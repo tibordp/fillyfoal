@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ protocol2.pkl  [0x0+0x189]
+  ▾ Segment 0: Binary (eexec) (0x2) — 671117693 bytes  [0x0+0x189]
+      eexec-encrypted data  [0x6+0x183]

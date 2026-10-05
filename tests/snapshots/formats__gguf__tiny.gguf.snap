@@ -1,0 +1,35 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.gguf — llama fillyfoal-tiny, GGUF v3, 3 tensors, 12 metadata entries  [0x0+0x3a0]
+    Magic: "GGUF"  [0x0+0x4]
+    Version: 3  [0x4+0x4]
+    Tensor count: 3  [0x8+0x8]
+    Metadata count: 12  [0x10+0x8]
+  ▾ Metadata — 12 entries
+      general.architecture: "llama" — string  [0x18+0x2d]
+      general.name: "fillyfoal-tiny" — string  [0x45+0x2e]
+      general.alignment: 32 — uint32  [0x73+0x21]
+      llama.context_length: 128 — uint32  [0x94+0x24]
+      llama.embedding_length: 8 — uint32  [0xb8+0x26]
+      llama.rope.freq_base: 10000 — float32  [0xde+0x24]
+      tokenizer.ggml.model: "llama" — string  [0x102+0x2d]
+    ▾ tokenizer.ggml.tokens — array of 4 string  [0x12f+0x5b]
+        [0]: "<unk>"  [0x15c+0xd]
+        [1]: "<s>"  [0x169+0xb]
+        [2]: "</s>"  [0x174+0xc]
+        [3]: "hi"  [0x180+0xa]
+    ▾ tokenizer.ggml.scores — array of 4 float32  [0x18a+0x3d]
+        [0]: 0  [0x1b7+0x4]
+        [1]: 0  [0x1bb+0x4]
+        [2]: 0  [0x1bf+0x4]
+        [3]: -1.5  [0x1c3+0x4]
+      tokenizer.ggml.add_bos_token: true — bool  [0x1c7+0x29]
+      general.file_type: 1 — uint32  [0x1f0+0x21]
+      test.signed: -42 — int64  [0x211+0x1f]
+  ▾ Tensors — 3 tensors
+      Tensor data — 192 bytes, aligned to 32  [0x2e0+0xc0]
+      token_embd.weight: F16 (0x1) — [8, 4] F16, at data+0x0  [0x230+0x39] → 0x2e0+0x1
+      output_norm.weight: F32 (0x0) — [8] F32, at data+0x40  [0x269+0x32] → 0x320+0x1
+      blk.0.attn_q.weight: Q8_0 (0x8) — [8, 8] Q8_0, at data+0x60  [0x29b+0x3b] → 0x340+0x1

@@ -41,12 +41,14 @@ pub mod datakit;
 pub mod evt;
 pub mod evtx;
 pub mod font;
+pub mod gguf;
 pub mod icc;
 pub mod json;
 pub mod lnk;
 pub mod mo;
 pub mod npy;
 pub mod pcap;
+pub mod pickle;
 pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
@@ -185,6 +187,8 @@ pub static FORMATS: &[&Format] = &[
     &crx::MOZLZ4,
     &applesingle::APPLESINGLE,
     &applesingle::APPLEDOUBLE,
+    &gguf::FORMAT,
+    &pickle::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
