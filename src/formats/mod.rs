@@ -18,6 +18,7 @@ use crate::span::Span;
 pub mod ar;
 pub mod arcutil;
 pub mod bzip2;
+pub mod cab;
 pub mod compress;
 pub mod cpio;
 pub mod gzip;
@@ -170,6 +171,7 @@ pub static FORMATS: &[&Format] = &[
     &rpm::FORMAT,
     &sevenzip::FORMAT,
     &rar::FORMAT,
+    &cab::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
