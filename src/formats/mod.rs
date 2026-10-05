@@ -29,7 +29,10 @@ pub mod png;
 
 // -- audio & video --
 // audio (riff/iff/flac/mp3/ogg/...)
+pub mod amr;
 pub mod apetag;
+pub mod au;
+pub mod caf;
 pub mod flac;
 pub mod id3;
 pub mod iff;
@@ -37,7 +40,9 @@ pub mod midi;
 pub mod mpa;
 pub mod ogg;
 pub mod sound;
+pub mod voc;
 pub mod vorbis;
+pub mod w64;
 // -- end audio & video --
 
 // -- documents & data --
@@ -169,6 +174,11 @@ pub static FORMATS: &[&Format] = &[
     &iff::RIFF,
     &iff::IFF,
     &midi::FORMAT,
+    &au::FORMAT,
+    &voc::FORMAT,
+    &caf::FORMAT,
+    &amr::FORMAT,
+    &w64::FORMAT,
     &flac::FORMAT,
     &ogg::OPUS,
     &ogg::OGG_FLAC,
