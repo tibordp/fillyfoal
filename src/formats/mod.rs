@@ -40,6 +40,10 @@ pub mod png;
 pub mod retro;
 // -- end retro --
 
+// -- games, 3D, science, e-books, misc --
+pub mod games;
+// -- end misc --
+
 // -- text --
 // -- end text --
 
@@ -224,6 +228,18 @@ pub static FORMATS: &[&Format] = &[
     &retro::computers::ADF,
     &retro::computers::D64,
     // -- end retro --
+
+    // -- games, 3D, science, e-books, misc --
+    &games::WAD,
+    &games::PAK,
+    &games::WAD2,
+    &games::VPK,
+    &games::MDL,
+    &games::MD2,
+    &games::MD3,
+    &games::UNREAL,
+    &games::BSP,
+    // -- end misc --
 
     // -- text (generic probes, keep last) --
     // -- end text --
