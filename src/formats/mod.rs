@@ -36,6 +36,7 @@ pub mod isobmff;
 pub mod ivf;
 pub mod matroska;
 pub mod mpeg;
+pub mod realmedia;
 pub mod vidutil;
 pub mod y4m;
 // -- end audio & video --
@@ -170,6 +171,7 @@ pub static FORMATS: &[&Format] = &[
     &asf::WMV,
     &asf::WMA,
     &asf::ASF,
+    &realmedia::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
