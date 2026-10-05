@@ -25,6 +25,7 @@ pub mod cpio;
 pub mod dmg;
 pub mod firmware;
 pub mod gzip;
+pub mod hexfile;
 pub mod iso9660;
 pub mod lha;
 pub mod lz4;
@@ -220,6 +221,8 @@ pub static FORMATS: &[&Format] = &[
     &tar::V7,
     &lha::FORMAT,
     &lzma::LZMA,
+    &hexfile::IHEX,
+    &hexfile::SREC,
     // -- end archives --
 
     // -- text (generic probes, keep last) --
