@@ -365,7 +365,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let clusters = u32::try_from(count.min(capacity.saturating_sub(2))).unwrap_or(u32::MAX);
 
-    let (label, serial) = match kind {
+    let label = match kind {
         Kind::Fat32 => {
             let ext = ext32.clone()?;
             cx.emit(Ebpb32::node(
@@ -373,13 +373,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 vol.sub(Bpb::SIZE, Ebpb32::SIZE),
                 LE,
             ));
-            (ext.label, ext.serial)
+            ext.label
         }
         _ => {
             let span = vol.sub(Bpb::SIZE, Ebpb16::SIZE);
             let ext = parse(&cx, span, LE, &(), Ebpb16::layout).await?;
             cx.emit(Ebpb16::node("Extended BPB", span, LE));
-            (ext.label, ext.serial)
+            ext.label
         }
     };
     let label = label.trim_end().to_owned();
@@ -395,7 +395,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         clusters,
         size(cluster),
     ));
-    let _ = serial;
 
     let mut root_cluster = 0;
     if let (Kind::Fat32, Ok(ext)) = (kind, &ext32) {

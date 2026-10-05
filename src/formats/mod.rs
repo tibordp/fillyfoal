@@ -153,9 +153,12 @@ pub static FORMATS: &[&Format] = &[
     &disk::mdraid::FORMAT,
     &disk::swap::FORMAT,
     &disk::xfs::FORMAT,
+    &disk::apm::FORMAT,
+    &disk::uefi::FORMAT,
     // Boot sectors ending in 0x55AA, before the plain MBR.
     &disk::fat::FORMAT,
     &disk::mbr::FORMAT,
+    &disk::bsdlabel::FORMAT,
     // Probes an all-zero head; keep last.
     &disk::btrfs::FORMAT,
     // -- end disk images --

@@ -7,7 +7,9 @@
 //! content is its extent if contiguous, or a piecewise source assembled from
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 
+pub mod apm;
 pub mod bitlocker;
+pub mod bsdlabel;
 pub mod btrfs;
 pub mod fat;
 pub mod gpt;
@@ -19,6 +21,7 @@ pub mod parallels;
 pub mod ptypes;
 pub mod qcow;
 pub mod swap;
+pub mod uefi;
 pub mod vdi;
 pub mod vhd;
 pub mod vhdx;
@@ -425,4 +428,9 @@ pub fn guid_le(b: &[u8]) -> crate::value::Guid {
         data3: u16::from_le_bytes([get(6), get(7)]),
         data4,
     }
+}
+
+/// Rounds `v` up to a multiple of `a`, saturating instead of overflowing.
+pub fn align(v: u64, a: u64) -> u64 {
+    v.checked_next_multiple_of(a).unwrap_or(u64::MAX)
 }

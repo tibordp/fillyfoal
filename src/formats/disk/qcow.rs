@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::disk::{PieceList, size};
+use crate::formats::disk::{PieceList, align, size};
 use crate::formats::{Format, Head, Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
@@ -354,7 +354,7 @@ async fn snapshots(cx: Cx, (file, offset, count): (Span, u64, u32)) -> Result<()
         let name_at = id_at.saturating_add(s.id_size.into());
         let name = String::from_utf8_lossy(&cx.read_avail(file.sub(name_at, s.name_size.into())).await?).into_owned();
         let end = name_at.saturating_add(s.name_size.into());
-        let total = end.saturating_sub(at).next_multiple_of(8);
+        let total = align(end.saturating_sub(at), 8);
         cx.push(
             SnapshotHeader::node(format!("Snapshot {i}: {name}"), file.sub(at, total), BE)
                 .summary(format!("id {id}, VM state {}", size(s.vm_state_size.into()))),
