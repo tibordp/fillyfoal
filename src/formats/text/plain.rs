@@ -22,7 +22,7 @@ pub static FORMAT: Format = Format {
     title: "Plain text",
     extensions: &["txt", "text", "log", "nfo", "me", "readme"],
     mime: "text/plain",
-    probe: Probe::Custom(|h| encoding::classify(h.data).is_some()),
+    probe: Probe::Custom(probe_text),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -34,6 +34,13 @@ pub static SCRIPT: Format = Format {
     probe: Probe::Custom(probe_script),
     dissect: crate::expander!(dissect_script: Input),
 };
+
+/// Anything that looks like text. A few bytes are too little evidence (a
+/// truncated binary header is often printable), unless they end a line.
+fn probe_text(h: &Head<'_>) -> bool {
+    let tiny = h.len < 4 && !h.data.ends_with(b"\n");
+    !tiny && encoding::classify(h.data).is_some()
+}
 
 /// How lines end in a sample.
 #[derive(Clone, Copy, Debug, Default)]

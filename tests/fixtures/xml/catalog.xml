@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!DOCTYPE catalog [
+  <!ENTITY pub "Fillyfoal Press">
+  <!ELEMENT catalog (book*)>
+]>
+<!-- A small catalog -->
+<?xml-stylesheet type="text/xsl" href="style.xsl"?>
+<catalog xmlns="urn:example:catalog" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <book id="b1" lang="en">
+    <dc:title>Lazy Trees &amp; Spans</dc:title>
+    <price currency="EUR">29.90</price>
+    <empty/>
+    <notes><![CDATA[x < y && y > z]]></notes>
+  </book>
+  <book id="b2">Mixed <b>content</b> here &#x263A;</book>
+</catalog>

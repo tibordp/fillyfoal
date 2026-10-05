@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Fillyfoal News</title>
+  <link>https://example.com/</link>
+  <item><title>First</title><pubDate>Mon, 05 Oct 2026 10:00:00 GMT</pubDate></item>
+  <item><title>Second</title><description><![CDATA[<p>Hi</p>]]></description></item>
+</channel>
+</rss>
