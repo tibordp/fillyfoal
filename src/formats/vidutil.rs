@@ -526,6 +526,47 @@ pub fn hevc_sps(nal: &[u8]) -> Option<SpsInfo> {
     })
 }
 
+/// Codec summary from an AVC decoder configuration record (`avcC`).
+pub fn avcc_summary(d: &[u8]) -> Option<String> {
+    let len = usize::from(crate::bytes::u16_be(d, 6)?);
+    if let Some(sps) = d.get(8..).and_then(|r| r.get(..len)).and_then(h264_sps) {
+        return Some(sps.h264_summary());
+    }
+    Some(format!(
+        "{}@L{}",
+        lookup_or(H264_PROFILES, d.get(1).copied()?.into()),
+        h264_level(d.get(3).copied()?)
+    ))
+}
+
+/// Codec summary from an HEVC decoder configuration record (`hvcC`).
+pub fn hvcc_summary(d: &[u8]) -> Option<String> {
+    hvcc_sps(d)
+        .and_then(hevc_sps)
+        .map(|s| s.hevc_summary())
+        .or_else(|| Some(format!("level {}", hevc_level(d.get(12).copied()?))))
+}
+
+/// The first SPS NAL unit in an `hvcC` body.
+pub fn hvcc_sps(d: &[u8]) -> Option<&[u8]> {
+    let arrays = d.get(22).copied()?;
+    let mut at = 23usize;
+    for _ in 0..arrays {
+        let kind = d.get(at).copied()? & 0x3f;
+        let n = crate::bytes::u16_be(d, at.saturating_add(1))?;
+        at = at.saturating_add(3);
+        for _ in 0..n {
+            let len = usize::from(crate::bytes::u16_be(d, at)?);
+            let nal = d.get(at.saturating_add(2)..at.saturating_add(2).saturating_add(len))?;
+            if kind == 33 {
+                return Some(nal);
+            }
+            at = at.saturating_add(2).saturating_add(len);
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Start codes
 

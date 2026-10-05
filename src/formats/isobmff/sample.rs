@@ -503,21 +503,8 @@ pub async fn describe_config(cx: &Cx, st: &BoxState) -> Option<String> {
     }
     let d = small(cx, st.body().sub(0, 1024)).await.ok()?;
     match kind {
-        b"avcC" => {
-            let len = usize::from(u16_be(&d, 6)?);
-            if let Some(sps) = d.get(8..).and_then(|r| r.get(..len)).and_then(h264_sps) {
-                return Some(sps.h264_summary());
-            }
-            Some(format!(
-                "{}@L{}",
-                lookup_or(H264_PROFILES, d.get(1).copied()?.into()),
-                h264_level(d.get(3).copied()?)
-            ))
-        }
-        b"hvcC" => hvcc_sps(&d)
-            .and_then(hevc_sps)
-            .map(|s| s.hevc_summary())
-            .or_else(|| Some(format!("level {}", hevc_level(d.get(12).copied()?)))),
+        b"avcC" => vidutil::avcc_summary(&d),
+        b"hvcC" => vidutil::hvcc_summary(&d),
         b"av1C" => {
             let b1 = d.get(1).copied()?;
             let b2 = d.get(2).copied()?;
@@ -554,26 +541,6 @@ fn av1_bit_depth(b2: u8) -> u8 {
         (true, false) => 10,
         _ => 8,
     }
-}
-
-/// The first SPS NAL unit in an `hvcC` body.
-fn hvcc_sps(d: &[u8]) -> Option<&[u8]> {
-    let arrays = d.get(22).copied()?;
-    let mut at = 23usize;
-    for _ in 0..arrays {
-        let kind = d.get(at).copied()? & 0x3f;
-        let n = u16_be(d, at.saturating_add(1))?;
-        at = at.saturating_add(3);
-        for _ in 0..n {
-            let len = usize::from(u16_be(d, at)?);
-            let nal = d.get(at.saturating_add(2)..at.saturating_add(2).saturating_add(len))?;
-            if kind == 33 {
-                return Some(nal);
-            }
-            at = at.saturating_add(2).saturating_add(len);
-        }
-    }
-    None
 }
 
 fn avcc(f: &mut Fields<'_>) -> Result<()> {

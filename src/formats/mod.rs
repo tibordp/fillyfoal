@@ -30,6 +30,7 @@ pub mod png;
 // -- audio & video --
 // video & containers (isobmff/matroska/ts/...)
 pub mod isobmff;
+pub mod matroska;
 pub mod vidutil;
 // -- end audio & video --
 
@@ -146,6 +147,8 @@ pub static FORMATS: &[&Format] = &[
     &isobmff::M4V,
     &isobmff::MOV,
     &isobmff::MP4,
+    &matroska::WEBM,
+    &matroska::MKV,
     // -- end audio & video --
 
     // -- documents & data --
