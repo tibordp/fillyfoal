@@ -50,6 +50,7 @@ pub mod system;
 pub mod graphics;
 pub mod packages;
 pub mod archives2;
+pub mod misc2;
 // -- end misc --
 
 // -- text --
@@ -343,6 +344,29 @@ pub static FORMATS: &[&Format] = &[
     &archives2::FLP,
     &archives2::GUITAR_PRO,
     &archives2::UNREAL_PAK,
+    &misc2::DVI,
+    &misc2::WORDPERFECT,
+    &misc2::WRITE,
+    &misc2::ONENOTE,
+    &misc2::FRAMEMAKER,
+    &misc2::WARC,
+    &misc2::AGE,
+    &misc2::BITCOIN_BLOCKS,
+    &misc2::BTSNOOP,
+    &misc2::NETMON,
+    &misc2::OTA_PAYLOAD,
+    &misc2::REGISTRY_POL,
+    &misc2::ESE,
+    &misc2::BOMSTORE,
+    &misc2::SDB,
+    &misc2::SPSS,
+    &misc2::SAS7BDAT,
+    &misc2::STATA,
+    &misc2::ROOT,
+    &misc2::NIFTI,
+    &misc2::NRRD,
+    &misc2::HDF4,
+    &misc2::VTK,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,
