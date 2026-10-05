@@ -216,6 +216,8 @@ pub struct Host {
     pub polls: u64,
     pub bytes_supplied: u64,
     pub max_polls: u64,
+    /// Exploration stops expanding once this many nodes exist.
+    pub max_nodes: usize,
 }
 
 impl Host {
@@ -236,6 +238,7 @@ impl Host {
             polls: 0,
             bytes_supplied: 0,
             max_polls: 1_000_000,
+            max_nodes: usize::MAX,
         }
     }
 
@@ -274,7 +277,7 @@ impl Host {
     /// Expands everything under `id` down to `depth`, fetching pages of
     /// `page` children until each collection is exhausted.
     pub fn explore(&mut self, id: NodeId, depth: usize, page: u64) {
-        if depth == 0 {
+        if depth == 0 || self.session.live_nodes() >= self.max_nodes {
             return;
         }
         loop {
@@ -331,6 +334,20 @@ impl Rng {
     }
 }
 
+/// Every diagnostic in the materialised tree.
+pub fn diagnostics(host: &Host) -> Vec<fillyfoal::Diagnostic> {
+    let mut out = Vec::new();
+    let mut stack = vec![host.root];
+    while let Some(id) = stack.pop() {
+        let node = host.session.node(id).unwrap();
+        out.extend(node.diagnostics.iter().cloned());
+        let children = host.session.children(id).unwrap();
+        out.extend(children.error.cloned());
+        stack.extend(children.ids.iter().copied());
+    }
+    out
+}
+
 /// Every diagnostic kind in the materialised tree.
 pub fn diagnostic_kinds(host: &Host) -> Vec<fillyfoal::DiagKind> {
     let mut out = Vec::new();
@@ -368,13 +385,26 @@ pub fn explore(name: &str, data: &[u8]) -> String {
 /// panics, hangs or internal errors.
 pub fn robustness(name: &str, data: &[u8]) {
     let settle = |variant: Vec<u8>, what: &str| {
-        let mut host = Host::with_chunk(variant, 256);
-        host.max_polls = 200_000;
-        host.explore(host.root, 24, 1000);
-        assert!(
-            !diagnostic_kinds(&host).contains(&fillyfoal::DiagKind::Internal),
-            "{name}: internal error after {what}"
+        let mut host = Host::new(
+            variant,
+            Limits {
+                chunk_size: 256,
+                max_work: 5_000_000,
+                ..Limits::default()
+            },
         );
+        host.max_polls = 200_000;
+        // Malformed tables can make trees exponentially wide; a user only
+        // drills into one branch, so bound the exploration instead.
+        host.max_nodes = 20_000;
+        host.explore(host.root, 24, 1000);
+        for d in diagnostics(&host) {
+            assert!(d.kind != fillyfoal::DiagKind::Internal, "{name}: internal error after {what}: {d}");
+            assert!(
+                !d.message.contains("units of work"),
+                "{name}: runaway expansion after {what} (a loop that makes no progress?)"
+            );
+        }
     };
     let lengths: Vec<usize> = if data.len() <= 600 {
         (0..data.len()).collect()

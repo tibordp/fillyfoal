@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ book.lit — Microsoft Reader, version 1, 2 pieces  [0x0+0x58]
+  ▾ Header  [0x0+0x28]
+      Magic: "ITOLITLS"  [0x0+0x8]
+      Version: 1  [0x8+0x4]
+      Header length: 0x28  [0xc+0x4]
+      Number of pieces: 2  [0x10+0x4]
+      Secondary header length: 0x100  [0x14+0x4]
+      Header GUID: {00000000-0000-0000-0000-000000000000}  [0x18+0x10]
+    Piece 0 — 8 bytes  [0x48+0x8]
+    Piece 1 — 8 bytes  [0x50+0x8]

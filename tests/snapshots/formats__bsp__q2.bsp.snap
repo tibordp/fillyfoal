@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ q2.bsp — Quake II map, 1 entities  [0x0+0xbe]
+    Header — Quake II BSP version 38  [0x0+0x8]
+    entities — 30 bytes  [0xa0+0x1e]
+    planes — 0 bytes  [0xbe+0x0]
+    vertices — 0 bytes  [0xbe+0x0]
+    visibility — 0 bytes  [0xbe+0x0]
+    nodes — 0 bytes  [0xbe+0x0]
+    texinfo — 0 bytes  [0xbe+0x0]
+    faces — 0 bytes  [0xbe+0x0]
+    lighting — 0 bytes  [0xbe+0x0]
+    leafs — 0 bytes  [0xbe+0x0]
+    leaf faces — 0 bytes  [0xbe+0x0]
+    leaf brushes — 0 bytes  [0xbe+0x0]
+    edges — 0 bytes  [0xbe+0x0]
+    surface edges — 0 bytes  [0xbe+0x0]
+    models — 0 bytes  [0xbe+0x0]
+    brushes — 0 bytes  [0xbe+0x0]
+    brush sides — 0 bytes  [0xbe+0x0]
+    pop — 0 bytes  [0xbe+0x0]
+    areas — 0 bytes  [0xbe+0x0]
+    area portals — 0 bytes  [0xbe+0x0]

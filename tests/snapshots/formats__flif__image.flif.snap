@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.flif — 64×32, 3 channel(s), 8-bit  [0x0+0x19]
+    Header  [0x0+0x8]
+    Image data  [0x8+0x11]

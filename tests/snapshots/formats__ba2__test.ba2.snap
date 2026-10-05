@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.ba2 — BA2 v1 GNRL, 2 files  [0x0+0x3e]
+    Magic: "BTDX"  [0x0+0x4]
+    Version: 1  [0x4+0x4]
+    Type: "GNRL"  [0x8+0x4]
+    Files: 2  [0xc+0x4]
+    Name table offset: 0x30  [0x10+0x8]
+    File records and data  [0x18+0x18]
+    Name table  [0x30+0xe]

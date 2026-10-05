@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.mpq — MPQ v1, 2 blocks, 4096-byte sectors  [0x0+0x60]
+  ▾ Header  [0x0+0x20]
+      Magic: 4d 50 51 1a  |MPQ.|  [0x0+0x4]
+      Header size: 32  [0x4+0x4]
+      Archive size: 96  [0x8+0x4]
+      Format version: 0  [0xc+0x2]
+      Sector size shift: 3  [0xe+0x2]
+      Hash table offset: 0x20  [0x10+0x4]
+      Block table offset: 0x40  [0x14+0x4]
+      Hash table entries: 2  [0x18+0x4]
+      Block table entries: 2  [0x1c+0x4]
+    Hash table  [0x20+0x20]
+      ! note: encrypted with the MPQ hash key
+    Block table  [0x40+0x20]
+      ! note: encrypted with the MPQ block key

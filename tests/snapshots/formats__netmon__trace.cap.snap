@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ trace.cap — Network Monitor 2.1 (GMBU), 2 frames  [0x0+0x38]
+    Magic: "GMBU"  [0x0+0x4]
+    Minor version: 1  [0x4+0x1]
+    Major version: 2  [0x5+0x1]
+    MAC type: 1  [0x6+0x2]
+    Capture start time (SYSTEMTIME): 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x8+0x10]
+    Frame table offset: 0x30  [0x18+0x4]
+    Frame table length: 8  [0x1c+0x4]
+    Frame table — 2 frames  [0x30+0x8]

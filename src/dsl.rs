@@ -136,6 +136,26 @@ macro_rules! __record_read {
     };
 }
 
+/// Declares a [`Format`](crate::formats::Format) static:
+///
+/// ```ignore
+/// declare_format!(pub NES = "nes", "iNES ROM image", ["nes"], "application/x-nes-rom",
+///     Probe::Magic(&[(0, b"NES\x1a")]), dissect);
+/// ```
+#[macro_export]
+macro_rules! declare_format {
+    ($vis:vis $id:ident = $name:literal, $title:literal, [$($ext:literal),* $(,)?], $mime:literal, $probe:expr, $dissect:path) => {
+        $vis static $id: $crate::formats::Format = $crate::formats::Format {
+            name: $name,
+            title: $title,
+            extensions: &[$($ext),*],
+            mime: $mime,
+            probe: $probe,
+            dissect: $crate::expander!($dissect: $crate::formats::Input),
+        };
+    };
+}
+
 /// Declares a fixed-size record. See the [module docs](crate::dsl).
 #[macro_export]
 macro_rules! record {
@@ -170,6 +190,20 @@ macro_rules! record {
             }
         }
     };
+}
+
+/// Reads a record at `span` and emits its fields directly as children of the
+/// node being expanded (for formats that are little more than a header).
+/// Fields up to a truncation are still emitted.
+pub async fn emit_record<R: Record>(cx: &Cx, span: Span, endian: Endian) -> Result<R> {
+    let block = cx.block(span).await?;
+    R::read(&mut Fields::emitting(cx, &block, endian))
+}
+
+/// Reads a record at `span` without emitting anything.
+pub async fn read_record<R: Record>(cx: &Cx, span: Span, endian: Endian) -> Result<R> {
+    let block = cx.block(span).await?;
+    R::read(&mut Fields::new(&block, endian))
 }
 
 /// Sequential, async access to a region: the natural way to walk chunked

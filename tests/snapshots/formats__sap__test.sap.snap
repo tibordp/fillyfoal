@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.sap — "Fillyfoal Pokey"  [0x0+0x69]
+    SAP: ""  [0x0+0x5]
+    AUTHOR: "Composer"  [0x5+0x13]
+    NAME: "Fillyfoal Pokey"  [0x18+0x18]
+    DATE: "2026"  [0x30+0xd]
+    TYPE: "B"  [0x3d+0x8]
+    INIT: "2000"  [0x45+0xb]
+    PLAYER: "2003"  [0x50+0xd]
+    Binary (Atari DOS segments)  [0x5d+0xc]

@@ -207,10 +207,45 @@ zip_variant!(
     |h| has_entry_suffix(h, b".usdc") || has_entry_suffix(h, b".usda")
 );
 
+zip_variant!(KRITA, "krita", "Krita document", ["kra"], "application/x-krita",
+    |h| mimetype(h, b"application/x-krita"));
+zip_variant!(ORA, "ora", "OpenRaster image", ["ora"], "image/openraster",
+    |h| mimetype(h, b"image/openraster"));
+zip_variant!(IDML, "idml", "InDesign markup package", ["idml"], "application/vnd.adobe.indesign-idml-package",
+    |h| mimetype(h, b"application/vnd.adobe.indesign-idml-package"));
+zip_variant!(ODF_FORMULA, "odf", "OpenDocument formula", ["odf"], "application/vnd.oasis.opendocument.formula",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.formula"));
+zip_variant!(ODB, "odb", "OpenDocument database", ["odb"], "application/vnd.oasis.opendocument.base",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.base"));
+zip_variant!(IWORK, "iwork", "Apple iWork document (Pages/Numbers/Keynote)", ["pages", "numbers", "key"], "application/x-iwork",
+    |h| has_entry(h, b"Index/Document.iwa") || has_entry(h, b"Index.zip"));
+zip_variant!(APPX, "appx", "Windows app package (APPX/MSIX)", ["appx", "msix", "appxbundle", "msixbundle"], "application/vnd.ms-appx",
+    |h| has_entry(h, b"AppxManifest.xml") || has_entry(h, b"AppxMetadata/AppxBundleManifest.xml") || has_entry(h, b"AppxSignature.p7x"));
+zip_variant!(XAP, "xap", "Silverlight / Windows Phone package", ["xap"], "application/x-silverlight-app",
+    |h| has_entry(h, b"AppManifest.xaml"));
+zip_variant!(SCRATCH, "sb3", "Scratch 3 project", ["sb3", "sb2"], "application/x-scratch-project",
+    |h| has_entry(h, b"project.json"));
+zip_variant!(MCPACK, "mcpack", "Minecraft Bedrock pack", ["mcpack", "mcaddon", "mcworld"], "application/zip",
+    |h| has_entry(h, b"manifest.json") && (has_entry_suffix(h, b"pack_icon.png") || has_entry(h, b"level.dat")));
+zip_variant!(AAR, "aar", "Android library archive", ["aar"], "application/zip",
+    |h| has_entry(h, b"AndroidManifest.xml") && has_entry(h, b"classes.jar"));
+zip_variant!(XLSB, "xlsb", "Excel binary workbook", ["xlsb"], "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+    |h| ooxml(h, b"xl/") && has_entry_suffix(h, b".bin"));
+zip_variant!(SNUPKG, "snupkg", "NuGet symbols package", ["snupkg"], "application/zip",
+    |h| has_entry_suffix(h, b".nuspec") && has_entry_suffix(h, b".pdb"));
+zip_variant!(FBZ, "fbz", "FictionBook (zipped)", ["fbz"], "application/x-zip-compressed-fb2",
+    |h| has_entry_suffix(h, b".fb2"));
+zip_variant!(CBZ, "cbz", "Comic book archive (ZIP)", ["cbz"], "application/vnd.comicbook+zip",
+    |h| has_entry(h, b"ComicInfo.xml"));
+zip_variant!(GEOGEBRA, "ggb", "GeoGebra file", ["ggb"], "application/vnd.geogebra.file",
+    |h| has_entry(h, b"geogebra.xml"));
+zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
+    |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
+
 pub static FORMAT: Format = Format {
     name: "zip",
     title: "ZIP archive",
-    extensions: &["zip", "zipx", "cbz", "crx"],
+    extensions: &["zip", "zipx"],
     mime: "application/zip",
     probe: Probe::Magic(&[
         (0, b"PK\x03\x04"),

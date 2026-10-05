@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tri.ply — PLY binary_little_endian 1.0: 3 vertex, 1 face  [0x0+0xf4]
+  ▾ Header — binary_little_endian 1.0  [0x0+0xc3]
+      ply  [0x0+0x4]
+      format binary_little_endian 1.0  [0x4+0x20]
+      comment made by fillyfoal  [0x24+0x1a]
+      element vertex 3  [0x3e+0x11]
+      property float x  [0x4f+0x11]
+      property float y  [0x60+0x11]
+      property float z  [0x71+0x11]
+      element face 1  [0x82+0xf]
+      property list uchar int vertex_indices  [0x91+0x27]
+    vertex — 3 × [x: float, y: float, z: float]  [0xc3+0x24]
+    face — 1 × [property list uchar int vertex_indices]
+      ! note: list properties: element size varies

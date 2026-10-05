@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ drawing.dwg — AutoCAD 2018 drawing (AC1032)  [0x0+0x80]
+    Version: "AC1032" — AutoCAD 2018  [0x0+0x6]
+    Zeros: 00 00 00 00 00  |.....|  [0x6+0x5]
+    Maintenance release: 0  [0xb+0x1]
+    Unknown: 0x3  [0xc+0x1]
+    Preview image offset: 0x1c0  [0xd+0x4]
+    Application version: 33  [0x11+0x1]
+    Application maintenance release: 2  [0x12+0x1]
+    Code page: 30  [0x13+0x2]

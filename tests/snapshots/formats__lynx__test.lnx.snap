@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.lnx — "Fillyfoal" by Fillyfoal Inc  [0x0+0x140]
+    Magic: "LYNX"  [0x0+0x4]
+    Bank 0 page size: 256  [0x4+0x2]
+    Bank 1 page size: 0  [0x6+0x2]
+    Version: 1  [0x8+0x2]
+    Cartridge name: "Fillyfoal"  [0xa+0x20]
+    Manufacturer: "Fillyfoal Inc"  [0x2a+0x10]
+    Rotation: none (0x0)  [0x3a+0x1]
+    Reserved: 00 00 00 00 00  |.....|  [0x3b+0x5]
+    ROM  [0x40+0x100]
