@@ -301,7 +301,7 @@ async fn image_list(
 
 async fn subcaches(cx: Cx, (span, v2): (Span, bool)) -> Result<()> {
     let size: u64 = if v2 { 56 } else { 24 };
-    let count = span.len / size;
+    let count = span.len.checked_div(size).unwrap_or(0);
     cx.set_count(Count::Exact(count));
     for i in 0..count {
         let at = span.sub(i.saturating_mul(size), size);

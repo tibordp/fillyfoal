@@ -44,15 +44,6 @@ pub fn text(s: impl Into<String>) -> Value {
     Value::Text(s.into())
 }
 
-/// An enumerated value.
-pub fn enumerated(table: EnumTable, raw: u64, bits: u8) -> Value {
-    Value::Enum {
-        raw,
-        bits,
-        name: lookup(table, raw),
-    }
-}
-
 /// The table's name for `raw`, or `"<prefix> <raw:#x>"`.
 pub fn name_or(table: EnumTable, raw: u64, prefix: &str) -> String {
     lookup(table, raw).map_or_else(|| format!("{prefix} {raw:#x}"), str::to_owned)
@@ -177,10 +168,6 @@ impl Tree {
             let node = std::mem::replace(&mut t.node, Node::new(""));
             t.node = f(node);
         }
-    }
-
-    pub fn len(&self) -> usize {
-        self.nodes.len()
     }
 
     /// The display node for `index`: expandable if it has children.

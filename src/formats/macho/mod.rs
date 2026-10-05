@@ -343,10 +343,7 @@ fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32) -> Result
         LC_SEGMENT | LC_SEGMENT_64 => {
             let segment = segment_command(f, ctx)?;
             for _ in 0..segment.nsects {
-                match section_header(f, ctx) {
-                    Ok(s) => info.sections.push(s),
-                    Err(e) => return Err(e),
-                }
+                info.sections.push(section_header(f, ctx)?);
             }
             info.segments.push(segment);
         }

@@ -466,7 +466,7 @@ async fn id_list(cx: Cx, (dex, kind): (Dex, Kind)) -> Result<()> {
         Kind::Class => (h.classes, 32),
     };
     let span = dex.table(t, width);
-    let count = u32::try_from(span.len / width).unwrap_or(u32::MAX);
+    let count = u32::try_from(span.len.checked_div(width).unwrap_or(0)).unwrap_or(u32::MAX);
     cx.set_count(Count::Exact(count.into()));
     for i in 0..count {
         let at = span.sub(u64::from(i).saturating_mul(width), width);

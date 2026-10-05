@@ -415,7 +415,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         machine: h.machine,
         sections: Vec::new(),
         symbols,
-        nsyms: u32::try_from(symbols.len / record).unwrap_or(0),
+        nsyms: u32::try_from(symbols.len.checked_div(record).unwrap_or(0)).unwrap_or(0),
         strings,
     };
     let block = cx.block(table).await?;

@@ -145,7 +145,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn arch_table(cx: Cx, (table, wide, file): (Span, bool, Span)) -> Result<()> {
     let size: u64 = if wide { 32 } else { 20 };
-    let count = table.len / size;
+    let count = table.len.checked_div(size).unwrap_or(0);
     cx.set_count(Count::Exact(count));
     for i in 0..count {
         let span = table.sub(i.saturating_mul(size), size);

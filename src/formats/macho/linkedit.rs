@@ -142,7 +142,7 @@ async fn chained_imports(
         2 => 8,
         _ => 16,
     };
-    let count = imports.len / width;
+    let count = imports.len.checked_div(width).unwrap_or(0);
     cx.set_count(Count::Exact(count));
     for i in 0..count {
         let at = imports.sub(i.saturating_mul(width), width);
