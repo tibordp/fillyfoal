@@ -66,7 +66,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, BE);
     let (header, header_span) = cur.record::<Header>().await?;
     cx.emit(Header::node("Header", header_span, BE));
-    let block_size = header.level.parse::<u64>().unwrap_or(0).saturating_mul(100_000);
+    let block_size = header
+        .level
+        .parse::<u64>()
+        .unwrap_or(0)
+        .saturating_mul(100_000);
 
     let body = file.tail(4);
     let first = cx.read_avail(body.sub(0, 14)).await?;
@@ -86,21 +90,32 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let tail_bits = to_u64(tail.len()).saturating_mul(8);
     let eos = (0..8u64).find_map(|pad| {
         let start = tail_bits.checked_sub(80u64.saturating_add(pad))?;
-        (bits(&tail, start, 48) == Some(EOS_MAGIC))
-            .then(|| (start, bits(&tail, start.saturating_add(48), 32).unwrap_or(0)))
+        (bits(&tail, start, 48) == Some(EOS_MAGIC)).then(|| {
+            (
+                start,
+                bits(&tail, start.saturating_add(48), 32).unwrap_or(0),
+            )
+        })
     });
 
     cx.emit(
         Node::new("Blocks")
             .span(body)
-            .summary(format!("up to {} each, found by a bit-level scan", human_size(block_size)))
+            .summary(format!(
+                "up to {} each, found by a bit-level scan",
+                human_size(block_size)
+            ))
             .lazy(blocks, body),
     );
     cx.emit(unsupported("Compressed data", body, "bzip2"));
     let mut summary = format!("bzip2, {}k blocks", block_size / 1000);
     match eos {
         Some((bit, crc)) => {
-            let bit_offset = tail_span.offset.saturating_sub(body.offset).saturating_mul(8).saturating_add(bit);
+            let bit_offset = tail_span
+                .offset
+                .saturating_sub(body.offset)
+                .saturating_mul(8)
+                .saturating_add(bit);
             let byte = bit / 8;
             let span = tail_span.tail(byte);
             cx.emit(
@@ -122,7 +137,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 fn block_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.bytes("Block magic", 6).desc("0x314159265359 (BCD π)").emit()?;
+    f.bytes("Block magic", 6)
+        .desc("0x314159265359 (BCD π)")
+        .emit()?;
     f.u32("Block CRC").hex().emit()?;
     let rest = f.bytes("Randomised / original pointer", 4).get()?;
     let randomised = bits(&rest, 0, 1).unwrap_or(0);

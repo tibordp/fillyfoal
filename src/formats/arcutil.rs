@@ -3,9 +3,13 @@
 //! checksums these formats use.
 
 use std::borrow::Cow;
+use std::sync::Arc;
 
-use crate::fields::{Field, Fields};
+use crate::cx::Cx;
+use crate::error::Result;
+
 use crate::error::Diagnostic;
+use crate::fields::{Field, Fields};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -66,6 +70,15 @@ pub fn unsupported(name: impl Into<Cow<'static, str>>, span: Span, codec: &str) 
         .span(span)
         .summary(human_size(span.len))
         .diag(Diagnostic::unsupported(format!("{codec} compression")))
+}
+
+/// Expander that emits pre-built nodes: for small groups decoded together
+/// with their parent (e.g. the fields of a varint-encoded record).
+pub async fn emit_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
+    for node in nodes.iter() {
+        cx.emit(node.clone());
+    }
+    Ok(())
 }
 
 /// Adds a truncation diagnostic if `span` is shorter than `wanted`.
@@ -315,7 +328,10 @@ mod tests {
         assert_eq!(crc16_arc(b"123456789"), 0xbb3d);
         assert_eq!(crc32c(b"123456789"), 0xe306_9283);
         assert_eq!(xxh32(b"", 0), 0x02cc_5d05);
-        assert_eq!(xxh32(b"Nobody inspects the spammish repetition", 0), 0xe229_3b2f);
+        assert_eq!(
+            xxh32(b"Nobody inspects the spammish repetition", 0),
+            0xe229_3b2f
+        );
     }
 
     #[test]

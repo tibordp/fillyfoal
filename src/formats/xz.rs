@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, hex, human_size, uint, unsupported};
+use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -170,7 +170,9 @@ async fn find_streams(cx: &Cx, file: Span) -> Result<Vec<Stream>> {
         if footer.magic != "YZ" {
             return Err(Diagnostic::malformed("no stream footer magic").at(footer_span));
         }
-        let index_len = (u64::from(footer.backward)).saturating_add(1).saturating_mul(4);
+        let index_len = (u64::from(footer.backward))
+            .saturating_add(1)
+            .saturating_mul(4);
         let index_at = footer_at
             .checked_sub(index_len)
             .ok_or_else(|| Diagnostic::malformed("index larger than the file").at(footer_span))?;
@@ -258,7 +260,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         pos = rel.saturating_add(stream.span.len);
     }
     if pos < file.len {
-        cx.push(Node::new("Stream padding").span(file.tail(pos))).await;
+        cx.push(Node::new("Stream padding").span(file.tail(pos)))
+            .await;
     }
     Ok(())
 }
@@ -289,7 +292,10 @@ fn verify(node: Node, computed: u32, stored: u32) -> Node {
 async fn emit_stream(cx: &Cx, input: Input, stream: &Stream) -> Result<()> {
     let span = stream.span;
     cx.emit(stream_header_node(cx, span.sub(0, StreamHeader::SIZE)).await?);
-    let blocks_len = stream.index.offset.saturating_sub(span.offset.saturating_add(12));
+    let blocks_len = stream
+        .index
+        .offset
+        .saturating_sub(span.offset.saturating_add(12));
     let n = to_u64(stream.records.len());
     cx.emit(
         Node::new("Blocks")
@@ -352,7 +358,10 @@ impl Reader<'_> {
         let from = self.at;
         let v = *self.data.get(self.at)?;
         self.at = self.at.saturating_add(1);
-        Some((v, Node::new(name).span(self.span(from)).value(uint(v.into()))))
+        Some((
+            v,
+            Node::new(name).span(self.span(from)).value(uint(v.into())),
+        ))
     }
 
     fn varint(&mut self, name: &'static str) -> Option<(u64, Node)> {
@@ -367,7 +376,10 @@ impl Reader<'_> {
         let end = from.checked_add(to_usize(n))?;
         let v = self.data.get(from..end)?.to_vec();
         self.at = end;
-        Some((v.clone(), Node::new(name).span(self.span(from)).value(Value::Bytes(v))))
+        Some((
+            v.clone(),
+            Node::new(name).span(self.span(from)).value(Value::Bytes(v)),
+        ))
     }
 }
 
@@ -503,10 +515,7 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
             bits: 64,
             name: crate::value::lookup(FILTERS, id),
         });
-        cx.emit(node.lazy(
-            emit_nodes,
-            Arc::new(vec![id_node, size_node, props_node]),
-        ));
+        cx.emit(node.lazy(emit_nodes, Arc::new(vec![id_node, size_node, props_node])));
     }
     let crc_at = span.len.saturating_sub(4);
     let pad = to_u64(r.at);
@@ -514,18 +523,11 @@ async fn block_header(cx: Cx, span: Span) -> Result<()> {
         cx.emit(Node::new("Header padding").span(span.sub(pad, crc_at.saturating_sub(pad))));
     }
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
-    let node = Node::new("CRC32").span(span.sub(crc_at, 4)).value(hex(stored.into()));
+    let node = Node::new("CRC32")
+        .span(span.sub(crc_at, 4))
+        .value(hex(stored.into()));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
     cx.emit(verify(node, crc32(covered), stored));
-    Ok(())
-}
-
-/// Emits pre-built nodes (for small groups decoded together with their
-/// parent).
-pub async fn emit_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for node in nodes.iter() {
-        cx.emit(node.clone());
-    }
     Ok(())
 }
 
@@ -563,7 +565,9 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
         cx.emit(Node::new("Index padding").span(span.sub(pad, crc_at.saturating_sub(pad))));
     }
     let stored = u32_le(&data, to_usize(crc_at)).unwrap_or(0);
-    let node = Node::new("CRC32").span(span.sub(crc_at, 4)).value(hex(stored.into()));
+    let node = Node::new("CRC32")
+        .span(span.sub(crc_at, 4))
+        .value(hex(stored.into()));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
     cx.emit(verify(node, crc32(covered), stored));
     Ok(())

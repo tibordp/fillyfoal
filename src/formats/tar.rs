@@ -198,14 +198,13 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Option<Member>> {
             if cur.pos() == start {
                 return Ok(None);
             }
-            return Err(Diagnostic::malformed("metadata header not followed by a member")
-                .at(cur.since(start)));
+            return Err(
+                Diagnostic::malformed("metadata header not followed by a member")
+                    .at(cur.since(start)),
+            );
         }
         if to_u64(block.len()) < BLOCK {
-            return Err(Diagnostic::truncated(
-                cur.span(BLOCK),
-                to_u64(block.len()),
-            ));
+            return Err(Diagnostic::truncated(cur.span(BLOCK), to_u64(block.len())));
         }
         cur.skip(BLOCK);
         let raw = raw_header(&block);
@@ -361,9 +360,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if cur.pos() > end_start {
         let span = cur.since(end_start);
         let blocks = span.len / BLOCK;
-        let mut node = Node::new("End of archive")
-            .span(span)
-            .summary(count(blocks, "zero block", "zero blocks"));
+        let mut node = Node::new("End of archive").span(span).summary(count(
+            blocks,
+            "zero block",
+            "zero blocks",
+        ));
         if blocks < 2 {
             node = node.diag(Diagnostic::warning("expected two zero blocks"));
         }
@@ -405,7 +406,10 @@ fn member_node(input: Input, m: &Member) -> Node {
         _ => human_size(m.size),
     };
     let summary = if m.mode != 0 {
-        format!("{kind}, {}", crate::formats::arcutil::unix_mode(m.mode | type_bits(m.typeflag)))
+        format!(
+            "{kind}, {}",
+            crate::formats::arcutil::unix_mode(m.mode | type_bits(m.typeflag))
+        )
     } else {
         kind
     };
@@ -561,7 +565,9 @@ async fn pax_header(cx: Cx, span: Span) -> Result<()> {
                     .split('.')
                     .next()
                     .and_then(|s| s.parse::<i64>().ok())
-                    .map(|s| crate::render::value(&crate::value::Value::Timestamp { unix_seconds: s }))
+                    .map(|s| {
+                        crate::render::value(&crate::value::Value::Timestamp { unix_seconds: s })
+                    })
                     .unwrap_or_default(),
             ),
             "size" | "GNU.sparse.realsize" | "GNU.sparse.size" => {

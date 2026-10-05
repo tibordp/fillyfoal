@@ -18,9 +18,11 @@ use crate::span::Span;
 pub mod arcutil;
 pub mod bzip2;
 pub mod gzip;
+pub mod lz4;
 pub mod lzma;
 pub mod tar;
 pub mod xz;
+pub mod zstd;
 pub mod zip;
 // -- end archives --
 
@@ -149,6 +151,11 @@ pub static FORMATS: &[&Format] = &[
     &bzip2::FORMAT,
     &xz::FORMAT,
     &lzma::LZIP,
+    &zstd::FORMAT,
+    &zstd::SKIPPABLE,
+    &lz4::FORMAT,
+    &lz4::LEGACY,
+    &lz4::SNAPPY,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,

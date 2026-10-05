@@ -64,12 +64,7 @@ fn probe_lzip(h: &Head<'_>) -> bool {
 
 /// lc, lp and pb from the properties byte.
 fn props_summary(props: u8) -> String {
-    format!(
-        "lc={} lp={} pb={}",
-        props % 9,
-        (props / 9) % 5,
-        props / 45
-    )
+    format!("lc={} lp={} pb={}", props % 9, (props / 9) % 5, props / 45)
 }
 
 record! {
@@ -139,9 +134,14 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
             error = Some(Diagnostic::malformed("no member trailer").at(file.sub(0, end)));
             break;
         };
-        let trailer =
-            crate::fields::parse(&cx, file.sub(at, LzipTrailer::SIZE), LE, &(), LzipTrailer::layout)
-                .await?;
+        let trailer = crate::fields::parse(
+            &cx,
+            file.sub(at, LzipTrailer::SIZE),
+            LE,
+            &(),
+            LzipTrailer::layout,
+        )
+        .await?;
         let start = end.checked_sub(trailer.member_size);
         let magic = match start {
             Some(s) if trailer.member_size >= 26 => cx.read_avail(file.sub(s, 4)).await?,
@@ -168,7 +168,11 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
         let mut cur = Cursor::new(&cx, file, LE);
         let (_, span) = cur.record::<LzipHeader>().await?;
         cx.emit(LzipHeader::node("Header", span, LE));
-        cx.emit(unsupported("Compressed data", file.tail(LzipHeader::SIZE), "LZMA"));
+        cx.emit(unsupported(
+            "Compressed data",
+            file.tail(LzipHeader::SIZE),
+            "LZMA",
+        ));
         cx.diag(e);
         cx.annotate("lzip (trailer missing or damaged)");
         return Ok(());
@@ -202,7 +206,11 @@ async fn member(cx: Cx, span: Span) -> Result<()> {
 }
 
 async fn emit_member(cx: &Cx, span: Span) -> Result<()> {
-    cx.emit(LzipHeader::node("Header", span.sub(0, LzipHeader::SIZE), LE));
+    cx.emit(LzipHeader::node(
+        "Header",
+        span.sub(0, LzipHeader::SIZE),
+        LE,
+    ));
     let body_len = span
         .len
         .saturating_sub(LzipHeader::SIZE)
