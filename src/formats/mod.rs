@@ -22,6 +22,7 @@ pub mod zip;
 // -- executables & code --
 mod binutil;
 pub mod elf;
+pub mod macho;
 pub mod pe;
 // -- end executables --
 
@@ -124,6 +125,9 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::FORMAT,
     &elf::FORMAT,
+    &macho::FORMAT,
+    &macho::fat::FORMAT,
+    &macho::dyld_cache::FORMAT,
     // -- end executables --
 
     // -- images --

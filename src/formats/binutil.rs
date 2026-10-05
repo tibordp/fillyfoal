@@ -3,7 +3,9 @@
 use std::borrow::Cow;
 
 use crate::bytes::to_usize;
-use crate::error::Diagnostic;
+use crate::cx::Cx;
+use crate::dsl::Cursor;
+use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Prim};
 use crate::node::Node;
 use crate::span::Span;
@@ -70,6 +72,23 @@ pub fn data_node(name: impl Into<Cow<'static, str>>, span: Span, wanted: u64) ->
     }
 }
 
+/// Node conveniences.
+pub trait NodeExt {
+    /// Sets the summary unless it is empty.
+    fn maybe_summary(self, summary: impl Into<String>) -> Self;
+}
+
+impl NodeExt for Node {
+    fn maybe_summary(self, summary: impl Into<String>) -> Self {
+        let summary = summary.into();
+        if summary.is_empty() {
+            self
+        } else {
+            self.summary(summary)
+        }
+    }
+}
+
 /// Lower-case hex digits of `bytes`, without separators.
 pub fn hex_string(bytes: &[u8]) -> String {
     use std::fmt::Write;
@@ -121,6 +140,97 @@ pub fn mutf8(bytes: &[u8]) -> String {
         units.push(unit);
     }
     String::from_utf16_lossy(&units)
+}
+
+/// Sequential decoding of an in-memory byte buffer (opcode streams, tries).
+/// Every method returns `None` once the data runs out.
+pub struct Reader<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Reader<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        Reader { data, pos: 0 }
+    }
+
+    pub fn at(data: &'a [u8], pos: usize) -> Self {
+        Reader { data, pos }
+    }
+
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    pub fn at_end(&self) -> bool {
+        self.pos >= self.data.len()
+    }
+
+    pub fn u8(&mut self) -> Option<u8> {
+        let b = *self.data.get(self.pos)?;
+        self.pos = self.pos.checked_add(1)?;
+        Some(b)
+    }
+
+    pub fn int<T: Prim>(&mut self, endian: Endian) -> Option<T> {
+        let v = get::<T>(self.data, self.pos, endian)?;
+        self.pos = self.pos.checked_add(T::SIZE)?;
+        Some(v)
+    }
+
+    pub fn bytes(&mut self, n: usize) -> Option<&'a [u8]> {
+        let end = self.pos.checked_add(n)?;
+        let b = self.data.get(self.pos..end)?;
+        self.pos = end;
+        Some(b)
+    }
+
+    pub fn uleb(&mut self) -> Option<u64> {
+        let (v, n) = crate::bytes::uleb128(self.data.get(self.pos..)?)?;
+        self.pos = self.pos.checked_add(n)?;
+        Some(v)
+    }
+
+    pub fn sleb(&mut self) -> Option<i64> {
+        let (v, n) = crate::bytes::sleb128(self.data.get(self.pos..)?)?;
+        self.pos = self.pos.checked_add(n)?;
+        Some(v)
+    }
+
+    /// A NUL-terminated string (the NUL is consumed).
+    pub fn cstr(&mut self) -> Option<&'a [u8]> {
+        let rest = self.data.get(self.pos..)?;
+        let n = rest.iter().position(|&b| b == 0)?;
+        let s = rest.get(..n)?;
+        self.pos = self.pos.checked_add(n)?.checked_add(1)?;
+        Some(s)
+    }
+}
+
+/// Expander: the NUL-terminated strings in `span`, listed by offset (empty
+/// strings are skipped).
+pub async fn cstrings(cx: Cx, span: Span) -> Result<()> {
+    let mut cur = Cursor::new(&cx, span, Endian::Little);
+    while !cur.at_end() {
+        let start = cur.pos();
+        let (s, at) = cur.cstr(4096).await?;
+        if s.is_empty() {
+            continue;
+        }
+        cx.push(Node::new(format!("{start:#x}")).span(at).value(text(s)))
+            .await;
+    }
+    Ok(())
+}
+
+/// Reads a NUL-terminated string at `offset` within a string table.
+pub async fn string_at(cx: &Cx, table: Span, offset: u64) -> Result<(String, Span)> {
+    if offset >= table.len {
+        return Err(Diagnostic::malformed(format!(
+            "string offset {offset:#x} is outside the string table"
+        )));
+    }
+    cx.cstr(table.tail(offset).sub(0, 4096)).await
 }
 
 #[cfg(test)]

@@ -5,10 +5,10 @@ use super::tables::*;
 use super::{Class, Elf, MAX_NAME, Section};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
-use crate::dsl::{Cursor, Record};
+use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
-use crate::formats::binutil::{ellipsize, get_at, hex, name_or, text};
+use crate::formats::binutil::{NodeExt, ellipsize, get_at, hex, name_or, text};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -348,7 +348,7 @@ async fn relocations(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
         let label = name_or(elf.relocation_types(), r.kind, "type");
         let mut node = struct_node(label, span, elf.endian(), ctx.clone(), relocation)
             .value(hex(r.offset, elf.class.bits()))
-            .summary(if target.is_empty() && r.addend.is_none() {
+            .maybe_summary(if target.is_empty() && r.addend.is_none() {
                 String::new()
             } else {
                 format!("{target}{addend}")
@@ -465,23 +465,7 @@ pub(super) async fn dynamic(cx: Cx, (elf, span, link): (Elf, Span, Option<u32>))
 // Simple sections
 
 /// NUL-terminated strings, listed by offset.
-pub(super) async fn strings(cx: Cx, span: Span) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, crate::fields::Endian::Little);
-    while !cur.at_end() {
-        let start = cur.pos();
-        let (s, at) = cur.cstr(MAX_NAME).await?;
-        if s.is_empty() {
-            continue;
-        }
-        cx.push(
-            Node::new(format!("{start:#x}"))
-                .span(at)
-                .value(text(s)),
-        )
-        .await;
-    }
-    Ok(())
-}
+pub(super) use crate::formats::binutil::cstrings as strings;
 
 /// Arrays of code pointers (`.init_array` and friends).
 pub(super) async fn pointers(cx: Cx, (elf, span): (Elf, Span)) -> Result<()> {

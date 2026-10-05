@@ -8,7 +8,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::binutil::{data_node, get_at, hex, hex_string, name_or, text};
+use crate::formats::binutil::{NodeExt, data_node, get_at, hex, hex_string, name_or, text};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, decode_flags, lookup};
@@ -127,7 +127,7 @@ pub(super) async fn emit_all(cx: &Cx, elf: &Elf, region: &Region) -> Result<()> 
         cx.push(
             Node::new(label(&note))
                 .span(note.span)
-                .summary(summary)
+                .maybe_summary(summary)
                 .lazy(detail, (*region, note.span, note.name.clone(), note.desc, note.kind)),
         )
         .await;
