@@ -240,6 +240,8 @@ pub static FORMATS: &[&Format] = &[
     &text::ini::INF,
     &text::ini::ASS,
     &text::ini::FORMAT,
+    // Markdown before YAML: front matter starts like a YAML document.
+    &text::markdown::FORMAT,
     &text::yaml::FORMAT,
     &text::plain::SCRIPT,
     // Weak, statistical probes.

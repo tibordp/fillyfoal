@@ -32,7 +32,7 @@ pub mod csv;
 pub mod html;
 pub mod ini;
 pub mod json;
-// pub mod markdown;
+pub mod markdown;
 pub mod mime;
 // pub mod misc;
 pub mod pem;
