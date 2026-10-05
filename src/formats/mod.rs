@@ -42,6 +42,7 @@ pub mod evt;
 pub mod evtx;
 pub mod font;
 pub mod gguf;
+pub mod git;
 pub mod icc;
 pub mod json;
 pub mod lnk;
@@ -189,6 +190,9 @@ pub static FORMATS: &[&Format] = &[
     &applesingle::APPLEDOUBLE,
     &gguf::FORMAT,
     &pickle::FORMAT,
+    &git::PACK,
+    &git::PACK_INDEX,
+    &git::INDEX,
     // -- end documents --
 
     // -- disk images & filesystems --
