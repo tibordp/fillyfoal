@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.gbc — "FILLYCOLOR", MBC3+RAM+BATTERY  [0x0+0x400]
+    Interrupt vectors and RST  [0x0+0x100]
+  ▾ Cartridge header  [0x100+0x50]
+      Entry point: 00 c3 50 01  |..P.|  [0x100+0x4]
+      Nintendo logo: ce ed 66 66 cc 0d 00 0b 03 73 00 83 00 0c 00 0d …  |..ff.....s......|  [0x104+0x30]
+      Title: "FILLYCOLOR"  [0x134+0xf]
+      CGB flag: CGB enhanced (0x80)  [0x143+0x1]
+      New licensee code: "01"  [0x144+0x2]
+      SGB flag: No SGB functions (0x0)  [0x146+0x1]
+      Cartridge type: MBC3+RAM+BATTERY (0x13)  [0x147+0x1]
+      ROM size: 0 — 32 KiB  [0x148+0x1]
+      RAM size: 8 KiB (0x2)  [0x149+0x1]
+      Destination: Overseas (0x1)  [0x14a+0x1]
+      Old licensee code: 0x33  [0x14b+0x1]
+      Mask ROM version: 0  [0x14c+0x1]
+      Header checksum: 0xbe  [0x14d+0x1]
+      Global checksum: 0x0  [0x14e+0x2]
+    Program  [0x150+0x2b0]

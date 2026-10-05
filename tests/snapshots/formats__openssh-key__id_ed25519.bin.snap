@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ id_ed25519.bin — 1 key(s): ssh-ed25519, unencrypted  [0x0+0xf6]
+    Magic  [0x0+0xf]
+    Cipher: "none"  [0xf+0x8]
+    KDF: "none"  [0x17+0x8]
+    KDF options  [0x1f+0x4]
+    Public key 0: "ssh-ed25519"  [0x27+0x37]
+    Private section  [0x5e+0x98]

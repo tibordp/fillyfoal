@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.adf — "Fillyfoal", FFS, 880 KiB  [0x0+0xdc000]
+    Disk type: "DOS"  [0x0+0x3]
+    Filesystem: FFS (0x1)  [0x3+0x1]
+    Boot block checksum: 0x0  [0x4+0x4]
+    Root block: 880  [0x8+0x4]
+  ▾ Root block — volume "Fillyfoal"  [0x6e000+0x200]
+      readme — 1234 bytes  [0x6e400+0x200]
+    ▾ Docs — directory  [0x6e600+0x200]
+        inner.txt — 42 bytes  [0x6e800+0x200]

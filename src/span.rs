@@ -13,6 +13,11 @@ impl SourceId {
     pub fn index(self) -> u32 {
         self.0
     }
+
+    /// The first source registered in a session (by convention, the file).
+    pub const fn default_host() -> Self {
+        SourceId(0)
+    }
 }
 
 /// How a derived source was produced: by applying `transform` (e.g.

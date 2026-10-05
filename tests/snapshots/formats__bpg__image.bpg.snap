@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.bpg — 64×32, 4:4:4, 8-bit  [0x0+0x19]
+    Header — 4:4:4, 8-bit, alpha: false  [0x0+0x8]
+    HEVC data  [0x8+0x11]

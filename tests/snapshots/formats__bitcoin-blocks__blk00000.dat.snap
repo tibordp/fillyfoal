@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ blk00000.dat — Bitcoin mainnet, 1 block(s)  [0x0+0x9b]
+  ▾ Block 1: 2009-01-03 18:15:05 UTC — 131 bytes  [0x8+0x50] → 0x0+0x8b
+      Version: 0x1  [0x8+0x4]
+      Previous block hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xc+0x20]
+      Merkle root: 3b a3 ed fd 7a 7b 12 b2 7a c7 2c 3e 67 76 8f 61 …  |;...z{..z.,>gv.a|  [0x2c+0x20]
+      Time: 2009-01-03 18:15:05 UTC  [0x4c+0x4]
+      Bits (target): 0x1d00ffff  [0x50+0x4]
+      Nonce: 2083236893  [0x54+0x4]

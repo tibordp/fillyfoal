@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.lzfse — LZFSE, 1 block(s), 5 bytes uncompressed  [0x0+0x11]
+    Uncompressed block — 5 payload bytes  [0x0+0xd]
+      ! unsupported: LZFSE decoding
+    End of stream  [0xd+0x4]

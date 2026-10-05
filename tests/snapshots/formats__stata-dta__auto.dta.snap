@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ auto.dta — Stata release 118, 3 variables, 74 observations  [0x0+0x70]
+    Release: "118"
+    Byte order: "LSF"
+    Data  [0x0+0x70]

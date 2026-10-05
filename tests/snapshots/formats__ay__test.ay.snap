@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.ay — by "Composer", 2 songs  [0x0+0x40]
+    Magic: "ZXAYEMUL"  [0x0+0x8]
+    File version: 0  [0x8+0x2]
+    Player version: 3  [0xa+0x2]
+    Special player pointer: 0x0  [0xc+0x2]
+    Author pointer: 0x12  [0xe+0x2]
+    Misc pointer: 0x20  [0x10+0x2]
+    Last song index: 1  [0x12+0x1]
+    First song index: 0  [0x13+0x1]
+    Author: "Composer"  [0x20+0x9]
+    Misc: "Fillyfoal"  [0x30+0xa]
