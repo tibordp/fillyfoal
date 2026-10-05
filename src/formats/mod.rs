@@ -36,6 +36,10 @@ pub mod png;
 // -- disk images & filesystems --
 // -- end disk images --
 
+// -- retro & consoles --
+pub mod retro;
+// -- end retro --
+
 // -- text --
 // -- end text --
 
@@ -50,11 +54,17 @@ pub const TAIL_LEN: u64 = 0x400;
 pub struct Input {
     pub span: Span,
     pub nesting: u32,
+    /// The region this input is embedded in (itself, for the root).
+    pub outer: Span,
 }
 
 impl Input {
     pub fn root(span: Span) -> Self {
-        Input { span, nesting: 0 }
+        Input {
+            span,
+            nesting: 0,
+            outer: span,
+        }
     }
 
     /// An input embedded in this one.
@@ -62,6 +72,7 @@ impl Input {
         Input {
             span,
             nesting: self.nesting.saturating_add(1),
+            outer: self.span,
         }
     }
 }
@@ -164,6 +175,31 @@ pub static FORMATS: &[&Format] = &[
     &zip::JAR,
     &zip::FORMAT,
     // -- end archives --
+
+    // -- retro & consoles --
+    &retro::consoles::NES,
+    &retro::consoles::FDS,
+    &retro::consoles::GBC,
+    &retro::consoles::GB,
+    &retro::consoles::GBA,
+    &retro::consoles::NDS,
+    &retro::consoles::N64,
+    &retro::consoles::GENESIS,
+    &retro::consoles::PSX_EXE,
+    &retro::consoles::PBP,
+    &retro::consoles::SFO,
+    &retro::consoles::XBE,
+    &retro::consoles::WII,
+    &retro::consoles::GAMECUBE,
+    &retro::consoles::NRO,
+    &retro::consoles::NSO,
+    &retro::consoles::THREEDSX,
+    &retro::consoles::NCSD,
+    &retro::consoles::NCCH,
+    &retro::consoles::LYNX,
+    &retro::consoles::A7800,
+    &retro::consoles::SNES,
+    // -- end retro --
 
     // -- text (generic probes, keep last) --
     // -- end text --

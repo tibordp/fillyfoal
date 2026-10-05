@@ -216,6 +216,8 @@ pub struct Host {
     pub polls: u64,
     pub bytes_supplied: u64,
     pub max_polls: u64,
+    /// Exploration stops expanding once this many nodes exist.
+    pub max_nodes: usize,
 }
 
 impl Host {
@@ -236,6 +238,7 @@ impl Host {
             polls: 0,
             bytes_supplied: 0,
             max_polls: 1_000_000,
+            max_nodes: usize::MAX,
         }
     }
 
@@ -274,7 +277,7 @@ impl Host {
     /// Expands everything under `id` down to `depth`, fetching pages of
     /// `page` children until each collection is exhausted.
     pub fn explore(&mut self, id: NodeId, depth: usize, page: u64) {
-        if depth == 0 {
+        if depth == 0 || self.session.live_nodes() >= self.max_nodes {
             return;
         }
         loop {
@@ -370,6 +373,9 @@ pub fn robustness(name: &str, data: &[u8]) {
     let settle = |variant: Vec<u8>, what: &str| {
         let mut host = Host::with_chunk(variant, 256);
         host.max_polls = 200_000;
+        // Malformed tables can make trees exponentially wide; a user only
+        // drills into one branch, so bound the exploration instead.
+        host.max_nodes = 20_000;
         host.explore(host.root, 24, 1000);
         assert!(
             !diagnostic_kinds(&host).contains(&fillyfoal::DiagKind::Internal),
