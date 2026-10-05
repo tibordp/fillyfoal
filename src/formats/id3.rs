@@ -42,7 +42,11 @@ pub fn v2_len(data: &[u8]) -> Option<u64> {
         return None;
     }
     let size = syncsafe(data.get(6..10)?)?;
-    let footer = if major == 4 && flags & 0x10 != 0 { 10 } else { 0 };
+    let footer = if major == 4 && flags & 0x10 != 0 {
+        10
+    } else {
+        0
+    };
     Some(u64::from(size).saturating_add(10).saturating_add(footer))
 }
 
@@ -342,7 +346,10 @@ async fn frames(cx: &Cx, tag: &Tag, region: Span) -> Result<()> {
                 u16_be(&head, 8).unwrap_or(0),
             )
         };
-        if !id.iter().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) {
+        if !id
+            .iter()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        {
             cx.emit(
                 Node::new("Unparsed data")
                     .span(region.tail(pos))
@@ -580,7 +587,11 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
     };
     let encoding = |cx: &Cx| -> u8 {
         let enc = bytes.first().copied().unwrap_or(0);
-        cx.emit(leaf("Encoding", data.sub(0, 1), enumerated(enc, 8, ENCODING)));
+        cx.emit(leaf(
+            "Encoding",
+            data.sub(0, 1),
+            enumerated(enc, 8, ENCODING),
+        ));
         enc
     };
     match id {
@@ -648,7 +659,10 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
             string("MIME type", 0, &mut at, false);
             string("File name", enc, &mut at, false);
             string("Description", enc, &mut at, false);
-            cx.emit(embedded("Object", frame.tag.input.nested(data.tail(to_u64(at)))));
+            cx.emit(embedded(
+                "Object",
+                frame.tag.input.nested(data.tail(to_u64(at))),
+            ));
         }
         "PRIV" | "UFID" | "UFI" => {
             string("Owner", 0, &mut at, false);
@@ -667,7 +681,11 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
             let rest = bytes.get(at.saturating_add(1)..).unwrap_or_default();
             if !rest.is_empty() {
                 let n = rest.iter().fold(0u64, |acc, &b| (acc << 8) | u64::from(b));
-                cx.emit(leaf("Counter", data.tail(to_u64(at).saturating_add(1)), uint(n, 64)));
+                cx.emit(leaf(
+                    "Counter",
+                    data.tail(to_u64(at).saturating_add(1)),
+                    uint(n, 64),
+                ));
             }
         }
         "CHAP" => {
@@ -684,9 +702,7 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
             string("Element ID", 0, &mut at, false);
             let mut f = Fields::emitting(&cx, &block, BE);
             f.seek(to_u64(at));
-            f.u8("Flags")
-                .flags(CTOC_FLAGS)
-                .emit()?;
+            f.u8("Flags").flags(CTOC_FLAGS).emit()?;
             let count = f.u8("Entries").emit()?;
             let mut pos = to_usize(f.pos());
             for _ in 0..count {
@@ -702,11 +718,10 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
 /// CHAP and CTOC hold frames of their own.
 fn sub_frames(cx: &Cx, frame: &Frame, region: Span) {
     if !region.is_empty() {
-        cx.emit(
-            Node::new("Sub-frames")
-                .span(region)
-                .lazy(crate::expander!(self::expand_frames: (Tag, Span)), (frame.tag.clone(), region)),
-        );
+        cx.emit(Node::new("Sub-frames").span(region).lazy(
+            crate::expander!(self::expand_frames: (Tag, Span)),
+            (frame.tag.clone(), region),
+        ));
     }
 }
 
@@ -736,7 +751,10 @@ pub async fn summary(cx: &Cx, span: Span) -> Result<String> {
             break;
         }
         let (id, size) = if major == 2 {
-            (h.get(..3).unwrap_or_default(), crate::bytes::u24_be(&h, 3).unwrap_or(0))
+            (
+                h.get(..3).unwrap_or_default(),
+                crate::bytes::u24_be(&h, 3).unwrap_or(0),
+            )
         } else if major == 4 {
             let raw = h.get(4..8).unwrap_or_default();
             (
@@ -835,7 +853,11 @@ fn struct_with_track(span: Span) -> Node {
         if let Some(track) = v1_track(&tag.comment) {
             f.node(leaf(
                 "Track",
-                Span::new(f.peek_span(0).source, f.peek_span(0).offset.saturating_sub(2), 1),
+                Span::new(
+                    f.peek_span(0).source,
+                    f.peek_span(0).offset.saturating_sub(2),
+                    1,
+                ),
                 uint(track, 8),
             ));
         }
@@ -845,7 +867,9 @@ fn struct_with_track(span: Span) -> Node {
 
 /// "Artist – Title" from an ID3v1 tag.
 pub async fn v1_title(cx: &Cx, span: Span) -> Option<String> {
-    let tag = crate::fields::parse(cx, span, BE, &(), V1::layout).await.ok()?;
+    let tag = crate::fields::parse(cx, span, BE, &(), V1::layout)
+        .await
+        .ok()?;
     let parts: Vec<&str> = [tag.artist.trim(), tag.title.trim()]
         .into_iter()
         .filter(|s| !s.is_empty())
@@ -868,15 +892,84 @@ pub fn genre(n: u64) -> Option<&'static str> {
 }
 
 const GENRES: &[&str] = &[
-    "Blues", "Classic Rock", "Country", "Dance", "Disco", "Funk", "Grunge", "Hip-Hop", "Jazz",
-    "Metal", "New Age", "Oldies", "Other", "Pop", "R&B", "Rap", "Reggae", "Rock", "Techno",
-    "Industrial", "Alternative", "Ska", "Death Metal", "Pranks", "Soundtrack", "Euro-Techno",
-    "Ambient", "Trip-Hop", "Vocal", "Jazz+Funk", "Fusion", "Trance", "Classical", "Instrumental",
-    "Acid", "House", "Game", "Sound Clip", "Gospel", "Noise", "AlternRock", "Bass", "Soul",
-    "Punk", "Space", "Meditative", "Instrumental Pop", "Instrumental Rock", "Ethnic", "Gothic",
-    "Darkwave", "Techno-Industrial", "Electronic", "Pop-Folk", "Eurodance", "Dream",
-    "Southern Rock", "Comedy", "Cult", "Gangsta", "Top 40", "Christian Rap", "Pop/Funk", "Jungle",
-    "Native American", "Cabaret", "New Wave", "Psychedelic", "Rave", "Showtunes", "Trailer",
-    "Lo-Fi", "Tribal", "Acid Punk", "Acid Jazz", "Polka", "Retro", "Musical", "Rock & Roll",
+    "Blues",
+    "Classic Rock",
+    "Country",
+    "Dance",
+    "Disco",
+    "Funk",
+    "Grunge",
+    "Hip-Hop",
+    "Jazz",
+    "Metal",
+    "New Age",
+    "Oldies",
+    "Other",
+    "Pop",
+    "R&B",
+    "Rap",
+    "Reggae",
+    "Rock",
+    "Techno",
+    "Industrial",
+    "Alternative",
+    "Ska",
+    "Death Metal",
+    "Pranks",
+    "Soundtrack",
+    "Euro-Techno",
+    "Ambient",
+    "Trip-Hop",
+    "Vocal",
+    "Jazz+Funk",
+    "Fusion",
+    "Trance",
+    "Classical",
+    "Instrumental",
+    "Acid",
+    "House",
+    "Game",
+    "Sound Clip",
+    "Gospel",
+    "Noise",
+    "AlternRock",
+    "Bass",
+    "Soul",
+    "Punk",
+    "Space",
+    "Meditative",
+    "Instrumental Pop",
+    "Instrumental Rock",
+    "Ethnic",
+    "Gothic",
+    "Darkwave",
+    "Techno-Industrial",
+    "Electronic",
+    "Pop-Folk",
+    "Eurodance",
+    "Dream",
+    "Southern Rock",
+    "Comedy",
+    "Cult",
+    "Gangsta",
+    "Top 40",
+    "Christian Rap",
+    "Pop/Funk",
+    "Jungle",
+    "Native American",
+    "Cabaret",
+    "New Wave",
+    "Psychedelic",
+    "Rave",
+    "Showtunes",
+    "Trailer",
+    "Lo-Fi",
+    "Tribal",
+    "Acid Punk",
+    "Acid Jazz",
+    "Polka",
+    "Retro",
+    "Musical",
+    "Rock & Roll",
     "Hard Rock",
 ];

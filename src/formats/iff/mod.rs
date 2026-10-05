@@ -138,14 +138,9 @@ form!(
     "application/x-navi-animation",
     |h| riff(h, b"ACON")
 );
-form!(
-    RMI,
-    "rmi",
-    "RIFF MIDI",
-    ["rmi"],
-    "audio/mid",
-    |h| riff(h, b"RMID")
-);
+form!(RMI, "rmi", "RIFF MIDI", ["rmi"], "audio/mid", |h| riff(
+    h, b"RMID"
+));
 form!(
     DLS,
     "dls",
@@ -162,14 +157,9 @@ form!(
     "audio/x-soundfont",
     |h| riff(h, b"sfbk")
 );
-form!(
-    XWMA,
-    "xwma",
-    "XAudio2 WMA",
-    ["xwma"],
-    "audio/x-xwma",
-    |h| riff(h, b"XWMA")
-);
+form!(XWMA, "xwma", "XAudio2 WMA", ["xwma"], "audio/x-xwma", |h| {
+    riff(h, b"XWMA")
+});
 form!(
     CDXA,
     "cdxa",
@@ -226,14 +216,9 @@ form!(
     "video/x-4xm",
     |h| riff(h, b"4XMV")
 );
-form!(
-    AMV,
-    "amv",
-    "AMV video",
-    ["amv"],
-    "video/x-amv",
-    |h| riff(h, b"AMV ")
-);
+form!(AMV, "amv", "AMV video", ["amv"], "video/x-amv", |h| riff(
+    h, b"AMV "
+));
 form!(
     AIFF,
     "aiff",
@@ -445,7 +430,10 @@ async fn chunk_node(cx: &Cx, chunk: Chunk) -> Node {
     let mut name = id.clone();
     let mut summary = None;
     if container {
-        let kind = cx.read_avail(chunk.data.sub(0, 4)).await.unwrap_or_default();
+        let kind = cx
+            .read_avail(chunk.data.sub(0, 4))
+            .await
+            .unwrap_or_default();
         name = format!("{id} {}", fourcc(&kind));
         summary = Some(format!("{} bytes", chunk.size.saturating_sub(4)));
     } else {

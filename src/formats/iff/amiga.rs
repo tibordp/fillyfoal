@@ -13,7 +13,11 @@ use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};
 
-const SVX_COMPRESSION: EnumTable = &[(0, "none"), (1, "Fibonacci delta"), (2, "exponential delta")];
+const SVX_COMPRESSION: EnumTable = &[
+    (0, "none"),
+    (1, "Fibonacci delta"),
+    (2, "exponential delta"),
+];
 const MASKING: EnumTable = &[
     (0, "none"),
     (1, "has mask plane"),
@@ -156,10 +160,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"CMAP" => Some(format!("{} colors", chunk.size / 3)),
         b"ANHD" => {
             let h = parse(cx, chunk.data, e, &(), AnimHeader::layout).await?;
-            Some(format!(
-                "operation {}, {} jiffies",
-                h.operation, h.rel_time
-            ))
+            Some(format!("operation {}, {} jiffies", h.operation, h.rel_time))
         }
         _ => None,
     })
@@ -275,9 +276,7 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
         b"MAUD" => match find(cx, ctx, region, b"MHDR").await? {
             Some(h) => {
                 let h = parse(cx, h.data, e, &(), MaudHeader::layout).await?;
-                let rate = u64::from(h.clock)
-                    .checked_div(h.divide.into())
-                    .unwrap_or(0);
+                let rate = u64::from(h.clock).checked_div(h.divide.into()).unwrap_or(0);
                 Some(format!(
                     "MAUD, {rate} Hz, {} ch, {}-bit",
                     h.channels, h.bits

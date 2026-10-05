@@ -18,7 +18,11 @@ pub async fn emit(cx: &Cx, span: Span) -> Result<u64> {
     let mut cur = Cursor::new(cx, span, LE);
     let start = cur.pos();
     let vendor_len = cur.u32().await?;
-    cx.emit(leaf("Vendor length", cur.since(start), uint(vendor_len, 32)));
+    cx.emit(leaf(
+        "Vendor length",
+        cur.since(start),
+        uint(vendor_len, 32),
+    ));
     let vendor = cur.span(vendor_len.into());
     let text_bytes = cx.read(vendor).await?;
     cx.emit(leaf(
@@ -96,7 +100,11 @@ async fn comment(cx: Cx, span: Span) -> Result<()> {
         Some((key, value)) => {
             let key_len = to_u64(key.len());
             cx.emit(leaf("Field", body.sub(0, key_len), text(key)));
-            cx.emit(leaf("Value", body.tail(key_len.saturating_add(1)), text(value)));
+            cx.emit(leaf(
+                "Value",
+                body.tail(key_len.saturating_add(1)),
+                text(value),
+            ));
         }
         None => cx.emit(leaf("Text", body, text(text_value))),
     }

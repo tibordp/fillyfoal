@@ -30,8 +30,8 @@ pub static FORMAT: Format = Format {
 };
 
 const RATES: [u32; 15] = [
-    6000, 8000, 9600, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000, 88200,
-    96000, 192000,
+    6000, 8000, 9600, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 64000, 88200, 96000,
+    192000,
 ];
 
 const FLAGS: FlagTable = &[
@@ -130,9 +130,18 @@ impl BlockHeader {
         };
         format!(
             "{}{}, {kind}, {}",
-            self.rate().map_or_else(|| "custom".to_owned(), |r| r.to_string()),
-            if self.rate().is_some() { " Hz" } else { " rate" },
-            if self.flags & 4 != 0 { "mono" } else { "stereo" }
+            self.rate()
+                .map_or_else(|| "custom".to_owned(), |r| r.to_string()),
+            if self.rate().is_some() {
+                " Hz"
+            } else {
+                " rate"
+            },
+            if self.flags & 4 != 0 {
+                "mono"
+            } else {
+                "stereo"
+            }
         )
     }
 }
@@ -140,7 +149,14 @@ impl BlockHeader {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (end, tags) = trailing_tags(&cx, input).await?;
-    let first = parse(&cx, file.sub(0, BlockHeader::SIZE), LE, &(), BlockHeader::layout).await?;
+    let first = parse(
+        &cx,
+        file.sub(0, BlockHeader::SIZE),
+        LE,
+        &(),
+        BlockHeader::layout,
+    )
+    .await?;
     let total = if first.total == u32::MAX {
         None
     } else {
@@ -175,7 +191,14 @@ async fn list_blocks(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
     let mut pos = 0u64;
     let mut index = 0u64;
     while region.len.saturating_sub(pos) >= BlockHeader::SIZE {
-        let head = parse(&cx, region.sub(pos, BlockHeader::SIZE), LE, &(), BlockHeader::layout).await?;
+        let head = parse(
+            &cx,
+            region.sub(pos, BlockHeader::SIZE),
+            LE,
+            &(),
+            BlockHeader::layout,
+        )
+        .await?;
         if head.id != "wvpk" {
             cx.emit(
                 Node::new("Unparsed data")
@@ -186,12 +209,14 @@ async fn list_blocks(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
         }
         let len = u64::from(head.size).saturating_add(8);
         let span = region.sub(pos, len);
-        let mut node = Node::new(format!("Block {index}")).span(span).summary(format!(
-            "samples {}..{}, {}",
-            head.index,
-            u64::from(head.index).saturating_add(head.samples.into()),
-            head.describe()
-        ));
+        let mut node = Node::new(format!("Block {index}"))
+            .span(span)
+            .summary(format!(
+                "samples {}..{}, {}",
+                head.index,
+                u64::from(head.index).saturating_add(head.samples.into()),
+                head.describe()
+            ));
         if span.len < len {
             node = node.diag(Diagnostic::truncated(
                 Span::new(span.source, span.offset, len),
@@ -209,7 +234,11 @@ async fn list_blocks(cx: Cx, (input, region): (Input, Span)) -> Result<()> {
 }
 
 async fn block(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    cx.emit(BlockHeader::node("Header", span.sub(0, BlockHeader::SIZE), LE));
+    cx.emit(BlockHeader::node(
+        "Header",
+        span.sub(0, BlockHeader::SIZE),
+        LE,
+    ));
     let mut cur = Cursor::new(&cx, span.tail(BlockHeader::SIZE), LE);
     while !cur.at_end() {
         let start = cur.pos();
@@ -230,19 +259,27 @@ async fn block(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         } else {
             len
         };
-        let name = crate::value::lookup(SUB_BLOCK, function.into())
-            .map_or_else(|| format!("Sub-block {function:#04x}"), |n| {
+        let name = crate::value::lookup(SUB_BLOCK, function.into()).map_or_else(
+            || format!("Sub-block {function:#04x}"),
+            |n| {
                 let mut s = n.to_owned();
                 if let Some(c) = s.get(..1) {
                     s = c.to_uppercase() + s.get(1..).unwrap_or_default();
                 }
                 s
-            });
+            },
+        );
         let node = Node::new(name)
             .span(cur.since(start))
             .value(crate::formats::sound::hex(id, 8))
             .summary(format!("{real} bytes"));
-        let state = (input, cur.since(start), header_len, data.sub(0, real), function);
+        let state = (
+            input,
+            cur.since(start),
+            header_len,
+            data.sub(0, real),
+            function,
+        );
         cx.emit(node.lazy(sub_block, state));
         cx.checkpoint().await;
     }
@@ -255,16 +292,14 @@ async fn sub_block(
 ) -> Result<()> {
     let head = cx.read(span.sub(0, header_len)).await?;
     let id = head.first().copied().unwrap_or(0);
-    cx.emit(leaf(
-        "ID",
-        span.sub(0, 1),
-        crate::formats::sound::hex(id, 8),
-    ).summary(format!(
-        "function {:#04x}{}{}",
-        id & 0x3f,
-        if id & 0x40 != 0 { ", odd size" } else { "" },
-        if id & 0x80 != 0 { ", large" } else { "" }
-    )));
+    cx.emit(
+        leaf("ID", span.sub(0, 1), crate::formats::sound::hex(id, 8)).summary(format!(
+            "function {:#04x}{}{}",
+            id & 0x3f,
+            if id & 0x40 != 0 { ", odd size" } else { "" },
+            if id & 0x80 != 0 { ", large" } else { "" }
+        )),
+    );
     cx.emit(leaf(
         "Size (words)",
         span.sub(1, header_len.saturating_sub(1)),

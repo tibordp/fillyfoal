@@ -143,7 +143,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(size).saturating_add(12);
     }
     if let Some(d) = &description {
-        let mut line = format!("CAF, {}, {}, {}", format_name(&d.format), hz(d.rate), channels(d.channels));
+        let mut line = format!(
+            "CAF, {}, {}, {}",
+            format_name(&d.format),
+            hz(d.rate),
+            channels(d.channels)
+        );
         if d.bits > 0 {
             line.push_str(&format!(", {}-bit", d.bits));
         }
@@ -168,7 +173,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         node = node.summary(match &id {
             b"desc" => description.as_ref().map_or_else(String::new, |d| {
-                format!("{}, {}, {}", format_name(&d.format), hz(d.rate), channels(d.channels))
+                format!(
+                    "{}, {}, {}",
+                    format_name(&d.format),
+                    hz(d.rate),
+                    channels(d.channels)
+                )
             }),
             _ => format!("{} bytes", span.len.saturating_sub(12)),
         });
@@ -192,16 +202,20 @@ async fn chunk(cx: Cx, (input, id, span): (Input, [u8; 4], Span)) -> Result<()> 
     let mut f = Fields::emitting(&cx, &head, BE);
     f.ascii("Chunk type", 4).emit()?;
     f.u64("Chunk size")
-        .with(|&s, n| if s == u64::MAX { n.summary("-1: to the end of the file") } else { n })
+        .with(|&s, n| {
+            if s == u64::MAX {
+                n.summary("-1: to the end of the file")
+            } else {
+                n
+            }
+        })
         .emit()?;
     let data = span.tail(12);
     match &id {
         b"desc" => cx.emit(struct_node("Description", data, BE, (), desc)),
         b"data" => {
             let block = cx.block(data.sub(0, 4)).await?;
-            Fields::emitting(&cx, &block, BE)
-                .u32("Edit count")
-                .emit()?;
+            Fields::emitting(&cx, &block, BE).u32("Edit count").emit()?;
             cx.emit(Node::new("Audio data").span(data.tail(4)));
         }
         b"pakt" => {
@@ -233,7 +247,11 @@ async fn chunk(cx: Cx, (input, id, span): (Input, [u8; 4], Span)) -> Result<()> 
         b"info" => {
             let block = cx.block(data.sub(0, data.len.min(1 << 16))).await?;
             let count = u32_be(&block.data, 0).unwrap_or(0);
-            cx.emit(leaf("Entries", data.sub(0, 4), crate::formats::sound::uint(count, 32)));
+            cx.emit(leaf(
+                "Entries",
+                data.sub(0, 4),
+                crate::formats::sound::uint(count, 32),
+            ));
             let mut at = 4usize;
             for _ in 0..count {
                 let rest = block.data.get(at..).unwrap_or_default();
@@ -245,7 +263,8 @@ async fn chunk(cx: Cx, (input, id, span): (Input, [u8; 4], Span)) -> Result<()> 
                     break;
                 };
                 let key = String::from_utf8_lossy(rest.get(..k).unwrap_or_default()).into_owned();
-                let value = String::from_utf8_lossy(after.get(..v).unwrap_or_default()).into_owned();
+                let value =
+                    String::from_utf8_lossy(after.get(..v).unwrap_or_default()).into_owned();
                 let len = k.saturating_add(v).saturating_add(2);
                 cx.emit(leaf(key, data.sub(to_u64(at), to_u64(len)), text(value)));
                 at = at.saturating_add(len);

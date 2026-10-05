@@ -57,7 +57,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let span = region.sub(pos, len);
         let kind = name(h.get(..16).unwrap_or_default());
         match kind.as_str() {
-            "fmt" => fmt = parse(&cx, span.tail(24), LE, &(), wav::wave_format).await.ok(),
+            "fmt" => {
+                fmt = parse(&cx, span.tail(24), LE, &(), wav::wave_format)
+                    .await
+                    .ok()
+            }
             "data" => data_len = Some(len.saturating_sub(24)),
             _ => {}
         }

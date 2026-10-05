@@ -85,7 +85,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hspan = file.sub(0, Header::SIZE);
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", hspan, LE));
-    let orders = file.sub(Header::SIZE, 256.min(u64::from(h.header_size).saturating_sub(20)));
+    let orders = file.sub(
+        Header::SIZE,
+        256.min(u64::from(h.header_size).saturating_sub(20)),
+    );
     let list = cx.read_avail(orders).await?;
     cx.emit(
         Node::new("Orders")
@@ -156,8 +159,15 @@ async fn list_patterns(cx: Cx, patterns: Vec<(u16, Span, u64, u16)>) -> Result<(
 }
 
 async fn pattern(cx: Cx, (span, header_len): (Span, u64)) -> Result<()> {
-    cx.emit(PatternHeader::node("Header", span.sub(0, PatternHeader::SIZE), LE));
-    let extra = span.sub(PatternHeader::SIZE, header_len.saturating_sub(PatternHeader::SIZE));
+    cx.emit(PatternHeader::node(
+        "Header",
+        span.sub(0, PatternHeader::SIZE),
+        LE,
+    ));
+    let extra = span.sub(
+        PatternHeader::SIZE,
+        header_len.saturating_sub(PatternHeader::SIZE),
+    );
     if !extra.is_empty() {
         cx.emit(Node::new("Extra header bytes").span(extra));
     }
@@ -195,7 +205,10 @@ async fn list_instruments(cx: Cx, (region, count): (Span, u16)) -> Result<()> {
             let len = cx.read_avail(region.sub(at, 4)).await?;
             data_len = data_len.saturating_add(u32_le(&len, 0).unwrap_or(0).into());
         }
-        let span = region.sub(pos, headers_end.saturating_add(data_len).saturating_sub(pos));
+        let span = region.sub(
+            pos,
+            headers_end.saturating_add(data_len).saturating_sub(pos),
+        );
         let state = (span, size.max(29), samples, shsize);
         cx.push(
             Node::new(format!("Instrument {}", i.saturating_add(1)))

@@ -28,7 +28,10 @@ pub static FORMAT: Format = Format {
 
 /// The channel count implied by the format tag.
 fn channels_for(tag: &[u8]) -> Option<u64> {
-    let digit = |b: u8| b.is_ascii_digit().then(|| u64::from(b.saturating_sub(b'0')));
+    let digit = |b: u8| {
+        b.is_ascii_digit()
+            .then(|| u64::from(b.saturating_sub(b'0')))
+    };
     Some(match tag {
         b"M.K." | b"M!K!" | b"M&K!" | b"N.T." | b"FLT4" | b"4CHN" => 4,
         b"FLT8" | b"OKTA" | b"OCTA" | b"CD81" | b"FA08" => 8,
@@ -72,7 +75,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut lengths = Vec::new();
     let mut used = 0u32;
     for i in 0..31usize {
-        let at = 20usize.saturating_add(i.saturating_mul(30)).saturating_add(22);
+        let at = 20usize
+            .saturating_add(i.saturating_mul(30))
+            .saturating_add(22);
         let words = crate::bytes::u16_be(&head, at).unwrap_or(0);
         if words > 0 {
             used = used.saturating_add(1);
@@ -85,7 +90,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             samples_span,
             BE,
             "Sample",
-            Some(|s| format!("{}, {} bytes", named(&s.name), u32::from(s.length).saturating_mul(2))),
+            Some(|s| {
+                format!(
+                    "{}, {} bytes",
+                    named(&s.name),
+                    u32::from(s.length).saturating_mul(2)
+                )
+            }),
         )
         .summary(format!("{used} of 31 used")),
     );
@@ -95,11 +106,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(950, 1))
             .value(crate::formats::sound::uint(song_length, 8)),
     );
-    cx.emit(
-        Node::new("Restart position")
-            .span(file.sub(951, 1))
-            .value(crate::formats::sound::uint(head.get(951).copied().unwrap_or(0), 8)),
-    );
+    cx.emit(Node::new("Restart position").span(file.sub(951, 1)).value(
+        crate::formats::sound::uint(head.get(951).copied().unwrap_or(0), 8),
+    ));
     let order_span = file.sub(952, u64::from(song_length.min(128)));
     cx.emit(order_node(&cx, order_span).await?);
     cx.emit(
@@ -177,8 +186,8 @@ async fn list_patterns(cx: Cx, (span, channels, count): (Span, u64, u64)) -> Res
 
 /// Amiga periods for octaves 1–3 (C-1 = 856).
 const PERIODS: [u16; 36] = [
-    856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, 428, 404, 381, 360, 339, 320,
-    302, 285, 269, 254, 240, 226, 214, 202, 190, 180, 170, 160, 151, 143, 135, 127, 120, 113,
+    856, 808, 762, 720, 678, 640, 604, 570, 538, 508, 480, 453, 428, 404, 381, 360, 339, 320, 302,
+    285, 269, 254, 240, 226, 214, 202, 190, 180, 170, 160, 151, 143, 135, 127, 120, 113,
 ];
 
 fn period_note(period: u16) -> String {

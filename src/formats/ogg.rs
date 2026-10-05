@@ -47,10 +47,38 @@ macro_rules! ogg_format {
     };
 }
 
-ogg_format!(OPUS, "opus", "Ogg Opus", ["opus", "ogg", "oga"], "audio/ogg; codecs=opus", b"OpusHead");
-ogg_format!(OGG_FLAC, "ogg-flac", "Ogg FLAC", ["oga", "ogg"], "audio/ogg; codecs=flac", b"\x7fFLAC");
-ogg_format!(SPEEX, "speex", "Ogg Speex", ["spx", "ogg"], "audio/ogg; codecs=speex", b"Speex   ");
-ogg_format!(THEORA, "theora", "Ogg Theora", ["ogv", "ogg"], "video/ogg", b"\x80theora");
+ogg_format!(
+    OPUS,
+    "opus",
+    "Ogg Opus",
+    ["opus", "ogg", "oga"],
+    "audio/ogg; codecs=opus",
+    b"OpusHead"
+);
+ogg_format!(
+    OGG_FLAC,
+    "ogg-flac",
+    "Ogg FLAC",
+    ["oga", "ogg"],
+    "audio/ogg; codecs=flac",
+    b"\x7fFLAC"
+);
+ogg_format!(
+    SPEEX,
+    "speex",
+    "Ogg Speex",
+    ["spx", "ogg"],
+    "audio/ogg; codecs=speex",
+    b"Speex   "
+);
+ogg_format!(
+    THEORA,
+    "theora",
+    "Ogg Theora",
+    ["ogv", "ogg"],
+    "video/ogg",
+    b"\x80theora"
+);
 
 /// Ogg Vorbis and any other Ogg stream.
 pub static FORMAT: Format = Format {
@@ -65,11 +93,7 @@ pub static FORMAT: Format = Format {
 // ---------------------------------------------------------------------------
 // Pages
 
-const PAGE_FLAGS: FlagTable = &[
-    flag(0x1, "CONTINUED"),
-    flag(0x2, "BOS"),
-    flag(0x4, "EOS"),
-];
+const PAGE_FLAGS: FlagTable = &[flag(0x1, "CONTINUED"), flag(0x2, "BOS"), flag(0x4, "EOS")];
 
 record! {
     pub struct PageHeader {
@@ -239,7 +263,9 @@ impl Stream {
                 let info = p.get(17..).unwrap_or_default();
                 let rate = crate::bytes::u24_be(info, 10).unwrap_or(0) >> 4;
                 s.rate = f64::from(rate);
-                s.channels = info.get(12).map_or(0, |b| u64::from((b >> 1) & 7).saturating_add(1));
+                s.channels = info
+                    .get(12)
+                    .map_or(0, |b| u64::from((b >> 1) & 7).saturating_add(1));
             }
             Codec::Theora => {
                 let num = crate::bytes::u32_be(p, 22).unwrap_or(0);
@@ -259,10 +285,17 @@ impl Stream {
             }
             _ => {}
         }
-        if matches!(codec, Codec::Vorbis | Codec::Opus | Codec::Flac | Codec::Speex) {
+        if matches!(
+            codec,
+            Codec::Vorbis | Codec::Opus | Codec::Flac | Codec::Speex
+        ) {
             s.describe = format!(
                 "{}, {} Hz, {} ch",
-                if codec == Codec::Opus { "Opus" } else { codec.name() },
+                if codec == Codec::Opus {
+                    "Opus"
+                } else {
+                    codec.name()
+                },
                 s.rate as u64,
                 s.channels
             );
@@ -390,8 +423,10 @@ async fn last_granules(cx: &Cx, file: Span) -> Result<Vec<(u32, u64)>> {
         .and_then(|t| t.windows(4).position(|w| w == b"OggS"))
     {
         let p = i.saturating_add(at);
-        if let (Some(g), Some(serial)) = (u64_le(&tail, p.saturating_add(6)), u32_le(&tail, p.saturating_add(14)))
-            && g != u64::MAX
+        if let (Some(g), Some(serial)) = (
+            u64_le(&tail, p.saturating_add(6)),
+            u32_le(&tail, p.saturating_add(14)),
+        ) && g != u64::MAX
         {
             match out.iter_mut().find(|(s, _)| *s == serial) {
                 Some(entry) => entry.1 = g,
@@ -697,7 +732,11 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             let used = vorbis::emit(&cx, span.tail(skip)).await?;
             let rest = span.tail(skip.saturating_add(used));
             if !rest.is_empty() {
-                cx.emit(Node::new("Trailing bytes").span(rest).desc("Framing bit or padding"));
+                cx.emit(
+                    Node::new("Trailing bytes")
+                        .span(rest)
+                        .desc("Framing bit or padding"),
+                );
             }
         }
         Kind::OpusHead => {
@@ -705,7 +744,9 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             f.ascii("Signature", 8).emit()?;
             f.u8("Version").emit()?;
             let channels = f.u8("Channels").emit()?;
-            f.u16("Pre-skip").desc("Samples (at 48 kHz) to discard").emit()?;
+            f.u16("Pre-skip")
+                .desc("Samples (at 48 kHz) to discard")
+                .emit()?;
             f.u32("Input sample rate").emit()?;
             f.int::<i16>("Output gain")
                 .with(|&g, n| n.summary(format!("{:.2} dB", f64::from(g) / 256.0)))

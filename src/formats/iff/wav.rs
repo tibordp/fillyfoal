@@ -384,7 +384,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             }
         }
         b"bext" => {
-            cx.emit(Bext::node("Broadcast extension", data.sub(0, Bext::SIZE), e));
+            cx.emit(Bext::node(
+                "Broadcast extension",
+                data.sub(0, Bext::SIZE),
+                e,
+            ));
             let history = data.tail(Bext::SIZE);
             if !history.is_empty() {
                 let t = peek_text(cx, history, history.len.min(1 << 16)).await?;
@@ -393,9 +397,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         }
         b"cue " => {
             let block = cx.block(data.sub(0, 4)).await?;
-            let count = Fields::emitting(cx, &block, e)
-                .u32("Cue points")
-                .emit()?;
+            let count = Fields::emitting(cx, &block, e).u32("Cue points").emit()?;
             let points = data.sub(4, u64::from(count).saturating_mul(CuePoint::SIZE));
             cx.emit(table::<CuePoint>(
                 "Points",

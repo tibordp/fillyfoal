@@ -7,9 +7,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Fields, parse};
+use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, find, scan, wav};
 use crate::formats::sound::{peek_text, table};
-use crate::formats::embedded;
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -263,7 +263,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         (b"DLS ", b"rgnh") => cx.emit(RegionHeader::node("Region header", data, e)),
         (b"DLS ", b"wlnk") => cx.emit(WaveLink::node("Wave link", data, e)),
         (b"DLS ", b"wsmp") => {
-            cx.emit(WaveSample::node("Wave sample", data.sub(0, WaveSample::SIZE), e));
+            cx.emit(WaveSample::node(
+                "Wave sample",
+                data.sub(0, WaveSample::SIZE),
+                e,
+            ));
             let loops = data.tail(WaveSample::SIZE);
             if !loops.is_empty() {
                 cx.emit(Node::new("Loops").span(loops));

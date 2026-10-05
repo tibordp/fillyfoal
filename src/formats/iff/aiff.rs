@@ -85,7 +85,10 @@ impl Common {
             s.push_str(&format!(", {}-bit", self.bits));
         }
         if self.rate > 0.0 {
-            s.push_str(&format!(", {}", duration(f64::from(self.frames) / self.rate)));
+            s.push_str(&format!(
+                ", {}",
+                duration(f64::from(self.frames) / self.rate)
+            ));
         }
         s
     }
@@ -111,10 +114,7 @@ fn pstring(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
 fn comm(f: &mut Fields<'_>, aifc: &bool) -> Result<Common> {
     let mut c = Common {
         channels: f.int::<i16>("Channels").emit()?,
-        frames: f
-            .u32("Sample frames")
-            .desc("Samples per channel")
-            .emit()?,
+        frames: f.u32("Sample frames").desc("Samples per channel").emit()?,
         bits: f.int::<i16>("Sample size").desc("Bits per sample").emit()?,
         ..Common::default()
     };
@@ -256,7 +256,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 );
             }
         }
-        b"INST" => cx.emit(Instrument::node("Instrument", data.sub(0, Instrument::SIZE), e)),
+        b"INST" => cx.emit(Instrument::node(
+            "Instrument",
+            data.sub(0, Instrument::SIZE),
+            e,
+        )),
         b"COMT" => {
             let block = cx.block(data).await?;
             let mut f = Fields::new(&block, e);

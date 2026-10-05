@@ -168,7 +168,12 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
     crate::formats::sound::u24(&mut f, "Length", BE).emit()?;
     let data = b.span.tail(4);
     match b.kind {
-        0 => cx.emit(bits_node("Stream info", data, |b| streaminfo(b).map(|_| ()), false)),
+        0 => cx.emit(bits_node(
+            "Stream info",
+            data,
+            |b| streaminfo(b).map(|_| ()),
+            false,
+        )),
         1 => cx.emit(Node::new("Padding").span(data)),
         2 => {
             let block = cx.block(data.sub(0, 4)).await?;
@@ -234,12 +239,12 @@ pub async fn picture(cx: &Cx, input: Input, data: Span) -> Result<()> {
     f.u32("Width").emit()?;
     f.u32("Height").emit()?;
     f.u32("Color depth").emit()?;
-    f.u32("Colors used").desc("For indexed images; 0 otherwise").emit()?;
+    f.u32("Colors used")
+        .desc("For indexed images; 0 otherwise")
+        .emit()?;
     let len = f.u32("Data length").emit()?;
     let image = data.sub(f.pos(), len.into());
-    cx.emit(
-        embedded("Picture data", input.nested(image)).summary(format!("{} bytes", image.len)),
-    );
+    cx.emit(embedded("Picture data", input.nested(image)).summary(format!("{} bytes", image.len)));
     Ok(())
 }
 
@@ -278,7 +283,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let data = span.tail(4);
         match flags & 0x7f {
             0 if info.is_none() => {
-                info = parse_bits(&cx, data.sub(0, 34), streaminfo, false).await.ok();
+                info = parse_bits(&cx, data.sub(0, 34), streaminfo, false)
+                    .await
+                    .ok();
             }
             4 if title.is_none() => title = vorbis::title(&cx, data).await,
             _ => {}
@@ -372,7 +379,13 @@ struct FrameHeader {
 
 fn crc8(data: &[u8]) -> u8 {
     data.iter().fold(0u8, |crc, &b| {
-        (0..8).fold(crc ^ b, |c, _| if c & 0x80 != 0 { (c << 1) ^ 0x07 } else { c << 1 })
+        (0..8).fold(crc ^ b, |c, _| {
+            if c & 0x80 != 0 {
+                (c << 1) ^ 0x07
+            } else {
+                c << 1
+            }
+        })
     })
 }
 
@@ -384,7 +397,12 @@ fn frame_header(d: &[u8]) -> Option<FrameHeader> {
     let size_code = d.get(2)? >> 4;
     let rate_code = d.get(2)? & 0xf;
     let chan = d.get(3)? >> 4;
-    if size_code == 0 || rate_code == 15 || chan > 10 || d.get(3)? & 1 != 0 || (d.get(3)? >> 1) & 7 == 3 {
+    if size_code == 0
+        || rate_code == 15
+        || chan > 10
+        || d.get(3)? & 1 != 0
+        || (d.get(3)? >> 1) & 7 == 3
+    {
         return None;
     }
     // UTF-8-style coded frame or sample number.
@@ -440,7 +458,9 @@ const WINDOW: u64 = 0x10000;
 async fn next_frame(cx: &Cx, region: Span, from: u64, number: u64) -> Result<Option<u64>> {
     let mut pos = from;
     while pos < region.len {
-        let window = cx.read_avail(region.sub(pos, WINDOW.saturating_add(16))).await?;
+        let window = cx
+            .read_avail(region.sub(pos, WINDOW.saturating_add(16)))
+            .await?;
         let limit = window.len().saturating_sub(16).max(1);
         for i in 0..limit {
             if window.get(i) == Some(&0xff)
@@ -472,9 +492,14 @@ async fn list_frames(cx: Cx, (region, info): (Span, StreamInfo)) -> Result<()> {
             );
             return Ok(());
         };
-        let next = next_frame(&cx, region, pos.saturating_add(to_u64(h.len)), h.number.saturating_add(1))
-            .await?
-            .unwrap_or(region.len);
+        let next = next_frame(
+            &cx,
+            region,
+            pos.saturating_add(to_u64(h.len)),
+            h.number.saturating_add(1),
+        )
+        .await?
+        .unwrap_or(region.len);
         let span = region.sub(pos, next.saturating_sub(pos));
         let chans = crate::value::lookup(CHANNELS, h.channels.into()).unwrap_or("?");
         cx.push(
@@ -499,7 +524,10 @@ async fn frame(cx: Cx, (span, header_len, _info): (Span, usize, StreamInfo)) -> 
     let crc_at = span.len.saturating_sub(2);
     cx.emit(
         Node::new("Subframes")
-            .span(span.sub(to_u64(header_len), crc_at.saturating_sub(to_u64(header_len))))
+            .span(span.sub(
+                to_u64(header_len),
+                crc_at.saturating_sub(to_u64(header_len)),
+            ))
             .desc("One encoded subframe per channel"),
     );
     let crc = cx.read(span.sub(crc_at, 2)).await?;
@@ -528,8 +556,13 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
             _ => n,
         })
         .emit()?;
-    let rate_code = b.field("Sample rate code", 4).enumeration(RATE_CODE).emit()?;
-    b.field("Channel assignment", 4).enumeration(CHANNELS).emit()?;
+    let rate_code = b
+        .field("Sample rate code", 4)
+        .enumeration(RATE_CODE)
+        .emit()?;
+    b.field("Channel assignment", 4)
+        .enumeration(CHANNELS)
+        .emit()?;
     b.field("Sample size", 3).enumeration(SAMPLE_SIZE).emit()?;
     b.field("Reserved", 1).emit()?;
     // The frame or sample number, UTF-8 style: the first byte's leading

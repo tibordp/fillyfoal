@@ -65,24 +65,47 @@ pub fn find_sync(data: &[u8], limit: usize) -> Option<usize> {
 // ---------------------------------------------------------------------------
 // Frame headers
 
-const VERSION: EnumTable = &[(0, "MPEG-2.5"), (1, "reserved"), (2, "MPEG-2"), (3, "MPEG-1")];
-const LAYER: EnumTable = &[(0, "reserved"), (1, "Layer III"), (2, "Layer II"), (3, "Layer I")];
+const VERSION: EnumTable = &[
+    (0, "MPEG-2.5"),
+    (1, "reserved"),
+    (2, "MPEG-2"),
+    (3, "MPEG-1"),
+];
+const LAYER: EnumTable = &[
+    (0, "reserved"),
+    (1, "Layer III"),
+    (2, "Layer II"),
+    (3, "Layer I"),
+];
 const MODE: EnumTable = &[
     (0, "stereo"),
     (1, "joint stereo"),
     (2, "dual channel"),
     (3, "mono"),
 ];
-const EMPHASIS: EnumTable = &[(0, "none"), (1, "50/15 µs"), (2, "reserved"), (3, "CCITT J.17")];
+const EMPHASIS: EnumTable = &[
+    (0, "none"),
+    (1, "50/15 µs"),
+    (2, "reserved"),
+    (3, "CCITT J.17"),
+];
 
 const BITRATES: [[[u16; 15]; 3]; 2] = [
     [
-        [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
-        [0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
-        [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
+        [
+            0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448,
+        ],
+        [
+            0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384,
+        ],
+        [
+            0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320,
+        ],
     ],
     [
-        [0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],
+        [
+            0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256,
+        ],
         [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
         [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
     ],
@@ -166,10 +189,20 @@ impl Header {
         let pad = u64::from(self.padding);
         let rate = u64::from(self.rate);
         let len = match self.layer {
-            1 => bits.checked_mul(12)?.checked_div(rate)?.checked_add(pad)?.checked_mul(4)?,
+            1 => bits
+                .checked_mul(12)?
+                .checked_div(rate)?
+                .checked_add(pad)?
+                .checked_mul(4)?,
             _ => {
-                let factor = if self.layer == 3 && self.version != 1 { 72 } else { 144 };
-                bits.checked_mul(factor)?.checked_div(rate)?.checked_add(pad)?
+                let factor = if self.layer == 3 && self.version != 1 {
+                    72
+                } else {
+                    144
+                };
+                bits.checked_mul(factor)?
+                    .checked_div(rate)?
+                    .checked_add(pad)?
             }
         };
         (len >= 4).then_some(len)
@@ -247,10 +280,12 @@ fn header_fields(b: &mut Bits<'_>) -> Result<()> {
         _ => 2,
     };
     b.field("Sample rate index", 2)
-        .with(|v, n| match RATES.get(rate_row).and_then(|r| r.get(to_usize(v))) {
-            Some(r) => n.summary(format!("{r} Hz")),
-            None => n.diag(Diagnostic::malformed("reserved sample rate")),
-        })
+        .with(
+            |v, n| match RATES.get(rate_row).and_then(|r| r.get(to_usize(v))) {
+                Some(r) => n.summary(format!("{r} Hz")),
+                None => n.diag(Diagnostic::malformed("reserved sample rate")),
+            },
+        )
         .emit()?;
     b.field("Padding", 1).flag().emit()?;
     b.field("Private", 1).flag().emit()?;
@@ -345,7 +380,9 @@ fn xing(f: &mut Fields<'_>, _: &()) -> Result<Vbr> {
         f.u16("Radio replay gain").hex().emit()?;
         f.u16("Audiophile replay gain").hex().emit()?;
         f.u8("Encoding flags / ATH type").hex().emit()?;
-        f.u8("Bitrate").desc("ABR: average; CBR: exact; VBR: minimum (kbps)").emit()?;
+        f.u8("Bitrate")
+            .desc("ABR: average; CBR: exact; VBR: minimum (kbps)")
+            .emit()?;
         u24(f, "Encoder delay / padding", BE)
             .with(|&v, n| n.summary(format!("delay {}, padding {}", v >> 12, v & 0xfff)))
             .emit()?;
@@ -372,7 +409,8 @@ fn vbri(f: &mut Fields<'_>, _: &()) -> Result<Vbr> {
     f.u16("Frames per TOC entry").emit()?;
     let toc = u64::from(entries).saturating_mul(size.into());
     if toc > 0 {
-        f.bytes("Table of contents", toc.min(f.remaining())).emit()?;
+        f.bytes("Table of contents", toc.min(f.remaining()))
+            .emit()?;
     }
     Ok(Vbr {
         frames: Some(frames),
@@ -463,10 +501,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Ok(v) => {
                 let mut node = struct_node(name, span, BE, (), layout);
                 if let Some(n) = v.frames {
-                    node = node.summary(format!(
-                        "{}, {n} frames",
-                        if v.cbr { "CBR" } else { "VBR" }
-                    ));
+                    node =
+                        node.summary(format!("{}, {n} frames", if v.cbr { "CBR" } else { "VBR" }));
                 }
                 cx.emit(node);
                 vbr = Some(v);
@@ -527,7 +563,8 @@ async fn list_frames(cx: Cx, region: Span) -> Result<()> {
     let mut index = 0u64;
     while region.len.saturating_sub(pos) >= 4 {
         let head = cx.read(region.sub(pos, 4)).await?;
-        let Some((h, len)) = Header::parse(&head).and_then(|h| h.frame_len().map(|l| (h, l))) else {
+        let Some((h, len)) = Header::parse(&head).and_then(|h| h.frame_len().map(|l| (h, l)))
+        else {
             let rest = region.tail(pos);
             let mut node = Node::new("Unparsed data").span(rest);
             if head.iter().all(|&b| b == 0) {

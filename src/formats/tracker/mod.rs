@@ -22,7 +22,9 @@ use crate::span::Span;
 
 /// "C-4" style note names (0 = C-0).
 pub fn note_name(n: u8) -> String {
-    const NAMES: [&str; 12] = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"];
+    const NAMES: [&str; 12] = [
+        "C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-",
+    ];
     let name = NAMES.get(usize::from(n % 12)).copied().unwrap_or("?");
     format!("{name}{}", n / 12)
 }
@@ -73,7 +75,11 @@ pub fn pointed<R: Record>(
     item: &'static str,
     describe: Option<Describe<R>>,
 ) -> Node {
-    let count = pointers.table.len.checked_div(pointers.width.into()).unwrap_or(0);
+    let count = pointers
+        .table
+        .len
+        .checked_div(pointers.width.into())
+        .unwrap_or(0);
     Node::new(name)
         .span(pointers.table)
         .summary(format!("{count} entries"))
@@ -88,7 +94,9 @@ async fn expand_pointed<R: Record>(
 ) -> Result<()> {
     let table = cx.read(pointers.table).await?;
     let width = usize::from(pointers.width.max(1));
-    cx.set_count(Count::Exact(to_u64(table.len().checked_div(width).unwrap_or(0))));
+    cx.set_count(Count::Exact(to_u64(
+        table.len().checked_div(width).unwrap_or(0),
+    )));
     let mut index = 0u64;
     let mut at = 0usize;
     while at.saturating_add(width) <= table.len() {

@@ -96,8 +96,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Magic")
             .span(file.sub(0, magic_len))
             .value(crate::formats::sound::text(
-                String::from_utf8_lossy(head.get(..to_usize(magic_len).saturating_sub(1)).unwrap_or_default())
-                    .into_owned(),
+                String::from_utf8_lossy(
+                    head.get(..to_usize(magic_len).saturating_sub(1))
+                        .unwrap_or_default(),
+                )
+                .into_owned(),
             )),
     );
     let mut pos = magic_len;
@@ -149,7 +152,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .span(frames_span)
-            .summary(format!("{}{frames} frames of 20 ms", if exact { "" } else { "≈" }))
+            .summary(format!(
+                "{}{frames} frames of 20 ms",
+                if exact { "" } else { "≈" }
+            ))
             .lazy(list_frames, (frames_span, kind)),
     );
     Ok(())
@@ -165,7 +171,9 @@ async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
             cx.emit(
                 Node::new("Unparsed data")
                     .span(region.tail(pos))
-                    .diag(Diagnostic::malformed(format!("invalid frame header {toc:#04x}"))),
+                    .diag(Diagnostic::malformed(format!(
+                        "invalid frame header {toc:#04x}"
+                    ))),
             );
             return Ok(());
         }

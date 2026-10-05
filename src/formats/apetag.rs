@@ -87,7 +87,10 @@ async fn expand(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         cx.emit(Footer::node("Header", span.sub(0, Footer::SIZE), LE));
     }
     let start = if has_header { Footer::SIZE } else { 0 };
-    let items = span.sub(start, span.len.saturating_sub(start).saturating_sub(Footer::SIZE));
+    let items = span.sub(
+        start,
+        span.len.saturating_sub(start).saturating_sub(Footer::SIZE),
+    );
     cx.emit(
         Node::new("Items")
             .span(items)
@@ -149,7 +152,9 @@ async fn item_fields(cx: Cx, (input, span, value, kind): (Input, Span, Span, u32
     f.u32("Value size").emit()?;
     f.u32("Flags")
         .flags(FLAGS)
-        .with(|&v, n| n.summary(crate::value::lookup(ITEM_KIND, ((v >> 1) & 3).into()).unwrap_or("reserved")))
+        .with(|&v, n| {
+            n.summary(crate::value::lookup(ITEM_KIND, ((v >> 1) & 3).into()).unwrap_or("reserved"))
+        })
         .emit()?;
     let key_len = value.offset.saturating_sub(span.offset).saturating_sub(8);
     let key = cx.read(span.sub(8, key_len)).await?;
@@ -167,7 +172,9 @@ async fn item_fields(cx: Cx, (input, span, value, kind): (Input, Span, Span, u32
                 cx.emit(leaf(
                     "File name",
                     value.sub(0, n.saturating_add(1)),
-                    text(crate::text::latin1(data.get(..crate::bytes::to_usize(n)).unwrap_or_default())),
+                    text(crate::text::latin1(
+                        data.get(..crate::bytes::to_usize(n)).unwrap_or_default(),
+                    )),
                 ));
                 cx.emit(crate::formats::embedded(
                     "Data",

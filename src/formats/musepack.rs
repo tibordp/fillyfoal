@@ -17,7 +17,8 @@ pub static FORMAT: Format = Format {
     extensions: &["mpc", "mp+", "mpp"],
     mime: "audio/x-musepack",
     probe: Probe::Custom(|h| {
-        h.starts_with(b"MPCK") || (h.starts_with(b"MP+") && h.data.get(3).is_some_and(|v| v & 0xf == 7))
+        h.starts_with(b"MPCK")
+            || (h.starts_with(b"MP+") && h.data.get(3).is_some_and(|v| v & 0xf == 7))
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -90,10 +91,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let header_len = 2u64.saturating_add(crate::bytes::to_u64(size_len));
             let len = size.max(header_len);
             let span = file.sub(pos, len);
-            let name = KEYS
-                .iter()
-                .find(|(k, _)| **k == key)
-                .map_or_else(|| crate::formats::sound::fourcc(&key), |(_, n)| (*n).to_owned());
+            let name = KEYS.iter().find(|(k, _)| **k == key).map_or_else(
+                || crate::formats::sound::fourcc(&key),
+                |(_, n)| (*n).to_owned(),
+            );
             let mut node = Node::new(name).span(span).summary(format!("{len} bytes"));
             if &key == b"SH" {
                 let data = cx.read_avail(span.tail(header_len).sub(0, 32)).await?;
@@ -133,7 +134,11 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
     ));
     let head = cx.read(span.sub(2, header_len.saturating_sub(2))).await?;
     let size = varint(&head).map_or(0, |v| v.0);
-    cx.emit(leaf("Size", span.sub(2, header_len.saturating_sub(2)), uint(size, 64)));
+    cx.emit(leaf(
+        "Size",
+        span.sub(2, header_len.saturating_sub(2)),
+        uint(size, 64),
+    ));
     let payload = span.tail(header_len);
     let data = cx.read_avail(payload.sub(0, 64)).await?;
     match &key {
@@ -165,7 +170,13 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
             b.field("Channels − 1", 4).emit()?;
             b.field("Mid/side stereo", 1).flag().emit()?;
             b.field("Audio block frames", 3)
-                .with(|v, n| n.summary(format!("{} frames per packet", 1u64.checked_shl(u32::try_from(v.saturating_mul(2)).unwrap_or(64)).unwrap_or(0))))
+                .with(|v, n| {
+                    n.summary(format!(
+                        "{} frames per packet",
+                        1u64.checked_shl(u32::try_from(v.saturating_mul(2)).unwrap_or(64))
+                            .unwrap_or(0)
+                    ))
+                })
                 .emit()?;
         }
         b"RG" => {
@@ -183,7 +194,11 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
                 leaf("Profile", payload.sub(0, 1), uint(raw >> 1, 7))
                     .summary(format!("{:.1}", f64::from(raw >> 1) / 8.0)),
             );
-            cx.emit(leaf("PNS", payload.sub(0, 1), crate::value::Value::Bool(raw & 1 != 0)));
+            cx.emit(leaf(
+                "PNS",
+                payload.sub(0, 1),
+                crate::value::Value::Bool(raw & 1 != 0),
+            ));
             let block = cx.block(payload.sub(1, 3)).await?;
             let mut f = Fields::emitting(&cx, &block, Endian::Big);
             f.u8("Encoder major").emit()?;
@@ -193,8 +208,12 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
         b"SO" => {
             let (v, n) = varint(&data).unwrap_or((0, 1));
             cx.emit(
-                leaf("Offset", payload.sub(0, crate::bytes::to_u64(n)), uint(v, 64))
-                    .desc("From the start of this packet to the seek table"),
+                leaf(
+                    "Offset",
+                    payload.sub(0, crate::bytes::to_u64(n)),
+                    uint(v, 64),
+                )
+                .desc("From the start of this packet to the seek table"),
             );
         }
         _ => cx.emit(Node::new("Data").span(payload)),
@@ -217,7 +236,10 @@ async fn sv7(cx: &Cx, file: Span) -> Result<()> {
             n.summary(format!(
                 "profile {}, {} Hz, max band {}",
                 (v >> 20) & 0xf,
-                RATES.get(crate::bytes::to_usize(((v >> 16) & 3).into())).copied().unwrap_or(0),
+                RATES
+                    .get(crate::bytes::to_usize(((v >> 16) & 3).into()))
+                    .copied()
+                    .unwrap_or(0),
                 v & 0x3f
             ))
         })

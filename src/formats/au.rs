@@ -71,10 +71,7 @@ fn header(f: &mut Fields<'_>, _: &()) -> Result<Header> {
     f.ascii("Magic", 4).emit()?;
     Ok(Header {
         offset: f.u32("Data offset").hex().emit()?,
-        size: f
-            .u32("Data size")
-            .desc("0xffffffff = unknown")
-            .emit()?,
+        size: f.u32("Data size").desc("0xffffffff = unknown").emit()?,
         encoding: f.u32("Encoding").enumeration(ENCODING).emit()?,
         rate: f.u32("Sample rate").emit()?,
         channels: f.u32("Channels").emit()?,
@@ -104,11 +101,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         u64::from(h.size)
     };
     let data = file.sub(offset, size);
-    let encoding =
-        crate::value::lookup(ENCODING, h.encoding.into()).map_or_else(|| format!("encoding {}", h.encoding), str::to_owned);
+    let encoding = crate::value::lookup(ENCODING, h.encoding.into())
+        .map_or_else(|| format!("encoding {}", h.encoding), str::to_owned);
     let mut line = format!("{encoding}, {} Hz, {}", h.rate, channels(h.channels));
     let frame_bits = bits(h.encoding).saturating_mul(h.channels.into());
-    let frames = data.len.saturating_mul(8).checked_div(frame_bits).unwrap_or(0);
+    let frames = data
+        .len
+        .saturating_mul(8)
+        .checked_div(frame_bits)
+        .unwrap_or(0);
     let mut node = Node::new("Samples").span(data);
     if let Some(d) = duration_of(frames, h.rate.into()) {
         line.push_str(&format!(", {d}"));

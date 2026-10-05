@@ -7,9 +7,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Fields, parse};
+use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, Entry, FourCc, find, scan, wav};
 use crate::formats::sound::{duration, fourcc, peek_text, table, text};
-use crate::formats::embedded;
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -292,7 +292,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         b"strh" => cx.emit(StreamHeader::node("Stream header", data, e)),
         b"strf" => match stream_header(cx, chunk).await {
             Some(h) if &h.kind == b"vids" => {
-                cx.emit(BitmapInfo::node("Bitmap info", data.sub(0, BitmapInfo::SIZE), e));
+                cx.emit(BitmapInfo::node(
+                    "Bitmap info",
+                    data.sub(0, BitmapInfo::SIZE),
+                    e,
+                ));
                 let extra = data.tail(BitmapInfo::SIZE);
                 if !extra.is_empty() {
                     cx.emit(Node::new("Codec data").span(extra));
@@ -310,9 +314,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         }
         b"dmlh" => {
             let block = cx.block(data.sub(0, 4)).await?;
-            Fields::emitting(cx, &block, e)
-                .u32("Total frames")
-                .emit()?;
+            Fields::emitting(cx, &block, e).u32("Total frames").emit()?;
         }
         b"idx1" => {
             cx.set_count(crate::node::Count::Exact(data.len / IndexEntry::SIZE));
@@ -361,7 +363,11 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 e,
                 "Index",
                 Some(|s| {
-                    let key = if s.size & 0x8000_0000 == 0 { ", key" } else { "" };
+                    let key = if s.size & 0x8000_0000 == 0 {
+                        ", key"
+                    } else {
+                        ""
+                    };
                     format!("{:#x}, {} bytes{key}", s.offset, s.size & 0x7fff_ffff)
                 }),
             ));

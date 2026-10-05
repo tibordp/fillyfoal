@@ -234,7 +234,11 @@ impl<'a> Bits<'a> {
 
     fn bit(&self, at: u64) -> Option<u64> {
         let byte = self.data.get(to_usize(at / 8))?;
-        let shift = if self.lsb_first { at % 8 } else { 7u64.saturating_sub(at % 8) };
+        let shift = if self.lsb_first {
+            at % 8
+        } else {
+            7u64.saturating_sub(at % 8)
+        };
         Some(u64::from(byte >> shift) & 1)
     }
 

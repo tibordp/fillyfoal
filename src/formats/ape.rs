@@ -197,12 +197,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Some(|e| format!("{:#x}", e.offset)),
             ),
             "WAV header" => crate::formats::embedded(name, input.nested(span)),
-            _ => Node::new(name).span(span).summary(format!("{} bytes", span.len)),
+            _ => Node::new(name)
+                .span(span)
+                .summary(format!("{} bytes", span.len)),
         };
         cx.emit(node);
     }
     if data_start < end {
-        cx.emit(Node::new("Unaccounted data").span(file.sub(data_start, end.saturating_sub(data_start))));
+        cx.emit(
+            Node::new("Unaccounted data")
+                .span(file.sub(data_start, end.saturating_sub(data_start))),
+        );
     }
     for node in tags {
         cx.emit(node);

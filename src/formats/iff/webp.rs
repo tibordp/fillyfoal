@@ -5,9 +5,9 @@
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
+use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, FourCc, scan, walk};
 use crate::formats::sound::{Bits, bits_node, parse_bits, u24};
-use crate::formats::embedded;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -20,10 +20,18 @@ const VP8X_FLAGS: FlagTable = &[
     flag(0x02, "ANIMATION"),
 ];
 
-const FRAME_FLAGS: FlagTable = &[flag(0x2, "DO_NOT_BLEND"), flag(0x1, "DISPOSE_TO_BACKGROUND")];
+const FRAME_FLAGS: FlagTable = &[
+    flag(0x2, "DO_NOT_BLEND"),
+    flag(0x1, "DISPOSE_TO_BACKGROUND"),
+];
 
 const ALPHA_COMPRESSION: EnumTable = &[(0, "none"), (1, "lossless (VP8L)")];
-const ALPHA_FILTER: EnumTable = &[(0, "none"), (1, "horizontal"), (2, "vertical"), (3, "gradient")];
+const ALPHA_FILTER: EnumTable = &[
+    (0, "none"),
+    (1, "horizontal"),
+    (2, "vertical"),
+    (3, "gradient"),
+];
 const PREPROCESSING: EnumTable = &[(0, "none"), (1, "level reduction")];
 const SCALE: EnumTable = &[(0, "none"), (1, "5/4"), (2, "5/3"), (3, "2")];
 
@@ -53,9 +61,9 @@ struct Size {
 /// VP8 frame header: a 3-byte little-endian tag, then (for key frames) a
 /// start code and two 14-bit dimensions with 2-bit scales.
 fn vp8(b: &mut Bits<'_>) -> Result<Option<Size>> {
-    let key = b.field("Frame type", 1).with(|v, n| {
-        n.summary(if v == 0 { "key frame" } else { "interframe" })
-    });
+    let key = b
+        .field("Frame type", 1)
+        .with(|v, n| n.summary(if v == 0 { "key frame" } else { "interframe" }));
     let key = key.emit()? == 0;
     b.field("Version", 3).emit()?;
     b.field("Show frame", 1).flag().emit()?;
@@ -164,9 +172,7 @@ fn anmf(f: &mut Fields<'_>, _: &()) -> Result<Frame> {
     let width = u24(f, "Width − 1", LE).emit()?;
     let height = u24(f, "Height − 1", LE).emit()?;
     let duration = u24(f, "Duration", LE).desc("Milliseconds").emit()?;
-    f.u8("Flags")
-        .flags(FRAME_FLAGS)
-        .emit()?;
+    f.u8("Flags").flags(FRAME_FLAGS).emit()?;
     Ok(Frame {
         x: x.saturating_mul(2),
         y: y.saturating_mul(2),
@@ -181,9 +187,15 @@ async fn size_of(cx: &Cx, id: &FourCc, data: Span) -> Result<Option<Size>> {
         b"VP8 " => parse_bits(cx, data.sub(0, 10), vp8, true).await?,
         b"VP8L" => Some(parse_bits(cx, data.sub(0, 5), vp8l, true).await?),
         b"VP8X" => Some(
-            crate::fields::parse(cx, data.sub(0, 10), crate::fields::Endian::Little, &(), vp8x)
-                .await?
-                .size,
+            crate::fields::parse(
+                cx,
+                data.sub(0, 10),
+                crate::fields::Endian::Little,
+                &(),
+                vp8x,
+            )
+            .await?
+            .size,
         ),
         _ => None,
     })
@@ -219,11 +231,21 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
     let e = chunk.endian();
     match &chunk.id {
         b"VP8 " => {
-            cx.emit(bits_node("Frame header", data.sub(0, 10), |b| vp8(b).map(|_| ()), true));
+            cx.emit(bits_node(
+                "Frame header",
+                data.sub(0, 10),
+                |b| vp8(b).map(|_| ()),
+                true,
+            ));
             cx.emit(Node::new("Bitstream").span(data.tail(10)));
         }
         b"VP8L" => {
-            cx.emit(bits_node("Header", data.sub(0, 5), |b| vp8l(b).map(|_| ()), true));
+            cx.emit(bits_node(
+                "Header",
+                data.sub(0, 5),
+                |b| vp8l(b).map(|_| ()),
+                true,
+            ));
             cx.emit(Node::new("Bitstream").span(data.tail(5)));
         }
         b"VP8X" => {
@@ -283,7 +305,12 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
                 ", lossy"
             });
         }
-        for (bit, name) in [(0x10, "alpha"), (0x20, "ICC"), (0x08, "Exif"), (0x04, "XMP")] {
+        for (bit, name) in [
+            (0x10, "alpha"),
+            (0x20, "ICC"),
+            (0x08, "Exif"),
+            (0x04, "XMP"),
+        ] {
             if flags & bit != 0 {
                 line.push_str(&format!(", {name}"));
             }

@@ -142,14 +142,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             scale: 16,
         },
         "Instrument",
-        Some(|i| {
-            format!(
-                "{}, {} bytes, {} Hz",
-                named(&i.name),
-                i.length,
-                i.c2spd
-            )
-        }),
+        Some(|i| format!("{}, {} bytes, {} Hz", named(&i.name), i.length, i.c2spd)),
     ));
     cx.emit(
         Node::new("Patterns")
@@ -187,7 +180,6 @@ async fn list_patterns(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-
                 .summary(format!("{len} bytes packed, 64 rows")),
         )
         .await;

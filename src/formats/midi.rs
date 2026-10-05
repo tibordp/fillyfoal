@@ -150,9 +150,9 @@ struct Timed {
 async fn event(cur: &mut Cursor<'_>, running: &mut Option<u8>) -> Result<Timed> {
     let delta = varlen(cur).await?;
     let first = cur.peek(1).await?;
-    let first = *first.first().ok_or_else(|| {
-        Diagnostic::truncated(cur.span(1), 0)
-    })?;
+    let first = *first
+        .first()
+        .ok_or_else(|| Diagnostic::truncated(cur.span(1), 0))?;
     let status = if first & 0x80 != 0 {
         cur.skip(1);
         first
@@ -178,14 +178,18 @@ async fn event(cur: &mut Cursor<'_>, running: &mut Option<u8>) -> Result<Timed> 
             Event::SysEx { kind: status, data }
         }
         0xf1..=0xfe => {
-            return Err(Diagnostic::malformed(format!(
-                "system message {status:#04x} in a file"
-            ))
-            .at(cur.span(1)));
+            return Err(
+                Diagnostic::malformed(format!("system message {status:#04x} in a file"))
+                    .at(cur.span(1)),
+            );
         }
         _ => {
             *running = Some(status);
-            let n = if matches!(status & 0xf0, 0xc0 | 0xd0) { 1 } else { 2 };
+            let n = if matches!(status & 0xf0, 0xc0 | 0xd0) {
+                1
+            } else {
+                2
+            };
             let bytes = cur.bytes(n).await?;
             Event::Channel {
                 status,
@@ -239,7 +243,10 @@ async fn track(cx: Cx, data: Span) -> Result<()> {
 /// Event name, summary detail and text value.
 async fn describe(cx: &Cx, ev: &Event) -> Result<(String, String, Option<String>)> {
     Ok(match ev {
-        Event::Channel { status, data: [a, b] } => {
+        Event::Channel {
+            status,
+            data: [a, b],
+        } => {
             let ch = (status & 0xf).saturating_add(1);
             let (name, detail) = match status >> 4 {
                 0x8 => ("Note off", format!("{}, velocity {b}", note(*a))),
@@ -285,15 +292,10 @@ async fn describe(cx: &Cx, ev: &Event) -> Result<(String, String, Option<String>
                 .map_or_else(|| format!("Meta {kind:#04x}"), str::to_owned);
             let bytes = cx.read_avail(data.sub(0, 256)).await?;
             let (detail, value) = match kind {
-                0x01..=0x0f => {
-                    (String::new(), Some(decode_text(&bytes)))
-                }
+                0x01..=0x0f => (String::new(), Some(decode_text(&bytes))),
                 0x00 => (format!(" — {}", u16_be(&bytes, 0).unwrap_or(0)), None),
                 0x2f => (String::new(), None),
-                0x20 | 0x21 => (
-                    format!(" — {}", bytes.first().copied().unwrap_or(0)),
-                    None,
-                ),
+                0x20 | 0x21 => (format!(" — {}", bytes.first().copied().unwrap_or(0)), None),
                 0x51 => {
                     let us = crate::bytes::u24_be(&bytes, 0).unwrap_or(0);
                     let bpm = if us > 0 { 60e6 / f64::from(us) } else { 0.0 };
@@ -379,7 +381,9 @@ const CONTROLLERS: EnumTable = &[
 ];
 
 fn note(n: u8) -> String {
-    const NAMES: [&str; 12] = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+    const NAMES: [&str; 12] = [
+        "C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B",
+    ];
     let name = NAMES.get(usize::from(n % 12)).copied().unwrap_or("?");
     format!("{name}{} ({n})", i32::from(n / 12).saturating_sub(1))
 }
@@ -401,28 +405,132 @@ fn key(sharps: i8, minor: bool) -> String {
 
 /// General MIDI level 1 instrument names.
 pub const GM_PROGRAMS: [&str; 128] = [
-    "Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano",
-    "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet", "Celesta", "Glockenspiel",
-    "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer",
-    "Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion",
-    "Harmonica", "Tango Accordion", "Acoustic Guitar (nylon)", "Acoustic Guitar (steel)",
-    "Electric Guitar (jazz)", "Electric Guitar (clean)", "Electric Guitar (muted)",
-    "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics", "Acoustic Bass",
-    "Electric Bass (finger)", "Electric Bass (pick)", "Fretless Bass", "Slap Bass 1",
-    "Slap Bass 2", "Synth Bass 1", "Synth Bass 2", "Violin", "Viola", "Cello", "Contrabass",
-    "Tremolo Strings", "Pizzicato Strings", "Orchestral Harp", "Timpani", "String Ensemble 1",
-    "String Ensemble 2", "Synth Strings 1", "Synth Strings 2", "Choir Aahs", "Voice Oohs",
-    "Synth Voice", "Orchestra Hit", "Trumpet", "Trombone", "Tuba", "Muted Trumpet", "French Horn",
-    "Brass Section", "Synth Brass 1", "Synth Brass 2", "Soprano Sax", "Alto Sax", "Tenor Sax",
-    "Baritone Sax", "Oboe", "English Horn", "Bassoon", "Clarinet", "Piccolo", "Flute", "Recorder",
-    "Pan Flute", "Blown Bottle", "Shakuhachi", "Whistle", "Ocarina", "Lead 1 (square)",
-    "Lead 2 (sawtooth)", "Lead 3 (calliope)", "Lead 4 (chiff)", "Lead 5 (charang)",
-    "Lead 6 (voice)", "Lead 7 (fifths)", "Lead 8 (bass + lead)", "Pad 1 (new age)",
-    "Pad 2 (warm)", "Pad 3 (polysynth)", "Pad 4 (choir)", "Pad 5 (bowed)", "Pad 6 (metallic)",
-    "Pad 7 (halo)", "Pad 8 (sweep)", "FX 1 (rain)", "FX 2 (soundtrack)", "FX 3 (crystal)",
-    "FX 4 (atmosphere)", "FX 5 (brightness)", "FX 6 (goblins)", "FX 7 (echoes)", "FX 8 (sci-fi)",
-    "Sitar", "Banjo", "Shamisen", "Koto", "Kalimba", "Bagpipe", "Fiddle", "Shanai",
-    "Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko Drum", "Melodic Tom",
-    "Synth Drum", "Reverse Cymbal", "Guitar Fret Noise", "Breath Noise", "Seashore",
-    "Bird Tweet", "Telephone Ring", "Helicopter", "Applause", "Gunshot",
+    "Acoustic Grand Piano",
+    "Bright Acoustic Piano",
+    "Electric Grand Piano",
+    "Honky-tonk Piano",
+    "Electric Piano 1",
+    "Electric Piano 2",
+    "Harpsichord",
+    "Clavinet",
+    "Celesta",
+    "Glockenspiel",
+    "Music Box",
+    "Vibraphone",
+    "Marimba",
+    "Xylophone",
+    "Tubular Bells",
+    "Dulcimer",
+    "Drawbar Organ",
+    "Percussive Organ",
+    "Rock Organ",
+    "Church Organ",
+    "Reed Organ",
+    "Accordion",
+    "Harmonica",
+    "Tango Accordion",
+    "Acoustic Guitar (nylon)",
+    "Acoustic Guitar (steel)",
+    "Electric Guitar (jazz)",
+    "Electric Guitar (clean)",
+    "Electric Guitar (muted)",
+    "Overdriven Guitar",
+    "Distortion Guitar",
+    "Guitar Harmonics",
+    "Acoustic Bass",
+    "Electric Bass (finger)",
+    "Electric Bass (pick)",
+    "Fretless Bass",
+    "Slap Bass 1",
+    "Slap Bass 2",
+    "Synth Bass 1",
+    "Synth Bass 2",
+    "Violin",
+    "Viola",
+    "Cello",
+    "Contrabass",
+    "Tremolo Strings",
+    "Pizzicato Strings",
+    "Orchestral Harp",
+    "Timpani",
+    "String Ensemble 1",
+    "String Ensemble 2",
+    "Synth Strings 1",
+    "Synth Strings 2",
+    "Choir Aahs",
+    "Voice Oohs",
+    "Synth Voice",
+    "Orchestra Hit",
+    "Trumpet",
+    "Trombone",
+    "Tuba",
+    "Muted Trumpet",
+    "French Horn",
+    "Brass Section",
+    "Synth Brass 1",
+    "Synth Brass 2",
+    "Soprano Sax",
+    "Alto Sax",
+    "Tenor Sax",
+    "Baritone Sax",
+    "Oboe",
+    "English Horn",
+    "Bassoon",
+    "Clarinet",
+    "Piccolo",
+    "Flute",
+    "Recorder",
+    "Pan Flute",
+    "Blown Bottle",
+    "Shakuhachi",
+    "Whistle",
+    "Ocarina",
+    "Lead 1 (square)",
+    "Lead 2 (sawtooth)",
+    "Lead 3 (calliope)",
+    "Lead 4 (chiff)",
+    "Lead 5 (charang)",
+    "Lead 6 (voice)",
+    "Lead 7 (fifths)",
+    "Lead 8 (bass + lead)",
+    "Pad 1 (new age)",
+    "Pad 2 (warm)",
+    "Pad 3 (polysynth)",
+    "Pad 4 (choir)",
+    "Pad 5 (bowed)",
+    "Pad 6 (metallic)",
+    "Pad 7 (halo)",
+    "Pad 8 (sweep)",
+    "FX 1 (rain)",
+    "FX 2 (soundtrack)",
+    "FX 3 (crystal)",
+    "FX 4 (atmosphere)",
+    "FX 5 (brightness)",
+    "FX 6 (goblins)",
+    "FX 7 (echoes)",
+    "FX 8 (sci-fi)",
+    "Sitar",
+    "Banjo",
+    "Shamisen",
+    "Koto",
+    "Kalimba",
+    "Bagpipe",
+    "Fiddle",
+    "Shanai",
+    "Tinkle Bell",
+    "Agogo",
+    "Steel Drums",
+    "Woodblock",
+    "Taiko Drum",
+    "Melodic Tom",
+    "Synth Drum",
+    "Reverse Cymbal",
+    "Guitar Fret Noise",
+    "Breath Noise",
+    "Seashore",
+    "Bird Tweet",
+    "Telephone Ring",
+    "Helicopter",
+    "Applause",
+    "Gunshot",
 ];

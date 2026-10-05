@@ -55,7 +55,12 @@ const SAMPLE_FLAGS: FlagTable = &[
     flag(0x80, "PING_PONG_SUSTAIN"),
 ];
 
-const NNA: EnumTable = &[(0, "cut"), (1, "continue"), (2, "note off"), (3, "note fade")];
+const NNA: EnumTable = &[
+    (0, "cut"),
+    (1, "continue"),
+    (2, "note off"),
+    (3, "note fade"),
+];
 
 fn version(v: u16) -> String {
     format!("{:x}.{:02x}", v >> 8, v & 0xff)
@@ -182,7 +187,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 named(&s.name),
                 s.length,
                 s.c5_speed,
-                if s.flags & 0x8 != 0 { ", compressed" } else { "" }
+                if s.flags & 0x8 != 0 {
+                    ", compressed"
+                } else {
+                    ""
+                }
             )
         }),
     ));
@@ -226,7 +235,6 @@ async fn list_patterns(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(span)
-
                 .summary(format!("{rows} rows, {len} bytes packed")),
         )
         .await;

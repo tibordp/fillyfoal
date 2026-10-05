@@ -153,8 +153,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let name = crate::value::lookup(BLOCK, kind.into())
             .map_or_else(|| format!("Block type {kind}"), str::to_owned);
         let summary = block_summary(&cx, kind, span).await?;
-        cx.push(Node::new(name).span(span).summary(summary).lazy(block, (kind, span)))
-            .await;
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(summary)
+                .lazy(block, (kind, span)),
+        )
+        .await;
     }
     if pos < file.len {
         cx.emit(Node::new("Trailing data").span(file.tail(pos)));
