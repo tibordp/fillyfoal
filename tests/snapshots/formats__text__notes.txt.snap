@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ notes.txt — UTF-8 text, CRLF line endings, 7 lines  [0x0+0x61]
+    Encoding: "UTF-8"
+    Line endings: "CRLF" — 0 LF, 6 CRLF, 0 CR
+  ▾ Lines — 7 lines  [0x0+0x61]
+      Line 1: "Shopping list"  [0x0+0xd]
+      Line 2: "============="  [0xf+0xd]
+      Line 3: ""  [0x1e+0x0]
+      Line 4: "- café au lait"  [0x20+0xf]
+      Line 5: "- 2× croissants"  [0x31+0x10]
+      Line 6: ""  [0x43+0x0]
+      Line 7: "Last line without terminator"  [0x45+0x1c]

@@ -37,6 +37,7 @@ pub mod png;
 // -- end disk images --
 
 // -- text --
+pub mod text;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
@@ -166,6 +167,9 @@ pub static FORMATS: &[&Format] = &[
     // -- end archives --
 
     // -- text (generic probes, keep last) --
+    &text::plain::SCRIPT,
+    // Plain text matches anything textual: keep it last.
+    &text::plain::FORMAT,
     // -- end text --
 ];
 
