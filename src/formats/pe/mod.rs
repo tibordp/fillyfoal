@@ -6,6 +6,7 @@
 //! when expanded.
 
 mod tables;
+mod version;
 
 use std::sync::Arc;
 
@@ -124,6 +125,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if rva != 0 || size != 0 {
             cx.emit(directory(&pe, index, name, rva, size));
         }
+    }
+
+    if let (Some(rva), Some(size)) = (
+        u32_le(&directories, DIR_RESOURCE.saturating_mul(8)),
+        u32_le(&directories, DIR_RESOURCE.saturating_mul(8).saturating_add(4)),
+    ) && rva != 0
+        && size != 0
+        && let Ok(Some(span)) = find_version(&cx, &pe, rva).await
+    {
+        let node = Node::new("Version Information")
+            .span(span)
+            .lazy(version::block, span);
+        cx.emit(match version::summary(&cx, span).await {
+            Ok(summary) => node.summary(summary),
+            Err(e) => node.diag(e),
+        });
     }
 
     let end = pe
@@ -586,6 +603,7 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
                 base: rva,
                 offset: 0,
                 path: vec![0],
+                kind: None,
             },
         ),
         DIR_SECURITY => node.lazy(certificates, dir),
@@ -878,6 +896,8 @@ struct ResourceDir {
     offset: u32,
     /// Offsets of this directory and its ancestors, for cycle detection.
     path: Vec<u32>,
+    /// Resource type (`RT_*`), once known from the first level.
+    kind: Option<u32>,
 }
 
 async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
@@ -941,6 +961,11 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
                         base: dir.base,
                         offset: child,
                         path,
+                        kind: if level == 1 && name & HIGH_BIT == 0 {
+                            Some(name)
+                        } else {
+                            dir.kind
+                        },
                     },
                 );
             }
@@ -950,11 +975,48 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
                 Ok(e) => node = node.summary(format!("{:#x} bytes", e.size)).target(span),
                 Err(e) => node = node.diag(e),
             }
-            node = node.lazy(resource_data, (pe.clone(), span));
+            node = node.lazy(resource_data, (pe.clone(), span, dir.kind));
         }
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// Follows type `RT_VERSION`, then the first name and the first language, to
+/// the version resource's data.
+async fn find_version(cx: &Cx, pe: &PeInfo, base: u32) -> Result<Option<Span>> {
+    let mut offset = 0u32;
+    for level in 0..3 {
+        let header_rva = base.checked_add(offset).ok_or_else(overflow)?;
+        let header = cx.read(pe.rva_exact(header_rva, 16)?).await?;
+        let total = usize::from(u16_le(&header, 12).unwrap_or(0))
+            .saturating_add(u16_le(&header, 14).unwrap_or(0).into());
+        let entries_rva = header_rva.checked_add(16).ok_or_else(overflow)?;
+        let entries = cx
+            .read(pe.rva_exact(entries_rva, to_u64(total.min(64)).saturating_mul(8))?)
+            .await?;
+        let found = (0..total.min(64)).find_map(|i| {
+            let name = u32_le(&entries, i.saturating_mul(8))?;
+            let target = u32_le(&entries, i.saturating_mul(8).saturating_add(4))?;
+            (level > 0 || name == RT_VERSION).then_some(target)
+        });
+        let Some(target) = found else {
+            return Ok(None);
+        };
+        offset = target & !HIGH_BIT;
+        if target & HIGH_BIT == 0 {
+            let entry_rva = base.checked_add(offset).ok_or_else(overflow)?;
+            let entry = parse(cx, pe.rva_exact(entry_rva, 16)?, LE, &(), data_entry).await?;
+            return Ok(Some(pe.rva_span(entry.rva, entry.size.into())?));
+        }
+    }
+    Ok(None)
+}
+
+fn data_entry(f: &mut Fields<'_>, _: &()) -> Result<DataEntry> {
+    let rva = f.u32("OffsetToData").get()?;
+    let size = f.u32("Size").get()?;
+    Ok(DataEntry { rva, size })
 }
 
 fn id_label(level: usize, id: u32) -> String {
@@ -994,13 +1056,22 @@ fn resource_data_entry(f: &mut Fields<'_>, pe: &Pe) -> Result<DataEntry> {
     Ok(DataEntry { rva, size })
 }
 
-async fn resource_data(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
+async fn resource_data(cx: Cx, (pe, span, kind): (Pe, Span, Option<u32>)) -> Result<()> {
     cx.emit(struct_node("Data Entry", span, LE, pe.clone(), resource_data_entry));
     let entry = parse(&cx, span, LE, &pe, resource_data_entry).await?;
     let wanted = u64::from(entry.size);
     let content = pe.rva_span(entry.rva, wanted)?;
-    let mut node = embedded("Content", pe.input.nested(content))
-        .summary(format!("{:#x} bytes", entry.size));
+    let mut node = if kind == Some(RT_VERSION) {
+        let node = Node::new("Version Info")
+            .span(content)
+            .lazy(version::block, content);
+        match version::summary(&cx, content).await {
+            Ok(summary) => node.summary(summary),
+            Err(e) => node.diag(e),
+        }
+    } else {
+        embedded("Content", pe.input.nested(content)).summary(format!("{:#x} bytes", entry.size))
+    };
     if content.len < wanted {
         node = node.diag(Diagnostic::truncated(
             Span::new(content.source, content.offset, wanted),

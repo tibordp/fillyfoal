@@ -206,6 +206,8 @@ pub const RESOURCE_TYPE: EnumTable = &[
     (24, "RT_MANIFEST"),
 ];
 
+pub const RT_VERSION: u32 = 16;
+
 pub const CERTIFICATE_REVISION: EnumTable = &[(0x100, "REVISION_1_0"), (0x200, "REVISION_2_0")];
 
 pub const CERTIFICATE_TYPE: EnumTable = &[
