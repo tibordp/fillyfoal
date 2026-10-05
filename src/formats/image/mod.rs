@@ -4,11 +4,14 @@
 //! value constructors.
 
 pub mod bmp;
+pub mod dds;
+pub mod exr;
 pub mod farbfeld;
 pub mod gif;
 pub mod hdr;
 pub mod ico;
 pub mod jpeg;
+pub mod ktx;
 pub mod pcx;
 pub mod pnm;
 pub mod psd;
