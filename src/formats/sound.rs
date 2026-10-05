@@ -277,6 +277,39 @@ impl<'a> Bits<'a> {
         field
     }
 
+    /// The span of the bytes holding bits `start..end`.
+    pub fn span_of(&self, start: u64, end: u64) -> Span {
+        let first = start / 8;
+        let last = end.saturating_add(7) / 8;
+        self.span.sub(first, last.saturating_sub(first))
+    }
+
+    /// `n` whole bytes (the reader must be byte-aligned) as a bytes field.
+    pub fn bytes(&mut self, name: &'static str, n: u64) -> BitField<'a> {
+        let start = self.pos;
+        let bytes = self
+            .data
+            .get(to_usize(start / 8)..)
+            .and_then(|d| d.get(..to_usize(n)))
+            .map(<[u8]>::to_vec);
+        self.pos = self.pos.saturating_add(n.saturating_mul(8));
+        let span = self.span_of(start, self.pos);
+        let mut node = Node::new(name).span(span);
+        let value = match bytes {
+            Some(b) => {
+                node.value = Some(Value::Bytes(b));
+                Ok(0)
+            }
+            None => Err(Diagnostic::truncated(span, 0)),
+        };
+        BitField {
+            cx: self.cx,
+            node,
+            value,
+            bits: 0,
+        }
+    }
+
     /// Emits an arbitrary node if this reader is emitting.
     pub fn node(&self, node: Node) {
         if let Some(cx) = self.cx {
