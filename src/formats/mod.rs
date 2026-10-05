@@ -38,6 +38,7 @@ pub mod cbor;
 pub mod datakit;
 pub mod lnk;
 pub mod pcap;
+pub mod regf;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -147,6 +148,7 @@ pub static FORMATS: &[&Format] = &[
     &pcap::FORMAT,
     &pcap::ng::FORMAT,
     &lnk::FORMAT,
+    &regf::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
