@@ -6,10 +6,8 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 use crate::cx::Cx;
-use crate::error::Result;
-
-use crate::error::Diagnostic;
-use crate::fields::{Field, Fields};
+use crate::error::{Diagnostic, Result};
+use crate::fields::{Endian, Field, Fields};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -317,6 +315,139 @@ pub fn xxh32(data: &[u8], seed: u32) -> u32 {
     h = h.wrapping_mul(P3);
     h ^= h >> 16;
     h
+}
+
+/// Decodes fields from bytes already in memory and collects a node (with
+/// its span) for each: for variable layouts, such as varint-encoded headers,
+/// that [`Fields`] does not cover. Every reader method returns `None` when
+/// the data runs out.
+pub struct ByteReader<'a> {
+    pub data: &'a [u8],
+    pub base: Span,
+    pub at: usize,
+    pub nodes: Vec<Node>,
+}
+
+impl<'a> ByteReader<'a> {
+    pub fn new(data: &'a [u8], base: Span) -> Self {
+        ByteReader {
+            data,
+            base,
+            at: 0,
+            nodes: Vec::new(),
+        }
+    }
+
+    /// The span from `start` (relative) to the current position.
+    pub fn since(&self, start: usize) -> Span {
+        self.base.sub(
+            crate::bytes::to_u64(start),
+            crate::bytes::to_u64(self.at.saturating_sub(start)),
+        )
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.data.len().saturating_sub(self.at)
+    }
+
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        let end = self.at.checked_add(n)?;
+        let bytes = self.data.get(self.at..end)?;
+        self.at = end;
+        Some(bytes)
+    }
+
+    fn field(&mut self, name: &'static str, start: usize, value: Value) {
+        let span = self.since(start);
+        self.nodes.push(Node::new(name).span(span).value(value));
+    }
+
+    /// Applies `f` to the most recently read field's node.
+    pub fn with(&mut self, f: impl FnOnce(Node) -> Node) {
+        if let Some(node) = self.nodes.pop() {
+            self.nodes.push(f(node));
+        }
+    }
+
+    pub fn push(&mut self, node: Node) {
+        self.nodes.push(node);
+    }
+
+    pub fn u8(&mut self, name: &'static str) -> Option<u8> {
+        let start = self.at;
+        let v = *self.take(1)?.first()?;
+        self.field(name, start, uint(v.into()));
+        Some(v)
+    }
+
+    pub fn u16(&mut self, name: &'static str, endian: Endian) -> Option<u16> {
+        let start = self.at;
+        let b: [u8; 2] = self.take(2)?.try_into().ok()?;
+        let v = match endian {
+            Endian::Little => u16::from_le_bytes(b),
+            Endian::Big => u16::from_be_bytes(b),
+        };
+        self.field(name, start, uint(v.into()));
+        Some(v)
+    }
+
+    pub fn u32(&mut self, name: &'static str, endian: Endian) -> Option<u32> {
+        let start = self.at;
+        let b: [u8; 4] = self.take(4)?.try_into().ok()?;
+        let v = match endian {
+            Endian::Little => u32::from_le_bytes(b),
+            Endian::Big => u32::from_be_bytes(b),
+        };
+        self.field(name, start, uint(v.into()));
+        Some(v)
+    }
+
+    pub fn u64(&mut self, name: &'static str, endian: Endian) -> Option<u64> {
+        let start = self.at;
+        let b: [u8; 8] = self.take(8)?.try_into().ok()?;
+        let v = match endian {
+            Endian::Little => u64::from_le_bytes(b),
+            Endian::Big => u64::from_be_bytes(b),
+        };
+        self.field(name, start, uint(v));
+        Some(v)
+    }
+
+    /// An unsigned LEB128 value ("vint" in RAR 5, "multibyte integer" in xz).
+    pub fn vint(&mut self, name: &'static str) -> Option<u64> {
+        let start = self.at;
+        let rest = self.data.get(self.at..)?;
+        let (v, len) = crate::bytes::uleb128(rest)?;
+        self.at = self.at.checked_add(len)?;
+        self.field(name, start, uint(v));
+        Some(v)
+    }
+
+    pub fn bytes(&mut self, name: &'static str, n: u64) -> Option<&'a [u8]> {
+        let start = self.at;
+        let b = self.take(crate::bytes::to_usize(n))?;
+        self.field(name, start, Value::Bytes(b.to_vec()));
+        Some(b)
+    }
+
+    /// Text of `n` bytes, decoded lossily as UTF-8.
+    pub fn text(&mut self, name: &'static str, n: u64) -> Option<String> {
+        let start = self.at;
+        let b = self.take(crate::bytes::to_usize(n))?;
+        let s = String::from_utf8_lossy(b).into_owned();
+        self.field(name, start, text(s.clone()));
+        Some(s)
+    }
+
+    /// Skips `n` bytes without a node.
+    pub fn skip(&mut self, n: u64) -> Option<()> {
+        self.take(crate::bytes::to_usize(n)).map(|_| ())
+    }
+
+    /// The collected nodes, for [`emit_nodes`].
+    pub fn into_nodes(self) -> Arc<Vec<Node>> {
+        Arc::new(self.nodes)
+    }
 }
 
 #[cfg(test)]
