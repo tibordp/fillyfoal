@@ -33,7 +33,7 @@ pub mod html;
 pub mod ini;
 pub mod json;
 // pub mod markdown;
-// pub mod mime;
+pub mod mime;
 // pub mod misc;
 pub mod pem;
 pub mod plain;

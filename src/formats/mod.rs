@@ -175,6 +175,10 @@ pub static FORMATS: &[&Format] = &[
     &text::pem::SSH2,
     &text::pem::FORMAT,
     &text::ssh::KEYS,
+    // Messages (header blocks look like YAML; keep them before it).
+    &text::mime::MBOX,
+    &text::mime::MHTML,
+    &text::mime::EML,
     // Markup: specific XML vocabularies, then HTML, then generic XML.
     &text::plist::FORMAT,
     &text::xml::XHTML,
