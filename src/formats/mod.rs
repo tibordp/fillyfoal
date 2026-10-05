@@ -42,6 +42,7 @@ pub mod mpa;
 pub mod musepack;
 pub mod ogg;
 pub mod sound;
+pub mod tracker;
 pub mod tta;
 pub mod voc;
 pub mod vorbis;
@@ -187,6 +188,10 @@ pub static FORMATS: &[&Format] = &[
     &wavpack::FORMAT,
     &musepack::FORMAT,
     &tta::FORMAT,
+    &tracker::it::FORMAT,
+    &tracker::xm::FORMAT,
+    &tracker::s3m::FORMAT,
+    &tracker::protracker::FORMAT,
     &flac::FORMAT,
     &ogg::OPUS,
     &ogg::OGG_FLAC,
