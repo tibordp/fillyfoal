@@ -169,6 +169,9 @@ pub static FORMATS: &[&Format] = &[
     // -- text (generic probes, keep last) --
     // Documents with a fixed signature.
     &text::rtf::FORMAT,
+    &text::postscript::DOS_EPS,
+    &text::postscript::EPS,
+    &text::postscript::POSTSCRIPT,
     // Binary formats found inside text armor.
     &text::ssh::PRIVATE,
     &text::ssh::BLOB,

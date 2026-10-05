@@ -39,7 +39,7 @@ pub mod pem;
 pub mod plain;
 pub mod playlist;
 pub mod plist;
-// pub mod postscript;
+pub mod postscript;
 pub mod rtf;
 pub mod ssh;
 pub mod subtitles;
