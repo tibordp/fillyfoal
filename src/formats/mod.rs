@@ -204,6 +204,9 @@ pub static FORMATS: &[&Format] = &[
     &text::json::NDJSON,
     &text::json::FORMAT,
     &text::plain::SCRIPT,
+    // Weak, statistical probes.
+    &text::csv::TSV,
+    &text::csv::CSV,
     // Plain text matches anything textual: keep it last.
     &text::plain::FORMAT,
     // -- end text --

@@ -27,7 +27,7 @@ pub mod piece;
 pub mod probe;
 pub mod scan;
 
-// pub mod csv;
+pub mod csv;
 // pub mod diff;
 pub mod html;
 // pub mod ini;

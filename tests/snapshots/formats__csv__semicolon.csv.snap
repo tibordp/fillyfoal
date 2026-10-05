@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ semicolon.csv — CSV, 3 columns (Datum, Znesek, Opis), ~5 records  [0x0+0x5f]
+    Delimiter: "semicolon"
+  ▾ Header — Datum, Znesek, Opis  [0x0+0x11]
+      Column 1: "Datum"  [0x0+0x5]
+      Column 2: "Znesek"  [0x6+0x6]
+      Column 3: "Opis"  [0xd+0x4]
+  ▾ Record 1 — 2026-10-01;12,50;Kava  [0x12+0x15]
+      Datum: "2026-10-01"  [0x12+0xa]
+      Znesek: "12,50"  [0x1d+0x5]
+      Opis: "Kava"  [0x23+0x4]
+  ▾ Record 2 — 2026-10-02;-3,20;Vračilo  [0x28+0x19]
+      Datum: "2026-10-02"  [0x28+0xa]
+      Znesek: "-3,20"  [0x33+0x5]
+      Opis: "Vračilo"  [0x39+0x8]
+  ▾ Record 3 — 2026-10-03;100;"Plača; del"  [0x42+0x1c]
+      Datum: "2026-10-03"  [0x42+0xa]
+      Znesek: 100  [0x4d+0x3]
+      Opis: "Plača; del"  [0x51+0xd]
