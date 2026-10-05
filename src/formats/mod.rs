@@ -38,6 +38,7 @@ pub mod cbor;
 pub mod datakit;
 pub mod evt;
 pub mod evtx;
+pub mod font;
 pub mod icc;
 pub mod lnk;
 pub mod pcap;
@@ -162,6 +163,14 @@ pub static FORMATS: &[&Format] = &[
     &thumbcache::FORMAT,
     &thumbcache::INDEX,
     &icc::FORMAT,
+    &font::SFNT,
+    &font::TTC,
+    &font::woff::WOFF,
+    &font::woff::WOFF2,
+    &font::eot::FORMAT,
+    &font::pfb::FORMAT,
+    &font::bitmap::PCF,
+    &font::bitmap::BDF,
     // -- end documents --
 
     // -- disk images & filesystems --
