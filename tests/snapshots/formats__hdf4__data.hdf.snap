@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.hdf — HDF4, 2 data descriptors  [0x0+0x32]
+    Magic  [0x0+0x4]
+    DD block 1 — 2 descriptors  [0x4+0x1e]

@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.dsk — Extended DSK, 1 tracks, 1 side(s)  [0x0+0x300]
+    Disk information block — Fillyfoal  [0x0+0x100]
+    Track 0 side 0 — 1 sectors  [0x100+0x200]

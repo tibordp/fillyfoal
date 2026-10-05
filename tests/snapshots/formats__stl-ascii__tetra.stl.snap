@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tetra.stl — solid "fillyfoal", 2 facets  [0x0+0x10c]
+    facet 1 — facet normal 0 0 1  [0x10+0x74]
+    facet 2 — facet normal 0 0 -1  [0x84+0x75]

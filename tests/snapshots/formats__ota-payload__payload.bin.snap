@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ payload.bin — Android OTA payload v2, manifest 16 bytes  [0x0+0x50]
+    Magic: "CrAU"  [0x0+0x4]
+    Format version: 2  [0x4+0x8]
+    Manifest size: 16  [0xc+0x8]
+    Metadata signature size: 8  [0x14+0x4]
+    Manifest (protobuf)  [0x18+0x10]
+    Metadata signature  [0x28+0x8]
+    Data blobs  [0x30+0x20]

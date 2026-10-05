@@ -25,6 +25,10 @@ pub struct Limits {
     pub max_nesting: u32,
     /// Total bytes of decoded (derived) sources kept in memory.
     pub max_derived: u64,
+    /// Work units one expansion may consume before it is stopped with a
+    /// `Limit` diagnostic. A safety net against dissectors that loop without
+    /// making progress on malformed input.
+    pub max_work: u64,
 }
 
 impl Default for Limits {
@@ -35,6 +39,7 @@ impl Default for Limits {
             max_read: 16 * 1024 * 1024,
             max_nesting: 16,
             max_derived: 256 * 1024 * 1024,
+            max_work: 100_000_000,
         }
     }
 }
@@ -124,6 +129,8 @@ struct Entry {
     run: Option<Run>,
     /// When the host last asked for this node's children.
     touched: u64,
+    /// Work units consumed by the current expansion.
+    work: u64,
 }
 
 struct Run {
@@ -148,6 +155,7 @@ impl Entry {
             error: None,
             run: None,
             touched: 0,
+            work: 0,
         }
     }
 }
@@ -243,6 +251,7 @@ impl Session {
         sh.sources.push(crate::cx::SourceEntry {
             len,
             data: None,
+            pieces: None,
             origin: None,
             consumed: 0,
             error: None,
@@ -269,6 +278,15 @@ impl Session {
     /// Where a derived source came from (`None` for host sources).
     pub fn origin(&self, source: SourceId) -> Option<Origin> {
         lock(&self.shared).source(source).and_then(|s| s.origin)
+    }
+
+    /// Maps a span of any source to the host-file (or in-memory) spans that
+    /// hold its bytes, following piecewise sources. For a hex view, this
+    /// turns "bytes 100..200 of a fragmented file" into file offsets.
+    pub fn resolve(&self, span: Span) -> Vec<Span> {
+        let mut out = Vec::new();
+        lock(&self.shared).resolve(span, 0, &mut out);
+        out
     }
 
     /// The bytes of a derived source, e.g. for a hex view.
@@ -364,6 +382,7 @@ impl Session {
         let children = match self.entry_mut(id) {
             Some(entry) => {
                 entry.run = None;
+                entry.work = 0;
                 entry.error = None;
                 entry.count = Count::Unknown;
                 entry.state = if entry.node.has_children() {
@@ -471,18 +490,24 @@ impl Session {
         let Some(mut run) = self.entry_mut(id).and_then(|e| e.run.take()) else {
             return;
         };
-        {
+        let budget_before = {
             let mut sh = lock(&self.shared);
             sh.stop = None;
             sh.wanted.clear();
-        }
+            sh.budget
+        };
         let result = run
             .future
             .as_mut()
             .poll(&mut Context::from_waker(Waker::noop()));
-        let (stop, wanted) = {
+        let (stop, wanted, used, max_work) = {
             let mut sh = lock(&self.shared);
-            (sh.stop.take(), take(&mut sh.wanted))
+            (
+                sh.stop.take(),
+                take(&mut sh.wanted),
+                budget_before.saturating_sub(sh.budget),
+                sh.limits.max_work,
+            )
         };
         let (nodes, count, summary, diagnostics) = {
             let mut out = lock(&run.out);
@@ -509,6 +534,14 @@ impl Session {
             entry.node.summary = Some(summary);
         }
         entry.node.diagnostics.extend(diagnostics);
+        entry.work = entry.work.saturating_add(used);
+        if result.is_pending() && entry.work > max_work {
+            entry.state = ChildState::Failed;
+            entry.error = Some(Diagnostic::limit(format!(
+                "expansion stopped after {max_work} units of work"
+            )));
+            return;
+        }
         match result {
             Poll::Ready(Ok(())) => {
                 entry.state = ChildState::Complete;

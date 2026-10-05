@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello.txt.lzo — lzop, originally "hello.txt" (2023-11-14 22:13:20 UTC)  [0x0+0x3f]
+    Version: 0x1040  [0x9+0x2]
+    Library version: 0x2080  [0xb+0x2]
+    Version needed: 0x940  [0xd+0x2]
+    Method: LZO1X-1 (0x1)  [0xf+0x1]
+    Level: 5  [0x10+0x1]
+    Flags: 0x3000001  [0x11+0x4]
+    Mode: 0x81a4  [0x15+0x4]
+    Modification time: 2023-11-14 22:13:20 UTC  [0x19+0x4]
+    Modification time (high): 0  [0x1d+0x4]
+    Name length: 9  [0x21+0x1]
+    Original name: "hello.txt"  [0x22+0x9]
+    Compressed blocks  [0x2f+0x10]
+      ! unsupported: LZO decoding

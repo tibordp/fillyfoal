@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.smc — "FILLYFOAL TEST", LoROM, North America  [0x0+0x8200]
+    Copier header  [0x0+0x200]
+  ▾ Internal header  [0x81c0+0x20]
+      Title: "FILLYFOAL TEST       "  [0x81c0+0x15]
+      Map mode: LoROM (0x20)  [0x81d5+0x1]
+      Cartridge type: 0x2  [0x81d6+0x1]
+      ROM size: 8 — 256 KiB  [0x81d7+0x1]
+      RAM size: 3 — 8 KiB  [0x81d8+0x1]
+      Country: North America (0x1)  [0x81d9+0x1]
+      Developer ID: 0x33  [0x81da+0x1]
+      Version: 0  [0x81db+0x1]
+      Checksum complement: 0xedcb  [0x81dc+0x2]
+      Checksum: 0x1234  [0x81de+0x2]
+    Vectors  [0x81e0+0x20]

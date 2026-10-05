@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.dcm — Secondary Capture Image Storage, Implicit VR Little Endian  [0x0+0x1b0]
+    Preamble  [0x0+0x80]
+    Prefix: "DICM"  [0x80+0x4]
+  ▾ File Meta Information  [0x84+0x7a]
+      File Meta Information Group Length [UL]: 110  [0x84+0xc]
+      File Meta Information Version [OB]  [0x90+0xe]
+      Media Storage SOP Class UID [UI]: "1.2.840.10008.5.1.4.1.1.7 (Secondary Capture Image Storage)"  [0x9e+0x22]
+      Media Storage SOP Instance UID [UI]: "1.2.3.4.5"  [0xc0+0x12]
+      Transfer Syntax UID [UI]: "1.2.840.10008.1.2 (Implicit VR Little Endian)"  [0xd2+0x1a]
+      Implementation Version Name [SH]: "FILLYFOAL"  [0xec+0x12]
+  ▾ Data Set  [0xfe+0xb2]
+      SOP Class UID [UI]: "1.2.840.10008.5.1.4.1.1.7 (Secondary Capture Image Storage)"  [0xfe+0x22]
+      Modality [CS]: "OT"  [0x120+0xa]
+    ▾ Referenced Image Sequence [SQ]  [0x12a+0x4c]
+      ▾ Item []  [0x132+0x3c]
+          Referenced SOP Class UID [UI]: "1.2.840.10008.5.1.4.1.1.7 (Secondary Capture Image Storage)"  [0x13a+0x22]
+          Referenced SOP Instance UID [UI]: "1.2.3.4.6"  [0x15c+0x12]
+        Sequence Delimitation Item []  [0x16e+0x8]
+      Patient's Name [PN]: "Doe^Jane"  [0x176+0x10]
+      Rows [US]: 2  [0x186+0xa]
+      Columns [US]: 2  [0x190+0xa]
+      Bits Allocated [US]: 8  [0x19a+0xa]
+      Pixel Data [OW] — 4 bytes  [0x1a4+0xc]
