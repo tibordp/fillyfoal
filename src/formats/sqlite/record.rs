@@ -297,6 +297,9 @@ mod tests {
         let idx = columns("CREATE INDEX i ON t(a, b DESC)");
         assert_eq!(idx.len(), 2);
         assert_eq!(decode(1, &[0xff], Encoding::Utf8), Some(Val::Int(-1)));
-        assert_eq!(decode(5, &[0, 0, 0, 1, 0, 0], Encoding::Utf8), Some(Val::Int(65536)));
+        assert_eq!(
+            decode(5, &[0, 0, 0, 1, 0, 0], Encoding::Utf8),
+            Some(Val::Int(65536))
+        );
     }
 }

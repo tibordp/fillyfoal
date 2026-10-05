@@ -48,7 +48,9 @@ pub static FORMAT: Format = Format {
     title: "SQLite 3 database",
     extensions: &["sqlite", "sqlite3", "db", "db3", "s3db", "sl3"],
     mime: "application/vnd.sqlite3",
-    probe: Probe::Custom(|h| h.starts_with(MAGIC) && !matches!(app_id(h), Some(GPKG | GP10 | GP11 | MBTILES_ID))),
+    probe: Probe::Custom(|h| {
+        h.starts_with(MAGIC) && !matches!(app_id(h), Some(GPKG | GP10 | GP11 | MBTILES_ID))
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -199,14 +201,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Pages")
             .summary(format!("{} pages of {} bytes", db.page_count, page_size))
-            .lazy(pages, (db.clone(), header.freelist_trunk, header.largest_root)),
+            .lazy(
+                pages,
+                (db.clone(), header.freelist_trunk, header.largest_root),
+            ),
     );
     let end = db.page_count.saturating_mul(page_size);
     if end < file.len {
         cx.emit(
             Node::new("Trailing data")
                 .span(file.tail(end))
-                .summary(format!("{:#x} bytes after the last page", file.len.saturating_sub(end))),
+                .summary(format!(
+                    "{:#x} bytes after the last page",
+                    file.len.saturating_sub(end)
+                )),
         );
     }
     Ok(())
@@ -245,7 +253,8 @@ struct Counts {
 
 impl Counts {
     fn describe(&self) -> String {
-        let part = |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
+        let part =
+            |n: usize, one: &str, many: &str| format!("{n} {}", if n == 1 { one } else { many });
         let mut out = format!(
             "{}, {}, {}, {}",
             part(self.tables, "table", "tables"),
@@ -431,7 +440,13 @@ async fn schema_entry(cx: Cx, entry: SchemaEntry) -> Result<()> {
                 .desc("Records in key order, read page by page as they are requested")
                 .lazy(rows, (entry.db.clone(), entry.root, entry.columns.clone())),
         );
-        cx.emit(page_link("Root page", &entry.db, entry.root, &path, Role::BTree));
+        cx.emit(page_link(
+            "Root page",
+            &entry.db,
+            entry.root,
+            &path,
+            Role::BTree,
+        ));
     }
     Ok(())
 }
@@ -562,10 +577,20 @@ async fn expand_page(cx: Cx, page: PageState) -> Result<()> {
                     radix: Radix::Dec,
                 })
             } else {
-                page_link("Next overflow page", &page.db, next, &page.path, Role::Overflow)
+                page_link(
+                    "Next overflow page",
+                    &page.db,
+                    next,
+                    &page.path,
+                    Role::Overflow,
+                )
             };
             let link = link.span(page.span.sub(0, 4));
-            cx.emit(if next == 0 { link.summary("end of chain") } else { link });
+            cx.emit(if next == 0 {
+                link.summary("end of chain")
+            } else {
+                link
+            });
             cx.emit(Node::new("Content").span(page.span.sub(4, page.db.usable.saturating_sub(4))));
             Ok(())
         }
@@ -582,7 +607,10 @@ fn btree_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let kind = f.u8("Page type").enumeration(btree::PAGE_TYPES).emit()?;
     f.u16("First freeblock").hex().emit()?;
     f.u16("Number of cells").emit()?;
-    f.u16("Cell content area").hex().desc("0 means 65536").emit()?;
+    f.u16("Cell content area")
+        .hex()
+        .desc("0 means 65536")
+        .emit()?;
     f.u8("Fragmented free bytes").emit()?;
     if Kind::from_byte(kind).is_some_and(|k| !k.is_leaf()) {
         f.u32("Right-most pointer").emit()?;
@@ -605,9 +633,19 @@ async fn btree_page(cx: &Cx, state: &PageState) -> Result<()> {
         Err(e) => return Err(e),
     };
     if state.no == 1 {
-        cx.emit(Header::node("Database Header", state.span.sub(0, Header::SIZE), BE));
+        cx.emit(Header::node(
+            "Database Header",
+            state.span.sub(0, Header::SIZE),
+            BE,
+        ));
     }
-    cx.emit(struct_node("B-tree page header", page.header_span(), BE, (), btree_header));
+    cx.emit(struct_node(
+        "B-tree page header",
+        page.header_span(),
+        BE,
+        (),
+        btree_header,
+    ));
     cx.emit(
         Node::new("Cell pointer array")
             .span(page.pointers_span())
@@ -654,8 +692,14 @@ async fn btree_page(cx: &Cx, state: &PageState) -> Result<()> {
         .await;
     }
     if let Some(right) = page.right {
-        cx.push(page_link("Right-most child page", db, right, &state.path, Role::BTree))
-            .await;
+        cx.push(page_link(
+            "Right-most child page",
+            db,
+            right,
+            &state.path,
+            Role::BTree,
+        ))
+        .await;
     }
     Ok(())
 }
@@ -699,8 +743,14 @@ async fn freelist(cx: Cx, (db, first): (DbRef, u32)) -> Result<()> {
         let head = cx.read(span.sub(0, 8)).await?;
         let leaves = u32_be(&head, 4).unwrap_or(0);
         cx.push(
-            page_node(&db, format!("Trunk page {next}"), next, span, Role::FreelistTrunk)
-                .summary(format!("{leaves} leaf pages")),
+            page_node(
+                &db,
+                format!("Trunk page {next}"),
+                next,
+                span,
+                Role::FreelistTrunk,
+            )
+            .summary(format!("{leaves} leaf pages")),
         )
         .await;
         next = u32_be(&head, 0).unwrap_or(0);
@@ -719,7 +769,13 @@ async fn freelist_trunk(cx: &Cx, page: &PageState) -> Result<()> {
             radix: Radix::Dec,
         })
     } else {
-        page_link("Next trunk page", &page.db, next, &page.path, Role::FreelistTrunk)
+        page_link(
+            "Next trunk page",
+            &page.db,
+            next,
+            &page.path,
+            Role::FreelistTrunk,
+        )
     };
     next_node = next_node.span(page.span.sub(0, 4));
     cx.emit(next_node);
@@ -737,13 +793,18 @@ async fn freelist_trunk(cx: &Cx, page: &PageState) -> Result<()> {
         )));
     }
     cx.emit(count_node);
-    let list = page.span.sub(8, u64::from(count).min(max).saturating_mul(4));
+    let list = page
+        .span
+        .sub(8, u64::from(count).min(max).saturating_mul(4));
     let data = cx.read(list).await?;
     for (i, chunk) in data.as_chunks::<4>().0.iter().enumerate() {
         let no = u32::from_be_bytes(*chunk);
         let at = to_u64(i).saturating_mul(4);
-        cx.push(page_link("Leaf page", &page.db, no, &page.path, Role::FreelistLeaf).span(list.sub(at, 4)))
-            .await;
+        cx.push(
+            page_link("Leaf page", &page.db, no, &page.path, Role::FreelistLeaf)
+                .span(list.sub(at, 4)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -761,8 +822,14 @@ fn pointer_map_pages(db: &Db) -> impl Iterator<Item = u32> + use<> {
 async fn pointer_maps(cx: Cx, db: DbRef) -> Result<()> {
     for no in pointer_map_pages(&db) {
         let span = db.page(no)?;
-        cx.push(page_node(&db, format!("Pointer map page {no}"), no, span, Role::PointerMap))
-            .await;
+        cx.push(page_node(
+            &db,
+            format!("Pointer map page {no}"),
+            no,
+            span,
+            Role::PointerMap,
+        ))
+        .await;
     }
     Ok(())
 }
@@ -818,9 +885,15 @@ async fn pages(cx: Cx, (db, trunk, largest_root): (DbRef, u32, u32)) -> Result<(
             break;
         };
         let head = cx.read(span.sub(0, 8)).await?;
-        let count = u64::from(u32_be(&head, 4).unwrap_or(0)).min(db.usable.saturating_div(4).saturating_sub(2));
+        let count = u64::from(u32_be(&head, 4).unwrap_or(0))
+            .min(db.usable.saturating_div(4).saturating_sub(2));
         let list = cx.read(span.sub(8, count.saturating_mul(4))).await?;
-        leaves.extend(list.as_chunks::<4>().0.iter().map(|c| u32::from_be_bytes(*c)));
+        leaves.extend(
+            list.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| u32::from_be_bytes(*c)),
+        );
         next = u32_be(&head, 0).unwrap_or(0);
     }
     let ptrmaps: BTreeSet<u32> = if largest_root != 0 {

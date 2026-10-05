@@ -212,7 +212,9 @@ fn valid(data: &[u8], depth: u32) -> bool {
         if !ok {
             return false;
         }
-        rest = rest.get(start.saturating_add(to_usize(len))..).unwrap_or_default();
+        rest = rest
+            .get(start.saturating_add(to_usize(len))..)
+            .unwrap_or_default();
     }
     true
 }
@@ -280,10 +282,7 @@ pub fn string(tag: u64, content: &[u8]) -> Option<String> {
 /// Seconds since the Unix epoch of a UTCTime or GeneralizedTime.
 pub fn time(tag: u64, content: &[u8]) -> Option<i64> {
     let text = std::str::from_utf8(content).ok()?;
-    let digits: Vec<u32> = text
-        .chars()
-        .map_while(|c| c.to_digit(10))
-        .collect();
+    let digits: Vec<u32> = text.chars().map_while(|c| c.to_digit(10)).collect();
     let num = |from: usize, n: usize| -> Option<i64> {
         let part = digits.get(from..from.checked_add(n)?)?;
         Some(part.iter().fold(0i64, |acc, &d| {
@@ -376,8 +375,8 @@ pub fn name(content: &[u8]) -> String {
                 continue;
             }
             let dotted = oid(oid_bytes).unwrap_or_default();
-            let key = super::oids::short_attribute(&dotted)
-                .map_or_else(|| dotted.clone(), str::to_owned);
+            let key =
+                super::oids::short_attribute(&dotted).map_or_else(|| dotted.clone(), str::to_owned);
             let text = display(&vt, value).unwrap_or_else(|| "…".to_owned());
             parts.push(format!("{key}={text}"));
         }
@@ -404,7 +403,10 @@ mod tests {
         assert_eq!(integer(&[0xff, 0x7f]), Some(-129));
         assert_eq!(integer(&[0x00, 0x80]), Some(128));
         assert_eq!(time(UTC_TIME, b"700101000000Z"), Some(0));
-        assert_eq!(time(GENERALIZED_TIME, b"20000301000000Z"), Some(951_868_800));
+        assert_eq!(
+            time(GENERALIZED_TIME, b"20000301000000Z"),
+            Some(951_868_800)
+        );
         assert_eq!(date(951_868_800), "2000-03-01");
         assert!(is_nested_der(&[0x30, 0x03, 0x02, 0x01, 0x05]));
         assert!(!is_nested_der(&[0x30, 0x03, 0x02, 0x01]));

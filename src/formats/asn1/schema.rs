@@ -139,7 +139,10 @@ static TBS_CERTIFICATE: Schema = Schema::Seq(&[
     opt("extensions", &[0xa3], &EXPLICIT_EXTENSIONS),
 ]);
 
-static VALIDITY: Schema = Schema::Seq(&[req("notBefore", TIME, &UNKNOWN), req("notAfter", TIME, &UNKNOWN)]);
+static VALIDITY: Schema = Schema::Seq(&[
+    req("notBefore", TIME, &UNKNOWN),
+    req("notAfter", TIME, &UNKNOWN),
+]);
 
 // --- CRLs ------------------------------------------------------------------
 

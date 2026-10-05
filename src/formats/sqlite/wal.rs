@@ -109,7 +109,11 @@ async fn dissect_wal(cx: Cx, input: Input) -> Result<()> {
             .at(header_span.sub(8, 4))
     })?;
     let frame = FrameHeader::SIZE.saturating_add(page_size);
-    let frames = file.len.saturating_sub(WalHeader::SIZE).checked_div(frame).unwrap_or(0);
+    let frames = file
+        .len
+        .saturating_sub(WalHeader::SIZE)
+        .checked_div(frame)
+        .unwrap_or(0);
     cx.annotate(format!(
         "SQLite WAL, {frames} frames of {page_size}-byte pages, checkpoint {}",
         header.checkpoint
@@ -117,7 +121,10 @@ async fn dissect_wal(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .summary(format!("{frames} frames"))
-            .lazy(wal_frames, (input, page_size, frames, header.salt1, header.salt2)),
+            .lazy(
+                wal_frames,
+                (input, page_size, frames, header.salt1, header.salt2),
+            ),
     );
     Ok(())
 }
@@ -130,9 +137,10 @@ async fn wal_frames(
     let db = image_db(input, page_size);
     let frame_len = FrameHeader::SIZE.saturating_add(page_size);
     for i in 0..frames {
-        let span = input
-            .span
-            .sub(WalHeader::SIZE.saturating_add(i.saturating_mul(frame_len)), frame_len);
+        let span = input.span.sub(
+            WalHeader::SIZE.saturating_add(i.saturating_mul(frame_len)),
+            frame_len,
+        );
         let head = cx.read(span.sub(0, FrameHeader::SIZE)).await?;
         let page = u32_be(&head, 0).unwrap_or(0);
         let commit = u32_be(&head, 4).unwrap_or(0);
@@ -156,9 +164,19 @@ async fn wal_frames(
 }
 
 async fn frame(cx: Cx, (db, span, page): (DbRef, crate::span::Span, u32)) -> Result<()> {
-    cx.emit(FrameHeader::node("Frame header", span.sub(0, FrameHeader::SIZE), BE));
+    cx.emit(FrameHeader::node(
+        "Frame header",
+        span.sub(0, FrameHeader::SIZE),
+        BE,
+    ));
     let image = span.tail(FrameHeader::SIZE);
-    cx.emit(page_node(&db, format!("Page {page}"), page, image, Role::Unknown));
+    cx.emit(page_node(
+        &db,
+        format!("Page {page}"),
+        page,
+        image,
+        Role::Unknown,
+    ));
     Ok(())
 }
 
@@ -173,7 +191,11 @@ async fn dissect_journal(cx: Cx, input: Input) -> Result<()> {
     })?;
     let sector = u64::from(header.sector_size).clamp(JournalHeader::SIZE, 65536);
     let record = page_size.saturating_add(8);
-    let available = file.len.saturating_sub(sector).checked_div(record).unwrap_or(0);
+    let available = file
+        .len
+        .saturating_sub(sector)
+        .checked_div(record)
+        .unwrap_or(0);
     let count = match header.page_count {
         u32::MAX | 0 => available,
         n => u64::from(n).min(available),
@@ -183,7 +205,10 @@ async fn dissect_journal(cx: Cx, input: Input) -> Result<()> {
         header.initial_size
     ));
     if sector > JournalHeader::SIZE {
-        cx.emit(Node::new("Header padding").span(file.sub(JournalHeader::SIZE, sector.saturating_sub(JournalHeader::SIZE))));
+        cx.emit(Node::new("Header padding").span(file.sub(
+            JournalHeader::SIZE,
+            sector.saturating_sub(JournalHeader::SIZE),
+        )));
     }
     cx.emit(
         Node::new("Page records")

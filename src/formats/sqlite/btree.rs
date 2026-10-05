@@ -493,7 +493,12 @@ pub struct Columns(pub Arc<Vec<Column>>);
 
 /// Values of a record decoded from the bytes at hand (the local part of a
 /// payload), for summaries.
-pub fn record_summary(data: &[u8], columns: &[Column], rowid: Option<i64>, encoding: Encoding) -> String {
+pub fn record_summary(
+    data: &[u8],
+    columns: &[Column],
+    rowid: Option<i64>,
+    encoding: Encoding,
+) -> String {
     const MAX_COLUMNS: usize = 8;
     let Some((_, fields)) = record::header(data) else {
         return "(unreadable record)".to_owned();
@@ -571,11 +576,20 @@ pub async fn expand_cell(cx: Cx, state: CellState) -> Result<()> {
     cx.emit(
         Node::new("Cell")
             .span(cell.span())
-            .summary(format!("{:#x} bytes at page offset {:#x}", cell.len, cell.offset))
+            .summary(format!(
+                "{:#x} bytes at page offset {:#x}",
+                cell.len, cell.offset
+            ))
             .lazy(cell_fields, state.clone()),
     );
     if let Some(left) = cell.left {
-        cx.emit(super::page_link("Left child page", db, left, &state.path, super::Role::BTree));
+        cx.emit(super::page_link(
+            "Left child page",
+            db,
+            left,
+            &state.path,
+            super::Role::BTree,
+        ));
     }
     Ok(())
 }
@@ -588,14 +602,24 @@ async fn cell_fields(cx: Cx, state: CellState) -> Result<()> {
     }
     if let Some(p) = cell.payload {
         let (o, n) = cell.payload_len_at;
-        cx.emit(uint("Payload size", p.total, at(o, n)).desc("Varint: bytes of payload, including overflow"));
+        cx.emit(
+            uint("Payload size", p.total, at(o, n))
+                .desc("Varint: bytes of payload, including overflow"),
+        );
     }
     if let Some(rowid) = cell.rowid {
         let (o, n) = cell.rowid_at;
         cx.emit(
-            Node::new(if cell.kind == Kind::TableInterior { "Key (rowid)" } else { "Rowid" })
-                .span(at(o, n))
-                .value(Value::Int { value: rowid, bits: 64 }),
+            Node::new(if cell.kind == Kind::TableInterior {
+                "Key (rowid)"
+            } else {
+                "Rowid"
+            })
+            .span(at(o, n))
+            .value(Value::Int {
+                value: rowid,
+                bits: 64,
+            }),
         );
     }
     if let Some(p) = cell.payload {
@@ -613,7 +637,10 @@ async fn cell_fields(cx: Cx, state: CellState) -> Result<()> {
             cx.emit(node);
             cx.emit(
                 Node::new("Overflow chain")
-                    .summary(format!("{:#x} bytes on overflow pages", p.total.saturating_sub(p.local_len)))
+                    .summary(format!(
+                        "{:#x} bytes on overflow pages",
+                        p.total.saturating_sub(p.local_len)
+                    ))
                     .lazy(overflow_pages, state.clone()),
             );
         }
@@ -628,8 +655,14 @@ async fn overflow_pages(cx: Cx, state: CellState) -> Result<()> {
     let (chain, diag) = overflow_chain(&cx, &state.db, &payload).await;
     for (no, content) in chain {
         cx.push(
-            super::page_link("Overflow page", &state.db, no, &state.path, super::Role::Overflow)
-                .summary(format!("page {no}, {:#x} payload bytes", content.len)),
+            super::page_link(
+                "Overflow page",
+                &state.db,
+                no,
+                &state.path,
+                super::Role::Overflow,
+            )
+            .summary(format!("page {no}, {:#x} payload bytes", content.len)),
         )
         .await;
     }
@@ -666,18 +699,27 @@ async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
         let data = cx.read_avail(span.sub(0, VALUE_PREVIEW)).await?;
         let complete = to_u64(data.len()) == field.len;
         node = match record::decode(field.serial, &data, state.db.encoding) {
-            Some(Val::Null) if columns.get(i).is_some_and(|c| c.rowid_alias) => match state.cell.rowid {
-                Some(rowid) => node
-                    .value(Value::Int { value: rowid, bits: 64 })
-                    .summary("INTEGER PRIMARY KEY (stored as NULL; the rowid)"),
-                None => node.summary("NULL"),
-            },
+            Some(Val::Null) if columns.get(i).is_some_and(|c| c.rowid_alias) => {
+                match state.cell.rowid {
+                    Some(rowid) => node
+                        .value(Value::Int {
+                            value: rowid,
+                            bits: 64,
+                        })
+                        .summary("INTEGER PRIMARY KEY (stored as NULL; the rowid)"),
+                    None => node.summary("NULL"),
+                }
+            }
             Some(Val::Null) => node.summary("NULL"),
             Some(Val::Int(v)) => node.value(Value::Int { value: v, bits: 64 }),
             Some(Val::Float(v)) => node.value(Value::Float(v)),
             Some(Val::Text(s)) => {
                 let node = node.value(Value::Text(s));
-                if complete { node } else { node.summary(format!("{} bytes", field.len)) }
+                if complete {
+                    node
+                } else {
+                    node.summary(format!("{} bytes", field.len))
+                }
             }
             Some(Val::Blob(b)) => {
                 let node = node
@@ -702,10 +744,7 @@ async fn record_nodes(cx: &Cx, state: &CellState, payload: Span) -> Result<()> {
     Ok(())
 }
 
-async fn record_header(
-    cx: Cx,
-    (span, fields): (Span, Arc<Vec<record::Field>>),
-) -> Result<()> {
+async fn record_header(cx: Cx, (span, fields): (Span, Arc<Vec<record::Field>>)) -> Result<()> {
     let head = cx.read_avail(span.sub(0, 9)).await?;
     if let Some((size, n)) = record::varint(&head, 0) {
         cx.emit(uint("Header size", size, span.sub(0, to_u64(n))));

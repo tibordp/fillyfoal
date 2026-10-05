@@ -249,12 +249,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     dissect_with(cx, input, &schema::UNKNOWN, Kind::Generic).await
 }
 
-async fn dissect_with(
-    cx: Cx,
-    input: Input,
-    schema: &'static Schema,
-    kind: Kind,
-) -> Result<()> {
+async fn dissect_with(cx: Cx, input: Input, schema: &'static Schema, kind: Kind) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, SUMMARY_READ)).await?;
     cx.annotate(annotation(kind, &head, input.span.len));
     elements(
@@ -288,10 +283,7 @@ async fn elements(cx: Cx, level: Level) -> Result<()> {
             Some(len) => (len, 0),
             None => (indefinite_len(&cx, region, content_start).await?, 2),
         };
-        let total = tlv
-            .header
-            .saturating_add(content_len)
-            .saturating_add(eoc);
+        let total = tlv.header.saturating_add(content_len).saturating_add(eoc);
         let whole = region.sub(pos, total);
         let content = region.sub(content_start, content_len);
         let (name, schema) = matcher.child(tlv.id);
@@ -328,8 +320,10 @@ async fn indefinite_len(cx: &Cx, region: Span, start: u64) -> Result<u64> {
         cx.checkpoint().await;
         let peek = cx.read_avail(region.sub(pos, HEADER_MAX)).await?;
         if peek.len() < 2 {
-            return Err(Diagnostic::truncated(region.sub(start, pos.saturating_sub(start)), 0)
-                .at(region.sub(pos, 2)));
+            return Err(
+                Diagnostic::truncated(region.sub(start, pos.saturating_sub(start)), 0)
+                    .at(region.sub(pos, 2)),
+            );
         }
         if peek.starts_with(&[0, 0]) {
             depth = depth.saturating_sub(1);
@@ -553,9 +547,10 @@ async fn primitive(
 
 /// Bits in a big-endian unsigned magnitude, for "2048-bit" summaries.
 fn significant_bits(data: &[u8]) -> u64 {
-    let trimmed = data.iter().position(|&b| b != 0).map_or(&[][..], |i| {
-        data.get(i..).unwrap_or_default()
-    });
+    let trimmed = data
+        .iter()
+        .position(|&b| b != 0)
+        .map_or(&[][..], |i| data.get(i..).unwrap_or_default());
     let Some(&lead) = trimmed.first() else {
         return 0;
     };

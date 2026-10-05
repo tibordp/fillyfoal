@@ -26,7 +26,10 @@ const OIDS: &[(&str, &str)] = &[
     ("0.9.2342.19200300.100.1.25", "domainComponent"),
     ("1.2.840.113549.1.9.1", "emailAddress"),
     ("1.3.6.1.4.1.311.60.2.1.1", "jurisdictionLocalityName"),
-    ("1.3.6.1.4.1.311.60.2.1.2", "jurisdictionStateOrProvinceName"),
+    (
+        "1.3.6.1.4.1.311.60.2.1.2",
+        "jurisdictionStateOrProvinceName",
+    ),
     ("1.3.6.1.4.1.311.60.2.1.3", "jurisdictionCountryName"),
     // X.509 certificate and CRL extensions
     ("2.5.29.9", "subjectDirectoryAttributes"),
