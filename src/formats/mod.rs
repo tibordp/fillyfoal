@@ -49,6 +49,7 @@ pub mod security;
 pub mod system;
 pub mod graphics;
 pub mod packages;
+pub mod archives2;
 // -- end misc --
 
 // -- text --
@@ -328,6 +329,20 @@ pub static FORMATS: &[&Format] = &[
     &packages::POWERPACKER,
     &packages::ZPAQ,
     &packages::PGS,
+    &archives2::SARC,
+    &archives2::YAZ0,
+    &archives2::U8,
+    &archives2::NARC,
+    &archives2::PSARC,
+    &archives2::XNB,
+    &archives2::BSA,
+    &archives2::BA2,
+    &archives2::MPQ,
+    &archives2::RGSSAD,
+    &archives2::FXP,
+    &archives2::FLP,
+    &archives2::GUITAR_PRO,
+    &archives2::UNREAL_PAK,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,
