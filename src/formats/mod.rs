@@ -29,11 +29,14 @@ pub mod png;
 
 // -- audio & video --
 // audio (riff/iff/flac/mp3/ogg/...)
+pub mod ac3;
+pub mod adts;
 pub mod amr;
 pub mod ape;
 pub mod apetag;
 pub mod au;
 pub mod caf;
+pub mod dts;
 pub mod flac;
 pub mod id3;
 pub mod iff;
@@ -198,6 +201,9 @@ pub static FORMATS: &[&Format] = &[
     &ogg::SPEEX,
     &ogg::THEORA,
     &ogg::FORMAT,
+    &adts::FORMAT,
+    &ac3::FORMAT,
+    &dts::FORMAT,
     &mpa::FORMAT,
     &id3::FORMAT,
     // -- end audio & video --

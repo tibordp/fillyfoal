@@ -232,6 +232,10 @@ impl<'a> Bits<'a> {
         self.pos = self.pos.saturating_add(bits);
     }
 
+    pub fn seek(&mut self, bit: u64) {
+        self.pos = bit;
+    }
+
     fn bit(&self, at: u64) -> Option<u64> {
         let byte = self.data.get(to_usize(at / 8))?;
         let shift = if self.lsb_first {
@@ -454,5 +458,79 @@ async fn expand_table<R: Record>(
         cx.push(node).await;
         index = index.saturating_add(1);
     }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Elementary streams of self-delimiting frames (ADTS, AC-3, DTS, ...)
+
+/// How to recognise and render the frames of an elementary stream.
+pub struct FrameSyntax {
+    /// Bytes `parse` needs to see.
+    pub peek: u64,
+    /// Frame length and a one-line description, if `data` starts with a
+    /// valid frame header.
+    pub parse: fn(&[u8]) -> Option<(u64, String)>,
+    /// Header bytes rendered by `layout`.
+    pub header: fn(&[u8]) -> u64,
+    pub layout: BitLayout<()>,
+}
+
+/// Counts the frames at the start of `data` and the bytes they cover.
+pub fn count_frames(data: &[u8], syntax: &FrameSyntax) -> (u64, u64) {
+    let mut at = 0u64;
+    let mut count = 0u64;
+    while let Some((len, _)) = data.get(to_usize(at)..).and_then(syntax.parse) {
+        if len == 0 || at.saturating_add(len) > to_u64(data.len()) {
+            break;
+        }
+        at = at.saturating_add(len);
+        count = count.saturating_add(1);
+    }
+    (count, at)
+}
+
+/// A lazy node listing the frames of `region`, paged.
+pub fn frames_node(region: Span, syntax: &'static FrameSyntax) -> Node {
+    Node::new("Frames")
+        .span(region)
+        .summary(format!("{} bytes", region.len))
+        .lazy(list_frames, (region, syntax))
+}
+
+async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> Result<()> {
+    let mut pos = 0u64;
+    let mut index = 0u64;
+    while pos < region.len {
+        let head = cx.read_avail(region.sub(pos, syntax.peek)).await?;
+        let Some((len, summary)) = (syntax.parse)(&head).filter(|(l, _)| *l > 0) else {
+            let mut node = Node::new("Unparsed data").span(region.tail(pos));
+            if !head.iter().all(|&b| b == 0) {
+                node = node.diag(Diagnostic::malformed("lost frame sync"));
+            }
+            cx.emit(node);
+            return Ok(());
+        };
+        let span = region.sub(pos, len);
+        let mut node = Node::new(format!("Frame {index}"))
+            .span(span)
+            .summary(format!("{summary}, {len} bytes"));
+        if span.len < len {
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, len),
+                span.len,
+            ));
+        }
+        let header = span.sub(0, (syntax.header)(&head));
+        cx.push(node.lazy(frame, (span, header, syntax))).await;
+        pos = pos.saturating_add(len);
+        index = index.saturating_add(1);
+    }
+    Ok(())
+}
+
+async fn frame(cx: Cx, (span, header, syntax): (Span, Span, &'static FrameSyntax)) -> Result<()> {
+    cx.emit(bits_node("Header", header, syntax.layout, false));
+    cx.emit(Node::new("Payload").span(span.tail(header.len)));
     Ok(())
 }
