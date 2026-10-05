@@ -53,6 +53,7 @@ pub mod pickle;
 pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
+pub mod swf;
 pub mod terminfo;
 pub mod thumbcache;
 // -- end documents --
@@ -193,6 +194,7 @@ pub static FORMATS: &[&Format] = &[
     &git::PACK,
     &git::PACK_INDEX,
     &git::INDEX,
+    &swf::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --

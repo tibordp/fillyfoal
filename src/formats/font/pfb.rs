@@ -18,9 +18,16 @@ pub static FORMAT: Format = Format {
     title: "PostScript Type 1 font (PFB)",
     extensions: &["pfb"],
     mime: "application/x-font-type1",
-    probe: Probe::Magic(&[(0, b"\x80\x01"), (0, b"\x80\x02")]),
+    probe: Probe::Custom(probe),
     dissect: crate::expander!(dissect: Input),
 };
+
+/// An ASCII segment of plausible length whose text starts with `%!`.
+fn probe(h: &crate::formats::Head<'_>) -> bool {
+    h.starts_with(b"\x80\x01")
+        && h.at(6, b"%!")
+        && crate::bytes::u32_le(h.data, 2).is_some_and(|n| n >= 16 && u64::from(n) < h.len)
+}
 
 const SEGMENTS: EnumTable = &[(1, "ASCII"), (2, "Binary (eexec)"), (3, "End of file")];
 
