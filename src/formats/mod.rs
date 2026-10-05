@@ -19,6 +19,7 @@ pub mod ar;
 pub mod arcutil;
 pub mod bzip2;
 pub mod compress;
+pub mod cpio;
 pub mod gzip;
 pub mod lz4;
 pub mod lzma;
@@ -162,6 +163,7 @@ pub static FORMATS: &[&Format] = &[
     &compress::PACK,
     &ar::DEB,
     &ar::FORMAT,
+    &cpio::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
