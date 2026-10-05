@@ -5,8 +5,10 @@
 
 pub mod bmp;
 pub mod dds;
+pub mod dpx;
 pub mod exr;
 pub mod farbfeld;
+pub mod fits;
 pub mod gif;
 pub mod hdr;
 pub mod icc;
