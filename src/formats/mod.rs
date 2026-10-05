@@ -24,6 +24,7 @@ pub mod gzip;
 pub mod lz4;
 pub mod lzma;
 pub mod rpm;
+pub mod sevenzip;
 pub mod tar;
 pub mod xz;
 pub mod zstd;
@@ -166,6 +167,7 @@ pub static FORMATS: &[&Format] = &[
     &ar::FORMAT,
     &cpio::FORMAT,
     &rpm::FORMAT,
+    &sevenzip::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
