@@ -44,7 +44,7 @@ pub mod plist;
 pub mod ssh;
 // pub mod subtitles;
 pub mod toml;
-// pub mod vcard;
+pub mod vcard;
 pub mod xml;
 pub mod yaml;
 

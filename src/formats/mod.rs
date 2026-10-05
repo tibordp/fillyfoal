@@ -179,6 +179,8 @@ pub static FORMATS: &[&Format] = &[
     &text::mime::MBOX,
     &text::mime::MHTML,
     &text::mime::EML,
+    &text::vcard::VCARD,
+    &text::vcard::ICALENDAR,
     // Markup: specific XML vocabularies, then HTML, then generic XML.
     &text::plist::FORMAT,
     &text::xml::XHTML,

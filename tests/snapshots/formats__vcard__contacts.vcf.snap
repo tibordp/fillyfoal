@@ -1,0 +1,62 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ contacts.vcf — vCard, 2 contacts  [0x0+0x26f]
+  ▾ VCARD — Dr. Ana Novak  [0x0+0x1e0]
+      VERSION: "3.0"  [0x15+0x3]
+    ▾ N: "Novak;Ana;;Dr.;"  [0x1c+0xf]
+        Family name: "Novak"
+        Given name: "Ana"
+        Prefix: "Dr."
+      FN: "Dr. Ana Novak"  [0x30+0xd]
+    ▾ ORG: "Fillyfoal Inc.;Research"  [0x43+0x17]
+        Organisation: "Fillyfoal Inc."
+        Unit: "Research"
+    ▾ TEL: "+386 1 234 5678"  [0x70+0xf]
+        TYPE (parameter): "work,voice"
+    ▾ EMAIL: "ana@example.com"  [0x95+0xf]
+        TYPE (parameter): "INTERNET"
+    ▾ ADR: ";;Trubarjeva 1;Ljubljana;;1000;Slovenia"  [0xb4+0x27]
+        TYPE (parameter): "home"
+        Street: "Trubarjeva 1"
+        Locality: "Ljubljana"
+        Postal code: "1000"
+        Country: "Slovenia"
+      NOTE: "Line one\nLine two, with comma and a long folded continuation."  [0xe2+0x42]
+      BDAY: 1990-04-01 00:00:00 UTC  [0x12b+0xa]
+    ▾ PHOTO — 1×1, 8-bit RGBA  [0x151+0x63]
+        Signature  [#1:0x0+0x8]
+      ▾ IHDR — 1×1, 8-bit RGBA  [#1:0x8+0x19]
+          Length: 13  [#1:0x8+0x4]
+          Type: "IHDR" — critical, public, unsafe to copy  [#1:0xc+0x4]
+        ▾ Header  [#1:0x10+0xd]
+            Width: 1  [#1:0x10+0x4]
+            Height: 1  [#1:0x14+0x4]
+            Bit depth: 8  [#1:0x18+0x1]
+            Color type: RGBA (0x6)  [#1:0x19+0x1]
+            Compression method: 0  [#1:0x1a+0x1]
+            Filter method: 0  [#1:0x1b+0x1]
+            Interlace method: None (0x0)  [#1:0x1c+0x1]
+          CRC: 0x1f15c489 — valid  [#1:0x1d+0x4]
+      ▾ IDAT — 0xd bytes  [#1:0x21+0x19]
+          Length: 13  [#1:0x21+0x4]
+          Type: "IDAT" — critical, public, unsafe to copy  [#1:0x25+0x4]
+          Data  [#1:0x29+0xd]
+          CRC: 0x5a347d6b — valid  [#1:0x36+0x4]
+      ▾ IEND — 0x0 bytes  [#1:0x3a+0xc]
+          Length: 0  [#1:0x3a+0x4]
+          Type: "IEND" — critical, public, unsafe to copy  [#1:0x3e+0x4]
+          Data  [#1:0x42+0x0]
+          CRC: 0xae426082 — valid  [#1:0x42+0x4]
+      item1.URL: "https://example.com"  [0x1c0+0x13]
+  ▾ VCARD — Bob Kranjc  [0x1e0+0x8f]
+      VERSION: "2.1"  [0x1f5+0x3]
+    ▾ N: "Kranjc;Bob"  [0x1fc+0xa]
+        Family name: "Kranjc"
+        Given name: "Bob"
+      FN: "Bob Kranjc"  [0x20b+0xa]
+    ▾ NOTE: "Café lover"  [0x236+0x12]
+        ENCODING (parameter): "QUOTED-PRINTABLE"
+    ▾ TEL: "+386 40 000 000"  [0x253+0xf]
+        TYPE (parameter): "HOME"
