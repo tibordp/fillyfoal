@@ -515,7 +515,7 @@ async fn expand(cx: Cx, chunk: Chunk) -> Result<()> {
 async fn common(cx: &Cx, chunk: &Chunk) -> Result<bool> {
     let input = chunk.input();
     match (&chunk.id, &chunk.list) {
-        (_, b"INFO") => {
+        _ if is_text_chunk(chunk) => {
             let text = peek_text(cx, chunk.data, chunk.data.len).await?;
             cx.emit(
                 Node::new("Text")
@@ -555,7 +555,7 @@ async fn body(cx: &Cx, chunk: &Chunk) -> Result<bool> {
 
 /// A summary for a chunk's collapsed line, if the form has one.
 async fn summarize(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
-    if &chunk.list == b"INFO" || is_text_chunk(chunk) {
+    if is_text_chunk(chunk) {
         let text = peek_text(cx, chunk.data, 120).await?;
         return Ok(Some(crate::formats::sound::clip(&text, 60)));
     }
@@ -569,10 +569,13 @@ async fn summarize(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
     }
 }
 
-/// IFF's generic text chunks.
+/// RIFF `INFO` entries and IFF's generic text chunks (but not SoundFont's
+/// binary version numbers, which also live in `INFO`).
 fn is_text_chunk(chunk: &Chunk) -> bool {
-    chunk.ctx.family == Family::Iff
-        && matches!(&chunk.id, b"NAME" | b"AUTH" | b"(c) " | b"ANNO" | b"CHRS")
+    match chunk.ctx.family {
+        Family::Riff => &chunk.list == b"INFO" && !matches!(&chunk.id, b"ifil" | b"iver"),
+        Family::Iff => matches!(&chunk.id, b"NAME" | b"AUTH" | b"(c) " | b"ANNO" | b"CHRS"),
+    }
 }
 
 fn describe_id(chunk: &Chunk) -> Option<&'static str> {
