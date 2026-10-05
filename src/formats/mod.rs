@@ -43,6 +43,7 @@ pub mod retro;
 // -- games, 3D, science, e-books, misc --
 pub mod games;
 pub mod models;
+pub mod science;
 // -- end misc --
 
 // -- text --
@@ -251,6 +252,14 @@ pub static FORMATS: &[&Format] = &[
     &models::STL_ASCII,
     &models::DXF,
     &models::STL,
+    &science::FITS,
+    &science::DICOM,
+    &science::SHX,
+    &science::SHP,
+    &science::LAS,
+    &science::GRIB,
+    &science::BUFR,
+    &science::DBF,
     // -- end misc --
 
     // -- text (generic probes, keep last) --

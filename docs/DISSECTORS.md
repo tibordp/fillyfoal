@@ -124,7 +124,12 @@ Cursor has `record`, `bytes`, `peek`, `u8..u64`, `int::<T>`, `uleb128`,
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than
-looping forever.
+looping forever. Beware `cx.read(region.sub(pos, n))` past the end: `sub`
+clamps, so the read succeeds with *fewer* (or zero) bytes; a loop that only
+stops at a terminator then never stops. Bound such loops by the region
+(`while pos < region.len`) or use `sub_exact`. As a safety net the session
+stops any expansion after `Limits::max_work` units, and the robustness
+tests fail if that ever happens on a fixture.
 
 ## 5. Spans: `sub` versus `sub_exact`
 
