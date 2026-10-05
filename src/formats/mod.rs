@@ -31,6 +31,10 @@ pub mod png;
 // -- end audio & video --
 
 // -- documents & data --
+// data, system artifacts, fonts
+pub mod bencode;
+pub mod bplist;
+pub mod datakit;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -133,6 +137,9 @@ pub static FORMATS: &[&Format] = &[
     // -- end audio & video --
 
     // -- documents & data --
+    // data, system artifacts, fonts
+    &bplist::FORMAT,
+    &bencode::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
