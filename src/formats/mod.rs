@@ -28,6 +28,9 @@ pub mod png;
 // -- end images --
 
 // -- audio & video --
+// video & containers (isobmff/matroska/ts/...)
+pub mod isobmff;
+pub mod vidutil;
 // -- end audio & video --
 
 // -- documents & data --
@@ -130,6 +133,19 @@ pub static FORMATS: &[&Format] = &[
     // -- end images --
 
     // -- audio & video --
+    // video & containers (isobmff/matroska/ts/...)
+    &isobmff::CR3,
+    &isobmff::HEIF,
+    &isobmff::AVIF,
+    &isobmff::JP2,
+    &isobmff::JPX,
+    &isobmff::MJ2,
+    &isobmff::THREE_GP,
+    &isobmff::THREE_G2,
+    &isobmff::M4A,
+    &isobmff::M4V,
+    &isobmff::MOV,
+    &isobmff::MP4,
     // -- end audio & video --
 
     // -- documents & data --
