@@ -36,6 +36,7 @@ pub mod isobmff;
 pub mod ivf;
 pub mod matroska;
 pub mod mpeg;
+pub mod mxf;
 pub mod rad;
 pub mod realmedia;
 pub mod vidutil;
@@ -175,6 +176,7 @@ pub static FORMATS: &[&Format] = &[
     &realmedia::FORMAT,
     &rad::BINK,
     &rad::SMACKER,
+    &mxf::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
