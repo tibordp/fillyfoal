@@ -33,7 +33,10 @@ pub mod png;
 // -- documents & data --
 // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
 pub mod asn1;
+pub mod avro;
 pub mod cfb;
+pub mod matlab;
+pub mod netcdf;
 pub mod pdf;
 pub mod pem;
 pub mod pgp;
@@ -163,6 +166,9 @@ pub static FORMATS: &[&Format] = &[
     &pgp::FORMAT,
     &pgp::ARMOR,
     &pem::FORMAT,
+    &avro::FORMAT,
+    &netcdf::FORMAT,
+    &matlab::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
