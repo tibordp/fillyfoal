@@ -22,8 +22,8 @@ fn uint(value: u64) -> Value {
 // STL
 
 fn stl_binary_probe(h: &Head<'_>) -> bool {
-    h.len >= 84
-        && u32_le(h.data, 80).is_some_and(|n| u64::from(n).saturating_mul(50).saturating_add(84) == h.len)
+    h.len >= 134
+        && u32_le(h.data, 80).is_some_and(|n| n > 0 && u64::from(n).saturating_mul(50).saturating_add(84) == h.len)
 }
 
 fn stl_ascii_probe(h: &Head<'_>) -> bool {

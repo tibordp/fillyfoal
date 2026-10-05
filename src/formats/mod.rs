@@ -47,6 +47,7 @@ pub mod science;
 pub mod ebooks;
 pub mod security;
 pub mod system;
+pub mod graphics;
 // -- end misc --
 
 // -- text --
@@ -271,7 +272,6 @@ pub static FORMATS: &[&Format] = &[
     &models::THREE_DS,
     &models::STL_ASCII,
     &models::DXF,
-    &models::STL,
     &science::FITS,
     &science::DICOM,
     &science::SHX,
@@ -298,7 +298,25 @@ pub static FORMATS: &[&Format] = &[
     &system::DOTNET_RESOURCES,
     &system::SNOOP,
     &system::ACPI,
+    &graphics::EMF,
+    &graphics::DPX,
+    &graphics::CINEON,
+    &graphics::VTF,
+    &graphics::PVR,
+    &graphics::ASTC,
+    &graphics::PKM,
+    &graphics::ASE,
+    &graphics::GBR,
+    &graphics::GPAT,
+    &graphics::PDN,
+    &graphics::BPG,
+    &graphics::FLIF,
+    &graphics::JXR,
+    &graphics::WMF,
+    &graphics::ACO,
     &ebooks::PDB,
+    // Weak, size-based probes last.
+    &models::STL,
     // -- end misc --
 
     // -- text (generic probes, keep last) --
