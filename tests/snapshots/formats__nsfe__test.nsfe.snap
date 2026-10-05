@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.nsfe  [0x0+0x76]
+    Magic  [0x0+0x4]
+    INFO — 10 bytes  [0x4+0x12]
+    DATA — 16 bytes  [0x16+0x18]
+    auth — Game / Artist / (c) 2026 / Ripper  [0x2e+0x24]
+    tlbl — Track one / Track two  [0x52+0x1c]
+    NEND — 0 bytes  [0x6e+0x8]

@@ -199,6 +199,18 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles::LYNX,
     &retro::consoles::A7800,
     &retro::consoles::SNES,
+    &retro::music::NSF,
+    &retro::music::NSFE,
+    &retro::music::GBS,
+    &retro::music::SPC,
+    &retro::music::VGM,
+    &retro::music::PSF,
+    &retro::music::SID,
+    &retro::music::HES,
+    &retro::music::KSS,
+    &retro::music::AY,
+    &retro::music::SAP,
+    &retro::music::YM,
     // -- end retro --
 
     // -- text (generic probes, keep last) --

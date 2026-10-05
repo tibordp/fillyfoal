@@ -2,3 +2,4 @@
 //! tape images.
 
 pub mod consoles;
+pub mod music;
