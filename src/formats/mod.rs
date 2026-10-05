@@ -29,6 +29,7 @@ pub mod png;
 
 // -- audio & video --
 // video & containers (isobmff/matroska/ts/...)
+pub mod annexb;
 pub mod flv;
 pub mod isobmff;
 pub mod matroska;
@@ -158,6 +159,8 @@ pub static FORMATS: &[&Format] = &[
     &mpeg::ps::MPEG1_SYSTEM,
     &mpeg::video::MPEG2_VIDEO,
     &mpeg::video::MPEG1_VIDEO,
+    &annexb::HEVC,
+    &annexb::H264,
     // -- end audio & video --
 
     // -- documents & data --
