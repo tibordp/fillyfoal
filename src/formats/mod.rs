@@ -15,7 +15,9 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
+pub mod arcutil;
 pub mod gzip;
+pub mod tar;
 pub mod zip;
 // -- end archives --
 
@@ -140,6 +142,7 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
+    &tar::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
@@ -163,6 +166,8 @@ pub static FORMATS: &[&Format] = &[
     &zip::USDZ,
     &zip::JAR,
     &zip::FORMAT,
+    // Weak probes last.
+    &tar::V7,
     // -- end archives --
 
     // -- text (generic probes, keep last) --
