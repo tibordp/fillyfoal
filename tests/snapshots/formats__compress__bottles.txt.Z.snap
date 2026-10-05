@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.Z — compress, 16-bit LZW, block mode, 460 bytes compressed  [0x0+0x1cf]
+  ▾ Header  [0x0+0x3]
+      Magic: 1f 9d  |..|  [0x0+0x2]
+      Flags: 0x90 [BLOCK_MODE | MAX_BITS_16] — up to 16-bit codes  [0x2+0x1]
+    Compressed data — 460 bytes  [0x3+0x1cc]
+      ! unsupported: LZW compression

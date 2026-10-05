@@ -15,8 +15,10 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
+pub mod ar;
 pub mod arcutil;
 pub mod bzip2;
+pub mod compress;
 pub mod gzip;
 pub mod lz4;
 pub mod lzma;
@@ -156,6 +158,10 @@ pub static FORMATS: &[&Format] = &[
     &lz4::FORMAT,
     &lz4::LEGACY,
     &lz4::SNAPPY,
+    &compress::COMPRESS,
+    &compress::PACK,
+    &ar::DEB,
+    &ar::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
