@@ -14,6 +14,7 @@ pub mod btrfs;
 pub mod exfat;
 pub mod fat;
 pub mod gpt;
+pub mod hfs;
 pub mod luks;
 pub mod lvm;
 pub mod mbr;
