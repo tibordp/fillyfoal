@@ -167,6 +167,14 @@ pub static FORMATS: &[&Format] = &[
     // -- end archives --
 
     // -- text (generic probes, keep last) --
+    // Binary formats found inside text armor.
+    &text::ssh::PRIVATE,
+    &text::ssh::BLOB,
+    // Armor and keys.
+    &text::pem::PGP,
+    &text::pem::SSH2,
+    &text::pem::FORMAT,
+    &text::ssh::KEYS,
     // Markup: specific XML vocabularies, then HTML, then generic XML.
     &text::plist::FORMAT,
     &text::xml::XHTML,

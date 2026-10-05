@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ message.asc — PGP MESSAGE  [0x0+0x90]
+  ▾ PGP MESSAGE — OpenPGP armor, 0x90 bytes  [0x0+0x90]
+      Begin: "PGP MESSAGE"  [0x0+0x1b]
+      Version: "fillyfoal test"  [0x25+0xe]
+      Comment: "not really encrypted"  [0x3d+0x14]
+    ▾ Data — base64, 0x13 bytes decoded  [0x53+0x1c]
+        Data  [#1:0x0+0x13]
+      Checksum: 0xba010b — CRC-24, valid  [0x71+0x4]
+      End  [0x76+0x19]
