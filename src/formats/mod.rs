@@ -24,6 +24,7 @@ pub mod pe;
 // -- end executables --
 
 // -- images --
+pub mod image;
 pub mod png;
 // -- end images --
 
@@ -127,6 +128,20 @@ pub static FORMATS: &[&Format] = &[
     &png::FORMAT,
     &png::MNG,
     &png::JNG,
+    &image::bmp::FORMAT,
+    &image::gif::FORMAT,
+    &image::jpeg::FORMAT,
+    &image::psd::FORMAT,
+    // TIFF-based camera raw formats before plain TIFF.
+    &image::tiff::DNG,
+    &image::tiff::CR2,
+    &image::tiff::NEF,
+    &image::tiff::ARW,
+    &image::tiff::PEF,
+    &image::tiff::SRW,
+    &image::tiff::ORF,
+    &image::tiff::RW2,
+    &image::tiff::FORMAT,
     // -- end images --
 
     // -- audio & video --
