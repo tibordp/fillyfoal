@@ -9,6 +9,7 @@ pub mod exr;
 pub mod farbfeld;
 pub mod gif;
 pub mod hdr;
+pub mod icc;
 pub mod icns;
 pub mod ico;
 pub mod j2k;
