@@ -36,6 +36,7 @@ pub mod bencode;
 pub mod bplist;
 pub mod cbor;
 pub mod datakit;
+pub mod pcap;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -142,6 +143,8 @@ pub static FORMATS: &[&Format] = &[
     &bplist::FORMAT,
     &bencode::FORMAT,
     &cbor::FORMAT,
+    &pcap::FORMAT,
+    &pcap::ng::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
