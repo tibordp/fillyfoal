@@ -150,6 +150,8 @@ pub static FORMATS: &[&Format] = &[
     &image::texture::ASTC,
     &image::texture::PVR,
     &image::texture::VTF,
+    &image::metafile::EMF,
+    &image::metafile::WMF,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
     &image::sgi::FORMAT,
