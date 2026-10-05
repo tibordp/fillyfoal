@@ -63,3 +63,42 @@ fn fixtures_are_robust() {
         common::robustness(&snapshot_name(&path), &data);
     }
 }
+
+/// The directory a fixture lives in names the format it must be identified
+/// as. This catches probes that are too greedy (or too strict) as formats
+/// accumulate.
+#[test]
+fn fixtures_are_identified_correctly() {
+    use fillyfoal::formats::{HEAD_LEN, Head, TAIL_LEN, identify};
+    let mut wrong = Vec::new();
+    for path in fixtures() {
+        let data = std::fs::read(&path).unwrap();
+        let expected = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+        let head = &data[..data.len().min(HEAD_LEN as usize)];
+        let tail = &data[data.len().saturating_sub(TAIL_LEN as usize)..];
+        let probe = Head {
+            data: head,
+            tail,
+            len: data.len() as u64,
+        };
+        let found = identify(&probe).map(|f| f.name);
+        if found != Some(expected.as_str()) {
+            wrong.push(format!("{}: expected {expected}, got {found:?}", snapshot_name(&path)));
+        }
+    }
+    assert!(wrong.is_empty(), "misidentified fixtures:\n{}", wrong.join("\n"));
+}
+
+#[test]
+fn format_names_are_unique() {
+    let mut names: Vec<&str> = fillyfoal::formats::FORMATS.iter().map(|f| f.name).collect();
+    names.sort_unstable();
+    let before = names.len();
+    names.dedup();
+    assert_eq!(before, names.len(), "duplicate format names");
+}
