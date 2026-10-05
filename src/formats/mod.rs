@@ -24,6 +24,7 @@ pub mod compress;
 pub mod cpio;
 pub mod dmg;
 pub mod gzip;
+pub mod iso9660;
 pub mod lha;
 pub mod lz4;
 pub mod lzma;
@@ -180,6 +181,8 @@ pub static FORMATS: &[&Format] = &[
     &cab::FORMAT,
     &arj::FORMAT,
     &xar::FORMAT,
+    &iso9660::FORMAT,
+    &iso9660::UDF,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
