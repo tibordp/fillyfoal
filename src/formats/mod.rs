@@ -23,6 +23,7 @@ pub mod cab;
 pub mod compress;
 pub mod cpio;
 pub mod dmg;
+pub mod firmware;
 pub mod gzip;
 pub mod iso9660;
 pub mod lha;
@@ -183,6 +184,9 @@ pub static FORMATS: &[&Format] = &[
     &xar::FORMAT,
     &iso9660::FORMAT,
     &iso9660::UDF,
+    &firmware::ANDROID_SPARSE,
+    &firmware::ANDROID_BOOT,
+    &firmware::UIMAGE,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
