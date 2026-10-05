@@ -160,7 +160,10 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
-    // ZIP-based formats before plain ZIP.
+    // ZIP-based formats before plain ZIP (more specific ones first).
+    &zip::AAR,
+    &zip::XLSB,
+    &zip::SNUPKG,
     &zip::EPUB,
     &zip::ODT,
     &zip::ODS,
@@ -181,6 +184,20 @@ pub static FORMATS: &[&Format] = &[
     &zip::THREE_MF,
     &zip::SKETCH,
     &zip::USDZ,
+    &zip::KRITA,
+    &zip::ORA,
+    &zip::IDML,
+    &zip::ODF_FORMULA,
+    &zip::ODB,
+    &zip::IWORK,
+    &zip::APPX,
+    &zip::XAP,
+    &zip::FBZ,
+    &zip::CBZ,
+    &zip::GEOGEBRA,
+    &zip::DWFX,
+    &zip::MCPACK,
+    &zip::SCRATCH,
     &zip::JAR,
     &zip::FORMAT,
     // -- end archives --
