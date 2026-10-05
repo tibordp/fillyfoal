@@ -32,9 +32,11 @@ pub mod png;
 pub mod annexb;
 pub mod flv;
 pub mod isobmff;
+pub mod ivf;
 pub mod matroska;
 pub mod mpeg;
 pub mod vidutil;
+pub mod y4m;
 // -- end audio & video --
 
 // -- documents & data --
@@ -161,6 +163,9 @@ pub static FORMATS: &[&Format] = &[
     &mpeg::video::MPEG1_VIDEO,
     &annexb::HEVC,
     &annexb::H264,
+    &ivf::FORMAT,
+    &ivf::OBU,
+    &y4m::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
