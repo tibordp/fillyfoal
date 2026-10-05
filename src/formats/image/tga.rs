@@ -31,7 +31,50 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    h.len >= 44 && h.tail.ends_with(SIGNATURE) && matches!(h.data.get(2), Some(1..=3 | 9..=11 | 32 | 33))
+    let footer = h.len >= 44 && h.tail.ends_with(SIGNATURE);
+    let kind_ok = matches!(h.data.get(2), Some(1..=3 | 9..=11 | 32 | 33));
+    kind_ok && (footer || plausible_v1(h))
+}
+
+/// Version 1 files have no signature, so every header field must be
+/// consistent: a known image type, a color map exactly when the type needs
+/// one, a common pixel depth, and a file large enough for the image.
+fn plausible_v1(h: &Head<'_>) -> bool {
+    let d = h.data;
+    let byte = |i: usize| d.get(i).copied().unwrap_or(0xff);
+    let word = |i: usize| crate::bytes::u16_le(d, i).unwrap_or(0);
+    let (id_len, cmap_type, kind) = (byte(0), byte(1), byte(2));
+    let (cmap_len, cmap_bits) = (word(5), byte(7));
+    let (width, height, depth, descriptor) = (word(12), word(14), byte(16), byte(17));
+    let mapped = matches!(kind, 1 | 9);
+    let cmap_ok = match cmap_type {
+        0 => !mapped && cmap_len == 0 && cmap_bits == 0 && word(3) == 0,
+        1 => mapped && cmap_len > 0 && matches!(cmap_bits, 15 | 16 | 24 | 32),
+        _ => false,
+    };
+    let depth_ok = if mapped {
+        depth == 8 || depth == 16
+    } else {
+        matches!(depth, 8 | 15 | 16 | 24 | 32)
+    };
+    let header = 18u64
+        .saturating_add(id_len.into())
+        .saturating_add(u64::from(cmap_len).saturating_mul(u64::from(cmap_bits).div_ceil(8)));
+    let pixels = u64::from(width)
+        .saturating_mul(height.into())
+        .saturating_mul(u64::from(depth).div_ceil(8));
+    let size_ok = if kind & 8 != 0 {
+        h.len > header
+    } else {
+        h.len >= header.saturating_add(pixels)
+    };
+    cmap_ok
+        && depth_ok
+        && width > 0
+        && height > 0
+        && descriptor & 0xc0 == 0
+        && u16::from(descriptor & 15) <= u16::from(depth)
+        && size_ok
 }
 
 const IMAGE_TYPES: EnumTable = &[
