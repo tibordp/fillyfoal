@@ -20,6 +20,8 @@ pub mod zip;
 // -- end archives --
 
 // -- executables & code --
+mod binutil;
+pub mod elf;
 pub mod pe;
 // -- end executables --
 
@@ -121,6 +123,7 @@ pub struct Format {
 pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::FORMAT,
+    &elf::FORMAT,
     // -- end executables --
 
     // -- images --
