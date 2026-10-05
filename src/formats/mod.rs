@@ -27,6 +27,7 @@ pub mod elf;
 pub mod java;
 pub mod macho;
 pub mod pe;
+pub mod pyc;
 pub mod wasm;
 // -- end executables --
 
@@ -141,6 +142,7 @@ pub static FORMATS: &[&Format] = &[
     &android::dex::ODEX,
     &coff::FORMAT,
     &coff::IMPORT,
+    &pyc::FORMAT,
     // -- end executables --
 
     // -- images --

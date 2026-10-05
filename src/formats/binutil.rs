@@ -240,6 +240,11 @@ impl<'a> Reader<'a> {
         self.pos >= self.data.len()
     }
 
+    /// The unread bytes.
+    pub fn rest(&self) -> &'a [u8] {
+        self.data.get(self.pos..).unwrap_or_default()
+    }
+
     /// The next byte, without consuming it.
     pub fn peek(&self) -> Option<u8> {
         self.data.get(self.pos).copied()
