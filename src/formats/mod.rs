@@ -16,8 +16,11 @@ use crate::span::Span;
 
 // -- archives & compression --
 pub mod arcutil;
+pub mod bzip2;
 pub mod gzip;
+pub mod lzma;
 pub mod tar;
+pub mod xz;
 pub mod zip;
 // -- end archives --
 
@@ -143,6 +146,9 @@ pub static FORMATS: &[&Format] = &[
     // -- archives & compression --
     &gzip::FORMAT,
     &tar::FORMAT,
+    &bzip2::FORMAT,
+    &xz::FORMAT,
+    &lzma::LZIP,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
     &zip::ODT,
@@ -168,6 +174,7 @@ pub static FORMATS: &[&Format] = &[
     &zip::FORMAT,
     // Weak probes last.
     &tar::V7,
+    &lzma::LZMA,
     // -- end archives --
 
     // -- text (generic probes, keep last) --

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ empty.bz2 — bzip2, empty  [0x0+0xe]
+  ▾ Header  [0x0+0x4]
+      Signature: "BZ"  [0x0+0x2]
+      Version: "h"  [0x2+0x1]
+      Block size: "9" — 900k  [0x3+0x1]
+  ▾ Blocks — 0 blocks  [0x4+0xa]
+    Compressed data — 10 bytes  [0x4+0xa]
+      ! unsupported: bzip2 compression
+  ▾ End of stream — at bit 0x0 of the compressed data  [0x4+0xa]
+      End-of-stream magic: 0x177245385090 — √π (BCD), bit offset 0 in its first byte  [0x4+0x7]
+      Combined CRC: 0x0  [0xa+0x4]
