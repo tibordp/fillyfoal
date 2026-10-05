@@ -175,6 +175,9 @@ pub static FORMATS: &[&Format] = &[
     &image::tiff::SRW,
     &image::tiff::ORF,
     &image::tiff::RW2,
+    &image::tiff::JXR,
+    &image::raw::RAF,
+    &image::raw::MRW,
     &image::tiff::FORMAT,
     // Weak probes (footer, header sanity checks) last.
     &image::xwd::FORMAT,

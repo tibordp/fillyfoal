@@ -62,6 +62,9 @@ tiff_variant!(ORF, "orf", "Olympus raw (ORF)", ["orf"], "image/x-olympus-orf", |
 tiff_variant!(RW2, "rw2", "Panasonic raw (RW2)", ["rw2", "rwl"], "image/x-panasonic-rw2", |h| {
     h.starts_with(b"IIU\x00\x18\x00\x00\x00")
 });
+tiff_variant!(JXR, "jxr", "JPEG XR (HD Photo)", ["jxr", "wdp", "hdp"], "image/jxr", |h| {
+    h.starts_with(b"II\xbc\x01")
+});
 
 pub static FORMAT: Format = Format {
     name: "tiff",
@@ -387,7 +390,7 @@ const PREVIEW: u64 = 8;
 fn is_offset_tag(tag: u16) -> bool {
     matches!(
         tag,
-        0x0111 | 0x0144 | 0x0201 | 0x014a | 0x8769 | 0x8825 | 0xa005 | 0x0120
+        0x0111 | 0x0144 | 0x0201 | 0x014a | 0x8769 | 0x8825 | 0xa005 | 0x0120 | 0xbcc0 | 0xbcc2
     )
 }
 
@@ -521,6 +524,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 43 => "BigTIFF",
                 0x4f52 | 0x5352 => "ORF",
                 0x55 => "RW2",
+                0x01bc => "JPEG XR",
                 _ if ifd.find(0xc612).is_some() => "DNG",
                 _ => "TIFF",
             };
@@ -547,6 +551,7 @@ const VERSIONS: EnumTable = &[
     (0x4f52, "Olympus ORF"),
     (0x5352, "Olympus ORF"),
     (0x55, "Panasonic RW2"),
+    (0x01bc, "JPEG XR"),
 ];
 
 fn header(f: &mut Fields<'_>, big: &bool) -> Result<u64> {
@@ -591,6 +596,8 @@ async fn ifd_summary(cx: &Cx, t: Tiff, ifd: &Ifd) -> String {
         parts.push(camera);
     }
     if let (Some(w), Some(h)) = (first(0x0100).await, first(0x0101).await) {
+        parts.push(dims(w, h));
+    } else if let (Some(w), Some(h)) = (first(0xbc80).await, first(0xbc81).await) {
         parts.push(dims(w, h));
     }
     if let Some(bits) = first(0x0102).await {
@@ -709,6 +716,18 @@ async fn image_data(cx: &Cx, t: Tiff, ifd: &Ifd) {
                 .summary(format!("{n} {}", what.to_lowercase()))
                 .lazy(pieces, (t, *o, *c, compression));
             cx.push(node).await;
+        }
+    }
+    // JPEG XR keeps its bitstream (and an optional alpha plane) out of line.
+    for (offset, count, what) in [(0xbcc0, 0xbcc1, "Image bitstream"), (0xbcc2, 0xbcc3, "Alpha bitstream")] {
+        if let (Some(o), Some(c)) = (ifd.find(offset), ifd.find(count)) {
+            let read = |e: Entry| async move {
+                let bytes = cx.read_avail(e.data.sub(0, 8)).await.ok()?;
+                num(t, e.kind, &bytes, 0)?.as_u64()
+            };
+            if let (Some(offset), Some(len)) = (read(*o).await, read(*c).await) {
+                cx.push(region(what, t.file(), offset, len)).await;
+            }
         }
     }
     if let (Some(o), Some(l)) = (ifd.find(0x0201), ifd.find(0x0202)) {

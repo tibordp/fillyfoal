@@ -24,6 +24,7 @@ pub mod pcx;
 pub mod pnm;
 pub mod psd;
 pub mod qoi;
+pub mod raw;
 pub mod sgi;
 pub mod sunras;
 pub mod texture;
