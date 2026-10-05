@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ readme.tx_ — MS-DOS COMPRESS (KWAJ), stored, 21 bytes uncompressed  [0x0+0x32]
+  ▾ Header  [0x0+0x1d]
+      Magic: 4b 57 41 4a 88 f0 27 d1  |KWAJ..'.|  [0x0+0x8]
+      Method: stored (0x0)  [0x8+0x2]
+      Data offset: 0x1d  [0xa+0x2]
+      Flags: 0x19 [LENGTH | NAME | EXTENSION]  [0xc+0x2]
+      Uncompressed size: 21 — 21 bytes  [0xe+0x4]
+      File name: "README"  [0x12+0x7]
+      Extension: "TXT"  [0x19+0x4]
+  ▾ Data  [0x1d+0x15]
+      ! unsupported: unrecognized format [0x1d+0x15]

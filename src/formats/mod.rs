@@ -21,6 +21,7 @@ pub mod arj;
 pub mod bzip2;
 pub mod cab;
 pub mod compress;
+pub mod compressors;
 pub mod cpio;
 pub mod dmg;
 pub mod firmware;
@@ -177,6 +178,10 @@ pub static FORMATS: &[&Format] = &[
     &lz4::SNAPPY,
     &compress::COMPRESS,
     &compress::PACK,
+    &compressors::LZOP,
+    &compressors::LRZIP,
+    &compressors::SZDD,
+    &compressors::KWAJ,
     &ar::DEB,
     &ar::FORMAT,
     &cpio::FORMAT,

@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ data.lrz — lrzip 0.6, 4.0 KiB uncompressed  [0x0+0x68]
+  ▾ Header — version 0.6  [0x0+0x18]
+      Magic: "LRZI"  [0x0+0x4]
+      Major version: 0  [0x4+0x1]
+      Minor version: 6  [0x5+0x1]
+      Uncompressed size: 4096 — 4.0 KiB  [0x6+0x8]
+      Reserved: 00 00  |..|  [0xe+0x2]
+      LZMA properties: 5d 00 00 80 00  |]....|  [0x10+0x5]
+      MD5 stored: 1  [0x15+0x1]
+      Encrypted: 0  [0x16+0x1]
+      Reserved: 0  [0x17+0x1]
+    Compressed data — 64 bytes  [0x18+0x40]
+      ! unsupported: lrzip (rzip + LZMA/ZPAQ/bzip2) compression
+    MD5  [0x58+0x10]
