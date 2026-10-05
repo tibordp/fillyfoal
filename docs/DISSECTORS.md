@@ -148,6 +148,16 @@ looping forever.
   crates (see the codec policy in `DESIGN.md`).
 - `crate::codec::inflate_span(&cx, span, zlib, expected)` if you need the
   decoded bytes yourself (e.g. a compressed text chunk).
+- **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
+  sector chains, SQLite overflow pages): describe it as pieces instead of
+  copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },
+  vec![span_a, span_b, ...])` returns a span of a new source whose reads are
+  mapped onto the pieces (through the cache, no copy, any size). Then
+  `embedded(name, input.nested(span))`. Provenance stays exact:
+  `Session::resolve(span)` maps it back to file offsets.
+- **Decoded data** you computed yourself (base64, quoted-printable, a custom
+  decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
+  bytes, consumed, error)`. Counts against `Limits::max_derived`.
 
 ## 7. Values and presentation
 

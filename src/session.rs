@@ -243,6 +243,7 @@ impl Session {
         sh.sources.push(crate::cx::SourceEntry {
             len,
             data: None,
+            pieces: None,
             origin: None,
             consumed: 0,
             error: None,
@@ -269,6 +270,15 @@ impl Session {
     /// Where a derived source came from (`None` for host sources).
     pub fn origin(&self, source: SourceId) -> Option<Origin> {
         lock(&self.shared).source(source).and_then(|s| s.origin)
+    }
+
+    /// Maps a span of any source to the host-file (or in-memory) spans that
+    /// hold its bytes, following piecewise sources. For a hex view, this
+    /// turns "bytes 100..200 of a fragmented file" into file offsets.
+    pub fn resolve(&self, span: Span) -> Vec<Span> {
+        let mut out = Vec::new();
+        lock(&self.shared).resolve(span, 0, &mut out);
+        out
     }
 
     /// The bytes of a derived source, e.g. for a hex view.

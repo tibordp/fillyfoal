@@ -88,10 +88,17 @@ fn fixtures_are_identified_correctly() {
         };
         let found = identify(&probe).map(|f| f.name);
         if found != Some(expected.as_str()) {
-            wrong.push(format!("{}: expected {expected}, got {found:?}", snapshot_name(&path)));
+            wrong.push(format!(
+                "{}: expected {expected}, got {found:?}",
+                snapshot_name(&path)
+            ));
         }
     }
-    assert!(wrong.is_empty(), "misidentified fixtures:\n{}", wrong.join("\n"));
+    assert!(
+        wrong.is_empty(),
+        "misidentified fixtures:\n{}",
+        wrong.join("\n")
+    );
 }
 
 #[test]
