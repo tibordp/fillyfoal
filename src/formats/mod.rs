@@ -30,6 +30,7 @@ pub mod png;
 // -- audio & video --
 // video & containers (isobmff/matroska/ts/...)
 pub mod annexb;
+pub mod asf;
 pub mod flv;
 pub mod isobmff;
 pub mod ivf;
@@ -166,6 +167,9 @@ pub static FORMATS: &[&Format] = &[
     &ivf::FORMAT,
     &ivf::OBU,
     &y4m::FORMAT,
+    &asf::WMV,
+    &asf::WMA,
+    &asf::ASF,
     // -- end audio & video --
 
     // -- documents & data --
