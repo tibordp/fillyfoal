@@ -27,6 +27,7 @@ pub mod vhd;
 pub mod vhdx;
 pub mod vmdk;
 pub mod xfs;
+pub mod zfs;
 
 use std::borrow::Cow;
 use std::sync::Arc;
