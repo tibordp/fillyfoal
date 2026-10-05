@@ -147,6 +147,9 @@ pub static FORMATS: &[&Format] = &[
     &image::fits::FORMAT,
     &image::dpx::DPX,
     &image::dpx::CINEON,
+    &image::texture::ASTC,
+    &image::texture::PVR,
+    &image::texture::VTF,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
     &image::sgi::FORMAT,
@@ -169,6 +172,7 @@ pub static FORMATS: &[&Format] = &[
     &image::tiff::RW2,
     &image::tiff::FORMAT,
     // Weak probes (footer, header sanity checks) last.
+    &image::xwd::FORMAT,
     &image::tga::FORMAT,
     &image::pcx::FORMAT,
     &image::wbmp::FORMAT,

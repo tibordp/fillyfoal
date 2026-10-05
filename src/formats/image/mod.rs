@@ -24,12 +24,14 @@ pub mod psd;
 pub mod qoi;
 pub mod sgi;
 pub mod sunras;
+pub mod texture;
 pub mod tga;
 pub mod tiff;
 mod tiff_tags;
 pub mod wbmp;
 pub mod xbm;
 pub mod xcf;
+pub mod xwd;
 
 use std::borrow::Cow;
 

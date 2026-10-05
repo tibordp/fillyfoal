@@ -1,0 +1,6 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc-rgb24.xwd  [0x0+0x93]
+    ! unsupported: unrecognized format [0x0+0x93]
