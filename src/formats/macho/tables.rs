@@ -2,7 +2,6 @@
 
 use crate::value::{EnumTable, FlagTable, field, flag};
 
-pub const CPU_ARCH_ABI64: u32 = 0x0100_0000;
 pub const CPU_TYPE_X86: u32 = 7;
 pub const CPU_TYPE_X86_64: u32 = 0x0100_0007;
 pub const CPU_TYPE_ARM: u32 = 12;
@@ -66,7 +65,6 @@ pub const FILE_TYPE_WORDS: EnumTable = &[
 ];
 
 pub const MH_EXECUTE: u32 = 2;
-pub const MH_DYLIB: u32 = 6;
 
 pub const HEADER_FLAGS: FlagTable = &[
     flag(0x1, "NOUNDEFS"),
@@ -103,7 +101,6 @@ pub const HEADER_FLAGS: FlagTable = &[
 
 pub const MH_PIE: u32 = 0x20_0000;
 
-pub const LC_REQ_DYLD: u32 = 0x8000_0000;
 pub const LC_SEGMENT: u32 = 0x1;
 pub const LC_SYMTAB: u32 = 0x2;
 pub const LC_THREAD: u32 = 0x4;
@@ -333,15 +330,6 @@ pub const N_STAB: EnumTable = &[
     (0xe4, "N_ECOMM"),
     (0xe8, "N_ECOML"),
     (0xfe, "N_LENG"),
-];
-
-pub const N_TYPE_FLAGS: FlagTable = &[
-    flag(0x01, "N_EXT"),
-    flag(0x10, "N_PEXT"),
-    field(0xee, 0x02, "N_ABS"),
-    field(0xee, 0x0a, "N_INDR"),
-    field(0xee, 0x0c, "N_PBUD"),
-    field(0xee, 0x0e, "N_SECT"),
 ];
 
 pub const N_DESC: FlagTable = &[

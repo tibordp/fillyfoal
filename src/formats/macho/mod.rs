@@ -69,16 +69,13 @@ struct Command {
 struct SegmentInfo {
     name: String,
     vmaddr: u64,
-    vmsize: u64,
     fileoff: u64,
     filesize: u64,
-    initprot: u32,
     nsects: u32,
 }
 
 #[derive(Clone, Debug)]
 struct SectionInfo {
-    header: Span,
     sectname: String,
     segname: String,
     addr: u64,
@@ -193,7 +190,6 @@ impl MachInfo {
 struct Ctx {
     wide: bool,
     file: Span,
-    cputype: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -231,7 +227,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let ctx = Ctx {
         wide,
         file,
-        cputype: header.cputype,
     };
     let region = file.sub(header_size, header.sizeofcmds.into());
     if region.len > MAX_COMMANDS {
@@ -614,7 +609,6 @@ async fn command_node(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
     let ctx = Ctx {
         wide: m.wide,
         file: m.file(),
-        cputype: m.header.cputype,
     };
     let mut f = Fields::emitting(&cx, &block, m.endian);
     let mut extras = Vec::new();
@@ -741,7 +735,7 @@ fn segment_command(f: &mut Fields<'_>, c: &Ctx) -> Result<SegmentInfo> {
     command_head(f)?;
     let name = f.ascii("segname", 16).emit()?;
     let vmaddr = f.uword("vmaddr", c.wide).hex().emit()?;
-    let vmsize = f.uword("vmsize", c.wide).hex().emit()?;
+    f.uword("vmsize", c.wide).hex().emit()?;
     let filesize = peek_word(f, if c.wide { 8 } else { 4 }, c.wide);
     let file = c.file;
     let fileoff = f
@@ -751,16 +745,14 @@ fn segment_command(f: &mut Fields<'_>, c: &Ctx) -> Result<SegmentInfo> {
         .emit()?;
     let filesize = f.uword("filesize", c.wide).hex().emit()?;
     f.u32("maxprot").flags(VM_PROT).emit()?;
-    let initprot = f.u32("initprot").flags(VM_PROT).emit()?;
+    f.u32("initprot").flags(VM_PROT).emit()?;
     let nsects = f.u32("nsects").emit()?;
     f.u32("flags").flags(SEGMENT_FLAGS).emit()?;
     Ok(SegmentInfo {
         name,
         vmaddr,
-        vmsize,
         fileoff,
         filesize,
-        initprot,
         nsects,
     })
 }
@@ -774,7 +766,6 @@ fn peek_word(f: &mut Fields<'_>, ahead: u64, wide: bool) -> u64 {
 }
 
 fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
-    let header = f.peek_span(if c.wide { 80 } else { 68 });
     let sectname = f.ascii("sectname", 16).emit()?;
     let segname = f.ascii("segname", 16).emit()?;
     let addr = f.uword("addr", c.wide).hex().emit()?;
@@ -800,7 +791,6 @@ fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
         f.u32("reserved3").emit()?;
     }
     Ok(SectionInfo {
-        header,
         sectname,
         segname,
         addr,
@@ -1068,7 +1058,6 @@ async fn section_node(cx: Cx, (m, header): (Macho, Span)) -> Result<()> {
     let ctx = Ctx {
         wide: m.wide,
         file: m.file(),
-        cputype: m.header.cputype,
     };
     let block = cx.block(header).await?;
     let s = section_header(&mut Fields::emitting(&cx, &block, m.endian), &ctx)?;

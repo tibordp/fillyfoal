@@ -25,6 +25,7 @@ pub mod elf;
 pub mod java;
 pub mod macho;
 pub mod pe;
+pub mod wasm;
 // -- end executables --
 
 // -- images --
@@ -133,6 +134,7 @@ pub static FORMATS: &[&Format] = &[
     &java::class::FORMAT,
     &java::serialization::FORMAT,
     &java::keystore::FORMAT,
+    &wasm::FORMAT,
     // -- end executables --
 
     // -- images --
