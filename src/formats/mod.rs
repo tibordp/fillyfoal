@@ -34,6 +34,7 @@ pub mod rpm;
 pub mod sevenzip;
 pub mod squashfs;
 pub mod tar;
+pub mod wim;
 pub mod xar;
 pub mod xz;
 pub mod zoo;
@@ -190,6 +191,7 @@ pub static FORMATS: &[&Format] = &[
     &firmware::UIMAGE,
     &squashfs::SQUASHFS,
     &squashfs::CRAMFS,
+    &wim::FORMAT,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
