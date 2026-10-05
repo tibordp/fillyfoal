@@ -30,6 +30,7 @@ pub mod png;
 // -- audio & video --
 // audio (riff/iff/flac/mp3/ogg/...)
 pub mod amr;
+pub mod ape;
 pub mod apetag;
 pub mod au;
 pub mod caf;
@@ -38,11 +39,14 @@ pub mod id3;
 pub mod iff;
 pub mod midi;
 pub mod mpa;
+pub mod musepack;
 pub mod ogg;
 pub mod sound;
+pub mod tta;
 pub mod voc;
 pub mod vorbis;
 pub mod w64;
+pub mod wavpack;
 // -- end audio & video --
 
 // -- documents & data --
@@ -179,6 +183,10 @@ pub static FORMATS: &[&Format] = &[
     &caf::FORMAT,
     &amr::FORMAT,
     &w64::FORMAT,
+    &ape::FORMAT,
+    &wavpack::FORMAT,
+    &musepack::FORMAT,
+    &tta::FORMAT,
     &flac::FORMAT,
     &ogg::OPUS,
     &ogg::OGG_FLAC,

@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.tta — TTA, 8000 Hz, 1 ch, 16-bit, 100 ms  [0x0+0x2cf]
+  ▾ Header — CRC valid  [0x0+0x16]
+      Signature: "TTA1"  [0x0+0x4]
+      Audio format: PCM (0x1)  [0x4+0x2]
+      Channels: 1  [0x6+0x2]
+      Bits per sample: 16  [0x8+0x2]
+      Sample rate: 8000  [0xa+0x4]
+      Samples: 800  [0xe+0x4]
+      CRC: 0xfb3e17b  [0x12+0x4]
+  ▾ Seek table — 1 entries  [0x16+0x4]
+    ▾ Frame 0 — 689 bytes  [0x16+0x4]
+        Size: 689  [0x16+0x4]
+    Seek table CRC: 0x870e228d  [0x1a+0x4]
+    Frames — 1 frames  [0x1e+0x2b1]
