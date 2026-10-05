@@ -21,6 +21,7 @@ pub mod zip;
 
 // -- executables & code --
 mod binutil;
+pub mod android;
 pub mod elf;
 pub mod java;
 pub mod macho;
@@ -135,6 +136,8 @@ pub static FORMATS: &[&Format] = &[
     &java::serialization::FORMAT,
     &java::keystore::FORMAT,
     &wasm::FORMAT,
+    &android::dex::FORMAT,
+    &android::dex::ODEX,
     // -- end executables --
 
     // -- images --
