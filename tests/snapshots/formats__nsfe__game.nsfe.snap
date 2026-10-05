@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ game.nsfe — NSFe — fillyfoal – Game  [0x0+0x71]
+    Magic: "NSFE"  [0x0+0x4]
+    INFO — 10 bytes  [0x4+0x12]
+    DATA — 8 bytes  [0x16+0x10]
+    auth: "Game / fillyfoal / 2026 / ripper" — 27 bytes  [0x26+0x23]
+    tlbl — 8 bytes  [0x49+0x10]
+    time — 8 bytes  [0x59+0x10]
+    NEND — 0 bytes  [0x69+0x8]

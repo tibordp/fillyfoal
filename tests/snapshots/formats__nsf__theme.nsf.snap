@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ theme.nsf — NSF v1, 4 songs, VRC6 — fillyfoal – Theme  [0x0+0x90]
+  ▾ Header  [0x0+0x80]
+      Magic: 4e 45 53 4d 1a  |NESM.|  [0x0+0x5]
+      Version: 1  [0x5+0x1]
+      Songs: 4  [0x6+0x1]
+      Start song: 1  [0x7+0x1]
+      Load address: 0x8000  [0x8+0x2]
+      Init address: 0x8000  [0xa+0x2]
+      Play address: 0x8003  [0xc+0x2]
+      Name: "Theme"  [0xe+0x20]
+      Artist: "fillyfoal"  [0x2e+0x20]
+      Copyright: "2026"  [0x4e+0x20]
+      NTSC speed: 16639  [0x6e+0x2]
+      Bankswitch init: 00 00 00 00 00 00 00 00  |........|  [0x70+0x8]
+      PAL speed: 19997  [0x78+0x2]
+      Region: 0 — NTSC  [0x7a+0x1]
+      Expansion chips: 0x1 [VRC6]  [0x7b+0x1]
+      NSF2 flags: 0x0  [0x7c+0x1]
+      Program data length: 00 00 00  |...|  [0x7d+0x3]
+    Program data  [0x80+0x10]

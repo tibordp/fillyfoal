@@ -36,6 +36,7 @@ pub mod ape;
 pub mod apetag;
 pub mod au;
 pub mod caf;
+pub mod chiptune;
 pub mod dsd;
 pub mod dts;
 pub mod flac;
@@ -197,6 +198,13 @@ pub static FORMATS: &[&Format] = &[
     &dsd::DSF,
     &dsd::DFF,
     &smaf::FORMAT,
+    &chiptune::SPC,
+    &chiptune::SID,
+    &chiptune::NSF,
+    &chiptune::NSFE,
+    &chiptune::GBS,
+    &chiptune::SAP,
+    &chiptune::VGM,
     &simple_audio::SOX,
     &simple_audio::IRCAM,
     &simple_audio::ADX,
