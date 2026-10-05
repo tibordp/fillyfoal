@@ -246,6 +246,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let node = item_node(&mut scan, input.span, "Root".into(), &root, None).await?;
     cx.emit(node);
+    // The info hash identifies the torrent: SHA-1 of the bencoded info dict.
+    if let Ok(Some(info)) = scan.lookup(&root, b"info").await {
+        let span = input.span.sub(info.start, info.end.saturating_sub(info.start));
+        if span.len <= cx.limits().max_read {
+            let bytes = cx.read(span).await?;
+            cx.emit(
+                Node::new("Info hash")
+                    .span(span)
+                    .value(Value::Text(hex_string(&crate::formats::datakit::sha1(&bytes))))
+                    .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
+            );
+        }
+    }
     if root.end < input.span.len {
         cx.emit(
             Node::new("Trailing data")

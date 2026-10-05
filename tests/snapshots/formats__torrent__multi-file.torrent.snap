@@ -34,3 +34,4 @@ expression: "common::explore(&name, &data)"
           Piece 0: "c738afa748fde22ea4a5b77da62231d108a186cf"  [0x1b5+0x14]
           Piece 1: "b79740d906cf44310b83653e5d4e1f2863250ecb"  [0x1c9+0x14]
           Piece 2: "582fcc3241267b6e58661ffb6d83eb285163bb83"  [0x1dd+0x14]
+    Info hash: "110901b72667b6487d9786faaa06e9c21adcac0d"  [0x106+0xec]
