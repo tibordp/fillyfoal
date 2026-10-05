@@ -32,6 +32,7 @@ pub mod png;
 pub mod flv;
 pub mod isobmff;
 pub mod matroska;
+pub mod mpeg;
 pub mod vidutil;
 // -- end audio & video --
 
@@ -151,6 +152,12 @@ pub static FORMATS: &[&Format] = &[
     &matroska::WEBM,
     &matroska::MKV,
     &flv::FORMAT,
+    &mpeg::ts::M2TS,
+    &mpeg::ts::FORMAT,
+    &mpeg::ps::MPEG2_PS,
+    &mpeg::ps::MPEG1_SYSTEM,
+    &mpeg::video::MPEG2_VIDEO,
+    &mpeg::video::MPEG1_VIDEO,
     // -- end audio & video --
 
     // -- documents & data --
