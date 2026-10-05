@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ $IABC123.txt — deleted file "C:\\Users\\fixture\\Documents\\report draft.txt", 12.1 KiB  [0x0+0x74]
+    Version: 2  [0x0+0x8]
+    Original size: 12345 — 12.1 KiB  [0x8+0x8]
+    Deletion time: 2026-09-21 14:13:20 UTC  [0x10+0x8]
+    Path length: 44  [0x18+0x4]
+    Original path: "C:\\Users\\fixture\\Documents\\report draft.txt"  [0x1c+0x58]

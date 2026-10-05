@@ -41,7 +41,9 @@ pub mod evtx;
 pub mod lnk;
 pub mod pcap;
 pub mod prefetch;
+pub mod recyclebin;
 pub mod regf;
+pub mod thumbcache;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -155,6 +157,9 @@ pub static FORMATS: &[&Format] = &[
     &evtx::FORMAT,
     &evt::FORMAT,
     &prefetch::FORMAT,
+    &recyclebin::FORMAT,
+    &thumbcache::FORMAT,
+    &thumbcache::INDEX,
     // -- end documents --
 
     // -- disk images & filesystems --
