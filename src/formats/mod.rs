@@ -37,6 +37,7 @@ pub mod avro;
 pub mod cfb;
 pub mod matlab;
 pub mod netcdf;
+pub mod orc;
 pub mod parquet;
 pub mod pdf;
 pub mod pem;
@@ -171,6 +172,7 @@ pub static FORMATS: &[&Format] = &[
     &netcdf::FORMAT,
     &matlab::FORMAT,
     &parquet::FORMAT,
+    &orc::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
