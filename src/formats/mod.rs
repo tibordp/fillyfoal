@@ -157,6 +157,7 @@ pub static FORMATS: &[&Format] = &[
     &disk::uefi::FORMAT,
     &disk::zfs::FORMAT,
     // Boot sectors ending in 0x55AA, before the plain MBR.
+    &disk::exfat::FORMAT,
     &disk::fat::FORMAT,
     &disk::mbr::FORMAT,
     &disk::bsdlabel::FORMAT,

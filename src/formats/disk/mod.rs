@@ -11,6 +11,7 @@ pub mod apm;
 pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
+pub mod exfat;
 pub mod fat;
 pub mod gpt;
 pub mod luks;
