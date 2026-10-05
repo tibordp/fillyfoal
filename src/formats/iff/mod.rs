@@ -299,8 +299,14 @@ pub static RIFF: Format = Format {
     extensions: &["riff"],
     mime: "application/octet-stream",
     probe: Probe::Custom(|h| {
+        let size = if h.starts_with(b"RIFX") {
+            u32_be(h.data, 4)
+        } else {
+            u32_le(h.data, 4)
+        };
         (h.starts_with(b"RIFF") || h.starts_with(b"RIFX") || h.starts_with(b"RF64"))
             && h.data.get(8..12).is_some_and(is_fourcc)
+            && size.is_some_and(|s| s == u32::MAX || plausible_size(s, h.len))
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -314,9 +320,16 @@ pub static IFF: Format = Format {
     probe: Probe::Custom(|h| {
         (h.starts_with(b"FORM") || h.starts_with(b"CAT ") || h.starts_with(b"LIST"))
             && h.data.get(8..12).is_some_and(is_fourcc)
+            && u32_be(h.data, 4).is_some_and(|s| plausible_size(s, h.len))
     }),
     dissect: crate::expander!(dissect: Input),
 };
+
+/// A container size that fits the input (with a little slack for files
+/// that were cut short or padded): rejects little-endian lookalikes.
+fn plausible_size(size: u32, len: u64) -> bool {
+    size >= 4 && u64::from(size).saturating_add(8) <= len.saturating_add(16)
+}
 
 fn is_fourcc(b: &[u8]) -> bool {
     b.len() == 4 && b.iter().all(|&c| (0x20..0x7f).contains(&c))

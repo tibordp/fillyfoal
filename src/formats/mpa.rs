@@ -34,7 +34,19 @@ fn probe(h: &Head<'_>) -> bool {
             // The tag is larger than what the probe can see.
             _ => len < h.len,
         },
-        None => plausible(h.data, 0),
+        // Without a tag, demand two consecutive frames: a lone sync-like
+        // pair of bytes (e.g. a UTF-16LE BOM) is too weak.
+        None => Header::parse(h.data)
+            .and_then(|f| f.frame_len().map(|len| (f, len)))
+            .is_some_and(|(f, len)| {
+                let next = to_usize(len);
+                h.data
+                    .get(next..next.saturating_add(4))
+                    .and_then(Header::parse)
+                    .is_some_and(|n| {
+                        n.version == f.version && n.layer == f.layer && n.rate == f.rate
+                    })
+            }),
     }
 }
 
