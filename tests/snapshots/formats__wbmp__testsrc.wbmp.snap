@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.wbmp — 10×4, 1-bit  [0x0+0xc]
+    Type: 0  [0x0+0x1]
+    Fixed header: 0  [0x1+0x1]
+    Width: 10  [0x2+0x1]
+    Height: 4  [0x3+0x1]
+    Raster — 4 rows of 2 bytes, 1 = white  [0x4+0x8]

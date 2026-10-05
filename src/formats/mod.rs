@@ -139,6 +139,8 @@ pub static FORMATS: &[&Format] = &[
     &image::ktx::KTX,
     &image::ktx::KTX2,
     &image::exr::FORMAT,
+    &image::xcf::FORMAT,
+    &image::icns::FORMAT,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
     &image::sgi::FORMAT,
@@ -163,6 +165,7 @@ pub static FORMATS: &[&Format] = &[
     // Weak probes (footer, header sanity checks) last.
     &image::tga::FORMAT,
     &image::pcx::FORMAT,
+    &image::wbmp::FORMAT,
     // -- end images --
 
     // -- audio & video --
