@@ -28,6 +28,9 @@ pub mod png;
 // -- end images --
 
 // -- audio & video --
+// audio (riff/iff/flac/mp3/ogg/...)
+pub mod iff;
+pub mod sound;
 // -- end audio & video --
 
 // -- documents & data --
@@ -130,6 +133,34 @@ pub static FORMATS: &[&Format] = &[
     // -- end images --
 
     // -- audio & video --
+    // audio (riff/iff/flac/mp3/ogg/...)
+    &iff::WAV,
+    &iff::AVI,
+    &iff::WEBP,
+    &iff::ANI,
+    &iff::RMI,
+    &iff::DLS,
+    &iff::SF2,
+    &iff::XWMA,
+    &iff::CDXA,
+    &iff::RIFF_PALETTE,
+    &iff::RDIB,
+    &iff::RMMP,
+    &iff::QCP,
+    &iff::CDR,
+    &iff::FOURXM,
+    &iff::AMV,
+    &iff::AIFF,
+    &iff::AIFC,
+    &iff::SVX8,
+    &iff::SVX16,
+    &iff::ILBM,
+    &iff::ANIM,
+    &iff::SMUS,
+    &iff::FTXT,
+    &iff::MAUD,
+    &iff::RIFF,
+    &iff::IFF,
     // -- end audio & video --
 
     // -- documents & data --
