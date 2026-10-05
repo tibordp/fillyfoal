@@ -2,6 +2,7 @@
 //! streams (`ps`) and elementary video streams (`video`). This module holds
 //! what they share: stream IDs, PES headers and 90 kHz timestamps.
 
+pub mod mpeg4;
 pub mod ps;
 pub mod ts;
 pub mod video;

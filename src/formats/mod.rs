@@ -165,6 +165,7 @@ pub static FORMATS: &[&Format] = &[
     &mpeg::ps::MPEG1_SYSTEM,
     &mpeg::video::MPEG2_VIDEO,
     &mpeg::video::MPEG1_VIDEO,
+    &mpeg::mpeg4::FORMAT,
     &annexb::HEVC,
     &annexb::H264,
     &ivf::FORMAT,
