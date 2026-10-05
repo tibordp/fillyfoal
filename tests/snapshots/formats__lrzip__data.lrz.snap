@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.lrz — lrzip 0.6, 12345 bytes uncompressed  [0x0+0x38]
+    Magic: "LRZI"  [0x0+0x4]
+    Version major: 0  [0x4+0x1]
+    Version minor: 6  [0x5+0x1]
+    Uncompressed size: 12345  [0x6+0x8]
+    Streams  [0x18+0x20]
+      ! unsupported: lrzip decoding

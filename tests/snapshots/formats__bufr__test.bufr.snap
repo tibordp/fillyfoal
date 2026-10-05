@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.bufr — BUFR edition 4, 51 bytes  [0x0+0x33]
+    Section 0 (indicator): 4  [0x0+0x8]
+    Section 1 — 22 bytes  [0x8+0x16]
+    Section 2 — 9 bytes  [0x1e+0x9]
+    Section 3 — 8 bytes  [0x27+0x8]
+    Section 5 (7777)  [0x2f+0x4]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ scene.blend — Blender 2.93  [0x0+0x13c]
+    Header — 64-bit pointers, little endian  [0x0+0xc]
+  ▾ File blocks  [0xc+0x130]
+      REND (render info) — 72 bytes, 1 item(s)  [0xc+0x18] → 0x24+0x48
+      GLOB (global settings) — 64 bytes, 1 item(s)  [0x6c+0x18] → 0x84+0x40
+      OB — 32 bytes, 1 item(s)  [0xc4+0x18] → 0xdc+0x20
+      DNA1 (struct definitions) — 16 bytes, 1 item(s)  [0xfc+0x18] → 0x114+0x10
+      ENDB (end) — 0 bytes, 1 item(s)  [0x124+0x18] → 0x13c+0x0

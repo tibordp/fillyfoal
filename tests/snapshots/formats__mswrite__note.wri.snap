@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ note.wri — Write document, 29 characters  [0x0+0x11d]
+    Identifier: 0xbe31  [0x0+0x2]
+    Reserved: 0  [0x2+0x2]
+    Tool: 0xab00  [0x4+0x2]
+    Reserved: 00 00 00 00 00 00 00 00  |........|  [0x6+0x8]
+    End of text (fcMac): 157  [0xe+0x4]
+    Paragraph info page (pnPara): 0  [0x12+0x2]
+    Text — Hello from Microsoft Write!    [0x80+0x1d]

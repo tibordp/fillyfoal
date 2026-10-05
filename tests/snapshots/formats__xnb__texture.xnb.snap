@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ texture.xnb — XNB v5 for Windows, 32 bytes  [0x0+0x20]
+    Magic: "XNB"  [0x0+0x3]
+    Target platform: "w"  [0x3+0x1]
+    Format version: 5  [0x4+0x1]
+    Flags: 0x0  [0x5+0x1]
+    File size: 32  [0x6+0x4]
+    Content  [0xa+0x16]

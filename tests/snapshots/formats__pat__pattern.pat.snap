@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pattern.pat — "Fillyfoal pattern", 2×2, 3 byte(s) per pixel  [0x0+0x36]
+    Header size: 42  [0x0+0x4]
+    Version: 1  [0x4+0x4]
+    Width: 2  [0x8+0x4]
+    Height: 2  [0xc+0x4]
+    Bytes per pixel: 3  [0x10+0x4]
+    Magic: "GPAT"  [0x14+0x4]
+    Name: "Fillyfoal pattern"  [0x18+0x12]
+    Pixels  [0x2a+0xc]

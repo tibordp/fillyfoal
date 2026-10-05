@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Registry.pol — 2 policy settings  [0x0+0xca]
+    Header  [0x0+0x8]
+    Software\Policies\Fillyfoal\Enabled: "1" — REG_DWORD  [0x8+0x60]
+    Software\Policies\Fillyfoal\Name: "Filly" — REG_SZ  [0x68+0x62]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.msa — 9 sectors/track, tracks 0-1, 1 side(s)  [0x0+0x1213]
+  ▾ Header  [0x0+0xa]
+      Magic: 0xe0f  [0x0+0x2]
+      Sectors per track: 9  [0x2+0x2]
+      Sides (0 = single): 0  [0x4+0x2]
+      Start track: 0  [0x6+0x2]
+      End track: 1  [0x8+0x2]
+    Track 0 — uncompressed  [0xa+0x1202]
+    Track 1 — RLE compressed  [0x120c+0x7]
