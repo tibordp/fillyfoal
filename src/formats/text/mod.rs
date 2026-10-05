@@ -46,7 +46,7 @@ pub mod plist;
 pub mod toml;
 // pub mod vcard;
 pub mod xml;
-// pub mod yaml;
+pub mod yaml;
 
 /// The most text a single value holds; longer text is cut (the node's span
 /// still covers all of it).

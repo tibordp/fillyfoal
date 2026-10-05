@@ -213,6 +213,7 @@ pub static FORMATS: &[&Format] = &[
     &text::ini::INF,
     &text::ini::ASS,
     &text::ini::FORMAT,
+    &text::yaml::FORMAT,
     &text::plain::SCRIPT,
     // Weak, statistical probes.
     &text::csv::TSV,
