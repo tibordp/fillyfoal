@@ -5,7 +5,7 @@
 //! translation). Directories, sections and their contents are dissected only
 //! when expanded.
 
-mod tables;
+pub(crate) mod tables;
 mod version;
 
 use std::sync::Arc;
