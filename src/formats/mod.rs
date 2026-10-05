@@ -35,6 +35,8 @@ pub mod png;
 pub mod asn1;
 pub mod cfb;
 pub mod pdf;
+pub mod pem;
+pub mod pgp;
 pub mod sqlite;
 // -- end documents --
 
@@ -158,6 +160,9 @@ pub static FORMATS: &[&Format] = &[
     &asn1::PKCS7,
     &asn1::PKCS12,
     &asn1::DER,
+    &pgp::FORMAT,
+    &pgp::ARMOR,
+    &pem::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
