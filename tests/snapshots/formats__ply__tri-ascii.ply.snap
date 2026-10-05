@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tri-ascii.ply — PLY ascii 1.0: 3 vertex  [0x0+0x76]
+  ▾ Header — ascii 1.0  [0x0+0x64]
+      ply  [0x0+0x4]
+      format ascii 1.0  [0x4+0x11]
+      element vertex 3  [0x15+0x11]
+      property float x  [0x26+0x11]
+      property float y  [0x37+0x11]
+      property float z  [0x48+0x11]
+    vertex — 3 × [x: float, y: float, z: float]

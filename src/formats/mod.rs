@@ -42,6 +42,7 @@ pub mod retro;
 
 // -- games, 3D, science, e-books, misc --
 pub mod games;
+pub mod models;
 // -- end misc --
 
 // -- text --
@@ -239,6 +240,17 @@ pub static FORMATS: &[&Format] = &[
     &games::MD3,
     &games::UNREAL,
     &games::BSP,
+    &models::GLB,
+    &models::FBX,
+    &models::BLEND,
+    &models::USDC,
+    &models::VOX,
+    &models::PLY,
+    &models::DWG,
+    &models::THREE_DS,
+    &models::STL_ASCII,
+    &models::DXF,
+    &models::STL,
     // -- end misc --
 
     // -- text (generic probes, keep last) --
