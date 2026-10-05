@@ -22,6 +22,7 @@ pub mod zip;
 // -- executables & code --
 mod binutil;
 pub mod elf;
+pub mod java;
 pub mod macho;
 pub mod pe;
 // -- end executables --
@@ -128,6 +129,10 @@ pub static FORMATS: &[&Format] = &[
     &macho::FORMAT,
     &macho::fat::FORMAT,
     &macho::dyld_cache::FORMAT,
+    // After the universal binary probe, which shares the 0xcafebabe magic.
+    &java::class::FORMAT,
+    &java::serialization::FORMAT,
+    &java::keystore::FORMAT,
     // -- end executables --
 
     // -- images --

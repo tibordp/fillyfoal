@@ -142,6 +142,80 @@ pub fn mutf8(bytes: &[u8]) -> String {
     String::from_utf16_lossy(&units)
 }
 
+/// A tree decoded up front (for formats that must be parsed sequentially to
+/// find their structure, such as serialization streams), displayed lazily:
+/// each node's children are emitted only when it is expanded.
+#[derive(Default)]
+pub struct Tree {
+    nodes: Vec<TreeNode>,
+}
+
+#[derive(Clone)]
+struct TreeNode {
+    node: Node,
+    children: Vec<usize>,
+}
+
+impl Tree {
+    /// Adds a node under `parent` (or as a root) and returns its index.
+    pub fn add(&mut self, parent: Option<usize>, node: Node) -> usize {
+        let index = self.nodes.len();
+        self.nodes.push(TreeNode {
+            node,
+            children: Vec::new(),
+        });
+        if let Some(p) = parent.and_then(|p| self.nodes.get_mut(p)) {
+            p.children.push(index);
+        }
+        index
+    }
+
+    /// Changes a node already added (e.g. to fill in its span or summary once
+    /// its end is known).
+    pub fn update(&mut self, index: usize, f: impl FnOnce(Node) -> Node) {
+        if let Some(t) = self.nodes.get_mut(index) {
+            let node = std::mem::replace(&mut t.node, Node::new(""));
+            t.node = f(node);
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// The display node for `index`: expandable if it has children.
+    pub fn node(tree: &std::sync::Arc<Tree>, index: usize) -> Node {
+        let Some(t) = tree.nodes.get(index) else {
+            return Node::new("?");
+        };
+        if t.children.is_empty() {
+            t.node.clone()
+        } else {
+            t.node
+                .clone()
+                .lazy(tree_children, (tree.clone(), index))
+        }
+    }
+
+    /// Emits (pages) the children of `index` into the current expansion.
+    pub async fn emit_children(cx: &Cx, tree: &std::sync::Arc<Tree>, index: usize) {
+        let children = tree
+            .nodes
+            .get(index)
+            .map(|t| t.children.clone())
+            .unwrap_or_default();
+        cx.set_count(crate::node::Count::Exact(crate::bytes::to_u64(children.len())));
+        for child in children {
+            cx.push(Tree::node(tree, child)).await;
+        }
+    }
+}
+
+async fn tree_children(cx: Cx, (tree, index): (std::sync::Arc<Tree>, usize)) -> Result<()> {
+    Tree::emit_children(&cx, &tree, index).await;
+    Ok(())
+}
+
 /// Sequential decoding of an in-memory byte buffer (opcode streams, tries).
 /// Every method returns `None` once the data runs out.
 pub struct Reader<'a> {
@@ -164,6 +238,11 @@ impl<'a> Reader<'a> {
 
     pub fn at_end(&self) -> bool {
         self.pos >= self.data.len()
+    }
+
+    /// The next byte, without consuming it.
+    pub fn peek(&self) -> Option<u8> {
+        self.data.get(self.pos).copied()
     }
 
     pub fn u8(&mut self) -> Option<u8> {
