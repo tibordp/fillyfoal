@@ -31,6 +31,7 @@ pub mod rar;
 pub mod rpm;
 pub mod sevenzip;
 pub mod tar;
+pub mod xar;
 pub mod xz;
 pub mod zoo;
 pub mod zstd;
@@ -178,6 +179,7 @@ pub static FORMATS: &[&Format] = &[
     &rar::FORMAT,
     &cab::FORMAT,
     &arj::FORMAT,
+    &xar::FORMAT,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
