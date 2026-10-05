@@ -167,6 +167,11 @@ pub static FORMATS: &[&Format] = &[
     // -- end archives --
 
     // -- text (generic probes, keep last) --
+    &text::json::IPYNB,
+    &text::json::GEOJSON,
+    &text::json::HAR,
+    &text::json::NDJSON,
+    &text::json::FORMAT,
     &text::plain::SCRIPT,
     // Plain text matches anything textual: keep it last.
     &text::plain::FORMAT,

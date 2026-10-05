@@ -30,7 +30,7 @@ pub mod scan;
 // pub mod csv;
 // pub mod diff;
 // pub mod ini;
-// pub mod json;
+pub mod json;
 // pub mod markdown;
 // pub mod mime;
 // pub mod misc;
