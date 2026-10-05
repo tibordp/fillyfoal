@@ -4,6 +4,7 @@
 //! value constructors.
 
 pub mod bmp;
+pub mod crw;
 pub mod dds;
 pub mod dpx;
 pub mod exr;
