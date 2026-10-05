@@ -68,7 +68,7 @@ fn describe(kind: &[u8]) -> Option<&'static str> {
         b"name" => "Name",
         b"info" => "Info dictionary (property list)",
         b"slct" => "Selected variant",
-        b"\xfd\xd9\x2f\xa8" => "Dark mode variant (nested icns)",
+        b"\xfd\xd9\x2f\xa8" => "Dark mode variant",
         _ => return None,
     })
 }
@@ -86,7 +86,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     f.ascii("Magic", 4).emit()?;
     let declared = f.u32("File length").emit()?;
     let body = file.sub(8, u64::from(declared).saturating_sub(8));
-    let mut cur = Cursor::new(&cx, body, BE);
+    let icons = elements(&cx, input, body).await?;
+    cx.annotate(format!("{} icons: {}", icons.len(), icons.join(", ")));
+    Ok(())
+}
+
+/// Lists the elements in `body`; returns the types that hold icons.
+async fn elements(cx: &Cx, input: Input, body: Span) -> Result<Vec<String>> {
+    let mut cur = Cursor::new(cx, body, BE);
     let mut count = 0u64;
     let mut icons = Vec::new();
     while cur.remaining() >= 8 && count < MAX_ELEMENTS {
@@ -116,14 +123,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new(name)
                 .span(span)
                 .summary(summary)
-                .lazy(element, (input, span, kind)),
+                .lazy(crate::expander!(self::element: (Input, Span, Vec<u8>)), (input, span, kind)),
         )
         .await;
         count = count.saturating_add(1);
     }
-    cx.annotate(format!("{} icons: {}", icons.len(), icons.join(", ")));
-    Ok(())
+    Ok(icons)
 }
+
+/// How deeply variant element lists may nest.
+const MAX_NESTING: u32 = 4;
 
 async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<()> {
     let block = cx.block(span.sub(0, 8)).await?;
@@ -148,7 +157,14 @@ async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<
             let bytes = cx.read_avail(data.sub(0, 256)).await?;
             cx.emit(Node::new("Value").span(data).value(super::text(crate::text::latin1(&bytes))));
         }
-        b"info" | b"\xfd\xd9\x2f\xa8" => cx.emit(embedded("Contents", input.nested(data))),
+        b"info" => cx.emit(embedded("Contents", input.nested(data))),
+        b"\xfd\xd9\x2f\xa8" if input.nesting < MAX_NESTING => {
+            cx.emit(
+                Node::new("Elements")
+                    .span(data)
+                    .lazy(crate::expander!(self::variant: (Input, Span)), (input.nested(data), data)),
+            );
+        }
         _ if head.starts_with(PNG) || head.starts_with(JP2) => {
             cx.emit(embedded("Image", input.nested(data)));
         }
@@ -158,6 +174,12 @@ async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<
         }
         _ => cx.emit(Node::new("Data").span(data)),
     }
+    Ok(())
+}
+
+async fn variant(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
+    let icons = elements(&cx, input, data).await?;
+    cx.annotate(format!("{} icons", icons.len()));
     Ok(())
 }
 

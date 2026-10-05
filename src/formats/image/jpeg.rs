@@ -504,10 +504,9 @@ async fn application(cx: &Cx, input: Input, seg: &Segment) -> Result<()> {
         }
         (0xe1, XMP) => {
             cx.emit(id_node("Namespace"));
-            let bytes = cx.read(rest).await?;
             cx.emit(
                 embedded("XMP packet", input.nested(rest))
-                    .value(text(String::from_utf8_lossy(&bytes))),
+                    .summary(format!("{:#x} bytes of XML", rest.len)),
             );
         }
         (0xe1, XMP_EXTENSION) => {

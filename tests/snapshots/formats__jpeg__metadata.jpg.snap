@@ -298,7 +298,7 @@ expression: "common::explore(&name, &data)"
       Marker: 0xffe1 — APP1  [0x396+0x2]
       Length: 89  [0x398+0x2]
       Namespace: "http://ns.adobe.com/xap/1.0/"  [0x39a+0x1d]
-    ▾ XMP packet: "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF/></x:xmpmeta>"  [0x3b7+0x3a]
+    ▾ XMP packet — 0x3a bytes of XML  [0x3b7+0x3a]
         ! unsupported: unrecognized format [0x3b7+0x3a]
   ▾ APP2 — ICC profile, chunk 1 of 2  [0x3f1+0xda]
       Marker: 0xffe2 — APP2  [0x3f1+0x2]
