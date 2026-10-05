@@ -208,10 +208,14 @@ pub struct Host {
 
 impl Host {
     pub fn new(data: Vec<u8>, limits: Limits) -> Self {
+        Host::named("fixture.dll", data, limits)
+    }
+
+    pub fn named(name: &str, data: Vec<u8>, limits: Limits) -> Self {
         let mut session = Session::new(limits);
         let len = data.len() as u64;
         let source = session.add_source(len);
-        let root = session.add_root(formats::root("fixture.dll", Span::new(source, 0, len)));
+        let root = session.add_root(formats::root(name.to_owned(), Span::new(source, 0, len)));
         Host {
             session,
             data,
@@ -308,5 +312,82 @@ impl Rng {
     }
     pub fn below(&mut self, n: usize) -> usize {
         (self.next() % n as u64) as usize
+    }
+}
+
+/// Every diagnostic kind in the materialised tree.
+pub fn diagnostic_kinds(host: &Host) -> Vec<fillyfoal::DiagKind> {
+    let mut out = Vec::new();
+    let mut stack = vec![host.root];
+    while let Some(id) = stack.pop() {
+        let node = host.session.node(id).unwrap();
+        out.extend(node.diagnostics.iter().map(|d| d.kind));
+        let children = host.session.children(id).unwrap();
+        out.extend(children.error.map(|e| e.kind));
+        stack.extend(children.ids.iter().copied());
+    }
+    out
+}
+
+/// Fully explores `data` and returns the rendered tree.
+pub fn explore(name: &str, data: &[u8]) -> String {
+    let mut host = Host::named(
+        name,
+        data.to_vec(),
+        Limits {
+            chunk_size: 64,
+            ..Limits::default()
+        },
+    );
+    host.explore(host.root, 24, 1000);
+    assert!(
+        !diagnostic_kinds(&host).contains(&fillyfoal::DiagKind::Internal),
+        "{name}: internal error\n{}",
+        host.render()
+    );
+    host.render()
+}
+
+/// Truncates and mutates `data` many ways; every variant must settle without
+/// panics, hangs or internal errors.
+pub fn robustness(name: &str, data: &[u8]) {
+    let settle = |variant: Vec<u8>, what: &str| {
+        let mut host = Host::with_chunk(variant, 256);
+        host.max_polls = 200_000;
+        host.explore(host.root, 24, 1000);
+        assert!(
+            !diagnostic_kinds(&host).contains(&fillyfoal::DiagKind::Internal),
+            "{name}: internal error after {what}"
+        );
+    };
+    let lengths: Vec<usize> = if data.len() <= 600 {
+        (0..data.len()).collect()
+    } else {
+        (0..300).map(|i| i * data.len() / 300).collect()
+    };
+    for len in lengths {
+        settle(data[..len].to_vec(), &format!("truncation to {len}"));
+    }
+    let mut rng = Rng(0x5eed ^ data.len() as u64);
+    const INTERESTING: [u8; 6] = [0x00, 0xff, 0x7f, 0x80, 0x01, 0x10];
+    for round in 0..300 {
+        let mut mutated = data.to_vec();
+        if mutated.is_empty() {
+            break;
+        }
+        for _ in 0..1 + rng.below(4) {
+            // Bias towards the start, where headers live.
+            let at = if rng.below(2) == 0 {
+                rng.below(mutated.len().min(512))
+            } else {
+                rng.below(mutated.len())
+            };
+            mutated[at] = if rng.below(2) == 0 {
+                INTERESTING[rng.below(INTERESTING.len())]
+            } else {
+                rng.next() as u8
+            };
+        }
+        settle(mutated, &format!("mutation round {round}"));
     }
 }

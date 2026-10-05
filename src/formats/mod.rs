@@ -11,7 +11,10 @@ use crate::error::{Diagnostic, Result};
 use crate::node::{Expansion, Node};
 use crate::span::Span;
 
+pub mod gzip;
 pub mod pe;
+pub mod png;
+pub mod zip;
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
 /// a file, such as ISO 9660's volume descriptor at 0x8001.
@@ -92,7 +95,36 @@ pub struct Format {
 }
 
 /// All formats, in probing order: specific before generic.
-pub static FORMATS: &[&Format] = &[&pe::FORMAT];
+pub static FORMATS: &[&Format] = &[
+    &pe::FORMAT,
+    &png::FORMAT,
+    &png::MNG,
+    &png::JNG,
+    &gzip::FORMAT,
+    // ZIP-based formats before plain ZIP.
+    &zip::EPUB,
+    &zip::ODT,
+    &zip::ODS,
+    &zip::ODP,
+    &zip::ODG,
+    &zip::DOCX,
+    &zip::XLSX,
+    &zip::PPTX,
+    &zip::VSDX,
+    &zip::XPS,
+    &zip::APK,
+    &zip::XPI,
+    &zip::NUPKG,
+    &zip::VSIX,
+    &zip::WHL,
+    &zip::IPA,
+    &zip::KMZ,
+    &zip::THREE_MF,
+    &zip::SKETCH,
+    &zip::USDZ,
+    &zip::JAR,
+    &zip::FORMAT,
+];
 
 pub fn by_name(name: &str) -> Option<&'static Format> {
     FORMATS.iter().copied().find(|f| f.name == name)
@@ -162,6 +194,72 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         None if data.is_empty() => Err(Diagnostic::note("empty").at(input.span)),
         None => Err(Diagnostic::unsupported("unrecognized format").at(input.span)),
     }
+}
+
+/// Dissects `input`, or, if its format is not recognised, shows it as a
+/// plain data leaf so its bytes stay reachable (e.g. decompressed content).
+pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
+    check_nesting(&cx, &input)?;
+    let (data, tail) = head(&cx, input.span).await?;
+    let probe = Head {
+        data: &data,
+        tail: &tail,
+        len: input.span.len,
+    };
+    match identify(&probe) {
+        Some(format) => (format.dissect)(cx, input).await,
+        None => {
+            cx.emit(Node::new("Data").span(input.span));
+            Ok(())
+        }
+    }
+}
+
+/// How compressed content is encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Codec {
+    Stored,
+    Deflate,
+    Zlib,
+}
+
+/// A node for content stored in `span` with `codec`. Nothing is read or
+/// decompressed until it is expanded; then the content is decoded into a
+/// derived source and dissected in place.
+pub fn content(
+    name: impl Into<Cow<'static, str>>,
+    input: Input,
+    span: Span,
+    codec: Codec,
+    expected: Option<u64>,
+) -> Node {
+    Node::new(name)
+        .span(span)
+        .lazy(expand_content, (input, span, codec, expected))
+}
+
+async fn expand_content(
+    cx: Cx,
+    (input, span, codec, expected): (Input, Span, Codec, Option<u64>),
+) -> Result<()> {
+    let inner = match codec {
+        Codec::Stored => input.nested(span),
+        Codec::Deflate | Codec::Zlib => {
+            let decoded =
+                crate::codec::inflate_span(&cx, span, codec == Codec::Zlib, expected).await?;
+            cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
+            if let Some(e) = decoded.error {
+                cx.diag(e);
+            } else if decoded.consumed < span.len {
+                cx.diag(Diagnostic::note(format!(
+                    "{:#x} bytes follow the compressed stream",
+                    span.len.saturating_sub(decoded.consumed)
+                )));
+            }
+            input.nested(decoded.span)
+        }
+    };
+    dissect_or_data(cx, inner).await
 }
 
 async fn dissect_as(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
