@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ boot.img — Android boot image v2, kernel 43 bytes, ramdisk 130 bytes, dtb 40 bytes  [0x0+0x2000]
   ▾ Header — version 2  [0x0+0x67c]
@@ -85,5 +85,19 @@ expression: "common::explore(&name, &data)"
             Name size: 11  [#2:0xfa+0x8]
             Checksum: 0x0  [#2:0x102+0x8]
           Name: "TRAILER!!!"  [#2:0x10a+0xb]
-  ▾ DTB — 40 bytes  [0x1800+0x28]
-      ! unsupported: unrecognized format [0x1800+0x28]
+  ▾ DTB — DTB v0  [0x1800+0x28]
+    ▾ Header  [0x1800+0x28]
+        Magic: 0xd00dfeed  [0x1800+0x4]
+        Total size: 0  [0x1804+0x4]
+        Structure block offset: 0x0  [0x1808+0x4]
+        Strings block offset: 0x0  [0x180c+0x4]
+        Memory reservation map offset: 0x0  [0x1810+0x4]
+        Version: 0  [0x1814+0x4]
+        Last compatible version: 0  [0x1818+0x4]
+        Boot CPU ID: 0  [0x181c+0x4]
+        Strings block size: 0  [0x1820+0x4]
+        Structure block size: 0  [0x1824+0x4]
+      Reserved memory map  [0x1800+0x0]
+    ▾ /  [0x1800+0x0]
+        ! truncated: needed 0x4 bytes at 0x1800, only 0x0 available [0x1800+0x4]
+      Strings  [0x1800+0x0]

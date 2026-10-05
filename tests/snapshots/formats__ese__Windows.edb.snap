@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Windows.edb — ESE database v0x620 rev 20, 4 KiB pages, clean shutdown  [0x0+0x240]
+    Checksum: 0x1234  [0x0+0x4]
+    Signature: 0x89abcdef  [0x4+0x4]
+    Format version: 0x620  [0x8+0x4]
+    File type: database (0x0)  [0xc+0x4]
+    Database time: 0  [0x10+0x8]
+    Database signature: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x18+0x1c]
+    Database state: clean shutdown (0x3)  [0x34+0x4]
+    Page size: 4096  [0xec+0x4]
+    Pages  [0x240+0x0]

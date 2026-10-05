@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.woz — WOZ, 5.25"  [0x0+0x81]
+    Header  [0x0+0xc]
+    INFO — 5.25" disk, created by Fillyfoal WOZ  [0xc+0x44]
+  ▾ META — 41 bytes  [0x50+0x31]
+      title: "Fillyfoal Disk"
+      publisher: "Fillyfoal"

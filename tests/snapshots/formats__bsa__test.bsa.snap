@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.bsa — BSA v104 (Fallout 3 / Skyrim), 2 folders, 5 files  [0x0+0x64]
+    Magic: "BSA"  [0x0+0x4]
+    Version: Fallout 3 / Skyrim (0x68)  [0x4+0x4]
+    Folder records offset: 36  [0x8+0x4]
+    Archive flags: 0x3  [0xc+0x4]
+    Folders: 2  [0x10+0x4]
+    Files: 5  [0x14+0x4]
+    Total folder name length: 10  [0x18+0x4]
+    Total file name length: 40  [0x1c+0x4]
+    Content flags: 0x0  [0x20+0x2]
+    Padding: 0  [0x22+0x2]
+    Records and data  [0x24+0x40]

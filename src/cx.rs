@@ -29,10 +29,19 @@ pub(crate) enum Stop {
     Page,
 }
 
+/// A source assembled from pieces of other sources, in order.
+pub(crate) struct Pieces {
+    pub spans: Vec<Span>,
+    /// Offset of each piece within the assembled source.
+    pub starts: Vec<u64>,
+}
+
 pub(crate) struct SourceEntry {
     pub len: u64,
     /// Bytes of a derived (in-memory) source.
     pub data: Option<Arc<[u8]>>,
+    /// The layout of a piecewise source.
+    pub pieces: Option<Arc<Pieces>>,
     pub origin: Option<Origin>,
     /// For derived sources: how many parent bytes the decoder consumed, and
     /// why it stopped early, if it did.
@@ -62,6 +71,118 @@ impl Shared {
 
     fn charge(&mut self, units: u64) {
         self.budget = self.budget.saturating_sub(units);
+    }
+
+    /// Bytes `start..end` of `source` (clamped to its length), or the host
+    /// chunks that must be supplied first. Piecewise sources are resolved
+    /// through their parents.
+    pub fn read_range(
+        &mut self,
+        source: SourceId,
+        start: u64,
+        end: u64,
+        depth: u32,
+    ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
+        let end = end.min(self.source_len(source));
+        let start = start.min(end);
+        let Some(entry) = self.source(source) else {
+            return Ok(Vec::new());
+        };
+        if let Some(data) = &entry.data {
+            return Ok(data
+                .get(crate::bytes::to_usize(start)..crate::bytes::to_usize(end))
+                .unwrap_or_default()
+                .to_vec());
+        }
+        let Some(pieces) = entry.pieces.clone() else {
+            return self
+                .cache
+                .read(source, start, end)
+                .map_err(|missing| missing.into_iter().map(|i| (source, i)).collect());
+        };
+        if depth > 32 {
+            return Ok(Vec::new());
+        }
+        let mut out = Vec::new();
+        let mut missing = Vec::new();
+        let mut index = pieces
+            .starts
+            .partition_point(|&s| s <= start)
+            .saturating_sub(1);
+        let mut pos = start;
+        while pos < end {
+            let (Some(piece), Some(&piece_start)) =
+                (pieces.spans.get(index), pieces.starts.get(index))
+            else {
+                break;
+            };
+            let within = pos.saturating_sub(piece_start);
+            let take = piece
+                .len
+                .saturating_sub(within)
+                .min(end.saturating_sub(pos));
+            if take == 0 {
+                index = index.saturating_add(1);
+                continue;
+            }
+            let from = piece.offset.saturating_add(within);
+            match self.read_range(
+                piece.source,
+                from,
+                from.saturating_add(take),
+                depth.saturating_add(1),
+            ) {
+                Ok(bytes) => {
+                    let short = to_u64(bytes.len()) < take;
+                    out.extend_from_slice(&bytes);
+                    if short && missing.is_empty() {
+                        // The parent is shorter than the piece claims.
+                        break;
+                    }
+                }
+                Err(m) => missing.extend(m),
+            }
+            pos = pos.saturating_add(take);
+            index = index.saturating_add(1);
+        }
+        if missing.is_empty() {
+            Ok(out)
+        } else {
+            Err(missing)
+        }
+    }
+
+    /// Resolves a span of any source to spans of non-piecewise sources.
+    pub fn resolve(&self, span: Span, depth: u32, out: &mut Vec<Span>) {
+        let pieces = self.source(span.source).and_then(|e| e.pieces.clone());
+        let Some(pieces) = pieces.filter(|_| depth <= 32) else {
+            out.push(span);
+            return;
+        };
+        let end = span.end();
+        let mut index = pieces
+            .starts
+            .partition_point(|&s| s <= span.offset)
+            .saturating_sub(1);
+        let mut pos = span.offset;
+        while pos < end {
+            let (Some(piece), Some(&piece_start)) =
+                (pieces.spans.get(index), pieces.starts.get(index))
+            else {
+                break;
+            };
+            let within = pos.saturating_sub(piece_start);
+            let take = piece
+                .len
+                .saturating_sub(within)
+                .min(end.saturating_sub(pos));
+            if take > 0 {
+                let parent = Span::new(piece.source, piece.offset.saturating_add(within), take);
+                self.resolve(parent, depth.saturating_add(1), out);
+            }
+            pos = pos.saturating_add(take.max(1));
+            index = index.saturating_add(1);
+        }
     }
 }
 
@@ -127,24 +248,22 @@ impl Cx {
                 sh.stop = Some(Stop::Budget);
                 return Poll::Pending;
             }
-            let end = span.end().min(sh.source_len(span.source));
-            let start = span.offset.min(end);
-            if let Some(data) = sh.source(span.source).and_then(|s| s.data.clone()) {
-                let bytes = data
-                    .get(crate::bytes::to_usize(start)..crate::bytes::to_usize(end))
-                    .unwrap_or_default()
-                    .to_vec();
-                sh.charge(1u64.saturating_add(to_u64(bytes.len()) >> 12));
-                return Poll::Ready(Ok(bytes));
-            }
-            match sh.cache.read(span.source, start, end) {
+            match sh.read_range(span.source, span.offset, span.end(), 0) {
                 Ok(data) => {
                     sh.charge(1u64.saturating_add(to_u64(data.len()) >> 12));
                     Poll::Ready(Ok(data))
                 }
                 Err(missing) => {
-                    sh.wanted
-                        .extend(missing.into_iter().map(|i| (span.source, i)));
+                    // Scattered pieces could need more chunks than the cache
+                    // holds at once; refuse rather than thrash forever.
+                    let needed = to_u64(missing.len()).saturating_mul(sh.cache.chunk_size());
+                    if needed > to_u64(sh.limits.cache_bytes) / 2 {
+                        return Poll::Ready(Err(Diagnostic::limit(
+                            "read spans too many scattered chunks",
+                        )
+                        .at(span)));
+                    }
+                    sh.wanted.extend(missing);
                     sh.stop = Some(Stop::Bytes);
                     Poll::Pending
                 }
@@ -241,6 +360,7 @@ impl Cx {
         sh.sources.push(SourceEntry {
             len,
             data: Some(data.into()),
+            pieces: None,
             origin: Some(origin),
             consumed,
             error: error.clone(),
@@ -252,6 +372,43 @@ impl Cx {
             consumed,
             error,
         })
+    }
+
+    /// Registers a source assembled from `pieces` of other sources (a
+    /// fragmented file, a sector chain). Nothing is copied: reads are mapped
+    /// to the pieces, and provenance stays exact. Pieces are clamped to their
+    /// sources. Memoized by `origin`.
+    pub fn add_pieces(&self, origin: Origin, pieces: Vec<Span>) -> Result<Span> {
+        if let Some(found) = self.derived(origin) {
+            return Ok(found.span);
+        }
+        let mut sh = lock(&self.shared);
+        let mut spans = Vec::with_capacity(pieces.len());
+        let mut starts = Vec::with_capacity(pieces.len());
+        let mut len = 0u64;
+        for piece in pieces {
+            let source_len = sh.source_len(piece.source);
+            let end = piece.end().min(source_len);
+            let start = piece.offset.min(end);
+            let clamped = Span::new(piece.source, start, end.saturating_sub(start));
+            if clamped.len == 0 {
+                continue;
+            }
+            starts.push(len);
+            len = len.saturating_add(clamped.len);
+            spans.push(clamped);
+        }
+        let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        sh.sources.push(SourceEntry {
+            len,
+            data: None,
+            pieces: Some(Arc::new(Pieces { spans, starts })),
+            origin: Some(origin),
+            consumed: 0,
+            error: None,
+        });
+        sh.derived.insert(origin, id);
+        Ok(Span::new(id, 0, len))
     }
 
     /// Charges one unit of work, suspending first if the budget is exhausted.

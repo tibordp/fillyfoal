@@ -124,7 +124,12 @@ Cursor has `record`, `bytes`, `peek`, `u8..u64`, `int::<T>`, `uleb128`,
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than
-looping forever.
+looping forever. Beware `cx.read(region.sub(pos, n))` past the end: `sub`
+clamps, so the read succeeds with *fewer* (or zero) bytes; a loop that only
+stops at a terminator then never stops. Bound such loops by the region
+(`while pos < region.len`) or use `sub_exact`. As a safety net the session
+stops any expansion after `Limits::max_work` units, and the robustness
+tests fail if that ever happens on a fixture.
 
 ## 5. Spans: `sub` versus `sub_exact`
 
@@ -148,6 +153,16 @@ looping forever.
   crates (see the codec policy in `DESIGN.md`).
 - `crate::codec::inflate_span(&cx, span, zlib, expected)` if you need the
   decoded bytes yourself (e.g. a compressed text chunk).
+- **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
+  sector chains, SQLite overflow pages): describe it as pieces instead of
+  copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },
+  vec![span_a, span_b, ...])` returns a span of a new source whose reads are
+  mapped onto the pieces (through the cache, no copy, any size). Then
+  `embedded(name, input.nested(span))`. Provenance stays exact:
+  `Session::resolve(span)` maps it back to file offsets.
+- **Decoded data** you computed yourself (base64, quoted-printable, a custom
+  decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
+  bytes, consumed, error)`. Counts against `Limits::max_derived`.
 
 ## 7. Values and presentation
 
@@ -189,6 +204,11 @@ FIXTURE=bmp INSTA_UPDATE=always cargo test --test formats   # write snapshots
 cargo test && cargo clippy --all-targets                     # must be clean
 cargo run --example inspect -- file --depth 3                # look at it
 ```
+
+Formats identified by an exact image size (e.g. D64, ADF) need full-size
+fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
+decompresses them first. Each fixture's directory names the format it must
+be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are
 right.

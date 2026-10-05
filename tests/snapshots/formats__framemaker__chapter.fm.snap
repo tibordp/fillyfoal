@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ chapter.fm — MakerFile 9.0  [0x0+0x52]
+    Identification: "<MakerFile 9.0>"  [0x0+0xf]
+    Body  [0xf+0x43]

@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.gba — "FILLYFOAL" (AFFE01)  [0x0+0x200]
+  ▾ Cartridge header  [0x0+0xc0]
+      Entry point (ARM branch): 0xea00002e  [0x0+0x4]
+      Nintendo logo: 24 ff ae 51 69 9a a2 21 3d 84 82 0a 84 e4 09 ad …  |$..Qi..!=.......|  [0x4+0x9c]
+      Game title: "FILLYFOAL"  [0xa0+0xc]
+      Game code: "AFFE"  [0xac+0x4]
+      Maker code: "01"  [0xb0+0x2]
+      Fixed value: 0x96  [0xb2+0x1]
+      Main unit code: 0  [0xb3+0x1]
+      Device type: 0  [0xb4+0x1]
+      Reserved: 00 00 00 00 00 00 00  |.......|  [0xb5+0x7]
+      Software version: 0  [0xbc+0x1]
+      Complement check: 0x3c  [0xbd+0x1]
+      Reserved: 00 00  |..|  [0xbe+0x2]
+    Program  [0xc0+0x140]

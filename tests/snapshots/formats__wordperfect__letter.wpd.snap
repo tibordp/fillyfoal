@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ letter.wpd — WordPerfect 6.x or later document (format 2.1)  [0x0+0x2d]
+    Magic: ff 57 50 43  |.WPC|  [0x0+0x4]
+    Document area offset: 0x20  [0x4+0x4]
+    Product type: 1  [0x8+0x1]
+    File type: document (0xa)  [0x9+0x1]
+    Major version: 2  [0xa+0x1]
+    Minor version: 1  [0xb+0x1]
+    Encryption: 0x0  [0xc+0x2]
+    Prefix packets  [0x10+0x10]
+    Document area  [0x20+0xd]

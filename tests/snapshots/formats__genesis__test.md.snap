@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.md — "FILLYFOAL TEST", SEGA MEGA DRIVE, region JUE  [0x0+0x400]
+    68000 vector table  [0x0+0x100]
+  ▾ Header  [0x100+0x100]
+      System type: "SEGA MEGA DRIVE "  [0x100+0x10]
+      Copyright and release date: "(C)FFOL 2026.OCT"  [0x110+0x10]
+      Domestic title: "FILLYFOAL TEST                                  "  [0x120+0x30]
+      Overseas title: "FILLYFOAL TEST                                  "  [0x150+0x30]
+      Serial number: "GM 00000000-00"  [0x180+0xe]
+      Checksum: 0x1234  [0x18e+0x2]
+      Device support: "J               "  [0x190+0x10]
+      ROM start: 0x0  [0x1a0+0x4]
+      ROM end: 0x3ff  [0x1a4+0x4]
+      RAM start: 0xff0000  [0x1a8+0x4]
+      RAM end: 0xffffff  [0x1ac+0x4]
+      Extra memory: 20 20 20 20 20 20 20 20 20 20 20 20  |            |  [0x1b0+0xc]
+      Modem support: "            "  [0x1bc+0xc]
+      Notes: "                                        "  [0x1c8+0x28]
+      Region support: "JUE"  [0x1f0+0x3]
+      Reserved: 20 20 20 20 20 20 20 20 20 20 20 20 20  |             |  [0x1f3+0xd]
+    Program  [0x200+0x200]

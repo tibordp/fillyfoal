@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.zpaq — ZPAQ level 1  [0x0+0x2d]
+    Block header  [0x0+0x4]
+    Blocks  [0x0+0x2d]
+      ! unsupported: ZPAQ decoding

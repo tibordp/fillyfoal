@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cube.fbx — FBX 7.4  [0x0+0x111]
+    Magic: "Kaydara FBX Binary  "  [0x0+0x15]
+    Reserved: 1a 00  |..|  [0x15+0x2]
+    Version: 7400  [0x17+0x4]
+  ▾ Nodes  [0x1b+0xf6]
+    ▾ FBXHeaderExtension — 0 properties  [0x1b+0x48]
+      ▾ Children  [0x3a+0x29]
+        ▾ FBXVersion — 1 properties  [0x3a+0x1c]
+            [0] I: 7400  [0x51+0x5]
+    ▾ Objects — 0 properties  [0x63+0xa1]
+      ▾ Children  [0x77+0x8d]
+        ▾ Geometry — 3 properties  [0x77+0x80]
+            [0] L: 12345  [0x8c+0x9]
+            [1] S: "Cube::Geometry"  [0x95+0x13]
+            [2] S: "Mesh"  [0xa8+0x9]
+          ▾ Children  [0xb1+0x46]
+            ▾ Vertices — 1 properties  [0xb1+0x39]
+              ▾ [0] d — 0x100 bytes decompressed  [0xd3+0x17] → 0xc6+0x24
+                  Data  [#1:0x0+0x100]

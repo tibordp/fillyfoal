@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ vault.kdb — KeePass 1, 2 groups, 5 entries  [0x0+0xbc]
+    Signature 1: 0x9aa2d903  [0x0+0x4]
+    Signature 2: 0xb54bfb65  [0x4+0x4]
+    Flags: 0x3  [0x8+0x4]
+    Version: 0x30003  [0xc+0x4]
+    Master seed: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x10+0x10]
+    Encryption IV: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x20+0x10]
+    Groups: 2  [0x30+0x4]
+    Entries: 5  [0x34+0x4]
+    Contents hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x38+0x20]
+    Transform seed: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x58+0x20]
+    Key transform rounds: 50000  [0x78+0x4]
+    Encrypted payload  [0x7c+0x40]

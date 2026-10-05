@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.psarc — PSARC 1.4, 1 entries, zlib  [0x0+0x4e]
+    Magic: "PSAR"  [0x0+0x4]
+    Version major: 1  [0x4+0x2]
+    Version minor: 4  [0x6+0x2]
+    Compression: "zlib"  [0x8+0x4]
+    TOC length: 62  [0xc+0x4]
+    TOC entry size: 30  [0x10+0x4]
+    TOC entries: 1  [0x14+0x4]
+    Block size: 65536  [0x18+0x4]
+    Archive flags: 0x0  [0x1c+0x4]
+    Table of contents  [0x20+0x1e]
+    Data blocks  [0x3e+0x10]
+      ! unsupported: zlib compression
