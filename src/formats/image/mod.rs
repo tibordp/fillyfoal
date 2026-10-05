@@ -19,6 +19,7 @@ pub mod jpeg;
 pub mod jxl;
 pub mod ktx;
 pub mod metafile;
+pub mod modern;
 pub mod pcx;
 pub mod pnm;
 pub mod psd;

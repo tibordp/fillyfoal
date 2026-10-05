@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.bpg — 300×200, YCbCr 4:2:0 (JPEG chroma position), 8-bit  [0x0+0x2a]
+    Magic  [0x0+0x4]
+    Pixel format, alpha, bit depth: 0x20 — YCbCr 4:2:0 (JPEG chroma position), 8-bit  [0x4+0x1]
+    Color space and flags: 0x8 — YCbCr (BT.601), extensions  [0x5+0x1]
+    Width: 300  [0x6+0x2]
+    Height: 200  [0x8+0x2]
+    Picture data length: 24  [0xa+0x1]
+    Extension data length: 6  [0xb+0x1]
+    Extension data  [0xc+0x6]
+    HEVC picture data  [0x12+0x18]

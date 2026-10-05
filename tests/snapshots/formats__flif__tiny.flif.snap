@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.flif — 640×480, 4 channels  [0x0+0x1f]
+    Magic: "FLIF"  [0x0+0x4]
+    Format: "4" — non-interlaced, 4 channels  [0x4+0x1]
+    Bytes per channel: "1"  [0x5+0x1]
+    Width - 1: 639  [0x6+0x2]
+    Height - 1: 479  [0x8+0x2]
+    eXmp — 5 bytes, deflate-compressed  [0xa+0xa]
+    Image data  [0x14+0xb]

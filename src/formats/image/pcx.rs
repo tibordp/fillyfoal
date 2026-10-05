@@ -2,12 +2,12 @@
 //! RLE-encoded scanlines, and for 256-color images a palette at the end
 //! (`0C` followed by 768 bytes).
 
-use crate::bytes::u16_le;
+use crate::bytes::{to_u64, u16_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::{Format, Head, Input, Probe};
+use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::record;
 use crate::value::EnumTable;
 
@@ -112,6 +112,39 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if end < file.len {
         cx.emit(region("Palette marker", file, end, 1));
         cx.emit(palette("Palette", file.tail(end.saturating_add(1)), ColorOrder::Rgb));
+    }
+    Ok(())
+}
+
+/// Multi-page PCX (DCX): a magic number and up to 1023 page offsets
+/// (terminated by zero), each pointing at a complete PCX image.
+pub static DCX: Format = Format {
+    name: "dcx",
+    title: "Multi-page PCX",
+    extensions: &["dcx"],
+    mime: "image/x-dcx",
+    probe: Probe::Magic(&[(0, b"\xb1\x68\xde\x3a")]),
+    dissect: crate::expander!(dissect_dcx: Input),
+};
+
+pub async fn dissect_dcx(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    cx.emit(region("Magic", file, 0, 4));
+    let table = cx.read_avail(file.sub(4, 1023 * 4)).await?;
+    let offsets: Vec<u64> = table
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u64::from(u32::from_le_bytes(*b)))
+        .take_while(|&o| o != 0)
+        .collect();
+    let table_len = to_u64(offsets.len()).saturating_add(1).saturating_mul(4);
+    cx.emit(region("Page table", file, 4, table_len).summary(format!("{} pages", offsets.len())));
+    cx.annotate(format!("{} pages", offsets.len()));
+    for (i, &offset) in offsets.iter().enumerate() {
+        let end = offsets.get(i.saturating_add(1)).copied().unwrap_or(file.len);
+        let page = file.sub(offset, end.saturating_sub(offset));
+        cx.push(embedded(format!("Page {i}"), input.nested(page))).await;
     }
     Ok(())
 }
