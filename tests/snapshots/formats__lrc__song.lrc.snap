@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ song.lrc — LRC lyrics: Fillyfoal – Test Song, 4 lines  [0x0+0x76]
+    Title: "Test Song"  [0x4+0x9]
+    Artist: "Fillyfoal"  [0x13+0x9]
+    Length: "01:00"  [0x26+0x5]
+    [00:01.00]: "First line" — at 1.00 s  [0x2d+0x14]
+    [00:05.50]: "Repeated chorus" — at 5.50 s  [0x42+0x23]
+    [00:20.00]: "Repeated chorus" — at 20.00 s  [0x42+0x23]
+    [00:10.25]: "Third" — at 10.25 s  [0x66+0xf]

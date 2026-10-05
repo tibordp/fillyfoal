@@ -181,6 +181,14 @@ pub static FORMATS: &[&Format] = &[
     &text::mime::EML,
     &text::vcard::VCARD,
     &text::vcard::ICALENDAR,
+    // Timed text and playlists.
+    &text::subtitles::WEBVTT,
+    &text::subtitles::SRT,
+    &text::subtitles::LRC,
+    &text::playlist::HLS,
+    &text::playlist::M3U,
+    &text::playlist::PLS,
+    &text::playlist::CUE,
     // Markup: specific XML vocabularies, then HTML, then generic XML.
     &text::plist::FORMAT,
     &text::xml::XHTML,

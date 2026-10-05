@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ radio.m3u — M3U playlist, 3 entries  [0x0+0xaa]
+    Header: "#EXTM3U"  [0x0+0x7]
+    #PLAYLIST: "Favourites"  [0x12+0xa]
+  ▾ Radio One — -1 s: http://radio.example.com/stream  [0x1d+0x54]
+      Duration: -1 — seconds  [0x25+0x2]
+      tvg-id: "r1"  [0x30+0x2]
+      group-title: "Radio"  [0x41+0x5]
+      Title: "Radio One"  [0x48+0x9]
+      URI: "http://radio.example.com/stream"  [0x52+0x1f]
+  ▾ Artist - Song — 215 s: music/song.mp3  [0x72+0x28]
+      Duration: 215 — seconds  [0x7a+0x3]
+      Title: "Artist - Song"  [0x7e+0xd]
+      URI: "music/song.mp3"  [0x8c+0xe]
+  ▾ Entry 3 — plain/file.ogg  [0x9b+0xe]
+      URI: "plain/file.ogg"  [0x9b+0xe]
