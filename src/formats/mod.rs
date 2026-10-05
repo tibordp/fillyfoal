@@ -137,17 +137,27 @@ pub static FORMATS: &[&Format] = &[
     // -- end documents --
 
     // -- disk images & filesystems --
+    // Virtual disk containers first: their payload may start with an MBR.
+    &disk::vhd::FORMAT,
+    &disk::vhdx::FORMAT,
+    &disk::qcow::FORMAT,
+    &disk::vmdk::FORMAT,
+    &disk::vmdk::DESCRIPTOR,
+    &disk::vdi::FORMAT,
+    &disk::parallels::FORMAT,
+    // Partition tables and volumes with distinctive signatures.
     &disk::gpt::FORMAT,
     &disk::bitlocker::FORMAT,
-    &disk::fat::FORMAT,
     &disk::luks::FORMAT,
     &disk::lvm::FORMAT,
     &disk::mdraid::FORMAT,
     &disk::swap::FORMAT,
     &disk::xfs::FORMAT,
+    // Boot sectors ending in 0x55AA, before the plain MBR.
+    &disk::fat::FORMAT,
+    &disk::mbr::FORMAT,
     // Probes an all-zero head; keep last.
     &disk::btrfs::FORMAT,
-    &disk::mbr::FORMAT,
     // -- end disk images --
 
     // -- archives & compression --
