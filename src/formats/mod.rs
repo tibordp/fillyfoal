@@ -203,6 +203,8 @@ pub static FORMATS: &[&Format] = &[
     &text::json::HAR,
     &text::json::NDJSON,
     &text::json::FORMAT,
+    // TOML before INI: its values are typed, INI's are not.
+    &text::toml::FORMAT,
     // INI family: specific first.
     &text::ini::REG,
     &text::ini::DESKTOP,
