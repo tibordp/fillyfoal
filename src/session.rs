@@ -11,7 +11,7 @@ use crate::cx::{Cx, Output, Shared, Stop, lock};
 use crate::error::Diagnostic;
 use crate::formats;
 use crate::node::{Count, Expansion, Node};
-use crate::span::{SourceId, Span};
+use crate::span::{Origin, SourceId, Span};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
@@ -23,6 +23,8 @@ pub struct Limits {
     pub max_read: u64,
     /// How deeply embedded objects may nest (a resource in a PE in a ZIP ...).
     pub max_nesting: u32,
+    /// Total bytes of decoded (derived) sources kept in memory.
+    pub max_derived: u64,
 }
 
 impl Default for Limits {
@@ -32,6 +34,7 @@ impl Default for Limits {
             cache_bytes: 64 * 1024 * 1024,
             max_read: 16 * 1024 * 1024,
             max_nesting: 16,
+            max_derived: 256 * 1024 * 1024,
         }
     }
 }
@@ -102,6 +105,8 @@ pub struct Session {
     slots: Vec<Slot>,
     free: Vec<u32>,
     active: Vec<NodeId>,
+    live: usize,
+    clock: u64,
 }
 
 struct Slot {
@@ -117,6 +122,8 @@ struct Entry {
     count: Count,
     error: Option<Diagnostic>,
     run: Option<Run>,
+    /// When the host last asked for this node's children.
+    touched: u64,
 }
 
 struct Run {
@@ -140,6 +147,7 @@ impl Entry {
             count: Count::Unknown,
             error: None,
             run: None,
+            touched: 0,
         }
     }
 }
@@ -154,6 +162,8 @@ impl Session {
         limits.cache_bytes = limits.cache_bytes.max(floor);
         let shared = Shared {
             sources: Vec::new(),
+            derived: std::collections::HashMap::new(),
+            derived_bytes: 0,
             cache: ByteCache::new(limits.chunk_size, limits.cache_bytes),
             budget: 0,
             stop: None,
@@ -165,6 +175,56 @@ impl Session {
             slots: Vec::new(),
             free: Vec::new(),
             active: Vec::new(),
+            live: 0,
+            clock: 0,
+        }
+    }
+
+    /// Number of nodes currently materialised.
+    pub fn live_nodes(&self) -> usize {
+        self.live
+    }
+
+    /// Bounds memory by collapsing the least recently expanded subtrees until
+    /// at most `max_nodes` nodes remain (or nothing more can be collapsed).
+    /// Nodes in `keep`, and their ancestors, are not collapsed. Collapsed
+    /// nodes can be expanded again and produce the same children; handles to
+    /// their former descendants become stale.
+    pub fn trim(&mut self, max_nodes: usize, keep: &[NodeId]) {
+        if self.live <= max_nodes {
+            return;
+        }
+        let mut protected = std::collections::HashSet::new();
+        for &id in keep {
+            let mut cursor = Some(id);
+            while let Some(c) = cursor {
+                if !protected.insert(c) {
+                    break;
+                }
+                cursor = self.parent(c);
+            }
+        }
+        let mut candidates: Vec<(u64, NodeId)> = self
+            .slots
+            .iter()
+            .enumerate()
+            .filter_map(|(index, slot)| {
+                let entry = slot.entry.as_ref()?;
+                let id = NodeId {
+                    index: u32::try_from(index).ok()?,
+                    generation: slot.generation,
+                };
+                let expanded = !entry.children.is_empty() || entry.run.is_some();
+                (expanded && entry.parent.is_some() && !protected.contains(&id))
+                    .then_some((entry.touched, id))
+            })
+            .collect();
+        candidates.sort_unstable_by_key(|&(touched, _)| touched);
+        for (_, id) in candidates {
+            if self.live <= max_nodes {
+                break;
+            }
+            self.collapse(id);
         }
     }
 
@@ -176,7 +236,13 @@ impl Session {
     pub fn add_source(&mut self, len: u64) -> SourceId {
         let mut sh = lock(&self.shared);
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
-        sh.sources.push(len);
+        sh.sources.push(crate::cx::SourceEntry {
+            len,
+            data: None,
+            origin: None,
+            consumed: 0,
+            error: None,
+        });
         id
     }
 
@@ -188,10 +254,22 @@ impl Session {
     /// announced. Pending reads beyond the new end become truncations.
     pub fn set_source_len(&mut self, source: SourceId, len: u64) {
         let mut sh = lock(&self.shared);
-        if let Some(slot) = sh.sources.get_mut(to_usize(source.0.into())) {
-            *slot = len;
+        if let Some(slot) = sh.sources.get_mut(to_usize(source.0.into()))
+            && slot.data.is_none()
+        {
+            slot.len = len;
         }
         sh.cache.truncate(source, len);
+    }
+
+    /// Where a derived source came from (`None` for host sources).
+    pub fn origin(&self, source: SourceId) -> Option<Origin> {
+        lock(&self.shared).source(source).and_then(|s| s.origin)
+    }
+
+    /// The bytes of a derived source, e.g. for a hex view.
+    pub fn derived_data(&self, source: SourceId) -> Option<Arc<[u8]>> {
+        lock(&self.shared).source(source).and_then(|s| s.data.clone())
     }
 
     /// Adds a top-level node.
@@ -226,9 +304,12 @@ impl Session {
     /// [`Session::poll`].
     pub fn expand(&mut self, id: NodeId, at_least: u64) {
         let shared = self.shared.clone();
+        self.clock = self.clock.wrapping_add(1);
+        let clock = self.clock;
         let Some(entry) = self.entry_mut(id) else {
             return;
         };
+        entry.touched = clock;
         let have = to_u64(entry.children.len());
         match entry.state {
             ChildState::NotRequested => {
@@ -495,6 +576,7 @@ impl Session {
     }
 
     fn alloc(&mut self, entry: Entry) -> NodeId {
+        self.live = self.live.saturating_add(1);
         if let Some(index) = self.free.pop()
             && let Some(slot) = self.slots.get_mut(to_usize(index.into()))
         {
@@ -527,6 +609,7 @@ impl Session {
             };
             if let Some(entry) = slot.entry.take() {
                 stack.extend(entry.children);
+                self.live = self.live.saturating_sub(1);
             }
             slot.generation = slot.generation.wrapping_add(1);
             self.free.push(id.index);

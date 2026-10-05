@@ -115,7 +115,24 @@ impl fmt::Debug for Node {
     }
 }
 
-pub(crate) type Expansion = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+/// A boxed expansion future, as produced by [`expander!`](crate::expander).
+pub type Expansion = Pin<Box<dyn Future<Output = Result<()>> + Send>>;
+
+/// Refers to an expander `async fn` from inside its own body (or from a
+/// mutually recursive one): `node.lazy(expander!(walk: State), state)`.
+///
+/// Plain `node.lazy(walk, state)` would make the compiler check that `walk`'s
+/// future is `Send` while it is still inferring that very future, which fails.
+/// This macro moves the check into a separate item.
+#[macro_export]
+macro_rules! expander {
+    ($f:path : $state:ty) => {{
+        fn boxed(cx: $crate::Cx, state: $state) -> $crate::node::Expansion {
+            ::std::boxed::Box::pin($f(cx, state))
+        }
+        boxed
+    }};
+}
 
 pub(crate) trait Expand: Send + Sync {
     fn start(&self, cx: Cx) -> Expansion;

@@ -15,7 +15,9 @@
 
 pub mod bytes;
 mod cache;
+pub mod codec;
 pub mod cx;
+pub mod dsl;
 pub mod error;
 pub mod fields;
 pub mod formats;
@@ -27,9 +29,10 @@ pub mod sync;
 pub mod value;
 
 pub use cx::{Block, Cx};
+pub use dsl::{Cursor, Record};
 pub use error::{DiagKind, Diagnostic, Error, Result};
 pub use fields::{Endian, Field, Fields};
 pub use node::{Count, Node};
 pub use session::{ByteRequest, ChildState, Children, Limits, NodeId, Progress, Session, Wait};
-pub use span::{SourceId, Span};
+pub use span::{Origin, SourceId, Span};
 pub use value::{Guid, Radix, Value};

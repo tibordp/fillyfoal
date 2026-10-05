@@ -15,7 +15,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
-use crate::formats::{Input, embedded};
+use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value, lookup};
@@ -33,6 +33,15 @@ const IMAGE_FILE_DLL: u16 = 0x2000;
 
 // ---------------------------------------------------------------------------
 // Entry point
+
+pub static FORMAT: Format = Format {
+    name: "pe",
+    title: "Portable Executable (EXE, DLL, SYS, EFI)",
+    extensions: &["exe", "dll", "sys", "efi", "scr", "ocx", "cpl", "drv", "mui"],
+    mime: "application/vnd.microsoft.portable-executable",
+    probe: Probe::Magic(&[(0, b"MZ")]),
+    dissect: crate::expander!(dissect: Input),
+};
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -570,8 +579,8 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
     match index {
         DIR_EXPORT => node.lazy(exports, (pe, dir)),
         DIR_IMPORT => node.lazy(imports, (pe, dir)),
-        DIR_RESOURCE => subdirectory(
-            node,
+        DIR_RESOURCE => node.lazy(
+            resource_directory,
             ResourceDir {
                 pe,
                 base: rva,
@@ -925,8 +934,8 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
                 }
                 let mut path = dir.path.clone();
                 path.push(child);
-                node = subdirectory(
-                    node,
+                node = node.lazy(
+                    crate::expander!(resource_directory: ResourceDir),
                     ResourceDir {
                         pe: pe.clone(),
                         base: dir.base,
@@ -946,12 +955,6 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
         cx.push(node).await;
     }
     Ok(())
-}
-
-/// Not inlined into `resource_directory`: a recursive `lazy` call inside the
-/// async fn would make its `Send` check depend on itself.
-fn subdirectory(node: Node, dir: ResourceDir) -> Node {
-    node.lazy(resource_directory, dir)
 }
 
 fn id_label(level: usize, id: u32) -> String {

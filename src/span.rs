@@ -15,6 +15,15 @@ impl SourceId {
     }
 }
 
+/// How a derived source was produced: by applying `transform` (e.g.
+/// `"deflate"`) to the bytes of `parent`. Decoded bytes generally have no
+/// one-to-one position in the parent; the parent span is the provenance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Origin {
+    pub parent: Span,
+    pub transform: &'static str,
+}
+
 /// A byte range within a source.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Span {

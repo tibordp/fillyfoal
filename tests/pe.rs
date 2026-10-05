@@ -34,14 +34,18 @@ fn full_tree_snapshot() {
 
 #[test]
 fn top_level_reads_only_headers() {
-    let mut host = Host::with_chunk(fixture(), 16);
+    let mut data = fixture();
+    data.resize(4 << 20, 0xaa); // a large overlay
+    let mut host = Host::with_chunk(data, 16);
     host.session.expand(host.root, 100);
     host.run();
     let children = host.session.children(host.root).unwrap();
     assert_eq!(children.state, ChildState::Complete);
-    // DOS header, NT headers, section table and data directories end at 0x200.
+    // Format probing reads the head and tail; the PE dissector itself only
+    // needs the headers, which end at 0x200.
+    let probe = fillyfoal::formats::HEAD_LEN + fillyfoal::formats::TAIL_LEN;
     assert!(
-        host.bytes_supplied <= 0x200,
+        host.bytes_supplied <= probe,
         "read {:#x} bytes",
         host.bytes_supplied
     );
@@ -234,4 +238,21 @@ fn reads_beyond_the_limit_fail_locally() {
     let dos = host.child(host.root, "DOS Header").unwrap();
     assert_eq!(host.session.children(dos).unwrap().ids.len(), 19);
     assert!(host.child(host.root, "NT Headers").is_some());
+}
+
+#[test]
+fn trim_bounds_memory_and_keeps_the_focus() {
+    let mut host = Host::with_chunk(fixture(), 4096);
+    host.explore_all();
+    let full = host.render();
+    let before = host.session.live_nodes();
+    let imports = host.child(host.root, "Import Table").unwrap();
+    let kernel32 = host.child(imports, "KERNEL32.dll").unwrap();
+    host.session.trim(40, &[kernel32]);
+    assert!(host.session.live_nodes() <= 40, "{} of {before}", host.session.live_nodes());
+    assert!(host.session.node(kernel32).is_some());
+    assert_eq!(host.session.children(kernel32).unwrap().ids.len(), 3);
+    // Re-expanding restores the same tree.
+    host.explore_all();
+    assert_eq!(host.render(), full);
 }

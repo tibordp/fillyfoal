@@ -9,6 +9,7 @@
 //! The session inspects which of these happened after each poll; a future
 //! that suspends any other way is reported as an internal error.
 
+use std::collections::HashMap;
 use std::future::poll_fn;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::Poll;
@@ -18,7 +19,7 @@ use crate::cache::ByteCache;
 use crate::error::{Diagnostic, Result};
 use crate::node::{Count, Node};
 use crate::session::Limits;
-use crate::span::{SourceId, Span};
+use crate::span::{Origin, SourceId, Span};
 
 /// Why the most recently polled expansion suspended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -28,8 +29,21 @@ pub(crate) enum Stop {
     Page,
 }
 
+pub(crate) struct SourceEntry {
+    pub len: u64,
+    /// Bytes of a derived (in-memory) source.
+    pub data: Option<Arc<[u8]>>,
+    pub origin: Option<Origin>,
+    /// For derived sources: how many parent bytes the decoder consumed, and
+    /// why it stopped early, if it did.
+    pub consumed: u64,
+    pub error: Option<Diagnostic>,
+}
+
 pub(crate) struct Shared {
-    pub sources: Vec<u64>,
+    pub sources: Vec<SourceEntry>,
+    pub derived: HashMap<Origin, SourceId>,
+    pub derived_bytes: u64,
     pub cache: ByteCache,
     pub budget: u64,
     pub stop: Option<Stop>,
@@ -38,11 +52,12 @@ pub(crate) struct Shared {
 }
 
 impl Shared {
+    pub fn source(&self, source: SourceId) -> Option<&SourceEntry> {
+        self.sources.get(crate::bytes::to_usize(source.0.into()))
+    }
+
     pub fn source_len(&self, source: SourceId) -> u64 {
-        self.sources
-            .get(crate::bytes::to_usize(source.0.into()))
-            .copied()
-            .unwrap_or(0)
+        self.source(source).map_or(0, |s| s.len)
     }
 
     fn charge(&mut self, units: u64) {
@@ -114,6 +129,14 @@ impl Cx {
             }
             let end = span.end().min(sh.source_len(span.source));
             let start = span.offset.min(end);
+            if let Some(data) = sh.source(span.source).and_then(|s| s.data.clone()) {
+                let bytes = data
+                    .get(crate::bytes::to_usize(start)..crate::bytes::to_usize(end))
+                    .unwrap_or_default()
+                    .to_vec();
+                sh.charge(1u64.saturating_add(to_u64(bytes.len()) >> 12));
+                return Poll::Ready(Ok(bytes));
+            }
             match sh.cache.read(span.source, start, end) {
                 Ok(data) => {
                     sh.charge(1u64.saturating_add(to_u64(data.len()) >> 12));
@@ -171,6 +194,60 @@ impl Cx {
             span.len
         ))
         .at(span))
+    }
+
+    /// A previously derived source with this origin, if any. Dissectors use
+    /// this to avoid decoding the same bytes twice (e.g. after a collapse).
+    pub fn derived(&self, origin: Origin) -> Option<crate::codec::Decoded> {
+        let sh = lock(&self.shared);
+        let id = *sh.derived.get(&origin)?;
+        let entry = sh.source(id)?;
+        Some(crate::codec::Decoded {
+            source: id,
+            span: Span::new(id, 0, entry.len),
+            consumed: entry.consumed,
+            error: entry.error.clone(),
+        })
+    }
+
+    /// Registers decoded bytes as a new source. Fails if the session's total
+    /// budget for derived bytes would be exceeded.
+    pub fn add_derived(
+        &self,
+        origin: Origin,
+        data: Vec<u8>,
+        consumed: u64,
+        error: Option<Diagnostic>,
+    ) -> Result<crate::codec::Decoded> {
+        if let Some(found) = self.derived(origin) {
+            return Ok(found);
+        }
+        let mut sh = lock(&self.shared);
+        let len = to_u64(data.len());
+        let total = sh.derived_bytes.saturating_add(len);
+        if total > sh.limits.max_derived {
+            return Err(Diagnostic::limit(format!(
+                "decoded data would exceed the {:#x}-byte limit for derived sources",
+                sh.limits.max_derived
+            ))
+            .at(origin.parent));
+        }
+        sh.derived_bytes = total;
+        let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        sh.sources.push(SourceEntry {
+            len,
+            data: Some(data.into()),
+            origin: Some(origin),
+            consumed,
+            error: error.clone(),
+        });
+        sh.derived.insert(origin, id);
+        Ok(crate::codec::Decoded {
+            source: id,
+            span: Span::new(id, 0, len),
+            consumed,
+            error,
+        })
     }
 
     /// Charges one unit of work, suspending first if the budget is exhausted.
