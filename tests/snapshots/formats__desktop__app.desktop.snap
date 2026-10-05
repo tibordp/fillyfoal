@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ app.desktop — Desktop entry: Fillyfoal Viewer (Application)  [0x0+0xc6]
+  ▾ [Desktop Entry] — 6 entries  [0x0+0x8c]
+      Type: "Application"  [0x15+0xb]
+      Name: "Fillyfoal Viewer"  [0x26+0x10]
+      Name[sl]: "Pregledovalnik"  [0x40+0xe]
+      Exec: "fillyfoal %F"  [0x54+0xc]
+      Icon: "fillyfoal"  [0x66+0x9]
+      Categories: "Utility;Viewer;"  [0x7b+0xf]
+  ▾ [Desktop Action New] — 2 entries  [0x8c+0x3a]
+      Name: "New Window"  [0xa6+0xa]
+      Exec: "fillyfoal --new"  [0xb6+0xf]

@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ demo.service — systemd unit: Fillyfoal demo service  [0x0+0xb4]
+  ▾ [Unit] — 2 entries  [0x0+0x40]
+      Description: "Fillyfoal demo service"  [0x13+0x16]
+      After: "network.target"  [0x30+0xe]
+  ▾ [Service] — 3 entries  [0x40+0x4f]
+      Type: "simple"  [0x4f+0x6]
+      ExecStart: "/usr/bin/fillyfoal --serve"  [0x60+0x1a]
+      Restart: "on-failure"  [0x83+0xa]
+  ▾ [Install] — 1 entry  [0x8f+0x25]
+      WantedBy: "multi-user.target"  [0xa2+0x11]

@@ -203,6 +203,14 @@ pub static FORMATS: &[&Format] = &[
     &text::json::HAR,
     &text::json::NDJSON,
     &text::json::FORMAT,
+    // INI family: specific first.
+    &text::ini::REG,
+    &text::ini::DESKTOP,
+    &text::ini::URL,
+    &text::ini::SYSTEMD,
+    &text::ini::INF,
+    &text::ini::ASS,
+    &text::ini::FORMAT,
     &text::plain::SCRIPT,
     // Weak, statistical probes.
     &text::csv::TSV,
