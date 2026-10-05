@@ -200,5 +200,10 @@ cargo test && cargo clippy --all-targets                     # must be clean
 cargo run --example inspect -- file --depth 3                # look at it
 ```
 
+Formats identified by an exact image size (e.g. D64, ADF) need full-size
+fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
+decompresses them first. Each fixture's directory names the format it must
+be identified as (`fixtures_are_identified_correctly`).
+
 Review the snapshot by eye: it is the best check that values and spans are
 right.

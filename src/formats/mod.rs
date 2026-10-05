@@ -211,6 +211,18 @@ pub static FORMATS: &[&Format] = &[
     &retro::music::AY,
     &retro::music::SAP,
     &retro::music::YM,
+    &retro::computers::T64,
+    &retro::computers::CRT,
+    &retro::computers::AMIGA_HUNK,
+    &retro::computers::TZX,
+    &retro::computers::CPC_DSK,
+    &retro::computers::MSA,
+    &retro::computers::ATR,
+    &retro::computers::WOZ,
+    &retro::computers::TWO_IMG,
+    &retro::computers::UEF,
+    &retro::computers::ADF,
+    &retro::computers::D64,
     // -- end retro --
 
     // -- text (generic probes, keep last) --

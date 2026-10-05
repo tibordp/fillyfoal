@@ -3,3 +3,4 @@
 
 pub mod consoles;
 pub mod music;
+pub mod computers;
