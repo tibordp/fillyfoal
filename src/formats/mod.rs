@@ -36,8 +36,11 @@ pub mod bencode;
 pub mod bplist;
 pub mod cbor;
 pub mod datakit;
+pub mod evt;
+pub mod evtx;
 pub mod lnk;
 pub mod pcap;
+pub mod prefetch;
 pub mod regf;
 // -- end documents --
 
@@ -149,6 +152,9 @@ pub static FORMATS: &[&Format] = &[
     &pcap::ng::FORMAT,
     &lnk::FORMAT,
     &regf::FORMAT,
+    &evtx::FORMAT,
+    &evt::FORMAT,
+    &prefetch::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
