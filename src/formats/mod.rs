@@ -34,6 +34,7 @@ pub mod png;
 // data, system artifacts, fonts
 pub mod bencode;
 pub mod bplist;
+pub mod cbor;
 pub mod datakit;
 // -- end documents --
 
@@ -140,6 +141,7 @@ pub static FORMATS: &[&Format] = &[
     // data, system artifacts, fonts
     &bplist::FORMAT,
     &bencode::FORMAT,
+    &cbor::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --

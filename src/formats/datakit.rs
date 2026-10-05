@@ -2,7 +2,7 @@
 
 use crate::bytes::to_u64;
 use crate::cx::Cx;
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
@@ -148,4 +148,98 @@ pub fn cf_time(seconds: f64) -> Value {
 /// Length helper: `usize` to `u64`.
 pub fn len64(n: usize) -> u64 {
     to_u64(n)
+}
+
+/// Buffered random access to small pieces of a region, for formats that are
+/// decoded a byte at a time (CBOR, pickle, ...). Offsets are relative to the
+/// region.
+pub struct ByteReader<'a> {
+    cx: &'a Cx,
+    region: Span,
+    buf: Vec<u8>,
+    buf_start: u64,
+}
+
+impl<'a> ByteReader<'a> {
+    const WINDOW: u64 = 0x1000;
+
+    pub fn new(cx: &'a Cx, region: Span) -> Self {
+        ByteReader {
+            cx,
+            region,
+            buf: Vec::new(),
+            buf_start: 0,
+        }
+    }
+
+    pub fn region(&self) -> Span {
+        self.region
+    }
+
+    pub fn cx(&self) -> &'a Cx {
+        self.cx
+    }
+
+    /// `len` bytes at `at`, which must all exist.
+    pub async fn bytes(&mut self, at: u64, len: u64) -> Result<Vec<u8>> {
+        let end = at.saturating_add(len);
+        let buf_end = self.buf_start.saturating_add(to_u64(self.buf.len()));
+        if at < self.buf_start || end > buf_end {
+            if len > Self::WINDOW {
+                return self.cx.read(self.region.sub_exact(at, len)?).await;
+            }
+            self.buf = self.cx.read_avail(self.region.sub(at, Self::WINDOW)).await?;
+            self.buf_start = at;
+        }
+        let rel = crate::bytes::to_usize(at.saturating_sub(self.buf_start));
+        let rel_end = rel.saturating_add(crate::bytes::to_usize(len));
+        match self.buf.get(rel..rel_end) {
+            Some(b) => Ok(b.to_vec()),
+            None => Err(Diagnostic::truncated(
+                Span::new(
+                    self.region.source,
+                    self.region.offset.saturating_add(at),
+                    len,
+                ),
+                self.region.len.saturating_sub(at).min(len),
+            )),
+        }
+    }
+
+    pub async fn byte(&mut self, at: u64) -> Result<u8> {
+        let b = self.bytes(at, 1).await?;
+        Ok(b.first().copied().unwrap_or(0))
+    }
+
+    /// A big-endian unsigned integer of `len` (at most 8) bytes.
+    pub async fn be(&mut self, at: u64, len: u64) -> Result<u64> {
+        let b = self.bytes(at, len.min(8)).await?;
+        Ok(be_uint(&b))
+    }
+
+    /// A little-endian unsigned integer of `len` (at most 8) bytes.
+    pub async fn le(&mut self, at: u64, len: u64) -> Result<u64> {
+        let b = self.bytes(at, len.min(8)).await?;
+        Ok(le_uint(&b))
+    }
+
+    /// The span of `len` bytes at `at` (clamped to the region).
+    pub fn span(&self, at: u64, len: u64) -> Span {
+        self.region.sub(at, len)
+    }
+}
+
+/// Big-endian unsigned integer from up to 8 bytes.
+pub fn be_uint(bytes: &[u8]) -> u64 {
+    bytes
+        .iter()
+        .fold(0u64, |acc, &x| acc.checked_shl(8).unwrap_or(0) | u64::from(x))
+}
+
+/// Little-endian unsigned integer from up to 8 bytes.
+pub fn le_uint(bytes: &[u8]) -> u64 {
+    bytes
+        .iter()
+        .rev()
+        .fold(0u64, |acc, &x| acc.checked_shl(8).unwrap_or(0) | u64::from(x))
 }
