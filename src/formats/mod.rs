@@ -46,6 +46,7 @@ pub mod models;
 pub mod science;
 pub mod ebooks;
 pub mod security;
+pub mod system;
 // -- end misc --
 
 // -- text --
@@ -272,6 +273,14 @@ pub static FORMATS: &[&Format] = &[
     &security::KEYBOX,
     &security::KEYCHAIN,
     &security::ANDROID_BACKUP,
+    &system::DTB,
+    &system::BZIMAGE,
+    &system::JOURNAL,
+    &system::REDIS_RDB,
+    &system::PST,
+    &system::DOTNET_RESOURCES,
+    &system::SNOOP,
+    &system::ACPI,
     &ebooks::PDB,
     // -- end misc --
 

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dump.rdb — RDB v11, Redis 7.2.4  [0x0+0x41]
+    Magic: "REDIS"  [0x0+0x5]
+    Version: "0011"  [0x5+0x4]
+    redis-ver: "7.2.4"  [0x9+0x11]
+    redis-bits: "64"  [0x1a+0xe]
+    SELECTDB 0  [0x28+0x2]
+    RESIZEDB — 1 keys, 0 with expiry  [0x2a+0x3]
+    Key-value pairs  [0x2d+0x14]
