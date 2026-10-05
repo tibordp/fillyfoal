@@ -44,6 +44,7 @@ pub mod midi;
 pub mod mpa;
 pub mod musepack;
 pub mod ogg;
+pub mod simple_audio;
 pub mod sound;
 pub mod tracker;
 pub mod tta;
@@ -191,10 +192,18 @@ pub static FORMATS: &[&Format] = &[
     &wavpack::FORMAT,
     &musepack::FORMAT,
     &tta::FORMAT,
+    &simple_audio::SOX,
+    &simple_audio::IRCAM,
+    &simple_audio::ADX,
+    &simple_audio::KVAG,
+    &simple_audio::AST,
+    &simple_audio::ILBC,
+    &simple_audio::QOA,
     &tracker::it::FORMAT,
     &tracker::xm::FORMAT,
     &tracker::s3m::FORMAT,
     &tracker::protracker::FORMAT,
+    &simple_audio::RSO,
     &flac::FORMAT,
     &ogg::OPUS,
     &ogg::OGG_FLAC,

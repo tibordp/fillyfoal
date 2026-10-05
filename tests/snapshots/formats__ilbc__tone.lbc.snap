@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.lbc — iLBC, 20 ms frames, 8000 Hz, 120 ms  [0x0+0xed]
+    Magic: "#!iLBC20"  [0x0+0x9]
+  ▾ Frames — 6 frames of 38 bytes  [0x9+0xe4]
+      Frame 0  [0x9+0x26]
+      Frame 1  [0x2f+0x26]
+      Frame 2  [0x55+0x26]
+      Frame 3  [0x7b+0x26]
+      Frame 4  [0xa1+0x26]
+      Frame 5  [0xc7+0x26]
