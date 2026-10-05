@@ -38,6 +38,7 @@ pub mod cbor;
 pub mod datakit;
 pub mod evt;
 pub mod evtx;
+pub mod icc;
 pub mod lnk;
 pub mod pcap;
 pub mod prefetch;
@@ -160,6 +161,7 @@ pub static FORMATS: &[&Format] = &[
     &recyclebin::FORMAT,
     &thumbcache::FORMAT,
     &thumbcache::INDEX,
+    &icc::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
