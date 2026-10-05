@@ -167,6 +167,8 @@ pub static FORMATS: &[&Format] = &[
     // -- end archives --
 
     // -- text (generic probes, keep last) --
+    // Documents with a fixed signature.
+    &text::rtf::FORMAT,
     // Binary formats found inside text armor.
     &text::ssh::PRIVATE,
     &text::ssh::BLOB,
