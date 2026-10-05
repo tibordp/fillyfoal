@@ -271,3 +271,25 @@ async fn logical_partitions(cx: Cx, (input, first, ext_base): (Input, u64, u64))
     }
     Ok(())
 }
+
+/// The MBR sector of a GPT disk: its entries, without dissecting the
+/// (protective) partitions they describe.
+pub fn protective_node(name: &'static str, sector: Span) -> Node {
+    Node::new(name).span(sector).lazy(protective, sector)
+}
+
+async fn protective(cx: Cx, sector: Span) -> Result<()> {
+    cx.emit(Node::new("Bootstrap code").span(sector.sub(0, 440)));
+    for i in 0..4u64 {
+        let span = sector.sub(TABLE.saturating_add(i.saturating_mul(16)), 16);
+        let e = parse(&cx, span, LE, &(), Entry::layout).await?;
+        let node = Entry::node(format!("Entry {}", i.saturating_add(1)), span, LE);
+        cx.emit(if e.kind == 0 {
+            node.summary("unused")
+        } else {
+            node.summary(describe(&e, 0))
+        });
+    }
+    cx.emit(Node::new("Boot signature").span(sector.sub(510, 2)));
+    Ok(())
+}

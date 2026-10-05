@@ -11,7 +11,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::ptypes::gpt_type;
 use crate::formats::disk::{mbr, size, volume};
-use crate::formats::{Format, Head, Input, Probe, embedded_as};
+use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -117,11 +117,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     } else {
         4096
     };
-    cx.emit(embedded_as(
-        "Protective MBR",
-        input.nested(disk.sub(0, mbr::SECTOR)),
-        &mbr::FORMAT,
-    ));
+    cx.emit(mbr::protective_node("Protective MBR", disk.sub(0, mbr::SECTOR)));
 
     let header_span = disk.sub(sector, Header::SIZE);
     let header = parse(&cx, header_span, LE, &(), Header::layout).await?;

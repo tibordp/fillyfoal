@@ -138,7 +138,15 @@ pub static FORMATS: &[&Format] = &[
 
     // -- disk images & filesystems --
     &disk::gpt::FORMAT,
+    &disk::bitlocker::FORMAT,
     &disk::fat::FORMAT,
+    &disk::luks::FORMAT,
+    &disk::lvm::FORMAT,
+    &disk::mdraid::FORMAT,
+    &disk::swap::FORMAT,
+    &disk::xfs::FORMAT,
+    // Probes an all-zero head; keep last.
+    &disk::btrfs::FORMAT,
     &disk::mbr::FORMAT,
     // -- end disk images --
 

@@ -7,10 +7,17 @@
 //! content is its extent if contiguous, or a piecewise source assembled from
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 
+pub mod bitlocker;
+pub mod btrfs;
 pub mod fat;
 pub mod gpt;
+pub mod luks;
+pub mod lvm;
 pub mod mbr;
+pub mod mdraid;
 pub mod ptypes;
+pub mod swap;
+pub mod xfs;
 
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -137,37 +144,103 @@ pub fn assemble(cx: &Cx, anchor: Span, transform: &'static str, pieces: Vec<Span
     }
 }
 
-/// Largest sparse hole materialized as zeros.
-const MAX_HOLE: u64 = 64 * 1024 * 1024;
+/// Zeros materialized for the holes of one sparse source, at most.
+const MAX_ZEROS: u64 = 16 << 30;
+/// Size of the shared zero-filled source holes are made of.
+const ZERO_BLOCK: u64 = 1 << 20;
 
-/// A run of zero bytes for sparse files: pieces of one shared zero-filled
-/// derived source.
-pub fn zeros(cx: &Cx, anchor: Span, len: u64) -> Result<Vec<Span>> {
-    const BLOCK: u64 = 64 * 1024;
-    if len > MAX_HOLE {
-        return Err(Diagnostic::limit(format!(
-            "sparse region of {} is not materialized",
-            size(len)
-        ))
-        .at(anchor));
+/// Collects the pieces of a sparse or fragmented byte stream (a file with
+/// holes, a virtual disk with unallocated blocks), merging adjacent pieces.
+/// Holes become pieces of one shared zero-filled derived source.
+pub struct PieceList {
+    anchor: Span,
+    pieces: Vec<Span>,
+    zeros: u64,
+    len: u64,
+    zero: Option<Span>,
+}
+
+impl PieceList {
+    /// `anchor` identifies the stream (its metadata) for memoization and
+    /// diagnostics.
+    pub fn new(anchor: Span) -> Self {
+        PieceList {
+            anchor,
+            pieces: Vec::new(),
+            zeros: 0,
+            len: 0,
+            zero: None,
+        }
     }
-    let zero = cx.add_derived(
-        Origin {
-            parent: Span::new(anchor.source, 0, 0),
-            transform: "zeros",
-        },
-        vec![0; crate::bytes::to_usize(BLOCK)],
-        0,
-        None,
-    )?;
-    let mut out = Vec::new();
-    let mut left = len;
-    while left > 0 {
-        let take = left.min(BLOCK);
-        out.push(zero.span.sub(0, take));
-        left = left.saturating_sub(take);
+
+    pub fn len(&self) -> u64 {
+        self.len
     }
-    Ok(out)
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub fn data(&mut self, piece: Span) {
+        if piece.is_empty() {
+            return;
+        }
+        self.len = self.len.saturating_add(piece.len);
+        match self.pieces.last_mut() {
+            Some(prev) if prev.source == piece.source && prev.end() == piece.offset => {
+                prev.len = prev.len.saturating_add(piece.len);
+            }
+            _ => self.pieces.push(piece),
+        }
+    }
+
+    /// Appends `len` zero bytes. Fails once the total of zeros exceeds a
+    /// limit (a huge, mostly empty virtual disk).
+    pub fn hole(&mut self, cx: &Cx, len: u64) -> Result<()> {
+        self.zeros = self.zeros.saturating_add(len);
+        if self.zeros > MAX_ZEROS {
+            return Err(Diagnostic::limit(format!(
+                "more than {} of holes; the rest is not assembled",
+                size(MAX_ZEROS)
+            ))
+            .at(self.anchor));
+        }
+        let zero = match self.zero {
+            Some(z) => z,
+            None => {
+                let z = cx
+                    .add_derived(
+                        Origin {
+                            parent: Span::new(self.anchor.source, 0, 0),
+                            transform: "zeros",
+                        },
+                        vec![0; crate::bytes::to_usize(ZERO_BLOCK)],
+                        0,
+                        None,
+                    )?
+                    .span;
+                self.zero = Some(z);
+                z
+            }
+        };
+        let mut left = len;
+        while left > 0 {
+            let take = left.min(ZERO_BLOCK);
+            self.data(zero.sub(0, take));
+            left = left.saturating_sub(take);
+        }
+        Ok(())
+    }
+
+    /// The pieces collected so far.
+    pub fn pieces(&self) -> &[Span] {
+        &self.pieces
+    }
+
+    /// Registers the stream as a source (or returns its single piece).
+    pub fn finish(self, cx: &Cx, transform: &'static str) -> Result<Span> {
+        assemble(cx, self.anchor, transform, self.pieces)
+    }
 }
 
 /// Assembled file content: dissected if recognised, otherwise a data leaf.
@@ -263,4 +336,72 @@ pub fn unix_time<T: Copy + Into<u64>>(v: &T, node: Node) -> Node {
     node.value(Value::Timestamp {
         unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
     })
+}
+
+/// CRC-32C (Castagnoli), as used by ext4, XFS, Btrfs and VHDX.
+pub fn crc32c(data: &[u8]) -> u32 {
+    crc32c_update(!0, data) ^ !0
+}
+
+/// Raw CRC-32C register update (no initial or final inversion).
+pub fn crc32c_update(mut crc: u32, data: &[u8]) -> u32 {
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                crc >> 1 ^ 0x82f6_3b78
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    crc
+}
+
+/// APFS's Fletcher-64 checksum of a block whose first 8 bytes hold the
+/// checksum (they are skipped). Returns the value to store there.
+pub fn fletcher64(block: &[u8]) -> u64 {
+    const MOD: u64 = 0xffff_ffff;
+    let (mut lo, mut hi) = (0u64, 0u64);
+    for word in block.get(8..).unwrap_or_default().as_chunks::<4>().0 {
+        lo = lo.saturating_add(u32::from_le_bytes(*word).into()) % MOD;
+        hi = hi.saturating_add(lo) % MOD;
+    }
+    let c1 = MOD.saturating_sub(lo.saturating_add(hi) % MOD);
+    let c2 = MOD.saturating_sub(lo.saturating_add(c1) % MOD);
+    c2 << 32 | c1
+}
+
+/// A Unix mode as `ls -l` shows it, e.g. `drwxr-xr-x`.
+pub fn unix_mode(mode: u32) -> String {
+    let kind = match mode & 0o170_000 {
+        0o040_000 => 'd',
+        0o100_000 => '-',
+        0o120_000 => 'l',
+        0o020_000 => 'c',
+        0o060_000 => 'b',
+        0o010_000 => 'p',
+        0o140_000 => 's',
+        _ => '?',
+    };
+    let mut out = String::from(kind);
+    for shift in [6u32, 3, 0] {
+        let bits = (mode >> shift) & 7;
+        out.push(if bits & 4 != 0 { 'r' } else { '-' });
+        out.push(if bits & 2 != 0 { 'w' } else { '-' });
+        let special = match shift {
+            6 => mode & 0o4000 != 0,
+            3 => mode & 0o2000 != 0,
+            _ => mode & 0o1000 != 0,
+        };
+        out.push(match (bits & 1 != 0, special, shift) {
+            (true, true, 0) => 't',
+            (false, true, 0) => 'T',
+            (true, true, _) => 's',
+            (false, true, _) => 'S',
+            (true, false, _) => 'x',
+            (false, false, _) => '-',
+        });
+    }
+    out
 }
