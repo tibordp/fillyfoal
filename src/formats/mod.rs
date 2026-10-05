@@ -29,7 +29,10 @@ pub mod png;
 
 // -- audio & video --
 // audio (riff/iff/flac/mp3/ogg/...)
+pub mod apetag;
+pub mod id3;
 pub mod iff;
+pub mod mpa;
 pub mod sound;
 // -- end audio & video --
 
@@ -161,6 +164,8 @@ pub static FORMATS: &[&Format] = &[
     &iff::MAUD,
     &iff::RIFF,
     &iff::IFF,
+    &mpa::FORMAT,
+    &id3::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
