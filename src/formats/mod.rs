@@ -33,6 +33,7 @@ pub mod png;
 // -- documents & data --
 // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
 pub mod asn1;
+pub mod sqlite;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -136,6 +137,11 @@ pub static FORMATS: &[&Format] = &[
 
     // -- documents & data --
     // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+    &sqlite::GEOPACKAGE,
+    &sqlite::MBTILES,
+    &sqlite::FORMAT,
+    &sqlite::WAL,
+    &sqlite::JOURNAL,
     &asn1::X509,
     &asn1::CRL,
     &asn1::CSR,
