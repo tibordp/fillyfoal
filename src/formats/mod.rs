@@ -32,16 +32,20 @@ pub mod png;
 
 // -- documents & data --
 // data, system artifacts, fonts
+pub mod applesingle;
 pub mod bencode;
 pub mod bplist;
 pub mod cbor;
+pub mod crx;
 pub mod datakit;
 pub mod evt;
 pub mod evtx;
 pub mod font;
 pub mod icc;
+pub mod json;
 pub mod lnk;
 pub mod mo;
+pub mod npy;
 pub mod pcap;
 pub mod prefetch;
 pub mod recyclebin;
@@ -175,6 +179,12 @@ pub static FORMATS: &[&Format] = &[
     &font::bitmap::BDF,
     &mo::FORMAT,
     &terminfo::FORMAT,
+    &npy::NPY,
+    &npy::SAFETENSORS,
+    &crx::CRX,
+    &crx::MOZLZ4,
+    &applesingle::APPLESINGLE,
+    &applesingle::APPLEDOUBLE,
     // -- end documents --
 
     // -- disk images & filesystems --
