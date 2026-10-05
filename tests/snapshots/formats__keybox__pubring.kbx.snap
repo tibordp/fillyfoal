@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pubring.kbx — 1 OpenPGP and 0 X.509 blob(s)  [0x0+0x48]
+    header blob — 32 bytes  [0x0+0x20]
+    OpenPGP blob — 40 bytes  [0x20+0x28]

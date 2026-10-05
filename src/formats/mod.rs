@@ -44,6 +44,8 @@ pub mod retro;
 pub mod games;
 pub mod models;
 pub mod science;
+pub mod ebooks;
+pub mod security;
 // -- end misc --
 
 // -- text --
@@ -260,6 +262,17 @@ pub static FORMATS: &[&Format] = &[
     &science::GRIB,
     &science::BUFR,
     &science::DBF,
+    &ebooks::MOBI,
+    &ebooks::PALMDOC,
+    &ebooks::DJVU,
+    &ebooks::LIT,
+    &security::KDBX,
+    &security::KDB,
+    &security::OPENSSH_KEY,
+    &security::KEYBOX,
+    &security::KEYCHAIN,
+    &security::ANDROID_BACKUP,
+    &ebooks::PDB,
     // -- end misc --
 
     // -- text (generic probes, keep last) --
