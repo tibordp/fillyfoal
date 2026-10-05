@@ -337,8 +337,9 @@ async fn block(cx: Cx, b: Block) -> Result<()> {
             options_from = Some(start.saturating_add(padded));
         }
         3 => {
-            f.u32("Original length").emit()?;
-            let packet = b.span.sub(f.pos(), body_end.saturating_sub(f.pos()));
+            let original = f.u32("Original length").emit()?;
+            let room = body_end.saturating_sub(f.pos());
+            let packet = b.span.sub(f.pos(), room.min(original.into()));
             emit_packet(&cx, packet, b.iface);
         }
         4 => {
@@ -446,7 +447,7 @@ async fn name_records(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
         let len = cur.u16().await?;
         let value = cur.span(len.into());
         cur.skip(u64::from(len).checked_next_multiple_of(4).unwrap_or(u64::MAX));
-        let node = Node::new(lookup(NRB_TYPES, kind.into()).unwrap_or("record"))
+        let node = Node::new("Record")
             .span(cur.since(start))
             .value(enumv(kind, 16, NRB_TYPES));
         let node = match kind {
