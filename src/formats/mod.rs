@@ -34,6 +34,7 @@ pub mod png;
 // -- end documents --
 
 // -- disk images & filesystems --
+pub mod disk;
 // -- end disk images --
 
 // -- text --
@@ -136,6 +137,9 @@ pub static FORMATS: &[&Format] = &[
     // -- end documents --
 
     // -- disk images & filesystems --
+    &disk::gpt::FORMAT,
+    &disk::fat::FORMAT,
+    &disk::mbr::FORMAT,
     // -- end disk images --
 
     // -- archives & compression --
