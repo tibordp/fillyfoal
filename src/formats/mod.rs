@@ -34,6 +34,7 @@ pub mod rar;
 pub mod rpm;
 pub mod sevenzip;
 pub mod squashfs;
+pub mod stuffit;
 pub mod tar;
 pub mod wim;
 pub mod xar;
@@ -193,6 +194,8 @@ pub static FORMATS: &[&Format] = &[
     &squashfs::SQUASHFS,
     &squashfs::CRAMFS,
     &wim::FORMAT,
+    &stuffit::FORMAT,
+    &stuffit::SIT5,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
