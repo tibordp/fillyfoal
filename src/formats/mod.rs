@@ -41,10 +41,12 @@ pub mod evtx;
 pub mod font;
 pub mod icc;
 pub mod lnk;
+pub mod mo;
 pub mod pcap;
 pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
+pub mod terminfo;
 pub mod thumbcache;
 // -- end documents --
 
@@ -171,6 +173,8 @@ pub static FORMATS: &[&Format] = &[
     &font::pfb::FORMAT,
     &font::bitmap::PCF,
     &font::bitmap::BDF,
+    &mo::FORMAT,
+    &terminfo::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
