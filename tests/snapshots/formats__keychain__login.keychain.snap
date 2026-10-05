@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ login.keychain — keychain, 3 tables  [0x0+0x4c]
+  ▾ Header  [0x0+0x10]
+      Magic: "kych"  [0x0+0x4]
+      Version: 0x10000  [0x4+0x4]
+      Auth offset: 0x10  [0x8+0x4]
+      Schema offset: 0x14  [0xc+0x4]
+    Schema — 3 tables  [0x14+0x38]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cars.sas7bdat — SAS DATA "CARS", release 9.0401M7, 64-bit little-endian  [0x0+0x3fc]
+    Magic  [0x0+0x20]
+    Dataset name: "CARS"  [0x5c+0x40]
+    File type: "DATA"  [0x9c+0x8]
+    SAS release: "9.0401M7"  [0x120+0x8]

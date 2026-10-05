@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ palette.ase — 2 colours  [0x0+0x74]
+    Signature: "ASEF"  [0x0+0x4]
+    Version major: 1  [0x4+0x2]
+    Version minor: 0  [0x6+0x2]
+    Blocks: 4  [0x8+0x4]
+    Group start — Fillyfoal  [0xc+0x1c]
+    Color — Red (RGB)  [0x28+0x22]
+    Color — Blue (RGB)  [0x4a+0x24]
+    Group end  [0x6e+0x6]

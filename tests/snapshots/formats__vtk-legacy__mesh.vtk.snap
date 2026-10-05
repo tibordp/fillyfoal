@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ mesh.vtk — POLYDATA ASCII, Fillyfoal mesh  [0x0+0x62]
+    Version: "# vtk DataFile Version 3.0"  [0x0+0x1b]
+    Title: "Fillyfoal mesh"  [0x1b+0xf]
+    Encoding: "ASCII"  [0x2a+0x6]
+    Dataset type: "DATASET POLYDATA"  [0x30+0x11]
+    Data  [0x41+0x21]
