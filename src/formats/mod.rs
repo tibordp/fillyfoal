@@ -31,6 +31,8 @@ pub mod png;
 // -- end audio & video --
 
 // -- documents & data --
+// graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+pub mod asn1;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -133,6 +135,13 @@ pub static FORMATS: &[&Format] = &[
     // -- end audio & video --
 
     // -- documents & data --
+    // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+    &asn1::X509,
+    &asn1::CRL,
+    &asn1::CSR,
+    &asn1::PKCS7,
+    &asn1::PKCS12,
+    &asn1::DER,
     // -- end documents --
 
     // -- disk images & filesystems --
