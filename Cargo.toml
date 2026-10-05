@@ -1,0 +1,21 @@
+[package]
+name = "fillyfoal"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Lazy, sans-I/O structural dissection of files"
+
+[dependencies]
+
+[dev-dependencies]
+insta = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+arithmetic_side_effects = "deny"
+indexing_slicing = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
