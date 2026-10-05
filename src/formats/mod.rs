@@ -32,6 +32,7 @@ pub mod lzma;
 pub mod rar;
 pub mod rpm;
 pub mod sevenzip;
+pub mod squashfs;
 pub mod tar;
 pub mod xar;
 pub mod xz;
@@ -187,6 +188,8 @@ pub static FORMATS: &[&Format] = &[
     &firmware::ANDROID_SPARSE,
     &firmware::ANDROID_BOOT,
     &firmware::UIMAGE,
+    &squashfs::SQUASHFS,
+    &squashfs::CRAMFS,
     &zoo::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
