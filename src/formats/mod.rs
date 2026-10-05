@@ -33,6 +33,7 @@ pub mod apetag;
 pub mod flac;
 pub mod id3;
 pub mod iff;
+pub mod midi;
 pub mod mpa;
 pub mod ogg;
 pub mod sound;
@@ -167,6 +168,7 @@ pub static FORMATS: &[&Format] = &[
     &iff::MAUD,
     &iff::RIFF,
     &iff::IFF,
+    &midi::FORMAT,
     &flac::FORMAT,
     &ogg::OPUS,
     &ogg::OGG_FLAC,
