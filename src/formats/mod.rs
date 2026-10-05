@@ -48,6 +48,7 @@ pub mod ebooks;
 pub mod security;
 pub mod system;
 pub mod graphics;
+pub mod packages;
 // -- end misc --
 
 // -- text --
@@ -314,6 +315,19 @@ pub static FORMATS: &[&Format] = &[
     &graphics::JXR,
     &graphics::WMF,
     &graphics::ACO,
+    &packages::GODOT_PCK,
+    &packages::UNITYFS,
+    &packages::GAMEMAKER,
+    &packages::RPA,
+    &packages::APPLE_ARCHIVE,
+    &packages::LZFSE,
+    &packages::PBZX,
+    &packages::LZOP,
+    &packages::LRZIP,
+    &packages::ZSTD_DICT,
+    &packages::POWERPACKER,
+    &packages::ZPAQ,
+    &packages::PGS,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,

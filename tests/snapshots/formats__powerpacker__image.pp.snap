@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.pp — PowerPacker, 256 bytes uncompressed  [0x0+0x2c]
+    Magic  [0x0+0x4]
+    Efficiency table: 09 0a 0c 0d  |....|  [0x4+0x4]
+    Compressed data  [0x8+0x20]
+      ! unsupported: PowerPacker decoding
+    Trailer — 256 bytes uncompressed  [0x28+0x4]
