@@ -132,6 +132,12 @@ pub static FORMATS: &[&Format] = &[
     &image::gif::FORMAT,
     &image::jpeg::FORMAT,
     &image::psd::FORMAT,
+    &image::ico::ICO,
+    &image::ico::CUR,
+    &image::qoi::FORMAT,
+    &image::farbfeld::FORMAT,
+    &image::sunras::FORMAT,
+    &image::sgi::FORMAT,
     // TIFF-based camera raw formats before plain TIFF.
     &image::tiff::DNG,
     &image::tiff::CR2,
@@ -142,6 +148,9 @@ pub static FORMATS: &[&Format] = &[
     &image::tiff::ORF,
     &image::tiff::RW2,
     &image::tiff::FORMAT,
+    // Weak probes (footer, header sanity checks) last.
+    &image::tga::FORMAT,
+    &image::pcx::FORMAT,
     // -- end images --
 
     // -- audio & video --

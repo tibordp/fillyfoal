@@ -4,9 +4,16 @@
 //! value constructors.
 
 pub mod bmp;
+pub mod farbfeld;
 pub mod gif;
+pub mod ico;
 pub mod jpeg;
+pub mod pcx;
 pub mod psd;
+pub mod qoi;
+pub mod sgi;
+pub mod sunras;
+pub mod tga;
 pub mod tiff;
 mod tiff_tags;
 
