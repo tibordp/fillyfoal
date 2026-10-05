@@ -16,6 +16,7 @@ pub mod icc;
 pub mod icns;
 pub mod ico;
 pub mod j2k;
+pub mod jbig2;
 pub mod jpeg;
 pub mod jxl;
 pub mod ktx;

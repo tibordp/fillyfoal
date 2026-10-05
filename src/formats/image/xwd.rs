@@ -29,7 +29,7 @@ pub static FORMAT: Format = Format {
 fn probe(h: &Head<'_>) -> bool {
     let field = |i: usize| u32_be(h.data, i.saturating_mul(4));
     let (Some(size), Some(7), Some(format), Some(depth), Some(order), Some(class)) =
-        (field(0), field(1), field(2), field(3), field(7), field(15))
+        (field(0), field(1), field(2), field(3), field(7), field(13))
     else {
         return false;
     };
