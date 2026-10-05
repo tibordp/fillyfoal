@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Game.rgss3a — RPG Maker VX Ace archive (v3)  [0x0+0x28]
+    Header: 3  [0x0+0x8]
+    Encrypted entries  [0x8+0x20]
+      ! note: entries are XOR-obfuscated

@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.t64 — "FILLYFOAL TAPE", 1 files  [0x0+0x90]
+  ▾ Header  [0x0+0x40]
+      Signature: "C64 tape image file"  [0x0+0x20]
+      Version: 0x101  [0x20+0x2]
+      Directory entries: 2  [0x22+0x2]
+      Used entries: 1  [0x24+0x2]
+      Unused: 0  [0x26+0x2]
+      Tape name: "FILLYFOAL TAPE          "  [0x28+0x18]
+  ▾ HELLO — $0801-$0811  [0x40+0x20] → 0x80+0x10
+      Entry type: normal tape file (0x1)  [0x40+0x1]
+      C64 file type: 0x82  [0x41+0x1]
+      Start address: 0x801  [0x42+0x2]
+      End address: 0x811  [0x44+0x2]
+      Unused: 0  [0x46+0x2]
+      Data offset: 0x80  [0x48+0x4]
+      Unused: 0  [0x4c+0x4]
+      File name: 48 45 4c 4c 4f 20 20 20 20 20 20 20 20 20 20 20  |HELLO           |  [0x50+0x10]

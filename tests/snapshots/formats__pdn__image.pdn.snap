@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.pdn — Paint.NET, 64×32  [0x0+0x65]
+    Magic  [0x0+0x4]
+  ▾ Header (XML)  [0x7+0x45]
+      ! unsupported: unrecognized format [0x7+0x45]
+    Document (.NET serialized)  [0x4c+0x19]

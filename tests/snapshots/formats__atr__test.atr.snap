@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.atr — 1024 bytes, 128-byte sectors  [0x0+0x410]
+    Magic: 0x296  [0x0+0x2]
+    Image size (16-byte paragraphs, low): 64  [0x2+0x2]
+    Sector size: 128  [0x4+0x2]
+    Image size (high byte): 0  [0x6+0x1]
+    CRC: 0x0  [0x7+0x4]
+    Unused: 0  [0xb+0x4]
+    Flags: 0x0  [0xf+0x1]
+    Sectors  [0x10+0x400]

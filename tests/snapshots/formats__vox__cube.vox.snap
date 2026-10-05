@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cube.vox — MagicaVoxel v150  [0x0+0x450]
+    Header — version 150  [0x0+0x8]
+  ▾ MAIN — 0 bytes  [0x8+0x448]
+      SIZE — 2×2×2  [0x14+0x18]
+      XYZI — 2 voxels  [0x2c+0x18]
+      RGBA — 1024 bytes  [0x44+0x40c]

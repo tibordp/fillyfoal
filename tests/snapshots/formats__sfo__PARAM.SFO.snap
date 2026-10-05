@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ PARAM.SFO — Fillyfoal Test  [0x0+0x7c]
+  ▾ Header  [0x0+0x14]
+      Magic: 00 50 53 46  |.PSF|  [0x0+0x4]
+      Version: 0x101  [0x4+0x4]
+      Key table offset: 0x44  [0x8+0x4]
+      Data table offset: 0x64  [0xc+0x4]
+      Entries: 3  [0x10+0x4]
+    CATEGORY: "MG"  [0x64+0x3]
+    PARENTAL_LEVEL: 1  [0x68+0x4]
+    TITLE: "Fillyfoal Test"  [0x6c+0xf]

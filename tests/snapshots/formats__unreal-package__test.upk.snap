@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.upk — Unreal package v868, 5 names, 2 exports  [0x0+0x68]
+    Tag  [0x0+0x4]
+    File version: 868  [0x4+0x2]
+    Licensee version: 0  [0x6+0x2]
+    Name table — 5 names at 0x40  [0x40+0x0]
+    Export table — 2 exports at 0x80
+    Import table — 1 imports at 0x0

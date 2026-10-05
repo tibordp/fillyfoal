@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ frame.cin — Cineon V4.5, 2×2  [0x0+0x408]
+    Magic: 0x802a5fd7  [0x0+0x4]
+    Image data offset: 0x400  [0x4+0x4]
+    Generic header size: 1024  [0x8+0x4]
+    Industry header size: 0  [0xc+0x4]
+    User data size: 0  [0x10+0x4]
+    File size: 1032  [0x14+0x4]
+    Version: "V4.5"  [0x18+0x8]
+    File name: ""  [0x20+0x64]
+    Creation date: ""  [0x84+0xc]
+    Creation time: ""  [0x90+0xc]
+    Image data  [0x400+0x8]

@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.ym — "Fillyfoal ST" by Composer, 0:02  [0x0+0x686]
+    Magic: "YM5!"  [0x0+0x4]
+    Check string: "LeOnArD!"  [0x4+0x8]
+    Frames: 100  [0xc+0x4]
+    Attributes: 0x1  [0x10+0x4]
+    Digidrums: 0  [0x14+0x2]
+    Master clock (Hz): 2000000  [0x16+0x4]
+    Frame rate (Hz): 50  [0x1a+0x2]
+    Loop frame: 0  [0x1c+0x4]
+    Extra data size: 0  [0x20+0x2]
+    Song name: "Fillyfoal ST"  [0x22+0xd]
+    Author: "Composer"  [0x2f+0x9]
+    Comment: "Test tune"  [0x38+0xa]
+    Register frames  [0x42+0x644]

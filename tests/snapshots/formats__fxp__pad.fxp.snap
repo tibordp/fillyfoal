@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pad.fxp — VST data for plugin 'FfoL', 2 entries  [0x0+0x40]
+    Chunk magic: "CcnK"  [0x0+0x4]
+    Byte size: 60  [0x4+0x4]
+    FX magic: 0x4678436b (unknown)  [0x8+0x4]
+    Format version: 1  [0xc+0x4]
+    Plugin ID: "FfoL"  [0x10+0x4]
+    Plugin version: 1  [0x14+0x4]
+    Parameters / programs: 2  [0x18+0x4]
+    Data  [0x1c+0x24]

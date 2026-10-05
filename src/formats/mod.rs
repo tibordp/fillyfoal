@@ -48,6 +48,23 @@ pub mod sqlite;
 // -- disk images & filesystems --
 // -- end disk images --
 
+// -- retro & consoles --
+pub mod retro;
+// -- end retro --
+
+// -- games, 3D, science, e-books, misc --
+pub mod games;
+pub mod models;
+pub mod science;
+pub mod ebooks;
+pub mod security;
+pub mod system;
+pub mod graphics;
+pub mod packages;
+pub mod archives2;
+pub mod misc2;
+// -- end misc --
+
 // -- text --
 // -- end text --
 
@@ -62,11 +79,17 @@ pub const TAIL_LEN: u64 = 0x400;
 pub struct Input {
     pub span: Span,
     pub nesting: u32,
+    /// The region this input is embedded in (itself, for the root).
+    pub outer: Span,
 }
 
 impl Input {
     pub fn root(span: Span) -> Self {
-        Input { span, nesting: 0 }
+        Input {
+            span,
+            nesting: 0,
+            outer: span,
+        }
     }
 
     /// An input embedded in this one.
@@ -74,6 +97,7 @@ impl Input {
         Input {
             span,
             nesting: self.nesting.saturating_add(1),
+            outer: self.span,
         }
     }
 }
@@ -180,7 +204,10 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
-    // ZIP-based formats before plain ZIP.
+    // ZIP-based formats before plain ZIP (more specific ones first).
+    &zip::AAR,
+    &zip::XLSB,
+    &zip::SNUPKG,
     &zip::EPUB,
     &zip::ODT,
     &zip::ODS,
@@ -201,9 +228,189 @@ pub static FORMATS: &[&Format] = &[
     &zip::THREE_MF,
     &zip::SKETCH,
     &zip::USDZ,
+    &zip::KRITA,
+    &zip::ORA,
+    &zip::IDML,
+    &zip::ODF_FORMULA,
+    &zip::ODB,
+    &zip::IWORK,
+    &zip::APPX,
+    &zip::XAP,
+    &zip::FBZ,
+    &zip::CBZ,
+    &zip::GEOGEBRA,
+    &zip::DWFX,
+    &zip::MCPACK,
+    &zip::SCRATCH,
     &zip::JAR,
     &zip::FORMAT,
     // -- end archives --
+
+    // -- retro & consoles --
+    &retro::consoles::NES,
+    &retro::consoles::FDS,
+    &retro::consoles::GBC,
+    &retro::consoles::GB,
+    &retro::consoles::GBA,
+    &retro::consoles::NDS,
+    &retro::consoles::N64,
+    &retro::consoles::GENESIS,
+    &retro::consoles::PSX_EXE,
+    &retro::consoles::PBP,
+    &retro::consoles::SFO,
+    &retro::consoles::XBE,
+    &retro::consoles::WII,
+    &retro::consoles::GAMECUBE,
+    &retro::consoles::NRO,
+    &retro::consoles::NSO,
+    &retro::consoles::THREEDSX,
+    &retro::consoles::NCSD,
+    &retro::consoles::NCCH,
+    &retro::consoles::LYNX,
+    &retro::consoles::A7800,
+    &retro::consoles::SNES,
+    &retro::music::NSF,
+    &retro::music::NSFE,
+    &retro::music::GBS,
+    &retro::music::SPC,
+    &retro::music::VGM,
+    &retro::music::PSF,
+    &retro::music::SID,
+    &retro::music::HES,
+    &retro::music::KSS,
+    &retro::music::AY,
+    &retro::music::SAP,
+    &retro::music::YM,
+    &retro::computers::T64,
+    &retro::computers::CRT,
+    &retro::computers::AMIGA_HUNK,
+    &retro::computers::TZX,
+    &retro::computers::CPC_DSK,
+    &retro::computers::MSA,
+    &retro::computers::ATR,
+    &retro::computers::WOZ,
+    &retro::computers::TWO_IMG,
+    &retro::computers::UEF,
+    &retro::computers::ADF,
+    &retro::computers::D64,
+    // -- end retro --
+
+    // -- games, 3D, science, e-books, misc --
+    &games::WAD,
+    &games::PAK,
+    &games::WAD2,
+    &games::VPK,
+    &games::MDL,
+    &games::MD2,
+    &games::MD3,
+    &games::UNREAL,
+    &games::BSP,
+    &models::GLB,
+    &models::FBX,
+    &models::BLEND,
+    &models::USDC,
+    &models::VOX,
+    &models::PLY,
+    &models::DWG,
+    &models::THREE_DS,
+    &models::STL_ASCII,
+    &models::DXF,
+    &science::FITS,
+    &science::DICOM,
+    &science::SHX,
+    &science::SHP,
+    &science::LAS,
+    &science::GRIB,
+    &science::BUFR,
+    &science::DBF,
+    &ebooks::MOBI,
+    &ebooks::PALMDOC,
+    &ebooks::DJVU,
+    &ebooks::LIT,
+    &security::KDBX,
+    &security::KDB,
+    &security::OPENSSH_KEY,
+    &security::KEYBOX,
+    &security::KEYCHAIN,
+    &security::ANDROID_BACKUP,
+    &system::DTB,
+    &system::BZIMAGE,
+    &system::JOURNAL,
+    &system::REDIS_RDB,
+    &system::PST,
+    &system::DOTNET_RESOURCES,
+    &system::SNOOP,
+    &system::ACPI,
+    &graphics::EMF,
+    &graphics::DPX,
+    &graphics::CINEON,
+    &graphics::VTF,
+    &graphics::PVR,
+    &graphics::ASTC,
+    &graphics::PKM,
+    &graphics::ASE,
+    &graphics::GBR,
+    &graphics::GPAT,
+    &graphics::PDN,
+    &graphics::BPG,
+    &graphics::FLIF,
+    &graphics::JXR,
+    &graphics::WMF,
+    &graphics::ACO,
+    &packages::GODOT_PCK,
+    &packages::UNITYFS,
+    &packages::GAMEMAKER,
+    &packages::RPA,
+    &packages::APPLE_ARCHIVE,
+    &packages::LZFSE,
+    &packages::PBZX,
+    &packages::LZOP,
+    &packages::LRZIP,
+    &packages::ZSTD_DICT,
+    &packages::POWERPACKER,
+    &packages::ZPAQ,
+    &packages::PGS,
+    &archives2::SARC,
+    &archives2::YAZ0,
+    &archives2::U8,
+    &archives2::NARC,
+    &archives2::PSARC,
+    &archives2::XNB,
+    &archives2::BSA,
+    &archives2::BA2,
+    &archives2::MPQ,
+    &archives2::RGSSAD,
+    &archives2::FXP,
+    &archives2::FLP,
+    &archives2::GUITAR_PRO,
+    &archives2::UNREAL_PAK,
+    &misc2::DVI,
+    &misc2::WORDPERFECT,
+    &misc2::WRITE,
+    &misc2::ONENOTE,
+    &misc2::FRAMEMAKER,
+    &misc2::WARC,
+    &misc2::AGE,
+    &misc2::BITCOIN_BLOCKS,
+    &misc2::BTSNOOP,
+    &misc2::NETMON,
+    &misc2::OTA_PAYLOAD,
+    &misc2::REGISTRY_POL,
+    &misc2::ESE,
+    &misc2::BOMSTORE,
+    &misc2::SDB,
+    &misc2::SPSS,
+    &misc2::SAS7BDAT,
+    &misc2::STATA,
+    &misc2::ROOT,
+    &misc2::NIFTI,
+    &misc2::NRRD,
+    &misc2::HDF4,
+    &misc2::VTK,
+    &ebooks::PDB,
+    // Weak, size-based probes last.
+    &models::STL,
+    // -- end misc --
 
     // -- text (generic probes, keep last) --
     // -- end text --

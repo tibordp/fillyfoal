@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ box.glb — glTF 2 by fillyfoal fixture  [0x0+0x88]
+  ▾ Header  [0x0+0xc]
+      Magic: "glTF"  [0x0+0x4]
+      Version: 2  [0x4+0x4]
+      Total length: 136  [0x8+0x4]
+  ▾ JSON chunk — 96 bytes  [0x14+0x60] → 0xc+0x68
+      ! unsupported: unrecognized format [0x14+0x60]
+    BIN chunk — 12 bytes  [0x7c+0xc] → 0x74+0x14

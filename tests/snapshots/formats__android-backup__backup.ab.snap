@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ backup.ab — Android backup v5, compressed  [0x0+0xa7]
+    Magic: "ANDROID BACKUP"  [0x0+0xf]
+    Version: "5"  [0xf+0x2]
+    Compressed: "1"  [0x11+0x2]
+    Encryption: "none"  [0x13+0x5]
+  ▾ Payload (tar) — 0x2800 bytes decompressed  [0x18+0x8f]
+      Data  [#1:0x0+0x2800]

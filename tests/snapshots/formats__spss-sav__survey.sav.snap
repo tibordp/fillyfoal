@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ survey.sav — SPSS, 120 cases, SPSS DATA FILE MS Windows 25.0.0.0 (06 Oct 26 00:59:59)  [0x0+0xd0]
+    Record type: "$FL2"  [0x0+0x4]
+    Product name: "@(#) SPSS DATA FILE MS Windows 25.0.0.0                     "  [0x4+0x3c]
+    Layout code: 2  [0x40+0x4]
+    Nominal case size: 4  [0x44+0x4]
+    Compression: bytecode (0x1)  [0x48+0x4]
+    Weight variable index: 0  [0x4c+0x4]
+    Number of cases: 120  [0x50+0x4]
+    Compression bias: 100  [0x54+0x8]
+    Creation date: "06 Oct 26"  [0x5c+0x9]
+    Creation time: "00:59:59"  [0x65+0x8]
+    File label: "Fillyfoal survey                                                "  [0x6d+0x40]
+    Padding: 00 00 00  |...|  [0xad+0x3]
+    Dictionary and data  [0xb0+0x20]
