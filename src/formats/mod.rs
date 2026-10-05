@@ -22,6 +22,7 @@ pub mod bzip2;
 pub mod cab;
 pub mod compress;
 pub mod cpio;
+pub mod dmg;
 pub mod gzip;
 pub mod lha;
 pub mod lz4;
@@ -157,6 +158,7 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
+    &dmg::FORMAT,
     &tar::FORMAT,
     &bzip2::FORMAT,
     &xz::FORMAT,
