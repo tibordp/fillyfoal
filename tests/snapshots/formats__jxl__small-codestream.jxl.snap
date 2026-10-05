@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ small-codestream.jxl — 8×8, codestream  [0x0+0x14]
+    Signature — FF 0A  [0x0+0x2]
+  ▾ Size header — 8×8  [0x2+0x2]
+      Width: 8  [0x2+0x2]
+      Height: 8  [0x2+0x2]
+    Image metadata, frames  [0x4+0x10]

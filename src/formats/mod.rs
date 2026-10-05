@@ -141,6 +141,8 @@ pub static FORMATS: &[&Format] = &[
     &image::exr::FORMAT,
     &image::xcf::FORMAT,
     &image::icns::FORMAT,
+    &image::j2k::FORMAT,
+    &image::jxl::FORMAT,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
     &image::sgi::FORMAT,
