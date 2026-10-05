@@ -48,15 +48,15 @@ impl Brand {
         match self {
             Brand::Mp4 => "MP4",
             Brand::M4a => "MPEG-4 audio",
-            Brand::M4v => "MPEG-4 video (Apple)",
-            Brand::Mov => "QuickTime movie",
+            Brand::M4v => "MPEG-4 video",
+            Brand::Mov => "QuickTime",
             Brand::ThreeGp => "3GPP",
             Brand::ThreeG2 => "3GPP2",
             Brand::Heif => "HEIF",
             Brand::Avif => "AVIF",
             Brand::Cr3 => "Canon CR3",
             Brand::Jp2 => "JPEG 2000",
-            Brand::Jpx => "JPEG 2000 (JPX)",
+            Brand::Jpx => "JPEG 2000 extended",
             Brand::Mj2 => "Motion JPEG 2000",
         }
     }
@@ -404,7 +404,8 @@ async fn expand_box(cx: Cx, st: BoxState) -> Result<()> {
     f.u32("Size")
         .with(|&s, n| if s == 0 { n.summary("to end of container") } else { n })
         .emit()?;
-    f.ascii("Type", 4).emit()?;
+    f.node(text("Type", f.peek_span(4), h.name()));
+    f.skip(4);
     if h.header_len >= 16 && u32_be(&block.data, 0) == Some(1) {
         f.u64("Large size").emit()?;
     }

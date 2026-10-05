@@ -311,7 +311,7 @@ async fn iloc(cx: &Cx, st: &BoxState) -> Result<()> {
     cx.emit(
         Node::new("Items")
             .span(body.tail(state.start))
-            .summary(format!("{count} items"))
+            .summary(crate::formats::vidutil::plural(count, "item"))
             .lazy(iloc_items, state),
     );
     Ok(())
@@ -535,7 +535,7 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     };
     match kind {
         b"pitm" => Some(format!("item {}", id(4, v == 0)?)),
-        b"iinf" => Some(format!("{} items", id(4, v == 0)?)),
+        b"iinf" => Some(crate::formats::vidutil::plural(id(4, v == 0)?, "item")),
         b"infe" if v >= 2 => {
             let item = id(4, v == 2)?;
             let at: usize = if v == 2 { 8 } else { 10 };
@@ -547,8 +547,8 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
                 format!("item {item}: {} \"{name}\"", fourcc(t))
             })
         }
-        b"iloc" => Some(format!("{} items", id(6, v < 2)?)),
-        b"ipma" => Some(format!("{} items", u32_be(&d, 4)?)),
+        b"iloc" => Some(crate::formats::vidutil::plural(id(6, v < 2)?, "item")),
+        b"ipma" => Some(crate::formats::vidutil::plural(u32_be(&d, 4)?, "item")),
         b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
         b"irot" => Some(format!("{}°", u16::from(v & 3).saturating_mul(90))),
         b"pixi" => Some(format!(
@@ -576,7 +576,7 @@ pub async fn summary(cx: &Cx, meta: Span) -> Result<Option<String>> {
         }
         None => None,
     };
-    let mut parts = vec![format!("{} items", types.len())];
+    let mut parts = vec![crate::formats::vidutil::plural(crate::bytes::to_u64(types.len()), "item")];
     if let Some(p) = primary {
         let kind = types
             .iter()

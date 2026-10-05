@@ -360,8 +360,8 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let n = u32_be(&d, 4)?;
             let first = d.get(12..16).map(fourcc);
             Some(match (kind, first) {
-                (b"stsd", Some(t)) if n > 0 => format!("{n} entries: {t}"),
-                _ => format!("{n} entries"),
+                (b"stsd", Some(t)) if n > 0 => format!("{}: {t}", super::tables::entries(n.into())),
+                _ => super::tables::entries(n.into()),
             })
         }
         b"mfhd" => Some(format!("sequence {}", u32_be(&d, 4)?)),

@@ -46,6 +46,16 @@ pub fn seconds_f64(seconds: f64) -> String {
     seconds_ms(millis)
 }
 
+/// `n` followed by a noun, pluralised with an `s` unless `n` is 1.
+pub fn plural(n: impl Into<u64>, noun: &str) -> String {
+    let n = n.into();
+    if n == 1 {
+        format!("1 {noun}")
+    } else {
+        format!("{n} {noun}s")
+    }
+}
+
 /// A four-character code, with non-printable bytes escaped.
 pub fn fourcc(bytes: &[u8]) -> String {
     let mut out = String::new();
@@ -574,7 +584,11 @@ pub fn table<E: Entry>(
 ) -> Node {
     Node::new(name)
         .span(span)
-        .summary(format!("{count} entries"))
+        .summary(if count == 1 {
+            "1 entry".to_owned()
+        } else {
+            format!("{count} entries")
+        })
         .lazy(expand_table::<E>, Table {
             span,
             count,

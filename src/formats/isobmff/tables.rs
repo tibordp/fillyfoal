@@ -316,7 +316,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             let entries = body.tail(at);
             let mut node = Node::new("Samples")
                 .span(entries)
-                .summary(format!("{count} samples"));
+                .summary(crate::formats::vidutil::plural(count, "sample"));
             if stride > 0 {
                 node = node.lazy(trun_samples, (entries, u64::from(count), flags));
             }
@@ -381,9 +381,9 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let size = u32_be(&d, 4)?;
             let n = u32_be(&d, 8)?;
             Some(if size == 0 {
-                format!("{n} samples")
+                crate::formats::vidutil::plural(n, "sample")
             } else {
-                format!("{n} samples of {size} bytes")
+                format!("{} of {size} bytes", crate::formats::vidutil::plural(n, "sample"))
             })
         }
         b"sidx" => Some(format!(
@@ -395,8 +395,17 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             u32_be(&d, if wide { 12 } else { 8 })?,
             crate::formats::vidutil::fourcc(d.get(4..8)?)
         )),
-        b"trun" => Some(format!("{} samples", u32_be(&d, at)?)),
-        _ => Some(format!("{} entries", u32_be(&d, at)?)),
+        b"trun" => Some(crate::formats::vidutil::plural(u32_be(&d, at)?, "sample")),
+        _ => Some(entries(u32_be(&d, at)?.into())),
+    }
+}
+
+/// "1 entry", "2 entries".
+pub fn entries(n: u64) -> String {
+    if n == 1 {
+        "1 entry".to_owned()
+    } else {
+        format!("{n} entries")
     }
 }
 
