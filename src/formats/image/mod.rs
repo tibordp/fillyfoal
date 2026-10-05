@@ -6,9 +6,11 @@
 pub mod bmp;
 pub mod farbfeld;
 pub mod gif;
+pub mod hdr;
 pub mod ico;
 pub mod jpeg;
 pub mod pcx;
+pub mod pnm;
 pub mod psd;
 pub mod qoi;
 pub mod sgi;
@@ -16,6 +18,7 @@ pub mod sunras;
 pub mod tga;
 pub mod tiff;
 mod tiff_tags;
+pub mod xbm;
 
 use std::borrow::Cow;
 
