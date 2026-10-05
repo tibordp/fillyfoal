@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Bom  [0x0+0x26a]
+  ▾ Header  [0x0+0x20]
+      Magic: "BOMStore"  [0x0+0x8]
+      Version: 1  [0x8+0x4]
+      Non-null blocks: 1  [0xc+0x4]
+      Block index offset: 0x200  [0x10+0x4]
+      Block index length: 20  [0x14+0x4]
+      Variables offset: 0x214  [0x18+0x4]
+      Variables length: 16  [0x1c+0x4]
+    ! truncated: needed 0x8 bytes at 0x21d, only 0x7 available [0x21d+0x8]

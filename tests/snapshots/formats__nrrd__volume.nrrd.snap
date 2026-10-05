@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ volume.nrrd — NRRD 4×3 uint8, raw encoding  [0x0+0x54]
+    Magic: "NRRD0004"  [0x0+0x9]
+    type: "uint8"  [0x15+0xc]
+    dimension: "2"  [0x21+0xd]
+    sizes: "4 3"  [0x2e+0xb]
+    encoding: "raw"  [0x39+0xe]
+    Data  [0x48+0xc]

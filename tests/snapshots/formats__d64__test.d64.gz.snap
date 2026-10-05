@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.d64 — "FILLYFOAL DISK", ID FF  [0x0+0x2ab00]
+    BAM and disk header  [0x16500+0x100]
+    Disk name: "FILLYFOAL DISK"  [0x16590+0x10]
+    Disk ID: "FF"  [0x165a2+0x2]
+  ▾ Directory
+    ▾ HELLO — PRG, 2 blocks  [0x16600+0x20]
+        Load address: 0x801  [#1:0x0+0x2]
+        Contents — 354 bytes in 2 sectors  [#1:0x0+0x162]
+    ▾ NOTES — SEQ, 1 blocks  [0x16620+0x20]
+        Load address: 0x6568  [#2:0x0+0x2]
+        Contents — 19 bytes in 1 sectors  [#2:0x0+0x13]

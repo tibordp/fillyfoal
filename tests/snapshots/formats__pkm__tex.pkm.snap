@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tex.pkm — PKM 10, 8×8  [0x0+0x30]
+    Magic: "PKM "  [0x0+0x4]
+    Version: "10"  [0x4+0x2]
+    Format: ETC1 RGB (0x0)  [0x6+0x2]
+    Padded width: 8  [0x8+0x2]
+    Padded height: 8  [0xa+0x2]
+    Width: 8  [0xc+0x2]
+    Height: 8  [0xe+0x2]
+    Texture data  [0x10+0x20]

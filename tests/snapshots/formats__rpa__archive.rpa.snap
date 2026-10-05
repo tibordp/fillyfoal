@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ archive.rpa — RPA-3.0, key 00000042  [0x0+0x72]
+    Header: "RPA-3.0 000000000000002e 00000042"  [0x0+0x22]
+  ▾ Index (pickle) — 0x3c bytes decompressed  [0x2e+0x44]
+      Data  [#1:0x0+0x3c]

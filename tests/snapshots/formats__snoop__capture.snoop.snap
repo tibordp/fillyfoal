@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ capture.snoop — snoop v2, Ethernet, 1 packets  [0x0+0x64]
+    Magic: "snoop"  [0x0+0x8]
+    Version: 2  [0x8+0x4]
+    Datalink type: Ethernet (0x4)  [0xc+0x4]
+    Packet 1: 2023-11-14 22:13:20 UTC — 60/60 bytes, +500 µs  [0x10+0x54]

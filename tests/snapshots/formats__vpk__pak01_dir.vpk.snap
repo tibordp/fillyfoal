@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pak01_dir.vpk — VPK v1  [0x0+0x5e]
+  ▾ Header  [0x0+0xc]
+      Signature: 0x55aa1234  [0x0+0x4]
+      Version: 1  [0x4+0x4]
+      Directory tree size: 69  [0x8+0x4]
+  ▾ Directory tree  [0xc+0x45]
+    ▾ docs/readme.txt — 13 bytes  [0x51+0xd] → 0x15+0x19
+        ! unsupported: unrecognized format [0x51+0xd]
+    ▾ notes.txt — 5 preloaded bytes  [0x49+0x5] → 0x31+0x1d
+        ! unsupported: unrecognized format [0x49+0x5]
