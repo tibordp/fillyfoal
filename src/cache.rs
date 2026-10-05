@@ -58,7 +58,9 @@ impl ByteCache {
         }
         let first = self.chunk_index(start);
         let last = self.chunk_index(end.saturating_sub(1));
-        let missing: Vec<u64> = (first..=last).filter(|&i| !self.contains(source, i)).collect();
+        let missing: Vec<u64> = (first..=last)
+            .filter(|&i| !self.contains(source, i))
+            .collect();
         if !missing.is_empty() {
             return Err(missing);
         }

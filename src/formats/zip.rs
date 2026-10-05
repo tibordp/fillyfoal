@@ -37,58 +37,188 @@ macro_rules! zip_variant {
     };
 }
 
-zip_variant!(EPUB, "epub", "EPUB e-book", ["epub"], "application/epub+zip",
-    |h| mimetype(h, b"application/epub+zip"));
-zip_variant!(ODT, "odt", "OpenDocument text", ["odt", "ott"], "application/vnd.oasis.opendocument.text",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.text"));
-zip_variant!(ODS, "ods", "OpenDocument spreadsheet", ["ods", "ots"], "application/vnd.oasis.opendocument.spreadsheet",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.spreadsheet"));
-zip_variant!(ODP, "odp", "OpenDocument presentation", ["odp", "otp"], "application/vnd.oasis.opendocument.presentation",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.presentation"));
-zip_variant!(ODG, "odg", "OpenDocument drawing", ["odg", "otg"], "application/vnd.oasis.opendocument.graphics",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.graphics"));
-zip_variant!(DOCX, "docx", "Office Open XML document", ["docx", "docm", "dotx"], "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    |h| ooxml(h, b"word/"));
-zip_variant!(XLSX, "xlsx", "Office Open XML workbook", ["xlsx", "xlsm", "xltx"], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    |h| ooxml(h, b"xl/"));
-zip_variant!(PPTX, "pptx", "Office Open XML presentation", ["pptx", "pptm", "potx"], "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    |h| ooxml(h, b"ppt/"));
-zip_variant!(VSDX, "vsdx", "Office Open XML drawing (Visio)", ["vsdx"], "application/vnd.ms-visio.drawing",
-    |h| ooxml(h, b"visio/"));
-zip_variant!(XPS, "xps", "XML Paper Specification", ["xps", "oxps"], "application/vnd.ms-xpsdocument",
-    |h| ooxml(h, b"Documents/") || has_entry(h, b"FixedDocSeq.fdseq"));
-zip_variant!(APK, "apk", "Android package", ["apk", "aab"], "application/vnd.android.package-archive",
-    |h| has_entry(h, b"AndroidManifest.xml") || has_entry(h, b"classes.dex"));
-zip_variant!(JAR, "jar", "Java archive", ["jar", "war", "ear"], "application/java-archive",
-    |h| has_entry(h, b"META-INF/MANIFEST.MF") || first_entry(h, b"META-INF/"));
-zip_variant!(XPI, "xpi", "Mozilla extension", ["xpi"], "application/x-xpinstall",
-    |h| has_entry(h, b"install.rdf") || (has_entry(h, b"manifest.json") && has_entry(h, b"META-INF/mozilla")));
-zip_variant!(NUPKG, "nupkg", "NuGet package", ["nupkg", "snupkg"], "application/zip",
-    |h| has_entry_suffix(h, b".nuspec"));
-zip_variant!(VSIX, "vsix", "Visual Studio extension", ["vsix"], "application/zip",
-    |h| has_entry(h, b"extension.vsixmanifest"));
-zip_variant!(WHL, "whl", "Python wheel", ["whl"], "application/zip",
-    |h| has_entry_suffix(h, b".dist-info/WHEEL") || has_entry_suffix(h, b".dist-info/METADATA"));
-zip_variant!(IPA, "ipa", "iOS application archive", ["ipa"], "application/octet-stream",
-    |h| first_entry(h, b"Payload/"));
-zip_variant!(KMZ, "kmz", "Keyhole Markup (zipped)", ["kmz"], "application/vnd.google-earth.kmz",
-    |h| has_entry(h, b"doc.kml"));
-zip_variant!(THREE_MF, "3mf", "3D Manufacturing Format", ["3mf"], "model/3mf",
-    |h| has_entry(h, b"3D/3dmodel.model"));
-zip_variant!(SKETCH, "sketch", "Sketch document", ["sketch"], "application/zip",
-    |h| has_entry(h, b"document.json") && has_entry(h, b"meta.json"));
-zip_variant!(USDZ, "usdz", "Universal Scene Description (zipped)", ["usdz"], "model/vnd.usdz+zip",
-    |h| has_entry_suffix(h, b".usdc") || has_entry_suffix(h, b".usda"));
+zip_variant!(
+    EPUB,
+    "epub",
+    "EPUB e-book",
+    ["epub"],
+    "application/epub+zip",
+    |h| mimetype(h, b"application/epub+zip")
+);
+zip_variant!(
+    ODT,
+    "odt",
+    "OpenDocument text",
+    ["odt", "ott"],
+    "application/vnd.oasis.opendocument.text",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.text")
+);
+zip_variant!(
+    ODS,
+    "ods",
+    "OpenDocument spreadsheet",
+    ["ods", "ots"],
+    "application/vnd.oasis.opendocument.spreadsheet",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.spreadsheet")
+);
+zip_variant!(
+    ODP,
+    "odp",
+    "OpenDocument presentation",
+    ["odp", "otp"],
+    "application/vnd.oasis.opendocument.presentation",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.presentation")
+);
+zip_variant!(
+    ODG,
+    "odg",
+    "OpenDocument drawing",
+    ["odg", "otg"],
+    "application/vnd.oasis.opendocument.graphics",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.graphics")
+);
+zip_variant!(
+    DOCX,
+    "docx",
+    "Office Open XML document",
+    ["docx", "docm", "dotx"],
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    |h| ooxml(h, b"word/")
+);
+zip_variant!(
+    XLSX,
+    "xlsx",
+    "Office Open XML workbook",
+    ["xlsx", "xlsm", "xltx"],
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    |h| ooxml(h, b"xl/")
+);
+zip_variant!(
+    PPTX,
+    "pptx",
+    "Office Open XML presentation",
+    ["pptx", "pptm", "potx"],
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    |h| ooxml(h, b"ppt/")
+);
+zip_variant!(
+    VSDX,
+    "vsdx",
+    "Office Open XML drawing (Visio)",
+    ["vsdx"],
+    "application/vnd.ms-visio.drawing",
+    |h| ooxml(h, b"visio/")
+);
+zip_variant!(
+    XPS,
+    "xps",
+    "XML Paper Specification",
+    ["xps", "oxps"],
+    "application/vnd.ms-xpsdocument",
+    |h| ooxml(h, b"Documents/") || has_entry(h, b"FixedDocSeq.fdseq")
+);
+zip_variant!(
+    APK,
+    "apk",
+    "Android package",
+    ["apk", "aab"],
+    "application/vnd.android.package-archive",
+    |h| has_entry(h, b"AndroidManifest.xml") || has_entry(h, b"classes.dex")
+);
+zip_variant!(
+    JAR,
+    "jar",
+    "Java archive",
+    ["jar", "war", "ear"],
+    "application/java-archive",
+    |h| has_entry(h, b"META-INF/MANIFEST.MF") || first_entry(h, b"META-INF/")
+);
+zip_variant!(
+    XPI,
+    "xpi",
+    "Mozilla extension",
+    ["xpi"],
+    "application/x-xpinstall",
+    |h| has_entry(h, b"install.rdf")
+        || (has_entry(h, b"manifest.json") && has_entry(h, b"META-INF/mozilla"))
+);
+zip_variant!(
+    NUPKG,
+    "nupkg",
+    "NuGet package",
+    ["nupkg", "snupkg"],
+    "application/zip",
+    |h| has_entry_suffix(h, b".nuspec")
+);
+zip_variant!(
+    VSIX,
+    "vsix",
+    "Visual Studio extension",
+    ["vsix"],
+    "application/zip",
+    |h| has_entry(h, b"extension.vsixmanifest")
+);
+zip_variant!(
+    WHL,
+    "whl",
+    "Python wheel",
+    ["whl"],
+    "application/zip",
+    |h| has_entry_suffix(h, b".dist-info/WHEEL") || has_entry_suffix(h, b".dist-info/METADATA")
+);
+zip_variant!(
+    IPA,
+    "ipa",
+    "iOS application archive",
+    ["ipa"],
+    "application/octet-stream",
+    |h| first_entry(h, b"Payload/")
+);
+zip_variant!(
+    KMZ,
+    "kmz",
+    "Keyhole Markup (zipped)",
+    ["kmz"],
+    "application/vnd.google-earth.kmz",
+    |h| has_entry(h, b"doc.kml")
+);
+zip_variant!(
+    THREE_MF,
+    "3mf",
+    "3D Manufacturing Format",
+    ["3mf"],
+    "model/3mf",
+    |h| has_entry(h, b"3D/3dmodel.model")
+);
+zip_variant!(
+    SKETCH,
+    "sketch",
+    "Sketch document",
+    ["sketch"],
+    "application/zip",
+    |h| has_entry(h, b"document.json") && has_entry(h, b"meta.json")
+);
+zip_variant!(
+    USDZ,
+    "usdz",
+    "Universal Scene Description (zipped)",
+    ["usdz"],
+    "model/vnd.usdz+zip",
+    |h| has_entry_suffix(h, b".usdc") || has_entry_suffix(h, b".usda")
+);
 
 pub static FORMAT: Format = Format {
     name: "zip",
     title: "ZIP archive",
     extensions: &["zip", "zipx", "cbz", "crx"],
     mime: "application/zip",
-    probe: Probe::Magic(&[(0, b"PK\x03\x04"), (0, b"PK\x05\x06"), (0, b"PK\x07\x08PK\x03\x04")]),
+    probe: Probe::Magic(&[
+        (0, b"PK\x03\x04"),
+        (0, b"PK\x05\x06"),
+        (0, b"PK\x07\x08PK\x03\x04"),
+    ]),
     dissect: crate::expander!(dissect: Input),
 };
-
 
 /// File names of the local headers found in the probe window.
 fn entry_names<'a>(h: &'a Head<'_>) -> impl Iterator<Item = &'a [u8]> {
@@ -139,10 +269,12 @@ fn first_entry(h: &Head<'_>, prefix: &[u8]) -> bool {
 
 /// OpenDocument and EPUB store an uncompressed `mimetype` entry first.
 fn mimetype(h: &Head<'_>, mime: &[u8]) -> bool {
-    is_zip(h) && h.at(30, b"mimetype") && h.data.get(38..).is_some_and(|rest| {
-        let extra = usize::from(u16_le(h.data, 28).unwrap_or(0));
-        rest.get(extra..).is_some_and(|r| r.starts_with(mime))
-    })
+    is_zip(h)
+        && h.at(30, b"mimetype")
+        && h.data.get(38..).is_some_and(|rest| {
+            let extra = usize::from(u16_le(h.data, 28).unwrap_or(0));
+            rest.get(extra..).is_some_and(|r| r.starts_with(mime))
+        })
 }
 
 fn ooxml(h: &Head<'_>, part: &[u8]) -> bool {
@@ -289,7 +421,12 @@ record! {
 }
 
 fn dos_time(t: u16) -> String {
-    format!("{:02}:{:02}:{:02}", t >> 11, (t >> 5) & 0x3f, (t & 0x1f).saturating_mul(2))
+    format!(
+        "{:02}:{:02}:{:02}",
+        t >> 11,
+        (t >> 5) & 0x3f,
+        (t & 0x1f).saturating_mul(2)
+    )
 }
 
 fn dos_date(d: u16) -> String {
@@ -346,11 +483,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         size: end.cd_size,
                         entries: end.entries,
                     };
-                    nodes.push(Zip64End::node("ZIP64 End of Central Directory", end_span, LE));
+                    nodes.push(Zip64End::node(
+                        "ZIP64 End of Central Directory",
+                        end_span,
+                        LE,
+                    ));
                 }
                 Err(e) => cx.diag(e),
             }
-            nodes.push(Zip64Locator::node("ZIP64 End of Central Directory Locator", loc_span, LE));
+            nodes.push(Zip64Locator::node(
+                "ZIP64 End of Central Directory Locator",
+                loc_span,
+                LE,
+            ));
         }
     }
 
@@ -435,8 +580,9 @@ async fn central_directory(
         let start = cur.pos();
         let (header, _) = cur.record::<CentralHeader>().await?;
         if u32_le(&header.signature, 0) != Some(CENTRAL) {
-            return Err(Diagnostic::malformed("expected a central directory header")
-                .at(cur.span(4)));
+            return Err(
+                Diagnostic::malformed("expected a central directory header").at(cur.span(4))
+            );
         }
         let name = decode_name(&cur.bytes(header.name_len.into()).await?, header.flags);
         cur.skip(u64::from(header.extra_len).saturating_add(header.comment_len.into()));
@@ -452,7 +598,10 @@ async fn central_directory(
         let summary = if name.ends_with('/') {
             "directory".to_owned()
         } else {
-            format!("{method}, {} → {} bytes", sizes.compressed, sizes.uncompressed)
+            format!(
+                "{method}, {} → {} bytes",
+                sizes.compressed, sizes.uncompressed
+            )
         };
         cx.push(
             Node::new(name)
@@ -541,11 +690,26 @@ fn cp437(b: u8) -> char {
 
 async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> {
     let file = input.span;
-    let header = crate::fields::parse(&cx, span.sub(0, CentralHeader::SIZE), LE, &(), CentralHeader::layout).await?;
-    cx.emit(CentralHeader::node("Central Directory Header", span.sub(0, CentralHeader::SIZE), LE));
+    let header = crate::fields::parse(
+        &cx,
+        span.sub(0, CentralHeader::SIZE),
+        LE,
+        &(),
+        CentralHeader::layout,
+    )
+    .await?;
+    cx.emit(CentralHeader::node(
+        "Central Directory Header",
+        span.sub(0, CentralHeader::SIZE),
+        LE,
+    ));
     let name_span = span.sub(CentralHeader::SIZE, header.name_len.into());
     let name = decode_name(&cx.read(name_span).await?, header.flags);
-    cx.emit(Node::new("File name").span(name_span).value(Value::Text(name)));
+    cx.emit(
+        Node::new("File name")
+            .span(name_span)
+            .value(Value::Text(name)),
+    );
     let extra = span.sub(
         CentralHeader::SIZE.saturating_add(header.name_len.into()),
         header.extra_len.into(),
@@ -626,7 +790,9 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
             cx.emit(
                 Node::new("Compressed data")
                     .span(data)
-                    .diag(Diagnostic::unsupported(format!("compression method {method}"))),
+                    .diag(Diagnostic::unsupported(format!(
+                        "compression method {method}"
+                    ))),
             );
         }
     }
@@ -703,13 +869,20 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
             0 => Codec::Stored,
             8 => Codec::Deflate,
             _ => {
-                cx.push(node.diag(Diagnostic::unsupported("compression method"))).await;
+                cx.push(node.diag(Diagnostic::unsupported("compression method")))
+                    .await;
                 continue;
             }
         };
         cx.push(node.summary(format!("{} bytes", header.uncompressed)).lazy(
             local_entry,
-            (input, header_span, data, codec, u64::from(header.uncompressed)),
+            (
+                input,
+                header_span,
+                data,
+                codec,
+                u64::from(header.uncompressed),
+            ),
         ))
         .await;
     }

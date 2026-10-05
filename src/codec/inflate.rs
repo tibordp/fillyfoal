@@ -10,8 +10,8 @@ use crate::error::{Diagnostic, Result};
 const MAX_BITS: usize = 15;
 
 const LENGTH_BASE: [u16; 29] = [
-    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115,
-    131, 163, 195, 227, 258,
+    3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131,
+    163, 195, 227, 258,
 ];
 const LENGTH_EXTRA: [u8; 29] = [
     0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
@@ -259,12 +259,16 @@ impl Inflate {
                 return Ok(true);
             }
             let index = symbol.saturating_sub(257);
-            let base = LENGTH_BASE.get(index).ok_or_else(|| bad("invalid length symbol"))?;
+            let base = LENGTH_BASE
+                .get(index)
+                .ok_or_else(|| bad("invalid length symbol"))?;
             let extra = LENGTH_EXTRA.get(index).copied().unwrap_or(0);
             let len = usize::from(*base)
                 .saturating_add(usize::try_from(self.bits(input, extra.into())?).unwrap_or(0));
             let d = usize::from(self.decode(input, dist)?);
-            let base = DIST_BASE.get(d).ok_or_else(|| bad("invalid distance symbol"))?;
+            let base = DIST_BASE
+                .get(d)
+                .ok_or_else(|| bad("invalid distance symbol"))?;
             let extra = DIST_EXTRA.get(d).copied().unwrap_or(0);
             let distance = usize::from(*base)
                 .saturating_add(usize::try_from(self.bits(input, extra.into())?).unwrap_or(0));
@@ -284,9 +288,15 @@ impl Inflate {
     }
 
     fn dynamic(&mut self, input: &[u8]) -> Result<State> {
-        let nlen = usize::try_from(self.bits(input, 5)?).unwrap_or(0).saturating_add(257);
-        let ndist = usize::try_from(self.bits(input, 5)?).unwrap_or(0).saturating_add(1);
-        let ncode = usize::try_from(self.bits(input, 4)?).unwrap_or(0).saturating_add(4);
+        let nlen = usize::try_from(self.bits(input, 5)?)
+            .unwrap_or(0)
+            .saturating_add(257);
+        let ndist = usize::try_from(self.bits(input, 5)?)
+            .unwrap_or(0)
+            .saturating_add(1);
+        let ncode = usize::try_from(self.bits(input, 4)?)
+            .unwrap_or(0)
+            .saturating_add(4);
         if nlen > 286 || ndist > 30 {
             return Err(bad("too many length or distance codes"));
         }
@@ -308,7 +318,10 @@ impl Inflate {
                         .checked_sub(1)
                         .and_then(|p| all.get(p).copied())
                         .ok_or_else(|| bad("repeat with no previous length"))?;
-                    (previous, 3usize.saturating_add(self.bits(input, 2)? as usize))
+                    (
+                        previous,
+                        3usize.saturating_add(self.bits(input, 2)? as usize),
+                    )
                 }
                 17 => (0, 3usize.saturating_add(self.bits(input, 3)? as usize)),
                 _ => (0, 11usize.saturating_add(self.bits(input, 7)? as usize)),

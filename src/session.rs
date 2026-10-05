@@ -158,7 +158,11 @@ impl Session {
         limits.chunk_size = limits.chunk_size.max(1);
         // A single read must fit in the cache alongside a little slack, or it
         // could evict its own chunks forever.
-        let floor = to_usize(limits.max_read.saturating_add(limits.chunk_size.saturating_mul(2)));
+        let floor = to_usize(
+            limits
+                .max_read
+                .saturating_add(limits.chunk_size.saturating_mul(2)),
+        );
         limits.cache_bytes = limits.cache_bytes.max(floor);
         let shared = Shared {
             sources: Vec::new(),
@@ -269,7 +273,9 @@ impl Session {
 
     /// The bytes of a derived source, e.g. for a hex view.
     pub fn derived_data(&self, source: SourceId) -> Option<Arc<[u8]>> {
-        lock(&self.shared).source(source).and_then(|s| s.data.clone())
+        lock(&self.shared)
+            .source(source)
+            .and_then(|s| s.data.clone())
     }
 
     /// Adds a top-level node.
@@ -423,7 +429,9 @@ impl Session {
         let source_len = sh.source_len(source);
         let chunk_size = sh.cache.chunk_size();
         let end = offset.saturating_add(to_u64(data.len()));
-        let mut index = sh.cache.chunk_index(offset.saturating_add(chunk_size.saturating_sub(1)));
+        let mut index = sh
+            .cache
+            .chunk_index(offset.saturating_add(chunk_size.saturating_sub(1)));
         loop {
             let start = sh.cache.chunk_start(index);
             if start >= end || start >= source_len {

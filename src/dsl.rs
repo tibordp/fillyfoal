@@ -17,8 +17,8 @@
 //! }
 //! ```
 //!
-//! Field kinds: `u8 u16 u32 u64 i8 i16 i32 i64`, `ascii[N]` (NUL-padded
-//! text), `bytes[N]`, `guid`. Anything after the label is a chain of
+//! Field kinds: `u8 u16 u32 u64 i8 i16 i32 i64 f32 f64`, `ascii[N]`
+//! (NUL-padded text), `utf16[N]` (N code units), `bytes[N]`, `guid`. Anything after the label is a chain of
 //! [`crate::Field`] decorators; closures in decorators can refer to fields
 //! declared earlier (they are local variables).
 //!
@@ -61,6 +61,9 @@ macro_rules! __record_ty {
     (i16) => { i16 };
     (i32) => { i32 };
     (i64) => { i64 };
+    (f32) => { f32 };
+    (f64) => { f64 };
+    (utf16) => { ::std::string::String };
     (ascii) => { ::std::string::String };
     (bytes) => { ::std::vec::Vec<u8> };
     (guid) => { $crate::value::Guid };
@@ -69,26 +72,68 @@ macro_rules! __record_ty {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __record_size {
-    (u8) => { 1u64 };
-    (u16) => { 2u64 };
-    (u32) => { 4u64 };
-    (u64) => { 8u64 };
-    (i8) => { 1u64 };
-    (i16) => { 2u64 };
-    (i32) => { 4u64 };
-    (i64) => { 8u64 };
-    (guid) => { 16u64 };
-    (ascii [$n:expr]) => { ($n) as u64 };
-    (bytes [$n:expr]) => { ($n) as u64 };
+    (u8) => {
+        1u64
+    };
+    (u16) => {
+        2u64
+    };
+    (u32) => {
+        4u64
+    };
+    (u64) => {
+        8u64
+    };
+    (i8) => {
+        1u64
+    };
+    (i16) => {
+        2u64
+    };
+    (i32) => {
+        4u64
+    };
+    (i64) => {
+        8u64
+    };
+    (f32) => {
+        4u64
+    };
+    (f64) => {
+        8u64
+    };
+    (guid) => {
+        16u64
+    };
+    (utf16 [$n:expr]) => {
+        (($n) as u64) * 2
+    };
+    (ascii [$n:expr]) => {
+        ($n) as u64
+    };
+    (bytes [$n:expr]) => {
+        ($n) as u64
+    };
 }
 
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __record_read {
-    ($f:ident, ascii [$n:expr], $label:literal) => { $f.ascii($label, ($n) as u64) };
-    ($f:ident, bytes [$n:expr], $label:literal) => { $f.bytes($label, ($n) as u64) };
-    ($f:ident, guid, $label:literal) => { $f.guid($label) };
-    ($f:ident, $kind:ident, $label:literal) => { $f.int::<$kind>($label) };
+    ($f:ident, ascii [$n:expr], $label:literal) => {
+        $f.ascii($label, ($n) as u64)
+    };
+    ($f:ident, bytes [$n:expr], $label:literal) => {
+        $f.bytes($label, ($n) as u64)
+    };
+    ($f:ident, guid, $label:literal) => {
+        $f.guid($label)
+    };
+    ($f:ident, utf16 [$n:expr], $label:literal) => {
+        $f.utf16($label, ($n) as u64)
+    };
+    ($f:ident, $kind:ident, $label:literal) => {
+        $f.int::<$kind>($label)
+    };
 }
 
 /// Declares a fixed-size record. See the [module docs](crate::dsl).
@@ -232,6 +277,24 @@ impl<'a> Cursor<'a> {
 
     pub async fn u64(&mut self) -> Result<u64> {
         self.int().await
+    }
+
+    /// An unsigned LEB128 value (as in DWARF, WebAssembly, DEX).
+    pub async fn uleb128(&mut self) -> Result<u64> {
+        let data = self.peek(10).await?;
+        let (value, len) = crate::bytes::uleb128(&data)
+            .ok_or_else(|| Diagnostic::malformed("invalid LEB128").at(self.span(10)))?;
+        self.skip(to_u64(len));
+        Ok(value)
+    }
+
+    /// A signed LEB128 value.
+    pub async fn sleb128(&mut self) -> Result<i64> {
+        let data = self.peek(10).await?;
+        let (value, len) = crate::bytes::sleb128(&data)
+            .ok_or_else(|| Diagnostic::malformed("invalid LEB128").at(self.span(10)))?;
+        self.skip(to_u64(len));
+        Ok(value)
     }
 
     /// A NUL-terminated string of at most `max` bytes; advances past the NUL.

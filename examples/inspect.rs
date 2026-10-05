@@ -90,7 +90,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Limits::default()
     });
     let source = session.add_source(len);
-    let root = session.add_root(formats::root(options.file.clone(), Span::new(source, 0, len)));
+    let root = session.add_root(formats::root(
+        options.file.clone(),
+        Span::new(source, 0, len),
+    ));
     let mut driver = Driver::new();
     driver.add(
         source,
@@ -111,7 +114,13 @@ fn main() -> Result<(), Box<dyn Error>> {
             .get(index)
             .ok_or_else(|| format!("no child {index} (have {})", children.ids.len()))?;
     }
-    explore(&mut session, &mut driver, focus, options.depth, options.page)?;
+    explore(
+        &mut session,
+        &mut driver,
+        focus,
+        options.depth,
+        options.page,
+    )?;
 
     print!("{}", render::tree(&session, focus));
     let elapsed = started.elapsed();

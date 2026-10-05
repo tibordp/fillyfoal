@@ -233,13 +233,15 @@ async fn chunk(cx: Cx, (input, span, kind): (Input, Span, String)) -> Result<()>
         "sRGB" => {
             let v = cx.read(data.sub(0, 1)).await?;
             let intent = v.first().copied().unwrap_or(0);
-            cx.emit(Node::new("Rendering intent").span(data.sub(0, 1)).value(
-                Value::Enum {
-                    raw: intent.into(),
-                    bits: 8,
-                    name: crate::value::lookup(RENDERING_INTENT, intent.into()),
-                },
-            ));
+            cx.emit(
+                Node::new("Rendering intent")
+                    .span(data.sub(0, 1))
+                    .value(Value::Enum {
+                        raw: intent.into(),
+                        bits: 8,
+                        name: crate::value::lookup(RENDERING_INTENT, intent.into()),
+                    }),
+            );
         }
         "PLTE" => {
             cx.emit(
@@ -310,7 +312,11 @@ async fn text(cx: &Cx, data: Span, compressed: bool) -> Result<()> {
         cx.emit(node);
     } else {
         let text = cx.read(rest).await?;
-        cx.emit(Node::new("Text").span(rest).value(Value::Text(latin1(&text))));
+        cx.emit(
+            Node::new("Text")
+                .span(rest)
+                .value(Value::Text(latin1(&text))),
+        );
     }
     Ok(())
 }
@@ -362,6 +368,10 @@ fn chunk_kind(kind: &str) -> String {
         "{}, {}, {}",
         if bit(0) { "ancillary" } else { "critical" },
         if bit(1) { "private" } else { "public" },
-        if bit(3) { "safe to copy" } else { "unsafe to copy" }
+        if bit(3) {
+            "safe to copy"
+        } else {
+            "unsafe to copy"
+        }
     )
 }

@@ -149,7 +149,10 @@ fn resource_cycle_is_reported_not_followed() {
 fn embedded_pe_is_dissected() {
     let mut host = Host::with_chunk(fixture(), 4096);
     host.explore_all();
-    assert!(host.render().contains("Content — PE32 executable, I386, WINDOWS_CUI"));
+    assert!(
+        host.render()
+            .contains("Content — PE32 executable, I386, WINDOWS_CUI")
+    );
 }
 
 #[test]
@@ -249,7 +252,11 @@ fn trim_bounds_memory_and_keeps_the_focus() {
     let imports = host.child(host.root, "Import Table").unwrap();
     let kernel32 = host.child(imports, "KERNEL32.dll").unwrap();
     host.session.trim(40, &[kernel32]);
-    assert!(host.session.live_nodes() <= 40, "{} of {before}", host.session.live_nodes());
+    assert!(
+        host.session.live_nodes() <= 40,
+        "{} of {before}",
+        host.session.live_nodes()
+    );
     assert!(host.session.node(kernel32).is_some());
     assert_eq!(host.session.children(kernel32).unwrap().ids.len(), 3);
     // Re-expanding restores the same tree.

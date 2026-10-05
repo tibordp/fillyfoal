@@ -11,10 +11,33 @@ use crate::error::{Diagnostic, Result};
 use crate::node::{Expansion, Node};
 use crate::span::Span;
 
+// Modules, grouped by family. Keep each group sorted; parallel branches
+// touch different groups, so they merge cleanly.
+
+// -- archives & compression --
 pub mod gzip;
-pub mod pe;
-pub mod png;
 pub mod zip;
+// -- end archives --
+
+// -- executables & code --
+pub mod pe;
+// -- end executables --
+
+// -- images --
+pub mod png;
+// -- end images --
+
+// -- audio & video --
+// -- end audio & video --
+
+// -- documents & data --
+// -- end documents --
+
+// -- disk images & filesystems --
+// -- end disk images --
+
+// -- text --
+// -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
 /// a file, such as ISO 9660's volume descriptor at 0x8001.
@@ -96,10 +119,26 @@ pub struct Format {
 
 /// All formats, in probing order: specific before generic.
 pub static FORMATS: &[&Format] = &[
+    // -- executables & code --
     &pe::FORMAT,
+    // -- end executables --
+
+    // -- images --
     &png::FORMAT,
     &png::MNG,
     &png::JNG,
+    // -- end images --
+
+    // -- audio & video --
+    // -- end audio & video --
+
+    // -- documents & data --
+    // -- end documents --
+
+    // -- disk images & filesystems --
+    // -- end disk images --
+
+    // -- archives & compression --
     &gzip::FORMAT,
     // ZIP-based formats before plain ZIP.
     &zip::EPUB,
@@ -124,6 +163,10 @@ pub static FORMATS: &[&Format] = &[
     &zip::USDZ,
     &zip::JAR,
     &zip::FORMAT,
+    // -- end archives --
+
+    // -- text (generic probes, keep last) --
+    // -- end text --
 ];
 
 pub fn by_name(name: &str) -> Option<&'static Format> {
@@ -160,8 +203,7 @@ fn check_nesting(cx: &Cx, input: &Input) -> Result<()> {
     let max = cx.limits().max_nesting;
     if input.nesting > max {
         return Err(
-            Diagnostic::limit(format!("embedded objects nested deeper than {max}"))
-                .at(input.span),
+            Diagnostic::limit(format!("embedded objects nested deeper than {max}")).at(input.span),
         );
     }
     Ok(())

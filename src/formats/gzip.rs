@@ -91,7 +91,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut name = None;
     if header.flags & 0x08 != 0 {
         let (text, span) = cur.cstr(4096).await?;
-        cx.emit(Node::new("Original name").span(span).value(Value::Text(text.clone())));
+        cx.emit(
+            Node::new("Original name")
+                .span(span)
+                .value(Value::Text(text.clone())),
+        );
         name = Some(text);
     }
     if header.flags & 0x10 != 0 {
@@ -101,11 +105,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if header.flags & 0x02 != 0 {
         let start = cur.pos();
         let crc = cur.u16().await?;
-        cx.emit(Node::new("Header CRC16").span(cur.since(start)).value(Value::UInt {
-            value: crc.into(),
-            bits: 16,
-            radix: crate::value::Radix::Hex,
-        }));
+        cx.emit(
+            Node::new("Header CRC16")
+                .span(cur.since(start))
+                .value(Value::UInt {
+                    value: crc.into(),
+                    bits: 16,
+                    radix: crate::value::Radix::Hex,
+                }),
+        );
     }
 
     // Assume a single member: the trailer is the last 8 bytes. Concatenated

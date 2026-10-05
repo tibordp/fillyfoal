@@ -32,6 +32,7 @@ pub fn value(v: &Value) -> String {
             }
             format!("{raw:#x} [{}]", parts.join(" | "))
         }
+        Value::Float(f) => format!("{f}"),
         Value::Timestamp { unix_seconds } => timestamp(*unix_seconds),
         Value::Text(s) => format!("{s:?}"),
         Value::Bytes(b) => bytes(b),
@@ -54,7 +55,13 @@ fn bytes(b: &[u8]) -> String {
     let ascii: String = b
         .iter()
         .take(MAX)
-        .map(|&c| if c.is_ascii_graphic() || c == b' ' { char::from(c) } else { '.' })
+        .map(|&c| {
+            if c.is_ascii_graphic() || c == b' ' {
+                char::from(c)
+            } else {
+                '.'
+            }
+        })
         .collect();
     let _ = write!(out, "  |{ascii}|");
     out

@@ -143,7 +143,8 @@ impl Cx {
                     Poll::Ready(Ok(data))
                 }
                 Err(missing) => {
-                    sh.wanted.extend(missing.into_iter().map(|i| (span.source, i)));
+                    sh.wanted
+                        .extend(missing.into_iter().map(|i| (span.source, i)));
                     sh.stop = Some(Stop::Bytes);
                     Poll::Pending
                 }
@@ -181,7 +182,10 @@ impl Cx {
             if let Some(n) = data.iter().position(|&b| b == 0) {
                 text.extend_from_slice(data.get(..n).unwrap_or_default());
                 let len = to_u64(text.len()).saturating_add(1);
-                return Ok((String::from_utf8_lossy(&text).into_owned(), span.sub(0, len)));
+                return Ok((
+                    String::from_utf8_lossy(&text).into_owned(),
+                    span.sub(0, len),
+                ));
             }
             text.extend_from_slice(&data);
             if to_u64(data.len()) < window.len {

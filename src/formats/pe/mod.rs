@@ -38,7 +38,9 @@ const IMAGE_FILE_DLL: u16 = 0x2000;
 pub static FORMAT: Format = Format {
     name: "pe",
     title: "Portable Executable (EXE, DLL, SYS, EFI)",
-    extensions: &["exe", "dll", "sys", "efi", "scr", "ocx", "cpl", "drv", "mui"],
+    extensions: &[
+        "exe", "dll", "sys", "efi", "scr", "ocx", "cpl", "drv", "mui",
+    ],
     mime: "application/vnd.microsoft.portable-executable",
     probe: Probe::Magic(&[(0, b"MZ")]),
     dissect: crate::expander!(dissect: Input),
@@ -129,7 +131,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     if let (Some(rva), Some(size)) = (
         u32_le(&directories, DIR_RESOURCE.saturating_mul(8)),
-        u32_le(&directories, DIR_RESOURCE.saturating_mul(8).saturating_add(4)),
+        u32_le(
+            &directories,
+            DIR_RESOURCE.saturating_mul(8).saturating_add(4),
+        ),
     ) && rva != 0
         && size != 0
         && let Ok(Some(span)) = find_version(&cx, &pe, rva).await
@@ -157,7 +162,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     "{:#x} bytes after the last section",
                     file.len.saturating_sub(end)
                 ))
-                .desc("Data appended to the image; installers and self-extractors keep payloads here"),
+                .desc(
+                    "Data appended to the image; installers and self-extractors keep payloads here",
+                ),
         );
     }
     Ok(())
@@ -211,7 +218,13 @@ struct Section {
 
 impl Section {
     fn summary(&self) -> String {
-        let flag = |bit: u32, c: char| if self.characteristics & bit != 0 { c } else { '-' };
+        let flag = |bit: u32, c: char| {
+            if self.characteristics & bit != 0 {
+                c
+            } else {
+                '-'
+            }
+        };
         format!(
             "{}{}{}  VA {:#x}+{:#x}, file {:#x}+{:#x}",
             flag(SCN_MEM_READ, 'r'),
@@ -303,18 +316,29 @@ async fn read_name(cx: &Cx, pe: &PeInfo, rva: u32) -> Result<(String, Span)> {
 
 fn dos_header(f: &mut Fields<'_>, file: &Span) -> Result<u32> {
     f.ascii("e_magic", 2).desc("\"MZ\"").emit()?;
-    f.u16("e_cblp").desc("Bytes on the last page of the file").emit()?;
+    f.u16("e_cblp")
+        .desc("Bytes on the last page of the file")
+        .emit()?;
     f.u16("e_cp").desc("Pages in the file").emit()?;
     f.u16("e_crlc").desc("Relocations").emit()?;
-    f.u16("e_cparhdr").desc("Size of the header in paragraphs").emit()?;
-    f.u16("e_minalloc").desc("Minimum extra paragraphs needed").emit()?;
-    f.u16("e_maxalloc").desc("Maximum extra paragraphs needed").emit()?;
+    f.u16("e_cparhdr")
+        .desc("Size of the header in paragraphs")
+        .emit()?;
+    f.u16("e_minalloc")
+        .desc("Minimum extra paragraphs needed")
+        .emit()?;
+    f.u16("e_maxalloc")
+        .desc("Maximum extra paragraphs needed")
+        .emit()?;
     f.u16("e_ss").hex().desc("Initial (relative) SS").emit()?;
     f.u16("e_sp").hex().desc("Initial SP").emit()?;
     f.u16("e_csum").hex().desc("Checksum").emit()?;
     f.u16("e_ip").hex().desc("Initial IP").emit()?;
     f.u16("e_cs").hex().desc("Initial (relative) CS").emit()?;
-    f.u16("e_lfarlc").hex().desc("File offset of the relocation table").emit()?;
+    f.u16("e_lfarlc")
+        .hex()
+        .desc("File offset of the relocation table")
+        .emit()?;
     f.u16("e_ovno").desc("Overlay number").emit()?;
     f.bytes("e_res", 8).emit()?;
     f.u16("e_oemid").hex().emit()?;
@@ -655,7 +679,13 @@ fn export_directory(f: &mut Fields<'_>, pe: &Pe) -> Result<ExportDirectory> {
 
 async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     let span = pe.rva_span(dir.rva, 40)?;
-    cx.emit(struct_node("Export Directory", span, LE, pe.clone(), export_directory));
+    cx.emit(struct_node(
+        "Export Directory",
+        span,
+        LE,
+        pe.clone(),
+        export_directory,
+    ));
     let ed = parse(&cx, span, LE, &pe, export_directory).await?;
     match read_name(&cx, &pe, ed.name).await {
         Ok((name, at)) => {
@@ -672,10 +702,7 @@ async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     Ok(())
 }
 
-async fn export_functions(
-    cx: Cx,
-    (pe, dir, ed): (Pe, Directory, ExportDirectory),
-) -> Result<()> {
+async fn export_functions(cx: Cx, (pe, dir, ed): (Pe, Directory, ExportDirectory)) -> Result<()> {
     let address_table = pe.table(ed.address_of_functions, ed.functions, 4)?;
     let addresses = cx.read(address_table).await?;
     let names = cx.read(pe.table(ed.address_of_names, ed.names, 4)?).await?;
@@ -722,7 +749,9 @@ async fn export_functions(
         cx.push(node).await;
     }
     for index in unnamed {
-        let ordinal = ed.base.saturating_add(u32::try_from(index).unwrap_or(u32::MAX));
+        let ordinal = ed
+            .base
+            .saturating_add(u32::try_from(index).unwrap_or(u32::MAX));
         let node = exports.entry(&cx, index, format!("#{ordinal}")).await;
         cx.push(node).await;
     }
@@ -1032,7 +1061,10 @@ async fn resource_name(cx: &Cx, pe: &PeInfo, base: u32, offset: u32) -> Result<S
     let len = cx.read(pe.rva_exact(rva, 2)?).await?;
     let len = u16_le(&len, 0).unwrap_or(0);
     let text = cx
-        .read(pe.rva_exact(rva.checked_add(2).ok_or_else(overflow)?, u64::from(len).saturating_mul(2))?)
+        .read(pe.rva_exact(
+            rva.checked_add(2).ok_or_else(overflow)?,
+            u64::from(len).saturating_mul(2),
+        )?)
         .await?;
     let units: Vec<u16> = (0..usize::from(len))
         .filter_map(|i| u16_le(&text, i.saturating_mul(2)))
@@ -1057,7 +1089,13 @@ fn resource_data_entry(f: &mut Fields<'_>, pe: &Pe) -> Result<DataEntry> {
 }
 
 async fn resource_data(cx: Cx, (pe, span, kind): (Pe, Span, Option<u32>)) -> Result<()> {
-    cx.emit(struct_node("Data Entry", span, LE, pe.clone(), resource_data_entry));
+    cx.emit(struct_node(
+        "Data Entry",
+        span,
+        LE,
+        pe.clone(),
+        resource_data_entry,
+    ));
     let entry = parse(&cx, span, LE, &pe, resource_data_entry).await?;
     let wanted = u64::from(entry.size);
     let content = pe.rva_span(entry.rva, wanted)?;
@@ -1190,7 +1228,9 @@ fn win_certificate(f: &mut Fields<'_>, _: &()) -> Result<WinCertificate> {
         .hex()
         .desc("Length including this header")
         .emit()?;
-    f.u16("wRevision").enumeration(CERTIFICATE_REVISION).emit()?;
+    f.u16("wRevision")
+        .enumeration(CERTIFICATE_REVISION)
+        .emit()?;
     let kind = f
         .u16("wCertificateType")
         .enumeration(CERTIFICATE_TYPE)

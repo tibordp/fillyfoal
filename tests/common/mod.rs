@@ -39,7 +39,10 @@ pub fn mini_pe32() -> Vec<u8> {
     let mut w = Image::new(0x140);
     w.bytes(0, b"MZ").u32(0x3c, 0x40).bytes(0x40, b"PE\0\0");
     // File header
-    w.u16(0x44, 0x14c).u32(0x48, 0x5000_0000).u16(0x54, 224).u16(0x56, 0x0102);
+    w.u16(0x44, 0x14c)
+        .u32(0x48, 0x5000_0000)
+        .u16(0x54, 224)
+        .u16(0x56, 0x0102);
     // Optional header (PE32)
     let o = 0x58;
     w.u16(o, 0x10b)
@@ -134,7 +137,9 @@ pub fn fixture() -> Vec<u8> {
         .u32(rd(0x201c), 0x2040)
         .u32(rd(0x2020), 0x2050)
         .u32(rd(0x2024), 0x2058);
-    w.u32(rd(0x2040), 0x1000).u32(rd(0x2044), 0x1008).u32(rd(0x2048), 0x2110);
+    w.u32(rd(0x2040), 0x1000)
+        .u32(rd(0x2044), 0x1008)
+        .u32(rd(0x2048), 0x2110);
     w.u32(rd(0x2050), 0x2120).u32(rd(0x2054), 0x2128);
     w.u16(rd(0x2058), 0).u16(rd(0x205a), 2);
     w.cstr(rd(0x2100), "fixture.dll")
@@ -144,17 +149,21 @@ pub fn fixture() -> Vec<u8> {
 
     // Imports
     let mut descriptor = |at: usize, ilt, name, iat| {
-        w.u32(rd(at), ilt).u32(rd(at + 12), name).u32(rd(at + 16), iat);
+        w.u32(rd(at), ilt)
+            .u32(rd(at + 12), name)
+            .u32(rd(at + 16), iat);
     };
     descriptor(0x2200, 0x2240, 0x2300, 0x2280);
     descriptor(0x2214, 0x2260, 0x2310, 0x22a0);
     for base in [0x2240, 0x2280] {
-        w.u64(rd(base), 0x2320).u64(rd(base + 8), 0x8000_0000_0000_0010);
+        w.u64(rd(base), 0x2320)
+            .u64(rd(base + 8), 0x8000_0000_0000_0010);
     }
     for base in [0x2260, 0x22a0] {
         w.u64(rd(base), 0x2330);
     }
-    w.cstr(rd(0x2300), "KERNEL32.dll").cstr(rd(0x2310), "USER32.dll");
+    w.cstr(rd(0x2300), "KERNEL32.dll")
+        .cstr(rd(0x2310), "USER32.dll");
     w.u16(rd(0x2320), 0x123).cstr(rd(0x2322), "ExitProcess");
     w.u16(rd(0x2330), 0x42).cstr(rd(0x2332), "MessageBoxW");
 
@@ -188,7 +197,10 @@ pub fn fixture() -> Vec<u8> {
     w.bytes(rs(0x100), &payload);
 
     // Certificate table and overlay
-    w.u32(0xe00, 0x10).u16(0xe04, 0x200).u16(0xe06, 2).bytes(0xe08, &[0x30; 8]);
+    w.u32(0xe00, 0x10)
+        .u16(0xe04, 0x200)
+        .u16(0xe06, 2)
+        .bytes(0xe08, &[0x30; 8]);
     w.bytes(0xe10, b"OVERLAY!");
     w.finish()
 }
@@ -273,7 +285,11 @@ impl Host {
                 break;
             }
         }
-        let children = self.session.children(id).map(|c| c.ids.to_vec()).unwrap_or_default();
+        let children = self
+            .session
+            .children(id)
+            .map(|c| c.ids.to_vec())
+            .unwrap_or_default();
         for child in children {
             self.explore(child, depth - 1, page);
         }

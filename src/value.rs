@@ -11,7 +11,7 @@ pub enum Radix {
     Hex,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Bool(bool),
     UInt {
@@ -36,6 +36,7 @@ pub enum Value {
         set: Vec<&'static str>,
         unknown: u64,
     },
+    Float(f64),
     Timestamp {
         unix_seconds: i64,
     },

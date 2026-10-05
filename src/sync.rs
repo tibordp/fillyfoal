@@ -46,7 +46,8 @@ impl<R: Read + Seek> Driver<R> {
                 Progress::Yielded => {}
                 Progress::NeedBytes(requests) => {
                     for req in requests {
-                        let Some((_, reader)) = self.sources.iter_mut().find(|(s, _)| *s == req.source)
+                        let Some((_, reader)) =
+                            self.sources.iter_mut().find(|(s, _)| *s == req.source)
                         else {
                             return Err(io::Error::new(
                                 io::ErrorKind::NotFound,
@@ -59,7 +60,8 @@ impl<R: Read + Seek> Driver<R> {
                         buf.truncate(n);
                         session.supply(req.source, req.offset, &buf);
                         if to_u64(n) < req.len {
-                            session.set_source_len(req.source, req.offset.saturating_add(to_u64(n)));
+                            session
+                                .set_source_len(req.source, req.offset.saturating_add(to_u64(n)));
                         }
                     }
                 }

@@ -83,6 +83,29 @@ macro_rules! prim_signed {
 }
 
 prim_unsigned!(u8, u16, u32, u64);
+
+macro_rules! prim_float {
+    ($($t:ty => $u:ty),*) => {$(
+        impl Prim for $t {
+            const SIZE: usize = std::mem::size_of::<$t>();
+            fn decode(bytes: &[u8], endian: Endian) -> Option<Self> {
+                let bytes = bytes.try_into().ok()?;
+                Some(match endian {
+                    Endian::Little => <$t>::from_le_bytes(bytes),
+                    Endian::Big => <$t>::from_be_bytes(bytes),
+                })
+            }
+            fn raw(self) -> u64 {
+                u64::from(self.to_bits())
+            }
+            fn value(self, _radix: Radix) -> Value {
+                Value::Float(f64::from(self))
+            }
+        }
+    )*};
+}
+
+prim_float!(f32 => u32, f64 => u64);
 prim_signed!(i8 => u8, i16 => u16, i32 => u32, i64 => u64);
 
 /// A cursor over a block that decodes fields and, optionally, emits them.
@@ -214,6 +237,46 @@ impl<'a> Fields<'a> {
         self.int(name)
     }
 
+    pub fn f32(&mut self, name: &'static str) -> Field<'a, f32> {
+        self.int(name)
+    }
+
+    pub fn f64(&mut self, name: &'static str) -> Field<'a, f64> {
+        self.int(name)
+    }
+
+    /// A NUL-terminated UTF-16 string (in the cursor's byte order) within
+    /// the rest of the block.
+    pub fn utf16z(&mut self, name: &'static str) -> Field<'a, String> {
+        let data: &'a [u8] = &self.block.data;
+        let start = to_usize(self.pos);
+        let rest = data.get(start..).unwrap_or_default();
+        let (text, len, terminated) = crate::text::utf16z(rest, self.endian);
+        let (span, _) = self.take(to_u64(len));
+        let value = if terminated {
+            Ok(text)
+        } else {
+            Err(Diagnostic::malformed("unterminated UTF-16 string").at(span))
+        };
+        let mut field = self.field(name, span, value);
+        if let Ok(v) = &field.value {
+            field.node.value = Some(Value::Text(v.clone()));
+        }
+        field
+    }
+
+    /// A fixed-size UTF-16 text field of `units` code units, NUL-padded.
+    pub fn utf16(&mut self, name: &'static str, units: u64) -> Field<'a, String> {
+        let endian = self.endian;
+        let (span, bytes) = self.take(units.saturating_mul(2));
+        let text = bytes.map(|b| crate::text::utf16z(b, endian).0);
+        let mut field = self.field(name, span, text);
+        if let Ok(v) = &field.value {
+            field.node.value = Some(Value::Text(v.clone()));
+        }
+        field
+    }
+
     /// A 32- or 64-bit unsigned field, depending on `wide`.
     pub fn uword(&mut self, name: &'static str, wide: bool) -> Field<'a, u64> {
         if wide {
@@ -300,7 +363,9 @@ pub struct Field<'a, T> {
 
 impl<'a, T> Field<'a, T> {
     pub fn span(&self) -> Span {
-        self.node.span.unwrap_or(Span::new(crate::span::SourceId(0), 0, 0))
+        self.node
+            .span
+            .unwrap_or(Span::new(crate::span::SourceId(0), 0, 0))
     }
 
     pub fn desc(mut self, description: impl Into<Cow<'static, str>>) -> Self {
@@ -393,6 +458,26 @@ impl<T: Prim> Field<'_, T> {
         self
     }
 
+    /// Windows FILETIME (100 ns ticks since 1601).
+    pub fn filetime(mut self) -> Self {
+        if let Some((raw, _)) = self.raw {
+            self.node.value = Some(Value::Timestamp {
+                unix_seconds: crate::text::filetime_to_unix(raw),
+            });
+        }
+        self
+    }
+
+    /// Seconds since 1904 (HFS, QuickTime, AIFF).
+    pub fn mac_time(mut self) -> Self {
+        if let Some((raw, _)) = self.raw {
+            self.node.value = Some(Value::Timestamp {
+                unix_seconds: crate::text::mac_to_unix(raw),
+            });
+        }
+        self
+    }
+
     /// Seconds since the Unix epoch.
     pub fn timestamp(mut self) -> Self {
         if let Some((raw, _)) = self.raw {
@@ -443,7 +528,9 @@ where
         ctx,
         layout,
     };
-    Node::new(name).span(span).lazy(expand_struct::<C, R>, state)
+    Node::new(name)
+        .span(span)
+        .lazy(expand_struct::<C, R>, state)
 }
 
 async fn expand_struct<C, R>(cx: Cx, st: StructState<C, R>) -> Result<()>

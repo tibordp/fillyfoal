@@ -26,6 +26,7 @@ pub mod render;
 pub mod session;
 pub mod span;
 pub mod sync;
+pub mod text;
 pub mod value;
 
 pub use cx::{Block, Cx};

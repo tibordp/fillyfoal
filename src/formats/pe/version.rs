@@ -146,7 +146,9 @@ fn short() -> Diagnostic {
 
 /// The text value of a block, without its terminator.
 fn text_value(data: &[u8], block: &Block) -> String {
-    let bytes = data.get(block.value_start..block.value_end).unwrap_or_default();
+    let bytes = data
+        .get(block.value_start..block.value_end)
+        .unwrap_or_default();
     utf16z(bytes, 0).0
 }
 
