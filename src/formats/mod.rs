@@ -36,6 +36,7 @@ pub mod ape;
 pub mod apetag;
 pub mod au;
 pub mod caf;
+pub mod dsd;
 pub mod dts;
 pub mod flac;
 pub mod id3;
@@ -45,6 +46,7 @@ pub mod mpa;
 pub mod musepack;
 pub mod ogg;
 pub mod simple_audio;
+pub mod smaf;
 pub mod sound;
 pub mod tracker;
 pub mod tta;
@@ -192,6 +194,9 @@ pub static FORMATS: &[&Format] = &[
     &wavpack::FORMAT,
     &musepack::FORMAT,
     &tta::FORMAT,
+    &dsd::DSF,
+    &dsd::DFF,
+    &smaf::FORMAT,
     &simple_audio::SOX,
     &simple_audio::IRCAM,
     &simple_audio::ADX,
