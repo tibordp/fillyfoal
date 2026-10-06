@@ -1277,3 +1277,93 @@ async fn ami_lines(cx: Cx, (file, list): (Span, Vec<(u64, u64)>)) -> Result<()> 
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Microsoft Money (MSISAM: Jet 4 pages with their own format ID)
+
+fn money_probe(h: &Head<'_>) -> bool {
+    h.starts_with(&[0, 1, 0, 0]) && h.at(4, b"MSISAM Database\0")
+}
+
+declare_format!(pub MONEY = "ms-money", "Microsoft Money file (MSISAM)", ["mny", "mbf"], "application/x-msmoney",
+    Probe::Custom(money_probe), money);
+
+async fn money(cx: Cx, input: Input) -> Result<()> {
+    crate::formats::jet::dissect(cx.clone(), input).await?;
+    let pages = input.span.len / 4096;
+    cx.annotate(format!("Microsoft Money file (MSISAM, Jet 4 pages), {pages} pages of 4 KiB"));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// FileMaker Pro 7 and later (.fp7, .fmp12)
+
+declare_format!(pub FILEMAKER = "filemaker", "FileMaker Pro database (fp7/fmp12)", ["fp7", "fmp12", "fmpur"], "application/x-filemaker",
+    Probe::Magic(&[(0, b"\x00\x01\x00\x00\x00\x02\x00\x01\x00\x05\x00\x02\x00\x02\xc0HBAM7")]), filemaker);
+
+const FILEMAKER_BLOCK: u64 = 4096;
+
+/// Printable runs of at least four characters (version strings in headers).
+fn printable_runs(data: &[u8]) -> Vec<(usize, String)> {
+    let mut out = Vec::new();
+    let mut start = None;
+    for (i, &b) in data.iter().chain(std::iter::once(&0)).enumerate() {
+        if (0x20..0x7f).contains(&b) {
+            start.get_or_insert(i);
+        } else if let Some(s) = start.take()
+            && i.saturating_sub(s) >= 4
+        {
+            out.push((s, crate::text::latin1(data.get(s..i).unwrap_or_default())));
+        }
+    }
+    out
+}
+
+async fn filemaker(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    cx.emit(Node::new("Signature").span(file.sub(0, 20)).value(text("HBAM7")));
+    let header = file.sub(0, FILEMAKER_BLOCK);
+    let data = cx.read_avail(header).await?;
+    let strings: Vec<(usize, String)> = printable_runs(data.get(20..).unwrap_or_default())
+        .into_iter()
+        .map(|(at, s)| (at.saturating_add(20), s))
+        .collect();
+    let version = strings.iter().find(|(_, s)| s.contains("Pro ") || s.starts_with("HBAM")).map(|(_, s)| s.clone());
+    cx.emit(
+        Node::new("Header block")
+            .span(header)
+            .summary(clip(&strings.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join(", "), 120))
+            .lazy(filemaker_strings, (header, strings)),
+    );
+    let blocks = file.len / FILEMAKER_BLOCK;
+    cx.emit(Node::new("Data blocks").span(file.tail(FILEMAKER_BLOCK)).summary(format!("{} blocks of 4 KiB", blocks.saturating_sub(1))));
+    cx.annotate(format!("FileMaker Pro database{}, {blocks} blocks", version.map(|v| format!(" ({v})")).unwrap_or_default()));
+    Ok(())
+}
+
+async fn filemaker_strings(cx: Cx, (header, strings): (Span, Vec<(usize, String)>)) -> Result<()> {
+    for (at, s) in strings {
+        cx.push(Node::new("String").span(header.sub(to_u64(at), to_u64(s.len()))).value(text(s))).await;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Lotus Word Pro (.lwp)
+
+declare_format!(pub WORDPRO = "lotus-wordpro", "Lotus Word Pro document", ["lwp"], "application/vnd.lotus-wordpro",
+    Probe::Magic(&[(0, b"WordPro")]), wordpro);
+
+async fn wordpro(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    cx.emit(Node::new("Signature").span(file.sub(0, 7)).value(text("WordPro")));
+    let head = cx.read_avail(file.sub(0, 0x400)).await?;
+    let strings = printable_runs(head.get(7..).unwrap_or_default());
+    let mut node = Node::new("Document objects").span(file.tail(7)).diag(Diagnostic::note("the object stream is not dissected"));
+    if !strings.is_empty() {
+        node = node.summary(clip(&strings.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join(", "), 120));
+    }
+    cx.emit(node);
+    cx.annotate("Lotus Word Pro document");
+    Ok(())
+}

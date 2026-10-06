@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Finances.mny — Microsoft Money file (MSISAM, Jet 4 pages), 2 pages of 4 KiB  [0x0+0x2000]
+    Page type: 00 01 00 00  |....|  [0x0+0x4]
+    Format ID: "MSISAM Database"  [0x4+0x10]
+    Version: Jet 4 (Access 2000-2003) (0x1)  [0x14+0x4]
+  ▾ Database header — RC4-obfuscated  [0x18+0x80]
+      Code page: 37847  [#1:0x24+0x2]
+      Collation: 0xe19b  [#1:0x3e+0x2]
+      Decrypted bytes: cd f2 c1 85 6d 39 94 2e 4b 6c 8d 7d 77 66 7e 3f …  |....m9..Kl.}wf~?|  [#1:0x0+0x80]
+  ▾ Pages — 2
+      Page 0 — database definition  [0x0+0x1000]
+    ▾ Page 1 — data, 0 rows, table definition at page 2  [0x1000+0x1000]
+        Free space: 4000  [0x1002+0x2]
+        Table definition page: 2  [0x1004+0x4]
+        Row count: 0  [0x100c+0x2]
