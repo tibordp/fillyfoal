@@ -1,0 +1,13 @@
+MPX,Microsoft Project for Windows,4.0,ANSI
+10,$,1,2,",",.
+11,0,1,8,40,0,$0.00/h,$0.00/h,0,0
+30,Garden Project,Example Co,Alice,,,01/04/24,,0,,,,,,,,
+40,Name,ID
+41,1,40
+50,Alice,1
+50,Bob,2
+61,90,1,40,50,51,44
+70,1,"Plan beds, paths",3d,01/04/24,03/04/24,100%
+70,2,Plant seeds,2d,04/04/24,05/04/24,50%
+71,Use the heirloom tomato seeds
+75,1,1,8h

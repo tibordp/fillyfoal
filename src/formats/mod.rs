@@ -173,6 +173,7 @@ pub mod devices;
 pub mod browser;
 pub mod winforensics;
 pub mod unixforensics;
+pub mod office_legacy;
 // -- end misc --
 
 // -- text --
@@ -834,6 +835,19 @@ pub static FORMATS: &[&Format] = &[
     &unixforensics::ASL,
     &unixforensics::MBDB,
     &unixforensics::ABX,
+    &office_legacy::LOTUS,
+    &office_legacy::LOTUS3,
+    &office_legacy::QUATTRO,
+    &office_legacy::WORKS_WKS,
+    &office_legacy::XLS_BIFF,
+    &office_legacy::CLARISWORKS,
+    &office_legacy::SKETCHUP,
+    &office_legacy::SYLK,
+    &office_legacy::DIF,
+    &office_legacy::QIF,
+    &office_legacy::OFX,
+    &office_legacy::MPX,
+    &office_legacy::AMIPRO,
     // Weak, size-based probes last.
     &unixforensics::UTMP,
     &models::STL,

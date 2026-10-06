@@ -1,0 +1,22 @@
+!Type:Bank
+D03/01/2004
+T-379.00
+CX
+PCITY OF SPRINGFIELD
+LUtilities:Water
+^
+D03/03/2004
+T-20.28
+PYOUR LOCAL SUPERMARKET
+Mweekly shop
+LGroceries
+^
+D03/04/2004
+T1,500.00
+N1001
+PPayroll
+SIncome:Salary
+$1,700.00
+STaxes
+$-200.00
+^

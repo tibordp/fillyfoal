@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ LETTER.SAM — Ami Pro document (format 4), 7 sections, 4 text lines  [0x0+0xca]
+  ▾ [ver] — 1 lines  [0x0+0xb]
+      Line 0: "\t4"  [0x7+0x4]
+  ▾ [sty] — 1 lines  [0xb+0xa]
+      Line 0: ""  [0x12+0x3]
+  ▾ [compat] — 1 lines  [0x15+0xe]
+      Line 0: "\t1"  [0x1f+0x4]
+  ▾ [fnt] — 2 lines  [0x23+0x20]
+      Line 0: "\tTimes New Roman"  [0x2a+0x12]
+      Line 1: "\t2400"  [0x3c+0x7]
+  ▾ [lay] — 2 lines  [0x43+0x18]
+      Line 0: "\tStandard"  [0x4a+0xb]
+      Line 1: "\t516"  [0x55+0x6]
+  ▾ [tag] — 2 lines  [0x5b+0x1b]
+      Line 0: "\tBody Text"  [0x62+0xc]
+      Line 1: "\t[fnt]"  [0x6e+0x8]
+  ▾ [edoc] — 4 lines  [0x76+0x54]
+      Line 0: "<+!>Dear Sam,"  [0x7e+0xf]
+      Line 1: ""  [0x8d+0x2]
+      Line 2: "Thanks for the <+\"><:#277,2400>notes<-\"> from Tuesday."  [0x8f+0x38]
+      Line 3: ">"  [0xc7+0x3]
