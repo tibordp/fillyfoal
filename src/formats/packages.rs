@@ -236,13 +236,20 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let header_len = u64::from(cur.u16().await?);
+        if header_len < 6 {
+            cx.diag(Diagnostic::malformed("entry header too short").at(cur.since(start)));
+            break;
+        }
         let fields = cx
             .read_avail(file.sub(start.saturating_add(6), header_len.saturating_sub(6)))
             .await?;
         // Fields are 3-letter keys plus a type letter; we pick out PAT and
-        // the data size (DAT with a B-type size).
+        // the blob sizes (A/B/C types): blobs follow the header in field
+        // order, DAT being the file's contents.
         let mut path = String::new();
+        let mut data_at = 0u64;
         let mut data_len = 0u64;
+        let mut blobs = 0u64;
         let mut at = 0usize;
         while at.saturating_add(4) <= fields.len() {
             let key = fields.get(at..at.saturating_add(3)).unwrap_or_default();
@@ -276,19 +283,22 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
                 )
                 .into_owned();
             }
+            let blob = match kind {
+                b'A' => u64::from(crate::bytes::u16_le(&fields, at).unwrap_or(0)),
+                b'B' => u64::from(u32_le(&fields, at).unwrap_or(0)),
+                b'C' => u64_le(&fields, at).unwrap_or(0),
+                _ => 0,
+            };
             if key == b"DAT" {
-                data_len = match kind {
-                    b'A' => u64::from(crate::bytes::u16_le(&fields, at).unwrap_or(0)),
-                    b'B' => u64::from(u32_le(&fields, at).unwrap_or(0)),
-                    b'C' => u64_le(&fields, at).unwrap_or(0),
-                    _ => 0,
-                };
+                data_at = blobs;
+                data_len = blob;
             }
+            blobs = blobs.saturating_add(blob);
             at = at.saturating_add(size);
         }
-        cur.seek(start.saturating_add(header_len));
+        cur.seek(start.saturating_add(header_len).saturating_add(data_at));
         let data = cur.span(data_len);
-        cur.skip(data_len);
+        cur.seek(start.saturating_add(header_len).saturating_add(blobs));
         entries = entries.saturating_add(1);
         let name = if path.is_empty() {
             "(root)".to_owned()
@@ -393,35 +403,62 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-declare_format!(pub PBZX = "pbzx", "Apple pbzx payload", ["pbzx"], "application/x-pbzx",
-    Probe::Magic(&[(0, b"pbzx")]), pbzx);
+declare_format!(pub PBZX = "pbzx", "Apple chunked compressed data (pbzx, pbze, pbz4, pbzz)", ["pbzx"], "application/x-pbzx",
+    Probe::Magic(&[(0, b"pbzx"), (0, b"pbze"), (0, b"pbz4"), (0, b"pbzz")]), pbzx);
 
 async fn pbzx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, BE);
-    cur.skip(4);
-    let flags = cur.u64().await?;
+    let magic = cur.bytes(4).await?;
+    let algorithm = match magic.get(3) {
+        Some(b'x') => "xz",
+        Some(b'e') => "LZFSE",
+        Some(b'4') => "LZ4",
+        _ => "zlib",
+    };
+    let chunk_size = cur.u64().await?;
     cx.emit(
         Node::new("Header")
             .span(file.sub(0, 12))
-            .summary(format!("chunk size {flags:#x}")),
+            .summary(format!("{algorithm}, chunk size {chunk_size:#x}")),
     );
     let mut chunks = 0u32;
+    let mut total = 0u64;
+    let mut any_compressed = false;
     while cur.remaining() >= 16 {
         let start = cur.pos();
-        let _chunk_flags = cur.u64().await?;
+        let raw = cur.u64().await?;
         let len = cur.u64().await?;
         let data = cur.span(len);
+        let head = cx.read_avail(data.sub(0, 6)).await?;
+        let compressed = raw != len
+            && crate::codec::pbz::looks_compressed(magic.get(3).copied().unwrap_or(0), &head);
+        any_compressed |= compressed;
         cur.skip(len);
         chunks = chunks.saturating_add(1);
+        total = total.saturating_add(if compressed { raw } else { len });
+        let summary = if !compressed {
+            format!("{len} bytes, stored")
+        } else {
+            format!("{len} bytes, {raw} uncompressed")
+        };
         cx.push(
             crate::formats::embedded(format!("Chunk {chunks}"), input.nested(data))
-                .summary(format!("{len} bytes"))
+                .summary(summary)
                 .target(cur.since(start)),
         )
         .await;
     }
-    cx.annotate(format!("pbzx, {chunks} chunk(s)"));
+    if any_compressed {
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            file,
+            crate::codec::Codec::Pbz,
+            Some(total),
+        ));
+    }
+    cx.annotate(format!("{}, {algorithm}, {chunks} chunk(s), {total} bytes uncompressed", String::from_utf8_lossy(&magic)));
     Ok(())
 }
 

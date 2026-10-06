@@ -13,6 +13,7 @@ pub mod crypto;
 pub mod filters;
 pub mod lz;
 pub mod lzfse;
+pub mod pbz;
 pub mod lzma;
 pub mod xz;
 pub mod zstd;
@@ -67,6 +68,8 @@ pub enum Codec {
     TiffPredictor { bpp: usize, row: usize },
     /// Apple LZFSE (with LZVN blocks).
     Lzfse,
+    /// Apple's chunked wrapper (`pbzx`/`pbze`/`pbz4`/`pbzz`).
+    Pbz,
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
     /// Zstandard frames.
@@ -142,6 +145,7 @@ impl Codec {
             Codec::Zstd => "zstd",
             Codec::UnixCompress => "unix-compress",
             Codec::Lzfse => "lzfse",
+            Codec::Pbz => "pbz",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
             Codec::Lzma2 => "lzma2",
@@ -176,6 +180,7 @@ impl Codec {
             Codec::Zstd => "zstd (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
+            Codec::Pbz => "pbz (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
             Codec::Lzma2 => "lzma2 (lazy)",
@@ -208,6 +213,7 @@ impl Codec {
             | Codec::Zstd
             | Codec::UnixCompress
             | Codec::Lzfse
+            | Codec::Pbz
             | Codec::LzmaAlone
             | Codec::Lzma2
             | Codec::LzmaRaw { .. } => "decompressed",
@@ -242,6 +248,7 @@ impl Codec {
             Codec::Zstd => 32_768,
             Codec::UnixCompress => 8_000,
             Codec::Lzfse => 4_096,
+            Codec::Pbz => 7_000,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -269,6 +276,7 @@ impl Codec {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
             Codec::Lzfse => Box::new(Streaming(filters::Whole::new(lzfse::Lzfse))),
+            Codec::Pbz => Box::new(Streaming(filters::Whole::new(pbz::Pbz))),
             Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
