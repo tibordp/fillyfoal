@@ -4,5 +4,9 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.lzfse — LZFSE, 1 block(s), 5 bytes uncompressed  [0x0+0x11]
     Uncompressed block — 5 payload bytes  [0x0+0xd]
-      ! unsupported: LZFSE decoding
     End of stream  [0xd+0x4]
+  ▾ Decompressed — UTF-8 text, 1 line  [0x0+0x11]
+      Encoding: "UTF-8"
+      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [#1:0x0+0x5]
+        Line 1: "hello"  [#1:0x0+0x5]

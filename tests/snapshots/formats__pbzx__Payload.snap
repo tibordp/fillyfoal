@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Payload — pbzx, 1 chunk(s)  [0x0+0x1c9]
-    Header — chunk size 0x1000000  [0x0+0xc]
+▾ Payload — pbzx, xz, 1 chunk(s), 429 bytes uncompressed  [0x0+0x1c9]
+    Header — xz, chunk size 0x1000000  [0x0+0xc]
   ▾ Chunk 1 — 32×24, 8-bit RGB  [0x1c+0x1ad] → 0xc+0x1bd
       Signature  [0x1c+0x8]
     ▾ IHDR — 32×24, 8-bit RGB  [0x24+0x19]

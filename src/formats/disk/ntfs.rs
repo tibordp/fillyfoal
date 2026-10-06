@@ -8,11 +8,13 @@
 //! $FILE_NAME, runlists of non-resident attributes, ...); directories are
 //! read from $INDEX_ROOT and the INDX records of $INDEX_ALLOCATION and
 //! presented as a lazy, paged tree; file content follows the $DATA
-//! runlist (sparse runs become holes).
+//! runlist (sparse runs become holes); compressed streams are decoded one
+//! LZNT1 compression unit at a time, on demand.
 
 use std::sync::Arc;
 
 use crate::bytes::{u16_le, u32_le, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -187,6 +189,9 @@ struct Attr {
     resident: Option<Span>,
     runs: Option<Span>,
     data_size: u64,
+    /// Log2 of the compression unit in clusters, for a non-resident
+    /// attribute flagged compressed (0 otherwise).
+    compression_unit: u32,
 }
 
 /// Decodes `n`-byte little-endian integers (signed if requested).
@@ -374,6 +379,7 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
             resident: None,
             runs: None,
             data_size: 0,
+            compression_unit: 0,
         };
         if h.get(8) == Some(&0) {
             let vlen = u64::from(u32_le(&h, 16).unwrap_or(0));
@@ -384,6 +390,9 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
             let roff = u64::from(u16_le(&h, 32).unwrap_or(0));
             attr.runs = Some(span.sub(roff, len.saturating_sub(roff)));
             attr.data_size = u64_le(&h, 48).unwrap_or(0);
+            if u16_le(&h, 12).unwrap_or(0) & 0x00ff != 0 {
+                attr.compression_unit = u32::from(u16_le(&h, 34).unwrap_or(0));
+            }
         }
         out.push(attr);
         at = at.saturating_add(len);
@@ -662,11 +671,151 @@ async fn stream_content(cx: &Cx, fs: &Vol, a: &Attr) -> Result<Node> {
     if let Some(d) = problem {
         cx.diag(d);
     }
+    if a.compression_unit != 0 {
+        return compressed_content(cx, fs, a, &runs).await;
+    }
     let list = fs.runs_list(cx, a.span, &runs, a.data_size)?;
     let pieces = list.pieces().to_vec();
     let span = list.finish(cx, "ntfs-runs")?;
     cx.emit(fragments_node("Clusters", pieces));
     Ok(content_node(&fs.input, span))
+}
+
+/// How a run of compression units is stored: first unit, unit count,
+/// kind, and the clusters holding them.
+type UnitRun = (u64, u64, &'static str, Vec<Span>);
+
+/// The content of a compressed stream. It is stored in compression units
+/// (usually 16 clusters): a unit whose clusters are all allocated is
+/// stored as is, a wholly sparse one is zeros, and one whose allocated
+/// clusters are followed by sparse ones holds LZNT1 data in those clusters,
+/// decoded on demand (zero-filled to the unit).
+async fn compressed_content(cx: &Cx, fs: &Vol, a: &Attr, runs: &[(u64, Option<u64>)]) -> Result<Node> {
+    if a.compression_unit > 16 {
+        return Err(Diagnostic::malformed(format!(
+            "compression unit of 2^{} clusters",
+            a.compression_unit
+        ))
+        .at(a.span));
+    }
+    let per_unit = 1u64 << a.compression_unit;
+    let unit = per_unit.saturating_mul(fs.cluster);
+    let mut list = PieceList::new(a.span);
+    let mut units: Vec<UnitRun> = Vec::new();
+    let mut index = 0u64;
+    // Runs not yet consumed, as (clusters left, next cluster).
+    let mut queue: std::collections::VecDeque<(u64, Option<u64>)> =
+        runs.iter().copied().filter(|r| r.0 > 0).collect();
+    while list.len() < a.data_size {
+        let want = a.data_size.saturating_sub(list.len());
+        let Some(&(count, start)) = queue.front() else {
+            break;
+        };
+        // Whole units within one run: stored or sparse, in bulk.
+        let whole = count.checked_div(per_unit).unwrap_or(0);
+        if whole > 0 {
+            let clusters = whole.saturating_mul(per_unit);
+            let len = clusters.saturating_mul(fs.cluster).min(want);
+            let n = len.div_ceil(unit);
+            match start {
+                Some(lcn) => {
+                    let span = fs.vol.sub(lcn.saturating_mul(fs.cluster), len);
+                    units.push((index, n, "stored", vec![span]));
+                    list.data(span);
+                }
+                None => {
+                    units.push((index, n, "sparse (zeros)", Vec::new()));
+                    list.hole(cx, len)?;
+                }
+            }
+            index = index.saturating_add(n);
+            if let Some(front) = queue.front_mut() {
+                *front = (count.saturating_sub(clusters), start.map(|l| l.saturating_add(clusters)));
+                if front.0 == 0 {
+                    queue.pop_front();
+                }
+            }
+            continue;
+        }
+        // A unit spanning runs: gather its clusters.
+        let mut need = per_unit;
+        let mut pieces = Vec::new();
+        let mut sparse = 0u64;
+        while need > 0 {
+            let Some(front) = queue.front_mut() else {
+                break;
+            };
+            let take = front.0.min(need);
+            match front.1 {
+                Some(lcn) => pieces.push(fs.cluster_span(lcn, take)),
+                None => sparse = sparse.saturating_add(take),
+            }
+            *front = (front.0.saturating_sub(take), front.1.map(|l| l.saturating_add(take)));
+            if front.0 == 0 {
+                queue.pop_front();
+            }
+            need = need.saturating_sub(take);
+        }
+        let len = unit.min(want);
+        if pieces.is_empty() {
+            units.push((index, 1, "sparse (zeros)", Vec::new()));
+            list.hole(cx, len)?;
+        } else if sparse == 0 && need == 0 {
+            let mut left = len;
+            for &p in &pieces {
+                let take = p.len.min(left);
+                list.data(p.sub(0, take));
+                left = left.saturating_sub(take);
+            }
+            units.push((index, 1, "stored", pieces));
+        } else {
+            let anchor = pieces.first().copied().unwrap_or(a.span);
+            let packed = crate::formats::disk::assemble(cx, anchor, "ntfs-unit", pieces.clone())?;
+            let decoded = cx.decode_lazy(packed, &Codec::Lznt1 { size: Some(unit) }, unit)?;
+            list.data(decoded.sub(0, len));
+            units.push((index, 1, "LZNT1", pieces));
+        }
+        index = index.saturating_add(1);
+        cx.checkpoint().await;
+    }
+    let span = list.finish(cx, "ntfs-compressed")?;
+    cx.emit(
+        Node::new("Compression units")
+            .summary(format!("{index} of {}", size(unit)))
+            .lazy(unit_list, Arc::new(units)),
+    );
+    Ok(content_node(&fs.input, span))
+}
+
+async fn unit_list(cx: Cx, units: Arc<Vec<UnitRun>>) -> Result<()> {
+    cx.set_count(Count::Exact(crate::bytes::to_u64(units.len())));
+    for (first, count, kind, clusters) in units.iter() {
+        let name = if *count == 1 {
+            format!("Unit {first}")
+        } else {
+            format!("Units {first}-{}", first.saturating_add(*count).saturating_sub(1))
+        };
+        let stored = clusters.iter().map(|c| c.len).fold(0, u64::saturating_add);
+        let mut node = Node::new(name).summary(if clusters.is_empty() {
+            (*kind).to_owned()
+        } else {
+            format!("{kind}, {} in {} fragment(s)", size(stored), clusters.len())
+        });
+        if let [one] = clusters.as_slice() {
+            node = node.span(*one);
+        } else if !clusters.is_empty() {
+            node = node.lazy(list_pieces, Arc::new(clusters.clone()));
+        }
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+async fn list_pieces(cx: Cx, pieces: Arc<Vec<Span>>) -> Result<()> {
+    for (i, p) in pieces.iter().enumerate() {
+        cx.push(Node::new(format!("Fragment {i}")).span(*p).summary(size(p.len))).await;
+    }
+    Ok(())
 }
 
 #[derive(Clone)]

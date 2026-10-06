@@ -582,6 +582,10 @@ async fn bsdiff(cx: Cx, input: Input) -> Result<()> {
             } else {
                 Node::new(name).span(span).summary(size(span.len))
             }
+        } else if codecs.get(i) == Some(&2) {
+            // Brotli has no magic to be identified by.
+            crate::formats::content(name, input, span, crate::codec::Codec::Brotli, None)
+                .summary(size(span.len))
         } else {
             embedded(name, input.nested(span)).summary(size(span.len))
         };

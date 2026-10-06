@@ -374,3 +374,149 @@ fn zstd_decodes_python_output() {
     assert!(decode(&read("zeros.zst")).unwrap() == vec![0u8; 300000]);
     assert!(decode(&read("big-text.zst")).unwrap() == text.repeat(40));
 }
+
+#[test]
+fn unix_compress_decodes_real_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/compress/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |data: &[u8]| {
+        let mut d = Codec::UnixCompress.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    assert!(decode(&read("text.Z")) == lzma_text());
+    assert!(decode(&read("text12.Z")) == lzma_text());
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(&read("rnd.Z")) == random);
+    let words = decode(&read("words.Z"));
+    assert_eq!(words.len(), 2_493_885);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+}
+
+#[test]
+fn lzfse_decodes_apple_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/lzfse/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |data: &[u8]| {
+        let mut d = Codec::Lzfse.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    assert!(decode(&read("text.lzfse")) == lzma_text());
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(&read("rnd.lzfse")) == random);
+    assert_eq!(decode(&read("small.lzfse")), b"hello lzvn hello lzvn hello lzvn small input\n");
+    let words = decode(&read("words.lzfse"));
+    assert_eq!(words.len(), 2_493_885);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+}
+
+/// Streams from the `brotli` 1.2.0 CLI, except `transforms.br`: hand-made
+/// (one meta-block per dictionary reference, all 121 transforms on words of
+/// every length) and checked against `brotli -d`'s output.
+#[test]
+fn brotli_decodes_reference_output() {
+    use fillyfoal::codec::{Codec, crc32};
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/brotli/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |name: &str| {
+        let mut d = Codec::Brotli.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read(name), 1 << 26).unwrap()
+    };
+    // Qualities 0-11 and window sizes 2^16 and the default 2^22.
+    for name in ["text.q0.br", "text.q1.br", "text.q5.br", "text.q9.br", "text.q11.br", "text.w16.br"] {
+        assert!(decode(name) == lzma_text(), "{name}");
+    }
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode("rnd.br") == random);
+    assert!(decode("zeros.br") == vec![0u8; 100_000]);
+    assert!(decode("empty.br").is_empty());
+    let check = |name: &str, len: usize, crc: u32| {
+        let out = decode(name);
+        assert_eq!((out.len(), crc32(&out)), (len, crc), "{name}");
+        out
+    };
+    // English-like text with UTF-8 and HTML (dictionary hits; 2^10 window).
+    for name in ["prose.q0.br", "prose.q11.br", "prose.w10.br"] {
+        check(name, 32656, 0xd184_6982);
+    }
+    // Transformed dictionary words, at quality 11 (113 of the transforms).
+    check("dict.q11.br", 101_373, 0xa334_44cb);
+    check("transforms.br", 39876, 0x0a24_e342);
+    // Binary records: signed context mode, NPOSTFIX 3 and NDIRECT 120.
+    check("struct.q11.br", 30000, 0x3c0f_27cd);
+    // Incompressible: uncompressed meta-blocks.
+    check("noise.br", 20000, 0x1716_a644);
+    // Several meta-blocks (quality 1, 2^16 window).
+    let words = check("words.q1.br", 300_000, 0xe11b_b7a0);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+    // Truncation and corruption are errors, not panics.
+    let text = read("text.q11.br");
+    for cut in [0, 1, 10, text.len() / 2, text.len() - 1] {
+        let mut d = Codec::Brotli.decoder().unwrap();
+        assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), &text[..cut], 1 << 26).is_err());
+    }
+    for i in (0..text.len()).step_by(97) {
+        let mut bad = text.clone();
+        bad[i] ^= 0x5a;
+        let mut d = Codec::Brotli.decoder().unwrap();
+        let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 26);
+    }
+    // The output limit holds.
+    let mut d = Codec::Brotli.decoder().unwrap();
+    assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read("zeros.br"), 1000).is_err());
+}
+
+#[test]
+fn xca_codecs_decode_reference_output() {
+    // LZNT1 from the `lznt1` PyPI encoder; Plain LZ77 and LZ77+Huffman from
+    // encoders written to [MS-XCA] 2.3.4 / 2.1 (no packaged encoder exists),
+    // all checked against dissect.util's decompressors when generated.
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/xca/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |codec: Codec, data: &[u8]| {
+        let mut d = codec.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    let lcg = |n: usize| {
+        let mut x: u32 = 12345;
+        (0..n)
+            .map(|_| {
+                x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+                ((x >> 16) & 0xff) as u8
+            })
+            .collect::<Vec<u8>>()
+    };
+    let inputs = [
+        ("text", lzma_text()),
+        ("rnd", (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect()),
+        ("zeros", vec![0u8; 150_000]),
+        ("noise", lcg(9000)),
+    ];
+    for (name, data) in inputs {
+        let size = data.len() as u64;
+        assert!(decode(Codec::Lznt1 { size: None }, &read(&format!("{name}.lznt1"))) == data, "{name}.lznt1");
+        assert!(decode(Codec::Xpress { size: None }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
+        assert!(decode(Codec::Xpress { size: Some(size) }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
+        assert!(decode(Codec::XpressHuffman { size }, &read(&format!("{name}.xpressh"))) == data, "{name}.xpressh");
+    }
+    // Corrupt and truncated input fails cleanly (no panics, bounded output).
+    let mut rng = common::Rng(0x8ca);
+    for ext in ["lznt1", "xpress", "xpressh"] {
+        let good = read(&format!("text.{ext}"));
+        for i in 0..64 {
+            let mut bad = good.clone();
+            if i % 2 == 0 {
+                bad.truncate(rng.below(good.len()));
+            } else {
+                for _ in 0..8 {
+                    let at = rng.below(bad.len());
+                    bad[at] = rng.next() as u8;
+                }
+            }
+            for codec in [Codec::Lznt1 { size: None }, Codec::Xpress { size: None }, Codec::XpressHuffman { size: 68670 }] {
+                let mut d = codec.decoder().unwrap();
+                if let Ok(out) = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 20) {
+                    assert!(out.len() <= 1 << 20);
+                }
+            }
+        }
+    }
+}

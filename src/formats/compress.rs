@@ -1,6 +1,5 @@
-//! Classic Unix compressors: `compress` (`.Z`, LZW) and `pack` (`.z`,
-//! static Huffman). Only the headers are decoded; the payload is an
-//! unsupported leaf (see the codec policy).
+//! Classic Unix compressors: `compress` (`.Z`, LZW; decoded on demand) and
+//! `pack` (`.z`, static Huffman; header only).
 
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
@@ -69,7 +68,8 @@ pub async fn dissect_compress(cx: Cx, input: Input) -> Result<()> {
     let (header, span) = cur.record::<CompressHeader>().await?;
     cx.emit(CompressHeader::node("Header", span, Endian::Little));
     let body = input.span.tail(CompressHeader::SIZE);
-    cx.emit(unsupported("Compressed data", body, "LZW"));
+    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::UnixCompress, None));
+    cx.emit(Node::new("Compressed data").span(body));
     let mode = if header.flags & 0x80 != 0 {
         ", block mode"
     } else {
