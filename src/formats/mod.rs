@@ -37,6 +37,7 @@ pub mod avro;
 pub mod bdb;
 pub mod cfb;
 pub mod hdf5;
+pub mod jet;
 pub mod matlab;
 pub mod netcdf;
 pub mod orc;
@@ -205,6 +206,8 @@ pub static FORMATS: &[&Format] = &[
     &sst::LEVELDB,
     &sst::ROCKSDB,
     &bdb::FORMAT,
+    &jet::MDB,
+    &jet::ACCDB,
     // -- end documents --
 
     // -- disk images & filesystems --
