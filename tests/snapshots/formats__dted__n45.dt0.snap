@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ n45.dt0 — DTED tile at 0450000N 0150000E, 0121×0121 posts  [0x0+0x8480]
+    Sentinel: "UHL1"  [0x0+0x4]
+    Origin longitude (DDDMMSSH): "0150000E"  [0x4+0x8]
+    Origin latitude (DDDMMSSH): "0450000N"  [0xc+0x8]
+    Longitude interval (0.1 s): "0300"  [0x14+0x4]
+    Latitude interval (0.1 s): "0300"  [0x18+0x4]
+    Absolute vertical accuracy (m): "0020"  [0x1c+0x4]
+    Security code: "U  "  [0x20+0x3]
+    Unique reference: "REF         "  [0x23+0xc]
+    Longitude lines: "0121"  [0x2f+0x4]
+    Latitude points: "0121"  [0x33+0x4]
+    Multiple accuracy: "0"  [0x37+0x1]
+    Data set identification (DSI)  [0x50+0x288]
+    Accuracy (ACC)  [0x2d8+0xa8c]
+    Elevation records  [0xd64+0x771c]

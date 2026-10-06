@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ App.sln — Visual Studio solution, 2 projects (Visual Studio 17.8.34330.188)  [0x0+0x2b0]
+    Byte order mark: "UTF-8"  [0x0+0x3]
+    Header: "Microsoft Visual Studio Solution File, Format Version 12.00"  [0x5+0x3b]
+    Header: "# Visual Studio Version 17"  [0x42+0x1a]
+    VisualStudioVersion: "17.8.34330.188"  [0x74+0xe]
+    MinimumVisualStudioVersion: "10.0.40219.1"  [0xa1+0xc]
+  ▾ App — C# (SDK): App\App.csproj  [0xaf+0x83]
+      Type: "{9A19103F-16F7-4668-BE54-9A1E7A4F7556}" — C# (SDK)  [0xb8+0x26]
+      Name: "App"  [0xe4+0x3]
+      Path: "App\\App.csproj"  [0xeb+0xe]
+      GUID: "{11111111-2222-3333-4444-555555555555}"  [0xfd+0x26]
+  ▾ docs — Solution folder: docs  [0x132+0xd4]
+      Type: "{2150E333-8FDC-42A3-9474-1A3956D46DE8}" — Solution folder  [0x13b+0x26]
+      Name: "docs"  [0x167+0x4]
+      Path: "docs"  [0x16f+0x4]
+      GUID: "{66666666-7777-8888-9999-000000000000}"  [0x177+0x26]
+      ProjectSection(SolutionItems): "preProject"  [0x1c1+0xa]
+      README.md: "README.md"  [0x1db+0x9]
+  ▾ GlobalSection SolutionConfigurationPlatforms  [0x20e+0x97]
+      Debug|Any CPU: "Debug|Any CPU"  [0x25e+0xd]
+      Release|Any CPU: "Release|Any CPU"  [0x281+0xf]

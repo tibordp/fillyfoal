@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ driver.inf — Windows setup information: USB  [0x0+0x89]
+  ▾ [Version] — 4 entries  [0x10+0x5a]
+      Signature: "$Windows NT$"  [0x24+0xe]
+      Class: "USB"  [0x39+0x3]
+      Provider: "%Mfg%"  [0x46+0x5]
+      DriverVer: "10/05/2026,1.0.0.0"  [0x56+0x12]
+  ▾ [Strings] — 1 entry  [0x6a+0x1f]
+      Mfg: "Fillyfoal Inc."  [0x78+0x10]

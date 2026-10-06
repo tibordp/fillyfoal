@@ -1,0 +1,11 @@
+# Materials
+newmtl red
+Ka 0.1 0.0 0.0
+Kd 0.8 0.0 0.0
+Ns 10
+d 1.0
+illum 2
+
+newmtl textured
+Kd 1 1 1
+map_Kd brick.png

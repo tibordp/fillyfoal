@@ -1,0 +1,4 @@
+example.com,192.0.2.10 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBINM0D8MNfjyKfJxIRu0+tLgZPbTwM6h04jXoXSN4cqqQvNvg83kxR2162YK+FSUp+g9q11kyi7ugxvAbAau64k=
+|1|c2FsdHNhbHRzYWx0c2FsdA==|aGFzaGhhc2hoYXNoaGFzaA== ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPo3o1qqIXRb4fp7sPKfBIVEtV+0cNHe6R/HWzMLRdpm
+@cert-authority *.example.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPo3o1qqIXRb4fp7sPKfBIVEtV+0cNHe6R/HWzMLRdpm ca key
+garbage line

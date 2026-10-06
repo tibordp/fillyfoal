@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.duckdb — DuckDB database, storage version 64  [0x0+0x3040]
+    Checksum: 0x0  [0x0+0x8]
+    Magic: "DUCK"  [0x8+0x4]
+    Storage version: 64  [0xc+0x8]
+    Flags: 0x0  [0x14+0x8]
+    Database headers  [0x1000+0x2000]
+    Blocks  [0x3000+0x40]

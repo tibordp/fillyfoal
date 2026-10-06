@@ -1,8 +1,6 @@
-//! The Java family: class files, serialization streams, keystores and
-//! module files.
+//! The Java family: class files, serialization streams and keystores.
 
 pub mod class;
 pub mod keystore;
-pub mod modules;
 mod opcodes;
 pub mod serialization;

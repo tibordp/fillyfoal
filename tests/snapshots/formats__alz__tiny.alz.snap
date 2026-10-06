@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.alz — ALZip archive, 1+ entries  [0x0+0x2e]
+    Header  [0x0+0x8]
+    Local file records  [0x8+0x26]

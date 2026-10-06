@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ site.url — Internet shortcut: https://example.com/  [0x0+0x3b]
+  ▾ [InternetShortcut] — 2 entries  [0x0+0x3b]
+      URL: "https://example.com/"  [0x18+0x14]
+      IconIndex: "0"  [0x38+0x1]

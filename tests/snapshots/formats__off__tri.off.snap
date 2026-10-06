@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tri.off — OFF mesh, 3 vertices, 1 faces  [0x0+0x31]
+    Header: "OFF"  [0x0+0x3]
+    Data  [0x0+0x31]

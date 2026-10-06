@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mdl — Source model "models/tiny.mdl", version 48  [0x0+0xcc]
+    Identifier: "IDST"  [0x0+0x4]
+    Version: 48  [0x4+0x4]
+    Checksum: 0x1234abcd  [0x8+0x4]
+    Name: "models/tiny.mdl"  [0xc+0x40]
+    File length: 200  [0x4c+0x4]
+    Model data  [0x50+0x7c]

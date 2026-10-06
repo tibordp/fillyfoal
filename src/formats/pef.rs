@@ -17,7 +17,7 @@ use crate::value::EnumTable;
 const BE: Endian = Endian::Big;
 
 pub static FORMAT: Format = Format {
-    name: "pef",
+    name: "mac-pef",
     title: "Preferred Executable Format (classic Mac OS)",
     extensions: &["pef", "shlb"],
     mime: "application/x-pef",

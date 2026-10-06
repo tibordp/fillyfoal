@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ users.avro — Avro object container, codec null, schema User  [0x0+0xf2]
+    Magic: 4f 62 6a 01  |Obj.|  [0x0+0x4]
+  ▾ Metadata — 2 entries  [0x4+0xa7]
+      avro.schema: "{\"type\": \"record\", \"name\": \"User\", \"namespace\": \"test\", \"fields\": [{\"name\": \"name\", \"type\": \"string\"}, {\"name\": \"age\", \"type\": \"int\"}]}"  [0x5+0x95]
+      avro.codec: "null"  [0x9a+0x10]
+    Sync marker: a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 aa ab ac ad ae af  |................|  [0xab+0x10]
+  ▾ Blocks  [0xbb+0x37]
+    ▾ Block 0 — 2 objects, 12 bytes  [0xbb+0x1e]
+        Object count: 2  [0xbb+0x1]
+        Size: 12  [0xbc+0x1]
+      ▾ Objects — 12 bytes  [0xbd+0xc]
+          Data  [0xbd+0xc]
+        Sync marker  [0xc9+0x10]
+    ▾ Block 1 — 1 objects, 7 bytes  [0xd9+0x19]
+        Object count: 1  [0xd9+0x1]
+        Size: 7  [0xda+0x1]
+      ▾ Objects — UTF-8 text, LF line endings, 2 lines  [0xdb+0x7]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 2 lines  [0xdb+0x7]
+            Line 1: ""  [0xdb+0x0]
+            Line 2: "carolR"  [0xdc+0x6]
+        Sync marker  [0xe2+0x10]

@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.nut — NUT container, 1 main header(s), 1 stream header(s) in the first 64 KiB  [0x0+0x51]
+    File ID string  [0x0+0x19]
+    Packets  [0x19+0x38]

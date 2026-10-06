@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ snap.btrfs — btrfs send stream v1, 4 commands  [0x0+0x8f]
+    Header — version 1  [0x0+0x11]
+    SUBVOL — snap1  [0x11+0x33]
+    MKFILE — hello.txt  [0x44+0x17]
+    WRITE — hello.txt  [0x5b+0x2a]
+    END  [0x85+0xa]

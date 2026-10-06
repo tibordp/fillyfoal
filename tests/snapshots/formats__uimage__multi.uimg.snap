@@ -1,0 +1,41 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ multi.uimg — U-Boot image "multi-file": Linux ARM multi-file, none, 52 bytes  [0x0+0x74]
+  ▾ Header — multi-file, header CRC valid  [0x0+0x40]
+      Magic: 0x27051956  [0x0+0x4]
+      Header CRC: 0xbf54996  [0x4+0x4]
+      Creation time: 2024-01-02 03:04:00 UTC  [0x8+0x4]
+      Data size: 52 — 52 bytes  [0xc+0x4]
+      Load address: 0x80008000  [0x10+0x4]
+      Entry point: 0x80008000  [0x14+0x4]
+      Data CRC: 0x5875fe3c  [0x18+0x4]
+      Operating system: Linux (0x5)  [0x1c+0x1]
+      Architecture: ARM (0x2)  [0x1d+0x1]
+      Image type: multi-file (0x4)  [0x1e+0x1]
+      Compression: none (0x0)  [0x1f+0x1]
+      Name: "multi-file"  [0x20+0x20]
+  ▾ Images — none, 52 bytes  [0x40+0x34]
+      Size table: 2 — 2 images  [0x40+0xc]
+    ▾ Image 0 — UTF-8 text, LF line endings, 1 line  [0x4c+0xb]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x4c+0xb]
+          Line 1: "first part"  [0x4c+0xa]
+    ▾ Image 1 — gzip, 7 bytes uncompressed  [0x58+0x1b]
+      ▾ Header  [0x58+0xa]
+          ID: 1f 8b  |..|  [0x58+0x2]
+          CM: deflate (0x8)  [0x5a+0x1]
+          FLG: 0x0 []  [0x5b+0x1]
+          MTIME: 1970-01-01 00:00:00 UTC  [0x5c+0x4]
+          XFL: best compression (0x2)  [0x60+0x1]
+          OS: unknown (0xff)  [0x61+0x1]
+      ▾ Trailer  [0x6b+0x8]
+          CRC32: 0x60fc07e  [0x6b+0x4]
+          ISIZE: 7  [0x6f+0x4]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x62+0x9]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x7]
+            Line 1: "second"  [#1:0x0+0x6]

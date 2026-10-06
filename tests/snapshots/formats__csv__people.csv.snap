@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ people.csv — CSV, 4 columns (name, age, city, zip), ~7 records  [0x0+0x89]
+    Delimiter: "comma"
+  ▾ Header — name, age, city, zip  [0x0+0x11]
+      Column 1: "name"  [0x0+0x4]
+      Column 2: "age"  [0x5+0x3]
+      Column 3: "city"  [0x9+0x4]
+      Column 4: "zip"  [0xe+0x3]
+  ▾ Record 1 — Ana,34,Ljubljana,01000  [0x13+0x16]
+      name: "Ana"  [0x13+0x3]
+      age: 34  [0x17+0x2]
+      city: "Ljubljana"  [0x1a+0x9]
+      zip: "01000"  [0x24+0x5]
+  ▾ Record 2 — "Novak, Janez",51,"Maribor",2000  [0x2b+0x20]
+      name: "Novak, Janez"  [0x2b+0xe]
+      age: 51  [0x3a+0x2]
+      city: "Maribor"  [0x3d+0x9]
+      zip: 2000  [0x47+0x4]
+  ▾ Record 3 — "He said ""hi""",7.5,"multi  line",  [0x4d+0x23]
+      name: "He said \"hi\""  [0x4d+0x10]
+      age: 7.5  [0x5e+0x3]
+      city: "multi\r\nline"  [0x62+0xd]
+      zip: ""  [0x70+0x0]
+  ▾ Record 4 — Bob,,Kranj,4000,extra  [0x72+0x15]
+      ! warning: 5 fields, header has 4
+      name: "Bob"  [0x72+0x3]
+      age: ""  [0x76+0x0]
+      city: "Kranj"  [0x77+0x5]
+      zip: 4000  [0x7d+0x4]
+      Column 5: "extra"  [0x82+0x5]

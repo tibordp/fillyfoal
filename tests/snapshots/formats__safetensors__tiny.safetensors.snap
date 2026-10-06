@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.safetensors — safetensors, 4 tensors, 24 parameters, 67 bytes  [0x0+0x193]
+    Header size: 328  [0x0+0x8]
+    Header — 328 bytes of JSON  [0x8+0x148]
+  ▾ Metadata — 2 entries
+      format: "pt"
+      producer: "fillyfoal fixture"
+  ▾ Tensors — 4  [0x150+0x43]
+      embed.weight: "F32" — [4, 3], 48 bytes  [0x150+0x30]
+      embed.bias: "F16" — [3], 6 bytes  [0x180+0x6]
+      layer.0.scale: "BF16" — [2, 2], 8 bytes  [0x186+0x8]
+      mask: "BOOL" — [5], 5 bytes  [0x18e+0x5]

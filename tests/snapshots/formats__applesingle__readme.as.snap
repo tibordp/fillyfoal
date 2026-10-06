@@ -1,0 +1,38 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ readme.as — AppleSingle, real name, file dates, finder info, data fork, "Read Me.txt"  [0x0+0xa4]
+    Magic: 0x51600  [0x0+0x4]
+    Version: 0x20000  [0x4+0x4]
+    Filler: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x8+0x10]
+    Number of entries: 4  [0x18+0x2]
+  ▾ Real name — 11 bytes  [0x4a+0xb] → 0x1a+0xc
+      Entry ID: 3  [0x1a+0x4]
+      Offset: 0x4a  [0x1e+0x4]
+      Length: 11  [0x22+0x4]
+      Text: "Read Me.txt"  [0x4a+0xb]
+  ▾ File dates — 16 bytes  [0x55+0x10] → 0x26+0xc
+      Entry ID: 8  [0x26+0x4]
+      Offset: 0x55  [0x2a+0x4]
+      Length: 16  [0x2e+0x4]
+      Created: 2025-05-08 06:13:20 UTC  [0x55+0x4]
+      Modified: 2025-09-01 00:00:00 UTC  [0x59+0x4]
+      Backed up: 1931-12-13 20:45:52 UTC  [0x5d+0x4]
+      Accessed: 2025-12-25 17:46:40 UTC  [0x61+0x4]
+  ▾ Finder info — 32 bytes  [0x65+0x20] → 0x32+0xc
+      Entry ID: 9  [0x32+0x4]
+      Offset: 0x65  [0x36+0x4]
+      Length: 32  [0x3a+0x4]
+      File type: "TEXT"  [0x65+0x4]
+      Creator: "ttxt"  [0x69+0x4]
+      Finder flags: 0x100 [hasBeenInited]  [0x6d+0x2]
+      Location v: 10  [0x6f+0x2]
+      Location h: 20  [0x71+0x2]
+      Folder: 0  [0x73+0x2]
+      Extended Finder info: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x75+0x10]
+  ▾ Data fork — UTF-8 text, CR line endings, 1 line  [0x85+0x1f] → 0x3e+0xc
+      Encoding: "UTF-8"
+      Line endings: "CR" — 0 LF, 0 CRLF, 1 CR
+    ▾ Lines — 1 line  [0x85+0x1f]
+        Line 1: "Hello from a classic Mac file."  [0x85+0x1e]

@@ -1,0 +1,36 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sl.po — gettext catalog: fillyfoal 0.1, 5 messages (1 untranslated, 1 fuzzy)  [0x0+0x25d]
+  ▾ Header  [0x0+0xf1]
+      Comment: "Slovenian translation."  [0x0+0x18]
+      msgid: ""  [0x19+0x8]
+    ▾ msgstr: "Project-Id-Version: fillyfoal 0.1\nLanguage: sl\nContent-Type: text/plain; charset=UTF-8\nPlural-Forms: nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3);\n" — 4 fields  [0x22+0xcf]
+        Project-Id-Version: "fillyfoal 0.1"
+        Language: "sl"
+        Content-Type: "text/plain; charset=UTF-8"
+        Plural-Forms: "nplurals=4; plural=(n%100==1 ? 0 : n%100==2 ? 1 : n%100==3 || n%100==4 ? 2 : 3);"
+  ▾ Hello: "Živjo"  [0xf3+0x49]
+      Extracted comment: "Shown on the title bar"  [0xf3+0x19]
+      Reference: "src/main.rs:10"  [0x10d+0x11]
+      msgid: "Hello"  [0x11f+0xd]
+      msgstr: "Živjo"  [0x12d+0xf]
+  ▾ Open %s: "Odpri %s" — fuzzy, c-format  [0x13e+0x43]
+      Flags: "fuzzy, c-format"  [0x13e+0x12]
+      msgctxt: "menu"  [0x151+0xe]
+      msgid: "Open %s"  [0x160+0xf]
+      msgstr: "Odpri %s"  [0x170+0x11]
+  ▾ One file: "%d datoteka"  [0x183+0x87]
+      msgid: "One file"  [0x183+0x10]
+      msgid_plural: "%d files"  [0x194+0x17]
+      msgstr[0]: "%d datoteka"  [0x1ac+0x17]
+      msgstr[1]: "%d datoteki"  [0x1c4+0x17]
+      msgstr[2]: "%d datoteke"  [0x1dc+0x17]
+      msgstr[3]: "%d datotek"  [0x1f4+0x16]
+  ▾ Long message continued: ""  [0x20c+0x2e]
+      msgid: "Long message continued"  [0x20c+0x24]
+      msgstr: ""  [0x231+0x9]
+  ▾ Old: "Staro" — obsolete  [0x23c+0x20]
+      msgid: "Old"  [0x23c+0xe]
+      msgstr: "Staro"  [0x24b+0x11]

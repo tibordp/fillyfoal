@@ -1,0 +1,35 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "fillyfoal"
+  },
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ]
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0
+          }
+        }
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "data:application/octet-stream;base64,AAAA",
+      "byteLength": 3
+    }
+  ]
+}

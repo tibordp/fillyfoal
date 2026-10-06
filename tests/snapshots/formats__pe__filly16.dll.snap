@@ -72,8 +72,11 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Resource Table  [0xd0+0x36]
         rscAlignShift: 4  [0xd0+0x2]
       ▾ RCDATA — 1 resources  [0xd2+0x14]
-        ▾ #1 — 0x10 bytes at 0x190  [0x190+0x10] → 0xda+0xc
-            Data  [0x190+0x10]
+        ▾ #1 — UTF-8 text, 1 line  [0x190+0x10] → 0xda+0xc
+            Encoding: "UTF-8"
+            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x190+0x10]
+              Line 1: "RCDATA payload: "  [0x190+0x10]
       ▾ VERSION — 1 resources  [0xe6+0x14]
         ▾ FILLYVER — 0x10 bytes at 0x1c0  [0x1c0+0x10] → 0xee+0xc
             Data  [0x1c0+0x10]

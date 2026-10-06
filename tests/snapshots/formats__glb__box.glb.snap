@@ -7,6 +7,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Magic: "glTF"  [0x0+0x4]
       Version: 2  [0x4+0x4]
       Total length: 136  [0x8+0x4]
-  ▾ JSON chunk — 96 bytes  [0x14+0x60] → 0xc+0x68
-      ! unsupported: unrecognized format [0x14+0x60]
+  ▾ JSON chunk — glTF 3D asset (JSON): fillyfoal fixture  [0x14+0x60] → 0xc+0x68
+    ▾ asset — object, 2 members  [0x1e+0x34]
+        version: "2.0"  [0x2a+0x5]
+        generator: "fillyfoal fixture"  [0x3e+0x13]
+    ▾ buffers — array, 1 element  [0x5f+0x14]
+      ▾ [0] — object, 1 member  [0x60+0x12]
+          byteLength: 12  [0x6f+0x2]
     BIN chunk — 12 bytes  [0x7c+0xc] → 0x74+0x14

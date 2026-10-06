@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ person.schema.json — JSON Schema: Person  [0x0+0x132]
+    $schema: "https://json-schema.org/draft/2020-12/schema"  [0xf+0x2e]
+    $id: "https://example.com/person"  [0x48+0x1c]
+    title: "Person"  [0x71+0x8]
+    type: "object"  [0x85+0x8]
+  ▾ properties — object, 2 members  [0x9f+0x70]
+    ▾ name — object, 1 member  [0xad+0x1e]
+        type: "string"  [0xbd+0x8]
+    ▾ age — object, 2 members  [0xd8+0x33]
+        type: "integer"  [0xe8+0x9]
+        minimum: 0  [0x104+0x1]
+  ▾ required — array, 1 element  [0x11f+0x10]
+      [0]: "name"  [0x125+0x6]

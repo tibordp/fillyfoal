@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ matrix.npy — NumPy array <f8, shape (3, 4), C order  [0x0+0xe0]
+    Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
+    Major version: 1  [0x6+0x1]
+    Minor version: 0  [0x7+0x1]
+    Header length: 118  [0x8+0x2]
+    Header: "{'descr': '<f8', 'fortran_order': False, 'shape': (3, 4), }"  [0xa+0x76]
+    dtype: "<f8"
+    Fortran order: false
+    Shape: "(3, 4)"
+    Data — 12 elements, 96 bytes  [0x80+0x60]

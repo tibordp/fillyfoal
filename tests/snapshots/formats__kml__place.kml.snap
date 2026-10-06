@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ place.kml — Keyhole Markup Language: Castle  [0x0+0xc1]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ kml — 1 element  [0x27+0x99]
+      @xmlns: "http://www.opengis.net/kml/2.2"  [0x33+0x1e]
+    ▾ Placemark — 2 elements  [0x56+0x63]
+        name: "Castle"  [0x61+0x13]
+      ▾ Point — 1 element  [0x74+0x39]
+          coordinates: "14.508,46.049,0"  [0x7b+0x2a]

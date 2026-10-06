@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.egg — EGG archive v1.0  [0x0+0x22]
+    Signature: "EGGA"  [0x0+0x4]
+    Version: 0x100  [0x4+0x2]
+    Header ID: 0x12345678  [0x6+0x4]
+    Reserved: 0  [0xa+0x4]
+    Blocks  [0xe+0x14]

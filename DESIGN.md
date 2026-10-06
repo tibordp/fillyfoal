@@ -150,10 +150,16 @@ layout.
 
 1. Core + PE (headers, sections, data directories, imports, exports,
    resources with embedded-object detection, debug/CodeView, certificates,
-   overlay). ← *we are here*
+   overlay). Done, plus version resources.
 2. ZIP (stored members first) + PNG member: derived sources and composition.
-3. In-house inflate behind the codec interface; ZIP deflate members.
+   Done.
+3. In-house inflate behind the codec interface; ZIP deflate members. Done
+   (whole-member decoding into memory, budgeted; streaming is still open).
 4. tar.gz: streaming-only derived source, checkpoints, budgets under load.
+   Partly done: large members are decoded lazily (`Cx::inflate_lazy`), so
+   the first page of a huge tarball costs only what it reads. Decoded bytes
+   are kept (bounded by `max_derived`); checkpoints that allow discarding
+   and re-decoding are still open.
 5. SQLite: page graph, resume keys with traversal stacks, overflow chains as
    fragmented sources.
 6. MP4: generic recursive boxes, huge fixed-stride tables, random index access.
@@ -180,9 +186,38 @@ The core is not considered stable until SQLite and PDF fit without contortion.
 - **Laziness is real.** On a 160 KB DLL, F3 (top level) reads 4 KiB; fully
   expanding real binaries reads 10–30% of the file, because section bodies,
   resources and overlays stay unread until opened.
-- **Not yet done in PE:** VS_VERSIONINFO (high value for F3), Rich header,
-  delay imports, base relocations, exception/TLS/load-config tables, .NET
-  metadata, Authenticode. All of these currently appear as leaves with spans.
+- **Not yet done in PE:** Rich header, delay imports, base relocations,
+  exception/TLS/load-config tables, .NET metadata. These appear as leaves with
+  spans. (Version resources and Authenticode via the ASN.1 dissector are done.)
+
+## Findings from scaling out (hundreds of formats)
+
+- **The registry scales.** A format is a file plus one line in `FORMATS`;
+  families share a dissector and register one `Format` per member. Sections
+  per family let parallel branches merge with a union of lines.
+- **Probe collisions are the main integration risk.** Weak probes (frame
+  syncs, size checks, two-byte magics) shadow other formats. Two tests keep
+  this honest: every fixture must be identified as the format its directory
+  names, and format names must be unique. Weak probes go last in their
+  section; generic text goes last overall.
+- **The robustness harness finds real bugs fast.** Truncation and mutation
+  sweeps over every fixture found infinite loops (a header scan reading past
+  EOF through a clamped span), exponential self-embedding (a partition table
+  pointing at its own image), and probe overreach. Two framework guards came
+  out of it: embedded regions in the same source must be strictly smaller than
+  their container, and `Limits::max_work` stops any runaway expansion with a
+  local `Limit` diagnostic.
+- **Piecewise sources** (`Cx::add_pieces`) cover fragmented data without
+  copying: CBM sector chains, MSF (PDB) streams and their directory,
+  filesystem extents. `Session::resolve` maps them back to file offsets.
+- **Composition compounds.** Each new format improves others: text inside
+  archives, JPEG frames inside AVI, PNG inside game packs, TAR inside Android
+  backups. Snapshot diffs after merges are mostly such improvements.
+- **API sharp edges seen in practice:** `cx.read(region.sub(..))` silently
+  returns short data past the end (by design, for partial structures) — loops
+  must be bounded by the region; inline flag tables must be `const` (they call
+  `flag()`); `expander!` needs a `self::` path when a local variable shadows
+  the function name.
 
 ## Open questions
 

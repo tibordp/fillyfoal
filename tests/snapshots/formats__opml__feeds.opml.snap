@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ feeds.opml — OPML outline: My feeds  [0x0+0xd8]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ opml — version="2.0" (2 elements)  [0x27+0xb0]
+      @version: "2.0"  [0x36+0x3]
+    ▾ head — 1 element  [0x3b+0x24]
+        title: "My feeds"  [0x41+0x17]
+    ▾ body — 1 element  [0x5f+0x71]
+      ▾ outline — text="News" (1 element)  [0x65+0x64]
+          @text: "News"  [0x74+0x4]
+        ▾ outline — type="rss" text="Example" xmlUrl="https://example.com/rss"  [0x7a+0x45]
+            @type: "rss"  [0x89+0x3]
+            @text: "Example"  [0x94+0x7]
+            @xmlUrl: "https://example.com/rss"  [0xa5+0x17]

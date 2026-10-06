@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 000000001-000000001.tsm — InfluxDB TSM v1, index at 0x2d  [0x0+0x49]
+    Header — version 1  [0x0+0x5]
+    Blocks  [0x5+0x28]
+    Index  [0x2d+0x14]
+    Footer  [0x41+0x8]

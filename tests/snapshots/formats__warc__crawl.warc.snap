@@ -9,8 +9,11 @@ expression: "common::explore(&display_name(&path), &data)"
       WARC-Target-URI: ""  [0x1f+0x11]
       Content-Type: "application/octet-stream"  [0x32+0x26]
       Content-Length: "21"  [0x5a+0x12]
-    ▾ Content block — 21 bytes  [0x70+0x15]
-        ! unsupported: unrecognized format [0x70+0x15]
+    ▾ Content block — UTF-8 text, CRLF line endings, 1 line  [0x70+0x15]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x70+0x15]
+          Line 1: "software: fillyfoal"  [0x70+0x13]
   ▾ resource https://example.com/icon.png  [0x89+0x23e]
       Version: "WARC/1.0"  [0x89+0x8]
       WARC-Type: "resource"  [0x93+0x13]
@@ -80,5 +83,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Type: "IEND" — critical, public, unsafe to copy  [0x2b4+0x4]
           Data  [0x2b8+0x0]
           CRC: 0xae426082 — valid  [0x2b8+0x4]
-      ▾ Trailing data — 0x7 bytes after the end chunk  [0x2bc+0x7]
-          ! unsupported: unrecognized format [0x2bc+0x7]
+      ▾ Trailing data — UTF-8 text, 1 line  [0x2bc+0x7]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x2bc+0x7]
+            Line 1: "TRAILER"  [0x2bc+0x7]

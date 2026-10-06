@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ work.ics — iCalendar, 1 calendar  [0x0+0x276]
+  ▾ VCALENDAR — Work, 3 components  [0x0+0x276]
+      VERSION: "2.0"  [0x19+0x3]
+      PRODID: "-//Fillyfoal//Tests//EN"  [0x25+0x17]
+      X-WR-CALNAME: "Work"  [0x4b+0x4]
+    ▾ VTIMEZONE — Europe/Ljubljana, 1 component  [0x51+0x94]
+        TZID: "Europe/Ljubljana"  [0x67+0x10]
+      ▾ STANDARD — 1970-10-25 03:00:00 UTC  [0x79+0x5d]
+          DTSTART: "19701025T030000"  [0x91+0xf]
+          TZOFFSETFROM: "+0200"  [0xaf+0x5]
+          TZOFFSETTO: "+0100"  [0xc1+0x5]
+    ▾ VEVENT — Design review, round 2, 2026-10-06 10:00:00 UTC, 1 component  [0xe5+0x126]
+        UID: "1@example.com"  [0xf7+0xd]
+        DTSTAMP: 2026-10-05 08:00:00 UTC  [0x10e+0x10]
+      ▾ DTSTART: "20261006T100000" — local time in Europe/Ljubljana  [0x13e+0xf]
+          TZID (parameter): "Europe/Ljubljana"
+        DTEND: 2026-10-06 09:00:00 UTC  [0x155+0x10]
+        SUMMARY: "Design review, round 2"  [0x16f+0x17]
+        LOCATION: "Room 1"  [0x191+0x6]
+        DESCRIPTION: "Agenda:\n- dissectors\n- tests"  [0x1a5+0x1e]
+      ▾ VALARM — DISPLAY  [0x1c5+0x3a]
+          ACTION: "DISPLAY"  [0x1da+0x7]
+          TRIGGER: "-PT15M"  [0x1eb+0x6]
+    ▾ VTODO — Write fixtures  [0x20b+0x5c]
+        UID: "2@example.com"  [0x21c+0xd]
+        SUMMARY: "Write fixtures"  [0x233+0xe]
+      ▾ DUE: 2026-10-10 00:00:00 UTC  [0x252+0x8]
+          VALUE (parameter): "DATE"

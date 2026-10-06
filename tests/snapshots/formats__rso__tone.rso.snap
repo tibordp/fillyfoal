@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.rso — LEGO RSO, 8000 Hz, 50 ms  [0x0+0x198]
+  ▾ Header  [0x0+0x8]
+      Format: 8-bit unsigned PCM (0x100)  [0x0+0x2]
+      Data size: 400  [0x2+0x2]
+      Sample rate: 8000  [0x4+0x2]
+      Play mode: 0  [0x6+0x2]
+    Samples — 50 ms  [0x8+0x190]

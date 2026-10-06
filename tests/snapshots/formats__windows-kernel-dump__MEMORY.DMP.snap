@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ MEMORY.DMP — Windows 15.19045 kernel dump, bug check 0xd1, 4 CPU(s), machine 0x8664  [0x0+0x2040]
+    Signature: "PAGE"  [0x0+0x4]
+    Valid dump: "DU64"  [0x4+0x4]
+    Major version: 15  [0x8+0x4]
+    Minor version (build): 19045  [0xc+0x4]
+    Directory table base: 0x1aa000  [0x10+0x8]
+    PFN database: 0xfffffa8000000000  [0x18+0x8]
+    Loaded module list: 0xfffff80000000000  [0x20+0x8]
+    Active process list: 0xfffff80000001000  [0x28+0x8]
+    Machine: x64 (0x8664)  [0x30+0x4]
+    Processors: 4  [0x34+0x4]
+    Bug check code: 0xd1  [0x38+0x4]
+    Dump type: kernel (0x2)  [0xf98+0x4]
+    Memory pages  [0x2000+0x40]

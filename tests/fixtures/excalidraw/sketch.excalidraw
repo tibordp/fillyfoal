@@ -1,0 +1,15 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "type": "rectangle",
+      "x": 0,
+      "y": 0,
+      "width": 10,
+      "height": 10
+    }
+  ],
+  "appState": {}
+}

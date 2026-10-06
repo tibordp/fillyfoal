@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ groups-v0.h5 — HDF5 superblock v0, 1000 bytes declared  [0x0+0x3e8]
+  ▾ Superblock — version 0  [0x0+0x60]
+      Signature: 89 48 44 46 0d 0a 1a 0a  |.HDF....|  [0x0+0x8]
+      Version: 0  [0x8+0x1]
+      Free-space storage version: 0  [0x9+0x1]
+      Root group symbol table version: 0  [0xa+0x1]
+      Shared header message version: 0  [0xc+0x1]
+      Size of offsets: 8  [0xd+0x1]
+      Size of lengths: 8  [0xe+0x1]
+      Group leaf node K: 4  [0x10+0x2]
+      Group internal node K: 16  [0x12+0x2]
+      File consistency flags: 0x0  [0x14+0x4]
+      Base address: 0x0  [0x18+0x8]
+      Free-space info address: 0xffffffffffffffff  [0x20+0x8]
+      End of file address: 0x3e8  [0x28+0x8]
+      Driver info address: 0xffffffffffffffff  [0x30+0x8]
+      Root group symbol table entry: 0x60 — object header address  [0x38+0x28]
+  ▾ Root group: 0x60 — group, object header v1, 2 messages → 0x60+0x10
+    ▾ Symbol Table — B-tree at 0xc8, heap at 0x118  [0x70+0x18]
+      ▾ data: 0x208 — dataset, object header v1, 4 messages  [0x170+0x28] → 0x208+0x10
+          Dataspace — [2×3]  [0x218+0x20]
+          Datatype — floating-point, 8 bytes  [0x238+0x20]
+          Data Layout: 0x2a8 — contiguous, 48 bytes  [0x258+0x20] → 0x2a8+0x30
+          Object Comment: "a 2x3 matrix"  [0x278+0x18]
+      ▾ sub: 0x2e4 — group, object header v1, 1 messages  [0x198+0x28] → 0x2e4+0x10
+        ▾ Symbol Table — B-tree at 0x320, heap at 0x118  [0x2f4+0x18]
+            back: 0x60 — already open above (hard-link cycle)  [0x378+0x28] → 0x60+0x10
+      Object Modification Time: 2026-01-01 00:00:00 UTC  [0x88+0x10]

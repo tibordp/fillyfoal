@@ -34,7 +34,19 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    h.at(2, b"\r\n") && u16_le(h.data, 0).is_some_and(|m| version(m).is_some())
+    let Some(v) = u16_le(h.data, 0).and_then(version) else {
+        return false;
+    };
+    let header = if v >= (3, 7) {
+        16
+    } else if v >= (3, 3) {
+        12
+    } else {
+        8
+    };
+    // The marshalled code object follows the header ('c', possibly with
+    // the reference flag set).
+    h.at(2, b"\r\n") && matches!(h.data.get(header), Some(b'c' | 0xe3))
 }
 
 /// The Python version a magic number belongs to, as `(major, minor)`.

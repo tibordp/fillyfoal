@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ channel.wad — Wii WAD (Is), 64 bytes of content  [0x0+0xf80]
+    Header size: 32  [0x0+0x4]
+    Type: "Is"  [0x4+0x4]
+    Certificate chain size: 2560  [0x8+0x4]
+    Reserved: 0  [0xc+0x4]
+    Ticket size: 676  [0x10+0x4]
+    TMD size: 520  [0x14+0x4]
+    Data size: 64  [0x18+0x4]
+    Footer size: 0  [0x1c+0x4]
+    Certificate chain  [0x40+0xa00]
+    Ticket  [0xa40+0x2a4]
+    Title metadata (TMD)  [0xd00+0x208]
+    Encrypted content  [0xf40+0x40]
+    Footer  [0xf80+0x0]

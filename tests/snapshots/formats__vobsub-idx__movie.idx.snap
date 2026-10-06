@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ movie.idx — VobSub index, tracks [en, de], 3 subtitles  [0x0+0x124]
+    size: "720x480"  [0x3d+0xd]
+    org: "0, 0"  [0x4b+0x9]
+    scale: "100%, 100%"  [0x55+0x11]
+    alpha: "100%"  [0x67+0xb]
+    langidx: "0"  [0x73+0xa]
+    Track en, index: 0  [0x7e+0x10]
+    Track de, index: 1  [0xe7+0x10]

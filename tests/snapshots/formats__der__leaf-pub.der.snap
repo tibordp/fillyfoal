@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ leaf-pub.der — ASN.1 DER, SEQUENCE, 91 bytes  [0x0+0x5b]
+  ▾ SEQUENCE  [0x0+0x5b]
+    ▾ SEQUENCE — ecPublicKey = prime256v1  [0x2+0x15]
+        OBJECT IDENTIFIER: "1.2.840.10045.2.1" — ecPublicKey  [0x4+0x9]
+        OBJECT IDENTIFIER: "1.2.840.10045.3.1.7" — prime256v1  [0xd+0xa]
+      BIT STRING: 04 57 9e c8 30 c5 74 ea 98 90 b8 7d b9 8d 6f 8a …  |.W..0.t....}..o.| — 520 bits  [0x17+0x44]

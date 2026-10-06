@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ uncompressed-block.lz4 — LZ4, 1 frame  [0x0+0x20f]
+  ▾ Frame 0 — 1 block, size unknown  [0x0+0x20f]
+      Magic: 0x184d2204  [0x0+0x4]
+    ▾ Frame descriptor — content size not recorded  [0x4+0x3]
+        FLG: 0x60 [VERSION_01 | BLOCK_INDEPENDENT]  [0x4+0x1]
+        BD: 64 — block maximum 64 KiB  [0x5+0x1]
+        Header checksum: 0x82 — valid  [0x6+0x1]
+    ▾ Block 0 — uncompressed, 512 bytes  [0x7+0x204]
+        Block size: 0x80000200 — 512 bytes, uncompressed  [0x7+0x4]
+        Uncompressed data  [0xb+0x200]
+      End mark: 0x0  [0x20b+0x4]

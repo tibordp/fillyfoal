@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ repo.dump — Subversion dump v2, 2 revisions  [0x0+0x1ae]
+    Format version: "2"  [0x0+0x1f]
+    Repository UUID: "7bf7a5ef-cabf-0310-b7d4-93df341afa7e"  [0x1f+0x2c]
+    Revision 0  [0x4b+0x49]
+    Revision 1  [0x95+0x49]
+      trunk — add dir  [0xdf+0x67]
+      trunk/a.txt — add file  [0x148+0x65]

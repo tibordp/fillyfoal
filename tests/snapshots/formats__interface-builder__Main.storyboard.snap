@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Main.storyboard — Interface Builder document: com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB  [0x0+0xf6]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ document — type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="21701" (1 element)  [0x27+0xce]
+      @type: "com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB"  [0x37+0x35]
+      @version: "3.0"  [0x77+0x3]
+      @toolsVersion: "21701"  [0x8a+0x5]
+    ▾ scenes — 1 element  [0x91+0x59]
+      ▾ scene — sceneID="s1" (1 element)  [0x99+0x48]
+          @sceneID: "s1"  [0xa9+0x2]
+        ▾ objects — 1 element  [0xad+0x2c]
+          ▾ viewController — id="vc"  [0xb6+0x19]
+              @id: "vc"  [0xca+0x2]
