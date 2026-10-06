@@ -3,8 +3,8 @@
 //! SquashFS: a 96-byte superblock locating the inode, directory, fragment,
 //! export, ID and xattr tables; optional compressor options follow it.
 //! Tables are sequences of metadata blocks (16-bit header, up to 8 KiB),
-//! shown with their payloads (zlib blocks are decompressed when the image
-//! uses gzip).
+//! shown with their payloads, decompressed (gzip, LZMA, xz, LZ4 and zstd;
+//! LZO is unsupported).
 //!
 //! CramFS: a superblock and a tree of 12-byte inodes; directories are
 //! walked lazily and file contents (zlib blocks of one page each) are
@@ -123,7 +123,15 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
         Superblock::node("Superblock", sb_span, LE)
             .summary(format!("version {}.{}", sb.major, sb.minor)),
     );
-    let gzip = sb.compressor == 1;
+    let codec = match sb.compressor {
+        1 => Some(Codec::Zlib),
+        // squashfs-tools' legacy LZMA: a 13-byte `.lzma` header per block.
+        2 => Some(Codec::LzmaAlone),
+        4 => Some(Codec::Xz),
+        5 => Some(Codec::Lz4Block),
+        6 => Some(Codec::Zstd),
+        _ => None,
+    };
     let compressor = crate::value::lookup(COMPRESSOR, sb.compressor.into()).unwrap_or("unknown");
     let mut data_start = Superblock::SIZE;
     if sb.flags & 0x0400 != 0 {
@@ -169,7 +177,7 @@ pub async fn dissect_squashfs(cx: Cx, input: Input) -> Result<()> {
             "Inode table" | "Directory table" => Node::new(name)
                 .span(span)
                 .summary(human_size(span.len))
-                .lazy(metadata_blocks, (input, span, gzip, compressor)),
+                .lazy(metadata_blocks, (input, span, codec.clone(), compressor)),
             _ => Node::new(name).span(span).summary(human_size(span.len)),
         };
         cx.emit(node);
@@ -233,7 +241,7 @@ fn compressor_options(f: &mut Fields<'_>, compressor: &u16) -> Result<()> {
 
 async fn metadata_blocks(
     cx: Cx,
-    (input, span, gzip, compressor): (Input, Span, bool, &'static str),
+    (input, span, codec, compressor): (Input, Span, Option<Codec>, &'static str),
 ) -> Result<()> {
     let mut at = 0u64;
     let mut index = 0u64;
@@ -246,8 +254,8 @@ async fn metadata_blocks(
         let payload = block.tail(2);
         let child = if stored {
             Node::new("Data").span(payload)
-        } else if gzip {
-            content("Data", input, payload, Codec::Zlib, None)
+        } else if let Some(codec) = &codec {
+            content("Data", input, payload, codec.clone(), None)
         } else {
             unsupported("Data", payload, compressor)
         };
