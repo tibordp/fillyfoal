@@ -1,5 +1,5 @@
 //! Chiptune trackers and register dumps: FamiTracker, DefleMask, Furnace,
-//! S98, GYM, Organya, GoatTracker, SNDH, Pro Tracker 3, PSG and AHX.
+//! S98, GYM, Organya, GoatTracker, SNDH, Pro Tracker 3 and PSG.
 
 use super::util::{clean, dec, size, text};
 use crate::bytes::{to_u64, u16_be, u16_le, u32_le};
@@ -9,13 +9,12 @@ use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe};
-use crate::node::{Count, Node};
+use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
-const BE: Endian = Endian::Big;
 
 /// The first bytes of a zlib stream, decompressed (for probes).
 fn zlib_peek(h: &Head<'_>) -> Option<Vec<u8>> {
@@ -702,55 +701,5 @@ async fn psg(cx: Cx, input: Input) -> Result<()> {
             format!(", {n} frames ({}:{:02})", secs / 60, secs % 60)
         })
     ));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// AHX (Abyss' Highest eXperience, Amiga)
-
-fn ahx_probe(h: &Head<'_>) -> bool {
-    h.at(0, b"THX") && matches!(h.data.get(3), Some(0 | 1)) && u16_be(h.data, 4).is_some_and(|o| u64::from(o) < h.len && o >= 14)
-}
-
-declare_format!(pub AHX = "ahx", "AHX module (Amiga)", ["ahx", "thx"],
-    "audio/x-ahx", Probe::Custom(ahx_probe), ahx);
-
-async fn ahx(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 14)).await?;
-    let mut f = Fields::emitting(&cx, &head, BE);
-    f.ascii("Magic", 3).emit()?;
-    let version = f.u8("Version").emit()?;
-    let names = f.u16("Name table offset").hex().emit()?;
-    let word = f.u16("Flags and position list length").hex().emit()?;
-    f.node(Node::new("Position list length").span(file.sub(6, 2)).value(dec((word & 0x0fff).into(), 12)));
-    f.node(Node::new("Speed multiplier").span(file.sub(6, 1)).value(dec((u64::from(word) >> 12 & 7).saturating_add(1), 3)));
-    f.u16("Restart position").emit()?;
-    let rows = f.u8("Track length (rows)").emit()?;
-    let tracks = f.u8("Tracks").emit()?;
-    let samples = f.u8("Samples").emit()?;
-    let subsongs = f.u8("Subsongs").emit()?;
-    let positions = u64::from(word & 0x0fff);
-    let subsong_span = file.sub(14, u64::from(subsongs).saturating_mul(2));
-    cx.emit(Node::new("Subsong list").span(subsong_span));
-    let pos_span = file.sub(subsong_span.end().saturating_sub(file.offset), positions.saturating_mul(8));
-    cx.emit(Node::new("Position list").span(pos_span).summary(format!("{positions} positions × 4 channels")));
-    let name_span = file.tail(names.into());
-    let raw = cx.read_avail(name_span.sub(0, 4096)).await?;
-    let mut strings = raw.split(|&b| b == 0).map(|s| String::from_utf8_lossy(s).into_owned());
-    let title = strings.next().unwrap_or_default();
-    let sample_names: Vec<String> = strings.take(usize::from(samples)).collect();
-    cx.emit(Node::new("Names").span(name_span).value(text(title.clone())).lazy(ahx_names, (name_span, sample_names)));
-    cx.annotate(format!(
-        "AHX{version} module {title:?}, {positions} positions, {tracks} tracks of {rows} rows, {samples} samples, {subsongs} subsongs"
-    ));
-    Ok(())
-}
-
-async fn ahx_names(cx: Cx, (span, names): (Span, Vec<String>)) -> Result<()> {
-    cx.set_count(Count::Exact(to_u64(names.len())));
-    for (i, n) in names.into_iter().enumerate() {
-        cx.push(Node::new(format!("Sample {}", i.saturating_add(1))).value(text(n)).target(span)).await;
-    }
     Ok(())
 }
