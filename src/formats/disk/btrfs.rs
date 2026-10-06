@@ -1,9 +1,8 @@
 //! Btrfs filesystems: the superblock at 64 KiB (and its mirrors), the
 //! bootstrap chunk array and the headers of the trees it points at.
 //!
-//! The superblock lies beyond what probes see (`HEAD_LEN`), so the probe
-//! accepts inputs whose visible start is entirely zero (as Btrfs leaves it)
-//! and the dissector checks the magic.
+//! The superblock lies beyond what probes see (`HEAD_LEN`), so detection
+//! only works once the probe window covers 64 KiB + 72 bytes.
 
 use crate::bytes::{to_u64, u16_le, u64_le};
 use crate::cx::Cx;
@@ -11,7 +10,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{crc32c, size, text, uuid_value};
-use crate::formats::{Format, HEAD_LEN, Head, Input, Probe};
+use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -33,14 +32,9 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    let magic_at = crate::bytes::to_usize(SUPER.saturating_add(0x40));
-    if h.at(magic_at, MAGIC) {
-        return true;
-    }
-    // The magic is beyond the probe window: accept an all-zero window.
-    h.len >= SUPER.saturating_add(0x1000)
-        && to_u64(h.data.len()) >= HEAD_LEN.min(SUPER)
-        && h.data.iter().all(|&b| b == 0)
+    // Only matches if the probe window reaches the superblock (it does not
+    // with the current `HEAD_LEN`); `BTRFS` can still be dissected by name.
+    h.at(crate::bytes::to_usize(SUPER.saturating_add(0x40)), MAGIC)
 }
 
 const INCOMPAT: FlagTable = &[

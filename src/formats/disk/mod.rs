@@ -7,6 +7,7 @@
 //! content is its extent if contiguous, or a piecewise source assembled from
 //! its fragments ([`Cx::add_pieces`]) otherwise.
 
+pub mod apfs;
 pub mod apm;
 pub mod bitlocker;
 pub mod bsdlabel;
