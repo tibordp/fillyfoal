@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ baseline.prof — ART profile v015, 2 sections  [0x0+0x4a]
+    Magic: "pro"  [0x0+0x4]
+    Version: "015"  [0x4+0x4]
+    Section count: 2  [0x8+0x4]
+  ▾ DexFiles — 0x1c bytes decompressed  [0x2c+0x16] → 0xc+0x10
+      Data  [#1:0x0+0x1c]
+    Methods — 8 bytes  [0x42+0x8] → 0x1c+0x10

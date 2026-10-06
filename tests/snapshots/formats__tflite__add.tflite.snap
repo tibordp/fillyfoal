@@ -2,25 +2,28 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ add.tflite — TensorFlow Lite v3, 1 subgraph(s), 2 operator kind(s), 5 buffer(s), fillyfoal test model  [0x0+0x274]
-    Root table offset  [0x0+0x4]
-    File identifier: "TFL3"  [0x4+0x4]
+▾ add.tflite — TensorFlow Lite model v3 "fillyfoal test model", 1 subgraph(s), 1 operators, 3 tensors  [0x0+0x274]
+    Header — root table offset, identifier TFL3  [0x0+0x8]
     Version: 3  [0x20+0x4]
     Description: "fillyfoal test model"
-    Operator codes: 2 — ADD, CONV_2D
-  ▾ Subgraph 0 (main) — 3 tensor(s), 1 operator(s)  [0x94+0x4]
-      Inputs: "0"
-      Outputs: "2"
-    ▾ Tensors: 3
-        0: input: "float32 [1×4]" — buffer 1  [0xc8+0x4]
-        1: bias: "float32 [4]" — buffer 2  [0x100+0x4]
-        2: output: "float32 [1×4]" — buffer 3  [0x134+0x4]
-    ▾ Operators: 1
-        0: ADD: "(input, bias) → (output)"  [0x184+0x4]
-  ▾ Buffers: 5
-      Buffer 0 — empty
-      Buffer 1 — empty
-      Buffer 2 — 16 bytes  [0x20c+0x10]
-      Buffer 3 — empty
-      Buffer 4 — 8 bytes  [0x238+0x8]
-    Metadata min_runtime_version: 4
+  ▾ Operator codes — 2 codes  [0x3c+0x8]
+      [0]: "ADD" — version 1  [0x50+0x10]
+      [1]: "CONV_2D" — version 1  [0x6c+0x10]
+  ▾ Subgraphs — 1 subgraphs  [0x80+0x4]
+    ▾ Subgraph 0: "main" — 3 tensors, 1 operators  [0x94+0x18]
+        Inputs: "[0]"  [0x164+0x4]
+        Outputs: "[2]"  [0x16c+0x4]
+      ▾ Tensors — 3 tensors  [0xb0+0xc]
+          [0]: "input" — FLOAT32 [1, 4], buffer 1  [0xc8+0x14]
+          [1]: "bias" — FLOAT32 [4], buffer 2  [0x100+0x14]
+          [2]: "output" — FLOAT32 [1, 4], buffer 3  [0x134+0x14]
+      ▾ Operators — 1 operators  [0x174+0x4]
+          [0]: "ADD" — [0, 1] → [2]  [0x184+0x10]
+  ▾ Buffers — 5 buffers  [0x1d4+0x14]
+      [0] — empty  [0x1ec+0x4]
+      [1] — empty  [0x1f4+0x4]
+      [2] — 16 bytes  [0x20c+0x10]
+      [3] — empty  [0x220+0x4]
+      [4] — 8 bytes  [0x238+0x8]
+  ▾ Metadata — 1 entries  [0x244+0x4]
+      [0]: "min_runtime_version" — buffer 4  [0x250+0xc]

@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ traces.txt — Android ANR traces, 1 process(es), com.example.tiny  [0x0+0x2ac]
+  ▾ pid 1234: "2024-01-01 00:00:00.000000000+0000" — 2 threads  [0x1+0x2ab]
+      Line 1: "----- pid 1234 at 2024-01-01 00:00:00.000000000+0000 -----"  [0x1+0x3a]
+      Cmd line: "com.example.tiny"  [0x3c+0x1a]
+      Build fingerprint: "'google/tiny/tiny:14/UQ1A.240105.004/11206848:user/release-keys'"  [0x57+0x53]
+      ABI: "'arm64'"  [0xab+0xc]
+      Build type: "optimized"  [0xb8+0x15]
+    ▾ main: "Sleeping"  [0xcf+0xde]
+        Line 1: "\"main\" prio=5 tid=1 Sleeping"  [0xcf+0x1c]
+        Line 2: "| group=\"main\" sCount=1 ucsCount=0 flags=1 obj=0x72a3b4c8 self=0xb400007a1c2d3e40"  [0xec+0x53]
+        Line 3: "at java.lang.Thread.sleep(Native method)"  [0x140+0x2a]
+        Line 4: "at com.example.tiny.MainActivity.onClick(MainActivity.java:42)"  [0x16b+0x40]
+    ▾ Signal Catcher: "Runnable"  [0x1ad+0xea]
+        Line 1: "\"Signal Catcher\" daemon prio=10 tid=2 Runnable"  [0x1ad+0x2e]
+        Line 2: "| group=\"system\" sCount=0 ucsCount=0 flags=0 obj=0x12c00220 self=0xb400007a1c2d4f50"  [0x1dc+0x55]
+        Line 3: "native: #00 pc 0000000000123456  /apex/com.android.art/lib64/libart.so (art::DumpNativeStack+100)"  [0x232+0x63]
+      Line 16: "----- end 1234 -----"  [0x297+0x14]

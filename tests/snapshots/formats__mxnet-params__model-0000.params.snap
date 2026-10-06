@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ model-0000.params — MXNet parameters, 2 arrays, 32 bytes  [0x0+0xb2]
+  ▾ Header  [0x0+0x18]
+      Magic: 0x112  [0x0+0x8]
+      Reserved: 0  [0x8+0x8]
+      Array count: 2  [0x10+0x8]
+    arg:fc1_weight — float32 [2 × 3]  [0x18+0x40]
+    arg:fc1_bias — float32 [2]  [0x58+0x28]

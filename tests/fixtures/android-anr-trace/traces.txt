@@ -1,0 +1,17 @@
+
+----- pid 1234 at 2024-01-01 00:00:00.000000000+0000 -----
+Cmd line: com.example.tiny
+Build fingerprint: 'google/tiny/tiny:14/UQ1A.240105.004/11206848:user/release-keys'
+ABI: 'arm64'
+Build type: optimized
+
+"main" prio=5 tid=1 Sleeping
+  | group="main" sCount=1 ucsCount=0 flags=1 obj=0x72a3b4c8 self=0xb400007a1c2d3e40
+  at java.lang.Thread.sleep(Native method)
+  at com.example.tiny.MainActivity.onClick(MainActivity.java:42)
+
+"Signal Catcher" daemon prio=10 tid=2 Runnable
+  | group="system" sCount=0 ucsCount=0 flags=0 obj=0x12c00220 self=0xb400007a1c2d4f50
+  native: #00 pc 0000000000123456  /apex/com.android.art/lib64/libart.so (art::DumpNativeStack+100)
+
+----- end 1234 -----

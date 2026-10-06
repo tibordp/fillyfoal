@@ -1,0 +1,10 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ x86_64-macos, arm64-macos ]
+install-name:    '/usr/lib/libtiny.dylib'
+current-version: 1.2.3
+exports:
+  - targets:         [ x86_64-macos, arm64-macos ]
+    symbols:         [ _tiny_init, _tiny_free ]
+    objc-classes:    [ TinyObject ]
+...

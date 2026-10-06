@@ -1,0 +1,11 @@
+{
+  "metadata": {
+    "total_size": 13476839424
+  },
+  "weight_map": {
+    "lm_head.weight": "model-00002-of-00002.safetensors",
+    "model.embed_tokens.weight": "model-00001-of-00002.safetensors",
+    "model.layers.0.mlp.down_proj.weight": "model-00001-of-00002.safetensors",
+    "model.norm.weight": "model-00002-of-00002.safetensors"
+  }
+}

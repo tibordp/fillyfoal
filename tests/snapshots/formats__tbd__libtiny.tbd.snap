@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ libtiny.tbd — Text-based stub v4, /usr/lib/libtiny.dylib, targets [ x86_64-macos, arm64-macos ], 1 document(s)  [0x0+0x125]
+    tbd-version: 4  [0x1f+0x1]
+  ▾ targets — sequence, 2 items  [0x32+0x1d]
+      [0]: "x86_64-macos"  [0x34+0xc]
+      [1]: "arm64-macos"  [0x42+0xb]
+    install-name: "/usr/lib/libtiny.dylib"  [0x61+0x18]
+    current-version: "1.2.3"  [0x8b+0x5]
+  ▾ exports — sequence  [0x9a+0x87]
+    ▾ [0] — mapping  [0x9e+0x83]
+      ▾ targets — sequence, 2 items  [0xaf+0x1d]
+          [0]: "x86_64-macos"  [0xb1+0xc]
+          [1]: "arm64-macos"  [0xbf+0xb]
+      ▾ symbols — sequence, 2 items  [0xe2+0x1a]
+          [0]: "_tiny_init"  [0xe4+0xa]
+          [1]: "_tiny_free"  [0xf0+0xa]
+      ▾ objc-classes — sequence, 1 item  [0x112+0xe]
+          [0]: "TinyObject"  [0x114+0xa]

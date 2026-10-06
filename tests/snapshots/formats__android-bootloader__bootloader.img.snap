@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bootloader.img — Android bootloader bundle, 2 images: abl, xbl  [0x0+0x10a]
+  ▾ Header  [0x0+0x14]
+      Magic: "BOOTLDR!"  [0x0+0x8]
+      Image count: 2  [0x8+0x4]
+      Data offset: 0x9c  [0xc+0x4]
+      Data size: 110  [0x10+0x4]
+  ▾ abl — UTF-8 text, LF line endings, 3 lines  [0x9c+0x42] → 0x14+0x44
+      Encoding: "UTF-8"
+      Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+    ▾ Lines — 3 lines  [0x9c+0x42]
+        Line 1: "ABL image placeholder"  [0x9c+0x15]
+        Line 2: "ABL image placeholder"  [0xb2+0x15]
+        Line 3: "ABL image placeholder"  [0xc8+0x15]
+  ▾ xbl — UTF-8 text, LF line endings, 2 lines  [0xde+0x2c] → 0x58+0x44
+      Encoding: "UTF-8"
+      Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+    ▾ Lines — 2 lines  [0xde+0x2c]
+        Line 1: "XBL image placeholder"  [0xde+0x15]
+        Line 2: "XBL image placeholder"  [0xf4+0x15]

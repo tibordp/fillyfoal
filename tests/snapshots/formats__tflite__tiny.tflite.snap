@@ -1,0 +1,31 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.tflite — TensorFlow Lite model v3 "fillyfoal test model", 1 subgraph(s), 2 operators, 5 tensors  [0x0+0x374]
+    Header — root table offset, identifier TFL3  [0x0+0x8]
+    Version: 3  [0x24+0x4]
+    Description: "fillyfoal test model"
+  ▾ Operator codes — 2 codes  [0x40+0x8]
+      [0]: "FULLY_CONNECTED" — version 1  [0x58+0x10]
+      [1]: "SOFTMAX" — version 1  [0x78+0x10]
+  ▾ Subgraphs — 1 subgraphs  [0x8c+0x4]
+    ▾ Subgraph 0: "main" — 5 tensors, 2 operators  [0xa0+0x18]
+        Inputs: "[0]"  [0x204+0x4]
+        Outputs: "[4]"  [0x20c+0x4]
+      ▾ Tensors — 5 tensors  [0xbc+0x14]
+          [0]: "input" — FLOAT32 [1, 4]  [0xe0+0x14]
+          [1]: "dense/kernel" — FLOAT32 [2, 4], buffer 1  [0x118+0x14]
+          [2]: "dense/bias" — FLOAT32 [2], buffer 2  [0x158+0x14]
+          [3]: "dense/BiasAdd" — FLOAT32 [1, 2]  [0x190+0x14]
+          [4]: "Identity" — FLOAT32 [1, 2]  [0x1d0+0x14]
+      ▾ Operators — 2 operators  [0x214+0x8]
+          [0]: "FULLY_CONNECTED" — [0, 1, 2] → [3]  [0x228+0x10]
+          [1]: "SOFTMAX" — [3] → [4]  [0x260+0x10]
+  ▾ Buffers — 4 buffers  [0x2ac+0x10]
+      [0] — empty  [0x2c0+0x4]
+      [1] — 32 bytes  [0x2dc+0x20]
+      [2] — 8 bytes  [0x314+0x8]
+      [3] — 5 bytes  [0x334+0x5]
+  ▾ Metadata — 1 entries  [0x340+0x4]
+      [0]: "min_runtime_version" — buffer 3  [0x350+0xc]

@@ -237,6 +237,8 @@ pub mod misc10;
 // -- end misc --
 
 // -- ml models & mobile platforms --
+pub mod ml;
+pub mod mobile;
 // -- end ml --
 
 // -- geospatial, telemetry & vehicle logs --
@@ -735,10 +737,18 @@ pub static FORMATS: &[&Format] = &[
     &zoo::FORMAT,
     &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
+    // (ml models & mobile platforms)
+    &zip::TORCHSCRIPT,
     &zip::PYTORCH,
-    &zip::NPZ,
     &zip::KERAS,
+    &zip::NPZ,
     &zip::SIGROK,
+    &zip::APEX,
+    &zip::ANDROID_OTA,
+    &zip::ANDROID_DM,
+    &zip::BUGREPORT,
+    &zip::IPSW,
+    // (end ml)
     &zip::AAR,
     &zip::XLSB,
     &zip::SNUPKG,
@@ -996,6 +1006,65 @@ pub static FORMATS: &[&Format] = &[
     // -- end retro --
 
     // -- ml models & mobile platforms --
+    &ml::binary::GGML,
+    &ml::binary::GGMF,
+    &ml::binary::GGJT,
+    &ml::binary::GGLA,
+    &ml::binary::NCNN_BIN,
+    &ml::binary::MXNET,
+    &ml::binary::NNEF_TENSOR,
+    &ml::binary::FASTTEXT,
+    &ml::binary::MLIR,
+    &ml::tflite::TFLITE,
+    &ml::tflite::ORT,
+    &ml::tflite::EXECUTORCH,
+    &mobile::android::SUPER,
+    &mobile::android::VENDOR_BOOT,
+    &mobile::android::BOOTLDR,
+    &mobile::android::MTK,
+    &mobile::android::PIT,
+    &mobile::android::QCDT,
+    &mobile::android::ART_PROFILE,
+    &mobile::android::FCONTEXT,
+    &mobile::android::HPROF,
+    &mobile::android::METHOD_TRACE,
+    &mobile::apple::NIB,
+    &mobile::apple::METALLIB,
+    &mobile::apple::CAR,
+    &mobile::apple::CODE_SIGNATURE,
+    &mobile::apple::AEA,
+    &mobile::apple::SWIFTMODULE,
+    &ml::protos::TFRECORD,
+    &ml::protos::SAVED_MODEL,
+    &ml::protos::COREML,
+    &ml::protos::ONNX,
+    &ml::protos::GRAPHDEF,
+    &ml::protos::SENTENCEPIECE,
+    &mobile::apple::TRUSTCACHE,
+    &mobile::android::LOGCAT,
+    &mobile::android_text::TOMBSTONE_FORMAT,
+    &mobile::android_text::ANR,
+    &mobile::android_text::BUILD_PROP,
+    &mobile::apple_text::PBXPROJ,
+    &mobile::apple_text::BCSYMBOLMAP,
+    &mobile::apple_text::CRASH,
+    &mobile::apple_text::IPS,
+    &mobile::apple_text::TBD,
+    &mobile::apple_text::STRINGS,
+    &ml::text::NCNN,
+    &ml::text::CAFFE,
+    &ml::text::DARKNET,
+    &ml::text::NNEF_GRAPH,
+    &ml::text::LIBSVM,
+    &ml::text::LIBLINEAR,
+    &ml::text::LIGHTGBM,
+    &ml::text::OPENVINO,
+    &ml::text::PMML,
+    &ml::text::OPENCV,
+    &ml::text::MXNET_SYMBOL,
+    &ml::text::TFJS,
+    &ml::text::HF_TOKENIZER,
+    &ml::text::SAFETENSORS_INDEX,
     // -- end ml --
 
     // -- geospatial, telemetry & vehicle logs --
@@ -1321,7 +1390,6 @@ pub static FORMATS: &[&Format] = &[
     &instruments::INTAN_RHD,
     &instruments::TDMS,
     &instruments::TDMS_INDEX,
-    &instruments::TFLITE,
     &instruments::NEV,
     &instruments::NSX,
     &instruments::PLEXON,

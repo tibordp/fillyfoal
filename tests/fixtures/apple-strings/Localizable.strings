@@ -1,0 +1,8 @@
+/* Title of the main window */
+"WINDOW_TITLE" = "Hello, world";
+
+/* Button label
+   (shown twice) */
+"OK_BUTTON" = "OK";
+"QUOTE" = "She said \"hi\"\n";
+NSHumanReadableCopyright = "© 2024 Example";

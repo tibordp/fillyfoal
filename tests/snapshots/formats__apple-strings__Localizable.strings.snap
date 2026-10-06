@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Localizable.strings — Apple strings table (UTF-8), 4 entries  [0x0+0xc6]
+    WINDOW_TITLE: "Hello, world"  [0x1f+0x20]
+    OK_BUTTON: "OK"  [0x65+0x13]
+    QUOTE: "She said \"hi\"\n"  [0x79+0x1e]
+    NSHumanReadableCopyright: "© 2024 Example"  [0x98+0x2d]

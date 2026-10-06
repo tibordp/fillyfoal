@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.aea — Apple Encrypted Archive, symmetric key encryption  [0x0+0x27b]
+  ▾ Header  [0x0+0xc]
+      Magic: "AEA1"  [0x0+0x4]
+      Profile: 01 00 00  |...| — symmetric key encryption  [0x4+0x3]
+      Scrypt strength: 0  [0x7+0x1]
+      Auth data size: 111  [0x8+0x4]
+  ▾ Auth data — 111 bytes  [0xc+0x6f]
+      com.apple.wkms.fcs-response: "{\"wrapped-key\":\"...\"}"  [0xc+0x35]
+      com.apple.wkms.fcs-key-url: "https://example.invalid/key"  [0x41+0x3a]
+    Signature, keys and encrypted segments  [0x7b+0x200]

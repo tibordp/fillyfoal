@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Tiny.crash — Apple crash report: Tiny [1234], EXC_BAD_ACCESS (SIGSEGV), Thread 0 Crashed  [0x0+0x38d]
+    Incident Identifier: "11111111-2222-3333-4444-555555555555"  [0x0+0x39]
+    CrashReporter Key: "abcdef"  [0x3a+0x1b]
+    Hardware Model: "iPhone15,2"  [0x56+0x1f]
+    Process: "Tiny [1234]"  [0x76+0x20]
+    Path: "/private/var/containers/Bundle/Application/X/Tiny.app/Tiny"  [0x97+0x4f]
+    Identifier: "com.example.tiny"  [0xe7+0x25]
+    Version: "1.0 (1)"  [0x10d+0x1c]
+    OS Version: "iPhone OS 17.0 (21A329)"  [0x12a+0x2c]
+    Exception Type: "EXC_BAD_ACCESS (SIGSEGV)"  [0x157+0x29]
+    Exception Codes: "KERN_INVALID_ADDRESS at 0x0000000000000000"  [0x181+0x3b]
+    Triggered by Thread: "0"  [0x1bd+0x17]
+  ▾ Thread 0 name:  Dispatch queue: com.apple.main-thread — 3 lines  [0x1d6+0xcb]
+      Line 1: "Thread 0 name:  Dispatch queue: com.apple.main-thread"  [0x1d6+0x35]
+      Line 2: "Thread 0 Crashed:"  [0x20c+0x11]
+      Line 3: "0   Tiny                          \t0x0000000100004000 main + 16"  [0x21e+0x3f]
+      Line 4: "1   dyld                          \t0x00000001a0000000 start + 2000"  [0x25e+0x42]
+  ▾ Thread 1 — 1 lines  [0x2a2+0x57]
+      Line 1: "Thread 1:"  [0x2a2+0x9]
+      Line 2: "0   libsystem_kernel.dylib        \t0x00000001b0000000 __workq_kernreturn + 8"  [0x2ac+0x4c]
+  ▾ Binary Images — 1 lines  [0x2fa+0x93]
+      Line 1: "Binary Images:"  [0x2fa+0xe]
+      Line 2: "0x100000000 - 0x100007fff Tiny arm64  <00000000000000000000000000000000> /private/var/containers/Bundle/Application/X/Tiny.app/Tiny"  [0x309+0x83]

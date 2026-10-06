@@ -1,0 +1,22 @@
+Incident Identifier: 11111111-2222-3333-4444-555555555555
+CrashReporter Key:   abcdef
+Hardware Model:      iPhone15,2
+Process:             Tiny [1234]
+Path:                /private/var/containers/Bundle/Application/X/Tiny.app/Tiny
+Identifier:          com.example.tiny
+Version:             1.0 (1)
+OS Version:          iPhone OS 17.0 (21A329)
+Exception Type:  EXC_BAD_ACCESS (SIGSEGV)
+Exception Codes: KERN_INVALID_ADDRESS at 0x0000000000000000
+Triggered by Thread:  0
+
+Thread 0 name:  Dispatch queue: com.apple.main-thread
+Thread 0 Crashed:
+0   Tiny                          	0x0000000100004000 main + 16
+1   dyld                          	0x00000001a0000000 start + 2000
+
+Thread 1:
+0   libsystem_kernel.dylib        	0x00000001b0000000 __workq_kernreturn + 8
+
+Binary Images:
+0x100000000 - 0x100007fff Tiny arm64  <00000000000000000000000000000000> /private/var/containers/Bundle/Application/X/Tiny.app/Tiny

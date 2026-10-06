@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ model.json — TensorFlow.js graph-model, 2.15.0 TensorFlow.js Converter v4.17.0, 1 weight group(s)  [0x0+0x173]
+    format: "graph-model"  [0xe+0xd]
+    generatedBy: "2.15.0"  [0x2e+0x8]
+    convertedBy: "TensorFlow.js Converter v4.17.0"  [0x49+0x21]
+    signature — object, 0 members  [0x7b+0x2]
+  ▾ modelTopology — object, 2 members  [0x92+0x4e]
+    ▾ node — array, 1 element  [0x9b+0x24]
+      ▾ [0] — object, 2 members  [0x9c+0x22]
+          name: "x"  [0xa5+0x3]
+          op: "Placeholder"  [0xb0+0xd]
+    ▾ versions — object, 1 member  [0xcd+0x12]
+        producer: 1645  [0xda+0x4]
+  ▾ weightsManifest — array, 1 element  [0xf7+0x79]
+    ▾ [0] — object, 2 members  [0xfd+0x6f]
+      ▾ paths — array, 1 element  [0x107+0x18]
+          [0]: "group1-shard1of1.bin"  [0x108+0x16]
+      ▾ weights — array, 1 element  [0x12c+0x3f]
+        ▾ [0] — object, 3 members  [0x12d+0x3d]
+            name: "dense/kernel"  [0x136+0xe]
+          ▾ shape — array, 2 elements  [0x14f+0x6]
+              [0]: 4  [0x150+0x1]
+              [1]: 2  [0x153+0x1]
+            dtype: "float32"  [0x160+0x9]

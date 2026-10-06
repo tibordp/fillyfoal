@@ -1,0 +1,30 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		AA0000000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* main.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		AA0000000000000000000002 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		AA0000000000000000000003 /* Tiny */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = Tiny; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXProject section */
+		AA0000000000000000000004 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = AA0000000000000000000005 /* Build configuration list for PBXProject "Tiny" */;
+			compatibilityVersion = "Xcode 14.0";
+			mainGroup = AA0000000000000000000006;
+			targets = (
+			);
+		};
+/* End PBXProject section */
+	};
+	rootObject = AA0000000000000000000004 /* Project object */;
+}

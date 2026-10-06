@@ -273,6 +273,25 @@ zip_variant!(IWORK09, "iwork09", "Apple iWork '09 document (Pages/Numbers/Keynot
         || has_entry(h, b"index.apxl.gz")
         || ((has_entry(h, b"index.xml") || has_entry(h, b"index.xml.gz")) && has_entry(h, b"buildVersionHistory.plist")));
 
+// ML models and mobile platform packages (registered before the other
+// variants: APEX and OTA packages also carry Android/JAR markers).
+zip_variant!(TORCHSCRIPT, "torchscript", "TorchScript module (ZIP)", ["pt", "pth", "ptl"], "application/x-torchscript",
+    |h| has_entry_suffix(h, b"/constants.pkl") || entry_names(h).any(|n| probe_contains(n, b"/code/")));
+zip_variant!(APEX, "apex", "Android APEX package", ["apex", "capex"], "application/x-apex",
+    |h| has_entry(h, b"apex_manifest.pb") || has_entry(h, b"apex_manifest.json"));
+zip_variant!(ANDROID_OTA, "android-ota", "Android OTA update package", ["zip"], "application/zip",
+    |h| has_entry(h, b"META-INF/com/android/metadata") || has_entry(h, b"payload_properties.txt"));
+zip_variant!(ANDROID_DM, "android-dm", "Android dex metadata", ["dm"], "application/zip",
+    |h| has_entry(h, b"primary.prof") || has_entry(h, b"primary.vdex"));
+zip_variant!(BUGREPORT, "android-bugreport", "Android bug report", ["zip"], "application/zip",
+    |h| has_entry(h, b"main_entry.txt") && has_entry(h, b"version.txt"));
+zip_variant!(IPSW, "ipsw", "Apple firmware (IPSW)", ["ipsw"], "application/x-ipsw",
+    |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist"));
+
+fn probe_contains(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
 pub static FORMAT: Format = Format {
     name: "zip",
     title: "ZIP archive",

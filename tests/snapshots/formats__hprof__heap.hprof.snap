@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ heap.hprof — JAVA PROFILE 1.0.3 heap dump, 5 records (2 strings, 1 classes, 1 heap dump segments)  [0x0+0x89]
+    Format: "JAVA PROFILE 1.0.3"  [0x0+0x13]
+    Identifier size: 4  [0x13+0x4]
+    Timestamp: 2023-11-14 22:13:20 UTC  [0x17+0x8]
+    STRING: "java.lang.Object"  [0x1f+0x1d]
+    STRING: "com.example.Tiny"  [0x3c+0x1d]
+    LOAD CLASS — class serial 1  [0x59+0x19]
+    HEAP DUMP SEGMENT — 5 bytes  [0x72+0xe]
+    HEAP DUMP END — 0 bytes  [0x80+0x9]

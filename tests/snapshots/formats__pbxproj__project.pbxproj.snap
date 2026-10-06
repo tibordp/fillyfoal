@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ project.pbxproj — Xcode project, object version 56, 4 objects in 3 sections  [0x0+0x459]
+    Encoding marker: "// !$*UTF8*$!"  [0x0+0xd]
+    archiveVersion: "1"  [0x10+0x14]
+    objectVersion: "56"  [0x36+0x14]
+  ▾ PBXBuildFile — 1 objects  [0x59+0xc6]
+    ▾ main.swift in Sources: "PBXBuildFile" — AA0000000000000000000001  [0x7a+0x86]
+        Line 1: "AA0000000000000000000001 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000002 /* main.swift */; };"  [0x7a+0x85]
+  ▾ PBXFileReference — 2 objects  [0x120+0x19a]
+    ▾ main.swift: "PBXFileReference" — AA0000000000000000000002  [0x145+0x9b]
+        Line 1: "AA0000000000000000000002 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = \"<group>\"; };"  [0x145+0x9a]
+    ▾ Tiny: "PBXFileReference" — AA0000000000000000000003  [0x1e0+0xb7]
+        Line 1: "AA0000000000000000000003 /* Tiny */ = {isa = PBXFileReference; explicitFileType = \"compiled.mach-o.executable\"; includeInIndex = 0; path = Tiny; sourceTree = BUILT_PRODUCTS_DIR; };"  [0x1e0+0xb6]
+  ▾ PBXProject — 1 objects  [0x2bb+0x15b]
+    ▾ Project object: "PBXProject" — AA0000000000000000000004  [0x2da+0x11f]
+        Line 1: "AA0000000000000000000004 /* Project object */ = {"  [0x2da+0x33]
+        Line 2: "isa = PBXProject;"  [0x30e+0x14]
+        Line 3: "buildConfigurationList = AA0000000000000000000005 /* Build configuration list for PBXProject \"Tiny\" */;"  [0x323+0x6a]
+        Line 4: "compatibilityVersion = \"Xcode 14.0\";"  [0x38e+0x27]
+        Line 5: "mainGroup = AA0000000000000000000006;"  [0x3b6+0x28]
+        Line 6: "targets = ("  [0x3df+0xe]
+        Line 7: ");"  [0x3ee+0x5]
+        Line 8: "};"  [0x3f4+0x4]
+    rootObject: "AA0000000000000000000004 /* Project object */"  [0x41a+0x3c]

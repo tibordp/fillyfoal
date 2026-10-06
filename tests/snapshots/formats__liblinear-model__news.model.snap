@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ news.model — LIBLINEAR model, L2R_L2LOSS_SVC_DUAL, 2 classes, 4 features  [0x0+0x66]
+    solver_type: "L2R_L2LOSS_SVC_DUAL"  [0x0+0x1f]
+    nr_class: "2"  [0x20+0xa]
+    label: "1 -1"  [0x2b+0xa]
+    nr_feature: "4"  [0x36+0xc]
+    bias: "-1"  [0x43+0x7]
+    Marker: "w"  [0x4b+0x1]
+  ▾ Weights — 4 lines  [0x4d+0x19]
+      Line 1: "0.123"  [0x4d+0x5]
+      Line 2: "-0.456"  [0x53+0x6]
+      Line 3: "0.789"  [0x5a+0x5]
+      Line 4: "0.001"  [0x60+0x5]

@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ events.out.tfevents — TFRecord, 2 records (event log)  [0x0+0x52]
+  ▾ Record 0 — 24 bytes, Event?  [0x0+0x28]
+      Length: 24  [0x0+0x8]
+      Length CRC (masked CRC-32C): 0x224b7fa3  [0x8+0x4]
+    ▾ Event  [0xc+0x18]
+        wall_time: 1700000000  [0xc+0x9]
+        file_version: "brain.Event:2"  [0x15+0xf]
+      Data CRC (masked CRC-32C): 0x9d8fedec  [0x24+0x4]
+  ▾ Record 1 — 26 bytes, Event?  [0x28+0x2a]
+      Length: 26  [0x28+0x8]
+      Length CRC (masked CRC-32C): 0x2dd89b12  [0x30+0x4]
+    ▾ Event  [0x34+0x1a]
+        wall_time: 1700000001.5  [0x34+0x9]
+        step: 10  [0x3d+0x2]
+      ▾ summary — Summary, 13 bytes  [0x3f+0xf]
+        ▾ value — loss  [0x41+0xd]
+            tag: "loss"  [0x43+0x6]
+            simple_value: 0.25  [0x49+0x5]
+      Data CRC (masked CRC-32C): 0xa374c914  [0x4e+0x4]

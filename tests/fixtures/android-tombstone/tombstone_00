@@ -1,0 +1,21 @@
+*** *** *** *** *** *** *** *** *** *** *** *** *** *** *** ***
+Build fingerprint: 'google/tiny/tiny:14/UQ1A.240105.004/11206848:user/release-keys'
+Revision: '0'
+ABI: 'arm64'
+Timestamp: 2024-01-01 00:00:00.000000000+0000
+Process uptime: 12s
+Cmdline: com.example.tiny
+pid: 1234, tid: 1234, name: example.tiny  >>> com.example.tiny <<<
+uid: 10100
+signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000
+Cause: null pointer dereference
+    x0  0000000000000000  x1  0000007fc0a1b2c8  x2  0000000000000001  x3  0000000000000000
+    sp  0000007fc0a1b200  lr  00000071a2b3c4d4  pc  00000071a2b3c4e0  pst 0000000060001000
+
+backtrace:
+      #00 pc 000000000001e4e0  /data/app/com.example.tiny/lib/arm64/libtiny.so (crash+16)
+      #01 pc 000000000001e4d0  /data/app/com.example.tiny/lib/arm64/libtiny.so (Java_com_example_Tiny_run+32)
+
+memory map (2 entries):
+    00000071'a2b20000-00000071'a2b3ffff r-x         0     20000  /data/app/com.example.tiny/lib/arm64/libtiny.so
+    0000007f'c0a00000-0000007f'c0afffff rw-         0    100000  [stack]
