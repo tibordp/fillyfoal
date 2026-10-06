@@ -3,8 +3,8 @@
 //! A file is a sequence of frames: zstd frames (header, blocks, optional
 //! checksum) and skippable frames (magic 0x184D2A50..5F, length, data). The
 //! seekable format keeps a seek table in a skippable frame at the end, which
-//! is decoded too. Blocks are listed from their 3-byte headers; compressed
-//! blocks are unsupported leaves (see the codec policy).
+//! is decoded too. Blocks are listed from their 3-byte headers; the
+//! decompressed content is decoded on demand.
 
 use crate::bytes::u32_le;
 use crate::cx::Cx;
@@ -13,7 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use std::sync::Arc;
 
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
+use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -221,6 +221,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut frames = 0u64;
     let mut total = Some(0u64);
     cx.annotate("Zstandard");
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Zstd, None));
     while !cur.at_end() {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
@@ -439,7 +440,7 @@ async fn block(cx: Cx, span: Span) -> Result<()> {
                     .value(Value::Bytes(byte)),
             );
         }
-        2 => cx.emit(unsupported("Compressed data", body, "zstd")),
+        2 => cx.emit(Node::new("Compressed data").span(body).desc("Decoded as part of the whole stream (see Decompressed)")),
         _ => cx.diag(Diagnostic::malformed("reserved block type")),
     }
     Ok(())

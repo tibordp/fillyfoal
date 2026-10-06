@@ -9,6 +9,8 @@ expression: "common::explore(&display_name(&path), &data)"
       Section 1: AES-CTR (0x3) — 128 KiB at NCA offset 0x14000  [0x4050+0x40]
     Block header — 2 blocks of 128 KiB, 192 KiB decompressed  [0x4090+0x20]
   ▾ Compressed body (zstd) — Zstandard, 0 frames  [0x40b0+0x28]
+    ▾ Decompressed  [0x40b0+0x28]
+        ! malformed: zstd: truncated raw block [0x40b0+0x28]
     ▾ Frame 0  [0x40b0+0x28]
         ! truncated: needed 0x28 bytes at 0x40b0, only 0x28 available [0x40b0+0x28]
         Magic: 0xfd2fb528  [0x40b0+0x4]

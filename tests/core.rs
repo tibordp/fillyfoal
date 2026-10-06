@@ -355,3 +355,22 @@ fn lzma_family_decodes_python_output() {
     let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
     assert!(decode(Codec::Xz, &read("random.xz")) == random);
 }
+
+#[test]
+fn zstd_decodes_python_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/zstd/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |data: &[u8]| {
+        let mut d = Codec::Zstd.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26)
+    };
+    let text = lzma_text();
+    for name in ["text-1.zst", "text-3.zst", "text-9.zst", "text-19.zst", "text-checksum.zst", "text-two-frames.zst"] {
+        assert!(decode(&read(name)).unwrap() == text, "{name}");
+    }
+    assert!(decode(&read("code-19.zst")).unwrap() == lzma_code());
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(&read("random.zst")).unwrap() == random);
+    assert!(decode(&read("zeros.zst")).unwrap() == vec![0u8; 300000]);
+    assert!(decode(&read("big-text.zst")).unwrap() == text.repeat(40));
+}

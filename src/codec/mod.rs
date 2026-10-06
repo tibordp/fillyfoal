@@ -14,6 +14,7 @@ pub mod filters;
 pub mod lz;
 pub mod lzma;
 pub mod xz;
+pub mod zstd;
 pub mod pipeline;
 
 use std::sync::Arc;
@@ -62,6 +63,8 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// Zstandard frames.
+    Zstd,
     /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
     Xz,
     /// `.lzma` ("LZMA alone").
@@ -130,6 +133,7 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Eexec { .. } => "eexec",
             Codec::Bzip2 => "bzip2",
+            Codec::Zstd => "zstd",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
             Codec::Lzma2 => "lzma2",
@@ -161,6 +165,7 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Bzip2 => "bzip2 (lazy)",
+            Codec::Zstd => "zstd (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
             Codec::Lzma2 => "lzma2 (lazy)",
@@ -190,6 +195,7 @@ impl Codec {
             | Codec::SnappyFramed
             | Codec::Bzip2
             | Codec::Xz
+            | Codec::Zstd
             | Codec::LzmaAlone
             | Codec::Lzma2
             | Codec::LzmaRaw { .. } => "decompressed",
@@ -220,6 +226,8 @@ impl Codec {
             Codec::Bzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 | Codec::LzmaRaw { .. } => 7_000,
+            // RLE blocks can encode 128 KiB in four bytes.
+            Codec::Zstd => 32_768,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -246,6 +254,7 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),
             Codec::Lzma2 => Box::new(Streaming(filters::Whole::new(lzma::Lzma2))),
