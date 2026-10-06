@@ -78,6 +78,7 @@ pub mod graphics;
 pub mod packages;
 pub mod archives2;
 pub mod misc2;
+pub mod pdb;
 // -- end misc --
 
 // -- text --
@@ -436,6 +437,8 @@ pub static FORMATS: &[&Format] = &[
     &misc2::NRRD,
     &misc2::HDF4,
     &misc2::VTK,
+    &pdb::PDB,
+    &pdb::PDB2,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,
