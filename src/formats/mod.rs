@@ -44,6 +44,7 @@ pub mod pdf;
 pub mod pem;
 pub mod pgp;
 pub mod sqlite;
+pub mod sst;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -200,6 +201,8 @@ pub static FORMATS: &[&Format] = &[
     &matlab::FORMAT,
     &parquet::FORMAT,
     &orc::FORMAT,
+    &sst::LEVELDB,
+    &sst::ROCKSDB,
     // -- end documents --
 
     // -- disk images & filesystems --
