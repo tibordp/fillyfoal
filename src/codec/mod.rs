@@ -16,6 +16,7 @@ pub mod filters;
 pub mod lz;
 pub mod lzfse;
 pub mod pbz;
+pub mod wim;
 pub mod lznt1;
 pub mod lzma;
 pub mod xz;
@@ -82,6 +83,8 @@ pub enum Codec {
     Lzfse,
     /// Apple's chunked wrapper (`pbzx`/`pbze`/`pbz4`/`pbzz`).
     Pbz,
+    /// A compressed WIM resource (chunk table, XPRESS or LZX chunks).
+    WimResource(wim::Resource),
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
     /// LZNT1 ([MS-XCA] 2.5); with a `size` (an NTFS compression unit) the
@@ -198,6 +201,7 @@ impl Codec {
             Codec::CabFolder(_) => "cab-folder",
             Codec::Lzfse => "lzfse",
             Codec::Pbz => "pbz",
+            Codec::WimResource(_) => "wim-resource",
             Codec::Brotli => "brotli",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
@@ -246,6 +250,7 @@ impl Codec {
             Codec::CabFolder(_) => "cab-folder (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
             Codec::Pbz => "pbz (lazy)",
+            Codec::WimResource(_) => "wim-resource (lazy)",
             Codec::Brotli => "brotli (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
@@ -292,6 +297,7 @@ impl Codec {
             | Codec::CabFolder(_)
             | Codec::Lzfse
             | Codec::Pbz
+            | Codec::WimResource(_)
             | Codec::Brotli
             | Codec::LzmaAlone
             | Codec::Lzma2
@@ -345,6 +351,7 @@ impl Codec {
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
             Codec::Pbz => 7_000,
+            Codec::WimResource(_) => 32_768,
             // A copy of 16 MiB costs a few bits.
             Codec::Brotli => 1 << 20,
             Codec::Lzw { .. } => 4096,
@@ -375,6 +382,7 @@ impl Codec {
             }
             Codec::Lzfse => Box::new(Streaming(filters::Whole::new(lzfse::Lzfse))),
             Codec::Pbz => Box::new(Streaming(filters::Whole::new(pbz::Pbz))),
+            Codec::WimResource(r) => Box::new(Streaming(filters::Whole::new(*r))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
             Codec::Lznt1 { size } => Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size }))),

@@ -14,7 +14,8 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::codec::{Codec, wim};
+use crate::formats::{Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -132,11 +133,59 @@ fn compression(flags: u32) -> &'static str {
     }
 }
 
+/// How the image's resources are compressed: the header flags and chunk
+/// size.
+#[derive(Clone, Copy, Debug)]
+struct Scheme {
+    flags: u32,
+    chunk: u32,
+}
+
+impl Scheme {
+    /// The codec for a compressed resource, if we decode its scheme
+    /// (XPRESS or LZX, not solid).
+    fn codec(self, r: &Resource) -> Option<Codec> {
+        let kind = if self.flags & 0x0002_0000 != 0 {
+            wim::Kind::Xpress
+        } else if self.flags & 0x0004_0000 != 0 {
+            wim::Kind::Lzx
+        } else {
+            return None;
+        };
+        (r.flags & 0x10 == 0).then_some(Codec::WimResource(wim::Resource {
+            kind,
+            chunk: self.chunk,
+            original: r.original,
+        }))
+    }
+
+    /// A node for a resource's (possibly compressed) data.
+    fn data(self, input: Input, data: Span, r: &Resource, name: &'static str) -> Node {
+        if r.flags & 0x04 == 0 {
+            return embedded("Data", input.nested(data));
+        }
+        match self.codec(r) {
+            Some(codec) => content("Data", input, data, codec, Some(r.original)),
+            None => unsupported("Data", data, name),
+        }
+    }
+}
+
+/// A compressed lookup table: decompressed, then listed.
+async fn compressed_lookup(cx: Cx, (input, data, name, scheme, codec): (Input, Span, &'static str, Scheme, Codec)) -> Result<()> {
+    let decoded = crate::codec::decode_span(&cx, data, &codec, None).await?;
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    lookup_table(cx, (input, decoded.span, name, scheme)).await
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h = crate::fields::parse(&cx, file.sub(0, Header::SIZE), LE, &(), Header::layout).await?;
     let raw = cx.read(file.sub(0, 208)).await?;
     let codec = compression(h.flags);
+    let scheme = Scheme { flags: h.flags, chunk: h.chunk };
     cx.emit(
         Header::node("Header", file.sub(0, 208), LE)
             .summary(format!("version {:#x}, {codec}", h.version)),
@@ -171,11 +220,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let compressed = r.flags & 0x04 != 0;
         let payload = match (name, compressed) {
-            (_, true) => unsupported("Data", data, codec),
+            ("Lookup table", true) => match scheme.codec(&r) {
+                Some(c) => Node::new("Entries")
+                    .span(data)
+                    .lazy(compressed_lookup, (input, data, codec, scheme, c)),
+                None => unsupported("Data", data, codec),
+            },
+            (_, true) => scheme.data(input, data, &r, codec),
             ("Lookup table", false) => Node::new("Entries")
                 .span(data)
                 .summary(count(r.size / LOOKUP_ENTRY, "entry", "entries"))
-                .lazy(lookup_table, (input, data, codec)),
+                .lazy(lookup_table, (input, data, codec, scheme)),
             ("XML data", false) => Node::new("XML").span(data).lazy(xml_text, data),
             _ => embedded("Data", input.nested(data)),
         };
@@ -203,7 +258,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn lookup_table(cx: Cx, (input, span, codec): (Input, Span, &'static str)) -> Result<()> {
+async fn lookup_table(cx: Cx, (input, span, codec, scheme): (Input, Span, &'static str, Scheme)) -> Result<()> {
     let n = span.len / LOOKUP_ENTRY;
     cx.set_count(Count::Exact(n));
     let data = cx.read(span.sub(0, n.saturating_mul(LOOKUP_ENTRY))).await?;
@@ -221,11 +276,7 @@ async fn lookup_table(cx: Cx, (input, span, codec): (Input, Span, &'static str))
             .to_vec();
         let file = input.span;
         let stream = file.sub(r.offset, r.size);
-        let content = if r.flags & 0x04 != 0 {
-            unsupported("Data", stream, codec)
-        } else {
-            embedded("Data", input.nested(stream))
-        };
+        let content = scheme.data(input, stream, &r, codec);
         let children = vec![
             struct_node("Resource header", entry.sub(0, 24), LE, (), resource_layout),
             Node::new("Part number")
