@@ -260,7 +260,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let Some(w) = word(i) else { break };
         let (count, op) = (usize::try_from(w >> 16).unwrap_or(0), w & 0xffff);
         steps = steps.wrapping_add(1);
-        if steps % 4096 == 0 {
+        if steps.is_multiple_of(4096) {
             cx.checkpoint().await;
         }
         if count == 0 {
