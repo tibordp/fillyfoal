@@ -367,3 +367,16 @@ pub fn inflate(input: &[u8], limit: usize) -> Result<Vec<u8>> {
     while inflater.step(input, &mut out, usize::MAX, limit)? == Step::More {}
     Ok(out)
 }
+
+/// Inflates a whole raw DEFLATE stream whose distances may reach back into
+/// `dictionary` (a preset dictionary: zlib's FDICT, or MSZIP's previous
+/// block). Returns the output (without the dictionary) and the input bytes
+/// consumed. `limit` bounds the output alone.
+pub fn inflate_with_dictionary(input: &[u8], dictionary: &[u8], limit: usize) -> Result<(Vec<u8>, usize)> {
+    let mut out = dictionary.to_vec();
+    let mut inflater = Inflate::new();
+    let total = limit.saturating_add(dictionary.len());
+    while inflater.step(input, &mut out, usize::MAX, total)? == Step::More {}
+    out.drain(..dictionary.len());
+    Ok((out, inflater.consumed()))
+}

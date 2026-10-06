@@ -2,9 +2,10 @@
 //!
 //! A header (`MSCF`), folder entries, file entries, then per folder a chain
 //! of data blocks. Files are byte ranges of their folder's uncompressed
-//! stream. Uncompressed folders are mapped back to the file's bytes and
-//! dissected; MSZIP blocks (`CK` + deflate) are decompressed per block;
-//! Quantum and LZX are unsupported leaves.
+//! stream. A folder's stream is its data blocks through its codec (stored,
+//! MSZIP, Quantum or LZX; see [`crate::codec::cab`]), decoded lazily as far
+//! as reads reach; files in a single stored block map straight back to the
+//! cabinet's bytes.
 
 use std::sync::Arc;
 
@@ -14,7 +15,8 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
-use crate::formats::{Codec, Format, Input, Probe, content, embedded};
+use crate::codec::cab::Folder;
+use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -103,6 +105,49 @@ async fn folder_info(cx: &Cx, l: &Layout, i: u16) -> Result<FolderInfo> {
         blocks: u16_le(&b, 4).unwrap_or(0),
         kind: u16_le(&b, 6).unwrap_or(0),
     })
+}
+
+/// The folder's codec, if its compression method is known.
+fn folder_codec(l: &Layout, f: &FolderInfo) -> Option<Codec> {
+    (f.kind & 0x0f <= 3).then(|| {
+        Codec::CabFolder(Folder {
+            kind: f.kind,
+            data_reserve: u8::try_from(l.data_reserve).unwrap_or(u8::MAX),
+        })
+    })
+}
+
+/// The folder's data blocks (headers included) and its unpacked size.
+async fn folder_data(cx: &Cx, l: &Layout, f: &FolderInfo) -> Result<(Span, u64)> {
+    let mut cur = Cursor::new(cx, l.file, LE);
+    cur.seek(f.data_at);
+    let mut total = 0u64;
+    for _ in 0..f.blocks {
+        cur.skip(4);
+        let packed = cur.u16().await?;
+        let unpacked = cur.u16().await?;
+        cur.skip(l.data_reserve.saturating_add(packed.into()));
+        total = total.saturating_add(unpacked.into());
+        cx.checkpoint().await;
+    }
+    Ok((cur.since(f.data_at), total))
+}
+
+/// The folder's uncompressed stream, decoded on demand. Its length is the
+/// one the data blocks claim (whether or not decoding fails earlier, which
+/// shows up as short reads), so the result does not depend on what was
+/// decoded before.
+async fn folder_stream(cx: &Cx, l: &Layout, f: &FolderInfo) -> Result<Span> {
+    let codec = folder_codec(l, f).ok_or_else(|| Diagnostic::unsupported(compression_name(f.kind)))?;
+    let (data, total) = folder_data(cx, l, f).await?;
+    let stream = cx.decode_lazy(data, &codec, total)?;
+    Ok(Span::new(stream.source, 0, total))
+}
+
+async fn folder_content(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Result<()> {
+    let stream = folder_stream(&cx, &l, &f).await?;
+    cx.annotate(format!("{:#x} bytes, decoded on demand", stream.len));
+    dissect_or_data(cx, input.nested(stream)).await
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -198,7 +243,7 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
             .saturating_add(u64::from(i).saturating_mul(l.folder_size));
         let span = l.file.sub(at, l.folder_size);
         let f = folder_info(&cx, &l, i).await?;
-        let fields = vec![
+        let mut fields = vec![
             Node::new("First data block offset")
                 .span(span.sub(0, 4))
                 .value(hex(f.data_at))
@@ -219,6 +264,14 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
                 .summary(count(f.blocks.into(), "block", "blocks"))
                 .lazy(data_blocks, (input, l, f)),
         ];
+        if f.kind & 0x0f != 0 {
+            fields.push(match folder_codec(&l, &f) {
+                Some(_) => Node::new("Uncompressed stream")
+                    .span(l.file.tail(f.data_at))
+                    .lazy(folder_content, (input, l, f)),
+                None => unsupported("Uncompressed stream", l.file.tail(f.data_at), &compression_name(f.kind)),
+            });
+        }
         cx.push(
             Node::new(format!("Folder {i}"))
                 .span(span)
@@ -268,20 +321,16 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
             1 => {
                 let magic = cx.read_avail(data.sub(0, 2)).await?;
                 if magic == b"CK" {
-                    content(
-                        "Data",
-                        input,
-                        data.tail(2),
-                        Codec::Deflate,
-                        Some(unpacked.into()),
-                    )
-                    .summary("MSZIP: 'CK' + deflate")
+                    Node::new("Data").span(data).summary("MSZIP: 'CK' + deflate")
                 } else {
                     Node::new("Data")
                         .span(data)
                         .diag(Diagnostic::malformed("MSZIP block without 'CK' signature"))
                 }
             }
+            2 | 3 => Node::new("Data")
+                .span(data)
+                .summary(format!("{}, decoded with the folder", compression_name(f.kind))),
             _ => unsupported("Data", data, &compression_name(f.kind)),
         });
         cx.push(crate::formats::arcutil::check_len(
@@ -359,7 +408,7 @@ async fn file_entry(
     let fo = folder_info(&cx, &l, folder).await?;
     let want_start = u64::from(offset);
     let want_end = want_start.saturating_add(size.into());
-    // Find the data block holding the file's bytes.
+    // Find the data block holding the file's start.
     let mut cur = Cursor::new(&cx, l.file, LE);
     cur.seek(fo.data_at);
     let mut uncompressed_at = 0u64;
@@ -372,32 +421,33 @@ async fn file_entry(
         cur.skip(packed.into());
         let end = uncompressed_at.saturating_add(unpacked.into());
         if want_start < end {
-            let whole_block = want_start == uncompressed_at && want_end == end;
             if fo.kind & 0x0f == 0 && want_end <= end {
+                // Within one stored block: the cabinet's own bytes.
                 let s = data.sub(want_start.saturating_sub(uncompressed_at), size.into());
                 cx.emit(embedded("Content", input.nested(s)).summary(human_size(size.into())));
-            } else if fo.kind & 0x0f == 1 && whole_block {
-                cx.emit(
-                    content(
-                        "Content",
-                        input,
-                        data.tail(2),
-                        Codec::Deflate,
-                        Some(size.into()),
-                    )
-                    .summary(format!("MSZIP, {}", human_size(size.into()))),
-                );
-            } else {
-                cx.emit(Node::new("Location").span(data).summary(format!(
-                    "{}, starts in data block {i} of folder {folder}",
-                    compression_name(fo.kind)
-                )));
+                return Ok(());
             }
-            return Ok(());
+            cx.emit(Node::new("Location").span(data).summary(format!(
+                "{}, starts in data block {i} of folder {folder}",
+                compression_name(fo.kind)
+            )));
+            break;
         }
         uncompressed_at = end;
         cx.checkpoint().await;
     }
-    cx.diag(Diagnostic::malformed("file lies beyond its folder's data"));
+    if folder_codec(&l, &fo).is_none() {
+        cx.emit(unsupported("Content", span, &compression_name(fo.kind)));
+        return Ok(());
+    }
+    let stream = folder_stream(&cx, &l, &fo).await?;
+    if want_end > stream.len {
+        cx.diag(Diagnostic::malformed("file lies beyond its folder's data"));
+        return Ok(());
+    }
+    cx.emit(
+        embedded("Content", input.nested(stream.sub(want_start, size.into())))
+            .summary(format!("{}, {}", compression_name(fo.kind), human_size(size.into()))),
+    );
     Ok(())
 }

@@ -25,6 +25,9 @@ pub mod xpress;
 pub mod lzo;
 pub mod legacy;
 pub mod implode;
+pub mod cab;
+pub mod lzx;
+pub mod quantum;
 
 use std::sync::Arc;
 
@@ -88,6 +91,12 @@ pub enum Codec {
     /// Xpress LZ77+Huffman ([MS-XCA] 2.2), `size` bytes (the stream does not
     /// record it).
     XpressHuffman { size: u64 },
+    /// A raw LZX stream (CHM content, WIM chunks); see [`lzx::Params`] for
+    /// the window size, reset interval and E8 translation variant.
+    Lzx(lzx::Params),
+    /// A cabinet folder's data blocks (headers included) through the
+    /// folder's codec: stored, MSZIP, Quantum or LZX (see [`cab`]).
+    CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
     /// One raw LZO1X stream (with its end marker).
@@ -184,6 +193,8 @@ impl Codec {
             Codec::Adc => "adc",
             Codec::Implode(_) => "implode",
             Codec::DclImplode => "dcl-implode",
+            Codec::Lzx(_) => "lzx",
+            Codec::CabFolder(_) => "cab-folder",
             Codec::Lzfse => "lzfse",
             Codec::Pbz => "pbz",
             Codec::Brotli => "brotli",
@@ -230,6 +241,8 @@ impl Codec {
             Codec::Adc => "adc (lazy)",
             Codec::Implode(_) => "implode (lazy)",
             Codec::DclImplode => "dcl-implode (lazy)",
+            Codec::Lzx(_) => "lzx (lazy)",
+            Codec::CabFolder(_) => "cab-folder (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
             Codec::Pbz => "pbz (lazy)",
             Codec::Brotli => "brotli (lazy)",
@@ -274,6 +287,8 @@ impl Codec {
             | Codec::Adc
             | Codec::Implode(_)
             | Codec::DclImplode
+            | Codec::Lzx(_)
+            | Codec::CabFolder(_)
             | Codec::Lzfse
             | Codec::Pbz
             | Codec::Brotli
@@ -323,6 +338,10 @@ impl Codec {
             Codec::Adc => 32,
             // Matches of up to 320 or 518 bytes in about 17 or 24 bits.
             Codec::Implode(_) | Codec::DclImplode => 256,
+            // A 32 KiB frame (block) takes a few bytes at least.
+            Codec::Lzx(_) => 32_768,
+            Codec::CabFolder(f) if f.method() == 0 => 1,
+            Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
             Codec::Pbz => 7_000,
             // A copy of 16 MiB costs a few bits.
@@ -369,6 +388,8 @@ impl Codec {
             Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
             Codec::Implode(params) => Box::new(Streaming(filters::Whole::new(*params))),
             Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
+            Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
+            Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),

@@ -661,3 +661,176 @@ fn dcl_implode_decodes_pklib_output() {
     assert!(legacy_decode(Codec::DclImplode, "dcl", "text_binary2k.pk") == text[..5000]);
     assert!(legacy_decode(Codec::DclImplode, "dcl", "mixed_binary1k.pk") == legacy_mixed());
 }
+
+/// A cabinet's folders: compression type and the span of their data blocks.
+fn cab_folders(cab: &[u8]) -> Vec<(u16, std::ops::Range<usize>)> {
+    let u16le = |o: usize| u16::from_le_bytes([cab[o], cab[o + 1]]);
+    let u32le = |o: usize| u32::from_le_bytes(cab[o..o + 4].try_into().unwrap()) as usize;
+    (0..usize::from(u16le(26)))
+        .map(|i| {
+            let at = 36 + 8 * i;
+            let start = u32le(at);
+            let mut end = start;
+            for _ in 0..u16le(at + 4) {
+                end += 8 + usize::from(u16le(end + 4));
+            }
+            (u16le(at + 6), start..end)
+        })
+        .collect()
+}
+
+/// MSZIP comes from zlib; LZX and Quantum from the test encoders in
+/// `tests/data/cab/make.py`, whose output 7-Zip extracts to the same bytes.
+#[test]
+fn cab_folders_decode_7zip_checked_cabinets() {
+    use fillyfoal::codec::{Codec, cab::Folder};
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let (text, code) = (lzma_text(), lzma_code());
+    let small = b"hello cabinet ".repeat(40);
+    let cases = [
+        ("mszip.cab", vec![[text.as_slice(), &small].concat()]),
+        ("lzx16.cab", vec![[code.as_slice(), &text[..40000]].concat()]),
+        ("lzx21.cab", vec![text.clone(), small.clone()]),
+        ("quantum.cab", vec![[text.as_slice(), &code[..20000]].concat()]),
+    ];
+    for (name, expected) in cases {
+        let cab = read(name);
+        let folders = cab_folders(&cab);
+        assert_eq!(folders.len(), expected.len());
+        for ((kind, range), expected) in folders.into_iter().zip(expected) {
+            let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+            let mut d = codec.decoder().unwrap();
+            let out = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &cab[range.clone()], 1 << 26).unwrap();
+            assert!(out == expected, "{name}: folder {kind:#x}");
+            assert!(trickle(&codec, &cab[range]) == expected, "{name}: folder {kind:#x}, trickled");
+        }
+    }
+}
+
+/// The test CHM's LZX section: the content stream, window bits, reset
+/// interval (frames), decoded length (from the reset table) and the files.
+type Section1 = (Vec<u8>, u8, u32, u64, Vec<(String, u64, u64)>);
+
+fn chm_section1(chm: &[u8]) -> Section1 {
+    let u32le = |d: &[u8], o: usize| u32::from_le_bytes(d[o..o + 4].try_into().unwrap());
+    let u64le = |d: &[u8], o: usize| u64::from_le_bytes(d[o..o + 8].try_into().unwrap());
+    let content_at = u64le(chm, 0x58) as usize;
+    let dir = u64le(chm, 0x48) as usize + 0x54;
+    let pmgl = &chm[dir..dir + 0x1000];
+    let end = 0x1000 - u32le(pmgl, 4) as usize;
+    let encint = |at: &mut usize| {
+        let mut v = 0u64;
+        loop {
+            let b = pmgl[*at];
+            *at += 1;
+            v = v << 7 | u64::from(b & 0x7f);
+            if b & 0x80 == 0 {
+                return v;
+            }
+        }
+    };
+    let (mut at, mut files, mut sec0) = (20, Vec::new(), std::collections::HashMap::new());
+    while at < end {
+        let len = encint(&mut at) as usize;
+        let name = String::from_utf8(pmgl[at..at + len].to_vec()).unwrap();
+        at += len;
+        let (section, offset, length) = (encint(&mut at), encint(&mut at), encint(&mut at));
+        if section == 1 {
+            files.push((name, offset, length));
+        } else {
+            sec0.insert(name, &chm[content_at + offset as usize..content_at + (offset + length) as usize]);
+        }
+    }
+    let base = "::DataSpace/Storage/MSCompressed/";
+    let control = sec0[&format!("{base}ControlData")];
+    assert_eq!(&control[4..8], b"LZXC");
+    let window_bits = (u32le(control, 16) * 32768).trailing_zeros() as u8;
+    let reset = sec0[&format!("{base}Transform/{{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}}/InstanceData/ResetTable")];
+    let content = sec0[&format!("{base}Content")].to_vec();
+    (content, window_bits, u32le(control, 12), u64le(reset, 16), files)
+}
+
+/// The CHM's LZX section resets every two frames and uses E8 translation;
+/// 7-Zip extracts the same files from it. Also a WIM-style chunk (short
+/// block sizes, no E8 header): self-consistency with the test encoder only.
+#[test]
+fn lzx_decodes_chm_sections_and_wim_chunks() {
+    use fillyfoal::codec::{Codec, lzx};
+    let dir = format!("{}/tests/data/cab", env!("CARGO_MANIFEST_DIR"));
+    let chm = std::fs::read(format!("{dir}/lzx.chm")).unwrap();
+    let (content, window_bits, reset_interval, len, files) = chm_section1(&chm);
+    assert_eq!((window_bits, reset_interval), (16, 2));
+    let codec = Codec::Lzx(lzx::Params {
+        window_bits,
+        reset_interval,
+        variant: lzx::Variant::Cab,
+        len: Some(len),
+    });
+    let mut d = codec.decoder().unwrap();
+    let out = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &content, 1 << 26).unwrap();
+    assert_eq!(out.len() as u64, len);
+    assert!(trickle(&codec, &content) == out);
+    let (text, code) = (lzma_text(), lzma_code());
+    let small = [b"<html>".as_slice(), &b"hello cabinet ".repeat(40), b"</html>"].concat();
+    for (name, offset, length) in files {
+        let expected = match name.as_str() {
+            "/text.txt" => text.clone(),
+            "/code.bin" => code[..30000].to_vec(),
+            "/small.html" => small.clone(),
+            _ => panic!("{name}"),
+        };
+        assert!(out[offset as usize..(offset + length) as usize] == expected, "{name}");
+    }
+
+    let chunk = std::fs::read(format!("{dir}/wim-chunk.lzx")).unwrap();
+    let mut d = Codec::Lzx(lzx::Params::wim_chunk(32768)).decoder().unwrap();
+    let out = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &chunk, 1 << 20).unwrap();
+    assert!(out == [&code[..6000], &text[..32768 - 6000]].concat());
+}
+
+/// Files in compressed CAB folders and in the CHM's LZX section are
+/// dissected like stored ones.
+#[test]
+fn cab_and_chm_show_compressed_files() {
+    for name in ["mszip.cab", "lzx16.cab", "lzx21.cab", "quantum.cab", "lzx.chm"] {
+        let data = std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let mut host = Host::named(name, data, Limits::default());
+        host.explore(host.root, 6, 40);
+        let tree = host.render();
+        // (The text sniffs as YAML, which has complaints of its own.)
+        for line in tree.lines().filter(|l| !l.contains("expected `key: value`")) {
+            for bad in ["! malformed", "! truncated", "! limit", "! internal"] {
+                assert!(!line.contains(bad), "{name}: {line}");
+            }
+        }
+        assert!(tree.contains("\"the quick brown fox 919\""), "{name}\n{tree}");
+        if !["lzx16.cab", "quantum.cab"].contains(&name) {
+            assert!(tree.contains("hello cabinet hello cabinet"), "{name}\n{tree}");
+        }
+    }
+}
+
+/// Corrupted and truncated folders fail (or decode to something) without
+/// panicking or looping.
+#[test]
+fn cab_folder_decoders_survive_corruption() {
+    use fillyfoal::codec::{Codec, cab::Folder};
+    for name in ["mszip.cab", "lzx16.cab", "quantum.cab"] {
+        let cab = std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let (kind, range) = cab_folders(&cab).remove(0);
+        let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+        let data = &cab[range];
+        for i in 0..64usize {
+            let at = 8 + (i * 7919) % (data.len() - 8);
+            let mut bad = data.to_vec();
+            bad[at] ^= 1 << (i % 8);
+            let mut d = codec.decoder().unwrap();
+            let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 26);
+            let mut d = codec.decoder().unwrap();
+            let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &data[..at], 1 << 26);
+        }
+        // The output limit holds.
+        let mut d = codec.decoder().unwrap();
+        assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 40000).is_err());
+    }
+}
