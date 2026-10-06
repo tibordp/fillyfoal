@@ -1264,7 +1264,6 @@ pub static FORMATS: &[&Format] = &[
     &misc9::CGFX,
     &misc9::J3D,
     &misc9::RARC,
-    &misc9::TPL,
     &misc9::BRRES,
     &misc9::GIM,
     &misc9::GXT,
