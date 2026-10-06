@@ -4,10 +4,9 @@
 //! size, data). Each chunk is an independent stream in the algorithm the
 //! magic names, or stored when both sizes are equal.
 
-use crate::codec::filters::Filter;
 use crate::codec::lz::lz4_block;
-use crate::codec::lzfse::Lzfse;
-use crate::codec::xz::Xz;
+use crate::codec::pipeline::{self, Decode, Step};
+use crate::codec::Codec;
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -74,49 +73,80 @@ pub fn looks_compressed(algorithm: u8, data: &[u8]) -> bool {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct Pbz;
+/// A pbz stream, decoded a chunk per step (each chunk through its own
+/// decoder, to the end of the chunk).
+#[derive(Clone, Default)]
+pub struct Pbz {
+    pos: usize,
+    done: bool,
+}
 
-impl Filter for Pbz {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+/// Decodes one compressed chunk (`algorithm` is the magic's last byte).
+fn chunk(algorithm: u8, data: &[u8], room: usize) -> Result<Vec<u8>> {
+    let codec = match algorithm {
+        b'x' => Codec::Xz,
+        b'e' => Codec::Lzfse,
+        b'z' => Codec::Zlib,
+        _ => {
+            let mut v = Vec::new();
+            lz4_bv4(data, &mut v, room)?;
+            return Ok(v);
+        }
+    };
+    let mut decoder = codec.decoder().ok_or_else(|| Diagnostic::internal("no chunk decoder"))?;
+    pipeline::decode_all(decoder.as_mut(), data, room)
+}
+
+impl Decode for Pbz {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
         let algorithm = match input.get(..4) {
             Some([b'p', b'b', b'z', a @ (b'x' | b'e' | b'4' | b'z')]) => *a,
             _ => return Err(bad("not a pbz stream")),
         };
-        let mut out = Vec::new();
-        let mut pos = 12usize;
-        while pos < input.len() {
+        self.pos = self.pos.max(12);
+        let mark = out.len();
+        while !self.done {
+            let pos = self.pos;
+            if pos >= input.len() {
+                if !eof {
+                    return Err(bad("truncated chunk header"));
+                }
+                self.pos = input.len();
+                self.done = true;
+                break;
+            }
             let raw = u64_be(input, pos).ok_or_else(|| bad("truncated chunk header"))?;
             let packed = u64_be(input, pos.saturating_add(8)).ok_or_else(|| bad("truncated chunk header"))?;
             let raw = usize::try_from(raw).map_err(|_| bad("chunk too large"))?;
             let packed = usize::try_from(packed).map_err(|_| bad("chunk too large"))?;
             let start = pos.saturating_add(16);
             let data = input.get(start..start.saturating_add(packed)).ok_or_else(|| bad("truncated chunk"))?;
-            pos = start.saturating_add(packed);
             let room = limit.saturating_sub(out.len());
             let compressed = looks_compressed(algorithm, data);
-            let chunk = if raw == packed || !compressed {
-                data.to_vec()
-            } else {
-                match algorithm {
-                    b'x' => Xz.apply(data, room)?,
-                    b'e' => Lzfse.apply(data, room)?,
-                    b'z' => crate::codec::pipeline::decode_all(crate::codec::Codec::Zlib.decoder().ok_or_else(|| bad("no zlib decoder"))?.as_mut(), data, room)?,
-                    _ => {
-                        let mut v = Vec::new();
-                        lz4_bv4(data, &mut v, room)?;
-                        v
-                    }
+            if raw == packed || !compressed {
+                if data.len() > room {
+                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
                 }
-            };
-            if compressed && chunk.len() != raw {
-                return Err(bad("chunk size mismatch"));
+                out.extend_from_slice(data);
+            } else {
+                let decoded = chunk(algorithm, data, room)?;
+                if decoded.len() != raw {
+                    return Err(bad("chunk size mismatch"));
+                }
+                if decoded.len() > room {
+                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                }
+                out.extend_from_slice(&decoded);
             }
-            if chunk.len() > room {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            self.pos = start.saturating_add(packed);
+            if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
             }
-            out.extend_from_slice(&chunk);
         }
-        Ok(out)
+        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
     }
 }
