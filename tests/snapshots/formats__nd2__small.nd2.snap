@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.nd2 — Nikon ND2 Ver3.0, 5 chunk(s), 1 image frame(s)  [0x0+0x2e5]
+    ND2 FILE SIGNATURE CHUNK NAME01! — 32 bytes  [0x0+0x51]
+  ▾ ImageAttributesLV! — 196 bytes  [0x51+0xe7]
+    ▾ SLxImageAttributes — 4 item(s)  [0x74+0xc4]
+        uiWidth: 4  [0xa8+0x16]
+        uiHeight: 4  [0xbe+0x18]
+        uiComp: 1  [0xd6+0x14]
+        dCompressionParam: 0  [0xea+0x2e]
+  ▾ ImageTextInfoLV! — 122 bytes  [0x138+0x9b]
+    ▾ SLxImageTextInfo — 1 item(s)  [0x159+0x7a]
+        TextInfoItem_5: "Nikon Ti2-E test"  [0x189+0x42]
+    ImageDataSeq|0! — 24 bytes  [0x1d3+0x38]
+  ▾ ND2 CHUNK MAP SIGNATURE 0000001! — 129 bytes  [0x20b+0xb2]
+      ImageAttributesLV!: 0x51 — 196 bytes  [0x23c+0x22]
+      ImageTextInfoLV!: 0x138 — 122 bytes  [0x25e+0x20]
+      ImageDataSeq|0!: 0x1d3 — 24 bytes  [0x27e+0x1f]
+    Chunk map pointer: 0x20b  [0x2bd+0x28]
