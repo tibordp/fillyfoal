@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ candump-2024-05-01.log — candump log, interface vcan0  [0x0+0xb2]
+  ▾ Frame — 1714564800.000100 s, vcan0, ID 123, CAN [4] DE AD BE EF  [0x0+0x26]
+      Timestamp: 2024-05-01 12:00:00 UTC — 1714564800.000100  [0x1+0x11]
+      Interface: "vcan0"  [0x14+0x5]
+      ID: 0x123  [0x1a+0x3]
+      Data: "DEADBEEF"  [0x1e+0x8]
+  ▾ Frame — 1714564800.001200 s, vcan0, ID 18FEF100, CAN [8] 01 02 03 04 05 06 07 08  [0x27+0x33]
+      Timestamp: 2024-05-01 12:00:00 UTC — 1714564800.001200  [0x28+0x11]
+      Interface: "vcan0"  [0x3b+0x5]
+      ID: 0x18fef100  [0x41+0x8]
+      Data: "0102030405060708"  [0x4a+0x10]
+  ▾ Frame — 1714564800.002300 s, can1, ID 7DF, remote [0]   [0x5b+0x1e]
+      Timestamp: 2024-05-01 12:00:00 UTC — 1714564800.002300  [0x5c+0x11]
+      Interface: "can1"  [0x6f+0x4]
+      ID: 0x7df  [0x74+0x3]
+      Data: "R"  [0x78+0x1]
+  ▾ Frame — 1714564800.003400 s, can1, ID 456, CAN FD [12] 11 22 33 44 55 66 77 88 99 AA BB CC  [0x7a+0x37]
+      Timestamp: 2024-05-01 12:00:00 UTC — 1714564800.003400  [0x7b+0x11]
+      Interface: "can1"  [0x8e+0x4]
+      ID: 0x456  [0x93+0x3]
+      Data: "#1112233445566778899AABBCC"  [0x97+0x1a]

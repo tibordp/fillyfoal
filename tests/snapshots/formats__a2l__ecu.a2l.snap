@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ecu.a2l — ASAM A2L description  [0x0+0x257]
+    ASAP2_VERSION: "ASAP2_VERSION 1 71"  [0x0+0x12]
+  ▾ PROJECT Demo  [0x13+0x244]
+    ▾ HEADER "Header"  [0x36+0x39]
+        VERSION: "VERSION \"1.0\""  [0x4f+0x11]
+    ▾ MODULE ECU  [0x6f+0x1db]
+      ▾ MOD_PAR ""  [0x97+0x3e]
+          CPU_TYPE: "CPU_TYPE \"TC397\""  [0xad+0x16]
+      ▾ MEASUREMENT EngineSpeed  [0xd5+0x84]
+          UWORD: "UWORD CM_RPM 1 100 0 8000"  [0x107+0x1f]
+          ECU_ADDRESS: "ECU_ADDRESS 0x70001000"  [0x127+0x1c]
+      ▾ CHARACTERISTIC IdleTarget  [0x159+0x83]
+          VALUE: "VALUE 0x80002000 RL_UWORD 0 CM_RPM 500 1200"  [0x192+0x31]
+        COMPU_METHOD: "/begin COMPU_METHOD CM_RPM \"rpm\" LINEAR \"%6.1\" \"rpm\" COEFFS_LINEAR 0.25 0 /end COMPU_METHOD"  [0x1dc+0x5f]

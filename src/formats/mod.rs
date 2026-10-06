@@ -824,6 +824,13 @@ pub static FORMATS: &[&Format] = &[
     &geo::rinex::IONEX,
     &geo::rinex::SP3,
     &geo::rinex::SINEX,
+    &geo::vehicle::BLF,
+    &geo::vehicle::ASC,
+    &geo::vehicle::CANDUMP,
+    &geo::vehicle::TRC,
+    &geo::vehicle::DBC,
+    &geo::vehicle::LDF,
+    &geo::vehicle::A2L,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

@@ -1,0 +1,12 @@
+;$FILEVERSION=2.0
+;$STARTTIME=45413.5000000000
+;$COLUMNS=N,O,T,I,d,l,D
+;
+;   C:\trace.trc
+;   Start time: 01.05.2024 12:00:00.000.0
+;   Message   Time    Type ID     Rx/Tx
+;   Number    Offset  |    [hex]  |  Data Length
+;   |         [ms]    |    |      |  |  Data [hex] ...
+;---+-- ------+------ +- --+----- +- +- +- -- -- -- -- -- -- --
+      1         0.100 DT     0123 Rx 8  01 02 03 04 05 06 07 08
+      2        10.250 DT 18FEF100 Tx 3  AA BB CC

@@ -1,0 +1,19 @@
+ASAP2_VERSION 1 71
+/begin PROJECT Demo "Demo project"
+  /begin HEADER "Header"
+    VERSION "1.0"
+  /end HEADER
+  /begin MODULE ECU "Engine controller"
+    /begin MOD_PAR ""
+      CPU_TYPE "TC397"
+    /end MOD_PAR
+    /begin MEASUREMENT EngineSpeed "Engine speed"
+      UWORD CM_RPM 1 100 0 8000
+      ECU_ADDRESS 0x70001000
+    /end MEASUREMENT
+    /begin CHARACTERISTIC IdleTarget "Idle speed target"
+      VALUE 0x80002000 RL_UWORD 0 CM_RPM 500 1200
+    /end CHARACTERISTIC
+    /begin COMPU_METHOD CM_RPM "rpm" LINEAR "%6.1" "rpm" COEFFS_LINEAR 0.25 0 /end COMPU_METHOD
+  /end MODULE
+/end PROJECT
