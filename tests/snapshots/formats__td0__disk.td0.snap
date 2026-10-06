@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.td0 — Teledisk 2.1 image, 1.44M 3.5", 500 kbps MFM, 2 side(s), "Backup of my disk"  [0x0+0x45d]
+    Signature: "TD"  [0x0+0x2]
+    Volume sequence: 0  [0x2+0x1]
+    Check signature: 0x2a  [0x3+0x1]
+    Version: 21  [0x4+0x1]
+    Data rate: 500 kbps MFM (0x2)  [0x5+0x1]
+    Drive type: 1.44M 3.5" (0x4)  [0x6+0x1]
+    Stepping: 0x80 [COMMENT]  [0x7+0x1]
+    DOS allocation only: 0  [0x8+0x1]
+    Sides: 2  [0x9+0x1]
+    Header CRC: 0x2d26  [0xa+0x2]
+    Comment: "Backup of my disk" — 1995-06-17 12:30:00  [0xc+0x1c]
+  ▾ Tracks  [0x28+0x435]
+      Cylinder 0 head 0: 2 — 2 sectors, 1 run-length encoded  [0x28+0x21a]
+      Cylinder 1 head 0: 2 — 2 sectors, 1 run-length encoded  [0x242+0x21a]
+      End of image  [0x45c+0x1]

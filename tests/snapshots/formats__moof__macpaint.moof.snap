@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ macpaint.moof — MOOF image "MacPaint", DSDD GCR (800K), 4 chunks, by "Applesauce v2.0", CRC valid  [0x0+0x137]
+    Signature: "MOOF"  [0x0+0x8]
+    CRC-32: 0xbe6fc117 — valid  [0x8+0x4]
+    INFO — 60 bytes  [0xc+0x44] → 0x14+0x3c
+    TMAP — 160 bytes  [0x50+0xa8] → 0x58+0xa0
+    TRKS — 32 bytes  [0xf8+0x28] → 0x100+0x20
+    META: "title\tMacPaint; " — 15 bytes  [0x120+0x17] → 0x128+0xf

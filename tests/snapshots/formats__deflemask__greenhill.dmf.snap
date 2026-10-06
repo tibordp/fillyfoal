@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ greenhill.dmf — DefleMask module v24 (zlib), "Green Hill" by Yuzo, Sega Genesis (YM2612 + SN76489), 60 Hz, 8 orders of 64 rows  [0x0+0x3c]
+    zlib stream — 60 bytes → 113 bytes  [0x0+0x3c]
+    Magic: ".DelekDefleMask."  [#1:0x0+0x10]
+    Version: 24  [#1:0x10+0x1]
+    System: Sega Genesis (YM2612 + SN76489) (0x2)  [#1:0x11+0x1]
+    Song name: "Green Hill"  [#1:0x12+0xb]
+    Author: "Yuzo"  [#1:0x1d+0x5]
+    Highlight A: 4  [#1:0x22+0x1]
+    Highlight B: 16  [#1:0x23+0x1]
+    Time base: 1  [#1:0x24+0x1]
+    Tick time 1: 6  [#1:0x25+0x1]
+    Tick time 2: 6  [#1:0x26+0x1]
+    Frames mode: NTSC (60 Hz) (0x1)  [#1:0x27+0x1]
+    Custom rate: 0  [#1:0x28+0x1]
+    Custom rate value: "60"  [#1:0x29+0x3]
+    Rows per pattern: 64  [#1:0x2c+0x4]
+    Pattern matrix rows: 8  [#1:0x30+0x1]
+    Pattern matrix, instruments, wavetables, patterns, samples  [#1:0x31+0x40]

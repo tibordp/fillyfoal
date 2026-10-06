@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!DOCTYPE softwarelist SYSTEM "softwarelist.dtd">
+<softwarelist name="gameboy" description="Nintendo Game Boy cartridges">
+	<software name="tetris">
+		<description>Tetris (World, Rev. 1)</description>
+		<year>1989</year>
+		<publisher>Nintendo</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<dataarea name="rom" size="32768">
+				<rom name="tetris.gb" size="32768" crc="46df91ad" sha1="74591cc9501af93873f9a5d3eb12da12c0723bbc" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+	<software name="supmario" supported="yes">
+		<description>Super Mario Land (World, Rev. 1)</description>
+		<year>1989</year>
+		<publisher>Nintendo</publisher>
+		<part name="cart" interface="gameboy_cart">
+			<dataarea name="rom" size="65536">
+				<rom name="sml.gb" size="65536" crc="2c27ec70" offset="000000" />
+			</dataarea>
+		</part>
+	</software>
+</softwarelist>

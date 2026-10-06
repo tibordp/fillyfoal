@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.zso — ZSO (LZ4) v1, 4 KiB image in 2 blocks of 2 KiB  [0x0+0x2c]
+  ▾ Header  [0x0+0x18]
+      Magic: "ZISO"  [0x0+0x4]
+      Header size: 24  [0x4+0x4]
+      Uncompressed size: 4096  [0x8+0x8]
+      Block size: 2048  [0x10+0x4]
+      Version: 1  [0x14+0x1]
+      Index alignment (shift): 0  [0x15+0x1]
+      Reserved: 00 00  |..|  [0x16+0x2]
+  ▾ Blocks — 2 blocks  [0x18+0xc]
+      Block 0: 0x24 — LZ4, 4 bytes  [0x24+0x4]
+        ! unsupported: LZ4 compression
+      Block 1: 0x28 — LZ4, 4 bytes  [0x28+0x4]
+        ! unsupported: LZ4 compression

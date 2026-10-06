@@ -1,5 +1,5 @@
 //! Console game assets: Nintendo (BFRES, BNTX, BYML, MSBT, CGFX, J3D,
-//! RARC, TPL, BRRES), Sony (GIM, GXT, RCO, NPD/EDAT), Xbox (XDBF, XPR,
+//! RARC, BRRES; TPL is in retro::extras), Sony (GIM, GXT, RCO, NPD/EDAT), Xbox (XDBF, XPR,
 //! XACT sound and global settings) and Sega (PVR/GVR textures, Ninja
 //! chunks).
 
@@ -282,7 +282,8 @@ async fn cgfx(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// J3D (GameCube/Wii models and animations), RARC, TPL, BRRES
+// J3D (GameCube/Wii models and animations), RARC, BRRES (TPL lives in
+// retro::extras)
 
 fn j3d_probe(h: &Head<'_>) -> bool {
     h.starts_with(b"J3D1") || h.starts_with(b"J3D2")
@@ -365,52 +366,6 @@ async fn rarc(cx: Cx, input: Input) -> Result<()> {
     }
     let _ = nodes_rel;
     cx.annotate(format!("RARC archive, {nodes} directories, {files} files"));
-    Ok(())
-}
-
-declare_format!(pub TPL = "tpl", "GameCube/Wii texture palette library (TPL)", ["tpl"], "image/x-tpl",
-    Probe::Magic(&[(0, b"\x00\x20\xaf\x30")]), tpl);
-
-const GX_FORMATS: EnumTable = &[
-    (0, "I4"),
-    (1, "I8"),
-    (2, "IA4"),
-    (3, "IA8"),
-    (4, "RGB565"),
-    (5, "RGB5A3"),
-    (6, "RGBA32"),
-    (8, "C4"),
-    (9, "C8"),
-    (10, "C14X2"),
-    (14, "CMPR"),
-];
-
-async fn tpl(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 12)).await?;
-    let count = u32_be(&head, 4).unwrap_or(0);
-    let table = u64::from(u32_be(&head, 8).unwrap_or(0));
-    cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Images").span(file.sub(4, 4)).value(uint(count.into(), 32)));
-    for i in 0..u64::from(count.min(1024)) {
-        let t = cx.read(file.sub_exact(table.saturating_add(i.saturating_mul(8)), 8)?).await?;
-        let image = u64::from(u32_be(&t, 0).unwrap_or(0));
-        let palette = u32_be(&t, 4).unwrap_or(0);
-        let h = cx.read(file.sub_exact(image, 12)?).await?;
-        let height = u16_be(&h, 0).unwrap_or(0);
-        let width = u16_be(&h, 2).unwrap_or(0);
-        let format = u32_be(&h, 4).unwrap_or(0);
-        let data = u64::from(u32_be(&h, 8).unwrap_or(0));
-        let name = GX_FORMATS.iter().find(|(k, _)| *k == u64::from(format)).map_or("unknown", |(_, v)| v);
-        cx.push(
-            Node::new(format!("Image {i}"))
-                .span(file.sub(image, 0x24))
-                .summary(format!("{width}×{height} {name}{}", if palette != 0 { ", palette" } else { "" }))
-                .target(file.sub(data, 0)),
-        )
-        .await;
-    }
-    cx.annotate(format!("TPL texture library, {count} images"));
     Ok(())
 }
 

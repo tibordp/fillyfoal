@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ RMCE01.wbfs — WBFS, 1048576 sectors of 512 bytes, WBFS sectors of 2.0 MiB, 1 disc(s): "Mario Kart Wii"  [0x0+0x500]
+    Magic: "WBFS"  [0x0+0x4]
+    HD sectors: 1048576  [0x4+0x4]
+    HD sector size (shift): 9 — 512 bytes  [0x8+0x1]
+    WBFS sector size (shift): 21 — 2.0 MiB  [0x9+0x1]
+    Version: 1  [0xa+0x1]
+    Padding: 0  [0xb+0x1]
+    Disc table — 1 slots used  [0xc+0x1f4]
+  ▾ Disc 0: "RMCE01" — Mario Kart Wii  [0x200+0x200]
+      Game ID: "RMCE01"  [0x200+0x6]
+      Disc number: 0  [0x206+0x1]
+      Version: 0  [0x207+0x1]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x208+0x10]
+      Wii magic: 0x5d1c9ea3  [0x218+0x4]
+      GameCube magic: 0x0  [0x21c+0x4]
+      Title: "Mario Kart Wii"  [0x220+0x40]
+      Wii LBA table  [0x300+0x100]

@@ -1,0 +1,13 @@
+cheats = 3
+
+cheat0_desc = "Infinite lives"
+cheat0_code = "00C1-B7A4"
+cheat0_enable = false
+
+cheat1_desc = "Max money"
+cheat1_code = "7E0DBF63+7E0DC063"
+cheat1_enable = true
+
+cheat2_desc = "Start on level 5"
+cheat2_code = "C2A2-4F0D"
+cheat2_enable = false

@@ -1,5 +1,6 @@
 //! Legacy archivers and compressors (HA, UHARC, YZ1, DGCA, GCA, PAQ8,
-//! freeze, compact, squeeze, crunch, Amiga XPK and LZX, PackIt, BinHex),
+//! freeze, compact, squeeze, crunch, Amiga XPK and LZX, PackIt; BinHex lives in
+//! retro::micros),
 //! paint-program files, small image formats, help/e-book formats and embedded
 //! key-value databases.
 
@@ -287,7 +288,7 @@ async fn amiga_lzx(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Classic Mac: PackIt, BinHex
+// Classic Mac: PackIt
 
 declare_format!(pub PACKIT = "packit", "PackIt archive", ["pit"], "application/x-packit",
     Probe::Magic(&[(0, b"PMag"), (0, b"PMa4"), (0, b"PMa5"), (0, b"PMa6")]), packit);
@@ -340,30 +341,6 @@ async fn packit_entry(cx: Cx, (input, header, data, rsrc): (Input, Span, Span, S
         cx.emit(embedded_as("Resource fork", input.nested(rsrc), &crate::formats::platform::MAC_RESOURCE));
     }
     cx.emit(Node::new("CRC").span(Span::new(rsrc.source, rsrc.end(), 2)));
-    Ok(())
-}
-
-fn binhex_probe(h: &Head<'_>) -> bool {
-    let n = h.data.len().min(1024);
-    h.data.get(..n).is_some_and(|d| d.windows(40).any(|w| w == b"(This file must be converted with BinHex"))
-}
-
-declare_format!(pub BINHEX = "binhex", "BinHex 4.0 encoded file", ["hqx"], "application/mac-binhex40",
-    Probe::Custom(binhex_probe), binhex);
-
-async fn binhex(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read_avail(file.sub(0, 1024)).await?;
-    let start = head.windows(40).position(|w| w == b"(This file must be converted with BinHex").unwrap_or(0);
-    let line_end = head.get(start..).and_then(|r| r.iter().position(|&b| b == b'\n')).map_or(head.len(), |p| p.saturating_add(start));
-    let banner = String::from_utf8_lossy(head.get(start..line_end).unwrap_or_default()).trim().to_owned();
-    cx.emit(Node::new("Banner").span(file.sub(to_u64(start), to_u64(line_end.saturating_sub(start)))).value(text(banner)));
-    // The encoded data sits between two colons.
-    let colon = head.get(line_end..).and_then(|r| r.iter().position(|&b| b == b':')).map(|p| p.saturating_add(line_end));
-    if let Some(c) = colon {
-        cx.emit(Node::new("Encoded data").span(file.tail(to_u64(c))).summary("6-bit encoded, RLE-compressed"));
-    }
-    cx.annotate("BinHex 4.0");
     Ok(())
 }
 

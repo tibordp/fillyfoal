@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ wings.sndh — SNDH "Wings of Death" by Jochen Hippel, 2 tune(s), timer TC50  [0x0+0x9f]
+    Init / exit / play branches  [0x0+0xc]
+    Magic: "SNDH"  [0xc+0x4]
+    Title: "Wings of Death"  [0x10+0x13]
+    Composer: "Jochen Hippel"  [0x23+0x12]
+    Ripper: "Grazey"  [0x35+0xb]
+    Year: "1990"  [0x40+0x9]
+    Subtunes: 2  [0x49+0x4]
+    Timer: "TC50"  [0x4d+0x5]
+    Durations: "2:05, 1:30"  [0x53+0x8]
+    End of header (HDNS)  [0x5b+0x4]
+    68000 replay code and data  [0x5f+0x40]

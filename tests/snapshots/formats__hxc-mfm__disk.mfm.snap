@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.mfm — HxC MFM image, 2 tracks × 1 sides, 300 RPM, 250 kbit/s  [0x0+0x129]
+    Signature: "HXCMFM"  [0x0+0x7]
+    Tracks: 2  [0x7+0x2]
+    Sides: 1  [0x9+0x1]
+    RPM: 300  [0xa+0x2]
+    Bit rate (kbit/s): 250  [0xc+0x2]
+    Interface type: 7  [0xe+0x1]
+    Track list offset: 0x13  [0xf+0x4]
+    Track 0 side 0: 128 — 128 MFM bytes  [0x13+0xb] → 0x29+0x80
+    Track 1 side 0: 128 — 128 MFM bytes  [0x1e+0xb] → 0xa9+0x80

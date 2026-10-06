@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disc.gdi — GD-ROM track list, 3 tracks, with high-density area  [0x0+0x53]
+    Track count: 3  [0x0+0x1]
+    Track 1: "track01.bin" — data, LBA 0, 2352-byte sectors  [0x2+0x18]
+    Track 2: "track02.raw" — audio, LBA 756, 2352-byte sectors  [0x1b+0x1a]
+    Track 3: "track03.bin" — data, LBA 45000 (high-density area), 2352-byte sectors  [0x36+0x1c]

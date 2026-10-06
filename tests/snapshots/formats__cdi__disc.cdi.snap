@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disc.cdi — DiscJuggler image v3.5, 1 session(s), 4 KiB of data  [0x0+0x12a8]
+    Version: 3.5 (0x80000006)  [0x12a0+0x4]
+    Descriptor offset: 0x48  [0x12a4+0x4]
+    Image data — 4 KiB  [0x0+0x1260]
+  ▾ Descriptor — 1 session(s), first session has 1 track(s)  [0x1260+0x40]
+      Sessions: 1  [0x1260+0x2]
+      Tracks in first session: 1  [0x1262+0x2]
+      Track descriptors  [0x1264+0x3c]
+        ! unsupported: variable-length CDI track records

@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.hfe — HFE v1 image, 2 tracks × 2 sides, ISO/IBM MFM, 250 kbit/s, 300 RPM, generic Shugart DD  [0x0+0x800]
+  ▾ Header  [0x0+0x1a]
+      Signature: "HXCPICFE"  [0x0+0x8]
+      Format revision: 0  [0x8+0x1]
+      Tracks: 2  [0x9+0x1]
+      Sides: 2  [0xa+0x1]
+      Track encoding: ISO/IBM MFM (0x0)  [0xb+0x1]
+      Bit rate (kbit/s): 250  [0xc+0x2]
+      RPM: 300  [0xe+0x2]
+      Interface mode: generic Shugart DD (0x7)  [0x10+0x1]
+      Unused: 1  [0x11+0x1]
+      Track list offset (512-byte blocks): 1  [0x12+0x2]
+      Write allowed: yes (0xff)  [0x14+0x1]
+      Single step: single step (0xff)  [0x15+0x1]
+      Track 0 side 0 alternate encoding: 0xff  [0x16+0x1]
+      Track 0 side 0 encoding: ISO/IBM MFM (0x0)  [0x17+0x1]
+      Track 0 side 1 alternate encoding: 0xff  [0x18+0x1]
+      Track 0 side 1 encoding: ISO/IBM MFM (0x0)  [0x19+0x1]
+  ▾ Track list — 2 tracks  [0x200+0x8]
+      Track 0: 0x400 — 512 bytes (both sides interleaved per 256 bytes)  [0x200+0x4] → 0x400+0x200
+      Track 1: 0x600 — 512 bytes (both sides interleaved per 256 bytes)  [0x204+0x4] → 0x600+0x200

@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tape.csw — CSW v2.0 tape, 44100 Hz, Z-RLE (zlib), 256 pulses  [0x0+0x43]
+    Signature: "Compressed Square Wave"  [0x0+0x16]
+    Terminator: 0x1a  [0x16+0x1]
+    Major version: 2  [0x17+0x1]
+    Minor version: 0  [0x18+0x1]
+    Sample rate: 44100  [0x19+0x4]
+    Total pulses: 256  [0x1d+0x4]
+    Compression: Z-RLE (zlib) (0x2)  [0x21+0x1]
+    Flags: 0x1 [INITIAL_HIGH]  [0x22+0x1]
+    Header extension length: 0  [0x23+0x1]
+    Encoding application: "fillyfoal test"  [0x24+0x10]
+  ▾ Pulse data (Z-RLE) — 0x100 bytes decompressed  [0x34+0xf]
+      Data  [#1:0x0+0x100]

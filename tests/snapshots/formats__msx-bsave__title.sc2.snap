@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ title.sc2 — MSX BSAVE VRAM screen dump, $0000-$37ff, exec $0000  [0x0+0x3807]
+    ID: 0xfe  [0x0+0x1]
+    Start address: 0x0  [0x1+0x2]
+    End address: 0x37ff  [0x3+0x2]
+    Execution address: 0x0  [0x5+0x2]
+    Data — 14 KiB  [0x7+0x3800]

@@ -1,0 +1,17 @@
+// cdrdao TOC written for fillyfoal
+CD_ROM_XA
+
+CATALOG "0000000000000"
+
+// Track 1
+TRACK MODE2_RAW
+NO COPY
+DATAFILE "game.bin" 03:20:00 // length in bytes: 35280000
+
+// Track 2
+TRACK AUDIO
+NO COPY
+NO PRE_EMPHASIS
+TWO_CHANNEL_AUDIO
+FILE "game.bin" #35280000 0 02:30:00
+START 00:02:00
