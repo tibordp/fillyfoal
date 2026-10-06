@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.lz4 — LZ4, 1 frame, 5.0 KiB uncompressed  [0x0+0x40c]
+  ▾ Frame 0 — 1 block, 5.0 KiB  [0x0+0x40c]
+      Magic: 0x184d2204  [0x0+0x4]
+    ▾ Frame descriptor — content 5.0 KiB  [0x4+0xb]
+        FLG: 0x7c [VERSION_01 | BLOCK_INDEPENDENT | BLOCK_CHECKSUM | CONTENT_SIZE | CONTENT_CHECKSUM]  [0x4+0x1]
+        BD: 64 — block maximum 64 KiB  [0x5+0x1]
+        Content size: 5130 — 5.0 KiB  [0x6+0x8]
+        Header checksum: 0x55 — valid  [0xe+0x1]
+    ▾ Block 0 — compressed, 1005 bytes  [0xf+0x3f5]
+        Block size: 0x3ed — 1005 bytes, compressed  [0xf+0x4]
+        Compressed data — 1005 bytes  [0x13+0x3ed]
+          ! unsupported: LZ4 compression
+        Block checksum: 0x6fbdd7c9  [0x400+0x4]
+      End mark: 0x0  [0x404+0x4]
+      Content checksum: 0x20263c43  [0x408+0x4]

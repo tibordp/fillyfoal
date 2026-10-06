@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ flash.bin — Intel flash image, regions: BIOS, Management Engine  [0x0+0x3000]
+    Descriptor signature  [0x10+0x4]
+  ▾ BIOS — 0x2000..0x2fff  [0x2000+0x1000]
+      ! unsupported: unrecognized format [0x2000+0x1000]
+  ▾ Management Engine — 0x1000..0x1fff  [0x1000+0x1000]
+      ! unsupported: unrecognized format [0x1000+0x1000]

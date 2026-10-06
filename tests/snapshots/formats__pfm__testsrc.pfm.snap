@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.pfm — 3×2, PFM RGB, 32-bit float  [0x0+0x59]
+    Magic: "PF" — PFM, RGB  [0x0+0x2]
+    Width: 3  [0x3+0x1]
+    Height: 2  [0x5+0x1]
+    Scale: -1 — little-endian  [0x7+0x9]
+    Raster  [0x11+0x48]

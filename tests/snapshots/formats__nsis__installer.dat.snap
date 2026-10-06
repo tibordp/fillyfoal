@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ installer.dat — NSIS installer, 64 bytes, header 4096 bytes, LZMA  [0x0+0x40]
+    Flags: 0x0 []  [0x0+0x4]
+    Signature: ef be ad de 4e 75 6c 6c 73 6f 66 74 49 6e 73 74  |....NullsoftInst|  [0x4+0x10]
+    Header size (uncompressed): 4096  [0x14+0x4]
+    Data length: 64  [0x18+0x4]
+    Compressed header and data  [0x1c+0x24]
+      ! unsupported: LZMA compression

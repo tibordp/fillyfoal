@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.pam — 4×3, PAM raw, RGB_ALPHA, maxval 255  [0x0+0x71]
+    Magic: "P7" — PAM, raw  [0x0+0x2]
+    WIDTH: 4  [0x3+0x7]
+    HEIGHT: 3  [0xb+0x8]
+    DEPTH: 4  [0x14+0x7]
+    MAXVAL: 255  [0x1c+0xa]
+    TUPLTYPE: "RGB_ALPHA"  [0x27+0x12]
+    ENDHDR  [0x3a+0x6]
+    Raster  [0x41+0x30]

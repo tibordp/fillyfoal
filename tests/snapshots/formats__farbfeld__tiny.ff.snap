@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.ff — 3×2, 16-bit RGBA  [0x0+0x40]
+  ▾ Header  [0x0+0x10]
+      Magic: "farbfeld"  [0x0+0x8]
+      Width: 3  [0x8+0x4]
+      Height: 2  [0xc+0x4]
+    Pixels — 2 rows of 3 pixels  [0x10+0x30]

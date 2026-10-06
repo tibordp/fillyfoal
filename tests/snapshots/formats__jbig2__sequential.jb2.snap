@@ -1,0 +1,34 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ sequential.jb2 — 16×8, 1 pages  [0x0+0x61]
+    ID string: 97 4a 42 32 0d 0a 1a 0a  |.JB2....|  [0x0+0x8]
+    Flags: 0x1 [SEQUENTIAL]  [0x8+0x1]
+    Number of pages: 1  [0x9+0x4]
+  ▾ Segment 0 — Page information, page 1, 19 bytes  [0xd+0xb] → 0x18+0x13
+      Segment number: 0  [0xd+0x4]
+      Flags: 0x30 — Page information  [0x11+0x1]
+      Referred-to segments, page association, data length — 6 bytes  [0x12+0x6]
+    ▾ Page information  [0x18+0x13]
+        Width: 16  [0x18+0x4]
+        Height: 8  [0x1c+0x4]
+        X resolution: 2835  [0x20+0x4]
+        Y resolution: 2835  [0x24+0x4]
+        Flags: 0x0  [0x28+0x1]
+        Striping: 0x0  [0x29+0x2]
+  ▾ Segment 1 — Immediate generic region, page 1, 21 bytes  [0x2b+0xb] → 0x36+0x15
+      Segment number: 1  [0x2b+0x4]
+      Flags: 0x26 — Immediate generic region  [0x2f+0x1]
+      Referred-to segments, page association, data length — 6 bytes  [0x30+0x6]
+      Data  [0x36+0x15]
+  ▾ Segment 2 — End of page, page 1, 0 bytes  [0x4b+0xb] → 0x56+0x0
+      Segment number: 2  [0x4b+0x4]
+      Flags: 0x31 — End of page  [0x4f+0x1]
+      Referred-to segments, page association, data length — 6 bytes  [0x50+0x6]
+      Data  [0x56+0x0]
+  ▾ Segment 3 — End of file, page 0, 0 bytes  [0x56+0xb] → 0x61+0x0
+      Segment number: 3  [0x56+0x4]
+      Flags: 0x33 — End of file  [0x5a+0x1]
+      Referred-to segments, page association, data length — 6 bytes  [0x5b+0x6]
+      Data  [0x61+0x0]

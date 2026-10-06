@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ pcm16.voc — Creative Voice, 16-bit signed PCM, 8000 Hz, 1 ch, 50 ms  [0x0+0x34b]
+  ▾ Header  [0x0+0x1a]
+      Signature: "Creative Voice File\u{1a}"  [0x0+0x14]
+      Header size: 26  [0x14+0x2]
+      Version: 276 — 1.20  [0x16+0x2]
+      Checksum: 0x111f  [0x18+0x2]
+  ▾ Sound data (new format) — 8000 Hz, 16-bit, 1 ch, 800 bytes  [0x1a+0x330]
+      Type: Sound data (new format) (0x9)  [0x1a+0x1]
+      Length: 812  [0x1b+0x3]
+      Sample rate: 8000  [0x1e+0x4]
+      Bits per sample: 16  [0x22+0x1]
+      Channels: 1  [0x23+0x1]
+      Codec: 16-bit signed PCM (0x4)  [0x24+0x2]
+      Reserved: 0  [0x26+0x4]
+      Samples  [0x2a+0x320]
+  ▾ Terminator — 1 bytes  [0x34a+0x1]
+      Type: 0  [0x34a+0x1]

@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.tga — 8×6, 24-bit, True-color  [0x0+0xbc]
+  ▾ Header  [0x0+0x12]
+      ID length: 0  [0x0+0x1]
+      Color map type: 0  [0x1+0x1]
+      Image type: True-color (0x2)  [0x2+0x1]
+      First color map entry: 0  [0x3+0x2]
+      Color map length: 0  [0x5+0x2]
+      Color map entry size: 0  [0x7+0x1]
+      X origin: 0  [0x8+0x2]
+      Y origin: 0  [0xa+0x2]
+      Width: 8  [0xc+0x2]
+      Height: 6  [0xe+0x2]
+      Pixel depth: 24  [0x10+0x1]
+      Image descriptor: 0x20 [TOP_LEFT] — 0 alpha bits  [0x11+0x1]
+    Image data — 6 rows  [0x12+0x90]
+  ▾ Footer  [0xa2+0x1a]
+      Extension area offset: 0x0  [0xa2+0x4]
+      Developer directory offset: 0x0  [0xa6+0x4]
+      Signature: "TRUEVISION-XFILE."  [0xaa+0x12]

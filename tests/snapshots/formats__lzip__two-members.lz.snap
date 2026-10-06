@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ two-members.lz — lzip, 2 members, 27 bytes uncompressed  [0x0+0x65]
+  ▾ Member 0 — 13 bytes uncompressed  [0x0+0x32]
+    ▾ Header  [0x0+0x6]
+        Magic: "LZIP"  [0x0+0x4]
+        Version: 1  [0x4+0x1]
+        Coded dictionary size: 16 — 64.0 KiB  [0x5+0x1]
+      Compressed data — 24 bytes  [0x6+0x18]
+        ! unsupported: LZMA compression
+    ▾ Trailer  [0x1e+0x14]
+        CRC32: 0xa85f4a7  [0x1e+0x4]
+        Data size: 13 — 13 bytes  [0x22+0x8]
+        Member size: 50 — 50 bytes  [0x2a+0x8]
+  ▾ Member 1 — 14 bytes uncompressed  [0x32+0x33]
+    ▾ Header  [0x32+0x6]
+        Magic: "LZIP"  [0x32+0x4]
+        Version: 1  [0x36+0x1]
+        Coded dictionary size: 12 — 4.0 KiB  [0x37+0x1]
+      Compressed data — 25 bytes  [0x38+0x19]
+        ! unsupported: LZMA compression
+    ▾ Trailer  [0x51+0x14]
+        CRC32: 0xe4b1836  [0x51+0x4]
+        Data size: 14 — 14 bytes  [0x55+0x8]
+        Member size: 51 — 51 bytes  [0x5d+0x8]

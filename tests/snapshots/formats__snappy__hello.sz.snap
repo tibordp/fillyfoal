@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ hello.sz — Snappy framed, 2 data chunks  [0x0+0x5b]
+  ▾ Stream identifier — 6 bytes  [0x0+0xa]
+      Chunk type: stream identifier (0xff)  [0x0+0x1]
+      Length: 6  [0x1+0x3]
+      Stream identifier: "sNaPpY"  [0x4+0x6]
+  ▾ Compressed data — 37 bytes  [0xa+0x29]
+      Chunk type: compressed data (0x0)  [0xa+0x1]
+      Length: 37  [0xb+0x3]
+      Masked CRC-32C: 0xa6d6e0c2  [0xe+0x4]
+      Uncompressed length: 31 — 31 bytes  [0x12+0x1]
+      Compressed data — 33 bytes  [0x12+0x21]
+        ! unsupported: Snappy compression
+  ▾ Uncompressed data — 28 bytes  [0x33+0x20]
+      Chunk type: uncompressed data (0x1)  [0x33+0x1]
+      Length: 28  [0x34+0x3]
+      Masked CRC-32C: 0xc5138a20 — valid  [0x37+0x4]
+      Data  [0x3b+0x18]
+  ▾ Padding — 4 bytes  [0x53+0x8]
+      Chunk type: padding (0xfe)  [0x53+0x1]
+      Length: 4  [0x54+0x3]
+      Data  [0x57+0x4]
