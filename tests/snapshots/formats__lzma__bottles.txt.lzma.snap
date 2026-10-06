@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.lzma — LZMA, unknown size, dictionary 8.0 MiB, lc=3 lp=0 pb=2  [0x0+0x134]
+  ▾ Header  [0x0+0xd]
+      Properties: 93 — lc=3 lp=0 pb=2  [0x0+0x1]
+      Dictionary size: 8388608 — 8.0 MiB  [0x1+0x4]
+      Uncompressed size: 18446744073709551615 — unknown (end marker)  [0x5+0x8]
+    Compressed data — 295 bytes  [0xd+0x127]
+      ! unsupported: LZMA compression

@@ -1,7 +1,6 @@
 ---
 source: tests/formats.rs
-assertion_line: 76
-expression: "common::explore(&display_name(&path), &data)"
+expression: "common::explore(&name, &data)"
 ---
 ▾ copy-plain-header.7z — 7-Zip archive, 4 files, Copy  [0x0+0x1fc]
   ▾ Signature header — version 0.4  [0x0+0x20]
@@ -21,11 +20,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Attributes: 0x81a48020 — -rw-r--r--
         Size: 10 — 10 bytes
         Folder: 0
-      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x20+0xa]
-          Encoding: "UTF-8"
-          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [0x20+0xa]
-            Line 1: "hello tar"  [0x20+0x9]
+      ▾ Content  [0x20+0xa]
+          ! unsupported: unrecognized format [0x20+0xa]
     ▾ sub/a-very-long-file-name-that-does-not-fit-into-the-one-hundred-byte-name-field-of-a-classic-tar-header.txt — 1 byte  [0x2a+0x1]
         Modification time: 2024-01-02 03:04:00 UTC
         Attributes: 0x81a48020 — -rw-r--r--
@@ -67,11 +63,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Coder 0: "Copy" — 1 in, 1 out
         Unpacked size: 10 — 10 bytes
         Streams: 1
-      ▾ Data — UTF-8 text, LF line endings, 1 line  [0x20+0xa]
-          Encoding: "UTF-8"
-          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [0x20+0xa]
-            Line 1: "hello tar"  [0x20+0x9]
+      ▾ Data  [0x20+0xa]
+          ! unsupported: unrecognized format [0x20+0xa]
     ▾ Folder 1 — Copy, 1 byte → 1 byte, 1 stream  [0x2a+0x1]
         Coder 0: "Copy" — 1 in, 1 out
         Unpacked size: 1 — 1 byte

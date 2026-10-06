@@ -15,7 +15,34 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
+pub mod ace;
+pub mod ar;
+pub mod arcutil;
+pub mod arj;
+pub mod bzip2;
+pub mod cab;
+pub mod compress;
+pub mod compressors;
+pub mod cpio;
+pub mod dmg;
+pub mod firmware;
 pub mod gzip;
+pub mod hexfile;
+pub mod iso9660;
+pub mod lha;
+pub mod lz4;
+pub mod lzma;
+pub mod rar;
+pub mod rpm;
+pub mod sevenzip;
+pub mod squashfs;
+pub mod stuffit;
+pub mod tar;
+pub mod wim;
+pub mod xar;
+pub mod xz;
+pub mod zoo;
+pub mod zstd;
 pub mod zip;
 // -- end archives --
 
@@ -217,6 +244,41 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
+    &dmg::FORMAT,
+    &tar::FORMAT,
+    &bzip2::FORMAT,
+    &xz::FORMAT,
+    &lzma::LZIP,
+    &zstd::FORMAT,
+    &zstd::SKIPPABLE,
+    &lz4::FORMAT,
+    &lz4::LEGACY,
+    &lz4::SNAPPY,
+    &compress::COMPRESS,
+    &compress::PACK,
+    &compressors::SZDD,
+    &compressors::KWAJ,
+    &ar::DEB,
+    &ar::FORMAT,
+    &cpio::FORMAT,
+    &rpm::FORMAT,
+    &sevenzip::FORMAT,
+    &rar::FORMAT,
+    &cab::FORMAT,
+    &arj::FORMAT,
+    &xar::FORMAT,
+    &iso9660::FORMAT,
+    &iso9660::UDF,
+    &firmware::ANDROID_SPARSE,
+    &firmware::ANDROID_BOOT,
+    &firmware::UIMAGE,
+    &squashfs::SQUASHFS,
+    &squashfs::CRAMFS,
+    &wim::FORMAT,
+    &stuffit::FORMAT,
+    &stuffit::SIT5,
+    &zoo::FORMAT,
+    &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
     &zip::AAR,
     &zip::XLSB,
@@ -257,6 +319,13 @@ pub static FORMATS: &[&Format] = &[
     &zip::SCRATCH,
     &zip::JAR,
     &zip::FORMAT,
+    // Weak probes last.
+    &tar::V7,
+    &lha::FORMAT,
+    &ace::ARC,
+    &lzma::LZMA,
+    &hexfile::IHEX,
+    &hexfile::SREC,
     // -- end archives --
 
     // -- retro & consoles --

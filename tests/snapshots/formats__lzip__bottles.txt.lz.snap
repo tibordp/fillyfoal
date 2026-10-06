@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.lz — lzip, 1 member, 5.0 KiB uncompressed  [0x0+0x141]
+  ▾ Header  [0x0+0x6]
+      Magic: "LZIP"  [0x0+0x4]
+      Version: 1  [0x4+0x1]
+      Coded dictionary size: 16 — 64.0 KiB  [0x5+0x1]
+    Compressed data — 295 bytes  [0x6+0x127]
+      ! unsupported: LZMA compression
+  ▾ Trailer  [0x12d+0x14]
+      CRC32: 0x322887ce  [0x12d+0x4]
+      Data size: 5130 — 5.0 KiB  [0x131+0x8]
+      Member size: 321 — 321 bytes  [0x139+0x8]

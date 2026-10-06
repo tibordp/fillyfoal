@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ skippable-first.zst — Zstandard, 1 frame, 293.0 KiB uncompressed  [0x0+0x2e]
+  ▾ Skippable frame 0x0 — 4 bytes  [0x0+0xc]
+      Magic: 0x184d2a50  [0x0+0x4]
+      Frame size: 4  [0x4+0x4]
+      User data  [0x8+0x4]
+  ▾ Frame 0 — 3 blocks, 293.0 KiB  [0xc+0x22]
+      Magic: 0xfd2fb528  [0xc+0x4]
+    ▾ Frame header — content 293.0 KiB, window 293.0 KiB  [0x10+0x5]
+        Frame header descriptor: 0xa4 [FCS_4 | SINGLE_SEGMENT | CONTENT_CHECKSUM]  [0x10+0x1]
+        Frame content size: 300000  [0x11+0x4]
+    ▾ Blocks  [0x15+0x15]
+      ▾ Block 0 — compressed, 10 bytes  [0x15+0xd]
+          Last block: false  [0x15+0x1]
+          Block type: compressed (0x2)  [0x15+0x1]
+          Block size: 10 — 10 bytes  [0x15+0x3]
+          Compressed data — 10 bytes  [0x18+0xa]
+            ! unsupported: zstd compression
+      ▾ Block 1 — RLE, 128.0 KiB  [0x22+0x4]
+          Last block: false  [0x22+0x1]
+          Block type: RLE (0x1)  [0x22+0x1]
+          Block size: 131072 — 131072 repetitions  [0x22+0x3]
+          RLE byte: 61  |a|  [0x25+0x1]
+      ▾ Block 2 — RLE, 37.0 KiB, last  [0x26+0x4]
+          Last block: true  [0x26+0x1]
+          Block type: RLE (0x1)  [0x26+0x1]
+          Block size: 37856 — 37856 repetitions  [0x26+0x3]
+          RLE byte: 61  |a|  [0x29+0x1]
+      Content checksum: 0xa6045f8d  [0x2a+0x4]

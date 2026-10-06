@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.bz2 — bzip2, 900k blocks  [0x0+0x136]
+  ▾ Header  [0x0+0x4]
+      Signature: "BZ"  [0x0+0x2]
+      Version: "h"  [0x2+0x1]
+      Block size: "9" — 900k  [0x3+0x1]
+  ▾ First block header — byte-aligned  [0x4+0xe]
+      Block magic: 31 41 59 26 53 59  |1AY&SY|  [0x4+0x6]
+      Block CRC: 0x9d479efe  [0xa+0x4]
+      Randomised: false  [0xe+0x1]
+      Original pointer: 1663  [0xe+0x4]
+  ▾ Blocks — 1 block  [0x4+0x132]
+      Block 0: 0x9d479efe — bit offset 0x0, 295 bytes compressed  [0x4+0x128]
+    Compressed data — 306 bytes  [0x4+0x132]
+      ! unsupported: bzip2 compression
+  ▾ End of stream — at bit 0x93c of the compressed data  [0x12b+0xb]
+      End-of-stream magic: 0x177245385090 — √π (BCD), bit offset 4 in its first byte  [0x12b+0x7]
+      Combined CRC: 0x9d479efe  [0x131+0x5]
