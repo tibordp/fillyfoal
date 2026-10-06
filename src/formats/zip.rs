@@ -890,9 +890,13 @@ async fn central_directory(
 ) -> Result<()> {
     cx.set_count(Count::Exact(entries));
     let mut cur = Cursor::new(&cx, span, LE);
-    let mut index = 0u64;
+    // Resume marks: (position, entries so far).
+    let (pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    cur.seek(pos);
     while !cur.at_end() && index < entries {
         let start = cur.pos();
+        let at = (start, index);
+        cx.mark(move || at);
         let (header, _) = cur.record::<CentralHeader>().await?;
         if u32_le(&header.signature, 0) != Some(CENTRAL) {
             return Err(

@@ -198,8 +198,15 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
 pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Result<()> {
     if encoding.ascii_compatible() {
         let mut lines = Lines::new(&cx, span);
-        lines.seek(0, first);
-        while let Some(line) = lines.next().await? {
+        // Resume marks: (byte position, lines so far).
+        let (pos, number) = cx.resume::<(u64, u64)>().unwrap_or((0, first));
+        lines.seek(pos, number);
+        loop {
+            let at = (lines.pos(), lines.number());
+            cx.mark(move || at);
+            let Some(line) = lines.next().await? else {
+                break;
+            };
             cx.push(line_node(
                 line.number,
                 line.span,

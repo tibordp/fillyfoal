@@ -331,9 +331,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let first = cur.peek(BLOCK).await?;
     let flavor = Flavor::of(&first);
     cx.annotate(format!("tar archive ({})", flavor.name()));
-    let mut members = 0u64;
-    let mut total = 0u64;
+    // Resume marks: (position, entries so far, their total size).
+    let (pos, mut members, mut total) = cx.resume::<(u64, u64, u64)>().unwrap_or((0, 0, 0));
+    cur.seek(pos);
     while cur.remaining() >= BLOCK {
+        let at = (cur.pos(), members, total);
+        cx.mark(move || at);
         let Some(member) = next_member(&cx, &mut cur).await? else {
             break;
         };

@@ -1130,3 +1130,25 @@ fn lazy_sources_slide_over_streams_larger_than_the_budget() {
     assert_eq!(got, want);
     assert!(host.session.derived_bytes() <= 4 << 20, "{} bytes held", host.session.derived_bytes());
 }
+
+/// Seeking around the lines of a large text file, forward and back (the
+/// line walker records resume marks), gives the right lines.
+#[test]
+fn text_lines_seek() {
+    let text: String = (1..=100_000).map(|i| format!("row {i}\n")).collect();
+    let mut host = Host::with_chunk(text.into_bytes(), 65_536);
+    host.max_polls = 10_000_000;
+    host.session.expand(host.root, 10);
+    host.run();
+    let lines = host.child(host.root, "Lines").expect("lines node");
+    for (start, first_name, first_text) in [(90_000, "Line 90001", "row 90001"), (50_000, "Line 50001", "row 50001"), (99_998, "Line 99999", "row 99999")] {
+        host.session.seek(lines, start, 5);
+        host.run();
+        let c = host.session.children(lines).unwrap();
+        assert_eq!(c.first, start);
+        let node = host.session.node(c.ids[0]).unwrap();
+        assert_eq!(node.name, first_name);
+        assert_eq!(node.value, Some(Value::Text(first_text.into())));
+    }
+    assert!(host.session.live_nodes() < 50, "{} live nodes", host.session.live_nodes());
+}
