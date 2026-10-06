@@ -5,7 +5,7 @@
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::data_node;
+use crate::formats::util::binutil::data_node;
 use crate::formats::{Format, Input, Probe};
 
 const LE: Endian = Endian::Little;

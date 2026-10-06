@@ -7,7 +7,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, FourCc, scan, walk};
-use crate::formats::sound::{Bits, bits_node, parse_bits, u24};
+use crate::formats::util::sound::{Bits, bits_node, parse_bits, u24};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};

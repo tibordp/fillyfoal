@@ -7,7 +7,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::iff::{Chunk, Ctx, find, scan};
-use crate::formats::sound::{duration_of, table};
+use crate::formats::util::sound::{duration_of, table};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -295,7 +295,7 @@ async fn bitmap(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>> {
     let h = parse(cx, bmhd.data, ctx.endian, &(), BitmapHeader::layout).await?;
     let mut line = format!(
         "{} {}×{}, {} planes",
-        crate::formats::sound::fourcc(&ctx.form),
+        crate::formats::util::sound::fourcc(&ctx.form),
         h.width,
         h.height,
         h.planes

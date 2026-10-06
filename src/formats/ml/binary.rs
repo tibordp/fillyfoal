@@ -267,7 +267,7 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
     };
     cx.annotate(format!(
         "{what}, {vocab_part}{count} tensors ({} of weights)",
-        crate::formats::datakit::size(bytes)
+        crate::formats::util::datakit::size(bytes)
     ));
     Ok(())
 }
@@ -772,7 +772,7 @@ async fn mxnet(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "MXNet parameters, {count} arrays, {}",
-        crate::formats::datakit::size(total)
+        crate::formats::util::datakit::size(total)
     ));
     Ok(())
 }

@@ -1004,7 +1004,7 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
             embedded_as(
                 "Resource fork",
                 input.nested(file.sub(at, rsrc_len.into())),
-                &crate::formats::platform::MAC_RESOURCE,
+                &crate::formats::system::platform::MAC_RESOURCE,
             )
             .summary(size(rsrc_len.into())),
         );
@@ -1173,7 +1173,7 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
             embedded_as(
                 "Resource fork",
                 input.nested(body.sub(rsrc_at, rsrc_len)),
-                &crate::formats::platform::MAC_RESOURCE,
+                &crate::formats::system::platform::MAC_RESOURCE,
             )
             .summary(size(rsrc_len)),
         );

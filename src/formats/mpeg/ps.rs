@@ -5,7 +5,7 @@
 use crate::bytes::u16_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::vidutil::{self, flag_node, hex, uint};
+use crate::formats::util::vidutil::{self, flag_node, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

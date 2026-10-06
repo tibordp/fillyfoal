@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::binutil::{Reader, Tree, ellipsize, hex, mutf8, text};
+use crate::formats::util::binutil::{Reader, Tree, ellipsize, hex, mutf8, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -587,7 +587,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         root,
         "version",
         2,
-        crate::formats::binutil::dec(version.into(), 16),
+        crate::formats::util::binutil::dec(version.into(), 16),
     );
     let mut items = 0u32;
     while !p.r.at_end() {

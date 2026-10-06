@@ -6,7 +6,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::vidutil::{self, Bits, enumerated, flag_node, hex, uint};
+use crate::formats::util::vidutil::{self, Bits, enumerated, flag_node, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

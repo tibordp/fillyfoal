@@ -7,8 +7,8 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::Endian;
-use crate::formats::sound::{table, text};
 use crate::formats::tracker::{named, note_name, order_node};
+use crate::formats::util::sound::{table, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -104,17 +104,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Song length")
             .span(file.sub(950, 1))
-            .value(crate::formats::sound::uint(song_length, 8)),
+            .value(crate::formats::util::sound::uint(song_length, 8)),
     );
     cx.emit(Node::new("Restart position").span(file.sub(951, 1)).value(
-        crate::formats::sound::uint(head.get(951).copied().unwrap_or(0), 8),
+        crate::formats::util::sound::uint(head.get(951).copied().unwrap_or(0), 8),
     ));
     let order_span = file.sub(952, u64::from(song_length.min(128)));
     cx.emit(order_node(&cx, order_span).await?);
     cx.emit(
         Node::new("Format tag")
             .span(file.sub(1080, 4))
-            .value(text(crate::formats::sound::fourcc(tag)))
+            .value(text(crate::formats::util::sound::fourcc(tag)))
             .summary(format!("{channels} channels")),
     );
     let all_orders = head.get(952..1080).unwrap_or_default();
@@ -146,7 +146,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "MOD ({}), {channels} channels, {} orders, {patterns} patterns, {used} samples — {}",
-        crate::formats::sound::fourcc(tag),
+        crate::formats::util::sound::fourcc(tag),
         song_length,
         named(&title)
     ));

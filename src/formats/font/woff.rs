@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::datakit::{fourcc, size};
+use crate::formats::util::datakit::{fourcc, size};
 use crate::formats::font::tables;
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
@@ -179,7 +179,7 @@ async fn woff_table(
     if table.len <= cx.limits().max_read {
         let data = cx.read_avail(table).await?;
         let computed = tables::checksum(&data, tag == "head");
-        let node = Node::new("Checksum").value(crate::formats::datakit::hex(checksum, 32));
+        let node = Node::new("Checksum").value(crate::formats::util::datakit::hex(checksum, 32));
         cx.emit(if computed == checksum {
             node.summary("valid")
         } else {

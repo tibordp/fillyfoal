@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::embedded;
-use crate::formats::vidutil::fourcc;
+use crate::formats::util::vidutil::fourcc;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;

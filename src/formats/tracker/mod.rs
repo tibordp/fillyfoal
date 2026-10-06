@@ -5,9 +5,12 @@
 //! instruments and patterns, either stored back to back (MOD, XM) or
 //! reached through pointer tables (S3M, IT). The helpers here list such
 //! tables lazily.
+//!
+//! Less common modules are in `more` and `pc`.
 
 pub mod it;
 pub mod more;
+pub mod pc;
 pub mod protracker;
 pub mod s3m;
 pub mod xm;
@@ -17,7 +20,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::Endian;
-use crate::formats::sound::Describe;
+use crate::formats::util::sound::Describe;
 use crate::node::{Count, Node};
 use crate::span::Span;
 
@@ -59,7 +62,7 @@ pub async fn order_node(cx: &Cx, span: Span) -> Result<Node> {
     Ok(Node::new("Orders")
         .span(span)
         .summary(format!("{} entries", list.len()))
-        .value(crate::formats::sound::text(orders(&list))))
+        .value(crate::formats::util::sound::text(orders(&list))))
 }
 
 /// How a pointer table addresses its targets.

@@ -8,7 +8,7 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
-use crate::formats::vidutil::{fourcc, hex, uint};
+use crate::formats::util::vidutil::{fourcc, hex, uint};
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -320,7 +320,7 @@ async fn iloc(cx: &Cx, st: &BoxState) -> Result<()> {
     cx.emit(
         Node::new("Items")
             .span(body.tail(state.start))
-            .summary(crate::formats::vidutil::plural(count, "item"))
+            .summary(crate::formats::util::vidutil::plural(count, "item"))
             .lazy(iloc_items, state),
     );
     Ok(())
@@ -384,7 +384,7 @@ fn parse_item(d: &[u8], at: &mut usize, s: &Iloc, region: Span) -> Option<ItemLo
 
 async fn iloc_items(cx: Cx, s: Iloc) -> Result<()> {
     let region = s.body.tail(s.start);
-    let d = crate::formats::vidutil::read_small(&cx, region, 0x100000).await?;
+    let d = crate::formats::util::vidutil::read_small(&cx, region, 0x100000).await?;
     cx.set_count(Count::Exact(s.count.into()));
     let mut at = 0usize;
     for _ in 0..s.count {
@@ -559,7 +559,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     };
     match kind {
         b"pitm" => Some(format!("item {}", id(4, v == 0)?)),
-        b"iinf" => Some(crate::formats::vidutil::plural(id(4, v == 0)?, "item")),
+        b"iinf" => Some(crate::formats::util::vidutil::plural(
+            id(4, v == 0)?,
+            "item",
+        )),
         b"infe" if v >= 2 => {
             let item = id(4, v == 2)?;
             let at: usize = if v == 2 { 8 } else { 10 };
@@ -571,8 +574,11 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
                 format!("item {item}: {} \"{name}\"", fourcc(t))
             })
         }
-        b"iloc" => Some(crate::formats::vidutil::plural(id(6, v < 2)?, "item")),
-        b"ipma" => Some(crate::formats::vidutil::plural(u32_be(&d, 4)?, "item")),
+        b"iloc" => Some(crate::formats::util::vidutil::plural(id(6, v < 2)?, "item")),
+        b"ipma" => Some(crate::formats::util::vidutil::plural(
+            u32_be(&d, 4)?,
+            "item",
+        )),
         b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
         b"irot" => Some(format!("{}°", u16::from(v & 3).saturating_mul(90))),
         b"pixi" => Some(format!("{} channels, {} bits", d.get(4)?, d.get(5)?)),
@@ -596,7 +602,7 @@ pub async fn summary(cx: &Cx, meta: Span) -> Result<Option<String>> {
         }
         None => None,
     };
-    let mut parts = vec![crate::formats::vidutil::plural(
+    let mut parts = vec![crate::formats::util::vidutil::plural(
         crate::bytes::to_u64(types.len()),
         "item",
     )];

@@ -5,19 +5,22 @@ why; this is the how. Good examples to copy from:
 
 | Pattern | Example |
 |---|---|
-| Fixed header + chunk stream (big-endian, CRCs) | `src/formats/png.rs` |
-| Header + compressed payload dissected in place | `src/formats/gzip.rs` |
-| Directory at the end, paged entries, variants by probe | `src/formats/zip.rs` |
-| Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/pe/` |
-| Recursive variable-length blocks | `src/formats/pe/version.rs` |
+| Fixed header + chunk stream (big-endian, CRCs) | `src/formats/image/png.rs` |
+| Header + compressed payload dissected in place | `src/formats/compression/gzip.rs` |
+| Directory at the end, paged entries, variants by probe | `src/formats/archive/zip.rs` |
+| Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/executable/pe/` |
+| Recursive variable-length blocks | `src/formats/executable/pe/version.rs` |
 | Text: windowed lines/tokens, encodings, base64 into derived sources | `src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |
 
 ## 1. Register the format
 
-Create `src/formats/<name>.rs` (or a directory for big families) and add it
-to `src/formats/mod.rs` in two places, inside the right family section:
-the `pub mod` list and the `FORMATS` array. Order in `FORMATS` matters:
-probes run top to bottom, so specific formats go before generic ones.
+Create `src/formats/<family>/<name>.rs` in the family the format belongs to
+(`archive`, `audio`, `image`, `data`, `forensics`, ...; each family's
+`mod.rs` summarises what it holds), or a subdirectory for a big format. Add
+it in two places: the `pub mod` list of the family's `mod.rs`, and the
+`FORMATS` array in `src/formats/mod.rs`, inside the right section. Order in
+`FORMATS` matters: probes run top to bottom, so specific formats go before
+generic ones. Shared helpers live in `src/formats/util/`.
 
 ```rust
 pub static FORMAT: Format = Format {

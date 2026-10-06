@@ -11,7 +11,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{hex_string, size};
+use crate::formats::util::datakit::{hex_string, size};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -850,10 +850,10 @@ declare_format!(pub CODE_SIGNATURE = "apple-code-signature", "Apple code signatu
 
 async fn code_signature(cx: Cx, input: Input) -> Result<()> {
     let span = input.span;
-    let summary = crate::formats::macho::codesign::summary(&cx, span)
+    let summary = crate::formats::executable::macho::codesign::summary(&cx, span)
         .await
         .unwrap_or_else(|_| "detached".to_owned());
-    crate::formats::macho::codesign::superblob(cx.clone(), span).await?;
+    crate::formats::executable::macho::codesign::superblob(cx.clone(), span).await?;
     cx.annotate(format!("Apple code signature, {summary}"));
     Ok(())
 }

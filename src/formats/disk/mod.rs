@@ -6,6 +6,8 @@
 //! Filesystems present directories as lazily expanded, paged trees; a file's
 //! content is its extent if contiguous, or a piecewise source assembled from
 //! its fragments ([`Cx::add_pieces`]) otherwise.
+//!
+//! Also here: Apple disk images (`dmg`), ISO 9660 and SquashFS/CramFS.
 
 pub mod apfs;
 pub mod apm;
@@ -13,6 +15,7 @@ pub mod bfs;
 pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
+pub mod dmg;
 pub mod erofs;
 pub mod exfat;
 pub mod ext;
@@ -20,6 +23,7 @@ pub mod f2fs;
 pub mod fat;
 pub mod gpt;
 pub mod hfs;
+pub mod iso9660;
 pub mod jfs;
 pub mod luks;
 pub mod lvm;
@@ -31,6 +35,7 @@ pub mod ntfs;
 pub mod parallels;
 pub mod ptypes;
 pub mod qcow;
+pub mod squashfs;
 pub mod swap;
 pub mod uefi;
 pub mod ufs;

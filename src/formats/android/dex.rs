@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{NodeExt, Reader, ellipsize, get_at, mutf8, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader, ellipsize, get_at, mutf8, name_or, text};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;

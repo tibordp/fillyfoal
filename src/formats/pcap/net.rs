@@ -510,7 +510,7 @@ fn arp(f: &mut Fields<'_>, _: &()) -> Result<()> {
                 } else if b.len() == 4 {
                     ipv4(b)
                 } else {
-                    crate::formats::datakit::hex_string(b)
+                    crate::formats::util::datakit::hex_string(b)
                 }))
             })
             .emit()

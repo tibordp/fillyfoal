@@ -13,7 +13,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::binutil::{NodeExt, Reader, Tree, ellipsize, text};
+use crate::formats::util::binutil::{NodeExt, Reader, Tree, ellipsize, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

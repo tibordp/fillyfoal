@@ -1,0 +1,483 @@
+//! RPM packages.
+//!
+//! A 96-byte lead, a signature header (padded to 8 bytes), the main header,
+//! and the payload (usually a compressed cpio archive). Both headers are an
+//! index of `(tag, type, offset, count)` entries into a data store; entries
+//! are listed with their tag names and decoded values.
+
+use std::sync::Arc;
+
+use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
+use crate::cx::Cx;
+use crate::dsl::Record;
+use crate::error::{Diagnostic, Result};
+use crate::fields::Endian;
+use crate::formats::util::arcutil::{emit_nodes, hex, human_size, text, uint};
+use crate::formats::{Format, Input, Probe, embedded};
+use crate::node::{Count, Node};
+use crate::record;
+use crate::span::Span;
+use crate::value::{EnumTable, Value};
+
+const BE: Endian = Endian::Big;
+const LEAD: u64 = 96;
+const HEADER_MAGIC: &[u8] = b"\x8e\xad\xe8\x01";
+/// Array items shown inline before switching to a paged child list.
+const INLINE_ITEMS: u32 = 1;
+
+pub static FORMAT: Format = Format {
+    name: "rpm",
+    title: "RPM package",
+    extensions: &["rpm", "srpm"],
+    mime: "application/x-rpm",
+    probe: Probe::Magic(&[(0, b"\xed\xab\xee\xdb")]),
+    dissect: crate::expander!(dissect: Input),
+};
+
+const PACKAGE_TYPE: EnumTable = &[(0, "binary"), (1, "source")];
+const SIGNATURE_TYPE: EnumTable = &[(5, "header-style signature")];
+
+const TYPES: EnumTable = &[
+    (0, "NULL"),
+    (1, "CHAR"),
+    (2, "INT8"),
+    (3, "INT16"),
+    (4, "INT32"),
+    (5, "INT64"),
+    (6, "STRING"),
+    (7, "BIN"),
+    (8, "STRING_ARRAY"),
+    (9, "I18NSTRING"),
+];
+
+const SIGNATURE_TAGS: EnumTable = &[
+    (62, "HEADERSIGNATURES"),
+    (267, "DSAHEADER"),
+    (268, "RSAHEADER"),
+    (269, "SHA1HEADER"),
+    (270, "LONGSIZE"),
+    (271, "LONGARCHIVESIZE"),
+    (273, "SHA256HEADER"),
+    (1000, "SIZE"),
+    (1001, "LEMD5_1"),
+    (1002, "PGP"),
+    (1003, "LEMD5_2"),
+    (1004, "MD5"),
+    (1005, "GPG"),
+    (1006, "PGP5"),
+    (1007, "PAYLOADSIZE"),
+    (1008, "RESERVEDSPACE"),
+];
+
+const TAGS: EnumTable = &[
+    (61, "HEADERIMAGE"),
+    (62, "HEADERSIGNATURES"),
+    (63, "HEADERIMMUTABLE"),
+    (100, "HEADERI18NTABLE"),
+    (267, "DSAHEADER"),
+    (268, "RSAHEADER"),
+    (269, "SHA1HEADER"),
+    (273, "SHA256HEADER"),
+    (1000, "NAME"),
+    (1001, "VERSION"),
+    (1002, "RELEASE"),
+    (1003, "EPOCH"),
+    (1004, "SUMMARY"),
+    (1005, "DESCRIPTION"),
+    (1006, "BUILDTIME"),
+    (1007, "BUILDHOST"),
+    (1008, "INSTALLTIME"),
+    (1009, "SIZE"),
+    (1010, "DISTRIBUTION"),
+    (1011, "VENDOR"),
+    (1012, "GIF"),
+    (1013, "XPM"),
+    (1014, "LICENSE"),
+    (1015, "PACKAGER"),
+    (1016, "GROUP"),
+    (1017, "CHANGELOG"),
+    (1018, "SOURCE"),
+    (1019, "PATCH"),
+    (1020, "URL"),
+    (1021, "OS"),
+    (1022, "ARCH"),
+    (1023, "PREIN"),
+    (1024, "POSTIN"),
+    (1025, "PREUN"),
+    (1026, "POSTUN"),
+    (1027, "OLDFILENAMES"),
+    (1028, "FILESIZES"),
+    (1029, "FILESTATES"),
+    (1030, "FILEMODES"),
+    (1033, "FILERDEVS"),
+    (1034, "FILEMTIMES"),
+    (1035, "FILEDIGESTS"),
+    (1036, "FILELINKTOS"),
+    (1037, "FILEFLAGS"),
+    (1039, "FILEUSERNAME"),
+    (1040, "FILEGROUPNAME"),
+    (1044, "SOURCERPM"),
+    (1045, "FILEVERIFYFLAGS"),
+    (1046, "ARCHIVESIZE"),
+    (1047, "PROVIDENAME"),
+    (1048, "REQUIREFLAGS"),
+    (1049, "REQUIRENAME"),
+    (1050, "REQUIREVERSION"),
+    (1053, "CONFLICTFLAGS"),
+    (1054, "CONFLICTNAME"),
+    (1055, "CONFLICTVERSION"),
+    (1064, "RPMVERSION"),
+    (1065, "TRIGGERSCRIPTS"),
+    (1066, "TRIGGERNAME"),
+    (1067, "TRIGGERVERSION"),
+    (1068, "TRIGGERFLAGS"),
+    (1069, "TRIGGERINDEX"),
+    (1079, "VERIFYSCRIPT"),
+    (1080, "CHANGELOGTIME"),
+    (1081, "CHANGELOGNAME"),
+    (1082, "CHANGELOGTEXT"),
+    (1085, "PREINPROG"),
+    (1086, "POSTINPROG"),
+    (1087, "PREUNPROG"),
+    (1088, "POSTUNPROG"),
+    (1090, "OBSOLETENAME"),
+    (1094, "COOKIE"),
+    (1095, "FILEDEVICES"),
+    (1096, "FILEINODES"),
+    (1097, "FILELANGS"),
+    (1098, "PREFIXES"),
+    (1112, "PROVIDEFLAGS"),
+    (1113, "PROVIDEVERSION"),
+    (1114, "OBSOLETEFLAGS"),
+    (1115, "OBSOLETEVERSION"),
+    (1116, "DIRINDEXES"),
+    (1117, "BASENAMES"),
+    (1118, "DIRNAMES"),
+    (1122, "OPTFLAGS"),
+    (1124, "PAYLOADFORMAT"),
+    (1125, "PAYLOADCOMPRESSOR"),
+    (1126, "PAYLOADFLAGS"),
+    (1131, "RHNPLATFORM"),
+    (1132, "PLATFORM"),
+    (1140, "FILECOLORS"),
+    (1141, "FILECLASS"),
+    (1142, "CLASSDICT"),
+    (1143, "FILEDEPENDSX"),
+    (1144, "FILEDEPENDSN"),
+    (1145, "DEPENDSDICT"),
+    (1146, "SOURCEPKGID"),
+    (5011, "FILEDIGESTALGO"),
+    (5062, "ENCODING"),
+    (5092, "PAYLOADDIGEST"),
+    (5093, "PAYLOADDIGESTALGO"),
+];
+
+record! {
+    pub struct Lead {
+        magic: bytes[4] "Magic",
+        major: u8 "Major version",
+        minor: u8 "Minor version",
+        kind: u16 "Type" .enumeration(PACKAGE_TYPE),
+        arch: u16 "Architecture number",
+        name: ascii[66] "Name",
+        os: u16 "OS number",
+        signature: u16 "Signature type" .enumeration(SIGNATURE_TYPE),
+        reserved: bytes[16] "Reserved",
+    }
+}
+
+record! {
+    pub struct Preamble {
+        magic: bytes[3] "Magic",
+        version: u8 "Version",
+        reserved: bytes[4] "Reserved",
+        entries: u32 "Index entries",
+        size: u32 "Data store size" .with(|&s, n| n.summary(human_size(s.into()))),
+    }
+}
+
+/// A header structure located in the file.
+#[derive(Clone, Copy, Debug)]
+struct Header {
+    span: Span,
+    entries: u32,
+    index: Span,
+    store: Span,
+}
+
+async fn locate(cx: &Cx, file: Span, at: u64) -> Result<Header> {
+    let span = file.sub(at, Preamble::SIZE);
+    let p = crate::fields::parse(cx, span, BE, &(), Preamble::layout).await?;
+    let mut magic = p.magic.clone();
+    magic.push(p.version);
+    if magic != HEADER_MAGIC {
+        return Err(Diagnostic::malformed("bad header magic").at(span));
+    }
+    let index_len = u64::from(p.entries).saturating_mul(16);
+    let index = file.sub_exact(at.saturating_add(Preamble::SIZE), index_len)?;
+    let store = file.sub(
+        at.saturating_add(Preamble::SIZE).saturating_add(index_len),
+        p.size.into(),
+    );
+    let total = Preamble::SIZE
+        .saturating_add(index_len)
+        .saturating_add(p.size.into());
+    Ok(Header {
+        span: file.sub(at, total),
+        entries: p.entries,
+        index,
+        store,
+    })
+}
+
+/// One index entry.
+#[derive(Clone, Copy, Debug)]
+struct Entry {
+    tag: u32,
+    kind: u32,
+    offset: u32,
+    count: u32,
+}
+
+fn entry_at(index: &[u8], i: usize) -> Option<Entry> {
+    let at = i.checked_mul(16)?;
+    Some(Entry {
+        tag: u32_be(index, at)?,
+        kind: u32_be(index, at.checked_add(4)?)?,
+        offset: u32_be(index, at.checked_add(8)?)?,
+        count: u32_be(index, at.checked_add(12)?)?,
+    })
+}
+
+/// Decoded entry values: either one value or items.
+enum Decoded {
+    One(Value, Span),
+    Items(Vec<(Value, Span)>),
+}
+
+/// Decodes up to `limit` items of an entry from the store.
+fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
+    let start = to_usize(e.offset.into());
+    let n = e.count.min(limit);
+    let mut items = Vec::new();
+    let mut at = start;
+    let span = |at: usize, len: usize| base.sub(to_u64(at), to_u64(len));
+    match e.kind {
+        1 | 2 => {
+            let bytes = store.get(start..start.checked_add(to_usize(e.count.into()))?)?;
+            if e.count != 1 {
+                return Some(Decoded::One(
+                    Value::Bytes(bytes.to_vec()),
+                    span(start, bytes.len()),
+                ));
+            }
+            let v = u64::from(*bytes.first()?);
+            return Some(Decoded::One(uint(v), span(start, 1)));
+        }
+        7 => {
+            let bytes = store.get(start..start.checked_add(to_usize(e.count.into()))?)?;
+            return Some(Decoded::One(
+                Value::Bytes(bytes.to_vec()),
+                span(start, bytes.len()),
+            ));
+        }
+        3..=5 => {
+            let width = match e.kind {
+                3 => 2usize,
+                4 => 4,
+                _ => 8,
+            };
+            for _ in 0..n {
+                let v = match width {
+                    2 => u64::from(u16_be(store, at)?),
+                    4 => u64::from(u32_be(store, at)?),
+                    _ => u64_be(store, at)?,
+                };
+                items.push((uint(v), span(at, width)));
+                at = at.checked_add(width)?;
+            }
+        }
+        6 | 8 | 9 => {
+            let n = if e.kind == 6 { 1 } else { n };
+            for _ in 0..n {
+                let rest = store.get(at..)?;
+                let len = rest.iter().position(|&b| b == 0)?;
+                let s = String::from_utf8_lossy(rest.get(..len)?).into_owned();
+                items.push((text(s), span(at, len.saturating_add(1))));
+                at = at.checked_add(len)?.checked_add(1)?;
+            }
+        }
+        _ => return None,
+    }
+    if e.kind == 6 || (e.count == 1 && items.len() == 1) {
+        let (v, s) = items.pop()?;
+        return Some(Decoded::One(v, s));
+    }
+    Some(Decoded::Items(items))
+}
+
+/// A string or number tag's first value, for summaries.
+fn first_text(e: &Entry, store: &[u8], base: Span) -> Option<String> {
+    match decode(e, store, base, 1)? {
+        Decoded::One(Value::Text(s), _) => Some(s),
+        Decoded::Items(items) => match items.into_iter().next()?.0 {
+            Value::Text(s) => Some(s),
+            _ => None,
+        },
+        Decoded::One(Value::UInt { value, .. }, _) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let lead_span = file.sub(0, LEAD);
+    let lead = crate::fields::parse(&cx, lead_span, BE, &(), Lead::layout).await?;
+    cx.emit(Lead::node("Lead", lead_span, BE).summary(lead.name.clone()));
+    cx.annotate(format!("RPM package {}", lead.name));
+
+    let sig = locate(&cx, file, LEAD).await?;
+    cx.emit(header_node("Signature", sig, true));
+    let main_at = LEAD
+        .saturating_add(sig.span.len)
+        .div_ceil(8)
+        .saturating_mul(8);
+    let main = locate(&cx, file, main_at).await?;
+    cx.emit(header_node("Header", main, false));
+
+    // Package identity and payload description from the main header.
+    let index = cx.read(main.index).await?;
+    let store = cx.read(main.store.sub(0, cx.limits().max_read)).await?;
+    let mut tags = std::collections::BTreeMap::new();
+    for i in 0..to_usize(main.entries.into()) {
+        let Some(e) = entry_at(&index, i) else {
+            break;
+        };
+        if matches!(e.tag, 1000..=1002 | 1022 | 1124 | 1125)
+            && let Some(v) = first_text(&e, &store, main.store)
+        {
+            tags.insert(e.tag, v);
+        }
+    }
+    let get = |t: u32| tags.get(&t).cloned().unwrap_or_default();
+    let nevra = format!("{}-{}-{}.{}", get(1000), get(1001), get(1002), get(1022));
+    let format = tags
+        .get(&1124)
+        .cloned()
+        .unwrap_or_else(|| "cpio".to_owned());
+    let compressor = tags
+        .get(&1125)
+        .cloned()
+        .unwrap_or_else(|| "gzip".to_owned());
+    let payload = file.tail(main.span.end().saturating_sub(file.offset));
+    cx.emit(embedded("Payload", input.nested(payload)).summary(format!(
+        "{format}, {compressor}, {}",
+        human_size(payload.len)
+    )));
+    cx.annotate(format!("RPM {nevra}, payload {format}/{compressor}"));
+    Ok(())
+}
+
+fn header_node(name: &'static str, h: Header, signature: bool) -> Node {
+    Node::new(name)
+        .span(h.span)
+        .summary(format!(
+            "{} entries, {}",
+            h.entries,
+            human_size(h.store.len)
+        ))
+        .lazy(header, (h, signature))
+}
+
+async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
+    cx.set_count(Count::Exact(u64::from(h.entries).saturating_add(2)));
+    cx.emit(Preamble::node(
+        "Header preamble",
+        h.span.sub(0, Preamble::SIZE),
+        BE,
+    ));
+    let index = cx.read(h.index).await?;
+    let store = cx.read(h.store.sub(0, cx.limits().max_read)).await?;
+    let table = if signature { SIGNATURE_TAGS } else { TAGS };
+    for i in 0..to_usize(h.entries.into()) {
+        let Some(e) = entry_at(&index, i) else {
+            break;
+        };
+        let entry_span = h.index.sub(to_u64(i).saturating_mul(16), 16);
+        let name = crate::value::lookup(table, e.tag.into())
+            .map_or_else(|| format!("Tag {}", e.tag), str::to_owned);
+        let kind = crate::value::lookup(TYPES, e.kind.into()).unwrap_or("?");
+        let fields = Arc::new(vec![
+            Node::new("Tag")
+                .span(entry_span.sub(0, 4))
+                .value(Value::Enum {
+                    raw: e.tag.into(),
+                    bits: 32,
+                    name: crate::value::lookup(table, e.tag.into()),
+                }),
+            Node::new("Type")
+                .span(entry_span.sub(4, 4))
+                .value(Value::Enum {
+                    raw: e.kind.into(),
+                    bits: 32,
+                    name: crate::value::lookup(TYPES, e.kind.into()),
+                }),
+            Node::new("Offset")
+                .span(entry_span.sub(8, 4))
+                .value(hex(e.offset.into()))
+                .target(h.store.sub(e.offset.into(), 0)),
+            Node::new("Count")
+                .span(entry_span.sub(12, 4))
+                .value(uint(e.count.into())),
+        ]);
+        let mut node = Node::new(name).span(entry_span);
+        match decode(&e, &store, h.store, INLINE_ITEMS) {
+            Some(Decoded::One(v, s)) => {
+                node = node.value(present(e.tag, v, signature)).target(s);
+                node = node.lazy(emit_nodes, fields);
+            }
+            Some(Decoded::Items(first)) => {
+                let preview = match first.first() {
+                    Some((Value::Text(t), _)) => format!(", first {t:?}"),
+                    Some((Value::UInt { value, .. }, _)) => format!(", first {value}"),
+                    _ => String::new(),
+                };
+                node = node
+                    .summary(format!("{kind}[{}]{preview}", e.count))
+                    .lazy(items, (h.store, e, fields));
+            }
+            None => {
+                node = node
+                    .summary(kind)
+                    .diag(Diagnostic::malformed("value outside the data store"))
+                    .lazy(emit_nodes, fields);
+            }
+        }
+        cx.push(node).await;
+    }
+    cx.emit(Node::new("Data store").span(h.store));
+    Ok(())
+}
+
+/// Interprets well-known numeric tags.
+fn present(tag: u32, v: Value, signature: bool) -> Value {
+    match (tag, &v, signature) {
+        (1006 | 1008, Value::UInt { value, .. }, false) => Value::Timestamp {
+            unix_seconds: i64::try_from(*value).unwrap_or(0),
+        },
+        _ => v,
+    }
+}
+
+async fn items(cx: Cx, (store, e, fields): (Span, Entry, Arc<Vec<Node>>)) -> Result<()> {
+    emit_nodes(cx.clone(), fields).await?;
+    // Read only the part of the store this entry can use.
+    let data = cx.read(store.sub(0, cx.limits().max_read)).await?;
+    let Some(Decoded::Items(values)) = decode(&e, &data, store, e.count) else {
+        return Ok(());
+    };
+    for (i, (v, s)) in values.into_iter().enumerate() {
+        cx.push(Node::new(format!("[{i}]")).span(s).value(v)).await;
+    }
+    Ok(())
+}

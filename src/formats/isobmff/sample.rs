@@ -8,7 +8,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::embedded;
-use crate::formats::vidutil::{
+use crate::formats::util::vidutil::{
     self, COLOUR_PRIMARIES, H264_PROFILES, HEVC_NAL_TYPES, MATRIX_COEFFICIENTS,
     TRANSFER_CHARACTERISTICS, asc_summary, fixed16, fourcc, h264_level, h264_sps, hevc_level,
     hevc_sps, lookup_or, num, uint,

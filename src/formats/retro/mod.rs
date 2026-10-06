@@ -1,10 +1,10 @@
 //! Retro computing and console formats: ROM headers, music rips, disk and
 //! tape images.
 
+pub mod cartridges;
 pub mod computers;
+pub mod console_packages;
 pub mod consoles;
-pub mod consoles2;
-pub mod consoles3;
 pub mod dats;
 pub mod discs;
 pub mod extras;

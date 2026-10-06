@@ -19,7 +19,7 @@ use crate::bytes::{to_u64, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::vidutil::{fourcc, hex, text, uint};
+use crate::formats::util::vidutil::{fourcc, hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -504,7 +504,7 @@ async fn expand_box(cx: Cx, st: BoxState) -> Result<()> {
     }
     if let Some(u) = h.uuid {
         let at = f.peek_span(16);
-        let mut node = text("User type", at, crate::formats::vidutil::uuid(&u));
+        let mut node = text("User type", at, crate::formats::util::vidutil::uuid(&u));
         if let Some(name) = canon::uuid_name(&u) {
             node = node.summary(name);
         }
@@ -641,7 +641,7 @@ pub async fn version_flags(cx: &Cx, body: Span) -> Result<(u8, u32)> {
 
 /// Reads a small box body for in-memory parsing.
 pub async fn small(cx: &Cx, body: Span) -> Result<Vec<u8>> {
-    crate::formats::vidutil::read_small(cx, body, 0x10000).await
+    crate::formats::util::vidutil::read_small(cx, body, 0x10000).await
 }
 
 /// A count node with the number of bytes the span holds.

@@ -3,7 +3,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::vidutil::{self, Bits, hex, uint};
+use crate::formats::util::vidutil::{self, Bits, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
