@@ -45,6 +45,7 @@ pub mod pdb;
 pub mod pe;
 pub mod pef;
 pub mod pyc;
+pub mod qvm;
 pub mod spirv;
 pub mod te;
 pub mod winres;
@@ -197,6 +198,7 @@ pub static FORMATS: &[&Format] = &[
     &lx::FORMAT,
     &mz::FORMAT,
     &omf::FORMAT,
+    &qvm::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
