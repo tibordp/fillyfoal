@@ -214,6 +214,7 @@ pub mod misc7;
 // -- end ml --
 
 // -- geospatial, telemetry & vehicle logs --
+pub mod geo;
 // -- end geo --
 
 // -- publishing, design & multimedia authoring --
@@ -796,6 +797,11 @@ pub static FORMATS: &[&Format] = &[
     // -- end ml --
 
     // -- geospatial, telemetry & vehicle logs --
+    &geo::fit::FIT,
+    &geo::tiles::PMTILES,
+    &geo::tiles::FLATGEOBUF,
+    &geo::tiles::O5M,
+    &geo::tiles::MVT,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --
