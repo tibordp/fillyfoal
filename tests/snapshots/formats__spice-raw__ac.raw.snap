@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ac.raw — SPICE raw file: AC Analysis "AC test", 2 variable(s) (frequency, v(out)), 2 point(s)  [0x0+0xdb]
+    Title: "AC test"  [0x0+0xe]
+    Date: "Fri May 17 10:30:00 2024"  [0xf+0x1e]
+    Plotname: "AC Analysis"  [0x2e+0x15]
+    Flags: "complex"  [0x44+0xe]
+    No. Variables: 2  [0x53+0x10]
+    No. Points: 2  [0x64+0xd]
+  ▾ Variables: 2
+      frequency: "frequency" — index 0
+      v(out): "voltage" — index 1
+    Header  [0x0+0xae]
+    Data — 2 point(s), ASCII  [0xae+0x2d]

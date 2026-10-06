@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ top.bit — Xilinx bitstream for 7a35tcpg236 (top), 2024/05/17 10:30:00, IDCODE 0x03651093  [0x0+0xdb]
+    Header magic  [0x0+0xd]
+    a: Design name: "top;UserID=0XFFFFFFFF;Version=2023.2"  [0xd+0x28]
+    b: Part: "7a35tcpg236"  [0x35+0xf]
+    c: Date: "2024/05/17"  [0x44+0xe]
+    d: Time: "10:30:00"  [0x52+0xc]
+    e: Bitstream length: 120  [0x5e+0x5]
+  ▾ Configuration data  [0x63+0x78]
+      Dummy/bus width words  [0x63+0x18]
+      Sync word: 0xaa995566  [0x7b+0x4]
+      Type 1 write CMD: 1 — RCRC  [0x83+0x8]
+      Type 1 write IDCODE: 1 — 0x03651093  [0x8f+0x8]
+      Type 1 write FDRI: 0  [0x97+0x4]
+      Type 2 write FDRI: 8 — 32 bytes  [0x9b+0x24]
+      Type 1 write CMD: 1 — START  [0xbf+0x8]
+      Type 1 write CMD: 1 — DESYNC  [0xcb+0x8]
+      NOOPs: 5

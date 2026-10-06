@@ -175,6 +175,7 @@ pub mod bio;
 pub mod biotext;
 pub mod instruments;
 pub mod geo;
+pub mod eda;
 // -- end misc --
 
 // -- text --
@@ -875,6 +876,24 @@ pub static FORMATS: &[&Format] = &[
     &geo::PDS3,
     &geo::VICAR,
     &geo::MSEED2,
+    &eda::GDSII,
+    &eda::OASIS,
+    &eda::KICAD_PCB,
+    &eda::KICAD_SCH,
+    &eda::KICAD_SYM,
+    &eda::KICAD_MOD,
+    &eda::EDIF,
+    &eda::SDF_TIMING,
+    &eda::VCD,
+    &eda::CITI,
+    &eda::SPICE_RAW,
+    &eda::IBIS,
+    &eda::SPEF,
+    &eda::XILINX_BIT,
+    &eda::JEDEC,
+    &eda::EXCELLON,
+    &eda::GERBER,
+    &eda::TOUCHSTONE,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --

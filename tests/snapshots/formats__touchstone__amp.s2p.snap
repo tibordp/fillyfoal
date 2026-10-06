@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ amp.s2p — Touchstone 2-port (GHz S MA R 50), 3 frequency point(s), 1.0–3.0 GHz  [0x0+0xbd]
+    Comment: "Example 2-port S-parameters"  [0x0+0x1d]
+    Comment: "Created by a test script"  [0x1e+0x1a]
+  ▾ Option line: "GHz S MA R 50"  [0x39+0xf]
+      Frequency unit: "GHz"  [0x39+0xf]
+      Parameter: "S"  [0x39+0xf]
+      Format: "magnitude/angle"  [0x39+0xf]
+      Reference impedance (Ω): 50  [0x39+0xf]
+  ▾ Network data: 3  [0x49+0x74]
+      1.0: "0.90 -20 3.10 150 0.01 60 0.50 -30"  [0x49+0x26]
+      2.0: "0.80 -40 2.80 120 0.02 55 0.45 -60"  [0x70+0x26]
+      3.0: "0.70 -60 2.40 95 0.03 50 0.40 -90"  [0x97+0x25]

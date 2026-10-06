@@ -1,0 +1,38 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ counter.vcd — VCD (Icarus Verilog), timescale 1ns, 3 variable(s) in 1 top scope(s), until #20  [0x0+0x156]
+    $date: "Fri May 17 10:30:00 2024"  [0x0+0x26]
+    $version: "Icarus Verilog"  [0x27+0x1f]
+    $timescale: "1ns"  [0x47+0x16]
+    $enddefinitions  [0xf3+0x14]
+  ▾ Scopes: 1
+    ▾ module tb — 2 variable(s), 1 scope(s)
+        clk: "wire [1]" — id !
+        count [3:0]: "reg [4]" — id "
+      ▾ module dut — 1 variable(s), 0 scope(s)
+          rst: "wire [1]" — id #
+  ▾ Value changes  [0x108+0x4e]
+    ▾ #0 — 3 change(s)  [0x108+0x20]
+        Line: "#0"  [0x108+0x2]
+        Line: "$dumpvars"  [0x10b+0x9]
+        Line: "0!"  [0x115+0x2]
+        Line: "b0000 \""  [0x118+0x7]
+        Line: "1#"  [0x120+0x2]
+        Line: "$end"  [0x123+0x4]
+    ▾ #5 — 1 change(s)  [0x128+0x6]
+        Line: "#5"  [0x128+0x2]
+        Line: "1!"  [0x12b+0x2]
+    ▾ #10 — 3 change(s)  [0x12e+0x12]
+        Line: "#10"  [0x12e+0x3]
+        Line: "0!"  [0x132+0x2]
+        Line: "b0001 \""  [0x135+0x7]
+        Line: "0#"  [0x13d+0x2]
+    ▾ #15 — 1 change(s)  [0x140+0x7]
+        Line: "#15"  [0x140+0x3]
+        Line: "1!"  [0x144+0x2]
+    ▾ #20 — 2 change(s)  [0x147+0xf]
+        Line: "#20"  [0x147+0x3]
+        Line: "0!"  [0x14b+0x2]
+        Line: "b0010 \""  [0x14e+0x7]
