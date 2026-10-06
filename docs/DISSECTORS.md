@@ -152,7 +152,10 @@ tests fail if that ever happens on a fixture.
   `Diagnostic::unsupported("LZMA compression")` and the span. Do not pull in
   crates (see the codec policy in `DESIGN.md`).
 - `crate::codec::inflate_span(&cx, span, zlib, expected)` if you need the
-  decoded bytes yourself (e.g. a compressed text chunk).
+  decoded bytes yourself (e.g. a compressed text chunk). `content()` already
+  switches to `cx.inflate_lazy(span, zlib, len)` for large members, which
+  decodes only as far as reads reach — so never read the *end* of a large
+  decoded member unless the user asked for it.
 - **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
   sector chains, SQLite overflow pages): describe it as pieces instead of
   copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },

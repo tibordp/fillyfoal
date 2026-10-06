@@ -156,7 +156,10 @@ layout.
 3. In-house inflate behind the codec interface; ZIP deflate members. Done
    (whole-member decoding into memory, budgeted; streaming is still open).
 4. tar.gz: streaming-only derived source, checkpoints, budgets under load.
-   Open: today tar.gz works up to `max_derived` decoded bytes.
+   Partly done: large members are decoded lazily (`Cx::inflate_lazy`), so
+   the first page of a huge tarball costs only what it reads. Decoded bytes
+   are kept (bounded by `max_derived`); checkpoints that allow discarding
+   and re-decoding are still open.
 5. SQLite: page graph, resume keys with traversal stacks, overflow chains as
    fragmented sources.
 6. MP4: generic recursive boxes, huge fixed-stride tables, random index access.
