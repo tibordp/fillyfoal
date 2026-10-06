@@ -1,0 +1,15 @@
+Name: Caffeine
+Formula: C8H10N4O2
+MW: 194
+CAS#: 58-08-2
+Num Peaks: 5
+55 120; 67 230; 82 150
+109 400; 194 999
+
+Name: Ethanol
+Formula: C2H6O
+MW: 46
+Num Peaks: 3
+31 999
+45 520
+46 210

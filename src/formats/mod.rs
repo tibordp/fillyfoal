@@ -210,6 +210,7 @@ pub mod geo;
 pub mod eda;
 pub mod cad;
 pub mod microscopy;
+pub mod molecular;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1117,6 +1118,13 @@ pub static FORMATS: &[&Format] = &[
     &microscopy::LIF,
     &microscopy::SER,
     &microscopy::GATAN_DM,
+    &molecular::DCD,
+    &molecular::XTC,
+    &molecular::TRR,
+    &molecular::MOL2,
+    &molecular::CHARMM_PSF,
+    &molecular::MSP,
+    &molecular::MGF,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

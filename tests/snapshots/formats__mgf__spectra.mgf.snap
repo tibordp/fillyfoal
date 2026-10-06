@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ spectra.mgf — MGF, 2 spectr(um/a), 4 peak(s)  [0x0+0xeb]
+    COM: "Test peak list"  [0x0+0x12]
+    SEARCH: "MIS"  [0x13+0xa]
+  ▾ scan=1001: 499.251 — 3 peak(s) 2+  [0x1e+0x80]
+      TITLE: "scan=1001"  [0x29+0xf]
+      PEPMASS: "499.2510 12000"  [0x39+0x16]
+      CHARGE: "2+"  [0x50+0x9]
+      RTINSECONDS: 120.5  [0x5a+0x11]
+      m/z 110.0712: 1500  [0x6c+0xd]
+      m/z 175.1190: 3200  [0x7a+0xd]
+      m/z 248.1605: 850  [0x88+0xc]
+  ▾ scan=1002: 620.3001 — 1 peak(s) 3+  [0x9e+0x4d]
+      TITLE: "scan=1002"  [0xa9+0xf]
+      PEPMASS: 620.3001  [0xb9+0x10]
+      CHARGE: "3+"  [0xca+0x9]
+      m/z 147.1128: 2100  [0xd4+0xd]

@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.psf — PSF EXT: 3 atom(s), 2 bond(s), 1 angle(s), 0 dihedral(s)  [0x0+0x223]
+    Flags: "PSF EXT"  [0x0+0x7]
+  ▾ !NTITLE: 2 — 2 line(s)  [0x9+0x3b]
+      Line: "* Test structure"  [0x1c+0x10]
+      Line: "* Created by a script"  [0x2d+0x15]
+  ▾ !NATOM: 3 — 3 line(s)  [0x44+0x124]
+      Atom 1: "PROA ALA1 N" — type NH3, charge -0.300000, mass 14.0070  [0x56+0x5a]
+      Atom 2: "PROA ALA1 HT1" — type HC, charge 0.330000, mass 1.0080  [0xb1+0x5a]
+      Atom 3: "PROA ALA1 CA" — type CT1, charge 0.210000, mass 12.0110  [0x10c+0x5a]
+    !NBOND: bonds: 2 — 1 line(s)  [0x168+0x43]
+    !NTHETA: angles: 1 — 1 line(s)  [0x1ab+0x3b]
+    !NPHI: dihedrals: 0 — 0 line(s)  [0x1e6+0x1e]
+    !NIMPHI: impropers: 0 — 0 line(s)  [0x204+0x1f]

@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ library.msp — NIST MSP library, 2 spectr(um/a)  [0x0+0xb4]
+  ▾ Caffeine: "C8H10N4O2" — 5 peak(s)  [0x0+0x6e]
+      Name: "Caffeine"  [0x0+0xe]
+      Formula: "C8H10N4O2"  [0xf+0x12]
+      MW: 194  [0x22+0x7]
+      CAS#: "58-08-2"  [0x2a+0xd]
+      Num Peaks: 5  [0x38+0xc]
+      m/z 55: 120  [0x45+0x16]
+      m/z 67: 230  [0x45+0x16]
+      m/z 82: 150  [0x45+0x16]
+      m/z 109: 400  [0x5c+0x10]
+      m/z 194: 999  [0x5c+0x10]
+  ▾ Ethanol: "C2H6O" — 3 peak(s)  [0x6e+0x46]
+      Name: "Ethanol"  [0x6e+0xd]
+      Formula: "C2H6O"  [0x7c+0xe]
+      MW: 46  [0x8b+0x6]
+      Num Peaks: 3  [0x92+0xc]
+      m/z 31: 999  [0x9f+0x6]
+      m/z 45: 520  [0xa6+0x6]
+      m/z 46: 210  [0xad+0x6]
