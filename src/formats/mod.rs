@@ -188,7 +188,7 @@ pub static FORMATS: &[&Format] = &[
     &disk::fat::FORMAT,
     &disk::mbr::FORMAT,
     &disk::bsdlabel::FORMAT,
-    // Probes an all-zero head; keep last.
+    // Detected only if the probe window reaches 64 KiB.
     &disk::btrfs::FORMAT,
     // -- end disk images --
 
