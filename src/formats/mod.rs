@@ -30,6 +30,7 @@ pub mod coff;
 pub mod dart;
 pub mod dxbc;
 pub mod elf;
+pub mod fatbin;
 pub mod hermes;
 pub mod java;
 pub mod lua;
@@ -199,6 +200,7 @@ pub static FORMATS: &[&Format] = &[
     &mz::FORMAT,
     &omf::FORMAT,
     &qvm::FORMAT,
+    &fatbin::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,

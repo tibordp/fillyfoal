@@ -1060,6 +1060,7 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
             }
             ".gnu_debuglink" => lazy("Debug Link").lazy(symbols::debuglink, (elf.class, data)),
             ".gnu_debugaltlink" => lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data)),
+            ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
             _ => raw,
         },
     };
