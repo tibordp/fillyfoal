@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ layout.qxd — QuarkXPress document (Mac, version code 0x3f)  [0x0+0x20a]
+    Reserved: 0x0  [0x0+0x2]
+    Byte order: "MM (big-endian, Mac)"  [0x2+0x2]
+    Signature: "XPR3"  [0x4+0x4]
+    Version code: 0x3f  [0x8+0x2]
+    Document data  [0xa+0x200]
+      ! unsupported: QuarkXPress document records

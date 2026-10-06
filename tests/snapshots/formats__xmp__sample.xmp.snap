@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.xmp — XMP metadata, Adobe XMP Core 9.1-c001  [0x0+0x28e]
+    ?xpacket: "begin=\"\u{feff}\" id=\"W5M0MpCehiHzreSzNTczkc9d\""  [0x0+0x35]
+  ▾ x:xmpmeta — x:xmptk="Adobe XMP Core 9.1-c001" (1 element)  [0x36+0x244]
+      @xmlns:x: "adobe:ns:meta/"  [0x4a+0xe]
+      @x:xmptk: "Adobe XMP Core 9.1-c001"  [0x63+0x17]
+    ▾ rdf:RDF — 1 element  [0x7e+0x1ef]
+        @xmlns:rdf: "http://www.w3.org/1999/02/22-rdf-syntax-ns#"  [0x92+0x2b]
+      ▾ rdf:Description — rdf:about="" (4 elements)  [0xc2+0x19f]
+          @rdf:about: ""  [0xde+0x0]
+          @xmlns:xmp: "http://ns.adobe.com/xap/1.0/"  [0xeb+0x1c]
+          @xmlns:dc: "http://purl.org/dc/elements/1.1/"  [0x113+0x20]
+          xmp:CreatorTool: "Adobe InDesign 19.0 (Macintosh)"  [0x139+0x42]
+          xmp:CreateDate: "2026-10-06T10:00:00+02:00"  [0x17f+0x3a]
+          dc:format: "application/x-indesign"  [0x1bd+0x2d]
+        ▾ dc:title — 1 element  [0x1ee+0x5e]
+          ▾ rdf:Alt — 1 element  [0x1f8+0x49]
+            ▾ rdf:li: "Fixture brochure" — xml:lang="x-default"  [0x201+0x36]
+                @xml:lang: "x-default"  [0x213+0x9]
+                #text: "Fixture brochure"  [0x21e+0x10]
+    ?xpacket: "end=\"w\""  [0x27b+0x13]

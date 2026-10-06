@@ -210,7 +210,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ xml   [0x27b+0x14]
       Size: 20  [0x27b+0x4]
       Type: "xml "  [0x27f+0x4]
-    ▾ XMP — XML document, root <x:xmpmeta>  [0x283+0xc]
+    ▾ XMP — XMP metadata  [0x283+0xc]
         x:xmpmeta  [0x283+0xc]
   ▾ jxlp — 300×100  [0x28f+0x12]
       Size: 18  [0x28f+0x4]

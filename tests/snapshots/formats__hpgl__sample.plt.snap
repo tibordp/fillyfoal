@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.plt — HP-GL/2 plot, 19 instructions, up to pen 2, 2 pages  [0x0+0xa2]
+    IN Initialize  [0x0+0x2]
+    SP Select pen: "1"  [0x3+0x3]
+    PU Pen up: "0,0"  [0x7+0x5]
+    PD Pen down: "1000,0,1000,1000,0,1000,0,0"  [0xd+0x1d]
+    PU Pen up  [0x2b+0x2]
+    SP Select pen: "2"  [0x2e+0x3]
+    PA Plot absolute: "500,500"  [0x32+0x9]
+    CI Circle: "250"  [0x3c+0x5]
+    SI Character size: "0.3,0.4"  [0x42+0x9]
+    DI Absolute direction: "1,0"  [0x4c+0x5]
+    LB Label: "Fixture plot"  [0x52+0x10]
+    PU Pen up: "2000,2000"  [0x62+0xb]
+    EA Edge rectangle absolute: "2500,2600"  [0x6e+0xb]
+    FT Fill type: "3,50,45"  [0x7a+0x9]
+    RA Fill rectangle absolute: "3000,3000"  [0x84+0xb]
+    DT Define label terminator: "*"  [0x90+0x3]
+    LB Label: "Alt*"  [0x94+0x6]
+    SP Select pen: "0"  [0x9a+0x3]
+    PG Advance page  [0x9e+0x2]

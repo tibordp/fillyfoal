@@ -239,7 +239,13 @@ zip_variant!(CBZ, "cbz", "Comic book archive (ZIP)", ["cbz"], "application/vnd.c
     |h| has_entry(h, b"ComicInfo.xml"));
 zip_variant!(GEOGEBRA, "ggb", "GeoGebra file", ["ggb"], "application/vnd.geogebra.file",
     |h| has_entry(h, b"geogebra.xml"));
-zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
+zip_variant!(ADOBE_XD, "adobe-xd", "Adobe XD document", ["xd"], "application/vnd.adobe.sparkler.project+dcxucf",
+    |h| mimetype(h, b"application/vnd.adobe.sparkler.project+dcxucf"));
+zip_variant!(PROCREATE, "procreate", "Procreate artwork", ["procreate", "brush", "brushset", "swatches"], "application/x-procreate",
+    |h| has_entry(h, b"Document.archive"));
+zip_variant!(XFL, "flash-fla", "Adobe Animate / Flash document (XFL)", ["fla", "xfl"], "application/vnd.adobe.fla",
+    |h| has_entry(h, b"DOMDocument.xml"));
+zip_variant!(DWFX, "dwfx","Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
     |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
 
 pub static FORMAT: Format = Format {

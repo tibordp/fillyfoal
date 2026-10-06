@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.gpd — Generic Printer Description 1.0: Fixture DotMatrix 24  [0x0+0x305]
+    GPDSpecVersion: "1.0"  [0x2d+0x16]
+    GPDFileVersionNum: "1.0"  [0x44+0x19]
+    GPDFileName: "FIXTURE.GPD"  [0x5e+0x1b]
+    Include: "StdNames.gpd"  [0x7a+0x18]
+    ModelName: "Fixture DotMatrix 24"  [0x93+0x22]
+    MasterUnits: "PAIR(360, 360)"  [0xb6+0x1c]
+    PrinterType: "SERIAL"  [0xd3+0x14]
+  ▾ Feature: "Orientation"  [0xe8+0xf1]
+      rcNameID: "=ORIENTATION_DISPLAY"  [0x100+0x23]
+      DefaultOption: "PORTRAIT"  [0x124+0x1c]
+    ▾ Option: "PORTRAIT"  [0x141+0x47]
+        rcNameID: "=PORTRAIT_DISPLAY"  [0x15d+0x24]
+    ▾ Option: "LANDSCAPE_CC270"  [0x188+0x4f]
+        rcNameID: "=LANDSCAPE_DISPLAY"  [0x1ab+0x25]
+  ▾ Feature: "Resolution"  [0x1d9+0xf0]
+      DefaultOption: "Option1"  [0x1f0+0x1b]
+    ▾ Option: "Option1"  [0x20c+0xbb]
+        Name: "360 x 360 dots per inch"  [0x227+0x28]
+        DPI: "PAIR(360, 360)"  [0x250+0x1c]
+        Command: "CmdSendBlockData { *Cmd : \"<1B>*\" %c[0,255]{NumOfDataBytes / 3} }"  [0x26d+0x53]
+    Command: "CmdStartDoc { *Order: DOC_SETUP.1 *Cmd: \"<1B>@\" }"  [0x2c9+0x3b]

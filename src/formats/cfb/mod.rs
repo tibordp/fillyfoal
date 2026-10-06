@@ -110,6 +110,14 @@ cfb_format!(
     |h| probe_names(h).iter().any(|n| n == "Catalog")
 );
 cfb_format!(
+    PUBLISHER,
+    "publisher",
+    "Microsoft Publisher document",
+    ["pub", "puz"],
+    "application/vnd.ms-publisher",
+    |h| { let n = probe_names(h); n.iter().any(|n| n == "Quill") && n.iter().any(|n| n == "Contents") }
+);
+cfb_format!(
     FORMAT,
     "cfb",
     "OLE2 Compound File",

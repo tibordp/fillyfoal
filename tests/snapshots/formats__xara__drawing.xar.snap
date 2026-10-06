@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ drawing.xar — Xara document (CXN), 8 records  [0x0+0x92]
+    Signature  [0x0+0x8]
+    File header: "CXN" — Xara Group Ltd. Fixture 1.0 Build 42  [0x8+0x3c]
+    Down — depth 0, 0 bytes  [0x44+0x8]
+    Record 4001 — depth 1, 6 bytes  [0x4c+0xe]
+    Down — depth 1, 0 bytes  [0x5a+0x8]
+    Record 1100 — depth 2, 16 bytes  [0x62+0x18]
+    Up — depth 2, 0 bytes  [0x7a+0x8]
+    Up — depth 1, 0 bytes  [0x82+0x8]
+    End of file — depth 0, 0 bytes  [0x8a+0x8]
