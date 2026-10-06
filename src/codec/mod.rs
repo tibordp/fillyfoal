@@ -16,6 +16,7 @@ pub mod lzma;
 pub mod xz;
 pub mod zstd;
 pub mod pipeline;
+pub mod unixz;
 
 use std::sync::Arc;
 
@@ -63,6 +64,8 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// Unix `compress` (`.Z`, LSB-first LZW with a header).
+    UnixCompress,
     /// Zstandard frames.
     Zstd,
     /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
@@ -134,6 +137,7 @@ impl Codec {
             Codec::Eexec { .. } => "eexec",
             Codec::Bzip2 => "bzip2",
             Codec::Zstd => "zstd",
+            Codec::UnixCompress => "unix-compress",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
             Codec::Lzma2 => "lzma2",
@@ -166,6 +170,7 @@ impl Codec {
             Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Bzip2 => "bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
+            Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
             Codec::Lzma2 => "lzma2 (lazy)",
@@ -196,6 +201,7 @@ impl Codec {
             | Codec::Bzip2
             | Codec::Xz
             | Codec::Zstd
+            | Codec::UnixCompress
             | Codec::LzmaAlone
             | Codec::Lzma2
             | Codec::LzmaRaw { .. } => "decompressed",
@@ -228,6 +234,7 @@ impl Codec {
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd => 32_768,
+            Codec::UnixCompress => 8_000,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -254,6 +261,7 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),

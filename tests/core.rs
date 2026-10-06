@@ -374,3 +374,20 @@ fn zstd_decodes_python_output() {
     assert!(decode(&read("zeros.zst")).unwrap() == vec![0u8; 300000]);
     assert!(decode(&read("big-text.zst")).unwrap() == text.repeat(40));
 }
+
+#[test]
+fn unix_compress_decodes_real_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/compress/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |data: &[u8]| {
+        let mut d = Codec::UnixCompress.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    assert!(decode(&read("text.Z")) == lzma_text());
+    assert!(decode(&read("text12.Z")) == lzma_text());
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(&read("rnd.Z")) == random);
+    let words = decode(&read("words.Z"));
+    assert_eq!(words.len(), 2_493_885);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+}
