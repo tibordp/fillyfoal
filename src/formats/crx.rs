@@ -5,7 +5,7 @@
 //! signature, followed by a ZIP archive. Version 3 stores them in a
 //! protocol buffer (`CrxFileHeader`), decoded here with a tiny generic
 //! protobuf walker. `mozlz4` (Firefox session and search files) is a magic,
-//! the decompressed size and an LZ4 block, which is not decoded.
+//! the decompressed size and an LZ4 block, decompressed on expansion.
 
 use crate::bytes::u32_le;
 use crate::cx::Cx;
@@ -219,10 +219,12 @@ pub async fn mozlz4(cx: Cx, input: Input) -> Result<()> {
         "Mozilla LZ4 file, {} uncompressed",
         size(size_out.into())
     ));
-    cx.emit(
-        Node::new("LZ4 block")
-            .span(file.tail(12))
-            .diag(Diagnostic::unsupported("LZ4 compression")),
-    );
+    cx.emit(crate::formats::content(
+        "LZ4 block",
+        input,
+        file.tail(12),
+        crate::codec::Codec::Lz4Block,
+        Some(size_out.into()),
+    ));
     Ok(())
 }

@@ -1,9 +1,13 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ recovery.jsonlz4 — Mozilla LZ4 file, 70 bytes uncompressed  [0x0+0x54]
     Magic: "mozLz40"  [0x0+0x8]
     Decompressed size: 70  [0x8+0x4]
-    LZ4 block  [0xc+0x48]
-      ! unsupported: LZ4 compression
+  ▾ LZ4 block — JSON object, 3 members  [0xc+0x48]
+    ▾ version — array, 2 elements  [#1:0xc+0x15]
+        [0]: "sessionrestore"  [#1:0xd+0x10]
+        [1]: 1  [#1:0x1f+0x1]
+      windows — array, 0 elements  [#1:0x2e+0x2]
+      selectedWindow: 0  [#1:0x44+0x1]
