@@ -221,7 +221,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut frames = 0u64;
     let mut total = Some(0u64);
     cx.annotate("Zstandard");
-    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Zstd, None));
+    cx.emit(Node::new("Decompressed").span(file).lazy(decompressed, input));
     while !cur.at_end() {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
@@ -301,6 +301,36 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
     Ok(())
+}
+
+/// The decompressed content. When every frame records its content size,
+/// the total is known up front and a large stream decodes lazily.
+async fn decompressed(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let mut cur = Cursor::new(&cx, file, LE);
+    let mut total = Some(0u64);
+    while !cur.at_end() && total.is_some() {
+        let start = cur.pos();
+        let Some(magic) = u32_le(&cur.peek(4).await?, 0) else {
+            break;
+        };
+        if magic == FRAME_MAGIC {
+            total = match walk_frame(&cx, &mut cur).await {
+                Ok(info) => total.zip(info.header.content_size).map(|(t, s)| t.saturating_add(s)),
+                Err(_) => None,
+            };
+        } else if magic & 0xffff_fff0 == 0x184d_2a50 {
+            cur.skip(4);
+            let len = cur.u32().await?;
+            cur.skip(len.into());
+        } else {
+            break;
+        }
+        if cur.pos() == start {
+            break;
+        }
+    }
+    crate::formats::expand_content(cx, (input, file, crate::codec::Codec::Zstd, total)).await
 }
 
 async fn is_seek_table(cx: &Cx, span: Span) -> bool {

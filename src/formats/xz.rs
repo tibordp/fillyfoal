@@ -215,13 +215,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             return Ok(());
         }
     };
-    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Xz, None));
     let blocks = streams
         .iter()
         .fold(0u64, |a, s| a.saturating_add(to_u64(s.records.len())));
     let size = streams
         .iter()
         .fold(0u64, |a, s| a.saturating_add(s.uncompressed()));
+    // The index records the decoded size, so large streams decode lazily.
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Xz, Some(size)));
     let check = streams.first().map_or(0, |s| s.check);
     let mut summary = format!(
         "xz, {}, {} uncompressed, {}",

@@ -2019,7 +2019,9 @@ pub fn content(
         .lazy(expand_content, (input, span, codec, expected))
 }
 
-async fn expand_content(
+/// Expands a content node in place: what [`content`] does on expansion, for
+/// expanders that work out the decoded size themselves first.
+pub async fn expand_content(
     cx: Cx,
     (input, span, codec, expected): (Input, Span, Codec, Option<u64>),
 ) -> Result<()> {
