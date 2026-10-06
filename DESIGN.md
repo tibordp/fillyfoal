@@ -63,19 +63,30 @@ exploration pays for additional work only as needed.
   Anything built around `Read`/`Write` or file handles is excluded at runtime.
   (`miniz_oxide`: acceptable. `zip`: not.)
 - No external codec is a default feature (including `iluvatar`). The default
-  build is fully hermetic; compressed content becomes an `Unsupported` leaf
-  that names the codec and keeps its span.
-- Inflate is the exception worth writing in-house early (ZIP, PDF 1.5+ object
-  streams, PNG); external crates may serve as differential-testing oracles
-  (dev-dependencies are not subject to the runtime rule).
+  build is fully hermetic; content in a codec we lack becomes an
+  `Unsupported` leaf that names the codec and keeps its span.
+- In practice every codec so far is in-house (`src/codec/`, no features
+  needed): DEFLATE/zlib, bzip2, LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
+  Zstandard, Brotli, LZ4, Snappy, LZFSE/LZVN and Apple `pbz*`, Unix `.Z`,
+  LZO1X/lzop, LZF, ADC, PKWARE implode and DCL implode, MSZIP/LZX/Quantum
+  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, the PDF/PostScript
+  filters and predictors, and the ciphers that unlock content (ZipCrypto,
+  AES, RC4, Type 1 eexec, MPQ). Each is checked byte-exact against a real
+  encoder where one was available (CLI tools, Python packages via `uv`,
+  `hdiutil`, `compression_tool`, liblzo2, 7-Zip as an extraction oracle),
+  otherwise against spec vectors and spec-derived encoders; the test names
+  and comments say which. CRCs share one table-driven engine
+  (`codec::crc`).
 - CI tests both the hermetic and the feature-enabled build.
 
 ## Architecture (current)
 
 ```
-host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress::{Idle, Yielded, NeedBytes}
+host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress::{Idle, Yielded, NeedBytes, NeedSecret}
      ◀─NeedBytes(reqs)───          (no I/O, no executor)
      ──supply(bytes)────▶
+     ◀─NeedSecret(reqs)──
+     ──answer_secret()──▶
 ```
 
 - **Session** owns the node arena, a bounded byte cache, and one in-flight
@@ -96,9 +107,15 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   optional *expander*: a plain-data state plus an `async fn` that emits the
   children. Expanders are re-runnable (determinism), which is what will make
   eviction possible later.
-- **Spans** are `(source, offset, len)`. Today every source is host-provided;
-  derived sources (decompressed streams, reassembled fragments) are the next
-  step.
+- **Spans** are `(source, offset, len)`. Sources are host-provided or
+  derived: decoded streams (`Cx::add_derived`, `codec::decode_span`, lazily
+  `Cx::decode_lazy`) and piece lists over other sources (`Cx::add_pieces`),
+  memoized by `Origin { parent, transform }`.
+- **Secrets.** `cx.unlock(realm, prompt, verify)` suspends an expansion until
+  the host answers a `SecretRequest` (`Progress::NeedSecret`, reported only
+  when nothing else can run). Answers are cached per realm and attempt, so
+  one password serves a whole archive; a declined request yields `None` and
+  the content stays an "encrypted" leaf.
 - **Pagination.** `expand(node, n)` asks for at least `n` children; the
   expansion suspends when that many are emitted and resumes when more are
   requested. Collections may announce `Count::{Exact, AtLeast, Unknown}`.
@@ -268,11 +285,42 @@ unioning `mod.rs` sections. What they reported, consolidated:
   and commit messages; fixtures are self-generated, so those dissectors are
   self-consistent but unverified against real files.
 
+## Findings from the codec pass
+
+Five agents wrote codecs in parallel, a sixth wired existing ones into
+containers. Consolidated:
+
+- **`filters::Whole` is not incremental.** Most codecs are whole-input
+  filters wrapped in `Streaming`; they report all input as consumed (so the
+  "bytes follow the stream" note never fires) and `decode_lazy` decodes
+  everything on the first read. Only inflate, LZX and Brotli are truly
+  incremental. Worth converting the large-member codecs (bzip2, xz, zstd)
+  to real `Decode` state machines.
+- **Expected-size and single-frame modes are missing** for some codecs:
+  `Lz4Block` fails on trailing padding (ZSO with alignment), Zstd decodes
+  every frame it finds (qcow2 has to walk the frame header itself). A
+  per-codec "stop at the expected size" would cover both.
+- **Lazy decode errors are dropped:** if a lazily decoded source fails
+  partway, reads come back short with no diagnostic. The error should be
+  attached to the content node.
+- **Post-filters inside `Codec`.** 7z BCJ/Delta chains decode in memory
+  because the filters are not `Codec` stages; making them stages would let
+  them decode lazily.
+- **Bit-at-a-time Huffman** (inflate, LZX, implode) is fine for viewing but
+  slow on very large members; table-driven decoding is the obvious next
+  step if it ever matters.
+- **Probing magic-less codecs** (Brotli) is done by a bounded trial decode
+  of small, complete files only; measured at about 1 in 10⁶ false positives
+  on random 4–63 byte inputs and none on short text.
+
 ## Open questions
 
 - Eviction: re-deriving collapsed subtrees and resume keys for pages, so that
   memory stays bounded in long sessions.
 - Random access into collections (`seek(index)`) for fixed-stride arrays.
 - Node links (to other nodes, not just spans) for graph-shaped formats.
-- Text encodings beyond ASCII/UTF-8/UTF-16 (CP437 for ZIP names, etc.).
+- CJK multi-byte encodings (Shift_JIS, EUC-JP, GBK/GB18030, Big5, EUC-KR):
+  labels are recognised and reported as unsupported; decoders with
+  generated tables (~200 KB) would belong behind a feature. Single-byte code
+  pages are in `codec::charset`.
 - Format detection beyond magic bytes; confidence and "inspect as…".

@@ -174,6 +174,11 @@ tests fail if that ever happens on a fixture.
   makes it resumable by rolling back steps that ran short, so it works
   lazily and inside chains with no extra effort. Report checksum problems
   through `Decode::warning`.
+- Look at the `Codec` enum before writing a decoder: most compression
+  schemes in the wild already have a variant (see the list in `DESIGN.md`).
+  Container framings that wrap a codec (WIM chunk tables, CAB folders,
+  Apple `pbz*`) are codecs too (`Codec::WimResource`, `Codec::CabFolder`,
+  `Codec::Pbz`), so the container dissector can stay a thin walker.
 - For a codec we do not have, emit a leaf with
   `Diagnostic::unsupported("LZMA compression")` and the span. Do not pull in
   crates (see the codec policy in `DESIGN.md`).
@@ -234,7 +239,11 @@ summary is the first thing the user sees on F3.
 
 Helpers: `crate::bytes::{u16_le, u32_be, ..., uleb128}`,
 `crate::text::{utf16z, latin1, until_nul, looks_like_text, dos_datetime,
-filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`.
+filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`,
+`crate::codec::crc` (CRC-32C, CRC-64/XZ, CRC-24, CRC-16 variants, CRC-8, or
+`Crc::new(width, poly, init, reflected, xorout)` for another; never write a
+bitwise CRC loop), `crate::codec::charset` (single-byte code pages by WHATWG
+label).
 
 ## 8. Rules (enforced by lints and tests)
 
