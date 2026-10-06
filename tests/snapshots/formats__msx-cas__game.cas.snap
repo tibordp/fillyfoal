@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.cas — MSX cassette, 2 blocks, 1 file(s): GAME (binary)  [0x0+0x40]
+    Header: GAME: "GAME" — binary  [0x0+0x18]
+    Data block — 32 bytes  [0x18+0x28]

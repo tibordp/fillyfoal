@@ -764,6 +764,14 @@ pub static FORMATS: &[&Format] = &[
     &retro::trackers::PT3,
     &retro::trackers::PSG,
     &retro::trackers::AHX,
+    &retro::tapes::PZX,
+    &retro::tapes::CSW,
+    &retro::tapes::C64_TAP,
+    &retro::tapes::G64,
+    &retro::tapes::P00,
+    &retro::tapes::SCL,
+    &retro::tapes::MSX_CAS,
+    &retro::tapes::ATARI_CAR,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -776,6 +784,10 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles2::VIRTUAL_BOY,
     &retro::states::GCI,
     &retro::states::FM2,
+    &retro::tapes::ZX_TAP,
+    &retro::tapes::TRD,
+    &retro::tapes::ORIC_TAP,
+    &retro::tapes::ATARI_ST_PRG,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --
