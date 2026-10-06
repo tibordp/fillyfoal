@@ -382,4 +382,18 @@ impl Decode for Lzop {
     fn consumed(&self) -> usize {
         self.pos
     }
+
+    fn releasable_input(&self) -> usize {
+        // Headers and blocks (with their checks) are read whole from `pos`.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Blocks are independent, and checked as they are decoded.
+        out_len
+    }
 }

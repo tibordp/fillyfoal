@@ -198,11 +198,11 @@ mod lz {
     use super::assert_on_demand;
     use fillyfoal::codec::{Codec, pipeline, wim};
 
-    fn read(path: &str) -> Vec<u8> {
+    pub fn read(path: &str) -> Vec<u8> {
         std::fs::read(format!("{}/tests/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap()
     }
 
-    fn eager(codec: &Codec, input: &[u8]) -> Vec<u8> {
+    pub fn eager(codec: &Codec, input: &[u8]) -> Vec<u8> {
         pipeline::decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).unwrap()
     }
 
@@ -210,7 +210,7 @@ mod lz {
         lines_n(7000)
     }
 
-    fn lines_n(n: u32) -> Vec<u8> {
+    pub fn lines_n(n: u32) -> Vec<u8> {
         (0..n)
             .map(|i| format!("line {i}: the quick brown fox {} jumps over {}\n", i * 7919 % 1000, i * 104_729 % 9973))
             .collect::<String>()
@@ -218,12 +218,12 @@ mod lz {
     }
 
     /// `lzma_text` of tests/core.rs.
-    fn text() -> Vec<u8> {
+    pub fn text() -> Vec<u8> {
         (0..2000).map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
     }
 
     /// `legacy_mixed` of tests/core.rs.
-    fn mixed() -> Vec<u8> {
+    pub fn mixed() -> Vec<u8> {
         let mut x: u32 = 12345;
         let noise: Vec<u8> = (0..9000)
             .map(|_| {
@@ -307,6 +307,12 @@ mod lz {
 
     #[test]
     fn wim_resources_are_on_demand() {
+        let (codec, input, expected) = wim_resource();
+        assert_on_demand(&codec, &input, &expected);
+    }
+
+    /// A WIM resource (its codec, encoded bytes and decoded bytes).
+    pub fn wim_resource() -> (Codec, Vec<u8>, Vec<u8>) {
         // LZX chunks (32 KiB each) and stored ones, the last one short.
         let lzx = read("data/cab/wim-chunk.lzx");
         let lzx_out = eager(&Codec::Lzx(fillyfoal::codec::lzx::Params::wim_chunk(32768)), &lzx);
@@ -340,7 +346,7 @@ mod lz {
             chunk: 32768,
             original: expected.len() as u64,
         });
-        assert_on_demand(&codec, &input, &expected);
+        (codec, input, expected)
     }
 
     #[test]
@@ -490,6 +496,153 @@ fn inflate_releases() {
     let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/lazy/big.zlib")).unwrap();
     let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
     assert_releases(&Codec::Zlib, &data, &expected, 32 * 1024 + 2 * 16 * 1024 + 65_536);
+}
+
+/// Releasing for the LZ-family, chunked and stream-cipher codecs, on the
+/// real-encoder data of `mod lz`.
+mod lz_releases {
+    use super::assert_releases;
+    use super::lz::{eager, lines, lines_n, mixed, read, text, wim_resource};
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::crypto::stream::{Key, ZipCryptoKeys};
+
+    const STEPS: usize = 2 * 16 * 1024;
+
+    #[test]
+    fn lzfse_releases() {
+        // The window, plus a block (the encoder's are up to about 200 KiB).
+        let max = fillyfoal::codec::lzfse::WINDOW + STEPS + 256 * 1024;
+        assert_releases(&Codec::Lzfse, &read("data/lzfse/lines.lzfse"), &lines_n(14000), max);
+        let words = read("data/lzfse/words.lzfse");
+        let expected = eager(&Codec::Lzfse, &words);
+        assert_eq!(expected.len(), 2_493_885);
+        assert_releases(&Codec::Lzfse, &words, &expected, max);
+    }
+
+    #[test]
+    fn lz4_frames_release() {
+        // Linked 64 KiB blocks: the 64 KiB window, plus a block.
+        let big = read("data/lz4/lines.lz4");
+        assert_releases(&Codec::Lz4Frame, &big, &lines(), 65_536 + STEPS + 65_536);
+        // A skippable frame, a frame and a legacy frame, concatenated.
+        let legacy = read("fixtures/lz4-legacy/legacy.lz4");
+        let mut input = vec![0x5a, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 1, 2, 3];
+        input.extend_from_slice(&big);
+        input.extend_from_slice(&legacy);
+        let expected = [lines(), eager(&Codec::Lz4Frame, &legacy)].concat();
+        assert_releases(&Codec::Lz4Frame, &input, &expected, 65_536 + STEPS + 65_536);
+    }
+
+    #[test]
+    fn framed_snappy_releases() {
+        // Independent chunks of at most 64 KiB: only the last step is held.
+        assert_releases(&Codec::SnappyFramed, &read("data/snappy/lines.sz"), &lines(), STEPS + 65_536);
+    }
+
+    #[test]
+    fn lzop_releases() {
+        let text_lzo = read("data/lzo/text.lzo");
+        let mixed_lzo = read("data/lzo/mixed.lzo");
+        let input = [&text_lzo[..], &text_lzo, &mixed_lzo, &text_lzo, &text_lzo].concat();
+        let expected = [text(), text(), mixed(), text(), text()].concat();
+        // Independent blocks of up to 256 KiB.
+        assert_releases(&Codec::Lzop, &input, &expected, STEPS + 256 * 1024);
+    }
+
+    #[test]
+    fn pbz_releases() {
+        for path in ["data/pbz/lines-lzfse.aar", "data/pbz/lines-lzma.aar"] {
+            let input = read(path);
+            let expected = eager(&Codec::Pbz, &input);
+            // Independent 64 KiB chunks.
+            assert_releases(&Codec::Pbz, &input, &expected, STEPS + 65_536);
+        }
+    }
+
+    #[test]
+    fn wim_resources_release() {
+        let (codec, input, expected) = wim_resource();
+        // Independent 32 KiB chunks; the table is copied out of the input.
+        assert_releases(&codec, &input, &expected, STEPS + 32 * 1024);
+    }
+
+    #[test]
+    fn unix_compress_releases() {
+        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        // Output is never read back: a step (and a string) at most.
+        let max = STEPS + 65_536;
+        assert_releases(&Codec::UnixCompress, &read("data/compress/text.Z"), &text(), max);
+        assert_releases(&Codec::UnixCompress, &read("data/compress/text12.Z"), &text(), max);
+        assert_releases(&Codec::UnixCompress, &read("data/compress/rnd.Z"), &random, max);
+        assert_releases(&Codec::UnixCompress, &read("data/compress/lines.Z"), &lines(), max);
+        let words = read("data/compress/words.Z");
+        let expected = eager(&Codec::UnixCompress, &words);
+        assert_eq!(expected.len(), 2_493_885);
+        assert_releases(&Codec::UnixCompress, &words, &expected, max);
+    }
+
+    /// The raw DEFLATE stream of tests/data/lazy/big.zlib and its 64 MiB
+    /// output.
+    fn big_deflate() -> (Vec<u8>, Vec<u8>) {
+        let zlib = read("data/lazy/big.zlib");
+        let raw = zlib[2..zlib.len() - 4].to_vec();
+        let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
+        (raw, expected)
+    }
+
+    /// ZipCrypto encryption (with a 12-byte header), through the
+    /// decryption keys: the keystream byte is what decrypting 0 yields.
+    fn zipcrypto_encrypt(password: &[u8], plain: &[u8]) -> Vec<u8> {
+        let mut keys = ZipCryptoKeys::new(password);
+        [&[0x5au8; 12][..], plain]
+            .concat()
+            .into_iter()
+            .map(|p| {
+                let c = p ^ keys.clone().decrypt(0);
+                keys.decrypt(c);
+                c
+            })
+            .collect()
+    }
+
+    fn deflate_after(cipher: Codec) -> Codec {
+        Codec::chain("decrypt+deflate", "decrypt+deflate (lazy)", vec![cipher, Codec::Deflate])
+    }
+
+    #[test]
+    fn zipcrypto_deflate_chain_releases() {
+        let max = 32 * 1024 + STEPS + 65_536;
+        let codec = deflate_after(Codec::ZipCrypto(Key::new(b"fillyfoal".to_vec())));
+        // The deflated member of tests/fixtures/zip/zipcrypto.zip.
+        let zip = read("fixtures/zip/zipcrypto.zip");
+        let le16 = |at: usize| usize::from(u16::from_le_bytes([zip[at], zip[at + 1]]));
+        let le32 = |at: usize| u32::from_le_bytes(zip[at..at + 4].try_into().unwrap()) as usize;
+        assert_eq!(&zip[..4], b"PK\x03\x04");
+        assert_eq!(le16(8), 8, "deflated");
+        let data = 30 + le16(26) + le16(28);
+        let member = &zip[data..data + le32(18)];
+        let expected = eager(&codec, member);
+        assert_eq!(expected.len(), le32(22));
+        assert_releases(&codec, member, &expected, max);
+        // 64 MiB through the chain.
+        let (raw, expected) = big_deflate();
+        assert_releases(&codec, &zipcrypto_encrypt(b"fillyfoal", &raw), &expected, max);
+    }
+
+    #[test]
+    fn ctr_and_rc4_release() {
+        let max = 32 * 1024 + STEPS + 65_536;
+        let (raw, expected) = big_deflate();
+        // Both are their own inverse.
+        let aes = Codec::AesCtrLe(Key::new((0..32u8).collect::<Vec<u8>>()));
+        assert_releases(&deflate_after(aes.clone()), &eager(&aes, &raw), &expected, max);
+        let rc4 = Codec::Rc4(Key::new(b"fillyfoal".to_vec()));
+        assert_releases(&deflate_after(rc4.clone()), &eager(&rc4, &raw), &expected, max);
+        // On their own, with the last AES block partial.
+        let odd = &lines()[..100_001];
+        assert_releases(&aes, &eager(&aes, odd), odd, STEPS + 16);
+        assert_releases(&rc4, &eager(&rc4, odd), odd, STEPS);
+    }
 }
 
 /// zstd: within a frame, output before its window (Window_Size, or the

@@ -101,12 +101,15 @@ enum Lz4At {
     /// Before a frame's magic number.
     Magic,
     /// Inside a frame whose output starts at `start` (the window of its
-    /// linked blocks).
-    Frame { start: usize, block_checksum: bool, content_checksum: bool },
+    /// linked blocks; independent blocks see only their own output).
+    Frame { start: usize, independent: bool, block_checksum: bool, content_checksum: bool },
     /// Inside a legacy frame.
     Legacy,
     Done,
 }
+
+/// The farthest an LZ4 match reaches back (16-bit offsets).
+const LZ4_WINDOW: usize = 1 << 16;
 
 /// LZ4 frames (and legacy frames, and skippable frames), concatenated;
 /// decoded a block at a time. The content checksum is not verified.
@@ -150,6 +153,7 @@ impl Lz4Frame {
                         self.pos = pos.saturating_add(2).saturating_add(if content_size { 8 } else { 0 }).saturating_add(1);
                         self.at = Lz4At::Frame {
                             start: out.len(),
+                            independent: flg & 0x20 != 0,
                             block_checksum: flg & 0x10 != 0,
                             content_checksum: flg & 0x04 != 0,
                         };
@@ -165,7 +169,7 @@ impl Lz4Frame {
                     _ => self.at = Lz4At::Done,
                 }
             }
-            Lz4At::Frame { start, block_checksum, content_checksum } => {
+            Lz4At::Frame { start, independent, block_checksum, content_checksum } => {
                 let size = u32_at(input, pos).ok_or_else(|| bad("truncated LZ4 block size"))?;
                 let pos = pos.saturating_add(4);
                 if size == 0 {
@@ -182,7 +186,8 @@ impl Lz4Frame {
                 } else {
                     // Linked blocks refer back into earlier output of the
                     // same frame; earlier frames are not part of the window.
-                    lz4_block_from(block, out, start, false, limit)?;
+                    let base = if independent { out.len() } else { start };
+                    lz4_block_from(block, out, base, false, limit)?;
                 }
                 self.pos = pos.saturating_add(len).saturating_add(if block_checksum { 4 } else { 0 });
                 if self.pos > input.len() && !eof {
@@ -230,6 +235,30 @@ impl Decode for Lz4Frame {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Units are read whole from `pos`.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        match self.at {
+            // Linked blocks see the frame's last 64 KiB.
+            Lz4At::Frame { start, independent: false, .. } => out_len.saturating_sub(LZ4_WINDOW).max(start).min(out_len),
+            // Independent blocks (and legacy ones) see only their own output.
+            _ => out_len,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Lz4At::Frame { start, .. } = &mut self.at {
+            *start = start.saturating_sub(n);
+        }
     }
 }
 
@@ -357,6 +386,19 @@ impl Decode for SnappyFramed {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Chunks are independent: output is never read back.
+        out_len
     }
 }
 

@@ -3,6 +3,8 @@
 //! of the table), then the chunks. Each chunk is compressed independently,
 //! or stored when compression did not shrink it.
 
+use std::sync::Arc;
+
 use crate::codec::pipeline::{Decode, Step};
 use crate::codec::{Codec, lzx, pipeline};
 use crate::error::{Diagnostic, Result};
@@ -28,22 +30,45 @@ pub struct Resource {
     pub original: u64,
 }
 
-/// A [`Resource`] decoded a chunk per step. Chunk offsets are read from the
-/// table in the input as they are needed; the last chunk runs to the end of
+/// A [`Resource`] decoded a chunk per step. The chunk table is copied out
+/// of the input by the first step (shared, so snapshots stay cheap), so
+/// that consumed input can be released; the last chunk runs to the end of
 /// the input, so it waits for all of it.
 #[derive(Clone)]
 pub struct Decoder {
     resource: Resource,
+    /// The chunk table, once read.
+    table: Option<Arc<[u8]>>,
+    /// Whether the table's offsets never decrease (otherwise a chunk may
+    /// lie in consumed input, which is then kept).
+    ascending: bool,
     /// The next chunk.
     index: u64,
     consumed: usize,
+    /// Input and output bytes dropped from the front.
+    released_in: usize,
+    released_out: usize,
     done: bool,
 }
 
 impl Decoder {
     pub fn new(resource: Resource) -> Self {
-        Decoder { resource, index: 0, consumed: 0, done: false }
+        Decoder {
+            resource,
+            table: None,
+            ascending: false,
+            index: 0,
+            consumed: 0,
+            released_in: 0,
+            released_out: 0,
+            done: false,
+        }
     }
+}
+
+/// A little-endian table entry.
+fn entry_value(e: &[u8]) -> u64 {
+    e.iter().rev().fold(0u64, |acc, &b| acc << 8 | u64::from(b))
 }
 
 impl Decode for Decoder {
@@ -54,7 +79,7 @@ impl Decode for Decoder {
             return Err(Diagnostic::unsupported(format!("WIM chunk size {chunk:#x}")));
         }
         let original = usize::try_from(r.original).map_err(|_| bad("too large"))?;
-        if original > limit {
+        if original > limit.saturating_add(self.released_out) {
             return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
         }
         let chunks = r.original.div_ceil(chunk);
@@ -62,18 +87,42 @@ impl Decode for Decoder {
         // resource is one empty chunk).
         let entries = chunks.saturating_sub(1);
         let entry: usize = if r.original > u64::from(u32::MAX) { 8 } else { 4 };
-        let table_len = usize::try_from(entries)
-            .ok()
-            .and_then(|n| n.checked_mul(entry))
-            .filter(|&n| n <= input.len())
-            .ok_or_else(|| bad("chunk table larger than the resource"))?;
-        let (table, body) = input.split_at_checked(table_len).ok_or_else(|| bad("truncated chunk table"))?;
+        let table = match &self.table {
+            Some(table) => Arc::clone(table),
+            None => {
+                let table: Arc<[u8]> = usize::try_from(entries)
+                    .ok()
+                    .and_then(|n| n.checked_mul(entry))
+                    .and_then(|n| input.get(..n))
+                    .ok_or_else(|| bad("chunk table larger than the resource"))?
+                    .into();
+                let mut prev = 0;
+                self.ascending = table.chunks(entry).all(|e| {
+                    let v = entry_value(e);
+                    let ok = v >= prev;
+                    prev = v;
+                    ok
+                });
+                self.table = Some(Arc::clone(&table));
+                table
+            }
+        };
+        let table_len = table.len();
+        // Where chunk `i` starts in the input as it is now.
+        let released_in = self.released_in;
         let start_of = |i: u64| -> Result<usize> {
-            let Some(i) = i.checked_sub(1) else { return Ok(0) };
-            let at = usize::try_from(i).ok().and_then(|i| i.checked_mul(entry)).unwrap_or(usize::MAX);
-            let e = table.get(at..at.saturating_add(entry)).ok_or_else(|| bad("truncated chunk table"))?;
-            let v = e.iter().rev().fold(0u64, |acc, &b| acc << 8 | u64::from(b));
-            usize::try_from(v).map_err(|_| bad("bad chunk offset"))
+            let offset = match i.checked_sub(1) {
+                None => 0,
+                Some(i) => {
+                    let at = usize::try_from(i).ok().and_then(|i| i.checked_mul(entry)).unwrap_or(usize::MAX);
+                    let e = table.get(at..at.saturating_add(entry)).ok_or_else(|| bad("truncated chunk table"))?;
+                    usize::try_from(entry_value(e)).map_err(|_| bad("bad chunk offset"))?
+                }
+            };
+            table_len
+                .checked_add(offset)
+                .and_then(|at| at.checked_sub(released_in))
+                .ok_or_else(|| bad("chunk outside the resource"))
         };
         let window_bits = u8::try_from(chunk.trailing_zeros()).unwrap_or(15);
         let mark = out.len();
@@ -84,8 +133,8 @@ impl Decode for Decoder {
                 return Err(bad("waiting for the last chunk"));
             }
             let from = start_of(i)?;
-            let to = if last { body.len() } else { start_of(i.saturating_add(1))? };
-            let data = body.get(from..to).ok_or_else(|| bad("chunk outside the resource"))?;
+            let to = if last { input.len() } else { start_of(i.saturating_add(1))? };
+            let data = input.get(from..to).ok_or_else(|| bad("chunk outside the resource"))?;
             let len = chunk.min(r.original.saturating_sub(i.saturating_mul(chunk)));
             let ulen = usize::try_from(len).unwrap_or(usize::MAX);
             if data.len() >= ulen {
@@ -106,9 +155,9 @@ impl Decode for Decoder {
                 out.extend_from_slice(&decoded);
             }
             self.index = i.saturating_add(1);
-            self.consumed = table_len.saturating_add(to);
+            self.consumed = to;
             if last {
-                if out.len() != original {
+                if self.released_out.saturating_add(out.len()) != original {
                     return Err(bad("chunks do not add up to the resource size"));
                 }
                 self.done = true;
@@ -121,5 +170,24 @@ impl Decode for Decoder {
 
     fn consumed(&self) -> usize {
         self.consumed
+    }
+
+    fn releasable_input(&self) -> usize {
+        // The table has been copied out before anything is consumed.
+        if self.ascending { self.consumed } else { 0 }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.consumed = self.consumed.saturating_sub(n);
+        self.released_in = self.released_in.saturating_add(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Chunks are independent; their sizes are tallied as they go.
+        out_len
+    }
+
+    fn release_output(&mut self, n: usize) {
+        self.released_out = self.released_out.saturating_add(n);
     }
 }

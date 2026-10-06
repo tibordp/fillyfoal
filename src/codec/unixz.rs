@@ -149,12 +149,47 @@ impl Lzw {
     }
 }
 
-/// A `.Z` stream, decoded as far as the input reaches.
-#[derive(Default)]
+impl Lzw {
+    /// Code data bits that may be dropped: up to the next code, or to the
+    /// latest group boundary at or before it, which [`Lzw::align`] can
+    /// count from instead of `mark`.
+    fn releasable_bits(&self) -> usize {
+        let group = usize::try_from(self.bits).unwrap_or(9).saturating_mul(8);
+        let into_group = self.pos.saturating_sub(self.mark).checked_rem(group).unwrap_or(0);
+        self.pos.saturating_sub(into_group)
+    }
+
+    /// Drops `n` bits (whole bytes, at most [`Lzw::releasable_bits`]) from
+    /// the front of the code data.
+    fn release(&mut self, n: usize) {
+        let group = usize::try_from(self.bits).unwrap_or(9).saturating_mul(8);
+        let into_group = self.pos.saturating_sub(self.mark).checked_rem(group).unwrap_or(0);
+        // A group boundary as good as `mark` for aligning, kept in range.
+        self.mark = self.pos.saturating_sub(into_group).saturating_sub(n);
+        self.pos = self.pos.saturating_sub(n);
+    }
+}
+
+/// A `.Z` stream, decoded as far as the input reaches. Output is never
+/// read back (the string table holds the strings), so all of it can be
+/// released, and input up to the current code.
 pub struct UnixCompress {
     lzw: Option<Lzw>,
+    /// Header bytes still at the front of the input (3, until released).
+    header: usize,
     consumed: usize,
     done: bool,
+}
+
+impl Default for UnixCompress {
+    fn default() -> Self {
+        UnixCompress {
+            lzw: None,
+            header: 3,
+            consumed: 0,
+            done: false,
+        }
+    }
 }
 
 impl Decoder for UnixCompress {
@@ -176,10 +211,10 @@ impl Decoder for UnixCompress {
                 self.lzw.insert(Lzw::new(flags)?)
             }
         };
-        let data = input.get(3..).unwrap_or_default();
+        let data = input.get(self.header..).unwrap_or_default();
         let mark = out.len();
         if lzw.run(data, out, step, limit)? {
-            self.consumed = lzw.pos.div_ceil(8).saturating_add(3);
+            self.consumed = lzw.pos.div_ceil(8).saturating_add(self.header);
             return Ok(Status::More);
         }
         if eof {
@@ -188,12 +223,36 @@ impl Decoder for UnixCompress {
             self.done = true;
             return Ok(Status::Done);
         }
-        self.consumed = (lzw.pos / 8).saturating_add(3);
+        self.consumed = (lzw.pos / 8).saturating_add(self.header);
         Ok(if out.len() > mark { Status::More } else { Status::NeedInput })
     }
 
     fn consumed(&self) -> usize {
         self.consumed
+    }
+
+    fn releasable_input(&self) -> usize {
+        match &self.lzw {
+            Some(_) if self.done => self.consumed,
+            Some(lzw) => self.header.saturating_add(lzw.releasable_bits() / 8),
+            None => 0,
+        }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.consumed = self.consumed.saturating_sub(n);
+        if self.done {
+            return;
+        }
+        let from_header = n.min(self.header);
+        self.header = self.header.saturating_sub(from_header);
+        if let Some(lzw) = &mut self.lzw {
+            lzw.release(n.saturating_sub(from_header).saturating_mul(8));
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
     }
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {

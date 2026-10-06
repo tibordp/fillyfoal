@@ -78,6 +78,8 @@ pub fn looks_compressed(algorithm: u8, data: &[u8]) -> bool {
 #[derive(Clone, Default)]
 pub struct Pbz {
     pos: usize,
+    /// The magic's last byte, once the header has been read.
+    algorithm: Option<u8>,
     done: bool,
 }
 
@@ -99,11 +101,18 @@ fn chunk(algorithm: u8, data: &[u8], room: usize) -> Result<Vec<u8>> {
 
 impl Decode for Pbz {
     fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
-        let algorithm = match input.get(..4) {
-            Some([b'p', b'b', b'z', a @ (b'x' | b'e' | b'4' | b'z')]) => *a,
-            _ => return Err(bad("not a pbz stream")),
+        let algorithm = match self.algorithm {
+            Some(a) => a,
+            None => {
+                let a = match input.get(..4) {
+                    Some([b'p', b'b', b'z', a @ (b'x' | b'e' | b'4' | b'z')]) => *a,
+                    _ => return Err(bad("not a pbz stream")),
+                };
+                self.algorithm = Some(a);
+                self.pos = 12;
+                a
+            }
         };
-        self.pos = self.pos.max(12);
         let mark = out.len();
         while !self.done {
             let pos = self.pos;
@@ -148,5 +157,19 @@ impl Decode for Pbz {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Chunks are read whole from `pos`; the header is parsed once.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Chunks are independent streams.
+        out_len
     }
 }
