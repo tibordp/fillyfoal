@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ usb.aff — AFF image, 5 segments, 1 pages, 16.0 KiB image  [0x0+0x123]
+▾ lzma.aff — AFF image, 5 segments, 1 pages, 16.0 KiB image  [0x0+0x13e]
     Signature: "AFF10"  [0x0+0x8]
   ▾ pagesize: 16384  [0x8+0x20] → 0x20+0x0
       Magic: "AFF"  [0x8+0x4]
@@ -31,13 +31,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Data  [0x78+0x17]
       Trailer: "ATT"  [0x8f+0x4]
       Segment length: 70  [0x93+0x4]
-  ▾ page0 — page 0, 68 bytes stored  [0x97+0x61] → 0xac+0x44
+  ▾ page0 — page 0, 95 bytes stored  [0x97+0x7c] → 0xac+0x5f
       Magic: "AFF"  [0x97+0x4]
       Name length: 5  [0x9b+0x4]
-      Data length: 68  [0x9f+0x4]
-      Flags: 0x3 [COMPRESSED | COMPRESSED_MAX]  [0xa3+0x4]
+      Data length: 95  [0x9f+0x4]
+      Flags: 0x21 [COMPRESSED | ALG_LZMA]  [0xa3+0x4]
       Name: "page0"  [0xa7+0x5]
-    ▾ Data (zlib) — MBR partition table, 1 primary partition, 16 KiB  [0xac+0x44]
+    ▾ Data (LZMA) — MBR partition table, 1 primary partition, 16 KiB  [0xac+0x5f]
         Bootstrap code — empty  [#1:0x0+0x1b8]
         Disk signature: 0x0  [#1:0x1b8+0x4]
       ▾ Partition 1 — FAT32 (LBA) (0x0c), 14.6 MiB at LBA 2048, active  [#1:0x1be+0x10]
@@ -52,14 +52,14 @@ expression: "common::explore(&display_name(&path), &data)"
             ! note: empty
             ! truncated: needed 0xea6000 bytes at 0x100000, only 0x0 available [#1:0x100000+0xea6000]
         Boot signature: 0xaa55  [#1:0x1fe+0x2]
-      Trailer: "ATT"  [0xf0+0x4]
-      Segment length: 97  [0xf4+0x4]
-  ▾ md5 — 16 bytes  [0xf8+0x2b] → 0x10b+0x10
-      Magic: "AFF"  [0xf8+0x4]
-      Name length: 3  [0xfc+0x4]
-      Data length: 16  [0x100+0x4]
-      Argument: 0  [0x104+0x4]
-      Name: "md5"  [0x108+0x3]
-      Data  [0x10b+0x10]
-      Trailer: "ATT"  [0x11b+0x4]
-      Segment length: 43  [0x11f+0x4]
+      Trailer: "ATT"  [0x10b+0x4]
+      Segment length: 124  [0x10f+0x4]
+  ▾ md5 — 16 bytes  [0x113+0x2b] → 0x126+0x10
+      Magic: "AFF"  [0x113+0x4]
+      Name length: 3  [0x117+0x4]
+      Data length: 16  [0x11b+0x4]
+      Argument: 0  [0x11f+0x4]
+      Name: "md5"  [0x123+0x3]
+      Data  [0x126+0x10]
+      Trailer: "ATT"  [0x136+0x4]
+      Segment length: 43  [0x13a+0x4]

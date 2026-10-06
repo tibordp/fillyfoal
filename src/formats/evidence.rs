@@ -335,10 +335,13 @@ fn aff_page(name: &str) -> Option<&str> {
 
 const AFF_PAGE_FLAGS: FlagTable = &[
     flag(1, "COMPRESSED"),
-    flag(2, "ZLIB"),
-    flag(4, "LZMA"),
-    flag(8, "ZERO"),
+    flag(2, "COMPRESSED_MAX"),
+    flag(0x10, "ALG_BZIP"),
+    flag(0x20, "ALG_LZMA"),
 ];
+const AFF_ALG_ZLIB: u32 = 0x00;
+const AFF_ALG_LZMA: u32 = 0x20;
+const AFF_ALG_ZERO: u32 = 0x30;
 
 async fn aff(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -435,14 +438,17 @@ async fn aff_segment(
         f.u32("Argument").emit()?;
     }
     cx.emit(Node::new("Name").span(name_span).value(text(name.clone())));
-    if page && arg & 3 == 3 {
-        cx.emit(content("Data (zlib)", input, data, Codec::Zlib, None));
-    } else if page && arg & 1 != 0 {
-        cx.emit(
-            Node::new("Data")
+    // afflib: bit 0 marks a compressed page, bits 4..8 the algorithm.
+    if page && arg & 1 != 0 {
+        cx.emit(match arg & 0xf0 {
+            AFF_ALG_ZLIB => content("Data (zlib)", input, data, Codec::Zlib, None),
+            // afflib's LZMA pages are `.lzma` streams (properties, size).
+            AFF_ALG_LZMA => content("Data (LZMA)", input, data, Codec::LzmaAlone, None),
+            AFF_ALG_ZERO => Node::new("Data").span(data).summary("count of zero bytes"),
+            _ => Node::new("Data")
                 .span(data)
-                .diag(Diagnostic::unsupported("LZMA compression")),
-        );
+                .diag(Diagnostic::unsupported(format!("compression algorithm {:#x}", arg & 0xf0))),
+        });
     } else if page {
         cx.emit(embedded("Data", input.nested(data)));
     } else {
