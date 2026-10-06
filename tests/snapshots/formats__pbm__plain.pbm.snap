@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ plain.pbm — 4×2, PBM plain, 1-bit  [0x0+0x28]
+    Magic: "P1" — PBM, plain  [0x0+0x2]
+    Comment: "# a plain bitmap"  [0x3+0x10]
+    Width: 4  [0x14+0x1]
+    Height: 2  [0x16+0x1]
+    Raster  [0x18+0x10]

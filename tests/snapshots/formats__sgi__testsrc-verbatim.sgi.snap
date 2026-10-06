@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc-verbatim.sgi — 8×6, grayscale, 8-bit, verbatim  [0x0+0x230]
+  ▾ Header  [0x0+0x200]
+      Magic: 0x1da  [0x0+0x2]
+      Storage: Verbatim (0x0)  [0x2+0x1]
+      Bytes per channel: 1  [0x3+0x1]
+      Dimension: 2  [0x4+0x2]
+      Width: 8  [0x6+0x2]
+      Height: 6  [0x8+0x2]
+      Channels: 1  [0xa+0x2]
+      Minimum pixel value: 0  [0xc+0x4]
+      Maximum pixel value: 255  [0x10+0x4]
+      Reserved: 00 00 00 00  |....|  [0x14+0x4]
+      Image name: ""  [0x18+0x50]
+      Colormap: Normal (0x0)  [0x68+0x4]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x6c+0x194]
+    Pixel data — 6 planar scanlines, bottom row first  [0x200+0x30]
