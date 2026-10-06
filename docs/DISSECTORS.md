@@ -163,15 +163,23 @@ tests fail if that ever happens on a fixture.
 - `embedded(name, input.nested(span))`: lazy node that detects the format of
   `span` and dissects it (e.g. EXIF in a JPEG, an icon in a PE).
 - `embedded_as(name, input.nested(span), &other::FORMAT)`: known format.
-- `content(name, input, span, Codec::{Stored, Deflate, Zlib}, expected)`:
-  decompresses on expansion into a derived source, then dissects in place.
+- `content(name, input, span, codec, expected)`: decodes on expansion into
+  a derived source, then dissects in place. Large members (with a plausible
+  `expected` size) are decoded lazily, only as far as reads reach. `codec`
+  is a `crate::codec::Codec`: a single codec or `Codec::chain(name,
+  lazy_name, [stages])` (filters, decryption, then decompression).
+- **Writing a codec:** implement `codec::pipeline::Decode` (decode from all
+  input so far into all output so far, a bounded step at a time; running
+  out of input is just an error) and add a `Codec` variant. `Streaming`
+  makes it resumable by rolling back steps that ran short, so it works
+  lazily and inside chains with no extra effort. Report checksum problems
+  through `Decode::warning`.
 - For a codec we do not have, emit a leaf with
   `Diagnostic::unsupported("LZMA compression")` and the span. Do not pull in
   crates (see the codec policy in `DESIGN.md`).
-- `crate::codec::inflate_span(&cx, span, zlib, expected)` if you need the
-  decoded bytes yourself (e.g. a compressed text chunk). `content()` already
-  switches to `cx.inflate_lazy(span, zlib, len)` for large members, which
-  decodes only as far as reads reach — so never read the *end* of a large
+- `crate::codec::decode_span(&cx, span, &codec, expected)` if you need the
+  decoded bytes yourself (e.g. a compressed text chunk); `cx.decode_lazy`
+  for a lazily decoded source. Never read the *end* of a large lazily
   decoded member unless the user asked for it.
 - **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
   sector chains, SQLite overflow pages): describe it as pieces instead of

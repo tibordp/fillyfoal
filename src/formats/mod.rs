@@ -1995,13 +1995,7 @@ pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
 /// Members larger than this are decompressed lazily rather than up front.
 const LAZY_THRESHOLD: u64 = 1024 * 1024;
 
-/// How compressed content is encoded.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Codec {
-    Stored,
-    Deflate,
-    Zlib,
-}
+pub use crate::codec::Codec;
 
 /// A node for content stored in `span` with `codec`. Nothing is read or
 /// decompressed until it is expanded; then the content is decoded into a
@@ -2025,27 +2019,27 @@ async fn expand_content(
     let inner = match codec {
         Codec::Stored => input.nested(span),
         // Large members are decoded lazily: listing the first entries of a
-        // multi-gigabyte tarball only decodes what those entries need.
-        // DEFLATE cannot expand by more than about 1032:1, so larger claims
-        // are bogus and get the eager path (which reports the real size).
-        Codec::Deflate | Codec::Zlib
-            if expected
-                .is_some_and(|e| e > LAZY_THRESHOLD && e <= span.len.saturating_mul(1032)) =>
+        // multi-gigabyte tarball only decodes what those entries need. A
+        // claimed size beyond the codec's maximum ratio is bogus and gets the
+        // eager path (which reports the real size).
+        codec
+            if expected.is_some_and(|e| {
+                e > LAZY_THRESHOLD && e <= span.len.saturating_mul(codec.max_ratio())
+            }) =>
         {
             let len = expected.unwrap_or(0);
-            let decoded = cx.inflate_lazy(span, codec == Codec::Zlib, len)?;
-            cx.annotate(format!("{len:#x} bytes, decompressed on demand"));
+            let decoded = cx.decode_lazy(span, &codec, len)?;
+            cx.annotate(format!("{len:#x} bytes, decoded on demand"));
             input.nested(decoded)
         }
-        Codec::Deflate | Codec::Zlib => {
-            let decoded =
-                crate::codec::inflate_span(&cx, span, codec == Codec::Zlib, expected).await?;
-            cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
+        codec => {
+            let decoded = crate::codec::decode_span(&cx, span, &codec, expected).await?;
+            cx.annotate(format!("{:#x} bytes {}", decoded.span.len, codec.verb()));
             if let Some(e) = decoded.error {
                 cx.diag(e);
             } else if decoded.consumed < span.len {
                 cx.diag(Diagnostic::note(format!(
-                    "{:#x} bytes follow the compressed stream",
+                    "{:#x} bytes follow the encoded stream",
                     span.len.saturating_sub(decoded.consumed)
                 )));
             }

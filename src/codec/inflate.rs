@@ -94,14 +94,7 @@ enum State {
     Done,
 }
 
-/// Progress of [`Inflate::step`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Step {
-    /// More output may follow; call again.
-    More,
-    /// The final block has ended.
-    Done,
-}
+pub use super::pipeline::Step;
 
 /// A resumable inflater over an in-memory compressed buffer.
 #[derive(Clone, Debug)]

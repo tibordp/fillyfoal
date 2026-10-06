@@ -1,11 +1,18 @@
-//! Codecs: decoders that turn a span into a derived source.
+//! Codecs: decoders (decompressors, filters, ciphers) that turn a span into
+//! a derived source.
 //!
-//! Decoders here are written in-house (see the codec policy in `DESIGN.md`).
-//! Today they decode whole members into memory, bounded by
-//! [`crate::Limits::max_derived`], in budgeted steps; streaming with
-//! checkpoints is future work.
+//! Decoders are written in-house (see the codec policy in `DESIGN.md`)
+//! against [`pipeline::Decode`], and chained with [`Codec::Chain`]. A
+//! [`Codec`] decodes eagerly ([`decode_span`]) or lazily, as far as reads
+//! reach ([`Cx::decode_lazy`](crate::Cx::decode_lazy)); either way decoded
+//! bytes count against [`crate::Limits::max_derived`].
 
 pub mod inflate;
+pub mod pipeline;
+
+use std::sync::Arc;
+
+use pipeline::{Decode, Decoder, Status, Step, Streaming};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
@@ -26,6 +33,193 @@ pub struct Decoded {
 
 /// Bytes decoded per step between budget checkpoints.
 const STEP: usize = 64 * 1024;
+
+/// How content is encoded: a decompressor, a filter, or a chain of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Codec {
+    Stored,
+    /// Raw DEFLATE (RFC 1951).
+    Deflate,
+    /// zlib-wrapped DEFLATE (RFC 1950), with its Adler-32 checked.
+    Zlib,
+    /// Stages applied in order. `name` and `lazy_name` identify the chain
+    /// for memoization (see [`Origin`]); they must be distinct.
+    Chain {
+        name: &'static str,
+        lazy_name: &'static str,
+        stages: Arc<[Codec]>,
+    },
+}
+
+impl Codec {
+    pub fn chain(name: &'static str, lazy_name: &'static str, stages: impl Into<Arc<[Codec]>>) -> Self {
+        Codec::Chain {
+            name,
+            lazy_name,
+            stages: stages.into(),
+        }
+    }
+
+    /// The transform name of eagerly decoded sources.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Codec::Stored => "stored",
+            Codec::Deflate => "deflate",
+            Codec::Zlib => "zlib",
+            Codec::Chain { name, .. } => name,
+        }
+    }
+
+    /// The transform name of lazily decoded sources.
+    pub fn lazy_name(&self) -> &'static str {
+        match self {
+            Codec::Stored => "stored",
+            Codec::Deflate => "deflate (lazy)",
+            Codec::Zlib => "zlib (lazy)",
+            Codec::Chain { lazy_name, .. } => lazy_name,
+        }
+    }
+
+    /// How the result is described ("decompressed", "decoded", "decrypted").
+    pub fn verb(&self) -> &'static str {
+        match self {
+            Codec::Stored => "stored",
+            Codec::Deflate | Codec::Zlib => "decompressed",
+            Codec::Chain { .. } => "decoded",
+        }
+    }
+
+    /// The largest plausible ratio of decoded to encoded size; larger claims
+    /// from a container are treated as bogus.
+    pub fn max_ratio(&self) -> u64 {
+        match self {
+            Codec::Stored => 1,
+            Codec::Deflate | Codec::Zlib => 1032,
+            Codec::Chain { stages, .. } => stages
+                .iter()
+                .map(Codec::max_ratio)
+                .fold(1u64, u64::saturating_mul),
+        }
+    }
+
+    /// A fresh decoder (`None` for [`Codec::Stored`]).
+    pub fn decoder(&self) -> Option<Box<dyn Decoder>> {
+        Some(match self {
+            Codec::Stored => return None,
+            Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
+            Codec::Zlib => Box::new(Streaming(Zlib::default())),
+            Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
+                stages.iter().filter_map(Codec::decoder).collect(),
+            )),
+        })
+    }
+}
+
+impl Decode for inflate::Inflate {
+    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        inflate::Inflate::step(self, input, out, step, limit)
+    }
+
+    fn consumed(&self) -> usize {
+        inflate::Inflate::consumed(self)
+    }
+}
+
+/// zlib: a 2-byte header, DEFLATE, and a big-endian Adler-32 trailer.
+#[derive(Clone, Default)]
+struct Zlib {
+    inflate: inflate::Inflate,
+    trailer: Option<u32>,
+}
+
+impl Decode for Zlib {
+    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let (Some(&cmf), Some(&flg)) = (input.first(), input.get(1)) else {
+            return Err(Diagnostic::malformed("truncated zlib header"));
+        };
+        if cmf & 0x0f != 8 || (u16::from(cmf) << 8 | u16::from(flg)) % 31 != 0 {
+            return Err(Diagnostic::malformed("not a zlib stream"));
+        }
+        if flg & 0x20 != 0 {
+            return Err(Diagnostic::unsupported("zlib preset dictionary"));
+        }
+        let body = input.get(2..).unwrap_or_default();
+        match self.inflate.step(body, out, step, limit)? {
+            Step::More => Ok(Step::More),
+            Step::Done => {
+                let at = 2usize.saturating_add(self.inflate.consumed());
+                self.trailer = Some(
+                    crate::bytes::u32_be(input, at)
+                        .ok_or_else(|| Diagnostic::malformed("truncated zlib checksum"))?,
+                );
+                Ok(Step::Done)
+            }
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        let base = 2usize.saturating_add(self.inflate.consumed());
+        if self.trailer.is_some() { base.saturating_add(4) } else { base }
+    }
+
+    fn warning(&self, out: &[u8]) -> Option<Diagnostic> {
+        self.trailer
+            .filter(|&t| t != adler32(out))
+            .map(|_| Diagnostic::warning("zlib Adler-32 checksum mismatch"))
+    }
+}
+
+/// Decodes `span` with `codec` into a derived source (memoized). `expected`
+/// is the decoded size, if the container records it.
+pub async fn decode_span(cx: &Cx, span: Span, codec: &Codec, expected: Option<u64>) -> Result<Decoded> {
+    let origin = Origin {
+        parent: span,
+        transform: codec.name(),
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok(found);
+    }
+    let input = read_all(cx, span).await?;
+    let Some(mut decoder) = codec.decoder() else {
+        let len = to_u64(input.len());
+        return cx.add_derived(origin, input, len, None);
+    };
+    let limit = to_usize(cx.limits().max_derived);
+    let mut out = Vec::with_capacity(to_usize(expected.unwrap_or(0).min(1 << 24)));
+    let mut error = None;
+    loop {
+        match decoder.decode(&input, true, &mut out, STEP, limit) {
+            Ok(Status::Done) => break,
+            Ok(Status::More) => cx.checkpoint().await,
+            Ok(Status::NeedInput) => {
+                error = Some(Diagnostic::malformed(format!("{} stream ended early", codec.name())).at(span));
+                break;
+            }
+            Err(e) => {
+                error = Some(if e.span.is_some() { e } else { e.at(span) });
+                break;
+            }
+        }
+    }
+    if error.is_none() {
+        error = decoder.warning(&out).map(|w| w.at(span));
+    }
+    if let (Some(expected), None) = (expected, &error)
+        && expected != to_u64(out.len())
+    {
+        error = Some(Diagnostic::warning(format!(
+            "decoded {:#x} bytes, expected {expected:#x}",
+            out.len()
+        )));
+    }
+    if out.is_empty()
+        && let Some(e) = error
+    {
+        return Err(e);
+    }
+    let consumed = to_u64(decoder.consumed());
+    cx.add_derived(origin, out, consumed, error)
+}
 
 /// Reads `span` fully into memory, in pieces no larger than the read limit.
 pub async fn read_all(cx: &Cx, span: Span) -> Result<Vec<u8>> {
@@ -51,77 +245,10 @@ pub async fn read_all(cx: &Cx, span: Span) -> Result<Vec<u8>> {
     Ok(out)
 }
 
-/// Raw DEFLATE (`"deflate"`) or zlib-wrapped (`"zlib"`) data in `span`,
-/// decoded into a derived source. `expected` is the decoded size, if the
-/// container records it.
-pub async fn inflate_span(
-    cx: &Cx,
-    span: Span,
-    zlib: bool,
-    expected: Option<u64>,
-) -> Result<Decoded> {
-    let origin = Origin {
-        parent: span,
-        transform: if zlib { "zlib" } else { "deflate" },
-    };
-    if let Some(found) = cx.derived(origin) {
-        return Ok(found);
-    }
-    let input = read_all(cx, span).await?;
-    let mut start = 0usize;
-    if zlib {
-        let (Some(&cmf), Some(&flg)) = (input.first(), input.get(1)) else {
-            return Err(Diagnostic::truncated(span.sub(0, 2), to_u64(input.len())));
-        };
-        if cmf & 0x0f != 8 || (u16::from(cmf) << 8 | u16::from(flg)) % 31 != 0 {
-            return Err(Diagnostic::malformed("not a zlib stream").at(span.sub(0, 2)));
-        }
-        if flg & 0x20 != 0 {
-            return Err(Diagnostic::unsupported("zlib preset dictionary").at(span.sub(0, 2)));
-        }
-        start = 2;
-    }
-    let body = input.get(start..).unwrap_or_default();
-    let limit = to_usize(cx.limits().max_derived);
-    let mut out = Vec::with_capacity(to_usize(expected.unwrap_or(0).min(1 << 24)));
-    let mut inflater = inflate::Inflate::new();
-    let mut error = None;
-    loop {
-        match inflater.step(body, &mut out, STEP, limit) {
-            Ok(inflate::Step::Done) => break,
-            Ok(inflate::Step::More) => cx.checkpoint().await,
-            Err(e) => {
-                error = Some(e.at(span));
-                break;
-            }
-        }
-    }
-    let mut consumed = to_u64(start.saturating_add(inflater.consumed()));
-    if zlib && error.is_none() {
-        let at = to_usize(consumed);
-        match crate::bytes::u32_be(&input, at) {
-            Some(stored) if stored != adler32(&out) => {
-                error = Some(Diagnostic::warning("zlib Adler-32 checksum mismatch").at(span));
-            }
-            Some(_) => {}
-            None => error = Some(Diagnostic::truncated(span.sub(consumed, 4), 0)),
-        }
-        consumed = consumed.saturating_add(4);
-    }
-    if let (Some(expected), None) = (expected, &error)
-        && expected != to_u64(out.len())
-    {
-        error = Some(Diagnostic::warning(format!(
-            "decoded {:#x} bytes, expected {expected:#x}",
-            out.len()
-        )));
-    }
-    if out.is_empty()
-        && let Some(e) = error
-    {
-        return Err(e);
-    }
-    cx.add_derived(origin, out, consumed, error)
+/// [`decode_span`] for raw DEFLATE or zlib-wrapped data.
+pub async fn inflate_span(cx: &Cx, span: Span, zlib: bool, expected: Option<u64>) -> Result<Decoded> {
+    let codec = if zlib { Codec::Zlib } else { Codec::Deflate };
+    decode_span(cx, span, &codec, expected).await
 }
 
 pub fn adler32(data: &[u8]) -> u32 {

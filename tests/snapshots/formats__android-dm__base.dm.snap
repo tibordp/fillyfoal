@@ -44,7 +44,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Uncompressed size: 0  [#1:0x9+0x4]
           Compressed size: 0  [#1:0xd+0x4]
         ▾ Profile data (zlib)  [#1:0x11+0x0]
-            ! truncated: needed 0x0 bytes at 0x11, only 0x0 available [#1:0x11+0x0]
+            ! malformed: truncated zlib header [#1:0x11+0x0]
   ▾ End of Central Directory — at 0x6f  [0x6f+0x16]
       Signature: 50 4b 05 06  |PK..|  [0x6f+0x4]
       Number of this disk: 0  [0x73+0x2]

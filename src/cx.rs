@@ -16,6 +16,7 @@ use std::task::Poll;
 
 use crate::bytes::to_u64;
 use crate::cache::ByteCache;
+use crate::codec::Codec;
 use crate::error::{Diagnostic, Result};
 use crate::node::{Count, Node};
 use crate::session::Limits;
@@ -45,7 +46,7 @@ pub(crate) struct SourceEntry {
     /// The layout of a piecewise source.
     pub pieces: Option<Arc<Pieces>>,
     /// A stream decoded on demand, as far as reads reach.
-    pub lazy: Option<Box<LazyInflate>>,
+    pub lazy: Option<Box<LazyDecode>>,
     pub origin: Option<Origin>,
     /// For derived sources: how many parent bytes the decoder consumed, and
     /// why it stopped early, if it did.
@@ -53,21 +54,21 @@ pub(crate) struct SourceEntry {
     pub error: Option<Diagnostic>,
 }
 
-/// State of a lazily inflated source: compressed input read so far, the
+/// State of a lazily decoded source: encoded input read so far, the
 /// resumable decoder, and the output produced so far.
-pub(crate) struct LazyInflate {
+pub(crate) struct LazyDecode {
     parent: Span,
-    /// Bytes to skip at the start of the input (the zlib header).
-    skip: usize,
     input: Vec<u8>,
     input_eof: bool,
     out: Vec<u8>,
-    inflater: crate::codec::inflate::Inflate,
+    decoder: Box<dyn crate::codec::pipeline::Decoder>,
+    /// The decoder asked for more input than is buffered.
+    starved: bool,
     done: bool,
 }
 
-/// Compressed bytes kept ahead of the decoder, so it never runs out of input
-/// in the middle of a symbol (an output step consumes far less than this).
+/// Encoded bytes kept ahead of the decoder, so it rarely runs out of input
+/// in the middle of a step (it asks for more when it does).
 const LOOKAHEAD: usize = 64 * 1024;
 /// Output produced per decoder step.
 const LAZY_STEP: usize = 16 * 1024;
@@ -211,11 +212,8 @@ impl Shared {
                 let to = crate::bytes::to_usize(end).min(st.out.len());
                 break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
             }
-            let pending = st
-                .input
-                .len()
-                .saturating_sub(st.skip.saturating_add(st.inflater.consumed()));
-            if !st.input_eof && pending < LOOKAHEAD {
+            let pending = st.input.len().saturating_sub(st.decoder.consumed());
+            if !st.input_eof && (st.starved || pending < LOOKAHEAD) {
                 let fed = to_u64(st.input.len());
                 let want = (LOOKAHEAD as u64).min(st.parent.len.saturating_sub(fed));
                 if want == 0 {
@@ -234,23 +232,26 @@ impl Shared {
                             st.input_eof = true;
                         }
                         st.input.extend_from_slice(&bytes);
+                        st.starved = false;
                     }
                     Err(missing) => break Err(missing),
                 }
                 continue;
             }
-            let LazyInflate {
+            let LazyDecode {
                 input,
+                input_eof,
                 out,
-                inflater,
-                skip,
+                decoder,
+                starved,
                 done,
                 ..
             } = &mut *st;
-            let body = input.get(*skip..).unwrap_or_default();
-            match inflater.step(body, out, LAZY_STEP, out.len().saturating_add(limit)) {
-                Ok(crate::codec::inflate::Step::More) => {}
-                Ok(crate::codec::inflate::Step::Done) | Err(_) => *done = true,
+            let cap = out.len().saturating_add(limit);
+            match decoder.decode(input, *input_eof, out, LAZY_STEP, cap) {
+                Ok(crate::codec::pipeline::Status::More) => {}
+                Ok(crate::codec::pipeline::Status::NeedInput) if !*input_eof => *starved = true,
+                Ok(_) | Err(_) => *done = true,
             }
         };
         // Once the stream has ended, its real length is known.
@@ -615,19 +616,24 @@ impl Cx {
         sh.memo.insert((span, kind), value);
     }
 
-    /// Registers `span` (raw DEFLATE, or zlib-wrapped) as a source that is
-    /// decoded on demand: reading its first bytes decodes only those. `len` is
-    /// the decoded size recorded by the container; reads beyond what the
-    /// stream actually produces come back short. Memoized like other derived
-    /// sources; decoded bytes count against `Limits::max_derived`.
+    /// [`Cx::decode_lazy`] for raw DEFLATE or zlib-wrapped data.
     pub fn inflate_lazy(&self, span: Span, zlib: bool, len: u64) -> Result<Span> {
+        let codec = if zlib { Codec::Zlib } else { Codec::Deflate };
+        self.decode_lazy(span, &codec, len)
+    }
+
+    /// Registers `span`, encoded with `codec`, as a source that is decoded
+    /// on demand: reading its first bytes decodes only those. `len` is the
+    /// decoded size recorded by the container; reads beyond what the stream
+    /// actually produces come back short. Memoized like other derived
+    /// sources; decoded bytes count against `Limits::max_derived`.
+    pub fn decode_lazy(&self, span: Span, codec: &Codec, len: u64) -> Result<Span> {
+        let Some(decoder) = codec.decoder() else {
+            return Ok(span);
+        };
         let origin = Origin {
             parent: span,
-            transform: if zlib {
-                "zlib (lazy)"
-            } else {
-                "deflate (lazy)"
-            },
+            transform: codec.lazy_name(),
         };
         if let Some(found) = self.derived(origin) {
             return Ok(found.span);
@@ -638,13 +644,13 @@ impl Cx {
             len,
             data: None,
             pieces: None,
-            lazy: Some(Box::new(LazyInflate {
+            lazy: Some(Box::new(LazyDecode {
                 parent: span,
-                skip: if zlib { 2 } else { 0 },
                 input: Vec::new(),
                 input_eof: false,
                 out: Vec::new(),
-                inflater: crate::codec::inflate::Inflate::new(),
+                decoder,
+                starved: false,
                 done: false,
             })),
             origin: Some(origin),

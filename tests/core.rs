@@ -201,3 +201,50 @@ fn secrets_are_requested_once_per_realm_and_attempt() {
     let (_, requests) = run_locked(&["a", "b", "c", "d"]);
     assert_eq!(requests.len(), fillyfoal::secret::MAX_ATTEMPTS as usize);
 }
+
+/// A zlib stream with one stored block holding `data`.
+fn zlib_stored(data: &[u8]) -> Vec<u8> {
+    let len = data.len() as u16;
+    let mut out = vec![0x78, 0x01, 0x01];
+    out.extend_from_slice(&len.to_le_bytes());
+    out.extend_from_slice(&(!len).to_le_bytes());
+    out.extend_from_slice(data);
+    out.extend_from_slice(&fillyfoal::codec::adler32(data).to_be_bytes());
+    out
+}
+
+/// Feeds `input` one byte at a time, as a lazy source would in the worst case.
+fn trickle(codec: &fillyfoal::codec::Codec, input: &[u8]) -> Vec<u8> {
+    use fillyfoal::codec::pipeline::Status;
+    let mut decoder = codec.decoder().unwrap();
+    let mut out = Vec::new();
+    let mut fed = 0;
+    loop {
+        let eof = fed == input.len();
+        match decoder.decode(&input[..fed], eof, &mut out, 3, 1 << 20).unwrap() {
+            Status::Done => return out,
+            Status::More => {}
+            Status::NeedInput => {
+                assert!(!eof, "decoder wants input after the end");
+                fed += 1;
+            }
+        }
+    }
+}
+
+#[test]
+fn decoders_resume_across_input_shortages_and_chain() {
+    use fillyfoal::codec::Codec;
+    let inner = zlib_stored(b"hello, pipeline");
+    assert_eq!(trickle(&Codec::Zlib, &inner), b"hello, pipeline");
+    // zlib inside zlib: a two-stage chain.
+    let outer = zlib_stored(&inner);
+    let chain = Codec::chain("zlib+zlib", "zlib+zlib (lazy)", vec![Codec::Zlib, Codec::Zlib]);
+    assert_eq!(trickle(&chain, &outer), b"hello, pipeline");
+    // A corrupted checksum is a warning, not an error.
+    let mut bad = inner.clone();
+    *bad.last_mut().unwrap() ^= 1;
+    let mut decoder = Codec::Zlib.decoder().unwrap();
+    let out = fillyfoal::codec::pipeline::decode_all(decoder.as_mut(), &bad, 1 << 20).unwrap();
+    assert!(decoder.warning(&out).is_some());
+}
