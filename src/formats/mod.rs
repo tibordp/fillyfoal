@@ -178,6 +178,7 @@ pub static FORMATS: &[&Format] = &[
     &executable::ne::FORMAT,
     &executable::lx::FORMAT,
     &executable::omf::FORMAT,
+    &executable::dcu::FORMAT,
     &bytecode::qvm::FORMAT,
     &executable::fatbin::FORMAT,
     &bytecode::elc::FORMAT,

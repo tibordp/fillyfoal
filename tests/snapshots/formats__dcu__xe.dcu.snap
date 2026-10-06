@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ xe.dcu — Delphi / C++Builder XE compiled unit, compiled 2011-02-03 04:05:06  [0x0+0x4d]
+  ▾ Header — Delphi / C++Builder XE  [0x0+0xc]
+      Magic: 0x16000123 — Delphi / C++Builder XE  [0x0+0x4]
+      Compiler version: Delphi / C++Builder XE (0x16)  [0x3+0x1]
+      Platform / flags: 0x123  [0x0+0x3]
+      File size: 77  [0x4+0x4]
+      Compile time: "2011-02-03 04:05:06" — 0x3e4320a3  [0x8+0x4]
+    Unparsed remainder — 64 bytes; the record layout of Delphi / C++Builder XE is not decoded  [0xc+0x40]
+    End tag: end of unit (0x61)  [0x4c+0x1]
