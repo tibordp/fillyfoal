@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ld.so.cache — ld.so cache, 2 libraries, 84-byte string table  [0x0+0xb4]
+    Magic: "glibc-ld.so.cache1.1"  [0x0+0x14]
+    Libraries: 2  [0x14+0x4]
+    String table size: 84  [0x18+0x4]
+  ▾ Libraries — 2 entries  [0x30+0x30]
+      libc.so.6: "/lib/x86_64-linux-gnu/libc.so.6"  [0x30+0x18]
+      libm.so.6: "/lib/x86_64-linux-gnu/libm.so.6"  [0x48+0x18]

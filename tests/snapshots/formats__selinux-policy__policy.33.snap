@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ policy.33 — SE Linux version 33  [0x0+0x60]
+    Policy version: 33  [0x10+0x4]
+    Config: 0x0  [0x14+0x4]
+    Symbol tables: 8  [0x18+0x4]
+    Object contexts: 7  [0x1c+0x4]
+    Identifier: "SE Linux"  [0x8+0x8]
+    Policy  [0x20+0x40]

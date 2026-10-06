@@ -52,6 +52,7 @@ pub mod packages;
 pub mod archives2;
 pub mod misc2;
 pub mod pdb;
+pub mod platform;
 // -- end misc --
 
 // -- text --
@@ -370,6 +371,19 @@ pub static FORMATS: &[&Format] = &[
     &misc2::VTK,
     &pdb::PDB,
     &pdb::PDB2,
+    &platform::PERF,
+    &platform::LDSO_CACHE,
+    &platform::SELINUX,
+    &platform::VBMETA,
+    &platform::DTBO,
+    &platform::INTEL_FLASH,
+    &platform::CBFS,
+    &platform::ARM_FIP,
+    &platform::NSIS,
+    &platform::INNO,
+    &platform::JMOD,
+    &platform::JIMAGE,
+    &platform::MAC_RESOURCE,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,
