@@ -8,3 +8,4 @@ pub mod util;
 pub mod patches;
 pub mod discs;
 pub mod consoles2;
+pub mod states;

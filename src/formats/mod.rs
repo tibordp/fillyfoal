@@ -698,6 +698,19 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles2::NEO_GEO,
     &retro::consoles2::UNIF,
     &retro::consoles2::VECTREX,
+    &retro::states::ZSNES,
+    &retro::states::SNES9X,
+    &retro::states::FCEUX,
+    &retro::states::RETROARCH,
+    &retro::states::DTM,
+    &retro::states::SMV,
+    &retro::states::VBM,
+    &retro::states::FCM,
+    &retro::states::M64,
+    &retro::states::GMV,
+    &retro::states::DEXDRIVE,
+    &retro::states::PS2_MEMCARD,
+    &retro::states::PSX_MEMCARD,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -709,6 +722,8 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles2::WONDERSWAN_COLOR,
     &retro::consoles2::WONDERSWAN,
     &retro::consoles2::VIRTUAL_BOY,
+    &retro::states::GCI,
+    &retro::states::FM2,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --
