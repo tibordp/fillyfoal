@@ -39,6 +39,7 @@ pub mod mpeg;
 pub mod mxf;
 pub mod rad;
 pub mod realmedia;
+pub mod swf;
 pub mod vidutil;
 pub mod y4m;
 // -- end audio & video --
@@ -202,6 +203,7 @@ pub static FORMATS: &[&Format] = &[
     &rad::BINK,
     &rad::SMACKER,
     &mxf::FORMAT,
+    &swf::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
