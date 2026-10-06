@@ -309,11 +309,25 @@ async fn xnb(cx: Cx, input: Input) -> Result<()> {
     let version = f.u8("Format version").emit()?;
     let flags = f.u8("Flags").hex().emit()?;
     let size = f.u32("File size").emit()?;
-    let mut node = Node::new("Content").span(file.tail(10));
-    if flags & 0xc0 != 0 {
-        node = node.diag(Diagnostic::unsupported("LZX/LZ4-compressed content"));
+    if flags & 0x40 != 0 {
+        // MonoGame LZ4: the decompressed size, then one raw LZ4 block.
+        let head = cx.block(file.sub(10, 4)).await?;
+        let mut f = Fields::emitting(&cx, &head, LE);
+        let decoded = f.u32("Decompressed size").emit()?;
+        cx.emit(crate::formats::content(
+            "Content",
+            input,
+            file.tail(14),
+            crate::codec::Codec::Lz4Block,
+            Some(decoded.into()),
+        ));
+    } else {
+        let mut node = Node::new("Content").span(file.tail(10));
+        if flags & 0x80 != 0 {
+            node = node.diag(Diagnostic::unsupported("LZX-compressed content"));
+        }
+        cx.emit(node);
     }
-    cx.emit(node);
     let platform = match platform.as_str() {
         "w" => "Windows",
         "x" => "Xbox 360",
