@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pte — ExecuTorch program (ET12), version 0, methods: forward  [0x0+0x130]
+    Header — root table offset, identifier ET12  [0x0+0x8]
+  ▾ Extended header  [0x8+0x18]
+      Magic: "eh00"  [0x8+0x4]
+      Length: 24  [0xc+0x4]
+      Program size: 304  [0x10+0x8]
+      Segment base offset: 0x0  [0x18+0x8]
+    Version: 0
+  ▾ Execution plans — forward  [0x44+0x4]
+      [0]: "forward" — 3 values, operators: aten::add.out, aten::mul.out  [0x60+0x18]
+    Segments — 0 segments  [0x130+0x0]
+  ▾ Program table  [0x30+0x10]
+      vtable — 5 slots, table size 16  [0x20+0xe]
+      field 0: 0x0  [0x34+0x4]
+      field 1: 0x8  [0x38+0x4]
+      field 4: 0xf0  [0x3c+0x4]

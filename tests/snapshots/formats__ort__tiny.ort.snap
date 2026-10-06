@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ort — ONNX Runtime model, format v5, from onnxruntime.transformers, 2 nodes  [0x0+0x1d0]
+    Header — root table offset, identifier ORTM  [0x0+0x8]
+    ORT format version: "5"
+    IR version: 8
+    Producer: "onnxruntime.transformers 1.17.0"
+    Opset imports: "ai.onnx 17, com.microsoft 1"  [0x68+0x8]
+  ▾ Nodes — 2 nodes  [0x118+0x8]
+      [0]: "MatMul" — mm0  [0x130+0x14]
+      [1]: "com.microsoft::FusedRelu" — relu0  [0x168+0x18]
+  ▾ Graph table  [0x100+0x14]
+      vtable — 7 slots, table size 20  [0xe8+0x12]
+      field 2: 0x10  [0x104+0x4]
+      field 3: 0x2  [0x108+0x4]
+      field 5: 0xa4  [0x10c+0x4]
+      field 6: 0xb0  [0x110+0x4]
+  ▾ Session table  [0x10+0xc]
+      vtable — 2 slots, table size 12  [0x8+0x8]
+      field 0: 0x8  [0x14+0x4]
+      field 1: 0x20  [0x18+0x4]

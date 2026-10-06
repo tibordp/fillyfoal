@@ -211,6 +211,8 @@ pub mod misc7;
 // -- end misc --
 
 // -- ml models & mobile platforms --
+pub mod ml;
+pub mod mobile;
 // -- end ml --
 
 // -- geospatial, telemetry & vehicle logs --
@@ -793,6 +795,15 @@ pub static FORMATS: &[&Format] = &[
     // -- end retro --
 
     // -- ml models & mobile platforms --
+    &ml::tflite::TFLITE,
+    &ml::tflite::ORT,
+    &ml::tflite::EXECUTORCH,
+    &ml::protos::TFRECORD,
+    &ml::protos::SAVED_MODEL,
+    &ml::protos::COREML,
+    &ml::protos::ONNX,
+    &ml::protos::GRAPHDEF,
+    &ml::protos::SENTENCEPIECE,
     // -- end ml --
 
     // -- geospatial, telemetry & vehicle logs --
