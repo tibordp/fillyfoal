@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ gal.jed — JEDEC fuse map for GAL16V8, 2194 fuse(s), 20 pin(s), 3 fuse list field(s)  [0x0+0x123]
-    Design specification: "JEDEC file for: GAL16V8 V1.0\r\nCreated on: Fri May 17 10:30:00 2024"  [0x1+0x44]
+    Design specification: "JEDEC file for: GAL16V8 V1.0  Created on: Fri May 17 10:30:00 2024"  [0x1+0x44]
     Pin count: 20  [0x46+0x6]
     Fuse count: 2194  [0x4d+0x8]
     Test vector count: 0  [0x56+0x5]

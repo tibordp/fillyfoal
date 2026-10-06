@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ flow.plt — Tecplot binary v112 "Test dataset", 3 variable(s) (X, Y, P), 1 zone(s)  [0x0+0x134]
+    Magic: "#!TDV112"  [0x0+0x8]
+    Byte order: 1  [0x8+0x4]
+    File type: "full"  [0xc+0x4]
+    Title: "Test dataset"  [0x10+0x34]
+    Variables: "X, Y, P"  [0x44+0x1c]
+    Zone "Zone 1": ORDERED (0x0) — 2×2×1, t = 0.5  [0x60+0x54]
+    End of header  [0xb4+0x4]
+    Data section  [0xb8+0x7c]

@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ small.gfa — GFA, 1 header, 3 segment, 3 link, 1 path  [0x0+0x82]
-  ▾ Header: "H\tVN:Z:1.0"  [0x0+0xa]
+  ▾ Header: "H VN:Z:1.0"  [0x0+0xa]
       VN: "1.0"  [0x2+0x8]
   ▾ Segment: "11 (5 bp)"  [0xb+0xa]
       Name: "11"  [0xd+0x2]

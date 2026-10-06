@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ plate.bdf — NASTRAN deck (SOL 101), 4 GRID, 1 CQUAD4, 1 PSHELL, 1 MAT1, 1 SPC1, 1 FORCE  [0x0+0x23b]
+    ENDDATA  [0x233+0x7]
+  ▾ Executive control  [0x0+0x22]
+      SOL: "SOL 101"  [0x15+0x7]
+      CEND: "CEND"  [0x1d+0x4]
+  ▾ Case control  [0x22+0x47]
+      TITLE: "TITLE = PLATE TEST"  [0x22+0x12]
+      SUBCASE: "SUBCASE 1"  [0x35+0x9]
+      (continuation): "SPC = 1"  [0x3f+0x9]
+      (continuation): "LOAD = 2"  [0x49+0xa]
+      (continuation): "DISPLACEMENT = ALL"  [0x54+0x14]
+  ▾ Bulk data  [0x74+0x1bf]
+      GRID: "GRID           1              0.      0.      0."  [0x82+0x30]
+      GRID: "GRID           2              1.      0.      0."  [0xb3+0x30]
+      GRID: "GRID           3              1.      1.      0."  [0xe4+0x30]
+      GRID: "GRID           4              0.      1.      0."  [0x115+0x30]
+      CQUAD4: "CQUAD4         1       1       1       2       3       4"  [0x146+0x38]
+      PSHELL: "PSHELL         1       1     0.1"  [0x17f+0x20]
+      MAT1: "MAT1           1  2.1E+5             0.3"  [0x1a0+0x28]
+      SPC1: "SPC1           1  123456       1       4"  [0x1c9+0x28]
+      FORCE: "FORCE          2       2       0    100.      0.      0.     -1."  [0x1f2+0x40]
+  ▾ Card types: 6
+      GRID: 4
+      CQUAD4: 1
+      PSHELL: 1
+      MAT1: 1
+      SPC1: 1
+      FORCE: 1

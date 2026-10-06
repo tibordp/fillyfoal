@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ part.3dm — Rhino 3DM v70, 5 chunk(s); Created by a fillyfoal test script  Units: millimeters  [0x0+0xdf]
+    Signature: "3D Geometry File Format"  [0x0+0x18]
+    Version: 70  [0x18+0x8]
+    Comment block: 0x1 — 55 bytes  [0x20+0x43]
+    Properties table: 0x10000014 — 36 bytes  [0x63+0x30]
+    Layer table: 0x10000011 — 32 bytes  [0x93+0x2c]
+    Chunk 0x80000001: 0x80000001 — value 42  [0xbf+0xc]
+    End of file: 0x7fff — 8 bytes  [0xcb+0x14]

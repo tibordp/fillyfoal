@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ smoke.vdb — OpenVDB file v224 (library 9.1), 1 grid(s): density  [0x0+0xdd]
+    Magic: 0x56444220  [0x0+0x8]
+    File version: 224  [0x8+0x4]
+    Library major: 9  [0xc+0x4]
+    Library minor: 1  [0x10+0x4]
+    Has grid offsets: 1  [0x14+0x1]
+    UUID: "6b9e2e7c-5f1a-4c3e-9d2b-0123456789ab"  [0x15+0x24]
+  ▾ File metadata: 2  [0x39+0x45]
+      creator: "fillyfoal test (string)"  [0x3d+0x27]
+      frame: "12 (int32)"  [0x64+0x1a]
+    density: "Tree_float_5_4_3" — blocks at 0xcd  [0x82+0x3b] → 0xbd+0x20

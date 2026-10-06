@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ model.geo — EnSight Gold binary geometry, 1 part(s); Test geometry  [0x0+0x384]
+    Format: "C Binary"  [0x0+0x50]
+    Description 1: "Test geometry"  [0x50+0x50]
+    Description 2: "one tetrahedron"  [0xa0+0x50]
+    Node IDs: "node id off"  [0xf0+0x50]
+    Element IDs: "element id off"  [0x140+0x50]
+    Extents: "0, 1, 0, 1, 0, 1"  [0x190+0x68]
+    Part 1: "solid" — 4 node(s), 1 tetra4  [0x1f8+0x18c]

@@ -213,6 +213,7 @@ pub mod microscopy;
 pub mod molecular;
 pub mod instruments2;
 pub mod bio2;
+pub mod cad2;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1161,6 +1162,14 @@ pub static FORMATS: &[&Format] = &[
     &bio2::MZTAB,
     &bio2::AMBER_PRMTOP,
     &bio2::GTF,
+    &cad2::RHINO_3DM,
+    &cad2::ACIS_SAB,
+    &cad2::ANSYS_CDB,
+    &cad2::TECPLOT,
+    &cad2::ENSIGHT_CASE,
+    &cad2::ENSIGHT_GOLD,
+    &cad2::OPENVDB,
+    &cad2::NASTRAN,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

@@ -194,7 +194,9 @@ pub fn is_text(h: &Head<'_>) -> bool {
 
 /// A short, single-line preview of some text.
 pub fn preview(s: &str, max: usize) -> String {
-    let s = s.trim();
+    // One line: control characters (newlines, tabs) become spaces.
+    let s: String = s.trim().chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let s = s.as_str();
     if s.chars().count() <= max {
         return s.to_owned();
     }

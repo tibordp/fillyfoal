@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ block.sab — ACIS SAB v21800, 1 bod(ies), Fillyfoal (ACIS 218.0 NT)  [0x0+0x98]
+    Signature: "ACIS BinaryFile"  [0x0+0xf]
+    Version: 21800  [0xf+0x5]
+    Records: 5  [0x14+0x5]
+    Bodies: 1  [0x19+0x5]
+    Flags: 0  [0x1e+0x5]
+    Product ID: "Fillyfoal"  [0x23+0xb]
+    ACIS version: "ACIS 218.0 NT"  [0x2e+0xf]
+    Date: "Fri May 17 10:30:00 2024"  [0x3d+0x1a]
+    Units (mm): 1  [0x57+0x9]
+    Resolution: 0.000001  [0x60+0x9]
+    Normal tolerance: 0.0000000001  [0x69+0x9]
+    Entity records  [0x72+0x26]
