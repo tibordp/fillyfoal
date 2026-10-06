@@ -505,7 +505,11 @@ async fn primitive(
     let len_detail = format!("{} bytes", content.len);
     if tlv.class != der::CLASS_UNIVERSAL {
         return Ok(match der::printable(&data) {
-            Some(text) if complete => (node.value(Value::Text(text)), None),
+            // dNSName, rfc822Name, URI: internationalised host names.
+            Some(text) if complete => {
+                let unicode = crate::text::url::hosts_to_unicode(&text);
+                (node.value(Value::Text(text)), unicode)
+            }
             _ => (node.value(preview(&data)), Some(len_detail)),
         });
     }
@@ -573,7 +577,10 @@ async fn primitive(
             ),
         },
         tag => match der::string(tag, &data) {
-            Some(text) => (node.value(Value::Text(text)), None),
+            Some(text) => {
+                let unicode = crate::text::url::hosts_to_unicode(&text);
+                (node.value(Value::Text(text)), unicode)
+            }
             None => (node.value(preview(&data)), Some(len_detail)),
         },
     };

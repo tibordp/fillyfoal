@@ -10,6 +10,7 @@
 pub mod inflate;
 pub mod brotli;
 pub mod bzip2;
+pub mod charset;
 pub mod crypto;
 pub mod filters;
 pub mod lz;

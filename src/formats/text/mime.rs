@@ -14,8 +14,8 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::decode::{self, Transform, decoded_node, preview};
-use super::encoding::{decode_8bit, prepare, windows_1252};
+use super::decode::{self, Transform, decoded_text_node, preview};
+use super::encoding::{decode_8bit, prepare};
 use super::scan::Lines;
 use super::{parse_datetime, plural, probe, text_node};
 
@@ -132,58 +132,81 @@ pub fn decode_words(text: &str) -> String {
     if !text.contains("=?") {
         return text.to_owned();
     }
+    // Adjacent encoded words in the same charset are joined as bytes before
+    // decoding: encoders split multi-byte characters across words.
     let mut out = String::with_capacity(text.len());
+    let mut pending: Option<(String, Vec<u8>)> = None;
+    let flush = |out: &mut String, pending: &mut Option<(String, Vec<u8>)>| {
+        if let Some((charset, bytes)) = pending.take() {
+            out.push_str(&decode_charset(&charset, &bytes));
+        }
+    };
     let mut rest = text;
-    let mut after_word = false;
     while let Some(i) = rest.find("=?") {
         let before = rest.get(..i).unwrap_or_default();
         let word = rest.get(i.saturating_add(2)..).unwrap_or_default();
-        let decoded = (|| {
-            let (charset, r) = word.split_once('?')?;
-            let (enc, r) = r.split_once('?')?;
-            let end = r.find("?=")?;
-            let payload = r.get(..end)?;
-            let bytes = match enc {
-                "B" | "b" => decode::base64(payload.as_bytes()).bytes,
-                "Q" | "q" => decode::quoted_printable(payload.replace('_', " ").as_bytes()).bytes,
-                _ => return None,
-            };
-            let charset = charset
-                .split('*')
-                .next()
-                .unwrap_or_default()
-                .to_ascii_lowercase();
-            let text = match charset.as_str() {
-                "utf-8" | "utf8" | "us-ascii" => String::from_utf8_lossy(&bytes).into_owned(),
-                _ => windows_1252(&bytes),
-            };
-            Some((
-                text,
-                end.saturating_add(enc.len())
-                    .saturating_add(charset.len())
-                    .saturating_add(4),
-            ))
-        })();
-        match decoded {
-            Some((text, used)) => {
+        match encoded_word(word) {
+            Some((charset, bytes, used)) => {
                 // Whitespace between adjacent encoded words disappears.
-                if !(after_word && before.trim().is_empty()) {
-                    out.push_str(before);
+                let adjacent = pending.is_some() && before.trim().is_empty();
+                let same = pending
+                    .as_ref()
+                    .is_some_and(|(c, _)| c.eq_ignore_ascii_case(charset));
+                if adjacent && same {
+                    if let Some((_, b)) = pending.as_mut() {
+                        b.extend_from_slice(&bytes);
+                    }
+                } else {
+                    flush(&mut out, &mut pending);
+                    if !adjacent {
+                        out.push_str(before);
+                    }
+                    pending = Some((charset.to_owned(), bytes));
                 }
-                out.push_str(&text);
                 rest = word.get(used..).unwrap_or_default();
-                after_word = true;
             }
             None => {
+                flush(&mut out, &mut pending);
                 out.push_str(before);
                 out.push_str("=?");
                 rest = word;
-                after_word = false;
             }
         }
     }
+    flush(&mut out, &mut pending);
     out.push_str(rest);
     out
+}
+
+/// One encoded word after its `=?`: the charset (without an RFC 2231
+/// `*language` suffix), the decoded bytes, and the length used up to and
+/// including the closing `?=`.
+fn encoded_word(word: &str) -> Option<(&str, Vec<u8>, usize)> {
+    let (charset, r) = word.split_once('?')?;
+    let (enc, r) = r.split_once('?')?;
+    let end = r.find("?=")?;
+    let payload = r.get(..end)?;
+    if charset.is_empty() || charset.contains(char::is_whitespace) {
+        return None;
+    }
+    let bytes = match enc {
+        "B" | "b" => decode::base64(payload.as_bytes()).bytes,
+        "Q" | "q" => decode::quoted_printable(payload.replace('_', " ").as_bytes()).bytes,
+        _ => return None,
+    };
+    let used = charset
+        .len()
+        .saturating_add(enc.len())
+        .saturating_add(end)
+        .saturating_add(4);
+    let charset = charset.split('*').next().unwrap_or_default();
+    Some((charset, bytes, used))
+}
+
+/// Bytes in the charset `label` names; unknown and unsupported charsets
+/// are read as UTF-8 if valid, else Windows-1252.
+fn decode_charset(label: &str, bytes: &[u8]) -> String {
+    crate::codec::charset::decode_label(label, bytes).unwrap_or_else(|| decode_8bit(bytes))
 }
 
 /// One header field.
@@ -215,7 +238,9 @@ async fn headers(cx: &Cx, span: Span) -> Result<(Vec<Field>, Option<u64>)> {
         if folded && let Some(last) = fields.last_mut() {
             let more = p.trim().text();
             if last.value.len() < super::VALUE_CAP.saturating_mul(4) {
-                last.value.push(' ');
+                if !last.value.is_empty() {
+                    last.value.push(' ');
+                }
                 last.value.push_str(&more);
             }
             last.span = Span::new(
@@ -258,7 +283,16 @@ impl Params {
     fn parse(text: &str) -> Params {
         let mut parts = split_params(text).into_iter();
         let value = parts.next().unwrap_or_default().trim().to_ascii_lowercase();
-        let params = parts
+        // RFC 2231: `name*=charset'lang'percent-encoded`, and values split
+        // into sections `name*0`, `name*1*`, ... (sections ending in `*`
+        // are percent-encoded; the first one names the charset).
+        struct Piece {
+            name: String,
+            section: Option<u32>,
+            extended: bool,
+            value: String,
+        }
+        let pieces: Vec<Piece> = parts
             .filter_map(|p| {
                 let (k, v) = p.split_once('=')?;
                 let k = k.trim().to_ascii_lowercase();
@@ -267,17 +301,68 @@ impl Params {
                     .strip_prefix('"')
                     .and_then(|v| v.strip_suffix('"'))
                     .unwrap_or(v);
-                // RFC 2231: `name*=charset'lang'percent-encoded`.
-                let (k, v) = match k.strip_suffix('*') {
-                    Some(k) => {
-                        let raw = v.splitn(3, '\'').nth(2).unwrap_or(v);
-                        (k.to_owned(), percent_decode(raw))
-                    }
-                    None => (k, v.to_owned()),
+                let (k, extended) = match k.strip_suffix('*') {
+                    Some(k) => (k.to_owned(), true),
+                    None => (k, false),
                 };
-                Some((k, decode_words(&v)))
+                let (name, section) = match k.rsplit_once('*') {
+                    Some((n, s)) if !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()) => {
+                        (n.to_owned(), s.parse().ok())
+                    }
+                    _ => (k, None),
+                };
+                Some(Piece {
+                    name,
+                    section,
+                    extended,
+                    value: v.to_owned(),
+                })
             })
+            .take(MAX_PARAMS)
             .collect();
+        let mut params: Vec<(String, String)> = Vec::new();
+        let mut done: Vec<&str> = Vec::new();
+        for p in &pieces {
+            if done.contains(&p.name.as_str()) {
+                continue;
+            }
+            let mut same: Vec<&Piece> = pieces.iter().filter(|q| q.name == p.name).collect();
+            let rfc2231 = same.iter().any(|q| q.extended || q.section.is_some());
+            let decoded = if rfc2231 {
+                // The RFC 2231 form wins over a plain one (RFC 6266).
+                same.retain(|q| q.extended || q.section.is_some());
+                same.sort_by_key(|q| q.section.unwrap_or(0));
+                // Sections are joined before percent-decoding (plain ones
+                // with `%` escaped), which also tolerates encoders that
+                // split an escape between sections.
+                let mut charset: Option<String> = None;
+                let mut joined = String::new();
+                for (i, q) in same.iter().enumerate() {
+                    if q.extended {
+                        let mut raw = q.value.as_str();
+                        if i == 0 {
+                            let mut it = raw.splitn(3, '\'');
+                            if let (Some(c), Some(_), Some(r)) = (it.next(), it.next(), it.next()) {
+                                charset = Some(c.to_owned());
+                                raw = r;
+                            }
+                        }
+                        joined.push_str(raw);
+                    } else {
+                        joined.push_str(&q.value.replace('%', "%25"));
+                    }
+                }
+                let bytes = crate::text::url::percent_decode_bytes(joined.as_bytes());
+                match charset.filter(|c| !c.is_empty()) {
+                    Some(c) => decode_charset(&c, &bytes),
+                    None => decode_8bit(&bytes),
+                }
+            } else {
+                decode_words(&p.value)
+            };
+            done.push(&p.name);
+            params.push((p.name.clone(), decoded));
+        }
         Params { value, params }
     }
 
@@ -308,25 +393,8 @@ fn split_params(text: &str) -> Vec<String> {
     out
 }
 
-fn percent_decode(text: &str) -> String {
-    let mut bytes = Vec::with_capacity(text.len());
-    let mut it = text.bytes();
-    while let Some(b) = it.next() {
-        if b == b'%' {
-            let h: Vec<u8> = it.by_ref().take(2).collect();
-            match u8::from_str_radix(&String::from_utf8_lossy(&h), 16) {
-                Ok(v) => bytes.push(v),
-                Err(_) => {
-                    bytes.push(b'%');
-                    bytes.extend(h);
-                }
-            }
-        } else {
-            bytes.push(b);
-        }
-    }
-    String::from_utf8_lossy(&bytes).into_owned()
-}
+/// The most parameters read from one header value.
+const MAX_PARAMS: usize = 256;
 
 /// Parses an RFC 5322 date (`Mon, 5 Oct 2026 10:00:00 +0200`).
 fn mail_date(text: &str) -> Option<i64> {
@@ -438,7 +506,8 @@ fn body_node(fields: &[Field], ctype: &Params, input: Input, body: Span, depth: 
             },
         );
     }
-    decoded_node(name, input, body, transform).summary(summary)
+    let charset = ctype.get("charset").and_then(crate::codec::charset::lookup);
+    decoded_text_node(name, input, body, transform, charset).summary(summary)
 }
 
 /// Splits a multipart body at `--boundary` lines.
@@ -550,6 +619,9 @@ async fn header_nodes(cx: Cx, span: Span) -> Result<()> {
     for f in fields {
         let decoded = decode_words(&f.value);
         let mut node = text_node(f.name.clone(), f.span, &decoded);
+        if let Some(unicode) = crate::text::url::hosts_to_unicode(&decoded) {
+            node = node.summary(unicode);
+        }
         if f.name.eq_ignore_ascii_case("Date")
             && let Some(t) = mail_date(&f.value)
         {
@@ -669,4 +741,43 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
         plural(count, "message", "messages")
     ));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Expected values from Python's `email.header.decode_header` /
+    /// `make_header` and `Message.get_filename`.
+    #[test]
+    fn encoded_words() {
+        assert_eq!(
+            decode_words("=?iso-8859-2?q?Zo=EB_=AF=F3=B3=E6?= <zoe@example>"),
+            "Zoë Żółć <zoe@example>"
+        );
+        assert_eq!(decode_words("=?koi8-r?b?6dfBziDwxdTSz9c=?="), "Иван Петров");
+        assert_eq!(decode_words("a =?ISO-8859-1?Q?a?= =?ISO-8859-1?Q?b?= c"), "a ab c");
+        assert_eq!(decode_words("=?windows-1250?B?jmx1nW916Gv9IGv58g==?="), "Žluťoučký kůň");
+        // RFC 2231 language suffix; a character split between words.
+        assert_eq!(decode_words("=?utf-8*en?q?caf=C3=A9?="), "café");
+        assert_eq!(decode_words("=?UTF-8?B?xb1sdcU=?= =?UTF-8?B?pW91xI0=?="), "Žluťouč");
+        // Not encoded words.
+        assert_eq!(decode_words("=?broken"), "=?broken");
+        assert_eq!(decode_words("x =?utf-8?x?y?= z"), "x =?utf-8?x?y?= z");
+    }
+
+    #[test]
+    fn rfc2231_parameters() {
+        let p = Params::parse("attachment; filename*0*=iso-8859-1''%A3%20rates; filename*1=\" for 2026.txt\"");
+        assert_eq!(p.get("filename"), Some("£ rates for 2026.txt"));
+        let p = Params::parse("text/plain; name=\"plain.txt\"; name*=utf-8''%E2%82%AC.txt");
+        assert_eq!(p.get("name"), Some("€.txt"));
+        let p = Params::parse("text/plain; charset=\"iso-8859-2\"; format=flowed");
+        assert_eq!(p.value, "text/plain");
+        assert_eq!(p.get("charset"), Some("iso-8859-2"));
+        assert_eq!(p.get("format"), Some("flowed"));
+        // Sections out of order, and an escape split between sections.
+        let p = Params::parse("a; f*1*=%A9; f*0*=utf-8''%C2");
+        assert_eq!(p.get("f"), Some("©"));
+    }
 }

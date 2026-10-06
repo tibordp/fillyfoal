@@ -32,30 +32,7 @@ fn digits(s: &[u8]) -> bool {
     !s.is_empty() && s.iter().all(u8::is_ascii_digit)
 }
 
-/// Decodes `%XX` escapes (file URLs, Trash paths).
-fn percent_decode(s: &str) -> String {
-    let b = s.as_bytes();
-    let mut out = Vec::with_capacity(b.len());
-    let mut i = 0usize;
-    while let Some(&c) = b.get(i) {
-        let hex = (c == b'%')
-            .then(|| b.get(i.saturating_add(1)..i.saturating_add(3)))
-            .flatten()
-            .and_then(|h| std::str::from_utf8(h).ok())
-            .and_then(|h| u8::from_str_radix(h, 16).ok());
-        match hex {
-            Some(v) => {
-                out.push(v);
-                i = i.saturating_add(3);
-            }
-            None => {
-                out.push(c);
-                i = i.saturating_add(1);
-            }
-        }
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
+use crate::text::url::percent_decode;
 
 /// One history entry: lines, optional time, and the command text.
 fn history_node(

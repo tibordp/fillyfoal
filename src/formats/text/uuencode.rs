@@ -1,4 +1,5 @@
-//! uuencoded files (`begin 644 name` ... `end`) and their base64 variant
+//! uuencoded files (`begin 644 name` ... `end`), their xxencoded twin (the
+//! same framing with the alphabet `+-0-9A-Za-z`) and their base64 variant
 //! (`begin-base64`): each embedded file is decoded into a derived source and
 //! dissected.
 
@@ -44,8 +45,47 @@ fn begin(line: &[u8]) -> Option<(bool, &[u8], &[u8])> {
     .then_some((base64, mode, name))
 }
 
-/// Decodes uuencoded lines up to the terminating empty line.
-fn uudecode(data: &[u8]) -> Decoded {
+/// How a block is encoded.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Kind {
+    Uu,
+    Xx,
+    Base64,
+}
+
+impl Kind {
+    fn name(self) -> &'static str {
+        match self {
+            Kind::Uu => "uuencoded",
+            Kind::Xx => "xxencoded",
+            Kind::Base64 => "base64",
+        }
+    }
+}
+
+/// Whether a body line is xxencoded rather than uuencoded. The alphabets
+/// differ: uuencoding uses space to `_` (and a backquote), xxencoding `+`, `-`, digits
+/// and letters, so lowercase letters mean xxencoding; otherwise the line
+/// length must agree with the length character.
+fn is_xx(line: &[u8]) -> bool {
+    if line.iter().any(u8::is_ascii_lowercase) {
+        return true;
+    }
+    let fits = |n: u8| {
+        let groups = usize::from(n).div_ceil(3);
+        let chars = line.len().saturating_sub(1);
+        chars >= groups.saturating_mul(4) && chars <= groups.saturating_mul(4).saturating_add(2)
+    };
+    let Some(&first) = line.first() else {
+        return false;
+    };
+    let uu_ok = (0x20..=0x60).contains(&first) && fits(first.wrapping_sub(0x20) & 0x3f);
+    let xx_ok = decode::XX_ALPHABET.contains(&first) && fits(decode::xx_value(first));
+    xx_ok && !uu_ok
+}
+
+/// Decodes uu/xxencoded lines up to the terminating empty line.
+fn decode_lines(data: &[u8], xx: bool) -> Decoded {
     let mut bytes = Vec::with_capacity((data.len() / 4).saturating_mul(3));
     let mut error = None;
     for line in data.split(|&b| b == b'\n') {
@@ -53,28 +93,42 @@ fn uudecode(data: &[u8]) -> Decoded {
         if line.is_empty() {
             continue;
         }
-        if matches!(line, b"`" | b" ") {
+        let last = if xx { matches!(line, b"+") } else { matches!(line, b"`" | b" ") };
+        if last {
             break;
         }
-        if !decode::uu_line(line, &mut bytes) && error.is_none() {
+        let ok = if xx {
+            decode::xx_line(line, &mut bytes)
+        } else {
+            decode::uu_line(line, &mut bytes)
+        };
+        if !ok && error.is_none() {
             error = Some("line shorter than its length character says".to_owned());
         }
     }
     Decoded { bytes, error }
 }
 
+fn uudecode(data: &[u8]) -> Decoded {
+    decode_lines(data, false)
+}
+
+fn xxdecode(data: &[u8]) -> Decoded {
+    decode_lines(data, true)
+}
+
 #[derive(Clone, Debug)]
 struct Block {
     input: Input,
     body: Span,
-    base64: bool,
+    kind: Kind,
 }
 
 async fn content(cx: Cx, b: Block) -> Result<()> {
-    let (span, error) = if b.base64 {
-        decode::derive_with(&cx, b.body, Transform::Base64).await?
-    } else {
-        decode::derive(&cx, b.body, "uudecode", uudecode).await?
+    let (span, error) = match b.kind {
+        Kind::Base64 => decode::derive_with(&cx, b.body, Transform::Base64).await?,
+        Kind::Uu => decode::derive(&cx, b.body, "uudecode", uudecode).await?,
+        Kind::Xx => decode::derive(&cx, b.body, "xxdecode", xxdecode).await?,
     };
     if let Some(e) = error {
         cx.diag(e);
@@ -89,6 +143,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let inner = prepared.input(input);
     let mut lines = Lines::new(&cx, span);
     let mut files = 0u64;
+    let mut xx_files = 0u64;
     while let Some(line) = lines.next().await? {
         let Some((base64, mode, name)) = begin(&line.bytes) else {
             continue;
@@ -98,40 +153,50 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let body_start = line.next;
         let mut body_end = body_start;
         let mut end_line = None;
+        let mut kind = if base64 { Kind::Base64 } else { Kind::Uu };
+        let mut first = true;
         while let Some(l) = lines.next().await? {
             let t = l.piece().trim();
             if (!base64 && t.bytes() == b"end") || (base64 && t.bytes() == b"====") {
                 end_line = Some(l);
                 break;
             }
+            if first && !base64 && !t.is_empty() {
+                first = false;
+                if is_xx(t.bytes()) {
+                    kind = Kind::Xx;
+                }
+            }
             body_end = l.next;
         }
         files = files.saturating_add(1);
+        if kind == Kind::Xx {
+            xx_files = xx_files.saturating_add(1);
+        }
         let body = span.sub(body_start, body_end.saturating_sub(body_start));
         let stop = end_line.as_ref().map_or(body_end, |l| l.next);
         let block = span.sub(line.start, stop.saturating_sub(line.start));
         let mut node = Node::new(name.clone())
             .span(block)
-            .summary(format!(
-                "mode {mode}, {}",
-                if base64 { "base64" } else { "uuencoded" }
-            ))
-            .lazy(block_fields, (inner, block, body, base64, mode, name));
+            .summary(format!("mode {mode}, {}", kind.name()))
+            .lazy(block_fields, (inner, block, body, kind, mode, name));
         if end_line.is_none() {
             node = node.diag(Diagnostic::new(DiagKind::Truncated, "end line missing"));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!(
-        "uuencoded data, {}",
-        plural(files, "file", "files")
-    ));
+    let what = if files > 0 && xx_files == files {
+        "xxencoded"
+    } else {
+        "uuencoded"
+    };
+    cx.annotate(format!("{what} data, {}", plural(files, "file", "files")));
     Ok(())
 }
 
 async fn block_fields(
     cx: Cx,
-    (input, block, body, base64, mode, name): (Input, Span, Span, bool, String, String),
+    (input, block, body, kind, mode, name): (Input, Span, Span, Kind, String, String),
 ) -> Result<()> {
     let first = block.sub(0, body.offset.saturating_sub(block.offset));
     cx.emit(text_node("File name", first, &name));
@@ -142,11 +207,7 @@ async fn block_fields(
     );
     cx.emit(Node::new("Content").span(body).lazy(
         content,
-        Block {
-            input,
-            body,
-            base64,
-        },
+        Block { input, body, kind },
     ));
     Ok(())
 }

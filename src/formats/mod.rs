@@ -1793,6 +1793,7 @@ pub static FORMATS: &[&Format] = &[
     &text::mime::MBOX,
     &text::mime::MHTML,
     &text::mime::EML,
+    &text::yenc::FORMAT,
     &text::ldif::FORMAT,
     &text::diff::FORMAT,
     &text::vcard::VCARD,

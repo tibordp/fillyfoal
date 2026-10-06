@@ -1,0 +1,65 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ parts.yenc — yEnc, 2 blocks  [0x0+0x16e]
+  ▾ notes.txt (part 1) — yEnc, part 1 of 2, 49 bytes  [0x0+0xb7]
+    ▾ Header  [0x0+0x36]
+        part: 1  [0x8+0x6]
+        total: 2  [0xf+0x7]
+        line: 128  [0x17+0x8]
+        size: 97  [0x20+0x7]
+        name: "notes.txt"  [0x28+0xe]
+    ▾ Part  [0x38+0x15]
+        begin: 1  [0x3f+0x7]
+        end: 49  [0x47+0x6]
+    ▾ Content — UTF-8 text, CRLF line endings, 4 lines  [0x4f+0x33]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 4 CRLF, 0 CR
+      ▾ Lines — 4 lines  [#1:0x0+0x31]
+          Line 1: "Shopping list"  [#1:0x0+0xd]
+          Line 2: "============="  [#1:0xf+0xd]
+          Line 3: ""  [#1:0x1e+0x0]
+          Line 4: "- café au lait"  [#1:0x20+0xf]
+      CRC-32: 0x9f6557ed — matches the trailer
+    ▾ Trailer  [0x82+0x33]
+        size: 49  [0x88+0x7]
+        part: 1  [0x90+0x6]
+        pcrc32: 0x9f6557ed  [0x97+0xf]
+        crc32: 0x5725f388  [0xa7+0xe]
+  ▾ notes.txt (part 2) — yEnc, part 2 of 2, 48 bytes  [0xb7+0xb7]
+    ▾ Header  [0xb7+0x36]
+        part: 2  [0xbf+0x6]
+        total: 2  [0xc6+0x7]
+        line: 128  [0xce+0x8]
+        size: 97  [0xd7+0x7]
+        name: "notes.txt"  [0xdf+0xe]
+    ▾ Part  [0xef+0x16]
+        begin: 50  [0xf6+0x8]
+        end: 97  [0xff+0x6]
+    ▾ Content — UTF-8 text, CRLF line endings, 3 lines  [0x107+0x32]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 2 CRLF, 0 CR
+      ▾ Lines — 3 lines  [#2:0x0+0x30]
+          Line 1: "- 2× croissants"  [#2:0x0+0x10]
+          Line 2: ""  [#2:0x12+0x0]
+          Line 3: "Last line without terminator"  [#2:0x14+0x1c]
+      CRC-32: 0xc2f074fb — matches the trailer
+    ▾ Trailer  [0x139+0x33]
+        size: 48  [0x13f+0x7]
+        part: 2  [0x147+0x6]
+        pcrc32: 0xc2f074fb  [0x14e+0xf]
+        crc32: 0x5725f388  [0x15e+0xe]
+  ▾ Joined: notes.txt — 2 parts of 2, 97 bytes  [0x0+0x16e]
+    ▾ Content — UTF-8 text, CRLF line endings, 7 lines  [0x0+0x16e]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 6 CRLF, 0 CR
+      ▾ Lines — 7 lines  [#3:0x0+0x61]
+          Line 1: "Shopping list"  [#3:0x0+0xd]
+          Line 2: "============="  [#3:0xf+0xd]
+          Line 3: ""  [#3:0x1e+0x0]
+          Line 4: "- café au lait"  [#3:0x20+0xf]
+          Line 5: "- 2× croissants"  [#3:0x31+0x10]
+          Line 6: ""  [#3:0x43+0x0]
+          Line 7: "Last line without terminator"  [#3:0x45+0x1c]
+      CRC-32: 0x5725f388 — matches the trailer

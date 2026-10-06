@@ -21,7 +21,6 @@ use crate::span::Span;
 use crate::value::Value;
 
 use super::decode::preview;
-use super::encoding::prepare;
 use super::piece::Piece;
 use super::probe;
 use super::scan::{Owned, Scanner};
@@ -1480,8 +1479,20 @@ pub async fn element(cx: Cx, e: Elem) -> Result<()> {
     for a in &attrs {
         let mut node = Node::new(format!("@{}", a.name.text())).span(a.whole.span());
         if let Some(v) = a.value {
-            let text = decode_entities(&v.text(), e.mode == Mode::Html);
+            let raw = v.text();
+            let text = decode_entities(&raw, e.mode == Mode::Html);
             node = text_node(format!("@{}", a.name.text()), v.span(), &text);
+            if raw == text
+                && let Some(data) =
+                    super::decode::data_url_node(format!("@{}", a.name.text()), e.input, v.span(), &text)
+            {
+                // `src="data:image/png;base64,..."`: the payload decodes.
+                node = data;
+            } else if (text.contains("://") || text.starts_with("mailto:"))
+                && let Some(shown) = crate::text::url::display_url(&text)
+            {
+                node = node.summary(shown);
+            }
         }
         cx.push(node).await;
     }
@@ -1713,7 +1724,15 @@ async fn root_extent(lex: &mut Lexer<'_>, open: &Tok) -> Result<Extent> {
 
 /// Dissects a markup document: prolog, root element(s), epilog.
 pub async fn document(cx: &Cx, input: Input, mode: Mode) -> Result<()> {
-    let prepared = prepare(cx, input).await?;
+    // A declared single-byte encoding is transcoded up front.
+    let head = cx.read_avail(input.span.sub(0, 4096)).await?;
+    let declared = super::encoding::xml_declared(&head).or_else(|| {
+        (mode == Mode::Html)
+            .then(|| super::encoding::meta_charset(&head))
+            .flatten()
+    });
+    let declared = declared.as_deref().and_then(crate::codec::charset::lookup);
+    let prepared = super::encoding::prepare_declared(cx, input, declared).await?;
     let input = prepared.input(input);
     let mut lex = Lexer::new(cx, prepared.span, mode);
     let ns: Bindings = Arc::new(vec![(

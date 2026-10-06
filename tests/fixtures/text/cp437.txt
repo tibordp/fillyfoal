@@ -1,0 +1,9 @@
+-*- coding: cp437 -*-
+A DOS-era README, written in code page 437.
+
+ษออออออออออป
+บ Gr”แe: ซ บ
+ศออออออออออผ
+
+The box above is drawn with line-drawing characters;
+the same bytes mean other letters in other code pages.
