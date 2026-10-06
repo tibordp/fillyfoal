@@ -8,6 +8,7 @@
 //! bytes count against [`crate::Limits::max_derived`].
 
 pub mod inflate;
+pub mod bzip2;
 pub mod crypto;
 pub mod filters;
 pub mod lz;
@@ -59,6 +60,8 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// bzip2 streams.
+    Bzip2,
     /// LZ4 frames (also legacy and skippable frames).
     Lz4Frame,
     /// One raw LZ4 block.
@@ -116,6 +119,7 @@ impl Codec {
             Codec::PngPredictor { .. } => "png-predictor",
             Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Eexec { .. } => "eexec",
+            Codec::Bzip2 => "bzip2",
             Codec::Lz4Frame => "lz4",
             Codec::Lz4Block => "lz4-block",
             Codec::Snappy => "snappy",
@@ -142,6 +146,7 @@ impl Codec {
             Codec::PngPredictor { .. } => "png-predictor (lazy)",
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Eexec { .. } => "eexec (lazy)",
+            Codec::Bzip2 => "bzip2 (lazy)",
             Codec::Lz4Frame => "lz4 (lazy)",
             Codec::Lz4Block => "lz4-block (lazy)",
             Codec::Snappy => "snappy (lazy)",
@@ -164,7 +169,8 @@ impl Codec {
             | Codec::Lz4Frame
             | Codec::Lz4Block
             | Codec::Snappy
-            | Codec::SnappyFramed => "decompressed",
+            | Codec::SnappyFramed
+            | Codec::Bzip2 => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
             }
@@ -188,6 +194,8 @@ impl Codec {
             | Codec::TiffPredictor { .. } => 1,
             Codec::RunLength | Codec::PackBits => 128,
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
+            // A block of up to 900 kB can encode runs of 255-byte repeats.
+            Codec::Bzip2 => 50_000,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -214,6 +222,7 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Bzip2 => Box::new(Streaming(filters::Whole::new(bzip2::Bzip2))),
             Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),

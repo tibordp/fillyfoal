@@ -4,15 +4,14 @@
 //! starting with the 48-bit magic 0x314159265359 (π), and an end-of-stream
 //! marker 0x177245385090 (√π) followed by the combined CRC. Only the first
 //! block is byte-aligned; the others are found by a bit-level scan when the
-//! block list is expanded. Decompression is not supported (see the codec
-//! policy), so the compressed data is shown as an unsupported leaf.
+//! block list is expanded. The decompressed content is decoded on demand.
 
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, hex, human_size, uint, unsupported};
+use crate::formats::arcutil::{count, hex, human_size, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -107,7 +106,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ))
             .lazy(blocks, body),
     );
-    cx.emit(unsupported("Compressed data", body, "bzip2"));
+    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::Bzip2, None));
     let mut summary = format!("bzip2, {}k blocks", block_size / 1000);
     match eos {
         Some((bit, crc)) => {

@@ -17,8 +17,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Original pointer: 22  [0x26+0x4]
     ▾ Blocks — 1 block  [0x1c+0x35]
         Block 0: 0xf0106ca4 — bit offset 0x0, 42 bytes compressed  [0x1c+0x2b]
-      Compressed data — 53 bytes  [0x1c+0x35]
-        ! unsupported: bzip2 compression
+    ▾ Decompressed — 0x3e bytes decompressed  [0x18+0x39]
+        Data  [#1:0x0+0x3e]
     ▾ End of stream — at bit 0x151 of the compressed data  [0x46+0xb]
         End-of-stream magic: 0x177245385090 — √π (BCD), bit offset 1 in its first byte  [0x46+0x7]
         Combined CRC: 0xf0106ca4  [0x4c+0x5]
