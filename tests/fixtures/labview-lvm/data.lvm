@@ -1,0 +1,25 @@
+LabVIEW Measurement	
+Writer_Version	2
+Reader_Version	2
+Separator	Tab
+Decimal_Separator	.
+Multiple_Headers	No
+X_Columns	One
+Time_Pref	Relative
+Operator	tester
+Date	2024/05/17
+Time	10:30:00.000
+***End_of_Header***	
+	
+Channels	2	
+Samples	3	3	
+Date	2024/05/17	2024/05/17	
+Y_Unit_Label	Volts	Volts	
+X_Dimension	Time	Time	
+X0	0.0E+0	0.0E+0	
+Delta_X	1.0E-3	1.0E-3	
+***End_of_Header***	
+X_Value	Voltage	Current	Comment
+0.000000	1.25	0.01
+0.001000	1.30	0.02
+0.002000	1.28	0.01

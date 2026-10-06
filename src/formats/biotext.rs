@@ -1595,7 +1595,8 @@ async fn sdf_molfile(cx: Cx, mol: Span) -> Result<()> {
 // JCAMP-DX spectra
 
 fn jcamp_probe(h: &Head<'_>) -> bool {
-    is_text(h) && h.starts_with(b"##TITLE=") && h.data.windows(11).take(2048).any(|w| w == b"##JCAMP-DX=")
+    let head = h.data.get(..2048).unwrap_or(h.data);
+    is_text(h) && h.starts_with(b"##TITLE=") && (crate::formats::lines::contains(head, b"##JCAMP-DX=") || crate::formats::lines::contains(head, b"##JCAMPDX="))
 }
 
 declare_format!(pub JCAMP = "jcamp-dx", "JCAMP-DX spectrum", ["jdx", "dx", "jcm"], "chemical/x-jcamp-dx",

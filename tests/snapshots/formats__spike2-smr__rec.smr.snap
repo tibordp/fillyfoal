@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rec.smr — Spike2 v6, 4 channel slot(s), 0.100 s, Test recording  [0x0+0x470]
+    System ID: 6  [0x0+0x2]
+    Copyright: "(C) CED 87"  [0x2+0xa]
+    Creator: "FILLYFOL"  [0xc+0x8]
+    µs per time unit: 1  [0x14+0x2]
+    Time units per ADC: 1  [0x16+0x2]
+    File state: 0  [0x18+0x2]
+    First data block: 0x430  [0x1a+0x4]
+    Channels: 4  [0x1e+0x2]
+    Channel header size: 140  [0x20+0x2]
+    Extra data: 0  [0x22+0x2]
+    Buffer size: 0  [0x24+0x2]
+    OS format: 0  [0x26+0x2]
+    Maximum time: 100000  [0x28+0x4]
+    Time base (s): 0.000001  [0x2c+0x8]
+    Date/time: 00 1e 1e 0a 11 05 e8 07  |........|  [0x34+0x8]
+    Comment: "Test recording"  [0x70+0x50]
+    Comment: "second comment"  [0xc0+0x50]
+  ▾ Channels: 4  [0x200+0x230]
+      0: EMG: waveform (ADC) (0x1) — 1 block(s), ideal rate 1000 Hz, channel EMG  [0x200+0x8c]
+      1: Stim: event (rising) (0x3) — 1 block(s), ideal rate 0 Hz, channel Stim  [0x28c+0x8c]
+      3: Keys: marker (0x5) — 1 block(s), ideal rate 0 Hz, channel Keys  [0x3a4+0x8c]
+    Data blocks  [0x430+0x40]

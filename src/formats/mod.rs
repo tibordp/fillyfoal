@@ -211,6 +211,7 @@ pub mod eda;
 pub mod cad;
 pub mod microscopy;
 pub mod molecular;
+pub mod instruments2;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1128,6 +1129,26 @@ pub static FORMATS: &[&Format] = &[
     &molecular::CHARMM_PSF,
     &molecular::MSP,
     &molecular::MGF,
+    &instruments2::NMRPIPE,
+    &instruments2::SPARKY,
+    &instruments2::RIGAKU_RAS,
+    &instruments2::IMAGEJ_ROI,
+    &instruments2::PRINCETON_SPE,
+    &instruments2::ICS,
+    &instruments2::IMOD,
+    &instruments2::FREESURFER_SURF,
+    &instruments2::SPIKE2,
+    &instruments2::AXON_ATF,
+    &instruments2::IGOR_ITX,
+    &instruments2::LABVIEW_LVM,
+    &instruments2::KEYSIGHT_BIN,
+    &instruments2::TEKTRONIX_ISF,
+    &instruments2::LECROY_TRC,
+    &instruments2::FST,
+    &instruments2::BIORAD_PIC,
+    &instruments2::MGH,
+    &instruments2::ANALYZE,
+    &instruments2::GALACTIC_SPC,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,
