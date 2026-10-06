@@ -31,7 +31,6 @@ pub mod ntfs;
 pub mod parallels;
 pub mod ptypes;
 pub mod qcow;
-pub mod romfs;
 pub mod swap;
 pub mod uefi;
 pub mod ufs;

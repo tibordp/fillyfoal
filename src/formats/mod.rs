@@ -548,7 +548,6 @@ pub static FORMATS: &[&Format] = &[
     &disk::ext::FORMAT,
     &disk::minix::FORMAT,
     &disk::bfs::FORMAT,
-    &disk::romfs::FORMAT,
     &disk::f2fs::FORMAT,
     &disk::erofs::FORMAT,
     &disk::jfs::FORMAT,
