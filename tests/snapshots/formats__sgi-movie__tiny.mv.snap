@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mv — SGI movie, version 3  [0x0+0x28]
+    Signature  [0x0+0x4]
+    Version: 3  [0x4+0x2]
+    Movie  [0x8+0x20]

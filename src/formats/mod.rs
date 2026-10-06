@@ -210,6 +210,7 @@ pub mod misc6;
 pub mod misc7;
 pub mod misc8;
 pub mod misc9;
+pub mod misc10;
 // -- end misc --
 
 // -- ml models & mobile platforms --
@@ -1127,6 +1128,26 @@ pub static FORMATS: &[&Format] = &[
     &misc9::XACT,
     &misc9::SEGA_TEXTURE,
     &misc9::NINJA,
+    &misc10::PTM,
+    &misc10::DMF,
+    &misc10::IMF,
+    &misc10::J2B,
+    &misc10::GDM,
+    &misc10::MT2,
+    &misc10::AMS,
+    &misc10::SYMPHONIE,
+    &misc10::DIGITRAKKER,
+    &misc10::PLM,
+    &misc10::PSM,
+    &misc10::AMF,
+    &misc10::GUS_PAT,
+    &misc10::REALAUDIO,
+    &misc10::PSION_WVE,
+    &misc10::EVS,
+    &misc10::SMUSH,
+    &misc10::DXA,
+    &misc10::ARMOVIE,
+    &misc10::SGI_MOVIE,
     // Weak, size-based probes last.
     &misc9::BYML,
     &misc6::SQUEEZE,

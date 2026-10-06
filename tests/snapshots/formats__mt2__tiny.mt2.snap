@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mt2 — MadTracker 2.50 module "Tiny MT2" (MadTracker 2.0): 2 positions, 1 patterns, 4 tracks, 1 instruments  [0x0+0xbc]
+    Signature: "MT20"  [0x0+0x4]
+    User ID: 0x0  [0x4+0x4]
+    Version: 0x250  [0x8+0x2]
+    Tracker: "MadTracker 2.0"  [0xa+0x20]
+    Title: "Tiny MT2"  [0x2a+0x40]
+    Positions: 2  [0x6a+0x2]
+    Restart position: 0  [0x6c+0x2]
+    Patterns: 1  [0x6e+0x2]
+    Tracks: 4  [0x70+0x2]
+    Samples: 1  [0x72+0x2]
+    Ticks per line: 6  [0x74+0x1]
+    Lines per beat: 4  [0x75+0x1]
+    Flags: 0x0  [0x76+0x4]
+    Instruments: 1  [0x7a+0x2]
+    Song, patterns, drums and instruments  [0x7e+0x3e]

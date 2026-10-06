@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.gdm — GDM 1.0 module "Tiny GDM" by "filly"  [0x0+0x86]
+    Signature: 47 44 4d fe  |GDM.|  [0x0+0x4]
+    Title: "Tiny GDM"  [0x4+0x20]
+    Musician: "filly"  [0x24+0x20]
+    EOF marker: 0d 0a 1a  |...|  [0x44+0x3]
+    Format signature: "GMFS"  [0x47+0x4]
+    Format major: 1  [0x4b+0x1]
+    Format minor: 0  [0x4c+0x1]
+    Tracker ID: 0  [0x4d+0x2]
+    Tracker major: 1  [0x4f+0x1]
+    Tracker minor: 0  [0x50+0x1]
+    Panning map: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x51+0x20]
+    Master volume: 64  [0x71+0x1]
+    Tempo: 6  [0x72+0x1]
+    BPM: 125  [0x73+0x1]
+    Original format: S3M (0x3)  [0x74+0x2]
+    Tables, patterns and samples  [0x76+0x10]
