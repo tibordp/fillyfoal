@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ links-v2.h5 — HDF5 superblock v2, 300 bytes declared  [0x0+0x12c]
+  ▾ Superblock — version 2  [0x0+0x30]
+      Signature: 89 48 44 46 0d 0a 1a 0a  |.HDF....|  [0x0+0x8]
+      Version: 2  [0x8+0x1]
+      Size of offsets: 8  [0x9+0x1]
+      Size of lengths: 8  [0xa+0x1]
+      File consistency flags: 0  [0xb+0x1]
+      Base address: 0x0  [0xc+0x8]
+      Superblock extension address: 0xffffffffffffffff  [0x14+0x8]
+      End of file address: 0x12c  [0x1c+0x8]
+      Root group object header address: 0x30  [0x24+0x8]
+      Checksum: 0x0  [0x2c+0x4]
+  ▾ Root group: 0x30 — group, object header v2, 3 messages → 0x30+0x10
+    ▾ x: 0xa0 — dataset, object header v2, 3 messages  [0x3a+0x10] → 0xa0+0x10
+        Dataspace — [4]  [0xaa+0x10]
+        Datatype — fixed-point, 4 bytes  [0xba+0x10]
+        Data Layout: 0x104 — contiguous, 16 bytes  [0xca+0x16] → 0x104+0x10
+      self: 0x30 — already open above (hard-link cycle)  [0x4a+0x13] → 0x30+0x10
+      Attribute: "title"  [0x5d+0x13]

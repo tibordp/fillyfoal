@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dnxhr-lb.dnxhd — DNx, DNxHR LB, 256×120, 8-bit  [0x0+0x2000]
+  ▾ Frame 0 — DNxHR LB, 256×120, 8-bit, 8192 bytes  [0x0+0x2000]
+      Header prefix: 0x28003  [0x0+0x5]
+      Lines: 120  [0x18+0x2]
+      Samples per line: 256  [0x1a+0x2]
+      Compression ID: DNxHR LB (0x4fa)  [0x28+0x4]
+      Coded data  [0x280+0x1d80]

@@ -1,0 +1,63 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ lzma2-solid-plain-header.7z — 7-Zip archive, 4 files, LZMA2  [0x0+0x1ff]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0xb34f6b24  [0x8+0x4]
+      Next header offset: 0x51  [0xc+0x8]
+      Next header size: 398 — 398 bytes  [0x14+0x8]
+      Next header CRC: 0x3730f97d  [0x1c+0x4]
+  ▾ Files — 4 files  [0x71+0x18e]
+    ▾ sub — directory
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x41ed8010 — drwxr-xr-x
+    ▾ hello.txt — 10 bytes  [0x20+0x51]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 10 — 10 bytes
+        Folder: 0
+        Content — LZMA2, in a 78 bytes solid block  [0x20+0x51]
+          ! unsupported: LZMA2 compression
+    ▾ sub/a-very-long-file-name-that-does-not-fit-into-the-one-hundred-byte-name-field-of-a-classic-tar-header.txt — 1 byte  [0x20+0x51]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 1 — 1 byte
+        Folder: 0
+        Content — LZMA2, in a 78 bytes solid block  [0x20+0x51]
+          ! unsupported: LZMA2 compression
+    ▾ sub/pixel.png — 67 bytes  [0x20+0x51]
+        Modification time: 2024-01-02 03:04:00 UTC
+        Attributes: 0x81a48020 — -rw-r--r--
+        Size: 67 — 67 bytes
+        Folder: 0
+        Content — LZMA2, in a 78 bytes solid block  [0x20+0x51]
+          ! unsupported: LZMA2 compression
+  ▾ Folders — 1 folder  [0x20+0x51]
+    ▾ Folder 0 — LZMA2, 81 bytes → 78 bytes, 3 streams  [0x20+0x51]
+        Coder 0: "LZMA2" — 1 in, 1 out
+        Unpacked size: 78 — 78 bytes
+        Streams: 3
+        Data — 81 bytes  [0x20+0x51]
+          ! unsupported: LZMA2 compression
+  ▾ Next header — kHeader  [0x71+0x18e]
+    ▾ kMainStreamsInfo  [0x72+0x29]
+      ▾ kPackInfo — 1 packed stream, at 0x0  [0x73+0x6]
+          kSize — 1 size  [0x76+0x2]
+      ▾ kUnPackInfo — 1 folder  [0x79+0xc]
+          Folder 0 — LZMA2  [0x7d+0x5]
+          kCodersUnPackSize  [0x82+0x2]
+      ▾ kSubStreamsInfo — 3 streams  [0x85+0x15]
+          kNumUnPackStream  [0x86+0x2]
+          kSize  [0x88+0x3]
+          kCRC — 3 CRCs  [0x8b+0xe]
+    ▾ kFilesInfo — 4 files  [0x9b+0x163]
+        kEmptyStream — 1 empty stream  [0x9d+0x3]
+        kDummy — 11 bytes  [0xa0+0xd]
+        kName — 275 bytes  [0xad+0x116]
+        kDummy — 0 bytes  [0x1c3+0x2]
+        kMTime — 34 bytes  [0x1c5+0x24]
+        kWinAttributes — 18 bytes  [0x1e9+0x14]

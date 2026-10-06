@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tune.ult — ULT v4, 4 channels, 1 patterns, 1 samples — fillyfoal ult  [0x0+0x6a9]
+    Magic: "MAS_UTrack_V004"  [0x0+0xf]
+    Title: "fillyfoal ult"  [0xf+0x20]
+    Text: "Hello from UltraTracker!"  [0x30+0x20]
+  ▾ Samples — 1 samples  [0x51+0x42]
+    ▾ Sample 1 — beep  [0x51+0x40]
+        Name: "beep"  [0x51+0x20]
+        File name: "beep.smp"  [0x71+0xc]
+        Loop start: 0  [0x7d+0x4]
+        Loop end: 0  [0x81+0x4]
+        Size start: 0  [0x85+0x4]
+        Size end: 16  [0x89+0x4]
+        Volume: 255  [0x8d+0x1]
+        Flags: 0x0 []  [0x8e+0x1]
+        Finetune: 8363  [0x8f+0x2]
+    Orders: "0" — 256 entries  [0x93+0x100]
+    Channels − 1: 3  [0x193+0x1]
+    Patterns − 1: 0  [0x194+0x1]
+    Pan positions  [0x195+0x4]
+    Pattern and sample data  [0x199+0x510]

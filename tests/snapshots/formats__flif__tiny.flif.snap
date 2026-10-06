@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.flif — 640×480, 4 channel(s), 8-bit  [0x0+0x1f]
+    Header  [0x0+0xa]
+    Image data  [0xa+0x15]

@@ -1,0 +1,40 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ grid.nc — NetCDF classic, 3 dimensions, 3 variables, 3 global attributes  [0x0+0x204]
+    Magic: classic (0x1)  [0x0+0x4]
+    Number of records: 2  [0x4+0x4]
+  ▾ Dimensions — 3
+      time: "unlimited"  [0x10+0xc]
+      lat: 2  [0x1c+0xc]
+      lon: 3  [0x28+0xc]
+  ▾ Global attributes — 3
+      title: "Fixture dataset" — char[15]  [0x3c+0x24]
+      version: "1, 2" — int[2]  [0x60+0x1c]
+      scale: "0.5" — double[1]  [0x7c+0x1c]
+  ▾ Variables — 3  [0x0+0x190]
+    ▾ lat — float lat(lat)  [0xa0+0x48]
+        Dimension 0: "lat"
+      ▾ Attributes — 1
+          units: "degrees_north" — char[13]  [0xb8+0x24]
+        Type: float (0x5)
+        Size: 8 — bytes
+        Data: 0x190  [0x190+0x8]
+    ▾ lon — float lon(lon)  [0xe8+0x44]
+        Dimension 0: "lon"
+      ▾ Attributes — 1
+          units: "degrees_east" — char[12]  [0x100+0x20]
+        Type: float (0x5)
+        Size: 12 — bytes
+        Data: 0x198  [0x198+0xc]
+    ▾ temp — double temp(time, lat, lon)  [0x12c+0x64]
+        Dimension 0: "time"
+        Dimension 1: "lat"
+        Dimension 2: "lon"
+      ▾ Attributes — 2
+          units: "K" — char[1]  [0x14c+0x18]
+          valid_range: "0, 400" — float[2]  [0x164+0x20]
+        Type: double (0x6)
+        Size: 48 — per record
+        Data: 0x1a4 — first record; records are interleaved  [0x1a4+0x30]

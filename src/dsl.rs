@@ -338,3 +338,62 @@ impl<'a> Cursor<'a> {
         Ok((text, span))
     }
 }
+
+/// The path from a graph's root to the current node, for cycle and depth
+/// checks in graph-shaped formats (object references, directory trees,
+/// B-tree pages). Cheap to clone into expander state.
+///
+/// ```ignore
+/// match path.enter(page_number, 64) {
+///     Ok(child_path) => node.lazy(expander!(self::page: (Path, u32)), (child_path, page_number)),
+///     Err(diagnostic) => node.diag(diagnostic),
+/// }
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Path(std::sync::Arc<Vec<u64>>);
+
+impl Path {
+    pub fn new() -> Self {
+        Path::default()
+    }
+
+    pub fn depth(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn contains(&self, id: u64) -> bool {
+        self.0.contains(&id)
+    }
+
+    /// The path extended by `id`, or a diagnostic if `id` is already on the
+    /// path (a cycle) or the path would exceed `max_depth`.
+    pub fn enter(&self, id: u64, max_depth: usize) -> Result<Path> {
+        if self.contains(id) {
+            return Err(Diagnostic::malformed(format!("cycle: {id:#x} refers back to an ancestor")));
+        }
+        if self.0.len() >= max_depth {
+            return Err(Diagnostic::limit(format!("nested deeper than {max_depth}")));
+        }
+        let mut ids = Vec::with_capacity(self.0.len().saturating_add(1));
+        ids.extend_from_slice(&self.0);
+        ids.push(id);
+        Ok(Path(std::sync::Arc::new(ids)))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::Path;
+
+    #[test]
+    fn path_detects_cycles_and_depth() {
+        let root = Path::new();
+        let a = root.enter(1, 3).unwrap();
+        let b = a.enter(2, 3).unwrap();
+        assert!(b.enter(1, 3).is_err());
+        let c = b.enter(3, 3).unwrap();
+        assert!(c.enter(4, 3).is_err());
+        assert_eq!(c.depth(), 3);
+    }
+}

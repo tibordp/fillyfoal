@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ extension.fits — 2 HDU(s); PRIMARY, BITPIX 8, no data  [0x0+0x21c0]
+  ▾ HDU 0 — PRIMARY, BITPIX 8, no data  [0x0+0xb40]
+      SIMPLE: "T"  [0x0+0x50]
+      BITPIX: "8"  [0x50+0x50]
+      NAXIS: "0"  [0xa0+0x50]
+      EXTEND: "T"  [0xf0+0x50]
+      OBJECT: "It''s a test"  [0x140+0x50]
+      COMMENT: "made by gen_images.py"  [0x190+0x50]
+  ▾ HDU 1 — IMAGE, BITPIX -32, 3×2  [0xb40+0x1680]
+      XTENSION: "IMAGE"  [0xb40+0x50]
+      BITPIX: "-32"  [0xb90+0x50]
+      NAXIS: "2"  [0xbe0+0x50]
+      NAXIS1: "3"  [0xc30+0x50]
+      NAXIS2: "2"  [0xc80+0x50]
+      PCOUNT: "0"  [0xcd0+0x50]
+      GCOUNT: "1"  [0xd20+0x50]
+      EXTNAME: "SCI"  [0xd70+0x50]
+      Data  [0x1680+0x18]

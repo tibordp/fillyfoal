@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ default.xex — XEX2, default.exe  [0x0+0x200]
+    Magic: "XEX2"  [0x0+0x4]
+    Module flags: 0x1  [0x4+0x4]
+    PE data offset: 0x2000  [0x8+0x4]
+    Reserved: 0  [0xc+0x4]
+    Security info offset: 0x100  [0x10+0x4]
+    Optional headers: 2  [0x14+0x4]
+    Original base address: 0x82000000  [0x18+0x8]
+    Original PE name: 0x40  [0x20+0x8]
+    PE image (encrypted/compressed)  [0x200+0x0]

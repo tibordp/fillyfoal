@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fip.bin — FIP, 1 images  [0x0+0x70]
+    Name: 0xaa640001  [0x0+0x4]
+    Serial number: 305419896  [0x4+0x4]
+    Flags: 0x0  [0x8+0x8]
+  ▾ BL31 (EL3 runtime firmware) — 16 bytes  [0x60+0x10] → 0x10+0x28
+      ! unsupported: unrecognized format [0x60+0x10]

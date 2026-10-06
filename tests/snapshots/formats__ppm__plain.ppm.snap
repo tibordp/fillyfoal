@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ plain.ppm — 2×1, PPM plain, maxval 255  [0x0+0x32]
+    Magic: "P3" — PPM, plain  [0x0+0x2]
+    Comment: "# comment after magic"  [0x3+0x15]
+    Width: 2  [0x19+0x1]
+    Height: 1  [0x1b+0x1]
+    Maxval: 255  [0x1d+0x3]
+    Raster  [0x21+0x11]

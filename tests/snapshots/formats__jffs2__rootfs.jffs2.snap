@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rootfs.jffs2 — JFFS2 (little endian), 1 directory entries, 1 inode nodes  [0x0+0xc4]
+    CLEANMARKER  [0x0+0xc]
+    DIRENT — hello  [0xc+0x2d]
+    INODE  [0x3c+0x48]

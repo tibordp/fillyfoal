@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.sox — SoX, 32-bit PCM, 8000 Hz, 1 ch, 50 ms  [0x0+0x670]
+  ▾ Header  [0x0+0x20]
+      Magic: ".SoX"  [0x0+0x4]
+      Header size: 44  [0x4+0x4]
+      Samples: 400  [0x8+0x8]
+      Sample rate: 8000  [0x10+0x8]
+      Channels: 1  [0x18+0x4]
+      Comment length: 16  [0x1c+0x4]
+    Comment: "sox comment"  [0x20+0x10]
+    Samples — 50 ms  [0x30+0x640]

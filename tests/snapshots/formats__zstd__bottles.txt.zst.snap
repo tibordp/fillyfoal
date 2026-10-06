@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bottles.txt.zst — Zstandard, 1 frame, 5.0 KiB uncompressed  [0x0+0xf7]
+  ▾ Frame 0 — 1 block, 5.0 KiB  [0x0+0xf7]
+      Magic: 0xfd2fb528  [0x0+0x4]
+    ▾ Frame header — content 5.0 KiB, window 5.0 KiB  [0x4+0x3]
+        Frame header descriptor: 0x64 [FCS_2 | SINGLE_SEGMENT | CONTENT_CHECKSUM]  [0x4+0x1]
+        Frame content size: 4874 — 5130 (stored minus 256)  [0x5+0x2]
+    ▾ Blocks  [0x7+0xec]
+      ▾ Block 0 — compressed, 233 bytes, last  [0x7+0xec]
+          Last block: true  [0x7+0x1]
+          Block type: compressed (0x2)  [0x7+0x1]
+          Block size: 233 — 233 bytes  [0x7+0x3]
+          Compressed data — 233 bytes  [0xa+0xe9]
+            ! unsupported: zstd compression
+      Content checksum: 0x83c5e441  [0xf3+0x4]

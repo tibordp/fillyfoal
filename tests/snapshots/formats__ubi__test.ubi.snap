@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.ubi — UBI v1, 2 eraseblocks of 16 KiB, image 0x1234  [0x0+0x8000]
+  ▾ Erase counter header  [0x0+0x40]
+      Magic: "UBI#"  [0x0+0x4]
+      Version: 1  [0x4+0x1]
+      Padding: 00 00 00  |...|  [0x5+0x3]
+      Erase counter: 3  [0x8+0x8]
+      VID header offset: 0x40  [0x10+0x4]
+      Data offset: 0x800  [0x14+0x4]
+      Image sequence number: 0x1234  [0x18+0x4]
+      Padding: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1c+0x20]
+      Header CRC: 0x0  [0x3c+0x4]
+    Volume ID header — volume 0, LEB 0  [0x40+0x40]
+  ▾ Data (first eraseblock)  [0x800+0x3800]
+      ! unsupported: unrecognized format [0x800+0x3800]

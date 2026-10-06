@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ two-frames-422.y4m — YUV4MPEG2, 8×8 422, 5 fps, ~2 frames  [0x0+0x139]
+  ▾ Stream header  [0x0+0x2d]
+      Signature: "YUV4MPEG2"  [0x0+0x9]
+      Width: 8  [0xa+0x2]
+      Height: 8  [0xd+0x2]
+      Frame rate: "5:1"  [0x10+0x4]
+      Interlacing: "p" — progressive  [0x15+0x2]
+      Pixel aspect ratio: "1:1"  [0x18+0x4]
+      Colour space: "422"  [0x1d+0x4]
+      Extension: "YSCSS=422"  [0x22+0xa]
+  ▾ Frames — 128 bytes per frame  [0x2d+0x10c]
+    ▾ Frame 0  [0x2d+0x86]
+        Frame header: "FRAME"  [0x2d+0x6]
+        Y plane — 64 bytes  [0x33+0x40]
+        Cb plane — 32 bytes  [0x73+0x20]
+        Cr plane — 32 bytes  [0x93+0x20]
+    ▾ Frame 1  [0xb3+0x86]
+        Frame header: "FRAME"  [0xb3+0x6]
+        Y plane — 64 bytes  [0xb9+0x40]
+        Cb plane — 32 bytes  [0xf9+0x20]
+        Cr plane — 32 bytes  [0x119+0x20]
