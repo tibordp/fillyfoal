@@ -174,6 +174,7 @@ pub mod browser;
 pub mod winforensics;
 pub mod unixforensics;
 pub mod office_legacy;
+pub mod windiag;
 // -- end misc --
 
 // -- text --
@@ -852,6 +853,9 @@ pub static FORMATS: &[&Format] = &[
     &office_legacy::OFX,
     &office_legacy::MPX,
     &office_legacy::AMIPRO,
+    &windiag::MINIDUMP,
+    &windiag::WER,
+    &windiag::PIF,
     // Weak, size-based probes last.
     &unixforensics::UTMP,
     &winforensics::AUTORUN,
