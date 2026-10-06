@@ -1,6 +1,6 @@
 //! Game assets (Blizzard, Bethesda, Rockstar, Build engine, EA, FromSoftware,
-//! Nintendo audio and layouts, Minecraft NBT), trackers, bitmap fonts, Java
-//! keystores, PuTTY keys and planetary/remote-sensing imagery.
+//! Nintendo audio and layouts, Minecraft NBT), trackers, bitmap fonts,
+//! PuTTY keys and planetary/remote-sensing imagery.
 
 use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
@@ -9,7 +9,7 @@ use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::decode::{Transform, decoded_node};
-use crate::formats::{Head, Input, Probe, embedded, embedded_as};
+use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -926,120 +926,7 @@ async fn tex_gf(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Keys: Java keystores, PuTTY private keys
-
-fn jks_probe(h: &Head<'_>) -> bool {
-    (h.starts_with(b"\xfe\xed\xfe\xed") || h.starts_with(b"\xce\xce\xce\xce")) && u32_be(h.data, 4).is_some_and(|v| v == 1 || v == 2)
-}
-
-declare_format!(pub JKS = "java-keystore", "Java keystore (JKS/JCEKS)", ["jks", "keystore", "jceks", "ks"], "application/x-java-keystore",
-    Probe::Custom(jks_probe), jks);
-
-async fn jks(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 12)).await?;
-    let mut f = Fields::emitting(&cx, &head, BE);
-    let magic = f.u32("Magic").hex().emit()?;
-    let version = f.u32("Version").emit()?;
-    let count = f.u32("Entries").emit()?;
-    let mut cur = Cursor::new(&cx, file, BE);
-    cur.seek(12);
-    for i in 0..count {
-        let start = cur.pos();
-        let tag = cur.u32().await?;
-        let alias_len = u64::from(cur.u16().await?);
-        let alias = String::from_utf8_lossy(&cur.bytes(alias_len).await?).into_owned();
-        cur.skip(8);
-        let kind = match tag {
-            1 => {
-                let key_len = u64::from(cur.u32().await?);
-                cur.skip(key_len);
-                let chain = cur.u32().await?;
-                for _ in 0..chain {
-                    jks_skip_cert(&mut cur).await?;
-                }
-                "private key"
-            }
-            2 => {
-                jks_skip_cert(&mut cur).await?;
-                "trusted certificate"
-            }
-            3 => {
-                // A Java-serialized SealedObject: its length is not recorded.
-                cx.push(
-                    Node::new(alias)
-                        .span(file.tail(start))
-                        .summary("secret key")
-                        .diag(Diagnostic::unsupported("Java-serialized SealedObject; later entries are not listed")),
-                )
-                .await;
-                cx.annotate(format!("JCEKS keystore v{version}, {count} entries"));
-                return Ok(());
-            }
-            _ => return Err(Diagnostic::malformed(format!("unknown entry tag {tag}")).at(cur.since(start))),
-        };
-        let span = cur.since(start);
-        cx.push(
-            Node::new(alias)
-                .span(span)
-                .summary(format!("entry {i}: {kind}"))
-                .lazy(jks_entry, (input, span)),
-        )
-        .await;
-    }
-    if cur.remaining() >= 20 {
-        cx.emit(Node::new("Integrity digest (SHA-1)").span(file.sub(cur.pos(), 20)));
-    }
-    cx.annotate(format!("{} v{version}, {count} entries", if magic == 0xfeed_feed { "JKS keystore" } else { "JCEKS keystore" }));
-    Ok(())
-}
-
-async fn jks_skip_cert(cur: &mut Cursor<'_>) -> Result<()> {
-    let type_len = u64::from(cur.u16().await?);
-    cur.skip(type_len);
-    let len = u64::from(cur.u32().await?);
-    if len > cur.remaining() {
-        return Err(Diagnostic::malformed("certificate runs past the end of the file").at(cur.span(0)));
-    }
-    cur.skip(len);
-    Ok(())
-}
-
-async fn jks_entry(cx: Cx, (input, entry): (Input, Span)) -> Result<()> {
-    let mut cur = Cursor::new(&cx, entry, BE);
-    let tag = cur.u32().await?;
-    cx.emit(Node::new("Tag").span(cur.since(0)).value(Value::Enum { raw: tag.into(), bits: 32, name: match tag { 1 => Some("private key"), 2 => Some("trusted certificate"), 3 => Some("secret key"), _ => None } }));
-    let alias_len = u64::from(cur.u16().await?);
-    let alias_span = cur.span(alias_len);
-    let alias = String::from_utf8_lossy(&cur.bytes(alias_len).await?).into_owned();
-    cx.emit(Node::new("Alias").span(alias_span).value(text(alias)));
-    let at = cur.pos();
-    let millis = cur.u64().await?;
-    cx.emit(Node::new("Created").span(cur.since(at)).value(Value::Timestamp { unix_seconds: i64::try_from(millis / 1000).unwrap_or(0) }));
-    let mut certs = 1u32;
-    if tag == 1 {
-        let key_len = u64::from(cur.u32().await?);
-        cx.emit(Node::new("Protected private key").span(cur.span(key_len)).summary(format!("{key_len} bytes")));
-        cur.skip(key_len);
-        certs = cur.u32().await?;
-    }
-    for c in 0..certs {
-        let start = cur.pos();
-        let type_len = u64::from(cur.u16().await?);
-        let kind = String::from_utf8_lossy(&cur.bytes(type_len).await?).into_owned();
-        let len = u64::from(cur.u32().await?);
-        let data = cur.span(len);
-        cur.skip(len);
-        let name = if tag == 1 { format!("Certificate {c}") } else { "Certificate".to_owned() };
-        let node = if kind == "X.509" {
-            embedded_as(name, input.nested(data), &crate::formats::asn1::X509)
-        } else {
-            embedded(name, input.nested(data))
-        };
-        cx.push(node.summary(kind).target(cur.since(start))).await;
-    }
-    Ok(())
-}
+// Keys: PuTTY private keys
 
 declare_format!(pub PPK = "putty-key", "PuTTY private key (PPK)", ["ppk"], "application/x-putty-private-key",
     Probe::Magic(&[(0, b"PuTTY-User-Key-File-")]), ppk);

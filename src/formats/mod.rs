@@ -983,7 +983,6 @@ pub static FORMATS: &[&Format] = &[
     &misc4::FIGLET,
     &misc4::TEX_PK,
     &misc4::TEX_GF,
-    &misc4::JKS,
     &misc4::PPK,
     &misc4::SPHERE,
     &misc4::AVR,
