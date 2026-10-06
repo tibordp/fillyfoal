@@ -205,6 +205,7 @@ pub mod devices;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
+pub mod misc5;
 // -- end misc --
 
 // -- text --
@@ -430,6 +431,8 @@ pub static FORMATS: &[&Format] = &[
     &iff::FTXT,
     &iff::MAUD,
     &iff::RIFF,
+    // IFF-shaped formats with their own dissectors, before generic IFF.
+    &misc5::REX2,
     &iff::IFF,
     &midi::FORMAT,
     &au::FORMAT,
@@ -993,6 +996,23 @@ pub static FORMATS: &[&Format] = &[
     &misc4::MIFF,
     &misc4::UTAH_RLE,
     &misc4::PSP,
+    &misc5::FSB,
+    &misc5::XWB,
+    &misc5::WWISE_BNK,
+    &misc5::VAG,
+    &misc5::OMA,
+    &misc5::HCA,
+    &misc5::USM,
+    &misc5::CPK,
+    &misc5::AFS,
+    &misc5::EA_SCHL,
+    &misc5::NSV,
+    &misc5::NUV,
+    &misc5::R3D,
+    &misc5::DPAINT_ANM,
+    &misc5::TWINVQ,
+    &misc5::EXS,
+    &misc5::PTAB,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

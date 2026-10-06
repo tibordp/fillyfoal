@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.oma — OpenMG audio, ATRAC3plus  [0x0+0xba]
+    ID3-style tag — 16 bytes  [0x0+0x1a]
+    EA3 header  [0x1a+0x60]
+    Codec: ATRAC3plus (0x1)  [0x3a+0x1]
+    Audio  [0x7a+0x40]

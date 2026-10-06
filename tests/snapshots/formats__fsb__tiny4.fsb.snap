@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny4.fsb — FMOD FSB4 bank, 1 samples  [0x0+0x90]
+    Signature: "FSB4"  [0x0+0x4]
+    Samples: 1  [0x4+0x4]
+    Sample headers size: 80  [0x8+0x4]
+    Data size: 16  [0xc+0x4]
+    Version: 0x40000  [0x10+0x4]
+    Mode: 0x0  [0x14+0x4]
+    beep — sample header  [0x30+0x50]
+    Sample data  [0x80+0x10]

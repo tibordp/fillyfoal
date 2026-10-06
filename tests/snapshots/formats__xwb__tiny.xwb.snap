@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.xwb — XACT wave bank "TinyBank" (v46), 1 waves  [0x0+0x220]
+    Signature: "WBND"  [0x0+0x4]
+    Content version: 46  [0x4+0x4]
+    Header version: 44  [0x8+0x4]
+    Bank data offset: 0x34  [0xc+0x4]
+    Bank data length: 96  [0x10+0x4]
+    Entry metadata offset: 0x94  [0x14+0x4]
+    Entry metadata length: 24  [0x18+0x4]
+    Seek tables offset: 0x0  [0x1c+0x4]
+    Seek tables length: 0  [0x20+0x4]
+    Entry names offset: 0x0  [0x24+0x4]
+    Entry names length: 0  [0x28+0x4]
+    Wave data offset: 0x200  [0x2c+0x4]
+    Wave data length: 32  [0x30+0x4]
+    Bank data — "TinyBank", 1 entries  [0x34+0x60]
+    Entry metadata  [0x94+0x18]
+    Wave data  [0x200+0x20]

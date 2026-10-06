@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny5.fsb — FMOD FSB5 bank, 1 samples, Vorbis  [0x0+0x64]
+    Signature: "FSB5"  [0x0+0x4]
+    Version: 1  [0x4+0x4]
+    Samples: 1  [0x8+0x4]
+    Sample headers size: 8  [0xc+0x4]
+    Name table size: 0  [0x10+0x4]
+    Data size: 32  [0x14+0x4]
+    Codec: Vorbis (0xf)  [0x18+0x4]
+    Sample headers  [0x3c+0x8]
+    Sample data  [0x44+0x20]
