@@ -94,14 +94,74 @@ impl SourceEntry {
 /// resumable decoder, and the output produced so far.
 pub(crate) struct LazyDecode {
     parent: Span,
+    /// Encoded bytes read and not yet released; they start at `in_base`
+    /// of the parent span.
     input: Vec<u8>,
+    in_base: u64,
     input_eof: bool,
+    /// Decoded bytes held; they start at `out_base` of the source. Output
+    /// before the decoder's window is released once a stream grows large
+    /// (see [`LAZY_KEEP`]); reading before `out_base` decodes again from
+    /// the start.
     out: Vec<u8>,
+    out_base: u64,
     decoder: Box<dyn crate::codec::pipeline::Decoder>,
+    recipe: Codec,
     /// The decoder asked for more input than is buffered.
     starved: bool,
     done: bool,
 }
+
+impl LazyDecode {
+    /// A decoder at the start of `parent`, or `None` for a codec without
+    /// one.
+    fn new(parent: Span, recipe: &Codec) -> Option<Self> {
+        Some(LazyDecode {
+            parent,
+            input: Vec::new(),
+            in_base: 0,
+            input_eof: false,
+            out: Vec::new(),
+            out_base: 0,
+            decoder: recipe.decoder()?,
+            recipe: recipe.clone(),
+            starved: false,
+            done: false,
+        })
+    }
+
+    /// Drops what the decoder no longer needs: consumed input, and output
+    /// before both its window and `keep_from` (the start of the read being
+    /// served), keeping at least `keep` bytes of output.
+    fn release(&mut self, keep_from: u64, keep: usize) {
+        let n = self.decoder.releasable_input().min(self.input.len());
+        if n >= RELEASE_INPUT {
+            self.decoder.release_input(n);
+            self.input.drain(..n);
+            self.in_base = self.in_base.saturating_add(to_u64(n));
+        }
+        let len = self.out.len();
+        if len > keep.saturating_mul(2) {
+            let n = self
+                .decoder
+                .releasable_output(len)
+                .min(len.saturating_sub(keep))
+                .min(crate::bytes::to_usize(keep_from.saturating_sub(self.out_base)));
+            if n > 0 {
+                self.decoder.release_output(n);
+                self.out.drain(..n);
+                self.out_base = self.out_base.saturating_add(to_u64(n));
+            }
+        }
+    }
+}
+
+/// Decoded bytes a lazily decoded source keeps behind its decoding front
+/// once it releases output (reads near the front need no re-decoding): at
+/// most this, and at most a quarter of `Limits::max_derived`.
+const LAZY_KEEP: usize = 16 * 1024 * 1024;
+/// Consumed input is released in pieces at least this large.
+const RELEASE_INPUT: usize = 1024 * 1024;
 
 /// Encoded bytes kept ahead of the decoder, so it rarely runs out of input
 /// in the middle of a step (it asks for more when it does).
@@ -172,21 +232,17 @@ impl Shared {
             let Some(entry) = victim.and_then(|i| self.sources.get_mut(i)) else {
                 return false;
             };
-            let (Some(origin), Some(decoder)) = (entry.origin, entry.recipe.as_ref().and_then(Codec::decoder)) else {
+            let Some(origin) = entry.origin else {
                 entry.recipe = None;
                 continue;
             };
             let held = entry.held();
             entry.data = None;
-            entry.lazy = Some(Box::new(LazyDecode {
-                parent: origin.parent,
-                input: Vec::new(),
-                input_eof: false,
-                out: Vec::new(),
-                decoder,
-                starved: false,
-                done: false,
-            }));
+            let Some(fresh) = LazyDecode::new(origin.parent, entry.recipe.as_ref().unwrap_or(&Codec::Stored)) else {
+                entry.recipe = None;
+                continue;
+            };
+            entry.lazy = Some(Box::new(fresh));
             self.derived_bytes = self.derived_bytes.saturating_sub(held);
         }
         true
@@ -299,11 +355,20 @@ impl Shared {
             return Ok(Vec::new());
         };
         let before = st.out.len().saturating_add(st.input.len());
+        // Released output is decoded again, from the start.
+        if start < st.out_base
+            && let Some(fresh) = LazyDecode::new(st.parent, &st.recipe)
+        {
+            *st = fresh;
+        }
         // Room for the output still to come, and for the encoded input it
         // takes (kept alongside; rarely more than the output it produces).
-        let more_out = end.saturating_sub(to_u64(st.out.len()));
+        let keep = LAZY_KEEP.min(crate::bytes::to_usize(self.limits.max_derived / 4));
+        let front = st.out_base.saturating_add(to_u64(st.out.len()));
+        let fed_before = st.in_base.saturating_add(to_u64(st.input.len()));
+        let more_out = end.saturating_sub(front).min(to_u64(keep.saturating_mul(2)));
         let more_in = more_out
-            .min(st.parent.len.saturating_sub(to_u64(st.input.len())))
+            .min(st.parent.len.saturating_sub(st.in_base.saturating_add(to_u64(st.input.len()))))
             .saturating_add(to_u64(LOOKAHEAD));
         let need = more_out.saturating_add(more_in);
         self.make_room(need, source);
@@ -311,14 +376,14 @@ impl Shared {
             crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
         let mut failure = None;
         let result = loop {
-            if to_u64(st.out.len()) >= end || st.done {
-                let from = crate::bytes::to_usize(start).min(st.out.len());
-                let to = crate::bytes::to_usize(end).min(st.out.len());
+            if st.out_base.saturating_add(to_u64(st.out.len())) >= end || st.done {
+                let from = crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
+                let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
                 break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
             }
             let pending = st.input.len().saturating_sub(st.decoder.consumed());
             if !st.input_eof && (st.starved || pending < LOOKAHEAD) {
-                let fed = to_u64(st.input.len());
+                let fed = st.in_base.saturating_add(to_u64(st.input.len()));
                 let want = (LOOKAHEAD as u64).min(st.parent.len.saturating_sub(fed));
                 if want == 0 {
                     st.input_eof = true;
@@ -365,14 +430,22 @@ impl Shared {
                     failure = Some(e);
                 }
             }
+            st.release(start, keep);
         };
         // Once the stream has ended, its real length is known.
-        let finished_len = st.done.then(|| to_u64(st.out.len()));
+        let finished_len = st.done.then(|| st.out_base.saturating_add(to_u64(st.out.len())));
         let after = st.out.len().saturating_add(st.input.len());
         self.derived_bytes = self
             .derived_bytes
-            .saturating_add(to_u64(after.saturating_sub(before)));
-        self.charge(to_u64(after.saturating_sub(before)) >> 12);
+            .saturating_add(to_u64(after))
+            .saturating_sub(to_u64(before));
+        // Work: bytes decoded and read.
+        let work = st
+            .out_base
+            .saturating_add(to_u64(st.out.len()))
+            .saturating_sub(front)
+            .saturating_add(st.in_base.saturating_add(to_u64(st.input.len())).saturating_sub(fed_before));
+        self.charge(work >> 12);
         if let Some(entry) = self.sources.get_mut(index) {
             let declared = entry.len;
             entry.consumed = to_u64(st.decoder.consumed());
@@ -815,7 +888,7 @@ impl Cx {
     /// actually produces come back short. Memoized like other derived
     /// sources; decoded bytes count against `Limits::max_derived`.
     pub fn decode_lazy(&self, span: Span, codec: &Codec, len: u64) -> Result<Span> {
-        let Some(decoder) = codec.decoder() else {
+        let Some(fresh) = LazyDecode::new(span, codec) else {
             return Ok(span);
         };
         let origin = Origin {
@@ -832,15 +905,7 @@ impl Cx {
             len,
             data: None,
             pieces: None,
-            lazy: Some(Box::new(LazyDecode {
-                parent: span,
-                input: Vec::new(),
-                input_eof: false,
-                out: Vec::new(),
-                decoder,
-                starved: false,
-                done: false,
-            })),
+            lazy: Some(Box::new(fresh)),
             origin: Some(origin),
             consumed: 0,
             error: None,

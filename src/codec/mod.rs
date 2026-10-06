@@ -440,49 +440,99 @@ impl Decode for inflate::Inflate {
     fn consumed(&self) -> usize {
         inflate::Inflate::consumed(self)
     }
+
+    fn releasable_input(&self) -> usize {
+        inflate::Inflate::releasable_input(self)
+    }
+
+    fn release_input(&mut self, n: usize) {
+        inflate::Inflate::release_input(self, n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Back-references reach at most 32 KiB.
+        out_len.saturating_sub(inflate::WINDOW)
+    }
 }
 
 /// zlib: a 2-byte header, DEFLATE, and a big-endian Adler-32 trailer.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct Zlib {
     inflate: inflate::Inflate,
+    /// Header bytes still at the front of the input (2, until released).
+    header: usize,
+    checked: bool,
+    /// Adler-32 of the output so far.
+    adler: Adler32,
     trailer: Option<u32>,
+}
+
+impl Default for Zlib {
+    fn default() -> Self {
+        Zlib {
+            inflate: inflate::Inflate::new(),
+            header: 2,
+            checked: false,
+            adler: Adler32::new(),
+            trailer: None,
+        }
+    }
 }
 
 impl Decode for Zlib {
     fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
-        let (Some(&cmf), Some(&flg)) = (input.first(), input.get(1)) else {
-            return Err(Diagnostic::malformed("truncated zlib header"));
-        };
-        if cmf & 0x0f != 8 || (u16::from(cmf) << 8 | u16::from(flg)) % 31 != 0 {
-            return Err(Diagnostic::malformed("not a zlib stream"));
-        }
-        if flg & 0x20 != 0 {
-            return Err(Diagnostic::unsupported("zlib preset dictionary"));
-        }
-        let body = input.get(2..).unwrap_or_default();
-        match self.inflate.step(body, out, step, limit)? {
-            Step::More => Ok(Step::More),
-            Step::Done => {
-                let at = 2usize.saturating_add(self.inflate.consumed());
-                self.trailer = Some(
-                    crate::bytes::u32_be(input, at)
-                        .ok_or_else(|| Diagnostic::malformed("truncated zlib checksum"))?,
-                );
-                Ok(Step::Done)
+        if !self.checked {
+            let (Some(&cmf), Some(&flg)) = (input.first(), input.get(1)) else {
+                return Err(Diagnostic::malformed("truncated zlib header"));
+            };
+            if cmf & 0x0f != 8 || (u16::from(cmf) << 8 | u16::from(flg)) % 31 != 0 {
+                return Err(Diagnostic::malformed("not a zlib stream"));
             }
+            if flg & 0x20 != 0 {
+                return Err(Diagnostic::unsupported("zlib preset dictionary"));
+            }
+            self.checked = true;
         }
+        let body = input.get(self.header..).unwrap_or_default();
+        let mark = out.len();
+        let result = self.inflate.step(body, out, step, limit)?;
+        self.adler.update(out.get(mark..).unwrap_or_default());
+        if result == Step::Done {
+            let at = self.header.saturating_add(self.inflate.consumed());
+            self.trailer = Some(
+                crate::bytes::u32_be(input, at).ok_or_else(|| Diagnostic::malformed("truncated zlib checksum"))?,
+            );
+        }
+        Ok(result)
     }
 
     fn consumed(&self) -> usize {
-        let base = 2usize.saturating_add(self.inflate.consumed());
+        let base = self.header.saturating_add(self.inflate.consumed());
         if self.trailer.is_some() { base.saturating_add(4) } else { base }
     }
 
-    fn warning(&self, out: &[u8]) -> Option<Diagnostic> {
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         self.trailer
-            .filter(|&t| t != adler32(out))
+            .filter(|&t| t != self.adler.value())
             .map(|_| Diagnostic::warning("zlib Adler-32 checksum mismatch"))
+    }
+
+    fn releasable_input(&self) -> usize {
+        match self.inflate.releasable_input() {
+            0 => 0,
+            n => self.header.saturating_add(n),
+        }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        if n >= self.header {
+            self.inflate.release_input(n.saturating_sub(self.header));
+            self.header = 0;
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(inflate::WINDOW)
     }
 }
 
@@ -569,16 +619,43 @@ pub async fn inflate_span(cx: &Cx, span: Span, zlib: bool, expected: Option<u64>
 }
 
 pub fn adler32(data: &[u8]) -> u32 {
-    let (mut a, mut b) = (1u32, 0u32);
-    for chunk in data.chunks(5552) {
-        for &byte in chunk {
-            a = a.wrapping_add(u32::from(byte));
-            b = b.wrapping_add(a);
-        }
-        a %= 65521;
-        b %= 65521;
+    let mut a = Adler32::new();
+    a.update(data);
+    a.value()
+}
+
+/// A running Adler-32.
+#[derive(Clone, Copy, Debug)]
+pub struct Adler32 {
+    a: u32,
+    b: u32,
+}
+
+impl Default for Adler32 {
+    fn default() -> Self {
+        Self::new()
     }
-    b << 16 | a
+}
+
+impl Adler32 {
+    pub fn new() -> Self {
+        Adler32 { a: 1, b: 0 }
+    }
+
+    pub fn update(&mut self, data: &[u8]) {
+        for chunk in data.chunks(5552) {
+            for &byte in chunk {
+                self.a = self.a.wrapping_add(u32::from(byte));
+                self.b = self.b.wrapping_add(self.a);
+            }
+            self.a %= 65521;
+            self.b %= 65521;
+        }
+    }
+
+    pub fn value(&self) -> u32 {
+        self.b << 16 | self.a
+    }
 }
 
 pub fn crc32(data: &[u8]) -> u32 {

@@ -82,6 +82,9 @@ impl Huffman {
     }
 }
 
+/// How far back a DEFLATE match can reach.
+pub const WINDOW: usize = 32 * 1024;
+
 fn bad(message: &str) -> Diagnostic {
     Diagnostic::malformed(format!("deflate: {message}"))
 }
@@ -123,6 +126,17 @@ impl Inflate {
     /// Bytes of input consumed so far (rounded up to whole bytes).
     pub fn consumed(&self) -> usize {
         self.bit.div_ceil(8)
+    }
+
+    /// Whole input bytes already read (a partly read byte is kept).
+    pub fn releasable_input(&self) -> usize {
+        self.bit / 8
+    }
+
+    /// The first `n` (at most [`Inflate::releasable_input`]) input bytes
+    /// were dropped.
+    pub fn release_input(&mut self, n: usize) {
+        self.bit = self.bit.saturating_sub(n.saturating_mul(8));
     }
 
     /// Decodes until at least `step` more bytes have been produced, the stream

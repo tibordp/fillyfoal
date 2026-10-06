@@ -8,6 +8,21 @@
 //! ran out before the end of the stream, rolls back and asks for more. So
 //! decoders are written as if the whole input were in memory, and still run
 //! lazily, as far as reads reach.
+//!
+//! # Releasing
+//!
+//! A long lazily decoded stream would keep all its input and output. A
+//! decoder that can tell what it no longer needs lets the caller drop it:
+//! [`Decode::releasable_input`] is input it will never read again (what it
+//! has consumed, give or take a partial byte), and
+//! [`Decode::releasable_output`] is output before its window (the history
+//! its back-references can reach). The caller drops at most that many bytes
+//! from the front and calls `release_input`/`release_output` with the
+//! amount, and the decoder shifts the positions it keeps by it. From then
+//! on `input` and `out` start later than the stream does; `consumed` and
+//! every position are relative to the buffers as they are now. A decoder
+//! that releases output must not checksum `out` in [`Decode::warning`]:
+//! it keeps running checksums instead. The defaults release nothing.
 
 use crate::error::{Diagnostic, Result};
 
@@ -33,10 +48,36 @@ pub trait Decode: Clone + Send + 'static {
     fn consumed(&self) -> usize;
 
     /// A problem that does not stop decoding (a checksum mismatch), once
-    /// the stream has ended.
+    /// the stream has ended. `out` is the output still held, which is not
+    /// all of it once output has been released: checksums over the whole
+    /// output must be computed as it is produced.
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
     }
+
+    /// Input bytes at the front that the decoder will never read again
+    /// (at most [`consumed`](Self::consumed)). See "Releasing" in the
+    /// module docs. The default, 0, keeps all input.
+    fn releasable_input(&self) -> usize {
+        0
+    }
+
+    /// Rebases the decoder's input positions after the caller drops the
+    /// first `n` (at most [`releasable_input`](Self::releasable_input))
+    /// bytes of its input.
+    fn release_input(&mut self, _n: usize) {}
+
+    /// Output bytes at the front that the decoder will never read again
+    /// (what lies before its window), given `out_len` bytes of output. The
+    /// default, 0, keeps all output.
+    fn releasable_output(&self, _out_len: usize) -> usize {
+        0
+    }
+
+    /// Rebases the decoder's output positions after the caller drops the
+    /// first `n` (at most [`releasable_output`](Self::releasable_output))
+    /// bytes of its output.
+    fn release_output(&mut self, _n: usize) {}
 }
 
 /// Status of a [`Decoder`] step.
@@ -55,6 +96,30 @@ pub trait Decoder: Send {
     fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status>;
     fn consumed(&self) -> usize;
     fn warning(&self, out: &[u8]) -> Option<Diagnostic>;
+
+    /// Input bytes at the front that the decoder will never read again
+    /// (at most [`consumed`](Self::consumed)). See "Releasing" in the
+    /// module docs. The default, 0, keeps all input.
+    fn releasable_input(&self) -> usize {
+        0
+    }
+
+    /// Rebases the decoder's input positions after the caller drops the
+    /// first `n` (at most [`releasable_input`](Self::releasable_input))
+    /// bytes of its input.
+    fn release_input(&mut self, _n: usize) {}
+
+    /// Output bytes at the front that the decoder will never read again
+    /// (what lies before its window), given `out_len` bytes of output. The
+    /// default, 0, keeps all output.
+    fn releasable_output(&self, _out_len: usize) -> usize {
+        0
+    }
+
+    /// Rebases the decoder's output positions after the caller drops the
+    /// first `n` (at most [`releasable_output`](Self::releasable_output))
+    /// bytes of its output.
+    fn release_output(&mut self, _n: usize) {}
 }
 
 /// Adapts a [`Decode`] into a [`Decoder`] by rolling back steps that ran out
@@ -86,6 +151,22 @@ impl<D: Decode> Decoder for Streaming<D> {
 
     fn warning(&self, out: &[u8]) -> Option<Diagnostic> {
         self.0.warning(out)
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.0.releasable_input()
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.0.release_input(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        self.0.releasable_output(out_len)
+    }
+
+    fn release_output(&mut self, n: usize) {
+        self.0.release_output(n);
     }
 }
 
@@ -154,6 +235,7 @@ impl Decoder for Chain {
             out.extend_from_slice(input.get(from..).unwrap_or_default());
             return Ok(if eof { Status::Done } else { Status::NeedInput });
         };
+        self.trim();
         loop {
             let (before, rest) = self.stages.split_at_mut(last);
             let Some(stage) = rest.first_mut() else {
@@ -184,6 +266,48 @@ impl Decoder for Chain {
             let produced = if i == last { out } else { stage.out.as_slice() };
             stage.decoder.warning(produced)
         })
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.stages.first().map_or(0, |s| s.decoder.releasable_input())
+    }
+
+    fn release_input(&mut self, n: usize) {
+        if let Some(s) = self.stages.first_mut() {
+            s.decoder.release_input(n);
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        self.stages.last().map_or(0, |s| s.decoder.releasable_output(out_len))
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(s) = self.stages.last_mut() {
+            s.decoder.release_output(n);
+        }
+    }
+}
+
+impl Chain {
+    /// Drops what both sides of each intermediate buffer are done with.
+    fn trim(&mut self) {
+        for i in 1..self.stages.len() {
+            let (before, rest) = self.stages.split_at_mut(i);
+            let (Some(prev), Some(next)) = (before.last_mut(), rest.first_mut()) else {
+                continue;
+            };
+            let n = next
+                .decoder
+                .releasable_input()
+                .min(prev.decoder.releasable_output(prev.out.len()))
+                .min(prev.out.len());
+            if n > 0 {
+                next.decoder.release_input(n);
+                prev.decoder.release_output(n);
+                prev.out.drain(..n);
+            }
+        }
     }
 }
 

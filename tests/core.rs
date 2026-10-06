@@ -1095,3 +1095,38 @@ fn decoded_sources_are_evicted_and_decoded_again() {
     assert_eq!(tight[0], Value::Bytes(parts[0][parts[0].len() - 8..].to_vec()));
     assert!(held <= 1 << 20, "{held} derived bytes held");
 }
+
+/// Reads a 64 MiB lazily decoded stream at its end, its start and its
+/// middle, emitting 16 bytes from each.
+async fn read_far(cx: Cx, file: Span) -> Result<()> {
+    let len = 64u64 << 20;
+    let s = cx.decode_lazy(file, &fillyfoal::codec::Codec::Zlib, len)?;
+    for at in [len - 16, 0, len / 2, len - 16] {
+        let bytes = cx.read(s.sub(at, 16)).await?;
+        cx.emit(Node::new(format!("at {at}")).value(Value::Bytes(bytes)));
+    }
+    Ok(())
+}
+
+/// A stream sixteen times larger than the decoded-data budget can be read
+/// anywhere: the source keeps a window and decodes again from the start for
+/// reads behind it.
+#[test]
+fn lazy_sources_slide_over_streams_larger_than_the_budget() {
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/lazy/big.zlib")).unwrap();
+    let file = Span::new(fillyfoal::SourceId::default_host(), 0, data.len() as u64);
+    let limits = fillyfoal::Limits { max_derived: 4 << 20, ..fillyfoal::Limits::default() };
+    let mut host = Host::new(data, limits);
+    host.max_polls = 10_000_000;
+    let root = host.session.add_root(Node::new("far").lazy(read_far, file));
+    host.session.expand(root, 10);
+    host.run();
+    let c = host.session.children(root).unwrap();
+    assert!(c.error.is_none(), "{:?}", c.error);
+    let expect = |i: u64| -> Vec<u8> { (i..i + 16).map(|i| ((i * 7) + (i >> 12)) as u8).collect() };
+    let len = 64u64 << 20;
+    let got: Vec<Value> = c.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
+    let want: Vec<Value> = [len - 16, 0, len / 2, len - 16].iter().map(|&at| Value::Bytes(expect(at))).collect();
+    assert_eq!(got, want);
+    assert!(host.session.derived_bytes() <= 4 << 20, "{} bytes held", host.session.derived_bytes());
+}
