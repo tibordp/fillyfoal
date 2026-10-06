@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ trip.gdb — MapSource GDB v3, 2 waypoints, 1 tracks, 0 routes  [0x0+0xae]
+    Magic: "MsRcf"  [0x0+0x6]
+    header — format version 3  [0x6+0x7]
+    application: "MapSource" — 31 bytes  [0xd+0x24]
+    waypoint: "Summit" — 37 bytes  [0x31+0x2a]
+    waypoint: "Hut" — 34 bytes  [0x5b+0x27]
+    track: "Morning hike" — 33 bytes  [0x82+0x26]
+    end — 1 bytes  [0xa8+0x6]

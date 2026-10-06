@@ -802,6 +802,14 @@ pub static FORMATS: &[&Format] = &[
     &geo::tiles::FLATGEOBUF,
     &geo::tiles::O5M,
     &geo::tiles::MVT,
+    &geo::gis::GDBTABLE,
+    &geo::gis::ISO8211,
+    &geo::gis::NTV2,
+    &geo::gis::CTABLE2,
+    &geo::gis::LAZ,
+    &geo::gis::GARMIN_IMG,
+    &geo::gis::GARMIN_GDB,
+    &geo::gis::OV2,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

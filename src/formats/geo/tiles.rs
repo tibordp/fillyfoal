@@ -600,7 +600,7 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                 if let Some(t) = feat.iter().find(|g| g.number == 3) {
                     node = node.summary(crate::value::lookup(GEOM_TYPES, t.value).unwrap_or("UNKNOWN"));
                 }
-                cx.push(node.lazy(emit_all, parts)).await;
+                cx.push(node.lazy(super::emit_nodes, parts)).await;
                 index = index.saturating_add(1);
             }
             n => cx.push(Node::new(format!("Field {n}")).span(span)).await,
@@ -609,13 +609,6 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     Ok(())
 }
 
-/// Emits prepared nodes (small, already-parsed structures).
-async fn emit_all(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    for n in nodes {
-        cx.emit(n);
-    }
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // OpenStreetMap o5m / o5c

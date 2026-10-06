@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sights.ov2 — TomTom OV2, 3 POIs  [0x0+0x69]
+    Skipper — block of 84 bytes, lon 13.7°…14.6°, lat 45.5°…46.1°  [0x0+0x15]
+    Ljubljana Castle — 46.0569°, 14.5058°  [0x15+0x1e]
+    Koper harbour — 45.5469°, 13.7302° (id42)  [0x33+0x21]
+    Maribor — 46.5547°, 15.6459°  [0x54+0x15]

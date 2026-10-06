@@ -55,6 +55,15 @@ pub(crate) fn time(unix_seconds: i64) -> Value {
     Value::Timestamp { unix_seconds }
 }
 
+/// Emits prepared nodes: the expander for small structures that were
+/// parsed anyway to build their parent's summary.
+pub(crate) async fn emit_nodes(cx: Cx, nodes: Vec<Node>) -> Result<()> {
+    for n in nodes {
+        cx.emit(n);
+    }
+    Ok(())
+}
+
 /// `x` rounded to six decimal places, for display.
 pub(crate) fn round(x: f64) -> f64 {
     (x * 1e6).round() / 1e6
