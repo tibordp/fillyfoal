@@ -960,3 +960,75 @@ fn yenc_decodes_real_encoder_output() {
     let (texts, _) = explore_decoded("bad.yenc", bad);
     assert!(texts.iter().any(|t| t.starts_with("diag Malformed: CRC-32")), "{texts:?}");
 }
+
+/// A collection of `n` numbered children; with `marks`, the walker records
+/// resume marks (its next index) and counts in the summary where it
+/// started, so tests can see whether a restart used one.
+async fn numbers(cx: Cx, (n, marks): (u64, bool)) -> Result<()> {
+    let mut i = cx.resume::<u64>().unwrap_or(0);
+    cx.diag(fillyfoal::Diagnostic::note(format!("started at {i}")));
+    cx.set_count(fillyfoal::Count::Exact(n));
+    while i < n {
+        if marks {
+            let at = i;
+            cx.mark(move || at);
+        }
+        cx.push(Node::new(format!("n{i}")).value(Value::Text(i.to_string()))).await;
+        i += 1;
+    }
+    Ok(())
+}
+
+fn window(host: &Host, id: fillyfoal::NodeId) -> (u64, Vec<String>) {
+    let c = host.session.children(id).unwrap();
+    (c.first, c.ids.iter().map(|&i| host.session.node(i).unwrap().name.to_string()).collect())
+}
+
+fn started(host: &Host, id: fillyfoal::NodeId) -> Vec<String> {
+    host.session.node(id).unwrap().diagnostics.iter().map(|d| d.message.clone()).collect()
+}
+
+#[test]
+fn windows_seek_and_resume_from_marks() {
+    for marks in [true, false] {
+        let mut host = Host::with_chunk(Vec::new(), 4);
+        let root = host.session.add_root(Node::new("numbers").lazy(numbers, (10_000u64, marks)));
+        // Page through the start.
+        host.session.expand(root, 50);
+        host.run();
+        assert_eq!(window(&host, root).1.len(), 50);
+        // Jump far ahead: only the window is materialised.
+        host.session.seek(root, 5_000, 20);
+        host.run();
+        let (first, names) = window(&host, root);
+        assert_eq!(first, 5_000);
+        assert_eq!(names, (5_000..5_020).map(|i| format!("n{i}")).collect::<Vec<_>>());
+        assert!(host.session.live_nodes() < 100, "{} live nodes", host.session.live_nodes());
+        // Back to the middle: a restart, from a mark when there are marks.
+        host.session.seek(root, 1_000, 10);
+        host.run();
+        let (first, names) = window(&host, root);
+        assert_eq!(first, 1_000);
+        assert_eq!(names, (1_000..1_010).map(|i| format!("n{i}")).collect::<Vec<_>>());
+        let notes = started(&host, root);
+        assert_eq!(notes.len(), 1, "diagnostics of the restarted run only: {notes:?}");
+        if marks {
+            assert_ne!(notes[0], "started at 0", "restart did not use a mark");
+        } else {
+            assert_eq!(notes[0], "started at 0");
+        }
+        // Forward again within reach, then to the end.
+        host.session.seek(root, 9_990, 100);
+        host.run();
+        let (first, names) = window(&host, root);
+        assert_eq!((first, names.len()), (9_990, 10));
+        assert_eq!(host.session.children(root).unwrap().state, fillyfoal::ChildState::Complete);
+        assert_eq!(host.session.children(root).unwrap().count, fillyfoal::Count::Exact(10_000));
+        // Collapsing and expanding again starts from scratch with one note.
+        host.session.collapse(root);
+        host.session.expand(root, 5);
+        host.run();
+        assert_eq!(window(&host, root), (0, (0..5).map(|i| format!("n{i}")).collect()));
+        assert_eq!(started(&host, root), vec!["started at 0".to_owned()]);
+    }
+}

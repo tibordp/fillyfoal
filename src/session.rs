@@ -7,7 +7,7 @@ use std::task::{Context, Poll, Waker};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::cache::ByteCache;
-use crate::cx::{Cx, Output, Shared, Stop, lock};
+use crate::cx::{Cx, Key, Output, Shared, Stop, lock};
 use crate::error::Diagnostic;
 use crate::formats;
 use crate::node::{Count, Expansion, Node};
@@ -44,6 +44,9 @@ impl Default for Limits {
         }
     }
 }
+
+/// Resume marks kept per node before they are thinned.
+const MAX_MARKS: usize = 4096;
 
 /// Handle to a node. Stale handles (to collapsed subtrees) are detected.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -82,7 +85,12 @@ pub enum Wait {
 }
 
 pub struct Children<'a> {
+    /// The children currently materialised: indices `first..first + ids.len()`
+    /// of the collection (see [`Session::seek`]).
     pub ids: &'a [NodeId],
+    /// Index of `ids[0]` within the collection; 0 unless the host moved the
+    /// window with [`Session::seek`].
+    pub first: u64,
     pub state: ChildState,
     pub count: Count,
     pub error: Option<&'a Diagnostic>,
@@ -129,7 +137,14 @@ struct Slot {
 struct Entry {
     node: Node,
     parent: Option<NodeId>,
+    /// The materialised window of children, starting at index `first`.
     children: Vec<NodeId>,
+    first: u64,
+    /// Resume marks recorded by expansions: child index → walker state.
+    marks: std::collections::BTreeMap<u64, Key>,
+    /// The node's own diagnostics (from its creator); expansions add more,
+    /// which are dropped when the expansion restarts.
+    own_diagnostics: usize,
     state: ChildState,
     count: Count,
     error: Option<Diagnostic>,
@@ -155,9 +170,12 @@ impl Entry {
             ChildState::Leaf
         };
         Entry {
+            own_diagnostics: node.diagnostics.len(),
             node,
             parent,
             children: Vec::new(),
+            first: 0,
+            marks: std::collections::BTreeMap::new(),
             state,
             count: Count::Unknown,
             error: None,
@@ -335,45 +353,26 @@ impl Session {
     pub fn children(&self, id: NodeId) -> Option<Children<'_>> {
         self.entry(id).map(|e| Children {
             ids: &e.children,
+            first: e.first,
             state: e.state,
             count: e.count,
             error: e.error.as_ref(),
         })
     }
 
-    /// Requests at least `at_least` children of `id`. No work happens until
-    /// [`Session::poll`].
+    /// Requests the children of `id` up to index `at_least` (exclusive).
+    /// No work happens until [`Session::poll`].
     pub fn expand(&mut self, id: NodeId, at_least: u64) {
-        let shared = self.shared.clone();
         self.clock = self.clock.wrapping_add(1);
         let clock = self.clock;
         let Some(entry) = self.entry_mut(id) else {
             return;
         };
         entry.touched = clock;
-        let have = to_u64(entry.children.len());
+        let have = entry.first.saturating_add(to_u64(entry.children.len()));
+        let first = entry.first;
         match entry.state {
-            ChildState::NotRequested => {
-                let Some(expander) = entry.node.expander.clone() else {
-                    return;
-                };
-                let out = Arc::new(Mutex::new(Output {
-                    target: at_least,
-                    ..Output::default()
-                }));
-                let cx = Cx {
-                    shared,
-                    out: out.clone(),
-                };
-                entry.run = Some(Run {
-                    future: expander.start(cx),
-                    out,
-                    waiting: Vec::new(),
-                    secret: None,
-                });
-                entry.state = ChildState::Running(Wait::Ready);
-                self.active.push(id);
-            }
+            ChildState::NotRequested => self.start(id, first, at_least),
             ChildState::More | ChildState::Running(_) => {
                 if let Some(run) = &entry.run {
                     let mut out = lock(&run.out);
@@ -388,9 +387,115 @@ impl Session {
         }
     }
 
+    /// Moves the window of `id`'s children to indices `start..start + len`:
+    /// children outside it are released (their handles go stale) and the
+    /// missing ones are produced on the next polls. Seeking forward continues
+    /// the running expansion, dropping what lies before the window; seeking
+    /// backward restarts it, from the nearest resume mark (see
+    /// [`crate::Cx::mark`]) if the dissector records them. This keeps memory
+    /// bounded for huge collections while allowing random access.
+    pub fn seek(&mut self, id: NodeId, start: u64, len: u64) {
+        self.clock = self.clock.wrapping_add(1);
+        let clock = self.clock;
+        let end = start.saturating_add(len);
+        let Some(entry) = self.entry_mut(id) else {
+            return;
+        };
+        entry.touched = clock;
+        if entry.state == ChildState::Leaf {
+            return;
+        }
+        let first = entry.first;
+        let have = first.saturating_add(to_u64(entry.children.len()));
+        // Release children outside the window.
+        let keep_from = to_usize(start.saturating_sub(first)).min(entry.children.len());
+        let keep_to = to_usize(end.saturating_sub(first)).min(entry.children.len());
+        let mut dropped: Vec<NodeId> = entry.children.drain(keep_to..).collect();
+        dropped.extend(entry.children.drain(..keep_from));
+        let restart = start < first
+            || (entry.state == ChildState::NotRequested)
+            || (end > have && matches!(entry.state, ChildState::More | ChildState::Running(_)) && {
+                // Jump ahead from a mark if one lies beyond where the
+                // running expansion has got to.
+                let emitted = entry.run.as_ref().map_or(0, |r| lock(&r.out).emitted);
+                entry.marks.range(..=start).next_back().is_some_and(|(&i, _)| i > emitted)
+            });
+        if restart {
+            dropped.append(&mut entry.children);
+        }
+        for child in dropped {
+            self.release(child);
+        }
+        if restart {
+            self.start(id, start, end);
+            return;
+        }
+        let Some(entry) = self.entry_mut(id) else {
+            return;
+        };
+        // What is left starts at `start` (or nothing is left).
+        entry.first = start;
+        if end > have
+            && let Some(run) = &entry.run
+        {
+            let mut out = lock(&run.out);
+            out.target = out.target.max(end);
+            out.skip = out.skip.max(start);
+            drop(out);
+            if entry.state == ChildState::More {
+                entry.state = ChildState::Running(Wait::Ready);
+                self.active.push(id);
+            }
+        }
+    }
+
+    /// Starts (or restarts) the expansion of `id`, producing children from
+    /// index `start` up to `target`, resuming from the nearest mark.
+    fn start(&mut self, id: NodeId, start: u64, target: u64) {
+        let shared = self.shared.clone();
+        let Some(entry) = self.entry_mut(id) else {
+            return;
+        };
+        let Some(expander) = entry.node.expander.clone() else {
+            return;
+        };
+        let (from, resume) = match entry.marks.range(..=start).next_back() {
+            Some((&index, key)) => (index, Some(key.clone())),
+            None => (0, None),
+        };
+        let out = Arc::new(Mutex::new(Output {
+            target,
+            skip: start,
+            emitted: from,
+            last_mark: from,
+            resume,
+            ..Output::default()
+        }));
+        let cx = Cx {
+            shared,
+            out: out.clone(),
+        };
+        entry.run = Some(Run {
+            future: expander.start(cx),
+            out,
+            waiting: Vec::new(),
+            secret: None,
+        });
+        // A restarted expansion reproduces its own diagnostics.
+        entry.node.diagnostics.truncate(entry.own_diagnostics);
+        entry.error = None;
+        entry.work = 0;
+        entry.first = start;
+        entry.state = ChildState::Running(Wait::Ready);
+        self.active.retain(|&a| a != id);
+        self.active.push(id);
+    }
+
     /// Requests `page` more children than are currently present.
     pub fn expand_more(&mut self, id: NodeId, page: u64) {
-        let have = self.entry(id).map_or(0, |e| to_u64(e.children.len()));
+        let have = self
+            .entry(id)
+            .map_or(0, |e| e.first.saturating_add(to_u64(e.children.len())));
         self.expand(id, have.saturating_add(page));
     }
 
@@ -402,6 +507,8 @@ impl Session {
                 entry.run = None;
                 entry.work = 0;
                 entry.error = None;
+                entry.first = 0;
+                entry.node.diagnostics.truncate(entry.own_diagnostics);
                 entry.count = Count::Unknown;
                 entry.state = if entry.node.has_children() {
                     ChildState::NotRequested
@@ -547,13 +654,15 @@ impl Session {
                 sh.limits.max_work,
             )
         };
-        let (nodes, count, summary, diagnostics) = {
+        let (nodes, count, summary, diagnostics, marks, emitted) = {
             let mut out = lock(&run.out);
             (
                 take(&mut out.nodes),
                 out.count,
                 out.summary.take(),
                 take(&mut out.diagnostics),
+                take(&mut out.marks),
+                out.emitted,
             )
         };
         let ids: Vec<NodeId> = nodes
@@ -565,6 +674,15 @@ impl Session {
             return;
         };
         entry.children.extend(ids);
+        entry.marks.extend(marks);
+        // Keep marks sparse: past the cap, drop every other one.
+        if entry.marks.len() > MAX_MARKS {
+            let mut keep = false;
+            entry.marks.retain(|_, _| {
+                keep = !keep;
+                keep
+            });
+        }
         if let Some(count) = count {
             entry.count = count;
         }
@@ -583,7 +701,7 @@ impl Session {
         match result {
             Poll::Ready(Ok(())) => {
                 entry.state = ChildState::Complete;
-                entry.count = Count::Exact(to_u64(entry.children.len()));
+                entry.count = Count::Exact(emitted);
             }
             Poll::Ready(Err(error)) => {
                 entry.state = ChildState::Failed;

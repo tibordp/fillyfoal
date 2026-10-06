@@ -330,12 +330,27 @@ impl Shared {
     }
 }
 
+/// A resume key: dissector state from which an expansion can restart.
+pub(crate) type Key = Arc<dyn std::any::Any + Send + Sync>;
+
+/// Children between resume marks an expansion keeps (see [`Cx::mark`]).
+pub(crate) const MARK_SPACING: u64 = 256;
+
 /// Output of one expansion, drained by the session after every poll.
 #[derive(Default)]
 pub(crate) struct Output {
     pub nodes: Vec<Node>,
+    /// Index of the next child (emitted or skipped).
     pub emitted: u64,
     pub target: u64,
+    /// Children below this index are dropped instead of emitted (the host
+    /// asked for a window further on).
+    pub skip: u64,
+    /// The resume key this run started from, until the dissector takes it.
+    pub resume: Option<Key>,
+    /// Resume marks recorded since the last drain: (child index, key).
+    pub marks: Vec<(u64, Key)>,
+    pub last_mark: u64,
     pub count: Option<Count>,
     pub summary: Option<String>,
     pub diagnostics: Vec<Diagnostic>,
@@ -714,8 +729,43 @@ impl Cx {
     /// set of children; use [`Cx::push`] for collections.
     pub fn emit(&self, node: Node) {
         let mut out = lock(&self.out);
-        out.nodes.push(node);
+        if out.emitted >= out.skip {
+            out.nodes.push(node);
+        }
         out.emitted = out.emitted.saturating_add(1);
+    }
+
+    /// Whether the next child will be dropped because the host asked for a
+    /// window further on. A walker may then skip building the node (but
+    /// must still call [`Cx::push`], which keeps the count).
+    pub fn skipping(&self) -> bool {
+        let out = lock(&self.out);
+        out.emitted < out.skip
+    }
+
+    /// The resume key this expansion was restarted from, if any (see
+    /// [`Cx::mark`]). A dissector that gets one restores its walk from it
+    /// and continues exactly as it did after recording that mark: the next
+    /// child it emits or pushes has the mark's index. Returns `None` on a
+    /// fresh start (or if the key has another type).
+    pub fn resume<K: std::any::Any + Send + Sync + Clone>(&self) -> Option<K> {
+        let key = lock(&self.out).resume.take()?;
+        key.downcast_ref::<K>().cloned()
+    }
+
+    /// Records a resume point: `key()` is walker state from which the walk
+    /// can restart, producing the next child (the one about to be pushed)
+    /// and everything after it. The session keeps marks sparsely and uses
+    /// them to jump into a collection (a window far from the start) without
+    /// re-walking from the beginning. Optional: without marks, a jump
+    /// re-runs the expansion and drops the children before the window.
+    pub fn mark<K: std::any::Any + Send + Sync>(&self, key: impl FnOnce() -> K) {
+        let mut out = lock(&self.out);
+        let index = out.emitted;
+        if index >= out.last_mark.saturating_add(MARK_SPACING) {
+            out.last_mark = index;
+            out.marks.push((index, Arc::new(key())));
+        }
     }
 
     /// Emits the next element of a collection. Suspends first if the host has
@@ -723,6 +773,13 @@ impl Cx {
     /// page happens only on demand.
     pub async fn push(&self, node: Node) {
         self.checkpoint().await;
+        {
+            let mut out = lock(&self.out);
+            if out.emitted < out.skip {
+                out.emitted = out.emitted.saturating_add(1);
+                return;
+            }
+        }
         poll_fn(|_| {
             let page_full = {
                 let out = lock(&self.out);
