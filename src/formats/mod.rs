@@ -191,6 +191,7 @@ pub static FORMATS: &[&Format] = &[
     &android::resources::AXML,
     &android::resources::ARSC,
     &android::vdex::FORMAT,
+    &android::art::FORMAT,
     &minidump::FORMAT,
     &ne::FORMAT,
     &lx::FORMAT,
