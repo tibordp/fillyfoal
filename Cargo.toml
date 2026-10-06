@@ -4,6 +4,23 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 description = "Lazy, sans-I/O structural dissection of files"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["file-format", "dissector", "parser", "binary", "forensics"]
+categories = ["parser-implementations", "compression", "filesystem", "encoding"]
+# Tests, fixtures and snapshots (~20 MB) stay in the repository; unit-test
+# data under src/ is only read by `cargo test` from a checkout.
+include = [
+    "/src/**/*.rs",
+    "/src/codec/brotli_dictionary.bin",
+    "/examples/",
+    "/docs/",
+    "/DESIGN.md",
+    "/README.md",
+    "/THIRD-PARTY.md",
+    "/LICENSE-APACHE",
+    "/LICENSE-MIT",
+]
 
 [dependencies]
 
