@@ -574,9 +574,10 @@ impl MpqState {
             (true, Some(n)) => file_key(n, block.offset, block.size, block.flags & MPQ_FIX_KEY != 0),
             (true, None) => return Err(Diagnostic::unsupported("encrypted file whose name is unknown").at(data)),
         };
-        if block.flags & MPQ_IMPLODE != 0 {
-            return Err(Diagnostic::unsupported("PKWARE DCL implode").at(data));
-        }
+        // Imploded files (an older flag) hold bare DCL streams; compressed
+        // ones a mask byte naming the codec.
+        let imploded = block.flags & MPQ_IMPLODE != 0;
+        let packed = imploded || block.flags & MPQ_COMPRESS != 0;
         let raw = crate::codec::read_all(cx, data).await?;
         let limit = crate::bytes::to_usize(cx.limits().max_derived);
         let unit = |bytes: &[u8], index: u32, expected: usize| -> Result<Vec<u8>> {
@@ -584,17 +585,20 @@ impl MpqState {
             if encrypted {
                 decrypt(&mut bytes, key.wrapping_add(index));
             }
-            if block.flags & MPQ_COMPRESS == 0 || bytes.len() >= expected {
+            if !packed || bytes.len() >= expected {
                 return Ok(bytes);
             }
-            let (&mask, body) = bytes.split_first().ok_or_else(|| Diagnostic::malformed("empty compressed sector"))?;
             let decode = |codec: crate::codec::Codec, body: &[u8]| {
                 let mut decoder = codec.decoder().ok_or_else(|| Diagnostic::internal("no decoder"))?;
                 crate::codec::pipeline::decode_all(decoder.as_mut(), body, limit)
             };
+            if imploded {
+                return decode(crate::codec::Codec::DclImplode, &bytes);
+            }
+            let (&mask, body) = bytes.split_first().ok_or_else(|| Diagnostic::malformed("empty compressed sector"))?;
             match mask {
                 0x02 => decode(crate::codec::Codec::Zlib, body),
-                0x08 => Err(Diagnostic::unsupported("PKWARE DCL implode")),
+                0x08 => decode(crate::codec::Codec::DclImplode, body),
                 0x10 => decode(crate::codec::Codec::Bzip2, body),
                 // StormLib: a 0 (no filter) byte, the 5 LZMA properties
                 // bytes and the 8-byte decoded size, then raw LZMA.
@@ -615,7 +619,7 @@ impl MpqState {
         let sector = crate::bytes::to_usize(self.sector.into()).max(1);
         let size = crate::bytes::to_usize(block.size.into());
         let count = size.div_ceil(sector);
-        if block.flags & MPQ_COMPRESS == 0 {
+        if !packed {
             // Uncompressed sectors: decrypt each in turn.
             let mut out = Vec::with_capacity(size);
             for (i, chunk) in raw.chunks(sector).enumerate() {
