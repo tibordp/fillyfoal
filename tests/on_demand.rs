@@ -439,3 +439,55 @@ fn lzma_family_consumes_exactly() {
         assert_eq!(lzma_consumed(&codec, &trailing), data.len(), "{name} with trailing data");
     }
 }
+
+/// Decodes `input` (fed in 64 KiB pieces) while releasing everything the
+/// decoder allows after every step, reassembling the output from what was
+/// released. Returns the output and the most output and input ever held.
+pub fn released(codec: &Codec, input: &[u8]) -> (Vec<u8>, usize, usize) {
+    let mut decoder = codec.decoder().unwrap();
+    let (mut out, mut held_in) = (Vec::new(), Vec::new());
+    let mut done = Vec::new();
+    let mut fed = 0;
+    let (mut max_out, mut max_in) = (0, 0);
+    loop {
+        let eof = fed == input.len();
+        let status = decoder.decode(&held_in, eof, &mut out, 16 * 1024, 1 << 30).unwrap();
+        max_out = max_out.max(out.len());
+        max_in = max_in.max(held_in.len());
+        let n = decoder.releasable_input().min(held_in.len());
+        decoder.release_input(n);
+        held_in.drain(..n);
+        let n = decoder.releasable_output(out.len()).min(out.len());
+        decoder.release_output(n);
+        done.extend(out.drain(..n));
+        match status {
+            Status::Done => {
+                done.extend(out);
+                return (done, max_out, max_in);
+            }
+            Status::More => {}
+            Status::NeedInput => {
+                assert!(!eof, "decoder wants input after the end");
+                let to = (fed + 65_536).min(input.len());
+                held_in.extend_from_slice(&input[fed..to]);
+                fed = to;
+            }
+        }
+    }
+}
+
+/// Releasing gives the same output, and holds at most `max_out` bytes of
+/// output (the window plus a step) and about a few pieces of input.
+pub fn assert_releases(codec: &Codec, input: &[u8], expected: &[u8], max_out: usize) {
+    let (out, held_out, held_in) = released(codec, input);
+    assert!(out == expected, "{codec:?}: output differs when releasing");
+    assert!(held_out <= max_out, "{codec:?}: held {held_out} bytes of output (> {max_out})");
+    assert!(held_in <= 4 * 65_536 + 1024, "{codec:?}: held {held_in} bytes of input");
+}
+
+#[test]
+fn inflate_releases() {
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/lazy/big.zlib")).unwrap();
+    let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
+    assert_releases(&Codec::Zlib, &data, &expected, 32 * 1024 + 2 * 16 * 1024 + 65_536);
+}
