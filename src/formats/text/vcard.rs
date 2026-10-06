@@ -280,6 +280,13 @@ fn property_node(p: &Property, line: &[u8], span: Span, input: Input) -> Node {
         )
         .summary(format!("{}, data URI", meta.trim_end_matches(";base64")));
     }
+    // Percent-encoded `data:` URIs (vCard 4 allows any URI).
+    if !p.value.contains('\\')
+        && line.ends_with(p.value.as_bytes())
+        && let Some(node) = super::decode::data_url_node(p.name.clone(), input, value_span, &p.value)
+    {
+        return node;
+    }
     let text = if encoding.as_deref() == Some("QUOTED-PRINTABLE") {
         decode_8bit(&super::decode::quoted_printable(p.value.as_bytes()).bytes)
     } else {

@@ -1,0 +1,39 @@
+Content-Type: multipart/mixed; boundary="===============2538842471423697390=="
+MIME-Version: 1.0
+From: =?iso-8859-2?q?Zo=EB_=AF=F3=B3=E6?= <zoe@xn--mnchen-3ya.example>
+To: =?koi8-r?b?6dfBziDwxdTSz9c=?= <ivan@example.ru>
+Subject: 
+ =?utf-8?b?w5xuw69jw7Zkw6kgc8O8w59qw6ljdCDigJQg76yBbmFsIHLDqXN1bcOpIOKckyB3?=
+ =?utf-8?b?aXRoIOKCrHVybyBzaWducyBhbmQgbW9yZSDDvG7Dr2PDtmTDqSB0ZXh0?=
+X-Split: =?UTF-8?B?xb1sdcU=?= =?UTF-8?B?pW91xI0=?= =?UTF-8?B?a8O9IGs=?=
+ =?UTF-8?B?xa/FiA==?=
+Date: Tue, 06 Oct 2026 10:00:00 +0200
+Message-ID: <charsets@example>
+
+--===============2538842471423697390==
+Content-Type: text/plain; charset="iso-8859-2"
+MIME-Version: 1.0
+Content-Transfer-Encoding: quoted-printable
+
+Za=BF=F3=B3=E6 g=EA=B6l=B1 ja=BC=F1 - pchn=B1=E6 w t=EA =B3=F3d=BC je=BFa.
+
+--===============2538842471423697390==
+Content-Type: text/plain; charset="windows-1251"
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+
+0frl+Pwg5uUg5fm4IP3y6PUg7P/j6uj1IPTw4O328+fx6uj1IOHz6+7qLgo=
+
+--===============2538842471423697390==
+Content-Type: application/pdf
+MIME-Version: 1.0
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment;
+ filename*0*=utf-8''Zpr%C3%A1vy%20a%20v%C3%BDsledk;
+ filename*1*=y%20%C4%8Dtvrtlet%C3%AD%20%E2%;
+ filename*2*=80%94%20p%C5%99ehled%20za%20ro;
+ filename*3*=k%202026%20%28koncept%29.pdf
+
+JVBERi0xLjAKJSVFT0YK
+
+--===============2538842471423697390==--

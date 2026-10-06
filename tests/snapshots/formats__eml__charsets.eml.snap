@@ -1,0 +1,46 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ charsets.eml — E-mail: Ünïcödé süßjéct — ﬁnal résumé ✓ with €uro signs and more ünïcödé text — from Zoë Żółć <zoe@xn--mnchen-3ya.example>  [0x0+0x583]
+  ▾ Headers — 8 fields  [0x0+0x22a]
+      Content-Type: "multipart/mixed; boundary=\"===============2538842471423697390==\""  [0x0+0x4e]
+      MIME-Version: "1.0"  [0x50+0x11]
+      From: "Zoë Żółć <zoe@xn--mnchen-3ya.example>" — Zoë Żółć <zoe@münchen.example>  [0x63+0x46]
+      To: "Иван Петров <ivan@example.ru>"  [0xab+0x33]
+      Subject: "Ünïcödé süßjéct — ﬁnal résumé ✓ with €uro signs and more ünïcödé text"  [0xe0+0x9f]
+      X-Split: "Žluťoučký kůň"  [0x181+0x5e]
+      Date: 2026-10-06 08:00:00 UTC — Tue, 06 Oct 2026 10:00:00 +0200  [0x1e1+0x25]
+      Message-ID: "<charsets@example>"  [0x208+0x1e]
+  ▾ Part 1 — text/plain, 0xbe bytes  [0x252+0xbe]
+    ▾ Headers — 3 fields  [0x252+0x72]
+        Content-Type: "text/plain; charset=\"iso-8859-2\""  [0x252+0x2e]
+        MIME-Version: "1.0"  [0x282+0x11]
+        Content-Transfer-Encoding: "quoted-printable"  [0x295+0x2b]
+    ▾ Body — UTF-8 text, CRLF line endings, 1 line  [0x2c4+0x4c]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [#2:0x0+0x3c]
+          Line 1: "Zażółć gęślą jaźń - pchnąć w tę łódź jeża."  [#2:0x0+0x3a]
+  ▾ Part 2 — text/plain, 0xa8 bytes  [0x33a+0xa8]
+    ▾ Headers — 3 fields  [0x33a+0x6a]
+        Content-Type: "text/plain; charset=\"windows-1251\""  [0x33a+0x30]
+        MIME-Version: "1.0"  [0x36c+0x11]
+        Content-Transfer-Encoding: "base64"  [0x37f+0x21]
+    ▾ Body — UTF-8 text, LF line endings, 1 line  [0x3a4+0x3e]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#4:0x0+0x50]
+          Line 1: "Съешь же ещё этих мягких французских булок."  [#4:0x0+0x4f]
+  ▾ Part 3: Zprávy a výsledky čtvrtletí — přehled za rok 2026 (koncept).pdf — application/pdf, 0x14b bytes  [0x40c+0x14b]
+    ▾ Headers — 4 fields  [0x40c+0x135]
+        Content-Type: "application/pdf"  [0x40c+0x1d]
+        MIME-Version: "1.0"  [0x42b+0x11]
+        Content-Transfer-Encoding: "base64"  [0x43e+0x21]
+        Content-Disposition: "attachment; filename*0*=utf-8''Zpr%C3%A1vy%20a%20v%C3%BDsledk; filename*1*=y%20%C4%8Dtvrtlet%C3%AD%20%E2%; filename*2*=80%94%20p%C5%99ehled%20za%20ro; filename*3*=k%202026%20%28koncept%29.pdf"  [0x461+0xdc]
+    ▾ Zprávy a výsledky čtvrtletí — přehled za rok 2026 (koncept).pdf — PDF 1.0  [0x541+0x16]
+        ! malformed: no startxref
+        ! warning: cross-reference data unusable; objects were found by scanning
+        Header: "1.0"  [#5:0x0+0x8]
+      ▾ Pages
+      ▾ Objects — 0 entries

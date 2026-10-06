@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cp437.txt — CP437 text, LF line endings, 9 lines  [0x0+0xd7]
+    Encoding: "CP437" — declared by a coding comment
+    Line endings: "LF" — 9 LF, 0 CRLF, 0 CR
+  ▾ Lines — 9 lines  [0x0+0xd7]
+      Line 1: "-*- coding: cp437 -*-"  [0x0+0x15]
+      Line 2: "A DOS-era README, written in code page 437."  [0x16+0x2b]
+      Line 3: ""  [0x42+0x0]
+      Line 4: "╔══════════╗"  [0x43+0xc]
+      Line 5: "║ Größe: ½ ║"  [0x50+0xc]
+      Line 6: "╚══════════╝"  [0x5d+0xc]
+      Line 7: ""  [0x6a+0x0]
+      Line 8: "The box above is drawn with line-drawing characters;"  [0x6b+0x34]
+      Line 9: "the same bytes mean other letters in other code pages."  [0xa0+0x36]

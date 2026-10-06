@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ notes.xxe — xxencoded data, 1 file  [0x0+0xa4]
+  ▾ notes.txt — mode 644, xxencoded  [0x0+0xa4]
+      File name: "notes.txt"  [0x0+0x14]
+      Mode: "644"
+    ▾ Content — UTF-8 text, CRLF line endings, 7 lines  [0x14+0x8c]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 6 CRLF, 0 CR
+      ▾ Lines — 7 lines  [#1:0x0+0x61]
+          Line 1: "Shopping list"  [#1:0x0+0xd]
+          Line 2: "============="  [#1:0xf+0xd]
+          Line 3: ""  [#1:0x1e+0x0]
+          Line 4: "- café au lait"  [#1:0x20+0xf]
+          Line 5: "- 2× croissants"  [#1:0x31+0x10]
+          Line 6: ""  [#1:0x43+0x0]
+          Line 7: "Last line without terminator"  [#1:0x45+0x1c]

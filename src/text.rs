@@ -3,6 +3,8 @@
 use crate::bytes::to_usize;
 use crate::fields::Endian;
 
+pub mod url;
+
 /// Decodes NUL-terminated UTF-16 from `data`. Returns the text, the number
 /// of bytes consumed (including the terminator, if found) and whether a
 /// terminator was found.

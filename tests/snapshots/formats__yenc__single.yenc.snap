@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ single.yenc — yEnc, 1 block  [0x0+0x17e]
+    Text — before the first =ybegin line  [0x0+0x1e]
+  ▾ hello.bin — yEnc, 269 bytes  [0x1e+0x160]
+    ▾ Header  [0x1e+0x28]
+        line: 128  [0x26+0x8]
+        size: 269  [0x2f+0x8]
+        name: "hello.bin"  [0x38+0xe]
+    ▾ Content — 0x10d bytes decoded  [0x48+0x117]
+        Data  [#1:0x0+0x10d]
+      CRC-32: 0xc5240d4e — matches the trailer
+    ▾ Trailer  [0x15f+0x1d]
+        size: 269  [0x165+0x8]
+        crc32: 0xc5240d4e  [0x16e+0xe]

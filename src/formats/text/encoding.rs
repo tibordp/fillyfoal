@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 
 use crate::bytes::{to_u64, to_usize};
+use crate::codec::charset::{self, Charset, Label};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::Input;
@@ -17,6 +18,9 @@ pub enum Encoding {
     /// 8-bit text that is not UTF-8: decoded as Windows-1252, the usual
     /// superset of ISO 8859-1.
     Windows1252,
+    /// A single-byte code page named by a declaration (XML `encoding=`,
+    /// HTML `<meta charset>`, a coding cookie, MIME `charset=`).
+    Single(Charset),
     Utf16Le,
     Utf16Be,
     Utf32Le,
@@ -28,6 +32,7 @@ impl Encoding {
         match self {
             Encoding::Utf8 => "UTF-8",
             Encoding::Windows1252 => "Windows-1252",
+            Encoding::Single(c) => c.name(),
             Encoding::Utf16Le => "UTF-16LE",
             Encoding::Utf16Be => "UTF-16BE",
             Encoding::Utf32Le => "UTF-32LE",
@@ -38,7 +43,7 @@ impl Encoding {
     /// Bytes per code unit.
     pub fn unit(self) -> u64 {
         match self {
-            Encoding::Utf8 | Encoding::Windows1252 => 1,
+            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) => 1,
             Encoding::Utf16Le | Encoding::Utf16Be => 2,
             Encoding::Utf32Le | Encoding::Utf32Be => 4,
         }
@@ -54,7 +59,9 @@ impl Encoding {
     pub fn code_unit(self, bytes: &[u8]) -> Option<u32> {
         use crate::bytes::{u16_be, u16_le, u32_be, u32_le};
         match self {
-            Encoding::Utf8 | Encoding::Windows1252 => bytes.first().map(|&b| u32::from(b)),
+            Encoding::Utf8 | Encoding::Windows1252 | Encoding::Single(_) => {
+                bytes.first().map(|&b| u32::from(b))
+            }
             Encoding::Utf16Le => u16_le(bytes, 0).map(u32::from),
             Encoding::Utf16Be => u16_be(bytes, 0).map(u32::from),
             Encoding::Utf32Le => u32_le(bytes, 0),
@@ -66,6 +73,7 @@ impl Encoding {
         match self {
             Encoding::Utf8 => decode_8bit(bytes),
             Encoding::Windows1252 => windows_1252(bytes),
+            Encoding::Single(c) => c.decode(bytes),
             Encoding::Utf16Le => crate::text::utf16(bytes, crate::fields::Endian::Little),
             Encoding::Utf16Be => crate::text::utf16(bytes, crate::fields::Endian::Big),
             Encoding::Utf32Le | Encoding::Utf32Be => bytes
@@ -174,21 +182,7 @@ pub fn decode_8bit(bytes: &[u8]) -> String {
 
 /// Windows code page 1252.
 pub fn windows_1252(bytes: &[u8]) -> String {
-    const C1: [char; 32] = [
-        '€', '\u{81}', '‚', 'ƒ', '„', '…', '†', '‡', 'ˆ', '‰', 'Š', '‹', 'Œ', '\u{8d}', 'Ž',
-        '\u{8f}', '\u{90}', '‘', '’', '“', '”', '•', '–', '—', '˜', '™', 'š', '›', 'œ', '\u{9d}',
-        'ž', 'Ÿ',
-    ];
-    bytes
-        .iter()
-        .map(|&b| match b {
-            0x80..=0x9f => C1
-                .get(usize::from(b & 0x1f))
-                .copied()
-                .unwrap_or(char::REPLACEMENT_CHARACTER),
-            _ => char::from(b),
-        })
-        .collect()
+    Charset::Windows1252.decode(bytes)
 }
 
 /// A text input made ready for byte-oriented (ASCII-compatible) parsing.
@@ -227,6 +221,49 @@ impl Prepared {
 /// Detects the encoding of `input`, emits a node for its byte order mark,
 /// and transcodes UTF-16/32 text into a derived UTF-8 source.
 pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
+    prepare_declared(cx, input, None).await
+}
+
+/// Whether `data` is UTF-8 (allowing a character cut off at the end).
+fn is_utf8(data: &[u8]) -> bool {
+    match std::str::from_utf8(data) {
+        Ok(_) => true,
+        Err(e) => e.error_len().is_none(),
+    }
+}
+
+/// The single-byte charset a declaration names, if the head of the text
+/// needs it: a byte order mark or UTF-16 wins, and text that is valid UTF-8
+/// is taken as UTF-8 whatever it claims (mislabelled UTF-8 is far more
+/// common than legacy text that happens to be valid UTF-8). Declared but
+/// undecodable encodings are reported on `cx`.
+fn declared_single(cx: Option<&Cx>, head: &[u8], declared: Option<Label>) -> Option<Charset> {
+    let declared = declared?;
+    if bom(head).is_some() || sniff_utf16(head).is_some() || is_utf8(head) {
+        return None;
+    }
+    match declared {
+        Label::Single(c) => Some(c),
+        Label::Unsupported(name) => {
+            if let Some(cx) = cx {
+                cx.diag(crate::error::Diagnostic::unsupported(format!(
+                    "declared encoding {name} is not decoded (shown as Windows-1252)"
+                )));
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
+/// Like [`prepare`], for text whose encoding is also declared inside it (an
+/// XML declaration, an HTML `<meta charset>`) or by its container (MIME
+/// `charset=`): a declared single-byte code page is transcoded into a
+/// derived UTF-8 source, so that parsers see the right characters.
+///
+/// The decision is made from the head of the text: if that is plain ASCII
+/// (or valid UTF-8), the text is used as it is.
+pub async fn prepare_declared(cx: &Cx, input: Input, declared: Option<Label>) -> Result<Prepared> {
     let span = input.span;
     let head = cx.read_avail(span.sub(0, 512)).await?;
     let (encoding, bom_len) = match bom(&head) {
@@ -236,6 +273,17 @@ pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
             None => (Encoding::Utf8, 0),
         },
     };
+    let legacy = matches!(declared, Some(Label::Single(_) | Label::Unsupported(_)));
+    if legacy && encoding == Encoding::Utf8 && bom_len == 0 {
+        let head = cx.read_avail(span.sub(0, crate::formats::HEAD_LEN)).await?;
+        // Windows-1252 is what 8-bit text falls back to anyway: keeping
+        // the original source keeps spans in the file.
+        if let Some(c) = declared_single(Some(cx), &head, declared)
+            && c != Charset::Windows1252
+        {
+            return transcode(cx, span, Encoding::Single(c), c.transform(), None).await;
+        }
+    }
     let bom = (bom_len > 0).then(|| span.sub(0, bom_len));
     if let Some(b) = bom {
         cx.emit(
@@ -258,6 +306,17 @@ pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
         Encoding::Utf32Le => "utf-32le",
         _ => "utf-32be",
     };
+    transcode(cx, body, encoding, transform, bom).await
+}
+
+/// Transcodes `body` from `encoding` into a derived UTF-8 source.
+async fn transcode(
+    cx: &Cx,
+    body: Span,
+    encoding: Encoding,
+    transform: &'static str,
+    bom: Option<Span>,
+) -> Result<Prepared> {
     let origin = Origin {
         parent: body,
         transform,
@@ -276,6 +335,79 @@ pub async fn prepare(cx: &Cx, input: Input) -> Result<Prepared> {
         encoding,
         bom,
     })
+}
+
+/// The value of `name="..."` (or `'...'`, or unquoted) in `text`, matched
+/// ASCII case-insensitively, as a charset label.
+fn attribute(text: &[u8], name: &[u8]) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    lower
+        .windows(name.len())
+        .enumerate()
+        .filter(|(_, w)| *w == name)
+        .find_map(|(at, _)| attribute_value(text.get(at.saturating_add(name.len())..)?))
+}
+
+fn attribute_value(rest: &[u8]) -> Option<String> {
+    let rest = super::probe::trim_start(rest);
+    let rest = super::probe::trim_start(rest.strip_prefix(b"=")?);
+    let rest = rest
+        .strip_prefix(b"\"")
+        .or_else(|| rest.strip_prefix(b"'"))
+        .unwrap_or(rest);
+    let end = rest
+        .iter()
+        .position(|&b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':')))
+        .unwrap_or(rest.len());
+    let label = rest.get(..end)?;
+    (!label.is_empty()).then(|| String::from_utf8_lossy(label).into_owned())
+}
+
+/// The encoding named by an XML declaration at the start of `head`
+/// (`<?xml version="1.0" encoding="ISO-8859-2"?>`).
+pub fn xml_declared(head: &[u8]) -> Option<String> {
+    let head = probe_text(head);
+    let decl = head.strip_prefix(b"<?xml")?;
+    let end = decl.windows(2).position(|w| w == b"?>")?;
+    attribute(decl.get(..end)?, b"encoding")
+}
+
+/// The charset of an HTML `<meta charset=...>` or `<meta http-equiv=
+/// "Content-Type" content="text/html; charset=...">` in `head`.
+pub fn meta_charset(head: &[u8]) -> Option<String> {
+    let head = head.get(..head.len().min(4096)).unwrap_or_default();
+    attribute(head, b"charset")
+}
+
+/// A coding cookie in the first two lines of `head`: Emacs
+/// (`-*- coding: latin-1 -*-`), Python (PEP 263) or Vim
+/// (`vim: set fileencoding=koi8-r :`).
+pub fn coding_cookie(head: &[u8]) -> Option<String> {
+    head.split(|&b| b == b'\n').take(2).find_map(|line| {
+        let line = line.get(..line.len().min(256))?;
+        let lower = line.to_ascii_lowercase();
+        let at = lower.windows(6).position(|w| w == b"coding")?;
+        let rest = line.get(at.saturating_add(6)..)?;
+        let rest = rest.strip_prefix(b":").or_else(|| rest.strip_prefix(b"="))?;
+        let rest = super::probe::trim_start(rest);
+        let end = rest
+            .iter()
+            .position(|&b| !(b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.')))
+            .unwrap_or(rest.len());
+        let label = rest.get(..end)?;
+        (!label.is_empty()).then(|| String::from_utf8_lossy(label).into_owned())
+    })
+}
+
+/// The single-byte charset that `declared` names for text starting with
+/// `head` (see [`prepare_declared`]), for code that decodes strings itself.
+pub fn declared_charset(head: &[u8], declared: Option<&str>) -> Option<Charset> {
+    declared_single(None, head, declared.and_then(charset::lookup))
+}
+
+/// [`declared_charset`] for an already looked-up label.
+pub fn declared_charset_label(head: &[u8], declared: Label) -> Option<Charset> {
+    declared_single(None, head, Some(declared))
 }
 
 /// The head of a probe as UTF-8-compatible bytes: without a byte order

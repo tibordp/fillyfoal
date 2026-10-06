@@ -420,7 +420,16 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
             }
             _ => {
                 let text = value.unquote().text();
-                text_node(key.text(), value.span(), &text)
+                let node = text_node(key.text(), value.span(), &text);
+                // URLs (Internet shortcuts, desktop entries): readable form.
+                match text
+                    .contains("://")
+                    .then(|| crate::text::url::display_url(&text))
+                    .flatten()
+                {
+                    Some(shown) => node.summary(shown),
+                    None => node,
+                }
             }
         };
         cx.push(node).await;

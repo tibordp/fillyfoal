@@ -46,24 +46,17 @@ fn probe_html(h: &Head<'_>) -> bool {
 
 /// `charset` from `<meta charset=...>` or a `Content-Type` meta tag.
 fn charset(head: &[u8]) -> Option<String> {
-    let lower = head.to_ascii_lowercase();
-    let at = probe::find(&lower, b"charset=")?;
-    let rest = lower.get(at.saturating_add(8)..)?;
-    let rest = rest
-        .strip_prefix(b"\"")
-        .or_else(|| rest.strip_prefix(b"'"))
-        .unwrap_or(rest);
-    let end = rest
-        .iter()
-        .position(|&b| !(b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
-        .unwrap_or(rest.len());
-    let name = rest.get(..end)?;
-    (!name.is_empty()).then(|| String::from_utf8_lossy(name).into_owned())
+    super::encoding::meta_charset(head).map(|c| c.to_ascii_lowercase())
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let data = cx.read_avail(input.span.sub(0, HEAD_LEN)).await?;
-    let head = super::encoding::probe_text(&data);
+    let mut head = super::encoding::probe_text(&data);
+    // A declared legacy code page (see `xml::document`).
+    let declared = super::encoding::meta_charset(&head);
+    if let Some(c) = super::encoding::declared_charset(&head, declared.as_deref()) {
+        head = std::borrow::Cow::Owned(c.decode(&head).into_bytes());
+    }
     let lower = head.to_ascii_lowercase();
     let title = probe::find(&lower, b"<title").and_then(|at| {
         xml::first_text(head.get(at..).unwrap_or_default(), b"title")

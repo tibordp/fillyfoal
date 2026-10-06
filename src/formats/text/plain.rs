@@ -106,7 +106,14 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
     let head = cx.read_avail(span.sub(0, HEAD_LEN)).await?;
     let (encoding, bom) = match encoding::bom(&head) {
         Some(found) => found,
-        None => (encoding::classify(&head).unwrap_or(Encoding::Utf8), 0),
+        None => {
+            // A coding cookie names the code page of legacy 8-bit text.
+            let cookie = encoding::coding_cookie(&head);
+            match encoding::declared_charset(&head, cookie.as_deref()) {
+                Some(c) => (Encoding::Single(c), 0),
+                None => (encoding::classify(&head).unwrap_or(Encoding::Utf8), 0),
+            }
+        }
     };
     let body = head.get(to_usize(bom)..).unwrap_or_default();
     let endings = Endings::count(units(body, encoding));
@@ -159,6 +166,8 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
     let mut encoding = Node::new("Encoding").value(Value::Text(o.encoding.name().to_owned()));
     if o.bom > 0 {
         encoding = encoding.span(span.sub(0, o.bom)).summary("byte order mark");
+    } else if matches!(o.encoding, Encoding::Single(_)) {
+        encoding = encoding.summary("declared by a coding comment");
     }
     cx.emit(encoding);
     let e = &o.endings;

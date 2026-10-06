@@ -6,10 +6,13 @@
 //!   that no dissector ever reads a whole (possibly huge) text file at once;
 //! - [`piece`]: in-memory slices that carry their spans, so tokens found in
 //!   a line keep exact provenance;
-//! - [`encoding`]: byte order marks, encoding sniffing, and transcoding of
-//!   UTF-16/32 into a derived UTF-8 source for the structured parsers;
-//! - [`decode`]: base64, quoted-printable, hex and uuencoding into derived
-//!   sources, with the decoded content dissected in turn;
+//! - [`encoding`]: byte order marks, encoding sniffing, declared encodings
+//!   (XML declarations, `<meta charset>`, coding comments), and transcoding
+//!   of UTF-16/32 and declared legacy code pages into a derived UTF-8 source
+//!   for the structured parsers;
+//! - [`decode`]: base64, quoted-printable, hex, percent-encoding and
+//!   uu/xxencoding into derived sources, with the decoded content dissected
+//!   in turn (yEnc lives in [`yenc`]);
 //! - [`probe`]: helpers for cheap, conservative probes.
 //!
 //! Formats register in the `text` section of [`crate::formats::FORMATS`],
@@ -55,6 +58,7 @@ pub mod uuencode;
 pub mod vcard;
 pub mod xml;
 pub mod yaml;
+pub mod yenc;
 
 /// The most text a single value holds; longer text is cut (the node's span
 /// still covers all of it).

@@ -408,3 +408,103 @@ fn lzfse_decodes_apple_output() {
     assert_eq!(words.len(), 2_493_885);
     assert!(words.starts_with(b"A\na\naa\naal\n"));
 }
+
+#[test]
+fn charsets_match_python() {
+    use fillyfoal::codec::charset::Charset;
+    let all: Vec<u8> = (0..=255u8).collect();
+    for &cs in Charset::ALL {
+        let path = format!("{}/tests/data/charset/{}.txt", env!("CARGO_MANIFEST_DIR"), cs.name().replace(' ', "_"));
+        let python: Vec<char> = std::fs::read_to_string(&path).unwrap().chars().collect();
+        let ours: Vec<char> = cs.decode(&all).chars().collect();
+        assert_eq!(python.len(), 256, "{path}");
+        assert_eq!(ours.len(), 256);
+        for (b, (p, o)) in python.iter().zip(&ours).enumerate() {
+            // Undefined bytes: Python replaces them; Windows code pages
+            // pass them through as C1 controls (as browsers do).
+            let windows = cs.name().starts_with("Windows-");
+            let ok = p == o || (*p == '\u{fffd}' && windows && *o as u32 == b as u32);
+            assert!(ok, "{}: byte {b:#04x}: python {p:?}, ours {o:?}", cs.name());
+        }
+    }
+}
+
+/// Explores `data` as file `name`; returns the host, every node's summary
+/// and diagnostics, and the bytes of each derived source by transform.
+fn explore_decoded(name: &str, data: Vec<u8>) -> (Vec<String>, Vec<(&'static str, Vec<u8>)>) {
+    let mut host = Host::named(name, data, Limits::default());
+    host.explore_all();
+    let mut texts = Vec::new();
+    let mut sources = Vec::new();
+    let mut stack = vec![host.root];
+    while let Some(id) = stack.pop() {
+        let node = host.session.node(id).unwrap();
+        texts.push(format!("{}: {}", node.name, node.summary.clone().unwrap_or_default()));
+        for d in &node.diagnostics {
+            texts.push(format!("diag {:?}: {}", d.kind, d.message));
+        }
+        if let Some(span) = node.span
+            && !sources.contains(&span.source)
+        {
+            sources.push(span.source);
+        }
+        if let Some(c) = host.session.children(id) {
+            stack.extend(c.ids.iter().copied());
+        }
+    }
+    let derived = sources
+        .into_iter()
+        .filter_map(|s| Some((host.session.origin(s)?.transform, host.session.derived_data(s)?.to_vec())))
+        .collect();
+    (texts, derived)
+}
+
+fn test_data(path: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/data/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+#[test]
+fn uuencode_and_xxencode_decode_real_output() {
+    // `uu/*.uue` come from /usr/bin/uuencode; `uu/*.xxe` are the same
+    // output re-spelled in the xxencode alphabet.
+    let text = lzma_text()[..16000].to_vec();
+    let rnd: Vec<u8> = (0..5000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    for (file, transform, want) in [
+        ("uu/text.uue", "uudecode", &text),
+        ("uu/rnd.uue", "uudecode", &rnd),
+        ("uu/text.xxe", "xxdecode", &text),
+        ("uu/rnd.xxe", "xxdecode", &rnd),
+    ] {
+        let (texts, derived) = explore_decoded(file, test_data(file));
+        let got: Vec<_> = derived.iter().filter(|(t, _)| *t == transform).collect();
+        assert_eq!(got.len(), 1, "{file}: {texts:?}");
+        assert!(got[0].1 == *want, "{file}");
+        assert!(!texts.iter().any(|t| t.starts_with("diag")), "{file}: {texts:?}");
+    }
+}
+
+#[test]
+fn yenc_decodes_real_encoder_output() {
+    // Bodies from sabyenc3 (a real yEnc encoder); headers per yEnc 1.3.
+    let rnd: Vec<u8> = (0..20000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let (texts, derived) = explore_decoded("rnd.yenc", test_data("yenc/rnd.yenc"));
+    assert!(derived.iter().any(|(t, d)| *t == "ydecode" && *d == rnd), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "CRC-32: matches the trailer"), "{texts:?}");
+    assert!(!texts.iter().any(|t| t.starts_with("diag")), "{texts:?}");
+
+    // Three parts, joined: the joined file's size and CRC-32 are checked.
+    let text = lzma_text();
+    let (texts, derived) = explore_decoded("text.yenc", test_data("yenc/text.yenc"));
+    let parts: Vec<u8> = derived.iter().filter(|(t, _)| *t == "ydecode").flat_map(|(_, d)| d.clone()).collect();
+    assert_eq!(parts.len(), text.len());
+    assert!(texts.iter().any(|t| t.starts_with("Joined: lzma text.txt") && t.contains("3 parts of 3")), "{texts:?}");
+    assert_eq!(texts.iter().filter(|t| *t == "CRC-32: matches the trailer").count(), 4, "{texts:?}");
+    assert!(!texts.iter().any(|t| t.starts_with("diag")), "{texts:?}");
+
+    // A corrupted byte fails the CRC.
+    let mut bad = test_data("yenc/rnd.yenc");
+    let at = bad.len() / 2;
+    bad[at] = bad[at].wrapping_add(if bad[at] == b'=' - 1 { 2 } else { 1 });
+    let (texts, _) = explore_decoded("bad.yenc", bad);
+    assert!(texts.iter().any(|t| t.starts_with("diag Malformed: CRC-32")), "{texts:?}");
+}

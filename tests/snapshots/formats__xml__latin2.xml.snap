@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ latin2.xml — XML document, root <miasta>  [0x0+0x9d]
+  ▾ XML declaration  [#1:0x0+0x2b]
+      Version: "1.0"  [#1:0xf+0x3]
+      Encoding: "ISO-8859-2"  [#1:0x1e+0xa]
+  ▾ miasta — 2 elements  [#1:0x2c+0x77]
+    ▾ miasto: "Województwo łódzkie" — nazwa="Łódź"  [#1:0x37+0x37]
+        @nazwa: "Łódź"  [#1:0x46+0x7]
+        #text: "Województwo łódzkie"  [#1:0x4f+0x16]
+    ▾ miasto: "Pomorze" — nazwa="Gdańsk"  [#1:0x71+0x28]
+        @nazwa: "Gdańsk"  [#1:0x80+0x7]
+        #text: "Pomorze"  [#1:0x89+0x7]
