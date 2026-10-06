@@ -1,0 +1,21 @@
+Brain Vision Data Exchange Header File Version 1.0
+; Data created by the Vision Recorder
+
+[Common Infos]
+Codepage=UTF-8
+DataFile=rec.eeg
+MarkerFile=rec.vmrk
+DataFormat=BINARY
+DataOrientation=MULTIPLEXED
+NumberOfChannels=2
+SamplingInterval=2000
+
+[Binary Infos]
+BinaryFormat=INT_16
+
+[Channel Infos]
+Ch1=Fp1,,0.1,uV
+Ch2=Fp2,,0.1,uV
+
+[Comment]
+A free-form comment.

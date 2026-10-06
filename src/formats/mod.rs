@@ -173,6 +173,7 @@ pub mod devices;
 pub mod lines;
 pub mod bio;
 pub mod biotext;
+pub mod instruments;
 // -- end misc --
 
 // -- text --
@@ -841,6 +842,24 @@ pub static FORMATS: &[&Format] = &[
     &biotext::BED,
     &biotext::FASTQ,
     &biotext::FASTA,
+    &instruments::FCS,
+    &instruments::THERMO_RAW,
+    &instruments::ABF,
+    &instruments::ABF2,
+    &instruments::EDF,
+    &instruments::BDF,
+    &instruments::GDF,
+    &instruments::INTAN_RHD,
+    &instruments::TDMS,
+    &instruments::TDMS_INDEX,
+    &instruments::TFLITE,
+    &instruments::NEV,
+    &instruments::NSX,
+    &instruments::PLEXON,
+    &instruments::BRAINVISION_HEADER,
+    &instruments::BRAINVISION_MARKERS,
+    &instruments::NEURALYNX,
+    &instruments::IDX,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --

@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ biosemi.bdf — BDF, 1 signal(s) (A1), 2 record(s) of 1 s, started 17.05.24 10.30.00  [0x0+0x218]
+    Version: "\\xffBIOSEMI"  [0x0+0x8]
+    Patient: "X X X X"  [0x8+0x50]
+    Recording: "Startdate 17-MAY-2024 X X X"  [0x58+0x50]
+    Start date: "17.05.24"  [0xa8+0x8]
+    Start time: "10.30.00"  [0xb0+0x8]
+    Header bytes: 512  [0xb8+0x8]
+    Reserved: "24BIT"  [0xc0+0x2c]
+    Data records: 2  [0xec+0x8]
+    Record duration (s): 1  [0xf4+0x8]
+    Signals: 1  [0xfc+0x4]
+  ▾ Signal headers: 1  [0x100+0x100]
+    ▾ A1 — 4 samples/record, uV
+        Label: "A1"  [0x100+0x10]
+        Transducer: "Active electrode"  [0x110+0x50]
+        Physical dimension: "uV"  [0x160+0x8]
+        Physical minimum: -262144  [0x168+0x8]
+        Physical maximum: 262143  [0x170+0x8]
+        Digital minimum: -8388608  [0x178+0x8]
+        Digital maximum: 8388607  [0x180+0x8]
+        Prefiltering: "HP:DC; LP:417 Hz"  [0x188+0x50]
+        Samples per record: 4  [0x1d8+0x8]
+        Reserved: ""  [0x1e0+0x20]
+  ▾ Data records — 2 × 12 bytes  [0x200+0x18]
+    ▾ Record 0  [0x200+0xc]
+        A1 — 4 sample(s) [uV]: 1, -1, 1000, -1000  [0x200+0xc]
+    ▾ Record 1  [0x20c+0xc]
+        A1 — 4 sample(s) [uV]: 5, 6, 7, -8388608  [0x20c+0xc]

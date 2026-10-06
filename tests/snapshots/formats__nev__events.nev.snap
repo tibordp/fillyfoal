@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ events.nev — Blackrock NEV 2.3, File Dialog v6.03, recorded 2024-05-17 10:30:00.250, 3 packet(s)  [0x0+0x1b4]
+  ▾ Basic header — 2024-05-17 10:30:00.250  [0x0+0x150]
+      File type ID: "NEURALEV"  [0x0+0x8]
+      File spec major: 2  [0x8+0x1]
+      File spec minor: 3  [0x9+0x1]
+      Additional flags: 0x1  [0xa+0x2]
+      Bytes in headers: 400  [0xc+0x4]
+      Bytes in data packets: 12  [0x10+0x4]
+      Time resolution of timestamps (Hz): 30000  [0x14+0x4]
+      Time resolution of samples (Hz): 30000  [0x18+0x4]
+      Time origin (SYSTEMTIME): e8 07 05 00 05 00 11 00 0a 00 1e 00 00 00 fa 00  |................|  [0x1c+0x10]
+      Application: "File Dialog v6.03"  [0x2c+0x20]
+      Comment: "test recording"  [0x4c+0x100]
+      Number of extended headers: 2  [0x14c+0x4]
+  ▾ Extended headers: 2  [0x150+0x40]
+      NEUEVWAV — electrode 1, bank A, pin 1  [0x150+0x20]
+      NEUEVLBL — electrode 1: elec1  [0x170+0x20]
+  ▾ Data packets — 3 × 12 bytes  [0x190+0x24]
+      Packet 0: 300 — 0.0100 s, spike on electrode 1  [0x190+0xc]
+      Packet 1: 30000 — 1.0000 s, digital/serial event  [0x19c+0xc]
+      Packet 2: 45000 — 1.5000 s, spike on electrode 1  [0x1a8+0xc]
