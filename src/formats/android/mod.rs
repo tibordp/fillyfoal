@@ -3,3 +3,4 @@
 
 pub mod dex;
 pub mod resources;
+pub mod vdex;
