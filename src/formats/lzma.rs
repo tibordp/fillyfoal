@@ -3,14 +3,15 @@
 //!
 //! Both are a small header (LZMA properties, dictionary size) in front of a
 //! raw LZMA stream; lzip adds a trailer per member with the CRC and sizes, so
-//! members are found from the end. The LZMA data is an unsupported leaf.
+//! members are found from the end. The decompressed content is decoded on
+//! demand.
 
 use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, human_size, unsupported};
+use crate::formats::arcutil::{count, human_size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -90,7 +91,9 @@ pub async fn dissect_lzma(cx: Cx, input: Input) -> Result<()> {
     let (header, span) = cur.record::<LzmaHeader>().await?;
     cx.emit(LzmaHeader::node("Header", span, LE));
     let body = input.span.tail(LzmaHeader::SIZE);
-    cx.emit(unsupported("Compressed data", body, "LZMA"));
+    let expected = (header.size != u64::MAX).then_some(header.size);
+    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::LzmaAlone, expected));
+    cx.emit(Node::new("Compressed data").span(body));
     let size = if header.size == u64::MAX {
         "unknown size".to_owned()
     } else {
@@ -177,11 +180,7 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
         let mut cur = Cursor::new(&cx, file, LE);
         let (_, span) = cur.record::<LzipHeader>().await?;
         cx.emit(LzipHeader::node("Header", span, LE));
-        cx.emit(unsupported(
-            "Compressed data",
-            file.tail(LzipHeader::SIZE),
-            "LZMA",
-        ));
+        cx.emit(Node::new("Compressed data").span(file.tail(LzipHeader::SIZE)));
         cx.diag(e);
         cx.annotate("lzip (trailer missing or damaged)");
         return Ok(());
@@ -196,25 +195,25 @@ pub async fn dissect_lzip(cx: Cx, input: Input) -> Result<()> {
         human_size(total)
     ));
     if let [member] = members.as_slice() {
-        return emit_member(&cx, member.span).await;
+        return emit_member(&cx, input, member.span, member.data_size).await;
     }
     for (i, m) in members.iter().enumerate() {
         cx.push(
             Node::new(format!("Member {i}"))
                 .span(m.span)
                 .summary(format!("{} uncompressed", human_size(m.data_size)))
-                .lazy(member, m.span),
+                .lazy(member, (input, m.span, m.data_size)),
         )
         .await;
     }
     Ok(())
 }
 
-async fn member(cx: Cx, span: Span) -> Result<()> {
-    emit_member(&cx, span).await
+async fn member(cx: Cx, (input, span, size): (Input, Span, u64)) -> Result<()> {
+    emit_member(&cx, input, span, size).await
 }
 
-async fn emit_member(cx: &Cx, span: Span) -> Result<()> {
+async fn emit_member(cx: &Cx, input: Input, span: Span, size: u64) -> Result<()> {
     cx.emit(LzipHeader::node(
         "Header",
         span.sub(0, LzipHeader::SIZE),
@@ -224,11 +223,10 @@ async fn emit_member(cx: &Cx, span: Span) -> Result<()> {
         .len
         .saturating_sub(LzipHeader::SIZE)
         .saturating_sub(LzipTrailer::SIZE);
-    cx.emit(unsupported(
-        "Compressed data",
-        span.sub(LzipHeader::SIZE, body_len),
-        "LZMA",
-    ));
+    // lzip members are raw LZMA with lc=3, lp=0, pb=2 and an end marker.
+    let props = crate::codec::lzma::Props { lc: 3, lp: 0, pb: 2 };
+    let codec = crate::codec::Codec::LzmaRaw { props, size: usize::try_from(size).ok() };
+    cx.emit(crate::formats::content("Decompressed", input, span.sub(LzipHeader::SIZE, body_len), codec, Some(size)));
     cx.emit(LzipTrailer::node(
         "Trailer",
         span.tail(span.len.saturating_sub(LzipTrailer::SIZE)),

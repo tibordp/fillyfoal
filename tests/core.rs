@@ -317,3 +317,41 @@ fn pkcs12_without_the_password_lists_nothing_secret() {
     assert!(host.render().contains("CN=fillyfoal p12 test"));
     assert!(host.secret_requests.is_empty());
 }
+
+fn lzma_text() -> Vec<u8> {
+    (0..2000).map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+}
+
+fn lzma_code() -> Vec<u8> {
+    let mut x: u32 = 12345;
+    (0..40000)
+        .map(|_| {
+            x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+            let r = ((x >> 16) & 0xff) as u8;
+            if r < 40 { 0xe8 } else { r }
+        })
+        .collect()
+}
+
+#[test]
+fn lzma_family_decodes_python_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/lzma/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |codec: Codec, data: &[u8]| {
+        let mut d = codec.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    let text = lzma_text();
+    for name in ["text.xz", "text-crc32.xz", "text-sha256.xz", "text-two-streams.xz"] {
+        assert!(decode(Codec::Xz, &read(name)) == text, "{name}");
+    }
+    for name in ["text.lzma", "text-pb0lc0.lzma"] {
+        assert!(decode(Codec::LzmaAlone, &read(name)) == text, "{name}");
+    }
+    let code = lzma_code();
+    for name in ["code-x86.xz", "code-delta.xz", "code-arm.xz", "code-arm64.xz", "code-x86-delta.xz"] {
+        assert!(decode(Codec::Xz, &read(name)) == code, "{name}");
+    }
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(Codec::Xz, &read("random.xz")) == random);
+}

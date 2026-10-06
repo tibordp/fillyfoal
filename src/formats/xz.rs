@@ -4,8 +4,8 @@
 //! a 12-byte header, blocks, an index and a 12-byte footer. The footer gives
 //! the index size, and the index lists every block's sizes, so the whole
 //! layout is found from the end without touching compressed data. Block
-//! headers (filter chains) are decoded on expansion; the LZMA2 payload is an
-//! unsupported leaf (see the codec policy).
+//! headers (filter chains) are decoded on expansion; the decompressed
+//! content is decoded on demand.
 
 use std::sync::Arc;
 
@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
+use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -209,12 +209,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             // Truncated or damaged: show what the start says.
             cx.emit(stream_header_node(&cx, header_span).await?);
             let body = file.tail(StreamHeader::SIZE);
-            cx.emit(unsupported("Compressed data", body, "LZMA2"));
+            cx.emit(Node::new("Compressed data").span(body));
             cx.diag(e);
             cx.annotate("xz (footer missing or damaged)");
             return Ok(());
         }
     };
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Xz, None));
     let blocks = streams
         .iter()
         .fold(0u64, |a, s| a.saturating_add(to_u64(s.records.len())));
@@ -417,7 +418,8 @@ async fn block(cx: Cx, (_input, span, unpadded, check): (Input, Span, u64, u8)) 
         .saturating_sub(header_len)
         .saturating_sub(check_len);
     let payload = span.sub(header_len, compressed);
-    let mut node = unsupported("Compressed data", payload, codec);
+    let mut node = Node::new("Compressed data").span(payload);
+    let _ = codec;
     let chain: Vec<&str> = filters
         .iter()
         .map(|&id| crate::value::lookup(FILTERS, id).unwrap_or("?"))

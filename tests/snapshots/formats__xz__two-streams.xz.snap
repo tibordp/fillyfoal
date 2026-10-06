@@ -1,8 +1,14 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ two-streams.xz — xz, 2 blocks, 27 bytes uncompressed, CRC32, 2 streams  [0x0+0x9c]
+  ▾ Decompressed — UTF-8 text, LF line endings, 2 lines  [0x0+0x9c]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+    ▾ Lines — 2 lines  [#1:0x0+0x1b]
+        Line 1: "first stream"  [#1:0x0+0xc]
+        Line 2: "second stream"  [#1:0xd+0xd]
   ▾ Stream 0 — 1 block, 13 bytes uncompressed  [0x0+0x4c]
     ▾ Stream header — CRC valid  [0x0+0xc]
         Magic: fd 37 7a 58 5a 00  |.7zXZ.|  [0x0+0x6]
@@ -23,7 +29,6 @@ expression: "common::explore(&name, &data)"
             Header padding  [0x13+0x9]
             CRC32: 0x68cd8888 — CRC valid  [0x1c+0x4]
           Compressed data — LZMA2, 17 bytes  [0x20+0x11]
-            ! unsupported: LZMA2 compression
           Block padding  [0x31+0x3]
           Check: a2 5c da 40  |.\.@| — CRC32  [0x34+0x4]
     ▾ Index — 1 record  [0x38+0x8]
@@ -60,7 +65,6 @@ expression: "common::explore(&name, &data)"
             Header padding  [0x67+0x9]
             CRC32: 0xa966c19d — CRC valid  [0x70+0x4]
           Compressed data — LZMA2, 18 bytes  [0x74+0x12]
-            ! unsupported: LZMA2 compression
           Block padding  [0x86+0x2]
     ▾ Index — 1 record  [0x88+0x8]
         Index indicator: 0  [0x88+0x1]

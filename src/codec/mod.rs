@@ -12,6 +12,8 @@ pub mod bzip2;
 pub mod crypto;
 pub mod filters;
 pub mod lz;
+pub mod lzma;
+pub mod xz;
 pub mod pipeline;
 
 use std::sync::Arc;
@@ -60,6 +62,14 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
+    Xz,
+    /// `.lzma` ("LZMA alone").
+    LzmaAlone,
+    /// Raw LZMA2 chunks.
+    Lzma2,
+    /// Raw LZMA with known properties and (if known) decoded size.
+    LzmaRaw { props: lzma::Props, size: Option<usize> },
     /// bzip2 streams.
     Bzip2,
     /// LZ4 frames (also legacy and skippable frames).
@@ -120,6 +130,10 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Eexec { .. } => "eexec",
             Codec::Bzip2 => "bzip2",
+            Codec::Xz => "xz",
+            Codec::LzmaAlone => "lzma",
+            Codec::Lzma2 => "lzma2",
+            Codec::LzmaRaw { .. } => "lzma-raw",
             Codec::Lz4Frame => "lz4",
             Codec::Lz4Block => "lz4-block",
             Codec::Snappy => "snappy",
@@ -147,6 +161,10 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Bzip2 => "bzip2 (lazy)",
+            Codec::Xz => "xz (lazy)",
+            Codec::LzmaAlone => "lzma (lazy)",
+            Codec::Lzma2 => "lzma2 (lazy)",
+            Codec::LzmaRaw { .. } => "lzma-raw (lazy)",
             Codec::Lz4Frame => "lz4 (lazy)",
             Codec::Lz4Block => "lz4-block (lazy)",
             Codec::Snappy => "snappy (lazy)",
@@ -170,7 +188,11 @@ impl Codec {
             | Codec::Lz4Block
             | Codec::Snappy
             | Codec::SnappyFramed
-            | Codec::Bzip2 => "decompressed",
+            | Codec::Bzip2
+            | Codec::Xz
+            | Codec::LzmaAlone
+            | Codec::Lzma2
+            | Codec::LzmaRaw { .. } => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
             }
@@ -196,6 +218,8 @@ impl Codec {
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 => 50_000,
+            // LZMA's longest match (273 bytes) costs a handful of bits.
+            Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 | Codec::LzmaRaw { .. } => 7_000,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -222,6 +246,10 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
+            Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),
+            Codec::Lzma2 => Box::new(Streaming(filters::Whole::new(lzma::Lzma2))),
+            Codec::LzmaRaw { props, size } => Box::new(Streaming(filters::Whole::new(lzma::LzmaRaw { props: *props, end: *size }))),
             Codec::Bzip2 => Box::new(Streaming(filters::Whole::new(bzip2::Bzip2))),
             Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
