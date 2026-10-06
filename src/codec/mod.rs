@@ -9,6 +9,7 @@
 
 pub mod inflate;
 pub mod crypto;
+pub mod filters;
 pub mod pipeline;
 
 use std::sync::Arc;
@@ -43,6 +44,20 @@ pub enum Codec {
     Deflate,
     /// zlib-wrapped DEFLATE (RFC 1950), with its Adler-32 checked.
     Zlib,
+    /// Hex digit pairs (PDF `ASCIIHexDecode`).
+    AsciiHex,
+    /// Base-85 (PDF/PostScript `ASCII85Decode`).
+    Ascii85,
+    /// PDF `RunLengthDecode`.
+    RunLength,
+    /// PackBits (TIFF, Mac).
+    PackBits,
+    /// LZW with MSB-first codes (PDF `LZWDecode`, TIFF).
+    Lzw { early_change: bool },
+    /// PNG row predictors; `bpp` bytes per pixel, `row` bytes per row.
+    PngPredictor { bpp: usize, row: usize },
+    /// TIFF horizontal differencing (8-bit components).
+    TiffPredictor { bpp: usize, row: usize },
     /// Traditional PKWARE encryption with this password (the 12-byte
     /// encryption header is consumed, not output).
     ZipCrypto(crypto::Key),
@@ -75,6 +90,13 @@ impl Codec {
             Codec::Zlib => "zlib",
             Codec::ZipCrypto(_) => "zipcrypto",
             Codec::AesCtrLe(_) => "aes-ctr",
+            Codec::AsciiHex => "asciihex",
+            Codec::Ascii85 => "ascii85",
+            Codec::RunLength => "runlength",
+            Codec::PackBits => "packbits",
+            Codec::Lzw { .. } => "lzw",
+            Codec::PngPredictor { .. } => "png-predictor",
+            Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -87,6 +109,13 @@ impl Codec {
             Codec::Zlib => "zlib (lazy)",
             Codec::ZipCrypto(_) => "zipcrypto (lazy)",
             Codec::AesCtrLe(_) => "aes-ctr (lazy)",
+            Codec::AsciiHex => "asciihex (lazy)",
+            Codec::Ascii85 => "ascii85 (lazy)",
+            Codec::RunLength => "runlength (lazy)",
+            Codec::PackBits => "packbits (lazy)",
+            Codec::Lzw { .. } => "lzw (lazy)",
+            Codec::PngPredictor { .. } => "png-predictor (lazy)",
+            Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -97,6 +126,10 @@ impl Codec {
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Zlib => "decompressed",
             Codec::ZipCrypto(_) | Codec::AesCtrLe(_) => "decrypted",
+            Codec::Lzw { .. } | Codec::RunLength | Codec::PackBits => "decompressed",
+            Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
+                "decoded"
+            }
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -105,7 +138,15 @@ impl Codec {
     /// from a container are treated as bogus.
     pub fn max_ratio(&self) -> u64 {
         match self {
-            Codec::Stored | Codec::ZipCrypto(_) | Codec::AesCtrLe(_) => 1,
+            Codec::Stored
+            | Codec::ZipCrypto(_)
+            | Codec::AesCtrLe(_)
+            | Codec::AsciiHex
+            | Codec::Ascii85
+            | Codec::PngPredictor { .. }
+            | Codec::TiffPredictor { .. } => 1,
+            Codec::RunLength | Codec::PackBits => 128,
+            Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
                 .iter()
@@ -120,6 +161,17 @@ impl Codec {
             Codec::Stored => return None,
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),
+            Codec::AsciiHex => Box::new(Streaming(filters::Whole::new(filters::AsciiHex))),
+            Codec::Ascii85 => Box::new(Streaming(filters::Whole::new(filters::Ascii85))),
+            Codec::RunLength => Box::new(Streaming(filters::Whole::new(filters::RunLength))),
+            Codec::PackBits => Box::new(Streaming(filters::Whole::new(filters::PackBits))),
+            Codec::Lzw { early_change } => Box::new(Streaming(filters::Whole::new(filters::Lzw { early_change: *early_change }))),
+            Codec::PngPredictor { bpp, row } => {
+                Box::new(Streaming(filters::Whole::new(filters::PngPredictor { bpp: *bpp, row: *row })))
+            }
+            Codec::TiffPredictor { bpp, row } => {
+                Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
+            }
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
                 Some(d) => Box::new(Streaming(d)),

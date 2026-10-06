@@ -5,10 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::syntax::{self, Error as ParseError, Item, Obj, Parser};
 use crate::bytes::{to_u64, to_usize};
-use crate::codec;
+use crate::codec::{self, Codec};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::span::{Origin, Span};
+use crate::span::Span;
 
 /// Largest object (dictionary part) we are prepared to read.
 const MAX_OBJECT: u64 = 16 << 20;
@@ -207,123 +207,92 @@ pub fn filters(dict: &Item) -> Vec<String> {
     }
 }
 
-fn is_flate(name: &str) -> bool {
-    name == "FlateDecode" || name == "Fl"
+/// The `/DecodeParms` dictionary of filter `index` (a single dictionary or
+/// an array aligned with `/Filter`).
+fn parms(dict: &Item, index: usize) -> Option<&Item> {
+    let parms = dict.get("DecodeParms").or_else(|| dict.get("DP"))?;
+    match &parms.obj {
+        Obj::Array(items) => items.get(index).filter(|i| !matches!(i.obj, Obj::Null)),
+        _ if index == 0 => Some(parms),
+        _ => None,
+    }
 }
 
-/// The first `/DecodeParms` dictionary's predictor and columns.
-fn predictor(dict: &Item) -> Option<(i64, usize)> {
-    let parms = dict.get("DecodeParms")?;
-    let parms = match &parms.obj {
-        Obj::Array(items) => items.first()?,
-        _ => parms,
+/// The predictor stage that follows a Flate or LZW filter, if any.
+fn predictor(parms: Option<&Item>) -> std::result::Result<Option<Codec>, String> {
+    let Some(parms) = parms else { return Ok(None) };
+    let get = |k: &str, d: i64| parms.get(k).and_then(Item::int).unwrap_or(d);
+    let predictor = get("Predictor", 1);
+    if predictor <= 1 {
+        return Ok(None);
+    }
+    let (colors, bits, columns) = (get("Colors", 1), get("BitsPerComponent", 8), get("Columns", 1));
+    let bits_per_pixel = colors.checked_mul(bits).filter(|&b| b > 0).ok_or("bad predictor parameters")?;
+    let bpp = usize::try_from(bits_per_pixel.saturating_add(7) / 8).map_err(|_| "bad predictor parameters")?;
+    let row = columns
+        .checked_mul(bits_per_pixel)
+        .and_then(|b| usize::try_from(b.saturating_add(7) / 8).ok())
+        .filter(|&r| r > 0 && r < 1 << 24)
+        .ok_or("bad predictor parameters")?;
+    match predictor {
+        2 if bits == 8 => Ok(Some(Codec::TiffPredictor { bpp, row })),
+        2 => Err(format!("TIFF predictor with {bits}-bit components")),
+        10..=15 => Ok(Some(Codec::PngPredictor { bpp, row })),
+        p => Err(format!("predictor {p}")),
+    }
+}
+
+/// The codec chain that decodes a stream (`/Filter` with its
+/// `/DecodeParms`), and the filter names. Image codecs (DCT, JPX, JBIG2,
+/// CCITT) end the chain: their output is the image file itself.
+pub fn codec(dict: &Item) -> std::result::Result<(Codec, Vec<String>), String> {
+    let names = filters(dict);
+    let mut stages = Vec::new();
+    for (i, name) in names.iter().enumerate() {
+        let last = i.saturating_add(1) == names.len();
+        match name.as_str() {
+            "FlateDecode" | "Fl" => {
+                stages.push(Codec::Zlib);
+                stages.extend(predictor(parms(dict, i))?);
+            }
+            "LZWDecode" | "LZW" => {
+                let early = parms(dict, i).and_then(|p| p.get("EarlyChange")).and_then(Item::int).unwrap_or(1);
+                stages.push(Codec::Lzw { early_change: early != 0 });
+                stages.extend(predictor(parms(dict, i))?);
+            }
+            "ASCIIHexDecode" | "AHx" => stages.push(Codec::AsciiHex),
+            "ASCII85Decode" | "A85" => stages.push(Codec::Ascii85),
+            "RunLengthDecode" | "RL" => stages.push(Codec::RunLength),
+            "Crypt" => {}
+            "DCTDecode" | "DCT" | "JPXDecode" | "JBIG2Decode" | "CCITTFaxDecode" | "CCF" if last => {}
+            other => return Err(format!("stream filter /{other}")),
+        }
+    }
+    let codec = match stages.len() {
+        0 => Codec::Stored,
+        1 => stages.pop().unwrap_or(Codec::Stored),
+        _ => Codec::chain("pdf-filters", "pdf-filters (lazy)", stages),
     };
-    let predictor = parms.get("Predictor").and_then(Item::int).unwrap_or(1);
-    let columns = parms.get("Columns").and_then(Item::int).unwrap_or(1);
-    let colors = parms.get("Colors").and_then(Item::int).unwrap_or(1);
-    let bits = parms
-        .get("BitsPerComponent")
-        .and_then(Item::int)
-        .unwrap_or(8);
-    let bytes = columns
-        .checked_mul(colors)?
-        .checked_mul(bits)?
-        .checked_add(7)?
-        .checked_div(8)?;
-    (predictor > 1).then_some((predictor, usize::try_from(bytes).ok()?))
+    Ok((codec, names))
 }
 
-/// Decodes a stream's data (FlateDecode with or without a PNG predictor,
-/// or unfiltered) into a span. Other filters are unsupported.
+/// Decodes a stream's data into a span (all filters except the image
+/// codecs, whose output is the image file).
 pub async fn decode(cx: &Cx, located: &Located) -> Result<Span> {
     let Some(data) = located.data else {
         return Err(Diagnostic::malformed("not a stream"));
     };
-    let names = filters(&located.item);
-    match names.as_slice() {
-        [] => Ok(data),
-        [f] if is_flate(f) => {
-            let decoded = codec::inflate_span(cx, data, true, None).await?;
-            if let Some(e) = &decoded.error
-                && decoded.span.is_empty()
-            {
-                return Err(e.clone());
-            }
-            match predictor(&located.item) {
-                None => Ok(decoded.span),
-                Some((p, columns)) if p >= 10 => unpredict(cx, data, decoded.span, columns).await,
-                Some((p, _)) => {
-                    Err(Diagnostic::unsupported(format!("TIFF predictor {p}")).at(data))
-                }
-            }
-        }
-        _ => Err(Diagnostic::unsupported(format!("stream filter {}", names.join(", "))).at(data)),
+    let (codec, _) = codec(&located.item).map_err(|e| Diagnostic::unsupported(e).at(data))?;
+    if codec == Codec::Stored {
+        return Ok(data);
     }
-}
-
-/// Reverses PNG row predictors (each row starts with its filter type).
-async fn unpredict(cx: &Cx, parent: Span, decoded: Span, columns: usize) -> Result<Span> {
-    let origin = Origin {
-        parent,
-        transform: "pdf-png-predictor",
-    };
-    if let Some(found) = cx.derived(origin) {
-        return Ok(found.span);
+    let decoded = codec::decode_span(cx, data, &codec, None).await?;
+    if let Some(e) = &decoded.error
+        && decoded.span.is_empty()
+    {
+        return Err(e.clone());
     }
-    let input = codec::read_all(cx, decoded).await?;
-    let row = columns.max(1);
-    let mut out = Vec::with_capacity(input.len());
-    let mut prev = vec![0u8; row];
-    for chunk in input.chunks(row.saturating_add(1)) {
-        cx.checkpoint().await;
-        let Some((&kind, body)) = chunk.split_first() else {
-            break;
-        };
-        let mut cur = vec![0u8; row];
-        for (i, &b) in body.iter().enumerate() {
-            let left = i
-                .checked_sub(1)
-                .and_then(|j| cur.get(j))
-                .copied()
-                .unwrap_or(0);
-            let up = prev.get(i).copied().unwrap_or(0);
-            let up_left = i
-                .checked_sub(1)
-                .and_then(|j| prev.get(j))
-                .copied()
-                .unwrap_or(0);
-            let value = match kind {
-                1 => b.wrapping_add(left),
-                2 => b.wrapping_add(up),
-                3 => b.wrapping_add((u16::from(left).saturating_add(u16::from(up)) / 2) as u8),
-                4 => b.wrapping_add(paeth(left, up, up_left)),
-                _ => b,
-            };
-            if let Some(slot) = cur.get_mut(i) {
-                *slot = value;
-            }
-        }
-        out.extend_from_slice(cur.get(..body.len()).unwrap_or_default());
-        prev = cur;
-    }
-    Ok(cx.add_derived(origin, out, parent.len, None)?.span)
-}
-
-fn paeth(a: u8, b: u8, c: u8) -> u8 {
-    let (ia, ib, ic) = (i16::from(a), i16::from(b), i16::from(c));
-    let p = ia.saturating_add(ib).saturating_sub(ic);
-    let (pa, pb, pc) = (
-        p.saturating_sub(ia).abs(),
-        p.saturating_sub(ib).abs(),
-        p.saturating_sub(ic).abs(),
-    );
-    if pa <= pb && pa <= pc {
-        a
-    } else if pb <= pc {
-        b
-    } else {
-        c
-    }
+    Ok(decoded.span)
 }
 
 // ---------------------------------------------------------------------------

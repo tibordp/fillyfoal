@@ -29,7 +29,7 @@ use syntax::{Item, Obj};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::{Codec, Format, Head, Input, Probe, content};
+use crate::formats::{Format, Head, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -577,49 +577,33 @@ fn stream_data(doc: &DocRef, located: &Located) -> Node {
         return Node::new("Stream data");
     };
     let input = doc.input;
-    let names = objects::filters(&located.item);
     let expected = located
         .item
         .get("DL")
         .and_then(Item::int)
         .and_then(|n| u64::try_from(n).ok());
-    let has_predictor = located
-        .item
-        .get("DecodeParms")
-        .is_some_and(|p| p.get("Predictor").and_then(Item::int).unwrap_or(1) > 1);
     let name = "Stream data";
-    match names
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .as_slice()
-    {
-        [] => {
-            content(name, input, data, Codec::Stored, None).summary(format!("{} bytes", data.len))
+    match objects::codec(&located.item) {
+        Ok((codec, names)) => {
+            let image = match names.last().map(String::as_str) {
+                Some("DCTDecode" | "DCT") => Some("JPEG image"),
+                Some("JPXDecode") => Some("JPEG 2000 image"),
+                Some("JBIG2Decode") => Some("JBIG2 image"),
+                Some("CCITTFaxDecode" | "CCF") => Some("CCITT fax image"),
+                _ => None,
+            };
+            let filters: Vec<String> = names.iter().map(|f| format!("/{f}")).collect();
+            let summary = match (filters.is_empty(), image) {
+                (true, _) => format!("{} bytes", data.len),
+                (false, Some(kind)) => format!("{} bytes, {}: {kind}", data.len, filters.join(" ")),
+                (false, None) => format!("{} bytes, {}", data.len, filters.join(" ")),
+            };
+            content(name, input, data, codec, expected).summary(summary)
         }
-        ["FlateDecode" | "Fl"] if !has_predictor => {
-            content(name, input, data, Codec::Zlib, expected)
-                .summary(format!("{} bytes, FlateDecode", data.len))
-        }
-        ["FlateDecode" | "Fl"] => Node::new(name)
-            .span(data)
-            .summary(format!("{} bytes, FlateDecode with predictor", data.len))
-            .lazy(decoded_stream, (input, located.clone())),
-        ["DCTDecode" | "DCT"] => {
-            content(name, input, data, Codec::Stored, None).summary("JPEG image")
-        }
-        ["JPXDecode"] => content(name, input, data, Codec::Stored, None).summary("JPEG 2000 image"),
-        _ => Node::new(name)
+        Err(e) => Node::new(name)
             .span(data)
             .summary(format!("{} bytes", data.len))
-            .diag(Diagnostic::unsupported(format!(
-                "stream filter {}",
-                names
-                    .iter()
-                    .map(|f| format!("/{f}"))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ))),
+            .diag(Diagnostic::unsupported(e)),
     }
 }
 
@@ -636,12 +620,6 @@ fn looks_like_content(dict: &Item) -> bool {
 async fn content_operators(cx: Cx, located: Located) -> Result<()> {
     let span = objects::decode(&cx, &located).await?;
     content::operators(&cx, span).await
-}
-
-async fn decoded_stream(cx: Cx, (input, located): (Input, Located)) -> Result<()> {
-    let span = objects::decode(&cx, &located).await?;
-    cx.annotate(format!("{:#x} bytes decoded", span.len));
-    crate::formats::dissect_or_data(cx, input.nested(span)).await
 }
 
 async fn contained_objects(
