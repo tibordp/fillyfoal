@@ -824,6 +824,7 @@ pub static FORMATS: &[&Format] = &[
     &geo::rinex::IONEX,
     &geo::rinex::SP3,
     &geo::rinex::SINEX,
+    &geo::mdf::MDF,
     &geo::vehicle::BLF,
     &geo::vehicle::ASC,
     &geo::vehicle::CANDUMP,

@@ -23,6 +23,7 @@ pub mod gis;
 pub mod gistext;
 pub mod gnss;
 pub mod markup;
+pub mod mdf;
 pub mod rinex;
 pub mod robotics;
 pub mod tiles;
