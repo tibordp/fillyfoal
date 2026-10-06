@@ -52,6 +52,42 @@ pub(crate) struct SourceEntry {
     /// why it stopped early, if it did.
     pub consumed: u64,
     pub error: Option<Diagnostic>,
+    /// How to decode the source again from its parent: set for sources
+    /// decoded with a codec, which makes them evictable (see
+    /// [`Shared::make_room`]).
+    pub recipe: Option<Codec>,
+    /// When the source was last read (for eviction).
+    pub used: u64,
+    /// Registered with [`Cx::decode_lazy`] (an evicted eager source decodes
+    /// lazily too, but is not "on demand" to dissectors: what they see must
+    /// not depend on eviction).
+    pub on_demand: bool,
+}
+
+impl SourceEntry {
+    pub(crate) fn host(len: u64) -> Self {
+        SourceEntry {
+            len,
+            data: None,
+            pieces: None,
+            lazy: None,
+            origin: None,
+            consumed: 0,
+            error: None,
+            recipe: None,
+            used: 0,
+            on_demand: false,
+        }
+    }
+
+    /// Bytes this source holds in memory (counted in `derived_bytes`).
+    fn held(&self) -> u64 {
+        match (&self.data, &self.lazy) {
+            (Some(d), _) => to_u64(d.len()),
+            (None, Some(l)) => to_u64(l.out.len().saturating_add(l.input.len())),
+            _ => 0,
+        }
+    }
 }
 
 /// State of a lazily decoded source: encoded input read so far, the
@@ -88,6 +124,8 @@ pub(crate) struct Shared {
     /// The secret the current expansion is waiting for.
     pub secret_wanted: Option<SecretRequest>,
     pub limits: Limits,
+    /// Logical clock for least-recently-used eviction of derived sources.
+    pub tick: u64,
 }
 
 impl Shared {
@@ -100,6 +138,58 @@ impl Shared {
             return u64::MAX;
         }
         self.source(source).map_or(0, |s| s.len)
+    }
+
+    /// Frees memory for `need` more derived bytes by evicting the least
+    /// recently read sources that can be decoded again (those with a
+    /// recipe). An evicted source becomes a fresh lazily decoded one: reading
+    /// it later decodes it again from its parent, as far as the read
+    /// reaches. `protect` and the sources it derives from are kept (they
+    /// are being read). Returns whether `need` now fits.
+    pub(crate) fn make_room(&mut self, need: u64, protect: SourceId) -> bool {
+        let max = self.limits.max_derived;
+        let mut chain = vec![protect];
+        let mut cursor = protect;
+        while let Some(parent) = self.source(cursor).and_then(|e| e.origin).map(|o| o.parent.source) {
+            if chain.contains(&parent) || chain.len() > 64 {
+                break;
+            }
+            chain.push(parent);
+            cursor = parent;
+        }
+        while self.derived_bytes.saturating_add(need) > max {
+            let victim = self
+                .sources
+                .iter()
+                .enumerate()
+                .filter(|(i, e)| {
+                    e.recipe.is_some()
+                        && e.held() > 0
+                        && !chain.iter().any(|c| crate::bytes::to_usize(c.0.into()) == *i)
+                })
+                .min_by_key(|(_, e)| e.used)
+                .map(|(i, _)| i);
+            let Some(entry) = victim.and_then(|i| self.sources.get_mut(i)) else {
+                return false;
+            };
+            let (Some(origin), Some(decoder)) = (entry.origin, entry.recipe.as_ref().and_then(Codec::decoder)) else {
+                entry.recipe = None;
+                continue;
+            };
+            let held = entry.held();
+            entry.data = None;
+            entry.lazy = Some(Box::new(LazyDecode {
+                parent: origin.parent,
+                input: Vec::new(),
+                input_eof: false,
+                out: Vec::new(),
+                decoder,
+                starved: false,
+                done: false,
+            }));
+            self.derived_bytes = self.derived_bytes.saturating_sub(held);
+        }
+        true
     }
 
     fn charge(&mut self, units: u64) {
@@ -118,6 +208,11 @@ impl Shared {
     ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
         let end = end.min(self.source_len(source));
         let start = start.min(end);
+        self.tick = self.tick.wrapping_add(1);
+        let tick = self.tick;
+        if let Some(entry) = self.sources.get_mut(crate::bytes::to_usize(source.0.into())) {
+            entry.used = tick;
+        }
         if source == SourceId::ZEROS {
             return Ok(vec![0; crate::bytes::to_usize(end.saturating_sub(start))]);
         }
@@ -204,6 +299,14 @@ impl Shared {
             return Ok(Vec::new());
         };
         let before = st.out.len().saturating_add(st.input.len());
+        // Room for the output still to come, and for the encoded input it
+        // takes (kept alongside; rarely more than the output it produces).
+        let more_out = end.saturating_sub(to_u64(st.out.len()));
+        let more_in = more_out
+            .min(st.parent.len.saturating_sub(to_u64(st.input.len())))
+            .saturating_add(to_u64(LOOKAHEAD));
+        let need = more_out.saturating_add(more_in);
+        self.make_room(need, source);
         let limit =
             crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
         let mut failure = None;
@@ -415,7 +518,7 @@ impl Cx {
                     let failed = (to_u64(data.len()) < span.len)
                         .then(|| sh.source(span.source))
                         .flatten()
-                        .filter(|e| e.lazy.is_some())
+                        .filter(|e| e.on_demand)
                         .and_then(|e| e.error.clone());
                     Poll::Ready(match failed {
                         Some(e) => Err(Diagnostic::new(e.kind, format!("decoding stopped: {}", e.message)).at(span)),
@@ -533,7 +636,7 @@ impl Cx {
     pub fn is_lazy(&self, source: SourceId) -> bool {
         lock(&self.shared)
             .source(source)
-            .is_some_and(|s| s.lazy.is_some())
+            .is_some_and(|s| s.on_demand)
     }
 
     /// A previously derived source with this origin, if any. Dissectors use
@@ -551,7 +654,10 @@ impl Cx {
     }
 
     /// Registers decoded bytes as a new source. Fails if the session's total
-    /// budget for derived bytes would be exceeded.
+    /// budget for derived bytes would be exceeded. Such sources stay in
+    /// memory for the session (nothing records how to make them again); data
+    /// decoded with a [`Codec`] should go through [`crate::codec::decode_span`]
+    /// or [`Cx::decode_lazy`], whose sources can be evicted and re-decoded.
     pub fn add_derived(
         &self,
         origin: Origin,
@@ -559,11 +665,36 @@ impl Cx {
         consumed: u64,
         error: Option<Diagnostic>,
     ) -> Result<crate::codec::Decoded> {
+        self.add_bytes(origin, data, consumed, error, None)
+    }
+
+    /// [`Cx::add_derived`] for bytes decoded from `origin.parent` with
+    /// `codec`: evictable, decoded again on demand.
+    pub(crate) fn add_decoded(
+        &self,
+        origin: Origin,
+        data: Vec<u8>,
+        consumed: u64,
+        error: Option<Diagnostic>,
+        codec: &Codec,
+    ) -> Result<crate::codec::Decoded> {
+        self.add_bytes(origin, data, consumed, error, Some(codec.clone()))
+    }
+
+    fn add_bytes(
+        &self,
+        origin: Origin,
+        data: Vec<u8>,
+        consumed: u64,
+        error: Option<Diagnostic>,
+        recipe: Option<Codec>,
+    ) -> Result<crate::codec::Decoded> {
         if let Some(found) = self.derived(origin) {
             return Ok(found);
         }
         let mut sh = lock(&self.shared);
         let len = to_u64(data.len());
+        sh.make_room(len, origin.parent.source);
         let total = sh.derived_bytes.saturating_add(len);
         if total > sh.limits.max_derived {
             return Err(Diagnostic::limit(format!(
@@ -574,6 +705,7 @@ impl Cx {
         }
         sh.derived_bytes = total;
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        let tick = sh.tick;
         sh.sources.push(SourceEntry {
             len,
             data: Some(data.into()),
@@ -582,6 +714,9 @@ impl Cx {
             origin: Some(origin),
             consumed,
             error: error.clone(),
+            recipe,
+            used: tick,
+            on_demand: false,
         });
         sh.derived.insert(origin, id);
         Ok(crate::codec::Decoded {
@@ -618,6 +753,7 @@ impl Cx {
             spans.push(clamped);
         }
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        let tick = sh.tick;
         sh.sources.push(SourceEntry {
             len,
             data: None,
@@ -626,6 +762,9 @@ impl Cx {
             origin: Some(origin),
             consumed: 0,
             error: None,
+            recipe: None,
+            used: tick,
+            on_demand: false,
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))
@@ -688,6 +827,7 @@ impl Cx {
         }
         let mut sh = lock(&self.shared);
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        let tick = sh.tick;
         sh.sources.push(SourceEntry {
             len,
             data: None,
@@ -704,6 +844,9 @@ impl Cx {
             origin: Some(origin),
             consumed: 0,
             error: None,
+            recipe: Some(codec.clone()),
+            used: tick,
+            on_demand: true,
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))

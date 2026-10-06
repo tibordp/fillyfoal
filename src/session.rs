@@ -210,6 +210,7 @@ impl Session {
             secrets: std::collections::HashMap::new(),
             secret_wanted: None,
             limits,
+            tick: 0,
         };
         Session {
             shared: Arc::new(Mutex::new(shared)),
@@ -277,15 +278,7 @@ impl Session {
     pub fn add_source(&mut self, len: u64) -> SourceId {
         let mut sh = lock(&self.shared);
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
-        sh.sources.push(crate::cx::SourceEntry {
-            len,
-            data: None,
-            pieces: None,
-            lazy: None,
-            origin: None,
-            consumed: 0,
-            error: None,
-        });
+        sh.sources.push(crate::cx::SourceEntry::host(len));
         id
     }
 
@@ -324,7 +317,17 @@ impl Session {
         out
     }
 
-    /// The bytes of a derived source, e.g. for a hex view.
+    /// Reads the bytes of any span (host, decoded, lazily decoded, evicted or
+    /// piecewise), e.g. for a hex view. Decoded sources are decoded as far
+    /// as needed. If host bytes are missing, returns the requests to
+    /// [`Session::supply`] first.
+    pub fn read(&mut self, span: Span) -> Result<Vec<u8>, Vec<ByteRequest>> {
+        let result = lock(&self.shared).read_range(span.source, span.offset, span.end(), 0);
+        result.map_err(|missing| self.requests(missing))
+    }
+
+    /// The bytes of a derived source held in memory, if they are (see
+    /// [`Session::read`] for any source).
     pub fn derived_data(&self, source: SourceId) -> Option<Arc<[u8]>> {
         lock(&self.shared)
             .source(source)

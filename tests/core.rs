@@ -1039,3 +1039,59 @@ fn windows_seek_and_resume_from_marks() {
         assert_eq!(started(&host, root), vec!["started at 0".to_owned()]);
     }
 }
+
+/// A zlib stream of stored blocks holding `data` (any size).
+fn zlib_stored_big(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x78, 0x01];
+    let blocks: Vec<&[u8]> = data.chunks(65_535).collect();
+    for (i, block) in blocks.iter().enumerate() {
+        out.push(u8::from(i + 1 == blocks.len()));
+        let len = block.len() as u16;
+        out.extend_from_slice(&len.to_le_bytes());
+        out.extend_from_slice(&(!len).to_le_bytes());
+        out.extend_from_slice(block);
+    }
+    out.extend_from_slice(&fillyfoal::codec::adler32(data).to_be_bytes());
+    out
+}
+
+/// Decodes each stream eagerly, then the first one again, emitting each
+/// stream's last bytes.
+async fn decode_streams(cx: Cx, streams: Vec<Span>) -> Result<()> {
+    let order: Vec<usize> = (0..streams.len()).chain([0]).collect();
+    for i in order {
+        let decoded = fillyfoal::codec::decode_span(&cx, streams[i], &fillyfoal::codec::Codec::Zlib, None).await?;
+        let tail = cx.read(decoded.span.tail(decoded.span.len - 8)).await?;
+        cx.emit(Node::new(format!("stream {i}")).value(Value::Bytes(tail)));
+    }
+    Ok(())
+}
+
+#[test]
+fn decoded_sources_are_evicted_and_decoded_again() {
+    let parts: Vec<Vec<u8>> = (0..3u8).map(|k| (0..400_000u32).map(|i| (i as u8) ^ k.wrapping_mul(37)).collect()).collect();
+    let mut file = Vec::new();
+    let mut spans = Vec::new();
+    for p in &parts {
+        let z = zlib_stored_big(p);
+        spans.push(Span::new(fillyfoal::SourceId::default_host(), file.len() as u64, z.len() as u64));
+        file.extend_from_slice(&z);
+    }
+    let run = |max_derived: u64| {
+        let limits = fillyfoal::Limits { max_derived, chunk_size: 4096, ..fillyfoal::Limits::default() };
+        let mut host = Host::new(file.clone(), limits);
+        let root = host.session.add_root(Node::new("streams").lazy(decode_streams, spans.clone()));
+        host.session.expand(root, 10);
+        host.run();
+        let c = host.session.children(root).unwrap();
+        assert!(c.error.is_none(), "{:?}", c.error);
+        let values: Vec<_> = c.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
+        (values, host.session.derived_bytes())
+    };
+    let (roomy, _) = run(1 << 30);
+    let (tight, held) = run(1 << 20);
+    assert_eq!(roomy, tight);
+    assert_eq!(tight.len(), 4);
+    assert_eq!(tight[0], Value::Bytes(parts[0][parts[0].len() - 8..].to_vec()));
+    assert!(held <= 1 << 20, "{held} derived bytes held");
+}

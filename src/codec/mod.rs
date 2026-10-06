@@ -535,7 +535,7 @@ pub async fn decode_span(cx: &Cx, span: Span, codec: &Codec, expected: Option<u6
         return Err(e);
     }
     let consumed = to_u64(decoder.consumed());
-    cx.add_derived(origin, out, consumed, error)
+    cx.add_decoded(origin, out, consumed, error, codec)
 }
 
 /// Reads `span` fully into memory, in pieces no larger than the read limit.
