@@ -24,6 +24,7 @@ pub mod pe;
 // -- end executables --
 
 // -- images --
+pub mod image;
 pub mod png;
 // -- end images --
 
@@ -153,6 +154,56 @@ pub static FORMATS: &[&Format] = &[
     &png::FORMAT,
     &png::MNG,
     &png::JNG,
+    &image::bmp::FORMAT,
+    &image::gif::FORMAT,
+    &image::jpeg::FORMAT,
+    &image::psd::FORMAT,
+    &image::ico::ICO,
+    &image::ico::CUR,
+    &image::qoi::FORMAT,
+    &image::dds::FORMAT,
+    &image::ktx::KTX,
+    &image::ktx::KTX2,
+    &image::exr::FORMAT,
+    &image::xcf::FORMAT,
+    &image::icns::FORMAT,
+    &image::j2k::FORMAT,
+    &image::jxl::FORMAT,
+    &image::icc::FORMAT,
+    &image::pcx::DCX,
+    &image::farbfeld::FORMAT,
+    &image::sunras::FORMAT,
+    &image::sgi::FORMAT,
+    &image::hdr::FORMAT,
+    &image::xbm::XPM,
+    &image::xbm::XBM,
+    &image::pnm::PBM,
+    &image::pnm::PGM,
+    &image::pnm::PPM,
+    &image::pnm::PAM,
+    &image::pnm::PFM,
+    // TIFF-based camera raw formats before plain TIFF.
+    &image::tiff::DNG,
+    &image::tiff::CR2,
+    &image::tiff::NEF,
+    &image::tiff::ARW,
+    &image::tiff::PEF,
+    &image::tiff::SRW,
+    &image::tiff::ORF,
+    &image::tiff::RW2,
+    &image::raw::RAF,
+    &image::raw::MRW,
+    &image::crw::FORMAT,
+    &image::jbig2::FORMAT,
+    &image::tiff::FORMAT,
+    // Weak probes (footer, header sanity checks) last.
+    &image::xwd::FORMAT,
+    &image::tga::FORMAT,
+    &image::pcx::FORMAT,
+    &image::wbmp::FORMAT,
+    // Also implemented in src/formats/image/ but not registered, because main
+    // has its own versions (graphics.rs, science.rs): fits, dpx, cineon, astc,
+    // pvr, vtf, emf, wmf, bpg, flif, jxr. Swap in whichever is deeper.
     // -- end images --
 
     // -- audio & video --

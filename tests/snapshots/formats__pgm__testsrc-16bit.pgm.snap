@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc-16bit.pgm — 4×3, PGM raw, maxval 65535  [0x0+0x25]
+    Magic: "P5" — PGM, raw  [0x0+0x2]
+    Width: 4  [0x3+0x1]
+    Height: 3  [0x5+0x1]
+    Maxval: 65535  [0x7+0x5]
+    Raster  [0xd+0x18]

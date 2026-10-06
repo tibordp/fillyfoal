@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.pbm — 12×4, PBM raw, 1-bit  [0x0+0x10]
+    Magic: "P4" — PBM, raw  [0x0+0x2]
+    Width: 12  [0x3+0x2]
+    Height: 4  [0x6+0x1]
+    Raster  [0x8+0x8]
