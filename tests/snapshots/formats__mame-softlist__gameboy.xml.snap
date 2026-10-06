@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gameboy.xml — MAME software list "gameboy" (Nintendo Game Boy cartridges), 2 entries, 2 ROMs  [0x0+0x378]
+  ▾ Software — 2 entries, 2 ROMs
+      tetris: "Tetris (World, Rev. 1)" — 1989 Nintendo, 1 ROMs  [0x92+0x175]
+      supmario: "Super Mario Land (World, Rev. 1)" — 1989 Nintendo, 1 ROMs  [0x209+0x15e]

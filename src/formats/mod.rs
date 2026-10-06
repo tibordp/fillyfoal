@@ -914,6 +914,11 @@ pub static FORMATS: &[&Format] = &[
     &retro::graphics::KOALA,
     &retro::graphics::MSX_BSAVE,
     &retro::graphics::AMSDOS,
+    &retro::dats::CLRMAMEPRO,
+    &retro::dats::LOGIQX,
+    &retro::dats::SOFTLIST,
+    &retro::dats::CDRDAO_TOC,
+    &retro::dats::RETROARCH_CHT,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --
