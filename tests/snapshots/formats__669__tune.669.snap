@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tune.669 — 669, 8 channels, 1 patterns, 1 samples — fillyfoal 669  [0x0+0x81a]
+    Magic: "if"  [0x0+0x2]
+    Message: "fillyfoal 669"  [0x2+0x6c]
+    Samples: 1  [0x6e+0x1]
+    Patterns: 1  [0x6f+0x1]
+    Loop order: 0  [0x70+0x1]
+    Orders: "0" — 128 entries  [0x71+0x80]
+    Tempo list  [0xf1+0x80]
+    Break list  [0x171+0x80]
+  ▾ Samples — 1 entries  [0x1f1+0x19]
+    ▾ Sample 0 — beep.smp, 16 bytes  [0x1f1+0x19]
+        File name: "beep.smp"  [0x1f1+0xd]
+        Length: 16  [0x1fe+0x4]
+        Loop start: 0  [0x202+0x4]
+        Loop end: 1048575  [0x206+0x4]
+    Patterns — 1 patterns of 64 rows × 8 channels  [0x20a+0x600]
+    Sample data  [0x80a+0x10]

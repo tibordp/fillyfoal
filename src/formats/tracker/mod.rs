@@ -7,6 +7,7 @@
 //! tables lazily.
 
 pub mod it;
+pub mod more;
 pub mod protracker;
 pub mod s3m;
 pub mod xm;
@@ -32,6 +33,12 @@ pub fn note_name(n: u8) -> String {
 /// The order list as text: "0 1 2 1 …", with markers shown as `+++`
 /// (skip) and `---` (end).
 pub fn orders(list: &[u8]) -> String {
+    // Unused entries at the end are end markers (255).
+    let used = list
+        .iter()
+        .rposition(|&o| o != 255)
+        .map_or(0, |p| p.saturating_add(1));
+    let list = list.get(..used).unwrap_or_default();
     let mut out: Vec<String> = Vec::new();
     for &o in list.iter().take(64) {
         out.push(match o {

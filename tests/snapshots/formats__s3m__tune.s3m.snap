@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tune.s3m — S3M, Scream Tracker 3.20, 4 channels, 4 orders, 1 patterns, 2 instruments — fillyfoal s3m  [0x0+0x175]
   ▾ Header  [0x0+0x60]
@@ -24,7 +24,7 @@ expression: "common::explore(&name, &data)"
       Reserved: 00 00 00 00 00 00 00 00  |........|  [0x36+0x8]
       Special pointer: 0  [0x3e+0x2]
       Channel settings: 00 08 01 09 ff ff ff ff ff ff ff ff ff ff ff ff …  |................|  [0x40+0x20]
-    Orders: "0 0 --- ---" — 4 entries  [0x60+0x4]
+    Orders: "0 0" — 4 entries  [0x60+0x4]
   ▾ Instruments — 2 entries  [0x64+0x4]
     ▾ Instrument 1 — Tone, 32 bytes, 8363 Hz  [0x70+0x50]
         Type: sample (0x1)  [0x70+0x1]

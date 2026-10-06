@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tune.it — IT 2.14, 2 channels, 2 orders, 1 patterns, 1 samples, 1 instruments — fillyfoal it  [0x0+0x376]
   ▾ Header  [0x0+0xc0]
@@ -26,7 +26,7 @@ expression: "common::explore(&name, &data)"
       Reserved: 0  [0x3c+0x4]
       Channel panning: 20 20 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 a0 …  |  ..............|  [0x40+0x40]
       Channel volume: 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 …  |@@@@@@@@@@@@@@@@|  [0x80+0x40]
-    Orders: "0 ---" — 2 entries  [0xc0+0x2]
+    Orders: "0" — 2 entries  [0xc0+0x2]
   ▾ Instruments — 1 entries  [0xc2+0x4]
     ▾ Instrument 1 — Lead, 1 samples  [0xce+0x130]
         Signature: "IMPI"  [0xce+0x4]
