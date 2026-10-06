@@ -883,6 +883,8 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles3::SHARKPORT,
     &retro::consoles3::MAME_INP,
     &retro::consoles3::MAME_STATE,
+    &retro::graphics::KICKSTART,
+    &retro::graphics::AMIGA_INFO,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -907,6 +909,11 @@ pub static FORMATS: &[&Format] = &[
     &retro::micros::ZX_SNA,
     &retro::micros::ATARI_XEX,
     &retro::micros::MACBINARY,
+    &retro::graphics::DEGAS,
+    &retro::graphics::NEOCHROME,
+    &retro::graphics::KOALA,
+    &retro::graphics::MSX_BSAVE,
+    &retro::graphics::AMSDOS,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --

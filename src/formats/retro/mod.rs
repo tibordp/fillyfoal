@@ -15,3 +15,4 @@ pub mod floppies;
 pub mod systems;
 pub mod micros;
 pub mod consoles3;
+pub mod graphics;
