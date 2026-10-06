@@ -188,7 +188,11 @@ filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`.
 - Deterministic output: no hash-map iteration order, no clocks.
 - Recursion: an expander that refers to itself (directly or mutually) must
   use `node.lazy(crate::expander!(self::walk: State), state)`. If a local
-  variable shadows the function name, use the `self::` path.
+  variable shadows the function name, use the `self::` path. A recursive
+  *helper* `async fn` (not an expander) needs a boxed future with an
+  explicit `Send` bound, e.g.
+  `fn walk_boxed<'a>(..) -> Pin<Box<dyn Future<Output = Result<Node>> + Send + 'a>> { Box::pin(walk(..)) }`,
+  and calls itself through that (see `nar_node` in `devtools.rs`).
 - Graph-shaped formats: detect cycles and cap depth with `dsl::Path`
   (`path.enter(id, max_depth)` returns the child path or a diagnostic); keep
   the path in the expander state.
