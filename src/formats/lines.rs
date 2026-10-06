@@ -267,3 +267,9 @@ pub fn summarize(node: crate::node::Node, s: impl Into<String>) -> crate::node::
     let s = s.into();
     if s.is_empty() { node } else { node.summary(s) }
 }
+
+/// A single-precision float, widened without binary noise (0.05, not
+/// 0.05000000074505806).
+pub fn float32(v: f32) -> crate::value::Value {
+    crate::value::Value::Float(v.to_string().parse().unwrap_or(f64::from(v)))
+}

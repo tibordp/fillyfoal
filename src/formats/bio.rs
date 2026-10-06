@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{enumeration, float, hex, int, preview, summarize, text, uint};
+use crate::formats::lines::{enumeration, float32, hex, int, preview, summarize, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -480,7 +480,7 @@ fn tag_value(kind: u8, b: &[u8]) -> crate::value::Value {
         b'S' => uint(u16_le(b, 0).map_or(0, u64::from)),
         b'i' => int(crate::bytes::i32_le(b, 0).map_or(0, i64::from)),
         b'I' => uint(u32_le(b, 0).map_or(0, u64::from)),
-        b'f' => float(u32_le(b, 0).map_or(0.0, |v| f64::from(f32::from_bits(v)))),
+        b'f' => float32(f32::from_bits(u32_le(b, 0).unwrap_or(0))),
         _ => text("?"),
     }
 }
@@ -1520,7 +1520,7 @@ async fn bbi_block(cx: Cx, (input, data, endian, bed, compressed, chroms): (Inpu
                 (s, s.saturating_add(span), cur.int::<f32>().await?)
             }
         };
-        cx.push(Node::new(format!("{chrom}:{s}-{e}")).span(cur.since(at)).value(float(f64::from(v)))).await;
+        cx.push(Node::new(format!("{chrom}:{s}-{e}")).span(cur.since(at)).value(float32(v))).await;
     }
     Ok(())
 }

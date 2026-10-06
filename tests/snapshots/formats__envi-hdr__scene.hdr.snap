@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ scene.hdr — ENVI header: 640 samples × 480 lines × 3 bands, uint16, bsq  [0x0+0x10d]
+    Signature: "ENVI"  [0x0+0x4]
+    description: "{ Synthetic test scene [Fri May 17 10:30:00 2024]}"  [0x5+0x43]
+    samples: 640  [0x48+0xe]
+    lines: 480  [0x56+0xe]
+    bands: 3  [0x64+0xc]
+    header offset: 0  [0x70+0x12]
+    file type: "ENVI Standard"  [0x82+0x1a]
+    data type: uint16 (0xc)  [0x9c+0xf]
+    interleave: "bsq"  [0xab+0x11]
+    byte order: 0  [0xbc+0xf]
+    band names: "{ Red, Green, Blue}"  [0xcb+0x24]
+    wavelength units: "Nanometers"  [0xef+0x1e]

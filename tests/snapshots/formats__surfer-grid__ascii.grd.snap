@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ascii.grd — Surfer 6 ASCII grid, 3×2 nodes  [0x0+0x2d]
+    ID: "DSAA"  [0x0+0x4]
+    nx ny: "3 2"  [0x5+0x3]
+    xlo xhi: "0.0 2.0"  [0x9+0x7]
+    ylo yhi: "0.0 1.0"  [0x11+0x7]
+    zlo zhi: "1.0 6.0"  [0x19+0x7]
+    Values  [0x21+0xc]

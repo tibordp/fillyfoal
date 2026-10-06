@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ well.las — LAS 2.0 well log ANY ET AL 12-34-12-34, 3 curve(s) (DEPT, DT, RHOB), 3 row(s)  [0x0+0x3b5]
+  ▾ ~VERSION INFORMATION — 2 line(s)  [0x0+0xa2]
+      VERS: 2 — CWLS LOG ASCII STANDARD -VERSION 2.0  [0x15+0x4c]
+      WRAP: "NO" — ONE LINE PER DEPTH STEP  [0x62+0x3f]
+  ▾ ~WELL INFORMATION — 6 line(s)  [0xa2+0x179]
+      STRT: 1670 — START DEPTH  [0xf3+0x34]
+      STOP: 1669.75 — STOP DEPTH  [0x128+0x33]
+      STEP: -0.125 — STEP  [0x15c+0x2d]
+      NULL: -999.25 — NULL VALUE  [0x18a+0x33]
+      WELL: "ANY ET AL 12-34-12-34" — WELL  [0x1be+0x2d]
+      FLD: "WILDCAT" — FIELD  [0x1ec+0x2e]
+  ▾ ~CURVE INFORMATION — 3 line(s)  [0x21b+0xa8]
+      DEPT: "" — 1  DEPTH  [0x22e+0x2a]
+      DT: "" — 2  SONIC TRANSIT TIME  [0x259+0x37]
+      RHOB: "" — 3  BULK DENSITY  [0x291+0x31]
+  ▾ ~PARAMETER INFORMATION — 1 line(s)  [0x2c3+0x53]
+      BHT: 35.5 — BOTTOM HOLE TEMPERATURE  [0x2da+0x3b]
+  ▾ ~Other — 1 line(s)  [0x316+0x2f]
+      Note: "" — this is a synthetic example.  [0x31d+0x27]
+  ▾ ~A  DEPTH     DT       RHOB — 3 row(s)  [0x345+0x70]
+      1670.000: "DT=123.450 RHOB=2550.000"  [0x361+0x1b]
+      1669.875: "DT=123.450 RHOB=2550.000"  [0x37d+0x1b]
+      1669.750: "DT=123.450 RHOB=2550.000"  [0x399+0x1b]

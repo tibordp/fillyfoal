@@ -174,6 +174,7 @@ pub mod lines;
 pub mod bio;
 pub mod biotext;
 pub mod instruments;
+pub mod geo;
 // -- end misc --
 
 // -- text --
@@ -860,6 +861,20 @@ pub static FORMATS: &[&Format] = &[
     &instruments::BRAINVISION_MARKERS,
     &instruments::NEURALYNX,
     &instruments::IDX,
+    &geo::SEGY,
+    &geo::SEG2,
+    &geo::MSEED3,
+    &geo::SAC,
+    &geo::ERDAS_IMG,
+    &geo::E57,
+    &geo::PCD,
+    &geo::LAS_LOG,
+    &geo::SURFER_GRID,
+    &geo::ESRI_GRID,
+    &geo::ENVI_HDR,
+    &geo::PDS3,
+    &geo::VICAR,
+    &geo::MSEED2,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --

@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{Lines, contains, float, hex, int, number, preview, summarize, text, uint};
+use crate::formats::lines::{Lines, contains, float, float32, hex, int, number, preview, summarize, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -732,7 +732,7 @@ async fn gdf_channels(cx: Cx, (span, ns): (Span, u64)) -> Result<()> {
                 b's' => text(field_text(b)),
                 b'h' => uint(u16_le(b, 0).unwrap_or(0).into()),
                 b'd' => float(f64::from_bits(u64_le(b, 0).unwrap_or(0))),
-                b'f' => float(f64::from(f32::from_bits(u32_le(b, 0).unwrap_or(0)))),
+                b'f' => float32(f32::from_bits(u32_le(b, 0).unwrap_or(0))),
                 b't' => crate::formats::lines::enumeration(GDF_TYPES, u32_le(b, 0).unwrap_or(0).into(), 32),
                 _ => uint(u32_le(b, 0).unwrap_or(0).into()),
             };
@@ -796,7 +796,7 @@ async fn intan_rhd(cx: Cx, input: Input) -> Result<()> {
             if name.starts_with("Sample rate") {
                 rate = f;
             }
-            float(f64::from(f))
+            float32(f)
         };
         emit_num(name, cur.since(s), v);
     }
@@ -1044,7 +1044,7 @@ async fn tdms_value(cur: &mut Cursor<'_>, t: u32) -> Result<Value> {
         6 => uint(cur.u16().await?.into()),
         7 => uint(cur.u32().await?.into()),
         8 => uint(cur.u64().await?),
-        9 | 0x19 => float(f64::from(cur.int::<f32>().await?)),
+        9 | 0x19 => float32(cur.int::<f32>().await?),
         10 | 0x1a => float(cur.int::<f64>().await?),
         0x20 => text(tdms_string(cur).await?),
         0x21 => Value::Bool(cur.u8().await? != 0),
