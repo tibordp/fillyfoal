@@ -19,6 +19,10 @@ expand deeper to pay for more work.
   panics, bounded memory and work), tested by snapshot plus truncation and
   mutation sweeps over every fixture.
 
+About 1,500 formats are recognised, from executables, archives, disk
+images and filesystems to media, documents, databases, game assets, ROMs,
+scientific data, forensic artifacts and logs.
+
 ```sh
 cargo run --example inspect -- path/to/file --depth 2
 cargo run --example formats          # list supported formats

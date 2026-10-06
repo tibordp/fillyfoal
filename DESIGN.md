@@ -225,6 +225,49 @@ The core is not considered stable until SQLite and PDF fit without contortion.
   `flag()`); `expander!` needs a `self::` path when a local variable shadows
   the function name.
 
+## Findings from the parallel scale-out (1,500 formats)
+
+Twelve agents worked in parallel worktrees, one format family each, merged by
+unioning `mod.rs` sections. What they reported, consolidated:
+
+- **Duplicates happen across families,** even with lanes assigned (TFLite,
+  ISO 8211, ESRI headers, WKT, PDS/VICAR, BinHex, TPL, JKS, keras/npz/pytorch
+  variants). The unique-names test catches same-name duplicates; same-format
+  under different names (WKT `esri-prj` vs `wkt-crs`) needs review at merge.
+  The deeper implementation was kept each time.
+- **Probe order is the biggest structural constraint.** Detection stops at
+  the first match, so a variant of a generic container (ZIP, CFB, RIFF,
+  TIFF, DER/PKCS#7, bplist, gzip for BGZF) must be registered before its
+  parent, outside its family's section. GeoTIFF, IMG4, mobileprovision and
+  webarchive were skipped for this reason. Wanted: *refinement probes* — a
+  `Format` with a `parent` whose probe runs after the parent matches and
+  can claim the input.
+- **Wire formats want a shared module.** Protobuf walkers were written three
+  times and FlatBuffers readers twice (`ml::proto`, `ml::flatbuf`, `geo`,
+  `crx`, `misc3`). They should move to a public `formats::wire` (protobuf
+  with static schemas, FlatBuffers tables, MSB-first bit reader).
+- **Hand-off to text dissectors** (an XML vocabulary, a JSON schema) works
+  by calling `xml::dissect`/`json::dissect` and annotating afterwards; a
+  public "dissect as XML/JSON with this summary" entry point would be cleaner.
+- **Cursor gaps** reported repeatedly: counted byte strings that error on
+  truncation (`bytes_counted`), length-prefixed and UTF-16 strings, 24-bit
+  integers, MSB-first base-128 integers; `record!` arrays and `u24`.
+- **Text helpers:** splitting a region into sections at header lines came up
+  six times (crash reports, tombstones, build.prop...); small value helpers
+  (`text`, `uint`, `hex`) are copied into most modules and belong in core.
+- **Self-delimiting structures** without a length prefix (Photoshop
+  descriptors, OpenStep plists, NBT) must be measured before they can be lazy
+  nodes; an iterative "measure, then expose lazily" helper would generalise
+  the pattern.
+- **`add_pieces`/`add_derived` memoize by `Origin`;** two derived sources
+  with the same parent span and transform collide silently. The parent must
+  identify the stream (its directory entry, inode or table entry).
+- **Recursive async helpers** hit the `Send` auto-trait cycle (documented in
+  `docs/DISSECTORS.md`); it still bit several agents.
+- **Layouts written from memory** are flagged in each family's module docs
+  and commit messages; fixtures are self-generated, so those dissectors are
+  self-consistent but unverified against real files.
+
 ## Open questions
 
 - Eviction: re-deriving collapsed subtrees and resume keys for pages, so that
