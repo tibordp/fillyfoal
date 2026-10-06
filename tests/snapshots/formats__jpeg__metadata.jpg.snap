@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ metadata.jpg — 8×8, baseline DCT, YCbCr 4:4:4  [0x0+0x6e8]
+▾ metadata.jpg — 8×8, baseline DCT, YCbCr 4:4:4, FillyCam Model 1  [0x0+0x6e8]
     SOI  [0x0+0x2]
   ▾ APP0 — JFIF  [0x2+0x12]
       Marker: 0xffe0 — APP0  [0x2+0x2]
@@ -15,7 +15,7 @@ expression: "common::explore(&name, &data)"
       Y density: 1  [0x10+0x2]
       Thumbnail width: 0  [0x12+0x1]
       Thumbnail height: 0  [0x13+0x1]
-  ▾ APP1 — Exif  [0x14+0x382]
+  ▾ APP1 — Exif, FillyCam Model 1  [0x14+0x382]
       Marker: 0xffe1 — APP1  [0x14+0x2]
       Length: 896  [0x16+0x2]
       Identifier: "Exif"  [0x18+0x5]

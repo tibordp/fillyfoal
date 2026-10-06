@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ anim.gif — GIF89a, 8×6, 256 colors  [0x0+0x394]
+▾ anim.gif — GIF89a, 8×6, 256 colors, 3 frames, loops forever  [0x0+0x394]
     Signature: "GIF89a"  [0x0+0x6]
   ▾ Logical Screen Descriptor  [0x6+0x7]
       Logical screen width: 8  [0x6+0x2]

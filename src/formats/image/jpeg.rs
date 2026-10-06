@@ -318,6 +318,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, BE);
     let mut frame_seen = false;
+    let mut camera: Option<String> = None;
     let mut scans = 0u64;
     loop {
         if cur.at_end() {
@@ -327,11 +328,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let Some(seg) = next_segment(&mut cur).await? else {
             return Err(Diagnostic::malformed("expected a marker").at(cur.span(1)));
         };
-        let summary = segment_summary(&cx, &seg).await;
+        let mut summary = segment_summary(&cx, &seg).await;
+        if seg.marker == 0xe1 && camera.is_none() && summary.as_deref() == Some("Exif") {
+            camera = super::tiff::camera(&cx, input.nested(seg.payload().tail(6))).await;
+            if let Some(c) = &camera {
+                summary = Some(format!("Exif, {c}"));
+            }
+        }
         if is_sof(seg.marker) && !frame_seen {
             frame_seen = true;
             if let Some(s) = &summary {
-                cx.annotate(s.clone());
+                cx.annotate(match &camera {
+                    Some(c) => format!("{s}, {c}"),
+                    None => s.clone(),
+                });
             }
         }
         let mut node = Node::new(marker_name(seg.marker)).span(seg.span);

@@ -580,19 +580,7 @@ async fn ifd_summary(cx: &Cx, t: Tiff, ifd: &Ifd) -> String {
         let bytes = cx.read_avail(e.data.sub(0, 8)).await.ok()?;
         num(t, e.kind, &bytes, 0)?.as_u64()
     };
-    let text = |tag: u16| async move {
-        let e = ifd.find(tag).filter(|e| e.kind == 2)?;
-        let bytes = cx.read_avail(e.data.sub(0, 64)).await.ok()?;
-        Some(crate::text::until_nul(&bytes).trim().to_owned())
-    };
-    let make = text(0x010f).await.unwrap_or_default();
-    let model = text(0x0110).await.unwrap_or_default();
-    let camera = if model.starts_with(&make) || make.is_empty() {
-        model
-    } else {
-        format!("{make} {model}")
-    };
-    if !camera.is_empty() {
+    if let Some(camera) = camera_of(cx, ifd).await {
         parts.push(camera);
     }
     if let (Some(w), Some(h)) = (first(0x0100).await, first(0x0101).await) {
@@ -620,6 +608,43 @@ async fn ifd_summary(cx: &Cx, t: Tiff, ifd: &Ifd) -> String {
     } else {
         parts.join(", ")
     }
+}
+
+/// "Make Model" from an IFD's ASCII tags (the model alone when it already
+/// names the maker).
+async fn camera_of(cx: &Cx, ifd: &Ifd) -> Option<String> {
+    let text = |tag: u16| async move {
+        let e = ifd.find(tag).filter(|e| e.kind == 2)?;
+        let bytes = cx.read_avail(e.data.sub(0, 64)).await.ok()?;
+        Some(crate::text::until_nul(&bytes).trim().to_owned())
+    };
+    let make = text(0x010f).await.unwrap_or_default();
+    let model = text(0x0110).await.unwrap_or_default();
+    let camera = if model.starts_with(&make) || make.is_empty() {
+        model
+    } else {
+        format!("{make} {model}")
+    };
+    (!camera.is_empty()).then_some(camera)
+}
+
+/// The camera that wrote a TIFF stream (e.g. the Exif block of a JPEG), for
+/// summaries of the files that embed it.
+pub async fn camera(cx: &Cx, input: Input) -> Option<String> {
+    let head = cx.read_avail(input.span.sub(0, 8)).await.ok()?;
+    let endian = match head.get(..2)? {
+        b"II" => Endian::Little,
+        b"MM" => Endian::Big,
+        _ => return None,
+    };
+    let first = u32::decode(head.get(4..8)?, endian)?;
+    let t = Tiff {
+        input,
+        endian,
+        big: false,
+    };
+    let ifd = read_ifd(cx, t, first.into()).await.ok()?;
+    camera_of(cx, &ifd).await
 }
 
 #[derive(Clone, Debug)]

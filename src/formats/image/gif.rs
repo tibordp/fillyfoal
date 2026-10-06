@@ -156,7 +156,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cur.skip(len);
         summary = format!("{summary}, {} colors", 2u32 << (screen.flags & 7));
     }
-    cx.annotate(summary);
+    cx.annotate(summary.clone());
+    let mut looping = None;
 
     let mut images = 0u64;
     while !cur.at_end() {
@@ -181,6 +182,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let name = crate::value::lookup(LABELS, label.into())
                     .map_or_else(|| format!("Extension {label:#04x}"), str::to_owned);
                 let summary = extension_summary(&cx, span, label).await;
+                if label == 0xff
+                    && let Some(s) = summary.as_ref().filter(|s| s.contains("loop"))
+                {
+                    looping = s.split_once(", ").map(|(_, l)| l.to_owned());
+                }
                 cx.push(
                     Node::new(name)
                         .span(span)
@@ -221,6 +227,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .at(cur.since(start)));
             }
         }
+    }
+    // Once the whole stream has been listed, the frame count is known.
+    if images > 1 {
+        let mut full = format!("{summary}, {images} frames");
+        if let Some(l) = looping {
+            full = format!("{full}, {l}");
+        }
+        cx.annotate(full);
     }
     if !cur.at_end() {
         let rest = input.span.tail(cur.pos());
