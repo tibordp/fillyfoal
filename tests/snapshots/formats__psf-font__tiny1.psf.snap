@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny1.psf — PSF1 font, 256 glyphs, 8×8  [0x0+0x804]
+    Magic: 0x436  [0x0+0x2]
+    Mode: 0x0 []  [0x2+0x1]
+    Glyph height: 8  [0x3+0x1]
+    Glyphs — 256 × 8×8  [0x4+0x800]

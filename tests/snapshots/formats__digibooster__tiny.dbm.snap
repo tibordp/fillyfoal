@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.dbm — DigiBooster Pro 2.00 module "Tiny DBM"  [0x0+0x4e]
+    Signature: "DBM0"  [0x0+0x4]
+    Version: 0x200  [0x4+0x2]
+    Reserved: 0  [0x6+0x2]
+    NAME: "Tiny DBM" — 44 bytes  [0x8+0x34]
+    INFO — 10 bytes  [0x3c+0x12]

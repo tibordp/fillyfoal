@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.gf — GF font "METAFONT"  [0x0+0xe]
+    Comment: "METAFONT"  [0x3+0x8]
+    Characters  [0xb+0x3]

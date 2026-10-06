@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.img — GTA IMG v2 archive, 1 entries  [0x0+0x1000]
+    Entries: 1  [0x4+0x4]
+  ▾ hello.txt  [0x800+0x800] → 0x8+0x20
+      ! unsupported: unrecognized format [0x800+0x800]

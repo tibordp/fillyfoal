@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.big — EA BIG archive, 1 files  [0x0+0x34]
+    Signature: "BIGF"  [0x0+0x4]
+    Archive size (little-endian): 52  [0x4+0x4]
+    Entries: 1  [0x8+0x4]
+    Header size: 40  [0xc+0x4]
+  ▾ data\readme.txt — UTF-8 text, LF line endings, 1 line  [0x28+0xc] → 0x10+0x18
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x28+0xc]
+        Line 1: "BIG archive"  [0x28+0xb]

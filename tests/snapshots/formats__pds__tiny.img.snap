@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.img — PDS label, objects: IMAGE  [0x0+0x102]
+    PDS_VERSION_ID: "PDS3"  [0x0+0x16]
+    RECORD_TYPE: "FIXED_LENGTH"  [0x17+0x1b]
+    RECORD_BYTES: "64"  [0x33+0x12]
+    FILE_RECORDS: "3"  [0x46+0x11]
+    ^IMAGE: "3"  [0x58+0xb]
+      OBJECT: "IMAGE"  [0x64+0xf]
+      LINES: "1"  [0x74+0xc]
+      LINE_SAMPLES: "64"  [0x81+0x14]
+      SAMPLE_BITS: "8"  [0x96+0x12]
+    END_OBJECT: "IMAGE"  [0xa9+0x13]
+    Image  [0x80+0x82]

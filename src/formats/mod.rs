@@ -173,6 +173,7 @@ pub mod platform;
 pub mod devices;
 pub mod devtools;
 pub mod misc3;
+pub mod misc4;
 // -- end misc --
 
 // -- text --
@@ -885,7 +886,42 @@ pub static FORMATS: &[&Format] = &[
     &misc3::LRF,
     &misc3::AFM,
     &misc3::PFA,
+    &misc4::BLP,
+    &misc4::M2,
+    &misc4::W3M,
+    &misc4::TES,
+    &misc4::GTA_IMG,
+    &misc4::HOG,
+    &misc4::GRP,
+    &misc4::BIG,
+    &misc4::RFF,
+    &misc4::BND,
+    &misc4::NW4,
+    &misc4::NW4R,
+    &misc4::MUS,
+    &misc4::HMI,
+    &misc4::AHX,
+    &misc4::MO3,
+    &misc4::DBM,
+    &misc4::FAR,
+    &misc4::PSF_FONT,
+    &misc4::BMFONT,
+    &misc4::FIGLET,
+    &misc4::TEX_PK,
+    &misc4::TEX_GF,
+    &misc4::JKS,
+    &misc4::PPK,
+    &misc4::SPHERE,
+    &misc4::AVR,
+    &misc4::PVF,
+    &misc4::VICAR,
+    &misc4::PDS,
+    &misc4::ERDAS,
+    &misc4::MIFF,
+    &misc4::UTAH_RLE,
+    &misc4::PSP,
     // Weak, size-based probes last.
+    &misc4::NBT,
     &misc3::HGT,
     &models::STL,
     // -- end misc --
