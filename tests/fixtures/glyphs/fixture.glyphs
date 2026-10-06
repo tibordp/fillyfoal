@@ -1,0 +1,64 @@
+{
+.appVersion = "3260";
+.formatVersion = 3;
+familyName = "Fixture Sans";
+fontMaster = (
+{
+id = m01;
+metricValues = (
+{
+over = 16;
+pos = 800;
+},
+{
+over = -16;
+}
+);
+name = Regular;
+}
+);
+glyphs = (
+{
+glyphname = A;
+layers = (
+{
+layerId = m01;
+shapes = (
+{
+closed = 1;
+nodes = (
+(50,0,l),
+(300,700,l),
+(550,0,l)
+);
+}
+);
+width = 600;
+}
+);
+unicode = 65;
+},
+{
+glyphname = space;
+layers = (
+{
+layerId = m01;
+width = 250;
+}
+);
+unicode = 32;
+}
+);
+metrics = (
+{
+type = ascender;
+},
+{
+type = baseline;
+}
+);
+note = "a \"quoted\" note; with separators, inside";
+unitsPerEm = 1000;
+versionMajor = 1;
+versionMinor = 0;
+}

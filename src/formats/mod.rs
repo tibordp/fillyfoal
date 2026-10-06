@@ -217,6 +217,7 @@ pub mod misc7;
 // -- end geo --
 
 // -- publishing, design & multimedia authoring --
+pub mod publishing;
 // -- end publishing --
 
 // -- text --
@@ -799,6 +800,29 @@ pub static FORMATS: &[&Format] = &[
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --
+    &publishing::adobe::PAT,
+    &publishing::adobe::ABR,
+    &publishing::adobe::GRD,
+    &publishing::adobe::ASL,
+    &publishing::adobe::ATN,
+    &publishing::adobe::ACB,
+    &publishing::adobe::CSH,
+    &publishing::adobe::ACV,
+    &publishing::fonts::CFF,
+    &publishing::fonts::FNT,
+    &publishing::fonts::PFM,
+    &publishing::fonts::TFM,
+    &publishing::fonts::VF,
+    &publishing::fonts::AMIGA_FONT,
+    &publishing::fonts::PFR,
+    &publishing::fonts::BGI,
+    &publishing::fonts::VFB,
+    &publishing::fonts::SFD,
+    &publishing::fonts::GLYPHS,
+    &publishing::fonts::GLIF,
+    &publishing::fonts::DESIGNSPACE,
+    // Identified by size alone: last.
+    &publishing::adobe::ACT,
     // -- end publishing --
 
     // -- games, 3D, science, e-books, misc --

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.vfb — FontLab Studio 5 font source  [0x0+0x48]
+    Signature: "WLF10"  [0x0+0x6]
+    Version: 3  [0x6+0x2]
+    Records  [0x8+0x40]
+      ! unsupported: VFB records

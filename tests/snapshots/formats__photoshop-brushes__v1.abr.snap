@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v1.abr — Photoshop brushes v1, 2 brushes  [0x0+0x2c]
+    Version: 1  [0x0+0x2]
+    Brushes: 2  [0x2+0x2]
+    Brush 0 — computed, 14 bytes  [0x4+0x14]
+    Brush 1 — computed, 14 bytes  [0x18+0x14]
