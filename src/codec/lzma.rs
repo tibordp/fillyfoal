@@ -441,8 +441,14 @@ struct Running {
 pub struct LzmaStream {
     /// The header length: 13 for `.lzma`, 0 for raw data.
     header: usize,
+    /// Where the range-coded data starts in the input (the header length
+    /// until input is released).
+    data_at: usize,
     props: Props,
     size: Option<usize>,
+    /// The dictionary size, when known (from the `.lzma` header): the
+    /// furthest a match reaches back.
+    dict: Option<usize>,
     running: Option<Box<Running>>,
     consumed: usize,
     done: bool,
@@ -451,12 +457,12 @@ pub struct LzmaStream {
 impl LzmaStream {
     /// A `.lzma` stream.
     pub fn alone() -> Self {
-        LzmaStream { header: 13, props: Props { lc: 0, lp: 0, pb: 0 }, size: None, running: None, consumed: 0, done: false }
+        LzmaStream { header: 13, data_at: 13, props: Props { lc: 0, lp: 0, pb: 0 }, size: None, dict: None, running: None, consumed: 0, done: false }
     }
 
     /// Raw LZMA with known properties; `size` is the decoded size when known.
     pub fn raw(props: Props, size: Option<usize>) -> Self {
-        LzmaStream { header: 0, props, size, running: None, consumed: 0, done: false }
+        LzmaStream { header: 0, data_at: 0, props, size, dict: None, running: None, consumed: 0, done: false }
     }
 
     fn start(&mut self, input: &[u8], out: &[u8], limit: usize) -> Result<Running> {
@@ -464,6 +470,9 @@ impl LzmaStream {
             self.props = Props::from_byte(*input.first().ok_or_else(|| bad("truncated header"))?)?;
             let size = input.get(5..13).and_then(|s| s.try_into().ok()).map(u64::from_le_bytes).ok_or_else(|| bad("truncated header"))?;
             self.size = (size != u64::MAX).then(|| usize::try_from(size).unwrap_or(usize::MAX));
+            let dict = input.get(1..5).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes).ok_or_else(|| bad("truncated header"))?;
+            // Smaller dictionaries decode as 4 KiB ones (as in xz).
+            self.dict = Some(usize::try_from(dict).unwrap_or(usize::MAX).max(4096));
             if self.size.is_some_and(|e| e > limit.saturating_sub(out.len())) {
                 return Err(Diagnostic::limit(format!("LZMA data claims {size:#x} bytes")));
             }
@@ -489,7 +498,7 @@ impl Decoder for LzmaStream {
         let Some(r) = self.running.as_mut() else {
             return Err(bad("decoder not started"));
         };
-        let data = input.get(self.header..).unwrap_or_default();
+        let data = input.get(self.data_at..).unwrap_or_default();
         let mark = out.len();
         let bounds = Bounds {
             view: r.view,
@@ -502,7 +511,7 @@ impl Decoder for LzmaStream {
         let mut rc = Range::resume(data, r.rc);
         let ended = r.state.run(&mut rc, out, bounds)?;
         r.rc = rc.registers();
-        self.consumed = self.header.saturating_add(r.rc.pos);
+        self.consumed = self.data_at.saturating_add(r.rc.pos);
         if ended && r.end.is_some_and(|e| out.len() >= e) {
             // The known size reached: an end marker may follow (the
             // encoder's choice). Consume it if so.
@@ -510,7 +519,7 @@ impl Decoder for LzmaStream {
                 return Ok(if out.len() > mark { Status::More } else { Status::NeedInput });
             }
             if r.state.end_marker(&mut rc, r.view.position(out.len())) {
-                self.consumed = self.header.saturating_add(rc.pos);
+                self.consumed = self.data_at.saturating_add(rc.pos);
             }
         }
         if ended {
@@ -530,6 +539,40 @@ impl Decoder for LzmaStream {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
+    }
+
+    /// Everything consumed, once decoding has started (the header is read
+    /// once, when it does).
+    fn releasable_input(&self) -> usize {
+        if self.running.is_some() || self.done { self.consumed } else { 0 }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.consumed = self.consumed.saturating_sub(n);
+        let from_header = n.min(self.data_at);
+        self.data_at = self.data_at.saturating_sub(from_header);
+        if let Some(r) = self.running.as_mut() {
+            r.rc.pos = r.rc.pos.saturating_sub(n.saturating_sub(from_header));
+        }
+    }
+
+    /// Output before the dictionary (all of it once done); nothing for raw
+    /// LZMA, whose dictionary size is not known.
+    fn releasable_output(&self, out_len: usize) -> usize {
+        if self.done {
+            return out_len;
+        }
+        match (self.running.as_ref(), self.dict) {
+            (Some(r), Some(dict)) => out_len.saturating_sub(dict).max(r.view.index(0)).min(out_len),
+            _ => 0,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(r) = self.running.as_mut() {
+            r.view.dropped = r.view.dropped.saturating_add(n);
+            r.end = r.end.map(|e| e.saturating_sub(n));
+        }
     }
 }
 
@@ -584,6 +627,25 @@ impl Lzma2 {
     /// Whether the end marker has been decoded.
     pub fn done(&self) -> bool {
         self.done
+    }
+
+    /// Rebases the input positions after the first `n` bytes (at most
+    /// [`consumed`](Self::consumed)) of the LZMA2 data were dropped.
+    pub fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        if let Some(o) = self.open.as_mut() {
+            let before = n.min(o.data_at);
+            let within = n.saturating_sub(before);
+            o.data_at = o.data_at.saturating_sub(before);
+            o.rc.pos = o.rc.pos.saturating_sub(within);
+            o.packed = o.packed.saturating_sub(within);
+        }
+    }
+
+    /// Where the dictionary starts in the buffer `view` locates: output
+    /// before the last dictionary reset is never read again.
+    pub fn dict_start(&self, view: View) -> usize {
+        view.index(self.dict)
     }
 
     /// Decodes more of `input` (the LZMA2 data so far) into `out`, pausing
@@ -736,6 +798,30 @@ impl Decoder for Lzma2Stream {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.core.consumed()
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.core.release_input(n);
+    }
+
+    /// Output before the last dictionary reset (all of it once done): the
+    /// dictionary size is a coder property this stream is not given.
+    fn releasable_output(&self, out_len: usize) -> usize {
+        match self.view {
+            _ if self.core.done() => out_len,
+            Some(view) => self.core.dict_start(view).min(out_len),
+            None => 0,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(v) = self.view.as_mut() {
+            v.dropped = v.dropped.saturating_add(n);
+        }
     }
 }
 
