@@ -3,7 +3,8 @@
 //! ID3, WavPack, Musepack, TTA and other lossless codecs, DSD, CAF, Wave64,
 //! Sun `.au`, Creative VOC, Yamaha SMAF, MIDI, headered PCM (`simple_audio`,
 //! `pcm_headers`), codec streams (`codecs`: RealAudio, Psion, EVS), sequenced
-//! music (`sequenced`) and production files (`production`, `projects`).
+//! music (`sequenced`) and production files (`production`, `projects`, Cool
+//! Edit Pro / Audition sessions in `cool_edit`).
 //!
 //! RIFF/IFF audio (WAVE, AIFF) lives in [`super::iff`], tracker modules in
 //! [`super::tracker`].
@@ -16,6 +17,7 @@ pub mod apetag;
 pub mod au;
 pub mod caf;
 pub mod codecs;
+pub mod cool_edit;
 pub mod dsd;
 pub mod dts;
 pub mod flac;

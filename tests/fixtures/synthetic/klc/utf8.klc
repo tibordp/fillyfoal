@@ -1,0 +1,17 @@
+KBD	fillyu8	"UTF-8 test"
+
+LOCALEID	"00000409"
+
+SHIFTSTATE
+
+0
+1
+
+LAYOUT
+
+10	Q	1	q	Q
+1e	A	1	a	00e5@
+
+DEADKEY	00e5
+
+0061	00e5

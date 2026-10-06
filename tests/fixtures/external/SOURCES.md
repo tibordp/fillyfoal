@@ -106,6 +106,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `xcoff/` | Homebrew LLVM 22.1.8 | both objects (`Homebrew LLVM version 22.1.8` producer string) |
 | `llvm-bitcode/apple.bc` | Apple clang 21.0.0 | IDENTIFICATION block / producer string |
 | `llvm-bitcode/linux.bc` | Homebrew clang 22.1.8 | IDENTIFICATION block / producer string |
+| `win-res/llvm-rc.res` | Homebrew llvm-rc 22.1.8 | `llvm-rc -no-preprocess -fo llvm-rc.res app.rc`; the script covers icons (a DIB and a PNG image), a cursor, a bitmap, a manifest, RCDATA (a synthetic Delphi form, the same bytes as synthetic/delphi-dfm/form.dfm, and inline data), string tables in two languages, accelerators, version info, a menu, a DIALOGEX and a custom-typed resource; the image files it includes were written by our generator |
 | `lua/fib-5.5.luac` | luac 5.5 | chunk name `@target/fx/lua/fib.lua`; `luac -l` lists it |
 | `pyc/filly.cpython-39.pyc` | CPython 3.9 (py_compile) | bytecode of the matching interpreter version |
 | `pyc/filly.cpython-311.pyc` | CPython 3.11 (py_compile) | bytecode of the matching interpreter version |

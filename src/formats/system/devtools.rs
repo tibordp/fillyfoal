@@ -80,24 +80,10 @@ async fn clang_ast(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub WIN_RES = "win-res", "Windows compiled resources", ["res"], "application/x-ms-res",
     Probe::Magic(&[(0, b"\0\0\0\0\x20\0\0\0\xff\xff\0\0\xff\xff\0\0")]), win_res);
 
-const RES_TYPES: EnumTable = &[
-    (1, "RT_CURSOR"),
-    (2, "RT_BITMAP"),
-    (3, "RT_ICON"),
-    (4, "RT_MENU"),
-    (5, "RT_DIALOG"),
-    (6, "RT_STRING"),
-    (9, "RT_ACCELERATOR"),
-    (10, "RT_RCDATA"),
-    (11, "RT_MESSAGETABLE"),
-    (12, "RT_GROUP_CURSOR"),
-    (14, "RT_GROUP_ICON"),
-    (16, "RT_VERSION"),
-    (23, "RT_HTML"),
-    (24, "RT_MANIFEST"),
-];
+const RES_TYPES: EnumTable = crate::formats::executable::pe::tables::RESOURCE_TYPE;
 
-/// A resource type or name: 0xFFFF + ordinal, or a NUL-terminated UTF-16 string.
+/// A resource type or name: 0xFFFF + ordinal, or a NUL-terminated UTF-16
+/// string. Returns the label, the ordinal and the offset after it.
 fn res_id(data: &[u8], at: usize) -> (String, Option<u16>, usize) {
     if u16_le(data, at) == Some(0xffff) {
         let id = u16_le(data, at.saturating_add(2)).unwrap_or(0);
@@ -107,32 +93,87 @@ fn res_id(data: &[u8], at: usize) -> (String, Option<u16>, usize) {
     (s, None, at.saturating_add(used))
 }
 
+const RES_MEMORY_FLAGS: crate::value::FlagTable = &[
+    crate::value::flag(0x0010, "MOVEABLE"),
+    crate::value::flag(0x0020, "PURE"),
+    crate::value::flag(0x0040, "PRELOAD"),
+    crate::value::flag(0x1000, "DISCARDABLE"),
+];
+
+/// One `RESOURCEHEADER` and the resource data after it.
+#[derive(Clone, Copy)]
+struct ResEntry {
+    input: Input,
+    header: Span,
+    data: Span,
+    kind: Option<u16>,
+    name: Option<u16>,
+}
+
 async fn win_res(cx: Cx, input: Input) -> Result<()> {
+    use crate::formats::executable::pe::resource;
+    use crate::formats::util::lcid;
     let file = input.span;
-    let mut pos = 0u64;
-    let mut count = 0u32;
+    let (mut pos, mut count) = cx.resume::<(u64, u32)>().unwrap_or((0, 0));
     while pos.saturating_add(32) <= file.len {
-        let head = cx.read(file.sub(pos, 32)).await?;
+        let head = cx.read(file.sub(pos, 8)).await?;
         let data_size = u64::from(u32_le(&head, 0).unwrap_or(0));
         let header_size = u64::from(u32_le(&head, 4).unwrap_or(0));
-        if header_size < 16 {
+        if header_size < 32 {
+            cx.diag(
+                Diagnostic::malformed(format!("resource header size {header_size}"))
+                    .at(file.sub(pos, 8)),
+            );
             break;
         }
-        let header = cx.read_avail(file.sub(pos, header_size)).await?;
-        let (kind, kind_id, after) = res_id(&header, 8);
-        let (name, _, after) = res_id(&header, after.next_multiple_of(4).max(after));
+        let header_span = file.sub(pos, header_size);
+        let header = cx.read_avail(header_span).await?;
+        // TYPE and NAME follow each other directly; the fixed fields after
+        // them are DWORD-aligned.
+        let (kind_label, kind, after) = res_id(&header, 8);
+        let (name_label, name, after) = res_id(&header, after);
         let fields_at = after.next_multiple_of(4);
         let language = u16_le(&header, fields_at.saturating_add(6)).unwrap_or(0);
         let data = file.sub(pos.saturating_add(header_size), data_size);
-        if data_size > 0 || pos > 0 {
-            count = count.saturating_add(1);
-            let kind = kind_id
-                .and_then(|id| lookup(RES_TYPES, id.into()))
-                .map_or(kind, str::to_owned);
+        let at = (pos, count);
+        cx.mark(move || at);
+        if data_size == 0 && pos == 0 && kind == Some(0) && name == Some(0) {
             cx.push(
-                embedded(format!("{kind} {name}"), input.nested(data))
-                    .summary(format!("{data_size} bytes, language {language:#06x}"))
-                    .target(file.sub(pos, header_size)),
+                Node::new("Empty entry")
+                    .span(header_span)
+                    .summary("marks a 32-bit resource file"),
+            )
+            .await;
+        } else {
+            count = count.saturating_add(1);
+            let entry = ResEntry {
+                input,
+                header: header_span,
+                data,
+                kind,
+                name,
+            };
+            let content = resource::content(
+                &cx,
+                input,
+                data,
+                kind.map(u32::from),
+                name.map(u32::from),
+            )
+            .await;
+            let kind_label = kind
+                .and_then(|id| lookup(RES_TYPES, id.into()))
+                .map_or(kind_label, str::to_owned);
+            let mut summary = content
+                .summary
+                .clone()
+                .unwrap_or_else(|| format!("{data_size:#x} bytes"));
+            summary.push_str(&format!(", language {}", lcid::describe(language.into())));
+            cx.push(
+                Node::new(format!("{kind_label} {name_label}"))
+                    .span(file.sub(pos, header_size.saturating_add(data_size)))
+                    .summary(summary)
+                    .lazy(res_entry, entry),
             )
             .await;
         }
@@ -141,7 +182,79 @@ async fn win_res(cx: Cx, input: Input) -> Result<()> {
             .saturating_add(data_size)
             .next_multiple_of(4);
     }
-    cx.annotate(format!("{count} resources"));
+    cx.annotate(format!("Win32 resources, {count} entries"));
+    Ok(())
+}
+
+async fn res_entry(cx: Cx, e: ResEntry) -> Result<()> {
+    use crate::formats::executable::pe::resource;
+    cx.emit(Node::new("Header").span(e.header).lazy(res_header, e.header));
+    let mut content = resource::content(
+        &cx,
+        e.input,
+        e.data,
+        e.kind.map(u32::from),
+        e.name.map(u32::from),
+    )
+    .await;
+    let wanted = cx
+        .read_avail(e.header.sub(0, 4))
+        .await
+        .ok()
+        .and_then(|h| u32_le(&h, 0))
+        .map_or(0, u64::from);
+    if e.data.len < wanted {
+        content = content.diag(Diagnostic::truncated(
+            Span::new(e.data.source, e.data.offset, wanted),
+            e.data.len,
+        ));
+    }
+    cx.emit(content);
+    Ok(())
+}
+
+async fn res_header(cx: Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.u32("DataSize").hex().emit()?;
+    f.u32("HeaderSize").hex().emit()?;
+    let ids = [("TYPE", true), ("NAME", false)];
+    for (label, is_type) in ids {
+        let at = crate::bytes::to_usize(f.pos());
+        let (name_text, ordinal, end) = res_id(&block.data, at);
+        let len = to_u64(end.saturating_sub(at));
+        let mut node = Node::new(label).span(f.peek_span(len));
+        node = match ordinal {
+            Some(id) if is_type => node
+                .value(Value::Enum {
+                    raw: id.into(),
+                    bits: 16,
+                    name: lookup(RES_TYPES, id.into()),
+                })
+                .desc("0xFFFF, then an ordinal"),
+            Some(id) => node
+                .value(crate::formats::util::lines::uint(id.into()))
+                .desc("0xFFFF, then an ordinal"),
+            None => node.value(text(name_text)).desc("NUL-terminated UTF-16 name"),
+        };
+        f.node(node);
+        f.skip(len);
+    }
+    let aligned = f.pos().next_multiple_of(4);
+    if aligned > f.pos() {
+        f.bytes("Padding", aligned.saturating_sub(f.pos())).emit()?;
+    }
+    f.u32("DataVersion").emit()?;
+    f.u16("MemoryFlags").flags(RES_MEMORY_FLAGS).emit()?;
+    f.u16("LanguageId")
+        .with(|&v, node| match crate::formats::util::lcid::name(v.into()) {
+            Some(n) => node.summary(n),
+            None => node,
+        })
+        .hex()
+        .emit()?;
+    f.u32("Version").emit()?;
+    f.u32("Characteristics").hex().emit()?;
     Ok(())
 }
 
