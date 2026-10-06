@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tone.ofr — OptimFROG, 16-bit signed, 44100 Hz, 2 ch, 100 ms  [0x0+0x2f]
+    Magic: "OFR "  [0x0+0x4]
+    Header size: 15  [0x4+0x4]
+    Total samples (low): 8820  [0x8+0x4]
+    Total samples (high): 0  [0xc+0x2]
+    Sample type: 16-bit signed (0x3)  [0xe+0x1]
+    Channel configuration: stereo (0x1)  [0xf+0x1]
+    Sample rate: 44100  [0x10+0x4]
+    Encoder ID: 0x4510  [0x14+0x2]
+    Compression: 2  [0x16+0x1]
+    Compressed data  [0x17+0x18]

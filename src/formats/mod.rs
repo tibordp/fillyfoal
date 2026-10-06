@@ -40,6 +40,7 @@ pub mod dsd;
 pub mod dts;
 pub mod flac;
 pub mod id3;
+pub mod lossless;
 pub mod iff;
 pub mod midi;
 pub mod mpa;
@@ -218,6 +219,9 @@ pub static FORMATS: &[&Format] = &[
     &wavpack::FORMAT,
     &musepack::FORMAT,
     &tta::FORMAT,
+    &lossless::TAK,
+    &lossless::OFR,
+    &lossless::SHORTEN,
     &dsd::DSF,
     &dsd::DFF,
     &smaf::FORMAT,
