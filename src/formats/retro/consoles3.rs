@@ -168,9 +168,7 @@ record! {
 
 async fn npdm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let span = file.sub(0, NpdmHeader::SIZE);
-    let h: NpdmHeader = read_record(&cx, span, LE).await?;
-    cx.emit(NpdmHeader::node("Header", span, LE));
+    let h: NpdmHeader = crate::dsl::emit_record(&cx, file.sub(0, NpdmHeader::SIZE), LE).await?;
     let aci = file.sub(h.aci_offset.into(), h.aci_size.into());
     let raw = cx.read_avail(aci.sub(0, 0x40)).await?;
     let program = u64_le(&raw, 0x10).unwrap_or(0);
