@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Cache0000.bin — RDP bitmap cache v6, 2 tiles  [0x0+0xa4]
+    Signature: "RDP8bmp"  [0x0+0x8]
+    Version: 6  [0x8+0x4]
+    Tile 0: 0x1122334455660000 — 4×4 BGRA  [0xc+0x4c] → 0x18+0x40
+    Tile 1: 0x1122334455660001 — 8×2 BGRA  [0x58+0x4c] → 0x64+0x40

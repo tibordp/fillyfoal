@@ -171,6 +171,7 @@ pub mod pdb;
 pub mod platform;
 pub mod devices;
 pub mod browser;
+pub mod winforensics;
 // -- end misc --
 
 // -- text --
@@ -814,6 +815,18 @@ pub static FORMATS: &[&Format] = &[
     &browser::CHROME_VISITED,
     &browser::SNSS,
     &browser::MORK,
+    &winforensics::CUSTOM_DESTINATIONS,
+    &winforensics::INFO2,
+    &winforensics::MFT,
+    &winforensics::JOB,
+    &winforensics::NK2,
+    &winforensics::DBX,
+    &winforensics::RDP_CACHE,
+    &winforensics::URL_SHORTCUT,
+    &winforensics::GRP,
+    &winforensics::CARDFILE,
+    &winforensics::CLP,
+    &winforensics::USN,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --

@@ -1,5 +1,6 @@
 ---
 source: tests/formats.rs
+assertion_line: 76
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ Cookies.binarycookies — Safari cookies, 2 pages, 3 cookies  [0x0+0x18c]

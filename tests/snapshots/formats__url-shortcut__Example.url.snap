@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Example.url — Internet shortcut to https://www.example.com/docs/  [0x0+0xb2]
+  ▾ [{000214A0-0000-0000-C000-000000000046}] — 1 keys  [0x0+0x37]
+      Prop3: "19,11"  [0x2a+0xd]
+  ▾ [InternetShortcut] — 4 keys  [0x37+0x7b]
+      IDList: ""  [0x4b+0x9]
+      URL: "https://www.example.com/docs/"  [0x54+0x23]
+      IconFile: "https://www.example.com/favicon.ico"  [0x77+0x2e]
+      IconIndex: "1"  [0xa5+0xd]
