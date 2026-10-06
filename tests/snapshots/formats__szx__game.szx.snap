@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.szx — SZX v1.4 snapshot, ZX Spectrum 48K, 2 RAM pages, by "Fuse"  [0x0+0x253]
+    Magic: "ZXST"  [0x0+0x4]
+    Major version: 1  [0x4+0x1]
+    Minor version: 4  [0x5+0x1]
+    Machine: ZX Spectrum 48K (0x1)  [0x6+0x1]
+    Flags: 0x0 []  [0x7+0x1]
+    CRTR: "Fuse" — v1.6  [0x8+0x2c]
+    Z80R — 37 bytes  [0x34+0x2d]
+    SPCR — 8 bytes  [0x61+0x10]
+  ▾ RAMP page 5 — 0x4000 bytes decompressed  [0x71+0x1a3]
+      Data  [#1:0x0+0x4000]
+  ▾ RAMP page 2 — 0x4000 bytes decompressed  [0x214+0x32]
+      Data  [#2:0x0+0x4000]
+    KEYB — 5 bytes  [0x246+0xd]

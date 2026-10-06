@@ -1,0 +1,29 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ReadMe.hqx — BinHex 4.0 "ReadMe" (TEXT/ttxt), data 23 bytes, resource 321 bytes, CRCs valid  [0x0+0x239]
+    Banner: "(This file must be converted with BinHex 4.0)"  [0x0+0x2d]
+    Encoded data — 516 bytes → 376 bytes  [0x32+0x204]
+    Name length: 6  [#1:0x0+0x1]
+    File name: "ReadMe"  [#1:0x1+0x6]
+    Version: 0  [#1:0x7+0x1]
+    File type: "TEXT"  [#1:0x8+0x4]
+    Creator: "ttxt"  [#1:0xc+0x4]
+    Finder flags: 0x100  [#1:0x10+0x2]
+    Data fork length: 23  [#1:0x12+0x4]
+    Resource fork length: 321  [#1:0x16+0x4]
+    Header CRC: 0xd201  [#1:0x1a+0x2]
+  ▾ Data fork — UTF-8 text, CR line endings, 1 line  [#1:0x1c+0x17]
+      Encoding: "UTF-8"
+      Line endings: "CR" — 0 LF, 0 CRLF, 1 CR
+    ▾ Lines — 1 line  [#1:0x1c+0x17]
+        Line 1: "This is the data fork."  [#1:0x1c+0x16]
+  ▾ Resource fork — resource fork: TEXT×1  [#1:0x35+0x141]
+      Header  [#1:0x35+0x10]
+    ▾ TEXT — 1 resource(s)  [#1:0x162+0x8]
+      ▾ #128 — UTF-8 text, 1 line  [#1:0x139+0xb] → #1:0x16a+0xc
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x139+0xb]
+            Line 1: "Hello, Mac!"  [#1:0x139+0xb]

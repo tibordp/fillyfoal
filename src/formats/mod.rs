@@ -786,6 +786,15 @@ pub static FORMATS: &[&Format] = &[
     &retro::systems::INI1,
     &retro::systems::STFS,
     &retro::systems::XISO,
+    &retro::micros::CPC_SNA,
+    &retro::micros::SZX,
+    &retro::micros::RZX,
+    &retro::micros::NIB,
+    &retro::micros::VICE,
+    &retro::micros::ATARI_CAS,
+    &retro::micros::ATX,
+    &retro::micros::NUFX_ARCHIVE,
+    &retro::micros::BINHEX,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -807,6 +816,9 @@ pub static FORMATS: &[&Format] = &[
     &retro::floppies::D88,
     &retro::systems::DOL,
     &retro::systems::VMI,
+    &retro::micros::ZX_SNA,
+    &retro::micros::ATARI_XEX,
+    &retro::micros::MACBINARY,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --
