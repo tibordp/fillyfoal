@@ -153,6 +153,32 @@ fn large_members_are_decompressed_lazily() {
     assert!(host.render().contains("z.txt"));
 }
 
+/// The same tarball, corrupted halfway through its DEFLATE stream: paging
+/// to the end reports why the lazily decoded data stopped, instead of a bare
+/// truncation.
+#[test]
+fn lazy_decode_errors_are_reported() {
+    let mut data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/gzip/large-member.tar.gz"
+    ))
+    .unwrap();
+    let mid = data.len() / 2;
+    for b in &mut data[mid..mid + 16] {
+        *b = 0xff;
+    }
+    let mut host = Host::with_chunk(data, 4096);
+    host.session.expand(host.root, 100);
+    host.run();
+    let content = host.child(host.root, "Content").expect("content node");
+    host.explore(content, 4, 100);
+    let messages: Vec<String> = common::diagnostics(&host).iter().map(|d| d.message.clone()).collect();
+    assert!(
+        messages.iter().any(|m| m.starts_with("decoding stopped")),
+        "{messages:?}"
+    );
+}
+
 /// Two "entries" of one encrypted container, each unlocked with the same
 /// realm: the host is asked once per attempt, not once per entry.
 async fn locked(cx: Cx, file: Span) -> Result<()> {

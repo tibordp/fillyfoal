@@ -206,6 +206,7 @@ impl Shared {
         let before = st.out.len().saturating_add(st.input.len());
         let limit =
             crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
+        let mut failure = None;
         let result = loop {
             if to_u64(st.out.len()) >= end || st.done {
                 let from = crate::bytes::to_usize(start).min(st.out.len());
@@ -251,7 +252,15 @@ impl Shared {
             match decoder.decode(input, *input_eof, out, LAZY_STEP, cap) {
                 Ok(crate::codec::pipeline::Status::More) => {}
                 Ok(crate::codec::pipeline::Status::NeedInput) if !*input_eof => *starved = true,
-                Ok(_) | Err(_) => *done = true,
+                Ok(crate::codec::pipeline::Status::NeedInput) => {
+                    *done = true;
+                    failure = Some(Diagnostic::malformed("encoded stream ends early"));
+                }
+                Ok(crate::codec::pipeline::Status::Done) => *done = true,
+                Err(e) => {
+                    *done = true;
+                    failure = Some(e);
+                }
             }
         };
         // Once the stream has ended, its real length is known.
@@ -262,9 +271,23 @@ impl Shared {
             .saturating_add(to_u64(after.saturating_sub(before)));
         self.charge(to_u64(after.saturating_sub(before)) >> 12);
         if let Some(entry) = self.sources.get_mut(index) {
+            let declared = entry.len;
+            entry.consumed = to_u64(st.decoder.consumed());
             entry.lazy = Some(st);
             if let Some(len) = finished_len {
                 entry.len = entry.len.min(len);
+            }
+            // A stream that ended short of the size its container
+            // declared is reported like a decoding error.
+            if failure.is_none()
+                && let Some(len) = finished_len.filter(|&l| l < declared)
+            {
+                failure = Some(Diagnostic::warning(format!(
+                    "decoded {len:#x} bytes, expected {declared:#x}"
+                )));
+            }
+            if entry.error.is_none() {
+                entry.error = failure;
             }
         }
         result
@@ -372,7 +395,17 @@ impl Cx {
             match sh.read_range(span.source, span.offset, span.end(), 0) {
                 Ok(data) => {
                     sh.charge(1u64.saturating_add(to_u64(data.len()) >> 12));
-                    Poll::Ready(Ok(data))
+                    // A short read of a lazily decoded source that stopped
+                    // on an error is that error, not the end of the data.
+                    let failed = (to_u64(data.len()) < span.len)
+                        .then(|| sh.source(span.source))
+                        .flatten()
+                        .filter(|e| e.lazy.is_some())
+                        .and_then(|e| e.error.clone());
+                    Poll::Ready(match failed {
+                        Some(e) => Err(Diagnostic::new(e.kind, format!("decoding stopped: {}", e.message)).at(span)),
+                        None => Ok(data),
+                    })
                 }
                 Err(missing) => {
                     // Scattered pieces could need more chunks than the cache
