@@ -34,6 +34,7 @@ pub mod png;
 // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
 pub mod asn1;
 pub mod avro;
+pub mod bdb;
 pub mod cfb;
 pub mod hdf5;
 pub mod matlab;
@@ -203,6 +204,7 @@ pub static FORMATS: &[&Format] = &[
     &orc::FORMAT,
     &sst::LEVELDB,
     &sst::ROCKSDB,
+    &bdb::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
