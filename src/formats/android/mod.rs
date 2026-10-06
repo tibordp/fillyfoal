@@ -2,3 +2,4 @@
 //! compiled resource tables.
 
 pub mod dex;
+pub mod resources;

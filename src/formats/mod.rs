@@ -167,6 +167,8 @@ pub static FORMATS: &[&Format] = &[
     &wasm::FORMAT,
     &android::dex::FORMAT,
     &android::dex::ODEX,
+    &android::resources::AXML,
+    &android::resources::ARSC,
     &coff::FORMAT,
     &coff::IMPORT,
     &pyc::FORMAT,
