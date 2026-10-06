@@ -390,6 +390,7 @@ pub static FORMATS: &[&Format] = &[
     &text::mime::MBOX,
     &text::mime::MHTML,
     &text::mime::EML,
+    &text::ldif::FORMAT,
     &text::diff::FORMAT,
     &text::vcard::VCARD,
     &text::vcard::ICALENDAR,
@@ -401,6 +402,10 @@ pub static FORMATS: &[&Format] = &[
     &text::playlist::M3U,
     &text::playlist::PLS,
     &text::playlist::CUE,
+    &text::subtitles::MICRODVD,
+    &text::sln::FORMAT,
+    &text::dockerfile::FORMAT,
+    &text::dot::FORMAT,
     // Line-oriented data with distinctive keywords.
     &text::uuencode::FORMAT,
     &text::po::FORMAT,
@@ -470,6 +475,7 @@ pub static FORMATS: &[&Format] = &[
     &text::json::NDJSON,
     &text::json::FORMAT,
     // TOML before INI: its values are typed, INI's are not.
+    &text::ini::EDITORCONFIG,
     &text::toml::FORMAT,
     // INI family: specific first.
     &text::ini::REG,

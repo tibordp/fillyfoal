@@ -289,6 +289,74 @@ pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// MicroDVD: `{start frame}{end frame}text|second line`
+
+pub static MICRODVD: Format = Format {
+    name: "microdvd",
+    title: "MicroDVD subtitles",
+    extensions: &["sub"],
+    mime: "text/x-microdvd",
+    probe: Probe::Custom(|h| {
+        let head = probe::head(h);
+        let mut lines = probe::significant(&head, &[]).take(5).peekable();
+        lines.peek().is_some()
+            && lines.all(|l| frames(probe::trim(l)).is_some())
+            && probe::is_text(h)
+    }),
+    dissect: crate::expander!(dissect_microdvd: Input),
+};
+
+/// `{a}{b}` at the start: the frame numbers and the rest.
+fn frames(line: &[u8]) -> Option<(u64, Option<u64>, usize)> {
+    let num = |s: &[u8]| String::from_utf8_lossy(s).parse::<u64>().ok();
+    let rest = line.strip_prefix(b"{")?;
+    let a_end = rest.iter().position(|&b| b == b'}')?;
+    let a = num(rest.get(..a_end)?)?;
+    let rest = rest.get(a_end.saturating_add(1)..)?.strip_prefix(b"{")?;
+    let b_end = rest.iter().position(|&b| b == b'}')?;
+    let b_text = rest.get(..b_end)?;
+    let b = if b_text.is_empty() { None } else { Some(num(b_text)?) };
+    Some((a, b, a_end.saturating_add(b_end).saturating_add(4)))
+}
+
+pub async fn dissect_microdvd(cx: Cx, input: Input) -> Result<()> {
+    let prepared = prepare(&cx, input).await?;
+    let mut lines = Lines::new(&cx, prepared.span);
+    let mut cues = 0u64;
+    let mut fps = None;
+    while let Some(line) = lines.next().await? {
+        let p = line.piece().trim();
+        let Some((a, b, used)) = frames(p.bytes()) else {
+            continue;
+        };
+        let text = p.from(used);
+        let shown = text.text().replace('|', "\n");
+        // `{1}{1}23.976` declares the frame rate.
+        if a == 1
+            && b == Some(1)
+            && cues == 0
+            && fps.is_none()
+            && let Ok(rate) = text.text().trim().parse::<f64>()
+        {
+            fps = Some(rate);
+            cx.push(Node::new("Frame rate").span(text.span()).value(Value::Float(rate))).await;
+            continue;
+        }
+        cues = cues.saturating_add(1);
+        let end = b.map_or_else(|| "?".to_owned(), |b| b.to_string());
+        let mut summary = format!("frames {a}–{end}");
+        if let Some(rate) = fps.filter(|r| *r > 0.0) {
+            #[allow(clippy::cast_precision_loss)]
+            let at = a as f64 / rate;
+            summary = format!("{summary} ({at:.3} s)");
+        }
+        cx.push(text_node(format!("Cue {cues}"), line.span, &shown).summary(summary)).await;
+    }
+    cx.annotate(format!("MicroDVD subtitles, {}", plural(cues, "cue", "cues")));
+    Ok(())
+}
+
 /// LRC ID tags.
 fn lrc_tag(name: &str) -> &str {
     match name {

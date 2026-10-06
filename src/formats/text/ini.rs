@@ -30,6 +30,7 @@ pub enum Flavor {
     Url,
     Systemd,
     Inf,
+    EditorConfig,
     Ass,
 }
 
@@ -74,6 +75,18 @@ ini_format!(INF, dissect_inf, Flavor::Inf, "inf", "Windows setup information", [
             && probe::contains(&head, b"[version]")
             && probe::contains(&head, b"signature")
             && (probe::contains(&head, b"$windows nt$") || probe::contains(&head, b"$chicago$"))
+    });
+ini_format!(EDITORCONFIG, dissect_editorconfig, Flavor::EditorConfig, "editorconfig", "EditorConfig",
+    ["editorconfig"], "text/plain", |h| {
+        let head = probe::head(h);
+        let keys: [&[u8]; 6] = [
+            b"indent_style", b"indent_size", b"end_of_line", b"charset",
+            b"trim_trailing_whitespace", b"insert_final_newline",
+        ];
+        let first = probe::significant(&head, &[b";", b"#"]).next().map(probe::trim);
+        let glob = first_section(h).is_some_and(|s| s.contains(&b'*'));
+        let root = first.is_some_and(|l| l.starts_with(b"root"));
+        (glob || root) && keys.iter().any(|k| probe::contains(&head, k)) && probe::is_text(h)
     });
 ini_format!(ASS, dissect_ass, Flavor::Ass, "ass", "SubStation Alpha subtitles", ["ass", "ssa"],
     "text/x-ssa", |h| first_section(h).is_some_and(|s| s == b"Script Info"));
@@ -544,6 +557,10 @@ fn annotation(flavor: Flavor, head: &[u8]) -> String {
             ("Desktop entry", detail)
         }
         Flavor::Reg => ("Windows Registry export", None),
+        Flavor::EditorConfig => (
+            "EditorConfig",
+            get(b"root").map(|r| format!("root = {r}")),
+        ),
         Flavor::Url => ("Internet shortcut", get(b"URL")),
         Flavor::Systemd => ("systemd unit", get(b"Description")),
         Flavor::Inf => (
