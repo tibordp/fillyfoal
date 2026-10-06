@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ outlook.pst — Unicode PST, format version 23  [0x0+0x210]
+    Magic: "!BDN"  [0x0+0x4]
+    CRC (partial): 0x0  [0x4+0x4]
+    Client magic: "SM"  [0x8+0x2]
+    File format version: 23  [0xa+0x2]
+    Client version: 19  [0xc+0x2]
+    Platform create: 1  [0xe+0x1]
+    Platform access: 1  [0xf+0x1]

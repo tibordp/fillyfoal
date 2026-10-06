@@ -124,7 +124,12 @@ Cursor has `record`, `bytes`, `peek`, `u8..u64`, `int::<T>`, `uleb128`,
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than
-looping forever.
+looping forever. Beware `cx.read(region.sub(pos, n))` past the end: `sub`
+clamps, so the read succeeds with *fewer* (or zero) bytes; a loop that only
+stops at a terminator then never stops. Bound such loops by the region
+(`while pos < region.len`) or use `sub_exact`. As a safety net the session
+stops any expansion after `Limits::max_work` units, and the robustness
+tests fail if that ever happens on a fixture.
 
 ## 5. Spans: `sub` versus `sub_exact`
 
@@ -199,6 +204,11 @@ FIXTURE=bmp INSTA_UPDATE=always cargo test --test formats   # write snapshots
 cargo test && cargo clippy --all-targets                     # must be clean
 cargo run --example inspect -- file --depth 3                # look at it
 ```
+
+Formats identified by an exact image size (e.g. D64, ADF) need full-size
+fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
+decompresses them first. Each fixture's directory names the format it must
+be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are
 right.

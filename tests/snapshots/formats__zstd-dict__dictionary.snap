@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dictionary — zstd dictionary 42, 72 bytes  [0x0+0x48]
+    Magic: 0xec30a437  [0x0+0x4]
+    Dictionary ID: 42  [0x4+0x4]
+    Entropy tables and content  [0x8+0x40]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ level.bundle — UnityFS v7, Unity 2022.3.10f1  [0x0+0x72]
+    Signature: "UnityFS"  [0x0+0x8]
+    Format version: 7  [0x8+0x4]
+    Player version: "5.x.x"  [0xc+0x6]
+    Engine version: "2022.3.10f1"  [0x12+0xc]
+    Bundle header — 200 bytes; blocks info 50 → 80 bytes, LZ4HC  [0x1e+0x14]
+    Blocks and directory  [0x32+0x40]
+      ! unsupported: LZ4HC compression

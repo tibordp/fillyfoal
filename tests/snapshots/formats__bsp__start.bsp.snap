@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ start.bsp — Quake map, 2 entities  [0x0+0xbe]
+    Header — Quake BSP version 29  [0x0+0x4]
+    entities — 66 bytes  [0x7c+0x42]
+    planes — 0 bytes  [0xbe+0x0]
+    textures — 0 bytes  [0xbe+0x0]
+    vertexes — 0 bytes  [0xbe+0x0]
+    visibility — 0 bytes  [0xbe+0x0]
+    nodes — 0 bytes  [0xbe+0x0]
+    texinfo — 0 bytes  [0xbe+0x0]
+    faces — 0 bytes  [0xbe+0x0]
+    lighting — 0 bytes  [0xbe+0x0]
+    clipnodes — 0 bytes  [0xbe+0x0]
+    leafs — 0 bytes  [0xbe+0x0]
+    marksurfaces — 0 bytes  [0xbe+0x0]
+    edges — 0 bytes  [0xbe+0x0]
+    surfedges — 0 bytes  [0xbe+0x0]
+    models — 0 bytes  [0xbe+0x0]

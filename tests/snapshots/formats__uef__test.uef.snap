@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.uef — UEF 0.10  [0x0+0x2d]
+    Header  [0x0+0xc]
+    Chunk 0x0000 — 9 bytes  [0xc+0xf]
+    Chunk 0x0110 — 2 bytes  [0x1b+0x8]
+    Chunk 0x0100 — 4 bytes  [0x23+0xa]

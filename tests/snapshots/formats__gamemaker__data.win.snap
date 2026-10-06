@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.win — GameMaker data "FillyGame", 2 chunks  [0x0+0x86]
+    GEN8 — 96 bytes  [0x8+0x68]
+    STRG — 14 bytes  [0x70+0x16]

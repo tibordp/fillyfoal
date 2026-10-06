@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ drawing.dxf — DXF, AutoCAD 2000  [0x0+0x9e]
+  ▾ HEADER — 0 records  [0x0+0x2f]
+  ▾ ENTITIES — 3 records  [0x30+0x67]
+      LINE  [0x45+0x6]
+      CIRCLE  [0x6c+0x8]
+      EOF  [0x98+0x5]

@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.pak — Unreal pak v3, index 31 bytes  [0x0+0x7f]
+    Data  [0x0+0x34]
+    Index  [0x34+0x1f]
+    Footer — version 3  [0x53+0x2c]

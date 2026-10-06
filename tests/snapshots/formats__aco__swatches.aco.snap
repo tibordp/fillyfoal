@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ swatches.aco — 2 colours  [0x0+0x18]
+    Header — version 1, 2 colours  [0x0+0x4]
+    Colour 0 — RGB 255 0 0  [0x4+0xa]
+    Colour 1 — RGB 0 0 255  [0xe+0xa]

@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ song.gp5 — FICHIER GUITAR PRO v5.00: "Fillyfoal Blues" by The Foals  [0x0+0x90]
+    Version: "FICHIER GUITAR PRO v5.00"  [0x0+0x1f]
+    Title: "Fillyfoal Blues"  [0x1f+0x14]
+    Subtitle: ""  [0x33+0x5]
+    Artist: "The Foals"  [0x38+0xe]
+    Album: "Debut"  [0x46+0xa]
+    Song data  [0x50+0x40]

@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ test.z64 — "FILLYFOAL", North America, big-endian (.z64)  [0x0+0x1040]
+  ▾ Header — big-endian (.z64)  [0x0+0x40]
+      PI BSD domain 1 config: 0x80371240  [0x0+0x4]
+      Clock rate: 0xf  [0x4+0x4]
+      Boot address: 0x80000400  [0x8+0x4]
+      libultra version: 0x1444  [0xc+0x4]
+      Checksum 1: 0x12345678  [0x10+0x4]
+      Checksum 2: 0x9abcdef0  [0x14+0x4]
+      Reserved: 00 00 00 00 00 00 00 00  |........|  [0x18+0x8]
+      Image name: "FILLYFOAL           "  [0x20+0x14]
+      Reserved: 00 00 00 00 00 00 00  |.......|  [0x34+0x7]
+      Media format: "N"  [0x3b+0x1]
+      Cartridge ID: "FF"  [0x3c+0x2]
+      Country: North America (0x45)  [0x3e+0x1]
+      Version: 0  [0x3f+0x1]
+    Boot code (IPL3)  [0x40+0xfc0]
+    Program  [0x1000+0x40]

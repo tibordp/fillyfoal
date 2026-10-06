@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ beat.flp — FL Studio project, 4 channels, 96 PPQ  [0x0+0x4b]
+    Magic: "FLhd"  [0x0+0x4]
+    Header length: 6  [0x4+0x4]
+    Format: 0  [0x8+0x2]
+    Channels: 4  [0xa+0x2]
+    Pulses per quarter note: 96  [0xc+0x2]
+  ▾ Events (FLdt)  [0x16+0x35]
+      Event 11  [0x16+0x2]
+      Event 66  [0x18+0x3]
+      Event 199 — 20.8.4  [0x1b+0x10]
+      Event 194 — Fillyfoal Beat  [0x2b+0x20]

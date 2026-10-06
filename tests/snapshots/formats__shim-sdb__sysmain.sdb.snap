@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sysmain.sdb — shim database v3.0  [0x0+0x2c]
+    Major version: 3  [0x0+0x4]
+    Minor version: 0  [0x4+0x4]
+    Magic: "sdbf"  [0x8+0x4]
+    Tags  [0xc+0x20]
