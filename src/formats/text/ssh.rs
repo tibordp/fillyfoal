@@ -36,6 +36,8 @@ pub static BLOB: Format = Format {
     dissect: crate::expander!(dissect_blob: Input),
 };
 
+/// Not registered: `security::OPENSSH_KEY` claims the same magic. This one
+/// goes deeper (decodes unencrypted private sections); either can be kept.
 pub static PRIVATE: Format = Format {
     name: "openssh-private-key",
     title: "OpenSSH private key",

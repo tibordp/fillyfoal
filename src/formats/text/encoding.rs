@@ -207,7 +207,7 @@ impl Prepared {
         if self.span.source == input.span.source {
             Input {
                 span: self.span,
-                nesting: input.nesting,
+                ..input
             }
         } else {
             input.nested(self.span)

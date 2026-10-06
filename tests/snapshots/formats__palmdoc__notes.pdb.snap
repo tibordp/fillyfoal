@@ -21,8 +21,11 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Records — 2 records  [0x4e+0x10]
     ▾ Record 0 — 16 bytes  [0x60+0x10]
         ! unsupported: unrecognized format [0x60+0x10]
-    ▾ Record 1 — 11 bytes  [0x70+0xb]
-        ! unsupported: unrecognized format [0x70+0xb]
+    ▾ Record 1 — UTF-8 text, 1 line  [0x70+0xb]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x70+0xb]
+          Line 1: "Hello Palm!"  [0x70+0xb]
   ▾ Book header  [0x60+0x10]
       Compression: none (0x1)  [0x60+0x2]
       Unused: 0  [0x62+0x2]

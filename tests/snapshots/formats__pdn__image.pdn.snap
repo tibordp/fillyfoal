@@ -4,6 +4,10 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ image.pdn — Paint.NET, 64×32  [0x0+0x65]
     Magic  [0x0+0x4]
-  ▾ Header (XML)  [0x7+0x45]
-      ! unsupported: unrecognized format [0x7+0x45]
+  ▾ Header (XML) — XML document, root <pdnImage>  [0x7+0x45]
+    ▾ pdnImage — width="64" height="32" layers="1" savedWithVersion="5.0"  [0x7+0x45]
+        @width: "64"  [0x18+0x2]
+        @height: "32"  [0x24+0x2]
+        @layers: "1"  [0x30+0x1]
+        @savedWithVersion: "5.0"  [0x45+0x3]
     Document (.NET serialized)  [0x4c+0x19]

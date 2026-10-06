@@ -380,7 +380,6 @@ pub static FORMATS: &[&Format] = &[
     &text::postscript::EPS,
     &text::postscript::POSTSCRIPT,
     // Binary formats found inside text armor.
-    &text::ssh::PRIVATE,
     &text::ssh::BLOB,
     // Armor and keys.
     &text::pem::PGP,

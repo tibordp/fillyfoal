@@ -3,5 +3,8 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.aar — Apple Archive, 1 entries  [0x0+0x34]
-  ▾ hello.txt — 20 bytes  [0x20+0x14] → 0x0+0x34
-      ! unsupported: unrecognized format [0x20+0x14]
+  ▾ hello.txt — UTF-8 text, LF line endings, 1 line  [0x20+0x14] → 0x0+0x34
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x20+0x14]
+        Line 1: "hello apple archive"  [0x20+0x13]
