@@ -76,9 +76,9 @@ pub mod pyc;
 pub mod qvm;
 pub mod spirv;
 pub mod te;
+pub mod wasm;
 pub mod xcoff;
 pub mod yarb;
-pub mod wasm;
 // -- end executables --
 
 // -- images --
@@ -333,15 +333,16 @@ pub static FORMATS: &[&Format] = &[
     &hermes::FORMAT,
     &dart::FORMAT,
     &yarb::FORMAT,
-    &aout::PLAN9,
-    &aout::FORMAT,
-    &coff::FORMAT,
-    &coff::IMPORT,
     &pyc::FORMAT,
     &lua::FORMAT,
     &luajit::FORMAT,
     &bitcode::FORMAT,
     &beam::FORMAT,
+    // Weaker probes (sizes and machine numbers rather than long magics).
+    &coff::FORMAT,
+    &coff::IMPORT,
+    &aout::PLAN9,
+    &aout::FORMAT,
     // -- end executables --
 
     // -- images --
