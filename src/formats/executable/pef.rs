@@ -174,10 +174,13 @@ async fn imported_libraries(cx: &Cx, loader: Span) -> Result<Vec<String>> {
     for i in 0..u64::from(h.libraries.min(256)) {
         let at = loader.sub(LoaderHeader::SIZE.saturating_add(i.saturating_mul(24)), 4);
         let off = cx.read(at).await?;
-        let name =
-            crate::formats::util::binutil::string_at(cx, strings, u32_be(&off, 0).unwrap_or(0).into())
-                .await?
-                .0;
+        let name = crate::formats::util::binutil::string_at(
+            cx,
+            strings,
+            u32_be(&off, 0).unwrap_or(0).into(),
+        )
+        .await?
+        .0;
         out.push(name);
     }
     Ok(out)
@@ -223,10 +226,13 @@ async fn libraries(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
     for i in 0..count {
         let at = span.sub(i.saturating_mul(24), 24);
         let data = cx.read(at).await?;
-        let name =
-            crate::formats::util::binutil::string_at(&cx, strings, u32_be(&data, 0).unwrap_or(0).into())
-                .await
-                .map_or_else(|_| format!("#{i}"), |(s, _)| s);
+        let name = crate::formats::util::binutil::string_at(
+            &cx,
+            strings,
+            u32_be(&data, 0).unwrap_or(0).into(),
+        )
+        .await
+        .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(
             "{} symbols from {}, versions {:#x}..{:#x}",
             u32_be(&data, 12).unwrap_or(0),
@@ -255,9 +261,10 @@ async fn imported_symbols(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
         let data = cx.read(at).await?;
         let word = u32_be(&data, 0).unwrap_or(0);
         let class = word >> 24;
-        let name = crate::formats::util::binutil::string_at(&cx, strings, (word & 0x00ff_ffff).into())
-            .await
-            .map_or_else(|_| format!("#{i}"), |(s, _)| s);
+        let name =
+            crate::formats::util::binutil::string_at(&cx, strings, (word & 0x00ff_ffff).into())
+                .await
+                .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(
             "{}{}",
             name_or(SYMBOL_CLASS, (class & 0xf).into(), "class"),

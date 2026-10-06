@@ -5,13 +5,15 @@
 //! instruments and patterns, either stored back to back (MOD, XM) or
 //! reached through pointer tables (S3M, IT). The helpers here list such
 //! tables lazily.
+//!
+//! Less common modules are in `more` and `pc`.
 
 pub mod it;
 pub mod more;
+pub mod pc;
 pub mod protracker;
 pub mod s3m;
 pub mod xm;
-pub mod pc;
 
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;

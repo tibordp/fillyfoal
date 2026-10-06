@@ -635,9 +635,9 @@ async fn iges_directory(cx: Cx, list: Vec<Line>) -> Result<()> {
         let span = b.map_or(a.span, |l| {
             a.span.sub(0, l.span.end().saturating_sub(a.span.offset))
         });
-        let node = Node::new(format!("D{seq}"))
-            .span(span)
-            .value(crate::formats::util::lines::enumeration(IGES_ENTITIES, t, 16));
+        let node = Node::new(format!("D{seq}")).span(span).value(
+            crate::formats::util::lines::enumeration(IGES_ENTITIES, t, 16),
+        );
         cx.push(summarize(
             node,
             format!(

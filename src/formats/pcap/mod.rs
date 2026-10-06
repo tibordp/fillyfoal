@@ -5,10 +5,12 @@
 //! 16-byte header and the captured bytes. Records are listed in pages with
 //! their timestamp and a one-line protocol summary; expanding one decodes its
 //! link, network and transport headers (see [`net`]).
+//!
+//! Other captures (Bluetooth btsnoop, Network Monitor) are in [`captures`].
 
+pub mod captures;
 pub mod net;
 pub mod ng;
-pub mod captures;
 
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};

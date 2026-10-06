@@ -491,6 +491,8 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
     } else {
         unsupported("Compressed data", data, &format!("LHA {method}"))
     };
-    cx.emit(crate::formats::util::arcutil::check_len(node, data, data_len));
+    cx.emit(crate::formats::util::arcutil::check_len(
+        node, data, data_len,
+    ));
     Ok(())
 }

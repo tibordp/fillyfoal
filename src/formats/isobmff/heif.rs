@@ -559,7 +559,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     };
     match kind {
         b"pitm" => Some(format!("item {}", id(4, v == 0)?)),
-        b"iinf" => Some(crate::formats::util::vidutil::plural(id(4, v == 0)?, "item")),
+        b"iinf" => Some(crate::formats::util::vidutil::plural(
+            id(4, v == 0)?,
+            "item",
+        )),
         b"infe" if v >= 2 => {
             let item = id(4, v == 2)?;
             let at: usize = if v == 2 { 8 } else { 10 };
@@ -572,7 +575,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             })
         }
         b"iloc" => Some(crate::formats::util::vidutil::plural(id(6, v < 2)?, "item")),
-        b"ipma" => Some(crate::formats::util::vidutil::plural(u32_be(&d, 4)?, "item")),
+        b"ipma" => Some(crate::formats::util::vidutil::plural(
+            u32_be(&d, 4)?,
+            "item",
+        )),
         b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
         b"irot" => Some(format!("{}°", u16::from(v & 3).saturating_mul(90))),
         b"pixi" => Some(format!("{} channels, {} bits", d.get(4)?, d.get(5)?)),

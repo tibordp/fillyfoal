@@ -13,7 +13,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::datakit::{hex_string, size};
-use crate::formats::{Format, Input, Probe, embedded_as, archive::zip};
+use crate::formats::{Format, Input, Probe, archive::zip, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;

@@ -195,7 +195,11 @@ async fn block_summary(cx: &Cx, kind: u8, span: Span) -> Result<String> {
 
 async fn block(cx: Cx, (kind, span): (u8, Span)) -> Result<()> {
     if kind == 0 {
-        cx.emit(leaf("Type", span, crate::formats::util::sound::uint(0u8, 8)));
+        cx.emit(leaf(
+            "Type",
+            span,
+            crate::formats::util::sound::uint(0u8, 8),
+        ));
         return Ok(());
     }
     let head = cx.block(span.sub(0, 16)).await?;

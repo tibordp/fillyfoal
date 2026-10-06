@@ -4,6 +4,10 @@
 //! Shared here: value constructors, checksums used by several receivers'
 //! protocols, a protobuf wire-format reader, and helpers for text formats
 //! whose records are lines of delimited or fixed-column fields.
+//!
+//! Also here: geoscience (`geoscience`: seismic, well logs, grids, planetary
+//! labels; `dlis`), survey data (`survey`: Shapefile, LAS, GRIB/BUFR),
+//! OpenStreetMap PBF (`osm`) and elevation and imagery (`elevation`).
 
 use std::borrow::Cow;
 
@@ -18,21 +22,21 @@ use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 pub(crate) use crate::codec::crc::{crc16_xmodem, crc24q};
 
+pub mod dlis;
+pub mod elevation;
 pub mod fit;
+pub mod geoscience;
 pub mod gis;
 pub mod gistext;
 pub mod gnss;
 pub mod markup;
 pub mod mdf;
+pub mod osm;
 pub mod rinex;
 pub mod robotics;
+pub mod survey;
 pub mod tiles;
 pub mod vehicle;
-pub mod geoscience;
-pub mod dlis;
-pub mod survey;
-pub mod osm;
-pub mod elevation;
 
 // ---------------------------------------------------------------------------
 // Values

@@ -293,7 +293,12 @@ async fn sub_block(
     let head = cx.read(span.sub(0, header_len)).await?;
     let id = head.first().copied().unwrap_or(0);
     cx.emit(
-        leaf("ID", span.sub(0, 1), crate::formats::util::sound::hex(id, 8)).summary(format!(
+        leaf(
+            "ID",
+            span.sub(0, 1),
+            crate::formats::util::sound::hex(id, 8),
+        )
+        .summary(format!(
             "function {:#04x}{}{}",
             id & 0x3f,
             if id & 0x40 != 0 { ", odd size" } else { "" },

@@ -4,15 +4,18 @@
 //! An sfnt font is an offset table and a table directory pointing at tagged
 //! tables. The directory is listed at once (cheap); a table is read only
 //! when expanded, which also verifies its checksum.
+//!
+//! Also here: Adobe font metrics and PFA (`adobe`) and more bitmap fonts
+//! (`raster`: PSF, BMFont, FIGlet, TeX PK/GF).
 
+pub mod adobe;
 pub mod bitmap;
 pub mod eot;
 pub mod pfb;
+pub mod raster;
 pub mod tables;
 pub mod type1;
 pub mod woff;
-pub mod adobe;
-pub mod raster;
 
 use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
@@ -200,7 +203,8 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
     if padded <= cx.limits().max_read {
         let data = cx.read_avail(whole).await?;
         let computed = tables::checksum(&data, entry.tag == "head");
-        let node = Node::new("Checksum").value(crate::formats::util::datakit::hex(entry.checksum, 32));
+        let node =
+            Node::new("Checksum").value(crate::formats::util::datakit::hex(entry.checksum, 32));
         cx.emit(if computed == entry.checksum {
             node.summary("valid")
         } else {

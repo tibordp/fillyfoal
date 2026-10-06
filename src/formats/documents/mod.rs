@@ -1,10 +1,16 @@
-//! TODO family summary.
+//! Documents and help files: legacy office formats, e-books (Palm, DjVu,
+//! Microsoft Reader, Sony BBeB), word processors (`wordprocessing`), TeX DVI,
+//! Windows Help, Compiled HTML Help and other help formats (`help`).
+//!
+//! PDF lives in [`super::pdf`], OLE2 documents in [`super::cfb`], ZIP-based
+//! documents in [`super::archive::zip`], desktop publishing in
+//! [`super::publishing`].
 
-pub mod office_legacy;
-pub mod ebooks;
-pub mod winhelp;
 pub mod chm;
-pub mod wordprocessing;
 pub mod dvi;
-pub mod lrf;
+pub mod ebooks;
 pub mod help;
+pub mod lrf;
+pub mod office_legacy;
+pub mod winhelp;
+pub mod wordprocessing;

@@ -1,9 +1,15 @@
-//! Raster image formats (PNG lives in its own module).
+//! Raster image formats.
 //!
 //! Shared helpers for the family live here: palettes, sized regions and a few
 //! value constructors.
+//!
+//! Also here: PNG and MNG (`png`), ICC profiles (`icc_profile`), other
+//! graphics (`graphics`: metafiles, film frames, GPU textures, swatches),
+//! camera and toolkit formats (`camera`, `toolkits`), paint-program documents
+//! (`paint`) and less common raster formats (`minor`).
 
 pub mod bmp;
+pub mod camera;
 pub mod crw;
 pub mod dds;
 pub mod dpx;
@@ -11,8 +17,10 @@ pub mod exr;
 pub mod farbfeld;
 pub mod fits;
 pub mod gif;
+pub mod graphics;
 pub mod hdr;
 pub mod icc;
+pub mod icc_profile;
 pub mod icns;
 pub mod ico;
 pub mod j2k;
@@ -21,8 +29,11 @@ pub mod jpeg;
 pub mod jxl;
 pub mod ktx;
 pub mod metafile;
+pub mod minor;
 pub mod modern;
+pub mod paint;
 pub mod pcx;
+pub mod png;
 pub mod pnm;
 pub mod psd;
 pub mod qoi;
@@ -33,17 +44,11 @@ pub mod texture;
 pub mod tga;
 pub mod tiff;
 mod tiff_tags;
+pub mod toolkits;
 pub mod wbmp;
 pub mod xbm;
 pub mod xcf;
 pub mod xwd;
-pub mod png;
-pub mod graphics;
-pub mod icc_profile;
-pub mod camera;
-pub mod toolkits;
-pub mod paint;
-pub mod minor;
 
 use std::borrow::Cow;
 

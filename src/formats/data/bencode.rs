@@ -262,9 +262,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Info hash")
                     .span(span)
-                    .value(Value::Text(hex_string(&crate::formats::util::datakit::sha1(
-                        &bytes,
-                    ))))
+                    .value(Value::Text(hex_string(
+                        &crate::formats::util::datakit::sha1(&bytes),
+                    )))
                     .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
             );
         }

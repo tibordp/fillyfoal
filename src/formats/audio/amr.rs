@@ -198,7 +198,10 @@ async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
     Ok(())
 }
 
-async fn frame(cx: Cx, (span, header): (Span, crate::formats::util::sound::BitLayout<()>)) -> Result<()> {
+async fn frame(
+    cx: Cx,
+    (span, header): (Span, crate::formats::util::sound::BitLayout<()>),
+) -> Result<()> {
     cx.emit(bits_node("Header", span.sub(0, 1), header, false));
     cx.emit(Node::new("Speech data").span(span.tail(1)));
     Ok(())

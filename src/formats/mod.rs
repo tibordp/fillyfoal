@@ -11,83 +11,61 @@ use crate::error::{Diagnostic, Result};
 use crate::node::{Expansion, Node};
 use crate::span::Span;
 
-// Modules, grouped by family. Keep each group sorted; parallel branches
-// touch different groups, so they merge cleanly.
+// Modules, grouped by theme; each family's `mod.rs` summarises what it
+// holds. Keep each group sorted.
 
-// -- archives & compression --
-// -- end archives --
+// -- shared helpers --
+pub mod util;
+
+// -- archives, compression & disk images --
+pub mod archive;
+pub mod compression;
+pub mod disk;
 
 // -- executables & code --
 pub mod android;
+pub mod bytecode;
+pub mod executable;
 pub mod java;
-// -- end executables --
 
-// -- images --
+// -- images, fonts & publishing --
+pub mod font;
 pub mod image;
-// -- end images --
+pub mod publishing;
 
 // -- audio & video --
-// audio (riff/iff/flac/mp3/ogg/...)
+pub mod audio;
 pub mod iff;
-pub mod tracker;
-// video & containers (isobmff/matroska/ts/...)
 pub mod isobmff;
 pub mod mpeg;
-// -- end audio & video --
+pub mod tracker;
+pub mod video;
 
-// -- documents & data --
-// data, system artifacts, fonts
-pub mod font;
-pub mod pcap;
-// graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+// -- documents, data & text --
 pub mod asn1;
 pub mod cfb;
+pub mod data;
+pub mod documents;
 pub mod pdf;
 pub mod sqlite;
-// -- end documents --
-
-// -- disk images & filesystems --
-pub mod disk;
-// -- end disk images --
-
-// -- retro & consoles --
-pub mod retro;
-// -- end retro --
-
-// -- games, 3D, science, e-books, misc --
-pub mod science;
-pub mod security;
-// -- end misc --
-
-// -- ml models & mobile platforms --
-pub mod ml;
-pub mod mobile;
-// -- end ml --
-
-// -- geospatial, telemetry & vehicle logs --
-pub mod geo;
-// -- end geo --
-
-// -- publishing, design & multimedia authoring --
-pub mod publishing;
-// -- end publishing --
-
-// -- text --
 pub mod text;
-pub mod util;
-pub mod archive;
-pub mod compression;
-pub mod audio;
-pub mod video;
-pub mod executable;
-pub mod bytecode;
-pub mod data;
+
+// -- system, security & forensics --
 pub mod forensics;
+pub mod mobile;
+pub mod pcap;
+pub mod security;
 pub mod system;
-pub mod documents;
+
+// -- games & retro --
 pub mod games;
+pub mod retro;
+
+// -- science, engineering, geospatial & machine learning --
 pub mod engineering;
-// -- end text --
+pub mod geo;
+pub mod ml;
+pub mod science;
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
 /// a file, such as ISO 9660's volume descriptor at 0x8001 and the btrfs and
@@ -277,8 +255,9 @@ pub static FORMATS: &[&Format] = &[
     &image::pcx::FORMAT,
     &image::wbmp::FORMAT,
     // Also implemented in src/formats/image/ but not registered, because main
-    // has its own versions (graphics.rs, science.rs): fits, dpx, cineon, astc,
-    // pvr, vtf, emf, wmf, bpg, flif, jxr. Swap in whichever is deeper.
+    // has its own versions (image/graphics.rs, science/imaging.rs,
+    // image/icc_profile.rs): fits, dpx, cineon, astc, pvr, vtf, emf, wmf, bpg,
+    // flif, jxr, icc. Swap in whichever is deeper.
     // -- end images --
 
     // -- audio & video --
@@ -725,15 +704,15 @@ pub static FORMATS: &[&Format] = &[
     &retro::discs::TGC,
     &retro::discs::WII_CISO,
     &retro::discs::OPERA,
-    &retro::consoles2::GAME_GEAR,
-    &retro::consoles2::SMS,
-    &retro::consoles2::SMD,
-    &retro::consoles2::NGPC,
-    &retro::consoles2::NGP,
-    &retro::consoles2::POKEMON_MINI,
-    &retro::consoles2::NEO_GEO,
-    &retro::consoles2::UNIF,
-    &retro::consoles2::VECTREX,
+    &retro::cartridges::GAME_GEAR,
+    &retro::cartridges::SMS,
+    &retro::cartridges::SMD,
+    &retro::cartridges::NGPC,
+    &retro::cartridges::NGP,
+    &retro::cartridges::POKEMON_MINI,
+    &retro::cartridges::NEO_GEO,
+    &retro::cartridges::UNIF,
+    &retro::cartridges::VECTREX,
     &retro::states::ZSNES,
     &retro::states::SNES9X,
     &retro::states::FCEUX,
@@ -788,15 +767,15 @@ pub static FORMATS: &[&Format] = &[
     &retro::micros::ATX,
     &retro::micros::NUFX_ARCHIVE,
     &retro::micros::BINHEX,
-    &retro::consoles3::WUX,
-    &retro::consoles3::NCZ,
-    &retro::consoles3::NPDM,
-    &retro::consoles3::PS3_PUP,
-    &retro::consoles3::PS4_PKG,
-    &retro::consoles3::PSP_PRX,
-    &retro::consoles3::SHARKPORT,
-    &retro::consoles3::MAME_INP,
-    &retro::consoles3::MAME_STATE,
+    &retro::console_packages::WUX,
+    &retro::console_packages::NCZ,
+    &retro::console_packages::NPDM,
+    &retro::console_packages::PS3_PUP,
+    &retro::console_packages::PS4_PKG,
+    &retro::console_packages::PSP_PRX,
+    &retro::console_packages::SHARKPORT,
+    &retro::console_packages::MAME_INP,
+    &retro::console_packages::MAME_STATE,
     &retro::graphics::KICKSTART,
     &retro::graphics::AMIGA_INFO,
     &retro::extras::DSV,
@@ -810,12 +789,12 @@ pub static FORMATS: &[&Format] = &[
     &retro::discs::NRG,
     &retro::discs::CDI,
     &retro::discs::GDI,
-    &retro::consoles2::INTELLIVISION,
-    &retro::consoles2::COLECOVISION,
-    &retro::consoles2::MSX_ROM,
-    &retro::consoles2::WONDERSWAN_COLOR,
-    &retro::consoles2::WONDERSWAN,
-    &retro::consoles2::VIRTUAL_BOY,
+    &retro::cartridges::INTELLIVISION,
+    &retro::cartridges::COLECOVISION,
+    &retro::cartridges::MSX_ROM,
+    &retro::cartridges::WONDERSWAN_COLOR,
+    &retro::cartridges::WONDERSWAN,
+    &retro::cartridges::VIRTUAL_BOY,
     &retro::states::GCI,
     &retro::states::FM2,
     &retro::tapes::ZX_TAP,

@@ -408,7 +408,10 @@ pub fn instruction(
             let sub = r.uleb()?;
             let operands = match sub {
                 0..=11 | 92 | 93 => memarg(r)?,
-                12 => format!("v128 {}", crate::formats::util::binutil::hex_string(r.bytes(16)?)),
+                12 => format!(
+                    "v128 {}",
+                    crate::formats::util::binutil::hex_string(r.bytes(16)?)
+                ),
                 13 => format!(
                     "lanes {}",
                     crate::formats::util::binutil::hex_string(r.bytes(16)?)

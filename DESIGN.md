@@ -283,8 +283,9 @@ unioning `mod.rs` sections. What they reported, consolidated:
   can claim the input.
 - **Wire formats want a shared module.** Protobuf walkers were written three
   times and FlatBuffers readers twice (`ml::proto`, `ml::flatbuf`, `geo`,
-  `crx`, `misc3`). They should move to a public `formats::wire` (protobuf
-  with static schemas, FlatBuffers tables, MSB-first bit reader).
+  `archive::crx`, `geo::osm`). They should move to a public
+  `formats::wire` (protobuf with static schemas, FlatBuffers tables,
+  MSB-first bit reader).
 - **Hand-off to text dissectors** (an XML vocabulary, a JSON schema) works
   by calling `xml::dissect`/`json::dissect` and annotating afterwards; a
   public "dissect as XML/JSON with this summary" entry point would be cleaner.

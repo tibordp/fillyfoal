@@ -2,8 +2,8 @@
 //! (`---- BEGIN SSH2 PUBLIC KEY ----`). The same reader understands PEM
 //! (`-----BEGIN CERTIFICATE-----`) and OpenPGP armor (with its CRC-24
 //! checksum and clear-signed messages) when they appear in the same file;
-//! files that start with those are handled by `formats::pem` and
-//! `formats::pgp`.
+//! files that start with those are handled by `formats::security::pem`
+//! and `formats::security::pgp`.
 //!
 //! Blocks are a paged collection. Expanding one shows its headers and
 //! base64 body; the body is decoded into a derived source and dissected

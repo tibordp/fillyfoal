@@ -414,7 +414,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             u32_be(&d, if wide { 12 } else { 8 })?,
             crate::formats::util::vidutil::fourcc(d.get(4..8)?)
         )),
-        b"trun" => Some(crate::formats::util::vidutil::plural(u32_be(&d, at)?, "sample")),
+        b"trun" => Some(crate::formats::util::vidutil::plural(
+            u32_be(&d, at)?,
+            "sample",
+        )),
         _ => Some(entries(u32_be(&d, at)?.into())),
     }
 }

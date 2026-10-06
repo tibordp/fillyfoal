@@ -8,7 +8,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, text};
-use crate::formats::{Format, Input, Probe, embedded, audio::id3};
+use crate::formats::{Format, Input, Probe, audio::id3, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;

@@ -364,7 +364,10 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
                     );
                     node = node
                         .summary(format!("LZ4, {} uncompressed", size(out.into())))
-                        .lazy(crate::formats::util::arcutil::emit_nodes, Arc::new(vec![block]));
+                        .lazy(
+                            crate::formats::util::arcutil::emit_nodes,
+                            Arc::new(vec![block]),
+                        );
                 }
                 node
             }

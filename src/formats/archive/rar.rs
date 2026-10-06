@@ -13,7 +13,9 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, text, unsupported};
+use crate::formats::util::arcutil::{
+    ByteReader, count, emit_nodes, hex, human_size, text, unsupported,
+};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
