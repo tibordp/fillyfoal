@@ -2,7 +2,7 @@
 //! Burrows–Wheeler transform, and the final run-length step. Concatenated
 //! streams are decoded in sequence; block CRCs are checked.
 
-use crate::codec::filters::Filter;
+use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -80,8 +80,8 @@ impl Huffman {
     }
 }
 
-/// Decodes one block, appending to `out`; returns its stored CRC.
-fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+/// Decodes one block, appending to `out`; returns its (checked) CRC.
+fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Result<u32> {
     let stored_crc = bits.bits(32)?;
     if bits.bit()? != 0 {
         return Err(Diagnostic::unsupported("bzip2: randomised blocks"));
@@ -246,42 +246,126 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
     if !crc != stored_crc {
         return Err(bad("block CRC mismatch"));
     }
-    Ok(())
+    Ok(stored_crc)
 }
 
-/// bzip2 streams, concatenated.
-#[derive(Clone, Copy)]
-pub struct Bzip2;
+const BLOCK_MAGIC: u64 = 0x3141_5926_5359;
+const END_MAGIC: u64 = 0x1772_4538_5090;
 
-impl Filter for Bzip2 {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut bits = Bits { data: input, bit: 0 };
-        let mut streams = 0u32;
-        loop {
-            let at = bits.bit / 8;
-            match input.get(at..at.saturating_add(4)) {
-                Some([b'B', b'Z', b'h', level @ b'1'..=b'9']) => {
-                    bits.bit = bits.bit.saturating_add(32);
-                    streams = streams.saturating_add(1);
-                    let max = usize::from(level.saturating_sub(b'0')).saturating_mul(100_000);
-                    loop {
-                        let magic = u64::from(bits.bits(24)?) << 24 | u64::from(bits.bits(24)?);
-                        match magic {
-                            0x3141_5926_5359 => block(&mut bits, max, &mut out, limit)?,
-                            0x1772_4538_5090 => {
-                                bits.bits(32)?; // combined CRC
-                                bits.align();
-                                break;
-                            }
-                            _ => return Err(bad("bad block magic")),
-                        }
-                    }
-                }
-                _ if streams == 0 => return Err(bad("not a bzip2 stream")),
-                _ => return Ok(out),
+/// Whether a block or end-of-stream magic (which follows every block)
+/// starts somewhere after the magic at bit `at`. Without one, the block
+/// at `at` cannot be complete yet.
+fn next_magic(input: &[u8], at: usize) -> bool {
+    let mut window = 0u64;
+    let mut have = 0u32;
+    for &b in input.get((at / 8).saturating_add(6)..).unwrap_or_default() {
+        window = window << 8 | u64::from(b);
+        have = have.saturating_add(8);
+        if have < 48 {
+            continue;
+        }
+        for shift in 0..8u32.min(have.saturating_sub(47)) {
+            let candidate = (window >> shift) & 0xffff_ffff_ffff;
+            if candidate == BLOCK_MAGIC || candidate == END_MAGIC {
+                return true;
             }
         }
+    }
+    false
+}
+
+/// The stream being decoded.
+#[derive(Clone, Copy)]
+struct Stream {
+    /// The block size limit (from the level digit).
+    max: usize,
+    /// The combined CRC of the blocks so far.
+    combined: u32,
+}
+
+/// bzip2 streams, concatenated; decoded a block at a time.
+#[derive(Clone, Default)]
+pub struct Bzip2 {
+    /// Bit position in the input (byte-aligned between streams).
+    bit: usize,
+    streams: u32,
+    stream: Option<Stream>,
+    done: bool,
+}
+
+impl Bzip2 {
+    /// Starts a stream at the current (byte-aligned) position, or ends.
+    fn start_stream(&mut self, input: &[u8], eof: bool) -> Result<()> {
+        let at = self.bit / 8;
+        match input.get(at..at.saturating_add(4)) {
+            Some([b'B', b'Z', b'h', level @ b'1'..=b'9']) => {
+                self.bit = self.bit.saturating_add(32);
+                self.streams = self.streams.saturating_add(1);
+                let max = usize::from(level.saturating_sub(b'0')).saturating_mul(100_000);
+                self.stream = Some(Stream { max, combined: 0 });
+                Ok(())
+            }
+            None if !eof => Err(bad("unexpected end of data")),
+            _ if self.streams == 0 => Err(bad("not a bzip2 stream")),
+            _ => {
+                self.done = true;
+                Ok(())
+            }
+        }
+    }
+
+    /// Decodes the stream's next block, or its end.
+    fn block(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let Some(stream) = self.stream.as_mut() else {
+            return Ok(());
+        };
+        let mut bits = Bits { data: input, bit: self.bit };
+        let magic = u64::from(bits.bits(24)?) << 24 | u64::from(bits.bits(24)?);
+        match magic {
+            BLOCK_MAGIC if !eof && !next_magic(input, self.bit) => {
+                // The block cannot be complete: fail fast instead of
+                // decoding it up to the end of the input.
+                return Err(bad("unexpected end of data"));
+            }
+            BLOCK_MAGIC => {
+                let crc = block(&mut bits, stream.max, out, limit)?;
+                stream.combined = stream.combined.rotate_left(1) ^ crc;
+            }
+            END_MAGIC => {
+                let stored = bits.bits(32)?;
+                if stored != stream.combined {
+                    return Err(bad("stream CRC mismatch"));
+                }
+                bits.align();
+                self.stream = None;
+            }
+            _ => return Err(bad("bad block magic")),
+        }
+        self.bit = bits.bit;
+        Ok(())
+    }
+}
+
+impl Decode for Bzip2 {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let target = out.len().saturating_add(step.max(1));
+        loop {
+            if self.done {
+                return Ok(Step::Done);
+            }
+            if out.len() >= target {
+                return Ok(Step::More);
+            }
+            if self.stream.is_some() {
+                self.block(input, eof, out, limit)?;
+            } else {
+                self.start_stream(input, eof)?;
+            }
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.bit.div_ceil(8)
     }
 }
 
@@ -300,7 +384,7 @@ mod tests {
             0x84, 0x29, 0x90, 0x68, 0x06, 0x9a, 0x7e, 0x2e, 0xe4, 0x8a, 0x70, 0xa1, 0x20, 0x41, 0x15, 0xb5,
             0x50,
         ];
-        let out = Bzip2.apply(&data, 1 << 20);
+        let out = crate::codec::pipeline::decode_all(&mut crate::codec::pipeline::Streaming(Bzip2::default()), &data, 1 << 20);
         assert_eq!(out.unwrap(), b"hello hello hello hello, bzip2!\n".repeat(3));
     }
 }

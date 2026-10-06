@@ -69,3 +69,115 @@ fn deflate_is_on_demand() {
     z.extend_from_slice(&fillyfoal::codec::adler32(&text).to_be_bytes());
     assert_on_demand(&Codec::Zlib, &z, &text);
 }
+
+/// The text behind `tests/data/{zstd,bzip2}/lines-*` (850,250 bytes).
+fn zstd_bzip2_lines() -> Vec<u8> {
+    (0..24000u32).map(|i| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+}
+
+/// The data behind `mixed.zst` and `mixed-1.bz2`: text, 140,000
+/// pseudo-random bytes (raw zstd blocks), 300,000 zeros (RLE blocks), text.
+fn zstd_bzip2_mixed() -> Vec<u8> {
+    let mut out = zstd_bzip2_lines()[..100_000].to_vec();
+    let mut x: u32 = 12345;
+    for _ in 0..140_000 {
+        x = x.wrapping_mul(1_103_515_245).wrapping_add(12345) & 0x7fff_ffff;
+        out.push((x >> 16) as u8);
+    }
+    out.resize(out.len() + 300_000, 0);
+    out.extend(b"tail\n".repeat(1000));
+    out
+}
+
+fn zstd_bzip2_data(dir: &str, name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/data/{dir}/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+/// Decodes all of `input` (eof) and returns the output and the consumed
+/// count, or the error message.
+fn zstd_bzip2_decode(codec: &Codec, input: &[u8]) -> Result<(Vec<u8>, usize), String> {
+    let mut decoder = codec.decoder().unwrap();
+    let mut out = Vec::new();
+    loop {
+        match decoder.decode(input, true, &mut out, 16 * 1024, 1 << 30) {
+            Ok(Status::Done) => return Ok((out, decoder.consumed())),
+            Ok(Status::More) => {}
+            Ok(Status::NeedInput) => return Err("needs input".into()),
+            Err(e) => return Err(e.message),
+        }
+    }
+}
+
+/// `zstd` 1.5 CLI output: levels 1 and 19, `--long=27`, `--no-check`,
+/// `--no-content-size`, `--content-size`, two frames around a skippable
+/// frame, and a frame with raw and RLE blocks.
+#[test]
+fn zstd_is_on_demand() {
+    let lines = zstd_bzip2_lines();
+    for name in ["lines-1.zst", "lines-19.zst", "lines-long.zst", "lines-nocheck.zst", "lines-nosize.zst", "lines-size.zst", "lines-frames.zst"] {
+        assert_on_demand(&Codec::Zstd, &zstd_bzip2_data("zstd", name), &lines);
+    }
+    assert_on_demand(&Codec::Zstd, &zstd_bzip2_data("zstd", "mixed.zst"), &zstd_bzip2_mixed());
+}
+
+#[test]
+fn zstd_consumed_and_checks() {
+    let lines = zstd_bzip2_lines();
+    let one = zstd_bzip2_data("zstd", "lines-1.zst");
+    // Trailing data is left unconsumed.
+    let mut trailing = one.clone();
+    trailing.extend_from_slice(b"trailing junk");
+    for codec in [Codec::Zstd, Codec::ZstdFrame] {
+        let (out, consumed) = zstd_bzip2_decode(&codec, &trailing).unwrap();
+        assert!(out == lines);
+        assert_eq!(consumed, one.len());
+    }
+    // A single frame stops before the next one (here a skippable frame).
+    let frames = zstd_bzip2_data("zstd", "lines-frames.zst");
+    let (out, consumed) = zstd_bzip2_decode(&Codec::ZstdFrame, &frames).unwrap();
+    assert!(out == lines[..150_000]);
+    assert_eq!(frames[consumed..consumed + 4], [0x5a, 0x2a, 0x4d, 0x18]);
+    assert_on_demand(&Codec::ZstdFrame, &frames, &lines[..150_000]);
+    let (out, consumed) = zstd_bzip2_decode(&Codec::Zstd, &frames).unwrap();
+    assert!(out == lines);
+    assert_eq!(consumed, frames.len());
+    // A corrupted content checksum.
+    let mut bad = one.clone();
+    let n = bad.len();
+    bad[n - 1] ^= 1;
+    assert_eq!(zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(), "zstd: content checksum mismatch");
+    // A wrong content size (a 4-byte field, after the window descriptor
+    // unless the frame is a single segment).
+    let mut bad = zstd_bzip2_data("zstd", "lines-size.zst");
+    assert_eq!(bad[4] >> 6, 2);
+    let at = if bad[4] & 0x20 != 0 { 5 } else { 6 };
+    assert_eq!(u32::from_le_bytes(bad[at..at + 4].try_into().unwrap()), lines.len() as u32);
+    bad[at] ^= 1;
+    assert_eq!(zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(), "zstd: frame content size mismatch");
+}
+
+/// `bzip2` 1.0.8 output: `-1` (five 100k blocks), two concatenated streams
+/// (`-9` and `-3`), and `-1` on the mixed data.
+#[test]
+fn bzip2_is_on_demand() {
+    let lines = zstd_bzip2_lines();
+    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-1.bz2"), &lines);
+    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-streams.bz2"), &lines);
+    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "mixed-1.bz2"), &zstd_bzip2_mixed());
+}
+
+#[test]
+fn bzip2_consumed_and_checks() {
+    let lines = zstd_bzip2_lines();
+    let one = zstd_bzip2_data("bzip2", "lines-1.bz2");
+    let mut trailing = one.clone();
+    trailing.extend_from_slice(b"trailing junk");
+    let (out, consumed) = zstd_bzip2_decode(&Codec::Bzip2, &trailing).unwrap();
+    assert!(out == lines);
+    assert_eq!(consumed, one.len());
+    // The stream's combined CRC ends just before the last byte's padding.
+    let mut bad = one.clone();
+    let n = bad.len();
+    bad[n - 2] ^= 1;
+    assert_eq!(zstd_bzip2_decode(&Codec::Bzip2, &bad).unwrap_err(), "bzip2: stream CRC mismatch");
+}
