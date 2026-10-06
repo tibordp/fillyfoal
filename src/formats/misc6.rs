@@ -457,7 +457,7 @@ async fn packit_entry(
         cx.emit(embedded_as(
             "Resource fork",
             input.nested(rsrc),
-            &crate::formats::platform::MAC_RESOURCE,
+            &crate::formats::system::platform::MAC_RESOURCE,
         ));
     }
     cx.emit(Node::new("CRC").span(Span::new(rsrc.source, rsrc.end(), 2)));

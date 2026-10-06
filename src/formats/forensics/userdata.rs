@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::formats::util::datakit::{clip, text};
-use crate::formats::logs::{Lines, line_group, strip_bom, text_lines};
+use crate::formats::forensics::logs::{Lines, line_group, strip_bom, text_lines};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -156,7 +156,7 @@ async fn bash_history(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let all = text_lines(&cx, file).await?;
     let mut times = Vec::new();
-    let mut stamp: Option<(i64, crate::formats::logs::Line)> = None;
+    let mut stamp: Option<(i64, crate::formats::forensics::logs::Line)> = None;
     let mut count = 0u64;
     for l in all {
         if let Some(t) = bash_stamp(l.2.trim_end()) {

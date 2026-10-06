@@ -28,6 +28,9 @@ pub mod rinex;
 pub mod robotics;
 pub mod tiles;
 pub mod vehicle;
+pub mod geoscience;
+pub mod dlis;
+pub mod survey;
 
 // ---------------------------------------------------------------------------
 // Values

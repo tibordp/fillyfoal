@@ -1454,7 +1454,7 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     let tail = cx.read(file.sub(end, 4)).await?;
     let offset = u64::from(u32_be(&tail, 0).unwrap_or(0));
     let body = file.sub(0, offset);
-    let mut body_node = crate::formats::winforensics::text_or_embedded(&cx, input, body)
+    let mut body_node = crate::formats::forensics::windows::text_or_embedded(&cx, input, body)
         .await?
         .summary(size(offset));
     body_node.name = "Body".into();

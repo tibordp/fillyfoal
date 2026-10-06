@@ -191,7 +191,7 @@ async fn destination_entry(cx: Cx, (input, at, len): (Input, u64, u64)) -> Resul
     cx.emit(embedded_as(
         "Shell link",
         input.nested(file.sub(at.saturating_add(16), len)),
-        &crate::formats::lnk::FORMAT,
+        &crate::formats::forensics::lnk::FORMAT,
     ));
     Ok(())
 }

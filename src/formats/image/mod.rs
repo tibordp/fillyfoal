@@ -37,6 +37,9 @@ pub mod wbmp;
 pub mod xbm;
 pub mod xcf;
 pub mod xwd;
+pub mod png;
+pub mod graphics;
+pub mod icc_profile;
 
 use std::borrow::Cow;
 

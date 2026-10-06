@@ -10,3 +10,4 @@ pub mod proto;
 pub mod protos;
 pub mod text;
 pub mod tflite;
+pub mod gguf;

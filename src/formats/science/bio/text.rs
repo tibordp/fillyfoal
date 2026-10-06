@@ -10,7 +10,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
-use crate::formats::bio::SAM_FLAGS;
+use crate::formats::science::bio::binary::SAM_FLAGS;
 use crate::formats::util::lines::{
     Line, Lines, flags, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };

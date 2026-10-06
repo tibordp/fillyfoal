@@ -38,7 +38,7 @@ pub static ARMOR: Format = Format {
     title: "OpenPGP data (ASCII armor)",
     extensions: &["asc", "sig", "pub", "key"],
     mime: "application/pgp-keys",
-    probe: Probe::Custom(|h| crate::formats::pem::probe_armor(h, true)),
+    probe: Probe::Custom(|h| crate::formats::security::pem::probe_armor(h, true)),
     dissect: crate::expander!(dissect_armor: Input),
 };
 
@@ -1154,19 +1154,19 @@ async fn inflate_packets(cx: Cx, (stream, zlib): (Stream, bool)) -> Result<()> {
 // ASCII armor
 
 async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
-    let text = crate::formats::pem::read_text(&cx, input.span).await?;
-    let blocks = crate::formats::pem::blocks(&text);
+    let text = crate::formats::security::pem::read_text(&cx, input.span).await?;
+    let blocks = crate::formats::security::pem::blocks(&text);
     let labels: Vec<&str> = blocks.iter().map(|b| b.label.as_str()).collect();
     let mut summary = format!("OpenPGP armor: {}", labels.join(", "));
     if let Some(block) = blocks.first()
-        && let Ok(decoded) = crate::formats::pem::decode_block(&cx, &text, input.span, block).await
+        && let Ok(decoded) = crate::formats::security::pem::decode_block(&cx, &text, input.span, block).await
     {
         let head = cx.read_avail(decoded.sub(0, 4096)).await?;
         summary = format!("{} (armored)", self::summary(&head, decoded.len));
     }
     cx.annotate(summary);
     for block in blocks {
-        let whole = crate::formats::pem::sub(input.span, &block.whole);
+        let whole = crate::formats::security::pem::sub(input.span, &block.whole);
         cx.push(
             Node::new(block.label.clone())
                 .span(whole)
@@ -1177,8 +1177,8 @@ async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn armor_block(cx: Cx, (input, block): (Input, crate::formats::pem::Block)) -> Result<()> {
-    use crate::formats::pem;
+async fn armor_block(cx: Cx, (input, block): (Input, crate::formats::security::pem::Block)) -> Result<()> {
+    use crate::formats::security::pem;
     let text = cx.read(pem::sub(input.span, &(0..block.whole.end))).await?;
     for (key, value, range) in &block.headers {
         cx.emit(

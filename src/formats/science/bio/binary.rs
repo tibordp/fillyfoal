@@ -270,7 +270,7 @@ async fn vcf_bgzf(cx: Cx, input: Input) -> Result<()> {
     let mut node = embedded_as(
         "Decompressed VCF",
         input.nested(stream),
-        &crate::formats::biotext::VCF,
+        &crate::formats::science::bio::text::VCF,
     );
     if let Some(d) = stream_note(complete) {
         node = node.diag(d);
@@ -668,7 +668,7 @@ async fn bcf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(embedded_as(
         "Header (VCF)",
         input.nested(vcf_text),
-        &crate::formats::biotext::VCF,
+        &crate::formats::science::bio::text::VCF,
     ));
     let header = cx.read_avail(text_span.sub(0, 0x100000)).await?;
     let header = String::from_utf8_lossy(&header).into_owned();

@@ -1579,7 +1579,7 @@ declare_format!(pub MONEY = "ms-money", "Microsoft Money file (MSISAM)", ["mny",
     Probe::Custom(money_probe), money);
 
 async fn money(cx: Cx, input: Input) -> Result<()> {
-    crate::formats::jet::dissect(cx.clone(), input).await?;
+    crate::formats::data::jet::dissect(cx.clone(), input).await?;
     let pages = input.span.len / 4096;
     cx.annotate(format!(
         "Microsoft Money file (MSISAM, Jet 4 pages), {pages} pages of 4 KiB"

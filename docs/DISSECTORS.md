@@ -5,7 +5,7 @@ why; this is the how. Good examples to copy from:
 
 | Pattern | Example |
 |---|---|
-| Fixed header + chunk stream (big-endian, CRCs) | `src/formats/png.rs` |
+| Fixed header + chunk stream (big-endian, CRCs) | `src/formats/image/png.rs` |
 | Header + compressed payload dissected in place | `src/formats/compression/gzip.rs` |
 | Directory at the end, paged entries, variants by probe | `src/formats/archive/zip.rs` |
 | Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/executable/pe/` |
