@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.xpk — XPK NUKE, 100 bytes unpacked  [0x0+0x34]
+    Signature: "XPKF"  [0x0+0x4]
+    Packed length: 44  [0x4+0x4]
+    Packer: "NUKE"  [0x8+0x4]
+    Unpacked length: 100  [0xc+0x4]
+    Initial bytes: 48 65 6c 6c 6f 20 58 50 4b 20 77 6f 72 6c 64 21  |Hello XPK world!|  [0x10+0x10]
+    Flags: 0x0  [0x20+0x1]
+    Header checksum: 0x0  [0x21+0x1]
+    Sub-library version: 0  [0x22+0x1]
+    Master library version: 0  [0x23+0x1]
+    Chunks  [0x24+0x10]

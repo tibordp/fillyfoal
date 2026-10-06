@@ -206,6 +206,7 @@ pub mod devtools;
 pub mod misc3;
 pub mod misc4;
 pub mod misc5;
+pub mod misc6;
 // -- end misc --
 
 // -- text --
@@ -1013,7 +1014,37 @@ pub static FORMATS: &[&Format] = &[
     &misc5::TWINVQ,
     &misc5::EXS,
     &misc5::PTAB,
+    &misc6::HA,
+    &misc6::UHARC,
+    &misc6::YZ1,
+    &misc6::DGCA,
+    &misc6::GCA,
+    &misc6::PAQ8,
+    &misc6::FREEZE,
+    &misc6::COMPACT,
+    &misc6::XPK,
+    &misc6::AMIGA_LZX,
+    &misc6::PACKIT,
+    &misc6::BINHEX,
+    &misc6::CPT,
+    &misc6::CLIP,
+    &misc6::MDP,
+    &misc6::GIMP_GPL,
+    &misc6::PGF,
+    &misc6::XV_THUMB,
+    &misc6::VIFF,
+    &misc6::OS2_INF,
+    &misc6::TCR,
+    &misc6::AMIGAGUIDE,
+    &misc6::TOKYO,
+    &misc6::KYOTO,
+    &misc6::GDBM,
+    &misc6::RRD,
+    &misc6::WIREDTIGER,
+    &misc6::REALM,
     // Weak, size-based probes last.
+    &misc6::SQUEEZE,
+    &misc6::CRUNCH,
     &misc4::NBT,
     &misc3::HGT,
     &models::STL,

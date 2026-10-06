@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.paq8l — paq8l -6 archive, 2 files  [0x0+0x3b]
+    Header: "paq8l -6"  [0x0+0x9]
+    readme.txt — 12 bytes  [0xa+0xe]
+    note.txt — 5 bytes  [0x19+0xb]
+    Compressed stream  [0x27+0x14]

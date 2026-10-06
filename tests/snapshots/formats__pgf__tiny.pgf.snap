@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pgf — PGF v36, 32×16, 24 bpp, 3 channel(s), 3 levels  [0x0+0x36]
+    Signature: "PGF"  [0x0+0x3]
+    Version: 0x36  [0x3+0x1]
+    Header size: 16  [0x4+0x4]
+    Width: 32  [0x8+0x4]
+    Height: 16  [0xc+0x4]
+    Levels: 3  [0x10+0x1]
+    Quality: 1  [0x11+0x1]
+    Bits per pixel: 24  [0x12+0x1]
+    Channels: 3  [0x13+0x1]
+    Mode: 3  [0x14+0x1]
+    Used bits per channel: 8  [0x15+0x1]
+    Image data  [0x18+0x1e]

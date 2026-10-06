@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.yz1 — YZ1 archive  [0x0+0x2c]
+    Signature  [0x0+0x4]
+    Compressed data  [0x4+0x28]
