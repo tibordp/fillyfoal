@@ -207,7 +207,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   tries_size: 0  [0x1be+0x2]
                   debug_info_off: 0x0  [0x1c0+0x4]
                   insns_size: 4  [0x1c4+0x4]
-                insns — 4 code units  [0x1c8+0x8]
+              ▾ insns — 4 code units  [0x1c8+0x8]
+                  0x0000: "invoke-direct" — {v0}, Ljava/lang/Object;-><init>()V  [0x1c8+0x6]
+                  0x0003: "return-void"  [0x1ce+0x2]
             ▾ main([Ljava/lang/String;)V — direct method, public static  [0x331+0x4] → 0x1d0+0x10
               ▾ code_item  [0x1d0+0x10]
                   registers_size: 3  [0x1d0+0x2]
@@ -216,7 +218,11 @@ expression: "common::explore(&display_name(&path), &data)"
                   tries_size: 0  [0x1d6+0x2]
                   debug_info_off: 0x0  [0x1d8+0x4]
                   insns_size: 8  [0x1dc+0x4]
-                insns — 8 code units  [0x1e0+0x10]
+              ▾ insns — 8 code units  [0x1e0+0x10]
+                  0x0000: "sget-object" — v0, Ljava/lang/System;->out:Ljava/io/PrintStream;  [0x1e0+0x4]
+                  0x0002: "const-string" — v1, "héllo, wörld ☃ 🐎"  [0x1e4+0x4]
+                  0x0004: "invoke-virtual" — {v0, v1}, Ljava/io/PrintStream;->println(Ljava/lang/String;)V  [0x1e8+0x6]
+                  0x0007: "return-void"  [0x1ee+0x2]
             ▾ run()V — virtual method, public  [0x335+0x4] → 0x1f0+0x10
               ▾ code_item  [0x1f0+0x10]
                   registers_size: 1  [0x1f0+0x2]
@@ -225,7 +231,8 @@ expression: "common::explore(&display_name(&path), &data)"
                   tries_size: 0  [0x1f6+0x2]
                   debug_info_off: 0x0  [0x1f8+0x4]
                   insns_size: 1  [0x1fc+0x4]
-                insns — 1 code units  [0x200+0x2]
+              ▾ insns — 1 code units  [0x200+0x2]
+                  0x0000: "return-void"  [0x200+0x2]
   ▾ kVerifierDepsSection — 0x10 bytes at 0x3d0  [0x24+0xc] → 0x3d0+0x10
       section_kind: kVerifierDepsSection (0x2)  [0x24+0x4]
       section_offset: 0x3d0  [0x28+0x4]

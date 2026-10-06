@@ -725,7 +725,8 @@ async fn code_item(cx: Cx, (dex, off): (Dex, u64)) -> Result<()> {
     cx.emit(
         Node::new("insns")
             .span(insns)
-            .summary(format!("{} code units", item.insns)),
+            .summary(format!("{} code units", item.insns))
+            .lazy(disassemble, (dex.clone(), insns)),
     );
     if item.tries > 0 {
         let pad = if item.insns % 2 == 1 { 2 } else { 0 };
@@ -738,6 +739,61 @@ async fn code_item(cx: Cx, (dex, off): (Dex, u64)) -> Result<()> {
                 .span(tries)
                 .summary(format!("{} try blocks", item.tries)),
         );
+    }
+    Ok(())
+}
+
+/// Lists the instructions of a code item, resolving constant references.
+async fn disassemble(cx: Cx, (dex, span): (Dex, Span)) -> Result<()> {
+    use super::dalvik::{Ref, decode};
+    let bytes = cx.read(span.sub(0, 0x20_0000)).await?;
+    let units: Vec<u16> = bytes
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&c| u16::from_le_bytes(c))
+        .collect();
+    let mut pc = 0usize;
+    while pc < units.len() {
+        let Some(insn) = decode(&units, pc) else {
+            cx.push(
+                Node::new(format!("{pc:#06x}"))
+                    .span(span.tail(to_u64(pc.saturating_mul(2))))
+                    .diag(Diagnostic::malformed("truncated instruction")),
+            )
+            .await;
+            break;
+        };
+        let mut operands = insn.operands.clone();
+        if let Some((kind, index)) = insn.reference {
+            let resolved = match kind {
+                Ref::String => dex.string(&cx, index).await.map(|s| format!("{s:?}")).ok(),
+                Ref::Type => Some(dex.type_name(&cx, index).await),
+                Ref::Field => Some(dex.field(&cx, index).await),
+                Ref::Method => {
+                    let (class, method) = dex.method(&cx, index).await;
+                    Some(format!("{class}->{method}"))
+                }
+                Ref::Proto => Some(dex.proto(&cx, index).await),
+                Ref::CallSite => Some(format!("call_site@{index}")),
+                Ref::MethodHandle => Some(format!("method_handle@{index}")),
+            };
+            let target = resolved.unwrap_or_else(|| format!("#{index}"));
+            operands = if operands.is_empty() {
+                target
+            } else {
+                format!("{operands}, {target}")
+            };
+        }
+        let len = insn.units.max(1);
+        cx.push(
+            Node::new(format!("{pc:#06x}"))
+                .span(span.sub(to_u64(pc.saturating_mul(2)), to_u64(len.saturating_mul(2))))
+                .value(text(insn.mnemonic))
+                .maybe_summary(operands),
+        )
+        .await;
+        pc = pc.saturating_add(len);
     }
     Ok(())
 }
