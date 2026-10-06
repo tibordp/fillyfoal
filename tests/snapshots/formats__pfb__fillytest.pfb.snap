@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fillytest.pfb — PostScript Type 1 font FillyTest, ""  [0x0+0x4f2]
+  ▾ Segment 0: ASCII (0x1) — 208 bytes  [0x0+0xd6]
+      Header: "%!PS-AdobeFont-1.0: FillyTest 001.000"
+      FontName: "FillyTest"
+      Text — 208 bytes  [0x6+0xd0]
+  ▾ Segment 1: Binary (eexec) (0x2) — 502 bytes decrypted  [0xd6+0x200]
+      RD{string: "currentfile exch readstring pop}executeonly"
+      ND{noaccess: "def}executeonly"
+      NP{noaccess: "put}executeonly"
+      BlueValues: "[-15 0 700 715]"
+      StdHW: "[50]"
+      lenIV: "4"
+      MinFeature{16: "16}def"
+      password: "5839"
+      Subrs: 1
+    ▾ CharStrings — 3 glyphs  [#1:0x13b+0xbb]
+        .notdef: 8b 8b 0d 0e  |....| — 4 bytes of Type 1 charstring  [#1:0x15b+0x8]
+        A: 8b 8b 0d 8b 8b 05 0e  |.......| — 7 bytes of Type 1 charstring  [#1:0x170+0xb]
+        B: 96 8b 0d 0e  |....| — 4 bytes of Type 1 charstring  [#1:0x187+0x8]
+      Decrypted program — 502 bytes  [#1:0x0+0x1f6]
+  ▾ Segment 2: ASCII (0x1) — 532 bytes  [0x2d6+0x21a]
+      Header: "0000000000000000000000000000000000000000000000000000000000000000"
+      Text — 532 bytes  [0x2dc+0x214]
+    End of file: End of file (0x3)  [0x4f0+0x2]

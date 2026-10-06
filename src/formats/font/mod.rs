@@ -9,6 +9,7 @@ pub mod bitmap;
 pub mod eot;
 pub mod pfb;
 pub mod tables;
+pub mod type1;
 pub mod woff;
 
 use crate::bytes::{u16_be, u32_be};

@@ -86,7 +86,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             node = node.lazy(ascii_segment, body);
         } else if kind == 2 {
-            node = node.lazy(binary_segment, body);
+            node = node
+                .desc("Private dictionary and CharStrings, eexec-encrypted (decrypted on expansion)")
+                .lazy(crate::formats::font::type1::expand_private, (input, body, false));
         }
         cx.push(node).await;
         index = index.saturating_add(1);
@@ -119,15 +121,6 @@ async fn ascii_segment(cx: Cx, body: Span) -> Result<()> {
         Node::new("Text")
             .span(body)
             .summary(format!("{} bytes", body.len)),
-    );
-    Ok(())
-}
-
-async fn binary_segment(cx: Cx, body: Span) -> Result<()> {
-    cx.emit(
-        Node::new("eexec-encrypted data")
-            .span(body)
-            .desc("Private dictionary and CharStrings, encrypted with key 55665"),
     );
     Ok(())
 }

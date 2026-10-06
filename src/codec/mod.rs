@@ -58,6 +58,8 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// Adobe Type 1 `eexec` decryption (binary, or hex text).
+    Eexec { hex: bool },
     /// Traditional PKWARE encryption with this password (the 12-byte
     /// encryption header is consumed, not output).
     ZipCrypto(crypto::Key),
@@ -104,6 +106,7 @@ impl Codec {
             Codec::Lzw { .. } => "lzw",
             Codec::PngPredictor { .. } => "png-predictor",
             Codec::TiffPredictor { .. } => "tiff-predictor",
+            Codec::Eexec { .. } => "eexec",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -125,6 +128,7 @@ impl Codec {
             Codec::Lzw { .. } => "lzw (lazy)",
             Codec::PngPredictor { .. } => "png-predictor (lazy)",
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
+            Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -134,7 +138,9 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Zlib => "decompressed",
-            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) | Codec::Rc4(_) | Codec::AesCbc(_) => "decrypted",
+            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) | Codec::Rc4(_) | Codec::AesCbc(_) | Codec::Eexec { .. } => {
+                "decrypted"
+            }
             Codec::Lzw { .. } | Codec::RunLength | Codec::PackBits => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
@@ -152,6 +158,7 @@ impl Codec {
             | Codec::AesCtrLe(_)
             | Codec::Rc4(_)
             | Codec::AesCbc(_)
+            | Codec::Eexec { .. }
             | Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -183,6 +190,7 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Eexec { hex } => Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex }))),
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),

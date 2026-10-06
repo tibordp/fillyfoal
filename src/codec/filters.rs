@@ -359,6 +359,54 @@ impl Filter for TiffPredictor {
     }
 }
 
+/// Adobe Type 1 `eexec` decryption (key 55665), from binary or hex text;
+/// the first four (random) plaintext bytes are dropped.
+#[derive(Clone, Copy)]
+pub struct Eexec {
+    pub hex: bool,
+}
+
+/// Type 1 decryption with seed `r`, dropping `skip` leading bytes (eexec:
+/// 55665 and 4; charstrings: 4330 and lenIV).
+pub fn type1_decrypt(data: &[u8], mut r: u16, skip: usize) -> Vec<u8> {
+    let out: Vec<u8> = data
+        .iter()
+        .map(|&c| {
+            let p = c ^ r.to_be_bytes()[0];
+            r = u16::from(c).wrapping_add(r).wrapping_mul(52845).wrapping_add(22719);
+            p
+        })
+        .collect();
+    out.get(skip..).unwrap_or_default().to_vec()
+}
+
+impl Filter for Eexec {
+    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+        let binary;
+        let data = if self.hex {
+            let mut bytes = Vec::with_capacity(input.len() / 2);
+            let mut high: Option<u8> = None;
+            for &b in input {
+                if is_white(b) {
+                    continue;
+                }
+                let Some(v) = char::from(b).to_digit(16).and_then(|d| u8::try_from(d).ok()) else { break };
+                match high.take() {
+                    Some(h) => bytes.push(h << 4 | v),
+                    None => high = Some(v),
+                }
+            }
+            binary = bytes;
+            binary.as_slice()
+        } else {
+            input
+        };
+        let out = type1_decrypt(data, 55665, 4);
+        check_limit(&out, limit)?;
+        Ok(out)
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -385,6 +433,24 @@ mod tests {
         // PDF 1.7 reference, 7.4.4.2: "-----A---B" encoded with early change.
         let input = [0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x01];
         assert_eq!(Lzw { early_change: true }.apply(&input, 100).unwrap(), b"-----A---B");
+    }
+
+    #[test]
+    fn eexec_round_trip() {
+        // Encrypt with the inverse transform, then decrypt.
+        let plain = b"\0\0\0\0dup /Private 8 dict";
+        let mut r = 55665u16;
+        let enc: Vec<u8> = plain
+            .iter()
+            .map(|&p| {
+                let c = p ^ r.to_be_bytes()[0];
+                r = u16::from(c).wrapping_add(r).wrapping_mul(52845).wrapping_add(22719);
+                c
+            })
+            .collect();
+        assert_eq!(Eexec { hex: false }.apply(&enc, 100).unwrap(), b"dup /Private 8 dict");
+        let hex: String = enc.iter().map(|b| format!("{b:02X}")).collect();
+        assert_eq!(Eexec { hex: true }.apply(hex.as_bytes(), 100).unwrap(), b"dup /Private 8 dict");
     }
 
     #[test]

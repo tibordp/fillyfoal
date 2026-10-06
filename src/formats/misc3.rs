@@ -766,13 +766,8 @@ async fn pfa(cx: Cx, input: Input) -> Result<()> {
                 .to_owned();
             cx.emit(Node::new("FontName").span(*span).value(text(name.clone())));
         } else if line.contains("eexec") {
-            cx.emit(
-                Node::new("eexec-encrypted portion").span(
-                    input
-                        .span
-                        .tail(span.end().saturating_sub(input.span.offset)),
-                ),
-            );
+            let encrypted = input.span.tail(span.end().saturating_sub(input.span.offset));
+            cx.emit(crate::formats::font::type1::private_node(input, encrypted, true));
             break;
         }
     }
