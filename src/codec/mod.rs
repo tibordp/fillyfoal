@@ -64,6 +64,11 @@ pub enum Codec {
     /// AES-CTR with a little-endian counter from 1 (WinZip AE-x), with this
     /// AES key.
     AesCtrLe(crypto::Key),
+    /// RC4 with this key.
+    Rc4(crypto::Key),
+    /// AES-CBC with this key; the IV is the first 16 bytes and the data is
+    /// PKCS#7-padded (PDF AESV2/AESV3).
+    AesCbc(crypto::Key),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -90,6 +95,8 @@ impl Codec {
             Codec::Zlib => "zlib",
             Codec::ZipCrypto(_) => "zipcrypto",
             Codec::AesCtrLe(_) => "aes-ctr",
+            Codec::Rc4(_) => "rc4",
+            Codec::AesCbc(_) => "aes-cbc",
             Codec::AsciiHex => "asciihex",
             Codec::Ascii85 => "ascii85",
             Codec::RunLength => "runlength",
@@ -109,6 +116,8 @@ impl Codec {
             Codec::Zlib => "zlib (lazy)",
             Codec::ZipCrypto(_) => "zipcrypto (lazy)",
             Codec::AesCtrLe(_) => "aes-ctr (lazy)",
+            Codec::Rc4(_) => "rc4 (lazy)",
+            Codec::AesCbc(_) => "aes-cbc (lazy)",
             Codec::AsciiHex => "asciihex (lazy)",
             Codec::Ascii85 => "ascii85 (lazy)",
             Codec::RunLength => "runlength (lazy)",
@@ -125,7 +134,7 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Zlib => "decompressed",
-            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) => "decrypted",
+            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) | Codec::Rc4(_) | Codec::AesCbc(_) => "decrypted",
             Codec::Lzw { .. } | Codec::RunLength | Codec::PackBits => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
@@ -141,6 +150,8 @@ impl Codec {
             Codec::Stored
             | Codec::ZipCrypto(_)
             | Codec::AesCtrLe(_)
+            | Codec::Rc4(_)
+            | Codec::AesCbc(_)
             | Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -172,6 +183,8 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
+            Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
                 Some(d) => Box::new(Streaming(d)),

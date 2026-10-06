@@ -275,3 +275,27 @@ fn encrypted_zip_entries_unlock_once_and_stay_locked_on_wrong_passwords() {
         assert_eq!(asked, 1, "{name}: declining is remembered");
     }
 }
+
+#[test]
+fn encrypted_pdfs_ask_only_when_needed() {
+    let read = |name: &str| std::fs::read(format!("{}/tests/fixtures/pdf/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    // Empty user password: decrypted without asking.
+    let mut host = Host::named("a.pdf", read("encrypted-empty-aes-256.pdf"), Limits::default());
+    host.passwords.clear();
+    host.explore_all();
+    assert!(host.render().contains("Hello encrypted world"));
+    assert!(host.secret_requests.is_empty());
+    // A user password: asked once, then everything decrypts.
+    let mut host = Host::named("b.pdf", read("encrypted-password-rc4-128.pdf"), Limits::default());
+    host.explore_all();
+    assert!(host.render().contains("Hello encrypted world"));
+    assert_eq!(host.secret_requests.len(), 1);
+    // Declined: streams stay encrypted, and the user is not asked again.
+    let mut host = Host::named("c.pdf", read("encrypted-password-aes-256.pdf"), Limits::default());
+    host.passwords.clear();
+    host.explore_all();
+    let text = host.render();
+    assert!(!text.contains("Hello encrypted world"));
+    assert!(text.contains("password required"));
+    assert_eq!(host.secret_requests.len(), 1);
+}

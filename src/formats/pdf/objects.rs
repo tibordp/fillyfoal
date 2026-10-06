@@ -5,6 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use super::syntax::{self, Error as ParseError, Item, Obj, Parser};
 use crate::bytes::{to_u64, to_usize};
+use std::sync::Arc;
+
+use super::crypt::Security;
 use crate::codec::{self, Codec};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -31,6 +34,8 @@ pub type Xref = BTreeMap<u32, Loc>;
 /// stream data (if a stream), and the whole `N G obj ... endobj` range.
 #[derive(Clone, Debug)]
 pub struct Located {
+    /// The object number and generation (indirect objects only).
+    pub id: Option<(u32, u16)>,
     pub item: Item,
     pub base: Span,
     pub data: Option<Span>,
@@ -131,6 +136,7 @@ pub async fn object_at(
         num,
         generation,
         Located {
+            id: Some((num, generation)),
             item,
             base,
             data: stream_data,
@@ -276,13 +282,49 @@ pub fn codec(dict: &Item) -> std::result::Result<(Codec, Vec<String>), String> {
     Ok((codec, names))
 }
 
+/// Whether the stream of `located` is encrypted under `security`.
+pub fn is_encrypted(located: &Located, security: Option<&Arc<Security>>) -> bool {
+    let Some(security) = security else { return false };
+    let kind = located.item.get("Type").and_then(Item::name);
+    let own_crypt = filters(&located.item).iter().any(|f| f == "Crypt");
+    located.id.is_some()
+        && located.data.is_some()
+        && security.streams != super::crypt::Method::Identity
+        && kind != Some("XRef")
+        && !(kind == Some("Metadata") && !security.encrypt_metadata)
+        && !own_crypt
+}
+
+/// The decryption stage for the stream of `located` (asking for the
+/// password if needed); `None` if it is not encrypted.
+pub async fn decryption(cx: &Cx, located: &Located, security: Option<&Arc<Security>>) -> Result<Option<Codec>> {
+    let (Some(security), Some(id)) = (security, located.id) else { return Ok(None) };
+    if !is_encrypted(located, Some(security)) {
+        return Ok(None);
+    }
+    let Some(key) = super::crypt::file_key(cx, security, true).await else {
+        return Err(Diagnostic::unsupported("encrypted stream (no password, or a wrong one)").at(located.data.unwrap_or(located.whole)));
+    };
+    Ok(security.stream_codec(&key, id))
+}
+
 /// Decodes a stream's data into a span (all filters except the image
 /// codecs, whose output is the image file).
-pub async fn decode(cx: &Cx, located: &Located) -> Result<Span> {
+pub async fn decode(cx: &Cx, located: &Located, security: Option<&Arc<Security>>) -> Result<Span> {
     let Some(data) = located.data else {
         return Err(Diagnostic::malformed("not a stream"));
     };
     let (codec, _) = codec(&located.item).map_err(|e| Diagnostic::unsupported(e).at(data))?;
+    let codec = match decryption(cx, located, security).await? {
+        Some(decrypt) => match codec {
+            Codec::Stored => decrypt,
+            Codec::Chain { stages, .. } => {
+                Codec::chain("pdf-decrypt+filters", "pdf-decrypt+filters (lazy)", std::iter::once(decrypt).chain(stages.iter().cloned()).collect::<Vec<_>>())
+            }
+            single => Codec::chain("pdf-decrypt+filters", "pdf-decrypt+filters (lazy)", vec![decrypt, single]),
+        },
+        None => codec,
+    };
     if codec == Codec::Stored {
         return Ok(data);
     }
@@ -305,6 +347,7 @@ pub async fn in_object_stream(
     xref: &Xref,
     stream: u32,
     index: u32,
+    security: Option<&Arc<Security>>,
 ) -> Result<(u32, Located)> {
     let Some(&Loc::Offset { offset, .. }) = xref.get(&stream) else {
         return Err(Diagnostic::malformed(format!(
@@ -312,7 +355,7 @@ pub async fn in_object_stream(
         )));
     };
     let (_, _, objstm) = object_at(cx, region, offset, Some(xref)).await?;
-    let decoded = decode(cx, &objstm).await?;
+    let decoded = decode(cx, &objstm, security).await?;
     let first = objstm
         .item
         .get("First")
@@ -353,6 +396,7 @@ pub async fn in_object_stream(
     Ok((
         u32::try_from(num).unwrap_or(u32::MAX),
         Located {
+            id: None,
             item,
             base: span,
             data: None,
@@ -512,6 +556,7 @@ async fn table(cx: &Cx, region: Span, offset: u64) -> Result<Section> {
         span: region.sub(offset, pos.saturating_sub(offset)),
         entries,
         trailer: Some(Located {
+            id: None,
             item,
             base,
             data: None,
@@ -549,7 +594,7 @@ async fn stream_section(cx: &Cx, region: Span, offset: u64) -> Result<Section> {
         Some(items) => items.iter().filter_map(Item::int).collect(),
         None => vec![0, size],
     };
-    let decoded = decode(cx, &located).await?;
+    let decoded = decode(cx, &located, None).await?;
     let data = codec::read_all(cx, decoded).await?;
     let field = |bytes: &[u8]| bytes.iter().fold(0u64, |acc, &b| acc << 8 | u64::from(b));
     let mut entries = Vec::new();
@@ -676,6 +721,7 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>)> {
         .map(|((start, item), base, _)| {
             let whole = base.sub(to_u64(start), to_u64(item.end.saturating_sub(start)));
             Located {
+                id: None,
                 item,
                 base,
                 data: None,

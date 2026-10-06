@@ -168,3 +168,85 @@ impl Decode for AesCtrLe {
         self.pos
     }
 }
+
+/// RC4 as a streaming stage.
+#[derive(Clone)]
+pub struct Rc4 {
+    s: [u8; 256],
+    i: u8,
+    j: u8,
+    pos: usize,
+}
+
+impl Rc4 {
+    pub fn new(key: &Key) -> Self {
+        let mut s: [u8; 256] = std::array::from_fn(|i| u8::try_from(i).unwrap_or(0));
+        let key = key.expose();
+        if !key.is_empty() {
+            let mut j = 0u8;
+            for i in 0..256usize {
+                let k = key.get(i.checked_rem(key.len()).unwrap_or(0)).copied().unwrap_or(0);
+                j = j.wrapping_add(s.get(i).copied().unwrap_or(0)).wrapping_add(k);
+                s.swap(i, usize::from(j));
+            }
+        }
+        Rc4 { s, i: 0, j: 0, pos: 0 }
+    }
+}
+
+impl Decode for Rc4 {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let available = input.get(self.pos..).unwrap_or_default();
+        if available.is_empty() {
+            return if eof { Ok(Step::Done) } else { Err(Diagnostic::malformed("out of input")) };
+        }
+        let take = available.len().min(step.max(1));
+        if out.len().saturating_add(take) > limit {
+            return Err(Diagnostic::limit("decrypted data exceeds the limit"));
+        }
+        let get = |s: &[u8; 256], x: u8| s.get(usize::from(x)).copied().unwrap_or(0);
+        for &b in available.get(..take).unwrap_or_default() {
+            self.i = self.i.wrapping_add(1);
+            self.j = self.j.wrapping_add(get(&self.s, self.i));
+            self.s.swap(usize::from(self.i), usize::from(self.j));
+            let t = get(&self.s, self.i).wrapping_add(get(&self.s, self.j));
+            out.push(b ^ get(&self.s, t));
+        }
+        self.pos = self.pos.saturating_add(take);
+        Ok(Step::More)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+}
+
+/// AES-CBC with the IV in the first 16 bytes and PKCS#7 padding (PDF
+/// AESV2/AESV3).
+#[derive(Clone)]
+pub struct AesCbcIvPrefixed(pub Key);
+
+impl crate::codec::filters::Filter for AesCbcIvPrefixed {
+    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+        let out = aes_cbc_iv_prefixed(self.0.expose(), input)
+            .ok_or_else(|| Diagnostic::malformed("AES-CBC data is not a whole number of blocks, or its padding is bad"))?;
+        if out.len() > limit {
+            return Err(Diagnostic::limit("decrypted data exceeds the limit"));
+        }
+        Ok(out)
+    }
+}
+
+/// Decrypts `data` (IV, then AES-CBC ciphertext with PKCS#7 padding).
+pub fn aes_cbc_iv_prefixed(key: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+    if data.is_empty() {
+        return Some(Vec::new());
+    }
+    let aes = Aes::new(key)?;
+    let (iv, body) = (data.get(..16)?, data.get(16..)?);
+    if body.len() % 16 != 0 {
+        return None;
+    }
+    let plain = super::cipher::cbc_decrypt(&aes, iv, body);
+    super::cipher::unpad_pkcs7(&plain, 16).map(<[u8]>::to_vec)
+}

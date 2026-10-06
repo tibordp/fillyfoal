@@ -56,16 +56,39 @@ fn xtime(x: u8) -> u8 {
     (x << 1) ^ if x & 0x80 != 0 { 0x1b } else { 0 }
 }
 
-fn gmul(mut a: u8, mut b: u8) -> u8 {
-    let mut p = 0u8;
-    while b != 0 {
-        if b & 1 != 0 {
-            p ^= a;
+/// Multiplication by `k` in GF(2^8), as a table built at compile time.
+#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+const fn mul_table(k: u8) -> [u8; 256] {
+    let mut t = [0u8; 256];
+    let mut i = 0;
+    while i < 256 {
+        let (mut a, mut b, mut p) = (i as u8, k, 0u8);
+        while b != 0 {
+            if b & 1 != 0 {
+                p ^= a;
+            }
+            a = (a << 1) ^ if a & 0x80 != 0 { 0x1b } else { 0 };
+            b >>= 1;
         }
-        a = xtime(a);
-        b >>= 1;
+        t[i] = p;
+        i += 1;
     }
-    p
+    t
+}
+
+const MUL: [[u8; 256]; 6] = [mul_table(2), mul_table(3), mul_table(9), mul_table(11), mul_table(13), mul_table(14)];
+
+fn gmul(a: u8, k: u8) -> u8 {
+    let table = match k {
+        2 => 0,
+        3 => 1,
+        9 => 2,
+        11 => 3,
+        13 => 4,
+        14 => 5,
+        _ => return a,
+    };
+    MUL.get(table).and_then(|t| t.get(usize::from(a))).copied().unwrap_or(0)
 }
 
 /// An expanded AES key (128, 192 or 256 bits).

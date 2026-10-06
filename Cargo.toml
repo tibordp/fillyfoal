@@ -19,3 +19,11 @@ indexing_slicing = "deny"
 unwrap_used = "deny"
 expect_used = "deny"
 panic = "deny"
+
+[profile.dev]
+# The robustness sweep runs every dissector hundreds of times per fixture;
+# optimisation keeps it (and crypto-heavy fixtures) fast, and incremental
+# rebuilds are no slower. Not opt-level 1: rustc 1.98.1 miscompiles
+# `iter().fold(0u8, |x, &b| x.wrapping_sub(b))` there (wrong results for any
+# length). Profiles only apply when this crate is the workspace root.
+opt-level = 2

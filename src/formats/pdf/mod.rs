@@ -16,6 +16,7 @@
 //! derived sources on demand; JPEG and JPEG 2000 data is dissected as is.
 
 mod content;
+mod crypt;
 mod objects;
 mod syntax;
 
@@ -65,6 +66,8 @@ pub struct Doc {
     /// Newest first.
     sections: Vec<Section>,
     trailer: Option<Located>,
+    /// The standard security handler, for encrypted documents.
+    security: Option<Arc<crypt::Security>>,
 }
 
 pub type DocRef = Arc<Doc>;
@@ -73,8 +76,9 @@ pub type DocRef = Arc<Doc>;
 async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
     match doc.xref.get(&num) {
         Some(&Loc::Offset { offset, .. }) => {
-            let (found, _, located) =
+            let (found, _, mut located) =
                 objects::object_at(cx, doc.region, offset, Some(&doc.xref)).await?;
+            decrypt_strings(cx, doc, &mut located).await;
             if found != num {
                 return Err(Diagnostic::malformed(format!(
                     "cross-reference entry for object {num} points at object {found}"
@@ -84,7 +88,12 @@ async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
             Ok(located)
         }
         Some(&Loc::Compressed { stream, index }) => Ok(objects::in_object_stream(
-            cx, doc.region, &doc.xref, stream, index,
+            cx,
+            doc.region,
+            &doc.xref,
+            stream,
+            index,
+            doc.security.as_ref(),
         )
         .await?
         .1),
@@ -93,6 +102,37 @@ async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
             "object {num} is not in the cross-reference data"
         ))),
     }
+}
+
+/// Replaces the strings of an encrypted object with their plaintext, when
+/// the key is known without asking (the empty password, or one entered
+/// earlier). Spans still cover the encrypted bytes.
+async fn decrypt_strings(cx: &Cx, doc: &Doc, located: &mut Located) {
+    let (Some(security), Some(id)) = (&doc.security, located.id) else { return };
+    if security.strings == crypt::Method::Identity {
+        return;
+    }
+    let Some(key) = crypt::file_key(cx, security, false).await else { return };
+    fn walk(item: &mut Item, f: &dyn Fn(&[u8]) -> Vec<u8>, depth: u32) {
+        if depth > 64 {
+            return;
+        }
+        match &mut item.obj {
+            Obj::Str { bytes, .. } => *bytes = f(bytes),
+            Obj::Array(items) => {
+                for it in Arc::make_mut(items) {
+                    walk(it, f, depth.saturating_add(1));
+                }
+            }
+            Obj::Dict(entries) => {
+                for e in Arc::make_mut(entries) {
+                    walk(&mut e.value, f, depth.saturating_add(1));
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(&mut located.item, &|b| security.decrypt_string(&key, id, b), 0);
 }
 
 /// Resolves `item` if it is a reference; otherwise returns it as is.
@@ -177,13 +217,33 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "cross-reference data unusable; objects were found by scanning",
         ));
     }
-    let doc: DocRef = Arc::new(Doc {
+    let mut doc = Doc {
         input,
         region,
         xref,
         sections,
         trailer,
-    });
+        security: None,
+    };
+    if let Some(trailer) = &doc.trailer
+        && let Some(encrypt) = trailer.item.get("Encrypt")
+    {
+        let id0 = match trailer.item.get("ID").map(|i| &i.obj) {
+            Some(Obj::Array(ids)) => match ids.first().map(|i| &i.obj) {
+                Some(Obj::Str { bytes, .. }) => bytes.clone(),
+                _ => Vec::new(),
+            },
+            _ => Vec::new(),
+        };
+        match deref(&cx, &doc, encrypt).await {
+            Some(dict) => match crypt::Security::parse(&dict, id0, trailer.whole) {
+                Ok(security) => doc.security = Some(Arc::new(security)),
+                Err(e) => diags.push(Diagnostic::unsupported(format!("encrypted with {e}"))),
+            },
+            None => diags.push(Diagnostic::malformed("unreadable /Encrypt dictionary")),
+        }
+    }
+    let doc: DocRef = Arc::new(doc);
     for d in diags {
         cx.diag(d);
     }
@@ -212,11 +272,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 &path,
             ));
         }
-        if item.get("Encrypt").is_some() {
-            cx.diag(Diagnostic::unsupported(
-                "encrypted document: strings and streams are shown as stored",
-            ));
-        }
+
     }
     cx.emit(
         Node::new("Pages")
@@ -281,7 +337,12 @@ async fn annotation(cx: &Cx, doc: &Doc, version: &str) -> String {
     if doc.sections.len() > 1 {
         out = format!("{out}, {} revisions", doc.sections.len());
     }
+    let locked = match &doc.security {
+        Some(security) => crypt::file_key(cx, security, false).await.is_none(),
+        None => false,
+    };
     if let Some(info) = trailer.item.get("Info")
+        && !locked
         && let Some(info) = deref(cx, doc, info).await
     {
         for key in ["Title", "Producer"] {
@@ -294,7 +355,7 @@ async fn annotation(cx: &Cx, doc: &Doc, version: &str) -> String {
         }
     }
     if trailer.item.get("Encrypt").is_some() {
-        out.push_str(", encrypted");
+        out.push_str(if locked { ", encrypted (password required)" } else { ", encrypted" });
     }
     out
 }
@@ -551,7 +612,7 @@ async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, path: &Arc<Vec<u3
             cx.emit(
                 Node::new("Content operators")
                     .desc("The stream read as a content stream (page or form drawing operators)")
-                    .lazy(content_operators, located.clone()),
+                    .lazy(content_operators, (doc.clone(), located.clone())),
             );
         }
         if item.get("Type").and_then(Item::name) == Some("ObjStm") {
@@ -583,6 +644,12 @@ fn stream_data(doc: &DocRef, located: &Located) -> Node {
         .and_then(Item::int)
         .and_then(|n| u64::try_from(n).ok());
     let name = "Stream data";
+    if objects::is_encrypted(located, doc.security.as_ref()) {
+        return Node::new(name)
+            .span(data)
+            .summary(format!("{} bytes, encrypted", data.len))
+            .lazy(encrypted_stream, (doc.clone(), located.clone()));
+    }
     match objects::codec(&located.item) {
         Ok((codec, names)) => {
             let image = match names.last().map(String::as_str) {
@@ -607,6 +674,14 @@ fn stream_data(doc: &DocRef, located: &Located) -> Node {
     }
 }
 
+/// An encrypted stream: decrypted (asking for the password if needed),
+/// then decoded and dissected.
+async fn encrypted_stream(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
+    let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
+    cx.annotate(format!("{:#x} bytes decrypted and decoded", span.len));
+    crate::formats::dissect_or_data(cx, doc.input.nested(span)).await
+}
+
 /// Streams without a type are usually page contents; forms say /Form.
 fn looks_like_content(dict: &Item) -> bool {
     let subtype = dict.get("Subtype").and_then(Item::name);
@@ -617,8 +692,8 @@ fn looks_like_content(dict: &Item) -> bool {
     (!typed && !other) || subtype == Some("Form")
 }
 
-async fn content_operators(cx: Cx, located: Located) -> Result<()> {
-    let span = objects::decode(&cx, &located).await?;
+async fn content_operators(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
+    let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
     content::operators(&cx, span).await
 }
 
@@ -626,7 +701,7 @@ async fn contained_objects(
     cx: Cx,
     (doc, objstm, path): (DocRef, Located, Arc<Vec<u32>>),
 ) -> Result<()> {
-    let decoded = objects::decode(&cx, &objstm).await?;
+    let decoded = objects::decode(&cx, &objstm, doc.security.as_ref()).await?;
     let index = objects::object_stream_index(&cx, &objstm, decoded).await?;
     cx.set_count(Count::Exact(to_u64(index.len())));
     for (num, offset) in index {
