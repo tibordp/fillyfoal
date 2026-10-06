@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ srgb-like-v4.icc — ICC profile v4.3.0, Display device, RGB → XYZ, "fillyfoal sRGB-like"  [0x0+0x22c]
   ▾ Header  [0x0+0x80]
@@ -20,7 +20,7 @@ expression: "common::explore(&name, &data)"
       Primary platform: Apple (0x4150504c)  [0x28+0x4]
       Profile flags: 0x0 []  [0x2c+0x4]
       Device manufacturer: "none"  [0x30+0x4]
-      Device model: "\\x00\\x00\\x00\\x00"  [0x34+0x4]
+      Device model: 0x0  [0x34+0x4]
       Device attributes: 0x0 []  [0x38+0x8]
       Rendering intent: Perceptual (0x0)  [0x40+0x4]
       PCS illuminant X: 0.964202880859375  [0x44+0x4]

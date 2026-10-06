@@ -158,7 +158,7 @@ record! {
         platform: u32 "Primary platform" .enumeration(PLATFORMS),
         flags: u32 "Profile flags" .flags(PROFILE_FLAGS),
         manufacturer: u32 "Device manufacturer" .with(|&s, n| n.value(Value::Text(fourcc(&s.to_be_bytes())))),
-        model: u32 "Device model" .with(|&s, n| n.value(Value::Text(fourcc(&s.to_be_bytes())))),
+        model: u32 "Device model" .hex(),
         attributes: u64 "Device attributes" .flags(DEVICE_ATTRIBUTES),
         intent: u32 "Rendering intent" .enumeration(INTENTS),
         illum_x: i32 "PCS illuminant X" .with(|&v, n| n.value(Value::Float(s15(v)))),
