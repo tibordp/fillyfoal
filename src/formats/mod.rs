@@ -780,6 +780,12 @@ pub static FORMATS: &[&Format] = &[
     &retro::floppies::A2R,
     &retro::floppies::MOOF,
     &retro::floppies::AMIGA_RDB,
+    &retro::systems::SMDH,
+    &retro::systems::FIRM,
+    &retro::systems::KIP1,
+    &retro::systems::INI1,
+    &retro::systems::STFS,
+    &retro::systems::XISO,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -799,6 +805,8 @@ pub static FORMATS: &[&Format] = &[
     &retro::floppies::SCP,
     &retro::floppies::DC42,
     &retro::floppies::D88,
+    &retro::systems::DOL,
+    &retro::systems::VMI,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --

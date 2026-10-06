@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ SONIC2__.VMI — VMU save "SONICADV2_SY" (SONIC2__.VMS), "Sonic Adventure 2 save", 16 KiB, 2001-06-19  [0x0+0x6c]
+    Checksum: 53 45 46 41  |SEFA|  [0x0+0x4]
+    Description: "Sonic Adventure 2 save          "  [0x4+0x20]
+    Copyright: "SEGA                            "  [0x24+0x20]
+    Year: 2001  [0x44+0x2]
+    Month: 6  [0x46+0x1]
+    Day: 19  [0x47+0x1]
+    Hour: 12  [0x48+0x1]
+    Minute: 0  [0x49+0x1]
+    Second: 0  [0x4a+0x1]
+    Weekday: 2  [0x4b+0x1]
+    VMI version: 0  [0x4c+0x2]
+    File number: 1  [0x4e+0x2]
+    VMS resource name: "SONIC2__"  [0x50+0x8]
+    File name on VMU: "SONICADV2_SY"  [0x58+0xc]
+    File mode: 0x0 []  [0x64+0x2]
+    Unknown: 0  [0x66+0x2]
+    File size: 16384  [0x68+0x4]
