@@ -172,6 +172,7 @@ pub mod platform;
 pub mod devices;
 pub mod browser;
 pub mod winforensics;
+pub mod unixforensics;
 // -- end misc --
 
 // -- text --
@@ -827,7 +828,14 @@ pub static FORMATS: &[&Format] = &[
     &winforensics::CARDFILE,
     &winforensics::CLP,
     &winforensics::USN,
+    &unixforensics::FSEVENTS,
+    &unixforensics::TIMESYNC,
+    &unixforensics::TRACEV3,
+    &unixforensics::ASL,
+    &unixforensics::MBDB,
+    &unixforensics::ABX,
     // Weak, size-based probes last.
+    &unixforensics::UTMP,
     &models::STL,
     // -- end misc --
 
