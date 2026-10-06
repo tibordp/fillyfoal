@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ places.tab — MapInfo table definition  [0x0+0xc8]
+  ▾ !table  [0x0+0x7]
+      Line 1: "!table"  [0x0+0x6]
+  ▾ !version — 300  [0x7+0xd]
+      Line 1: "!version 300"  [0x7+0xc]
+  ▾ !charset — WindowsLatin1  [0x14+0x18]
+      Line 1: "!charset WindowsLatin1"  [0x14+0x16]
+  ▾ Definition — Table  [0x2c+0x68]
+      Line 1: "Definition Table"  [0x2c+0x10]
+      Line 2: "Type NATIVE Charset \"WindowsLatin1\""  [0x3d+0x25]
+      Line 3: "Fields 2"  [0x63+0xa]
+      Line 4: "ID Integer ;"  [0x6e+0x10]
+      Line 5: "Name Char (20) ;"  [0x7f+0x14]
+  ▾ begin_metadata  [0x94+0xf]
+      Line 1: "begin_metadata"  [0x94+0xe]
+  ▾ "\IsReadOnly" — = "FALSE"  [0xa3+0x18]
+      Line 1: "\"\\IsReadOnly\" = \"FALSE\""  [0xa3+0x17]
+  ▾ end_metadata  [0xbb+0xd]
+      Line 1: "end_metadata"  [0xbb+0xc]

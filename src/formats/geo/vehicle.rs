@@ -344,7 +344,7 @@ async fn trc(cx: Cx, input: Input) -> Result<()> {
 
 /// Lists records: a line at column 0 starts one; indented lines and lines
 /// inside braces belong to the current record.
-async fn statements(cx: &Cx, file: Span, name: fn(&str) -> (Cow<'static, str>, Option<String>)) -> Result<u64> {
+pub(crate) async fn statements(cx: &Cx, file: Span, name: fn(&str) -> (Cow<'static, str>, Option<String>)) -> Result<u64> {
     let mut lines = Lines::new(cx, file);
     let mut current: Option<(u64, String)> = None;
     let mut depth = 0i64;

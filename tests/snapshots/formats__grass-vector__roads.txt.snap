@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ roads.txt — GRASS ASCII vector  [0x0+0x125]
+    ORGANIZATION: "fillyfoal"  [0x0+0x17]
+    DIGIT DATE: "2024-05-01"  [0x18+0x18]
+    DIGIT NAME: "test"  [0x31+0x12]
+    MAP NAME: "roads"  [0x44+0x13]
+    MAP DATE: 2024  [0x58+0x12]
+    MAP SCALE: 1  [0x6b+0xf]
+    OTHER INFO: ""  [0x7b+0xb]
+    ZONE: 0  [0x87+0xf]
+    MAP THRESH: 0  [0x97+0x16]
+    VERTI: ""  [0xae+0x6]
+  ▾ Line 0 — 3 coordinates  [0xb5+0x43]
+      Line 1: "L  3 1"  [0xb5+0x6]
+      Line 2: " 500100.0 4250000.0"  [0xbc+0x13]
+      Line 3: " 500200.0 4250100.0"  [0xd0+0x13]
+      Line 4: " 500300.0 4250050.0"  [0xe4+0x13]
+  ▾ Point 1 — 1 coordinates  [0x101+0x1b]
+      Line 1: "P  1 1"  [0x101+0x6]
+      Line 2: " 500150.0 4250020.0"  [0x108+0x13]

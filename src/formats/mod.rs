@@ -840,6 +840,21 @@ pub static FORMATS: &[&Format] = &[
     &geo::robotics::ROSBAG,
     &geo::robotics::MCAP,
     &geo::robotics::BLACKBOX_LOG,
+    &geo::gistext::IGC,
+    &geo::gistext::OZI_TRACK,
+    &geo::gistext::OZI_WAYPOINTS,
+    &geo::gistext::OZI_ROUTE,
+    &geo::gistext::OZI_MAP,
+    &geo::gistext::MIF,
+    &geo::gistext::TAB,
+    &geo::gistext::GRASS_ASCII,
+    &geo::gistext::GRASS_VECTOR,
+    &geo::gistext::IDRISI,
+    &geo::gistext::WKT,
+    &geo::gistext::BIL_HDR,
+    &geo::gistext::HRM,
+    &geo::gistext::ERG,
+    &geo::gistext::SRM,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --
