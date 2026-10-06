@@ -491,3 +491,130 @@ fn inflate_releases() {
     let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
     assert_releases(&Codec::Zlib, &data, &expected, 32 * 1024 + 2 * 16 * 1024 + 65_536);
 }
+
+/// zstd: within a frame, output before its window (Window_Size, or the
+/// content size of a single-segment frame) goes; between frames, all of it.
+#[test]
+fn zstd_releases() {
+    let lines = zstd_bzip2_lines();
+    // A 512 KiB window: held output is the window, a step and a 128 KiB block.
+    let one = zstd_bzip2_data("zstd", "lines-1.zst");
+    assert_releases(&Codec::Zstd, &one, &lines, 512 * 1024 + 2 * 16 * 1024 + 128 * 1024);
+    assert_releases(&Codec::ZstdFrame, &one, &lines, 512 * 1024 + 2 * 16 * 1024 + 128 * 1024);
+    // Single-segment frames (of 150,000 and 700,250 bytes), released between
+    // frames.
+    let frames = zstd_bzip2_data("zstd", "lines-frames.zst");
+    assert_releases(&Codec::Zstd, &frames, &lines, 700_250 + 2 * 16 * 1024 + 128 * 1024);
+    assert_releases(&Codec::ZstdFrame, &frames, &lines[..150_000], 150_000 + 2 * 16 * 1024 + 128 * 1024);
+    // The content checksum is checked as output is released.
+    let mut bad = one.clone();
+    let n = bad.len();
+    bad[n - 1] ^= 1;
+    let mut d = Codec::Zstd.decoder().unwrap();
+    let mut out = Vec::new();
+    let err = loop {
+        match d.decode(&bad, true, &mut out, 16 * 1024, 1 << 30) {
+            Ok(Status::More) => {
+                let n = d.releasable_output(out.len());
+                d.release_output(n);
+                out.drain(..n);
+            }
+            Ok(s) => break format!("{s:?}"),
+            Err(e) => break e.message,
+        }
+    };
+    assert_eq!(err, "zstd: content checksum mismatch");
+}
+
+/// bzip2: blocks never refer to earlier output, so all of it goes.
+#[test]
+fn bzip2_releases() {
+    let lines = zstd_bzip2_lines();
+    // 100k blocks (-1): a step's worth plus a block.
+    assert_releases(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-1.bz2"), &lines, 2 * 16 * 1024 + 100_000);
+    // Two streams (-9 and -3).
+    assert_releases(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-streams.bz2"), &lines, 2 * 16 * 1024 + 900_000);
+    let (out, _, _) = released(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "mixed-1.bz2"));
+    assert!(out == zstd_bzip2_mixed());
+}
+
+fn data_file(path: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/data/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+fn eager_decode(codec: &Codec, input: &[u8]) -> Vec<u8> {
+    fillyfoal::codec::pipeline::decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).unwrap()
+}
+
+/// Brotli: output before the window (`2^WBITS - 16`) goes; longer
+/// distances are dictionary words, which do not read the output.
+#[test]
+fn brotli_releases() {
+    // 300,000 bytes in several meta-blocks with a 2^18 window.
+    let words = data_file("brotli/words.q1.br");
+    let expected = eager_decode(&Codec::Brotli, &words);
+    assert_eq!((expected.len(), fillyfoal::codec::crc32(&expected)), (300_000, 0xe11b_b7a0));
+    assert_releases(&Codec::Brotli, &words, &expected, 262_144 + 2 * 16 * 1024 + 65_536);
+    // The other streams (dictionary words and transforms, a 2^10 window,
+    // uncompressed meta-blocks), released and fed in pieces: each is a
+    // single meta-block or fits its window, so only consumed input goes.
+    for name in ["prose.w10.br", "prose.q11.br", "dict.q11.br", "transforms.br", "struct.q11.br", "noise.br", "text.w16.br", "zeros.br", "empty.br"] {
+        let input = data_file(&format!("brotli/{name}"));
+        let expected = eager_decode(&Codec::Brotli, &input);
+        let (out, _, _) = released(&Codec::Brotli, &input);
+        assert!(out == expected, "{name}");
+        // (Byte-at-a-time feeding retries a whole meta-block per byte.)
+        assert!(chunked(&Codec::Brotli, &input, 4096, 16 * 1024) == expected, "{name}");
+    }
+    let text = data_file("brotli/text.w16.br");
+    assert_on_demand(&Codec::Brotli, &text, &eager_decode(&Codec::Brotli, &text));
+}
+
+/// A cabinet's folders: (compression type, the folder's data blocks).
+fn cab_folders(cab: &[u8]) -> Vec<(u16, std::ops::Range<usize>)> {
+    let u16le = |o: usize| u16::from_le_bytes([cab[o], cab[o + 1]]);
+    let u32le = |o: usize| u32::from_le_bytes(cab[o..o + 4].try_into().unwrap()) as usize;
+    (0..usize::from(u16le(26)))
+        .map(|i| {
+            let at = 36 + 8 * i;
+            let start = u32le(at);
+            let mut end = start;
+            for _ in 0..u16le(at + 4) {
+                end += 8 + usize::from(u16le(end + 4));
+            }
+            (u16le(at + 6), start..end)
+        })
+        .collect()
+}
+
+/// CAB folders and raw LZX: no method reads `out` back (MSZIP keeps its
+/// own 32 KiB dictionary, Quantum and LZX their own history), so all output
+/// goes.
+#[test]
+fn cab_and_lzx_release() {
+    use fillyfoal::codec::{cab::Folder, lzx};
+    for name in ["mszip.cab", "lzx16.cab", "lzx21.cab", "quantum.cab"] {
+        let cab = data_file(&format!("cab/{name}"));
+        for (kind, range) in cab_folders(&cab) {
+            let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+            let data = &cab[range];
+            let expected = eager_decode(&codec, data);
+            assert_releases(&codec, data, &expected, 2 * 16 * 1024 + 32 * 1024);
+            if kind & 0x0f != 3 {
+                continue;
+            }
+            // The blocks' data concatenated is a raw LZX stream of 32 KiB
+            // frames.
+            let (mut raw, mut at, mut len) = (Vec::new(), 0, 0u64);
+            while at < data.len() {
+                let packed = usize::from(u16::from_le_bytes([data[at + 4], data[at + 5]]));
+                len += u64::from(u16::from_le_bytes([data[at + 6], data[at + 7]]));
+                raw.extend_from_slice(&data[at + 8..at + 8 + packed]);
+                at += 8 + packed;
+            }
+            let codec = Codec::Lzx(lzx::Params { len: Some(len), ..lzx::Params::cab((kind >> 8 & 0x1f) as u8) });
+            assert!(eager_decode(&codec, &raw) == expected, "{name}: raw LZX");
+            assert_releases(&codec, &raw, &expected, 2 * 16 * 1024 + 32 * 1024);
+        }
+    }
+}

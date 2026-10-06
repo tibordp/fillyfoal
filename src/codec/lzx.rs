@@ -342,6 +342,12 @@ impl Lzx {
         self.st.bits.pos
     }
 
+    /// The first `n` (at most [`Lzx::consumed`]) input bytes were dropped
+    /// (between frames). Bits already read stay buffered.
+    pub fn release_input(&mut self, n: usize) {
+        self.st.bits.pos = self.st.bits.pos.saturating_sub(n);
+    }
+
     /// Whether the stream has ended (only when its length is unknown).
     pub fn done(&self) -> bool {
         self.st.done
@@ -714,5 +720,22 @@ impl Decoder for LzxStream {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Bits read ahead are buffered in the reader.
+        self.consumed()
+    }
+
+    fn release_input(&mut self, n: usize) {
+        if let Ok(core) = self.core.as_mut() {
+            core.release_input(n);
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Matches read the decoder's own history (untranslated), never
+        // `out`, and E8 positions count from its running offset.
+        out_len
     }
 }

@@ -410,7 +410,7 @@ fn table(mode: u8, data: &[u8], prev: Option<Fse>, default: &[i16], default_log:
     }
 }
 
-fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_start: usize, limit: usize) -> Result<()> {
+fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_start: usize, window: usize, limit: usize) -> Result<()> {
     let (lits, mut pos) = literals(block, st)?;
     let b0 = usize::from(*block.get(pos).ok_or_else(|| bad("missing sequence count"))?);
     let byte = |i: usize| usize::from(block.get(i).copied().unwrap_or(0));
@@ -492,7 +492,7 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
         let lit = lits.get(lit_pos..lit_pos.saturating_add(lit_len)).ok_or_else(|| bad("literals overrun"))?;
         out.extend_from_slice(lit);
         lit_pos = lit_pos.saturating_add(lit_len);
-        if offset == 0 || offset > out.len().saturating_sub(frame_start) {
+        if offset == 0 || offset > out.len().saturating_sub(frame_start) || offset > window {
             return Err(bad("match offset beyond the window"));
         }
         if out.len().saturating_add(match_len) > limit {
@@ -622,8 +622,13 @@ fn limit_error(limit: usize) -> Diagnostic {
 /// The frame being decoded.
 #[derive(Clone)]
 struct Frame {
-    /// Where the frame's output starts in `out` (its window starts there).
+    /// Where the frame's output starts in `out` (its window starts there);
+    /// 0 once output from the frame's start has been released.
     start: usize,
+    /// The window size: how far back matches may reach.
+    window: usize,
+    /// Bytes the frame has produced so far.
+    produced: u64,
     /// The content checksum, if the frame has one.
     hash: Option<Xxh64>,
     /// The declared content size.
@@ -709,8 +714,13 @@ impl Zstd {
             2 => 4,
             _ => 8,
         };
+        let mut window = None;
         if !single {
-            at = at.saturating_add(1); // window descriptor
+            let wd = *input.get(at).ok_or_else(|| bad("truncated frame header"))?;
+            let base = 1u64 << (10u32.saturating_add(u32::from(wd >> 3)));
+            let add = (base / 8).saturating_mul(u64::from(wd & 7));
+            window = Some(base.saturating_add(add));
+            at = at.saturating_add(1);
         }
         let dict = le(input.get(at..at.saturating_add(dict_len)).ok_or_else(|| bad("truncated frame header"))?);
         if dict != 0 {
@@ -724,10 +734,14 @@ impl Zstd {
             2 => Some(fcs.saturating_add(256)),
             _ => Some(fcs),
         };
+        // A single-segment frame's window is its content size.
+        let window = window.or(size).map_or(usize::MAX, |w| usize::try_from(w).unwrap_or(usize::MAX));
         self.frames = self.frames.saturating_add(1);
         self.pos = at;
         self.frame = Some(Frame {
             start: out.len(),
+            window,
+            produced: 0,
             hash: (fhd & 0x04 != 0).then(|| Xxh64::new(0)),
             size,
             st: FrameState { huffman: None, ll: None, of: None, ml: None, reps: [1, 4, 8] },
@@ -764,20 +778,21 @@ impl Zstd {
             }
             2 => {
                 let block = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated compressed block"))?;
-                compressed_block(block, &mut frame.st, out, frame.start, limit)?;
+                compressed_block(block, &mut frame.st, out, frame.start, frame.window, limit)?;
             }
             _ => return Err(bad("reserved block type")),
         }
         if out.len() > limit {
             return Err(limit_error(limit));
         }
+        let block_out = out.get(before..).unwrap_or_default();
+        frame.produced = frame.produced.saturating_add(u64::try_from(block_out.len()).unwrap_or(u64::MAX));
         if let Some(hash) = frame.hash.as_mut() {
-            hash.update(out.get(before..).unwrap_or_default());
+            hash.update(block_out);
         }
         pos = pos.saturating_add(if kind == 1 { 1 } else { size });
         if last {
-            let produced = out.len().saturating_sub(frame.start);
-            if frame.size.is_some_and(|size| u64::try_from(produced).ok() != Some(size)) {
+            if frame.size.is_some_and(|size| frame.produced != size) {
                 return Err(bad("frame content size mismatch"));
             }
             if let Some(hash) = &frame.hash {
@@ -823,6 +838,30 @@ impl Decode for Zstd {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Always at a frame or block boundary.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Earlier frames are done with; the current one reaches back at
+        // most its window.
+        match &self.frame {
+            None => out_len,
+            Some(frame) => out_len.saturating_sub(frame.window).max(frame.start).min(out_len),
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(frame) = self.frame.as_mut() {
+            frame.start = frame.start.saturating_sub(n);
+        }
     }
 }
 
