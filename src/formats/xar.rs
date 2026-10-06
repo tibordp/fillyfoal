@@ -3,7 +3,8 @@
 //! A big-endian header, a zlib-compressed XML table of contents, and a heap.
 //! The TOC lists files with their heap offsets, sizes and encodings; it is
 //! decompressed when the file list is expanded and scanned for `<file>`
-//! elements. Member data is decompressed (zlib) or dissected in place.
+//! elements. Member data is decompressed (zlib, `.lzma`) or dissected in
+//! place (raw, and bzip2/xz streams, whose dissectors decompress them).
 
 use std::sync::Arc;
 
@@ -239,10 +240,15 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
             children.push(Node::new("Encoding").value(text(e.encoding.clone())));
             let c = match e.encoding.as_str() {
                 "application/x-gzip" => content("Content", input, data, Codec::Zlib, Some(size)),
+                // The bzip2 and xz dissectors show the stream and its content.
                 "application/octet-stream" | "application/x-bzip2" | "application/x-xz" => {
                     embedded("Content", input.nested(data))
                 }
-                "application/x-lzma" => unsupported("Content", data, "LZMA"),
+                // xar's "lzma" is written by liblzma's easy encoder (an .xz
+                // stream); older writers used `.lzma`.
+                "application/x-lzma" => Node::new("Content")
+                    .span(data)
+                    .lazy(lzma_content, (input, data, size)),
                 other => unsupported("Content", data, other),
             };
             children.push(c.summary(human_size(size)));
@@ -253,4 +259,20 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
         cx.push(node.lazy(emit_nodes, Arc::new(children))).await;
     }
     Ok(())
+}
+
+/// Expander for `application/x-lzma` members: an `.xz` stream or, from
+/// older writers, `.lzma`.
+async fn lzma_content(cx: Cx, (input, data, size): (Input, Span, u64)) -> Result<()> {
+    let magic = cx.read_avail(data.sub(0, 6)).await?;
+    if magic == b"\xfd7zXZ\x00" {
+        return crate::formats::dissect_or_data(cx, input.nested(data)).await;
+    }
+    let codec = Codec::LzmaAlone;
+    let decoded = crate::codec::decode_span(&cx, data, &codec, Some(size)).await?;
+    cx.annotate(format!("{:#x} bytes {}", decoded.span.len, codec.verb()));
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    crate::formats::dissect_or_data(cx, input.nested(decoded.span)).await
 }

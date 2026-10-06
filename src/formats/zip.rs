@@ -1087,15 +1087,20 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         }
         return Ok(());
     }
-    let codec = match header.method {
-        0 => Some(Codec::Stored),
-        8 => Some(Codec::Deflate),
-        _ => None,
+    let codec = match method_codec(&cx, header.method, header.flags, data, sizes.uncompressed).await {
+        Ok(codec) => codec,
+        Err(e) => {
+            cx.emit(Node::new("Compressed data").span(data).diag(e));
+            return Ok(());
+        }
     };
     match codec {
-        Some(codec) if !(name_is_dir(&cx, name_span).await) => {
+        Some((codec, stream)) if !(name_is_dir(&cx, name_span).await) => {
+            if stream.offset != data.offset {
+                cx.emit(lzma_header(data.sub(0, stream.offset.saturating_sub(data.offset)), &codec));
+            }
             cx.emit(
-                content("Content", input, data, codec, Some(sizes.uncompressed))
+                content("Content", input, stream, codec, Some(sizes.uncompressed))
                     .summary(format!("{:#x} bytes", sizes.uncompressed)),
             );
         }
@@ -1112,6 +1117,58 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         }
     }
     Ok(())
+}
+
+/// The codec for compression `method` and the span of its stream (which
+/// for LZMA follows a properties header); `None` for a method we do not
+/// decode.
+async fn method_codec(cx: &Cx, method: u16, flags: u16, data: Span, size: u64) -> Result<Option<(Codec, Span)>> {
+    let codec = match method {
+        0 => Codec::Stored,
+        8 => Codec::Deflate,
+        12 => Codec::Bzip2,
+        20 | 93 => Codec::Zstd,
+        95 => Codec::Xz,
+        14 => {
+            let head = cx.read(data.sub_exact(0, 4)?).await?;
+            let (stream, codec) = lzma_stream(cx, &head, data, flags, size).await?;
+            return Ok(Some((codec, stream)));
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some((codec, data)))
+}
+
+/// ZIP method 14: a 2-byte LZMA SDK version, a 2-byte properties size, the
+/// properties (lc/lp/pb byte, 4-byte dictionary size), then raw LZMA; flag
+/// bit 1 says an end marker terminates the stream.
+async fn lzma_stream(cx: &Cx, head: &[u8], data: Span, flags: u16, size: u64) -> Result<(Span, Codec)> {
+    let props_len = u16_le(head, 2).ok_or_else(|| Diagnostic::malformed("truncated LZMA header").at(data))?;
+    if props_len < 5 {
+        return Err(Diagnostic::malformed("LZMA properties shorter than 5 bytes").at(data));
+    }
+    let props = cx.read(data.sub_exact(4, props_len.into())?).await?;
+    let props = crate::codec::lzma::Props::from_byte(props.first().copied().unwrap_or(0xff))
+        .map_err(|e| e.at(data.sub(4, 1)))?;
+    let skip = 4u64.saturating_add(props_len.into());
+    let stream = data.sub(skip, data.len.saturating_sub(skip));
+    let size = (flags & 0x0002 == 0).then(|| usize::try_from(size).unwrap_or(usize::MAX));
+    Ok((stream, Codec::LzmaRaw { props, size }))
+}
+
+/// A node for the LZMA properties header of a method-14 entry.
+fn lzma_header(span: Span, codec: &Codec) -> Node {
+    let mut node = Node::new("LZMA header").span(span);
+    if let Codec::LzmaRaw { props, size } = codec {
+        node = node.summary(format!(
+            "lc={} lp={} pb={}{}",
+            props.lc,
+            props.lp,
+            props.pb,
+            if size.is_none() { ", end marker" } else { "" }
+        ));
+    }
+    node
 }
 
 /// The content of an encrypted entry: asks for the archive's password,
@@ -1171,10 +1228,24 @@ async fn encrypted_content(
         };
         (Codec::ZipCrypto(Key::new(secret.expose())), data, header.method)
     };
-    let codec = match (method, &decrypt) {
+    let zipcrypto = matches!(decrypt, Codec::ZipCrypto(_));
+    let codec = match (method, zipcrypto) {
         (0, _) => decrypt,
-        (8, Codec::ZipCrypto(_)) => Codec::chain("zipcrypto+deflate", "zipcrypto+deflate (lazy)", vec![decrypt, Codec::Deflate]),
-        (8, _) => Codec::chain("aes-ctr+deflate", "aes-ctr+deflate (lazy)", vec![decrypt, Codec::Deflate]),
+        (8, true) => Codec::chain("zipcrypto+deflate", "zipcrypto+deflate (lazy)", vec![decrypt, Codec::Deflate]),
+        (8, false) => Codec::chain("aes-ctr+deflate", "aes-ctr+deflate (lazy)", vec![decrypt, Codec::Deflate]),
+        (12, true) => Codec::chain("zipcrypto+bzip2", "zipcrypto+bzip2 (lazy)", vec![decrypt, Codec::Bzip2]),
+        (12, false) => Codec::chain("aes-ctr+bzip2", "aes-ctr+bzip2 (lazy)", vec![decrypt, Codec::Bzip2]),
+        (20 | 93, true) => Codec::chain("zipcrypto+zstd", "zipcrypto+zstd (lazy)", vec![decrypt, Codec::Zstd]),
+        (20 | 93, false) => Codec::chain("aes-ctr+zstd", "aes-ctr+zstd (lazy)", vec![decrypt, Codec::Zstd]),
+        (95, true) => Codec::chain("zipcrypto+xz", "zipcrypto+xz (lazy)", vec![decrypt, Codec::Xz]),
+        (95, false) => Codec::chain("aes-ctr+xz", "aes-ctr+xz (lazy)", vec![decrypt, Codec::Xz]),
+        // The LZMA properties are encrypted too: decrypt first, then read them.
+        (14, _) => {
+            return Ok(Node::new("Content")
+                .span(payload)
+                .summary(format!("encrypted, {uncompressed:#x} bytes"))
+                .lazy(encrypted_lzma, (input, payload, decrypt, header.flags, uncompressed)));
+        }
         _ => {
             let name = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
             return Ok(Node::new("Decrypted data")
@@ -1184,6 +1255,23 @@ async fn encrypted_content(
     };
     Ok(content("Content", input, payload, codec, Some(uncompressed))
         .summary(format!("encrypted, {uncompressed:#x} bytes")))
+}
+
+/// An encrypted LZMA entry: decrypts it, then decompresses the LZMA stream
+/// after its properties header.
+async fn encrypted_lzma(
+    cx: Cx,
+    (input, payload, decrypt, flags, uncompressed): (Input, Span, Codec, u16, u64),
+) -> Result<()> {
+    let plain = crate::codec::decode_span(&cx, payload, &decrypt, None).await?;
+    if let Some(e) = plain.error {
+        cx.diag(e);
+    }
+    let head = cx.read(plain.span.sub_exact(0, 4)?).await?;
+    let (stream, codec) = lzma_stream(&cx, &head, plain.span, flags, uncompressed).await?;
+    cx.emit(lzma_header(plain.span.sub(0, stream.offset.saturating_sub(plain.span.offset)), &codec));
+    cx.emit(content("Decompressed", input, stream, codec, Some(uncompressed)));
+    Ok(())
 }
 
 /// The body of extra field `id` in `fields`.
@@ -1266,12 +1354,15 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
             cx.push(node).await;
             break;
         }
-        let codec = match header.method {
-            0 => Codec::Stored,
-            8 => Codec::Deflate,
-            _ => {
+        let (codec, data) = match method_codec(cx, header.method, header.flags, data, header.uncompressed.into()).await {
+            Ok(Some(found)) => found,
+            Ok(None) => {
                 cx.push(node.diag(Diagnostic::unsupported("compression method")))
                     .await;
+                continue;
+            }
+            Err(e) => {
+                cx.push(node.diag(e)).await;
                 continue;
             }
         };

@@ -3,10 +3,10 @@
 //! An 8-byte header (`FWS` uncompressed, `CWS` zlib, `ZWS` LZMA; version;
 //! uncompressed length) precedes the body: the frame size as a bit-packed
 //! RECT, frame rate and count, then tagged records. Compressed bodies are
-//! inflated when expanded; LZMA is not decoded.
+//! decompressed when expanded.
 
 use crate::bytes::{to_u64, u16_le};
-use crate::codec::inflate_span;
+use crate::codec::{Codec, decode_span};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
@@ -170,28 +170,39 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .summary(format!("zlib, {} bytes", body.len))
                     .lazy(
                         compressed,
-                        (input, body, u64::from(length).saturating_sub(8)),
+                        (input, body, u64::from(length).saturating_sub(8), Codec::Zlib),
                     ),
             );
         }
         _ => {
             cx.annotate(format!("Flash movie v{version}, LZMA-compressed"));
+            // A 4-byte compressed length and the 5 LZMA properties bytes,
+            // then raw LZMA with a known size (the file length less 8).
             let block = cx.block(body.sub(0, 9)).await?;
             let mut f = Fields::emitting(&cx, &block, LE);
             f.u32("Compressed length").emit()?;
-            f.bytes("LZMA properties", 5).emit()?;
-            cx.emit(
-                Node::new("Compressed body")
-                    .span(body.tail(9))
-                    .diag(Diagnostic::unsupported("LZMA compression")),
-            );
+            let props = f.bytes("LZMA properties", 5).emit()?;
+            let stream = body.tail(9);
+            let expected = u64::from(length).saturating_sub(8);
+            let node = Node::new("Compressed body").span(stream);
+            cx.emit(match crate::codec::lzma::Props::from_byte(props.first().copied().unwrap_or(0xff)) {
+                Ok(props) => {
+                    let codec = Codec::LzmaRaw {
+                        props,
+                        size: Some(crate::bytes::to_usize(expected)),
+                    };
+                    node.summary(format!("LZMA, {} bytes", stream.len))
+                        .lazy(compressed, (input, stream, expected, codec))
+                }
+                Err(e) => node.diag(e.at(body.sub(4, 1))),
+            });
         }
     }
     Ok(())
 }
 
-async fn compressed(cx: Cx, (input, body, expected): (Input, Span, u64)) -> Result<()> {
-    let decoded = inflate_span(&cx, body, true, Some(expected)).await?;
+async fn compressed(cx: Cx, (input, body, expected, codec): (Input, Span, u64, Codec)) -> Result<()> {
+    let decoded = decode_span(&cx, body, &codec, Some(expected)).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
     }

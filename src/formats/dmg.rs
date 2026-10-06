@@ -4,7 +4,8 @@
 //! property list. The plist's `blkx` entries are base64-encoded `mish`
 //! tables, one per partition, mapping sector ranges to chunks of the data
 //! fork (zero fill, raw, zlib, bzip2, ADC, LZFSE, LZMA). zlib chunks are
-//! decompressed on expansion; raw and bzip2 chunks are dissected in place.
+//! decompressed on expansion; raw, bzip2 and LZMA (.xz) chunks are dissected
+//! in place, which decompresses them; ADC and LZFSE are unsupported.
 
 use std::sync::Arc;
 
@@ -309,8 +310,10 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
         ];
         match kind {
             0x8000_0005 => fields.push(content("Data", input, data, Codec::Zlib, Some(size))),
-            0x0000_0001 | 0x8000_0006 => fields.push(embedded("Data", input.nested(data))),
-            0x8000_0004 | 0x8000_0007 | 0x8000_0008 => {
+            // bzip2 streams and (ULMO) libcompression's LZMA, which is an
+            // .xz stream: their dissectors show the structure and content.
+            0x0000_0001 | 0x8000_0006 | 0x8000_0008 => fields.push(embedded("Data", input.nested(data))),
+            0x8000_0004 | 0x8000_0007 => {
                 fields.push(unsupported("Data", data, kind_name));
             }
             _ => {}

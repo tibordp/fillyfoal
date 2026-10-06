@@ -468,7 +468,20 @@ async fn hg_bundle(cx: Cx, input: Input) -> Result<()> {
                 cx.push(Node::new(kind).span(cur.since(start))).await;
             }
         } else {
-            cx.emit(Node::new("Compressed payload").span(file.tail(cur.pos())));
+            let payload = file.tail(cur.pos());
+            let codec = params
+                .split(' ')
+                .find_map(|p| p.strip_prefix("Compression="))
+                .and_then(|c| match c {
+                    "GZ" => Some(Codec::Zlib),
+                    "BZ" => Some(Codec::Bzip2),
+                    "ZS" => Some(Codec::Zstd),
+                    _ => None,
+                });
+            cx.emit(match codec {
+                Some(codec) => content("Compressed payload", input, payload, codec, None),
+                None => Node::new("Compressed payload").span(payload),
+            });
         }
         cx.annotate(format!("Mercurial bundle2, {parts} parts ({params})"));
         return Ok(());
@@ -482,11 +495,14 @@ async fn hg_bundle(cx: Cx, input: Input) -> Result<()> {
             Codec::Zlib,
             None,
         )),
-        "BZ" => cx.emit(
-            Node::new("Changegroup")
-                .span(body)
-                .diag(Diagnostic::unsupported("bzip2 compression")),
-        ),
+        // The bzip2 stream's own "BZ" magic doubles as the end of ours.
+        "BZ" => cx.emit(content(
+            "Changegroup (bzip2)",
+            input,
+            file.tail(4),
+            Codec::Bzip2,
+            None,
+        )),
         _ => cx.emit(Node::new("Changegroup").span(body)),
     }
     cx.annotate(format!("Mercurial bundle ({magic})"));

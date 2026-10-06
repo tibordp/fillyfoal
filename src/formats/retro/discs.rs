@@ -1092,6 +1092,7 @@ async fn cso(cx: Cx, input: Input) -> Result<()> {
                     u64::from(h.block_size),
                     u32::from(h.align),
                     zso,
+                    h.total,
                 ),
             ),
     );
@@ -1107,7 +1108,7 @@ async fn cso(cx: Cx, input: Input) -> Result<()> {
 
 async fn cso_blocks(
     cx: Cx,
-    (input, index, block_size, align, zso): (Input, Span, u64, u32, bool),
+    (input, index, block_size, align, zso, total): (Input, Span, u64, u32, bool, u64),
 ) -> Result<()> {
     let file = input.span;
     let count = (index.len / 4).saturating_sub(1);
@@ -1122,15 +1123,16 @@ async fn cso_blocks(
         let span = file.sub(start, end.saturating_sub(start));
         let plain = a & 0x8000_0000 != 0;
         let name = format!("Block {i}");
+        // The last block holds what remains of the image.
+        let expected = block_size.min(total.saturating_sub(i.saturating_mul(block_size)));
         let node = if plain {
             Node::new(name).span(span).summary("stored")
         } else if zso {
-            Node::new(name)
-                .span(span)
+            // A raw LZ4 block (with `align`, padding after it is an error).
+            content(name, input, span, Codec::Lz4Block, Some(expected))
                 .summary(format!("LZ4, {} bytes", span.len))
-                .diag(Diagnostic::unsupported("LZ4 compression"))
         } else {
-            content(name, input, span, Codec::Deflate, Some(block_size))
+            content(name, input, span, Codec::Deflate, Some(expected))
                 .summary(format!("deflate, {} bytes", span.len))
         };
         cx.push(node.value(hex(start, 64))).await;

@@ -37,5 +37,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of subchunks: 0  [0xf8+0x2]
       Padding: 00 00 00 00 00 00  |......|  [0xfa+0x6]
       Earliest firehose time: 1234000  [0x100+0x8]
-    Chunkset — LZ4, 512 bytes uncompressed  [0x158+0x24] → 0x148+0x38
-      ! unsupported: LZ4 compression
+  ▾ Chunkset — LZ4, 512 bytes uncompressed  [0x158+0x24] → 0x148+0x38
+    ▾ Decompressed  [0x164+0x14]
+        ! malformed: match offset outside the output [0x164+0x14]

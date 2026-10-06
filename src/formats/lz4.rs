@@ -6,8 +6,8 @@
 //! and an optional content checksum. Legacy files are 8 MiB blocks with a
 //! size prefix. Snappy framing is a stream of typed chunks.
 //!
-//! Compressed blocks are unsupported leaves (see the codec policy);
-//! uncompressed blocks are shown as data.
+//! The whole stream is decompressed as a "Decompressed" node; compressed
+//! blocks point there, uncompressed blocks are shown as data.
 
 use std::sync::Arc;
 

@@ -1,0 +1,42 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lz4-chunkset.tracev3 — Unified Log tracev3 (MacBookPro16,1, build 19H15), 1 catalog, 1 chunkset  [0x0+0x1e8]
+  ▾ Header — MacBookPro16,1, build 19H15  [0x10+0xd0] → 0x0+0xe0
+      Timebase numerator: 125  [0x10+0x4]
+      Timebase denominator: 3  [0x14+0x4]
+      Start continuous time: 1234567  [0x18+0x8]
+      Start time: 2020-09-13 12:26:40 UTC  [0x20+0x8]
+      Unknown: 0  [0x28+0x4]
+      Timezone bias (minutes): 60  [0x2c+0x4]
+      Daylight saving: 0  [0x30+0x4]
+      Flags: 0x2  [0x34+0x4]
+      Subchunk tag: 0x6100  [0x38+0x4]
+      Subchunk size: 8  [0x3c+0x4]
+      Continuous time: 1234567  [0x40+0x8]
+      Subchunk tag: 0x6101  [0x48+0x4]
+      Subchunk size: 48  [0x4c+0x4]
+      Unknown: 0  [0x50+0x4]
+      Unknown: 0  [0x54+0x4]
+      Build version: "19H15"  [0x58+0x10]
+      Hardware model: "MacBookPro16,1"  [0x68+0x20]
+      Subchunk tag: 0x6102  [0x88+0x4]
+      Subchunk size: 24  [0x8c+0x4]
+      Boot UUID: 8a 1b 2c 3d 4e 5f 40 61 82 73 9a 8b 7c 6d 5e 4f  |..,=N_@a.s..|m^O|  [0x90+0x10]
+      logd PID: 98  [0xa0+0x4]
+      logd exit status: 0  [0xa4+0x4]
+      Subchunk tag: 0x6103  [0xa8+0x4]
+      Subchunk size: 48  [0xac+0x4]
+      Timezone path: "/var/db/timezone/zoneinfo/Europe/Berlin"  [0xb0+0x30]
+  ▾ Catalog  [0xf0+0x58] → 0xe0+0x68
+      Subsystem strings offset: 0x10  [0xf0+0x2]
+      Process info offset: 0x30  [0xf2+0x2]
+      Number of process info entries: 0  [0xf4+0x2]
+      Subchunks offset: 0x40  [0xf6+0x2]
+      Number of subchunks: 0  [0xf8+0x2]
+      Padding: 00 00 00 00 00 00  |......|  [0xfa+0x6]
+      Earliest firehose time: 1234000  [0x100+0x8]
+  ▾ Chunkset — LZ4, 512 bytes uncompressed  [0x158+0x8c] → 0x148+0xa0
+    ▾ Decompressed — 0x200 bytes decompressed  [0x164+0x7c]
+        Data  [#1:0x0+0x200]
