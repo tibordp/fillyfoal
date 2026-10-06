@@ -1,5 +1,5 @@
 //! 3D interchange and game-engine assets: DirectX `.x`, MilkShape, Cal3D,
-//! Ogre, Maya binary, Cinema 4D, Houdini, Alembic, OpenVDB, Gamebryo NIF,
+//! Ogre, Maya binary, Cinema 4D, Houdini, Alembic, Gamebryo NIF,
 //! Havok packfiles, Bethesda materials, World of Warcraft chunked files and
 //! client databases, Warcraft III MDX, id Tech sprites and models, Source
 //! VVD and DMX, Unreal IoStore TOC, KiriKiri XP3, Allegro datafiles and
@@ -259,7 +259,7 @@ async fn maya_group(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Cinema 4D, Houdini, Alembic, OpenVDB
+// Cinema 4D, Houdini, Alembic
 
 declare_format!(pub C4D = "cinema4d", "Cinema 4D scene", ["c4d"], "application/x-c4d",
     Probe::Magic(&[(0, b"XC4DC4D6")]), c4d);
@@ -327,24 +327,6 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
     }
     cx.emit(Node::new("Root group").span(file.sub(root, count.saturating_add(1).saturating_mul(8))).summary(format!("{count} children: {groups} groups, {data} data")));
     cx.annotate(format!("Alembic (Ogawa) archive, root with {count} children"));
-    Ok(())
-}
-
-declare_format!(pub OPENVDB = "openvdb", "OpenVDB volume", ["vdb"], "application/x-openvdb",
-    Probe::Magic(&[(0, b"\x20\x42\x44\x56\x00\x00\x00\x00")]), openvdb);
-
-async fn openvdb(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 57)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.u64("Magic").hex().emit()?;
-    let version = f.u32("File version").emit()?;
-    let major = f.u32("Library major").emit()?;
-    let minor = f.u32("Library minor").emit()?;
-    f.u8("Has grid offsets").emit()?;
-    let uuid = f.ascii("UUID", 36).emit()?;
-    cx.emit(Node::new("Metadata and grids").span(file.tail(57)));
-    cx.annotate(format!("OpenVDB file v{version} (library {major}.{minor}), {uuid}"));
     Ok(())
 }
 

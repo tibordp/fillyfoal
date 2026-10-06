@@ -1,6 +1,6 @@
 //! Game assets (Blizzard, Bethesda, Rockstar, Build engine, EA, FromSoftware,
 //! Nintendo audio and layouts, Minecraft NBT), trackers, bitmap fonts,
-//! PuTTY keys and planetary/remote-sensing imagery.
+//! PuTTY keys and a few image formats.
 
 use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
@@ -1026,8 +1026,7 @@ async fn pvf(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Imagery: VICAR, PDS, ERDAS Imagine, ImageMagick MIFF, Utah RLE,
-// Paint Shop Pro
+// Imagery: ImageMagick MIFF, Utah RLE, Paint Shop Pro
 
 /// `KEY=VALUE` pairs separated by whitespace (quoted values may contain
 /// spaces), with spans relative to `base`.
@@ -1064,99 +1063,6 @@ fn label_pairs(data: &[u8], base: Span) -> Vec<(String, String, Span)> {
         out.push((key, value, base.sub(to_u64(start), to_u64(i.saturating_sub(start)))));
     }
     out
-}
-
-declare_format!(pub VICAR = "vicar", "VICAR image", ["vic", "img", "vicar"], "image/x-vicar",
-    Probe::Magic(&[(0, b"LBLSIZE=")]), vicar);
-
-async fn vicar(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read_avail(file.sub(0, 32)).await?;
-    let lblsize: u64 = String::from_utf8_lossy(head.get(8..).unwrap_or_default())
-        .split_whitespace()
-        .next()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0);
-    let label = file.sub(0, lblsize.min(1 << 16));
-    let data = cx.read(label).await?;
-    let data = data.split(|&b| b == 0).next().unwrap_or_default();
-    let pairs = label_pairs(data, label);
-    for (k, v, span) in pairs.iter().take(256) {
-        cx.emit(Node::new(k.clone()).span(*span).value(text(v.clone())));
-    }
-    cx.emit(Node::new("Image data").span(file.tail(lblsize)));
-    let get = |k: &str| pairs.iter().find(|(a, _, _)| a == k).map_or("?", |(_, v, _)| v.as_str());
-    cx.annotate(format!("VICAR {} image, {}×{}×{}", get("FORMAT"), get("NS"), get("NL"), get("NB")));
-    Ok(())
-}
-
-declare_format!(pub PDS = "pds", "Planetary Data System label", ["lbl", "img", "pds"], "application/x-pds",
-    Probe::Magic(&[(0, b"PDS_VERSION_ID"), (0, b"PDS3"), (0, b"ODL_VERSION_ID")]), pds);
-
-async fn pds(cx: Cx, input: Input) -> Result<()> {
-    let all = header_lines(&cx, input.span, 1 << 16).await?;
-    let mut objects = Vec::new();
-    let mut depth = 0usize;
-    let mut label_end = 0u64;
-    let mut record_bytes = 0u64;
-    let mut image_rec = 0u64;
-    for (line, span) in &all {
-        let t = line.trim();
-        if t == "END" {
-            label_end = span.end().saturating_sub(input.span.offset);
-            break;
-        }
-        let Some((k, v)) = t.split_once('=') else { continue };
-        let (k, v) = (k.trim(), v.trim());
-        match k {
-            "OBJECT" => {
-                depth = depth.saturating_add(1);
-                objects.push(v.to_owned());
-            }
-            "END_OBJECT" => depth = depth.saturating_sub(1),
-            "RECORD_BYTES" => record_bytes = v.parse().unwrap_or(0),
-            "^IMAGE" => image_rec = v.split_whitespace().next().and_then(|s| s.parse().ok()).unwrap_or(0),
-            _ => {}
-        }
-        if depth <= 1 {
-            cx.emit(Node::new(format!("{}{k}", "  ".repeat(depth))).span(*span).value(text(v)));
-        }
-    }
-    if image_rec > 0 && record_bytes > 0 {
-        let at = image_rec.saturating_sub(1).saturating_mul(record_bytes);
-        cx.emit(Node::new("Image").span(input.span.tail(at)));
-    } else if label_end > 0 {
-        cx.emit(Node::new("Data").span(input.span.tail(label_end)));
-    }
-    cx.annotate(format!("PDS label, objects: {}", objects.join(", ")));
-    Ok(())
-}
-
-declare_format!(pub ERDAS = "erdas-img", "ERDAS IMAGINE image (HFA)", ["img"], "image/x-erdas-hfa",
-    Probe::Magic(&[(0, b"EHFA_HEADER_TAG")]), erdas);
-
-async fn erdas(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 20)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.ascii("Signature", 16).emit()?;
-    let ptr = f.u32("Header pointer").hex().emit()?;
-    let h = cx.block(file.sub(ptr.into(), 18)).await?;
-    let mut g = Fields::emitting(&cx, &h, LE);
-    let version = g.u32("Version").emit()?;
-    g.u32("Free list").hex().emit()?;
-    let root = g.u32("Root entry").hex().emit()?;
-    g.u16("Entry header length").emit()?;
-    let dict = g.u32("Dictionary pointer").hex().emit()?;
-    let (dictionary, span) = cx.cstr(file.sub(dict.into(), 1 << 16)).await?;
-    cx.emit(Node::new("Data dictionary").span(span).summary(format!("{} type definitions", dictionary.matches('{').count())));
-    // The root entry: next, prev, parent, child, data, data size, name[64], type[32], modtime.
-    let e = cx.read_avail(file.sub(root.into(), 128)).await?;
-    let name = zstr(e.get(24..88).unwrap_or_default());
-    let kind = zstr(e.get(88..120).unwrap_or_default());
-    cx.emit(Node::new("Root entry").span(file.sub(root.into(), 124)).summary(format!("{name:?} ({kind})")));
-    cx.annotate(format!("ERDAS IMAGINE (HFA) v{version}"));
-    Ok(())
 }
 
 declare_format!(pub MIFF = "miff", "ImageMagick image (MIFF)", ["miff", "mif"], "image/x-miff",

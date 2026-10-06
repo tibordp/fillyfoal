@@ -1556,8 +1556,6 @@ pub static FORMATS: &[&Format] = &[
     &misc4::SPHERE,
     &misc4::AVR,
     &misc4::PVF,
-    // misc4 also implements VICAR, PDS and ERDAS IMAGINE; the deeper
-    // versions in geo.rs are registered under the same names.
     &misc4::MIFF,
     &misc4::UTAH_RLE,
     &misc4::PSP,
@@ -1708,7 +1706,6 @@ pub static FORMATS: &[&Format] = &[
     &misc8::C4D,
     &misc8::BGEO,
     &misc8::ALEMBIC,
-    // misc8::OPENVDB is shadowed by the deeper cad2::OPENVDB (same name).
     &misc8::NIF,
     &misc8::HKX,
     &misc8::BGSM,
