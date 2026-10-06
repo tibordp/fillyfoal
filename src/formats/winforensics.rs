@@ -631,18 +631,7 @@ async fn mft_attribute(cx: Cx, (input, span, a): (Input, Span, MftAttr)) -> Resu
                 }
             }
             0x30 => {
-                f.u64("Parent directory").hex().with(|&v, n| file_reference(v, n)).emit()?;
-                f.u64("Created").filetime().emit()?;
-                f.u64("Modified").filetime().emit()?;
-                f.u64("MFT entry modified").filetime().emit()?;
-                f.u64("Accessed").filetime().emit()?;
-                f.u64("Allocated size").emit()?;
-                f.u64("Real size").emit()?;
-                f.u32("Flags").flags(FILE_ATTRIBUTES).emit()?;
-                f.u32("Reparse value").hex().emit()?;
-                let chars = f.u8("Name length").emit()?;
-                f.u8("Namespace").enumeration(NAMESPACES).emit()?;
-                f.utf16("Name", chars.into()).emit()?;
+                file_name_fields(&mut f)?;
             }
             0x60 => {
                 f.utf16("Volume name", u64::from(len) / 2).emit()?;
@@ -725,6 +714,303 @@ async fn mft_runs(cx: Cx, (span, runs): (Span, Vec<DataRun>)) -> Result<()> {
             None => format!("{clusters} clusters, sparse"),
         };
         cx.push(Node::new(format!("Run {i}")).span(span.sub(at, len)).summary(summary)).await;
+    }
+    Ok(())
+}
+
+/// The fields of a $FILE_NAME value (MFT attribute or index key); returns
+/// the name and the modification time.
+fn file_name_fields(f: &mut Fields<'_>) -> Result<(String, u64)> {
+    f.u64("Parent directory").hex().with(|&v, n| file_reference(v, n)).emit()?;
+    f.u64("Created").filetime().emit()?;
+    let modified = f.u64("Modified").filetime().emit()?;
+    f.u64("MFT entry modified").filetime().emit()?;
+    f.u64("Accessed").filetime().emit()?;
+    f.u64("Allocated size").emit()?;
+    f.u64("Real size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u32("Flags").flags(FILE_ATTRIBUTES).emit()?;
+    f.u32("Reparse value").hex().emit()?;
+    let chars = f.u8("Name length").emit()?;
+    f.u8("Namespace").enumeration(NAMESPACES).emit()?;
+    let name = f.utf16("Name", chars.into()).emit()?;
+    Ok((name, modified))
+}
+
+/// A part of a fixed-up multi-sector record, for decoding with [`Fields`].
+async fn fixed_part(cx: &Cx, record: Span, offset: u64, len: u64) -> Result<Block> {
+    let (block, _) = mft_record(cx, record).await?;
+    let start = to_usize(offset);
+    let data = block.data.get(start..start.saturating_add(to_usize(len))).or_else(|| block.data.get(start..)).unwrap_or_default().to_vec();
+    Ok(Block { span: record.sub(offset, len), data })
+}
+
+// ---------------------------------------------------------------------------
+// NTFS directory index buffers ($I30 INDX records)
+
+fn indx_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"INDX") && u16_le(h.data, 4) == Some(0x28) && h.len.is_multiple_of(4096) && u32_le(h.data, 0x18).is_some_and(|o| (0x10..4096).contains(&o))
+}
+
+declare_format!(pub INDX = "ntfs-index", "NTFS directory index ($I30 INDX records)", [], "application/x-ntfs-index",
+    Probe::Custom(indx_probe), indx);
+
+const INDEX_ENTRY_FLAGS: FlagTable = &[flag(1, "HAS_SUBNODE"), flag(2, "LAST_ENTRY")];
+const INDX_FLAGS: FlagTable = &[flag(1, "HAS_CHILDREN")];
+const RESTART_FLAGS: FlagTable = &[flag(2, "CLEAN_DISMOUNT")];
+const RCRD_FLAGS: FlagTable = &[flag(1, "RECORD_END")];
+
+/// A plausible $FILE_NAME key at `at` in a fixed-up record (for carving
+/// deleted entries out of slack space).
+fn plausible_entry(data: &[u8], at: usize) -> Option<u64> {
+    let len = usize::from(u16_le(data, at.saturating_add(8))?);
+    let key = usize::from(u16_le(data, at.saturating_add(10))?);
+    let chars = usize::from(*data.get(at.saturating_add(16 + 64))?);
+    let space = *data.get(at.saturating_add(16 + 65))?;
+    let modified = u64_le(data, at.saturating_add(16 + 16))?;
+    let plausible_time = (0x01b0_0000_0000_0000..0x0300_0000_0000_0000).contains(&modified);
+    (chars > 0
+        && space <= 3
+        && key == 66usize.saturating_add(chars.saturating_mul(2))
+        && len >= key.saturating_add(16)
+        && len.is_multiple_of(8)
+        && len <= 0x260
+        && plausible_time)
+        .then_some(to_u64(len))
+}
+
+async fn indx(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let count = file.len / 4096;
+    let mut entries = 0u64;
+    for i in 0..count {
+        let span = file.sub(i.saturating_mul(4096), 4096);
+        let (block, problem) = mft_record(&cx, span).await?;
+        let data = &block.data;
+        if data.get(..4) != Some(b"INDX") {
+            cx.push(Node::new(format!("Buffer {i}")).span(span).summary("not an index buffer")).await;
+            continue;
+        }
+        let vcn = u64_le(data, 16).unwrap_or(0);
+        let first = 0x18u64.saturating_add(u64::from(u32_le(data, 0x18).unwrap_or(0)));
+        let used = 0x18u64.saturating_add(u64::from(u32_le(data, 0x1c).unwrap_or(0)));
+        let mut list = Vec::new();
+        let mut at = first;
+        while at.saturating_add(16) <= used.min(4096) && list.len() < 512 {
+            let len = u64::from(u16_le(data, to_usize(at.saturating_add(8))).unwrap_or(0));
+            let flags = u32_le(data, to_usize(at.saturating_add(12))).unwrap_or(0);
+            if len < 16 {
+                break;
+            }
+            list.push((at, len, false));
+            if flags & 2 != 0 {
+                break;
+            }
+            at = at.saturating_add(len);
+        }
+        // Slack: entries left behind past the end of the used area.
+        let mut at = used.next_multiple_of(8);
+        while at.saturating_add(0x52) <= 4096 {
+            match plausible_entry(data, to_usize(at)) {
+                Some(len) => {
+                    list.push((at, len, true));
+                    at = at.saturating_add(len);
+                }
+                None => at = at.saturating_add(8),
+            }
+        }
+        let live = list.iter().filter(|(_, _, slack)| !slack).count();
+        let carved = list.len().saturating_sub(live);
+        entries = entries.saturating_add(to_u64(list.len()));
+        let mut node = Node::new(format!("Buffer {i} (VCN {vcn})"))
+            .span(span)
+            .summary(format!("{live} entries{}", if carved > 0 { format!(", {carved} recovered from slack") } else { String::new() }))
+            .lazy(indx_buffer, (span, list));
+        if let Some(p) = problem {
+            node = node.diag(p);
+        }
+        cx.push(node).await;
+    }
+    cx.annotate(format!("NTFS index, {count} buffers, {entries} entries"));
+    Ok(())
+}
+
+fn indx_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.ascii("Signature", 4).emit()?;
+    f.u16("Update sequence offset").hex().emit()?;
+    f.u16("Update sequence size (words)").emit()?;
+    f.u64("$LogFile sequence number").emit()?;
+    f.u64("VCN").emit()?;
+    f.u32("Entries offset").hex().emit()?;
+    f.u32("Index length").emit()?;
+    f.u32("Allocated length").emit()?;
+    f.u8("Flags").flags(INDX_FLAGS).emit()?;
+    Ok(())
+}
+
+async fn indx_buffer(cx: Cx, (span, list): (Span, Vec<(u64, u64, bool)>)) -> Result<()> {
+    let header = fixed_part(&cx, span, 0, 0x28).await?;
+    let mut f = Fields::new(&header, LE);
+    indx_header(&mut f, &())?;
+    cx.emit(Node::new("Header").span(header.span).lazy(indx_header_node, span));
+    for (at, len, slack) in list {
+        let block = fixed_part(&cx, span, at, len).await?;
+        let key_len = u16_le(&block.data, 10).unwrap_or(0);
+        let mut node = Node::new("Entry").span(block.span);
+        if key_len >= 66 {
+            let mut f = Fields::new(&block, LE);
+            f.seek(16);
+            if let Ok((name, modified)) = file_name_fields(&mut f) {
+                node = Node::new(name).span(block.span).value(filetime(modified));
+            }
+        } else {
+            node = node.summary("end of index");
+        }
+        if slack {
+            node = node.diag(Diagnostic::note("recovered from slack space (deleted or moved entry)"));
+        }
+        cx.push(node.lazy(indx_entry, (span, at, len))).await;
+    }
+    Ok(())
+}
+
+async fn indx_header_node(cx: Cx, span: Span) -> Result<()> {
+    let block = fixed_part(&cx, span, 0, 0x28).await?;
+    indx_header(&mut Fields::emitting(&cx, &block, LE), &())?;
+    Ok(())
+}
+
+async fn indx_entry(cx: Cx, (span, at, len): (Span, u64, u64)) -> Result<()> {
+    let block = fixed_part(&cx, span, at, len).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.u64("File reference").hex().with(|&v, n| file_reference(v, n)).emit()?;
+    f.u16("Entry length").emit()?;
+    let key = f.u16("Key length").emit()?;
+    let flags = f.u32("Flags").flags(INDEX_ENTRY_FLAGS).emit()?;
+    if key >= 66 {
+        file_name_fields(&mut f)?;
+    }
+    if flags & 1 != 0 {
+        f.seek(len.saturating_sub(8));
+        f.u64("Subnode VCN").emit()?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// NTFS transaction log ($LogFile)
+
+fn logfile_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"RSTR")
+        && u16_le(h.data, 4) == Some(0x1e)
+        && u32_le(h.data, 16).is_some_and(|p| p.is_power_of_two() && (512..=65536).contains(&p))
+        && u32_le(h.data, 20).is_some_and(|p| p.is_power_of_two() && (512..=65536).contains(&p))
+}
+
+declare_format!(pub LOGFILE = "ntfs-logfile", "NTFS transaction log ($LogFile)", [], "application/x-ntfs-logfile",
+    Probe::Custom(logfile_probe), logfile);
+
+fn restart_layout(f: &mut Fields<'_>, _: &()) -> Result<u64> {
+    f.ascii("Signature", 4).emit()?;
+    f.u16("Update sequence offset").hex().emit()?;
+    f.u16("Update sequence size (words)").emit()?;
+    f.u64("Chkdsk LSN").emit()?;
+    f.u32("System page size").emit()?;
+    f.u32("Log page size").emit()?;
+    let area = f.u16("Restart area offset").hex().emit()?;
+    f.int::<i16>("Minor version").emit()?;
+    f.int::<i16>("Major version").emit()?;
+    f.seek(area.into());
+    let lsn = f.u64("Current LSN").emit()?;
+    f.u16("Log clients").emit()?;
+    f.u16("Client free list").emit()?;
+    f.u16("Client in-use list").emit()?;
+    f.u16("Flags").flags(RESTART_FLAGS).emit()?;
+    f.u32("Sequence number bits").emit()?;
+    f.u16("Restart area length").emit()?;
+    let clients = f.u16("Client array offset").hex().emit()?;
+    f.u64("File size").with(|&v, n| n.summary(size(v))).emit()?;
+    f.u32("Last LSN data length").emit()?;
+    f.u16("Record header length").emit()?;
+    f.u16("Log page data offset").hex().emit()?;
+    f.u32("Restart log open count").emit()?;
+    f.seek(u64::from(area).saturating_add(clients.into()));
+    f.u64("Client: oldest LSN").emit()?;
+    f.u64("Client: restart LSN").emit()?;
+    f.u16("Client: previous").emit()?;
+    f.u16("Client: next").emit()?;
+    f.u16("Client: sequence number").emit()?;
+    f.bytes("Client: padding", 6).emit()?;
+    let chars = f.u32("Client: name length (bytes)").emit()?;
+    f.utf16("Client: name", u64::from(chars.min(128)) / 2).emit()?;
+    Ok(lsn)
+}
+
+fn record_page_layout(f: &mut Fields<'_>, _: &()) -> Result<u64> {
+    f.ascii("Signature", 4).emit()?;
+    f.u16("Update sequence offset").hex().emit()?;
+    f.u16("Update sequence size (words)").emit()?;
+    f.u64("Last LSN").emit()?;
+    f.u32("Flags").flags(RCRD_FLAGS).emit()?;
+    f.u16("Page count").emit()?;
+    f.u16("Page position").emit()?;
+    f.u16("Next record offset").hex().emit()?;
+    f.bytes("Padding", 6).emit()?;
+    let end = f.u64("Last end LSN").emit()?;
+    Ok(end)
+}
+
+async fn logfile(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.read(file.sub(0, 24)).await?;
+    let page = u64::from(u32_le(&head, 20).unwrap_or(4096)).max(512);
+    let count = file.len.checked_div(page).unwrap_or(0);
+    cx.set_count(Count::Exact(count));
+    let (mut restart, mut records, mut empty) = (0u64, 0u64, 0u64);
+    let mut lsn = 0u64;
+    for i in 0..count {
+        let span = file.sub(i.saturating_mul(page), page);
+        let sig = cx.read(span.sub(0, 4)).await?;
+        let node = match sig.as_slice() {
+            b"RSTR" | b"CHKD" => {
+                restart = restart.saturating_add(1);
+                let (block, _) = mft_record(&cx, span).await?;
+                let current = restart_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
+                lsn = lsn.max(current);
+                Node::new(format!("Restart page {i}")).span(span).value(uint(current, 64)).desc("Current LSN").lazy(log_page, (span, true))
+            }
+            b"RCRD" => {
+                records = records.saturating_add(1);
+                let (block, _) = mft_record(&cx, span).await?;
+                let end = record_page_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
+                Node::new(format!("Record page {i}")).span(span).value(uint(end, 64)).desc("Last end LSN").lazy(log_page, (span, false))
+            }
+            b"BAAD" => Node::new(format!("Page {i}")).span(span).diag(Diagnostic::warning("page marked BAAD")),
+            _ => {
+                empty = empty.saturating_add(1);
+                if i.is_multiple_of(64) {
+                    cx.checkpoint().await;
+                }
+                continue;
+            }
+        };
+        cx.push(node).await;
+    }
+    cx.annotate(format!("NTFS $LogFile, {restart} restart and {records} record pages ({empty} unused), current LSN {lsn}"));
+    Ok(())
+}
+
+async fn log_page(cx: Cx, (span, restart): (Span, bool)) -> Result<()> {
+    let (block, problem) = mft_record(&cx, span).await?;
+    if let Some(p) = problem {
+        cx.diag(p);
+    }
+    let mut f = Fields::emitting(&cx, &block, LE);
+    if restart {
+        restart_layout(&mut f, &())?;
+    } else {
+        let next = u16_le(&block.data, 0x14).unwrap_or(0);
+        record_page_layout(&mut f, &())?;
+        cx.emit(Node::new("Log records").span(span.sub(0x40, u64::from(next).saturating_sub(0x40))));
     }
     Ok(())
 }
@@ -1154,56 +1440,149 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Internet shortcuts (.url)
+// Windows INI-style artifacts: Internet shortcuts (.url), Shell Command
+// Files (.scf), autorun.inf and desktop.ini
+
+/// The first meaningful line (after a BOM, blank lines and `;` comments).
+fn ini_first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
+    let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
+    data.split(|&b| b == b'\n')
+        .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
+        .find(|l| !l.is_empty() && !l.starts_with(b";"))
+        .unwrap_or_default()
+}
 
 fn url_probe(h: &Head<'_>) -> bool {
     let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    data.starts_with(b"[InternetShortcut]") || data.starts_with(b"[{000214A0-0000-0000-C000-000000000046}]") || data.starts_with(b"[DEFAULT]\r\nBASEURL=")
+    data.starts_with(b"[InternetShortcut]")
+        || data.starts_with(b"[{000214A0-0000-0000-C000-000000000046}]")
+        || data.starts_with(b"[DEFAULT]\r\nBASEURL=")
 }
 
-declare_format!(pub URL_SHORTCUT = "url-shortcut", "Internet shortcut (.url)", ["url"], "application/x-mswinurl",
+fn scf_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"[Shell]\r\nCommand=") || h.starts_with(b"[Shell]\nCommand=")
+}
+
+fn autorun_probe(h: &Head<'_>) -> bool {
+    ini_first_line(h).eq_ignore_ascii_case(b"[autorun]") && h.len < 0x10000
+}
+
+fn desktop_ini_probe(h: &Head<'_>) -> bool {
+    let first = ini_first_line(h);
+    (first.eq_ignore_ascii_case(b"[.ShellClassInfo]") || first.eq_ignore_ascii_case(b"[ViewState]")) && h.len < 0x10000
+}
+
+declare_format!(pub URL_SHORTCUT = "url-shortcut", "Internet shortcut (.url)", ["url", "website"], "application/x-mswinurl",
     Probe::Custom(url_probe), url_shortcut);
+declare_format!(pub SCF = "shell-command-file", "Windows Shell Command File (.scf)", ["scf"], "application/x-ms-scf",
+    Probe::Custom(scf_probe), shell_command_file);
+declare_format!(pub AUTORUN = "autorun-inf", "Windows AutoRun configuration (autorun.inf)", ["inf"], "application/x-autorun-inf",
+    Probe::Custom(autorun_probe), autorun_inf);
+declare_format!(pub DESKTOP_INI = "desktop-ini", "Windows folder settings (desktop.ini)", ["ini"], "application/x-desktop-ini",
+    Probe::Custom(desktop_ini_probe), desktop_ini);
 
 /// A `key=value` line and where it is.
 type IniKey = (String, String, Span);
 
-async fn url_shortcut(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
+/// Emits the sections of an INI file and returns every `(section, key,
+/// value)` for the summary.
+async fn ini_file(cx: &Cx, file: Span) -> Result<Vec<(String, String, String)>> {
     let data = cx.read_avail(file.sub(0, 0x10000)).await?;
     let mut at = 0u64;
     let mut section: Option<(String, u64, Vec<IniKey>)> = None;
-    let mut url = String::new();
     let mut sections = Vec::new();
+    let mut all = Vec::new();
     for line in data.split_inclusive(|&b| b == b'\n') {
         let len = to_u64(line.len());
         let span = file.sub(at, len);
-        let text_line = String::from_utf8_lossy(line).trim().to_owned();
+        let text_line = crate::text::latin1(line.strip_prefix(b"\xef\xbb\xbf").unwrap_or(line)).trim().to_owned();
         if let Some(name) = text_line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
             sections.extend(section.take());
             section = Some((name.to_owned(), at, Vec::new()));
-        } else if let Some((k, v)) = text_line.split_once('=') {
-            if k.eq_ignore_ascii_case("URL") {
-                url = v.to_owned();
-            }
-            if let Some((_, _, keys)) = section.as_mut() {
-                keys.push((k.to_owned(), v.to_owned(), span));
-            }
+        } else if let Some((k, v)) = text_line.split_once('=')
+            && !text_line.starts_with(';')
+            && let Some((name, _, keys)) = section.as_mut()
+        {
+            all.push((name.clone(), k.trim().to_owned(), v.trim().to_owned()));
+            keys.push((k.trim().to_owned(), v.trim().to_owned(), span));
         }
         at = at.saturating_add(len);
     }
     sections.extend(section.take());
     let ends: Vec<u64> = sections.iter().skip(1).map(|(_, s, _)| *s).chain(std::iter::once(at)).collect();
     for ((name, start, keys), end) in sections.into_iter().zip(ends) {
-        cx.push(Node::new(format!("[{name}]")).span(file.sub(start, end.saturating_sub(start))).summary(format!("{} keys", keys.len())).lazy(url_keys, keys)).await;
+        cx.push(
+            Node::new(format!("[{name}]"))
+                .span(file.sub(start, end.saturating_sub(start)))
+                .summary(format!("{} keys", keys.len()))
+                .lazy(ini_keys, keys),
+        )
+        .await;
     }
-    cx.annotate(if url.is_empty() { "Internet shortcut".to_owned() } else { format!("Internet shortcut to {}", clip(&url, 120)) });
-    Ok(())
+    Ok(all)
 }
 
-async fn url_keys(cx: Cx, keys: Vec<IniKey>) -> Result<()> {
+fn ini_get<'a>(all: &'a [(String, String, String)], section: &str, key: &str) -> Option<&'a str> {
+    all.iter()
+        .find(|(s, k, _)| s.eq_ignore_ascii_case(section) && k.eq_ignore_ascii_case(key))
+        .map(|(_, _, v)| v.as_str())
+}
+
+async fn ini_keys(cx: Cx, keys: Vec<IniKey>) -> Result<()> {
     for (k, v, span) in keys {
         cx.push(Node::new(k).span(span).value(text(v))).await;
     }
+    Ok(())
+}
+
+async fn url_shortcut(cx: Cx, input: Input) -> Result<()> {
+    let all = ini_file(&cx, input.span).await?;
+    cx.annotate(match ini_get(&all, "InternetShortcut", "URL") {
+        Some(url) => format!("Internet shortcut to {}", clip(url, 120)),
+        None => "Internet shortcut".to_owned(),
+    });
+    Ok(())
+}
+
+async fn shell_command_file(cx: Cx, input: Input) -> Result<()> {
+    let all = ini_file(&cx, input.span).await?;
+    let command = ini_get(&all, "Taskbar", "Command").or_else(|| ini_get(&all, "Shell", "Command")).unwrap_or("?");
+    let icon = ini_get(&all, "Shell", "IconFile").unwrap_or_default();
+    let mut summary = format!("Shell Command File: {command}");
+    if !icon.is_empty() {
+        summary.push_str(&format!(", icon {}", clip(icon, 100)));
+        if icon.starts_with("\\\\") {
+            summary.push_str(" (network path)");
+        }
+    }
+    cx.annotate(summary);
+    Ok(())
+}
+
+async fn autorun_inf(cx: Cx, input: Input) -> Result<()> {
+    let all = ini_file(&cx, input.span).await?;
+    let open = ini_get(&all, "autorun", "open").or_else(|| ini_get(&all, "autorun", "shellexecute"));
+    let label = ini_get(&all, "autorun", "label");
+    cx.annotate(format!(
+        "AutoRun configuration{}{}",
+        label.map(|l| format!(" {l:?}")).unwrap_or_default(),
+        open.map(|o| format!(", runs {}", clip(o, 100))).unwrap_or_default()
+    ));
+    Ok(())
+}
+
+async fn desktop_ini(cx: Cx, input: Input) -> Result<()> {
+    let all = ini_file(&cx, input.span).await?;
+    let class = ini_get(&all, ".ShellClassInfo", "CLSID").or_else(|| ini_get(&all, ".ShellClassInfo", "CLSID2"));
+    let name = ini_get(&all, ".ShellClassInfo", "LocalizedResourceName");
+    let mut summary = "Folder settings".to_owned();
+    if let Some(n) = name {
+        summary.push_str(&format!(", name {n}"));
+    }
+    if let Some(c) = class {
+        summary.push_str(&format!(", class {c}"));
+    }
+    cx.annotate(summary);
     Ok(())
 }
 

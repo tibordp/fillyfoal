@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ desktop.ini — Folder settings, name @%SystemRoot%\system32\shell32.dll,-21770  [0x0+0xbf]
+  ▾ [.ShellClassInfo] — 2 keys  [0x5+0x8a]
+      LocalizedResourceName: "@%SystemRoot%\\system32\\shell32.dll,-21770"  [0x18+0x41]
+      IconResource: "%SystemRoot%\\system32\\imageres.dll,-112"  [0x59+0x36]
+  ▾ [ViewState] — 3 keys  [0x8f+0x30]
+      Mode: ""  [0x9c+0x7]
+      Vid: ""  [0xa3+0x6]
+      FolderType: "Documents"  [0xa9+0x16]

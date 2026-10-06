@@ -805,6 +805,8 @@ pub static FORMATS: &[&Format] = &[
     &devices::WII_WAD,
     &devices::CIA,
     &devices::KERNEL_DUMP,
+    // NTFS $LogFile restart pages also start with RSTR; check them first.
+    &winforensics::LOGFILE,
     &devices::HIBERFIL,
     &devices::VERITY,
     &devices::BTRFS_SEND,
@@ -820,11 +822,13 @@ pub static FORMATS: &[&Format] = &[
     &winforensics::CUSTOM_DESTINATIONS,
     &winforensics::INFO2,
     &winforensics::MFT,
+    &winforensics::INDX,
     &winforensics::JOB,
     &winforensics::NK2,
     &winforensics::DBX,
     &winforensics::RDP_CACHE,
     &winforensics::URL_SHORTCUT,
+    &winforensics::SCF,
     &winforensics::GRP,
     &winforensics::CARDFILE,
     &winforensics::CLP,
@@ -850,6 +854,8 @@ pub static FORMATS: &[&Format] = &[
     &office_legacy::AMIPRO,
     // Weak, size-based probes last.
     &unixforensics::UTMP,
+    &winforensics::AUTORUN,
+    &winforensics::DESKTOP_INI,
     &models::STL,
     // -- end misc --
 
