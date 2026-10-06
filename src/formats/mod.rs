@@ -41,6 +41,7 @@ pub mod pyc;
 pub mod spirv;
 pub mod te;
 pub mod winres;
+pub mod xcoff;
 pub mod wasm;
 // -- end executables --
 
@@ -188,6 +189,7 @@ pub static FORMATS: &[&Format] = &[
     &dxbc::FORMAT,
     &winres::FORMAT,
     &te::FORMAT,
+    &xcoff::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
