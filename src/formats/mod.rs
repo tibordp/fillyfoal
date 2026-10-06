@@ -180,6 +180,8 @@ pub static FORMATS: &[&Format] = &[
     &java::class::FORMAT,
     &java::serialization::FORMAT,
     &java::keystore::FORMAT,
+    &java::modules::JMOD,
+    &java::modules::JIMAGE,
     &wasm::FORMAT,
     &android::dex::FORMAT,
     &android::dex::ODEX,
