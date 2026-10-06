@@ -142,13 +142,14 @@ pub fn classify(data: &[u8]) -> Option<Encoding> {
     if let Some(encoding) = sniff_utf16(data) {
         return Some(encoding);
     }
-    if crate::text::looks_like_text(data) {
-        return Some(Encoding::Utf8);
-    }
-    // 8-bit legacy text: no NULs, few control characters, mostly ASCII.
+    // 8-bit text never contains NUL bytes; binary data usually does.
     if data.is_empty() || data.contains(&0) {
         return None;
     }
+    if crate::text::looks_like_text(data) {
+        return Some(Encoding::Utf8);
+    }
+    // 8-bit legacy text: few control characters, mostly ASCII.
     let control = data
         .iter()
         .filter(|&&b| (b < 0x20 && !matches!(b, b'\t' | b'\n' | b'\r' | 0x0c)) || b == 0x7f)
