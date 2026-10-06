@@ -1,0 +1,12 @@
+ID;PWXL;N;E
+P;PGeneral
+P;P0.00
+F;P0;DG0G8;M255
+B;Y3;X2;D0 0 2 1
+C;Y1;X1;K"Item"
+C;X2;K"Cost"
+C;Y2;X1;K"Rent"
+C;X2;K1200
+C;Y3;X1;K"Total"
+C;X2;K1200;ER2C2
+E

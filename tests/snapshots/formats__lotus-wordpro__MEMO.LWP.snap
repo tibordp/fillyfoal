@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ MEMO.LWP — Lotus Word Pro document  [0x0+0x60]
+    Signature: "WordPro"  [0x0+0x7]
+    Document objects — LwpDocument, Times New Roman  [0x7+0x59]
+      ! note: the object stream is not dissected

@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ minestorm.vec — Vectrex "MINE STORM BY GCE", g GCE 1982, 240 bytes  [0x0+0xf0]
+    Copyright: "g GCE 1982"  [0x0+0xb]
+    Music pointer: 0xfd0d  [0xb+0x2]
+    Title line: "MINE STORM" — height -8, width 80, at (-48, 32)  [0xd+0xf]
+    Title line: "BY GCE" — height -8, width 80, at (-40, 0)  [0x1c+0xb]
+    End of title  [0x27+0x1]
+    Program  [0x28+0xc8]

@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ piano.pat — GUS patch "Piano" (Tiny piano), 1 waveforms  [0x0+0x15f]
+    Signature: "GF1PATCH110"  [0x0+0x16]
+    Description: "Tiny piano"  [0x16+0x3c]
+    Instruments: 1  [0x52+0x1]
+    Voices: 14  [0x53+0x1]
+    Channels: 0  [0x54+0x1]
+    Waveforms: 1  [0x55+0x2]
+    Master volume: 127  [0x57+0x2]
+    Data size: 16  [0x59+0x4]
+    Instrument — "Piano", 1 layer(s)  [0x81+0x3f]
+    Layer  [0xc0+0x2f]
+    C4 — 16 bytes, 22050 Hz, 16-bit, root 261.6 Hz, looped  [0xef+0x70]

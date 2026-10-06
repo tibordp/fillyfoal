@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ main.npdm — NPDM "Application", program 0100000000010000, AArch64, priority 44, core 0  [0x0+0x340]
+    Magic: "META"  [0x0+0x4]
+    Signature key generation: 0  [0x4+0x4]
+    Reserved: 0  [0x8+0x4]
+    Flags: 0x7 [AARCH64 | ADDRESS_SPACE_64BIT]  [0xc+0x1]
+    Reserved: 0  [0xd+0x1]
+    Main thread priority: 44  [0xe+0x1]
+    Main thread core: 0  [0xf+0x1]
+    Reserved: 0  [0x10+0x4]
+    System resource size: 0  [0x14+0x4]
+    Version: 1  [0x18+0x4]
+    Main thread stack size: 0x100000  [0x1c+0x4]
+    Name: "Application"  [0x20+0x10]
+    Product code: "SomeProductCode"  [0x30+0x10]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x40+0x30]
+    ACI0 offset: 0x80  [0x70+0x4]
+    ACI0 size: 128  [0x74+0x4]
+    ACID offset: 0x100  [0x78+0x4]
+    ACID size: 576  [0x7c+0x4]
+    ACI0 (access control info) — program 0100000000010000  [0x80+0x80]
+    ACID (signed access control descriptor) — programs 0100000000010000-0100000000010000  [0x100+0x240]

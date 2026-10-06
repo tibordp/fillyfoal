@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ IP.BIN — Dreamcast "SONIC ADVENTURE 2" (MK-51000 V1.003), by SEGA ENTERPRISES, boots 1ST_READ.BIN, Japan, North America, Europe  [0x0+0x400]
+  ▾ Meta information  [0x0+0x100]
+      Hardware ID: "SEGA SEGAKATANA "  [0x0+0x10]
+      Maker ID: "SEGA ENTERPRISES"  [0x10+0x10]
+      Device information: "0B13 GD-ROM1/1  "  [0x20+0x10]
+      Area symbols: "JUE     " — Japan, North America, Europe  [0x30+0x8]
+      Peripherals (hex): "E000F10 "  [0x38+0x8]
+      Product number: "MK-51000  "  [0x40+0xa]
+      Version: "V1.003"  [0x4a+0x6]
+      Release date: "20000801        "  [0x50+0x10]
+      Boot file: "1ST_READ.BIN    "  [0x60+0x10]
+      Software maker: "SEGA ENTERPRISES"  [0x70+0x10]
+      Game title: "SONIC ADVENTURE 2                                                                                                               "  [0x80+0x80]
+    Table of contents  [0x100+0x200]
+    Licence screen code  [0x300+0x100]
+    Area protection symbols  [0x400+0x0]
+    Bootstrap  [0x400+0x0]

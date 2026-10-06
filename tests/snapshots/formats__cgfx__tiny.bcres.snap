@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bcres — CGFX r0x5000000: 1 models, 2 textures, 1 skeletal animations  [0x0+0x94]
+    Signature: "CGFX"  [0x0+0x4]
+    Byte-order mark: 0xfeff  [0x4+0x2]
+    Header size: 20  [0x6+0x2]
+    Revision: 0x5000000  [0x8+0x4]
+    File size: 148  [0xc+0x4]
+    Blocks: 1  [0x10+0x4]
+    DATA — 1 models, 2 textures, 1 skeletal animations  [0x14+0x80]
+    Other blocks  [0x94+0x0]

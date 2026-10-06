@@ -1,0 +1,10 @@
+// <!-- <mdb:mork:z v="1.4"/> -->
+< <(a=c)> // (f=iso-8859-1)
+  (B8=Status)(B9=Subject)(BA=Recipients)(BB=date)(BC=size)(BD=flags)
+  (80=ns:msg:db:row:scope:msgs:all)(81=subject)(82=sender)>
+
+<(91=Hello world)(92=alice@example.com)(93=Re: lunch \) ok)(94=$C3$A9t$C3$A9)>
+{1:^80 {(k^BE:c)(s=9)} [1(^B9^91)(^82^92)(^BB=5f5e1000)] [2(^B9^93)(^82=bob@example.com)]}
+@$${2{@
+[3:^80(^B9^94)(^BC=1024)]
+@$$}2}@

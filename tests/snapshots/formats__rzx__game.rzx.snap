@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.rzx — RZX v0.13 recording, 10 frames, 1 snapshot(s), by Fuse  [0x0+0x248]
+    Signature: "RZX!"  [0x0+0x4]
+    Major version: 0  [0x4+0x1]
+    Minor version: 13  [0x5+0x1]
+    Flags: 0x0 []  [0x6+0x4]
+    Creator information: 0x10 — Fuse 1.6  [0xa+0x1d]
+  ▾ Snapshot (szx): "szx" — SZX v1.4 snapshot, ZX Spectrum 48K, 2 RAM pages, by "Fuse"  [0x38+0x1cc]
+      Magic: "ZXST"  [#1:0x0+0x4]
+      Major version: 1  [#1:0x4+0x1]
+      Minor version: 4  [#1:0x5+0x1]
+      Machine: ZX Spectrum 48K (0x1)  [#1:0x6+0x1]
+      Flags: 0x0 []  [#1:0x7+0x1]
+      CRTR: "Fuse" — v1.6  [#1:0x8+0x2c]
+      Z80R — 37 bytes  [#1:0x34+0x2d]
+      SPCR — 8 bytes  [#1:0x61+0x10]
+    ▾ RAMP page 5 — 0x4000 bytes decompressed  [#1:0x71+0x1a3]
+        Data  [#2:0x0+0x4000]
+    ▾ RAMP page 2 — 0x4000 bytes decompressed  [#1:0x214+0x32]
+        Data  [#3:0x0+0x4000]
+      KEYB — 5 bytes  [#1:0x246+0xd]
+    Input recording: 0x80 — 10 frames, starting at T-state 1234  [0x204+0x44]

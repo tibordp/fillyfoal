@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.rpl — Acorn Replay movie "Tiny movie": 160×128, 12.5 fps  [0x0+0x88]
+    Signature: "ARMovie"  [0x0+0x7]
+    Name: "Tiny movie"  [0x8+0xa]
+    Date and copyright: "(c) 2026"  [0x13+0x8]
+    Author: "filly"  [0x1c+0x5]
+    Video format: "17"  [0x22+0x12]
+    Width: "160"  [0x35+0x3]
+    Height: "128"  [0x39+0x3]
+    Pixel depth: "16"  [0x3d+0x8]
+    Frames per second: "12.5"  [0x46+0x4]
+    Sound format: "1"  [0x4b+0x9]
+    Sound rate: "11025"  [0x55+0x5]
+    Sound channels: "1"  [0x5b+0x1]
+    Sound precision: "8 bits"  [0x5d+0x6]
+    Frames per chunk: "2"  [0x64+0x1]
+    Chunks: "1"  [0x66+0x1]

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.symmod — Symphonie module, 3 chunks  [0x0+0x28]
+    Signature  [0x0+0x4]
+    Version: 1  [0x4+0x4]
+    Channels — type -1  [0x8+0x8]
+    Track length — type -2  [0x10+0x8]
+    Data chunk — type 10  [0x18+0x10]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mdl — Digitrakker module "Tiny MDL"  [0x0+0x51]
+    Signature  [0x0+0x4]
+    Version: "1.1"  [0x4+0x1]
+    IN — "Tiny MDL" by "filly"  [0x5+0x42]
+    PA — 4 bytes  [0x47+0xa]

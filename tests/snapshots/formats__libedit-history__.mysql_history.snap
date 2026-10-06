@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .mysql_history — libedit history, 3 entries  [0x0+0x63]
+    Entry 1: "show databases;"  [0xd+0x13]
+    Entry 2: "use shop;"  [0x20+0xd]
+    Entry 3: "select * from users where id=11;"  [0x2d+0x36]

@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.gvr — Sega GVR (GameCube) texture, 8×8  [0x0+0x40]
+    Global index: 7  [0x0+0x10]
+    GVRT — 8×8, pixel format 0, data format 0x0e  [0x10+0x30]

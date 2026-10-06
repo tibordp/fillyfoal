@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ smw.000 — Snes9x snapshot v11, 5 blocks, ROM "C:\\roms\\Super Mario World (U).smc"  [0x0+0x2e6]
+    Signature: "#!s9xsnp:0011"  [0x0+0xe]
+    NAM: "C:\\roms\\Super Mario World (U).smc" — ROM file name, 34 bytes  [0xe+0x2d] → 0x19+0x22
+    CPU — 65C816 registers, 48 bytes  [0x3b+0x3b] → 0x46+0x30
+    REG — registers, 15 bytes  [0x76+0x1a] → 0x81+0xf
+    RAM — work RAM, 512 bytes  [0x90+0x20b] → 0x9b+0x200
+    SND — sound (SPC700/DSP), 64 bytes  [0x29b+0x4b] → 0x2a6+0x40

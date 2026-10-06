@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ banner.bin — Wii save banner "Mario Kart Wii" / "Save Data", 2 icon frame(s)  [0x0+0x84a0]
+    Magic: "WIBN"  [0x0+0x4]
+    Flags: 0x10 [ICON_BOUNCE]  [0x4+0x4]
+    Animation speed: 0x3  [0x8+0x2]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0xa+0x16]
+    Title: "Mario Kart Wii"  [0x20+0x40]
+    Subtitle: "Save Data"  [0x60+0x40]
+    Banner image (192×64 RGB5A3)  [0xa0+0x6000]
+    Icon frame 0 (48×48 RGB5A3)  [0x60a0+0x1200]
+    Icon frame 1 (48×48 RGB5A3)  [0x72a0+0x1200]

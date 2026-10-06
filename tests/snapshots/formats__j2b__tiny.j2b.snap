@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.j2b — Jazz Jackrabbit 2 music, 26 → 20 bytes  [0x0+0x32]
+    Signature: 4d 55 53 45 de ad be af  |MUSE....|  [0x0+0x8]
+    File length: 50  [0x8+0x4]
+    CRC32: 0x0  [0xc+0x4]
+    Compressed length: 26  [0x10+0x4]
+    Uncompressed length: 20  [0x14+0x4]
+  ▾ Module (RIFF AM) — RIFF AM  [0x18+0x1a]
+    ▾ Header  [#1:0x0+0xc]
+        Chunk ID: "RIFF"  [#1:0x0+0x4]
+        Size: 12  [#1:0x4+0x4]
+        Form type: "AM  "  [#1:0x8+0x4]
+    ▾ INIT — 0 bytes  [#1:0xc+0x8]
+        Chunk ID: "INIT"  [#1:0xc+0x4]
+        Chunk size: 0  [#1:0x10+0x4]
+        Data  [#1:0x14+0x0]

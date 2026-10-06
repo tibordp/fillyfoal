@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.plm — Disorder Tracker v16 module "Tiny PLM": 4 channels, 1 patterns, 1 samples, 1 orders  [0x0+0x70]
+    Signature: 50 4c 4d 1a  |PLM.|  [0x0+0x4]
+    Header size: 96  [0x4+0x1]
+    Version: 16  [0x5+0x1]
+    Title: "Tiny PLM"  [0x6+0x30]
+    Channels: 4  [0x36+0x1]
+    Flags: 0x0  [0x37+0x1]
+    Maximum volume: 64  [0x38+0x1]
+    Amplification: 48  [0x39+0x1]
+    BPM: 125  [0x3a+0x1]
+    Speed: 6  [0x3b+0x1]
+    Panning: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x3c+0x20]
+    Samples: 1  [0x5c+0x1]
+    Patterns: 1  [0x5d+0x1]
+    Orders: 1  [0x5e+0x2]
+    Orders, patterns and samples  [0x60+0x10]

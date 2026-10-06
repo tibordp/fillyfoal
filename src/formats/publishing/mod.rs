@@ -9,7 +9,7 @@
 //! - [`authoring`]: Director/Shockwave movies, HyperCard stacks, After
 //!   Effects projects, Corel CMX, Figma, Rive, Live2D.
 //! - [`design`]: pixel-art and paint-program images, palettes, gradients,
-//!   colour lookup tables, metafiles (CGM, PICT, GEM).
+//!   colour lookup tables, metafiles (CGM, PICT) and GEM bitmaps.
 //! - [`fonts`]: font sources and font binaries not covered elsewhere (CFF,
 //!   FontForge, Glyphs, FontLab, Windows FNT/PFM, TeX TFM/VF, Amiga, PFR,
 //!   BGI, UFO).

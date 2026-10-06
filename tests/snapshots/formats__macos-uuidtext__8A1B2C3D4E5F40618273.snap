@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 8A1B2C3D4E5F40618273 — Unified Log format strings v2.1 for /usr/libexec/exampled, 2 ranges  [0x0+0x82]
+    Signature: 0x66778899  [0x0+0x4]
+    Major version: 2  [0x4+0x4]
+    Minor version: 1  [0x8+0x4]
+    Number of ranges: 2  [0xc+0x4]
+  ▾ Ranges — 2 ranges  [0x10+0x10]
+    ▾ Range 0 at 0x1000 — 2 strings  [0x20+0x38] → 0x10+0x8
+        0x1000: "Connection established to %{public}s"  [0x20+0x24]
+        0x1025: "Request failed: %d"  [0x45+0x12]
+    ▾ Range 1 at 0x2400 — 1 strings  [0x58+0x14] → 0x18+0x8
+        0x2400: "Starting service %s"  [0x58+0x13]
+    Image path: "/usr/libexec/exampled"  [0x6c+0x16]

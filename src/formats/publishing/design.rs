@@ -1,6 +1,5 @@
-//! Illustration and paint-program files: Aseprite sprites, Atari ST paint
-//! programs (DEGAS, NEOchrome), GEM bitmaps, binary CGM and QuickDraw PICT
-//! metafiles, and palette/gradient/LUT text formats (JASC palettes, GIMP
+//! Illustration and paint-program files: Aseprite sprites, GEM bitmaps,
+//! binary CGM and QuickDraw PICT metafiles, and palette/gradient/LUT text formats (JASC palettes, GIMP
 //! gradients, Adobe/Resolve `.cube` colour lookup tables).
 
 use crate::bytes::{to_u64, u16_be, u16_le, u32_le};
@@ -227,83 +226,6 @@ async fn ase_palette(cx: Cx, body: Span) -> Result<()> {
         let [r, g, b, a] = c.get(..4).and_then(|s| <[u8; 4]>::try_from(s).ok()).unwrap_or_default();
         cx.push(node.span(cur.since(start)).value(text(format!("#{r:02x}{g:02x}{b:02x}{a:02x}")))).await;
     }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Atari ST: DEGAS and NEOchrome
-
-const ST_RESOLUTIONS: EnumTable = &[(0, "low (320×200, 16 colours)"), (1, "medium (640×200, 4 colours)"), (2, "high (640×400, mono)")];
-
-fn st_palette_ok(d: &[u8], at: usize) -> bool {
-    (0..32).step_by(2).all(|i| u16_be(d, at.saturating_add(i)).is_some_and(|w| w <= 0x0fff))
-}
-
-fn degas_probe(h: &Head<'_>) -> bool {
-    matches!(h.len, 32034 | 32066) && u16_be(h.data, 0).is_some_and(|r| r <= 2) && st_palette_ok(h.data, 2)
-}
-
-fn neo_probe(h: &Head<'_>) -> bool {
-    h.len == 32128 && u16_be(h.data, 0) == Some(0) && u16_be(h.data, 2).is_some_and(|r| r <= 2) && st_palette_ok(h.data, 4)
-}
-
-declare_format!(pub DEGAS = "degas", "DEGAS picture (Atari ST)", ["pi1", "pi2", "pi3"], "image/x-degas",
-    Probe::Custom(degas_probe), degas);
-declare_format!(pub NEO = "neochrome", "NEOchrome picture (Atari ST)", ["neo"], "image/x-neochrome",
-    Probe::Custom(neo_probe), neochrome);
-
-fn st_colour(w: u16) -> String {
-    // 3 bits per channel (STE: a fourth, low-order bit in bit 3).
-    let c = |v: u16| {
-        let v = ((v & 7) << 1) | ((v >> 3) & 1);
-        v.saturating_mul(17)
-    };
-    format!("#{:02x}{:02x}{:02x}", c(w >> 8), c(w >> 4), c(w))
-}
-
-async fn st_palette(cx: Cx, span: Span) -> Result<()> {
-    let d = cx.read(span).await?;
-    for (i, w) in d.as_chunks::<2>().0.iter().enumerate() {
-        let w = u16::from_be_bytes(*w);
-        cx.push(Node::new(format!("[{i}]")).span(span.sub(to_u64(i).saturating_mul(2), 2)).value(text(st_colour(w))).summary(format!("{w:#05x}"))).await;
-    }
-    Ok(())
-}
-
-async fn degas(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let res = u16_be(&cx.read(file.sub(0, 2)).await?, 0).unwrap_or(0);
-    let name = ST_RESOLUTIONS.iter().find(|(k, _)| *k == u64::from(res)).map(|(_, v)| *v);
-    cx.emit(Node::new("Resolution").span(file.sub(0, 2)).value(Value::Enum { raw: res.into(), bits: 16, name }));
-    let pal = file.sub(2, 32);
-    cx.emit(Node::new("Palette").span(pal).summary("16 colours").lazy(st_palette, pal));
-    cx.emit(Node::new("Screen memory").span(file.sub(34, 32000)).summary("interleaved bitplanes"));
-    if file.len == 32066 {
-        cx.emit(Node::new("Colour animation (DEGAS Elite)").span(file.sub(32034, 32)).summary("left/right limits, directions, delays"));
-    }
-    cx.annotate(format!("DEGAS{} picture, {}", if file.len == 32066 { " Elite" } else { "" }, name.unwrap_or("unknown resolution")));
-    Ok(())
-}
-
-async fn neochrome(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let h = cx.read(file.sub_exact(0, 128)?).await?;
-    let word = |i: usize| u16_be(&h, i).unwrap_or(0);
-    let res = word(2);
-    let name = ST_RESOLUTIONS.iter().find(|(k, _)| *k == u64::from(res)).map(|(_, v)| *v);
-    cx.emit(Node::new("Flags").span(file.sub(0, 2)).value(hex(word(0), 16)));
-    cx.emit(Node::new("Resolution").span(file.sub(2, 2)).value(Value::Enum { raw: res.into(), bits: 16, name }));
-    let pal = file.sub(4, 32);
-    cx.emit(Node::new("Palette").span(pal).summary("16 colours").lazy(st_palette, pal));
-    cx.emit(Node::new("File name").span(file.sub(36, 12)).value(text(String::from_utf8_lossy(h.get(36..48).unwrap_or_default()).trim_end())));
-    cx.emit(Node::new("Colour animation limits").span(file.sub(48, 2)).value(hex(word(48), 16)));
-    cx.emit(Node::new("Colour animation speed").span(file.sub(50, 2)).value(hex(word(50), 16)));
-    cx.emit(Node::new("Animation steps").span(file.sub(52, 2)).value(uint(word(52), 16)));
-    cx.emit(Node::new("Offset").span(file.sub(54, 4)).value(text(format!("{}, {}", word(54), word(56)))));
-    cx.emit(Node::new("Size").span(file.sub(58, 4)).value(text(format!("{}×{}", word(58), word(60)))));
-    cx.emit(Node::new("Reserved").span(file.sub(62, 66)));
-    cx.emit(Node::new("Screen memory").span(file.sub(128, 32000)).summary("interleaved bitplanes"));
-    cx.annotate(format!("NEOchrome picture, {}", name.unwrap_or("unknown resolution")));
     Ok(())
 }
 

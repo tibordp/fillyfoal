@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ autorun.inf — AutoRun configuration "Example Install Disc", runs setup.exe /auto  [0x0+0x86]
+  ▾ [autorun] — 3 keys  [0x18+0x51]
+      open: "setup.exe /auto"  [0x23+0x16]
+      icon: "setup.exe,0"  [0x39+0x12]
+      label: "Example Install Disc"  [0x4b+0x1c]
+  ▾ [Content] — 1 keys  [0x69+0x1d]
+      MusicFiles: "false"  [0x74+0x12]

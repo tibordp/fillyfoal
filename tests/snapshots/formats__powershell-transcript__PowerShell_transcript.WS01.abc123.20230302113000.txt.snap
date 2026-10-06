@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ PowerShell_transcript.WS01.abc123.20230302113000.txt — PowerShell transcript by EXAMPLE\alice on WS01, 3 commands  [0x0+0x2ed]
+  ▾ Windows PowerShell transcript start: "2023-03-02 11:30:00"  [0x1b+0x137]
+      Start time: "2023-03-02 11:30:00"  [0x40+0x1c]
+      Username: "EXAMPLE\\alice"  [0x5c+0x19]
+      RunAs User: "EXAMPLE\\alice"  [0x75+0x1b]
+      Line: "Configuration Name:"  [0x90+0x15]
+      Machine: "WS01 (Microsoft Windows NT 10.0.19045.0)"  [0xa5+0x33]
+      Host Application: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"  [0xd8+0x4d]
+      Process ID: "4321"  [0x125+0x12]
+      PSVersion: "5.1.19041.2364"  [0x137+0x1b]
+    Line: "Transcript started, output file is C:\\Users\\alice\\Documents\\PowerShell_transcript.WS01.abc123.20230302113000.txt"  [0x16a+0x72]
+  ▾ PS> whoami — 1 output lines  [0x1dc+0x2a]
+      Line: "PS C:\\Users\\alice> whoami"  [0x1dc+0x1b]
+      Line: "example\\alice"  [0x1f7+0xf]
+  ▾ PS> Get-ChildItem C:\Temp | Select-Object Name — 3 output lines  [0x206+0x56]
+      Line: "PS C:\\Users\\alice> Get-ChildItem C:\\Temp | Select-Object Name"  [0x206+0x3f]
+      Line: "Name"  [0x245+0x6]
+      Line: "----"  [0x24b+0x6]
+      Line: "notes.txt"  [0x251+0xb]
+  ▾ PS> Stop-Transcript — 0 output lines  [0x25c+0x24]
+      Line: "PS C:\\Users\\alice> Stop-Transcript"  [0x25c+0x24]
+  ▾ Windows PowerShell transcript end: "2023-03-02 11:35:12"  [0x298+0x3d]
+      End time: "2023-03-02 11:35:12"  [0x2bb+0x1a]

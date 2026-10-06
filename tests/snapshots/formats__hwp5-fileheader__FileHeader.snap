@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ FileHeader — HWP 5.0.3.0 file header, compressed  [0x0+0x100]
+    Signature: "HWP Document File"  [0x0+0x20]
+    Version: 83886848 — 5.0.3.0  [0x20+0x4]
+    Properties: 0x1 [COMPRESSED]  [0x24+0x4]
+    License: 0x0  [0x28+0x4]
+    Encryption version: 0  [0x2c+0x4]
+    KOGL license country: 0  [0x30+0x1]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x31+0xcf]

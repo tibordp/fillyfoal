@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ budget.slk — SYLK spreadsheet from WXL, 6 cells, 3 rows × 2 columns  [0x0+0xa8]
+    Identification: "ID;PWXL;N;E"  [0x0+0xd]
+    Picture format: "P;PGeneral"  [0xd+0xc]
+    Picture format: "P;P0.00"  [0x19+0x9]
+    Format: "F;P0;DG0G8;M255"  [0x22+0x11]
+    Bounds: "B;Y3;X2;D0 0 2 1"  [0x33+0x12]
+    A1: "Item"  [0x45+0x11]
+    B1: "Cost"  [0x56+0xe]
+    A2: "Rent"  [0x64+0x11]
+    B2: 1200  [0x75+0xc]
+    A3: "Total"  [0x81+0x12]
+    B3: 1200 — =R2C2  [0x93+0x12]
+    End: "E"  [0xa5+0x3]

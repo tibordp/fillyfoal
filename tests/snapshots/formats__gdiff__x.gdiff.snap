@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ x.gdiff — GDIFF, 5 commands (2 copies, 8 literal bytes), output 328 bytes  [0x0+0x1f]
+    Magic: 0xd1ffd1ff  [0x0+0x4]
+    Version: 4  [0x4+0x1]
+    DATA: 0x0 — opcode 3: 3 literal bytes  [0x5+0x4]
+    COPY: 0x3 — opcode 249: 20 bytes from 0x10  [0x9+0x4]
+    DATA: 0x17 — opcode 247: 5 literal bytes  [0xd+0x8]
+    COPY: 0x1c — opcode 254: 300 bytes from 0x100  [0x15+0x9]
+    EOF: 0x148 — opcode 0: end of patch  [0x1e+0x1]

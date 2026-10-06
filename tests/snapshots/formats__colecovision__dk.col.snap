@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dk.col — ColecoVision "DONKEY KONG" (PRESENTS COLECO, 1982), 8 KiB, start 0x8040  [0x0+0x2000]
+    Magic: show title screen (0x55aa)  [0x0+0x2]
+    Sprite name table: 0x7000  [0x2+0x2]
+    Sprite order table: 0x7020  [0x4+0x2]
+    Work buffer: 0x7030  [0x6+0x2]
+    Controller map: 0x7040  [0x8+0x2]
+    Game start: 0x8040  [0xa+0x2]
+    RST 08h: c3 00 80  |...|  [0xc+0x3]
+    RST 10h: c3 00 80  |...|  [0xf+0x3]
+    RST 18h: c3 00 80  |...|  [0x12+0x3]
+    RST 20h: c3 00 80  |...|  [0x15+0x3]
+    RST 28h: c3 00 80  |...|  [0x18+0x3]
+    RST 30h: c3 00 80  |...|  [0x1b+0x3]
+    IRQ (RST 38h): c3 00 80  |...|  [0x1e+0x3]
+    NMI: c3 00 80  |...|  [0x21+0x3]
+    Title string: "PRESENTS COLECO/DONKEY KONG/1982"  [0x24+0x20]
+    Program  [0x24+0x1fdc]

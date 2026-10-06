@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.d88 — D88 2DD disk "MY DISK", 2 tracks  [0x0+0x6f0]
+    Disk name: "MY DISK"  [0x0+0x11]
+    Reserved: 00 00 00 00 00 00 00 00 00  |.........|  [0x11+0x9]
+    Write protect: no (0x0)  [0x1a+0x1]
+    Media type: 2DD (0x10)  [0x1b+0x1]
+    Disk size: 1776  [0x1c+0x4]
+  ▾ Tracks — 2 tracks  [0x20+0x290]
+      Track 0 (cylinder 0, head 0) — 2 sectors of 256 bytes, IDs 1 2  [0x2b0+0x220]
+      Track 1 (cylinder 1, head 0) — 2 sectors of 256 bytes, IDs 1 2  [0x4d0+0x220]

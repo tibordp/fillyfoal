@@ -1,0 +1,7 @@
+type=USER_LOGIN msg=audit(1677756600.123:812): pid=2201 uid=0 auid=1000 ses=4 msg='op=login id=1000 exe="/usr/sbin/sshd" hostname=? addr=192.0.2.10 terminal=/dev/pts/0 res=success'
+type=SYSCALL msg=audit(1677756660.500:813): arch=c000003e syscall=59 success=yes exit=0 a0=55d1 a1=55d2 a2=55d3 a3=0 items=2 ppid=2210 pid=2250 auid=1000 uid=1000 gid=1000 euid=1000 comm="cat" exe="/usr/bin/cat" key="passwd_read"
+type=EXECVE msg=audit(1677756660.500:813): argc=2 a0="cat" a1="/etc/passwd"
+type=CWD msg=audit(1677756660.500:813): cwd="/home/alice"
+type=PATH msg=audit(1677756660.500:813): item=0 name="/usr/bin/cat" inode=1234 dev=08:01 mode=0100755 ouid=0 ogid=0
+type=PROCTITLE msg=audit(1677756660.500:813): proctitle=636174002F6574632F706173737764
+type=USER_END msg=audit(1677757000.010:820): pid=2201 uid=0 auid=1000 ses=4 msg='op=PAM:session_close acct="alice" exe="/usr/sbin/sshd" res=success'
