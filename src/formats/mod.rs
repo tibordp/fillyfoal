@@ -150,6 +150,7 @@ pub mod sst;
 // -- end documents --
 
 // -- disk images & filesystems --
+pub mod disk;
 // -- end disk images --
 
 // -- retro & consoles --
@@ -525,6 +526,43 @@ pub static FORMATS: &[&Format] = &[
     // -- end documents --
 
     // -- disk images & filesystems --
+    // Virtual disk containers first: their payload may start with an MBR.
+    &disk::vhd::FORMAT,
+    &disk::vhdx::FORMAT,
+    &disk::qcow::FORMAT,
+    &disk::vmdk::FORMAT,
+    &disk::vmdk::DESCRIPTOR,
+    &disk::vdi::FORMAT,
+    &disk::parallels::FORMAT,
+    // Partition tables and volumes with distinctive signatures.
+    &disk::gpt::FORMAT,
+    &disk::bitlocker::FORMAT,
+    &disk::luks::FORMAT,
+    &disk::lvm::FORMAT,
+    &disk::mdraid::FORMAT,
+    &disk::swap::FORMAT,
+    &disk::xfs::FORMAT,
+    &disk::apm::FORMAT,
+    &disk::uefi::FORMAT,
+    &disk::zfs::FORMAT,
+    &disk::hfs::FORMAT,
+    &disk::apfs::FORMAT,
+    &disk::ext::FORMAT,
+    &disk::minix::FORMAT,
+    &disk::bfs::FORMAT,
+    &disk::f2fs::FORMAT,
+    &disk::erofs::FORMAT,
+    &disk::jfs::FORMAT,
+    &disk::nilfs::FORMAT,
+    &disk::ufs::FORMAT,
+    // Boot sectors ending in 0x55AA, before the plain MBR.
+    &disk::ntfs::FORMAT,
+    &disk::exfat::FORMAT,
+    &disk::fat::FORMAT,
+    &disk::mbr::FORMAT,
+    &disk::bsdlabel::FORMAT,
+    // Detected only if the probe window reaches 64 KiB.
+    &disk::btrfs::FORMAT,
     // -- end disk images --
 
     // -- archives & compression --

@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ swap.img — Linux swap v1 "swapfix", 12 KiB (3 pages of 4 KiB)  [0x0+0x3000]
+    Boot bits  [0x0+0x400]
+  ▾ Header  [0x400+0x2c]
+      Version: 1  [0x400+0x4]
+      Last page: 2  [0x404+0x4]
+      Bad pages: 0  [0x408+0x4]
+      UUID: "8a7b6c5d-4e3f-4a2b-9c1d-0e1f2a3b4c5d"  [0x40c+0x10]
+      Label: "swapfix"  [0x41c+0x10]
+    Signature: "SWAPSPACE2"  [0xff6+0xa]
+    Swap pages — 8 KiB  [0x1000+0x2000]
