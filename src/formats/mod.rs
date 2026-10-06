@@ -54,6 +54,7 @@ pub mod pickle;
 pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
+pub mod winhelp;
 pub mod swf;
 pub mod terminfo;
 pub mod thumbcache;
@@ -221,6 +222,7 @@ pub static FORMATS: &[&Format] = &[
     &git::INDEX,
     &swf::FORMAT,
     &chm::FORMAT,
+    &winhelp::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
