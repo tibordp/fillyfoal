@@ -1974,7 +1974,7 @@ async fn clp_format(cx: Cx, (input, entry, nt, format, data): (Input, Span, bool
 
 /// A node for opaque data: its text if it looks like text, otherwise the
 /// data identified as an embedded file.
-async fn text_or_embedded(cx: &Cx, input: Input, span: Span) -> Result<Node> {
+pub(crate) async fn text_or_embedded(cx: &Cx, input: Input, span: Span) -> Result<Node> {
     let head = cx.read_avail(span.sub(0, 0x1000)).await?;
     let printable = head.split(|&b| b == 0).next().unwrap_or_default();
     if !head.is_empty() && crate::text::looks_like_text(printable) && printable.len() >= head.len().saturating_sub(1) {

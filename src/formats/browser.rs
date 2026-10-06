@@ -1114,3 +1114,125 @@ async fn mork_expand(cx: Cx, (file, span, kind): (Span, Span, MorkKind)) -> Resu
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Firefox cache2 entries (cache2/entries/<SHA1>)
+//
+// The body comes first; the metadata (hashes, header, key, elements) follows
+// it, and the file ends with the metadata's offset (big-endian).
+
+const CACHE2_CHUNK: u64 = 256 * 1024;
+
+/// Reads a big-endian u32 at absolute offset `at` from the head or the tail.
+fn head_or_tail_u32(h: &Head<'_>, at: u64) -> Option<u32> {
+    if let Some(v) = usize::try_from(at).ok().and_then(|a| u32_be(h.data, a)) {
+        return Some(v);
+    }
+    let tail_start = h.len.checked_sub(to_u64(h.tail.len()))?;
+    let rel = usize::try_from(at.checked_sub(tail_start)?).ok()?;
+    u32_be(h.tail, rel)
+}
+
+/// Where the metadata header starts, given the metadata offset.
+fn cache2_header_at(offset: u64) -> u64 {
+    let chunks = offset.div_ceil(CACHE2_CHUNK);
+    offset.saturating_add(4).saturating_add(chunks.saturating_mul(2))
+}
+
+fn cache2_probe(h: &Head<'_>) -> bool {
+    let Some(offset) = h.len.checked_sub(4).and_then(|end| head_or_tail_u32(h, end)).map(u64::from) else {
+        return false;
+    };
+    let header = cache2_header_at(offset);
+    // Header (7 or 8 words) plus a key must fit before the trailing offset.
+    if header.saturating_add(36) > h.len.saturating_sub(4) {
+        return false;
+    }
+    let version = head_or_tail_u32(h, header);
+    let key_size = head_or_tail_u32(h, header.saturating_add(24)).map_or(0, u64::from);
+    matches!(version, Some(1..=3)) && key_size > 0 && header.saturating_add(28).saturating_add(key_size) < h.len
+}
+
+declare_format!(pub FIREFOX_CACHE2 = "firefox-cache2", "Firefox cache entry (cache2)", [], "application/x-firefox-cache2",
+    Probe::Custom(cache2_probe), firefox_cache2);
+
+const CACHE2_FLAGS: FlagTable = &[flag(1, "ANONYMOUS"), flag(2, "PINNED")];
+
+fn cache2_header(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
+    let version = f.u32("Version").emit()?;
+    f.u32("Fetch count").emit()?;
+    f.u32("Last fetched").timestamp().emit()?;
+    f.u32("Last modified").timestamp().emit()?;
+    f.u32("Frecency").emit()?;
+    f.u32("Expiration time").with(|&v, n| if v == u32::MAX { n.summary("never") } else { n.value(Value::Timestamp { unix_seconds: v.into() }) }).emit()?;
+    let key = f.u32("Key size").emit()?;
+    if version >= 2 {
+        f.u32("Flags").flags(CACHE2_FLAGS).emit()?;
+    }
+    Ok((version, key))
+}
+
+async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let end = file.len.saturating_sub(4);
+    let tail = cx.read(file.sub(end, 4)).await?;
+    let offset = u64::from(u32_be(&tail, 0).unwrap_or(0));
+    let body = file.sub(0, offset);
+    let mut body_node = crate::formats::winforensics::text_or_embedded(&cx, input, body).await?.summary(size(offset));
+    body_node.name = "Body".into();
+    cx.emit(body_node);
+    let chunks = offset.div_ceil(CACHE2_CHUNK);
+    cx.emit(Node::new("Metadata hash").span(file.sub(offset, 4)));
+    cx.emit(Node::new("Chunk hashes").span(file.sub(offset.saturating_add(4), chunks.saturating_mul(2))).summary(format!("{chunks} chunks")));
+    let header_at = cache2_header_at(offset);
+    let header_span = file.sub(header_at, 32);
+    let block = cx.block(header_span).await?;
+    let (version, key_len) = cache2_header(&mut Fields::new(&block, BE), &())?;
+    let header_len = if version >= 2 { 32 } else { 28 };
+    cx.emit(struct_node("Header", file.sub(header_at, header_len), BE, (), cache2_header));
+    let key_at = header_at.saturating_add(header_len);
+    let key_span = file.sub_exact(key_at, u64::from(key_len).saturating_add(1))?;
+    let key = crate::text::until_nul(&cx.read(key_span).await?);
+    cx.emit(Node::new("Key").span(key_span).value(text(key.clone())));
+    // Elements: NUL-terminated name/value pairs up to the trailing offset.
+    let elements_at = key_span.end().saturating_sub(file.offset);
+    let elements = file.sub(elements_at, end.saturating_sub(elements_at));
+    let data = cx.read_avail(elements.sub(0, cx.limits().max_read)).await?;
+    let mut parts = data.split(|&b| b == 0);
+    let mut at = 0u64;
+    let mut status = String::new();
+    let mut list = Vec::new();
+    while let (Some(name), Some(value)) = (parts.next(), parts.next()) {
+        if name.is_empty() {
+            break;
+        }
+        let len = to_u64(name.len()).saturating_add(to_u64(value.len())).saturating_add(2);
+        let name = String::from_utf8_lossy(name).into_owned();
+        let value = String::from_utf8_lossy(value).into_owned();
+        if name == "response-head" {
+            status = value.lines().next().unwrap_or_default().to_owned();
+        }
+        list.push((name, value, elements.sub(at, len)));
+        at = at.saturating_add(len);
+    }
+    cx.emit(Node::new("Elements").span(elements).summary(format!("{} elements", list.len())).lazy(cache2_elements, list));
+    cx.emit(Node::new("Metadata offset").span(file.sub(end, 4)).value(crate::formats::datakit::hex(offset, 32)));
+    // The key is "[flags],:URL" (e.g. "a,:https://...", "O^partitionKey=...,:URL").
+    let url = key.split_once(":http").map_or(key.as_str(), |(_, rest)| rest);
+    let url = if key.contains(":http") { format!("http{url}") } else { key.clone() };
+    cx.annotate(format!(
+        "Firefox cache entry v{version}: {}{}, {} body",
+        clip(&url, 120),
+        if status.is_empty() { String::new() } else { format!(" ({status})") },
+        size(offset)
+    ));
+    Ok(())
+}
+
+async fn cache2_elements(cx: Cx, list: Vec<(String, String, Span)>) -> Result<()> {
+    for (name, value, span) in list {
+        let node = Node::new(name).span(span);
+        cx.push(if value.lines().count() > 1 { node.value(text(value.lines().next().unwrap_or_default())).summary(clip(value.trim_end().replace("\r\n", " | ").as_str(), 200)) } else { node.value(text(value)) }).await;
+    }
+    Ok(())
+}

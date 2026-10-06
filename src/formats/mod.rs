@@ -858,6 +858,7 @@ pub static FORMATS: &[&Format] = &[
     &windiag::PIF,
     // Weak, size-based probes last.
     &unixforensics::UTMP,
+    &browser::FIREFOX_CACHE2,
     &winforensics::AUTORUN,
     &winforensics::DESKTOP_INI,
     &models::STL,
