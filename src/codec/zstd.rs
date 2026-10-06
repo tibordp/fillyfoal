@@ -2,7 +2,7 @@
 //! blocks; Huffman-coded literals; FSE-coded sequences with repeat offsets;
 //! XXH64 content checksums. Dictionaries are not supported.
 
-use crate::codec::filters::Filter;
+use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -329,6 +329,7 @@ impl Huffman {
 // Frames and blocks
 
 /// State that persists between the blocks of a frame.
+#[derive(Clone)]
 struct FrameState {
     huffman: Option<Huffman>,
     ll: Option<Fse>,
@@ -510,135 +511,318 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
     Ok(())
 }
 
-/// XXH64 (for content checksums).
-pub fn xxh64(data: &[u8], seed: u64) -> u64 {
-    const P1: u64 = 0x9e37_79b1_85eb_ca87;
-    const P2: u64 = 0xc2b2_ae3d_27d4_eb4f;
-    const P3: u64 = 0x1656_67b1_9e37_79f9;
-    const P4: u64 = 0x85eb_ca77_c2b2_ae63;
-    const P5: u64 = 0x27d4_eb2f_1656_67c5;
-    let round = |acc: u64, v: u64| acc.wrapping_add(v.wrapping_mul(P2)).rotate_left(31).wrapping_mul(P1);
-    let merge = |acc: u64, v: u64| (acc ^ round(0, v)).wrapping_mul(P1).wrapping_add(P4);
-    let mut h;
-    let (stripes, rest) = data.as_chunks::<32>();
-    if stripes.is_empty() {
-        h = seed.wrapping_add(P5);
-    } else {
-        let mut v = [seed.wrapping_add(P1).wrapping_add(P2), seed.wrapping_add(P2), seed, seed.wrapping_sub(P1)];
-        for stripe in stripes {
-            for (acc, lane) in v.iter_mut().zip(stripe.as_chunks::<8>().0) {
-                *acc = round(*acc, u64::from_le_bytes(*lane));
-            }
-        }
-        h = v[0].rotate_left(1).wrapping_add(v[1].rotate_left(7)).wrapping_add(v[2].rotate_left(12)).wrapping_add(v[3].rotate_left(18));
-        for lane in v {
-            h = merge(h, lane);
-        }
-    }
-    h = h.wrapping_add(u64::try_from(data.len()).unwrap_or(0));
-    let (words, rest) = rest.as_chunks::<8>();
-    for w in words {
-        h = (h ^ round(0, u64::from_le_bytes(*w))).rotate_left(27).wrapping_mul(P1).wrapping_add(P4);
-    }
-    let (quads, bytes) = rest.as_chunks::<4>();
-    for q in quads {
-        h = (h ^ u64::from(u32::from_le_bytes(*q)).wrapping_mul(P1)).rotate_left(23).wrapping_mul(P2).wrapping_add(P3);
-    }
-    for &b in bytes {
-        h = (h ^ u64::from(b).wrapping_mul(P5)).rotate_left(11).wrapping_mul(P1);
-    }
-    h ^= h >> 33;
-    h = h.wrapping_mul(P2);
-    h ^= h >> 29;
-    h = h.wrapping_mul(P3);
-    h ^ (h >> 32)
+const P1: u64 = 0x9e37_79b1_85eb_ca87;
+const P2: u64 = 0xc2b2_ae3d_27d4_eb4f;
+const P3: u64 = 0x1656_67b1_9e37_79f9;
+const P4: u64 = 0x85eb_ca77_c2b2_ae63;
+const P5: u64 = 0x27d4_eb2f_1656_67c5;
+
+fn xxh_round(acc: u64, v: u64) -> u64 {
+    acc.wrapping_add(v.wrapping_mul(P2)).rotate_left(31).wrapping_mul(P1)
 }
 
-/// Zstandard frames (and skippable frames), concatenated.
-#[derive(Clone, Copy)]
-pub struct Zstd;
+/// Incremental XXH64 (for content checksums).
+#[derive(Clone)]
+pub struct Xxh64 {
+    seed: u64,
+    lanes: [u64; 4],
+    /// A partial 32-byte stripe.
+    buf: [u8; 32],
+    buffered: usize,
+    total: u64,
+}
 
-impl Filter for Zstd {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut pos = 0usize;
-        let mut frames = 0u32;
-        while let Some(magic) = input.get(pos..pos.saturating_add(4)).map(le) {
-            if magic & 0xffff_fff0 == 0x184d_2a50 {
-                let len = usize::try_from(le(input.get(pos.saturating_add(4)..pos.saturating_add(8)).unwrap_or_default())).unwrap_or(usize::MAX);
-                pos = pos.saturating_add(8).saturating_add(len);
-                continue;
+impl Xxh64 {
+    pub fn new(seed: u64) -> Self {
+        Xxh64 {
+            seed,
+            lanes: [seed.wrapping_add(P1).wrapping_add(P2), seed.wrapping_add(P2), seed, seed.wrapping_sub(P1)],
+            buf: [0; 32],
+            buffered: 0,
+            total: 0,
+        }
+    }
+
+    fn stripe(&mut self, stripe: &[u8; 32]) {
+        for (acc, lane) in self.lanes.iter_mut().zip(stripe.as_chunks::<8>().0) {
+            *acc = xxh_round(*acc, u64::from_le_bytes(*lane));
+        }
+    }
+
+    pub fn update(&mut self, mut data: &[u8]) {
+        self.total = self.total.wrapping_add(u64::try_from(data.len()).unwrap_or(0));
+        if self.buffered > 0 {
+            let take = 32usize.saturating_sub(self.buffered).min(data.len());
+            if let (Some(dst), Some(src)) = (self.buf.get_mut(self.buffered..self.buffered.saturating_add(take)), data.get(..take)) {
+                dst.copy_from_slice(src);
             }
-            if magic != 0xfd2f_b528 {
-                if frames == 0 {
-                    return Err(bad("not a zstd frame"));
-                }
-                break;
+            self.buffered = self.buffered.saturating_add(take);
+            data = data.get(take..).unwrap_or_default();
+            if self.buffered < 32 {
+                return;
             }
-            frames = frames.saturating_add(1);
-            pos = pos.saturating_add(4);
-            let fhd = *input.get(pos).ok_or_else(|| bad("truncated frame header"))?;
-            pos = pos.saturating_add(1);
-            let single = fhd & 0x20 != 0;
-            let checksum = fhd & 0x04 != 0;
-            let dict_len = match fhd & 3 {
-                0 => 0usize,
-                1 => 1,
-                2 => 2,
-                _ => 4,
-            };
-            let fcs_len = match fhd >> 6 {
-                0 => usize::from(single),
-                1 => 2,
-                2 => 4,
-                _ => 8,
-            };
-            if !single {
-                pos = pos.saturating_add(1); // window descriptor
+            let full = self.buf;
+            self.stripe(&full);
+            self.buffered = 0;
+        }
+        let (stripes, rest) = data.as_chunks::<32>();
+        for stripe in stripes {
+            self.stripe(stripe);
+        }
+        if let Some(dst) = self.buf.get_mut(..rest.len()) {
+            dst.copy_from_slice(rest);
+        }
+        self.buffered = rest.len();
+    }
+
+    pub fn finish(&self) -> u64 {
+        let merge = |acc: u64, v: u64| (acc ^ xxh_round(0, v)).wrapping_mul(P1).wrapping_add(P4);
+        let mut h;
+        if self.total >= 32 {
+            let [a, b, c, d] = self.lanes;
+            h = a.rotate_left(1).wrapping_add(b.rotate_left(7)).wrapping_add(c.rotate_left(12)).wrapping_add(d.rotate_left(18));
+            for lane in self.lanes {
+                h = merge(h, lane);
             }
-            let dict = le(input.get(pos..pos.saturating_add(dict_len)).unwrap_or_default());
-            if dict != 0 {
-                return Err(Diagnostic::unsupported("zstd frame using a dictionary"));
+        } else {
+            h = self.seed.wrapping_add(P5);
+        }
+        h = h.wrapping_add(self.total);
+        let rest = self.buf.get(..self.buffered).unwrap_or_default();
+        let (words, rest) = rest.as_chunks::<8>();
+        for w in words {
+            h = (h ^ xxh_round(0, u64::from_le_bytes(*w))).rotate_left(27).wrapping_mul(P1).wrapping_add(P4);
+        }
+        let (quads, bytes) = rest.as_chunks::<4>();
+        for q in quads {
+            h = (h ^ u64::from(u32::from_le_bytes(*q)).wrapping_mul(P1)).rotate_left(23).wrapping_mul(P2).wrapping_add(P3);
+        }
+        for &b in bytes {
+            h = (h ^ u64::from(b).wrapping_mul(P5)).rotate_left(11).wrapping_mul(P1);
+        }
+        h ^= h >> 33;
+        h = h.wrapping_mul(P2);
+        h ^= h >> 29;
+        h = h.wrapping_mul(P3);
+        h ^ (h >> 32)
+    }
+}
+
+/// XXH64 of a whole buffer.
+pub fn xxh64(data: &[u8], seed: u64) -> u64 {
+    let mut h = Xxh64::new(seed);
+    h.update(data);
+    h.finish()
+}
+
+fn limit_error(limit: usize) -> Diagnostic {
+    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
+}
+
+/// The frame being decoded.
+#[derive(Clone)]
+struct Frame {
+    /// Where the frame's output starts in `out` (its window starts there).
+    start: usize,
+    /// The content checksum, if the frame has one.
+    hash: Option<Xxh64>,
+    /// The declared content size.
+    size: Option<u64>,
+    st: FrameState,
+}
+
+/// Zstandard frames (and skippable frames), concatenated; or, in
+/// single-frame mode, exactly one frame (after any skippable frames).
+/// Decoded a block at a time.
+#[derive(Clone)]
+pub struct Zstd {
+    /// Input consumed (always at a frame or block boundary).
+    pos: usize,
+    /// Zstandard (not skippable) frames started.
+    frames: u32,
+    frame: Option<Frame>,
+    single: bool,
+    done: bool,
+}
+
+impl Zstd {
+    /// Concatenated frames, until the input ends or something else follows.
+    pub fn new() -> Self {
+        Zstd { pos: 0, frames: 0, frame: None, single: false, done: false }
+    }
+
+    /// One frame; whatever follows it is left unconsumed.
+    pub fn single_frame() -> Self {
+        Zstd { single: true, ..Zstd::new() }
+    }
+
+    /// Starts a frame (or skips a skippable one) at `self.pos`.
+    fn start_frame(&mut self, input: &[u8], eof: bool, out: &[u8]) -> Result<()> {
+        let pos = self.pos;
+        let Some(magic) = input.get(pos..pos.saturating_add(4)).map(le) else {
+            if !eof {
+                return Err(bad("truncated frame magic"));
             }
-            pos = pos.saturating_add(dict_len).saturating_add(fcs_len);
-            let frame_start = out.len();
-            let mut st = FrameState { huffman: None, ll: None, of: None, ml: None, reps: [1, 4, 8] };
-            loop {
-                let h = le(input.get(pos..pos.saturating_add(3)).ok_or_else(|| bad("truncated block header"))?);
-                pos = pos.saturating_add(3);
-                let last = h & 1 != 0;
-                let kind = (h >> 1) & 3;
-                let size = usize::try_from(h >> 3).unwrap_or(0);
-                match kind {
-                    0 => out.extend_from_slice(input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated raw block"))?),
-                    1 => {
-                        let b = *input.get(pos).ok_or_else(|| bad("truncated RLE block"))?;
-                        out.resize(out.len().saturating_add(size), b);
+            if self.single && self.frames == 0 {
+                return Err(bad("missing frame"));
+            }
+            // Fewer than four bytes left: not another frame.
+            self.done = true;
+            return Ok(());
+        };
+        if magic & 0xffff_fff0 == 0x184d_2a50 {
+            let len = input.get(pos.saturating_add(4)..pos.saturating_add(8)).map(le);
+            let end = len.map(|len| pos.saturating_add(8).saturating_add(usize::try_from(len).unwrap_or(usize::MAX)));
+            match end {
+                Some(end) if end <= input.len() => self.pos = end,
+                _ if !eof => return Err(bad("truncated skippable frame")),
+                _ => {
+                    self.pos = input.len();
+                    if self.single && self.frames == 0 {
+                        return Err(bad("missing frame"));
                     }
-                    2 => {
-                        let block = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated compressed block"))?;
-                        compressed_block(block, &mut st, &mut out, frame_start, limit)?;
-                    }
-                    _ => return Err(bad("reserved block type")),
-                }
-                if out.len() > limit {
-                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
-                }
-                pos = pos.saturating_add(if kind == 1 { 1 } else { size });
-                if last {
-                    break;
+                    self.done = true;
                 }
             }
-            if checksum {
+            return Ok(());
+        }
+        if magic != 0xfd2f_b528 {
+            if self.frames == 0 {
+                return Err(bad("not a zstd frame"));
+            }
+            self.done = true;
+            return Ok(());
+        }
+        let mut at = pos.saturating_add(4);
+        let fhd = *input.get(at).ok_or_else(|| bad("truncated frame header"))?;
+        at = at.saturating_add(1);
+        let single = fhd & 0x20 != 0;
+        let dict_len = match fhd & 3 {
+            0 => 0usize,
+            1 => 1,
+            2 => 2,
+            _ => 4,
+        };
+        let fcs_len = match fhd >> 6 {
+            0 => usize::from(single),
+            1 => 2,
+            2 => 4,
+            _ => 8,
+        };
+        if !single {
+            at = at.saturating_add(1); // window descriptor
+        }
+        let dict = le(input.get(at..at.saturating_add(dict_len)).ok_or_else(|| bad("truncated frame header"))?);
+        if dict != 0 {
+            return Err(Diagnostic::unsupported("zstd frame using a dictionary"));
+        }
+        at = at.saturating_add(dict_len);
+        let fcs = le(input.get(at..at.saturating_add(fcs_len)).ok_or_else(|| bad("truncated frame header"))?);
+        at = at.saturating_add(fcs_len);
+        let size = match fcs_len {
+            0 => None,
+            2 => Some(fcs.saturating_add(256)),
+            _ => Some(fcs),
+        };
+        self.frames = self.frames.saturating_add(1);
+        self.pos = at;
+        self.frame = Some(Frame {
+            start: out.len(),
+            hash: (fhd & 0x04 != 0).then(|| Xxh64::new(0)),
+            size,
+            st: FrameState { huffman: None, ll: None, of: None, ml: None, reps: [1, 4, 8] },
+        });
+        Ok(())
+    }
+
+    /// Decodes the frame's next block (and its end, after the last one).
+    fn block(&mut self, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let Some(frame) = self.frame.as_mut() else {
+            return Ok(());
+        };
+        let mut pos = self.pos;
+        let h = le(input.get(pos..pos.saturating_add(3)).ok_or_else(|| bad("truncated block header"))?);
+        pos = pos.saturating_add(3);
+        let last = h & 1 != 0;
+        let kind = (h >> 1) & 3;
+        let size = usize::try_from(h >> 3).unwrap_or(0);
+        let before = out.len();
+        match kind {
+            0 => {
+                let body = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated raw block"))?;
+                if before.saturating_add(size) > limit {
+                    return Err(limit_error(limit));
+                }
+                out.extend_from_slice(body);
+            }
+            1 => {
+                let b = *input.get(pos).ok_or_else(|| bad("truncated RLE block"))?;
+                if before.saturating_add(size) > limit {
+                    return Err(limit_error(limit));
+                }
+                out.resize(before.saturating_add(size), b);
+            }
+            2 => {
+                let block = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated compressed block"))?;
+                compressed_block(block, &mut frame.st, out, frame.start, limit)?;
+            }
+            _ => return Err(bad("reserved block type")),
+        }
+        if out.len() > limit {
+            return Err(limit_error(limit));
+        }
+        if let Some(hash) = frame.hash.as_mut() {
+            hash.update(out.get(before..).unwrap_or_default());
+        }
+        pos = pos.saturating_add(if kind == 1 { 1 } else { size });
+        if last {
+            let produced = out.len().saturating_sub(frame.start);
+            if frame.size.is_some_and(|size| u64::try_from(produced).ok() != Some(size)) {
+                return Err(bad("frame content size mismatch"));
+            }
+            if let Some(hash) = &frame.hash {
                 let stored = le(input.get(pos..pos.saturating_add(4)).ok_or_else(|| bad("truncated checksum"))?);
-                let content = out.get(frame_start..).unwrap_or_default();
-                if xxh64(content, 0) & 0xffff_ffff != stored {
+                if hash.finish() & 0xffff_ffff != stored {
                     return Err(bad("content checksum mismatch"));
                 }
                 pos = pos.saturating_add(4);
             }
+            self.frame = None;
+            if self.single {
+                self.done = true;
+            }
         }
-        Ok(out)
+        self.pos = pos;
+        Ok(())
+    }
+}
+
+impl Default for Zstd {
+    fn default() -> Self {
+        Zstd::new()
+    }
+}
+
+impl Decode for Zstd {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let target = out.len().saturating_add(step.max(1));
+        loop {
+            if self.done {
+                return Ok(Step::Done);
+            }
+            if out.len() >= target {
+                return Ok(Step::More);
+            }
+            if self.frame.is_some() {
+                self.block(input, out, limit)?;
+            } else {
+                self.start_frame(input, eof, out)?;
+            }
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
     }
 }
 

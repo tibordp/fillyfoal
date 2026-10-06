@@ -104,6 +104,9 @@ pub enum Codec {
     CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
+    /// Exactly one Zstandard frame (after any skippable frames); what
+    /// follows it is left unconsumed.
+    ZstdFrame,
     /// One raw LZO1X stream (with its end marker).
     Lzo1x,
     /// The lzop (`.lzo`) container.
@@ -187,6 +190,7 @@ impl Codec {
             Codec::Eexec { .. } => "eexec",
             Codec::Bzip2 => "bzip2",
             Codec::Zstd => "zstd",
+            Codec::ZstdFrame => "zstd-frame",
             Codec::UnixCompress => "unix-compress",
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
@@ -236,6 +240,7 @@ impl Codec {
             Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Bzip2 => "bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
+            Codec::ZstdFrame => "zstd-frame (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
@@ -283,6 +288,7 @@ impl Codec {
             | Codec::Bzip2
             | Codec::Xz
             | Codec::Zstd
+            | Codec::ZstdFrame
             | Codec::UnixCompress
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
@@ -331,7 +337,7 @@ impl Codec {
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
-            Codec::Zstd => 32_768,
+            Codec::Zstd | Codec::ZstdFrame => 32_768,
             Codec::UnixCompress => 8_000,
             // A 3-byte chunk stands for 4 KiB of zeros when another follows.
             Codec::Lznt1 { .. } => 1_400,
@@ -400,12 +406,13 @@ impl Codec {
             Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
             Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
-            Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
+            Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
+            Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),
             Codec::Lzma2 => Box::new(Streaming(filters::Whole::new(lzma::Lzma2))),
             Codec::LzmaRaw { props, size } => Box::new(Streaming(filters::Whole::new(lzma::LzmaRaw { props: *props, end: *size }))),
-            Codec::Bzip2 => Box::new(Streaming(filters::Whole::new(bzip2::Bzip2))),
+            Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
             Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
