@@ -170,6 +170,7 @@ pub mod misc2;
 pub mod pdb;
 pub mod platform;
 pub mod devices;
+pub mod browser;
 // -- end misc --
 
 // -- text --
@@ -805,6 +806,14 @@ pub static FORMATS: &[&Format] = &[
     &devices::VERITY,
     &devices::BTRFS_SEND,
     &ebooks::PDB,
+    &browser::IE_INDEX,
+    &browser::BINARYCOOKIES,
+    &browser::CHROME_CACHE_INDEX,
+    &browser::CHROME_CACHE_BLOCK,
+    &browser::CHROME_SIMPLE,
+    &browser::CHROME_VISITED,
+    &browser::SNSS,
+    &browser::MORK,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --
