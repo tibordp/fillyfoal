@@ -29,6 +29,7 @@ pub mod bitcode;
 pub mod coff;
 pub mod dart;
 pub mod dxbc;
+pub mod elc;
 pub mod elf;
 pub mod fatbin;
 pub mod hermes;
@@ -201,6 +202,7 @@ pub static FORMATS: &[&Format] = &[
     &omf::FORMAT,
     &qvm::FORMAT,
     &fatbin::FORMAT,
+    &elc::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
