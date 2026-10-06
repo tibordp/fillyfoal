@@ -5,7 +5,7 @@
 use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Cursor, Record, emit_record};
+use crate::dsl::{ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::decode::{Transform, decoded_node};
@@ -748,18 +748,13 @@ async fn dbm(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(8);
     let mut title = String::new();
-    while cur.remaining() >= 8 {
-        let start = cur.pos();
-        let id = String::from_utf8_lossy(&cur.bytes(4).await?).into_owned();
-        let size = u64::from(cur.u32().await?);
-        let body = file.sub(cur.pos(), size);
-        let mut node = Node::new(id.clone()).span(file.sub(start, size.saturating_add(8))).summary(format!("{size} bytes"));
-        if id == "NAME" {
-            title = zstr(&cx.read_avail(body.sub(0, 64)).await?);
+    while let Some(chunk) = cur.chunk(ChunkLayout::new(4, 4, BE)).await? {
+        let mut node = chunk.node();
+        if chunk.id == b"NAME" {
+            title = zstr(&cx.read_avail(chunk.body.sub(0, 64)).await?);
             node = node.value(text(title.clone()));
         }
         cx.push(node).await;
-        cur.skip(size);
     }
     cx.annotate(format!("DigiBooster Pro {}.{:02x} module {title:?}", version >> 8, version & 0xff));
     Ok(())

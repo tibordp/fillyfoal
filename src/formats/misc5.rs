@@ -5,7 +5,7 @@
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Cursor, Record, emit_record};
+use crate::dsl::{Chunk, ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe, embedded};
@@ -25,37 +25,29 @@ fn zstr(b: &[u8]) -> String {
     crate::text::until_nul(b)
 }
 
-/// Walks `[id: 4][size: u32]` chunks in `region` from `start`. `size_includes_header`
-/// selects whether the size counts the 8-byte header; `pad` aligns chunks to
-/// even offsets (IFF style). Each chunk is pushed with `describe`'s summary.
-async fn chunks(
-    cx: &Cx,
-    region: Span,
-    start: u64,
-    endian: Endian,
-    size_includes_header: bool,
-    pad: bool,
-) -> Result<Vec<(String, Span)>> {
+/// Pushes a node for every chunk of `region` from `start`; returns the chunks.
+async fn chunks(cx: &Cx, region: Span, start: u64, layout: ChunkLayout) -> Result<Vec<Chunk>> {
+    let mut cur = Cursor::new(cx, region, layout.endian);
+    cur.seek(start);
     let mut out = Vec::new();
-    let mut pos = start;
-    while pos.saturating_add(8) <= region.len {
-        let h = cx.read(region.sub(pos, 8)).await?;
-        let id = String::from_utf8_lossy(h.get(..4).unwrap_or_default()).into_owned();
-        let raw = if endian == BE { u32_be(&h, 4) } else { u32_le(&h, 4) }.unwrap_or(0);
-        let size = u64::from(raw);
-        let total = if size_includes_header { size } else { size.saturating_add(8) };
-        if total < 8 {
-            return Err(Diagnostic::malformed(format!("chunk {id:?} smaller than its header")).at(region.sub(pos, 8)));
-        }
-        let span = region.sub(pos, total);
-        cx.push(Node::new(id.clone()).span(span).summary(format!("{} bytes", total.saturating_sub(8)))).await;
-        out.push((id, span));
-        pos = pos.saturating_add(total);
-        if pad && pos % 2 == 1 {
-            pos = pos.saturating_add(1);
-        }
+    while let Some(chunk) = cur.chunk(layout).await? {
+        cx.push(chunk.node()).await;
+        out.push(chunk);
     }
     Ok(out)
+}
+
+/// "3× A, 1× B" for chunk kinds in order of first appearance.
+fn tally(found: &[Chunk]) -> String {
+    let mut counts: Vec<(String, u32)> = Vec::new();
+    for c in found {
+        let id = c.name();
+        match counts.iter_mut().find(|(k, _)| *k == id) {
+            Some((_, n)) => *n = n.saturating_add(1),
+            None => counts.push((id, 1)),
+        }
+    }
+    counts.iter().map(|(k, n)| format!("{n}× {k}")).collect::<Vec<_>>().join(", ")
 }
 
 // ---------------------------------------------------------------------------
@@ -367,23 +359,8 @@ declare_format!(pub USM = "cri-usm", "CRI Sofdec2 movie (USM)", ["usm"], "video/
     Probe::Magic(&[(0, b"CRID")]), usm);
 
 async fn usm(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    // Chunk counts per kind (movies have thousands of chunks): pages.
-    let mut pos = 0u64;
-    let mut counts: Vec<(String, u32)> = Vec::new();
-    while pos.saturating_add(8) <= file.len {
-        let h = cx.read(file.sub(pos, 8)).await?;
-        let id = String::from_utf8_lossy(h.get(..4).unwrap_or_default()).into_owned();
-        let size = u64::from(u32_be(&h, 4).unwrap_or(0));
-        match counts.iter_mut().find(|(k, _)| *k == id) {
-            Some((_, n)) => *n = n.saturating_add(1),
-            None => counts.push((id.clone(), 1)),
-        }
-        cx.push(Node::new(id).span(file.sub(pos, size.saturating_add(8))).summary(format!("{size} bytes"))).await;
-        pos = pos.saturating_add(8).saturating_add(size);
-    }
-    let list: Vec<String> = counts.iter().map(|(k, n)| format!("{n}× {k}")).collect();
-    cx.annotate(format!("CRI USM movie: {}", list.join(", ")));
+    let found = chunks(&cx, input.span, 0, ChunkLayout::new(4, 4, BE)).await?;
+    cx.annotate(format!("CRI USM movie: {}", tally(&found)));
     Ok(())
 }
 
@@ -461,8 +438,8 @@ declare_format!(pub EA_SCHL = "ea-schl", "Electronic Arts audio stream (SCHl)", 
     Probe::Magic(&[(0, b"SCHl")]), ea_schl);
 
 async fn ea_schl(cx: Cx, input: Input) -> Result<()> {
-    let found = chunks(&cx, input.span, 0, LE, true, false).await?;
-    let blocks = found.iter().filter(|(k, _)| k == "SCDl").count();
+    let found = chunks(&cx, input.span, 0, ChunkLayout::new(4, 4, LE).inclusive()).await?;
+    let blocks = found.iter().filter(|c| c.id == b"SCDl").count();
     cx.annotate(format!("EA audio stream, {blocks} data blocks"));
     Ok(())
 }
@@ -547,25 +524,8 @@ declare_format!(pub R3D = "r3d", "RED camera raw video (R3D)", ["r3d"], "video/x
     Probe::Custom(r3d_probe), r3d);
 
 async fn r3d(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let mut pos = 0u64;
-    let mut counts: Vec<(String, u32)> = Vec::new();
-    while pos.saturating_add(8) <= file.len {
-        let h = cx.read(file.sub(pos, 8)).await?;
-        let size = u64::from(u32_be(&h, 0).unwrap_or(0));
-        let id = String::from_utf8_lossy(h.get(4..8).unwrap_or_default()).into_owned();
-        if size < 8 {
-            return Err(Diagnostic::malformed("block smaller than its header").at(file.sub(pos, 8)));
-        }
-        match counts.iter_mut().find(|(k, _)| *k == id) {
-            Some((_, n)) => *n = n.saturating_add(1),
-            None => counts.push((id.clone(), 1)),
-        }
-        cx.push(Node::new(id).span(file.sub(pos, size)).summary(format!("{size} bytes"))).await;
-        pos = pos.saturating_add(size);
-    }
-    let list: Vec<String> = counts.iter().map(|(k, n)| format!("{n}× {k}")).collect();
-    cx.annotate(format!("RED R3D clip: {}", list.join(", ")));
+    let found = chunks(&cx, input.span, 0, ChunkLayout::new(4, 4, BE).size_first().inclusive()).await?;
+    cx.annotate(format!("RED R3D clip: {}", tally(&found)));
     Ok(())
 }
 
@@ -692,8 +652,8 @@ declare_format!(pub REX2 = "rex2", "Propellerhead ReCycle loop (REX2)", ["rx2", 
 async fn rex2(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Container").span(file.sub(0, 12)).summary("CAT REX2"));
-    let found = chunks(&cx, file, 12, BE, false, true).await?;
-    let slices = found.iter().filter(|(k, _)| k == "SLCE").count();
+    let found = chunks(&cx, file, 12, ChunkLayout::IFF).await?;
+    let slices = found.iter().filter(|c| c.id == b"SLCE").count();
     cx.annotate(format!("REX2 loop, {} chunks, {slices} slices", found.len()));
     Ok(())
 }
