@@ -130,21 +130,28 @@ fn holes_read_as_zeros_and_resolve_to_nothing() {
 /// must not decompress the whole stream.
 #[test]
 fn large_members_are_decompressed_lazily() {
-    let data = std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/gzip/large-member.tar.gz"
-    ))
-    .unwrap();
+    // The same tarball through gzip, xz and zstd (real `gzip`/`xz`/`zstd`).
+    for (path, node) in [
+        ("gzip/large-member.tar.gz", "Content"),
+        ("xz/large-member.tar.xz", "Decompressed"),
+        ("zstd/large-member.tar.zst", "Decompressed"),
+    ] {
+        large_member_is_decompressed_lazily(path, node);
+    }
+}
+
+fn large_member_is_decompressed_lazily(path: &str, node: &str) {
+    let data = std::fs::read(format!("{}/tests/fixtures/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let mut host = Host::with_chunk(data, 4096);
     host.session.expand(host.root, 100);
     host.run();
-    let content = host.child(host.root, "Content").expect("content node");
+    let content = host.child(host.root, node).expect("content node");
     host.session.expand(content, 1);
     host.run();
     let decoded = host.session.derived_bytes();
     assert!(
         decoded < 512 << 10,
-        "decoded {decoded} bytes to show one entry"
+        "{path}: decoded {decoded} bytes to show one entry"
     );
     let rendered = host.render();
     assert!(rendered.contains("a.txt"), "{rendered}");
