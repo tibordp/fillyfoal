@@ -7,7 +7,8 @@
 //! The format is undocumented and changes with every compiler version. What
 //! is decoded here is reconstructed from memory of Alexei Hmelnov's DCU32INT
 //! decompiler and checked against a single Delphi 7 unit; nothing comes from
-//! a specification.
+//! a specification. Field names that come from DCU32INT say so; values whose
+//! meaning was not established are shown raw ("Value N").
 //!
 //! - **Header** (all versions): a 4-byte magic, the file size (which must
 //!   equal the file length) and the compile time as a DOS date/time. The last
@@ -20,19 +21,56 @@
 //!   carry platform and edition bits, which are not established here. The
 //!   pre-Delphi 6 magics are from memory and unverified.
 //! - **Tag stream** (Delphi 7 only, magic `0x0f0000df`): after an 18-byte
-//!   header comes a stream of records, each starting with a one-byte tag.
-//!   Decoded, in the order they must occur: unit flags (`0x96`, two packed
-//!   indices), source files (`p`, and `r` for resource files: a name, a DOS
-//!   time stamp and one unknown byte), then the used units, each a `d`
-//!   record (name and two raw 32-bit values) followed by the types (`f`) and
-//!   values (`g`) imported from it (name and a 32-bit check value) and closed
-//!   by `c`. DCU32INT's `e` tag (a unit used from the implementation part)
-//!   is accepted with the `d` layout but was not seen in a real file.
-//!   Interface and implementation uses are otherwise not distinguished.
-//! - Everything after the uses (unit-level declarations, types, procedures,
-//!   code, fixups, line numbers) is shown as an unparsed remainder: those
-//!   records are version-specific and not understood well enough. The walk
-//!   also stops at the first tag that does not fit the grammar above.
+//!   header comes a stream of records, each a one-byte tag and fields. Most
+//!   numbers are *packed indices* (DCU32INT's `ReadUIndex`/`ReadIndex`: the
+//!   low bits of the first byte give the length, 1 to 5 bytes, unsigned or
+//!   signed). Some records open a list of nested records closed by `c`.
+//!
+//! Records decoded (layouts verified at exact offsets in the sample):
+//!
+//! | Tag | Record | Fields |
+//! |---|---|---|
+//! | `0x96` | unit flags | two packed values |
+//! | `p`, `r` | source / resource file | name, DOS time, a byte |
+//! | `d` (`e`) | used unit, opens its import list | name, two raw 32-bit values |
+//! | `f`, `g` | imported type / value | name, 32-bit check value |
+//! | `4` | unit reference, opens an (empty) list | name, flags, index of the unit's `d` record |
+//! | `&`, ` ` | symbol / variable | name, flags, type, a signed value |
+//! | `*` | type name | name, flags, definition index |
+//! | `(` | procedure, opens parameters and locals | name, flags, four values (the second is the code size) |
+//! | `!`, `"`, ` ` | value / var parameter, local (in a procedure) | name, flags, type, location |
+//! | `0x9e` | not established | one signed packed value |
+//! | `G` | type definition (class reference / VMT, per its use) | five values |
+//! | `F` | class definition, opens its members | twelve values |
+//! | `,`, `-` | field / method (in a class) | name, flags, type and offset / two values and the implementing procedure |
+//!
+//! "Flags" is a packed value; at unit level, when its bit `0x40` is set, a
+//! 32-bit check value follows (as observed: every unit-level record with
+//! that bit has one, none without it, and nested records never do).
+//!
+//! Cross-references, verified on the sample:
+//!
+//! - **Types** are numbered from 1 in the order of the imported-type (`f`)
+//!   records, then by the unit's own definitions; a `*` record gives the
+//!   number its name stands for. Field and parameter types resolve to the
+//!   expected classes (the same equivalence classes as the published field
+//!   table in the code block, and `Self` resolves to the form class).
+//! - **Declarations** are numbered from 2 (1 is the unit itself) in stream
+//!   order over the `d`, `f`, `g`, `4`, `&`, `*`, ` `, `(`, `!` and `"`
+//!   records, nested ones included: the unit references point at their `d`
+//!   records and the methods at their procedures. Whether `0x9e`, `G`, `F`
+//!   and class members take numbers is not known; numbers after the first of
+//!   them are unverified.
+//! - The `G` and `F` layouts are fixed counts of packed values taken from one
+//!   instance each; some of their values resolve (the class a `G` refers to;
+//!   the declaration, parent class and VMT symbol of an `F`), the rest are
+//!   raw. A `G` or `F` that is not followed by a recognised record ends the
+//!   walk.
+//!
+//! The walk stops at the first record it does not know (in the sample the
+//! range type definition `D` that precedes the code block); everything from
+//! there (further type definitions, the code block, fixups, line numbers) is
+//! an unparsed remainder.
 
 use std::sync::Arc;
 
@@ -62,8 +100,11 @@ const HEADER_D7: u64 = 18;
 const HEADER_COMMON: u64 = 12;
 /// The end tag, the last byte of every unit.
 const END_TAG: u8 = b'a';
-/// Longest record decoded: tag, counted name, two 32-bit values.
-const MAX_RECORD: u64 = 1 + 1 + 255 + 8;
+/// Longest record decoded: tag, counted name, flags, check value and up to
+/// twelve packed values of at most five bytes.
+const MAX_RECORD: u64 = 1 + 256 + 5 + 4 + 12 * 5;
+/// The tag that closes a list.
+const CLOSE: u8 = b'c';
 
 /// Magics of the versions before Delphi 6, which do not follow the
 /// `CompilerVersion` pattern. From memory of DCU32INT; unverified.
@@ -100,17 +141,6 @@ const COMPILER_VERSION: EnumTable = &[
     (35, "Delphi / C++Builder 11 Alexandria"),
     (36, "Delphi / C++Builder 12 Athens"),
     (37, "Delphi / C++Builder 13 Florence"),
-];
-
-const TAG: EnumTable = &[
-    (0x96, "unit flags"),
-    (b'p' as u64, "source file"),
-    (b'r' as u64, "resource file"),
-    (b'd' as u64, "used unit"),
-    (b'e' as u64, "used unit (implementation)"),
-    (b'f' as u64, "imported type"),
-    (b'g' as u64, "imported value"),
-    (b'c' as u64, "end of unit imports"),
 ];
 
 /// The product a magic stands for, if it is a known DCU magic.
@@ -151,49 +181,323 @@ fn probe(h: &Head<'_>) -> bool {
     shape && (magic != MAGIC_D7 || h.data.get(18) == Some(&0x96))
 }
 
-/// A DCU packed index (DCU32INT's `ReadUIndex`): the low bits of the first
-/// byte say how many bytes follow. Returns the value and its length.
-fn packed(data: &[u8], at: usize) -> Option<(u64, usize)> {
-    let b0 = *data.get(at)?;
-    let le = |n: usize| -> Option<u64> {
-        let end = at.checked_add(n)?;
-        let bytes = data.get(at..end)?;
-        Some(
-            bytes
-                .iter()
-                .rev()
-                .fold(0u64, |acc, &b| (acc << 8) | u64::from(b)),
-        )
-    };
-    if b0 & 1 == 0 {
-        Some((u64::from(b0 >> 1), 1))
-    } else if b0 & 2 == 0 {
-        Some((le(2)? >> 2, 2))
-    } else if b0 & 4 == 0 {
-        Some((le(3)? >> 3, 3))
-    } else if b0 & 8 == 0 {
-        Some((le(4)? >> 4, 4))
-    } else {
-        let v = u32_le(data, at.checked_add(1)?)?;
-        Some((u64::from(v), 5))
+/// The `n` bytes at `at`, little-endian.
+fn le(data: &[u8], at: usize, n: usize) -> Option<u64> {
+    let bytes = data.get(at..at.checked_add(n)?)?;
+    Some(
+        bytes
+            .iter()
+            .rev()
+            .fold(0u64, |acc, &b| (acc << 8) | u64::from(b)),
+    )
+}
+
+/// The length of the packed index whose first byte is `b0`.
+fn packed_len(b0: u8) -> usize {
+    match b0.trailing_ones() {
+        0 => 1,
+        1 => 2,
+        2 => 3,
+        3 => 4,
+        _ => 5,
     }
 }
 
-/// One decoded field of a record: name, offset and length in the record.
+/// A DCU packed index (DCU32INT's `ReadUIndex`): the low bits of the first
+/// byte say how many bytes follow. Returns the value and its length.
+fn packed(data: &[u8], at: usize) -> Option<(u64, usize)> {
+    let n = packed_len(*data.get(at)?);
+    if n == 5 {
+        let v = u32_le(data, at.checked_add(1)?)?;
+        return Some((u64::from(v), 5));
+    }
+    Some((le(data, at, n)? >> n, n))
+}
+
+/// The signed variant (DCU32INT's `ReadIndex`): the same lengths, with the
+/// value sign-extended from the bytes read before the shift.
+fn signed(data: &[u8], at: usize) -> Option<(i64, usize)> {
+    let n = packed_len(*data.get(at)?);
+    if n == 5 {
+        let v = u32_le(data, at.checked_add(1)?)?;
+        return Some((i64::from(v as i32), 5));
+    }
+    let raw = le(data, at, n)?;
+    let unused = 64u32.saturating_sub(u32::try_from(n.saturating_mul(8)).unwrap_or(64));
+    let extended = ((raw << unused) as i64) >> unused;
+    Some((extended >> n, n))
+}
+
+/// Where a record occurs: which tags are allowed and what they mean.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Ctx {
+    /// The unit-level stream.
+    Top,
+    /// The imports of a used unit (`d`).
+    Unit,
+    /// The (empty) list after a unit reference (`4`).
+    UnitRef,
+    /// Parameters and locals of a procedure (`(`).
+    Proc,
+    /// Members of a class definition (`F`).
+    Class,
+}
+
+/// How a field is decoded and shown.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Tag,
+    Name,
+    Flags,
+    Check,
+    Time,
+    Byte,
+    Raw32,
+    /// Unsigned packed value.
+    Packed,
+    /// Signed packed value.
+    Signed,
+    /// Unsigned packed type number.
+    TypeRef,
+    /// Unsigned packed declaration number.
+    DeclRef,
+}
+
+/// One layout step: kind, label, description.
+type Step = (Kind, &'static str, &'static str);
+
+const NAME: Step = (Kind::Name, "Name", "Length-prefixed (short) string");
+const FLAGS: Step = (
+    Kind::Flags,
+    "Flags",
+    "Packed value; at unit level, bit 0x40 means a check value follows",
+);
+
+const L_UNIT_FLAGS: &[Step] = &[
+    (
+        Kind::Packed,
+        "Flags",
+        "Packed value; called the unit flags in DCU32INT",
+    ),
+    (
+        Kind::Packed,
+        "Priority",
+        "Packed value; called the unit priority in DCU32INT",
+    ),
+];
+const L_SOURCE: &[Step] = &[
+    NAME,
+    (
+        Kind::Time,
+        "Time",
+        "DOS date and time of the file when compiled",
+    ),
+    (Kind::Byte, "Value", "Meaning not established"),
+];
+const L_USED_UNIT: &[Step] = &[
+    NAME,
+    (
+        Kind::Raw32,
+        "Value 1",
+        "Meaning not established (units compiled together tend to share it)",
+    ),
+    (Kind::Raw32, "Value 2", "Meaning not established"),
+];
+const L_IMPORT: &[Step] = &[
+    NAME,
+    (
+        Kind::Raw32,
+        "Check value",
+        "Presumably a signature of the imported declaration; zero for some compiler intrinsics",
+    ),
+];
+const L_UNIT_REF: &[Step] = &[
+    NAME,
+    FLAGS,
+    (
+        Kind::DeclRef,
+        "Unit",
+        "Number of the used-unit record this refers to (1: this unit)",
+    ),
+];
+const L_SYMBOL: &[Step] = &[
+    NAME,
+    FLAGS,
+    (Kind::TypeRef, "Type", "Type number"),
+    (
+        Kind::Signed,
+        "Value",
+        "Signed packed value; meaning not established at unit level",
+    ),
+];
+const L_TYPE: &[Step] = &[
+    NAME,
+    FLAGS,
+    (
+        Kind::Packed,
+        "Definition",
+        "The type number this name stands for",
+    ),
+];
+const L_PROC: &[Step] = &[
+    NAME,
+    FLAGS,
+    (Kind::Packed, "Value 1", "Meaning not established"),
+    (
+        Kind::Packed,
+        "Code size",
+        "Bytes of code (with its literals) in the code block",
+    ),
+    (Kind::Packed, "Value 3", "Meaning not established"),
+    (Kind::Packed, "Value 4", "Meaning not established"),
+];
+const L_LOCAL: &[Step] = &[
+    NAME,
+    FLAGS,
+    (Kind::TypeRef, "Type", "Type number"),
+    (
+        Kind::Signed,
+        "Location",
+        "Signed packed value: negative for frame-based locals (an offset); otherwise not \
+         established (register or parameter slot)",
+    ),
+];
+const L_9E: &[Step] = &[(Kind::Signed, "Value", "Meaning not established")];
+const L_G: &[Step] = &[
+    (Kind::Packed, "Value 1", "Meaning not established"),
+    (Kind::Packed, "Value 2", "Meaning not established"),
+    (Kind::Packed, "Value 3", "Meaning not established"),
+    (
+        Kind::TypeRef,
+        "Class",
+        "Type number of the class it refers to",
+    ),
+    (Kind::Packed, "Value 5", "Meaning not established"),
+];
+const L_CLASS: &[Step] = &[
+    (Kind::Packed, "Value 1", "Meaning not established"),
+    (Kind::Packed, "Value 2", "Meaning not established"),
+    (
+        Kind::DeclRef,
+        "Declaration",
+        "Number of the type name (`*`) record",
+    ),
+    (Kind::TypeRef, "Parent", "Type number of the parent class"),
+    (Kind::Packed, "Value 5", "Meaning not established"),
+    (Kind::Packed, "Value 6", "Meaning not established"),
+    (
+        Kind::DeclRef,
+        "Symbol",
+        "Number of a related declaration (the `&` record named after the class)",
+    ),
+    (Kind::Packed, "Value 8", "Meaning not established"),
+    (Kind::Signed, "Value 9", "Meaning not established"),
+    (Kind::Signed, "Value 10", "Meaning not established"),
+    (Kind::Packed, "Value 11", "Meaning not established"),
+    (Kind::Packed, "Value 12", "Meaning not established"),
+];
+const L_FIELD: &[Step] = &[
+    NAME,
+    FLAGS,
+    (Kind::TypeRef, "Type", "Type number"),
+    (Kind::Signed, "Offset", "Offset of the field in an instance"),
+];
+const L_METHOD: &[Step] = &[
+    NAME,
+    FLAGS,
+    (Kind::Signed, "Value 1", "Meaning not established"),
+    (
+        Kind::DeclRef,
+        "Implementation",
+        "Number of the procedure record implementing the method",
+    ),
+    (Kind::Packed, "Value 3", "Meaning not established"),
+];
+
+/// A record kind: layout, what it is called, the list it opens, and
+/// whether it takes a declaration number.
+struct Layout {
+    steps: &'static [Step],
+    what: &'static str,
+    opens: Option<Ctx>,
+    numbered: bool,
+}
+
+const fn lay(
+    steps: &'static [Step],
+    what: &'static str,
+    opens: Option<Ctx>,
+    numbered: bool,
+) -> Layout {
+    Layout {
+        steps,
+        what,
+        opens,
+        numbered,
+    }
+}
+
+fn layout(ctx: Ctx, tag: u8) -> Option<Layout> {
+    Some(match (ctx, tag) {
+        (Ctx::Top, 0x96) => lay(L_UNIT_FLAGS, "unit flags", None, false),
+        (Ctx::Top, b'p') => lay(L_SOURCE, "source file", None, false),
+        (Ctx::Top, b'r') => lay(L_SOURCE, "resource file", None, false),
+        (Ctx::Top, b'd') => lay(L_USED_UNIT, "used unit", Some(Ctx::Unit), true),
+        (Ctx::Top, b'e') => lay(
+            L_USED_UNIT,
+            "used unit (implementation)",
+            Some(Ctx::Unit),
+            true,
+        ),
+        (Ctx::Unit, b'f') => lay(L_IMPORT, "imported type", None, true),
+        (Ctx::Unit, b'g') => lay(L_IMPORT, "imported value", None, true),
+        (Ctx::Top, b'4') => lay(L_UNIT_REF, "unit reference", Some(Ctx::UnitRef), true),
+        (Ctx::Top, b'&') => lay(L_SYMBOL, "symbol", None, true),
+        (Ctx::Top, b'*') => lay(L_TYPE, "type", None, true),
+        (Ctx::Top, b' ') => lay(L_SYMBOL, "variable", None, true),
+        (Ctx::Top, b'(') => lay(L_PROC, "procedure", Some(Ctx::Proc), true),
+        (Ctx::Top, 0x9e) => lay(L_9E, "record 0x9e", None, false),
+        (Ctx::Top, b'G') => lay(L_G, "type definition G", None, false),
+        (Ctx::Top, b'F') => lay(L_CLASS, "class definition", Some(Ctx::Class), false),
+        (Ctx::Proc, b'!') => lay(L_LOCAL, "parameter", None, true),
+        (Ctx::Proc, b'"') => lay(L_LOCAL, "var parameter", None, true),
+        (Ctx::Proc, b' ') => lay(L_LOCAL, "local variable", None, true),
+        (Ctx::Class, b',') => lay(L_FIELD, "field", None, false),
+        (Ctx::Class, b'-') => lay(L_METHOD, "method", None, false),
+        (Ctx::Unit | Ctx::UnitRef | Ctx::Proc | Ctx::Class, CLOSE) => {
+            lay(&[], "end of list", None, false)
+        }
+        _ => return None,
+    })
+}
+
+/// One decoded field: offset and length in the record, and its number or
+/// text.
 struct Field {
-    name: &'static str,
+    step: Step,
     at: usize,
     len: usize,
-    value: Value,
-    summary: Option<String>,
-    desc: Option<&'static str>,
+    num: i64,
+    text: Option<String>,
 }
 
 struct Rec {
     tag: u8,
     len: usize,
+    what: &'static str,
     name: Option<String>,
+    opens: Option<Ctx>,
+    numbered: bool,
     fields: Vec<Field>,
+}
+
+impl Rec {
+    fn num(&self, label: &str) -> Option<i64> {
+        self.fields
+            .iter()
+            .find(|f| f.step.1 == label)
+            .map(|f| f.num)
+    }
 }
 
 enum Stop {
@@ -203,146 +507,82 @@ enum Stop {
     Truncated,
 }
 
-/// A counted (short) string at `at`: the field and the decoded name.
-fn short_string(data: &[u8], at: usize) -> Option<(Field, String)> {
-    let n = usize::from(*data.get(at)?);
-    let start = at.checked_add(1)?;
-    let bytes = data.get(start..start.checked_add(n)?)?;
-    let name = crate::text::latin1(bytes);
-    let field = Field {
-        name: "Name",
-        at,
-        len: n.checked_add(1)?,
-        value: text(name.clone()),
-        summary: None,
-        desc: Some("Length-prefixed (short) string"),
-    };
-    Some((field, name))
-}
-
-fn raw32(data: &[u8], at: usize, name: &'static str, desc: &'static str) -> Option<Field> {
-    let v = u32_le(data, at)?;
-    Some(Field {
-        name,
-        at,
-        len: 4,
-        value: hex(v.into(), 32),
-        summary: None,
-        desc: Some(desc),
-    })
-}
-
 /// Decodes the record at the start of `data` (a window of at most
 /// [`MAX_RECORD`] bytes, shorter where the region ends).
-fn parse_record(data: &[u8]) -> std::result::Result<Rec, Stop> {
+fn parse_record(data: &[u8], ctx: Ctx) -> std::result::Result<Rec, Stop> {
     let Some(&tag) = data.first() else {
         return Err(Stop::Truncated);
     };
-    let tag_field = Field {
-        name: "Tag",
+    let lay = layout(ctx, tag).ok_or(Stop::Unknown(tag))?;
+    let mut fields = vec![Field {
+        step: (Kind::Tag, "Tag", ""),
         at: 0,
         len: 1,
-        value: Value::Enum {
-            raw: tag.into(),
-            bits: 8,
-            name: lookup(TAG, tag.into()),
-        },
-        summary: None,
-        desc: None,
-    };
-    let mut fields = vec![tag_field];
+        num: tag.into(),
+        text: None,
+    }];
     let mut name = None;
     let mut at = 1usize;
-    match tag {
-        0x96 => {
-            for (label, desc) in [
-                ("Flags", "Packed index; called the unit flags in DCU32INT"),
-                (
-                    "Priority",
-                    "Packed index; called the unit priority in DCU32INT",
-                ),
-            ] {
+    for &step in lay.steps {
+        let (num, len, txt) = match step.0 {
+            Kind::Name => {
+                let n = usize::from(*data.get(at).ok_or(Stop::Truncated)?);
+                let start = at.saturating_add(1);
+                let bytes = data
+                    .get(start..start.saturating_add(n))
+                    .ok_or(Stop::Truncated)?;
+                let s = crate::text::latin1(bytes);
+                name = Some(s.clone());
+                (0, n.saturating_add(1), Some(s))
+            }
+            Kind::Time | Kind::Raw32 | Kind::Check => {
+                (u32_le(data, at).ok_or(Stop::Truncated)?.into(), 4, None)
+            }
+            Kind::Byte => (
+                data.get(at).copied().ok_or(Stop::Truncated)?.into(),
+                1,
+                None,
+            ),
+            Kind::Signed => {
+                let (v, n) = signed(data, at).ok_or(Stop::Truncated)?;
+                (v, n, None)
+            }
+            Kind::Tag | Kind::Packed | Kind::TypeRef | Kind::DeclRef | Kind::Flags => {
                 let (v, n) = packed(data, at).ok_or(Stop::Truncated)?;
-                fields.push(Field {
-                    name: label,
-                    at,
-                    len: n,
-                    value: dec(v, 64),
-                    summary: None,
-                    desc: Some(desc),
-                });
-                at = at.saturating_add(n);
+                (i64::try_from(v).unwrap_or(i64::MAX), n, None)
             }
+        };
+        fields.push(Field {
+            step,
+            at,
+            len,
+            num,
+            text: txt,
+        });
+        at = at.saturating_add(len);
+        if step.0 == Kind::Flags && ctx == Ctx::Top && num & 0x40 != 0 {
+            let v = u32_le(data, at).ok_or(Stop::Truncated)?;
+            fields.push(Field {
+                step: (
+                    Kind::Check,
+                    "Check value",
+                    "Present at unit level when flag bit 0x40 is set; meaning not established",
+                ),
+                at,
+                len: 4,
+                num: v.into(),
+                text: None,
+            });
+            at = at.saturating_add(4);
         }
-        b'p' | b'r' | b'd' | b'e' | b'f' | b'g' => {
-            let (field, s) = short_string(data, at).ok_or(Stop::Truncated)?;
-            at = at.saturating_add(field.len);
-            fields.push(field);
-            name = Some(s);
-            match tag {
-                b'p' | b'r' => {
-                    let v = u32_le(data, at).ok_or(Stop::Truncated)?;
-                    fields.push(Field {
-                        name: "Time",
-                        at,
-                        len: 4,
-                        value: text(dos_time(v)),
-                        summary: Some(format!("{v:#010x}")),
-                        desc: Some("DOS date and time of the file when compiled"),
-                    });
-                    let b = *data.get(at.saturating_add(4)).ok_or(Stop::Truncated)?;
-                    fields.push(Field {
-                        name: "Unknown",
-                        at: at.saturating_add(4),
-                        len: 1,
-                        value: hex(b.into(), 8),
-                        summary: None,
-                        desc: Some("Meaning not established"),
-                    });
-                    at = at.saturating_add(5);
-                }
-                b'd' | b'e' => {
-                    fields.push(
-                        raw32(
-                            data,
-                            at,
-                            "Value 1",
-                            "Meaning not established (units compiled together tend to share it)",
-                        )
-                        .ok_or(Stop::Truncated)?,
-                    );
-                    fields.push(
-                        raw32(
-                            data,
-                            at.saturating_add(4),
-                            "Value 2",
-                            "Meaning not established",
-                        )
-                        .ok_or(Stop::Truncated)?,
-                    );
-                    at = at.saturating_add(8);
-                }
-                _ => {
-                    fields.push(
-                        raw32(
-                            data,
-                            at,
-                            "Check value",
-                            "Presumably a signature of the imported declaration; zero for some compiler intrinsics",
-                        )
-                        .ok_or(Stop::Truncated)?,
-                    );
-                    at = at.saturating_add(4);
-                }
-            }
-        }
-        b'c' => {}
-        other => return Err(Stop::Unknown(other)),
     }
     Ok(Rec {
         tag,
         len: at,
+        what: lay.what,
         name,
+        opens: lay.opens,
+        numbered: lay.numbered,
         fields,
     })
 }
@@ -352,71 +592,418 @@ async fn read_record(
     cx: &Cx,
     region: Span,
     pos: u64,
+    ctx: Ctx,
 ) -> Result<(std::result::Result<Rec, Stop>, Span)> {
     let window = region.sub(pos, MAX_RECORD);
     let data = cx.read(window).await?;
-    let rec = parse_record(&data);
+    let rec = parse_record(&data, ctx);
     let len = rec.as_ref().map_or(0, |r| r.len as u64);
     Ok((rec, region.sub(pos, len)))
 }
 
-fn tag_name(tag: u8) -> String {
-    lookup(TAG, tag.into()).map_or_else(|| format!("tag {tag:#04x}"), str::to_owned)
+/// Names for cross-references, collected by the top-level walk.
+#[derive(Default)]
+struct Names {
+    /// Names of the imported types, numbered from 1.
+    types: Vec<String>,
+    /// Type numbers named by the unit's own `*` records.
+    local_types: Vec<(i64, String)>,
+    /// Declaration names, numbered from 2 (index 0 is declaration 2).
+    decls: Vec<String>,
+    /// Declaration numbers of the imported-type records, in order.
+    type_decls: Vec<i64>,
 }
 
-fn record_node(rec: &Rec, span: Span) -> Node {
-    let label = match (rec.tag, &rec.name) {
-        (0x96, _) => "Unit flags".to_owned(),
-        (_, Some(n)) => n.clone(),
-        _ => "End".to_owned(),
-    };
-    let summary = match rec.tag {
-        0x96 => String::new(),
-        b'p' | b'r' => rec
-            .fields
+impl Names {
+    fn type_name(&self, n: i64) -> Option<String> {
+        let imported = usize::try_from(n)
+            .ok()
+            .and_then(|i| i.checked_sub(1))
+            .and_then(|i| self.types.get(i));
+        if let Some(s) = imported {
+            return Some(s.clone());
+        }
+        self.local_types
             .iter()
-            .find(|f| f.name == "Time")
-            .and_then(|f| match &f.value {
-                Value::Text(t) => Some(format!("{}, {t}", tag_name(rec.tag))),
-                _ => None,
-            })
-            .unwrap_or_default(),
-        _ => tag_name(rec.tag),
-    };
-    let node = Node::new(label).span(span).lazy(record_fields, span);
-    if summary.is_empty() {
-        node
-    } else {
-        node.summary(summary)
+            .find(|(k, _)| *k == n)
+            .map(|(_, s)| s.clone())
+    }
+
+    /// The type number of the imported-type record with declaration
+    /// number `decl`.
+    fn type_of_import(&self, decl: i64) -> Option<usize> {
+        self.type_decls
+            .binary_search(&decl)
+            .ok()
+            .and_then(|i| i.checked_add(1))
+    }
+
+    fn decl_name(&self, n: i64) -> Option<String> {
+        if n == 1 {
+            return Some("(this unit)".to_owned());
+        }
+        usize::try_from(n)
+            .ok()
+            .and_then(|i| i.checked_sub(2))
+            .and_then(|i| self.decls.get(i))
+            .cloned()
+    }
+
+    /// The next declaration number.
+    fn next_decl(&self) -> i64 {
+        i64::try_from(self.decls.len())
+            .unwrap_or(i64::MAX)
+            .saturating_add(2)
+    }
+
+    fn note(&mut self, rec: &Rec) {
+        let name = rec.name.clone().unwrap_or_default();
+        if rec.tag == b'f' {
+            self.types.push(name.clone());
+            self.type_decls.push(self.next_decl());
+        }
+        if rec.tag == b'*'
+            && let Some(n) = rec.num("Definition")
+        {
+            self.local_types.push((n, name.clone()));
+        }
+        if rec.numbered {
+            self.decls.push(name);
+        }
     }
 }
 
-async fn record_fields(cx: Cx, span: Span) -> Result<()> {
+/// The sections the top-level records are grouped into.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Section {
+    Flags,
+    Sources,
+    Units,
+    UnitRefs,
+    Decls,
+    TypeDefs,
+}
+
+fn section(tag: u8) -> Section {
+    match tag {
+        0x96 => Section::Flags,
+        b'p' | b'r' => Section::Sources,
+        b'd' | b'e' => Section::Units,
+        b'4' => Section::UnitRefs,
+        b'G' | b'F' => Section::TypeDefs,
+        _ => Section::Decls,
+    }
+}
+
+/// A run of consecutive top-level records of one section.
+#[derive(Clone, Copy)]
+struct Run {
+    section: Section,
+    region: Span,
+    count: u64,
+    /// Declaration number of the first numbered record in the run.
+    first_decl: i64,
+}
+
+/// An item: a top-level record and its nested list, if it opens one.
+struct Item {
+    rec: Rec,
+    head: Span,
+    span: Span,
+    /// Number of nested records (without the closing `c`).
+    nested: u64,
+}
+
+/// Reads the item at `pos` of `region`, noting names in `names` (if
+/// given). `Err` with the reason if it cannot be decoded completely.
+async fn read_item(
+    cx: &Cx,
+    region: Span,
+    pos: u64,
+    mut names: Option<&mut Names>,
+) -> Result<std::result::Result<Item, String>> {
+    let (rec, head) = read_record(cx, region, pos, Ctx::Top).await?;
+    let rec = match rec {
+        Ok(r) => r,
+        Err(Stop::Unknown(t)) => return Ok(Err(format!("tag {t:#04x} not decoded"))),
+        Err(Stop::Truncated) => return Ok(Err("truncated record".to_owned())),
+    };
+    if let Some(n) = names.as_deref_mut() {
+        n.note(&rec);
+    }
+    let mut end = pos.saturating_add(head.len);
+    let mut nested = 0u64;
+    if let Some(ctx) = rec.opens {
+        loop {
+            if end >= region.len {
+                return Ok(Err(format!("{} list not closed", rec.what)));
+            }
+            let (inner, span) = read_record(cx, region, end, ctx).await?;
+            match inner {
+                Ok(i) => {
+                    end = end.saturating_add(span.len);
+                    if i.tag == CLOSE {
+                        break;
+                    }
+                    if let Some(n) = names.as_deref_mut() {
+                        n.note(&i);
+                    }
+                    nested = nested.saturating_add(1);
+                }
+                Err(Stop::Unknown(t)) => {
+                    return Ok(Err(format!(
+                        "tag {t:#04x} not decoded inside a {}",
+                        rec.what
+                    )));
+                }
+                Err(Stop::Truncated) => return Ok(Err("truncated record".to_owned())),
+            }
+        }
+    }
+    let span = region.sub(pos, end.saturating_sub(pos));
+    Ok(Ok(Item {
+        rec,
+        head,
+        span,
+        nested,
+    }))
+}
+
+fn plural(n: u64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+fn type_label(names: &Names, n: i64) -> String {
+    names.type_name(n).unwrap_or_else(|| format!("type #{n}"))
+}
+
+/// Label and summary of a record.
+fn describe(rec: &Rec, names: &Names, number: Option<i64>, nested: u64) -> (String, String) {
+    let num = |label: &str| rec.num(label).unwrap_or(0);
+    let mut label = rec.name.clone().unwrap_or_default();
+    let mut summary = match rec.tag {
+        0x96 => {
+            label = "Unit flags".to_owned();
+            String::new()
+        }
+        b'p' | b'r' => format!(
+            "{}, {}",
+            rec.what,
+            dos_time(u32::try_from(num("Time")).unwrap_or(0))
+        ),
+        b'd' | b'e' => format!("{}, {}", rec.what, plural(nested, "import", "imports")),
+        b'f' => match number.and_then(|n| names.type_of_import(n)) {
+            Some(t) => format!("{}, type #{t}", rec.what),
+            None => rec.what.to_owned(),
+        },
+        b'4' => format!(
+            "{} → {}",
+            rec.what,
+            names
+                .decl_name(num("Unit"))
+                .unwrap_or_else(|| format!("#{}", num("Unit")))
+        ),
+        b'&' | b' ' | b'!' | b'"' => format!("{}: {}", rec.what, type_label(names, num("Type"))),
+        b'*' => format!("{}, names type #{}", rec.what, num("Definition")),
+        b'(' => format!(
+            "{}, {} of code, {}",
+            rec.what,
+            plural(
+                u64::try_from(num("Code size")).unwrap_or(0),
+                "byte",
+                "bytes"
+            ),
+            plural(nested, "parameter or local", "parameters and locals")
+        ),
+        0x9e => {
+            label = "Record 0x9e".to_owned();
+            format!("value {}", num("Value"))
+        }
+        b'G' => {
+            label = "Type definition G".to_owned();
+            format!("refers to {}", type_label(names, num("Class")))
+        }
+        b'F' => {
+            label = names
+                .decl_name(num("Declaration"))
+                .unwrap_or_else(|| "Class definition".to_owned());
+            format!(
+                "{} (parent {}), {}",
+                rec.what,
+                type_label(names, num("Parent")),
+                plural(nested, "member", "members")
+            )
+        }
+        b',' => format!(
+            "{}: {} at offset {}",
+            rec.what,
+            type_label(names, num("Type")),
+            num("Offset")
+        ),
+        b'-' => format!(
+            "{} → {}",
+            rec.what,
+            names
+                .decl_name(num("Implementation"))
+                .unwrap_or_else(|| format!("#{}", num("Implementation")))
+        ),
+        CLOSE => {
+            label = "End".to_owned();
+            rec.what.to_owned()
+        }
+        _ => rec.what.to_owned(),
+    };
+    if let Some(n) = number {
+        summary = format!("#{n} {summary}");
+    }
+    (label, summary)
+}
+
+fn field_node(f: &Field, span: Span, rec: &Rec, names: &Names) -> Node {
+    let (kind, label, desc) = f.step;
+    let raw = u64::try_from(f.num).unwrap_or(0);
+    let mut node = Node::new(label).span(span.sub(f.at as u64, f.len as u64));
+    node = match kind {
+        Kind::Tag => node.value(Value::Enum {
+            raw,
+            bits: 8,
+            name: Some(rec.what),
+        }),
+        Kind::Name => node.value(text(f.text.clone().unwrap_or_default())),
+        Kind::Time => node
+            .value(text(dos_time(u32::try_from(raw).unwrap_or(0))))
+            .summary(format!("{raw:#010x}")),
+        Kind::Byte => node.value(hex(raw, 8)),
+        Kind::Raw32 | Kind::Check => node.value(hex(raw, 32)),
+        Kind::Flags => node.value(hex(raw, 32)),
+        Kind::Packed => node.value(dec(raw, 32)),
+        Kind::Signed => node.value(Value::Int {
+            value: f.num,
+            bits: 32,
+        }),
+        Kind::TypeRef => {
+            let n = node.value(dec(raw, 32));
+            match names.type_name(f.num) {
+                Some(s) => n.summary(s),
+                None => n,
+            }
+        }
+        Kind::DeclRef => {
+            let n = node.value(dec(raw, 32));
+            match names.decl_name(f.num) {
+                Some(s) => n.summary(s),
+                None => n,
+            }
+        }
+    };
+    if desc.is_empty() {
+        node
+    } else {
+        node.desc(desc)
+    }
+}
+
+/// Expands a record: its fields.
+async fn record_fields(cx: Cx, (span, ctx, names): (Span, Ctx, Arc<Names>)) -> Result<()> {
     let data = cx.read(span).await?;
-    let rec = parse_record(&data).map_err(|_| Diagnostic::malformed("record").at(span))?;
-    for f in rec.fields {
-        let mut node = Node::new(f.name)
-            .span(span.sub(f.at as u64, f.len as u64))
-            .value(f.value);
-        if let Some(s) = f.summary {
-            node = node.summary(s);
-        }
-        if let Some(d) = f.desc {
-            node = node.desc(d);
-        }
-        cx.emit(node);
+    let rec = parse_record(&data, ctx).map_err(|_| Diagnostic::malformed("record").at(span))?;
+    for f in &rec.fields {
+        cx.emit(field_node(f, span, &rec, &names));
     }
     Ok(())
 }
 
-/// A used unit found by the top-level walk.
-#[derive(Clone)]
-struct UnitInfo {
-    name: String,
-    tag: u8,
-    /// From the `d` record to the closing `c`, inclusive.
-    block: Span,
-    imports: u64,
+/// Expands an item: the fields of its record, then its nested records.
+async fn item_children(
+    cx: Cx,
+    (span, head_len, ctx, first, names): (Span, u64, Ctx, i64, Arc<Names>),
+) -> Result<()> {
+    let head = span.sub(0, head_len);
+    let data = cx.read(head).await?;
+    let rec =
+        parse_record(&data, Ctx::Top).map_err(|_| Diagnostic::malformed("record").at(head))?;
+    for f in &rec.fields {
+        cx.emit(field_node(f, head, &rec, &names));
+    }
+    let mut pos = head_len;
+    let mut number = first;
+    while pos < span.len {
+        let (inner, at) = read_record(&cx, span, pos, ctx).await?;
+        let Ok(inner) = inner else {
+            return Err(Diagnostic::malformed("record").at(at));
+        };
+        let this = inner.numbered.then_some(number);
+        if inner.numbered {
+            number = number.saturating_add(1);
+        }
+        let node = if inner.tag == CLOSE {
+            Node::new("End").span(at).value(Value::Enum {
+                raw: CLOSE.into(),
+                bits: 8,
+                name: Some(inner.what),
+            })
+        } else {
+            let (label, summary) = describe(&inner, &names, this, 0);
+            Node::new(label)
+                .span(at)
+                .summary(summary)
+                .lazy(record_fields, (at, ctx, names.clone()))
+        };
+        cx.push(node).await;
+        pos = pos.saturating_add(at.len);
+        if at.len == 0 {
+            break;
+        }
+    }
+    Ok(())
+}
+
+/// Pushes the items of a run.
+async fn run_items(cx: Cx, (run, names): (Run, Arc<Names>)) -> Result<()> {
+    cx.set_count(Count::Exact(run.count));
+    let mut pos = 0u64;
+    let mut number = run.first_decl;
+    while pos < run.region.len {
+        let item = match read_item(&cx, run.region, pos, None).await? {
+            Ok(i) => i,
+            Err(why) => return Err(Diagnostic::malformed(why).at(run.region.tail(pos))),
+        };
+        if item.span.len == 0 {
+            break;
+        }
+        cx.push(item_node(&item, &names, &mut number)).await;
+        pos = pos.saturating_add(item.span.len);
+    }
+    Ok(())
+}
+
+/// The node of an item; advances `number` past the declarations it holds.
+fn item_node(item: &Item, names: &Arc<Names>, number: &mut i64) -> Node {
+    let this = item.rec.numbered.then_some(*number);
+    if item.rec.numbered {
+        *number = number.saturating_add(1);
+    }
+    let (label, summary) = describe(&item.rec, names, this, item.nested);
+    let node = Node::new(label).span(item.span);
+    let node = if summary.is_empty() {
+        node
+    } else {
+        node.summary(summary)
+    };
+    match item.rec.opens {
+        Some(ctx) => {
+            let first = *number;
+            if matches!(ctx, Ctx::Unit | Ctx::Proc) {
+                // Imports, parameters and locals are numbered.
+                *number = number.saturating_add(i64::try_from(item.nested).unwrap_or(0));
+            }
+            node.lazy(
+                item_children,
+                (item.span, item.head.len, ctx, first, names.clone()),
+            )
+        }
+        None => node.lazy(record_fields, (item.head, Ctx::Top, names.clone())),
+    }
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -453,103 +1040,82 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     let mut pos = header_len;
     let mut stop: Option<String> = None;
-    let mut sources = 0u64;
-    let mut units: Vec<UnitInfo> = Vec::new();
+    let mut names = Names::default();
+    let mut runs: Vec<Run> = Vec::new();
     if d7 {
-        // Unit flags.
-        let (rec, span) = read_record(&cx, body, pos).await?;
-        match rec {
-            Ok(r) if r.tag == 0x96 => {
-                cx.emit(record_node(&r, span));
-                pos = pos.saturating_add(span.len);
-            }
-            _ => stop = Some("expected the unit flags record (0x96)".to_owned()),
-        }
-        // Source files.
-        let sources_start = pos;
-        while stop.is_none() && pos < body.len {
-            let (rec, span) = read_record(&cx, body, pos).await?;
-            match rec {
-                Ok(r) if matches!(r.tag, b'p' | b'r') => {
-                    sources = sources.saturating_add(1);
-                    pos = pos.saturating_add(span.len);
-                }
-                _ => break,
-            }
-        }
-        if sources > 0 {
-            let region = body.sub(sources_start, pos.saturating_sub(sources_start));
-            cx.emit(
-                Node::new("Source files")
-                    .span(region)
-                    .summary(format!("{sources} files"))
-                    .lazy(flat_records, (region, sources)),
-            );
-        }
-        // Used units: `d` (or `e`), imports, `c`.
-        let uses_start = pos;
-        'units: while stop.is_none() && pos < body.len {
-            let unit_start = pos;
-            let (rec, span) = read_record(&cx, body, pos).await?;
-            let r = match rec {
-                Ok(r) if matches!(r.tag, b'd' | b'e') => r,
-                Ok(r) => {
-                    stop = Some(format!("{} not decoded", tag_name(r.tag)));
-                    break;
-                }
-                Err(Stop::Unknown(t)) => {
-                    stop = Some(format!("tag {t:#04x} not decoded"));
-                    break;
-                }
-                Err(Stop::Truncated) => {
-                    stop = Some("truncated record".to_owned());
+        while pos < body.len {
+            let first_decl = names.next_decl();
+            let item = match read_item(&cx, body, pos, Some(&mut names)).await? {
+                Ok(i) => i,
+                Err(why) => {
+                    stop = Some(why);
                     break;
                 }
             };
-            pos = pos.saturating_add(span.len);
-            let mut imports = 0u64;
-            loop {
-                if pos >= body.len {
-                    stop = Some("used unit not closed".to_owned());
-                    pos = unit_start;
-                    break 'units;
+            let sec = section(item.rec.tag);
+            match runs.last_mut() {
+                Some(r) if r.section == sec => {
+                    r.region = Span::new(
+                        r.region.source,
+                        r.region.offset,
+                        r.region.len.saturating_add(item.span.len),
+                    );
+                    r.count = r.count.saturating_add(1);
                 }
-                let (rec, span) = read_record(&cx, body, pos).await?;
-                match rec {
-                    Ok(i) if matches!(i.tag, b'f' | b'g') => {
-                        imports = imports.saturating_add(1);
-                        pos = pos.saturating_add(span.len);
-                    }
-                    Ok(i) if i.tag == b'c' => {
-                        pos = pos.saturating_add(span.len);
-                        break;
-                    }
-                    _ => {
-                        stop = Some("unexpected record inside a used unit".to_owned());
-                        pos = unit_start;
-                        break 'units;
-                    }
-                }
+                _ => runs.push(Run {
+                    section: sec,
+                    region: item.span,
+                    count: 1,
+                    first_decl,
+                }),
             }
-            units.push(UnitInfo {
-                name: r.name.unwrap_or_default(),
-                tag: r.tag,
-                block: body.sub(unit_start, pos.saturating_sub(unit_start)),
-                imports,
-            });
-        }
-        if !units.is_empty() {
-            let region = body.sub(uses_start, pos.saturating_sub(uses_start));
-            let count = units.len() as u64;
-            cx.emit(
-                Node::new("Used units")
-                    .span(region)
-                    .summary(format!("{count} units"))
-                    .lazy(used_units, Arc::new(units.clone())),
-            );
+            pos = pos.saturating_add(item.span.len);
         }
     } else {
         stop = Some(format!("the record layout of {product} is not decoded"));
+    }
+
+    let names = Arc::new(names);
+    let mut units = 0u64;
+    let mut sources = 0u64;
+    let mut decls = 0u64;
+    for run in &runs {
+        let (label, unit) = match run.section {
+            Section::Flags => ("Unit flags", ("record", "records")),
+            Section::Sources => {
+                sources = sources.saturating_add(run.count);
+                ("Source files", ("file", "files"))
+            }
+            Section::Units => {
+                units = units.saturating_add(run.count);
+                ("Used units", ("unit", "units"))
+            }
+            Section::UnitRefs => ("Unit references", ("unit", "units")),
+            Section::Decls => {
+                decls = decls.saturating_add(run.count);
+                ("Declarations", ("declaration", "declarations"))
+            }
+            Section::TypeDefs => ("Type definitions", ("definition", "definitions")),
+        };
+        if run.section == Section::Flags && run.count == 1 {
+            // A single record, shown as itself.
+            if let Ok(Ok(item)) = read_item(&cx, run.region, 0, None).await {
+                let mut n = run.first_decl;
+                cx.emit(item_node(&item, &names, &mut n));
+            }
+            continue;
+        }
+        let mut node = Node::new(label)
+            .span(run.region)
+            .summary(plural(run.count, unit.0, unit.1))
+            .lazy(run_items, (*run, names.clone()));
+        if run.section == Section::UnitRefs {
+            node = node.desc(
+                "One per unit named in the uses clauses, and one for the unit itself; each \
+                 refers to the used-unit record",
+            );
+        }
+        cx.emit(node);
     }
 
     if pos < body.len {
@@ -560,8 +1126,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(rest)
                 .summary(format!("{} bytes; {why}", rest.len))
                 .desc(
-                    "Declarations, code, fixups and debug records. Their layout varies by \
-                     compiler version and is not decoded.",
+                    "Type definitions, code, fixups and debug records not decoded. Their \
+                     layout varies by compiler version.",
                 ),
         );
     }
@@ -578,11 +1144,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let mut note = format!("{product} compiled unit");
-    if !units.is_empty() {
-        note.push_str(&format!(", {} used units", units.len()));
+    if units > 0 {
+        note.push_str(&format!(", {}", plural(units, "used unit", "used units")));
+    }
+    if decls > 0 {
+        note.push_str(&format!(
+            ", {}",
+            plural(decls, "declaration", "declarations")
+        ));
     }
     if sources > 0 {
-        note.push_str(&format!(", {sources} source files"));
+        note.push_str(&format!(
+            ", {}",
+            plural(sources, "source file", "source files")
+        ));
     }
     if valid_dos_time(time) {
         note.push_str(&format!(", compiled {}", dos_time(time)));
@@ -671,47 +1246,6 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
     Ok(())
 }
 
-/// Pushes `count` consecutive records of `region`.
-async fn flat_records(cx: Cx, (region, count): (Span, u64)) -> Result<()> {
-    cx.set_count(Count::Exact(count));
-    let mut pos = 0u64;
-    while pos < region.len {
-        let (rec, span) = read_record(&cx, region, pos).await?;
-        let Ok(rec) = rec else {
-            return Err(Diagnostic::malformed("record").at(span));
-        };
-        if span.len == 0 {
-            break;
-        }
-        cx.push(record_node(&rec, span)).await;
-        pos = pos.saturating_add(span.len);
-    }
-    Ok(())
-}
-
-async fn used_units(cx: Cx, units: Arc<Vec<UnitInfo>>) -> Result<()> {
-    cx.set_count(Count::Exact(units.len() as u64));
-    for u in units.iter() {
-        let kind = if u.tag == b'e' {
-            "implementation, "
-        } else {
-            ""
-        };
-        cx.push(
-            Node::new(u.name.clone())
-                .span(u.block)
-                .summary(format!(
-                    "{kind}{} import{}",
-                    u.imports,
-                    if u.imports == 1 { "" } else { "s" }
-                ))
-                .lazy(flat_records, (u.block, u.imports.saturating_add(2))),
-        )
-        .await;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -723,6 +1257,15 @@ mod tests {
         assert_eq!(packed(&[0x03, 0x00, 0x01], 0), Some((0x2000, 3)));
         assert_eq!(packed(&[0x0f, 1, 2, 3, 4], 0), Some((0x0403_0201, 5)));
         assert_eq!(packed(&[0x01], 0), None);
+    }
+
+    #[test]
+    fn signed_index() {
+        assert_eq!(signed(&[0xf8], 0), Some((-4, 1)));
+        assert_eq!(signed(&[0x08], 0), Some((4, 1)));
+        assert_eq!(signed(&[0xe1, 0x0b], 0), Some((760, 2)));
+        assert_eq!(signed(&[0xa9, 0xfe], 0), Some((-86, 2)));
+        assert_eq!(signed(&[0x0f, 0, 0, 0, 0x80], 0), Some((-0x8000_0000, 5)));
     }
 
     #[test]
