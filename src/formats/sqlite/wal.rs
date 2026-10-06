@@ -83,15 +83,43 @@ record! {
     }
 }
 
-fn image_db(input: Input, page_size: u64) -> DbRef {
+fn image_db(input: Input, page_size: u64, reserved: u8) -> DbRef {
     Arc::new(Db {
         input,
         page_size,
-        usable: page_size,
+        usable: page_size.saturating_sub(reserved.into()).max(480),
         page_count: u64::from(u32::MAX),
         encoding: Encoding::Utf8,
         linked: false,
     })
+}
+
+/// The reserved bytes per page, from an image of page 1 (whose database
+/// header records it) among the first records, if there is one. Records
+/// are `stride` bytes from `first`; page images start `skip` bytes in.
+async fn reserved_bytes(
+    cx: &Cx,
+    input: Input,
+    first: u64,
+    stride: u64,
+    count: u64,
+    skip: u64,
+) -> Result<u8> {
+    for i in 0..count.min(1024) {
+        let at = first.saturating_add(i.saturating_mul(stride));
+        let head = cx.read_avail(input.span.sub(at, 4)).await?;
+        if u32_be(&head, 0) == Some(1) {
+            let r = cx
+                .read_avail(
+                    input
+                        .span
+                        .sub(at.saturating_add(skip).saturating_add(20), 1),
+                )
+                .await?;
+            return Ok(r.first().copied().unwrap_or(0));
+        }
+    }
+    Ok(0)
 }
 
 fn valid_page_size(size: u32) -> Option<u64> {
@@ -134,8 +162,17 @@ async fn wal_frames(
     (input, page_size, frames, salt1, salt2): (Input, u64, u64, u32, u32),
 ) -> Result<()> {
     cx.set_count(Count::Exact(frames));
-    let db = image_db(input, page_size);
     let frame_len = FrameHeader::SIZE.saturating_add(page_size);
+    let reserved = reserved_bytes(
+        &cx,
+        input,
+        WalHeader::SIZE,
+        frame_len,
+        frames,
+        FrameHeader::SIZE,
+    )
+    .await?;
+    let db = image_db(input, page_size, reserved);
     for i in 0..frames {
         let span = input.span.sub(
             WalHeader::SIZE.saturating_add(i.saturating_mul(frame_len)),
@@ -223,8 +260,9 @@ async fn journal_records(
     (input, page_size, start, count): (Input, u64, u64, u64),
 ) -> Result<()> {
     cx.set_count(Count::Exact(count));
-    let db = image_db(input, page_size);
     let record = page_size.saturating_add(8);
+    let reserved = reserved_bytes(&cx, input, start, record, count, 4).await?;
+    let db = image_db(input, page_size, reserved);
     for i in 0..count {
         let span = input
             .span
