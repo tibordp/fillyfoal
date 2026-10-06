@@ -26,6 +26,7 @@ pub mod aout;
 pub mod beam;
 pub mod bitcode;
 pub mod coff;
+pub mod dxbc;
 pub mod elf;
 pub mod java;
 pub mod lua;
@@ -179,6 +180,7 @@ pub static FORMATS: &[&Format] = &[
     &ne::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
+    &dxbc::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
