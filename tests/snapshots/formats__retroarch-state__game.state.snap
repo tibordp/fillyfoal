@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.state — RetroArch state v1, 31 bytes core state, blocks MEM, ACHV, END  [0x0+0x50]
+    Magic: "RASTATE"  [0x0+0x7]
+    Version: 1  [0x7+0x1]
+    MEM  — 31 bytes  [0x8+0x28] → 0x10+0x1f
+    ACHV — 12 bytes  [0x30+0x18] → 0x38+0xc
+    END  — 0 bytes  [0x48+0x8] → 0x50+0x0

@@ -4,3 +4,17 @@
 pub mod consoles;
 pub mod music;
 pub mod computers;
+pub mod util;
+pub mod patches;
+pub mod discs;
+pub mod consoles2;
+pub mod states;
+pub mod trackers;
+pub mod tapes;
+pub mod floppies;
+pub mod systems;
+pub mod micros;
+pub mod consoles3;
+pub mod graphics;
+pub mod dats;
+pub mod extras;

@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ LETTER.DOC — Word for Windows 2.0 document, English (US), 12 words  [0x0+0x100]
+  ▾ File information block  [0x0+0x20]
+      wIdent: 0xa5db  [0x0+0x2]
+      nFib: 45  [0x2+0x2]
+      nProduct: 0x6025  [0x4+0x2]
+      Language: English (US) (0x409)  [0x6+0x2]
+      pnNext: 0  [0x8+0x2]
+      Flags: 0x0 []  [0xa+0x2]
+      nFibBack: 45  [0xc+0x2]
+      Encryption key: 0x0  [0xe+0x4]
+      Environment: 0  [0x12+0x1]
+      Reserved: 0  [0x13+0x1]
+      Character set: 0  [0x14+0x2]
+      Character set (tables): 0  [0x16+0x2]
+      fcMin (text start): 0x80  [0x18+0x4]
+      fcMac (text end): 0xc0  [0x1c+0x4]
+    Text: "Dear Sam,\nThanks for the notes from Tuesday. See you on Friday.\n" — 64 characters  [0x80+0x40]
+    Formatting and tables  [0xc0+0x40]

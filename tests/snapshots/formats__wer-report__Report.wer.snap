@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Report.wer — WER report: APPCRASH in Example App, 18 entries  [0x0+0x41e]
+    Version: "1"  [0x2+0x16]
+    EventType: "APPCRASH"  [0x18+0x28]
+    EventTime: 2017-07-14 02:40:00 UTC  [0x40+0x3c]
+    ReportType: "2"  [0x7c+0x1c]
+    Consent: "1"  [0x98+0x16]
+    ReportIdentifier: "8a1b2c3d-4e5f-4061-8273-9a8b7c6d5e4f"  [0xae+0x6e]
+    Sig[0].Name: "Application Name"  [0x11c+0x3c]
+    Sig[0].Value: "example.exe"  [0x158+0x34]
+    Sig[1].Name: "Application Version"  [0x18c+0x42]
+    Sig[1].Value: "1.2.3.4"  [0x1ce+0x2c]
+    Sig[3].Name: "Fault Module Name"  [0x1fa+0x3e]
+    Sig[3].Value: "ntdll.dll"  [0x238+0x30]
+    Sig[6].Name: "Exception Code"  [0x268+0x38]
+    Sig[6].Value: "c0000005"  [0x2a0+0x2e]
+    LoadedModule[0]: "C:\\Program Files\\Example\\example.exe"  [0x2ce+0x6c]
+    LoadedModule[1]: "C:\\Windows\\SYSTEM32\\ntdll.dll"  [0x33a+0x5e]
+    AppName: "Example App"  [0x398+0x2a]
+    AppPath: "C:\\Program Files\\Example\\example.exe"  [0x3c2+0x5c]

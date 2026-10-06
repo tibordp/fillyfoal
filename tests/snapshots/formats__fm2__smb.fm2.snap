@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ smb.fm2 — FCEUX movie of "Super Mario Bros.", 3 frames, 4 rerecords  [0x0+0xfa]
+    version: 3  [0x0+0x9]
+    emuVersion: 22020  [0xa+0x10]
+    rerecordCount: 4  [0x1b+0xf]
+    palFlag: 0  [0x2b+0x9]
+    romFilename: "Super Mario Bros."  [0x35+0x1d]
+    romChecksum: "base64:jjYwGG411HcjG/j9UOVM3Q=="  [0x53+0x2b]
+    guid: "0EDF6AF2-1E8A-4C7E-9A3B-1234567890AB"  [0x7f+0x29]
+    fourscore: 0  [0xa9+0xb]
+    port0: 1  [0xb5+0x7]
+    port1: 1  [0xbd+0x7]
+    port2: 0  [0xc5+0x7]
+  ▾ Input log — 3 frames  [0xcd+0x2c]
+      Frame 0: "|1|........|||"  [0xcd+0xe]
+      Frame 1: "|0|.......A|||"  [0xdc+0xe]
+      Frame 2: "|0|R......A|||"  [0xeb+0xe]

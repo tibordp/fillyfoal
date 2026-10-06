@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cert_override.txt — Firefox certificate overrides, 2 exceptions  [0x0+0x1c2]
+    selfsigned.example.com:443: "AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89" — mismatched domain, untrusted  [0x53+0xde]
+    192.0.2.1:8443: "01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF:01:23:45:67:89:AB:CD:EF" — untrusted  [0x131+0x91]

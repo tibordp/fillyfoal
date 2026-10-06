@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<!DOCTYPE datafile PUBLIC "-//Logiqx//DTD ROM Management Datafile//EN" "http://www.logiqx.com/Dats/datafile.dtd">
+<datafile>
+	<header>
+		<name>Sega - Mega Drive - Genesis</name>
+		<description>Sega - Mega Drive - Genesis (20240101)</description>
+		<version>20240101</version>
+		<author>fillyfoal</author>
+	</header>
+	<game name="Sonic the Hedgehog (USA, Europe)">
+		<description>Sonic the Hedgehog (USA, Europe)</description>
+		<rom name="Sonic the Hedgehog (USA, Europe).md" size="524288" crc="f9394e97" sha1="6ddb7de1e17e7f6cdb88927bd906352030daa194"/>
+	</game>
+	<game name="Sonic the Hedgehog (Japan) (Rev 1)" cloneof="Sonic the Hedgehog (USA, Europe)">
+		<description>Sonic the Hedgehog (Japan) (Rev 1)</description>
+		<rom name="Sonic the Hedgehog (Japan) (Rev 1).md" size="524288" crc="afe05eee"/>
+	</game>
+</datafile>

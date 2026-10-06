@@ -1,0 +1,19 @@
+clrmamepro (
+	name "Nintendo - Game Boy"
+	description "Nintendo - Game Boy (20240101-000000)"
+	version 20240101-000000
+	author "fillyfoal"
+)
+
+game (
+	name "Tetris (World) (Rev 1)"
+	description "Tetris (World) (Rev 1)"
+	rom ( name "Tetris (World) (Rev 1).gb" size 32768 crc 46DF91AD md5 982ED5D2B12A0377EB14BCDC4123744E sha1 74591CC9501AF93873F9A5D3EB12DA12C0723BBC )
+)
+
+game (
+	name "Super Mario Land (World)"
+	description "Super Mario Land (World)"
+	year 1989
+	rom ( name "Super Mario Land (World).gb" size 65536 crc 90776841 )
+)

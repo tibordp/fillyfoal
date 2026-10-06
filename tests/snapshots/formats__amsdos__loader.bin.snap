@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ loader.bin — AMSDOS file "LOADER.BIN", binary, 512 bytes, load $4000, entry $4000  [0x0+0x280]
+  ▾ AMSDOS header — checksum valid  [0x0+0x80]
+      User number: 0  [0x0+0x1]
+      File name: "LOADER  "  [0x1+0x8]
+      Extension: "BIN"  [0x9+0x3]
+      Reserved: 00 00 00 00  |....|  [0xc+0x4]
+      Block number: 0  [0x10+0x1]
+      Last block: 0  [0x11+0x1]
+      File type: binary (0x2)  [0x12+0x1]
+      Data length: 512  [0x13+0x2]
+      Load address: 0x4000  [0x15+0x2]
+      First block: 0  [0x17+0x1]
+      Logical length: 512  [0x18+0x2]
+      Entry address: 0x4000  [0x1a+0x2]
+      Unused: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1c+0x24]
+      File length (24-bit): 00 02 00  |...|  [0x40+0x3]
+      Checksum: 0x358  [0x43+0x2]
+    LOADER.BIN — 512 bytes  [0x80+0x200]

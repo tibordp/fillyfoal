@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.edat — PS3 EDAT v3 "UP0001-TINY00001_00-0000000000000001", 1234 bytes in 16384-byte blocks, licensed  [0x0+0xd0]
+    Signature: "NPD"  [0x0+0x4]
+    Version: 3  [0x4+0x4]
+    License: free (0x3)  [0x8+0x4]
+    Type: 0x0  [0xc+0x4]
+    Content ID: "UP0001-TINY00001_00-0000000000000001"  [0x10+0x30]
+    Digest: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x40+0x10]
+    Title hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x50+0x10]
+    Developer hash: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x60+0x10]
+    Unknown: 0x0  [0x70+0x8]
+    Unknown: 0x0  [0x78+0x8]
+    Flags: 0x3c  [0x80+0x4]
+    Block size: 16384  [0x84+0x4]
+    Data size: 1234  [0x88+0x8]
+    Metadata and encrypted blocks  [0x90+0x40]

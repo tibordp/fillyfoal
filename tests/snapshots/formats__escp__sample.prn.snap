@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.prn — Epson ESC/P print data, 11 commands, 2 graphics blocks  [0x0+0x67]
+    Initialize: "<ESC>@"  [0x0+0x2]
+    Print quality: "<ESC>x1"  [0x2+0x3]
+    Typeface: "<ESC>k\\x01"  [0x5+0x3]
+    Bold on: "<ESC>E"  [0x8+0x2]
+    Text: "Fixture invoice\\r\\n"  [0xa+0x11]
+    Bold off: "<ESC>F"  [0x1b+0x2]
+    n/180-inch line spacing: "<ESC>3\\x18"  [0x1d+0x3]
+    Text: "Line two\\r\\n"  [0x20+0xa]
+    Absolute horizontal position: "<ESC>$\\x10\\x00"  [0x2a+0x4]
+    Text: "Indented\\r\\n"  [0x2e+0xa]
+    Bit image (mode 0, 16 columns): "<ESC>*\\x00\\x10\\x00\\x81B$"  [0x38+0x15]
+    Text: "\\r\\n"  [0x4d+0x2]
+    Extended command ESC ( U: "<ESC>(U\\x01\\x00\\n"  [0x4f+0x6]
+    Raster graphics (1×56, RLE): "<ESC>.\\x01\\x14\\x14\\x018\\x00"  [0x55+0xf]
+    Text: "\\f"  [0x64+0x1]
+    Initialize: "<ESC>@"  [0x65+0x2]

@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ drawing.cgm — CGM metafile "Fixture metafile", 1 pictures  [0x0+0xd4]
+    BEGIN METAFILE: "Fixture metafile"  [0x0+0x14]
+    METAFILE VERSION: 1  [0x14+0x4]
+    METAFILE DESCRIPTION: "Created by a fixture generator for testing"  [0x18+0x30]
+    METAFILE ELEMENT LIST — 6 bytes  [0x48+0x8]
+    FONT LIST — 16 bytes  [0x50+0x12]
+  ▾ Picture 1: "Page 1"  [0x62+0x70]
+      BEGIN PICTURE: "Page 1"  [0x62+0xa]
+      VDC EXTENT — 8 bytes  [0x6c+0xa]
+      BEGIN PICTURE BODY  [0x76+0x2]
+      LINE COLOUR — 2 bytes  [0x78+0x4]
+      POLYLINE — 12 bytes  [0x7c+0xe]
+      TEXT: "Hello CGM"  [0x8a+0x12]
+      POLYGON — 40 bytes  [0x9c+0x2c]
+      CIRCLE — 6 bytes  [0xc8+0x8]
+      END PICTURE  [0xd0+0x2]
+    END METAFILE  [0xd2+0x2]

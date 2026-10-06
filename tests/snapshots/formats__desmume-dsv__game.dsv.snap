@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.dsv — DeSmuME DS save, 8 KiB of data, EEPROM 64 Kbit, 2-byte addressing  [0x0+0x2076]
+    Save data — 8 KiB  [0x0+0x2000]
+    Footer text  [0x2000+0x52]
+    Actual size: 8192  [0x2052+0x4]
+    Padded size: 8192  [0x2056+0x4]
+    Type: EEPROM 64 Kbit (0x2)  [0x205a+0x4]
+    Address size (bytes): 2  [0x205e+0x4]
+    Memory size: 8192  [0x2062+0x4]
+    Cookie: "|-DESMUME SAVE-|"  [0x2066+0x10]

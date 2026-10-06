@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.wmo — World of Warcraft WMO root, 4 chunks  [0x0+0xac]
+    MVER — 4 bytes  [0x0+0xc]
+    MOHD — 64 bytes  [0xc+0x48]
+    MOTX — 8 bytes  [0x54+0x10]
+    MOMT — 64 bytes  [0x64+0x48]

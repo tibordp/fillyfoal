@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.pcl — PCL 5 print job, 17 commands, 1 pages  [0x0+0x90]
+    Reset  [0x0+0x2]
+    Orientation, Page size, Top margin: "0o 2a 0E"  [0x2+0x9]
+    Unit of measure: "600D"  [0xb+0x7]
+    Primary symbol set: "10U"  [0x12+0x5]
+    Primary spacing, Primary pitch, Primary height, Primary style, Primary stroke weight, Primary typeface: "0p 10h 12v 0s 0b 3T"  [0x17+0x11]
+    Horizontal position (decipoints), Vertical position (decipoints): "100h 200V"  [0x28+0xb]
+    Text: "Hello, PCL!\\r\\n"  [0x33+0xd]
+    Horizontal position (dots), Vertical position (dots): "300x 400Y"  [0x40+0xb]
+    Raster resolution: "300R"  [0x4b+0x7]
+    Raster width: "24S"  [0x52+0x6]
+    Start raster graphics: "1A"  [0x58+0x5]
+    Raster data: "3W"  [0x5d+0x8]
+    Raster data: "3W"  [0x65+0x8]
+    Raster data: "3W"  [0x6d+0x8]
+    Raster data: "3W"  [0x75+0x8]
+    End raster graphics: "B"  [0x7d+0x4]
+    Rectangle width (dots), Rectangle height (dots), Fill rectangle: "100a 50b 0P"  [0x81+0xc]
+    Text: "\\f"  [0x8d+0x1]
+    Reset  [0x8e+0x2]

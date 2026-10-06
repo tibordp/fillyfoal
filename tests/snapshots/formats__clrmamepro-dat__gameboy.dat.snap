@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gameboy.dat — clrmamepro DAT "Nintendo - Game Boy (20240101-000000)", 2 games, 2 ROMs  [0x0+0x213]
+  ▾ clrmamepro: "Nintendo - Game Boy (20240101-000000)" — version 20240101-000000  [0x0+0x8c]
+      name: "Nintendo - Game Boy"
+      description: "Nintendo - Game Boy (20240101-000000)"
+      version: "20240101-000000"
+      author: "fillyfoal"
+  ▾ Entries — 2 games, 2 ROMs
+    ▾ game Tetris (World) (Rev 1): "Tetris (World) (Rev 1)" — 1 ROMs  [0x8e+0xe2]
+        rom Tetris (World) (Rev 1).gb: "32768 bytes, CRC 46DF91AD"
+    ▾ game Super Mario Land (World): "Super Mario Land (World)" — 1 ROMs  [0x172+0xa0]
+        rom Super Mario Land (World).gb: "65536 bytes, CRC 90776841"

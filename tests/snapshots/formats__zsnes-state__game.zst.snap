@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.zst — ZSNES Save State File V0.6, version 60, 1 KiB  [0x0+0x41c]
+    Signature: "ZSNES Save State File V0.6"  [0x0+0x1a]
+    End of text: 0x1a  [0x1a+0x1]
+    Version: 60  [0x1b+0x1]
+    CPU, PPU and memory snapshot — 1 KiB  [0x1c+0x400]

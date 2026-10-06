@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.font — Amiga font contents, sizes 8, 11, 15  [0x0+0x310]
+    File ID: 0xf00 — FCH_ID  [0x0+0x2]
+    Entries: 3  [0x2+0x2]
+    fixture/8: 8 — plain  [0x4+0x104]
+    fixture/11: 11 — bold  [0x108+0x104]
+    fixture/15: 15 — bold, italic  [0x20c+0x104]

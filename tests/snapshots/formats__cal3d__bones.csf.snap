@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bones.csf — Cal3D skeleton v1000, 2 bones  [0x0+0x2c]
+    Signature  [0x0+0x4]
+    Version: 1000  [0x4+0x4]
+    Body — 2 bones  [0x8+0x24]

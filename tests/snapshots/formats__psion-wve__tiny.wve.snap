@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.wve — Psion A-law sound, 16 samples (0.00 s)  [0x0+0x30]
+    Signature: "ALawSoundFile**"  [0x0+0x10]
+    Version: 0xf10  [0x10+0x2]
+    Samples: 16  [0x12+0x4]
+    Silence before repeat: 0  [0x16+0x2]
+    Repeats: 0  [0x18+0x2]
+    A-law samples (8 kHz)  [0x20+0x10]

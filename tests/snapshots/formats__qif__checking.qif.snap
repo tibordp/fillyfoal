@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ checking.qif — Quicken QIF, 3 entries (Type:Bank)  [0x0+0xf7]
+    !Type:Bank  [0x0+0xc]
+  ▾ CITY OF SPRINGFIELD: "-379.00" — 03/01/2004  [0xc+0x46]
+      Date: "03/01/2004"  [0xc+0xd]
+      Amount: "-379.00"  [0x19+0xa]
+      Cleared status: "X"  [0x23+0x4]
+      Payee: "CITY OF SPRINGFIELD"  [0x27+0x16]
+      Category / transfer: "Utilities:Water"  [0x3d+0x12]
+  ▾ YOUR LOCAL SUPERMARKET: "-20.28" — 03/03/2004  [0x52+0x4c]
+      Date: "03/03/2004"  [0x52+0xd]
+      Amount: "-20.28"  [0x5f+0x9]
+      Payee: "YOUR LOCAL SUPERMARKET"  [0x68+0x19]
+      Memo: "weekly shop"  [0x81+0xe]
+      Category / transfer: "Groceries"  [0x8f+0xc]
+  ▾ Payroll: "1,500.00" — 03/04/2004  [0x9e+0x59]
+      Date: "03/04/2004"  [0x9e+0xd]
+      Amount: "1,500.00"  [0xab+0xb]
+      Number / action: "1001"  [0xb6+0x7]
+      Payee: "Payroll"  [0xbd+0xa]
+      Split category: "Income:Salary"  [0xc7+0x10]
+      Split amount: "1,700.00"  [0xd7+0xb]
+      Split category: "Taxes"  [0xe2+0x8]
+      Split amount: "-200.00"  [0xea+0xa]

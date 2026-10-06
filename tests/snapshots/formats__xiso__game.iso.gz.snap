@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.iso — Xbox XDVDFS image, root directory at sector 33 (2048 bytes), 72 KiB  [0x0+0x12005]
+    Magic: "MICROSOFT*XBOX*MEDIA"  [0x10000+0x14]
+    Root directory sector: 33  [0x10014+0x4]
+    Root directory size: 2048  [0x10018+0x4]
+    Creation time: 2000-04-12 08:00:00 UTC  [0x1001c+0x8]
+  ▾ /  [0x10800+0x800]
+    ▾ default.xbe: 0x20 [ARCHIVE] — 16 bytes  [0x11000+0x10] → 0x10800+0x19
+        ! truncated: needed 0x100 bytes at 0x11004, only 0xc available [0x11004+0x100]
+    ▾ media/: 0x10 [DIRECTORY]  [0x11800+0x800] → 0x1081c+0x13
+      ▾ readme.txt: 0x20 [ARCHIVE] — UTF-8 text, 1 line  [0x12000+0x5] → 0x11800+0x18
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x12000+0x5]
+            Line 1: "hello"  [0x12000+0x5]

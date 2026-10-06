@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.amf — DSMI AMF v0.14 module "Tiny AMF": 4 channels, 1 orders, 4 tracks, 1 samples  [0x0+0x69]
+    Signature: "AMF"  [0x0+0x3]
+    Version: 0xe  [0x3+0x1]
+    Title: "Tiny AMF"  [0x4+0x20]
+    Samples: 1  [0x24+0x1]
+    Orders: 1  [0x25+0x1]
+    Tracks: 4  [0x26+0x2]
+    Channels: 4  [0x28+0x1]
+    Module  [0x29+0x40]

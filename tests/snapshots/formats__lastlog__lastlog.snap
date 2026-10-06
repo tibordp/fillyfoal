@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lastlog — lastlog, 2 users with logins (UIDs 0–2)  [0x0+0x36c]
+  ▾ UID 0: 2023-11-14 22:13:20 UTC — tty1  [0x0+0x124]
+      Time: 2023-11-14 22:13:20 UTC  [0x0+0x4]
+      Terminal: "tty1"  [0x4+0x20]
+      Host: ""  [0x24+0x100]
+  ▾ UID 2: 2023-11-14 22:21:40 UTC — pts/0 from 192.0.2.10  [0x248+0x124]
+      Time: 2023-11-14 22:21:40 UTC  [0x248+0x4]
+      Terminal: "pts/0"  [0x24c+0x20]
+      Host: "192.0.2.10"  [0x26c+0x100]

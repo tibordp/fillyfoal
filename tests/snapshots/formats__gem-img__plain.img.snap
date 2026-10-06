@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ plain.img — GEM bitmap, 16×4, 1 planes  [0x0+0x20]
+    Version: 1  [0x0+0x2]
+    Header length (words): 8  [0x2+0x2]
+    Planes: 1  [0x4+0x2]
+    Pattern length: 2  [0x6+0x2]
+    Pixel width (µm): 372  [0x8+0x2]
+    Pixel height (µm): 372  [0xa+0x2]
+    Width: 16  [0xc+0x2]
+    Height: 4  [0xe+0x2]
+    Compressed scan lines — pattern runs, solid runs, bit strings, vertical replication  [0x10+0x10]

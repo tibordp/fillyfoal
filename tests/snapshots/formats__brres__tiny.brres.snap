@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.brres — BRRES, 3 sections: MDL0, TEX0  [0x0+0x48]
+    Signature: "bres"  [0x0+0x4]
+    Byte-order mark: 0xfeff  [0x4+0x2]
+    Padding: 0  [0x6+0x2]
+    File size: 72  [0x8+0x4]
+    Root offset: 0x10  [0xc+0x2]
+    Sections: 3  [0xe+0x2]
+    root — 8 bytes  [0x10+0x10]
+    MDL0 — 16 bytes  [0x20+0x18]
+    TEX0 — 8 bytes  [0x38+0x10]

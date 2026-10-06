@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.toc — cdrdao TOC, CD_ROM_XA, 2 tracks (MODE2_RAW, AUDIO), 2 data file reference(s)  [0x0+0x11b]
+    Disc type: "CD_ROM_XA"  [0x24+0x9]
+    Disc: "CATALOG \"0000000000000\""  [0x2f+0x17]
+  ▾ Track 1: "MODE2_RAW" — 2 statements  [0x53+0x51]
+      NO: "COPY"  [0x63+0x7]
+      DATAFILE: "\"game.bin\" 03:20:00 // length in bytes: 35280000"  [0x6b+0x39]
+  ▾ Track 2: "AUDIO" — 5 statements  [0xb1+0x69]
+      NO: "COPY"  [0xbd+0x7]
+      NO: "PRE_EMPHASIS"  [0xc5+0xf]
+      TWO_CHANNEL_AUDIO: ""  [0xd5+0x11]
+      FILE: "\"game.bin\" #35280000 0 02:30:00"  [0xe7+0x24]
+      START: "00:02:00"  [0x10c+0xe]

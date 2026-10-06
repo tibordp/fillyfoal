@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ nights.bin — Saturn "NIGHTS into Dreams..." (MK-81009 V1.000), 19951117, Japan, Asia NTSC, North America, Europe  [0x0+0x310]
+    Sector sync and header  [0x0+0x10]
+  ▾ System ID  [0x10+0x100]
+      Hardware ID: "SEGA SEGASATURN "  [0x10+0x10]
+      Maker ID: "SEGA ENTERPRISES"  [0x20+0x10]
+      Product number: "MK-81009  "  [0x30+0xa]
+      Version: "V1.000"  [0x3a+0x6]
+      Release date (YYYYMMDD): "19951117"  [0x40+0x8]
+      Device information: "CD-1/1  "  [0x48+0x8]
+      Compatible areas: "JTUE      " — Japan, Asia NTSC, North America, Europe  [0x50+0xa]
+      Reserved: "      "  [0x5a+0x6]
+      Compatible peripherals: "J               "  [0x60+0x10]
+      Game title: "NIGHTS into Dreams...                                                                                           "  [0x70+0x70]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0xe0+0x10]
+      IP size: 0x1800  [0xf0+0x4]
+      Reserved: 0  [0xf4+0x4]
+      Master SH-2 stack: 0x0  [0xf8+0x4]
+      Slave SH-2 stack: 0x0  [0xfc+0x4]
+      1st read address: 0x6004000  [0x100+0x4]
+      1st read size: 0x0  [0x104+0x4]
+      Reserved: 00 00 00 00 00 00 00 00  |........|  [0x108+0x8]
+    Security code and area code  [0x110+0x200]

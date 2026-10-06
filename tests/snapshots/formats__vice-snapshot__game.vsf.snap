@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.vsf — VICE snapshot v2.0 of C64SC (VICE 3.6.1), 4 modules  [0x0+0x138]
+    Signature: "VICE Snapshot File\u{1a}"  [0x0+0x13]
+    Major version: 2  [0x13+0x1]
+    Minor version: 0  [0x14+0x1]
+    Machine: "C64SC"  [0x15+0x10]
+    VICE version: "3.6.1" — SVN r41234  [0x25+0x15]
+    MAINCPU — v1.3, 62 bytes  [0x3a+0x3e]
+    C64MEM — v0.0, 86 bytes  [0x78+0x56]
+    CIA1 — v2.2, 52 bytes  [0xce+0x34]
+    SID — v1.4, 54 bytes  [0x102+0x36]

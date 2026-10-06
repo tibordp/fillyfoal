@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.act — Photoshop colour table, 16 colours  [0x0+0x304]
+  ▾ Colours — 16 entries  [0x0+0x30]
+      [0]: "#00ff00"  [0x0+0x3]
+      [1]: "#10ef25"  [0x3+0x3]
+      [2]: "#20df4a"  [0x6+0x3]
+      [3]: "#30cf6f"  [0x9+0x3]
+      [4]: "#40bf94"  [0xc+0x3]
+      [5]: "#50afb9"  [0xf+0x3]
+      [6]: "#609fde"  [0x12+0x3]
+      [7]: "#708f03"  [0x15+0x3]
+      [8]: "#807f28"  [0x18+0x3]
+      [9]: "#906f4d"  [0x1b+0x3]
+      [10]: "#a05f72"  [0x1e+0x3]
+      [11]: "#b04f97"  [0x21+0x3]
+      [12]: "#c03fbc"  [0x24+0x3]
+      [13]: "#d02fe1"  [0x27+0x3]
+      [14]: "#e01f06"  [0x2a+0x3]
+      [15]: "#f00f2b"  [0x2d+0x3]
+    Unused entries  [0x30+0x2d0]
+    Colour count: 16  [0x300+0x2]
+    Transparent index: 0  [0x302+0x2]

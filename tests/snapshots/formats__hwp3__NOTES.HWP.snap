@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ NOTES.HWP — Hangul 3.0 document "Meeting notes"  [0x0+0x4ce]
+    Signature: "HWP Document File V3.00"  [0x0+0x1e]
+    Document information — uncompressed  [0x1e+0x80]
+    Title: "Meeting notes"  [0x9e+0x70]
+    Subject: "Budget"  [0x10e+0x70]
+    Author: "Kim"  [0x17e+0x70]
+    Date: "2004-05-01"  [0x1ee+0x70]
+    Keyword 1: "budget"  [0x25e+0x70]
+    Keyword 2: "plan"  [0x2ce+0x70]
+    Other 1: ""  [0x33e+0x70]
+    Other 2: ""  [0x3ae+0x70]
+    Other 3: ""  [0x41e+0x70]
+    Body  [0x48e+0x40]
+      ! note: paragraph records are not dissected

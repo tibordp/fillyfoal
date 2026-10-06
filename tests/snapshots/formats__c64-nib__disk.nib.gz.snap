@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.nib — MNIB nibbler image v3, 3 tracks  [0x0+0x6100]
+    Signature: "MNIB-1541-RAW"  [0x0+0xd]
+    Version: 3  [0xd+0x1]
+    Track 1 — density 3  [0x10+0x2] → 0x100+0x2000
+    Track 2 — density 3  [0x12+0x2] → 0x2100+0x2000
+    Track 18 — density 2 (killer track)  [0x14+0x2] → 0x4100+0x2000

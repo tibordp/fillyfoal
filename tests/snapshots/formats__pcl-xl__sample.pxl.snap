@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.pxl — PCL XL stream (HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x0+0x95]
+    Stream header: ") HP-PCL XL;2;0;Comment Fixture" — little-endian binding  [0x0+0x21]
+    BeginSession: "137=uint16 (600, 600), 134=ubyte 0" — 2 attributes  [0x21+0xc]
+    OpenDataSource: "136=ubyte 0, 135=ubyte 1" — 2 attributes  [0x2d+0x9]
+    BeginPage: "40=ubyte 0, 37=ubyte 2" — 2 attributes  [0x36+0x9]
+    SetFont: "168=ubyte \"Courier       \", 161=real32 40, 162=uint16 629" — 3 attributes  [0x3f+0x21]
+    SetCursor: "76=uint16 (100, 200)" — 1 attributes  [0x60+0x8]
+    Text: "171=ubyte \"Hello\"" — 1 attributes  [0x68+0xc]
+    ReadImage: "98=ubyte 0, 109=uint16 8, 99=uint16 1" — 3 attributes  [0x74+0xf]
+    Embedded data — 8 bytes  [0x83+0xa]
+    EndPage: "49=uint16 1" — 1 attributes  [0x8d+0x6]
+    CloseDataSource  [0x93+0x1]
+    EndSession  [0x94+0x1]

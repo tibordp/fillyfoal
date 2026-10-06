@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ picture.koa — Koala Painter picture, 160×200 multicolour, background blue  [0x0+0x2713]
+    Load address: 0x6000  [0x0+0x2]
+    Bitmap — 160×200 multicolour  [0x2+0x1f40]
+    Screen RAM (colours 1 and 2)  [0x1f42+0x3e8]
+    Colour RAM (colour 3)  [0x232a+0x3e8]
+    Background colour: blue (0x6)  [0x2712+0x1]

@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mdl — Hexen II model: 3 vertices, 1 triangles, 1 frames, 1 skins  [0x0+0x98]
+    Signature: "RAPO"  [0x0+0x4]
+    Version: 6  [0x4+0x4]
+    Scale: 00 00 80 3f 00 00 80 3f 00 00 80 3f  |...?...?...?|  [0x8+0xc]
+    Origin: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0x14+0xc]
+    Bounding radius: 10  [0x20+0x4]
+    Eye position: 00 00 00 00 00 00 00 00 00 00 a0 41  |...........A|  [0x24+0xc]
+    Skins: 1  [0x30+0x4]
+    Skin width: 8  [0x34+0x4]
+    Skin height: 8  [0x38+0x4]
+    Vertices: 3  [0x3c+0x4]
+    Triangles: 1  [0x40+0x4]
+    Frames: 1  [0x44+0x4]
+    Sync type: 0  [0x48+0x4]
+    Flags: 0x0  [0x4c+0x4]
+    Average size: 0  [0x50+0x4]
+    Skins, vertices, triangles and frames  [0x54+0x44]

@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.pfr — Bitstream PFR, 1 logical fonts, 1 physical fonts, up to 95 characters  [0x0+0xba]
+    Signature  [0x0+0x4]
+    Version: 4  [0x4+0x2]
+    Signature 2: 3338  [0x6+0x2]
+    Header size: 58  [0x8+0x2]
+    Logical font directory size: 8  [0xa+0x2]
+    Logical font directory offset: 58  [0xc+0x2]
+    Logical font max size: 40  [0xe+0x2]
+    Logical font section size: 40  [0x10+0x3]
+    Logical font section offset: 66  [0x13+0x3]
+    Physical font max size: 64  [0x16+0x2]
+    Physical font section size: 64  [0x18+0x3]
+    Physical font section offset: 106  [0x1b+0x3]
+    Glyph program strings max size: 16  [0x1e+0x2]
+    Glyph program strings section size: 16  [0x20+0x3]
+    Glyph program strings section offset: 170  [0x23+0x3]
+    Max blue values: 7  [0x26+0x1]
+    Max X orus: 12  [0x27+0x1]
+    Max Y orus: 12  [0x28+0x1]
+    Physical font max size (high): 0  [0x29+0x1]
+    Colour flags: 0  [0x2a+0x1]
+    Bitmap character table max size: 0  [0x2b+0x3]
+    Bitmap character table set max size: 0  [0x2e+0x3]
+    Physical bitmap character table set max size: 0  [0x31+0x3]
+    Physical fonts: 1  [0x34+0x2]
+    Max vertical stem snaps: 2  [0x36+0x1]
+    Max horizontal stem snaps: 2  [0x37+0x1]
+    Max characters: 95  [0x38+0x2]
+    Logical font 0 — 40 bytes  [0x3c+0x6] → 0x42+0x28
