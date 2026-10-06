@@ -1,0 +1,17 @@
+v 20130925 2
+C 40000 40000 1 0 0 title-B.sym
+C 45000 45000 1 0 0 resistor-1.sym
+{
+T 45300 45400 5 10 0 0 0 0 1
+device=RESISTOR
+T 45200 45300 5 10 1 1 0 0 1
+refdes=R1
+}
+C 47000 45000 1 0 0 capacitor-1.sym
+{
+T 47200 45700 5 10 1 1 0 0 1
+refdes=C1
+}
+N 45900 45100 47000 45200 4
+T 41000 41000 9 10 1 0 0 0 1
+Amplifier test

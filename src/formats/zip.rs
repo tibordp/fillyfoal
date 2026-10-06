@@ -245,6 +245,8 @@ zip_variant!(NPZ, "npz", "NumPy array archive (NPZ)", ["npz"], "application/x-np
     |h| is_zip(h) && entry_names(h).next().is_some() && entry_names(h).all(|n| n.ends_with(b".npy")));
 zip_variant!(KERAS, "keras", "Keras v3 model", ["keras"], "application/x-keras",
     |h| has_entry(h, b"config.json") && (has_entry(h, b"model.weights.h5") || has_entry(h, b"metadata.json")));
+zip_variant!(SIGROK, "sigrok", "sigrok logic analyzer session", ["sr"], "application/x-sigrok",
+    |h| has_entry(h, b"version") && has_entry(h, b"metadata"));
 zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
     |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
 

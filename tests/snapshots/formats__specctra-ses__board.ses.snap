@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ board.ses — Specctra session; 1 base_design, 1 placement, 1 was_is, 1 routes  [0x0+0x15b]
+  ▾ (session — 5 element(s)  [0x0+0x15a]
+      atom: "board.ses"  [0x9+0x9]
+      (base_design: "board.dsn"  [0x15+0x17]
+    ▾ (placement — 2 sub-list(s)  [0x2f+0x5e]
+        (resolution: "um 10"  [0x3e+0x12]
+      ▾ (component: "R_0603" — 1 sub-list(s)  [0x55+0x34]
+          (place: "R1 200000 -200000 front 0"  [0x67+0x21]
+      (was_is  [0x90+0x8]
+    ▾ (routes — 3 sub-list(s)  [0x9b+0xbd]
+        (resolution: "um 10"  [0xa7+0x12]
+      ▾ (parser — 2 sub-list(s)  [0xbe+0x39]
+          (host_cad: "KiCad's Pcbnew"  [0xc6+0x1b]
+          (host_version: "7.0"  [0xe2+0x14]
+      ▾ (network_out — 1 sub-list(s)  [0xfc+0x58]
+        ▾ (net: "GND" — 1 sub-list(s)  [0x10f+0x3f]
+          ▾ (wire — 1 sub-list(s)  [0x118+0x35]
+              (path: "F.Cu 2500 200000 -200000 300000 -200000"  [0x11e+0x2e]

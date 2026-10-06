@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ old.lib — KiCad legacy symbol library, 2 symbol(s): R, LED  [0x0+0x165]
+  ▾ DEF R — 12 line(s)  [0x35+0xbb]
+      DEF: "R R 0 0 N Y 1 F N"  [0x35+0x15]
+      F0: "\"R\" 80 0 50 V V C CNN"  [0x4b+0x18]
+      F1: "\"R\" 0 0 50 V V C CNN"  [0x64+0x17]
+      DRAW: ""  [0x7c+0x4]
+      S: "-40 -100 40 100 0 1 10 N"  [0x81+0x1a]
+      X: "~ 1 0 150 50 D 50 50 1 1 P"  [0x9c+0x1c]
+      X: "~ 2 0 -150 50 U 50 50 1 1 P"  [0xb9+0x1d]
+      ENDDRAW: ""  [0xd7+0x7]
+      ENDDEF: ""  [0xdf+0x6]
+      #: ""  [0xe6+0x1]
+      #: "LED"  [0xe8+0x5]
+      #: ""  [0xee+0x1]
+  ▾ DEF LED — 8 line(s)  [0xf0+0x75]
+      DEF: "LED D 0 40 N N 1 F N"  [0xf0+0x18]
+      F0: "\"D\" 0 100 50 H V C CNN"  [0x109+0x19]
+      DRAW: ""  [0x123+0x4]
+      X: "K 1 -150 0 100 R 50 50 1 1 P"  [0x128+0x1e]
+      ENDDRAW: ""  [0x147+0x7]
+      ENDDEF: ""  [0x14f+0x6]
+      #: ""  [0x156+0x1]
+      #End: "Library"  [0x158+0xc]
+  ▾ Other lines: 5
+      EESchema-LIBRARY: "Version 2.4"  [0x0+0x1c]
+      #encoding: "utf-8"  [0x1d+0xf]
+      #: ""  [0x2d+0x1]
+      #: "R"  [0x2f+0x3]
+      #: ""  [0x33+0x1]

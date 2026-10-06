@@ -215,6 +215,7 @@ pub mod instruments2;
 pub mod bio2;
 pub mod cad2;
 pub mod geo2;
+pub mod eda2;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -706,6 +707,7 @@ pub static FORMATS: &[&Format] = &[
     &zip::PYTORCH,
     &zip::NPZ,
     &zip::KERAS,
+    &zip::SIGROK,
     &zip::AAR,
     &zip::XLSB,
     &zip::SNUPKG,
@@ -1177,6 +1179,18 @@ pub static FORMATS: &[&Format] = &[
     &geo2::ISO8211,
     &geo2::DLIS,
     &geo2::ESRI_BIL_HDR,
+    &eda::SAIF,
+    &eda::SPECCTRA_DSN,
+    &eda::SPECCTRA_SES,
+    &eda2::LTSPICE_ASC,
+    &eda2::LTSPICE_ASY,
+    &eda2::KICAD_LEGACY_SCH,
+    &eda2::KICAD_LEGACY_LIB,
+    &eda2::KICAD_LEGACY_PCB,
+    &eda2::GEDA_SCH,
+    &eda2::PADS_ASCII,
+    &eda2::DEF,
+    &eda2::LEF,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

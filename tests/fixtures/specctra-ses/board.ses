@@ -1,0 +1,15 @@
+(session board.ses
+  (base_design board.dsn)
+  (placement
+    (resolution um 10)
+    (component R_0603 (place R1 200000 -200000 front 0))
+  )
+  (was_is)
+  (routes
+    (resolution um 10)
+    (parser (host_cad "KiCad's Pcbnew") (host_version "7.0"))
+    (network_out
+      (net GND (wire (path F.Cu 2500 200000 -200000 300000 -200000)))
+    )
+  )
+)

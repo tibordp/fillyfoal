@@ -922,6 +922,12 @@ declare_format!(pub EDIF = "edif", "Electronic Design Interchange Format (EDIF)"
     Probe::Custom(|h| sexpr_probe(h, &[b"(edif", b"(EDIF"])), sexpr);
 declare_format!(pub SDF_TIMING = "sdf-timing", "Standard Delay Format (SDF)", ["sdf"], "application/x-sdf-timing",
     Probe::Custom(|h| sexpr_probe(h, &[b"(DELAYFILE", b"(delayfile"])), sexpr);
+declare_format!(pub SAIF = "saif", "Switching Activity Interchange Format (SAIF)", ["saif"], "application/x-saif",
+    Probe::Custom(|h| sexpr_probe(h, &[b"(SAIFILE", b"(saifile"])), sexpr);
+declare_format!(pub SPECCTRA_DSN = "specctra-dsn", "Specctra design (DSN)", ["dsn"], "application/x-specctra-dsn",
+    Probe::Custom(|h| sexpr_probe(h, &[b"(pcb", b"(PCB"]) && contains(h.data.get(..8192).unwrap_or(h.data), b"(structure")), sexpr);
+declare_format!(pub SPECCTRA_SES = "specctra-ses", "Specctra session (SES)", ["ses"], "application/x-specctra-ses",
+    Probe::Custom(|h| sexpr_probe(h, &[b"(session", b"(SESSION"])), sexpr);
 
 /// The elements of one list: atoms and nested lists (`start`, `end` offsets
 /// in `data`, exclusive of the list's parentheses).
@@ -941,7 +947,9 @@ fn sexpr_elements(data: &[u8]) -> Vec<(usize, usize, bool)> {
                 while let Some(&d) = data.get(j) {
                     match d {
                         b'\\' if in_str => j = j.saturating_add(1),
-                        b'"' => in_str = !in_str,
+                        // A lone `"` before `)` is an atom (Specctra's string_quote), not a string.
+                        b'"' if in_str => in_str = false,
+                        b'"' if data.get(j.saturating_add(1)) != Some(&b')') => in_str = true,
                         b'(' if !in_str => depth = depth.saturating_add(1),
                         b')' if !in_str => {
                             depth = depth.saturating_sub(1);
@@ -958,7 +966,7 @@ fn sexpr_elements(data: &[u8]) -> Vec<(usize, usize, bool)> {
                 i = end;
             }
             b')' => i = i.saturating_add(1),
-            b'"' => {
+            b'"' if data.get(i.saturating_add(1)) != Some(&b')') => {
                 let mut j = i.saturating_add(1);
                 while let Some(&d) = data.get(j) {
                     if d == b'\\' {
@@ -1017,7 +1025,7 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
         let kids = sexpr_elements(child.get(1..child.len().saturating_sub(1)).unwrap_or_default());
         let name = kids.first().map(|&(x, y, _)| atom(child.get(1..).and_then(|c| c.get(x..y)).unwrap_or_default())).unwrap_or_default();
         let first_value = kids.get(1).map(|&(x, y, _)| atom(child.get(1..).and_then(|c| c.get(x..y)).unwrap_or_default())).unwrap_or_default();
-        if matches!(name.as_str(), "version" | "generator" | "SDFVERSION" | "DESIGN" | "edifVersion" | "TIMESCALE" | "paper") && facts.len() < 6 {
+        if matches!(name.as_str(), "version" | "generator" | "SDFVERSION" | "DESIGN" | "edifVersion" | "TIMESCALE" | "paper" | "SAIFVERSION" | "DURATION" | "resolution") && facts.len() < 6 {
             facts.push(format!("{name} {first_value}"));
         }
         tally(&mut counts, &name, 256);
@@ -1032,6 +1040,9 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
         "kicad_symbol_lib" => "KiCad symbol library",
         "footprint" | "module" => "KiCad footprint",
         "DELAYFILE" | "delayfile" => "SDF timing",
+        "SAIFILE" | "saifile" => "SAIF switching activity",
+        "pcb" | "PCB" => "Specctra design",
+        "session" | "SESSION" => "Specctra session",
         _ => "EDIF",
     };
     cx.annotate(format!("{kind}{}; {}", if facts.is_empty() { String::new() } else { format!(" ({})", facts.join(", ")) }, top.join(", ")));

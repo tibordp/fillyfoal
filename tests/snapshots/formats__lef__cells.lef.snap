@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cells.lef — LEF library, 1 macro(s) (INVX1), 1 layer(s)  [0x0+0x14e]
+  ▾ LAYER metal1 — 5 line(s)  [0x5d+0x50]
+      LAYER: "metal1"  [0x5d+0xc]
+      TYPE: "ROUTING ;"  [0x6a+0x10]
+      DIRECTION: "HORIZONTAL ;"  [0x7b+0x18]
+      PITCH: "0.2 ;"  [0x94+0xd]
+      END: "metal1"  [0xa2+0xa]
+  ▾ SITE core — 4 line(s)  [0xad+0x36]
+      SITE: "core"  [0xad+0x9]
+      CLASS: "CORE ;"  [0xb7+0xe]
+      SIZE: "0.2 BY 2.0 ;"  [0xc6+0x13]
+      END: "core"  [0xda+0x8]
+  ▾ MACRO INVX1 — 8 line(s)  [0xe3+0x6b]
+      MACRO: "INVX1"  [0xe3+0xb]
+      CLASS: "CORE ;"  [0xef+0xe]
+      SIZE: "0.6 BY 2.0 ;"  [0xfe+0x13]
+      PIN: "A"  [0x112+0x7]
+      DIRECTION: "INPUT ;"  [0x11a+0x15]
+      END: "A"  [0x130+0x7]
+      END: "INVX1"  [0x138+0x9]
+      END: "LIBRARY"  [0x142+0xb]
+  ▾ Other lines: 6
+      VERSION: "5.8 ;"  [0x0+0xd]
+      BUSBITCHARS: "\"[]\" ;"  [0xe+0x12]
+      DIVIDERCHAR: "\"/\" ;"  [0x21+0x11]
+      UNITS: ""  [0x33+0x5]
+      DATABASE: "MICRONS 1000 ;"  [0x39+0x19]
+      END: "UNITS"  [0x53+0x9]

@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ top.def — DEF design top, 2 components, 1 pins, 1 nets  [0x0+0x197]
+  ▾ VERSION 5.8 — 3 line(s)  [0xb+0x33]
+      VERSION: "5.8 ;"  [0xb+0xd]
+      DIVIDERCHAR: "\"/\" ;"  [0x19+0x11]
+      BUSBITCHARS: "\"[]\" ;"  [0x2b+0x12]
+  ▾ DESIGN top — 1 line(s)  [0x3e+0xd]
+      DESIGN: "top ;"  [0x3e+0xc]
+  ▾ UNITS DISTANCE MICRONS 1000 — 1 line(s)  [0x4b+0x1e]
+      UNITS: "DISTANCE MICRONS 1000 ;"  [0x4b+0x1d]
+  ▾ DIEAREA ( 0 0 ) ( 100000 100000 ) — 1 line(s)  [0x69+0x24]
+      DIEAREA: "( 0 0 ) ( 100000 100000 ) ;"  [0x69+0x23]
+  ▾ ROW ROW_0 core 0 0 N DO 100 BY 1 STEP 200 0 — 1 line(s)  [0x8d+0x2e]
+      ROW: "ROW_0 core 0 0 N DO 100 BY 1 STEP 200 0 ;"  [0x8d+0x2d]
+  ▾ COMPONENTS 2 — 4 line(s)  [0xbb+0x6b]
+      COMPONENTS: "2 ;"  [0xbb+0xe]
+      -: "u1 INVX1 + PLACED ( 1000 1000 ) N ;"  [0xca+0x25]
+      -: "u2 DFFX1 + PLACED ( 5000 1000 ) FS ;"  [0xf0+0x26]
+      END: "COMPONENTS"  [0x117+0xe]
+  ▾ PINS 1 — 3 line(s)  [0x126+0x36]
+      PINS: "1 ;"  [0x126+0x8]
+      -: "clk + NET clk + DIRECTION INPUT ;"  [0x12f+0x23]
+      END: "PINS"  [0x153+0x8]
+  ▾ NETS 1 — 4 line(s)  [0x15c+0x3b]
+      NETS: "1 ;"  [0x15c+0x8]
+      -: "clk ( PIN clk ) ( u2 CK ) ;"  [0x165+0x1d]
+      END: "NETS"  [0x183+0x8]
+      END: "DESIGN"  [0x18c+0xa]
+  ▾ Other lines: 1
+      #: "DEF test"  [0x0+0xa]

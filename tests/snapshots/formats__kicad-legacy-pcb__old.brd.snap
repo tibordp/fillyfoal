@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ old.brd — KiCad legacy board, 1 module(s), 1 net(s), 2 track segment(s)  [0x0+0x160]
+  ▾ GENERAL — 6 line(s)  [0x31+0x43]
+      $GENERAL: ""  [0x31+0x8]
+      encoding: "utf-8"  [0x3a+0xe]
+      LayerCount: "2"  [0x49+0xc]
+      Nmodule: "1"  [0x56+0x9]
+      Nnets: "2"  [0x60+0x7]
+      $EndGENERAL: ""  [0x68+0xb]
+  ▾ Net — 4 line(s)  [0x75+0x25]
+      $EQUIPOT: ""  [0x75+0x8]
+      Na: "1 \"GND\""  [0x7e+0xa]
+      St: "~"  [0x89+0x4]
+      $EndEQUIPOT: ""  [0x8e+0xb]
+  ▾ Module R_0603 — 7 line(s)  [0x9a+0x79]
+      $MODULE: "R_0603"  [0x9a+0xe]
+      Po: "100000 50000 0 15 5F000001 00000000 ~~"  [0xa9+0x29]
+      Li: "R_0603"  [0xd3+0x9]
+      $PAD: ""  [0xdd+0x4]
+      Sh: "\"1\" R 400 500 0 0 0"  [0xe2+0x16]
+      $EndPAD: ""  [0xf9+0x7]
+      $EndMODULE: "R_0603"  [0x101+0x11]
+  ▾ Tracks — 5 line(s)  [0x113+0x4d]
+      $TRACK: ""  [0x113+0x6]
+      Po: "0 99000 50000 90000 50000 100 -1"  [0x11a+0x23]
+      De: "15 0 1 0 0"  [0x13e+0xd]
+      $EndTRACK: ""  [0x14c+0x9]
+      $EndBOARD: ""  [0x156+0x9]
+  ▾ Other lines: 1
+      PCBNEW-BOARD: "Version 1 date 17/05/2024 10:30:00"  [0x0+0x2f]

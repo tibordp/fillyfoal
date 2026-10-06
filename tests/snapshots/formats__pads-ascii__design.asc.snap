@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ design.asc — PADS ASCII PADS-POWERPCB-V9.0-MILS! DESIGN DATABASE ASCII FILE 1.0, section(s) PCB, PART, NET, SIGNAL, END  [0x0+0x115]
+  ▾ *PCB*        GENERAL PARAMETERS OF THE PCB DESIGN — 3 line(s)  [0x39+0x57]
+      *PCB*: "GENERAL PARAMETERS OF THE PCB DESIGN"  [0x39+0x31]
+      UNITS: "0"  [0x6b+0xe]
+      *REMARK*: "comment line"  [0x7a+0x15]
+  ▾ *PART*       ITEMS — 3 line(s)  [0x90+0x3d]
+      *PART*: "ITEMS"  [0x90+0x12]
+      R1: "RES0603"  [0xa3+0x14]
+      C1: "CAP0603"  [0xb8+0x14]
+  ▾ *NET*        NETS — 1 line(s)  [0xcd+0x12]
+      *NET*: "NETS"  [0xcd+0x11]
+  ▾ *SIGNAL* GND — 2 line(s)  [0xdf+0x17]
+      *SIGNAL*: "GND"  [0xdf+0xc]
+      R1.1: "C1.2"  [0xec+0x9]
+  ▾ *END*     OF ASCII OUTPUT FILE — 1 line(s)  [0xf6+0x1f]
+      *END*: "OF ASCII OUTPUT FILE"  [0xf6+0x1e]
+  ▾ Other lines: 1
+      !PADS-POWERPCB-V9.0-MILS!: "DESIGN DATABASE ASCII FILE 1.0"  [0x0+0x38]
