@@ -36,6 +36,7 @@ pub mod applesingle;
 pub mod bencode;
 pub mod bplist;
 pub mod cbor;
+pub mod chm;
 pub mod crx;
 pub mod datakit;
 pub mod evt;
@@ -219,6 +220,7 @@ pub static FORMATS: &[&Format] = &[
     &git::PACK_INDEX,
     &git::INDEX,
     &swf::FORMAT,
+    &chm::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
