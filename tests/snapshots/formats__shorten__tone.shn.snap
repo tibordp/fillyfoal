@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tone.shn — Shorten v2  [0x0+0x21]
+    Magic: "ajkg"  [0x0+0x4]
+    Version: 2  [0x4+0x1]
+    Compressed stream  [0x5+0x1c]

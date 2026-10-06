@@ -56,6 +56,33 @@ pub mod png;
 // -- end images --
 
 // -- audio & video --
+// audio (riff/iff/flac/mp3/ogg/...)
+pub mod ac3;
+pub mod adts;
+pub mod amr;
+pub mod ape;
+pub mod apetag;
+pub mod au;
+pub mod caf;
+pub mod dsd;
+pub mod dts;
+pub mod flac;
+pub mod id3;
+pub mod iff;
+pub mod lossless;
+pub mod midi;
+pub mod mpa;
+pub mod musepack;
+pub mod ogg;
+pub mod simple_audio;
+pub mod smaf;
+pub mod sound;
+pub mod tracker;
+pub mod tta;
+pub mod voc;
+pub mod vorbis;
+pub mod w64;
+pub mod wavpack;
 // -- end audio & video --
 
 // -- documents & data --
@@ -234,6 +261,79 @@ pub static FORMATS: &[&Format] = &[
     // -- end images --
 
     // -- audio & video --
+    // audio (riff/iff/flac/mp3/ogg/...)
+    &iff::WAV,
+    &iff::AVI,
+    &iff::WEBP,
+    &iff::ANI,
+    &iff::RMI,
+    &iff::DLS,
+    &iff::SF2,
+    &iff::XWMA,
+    &iff::CDXA,
+    &iff::RIFF_PALETTE,
+    &iff::RDIB,
+    &iff::RMMP,
+    &iff::QCP,
+    &iff::CDR,
+    &iff::FOURXM,
+    &iff::AMV,
+    &iff::AIFF,
+    &iff::AIFC,
+    &iff::SVX8,
+    &iff::SVX16,
+    &iff::ILBM,
+    &iff::ANIM,
+    &iff::SMUS,
+    &iff::FTXT,
+    &iff::MAUD,
+    &iff::RIFF,
+    &iff::IFF,
+    &midi::FORMAT,
+    &au::FORMAT,
+    &voc::FORMAT,
+    &caf::FORMAT,
+    &amr::FORMAT,
+    &w64::FORMAT,
+    &ape::FORMAT,
+    &wavpack::FORMAT,
+    &musepack::FORMAT,
+    &tta::FORMAT,
+    &lossless::TAK,
+    &lossless::OFR,
+    &lossless::SHORTEN,
+    &dsd::DSF,
+    &dsd::DFF,
+    &smaf::FORMAT,
+    &simple_audio::SOX,
+    &simple_audio::IRCAM,
+    &simple_audio::ADX,
+    &simple_audio::KVAG,
+    &simple_audio::AST,
+    &simple_audio::ILBC,
+    &simple_audio::QOA,
+    &tracker::it::FORMAT,
+    &tracker::xm::FORMAT,
+    &tracker::s3m::FORMAT,
+    &tracker::more::MTM,
+    &tracker::more::STM,
+    &tracker::more::ULT,
+    &tracker::more::MED,
+    &tracker::more::OKT,
+    &tracker::protracker::FORMAT,
+    &tracker::more::COMPOSER669,
+    &simple_audio::RSO,
+    &flac::FORMAT,
+    &ogg::OPUS,
+    &ogg::OGG_FLAC,
+    &ogg::SPEEX,
+    &ogg::THEORA,
+    &ogg::FORMAT,
+    &adts::FORMAT,
+    &ac3::FORMAT,
+    &dts::FORMAT,
+    &mpa::FORMAT,
+    &id3::FORMAT,
     // -- end audio & video --
 
     // -- documents & data --
