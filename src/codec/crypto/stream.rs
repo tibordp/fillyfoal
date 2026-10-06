@@ -70,6 +70,8 @@ impl ZipCryptoKeys {
 pub struct ZipCrypto {
     keys: ZipCryptoKeys,
     pos: usize,
+    /// Header bytes still to decrypt (and drop).
+    header: u8,
 }
 
 impl ZipCrypto {
@@ -77,6 +79,7 @@ impl ZipCrypto {
         ZipCrypto {
             keys: ZipCryptoKeys::new(password.expose()),
             pos: 0,
+            header: 12,
         }
     }
 }
@@ -90,7 +93,9 @@ impl Decode for ZipCrypto {
         let take = available.len().min(step.max(1));
         for &c in available.get(..take).unwrap_or_default() {
             let p = self.keys.decrypt(c);
-            if self.pos >= 12 {
+            if self.header > 0 {
+                self.header = self.header.saturating_sub(1);
+            } else {
                 if out.len() >= limit {
                     return Err(Diagnostic::limit("decrypted data exceeds the limit"));
                 }
@@ -104,6 +109,17 @@ impl Decode for ZipCrypto {
     fn consumed(&self) -> usize {
         self.pos
     }
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+    }
 }
 
 /// AES in CTR mode with a little-endian block counter starting at 1
@@ -112,6 +128,9 @@ impl Decode for ZipCrypto {
 pub struct AesCtrLe {
     aes: Aes,
     pos: usize,
+    /// Input bytes dropped from the front (a multiple of 16 until the
+    /// end), for the counter.
+    released: usize,
 }
 
 impl AesCtrLe {
@@ -119,6 +138,7 @@ impl AesCtrLe {
         Some(AesCtrLe {
             aes: Aes::new(key.expose())?,
             pos: 0,
+            released: 0,
         })
     }
 }
@@ -131,11 +151,12 @@ impl Decode for AesCtrLe {
         if usable == 0 {
             return if eof { Ok(Step::Done) } else { Err(Diagnostic::malformed("out of input")) };
         }
-        let take = usable.min(step.max(16).next_multiple_of(16));
+        let take = usable.min(step.max(16).checked_next_multiple_of(16).unwrap_or(usize::MAX));
         if out.len().saturating_add(take) > limit {
             return Err(Diagnostic::limit("decrypted data exceeds the limit"));
         }
-        let mut counter = u128::try_from(self.pos / 16).unwrap_or(0).wrapping_add(1);
+        let block = self.released.saturating_add(self.pos) / 16;
+        let mut counter = u128::try_from(block).unwrap_or(0).wrapping_add(1);
         for chunk in available.get(..take).unwrap_or_default().chunks(16) {
             let mut ks = counter.to_le_bytes();
             self.aes.encrypt_block(&mut ks);
@@ -148,6 +169,18 @@ impl Decode for AesCtrLe {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        self.released = self.released.saturating_add(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
     }
 }
 
@@ -200,6 +233,17 @@ impl Decode for Rc4 {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
     }
 }
 

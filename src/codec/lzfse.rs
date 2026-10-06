@@ -326,9 +326,13 @@ fn lzvn(payload: &[u8], n_raw: usize, out: &mut Vec<u8>, limit: usize) -> Result
     Ok(())
 }
 
+/// The farthest a match reaches back: `bvx2` distances are at most
+/// `D_BASE[63]` plus 15 extra bits (262 139), LZVN ones 16 bits.
+pub const WINDOW: usize = 229_372 + (1 << 15);
+
 /// An LZFSE stream, decoded a block per step. Matches reach back into
-/// earlier blocks' output (`out` is the window), so the state is just the
-/// input position.
+/// earlier blocks' output (`out` is the window, [`WINDOW`] bytes of it),
+/// so the state is just the input position.
 #[derive(Clone, Default)]
 pub struct Lzfse {
     pos: usize,
@@ -383,5 +387,18 @@ impl Decode for Lzfse {
 
     fn consumed(&self) -> usize {
         self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Blocks are decoded whole from their start.
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(WINDOW)
     }
 }
