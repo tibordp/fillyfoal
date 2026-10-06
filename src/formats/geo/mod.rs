@@ -5,7 +5,6 @@
 //! protocols, a protobuf wire-format reader, and helpers for text formats
 //! whose records are lines of delimited or fixed-column fields.
 
-#![allow(dead_code)] // TEMP
 use std::borrow::Cow;
 
 use crate::cx::Cx;
@@ -196,11 +195,6 @@ pub(crate) fn pb_fields(data: &[u8]) -> Option<Vec<PbField>> {
 
 // ---------------------------------------------------------------------------
 // Text helpers
-
-/// The probe head as ASCII-compatible text.
-pub(crate) fn head_text<'a>(h: &'a Head<'_>) -> Cow<'a, [u8]> {
-    probe::head(h)
-}
 
 /// The first `n` lines of the head (without terminators).
 pub(crate) fn head_lines(h: &Head<'_>, n: usize) -> Vec<Vec<u8>> {
