@@ -65,11 +65,7 @@ const CAPS2: FlagTable = &[
     flag(0x20_0000, "VOLUME"),
 ];
 
-const DIMENSIONS: EnumTable = &[
-    (2, "TEXTURE1D"),
-    (3, "TEXTURE2D"),
-    (4, "TEXTURE3D"),
-];
+const DIMENSIONS: EnumTable = &[(2, "TEXTURE1D"), (3, "TEXTURE2D"), (4, "TEXTURE3D")];
 
 const MISC: FlagTable = &[flag(0x4, "TEXTURECUBE")];
 
@@ -175,14 +171,20 @@ struct Layout {
 
 impl Layout {
     fn level_size(&self, level: u64) -> u64 {
-        let shrink = |v: u64| v.checked_shr(u32::try_from(level).unwrap_or(u32::MAX)).unwrap_or(0).max(1);
+        let shrink = |v: u64| {
+            v.checked_shr(u32::try_from(level).unwrap_or(u32::MAX))
+                .unwrap_or(0)
+                .max(1)
+        };
         let (w, h, d) = (shrink(self.width), shrink(self.height), shrink(self.depth));
         let (w, h) = if self.compressed {
             (w.saturating_add(3) / 4, h.saturating_add(3) / 4)
         } else {
             (w, h)
         };
-        w.saturating_mul(h).saturating_mul(d).saturating_mul(self.unit)
+        w.saturating_mul(h)
+            .saturating_mul(d)
+            .saturating_mul(self.unit)
     }
 
     fn surface_size(&self) -> u64 {
@@ -234,7 +236,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let dx = parse(&cx, span, LE, &(), Dx10::layout).await?;
         cx.emit(Dx10::node("DX10 header", span, LE));
         pos = pos.saturating_add(Dx10::SIZE);
-        surfaces = u64::from(dx.array_size.max(1)).saturating_mul(if dx.misc & 4 != 0 { 6 } else { 1 });
+        surfaces =
+            u64::from(dx.array_size.max(1)).saturating_mul(if dx.misc & 4 != 0 { 6 } else { 1 });
         let name = lookup(DXGI_NAMES, dx.format.into())
             .map_or_else(|| format!("DXGI format {}", dx.format), str::to_owned);
         match dxgi_unit(dx.format) {
@@ -262,7 +265,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let layout = Layout {
                 width: h.width.into(),
                 height: h.height.into(),
-                depth: if h.caps2 & 0x20_0000 != 0 { h.depth.max(1).into() } else { 1 },
+                depth: if h.caps2 & 0x20_0000 != 0 {
+                    h.depth.max(1).into()
+                } else {
+                    1
+                },
                 levels,
                 surfaces,
                 unit,
@@ -294,16 +301,20 @@ async fn list_surfaces(cx: Cx, (data, layout): (Span, Layout)) -> Result<()> {
         let mut pos = s.saturating_mul(surface);
         for level in 0..levels {
             let size = layout.level_size(level);
-            let shrink = |v: u64| v.checked_shr(u32::try_from(level).unwrap_or(u32::MAX)).unwrap_or(0).max(1);
+            let shrink = |v: u64| {
+                v.checked_shr(u32::try_from(level).unwrap_or(u32::MAX))
+                    .unwrap_or(0)
+                    .max(1)
+            };
             let name = if surfaces > 1 {
                 format!("Surface {s}, level {level}")
             } else {
                 format!("Level {level}")
             };
-            cx.push(
-                region(name, data, pos, size)
-                    .summary(format!("{}, {size:#x} bytes", dims(shrink(layout.width), shrink(layout.height)))),
-            )
+            cx.push(region(name, data, pos, size).summary(format!(
+                "{}, {size:#x} bytes",
+                dims(shrink(layout.width), shrink(layout.height))
+            )))
             .await;
             pos = pos.saturating_add(size);
         }

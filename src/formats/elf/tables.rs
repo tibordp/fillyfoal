@@ -355,12 +355,7 @@ pub const COMPRESSION: EnumTable = &[(1, "ZLIB"), (2, "ZSTD")];
 
 pub const GROUP_FLAGS: FlagTable = &[flag(1, "GRP_COMDAT")];
 
-pub const SYMBOL_BIND: EnumTable = &[
-    (0, "LOCAL"),
-    (1, "GLOBAL"),
-    (2, "WEAK"),
-    (10, "GNU_UNIQUE"),
-];
+pub const SYMBOL_BIND: EnumTable = &[(0, "LOCAL"), (1, "GLOBAL"), (2, "WEAK"), (10, "GNU_UNIQUE")];
 
 pub const SYMBOL_TYPE: EnumTable = &[
     (0, "NOTYPE"),
@@ -409,9 +404,36 @@ pub const DT_STRINGS: &[u64] = &[
 
 /// Tags whose value is an address.
 pub const DT_ADDRESSES: &[u64] = &[
-    3, 4, 5, 6, 7, 12, 13, 17, 21, 23, 25, 26, 32, 34, 36, 0x6fff_fef5, 0x6fff_fef6, 0x6fff_fef7,
-    0x6fff_fef8, 0x6fff_fef9, 0x6fff_fefa, 0x6fff_fefb, 0x6fff_fefc, 0x6fff_fefd, 0x6fff_fefe,
-    0x6fff_feff, 0x6fff_fff0, 0x6fff_fffc, 0x6fff_fffe, 0x7000_0016,
+    3,
+    4,
+    5,
+    6,
+    7,
+    12,
+    13,
+    17,
+    21,
+    23,
+    25,
+    26,
+    32,
+    34,
+    36,
+    0x6fff_fef5,
+    0x6fff_fef6,
+    0x6fff_fef7,
+    0x6fff_fef8,
+    0x6fff_fef9,
+    0x6fff_fefa,
+    0x6fff_fefb,
+    0x6fff_fefc,
+    0x6fff_fefd,
+    0x6fff_fefe,
+    0x6fff_feff,
+    0x6fff_fff0,
+    0x6fff_fffc,
+    0x6fff_fffe,
+    0x7000_0016,
 ];
 
 pub const DYNAMIC_TAG: EnumTable = &[
@@ -654,7 +676,12 @@ pub const GNU_PROPERTY_X86_FEATURE_1_AND: u32 = 0xc000_0002;
 pub const GNU_PROPERTY_X86_ISA_1_NEEDED: u32 = 0xc000_8002;
 pub const GNU_PROPERTY_X86_ISA_1_USED: u32 = 0xc001_0002;
 
-pub const X86_FEATURE_1: FlagTable = &[flag(1, "IBT"), flag(2, "SHSTK"), flag(4, "LAM_U48"), flag(8, "LAM_U57")];
+pub const X86_FEATURE_1: FlagTable = &[
+    flag(1, "IBT"),
+    flag(2, "SHSTK"),
+    flag(4, "LAM_U48"),
+    flag(8, "LAM_U57"),
+];
 pub const AARCH64_FEATURE_1: FlagTable = &[flag(1, "BTI"), flag(2, "PAC"), flag(4, "GCS")];
 pub const X86_ISA_1: FlagTable = &[
     flag(1, "x86-64-baseline"),

@@ -14,7 +14,15 @@ use super::{plural, probe, text_node};
 pub static FORMAT: Format = Format {
     name: "checksums",
     title: "Checksum list",
-    extensions: &["md5", "sha1", "sha256", "sha512", "md5sum", "sha256sum", "sums"],
+    extensions: &[
+        "md5",
+        "sha1",
+        "sha256",
+        "sha512",
+        "md5sum",
+        "sha256sum",
+        "sums",
+    ],
     mime: "text/plain",
     probe: Probe::Custom(probe_sums),
     dissect: crate::expander!(dissect: Input),
@@ -23,7 +31,6 @@ pub static FORMAT: Format = Format {
 /// The usual algorithm for a hex digest of `len` digits.
 fn algorithm(len: usize) -> Option<&'static str> {
     Some(match len {
-
         32 => "MD5",
         40 => "SHA-1",
         56 => "SHA-224",
@@ -51,7 +58,10 @@ fn parse(line: Piece<'_>) -> Option<Entry<'_>> {
     {
         let algo = t.to(open);
         let hash = t.from(close.saturating_add(4)).trim();
-        if algo.bytes().iter().all(|b| b.is_ascii_alphanumeric() || *b == b'-')
+        if algo
+            .bytes()
+            .iter()
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'-')
             && hash.bytes().iter().all(u8::is_ascii_hexdigit)
             && !hash.is_empty()
         {
@@ -70,7 +80,11 @@ fn parse(line: Piece<'_>) -> Option<Entry<'_>> {
         return None;
     }
     let binary = rest.first() == Some(b'*');
-    let file = if rest.first() == Some(b' ') || binary { rest.from(1) } else { rest };
+    let file = if rest.first() == Some(b' ') || binary {
+        rest.from(1)
+    } else {
+        rest
+    };
     (!file.is_empty()).then(|| Entry {
         algorithm: algo.to_owned(),
         hash,
@@ -125,8 +139,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             summary.push_str(", binary mode");
         }
         cx.push(
-            text_node(e.file.text(), e.hash.span(), &e.hash.text().to_ascii_lowercase())
-                .summary(summary),
+            text_node(
+                e.file.text(),
+                e.hash.span(),
+                &e.hash.text().to_ascii_lowercase(),
+            )
+            .summary(summary),
         )
         .await;
     }

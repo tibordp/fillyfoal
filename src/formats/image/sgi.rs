@@ -81,13 +81,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let rows = u64::from(h.ysize).saturating_mul(h.zsize.max(1).into());
     if h.storage == 1 {
         let table = rows.saturating_mul(4);
-        cx.emit(region("Scanline offsets", file, Header::SIZE, table).summary(format!("{rows} entries")));
         cx.emit(
-            region("Scanline lengths", file, Header::SIZE.saturating_add(table), table)
+            region("Scanline offsets", file, Header::SIZE, table)
                 .summary(format!("{rows} entries")),
         );
+        cx.emit(
+            region(
+                "Scanline lengths",
+                file,
+                Header::SIZE.saturating_add(table),
+                table,
+            )
+            .summary(format!("{rows} entries")),
+        );
         let start = Header::SIZE.saturating_add(table.saturating_mul(2));
-        cx.emit(region("RLE data", file, start, file.len.saturating_sub(start)));
+        cx.emit(region(
+            "RLE data",
+            file,
+            start,
+            file.len.saturating_sub(start),
+        ));
     } else {
         let len = rows
             .saturating_mul(h.xsize.into())

@@ -119,12 +119,10 @@ async fn elements(cx: &Cx, input: Input, body: Span) -> Result<Vec<String>> {
             icons.push(crate::text::latin1(&kind));
         }
         let name = crate::text::latin1(&kind);
-        cx.push(
-            Node::new(name)
-                .span(span)
-                .summary(summary)
-                .lazy(crate::expander!(self::element: (Input, Span, Vec<u8>)), (input, span, kind)),
-        )
+        cx.push(Node::new(name).span(span).summary(summary).lazy(
+            crate::expander!(self::element: (Input, Span, Vec<u8>)),
+            (input, span, kind),
+        ))
         .await;
         count = count.saturating_add(1);
     }
@@ -155,15 +153,18 @@ async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<
         }
         b"name" | b"slct" => {
             let bytes = cx.read_avail(data.sub(0, 256)).await?;
-            cx.emit(Node::new("Value").span(data).value(super::text(crate::text::latin1(&bytes))));
+            cx.emit(
+                Node::new("Value")
+                    .span(data)
+                    .value(super::text(crate::text::latin1(&bytes))),
+            );
         }
         b"info" => cx.emit(embedded("Contents", input.nested(data))),
         b"\xfd\xd9\x2f\xa8" if input.nesting < MAX_NESTING => {
-            cx.emit(
-                Node::new("Elements")
-                    .span(data)
-                    .lazy(crate::expander!(self::variant: (Input, Span)), (input.nested(data), data)),
-            );
+            cx.emit(Node::new("Elements").span(data).lazy(
+                crate::expander!(self::variant: (Input, Span)),
+                (input.nested(data), data),
+            ));
         }
         _ if head.starts_with(PNG) || head.starts_with(JP2) => {
             cx.emit(embedded("Image", input.nested(data)));
@@ -191,12 +192,8 @@ async fn toc(cx: Cx, data: Span) -> Result<()> {
         let bytes = cx.read(span).await?;
         let kind = crate::text::latin1(bytes.get(..4).unwrap_or_default());
         let len = u32_be(&bytes, 4).unwrap_or(0);
-        cx.push(
-            Node::new(kind)
-                .span(span)
-                .summary(format!("{len} bytes")),
-        )
-        .await;
+        cx.push(Node::new(kind).span(span).summary(format!("{len} bytes")))
+            .await;
     }
     Ok(())
 }

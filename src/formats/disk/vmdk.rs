@@ -94,7 +94,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         // Stream-optimized: the real header is the footer, 1 KiB from the end.
         let footer = file.sub(file.len.saturating_sub(2 * SECTOR), Header::SIZE);
         let f = parse(&cx, footer, LE, &(), Header::layout).await?;
-        cx.emit(Header::node("Footer", file.sub(footer.offset.saturating_sub(file.offset), SECTOR), LE));
+        cx.emit(Header::node(
+            "Footer",
+            file.sub(footer.offset.saturating_sub(file.offset), SECTOR),
+            LE,
+        ));
         h = f;
     }
     let descriptor = file.sub(
@@ -105,7 +109,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let create_type = descriptor_value(&text, "createType").unwrap_or_default();
     cx.annotate(format!(
         "VMDK sparse extent{}, {} virtual, {} grains",
-        if create_type.is_empty() { String::new() } else { format!(" ({create_type})") },
+        if create_type.is_empty() {
+            String::new()
+        } else {
+            format!(" ({create_type})")
+        },
         size(h.capacity.saturating_mul(SECTOR)),
         size(h.grain_size.saturating_mul(SECTOR))
     ));
@@ -125,9 +133,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let per_table = gtes.saturating_mul(grain);
     let tables = h.capacity.saturating_mul(SECTOR).div_ceil(per_table);
     let gd = file.sub_exact(h.gd_offset.saturating_mul(SECTOR), tables.saturating_mul(4))?;
-    cx.emit(Node::new("Grain directory").span(gd).summary(format!("{tables} grain tables")));
+    cx.emit(
+        Node::new("Grain directory")
+            .span(gd)
+            .summary(format!("{tables} grain tables")),
+    );
     if h.rgd_offset != 0 {
-        cx.emit(Node::new("Redundant grain directory").span(file.sub(h.rgd_offset.saturating_mul(SECTOR), gd.len)));
+        cx.emit(
+            Node::new("Redundant grain directory")
+                .span(file.sub(h.rgd_offset.saturating_mul(SECTOR), gd.len)),
+        );
     }
     let sparse = Arc::new(Sparse {
         input,
@@ -161,7 +176,10 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
             continue;
         }
         let table = cx
-            .read(file.sub(table_sector.saturating_mul(SECTOR), s.gtes.saturating_mul(4)))
+            .read(file.sub(
+                table_sector.saturating_mul(SECTOR),
+                s.gtes.saturating_mul(4),
+            ))
             .await?;
         for gte in table.as_chunks::<4>().0 {
             let want = s.grain.min(s.capacity.saturating_sub(list.len()));
@@ -176,7 +194,14 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
                     let at = sector.saturating_mul(SECTOR);
                     let head = cx.read(file.sub(at, 12)).await?;
                     let len = u64::from(u32_le(&head, 8).unwrap_or(0));
-                    match crate::codec::inflate_span(&cx, file.sub(at.saturating_add(12), len), true, Some(s.grain)).await {
+                    match crate::codec::inflate_span(
+                        &cx,
+                        file.sub(at.saturating_add(12), len),
+                        true,
+                        Some(s.grain),
+                    )
+                    .await
+                    {
                         Ok(d) => {
                             list.data(d.span.sub(0, want));
                             Ok(())
@@ -221,7 +246,8 @@ async fn descriptor_lines(cx: Cx, (span, len): (Span, u64)) -> Result<()> {
             continue;
         }
         let node = if let Some((key, value)) = text.split_once('=') {
-            Node::new(key.trim().to_owned()).value(Value::Text(value.trim().trim_matches('"').to_owned()))
+            Node::new(key.trim().to_owned())
+                .value(Value::Text(value.trim().trim_matches('"').to_owned()))
         } else {
             let mut words = text.split_whitespace();
             let access = words.next().unwrap_or("");
@@ -230,7 +256,11 @@ async fn descriptor_lines(cx: Cx, (span, len): (Span, u64)) -> Result<()> {
             let rest: Vec<&str> = words.collect();
             Node::new("Extent")
                 .value(Value::Text(text.clone()))
-                .summary(format!("{access} {kind}, {} in {}", size(sectors.saturating_mul(SECTOR)), rest.join(" ")))
+                .summary(format!(
+                    "{access} {kind}, {} in {}",
+                    size(sectors.saturating_mul(SECTOR)),
+                    rest.join(" ")
+                ))
         };
         cx.push(node.span(line_span)).await;
     }

@@ -21,7 +21,11 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 fn int(value: i64, bits: u8) -> Value {
@@ -169,22 +173,43 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
         _ => Ggml::Unversioned,
     };
     let versioned = kind != Ggml::Unversioned;
-    let version = if versioned { u32_le(&head, 4).unwrap_or(0) } else { 0 };
+    let version = if versioned {
+        u32_le(&head, 4).unwrap_or(0)
+    } else {
+        0
+    };
     let header_len = if versioned { 8 } else { 4 };
-    cx.emit(struct_node("Header", file.sub(0, header_len), LE, versioned, |f, &versioned| {
-        f.ascii("Magic", 4).desc("Stored as a little-endian u32, so it reads backwards").emit()?;
-        if versioned {
-            f.u32("Version").emit()?;
-        }
-        Ok(())
-    }));
+    cx.emit(struct_node(
+        "Header",
+        file.sub(0, header_len),
+        LE,
+        versioned,
+        |f, &versioned| {
+            f.ascii("Magic", 4)
+                .desc("Stored as a little-endian u32, so it reads backwards")
+                .emit()?;
+            if versioned {
+                f.u32("Version").emit()?;
+            }
+            Ok(())
+        },
+    ));
     let (vocab_start, n_vocab) = if kind == Ggml::Ggla {
-        cx.emit(struct_node("Hyperparameters", file.sub(header_len, 8), LE, (), lora_hparams));
+        cx.emit(struct_node(
+            "Hyperparameters",
+            file.sub(header_len, 8),
+            LE,
+            (),
+            lora_hparams,
+        ));
         (header_len.saturating_add(8), 0)
     } else {
         let span = file.sub(header_len, 28);
         let n_vocab = crate::fields::parse(&cx, span, LE, &(), llama_hparams).await?;
-        cx.emit(struct_node("Hyperparameters", span, LE, (), llama_hparams).desc("Assuming the LLaMA layout"));
+        cx.emit(
+            struct_node("Hyperparameters", span, LE, (), llama_hparams)
+                .desc("Assuming the LLaMA layout"),
+        );
         (header_len.saturating_add(28), n_vocab)
     };
     // Walk the vocabulary to find the tensors.
@@ -200,11 +225,20 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
         cx.checkpoint().await;
     }
     if cur.pos() > file.len {
-        return Err(Diagnostic::truncated(file.sub(vocab_start, u64::MAX), file.len.saturating_sub(vocab_start)));
+        return Err(Diagnostic::truncated(
+            file.sub(vocab_start, u64::MAX),
+            file.len.saturating_sub(vocab_start),
+        ));
     }
     let vocab = file.sub(vocab_start, cur.pos().saturating_sub(vocab_start));
     let tensors = file.tail(cur.pos());
-    let layout = GgmlLayout { kind, version, vocab, n_vocab, tensors };
+    let layout = GgmlLayout {
+        kind,
+        version,
+        vocab,
+        n_vocab,
+        tensors,
+    };
     if kind != Ggml::Ggla {
         cx.emit(
             Node::new("Vocabulary")
@@ -226,8 +260,15 @@ async fn ggml(cx: Cx, input: Input) -> Result<()> {
         Ggml::Ggjt => format!("GGJT v{version} model"),
         Ggml::Ggla => format!("GGML LoRA adapter v{version}"),
     };
-    let vocab_part = if kind == Ggml::Ggla { String::new() } else { format!("{n_vocab} tokens, ") };
-    cx.annotate(format!("{what}, {vocab_part}{count} tensors ({} of weights)", crate::formats::datakit::size(bytes)));
+    let vocab_part = if kind == Ggml::Ggla {
+        String::new()
+    } else {
+        format!("{n_vocab} tokens, ")
+    };
+    cx.annotate(format!(
+        "{what}, {vocab_part}{count} tensors ({} of weights)",
+        crate::formats::datakit::size(bytes)
+    ));
     Ok(())
 }
 
@@ -239,7 +280,8 @@ async fn ggml_vocab(cx: Cx, layout: GgmlLayout) -> Result<()> {
         let start = cur.pos();
         let len = cur.u32().await?;
         let token = cur.bytes(len.into()).await?;
-        let mut node = Node::new(format!("[{i}]")).value(text(String::from_utf8_lossy(&token).into_owned()));
+        let mut node =
+            Node::new(format!("[{i}]")).value(text(String::from_utf8_lossy(&token).into_owned()));
         if scored {
             let score = f32::from_bits(cur.u32().await?);
             node = node.summary(format!("score {score}"));
@@ -275,8 +317,10 @@ async fn ggml_walk(cx: &Cx, file: Span, layout: GgmlLayout, emit: bool) -> Resul
         let name_len = cur.u32().await?;
         let kind = cur.u32().await?;
         if n_dims > 4 || name_len > 4096 {
-            return Err(Diagnostic::malformed(format!("tensor with {n_dims} dimensions, {name_len}-byte name"))
-                .at(cur.since(start)));
+            return Err(Diagnostic::malformed(format!(
+                "tensor with {n_dims} dimensions, {name_len}-byte name"
+            ))
+            .at(cur.since(start)));
         }
         let mut dims = Vec::new();
         for _ in 0..n_dims {
@@ -299,18 +343,30 @@ async fn ggml_walk(cx: &Cx, file: Span, layout: GgmlLayout, emit: bool) -> Resul
                 )
                 .await;
             }
-            return Err(Diagnostic::unsupported(format!("tensor type {kind}: cannot size the data")).at(header));
+            return Err(Diagnostic::unsupported(format!(
+                "tensor type {kind}: cannot size the data"
+            ))
+            .at(header));
         };
         let len = elements.div_ceil(per).saturating_mul(size);
         let data = cur.span(len);
         if data.len < len {
-            return Err(Diagnostic::truncated(Span::new(data.source, data.offset, len), data.len));
+            return Err(Diagnostic::truncated(
+                Span::new(data.source, data.offset, len),
+                data.len,
+            ));
         }
         cur.skip(len);
         count = count.saturating_add(1);
         bytes = bytes.saturating_add(len);
         if emit {
-            let info = TensorInfo { name, kind, dims, header, data };
+            let info = TensorInfo {
+                name,
+                kind,
+                dims,
+                header,
+                data,
+            };
             cx.push(tensor_node(info)).await;
         } else {
             cx.checkpoint().await;
@@ -323,12 +379,31 @@ fn tensor_node(t: TensorInfo) -> Node {
     let shape: Vec<String> = t.dims.iter().map(u32::to_string).collect();
     let kind = lookup(GGML_TYPE, t.kind.into()).unwrap_or("?");
     Node::new(t.name)
-        .span(Span::new(t.header.source, t.header.offset, t.data.end().saturating_sub(t.header.offset)))
-        .summary(format!("{kind} [{}], {} bytes", shape.join(" × "), t.data.len))
-        .lazy(tensor_fields, (t.header, t.data, t.kind, u32::try_from(t.dims.len()).unwrap_or(0)))
+        .span(Span::new(
+            t.header.source,
+            t.header.offset,
+            t.data.end().saturating_sub(t.header.offset),
+        ))
+        .summary(format!(
+            "{kind} [{}], {} bytes",
+            shape.join(" × "),
+            t.data.len
+        ))
+        .lazy(
+            tensor_fields,
+            (
+                t.header,
+                t.data,
+                t.kind,
+                u32::try_from(t.dims.len()).unwrap_or(0),
+            ),
+        )
 }
 
-async fn tensor_fields(cx: Cx, (header, data, _kind, n_dims): (Span, Span, u32, u32)) -> Result<()> {
+async fn tensor_fields(
+    cx: Cx,
+    (header, data, _kind, n_dims): (Span, Span, u32, u32),
+) -> Result<()> {
     let block = cx.block(header).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u32("n_dims").emit()?;
@@ -342,7 +417,11 @@ async fn tensor_fields(cx: Cx, (header, data, _kind, n_dims): (Span, Span, u32, 
         let pad = f.remaining();
         f.bytes("Alignment padding", pad).emit()?;
     }
-    cx.emit(Node::new("Data").span(data).summary(format!("{} bytes", data.len)));
+    cx.emit(
+        Node::new("Data")
+            .span(data)
+            .summary(format!("{} bytes", data.len)),
+    );
     Ok(())
 }
 
@@ -355,14 +434,66 @@ async fn ggml_tensors(cx: Cx, (file, layout): (Span, GgmlLayout)) -> Result<()> 
 
 /// ncnn's built-in layer types, by index.
 const NCNN_LAYERS: &[&str] = &[
-    "AbsVal", "ArgMax", "BatchNorm", "Bias", "BNLL", "Concat", "Convolution", "Crop",
-    "Deconvolution", "Dropout", "Eltwise", "ELU", "Embed", "Exp", "Flatten", "InnerProduct",
-    "Input", "Log", "LRN", "MemoryData", "MVN", "Pooling", "Power", "PReLU", "Proposal",
-    "Reduction", "ReLU", "Reshape", "ROIPooling", "Scale", "Sigmoid", "Slice", "Softmax", "Split",
-    "SPP", "TanH", "Threshold", "Tile", "RNN", "LSTM", "BinaryOp", "UnaryOp",
-    "ConvolutionDepthWise", "Padding", "Squeeze", "ExpandDims", "Normalize", "Permute", "PriorBox",
-    "DetectionOutput", "Interp", "DeconvolutionDepthWise", "ShuffleChannel", "InstanceNorm", "Clip",
-    "Reorg", "YoloDetectionOutput", "Quantize", "Dequantize", "Yolov3DetectionOutput",
+    "AbsVal",
+    "ArgMax",
+    "BatchNorm",
+    "Bias",
+    "BNLL",
+    "Concat",
+    "Convolution",
+    "Crop",
+    "Deconvolution",
+    "Dropout",
+    "Eltwise",
+    "ELU",
+    "Embed",
+    "Exp",
+    "Flatten",
+    "InnerProduct",
+    "Input",
+    "Log",
+    "LRN",
+    "MemoryData",
+    "MVN",
+    "Pooling",
+    "Power",
+    "PReLU",
+    "Proposal",
+    "Reduction",
+    "ReLU",
+    "Reshape",
+    "ROIPooling",
+    "Scale",
+    "Sigmoid",
+    "Slice",
+    "Softmax",
+    "Split",
+    "SPP",
+    "TanH",
+    "Threshold",
+    "Tile",
+    "RNN",
+    "LSTM",
+    "BinaryOp",
+    "UnaryOp",
+    "ConvolutionDepthWise",
+    "Padding",
+    "Squeeze",
+    "ExpandDims",
+    "Normalize",
+    "Permute",
+    "PriorBox",
+    "DetectionOutput",
+    "Interp",
+    "DeconvolutionDepthWise",
+    "ShuffleChannel",
+    "InstanceNorm",
+    "Clip",
+    "Reorg",
+    "YoloDetectionOutput",
+    "Quantize",
+    "Dequantize",
+    "Yolov3DetectionOutput",
 ];
 
 const NCNN_MAGIC: u32 = 7_767_517;
@@ -418,7 +549,10 @@ async fn ncnn_bin(cx: Cx, input: Input) -> Result<()> {
             }
             params = params.saturating_add(1);
             if cur.at_end() {
-                return Err(Diagnostic::truncated(cur.since(start), cur.since(start).len));
+                return Err(Diagnostic::truncated(
+                    cur.since(start),
+                    cur.since(start).len,
+                ));
             }
         }
         let name = usize::try_from(kind)
@@ -442,18 +576,30 @@ async fn ncnn_layer(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     let at = cur.pos();
     let kind = cur.int::<i32>().await?;
-    cx.emit(Node::new("Type index").span(cur.since(at)).value(int(kind.into(), 32)));
+    cx.emit(
+        Node::new("Type index")
+            .span(cur.since(at))
+            .value(int(kind.into(), 32)),
+    );
     let at = cur.pos();
     let bottoms = cur.u32().await?;
     let tops = cur.u32().await?;
-    cx.emit(Node::new("Blob counts").span(cur.since(at)).summary(format!("{bottoms} bottom, {tops} top")));
+    cx.emit(
+        Node::new("Blob counts")
+            .span(cur.since(at))
+            .summary(format!("{bottoms} bottom, {tops} top")),
+    );
     for (label, n) in [("Bottom blobs", bottoms), ("Top blobs", tops)] {
         let at = cur.pos();
         let mut ids = Vec::new();
         for _ in 0..n.min(4096) {
             ids.push(cur.int::<i32>().await?.to_string());
         }
-        cx.emit(Node::new(label).span(cur.since(at)).value(text(ids.join(", "))));
+        cx.emit(
+            Node::new(label)
+                .span(cur.since(at))
+                .value(text(ids.join(", "))),
+        );
     }
     while !cur.at_end() {
         let at = cur.pos();
@@ -467,11 +613,24 @@ async fn ncnn_layer(cx: Cx, span: Span) -> Result<()> {
             let n = cur.u32().await?;
             let data = cur.bytes(u64::from(n.min(64)).saturating_mul(4)).await?;
             cur.skip(u64::from(n.saturating_sub(64)).saturating_mul(4));
-            let shown: Vec<String> = data.as_chunks::<4>().0.iter().map(|c| show_word(u32::from_le_bytes(*c))).collect();
-            cx.emit(Node::new(format!("Param {real}")).span(cur.since(at)).value(text(format!("[{}]", shown.join(", ")))));
+            let shown: Vec<String> = data
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|c| show_word(u32::from_le_bytes(*c)))
+                .collect();
+            cx.emit(
+                Node::new(format!("Param {real}"))
+                    .span(cur.since(at))
+                    .value(text(format!("[{}]", shown.join(", ")))),
+            );
         } else {
             let v = cur.u32().await?;
-            cx.emit(Node::new(format!("Param {id}")).span(cur.since(at)).value(text(show_word(v))));
+            cx.emit(
+                Node::new(format!("Param {id}"))
+                    .span(cur.since(at))
+                    .value(text(show_word(v))),
+            );
         }
     }
     Ok(())
@@ -551,7 +710,9 @@ async fn mxnet(cx: Cx, input: Input) -> Result<()> {
                 return Err(Diagnostic::unsupported("sparse NDArray").at(cur.since(start)));
             }
         } else if magic != MXNET_V1 {
-            return Err(Diagnostic::unsupported(format!("NDArray magic {magic:#x}")).at(cur.since(start)));
+            return Err(
+                Diagnostic::unsupported(format!("NDArray magic {magic:#x}")).at(cur.since(start))
+            );
         }
         let ndim = cur.u32().await?;
         if ndim > 32 {
@@ -559,23 +720,36 @@ async fn mxnet(cx: Cx, input: Input) -> Result<()> {
         }
         let mut dims = Vec::new();
         for _ in 0..ndim {
-            dims.push(if magic == MXNET_V1 { u64::from(cur.u32().await?) } else { cur.u64().await? });
+            dims.push(if magic == MXNET_V1 {
+                u64::from(cur.u32().await?)
+            } else {
+                cur.u64().await?
+            });
         }
         if ndim > 0 {
             let _dev_type = cur.int::<i32>().await?;
             let _dev_id = cur.int::<i32>().await?;
             let kind = cur.int::<i32>().await?;
-            let size = mxnet_size(kind).ok_or_else(|| Diagnostic::unsupported(format!("type flag {kind}")).at(cur.since(start)))?;
+            let size = mxnet_size(kind).ok_or_else(|| {
+                Diagnostic::unsupported(format!("type flag {kind}")).at(cur.since(start))
+            })?;
             let elements = dims.iter().fold(1u64, |a, &d| a.saturating_mul(d));
             let len = elements.saturating_mul(size);
             let data = cur.span(len);
             if data.len < len {
-                return Err(Diagnostic::truncated(Span::new(data.source, data.offset, len), data.len));
+                return Err(Diagnostic::truncated(
+                    Span::new(data.source, data.offset, len),
+                    data.len,
+                ));
             }
             cur.skip(len);
             total = total.saturating_add(len);
             let shape: Vec<String> = dims.iter().map(u64::to_string).collect();
-            summary = format!("{} [{}]", lookup(MXNET_TYPE, kind.unsigned_abs().into()).unwrap_or("?"), shape.join(" × "));
+            summary = format!(
+                "{} [{}]",
+                lookup(MXNET_TYPE, kind.unsigned_abs().into()).unwrap_or("?"),
+                shape.join(" × ")
+            );
         }
         arrays.push((cur.since(start), summary));
         cx.checkpoint().await;
@@ -596,7 +770,10 @@ async fn mxnet(cx: Cx, input: Input) -> Result<()> {
         let name = names.get(i).cloned().unwrap_or_else(|| format!("[{i}]"));
         cx.push(Node::new(name).span(span).summary(summary)).await;
     }
-    cx.annotate(format!("MXNet parameters, {count} arrays, {}", crate::formats::datakit::size(total)));
+    cx.annotate(format!(
+        "MXNet parameters, {count} arrays, {}",
+        crate::formats::datakit::size(total)
+    ));
     Ok(())
 }
 
@@ -638,9 +815,16 @@ async fn nnef_tensor(cx: Cx, input: Input) -> Result<()> {
     let header = file.sub(0, 128);
     let (len, dims, bits) = crate::fields::parse(&cx, header, LE, &(), nnef_header).await?;
     cx.emit(struct_node("Header", header, LE, (), nnef_header));
-    cx.emit(Node::new("Data").span(file.sub(128, len.into())).summary(format!("{len} bytes")));
+    cx.emit(
+        Node::new("Data")
+            .span(file.sub(128, len.into()))
+            .summary(format!("{len} bytes")),
+    );
     let shape: Vec<String> = dims.iter().map(u32::to_string).collect();
-    cx.annotate(format!("NNEF tensor [{}], {bits}-bit items", shape.join(" × ")));
+    cx.annotate(format!(
+        "NNEF tensor [{}], {bits}-bit items",
+        shape.join(" × ")
+    ));
     Ok(())
 }
 
@@ -650,7 +834,8 @@ async fn nnef_tensor(cx: Cx, input: Input) -> Result<()> {
 const FASTTEXT_MAGIC: u32 = 793_712_314;
 
 fn fasttext_probe(h: &Head<'_>) -> bool {
-    u32_le(h.data, 0) == Some(FASTTEXT_MAGIC) && u32_le(h.data, 4).is_some_and(|v| (11..=12).contains(&v))
+    u32_le(h.data, 0) == Some(FASTTEXT_MAGIC)
+        && u32_le(h.data, 4).is_some_and(|v| (11..=12).contains(&v))
 }
 
 declare_format!(pub FASTTEXT = "fasttext", "fastText model", ["bin", "ftz"], "application/x-fasttext",
@@ -665,8 +850,13 @@ fn fasttext_args(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
     f.u32("minCount").emit()?;
     f.u32("neg").emit()?;
     f.u32("wordNgrams").emit()?;
-    f.u32("loss").enumeration(&[(1, "hs"), (2, "ns"), (3, "softmax"), (4, "ova")]).emit()?;
-    let model = f.u32("model").enumeration(&[(1, "cbow"), (2, "skipgram"), (3, "supervised")]).emit()?;
+    f.u32("loss")
+        .enumeration(&[(1, "hs"), (2, "ns"), (3, "softmax"), (4, "ova")])
+        .emit()?;
+    let model = f
+        .u32("model")
+        .enumeration(&[(1, "cbow"), (2, "skipgram"), (3, "supervised")])
+        .emit()?;
     f.u32("bucket").emit()?;
     f.u32("minn").emit()?;
     f.u32("maxn").emit()?;
@@ -702,25 +892,51 @@ async fn fasttext(cx: Cx, input: Input) -> Result<()> {
         cur.skip(prune.unsigned_abs().saturating_mul(8));
     }
     if cur.pos() > file.len {
-        return Err(Diagnostic::truncated(file.tail(dict_start), file.len.saturating_sub(dict_start)));
+        return Err(Diagnostic::truncated(
+            file.tail(dict_start),
+            file.len.saturating_sub(dict_start),
+        ));
     }
     let dict = cur.since(dict_start);
     cx.emit(
         Node::new("Dictionary")
             .span(dict)
-            .summary(format!("{nwords} words, {nlabels} labels, {ntokens} tokens"))
-            .lazy(fasttext_dict, (file.sub(dict_start, entries_start.saturating_sub(dict_start)), words, size)),
+            .summary(format!(
+                "{nwords} words, {nlabels} labels, {ntokens} tokens"
+            ))
+            .lazy(
+                fasttext_dict,
+                (
+                    file.sub(dict_start, entries_start.saturating_sub(dict_start)),
+                    words,
+                    size,
+                ),
+            ),
     );
     let rest = file.tail(cur.pos());
-    let quant = cx.read_avail(rest.sub(0, 1)).await?.first().copied().unwrap_or(0) != 0;
-    cx.emit(Node::new("Quantized input").span(rest.sub(0, 1)).value(Value::Bool(quant)));
+    let quant = cx
+        .read_avail(rest.sub(0, 1))
+        .await?
+        .first()
+        .copied()
+        .unwrap_or(0)
+        != 0;
+    cx.emit(
+        Node::new("Quantized input")
+            .span(rest.sub(0, 1))
+            .value(Value::Bool(quant)),
+    );
     if !quant && rest.len >= 17 {
         let m = rest.sub(1, 16);
         let dims = cx.read(m).await?;
         let (rows, cols) = (u64_le(&dims, 0).unwrap_or(0), u64_le(&dims, 8).unwrap_or(0));
         let len = rows.saturating_mul(cols).saturating_mul(4);
         let matrix = rest.sub(1, len.saturating_add(16));
-        cx.emit(Node::new("Input matrix").span(matrix).summary(format!("{rows} × {cols} f32")));
+        cx.emit(
+            Node::new("Input matrix")
+                .span(matrix)
+                .summary(format!("{rows} × {cols} f32")),
+        );
         let after = rest.tail(matrix.len.saturating_add(1));
         if !after.is_empty() {
             cx.emit(Node::new("Output matrix").span(after));
@@ -728,8 +944,14 @@ async fn fasttext(cx: Cx, input: Input) -> Result<()> {
     } else {
         cx.emit(Node::new("Matrices").span(rest.tail(1)));
     }
-    let kind = lookup(&[(1, "cbow"), (2, "skipgram"), (3, "supervised")], model.into()).unwrap_or("?");
-    cx.annotate(format!("fastText {kind} model, dim {dim}, {nwords} words, {nlabels} labels"));
+    let kind = lookup(
+        &[(1, "cbow"), (2, "skipgram"), (3, "supervised")],
+        model.into(),
+    )
+    .unwrap_or("?");
+    cx.annotate(format!(
+        "fastText {kind} model, dim {dim}, {nwords} words, {nlabels} labels"
+    ));
     Ok(())
 }
 
@@ -752,7 +974,13 @@ async fn fasttext_dict(cx: Cx, (head, entries, size): (Span, Span, u32)) -> Resu
         let count = cur.u64().await?;
         let kind = cur.u8().await?;
         let label = if kind == 1 { "label" } else { "word" };
-        cx.push(Node::new(word).span(cur.since(start)).value(uint(count, 64)).summary(label)).await;
+        cx.push(
+            Node::new(word)
+                .span(cur.since(start))
+                .value(uint(count, 64))
+                .summary(label),
+        )
+        .await;
     }
     Ok(())
 }
@@ -774,7 +1002,13 @@ async fn mlir_varint(cur: &mut Cursor<'_>) -> Result<u64> {
     let rest = cur.bytes(extra.into()).await?;
     let mut value = u64::from(first);
     for (i, b) in rest.iter().enumerate() {
-        value |= u64::from(*b).checked_shl(u32::try_from(i.saturating_add(1)).unwrap_or(0).saturating_mul(8)).unwrap_or(0);
+        value |= u64::from(*b)
+            .checked_shl(
+                u32::try_from(i.saturating_add(1))
+                    .unwrap_or(0)
+                    .saturating_mul(8),
+            )
+            .unwrap_or(0);
     }
     Ok(value.checked_shr(extra.saturating_add(1)).unwrap_or(0))
 }
@@ -798,12 +1032,24 @@ async fn mlir(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
     cur.skip(4);
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(Value::Bytes(b"ML\xefR".to_vec())));
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(Value::Bytes(b"ML\xefR".to_vec())),
+    );
     let at = cur.pos();
     let version = mlir_varint(&mut cur).await?;
-    cx.emit(Node::new("Version").span(cur.since(at)).value(uint(version, 64)));
+    cx.emit(
+        Node::new("Version")
+            .span(cur.since(at))
+            .value(uint(version, 64)),
+    );
     let (producer, span) = cur.cstr(1024).await?;
-    cx.emit(Node::new("Producer").span(span).value(text(producer.clone())));
+    cx.emit(
+        Node::new("Producer")
+            .span(span)
+            .value(text(producer.clone())),
+    );
     let mut sections = Vec::new();
     while !cur.at_end() {
         let start = cur.pos();
@@ -812,7 +1058,8 @@ async fn mlir(cx: Cx, input: Input) -> Result<()> {
         if id & 0x80 != 0 {
             let align = mlir_varint(&mut cur).await?;
             if align == 0 || !align.is_power_of_two() || align > 4096 {
-                return Err(Diagnostic::malformed(format!("section alignment {align}")).at(cur.since(start)));
+                return Err(Diagnostic::malformed(format!("section alignment {align}"))
+                    .at(cur.since(start)));
             }
             // Padding bytes (0xCB) up to the alignment, relative to the file.
             while cur.pos().checked_rem(align).unwrap_or(0) != 0 {
@@ -821,14 +1068,25 @@ async fn mlir(cx: Cx, input: Input) -> Result<()> {
         }
         let body = cur.span(len);
         if body.len < len {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len),
+                body.len,
+            ));
         }
         cur.skip(len);
         let kind = id & 0x7f;
         let name = lookup(MLIR_SECTIONS, kind.into()).unwrap_or("unknown");
         sections.push(name);
-        cx.push(Node::new(format!("{name} section")).span(cur.since(start)).summary(format!("id {kind}, {len} bytes"))).await;
+        cx.push(
+            Node::new(format!("{name} section"))
+                .span(cur.since(start))
+                .summary(format!("id {kind}, {len} bytes")),
+        )
+        .await;
     }
-    cx.annotate(format!("MLIR bytecode v{version} from \"{producer}\", {} sections", sections.len()));
+    cx.annotate(format!(
+        "MLIR bytecode v{version} from \"{producer}\", {} sections",
+        sections.len()
+    ));
     Ok(())
 }

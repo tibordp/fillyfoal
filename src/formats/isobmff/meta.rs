@@ -138,8 +138,15 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             let mut f = Fields::emitting(cx, &block, BE);
             full_box(&mut f)?;
             let rest = f.remaining();
-            f.ascii(if &kind == b"mean" { "Namespace" } else { "Name" }, rest)
-                .emit()?;
+            f.ascii(
+                if &kind == b"mean" {
+                    "Namespace"
+                } else {
+                    "Name"
+                },
+                rest,
+            )
+            .emit()?;
         }
         b"keys" => {
             let block = cx.block(body.sub(0, 0x10000)).await?;
@@ -199,8 +206,7 @@ async fn data(cx: &Cx, st: &BoxState, body: Span) -> Result<()> {
     match kind {
         13 | 14 | 27 => {
             cx.emit(
-                embedded("Image", st.input.nested(value))
-                    .summary(format!("{} bytes", value.len)),
+                embedded("Image", st.input.nested(value)).summary(format!("{} bytes", value.len)),
             );
         }
         _ => {
@@ -284,9 +290,8 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         b"data" => {
             let d = small(cx, st.body().sub(0, 256)).await.ok()?;
             let t = u32_be(&d, 0)? & 0x00ff_ffff;
-            render(parent, t, d.get(8..)?).or_else(|| {
-                crate::value::lookup(DATA_TYPES, t.into()).map(str::to_owned)
-            })
+            render(parent, t, d.get(8..)?)
+                .or_else(|| crate::value::lookup(DATA_TYPES, t.into()).map(str::to_owned))
         }
         b"mean" | b"name" => {
             let d = small(cx, st.body().sub(0, 256)).await.ok()?;
@@ -294,7 +299,11 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         }
         b"meta" => {
             let d = small(cx, st.body().sub(0, 24)).await.ok()?;
-            let at: usize = if d.get(4..8) == Some(b"hdlr".as_slice()) { 16 } else { 20 };
+            let at: usize = if d.get(4..8) == Some(b"hdlr".as_slice()) {
+                16
+            } else {
+                20
+            };
             Some(fourcc(d.get(at..at.saturating_add(4))?))
         }
         _ => None,

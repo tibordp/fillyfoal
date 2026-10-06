@@ -69,7 +69,10 @@ pub(super) async fn rich_header(cx: &Cx, file: Span, lfanew: u64) -> Result<Opti
     let Some(start) = start else {
         return Ok(None);
     };
-    let span = file.sub(to_u64(start), to_u64(rich.saturating_add(8).saturating_sub(start)));
+    let span = file.sub(
+        to_u64(start),
+        to_u64(rich.saturating_add(8).saturating_sub(start)),
+    );
     let mut entries = Vec::new();
     // Entries start after "DanS" and three zero padding words.
     let mut e = start.saturating_add(16);
@@ -93,8 +96,14 @@ async fn rich_entries(cx: Cx, entries: Vec<(u32, u32, Span)>) -> Result<()> {
     for (comp, count, span) in entries {
         let product = comp >> 16;
         let build = comp & 0xffff;
-        let name = lookup(RICH_PRODUCTS, product.into()).map_or_else(|| format!("product {product:#06x}"), str::to_owned);
-        cx.push(Node::new(name).span(span).summary(format!("build {build}, used {count} time(s)"))).await;
+        let name = lookup(RICH_PRODUCTS, product.into())
+            .map_or_else(|| format!("product {product:#06x}"), str::to_owned);
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(format!("build {build}, used {count} time(s)")),
+        )
+        .await;
     }
     Ok(())
 }
@@ -133,16 +142,39 @@ async fn dos_exe(cx: Cx, input: Input) -> Result<()> {
     let ip = u16_le(&header.data, 0x14).unwrap_or(0);
     // A full 64-byte header is only meaningful for "new" executables.
     let header_len = if table >= 0x40 { 64u64 } else { 0x1c };
-    cx.emit(struct_node("DOS Header", file.sub(0, header_len), LE, file, dos_header));
+    cx.emit(struct_node(
+        "DOS Header",
+        file.sub(0, header_len),
+        LE,
+        file,
+        dos_header,
+    ));
     if relocations > 0 {
         let span = file.sub(table.into(), u64::from(relocations).saturating_mul(4));
-        cx.emit(Node::new("Relocation table").span(span).summary(format!("{relocations} entries")).lazy(dos_relocations, span));
+        cx.emit(
+            Node::new("Relocation table")
+                .span(span)
+                .summary(format!("{relocations} entries"))
+                .lazy(dos_relocations, span),
+        );
     }
-    let image_end = u64::from(pages).saturating_mul(512).saturating_sub(if last == 0 { 0 } else { 512u64.saturating_sub(last.into()) });
+    let image_end = u64::from(pages)
+        .saturating_mul(512)
+        .saturating_sub(if last == 0 {
+            0
+        } else {
+            512u64.saturating_sub(last.into())
+        });
     let module_start = u64::from(paragraphs).saturating_mul(16);
-    cx.emit(Node::new("Load module").span(file.sub(module_start, image_end.saturating_sub(module_start))));
+    cx.emit(
+        Node::new("Load module")
+            .span(file.sub(module_start, image_end.saturating_sub(module_start))),
+    );
     if image_end < file.len && image_end > 0 {
-        cx.emit(embedded("Overlay", input.nested(file.tail(image_end))).summary(format!("{} bytes", file.len.saturating_sub(image_end))));
+        cx.emit(
+            embedded("Overlay", input.nested(file.tail(image_end)))
+                .summary(format!("{} bytes", file.len.saturating_sub(image_end))),
+        );
     }
     cx.annotate(format!(
         "MS-DOS executable, {} bytes of code and data, entry {cs:04x}:{ip:04x}",
@@ -159,7 +191,8 @@ async fn dos_relocations(cx: Cx, span: Span) -> Result<()> {
         let at = i.saturating_mul(4);
         let offset = u16_le(&data, at).unwrap_or(0);
         let segment = u16_le(&data, at.saturating_add(2)).unwrap_or(0);
-        cx.push(Node::new(format!("{segment:04x}:{offset:04x}")).span(span.sub(to_u64(at), 4))).await;
+        cx.push(Node::new(format!("{segment:04x}:{offset:04x}")).span(span.sub(to_u64(at), 4)))
+            .await;
     }
     Ok(())
 }
@@ -187,7 +220,10 @@ pub(super) async fn base_relocations(cx: Cx, (_pe, dir): (Pe, Directory)) -> Res
         let page = u32_le(&head, 0).unwrap_or(0);
         let size = u64::from(u32_le(&head, 4).unwrap_or(0));
         if size < 8 {
-            cx.diag(Diagnostic::malformed("relocation block smaller than its header").at(dir.span.sub(pos, 8)));
+            cx.diag(
+                Diagnostic::malformed("relocation block smaller than its header")
+                    .at(dir.span.sub(pos, 8)),
+            );
             break;
         }
         let span = dir.span.sub(pos, size);
@@ -217,7 +253,11 @@ async fn relocation_block(cx: Cx, (span, page): (Span, u32)) -> Result<()> {
         cx.push(
             Node::new(format!("{rva:#x}"))
                 .span(span.sub(to_u64(at), 2))
-                .value(Value::Enum { raw: kind.into(), bits: 4, name: lookup(RELOCATION_TYPES, kind.into()) }),
+                .value(Value::Enum {
+                    raw: kind.into(),
+                    bits: 4,
+                    name: lookup(RELOCATION_TYPES, kind.into()),
+                }),
         )
         .await;
     }
@@ -232,7 +272,10 @@ fn tls_layout(f: &mut Fields<'_>, pe: &Pe) -> Result<()> {
     f.uword("StartAddressOfRawData", wide).hex().emit()?;
     f.uword("EndAddressOfRawData", wide).hex().emit()?;
     f.uword("AddressOfIndex", wide).hex().emit()?;
-    f.uword("AddressOfCallBacks", wide).hex().desc("VA of a NULL-terminated array of TLS callbacks").emit()?;
+    f.uword("AddressOfCallBacks", wide)
+        .hex()
+        .desc("VA of a NULL-terminated array of TLS callbacks")
+        .emit()?;
     f.u32("SizeOfZeroFill").hex().emit()?;
     f.u32("Characteristics").hex().emit()?;
     Ok(())
@@ -283,7 +326,10 @@ fn load_config_layout(f: &mut Fields<'_>, pe: &Pe) -> Result<()> {
     f.u16("CSDVersion").emit()?;
     f.u16("DependentLoadFlags").hex().emit()?;
     f.uword("EditList", wide).hex().emit()?;
-    f.uword("SecurityCookie", wide).hex().desc("VA of the /GS stack cookie").emit()?;
+    f.uword("SecurityCookie", wide)
+        .hex()
+        .desc("VA of the /GS stack cookie")
+        .emit()?;
     if u64::from(size) <= f.pos() {
         return Ok(());
     }
@@ -293,7 +339,9 @@ fn load_config_layout(f: &mut Fields<'_>, pe: &Pe) -> Result<()> {
         return Ok(());
     }
     f.uword("GuardCFCheckFunctionPointer", wide).hex().emit()?;
-    f.uword("GuardCFDispatchFunctionPointer", wide).hex().emit()?;
+    f.uword("GuardCFDispatchFunctionPointer", wide)
+        .hex()
+        .emit()?;
     f.uword("GuardCFFunctionTable", wide).hex().emit()?;
     f.uword("GuardCFFunctionCount", wide).emit()?;
     f.u32("GuardFlags").flags(GUARD_FLAGS).emit()?;
@@ -313,7 +361,11 @@ pub(super) async fn load_config(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()
 // Delay-load imports
 
 fn delay_descriptor(f: &mut Fields<'_>, pe: &Pe) -> Result<[u32; 8]> {
-    let attributes = f.u32("Attributes").hex().desc("1 = addresses are RVAs").emit()?;
+    let attributes = f
+        .u32("Attributes")
+        .hex()
+        .desc("1 = addresses are RVAs")
+        .emit()?;
     let name = rva_field(f.u32("DllNameRVA"), pe).emit()?;
     let module = rva_field(f.u32("ModuleHandleRVA"), pe).emit()?;
     let iat = rva_field(f.u32("ImportAddressTableRVA"), pe).emit()?;
@@ -336,29 +388,50 @@ pub(super) async fn delay_imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<
             Ok((name, _)) => Node::new(name),
             Err(e) => Node::new("<unreadable name>").diag(e),
         };
-        cx.push(node.span(span).lazy(delay_module, (pe.clone(), span, d[4]))).await;
+        cx.push(node.span(span).lazy(delay_module, (pe.clone(), span, d[4])))
+            .await;
         rva = rva.checked_add(32).ok_or_else(overflow)?;
     }
     Ok(())
 }
 
 async fn delay_module(cx: Cx, (pe, descriptor, names): (Pe, Span, u32)) -> Result<()> {
-    cx.emit(struct_node("Delay Import Descriptor", descriptor, LE, pe.clone(), delay_descriptor));
+    cx.emit(struct_node(
+        "Delay Import Descriptor",
+        descriptor,
+        LE,
+        pe.clone(),
+        delay_descriptor,
+    ));
     let width: u32 = if pe.wide { 8 } else { 4 };
-    let ordinal = if pe.wide { 0x8000_0000_0000_0000u64 } else { 0x8000_0000 };
+    let ordinal = if pe.wide {
+        0x8000_0000_0000_0000u64
+    } else {
+        0x8000_0000
+    };
     let mut index = 0u32;
     loop {
-        let rva = index.checked_mul(width).and_then(|o| names.checked_add(o)).ok_or_else(overflow)?;
+        let rva = index
+            .checked_mul(width)
+            .and_then(|o| names.checked_add(o))
+            .ok_or_else(overflow)?;
         let span = pe.rva_exact(rva, width.into())?;
         let data = cx.read(span).await?;
-        let thunk = if pe.wide { crate::bytes::u64_le(&data, 0) } else { u32_le(&data, 0).map(u64::from) }.unwrap_or(0);
+        let thunk = if pe.wide {
+            crate::bytes::u64_le(&data, 0)
+        } else {
+            u32_le(&data, 0).map(u64::from)
+        }
+        .unwrap_or(0);
         if thunk == 0 {
             break;
         }
         let node = if thunk & ordinal != 0 {
             Node::new(format!("Ordinal {}", thunk & 0xffff))
         } else {
-            let at = u32::try_from(thunk & 0x7fff_ffff).unwrap_or(0).saturating_add(2);
+            let at = u32::try_from(thunk & 0x7fff_ffff)
+                .unwrap_or(0)
+                .saturating_add(2);
             match read_name(&cx, &pe, at).await {
                 Ok((name, span)) => Node::new(name).target(span),
                 Err(e) => Node::new("<unreadable>").diag(e),
@@ -383,7 +456,10 @@ pub(super) async fn exceptions(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()>
         let begin = u32_le(&data, 0).unwrap_or(0);
         let end = u32_le(&data, 4).unwrap_or(0);
         let node = if pe.wide {
-            Node::new(format!("{begin:#x}..{end:#x}")).summary(format!("unwind info at {:#x}", u32_le(&data, 8).unwrap_or(0)))
+            Node::new(format!("{begin:#x}..{end:#x}")).summary(format!(
+                "unwind info at {:#x}",
+                u32_le(&data, 8).unwrap_or(0)
+            ))
         } else {
             Node::new(format!("{begin:#x}")).summary(format!("unwind data {end:#x}"))
         };
@@ -416,7 +492,10 @@ fn clr_header(f: &mut Fields<'_>, pe: &Pe) -> Result<(u32, u32, u16, u16)> {
     let metadata = rva_field(f.u32("MetaData.VirtualAddress"), pe).emit()?;
     let size = f.u32("MetaData.Size").hex().emit()?;
     f.u32("Flags").flags(CLR_FLAGS).emit()?;
-    f.u32("EntryPointToken").hex().desc("Method token, or RVA if NATIVE_ENTRYPOINT").emit()?;
+    f.u32("EntryPointToken")
+        .hex()
+        .desc("Method token, or RVA if NATIVE_ENTRYPOINT")
+        .emit()?;
     rva_field(f.u32("Resources.VirtualAddress"), pe).emit()?;
     f.u32("Resources.Size").hex().emit()?;
     rva_field(f.u32("StrongNameSignature.VirtualAddress"), pe).emit()?;
@@ -434,7 +513,13 @@ fn clr_header(f: &mut Fields<'_>, pe: &Pe) -> Result<(u32, u32, u16, u16)> {
 
 pub(super) async fn clr(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
     let header = dir.span.sub(0, 72);
-    cx.emit(struct_node("CLR Header", header, LE, pe.clone(), clr_header));
+    cx.emit(struct_node(
+        "CLR Header",
+        header,
+        LE,
+        pe.clone(),
+        clr_header,
+    ));
     let (metadata, size, major, minor) = parse(&cx, header, LE, &pe, clr_header).await?;
     let root = pe.rva_span(metadata, size.into())?;
     let head = cx.read(root.sub(0, 16)).await?;
@@ -450,7 +535,10 @@ pub(super) async fn clr(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
         Node::new("Metadata")
             .span(root)
             .summary(format!("{version}, {streams} streams"))
-            .lazy(metadata_streams, (root, streams_at.saturating_add(4), streams)),
+            .lazy(
+                metadata_streams,
+                (root, streams_at.saturating_add(4), streams),
+            ),
     );
     cx.annotate(format!(".NET {version} (CLR header {major}.{minor})"));
     Ok(())
@@ -464,11 +552,19 @@ async fn metadata_streams(cx: Cx, (root, mut at, streams): (Span, u64, u16)) -> 
         let size = u64::from(u32_le(&head, 4).unwrap_or(0));
         let (name, name_span) = cx.cstr(root.sub(at.saturating_add(8), 32)).await?;
         let header_len = 8u64.saturating_add(name_span.len.next_multiple_of(4));
-        let mut node = Node::new(name.clone()).span(root.sub(offset, size)).summary(format!("{size} bytes")).target(root.sub(at, header_len));
+        let mut node = Node::new(name.clone())
+            .span(root.sub(offset, size))
+            .summary(format!("{size} bytes"))
+            .target(root.sub(at, header_len));
         if name == "#~" || name == "#-" {
             let tables = cx.read_avail(root.sub(offset, 24)).await?;
             let valid = crate::bytes::u64_le(&tables, 8).unwrap_or(0);
-            node = node.summary(format!("{} tables present, schema {}.{}", valid.count_ones(), tables.get(4).copied().unwrap_or(0), tables.get(5).copied().unwrap_or(0)));
+            node = node.summary(format!(
+                "{} tables present, schema {}.{}",
+                valid.count_ones(),
+                tables.get(4).copied().unwrap_or(0),
+                tables.get(5).copied().unwrap_or(0)
+            ));
         } else if name == "#GUID" {
             node = node.summary(format!("{} GUIDs", size / 16));
         }

@@ -337,7 +337,11 @@ const ORIENTATION: EnumTable = &[
 
 const RESOLUTION_UNIT: EnumTable = &[(1, "None"), (2, "Inch"), (3, "Centimetre")];
 const PLANAR: EnumTable = &[(1, "Chunky"), (2, "Planar")];
-const PREDICTOR: EnumTable = &[(1, "None"), (2, "Horizontal differencing"), (3, "Floating point")];
+const PREDICTOR: EnumTable = &[
+    (1, "None"),
+    (2, "Horizontal differencing"),
+    (3, "Floating point"),
+];
 const SAMPLE_FORMAT: EnumTable = &[
     (1, "Unsigned integer"),
     (2, "Signed integer"),

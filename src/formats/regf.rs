@@ -35,7 +35,12 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const FILE_TYPES: EnumTable = &[(0, "primary"), (1, "transaction log (old)"), (2, "transaction log"), (6, "transaction log (new)")];
+const FILE_TYPES: EnumTable = &[
+    (0, "primary"),
+    (1, "transaction log (old)"),
+    (2, "transaction log"),
+    (6, "transaction log (new)"),
+];
 
 const VALUE_TYPES: EnumTable = &[
     (0, "REG_NONE"),
@@ -65,7 +70,10 @@ const KEY_FLAGS: FlagTable = &[
     flag(0x0200, "KEY_VIRTUAL_STORE"),
 ];
 
-const VALUE_FLAGS: FlagTable = &[flag(0x0001, "VALUE_COMP_NAME"), flag(0x0002, "IS_TOMBSTONE")];
+const VALUE_FLAGS: FlagTable = &[
+    flag(0x0001, "VALUE_COMP_NAME"),
+    flag(0x0002, "IS_TOMBSTONE"),
+];
 
 record! {
     pub struct BaseBlock {
@@ -112,10 +120,13 @@ impl Hive {
         let size = cx.read(self.bins.sub_exact(at, 4)?).await?;
         let size = i32_le(&size, 0).unwrap_or(0).unsigned_abs();
         if size < 4 {
-            return Err(Diagnostic::malformed(format!("cell at {offset:#x} has size {size}"))
-                .at(self.bins.sub(at, 4)));
+            return Err(
+                Diagnostic::malformed(format!("cell at {offset:#x} has size {size}"))
+                    .at(self.bins.sub(at, 4)),
+            );
         }
-        self.bins.sub_exact(at.saturating_add(4), u64::from(size).saturating_sub(4))
+        self.bins
+            .sub_exact(at.saturating_add(4), u64::from(size).saturating_sub(4))
     }
 }
 
@@ -131,14 +142,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hive: H = Arc::new(Hive {
         bins: file.tail(BINS),
     });
-    let name = base.file_name.rsplit('\\').next().unwrap_or_default().to_owned();
+    let name = base
+        .file_name
+        .rsplit('\\')
+        .next()
+        .unwrap_or_default()
+        .to_owned();
     let mut summary = format!("registry hive {}.{}", base.major, base.minor);
     if !name.is_empty() {
         summary = format!("{summary}, {name}");
     }
     match key_info(&cx, &hive, base.root).await {
         Ok(root) => {
-            summary = format!("{summary}, root {:?} ({} subkeys, {} values)", root.name, root.subkeys, root.values);
+            summary = format!(
+                "{summary}, root {:?} ({} subkeys, {} values)",
+                root.name, root.subkeys, root.values
+            );
             cx.annotate(summary);
             cx.emit(key_node(&hive, base.root, &root, &[]));
         }
@@ -168,11 +187,15 @@ async fn base_block(cx: Cx, span: Span) -> Result<()> {
             .iter()
             .take(127)
             .fold(0u32, |acc, c| acc ^ u32::from_le_bytes(*c));
-        let node = Node::new("Checksum").span(check_span).value(crate::formats::datakit::hex(stored, 32));
+        let node = Node::new("Checksum")
+            .span(check_span)
+            .value(crate::formats::datakit::hex(stored, 32));
         cx.emit(if computed == stored {
             node.summary("valid")
         } else {
-            node.diag(Diagnostic::warning(format!("checksum mismatch: computed {computed:#010x}")))
+            node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {computed:#010x}"
+            )))
         });
     }
     Ok(())
@@ -194,8 +217,9 @@ async fn key_info(cx: &Cx, hive: &Hive, offset: u32) -> Result<KeyInfo> {
     let span = hive.cell(cx, offset).await?;
     let data = cx.read(span.sub(0, 0x4c)).await?;
     if data.get(..2) != Some(b"nk") {
-        return Err(Diagnostic::malformed(format!("cell {offset:#x} is not a key node"))
-            .at(span.sub(0, 2)));
+        return Err(
+            Diagnostic::malformed(format!("cell {offset:#x} is not a key node")).at(span.sub(0, 2)),
+        );
     }
     let flags = u16_le(&data, 2).unwrap_or(0);
     let name_len = u16_le(&data, 0x48).unwrap_or(0);
@@ -244,7 +268,9 @@ fn key_node(hive: &H, offset: u32, info: &KeyInfo, path: &[u32]) -> Node {
         return node.diag(Diagnostic::malformed("key is its own ancestor"));
     }
     if path.len() >= MAX_DEPTH {
-        return node.diag(Diagnostic::limit(format!("keys nested deeper than {MAX_DEPTH}")));
+        return node.diag(Diagnostic::limit(format!(
+            "keys nested deeper than {MAX_DEPTH}"
+        )));
     }
     let mut path = path.to_vec();
     path.push(offset);
@@ -261,7 +287,9 @@ fn key_node(hive: &H, offset: u32, info: &KeyInfo, path: &[u32]) -> Node {
 async fn key(cx: Cx, k: Key) -> Result<()> {
     let hive = &k.hive;
     let info = key_info(&cx, hive, k.offset).await?;
-    let nk = info.span.sub(0, 0x4c_u64.saturating_add(name_len(&cx, info.span).await));
+    let nk = info
+        .span
+        .sub(0, 0x4c_u64.saturating_add(name_len(&cx, info.span).await));
     cx.emit(struct_node("Key node", nk, LE, (), key_node_fields));
     if info.values > 0 {
         cx.emit(
@@ -406,8 +434,8 @@ async fn value_node(cx: &Cx, hive: &H, offset: u32) -> Result<Node> {
     } else {
         clip(&name, 120)
     };
-    let type_name = lookup(VALUE_TYPES, kind.into())
-        .map_or_else(|| format!("type {kind:#x}"), str::to_owned);
+    let type_name =
+        lookup(VALUE_TYPES, kind.into()).map_or_else(|| format!("type {kind:#x}"), str::to_owned);
     let mut node = Node::new(name).span(vk);
     let vk_fields = vk.sub(0, 0x14u64.saturating_add(name_len.into()));
     let data = match value_data(cx, hive, vk, size, data_offset).await {
@@ -467,7 +495,11 @@ async fn value_fields(cx: Cx, (vk, data): (Span, Option<Span>)) -> Result<()> {
         f.utf16("Value name", u64::from(len / 2)).emit()?;
     }
     if let Some(data) = data {
-        cx.emit(Node::new("Data").span(data).summary(format!("{} bytes", data.len)));
+        cx.emit(
+            Node::new("Data")
+                .span(data)
+                .summary(format!("{} bytes", data.len)),
+        );
     }
     Ok(())
 }
@@ -482,8 +514,10 @@ async fn bins(cx: Cx, hive: H) -> Result<()> {
             return Err(Diagnostic::malformed("expected a hive bin").at(cur.since(start)));
         }
         if h.size < 0x20 || !u64::from(h.size).is_multiple_of(0x1000) {
-            return Err(Diagnostic::malformed(format!("bad hive bin size {:#x}", h.size))
-                .at(hive.bins.sub(start, 0x20)));
+            return Err(
+                Diagnostic::malformed(format!("bad hive bin size {:#x}", h.size))
+                    .at(hive.bins.sub(start, 0x20)),
+            );
         }
         cur.seek(start.saturating_add(h.size.into()));
         let span = hive.bins.sub(start, h.size.into());
@@ -519,14 +553,15 @@ async fn cells(cx: Cx, (bin, base): (Span, u64)) -> Result<()> {
         let size = cur.int::<i32>().await?;
         let len = u64::from(size.unsigned_abs());
         if len < 8 || !len.is_multiple_of(8) {
-            return Err(Diagnostic::malformed(format!("bad cell size {size}"))
-                .at(bin.sub(start, 4)));
+            return Err(
+                Diagnostic::malformed(format!("bad cell size {size}")).at(bin.sub(start, 4))
+            );
         }
         let sig = cur.peek(2).await?;
         let sig = u16_le(&sig, 0).unwrap_or(0);
         cur.seek(start.saturating_add(len));
-        let node = Node::new(format!("Cell {:#x}", base.saturating_add(start)))
-            .span(bin.sub(start, len));
+        let node =
+            Node::new(format!("Cell {:#x}", base.saturating_add(start))).span(bin.sub(start, len));
         let node = if size < 0 {
             let kind = lookup(CELL_TYPES, sig.into()).unwrap_or("data");
             node.value(enumv(sig, 16, CELL_TYPES))

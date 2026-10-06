@@ -119,8 +119,10 @@ impl Info {
         } else {
             COMPRESSION
         };
-        lookup(table, self.compression.into())
-            .map_or_else(|| format!("compression {}", self.compression), str::to_owned)
+        lookup(table, self.compression.into()).map_or_else(
+            || format!("compression {}", self.compression),
+            str::to_owned,
+        )
     }
 
     /// Bytes per row of the pixel array (rows are padded to 4 bytes).
@@ -222,9 +224,7 @@ fn info_header(f: &mut Fields<'_>, _: &()) -> Result<Info> {
     if size == 64 {
         f.u16("Units").desc("0 = pixels per metre").emit()?;
         f.u16("Reserved").emit()?;
-        f.u16("Recording")
-            .desc("0 = rows bottom-up")
-            .emit()?;
+        f.u16("Recording").desc("0 = rows bottom-up").emit()?;
         f.u16("Rendering").desc("Halftoning algorithm").emit()?;
         f.u32("Size1").desc("Halftoning parameter").emit()?;
         f.u32("Size2").desc("Halftoning parameter").emit()?;
@@ -345,14 +345,18 @@ pub async fn dib(
     }
     let header_span = span.sub(0, size.into());
     let info = parse(cx, header_span, LE, &(), info_header).await?;
-    cx.emit(
-        struct_node(info.version(), header_span, LE, (), info_header).summary(describe(&info)),
-    );
+    cx.emit(struct_node(info.version(), header_span, LE, (), info_header).summary(describe(&info)));
     let mut pos = u64::from(size);
 
     let mask_len = info.mask_bytes();
     if mask_len > 0 {
-        cx.emit(struct_node("Color masks", span.sub(pos, mask_len), LE, (), masks));
+        cx.emit(struct_node(
+            "Color masks",
+            span.sub(pos, mask_len),
+            LE,
+            (),
+            masks,
+        ));
         pos = pos.saturating_add(mask_len);
     }
 
@@ -404,10 +408,10 @@ pub async fn dib(
             );
         }
         0 | 3 | 6 => {
-            cx.emit(region("Pixel array", span, start, computed).summary(format!(
-                "{rows} rows of {:#x} bytes",
-                info.stride()
-            )));
+            cx.emit(
+                region("Pixel array", span, start, computed)
+                    .summary(format!("{rows} rows of {:#x} bytes", info.stride())),
+            );
         }
         _ => {
             let len = if info.size_image != 0 {
@@ -415,9 +419,7 @@ pub async fn dib(
             } else {
                 span.len.saturating_sub(start)
             };
-            cx.emit(
-                region("Pixel data", span, start, len).summary(info.compression_name()),
-            );
+            cx.emit(region("Pixel data", span, start, len).summary(info.compression_name()));
         }
     }
     if icon {

@@ -47,42 +47,143 @@ enum Form {
 fn op(code: u8) -> (&'static str, Form, Option<Ref>) {
     use Form::*;
     const BINOPS: [&str; 32] = [
-        "add-int", "sub-int", "mul-int", "div-int", "rem-int", "and-int", "or-int", "xor-int",
-        "shl-int", "shr-int", "ushr-int", "add-long", "sub-long", "mul-long", "div-long",
-        "rem-long", "and-long", "or-long", "xor-long", "shl-long", "shr-long", "ushr-long",
-        "add-float", "sub-float", "mul-float", "div-float", "rem-float", "add-double",
-        "sub-double", "mul-double", "div-double", "rem-double",
+        "add-int",
+        "sub-int",
+        "mul-int",
+        "div-int",
+        "rem-int",
+        "and-int",
+        "or-int",
+        "xor-int",
+        "shl-int",
+        "shr-int",
+        "ushr-int",
+        "add-long",
+        "sub-long",
+        "mul-long",
+        "div-long",
+        "rem-long",
+        "and-long",
+        "or-long",
+        "xor-long",
+        "shl-long",
+        "shr-long",
+        "ushr-long",
+        "add-float",
+        "sub-float",
+        "mul-float",
+        "div-float",
+        "rem-float",
+        "add-double",
+        "sub-double",
+        "mul-double",
+        "div-double",
+        "rem-double",
     ];
     const BINOPS_2ADDR: [&str; 32] = [
-        "add-int/2addr", "sub-int/2addr", "mul-int/2addr", "div-int/2addr", "rem-int/2addr",
-        "and-int/2addr", "or-int/2addr", "xor-int/2addr", "shl-int/2addr", "shr-int/2addr",
-        "ushr-int/2addr", "add-long/2addr", "sub-long/2addr", "mul-long/2addr",
-        "div-long/2addr", "rem-long/2addr", "and-long/2addr", "or-long/2addr",
-        "xor-long/2addr", "shl-long/2addr", "shr-long/2addr", "ushr-long/2addr",
-        "add-float/2addr", "sub-float/2addr", "mul-float/2addr", "div-float/2addr",
-        "rem-float/2addr", "add-double/2addr", "sub-double/2addr", "mul-double/2addr",
-        "div-double/2addr", "rem-double/2addr",
+        "add-int/2addr",
+        "sub-int/2addr",
+        "mul-int/2addr",
+        "div-int/2addr",
+        "rem-int/2addr",
+        "and-int/2addr",
+        "or-int/2addr",
+        "xor-int/2addr",
+        "shl-int/2addr",
+        "shr-int/2addr",
+        "ushr-int/2addr",
+        "add-long/2addr",
+        "sub-long/2addr",
+        "mul-long/2addr",
+        "div-long/2addr",
+        "rem-long/2addr",
+        "and-long/2addr",
+        "or-long/2addr",
+        "xor-long/2addr",
+        "shl-long/2addr",
+        "shr-long/2addr",
+        "ushr-long/2addr",
+        "add-float/2addr",
+        "sub-float/2addr",
+        "mul-float/2addr",
+        "div-float/2addr",
+        "rem-float/2addr",
+        "add-double/2addr",
+        "sub-double/2addr",
+        "mul-double/2addr",
+        "div-double/2addr",
+        "rem-double/2addr",
     ];
     const UNOPS: [&str; 21] = [
-        "neg-int", "not-int", "neg-long", "not-long", "neg-float", "neg-double", "int-to-long",
-        "int-to-float", "int-to-double", "long-to-int", "long-to-float", "long-to-double",
-        "float-to-int", "float-to-long", "float-to-double", "double-to-int", "double-to-long",
-        "double-to-float", "int-to-byte", "int-to-char", "int-to-short",
+        "neg-int",
+        "not-int",
+        "neg-long",
+        "not-long",
+        "neg-float",
+        "neg-double",
+        "int-to-long",
+        "int-to-float",
+        "int-to-double",
+        "long-to-int",
+        "long-to-float",
+        "long-to-double",
+        "float-to-int",
+        "float-to-long",
+        "float-to-double",
+        "double-to-int",
+        "double-to-long",
+        "double-to-float",
+        "int-to-byte",
+        "int-to-char",
+        "int-to-short",
     ];
     const ARRAY: [&str; 14] = [
-        "aget", "aget-wide", "aget-object", "aget-boolean", "aget-byte", "aget-char",
-        "aget-short", "aput", "aput-wide", "aput-object", "aput-boolean", "aput-byte",
-        "aput-char", "aput-short",
+        "aget",
+        "aget-wide",
+        "aget-object",
+        "aget-boolean",
+        "aget-byte",
+        "aget-char",
+        "aget-short",
+        "aput",
+        "aput-wide",
+        "aput-object",
+        "aput-boolean",
+        "aput-byte",
+        "aput-char",
+        "aput-short",
     ];
     const INSTANCE: [&str; 14] = [
-        "iget", "iget-wide", "iget-object", "iget-boolean", "iget-byte", "iget-char",
-        "iget-short", "iput", "iput-wide", "iput-object", "iput-boolean", "iput-byte",
-        "iput-char", "iput-short",
+        "iget",
+        "iget-wide",
+        "iget-object",
+        "iget-boolean",
+        "iget-byte",
+        "iget-char",
+        "iget-short",
+        "iput",
+        "iput-wide",
+        "iput-object",
+        "iput-boolean",
+        "iput-byte",
+        "iput-char",
+        "iput-short",
     ];
     const STATIC: [&str; 14] = [
-        "sget", "sget-wide", "sget-object", "sget-boolean", "sget-byte", "sget-char",
-        "sget-short", "sput", "sput-wide", "sput-object", "sput-boolean", "sput-byte",
-        "sput-char", "sput-short",
+        "sget",
+        "sget-wide",
+        "sget-object",
+        "sget-boolean",
+        "sget-byte",
+        "sget-char",
+        "sget-short",
+        "sput",
+        "sput-wide",
+        "sput-object",
+        "sput-boolean",
+        "sput-byte",
+        "sput-char",
+        "sput-short",
     ];
     const INVOKE: [&str; 5] = [
         "invoke-virtual",
@@ -98,16 +199,36 @@ fn op(code: u8) -> (&'static str, Form, Option<Ref>) {
         "invoke-static/range",
         "invoke-interface/range",
     ];
-    const CMP: [&str; 5] = ["cmpl-float", "cmpg-float", "cmpl-double", "cmpg-double", "cmp-long"];
+    const CMP: [&str; 5] = [
+        "cmpl-float",
+        "cmpg-float",
+        "cmpl-double",
+        "cmpg-double",
+        "cmp-long",
+    ];
     const IF: [&str; 6] = ["if-eq", "if-ne", "if-lt", "if-ge", "if-gt", "if-le"];
     const IFZ: [&str; 6] = ["if-eqz", "if-nez", "if-ltz", "if-gez", "if-gtz", "if-lez"];
     const LIT16: [&str; 8] = [
-        "add-int/lit16", "rsub-int", "mul-int/lit16", "div-int/lit16", "rem-int/lit16",
-        "and-int/lit16", "or-int/lit16", "xor-int/lit16",
+        "add-int/lit16",
+        "rsub-int",
+        "mul-int/lit16",
+        "div-int/lit16",
+        "rem-int/lit16",
+        "and-int/lit16",
+        "or-int/lit16",
+        "xor-int/lit16",
     ];
     const LIT8: [&str; 11] = [
-        "add-int/lit8", "rsub-int/lit8", "mul-int/lit8", "div-int/lit8", "rem-int/lit8",
-        "and-int/lit8", "or-int/lit8", "xor-int/lit8", "shl-int/lit8", "shr-int/lit8",
+        "add-int/lit8",
+        "rsub-int/lit8",
+        "mul-int/lit8",
+        "div-int/lit8",
+        "rem-int/lit8",
+        "and-int/lit8",
+        "or-int/lit8",
+        "xor-int/lit8",
+        "shl-int/lit8",
+        "shr-int/lit8",
         "ushr-int/lit8",
     ];
     let pick = |table: &'static [&'static str], base: u8| {
@@ -224,17 +345,26 @@ pub fn decode(units: &[u16], pc: usize) -> Option<Insn> {
         let (name, len) = match a8 {
             1 => {
                 let size = usize::from(u(1)?);
-                ("packed-switch-payload", size.checked_mul(2)?.checked_add(4)?)
+                (
+                    "packed-switch-payload",
+                    size.checked_mul(2)?.checked_add(4)?,
+                )
             }
             2 => {
                 let size = usize::from(u(1)?);
-                ("sparse-switch-payload", size.checked_mul(4)?.checked_add(2)?)
+                (
+                    "sparse-switch-payload",
+                    size.checked_mul(4)?.checked_add(2)?,
+                )
             }
             3 => {
                 let width = usize::from(u(1)?);
                 let size = usize::try_from(u32::from(u(2)?) | (u32::from(u(3)?) << 16)).ok()?;
                 let bytes = size.checked_mul(width)?;
-                ("fill-array-data-payload", (bytes.checked_add(1)? / 2).checked_add(4)?)
+                (
+                    "fill-array-data-payload",
+                    (bytes.checked_add(1)? / 2).checked_add(4)?,
+                )
             }
             _ => return None,
         };
@@ -265,7 +395,14 @@ pub fn decode(units: &[u16], pc: usize) -> Option<Insn> {
         F21s => (format!("v{a8}, #{}", i16_of(u(1)?)), None, 2),
         F21h => (format!("v{a8}, #{:#x}", u32::from(u(1)?) << 16), None, 2),
         F21hw => (format!("v{a8}, #{:#x}", u64::from(u(1)?) << 48), None, 2),
-        F21c => (format!("v{a8}"), { let i = u32::from(u(1)?); kind.map(|k| (k, i)) }, 2),
+        F21c => (
+            format!("v{a8}"),
+            {
+                let i = u32::from(u(1)?);
+                kind.map(|k| (k, i))
+            },
+            2,
+        ),
         F23x => {
             let b = u(1)?;
             (format!("v{a8}, v{}, v{}", b & 0xff, b >> 8), None, 2)
@@ -275,38 +412,80 @@ pub fn decode(units: &[u16], pc: usize) -> Option<Insn> {
             let lit = i8::from_le_bytes([u8::try_from(b >> 8).unwrap_or(0)]);
             (format!("v{a8}, v{}, #{lit}", b & 0xff), None, 2)
         }
-        F22t => (format!("v{a4}, v{b4}, {}", target(pc, i16_of(u(1)?))), None, 2),
+        F22t => (
+            format!("v{a4}, v{b4}, {}", target(pc, i16_of(u(1)?))),
+            None,
+            2,
+        ),
         F22s => (format!("v{a4}, v{b4}, #{}", i16_of(u(1)?)), None, 2),
-        F22c => (format!("v{a4}, v{b4}"), { let i = u32::from(u(1)?); kind.map(|k| (k, i)) }, 2),
+        F22c => (
+            format!("v{a4}, v{b4}"),
+            {
+                let i = u32::from(u(1)?);
+                kind.map(|k| (k, i))
+            },
+            2,
+        ),
         F32x => (format!("v{}, v{}", u(1)?, u(2)?), None, 3),
         F30t => (target(pc, i32_of(u(1)?, u(2)?)), None, 3),
-        F31t => (format!("v{a8}, {}", target(pc, i32_of(u(1)?, u(2)?))), None, 3),
+        F31t => (
+            format!("v{a8}, {}", target(pc, i32_of(u(1)?, u(2)?))),
+            None,
+            3,
+        ),
         F31i => (format!("v{a8}, #{}", i32_of(u(1)?, u(2)?)), None, 3),
         F31c => (
             format!("v{a8}"),
-            { let i = u32::from(u(1)?) | (u32::from(u(2)?) << 16); kind.map(|k| (k, i)) },
+            {
+                let i = u32::from(u(1)?) | (u32::from(u(2)?) << 16);
+                kind.map(|k| (k, i))
+            },
             3,
         ),
         F35c | F45cc => {
             let count = usize::from(b4);
             let regs = u(2)?;
-            let all = [regs & 0xf, (regs >> 4) & 0xf, (regs >> 8) & 0xf, regs >> 12, a4];
+            let all = [
+                regs & 0xf,
+                (regs >> 4) & 0xf,
+                (regs >> 8) & 0xf,
+                regs >> 12,
+                a4,
+            ];
             let list: Vec<String> = all.iter().take(count).map(|r| format!("v{r}")).collect();
             let units = if format == F45cc { 4 } else { 3 };
-            (format!("{{{}}}", list.join(", ")), { let i = u32::from(u(1)?); kind.map(|k| (k, i)) }, units)
+            (
+                format!("{{{}}}", list.join(", ")),
+                {
+                    let i = u32::from(u(1)?);
+                    kind.map(|k| (k, i))
+                },
+                units,
+            )
         }
         F3rc | F4rcc => {
             let first = u32::from(u(2)?);
             let last = first.saturating_add(u32::from(a8)).saturating_sub(1);
             let units = if format == F4rcc { 4 } else { 3 };
-            (format!("{{v{first} .. v{last}}}"), { let i = u32::from(u(1)?); kind.map(|k| (k, i)) }, units)
+            (
+                format!("{{v{first} .. v{last}}}"),
+                {
+                    let i = u32::from(u(1)?);
+                    kind.map(|k| (k, i))
+                },
+                units,
+            )
         }
         F51l => {
             let v = u64::from(u(1)?)
                 | (u64::from(u(2)?) << 16)
                 | (u64::from(u(3)?) << 32)
                 | (u64::from(u(4)?) << 48);
-            (format!("v{a8}, #{}", i64::from_le_bytes(v.to_le_bytes())), None, 5)
+            (
+                format!("v{a8}, #{}", i64::from_le_bytes(v.to_le_bytes())),
+                None,
+                5,
+            )
         }
     };
     Some(Insn {

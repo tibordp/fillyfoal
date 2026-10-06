@@ -28,7 +28,10 @@ pub static FORMAT: Format = Format {
 
 fn probe(h: &Head<'_>) -> bool {
     u16_le(h.data, 34) == Some(0x504c)
-        && matches!(u32_le(h.data, 8), Some(0x0001_0000 | 0x0002_0001 | 0x0002_0002))
+        && matches!(
+            u32_le(h.data, 8),
+            Some(0x0001_0000 | 0x0002_0001 | 0x0002_0002)
+        )
         && u32_le(h.data, 0).is_some_and(|n| u64::from(n) == h.len)
 }
 
@@ -38,7 +41,21 @@ const FLAGS: FlagTable = &[
     flag(0x1000_0000, "TTEMBED_XORENCRYPTDATA"),
 ];
 
-const CHARSETS: EnumTable = &[(0, "ANSI"), (1, "DEFAULT"), (2, "SYMBOL"), (128, "SHIFTJIS"), (134, "GB2312"), (136, "CHINESEBIG5"), (161, "GREEK"), (162, "TURKISH"), (177, "HEBREW"), (178, "ARABIC"), (186, "BALTIC"), (204, "RUSSIAN"), (238, "EASTEUROPE")];
+const CHARSETS: EnumTable = &[
+    (0, "ANSI"),
+    (1, "DEFAULT"),
+    (2, "SYMBOL"),
+    (128, "SHIFTJIS"),
+    (134, "GB2312"),
+    (136, "CHINESEBIG5"),
+    (161, "GREEK"),
+    (162, "TURKISH"),
+    (177, "HEBREW"),
+    (178, "ARABIC"),
+    (186, "BALTIC"),
+    (204, "RUSSIAN"),
+    (238, "EASTEUROPE"),
+];
 
 record! {
     pub struct Header {
@@ -72,7 +89,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut names = Vec::new();
     let labels: &[&'static str] = match h.version {
         0x0001_0000 => &["FamilyName", "StyleName", "VersionName", "FullName"],
-        _ => &["FamilyName", "StyleName", "VersionName", "FullName", "RootString"],
+        _ => &[
+            "FamilyName",
+            "StyleName",
+            "VersionName",
+            "FullName",
+            "RootString",
+        ],
     };
     for (i, label) in labels.iter().enumerate() {
         if i > 0 {

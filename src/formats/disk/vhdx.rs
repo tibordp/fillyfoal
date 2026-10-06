@@ -60,16 +60,28 @@ record! {
 }
 
 const REGIONS: &[(&str, &str)] = &[
-    ("2dc27766-f623-4200-9d64-115e9bfd4a08", "Block allocation table"),
+    (
+        "2dc27766-f623-4200-9d64-115e9bfd4a08",
+        "Block allocation table",
+    ),
     ("8b7ca206-4790-4b9a-b8fe-575f050f886e", "Metadata"),
 ];
 
 const ITEMS: &[(&str, &str)] = &[
     ("caa16737-fa36-4d43-b3b6-33f0aa44e76b", "File parameters"),
     ("2fa54224-cd1b-4876-b211-5dbed83bf4b8", "Virtual disk size"),
-    ("beca12ab-b2e6-4523-93ef-c309e000c746", "Virtual disk id (page 83 data)"),
-    ("8141bf1d-a96f-4709-ba47-f233a8faab5f", "Logical sector size"),
-    ("cda348c7-445d-4471-9cc9-e9885251c556", "Physical sector size"),
+    (
+        "beca12ab-b2e6-4523-93ef-c309e000c746",
+        "Virtual disk id (page 83 data)",
+    ),
+    (
+        "8141bf1d-a96f-4709-ba47-f233a8faab5f",
+        "Logical sector size",
+    ),
+    (
+        "cda348c7-445d-4471-9cc9-e9885251c556",
+        "Physical sector size",
+    ),
     ("a8d35f2d-b30b-454d-abf7-d3d84834ab0c", "Parent locator"),
 ];
 
@@ -88,7 +100,11 @@ record! {
     }
 }
 
-const ITEM_FLAGS: FlagTable = &[flag(1, "IS_USER"), flag(2, "IS_VIRTUAL_DISK"), flag(4, "IS_REQUIRED")];
+const ITEM_FLAGS: FlagTable = &[
+    flag(1, "IS_USER"),
+    flag(2, "IS_VIRTUAL_DISK"),
+    flag(4, "IS_REQUIRED"),
+];
 
 record! {
     pub struct MetadataEntry {
@@ -147,7 +163,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         match parse(&cx, span, LE, &(), Header::layout).await {
             Ok(h) if h.signature == "head" => {
                 let bad = verify(&cx, span, h.checksum).await?;
-                let mut node = Header::node(name, span, LE).summary(format!("sequence {}", h.sequence));
+                let mut node =
+                    Header::node(name, span, LE).summary(format!("sequence {}", h.sequence));
                 if let Some(d) = bad {
                     node = node.diag(d);
                 } else if current.as_ref().is_none_or(|(s, _)| h.sequence > *s) {
@@ -155,7 +172,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 }
                 cx.emit(node);
             }
-            Ok(_) => cx.emit(Node::new(name).span(span).diag(Diagnostic::malformed("bad signature"))),
+            Ok(_) => cx.emit(
+                Node::new(name)
+                    .span(span)
+                    .diag(Diagnostic::malformed("bad signature")),
+            ),
             Err(e) => cx.emit(Node::new(name).span(span).diag(e)),
         }
     }
@@ -167,24 +188,43 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (i, at) in [3 * KIB64, 4 * KIB64].into_iter().enumerate() {
         let span = file.sub(at, KIB64);
         let name = format!("Region table {}", i.saturating_add(1));
-        let header = parse(&cx, span.sub(0, RegionTable::SIZE), LE, &(), RegionTable::layout).await;
+        let header = parse(
+            &cx,
+            span.sub(0, RegionTable::SIZE),
+            LE,
+            &(),
+            RegionTable::layout,
+        )
+        .await;
         match header {
             Ok(t) if t.signature == "regi" => {
-                let mut node = Node::new(name).span(span).summary(format!("{} regions", t.entries));
+                let mut node = Node::new(name)
+                    .span(span)
+                    .summary(format!("{} regions", t.entries));
                 if let Some(d) = verify(&cx, span, t.checksum).await? {
                     node = node.diag(d);
                 }
                 let count = u64::from(t.entries).min(MAX_ENTRIES);
                 cx.emit(node.lazy(region_table, (span, count)));
                 if regions.is_empty() {
-                    let data = cx.read_avail(span.sub(16, count.saturating_mul(32))).await?;
+                    let data = cx
+                        .read_avail(span.sub(16, count.saturating_mul(32)))
+                        .await?;
                     for e in data.as_chunks::<32>().0 {
                         let id = guid_le(e.get(..16).unwrap_or_default());
-                        regions.push((guid_name(REGIONS, &id), u64_le(e, 16).unwrap_or(0), u32_le(e, 24).unwrap_or(0)));
+                        regions.push((
+                            guid_name(REGIONS, &id),
+                            u64_le(e, 16).unwrap_or(0),
+                            u32_le(e, 24).unwrap_or(0),
+                        ));
                     }
                 }
             }
-            Ok(_) => cx.emit(Node::new(name).span(span).diag(Diagnostic::malformed("bad signature"))),
+            Ok(_) => cx.emit(
+                Node::new(name)
+                    .span(span)
+                    .diag(Diagnostic::malformed("bad signature")),
+            ),
             Err(e) => cx.emit(Node::new(name).span(span).diag(e)),
         }
     }
@@ -204,7 +244,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "VHDX {} disk, {}, {} blocks",
-        if params.has_parent { "differencing" } else { "dynamic/fixed" },
+        if params.has_parent {
+            "differencing"
+        } else {
+            "dynamic/fixed"
+        },
         size(params.disk_size),
         size(params.block)
     ));
@@ -213,7 +257,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     if !params.block.is_power_of_two() || params.block < MIB || params.logical_sector == 0 {
         cx.emit(Node::new("Block allocation table").span(bat));
-        return Err(Diagnostic::malformed(format!("block size {:#x}", params.block)));
+        return Err(Diagnostic::malformed(format!(
+            "block size {:#x}",
+            params.block
+        )));
     }
     // One sector bitmap block follows every `chunk_ratio` payload blocks.
     let chunk_ratio = (1u64 << 23)
@@ -247,10 +294,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn region_table(cx: Cx, (span, count): (Span, u64)) -> Result<()> {
-    cx.emit(RegionTable::node("Header", span.sub(0, RegionTable::SIZE), LE));
+    cx.emit(RegionTable::node(
+        "Header",
+        span.sub(0, RegionTable::SIZE),
+        LE,
+    ));
     for i in 0..count {
         let e = span.sub(16u64.saturating_add(i.saturating_mul(32)), 32);
-        cx.push(RegionEntry::node(format!("Region {i}"), e, LE)).await;
+        cx.push(RegionEntry::node(format!("Region {i}"), e, LE))
+            .await;
     }
     Ok(())
 }
@@ -260,7 +312,9 @@ async fn metadata_params(cx: &Cx, region: Span) -> Result<Params> {
     let mut p = Params::default();
     let head = cx.read_avail(region.sub(0, 32)).await?;
     let count = u64::from(crate::bytes::u16_le(&head, 10).unwrap_or(0)).min(MAX_ENTRIES);
-    let table = cx.read_avail(region.sub(32, count.saturating_mul(32))).await?;
+    let table = cx
+        .read_avail(region.sub(32, count.saturating_mul(32)))
+        .await?;
     for e in table.as_chunks::<32>().0 {
         let id = guid_le(e.get(..16).unwrap_or_default());
         let offset = u64::from(u32_le(e, 16).unwrap_or(0));
@@ -285,7 +339,9 @@ async fn metadata(cx: Cx, region: Span) -> Result<()> {
     cx.emit(
         Node::new("Table header")
             .span(region.sub(0, 32))
-            .value(Value::Text(crate::text::until_nul(head.get(..8).unwrap_or_default())))
+            .value(Value::Text(crate::text::until_nul(
+                head.get(..8).unwrap_or_default(),
+            )))
             .summary(format!("{count} entries")),
     );
     for i in 0..count {
@@ -303,9 +359,7 @@ async fn metadata(cx: Cx, region: Span) -> Result<()> {
             Some("Logical sector size" | "Physical sector size") => {
                 format!("{} bytes", u32_le(&data, 0).unwrap_or(0))
             }
-            Some("Virtual disk id (page 83 data)") => {
-                guid_le(&data).to_string()
-            }
+            Some("Virtual disk id (page 83 data)") => guid_le(&data).to_string(),
             _ => format!("{} bytes", data.len()),
         };
         let name = guid_name(ITEMS, &e.id).unwrap_or("Unknown item");
@@ -344,7 +398,9 @@ impl Disk {
     }
 
     fn data(&self, entry: u64) -> Span {
-        self.input.span.sub((entry >> 20).saturating_mul(MIB), self.block)
+        self.input
+            .span
+            .sub((entry >> 20).saturating_mul(MIB), self.block)
     }
 }
 
@@ -353,11 +409,13 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
     for i in 0..d.blocks() {
         let (span, entry) = d.entry(&cx, i).await?;
         let state = entry & 7;
-        let mut node = Node::new(format!("Block {i}")).span(span).value(Value::Enum {
-            raw: state,
-            bits: 3,
-            name: crate::value::lookup(BAT_STATES, state),
-        });
+        let mut node = Node::new(format!("Block {i}"))
+            .span(span)
+            .value(Value::Enum {
+                raw: state,
+                bits: 3,
+                name: crate::value::lookup(BAT_STATES, state),
+            });
         if matches!(state, 6 | 7) {
             node = node.target(d.data(entry));
         }

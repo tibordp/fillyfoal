@@ -46,7 +46,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if let Some(v) = s.strip_prefix(";;; in Emacs version ") {
             compiler = Some(v.trim().to_owned());
         }
-        let span = file.sub(u64::try_from(start).unwrap_or(0), u64::try_from(line.len()).unwrap_or(0));
+        let span = file.sub(
+            u64::try_from(start).unwrap_or(0),
+            u64::try_from(line.len()).unwrap_or(0),
+        );
         cx.emit(Node::new("comment").span(span).value(text(s)));
     }
     let code = file.tail(u64::try_from(at).unwrap_or(0));

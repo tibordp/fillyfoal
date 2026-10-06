@@ -74,7 +74,9 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
             s.size_t = size_field(f, "sizeof(size_t)")?;
             s.instruction = size_field(f, "sizeof(Instruction)")?;
             size_field(f, "sizeof(lua_Number)")?;
-            f.u8("integral").desc("1: lua_Number is an integer type").emit()?;
+            f.u8("integral")
+                .desc("1: lua_Number is an integer type")
+                .emit()?;
             if *version == 0x52 {
                 f.bytes("LUAC_TAIL", 6).emit()?;
             }
@@ -120,7 +122,11 @@ fn header(f: &mut Fields<'_>, version: &u8) -> Result<Sizes> {
 }
 
 fn endian(flag: u8) -> Endian {
-    if flag == 0 { Endian::Big } else { Endian::Little }
+    if flag == 0 {
+        Endian::Big
+    } else {
+        Endian::Little
+    }
 }
 
 /// `LUAC_INT` (0x5678, or -0x5678 in 5.5) in the chunk's byte order, which
@@ -138,7 +144,10 @@ fn test_integer(f: &mut Fields<'_>, size: u8) -> Result<Endian> {
     f.node(
         Node::new("LUAC_INT")
             .span(span)
-            .value(Value::Int { value, bits: size.saturating_mul(8) })
+            .value(Value::Int {
+                value,
+                bits: size.saturating_mul(8),
+            })
             .summary(match endian {
                 Endian::Little => "little-endian",
                 Endian::Big => "big-endian",
@@ -148,12 +157,7 @@ fn test_integer(f: &mut Fields<'_>, size: u8) -> Result<Endian> {
 }
 
 fn sign_extend(bytes: &[u8], big: bool) -> [u8; 8] {
-    let negative = if big {
-        bytes.first()
-    } else {
-        bytes.last()
-    }
-    .is_some_and(|b| b & 0x80 != 0);
+    let negative = if big { bytes.first() } else { bytes.last() }.is_some_and(|b| b & 0x80 != 0);
     let mut out = [if negative { 0xff } else { 0 }; 8];
     let n = bytes.len().min(8);
     if big {
@@ -172,8 +176,16 @@ fn test_number(f: &mut Fields<'_>, size: u8, endian: Endian) -> Result<()> {
     let value = match (size, endian) {
         (8, Endian::Little) => bytes.as_slice().try_into().ok().map(f64::from_le_bytes),
         (8, Endian::Big) => bytes.as_slice().try_into().ok().map(f64::from_be_bytes),
-        (4, Endian::Little) => bytes.as_slice().try_into().ok().map(|b| f64::from(f32::from_le_bytes(b))),
-        (4, Endian::Big) => bytes.as_slice().try_into().ok().map(|b| f64::from(f32::from_be_bytes(b))),
+        (4, Endian::Little) => bytes
+            .as_slice()
+            .try_into()
+            .ok()
+            .map(|b| f64::from(f32::from_le_bytes(b))),
+        (4, Endian::Big) => bytes
+            .as_slice()
+            .try_into()
+            .ok()
+            .map(|b| f64::from(f32::from_be_bytes(b))),
         _ => None,
     };
     let node = Node::new("LUAC_NUM").span(span);
@@ -205,7 +217,8 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
     macro_rules! push {
         ($name:expr, $start:expr, $value:expr) => {{
             let end = r.pos();
-            main.nodes.push(Node::new($name).span(at($start, end)).value($value));
+            main.nodes
+                .push(Node::new($name).span(at($start, end)).value($value));
         }};
     }
     let int = |r: &mut Reader<'_>, size: u8| -> Option<u64> {
@@ -257,7 +270,11 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
         }
         for name in ["linedefined", "lastlinedefined"] {
             let start = r.pos();
-            let v = if version == 0x54 { varint(&mut r)? } else { int(&mut r, s.int)? };
+            let v = if version == 0x54 {
+                varint(&mut r)?
+            } else {
+                int(&mut r, s.int)?
+            };
             push!(name, start, dec(v, 32));
         }
         let names: &[&str] = if version == 0x51 {
@@ -271,7 +288,11 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
             push!(*name, start, dec(v.into(), 8));
         }
         let start = r.pos();
-        let n = if version == 0x54 { varint(&mut r)? } else { int(&mut r, s.int)? };
+        let n = if version == 0x54 {
+            varint(&mut r)?
+        } else {
+            int(&mut r, s.int)?
+        };
         let code_len = n.checked_mul(s.instruction.into())?;
         r.bytes(usize::try_from(code_len).ok()?)?;
         let end = r.pos();
@@ -289,7 +310,9 @@ fn function(data: &[u8], span: Span, version: u8, s: Sizes) -> Main {
         .span(rest)
         .desc("Constants, upvalues, nested prototypes and debug information");
     if decoded.is_none() {
-        node = node.diag(Diagnostic::malformed("truncated or malformed function prototype"));
+        node = node.diag(Diagnostic::malformed(
+            "truncated or malformed function prototype",
+        ));
     }
     main.nodes.push(node);
     main
@@ -304,9 +327,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let sizes = header(&mut probe, &version)?;
     let header_len = probe.pos();
     let hspan = file.sub(0, header_len);
-    cx.emit(crate::fields::struct_node("Header", hspan, Endian::Little, version, header));
+    cx.emit(crate::fields::struct_node(
+        "Header",
+        hspan,
+        Endian::Little,
+        version,
+        header,
+    ));
     if matches!(version, 0x53..=0x55) && head.get(6..12) != Some(LUAC_DATA) {
-        cx.diag(Diagnostic::warning("LUAC_DATA does not match (corrupted by a text conversion?)"));
+        cx.diag(Diagnostic::warning(
+            "LUAC_DATA does not match (corrupted by a text conversion?)",
+        ));
     }
     let body = file.tail(header_len);
     let mut summary = format!("Lua {}.{} bytecode", version >> 4, version & 0xf);

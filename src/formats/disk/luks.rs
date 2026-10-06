@@ -154,7 +154,10 @@ async fn luks2(cx: &Cx, disk: Span) -> Result<()> {
     };
     cx.annotate(format!("LUKS2 encrypted volume{label}, UUID {}", h.uuid));
     let header_size = h.header_size.clamp(4096, MAX_JSON);
-    cx.emit(Luks2::node("Binary header", disk.sub(0, 4096), BE).summary(format!("sequence {}", h.seqid)));
+    cx.emit(
+        Luks2::node("Binary header", disk.sub(0, 4096), BE)
+            .summary(format!("sequence {}", h.seqid)),
+    );
     let json = disk.sub(4096, header_size.saturating_sub(4096));
     cx.emit(json_node("JSON metadata", cx, json).await?);
 
@@ -162,8 +165,15 @@ async fn luks2(cx: &Cx, disk: Span) -> Result<()> {
     let second = disk.sub(header_size, Luks2::SIZE);
     let magic = cx.read_avail(second.sub(0, 6)).await?;
     if magic == MAGIC2 {
-        cx.emit(Luks2::node("Secondary binary header", disk.sub(header_size, 4096), BE));
-        let json2 = disk.sub(header_size.saturating_add(4096), header_size.saturating_sub(4096));
+        cx.emit(Luks2::node(
+            "Secondary binary header",
+            disk.sub(header_size, 4096),
+            BE,
+        ));
+        let json2 = disk.sub(
+            header_size.saturating_add(4096),
+            header_size.saturating_sub(4096),
+        );
         cx.emit(Node::new("Secondary JSON metadata").span(json2));
     } else {
         cx.emit(

@@ -67,7 +67,14 @@ const LE: Endian = Endian::Little;
 
 pub async fn dissect_dos(cx: Cx, input: Input) -> Result<()> {
     let span = input.span;
-    let header = crate::fields::parse(&cx, span.sub(0, DosHeader::SIZE), LE, &(), DosHeader::layout).await?;
+    let header = crate::fields::parse(
+        &cx,
+        span.sub(0, DosHeader::SIZE),
+        LE,
+        &(),
+        DosHeader::layout,
+    )
+    .await?;
     cx.emit(DosHeader::node("Header", span.sub(0, DosHeader::SIZE), LE));
     let mut parts = Vec::new();
     let section = |offset: u32, len: u32| span.sub(offset.into(), len.into());
@@ -218,8 +225,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             match key {
                 b"Title" => title = Some(value_text.trim_matches(['(', ')']).to_owned()),
                 b"Creator" => creator = Some(value_text.trim_matches(['(', ')']).to_owned()),
-                b"BoundingBox" if !value_text.starts_with("(atend)") => bbox = Some(value_text.clone()),
-                b"Pages" => pages_declared = value_text.split_whitespace().next().and_then(|n| n.parse::<u64>().ok()),
+                b"BoundingBox" if !value_text.starts_with("(atend)") => {
+                    bbox = Some(value_text.clone())
+                }
+                b"Pages" => {
+                    pages_declared = value_text
+                        .split_whitespace()
+                        .next()
+                        .and_then(|n| n.parse::<u64>().ok())
+                }
                 _ => {}
             }
         }
@@ -247,7 +261,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             })
         } else if key == b"Page" {
             pages = pages.saturating_add(1);
-            let label = value_text.split_whitespace().next().unwrap_or_default().to_owned();
+            let label = value_text
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
             Some(Open {
                 name: format!("Page {label}"),
                 kind: Kind::Page,
@@ -285,8 +303,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if let Some(o) = open.take() {
                 push(&cx, span, o, before).await;
             }
-            cx.push(Node::new("%%EOF").span(span.sub(line.start, line.end.saturating_sub(line.start))))
-                .await;
+            cx.push(
+                Node::new("%%EOF").span(span.sub(line.start, line.end.saturating_sub(line.start))),
+            )
+            .await;
             continue;
         }
         if open.is_none() {
@@ -309,7 +329,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}: {}", preview(&t, 60));
     }
     if let Some(b) = bbox {
-        let n: Vec<f64> = b.split_whitespace().filter_map(|v| v.parse().ok()).collect();
+        let n: Vec<f64> = b
+            .split_whitespace()
+            .filter_map(|v| v.parse().ok())
+            .collect();
         if let [x0, y0, x1, y1] = n.as_slice() {
             summary = format!("{summary}, {}×{} pt", x1 - x0, y1 - y0);
         }
@@ -356,7 +379,11 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         }
         let mut node = text_node(name.clone(), value.span(), &value.text());
         if name.ends_with("BoundingBox") {
-            let n: Vec<f64> = value.text().split_whitespace().filter_map(|v| v.parse().ok()).collect();
+            let n: Vec<f64> = value
+                .text()
+                .split_whitespace()
+                .filter_map(|v| v.parse().ok())
+                .collect();
             if let [x0, y0, x1, y1] = n.as_slice() {
                 node = node.summary(format!("{}×{} pt at ({x0}, {y0})", x1 - x0, y1 - y0));
             }
@@ -364,7 +391,9 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         if name == "CreationDate"
             && let Some(t) = super::parse_datetime(value.text().trim_matches(['(', ')']))
         {
-            node = Node::new(name).span(value.span()).value(Value::Timestamp { unix_seconds: t });
+            node = Node::new(name)
+                .span(value.span())
+                .value(Value::Timestamp { unix_seconds: t });
         }
         cx.push(node).await;
     }

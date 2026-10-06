@@ -260,7 +260,8 @@ fn key_bits(kind: &[u8], blob: &[u8]) -> Option<u64> {
             let mut at = 0usize;
             let mut field = || {
                 let len = crate::bytes::to_usize(crate::bytes::u32_be(blob, at)?.into());
-                let data = blob.get(at.saturating_add(4)..at.saturating_add(4).saturating_add(len))?;
+                let data =
+                    blob.get(at.saturating_add(4)..at.saturating_add(4).saturating_add(len))?;
                 at = at.saturating_add(4).saturating_add(len);
                 Some(data)
             };
@@ -297,7 +298,9 @@ fn string_node(name: &'static str, data: &[u8], span: Span) -> Node {
     } else {
         Node::new(name)
             .span(span)
-            .value(Value::Bytes(data.get(..data.len().min(64)).unwrap_or_default().to_vec()))
+            .value(Value::Bytes(
+                data.get(..data.len().min(64)).unwrap_or_default().to_vec(),
+            ))
             .summary(format!("{} bytes", data.len()))
     }
 }
@@ -324,9 +327,11 @@ fn public_fields(base: &[u8]) -> &'static [(&'static str, bool)] {
         b"ssh-dss" => &[("p", true), ("q", true), ("g", true), ("y", true)],
         b"ssh-ed25519" | b"ssh-ed448" => &[("Public key", false)],
         b"sk-ssh-ed25519@openssh.com" => &[("Public key", false), ("Application", false)],
-        b"sk-ecdsa-sha2-nistp256@openssh.com" => {
-            &[("Curve", false), ("Public point (Q)", false), ("Application", false)]
-        }
+        b"sk-ecdsa-sha2-nistp256@openssh.com" => &[
+            ("Curve", false),
+            ("Public point (Q)", false),
+            ("Application", false),
+        ],
         _ if base.starts_with(b"ecdsa-sha2-") => &[("Curve", false), ("Public point (Q)", false)],
         _ => &[],
     }
@@ -374,22 +379,30 @@ pub async fn dissect_blob(cx: Cx, input: Input) -> Result<()> {
 async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> {
     let start = cur.pos();
     let serial = cur.u64().await?;
-    cx.emit(Node::new("Serial").span(cur.since(start)).value(Value::UInt {
-        value: serial,
-        bits: 64,
-        radix: Radix::Dec,
-    }));
+    cx.emit(
+        Node::new("Serial")
+            .span(cur.since(start))
+            .value(Value::UInt {
+                value: serial,
+                bits: 64,
+                radix: Radix::Dec,
+            }),
+    );
     let start = cur.pos();
     let kind = cur.u32().await?;
-    cx.emit(Node::new("Certificate type").span(cur.since(start)).value(Value::Enum {
-        raw: kind.into(),
-        bits: 32,
-        name: match kind {
-            1 => Some("user"),
-            2 => Some("host"),
-            _ => None,
-        },
-    }));
+    cx.emit(
+        Node::new("Certificate type")
+            .span(cur.since(start))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 32,
+                name: match kind {
+                    1 => Some("user"),
+                    2 => Some("host"),
+                    _ => None,
+                },
+            }),
+    );
     let (id, span) = string(cur).await?;
     cx.emit(string_node("Key ID", &id, span));
     let (principals, span) = string(cur).await?;
@@ -450,18 +463,37 @@ fn ssh_strings(data: &[u8]) -> Vec<String> {
 /// `sshkey_private_serialize`.
 fn private_fields(base: &[u8]) -> &'static [&'static str] {
     match base {
-        b"ssh-rsa" => &["Modulus (n)", "Public exponent (e)", "Private exponent (d)", "iqmp", "p", "q"],
+        b"ssh-rsa" => &[
+            "Modulus (n)",
+            "Public exponent (e)",
+            "Private exponent (d)",
+            "iqmp",
+            "p",
+            "q",
+        ],
         b"ssh-dss" => &["p", "q", "g", "y", "x"],
         b"ssh-ed25519" => &["Public key", "Private key"],
-        b"sk-ssh-ed25519@openssh.com" => &["Public key", "Application", "Flags", "Key handle", "Reserved"],
-        _ if base.starts_with(b"ecdsa-sha2-") => &["Curve", "Public point (Q)", "Private scalar (d)"],
+        b"sk-ssh-ed25519@openssh.com" => &[
+            "Public key",
+            "Application",
+            "Flags",
+            "Key handle",
+            "Reserved",
+        ],
+        _ if base.starts_with(b"ecdsa-sha2-") => {
+            &["Curve", "Public point (Q)", "Private scalar (d)"]
+        }
         _ => &[],
     }
 }
 
 pub async fn dissect_private(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, input.span, BE);
-    cx.emit(Node::new("Magic").span(cur.span(15)).value(Value::Text("openssh-key-v1".to_owned())));
+    cx.emit(
+        Node::new("Magic")
+            .span(cur.span(15))
+            .value(Value::Text("openssh-key-v1".to_owned())),
+    );
     cur.skip(15);
     let (cipher, span) = string(&mut cur).await?;
     cx.emit(string_node("Cipher", &cipher, span));
@@ -471,7 +503,10 @@ pub async fn dissect_private(cx: Cx, input: Input) -> Result<()> {
     let mut node = Node::new("KDF options").span(span);
     if kdf == b"bcrypt" && options.len() >= 8 {
         let salt_len = crate::bytes::u32_be(&options, 0).unwrap_or(0);
-        let rounds = crate::bytes::u32_be(&options, 4usize.saturating_add(crate::bytes::to_usize(salt_len.into())));
+        let rounds = crate::bytes::u32_be(
+            &options,
+            4usize.saturating_add(crate::bytes::to_usize(salt_len.into())),
+        );
         if let Some(r) = rounds {
             node = node.summary(format!("{salt_len}-byte salt, {r} rounds"));
         }
@@ -479,11 +514,15 @@ pub async fn dissect_private(cx: Cx, input: Input) -> Result<()> {
     cx.emit(node);
     let start = cur.pos();
     let count = cur.u32().await?;
-    cx.emit(Node::new("Number of keys").span(cur.since(start)).value(Value::UInt {
-        value: count.into(),
-        bits: 32,
-        radix: Radix::Dec,
-    }));
+    cx.emit(
+        Node::new("Number of keys")
+            .span(cur.since(start))
+            .value(Value::UInt {
+                value: count.into(),
+                bits: 32,
+                radix: Radix::Dec,
+            }),
+    );
     let encrypted = cipher != b"none";
     let mut summary = String::from("OpenSSH private key");
     for i in 0..count.min(64) {
@@ -499,10 +538,17 @@ pub async fn dissect_private(cx: Cx, input: Input) -> Result<()> {
                 summary = format!("{summary} {bits}-bit");
             }
         }
-        cx.emit(embedded_as(format!("Public key {}", i.saturating_add(1)), input.nested(key), &BLOB));
+        cx.emit(embedded_as(
+            format!("Public key {}", i.saturating_add(1)),
+            input.nested(key),
+            &BLOB,
+        ));
     }
     if encrypted {
-        summary = format!("{summary}, encrypted ({})", String::from_utf8_lossy(&cipher));
+        summary = format!(
+            "{summary}, encrypted ({})",
+            String::from_utf8_lossy(&cipher)
+        );
     }
     cx.annotate(summary);
     let (_, span) = string(&mut cur).await?;
@@ -567,9 +613,17 @@ async fn private_key(cx: Cx, span: Span) -> Result<()> {
     for &name in private_fields(&kind) {
         let (data, s) = string(&mut cur).await?;
         // Secrets are shown by size only.
-        cx.emit(Node::new(name).span(s).summary(format!("{} bytes", data.len())));
+        cx.emit(
+            Node::new(name)
+                .span(s)
+                .summary(format!("{} bytes", data.len())),
+        );
     }
     let (comment, s) = string(&mut cur).await?;
-    cx.emit(text_node("Comment", s, &preview(&String::from_utf8_lossy(&comment), 200)));
+    cx.emit(text_node(
+        "Comment",
+        s,
+        &preview(&String::from_utf8_lossy(&comment), 200),
+    ));
     Ok(())
 }

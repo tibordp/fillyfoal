@@ -49,10 +49,18 @@ fn probe_safetensors(h: &Head<'_>) -> bool {
 /// Bytes per element of a NumPy type string such as `<f8` or `|u1`.
 fn npy_itemsize(descr: &str) -> Option<u64> {
     let kind = descr.trim_start_matches(['<', '>', '|', '=']);
-    let digits: String = kind.chars().skip(1).take_while(char::is_ascii_digit).collect();
+    let digits: String = kind
+        .chars()
+        .skip(1)
+        .take_while(char::is_ascii_digit)
+        .collect();
     let n: u64 = digits.parse().ok()?;
     // Unicode strings (`U`) count characters of 4 bytes.
-    Some(if kind.starts_with('U') { n.saturating_mul(4) } else { n })
+    Some(if kind.starts_with('U') {
+        n.saturating_mul(4)
+    } else {
+        n
+    })
 }
 
 /// The quoted value after `'key':` in a Python dict literal.
@@ -68,7 +76,12 @@ fn npy_descr(text: &str) -> Option<String> {
     let quote = rest.chars().next()?;
     if quote != '\'' && quote != '"' {
         // Structured dtype (a list); keep it whole.
-        return Some(rest.split("'fortran_order'").next()?.trim_end_matches([' ', ',']).to_owned());
+        return Some(
+            rest.split("'fortran_order'")
+                .next()?
+                .trim_end_matches([' ', ','])
+                .to_owned(),
+        );
     }
     rest.get(1..)?.split(quote).next().map(str::to_owned)
 }
@@ -112,7 +125,11 @@ pub async fn npy(cx: Cx, input: Input) -> Result<()> {
     let descr = npy_descr(&text);
     let shape = npy_shape(&text);
     let fortran = dict_entry(&text, "fortran_order").is_some_and(|v| v.starts_with("True"));
-    cx.emit(Node::new("Header").span(header_span).value(Value::Text(text.clone())));
+    cx.emit(
+        Node::new("Header")
+            .span(header_span)
+            .value(Value::Text(text.clone())),
+    );
     if let Some(d) = &descr {
         cx.emit(Node::new("dtype").value(Value::Text(d.clone())));
     }
@@ -127,7 +144,10 @@ pub async fn npy(cx: Cx, input: Input) -> Result<()> {
         let dims: Vec<String> = shape.iter().map(u64::to_string).collect();
         let shape_text = format!("({})", dims.join(", "));
         cx.emit(Node::new("Shape").value(Value::Text(shape_text.clone())));
-        summary = format!("{summary}, shape {shape_text}, {} order", if fortran { "Fortran" } else { "C" });
+        summary = format!(
+            "{summary}, shape {shape_text}, {} order",
+            if fortran { "Fortran" } else { "C" }
+        );
         let count = shape.iter().copied().fold(1u64, u64::saturating_mul);
         if let Some(item) = descr.as_deref().and_then(npy_itemsize) {
             let expected = count.saturating_mul(item);
@@ -194,9 +214,16 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
             }
             continue;
         }
-        let offsets = value.get("data_offsets").and_then(Json::as_array).unwrap_or_default();
+        let offsets = value
+            .get("data_offsets")
+            .and_then(Json::as_array)
+            .unwrap_or_default();
         tensors.push(Tensor {
-            dtype: value.get("dtype").and_then(Json::as_str).unwrap_or("?").to_owned(),
+            dtype: value
+                .get("dtype")
+                .and_then(Json::as_str)
+                .unwrap_or("?")
+                .to_owned(),
             shape: value
                 .get("shape")
                 .and_then(Json::as_array)
@@ -245,7 +272,8 @@ async fn json_members(cx: Cx, members: Vec<(String, Json)>) -> Result<()> {
             Json::Str(s) => s,
             other => other.render(),
         };
-        cx.push(Node::new(clip(&k, 120)).value(Value::Text(clip(&value, 4000)))).await;
+        cx.push(Node::new(clip(&k, 120)).value(Value::Text(clip(&value, 4000))))
+            .await;
     }
     Ok(())
 }

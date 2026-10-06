@@ -259,7 +259,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     cx.emit(
         Node::new("Allocation groups")
-            .summary(format!("{} × {}", sb.ag_count, size(geometry.ag_blocks.saturating_mul(block))))
+            .summary(format!(
+                "{} × {}",
+                sb.ag_count,
+                size(geometry.ag_blocks.saturating_mul(block))
+            ))
             .lazy(allocation_groups, (geometry, sb.ag_count)),
     );
     let root = geometry.inode(sb.root_ino);
@@ -270,7 +274,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .lazy(inode, root),
     );
     if sb.log_start != 0 {
-        let log = vol.sub(geometry.fsblock(sb.log_start), u64::from(sb.log_blocks).saturating_mul(block));
+        let log = vol.sub(
+            geometry.fsblock(sb.log_start),
+            u64::from(sb.log_blocks).saturating_mul(block),
+        );
         cx.emit(Node::new("Internal log").span(log).summary(size(log.len)));
     }
     Ok(())
@@ -348,7 +355,9 @@ async fn allocation_group(cx: Cx, (g, start): (Geometry, u64)) -> Result<()> {
         }
     }
     cx.emit(agf_node);
-    let agi = g.vol.sub(start.saturating_add(g.sect.saturating_mul(2)), Agi::SIZE);
+    let agi = g
+        .vol
+        .sub(start.saturating_add(g.sect.saturating_mul(2)), Agi::SIZE);
     let mut agi_node = Agi::node("AGI (inodes)", agi, BE);
     if let Ok(h) = parse(&cx, agi, BE, &(), Agi::layout).await {
         agi_node = agi_node.summary(format!("{} inodes, {} free", h.count, h.free_count));
@@ -357,7 +366,12 @@ async fn allocation_group(cx: Cx, (g, start): (Geometry, u64)) -> Result<()> {
         }
     }
     cx.emit(agi_node);
-    cx.emit(Node::new("AGFL (free list)").span(g.vol.sub(start.saturating_add(g.sect.saturating_mul(3)), g.sect)));
+    cx.emit(
+        Node::new("AGFL (free list)").span(
+            g.vol
+                .sub(start.saturating_add(g.sect.saturating_mul(3)), g.sect),
+        ),
+    );
     Ok(())
 }
 
@@ -381,9 +395,11 @@ async fn inode(cx: Cx, span: Span) -> Result<()> {
     };
     let fork = span.sub(fork_start, fork_len);
     cx.emit(
-        Node::new("Data fork")
-            .span(fork)
-            .value(Value::Text(crate::value::lookup(FORMATS, ino.format.into()).unwrap_or("unknown").to_owned())),
+        Node::new("Data fork").span(fork).value(Value::Text(
+            crate::value::lookup(FORMATS, ino.format.into())
+                .unwrap_or("unknown")
+                .to_owned(),
+        )),
     );
     Ok(())
 }

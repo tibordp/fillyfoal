@@ -121,7 +121,10 @@ fn header(f: &mut Fields<'_>, v: &(u8, u8)) -> Result<()> {
                 .desc("SipHash of the source file")
                 .emit()?;
         } else {
-            f.u32("mtime").timestamp().desc("Source modification time").emit()?;
+            f.u32("mtime")
+                .timestamp()
+                .desc("Source modification time")
+                .emit()?;
             f.u32("source_size").emit()?;
         }
         Ok(())
@@ -183,10 +186,19 @@ impl Unmarshal<'_> {
         }
     }
 
-    fn leaf(&mut self, parent: usize, label: &str, start: usize, value: Value, short: String) -> Obj {
+    fn leaf(
+        &mut self,
+        parent: usize,
+        label: &str,
+        start: usize,
+        value: Value,
+        short: String,
+    ) -> Obj {
         let node = self.tree.add(
             Some(parent),
-            Node::new(label.to_owned()).span(self.at(start)).value(value),
+            Node::new(label.to_owned())
+                .span(self.at(start))
+                .value(value),
         );
         Obj {
             node,
@@ -220,7 +232,14 @@ impl Unmarshal<'_> {
         Ok(obj)
     }
 
-    fn string(&mut self, parent: usize, label: &str, start: usize, len: u64, bytes: bool) -> Step<Obj> {
+    fn string(
+        &mut self,
+        parent: usize,
+        label: &str,
+        start: usize,
+        len: u64,
+        bytes: bool,
+    ) -> Step<Obj> {
         let data = self.bytes(len)?;
         if bytes {
             let preview = data.get(..64).unwrap_or(data).to_vec();
@@ -251,7 +270,15 @@ impl Unmarshal<'_> {
         }
     }
 
-    fn sequence(&mut self, parent: usize, label: &str, start: usize, n: u64, kind: &str, depth: u32) -> Step<Obj> {
+    fn sequence(
+        &mut self,
+        parent: usize,
+        label: &str,
+        start: usize,
+        n: u64,
+        kind: &str,
+        depth: u32,
+    ) -> Step<Obj> {
         let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
         let mut items = Vec::new();
         for i in 0..n {
@@ -274,22 +301,50 @@ impl Unmarshal<'_> {
         })
     }
 
-    fn body(&mut self, parent: usize, label: &str, depth: u32, start: usize, code: u8) -> Step<Obj> {
+    fn body(
+        &mut self,
+        parent: usize,
+        label: &str,
+        depth: u32,
+        start: usize,
+        code: u8,
+    ) -> Step<Obj> {
         let deeper = depth.saturating_add(1);
         match code {
             b'0' => Ok(self.leaf(parent, label, start, text("NULL"), "NULL".to_owned())),
             b'N' => Ok(self.leaf(parent, label, start, text("None"), "None".to_owned())),
             b'F' => Ok(self.leaf(parent, label, start, Value::Bool(false), "False".to_owned())),
             b'T' => Ok(self.leaf(parent, label, start, Value::Bool(true), "True".to_owned())),
-            b'S' => Ok(self.leaf(parent, label, start, text("StopIteration"), "StopIteration".to_owned())),
+            b'S' => Ok(self.leaf(
+                parent,
+                label,
+                start,
+                text("StopIteration"),
+                "StopIteration".to_owned(),
+            )),
             b'.' => Ok(self.leaf(parent, label, start, text("Ellipsis"), "...".to_owned())),
             b'i' => {
                 let v = self.i32()?;
-                Ok(self.leaf(parent, label, start, Value::Int { value: v.into(), bits: 32 }, v.to_string()))
+                Ok(self.leaf(
+                    parent,
+                    label,
+                    start,
+                    Value::Int {
+                        value: v.into(),
+                        bits: 32,
+                    },
+                    v.to_string(),
+                ))
             }
             b'I' => {
                 let v = self.r.int::<i64>(LE).ok_or_else(|| self.fail("integer"))?;
-                Ok(self.leaf(parent, label, start, Value::Int { value: v, bits: 64 }, v.to_string()))
+                Ok(self.leaf(
+                    parent,
+                    label,
+                    start,
+                    Value::Int { value: v, bits: 64 },
+                    v.to_string(),
+                ))
             }
             b'g' => {
                 let v = self.r.int::<f64>(LE).ok_or_else(|| self.fail("float"))?;
@@ -364,13 +419,8 @@ impl Unmarshal<'_> {
                     .cloned()
                     .unwrap_or_else(|| "?".to_owned());
                 let short = target.clone();
-                let mut obj = self.leaf(
-                    parent,
-                    label,
-                    start,
-                    text(format!("→ ref {index}")),
-                    short,
-                );
+                let mut obj =
+                    self.leaf(parent, label, start, text(format!("→ ref {index}")), short);
                 self.tree.update(obj.node, |n| n.summary(target.clone()));
                 if target.starts_with('"') {
                     obj.text = Some(target.trim_matches('"').to_owned());
@@ -418,7 +468,8 @@ impl Unmarshal<'_> {
                     self.object(node, part, deeper)?;
                 }
                 let span = self.at(start);
-                self.tree.update(node, |x| x.span(span).value(text("slice")));
+                self.tree
+                    .update(node, |x| x.span(span).value(text("slice")));
                 Ok(Obj {
                     node,
                     short: "slice".to_owned(),
@@ -426,11 +477,10 @@ impl Unmarshal<'_> {
                 })
             }
             b'c' => self.code(parent, label, start, depth),
-            other => Err(Diagnostic::unsupported(format!(
-                "marshal type {:?}",
-                char::from(other)
-            ))
-            .at(self.span.sub(to_u64(start), 1))),
+            other => Err(
+                Diagnostic::unsupported(format!("marshal type {:?}", char::from(other)))
+                    .at(self.span.sub(to_u64(start), 1)),
+            ),
         }
     }
 
@@ -494,7 +544,11 @@ impl Unmarshal<'_> {
         let line = self.int_field(node, "co_firstlineno")?;
         self.object(
             node,
-            if v >= (3, 10) { "co_linetable" } else { "co_lnotab" },
+            if v >= (3, 10) {
+                "co_linetable"
+            } else {
+                "co_lnotab"
+            },
             deeper,
         )?;
         if v >= (3, 11) {
@@ -503,7 +557,10 @@ impl Unmarshal<'_> {
         let name = name.text.unwrap_or_else(|| name.short.clone());
         let filename = filename.text.unwrap_or_else(|| filename.short.clone());
         let span = self.at(start);
-        let summary = format!("{filename}:{line}, code {}, consts {}", code.short, consts.short);
+        let summary = format!(
+            "{filename}:{line}, code {}, consts {}",
+            code.short, consts.short
+        );
         self.tree.update(node, |x| {
             x.span(span)
                 .value(text(format!("code object {name}")))
@@ -543,7 +600,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         refs: Vec::new(),
     };
     let root = u.tree.add(None, Node::new("root"));
-    u.tree.add(Some(root), struct_node("Header", hspan, LE, v, header));
+    u.tree
+        .add(Some(root), struct_node("Header", hspan, LE, v, header));
     let mut summary = format!("Python {}.{} byte-compiled", v.0, v.1);
     if v >= (3, 7) && u32_le(&head, 4).is_some_and(|f| f & 1 != 0) {
         summary.push_str(" (hash-based)");
@@ -560,7 +618,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
         Err(e) => {
-            u.tree.add(Some(root), Node::new("Undecoded").span(body).diag(e));
+            u.tree
+                .add(Some(root), Node::new("Undecoded").span(body).diag(e));
         }
     }
     cx.annotate(summary);

@@ -19,7 +19,11 @@ pub static FORMAT: Format = Format {
     title: "GGUF model",
     extensions: &["gguf"],
     mime: "application/octet-stream",
-    probe: Probe::Magic(&[(0, b"GGUF\x01\x00\x00\x00"), (0, b"GGUF\x02\x00\x00\x00"), (0, b"GGUF\x03\x00\x00\x00")]),
+    probe: Probe::Magic(&[
+        (0, b"GGUF\x01\x00\x00\x00"),
+        (0, b"GGUF\x02\x00\x00\x00"),
+        (0, b"GGUF\x03\x00\x00\x00"),
+    ]),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -95,11 +99,16 @@ impl Gguf {
 async fn string(r: &mut ByteReader<'_>, g: &Gguf, at: u64) -> Result<(String, u64)> {
     let len = r.le(at, g.len_size()).await?;
     if len > MAX_STRING {
-        return Err(Diagnostic::limit(format!("string of {len} bytes")).at(r.span(at, g.len_size())));
+        return Err(
+            Diagnostic::limit(format!("string of {len} bytes")).at(r.span(at, g.len_size()))
+        );
     }
     let body = at.saturating_add(g.len_size());
     let bytes = r.bytes(body, len).await?;
-    Ok((String::from_utf8_lossy(&bytes).into_owned(), body.saturating_add(len)))
+    Ok((
+        String::from_utf8_lossy(&bytes).into_owned(),
+        body.saturating_add(len),
+    ))
 }
 
 fn scalar_size(kind: u32) -> Option<u64> {
@@ -120,8 +129,15 @@ fn scalar_value(kind: u32, bytes: &[u8]) -> Value {
         ((raw << shift) as i64) >> shift
     };
     match kind {
-        0 | 2 | 4 | 10 => Value::UInt { value: raw, bits, radix: crate::value::Radix::Dec },
-        1 | 3 | 5 | 11 => Value::Int { value: signed(raw, bits), bits },
+        0 | 2 | 4 | 10 => Value::UInt {
+            value: raw,
+            bits,
+            radix: crate::value::Radix::Dec,
+        },
+        1 | 3 | 5 | 11 => Value::Int {
+            value: signed(raw, bits),
+            bits,
+        },
         6 => Value::Float(f64::from(f32::from_bits(raw as u32))),
         12 => Value::Float(f64::from_bits(raw)),
         7 => Value::Bool(raw != 0),
@@ -139,7 +155,11 @@ async fn value(
 ) -> Result<(Option<Value>, String, u64)> {
     if let Some(n) = scalar_size(kind) {
         let bytes = r.bytes(at, n).await?;
-        return Ok((Some(scalar_value(kind, &bytes)), String::new(), at.saturating_add(n)));
+        return Ok((
+            Some(scalar_value(kind, &bytes)),
+            String::new(),
+            at.saturating_add(n),
+        ));
     }
     match kind {
         8 => {
@@ -165,7 +185,9 @@ async fn value(
                     }
                 }
             } else {
-                return Err(Diagnostic::unsupported(format!("array of {elem_name}")).at(r.span(at, 4)));
+                return Err(
+                    Diagnostic::unsupported(format!("array of {elem_name}")).at(r.span(at, 4))
+                );
             }
             Ok((None, format!("array of {count} {elem_name}"), pos))
         }
@@ -197,7 +219,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let len = if wide { 8 } else { 4 };
     let tensors = r.le(8, len).await?;
     let kvs = r.le(8u64.saturating_add(len), len).await?;
-    let g = Gguf { file, wide, tensors, kvs };
+    let g = Gguf {
+        file,
+        wide,
+        tensors,
+        kvs,
+    };
     let hspan = file.sub(0, header_size(&g));
     let block = cx.block(hspan).await?;
     {
@@ -211,11 +238,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut pos = header_size(&g);
     let mut found = Vec::new();
     for _ in 0..kvs.min(32) {
-        let Ok((key, after)) = string(&mut r, &g, pos).await else { break };
-        let Ok(kind) = r.le(after, 4).await else { break };
-        let Ok((v, _, end)) = value(&mut r, &g, u32::try_from(kind).unwrap_or(u32::MAX), after.saturating_add(4)).await else { break };
-        if matches!(key.as_str(), "general.architecture" | "general.name" | "general.size_label")
-            && let Some(Value::Text(t)) = v
+        let Ok((key, after)) = string(&mut r, &g, pos).await else {
+            break;
+        };
+        let Ok(kind) = r.le(after, 4).await else {
+            break;
+        };
+        let Ok((v, _, end)) = value(
+            &mut r,
+            &g,
+            u32::try_from(kind).unwrap_or(u32::MAX),
+            after.saturating_add(4),
+        )
+        .await
+        else {
+            break;
+        };
+        if matches!(
+            key.as_str(),
+            "general.architecture" | "general.name" | "general.size_label"
+        ) && let Some(Value::Text(t)) = v
         {
             found.push(t);
         }
@@ -253,7 +295,11 @@ async fn metadata(cx: Cx, g: Gguf) -> Result<()> {
             node = node.value(v);
         }
         let type_name = lookup(VALUE_TYPES, kind.into()).unwrap_or("?");
-        node = node.summary(if summary.is_empty() { type_name.to_owned() } else { summary });
+        node = node.summary(if summary.is_empty() {
+            type_name.to_owned()
+        } else {
+            summary
+        });
         if kind == 9 {
             node = node.lazy(array, (g, after.saturating_add(4)));
         }
@@ -295,9 +341,14 @@ async fn tensor_infos(cx: Cx, g: Gguf) -> Result<()> {
         let (_, after) = string(&mut r, &g, pos).await?;
         let dims = u64::from(u32::try_from(r.le(after, 4).await?).unwrap_or(u32::MAX));
         if dims > MAX_DIMS {
-            return Err(Diagnostic::malformed(format!("{dims} dimensions")).at(g.file.sub(after, 4)));
+            return Err(
+                Diagnostic::malformed(format!("{dims} dimensions")).at(g.file.sub(after, 4))
+            );
         }
-        pos = after.saturating_add(4).saturating_add(dims.saturating_mul(g.len_size())).saturating_add(4 + 8);
+        pos = after
+            .saturating_add(4)
+            .saturating_add(dims.saturating_mul(g.len_size()))
+            .saturating_add(4 + 8);
         cx.checkpoint().await;
     }
     let data_start = pos.checked_next_multiple_of(alignment).unwrap_or(u64::MAX);
@@ -322,12 +373,20 @@ async fn tensor_infos(cx: Cx, g: Gguf) -> Result<()> {
         let offset = r.le(at.saturating_add(4), 8).await?;
         let end = at.saturating_add(12);
         let dims_text: Vec<String> = shape.iter().map(u64::to_string).collect();
-        let type_name = lookup(TENSOR_TYPES, kind).map_or_else(|| format!("type {kind}"), str::to_owned);
+        let type_name =
+            lookup(TENSOR_TYPES, kind).map_or_else(|| format!("type {kind}"), str::to_owned);
         cx.push(
             Node::new(clip(&name, 160))
                 .span(g.file.sub(pos, end.saturating_sub(pos)))
-                .value(Value::Enum { raw: kind, bits: 32, name: lookup(TENSOR_TYPES, kind) })
-                .summary(format!("[{}] {type_name}, at data+{offset:#x}", dims_text.join(", ")))
+                .value(Value::Enum {
+                    raw: kind,
+                    bits: 32,
+                    name: lookup(TENSOR_TYPES, kind),
+                })
+                .summary(format!(
+                    "[{}] {type_name}, at data+{offset:#x}",
+                    dims_text.join(", ")
+                ))
                 .target(data.sub(offset, 1)),
         )
         .await;

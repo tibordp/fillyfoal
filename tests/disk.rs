@@ -16,7 +16,11 @@ use fillyfoal::formats::{Input, disk, embedded_as};
 use fillyfoal::{Limits, Span};
 
 fn btrfs_image() -> Vec<u8> {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/btrfs.img.gz")).unwrap();
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/btrfs.img.gz"
+    ))
+    .unwrap();
     fillyfoal::codec::inflate::inflate(&data[10..], 1 << 20).unwrap()
 }
 
@@ -31,9 +35,11 @@ fn btrfs_host(data: Vec<u8>, chunk_size: u64) -> Host {
         },
     );
     let span = Span::new(fillyfoal::SourceId::default_host(), 0, len);
-    host.root = host
-        .session
-        .add_root(embedded_as("btrfs.img", Input::root(span), &disk::btrfs::FORMAT));
+    host.root = host.session.add_root(embedded_as(
+        "btrfs.img",
+        Input::root(span),
+        &disk::btrfs::FORMAT,
+    ));
     host
 }
 

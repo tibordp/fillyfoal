@@ -30,7 +30,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     loop {
         let rest = head.get(pos..).unwrap_or_default();
         let Some(len) = rest.iter().position(|&b| b == b'\n') else {
-            return Err(Diagnostic::malformed("header does not end").at(file.sub(0, to_u64(head.len()))));
+            return Err(
+                Diagnostic::malformed("header does not end").at(file.sub(0, to_u64(head.len())))
+            );
         };
         let line = crate::text::latin1(rest.get(..len).unwrap_or_default());
         let span = file.sub(to_u64(pos), to_u64(len));

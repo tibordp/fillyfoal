@@ -77,7 +77,11 @@ async fn head(r: &mut ByteReader<'_>, at: u64) -> Result<Head> {
         0..=23 => (u64::from(info), 1, false),
         24..=27 => {
             let size = 1u64 << (info.saturating_sub(24));
-            (r.be(at.saturating_add(1), size).await?, size.saturating_add(1), false)
+            (
+                r.be(at.saturating_add(1), size).await?,
+                size.saturating_add(1),
+                false,
+            )
         }
         31 if matches!(major, 2..=5 | 7) => (0, 1, true),
         _ => {
@@ -140,10 +144,10 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64) -> Result<u64> {
         };
         if nested > 0 {
             if stack.len() >= MAX_DEPTH {
-                return Err(Diagnostic::limit(format!(
-                    "items nested deeper than {MAX_DEPTH}"
-                ))
-                .at(r.span(pos, 1)));
+                return Err(
+                    Diagnostic::limit(format!("items nested deeper than {MAX_DEPTH}"))
+                        .at(r.span(pos, 1)),
+                );
             }
             stack.push(nested);
         }

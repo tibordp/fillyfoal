@@ -48,12 +48,27 @@ record! {
 }
 
 const GDB_GEOMETRY: EnumTable = &[
-    (0, "none"), (1, "point"), (2, "multipoint"), (3, "polyline"), (4, "polygon"), (9, "multipatch"),
+    (0, "none"),
+    (1, "point"),
+    (2, "multipoint"),
+    (3, "polyline"),
+    (4, "polygon"),
+    (9, "multipatch"),
 ];
 
 const GDB_TYPES: EnumTable = &[
-    (0, "int16"), (1, "int32"), (2, "float32"), (3, "float64"), (4, "string"), (5, "datetime"),
-    (6, "objectid"), (7, "geometry"), (8, "binary"), (9, "raster"), (10, "GUID"), (11, "GlobalID"),
+    (0, "int16"),
+    (1, "int32"),
+    (2, "float32"),
+    (3, "float64"),
+    (4, "string"),
+    (5, "datetime"),
+    (6, "objectid"),
+    (7, "geometry"),
+    (8, "binary"),
+    (9, "raster"),
+    (10, "GUID"),
+    (11, "GlobalID"),
     (12, "XML"),
 ];
 
@@ -76,8 +91,18 @@ async fn gdbtable(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{count} fields, {geometry} geometry"))
             .lazy(gdb_fields, section),
     );
-    cx.emit(Node::new("Rows").span(file.tail(start.saturating_add(size).saturating_add(4))).summary(format!("{} rows (located through the .gdbtablx index)", h.rows)));
-    cx.annotate(format!("File Geodatabase table, {count} fields, {} rows, {geometry} geometry", h.rows));
+    cx.emit(
+        Node::new("Rows")
+            .span(file.tail(start.saturating_add(size).saturating_add(4)))
+            .summary(format!(
+                "{} rows (located through the .gdbtablx index)",
+                h.rows
+            )),
+    );
+    cx.annotate(format!(
+        "File Geodatabase table, {count} fields, {} rows, {geometry} geometry",
+        h.rows
+    ));
     Ok(())
 }
 
@@ -85,13 +110,22 @@ async fn gdb_fields(cx: Cx, section: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, section, LE);
     let at = cur.pos();
     cur.skip(4);
-    cx.emit(leaf("Section size", cur.since(at), uint(section.len.saturating_sub(4), 32)));
+    cx.emit(leaf(
+        "Section size",
+        cur.since(at),
+        uint(section.len.saturating_sub(4), 32),
+    ));
     let at = cur.pos();
     let version = cur.u32().await?;
     cx.emit(leaf("Version", cur.since(at), uint(version.into(), 32)));
     let at = cur.pos();
     let flags = cur.u32().await?;
-    cx.emit(leaf("Layer flags", cur.since(at), hex(flags.into(), 32)).summary(crate::value::lookup(GDB_GEOMETRY, u64::from(flags & 0xff)).unwrap_or("unknown geometry")));
+    cx.emit(
+        leaf("Layer flags", cur.since(at), hex(flags.into(), 32)).summary(
+            crate::value::lookup(GDB_GEOMETRY, u64::from(flags & 0xff))
+                .unwrap_or("unknown geometry"),
+        ),
+    );
     let at = cur.pos();
     let count = cur.u16().await?;
     cx.emit(leaf("Field count", cur.since(at), uint(count.into(), 16)));
@@ -128,7 +162,9 @@ async fn gdb_fields(cx: Cx, section: Span) -> Result<()> {
             _ => {
                 // Geometry and raster fields carry spatial reference and
                 // extent data whose layout depends on many flags.
-                cx.emit(node.span(cur.since(start)).diag(Diagnostic::unsupported("field definition not decoded; later fields not shown")));
+                cx.emit(node.span(cur.since(start)).diag(Diagnostic::unsupported(
+                    "field definition not decoded; later fields not shown",
+                )));
                 return Ok(());
             }
         }
@@ -139,7 +175,11 @@ async fn gdb_fields(cx: Cx, section: Span) -> Result<()> {
 }
 
 fn nullable(flag: u8) -> &'static str {
-    if flag & 1 != 0 { "nullable" } else { "not null" }
+    if flag & 1 != 0 {
+        "nullable"
+    } else {
+        "not null"
+    }
 }
 
 /// A string as a character count (u8) and UTF-16LE characters.
@@ -171,7 +211,10 @@ declare_format!(pub ISO8211 = "iso8211", "ISO 8211 data (S-57 chart, SDTS)", ["0
     Probe::Custom(iso8211_probe), iso8211);
 
 fn num(b: &[u8]) -> u64 {
-    std::str::from_utf8(b).ok().and_then(|s| s.trim().parse().ok()).unwrap_or(0)
+    std::str::from_utf8(b)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .unwrap_or(0)
 }
 
 /// A record's leader and directory.
@@ -198,12 +241,22 @@ async fn read_leader(cx: &Cx, rec: Span) -> Result<Leader> {
     let dir = cx.read(rec.sub_exact(24, base.saturating_sub(24))?).await?;
     let mut entries = Vec::new();
     for e in dir.chunks_exact(to_usize(entry)) {
-        let tag = String::from_utf8_lossy(e.get(..to_usize(size_tag)).unwrap_or_default()).into_owned();
-        let flen = num(e.get(to_usize(size_tag)..to_usize(size_tag.saturating_add(size_len))).unwrap_or_default());
-        let fpos = num(e.get(to_usize(size_tag.saturating_add(size_len))..).unwrap_or_default());
+        let tag =
+            String::from_utf8_lossy(e.get(..to_usize(size_tag)).unwrap_or_default()).into_owned();
+        let flen = num(e
+            .get(to_usize(size_tag)..to_usize(size_tag.saturating_add(size_len)))
+            .unwrap_or_default());
+        let fpos = num(e
+            .get(to_usize(size_tag.saturating_add(size_len))..)
+            .unwrap_or_default());
         entries.push((tag, flen, fpos));
     }
-    Ok(Leader { len, kind, base, entries })
+    Ok(Leader {
+        len,
+        kind,
+        base,
+        entries,
+    })
 }
 
 /// Field definitions from the DDR: tag → (name, subfield labels, formats).
@@ -219,39 +272,79 @@ async fn iso8211(cx: Cx, input: Input) -> Result<()> {
         let leader = read_leader(&cx, rec).await?;
         let span = file.sub(pos, leader.len);
         if span.len < leader.len {
-            return Err(Diagnostic::truncated(Span::new(span.source, span.offset, leader.len), span.len));
+            return Err(Diagnostic::truncated(
+                Span::new(span.source, span.offset, leader.len),
+                span.len,
+            ));
         }
         if leader.kind == b'L' {
             let mut defs = Vec::new();
             for (tag, flen, fpos) in &leader.entries {
-                let f = cx.read(span.sub(leader.base.saturating_add(*fpos), *flen)).await?;
+                let f = cx
+                    .read(span.sub(leader.base.saturating_add(*fpos), *flen))
+                    .await?;
                 let parts: Vec<&[u8]> = f.split(|&b| b == 0x1f || b == 0x1e).collect();
                 let first = parts.first().copied().unwrap_or_default();
-                let name = String::from_utf8_lossy(first.get(9.min(first.len())..).unwrap_or_default()).into_owned();
-                let labels = String::from_utf8_lossy(parts.get(1).copied().unwrap_or_default()).into_owned();
-                let formats = String::from_utf8_lossy(parts.get(2).copied().unwrap_or_default()).into_owned();
+                let name =
+                    String::from_utf8_lossy(first.get(9.min(first.len())..).unwrap_or_default())
+                        .into_owned();
+                let labels =
+                    String::from_utf8_lossy(parts.get(1).copied().unwrap_or_default()).into_owned();
+                let formats =
+                    String::from_utf8_lossy(parts.get(2).copied().unwrap_or_default()).into_owned();
                 defs.push((tag.clone(), name, labels, formats));
             }
             let summary = format!("{} field definitions", defs.len());
             ddr = Arc::new(defs);
-            cx.push(Node::new("Data descriptive record").span(span).summary(summary).lazy(ddr_record, (span, ddr.clone()))).await;
+            cx.push(
+                Node::new("Data descriptive record")
+                    .span(span)
+                    .summary(summary)
+                    .lazy(ddr_record, (span, ddr.clone())),
+            )
+            .await;
         } else {
-            let tags: Vec<&str> = leader.entries.iter().map(|e| e.0.as_str()).filter(|t| *t != "0001").collect();
+            let tags: Vec<&str> = leader
+                .entries
+                .iter()
+                .map(|e| e.0.as_str())
+                .filter(|t| *t != "0001")
+                .collect();
             let summary = tags.join(", ");
-            cx.push(Node::new(format!("Record {n}")).span(span).summary(summary).lazy(data_record, (span, ddr.clone()))).await;
+            cx.push(
+                Node::new(format!("Record {n}"))
+                    .span(span)
+                    .summary(summary)
+                    .lazy(data_record, (span, ddr.clone())),
+            )
+            .await;
             n = n.saturating_add(1);
         }
         pos = pos.saturating_add(leader.len);
     }
     let s57 = ddr.iter().any(|d| d.0 == "DSID");
-    cx.annotate(format!("ISO 8211{}, {} field definitions, {n} data records", if s57 { " (S-57 chart)" } else { "" }, ddr.len()));
+    cx.annotate(format!(
+        "ISO 8211{}, {} field definitions, {n} data records",
+        if s57 { " (S-57 chart)" } else { "" },
+        ddr.len()
+    ));
     Ok(())
 }
 
 async fn ddr_record(cx: Cx, (span, ddr): (Span, Ddr)) -> Result<()> {
     let leader = read_leader(&cx, span).await?;
-    cx.emit(Node::new("Leader").span(span.sub(0, 24)).value(text(String::from_utf8_lossy(&cx.read(span.sub(0, 24)).await?))));
-    cx.emit(Node::new("Directory").span(span.sub(24, leader.base.saturating_sub(24))).summary(format!("{} entries", leader.entries.len())));
+    cx.emit(
+        Node::new("Leader")
+            .span(span.sub(0, 24))
+            .value(text(String::from_utf8_lossy(
+                &cx.read(span.sub(0, 24)).await?,
+            ))),
+    );
+    cx.emit(
+        Node::new("Directory")
+            .span(span.sub(24, leader.base.saturating_sub(24)))
+            .summary(format!("{} entries", leader.entries.len())),
+    );
     for (tag, flen, fpos) in &leader.entries {
         let fspan = span.sub(leader.base.saturating_add(*fpos), *flen);
         let mut node = Node::new(tag.clone()).span(fspan);
@@ -290,11 +383,18 @@ fn parse_formats(f: &str) -> Vec<(char, Option<usize>)> {
             // b1n / b2n: unsigned / signed binary of n bytes.
             tail.get(1..).and_then(|w| w.parse().ok())
         } else if kind == 'B' {
-            tail.trim_matches(|c| c == '(' || c == ')').parse::<usize>().ok().map(|bits| bits / 8)
+            tail.trim_matches(|c| c == '(' || c == ')')
+                .parse::<usize>()
+                .ok()
+                .map(|bits| bits / 8)
         } else {
             tail.trim_matches(|c| c == '(' || c == ')').parse().ok()
         };
-        let kind = if kind == 'b' && tail.starts_with('2') { 's' } else { kind };
+        let kind = if kind == 'b' && tail.starts_with('2') {
+            's'
+        } else {
+            kind
+        };
         for _ in 0..repeat {
             out.push((kind, width));
         }
@@ -315,7 +415,11 @@ fn subfield_value(kind: char, b: &[u8]) -> Value {
             let bits = u8::try_from(b.len().saturating_mul(8)).unwrap_or(64);
             if kind == 's' && bits > 0 {
                 let shift = 64u32.saturating_sub(u32::from(bits));
-                let v = raw.cast_signed().checked_shl(shift).and_then(|v| v.checked_shr(shift)).unwrap_or(0);
+                let v = raw
+                    .cast_signed()
+                    .checked_shl(shift)
+                    .and_then(|v| v.checked_shr(shift))
+                    .unwrap_or(0);
                 int(v, bits)
             } else {
                 uint(raw, bits)
@@ -324,7 +428,9 @@ fn subfield_value(kind: char, b: &[u8]) -> Value {
         'B' | 'b' | 's' => Value::Bytes(b.to_vec()),
         _ => {
             let s = String::from_utf8_lossy(b).into_owned();
-            crate::formats::text::number(&s).filter(|_| matches!(kind, 'I' | 'R' | 'S')).unwrap_or(Value::Text(s))
+            crate::formats::text::number(&s)
+                .filter(|_| matches!(kind, 'I' | 'R' | 'S'))
+                .unwrap_or(Value::Text(s))
         }
     }
 }
@@ -343,7 +449,10 @@ async fn data_record(cx: Cx, (span, ddr): (Span, Ddr)) -> Result<()> {
     Ok(())
 }
 
-async fn field(cx: Cx, (fspan, def): (Span, Option<(String, String, String, String)>)) -> Result<()> {
+async fn field(
+    cx: Cx,
+    (fspan, def): (Span, Option<(String, String, String, String)>),
+) -> Result<()> {
     let data = cx.read(fspan).await?;
     let Some((_, _, labels, formats)) = def else {
         cx.emit(leaf("Data", fspan, Value::Bytes(data)));
@@ -362,21 +471,38 @@ async fn field(cx: Cx, (fspan, def): (Span, Option<(String, String, String, Stri
     let mut at = 0usize;
     let mut group = 0u32;
     // The field terminator ends the data.
-    let end = data.len().saturating_sub(usize::from(data.last() == Some(&0x1e)));
+    let end = data
+        .len()
+        .saturating_sub(usize::from(data.last() == Some(&0x1e)));
     while at < end {
         for (i, label) in labels.iter().enumerate() {
-            let (kind, width) = formats.get(i).or_else(|| formats.last()).copied().unwrap_or(('A', None));
+            let (kind, width) = formats
+                .get(i)
+                .or_else(|| formats.last())
+                .copied()
+                .unwrap_or(('A', None));
             let start = at;
             let (value_end, next) = match width {
                 Some(w) => (at.saturating_add(w).min(end), at.saturating_add(w)),
                 None => {
-                    let stop = data.get(at..end).and_then(|d| d.iter().position(|&b| b == 0x1f)).map_or(end, |p| at.saturating_add(p));
+                    let stop = data
+                        .get(at..end)
+                        .and_then(|d| d.iter().position(|&b| b == 0x1f))
+                        .map_or(end, |p| at.saturating_add(p));
                     (stop, stop.saturating_add(1))
                 }
             };
             let bytes = data.get(start..value_end).unwrap_or_default();
-            let name = if repeating { format!("{label} [{group}]") } else { (*label).to_owned() };
-            cx.emit(leaf(name, fspan.sub(to_u64(start), to_u64(value_end.saturating_sub(start))), subfield_value(kind, bytes)));
+            let name = if repeating {
+                format!("{label} [{group}]")
+            } else {
+                (*label).to_owned()
+            };
+            cx.emit(leaf(
+                name,
+                fspan.sub(to_u64(start), to_u64(value_end.saturating_sub(start))),
+                subfield_value(kind, bytes),
+            ));
             at = next.max(start.saturating_add(1));
             if at >= end {
                 break;
@@ -415,13 +541,21 @@ fn ntv2_value(label: &str, v: &[u8], endian: Endian) -> Value {
     .map_or(0.0, f64::from_bits);
     match label {
         "NUM_OREC" | "NUM_SREC" | "NUM_FILE" | "GS_COUNT" => uint(i.into(), 32),
-        "MAJOR_F" | "MINOR_F" | "MAJOR_T" | "MINOR_T" | "S_LAT" | "N_LAT" | "E_LONG" | "W_LONG" | "LAT_INC" | "LONG_INC" => Value::Float(d),
+        "MAJOR_F" | "MINOR_F" | "MAJOR_T" | "MINOR_T" | "S_LAT" | "N_LAT" | "E_LONG" | "W_LONG"
+        | "LAT_INC" | "LONG_INC" => Value::Float(d),
         _ => text(fixed(v)),
     }
 }
 
-async fn ntv2_records(cx: &Cx, region: Span, count: u64, endian: Endian) -> Result<Vec<(String, Value, Span)>> {
-    let data = cx.read(region.sub_exact(0, count.saturating_mul(16))?).await?;
+async fn ntv2_records(
+    cx: &Cx,
+    region: Span,
+    count: u64,
+    endian: Endian,
+) -> Result<Vec<(String, Value, Span)>> {
+    let data = cx
+        .read(region.sub_exact(0, count.saturating_mul(16))?)
+        .await?;
     Ok(data
         .as_chunks::<16>()
         .0
@@ -460,7 +594,11 @@ fn get_float(records: &[(String, Value, Span)], label: &str) -> f64 {
 async fn ntv2(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 16)).await?;
-    let endian = if u32_le(&head, 8) == Some(11) { LE } else { Endian::Big };
+    let endian = if u32_le(&head, 8) == Some(11) {
+        LE
+    } else {
+        Endian::Big
+    };
     let orec = match endian {
         Endian::Little => u32_le(&head, 8),
         Endian::Big => u32_be(&head, 8),
@@ -471,29 +609,71 @@ async fn ntv2(cx: Cx, input: Input) -> Result<()> {
     let srec = get_uint(&overview, "NUM_SREC").min(64);
     let files = get_uint(&overview, "NUM_FILE");
     let ospan = file.sub(0, u64::from(orec).saturating_mul(16));
-    let from = overview.iter().find(|r| r.0 == "SYSTEM_F").map(|r| crate::render::value(&r.1)).unwrap_or_default();
-    let to = overview.iter().find(|r| r.0 == "SYSTEM_T").map(|r| crate::render::value(&r.1)).unwrap_or_default();
-    cx.emit(Node::new("Overview header").span(ospan).lazy(super::emit_nodes, overview.into_iter().map(|(l, v, s)| leaf(l, s, v)).collect::<Vec<_>>()));
+    let from = overview
+        .iter()
+        .find(|r| r.0 == "SYSTEM_F")
+        .map(|r| crate::render::value(&r.1))
+        .unwrap_or_default();
+    let to = overview
+        .iter()
+        .find(|r| r.0 == "SYSTEM_T")
+        .map(|r| crate::render::value(&r.1))
+        .unwrap_or_default();
+    cx.emit(
+        Node::new("Overview header").span(ospan).lazy(
+            super::emit_nodes,
+            overview
+                .into_iter()
+                .map(|(l, v, s)| leaf(l, s, v))
+                .collect::<Vec<_>>(),
+        ),
+    );
     let mut pos = ospan.len;
     for _ in 0..files {
         let records = ntv2_records(&cx, file.tail(pos), srec, endian).await?;
-        let name = records.iter().find(|r| r.0 == "SUB_NAME").map(|r| crate::render::value(&r.1)).unwrap_or_default();
+        let name = records
+            .iter()
+            .find(|r| r.0 == "SUB_NAME")
+            .map(|r| crate::render::value(&r.1))
+            .unwrap_or_default();
         let count = get_uint(&records, "GS_COUNT");
-        let rows = ((get_float(&records, "N_LAT") - get_float(&records, "S_LAT")) / get_float(&records, "LAT_INC")).round() + 1.0;
-        let cols = ((get_float(&records, "W_LONG") - get_float(&records, "E_LONG")) / get_float(&records, "LONG_INC")).round() + 1.0;
+        let rows = ((get_float(&records, "N_LAT") - get_float(&records, "S_LAT"))
+            / get_float(&records, "LAT_INC"))
+        .round()
+            + 1.0;
+        let cols = ((get_float(&records, "W_LONG") - get_float(&records, "E_LONG"))
+            / get_float(&records, "LONG_INC"))
+        .round()
+            + 1.0;
         let hspan = file.sub(pos, srec.saturating_mul(16));
         let grid = file.sub(pos.saturating_add(hspan.len), count.saturating_mul(16));
         let mut nodes: Vec<Node> = records.into_iter().map(|(l, v, s)| leaf(l, s, v)).collect();
-        nodes.push(Node::new("Grid").span(grid).summary(format!("{count} nodes ({rows}×{cols}), 4 × f32 each: lat/long shift and accuracy")));
-        cx.push(Node::new(format!("Sub-grid {name}")).span(file.sub(pos, hspan.len.saturating_add(grid.len))).summary(format!("{count} nodes")).lazy(super::emit_nodes, nodes)).await;
+        nodes.push(Node::new("Grid").span(grid).summary(format!(
+            "{count} nodes ({rows}×{cols}), 4 × f32 each: lat/long shift and accuracy"
+        )));
+        cx.push(
+            Node::new(format!("Sub-grid {name}"))
+                .span(file.sub(pos, hspan.len.saturating_add(grid.len)))
+                .summary(format!("{count} nodes"))
+                .lazy(super::emit_nodes, nodes),
+        )
+        .await;
         pos = pos.saturating_add(hspan.len).saturating_add(grid.len);
         if grid.len < count.saturating_mul(16) {
-            return Err(Diagnostic::truncated(Span::new(grid.source, grid.offset, count.saturating_mul(16)), grid.len));
+            return Err(Diagnostic::truncated(
+                Span::new(grid.source, grid.offset, count.saturating_mul(16)),
+                grid.len,
+            ));
         }
     }
     let end = file.sub(pos, 16);
     if end.len == 16 {
-        cx.push(leaf("End", end, text(fixed(&cx.read(end.sub(0, 8)).await?)))).await;
+        cx.push(leaf(
+            "End",
+            end,
+            text(fixed(&cx.read(end.sub(0, 8)).await?)),
+        ))
+        .await;
     }
     cx.annotate(format!("NTv2 grid, {files} sub-grids, {from} → {to}"));
     Ok(())
@@ -524,8 +704,17 @@ async fn ctable2(cx: Cx, input: Input) -> Result<()> {
     let h: CtHeader = read_record(&cx, file.sub(0, CtHeader::SIZE), LE).await?;
     cx.emit(CtHeader::node("Header", file.sub(0, 160), LE));
     let cells = u64::from(h.cols.unsigned_abs()).saturating_mul(h.rows.unsigned_abs().into());
-    cx.emit(Node::new("Shifts").span(file.sub(160, cells.saturating_mul(8))).summary(format!("{}×{} pairs of f32 (radians)", h.cols, h.rows)));
-    cx.annotate(format!("CTable2 grid {}×{}: {}", h.cols, h.rows, h.id.trim()));
+    cx.emit(
+        Node::new("Shifts")
+            .span(file.sub(160, cells.saturating_mul(8)))
+            .summary(format!("{}×{} pairs of f32 (radians)", h.cols, h.rows)),
+    );
+    cx.annotate(format!(
+        "CTable2 grid {}×{}: {}",
+        h.cols,
+        h.rows,
+        h.id.trim()
+    ));
     Ok(())
 }
 
@@ -540,15 +729,31 @@ declare_format!(pub LAZ = "laz", "LASzip compressed point cloud", ["laz"], "appl
     Probe::Custom(laz_probe), laz);
 
 const LAZ_ITEMS: EnumTable = &[
-    (0, "BYTE"), (1, "SHORT"), (2, "INT"), (3, "LONG"), (4, "FLOAT"), (5, "DOUBLE"),
-    (6, "POINT10"), (7, "GPSTIME11"), (8, "RGB12"), (9, "WAVEPACKET13"), (10, "POINT14"),
-    (11, "RGB14"), (12, "RGBNIR14"), (13, "WAVEPACKET14"), (14, "BYTE14"),
+    (0, "BYTE"),
+    (1, "SHORT"),
+    (2, "INT"),
+    (3, "LONG"),
+    (4, "FLOAT"),
+    (5, "DOUBLE"),
+    (6, "POINT10"),
+    (7, "GPSTIME11"),
+    (8, "RGB12"),
+    (9, "WAVEPACKET13"),
+    (10, "POINT14"),
+    (11, "RGB14"),
+    (12, "RGBNIR14"),
+    (13, "WAVEPACKET14"),
+    (14, "BYTE14"),
 ];
 
 async fn laz(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: LasHeader = read_record(&cx, file.sub(0, LasHeader::SIZE), LE).await?;
-    cx.emit(LasHeader::node("Public header block", file.sub(0, h.header_size.into()), LE));
+    cx.emit(LasHeader::node(
+        "Public header block",
+        file.sub(0, h.header_size.into()),
+        LE,
+    ));
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(h.header_size.into());
     let mut chunk_size = 0u32;
@@ -561,7 +766,9 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
         let description = crate::text::until_nul(&cur.bytes(32).await?);
         let body = cur.span(len.into());
         cur.skip(len.into());
-        let mut node = Node::new(format!("VLR {user}/{record}")).span(cur.since(start)).summary(description);
+        let mut node = Node::new(format!("VLR {user}/{record}"))
+            .span(cur.since(start))
+            .summary(description);
         if user == "laszip encoded" && record == 22204 {
             let b = cx.read(body).await?;
             chunk_size = u32_le(&b, 12).unwrap_or(0);
@@ -572,14 +779,42 @@ async fn laz(cx: Cx, input: Input) -> Result<()> {
     let points = file.tail(h.points_offset.into());
     let table = cx.read(points.sub(0, 8)).await?;
     let table_at = u64_le(&table, 0).unwrap_or(0);
-    cx.push(leaf("Chunk table offset", points.sub(0, 8), hex(table_at, 64))).await;
-    cx.push(Node::new("Compressed points").span(file.sub(u64::from(h.points_offset).saturating_add(8), table_at.saturating_sub(u64::from(h.points_offset).saturating_add(8)))).summary(format!("{} points, chunks of {chunk_size}", h.points))).await;
+    cx.push(leaf(
+        "Chunk table offset",
+        points.sub(0, 8),
+        hex(table_at, 64),
+    ))
+    .await;
+    cx.push(
+        Node::new("Compressed points")
+            .span(file.sub(
+                u64::from(h.points_offset).saturating_add(8),
+                table_at.saturating_sub(u64::from(h.points_offset).saturating_add(8)),
+            ))
+            .summary(format!("{} points, chunks of {chunk_size}", h.points)),
+    )
+    .await;
     let t = file.sub(table_at, 8);
     if table_at > 0 && t.len == 8 {
         let b = cx.read(t).await?;
-        cx.push(Node::new("Chunk table").span(file.tail(table_at)).summary(format!("version {}, {} chunks", u32_le(&b, 0).unwrap_or(0), u32_le(&b, 4).unwrap_or(0)))).await;
+        cx.push(
+            Node::new("Chunk table")
+                .span(file.tail(table_at))
+                .summary(format!(
+                    "version {}, {} chunks",
+                    u32_le(&b, 0).unwrap_or(0),
+                    u32_le(&b, 4).unwrap_or(0)
+                )),
+        )
+        .await;
     }
-    cx.annotate(format!("LAZ (LAS {}.{}), {} points, by {}", h.major, h.minor, h.points, h.software.trim_end()));
+    cx.annotate(format!(
+        "LAZ (LAS {}.{}), {} points, by {}",
+        h.major,
+        h.minor,
+        h.points,
+        h.software.trim_end()
+    ));
     Ok(())
 }
 
@@ -607,7 +842,12 @@ async fn laszip_vlr(cx: Cx, body: Span) -> Result<()> {
         let ty = cur.u16().await?;
         let size = cur.u16().await?;
         let version = cur.u16().await?;
-        cx.emit(Node::new(format!("Item {i}")).span(cur.since(at)).value(enumv(LAZ_ITEMS, ty.into(), 16)).summary(format!("{size} bytes, version {version}")));
+        cx.emit(
+            Node::new(format!("Item {i}"))
+                .span(cur.since(at))
+                .value(enumv(LAZ_ITEMS, ty.into(), 16))
+                .summary(format!("{size} bytes, version {version}")),
+        );
     }
     Ok(())
 }
@@ -618,7 +858,11 @@ async fn laszip_vlr(cx: Cx, body: Span) -> Result<()> {
 fn img_probe(h: &Head<'_>) -> bool {
     let x = h.data.first().copied().unwrap_or(0);
     let unxor = |at: usize, sig: &[u8]| {
-        sig.iter().enumerate().all(|(i, &s)| h.data.get(at.saturating_add(i)).is_some_and(|&b| b ^ x == s))
+        sig.iter().enumerate().all(|(i, &s)| {
+            h.data
+                .get(at.saturating_add(i))
+                .is_some_and(|&b| b ^ x == s)
+        })
     };
     unxor(0x10, b"DSKIMG\0") && unxor(0x41, b"GARMIN\0")
 }
@@ -643,15 +887,39 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
     let h = read_xor(&cx, file.sub_exact(0, 0x200)?, x).await?;
     let byte = |at: usize| h.get(at).copied().unwrap_or(0);
     cx.emit(leaf("XOR mask", file.sub(0, 1), hex(x.into(), 8)));
-    cx.emit(leaf("Signature", file.sub(0x10, 7), text(fixed(h.get(0x10..0x17).unwrap_or_default()))));
+    cx.emit(leaf(
+        "Signature",
+        file.sub(0x10, 7),
+        text(fixed(h.get(0x10..0x17).unwrap_or_default())),
+    ));
     let year = u16_le(&h, 0x39).unwrap_or(0);
-    cx.emit(leaf("Created", file.sub(0x39, 7), text(format!("{year:04}-{:02}-{:02} {:02}:{:02}:{:02}", byte(0x3b), byte(0x3c), byte(0x3d), byte(0x3e), byte(0x3f)))));
-    let desc = format!("{}{}", fixed(h.get(0x49..0x5d).unwrap_or_default()), fixed(h.get(0x65..0x83).unwrap_or_default()));
+    cx.emit(leaf(
+        "Created",
+        file.sub(0x39, 7),
+        text(format!(
+            "{year:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+            byte(0x3b),
+            byte(0x3c),
+            byte(0x3d),
+            byte(0x3e),
+            byte(0x3f)
+        )),
+    ));
+    let desc = format!(
+        "{}{}",
+        fixed(h.get(0x49..0x5d).unwrap_or_default()),
+        fixed(h.get(0x65..0x83).unwrap_or_default())
+    );
     cx.emit(leaf("Description", file.sub(0x49, 20), text(desc.clone())));
     let (e1, e2) = (byte(0x61), byte(0x62));
-    let block = 1u64.checked_shl(u32::from(e1).saturating_add(e2.into())).filter(|&b| (512..=1 << 24).contains(&b));
+    let block = 1u64
+        .checked_shl(u32::from(e1).saturating_add(e2.into()))
+        .filter(|&b| (512..=1 << 24).contains(&b));
     let Some(block) = block else {
-        return Err(Diagnostic::malformed(format!("bad block size exponents {e1}+{e2}")).at(file.sub(0x61, 2)));
+        return Err(
+            Diagnostic::malformed(format!("bad block size exponents {e1}+{e2}"))
+                .at(file.sub(0x61, 2)),
+        );
     };
     cx.emit(leaf("Block size", file.sub(0x61, 2), uint(block, 32)));
 
@@ -663,15 +931,32 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
     while pos.saturating_add(512) <= file.len.min(first_data) && files.len() < 4096 {
         let e = read_xor(&cx, file.sub(pos, 512), x).await?;
         let flag = e.first().copied().unwrap_or(0);
-        let name = format!("{}.{}", fixed(e.get(1..9).unwrap_or_default()), fixed(e.get(9..12).unwrap_or_default()));
-        if flag == 1 && e.get(1..12).is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic() || b == b' ')) {
+        let name = format!(
+            "{}.{}",
+            fixed(e.get(1..9).unwrap_or_default()),
+            fixed(e.get(9..12).unwrap_or_default())
+        );
+        if flag == 1
+            && e.get(1..12)
+                .is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic() || b == b' '))
+        {
             let size = u64::from(u32_le(&e, 12).unwrap_or(0));
             let part = u16_le(&e, 16).unwrap_or(0);
-            let blocks: Vec<u16> = e.get(0x20..).unwrap_or_default().as_chunks::<2>().0.iter().map(|&c| u16::from_le_bytes(c)).take_while(|&b| b != 0xffff).collect();
+            let blocks: Vec<u16> = e
+                .get(0x20..)
+                .unwrap_or_default()
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|&c| u16::from_le_bytes(c))
+                .take_while(|&b| b != 0xffff)
+                .collect();
             let header_entry = name.trim_matches(|c| c == ' ' || c == '.').is_empty();
             if header_entry {
                 // The image's own header blocks: the FAT ends where data begins.
-                first_data = to_u64(blocks.len()).saturating_mul(block).max(pos.saturating_add(512));
+                first_data = to_u64(blocks.len())
+                    .saturating_mul(block)
+                    .max(pos.saturating_add(512));
             } else if part == 0 {
                 files.push((name, size, blocks, file.sub(pos, 512)));
             } else if let Some(last) = files.iter_mut().rev().find(|f| f.0 == name) {
@@ -696,9 +981,20 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
             pieces.push(file.sub(u64::from(b).saturating_mul(block), take));
             left = left.saturating_sub(take);
         }
-        let node = match cx.add_pieces(Origin { parent: fat, transform: "garmin-img blocks" }, pieces) {
-            Ok(span) if x == 0 => Node::new(name).span(span).summary(format!("{size} bytes")).lazy(subfile, span),
-            Ok(span) => Node::new(name).span(span).summary(format!("{size} bytes, XOR-masked")),
+        let node = match cx.add_pieces(
+            Origin {
+                parent: fat,
+                transform: "garmin-img blocks",
+            },
+            pieces,
+        ) {
+            Ok(span) if x == 0 => Node::new(name)
+                .span(span)
+                .summary(format!("{size} bytes"))
+                .lazy(subfile, span),
+            Ok(span) => Node::new(name)
+                .span(span)
+                .summary(format!("{size} bytes, XOR-masked")),
             Err(e) => Node::new(name).span(fat).diag(e),
         };
         cx.push(node).await;
@@ -726,7 +1022,10 @@ async fn subfile(cx: Cx, span: Span) -> Result<()> {
     let h = crate::dsl::emit_record::<SubHeader>(&cx, span.sub(0, SubHeader::SIZE), LE).await?;
     let len = u64::from(h.length);
     if len > SubHeader::SIZE {
-        cx.emit(Node::new("Type-specific header").span(span.sub(SubHeader::SIZE, len.saturating_sub(SubHeader::SIZE))));
+        cx.emit(
+            Node::new("Type-specific header")
+                .span(span.sub(SubHeader::SIZE, len.saturating_sub(SubHeader::SIZE))),
+        );
     }
     cx.emit(Node::new("Data").span(span.tail(len)));
     Ok(())
@@ -739,8 +1038,13 @@ declare_format!(pub GARMIN_GDB = "garmin-gdb", "Garmin MapSource database", ["gd
     Probe::Custom(|h| h.starts_with(b"MsRcf\0") && h.data.get(10) == Some(&b'D')), garmin_gdb);
 
 const GDB_RECORDS: EnumTable = &[
-    (b'D' as u64, "header"), (b'A' as u64, "application"), (b'W' as u64, "waypoint"),
-    (b'T' as u64, "track"), (b'R' as u64, "route"), (b'L' as u64, "map"), (b'V' as u64, "end"),
+    (b'D' as u64, "header"),
+    (b'A' as u64, "application"),
+    (b'W' as u64, "waypoint"),
+    (b'T' as u64, "track"),
+    (b'R' as u64, "route"),
+    (b'L' as u64, "map"),
+    (b'V' as u64, "end"),
 ];
 
 async fn garmin_gdb(cx: Cx, input: Input) -> Result<()> {
@@ -756,16 +1060,25 @@ async fn garmin_gdb(cx: Cx, input: Input) -> Result<()> {
         let kind = cur.u8().await?;
         let body = cur.span(len);
         if body.len < len {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len),
+                body.len,
+            ));
         }
         cur.skip(len);
         let span = cur.since(start);
         let head = cx.read(body.sub(0, 256)).await?;
         let name = crate::text::until_nul(&head);
-        let mut node = Node::new(crate::value::lookup(GDB_RECORDS, kind.into()).map_or_else(|| format!("record {:?}", char::from(kind)), str::to_owned)).span(span);
+        let mut node = Node::new(
+            crate::value::lookup(GDB_RECORDS, kind.into())
+                .map_or_else(|| format!("record {:?}", char::from(kind)), str::to_owned),
+        )
+        .span(span);
         match kind {
             b'D' => {
-                version = head.first().map_or(0, |v| v.wrapping_sub(b'k').wrapping_add(1));
+                version = head
+                    .first()
+                    .map_or(0, |v| v.wrapping_sub(b'k').wrapping_add(1));
                 node = node.summary(format!("format version {version}"));
             }
             b'W' | b'T' | b'R' | b'A' => node = node.value(text(name)),
@@ -785,7 +1098,9 @@ async fn garmin_gdb(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    cx.annotate(format!("MapSource GDB v{version}, {w} waypoints, {t} tracks, {r} routes"));
+    cx.annotate(format!(
+        "MapSource GDB v{version}, {w} waypoints, {t} tracks, {r} routes"
+    ));
     Ok(())
 }
 
@@ -808,10 +1123,15 @@ fn ov2_walk(data: &[u8]) -> (u32, bool) {
             _ => return (n, false),
         };
         if kind == 2 || kind == 3 {
-            let Some(rec) = data.get(at..at.saturating_add(size)) else { return (n, false) };
+            let Some(rec) = data.get(at..at.saturating_add(size)) else {
+                return (n, false);
+            };
             let lat = crate::bytes::i32_le(rec, 9).unwrap_or(i32::MAX);
             let lon = crate::bytes::i32_le(rec, 5).unwrap_or(i32::MAX);
-            if lat.unsigned_abs() > 9_000_000 || lon.unsigned_abs() > 18_000_000 || rec.last() != Some(&0) {
+            if lat.unsigned_abs() > 9_000_000
+                || lon.unsigned_abs() > 18_000_000
+                || rec.last() != Some(&0)
+            {
                 return (n, false);
             }
         }
@@ -826,7 +1146,11 @@ fn ov2_probe(h: &Head<'_>) -> bool {
         return false;
     }
     let (n, exact) = ov2_walk(h.data);
-    if to_u64(h.data.len()) >= h.len { exact && n >= 2 } else { n >= 8 }
+    if to_u64(h.data.len()) >= h.len {
+        exact && n >= 2
+    } else {
+        n >= 8
+    }
 }
 
 declare_format!(pub OV2 = "tomtom-ov2", "TomTom points of interest (OV2)", ["ov2"], "application/x-tomtom-ov2",
@@ -848,18 +1172,50 @@ async fn ov2(cx: Cx, input: Input) -> Result<()> {
             1 => {
                 let b = cur.bytes(16).await?;
                 let v = |i: usize| crate::bytes::i32_le(&b, i).unwrap_or(0);
-                cx.push(Node::new("Skipper").span(cur.since(start)).summary(format!("block of {size} bytes, lon {}…{}, lat {}…{}", deg5(v(8)), deg5(v(0)), deg5(v(12)), deg5(v(4))))).await;
+                cx.push(Node::new("Skipper").span(cur.since(start)).summary(format!(
+                    "block of {size} bytes, lon {}…{}, lat {}…{}",
+                    deg5(v(8)),
+                    deg5(v(0)),
+                    deg5(v(12)),
+                    deg5(v(4))
+                )))
+                .await;
             }
             0 | 2 | 3 if size >= 13 => {
                 let rest = cur.bytes(size.saturating_sub(5)).await?;
                 let lon = crate::bytes::i32_le(&rest, 0).unwrap_or(0);
                 let lat = crate::bytes::i32_le(&rest, 4).unwrap_or(0);
-                let strings: Vec<String> = rest.get(8..).unwrap_or_default().split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
-                let name = if kind == 0 { "Deleted".to_owned() } else { strings.first().cloned().unwrap_or_default() };
-                cx.push(Node::new(name).span(cur.since(start)).summary(format!("{}, {}{}", deg5(lat), deg5(lon), strings.get(1..).filter(|s| !s.is_empty()).map(|s| format!(" ({})", s.join("; "))).unwrap_or_default()))).await;
+                let strings: Vec<String> = rest
+                    .get(8..)
+                    .unwrap_or_default()
+                    .split(|&b| b == 0)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| String::from_utf8_lossy(s).into_owned())
+                    .collect();
+                let name = if kind == 0 {
+                    "Deleted".to_owned()
+                } else {
+                    strings.first().cloned().unwrap_or_default()
+                };
+                cx.push(
+                    Node::new(name).span(cur.since(start)).summary(format!(
+                        "{}, {}{}",
+                        deg5(lat),
+                        deg5(lon),
+                        strings
+                            .get(1..)
+                            .filter(|s| !s.is_empty())
+                            .map(|s| format!(" ({})", s.join("; ")))
+                            .unwrap_or_default()
+                    )),
+                )
+                .await;
                 n = n.saturating_add(1);
             }
-            _ => return Err(Diagnostic::malformed(format!("unknown record type {kind}")).at(file.sub(start, 1))),
+            _ => {
+                return Err(Diagnostic::malformed(format!("unknown record type {kind}"))
+                    .at(file.sub(start, 1)));
+            }
         }
     }
     cx.annotate(format!("TomTom OV2, {n} POIs"));

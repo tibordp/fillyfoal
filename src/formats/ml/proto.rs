@@ -70,7 +70,11 @@ pub struct Msg {
 }
 
 /// A schema that knows no fields: everything is shown by wire type.
-pub static UNKNOWN: Msg = Msg { name: "message", fields: &[], title: &[] };
+pub static UNKNOWN: Msg = Msg {
+    name: "message",
+    fields: &[],
+    title: &[],
+};
 
 /// A raw field, as found by [`fields_in`] or [`scan`].
 #[derive(Clone, Copy, Debug)]
@@ -101,7 +105,13 @@ pub fn fields_in(data: &[u8]) -> impl Iterator<Item = Raw> + '_ {
         if num == 0 {
             return None;
         }
-        let mut raw = Raw { num, wire, value: 0, at: 0, len: 0 };
+        let mut raw = Raw {
+            num,
+            wire,
+            value: 0,
+            at: 0,
+            len: 0,
+        };
         match wire {
             0 => {
                 let (v, n) = uleb128(data.get(at..)?)?;
@@ -164,16 +174,20 @@ fn field_end(data: &[u8], pos: usize, raw: &Raw) -> Option<usize> {
 
 /// The first string value of field `num` in a message held in memory.
 pub fn string_in(data: &[u8], num: u64) -> Option<String> {
-    fields_in(data).find(|r| r.num == num && r.wire == 2).and_then(|r| {
-        let start = to_usize(r.at);
-        let bytes = data.get(start..start.checked_add(to_usize(r.len))?)?;
-        Some(String::from_utf8_lossy(bytes).into_owned())
-    })
+    fields_in(data)
+        .find(|r| r.num == num && r.wire == 2)
+        .and_then(|r| {
+            let start = to_usize(r.at);
+            let bytes = data.get(start..start.checked_add(to_usize(r.len))?)?;
+            Some(String::from_utf8_lossy(bytes).into_owned())
+        })
 }
 
 /// The first varint value of field `num` in a message held in memory.
 pub fn varint_in(data: &[u8], num: u64) -> Option<u64> {
-    fields_in(data).find(|r| r.num == num && r.wire == 0).map(|r| r.value)
+    fields_in(data)
+        .find(|r| r.num == num && r.wire == 0)
+        .map(|r| r.value)
 }
 
 /// Reads the field headers of the message in `span` without reading the
@@ -183,7 +197,13 @@ pub async fn scan(cx: &Cx, span: Span, max: usize) -> Result<Vec<Raw>> {
     let mut out = Vec::new();
     while !cur.at_end() && out.len() < max {
         let (num, wire) = key(&mut cur).await?;
-        let mut raw = Raw { num, wire, value: 0, at: 0, len: 0 };
+        let mut raw = Raw {
+            num,
+            wire,
+            value: 0,
+            at: 0,
+            len: 0,
+        };
         match wire {
             0 => raw.value = cur.uleb128().await?,
             1 => raw.value = cur.u64().await?,
@@ -227,12 +247,20 @@ fn unsupported_wire(cur: &Cursor<'_>, wire: u8) -> Diagnostic {
 }
 
 fn uint(value: u64) -> Value {
-    Value::UInt { value, bits: 64, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits: 64,
+        radix: Radix::Dec,
+    }
 }
 
 fn signed(value: u64) -> Value {
     let v = i64::from_ne_bytes(value.to_ne_bytes());
-    if v < 0 { Value::Int { value: v, bits: 64 } } else { uint(value) }
+    if v < 0 {
+        Value::Int { value: v, bits: 64 }
+    } else {
+        uint(value)
+    }
 }
 
 fn zigzag(value: u64) -> Value {
@@ -245,7 +273,11 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
     match ty {
         Some(Ty::SInt) => zigzag(v),
         Some(Ty::Bool) => Value::Bool(v != 0),
-        Some(Ty::Enum(table)) => Value::Enum { raw: v, bits: 32, name: lookup(table, v) },
+        Some(Ty::Enum(table)) => Value::Enum {
+            raw: v,
+            bits: 32,
+            name: lookup(table, v),
+        },
         _ => signed(v),
     }
 }
@@ -271,8 +303,10 @@ fn short(bytes: &[u8]) -> String {
 
 fn printable(bytes: &[u8]) -> bool {
     !bytes.is_empty()
-        && std::str::from_utf8(bytes)
-            .is_ok_and(|s| s.chars().all(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t')))
+        && std::str::from_utf8(bytes).is_ok_and(|s| {
+            s.chars()
+                .all(|c| !c.is_control() || matches!(c, '\n' | '\r' | '\t'))
+        })
 }
 
 /// The title of a message instance from its title fields, if it is small
@@ -285,16 +319,22 @@ async fn title(cx: &Cx, body: Span, msg: &'static Msg) -> Result<Option<String>>
     let parts: Vec<String> = msg
         .title
         .iter()
-        .filter_map(|&n| match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
-            Some(Ty::Int | Ty::Enum(_)) => {
-                let v = varint_in(&data, n)?;
-                Some(match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
-                    Some(Ty::Enum(t)) => lookup(t, v).map_or_else(|| v.to_string(), str::to_owned),
-                    _ => v.to_string(),
-                })
-            }
-            _ => string_in(&data, n).filter(|s| !s.is_empty()).map(|s| short(s.as_bytes())),
-        })
+        .filter_map(
+            |&n| match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
+                Some(Ty::Int | Ty::Enum(_)) => {
+                    let v = varint_in(&data, n)?;
+                    Some(match msg.fields.iter().find(|f| f.num == n).map(|f| f.ty) {
+                        Some(Ty::Enum(t)) => {
+                            lookup(t, v).map_or_else(|| v.to_string(), str::to_owned)
+                        }
+                        _ => v.to_string(),
+                    })
+                }
+                _ => string_in(&data, n)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| short(s.as_bytes())),
+            },
+        )
         .collect();
     Ok((!parts.is_empty()).then(|| parts.join(" · ")))
 }
@@ -335,14 +375,24 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
                     Some(Ty::Double | Ty::Packed(Elem::Double)) => {
                         Node::new(label).value(Value::Float(f64::from_bits(v)))
                     }
-                    _ => Node::new(label).value(Value::UInt { value: v, bits: 64, radix: Radix::Hex }),
+                    _ => Node::new(label).value(Value::UInt {
+                        value: v,
+                        bits: 64,
+                        radix: Radix::Hex,
+                    }),
                 }
             }
             5 => {
                 let v = u64::from(cur.u32().await?);
                 match ty {
-                    Some(Ty::Float | Ty::Packed(Elem::Float)) => Node::new(label).value(Value::Float(f32_of(v))),
-                    _ => Node::new(label).value(Value::UInt { value: v, bits: 32, radix: Radix::Hex }),
+                    Some(Ty::Float | Ty::Packed(Elem::Float)) => {
+                        Node::new(label).value(Value::Float(f32_of(v)))
+                    }
+                    _ => Node::new(label).value(Value::UInt {
+                        value: v,
+                        bits: 32,
+                        radix: Radix::Hex,
+                    }),
                 }
             }
             2 => {
@@ -375,8 +425,13 @@ async fn delimited(
     Ok(match ty {
         Some(Ty::Str) => {
             let data = cx.read(body.sub(0, TEXT_MAX)).await?;
-            let node = Node::new(label).value(Value::Text(String::from_utf8_lossy(&data).into_owned()));
-            if body.len > TEXT_MAX { node.summary(format!("{} bytes", body.len)) } else { node }
+            let node =
+                Node::new(label).value(Value::Text(String::from_utf8_lossy(&data).into_owned()));
+            if body.len > TEXT_MAX {
+                node.summary(format!("{} bytes", body.len))
+            } else {
+                node
+            }
         }
         Some(Ty::Msg(m)) => {
             let summary = match title(cx, body, m).await? {
@@ -400,7 +455,10 @@ async fn delimited(
             } else if whole && is_message(&data) {
                 Node::new(label)
                     .summary(format!("message?, {} bytes", body.len))
-                    .lazy(crate::expander!(self::message: State), (body, &UNKNOWN, child))
+                    .lazy(
+                        crate::expander!(self::message: State),
+                        (body, &UNKNOWN, child),
+                    )
             } else {
                 Node::new(label).summary(format!("{} bytes", body.len))
             }
@@ -445,7 +503,11 @@ async fn packed_summary(cx: &Cx, body: Span, elem: Elem) -> Result<String> {
     let data = cx.read(body.sub(0, 512)).await?;
     let values = elem_values(&data, elem);
     let shown: Vec<String> = values.iter().take(8).map(|(v, _, _)| show(v)).collect();
-    let more = if values.len() > 8 || to_u64(data.len()) < body.len { ", …" } else { "" };
+    let more = if values.len() > 8 || to_u64(data.len()) < body.len {
+        ", …"
+    } else {
+        ""
+    };
     Ok(format!("[{}{more}]", shown.join(", ")))
 }
 

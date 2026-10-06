@@ -21,13 +21,23 @@ const BE: Endian = Endian::Big;
 // ---------------------------------------------------------------------------
 // ZX Spectrum TAP
 
-const ZX_TYPES: EnumTable = &[(0, "Program"), (1, "Number array"), (2, "Character array"), (3, "Bytes")];
+const ZX_TYPES: EnumTable = &[
+    (0, "Program"),
+    (1, "Number array"),
+    (2, "Character array"),
+    (3, "Bytes"),
+];
 
 fn zx_tap_probe(h: &Head<'_>) -> bool {
     // The first block is almost always a 17-byte header: length 19, flag 0.
-    let Some(block) = h.data.get(2..21) else { return false };
+    let Some(block) = h.data.get(2..21) else {
+        return false;
+    };
     let xor = block.iter().take(18).fold(0u8, |x, &b| x ^ b);
-    u16_le(h.data, 0) == Some(19) && block.first() == Some(&0) && block.get(1).is_some_and(|&t| t <= 3) && block.get(18) == Some(&xor)
+    u16_le(h.data, 0) == Some(19)
+        && block.first() == Some(&0)
+        && block.get(1).is_some_and(|&t| t <= 3)
+        && block.get(18) == Some(&xor)
 }
 
 declare_format!(pub ZX_TAP = "zx-tap", "ZX Spectrum tape image (TAP)", ["tap"],
@@ -45,11 +55,16 @@ async fn zx_tap(cx: Cx, input: Input) -> Result<()> {
         blocks = blocks.saturating_add(1);
         let raw = cx.read_avail(data.sub(0, 0x10000)).await?;
         let flag = raw.first().copied().unwrap_or(0);
-        let xor = raw.iter().take(raw.len().saturating_sub(1)).fold(0u8, |x, &b| x ^ b);
+        let xor = raw
+            .iter()
+            .take(raw.len().saturating_sub(1))
+            .fold(0u8, |x, &b| x ^ b);
         let stored = raw.last().copied().unwrap_or(0);
         let mut node = if flag == 0 && len == 19 {
             let kind = raw.get(1).copied().unwrap_or(0);
-            let name = String::from_utf8_lossy(raw.get(2..12).unwrap_or_default()).trim_end().to_owned();
+            let name = String::from_utf8_lossy(raw.get(2..12).unwrap_or_default())
+                .trim_end()
+                .to_owned();
             let length = u16_le(&raw, 12).unwrap_or(0);
             let p1 = u16_le(&raw, 14).unwrap_or(0);
             let detail = match kind {
@@ -58,20 +73,33 @@ async fn zx_tap(cx: Cx, input: Input) -> Result<()> {
                 _ => String::new(),
             };
             names.push(name.clone());
-            Node::new(format!("Header: {}", lookup(ZX_TYPES, kind.into()).unwrap_or("?")))
-                .value(text(name))
-                .summary(format!("{length} bytes{detail}"))
-                .lazy(zx_header, data)
+            Node::new(format!(
+                "Header: {}",
+                lookup(ZX_TYPES, kind.into()).unwrap_or("?")
+            ))
+            .value(text(name))
+            .summary(format!("{length} bytes{detail}"))
+            .lazy(zx_header, data)
         } else {
-            Node::new(if flag == 0xff { "Data block" } else { "Block" }).summary(format!("flag {flag:#04x}, {} bytes", len.saturating_sub(2)))
+            Node::new(if flag == 0xff { "Data block" } else { "Block" })
+                .summary(format!("flag {flag:#04x}, {} bytes", len.saturating_sub(2)))
         };
         node = node.span(cur.since(start));
         if len > 0 && to_u64(raw.len()) == len && xor != stored {
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {xor:#04x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {xor:#04x}"
+            )));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("ZX Spectrum tape, {blocks} blocks{}", if names.is_empty() { String::new() } else { format!(": {}", names.join(", ")) }));
+    cx.annotate(format!(
+        "ZX Spectrum tape, {blocks} blocks{}",
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", names.join(", "))
+        }
+    ));
     Ok(())
 }
 
@@ -94,7 +122,14 @@ async fn zx_header(cx: Cx, data: Span) -> Result<()> {
 declare_format!(pub PZX = "pzx", "PZX tape image (ZX Spectrum)", ["pzx"],
     "application/x-pzx", Probe::Magic(&[(0, b"PZXT")]), pzx);
 
-const PZX_BLOCKS: &[(&str, &str)] = &[("PZXT", "header"), ("PULS", "pulse sequence"), ("DATA", "data block"), ("PAUS", "pause"), ("BRWS", "browse point"), ("STOP", "stop tape")];
+const PZX_BLOCKS: &[(&str, &str)] = &[
+    ("PZXT", "header"),
+    ("PULS", "pulse sequence"),
+    ("DATA", "data block"),
+    ("PAUS", "pause"),
+    ("BRWS", "browse point"),
+    ("STOP", "stop tape"),
+];
 
 async fn pzx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -107,26 +142,56 @@ async fn pzx(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(len);
         cur.skip(len);
         blocks = blocks.saturating_add(1);
-        let meaning = PZX_BLOCKS.iter().find(|b| b.0 == tag).map_or("unknown block", |b| b.1);
+        let meaning = PZX_BLOCKS
+            .iter()
+            .find(|b| b.0 == tag)
+            .map_or("unknown block", |b| b.1);
         let raw = cx.read_avail(data.sub(0, 4096)).await?;
         let summary = match tag.as_str() {
             "PZXT" => {
-                version = format!("{}.{}", raw.first().copied().unwrap_or(0), raw.get(1).copied().unwrap_or(0));
-                let strings: Vec<String> = raw.get(2..).unwrap_or_default().split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
+                version = format!(
+                    "{}.{}",
+                    raw.first().copied().unwrap_or(0),
+                    raw.get(1).copied().unwrap_or(0)
+                );
+                let strings: Vec<String> = raw
+                    .get(2..)
+                    .unwrap_or_default()
+                    .split(|&b| b == 0)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| String::from_utf8_lossy(s).into_owned())
+                    .collect();
                 title = strings.first().cloned().unwrap_or_default();
                 format!("v{version}, {}", strings.join(" / "))
             }
             "DATA" => {
                 let bits = u32_le(&raw, 0).unwrap_or(0) & 0x7fff_ffff;
-                format!("{bits} bits, tail {} T-states", u16_le(&raw, 4).unwrap_or(0))
+                format!(
+                    "{bits} bits, tail {} T-states",
+                    u16_le(&raw, 4).unwrap_or(0)
+                )
             }
             "PAUS" => format!("{} T-states", u32_le(&raw, 0).unwrap_or(0) & 0x7fff_ffff),
             "BRWS" => String::from_utf8_lossy(&raw).into_owned(),
             _ => format!("{len} bytes"),
         };
-        cx.push(Node::new(tag).span(cur.since(start)).desc(meaning).summary(summary).target(data)).await;
+        cx.push(
+            Node::new(tag)
+                .span(cur.since(start))
+                .desc(meaning)
+                .summary(summary)
+                .target(data),
+        )
+        .await;
     }
-    cx.annotate(format!("PZX tape v{version}{}, {blocks} blocks", if title.is_empty() { String::new() } else { format!(" {title:?}") }));
+    cx.annotate(format!(
+        "PZX tape v{version}{}, {blocks} blocks",
+        if title.is_empty() {
+            String::new()
+        } else {
+            format!(" {title:?}")
+        }
+    ));
     Ok(())
 }
 
@@ -164,7 +229,17 @@ async fn csw(cx: Cx, input: Input) -> Result<()> {
     };
     let data = file.tail(data_at);
     let node = Node::new("Pulse data").span(data).summary(size(data.len));
-    cx.emit(if compression == 2 { crate::formats::content("Pulse data (Z-RLE)", input, data, crate::formats::Codec::Zlib, None) } else { node });
+    cx.emit(if compression == 2 {
+        crate::formats::content(
+            "Pulse data (Z-RLE)",
+            input,
+            data,
+            crate::formats::Codec::Zlib,
+            None,
+        )
+    } else {
+        node
+    });
     cx.annotate(format!(
         "CSW v{major}.{minor} tape, {rate} Hz, {}{}",
         lookup(CSW_COMPRESSION, compression.into()).unwrap_or("unknown compression"),
@@ -204,7 +279,9 @@ async fn c64_tap(cx: Cx, input: Input) -> Result<()> {
         let (mut i, mut pulses, mut cycles) = (0usize, 0u64, 0u64);
         while let Some(&b) = raw.get(i) {
             if b == 0 && h.version >= 1 {
-                cycles = cycles.saturating_add(u64::from(crate::bytes::u24_le(&raw, i.saturating_add(1)).unwrap_or(0)));
+                cycles = cycles.saturating_add(u64::from(
+                    crate::bytes::u24_le(&raw, i.saturating_add(1)).unwrap_or(0),
+                ));
                 i = i.saturating_add(4);
             } else {
                 cycles = cycles.saturating_add(u64::from(b).saturating_mul(8));
@@ -240,11 +317,19 @@ async fn g64(cx: Cx, input: Input) -> Result<()> {
     let tracks = f.u8("Track entries (half tracks)").emit()?;
     let max = f.u16("Maximum track size").emit()?;
     let offsets = file.sub_exact(12, u64::from(tracks).saturating_mul(4))?;
-    let speeds = file.sub(offsets.end().saturating_sub(file.offset), u64::from(tracks).saturating_mul(4));
+    let speeds = file.sub(
+        offsets.end().saturating_sub(file.offset),
+        u64::from(tracks).saturating_mul(4),
+    );
     let raw = cx.read(offsets).await?;
     let used = raw.chunks(4).filter(|c| c.iter().any(|&b| b != 0)).count();
     cx.emit(Node::new("Speed zones").span(speeds));
-    cx.emit(Node::new("Tracks").span(offsets).summary(format!("{used} of {tracks} half-tracks present")).lazy(g64_tracks, (file, offsets, speeds)));
+    cx.emit(
+        Node::new("Tracks")
+            .span(offsets)
+            .summary(format!("{used} of {tracks} half-tracks present"))
+            .lazy(g64_tracks, (file, offsets, speeds)),
+    );
     cx.annotate(format!("{magic} image, {used} tracks present of {tracks} half-track slots, max {max} bytes per track"));
     Ok(())
 }
@@ -261,10 +346,14 @@ async fn g64_tracks(cx: Cx, (file, offsets, speeds): (Span, Span, Span)) -> Resu
         let zone = u32_le(&zones, i.saturating_mul(4)).unwrap_or(0);
         let track = i.saturating_add(2);
         cx.push(
-            Node::new(format!("Track {}{}", track / 2, if track % 2 == 1 { ".5" } else { "" }))
-                .span(file.sub(at, len.saturating_add(2)))
-                .value(dec(len, 16))
-                .summary(format!("{len} GCR bytes, speed zone {zone}")),
+            Node::new(format!(
+                "Track {}{}",
+                track / 2,
+                if track % 2 == 1 { ".5" } else { "" }
+            ))
+            .span(file.sub(at, len.saturating_add(2)))
+            .value(dec(len, 16))
+            .summary(format!("{len} GCR bytes, speed zone {zone}")),
         )
         .await;
     }
@@ -286,8 +375,15 @@ async fn p00(cx: Cx, input: Input) -> Result<()> {
     f.u8("Reserved").emit()?;
     f.u8("REL record size").emit()?;
     let load = f.u16("Load address").hex().emit()?;
-    cx.emit(Node::new("Program").span(file.tail(28)).summary(size(file.len.saturating_sub(28))));
-    cx.annotate(format!("PC64 file {name:?}, load at ${load:04x}, {}", size(file.len.saturating_sub(28))));
+    cx.emit(
+        Node::new("Program")
+            .span(file.tail(28))
+            .summary(size(file.len.saturating_sub(28))),
+    );
+    cx.annotate(format!(
+        "PC64 file {name:?}, load at ${load:04x}, {}",
+        size(file.len.saturating_sub(28))
+    ));
     Ok(())
 }
 
@@ -297,15 +393,29 @@ async fn p00(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub SCL = "scl", "Sinclair SCL archive (TR-DOS)", ["scl"],
     "application/x-scl", Probe::Magic(&[(0, b"SINCLAIR")]), scl);
 
-const TRDOS_TYPES: &[(u8, &str)] = &[(b'B', "BASIC"), (b'C', "code"), (b'D', "data array"), (b'#', "sequential")];
+const TRDOS_TYPES: &[(u8, &str)] = &[
+    (b'B', "BASIC"),
+    (b'C', "code"),
+    (b'D', "data array"),
+    (b'#', "sequential"),
+];
 
 fn trdos_entry(raw: &[u8]) -> (String, String) {
-    let name = String::from_utf8_lossy(raw.get(..8).unwrap_or_default()).trim_end().to_owned();
+    let name = String::from_utf8_lossy(raw.get(..8).unwrap_or_default())
+        .trim_end()
+        .to_owned();
     let ext = raw.get(8).copied().unwrap_or(b'?');
-    let kind = TRDOS_TYPES.iter().find(|t| t.0 == ext).map_or("unknown", |t| t.1);
+    let kind = TRDOS_TYPES
+        .iter()
+        .find(|t| t.0 == ext)
+        .map_or("unknown", |t| t.1);
     let start = u16_le(raw, 9).unwrap_or(0);
     let len = u16_le(raw, 11).unwrap_or(0);
-    let detail = if ext == b'C' { format!("{kind}, {len} bytes at {start}") } else { format!("{kind}, {len} bytes") };
+    let detail = if ext == b'C' {
+        format!("{kind}, {len} bytes at {start}")
+    } else {
+        format!("{kind}, {len} bytes")
+    };
     (format!("{name}.{}", char::from(ext)), detail)
 }
 
@@ -325,7 +435,13 @@ async fn scl(cx: Cx, input: Input) -> Result<()> {
         let data = file.sub(at, sectors.saturating_mul(256));
         at = at.saturating_add(sectors.saturating_mul(256));
         names.push(name.clone());
-        cx.push(Node::new(name).span(dir.sub(to_u64(i).saturating_mul(14), 14)).summary(format!("{detail}, {sectors} sectors")).target(data)).await;
+        cx.push(
+            Node::new(name)
+                .span(dir.sub(to_u64(i).saturating_mul(14), 14))
+                .summary(format!("{detail}, {sectors} sectors"))
+                .target(data),
+        )
+        .await;
     }
     let sum_span = file.sub(at, 4);
     let stored = u32_le(&cx.read_avail(sum_span).await?, 0);
@@ -334,10 +450,21 @@ async fn scl(cx: Cx, input: Input) -> Result<()> {
     {
         let all = cx.read(file.sub(0, at)).await?;
         let sum = all.iter().fold(0u32, |s, &b| s.wrapping_add(b.into()));
-        let node = Node::new("Checksum").span(sum_span).value(hex(stored.into(), 32));
-        cx.emit(if sum == stored { node.summary("valid") } else { node.diag(Diagnostic::warning(format!("checksum mismatch: computed {sum:#010x}"))) });
+        let node = Node::new("Checksum")
+            .span(sum_span)
+            .value(hex(stored.into(), 32));
+        cx.emit(if sum == stored {
+            node.summary("valid")
+        } else {
+            node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {sum:#010x}"
+            )))
+        });
     }
-    cx.annotate(format!("SCL archive, {count} file(s): {}", names.join(", ")));
+    cx.annotate(format!(
+        "SCL archive, {count} file(s): {}",
+        names.join(", ")
+    ));
     Ok(())
 }
 
@@ -351,7 +478,12 @@ fn trd_probe(h: &Head<'_>) -> bool {
 declare_format!(pub TRD = "trd", "TR-DOS disk image", ["trd"],
     "application/x-trd", Probe::Custom(trd_probe), trd);
 
-const TRD_DISK_TYPES: EnumTable = &[(0x16, "80 tracks, double-sided"), (0x17, "40 tracks, double-sided"), (0x18, "80 tracks, single-sided"), (0x19, "40 tracks, single-sided")];
+const TRD_DISK_TYPES: EnumTable = &[
+    (0x16, "80 tracks, double-sided"),
+    (0x17, "40 tracks, double-sided"),
+    (0x18, "80 tracks, single-sided"),
+    (0x19, "40 tracks, single-sided"),
+];
 
 async fn trd(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -366,9 +498,18 @@ async fn trd(cx: Cx, input: Input) -> Result<()> {
     f.bytes("Reserved", 12).emit()?;
     let label = cx.read_avail(file.sub(0x8f5, 8)).await?;
     let label = String::from_utf8_lossy(&label).trim_end().to_owned();
-    cx.emit(Node::new("Disk label").span(file.sub(0x8f5, 8)).value(text(label.clone())));
+    cx.emit(
+        Node::new("Disk label")
+            .span(file.sub(0x8f5, 8))
+            .value(text(label.clone())),
+    );
     let catalogue = file.sub(0, 0x800);
-    cx.emit(Node::new("Catalogue").span(catalogue).summary(format!("{files} file(s)")).lazy(trd_catalogue, (file, catalogue)));
+    cx.emit(
+        Node::new("Catalogue")
+            .span(catalogue)
+            .summary(format!("{files} file(s)"))
+            .lazy(trd_catalogue, (file, catalogue)),
+    );
     cx.annotate(format!(
         "TR-DOS disk {label:?}, {}, {files} file(s), {free} free sectors",
         lookup(TRD_DISK_TYPES, kind.into()).unwrap_or("unknown geometry")
@@ -388,8 +529,20 @@ async fn trd_catalogue(cx: Cx, (file, catalogue): (Span, Span)) -> Result<()> {
         let sectors = u64::from(entry.get(13).copied().unwrap_or(0));
         let sector = u64::from(entry.get(14).copied().unwrap_or(0));
         let track = u64::from(entry.get(15).copied().unwrap_or(0));
-        let data = file.sub(track.saturating_mul(16).saturating_add(sector).saturating_mul(256), sectors.saturating_mul(256));
-        cx.push(Node::new(name).span(catalogue.sub(to_u64(i).saturating_mul(16), 16)).summary(format!("{detail}, track {track} sector {sector}")).target(data)).await;
+        let data = file.sub(
+            track
+                .saturating_mul(16)
+                .saturating_add(sector)
+                .saturating_mul(256),
+            sectors.saturating_mul(256),
+        );
+        cx.push(
+            Node::new(name)
+                .span(catalogue.sub(to_u64(i).saturating_mul(16), 16))
+                .summary(format!("{detail}, track {track} sector {sector}"))
+                .target(data),
+        )
+        .await;
     }
     Ok(())
 }
@@ -422,18 +575,33 @@ async fn msx_cas(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(start, end.saturating_sub(start));
         let raw = cx.read_avail(span.sub(8, 16)).await?;
         let kind = raw.first().copied().unwrap_or(0);
-        let header = raw.len() == 16 && raw.iter().take(10).all(|&b| b == kind) && CAS_TYPES.iter().any(|t| t.0 == kind);
+        let header = raw.len() == 16
+            && raw.iter().take(10).all(|&b| b == kind)
+            && CAS_TYPES.iter().any(|t| t.0 == kind);
         let node = if header {
-            let name = String::from_utf8_lossy(raw.get(10..16).unwrap_or_default()).trim_end().to_owned();
+            let name = String::from_utf8_lossy(raw.get(10..16).unwrap_or_default())
+                .trim_end()
+                .to_owned();
             let label = CAS_TYPES.iter().find(|t| t.0 == kind).map_or("?", |t| t.1);
             files.push(format!("{name} ({label})"));
-            Node::new(format!("Header: {name}")).summary(label.to_owned()).value(text(name))
+            Node::new(format!("Header: {name}"))
+                .summary(label.to_owned())
+                .value(text(name))
         } else {
             Node::new("Data block").summary(size(span.len.saturating_sub(8)))
         };
         cx.push(node.span(span)).await;
     }
-    cx.annotate(format!("MSX cassette, {} blocks, {} file(s){}", starts.len(), files.len(), if files.is_empty() { String::new() } else { format!(": {}", files.join(", ")) }));
+    cx.annotate(format!(
+        "MSX cassette, {} blocks, {} file(s){}",
+        starts.len(),
+        files.len(),
+        if files.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", files.join(", "))
+        }
+    ));
     Ok(())
 }
 
@@ -452,18 +620,29 @@ async fn oric_tap(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 512)).await?;
     let sync = head.iter().take_while(|&&b| b == 0x16).count();
-    cx.emit(Node::new("Synchronisation").span(file.sub(0, to_u64(sync).saturating_add(1))).summary(format!("{sync} × 0x16, then 0x24")));
+    cx.emit(
+        Node::new("Synchronisation")
+            .span(file.sub(0, to_u64(sync).saturating_add(1)))
+            .summary(format!("{sync} × 0x16, then 0x24")),
+    );
     let at = to_u64(sync).saturating_add(1);
     let block = cx.block(file.sub(at, 9)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     f.u16("Reserved").emit()?;
-    let kind = f.u8("Type").enumeration(&[(0x00, "BASIC"), (0x80, "machine code"), (0x40, "array")]).emit()?;
+    let kind = f
+        .u8("Type")
+        .enumeration(&[(0x00, "BASIC"), (0x80, "machine code"), (0x40, "array")])
+        .emit()?;
     let auto = f.u8("Autorun").emit()?;
     let end = f.u16("End address").hex().emit()?;
     let start = f.u16("Start address").hex().emit()?;
     f.u8("Reserved").emit()?;
     let (name, name_span) = cx.cstr(file.sub(at.saturating_add(9), 17)).await?;
-    cx.emit(Node::new("File name").span(name_span).value(text(name.clone())));
+    cx.emit(
+        Node::new("File name")
+            .span(name_span)
+            .value(text(name.clone())),
+    );
     let data_at = name_span.end().saturating_sub(file.offset);
     let len = u64::from(end.saturating_sub(start)).saturating_add(1);
     cx.emit(Node::new("Data").span(file.sub(data_at, len)));
@@ -533,12 +712,17 @@ async fn atari_car(cx: Cx, input: Input) -> Result<()> {
             status = ", checksum valid";
         } else {
             status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {sum:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {sum:#010x}"
+            )));
         }
     }
     cx.emit(node);
     cx.emit(Node::new("ROM").span(data).summary(size(data.len)));
-    cx.annotate(format!("Atari cartridge, {}{status}", lookup(CAR_TYPES, h.kind.into()).map_or_else(|| format!("type {}", h.kind), str::to_owned)));
+    cx.annotate(format!(
+        "Atari cartridge, {}{status}",
+        lookup(CAR_TYPES, h.kind.into()).map_or_else(|| format!("type {}", h.kind), str::to_owned)
+    ));
     Ok(())
 }
 
@@ -546,7 +730,10 @@ async fn atari_car(cx: Cx, input: Input) -> Result<()> {
 // Atari ST / TOS executable (PRG, TOS, TTP, APP, ACC)
 
 fn st_prg_probe(h: &Head<'_>) -> bool {
-    let sizes: Option<u64> = [2usize, 6, 14].iter().map(|&o| u32_be(h.data, o).map(u64::from)).sum();
+    let sizes: Option<u64> = [2usize, 6, 14]
+        .iter()
+        .map(|&o| u32_be(h.data, o).map(u64::from))
+        .sum();
     h.at(0, b"\x60\x1a")
         && sizes.is_some_and(|s| s.saturating_add(28) <= h.len && s > 0)
         && u16_be(h.data, 26).is_some_and(|a| a <= 1)
@@ -583,9 +770,17 @@ async fn st_prg(cx: Cx, input: Input) -> Result<()> {
     let h: StHeader = read_record(&cx, span, BE).await?;
     cx.emit(StHeader::node("Header", span, BE));
     let mut at = StHeader::SIZE;
-    for (name, len) in [("TEXT", h.text), ("DATA", h.data), ("Symbol table", h.symbols)] {
+    for (name, len) in [
+        ("TEXT", h.text),
+        ("DATA", h.data),
+        ("Symbol table", h.symbols),
+    ] {
         if len > 0 {
-            cx.emit(Node::new(name).span(file.sub(at, len.into())).summary(size(len.into())));
+            cx.emit(
+                Node::new(name)
+                    .span(file.sub(at, len.into()))
+                    .summary(size(len.into())),
+            );
         }
         at = at.saturating_add(len.into());
     }
@@ -594,16 +789,30 @@ async fn st_prg(cx: Cx, input: Input) -> Result<()> {
         let reloc = file.tail(at);
         let raw = cx.read_avail(reloc.sub(0, 0x10000)).await?;
         if u32_be(&raw, 0).is_some_and(|v| v != 0) {
-            fixups = 1u64.saturating_add(to_u64(raw.iter().skip(4).take_while(|&&b| b != 0).filter(|&&b| b != 1).count()));
+            fixups = 1u64.saturating_add(to_u64(
+                raw.iter()
+                    .skip(4)
+                    .take_while(|&&b| b != 0)
+                    .filter(|&&b| b != 1)
+                    .count(),
+            ));
         }
-        cx.emit(Node::new("Relocation table").span(reloc).summary(format!("{fixups} fixups")));
+        cx.emit(
+            Node::new("Relocation table")
+                .span(reloc)
+                .summary(format!("{fixups} fixups")),
+        );
     }
     cx.annotate(format!(
         "Atari ST executable, text {}, data {}, bss {}{}",
         size(h.text.into()),
         size(h.data.into()),
         size(h.bss.into()),
-        if h.absolute == 0 { format!(", {fixups} relocations") } else { ", absolute".to_owned() }
+        if h.absolute == 0 {
+            format!(", {fixups} relocations")
+        } else {
+            ", absolute".to_owned()
+        }
     ));
     Ok(())
 }

@@ -141,7 +141,9 @@ async fn line(r: &mut ByteReader<'_>, at: u64) -> Result<(String, u64)> {
             return Err(Diagnostic::limit("line argument longer than 4 KiB").at(r.span(at, 1)));
         }
     }
-    let bytes = r.bytes(at, end.saturating_sub(at).saturating_sub(1)).await?;
+    let bytes = r
+        .bytes(at, end.saturating_sub(at).saturating_sub(1))
+        .await?;
     Ok((String::from_utf8_lossy(&bytes).into_owned(), end))
 }
 
@@ -163,18 +165,30 @@ async fn argument(r: &mut ByteReader<'_>, arg: Arg, at: u64) -> Result<(Option<V
         }
         Arg::Int4 => {
             let v = r.le(at, 4).await? as u32 as i32;
-            (Some(Value::Int { value: v.into(), bits: 32 }), at.saturating_add(4))
+            (
+                Some(Value::Int {
+                    value: v.into(),
+                    bits: 32,
+                }),
+                at.saturating_add(4),
+            )
         }
         Arg::Float => {
             let b = r.bytes(at, 8).await?;
-            (Some(Value::Float(f64::from_bits(be_uint(&b)))), at.saturating_add(8))
+            (
+                Some(Value::Float(f64::from_bits(be_uint(&b)))),
+                at.saturating_add(8),
+            )
         }
         Arg::Text(n) | Arg::Bytes(n) | Arg::Long(n) => {
             let len = r.le(at, n.into()).await?;
             let body = at.saturating_add(n.into());
             let end = body.saturating_add(len);
             if end > r.region().len {
-                return Err(Diagnostic::truncated(r.span(body, len), r.region().len.saturating_sub(body)));
+                return Err(Diagnostic::truncated(
+                    r.span(body, len),
+                    r.region().len.saturating_sub(body),
+                ));
             }
             let shown = r.bytes(body, len.min(MAX_VALUE)).await?;
             let value = match arg {
@@ -216,7 +230,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     while pos < file.len {
         let op = r.byte(pos).await?;
         let Some((name, arg)) = opcode(op) else {
-            return Err(Diagnostic::malformed(format!("unknown opcode {op:#04x}")).at(file.sub(pos, 1)));
+            return Err(
+                Diagnostic::malformed(format!("unknown opcode {op:#04x}")).at(file.sub(pos, 1))
+            );
         };
         let (value, end) = argument(&mut r, arg, pos.saturating_add(1)).await?;
         let mut node = Node::new(name).span(file.sub(pos, end.saturating_sub(pos)));
@@ -224,7 +240,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if let Value::Text(t) = &v
                 && t.len() > 200
             {
-                node = node.value(Value::Text(clip(t, 200))).summary(format!("{} characters", t.chars().count()));
+                node = node
+                    .value(Value::Text(clip(t, 200)))
+                    .summary(format!("{} characters", t.chars().count()));
             } else {
                 node = node.value(v);
             }
@@ -239,7 +257,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     if pos < file.len {
         let rest = file.tail(pos);
-        cx.emit(Node::new("Trailing data").span(rest).summary(format!("{} bytes", rest.len)));
+        cx.emit(
+            Node::new("Trailing data")
+                .span(rest)
+                .summary(format!("{} bytes", rest.len)),
+        );
     }
     Ok(())
 }

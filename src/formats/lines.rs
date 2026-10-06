@@ -46,7 +46,10 @@ impl Line {
         let mut out = Vec::new();
         let mut start = 0usize;
         for piece in self.bytes.split(|&b| b == sep) {
-            out.push((String::from_utf8_lossy(piece).into_owned(), self.sub(start, piece.len())));
+            out.push((
+                String::from_utf8_lossy(piece).into_owned(),
+                self.sub(start, piece.len()),
+            ));
             start = start.saturating_add(piece.len()).saturating_add(1);
         }
         out
@@ -56,13 +59,21 @@ impl Line {
     pub fn words(&self) -> Vec<(String, Span)> {
         let mut out = Vec::new();
         let mut start = None;
-        for (i, &b) in self.bytes.iter().enumerate().chain(std::iter::once((self.bytes.len(), &b' '))) {
+        for (i, &b) in self
+            .bytes
+            .iter()
+            .enumerate()
+            .chain(std::iter::once((self.bytes.len(), &b' ')))
+        {
             let space = b.is_ascii_whitespace();
             match (start, space) {
                 (None, false) => start = Some(i),
                 (Some(s), true) => {
                     let word = self.bytes.get(s..i).unwrap_or_default();
-                    out.push((String::from_utf8_lossy(word).into_owned(), self.sub(s, i.saturating_sub(s))));
+                    out.push((
+                        String::from_utf8_lossy(word).into_owned(),
+                        self.sub(s, i.saturating_sub(s)),
+                    ));
                     start = None;
                 }
                 _ => {}
@@ -75,7 +86,9 @@ impl Line {
     pub fn column(&self, from: usize, to: usize) -> String {
         let end = to.min(self.bytes.len());
         let start = from.min(end);
-        String::from_utf8_lossy(self.bytes.get(start..end).unwrap_or_default()).trim().to_owned()
+        String::from_utf8_lossy(self.bytes.get(start..end).unwrap_or_default())
+            .trim()
+            .to_owned()
     }
 }
 
@@ -160,7 +173,11 @@ impl<'a> Lines<'a> {
     }
 
     fn take(&mut self, off: usize, content: usize, consumed: usize) -> Line {
-        let mut bytes = self.buf.get(off..off.saturating_add(content)).unwrap_or_default().to_vec();
+        let mut bytes = self
+            .buf
+            .get(off..off.saturating_add(content))
+            .unwrap_or_default()
+            .to_vec();
         if bytes.last() == Some(&b'\r') {
             bytes.pop();
         }
@@ -195,7 +212,11 @@ pub fn is_text(h: &Head<'_>) -> bool {
 /// A short, single-line preview of some text.
 pub fn preview(s: &str, max: usize) -> String {
     // One line: control characters (newlines, tabs) become spaces.
-    let s: String = s.trim().chars().map(|c| if c.is_control() { ' ' } else { c }).collect();
+    let s: String = s
+        .trim()
+        .chars()
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .collect();
     let s = s.as_str();
     if s.chars().count() <= max {
         return s.to_owned();
@@ -212,11 +233,19 @@ pub fn text(s: impl Into<String>) -> crate::value::Value {
 }
 
 pub fn uint(value: u64) -> crate::value::Value {
-    crate::value::Value::UInt { value, bits: 64, radix: crate::value::Radix::Dec }
+    crate::value::Value::UInt {
+        value,
+        bits: 64,
+        radix: crate::value::Radix::Dec,
+    }
 }
 
 pub fn hex(value: u64, bits: u8) -> crate::value::Value {
-    crate::value::Value::UInt { value, bits, radix: crate::value::Radix::Hex }
+    crate::value::Value::UInt {
+        value,
+        bits,
+        radix: crate::value::Radix::Hex,
+    }
 }
 
 pub fn int(value: i64) -> crate::value::Value {
@@ -228,12 +257,21 @@ pub fn float(value: f64) -> crate::value::Value {
 }
 
 pub fn enumeration(table: crate::value::EnumTable, raw: u64, bits: u8) -> crate::value::Value {
-    crate::value::Value::Enum { raw, bits, name: crate::value::lookup(table, raw) }
+    crate::value::Value::Enum {
+        raw,
+        bits,
+        name: crate::value::lookup(table, raw),
+    }
 }
 
 pub fn flags(table: crate::value::FlagTable, raw: u64, bits: u8) -> crate::value::Value {
     let (set, unknown) = crate::value::decode_flags(table, raw);
-    crate::value::Value::Flags { raw, bits, set, unknown }
+    crate::value::Value::Flags {
+        raw,
+        bits,
+        set,
+        unknown,
+    }
 }
 
 /// A number parsed from text: an integer if it is one, else a float, else text.

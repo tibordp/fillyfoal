@@ -34,15 +34,42 @@ pub static MTL: Format = Format {
 };
 
 const OBJ_KEYWORDS: &[&[u8]] = &[
-    b"v", b"vt", b"vn", b"vp", b"f", b"l", b"p", b"o", b"g", b"s", b"usemtl", b"mtllib",
-    b"cstype", b"deg", b"curv", b"curv2", b"surf", b"parm", b"end", b"mg",
+    b"v", b"vt", b"vn", b"vp", b"f", b"l", b"p", b"o", b"g", b"s", b"usemtl", b"mtllib", b"cstype",
+    b"deg", b"curv", b"curv2", b"surf", b"parm", b"end", b"mg",
 ];
 
 const MTL_KEYWORDS: &[&[u8]] = &[
-    b"newmtl", b"Ka", b"Kd", b"Ks", b"Ke", b"Ns", b"Ni", b"d", b"Tr", b"Tf", b"illum",
-    b"map_Ka", b"map_Kd", b"map_Ks", b"map_Ns", b"map_d", b"map_bump", b"bump", b"disp",
-    b"decal", b"refl", b"sharpness", b"Pr", b"Pm", b"Ps", b"Pc", b"Pcr", b"aniso", b"map_Pr",
-    b"map_Pm", b"norm",
+    b"newmtl",
+    b"Ka",
+    b"Kd",
+    b"Ks",
+    b"Ke",
+    b"Ns",
+    b"Ni",
+    b"d",
+    b"Tr",
+    b"Tf",
+    b"illum",
+    b"map_Ka",
+    b"map_Kd",
+    b"map_Ks",
+    b"map_Ns",
+    b"map_d",
+    b"map_bump",
+    b"bump",
+    b"disp",
+    b"decal",
+    b"refl",
+    b"sharpness",
+    b"Pr",
+    b"Pm",
+    b"Ps",
+    b"Pc",
+    b"Pcr",
+    b"aniso",
+    b"map_Pr",
+    b"map_Pm",
+    b"norm",
 ];
 
 /// Every significant line starts with a known keyword, and `required`
@@ -53,7 +80,10 @@ fn probe_keywords(h: &Head<'_>, keywords: &[&[u8]], required: &[u8]) -> bool {
     let mut n = 0usize;
     for line in probe::significant(&head, &[b"#"]).take(60) {
         let t = probe::trim(line);
-        let word = t.split(|b| b.is_ascii_whitespace()).next().unwrap_or_default();
+        let word = t
+            .split(|b| b.is_ascii_whitespace())
+            .next()
+            .unwrap_or_default();
         if !keywords.contains(&word) {
             return false;
         }
@@ -126,15 +156,33 @@ pub async fn dissect_obj(cx: Cx, input: Input) -> Result<()> {
         let before = lines.pos();
         let Some(line) = lines.next().await? else {
             let (name, start, at) = &current;
-            push_group(&cx, name, span.sub(*start, before.saturating_sub(*start)), *at, counts).await;
+            push_group(
+                &cx,
+                name,
+                span.sub(*start, before.saturating_sub(*start)),
+                *at,
+                counts,
+            )
+            .await;
             break;
         };
         let t = line.piece().trim();
         let (word, rest) = t.split_word();
         if matches!(word.bytes(), b"o" | b"g") {
             let (name, start, at) = &current;
-            push_group(&cx, name, span.sub(*start, before.saturating_sub(*start)), *at, counts).await;
-            let kind = if word.bytes() == b"o" { "Object" } else { "Group" };
+            push_group(
+                &cx,
+                name,
+                span.sub(*start, before.saturating_sub(*start)),
+                *at,
+                counts,
+            )
+            .await;
+            let kind = if word.bytes() == b"o" {
+                "Object"
+            } else {
+                "Group"
+            };
             current = (format!("{kind} {}", rest.text()), before, counts);
             groups = groups.saturating_add(1);
             continue;
@@ -174,26 +222,27 @@ async fn group(cx: Cx, g: Group) -> Result<()> {
         }
         let (word, rest) = t.split_word();
         counts.note(word.bytes());
-        let node = match word.bytes() {
-            b"v" | b"vt" | b"vn" => {
-                let (name, n) = match word.bytes() {
-                    b"v" => ("Vertex", counts.v),
-                    b"vt" => ("Texture coordinate", counts.vt),
-                    _ => ("Normal", counts.vn),
-                };
-                let values = floats(&rest);
-                let text: Vec<String> = values.iter().map(f64::to_string).collect();
-                Node::new(format!("{name} {n}"))
-                    .span(line.span)
-                    .value(Value::Text(text.join(", ")))
-            }
-            b"f" => {
-                let refs = rest.words().count();
-                text_node(format!("Face {}", counts.f), line.span, &rest.text())
-                    .summary(plural(crate::bytes::to_u64(refs), "corner", "corners"))
-            }
-            _ => text_node(word.text(), rest.span(), &rest.text()),
-        };
+        let node =
+            match word.bytes() {
+                b"v" | b"vt" | b"vn" => {
+                    let (name, n) = match word.bytes() {
+                        b"v" => ("Vertex", counts.v),
+                        b"vt" => ("Texture coordinate", counts.vt),
+                        _ => ("Normal", counts.vn),
+                    };
+                    let values = floats(&rest);
+                    let text: Vec<String> = values.iter().map(f64::to_string).collect();
+                    Node::new(format!("{name} {n}"))
+                        .span(line.span)
+                        .value(Value::Text(text.join(", ")))
+                }
+                b"f" => {
+                    let refs = rest.words().count();
+                    text_node(format!("Face {}", counts.f), line.span, &rest.text())
+                        .summary(plural(crate::bytes::to_u64(refs), "corner", "corners"))
+                }
+                _ => text_node(word.text(), rest.span(), &rest.text()),
+            };
         cx.push(node).await;
     }
     Ok(())
@@ -226,7 +275,10 @@ pub async fn dissect_mtl(cx: Cx, input: Input) -> Result<()> {
             None => break,
         }
     }
-    cx.annotate(format!("Wavefront MTL: {}", plural(materials, "material", "materials")));
+    cx.annotate(format!(
+        "Wavefront MTL: {}",
+        plural(materials, "material", "materials")
+    ));
     Ok(())
 }
 

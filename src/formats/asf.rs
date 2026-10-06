@@ -26,69 +26,373 @@ const fn guid(data1: u32, data2: u16, data3: u16, data4: [u8; 8]) -> Guid {
     }
 }
 
-const HEADER: Guid = guid(0x75b2_2630, 0x668e, 0x11cf, [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c]);
-const DATA: Guid = guid(0x75b2_2636, 0x668e, 0x11cf, [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c]);
-const FILE_PROPERTIES: Guid = guid(0x8cab_dca1, 0xa947, 0x11cf, [0x8e, 0xe4, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65]);
-const STREAM_PROPERTIES: Guid = guid(0xb7dc_0791, 0xa9b7, 0x11cf, [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65]);
-const HEADER_EXTENSION: Guid = guid(0x5fbf_03b5, 0xa92e, 0x11cf, [0x8e, 0xe3, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65]);
-const CODEC_LIST: Guid = guid(0x86d1_5240, 0x311d, 0x11d0, [0xa3, 0xa4, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6]);
-const CONTENT_DESCRIPTION: Guid = guid(0x75b2_2633, 0x668e, 0x11cf, [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c]);
-const EXTENDED_CONTENT: Guid = guid(0xd2d0_a440, 0xe307, 0x11d2, [0x97, 0xf0, 0x00, 0xa0, 0xc9, 0x5e, 0xa8, 0x50]);
-const STREAM_BITRATES: Guid = guid(0x7bf8_75ce, 0x468d, 0x11d1, [0x8d, 0x82, 0x00, 0x60, 0x97, 0xc9, 0xa2, 0xb2]);
-const METADATA: Guid = guid(0xc5f8_cbea, 0x5baf, 0x4877, [0x84, 0x67, 0xaa, 0x8c, 0x44, 0xfa, 0x4c, 0xca]);
-const METADATA_LIBRARY: Guid = guid(0x4423_1c94, 0x9498, 0x49d1, [0xa1, 0x41, 0x1d, 0x13, 0x4e, 0x45, 0x70, 0x54]);
-const LANGUAGE_LIST: Guid = guid(0x7c43_46a9, 0xefe0, 0x4bfc, [0xb2, 0x29, 0x39, 0x3e, 0xde, 0x41, 0x5c, 0x85]);
-const EXTENDED_STREAM: Guid = guid(0x14e6_a5cb, 0xc672, 0x4332, [0x83, 0x99, 0xa9, 0x69, 0x52, 0x06, 0x5b, 0x5a]);
-const SIMPLE_INDEX: Guid = guid(0x3300_0890, 0xe5b1, 0x11cf, [0x89, 0xf4, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xcb]);
+const HEADER: Guid = guid(
+    0x75b2_2630,
+    0x668e,
+    0x11cf,
+    [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c],
+);
+const DATA: Guid = guid(
+    0x75b2_2636,
+    0x668e,
+    0x11cf,
+    [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c],
+);
+const FILE_PROPERTIES: Guid = guid(
+    0x8cab_dca1,
+    0xa947,
+    0x11cf,
+    [0x8e, 0xe4, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65],
+);
+const STREAM_PROPERTIES: Guid = guid(
+    0xb7dc_0791,
+    0xa9b7,
+    0x11cf,
+    [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65],
+);
+const HEADER_EXTENSION: Guid = guid(
+    0x5fbf_03b5,
+    0xa92e,
+    0x11cf,
+    [0x8e, 0xe3, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65],
+);
+const CODEC_LIST: Guid = guid(
+    0x86d1_5240,
+    0x311d,
+    0x11d0,
+    [0xa3, 0xa4, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6],
+);
+const CONTENT_DESCRIPTION: Guid = guid(
+    0x75b2_2633,
+    0x668e,
+    0x11cf,
+    [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c],
+);
+const EXTENDED_CONTENT: Guid = guid(
+    0xd2d0_a440,
+    0xe307,
+    0x11d2,
+    [0x97, 0xf0, 0x00, 0xa0, 0xc9, 0x5e, 0xa8, 0x50],
+);
+const STREAM_BITRATES: Guid = guid(
+    0x7bf8_75ce,
+    0x468d,
+    0x11d1,
+    [0x8d, 0x82, 0x00, 0x60, 0x97, 0xc9, 0xa2, 0xb2],
+);
+const METADATA: Guid = guid(
+    0xc5f8_cbea,
+    0x5baf,
+    0x4877,
+    [0x84, 0x67, 0xaa, 0x8c, 0x44, 0xfa, 0x4c, 0xca],
+);
+const METADATA_LIBRARY: Guid = guid(
+    0x4423_1c94,
+    0x9498,
+    0x49d1,
+    [0xa1, 0x41, 0x1d, 0x13, 0x4e, 0x45, 0x70, 0x54],
+);
+const LANGUAGE_LIST: Guid = guid(
+    0x7c43_46a9,
+    0xefe0,
+    0x4bfc,
+    [0xb2, 0x29, 0x39, 0x3e, 0xde, 0x41, 0x5c, 0x85],
+);
+const EXTENDED_STREAM: Guid = guid(
+    0x14e6_a5cb,
+    0xc672,
+    0x4332,
+    [0x83, 0x99, 0xa9, 0x69, 0x52, 0x06, 0x5b, 0x5a],
+);
+const SIMPLE_INDEX: Guid = guid(
+    0x3300_0890,
+    0xe5b1,
+    0x11cf,
+    [0x89, 0xf4, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xcb],
+);
 
-const AUDIO_MEDIA: Guid = guid(0xf869_9e40, 0x5b4d, 0x11cf, [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b]);
-const VIDEO_MEDIA: Guid = guid(0xbc19_efc0, 0x5b4d, 0x11cf, [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b]);
+const AUDIO_MEDIA: Guid = guid(
+    0xf869_9e40,
+    0x5b4d,
+    0x11cf,
+    [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b],
+);
+const VIDEO_MEDIA: Guid = guid(
+    0xbc19_efc0,
+    0x5b4d,
+    0x11cf,
+    [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b],
+);
 
 const NAMES: &[(Guid, &str)] = &[
     (HEADER, "Header"),
     (DATA, "Data"),
     (SIMPLE_INDEX, "Simple Index"),
-    (guid(0xd6e2_29d3, 0x35da, 0x11d1, [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe]), "Index"),
-    (guid(0xfeb1_03f8, 0x12ad, 0x4c64, [0x84, 0x0f, 0x2a, 0x1d, 0x2f, 0x7a, 0xd4, 0x8c]), "Media Object Index"),
-    (guid(0x3cb7_3fd0, 0x0c4a, 0x4803, [0x95, 0x3d, 0xed, 0xf7, 0xb6, 0x22, 0x8f, 0x0c]), "Timecode Index"),
+    (
+        guid(
+            0xd6e2_29d3,
+            0x35da,
+            0x11d1,
+            [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe],
+        ),
+        "Index",
+    ),
+    (
+        guid(
+            0xfeb1_03f8,
+            0x12ad,
+            0x4c64,
+            [0x84, 0x0f, 0x2a, 0x1d, 0x2f, 0x7a, 0xd4, 0x8c],
+        ),
+        "Media Object Index",
+    ),
+    (
+        guid(
+            0x3cb7_3fd0,
+            0x0c4a,
+            0x4803,
+            [0x95, 0x3d, 0xed, 0xf7, 0xb6, 0x22, 0x8f, 0x0c],
+        ),
+        "Timecode Index",
+    ),
     (FILE_PROPERTIES, "File Properties"),
     (STREAM_PROPERTIES, "Stream Properties"),
     (HEADER_EXTENSION, "Header Extension"),
     (CODEC_LIST, "Codec List"),
-    (guid(0x1efb_1a30, 0x0b62, 0x11d0, [0xa3, 0x9b, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6]), "Script Command"),
-    (guid(0xf487_cd01, 0xa951, 0x11cf, [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65]), "Marker"),
-    (guid(0xd6e2_29dc, 0x35da, 0x11d1, [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe]), "Bitrate Mutual Exclusion"),
-    (guid(0x75b2_2635, 0x668e, 0x11cf, [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c]), "Error Correction"),
+    (
+        guid(
+            0x1efb_1a30,
+            0x0b62,
+            0x11d0,
+            [0xa3, 0x9b, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6],
+        ),
+        "Script Command",
+    ),
+    (
+        guid(
+            0xf487_cd01,
+            0xa951,
+            0x11cf,
+            [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65],
+        ),
+        "Marker",
+    ),
+    (
+        guid(
+            0xd6e2_29dc,
+            0x35da,
+            0x11d1,
+            [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe],
+        ),
+        "Bitrate Mutual Exclusion",
+    ),
+    (
+        guid(
+            0x75b2_2635,
+            0x668e,
+            0x11cf,
+            [0xa6, 0xd9, 0x00, 0xaa, 0x00, 0x62, 0xce, 0x6c],
+        ),
+        "Error Correction",
+    ),
     (CONTENT_DESCRIPTION, "Content Description"),
     (EXTENDED_CONTENT, "Extended Content Description"),
-    (guid(0x2211_b3fa, 0xbd23, 0x11d2, [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e]), "Content Branding"),
+    (
+        guid(
+            0x2211_b3fa,
+            0xbd23,
+            0x11d2,
+            [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e],
+        ),
+        "Content Branding",
+    ),
     (STREAM_BITRATES, "Stream Bitrate Properties"),
-    (guid(0x2211_b3fb, 0xbd23, 0x11d2, [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e]), "Content Encryption"),
-    (guid(0x298a_e614, 0x2622, 0x4c17, [0xb9, 0x35, 0xda, 0xe0, 0x7e, 0xe9, 0x28, 0x9c]), "Extended Content Encryption"),
-    (guid(0x2211_b3fc, 0xbd23, 0x11d2, [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e]), "Digital Signature"),
-    (guid(0x1806_d474, 0xcadf, 0x4509, [0xa4, 0xba, 0x9a, 0xab, 0xcb, 0x96, 0xaa, 0xe8]), "Padding"),
+    (
+        guid(
+            0x2211_b3fb,
+            0xbd23,
+            0x11d2,
+            [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e],
+        ),
+        "Content Encryption",
+    ),
+    (
+        guid(
+            0x298a_e614,
+            0x2622,
+            0x4c17,
+            [0xb9, 0x35, 0xda, 0xe0, 0x7e, 0xe9, 0x28, 0x9c],
+        ),
+        "Extended Content Encryption",
+    ),
+    (
+        guid(
+            0x2211_b3fc,
+            0xbd23,
+            0x11d2,
+            [0xb4, 0xb7, 0x00, 0xa0, 0xc9, 0x55, 0xfc, 0x6e],
+        ),
+        "Digital Signature",
+    ),
+    (
+        guid(
+            0x1806_d474,
+            0xcadf,
+            0x4509,
+            [0xa4, 0xba, 0x9a, 0xab, 0xcb, 0x96, 0xaa, 0xe8],
+        ),
+        "Padding",
+    ),
     (EXTENDED_STREAM, "Extended Stream Properties"),
-    (guid(0xa086_49cf, 0x4775, 0x4670, [0x8a, 0x16, 0x6e, 0x35, 0x35, 0x75, 0x66, 0xcd]), "Advanced Mutual Exclusion"),
-    (guid(0xd146_5a40, 0x5a79, 0x4338, [0xb7, 0x1b, 0xe3, 0x6b, 0x8f, 0xd6, 0xc2, 0x49]), "Group Mutual Exclusion"),
-    (guid(0xd4fe_d15b, 0x88d3, 0x454f, [0x81, 0xf0, 0xed, 0x5c, 0x45, 0x99, 0x9e, 0x24]), "Stream Prioritization"),
-    (guid(0xa696_09e6, 0x517b, 0x11d2, [0xb6, 0xaf, 0x00, 0xc0, 0x4f, 0xd9, 0x08, 0xe9]), "Bandwidth Sharing"),
+    (
+        guid(
+            0xa086_49cf,
+            0x4775,
+            0x4670,
+            [0x8a, 0x16, 0x6e, 0x35, 0x35, 0x75, 0x66, 0xcd],
+        ),
+        "Advanced Mutual Exclusion",
+    ),
+    (
+        guid(
+            0xd146_5a40,
+            0x5a79,
+            0x4338,
+            [0xb7, 0x1b, 0xe3, 0x6b, 0x8f, 0xd6, 0xc2, 0x49],
+        ),
+        "Group Mutual Exclusion",
+    ),
+    (
+        guid(
+            0xd4fe_d15b,
+            0x88d3,
+            0x454f,
+            [0x81, 0xf0, 0xed, 0x5c, 0x45, 0x99, 0x9e, 0x24],
+        ),
+        "Stream Prioritization",
+    ),
+    (
+        guid(
+            0xa696_09e6,
+            0x517b,
+            0x11d2,
+            [0xb6, 0xaf, 0x00, 0xc0, 0x4f, 0xd9, 0x08, 0xe9],
+        ),
+        "Bandwidth Sharing",
+    ),
     (LANGUAGE_LIST, "Language List"),
     (METADATA, "Metadata"),
     (METADATA_LIBRARY, "Metadata Library"),
-    (guid(0xd6e2_29df, 0x35da, 0x11d1, [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe]), "Index Parameters"),
-    (guid(0x6b20_3bad, 0x3f11, 0x48e4, [0xac, 0xa8, 0xd7, 0x61, 0x3d, 0xe2, 0xcf, 0xa7]), "Media Object Index Parameters"),
-    (guid(0xf55e_496d, 0x9797, 0x4b5d, [0x8c, 0x8b, 0x60, 0x4d, 0xfe, 0x9b, 0xfb, 0x24]), "Timecode Index Parameters"),
-    (guid(0x26f1_8b5d, 0x4584, 0x47ec, [0x9f, 0x5f, 0x0e, 0x65, 0x1f, 0x04, 0x52, 0xc9]), "Compatibility"),
-    (guid(0x4305_8533, 0x6981, 0x49e6, [0x9b, 0x74, 0xad, 0x12, 0xcb, 0x86, 0xd5, 0x8c]), "Advanced Content Encryption"),
+    (
+        guid(
+            0xd6e2_29df,
+            0x35da,
+            0x11d1,
+            [0x90, 0x34, 0x00, 0xa0, 0xc9, 0x03, 0x49, 0xbe],
+        ),
+        "Index Parameters",
+    ),
+    (
+        guid(
+            0x6b20_3bad,
+            0x3f11,
+            0x48e4,
+            [0xac, 0xa8, 0xd7, 0x61, 0x3d, 0xe2, 0xcf, 0xa7],
+        ),
+        "Media Object Index Parameters",
+    ),
+    (
+        guid(
+            0xf55e_496d,
+            0x9797,
+            0x4b5d,
+            [0x8c, 0x8b, 0x60, 0x4d, 0xfe, 0x9b, 0xfb, 0x24],
+        ),
+        "Timecode Index Parameters",
+    ),
+    (
+        guid(
+            0x26f1_8b5d,
+            0x4584,
+            0x47ec,
+            [0x9f, 0x5f, 0x0e, 0x65, 0x1f, 0x04, 0x52, 0xc9],
+        ),
+        "Compatibility",
+    ),
+    (
+        guid(
+            0x4305_8533,
+            0x6981,
+            0x49e6,
+            [0x9b, 0x74, 0xad, 0x12, 0xcb, 0x86, 0xd5, 0x8c],
+        ),
+        "Advanced Content Encryption",
+    ),
     (AUDIO_MEDIA, "Audio Media"),
     (VIDEO_MEDIA, "Video Media"),
-    (guid(0x59da_cfc0, 0x59e6, 0x11d0, [0xa3, 0xac, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6]), "Command Media"),
-    (guid(0xb61b_e100, 0x5b4e, 0x11cf, [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b]), "JFIF Media"),
-    (guid(0x91bd_222c, 0xf21c, 0x497a, [0x8b, 0x6d, 0x5a, 0xa8, 0x6b, 0xfc, 0x01, 0x85]), "File Transfer Media"),
-    (guid(0x3afb_65e2, 0x47ef, 0x40f2, [0xac, 0x2c, 0x70, 0xa9, 0x0d, 0x71, 0xd3, 0x43]), "Binary Media"),
-    (guid(0x20fb_5700, 0x5b55, 0x11cf, [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b]), "No Error Correction"),
-    (guid(0xbfc3_cd50, 0x618f, 0x11cf, [0x8b, 0xb2, 0x00, 0xaa, 0x00, 0xb4, 0xe2, 0x20]), "Audio Spread"),
-    (guid(0xabd3_d211, 0xa9ba, 0x11cf, [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65]), "Reserved 1"),
+    (
+        guid(
+            0x59da_cfc0,
+            0x59e6,
+            0x11d0,
+            [0xa3, 0xac, 0x00, 0xa0, 0xc9, 0x03, 0x48, 0xf6],
+        ),
+        "Command Media",
+    ),
+    (
+        guid(
+            0xb61b_e100,
+            0x5b4e,
+            0x11cf,
+            [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b],
+        ),
+        "JFIF Media",
+    ),
+    (
+        guid(
+            0x91bd_222c,
+            0xf21c,
+            0x497a,
+            [0x8b, 0x6d, 0x5a, 0xa8, 0x6b, 0xfc, 0x01, 0x85],
+        ),
+        "File Transfer Media",
+    ),
+    (
+        guid(
+            0x3afb_65e2,
+            0x47ef,
+            0x40f2,
+            [0xac, 0x2c, 0x70, 0xa9, 0x0d, 0x71, 0xd3, 0x43],
+        ),
+        "Binary Media",
+    ),
+    (
+        guid(
+            0x20fb_5700,
+            0x5b55,
+            0x11cf,
+            [0xa8, 0xfd, 0x00, 0x80, 0x5f, 0x5c, 0x44, 0x2b],
+        ),
+        "No Error Correction",
+    ),
+    (
+        guid(
+            0xbfc3_cd50,
+            0x618f,
+            0x11cf,
+            [0x8b, 0xb2, 0x00, 0xaa, 0x00, 0xb4, 0xe2, 0x20],
+        ),
+        "Audio Spread",
+    ),
+    (
+        guid(
+            0xabd3_d211,
+            0xa9ba,
+            0x11cf,
+            [0x8e, 0xe6, 0x00, 0xc0, 0x0c, 0x20, 0x53, 0x65],
+        ),
+        "Reserved 1",
+    ),
 ];
 
 fn guid_name(g: &Guid) -> Option<&'static str> {
@@ -118,7 +422,9 @@ pub static WMA: Format = Format {
     title: "Windows Media Audio",
     extensions: &["wma", "asf"],
     mime: "audio/x-ms-wma",
-    probe: Probe::Custom(|h| h.starts_with(HEADER_BYTES) && has(h, AUDIO_BYTES) && !has(h, VIDEO_BYTES)),
+    probe: Probe::Custom(|h| {
+        h.starts_with(HEADER_BYTES) && has(h, AUDIO_BYTES) && !has(h, VIDEO_BYTES)
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -201,11 +507,9 @@ async fn objects(cx: &Cx, input: Input, region: Span, depth: u32, packet_size: u
             break;
         };
         if size < 24 {
-            cx.emit(
-                Node::new("Invalid object")
-                    .span(region.tail(pos))
-                    .diag(Diagnostic::malformed(format!("object size {size} is smaller than its header"))),
-            );
+            cx.emit(Node::new("Invalid object").span(region.tail(pos)).diag(
+                Diagnostic::malformed(format!("object size {size} is smaller than its header")),
+            ));
             break;
         }
         let span = region.sub(pos, size);
@@ -226,7 +530,10 @@ async fn objects(cx: &Cx, input: Input, region: Span, depth: u32, packet_size: u
             node = node.summary(s);
         }
         if span.len < size {
-            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, size), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, size),
+                span.len,
+            ));
         }
         cx.push(node.lazy(crate::expander!(self::expand_object: Object), obj))
             .await;
@@ -301,14 +608,28 @@ async fn expand_object(cx: Cx, obj: Object) -> Result<()> {
         f.u32("Number of header objects").emit()?;
         f.u8("Reserved 1").emit()?;
         f.u8("Reserved 2").emit()?;
-        objects(&cx, obj.input, body.tail(6), obj.depth.saturating_add(1), obj.packet_size).await?;
+        objects(
+            &cx,
+            obj.input,
+            body.tail(6),
+            obj.depth.saturating_add(1),
+            obj.packet_size,
+        )
+        .await?;
     } else if g == HEADER_EXTENSION {
         let b = cx.block(body.sub(0, 0x10000)).await?;
         let mut f = Fields::emitting(&cx, &b, LE);
         f.guid("Reserved field 1").emit()?;
         f.u16("Reserved field 2").emit()?;
         f.u32("Header extension data size").emit()?;
-        objects(&cx, obj.input, body.tail(22), obj.depth.saturating_add(1), obj.packet_size).await?;
+        objects(
+            &cx,
+            obj.input,
+            body.tail(22),
+            obj.depth.saturating_add(1),
+            obj.packet_size,
+        )
+        .await?;
     } else if g == DATA {
         let b = cx.block(body.sub(0, 26)).await?;
         let mut f = Fields::emitting(&cx, &b, LE);
@@ -411,7 +732,10 @@ fn decode_body(f: &mut Fields<'_>, g: &Guid) -> Result<()> {
         ]) {
             *slot = f.u16(name).emit()?;
         }
-        for (len, name) in lens.iter().zip(["Title", "Author", "Copyright", "Description", "Rating"]) {
+        for (len, name) in
+            lens.iter()
+                .zip(["Title", "Author", "Copyright", "Description", "Rating"])
+        {
             f.utf16(name, u64::from(*len / 2)).emit()?;
         }
     } else if *g == EXTENDED_CONTENT {
@@ -466,11 +790,13 @@ fn decode_body(f: &mut Fields<'_>, g: &Guid) -> Result<()> {
                 break;
             }
             f.u16("Type")
-                .with(|&t, n| n.summary(match t {
-                    1 => "video",
-                    2 => "audio",
-                    _ => "unknown",
-                }))
+                .with(|&t, n| {
+                    n.summary(match t {
+                        1 => "video",
+                        2 => "audio",
+                        _ => "unknown",
+                    })
+                })
                 .emit()?;
             let len = f.u16("Codec name length").emit()?;
             f.utf16("Codec name", len.into()).emit()?;
@@ -520,10 +846,12 @@ fn decode_body(f: &mut Fields<'_>, g: &Guid) -> Result<()> {
         f.u16("Stream number").emit()?;
         f.u16("Stream language ID index").emit()?;
         f.u64("Average time per frame")
-            .with(|&t, n| if t > 0 {
-                n.summary(format!("{} fps", vidutil::num(10_000_000.0 / t as f64)))
-            } else {
-                n
+            .with(|&t, n| {
+                if t > 0 {
+                    n.summary(format!("{} fps", vidutil::num(10_000_000.0 / t as f64)))
+                } else {
+                    n
+                }
             })
             .emit()?;
         f.u16("Stream name count").emit()?;
@@ -536,15 +864,28 @@ fn decode_body(f: &mut Fields<'_>, g: &Guid) -> Result<()> {
 fn typed_value(f: &mut Fields<'_>, kind: u16, len: u64) -> Result<Option<Value>> {
     let bytes = f.bytes("Value", len).get()?;
     Ok(Some(match kind {
-        0 => Value::Text(crate::text::utf16(&bytes, LE).trim_end_matches('\0').to_owned()),
+        0 => Value::Text(
+            crate::text::utf16(&bytes, LE)
+                .trim_end_matches('\0')
+                .to_owned(),
+        ),
         2 => Value::Bool(bytes.iter().any(|&b| b != 0)),
         3..=5 => Value::UInt {
-            value: bytes.iter().rev().fold(0u64, |a, &b| (a << 8) | u64::from(b)),
+            value: bytes
+                .iter()
+                .rev()
+                .fold(0u64, |a, &b| (a << 8) | u64::from(b)),
             bits: u8::try_from(len.saturating_mul(8).min(64)).unwrap_or(64),
             radix: crate::value::Radix::Dec,
         },
         _ if bytes.len() <= 32 => Value::Bytes(bytes),
-        _ => return Ok(Some(Value::Text(format!("{} bytes ({})", len, vidutil::lookup_or(VALUE_TYPES, kind.into()))))),
+        _ => {
+            return Ok(Some(Value::Text(format!(
+                "{} bytes ({})",
+                len,
+                vidutil::lookup_or(VALUE_TYPES, kind.into())
+            ))));
+        }
     }))
 }
 
@@ -668,7 +1009,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn file_summary(cx: &Cx, file: Span) -> Option<(String, u32)> {
     let d = cx.read_avail(file.sub(0, 30)).await.ok()?;
     let size = u64_le(&d, 16)?;
-    let header = vidutil::read_small(cx, file.sub(30, size.saturating_sub(30)), 0x40000).await.ok()?;
+    let header = vidutil::read_small(cx, file.sub(30, size.saturating_sub(30)), 0x40000)
+        .await
+        .ok()?;
     let mut video = false;
     let mut audio = false;
     let mut streams = Vec::new();
@@ -677,7 +1020,10 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<(String, u32)> {
     let mut packet_size = 0;
     let mut at = 0usize;
     for _ in 0..256 {
-        let (Some(g), Some(len)) = (read_guid(&header, at), u64_le(&header, at.saturating_add(16))) else {
+        let (Some(g), Some(len)) = (
+            read_guid(&header, at),
+            u64_le(&header, at.saturating_add(16)),
+        ) else {
             break;
         };
         let len = usize::try_from(len).ok()?;
@@ -687,7 +1033,10 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<(String, u32)> {
             video |= kind == Some(VIDEO_MEDIA);
             audio |= kind == Some(AUDIO_MEDIA);
             if let Some(s) = stream_summary(obj) {
-                streams.push(s.split_once(": ").map_or(s.clone(), |(_, rest)| rest.to_owned()));
+                streams.push(
+                    s.split_once(": ")
+                        .map_or(s.clone(), |(_, rest)| rest.to_owned()),
+                );
             }
         } else if g == FILE_PROPERTIES {
             let play = u64_le(obj, 64)?;

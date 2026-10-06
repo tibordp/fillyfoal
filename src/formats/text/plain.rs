@@ -8,7 +8,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::{Format, Head, HEAD_LEN, Input, Probe};
+use crate::formats::{Format, HEAD_LEN, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;
@@ -29,7 +29,9 @@ pub static FORMAT: Format = Format {
 pub static SCRIPT: Format = Format {
     name: "script",
     title: "Script with interpreter line",
-    extensions: &["sh", "bash", "zsh", "py", "pl", "rb", "js", "mjs", "php", "lua", "tcl"],
+    extensions: &[
+        "sh", "bash", "zsh", "py", "pl", "rb", "js", "mjs", "php", "lua", "tcl",
+    ],
     mime: "text/x-script",
     probe: Probe::Custom(probe_script),
     dissect: crate::expander!(dissect_script: Input),
@@ -104,10 +106,7 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
     let head = cx.read_avail(span.sub(0, HEAD_LEN)).await?;
     let (encoding, bom) = match encoding::bom(&head) {
         Some(found) => found,
-        None => (
-            encoding::classify(&head).unwrap_or(Encoding::Utf8),
-            0,
-        ),
+        None => (encoding::classify(&head).unwrap_or(Encoding::Utf8), 0),
     };
     let body = head.get(to_usize(bom)..).unwrap_or_default();
     let endings = Endings::count(units(body, encoding));
@@ -159,9 +158,7 @@ fn line_count(o: &Overview) -> String {
 fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
     let mut encoding = Node::new("Encoding").value(Value::Text(o.encoding.name().to_owned()));
     if o.bom > 0 {
-        encoding = encoding
-            .span(span.sub(0, o.bom))
-            .summary("byte order mark");
+        encoding = encoding.span(span.sub(0, o.bom)).summary("byte order mark");
     }
     cx.emit(encoding);
     let e = &o.endings;
@@ -174,7 +171,10 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
     let summary = if o.exact {
         line_count(o)
     } else {
-        format!("{} (estimated from the first {HEAD_LEN:#x} bytes)", line_count(o))
+        format!(
+            "{} (estimated from the first {HEAD_LEN:#x} bytes)",
+            line_count(o)
+        )
     };
     cx.emit(
         Node::new("Lines")
@@ -191,8 +191,12 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
         let mut lines = Lines::new(&cx, span);
         lines.seek(0, first);
         while let Some(line) = lines.next().await? {
-            cx.push(line_node(line.number, line.span, &encoding.decode(&line.bytes)))
-                .await;
+            cx.push(line_node(
+                line.number,
+                line.span,
+                &encoding.decode(&line.bytes),
+            ))
+            .await;
         }
         cx.set_count(Count::Exact(lines.number().saturating_sub(first)));
         return Ok(());
@@ -225,8 +229,12 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
         };
         number = number.saturating_add(1);
         let content = scan.bytes(start, end, LINE_CAP).await?;
-        cx.push(line_node(number, scan.span(start, end), &encoding.decode(&content)))
-            .await;
+        cx.push(line_node(
+            number,
+            scan.span(start, end),
+            &encoding.decode(&content),
+        ))
+        .await;
         pos = next.max(start.saturating_add(unit));
     }
     cx.set_count(Count::Exact(number.saturating_sub(first)));
@@ -351,11 +359,7 @@ pub async fn dissect_script(cx: Cx, input: Input) -> Result<()> {
     let shebang = parse_shebang(&command.text());
     let lang = language(&shebang.program);
     let what = lang.map_or_else(|| "Script".to_owned(), |l| format!("{l} script"));
-    cx.annotate(format!(
-        "{what} ({}), {}",
-        command.text(),
-        line_count(&o)
-    ));
+    cx.annotate(format!("{what} ({}), {}", command.text(), line_count(&o)));
     cx.emit(
         Node::new("Interpreter line")
             .span(scan.span(first.start, first.end))
@@ -371,7 +375,11 @@ async fn shebang_fields(cx: Cx, span: Span) -> Result<()> {
     let command = line.piece().from(2).trim();
     let mut words = command.words();
     if let Some(path) = words.next() {
-        cx.emit(Node::new("Interpreter").span(path.span()).value(Value::Text(path.text())));
+        cx.emit(
+            Node::new("Interpreter")
+                .span(path.span())
+                .value(Value::Text(path.text())),
+        );
     }
     let shebang = parse_shebang(&command.text());
     if shebang.program != shebang.path.rsplit('/').next().unwrap_or_default() {
@@ -386,7 +394,11 @@ async fn shebang_fields(cx: Cx, span: Span) -> Result<()> {
             to_usize(a.span().offset.saturating_sub(command.span().offset)),
             to_usize(b.span().end().saturating_sub(command.span().offset)),
         );
-        cx.emit(Node::new("Arguments").span(args.span()).value(Value::Text(args.text())));
+        cx.emit(
+            Node::new("Arguments")
+                .span(args.span())
+                .value(Value::Text(args.text())),
+        );
     }
     Ok(())
 }

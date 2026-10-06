@@ -115,7 +115,11 @@ fn extents_text(b: &[u8]) -> String {
         .filter(|&(_, n)| n != 0)
         .map(|(s, n)| format!("{n} at {s}"))
         .collect();
-    if list.is_empty() { "none".to_owned() } else { list.join(", ") }
+    if list.is_empty() {
+        "none".to_owned()
+    } else {
+        list.join(", ")
+    }
 }
 
 const SPECIAL_FILES: [&str; 5] = [
@@ -199,14 +203,18 @@ impl Volume {
             want = 0;
         }
         if left > 0 {
-            return Err(Diagnostic::malformed(format!("catalog node {n} lies outside the catalog file")));
+            return Err(Diagnostic::malformed(format!(
+                "catalog node {n} lies outside the catalog file"
+            )));
         }
         Ok(out)
     }
 
     /// The volume span of byte `offset` of catalog node `n` (for provenance).
     fn node_span(&self, n: u32, offset: u64, len: u64) -> Span {
-        let mut want = u64::from(n).saturating_mul(self.node_size).saturating_add(offset);
+        let mut want = u64::from(n)
+            .saturating_mul(self.node_size)
+            .saturating_add(offset);
         for piece in &self.catalog {
             if want < piece.len {
                 return piece.sub(want, len);
@@ -252,7 +260,11 @@ record! {
 }
 
 const COMPARE: EnumTable = &[(0xcf, "case folding"), (0xbc, "binary")];
-const BTREE_ATTRS: FlagTable = &[flag(1, "BAD_CLOSE"), flag(2, "BIG_KEYS"), flag(4, "VARIABLE_INDEX_KEYS")];
+const BTREE_ATTRS: FlagTable = &[
+    flag(1, "BAD_CLOSE"),
+    flag(2, "BIG_KEYS"),
+    flag(4, "VARIABLE_INDEX_KEYS"),
+];
 
 record! {
     /// `HFSPlusCatalogFolder`.
@@ -315,15 +327,30 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let span = vol.sub(HEADER, VolumeHeader::SIZE);
     let h = parse(&cx, span, BE, &(), VolumeHeader::layout).await?;
     cx.emit(Node::new("Boot blocks").span(vol.sub(0, HEADER)));
-    cx.emit(VolumeHeader::node("Volume header", vol.sub(HEADER, 512), BE));
-    let forks = cx.read_avail(vol.sub(HEADER.saturating_add(VolumeHeader::SIZE), 5 * ForkData::SIZE)).await?;
+    cx.emit(VolumeHeader::node(
+        "Volume header",
+        vol.sub(HEADER, 512),
+        BE,
+    ));
+    let forks = cx
+        .read_avail(vol.sub(
+            HEADER.saturating_add(VolumeHeader::SIZE),
+            5 * ForkData::SIZE,
+        ))
+        .await?;
     for (i, name) in SPECIAL_FILES.iter().enumerate() {
-        let at = HEADER.saturating_add(VolumeHeader::SIZE).saturating_add(to_u64(i).saturating_mul(ForkData::SIZE));
+        let at = HEADER
+            .saturating_add(VolumeHeader::SIZE)
+            .saturating_add(to_u64(i).saturating_mul(ForkData::SIZE));
         cx.emit(ForkData::node(*name, vol.sub(at, ForkData::SIZE), BE));
     }
     let block = u64::from(h.block_size);
     let kind = if h.signature == "HX" { "HFSX" } else { "HFS+" };
-    let journaled = if h.attributes & (1 << 13) != 0 { "journaled " } else { "" };
+    let journaled = if h.attributes & (1 << 13) != 0 {
+        "journaled "
+    } else {
+        ""
+    };
     if !block.is_power_of_two() || block < 512 {
         return Err(Diagnostic::malformed(format!("allocation block size {block}")).at(span));
     }
@@ -338,23 +365,33 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     volume.catalog = catalog_fork.pieces(&volume);
     if catalog_fork.overflowed() {
-        cx.diag(Diagnostic::unsupported("catalog extents in the overflow file are not followed"));
+        cx.diag(Diagnostic::unsupported(
+            "catalog extents in the overflow file are not followed",
+        ));
     }
     // The header node is node 0; its size is in the header record.
     let first = volume.catalog.first().copied().unwrap_or(vol.sub(0, 0));
     let header_rec = first.sub(14, BTreeHeader::SIZE);
     let bt = parse(&cx, header_rec, BE, &(), BTreeHeader::layout).await?;
     volume.node_size = u64::from(bt.node_size);
-    let volume_name = folder_name(&cx, &volume, bt.root, bt.depth).await.unwrap_or_default();
+    let volume_name = folder_name(&cx, &volume, bt.root, bt.depth)
+        .await
+        .unwrap_or_default();
     cx.annotate(format!(
         "{journaled}{kind} volume{}, {} ({} files, {} folders)",
-        if volume_name.is_empty() { String::new() } else { format!(" \"{volume_name}\"") },
+        if volume_name.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{volume_name}\"")
+        },
         size(u64::from(h.total_blocks).saturating_mul(block)),
         h.files,
         h.folders
     ));
     if !(512..=32768).contains(&volume.node_size) || !volume.node_size.is_power_of_two() {
-        return Err(Diagnostic::malformed(format!("catalog node size {}", volume.node_size)).at(header_rec));
+        return Err(
+            Diagnostic::malformed(format!("catalog node size {}", volume.node_size)).at(header_rec),
+        );
     }
     let fs: Vol = Arc::new(volume);
     cx.emit(
@@ -362,29 +399,36 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(first.sub(0, fs.node_size))
             .lazy(btree_header, first),
     );
-    cx.emit(
-        Node::new("Root folder")
-            .summary(volume_name)
-            .lazy(
-                crate::expander!(self::folder: Folder),
-                Folder {
-                    vol: fs.clone(),
-                    id: fs.root,
-                    tree: (bt.root, bt.depth.into()),
-                    record: None,
-                    ancestors: Arc::new(Vec::new()),
-                },
-            ),
-    );
+    cx.emit(Node::new("Root folder").summary(volume_name).lazy(
+        crate::expander!(self::folder: Folder),
+        Folder {
+            vol: fs.clone(),
+            id: fs.root,
+            tree: (bt.root, bt.depth.into()),
+            record: None,
+            ancestors: Arc::new(Vec::new()),
+        },
+    ));
     if h.journal_info != 0 {
-        cx.emit(Node::new("Journal info block").span(vol.sub(u64::from(h.journal_info).saturating_mul(block), block)));
+        cx.emit(
+            Node::new("Journal info block")
+                .span(vol.sub(u64::from(h.journal_info).saturating_mul(block), block)),
+        );
     }
     Ok(())
 }
 
 async fn btree_header(cx: Cx, node: Span) -> Result<()> {
-    cx.emit(NodeDescriptor::node("Node descriptor", node.sub(0, NodeDescriptor::SIZE), BE));
-    cx.emit(BTreeHeader::node("Header record", node.sub(14, BTreeHeader::SIZE), BE));
+    cx.emit(NodeDescriptor::node(
+        "Node descriptor",
+        node.sub(0, NodeDescriptor::SIZE),
+        BE,
+    ));
+    cx.emit(BTreeHeader::node(
+        "Header record",
+        node.sub(14, BTreeHeader::SIZE),
+        BE,
+    ));
     Ok(())
 }
 
@@ -416,7 +460,12 @@ fn records(node: &[u8], node_size: u64) -> Vec<Rec> {
         let parent = u32_be(node, start.saturating_add(2)).unwrap_or(0);
         let name_len = usize::from(u16_be(node, start.saturating_add(6)).unwrap_or(0)).min(255);
         let name = node
-            .get(start.saturating_add(8)..start.saturating_add(8).saturating_add(name_len.saturating_mul(2)))
+            .get(
+                start.saturating_add(8)
+                    ..start
+                        .saturating_add(8)
+                        .saturating_add(name_len.saturating_mul(2)),
+            )
             .unwrap_or_default()
             .as_chunks::<2>()
             .0
@@ -441,7 +490,9 @@ async fn find_leaf(cx: &Cx, vol: &Volume, (root, depth): (u32, u32), parent: u32
     let mut seen = HashSet::new();
     for _ in 0..depth.min(MAX_DEPTH) {
         if !seen.insert(n) {
-            return Err(Diagnostic::malformed(format!("catalog B-tree loops at node {n}")));
+            return Err(Diagnostic::malformed(format!(
+                "catalog B-tree loops at node {n}"
+            )));
         }
         let node = vol.node(cx, n).await?;
         if node.get(8) == Some(&0xff) {
@@ -457,7 +508,9 @@ async fn find_leaf(cx: &Cx, vol: &Volume, (root, depth): (u32, u32), parent: u32
             .ok_or_else(|| Diagnostic::malformed(format!("empty index node {n}")))?;
         n = u32_be(&node, to_usize(pick.body)).unwrap_or(0);
     }
-    Err(Diagnostic::malformed("catalog B-tree deeper than its header says"))
+    Err(Diagnostic::malformed(
+        "catalog B-tree deeper than its header says",
+    ))
 }
 
 /// The name of folder `ROOT_FOLDER`, from its thread record.
@@ -470,7 +523,10 @@ async fn folder_name(cx: &Cx, vol: &Volume, root: u32, depth: u16) -> Result<Str
             let at = to_usize(r.body);
             let len = usize::from(u16_be(&node, at.saturating_add(8)).unwrap_or(0)).min(255);
             let units: Vec<u16> = node
-                .get(at.saturating_add(10)..at.saturating_add(10).saturating_add(len.saturating_mul(2)))
+                .get(
+                    at.saturating_add(10)
+                        ..at.saturating_add(10).saturating_add(len.saturating_mul(2)),
+                )
                 .unwrap_or_default()
                 .as_chunks::<2>()
                 .0
@@ -505,7 +561,9 @@ async fn folder(cx: Cx, f: Folder) -> Result<()> {
     let mut seen = HashSet::new();
     loop {
         if !seen.insert(n) || seen.len() > MAX_LEAVES {
-            cx.diag(Diagnostic::malformed(format!("leaf chain loops at node {n}")));
+            cx.diag(Diagnostic::malformed(format!(
+                "leaf chain loops at node {n}"
+            )));
             break;
         }
         let node = vol.node(&cx, n).await?;
@@ -517,16 +575,24 @@ async fn folder(cx: Cx, f: Folder) -> Result<()> {
                 return Ok(());
             }
             let kind = u16_be(&node, to_usize(r.body)).unwrap_or(0);
-            let span = vol.node_span(n, r.body, r.len.saturating_sub(r.body.saturating_sub(r.start)));
+            let span = vol.node_span(
+                n,
+                r.body,
+                r.len.saturating_sub(r.body.saturating_sub(r.start)),
+            );
             let name = String::from_utf16_lossy(&r.name).replace('\0', "␀");
             let at = to_usize(r.body);
             let node_out = match kind {
                 1 => {
                     let id = u32_be(&node, at.saturating_add(8)).unwrap_or(0);
                     let items = u32_be(&node, at.saturating_add(4)).unwrap_or(0);
-                    let out = Node::new(name).span(span).summary(format!("folder, {items} items"));
+                    let out = Node::new(name)
+                        .span(span)
+                        .summary(format!("folder, {items} items"));
                     if ancestors.contains(&id) || ancestors.len() > MAX_FOLDER_DEPTH {
-                        out.diag(Diagnostic::malformed(format!("folder {id} contains itself; not followed")))
+                        out.diag(Diagnostic::malformed(format!(
+                            "folder {id} contains itself; not followed"
+                        )))
                     } else {
                         out.lazy(
                             crate::expander!(self::folder: Folder),
@@ -541,8 +607,14 @@ async fn folder(cx: Cx, f: Folder) -> Result<()> {
                     }
                 }
                 2 => {
-                    let data = Fork::parse(node.get(at.saturating_add(88)..at.saturating_add(168)).unwrap_or_default());
-                    let rsrc = Fork::parse(node.get(at.saturating_add(168)..at.saturating_add(248)).unwrap_or_default());
+                    let data = Fork::parse(
+                        node.get(at.saturating_add(88)..at.saturating_add(168))
+                            .unwrap_or_default(),
+                    );
+                    let rsrc = Fork::parse(
+                        node.get(at.saturating_add(168)..at.saturating_add(248))
+                            .unwrap_or_default(),
+                    );
                     let mut summary = size(data.size);
                     if rsrc.size > 0 {
                         summary = format!("{summary} + {} resource fork", size(rsrc.size));
@@ -570,7 +642,11 @@ async fn folder(cx: Cx, f: Folder) -> Result<()> {
 }
 
 async fn file(cx: Cx, (vol, record, forks): (Vol, Span, Arc<(Fork, Fork)>)) -> Result<()> {
-    cx.emit(FileRecord::node("Catalog record", record.sub(0, FileRecord::SIZE), BE));
+    cx.emit(FileRecord::node(
+        "Catalog record",
+        record.sub(0, FileRecord::SIZE),
+        BE,
+    ));
     let (data, rsrc) = &*forks;
     for (name, fork, anchor_at, transform) in [
         ("Data fork", data, 88u64, "hfs-data-fork"),
@@ -590,7 +666,11 @@ async fn file(cx: Cx, (vol, record, forks): (Vol, Span, Arc<(Fork, Fork)>)) -> R
         cx.emit(fragments_node("Extents", pieces.clone()));
         let span = assemble(&cx, fork_span, transform, pieces)?;
         let node = content_node(&vol.input, span);
-        cx.emit(if name == "Data fork" { node } else { node.summary(format!("resource fork, {}", size(span.len))) });
+        cx.emit(if name == "Data fork" {
+            node
+        } else {
+            node.summary(format!("resource fork, {}", size(span.len)))
+        });
     }
     Ok(())
 }
@@ -625,14 +705,22 @@ async fn hfs_wrapper(cx: &Cx, input: Input) -> Result<()> {
     let vol = input.span;
     let span = vol.sub(HEADER, Mdb::SIZE);
     let mdb = parse(cx, span, BE, &(), Mdb::layout).await?;
-    cx.emit(Mdb::node("Master directory block", vol.sub(HEADER, 512), BE));
-    let embed = cx.read_avail(vol.sub(HEADER.saturating_add(124), 6)).await?;
+    cx.emit(Mdb::node(
+        "Master directory block",
+        vol.sub(HEADER, 512),
+        BE,
+    ));
+    let embed = cx
+        .read_avail(vol.sub(HEADER.saturating_add(124), 6))
+        .await?;
     let name = pascal(&mdb.name);
     if embed.get(..2) == Some(b"H+") {
         let start = u64::from(u16_be(&embed, 2).unwrap_or(0));
         let count = u64::from(u16_be(&embed, 4).unwrap_or(0));
         let block = u64::from(mdb.block_size);
-        let at = u64::from(mdb.first_block).saturating_mul(512).saturating_add(start.saturating_mul(block));
+        let at = u64::from(mdb.first_block)
+            .saturating_mul(512)
+            .saturating_add(start.saturating_mul(block));
         let inner = vol.sub(at, count.saturating_mul(block));
         cx.annotate(format!("HFS wrapper \"{name}\" around an HFS+ volume"));
         cx.emit(embedded("Embedded HFS+ volume", input.nested(inner)));

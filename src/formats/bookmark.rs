@@ -111,7 +111,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let book = Book { data };
     let first = cx.read(data.sub_exact(0, 4)?).await?;
     let mut toc = u32_le(&first, 0).unwrap_or(0);
-    cx.emit(Node::new("First TOC offset").span(data.sub(0, 4)).value(crate::formats::datakit::hex(toc, 32)));
+    cx.emit(
+        Node::new("First TOC offset")
+            .span(data.sub(0, 4))
+            .value(crate::formats::datakit::hex(toc, 32)),
+    );
     let mut path = Vec::new();
     let mut volume = None;
     let mut seen = 0u32;
@@ -125,7 +129,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let id = u32_le(&h, 8).unwrap_or(0);
         let next = u32_le(&h, 12).unwrap_or(0);
         let count = u32_le(&h, 16).unwrap_or(0);
-        let entries = data.sub_exact(u64::from(toc).saturating_add(20), u64::from(count).saturating_mul(12))?;
+        let entries = data.sub_exact(
+            u64::from(toc).saturating_add(20),
+            u64::from(count).saturating_mul(12),
+        )?;
         if seen == 1 {
             let table = cx.read(entries).await?;
             for e in table.as_chunks::<12>().0 {
@@ -166,8 +173,15 @@ async fn item(cx: &Cx, book: &Book, offset: u32) -> Result<(u32, Span, Span)> {
     let h = cx.read(head).await?;
     let len = u32_le(&h, 0).unwrap_or(0);
     let kind = u32_le(&h, 4).unwrap_or(0);
-    let body = book.data.sub_exact(u64::from(offset).saturating_add(8), len.into())?;
-    Ok((kind, body, book.data.sub(offset.into(), u64::from(len).saturating_add(8))))
+    let body = book
+        .data
+        .sub_exact(u64::from(offset).saturating_add(8), len.into())?;
+    Ok((
+        kind,
+        body,
+        book.data
+            .sub(offset.into(), u64::from(len).saturating_add(8)),
+    ))
 }
 
 async fn string_at(cx: &Cx, book: &Book, offset: u32) -> Result<Option<String>> {
@@ -175,7 +189,9 @@ async fn string_at(cx: &Cx, book: &Book, offset: u32) -> Result<Option<String>> 
     if kind != 0x0101 {
         return Ok(None);
     }
-    Ok(Some(String::from_utf8_lossy(&cx.read(body.sub(0, 0x1000)).await?).into_owned()))
+    Ok(Some(
+        String::from_utf8_lossy(&cx.read(body.sub(0, 0x1000)).await?).into_owned(),
+    ))
 }
 
 async fn string_array(cx: &Cx, book: &Book, offset: u32) -> Result<Vec<String>> {
@@ -198,9 +214,13 @@ async fn toc_entries(cx: Cx, (book, entries): (Book, Span)) -> Result<()> {
     for (i, e) in table.as_chunks::<12>().0.iter().enumerate() {
         let key = u32_le(e, 0).unwrap_or(0);
         let off = u32_le(e, 4).unwrap_or(0);
-        let name = lookup(KEYS, key.into()).map_or_else(|| format!("Key {key:#06x}"), str::to_owned);
-        let node = item_node(&cx, &book, name, off, 0).await.unwrap_or_else(|e| Node::new(format!("Key {key:#06x}")).diag(e));
-        cx.push(node.target(entries.sub(to_u64(i).saturating_mul(12), 12))).await;
+        let name =
+            lookup(KEYS, key.into()).map_or_else(|| format!("Key {key:#06x}"), str::to_owned);
+        let node = item_node(&cx, &book, name, off, 0)
+            .await
+            .unwrap_or_else(|e| Node::new(format!("Key {key:#06x}")).diag(e));
+        cx.push(node.target(entries.sub(to_u64(i).saturating_mul(12), 12)))
+            .await;
     }
     Ok(())
 }
@@ -210,15 +230,28 @@ async fn item_node(cx: &Cx, book: &Book, name: String, offset: u32, depth: u32) 
     let (kind, body, span) = item(cx, book, offset).await?;
     let bytes = cx.read(body.sub(0, 0x1000)).await?;
     let node = Node::new(name).span(span);
-    let type_name = lookup(TYPES, kind.into()).map_or_else(|| format!("type {kind:#06x}"), str::to_owned);
+    let type_name =
+        lookup(TYPES, kind.into()).map_or_else(|| format!("type {kind:#06x}"), str::to_owned);
     let num = |n: usize| crate::formats::datakit::le_uint(bytes.get(..n).unwrap_or_default());
     let value = match kind {
         0x0101 | 0x0901 => Some(Value::Text(String::from_utf8_lossy(&bytes).into_owned())),
         0x0201 => Some(Value::Bytes(bytes.get(..32).unwrap_or(&bytes).to_vec())),
-        0x0301 => Some(Value::Int { value: i64::from(num(1) as u8 as i8), bits: 8 }),
-        0x0302 => Some(Value::Int { value: i64::from(num(2) as u16 as i16), bits: 16 }),
-        0x0303 => Some(Value::Int { value: i64::from(num(4) as u32 as i32), bits: 32 }),
-        0x0304 => Some(Value::Int { value: num(8) as i64, bits: 64 }),
+        0x0301 => Some(Value::Int {
+            value: i64::from(num(1) as u8 as i8),
+            bits: 8,
+        }),
+        0x0302 => Some(Value::Int {
+            value: i64::from(num(2) as u16 as i16),
+            bits: 16,
+        }),
+        0x0303 => Some(Value::Int {
+            value: i64::from(num(4) as u32 as i32),
+            bits: 32,
+        }),
+        0x0304 => Some(Value::Int {
+            value: num(8) as i64,
+            bits: 64,
+        }),
         0x0305 => Some(Value::Float(f64::from(f32::from_bits(num(4) as u32)))),
         0x0306 => Some(Value::Float(f64::from_bits(num(8)))),
         0x0400 => Some(cf_time(f64::from_bits(u64_be(&bytes, 0).unwrap_or(0)))),
@@ -247,26 +280,40 @@ async fn item_node(cx: &Cx, book: &Book, name: String, offset: u32, depth: u32) 
 
 async fn container(cx: Cx, (book, kind, body, depth): (Book, u32, Span, u32)) -> Result<()> {
     let data = cx.read(body.sub(0, 0x10000)).await?;
-    let offsets: Vec<u32> = data.as_chunks::<4>().0.iter().map(|o| u32::from_le_bytes(*o)).collect();
+    let offsets: Vec<u32> = data
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|o| u32::from_le_bytes(*o))
+        .collect();
     match kind {
         0x0701 => {
             for pair in offsets.chunks(2) {
-                let (Some(&k), Some(&v)) = (pair.first(), pair.get(1)) else { break };
-                let key = string_at(&cx, &book, k).await.ok().flatten().unwrap_or_else(|| format!("key at {k:#x}"));
+                let (Some(&k), Some(&v)) = (pair.first(), pair.get(1)) else {
+                    break;
+                };
+                let key = string_at(&cx, &book, k)
+                    .await
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| format!("key at {k:#x}"));
                 let node = (item_node(&cx, &book, clip(&key, 120), v, depth)).await;
-                cx.push(node.unwrap_or_else(|e| Node::new(key).diag(e))).await;
+                cx.push(node.unwrap_or_else(|e| Node::new(key).diag(e)))
+                    .await;
             }
         }
         0x0902 => {
             for (name, &o) in ["Base", "Relative"].into_iter().zip(&offsets) {
                 let node = (item_node(&cx, &book, name.to_owned(), o, depth)).await;
-                cx.push(node.unwrap_or_else(|e| Node::new(name).diag(e))).await;
+                cx.push(node.unwrap_or_else(|e| Node::new(name).diag(e)))
+                    .await;
             }
         }
         _ => {
             for (i, &o) in offsets.iter().enumerate() {
                 let node = (item_node(&cx, &book, format!("[{i}]"), o, depth)).await;
-                cx.push(node.unwrap_or_else(|e| Node::new(format!("[{i}]")).diag(e))).await;
+                cx.push(node.unwrap_or_else(|e| Node::new(format!("[{i}]")).diag(e)))
+                    .await;
             }
         }
     }

@@ -150,7 +150,11 @@ async fn chained_imports(
         let (ordinal, weak, name, addend) = if format == 3 {
             let raw = get_at::<u64>(&data, 0, endian).unwrap_or(0);
             let ordinal = raw & 0xffff;
-            let ordinal = if ordinal >= 0xfff0 { ordinal & 0xff } else { ordinal };
+            let ordinal = if ordinal >= 0xfff0 {
+                ordinal & 0xff
+            } else {
+                ordinal
+            };
             (
                 ordinal,
                 raw & 0x1_0000 != 0,
@@ -289,11 +293,15 @@ pub(super) async fn exports_trie(cx: Cx, (span, base): (Span, u64)) -> Result<()
     while let Some((offset, prefix)) = stack.pop() {
         cx.checkpoint().await;
         let Some(seen) = visited.get_mut(offset) else {
-            cx.diag(Diagnostic::malformed(format!("trie node offset {offset:#x} is out of range")));
+            cx.diag(Diagnostic::malformed(format!(
+                "trie node offset {offset:#x} is out of range"
+            )));
             continue;
         };
         if *seen {
-            cx.diag(Diagnostic::malformed(format!("trie node {offset:#x} is reachable twice")));
+            cx.diag(Diagnostic::malformed(format!(
+                "trie node {offset:#x} is reachable twice"
+            )));
             continue;
         }
         *seen = true;
@@ -301,9 +309,7 @@ pub(super) async fn exports_trie(cx: Cx, (span, base): (Span, u64)) -> Result<()
         let bad = || Diagnostic::malformed("malformed trie node").at(span.sub(to_u64(offset), 1));
         let terminal = r.uleb().ok_or_else(bad)?;
         let info_start = r.pos();
-        let children = info_start
-            .checked_add(to_usize(terminal))
-            .ok_or_else(bad)?;
+        let children = info_start.checked_add(to_usize(terminal)).ok_or_else(bad)?;
         if terminal > 0 {
             let flags = r.uleb().ok_or_else(bad)?;
             let name = String::from_utf8_lossy(&prefix).into_owned();
@@ -365,8 +371,11 @@ pub(super) async fn exports_trie(cx: Cx, (span, base): (Span, u64)) -> Result<()
 // ---------------------------------------------------------------------------
 // Bind opcodes (LC_DYLD_INFO)
 
-const BIND_TYPE: crate::value::EnumTable =
-    &[(1, "pointer"), (2, "text absolute 32"), (3, "text pc-relative 32")];
+const BIND_TYPE: crate::value::EnumTable = &[
+    (1, "pointer"),
+    (2, "text absolute 32"),
+    (3, "text pc-relative 32"),
+];
 
 #[derive(Default)]
 struct BindState {
@@ -452,17 +461,23 @@ pub(super) async fn bind_opcodes(
                 advance = r.uleb().ok_or_else(bad)?;
             }
             0xd0 => {
-                return Err(Diagnostic::unsupported("threaded binds").at(span.sub(to_u64(start), 1)));
+                return Err(
+                    Diagnostic::unsupported("threaded binds").at(span.sub(to_u64(start), 1))
+                );
             }
             _ => {
-                return Err(Diagnostic::malformed(format!("unknown bind opcode {op:#04x}"))
-                    .at(span.sub(to_u64(start), 1)));
+                return Err(
+                    Diagnostic::malformed(format!("unknown bind opcode {op:#04x}"))
+                        .at(span.sub(to_u64(start), 1)),
+                );
             }
         }
         let at = span.sub(to_u64(start), to_u64(r.pos().saturating_sub(start)));
         for _ in 0..repeat {
             if emitted >= budget {
-                cx.diag(Diagnostic::limit("too many binds for the size of the opcode stream"));
+                cx.diag(Diagnostic::limit(
+                    "too many binds for the size of the opcode stream",
+                ));
                 return Ok(());
             }
             emitted = emitted.saturating_add(1);
@@ -483,10 +498,7 @@ pub(super) async fn bind_opcodes(
             }
             cx.push(Node::new(s.symbol.clone()).span(at).summary(summary))
                 .await;
-            s.offset = s
-                .offset
-                .wrapping_add(advance)
-                .wrapping_add(pointer);
+            s.offset = s.offset.wrapping_add(advance).wrapping_add(pointer);
         }
         if repeat == 0 {
             cx.checkpoint().await;

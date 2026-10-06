@@ -210,7 +210,11 @@ impl<'a> Bits<'a> {
     pub fn se(&mut self) -> Option<i64> {
         let k = i64::try_from(self.ue()?).ok()?;
         let magnitude = k.checked_add(1)? >> 1;
-        Some(if k & 1 == 1 { magnitude } else { magnitude.checked_neg()? })
+        Some(if k & 1 == 1 {
+            magnitude
+        } else {
+            magnitude.checked_neg()?
+        })
     }
 }
 
@@ -630,11 +634,14 @@ pub fn table<E: Entry>(
         } else {
             format!("{count} entries")
         })
-        .lazy(expand_table::<E>, Table {
-            span,
-            count,
-            endian,
-        })
+        .lazy(
+            expand_table::<E>,
+            Table {
+                span,
+                count,
+                endian,
+            },
+        )
 }
 
 const PAGE: u64 = 256;
@@ -646,11 +653,7 @@ pub async fn expand_table<E: Entry>(cx: Cx, t: Table) -> Result<()> {
     if t.count > fits {
         cx.diag(
             Diagnostic::truncated(
-                Span::new(
-                    t.span.source,
-                    t.span.offset,
-                    t.count.saturating_mul(stride),
-                ),
+                Span::new(t.span.source, t.span.offset, t.count.saturating_mul(stride)),
                 t.span.len,
             )
             .at(t.span),
@@ -660,7 +663,9 @@ pub async fn expand_table<E: Entry>(cx: Cx, t: Table) -> Result<()> {
     let mut index = 0u64;
     while index < count {
         let n = count.saturating_sub(index).min(PAGE);
-        let page = t.span.sub(index.saturating_mul(stride), n.saturating_mul(stride));
+        let page = t
+            .span
+            .sub(index.saturating_mul(stride), n.saturating_mul(stride));
         let block = cx.block(page).await?;
         let mut f = Fields::new(&block, t.endian);
         for j in 0..n {

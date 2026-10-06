@@ -91,8 +91,8 @@ pub async fn track(cx: &Cx, trak: Span) -> Result<TrackInfo> {
         } else {
             u32_be(&d, at.saturating_add(4)).map_or(0, u64::from)
         };
-        info.language = u16_be(&d, at.saturating_add(if wide { 12 } else { 8 }))
-            .map(|l| language(l & 0x7fff));
+        info.language =
+            u16_be(&d, at.saturating_add(if wide { 12 } else { 8 })).map(|l| language(l & 0x7fff));
     }
     if let Some(hdlr) = find_path(cx, mdia, &[b"hdlr"]).await? {
         let d = cx.read_avail(hdlr.sub(8, 4)).await?;
@@ -193,7 +193,10 @@ async fn movie(cx: &Cx, moov: Span) -> Result<Option<String>> {
 
 async fn jp2_header(cx: &Cx, jp2h: Span) -> Option<String> {
     let (h, span) = find_child(cx, jp2h, b"ihdr").await.ok()??;
-    let d = cx.read_avail(span.tail(h.header_len).sub(0, 11)).await.ok()?;
+    let d = cx
+        .read_avail(span.tail(h.header_len).sub(0, 11))
+        .await
+        .ok()?;
     Some(format!(
         "{}×{}, {} components",
         u32_be(&d, 4)?,

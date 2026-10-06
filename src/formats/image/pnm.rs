@@ -26,11 +26,46 @@ macro_rules! pnm_format {
     };
 }
 
-pnm_format!(PBM, "pbm", "Portable bitmap", ["pbm"], "image/x-portable-bitmap", b"14");
-pnm_format!(PGM, "pgm", "Portable graymap", ["pgm"], "image/x-portable-graymap", b"25");
-pnm_format!(PPM, "ppm", "Portable pixmap", ["ppm", "pnm"], "image/x-portable-pixmap", b"36");
-pnm_format!(PAM, "pam", "Portable arbitrary map", ["pam"], "image/x-portable-arbitrarymap", b"7");
-pnm_format!(PFM, "pfm", "Portable float map", ["pfm"], "image/x-portable-floatmap", b"Ff");
+pnm_format!(
+    PBM,
+    "pbm",
+    "Portable bitmap",
+    ["pbm"],
+    "image/x-portable-bitmap",
+    b"14"
+);
+pnm_format!(
+    PGM,
+    "pgm",
+    "Portable graymap",
+    ["pgm"],
+    "image/x-portable-graymap",
+    b"25"
+);
+pnm_format!(
+    PPM,
+    "ppm",
+    "Portable pixmap",
+    ["ppm", "pnm"],
+    "image/x-portable-pixmap",
+    b"36"
+);
+pnm_format!(
+    PAM,
+    "pam",
+    "Portable arbitrary map",
+    ["pam"],
+    "image/x-portable-arbitrarymap",
+    b"7"
+);
+pnm_format!(
+    PFM,
+    "pfm",
+    "Portable float map",
+    ["pfm"],
+    "image/x-portable-floatmap",
+    b"Ff"
+);
 
 /// `P` + one of `magics`, then whitespace and a digit or comment (P7: a
 /// keyword line).
@@ -42,7 +77,9 @@ fn probe(h: &Head<'_>, magics: &[u8]) -> bool {
     if !magics.contains(m) || !ws.is_ascii_whitespace() {
         return false;
     }
-    let next = d.get(3..).and_then(|r| r.iter().find(|b| !b.is_ascii_whitespace()));
+    let next = d
+        .get(3..)
+        .and_then(|r| r.iter().find(|b| !b.is_ascii_whitespace()));
     match m {
         b'7' => next.is_some_and(|b| b.is_ascii_uppercase() || *b == b'#'),
         _ => next.is_some_and(|b| b.is_ascii_digit() || *b == b'#'),
@@ -159,7 +196,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
         if values.len() < names.len() {
-            return Err(Diagnostic::truncated(file.sub(0, to_u64(head.len())), to_u64(head.len())));
+            return Err(Diagnostic::truncated(
+                file.sub(0, to_u64(head.len())),
+                to_u64(head.len()),
+            ));
         }
         let w = values.first().copied().unwrap_or(0);
         let h = values.get(1).copied().unwrap_or(0);
@@ -182,7 +222,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         (to_u64(end).saturating_add(1), w, h, len, detail)
     };
-    cx.annotate(format!("{}, {kind} {encoding}, {detail}", dims(width, height)));
+    cx.annotate(format!(
+        "{}, {kind} {encoding}, {detail}",
+        dims(width, height)
+    ));
     let raster = region("Raster", file, raster_start, raster_len);
     cx.emit(if magic == b'F' || magic == b'f' {
         raster.desc("Rows bottom to top")
@@ -192,24 +235,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let end = raster_start.saturating_add(raster_len);
     if end < file.len && matches!(magic, b'4' | b'5' | b'6' | b'7') {
         let rest = file.tail(end);
-        cx.emit(embedded("Next image", input.nested(rest)).summary(format!("{:#x} bytes", rest.len)));
+        cx.emit(
+            embedded("Next image", input.nested(rest)).summary(format!("{:#x} bytes", rest.len)),
+        );
     }
     Ok(())
 }
 
 /// The P7 header: `KEY value` lines up to `ENDHDR`.
-async fn pam_header(
-    cx: &Cx,
-    file: Span,
-    head: &[u8],
-) -> Result<(u64, u64, u64, u64, String)> {
+async fn pam_header(cx: &Cx, file: Span, head: &[u8]) -> Result<(u64, u64, u64, u64, String)> {
     let (mut w, mut h, mut depth, mut maxval) = (0u64, 0u64, 0u64, 0u64);
     let mut tuple = String::new();
     let mut pos = 3usize;
     loop {
         let rest = head.get(pos..).unwrap_or_default();
         let Some(len) = rest.iter().position(|&b| b == b'\n') else {
-            return Err(Diagnostic::malformed("PAM header without ENDHDR").at(file.sub(0, to_u64(head.len()))));
+            return Err(Diagnostic::malformed("PAM header without ENDHDR")
+                .at(file.sub(0, to_u64(head.len()))));
         };
         let line = rest.get(..len).unwrap_or_default();
         let span = file.sub(to_u64(pos), to_u64(len));
@@ -219,7 +261,11 @@ async fn pam_header(
         let key = words.next().unwrap_or_default().to_owned();
         let value = words.collect::<Vec<_>>().join(" ");
         if key.starts_with('#') {
-            cx.emit(Node::new("Comment").span(span).value(text(text_line.clone())));
+            cx.emit(
+                Node::new("Comment")
+                    .span(span)
+                    .value(text(text_line.clone())),
+            );
             continue;
         }
         if key == "ENDHDR" {
@@ -245,7 +291,10 @@ async fn pam_header(
         });
     }
     let bps: u64 = if maxval > 255 { 2 } else { 1 };
-    let len = w.saturating_mul(h).saturating_mul(depth).saturating_mul(bps);
+    let len = w
+        .saturating_mul(h)
+        .saturating_mul(depth)
+        .saturating_mul(bps);
     let detail = if tuple.is_empty() {
         format!("depth {depth}, maxval {maxval}")
     } else {

@@ -65,20 +65,33 @@ record! {
 async fn inode_data(cx: &Cx, vol: Span, ino: u16, inodes_end: u64) -> Result<(Span, Span, u32)> {
     let at = BLOCK.saturating_add(u64::from(ino.saturating_sub(ROOT)).saturating_mul(INODE));
     if at.saturating_add(INODE) > inodes_end {
-        return Err(Diagnostic::malformed(format!("inode {ino} is outside the inode table")));
+        return Err(Diagnostic::malformed(format!(
+            "inode {ino} is outside the inode table"
+        )));
     }
     let span = vol.sub(at, INODE);
     let raw = cx.read(span).await?;
     let first = u64::from(u32_le(&raw, 4).unwrap_or(0));
     let last = u64::from(u32_le(&raw, 12).unwrap_or(0));
     let start = first.saturating_mul(BLOCK);
-    let len = if first == 0 { 0 } else { last.saturating_add(1).saturating_sub(start) };
+    let len = if first == 0 {
+        0
+    } else {
+        last.saturating_add(1).saturating_sub(start)
+    };
     Ok((span, vol.sub(start, len), u32_le(&raw, 16).unwrap_or(0)))
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
-    let sb = parse(&cx, vol.sub(0, Superblock::SIZE), LE, &(), Superblock::layout).await?;
+    let sb = parse(
+        &cx,
+        vol.sub(0, Superblock::SIZE),
+        LE,
+        &(),
+        Superblock::layout,
+    )
+    .await?;
     cx.emit(Superblock::node("Superblock", vol.sub(0, BLOCK), LE));
     let inodes_end = u64::from(sb.start);
     let count = inodes_end.saturating_sub(BLOCK) / INODE;
@@ -87,7 +100,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         crate::text::until_nul(&sb.volume),
         size(u64::from(sb.end).saturating_add(1))
     ));
-    cx.emit(Node::new("Inode table").span(vol.sub(BLOCK, inodes_end.saturating_sub(BLOCK))).summary(format!("{count} inodes")));
+    cx.emit(
+        Node::new("Inode table")
+            .span(vol.sub(BLOCK, inodes_end.saturating_sub(BLOCK)))
+            .summary(format!("{count} inodes")),
+    );
     let (root, dir, _) = inode_data(&cx, vol, ROOT, inodes_end).await?;
     cx.emit(Inode::node("Root inode", root, LE));
     let data = cx.read_avail(dir).await?;
@@ -96,7 +113,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .0
         .iter()
         .enumerate()
-        .map(|(i, e)| (u16_le(e, 0).unwrap_or(0), crate::text::until_nul(e.get(2..).unwrap_or_default()), to_u64(i)))
+        .map(|(i, e)| {
+            (
+                u16_le(e, 0).unwrap_or(0),
+                crate::text::until_nul(e.get(2..).unwrap_or_default()),
+                to_u64(i),
+            )
+        })
         .filter(|(ino, name, _)| *ino != 0 && name != "." && name != "..")
         .collect();
     cx.emit(
@@ -135,7 +158,11 @@ async fn directory(cx: Cx, (input, inodes_end, dir): (Input, u64, Span)) -> Resu
 async fn file(cx: Cx, (input, inode, data, kind): (Input, Span, Span, u32)) -> Result<()> {
     cx.emit(Inode::node("Inode", inode, LE));
     if kind == 2 {
-        cx.emit(Node::new("Directory data").span(data).value(Value::Text("directory".into())));
+        cx.emit(
+            Node::new("Directory data")
+                .span(data)
+                .value(Value::Text("directory".into())),
+        );
     } else {
         cx.emit(content_node(&input, data));
     }

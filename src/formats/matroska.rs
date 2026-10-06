@@ -57,7 +57,9 @@ fn doc_type<'a>(h: &Head<'a>) -> Option<&'a [u8]> {
 /// An element ID (marker bits kept): value and length.
 fn element_id(d: &[u8]) -> Option<(u32, usize)> {
     let first = *d.first()?;
-    let len = usize::try_from(first.leading_zeros()).ok()?.checked_add(1)?;
+    let len = usize::try_from(first.leading_zeros())
+        .ok()?
+        .checked_add(1)?;
     if len > 4 {
         return None;
     }
@@ -69,7 +71,9 @@ fn element_id(d: &[u8]) -> Option<(u32, usize)> {
 /// A data size: `None` for the reserved "unknown" value; and its length.
 fn vint(d: &[u8]) -> Option<(Option<u64>, usize)> {
     let first = *d.first()?;
-    let len = usize::try_from(first.leading_zeros()).ok()?.checked_add(1)?;
+    let len = usize::try_from(first.leading_zeros())
+        .ok()?
+        .checked_add(1)?;
     if len > 8 {
         return None;
     }
@@ -101,7 +105,9 @@ fn mem_children(d: &[u8]) -> impl Iterator<Item = (u32, &[u8])> {
 }
 
 fn be_uint(d: &[u8]) -> u64 {
-    d.iter().take(8).fold(0u64, |acc, &b| (acc << 8) | u64::from(b))
+    d.iter()
+        .take(8)
+        .fold(0u64, |acc, &b| (acc << 8) | u64::from(b))
 }
 
 fn be_int(d: &[u8]) -> i64 {
@@ -158,7 +164,12 @@ const TRACK_TYPES: EnumTable = &[
     (0x21, "metadata"),
 ];
 
-const COMP_ALGO: EnumTable = &[(0, "zlib"), (1, "bzlib"), (2, "lzo1x"), (3, "header stripping")];
+const COMP_ALGO: EnumTable = &[
+    (0, "zlib"),
+    (1, "bzlib"),
+    (2, "lzo1x"),
+    (3, "header stripping"),
+];
 const ENC_TYPE: EnumTable = &[(0, "compression"), (1, "encryption")];
 const INTERLACED: EnumTable = &[(0, "undetermined"), (1, "interlaced"), (2, "progressive")];
 const STEREO: EnumTable = &[
@@ -168,7 +179,12 @@ const STEREO: EnumTable = &[
     (3, "top-bottom (left first)"),
     (11, "side by side (right first)"),
 ];
-const RANGE: EnumTable = &[(0, "unspecified"), (1, "broadcast"), (2, "full"), (3, "defined by matrix/transfer")];
+const RANGE: EnumTable = &[
+    (0, "unspecified"),
+    (1, "broadcast"),
+    (2, "full"),
+    (3, "defined by matrix/transfer"),
+];
 
 use Kind::{Binary, Block, Date, Float, Int, Master, Str, UInt, Utf8};
 
@@ -275,7 +291,12 @@ const SCHEMA: &[Def] = &[
     (0x54b3, "AspectRatioType", UInt, 4),
     (0x2eb524, "UncompressedFourCC", Binary, 4),
     (0x55b0, "Colour", Master, 4),
-    (0x55b1, "MatrixCoefficients", Kind::Enum(vidutil::MATRIX_COEFFICIENTS), 5),
+    (
+        0x55b1,
+        "MatrixCoefficients",
+        Kind::Enum(vidutil::MATRIX_COEFFICIENTS),
+        5,
+    ),
     (0x55b2, "BitsPerChannel", UInt, 5),
     (0x55b3, "ChromaSubsamplingHorz", UInt, 5),
     (0x55b4, "ChromaSubsamplingVert", UInt, 5),
@@ -284,8 +305,18 @@ const SCHEMA: &[Def] = &[
     (0x55b7, "ChromaSitingHorz", UInt, 5),
     (0x55b8, "ChromaSitingVert", UInt, 5),
     (0x55b9, "Range", Kind::Enum(RANGE), 5),
-    (0x55ba, "TransferCharacteristics", Kind::Enum(vidutil::TRANSFER_CHARACTERISTICS), 5),
-    (0x55bb, "Primaries", Kind::Enum(vidutil::COLOUR_PRIMARIES), 5),
+    (
+        0x55ba,
+        "TransferCharacteristics",
+        Kind::Enum(vidutil::TRANSFER_CHARACTERISTICS),
+        5,
+    ),
+    (
+        0x55bb,
+        "Primaries",
+        Kind::Enum(vidutil::COLOUR_PRIMARIES),
+        5,
+    ),
     (0x55bc, "MaxCLL", UInt, 5),
     (0x55bd, "MaxFALL", UInt, 5),
     (0x55d0, "MasteringMetadata", Master, 5),
@@ -485,7 +516,9 @@ async fn unknown_end(cx: &Cx, region: Span, data_start: u64, level: u8) -> Resul
 /// Lists the elements in `region`.
 async fn elements(cx: &Cx, input: Input, region: Span, depth: u32, scale: u64) -> Result<()> {
     if depth > MAX_DEPTH {
-        return Err(Diagnostic::limit(format!("elements nested deeper than {MAX_DEPTH}")).at(region));
+        return Err(
+            Diagnostic::limit(format!("elements nested deeper than {MAX_DEPTH}")).at(region),
+        );
     }
     let mut pos = 0u64;
     while pos < region.len {
@@ -536,11 +569,13 @@ async fn element_node(cx: &Cx, el: &Element) -> Result<Node> {
     let node = Node::new(name).span(el.span);
     let data = el.data();
     let Some(def) = el.def() else {
-        return Ok(node.summary(format!("{} bytes", data.len)).value(Value::UInt {
-            value: el.id.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        }));
+        return Ok(node
+            .summary(format!("{} bytes", data.len))
+            .value(Value::UInt {
+                value: el.id.into(),
+                bits: 32,
+                radix: Radix::Hex,
+            }));
     };
     Ok(match def.2 {
         Master => {
@@ -654,7 +689,11 @@ async fn master(cx: Cx, el: Element) -> Result<()> {
 
 /// The TimestampScale from the segment's Info element.
 async fn segment_scale(cx: &Cx, segment: Span) -> Option<u64> {
-    let info = find_top(cx, segment, &[0x1549a966]).await.ok()?.into_iter().next()?;
+    let info = find_top(cx, segment, &[0x1549a966])
+        .await
+        .ok()?
+        .into_iter()
+        .next()?;
     let d = vidutil::read_small(cx, info.1, 0x10000).await.ok()?;
     mem_children(&d)
         .find(|(id, _)| *id == 0x2ad7b1)
@@ -730,9 +769,7 @@ async fn master_summary(cx: &Cx, el: &Element) -> Option<String> {
             }
             Some(format!("{} at segment offset {:#x}", name_of(id?), pos?))
         }
-        0x61a7 => fields
-            .find(|(id, _)| *id == 0x466e)
-            .map(|(_, v)| text(v)),
+        0x61a7 => fields.find(|(id, _)| *id == 0x466e).map(|(_, v)| text(v)),
         0x67c8 => {
             let mut name = None;
             let mut value = None;
@@ -881,7 +918,12 @@ async fn block(cx: Cx, el: Element) -> Result<()> {
         return Err(Diagnostic::malformed("invalid track number").at(data));
     };
     let at = to_u64(len);
-    cx.emit(uint("Track number", data.sub(0, at), track.unwrap_or(0), 64));
+    cx.emit(uint(
+        "Track number",
+        data.sub(0, at),
+        track.unwrap_or(0),
+        64,
+    ));
     let tc = d
         .get(len..len.saturating_add(2))
         .map(|b| b.iter().fold(0u16, |acc, &x| (acc << 8) | u16::from(x)));
@@ -897,7 +939,9 @@ async fn block(cx: Cx, el: Element) -> Result<()> {
             })
             .summary(format!(
                 "{} s",
-                vidutil::num(f64::from(i16::from_ne_bytes(tc.to_ne_bytes())) * el.scale as f64 / 1e9)
+                vidutil::num(
+                    f64::from(i16::from_ne_bytes(tc.to_ne_bytes())) * el.scale as f64 / 1e9
+                )
             )),
     );
     let fspan = data.sub(at.saturating_add(2), 1);
@@ -955,7 +999,9 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<String> {
         let data_start = pos.saturating_add(h.header_len);
         match h.id {
             0x1a45dfa3 => {
-                let d = vidutil::read_small(cx, file.sub(data_start, h.size?), 0x1000).await.ok()?;
+                let d = vidutil::read_small(cx, file.sub(data_start, h.size?), 0x1000)
+                    .await
+                    .ok()?;
                 let mut doc = String::new();
                 let mut version = 0;
                 for (id, v) in mem_children(&d) {
@@ -982,7 +1028,9 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<String> {
     let Some(segment) = segment else {
         return Some(label);
     };
-    let found = find_top(cx, segment, &[0x1549a966, 0x1654ae6b]).await.ok()?;
+    let found = find_top(cx, segment, &[0x1549a966, 0x1654ae6b])
+        .await
+        .ok()?;
     let mut parts = vec![label];
     let mut duration = None;
     let mut title = None;

@@ -25,13 +25,24 @@ declare_format!(pub WER = "wer-report", "Windows Error Reporting report (.wer)",
 async fn wer(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let raw = cx.read_avail(file.sub(2, 0x40000)).await?;
-    let units: Vec<u16> = raw.as_chunks::<2>().0.iter().map(|c| u16::from_le_bytes(*c)).collect();
+    let units: Vec<u16> = raw
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .collect();
     let mut at = 0usize;
     let mut entries: Vec<(String, String, Span)> = Vec::new();
     while at < units.len() {
-        let end = units.get(at..).and_then(|r| r.iter().position(|&u| u == u16::from(b'\n'))).map_or(units.len(), |p| at.saturating_add(p).saturating_add(1));
+        let end = units
+            .get(at..)
+            .and_then(|r| r.iter().position(|&u| u == u16::from(b'\n')))
+            .map_or(units.len(), |p| at.saturating_add(p).saturating_add(1));
         let line = String::from_utf16_lossy(units.get(at..end).unwrap_or_default());
-        let span = file.sub(2u64.saturating_add(to_u64(at).saturating_mul(2)), to_u64(end.saturating_sub(at)).saturating_mul(2));
+        let span = file.sub(
+            2u64.saturating_add(to_u64(at).saturating_mul(2)),
+            to_u64(end.saturating_sub(at)).saturating_mul(2),
+        );
         if let Some((k, v)) = line.trim_end().split_once('=') {
             entries.push((k.to_owned(), v.to_owned(), span));
         }
@@ -40,21 +51,38 @@ async fn wer(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    let get = |key: &str| entries.iter().find(|(k, _, _)| k == key).map(|(_, v, _)| v.clone()).unwrap_or_default();
+    let get = |key: &str| {
+        entries
+            .iter()
+            .find(|(k, _, _)| k == key)
+            .map(|(_, v, _)| v.clone())
+            .unwrap_or_default()
+    };
     let event = get("EventType");
     let app = get("AppName");
-    let app = if app.is_empty() { get("Sig[0].Value") } else { app };
+    let app = if app.is_empty() {
+        get("Sig[0].Value")
+    } else {
+        app
+    };
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for (k, v, span) in &entries {
         let node = Node::new(k.clone()).span(*span);
-        let node = if k.ends_with("Time") && let Ok(t) = v.parse::<u64>() {
-            node.value(Value::Timestamp { unix_seconds: crate::text::filetime_to_unix(t) })
+        let node = if k.ends_with("Time")
+            && let Ok(t) = v.parse::<u64>()
+        {
+            node.value(Value::Timestamp {
+                unix_seconds: crate::text::filetime_to_unix(t),
+            })
         } else {
             node.value(text(v.clone()))
         };
         cx.push(node).await;
     }
-    let mut summary = format!("WER report: {}", if event.is_empty() { "event" } else { &event });
+    let mut summary = format!(
+        "WER report: {}",
+        if event.is_empty() { "event" } else { &event }
+    );
     if !app.is_empty() {
         summary.push_str(&format!(" in {app}"));
     }
@@ -128,9 +156,16 @@ async fn pif(cx: Cx, input: Input) -> Result<()> {
         let data_at = u64::from(u16_le(&head, 18).unwrap_or(0));
         let len = u64::from(u16_le(&head, 20).unwrap_or(0));
         let data = file.sub(data_at, len);
-        let title = PIF_SECTIONS.iter().find(|(k, _)| *k == name).map(|(_, t)| *t);
+        let title = PIF_SECTIONS
+            .iter()
+            .find(|(k, _)| *k == name)
+            .map(|(_, t)| *t);
         names.push(name.clone());
-        let mut node = Node::new(name).span(file.sub(at, 22)).target(data).summary(size(len)).lazy(pif_section, (file.sub(at, 22), data));
+        let mut node = Node::new(name)
+            .span(file.sub(at, 22))
+            .target(data)
+            .summary(size(len))
+            .lazy(pif_section, (file.sub(at, 22), data));
         if let Some(t) = title {
             node = node.desc(t);
         }
@@ -141,7 +176,11 @@ async fn pif(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "PIF for {}{}, sections: {}",
         if program.is_empty() { "?" } else { &program },
-        if basic.parameters.trim().is_empty() { String::new() } else { format!(" {}", basic.parameters.trim()) },
+        if basic.parameters.trim().is_empty() {
+            String::new()
+        } else {
+            format!(" {}", basic.parameters.trim())
+        },
         clip(&names.join(", "), 120)
     ));
     Ok(())

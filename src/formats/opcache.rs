@@ -43,7 +43,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     let body = file.tail(80);
     let script = body.sub(0, h.mem_size);
-    cx.emit(data_node("Script", script, h.mem_size).summary(format!("script entry at {:#x}", h.script_offset)));
+    cx.emit(
+        data_node("Script", script, h.mem_size)
+            .summary(format!("script entry at {:#x}", h.script_offset)),
+    );
     let strings = body.sub(h.mem_size, h.str_size);
     cx.emit(data_node("Interned Strings", strings, h.str_size));
     Ok(())

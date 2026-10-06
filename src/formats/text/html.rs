@@ -49,7 +49,10 @@ fn charset(head: &[u8]) -> Option<String> {
     let lower = head.to_ascii_lowercase();
     let at = probe::find(&lower, b"charset=")?;
     let rest = lower.get(at.saturating_add(8)..)?;
-    let rest = rest.strip_prefix(b"\"").or_else(|| rest.strip_prefix(b"'")).unwrap_or(rest);
+    let rest = rest
+        .strip_prefix(b"\"")
+        .or_else(|| rest.strip_prefix(b"'"))
+        .unwrap_or(rest);
     let end = rest
         .iter()
         .position(|&b| !(b.is_ascii_alphanumeric() || b == b'-' || b == b'_'))
@@ -62,9 +65,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let data = cx.read_avail(input.span.sub(0, HEAD_LEN)).await?;
     let head = super::encoding::probe_text(&data);
     let lower = head.to_ascii_lowercase();
-    let title = probe::find(&lower, b"<title")
-        .and_then(|at| xml::first_text(head.get(at..).unwrap_or_default(), b"title")
-            .or_else(|| xml::first_text(head.get(at..).unwrap_or_default(), b"TITLE")));
+    let title = probe::find(&lower, b"<title").and_then(|at| {
+        xml::first_text(head.get(at..).unwrap_or_default(), b"title")
+            .or_else(|| xml::first_text(head.get(at..).unwrap_or_default(), b"TITLE"))
+    });
     let mut summary = String::from("HTML document");
     if let Some(t) = title {
         summary = format!("{summary}: {t}");

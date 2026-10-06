@@ -45,13 +45,7 @@ fn has_optional_header(id: u8) -> bool {
 /// A 33-bit timestamp from the 5-byte PTS/DTS encoding.
 pub fn timestamp(d: &[u8]) -> Option<u64> {
     let b = |i: usize| d.get(i).copied().map(u64::from);
-    Some(
-        ((b(0)? >> 1) & 7) << 30
-            | b(1)? << 22
-            | (b(2)? >> 1) << 15
-            | b(3)? << 7
-            | b(4)? >> 1,
-    )
+    Some(((b(0)? >> 1) & 7) << 30 | b(1)? << 22 | (b(2)? >> 1) << 15 | b(3)? << 7 | b(4)? >> 1)
 }
 
 /// 90 kHz ticks as seconds.
@@ -102,15 +96,15 @@ const SCRAMBLING: EnumTable = &[
 pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
     let id = d.get(3).copied().unwrap_or(0);
     cx.emit(hex("Start code prefix", span.sub(0, 3), 1, 24));
-    cx.emit(
-        hex("Stream ID", span.sub(3, 1), id.into(), 8).summary(stream_id_name(id)),
-    );
+    cx.emit(hex("Stream ID", span.sub(3, 1), id.into(), 8).summary(stream_id_name(id)));
     let len = u16_be(d, 4).unwrap_or(0);
-    cx.emit(uint("PES packet length", span.sub(4, 2), len.into(), 16).summary(if len == 0 {
-        "unbounded".to_owned()
-    } else {
-        format!("{len} bytes follow")
-    }));
+    cx.emit(
+        uint("PES packet length", span.sub(4, 2), len.into(), 16).summary(if len == 0 {
+            "unbounded".to_owned()
+        } else {
+            format!("{len} bytes follow")
+        }),
+    );
     if !has_optional_header(id) {
         return (6, len);
     }
@@ -122,7 +116,13 @@ pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
         return (mpeg1_header(cx, span, d), len);
     }
     let s6 = span.sub(6, 1);
-    cx.emit(enumerated("Scrambling control", s6, ((b6 >> 4) & 3).into(), 2, SCRAMBLING));
+    cx.emit(enumerated(
+        "Scrambling control",
+        s6,
+        ((b6 >> 4) & 3).into(),
+        2,
+        SCRAMBLING,
+    ));
     cx.emit(flag_node("Priority", s6, b6 & 0x08 != 0));
     cx.emit(flag_node("Data alignment", s6, b6 & 0x04 != 0));
     cx.emit(flag_node("Copyright", s6, b6 & 0x02 != 0));
@@ -150,7 +150,12 @@ pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
         unknown: 0,
     }));
     let header_len = d.get(8).copied().unwrap_or(0);
-    cx.emit(uint("PES header data length", span.sub(8, 1), header_len.into(), 8));
+    cx.emit(uint(
+        "PES header data length",
+        span.sub(8, 1),
+        header_len.into(),
+        8,
+    ));
     let (pts, dts) = pes_times(d);
     if let Some(p) = pts {
         cx.emit(uint("PTS", span.sub(9, 5), p, 33).summary(seconds_90k(p)));
@@ -182,13 +187,20 @@ fn mpeg1_header(cx: &Cx, span: Span, d: &[u8]) -> u64 {
         at = at.saturating_add(1);
     }
     if at > 6 {
-        cx.emit(Node::new("Stuffing").span(span.sub(6, crate::bytes::to_u64(at.saturating_sub(6)))));
+        cx.emit(
+            Node::new("Stuffing").span(span.sub(6, crate::bytes::to_u64(at.saturating_sub(6)))),
+        );
     }
     if d.get(at).is_some_and(|b| b & 0xc0 == 0x40) {
         let size = u16_be(d, at).unwrap_or(0);
         cx.emit(
-            uint("STD buffer size", span.sub(crate::bytes::to_u64(at), 2), (size & 0x1fff).into(), 13)
-                .summary(format!("scale {}", (size >> 13) & 1)),
+            uint(
+                "STD buffer size",
+                span.sub(crate::bytes::to_u64(at), 2),
+                (size & 0x1fff).into(),
+                13,
+            )
+            .summary(format!("scale {}", (size >> 13) & 1)),
         );
         at = at.saturating_add(2);
     }
@@ -205,8 +217,13 @@ fn mpeg1_header(cx: &Cx, span: Span, d: &[u8]) -> u64 {
             if let Some(p) = d.get(at..at.saturating_add(5)).and_then(timestamp) {
                 cx.emit(uint("PTS", span.sub(pos, 5), p, 33).summary(seconds_90k(p)));
             }
-            if let Some(t) = d.get(at.saturating_add(5)..at.saturating_add(10)).and_then(timestamp) {
-                cx.emit(uint("DTS", span.sub(pos.saturating_add(5), 5), t, 33).summary(seconds_90k(t)));
+            if let Some(t) = d
+                .get(at.saturating_add(5)..at.saturating_add(10))
+                .and_then(timestamp)
+            {
+                cx.emit(
+                    uint("DTS", span.sub(pos.saturating_add(5), 5), t, 33).summary(seconds_90k(t)),
+                );
             }
             at = at.saturating_add(10);
         }

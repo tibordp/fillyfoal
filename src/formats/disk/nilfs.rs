@@ -94,14 +94,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let label = crate::text::until_nul(&sb.volume_name);
     cx.annotate(format!(
         "NILFS2 filesystem{}, {}, {} segments of {} blocks, checkpoint {}",
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(sb.dev_size),
         sb.segments,
         sb.blocks_per_segment,
         sb.last_cno
     ));
     let last = vol.sub(sb.last_pseg.saturating_mul(block), block);
-    cx.emit(Node::new("Latest partial segment").span(last).summary(format!("block {}", sb.last_pseg)));
+    cx.emit(
+        Node::new("Latest partial segment")
+            .span(last)
+            .summary(format!("block {}", sb.last_pseg)),
+    );
     // The secondary superblock sits 4 KiB from the end, 4 KiB aligned.
     let second = (vol.len / 4096).saturating_sub(1).saturating_mul(4096);
     if second > SUPER {

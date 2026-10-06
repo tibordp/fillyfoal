@@ -130,12 +130,23 @@ async fn directory(cx: &Cx, heap: Span, endian: Endian) -> Result<(Span, Vec<Ent
     let offset = u64::from(u32::decode(&tail, endian).unwrap_or(0));
     let count_span = heap.sub_exact(offset, 2)?;
     let count = u16::decode(&cx.read(count_span).await?, endian).unwrap_or(0);
-    let table = heap.sub_exact(offset.saturating_add(2), u64::from(count).saturating_mul(10))?;
+    let table = heap.sub_exact(
+        offset.saturating_add(2),
+        u64::from(count).saturating_mul(10),
+    )?;
     let bytes = cx.read(table).await?;
     let mut entries = Vec::new();
     for (i, b) in bytes.as_chunks::<10>().0.iter().enumerate() {
-        let get16 = |at: usize| b.get(at..at.saturating_add(2)).and_then(|s| u16::decode(s, endian)).unwrap_or(0);
-        let get32 = |at: usize| b.get(at..at.saturating_add(4)).and_then(|s| u32::decode(s, endian)).unwrap_or(0);
+        let get16 = |at: usize| {
+            b.get(at..at.saturating_add(2))
+                .and_then(|s| u16::decode(s, endian))
+                .unwrap_or(0)
+        };
+        let get32 = |at: usize| {
+            b.get(at..at.saturating_add(4))
+                .and_then(|s| u32::decode(s, endian))
+                .unwrap_or(0)
+        };
         let tag = get16(0);
         let span = table.sub(crate::bytes::to_u64(i).saturating_mul(10), 10);
         let in_record = tag & 0xc000 == 0x4000;
@@ -164,7 +175,10 @@ async fn make_and_model(cx: &Cx, heap: Span, endian: Endian) -> Option<String> {
             return strings(cx, e.data).await.pop();
         }
     }
-    for e in entries.iter().filter(|e| matches!(e.kind, 0x2800 | 0x3000) && !e.in_record) {
+    for e in entries
+        .iter()
+        .filter(|e| matches!(e.kind, 0x2800 | 0x3000) && !e.in_record)
+    {
         let (_, inner) = directory(cx, e.data, endian).await.ok()?;
         if let Some(found) = inner.iter().find(|i| i.id == 0x080a) {
             let parts = strings(cx, found.data).await;
@@ -185,9 +199,14 @@ async fn strings(cx: &Cx, data: Span) -> Vec<String> {
 
 async fn list(cx: Cx, (input, heap, endian, depth): (Input, Span, Endian, u32)) -> Result<()> {
     let (count_span, entries) = directory(&cx, heap, endian).await?;
-    cx.emit(Node::new("Entry count").span(count_span).value(uint(crate::bytes::to_u64(entries.len()))));
+    cx.emit(
+        Node::new("Entry count")
+            .span(count_span)
+            .value(uint(crate::bytes::to_u64(entries.len()))),
+    );
     for e in entries {
-        let name = lookup(TAGS, e.id.into()).map_or_else(|| format!("Tag {:#06x}", e.id), str::to_owned);
+        let name =
+            lookup(TAGS, e.id.into()).map_or_else(|| format!("Tag {:#06x}", e.id), str::to_owned);
         let kind = lookup(TYPES, e.kind.into()).unwrap_or("?");
         let mut node = Node::new(name.clone())
             .span(e.span)

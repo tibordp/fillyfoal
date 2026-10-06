@@ -33,7 +33,8 @@ const BOM: u32 = 0x1a2b_3c4d;
 const MAX_INTERFACES: usize = 4096;
 
 fn probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"\x0a\x0d\x0d\x0a") && (h.at(8, b"\x1a\x2b\x3c\x4d") || h.at(8, b"\x4d\x3c\x2b\x1a"))
+    h.starts_with(b"\x0a\x0d\x0d\x0a")
+        && (h.at(8, b"\x1a\x2b\x3c\x4d") || h.at(8, b"\x4d\x3c\x2b\x1a"))
 }
 
 const BLOCK_TYPES: EnumTable = &[
@@ -60,7 +61,13 @@ const SECRETS_TYPES: EnumTable = &[
     (0x5353_484b, "SSH key log"),
 ];
 
-const NRB_TYPES: EnumTable = &[(0, "end"), (1, "IPv4"), (2, "IPv6"), (3, "EUI-48"), (4, "EUI-64")];
+const NRB_TYPES: EnumTable = &[
+    (0, "end"),
+    (1, "IPv4"),
+    (2, "IPv6"),
+    (3, "EUI-48"),
+    (4, "EUI-64"),
+];
 
 #[derive(Clone, Copy, Debug)]
 struct Interface {
@@ -158,7 +165,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let minor = rd16(endian, &head, 14).unwrap_or(0);
                 summary = format!(
                     "version {major}.{minor}, {}-endian",
-                    if endian == Endian::Little { "little" } else { "big" }
+                    if endian == Endian::Little {
+                        "little"
+                    } else {
+                        "big"
+                    }
                 );
                 if first {
                     cx.annotate(format!("pcapng {major}.{minor}, {}", summary_tail(endian)));
@@ -446,7 +457,11 @@ async fn name_records(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
         let kind = cur.u16().await?;
         let len = cur.u16().await?;
         let value = cur.span(len.into());
-        cur.skip(u64::from(len).checked_next_multiple_of(4).unwrap_or(u64::MAX));
+        cur.skip(
+            u64::from(len)
+                .checked_next_multiple_of(4)
+                .unwrap_or(u64::MAX),
+        );
         let node = Node::new("Record")
             .span(cur.since(start))
             .value(enumv(kind, 16, NRB_TYPES));
@@ -524,7 +539,11 @@ fn option_name(kind: u32, code: u16) -> Option<&'static str> {
             (7, "epb_verdict"),
             (8, "epb_processid_threadid"),
         ],
-        4 => &[(2, "ns_dnsname"), (3, "ns_dnsIP4addr"), (4, "ns_dnsIP6addr")],
+        4 => &[
+            (2, "ns_dnsname"),
+            (3, "ns_dnsIP4addr"),
+            (4, "ns_dnsIP6addr"),
+        ],
         5 => &[
             (2, "isb_starttime"),
             (3, "isb_endtime"),
@@ -554,7 +573,11 @@ async fn options(cx: Cx, (span, endian, kind): (Span, Endian, u32)) -> Result<()
         let len = cur.u16().await?;
         let value_span = cur.span(len.into());
         let bytes = cx.read(value_span).await?;
-        cur.skip(u64::from(len).checked_next_multiple_of(4).unwrap_or(u64::MAX));
+        cur.skip(
+            u64::from(len)
+                .checked_next_multiple_of(4)
+                .unwrap_or(u64::MAX),
+        );
         let name = option_name(kind, code).map_or_else(|| format!("option {code}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start));
         let rd64 = |b: &[u8]| match endian {

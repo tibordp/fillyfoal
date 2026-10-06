@@ -31,13 +31,28 @@ fn probe(h: &Head<'_>) -> bool {
 
 const SECTION: EnumTable = &[
     (u32::from_be_bytes(*b"CODE") as u64, "bytecode"),
-    (u32::from_be_bytes(*b"DATA") as u64, "global data (marshalled)"),
+    (
+        u32::from_be_bytes(*b"DATA") as u64,
+        "global data (marshalled)",
+    ),
     (u32::from_be_bytes(*b"PRIM") as u64, "primitive names"),
     (u32::from_be_bytes(*b"DLLS") as u64, "shared libraries"),
-    (u32::from_be_bytes(*b"DLPT") as u64, "shared library search path"),
-    (u32::from_be_bytes(*b"SYMB") as u64, "global symbols (marshalled)"),
-    (u32::from_be_bytes(*b"CRCS") as u64, "interface CRCs (marshalled)"),
-    (u32::from_be_bytes(*b"DBUG") as u64, "debug info (marshalled)"),
+    (
+        u32::from_be_bytes(*b"DLPT") as u64,
+        "shared library search path",
+    ),
+    (
+        u32::from_be_bytes(*b"SYMB") as u64,
+        "global symbols (marshalled)",
+    ),
+    (
+        u32::from_be_bytes(*b"CRCS") as u64,
+        "interface CRCs (marshalled)",
+    ),
+    (
+        u32::from_be_bytes(*b"DBUG") as u64,
+        "debug info (marshalled)",
+    ),
     (u32::from_be_bytes(*b"RNTM") as u64, "runtime path"),
 ];
 
@@ -49,7 +64,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let count_span = file.sub(end.saturating_sub(16), 4);
     let count = u32_be(&cx.read(count_span).await?, 0).unwrap_or(0);
     let table = file.sub_exact(
-        end.saturating_sub(16).saturating_sub(u64::from(count).saturating_mul(8)),
+        end.saturating_sub(16)
+            .saturating_sub(u64::from(count).saturating_mul(8)),
         u64::from(count).saturating_mul(8),
     )?;
     let entries = cx.read(table).await?;
@@ -58,7 +74,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let at = i.saturating_mul(8);
             let mut id = [0u8; 4];
             id.copy_from_slice(entries.get(at..at.saturating_add(4)).unwrap_or(&[0; 4]));
-            (id, u32_be(&entries, at.saturating_add(4)).unwrap_or(0).into())
+            (
+                id,
+                u32_be(&entries, at.saturating_add(4)).unwrap_or(0).into(),
+            )
         })
         .collect();
     let total: u64 = lengths.iter().fold(0u64, |a, (_, l)| a.saturating_add(*l));
@@ -82,8 +101,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (id, len) in &lengths {
         let span = file.sub(offset, *len);
         let name = String::from_utf8_lossy(id).into_owned();
-        let what = crate::value::lookup(SECTION, u32::from_be_bytes(*id).into()).unwrap_or("section");
-        let node = Node::new(name.clone()).span(span).summary(format!("{what}, {len:#x} bytes"));
+        let what =
+            crate::value::lookup(SECTION, u32::from_be_bytes(*id).into()).unwrap_or("section");
+        let node = Node::new(name.clone())
+            .span(span)
+            .summary(format!("{what}, {len:#x} bytes"));
         let node = match id {
             b"PRIM" | b"DLLS" | b"DLPT" => {
                 if id == b"PRIM" {
@@ -102,7 +124,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         nodes.push(node);
         offset = offset.saturating_add(*len);
     }
-    let ids: Vec<String> = lengths.iter().map(|(id, _)| String::from_utf8_lossy(id).into_owned()).collect();
+    let ids: Vec<String> = lengths
+        .iter()
+        .map(|(id, _)| String::from_utf8_lossy(id).into_owned())
+        .collect();
     cx.annotate(format!(
         "OCaml bytecode executable (format {version}), sections {}, {prims} primitives",
         ellipsize(&ids.join(" "), 80)
@@ -110,9 +135,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for n in nodes {
         cx.emit(n);
     }
-    cx.emit(Node::new("Section Table").span(table).summary(format!("{count} sections")));
-    cx.emit(Node::new("Section Count").span(count_span).value(crate::formats::binutil::dec(count.into(), 32)));
-    cx.emit(Node::new("Magic").span(magic_span).value(text(String::from_utf8_lossy(&magic).into_owned())));
+    cx.emit(
+        Node::new("Section Table")
+            .span(table)
+            .summary(format!("{count} sections")),
+    );
+    cx.emit(
+        Node::new("Section Count")
+            .span(count_span)
+            .value(crate::formats::binutil::dec(count.into(), 32)),
+    );
+    cx.emit(
+        Node::new("Magic")
+            .span(magic_span)
+            .value(text(String::from_utf8_lossy(&magic).into_owned())),
+    );
     Ok(())
 }
 

@@ -33,7 +33,10 @@ fn probe(h: &Head<'_>) -> bool {
     let sections = h.data.get(4).copied().unwrap_or(0);
     let subsystem = h.data.get(5).copied().unwrap_or(0);
     h.starts_with(b"VZ")
-        && matches!(machine, 0x14c | 0x8664 | 0x1c2 | 0x1c4 | 0xaa64 | 0x200 | 0xebc | 0x5064 | 0x6264)
+        && matches!(
+            machine,
+            0x14c | 0x8664 | 0x1c2 | 0x1c4 | 0xaa64 | 0x200 | 0xebc | 0x5064 | 0x6264
+        )
         && (1..=32).contains(&sections)
         && (10..=13).contains(&subsystem)
 }
@@ -83,7 +86,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         h.sections
     ));
     let delta = u64::from(h.stripped).saturating_sub(TeHeader::SIZE);
-    let table = file.sub(TeHeader::SIZE, u64::from(h.sections).saturating_mul(SectionHeader::SIZE));
+    let table = file.sub(
+        TeHeader::SIZE,
+        u64::from(h.sections).saturating_mul(SectionHeader::SIZE),
+    );
     cx.emit(
         Node::new("Section Table")
             .span(table)
@@ -102,14 +108,18 @@ async fn sections(cx: Cx, (file, table, delta): (Span, Span, u64)) -> Result<()>
         let offset = u64::from(s.raw_pointer).saturating_sub(delta);
         let data = file.sub(offset, s.raw_size.into());
         cx.push(
-            Node::new(if s.name.is_empty() { format!("[{i}]") } else { s.name.clone() })
-                .span(at)
-                .summary(format!(
-                    "VA {:#x}+{:#x}, file {offset:#x}+{:#x}",
-                    s.virtual_address, s.virtual_size, s.raw_size
-                ))
-                .target(data)
-                .lazy(section, (at, data, s.raw_size)),
+            Node::new(if s.name.is_empty() {
+                format!("[{i}]")
+            } else {
+                s.name.clone()
+            })
+            .span(at)
+            .summary(format!(
+                "VA {:#x}+{:#x}, file {offset:#x}+{:#x}",
+                s.virtual_address, s.virtual_size, s.raw_size
+            ))
+            .target(data)
+            .lazy(section, (at, data, s.raw_size)),
         )
         .await;
     }

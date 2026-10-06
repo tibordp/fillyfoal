@@ -74,8 +74,16 @@ async fn d64(cx: Cx, input: Input) -> Result<()> {
         node = node.diag(Diagnostic::warning("DOS version byte is not 'A'"));
     }
     cx.emit(node);
-    cx.emit(Node::new("Disk name").span(bam.sub(0x90, 16)).value(Value::Text(name.clone())));
-    cx.emit(Node::new("Disk ID").span(bam.sub(0xa2, 2)).value(Value::Text(id.clone())));
+    cx.emit(
+        Node::new("Disk name")
+            .span(bam.sub(0x90, 16))
+            .value(Value::Text(name.clone())),
+    );
+    cx.emit(
+        Node::new("Disk ID")
+            .span(bam.sub(0xa2, 2))
+            .value(Value::Text(id.clone())),
+    );
     cx.emit(Node::new("Directory").lazy(d64_directory, input));
     cx.annotate(format!("{name:?}, ID {id}"));
     Ok(())
@@ -90,7 +98,8 @@ async fn d64_directory(cx: Cx, input: Input) -> Result<()> {
             return Err(Diagnostic::malformed("directory chain loops"));
         }
         visited.push((track, sector));
-        let at = d64_offset(track, sector).ok_or_else(|| Diagnostic::malformed("bad directory track/sector"))?;
+        let at = d64_offset(track, sector)
+            .ok_or_else(|| Diagnostic::malformed("bad directory track/sector"))?;
         let block = cx.read(file.sub(at, 256)).await?;
         for slot in 0..8usize {
             let e = slot.saturating_mul(32);
@@ -98,7 +107,11 @@ async fn d64_directory(cx: Cx, input: Input) -> Result<()> {
             if kind == 0 {
                 continue;
             }
-            let name = petscii(block.get(e.saturating_add(5)..e.saturating_add(21)).unwrap_or_default());
+            let name = petscii(
+                block
+                    .get(e.saturating_add(5)..e.saturating_add(21))
+                    .unwrap_or_default(),
+            );
             let blocks = u16_le(&block, e.saturating_add(30)).unwrap_or(0);
             let start = (
                 block.get(e.saturating_add(3)).copied().unwrap_or(0),
@@ -109,7 +122,14 @@ async fn d64_directory(cx: Cx, input: Input) -> Result<()> {
             cx.push(
                 Node::new(name)
                     .span(entry)
-                    .summary(format!("{type_name}, {blocks} blocks{}", if kind & 0x80 == 0 { " (not closed)" } else { "" }))
+                    .summary(format!(
+                        "{type_name}, {blocks} blocks{}",
+                        if kind & 0x80 == 0 {
+                            " (not closed)"
+                        } else {
+                            ""
+                        }
+                    ))
                     .lazy(d64_file, (input, start)),
             )
             .await;
@@ -134,25 +154,50 @@ async fn d64_file(cx: Cx, (input, start): (Input, (u8, u8))) -> Result<()> {
         }
         visited.push((track, sector));
         let Some(at) = d64_offset(track, sector) else {
-            cx.diag(Diagnostic::malformed(format!("bad track/sector {track}/{sector}")));
+            cx.diag(Diagnostic::malformed(format!(
+                "bad track/sector {track}/{sector}"
+            )));
             break;
         };
         let link = cx.read(file.sub(at, 2)).await?;
-        let (next_t, next_s) = (link.first().copied().unwrap_or(0), link.get(1).copied().unwrap_or(0));
+        let (next_t, next_s) = (
+            link.first().copied().unwrap_or(0),
+            link.get(1).copied().unwrap_or(0),
+        );
         // In the last sector, the second byte is the index of the last byte used.
-        let used = if next_t == 0 { u64::from(next_s).saturating_sub(1) } else { 254 };
+        let used = if next_t == 0 {
+            u64::from(next_s).saturating_sub(1)
+        } else {
+            254
+        };
         pieces.push(file.sub(at.saturating_add(2), used));
         cx.checkpoint().await;
         track = next_t;
         sector = next_s;
     }
-    let chain = cx.add_pieces(Origin { parent: file.sub(d64_offset(start.0, start.1).unwrap_or(0), 256), transform: "cbm-chain" }, pieces)?;
-    cx.emit(Node::new("Load address").span(chain.sub(0, 2)).value(Value::UInt {
-        value: u16_le(&cx.read_avail(chain.sub(0, 2)).await?, 0).unwrap_or(0).into(),
-        bits: 16,
-        radix: crate::value::Radix::Hex,
-    }));
-    cx.emit(Node::new("Contents").span(chain).summary(format!("{} bytes in {} sectors", chain.len, visited.len())));
+    let chain = cx.add_pieces(
+        Origin {
+            parent: file.sub(d64_offset(start.0, start.1).unwrap_or(0), 256),
+            transform: "cbm-chain",
+        },
+        pieces,
+    )?;
+    cx.emit(
+        Node::new("Load address")
+            .span(chain.sub(0, 2))
+            .value(Value::UInt {
+                value: u16_le(&cx.read_avail(chain.sub(0, 2)).await?, 0)
+                    .unwrap_or(0)
+                    .into(),
+                bits: 16,
+                radix: crate::value::Radix::Hex,
+            }),
+    );
+    cx.emit(Node::new("Contents").span(chain).summary(format!(
+        "{} bytes in {} sectors",
+        chain.len,
+        visited.len()
+    )));
     Ok(())
 }
 
@@ -319,7 +364,11 @@ async fn adf(cx: Cx, input: Input) -> Result<()> {
     let root_span = file.sub(u64::from(root).saturating_mul(512), 512);
     let data = cx.read(root_span).await?;
     let name_len = usize::from(data.get(432).copied().unwrap_or(0).min(30));
-    let name = String::from_utf8_lossy(data.get(433..433usize.saturating_add(name_len)).unwrap_or_default()).into_owned();
+    let name = String::from_utf8_lossy(
+        data.get(433..433usize.saturating_add(name_len))
+            .unwrap_or_default(),
+    )
+    .into_owned();
     cx.emit(
         Node::new("Root block")
             .span(root_span)
@@ -333,7 +382,9 @@ async fn adf(cx: Cx, input: Input) -> Result<()> {
 
 /// Lists a directory block's hash table (72 slots, each a chain of headers).
 async fn adf_dir(cx: Cx, (file, block): (Span, u32)) -> Result<()> {
-    let dir = cx.read(file.sub(u64::from(block).saturating_mul(512), 512)).await?;
+    let dir = cx
+        .read(file.sub(u64::from(block).saturating_mul(512), 512))
+        .await?;
     let mut seen = Vec::new();
     for slot in 0..72usize {
         let mut next = u32_be(&dir, 24usize.saturating_add(slot.saturating_mul(4))).unwrap_or(0);
@@ -347,10 +398,16 @@ async fn adf_dir(cx: Cx, (file, block): (Span, u32)) -> Result<()> {
             let sec_type = u32_be(&header, 508).unwrap_or(0) as i32;
             let size = u32_be(&header, 324).unwrap_or(0);
             let len = usize::from(header.get(432).copied().unwrap_or(0).min(30));
-            let name = String::from_utf8_lossy(header.get(433..433usize.saturating_add(len)).unwrap_or_default()).into_owned();
+            let name = String::from_utf8_lossy(
+                header
+                    .get(433..433usize.saturating_add(len))
+                    .unwrap_or_default(),
+            )
+            .into_owned();
             let node = Node::new(name).span(span);
             let node = if sec_type == 2 {
-                node.summary("directory").lazy(crate::expander!(self::adf_dir: (Span, u32)), (file, next))
+                node.summary("directory")
+                    .lazy(crate::expander!(self::adf_dir: (Span, u32)), (file, next))
             } else {
                 node.summary(format!("{size} bytes"))
             };
@@ -394,7 +451,8 @@ async fn amiga_hunk(cx: Cx, input: Input) -> Result<()> {
     while cur.remaining() >= 4 {
         let start = cur.pos();
         let id = cur.u32().await? & 0x3fff_ffff;
-        let name = lookup(HUNK_TYPES, id.into()).map_or_else(|| format!("hunk {id:#x}"), str::to_owned);
+        let name =
+            lookup(HUNK_TYPES, id.into()).map_or_else(|| format!("hunk {id:#x}"), str::to_owned);
         match id {
             0x3f3 => {
                 // Resident library names, then table size and hunk sizes.
@@ -441,7 +499,12 @@ async fn amiga_hunk(cx: Cx, input: Input) -> Result<()> {
             },
             0x3f2 => {}
             _ => {
-                cx.push(Node::new(name).span(cur.since(start)).diag(Diagnostic::unsupported("hunk type"))).await;
+                cx.push(
+                    Node::new(name)
+                        .span(cur.since(start))
+                        .diag(Diagnostic::unsupported("hunk type")),
+                )
+                .await;
                 break;
             }
         }
@@ -523,22 +586,32 @@ async fn tzx(cx: Cx, input: Input) -> Result<()> {
         let field = cur.peek(rel.saturating_add(width)).await?;
         let mut n = 0u64;
         for i in 0..crate::bytes::to_usize(width) {
-            let byte = field.get(crate::bytes::to_usize(rel).saturating_add(i)).copied().unwrap_or(0);
-            n |= u64::from(byte).checked_shl(u32::try_from(i.saturating_mul(8)).unwrap_or(0)).unwrap_or(0);
+            let byte = field
+                .get(crate::bytes::to_usize(rel).saturating_add(i))
+                .copied()
+                .unwrap_or(0);
+            n |= u64::from(byte)
+                .checked_shl(u32::try_from(i.saturating_mul(8)).unwrap_or(0))
+                .unwrap_or(0);
         }
         cur.skip(n.saturating_mul(mul).saturating_add(extra));
-        let name = lookup(TZX_BLOCKS, id.into()).map_or_else(|| format!("Block {id:#04x}"), str::to_owned);
+        let name =
+            lookup(TZX_BLOCKS, id.into()).map_or_else(|| format!("Block {id:#04x}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start)).value(Value::UInt {
             value: id.into(),
             bits: 8,
             radix: crate::value::Radix::Hex,
         });
         if id == 0x30 {
-            let text = cx.read_avail(input.span.sub(start.saturating_add(2), n)).await?;
+            let text = cx
+                .read_avail(input.span.sub(start.saturating_add(2), n))
+                .await?;
             node = node.summary(String::from_utf8_lossy(&text).into_owned());
         }
         if lookup(TZX_BLOCKS, id.into()).is_none() {
-            node = node.diag(Diagnostic::note("unknown block; length taken from the extension rule"));
+            node = node.diag(Diagnostic::note(
+                "unknown block; length taken from the extension rule",
+            ));
         }
         cx.push(node).await;
         blocks = blocks.saturating_add(1);
@@ -564,13 +637,18 @@ async fn cpc_dsk(cx: Cx, input: Input) -> Result<()> {
     let tracks = info.get(0x30).copied().unwrap_or(0);
     let sides = info.get(0x31).copied().unwrap_or(0);
     let creator = crate::text::until_nul(info.get(0x22..0x30).unwrap_or_default());
-    cx.emit(Node::new("Disk information block").span(file.sub(0, 256)).summary(creator.trim().to_owned()));
+    cx.emit(
+        Node::new("Disk information block")
+            .span(file.sub(0, 256))
+            .summary(creator.trim().to_owned()),
+    );
     let count = usize::from(tracks).saturating_mul(sides.max(1).into());
     cx.set_count(Count::Exact(to_u64(count).saturating_add(1)));
     let mut at = 256u64;
     for i in 0..count {
         let size = if extended {
-            u64::from(info.get(0x34usize.saturating_add(i)).copied().unwrap_or(0)).saturating_mul(256)
+            u64::from(info.get(0x34usize.saturating_add(i)).copied().unwrap_or(0))
+                .saturating_mul(256)
         } else {
             u64::from(u16_le(&info, 0x32).unwrap_or(0))
         };
@@ -581,14 +659,25 @@ async fn cpc_dsk(cx: Cx, input: Input) -> Result<()> {
         let header = cx.read_avail(span.sub(0, 0x18)).await?;
         let sectors = header.get(0x15).copied().unwrap_or(0);
         cx.push(
-            Node::new(format!("Track {} side {}", header.get(0x10).copied().unwrap_or(0), header.get(0x11).copied().unwrap_or(0)))
-                .span(span)
-                .summary(format!("{sectors} sectors")),
+            Node::new(format!(
+                "Track {} side {}",
+                header.get(0x10).copied().unwrap_or(0),
+                header.get(0x11).copied().unwrap_or(0)
+            ))
+            .span(span)
+            .summary(format!("{sectors} sectors")),
         )
         .await;
         at = at.saturating_add(size);
     }
-    cx.annotate(format!("{}, {tracks} tracks, {sides} side(s)", if extended { "Extended DSK" } else { "Standard DSK" }));
+    cx.annotate(format!(
+        "{}, {tracks} tracks, {sides} side(s)",
+        if extended {
+            "Extended DSK"
+        } else {
+            "Standard DSK"
+        }
+    ));
     Ok(())
 }
 
@@ -615,7 +704,8 @@ async fn msa(cx: Cx, input: Input) -> Result<()> {
     let full = u64::from(h.sectors).saturating_mul(512);
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(MsaHeader::SIZE);
-    let tracks = u32::from(h.end.saturating_sub(h.start).saturating_add(1)).saturating_mul(u32::from(h.sides).saturating_add(1));
+    let tracks = u32::from(h.end.saturating_sub(h.start).saturating_add(1))
+        .saturating_mul(u32::from(h.sides).saturating_add(1));
     for i in 0..tracks {
         if cur.at_end() {
             break;
@@ -626,11 +716,21 @@ async fn msa(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Track {i}"))
                 .span(cur.since(start))
-                .summary(if u64::from(len) < full { "RLE compressed" } else { "uncompressed" }),
+                .summary(if u64::from(len) < full {
+                    "RLE compressed"
+                } else {
+                    "uncompressed"
+                }),
         )
         .await;
     }
-    cx.annotate(format!("{} sectors/track, tracks {}-{}, {} side(s)", h.sectors, h.start, h.end, h.sides.saturating_add(1)));
+    cx.annotate(format!(
+        "{} sectors/track, tracks {}-{}, {} side(s)",
+        h.sectors,
+        h.start,
+        h.end,
+        h.sides.saturating_add(1)
+    ));
     Ok(())
 }
 
@@ -675,7 +775,9 @@ async fn woz(cx: Cx, input: Input) -> Result<()> {
         let len = cur.u32().await?;
         let data = cur.span(len.into());
         cur.skip(len.into());
-        let mut node = Node::new(id.clone()).span(cur.since(start)).summary(format!("{len} bytes"));
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .summary(format!("{len} bytes"));
         if id == "INFO" {
             let bytes = cx.read_avail(data.sub(0, 60)).await?;
             let disk = match bytes.get(1) {
@@ -683,7 +785,9 @@ async fn woz(cx: Cx, input: Input) -> Result<()> {
                 Some(2) => "3.5\"",
                 _ => "unknown size",
             };
-            let creator = String::from_utf8_lossy(bytes.get(5..37).unwrap_or_default()).trim().to_owned();
+            let creator = String::from_utf8_lossy(bytes.get(5..37).unwrap_or_default())
+                .trim()
+                .to_owned();
             node = node.summary(format!("{disk} disk, created by {creator}"));
             info = Some(disk);
         }
@@ -700,7 +804,8 @@ async fn woz(cx: Cx, input: Input) -> Result<()> {
 async fn woz_meta(cx: Cx, text: String) -> Result<()> {
     for line in text.lines() {
         if let Some((k, v)) = line.split_once('\t') {
-            cx.push(Node::new(k.to_owned()).value(Value::Text(v.to_owned()))).await;
+            cx.push(Node::new(k.to_owned()).value(Value::Text(v.to_owned())))
+                .await;
         }
     }
     Ok(())
@@ -734,7 +839,11 @@ async fn two_img(cx: Cx, input: Input) -> Result<()> {
     if h.comment_length > 0 {
         let span = file.sub(h.comment_offset.into(), h.comment_length.into());
         let text = cx.read_avail(span).await?;
-        cx.emit(Node::new("Comment").span(span).value(Value::Text(String::from_utf8_lossy(&text).into_owned())));
+        cx.emit(
+            Node::new("Comment")
+                .span(span)
+                .value(Value::Text(String::from_utf8_lossy(&text).into_owned())),
+        );
     }
     cx.annotate(format!("{} blocks, created by {}", h.blocks, h.creator));
     Ok(())

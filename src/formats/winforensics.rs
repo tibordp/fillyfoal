@@ -20,7 +20,9 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 const LE: Endian = Endian::Little;
 
 fn filetime(ticks: u64) -> Value {
-    Value::Timestamp { unix_seconds: crate::text::filetime_to_unix(ticks) }
+    Value::Timestamp {
+        unix_seconds: crate::text::filetime_to_unix(ticks),
+    }
 }
 
 const FILE_ATTRIBUTES: FlagTable = &[
@@ -117,11 +119,20 @@ async fn custom_destinations(cx: Cx, input: Input) -> Result<()> {
             }
             1 => {
                 let id = cur.u32().await?;
-                (format!("Known category: {}", lookup(KNOWN_CATEGORIES, id.into()).unwrap_or("?")), None)
+                (
+                    format!(
+                        "Known category: {}",
+                        lookup(KNOWN_CATEGORIES, id.into()).unwrap_or("?")
+                    ),
+                    None,
+                )
             }
             2 => ("Tasks".to_owned(), Some(cur.u32().await?)),
             _ => {
-                cx.diag(Diagnostic::malformed(format!("unknown category type {kind}")).at(cur.since(start)));
+                cx.diag(
+                    Diagnostic::malformed(format!("unknown category type {kind}"))
+                        .at(cur.since(start)),
+                );
                 break;
             }
         };
@@ -137,15 +148,23 @@ async fn custom_destinations(cx: Cx, input: Input) -> Result<()> {
         links = links.saturating_add(u32::try_from(lnks.len()).unwrap_or(u32::MAX));
         let mut node = Node::new(name)
             .span(cur.since(start))
-            .value(Value::Enum { raw: kind.into(), bits: 32, name: lookup(CATEGORY_TYPES, kind.into()) })
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 32,
+                name: lookup(CATEGORY_TYPES, kind.into()),
+            })
             .summary(format!("{} links", lnks.len()))
             .lazy(destination_entries, (input, lnks));
         if footer != JUMPLIST_FOOTER {
-            node = node.diag(Diagnostic::warning(format!("category footer is {footer:#x}, expected {JUMPLIST_FOOTER:#x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "category footer is {footer:#x}, expected {JUMPLIST_FOOTER:#x}"
+            )));
         }
         cx.push(node.desc(format!("Category {i}"))).await;
     }
-    cx.annotate(format!("Jump list (custom destinations), {categories} categories, {links} links"));
+    cx.annotate(format!(
+        "Jump list (custom destinations), {categories} categories, {links} links"
+    ));
     Ok(())
 }
 
@@ -166,8 +185,14 @@ async fn destination_entries(cx: Cx, (input, lnks): (Input, Vec<(u64, u64)>)) ->
 async fn destination_entry(cx: Cx, (input, at, len): (Input, u64, u64)) -> Result<()> {
     let file = input.span;
     let block = cx.block(file.sub(at, 16)).await?;
-    Fields::emitting(&cx, &block, LE).guid("Shell link class").emit()?;
-    cx.emit(embedded_as("Shell link", input.nested(file.sub(at.saturating_add(16), len)), &crate::formats::lnk::FORMAT));
+    Fields::emitting(&cx, &block, LE)
+        .guid("Shell link class")
+        .emit()?;
+    cx.emit(embedded_as(
+        "Shell link",
+        input.nested(file.sub(at.saturating_add(16), len)),
+        &crate::formats::lnk::FORMAT,
+    ));
     Ok(())
 }
 
@@ -199,11 +224,22 @@ fn info2_layout(f: &mut Fields<'_>, unicode: &bool) -> Result<(String, u32, u64)
     let ansi = f.ascii("Original path (ANSI)", 260).emit()?;
     let index = f.u32("Record number").emit()?;
     f.u32("Drive number")
-        .with(|&d, n| n.summary(format!("{}:", char::from(b'A'.saturating_add(u8::try_from(d).unwrap_or(0))))))
+        .with(|&d, n| {
+            n.summary(format!(
+                "{}:",
+                char::from(b'A'.saturating_add(u8::try_from(d).unwrap_or(0)))
+            ))
+        })
         .emit()?;
     let deleted = f.u64("Deletion time").filetime().emit()?;
-    f.u32("Size on disk").with(|&v, n| n.summary(size(v.into()))).emit()?;
-    let path = if *unicode { f.utf16("Original path (Unicode)", 260).emit()? } else { ansi };
+    f.u32("Size on disk")
+        .with(|&v, n| n.summary(size(v.into())))
+        .emit()?;
+    let path = if *unicode {
+        f.utf16("Original path (Unicode)", 260).emit()?
+    } else {
+        ansi
+    };
     Ok((path, index, deleted))
 }
 
@@ -226,13 +262,20 @@ async fn info2(cx: Cx, input: Input) -> Result<()> {
             deleted = deleted.saturating_add(1);
         }
         let name = format!("Dc{index}");
-        let mut node = struct_node(name, span, LE, unicode, info2_layout).value(filetime(time)).summary(path);
+        let mut node = struct_node(name, span, LE, unicode, info2_layout)
+            .value(filetime(time))
+            .summary(path);
         if purged {
-            node = node.diag(Diagnostic::note("restored or purged (first path byte cleared)"));
+            node = node.diag(Diagnostic::note(
+                "restored or purged (first path byte cleared)",
+            ));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("Recycle Bin INFO2 v{}, {count} records ({deleted} restored or purged)", h.version));
+    cx.annotate(format!(
+        "Recycle Bin INFO2 v{}, {count} records ({deleted} restored or purged)",
+        h.version
+    ));
     Ok(())
 }
 
@@ -288,11 +331,20 @@ const USN_REASONS: FlagTable = &[
     flag(0x8000_0000, "CLOSE"),
 ];
 
-const USN_SOURCES: FlagTable = &[flag(1, "DATA_MANAGEMENT"), flag(2, "AUXILIARY_DATA"), flag(4, "REPLICATION_MANAGEMENT"), flag(8, "CLIENT_REPLICATION_MANAGEMENT")];
+const USN_SOURCES: FlagTable = &[
+    flag(1, "DATA_MANAGEMENT"),
+    flag(2, "AUXILIARY_DATA"),
+    flag(4, "REPLICATION_MANAGEMENT"),
+    flag(8, "CLIENT_REPLICATION_MANAGEMENT"),
+];
 
 /// An NTFS file reference: 48-bit record number and 16-bit sequence.
 fn file_reference(v: u64, node: Node) -> Node {
-    node.summary(format!("record {}, sequence {}", v & 0xffff_ffff_ffff, v >> 48))
+    node.summary(format!(
+        "record {}, sequence {}",
+        v & 0xffff_ffff_ffff,
+        v >> 48
+    ))
 }
 
 fn usn_layout(f: &mut Fields<'_>, _: &()) -> Result<(String, u64, u32)> {
@@ -303,8 +355,14 @@ fn usn_layout(f: &mut Fields<'_>, _: &()) -> Result<(String, u64, u32)> {
         f.bytes("File reference (128-bit)", 16).emit()?;
         f.bytes("Parent file reference (128-bit)", 16).emit()?;
     } else {
-        f.u64("File reference").hex().with(|&v, n| file_reference(v, n)).emit()?;
-        f.u64("Parent file reference").hex().with(|&v, n| file_reference(v, n)).emit()?;
+        f.u64("File reference")
+            .hex()
+            .with(|&v, n| file_reference(v, n))
+            .emit()?;
+        f.u64("Parent file reference")
+            .hex()
+            .with(|&v, n| file_reference(v, n))
+            .emit()?;
     }
     f.u64("USN").hex().emit()?;
     let time = f.u64("Timestamp").filetime().emit()?;
@@ -340,7 +398,10 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
         if len == 0 {
             // Padding up to the next page, or a sparse (zeroed) region.
             let zeros = cx.read_avail(file.sub(at, 0x10000)).await?;
-            let skip = zeros.iter().position(|&b| b != 0).map_or(to_u64(zeros.len()), |p| to_u64(p) & !7);
+            let skip = zeros
+                .iter()
+                .position(|&b| b != 0)
+                .map_or(to_u64(zeros.len()), |p| to_u64(p) & !7);
             if skip == 0 {
                 break;
             }
@@ -358,7 +419,9 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
         count = count.saturating_add(1);
         cx.push(
             struct_node(name, span, LE, (), usn_layout)
-                .value(Value::Timestamp { unix_seconds: crate::text::filetime_to_unix(time) })
+                .value(Value::Timestamp {
+                    unix_seconds: crate::text::filetime_to_unix(time),
+                })
                 .summary(reason_text(reason)),
         )
         .await;
@@ -383,7 +446,12 @@ fn mft_probe(h: &Head<'_>) -> bool {
 declare_format!(pub MFT = "ntfs-mft", "NTFS master file table ($MFT)", [], "application/x-ntfs-mft",
     Probe::Custom(mft_probe), mft);
 
-const MFT_FLAGS: FlagTable = &[flag(1, "IN_USE"), flag(2, "DIRECTORY"), flag(4, "EXTENSION"), flag(8, "SPECIAL_INDEX")];
+const MFT_FLAGS: FlagTable = &[
+    flag(1, "IN_USE"),
+    flag(2, "DIRECTORY"),
+    flag(4, "EXTENSION"),
+    flag(8, "SPECIAL_INDEX"),
+];
 
 const ATTRIBUTE_TYPES: EnumTable = &[
     (0x10, "$STANDARD_INFORMATION"),
@@ -403,7 +471,11 @@ const ATTRIBUTE_TYPES: EnumTable = &[
     (0x100, "$LOGGED_UTILITY_STREAM"),
 ];
 
-const ATTRIBUTE_FLAGS: FlagTable = &[flag(1, "COMPRESSED"), flag(0x4000, "ENCRYPTED"), flag(0x8000, "SPARSE")];
+const ATTRIBUTE_FLAGS: FlagTable = &[
+    flag(1, "COMPRESSED"),
+    flag(0x4000, "ENCRYPTED"),
+    flag(0x8000, "SPARSE"),
+];
 const NAMESPACES: EnumTable = &[(0, "POSIX"), (1, "Win32"), (2, "DOS"), (3, "Win32 & DOS")];
 
 /// Reads one MFT record and undoes the update sequence fixups (the last two
@@ -417,14 +489,22 @@ async fn mft_record(cx: &Cx, span: Span) -> Result<(Block, Option<Diagnostic>)> 
     let mut problem = None;
     for i in 1..count {
         let end = i.saturating_mul(512);
-        let Some(fix) = data.get(usa.saturating_add(i.saturating_mul(2))..usa.saturating_add(i.saturating_mul(2)).saturating_add(2)).map(<[u8]>::to_vec) else {
+        let Some(fix) = data
+            .get(
+                usa.saturating_add(i.saturating_mul(2))
+                    ..usa.saturating_add(i.saturating_mul(2)).saturating_add(2),
+            )
+            .map(<[u8]>::to_vec)
+        else {
             break;
         };
         let Some(slot) = data.get_mut(end.saturating_sub(2)..end) else {
             break;
         };
         if usn.is_some_and(|u| u.to_le_bytes() != *slot) {
-            problem = Some(Diagnostic::warning(format!("sector {i} does not end with the update sequence number (torn write)")));
+            problem = Some(Diagnostic::warning(format!(
+                "sector {i} does not end with the update sequence number (torn write)"
+            )));
         }
         slot.copy_from_slice(&fix);
     }
@@ -442,7 +522,10 @@ fn mft_header_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16)> {
     let flags = f.u16("Flags").flags(MFT_FLAGS).emit()?;
     f.u32("Used size").emit()?;
     f.u32("Allocated size").emit()?;
-    f.u64("Base record").hex().with(|&v, n| if v == 0 { n } else { file_reference(v, n) }).emit()?;
+    f.u64("Base record")
+        .hex()
+        .with(|&v, n| if v == 0 { n } else { file_reference(v, n) })
+        .emit()?;
     f.u16("Next attribute ID").emit()?;
     Ok((first, flags))
 }
@@ -469,7 +552,9 @@ fn mft_attributes(data: &[u8], first: u16) -> Vec<MftAttr> {
         let name_len = usize::from(data.get(at.saturating_add(9)).copied().unwrap_or(0));
         let name_off = usize::from(u16_le(data, at.saturating_add(10)).unwrap_or(0));
         let start = at.saturating_add(name_off);
-        let raw = data.get(start..start.saturating_add(name_len.saturating_mul(2))).unwrap_or_default();
+        let raw = data
+            .get(start..start.saturating_add(name_len.saturating_mul(2)))
+            .unwrap_or_default();
         out.push(MftAttr {
             offset: to_u64(at),
             len: to_u64(len),
@@ -487,14 +572,18 @@ fn mft_summary(data: &[u8], attrs: &[MftAttr]) -> (Option<String>, Option<u64>) 
     let mut name: Option<(u8, String)> = None;
     let mut modified = None;
     for a in attrs.iter().filter(|a| a.resident) {
-        let value = to_usize(a.offset).saturating_add(usize::from(u16_le(data, to_usize(a.offset).saturating_add(20)).unwrap_or(0)));
+        let value = to_usize(a.offset).saturating_add(usize::from(
+            u16_le(data, to_usize(a.offset).saturating_add(20)).unwrap_or(0),
+        ));
         match a.kind {
             0x10 => modified = u64_le(data, value.saturating_add(8)),
             0x30 => {
                 let chars = usize::from(data.get(value.saturating_add(64)).copied().unwrap_or(0));
                 let space = data.get(value.saturating_add(65)).copied().unwrap_or(0);
                 let start = value.saturating_add(66);
-                let raw = data.get(start..start.saturating_add(chars.saturating_mul(2))).unwrap_or_default();
+                let raw = data
+                    .get(start..start.saturating_add(chars.saturating_mul(2)))
+                    .unwrap_or_default();
                 let rank = if space == 2 { 0 } else { 1 };
                 if name.as_ref().is_none_or(|(r, _)| rank > *r) {
                     name = Some((rank, crate::text::utf16(raw, LE)));
@@ -537,7 +626,10 @@ async fn mft(cx: Cx, input: Input) -> Result<()> {
                     (false, false) => "deleted/unused",
                 };
                 node = node
-                    .summary(format!("{}{state}", name.map(|n| format!("{n} — ")).unwrap_or_default()))
+                    .summary(format!(
+                        "{}{state}",
+                        name.map(|n| format!("{n} — ")).unwrap_or_default()
+                    ))
                     .lazy(mft_entry, (input, span));
                 if let Some(m) = modified {
                     node = node.value(filetime(m));
@@ -546,27 +638,46 @@ async fn mft(cx: Cx, input: Input) -> Result<()> {
                     node = node.diag(p);
                 }
             }
-            Some(b"BAAD") => node = node.diag(Diagnostic::warning("record marked BAAD (failed multi-sector transfer)")),
+            Some(b"BAAD") => {
+                node = node.diag(Diagnostic::warning(
+                    "record marked BAAD (failed multi-sector transfer)",
+                ))
+            }
             _ => node = node.summary("empty"),
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("NTFS MFT, {count} records of {record} bytes, {used} in use ({dirs} directories)"));
+    cx.annotate(format!(
+        "NTFS MFT, {count} records of {record} bytes, {used} in use ({dirs} directories)"
+    ));
     Ok(())
 }
 
 async fn mft_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let (block, _) = mft_record(&cx, span).await?;
     let (first, _) = mft_header_layout(&mut Fields::new(&block, LE), &())?;
-    cx.emit(Node::new("Header").span(span.sub(0, first.into())).lazy(mft_header, span));
+    cx.emit(
+        Node::new("Header")
+            .span(span.sub(0, first.into()))
+            .lazy(mft_header, span),
+    );
     for (i, a) in mft_attributes(&block.data, first).into_iter().enumerate() {
-        let type_name = lookup(ATTRIBUTE_TYPES, a.kind.into()).map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
-        let name = if a.name.is_empty() { type_name } else { format!("{type_name}:{}", a.name) };
+        let type_name = lookup(ATTRIBUTE_TYPES, a.kind.into())
+            .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
+        let name = if a.name.is_empty() {
+            type_name
+        } else {
+            format!("{type_name}:{}", a.name)
+        };
         let attr_span = span.sub(a.offset, a.len);
         cx.push(
             Node::new(name)
                 .span(attr_span)
-                .summary(if a.resident { "resident" } else { "non-resident" })
+                .summary(if a.resident {
+                    "resident"
+                } else {
+                    "non-resident"
+                })
                 .desc(format!("Attribute {i}"))
                 .lazy(mft_attribute, (input, span, a)),
         )
@@ -587,14 +698,25 @@ async fn mft_header(cx: Cx, span: Span) -> Result<()> {
     }
     f.seek(usa.into());
     f.u16("Update sequence number").hex().emit()?;
-    f.bytes("Update sequence array", u64::from(words.saturating_sub(1)).saturating_mul(2)).emit()?;
+    f.bytes(
+        "Update sequence array",
+        u64::from(words.saturating_sub(1)).saturating_mul(2),
+    )
+    .emit()?;
     Ok(())
 }
 
 async fn mft_attribute(cx: Cx, (input, span, a): (Input, Span, MftAttr)) -> Result<()> {
     let (record, _) = mft_record(&cx, span).await?;
-    let data = record.data.get(to_usize(a.offset)..to_usize(a.offset.saturating_add(a.len))).unwrap_or_default().to_vec();
-    let block = Block { span: span.sub(a.offset, a.len), data };
+    let data = record
+        .data
+        .get(to_usize(a.offset)..to_usize(a.offset.saturating_add(a.len)))
+        .unwrap_or_default()
+        .to_vec();
+    let block = Block {
+        span: span.sub(a.offset, a.len),
+        data,
+    };
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u32("Type").enumeration(ATTRIBUTE_TYPES).emit()?;
     f.u32("Length").emit()?;
@@ -658,7 +780,11 @@ async fn mft_attribute(cx: Cx, (input, span, a): (Input, Span, MftAttr)) -> Resu
         cx.emit(
             Node::new("Data runs")
                 .span(run_span)
-                .summary(format!("{} runs, {} allocated", decoded.len(), size(allocated)))
+                .summary(format!(
+                    "{} runs, {} allocated",
+                    decoded.len(),
+                    size(allocated)
+                ))
                 .lazy(mft_runs, (run_span, decoded)),
         );
         let _ = real;
@@ -685,18 +811,27 @@ fn data_runs(list: &[u8]) -> Vec<DataRun> {
         let len_start = at.saturating_add(1);
         let off_start = len_start.saturating_add(len_bytes);
         let end = off_start.saturating_add(off_bytes);
-        let (Some(len_raw), Some(off_raw)) = (list.get(len_start..off_start), list.get(off_start..end)) else {
+        let (Some(len_raw), Some(off_raw)) =
+            (list.get(len_start..off_start), list.get(off_start..end))
+        else {
             break;
         };
         if len_bytes > 8 || off_bytes > 8 {
             break;
         }
-        let clusters = len_raw.iter().rev().fold(0u64, |a, &b| (a << 8) | u64::from(b));
+        let clusters = len_raw
+            .iter()
+            .rev()
+            .fold(0u64, |a, &b| (a << 8) | u64::from(b));
         let start = if off_bytes == 0 {
             None
         } else {
-            let mut delta = off_raw.iter().rev().fold(0i64, |a, &b| (a << 8) | i64::from(b));
-            let shift = 64u32.saturating_sub(u32::try_from(off_bytes.saturating_mul(8)).unwrap_or(64));
+            let mut delta = off_raw
+                .iter()
+                .rev()
+                .fold(0i64, |a, &b| (a << 8) | i64::from(b));
+            let shift =
+                64u32.saturating_sub(u32::try_from(off_bytes.saturating_mul(8)).unwrap_or(64));
             delta = delta.checked_shl(shift).map_or(delta, |d| d >> shift);
             lcn = lcn.saturating_add(delta);
             Some(lcn)
@@ -713,7 +848,12 @@ async fn mft_runs(cx: Cx, (span, runs): (Span, Vec<DataRun>)) -> Result<()> {
             Some(l) => format!("{clusters} clusters at LCN {l}"),
             None => format!("{clusters} clusters, sparse"),
         };
-        cx.push(Node::new(format!("Run {i}")).span(span.sub(at, len)).summary(summary)).await;
+        cx.push(
+            Node::new(format!("Run {i}"))
+                .span(span.sub(at, len))
+                .summary(summary),
+        )
+        .await;
     }
     Ok(())
 }
@@ -721,7 +861,10 @@ async fn mft_runs(cx: Cx, (span, runs): (Span, Vec<DataRun>)) -> Result<()> {
 /// The fields of a $FILE_NAME value (MFT attribute or index key); returns
 /// the name and the modification time.
 fn file_name_fields(f: &mut Fields<'_>) -> Result<(String, u64)> {
-    f.u64("Parent directory").hex().with(|&v, n| file_reference(v, n)).emit()?;
+    f.u64("Parent directory")
+        .hex()
+        .with(|&v, n| file_reference(v, n))
+        .emit()?;
     f.u64("Created").filetime().emit()?;
     let modified = f.u64("Modified").filetime().emit()?;
     f.u64("MFT entry modified").filetime().emit()?;
@@ -740,15 +883,26 @@ fn file_name_fields(f: &mut Fields<'_>) -> Result<(String, u64)> {
 async fn fixed_part(cx: &Cx, record: Span, offset: u64, len: u64) -> Result<Block> {
     let (block, _) = mft_record(cx, record).await?;
     let start = to_usize(offset);
-    let data = block.data.get(start..start.saturating_add(to_usize(len))).or_else(|| block.data.get(start..)).unwrap_or_default().to_vec();
-    Ok(Block { span: record.sub(offset, len), data })
+    let data = block
+        .data
+        .get(start..start.saturating_add(to_usize(len)))
+        .or_else(|| block.data.get(start..))
+        .unwrap_or_default()
+        .to_vec();
+    Ok(Block {
+        span: record.sub(offset, len),
+        data,
+    })
 }
 
 // ---------------------------------------------------------------------------
 // NTFS directory index buffers ($I30 INDX records)
 
 fn indx_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"INDX") && u16_le(h.data, 4) == Some(0x28) && h.len.is_multiple_of(4096) && u32_le(h.data, 0x18).is_some_and(|o| (0x10..4096).contains(&o))
+    h.starts_with(b"INDX")
+        && u16_le(h.data, 4) == Some(0x28)
+        && h.len.is_multiple_of(4096)
+        && u32_le(h.data, 0x18).is_some_and(|o| (0x10..4096).contains(&o))
 }
 
 declare_format!(pub INDX = "ntfs-index", "NTFS directory index ($I30 INDX records)", [], "application/x-ntfs-index",
@@ -787,7 +941,12 @@ async fn indx(cx: Cx, input: Input) -> Result<()> {
         let (block, problem) = mft_record(&cx, span).await?;
         let data = &block.data;
         if data.get(..4) != Some(b"INDX") {
-            cx.push(Node::new(format!("Buffer {i}")).span(span).summary("not an index buffer")).await;
+            cx.push(
+                Node::new(format!("Buffer {i}"))
+                    .span(span)
+                    .summary("not an index buffer"),
+            )
+            .await;
             continue;
         }
         let vcn = u64_le(data, 16).unwrap_or(0);
@@ -823,7 +982,14 @@ async fn indx(cx: Cx, input: Input) -> Result<()> {
         entries = entries.saturating_add(to_u64(list.len()));
         let mut node = Node::new(format!("Buffer {i} (VCN {vcn})"))
             .span(span)
-            .summary(format!("{live} entries{}", if carved > 0 { format!(", {carved} recovered from slack") } else { String::new() }))
+            .summary(format!(
+                "{live} entries{}",
+                if carved > 0 {
+                    format!(", {carved} recovered from slack")
+                } else {
+                    String::new()
+                }
+            ))
             .lazy(indx_buffer, (span, list));
         if let Some(p) = problem {
             node = node.diag(p);
@@ -851,7 +1017,11 @@ async fn indx_buffer(cx: Cx, (span, list): (Span, Vec<(u64, u64, bool)>)) -> Res
     let header = fixed_part(&cx, span, 0, 0x28).await?;
     let mut f = Fields::new(&header, LE);
     indx_header(&mut f, &())?;
-    cx.emit(Node::new("Header").span(header.span).lazy(indx_header_node, span));
+    cx.emit(
+        Node::new("Header")
+            .span(header.span)
+            .lazy(indx_header_node, span),
+    );
     for (at, len, slack) in list {
         let block = fixed_part(&cx, span, at, len).await?;
         let key_len = u16_le(&block.data, 10).unwrap_or(0);
@@ -866,7 +1036,9 @@ async fn indx_buffer(cx: Cx, (span, list): (Span, Vec<(u64, u64, bool)>)) -> Res
             node = node.summary("end of index");
         }
         if slack {
-            node = node.diag(Diagnostic::note("recovered from slack space (deleted or moved entry)"));
+            node = node.diag(Diagnostic::note(
+                "recovered from slack space (deleted or moved entry)",
+            ));
         }
         cx.push(node.lazy(indx_entry, (span, at, len))).await;
     }
@@ -882,7 +1054,10 @@ async fn indx_header_node(cx: Cx, span: Span) -> Result<()> {
 async fn indx_entry(cx: Cx, (span, at, len): (Span, u64, u64)) -> Result<()> {
     let block = fixed_part(&cx, span, at, len).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.u64("File reference").hex().with(|&v, n| file_reference(v, n)).emit()?;
+    f.u64("File reference")
+        .hex()
+        .with(|&v, n| file_reference(v, n))
+        .emit()?;
     f.u16("Entry length").emit()?;
     let key = f.u16("Key length").emit()?;
     let flags = f.u32("Flags").flags(INDEX_ENTRY_FLAGS).emit()?;
@@ -941,7 +1116,8 @@ fn restart_layout(f: &mut Fields<'_>, _: &()) -> Result<u64> {
     f.u16("Client: sequence number").emit()?;
     f.bytes("Client: padding", 6).emit()?;
     let chars = f.u32("Client: name length (bytes)").emit()?;
-    f.utf16("Client: name", u64::from(chars.min(128)) / 2).emit()?;
+    f.utf16("Client: name", u64::from(chars.min(128)) / 2)
+        .emit()?;
     Ok(lsn)
 }
 
@@ -976,15 +1152,25 @@ async fn logfile(cx: Cx, input: Input) -> Result<()> {
                 let (block, _) = mft_record(&cx, span).await?;
                 let current = restart_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
                 lsn = lsn.max(current);
-                Node::new(format!("Restart page {i}")).span(span).value(uint(current, 64)).desc("Current LSN").lazy(log_page, (span, true))
+                Node::new(format!("Restart page {i}"))
+                    .span(span)
+                    .value(uint(current, 64))
+                    .desc("Current LSN")
+                    .lazy(log_page, (span, true))
             }
             b"RCRD" => {
                 records = records.saturating_add(1);
                 let (block, _) = mft_record(&cx, span).await?;
                 let end = record_page_layout(&mut Fields::new(&block, LE), &()).unwrap_or(0);
-                Node::new(format!("Record page {i}")).span(span).value(uint(end, 64)).desc("Last end LSN").lazy(log_page, (span, false))
+                Node::new(format!("Record page {i}"))
+                    .span(span)
+                    .value(uint(end, 64))
+                    .desc("Last end LSN")
+                    .lazy(log_page, (span, false))
             }
-            b"BAAD" => Node::new(format!("Page {i}")).span(span).diag(Diagnostic::warning("page marked BAAD")),
+            b"BAAD" => Node::new(format!("Page {i}"))
+                .span(span)
+                .diag(Diagnostic::warning("page marked BAAD")),
             _ => {
                 empty = empty.saturating_add(1);
                 if i.is_multiple_of(64) {
@@ -1010,7 +1196,9 @@ async fn log_page(cx: Cx, (span, restart): (Span, bool)) -> Result<()> {
     } else {
         let next = u16_le(&block.data, 0x14).unwrap_or(0);
         record_page_layout(&mut f, &())?;
-        cx.emit(Node::new("Log records").span(span.sub(0x40, u64::from(next).saturating_sub(0x40))));
+        cx.emit(
+            Node::new("Log records").span(span.sub(0x40, u64::from(next).saturating_sub(0x40))),
+        );
     }
     Ok(())
 }
@@ -1019,7 +1207,8 @@ async fn log_page(cx: Cx, (span, restart): (Span, bool)) -> Result<()> {
 // Task Scheduler 1.0 jobs (.job)
 
 fn job_probe(h: &Head<'_>) -> bool {
-    u16_le(h.data, 0).is_some_and(|v| matches!(v, 0x0400 | 0x0500 | 0x0501 | 0x0502 | 0x0600 | 0x0601))
+    u16_le(h.data, 0)
+        .is_some_and(|v| matches!(v, 0x0400 | 0x0500 | 0x0501 | 0x0502 | 0x0600 | 0x0601))
         && u16_le(h.data, 2) == Some(1)
         && u16_le(h.data, 20) == Some(0x46)
         && u16_le(h.data, 22).is_some_and(|t| t > 0x46 && u64::from(t) < h.len)
@@ -1028,7 +1217,12 @@ fn job_probe(h: &Head<'_>) -> bool {
 declare_format!(pub JOB = "windows-job", "Windows Task Scheduler job", ["job"], "application/x-ms-job",
     Probe::Custom(job_probe), job);
 
-const JOB_PRIORITIES: EnumTable = &[(0x20, "NORMAL"), (0x40, "IDLE"), (0x80, "HIGH"), (0x100, "REALTIME")];
+const JOB_PRIORITIES: EnumTable = &[
+    (0x20, "NORMAL"),
+    (0x40, "IDLE"),
+    (0x80, "HIGH"),
+    (0x100, "REALTIME"),
+];
 const JOB_STATUS: EnumTable = &[
     (0x0004_1300, "SCHED_S_TASK_READY"),
     (0x0004_1301, "SCHED_S_TASK_RUNNING"),
@@ -1055,7 +1249,11 @@ const JOB_FLAGS: FlagTable = &[
     flag(0x1000, "SYSTEM_REQUIRED"),
     flag(0x2000, "RUN_ONLY_IF_LOGGED_ON"),
 ];
-const TRIGGER_FLAGS: FlagTable = &[flag(1, "HAS_END_DATE"), flag(2, "KILL_AT_DURATION_END"), flag(4, "DISABLED")];
+const TRIGGER_FLAGS: FlagTable = &[
+    flag(1, "HAS_END_DATE"),
+    flag(2, "KILL_AT_DURATION_END"),
+    flag(4, "DISABLED"),
+];
 const TRIGGER_TYPES: EnumTable = &[
     (0, "ONCE"),
     (1, "DAILY"),
@@ -1073,11 +1271,22 @@ fn systemtime_text(raw: &[u8]) -> String {
     if part(0) == 0 {
         return "never".to_owned();
     }
-    format!("{:04}-{:02}-{:02} {:02}:{:02}:{:02}", part(0), part(1), part(3), part(4), part(5), part(6))
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
+        part(0),
+        part(1),
+        part(3),
+        part(4),
+        part(5),
+        part(6)
+    )
 }
 
 fn systemtime(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
-    let raw = f.bytes(name, 16).with(|b, n| n.value(text(systemtime_text(b)))).emit()?;
+    let raw = f
+        .bytes(name, 16)
+        .with(|b, n| n.value(text(systemtime_text(b))))
+        .emit()?;
     Ok(systemtime_text(&raw))
 }
 
@@ -1106,7 +1315,12 @@ async fn job_string(cur: &mut Cursor<'_>, name: &'static str) -> Result<(Node, S
     let chars = cur.u16().await?;
     let raw = cur.bytes(u64::from(chars).saturating_mul(2)).await?;
     let s = crate::text::utf16z(&raw, LE).0;
-    Ok((Node::new(name).span(cur.since(start)).value(text(s.clone())), s))
+    Ok((
+        Node::new(name)
+            .span(cur.since(start))
+            .value(text(s.clone())),
+        s,
+    ))
 }
 
 fn trigger_layout(f: &mut Fields<'_>, _: &()) -> Result<(u32, String)> {
@@ -1138,15 +1352,31 @@ async fn job(cx: Cx, input: Input) -> Result<()> {
     let fixed = file.sub(0, 68);
     let block = cx.block(fixed).await?;
     let (status, last) = job_fixed(&mut Fields::new(&block, LE), &())?;
-    cx.emit(struct_node("Fixed-length section", fixed, LE, (), job_fixed));
+    cx.emit(struct_node(
+        "Fixed-length section",
+        fixed,
+        LE,
+        (),
+        job_fixed,
+    ));
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(68);
     let span = cur.span(2);
     let running = cur.u16().await?;
-    cx.emit(Node::new("Running instance count").span(span).value(uint(running, 16)));
+    cx.emit(
+        Node::new("Running instance count")
+            .span(span)
+            .value(uint(running, 16)),
+    );
     let mut app = String::new();
     let mut args = String::new();
-    for name in ["Application name", "Parameters", "Working directory", "Author", "Comment"] {
+    for name in [
+        "Application name",
+        "Parameters",
+        "Working directory",
+        "Author",
+        "Comment",
+    ] {
         let (node, s) = job_string(&mut cur, name).await?;
         match name {
             "Application name" => app = s,
@@ -1159,7 +1389,11 @@ async fn job(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let n = cur.u16().await?;
         cur.skip(n.into());
-        cx.emit(Node::new(name).span(cur.since(start)).summary(format!("{n} bytes")));
+        cx.emit(
+            Node::new(name)
+                .span(cur.since(start))
+                .summary(format!("{n} bytes")),
+        );
     }
     let start = cur.pos();
     let triggers = cur.u16().await?;
@@ -1192,7 +1426,11 @@ async fn job_triggers(cx: Cx, list: Vec<Span>) -> Result<()> {
         let block = cx.block(span).await?;
         let (kind, start) = trigger_layout(&mut Fields::new(&block, LE), &())?;
         let kind = lookup(TRIGGER_TYPES, kind.into()).unwrap_or("?");
-        cx.push(struct_node(format!("Trigger {i}"), span, LE, (), trigger_layout).summary(format!("{kind} from {start}"))).await;
+        cx.push(
+            struct_node(format!("Trigger {i}"), span, LE, (), trigger_layout)
+                .summary(format!("{kind} from {start}")),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1253,7 +1491,9 @@ async fn nk2(cx: Cx, input: Input) -> Result<()> {
     for i in 0..rows {
         let start = cur.pos();
         let props = cur.u32().await?;
-        let table = cur.bytes(u64::from(props.min(4096)).saturating_mul(16)).await?;
+        let table = cur
+            .bytes(u64::from(props.min(4096)).saturating_mul(16))
+            .await?;
         let mut display = None;
         let mut email = None;
         for p in table.as_chunks::<16>().0 {
@@ -1279,7 +1519,10 @@ async fn nk2(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Row {i}"))
                 .span(cur.since(start))
-                .summary(format!("{label}{}", email.map(|e| format!(" <{e}>")).unwrap_or_default()))
+                .summary(format!(
+                    "{label}{}",
+                    email.map(|e| format!(" <{e}>")).unwrap_or_default()
+                ))
                 .lazy(nk2_row, cur.since(start)),
         )
         .await;
@@ -1287,7 +1530,10 @@ async fn nk2(cx: Cx, input: Input) -> Result<()> {
     if cur.pos() < file.len {
         cx.emit(Node::new("Footer").span(file.tail(cur.pos())));
     }
-    cx.annotate(format!("Outlook autocomplete cache, {rows} entries: {}", clip(&names.join(", "), 120)));
+    cx.annotate(format!(
+        "Outlook autocomplete cache, {rows} entries: {}",
+        clip(&names.join(", "), 120)
+    ));
     Ok(())
 }
 
@@ -1300,9 +1546,12 @@ async fn nk2_row(cx: Cx, span: Span) -> Result<()> {
         let kind = u16_le(p, 0).unwrap_or(0);
         let id = u16_le(p, 2).unwrap_or(0);
         let entry = table_span.sub(to_u64(i).saturating_mul(16), 16);
-        let name = lookup(MAPI_PROPS, id.into()).map_or_else(|| format!("Property {id:#06x}"), str::to_owned);
+        let name = lookup(MAPI_PROPS, id.into())
+            .map_or_else(|| format!("Property {id:#06x}"), str::to_owned);
         let type_name = lookup(MAPI_TYPES, kind.into()).unwrap_or("?");
-        let mut node = Node::new(name).span(entry).desc(format!("{type_name} ({kind:#06x})"));
+        let mut node = Node::new(name)
+            .span(entry)
+            .desc(format!("{type_name} ({kind:#06x})"));
         if mapi_variable(kind) {
             let start = cur.pos();
             let len = cur.u32().await?;
@@ -1353,16 +1602,25 @@ async fn dbx(cx: Cx, input: Input) -> Result<()> {
     let class = head.data.get(4..20).unwrap_or_default().to_vec();
     let mut f = Fields::emitting(&cx, &head, LE);
     f.u32("Signature").hex().emit()?;
-    f.guid("Class ID").with(|_, n| n.summary(dbx_kind(&class))).emit()?;
+    f.guid("Class ID")
+        .with(|_, n| n.summary(dbx_kind(&class)))
+        .emit()?;
     f.seek(0xc4);
     let items = f.u32("Number of items").emit()?;
     f.seek(0xe4);
     let root = f.u32("Index root offset").hex().emit()?;
     cx.emit(Node::new("Header").span(file.sub(0, 0x24bc)));
     if root != 0 {
-        cx.emit(Node::new("Index").span(file.sub(root.into(), DBX_NODE)).lazy(dbx_tree, (file, u64::from(root), Path::new())));
+        cx.emit(
+            Node::new("Index")
+                .span(file.sub(root.into(), DBX_NODE))
+                .lazy(dbx_tree, (file, u64::from(root), Path::new())),
+        );
     }
-    cx.annotate(format!("Outlook Express {} store, {items} items", dbx_kind(&class)));
+    cx.annotate(format!(
+        "Outlook Express {} store, {items} items",
+        dbx_kind(&class)
+    ));
     Ok(())
 }
 
@@ -1377,22 +1635,43 @@ async fn dbx_tree(cx: Cx, (file, at, path): (Span, u64, Path)) -> Result<()> {
     let child = u32_le(&data, 8).unwrap_or(0);
     let entries = data.get(17).copied().unwrap_or(0).min(0x33);
     let push_child = |name: String, offset: u32, node_span: Span| {
-        let node = Node::new(name).span(node_span).summary(format!("node at {offset:#x}"));
+        let node = Node::new(name)
+            .span(node_span)
+            .summary(format!("node at {offset:#x}"));
         match path.enter(at, 64) {
-            Ok(p) => node.lazy(crate::expander!(self::dbx_tree: (Span, u64, Path)), (file, u64::from(offset), p)),
+            Ok(p) => node.lazy(
+                crate::expander!(self::dbx_tree: (Span, u64, Path)),
+                (file, u64::from(offset), p),
+            ),
             Err(d) => node.diag(d),
         }
     };
     if child != 0 {
-        cx.push(push_child("Child (before first)".to_owned(), child, span.sub(8, 4))).await;
+        cx.push(push_child(
+            "Child (before first)".to_owned(),
+            child,
+            span.sub(8, 4),
+        ))
+        .await;
     }
     for i in 0..u64::from(entries) {
         let e = 0x18u64.saturating_add(i.saturating_mul(12));
         let value = u32_le(&data, to_usize(e)).unwrap_or(0);
         let sub = u32_le(&data, to_usize(e.saturating_add(4))).unwrap_or(0);
-        cx.push(Node::new(format!("Entry {i}")).span(span.sub(e, 12)).value(hex(value, 32)).target(file.sub(value.into(), 4))).await;
+        cx.push(
+            Node::new(format!("Entry {i}"))
+                .span(span.sub(e, 12))
+                .value(hex(value, 32))
+                .target(file.sub(value.into(), 4)),
+        )
+        .await;
         if sub != 0 {
-            cx.push(push_child(format!("Child after entry {i}"), sub, span.sub(e.saturating_add(4), 4))).await;
+            cx.push(push_child(
+                format!("Child after entry {i}"),
+                sub,
+                span.sub(e.saturating_add(4), 4),
+            ))
+            .await;
         }
     }
     Ok(())
@@ -1420,7 +1699,9 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
         let h = cur.u16().await?;
         let pixels = u64::from(w).saturating_mul(h.into()).saturating_mul(4);
         if pixels == 0 || pixels > cur.remaining() {
-            cx.diag(Diagnostic::malformed("tile extends past the end of the file").at(cur.since(start)));
+            cx.diag(
+                Diagnostic::malformed("tile extends past the end of the file").at(cur.since(start)),
+            );
             break;
         }
         let data = cur.span(pixels);
@@ -1462,7 +1743,8 @@ fn autorun_probe(h: &Head<'_>) -> bool {
 
 fn desktop_ini_probe(h: &Head<'_>) -> bool {
     let first = ini_first_line(h);
-    (first.eq_ignore_ascii_case(b"[.ShellClassInfo]") || first.eq_ignore_ascii_case(b"[ViewState]")) && h.len < 0x10000
+    (first.eq_ignore_ascii_case(b"[.ShellClassInfo]") || first.eq_ignore_ascii_case(b"[ViewState]"))
+        && h.len < 0x10000
 }
 
 declare_format!(pub SCF = "shell-command-file", "Windows Shell Command File (.scf)", ["scf"], "application/x-ms-scf",
@@ -1486,8 +1768,13 @@ async fn ini_file(cx: &Cx, file: Span) -> Result<Vec<(String, String, String)>> 
     for line in data.split_inclusive(|&b| b == b'\n') {
         let len = to_u64(line.len());
         let span = file.sub(at, len);
-        let text_line = crate::text::latin1(line.strip_prefix(b"\xef\xbb\xbf").unwrap_or(line)).trim().to_owned();
-        if let Some(name) = text_line.strip_prefix('[').and_then(|s| s.strip_suffix(']')) {
+        let text_line = crate::text::latin1(line.strip_prefix(b"\xef\xbb\xbf").unwrap_or(line))
+            .trim()
+            .to_owned();
+        if let Some(name) = text_line
+            .strip_prefix('[')
+            .and_then(|s| s.strip_suffix(']'))
+        {
             sections.extend(section.take());
             section = Some((name.to_owned(), at, Vec::new()));
         } else if let Some((k, v)) = text_line.split_once('=')
@@ -1500,7 +1787,12 @@ async fn ini_file(cx: &Cx, file: Span) -> Result<Vec<(String, String, String)>> 
         at = at.saturating_add(len);
     }
     sections.extend(section.take());
-    let ends: Vec<u64> = sections.iter().skip(1).map(|(_, s, _)| *s).chain(std::iter::once(at)).collect();
+    let ends: Vec<u64> = sections
+        .iter()
+        .skip(1)
+        .map(|(_, s, _)| *s)
+        .chain(std::iter::once(at))
+        .collect();
     for ((name, start, keys), end) in sections.into_iter().zip(ends) {
         cx.push(
             Node::new(format!("[{name}]"))
@@ -1528,7 +1820,9 @@ async fn ini_keys(cx: Cx, keys: Vec<IniKey>) -> Result<()> {
 
 async fn shell_command_file(cx: Cx, input: Input) -> Result<()> {
     let all = ini_file(&cx, input.span).await?;
-    let command = ini_get(&all, "Taskbar", "Command").or_else(|| ini_get(&all, "Shell", "Command")).unwrap_or("?");
+    let command = ini_get(&all, "Taskbar", "Command")
+        .or_else(|| ini_get(&all, "Shell", "Command"))
+        .unwrap_or("?");
     let icon = ini_get(&all, "Shell", "IconFile").unwrap_or_default();
     let mut summary = format!("Shell Command File: {command}");
     if !icon.is_empty() {
@@ -1543,19 +1837,22 @@ async fn shell_command_file(cx: Cx, input: Input) -> Result<()> {
 
 async fn autorun_inf(cx: Cx, input: Input) -> Result<()> {
     let all = ini_file(&cx, input.span).await?;
-    let open = ini_get(&all, "autorun", "open").or_else(|| ini_get(&all, "autorun", "shellexecute"));
+    let open =
+        ini_get(&all, "autorun", "open").or_else(|| ini_get(&all, "autorun", "shellexecute"));
     let label = ini_get(&all, "autorun", "label");
     cx.annotate(format!(
         "AutoRun configuration{}{}",
         label.map(|l| format!(" {l:?}")).unwrap_or_default(),
-        open.map(|o| format!(", runs {}", clip(o, 100))).unwrap_or_default()
+        open.map(|o| format!(", runs {}", clip(o, 100)))
+            .unwrap_or_default()
     ));
     Ok(())
 }
 
 async fn desktop_ini(cx: Cx, input: Input) -> Result<()> {
     let all = ini_file(&cx, input.span).await?;
-    let class = ini_get(&all, ".ShellClassInfo", "CLSID").or_else(|| ini_get(&all, ".ShellClassInfo", "CLSID2"));
+    let class = ini_get(&all, ".ShellClassInfo", "CLSID")
+        .or_else(|| ini_get(&all, ".ShellClassInfo", "CLSID2"));
     let name = ini_get(&all, ".ShellClassInfo", "LocalizedResourceName");
     let mut summary = "Folder settings".to_owned();
     if let Some(n) = name {
@@ -1612,7 +1909,13 @@ fn grp_item_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, u16)> {
     Ok((name, command, icon))
 }
 
-const GRP_TAGS: EnumTable = &[(0x8000, "Start"), (0x8101, "Working directory"), (0x8102, "Hot key"), (0x8103, "Run minimized"), (0xffff, "End")];
+const GRP_TAGS: EnumTable = &[
+    (0x8000, "Start"),
+    (0x8101, "Working directory"),
+    (0x8102, "Hot key"),
+    (0x8103, "Run minimized"),
+    (0xffff, "End"),
+];
 
 async fn grp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -1620,7 +1923,11 @@ async fn grp(cx: Cx, input: Input) -> Result<()> {
     let h: GrpHeader = read_record(&cx, span, LE).await?;
     cx.emit(GrpHeader::node("Header", span, LE));
     let (name, name_span) = cx.cstr(file.sub(h.name.into(), 256)).await?;
-    cx.emit(Node::new("Group name").span(name_span).value(text(name.clone())));
+    cx.emit(
+        Node::new("Group name")
+            .span(name_span)
+            .value(text(name.clone())),
+    );
     let slots_span = file.sub_exact(GrpHeader::SIZE, u64::from(h.items).saturating_mul(2))?;
     let slots = cx.read(slots_span).await?;
     let mut programs = Vec::new();
@@ -1645,9 +1952,16 @@ async fn grp(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     if u64::from(h.size) < file.len {
-        cx.emit(Node::new("Tag data").span(file.tail(h.size.into())).lazy(grp_tags, file.tail(h.size.into())));
+        cx.emit(
+            Node::new("Tag data")
+                .span(file.tail(h.size.into()))
+                .lazy(grp_tags, file.tail(h.size.into())),
+        );
     }
-    cx.annotate(format!("Program Manager group {name:?}, {} programs", programs.len()));
+    cx.annotate(format!(
+        "Program Manager group {name:?}, {} programs",
+        programs.len()
+    ));
     Ok(())
 }
 
@@ -1655,7 +1969,11 @@ async fn grp_item(cx: Cx, (input, item): (Input, Span)) -> Result<()> {
     let file = input.span;
     let block = cx.block(item).await?;
     let (name, command, icon) = grp_item_layout(&mut Fields::emitting(&cx, &block, LE), &())?;
-    for (label, at) in [("Name", name), ("Command line", command), ("Icon path", icon)] {
+    for (label, at) in [
+        ("Name", name),
+        ("Command line", command),
+        ("Icon path", icon),
+    ] {
         let (s, span) = cx.cstr(file.sub(at.into(), 256)).await?;
         cx.emit(Node::new(label).span(span).value(text(s)));
     }
@@ -1679,7 +1997,8 @@ async fn grp_tags(cx: Cx, region: Span) -> Result<()> {
         }
         let data_span = cur.span(len.saturating_sub(6));
         let data = cur.bytes(len.saturating_sub(6)).await?;
-        let name = lookup(GRP_TAGS, id.into()).map_or_else(|| format!("Tag {id:#06x}"), str::to_owned);
+        let name =
+            lookup(GRP_TAGS, id.into()).map_or_else(|| format!("Tag {id:#06x}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start)).target(data_span);
         node = match id {
             0x8101 | 0x8000 => node.value(text(crate::text::until_nul(&data))),
@@ -1708,11 +2027,14 @@ fn cardfile_probe(h: &Head<'_>) -> bool {
     } else {
         return false;
     };
-    let Some(count) = u16_le(h.data, count_at) else { return false };
+    let Some(count) = u16_le(h.data, count_at) else {
+        return false;
+    };
     let first_card = to_u64(index_at).saturating_add(u64::from(count).saturating_mul(52));
     count > 0
         && h.at(index_at, &[0; 6])
-        && u32_le(h.data, index_at.saturating_add(6)).is_some_and(|p| u64::from(p) >= first_card && u64::from(p) < h.len)
+        && u32_le(h.data, index_at.saturating_add(6))
+            .is_some_and(|p| u64::from(p) >= first_card && u64::from(p) < h.len)
 }
 
 declare_format!(pub CARDFILE = "cardfile", "Windows Cardfile", ["crd"], "application/x-ms-cardfile",
@@ -1739,7 +2061,11 @@ async fn cardfile(cx: Cx, input: Input) -> Result<()> {
         f.u32("Last object ID").emit()?;
     }
     let count = f.u16("Number of cards").emit()?;
-    cx.set_count(Count::Exact(u64::from(count).saturating_add(if rrg { 3 } else { 2 })));
+    cx.set_count(Count::Exact(u64::from(count).saturating_add(if rrg {
+        3
+    } else {
+        2
+    })));
     let mut titles = Vec::new();
     for i in 0..u64::from(count) {
         let span = file.sub(head_len.saturating_add(i.saturating_mul(52)), 52);
@@ -1755,7 +2081,11 @@ async fn cardfile(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "Cardfile ({}), {count} cards: {}",
-        if rrg { "Windows 3.1 with objects" } else { "Windows 3.0" },
+        if rrg {
+            "Windows 3.1 with objects"
+        } else {
+            "Windows 3.0"
+        },
         clip(&titles.join(", "), 100)
     ));
     Ok(())
@@ -1769,37 +2099,65 @@ async fn card(cx: Cx, (input, index, at, rrg): (Input, Span, u64, bool)) -> Resu
     if rrg {
         let start = cur.pos();
         let object = cur.u16().await?;
-        cx.emit(Node::new("Object flag").span(cur.since(start)).value(uint(object, 16)));
+        cx.emit(
+            Node::new("Object flag")
+                .span(cur.since(start))
+                .value(uint(object, 16)),
+        );
         if object != 0 {
             let start = cur.pos();
             let id = cur.u32().await?;
-            cx.emit(Node::new("Object ID").span(cur.since(start)).value(uint(id, 32)));
+            cx.emit(
+                Node::new("Object ID")
+                    .span(cur.since(start))
+                    .value(uint(id, 32)),
+            );
             let start = cur.pos();
             ole1_skip(&mut cur).await?;
             cx.emit(Node::new("OLE 1.0 object").span(cur.since(start)));
             let start = cur.pos();
             cur.skip(14);
-            cx.emit(Node::new("Object placement").span(cur.since(start)).desc("Character width and height, rectangle, object type"));
+            cx.emit(
+                Node::new("Object placement")
+                    .span(cur.since(start))
+                    .desc("Character width and height, rectangle, object type"),
+            );
         }
     } else {
         let start = cur.pos();
         let bitmap = cur.u16().await?;
-        cx.emit(Node::new("Bitmap size").span(cur.since(start)).value(uint(bitmap, 16)));
+        cx.emit(
+            Node::new("Bitmap size")
+                .span(cur.since(start))
+                .value(uint(bitmap, 16)),
+        );
         if bitmap != 0 {
             let start = cur.pos();
             let w = cur.u16().await?;
             let h = cur.u16().await?;
             cur.skip(4);
             cur.skip(bitmap.into());
-            cx.emit(Node::new("Bitmap").span(cur.since(start)).summary(format!("{w}×{h} monochrome")));
+            cx.emit(
+                Node::new("Bitmap")
+                    .span(cur.since(start))
+                    .summary(format!("{w}×{h} monochrome")),
+            );
         }
     }
     let start = cur.pos();
     let len = cur.u16().await?;
-    cx.emit(Node::new("Text length").span(cur.since(start)).value(uint(len, 16)));
+    cx.emit(
+        Node::new("Text length")
+            .span(cur.since(start))
+            .value(uint(len, 16)),
+    );
     let span = cur.span(len.into());
     let body = cur.bytes(len.into()).await?;
-    cx.emit(Node::new("Text").span(span).value(text(crate::text::latin1(&body))));
+    cx.emit(
+        Node::new("Text")
+            .span(span)
+            .value(text(crate::text::latin1(&body))),
+    );
     Ok(())
 }
 
@@ -1845,16 +2203,21 @@ fn clp_entry_size(id: u16) -> u64 {
 }
 
 fn clp_probe(h: &Head<'_>) -> bool {
-    let Some(id) = u16_le(h.data, 0) else { return false };
+    let Some(id) = u16_le(h.data, 0) else {
+        return false;
+    };
     if !matches!(id, 0xc350..=0xc352) {
         return false;
     }
-    let Some(count) = u16_le(h.data, 2) else { return false };
+    let Some(count) = u16_le(h.data, 2) else {
+        return false;
+    };
     let table_end = 4u64.saturating_add(u64::from(count).saturating_mul(clp_entry_size(id)));
     let offset_at = if id == 0xc350 { 10 } else { 12 };
     (1..=64).contains(&count)
         && table_end <= h.len
-        && u32_le(h.data, offset_at).is_some_and(|o| u64::from(o) >= table_end && u64::from(o) <= h.len)
+        && u32_le(h.data, offset_at)
+            .is_some_and(|o| u64::from(o) >= table_end && u64::from(o) <= h.len)
 }
 
 declare_format!(pub CLP = "clipboard", "Windows Clipboard file", ["clp"], "application/x-ms-clipboard",
@@ -1886,10 +2249,18 @@ const CLIPBOARD_FORMATS: EnumTable = &[
 ];
 
 fn clp_entry_layout(f: &mut Fields<'_>, nt: &bool) -> Result<(u32, u32, u32, String)> {
-    let id = if *nt { f.u32("Format ID").enumeration(CLIPBOARD_FORMATS).emit()? } else { u32::from(f.u16("Format ID").enumeration(CLIPBOARD_FORMATS).emit()?) };
+    let id = if *nt {
+        f.u32("Format ID").enumeration(CLIPBOARD_FORMATS).emit()?
+    } else {
+        u32::from(f.u16("Format ID").enumeration(CLIPBOARD_FORMATS).emit()?)
+    };
     let len = f.u32("Data length").emit()?;
     let at = f.u32("Data offset").hex().emit()?;
-    let name = if *nt { f.utf16("Format name", 79).emit()? } else { f.ascii("Format name", 79).emit()? };
+    let name = if *nt {
+        f.utf16("Format name", 79).emit()?
+    } else {
+        f.ascii("Format name", 79).emit()?
+    };
     Ok((id, len, at, name))
 }
 
@@ -1897,7 +2268,14 @@ async fn clp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 4)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
-    let id = f.u16("File identifier").enumeration(&[(0xc350, "Windows 3.x"), (0xc351, "Windows NT"), (0xc352, "Windows NT (ClipBook)")]).emit()?;
+    let id = f
+        .u16("File identifier")
+        .enumeration(&[
+            (0xc350, "Windows 3.x"),
+            (0xc351, "Windows NT"),
+            (0xc352, "Windows NT (ClipBook)"),
+        ])
+        .emit()?;
     let count = f.u16("Number of formats").emit()?;
     let nt = id != 0xc350;
     let entry = clp_entry_size(id);
@@ -1906,41 +2284,78 @@ async fn clp(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(4u64.saturating_add(i.saturating_mul(entry)), entry);
         let block = cx.block(span).await?;
         let (format, len, at, name) = clp_entry_layout(&mut Fields::new(&block, LE), &nt)?;
-        let label = lookup(CLIPBOARD_FORMATS, format.into()).map_or_else(|| if name.is_empty() { format!("Format {format:#x}") } else { name.clone() }, str::to_owned);
+        let label = lookup(CLIPBOARD_FORMATS, format.into()).map_or_else(
+            || {
+                if name.is_empty() {
+                    format!("Format {format:#x}")
+                } else {
+                    name.clone()
+                }
+            },
+            str::to_owned,
+        );
         names.push(label.clone());
-        cx.push(
-            Node::new(label)
-                .span(span)
-                .summary(size(len.into()))
-                .lazy(clp_format, (input, span, nt, format, file.sub(at.into(), len.into()))),
-        )
+        cx.push(Node::new(label).span(span).summary(size(len.into())).lazy(
+            clp_format,
+            (input, span, nt, format, file.sub(at.into(), len.into())),
+        ))
         .await;
     }
-    cx.annotate(format!("Clipboard file ({}), {count} formats: {}", if nt { "NT" } else { "Windows 3.x" }, names.join(", ")));
+    cx.annotate(format!(
+        "Clipboard file ({}), {count} formats: {}",
+        if nt { "NT" } else { "Windows 3.x" },
+        names.join(", ")
+    ));
     Ok(())
 }
 
-async fn clp_format(cx: Cx, (input, entry, nt, format, data): (Input, Span, bool, u32, Span)) -> Result<()> {
-    cx.emit(struct_node("Directory entry", entry, LE, nt, clp_entry_layout));
+async fn clp_format(
+    cx: Cx,
+    (input, entry, nt, format, data): (Input, Span, bool, u32, Span),
+) -> Result<()> {
+    cx.emit(struct_node(
+        "Directory entry",
+        entry,
+        LE,
+        nt,
+        clp_entry_layout,
+    ));
     match format {
         1 | 7 | 0x81 => {
             let bytes = cx.read_avail(data.sub(0, 0x10000)).await?;
             let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-            cx.emit(Node::new("Text").span(data).value(text(crate::text::latin1(bytes.get(..end).unwrap_or_default()))));
+            cx.emit(Node::new("Text").span(data).value(text(crate::text::latin1(
+                bytes.get(..end).unwrap_or_default(),
+            ))));
         }
         16 => {
             let bytes = cx.read_avail(data.sub(0, 4)).await?;
-            cx.emit(Node::new("Locale ID").span(data).value(hex(u32_le(&bytes, 0).unwrap_or(0), 32)));
+            cx.emit(
+                Node::new("Locale ID")
+                    .span(data)
+                    .value(hex(u32_le(&bytes, 0).unwrap_or(0), 32)),
+            );
         }
         13 => {
             let bytes = cx.read_avail(data.sub(0, 0x20000)).await?;
-            cx.emit(Node::new("Text").span(data).value(text(crate::text::utf16z(&bytes, LE).0)));
+            cx.emit(
+                Node::new("Text")
+                    .span(data)
+                    .value(text(crate::text::utf16z(&bytes, LE).0)),
+            );
         }
         8 | 17 => {
             let head = cx.read_avail(data.sub(0, 16)).await?;
-            let (w, h) = (crate::bytes::i32_le(&head, 4).unwrap_or(0), crate::bytes::i32_le(&head, 8).unwrap_or(0));
+            let (w, h) = (
+                crate::bytes::i32_le(&head, 4).unwrap_or(0),
+                crate::bytes::i32_le(&head, 8).unwrap_or(0),
+            );
             let bpp = u16_le(&head, 14).unwrap_or(0);
-            cx.emit(Node::new("Device-independent bitmap").span(data).summary(format!("{w}×{} at {bpp} bpp", h.unsigned_abs())));
+            cx.emit(
+                Node::new("Device-independent bitmap")
+                    .span(data)
+                    .summary(format!("{w}×{} at {bpp} bpp", h.unsigned_abs())),
+            );
         }
         3 | 0x83 => {
             // METAFILEPICT (mapping mode, extents, handle) precedes the metafile.
@@ -1959,9 +2374,14 @@ async fn clp_format(cx: Cx, (input, entry, nt, format, data): (Input, Span, bool
 pub(crate) async fn text_or_embedded(cx: &Cx, input: Input, span: Span) -> Result<Node> {
     let head = cx.read_avail(span.sub(0, 0x1000)).await?;
     let printable = head.split(|&b| b == 0).next().unwrap_or_default();
-    if !head.is_empty() && crate::text::looks_like_text(printable) && printable.len() >= head.len().saturating_sub(1) {
+    if !head.is_empty()
+        && crate::text::looks_like_text(printable)
+        && printable.len() >= head.len().saturating_sub(1)
+    {
         let full = cx.read_avail(span.sub(0, 0x10000)).await?;
-        return Ok(Node::new("Data").span(span).value(text(crate::text::until_nul(&full))));
+        return Ok(Node::new("Data")
+            .span(span)
+            .value(text(crate::text::until_nul(&full))));
     }
     Ok(embedded("Data", input.nested(span)))
 }
@@ -1973,7 +2393,10 @@ pub(crate) async fn text_or_embedded(cx: &Cx, input: Input, span: Span) -> Resul
 fn rdp_text(data: &[u8]) -> (String, bool) {
     match data.strip_prefix(b"\xff\xfe") {
         Some(rest) => (crate::text::utf16(rest, LE), true),
-        None => (crate::text::latin1(data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(data)), false),
+        None => (
+            crate::text::latin1(data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(data)),
+            false,
+        ),
     }
 }
 
@@ -1981,8 +2404,12 @@ fn rdp_text(data: &[u8]) -> (String, bool) {
 fn rdp_setting(line: &str) -> Option<(&str, &str, &str)> {
     let (name, rest) = line.split_once(':')?;
     let (kind, value) = rest.split_once(':')?;
-    (matches!(kind, "i" | "s" | "b") && !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b' ' || b == b'_'))
-        .then_some((name, kind, value))
+    (matches!(kind, "i" | "s" | "b")
+        && !name.is_empty()
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b' ' || b == b'_'))
+    .then_some((name, kind, value))
 }
 
 fn rdp_probe(h: &Head<'_>) -> bool {
@@ -2002,7 +2429,12 @@ async fn rdp_file(cx: Cx, input: Input) -> Result<()> {
     let mut at = if wide { 2u64 } else { 0 };
     let (mut address, mut user, mut gateway) = (String::new(), String::new(), String::new());
     for line in txt.split_inclusive('\n') {
-        let len = to_u64(line.chars().map(|c| if wide { c.len_utf16() } else { 1 }).sum::<usize>()).saturating_mul(unit);
+        let len = to_u64(
+            line.chars()
+                .map(|c| if wide { c.len_utf16() } else { 1 })
+                .sum::<usize>(),
+        )
+        .saturating_mul(unit);
         let span = file.sub(at, len);
         at = at.saturating_add(len);
         let Some((name, kind, value)) = rdp_setting(line.trim_end()) else {
@@ -2016,13 +2448,20 @@ async fn rdp_file(cx: Cx, input: Input) -> Result<()> {
         }
         let node = Node::new(name.to_owned()).span(span);
         cx.push(match kind {
-            "i" => node.value(value.parse::<i64>().map_or_else(|_| text(value), |v| Value::Int { value: v, bits: 32 })),
+            "i" => node.value(
+                value
+                    .parse::<i64>()
+                    .map_or_else(|_| text(value), |v| Value::Int { value: v, bits: 32 }),
+            ),
             "b" => node.value(text(clip(value, 200))).desc("binary (hex)"),
             _ => node.value(text(value)),
         })
         .await;
     }
-    let mut summary = format!("Remote Desktop connection to {}", if address.is_empty() { "?" } else { &address });
+    let mut summary = format!(
+        "Remote Desktop connection to {}",
+        if address.is_empty() { "?" } else { &address }
+    );
     if !user.is_empty() {
         summary.push_str(&format!(" as {user}"));
     }
@@ -2047,7 +2486,9 @@ fn destlist_probe(h: &Head<'_>) -> bool {
         && (1..100_000).contains(&entries)
         && pinned <= entries
         && end > 0
-        && host.get(..end).is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic()))
+        && host
+            .get(..end)
+            .is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic()))
         && host.get(end..).is_some_and(|n| n.iter().all(|&b| b == 0))
 }
 
@@ -2065,7 +2506,15 @@ fn destlist_entry(f: &mut Fields<'_>, version: &u32) -> Result<(String, u64, u32
     f.u32("Unknown").emit()?;
     f.f32("Access weight").emit()?;
     let time = f.u64("Last access time").filetime().emit()?;
-    f.int::<i32>("Pin status").with(|&v, n| n.summary(if v < 0 { "not pinned".to_owned() } else { format!("pinned at {v}") })).emit()?;
+    f.int::<i32>("Pin status")
+        .with(|&v, n| {
+            n.summary(if v < 0 {
+                "not pinned".to_owned()
+            } else {
+                format!("pinned at {v}")
+            })
+        })
+        .emit()?;
     if *version >= 3 {
         f.u32("Unknown").emit()?;
         f.u32("Access count").emit()?;
@@ -2095,18 +2544,28 @@ async fn destlist(cx: Cx, input: Input) -> Result<()> {
     let mut at = 32u64;
     for _ in 0..entries.min(100_000) {
         let head = cx.read_avail(file.sub(at, fixed)).await?;
-        let chars = u64::from(u16_le(&head, crate::bytes::to_usize(fixed.saturating_sub(2))).unwrap_or(0));
-        let len = fixed.saturating_add(chars.saturating_mul(2)).saturating_add(if version >= 3 { 4 } else { 0 });
+        let chars =
+            u64::from(u16_le(&head, crate::bytes::to_usize(fixed.saturating_sub(2))).unwrap_or(0));
+        let len = fixed
+            .saturating_add(chars.saturating_mul(2))
+            .saturating_add(if version >= 3 { 4 } else { 0 });
         let span = file.sub(at, len);
         let block = cx.block(span).await?;
         let (path, time, number, host) = destlist_entry(&mut Fields::new(&block, LE), &version)?;
-        cx.push(struct_node(path, span, LE, version, destlist_entry).value(filetime(time)).summary(format!("entry {number} on {host}"))).await;
+        cx.push(
+            struct_node(path, span, LE, version, destlist_entry)
+                .value(filetime(time))
+                .summary(format!("entry {number} on {host}")),
+        )
+        .await;
         at = at.saturating_add(len);
         if at >= file.len {
             break;
         }
     }
-    cx.annotate(format!("Jump list DestList v{version}, {entries} entries ({pinned} pinned)"));
+    cx.annotate(format!(
+        "Jump list DestList v{version}, {entries} entries ({pinned} pinned)"
+    ));
     Ok(())
 }
 
@@ -2139,7 +2598,11 @@ async fn odl(cx: Cx, input: Input) -> Result<()> {
     let body = file.tail(256);
     if cx.read_avail(body.sub(0, 2)).await? == b"\x1f\x8b" {
         cx.emit(embedded("Records (gzip)", input.nested(body)));
-        cx.annotate(format!("OneDrive log v{version} (compressed), OneDrive {}, {}", app.trim(), os.trim()));
+        cx.annotate(format!(
+            "OneDrive log v{version} (compressed), OneDrive {}, {}",
+            app.trim(),
+            os.trim()
+        ));
         return Ok(());
     }
     let header_len: u64 = if version >= 3 { 32 } else { 56 };
@@ -2161,20 +2624,32 @@ async fn odl(cx: Cx, input: Input) -> Result<()> {
         cur.seek(data.end().saturating_sub(body.offset));
         // Data: code file name and function name as length-prefixed strings.
         let s1 = u32_le(&raw, 0).map_or(0, |n| crate::bytes::to_usize(n.into()));
-        let code_file = String::from_utf8_lossy(raw.get(4..4usize.saturating_add(s1)).unwrap_or_default()).into_owned();
+        let code_file =
+            String::from_utf8_lossy(raw.get(4..4usize.saturating_add(s1)).unwrap_or_default())
+                .into_owned();
         let at2 = 4usize.saturating_add(s1).saturating_add(4);
         let s2 = u32_le(&raw, at2).map_or(0, |n| crate::bytes::to_usize(n.into()));
-        let function = String::from_utf8_lossy(raw.get(at2.saturating_add(4)..at2.saturating_add(4).saturating_add(s2)).unwrap_or_default()).into_owned();
+        let function = String::from_utf8_lossy(
+            raw.get(at2.saturating_add(4)..at2.saturating_add(4).saturating_add(s2))
+                .unwrap_or_default(),
+        )
+        .into_owned();
         count = count.saturating_add(1);
         cx.push(
             Node::new(format!("{code_file} {function}").trim().to_owned())
                 .span(cur.since(start))
                 .target(data)
-                .value(Value::Timestamp { unix_seconds: i64::try_from(ms / 1000).unwrap_or(0) })
+                .value(Value::Timestamp {
+                    unix_seconds: i64::try_from(ms / 1000).unwrap_or(0),
+                })
                 .summary(size(len)),
         )
         .await;
     }
-    cx.annotate(format!("OneDrive log v{version}, {count} records, OneDrive {}, {}", app.trim(), os.trim()));
+    cx.annotate(format!(
+        "OneDrive log v{version}, {count} records, OneDrive {}, {}",
+        app.trim(),
+        os.trim()
+    ));
     Ok(())
 }

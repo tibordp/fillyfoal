@@ -70,7 +70,11 @@ pub async fn dissect_raf(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, RafHeader::SIZE);
     let h = parse(&cx, span, BE, &(), RafHeader::layout).await?;
     cx.emit(RafHeader::node("Header", span, BE));
-    cx.annotate(format!("Fujifilm {}, format {}", h.camera.trim(), h.format_version));
+    cx.annotate(format!(
+        "Fujifilm {}, format {}",
+        h.camera.trim(),
+        h.format_version
+    ));
     if h.jpeg_length > 0 {
         let jpeg = file.sub(h.jpeg_offset.into(), h.jpeg_length.into());
         cx.emit(embedded("JPEG preview", input.nested(jpeg)));
@@ -87,7 +91,11 @@ pub async fn dissect_raf(cx: Cx, input: Input) -> Result<()> {
         let cfa = file.sub(h.cfa_offset.into(), h.cfa_length.into());
         let head = cx.read_avail(cfa.sub(0, 4)).await?;
         if head == b"II*\0" || head == b"MM\0*" {
-            cx.emit(embedded_as("CFA (TIFF)", input.nested(cfa), &super::tiff::FORMAT));
+            cx.emit(embedded_as(
+                "CFA (TIFF)",
+                input.nested(cfa),
+                &super::tiff::FORMAT,
+            ));
         } else {
             cx.emit(Node::new("CFA data").span(cfa));
         }
@@ -98,7 +106,11 @@ pub async fn dissect_raf(cx: Cx, input: Input) -> Result<()> {
 async fn raf_records(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     let count = cur.u32().await?;
-    cx.emit(Node::new("Record count").span(span.sub(0, 4)).value(super::uint(count)));
+    cx.emit(
+        Node::new("Record count")
+            .span(span.sub(0, 4))
+            .value(super::uint(count)),
+    );
     for _ in 0..count {
         if cur.remaining() < 4 {
             break;
@@ -154,7 +166,10 @@ pub async fn dissect_mrw(cx: Cx, input: Input) -> Result<()> {
     let block = cx.block(file.sub(0, 8)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     f.bytes("Magic", 4).emit()?;
-    let len = f.u32("Header length").desc("Offset of the image data minus 8").emit()?;
+    let len = f
+        .u32("Header length")
+        .desc("Offset of the image data minus 8")
+        .emit()?;
     let header = file.sub(8, len.into());
     let mut cur = Cursor::new(&cx, header, BE);
     let mut summary = String::from("Minolta raw");
@@ -189,6 +204,11 @@ pub async fn dissect_mrw(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
     let start = 8u64.saturating_add(len.into());
-    cx.emit(region("Image data", file, start, file.len.saturating_sub(start)));
+    cx.emit(region(
+        "Image data",
+        file,
+        start,
+        file.len.saturating_sub(start),
+    ));
     Ok(())
 }

@@ -104,12 +104,7 @@ pub async fn text_preview(cx: &Cx, span: Span, max: u64) -> Result<String> {
 }
 
 /// A leaf for a text field stored at `span`, read in full (bounded by `max`).
-pub async fn text_node(
-    cx: &Cx,
-    name: &'static str,
-    span: Span,
-    max: u64,
-) -> Result<Node> {
+pub async fn text_node(cx: &Cx, name: &'static str, span: Span, max: u64) -> Result<Node> {
     let text = text_preview(cx, span, max).await?;
     let mut node = Node::new(name).span(span).value(Value::Text(text));
     if span.len > max {
@@ -188,7 +183,10 @@ impl<'a> ByteReader<'a> {
             if len > Self::WINDOW {
                 return self.cx.read(self.region.sub_exact(at, len)?).await;
             }
-            self.buf = self.cx.read_avail(self.region.sub(at, Self::WINDOW)).await?;
+            self.buf = self
+                .cx
+                .read_avail(self.region.sub(at, Self::WINDOW))
+                .await?;
             self.buf_start = at;
         }
         let rel = crate::bytes::to_usize(at.saturating_sub(self.buf_start));
@@ -232,7 +230,13 @@ impl<'a> ByteReader<'a> {
 /// SHA-1 (for verifying Git checksums and computing torrent info hashes;
 /// not for security).
 pub fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [0x6745_2301, 0xefcd_ab89, 0x98ba_dcfe, 0x1032_5476, 0xc3d2_e1f0];
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xefcd_ab89,
+        0x98ba_dcfe,
+        0x1032_5476,
+        0xc3d2_e1f0,
+    ];
     let bit_len = to_u64(data.len()).wrapping_mul(8);
     let mut padded = data.to_vec();
     padded.push(0x80);
@@ -287,17 +291,16 @@ pub fn sha1(data: &[u8]) -> [u8; 20] {
 
 /// Big-endian unsigned integer from up to 8 bytes.
 pub fn be_uint(bytes: &[u8]) -> u64 {
-    bytes
-        .iter()
-        .fold(0u64, |acc, &x| acc.checked_shl(8).unwrap_or(0) | u64::from(x))
+    bytes.iter().fold(0u64, |acc, &x| {
+        acc.checked_shl(8).unwrap_or(0) | u64::from(x)
+    })
 }
 
 /// Little-endian unsigned integer from up to 8 bytes.
 pub fn le_uint(bytes: &[u8]) -> u64 {
-    bytes
-        .iter()
-        .rev()
-        .fold(0u64, |acc, &x| acc.checked_shl(8).unwrap_or(0) | u64::from(x))
+    bytes.iter().rev().fold(0u64, |acc, &x| {
+        acc.checked_shl(8).unwrap_or(0) | u64::from(x)
+    })
 }
 
 #[cfg(test)]
@@ -306,9 +309,18 @@ mod tests {
 
     #[test]
     fn sha1_vectors() {
-        assert_eq!(hex_string(&sha1(b"")), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
-        assert_eq!(hex_string(&sha1(b"abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(
+            hex_string(&sha1(b"")),
+            "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        );
+        assert_eq!(
+            hex_string(&sha1(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
         let long = vec![b'a'; 1000];
-        assert_eq!(hex_string(&sha1(&long)), "291e9a6c66994949b57ba5e650361e98fc36b1ba");
+        assert_eq!(
+            hex_string(&sha1(&long)),
+            "291e9a6c66994949b57ba5e650361e98fc36b1ba"
+        );
     }
 }

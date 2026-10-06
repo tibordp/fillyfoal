@@ -42,18 +42,56 @@ record! {
 }
 
 const PERF_FEATURES: [&str; 32] = [
-    "reserved", "tracing data", "build ids", "hostname", "osrelease", "version", "arch", "nrcpus",
-    "cpudesc", "cpuid", "total memory", "cmdline", "event desc", "cpu topology", "numa topology",
-    "branch stack", "pmu mappings", "group desc", "auxtrace", "stat", "cache", "sample time",
-    "memory topology", "clockid", "dir format", "bpf prog info", "bpf btf", "compressed",
-    "cpu pmu caps", "clock data", "hybrid topology", "pmu caps",
+    "reserved",
+    "tracing data",
+    "build ids",
+    "hostname",
+    "osrelease",
+    "version",
+    "arch",
+    "nrcpus",
+    "cpudesc",
+    "cpuid",
+    "total memory",
+    "cmdline",
+    "event desc",
+    "cpu topology",
+    "numa topology",
+    "branch stack",
+    "pmu mappings",
+    "group desc",
+    "auxtrace",
+    "stat",
+    "cache",
+    "sample time",
+    "memory topology",
+    "clockid",
+    "dir format",
+    "bpf prog info",
+    "bpf btf",
+    "compressed",
+    "cpu pmu caps",
+    "clock data",
+    "hybrid topology",
+    "pmu caps",
 ];
 
 async fn perf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: PerfHeader = read_record(&cx, file.sub(0, PerfHeader::SIZE), LE).await?;
-    cx.emit(PerfHeader::node("Header", file.sub(0, PerfHeader::SIZE), LE));
-    cx.emit(Node::new("Attributes").span(file.sub(h.attrs_offset, h.attrs_size)).summary(format!("{} event(s)", h.attrs_size.checked_div(h.attr_size).unwrap_or(0))));
+    cx.emit(PerfHeader::node(
+        "Header",
+        file.sub(0, PerfHeader::SIZE),
+        LE,
+    ));
+    cx.emit(
+        Node::new("Attributes")
+            .span(file.sub(h.attrs_offset, h.attrs_size))
+            .summary(format!(
+                "{} event(s)",
+                h.attrs_size.checked_div(h.attr_size).unwrap_or(0)
+            )),
+    );
     cx.emit(Node::new("Samples").span(file.sub(h.data_offset, h.data_size)));
     let features: Vec<&str> = PERF_FEATURES
         .iter()
@@ -61,8 +99,16 @@ async fn perf(cx: Cx, input: Input) -> Result<()> {
         .filter(|(i, _)| h.features.get(i / 8).is_some_and(|b| b >> (i % 8) & 1 == 1))
         .map(|(_, n)| *n)
         .collect();
-    cx.emit(Node::new("Features").span(file.sub(0x48, 32)).value(text(features.join(", "))));
-    cx.annotate(format!("perf.data, {} bytes of samples, {} feature sections", h.data_size, features.len()));
+    cx.emit(
+        Node::new("Features")
+            .span(file.sub(0x48, 32))
+            .value(text(features.join(", "))),
+    );
+    cx.annotate(format!(
+        "perf.data, {} bytes of samples, {} feature sections",
+        h.data_size,
+        features.len()
+    ));
     Ok(())
 }
 
@@ -78,8 +124,14 @@ async fn ldso_cache(cx: Cx, input: Input) -> Result<()> {
     if cx.read(file.sub(0, 11)).await? == b"ld.so-1.7.0" {
         // The old format: skip its entries to reach the new-format header.
         let n = u32_le(&cx.read(file.sub(12, 4)).await?, 0).unwrap_or(0);
-        base = 16u64.saturating_add(u64::from(n).saturating_mul(12)).next_multiple_of(8);
-        cx.emit(Node::new("Old-format table").span(file.sub(0, base)).summary(format!("{n} entries")));
+        base = 16u64
+            .saturating_add(u64::from(n).saturating_mul(12))
+            .next_multiple_of(8);
+        cx.emit(
+            Node::new("Old-format table")
+                .span(file.sub(0, base))
+                .summary(format!("{n} entries")),
+        );
     }
     let head = cx.block(file.sub(base, 48)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
@@ -87,8 +139,15 @@ async fn ldso_cache(cx: Cx, input: Input) -> Result<()> {
     let count = f.u32("Libraries").emit()?;
     let strings_len = f.u32("String table size").emit()?;
     let entries = file.sub_exact(base.saturating_add(48), u64::from(count).saturating_mul(24))?;
-    cx.emit(Node::new("Libraries").span(entries).summary(format!("{count} entries")).lazy(ldso_entries, (file, entries, base)));
-    cx.annotate(format!("ld.so cache, {count} libraries, {strings_len}-byte string table"));
+    cx.emit(
+        Node::new("Libraries")
+            .span(entries)
+            .summary(format!("{count} entries"))
+            .lazy(ldso_entries, (file, entries, base)),
+    );
+    cx.annotate(format!(
+        "ld.so cache, {count} libraries, {strings_len}-byte string table"
+    ));
     Ok(())
 }
 
@@ -103,9 +162,14 @@ async fn ldso_entries(cx: Cx, (file, entries, base): (Span, Span, u64)) -> Resul
         let value = cur.u32().await?;
         cur.skip(12);
         // String offsets are relative to the new-format header.
-        let (name, _) = cx.cstr(file.sub(base.saturating_add(key.into()), 256)).await?;
-        let (path, _) = cx.cstr(file.sub(base.saturating_add(value.into()), 1024)).await?;
-        cx.push(Node::new(name).span(cur.since(start)).value(text(path))).await;
+        let (name, _) = cx
+            .cstr(file.sub(base.saturating_add(key.into()), 256))
+            .await?;
+        let (path, _) = cx
+            .cstr(file.sub(base.saturating_add(value.into()), 1024))
+            .await?;
+        cx.push(Node::new(name).span(cur.since(start)).value(text(path)))
+            .await;
     }
     Ok(())
 }
@@ -128,7 +192,11 @@ async fn selinux(cx: Cx, input: Input) -> Result<()> {
     f.u32("Config").hex().emit()?;
     f.u32("Symbol tables").emit()?;
     f.u32("Object contexts").emit()?;
-    cx.emit(Node::new("Identifier").span(file.sub(8, len)).value(text(id.clone())));
+    cx.emit(
+        Node::new("Identifier")
+            .span(file.sub(8, len))
+            .value(text(id.clone())),
+    );
     cx.emit(Node::new("Policy").span(file.tail(after.saturating_add(16))));
     cx.annotate(format!("{id} version {version}"));
     Ok(())
@@ -175,7 +243,13 @@ record! {
     }
 }
 
-const AVB_DESCRIPTORS: EnumTable = &[(0, "Property"), (1, "Hashtree"), (2, "Hash"), (3, "Kernel cmdline"), (4, "Chain partition")];
+const AVB_DESCRIPTORS: EnumTable = &[
+    (0, "Property"),
+    (1, "Hashtree"),
+    (2, "Hash"),
+    (3, "Kernel cmdline"),
+    (4, "Chain partition"),
+];
 
 async fn vbmeta(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -185,7 +259,11 @@ async fn vbmeta(cx: Cx, input: Input) -> Result<()> {
     let aux = file.sub(256u64.saturating_add(h.auth_size), h.aux_size);
     cx.emit(Node::new("Authentication block").span(auth));
     let descriptors = aux.sub(h.descriptors_offset, h.descriptors_size);
-    cx.emit(Node::new("Descriptors").span(descriptors).lazy(avb_descriptors, descriptors));
+    cx.emit(
+        Node::new("Descriptors")
+            .span(descriptors)
+            .lazy(avb_descriptors, descriptors),
+    );
     cx.annotate(format!(
         "vbmeta {}.{}, {}, {}",
         h.major,
@@ -204,14 +282,23 @@ async fn avb_descriptors(cx: Cx, span: Span) -> Result<()> {
         let len = cur.u64().await?;
         let body = cur.span(len);
         cur.skip(len);
-        let mut node = Node::new(lookup(AVB_DESCRIPTORS, tag).unwrap_or("Unknown descriptor")).span(cur.since(start));
+        let mut node = Node::new(lookup(AVB_DESCRIPTORS, tag).unwrap_or("Unknown descriptor"))
+            .span(cur.since(start));
         if tag == 0 {
             let b = cx.read_avail(body.sub(0, 4096)).await?;
             let key_len = crate::bytes::to_usize(u64_be(&b, 0).unwrap_or(0));
             let value_len = crate::bytes::to_usize(u64_be(&b, 8).unwrap_or(0));
-            let key = String::from_utf8_lossy(b.get(16..16usize.saturating_add(key_len)).unwrap_or_default()).into_owned();
+            let key = String::from_utf8_lossy(
+                b.get(16..16usize.saturating_add(key_len))
+                    .unwrap_or_default(),
+            )
+            .into_owned();
             let value_at = 16usize.saturating_add(key_len).saturating_add(1);
-            let value = String::from_utf8_lossy(b.get(value_at..value_at.saturating_add(value_len)).unwrap_or_default()).into_owned();
+            let value = String::from_utf8_lossy(
+                b.get(value_at..value_at.saturating_add(value_len))
+                    .unwrap_or_default(),
+            )
+            .into_owned();
             node = node.summary(format!("{key} = {value}"));
         }
         cx.push(node).await;
@@ -236,12 +323,18 @@ async fn dtbo(cx: Cx, input: Input) -> Result<()> {
     f.u32("Version").emit()?;
     let _ = header_size;
     for i in 0..count.min(256) {
-        let at = u64::from(entries_offset).saturating_add(u64::from(i).saturating_mul(entry_size.into()));
+        let at = u64::from(entries_offset)
+            .saturating_add(u64::from(i).saturating_mul(entry_size.into()));
         let entry = cx.read(file.sub(at, 32)).await?;
         let size = u64::from(u32_be(&entry, 0).unwrap_or(0));
         let offset = u64::from(u32_be(&entry, 4).unwrap_or(0));
         let id = u32_be(&entry, 8).unwrap_or(0);
-        cx.push(embedded(format!("Overlay {i}"), input.nested(file.sub(offset, size))).summary(format!("id {id:#x}, {size} bytes")).target(file.sub(at, entry_size.into()))).await;
+        cx.push(
+            embedded(format!("Overlay {i}"), input.nested(file.sub(offset, size)))
+                .summary(format!("id {id:#x}, {size} bytes"))
+                .target(file.sub(at, entry_size.into())),
+        )
+        .await;
     }
     cx.annotate(format!("DTBO table, {count} overlays"));
     Ok(())
@@ -257,7 +350,17 @@ fn ifd_probe(h: &Head<'_>) -> bool {
 declare_format!(pub INTEL_FLASH = "intel-flash", "Intel firmware flash image", ["bin", "rom"], "application/x-intel-flash",
     Probe::Custom(ifd_probe), intel_flash);
 
-const IFD_REGIONS: [&str; 9] = ["Descriptor", "BIOS", "Management Engine", "Gigabit Ethernet", "Platform Data", "Device Expansion", "BIOS 2", "Reserved", "Embedded Controller"];
+const IFD_REGIONS: [&str; 9] = [
+    "Descriptor",
+    "BIOS",
+    "Management Engine",
+    "Gigabit Ethernet",
+    "Platform Data",
+    "Device Expansion",
+    "BIOS 2",
+    "Reserved",
+    "Embedded Controller",
+];
 
 async fn intel_flash(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -276,9 +379,13 @@ async fn intel_flash(cx: Cx, input: Input) -> Result<()> {
         }
         present.push(*name);
         let span = file.sub(base, limit.saturating_sub(base).saturating_add(1));
-        cx.push(embedded(*name, input.nested(span)).summary(format!("{base:#x}..{limit:#x}"))).await;
+        cx.push(embedded(*name, input.nested(span)).summary(format!("{base:#x}..{limit:#x}")))
+            .await;
     }
-    cx.annotate(format!("Intel flash image, regions: {}", present.join(", ")));
+    cx.annotate(format!(
+        "Intel flash image, regions: {}",
+        present.join(", ")
+    ));
     Ok(())
 }
 
@@ -323,19 +430,34 @@ async fn cbfs(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(u32_be(&head, 8).unwrap_or(0));
         let kind = u32_be(&head, 12).unwrap_or(0);
         let offset = u64::from(u32_be(&head, 20).unwrap_or(0));
-        let (name, _) = cx.cstr(file.sub(pos.saturating_add(24), offset.saturating_sub(24).max(1))).await?;
+        let (name, _) = cx
+            .cstr(file.sub(pos.saturating_add(24), offset.saturating_sub(24).max(1)))
+            .await?;
         let data = file.sub(pos.saturating_add(offset), len);
         files = files.saturating_add(1);
         cx.push(
-            embedded(if name.is_empty() { "(unnamed)".to_owned() } else { name }, input.nested(data))
-                .summary(format!("{}, {len} bytes", lookup(CBFS_TYPES, kind.into()).unwrap_or("unknown type")))
-                .target(file.sub(pos, offset)),
+            embedded(
+                if name.is_empty() {
+                    "(unnamed)".to_owned()
+                } else {
+                    name
+                },
+                input.nested(data),
+            )
+            .summary(format!(
+                "{}, {len} bytes",
+                lookup(CBFS_TYPES, kind.into()).unwrap_or("unknown type")
+            ))
+            .target(file.sub(pos, offset)),
         )
         .await;
         if offset < 24 {
             break;
         }
-        pos = pos.saturating_add(offset).saturating_add(len).next_multiple_of(64);
+        pos = pos
+            .saturating_add(offset)
+            .saturating_add(len)
+            .next_multiple_of(64);
     }
     cx.annotate(format!("CBFS, {files} files"));
     Ok(())
@@ -345,13 +467,31 @@ declare_format!(pub ARM_FIP = "arm-fip", "Arm Trusted Firmware image package (FI
     Probe::Magic(&[(0, b"\x01\x00\x64\xaa")]), arm_fip);
 
 const FIP_UUIDS: &[(&str, &str)] = &[
-    ("5ff9ec0b-4d22-3e4d-a544-c39d81c73f0a", "BL2 (trusted boot firmware)"),
+    (
+        "5ff9ec0b-4d22-3e4d-a544-c39d81c73f0a",
+        "BL2 (trusted boot firmware)",
+    ),
     ("9766fd3d-89be-e849-ae5d-78a140608213", "SCP firmware BL2"),
-    ("47d4086d-4cfe-9846-9b95-2950cbbd5a00", "BL31 (EL3 runtime firmware)"),
-    ("05d0e189-53dc-1347-8d2b-500a4b7a3e38", "BL32 (secure payload)"),
-    ("d6d0eea7-fcea-d54b-97829934f234b6e4", "BL33 (non-trusted firmware)"),
-    ("d6d0eea7-fcea-d54b-9782-9934f234b6e4", "BL33 (non-trusted firmware)"),
-    ("8ea87bb1-cfa2-3f4d-85fd-e04bba6bc40c", "Trusted boot firmware certificate"),
+    (
+        "47d4086d-4cfe-9846-9b95-2950cbbd5a00",
+        "BL31 (EL3 runtime firmware)",
+    ),
+    (
+        "05d0e189-53dc-1347-8d2b-500a4b7a3e38",
+        "BL32 (secure payload)",
+    ),
+    (
+        "d6d0eea7-fcea-d54b-97829934f234b6e4",
+        "BL33 (non-trusted firmware)",
+    ),
+    (
+        "d6d0eea7-fcea-d54b-9782-9934f234b6e4",
+        "BL33 (non-trusted firmware)",
+    ),
+    (
+        "8ea87bb1-cfa2-3f4d-85fd-e04bba6bc40c",
+        "Trusted boot firmware certificate",
+    ),
 ];
 
 async fn arm_fip(cx: Cx, input: Input) -> Result<()> {
@@ -377,8 +517,16 @@ async fn arm_fip(cx: Cx, input: Input) -> Result<()> {
         }
         images = images.saturating_add(1);
         let id = uuid.to_string().trim_matches(['{', '}']).to_owned();
-        let name = FIP_UUIDS.iter().find(|(u, _)| *u == id).map_or_else(|| id.clone(), |(_, n)| (*n).to_owned());
-        cx.push(embedded(name, input.nested(file.sub(offset, size))).summary(format!("{size} bytes")).target(cur.since(start))).await;
+        let name = FIP_UUIDS
+            .iter()
+            .find(|(u, _)| *u == id)
+            .map_or_else(|| id.clone(), |(_, n)| (*n).to_owned());
+        cx.push(
+            embedded(name, input.nested(file.sub(offset, size)))
+                .summary(format!("{size} bytes"))
+                .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(format!("FIP, {images} images"));
     Ok(())
@@ -415,8 +563,16 @@ async fn nsis(cx: Cx, input: Input) -> Result<()> {
         [b'B', b'Z', ..] => "bzip2",
         _ => "zlib or solid",
     };
-    cx.emit(Node::new("Compressed header and data").span(file.sub(28, u64::from(length).saturating_sub(28))).diag(Diagnostic::unsupported(format!("{compression} compression"))));
-    cx.annotate(format!("NSIS installer, {length} bytes, header {header} bytes, {compression}"));
+    cx.emit(
+        Node::new("Compressed header and data")
+            .span(file.sub(28, u64::from(length).saturating_sub(28)))
+            .diag(Diagnostic::unsupported(format!(
+                "{compression} compression"
+            ))),
+    );
+    cx.annotate(format!(
+        "NSIS installer, {length} bytes, header {header} bytes, {compression}"
+    ));
     Ok(())
 }
 
@@ -428,7 +584,11 @@ async fn inno(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, 64)).await?;
     if head.starts_with(b"Inno Setup") {
         let version = crate::text::until_nul(&head);
-        cx.emit(Node::new("Version").span(file.sub(0, 64)).value(text(version.clone())));
+        cx.emit(
+            Node::new("Version")
+                .span(file.sub(0, 64))
+                .value(text(version.clone())),
+        );
         cx.emit(Node::new("Setup data").span(file.tail(64)));
         cx.annotate(version);
     } else {
@@ -456,7 +616,11 @@ declare_format!(pub JMOD = "jmod", "Java module (JMOD)", ["jmod"], "application/
 async fn jmod(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Header").span(file.sub(0, 4)).summary("JMOD 1.0"));
-    cx.emit(crate::formats::embedded_as("Module contents (ZIP)", input.nested(file.tail(4)), &crate::formats::zip::FORMAT));
+    cx.emit(crate::formats::embedded_as(
+        "Module contents (ZIP)",
+        input.nested(file.tail(4)),
+        &crate::formats::zip::FORMAT,
+    ));
     cx.annotate("Java module");
     Ok(())
 }
@@ -483,9 +647,18 @@ async fn jimage(cx: Cx, input: Input) -> Result<()> {
         .saturating_add(u64::from(h.table_length).saturating_mul(8))
         .saturating_add(h.locations_size.into())
         .saturating_add(h.strings_size.into());
-    cx.emit(Node::new("Index").span(input.span.sub(JimageHeader::SIZE, index.saturating_sub(JimageHeader::SIZE))));
+    cx.emit(
+        Node::new("Index").span(
+            input
+                .span
+                .sub(JimageHeader::SIZE, index.saturating_sub(JimageHeader::SIZE)),
+        ),
+    );
     cx.emit(Node::new("Resources").span(input.span.tail(index)));
-    cx.annotate(format!("jimage {}.{}, {} resources", h.major, h.minor, h.resources));
+    cx.annotate(format!(
+        "jimage {}.{}, {} resources",
+        h.major, h.minor, h.resources
+    ));
     Ok(())
 }
 
@@ -493,7 +666,12 @@ async fn jimage(cx: Cx, input: Input) -> Result<()> {
 // Classic Mac OS resource forks
 
 fn rsrc_probe(h: &Head<'_>) -> bool {
-    let (Some(data), Some(map), Some(data_len), Some(map_len)) = (u32_be(h.data, 0), u32_be(h.data, 4), u32_be(h.data, 8), u32_be(h.data, 12)) else {
+    let (Some(data), Some(map), Some(data_len), Some(map_len)) = (
+        u32_be(h.data, 0),
+        u32_be(h.data, 4),
+        u32_be(h.data, 8),
+        u32_be(h.data, 12),
+    ) else {
         return false;
     };
     data == 0x100
@@ -518,7 +696,9 @@ async fn mac_rsrc(cx: Cx, input: Input) -> Result<()> {
     let type_count = u16_be(&count_bytes, 0).unwrap_or(0).wrapping_add(1);
     let mut kinds = Vec::new();
     for i in 0..type_count.min(1024) {
-        let at = types_offset.saturating_add(2).saturating_add(u64::from(i).saturating_mul(8));
+        let at = types_offset
+            .saturating_add(2)
+            .saturating_add(u64::from(i).saturating_mul(8));
         let entry = cx.read(file.sub(at, 8)).await?;
         let kind = String::from_utf8_lossy(entry.get(..4).unwrap_or_default()).into_owned();
         let count = u16_be(&entry, 4).unwrap_or(0).wrapping_add(1);
@@ -538,7 +718,10 @@ async fn mac_rsrc(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn rsrc_refs(cx: Cx, (input, refs, count, data, names): (Input, u64, u16, u64, u64)) -> Result<()> {
+async fn rsrc_refs(
+    cx: Cx,
+    (input, refs, count, data, names): (Input, u64, u16, u64, u64),
+) -> Result<()> {
     let file = input.span;
     for i in 0..count.min(4096) {
         let at = refs.saturating_add(u64::from(i).saturating_mul(12));
@@ -551,12 +734,22 @@ async fn rsrc_refs(cx: Cx, (input, refs, count, data, names): (Input, u64, u16, 
         let len = u64::from(u32_be(&len_bytes, 0).unwrap_or(0));
         let mut label = format!("#{id}");
         if name_offset != 0xffff {
-            let n = cx.read(file.sub(names.saturating_add(name_offset.into()), 256)).await?;
+            let n = cx
+                .read(file.sub(names.saturating_add(name_offset.into()), 256))
+                .await?;
             let l = usize::from(n.first().copied().unwrap_or(0));
-            label = format!("#{id} {:?}", crate::text::latin1(n.get(1..1usize.saturating_add(l)).unwrap_or_default()));
+            label = format!(
+                "#{id} {:?}",
+                crate::text::latin1(n.get(1..1usize.saturating_add(l)).unwrap_or_default())
+            );
         }
         let body = file.sub(data.saturating_add(offset).saturating_add(4), len);
-        cx.push(embedded(label, input.nested(body)).summary(format!("{len} bytes, attributes {attrs:#04x}")).target(file.sub(at, 12))).await;
+        cx.push(
+            embedded(label, input.nested(body))
+                .summary(format!("{len} bytes, attributes {attrs:#04x}"))
+                .target(file.sub(at, 12)),
+        )
+        .await;
     }
     Ok(())
 }

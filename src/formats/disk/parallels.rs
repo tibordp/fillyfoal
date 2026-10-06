@@ -55,8 +55,14 @@ struct Image {
 
 impl Image {
     fn cluster_span(&self, entry: u32) -> Span {
-        let unit = if self.in_clusters { self.cluster } else { SECTOR };
-        self.input.span.sub(u64::from(entry).saturating_mul(unit), self.cluster)
+        let unit = if self.in_clusters {
+            self.cluster
+        } else {
+            SECTOR
+        };
+        self.input
+            .span
+            .sub(u64::from(entry).saturating_mul(unit), self.cluster)
     }
 }
 
@@ -87,7 +93,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{} entries", h.bat_entries))
             .lazy(bat, image.clone()),
     );
-    cx.emit(Node::new("Virtual disk").summary(size(image.size)).lazy(virtual_disk, image));
+    cx.emit(
+        Node::new("Virtual disk")
+            .summary(size(image.size))
+            .lazy(virtual_disk, image),
+    );
     Ok(())
 }
 
@@ -101,7 +111,8 @@ async fn bat(cx: Cx, image: Arc<Image>) -> Result<()> {
         cx.push(if entry == 0 {
             node.summary("not allocated")
         } else {
-            node.summary(format!("at {entry}")).target(image.cluster_span(entry))
+            node.summary(format!("at {entry}"))
+                .target(image.cluster_span(entry))
         })
         .await;
     }

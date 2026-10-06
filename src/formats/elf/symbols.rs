@@ -183,7 +183,9 @@ async fn symbols(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
     let strtab = linked_strings(&elf, section);
     cx.set_count(Count::Exact(t.count));
     for i in 0..t.count {
-        let span = t.span.sub(i.saturating_mul(t.entsize), elf.class.sym_size());
+        let span = t
+            .span
+            .sub(i.saturating_mul(t.entsize), elf.class.sym_size());
         let sym = parse(&cx, span, elf.endian(), &elf, symbol).await?;
         let (label, diag) = match symbol_name(&cx, &elf, &sym, strtab).await {
             Ok(name) if name.is_empty() => (format!("#{i}"), None),
@@ -331,7 +333,9 @@ async fn relocations(cx: Cx, (elf, index): (Elf, u32)) -> Result<()> {
             && let Some(symtab) = symtab
         {
             let st = table(&elf, symtab, elf.class.sym_size());
-            let at = st.span.sub(r.sym.saturating_mul(st.entsize), elf.class.sym_size());
+            let at = st
+                .span
+                .sub(r.sym.saturating_mul(st.entsize), elf.class.sym_size());
             match parse(&cx, at, elf.endian(), &elf, symbol).await {
                 Ok(sym) => match symbol_name(&cx, &elf, &sym, strtab).await {
                     Ok(name) => target = name,

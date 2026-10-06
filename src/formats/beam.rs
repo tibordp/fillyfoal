@@ -76,7 +76,12 @@ async fn atoms(cx: &Cx, m: &Module) -> Vec<String> {
 /// `(atoms, byte ranges)`; a negative count (OTP 28) means lengths use the
 /// compact term encoding.
 fn parse_atoms(data: &[u8], utf8: bool) -> Option<Vec<String>> {
-    Some(atom_entries(data, utf8)?.into_iter().map(|(s, _, _)| s).collect())
+    Some(
+        atom_entries(data, utf8)?
+            .into_iter()
+            .map(|(s, _, _)| s)
+            .collect(),
+    )
 }
 
 fn atom_entries(data: &[u8], utf8: bool) -> Option<Vec<(String, usize, usize)>> {
@@ -203,11 +208,18 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
             let entries = (to_u64(data.len()).saturating_sub(4) / 12).min(count.into());
             for i in 0..entries {
                 let at = crate::bytes::to_usize(i.saturating_mul(12).saturating_add(4));
-                let w = |k: usize| u32_be(&data, at.saturating_add(k.saturating_mul(4))).unwrap_or(0);
+                let w =
+                    |k: usize| u32_be(&data, at.saturating_add(k.saturating_mul(4))).unwrap_or(0);
                 let (label, extra) = if &c.id == b"ImpT" {
-                    (format!("{}:{}/{}", atom(w(0)), atom(w(1)), w(2)), String::new())
+                    (
+                        format!("{}:{}/{}", atom(w(0)), atom(w(1)), w(2)),
+                        String::new(),
+                    )
                 } else {
-                    (format!("{}/{}", atom(w(0)), w(1)), format!("label {}", w(2)))
+                    (
+                        format!("{}/{}", atom(w(0)), w(1)),
+                        format!("label {}", w(2)),
+                    )
                 };
                 let mut node = Node::new(label).span(c.data.sub(to_u64(at), 12));
                 if !extra.is_empty() {
@@ -223,7 +235,8 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
             let entries = (to_u64(data.len()).saturating_sub(4) / 24).min(count.into());
             for i in 0..entries {
                 let at = crate::bytes::to_usize(i.saturating_mul(24).saturating_add(4));
-                let w = |k: usize| u32_be(&data, at.saturating_add(k.saturating_mul(4))).unwrap_or(0);
+                let w =
+                    |k: usize| u32_be(&data, at.saturating_add(k.saturating_mul(4))).unwrap_or(0);
                 let name = usize::try_from(w(0))
                     .ok()
                     .and_then(|i| names.get(i))
@@ -245,7 +258,10 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
         b"Code" => {
             let block = cx.block(c.data.sub(0, 20)).await?;
             let mut f = Fields::emitting(&cx, &block, BE);
-            let sub = f.u32("sub-size").desc("Header bytes after this field").emit()?;
+            let sub = f
+                .u32("sub-size")
+                .desc("Header bytes after this field")
+                .emit()?;
             f.u32("instruction set").emit()?;
             f.u32("opcode max").emit()?;
             f.u32("labels").emit()?;
@@ -282,10 +298,20 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
         b"Line" => {
             let block = cx.block(c.data.sub(0, 20)).await?;
             let mut f = Fields::emitting(&cx, &block, BE);
-            for name in ["version", "flags", "instruction count", "item count", "name count"] {
+            for name in [
+                "version",
+                "flags",
+                "instruction count",
+                "item count",
+                "name count",
+            ] {
                 f.u32(name).emit()?;
             }
-            cx.emit(data_node("Line items", c.data.tail(20), c.data.len.saturating_sub(20)));
+            cx.emit(data_node(
+                "Line items",
+                c.data.tail(20),
+                c.data.len.saturating_sub(20),
+            ));
         }
         _ => {
             cx.emit(data_node("Data", c.data, c.data.len));

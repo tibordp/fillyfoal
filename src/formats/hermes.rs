@@ -48,7 +48,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     // The rest of the header (counts that vary between versions) is
     // padded to 128 bytes; the body follows.
-    cx.emit(data_node("Header (version-specific part)", file.sub(Header::SIZE, 128u64.saturating_sub(Header::SIZE)), 128u64.saturating_sub(Header::SIZE)));
+    cx.emit(data_node(
+        "Header (version-specific part)",
+        file.sub(Header::SIZE, 128u64.saturating_sub(Header::SIZE)),
+        128u64.saturating_sub(Header::SIZE),
+    ));
     // The file ends with a 20-byte footer holding a SHA-1 of the rest.
     let footer_at = u64::from(h.file_length).saturating_sub(20).max(128);
     cx.emit(Node::new("Tables and bytecode").span(file.sub(128, footer_at.saturating_sub(128))));

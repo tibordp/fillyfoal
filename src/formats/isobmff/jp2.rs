@@ -65,7 +65,13 @@ const MARKERS: EnumTable = &[
     (0xffd9, "EOC"),
 ];
 
-const PROGRESSION: EnumTable = &[(0, "LRCP"), (1, "RLCP"), (2, "RPCL"), (3, "PCRL"), (4, "CPRL")];
+const PROGRESSION: EnumTable = &[
+    (0, "LRCP"),
+    (1, "RLCP"),
+    (2, "RPCL"),
+    (3, "PCRL"),
+    (4, "CPRL"),
+];
 
 async fn emit_fields(
     cx: &Cx,
@@ -110,7 +116,9 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 f.int::<i8>("Precedence").emit()?;
                 f.u8("Approximation").emit()?;
                 if method == 1 {
-                    f.u32("Enumerated colourspace").enumeration(ENUM_CS).emit()?;
+                    f.u32("Enumerated colourspace")
+                        .enumeration(ENUM_CS)
+                        .emit()?;
                 }
                 Ok(())
             })
@@ -225,8 +233,9 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             u16_be(&d, 8)?,
             bpc(d.get(10).copied()?)
         )),
-        b"colr" if d.first() == Some(&1) => crate::value::lookup(ENUM_CS, u32_be(&d, 3)?.into())
-            .map(str::to_owned),
+        b"colr" if d.first() == Some(&1) => {
+            crate::value::lookup(ENUM_CS, u32_be(&d, 3)?.into()).map(str::to_owned)
+        }
         b"colr" => Some("ICC profile".to_owned()),
         b"jp2c" => siz_summary(&d),
         _ => None,
@@ -242,7 +251,9 @@ pub fn siz_summary(d: &[u8]) -> Option<String> {
     let width = u32_be(d, 8)?.saturating_sub(u32_be(d, 16)?);
     let height = u32_be(d, 12)?.saturating_sub(u32_be(d, 20)?);
     let components = u16_be(d, 40)?;
-    Some(format!("codestream {width}×{height}, {components} components"))
+    Some(format!(
+        "codestream {width}×{height}, {components} components"
+    ))
 }
 
 /// A lazy node for a JPEG 2000 codestream (also used for raw `.j2k` data
@@ -347,7 +358,9 @@ async fn segment(cx: Cx, (span, marker): (Span, u16)) -> Result<()> {
                 if f.remaining() < 3 {
                     break;
                 }
-                f.u8("Component depth").with(|&b, n| n.summary(bpc(b))).emit()?;
+                f.u8("Component depth")
+                    .with(|&b, n| n.summary(bpc(b)))
+                    .emit()?;
                 f.u8("Horizontal separation").emit()?;
                 f.u8("Vertical separation").emit()?;
             }
@@ -360,14 +373,30 @@ async fn segment(cx: Cx, (span, marker): (Span, u16)) -> Result<()> {
             f.u8("Multiple component transform").emit()?;
             f.u8("Decomposition levels").emit()?;
             f.u8("Code-block width")
-                .with(|&v, n| n.summary(format!("{}", 1u32 << (u32::from(v & 15).saturating_add(2)).min(31))))
+                .with(|&v, n| {
+                    n.summary(format!(
+                        "{}",
+                        1u32 << (u32::from(v & 15).saturating_add(2)).min(31)
+                    ))
+                })
                 .emit()?;
             f.u8("Code-block height")
-                .with(|&v, n| n.summary(format!("{}", 1u32 << (u32::from(v & 15).saturating_add(2)).min(31))))
+                .with(|&v, n| {
+                    n.summary(format!(
+                        "{}",
+                        1u32 << (u32::from(v & 15).saturating_add(2)).min(31)
+                    ))
+                })
                 .emit()?;
             f.u8("Code-block style").hex().emit()?;
             f.u8("Transformation")
-                .with(|&v, n| n.summary(if v == 0 { "9-7 irreversible" } else { "5-3 reversible" }))
+                .with(|&v, n| {
+                    n.summary(if v == 0 {
+                        "9-7 irreversible"
+                    } else {
+                        "5-3 reversible"
+                    })
+                })
                 .emit()?;
         }
         0xff64 => {

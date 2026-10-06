@@ -89,7 +89,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let name_len = u64::from(h.header_size).saturating_sub(Header::SIZE);
     let name_span = file.sub(Header::SIZE, name_len);
     let name = crate::text::until_nul(&cx.read_avail(name_span).await?);
-    cx.emit(Node::new("Window name").span(name_span).value(text(name.clone())));
+    cx.emit(
+        Node::new("Window name")
+            .span(name_span)
+            .value(text(name.clone())),
+    );
     let visual = lookup(VISUALS, h.visual_class.into()).unwrap_or("unknown visual");
     let mut summary = format!("{}, {}-bit {visual}", dims(h.width, h.height), h.depth);
     if !name.is_empty() {
@@ -108,10 +112,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let start = colors_at.saturating_add(u64::from(h.ncolors).saturating_mul(12));
     let len = u64::from(h.bytes_per_line).saturating_mul(h.height.into());
-    cx.emit(
-        region("Image data", file, start, len)
-            .summary(format!("{} rows of {:#x} bytes", h.height, h.bytes_per_line)),
-    );
+    cx.emit(region("Image data", file, start, len).summary(format!(
+        "{} rows of {:#x} bytes",
+        h.height, h.bytes_per_line
+    )));
     Ok(())
 }
 
@@ -126,12 +130,7 @@ async fn color_table(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("[{i}]"))
                 .span(entry)
-                .value(text(format!(
-                    "#{:04x}{:04x}{:04x}",
-                    get(4),
-                    get(6),
-                    get(8)
-                )))
+                .value(text(format!("#{:04x}{:04x}{:04x}", get(4), get(6), get(8))))
                 .summary(format!("pixel {pixel}")),
         )
         .await;

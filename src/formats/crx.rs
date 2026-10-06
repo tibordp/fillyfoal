@@ -59,17 +59,31 @@ pub async fn crx(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Crx2Header::node("Header", span, LE));
         let key = file.sub(Crx2Header::SIZE, h.key_len.into());
         let sig = file.sub(key.end().saturating_sub(file.offset), h.sig_len.into());
-        cx.emit(Node::new("Public key (DER)").span(key).summary(format!("{} bytes", key.len)));
-        cx.emit(Node::new("Signature").span(sig).summary(format!("{} bytes", sig.len)));
+        cx.emit(
+            Node::new("Public key (DER)")
+                .span(key)
+                .summary(format!("{} bytes", key.len)),
+        );
+        cx.emit(
+            Node::new("Signature")
+                .span(sig)
+                .summary(format!("{} bytes", sig.len)),
+        );
         sig.end().saturating_sub(file.offset)
     } else {
         let header_len = u64::from(u32_le(&head, 8).unwrap_or(0));
-        cx.emit(crate::fields::struct_node("Header", file.sub(0, 12), LE, (), |f, _| {
-            f.ascii("Magic", 4).emit()?;
-            f.u32("Version").emit()?;
-            f.u32("Header size").emit()?;
-            Ok(())
-        }));
+        cx.emit(crate::fields::struct_node(
+            "Header",
+            file.sub(0, 12),
+            LE,
+            (),
+            |f, _| {
+                f.ascii("Magic", 4).emit()?;
+                f.u32("Version").emit()?;
+                f.u32("Header size").emit()?;
+                Ok(())
+            },
+        ));
         let proto = file.sub(12, header_len);
         cx.emit(
             Node::new("CrxFileHeader")
@@ -80,7 +94,10 @@ pub async fn crx(cx: Cx, input: Input) -> Result<()> {
         12u64.saturating_add(header_len)
     };
     let archive = file.tail(zip_at);
-    cx.annotate(format!("Chrome extension (CRX{version}), {} ZIP payload", size(archive.len)));
+    cx.annotate(format!(
+        "Chrome extension (CRX{version}), {} ZIP payload",
+        size(archive.len)
+    ));
     cx.emit(embedded_as("Archive", input.nested(archive), &zip::FORMAT));
     Ok(())
 }
@@ -132,7 +149,11 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
         let node = match wire {
             0 => {
                 let v = varint(&mut cur).await?;
-                Node::new(label).value(Value::UInt { value: v, bits: 64, radix: crate::value::Radix::Dec })
+                Node::new(label).value(Value::UInt {
+                    value: v,
+                    bits: 64,
+                    radix: crate::value::Radix::Dec,
+                })
             }
             1 => {
                 let v = cur.u64().await?;
@@ -155,7 +176,10 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
                 let bytes = cx.read_avail(body.sub(0, 32)).await?;
                 let mut node = Node::new(label).summary(format!("{len} bytes"));
                 if sub != Kind::Unknown && depth < MAX_DEPTH {
-                    node = node.lazy(crate::expander!(self::message: (Span, Kind, u32)), (body, sub, depth.saturating_add(1)));
+                    node = node.lazy(
+                        crate::expander!(self::message: (Span, Kind, u32)),
+                        (body, sub, depth.saturating_add(1)),
+                    );
                 } else if name == "crx_id" {
                     node = node.value(Value::Text(crx_id(&bytes)));
                 } else {
@@ -164,7 +188,9 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
                 node
             }
             _ => {
-                return Err(Diagnostic::malformed(format!("wire type {wire}")).at(span.sub(start, 1)));
+                return Err(
+                    Diagnostic::malformed(format!("wire type {wire}")).at(span.sub(start, 1))
+                );
             }
         };
         cx.push(node.span(cur.since(start))).await;
@@ -189,7 +215,10 @@ pub async fn mozlz4(cx: Cx, input: Input) -> Result<()> {
     let mut f = crate::fields::Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 8).emit()?;
     let size_out = f.u32("Decompressed size").emit()?;
-    cx.annotate(format!("Mozilla LZ4 file, {} uncompressed", size(size_out.into())));
+    cx.annotate(format!(
+        "Mozilla LZ4 file, {} uncompressed",
+        size(size_out.into())
+    ));
     cx.emit(
         Node::new("LZ4 block")
             .span(file.tail(12))

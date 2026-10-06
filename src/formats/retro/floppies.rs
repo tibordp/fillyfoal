@@ -19,7 +19,15 @@ const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 fn fourcc(raw: &[u8]) -> String {
-    raw.iter().map(|&b| if b.is_ascii_graphic() || b == b' ' { char::from(b) } else { '.' }).collect()
+    raw.iter()
+        .map(|&b| {
+            if b.is_ascii_graphic() || b == b' ' {
+                char::from(b)
+            } else {
+                '.'
+            }
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -28,7 +36,13 @@ fn fourcc(raw: &[u8]) -> String {
 declare_format!(pub HFE = "hfe", "HxC floppy emulator image (HFE)", ["hfe"],
     "application/x-hfe", Probe::Magic(&[(0, b"HXCPICFE"), (0, b"HXCHFEV3")]), hfe);
 
-const HFE_ENCODINGS: EnumTable = &[(0, "ISO/IBM MFM"), (1, "Amiga MFM"), (2, "ISO/IBM FM"), (3, "EMU FM"), (0xff, "unknown")];
+const HFE_ENCODINGS: EnumTable = &[
+    (0, "ISO/IBM MFM"),
+    (1, "Amiga MFM"),
+    (2, "ISO/IBM FM"),
+    (3, "EMU FM"),
+    (0xff, "unknown"),
+];
 const HFE_INTERFACES: EnumTable = &[
     (0, "IBM PC DD"),
     (1, "IBM PC HD"),
@@ -73,11 +87,23 @@ async fn hfe(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, HfeHeader::SIZE);
     let h: HfeHeader = read_record(&cx, span, LE).await?;
     cx.emit(HfeHeader::node("Header", span, LE));
-    let list = file.sub_exact(u64::from(h.track_list).saturating_mul(512), u64::from(h.tracks).saturating_mul(4))?;
-    cx.emit(Node::new("Track list").span(list).summary(format!("{} tracks", h.tracks)).lazy(hfe_tracks, (file, list)));
+    let list = file.sub_exact(
+        u64::from(h.track_list).saturating_mul(512),
+        u64::from(h.tracks).saturating_mul(4),
+    )?;
+    cx.emit(
+        Node::new("Track list")
+            .span(list)
+            .summary(format!("{} tracks", h.tracks))
+            .lazy(hfe_tracks, (file, list)),
+    );
     cx.annotate(format!(
         "HFE {} image, {} tracks × {} sides, {}, {} kbit/s, {} RPM, {}",
-        if h.signature == "HXCHFEV3" { "v3" } else { "v1" },
+        if h.signature == "HXCHFEV3" {
+            "v3"
+        } else {
+            "v1"
+        },
         h.tracks,
         h.sides,
         lookup(HFE_ENCODINGS, h.encoding.into()).unwrap_or("unknown encoding"),
@@ -99,7 +125,9 @@ async fn hfe_tracks(cx: Cx, (file, list): (Span, Span)) -> Result<()> {
             Node::new(format!("Track {i}"))
                 .span(list.sub(to_u64(i).saturating_mul(4), 4))
                 .value(hex(offset, 32))
-                .summary(format!("{len} bytes (both sides interleaved per 256 bytes)"))
+                .summary(format!(
+                    "{len} bytes (both sides interleaved per 256 bytes)"
+                ))
                 .target(file.sub(offset, len)),
         )
         .await;
@@ -111,7 +139,11 @@ async fn hfe_tracks(cx: Cx, (file, list): (Span, Span)) -> Result<()> {
 // SuperCard Pro flux image (SCP)
 
 fn scp_probe(h: &Head<'_>) -> bool {
-    h.at(0, b"SCP") && h.data.get(6).zip(h.data.get(7)).is_some_and(|(s, e)| s <= e && *e < 168)
+    h.at(0, b"SCP")
+        && h.data
+            .get(6)
+            .zip(h.data.get(7))
+            .is_some_and(|(s, e)| s <= e && *e < 168)
 }
 
 declare_format!(pub SCP = "scp", "SuperCard Pro flux image", ["scp"],
@@ -187,14 +219,24 @@ async fn scp(cx: Cx, input: Input) -> Result<()> {
             status = ", checksum valid";
         } else {
             status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {sum:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {sum:#010x}"
+            )));
         }
     }
     cx.emit(node);
     let table = file.sub(0x10, 168 * 4);
     let raw = cx.read_avail(table).await?;
-    let present = raw.chunks(4).filter(|c| u32_le(c, 0).is_some_and(|v| v != 0)).count();
-    cx.emit(Node::new("Tracks").span(table).summary(format!("{present} tracks captured")).lazy(scp_tracks, (file, table, h.revolutions)));
+    let present = raw
+        .chunks(4)
+        .filter(|c| u32_le(c, 0).is_some_and(|v| v != 0))
+        .count();
+    cx.emit(
+        Node::new("Tracks")
+            .span(table)
+            .summary(format!("{present} tracks captured"))
+            .lazy(scp_tracks, (file, table, h.revolutions)),
+    );
     cx.annotate(format!(
         "SuperCard Pro flux image, {}, tracks {}-{}, {} revolution(s){status}",
         lookup(SCP_DISKS, h.disk.into()).unwrap_or("unknown disk"),
@@ -212,8 +254,17 @@ async fn scp_tracks(cx: Cx, (file, table, revolutions): (Span, Span, u8)) -> Res
         if at == 0 {
             continue;
         }
-        let head = file.sub(at, 4u64.saturating_add(u64::from(revolutions).saturating_mul(12)));
-        cx.push(Node::new(format!("Track {i}")).span(head).value(hex(at, 32)).lazy(scp_track, (file, head, revolutions))).await;
+        let head = file.sub(
+            at,
+            4u64.saturating_add(u64::from(revolutions).saturating_mul(12)),
+        );
+        cx.push(
+            Node::new(format!("Track {i}"))
+                .span(head)
+                .value(hex(at, 32))
+                .lazy(scp_track, (file, head, revolutions)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -227,10 +278,21 @@ async fn scp_track(cx: Cx, (file, head, revolutions): (Span, Span, u8)) -> Resul
         let time = f.u32("Index time (25 ns units)").emit()?;
         let flux = f.u32("Flux transitions").emit()?;
         let offset = f.u32("Data offset").hex().emit()?;
-        let rpm = if time > 0 { 60.0 / (f64::from(time) * 25e-9) } else { 0.0 };
+        let rpm = if time > 0 {
+            60.0 / (f64::from(time) * 25e-9)
+        } else {
+            0.0
+        };
         cx.emit(
             Node::new(format!("Revolution {r}"))
-                .span(file.sub(head.offset.saturating_sub(file.offset).saturating_add(offset.into()), u64::from(flux).saturating_mul(2)))
+                .span(
+                    file.sub(
+                        head.offset
+                            .saturating_sub(file.offset)
+                            .saturating_add(offset.into()),
+                        u64::from(flux).saturating_mul(2),
+                    ),
+                )
                 .summary(format!("{flux} flux transitions, {rpm:.1} RPM")),
         );
     }
@@ -243,7 +305,17 @@ async fn scp_track(cx: Cx, (file, head, revolutions): (Span, Span, u8)) -> Resul
 declare_format!(pub IPF = "ipf", "Interchangeable Preservation Format (IPF)", ["ipf"],
     "application/x-ipf", Probe::Magic(&[(0, b"CAPS\0\0\0\x0c")]), ipf);
 
-const IPF_PLATFORMS: EnumTable = &[(1, "Amiga"), (2, "Atari ST"), (3, "PC"), (4, "Amstrad CPC"), (5, "ZX Spectrum"), (6, "SAM Coupé"), (7, "Archimedes"), (8, "C64"), (9, "Atari 8-bit")];
+const IPF_PLATFORMS: EnumTable = &[
+    (1, "Amiga"),
+    (2, "Atari ST"),
+    (3, "PC"),
+    (4, "Amstrad CPC"),
+    (5, "ZX Spectrum"),
+    (6, "SAM Coupé"),
+    (7, "Archimedes"),
+    (8, "C64"),
+    (9, "Atari 8-bit"),
+];
 
 record! {
     pub struct IpfInfo {
@@ -283,7 +355,12 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(cur.u32().await?);
         let stored = cur.u32().await?;
         if len < 12 {
-            cx.push(Node::new(kind).span(cur.since(start)).diag(Diagnostic::malformed("record shorter than its header"))).await;
+            cx.push(
+                Node::new(kind)
+                    .span(cur.since(start))
+                    .diag(Diagnostic::malformed("record shorter than its header")),
+            )
+            .await;
             break;
         }
         let span = file.sub(start, len);
@@ -304,20 +381,40 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
         node = match kind.as_str() {
             "INFO" => {
                 let i: IpfInfo = read_record(&cx, span.sub(0, IpfInfo::SIZE), BE).await?;
-                let summary = format!("tracks {}-{}, sides {}-{}, {}", i.min_track, i.max_track, i.min_side, i.max_side, lookup(IPF_PLATFORMS, i.platform1.into()).unwrap_or("unknown platform"));
+                let summary = format!(
+                    "tracks {}-{}, sides {}-{}, {}",
+                    i.min_track,
+                    i.max_track,
+                    i.min_side,
+                    i.max_side,
+                    lookup(IPF_PLATFORMS, i.platform1.into()).unwrap_or("unknown platform")
+                );
                 info = Some(i);
-                IpfInfo::node("INFO", span.sub(0, IpfInfo::SIZE), BE).span(cur.since(start)).summary(summary)
+                IpfInfo::node("INFO", span.sub(0, IpfInfo::SIZE), BE)
+                    .span(cur.since(start))
+                    .summary(summary)
             }
             "IMGE" => {
                 tracks = tracks.saturating_add(1);
-                node.summary(format!("track {} side {}, {} data bits", u32_be(&raw, 12).unwrap_or(0), u32_be(&raw, 16).unwrap_or(0), u32_be(&raw, 40).unwrap_or(0)))
+                node.summary(format!(
+                    "track {} side {}, {} data bits",
+                    u32_be(&raw, 12).unwrap_or(0),
+                    u32_be(&raw, 16).unwrap_or(0),
+                    u32_be(&raw, 40).unwrap_or(0)
+                ))
             }
-            "DATA" => node.summary(format!("key {}, {} bytes of block data", u32_be(&raw, 24).unwrap_or(0), extra.map_or(0, |e| e.len))),
+            "DATA" => node.summary(format!(
+                "key {}, {} bytes of block data",
+                u32_be(&raw, 24).unwrap_or(0),
+                extra.map_or(0, |e| e.len)
+            )),
             _ => node.summary(format!("{len} bytes")),
         };
         if computed != stored {
             bad = bad.saturating_add(1);
-            node = node.diag(Diagnostic::warning(format!("record CRC mismatch: computed {computed:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "record CRC mismatch: computed {computed:#010x}"
+            )));
         }
         cx.push(node.value(hex(stored.into(), 32))).await;
     }
@@ -331,7 +428,14 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
             i.disk
         )
     });
-    cx.annotate(format!("IPF image{what}, {tracks} track descriptors, {records} records{}", if bad > 0 { format!(", {bad} bad CRCs") } else { String::new() }));
+    cx.annotate(format!(
+        "IPF image{what}, {tracks} track descriptors, {records} records{}",
+        if bad > 0 {
+            format!(", {bad} bad CRCs")
+        } else {
+            String::new()
+        }
+    ));
     Ok(())
 }
 
@@ -341,7 +445,12 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub STX = "stx", "Pasti Atari ST disk image (STX)", ["stx"],
     "application/x-stx", Probe::Magic(&[(0, b"RSY\0")]), stx);
 
-const STX_TRACK_FLAGS: FlagTable = &[flag(0x01, "SECTOR_DESCRIPTORS"), flag(0x20, "PROTECTED"), flag(0x40, "TRACK_IMAGE"), flag(0x80, "TRACK_IMAGE_SYNC")];
+const STX_TRACK_FLAGS: FlagTable = &[
+    flag(0x01, "SECTOR_DESCRIPTORS"),
+    flag(0x20, "PROTECTED"),
+    flag(0x40, "TRACK_IMAGE"),
+    flag(0x80, "TRACK_IMAGE_SYNC"),
+];
 
 async fn stx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -349,7 +458,9 @@ async fn stx(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Signature", 4).emit()?;
     let version = f.u16("Version").emit()?;
-    f.u16("Tool").enumeration(&[(0x01, "Pasti (Atari)"), (0xcc, "Aufit")]).emit()?;
+    f.u16("Tool")
+        .enumeration(&[(0x01, "Pasti (Atari)"), (0xcc, "Aufit")])
+        .emit()?;
     f.u16("Reserved").emit()?;
     let count = f.u8("Tracks").emit()?;
     f.u8("Revision").emit()?;
@@ -376,12 +487,31 @@ async fn stx(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Track {} side {}", number & 0x7f, number >> 7))
                 .span(cur.since(start))
-                .value(Value::Flags { raw: flags.into(), bits: 16, set, unknown })
-                .summary(format!("{n} sectors, {mfm} MFM bytes, type {kind}{}", if fz > 0 { format!(", {fz} fuzzy bytes") } else { String::new() })),
+                .value(Value::Flags {
+                    raw: flags.into(),
+                    bits: 16,
+                    set,
+                    unknown,
+                })
+                .summary(format!(
+                    "{n} sectors, {mfm} MFM bytes, type {kind}{}",
+                    if fz > 0 {
+                        format!(", {fz} fuzzy bytes")
+                    } else {
+                        String::new()
+                    }
+                )),
         )
         .await;
     }
-    cx.annotate(format!("Pasti STX v{version}, {count} tracks, {sectors} sectors{}", if fuzzy > 0 { format!(", {fuzzy} fuzzy bytes (copy protection)") } else { String::new() }));
+    cx.annotate(format!(
+        "Pasti STX v{version}, {count} tracks, {sectors} sectors{}",
+        if fuzzy > 0 {
+            format!(", {fuzzy} fuzzy bytes (copy protection)")
+        } else {
+            String::new()
+        }
+    ));
     Ok(())
 }
 
@@ -389,29 +519,53 @@ async fn stx(cx: Cx, input: Input) -> Result<()> {
 // ImageDisk (IMD)
 
 fn imd_probe(h: &Head<'_>) -> bool {
-    h.at(0, b"IMD ") && h.data.get(4).is_some_and(u8::is_ascii_digit) && h.data.iter().take(4096).any(|&b| b == 0x1a)
+    h.at(0, b"IMD ")
+        && h.data.get(4).is_some_and(u8::is_ascii_digit)
+        && h.data.iter().take(4096).any(|&b| b == 0x1a)
 }
 
 declare_format!(pub IMD = "imd", "ImageDisk floppy image (IMD)", ["imd"],
     "application/x-imd", Probe::Custom(imd_probe), imd);
 
-const IMD_MODES: EnumTable = &[(0, "500 kbps FM"), (1, "300 kbps FM"), (2, "250 kbps FM"), (3, "500 kbps MFM"), (4, "300 kbps MFM"), (5, "250 kbps MFM")];
+const IMD_MODES: EnumTable = &[
+    (0, "500 kbps FM"),
+    (1, "300 kbps FM"),
+    (2, "250 kbps FM"),
+    (3, "500 kbps MFM"),
+    (4, "300 kbps MFM"),
+    (5, "250 kbps MFM"),
+];
 
 async fn imd(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 4096)).await?;
-    let end = head.iter().position(|&b| b == 0x1a).ok_or_else(|| Diagnostic::malformed("comment not terminated"))?;
+    let end = head
+        .iter()
+        .position(|&b| b == 0x1a)
+        .ok_or_else(|| Diagnostic::malformed("comment not terminated"))?;
     let text_part = String::from_utf8_lossy(head.get(..end).unwrap_or_default()).into_owned();
     let (banner, comment) = text_part.split_once('\n').unwrap_or((&text_part, ""));
-    cx.emit(Node::new("Banner").span(file.sub(0, to_u64(banner.len()))).value(text(banner.trim_end().to_owned())));
-    cx.emit(Node::new("Comment").span(file.sub(to_u64(banner.len()).saturating_add(1), to_u64(comment.len()))).value(text(comment.trim_end().to_owned())));
+    cx.emit(
+        Node::new("Banner")
+            .span(file.sub(0, to_u64(banner.len())))
+            .value(text(banner.trim_end().to_owned())),
+    );
+    cx.emit(
+        Node::new("Comment")
+            .span(file.sub(
+                to_u64(banner.len()).saturating_add(1),
+                to_u64(comment.len()),
+            ))
+            .value(text(comment.trim_end().to_owned())),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(to_u64(end).saturating_add(1));
     let (mut tracks, mut total, mut compressed, mut errors) = (0u32, 0u64, 0u64, 0u64);
     while cur.remaining() >= 5 {
         let start = cur.pos();
         let h = cur.bytes(5).await?;
-        let [mode, cyl, head_byte, count, code] = [0usize, 1, 2, 3, 4].map(|i| h.get(i).copied().unwrap_or(0));
+        let [mode, cyl, head_byte, count, code] =
+            [0usize, 1, 2, 3, 4].map(|i| h.get(i).copied().unwrap_or(0));
         let n = u64::from(count);
         cur.skip(n);
         if head_byte & 0x80 != 0 {
@@ -422,7 +576,9 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
         }
         let sizes: Vec<u64> = if code == 0xff {
             let raw = cur.bytes(n.saturating_mul(2)).await?;
-            raw.chunks(2).map(|c| u64::from(u16_le(c, 0).unwrap_or(0))).collect()
+            raw.chunks(2)
+                .map(|c| u64::from(u16_le(c, 0).unwrap_or(0)))
+                .collect()
         } else {
             vec![128u64.checked_shl(code.into()).unwrap_or(0); usize::from(count)]
         };
@@ -435,7 +591,12 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
                     cur.skip(1);
                     compressed = compressed.saturating_add(1);
                 }
-                _ => return Err(Diagnostic::malformed(format!("unknown sector record type {kind}")).at(cur.span(1))),
+                _ => {
+                    return Err(
+                        Diagnostic::malformed(format!("unknown sector record type {kind}"))
+                            .at(cur.span(1)),
+                    );
+                }
             }
             if matches!(kind, 5..=8) {
                 errors = errors.saturating_add(1);
@@ -447,7 +608,11 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Cylinder {cyl} head {}", head_byte & 1))
                 .span(cur.since(start))
-                .value(Value::Enum { raw: mode.into(), bits: 8, name: lookup(IMD_MODES, mode.into()) })
+                .value(Value::Enum {
+                    raw: mode.into(),
+                    bits: 8,
+                    name: lookup(IMD_MODES, mode.into()),
+                })
                 .summary(format!("{count} sectors of {bytes} bytes")),
         )
         .await;
@@ -467,22 +632,43 @@ fn td0_crc(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { crc << 1 ^ 0xa097 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                crc << 1 ^ 0xa097
+            } else {
+                crc << 1
+            };
         }
     }
     crc
 }
 
 fn td0_probe(h: &Head<'_>) -> bool {
-    (h.at(0, b"TD\0") || h.at(0, b"td\0")) && h.data.get(..10).is_some_and(|d| Some(td0_crc(d)) == u16_le(h.data, 10))
+    (h.at(0, b"TD\0") || h.at(0, b"td\0"))
+        && h.data
+            .get(..10)
+            .is_some_and(|d| Some(td0_crc(d)) == u16_le(h.data, 10))
 }
 
 declare_format!(pub TD0 = "td0", "Teledisk floppy image (TD0)", ["td0"],
     "application/x-teledisk", Probe::Custom(td0_probe), td0);
 
 const TD0_STEPPING: FlagTable = &[flag(0x80, "COMMENT")];
-const TD0_RATES: EnumTable = &[(0, "250 kbps MFM"), (1, "300 kbps MFM"), (2, "500 kbps MFM"), (0x80, "250 kbps FM"), (0x81, "300 kbps FM"), (0x82, "500 kbps FM")];
-const TD0_DRIVES: EnumTable = &[(1, "360K 5.25\""), (2, "1.2M 5.25\""), (3, "720K 3.5\""), (4, "1.44M 3.5\""), (5, "8\""), (6, "3.5\"")];
+const TD0_RATES: EnumTable = &[
+    (0, "250 kbps MFM"),
+    (1, "300 kbps MFM"),
+    (2, "500 kbps MFM"),
+    (0x80, "250 kbps FM"),
+    (0x81, "300 kbps FM"),
+    (0x82, "500 kbps FM"),
+];
+const TD0_DRIVES: EnumTable = &[
+    (1, "360K 5.25\""),
+    (2, "1.2M 5.25\""),
+    (3, "720K 3.5\""),
+    (4, "1.44M 3.5\""),
+    (5, "8\""),
+    (6, "3.5\""),
+];
 
 async fn td0(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -502,32 +688,61 @@ async fn td0(cx: Cx, input: Input) -> Result<()> {
     let mut at = 12u64;
     let mut comment = String::new();
     if advanced {
-        cx.emit(Node::new("Compressed data").span(file.tail(12)).diag(Diagnostic::unsupported("Teledisk advanced (LZSS-Huffman) compression")));
+        cx.emit(
+            Node::new("Compressed data")
+                .span(file.tail(12))
+                .diag(Diagnostic::unsupported(
+                    "Teledisk advanced (LZSS-Huffman) compression",
+                )),
+        );
     } else {
         if stepping & 0x80 != 0 {
             let ch = cx.read(file.sub(12, 10)).await?;
             let len = u64::from(u16_le(&ch, 2).unwrap_or(0));
-            let [y, mo, d, hh, mm, ss] = [4usize, 5, 6, 7, 8, 9].map(|i| ch.get(i).copied().unwrap_or(0));
+            let [y, mo, d, hh, mm, ss] =
+                [4usize, 5, 6, 7, 8, 9].map(|i| ch.get(i).copied().unwrap_or(0));
             let body = cx.read_avail(file.sub(22, len)).await?;
-            comment = body.split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect::<Vec<_>>().join(" / ");
+            comment = body
+                .split(|&b| b == 0)
+                .filter(|s| !s.is_empty())
+                .map(|s| String::from_utf8_lossy(s).into_owned())
+                .collect::<Vec<_>>()
+                .join(" / ");
             cx.emit(
                 Node::new("Comment")
                     .span(file.sub(12, len.saturating_add(10)))
                     .value(text(comment.clone()))
-                    .summary(format!("{}-{:02}-{:02} {hh:02}:{mm:02}:{ss:02}", 1900u32.saturating_add(y.into()), mo.saturating_add(1), d)),
+                    .summary(format!(
+                        "{}-{:02}-{:02} {hh:02}:{mm:02}:{ss:02}",
+                        1900u32.saturating_add(y.into()),
+                        mo.saturating_add(1),
+                        d
+                    )),
             );
             at = 22u64.saturating_add(len);
         }
-        cx.emit(Node::new("Tracks").span(file.tail(at)).lazy(td0_tracks, (file, at)));
+        cx.emit(
+            Node::new("Tracks")
+                .span(file.tail(at))
+                .lazy(td0_tracks, (file, at)),
+        );
     }
     cx.annotate(format!(
         "Teledisk {}.{} image{}, {}, {}, {sides} side(s){}",
         version / 10,
         version % 10,
-        if advanced { " (advanced compression)" } else { "" },
+        if advanced {
+            " (advanced compression)"
+        } else {
+            ""
+        },
         lookup(TD0_DRIVES, drive.into()).unwrap_or("unknown drive"),
         lookup(TD0_RATES, rate.into()).unwrap_or("unknown rate"),
-        if comment.is_empty() { String::new() } else { format!(", {comment:?}") }
+        if comment.is_empty() {
+            String::new()
+        } else {
+            format!(", {comment:?}")
+        }
     ));
     Ok(())
 }
@@ -539,7 +754,8 @@ async fn td0_tracks(cx: Cx, (file, at): (Span, u64)) -> Result<()> {
         let start = cur.pos();
         let count = cur.u8().await?;
         if count == 0xff {
-            cx.push(Node::new("End of image").span(cur.since(start))).await;
+            cx.push(Node::new("End of image").span(cur.since(start)))
+                .await;
             break;
         }
         let cyl = cur.u8().await?;
@@ -579,16 +795,26 @@ fn dc42_probe(h: &Head<'_>) -> bool {
     h.at(0x52, b"\x01\x00")
         && h.data.first().is_some_and(|&n| (1..=63).contains(&n))
         && matches!(data, Some(409_600 | 819_200 | 737_280 | 1_474_560))
-        && data.zip(tags).is_some_and(|(d, t)| d.saturating_add(t).saturating_add(0x54) == h.len)
+        && data
+            .zip(tags)
+            .is_some_and(|(d, t)| d.saturating_add(t).saturating_add(0x54) == h.len)
 }
 
 declare_format!(pub DC42 = "dc42", "Apple DiskCopy 4.2 image", ["image", "dc42", "img", "dsk"],
     "application/x-dc42", Probe::Custom(dc42_probe), dc42);
 
-const DC42_FORMATS: EnumTable = &[(0, "400K GCR"), (1, "800K GCR"), (2, "720K MFM"), (3, "1440K MFM")];
+const DC42_FORMATS: EnumTable = &[
+    (0, "400K GCR"),
+    (1, "800K GCR"),
+    (2, "720K MFM"),
+    (3, "1440K MFM"),
+];
 
 fn dc42_sum(data: &[u8]) -> u32 {
-    data.chunks(2).fold(0u32, |sum, w| sum.wrapping_add(u32::from(u16_be(w, 0).unwrap_or(0))).rotate_right(1))
+    data.chunks(2).fold(0u32, |sum, w| {
+        sum.wrapping_add(u32::from(u16_be(w, 0).unwrap_or(0)))
+            .rotate_right(1)
+    })
 }
 
 async fn dc42(cx: Cx, input: Input) -> Result<()> {
@@ -596,7 +822,10 @@ async fn dc42(cx: Cx, input: Input) -> Result<()> {
     let head = cx.block(file.sub(0, 0x54)).await?;
     let mut f = Fields::emitting(&cx, &head, BE);
     let name_len = f.u8("Name length").emit()?;
-    let name = f.ascii("Disk name", 63).map(|s| s.chars().take(usize::from(name_len)).collect::<String>()).emit()?;
+    let name = f
+        .ascii("Disk name", 63)
+        .map(|s| s.chars().take(usize::from(name_len)).collect::<String>())
+        .emit()?;
     let data_len = f.u32("Data size").emit()?;
     let tag_len = f.u32("Tag size").emit()?;
     let data_sum = f.u32("Data checksum").hex().emit()?;
@@ -613,14 +842,22 @@ async fn dc42(cx: Cx, input: Input) -> Result<()> {
             status = ", checksum valid";
         } else {
             status = ", checksum mismatch";
-            node = node.diag(Diagnostic::warning(format!("data checksum mismatch: computed {sum:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "data checksum mismatch: computed {sum:#010x}"
+            )));
         }
     }
     cx.emit(node);
     if tag_len > 0 {
-        cx.emit(Node::new("Tag data").span(file.sub(0x54u64.saturating_add(data_len.into()), tag_len.into())));
+        cx.emit(
+            Node::new("Tag data")
+                .span(file.sub(0x54u64.saturating_add(data_len.into()), tag_len.into())),
+        );
     }
-    cx.annotate(format!("DiskCopy 4.2 image {name:?}, {}{status}", lookup(DC42_FORMATS, format.into()).unwrap_or("unknown format")));
+    cx.annotate(format!(
+        "DiskCopy 4.2 image {name:?}, {}{status}",
+        lookup(DC42_FORMATS, format.into()).unwrap_or("unknown format")
+    ));
     Ok(())
 }
 
@@ -632,8 +869,20 @@ declare_format!(pub A2R = "a2r", "Applesauce flux image (A2R)", ["a2r"],
 declare_format!(pub MOOF = "moof", "Applesauce Macintosh disk image (MOOF)", ["moof"],
     "application/x-moof", Probe::Magic(&[(0, b"MOOF\xff\x0a\x0d\x0a")]), moof);
 
-const A2R_DRIVES: EnumTable = &[(1, "5.25\" SS 40-track"), (2, "3.5\" DS 80-track CLV"), (3, "5.25\" DS 80-track"), (4, "5.25\" DS 40-track"), (5, "3.5\" DS 80-track"), (6, "8\" DS")];
-const MOOF_DISKS: EnumTable = &[(1, "SSDD GCR (400K)"), (2, "DSDD GCR (800K)"), (3, "DSHD MFM (1.44M)"), (4, "Twiggy")];
+const A2R_DRIVES: EnumTable = &[
+    (1, "5.25\" SS 40-track"),
+    (2, "3.5\" DS 80-track CLV"),
+    (3, "5.25\" DS 80-track"),
+    (4, "5.25\" DS 40-track"),
+    (5, "3.5\" DS 80-track"),
+    (6, "8\" DS"),
+];
+const MOOF_DISKS: EnumTable = &[
+    (1, "SSDD GCR (400K)"),
+    (2, "DSDD GCR (800K)"),
+    (3, "DSHD MFM (1.44M)"),
+    (4, "Twiggy"),
+];
 const APPLESAUCE_CHUNKS: &[(&str, &str)] = &[
     ("INFO", "disk information"),
     ("STRM", "flux streams (v2)"),
@@ -646,7 +895,11 @@ const APPLESAUCE_CHUNKS: &[(&str, &str)] = &[
 ];
 
 /// Walks `id + u32 size` chunks from `start`; returns (chunks, META text).
-async fn applesauce_chunks(cx: &Cx, file: Span, start: u64) -> Result<(u32, Option<String>, Option<Vec<u8>>)> {
+async fn applesauce_chunks(
+    cx: &Cx,
+    file: Span,
+    start: u64,
+) -> Result<(u32, Option<String>, Option<Vec<u8>>)> {
     let mut cur = Cursor::new(cx, file, LE);
     cur.seek(start);
     let (mut count, mut meta, mut info) = (0u32, None, None);
@@ -657,8 +910,15 @@ async fn applesauce_chunks(cx: &Cx, file: Span, start: u64) -> Result<(u32, Opti
         let data = cur.span(len);
         cur.skip(len);
         count = count.saturating_add(1);
-        let meaning = APPLESAUCE_CHUNKS.iter().find(|c| c.0 == id).map_or("unknown chunk", |c| c.1);
-        let mut node = Node::new(id.clone()).span(cur.since(at)).desc(meaning).summary(format!("{len} bytes")).target(data);
+        let meaning = APPLESAUCE_CHUNKS
+            .iter()
+            .find(|c| c.0 == id)
+            .map_or("unknown chunk", |c| c.1);
+        let mut node = Node::new(id.clone())
+            .span(cur.since(at))
+            .desc(meaning)
+            .summary(format!("{len} bytes"))
+            .target(data);
         if id == "META" {
             let raw = cx.read_avail(data.sub(0, 4096)).await?;
             let s = String::from_utf8_lossy(&raw).into_owned();
@@ -673,16 +933,27 @@ async fn applesauce_chunks(cx: &Cx, file: Span, start: u64) -> Result<(u32, Opti
 }
 
 fn meta_title(meta: Option<&str>) -> String {
-    meta.and_then(|m| m.lines().find_map(|l| l.strip_prefix("title\t")).map(|t| format!(" {t:?}"))).unwrap_or_default()
+    meta.and_then(|m| {
+        m.lines()
+            .find_map(|l| l.strip_prefix("title\t"))
+            .map(|t| format!(" {t:?}"))
+    })
+    .unwrap_or_default()
 }
 
 async fn a2r(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 4)).await?;
-    cx.emit(Node::new("Signature").span(file.sub(0, 8)).value(text(fourcc(&head))));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 8))
+            .value(text(fourcc(&head))),
+    );
     let (count, meta, info) = applesauce_chunks(&cx, file, 8).await?;
     let info = info.unwrap_or_default();
-    let creator = String::from_utf8_lossy(info.get(1..33).unwrap_or_default()).trim_end().to_owned();
+    let creator = String::from_utf8_lossy(info.get(1..33).unwrap_or_default())
+        .trim_end()
+        .to_owned();
     let drive = info.get(33).copied().unwrap_or(0);
     cx.annotate(format!(
         "Applesauce {} flux image{}, {}, {count} chunks, by {creator:?}",
@@ -695,20 +966,35 @@ async fn a2r(cx: Cx, input: Input) -> Result<()> {
 
 async fn moof(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Signature").span(file.sub(0, 8)).value(text("MOOF")));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 8))
+            .value(text("MOOF")),
+    );
     let crc_raw = cx.read(file.sub(8, 4)).await?;
     let stored = u32_le(&crc_raw, 0).unwrap_or(0);
     let computed = super::util::crc32_of(&cx, file.tail(12)).await;
-    cx.emit(super::util::crc_node("CRC-32", file.sub(8, 4), stored, computed));
+    cx.emit(super::util::crc_node(
+        "CRC-32",
+        file.sub(8, 4),
+        stored,
+        computed,
+    ));
     let (count, meta, info) = applesauce_chunks(&cx, file, 12).await?;
     let info = info.unwrap_or_default();
     let disk = info.get(1).copied().unwrap_or(0);
-    let creator = String::from_utf8_lossy(info.get(5..37).unwrap_or_default()).trim_end().to_owned();
+    let creator = String::from_utf8_lossy(info.get(5..37).unwrap_or_default())
+        .trim_end()
+        .to_owned();
     cx.annotate(format!(
         "MOOF image{}, {}, {count} chunks, by {creator:?}{}",
         meta_title(meta.as_deref()),
         lookup(MOOF_DISKS, disk.into()).unwrap_or("unknown disk"),
-        if computed == Some(stored) { ", CRC valid" } else { "" }
+        if computed == Some(stored) {
+            ", CRC valid"
+        } else {
+            ""
+        }
     ));
     Ok(())
 }
@@ -722,13 +1008,21 @@ fn d88_probe(h: &Head<'_>) -> bool {
         && matches!(h.data.get(0x1b), Some(0x00 | 0x10 | 0x20 | 0x30 | 0x40))
         && matches!(h.data.get(0x1a), Some(0x00 | 0x10))
         && (first == 0x2b0 || first == 0x2a0)
-        && h.data.get(..17).is_some_and(|n| n.iter().all(|&b| b == 0 || b >= 0x20))
+        && h.data
+            .get(..17)
+            .is_some_and(|n| n.iter().all(|&b| b == 0 || b >= 0x20))
 }
 
 declare_format!(pub D88 = "d88", "D88 floppy image (PC-88/PC-98)", ["d88", "d77", "88d", "d98", "d68"],
     "application/x-d88", Probe::Custom(d88_probe), d88);
 
-const D88_MEDIA: EnumTable = &[(0x00, "2D"), (0x10, "2DD"), (0x20, "2HD"), (0x30, "1D"), (0x40, "1DD")];
+const D88_MEDIA: EnumTable = &[
+    (0x00, "2D"),
+    (0x10, "2DD"),
+    (0x20, "2HD"),
+    (0x30, "1D"),
+    (0x40, "1DD"),
+];
 
 async fn d88(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -736,20 +1030,35 @@ async fn d88(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     let name = f.ascii("Disk name", 17).emit()?;
     f.bytes("Reserved", 9).emit()?;
-    let protect = f.u8("Write protect").enumeration(&[(0x00, "no"), (0x10, "yes")]).emit()?;
+    let protect = f
+        .u8("Write protect")
+        .enumeration(&[(0x00, "no"), (0x10, "yes")])
+        .emit()?;
     let media = f.u8("Media type").enumeration(D88_MEDIA).emit()?;
     f.u32("Disk size").emit()?;
     let first = u64::from(u32_le(&cx.read(file.sub(0x20, 4)).await?, 0).unwrap_or(0x2b0));
     let table = file.sub(0x20, first.saturating_sub(0x20).min(164 * 4));
     let raw = cx.read(table).await?;
-    let offsets: Vec<u64> = raw.chunks(4).map(|c| u64::from(u32_le(c, 0).unwrap_or(0))).collect();
+    let offsets: Vec<u64> = raw
+        .chunks(4)
+        .map(|c| u64::from(u32_le(c, 0).unwrap_or(0)))
+        .collect();
     let used = offsets.iter().filter(|&&o| o != 0).count();
-    cx.emit(Node::new("Tracks").span(table).summary(format!("{used} tracks")).lazy(d88_tracks, (file, offsets)));
+    cx.emit(
+        Node::new("Tracks")
+            .span(table)
+            .summary(format!("{used} tracks"))
+            .lazy(d88_tracks, (file, offsets)),
+    );
     cx.annotate(format!(
         "D88 {} disk {:?}, {used} tracks{}",
         lookup(D88_MEDIA, media.into()).unwrap_or("unknown"),
         name,
-        if protect != 0 { ", write-protected" } else { "" }
+        if protect != 0 {
+            ", write-protected"
+        } else {
+            ""
+        }
     ));
     Ok(())
 }
@@ -767,13 +1076,23 @@ async fn d88_tracks(cx: Cx, (file, offsets): (Span, Vec<u64>)) -> Result<()> {
             let s = cx.read(file.sub(pos, 16)).await?;
             let r = s.get(2).copied().unwrap_or(0);
             ids.push(r.to_string());
-            pos = pos.saturating_add(16).saturating_add(u16_le(&s, 14).unwrap_or(0).into());
+            pos = pos
+                .saturating_add(16)
+                .saturating_add(u16_le(&s, 14).unwrap_or(0).into());
         }
         let bytes = u16_le(&first, 14).unwrap_or(0);
         cx.push(
-            Node::new(format!("Track {} (cylinder {}, head {})", i, first.first().copied().unwrap_or(0), first.get(1).copied().unwrap_or(0)))
-                .span(file.sub(at, pos.saturating_sub(at)))
-                .summary(format!("{sectors} sectors of {bytes} bytes, IDs {}", ids.join(" "))),
+            Node::new(format!(
+                "Track {} (cylinder {}, head {})",
+                i,
+                first.first().copied().unwrap_or(0),
+                first.get(1).copied().unwrap_or(0)
+            ))
+            .span(file.sub(at, pos.saturating_sub(at)))
+            .summary(format!(
+                "{sectors} sectors of {bytes} bytes, IDs {}",
+                ids.join(" ")
+            )),
         )
         .await;
     }
@@ -792,7 +1111,10 @@ declare_format!(pub AMIGA_RDB = "amiga-rdb", "Amiga hard disk image (Rigid Disk 
 
 /// Amiga block checksum: all `summed` longs add up to zero.
 fn amiga_sum(raw: &[u8], summed: u32) -> bool {
-    raw.chunks(4).take(usize::try_from(summed).unwrap_or(0)).fold(0u32, |s, c| s.wrapping_add(u32_be(c, 0).unwrap_or(0))) == 0
+    raw.chunks(4)
+        .take(usize::try_from(summed).unwrap_or(0))
+        .fold(0u32, |s, c| s.wrapping_add(u32_be(c, 0).unwrap_or(0)))
+        == 0
 }
 
 record! {
@@ -858,8 +1180,14 @@ async fn amiga_rdb(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let name_len = usize::from(p.get(36).copied().unwrap_or(0).min(31));
-        let name = String::from_utf8_lossy(p.get(37..37usize.saturating_add(name_len)).unwrap_or_default()).into_owned();
-        let env = |i: usize| u64::from(u32_be(&p, 128usize.saturating_add(i.saturating_mul(4))).unwrap_or(0));
+        let name = String::from_utf8_lossy(
+            p.get(37..37usize.saturating_add(name_len))
+                .unwrap_or_default(),
+        )
+        .into_owned();
+        let env = |i: usize| {
+            u64::from(u32_be(&p, 128usize.saturating_add(i.saturating_mul(4))).unwrap_or(0))
+        };
         let (surfaces, per_track, lo, hi) = (env(3), env(5), env(9), env(10));
         let size_block = env(1).saturating_mul(4).max(1);
         let dos = match p.get(192..196) {
@@ -867,12 +1195,21 @@ async fn amiga_rdb(cx: Cx, input: Input) -> Result<()> {
             Some(raw) => fourcc(raw),
             None => String::new(),
         };
-        let cyl = surfaces.saturating_mul(per_track).saturating_mul(size_block);
-        let data = file.sub(lo.saturating_mul(cyl), hi.saturating_add(1).saturating_sub(lo).saturating_mul(cyl));
+        let cyl = surfaces
+            .saturating_mul(per_track)
+            .saturating_mul(size_block);
+        let data = file.sub(
+            lo.saturating_mul(cyl),
+            hi.saturating_add(1).saturating_sub(lo).saturating_mul(cyl),
+        );
         names.push(format!("{name} ({dos})"));
         let summed = u32_be(&p, 4).unwrap_or(0);
         let mut part = embedded(format!("Partition {name}"), input.nested(data))
-            .summary(format!("{dos}, cylinders {lo}-{hi}, {}, boot priority {}", size(data.len), crate::bytes::i32_be(&p, 188).unwrap_or(0)))
+            .summary(format!(
+                "{dos}, cylinders {lo}-{hi}, {}, boot priority {}",
+                size(data.len),
+                crate::bytes::i32_be(&p, 188).unwrap_or(0)
+            ))
             .target(block);
         if !amiga_sum(&p, summed) {
             part = part.diag(Diagnostic::warning("PART block checksum mismatch"));

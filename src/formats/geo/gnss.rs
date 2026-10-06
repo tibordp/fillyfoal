@@ -35,7 +35,8 @@ async fn resync(cx: &Cx, region: Span, from: u64, sync: &[u8]) -> Result<Option<
 async fn skip_gap(cx: &Cx, region: Span, at: u64, sync: &[u8]) -> Result<Option<u64>> {
     let next = resync(cx, region, at.saturating_add(1), sync).await?;
     let end = next.unwrap_or(region.len);
-    cx.push(Node::new("Unrecognized bytes").span(region.sub(at, end.saturating_sub(at)))).await;
+    cx.push(Node::new("Unrecognized bytes").span(region.sub(at, end.saturating_sub(at))))
+        .await;
     Ok(next)
 }
 
@@ -52,38 +53,72 @@ fn fletcher(data: &[u8]) -> (u8, u8) {
     (a, b)
 }
 
-const UBX_CLASSES: &[u8] = &[0x01, 0x02, 0x04, 0x05, 0x06, 0x09, 0x0a, 0x0b, 0x0d, 0x10, 0x13, 0x21, 0x27, 0x28];
+const UBX_CLASSES: &[u8] = &[
+    0x01, 0x02, 0x04, 0x05, 0x06, 0x09, 0x0a, 0x0b, 0x0d, 0x10, 0x13, 0x21, 0x27, 0x28,
+];
 
 /// Whether a valid UBX packet starts at `at` in `data`.
 fn ubx_at(data: &[u8], at: usize) -> Option<usize> {
-    if data.get(at..at.saturating_add(2))? != b"\xb5\x62" || !UBX_CLASSES.contains(data.get(at.saturating_add(2))?) {
+    if data.get(at..at.saturating_add(2))? != b"\xb5\x62"
+        || !UBX_CLASSES.contains(data.get(at.saturating_add(2))?)
+    {
         return None;
     }
     let len = usize::from(u16_le(data, at.saturating_add(4))?);
     let body = data.get(at.saturating_add(2)..at.saturating_add(6).saturating_add(len))?;
-    let ck = data.get(at.saturating_add(6).saturating_add(len)..at.saturating_add(8).saturating_add(len))?;
+    let ck = data
+        .get(at.saturating_add(6).saturating_add(len)..at.saturating_add(8).saturating_add(len))?;
     let (a, b) = fletcher(body);
     (ck == [a, b]).then_some(len.saturating_add(8))
 }
 
 fn ubx_probe(h: &Head<'_>) -> bool {
-    ubx_at(h.data, 0).is_some_and(|n| n == h.data.len() || ubx_at(h.data, n).is_some() || h.data.len() < n.saturating_add(8))
+    ubx_at(h.data, 0).is_some_and(|n| {
+        n == h.data.len() || ubx_at(h.data, n).is_some() || h.data.len() < n.saturating_add(8)
+    })
 }
 
 declare_format!(pub UBX = "ubx", "u-blox UBX binary log", ["ubx"], "application/x-ubx",
     Probe::Custom(ubx_probe), ubx);
 
 const UBX_MESSAGES: EnumTable = &[
-    (0x0102, "NAV-POSLLH"), (0x0103, "NAV-STATUS"), (0x0104, "NAV-DOP"), (0x0106, "NAV-SOL"),
-    (0x0107, "NAV-PVT"), (0x0112, "NAV-VELNED"), (0x0120, "NAV-TIMEGPS"), (0x0121, "NAV-TIMEUTC"),
-    (0x0135, "NAV-SAT"), (0x0213, "RXM-SFRBX"), (0x0215, "RXM-RAWX"), (0x0400, "INF-ERROR"),
-    (0x0401, "INF-WARNING"), (0x0402, "INF-NOTICE"), (0x0403, "INF-TEST"), (0x0404, "INF-DEBUG"),
-    (0x0500, "ACK-NAK"), (0x0501, "ACK-ACK"), (0x0600, "CFG-PRT"), (0x0601, "CFG-MSG"),
-    (0x0608, "CFG-RATE"), (0x068a, "CFG-VALSET"), (0x068b, "CFG-VALGET"), (0x0a04, "MON-VER"),
-    (0x0a09, "MON-HW"), (0x0d01, "TIM-TP"), (0x1002, "ESF-MEAS"),
+    (0x0102, "NAV-POSLLH"),
+    (0x0103, "NAV-STATUS"),
+    (0x0104, "NAV-DOP"),
+    (0x0106, "NAV-SOL"),
+    (0x0107, "NAV-PVT"),
+    (0x0112, "NAV-VELNED"),
+    (0x0120, "NAV-TIMEGPS"),
+    (0x0121, "NAV-TIMEUTC"),
+    (0x0135, "NAV-SAT"),
+    (0x0213, "RXM-SFRBX"),
+    (0x0215, "RXM-RAWX"),
+    (0x0400, "INF-ERROR"),
+    (0x0401, "INF-WARNING"),
+    (0x0402, "INF-NOTICE"),
+    (0x0403, "INF-TEST"),
+    (0x0404, "INF-DEBUG"),
+    (0x0500, "ACK-NAK"),
+    (0x0501, "ACK-ACK"),
+    (0x0600, "CFG-PRT"),
+    (0x0601, "CFG-MSG"),
+    (0x0608, "CFG-RATE"),
+    (0x068a, "CFG-VALSET"),
+    (0x068b, "CFG-VALGET"),
+    (0x0a04, "MON-VER"),
+    (0x0a09, "MON-HW"),
+    (0x0d01, "TIM-TP"),
+    (0x1002, "ESF-MEAS"),
 ];
 
-const FIX_TYPES: EnumTable = &[(0, "no fix"), (1, "dead reckoning"), (2, "2D"), (3, "3D"), (4, "GNSS + dead reckoning"), (5, "time only")];
+const FIX_TYPES: EnumTable = &[
+    (0, "no fix"),
+    (1, "dead reckoning"),
+    (2, "2D"),
+    (3, "3D"),
+    (4, "GNSS + dead reckoning"),
+    (5, "time only"),
+];
 
 fn deg7(v: i32) -> String {
     format!("{}°", f64::from(v) / 1e7)
@@ -156,16 +191,23 @@ async fn ubx(cx: Cx, input: Input) -> Result<()> {
                 None => break,
             }
         }
-        let id = u16::from_be_bytes([head.get(2).copied().unwrap_or(0), head.get(3).copied().unwrap_or(0)]);
+        let id = u16::from_be_bytes([
+            head.get(2).copied().unwrap_or(0),
+            head.get(3).copied().unwrap_or(0),
+        ]);
         let span = file.sub(pos, total);
-        let name = lookup(UBX_MESSAGES, id.into()).map_or_else(|| format!("UBX {id:#06x}"), str::to_owned);
+        let name =
+            lookup(UBX_MESSAGES, id.into()).map_or_else(|| format!("UBX {id:#06x}"), str::to_owned);
         let mut node = Node::new(name).span(span).summary(format!("{len} bytes"));
-        let payload = packet.get(6..to_usize(len.saturating_add(6))).unwrap_or_default();
+        let payload = packet
+            .get(6..to_usize(len.saturating_add(6)))
+            .unwrap_or_default();
         match id {
             0x0107 if len >= 92 => {
                 let lat = crate::bytes::i32_le(payload, 28).unwrap_or(0);
                 let lon = crate::bytes::i32_le(payload, 24).unwrap_or(0);
-                let fix = lookup(FIX_TYPES, payload.get(20).copied().unwrap_or(0).into()).unwrap_or("?");
+                let fix =
+                    lookup(FIX_TYPES, payload.get(20).copied().unwrap_or(0).into()).unwrap_or("?");
                 node = node.summary(format!("{fix}, {}, {}", deg7(lat), deg7(lon)));
             }
             0x0400..=0x0404 => node = node.summary(String::from_utf8_lossy(payload).into_owned()),
@@ -181,26 +223,53 @@ async fn ubx(cx: Cx, input: Input) -> Result<()> {
 
 async fn ubx_packet(cx: Cx, (span, id): (Span, u16)) -> Result<()> {
     cx.emit(leaf("Sync", span.sub(0, 2), hex(0xb562, 16)));
-    cx.emit(leaf("Message", span.sub(2, 2), enumv(UBX_MESSAGES, id.into(), 16)));
+    cx.emit(leaf(
+        "Message",
+        span.sub(2, 2),
+        enumv(UBX_MESSAGES, id.into(), 16),
+    ));
     let len = span.len.saturating_sub(8);
     cx.emit(leaf("Length", span.sub(4, 2), uint(len, 16)));
     let payload = span.sub(6, len);
     match id {
         0x0107 if len >= NavPvt::SIZE => cx.emit(NavPvt::node("NAV-PVT", payload, LE)),
         0x0102 if len >= NavPosllh::SIZE => cx.emit(NavPosllh::node("NAV-POSLLH", payload, LE)),
-        0x0400..=0x0404 => cx.emit(leaf("Text", payload, text(String::from_utf8_lossy(&cx.read(payload).await?)))),
+        0x0400..=0x0404 => cx.emit(leaf(
+            "Text",
+            payload,
+            text(String::from_utf8_lossy(&cx.read(payload).await?)),
+        )),
         0x0a04 => {
             let b = cx.read(payload).await?;
-            cx.emit(leaf("Software version", payload.sub(0, 30), text(crate::text::until_nul(b.get(..30).unwrap_or_default()))));
-            cx.emit(leaf("Hardware version", payload.sub(30, 10), text(crate::text::until_nul(b.get(30..40).unwrap_or_default()))));
+            cx.emit(leaf(
+                "Software version",
+                payload.sub(0, 30),
+                text(crate::text::until_nul(b.get(..30).unwrap_or_default())),
+            ));
+            cx.emit(leaf(
+                "Hardware version",
+                payload.sub(30, 10),
+                text(crate::text::until_nul(b.get(30..40).unwrap_or_default())),
+            ));
             for (i, ext) in b.get(40..).unwrap_or_default().chunks(30).enumerate() {
-                cx.emit(leaf("Extension", payload.sub(40u64.saturating_add(to_u64(i).saturating_mul(30)), 30), text(crate::text::until_nul(ext))));
+                cx.emit(leaf(
+                    "Extension",
+                    payload.sub(40u64.saturating_add(to_u64(i).saturating_mul(30)), 30),
+                    text(crate::text::until_nul(ext)),
+                ));
             }
         }
         0x0500 | 0x0501 => {
             let b = cx.read(payload).await?;
-            let acked = u16::from_be_bytes([b.first().copied().unwrap_or(0), b.get(1).copied().unwrap_or(0)]);
-            cx.emit(leaf("Acknowledged message", payload, enumv(UBX_MESSAGES, acked.into(), 16)));
+            let acked = u16::from_be_bytes([
+                b.first().copied().unwrap_or(0),
+                b.get(1).copied().unwrap_or(0),
+            ]);
+            cx.emit(leaf(
+                "Acknowledged message",
+                payload,
+                enumv(UBX_MESSAGES, acked.into(), 16),
+            ));
         }
         _ => cx.emit(Node::new("Payload").span(payload)),
     }
@@ -221,7 +290,10 @@ fn rtcm_at(data: &[u8], at: usize) -> Option<usize> {
     if b1 & 0xfc != 0 {
         return None;
     }
-    let len = usize::from(u16::from_be_bytes([b1 & 3, *data.get(at.saturating_add(2))?]));
+    let len = usize::from(u16::from_be_bytes([
+        b1 & 3,
+        *data.get(at.saturating_add(2))?,
+    ]));
     let frame = data.get(at..at.saturating_add(len).saturating_add(6))?;
     let body = frame.get(..len.saturating_add(3))?;
     let crc = frame.get(len.saturating_add(3)..)?;
@@ -230,27 +302,56 @@ fn rtcm_at(data: &[u8], at: usize) -> Option<usize> {
 }
 
 fn rtcm_probe(h: &Head<'_>) -> bool {
-    rtcm_at(h.data, 0).is_some_and(|n| n == h.data.len() || rtcm_at(h.data, n).is_some() || h.data.len() < n.saturating_add(1029))
+    rtcm_at(h.data, 0).is_some_and(|n| {
+        n == h.data.len() || rtcm_at(h.data, n).is_some() || h.data.len() < n.saturating_add(1029)
+    })
 }
 
 declare_format!(pub RTCM3 = "rtcm3", "RTCM 3 GNSS correction stream", ["rtcm3", "rtcm"], "application/x-rtcm3",
     Probe::Custom(rtcm_probe), rtcm3);
 
 const RTCM_MESSAGES: EnumTable = &[
-    (1001, "GPS L1 RTK observables"), (1002, "GPS L1 extended RTK observables"),
-    (1003, "GPS L1/L2 RTK observables"), (1004, "GPS L1/L2 extended RTK observables"),
-    (1005, "Reference station ARP"), (1006, "Reference station ARP with antenna height"),
-    (1007, "Antenna descriptor"), (1008, "Antenna descriptor and serial number"),
-    (1009, "GLONASS L1 RTK observables"), (1010, "GLONASS L1 extended RTK observables"),
-    (1011, "GLONASS L1/L2 RTK observables"), (1012, "GLONASS L1/L2 extended RTK observables"),
-    (1013, "System parameters"), (1019, "GPS ephemeris"), (1020, "GLONASS ephemeris"),
-    (1029, "Unicode text"), (1033, "Receiver and antenna descriptors"), (1042, "BeiDou ephemeris"),
-    (1044, "QZSS ephemeris"), (1045, "Galileo F/NAV ephemeris"), (1046, "Galileo I/NAV ephemeris"),
-    (1071, "GPS MSM1"), (1072, "GPS MSM2"), (1073, "GPS MSM3"), (1074, "GPS MSM4"), (1075, "GPS MSM5"),
-    (1076, "GPS MSM6"), (1077, "GPS MSM7"), (1081, "GLONASS MSM1"), (1084, "GLONASS MSM4"),
-    (1085, "GLONASS MSM5"), (1087, "GLONASS MSM7"), (1094, "Galileo MSM4"), (1095, "Galileo MSM5"),
-    (1097, "Galileo MSM7"), (1114, "QZSS MSM4"), (1117, "QZSS MSM7"), (1124, "BeiDou MSM4"),
-    (1125, "BeiDou MSM5"), (1127, "BeiDou MSM7"), (1230, "GLONASS code-phase biases"),
+    (1001, "GPS L1 RTK observables"),
+    (1002, "GPS L1 extended RTK observables"),
+    (1003, "GPS L1/L2 RTK observables"),
+    (1004, "GPS L1/L2 extended RTK observables"),
+    (1005, "Reference station ARP"),
+    (1006, "Reference station ARP with antenna height"),
+    (1007, "Antenna descriptor"),
+    (1008, "Antenna descriptor and serial number"),
+    (1009, "GLONASS L1 RTK observables"),
+    (1010, "GLONASS L1 extended RTK observables"),
+    (1011, "GLONASS L1/L2 RTK observables"),
+    (1012, "GLONASS L1/L2 extended RTK observables"),
+    (1013, "System parameters"),
+    (1019, "GPS ephemeris"),
+    (1020, "GLONASS ephemeris"),
+    (1029, "Unicode text"),
+    (1033, "Receiver and antenna descriptors"),
+    (1042, "BeiDou ephemeris"),
+    (1044, "QZSS ephemeris"),
+    (1045, "Galileo F/NAV ephemeris"),
+    (1046, "Galileo I/NAV ephemeris"),
+    (1071, "GPS MSM1"),
+    (1072, "GPS MSM2"),
+    (1073, "GPS MSM3"),
+    (1074, "GPS MSM4"),
+    (1075, "GPS MSM5"),
+    (1076, "GPS MSM6"),
+    (1077, "GPS MSM7"),
+    (1081, "GLONASS MSM1"),
+    (1084, "GLONASS MSM4"),
+    (1085, "GLONASS MSM5"),
+    (1087, "GLONASS MSM7"),
+    (1094, "Galileo MSM4"),
+    (1095, "Galileo MSM5"),
+    (1097, "Galileo MSM7"),
+    (1114, "QZSS MSM4"),
+    (1117, "QZSS MSM7"),
+    (1124, "BeiDou MSM4"),
+    (1125, "BeiDou MSM5"),
+    (1127, "BeiDou MSM7"),
+    (1230, "GLONASS code-phase biases"),
 ];
 
 async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
@@ -277,12 +378,26 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
             station = Some(id);
         }
         let span = file.sub(pos, to_u64(total));
-        let name = format!("{number}: {}", lookup(RTCM_MESSAGES, number).unwrap_or("message"));
-        cx.push(Node::new(name).span(span).summary(format!("station {id}, {} bytes", payload.len())).lazy(rtcm_frame, span)).await;
+        let name = format!(
+            "{number}: {}",
+            lookup(RTCM_MESSAGES, number).unwrap_or("message")
+        );
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(format!("station {id}, {} bytes", payload.len()))
+                .lazy(rtcm_frame, span),
+        )
+        .await;
         pos = pos.saturating_add(to_u64(total));
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("RTCM 3, {n} messages{}", station.map(|s| format!(", station {s}")).unwrap_or_default()));
+    cx.annotate(format!(
+        "RTCM 3, {n} messages{}",
+        station
+            .map(|s| format!(", station {s}"))
+            .unwrap_or_default()
+    ));
     Ok(())
 }
 
@@ -291,11 +406,17 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
     cx.emit(leaf("Preamble", span.sub(0, 1), hex(0xd3, 8)));
     let len = span.len.saturating_sub(6);
     cx.emit(leaf("Length", span.sub(1, 2), uint(len, 10)));
-    let payload = frame.get(3..to_usize(len.saturating_add(3))).unwrap_or_default();
+    let payload = frame
+        .get(3..to_usize(len.saturating_add(3)))
+        .unwrap_or_default();
     let pspan = span.sub(3, len);
     let mut bits = Bits::new(payload);
     let number = bits.u(12).unwrap_or(0);
-    cx.emit(leaf("Message number", pspan.sub(0, 2), enumv(RTCM_MESSAGES, number, 12)));
+    cx.emit(leaf(
+        "Message number",
+        pspan.sub(0, 2),
+        enumv(RTCM_MESSAGES, number, 12),
+    ));
     if matches!(number, 1005 | 1006) {
         let mut fields = Vec::new();
         let station = bits.u(12).unwrap_or(0);
@@ -308,7 +429,11 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
         let y = bits.i(38).unwrap_or(0);
         bits.u(2);
         let z = bits.i(38).unwrap_or(0);
-        for (label, v) in [("ECEF X (0.1 mm)", x), ("ECEF Y (0.1 mm)", y), ("ECEF Z (0.1 mm)", z)] {
+        for (label, v) in [
+            ("ECEF X (0.1 mm)", x),
+            ("ECEF Y (0.1 mm)", y),
+            ("ECEF Z (0.1 mm)", z),
+        ] {
             fields.push((label, int(v, 38)));
         }
         if number == 1006 {
@@ -317,12 +442,33 @@ async fn rtcm_frame(cx: Cx, span: Span) -> Result<()> {
         for (label, value) in fields {
             cx.emit(Node::new(label).span(pspan).value(value));
         }
-        cx.emit(Node::new("Position").span(pspan).summary(format!("ECEF {:.4}, {:.4}, {:.4} m", x as f64 / 1e4, y as f64 / 1e4, z as f64 / 1e4)));
+        cx.emit(Node::new("Position").span(pspan).summary(format!(
+            "ECEF {:.4}, {:.4}, {:.4} m",
+            x as f64 / 1e4,
+            y as f64 / 1e4,
+            z as f64 / 1e4
+        )));
     } else {
-        cx.emit(leaf("Station ID", pspan.sub(1, 2), uint(bits.u(12).unwrap_or(0), 12)));
+        cx.emit(leaf(
+            "Station ID",
+            pspan.sub(1, 2),
+            uint(bits.u(12).unwrap_or(0), 12),
+        ));
         cx.emit(Node::new("Payload").span(pspan));
     }
-    cx.emit(leaf("CRC-24Q", span.sub(len.saturating_add(3), 3), Value::Bytes(frame.get(to_usize(len.saturating_add(3))..).unwrap_or_default().to_vec())).summary("valid"));
+    cx.emit(
+        leaf(
+            "CRC-24Q",
+            span.sub(len.saturating_add(3), 3),
+            Value::Bytes(
+                frame
+                    .get(to_usize(len.saturating_add(3))..)
+                    .unwrap_or_default()
+                    .to_vec(),
+            ),
+        )
+        .summary("valid"),
+    );
     Ok(())
 }
 
@@ -351,9 +497,16 @@ declare_format!(pub SBF = "septentrio-sbf", "Septentrio Binary Format log", ["sb
     Probe::Custom(sbf_probe), sbf);
 
 const SBF_BLOCKS: EnumTable = &[
-    (4001, "DOP"), (4006, "PVTCartesian"), (4007, "PVTGeodetic"), (4013, "ChannelStatus"),
-    (4014, "ReceiverStatus"), (4027, "MeasEpoch"), (4028, "MeasExtra"), (5891, "GPSNav"),
-    (5902, "ReceiverSetup"), (5914, "ReceiverTime"),
+    (4001, "DOP"),
+    (4006, "PVTCartesian"),
+    (4007, "PVTGeodetic"),
+    (4013, "ChannelStatus"),
+    (4014, "ReceiverStatus"),
+    (4027, "MeasEpoch"),
+    (4028, "MeasExtra"),
+    (5891, "GPSNav"),
+    (5902, "ReceiverSetup"),
+    (5914, "ReceiverTime"),
 ];
 
 async fn sbf(cx: Cx, input: Input) -> Result<()> {
@@ -378,14 +531,31 @@ async fn sbf(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(pos, to_u64(total));
         let tow = u32_le(&block, 8).unwrap_or(u32::MAX);
         let week = u16_le(&block, 12).unwrap_or(u16::MAX);
-        let name = lookup(SBF_BLOCKS, number.into()).map_or_else(|| format!("Block {number}"), str::to_owned);
-        let mut summary = format!("rev {revision}, week {week}, TOW {} s", f64::from(tow) / 1e3);
+        let name = lookup(SBF_BLOCKS, number.into())
+            .map_or_else(|| format!("Block {number}"), str::to_owned);
+        let mut summary = format!(
+            "rev {revision}, week {week}, TOW {} s",
+            f64::from(tow) / 1e3
+        );
         if number == 4007
-            && let (Some(lat), Some(lon)) = (crate::bytes::u64_le(&block, 16), crate::bytes::u64_le(&block, 24))
+            && let (Some(lat), Some(lon)) = (
+                crate::bytes::u64_le(&block, 16),
+                crate::bytes::u64_le(&block, 24),
+            )
         {
-            summary = format!("{summary}, {:.7}°, {:.7}°", f64::from_bits(lat).to_degrees(), f64::from_bits(lon).to_degrees());
+            summary = format!(
+                "{summary}, {:.7}°, {:.7}°",
+                f64::from_bits(lat).to_degrees(),
+                f64::from_bits(lon).to_degrees()
+            );
         }
-        cx.push(Node::new(name).span(span).summary(summary).lazy(sbf_block, (span, number))).await;
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(summary)
+                .lazy(sbf_block, (span, number)),
+        )
+        .await;
         pos = pos.saturating_add(to_u64(total));
         n = n.saturating_add(1);
     }
@@ -417,8 +587,24 @@ record! {
 
 async fn sbf_block(cx: Cx, (span, number): (Span, u16)) -> Result<()> {
     cx.emit(leaf("Sync", span.sub(0, 2), text("$@")));
-    cx.emit(leaf("CRC", span.sub(2, 2), hex(u16_le(&cx.read(span.sub(2, 2)).await?, 0).unwrap_or(0).into(), 16)).summary("valid"));
-    cx.emit(leaf("Block number", span.sub(4, 2), enumv(SBF_BLOCKS, number.into(), 13)));
+    cx.emit(
+        leaf(
+            "CRC",
+            span.sub(2, 2),
+            hex(
+                u16_le(&cx.read(span.sub(2, 2)).await?, 0)
+                    .unwrap_or(0)
+                    .into(),
+                16,
+            ),
+        )
+        .summary("valid"),
+    );
+    cx.emit(leaf(
+        "Block number",
+        span.sub(4, 2),
+        enumv(SBF_BLOCKS, number.into(), 13),
+    ));
     cx.emit(leaf("Length", span.sub(6, 2), uint(span.len, 16)));
     let body = span.tail(8);
     if number == 4007 && body.len >= PvtGeodetic::SIZE {
@@ -426,8 +612,16 @@ async fn sbf_block(cx: Cx, (span, number): (Span, u16)) -> Result<()> {
         cx.emit(Node::new("Remaining fields").span(body.tail(PvtGeodetic::SIZE)));
     } else {
         let b = cx.read(body.sub(0, 6)).await?;
-        cx.emit(leaf("TOW (ms)", body.sub(0, 4), uint(u32_le(&b, 0).unwrap_or(0).into(), 32)));
-        cx.emit(leaf("Week number", body.sub(4, 2), uint(u16_le(&b, 4).unwrap_or(0).into(), 16)));
+        cx.emit(leaf(
+            "TOW (ms)",
+            body.sub(0, 4),
+            uint(u32_le(&b, 0).unwrap_or(0).into(), 32),
+        ));
+        cx.emit(leaf(
+            "Week number",
+            body.sub(4, 2),
+            uint(u16_le(&b, 4).unwrap_or(0).into(), 16),
+        ));
         cx.emit(Node::new("Body").span(body.tail(6)));
     }
     Ok(())
@@ -440,20 +634,46 @@ declare_format!(pub NOVATEL = "novatel", "NovAtel OEM binary log", ["gps", "bin"
     Probe::Custom(|h| h.starts_with(b"\xaa\x44\x12\x1c") && h.data.get(6).is_some_and(|t| t & 0x60 == 0)), novatel);
 
 const NOVATEL_MESSAGES: EnumTable = &[
-    (7, "GPSEPHEM"), (8, "IONUTC"), (37, "VERSION"), (41, "RAWEPHEM"), (42, "BESTPOS"),
-    (43, "RANGE"), (47, "PSRPOS"), (99, "BESTVEL"), (101, "TIME"), (140, "RANGECMP"),
+    (7, "GPSEPHEM"),
+    (8, "IONUTC"),
+    (37, "VERSION"),
+    (41, "RAWEPHEM"),
+    (42, "BESTPOS"),
+    (43, "RANGE"),
+    (47, "PSRPOS"),
+    (99, "BESTVEL"),
+    (101, "TIME"),
+    (140, "RANGECMP"),
 ];
 
 const SOLUTION_STATUS: EnumTable = &[
-    (0, "SOL_COMPUTED"), (1, "INSUFFICIENT_OBS"), (2, "NO_CONVERGENCE"), (3, "SINGULARITY"),
-    (4, "COV_TRACE"), (5, "TEST_DIST"), (6, "COLD_START"), (7, "V_H_LIMIT"), (8, "VARIANCE"),
+    (0, "SOL_COMPUTED"),
+    (1, "INSUFFICIENT_OBS"),
+    (2, "NO_CONVERGENCE"),
+    (3, "SINGULARITY"),
+    (4, "COV_TRACE"),
+    (5, "TEST_DIST"),
+    (6, "COLD_START"),
+    (7, "V_H_LIMIT"),
+    (8, "VARIANCE"),
     (9, "RESIDUALS"),
 ];
 
 const POSITION_TYPES: EnumTable = &[
-    (0, "NONE"), (1, "FIXEDPOS"), (2, "FIXEDHEIGHT"), (8, "DOPPLER_VELOCITY"), (16, "SINGLE"),
-    (17, "PSRDIFF"), (18, "WAAS"), (19, "PROPAGATED"), (32, "L1_FLOAT"), (34, "NARROW_FLOAT"),
-    (48, "L1_INT"), (50, "NARROW_INT"), (68, "PPP_CONVERGING"), (69, "PPP"),
+    (0, "NONE"),
+    (1, "FIXEDPOS"),
+    (2, "FIXEDHEIGHT"),
+    (8, "DOPPLER_VELOCITY"),
+    (16, "SINGLE"),
+    (17, "PSRDIFF"),
+    (18, "WAAS"),
+    (19, "PROPAGATED"),
+    (32, "L1_FLOAT"),
+    (34, "NARROW_FLOAT"),
+    (48, "L1_INT"),
+    (50, "NARROW_INT"),
+    (68, "PPP_CONVERGING"),
+    (69, "PPP"),
 ];
 
 /// NovAtel's CRC-32: the reflected IEEE polynomial with zero initial value
@@ -463,7 +683,11 @@ fn novatel_crc(data: &[u8]) -> u32 {
     for &b in data {
         crc ^= u32::from(b);
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xedb8_8320 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
         }
     }
     crc
@@ -528,10 +752,17 @@ async fn novatel(cx: Cx, input: Input) -> Result<()> {
         }
         let span = file.sub(pos, total);
         if span.len < total {
-            return Err(Diagnostic::truncated(Span::new(span.source, span.offset, total), span.len));
+            return Err(Diagnostic::truncated(
+                Span::new(span.source, span.offset, total),
+                span.len,
+            ));
         }
         let id = u16_le(&head, 4).unwrap_or(0);
-        let mut node = Node::new(lookup(NOVATEL_MESSAGES, id.into()).map_or_else(|| format!("Message {id}"), str::to_owned)).span(span);
+        let mut node = Node::new(
+            lookup(NOVATEL_MESSAGES, id.into())
+                .map_or_else(|| format!("Message {id}"), str::to_owned),
+        )
+        .span(span);
         let week = u16_le(&head, 14).unwrap_or(0);
         let ms = u32_le(&head, 16).unwrap_or(0);
         let mut summary = format!("week {week}, {} s", f64::from(ms) / 1e3);
@@ -543,11 +774,20 @@ async fn novatel(cx: Cx, input: Input) -> Result<()> {
         }
         let all = cx.read(span).await?;
         let stored = u32_le(&all, to_usize(total.saturating_sub(4))).unwrap_or(0);
-        let computed = novatel_crc(all.get(..to_usize(total.saturating_sub(4))).unwrap_or_default());
+        let computed = novatel_crc(
+            all.get(..to_usize(total.saturating_sub(4)))
+                .unwrap_or_default(),
+        );
         if stored != computed {
-            node = node.diag(Diagnostic::warning(format!("CRC {stored:#010x}, computed {computed:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "CRC {stored:#010x}, computed {computed:#010x}"
+            )));
         }
-        cx.push(node.summary(summary).lazy(novatel_message, (span, hlen, id))).await;
+        cx.push(
+            node.summary(summary)
+                .lazy(novatel_message, (span, hlen, id)),
+        )
+        .await;
         pos = pos.saturating_add(total);
         n = n.saturating_add(1);
     }
@@ -563,7 +803,16 @@ async fn novatel_message(cx: Cx, (span, hlen, id): (Span, u64, u16)) -> Result<(
     } else {
         cx.emit(Node::new("Message").span(body));
     }
-    cx.emit(leaf("CRC-32", span.tail(span.len.saturating_sub(4)), hex(u32_le(&cx.read(span.tail(span.len.saturating_sub(4))).await?, 0).unwrap_or(0).into(), 32)));
+    cx.emit(leaf(
+        "CRC-32",
+        span.tail(span.len.saturating_sub(4)),
+        hex(
+            u32_le(&cx.read(span.tail(span.len.saturating_sub(4))).await?, 0)
+                .unwrap_or(0)
+                .into(),
+            32,
+        ),
+    ));
     Ok(())
 }
 
@@ -579,7 +828,11 @@ fn nmea_sentence(line: &[u8]) -> Option<(&[u8], bool)> {
     }
     let comma = line.iter().position(|&b| b == b',')?;
     let address = line.get(1..comma)?;
-    if !(3..=6).contains(&address.len()) || !address.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) {
+    if !(3..=6).contains(&address.len())
+        || !address
+            .iter()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    {
         return None;
     }
     let star = line.iter().rposition(|&b| b == b'*')?;
@@ -595,7 +848,10 @@ fn nmea_sentence(line: &[u8]) -> Option<(&[u8], bool)> {
 fn nmea_probe(h: &Head<'_>) -> bool {
     let lines = super::head_lines(h, 8);
     let mut good = 0u32;
-    for l in lines.iter().filter(|l| !crate::formats::text::probe::trim(l).is_empty()) {
+    for l in lines
+        .iter()
+        .filter(|l| !crate::formats::text::probe::trim(l).is_empty())
+    {
         match nmea_sentence(l) {
             Some((_, true)) => good = good.saturating_add(1),
             _ => return good >= 2,
@@ -610,19 +866,117 @@ fn nmea_probe(h: &Head<'_>) -> bool {
 declare_format!(pub NMEA = "nmea", "NMEA 0183 sentence log", ["nmea", "nma", "gps", "log"], "text/x-nmea",
     Probe::Custom(nmea_probe), nmea);
 
-const GGA: super::Labels = &["Sentence", "UTC time", "Latitude", "N/S", "Longitude", "E/W", "Fix quality", "Satellites", "HDOP", "Altitude", "Altitude units", "Geoid separation", "Separation units", "DGPS age", "DGPS station"];
-const RMC: super::Labels = &["Sentence", "UTC time", "Status", "Latitude", "N/S", "Longitude", "E/W", "Speed (knots)", "Course (°)", "Date", "Magnetic variation", "E/W", "Mode"];
-const GSA: super::Labels = &["Sentence", "Mode", "Fix type", "SV 1", "SV 2", "SV 3", "SV 4", "SV 5", "SV 6", "SV 7", "SV 8", "SV 9", "SV 10", "SV 11", "SV 12", "PDOP", "HDOP", "VDOP"];
-const GSV: super::Labels = &["Sentence", "Messages", "Message number", "Satellites in view", "PRN", "Elevation", "Azimuth", "SNR", "PRN", "Elevation", "Azimuth", "SNR", "PRN", "Elevation", "Azimuth", "SNR", "PRN", "Elevation", "Azimuth", "SNR"];
-const GLL: super::Labels = &["Sentence", "Latitude", "N/S", "Longitude", "E/W", "UTC time", "Status", "Mode"];
-const VTG: super::Labels = &["Sentence", "True track", "T", "Magnetic track", "M", "Speed (knots)", "N", "Speed (km/h)", "K", "Mode"];
-const ZDA: super::Labels = &["Sentence", "UTC time", "Day", "Month", "Year", "Zone hours", "Zone minutes"];
-const VDM: super::Labels = &["Sentence", "Fragments", "Fragment number", "Message ID", "Channel", "Payload", "Fill bits"];
+const GGA: super::Labels = &[
+    "Sentence",
+    "UTC time",
+    "Latitude",
+    "N/S",
+    "Longitude",
+    "E/W",
+    "Fix quality",
+    "Satellites",
+    "HDOP",
+    "Altitude",
+    "Altitude units",
+    "Geoid separation",
+    "Separation units",
+    "DGPS age",
+    "DGPS station",
+];
+const RMC: super::Labels = &[
+    "Sentence",
+    "UTC time",
+    "Status",
+    "Latitude",
+    "N/S",
+    "Longitude",
+    "E/W",
+    "Speed (knots)",
+    "Course (°)",
+    "Date",
+    "Magnetic variation",
+    "E/W",
+    "Mode",
+];
+const GSA: super::Labels = &[
+    "Sentence", "Mode", "Fix type", "SV 1", "SV 2", "SV 3", "SV 4", "SV 5", "SV 6", "SV 7", "SV 8",
+    "SV 9", "SV 10", "SV 11", "SV 12", "PDOP", "HDOP", "VDOP",
+];
+const GSV: super::Labels = &[
+    "Sentence",
+    "Messages",
+    "Message number",
+    "Satellites in view",
+    "PRN",
+    "Elevation",
+    "Azimuth",
+    "SNR",
+    "PRN",
+    "Elevation",
+    "Azimuth",
+    "SNR",
+    "PRN",
+    "Elevation",
+    "Azimuth",
+    "SNR",
+    "PRN",
+    "Elevation",
+    "Azimuth",
+    "SNR",
+];
+const GLL: super::Labels = &[
+    "Sentence",
+    "Latitude",
+    "N/S",
+    "Longitude",
+    "E/W",
+    "UTC time",
+    "Status",
+    "Mode",
+];
+const VTG: super::Labels = &[
+    "Sentence",
+    "True track",
+    "T",
+    "Magnetic track",
+    "M",
+    "Speed (knots)",
+    "N",
+    "Speed (km/h)",
+    "K",
+    "Mode",
+];
+const ZDA: super::Labels = &[
+    "Sentence",
+    "UTC time",
+    "Day",
+    "Month",
+    "Year",
+    "Zone hours",
+    "Zone minutes",
+];
+const VDM: super::Labels = &[
+    "Sentence",
+    "Fragments",
+    "Fragment number",
+    "Message ID",
+    "Channel",
+    "Payload",
+    "Fill bits",
+];
 
 const SENTENCES: EnumTable = &[
-    (0, "GGA: fix data"), (1, "RMC: recommended minimum"), (2, "GSA: DOP and active satellites"),
-    (3, "GSV: satellites in view"), (4, "GLL: position"), (5, "VTG: track and speed"), (6, "ZDA: date and time"),
-    (7, "VDM: AIS message"), (8, "VDO: own-ship AIS message"), (9, "TXT: text"), (10, "HDT: true heading"),
+    (0, "GGA: fix data"),
+    (1, "RMC: recommended minimum"),
+    (2, "GSA: DOP and active satellites"),
+    (3, "GSV: satellites in view"),
+    (4, "GLL: position"),
+    (5, "VTG: track and speed"),
+    (6, "ZDA: date and time"),
+    (7, "VDM: AIS message"),
+    (8, "VDO: own-ship AIS message"),
+    (9, "TXT: text"),
+    (10, "HDT: true heading"),
 ];
 
 fn sentence_info(kind: &str) -> (super::Labels, Option<&'static str>) {
@@ -660,12 +1014,20 @@ async fn nmea(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let Some((address, valid)) = nmea_sentence(&line.bytes) else {
-            cx.push(Node::new(format!("Line {}", line.number)).span(line.span).value(text(line.text()))).await;
+            cx.push(
+                Node::new(format!("Line {}", line.number))
+                    .span(line.span)
+                    .value(text(line.text())),
+            )
+            .await;
             continue;
         };
         let address = String::from_utf8_lossy(address).into_owned();
         let (talker, kind) = if address.len() == 5 && !address.starts_with('P') {
-            (address.get(..2).unwrap_or_default().to_owned(), address.get(2..).unwrap_or_default().to_owned())
+            (
+                address.get(..2).unwrap_or_default().to_owned(),
+                address.get(2..).unwrap_or_default().to_owned(),
+            )
         } else {
             (String::new(), address.clone())
         };
@@ -690,8 +1052,14 @@ async fn nmea(cx: Cx, input: Input) -> Result<()> {
         if let Some((lat, lon)) = position {
             summary = format!("{summary}, {lat:.6}°, {lon:.6}°");
         }
-        let body = line.bytes.iter().rposition(|&b| b == b'*').map_or(line.span, |star| line.span.sub(0, to_u64(star)));
-        let mut node = super::delimited_span(address, body, b',', labels).span(line.span).summary(summary);
+        let body = line
+            .bytes
+            .iter()
+            .rposition(|&b| b == b'*')
+            .map_or(line.span, |star| line.span.sub(0, to_u64(star)));
+        let mut node = super::delimited_span(address, body, b',', labels)
+            .span(line.span)
+            .summary(summary);
         if !valid {
             node = node.diag(Diagnostic::warning("checksum mismatch"));
         }

@@ -94,7 +94,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hspan = file.sub(0, ContainerHeader::SIZE);
     cx.emit(ContainerHeader::node("Container Header", hspan, BE));
     let h = parse(&cx, hspan, BE, &(), ContainerHeader::layout).await?;
-    let table = file.sub(ContainerHeader::SIZE, u64::from(h.sections).saturating_mul(SectionHeader::SIZE));
+    let table = file.sub(
+        ContainerHeader::SIZE,
+        u64::from(h.sections).saturating_mul(SectionHeader::SIZE),
+    );
     let names_at = table.end().saturating_sub(file.offset);
     let mut sections = Vec::new();
     for i in 0..table.len.checked_div(SectionHeader::SIZE).unwrap_or(0) {
@@ -110,7 +113,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "PEF {} code fragment, {} sections{}",
-        if h.architecture == "pwpc" { "PowerPC" } else { "68k" },
+        if h.architecture == "pwpc" {
+            "PowerPC"
+        } else {
+            "68k"
+        },
         h.sections,
         if libraries.is_empty() {
             String::new()
@@ -121,13 +128,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (at, s) in sections {
         let name = if s.name_offset >= 0 {
             let names = file.tail(names_at);
-            crate::formats::binutil::string_at(&cx, names, u64::try_from(s.name_offset).unwrap_or(0))
-                .await
-                .map_or_else(|_| String::new(), |(n, _)| n)
+            crate::formats::binutil::string_at(
+                &cx,
+                names,
+                u64::try_from(s.name_offset).unwrap_or(0),
+            )
+            .await
+            .map_or_else(|_| String::new(), |(n, _)| n)
         } else {
             String::new()
         };
-        let label = if name.is_empty() { name_or(SECTION_KIND, s.kind.into(), "section") } else { name };
+        let label = if name.is_empty() {
+            name_or(SECTION_KIND, s.kind.into(), "section")
+        } else {
+            name
+        };
         let data = file.sub(s.offset.into(), s.container.into());
         cx.emit(
             Node::new(label)
@@ -146,13 +161,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn imported_libraries(cx: &Cx, loader: Span) -> Result<Vec<String>> {
-    let h = parse(cx, loader.sub(0, LoaderHeader::SIZE), BE, &(), LoaderHeader::layout).await?;
+    let h = parse(
+        cx,
+        loader.sub(0, LoaderHeader::SIZE),
+        BE,
+        &(),
+        LoaderHeader::layout,
+    )
+    .await?;
     let strings = loader.tail(h.strings.into());
     let mut out = Vec::new();
     for i in 0..u64::from(h.libraries.min(256)) {
         let at = loader.sub(LoaderHeader::SIZE.saturating_add(i.saturating_mul(24)), 4);
         let off = cx.read(at).await?;
-        let name = crate::formats::binutil::string_at(cx, strings, u32_be(&off, 0).unwrap_or(0).into()).await?.0;
+        let name =
+            crate::formats::binutil::string_at(cx, strings, u32_be(&off, 0).unwrap_or(0).into())
+                .await?
+                .0;
         out.push(name);
     }
     Ok(out)
@@ -165,14 +190,20 @@ async fn section(cx: Cx, (at, data, kind): (Span, Span, u8)) -> Result<()> {
         cx.emit(LoaderHeader::node("Loader Header", hspan, BE));
         let h = parse(&cx, hspan, BE, &(), LoaderHeader::layout).await?;
         let strings = data.tail(h.strings.into());
-        let libs = data.sub(LoaderHeader::SIZE, u64::from(h.libraries).saturating_mul(24));
+        let libs = data.sub(
+            LoaderHeader::SIZE,
+            u64::from(h.libraries).saturating_mul(24),
+        );
         cx.emit(
             Node::new("Imported Libraries")
                 .span(libs)
                 .summary(format!("{} libraries", h.libraries))
                 .lazy(libraries, (libs, strings)),
         );
-        let symbols = data.sub(libs.end().saturating_sub(data.offset), u64::from(h.imports).saturating_mul(4));
+        let symbols = data.sub(
+            libs.end().saturating_sub(data.offset),
+            u64::from(h.imports).saturating_mul(4),
+        );
         cx.emit(
             Node::new("Imported Symbols")
                 .span(symbols)
@@ -192,9 +223,10 @@ async fn libraries(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
     for i in 0..count {
         let at = span.sub(i.saturating_mul(24), 24);
         let data = cx.read(at).await?;
-        let name = crate::formats::binutil::string_at(&cx, strings, u32_be(&data, 0).unwrap_or(0).into())
-            .await
-            .map_or_else(|_| format!("#{i}"), |(s, _)| s);
+        let name =
+            crate::formats::binutil::string_at(&cx, strings, u32_be(&data, 0).unwrap_or(0).into())
+                .await
+                .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(
             "{} symbols from {}, versions {:#x}..{:#x}",
             u32_be(&data, 12).unwrap_or(0),
@@ -207,7 +239,13 @@ async fn libraries(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
     Ok(())
 }
 
-const SYMBOL_CLASS: EnumTable = &[(0, "code"), (1, "data"), (2, "transition vector"), (3, "TOC"), (4, "glue")];
+const SYMBOL_CLASS: EnumTable = &[
+    (0, "code"),
+    (1, "data"),
+    (2, "transition vector"),
+    (3, "TOC"),
+    (4, "glue"),
+];
 
 async fn imported_symbols(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
     let count = span.len / 4;
@@ -220,15 +258,11 @@ async fn imported_symbols(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
         let name = crate::formats::binutil::string_at(&cx, strings, (word & 0x00ff_ffff).into())
             .await
             .map_or_else(|_| format!("#{i}"), |(s, _)| s);
-        cx.push(
-            Node::new(name)
-                .span(at)
-                .summary(format!(
-                    "{}{}",
-                    name_or(SYMBOL_CLASS, (class & 0xf).into(), "class"),
-                    if class & 0x80 != 0 { ", weak" } else { "" }
-                )),
-        )
+        cx.push(Node::new(name).span(at).summary(format!(
+            "{}{}",
+            name_or(SYMBOL_CLASS, (class & 0xf).into(), "class"),
+            if class & 0x80 != 0 { ", weak" } else { "" }
+        )))
         .await;
     }
     Ok(())

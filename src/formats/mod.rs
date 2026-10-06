@@ -41,16 +41,16 @@ pub mod tar;
 pub mod wim;
 pub mod xar;
 pub mod xz;
+pub mod zip;
 pub mod zoo;
 pub mod zstd;
-pub mod zip;
 // -- end archives --
 
 // -- executables & code --
-mod binutil;
 pub mod android;
 pub mod aout;
 pub mod beam;
+mod binutil;
 pub mod bitcode;
 pub mod coff;
 pub mod dart;
@@ -139,10 +139,10 @@ pub mod bencode;
 pub mod bookmark;
 pub mod bplist;
 pub mod cbor;
-pub mod dsstore;
 pub mod chm;
 pub mod crx;
 pub mod datakit;
+pub mod dsstore;
 pub mod evt;
 pub mod evtx;
 pub mod font;
@@ -158,9 +158,9 @@ pub mod pickle;
 pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
-pub mod winhelp;
 pub mod terminfo;
 pub mod thumbcache;
+pub mod winhelp;
 // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
 pub mod arrow;
 pub mod asn1;
@@ -189,43 +189,31 @@ pub mod retro;
 // -- end retro --
 
 // -- games, 3D, science, e-books, misc --
-pub mod games;
-pub mod models;
-pub mod science;
-pub mod ebooks;
-pub mod security;
-pub mod system;
-pub mod graphics;
-pub mod packages;
 pub mod archives2;
-pub mod misc2;
-pub mod pdb;
-pub mod platform;
-pub mod devices;
-pub mod lines;
 pub mod bio;
-pub mod biotext;
-pub mod instruments;
-pub mod geoscience;
-pub mod eda;
-pub mod cad;
-pub mod microscopy;
-pub mod molecular;
-pub mod instruments2;
 pub mod bio2;
-pub mod cad2;
-pub mod geo2;
-pub mod eda2;
+pub mod biotext;
 pub mod browser;
-pub mod winforensics;
-pub mod unixforensics;
-pub mod office_legacy;
-pub mod windiag;
-pub mod logs;
-pub mod evidence;
-pub mod userdata;
-pub mod keyrings;
+pub mod cad;
+pub mod cad2;
+pub mod devices;
 pub mod devtools;
+pub mod ebooks;
+pub mod eda;
+pub mod eda2;
+pub mod evidence;
+pub mod games;
+pub mod geo2;
+pub mod geoscience;
+pub mod graphics;
+pub mod instruments;
+pub mod instruments2;
+pub mod keyrings;
+pub mod lines;
+pub mod logs;
+pub mod microscopy;
+pub mod misc10;
+pub mod misc2;
 pub mod misc3;
 pub mod misc4;
 pub mod misc5;
@@ -233,7 +221,19 @@ pub mod misc6;
 pub mod misc7;
 pub mod misc8;
 pub mod misc9;
-pub mod misc10;
+pub mod models;
+pub mod molecular;
+pub mod office_legacy;
+pub mod packages;
+pub mod pdb;
+pub mod platform;
+pub mod science;
+pub mod security;
+pub mod system;
+pub mod unixforensics;
+pub mod userdata;
+pub mod windiag;
+pub mod winforensics;
 // -- end misc --
 
 // -- ml models & mobile platforms --
@@ -2029,7 +2029,8 @@ async fn expand_content(
         // DEFLATE cannot expand by more than about 1032:1, so larger claims
         // are bogus and get the eager path (which reports the real size).
         Codec::Deflate | Codec::Zlib
-            if expected.is_some_and(|e| e > LAZY_THRESHOLD && e <= span.len.saturating_mul(1032)) =>
+            if expected
+                .is_some_and(|e| e > LAZY_THRESHOLD && e <= span.len.saturating_mul(1032)) =>
         {
             let len = expected.unwrap_or(0);
             let decoded = cx.inflate_lazy(span, codec == Codec::Zlib, len)?;

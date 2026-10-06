@@ -96,8 +96,8 @@ pub fn link_name(link: u32) -> String {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(input.span.sub(0, 4)).await?;
-    let (endian, nano) =
-        magic(&head).ok_or_else(|| Diagnostic::malformed("not a pcap file").at(input.span.sub(0, 4)))?;
+    let (endian, nano) = magic(&head)
+        .ok_or_else(|| Diagnostic::malformed("not a pcap file").at(input.span.sub(0, 4)))?;
     let mut cur = Cursor::new(&cx, input.span, endian);
     let (header, span) = cur.record::<GlobalHeader>().await?;
     cx.emit(GlobalHeader::node("Global Header", span, endian));
@@ -107,7 +107,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header.major,
         header.minor,
         link_name(link),
-        if endian == Endian::Little { "little" } else { "big" },
+        if endian == Endian::Little {
+            "little"
+        } else {
+            "big"
+        },
         if nano { "ns" } else { "µs" },
         header.snaplen
     ));

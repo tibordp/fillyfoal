@@ -147,10 +147,22 @@ fn cod(f: &mut Fields<'_>, _: &()) -> Result<u8> {
     f.u8("Multiple component transform").emit()?;
     f.u8("Decomposition levels").emit()?;
     f.u8("Code-block width")
-        .with(|&v, n| n.summary(format!("{}", 1u32.checked_shl(u32::from(v).saturating_add(2)).unwrap_or(0))))
+        .with(|&v, n| {
+            n.summary(format!(
+                "{}",
+                1u32.checked_shl(u32::from(v).saturating_add(2))
+                    .unwrap_or(0)
+            ))
+        })
         .emit()?;
     f.u8("Code-block height")
-        .with(|&v, n| n.summary(format!("{}", 1u32.checked_shl(u32::from(v).saturating_add(2)).unwrap_or(0))))
+        .with(|&v, n| {
+            n.summary(format!(
+                "{}",
+                1u32.checked_shl(u32::from(v).saturating_add(2))
+                    .unwrap_or(0)
+            ))
+        })
         .emit()?;
     f.u8("Code-block style").hex().emit()?;
     let transform = f.u8("Wavelet transform").enumeration(TRANSFORM).emit()?;
@@ -181,7 +193,9 @@ fn sot(f: &mut Fields<'_>, _: &()) -> Result<(u16, u32, u8)> {
         .desc("Tile-part length from SOT (0: to the end of the codestream)")
         .emit()?;
     let part = f.u8("TPsot").desc("Tile-part index").emit()?;
-    f.u8("TNsot").desc("Number of tile-parts (0: unknown)").emit()?;
+    f.u8("TNsot")
+        .desc("Number of tile-parts (0: unknown)")
+        .emit()?;
     Ok((tile, len, part))
 }
 
@@ -190,8 +204,10 @@ async fn next(cur: &mut Cursor<'_>) -> Result<(u16, Span, Span)> {
     let start = cur.pos();
     let marker = cur.u16().await?;
     if marker >> 8 != 0xff {
-        return Err(Diagnostic::malformed(format!("expected a marker, found {marker:#06x}"))
-            .at(cur.since(start)));
+        return Err(
+            Diagnostic::malformed(format!("expected a marker, found {marker:#06x}"))
+                .at(cur.since(start)),
+        );
     }
     if standalone(marker) {
         return Ok((marker, cur.since(start), cur.span(0)));
@@ -218,7 +234,10 @@ fn segment_node(marker: u16, span: Span, payload: Span) -> Node {
 async fn segment(cx: Cx, (marker, span, payload): (u16, Span, Span)) -> Result<()> {
     let head = cx.block(span.sub(0, 4)).await?;
     let mut f = Fields::emitting(&cx, &head, BE);
-    f.u16("Marker").hex().with(|&m, n| n.summary(marker_name(m))).emit()?;
+    f.u16("Marker")
+        .hex()
+        .with(|&m, n| n.summary(marker_name(m)))
+        .emit()?;
     f.u16("Length").emit()?;
     match marker {
         0xff52 => cx.emit(struct_node("Coding style", payload, BE, (), cod)),
@@ -234,7 +253,9 @@ async fn segment(cx: Cx, (marker, span, payload): (u16, Span, Span)) -> Result<(
                     .value(if kind == 1 {
                         text(crate::text::latin1(body))
                     } else {
-                        crate::value::Value::Bytes(body.get(..body.len().min(64)).unwrap_or_default().to_vec())
+                        crate::value::Value::Bytes(
+                            body.get(..body.len().min(64)).unwrap_or_default().to_vec(),
+                        )
                     })
                     .summary(if kind == 1 { "Latin-1" } else { "binary" }),
             );
@@ -268,7 +289,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     tiles_x.saturating_mul(tiles_y)
                 );
                 cx.annotate(summary.clone());
-                cx.push(segment_node(marker, span, payload).summary(summary)).await;
+                cx.push(segment_node(marker, span, payload).summary(summary))
+                    .await;
                 continue;
             }
         }
@@ -303,7 +325,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     if !cur.at_end() {
-        cx.push(Node::new("Trailing data").span(file.tail(cur.pos()))).await;
+        cx.push(Node::new("Trailing data").span(file.tail(cur.pos())))
+            .await;
     }
     Ok(())
 }
@@ -315,8 +338,12 @@ async fn tile_part(cx: Cx, span: Span) -> Result<()> {
         cx.push(segment_node(marker, seg, payload)).await;
         if marker == 0xff93 {
             let data = span.tail(cur.pos());
-            cx.push(Node::new("Tile data").span(data).summary(format!("{:#x} bytes", data.len)))
-                .await;
+            cx.push(
+                Node::new("Tile data")
+                    .span(data)
+                    .summary(format!("{:#x} bytes", data.len)),
+            )
+            .await;
             break;
         }
     }

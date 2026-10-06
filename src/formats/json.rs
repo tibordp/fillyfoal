@@ -122,7 +122,11 @@ impl Parser<'_> {
         self.ws();
         match self.bump() {
             Some(c) if c == b => Ok(()),
-            _ => Err(format!("expected {:?} at offset {}", char::from(b), self.pos)),
+            _ => Err(format!(
+                "expected {:?} at offset {}",
+                char::from(b),
+                self.pos
+            )),
         }
     }
 
@@ -188,7 +192,10 @@ impl Parser<'_> {
             Some(b'n') => self.literal(b"null", Json::Null),
             Some(b'-' | b'0'..=b'9') => {
                 let start = self.pos;
-                while matches!(self.peek(), Some(b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')) {
+                while matches!(
+                    self.peek(),
+                    Some(b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
+                ) {
                     self.pos = self.pos.saturating_add(1);
                 }
                 let text = self.data.get(start..self.pos).unwrap_or_default();
@@ -229,7 +236,8 @@ impl Parser<'_> {
                         Some(b'u') => {
                             let hi = self.hex4()?;
                             let code = if (0xd800..0xdc00).contains(&hi)
-                                && self.data.get(self.pos..self.pos.saturating_add(2)) == Some(b"\\u")
+                                && self.data.get(self.pos..self.pos.saturating_add(2))
+                                    == Some(b"\\u")
                             {
                                 self.pos = self.pos.saturating_add(2);
                                 let lo = self.hex4()?;

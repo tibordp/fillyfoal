@@ -498,9 +498,13 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     while cur.remaining() >= 12 {
         let start = cur.pos();
         let sig = cur.bytes(4).await?;
-        if !matches!(sig.as_slice(), b"8BIM" | b"MeSa" | b"AgHg" | b"PHUT" | b"DCSR") {
-            return Err(Diagnostic::malformed("expected an 8BIM resource signature")
-                .at(cur.since(start)));
+        if !matches!(
+            sig.as_slice(),
+            b"8BIM" | b"MeSa" | b"AgHg" | b"PHUT" | b"DCSR"
+        ) {
+            return Err(
+                Diagnostic::malformed("expected an 8BIM resource signature").at(cur.since(start))
+            );
         }
         let id = cur.u16().await?;
         let name_len = cur.u8().await?;
@@ -565,7 +569,11 @@ async fn resource(cx: Cx, r: Resource) -> Result<()> {
         )),
         1060 => cx.emit(embedded("XMP packet", input.nested(data))),
         1033 | 1036 => {
-            cx.emit(Thumbnail::node("Thumbnail header", data.sub(0, Thumbnail::SIZE), BE));
+            cx.emit(Thumbnail::node(
+                "Thumbnail header",
+                data.sub(0, Thumbnail::SIZE),
+                BE,
+            ));
             let image = data.tail(Thumbnail::SIZE);
             let format = cx.read_avail(data.sub(0, 4)).await?;
             if u32_be(&format, 0) == Some(1) {

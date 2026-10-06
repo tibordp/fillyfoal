@@ -33,7 +33,10 @@ const PALM_KINDS: &[(&[u8; 8], &str)] = &[
 
 fn palm_kind(h: &Head<'_>) -> Option<&'static str> {
     let tag = h.data.get(60..68)?;
-    PALM_KINDS.iter().find(|(t, _)| tag == &t[..]).map(|(_, n)| *n)
+    PALM_KINDS
+        .iter()
+        .find(|(t, _)| tag == &t[..])
+        .map(|(_, n)| *n)
 }
 
 fn mobi_probe(h: &Head<'_>) -> bool {
@@ -49,15 +52,25 @@ fn palmdoc_probe(h: &Head<'_>) -> bool {
 fn pdb_probe(h: &Head<'_>) -> bool {
     let d = h.data;
     let records = u16_be(d, 76).unwrap_or(0);
-    let name_ok = d.get(..32).is_some_and(|n| n.iter().take_while(|&&b| b != 0).all(|&b| (0x20..0x7f).contains(&b)) && n.first().is_some_and(|&b| b != 0));
-    let type_ok = d.get(60..68).is_some_and(|t| t.iter().all(|&b| (0x20..0x7f).contains(&b)));
+    let name_ok = d.get(..32).is_some_and(|n| {
+        n.iter()
+            .take_while(|&&b| b != 0)
+            .all(|&b| (0x20..0x7f).contains(&b))
+            && n.first().is_some_and(|&b| b != 0)
+    });
+    let type_ok = d
+        .get(60..68)
+        .is_some_and(|t| t.iter().all(|&b| (0x20..0x7f).contains(&b)));
     let first = u32_be(d, 78).unwrap_or(0);
     name_ok
         && type_ok
         && records > 0
         && u64::from(first) >= 78u64.saturating_add(u64::from(records).saturating_mul(8))
         && u64::from(first) < h.len
-        && (palm_kind(h).is_some() || h.data.get(60..64).is_some_and(|t| t.iter().all(u8::is_ascii_alphanumeric)))
+        && (palm_kind(h).is_some()
+            || h.data
+                .get(60..64)
+                .is_some_and(|t| t.iter().all(u8::is_ascii_alphanumeric)))
 }
 
 declare_format!(pub MOBI = "mobi", "Mobipocket / Kindle e-book", ["mobi", "azw", "azw3", "prc"], "application/x-mobipocket-ebook",
@@ -137,7 +150,11 @@ const EXTH: EnumTable = &[
 async fn palm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: PalmHeader = read_record(&cx, file.sub(0, PalmHeader::SIZE), BE).await?;
-    cx.emit(PalmHeader::node("Database header", file.sub(0, PalmHeader::SIZE), BE));
+    cx.emit(PalmHeader::node(
+        "Database header",
+        file.sub(0, PalmHeader::SIZE),
+        BE,
+    ));
     let list = file.sub_exact(PalmHeader::SIZE, u64::from(h.records).saturating_mul(8))?;
     let entries = cx.read(list).await?;
     let offsets: Vec<u64> = (0..usize::from(h.records))
@@ -160,7 +177,9 @@ async fn palm(cx: Cx, input: Input) -> Result<()> {
         && let (Some(&start), Some(&end)) = (offsets.first(), offsets.get(1).or(Some(&file.len)))
     {
         let record0 = file.sub(start, end.saturating_sub(start));
-        let mut node = Node::new("Book header").span(record0).lazy(book_header_node, record0);
+        let mut node = Node::new("Book header")
+            .span(record0)
+            .lazy(book_header_node, record0);
         if let Some(title) = mobi_title(&cx, record0).await? {
             summary = format!("{kind}: {title:?}");
             node = node.summary(title);
@@ -174,13 +193,24 @@ async fn palm(cx: Cx, input: Input) -> Result<()> {
 async fn palm_records(cx: Cx, (input, offsets): (Input, Vec<u64>)) -> Result<()> {
     cx.set_count(Count::Exact(crate::bytes::to_u64(offsets.len())));
     for (i, &start) in offsets.iter().enumerate() {
-        let end = offsets.get(i.saturating_add(1)).copied().unwrap_or(input.span.len);
+        let end = offsets
+            .get(i.saturating_add(1))
+            .copied()
+            .unwrap_or(input.span.len);
         if end < start {
-            cx.push(Node::new(format!("Record {i}")).diag(Diagnostic::malformed("record offsets out of order"))).await;
+            cx.push(
+                Node::new(format!("Record {i}"))
+                    .diag(Diagnostic::malformed("record offsets out of order")),
+            )
+            .await;
             continue;
         }
         let span = input.span.sub(start, end.saturating_sub(start));
-        cx.push(embedded(format!("Record {i}"), input.nested(span)).summary(format!("{} bytes", span.len))).await;
+        cx.push(
+            embedded(format!("Record {i}"), input.nested(span))
+                .summary(format!("{} bytes", span.len)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -208,12 +238,16 @@ async fn book_header(cx: &Cx, record0: Span) -> Result<Option<String>> {
     {
         let mut f = Fields::emitting(cx, &block, BE);
         // Not lazy: these few fields are the book's identity.
-        f.u16("Compression").enumeration(PALMDOC_COMPRESSION).emit()?;
+        f.u16("Compression")
+            .enumeration(PALMDOC_COMPRESSION)
+            .emit()?;
         f.u16("Unused").emit()?;
         f.u32("Text length").emit()?;
         f.u16("Text record count").emit()?;
         f.u16("Text record size").emit()?;
-        f.u16("Encryption").enumeration(&[(0, "none"), (1, "old Mobipocket"), (2, "Mobipocket")]).emit()?;
+        f.u16("Encryption")
+            .enumeration(&[(0, "none"), (1, "old Mobipocket"), (2, "Mobipocket")])
+            .emit()?;
         f.u16("Unknown").emit()?;
     }
     let mobi = cx.read_avail(record0.sub(16, 0x100)).await?;
@@ -239,11 +273,19 @@ async fn book_header(cx: &Cx, record0: Span) -> Result<Option<String>> {
     )));
     if exth_flags & 0x40 != 0 {
         let exth = record0.tail(16u64.saturating_add(header_len));
-        cx.emit(Node::new("EXTH metadata").span(exth).lazy(exth_records, exth));
+        cx.emit(
+            Node::new("EXTH metadata")
+                .span(exth)
+                .lazy(exth_records, exth),
+        );
     }
     let title_span = record0.sub(title_offset, title_len);
     let title = String::from_utf8_lossy(&cx.read_avail(title_span).await?).into_owned();
-    cx.emit(Node::new("Full name").span(title_span).value(Value::Text(title.clone())));
+    cx.emit(
+        Node::new("Full name")
+            .span(title_span)
+            .value(Value::Text(title.clone())),
+    );
     Ok(Some(title))
 }
 
@@ -264,11 +306,16 @@ async fn exth_records(cx: Cx, span: Span) -> Result<()> {
         let data = cur.bytes(data_len).await?;
         let name = lookup(EXTH, kind.into()).map_or_else(|| format!("EXTH {kind}"), str::to_owned);
         let value = if data_len == 4 && kind >= 115 && kind != 503 && kind != 524 {
-            Value::UInt { value: u32_be(&data, 0).unwrap_or(0).into(), bits: 32, radix: crate::value::Radix::Dec }
+            Value::UInt {
+                value: u32_be(&data, 0).unwrap_or(0).into(),
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            }
         } else {
             Value::Text(String::from_utf8_lossy(&data).into_owned())
         };
-        cx.push(Node::new(name).span(cur.since(start)).value(value)).await;
+        cx.push(Node::new(name).span(cur.since(start)).value(value))
+            .await;
     }
     Ok(())
 }
@@ -334,8 +381,13 @@ async fn djvu_chunks(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let len = cur.u32().await?;
         let body = cur.span(len.into());
         cur.skip(u64::from(len).saturating_add(u64::from(len & 1)));
-        let label = DJVU_CHUNKS.iter().find(|(k, _)| *k == id).map_or("", |(_, n)| n);
-        let mut node = Node::new(id.clone()).span(cur.since(start)).summary(format!("{label}, {len} bytes"));
+        let label = DJVU_CHUNKS
+            .iter()
+            .find(|(k, _)| *k == id)
+            .map_or("", |(_, n)| n);
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .summary(format!("{label}, {len} bytes"));
         if id == "FORM" {
             let kind = String::from_utf8_lossy(&cx.read_avail(body.sub(0, 4)).await?).into_owned();
             node = node.summary(format!("FORM:{kind}, {len} bytes")).lazy(
@@ -375,16 +427,33 @@ record! {
 
 async fn lit(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let h: LitHeader = read_record(&cx, file.sub(0, LitHeader::SIZE), crate::fields::Endian::Little).await?;
-    cx.emit(LitHeader::node("Header", file.sub(0, LitHeader::SIZE), crate::fields::Endian::Little));
+    let h: LitHeader = read_record(
+        &cx,
+        file.sub(0, LitHeader::SIZE),
+        crate::fields::Endian::Little,
+    )
+    .await?;
+    cx.emit(LitHeader::node(
+        "Header",
+        file.sub(0, LitHeader::SIZE),
+        crate::fields::Endian::Little,
+    ));
     let table = file.sub(h.header_len.into(), u64::from(h.pieces).saturating_mul(16));
     let entries = cx.read_avail(table).await?;
     for i in 0..usize::try_from(h.pieces.min(64)).unwrap_or(0) {
         let at = i.saturating_mul(16);
         let offset = crate::bytes::u64_le(&entries, at).unwrap_or(0);
         let size = crate::bytes::u64_le(&entries, at.saturating_add(8)).unwrap_or(0);
-        cx.push(Node::new(format!("Piece {i}")).span(file.sub(offset, size)).summary(format!("{size} bytes"))).await;
+        cx.push(
+            Node::new(format!("Piece {i}"))
+                .span(file.sub(offset, size))
+                .summary(format!("{size} bytes")),
+        )
+        .await;
     }
-    cx.annotate(format!("Microsoft Reader, version {}, {} pieces", h.version, h.pieces));
+    cx.annotate(format!(
+        "Microsoft Reader, version {}, {} pieces",
+        h.version, h.pieces
+    ));
     Ok(())
 }

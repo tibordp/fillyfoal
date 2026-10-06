@@ -60,9 +60,16 @@ async fn dtb(cx: Cx, input: Input) -> Result<()> {
         structure: file.sub(h.structure.into(), h.structure_size.into()),
         strings: file.sub(h.strings.into(), h.strings_size.into()),
     };
-    cx.emit(Node::new("Reserved memory map").span(file.sub(h.reservations.into(), u64::from(h.structure).saturating_sub(h.reservations.into()))));
+    cx.emit(Node::new("Reserved memory map").span(file.sub(
+        h.reservations.into(),
+        u64::from(h.structure).saturating_sub(h.reservations.into()),
+    )));
     // The root node starts the structure block.
-    cx.emit(Node::new("/").span(fdt.structure).lazy(dt_node, (fdt, 0u64, 0u32)));
+    cx.emit(
+        Node::new("/")
+            .span(fdt.structure)
+            .lazy(dt_node, (fdt, 0u64, 0u32)),
+    );
     cx.emit(Node::new("Strings").span(fdt.strings));
     let model = dt_property(&cx, fdt, "model").await.ok().flatten();
     cx.annotate(match model {
@@ -89,7 +96,9 @@ async fn dt_property(cx: &Cx, fdt: Fdt, wanted: &str) -> Result<Option<String>> 
                 let name_off = cur.u32().await?;
                 let value = cur.bytes(len.into()).await?;
                 cur.seek(cur.pos().next_multiple_of(4));
-                let (name, _) = cx.cstr(fdt.strings.tail(name_off.into()).sub(0, 256)).await?;
+                let (name, _) = cx
+                    .cstr(fdt.strings.tail(name_off.into()).sub(0, 256))
+                    .await?;
                 if name == wanted {
                     return Ok(Some(crate::text::until_nul(&value)));
                 }
@@ -110,7 +119,9 @@ async fn dt_node(cx: Cx, (fdt, offset, depth): (Fdt, u64, u32)) -> Result<()> {
     let mut cur = Cursor::new(&cx, fdt.structure, BE);
     cur.seek(offset);
     if cur.u32().await? != FDT_BEGIN_NODE {
-        return Err(Diagnostic::malformed("expected FDT_BEGIN_NODE").at(fdt.structure.sub(offset, 4)));
+        return Err(
+            Diagnostic::malformed("expected FDT_BEGIN_NODE").at(fdt.structure.sub(offset, 4))
+        );
     }
     cur.cstr(256).await?;
     cur.seek(cur.pos().next_multiple_of(4));
@@ -126,19 +137,26 @@ async fn dt_node(cx: Cx, (fdt, offset, depth): (Fdt, u64, u32)) -> Result<()> {
                 let value = cur.bytes(len.into()).await?;
                 cur.seek(cur.pos().next_multiple_of(4));
                 if level == 0 {
-                    let (name, _) = cx.cstr(fdt.strings.tail(name_off.into()).sub(0, 256)).await?;
-                    cx.push(Node::new(name).span(cur.since(start)).value(dt_value(&value)).target(value_span)).await;
+                    let (name, _) = cx
+                        .cstr(fdt.strings.tail(name_off.into()).sub(0, 256))
+                        .await?;
+                    cx.push(
+                        Node::new(name)
+                            .span(cur.since(start))
+                            .value(dt_value(&value))
+                            .target(value_span),
+                    )
+                    .await;
                 }
             }
             FDT_BEGIN_NODE => {
                 let (name, _) = cur.cstr(256).await?;
                 cur.seek(cur.pos().next_multiple_of(4));
                 if level == 0 {
-                    cx.push(
-                        Node::new(name)
-                            .span(fdt.structure.sub(start, 0))
-                            .lazy(crate::expander!(self::dt_node: (Fdt, u64, u32)), (fdt, start, depth.saturating_add(1))),
-                    )
+                    cx.push(Node::new(name).span(fdt.structure.sub(start, 0)).lazy(
+                        crate::expander!(self::dt_node: (Fdt, u64, u32)),
+                        (fdt, start, depth.saturating_add(1)),
+                    ))
                     .await;
                 }
                 level = level.saturating_add(1);
@@ -152,7 +170,9 @@ async fn dt_node(cx: Cx, (fdt, offset, depth): (Fdt, u64, u32)) -> Result<()> {
             FDT_NOP => {}
             FDT_END => return Ok(()),
             other => {
-                return Err(Diagnostic::malformed(format!("unknown token {other:#x}")).at(cur.since(start)));
+                return Err(
+                    Diagnostic::malformed(format!("unknown token {other:#x}")).at(cur.since(start))
+                );
             }
         }
     }
@@ -243,7 +263,11 @@ async fn acpi(cx: Cx, input: Input) -> Result<()> {
     if u64::from(h.length) <= cx.limits().max_read {
         let all = cx.read(file.sub(0, h.length.into())).await?;
         let sum = all.iter().fold(0u8, |a, &b| a.wrapping_add(b));
-        node = if sum == 0 { node.summary("checksum valid") } else { node.diag(Diagnostic::warning("checksum does not sum to zero")) };
+        node = if sum == 0 {
+            node.summary("checksum valid")
+        } else {
+            node.diag(Diagnostic::warning("checksum does not sum to zero"))
+        };
     }
     cx.emit(node);
     let body = file.tail(AcpiHeader::SIZE);
@@ -253,15 +277,37 @@ async fn acpi(cx: Cx, input: Input) -> Result<()> {
             let data = cx.read_avail(body).await?;
             for i in 0..body.len.checked_div(width).unwrap_or(0) {
                 let at = crate::bytes::to_usize(i.saturating_mul(width));
-                let address = if width == 8 { crate::bytes::u64_le(&data, at) } else { u32_le(&data, at).map(u64::from) }.unwrap_or(0);
-                cx.push(Node::new(format!("Entry {i}")).span(body.sub(i.saturating_mul(width), width)).value(Value::UInt { value: address, bits: 64, radix: Radix::Hex })).await;
+                let address = if width == 8 {
+                    crate::bytes::u64_le(&data, at)
+                } else {
+                    u32_le(&data, at).map(u64::from)
+                }
+                .unwrap_or(0);
+                cx.push(
+                    Node::new(format!("Entry {i}"))
+                        .span(body.sub(i.saturating_mul(width), width))
+                        .value(Value::UInt {
+                            value: address,
+                            bits: 64,
+                            radix: Radix::Hex,
+                        }),
+                )
+                .await;
             }
         }
         "DSDT" | "SSDT" => cx.emit(Node::new("AML bytecode").span(body)),
         _ => cx.emit(Node::new("Table data").span(body)),
     }
-    let name = ACPI_SIGNATURES.iter().find(|(s, _)| &s[..] == h.signature.as_bytes()).map_or("ACPI table", |(_, n)| n);
-    cx.annotate(format!("{} ({name}), {} {}", h.signature, h.oem.trim(), h.oem_table.trim()));
+    let name = ACPI_SIGNATURES
+        .iter()
+        .find(|(s, _)| &s[..] == h.signature.as_bytes())
+        .map_or("ACPI table", |(_, n)| n);
+    cx.annotate(format!(
+        "{} ({name}), {} {}",
+        h.signature,
+        h.oem.trim(),
+        h.oem_table.trim()
+    ));
     Ok(())
 }
 
@@ -328,22 +374,33 @@ async fn bzimage(cx: Cx, input: Input) -> Result<()> {
     let h: SetupHeader = read_record(&cx, span, LE).await?;
     cx.emit(Node::new("Boot sector").span(file.sub(0, 0x1f1)));
     cx.emit(SetupHeader::node("Setup header", span, LE));
-    let setup = u64::from(if h.setup_sects == 0 { 4 } else { h.setup_sects }).saturating_add(1).saturating_mul(512);
+    let setup = u64::from(if h.setup_sects == 0 { 4 } else { h.setup_sects })
+        .saturating_add(1)
+        .saturating_mul(512);
     cx.emit(Node::new("Real-mode setup code").span(file.sub(0, setup)));
     let protected = file.tail(setup);
     cx.emit(Node::new("Protected-mode kernel").span(protected));
     if h.payload_length > 0 {
         let payload = protected.sub(h.payload_offset.into(), h.payload_length.into());
-        cx.emit(embedded("Compressed payload", input.nested(payload)).summary(format!("{} bytes", h.payload_length)));
+        cx.emit(
+            embedded("Compressed payload", input.nested(payload))
+                .summary(format!("{} bytes", h.payload_length)),
+        );
     }
     let version = if h.kernel_version != 0 {
-        cx.cstr(file.sub(u64::from(h.kernel_version).saturating_add(0x200), 256)).await.map(|(v, _)| v).ok()
+        cx.cstr(file.sub(u64::from(h.kernel_version).saturating_add(0x200), 256))
+            .await
+            .map(|(v, _)| v)
+            .ok()
     } else {
         None
     };
     cx.annotate(format!(
         "Linux kernel {}, boot protocol {}.{:02}",
-        version.as_deref().and_then(|v| v.split_whitespace().next()).unwrap_or("(unknown version)"),
+        version
+            .as_deref()
+            .and_then(|v| v.split_whitespace().next())
+            .unwrap_or("(unknown version)"),
         h.version >> 8,
         h.version & 0xff
     ));
@@ -397,12 +454,25 @@ record! {
 async fn journal(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: JournalHeader = read_record(&cx, file.sub(0, JournalHeader::SIZE), LE).await?;
-    cx.emit(JournalHeader::node("Header", file.sub(0, h.header_size.min(file.len)), LE));
+    cx.emit(JournalHeader::node(
+        "Header",
+        file.sub(0, h.header_size.min(file.len)),
+        LE,
+    ));
     let arena = file.sub(h.header_size, h.arena_size);
-    cx.emit(Node::new("Objects").span(arena).summary(format!("{} objects", h.objects)).lazy(journal_objects, arena));
+    cx.emit(
+        Node::new("Objects")
+            .span(arena)
+            .summary(format!("{} objects", h.objects))
+            .lazy(journal_objects, arena),
+    );
     let state = lookup(JOURNAL_STATES, h.state.into()).unwrap_or("unknown");
-    let first = crate::render::value(&Value::Timestamp { unix_seconds: i64::try_from(h.head_realtime / 1_000_000).unwrap_or(0) });
-    let last = crate::render::value(&Value::Timestamp { unix_seconds: i64::try_from(h.tail_realtime / 1_000_000).unwrap_or(0) });
+    let first = crate::render::value(&Value::Timestamp {
+        unix_seconds: i64::try_from(h.head_realtime / 1_000_000).unwrap_or(0),
+    });
+    let last = crate::render::value(&Value::Timestamp {
+        unix_seconds: i64::try_from(h.tail_realtime / 1_000_000).unwrap_or(0),
+    });
     cx.annotate(format!("{} entries, {state}, {first} – {last}", h.entries));
     Ok(())
 }
@@ -429,7 +499,12 @@ async fn journal_objects(cx: Cx, arena: Span) -> Result<()> {
             break;
         }
         let span = arena.sub(start, size);
-        let mut node = Node::new(lookup(JOURNAL_OBJECTS, kind.into()).unwrap_or("unknown").to_owned()).span(span);
+        let mut node = Node::new(
+            lookup(JOURNAL_OBJECTS, kind.into())
+                .unwrap_or("unknown")
+                .to_owned(),
+        )
+        .span(span);
         if kind == 1 {
             // DATA: payload is "FIELD=value" after a 64-byte header.
             let payload = cx.read_avail(span.sub(64, 200)).await?;
@@ -454,7 +529,11 @@ async fn redis_rdb(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub(0, 9)).await?;
     let version = String::from_utf8_lossy(head.get(5..9).unwrap_or_default()).into_owned();
     cx.emit(Node::new("Magic").span(file.sub(0, 5)).value(text("REDIS")));
-    cx.emit(Node::new("Version").span(file.sub(5, 4)).value(text(version.clone())));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(5, 4))
+            .value(text(version.clone())),
+    );
     // Auxiliary fields (opcode 0xfa) come first: name/value string pairs.
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(9);
@@ -469,16 +548,23 @@ async fn redis_rdb(cx: Cx, input: Input) -> Result<()> {
                 if key == "redis-ver" {
                     redis_version = Some(value.clone());
                 }
-                cx.push(Node::new(key).span(cur.since(start)).value(text(value))).await;
+                cx.push(Node::new(key).span(cur.since(start)).value(text(value)))
+                    .await;
             }
             0xfe => {
                 let db = rdb_length(&mut cur).await?;
-                cx.push(Node::new(format!("SELECTDB {db}")).span(cur.since(start))).await;
+                cx.push(Node::new(format!("SELECTDB {db}")).span(cur.since(start)))
+                    .await;
             }
             0xfb => {
                 let keys = rdb_length(&mut cur).await?;
                 let expires = rdb_length(&mut cur).await?;
-                cx.push(Node::new("RESIZEDB").span(cur.since(start)).summary(format!("{keys} keys, {expires} with expiry"))).await;
+                cx.push(
+                    Node::new("RESIZEDB")
+                        .span(cur.since(start))
+                        .summary(format!("{keys} keys, {expires} with expiry")),
+                )
+                .await;
                 // Key/value pairs follow; their encodings vary by type.
                 cx.emit(Node::new("Key-value pairs").span(file.tail(cur.pos())));
                 break;
@@ -493,7 +579,11 @@ async fn redis_rdb(cx: Cx, input: Input) -> Result<()> {
             }
         }
     }
-    cx.annotate(format!("RDB v{}, Redis {}", version.trim_start_matches('0'), redis_version.unwrap_or_else(|| "?".to_owned())));
+    cx.annotate(format!(
+        "RDB v{}, Redis {}",
+        version.trim_start_matches('0'),
+        redis_version.unwrap_or_else(|| "?".to_owned())
+    ));
     Ok(())
 }
 
@@ -502,7 +592,9 @@ async fn rdb_length(cur: &mut Cursor<'_>) -> Result<u64> {
     Ok(match first >> 6 {
         0 => u64::from(first & 0x3f),
         1 => u64::from(first & 0x3f) << 8 | u64::from(cur.u8().await?),
-        2 if first == 0x80 => u64::from(u32::from_be_bytes(cur.bytes(4).await?.try_into().unwrap_or([0; 4]))),
+        2 if first == 0x80 => u64::from(u32::from_be_bytes(
+            cur.bytes(4).await?.try_into().unwrap_or([0; 4]),
+        )),
         2 => u64::from_be_bytes(cur.bytes(8).await?.try_into().unwrap_or([0; 8])),
         _ => u64::from(first & 0x3f) | 0x8000_0000_0000_0000,
     })
@@ -561,7 +653,9 @@ async fn read_7bit(cur: &mut Cursor<'_>) -> Result<u64> {
     let mut value = 0u64;
     for i in 0..5u32 {
         let b = cur.u8().await?;
-        value |= u64::from(b & 0x7f).checked_shl(i.saturating_mul(7)).unwrap_or(0);
+        value |= u64::from(b & 0x7f)
+            .checked_shl(i.saturating_mul(7))
+            .unwrap_or(0);
         if b & 0x80 == 0 {
             return Ok(value);
         }
@@ -579,7 +673,14 @@ async fn dotnet_resources(cx: Cx, input: Input) -> Result<()> {
     let reader_len = read_7bit(&mut cur).await?;
     let reader = String::from_utf8_lossy(&cur.bytes(reader_len).await?).into_owned();
     cur.seek(reader_start.saturating_add(skip.into()));
-    cx.emit(Node::new("Resource manager header").span(cur.since(0)).summary(format!("v{header_version}, reader {}", reader.split(',').next().unwrap_or_default())));
+    cx.emit(
+        Node::new("Resource manager header")
+            .span(cur.since(0))
+            .summary(format!(
+                "v{header_version}, reader {}",
+                reader.split(',').next().unwrap_or_default()
+            )),
+    );
     let start = cur.pos();
     let version = cur.u32().await?;
     let count = cur.u32().await?;
@@ -589,10 +690,18 @@ async fn dotnet_resources(cx: Cx, input: Input) -> Result<()> {
         let len = read_7bit(&mut cur).await?;
         type_names.push(String::from_utf8_lossy(&cur.bytes(len).await?).into_owned());
     }
-    cx.emit(Node::new("Resource reader header").span(cur.since(start)).summary(format!(
-        "version {version}, {count} resources, types: {}",
-        type_names.iter().map(|t| t.split(',').next().unwrap_or_default().to_owned()).collect::<Vec<_>>().join(", ")
-    )));
+    cx.emit(
+        Node::new("Resource reader header")
+            .span(cur.since(start))
+            .summary(format!(
+                "version {version}, {count} resources, types: {}",
+                type_names
+                    .iter()
+                    .map(|t| t.split(',').next().unwrap_or_default().to_owned())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )),
+    );
     cx.annotate(format!(".NET resources, {count} entries"));
     Ok(())
 }
@@ -644,7 +753,9 @@ async fn snoop(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Packet {packets}"))
                 .span(cur.since(start))
-                .value(Value::Timestamp { unix_seconds: seconds.into() })
+                .value(Value::Timestamp {
+                    unix_seconds: seconds.into(),
+                })
                 .summary(format!("{included}/{original} bytes, +{micros} µs")),
         )
         .await;

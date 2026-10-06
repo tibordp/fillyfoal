@@ -55,7 +55,8 @@ pub async fn dissect_roq(cx: Cx, input: Input) -> Result<()> {
     let mut frame = 0u32;
     while pos < file.len {
         let d = cx.read_avail(file.sub(pos, 16)).await?;
-        let (Some(id), Some(size), Some(arg)) = (u16_le(&d, 0), u32_le(&d, 2), u16_le(&d, 6)) else {
+        let (Some(id), Some(size), Some(arg)) = (u16_le(&d, 0), u32_le(&d, 2), u16_le(&d, 6))
+        else {
             cx.emit(Node::new("Trailing bytes").span(file.tail(pos)));
             break;
         };
@@ -75,10 +76,13 @@ pub async fn dissect_roq(cx: Cx, input: Input) -> Result<()> {
                 u16_le(&d, 8).unwrap_or(0),
                 u16_le(&d, 10).unwrap_or(0)
             ),
-            0x1002 => format!("{len} bytes, {} 4×4 cells", match arg & 0xff {
-                0 => 256,
-                n => n,
-            }),
+            0x1002 => format!(
+                "{len} bytes, {} 4×4 cells",
+                match arg & 0xff {
+                    0 => 256,
+                    n => n,
+                }
+            ),
             0x1011 | 0x1012 => {
                 frame = frame.saturating_add(1);
                 format!("frame {}, {len} bytes", frame.saturating_sub(1))
@@ -89,9 +93,15 @@ pub async fn dissect_roq(cx: Cx, input: Input) -> Result<()> {
             summary = format!("{len} bytes, initial sample {:#06x}", arg);
         }
         let name = vidutil::lookup_or(ROQ_CHUNKS, id.into());
-        let mut node = Node::new(name).span(span).summary(summary).lazy(roq_chunk, span);
+        let mut node = Node::new(name)
+            .span(span)
+            .summary(summary)
+            .lazy(roq_chunk, span);
         if span.len < total {
-            node = node.diag(Diagnostic::truncated(Span::new(file.source, span.offset, total), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(file.source, span.offset, total),
+                span.len,
+            ));
         }
         cx.push(node).await;
         pos = pos.saturating_add(total);
@@ -173,7 +183,11 @@ impl vidutil::Entry for FilmSample {
                 "video at {} ticks, {} bytes{}",
                 self.info1 & 0x7fff_ffff,
                 self.length,
-                if self.info1 & 0x8000_0000 == 0 { ", keyframe" } else { "" }
+                if self.info1 & 0x8000_0000 == 0 {
+                    ", keyframe"
+                } else {
+                    ""
+                }
             )
         })
     }
@@ -212,11 +226,18 @@ pub async fn dissect_film(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Sample table (STAB)")
             .span(stab_span)
-            .summary(format!("base clock {clock} Hz, {}", vidutil::plural(count, "sample")))
+            .summary(format!(
+                "base clock {clock} Hz, {}",
+                vidutil::plural(count, "sample")
+            ))
             .lazy(film_table, (stab_span, count)),
     );
     let data = file.tail(h.header_len.into());
-    cx.emit(Node::new("Sample data").span(data).summary(format!("{} bytes", data.len)));
+    cx.emit(
+        Node::new("Sample data")
+            .span(data)
+            .summary(format!("{} bytes", data.len)),
+    );
     Ok(())
 }
 
@@ -227,7 +248,12 @@ async fn film_table(cx: Cx, (span, count): (Span, u32)) -> Result<()> {
     f.u32("Chunk size").emit()?;
     f.u32("Base clock").emit()?;
     f.u32("Sample count").emit()?;
-    cx.emit(vidutil::table::<FilmSample>("Samples", span.tail(16), count.into(), Endian::Big));
+    cx.emit(vidutil::table::<FilmSample>(
+        "Samples",
+        span.tail(16),
+        count.into(),
+        Endian::Big,
+    ));
     Ok(())
 }
 
@@ -248,9 +274,16 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, 16)).await?;
     let h = file.sub(0, 16);
     cx.emit(vidutil::text("Signature", h.sub(0, 8), "\\0\\nSMJPEG"));
-    cx.emit(uint("Version", h.sub(8, 4), u32_be(&head, 8).unwrap_or(0).into(), 32));
+    cx.emit(uint(
+        "Version",
+        h.sub(8, 4),
+        u32_be(&head, 8).unwrap_or(0).into(),
+        32,
+    ));
     let length = u32_be(&head, 12).unwrap_or(0);
-    cx.emit(uint("Length", h.sub(12, 4), length.into(), 32).summary(vidutil::seconds_ms(length.into())));
+    cx.emit(
+        uint("Length", h.sub(12, 4), length.into(), 32).summary(vidutil::seconds_ms(length.into())),
+    );
     let mut parts = vec!["SMJPEG".to_owned()];
     let mut pos = 16u64;
     let mut in_header = true;
@@ -264,7 +297,11 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
         let tag: [u8; 4] = tag.try_into().unwrap_or_default();
         let (name, len, summary) = match &tag {
             b"HEND" | b"DONE" => {
-                let name = if &tag == b"HEND" { "Header end" } else { "Done" };
+                let name = if &tag == b"HEND" {
+                    "Header end"
+                } else {
+                    "Done"
+                };
                 (name.to_owned(), 0u64, None)
             }
             b"_TXT" => (
@@ -281,7 +318,11 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
                     vidutil::fourcc(d.get(12..16).unwrap_or_default())
                 );
                 parts.push(format!("audio {s}"));
-                ("Audio header".to_owned(), u64::from(u32_be(&d, 4).unwrap_or(0)), Some(s))
+                (
+                    "Audio header".to_owned(),
+                    u64::from(u32_be(&d, 4).unwrap_or(0)),
+                    Some(s),
+                )
             }
             b"_VID" => {
                 let s = format!(
@@ -292,7 +333,11 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
                     vidutil::fourcc(d.get(16..20).unwrap_or_default())
                 );
                 parts.push(format!("video {s}"));
-                ("Video header".to_owned(), u64::from(u32_be(&d, 4).unwrap_or(0)), Some(s))
+                (
+                    "Video header".to_owned(),
+                    u64::from(u32_be(&d, 4).unwrap_or(0)),
+                    Some(s),
+                )
             }
             b"sndD" | b"vidD" => {
                 let ts = u32_be(&d, 4).unwrap_or(0);
@@ -301,15 +346,17 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
                 (
                     format!("{kind} chunk {index}"),
                     len,
-                    Some(format!("{}, {} bytes", vidutil::seconds_ms(ts.into()), len.saturating_sub(4))),
+                    Some(format!(
+                        "{}, {} bytes",
+                        vidutil::seconds_ms(ts.into()),
+                        len.saturating_sub(4)
+                    )),
                 )
             }
             _ => {
-                cx.emit(
-                    Node::new("Unknown data")
-                        .span(file.tail(pos))
-                        .diag(Diagnostic::malformed(format!("unknown chunk {}", vidutil::fourcc(&tag)))),
-                );
+                cx.emit(Node::new("Unknown data").span(file.tail(pos)).diag(
+                    Diagnostic::malformed(format!("unknown chunk {}", vidutil::fourcc(&tag))),
+                ));
                 break;
             }
         };
@@ -345,9 +392,22 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
 
 async fn smjpeg_chunk(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 12)).await?;
-    cx.emit(uint("Timestamp", span.sub(4, 4), u32_be(&d, 4).unwrap_or(0).into(), 32));
-    cx.emit(uint("Length", span.sub(8, 4), u32_be(&d, 8).unwrap_or(0).into(), 32));
-    cx.emit(crate::formats::embedded("JPEG frame", input.nested(span.tail(12))));
+    cx.emit(uint(
+        "Timestamp",
+        span.sub(4, 4),
+        u32_be(&d, 4).unwrap_or(0).into(),
+        32,
+    ));
+    cx.emit(uint(
+        "Length",
+        span.sub(8, 4),
+        u32_be(&d, 8).unwrap_or(0).into(),
+        32,
+    ));
+    cx.emit(crate::formats::embedded(
+        "JPEG frame",
+        input.nested(span.tail(12)),
+    ));
     Ok(())
 }
 
@@ -360,8 +420,10 @@ pub static FLIC: Format = Format {
     extensions: &["fli", "flc", "flx"],
     mime: "video/x-flic",
     probe: Probe::Custom(|h| {
-        matches!(u16_le(h.data, 4), Some(0xaf11 | 0xaf12 | 0xaf44 | 0xaf30 | 0xaf31))
-            && u32_le(h.data, 0).is_some_and(|s| u64::from(s) <= h.len.saturating_add(16) && s >= 128)
+        matches!(
+            u16_le(h.data, 4),
+            Some(0xaf11 | 0xaf12 | 0xaf44 | 0xaf30 | 0xaf31)
+        ) && u32_le(h.data, 0).is_some_and(|s| u64::from(s) <= h.len.saturating_add(16) && s >= 128)
             && u16_le(h.data, 8).is_some_and(|w| w > 0)
             && u16_le(h.data, 10).is_some_and(|w| w > 0)
             && u16_le(h.data, 12).is_some_and(|d| matches!(d, 1 | 8 | 15 | 16 | 24 | 32))
@@ -433,10 +495,16 @@ const FLIC_CHUNKS: EnumTable = &[
 
 pub async fn dissect_flic(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (h, span) = Cursor::new(&cx, file, Endian::Little).record::<FlicHeader>().await?;
+    let (h, span) = Cursor::new(&cx, file, Endian::Little)
+        .record::<FlicHeader>()
+        .await?;
     cx.emit(FlicHeader::node("Header", span, Endian::Little));
     let fli = h.magic == 0xaf11;
-    let ms = if fli { u64::from(h.speed).saturating_mul(1000) / 70 } else { h.speed.into() };
+    let ms = if fli {
+        u64::from(h.speed).saturating_mul(1000) / 70
+    } else {
+        h.speed.into()
+    };
     cx.annotate(format!(
         "FLIC ({}), {}×{}, {}-bit, {}, {} ms/frame",
         if fli { "FLI" } else { "FLC" },
@@ -457,7 +525,11 @@ async fn flic_chunks(cx: &Cx, region: Span, depth: u32) -> Result<()> {
         let size = u64::from(u32_le(&d, 0).unwrap_or(0));
         let kind = u16_le(&d, 4).unwrap_or(0);
         if size < 6 {
-            cx.emit(Node::new("Invalid chunk").span(region.tail(pos)).diag(Diagnostic::malformed("chunk smaller than its header")));
+            cx.emit(
+                Node::new("Invalid chunk")
+                    .span(region.tail(pos))
+                    .diag(Diagnostic::malformed("chunk smaller than its header")),
+            );
             break;
         }
         let span = region.sub(pos, size);
@@ -474,7 +546,10 @@ async fn flic_chunks(cx: &Cx, region: Span, depth: u32) -> Result<()> {
             node = node.summary(format!("{size} bytes"));
         }
         if span.len < size {
-            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, size), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, size),
+                span.len,
+            ));
         }
         cx.push(node).await;
         pos = pos.saturating_add(size);
@@ -538,7 +613,11 @@ const MVE_OPCODES: EnumTable = &[
 
 pub async fn dissect_mve(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(vidutil::text("Signature", file.sub(0, 26), "Interplay MVE File"));
+    cx.emit(vidutil::text(
+        "Signature",
+        file.sub(0, 26),
+        "Interplay MVE File",
+    ));
     cx.annotate("Interplay MVE");
     let mut pos = 26u64;
     let mut annotated = false;
@@ -586,8 +665,19 @@ pub async fn dissect_mve(cx: Cx, input: Input) -> Result<()> {
 
 async fn mve_chunk(cx: Cx, span: Span) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 4)).await?;
-    cx.emit(uint("Length", span.sub(0, 2), u16_le(&d, 0).unwrap_or(0).into(), 16));
-    cx.emit(vidutil::enumerated("Type", span.sub(2, 2), u16_le(&d, 2).unwrap_or(0).into(), 16, MVE_CHUNKS));
+    cx.emit(uint(
+        "Length",
+        span.sub(0, 2),
+        u16_le(&d, 0).unwrap_or(0).into(),
+        16,
+    ));
+    cx.emit(vidutil::enumerated(
+        "Type",
+        span.sub(2, 2),
+        u16_le(&d, 2).unwrap_or(0).into(),
+        16,
+        MVE_CHUNKS,
+    ));
     let body = span.tail(4);
     let mut pos = 0u64;
     while pos.saturating_add(4) <= body.len {
@@ -657,14 +747,20 @@ struct ThpFrames {
 
 pub async fn dissect_thp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (h, span) = Cursor::new(&cx, file, Endian::Big).record::<ThpHeader>().await?;
+    let (h, span) = Cursor::new(&cx, file, Endian::Big)
+        .record::<ThpHeader>()
+        .await?;
     cx.emit(ThpHeader::node("Header", span, Endian::Big));
     let comp = file.tail(h.components.into());
     let d = cx.read_avail(comp.sub(0, 64)).await?;
     let n = u32_be(&d, 0).unwrap_or(0).min(16);
     let types: Vec<u8> = d.get(4..20).unwrap_or_default().to_vec();
     let mut at = 20usize;
-    let mut parts = vec![format!("THP v{}.{}", h.version >> 16, (h.version >> 12) & 0xf)];
+    let mut parts = vec![format!(
+        "THP v{}.{}",
+        h.version >> 16,
+        (h.version >> 12) & 0xf
+    )];
     let mut audio = false;
     let v11 = h.version == 0x0001_1000;
     for &t in types.iter().take(vidutil::us(n.into())) {
@@ -701,14 +797,17 @@ pub async fn dissect_thp(cx: Cx, input: Input) -> Result<()> {
         Node::new("Frames")
             .span(file.tail(h.first.into()))
             .summary(vidutil::plural(h.frames, "frame"))
-            .lazy(thp_frames, ThpFrames {
-                input,
-                file,
-                first: h.first.into(),
-                first_size: h.first_size.into(),
-                count: h.frames.into(),
-                audio,
-            }),
+            .lazy(
+                thp_frames,
+                ThpFrames {
+                    input,
+                    file,
+                    first: h.first.into(),
+                    first_size: h.first_size.into(),
+                    count: h.frames.into(),
+                    audio,
+                },
+            ),
     );
     Ok(())
 }
@@ -731,7 +830,10 @@ async fn thp_frames(cx: Cx, f: ThpFrames) -> Result<()> {
             .summary(summary)
             .lazy(thp_frame, (f.input, span, f.audio));
         if span.len < size {
-            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, size), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, size),
+                span.len,
+            ));
         }
         cx.push(node).await;
         pos = pos.saturating_add(size);
@@ -752,7 +854,10 @@ async fn thp_frame(cx: Cx, (input, span, audio): (Input, Span, bool)) -> Result<
         f.u32("Audio size").emit()?;
         header = 16;
     }
-    cx.emit(crate::formats::embedded("Image (JPEG)", input.nested(span.sub(header, image.into()))));
+    cx.emit(crate::formats::embedded(
+        "Image (JPEG)",
+        input.nested(span.sub(header, image.into())),
+    ));
     let rest = span.tail(header.saturating_add(image.into()));
     if !rest.is_empty() {
         cx.emit(Node::new(if audio { "Audio" } else { "Padding" }).span(rest));

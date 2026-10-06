@@ -58,7 +58,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("End of file")
                     .span(cur.since(start))
-                    .value(Value::Enum { raw: 3, bits: 8, name: lookup(SEGMENTS, 3) }),
+                    .value(Value::Enum {
+                        raw: 3,
+                        bits: 8,
+                        name: lookup(SEGMENTS, 3),
+                    }),
             );
             break;
         }
@@ -94,12 +98,28 @@ async fn ascii_segment(cx: Cx, body: Span) -> Result<()> {
     let text = text_preview(&cx, body, 0x2000).await?;
     let header = text.lines().next().unwrap_or_default().to_owned();
     cx.emit(Node::new("Header").value(Value::Text(header)));
-    for key in ["/FontName", "/FullName", "/FamilyName", "/Weight", "/version", "/Notice", "/FontType", "/ItalicAngle", "/isFixedPitch"] {
+    for key in [
+        "/FontName",
+        "/FullName",
+        "/FamilyName",
+        "/Weight",
+        "/version",
+        "/Notice",
+        "/FontType",
+        "/ItalicAngle",
+        "/isFixedPitch",
+    ] {
         if let Some(v) = ps_entry(&text, key) {
-            cx.emit(Node::new(key.trim_start_matches('/').to_owned()).value(Value::Text(clip(&v, 200))));
+            cx.emit(
+                Node::new(key.trim_start_matches('/').to_owned()).value(Value::Text(clip(&v, 200))),
+            );
         }
     }
-    cx.emit(Node::new("Text").span(body).summary(format!("{} bytes", body.len)));
+    cx.emit(
+        Node::new("Text")
+            .span(body)
+            .summary(format!("{} bytes", body.len)),
+    );
     Ok(())
 }
 

@@ -89,9 +89,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let width = u32::from(h.xmax.saturating_sub(h.xmin)).saturating_add(1);
     let height = u32::from(h.ymax.saturating_sub(h.ymin)).saturating_add(1);
     let depth = u16::from(h.bits).saturating_mul(h.planes.into());
-    cx.annotate(format!("{}, {depth}-bit, {} planes", dims(width, height), h.planes));
+    cx.annotate(format!(
+        "{}, {depth}-bit, {} planes",
+        dims(width, height),
+        h.planes
+    ));
     if depth <= 4 {
-        cx.emit(palette("Header palette", header_span.sub(16, 48), ColorOrder::Rgb));
+        cx.emit(palette(
+            "Header palette",
+            header_span.sub(16, 48),
+            ColorOrder::Rgb,
+        ));
     }
     // A 256-color palette sits at the end, introduced by 0x0c.
     let mut end = file.len;
@@ -102,7 +110,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.emit(
-        region("Image data", file, Header::SIZE, end.saturating_sub(Header::SIZE)).summary(format!(
+        region(
+            "Image data",
+            file,
+            Header::SIZE,
+            end.saturating_sub(Header::SIZE),
+        )
+        .summary(format!(
             "{height} scanlines × {} planes × {} bytes{}",
             h.planes,
             h.bytes_per_line,
@@ -111,7 +125,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     if end < file.len {
         cx.emit(region("Palette marker", file, end, 1));
-        cx.emit(palette("Palette", file.tail(end.saturating_add(1)), ColorOrder::Rgb));
+        cx.emit(palette(
+            "Palette",
+            file.tail(end.saturating_add(1)),
+            ColorOrder::Rgb,
+        ));
     }
     Ok(())
 }
@@ -142,9 +160,13 @@ pub async fn dissect_dcx(cx: Cx, input: Input) -> Result<()> {
     cx.emit(region("Page table", file, 4, table_len).summary(format!("{} pages", offsets.len())));
     cx.annotate(format!("{} pages", offsets.len()));
     for (i, &offset) in offsets.iter().enumerate() {
-        let end = offsets.get(i.saturating_add(1)).copied().unwrap_or(file.len);
+        let end = offsets
+            .get(i.saturating_add(1))
+            .copied()
+            .unwrap_or(file.len);
         let page = file.sub(offset, end.saturating_sub(offset));
-        cx.push(embedded(format!("Page {i}"), input.nested(page))).await;
+        cx.push(embedded(format!("Page {i}"), input.nested(page)))
+            .await;
     }
     Ok(())
 }

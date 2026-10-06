@@ -37,19 +37,36 @@ fn sequence_header(h: &Head<'_>) -> Option<u8> {
         return None;
     }
     let info = SequenceHeader::parse(h.data.get(4..12)?)?;
-    if info.width == 0 || info.height == 0 || !(1..=4).contains(&info.aspect) || !(1..=8).contains(&info.rate) {
+    if info.width == 0
+        || info.height == 0
+        || !(1..=4).contains(&info.aspect)
+        || !(1..=8).contains(&info.rate)
+    {
         return None;
     }
     let window = h.data.get(..h.data.len().min(512))?;
-    let ext = window
-        .windows(5)
-        .any(|w| w.get(..4) == Some(b"\x00\x00\x01\xb5".as_slice()) && w.get(4).is_some_and(|b| b >> 4 == 1));
+    let ext = window.windows(5).any(|w| {
+        w.get(..4) == Some(b"\x00\x00\x01\xb5".as_slice()) && w.get(4).is_some_and(|b| b >> 4 == 1)
+    });
     Some(if ext { 2 } else { 1 })
 }
 
-const ASPECT: EnumTable = &[(1, "1:1 (square pixels)"), (2, "4:3"), (3, "16:9"), (4, "2.21:1")];
+const ASPECT: EnumTable = &[
+    (1, "1:1 (square pixels)"),
+    (2, "4:3"),
+    (3, "16:9"),
+    (4, "2.21:1"),
+];
 const FRAME_RATES: [&str; 9] = [
-    "forbidden", "23.976", "24", "25", "29.97", "30", "50", "59.94", "60",
+    "forbidden",
+    "23.976",
+    "24",
+    "25",
+    "29.97",
+    "30",
+    "50",
+    "59.94",
+    "60",
 ];
 const PICTURE_TYPES: EnumTable = &[(1, "I"), (2, "P"), (3, "B"), (4, "D")];
 const EXTENSIONS: EnumTable = &[
@@ -106,7 +123,10 @@ impl SequenceHeader {
             self.width,
             self.height,
             vidutil::lookup_or(ASPECT, self.aspect),
-            FRAME_RATES.get(vidutil::us(self.rate)).copied().unwrap_or("?"),
+            FRAME_RATES
+                .get(vidutil::us(self.rate))
+                .copied()
+                .unwrap_or("?"),
             bitrate(self.bitrate)
         )
     }
@@ -216,7 +236,9 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
             )
         }
         0x01..=0xaf => vidutil::plural(slices, "slice"),
-        0xb3 => SequenceHeader::parse(body).map(|s| s.describe()).unwrap_or_default(),
+        0xb3 => SequenceHeader::parse(body)
+            .map(|s| s.describe())
+            .unwrap_or_default(),
         0xb5 => vidutil::lookup_or(EXTENSIONS, (body.first().copied().unwrap_or(0) >> 4).into()),
         0xb8 => {
             let mut b = Bits::new(body);
@@ -239,7 +261,12 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
 
 async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 256)).await?;
-    cx.emit(hex("Start code", span.sub(0, 4), 0x100u64 | u64::from(code), 32));
+    cx.emit(hex(
+        "Start code",
+        span.sub(0, 4),
+        0x100u64 | u64::from(code),
+        32,
+    ));
     let body = span.tail(4);
     let data = d.get(4..).unwrap_or_default();
     let mut b = Bits::new(data);
@@ -305,10 +332,20 @@ async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
                         )));
                     }
                     if let Some((n, v)) = field("Progressive sequence", 1) {
-                        cx.emit(flag_node("Progressive sequence", n.span.unwrap_or(body), v == 1));
+                        cx.emit(flag_node(
+                            "Progressive sequence",
+                            n.span.unwrap_or(body),
+                            v == 1,
+                        ));
                     }
                     if let Some((n, v)) = field("Chroma format", 2) {
-                        cx.emit(enumerated("Chroma format", n.span.unwrap_or(body), v, 2, CHROMA));
+                        cx.emit(enumerated(
+                            "Chroma format",
+                            n.span.unwrap_or(body),
+                            v,
+                            2,
+                            CHROMA,
+                        ));
                     }
                     for (name, bits) in [
                         ("Horizontal size extension", 2),
@@ -367,7 +404,13 @@ async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
                 cx.emit(n);
             }
             if let Some((n, v)) = field("Picture coding type", 3) {
-                cx.emit(enumerated("Picture coding type", n.span.unwrap_or(body), v, 3, PICTURE_TYPES));
+                cx.emit(enumerated(
+                    "Picture coding type",
+                    n.span.unwrap_or(body),
+                    v,
+                    3,
+                    PICTURE_TYPES,
+                ));
             }
             if let Some((n, _)) = field("VBV delay", 16) {
                 cx.emit(n);

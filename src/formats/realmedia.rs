@@ -74,7 +74,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Invalid chunk")
                     .span(file.tail(pos))
-                    .diag(Diagnostic::malformed(format!("chunk size {size} is too small"))),
+                    .diag(Diagnostic::malformed(format!(
+                        "chunk size {size} is too small"
+                    ))),
             );
             break;
         }
@@ -116,7 +118,11 @@ fn chunk_summary(id: &[u8; 4], d: &[u8]) -> Option<String> {
             Some(format!("stream {}: {mime} \"{name}\"", u16_be(d, 10)?))
         }
         b"DATA" => Some(format!("{} packets", u32_be(d, 10)?)),
-        b"INDX" => Some(format!("{} entries for stream {}", u32_be(d, 10)?, u16_be(d, 14)?)),
+        b"INDX" => Some(format!(
+            "{} entries for stream {}",
+            u32_be(d, 10)?,
+            u16_be(d, 14)?
+        )),
         b"CONT" => {
             let len = usize::from(u16_be(d, 10)?);
             let title = d.get(12..12usize.saturating_add(len))?;
@@ -170,7 +176,12 @@ impl Info {
                         return;
                     }
                     if ts.starts_with(b".ra\xfd") {
-                        self.streams.push(format!("RealAudio{}", audio_codec(ts).map(|c| format!(" ({c})")).unwrap_or_default()));
+                        self.streams.push(format!(
+                            "RealAudio{}",
+                            audio_codec(ts)
+                                .map(|c| format!(" ({c})"))
+                                .unwrap_or_default()
+                        ));
                         return;
                     }
                 }
@@ -295,7 +306,12 @@ async fn expand_chunk(cx: Cx, chunk: Chunk) -> Result<()> {
             f.u16("Stream number").emit()?;
             f.u32("Next index header").hex().emit()?;
             let entries = chunk.span.tail(20);
-            cx.emit(vidutil::table::<IndexEntry>("Entries", entries, n.into(), BE));
+            cx.emit(vidutil::table::<IndexEntry>(
+                "Entries",
+                entries,
+                n.into(),
+                BE,
+            ));
         }
         _ => {
             let rest = chunk.span.tail(10);
@@ -309,7 +325,11 @@ async fn expand_chunk(cx: Cx, chunk: Chunk) -> Result<()> {
 
 /// Video (`VIDO`) and audio (`.ra\xfd`) stream headers.
 fn type_specific_fields(f: &mut Fields<'_>, len: u64) -> Result<()> {
-    let d = f.block().data.get(vidutil::us(f.pos())..).unwrap_or_default();
+    let d = f
+        .block()
+        .data
+        .get(vidutil::us(f.pos())..)
+        .unwrap_or_default();
     if d.get(4..8) == Some(b"VIDO") {
         f.u32("Header size").emit()?;
         f.ascii("Type", 4).emit()?;

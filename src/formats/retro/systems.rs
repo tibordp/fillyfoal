@@ -27,13 +27,19 @@ fn gc_addr(a: u32) -> bool {
 
 fn dol_probe(h: &Head<'_>) -> bool {
     let off = |i: usize| u32_be(h.data, i.saturating_mul(4)).unwrap_or(0);
-    let addr = |i: usize| u32_be(h.data, 0x48usize.saturating_add(i.saturating_mul(4))).unwrap_or(0);
+    let addr =
+        |i: usize| u32_be(h.data, 0x48usize.saturating_add(i.saturating_mul(4))).unwrap_or(0);
     let len = |i: usize| u32_be(h.data, 0x90usize.saturating_add(i.saturating_mul(4))).unwrap_or(0);
     let sections_ok = (0..18).all(|i| {
         let (o, a, l) = (off(i), addr(i), len(i));
-        (o == 0 && l == 0) || (o >= 0x100 && u64::from(o).saturating_add(l.into()) <= h.len && gc_addr(a))
+        (o == 0 && l == 0)
+            || (o >= 0x100 && u64::from(o).saturating_add(l.into()) <= h.len && gc_addr(a))
     });
-    h.data.len() >= 0x100 && off(0) >= 0x100 && len(0) > 0 && sections_ok && u32_be(h.data, 0xe0).is_some_and(gc_addr)
+    h.data.len() >= 0x100
+        && off(0) >= 0x100
+        && len(0) > 0
+        && sections_ok
+        && u32_be(h.data, 0xe0).is_some_and(gc_addr)
 }
 
 declare_format!(pub DOL = "dol", "GameCube/Wii executable (DOL)", ["dol"],
@@ -57,9 +63,18 @@ async fn dol(cx: Cx, input: Input) -> Result<()> {
         if len == 0 {
             continue;
         }
-        let (name, total) = if i < 7 { (format!("Text {i}"), &mut text) } else { (format!("Data {}", i.saturating_sub(7)), &mut data) };
+        let (name, total) = if i < 7 {
+            (format!("Text {i}"), &mut text)
+        } else {
+            (format!("Data {}", i.saturating_sub(7)), &mut data)
+        };
         *total = total.saturating_add(len.into());
-        cx.emit(Node::new(name).span(file.sub(offset.into(), len.into())).value(hex(address.into(), 32)).summary(format!("{} at {address:#010x}", size(len.into()))));
+        cx.emit(
+            Node::new(name)
+                .span(file.sub(offset.into(), len.into()))
+                .value(hex(address.into(), 32))
+                .summary(format!("{} at {address:#010x}", size(len.into()))),
+        );
     }
     cx.annotate(format!(
         "GameCube/Wii DOL, {} text, {} data, {} BSS at {:#010x}, entry {entry:#010x}",
@@ -89,8 +104,17 @@ async fn dol_header(cx: Cx, span: Span) -> Result<()> {
 
 fn vmi_probe(h: &Head<'_>) -> bool {
     h.len == 108
-        && h.data.get(..4).zip(h.data.get(0x50..0x54)).is_some_and(|(sum, name)| sum.iter().zip(name.iter().zip(b"SEGA")).all(|(&s, (&n, &k))| s == n & k))
-        && h.data.get(0x58..0x64).is_some_and(|n| n.iter().all(|&b| b == 0 || (0x20..0x7f).contains(&b)))
+        && h.data
+            .get(..4)
+            .zip(h.data.get(0x50..0x54))
+            .is_some_and(|(sum, name)| {
+                sum.iter()
+                    .zip(name.iter().zip(b"SEGA"))
+                    .all(|(&s, (&n, &k))| s == n & k)
+            })
+        && h.data
+            .get(0x58..0x64)
+            .is_some_and(|n| n.iter().all(|&b| b == 0 || (0x20..0x7f).contains(&b)))
 }
 
 declare_format!(pub VMI = "dreamcast-vmi", "Dreamcast VMU file descriptor (VMI)", ["vmi"],
@@ -142,7 +166,20 @@ async fn vmi(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub SMDH = "smdh", "Nintendo 3DS icon and title data (SMDH)", ["smdh", "icn"],
     "application/x-smdh", Probe::Magic(&[(0, b"SMDH")]), smdh);
 
-const SMDH_LANGUAGES: [&str; 12] = ["Japanese", "English", "French", "German", "Italian", "Spanish", "Simplified Chinese", "Korean", "Dutch", "Portuguese", "Russian", "Traditional Chinese"];
+const SMDH_LANGUAGES: [&str; 12] = [
+    "Japanese",
+    "English",
+    "French",
+    "German",
+    "Italian",
+    "Spanish",
+    "Simplified Chinese",
+    "Korean",
+    "Dutch",
+    "Portuguese",
+    "Russian",
+    "Traditional Chinese",
+];
 const SMDH_REGIONS: FlagTable = &[
     flag(0x01, "JAPAN"),
     flag(0x02, "NORTH_AMERICA"),
@@ -177,7 +214,12 @@ async fn smdh(cx: Cx, input: Input) -> Result<()> {
     let english = cx.read_avail(titles.sub(0x200, 0x200)).await?;
     let short = crate::text::utf16z(english.get(..0x80).unwrap_or_default(), LE).0;
     let publisher = crate::text::utf16z(english.get(0x180..).unwrap_or_default(), LE).0;
-    cx.emit(Node::new("Application titles").span(titles).summary(format!("{short:?} by {publisher}")).lazy(smdh_titles, titles));
+    cx.emit(
+        Node::new("Application titles")
+            .span(titles)
+            .summary(format!("{short:?} by {publisher}"))
+            .lazy(smdh_titles, titles),
+    );
     let settings = cx.block(file.sub(0x2008, 0x30)).await?;
     let mut g = Fields::emitting(&cx, &settings, LE);
     g.bytes("Age ratings", 16).emit()?;
@@ -194,7 +236,11 @@ async fn smdh(cx: Cx, input: Input) -> Result<()> {
     let all = (0..7).map(|i| 1u32 << i).fold(0, |a, b| a | b);
     cx.annotate(format!(
         "3DS SMDH {short:?} by {publisher}, {}",
-        if regions & all == all || regions == 0x7fff_ffff { "region-free".to_owned() } else { format!("regions {regions:#x}") }
+        if regions & all == all || regions == 0x7fff_ffff {
+            "region-free".to_owned()
+        } else {
+            format!("regions {regions:#x}")
+        }
     ));
     Ok(())
 }
@@ -208,8 +254,16 @@ async fn smdh_titles(cx: Cx, titles: Span) -> Result<()> {
         let short = crate::text::utf16z(one.get(..0x80).unwrap_or_default(), LE).0;
         let long = crate::text::utf16z(one.get(0x80..0x180).unwrap_or_default(), LE).0;
         let publisher = crate::text::utf16z(one.get(0x180..).unwrap_or_default(), LE).0;
-        let name = SMDH_LANGUAGES.get(i).map_or_else(|| format!("Language {i}"), |l| (*l).to_owned());
-        cx.push(Node::new(name).span(titles.sub(to_u64(at), 0x200)).value(text(short)).summary(format!("{} / {publisher}", long.replace('\n', " ")))).await;
+        let name = SMDH_LANGUAGES
+            .get(i)
+            .map_or_else(|| format!("Language {i}"), |l| (*l).to_owned());
+        cx.push(
+            Node::new(name)
+                .span(titles.sub(to_u64(at), 0x200))
+                .value(text(short))
+                .summary(format!("{} / {publisher}", long.replace('\n', " "))),
+        )
+        .await;
     }
     Ok(())
 }
@@ -247,12 +301,18 @@ async fn firm(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Section {i}"))
                 .span(file.sub(offset.into(), len.into()))
                 .value(hex(address.into(), 32))
-                .summary(format!("{} at {address:#010x}, {}", size(len.into()), lookup(FIRM_COPY, copy.into()).unwrap_or("unknown copy method")))
+                .summary(format!(
+                    "{} at {address:#010x}, {}",
+                    size(len.into()),
+                    lookup(FIRM_COPY, copy.into()).unwrap_or("unknown copy method")
+                ))
                 .target(file.sub(0x40u64.saturating_add(to_u64(base)), 0x30)),
         );
     }
     cx.emit(Node::new("RSA-2048 signature").span(file.sub(0x100, 0x100)));
-    cx.annotate(format!("3DS FIRM, {sections} sections, ARM9 entry {arm9:#010x}, ARM11 entry {arm11:#010x}"));
+    cx.annotate(format!(
+        "3DS FIRM, {sections} sections, ARM9 entry {arm9:#010x}, ARM11 entry {arm11:#010x}"
+    ));
     Ok(())
 }
 
@@ -303,7 +363,10 @@ record! {
 }
 
 fn kip_total(h: &KipHeader) -> u64 {
-    KipHeader::SIZE.saturating_add(h.text_compressed.into()).saturating_add(h.ro_compressed.into()).saturating_add(h.data_compressed.into())
+    KipHeader::SIZE
+        .saturating_add(h.text_compressed.into())
+        .saturating_add(h.ro_compressed.into())
+        .saturating_add(h.data_compressed.into())
 }
 
 async fn kip1(cx: Cx, input: Input) -> Result<()> {
@@ -312,8 +375,17 @@ async fn kip1(cx: Cx, input: Input) -> Result<()> {
     let h: KipHeader = read_record(&cx, span, LE).await?;
     cx.emit(KipHeader::node("Header", span, LE));
     let mut at = KipHeader::SIZE;
-    for (i, (name, len)) in [(".text", h.text_compressed), (".rodata", h.ro_compressed), (".data", h.data_compressed)].into_iter().enumerate() {
-        let mut node = Node::new(name).span(file.sub(at, len.into())).summary(size(len.into()));
+    for (i, (name, len)) in [
+        (".text", h.text_compressed),
+        (".rodata", h.ro_compressed),
+        (".data", h.data_compressed),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut node = Node::new(name)
+            .span(file.sub(at, len.into()))
+            .summary(size(len.into()));
         if h.flags & (1u8 << i) != 0 {
             node = node.diag(Diagnostic::unsupported("BLZ (backwards LZ) compression"));
         }
@@ -325,7 +397,11 @@ async fn kip1(cx: Cx, input: Input) -> Result<()> {
         clean(&h.name),
         h.program,
         h.version,
-        size(u64::from(h.text_size).saturating_add(h.ro_size.into()).saturating_add(h.data_size.into())),
+        size(
+            u64::from(h.text_size)
+                .saturating_add(h.ro_size.into())
+                .saturating_add(h.data_size.into())
+        ),
         if h.flags & 7 != 0 { ", compressed" } else { "" }
     ));
     Ok(())
@@ -343,13 +419,22 @@ async fn ini1(cx: Cx, input: Input) -> Result<()> {
     let mut names = Vec::new();
     for _ in 0..count.min(256) {
         let span = file.sub(at, KipHeader::SIZE);
-        let Ok(h) = read_record::<KipHeader>(&cx, span, LE).await else { break };
+        let Ok(h) = read_record::<KipHeader>(&cx, span, LE).await else {
+            break;
+        };
         let len = kip_total(&h);
         names.push(clean(&h.name));
-        cx.push(embedded_as(clean(&h.name), input.nested(file.sub(at, len)), &KIP1).summary(size(len))).await;
+        cx.push(
+            embedded_as(clean(&h.name), input.nested(file.sub(at, len)), &KIP1).summary(size(len)),
+        )
+        .await;
         at = at.saturating_add(len);
     }
-    cx.annotate(format!("INI1, {count} processes ({}), {}", names.join(", "), size(total.into())));
+    cx.annotate(format!(
+        "INI1, {count} processes ({}), {}",
+        names.join(", "),
+        size(total.into())
+    ));
     Ok(())
 }
 
@@ -401,8 +486,19 @@ async fn stfs(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let magic = cx.read(file.sub(0, 4)).await?;
     let magic = String::from_utf8_lossy(&magic).into_owned();
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(text(magic.clone())));
-    cx.emit(Node::new(if magic == "CON " { "Console certificate and signature" } else { "Package signature" }).span(file.sub(4, 0x228)));
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(text(magic.clone())),
+    );
+    cx.emit(
+        Node::new(if magic == "CON " {
+            "Console certificate and signature"
+        } else {
+            "Package signature"
+        })
+        .span(file.sub(4, 0x228)),
+    );
     cx.emit(Node::new("License entries").span(file.sub(0x22c, 0x100)));
     let meta = cx.block(file.sub(0x32c, 0x79)).await?;
     let mut f = Fields::emitting(&cx, &meta, BE);
@@ -428,18 +524,40 @@ async fn stfs(cx: Cx, input: Input) -> Result<()> {
     let description = utf16be(strings.get(0x900..0x980).unwrap_or_default());
     let publisher = utf16be(strings.get(0x1200..0x1280).unwrap_or_default());
     let title = utf16be(strings.get(0x1280..0x1300).unwrap_or_default());
-    cx.emit(Node::new("Display name").span(file.sub(0x411, 0x80)).value(text(display.clone())));
-    cx.emit(Node::new("Display description").span(file.sub(0xd11, 0x80)).value(text(description)));
-    cx.emit(Node::new("Publisher").span(file.sub(0x1611, 0x80)).value(text(publisher.clone())));
-    cx.emit(Node::new("Title name").span(file.sub(0x1691, 0x80)).value(text(title.clone())));
+    cx.emit(
+        Node::new("Display name")
+            .span(file.sub(0x411, 0x80))
+            .value(text(display.clone())),
+    );
+    cx.emit(
+        Node::new("Display description")
+            .span(file.sub(0xd11, 0x80))
+            .value(text(description)),
+    );
+    cx.emit(
+        Node::new("Publisher")
+            .span(file.sub(0x1611, 0x80))
+            .value(text(publisher.clone())),
+    );
+    cx.emit(
+        Node::new("Title name")
+            .span(file.sub(0x1691, 0x80))
+            .value(text(title.clone())),
+    );
     let sizes = cx.read_avail(file.sub(0x1712, 8)).await?;
     let thumb = u64::from(u32_be(&sizes, 0).unwrap_or(0));
     let title_thumb = u64::from(u32_be(&sizes, 4).unwrap_or(0));
     if thumb > 0 {
-        cx.emit(embedded("Thumbnail", input.nested(file.sub(0x171a, thumb.min(0x4000)))));
+        cx.emit(embedded(
+            "Thumbnail",
+            input.nested(file.sub(0x171a, thumb.min(0x4000))),
+        ));
     }
     if title_thumb > 0 {
-        cx.emit(embedded("Title thumbnail", input.nested(file.sub(0x571a, title_thumb.min(0x4000)))));
+        cx.emit(embedded(
+            "Title thumbnail",
+            input.nested(file.sub(0x571a, title_thumb.min(0x4000))),
+        ));
     }
     cx.emit(Node::new("Hash tables and file data").span(file.tail(0xa000)));
     cx.annotate(format!(
@@ -460,7 +578,14 @@ const XISO_SECTOR: u64 = 2048;
 declare_format!(pub XISO = "xiso", "Xbox DVD file system image (XISO)", ["iso", "xiso"],
     "application/x-xiso", Probe::Magic(&[(0x10000, XISO_MAGIC)]), xiso);
 
-const XISO_ATTRS: FlagTable = &[flag(0x01, "READ_ONLY"), flag(0x02, "HIDDEN"), flag(0x04, "SYSTEM"), flag(0x10, "DIRECTORY"), flag(0x20, "ARCHIVE"), flag(0x80, "NORMAL")];
+const XISO_ATTRS: FlagTable = &[
+    flag(0x01, "READ_ONLY"),
+    flag(0x02, "HIDDEN"),
+    flag(0x04, "SYSTEM"),
+    flag(0x10, "DIRECTORY"),
+    flag(0x20, "ARCHIVE"),
+    flag(0x80, "NORMAL"),
+];
 
 async fn xiso(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -471,8 +596,14 @@ async fn xiso(cx: Cx, input: Input) -> Result<()> {
     let root_len = f.u32("Root directory size").emit()?;
     f.u64("Creation time").filetime().emit()?;
     let dir = file.sub(u64::from(root).saturating_mul(XISO_SECTOR), root_len.into());
-    cx.emit(Node::new("/").span(dir).lazy(crate::expander!(self::xiso_dir: (Input, Span, u32)), (input, dir, 0u32)));
-    cx.annotate(format!("Xbox XDVDFS image, root directory at sector {root} ({root_len} bytes), {}", size(file.len)));
+    cx.emit(Node::new("/").span(dir).lazy(
+        crate::expander!(self::xiso_dir: (Input, Span, u32)),
+        (input, dir, 0u32),
+    ));
+    cx.annotate(format!(
+        "Xbox XDVDFS image, root directory at sector {root} ({root_len} bytes), {}",
+        size(file.len)
+    ));
     Ok(())
 }
 
@@ -492,17 +623,36 @@ async fn xiso_dir(cx: Cx, (input, dir, depth): (Input, Span, u32)) -> Result<()>
         let len = u64::from(u32_le(&raw, pos.saturating_add(8)).unwrap_or(0));
         let attrs = raw.get(pos.saturating_add(12)).copied().unwrap_or(0);
         let name_len = usize::from(raw.get(pos.saturating_add(13)).copied().unwrap_or(0));
-        let name = String::from_utf8_lossy(raw.get(pos.saturating_add(14)..pos.saturating_add(14).saturating_add(name_len)).unwrap_or_default()).into_owned();
+        let name = String::from_utf8_lossy(
+            raw.get(pos.saturating_add(14)..pos.saturating_add(14).saturating_add(name_len))
+                .unwrap_or_default(),
+        )
+        .into_owned();
         let entry = dir.sub(to_u64(pos), to_u64(name_len).saturating_add(14));
         let data = file.sub(sector.saturating_mul(XISO_SECTOR), len);
         let (set, unknown) = crate::value::decode_flags(XISO_ATTRS, attrs.into());
         let node = if attrs & 0x10 != 0 {
-            Node::new(format!("{name}/")).span(data).lazy(crate::expander!(self::xiso_dir: (Input, Span, u32)), (input, data, depth.saturating_add(1)))
+            Node::new(format!("{name}/")).span(data).lazy(
+                crate::expander!(self::xiso_dir: (Input, Span, u32)),
+                (input, data, depth.saturating_add(1)),
+            )
         } else {
             embedded(name.clone(), input.nested(data)).summary(size(len))
         };
-        cx.push(node.value(Value::Flags { raw: attrs.into(), bits: 8, set, unknown }).target(entry)).await;
-        pos = pos.saturating_add(14).saturating_add(name_len).next_multiple_of(4);
+        cx.push(
+            node.value(Value::Flags {
+                raw: attrs.into(),
+                bits: 8,
+                set,
+                unknown,
+            })
+            .target(entry),
+        )
+        .await;
+        pos = pos
+            .saturating_add(14)
+            .saturating_add(name_len)
+            .next_multiple_of(4);
     }
     Ok(())
 }

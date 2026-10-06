@@ -25,8 +25,21 @@ const MAX_BLOB: u64 = 16 << 20;
 declare_format!(pub PMTILES = "pmtiles", "PMTiles tile archive", ["pmtiles"], "application/vnd.pmtiles",
     Probe::Magic(&[(0, b"PMTiles\x03")]), pmtiles);
 
-const COMPRESSION: EnumTable = &[(0, "unknown"), (1, "none"), (2, "gzip"), (3, "brotli"), (4, "zstd")];
-const TILE_TYPES: EnumTable = &[(0, "unknown"), (1, "mvt"), (2, "png"), (3, "jpeg"), (4, "webp"), (5, "avif")];
+const COMPRESSION: EnumTable = &[
+    (0, "unknown"),
+    (1, "none"),
+    (2, "gzip"),
+    (3, "brotli"),
+    (4, "zstd"),
+];
+const TILE_TYPES: EnumTable = &[
+    (0, "unknown"),
+    (1, "mvt"),
+    (2, "png"),
+    (3, "jpeg"),
+    (4, "webp"),
+    (5, "avif"),
+];
 
 fn e7(v: i32) -> String {
     format!("{:.7}°", f64::from(v) / 1e7)
@@ -118,19 +131,33 @@ async fn pmtiles(cx: Cx, input: Input) -> Result<()> {
     };
     let root = file.sub(h.root_offset, h.root_len);
     if state.plain {
-        cx.emit(Node::new("Root directory").span(root).lazy(directory, (state, root, Path::new())));
+        cx.emit(
+            Node::new("Root directory")
+                .span(root)
+                .lazy(directory, (state, root, Path::new())),
+        );
     } else {
         cx.emit(embedded("Root directory (compressed)", input.nested(root)));
     }
     if h.meta_len > 0 {
-        cx.emit(embedded("Metadata", input.nested(file.sub(h.meta_offset, h.meta_len))));
+        cx.emit(embedded(
+            "Metadata",
+            input.nested(file.sub(h.meta_offset, h.meta_len)),
+        ));
     }
     if h.leaf_len > 0 {
         cx.emit(Node::new("Leaf directories").span(state.leaves));
     }
-    cx.emit(Node::new("Tile data").span(state.data).summary(format!("{} tiles", h.contents)));
+    cx.emit(
+        Node::new("Tile data")
+            .span(state.data)
+            .summary(format!("{} tiles", h.contents)),
+    );
     let kind = crate::value::lookup(TILE_TYPES, h.tile_type.into()).unwrap_or("unknown");
-    cx.annotate(format!("PMTiles v{}, {} {kind} tiles, zoom {}–{}", h.version, h.addressed, h.min_zoom, h.max_zoom));
+    cx.annotate(format!(
+        "PMTiles v{}, {} {kind} tiles, zoom {}–{}",
+        h.version, h.addressed, h.min_zoom, h.max_zoom
+    ));
     Ok(())
 }
 
@@ -161,7 +188,11 @@ fn decode_directory(data: &[u8]) -> Option<Vec<(u64, u64, u64, u64)>> {
     for i in 0..n {
         let v = varint(data, &mut at)?;
         let len = *lens.get(i)?;
-        let off = if v == 0 && i > 0 { prev_off.checked_add(prev_len)? } else { v.checked_sub(1)? };
+        let off = if v == 0 && i > 0 {
+            prev_off.checked_add(prev_len)?
+        } else {
+            v.checked_sub(1)?
+        };
         out.push((*ids.get(i)?, off, len, *runs.get(i)?));
         (prev_off, prev_len) = (off, len);
     }
@@ -173,7 +204,8 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
         return Err(Diagnostic::limit("directory too large").at(dir));
     }
     let data = cx.read(dir).await?;
-    let entries = decode_directory(&data).ok_or_else(|| Diagnostic::malformed("malformed directory").at(dir))?;
+    let entries = decode_directory(&data)
+        .ok_or_else(|| Diagnostic::malformed("malformed directory").at(dir))?;
     cx.set_count(crate::node::Count::Exact(to_u64(entries.len())));
     for (i, (id, off, len, run)) in entries.into_iter().enumerate() {
         if run == 0 {
@@ -181,9 +213,17 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
             let node = match path.enter(to_u64(i).saturating_add(dir.offset), 4) {
                 Ok(child) if state.plain => Node::new(format!("Leaf directory from tile {id}"))
                     .span(span)
-                    .lazy(crate::expander!(self::directory: (PmState, Span, Path)), (state, span, child)),
-                Ok(_) => embedded(format!("Leaf directory from tile {id}"), state.input.nested(span)),
-                Err(e) => Node::new(format!("Leaf directory from tile {id}")).span(span).diag(e),
+                    .lazy(
+                        crate::expander!(self::directory: (PmState, Span, Path)),
+                        (state, span, child),
+                    ),
+                Ok(_) => embedded(
+                    format!("Leaf directory from tile {id}"),
+                    state.input.nested(span),
+                ),
+                Err(e) => Node::new(format!("Leaf directory from tile {id}"))
+                    .span(span)
+                    .diag(e),
             };
             cx.push(node).await;
             continue;
@@ -193,8 +233,13 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
             Some((z, x, y)) => format!("Tile {z}/{x}/{y}"),
             None => format!("Tile {id}"),
         };
-        let summary = if run > 1 { format!("{len} bytes, repeated for {run} tiles") } else { format!("{len} bytes") };
-        cx.push(embedded(name, state.input.nested(span)).summary(summary)).await;
+        let summary = if run > 1 {
+            format!("{len} bytes, repeated for {run} tiles")
+        } else {
+            format!("{len} bytes")
+        };
+        cx.push(embedded(name, state.input.nested(span)).summary(summary))
+            .await;
     }
     Ok(())
 }
@@ -206,16 +251,42 @@ declare_format!(pub FLATGEOBUF = "flatgeobuf", "FlatGeobuf", ["fgb"], "applicati
     Probe::Custom(|h| h.starts_with(b"fgb\x03fgb") && h.data.get(7).is_some_and(|&b| b <= 4)), flatgeobuf);
 
 const GEOMETRY_TYPES: EnumTable = &[
-    (0, "Unknown"), (1, "Point"), (2, "LineString"), (3, "Polygon"), (4, "MultiPoint"),
-    (5, "MultiLineString"), (6, "MultiPolygon"), (7, "GeometryCollection"), (8, "CircularString"),
-    (9, "CompoundCurve"), (10, "CurvePolygon"), (11, "MultiCurve"), (12, "MultiSurface"),
-    (13, "Curve"), (14, "Surface"), (15, "PolyhedralSurface"), (16, "TIN"), (17, "Triangle"),
+    (0, "Unknown"),
+    (1, "Point"),
+    (2, "LineString"),
+    (3, "Polygon"),
+    (4, "MultiPoint"),
+    (5, "MultiLineString"),
+    (6, "MultiPolygon"),
+    (7, "GeometryCollection"),
+    (8, "CircularString"),
+    (9, "CompoundCurve"),
+    (10, "CurvePolygon"),
+    (11, "MultiCurve"),
+    (12, "MultiSurface"),
+    (13, "Curve"),
+    (14, "Surface"),
+    (15, "PolyhedralSurface"),
+    (16, "TIN"),
+    (17, "Triangle"),
 ];
 
 const COLUMN_TYPES: EnumTable = &[
-    (0, "Byte"), (1, "UByte"), (2, "Bool"), (3, "Short"), (4, "UShort"), (5, "Int"), (6, "UInt"),
-    (7, "Long"), (8, "ULong"), (9, "Float"), (10, "Double"), (11, "String"), (12, "Json"),
-    (13, "DateTime"), (14, "Binary"),
+    (0, "Byte"),
+    (1, "UByte"),
+    (2, "Bool"),
+    (3, "Short"),
+    (4, "UShort"),
+    (5, "Int"),
+    (6, "UInt"),
+    (7, "Long"),
+    (8, "ULong"),
+    (9, "Float"),
+    (10, "Double"),
+    (11, "String"),
+    (12, "Json"),
+    (13, "DateTime"),
+    (14, "Binary"),
 ];
 
 /// Column names and types from the header, for decoding properties.
@@ -241,7 +312,11 @@ fn index_size(features: u64, node_size: u16) -> Option<u64> {
 
 async fn flatgeobuf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(leaf("Magic", file.sub(0, 8), Value::Bytes(cx.read(file.sub(0, 8)).await?)));
+    cx.emit(leaf(
+        "Magic",
+        file.sub(0, 8),
+        Value::Bytes(cx.read(file.sub(0, 8)).await?),
+    ));
     let size = u64::from(u32_le(&cx.read(file.sub(8, 4)).await?, 0).unwrap_or(0));
     cx.emit(leaf("Header size", file.sub(8, 4), uint(size, 32)));
     if size > MAX_BLOB {
@@ -258,22 +333,46 @@ async fn flatgeobuf(cx: Cx, input: Input) -> Result<()> {
     if let Some((n, start)) = root.vector(&buf, 7, 4) {
         for j in 0..n.min(4096) {
             if let Some(t) = FbTable::vector_table(&buf, start, j) {
-                columns.push((t.string(&buf, 0).map(|s| s.0).unwrap_or_default(), t.u8(&buf, 1).unwrap_or(0)));
+                columns.push((
+                    t.string(&buf, 0).map(|s| s.0).unwrap_or_default(),
+                    t.u8(&buf, 1).unwrap_or(0),
+                ));
             }
         }
     }
     let columns: Columns = std::sync::Arc::new(columns);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{} columns", columns.len())).lazy(fgb_header, hspan));
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{} columns", columns.len()))
+            .lazy(fgb_header, hspan),
+    );
 
     let index = index_size(features, node_size).unwrap_or(u64::MAX);
     let index_at = 12u64.saturating_add(size);
     if index > 0 {
-        cx.emit(Node::new("Spatial index").span(file.sub(index_at, index)).summary(format!("packed Hilbert R-tree, node size {node_size}")));
+        cx.emit(
+            Node::new("Spatial index")
+                .span(file.sub(index_at, index))
+                .summary(format!("packed Hilbert R-tree, node size {node_size}")),
+        );
     }
     let data = file.tail(index_at.saturating_add(index));
-    cx.emit(Node::new("Features").span(data).summary(format!("{features} features")).lazy(fgb_features, (data, columns)));
+    cx.emit(
+        Node::new("Features")
+            .span(data)
+            .summary(format!("{features} features"))
+            .lazy(fgb_features, (data, columns)),
+    );
     let geom = crate::value::lookup(GEOMETRY_TYPES, gtype.into()).unwrap_or("unknown");
-    cx.annotate(format!("FlatGeobuf {}, {features} {geom} features", if name.is_empty() { "layer".to_owned() } else { format!("layer {name:?}") }));
+    cx.annotate(format!(
+        "FlatGeobuf {}, {features} {geom} features",
+        if name.is_empty() {
+            "layer".to_owned()
+        } else {
+            format!("layer {name:?}")
+        }
+    ));
     Ok(())
 }
 
@@ -281,7 +380,12 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
     let buf = cx.read(hspan).await?;
     let root = fb_root(&buf).ok_or_else(|| Diagnostic::malformed("bad header table").at(hspan))?;
     let at = |pos: usize, len: usize| hspan.sub(to_u64(pos), to_u64(len));
-    for (i, label) in [(0usize, "Name"), (11, "Title"), (12, "Description"), (13, "Metadata")] {
+    for (i, label) in [
+        (0usize, "Name"),
+        (11, "Title"),
+        (12, "Description"),
+        (13, "Metadata"),
+    ] {
         if let Some((s, a, b)) = root.string(&buf, i) {
             cx.emit(leaf(label, at(a, b.saturating_sub(a)), text(s)));
         }
@@ -291,26 +395,51 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
             .filter_map(|j| u64_le(&buf, start.saturating_add(j.saturating_mul(8))))
             .map(|b| format!("{}", f64::from_bits(b)))
             .collect();
-        cx.emit(Node::new("Envelope").span(at(start, n.saturating_mul(8))).summary(format!("[{}]", v.join(", "))));
+        cx.emit(
+            Node::new("Envelope")
+                .span(at(start, n.saturating_mul(8)))
+                .summary(format!("[{}]", v.join(", "))),
+        );
     }
     if let Some(p) = root.field(&buf, 2) {
-        cx.emit(leaf("Geometry type", at(p, 1), enumv(GEOMETRY_TYPES, root.u8(&buf, 2).unwrap_or(0).into(), 8)));
+        cx.emit(leaf(
+            "Geometry type",
+            at(p, 1),
+            enumv(GEOMETRY_TYPES, root.u8(&buf, 2).unwrap_or(0).into(), 8),
+        ));
     }
     for (i, label) in [(3usize, "Has Z"), (4, "Has M"), (5, "Has T"), (6, "Has TM")] {
         if let Some(p) = root.field(&buf, i) {
-            cx.emit(leaf(label, at(p, 1), Value::Bool(root.u8(&buf, i).unwrap_or(0) != 0)));
+            cx.emit(leaf(
+                label,
+                at(p, 1),
+                Value::Bool(root.u8(&buf, i).unwrap_or(0) != 0),
+            ));
         }
     }
     if let Some(p) = root.field(&buf, 8) {
-        cx.emit(leaf("Features count", at(p, 8), uint(root.u64(&buf, 8).unwrap_or(0), 64)));
+        cx.emit(leaf(
+            "Features count",
+            at(p, 8),
+            uint(root.u64(&buf, 8).unwrap_or(0), 64),
+        ));
     }
     if let Some(p) = root.field(&buf, 9) {
-        cx.emit(leaf("Index node size", at(p, 2), uint(root.u16(&buf, 9).unwrap_or(0).into(), 16)));
+        cx.emit(leaf(
+            "Index node size",
+            at(p, 2),
+            uint(root.u16(&buf, 9).unwrap_or(0).into(), 16),
+        ));
     }
     if let Some(crs) = root.table(&buf, 10) {
-        let org = crs.string(&buf, 0).map(|s| s.0).unwrap_or_else(|| "EPSG".to_owned());
+        let org = crs
+            .string(&buf, 0)
+            .map(|s| s.0)
+            .unwrap_or_else(|| "EPSG".to_owned());
         let code = crs.i32(&buf, 1).unwrap_or(0);
-        let mut node = Node::new("CRS").span(at(crs.pos, 4)).value(text(format!("{org}:{code}")));
+        let mut node = Node::new("CRS")
+            .span(at(crs.pos, 4))
+            .value(text(format!("{org}:{code}")));
         if let Some((name, _, _)) = crs.string(&buf, 2) {
             node = node.summary(name);
         }
@@ -318,10 +447,16 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
     }
     if let Some((n, start)) = root.vector(&buf, 7, 4) {
         for j in 0..n.min(4096) {
-            let Some(t) = FbTable::vector_table(&buf, start, j) else { continue };
+            let Some(t) = FbTable::vector_table(&buf, start, j) else {
+                continue;
+            };
             let name = t.string(&buf, 0).map(|s| s.0).unwrap_or_default();
             let ty = t.u8(&buf, 1).unwrap_or(0);
-            cx.emit(Node::new(format!("Column {name}")).span(at(t.pos, 4)).value(enumv(COLUMN_TYPES, ty.into(), 8)));
+            cx.emit(
+                Node::new(format!("Column {name}"))
+                    .span(at(t.pos, 4))
+                    .value(enumv(COLUMN_TYPES, ty.into(), 8)),
+            );
         }
     }
     Ok(())
@@ -335,7 +470,10 @@ async fn fgb_features(cx: Cx, (data, columns): (Span, Columns)) -> Result<()> {
         let size = u64::from(cur.u32().await?);
         let body = cur.span(size);
         if body.len < size {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, size), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, size),
+                body.len,
+            ));
         }
         cur.skip(size);
         let mut node = Node::new(format!("Feature {i}")).span(cur.since(start));
@@ -345,7 +483,8 @@ async fn fgb_features(cx: Cx, (data, columns): (Span, Columns)) -> Result<()> {
                 node = node.summary(summary);
             }
         }
-        cx.push(node.lazy(fgb_feature, (body, columns.clone()))).await;
+        cx.push(node.lazy(fgb_feature, (body, columns.clone())))
+            .await;
         i = i.saturating_add(1);
     }
     Ok(())
@@ -357,7 +496,10 @@ fn feature_summary(buf: &[u8], columns: &Columns) -> Option<String> {
     let g = f.table(buf, 0)?;
     let ty = g.u8(buf, 6).unwrap_or(0);
     let points = g.vector(buf, 1, 8).map_or(0, |v| v.0 / 2);
-    let mut s = format!("{}, {points} points", crate::value::lookup(GEOMETRY_TYPES, ty.into()).unwrap_or("geometry"));
+    let mut s = format!(
+        "{}, {points} points",
+        crate::value::lookup(GEOMETRY_TYPES, ty.into()).unwrap_or("geometry")
+    );
     let props = properties(buf, columns);
     if let Some((name, value, _)) = props.first() {
         s.push_str(&format!(", {name}={}", crate::render::value(value)));
@@ -369,14 +511,20 @@ fn feature_summary(buf: &[u8], columns: &Columns) -> Option<String> {
 fn properties(buf: &[u8], columns: &Columns) -> Vec<(String, Value, (usize, usize))> {
     let mut out = Vec::new();
     let Some(f) = fb_root(buf) else { return out };
-    let Some((n, start)) = f.vector(buf, 1, 1) else { return out };
+    let Some((n, start)) = f.vector(buf, 1, 1) else {
+        return out;
+    };
     let props = buf.get(start..start.saturating_add(n)).unwrap_or_default();
     let mut at = 0usize;
     while at.saturating_add(2) <= props.len() && out.len() < 4096 {
         let begin = at;
-        let Some(col) = crate::bytes::u16_le(props, at) else { break };
+        let Some(col) = crate::bytes::u16_le(props, at) else {
+            break;
+        };
         at = at.saturating_add(2);
-        let Some((name, ty)) = columns.get(usize::from(col)) else { break };
+        let Some((name, ty)) = columns.get(usize::from(col)) else {
+            break;
+        };
         let width = match ty {
             0..=2 => 1,
             3 | 4 => 2,
@@ -388,11 +536,19 @@ fn properties(buf: &[u8], columns: &Columns) -> Vec<(String, Value, (usize, usiz
             let Some(len) = u32_le(props, at) else { break };
             at = at.saturating_add(4);
             let end = at.saturating_add(to_usize(len.into()));
-            let Some(bytes) = props.get(at..end) else { break };
+            let Some(bytes) = props.get(at..end) else {
+                break;
+            };
             at = end;
-            if *ty == 14 { Value::Bytes(bytes.to_vec()) } else { Value::Text(String::from_utf8_lossy(bytes).into_owned()) }
+            if *ty == 14 {
+                Value::Bytes(bytes.to_vec())
+            } else {
+                Value::Text(String::from_utf8_lossy(bytes).into_owned())
+            }
         } else {
-            let Some(bytes) = props.get(at..at.saturating_add(width)) else { break };
+            let Some(bytes) = props.get(at..at.saturating_add(width)) else {
+                break;
+            };
             at = at.saturating_add(width);
             let mut raw = 0u64;
             for &b in bytes.iter().rev() {
@@ -405,12 +561,19 @@ fn properties(buf: &[u8], columns: &Columns) -> Vec<(String, Value, (usize, usiz
                 10 => Value::Float(f64::from_bits(raw)),
                 0 | 3 | 5 | 7 => {
                     let shift = 64u32.saturating_sub(u32::from(bits));
-                    Value::Int { value: (raw.cast_signed() << shift) >> shift, bits }
+                    Value::Int {
+                        value: (raw.cast_signed() << shift) >> shift,
+                        bits,
+                    }
                 }
                 _ => uint(raw, bits),
             }
         };
-        out.push((name.clone(), value, (start.saturating_add(begin), start.saturating_add(at))));
+        out.push((
+            name.clone(),
+            value,
+            (start.saturating_add(begin), start.saturating_add(at)),
+        ));
     }
     out
 }
@@ -423,13 +586,19 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
     let f = fb_root(&buf).ok_or_else(|| Diagnostic::malformed("bad feature table").at(body))?;
     if let Some(g) = f.table(&buf, 0) {
         let ty = g.u8(&buf, 6).unwrap_or(0);
-        let mut node = Node::new("Geometry").span(body.sub(to_u64(g.pos), 4)).value(enumv(GEOMETRY_TYPES, ty.into(), 8));
+        let mut node = Node::new("Geometry")
+            .span(body.sub(to_u64(g.pos), 4))
+            .value(enumv(GEOMETRY_TYPES, ty.into(), 8));
         if let Some((n, start)) = g.vector(&buf, 1, 8) {
             let n = n / 2;
             let coords: Vec<String> = (0..n.min(4))
                 .filter_map(|j| {
                     let p = start.saturating_add(j.saturating_mul(16));
-                    Some(format!("({}, {})", f64::from_bits(u64_le(&buf, p)?), f64::from_bits(u64_le(&buf, p.saturating_add(8))?)))
+                    Some(format!(
+                        "({}, {})",
+                        f64::from_bits(u64_le(&buf, p)?),
+                        f64::from_bits(u64_le(&buf, p.saturating_add(8))?)
+                    ))
                 })
                 .collect();
             let more = if n > 4 { ", …" } else { "" };
@@ -441,7 +610,11 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
         cx.emit(node);
     }
     for (name, value, (a, b)) in properties(&buf, &columns) {
-        cx.emit(leaf(name, body.sub(to_u64(a), to_u64(b.saturating_sub(a))), value));
+        cx.emit(leaf(
+            name,
+            body.sub(to_u64(a), to_u64(b.saturating_sub(a))),
+            value,
+        ));
     }
     Ok(())
 }
@@ -451,10 +624,18 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
 
 /// Whether `layer` parses as a vector-tile layer (version and name).
 fn is_layer(layer: &[u8]) -> bool {
-    let Some(fields) = pb_fields(layer) else { return false };
-    let version = fields.iter().any(|f| f.number == 15 && f.wire == 0 && matches!(f.value, 1 | 2));
+    let Some(fields) = pb_fields(layer) else {
+        return false;
+    };
+    let version = fields
+        .iter()
+        .any(|f| f.number == 15 && f.wire == 0 && matches!(f.value, 1 | 2));
     let name = fields.iter().any(|f| f.number == 1 && f.wire == 2);
-    version && name && fields.iter().all(|f| matches!((f.number, f.wire), (1..=4, 2) | (5 | 15, 0)))
+    version
+        && name
+        && fields
+            .iter()
+            .all(|f| matches!((f.number, f.wire), (1..=4, 2) | (5 | 15, 0)))
 }
 
 fn mvt_probe(h: &Head<'_>) -> bool {
@@ -480,7 +661,12 @@ fn mvt_probe(h: &Head<'_>) -> bool {
 declare_format!(pub MVT = "mvt", "Mapbox vector tile", ["mvt", "pbf"], "application/vnd.mapbox-vector-tile",
     Probe::Custom(mvt_probe), mvt);
 
-const GEOM_TYPES: EnumTable = &[(0, "UNKNOWN"), (1, "POINT"), (2, "LINESTRING"), (3, "POLYGON")];
+const GEOM_TYPES: EnumTable = &[
+    (0, "UNKNOWN"),
+    (1, "POINT"),
+    (2, "LINESTRING"),
+    (3, "POLYGON"),
+];
 
 async fn mvt(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -497,7 +683,8 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(to_u64(f.start), to_u64(f.end.saturating_sub(f.start)));
         let body = file.sub(to_u64(f.body), to_u64(f.end.saturating_sub(f.body)));
         if f.number != 3 {
-            cx.push(Node::new(format!("Field {}", f.number)).span(span)).await;
+            cx.push(Node::new(format!("Field {}", f.number)).span(span))
+                .await;
             continue;
         }
         let layer = pb_fields(f.payload(&data)).unwrap_or_default();
@@ -509,22 +696,40 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
             .unwrap_or_default();
         let features = layer.iter().filter(|l| l.number == 2).count();
         names.push(name.clone());
-        cx.push(Node::new(format!("Layer {name}")).span(span).summary(format!("{features} features")).lazy(mvt_layer, body)).await;
+        cx.push(
+            Node::new(format!("Layer {name}"))
+                .span(span)
+                .summary(format!("{features} features"))
+                .lazy(mvt_layer, body),
+        )
+        .await;
     }
-    cx.annotate(format!("vector tile, {} layers: {}", names.len(), names.join(", ")));
+    cx.annotate(format!(
+        "vector tile, {} layers: {}",
+        names.len(),
+        names.join(", ")
+    ));
     Ok(())
 }
 
 /// A tile value message as a value.
 fn mvt_value(v: &[u8]) -> Value {
-    let Some(f) = pb_fields(v).and_then(|f| f.into_iter().next()) else { return Value::Bytes(v.to_vec()) };
+    let Some(f) = pb_fields(v).and_then(|f| f.into_iter().next()) else {
+        return Value::Bytes(v.to_vec());
+    };
     match (f.number, f.wire) {
         (1, 2) => Value::Text(String::from_utf8_lossy(f.payload(v)).into_owned()),
         (2, 5) => Value::Float(f32::from_bits(u32::try_from(f.value).unwrap_or(0)).into()),
         (3, 1) => Value::Float(f64::from_bits(f.value)),
-        (4, 0) => Value::Int { value: f.value.cast_signed(), bits: 64 },
+        (4, 0) => Value::Int {
+            value: f.value.cast_signed(),
+            bits: 64,
+        },
         (5, 0) => uint(f.value, 64),
-        (6, 0) => Value::Int { value: zigzag(f.value), bits: 64 },
+        (6, 0) => Value::Int {
+            value: zigzag(f.value),
+            bits: 64,
+        },
         (7, 0) => Value::Bool(f.value != 0),
         _ => Value::Bytes(v.to_vec()),
     }
@@ -535,7 +740,9 @@ fn packed(data: &[u8]) -> Vec<u64> {
     let mut at = 0usize;
     let mut out = Vec::new();
     while at < data.len() {
-        let Some(v) = varint(data, &mut at) else { break };
+        let Some(v) = varint(data, &mut at) else {
+            break;
+        };
         out.push(v);
     }
     out
@@ -547,7 +754,11 @@ fn geometry_summary(cmds: &[u64]) -> String {
     while let Some(&c) = cmds.get(i) {
         let (id, count) = (c & 7, c >> 3);
         ops = ops.saturating_add(1);
-        let params = if matches!(id, 1 | 2) { count.saturating_mul(2) } else { 0 };
+        let params = if matches!(id, 1 | 2) {
+            count.saturating_mul(2)
+        } else {
+            0
+        };
         if matches!(id, 1 | 2) {
             points = points.saturating_add(count);
         }
@@ -559,24 +770,52 @@ fn geometry_summary(cmds: &[u64]) -> String {
 async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     let data = cx.read(body).await?;
     let fields = pb_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
-    let keys: Vec<String> = fields.iter().filter(|f| f.number == 3).map(|f| String::from_utf8_lossy(f.payload(&data)).into_owned()).collect();
-    let values: Vec<Value> = fields.iter().filter(|f| f.number == 4).map(|f| mvt_value(f.payload(&data))).collect();
+    let keys: Vec<String> = fields
+        .iter()
+        .filter(|f| f.number == 3)
+        .map(|f| String::from_utf8_lossy(f.payload(&data)).into_owned())
+        .collect();
+    let values: Vec<Value> = fields
+        .iter()
+        .filter(|f| f.number == 4)
+        .map(|f| mvt_value(f.payload(&data)))
+        .collect();
     let mut index = 0u64;
     for f in &fields {
         let span = body.sub(to_u64(f.start), to_u64(f.end.saturating_sub(f.start)));
         match f.number {
             15 => cx.push(leaf("Version", span, uint(f.value, 32))).await,
-            1 => cx.push(leaf("Name", span, text(String::from_utf8_lossy(f.payload(&data))))).await,
+            1 => {
+                cx.push(leaf(
+                    "Name",
+                    span,
+                    text(String::from_utf8_lossy(f.payload(&data))),
+                ))
+                .await
+            }
             5 => cx.push(leaf("Extent", span, uint(f.value, 32))).await,
-            3 => cx.push(leaf("Key", span, text(String::from_utf8_lossy(f.payload(&data))))).await,
-            4 => cx.push(leaf("Value", span, mvt_value(f.payload(&data)))).await,
+            3 => {
+                cx.push(leaf(
+                    "Key",
+                    span,
+                    text(String::from_utf8_lossy(f.payload(&data))),
+                ))
+                .await
+            }
+            4 => {
+                cx.push(leaf("Value", span, mvt_value(f.payload(&data))))
+                    .await
+            }
             2 => {
                 let feat = pb_fields(f.payload(&data)).unwrap_or_default();
                 let payload = f.payload(&data);
                 let mut node = Node::new(format!("Feature {index}")).span(span);
                 let mut parts = Vec::new();
                 for g in &feat {
-                    let gspan = body.sub(to_u64(f.body.saturating_add(g.start)), to_u64(g.end.saturating_sub(g.start)));
+                    let gspan = body.sub(
+                        to_u64(f.body.saturating_add(g.start)),
+                        to_u64(g.end.saturating_sub(g.start)),
+                    );
                     match g.number {
                         1 => parts.push(leaf("Id", gspan, uint(g.value, 64))),
                         3 => parts.push(leaf("Type", gspan, enumv(GEOM_TYPES, g.value, 8))),
@@ -586,19 +825,30 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                                 .chunks(2)
                                 .take(32)
                                 .map(|kv| {
-                                    let k = kv.first().and_then(|&k| keys.get(to_usize(k))).map_or("?", String::as_str);
-                                    let v = kv.get(1).and_then(|&v| values.get(to_usize(v))).map_or_else(|| "?".to_owned(), crate::render::value);
+                                    let k = kv
+                                        .first()
+                                        .and_then(|&k| keys.get(to_usize(k)))
+                                        .map_or("?", String::as_str);
+                                    let v = kv
+                                        .get(1)
+                                        .and_then(|&v| values.get(to_usize(v)))
+                                        .map_or_else(|| "?".to_owned(), crate::render::value);
                                     format!("{k}={v}")
                                 })
                                 .collect();
                             parts.push(Node::new("Tags").span(gspan).summary(pairs.join(", ")));
                         }
-                        4 => parts.push(Node::new("Geometry").span(gspan).summary(geometry_summary(&packed(g.payload(payload))))),
+                        4 => parts.push(
+                            Node::new("Geometry")
+                                .span(gspan)
+                                .summary(geometry_summary(&packed(g.payload(payload)))),
+                        ),
                         _ => parts.push(Node::new(format!("Field {}", g.number)).span(gspan)),
                     }
                 }
                 if let Some(t) = feat.iter().find(|g| g.number == 3) {
-                    node = node.summary(crate::value::lookup(GEOM_TYPES, t.value).unwrap_or("UNKNOWN"));
+                    node = node
+                        .summary(crate::value::lookup(GEOM_TYPES, t.value).unwrap_or("UNKNOWN"));
                 }
                 cx.push(node.lazy(super::emit_nodes, parts)).await;
                 index = index.saturating_add(1);
@@ -609,7 +859,6 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     Ok(())
 }
 
-
 // ---------------------------------------------------------------------------
 // OpenStreetMap o5m / o5c
 
@@ -617,8 +866,15 @@ declare_format!(pub O5M = "o5m", "OpenStreetMap o5m/o5c", ["o5m", "o5c"], "appli
     Probe::Magic(&[(0, b"\xff\xe0\x04o5m2"), (0, b"\xff\xe0\x04o5c2")]), o5m);
 
 const DATASETS: EnumTable = &[
-    (0x10, "node"), (0x11, "way"), (0x12, "relation"), (0xdb, "bounding box"),
-    (0xdc, "file timestamp"), (0xe0, "header"), (0xee, "sync"), (0xef, "jump"), (0xff, "reset"),
+    (0x10, "node"),
+    (0x11, "way"),
+    (0x12, "relation"),
+    (0xdb, "bounding box"),
+    (0xdc, "file timestamp"),
+    (0xe0, "header"),
+    (0xee, "sync"),
+    (0xef, "jump"),
+    (0xff, "reset"),
     (0xfe, "end of file"),
 ];
 
@@ -641,7 +897,12 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
                 ids = [0; 3];
             }
             let name = crate::value::lookup(DATASETS, kind.into()).unwrap_or("marker");
-            cx.push(Node::new(name).span(cur.since(start)).value(hex(kind.into(), 8))).await;
+            cx.push(
+                Node::new(name)
+                    .span(cur.since(start))
+                    .value(hex(kind.into(), 8)),
+            )
+            .await;
             if kind == 0xfe {
                 break;
             }
@@ -649,17 +910,25 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
         }
         let peek = cur.peek(10).await?;
         let mut at = 0usize;
-        let len = varint(&peek, &mut at).ok_or_else(|| Diagnostic::malformed("bad length").at(cur.span(10)))?;
+        let len = varint(&peek, &mut at)
+            .ok_or_else(|| Diagnostic::malformed("bad length").at(cur.span(10)))?;
         cur.skip(to_u64(at));
         let body = cur.span(len);
         if body.len < len {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len),
+                body.len,
+            ));
         }
         cur.skip(len);
         let span = cur.since(start);
-        let name = crate::value::lookup(DATASETS, kind.into()).map_or_else(|| format!("dataset {kind:#04x}"), str::to_owned);
+        let name = crate::value::lookup(DATASETS, kind.into())
+            .map_or_else(|| format!("dataset {kind:#04x}"), str::to_owned);
         let mut node = Node::new(name).span(span).summary(format!("{len} bytes"));
-        if let Some(slot) = ids.get_mut(usize::from(kind.wrapping_sub(0x10))).filter(|_| (0x10..=0x12).contains(&kind)) {
+        if let Some(slot) = ids
+            .get_mut(usize::from(kind.wrapping_sub(0x10)))
+            .filter(|_| (0x10..=0x12).contains(&kind))
+        {
             let b = cx.read(body.sub(0, 10)).await?;
             let mut p = 0usize;
             if let Some(delta) = varint(&b, &mut p) {
@@ -672,10 +941,14 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
                 _ => relations = relations.saturating_add(1),
             }
         } else if kind == 0xe0 {
-            node = node.value(text(String::from_utf8_lossy(&cx.read(body.sub(0, 16)).await?)));
+            node = node.value(text(String::from_utf8_lossy(
+                &cx.read(body.sub(0, 16)).await?,
+            )));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("o5m, {nodes} nodes, {ways} ways, {relations} relations"));
+    cx.annotate(format!(
+        "o5m, {nodes} nodes, {ways} ways, {relations} relations"
+    ));
     Ok(())
 }

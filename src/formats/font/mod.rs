@@ -88,17 +88,23 @@ async fn font_at(cx: &Cx, file: Span, base: u64) -> Result<String> {
     let head = cx.read(file.sub_exact(base, 12)?).await?;
     let version = u32_be(&head, 0).unwrap_or(0);
     let count = u16_be(&head, 4).unwrap_or(0);
-    cx.emit(struct_node("Offset table", file.sub(base, 12), BE, (), |f, _| {
-        f.u32("sfnt version")
-            .hex()
-            .with(|&v, n| n.summary(flavor(v)))
-            .emit()?;
-        f.u16("Number of tables").emit()?;
-        f.u16("Search range").emit()?;
-        f.u16("Entry selector").emit()?;
-        f.u16("Range shift").emit()?;
-        Ok(())
-    }));
+    cx.emit(struct_node(
+        "Offset table",
+        file.sub(base, 12),
+        BE,
+        (),
+        |f, _| {
+            f.u32("sfnt version")
+                .hex()
+                .with(|&v, n| n.summary(flavor(v)))
+                .emit()?;
+            f.u16("Number of tables").emit()?;
+            f.u16("Search range").emit()?;
+            f.u16("Entry selector").emit()?;
+            f.u16("Range shift").emit()?;
+            Ok(())
+        },
+    ));
     if count > MAX_TABLES {
         return Err(Diagnostic::malformed(format!("{count} tables")).at(file.sub(base, 6)));
     }
@@ -119,7 +125,9 @@ async fn font_at(cx: &Cx, file: Span, base: u64) -> Result<String> {
     let mut summary = flavor(version).to_owned();
     let names = entries.iter().find(|e| e.tag == "name").map(|e| e.span);
     if let Some(name) = names {
-        let family = tables::find_name(cx, name, 4).await.or(tables::find_name(cx, name, 1).await);
+        let family = tables::find_name(cx, name, 4)
+            .await
+            .or(tables::find_name(cx, name, 1).await);
         if let Some(family) = family {
             summary = format!("{:?}, {summary}", clip(&family, 80));
         }
@@ -180,7 +188,11 @@ async fn directory(cx: Cx, dir: Span) -> Result<()> {
 }
 
 async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
-    let padded = entry.span.len.checked_next_multiple_of(4).unwrap_or(u64::MAX);
+    let padded = entry
+        .span
+        .len
+        .checked_next_multiple_of(4)
+        .unwrap_or(u64::MAX);
     let whole = Span::new(entry.span.source, entry.span.offset, padded);
     if padded <= cx.limits().max_read {
         let data = cx.read_avail(whole).await?;
@@ -189,7 +201,9 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
         cx.emit(if computed == entry.checksum {
             node.summary("valid")
         } else {
-            node.diag(Diagnostic::warning(format!("mismatch: computed {computed:#010x}")))
+            node.diag(Diagnostic::warning(format!(
+                "mismatch: computed {computed:#010x}"
+            )))
         });
     }
     tables::decode(&cx, &entry.tag, entry.span).await

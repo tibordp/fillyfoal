@@ -138,13 +138,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let magic = cx.read_avail(file.sub(0, 8)).await?;
     if magic.starts_with(b"MAM\x04") {
         let size = u32_le(&magic, 4).unwrap_or(0);
-        cx.annotate(format!("Windows Prefetch (compressed, {size} bytes uncompressed)"));
-        cx.emit(struct_node("Compression header", file.sub(0, 8), LE, (), |f, _| {
-            f.ascii("Signature", 3).emit()?;
-            f.u8("Compression").desc("4 = Xpress Huffman").emit()?;
-            f.u32("Uncompressed size").emit()?;
-            Ok(())
-        }));
+        cx.annotate(format!(
+            "Windows Prefetch (compressed, {size} bytes uncompressed)"
+        ));
+        cx.emit(struct_node(
+            "Compression header",
+            file.sub(0, 8),
+            LE,
+            (),
+            |f, _| {
+                f.ascii("Signature", 3).emit()?;
+                f.u8("Compression").desc("4 = Xpress Huffman").emit()?;
+                f.u32("Uncompressed size").emit()?;
+                Ok(())
+            },
+        ));
         cx.emit(
             Node::new("Compressed data")
                 .span(file.tail(8))
@@ -157,12 +165,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", header_span, LE));
     let size = info_size(header.version);
     if size == 0 {
-        return Err(Diagnostic::unsupported(format!("prefetch version {}", header.version))
-            .at(file.sub(0, 4)));
+        return Err(
+            Diagnostic::unsupported(format!("prefetch version {}", header.version))
+                .at(file.sub(0, 4)),
+        );
     }
     let info_span = file.sub(Header::SIZE, size);
     let info = parse(&cx, info_span, LE, &header.version, file_info).await?;
-    cx.emit(struct_node("File information", info_span, LE, header.version, file_info));
+    cx.emit(struct_node(
+        "File information",
+        info_span,
+        LE,
+        header.version,
+        file_info,
+    ));
     let mut summary = format!(
         "Windows Prefetch v{}, {}, run {} times",
         header.version, header.executable, info.run_count
@@ -226,7 +242,9 @@ async fn utf16_strings(cx: Cx, span: Span) -> Result<()> {
         let data = cx.read_avail(span.sub(at, 0x1000)).await?;
         let (text, used, terminated) = crate::text::utf16z(&data, LE);
         if !terminated && to_u64(data.len()) == 0x1000 {
-            return Err(Diagnostic::limit("string longer than 2048 characters").at(span.sub(at, 0x1000)));
+            return Err(
+                Diagnostic::limit("string longer than 2048 characters").at(span.sub(at, 0x1000))
+            );
         }
         let used = to_u64(used).max(2);
         if !text.is_empty() {
@@ -249,7 +267,10 @@ async fn utf16_strings(cx: Cx, span: Span) -> Result<()> {
 
 /// The file name a metrics or volume entry points to.
 async fn name_at(cx: &Cx, region: Span, offset: u32, chars: u32) -> String {
-    let span = region.sub(offset.into(), u64::from(chars).saturating_mul(2).min(0x2000));
+    let span = region.sub(
+        offset.into(),
+        u64::from(chars).saturating_mul(2).min(0x2000),
+    );
     cx.read_avail(span)
         .await
         .map(|b| crate::text::utf16(&b, LE))
@@ -262,7 +283,9 @@ async fn metrics_list(cx: Cx, pf: P) -> Result<()> {
         pf.info.metrics_offset.into(),
         u64::from(pf.info.metrics_count).saturating_mul(size),
     )?;
-    let names = pf.file.sub(pf.info.names_offset.into(), pf.info.names_size.into());
+    let names = pf
+        .file
+        .sub(pf.info.names_offset.into(), pf.info.names_size.into());
     cx.set_count(Count::Exact(pf.info.metrics_count.into()));
     for i in 0..u64::from(pf.info.metrics_count) {
         let span = table.sub(i.saturating_mul(size), size);
@@ -293,7 +316,11 @@ fn metric(f: &mut Fields<'_>, version: &u32) -> Result<()> {
         f.u64("NTFS file reference")
             .hex()
             .with(|&r, n| {
-                n.summary(format!("MFT entry {}, sequence {}", r & 0xffff_ffff_ffff, r >> 48))
+                n.summary(format!(
+                    "MFT entry {}, sequence {}",
+                    r & 0xffff_ffff_ffff,
+                    r >> 48
+                ))
             })
             .emit()?;
     }
@@ -306,12 +333,20 @@ async fn volumes_list(cx: Cx, pf: P) -> Result<()> {
         30 | 31 => 96,
         _ => 104,
     };
-    let region = pf.file.sub(pf.info.volumes_offset.into(), pf.info.volumes_size.into());
+    let region = pf
+        .file
+        .sub(pf.info.volumes_offset.into(), pf.info.volumes_size.into());
     let table = region.sub_exact(0, u64::from(pf.info.volumes_count).saturating_mul(size))?;
     for i in 0..u64::from(pf.info.volumes_count) {
         let span = table.sub(i.saturating_mul(size), size);
         let data = cx.read(span).await?;
-        let path = name_at(&cx, region, u32_le(&data, 0).unwrap_or(0), u32_le(&data, 4).unwrap_or(0)).await;
+        let path = name_at(
+            &cx,
+            region,
+            u32_le(&data, 0).unwrap_or(0),
+            u32_le(&data, 4).unwrap_or(0),
+        )
+        .await;
         let created = u64_le(&data, 8).unwrap_or(0);
         let serial = u32_le(&data, 16).unwrap_or(0);
         cx.push(
@@ -320,7 +355,11 @@ async fn volumes_list(cx: Cx, pf: P) -> Result<()> {
                 .value(Value::Timestamp {
                     unix_seconds: crate::text::filetime_to_unix(created),
                 })
-                .summary(format!("serial {:04X}-{:04X}", serial >> 16, serial & 0xffff))
+                .summary(format!(
+                    "serial {:04X}-{:04X}",
+                    serial >> 16,
+                    serial & 0xffff
+                ))
                 .lazy(volume, (region, span)),
         )
         .await;
@@ -360,7 +399,9 @@ async fn dir_strings(cx: Cx, (span, count): (Span, u32)) -> Result<()> {
         let len = cx.read(span.sub_exact(at, 2)?).await?;
         let chars = u64::from(crate::bytes::u16_le(&len, 0).unwrap_or(0));
         let total = chars.saturating_add(1).saturating_mul(2).saturating_add(2);
-        let text = cx.read(span.sub_exact(at.saturating_add(2), chars.saturating_mul(2))?).await?;
+        let text = cx
+            .read(span.sub_exact(at.saturating_add(2), chars.saturating_mul(2))?)
+            .await?;
         cx.push(
             Node::new("Directory")
                 .span(span.sub(at, total))

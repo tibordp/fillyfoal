@@ -163,7 +163,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         header_len = u64::from(h3.header_length).max(Header2::SIZE + Header3::SIZE);
         extended_l2 = h3.incompatible & 16 != 0;
         if header_len >= 105 && h3.incompatible & 8 != 0 {
-            compression = cx.read(file.sub(104, 1)).await?.first().copied().unwrap_or(0);
+            compression = cx
+                .read(file.sub(104, 1))
+                .await?
+                .first()
+                .copied()
+                .unwrap_or(0);
             cx.emit(
                 Node::new("Compression type")
                     .span(file.sub(104, 1))
@@ -181,21 +186,40 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let backing = backing_name(&cx, file, h.backing_offset, h.backing_size).await?;
     cx.annotate(format!(
         "QCOW{} image, {} virtual, {} clusters{}{}",
-        if version >= 3 { "3 (qcow2 v3)".to_owned() } else { "2".to_owned() },
+        if version >= 3 {
+            "3 (qcow2 v3)".to_owned()
+        } else {
+            "2".to_owned()
+        },
         size(h.size),
         size(1u64 << h.cluster_bits),
-        if h.snapshots > 0 { format!(", {} snapshots", h.snapshots) } else { String::new() },
+        if h.snapshots > 0 {
+            format!(", {} snapshots", h.snapshots)
+        } else {
+            String::new()
+        },
         match &backing {
             Some((name, _)) => format!(", backed by {name:?}"),
             None => String::new(),
         }
     ));
     if let Some((name, span)) = &backing {
-        cx.emit(Node::new("Backing file").span(*span).value(Value::Text(name.clone())));
+        cx.emit(
+            Node::new("Backing file")
+                .span(*span)
+                .value(Value::Text(name.clone())),
+        );
     }
     // Header extensions follow the header, up to the end of the first cluster.
-    let ext_area = file.sub(header_len, (1u64 << h.cluster_bits).saturating_sub(header_len));
-    cx.emit(Node::new("Header extensions").span(ext_area).lazy(extensions, ext_area));
+    let ext_area = file.sub(
+        header_len,
+        (1u64 << h.cluster_bits).saturating_sub(header_len),
+    );
+    cx.emit(
+        Node::new("Header extensions")
+            .span(ext_area)
+            .lazy(extensions, ext_area),
+    );
 
     let entry = if extended_l2 { 16 } else { 8 };
     let image = Arc::new(Image {
@@ -215,10 +239,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .lazy(l1_table, image.clone()),
     );
     if h.refcount_offset != 0 {
-        cx.emit(
-            Node::new("Refcount table")
-                .span(file.sub(h.refcount_offset, u64::from(h.refcount_clusters) << h.cluster_bits)),
-        );
+        cx.emit(Node::new("Refcount table").span(file.sub(
+            h.refcount_offset,
+            u64::from(h.refcount_clusters) << h.cluster_bits,
+        )));
     }
     if h.snapshots > 0 {
         cx.emit(
@@ -242,7 +266,12 @@ fn virtual_disk_node(image: Arc<Image>, crypt: u32, compression: u8) -> Node {
     node.lazy(virtual_disk, image)
 }
 
-async fn backing_name(cx: &Cx, file: Span, offset: u64, len: u32) -> Result<Option<(String, Span)>> {
+async fn backing_name(
+    cx: &Cx,
+    file: Span,
+    offset: u64,
+    len: u32,
+) -> Result<Option<(String, Span)>> {
     if offset == 0 || len == 0 {
         return Ok(None);
     }
@@ -266,7 +295,11 @@ async fn qcow1(cx: &Cx, input: Input) -> Result<()> {
         size(1u64 << h.cluster_bits)
     ));
     if let Some((name, span)) = &backing {
-        cx.emit(Node::new("Backing file").span(*span).value(Value::Text(name.clone())));
+        cx.emit(
+            Node::new("Backing file")
+                .span(*span)
+                .value(Value::Text(name.clone())),
+        );
     }
     let l2_entries = 1u64 << h.l2_bits;
     let covered = l2_entries << h.cluster_bits;
@@ -299,18 +332,21 @@ async fn extensions(cx: Cx, area: Span) -> Result<()> {
             break;
         };
         if kind == 0 {
-            cx.push(Node::new("End of extensions").span(area.sub(at, 8))).await;
+            cx.push(Node::new("End of extensions").span(area.sub(at, 8)))
+                .await;
             break;
         }
         let data = area.sub(at.saturating_add(8), len.into());
         let total = 8u64.saturating_add(u64::from(len).next_multiple_of(8));
         let name = crate::value::lookup(EXTENSIONS, kind.into())
             .map_or_else(|| format!("Extension {kind:#010x}"), str::to_owned);
-        let mut node = Node::new(name).span(area.sub(at, total)).value(Value::UInt {
-            value: kind.into(),
-            bits: 32,
-            radix: crate::value::Radix::Hex,
-        });
+        let mut node = Node::new(name)
+            .span(area.sub(at, total))
+            .value(Value::UInt {
+                value: kind.into(),
+                bits: 32,
+                radix: crate::value::Radix::Hex,
+            });
         if matches!(kind, 0xe279_2aca | 0x4441_5441) {
             let text = crate::text::until_nul(&cx.read_avail(data).await?);
             node = node.summary(format!("{text:?}"));
@@ -349,15 +385,21 @@ async fn snapshots(cx: Cx, (file, offset, count): (Span, u64, u32)) -> Result<()
     for i in 0..u64::from(count).min(to_u64(MAX_ITEMS)) {
         let span = file.sub(at, SnapshotHeader::SIZE);
         let s = parse(&cx, span, BE, &(), SnapshotHeader::layout).await?;
-        let id_at = at.saturating_add(SnapshotHeader::SIZE).saturating_add(s.extra_size.into());
-        let id = String::from_utf8_lossy(&cx.read_avail(file.sub(id_at, s.id_size.into())).await?).into_owned();
+        let id_at = at
+            .saturating_add(SnapshotHeader::SIZE)
+            .saturating_add(s.extra_size.into());
+        let id = String::from_utf8_lossy(&cx.read_avail(file.sub(id_at, s.id_size.into())).await?)
+            .into_owned();
         let name_at = id_at.saturating_add(s.id_size.into());
-        let name = String::from_utf8_lossy(&cx.read_avail(file.sub(name_at, s.name_size.into())).await?).into_owned();
+        let name =
+            String::from_utf8_lossy(&cx.read_avail(file.sub(name_at, s.name_size.into())).await?)
+                .into_owned();
         let end = name_at.saturating_add(s.name_size.into());
         let total = align(end.saturating_sub(at), 8);
         cx.push(
-            SnapshotHeader::node(format!("Snapshot {i}: {name}"), file.sub(at, total), BE)
-                .summary(format!("id {id}, VM state {}", size(s.vm_state_size.into()))),
+            SnapshotHeader::node(format!("Snapshot {i}: {name}"), file.sub(at, total), BE).summary(
+                format!("id {id}, VM state {}", size(s.vm_state_size.into())),
+            ),
         )
         .await;
         at = at.saturating_add(total.max(8));
@@ -371,15 +413,25 @@ async fn l1_table(cx: Cx, image: Arc<Image>) -> Result<()> {
     for i in 0..count {
         let span = image.l1.sub(i.saturating_mul(8), 8);
         let entry = u64_be(&cx.read(span).await?, 0).unwrap_or(0);
-        let l2 = if image.version == 1 { entry } else { entry & OFFSET_MASK };
+        let l2 = if image.version == 1 {
+            entry
+        } else {
+            entry & OFFSET_MASK
+        };
         if l2 == 0 {
             continue;
         }
-        let table = image.input.span.sub(l2, image.l2_entries.saturating_mul(image.l2_entry_size));
+        let table = image
+            .input
+            .span
+            .sub(l2, image.l2_entries.saturating_mul(image.l2_entry_size));
         cx.push(
             Node::new(format!("L1[{i}]"))
                 .span(span)
-                .summary(format!("guest {:#x}, L2 table at {l2:#x}", i.saturating_mul(covered)))
+                .summary(format!(
+                    "guest {:#x}, L2 table at {l2:#x}",
+                    i.saturating_mul(covered)
+                ))
                 .target(table),
         )
         .await;
@@ -408,10 +460,17 @@ impl Image {
         if entry & (1 << 62) != 0 {
             // Compressed: offset in the low bits, extra 512-byte sectors above.
             let bits = 62u32.saturating_sub(self.cluster_bits.saturating_sub(8));
-            let mask = 1u64.checked_shl(bits).map_or(u64::MAX, |v| v.saturating_sub(1));
+            let mask = 1u64
+                .checked_shl(bits)
+                .map_or(u64::MAX, |v| v.saturating_sub(1));
             let offset = entry & mask;
-            let sectors = (entry & !(1u64 << 63) & !(1 << 62)).checked_shr(bits).unwrap_or(0);
-            let len = sectors.saturating_add(1).saturating_mul(512).saturating_sub(offset & 511);
+            let sectors = (entry & !(1u64 << 63) & !(1 << 62))
+                .checked_shr(bits)
+                .unwrap_or(0);
+            let len = sectors
+                .saturating_add(1)
+                .saturating_mul(512)
+                .saturating_sub(offset & 511);
             return Mapping::Compressed(file.sub(offset, len));
         }
         let offset = entry & OFFSET_MASK;
@@ -438,7 +497,11 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
             break;
         }
         let entry = u64_be(&cx.read(image.l1.sub(i.saturating_mul(8), 8)).await?, 0).unwrap_or(0);
-        let l2 = if image.version == 1 { entry } else { entry & OFFSET_MASK };
+        let l2 = if image.version == 1 {
+            entry
+        } else {
+            entry & OFFSET_MASK
+        };
         if l2 == 0 {
             let want = covered.min(image.size.saturating_sub(list.len()));
             if let Err(e) = list.hole(&cx, want) {
@@ -448,7 +511,12 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
             continue;
         }
         let table = cx
-            .read(image.input.span.sub(l2, image.l2_entries.saturating_mul(image.l2_entry_size)))
+            .read(
+                image
+                    .input
+                    .span
+                    .sub(l2, image.l2_entries.saturating_mul(image.l2_entry_size)),
+            )
             .await?;
         for raw in table.chunks(crate::bytes::to_usize(image.l2_entry_size)) {
             let want = cluster.min(image.size.saturating_sub(list.len()));

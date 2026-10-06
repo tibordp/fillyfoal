@@ -75,8 +75,10 @@ impl<'a> Fb<'a> {
         let off = self.u32_at(pos).await?;
         let target = pos.saturating_add(off.into());
         if target >= self.buf.len {
-            return Err(Diagnostic::malformed(format!("offset {off:#x} points outside the buffer"))
-                .at(self.buf.sub(pos, 4)));
+            return Err(Diagnostic::malformed(format!(
+                "offset {off:#x} points outside the buffer"
+            ))
+            .at(self.buf.sub(pos, 4)));
         }
         Ok(target)
     }
@@ -89,15 +91,23 @@ impl<'a> Fb<'a> {
         } else {
             pos.checked_add(u64::from(soff.unsigned_abs()))
         }
-        .ok_or_else(|| Diagnostic::malformed("vtable offset out of range").at(self.buf.sub(pos, 4)))?;
+        .ok_or_else(|| {
+            Diagnostic::malformed("vtable offset out of range").at(self.buf.sub(pos, 4))
+        })?;
         let vtable_len = self.u16_at(vtable).await?;
         let size = self.u16_at(vtable.saturating_add(2)).await?;
         if vtable_len < 4 || vtable_len % 2 != 0 {
-            return Err(Diagnostic::malformed(format!("vtable size {vtable_len}")).at(self.buf.sub(vtable, 2)));
+            return Err(Diagnostic::malformed(format!("vtable size {vtable_len}"))
+                .at(self.buf.sub(vtable, 2)));
         }
         // The whole vtable must be inside the buffer.
         self.buf.sub_exact(vtable, vtable_len.into())?;
-        Ok(Table { pos, vtable, vtable_len, size })
+        Ok(Table {
+            pos,
+            vtable,
+            vtable_len,
+            size,
+        })
     }
 
     /// The root table (offset at the start of the buffer).
@@ -131,7 +141,10 @@ impl<'a> Fb<'a> {
     }
 
     pub async fn i32_field(&self, t: &Table, slot: u16) -> Result<Option<i32>> {
-        Ok(self.u32_field(t, slot).await?.map(|v| i32::from_ne_bytes(v.to_ne_bytes())))
+        Ok(self
+            .u32_field(t, slot)
+            .await?
+            .map(|v| i32::from_ne_bytes(v.to_ne_bytes())))
     }
 
     pub async fn u64_field(&self, t: &Table, slot: u16) -> Result<Option<u64>> {
@@ -174,7 +187,8 @@ impl<'a> Fb<'a> {
         let len = self.u32_at(at).await?;
         let start = at.saturating_add(4);
         // Reject counts that cannot fit before reading any element.
-        self.buf.sub_exact(start, u64::from(len).saturating_mul(elem))?;
+        self.buf
+            .sub_exact(start, u64::from(len).saturating_mul(elem))?;
         Ok(Some(Vector { start, len }))
     }
 
@@ -201,7 +215,12 @@ impl<'a> Fb<'a> {
     pub async fn i32s(&self, v: Vector, max: u32) -> Result<Vec<i32>> {
         let n = v.len.min(max);
         let data = self.bytes(v.start, u64::from(n).saturating_mul(4)).await?;
-        Ok(data.as_chunks::<4>().0.iter().map(|c| i32::from_le_bytes(*c)).collect())
+        Ok(data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| i32::from_le_bytes(*c))
+            .collect())
     }
 
     /// The span a table occupies (from its vtable-offset to its inline end).
@@ -213,7 +232,11 @@ impl<'a> Fb<'a> {
 /// Formats `[1, 224, 224, 3]` (with "…" if `total` exceeds the shown values).
 pub fn dims(values: &[i32], total: u32) -> String {
     let shown: Vec<String> = values.iter().map(i32::to_string).collect();
-    let more = if to_u64(values.len()) < u64::from(total) { ", …" } else { "" };
+    let more = if to_u64(values.len()) < u64::from(total) {
+        ", …"
+    } else {
+        ""
+    };
     format!("[{}{more}]", shown.join(", "))
 }
 
@@ -233,7 +256,11 @@ pub async fn raw_table(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
             cx.push(
                 Node::new(format!("field {slot}"))
                     .span(buf.sub(at, 4))
-                    .value(Value::UInt { value: value.into(), bits: 32, radix: Radix::Hex }),
+                    .value(Value::UInt {
+                        value: value.into(),
+                        bits: 32,
+                        radix: Radix::Hex,
+                    }),
             )
             .await;
         }

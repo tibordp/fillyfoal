@@ -100,7 +100,12 @@ async fn codestream(cx: &Cx, span: Span) -> Result<()> {
             .summary(dims(w, h))
             .lazy(size_fields, (span.sub(2, len.saturating_sub(2)), w, h)),
     );
-    cx.emit(region("Image metadata, frames", span, len, span.len.saturating_sub(len)));
+    cx.emit(region(
+        "Image metadata, frames",
+        span,
+        len,
+        span.len.saturating_sub(len),
+    ));
     Ok(())
 }
 
@@ -134,7 +139,9 @@ async fn container(cx: &Cx, input: Input) -> Result<()> {
             n => (8, n),
         };
         if len < header_len {
-            return Err(Diagnostic::malformed(format!("box size {len} too small")).at(file.sub(pos, 8)));
+            return Err(
+                Diagnostic::malformed(format!("box size {len} too small")).at(file.sub(pos, 8))
+            );
         }
         let span = file.sub(pos, len);
         let name = crate::text::latin1(&kind);
@@ -143,22 +150,32 @@ async fn container(cx: &Cx, input: Input) -> Result<()> {
         if !dims_found && (kind == b"jxlc" || kind == b"jxlp") {
             let offset = if kind == b"jxlp" { 4 } else { 0 };
             let head = cx.read_avail(payload.sub(offset, 16)).await?;
-            if let Some((w, h, _)) = head.starts_with(b"\xff\x0a").then(|| size_header(&head)).flatten() {
+            if let Some((w, h, _)) = head
+                .starts_with(b"\xff\x0a")
+                .then(|| size_header(&head))
+                .flatten()
+            {
                 dims_found = true;
                 cx.annotate(format!("{}, container", dims(w, h)));
                 node = node.summary(dims(w, h));
             }
         }
-        cx.push(node.lazy(jxl_box, (input, span, header_len, kind))).await;
+        cx.push(node.lazy(jxl_box, (input, span, header_len, kind)))
+            .await;
         pos = pos.saturating_add(len);
     }
     Ok(())
 }
 
-async fn jxl_box(cx: Cx, (input, span, header_len, kind): (Input, Span, u64, Vec<u8>)) -> Result<()> {
+async fn jxl_box(
+    cx: Cx,
+    (input, span, header_len, kind): (Input, Span, u64, Vec<u8>),
+) -> Result<()> {
     let block = cx.block(span.sub(0, header_len)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
-    f.u32("Size").desc("0: to the end of the file; 1: 64-bit size follows").emit()?;
+    f.u32("Size")
+        .desc("0: to the end of the file; 1: 64-bit size follows")
+        .emit()?;
     f.ascii("Type", 4).emit()?;
     if header_len == 16 {
         f.u64("Large size").emit()?;
@@ -187,7 +204,13 @@ async fn jxl_box(cx: Cx, (input, span, header_len, kind): (Input, Span, u64, Vec
             let block = cx.block(payload.sub(0, 4)).await?;
             let index = Fields::emitting(&cx, &block, BE)
                 .u32("Index")
-                .with(|&i, n| if i & 0x8000_0000 != 0 { n.summary("last part") } else { n })
+                .with(|&i, n| {
+                    if i & 0x8000_0000 != 0 {
+                        n.summary("last part")
+                    } else {
+                        n
+                    }
+                })
                 .emit()?;
             let part = payload.tail(4);
             if index & 0x7fff_ffff == 0 {
@@ -202,7 +225,11 @@ async fn jxl_box(cx: Cx, (input, span, header_len, kind): (Input, Span, u64, Vec
                 .u32("TIFF header offset")
                 .emit()?;
             let tiff = payload.tail(4u64.saturating_add(offset.into()));
-            cx.emit(embedded_as("Exif", input.nested(tiff), &super::tiff::FORMAT));
+            cx.emit(embedded_as(
+                "Exif",
+                input.nested(tiff),
+                &super::tiff::FORMAT,
+            ));
         }
         b"xml " => cx.emit(embedded("XMP", input.nested(payload))),
         b"brob" => {

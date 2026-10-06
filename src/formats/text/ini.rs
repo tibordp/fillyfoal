@@ -50,50 +50,141 @@ macro_rules! ini_format {
     };
 }
 
-ini_format!(FORMAT, dissect_ini, Flavor::Ini, "ini", "INI configuration",
-    ["ini", "cfg", "conf", "cnf", "properties", "lnk2"], "text/plain", probe_ini);
-ini_format!(DESKTOP, dissect_desktop, Flavor::Desktop, "desktop", "Desktop entry",
-    ["desktop", "directory"], "application/x-desktop",
-    |h| first_section(h).is_some_and(|s| s == b"Desktop Entry"));
-ini_format!(REG, dissect_reg, Flavor::Reg, "reg", "Windows Registry export", ["reg"],
-    "text/x-ms-regedit", |h| {
+ini_format!(
+    FORMAT,
+    dissect_ini,
+    Flavor::Ini,
+    "ini",
+    "INI configuration",
+    ["ini", "cfg", "conf", "cnf", "properties", "lnk2"],
+    "text/plain",
+    probe_ini
+);
+ini_format!(
+    DESKTOP,
+    dissect_desktop,
+    Flavor::Desktop,
+    "desktop",
+    "Desktop entry",
+    ["desktop", "directory"],
+    "application/x-desktop",
+    |h| first_section(h).is_some_and(|s| s == b"Desktop Entry")
+);
+ini_format!(
+    REG,
+    dissect_reg,
+    Flavor::Reg,
+    "reg",
+    "Windows Registry export",
+    ["reg"],
+    "text/x-ms-regedit",
+    |h| {
         let head = probe::head(h);
         let head = probe::trim_start(&head);
         head.starts_with(b"Windows Registry Editor Version") || head.starts_with(b"REGEDIT4")
-    });
-ini_format!(URL, dissect_url, Flavor::Url, "url", "Internet shortcut", ["url", "website"],
+    }
+);
+ini_format!(
+    URL,
+    dissect_url,
+    Flavor::Url,
+    "url",
+    "Internet shortcut",
+    ["url", "website"],
     "application/x-mswinurl",
     |h| first_section(h).is_some_and(|s| s == b"InternetShortcut" || s == b"DEFAULT")
-        && probe::contains(&probe::head(h), b"[InternetShortcut]"));
-ini_format!(SYSTEMD, dissect_systemd, Flavor::Systemd, "systemd-unit", "systemd unit",
-    ["service", "socket", "timer", "mount", "automount", "path", "slice", "target", "network", "netdev", "link"],
-    "text/plain", |h| first_section(h).is_some_and(|s| SYSTEMD_SECTIONS.contains(&s.as_slice())));
-ini_format!(INF, dissect_inf, Flavor::Inf, "inf", "Windows setup information", ["inf"],
-    "application/x-setupscript", |h| {
+        && probe::contains(&probe::head(h), b"[InternetShortcut]")
+);
+ini_format!(
+    SYSTEMD,
+    dissect_systemd,
+    Flavor::Systemd,
+    "systemd-unit",
+    "systemd unit",
+    [
+        "service",
+        "socket",
+        "timer",
+        "mount",
+        "automount",
+        "path",
+        "slice",
+        "target",
+        "network",
+        "netdev",
+        "link"
+    ],
+    "text/plain",
+    |h| first_section(h).is_some_and(|s| SYSTEMD_SECTIONS.contains(&s.as_slice()))
+);
+ini_format!(
+    INF,
+    dissect_inf,
+    Flavor::Inf,
+    "inf",
+    "Windows setup information",
+    ["inf"],
+    "application/x-setupscript",
+    |h| {
         let head = probe::head(h).to_ascii_lowercase();
         first_section(h).is_some()
             && probe::contains(&head, b"[version]")
             && probe::contains(&head, b"signature")
             && (probe::contains(&head, b"$windows nt$") || probe::contains(&head, b"$chicago$"))
-    });
-ini_format!(EDITORCONFIG, dissect_editorconfig, Flavor::EditorConfig, "editorconfig", "EditorConfig",
-    ["editorconfig"], "text/plain", |h| {
+    }
+);
+ini_format!(
+    EDITORCONFIG,
+    dissect_editorconfig,
+    Flavor::EditorConfig,
+    "editorconfig",
+    "EditorConfig",
+    ["editorconfig"],
+    "text/plain",
+    |h| {
         let head = probe::head(h);
         let keys: [&[u8]; 6] = [
-            b"indent_style", b"indent_size", b"end_of_line", b"charset",
-            b"trim_trailing_whitespace", b"insert_final_newline",
+            b"indent_style",
+            b"indent_size",
+            b"end_of_line",
+            b"charset",
+            b"trim_trailing_whitespace",
+            b"insert_final_newline",
         ];
-        let first = probe::significant(&head, &[b";", b"#"]).next().map(probe::trim);
+        let first = probe::significant(&head, &[b";", b"#"])
+            .next()
+            .map(probe::trim);
         let glob = first_section(h).is_some_and(|s| s.contains(&b'*'));
         let root = first.is_some_and(|l| l.starts_with(b"root"));
         (glob || root) && keys.iter().any(|k| probe::contains(&head, k)) && probe::is_text(h)
-    });
-ini_format!(ASS, dissect_ass, Flavor::Ass, "ass", "SubStation Alpha subtitles", ["ass", "ssa"],
-    "text/x-ssa", |h| first_section(h).is_some_and(|s| s == b"Script Info"));
+    }
+);
+ini_format!(
+    ASS,
+    dissect_ass,
+    Flavor::Ass,
+    "ass",
+    "SubStation Alpha subtitles",
+    ["ass", "ssa"],
+    "text/x-ssa",
+    |h| first_section(h).is_some_and(|s| s == b"Script Info")
+);
 
 const SYSTEMD_SECTIONS: &[&[u8]] = &[
-    b"Unit", b"Service", b"Socket", b"Timer", b"Mount", b"Automount", b"Path", b"Slice",
-    b"Install", b"Swap", b"Match", b"Network", b"NetDev", b"Link",
+    b"Unit",
+    b"Service",
+    b"Socket",
+    b"Timer",
+    b"Mount",
+    b"Automount",
+    b"Path",
+    b"Slice",
+    b"Install",
+    b"Swap",
+    b"Match",
+    b"Network",
+    b"NetDev",
+    b"Link",
 ];
 
 /// The name of the first `[section]`, if the first significant line is one.
@@ -163,7 +254,11 @@ async fn logical(lines: &mut Lines<'_>, flavor: Flavor) -> Result<Option<(LineBu
             let Some(more) = lines.next().await? else {
                 break;
             };
-            full = Span::new(full.source, full.offset, more.span.end().saturating_sub(full.offset));
+            full = Span::new(
+                full.source,
+                full.offset,
+                more.span.end().saturating_sub(full.offset),
+            );
             last = more.piece().trim_end().last();
         }
     }
@@ -374,7 +469,10 @@ async fn ass_fields(cx: Cx, (span, format): (Span, Arc<Vec<String>>)) -> Result<
     let owned = super::scan::Scanner::new(&cx, span)
         .owned(0, span.len, super::scan::LINE_CAP)
         .await?;
-    for (i, part) in split_fields(owned.piece(), format.len()).into_iter().enumerate() {
+    for (i, part) in split_fields(owned.piece(), format.len())
+        .into_iter()
+        .enumerate()
+    {
         let name = format
             .get(i)
             .cloned()
@@ -440,7 +538,9 @@ async fn reg_value(cx: &Cx, key: Piece<'_>, value: Span, version: u8) -> Result<
         return Ok(node.summary("value deleted"));
     }
     if v.first() == Some(b'"') {
-        return Ok(text_node(node.name, value, &reg_unescape(&v.unquote().text())).summary("REG_SZ"));
+        return Ok(
+            text_node(node.name, value, &reg_unescape(&v.unquote().text())).summary("REG_SZ"),
+        );
     }
     if let Some(hex) = v.strip_prefix(b"dword:") {
         let parsed = u32::from_str_radix(hex.trim().text().as_str(), 16);
@@ -517,7 +617,10 @@ async fn reg_value(cx: &Cx, key: Piece<'_>, value: Span, version: u8) -> Result<
             })
         }
         _ => node.value(Value::Bytes(
-            bytes.get(..bytes.len().min(super::VALUE_CAP)).unwrap_or_default().to_vec(),
+            bytes
+                .get(..bytes.len().min(super::VALUE_CAP))
+                .unwrap_or_default()
+                .to_vec(),
         )),
     };
     if node.summary.is_none() {
@@ -557,10 +660,7 @@ fn annotation(flavor: Flavor, head: &[u8]) -> String {
             ("Desktop entry", detail)
         }
         Flavor::Reg => ("Windows Registry export", None),
-        Flavor::EditorConfig => (
-            "EditorConfig",
-            get(b"root").map(|r| format!("root = {r}")),
-        ),
+        Flavor::EditorConfig => ("EditorConfig", get(b"root").map(|r| format!("root = {r}"))),
         Flavor::Url => ("Internet shortcut", get(b"URL")),
         Flavor::Systemd => ("systemd unit", get(b"Description")),
         Flavor::Inf => (

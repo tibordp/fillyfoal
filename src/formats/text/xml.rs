@@ -124,7 +124,9 @@ fn probe_xml(h: &Head<'_>) -> bool {
 pub static FORMAT: Format = Format {
     name: "xml",
     title: "XML document",
-    extensions: &["xml", "xsl", "rdf", "xul", "resx", "config", "manifest", "nuspec", "wxs"],
+    extensions: &[
+        "xml", "xsl", "rdf", "xul", "resx", "config", "manifest", "nuspec", "wxs",
+    ],
     mime: "application/xml",
     probe: Probe::Custom(probe_xml),
     dissect: crate::expander!(dissect: Input),
@@ -159,131 +161,456 @@ fn no_detail(_: &Root, _: &[u8]) -> Option<String> {
     None
 }
 
-xml_variant!(SVG, SVG_INFO, dissect_svg, "svg", "Scalable Vector Graphics", ["svg"],
-    "image/svg+xml", |r| r.local() == b"svg", svg_detail);
-xml_variant!(XHTML, XHTML_INFO, dissect_xhtml, "xhtml", "XHTML document", ["xhtml", "xht"],
+xml_variant!(
+    SVG,
+    SVG_INFO,
+    dissect_svg,
+    "svg",
+    "Scalable Vector Graphics",
+    ["svg"],
+    "image/svg+xml",
+    |r| r.local() == b"svg",
+    svg_detail
+);
+xml_variant!(
+    XHTML,
+    XHTML_INFO,
+    dissect_xhtml,
+    "xhtml",
+    "XHTML document",
+    ["xhtml", "xht"],
     "application/xhtml+xml",
-    |r| r.local().eq_ignore_ascii_case(b"html") && (r.declared || r.mentions(b"http://www.w3.org/1999/xhtml")),
-    |_, head| first_text(head, b"title"));
-xml_variant!(RSS, RSS_INFO, dissect_rss, "rss", "RSS feed", ["rss"],
+    |r| r.local().eq_ignore_ascii_case(b"html")
+        && (r.declared || r.mentions(b"http://www.w3.org/1999/xhtml")),
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    RSS,
+    RSS_INFO,
+    dissect_rss,
+    "rss",
+    "RSS feed",
+    ["rss"],
     "application/rss+xml",
     |r| r.is(b"rss") || (r.local() == b"RDF" && r.mentions(b"purl.org/rss")),
-    |_, head| first_text(head, b"title"));
-xml_variant!(ATOM, ATOM_INFO, dissect_atom, "atom", "Atom feed", ["atom"],
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    ATOM,
+    ATOM_INFO,
+    dissect_atom,
+    "atom",
+    "Atom feed",
+    ["atom"],
     "application/atom+xml",
     |r| r.local() == b"feed" && r.mentions(b"http://www.w3.org/2005/Atom"),
-    |_, head| first_text(head, b"title"));
-xml_variant!(GPX, GPX_INFO, dissect_gpx, "gpx", "GPS Exchange Format", ["gpx"],
-    "application/gpx+xml", |r| r.local() == b"gpx",
-    |r, _| attr(r, b"creator").map(|c| format!("created by {c}")));
-xml_variant!(KML, KML_INFO, dissect_kml, "kml", "Keyhole Markup Language", ["kml"],
-    "application/vnd.google-earth.kml+xml", |r| r.local() == b"kml",
-    |_, head| first_text(head, b"name"));
-xml_variant!(POM, POM_INFO, dissect_pom, "maven-pom", "Maven project (POM)", ["pom"],
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    GPX,
+    GPX_INFO,
+    dissect_gpx,
+    "gpx",
+    "GPS Exchange Format",
+    ["gpx"],
+    "application/gpx+xml",
+    |r| r.local() == b"gpx",
+    |r, _| attr(r, b"creator").map(|c| format!("created by {c}"))
+);
+xml_variant!(
+    KML,
+    KML_INFO,
+    dissect_kml,
+    "kml",
+    "Keyhole Markup Language",
+    ["kml"],
+    "application/vnd.google-earth.kml+xml",
+    |r| r.local() == b"kml",
+    |_, head| first_text(head, b"name")
+);
+xml_variant!(
+    POM,
+    POM_INFO,
+    dissect_pom,
+    "maven-pom",
+    "Maven project (POM)",
+    ["pom"],
     "application/xml",
     |r| r.is(b"project") && r.mentions(b"maven.apache.org/POM"),
-    |_, head| first_text(head, b"artifactId"));
-xml_variant!(XAML, XAML_INFO, dissect_xaml, "xaml", "XAML markup", ["xaml", "axaml"],
+    |_, head| first_text(head, b"artifactId")
+);
+xml_variant!(
+    XAML,
+    XAML_INFO,
+    dissect_xaml,
+    "xaml",
+    "XAML markup",
+    ["xaml", "axaml"],
     "application/xaml+xml",
-    |r| r.mentions(b"schemas.microsoft.com/winfx/2006/xaml") || r.mentions(b"github.com/avaloniaui")
+    |r| r.mentions(b"schemas.microsoft.com/winfx/2006/xaml")
+        || r.mentions(b"github.com/avaloniaui")
         || r.mentions(b"schemas.microsoft.com/dotnet/2021/maui"),
-    no_detail);
-xml_variant!(MATHML, MATHML_INFO, dissect_mathml, "mathml", "MathML", ["mml", "mathml"],
-    "application/mathml+xml", |r| r.local() == b"math", no_detail);
-xml_variant!(XSLT, XSLT_INFO, dissect_xslt, "xslt", "XSLT stylesheet", ["xsl", "xslt"],
+    no_detail
+);
+xml_variant!(
+    MATHML,
+    MATHML_INFO,
+    dissect_mathml,
+    "mathml",
+    "MathML",
+    ["mml", "mathml"],
+    "application/mathml+xml",
+    |r| r.local() == b"math",
+    no_detail
+);
+xml_variant!(
+    XSLT,
+    XSLT_INFO,
+    dissect_xslt,
+    "xslt",
+    "XSLT stylesheet",
+    ["xsl", "xslt"],
     "application/xslt+xml",
-    |r| matches!(r.local(), b"stylesheet" | b"transform") && r.mentions(b"http://www.w3.org/1999/XSL/Transform"),
-    |r, _| attr(r, b"version").map(|v| format!("version {v}")));
-xml_variant!(XSD, XSD_INFO, dissect_xsd, "xsd", "XML Schema", ["xsd"],
+    |r| matches!(r.local(), b"stylesheet" | b"transform")
+        && r.mentions(b"http://www.w3.org/1999/XSL/Transform"),
+    |r, _| attr(r, b"version").map(|v| format!("version {v}"))
+);
+xml_variant!(
+    XSD,
+    XSD_INFO,
+    dissect_xsd,
+    "xsd",
+    "XML Schema",
+    ["xsd"],
     "application/xml",
     |r| r.local() == b"schema" && r.mentions(b"http://www.w3.org/2001/XMLSchema"),
-    |r, _| attr(r, b"targetNamespace"));
-xml_variant!(MSBUILD, MSBUILD_INFO, dissect_msbuild, "msbuild", "MSBuild project",
-    ["csproj", "vbproj", "fsproj", "vcxproj", "props", "targets", "proj"],
+    |r, _| attr(r, b"targetNamespace")
+);
+xml_variant!(
+    MSBUILD,
+    MSBUILD_INFO,
+    dissect_msbuild,
+    "msbuild",
+    "MSBuild project",
+    [
+        "csproj", "vbproj", "fsproj", "vcxproj", "props", "targets", "proj"
+    ],
     "application/xml",
-    |r| r.is(b"Project") && (r.mentions(b"Sdk=") || r.mentions(b"schemas.microsoft.com/developer/msbuild")),
-    |r, _| attr(r, b"Sdk"));
-xml_variant!(COLLADA, COLLADA_INFO, dissect_collada, "collada", "COLLADA 3D asset", ["dae"],
-    "model/vnd.collada+xml", |r| r.is(b"COLLADA"),
-    |r, _| attr(r, b"version").map(|v| format!("version {v}")));
-xml_variant!(TTML, TTML_INFO, dissect_ttml, "ttml", "Timed Text Markup Language", ["ttml", "dfxp"],
-    "application/ttml+xml", |r| r.local() == b"tt" && r.mentions(b"/ttml"), no_detail);
-xml_variant!(DASH, DASH_INFO, dissect_dash, "dash-mpd", "MPEG-DASH manifest", ["mpd"],
-    "application/dash+xml", |r| r.local() == b"MPD",
-    |r, _| attr(r, b"type").map(|t| format!("{t} presentation")));
-xml_variant!(XLIFF, XLIFF_INFO, dissect_xliff, "xliff", "XLIFF localisation", ["xlf", "xliff"],
-    "application/xliff+xml", |r| r.local() == b"xliff",
-    |r, _| attr(r, b"version").map(|v| format!("version {v}")));
-xml_variant!(OPF, OPF_INFO, dissect_opf, "opf", "EPUB package document", ["opf"],
+    |r| r.is(b"Project")
+        && (r.mentions(b"Sdk=") || r.mentions(b"schemas.microsoft.com/developer/msbuild")),
+    |r, _| attr(r, b"Sdk")
+);
+xml_variant!(
+    COLLADA,
+    COLLADA_INFO,
+    dissect_collada,
+    "collada",
+    "COLLADA 3D asset",
+    ["dae"],
+    "model/vnd.collada+xml",
+    |r| r.is(b"COLLADA"),
+    |r, _| attr(r, b"version").map(|v| format!("version {v}"))
+);
+xml_variant!(
+    TTML,
+    TTML_INFO,
+    dissect_ttml,
+    "ttml",
+    "Timed Text Markup Language",
+    ["ttml", "dfxp"],
+    "application/ttml+xml",
+    |r| r.local() == b"tt" && r.mentions(b"/ttml"),
+    no_detail
+);
+xml_variant!(
+    DASH,
+    DASH_INFO,
+    dissect_dash,
+    "dash-mpd",
+    "MPEG-DASH manifest",
+    ["mpd"],
+    "application/dash+xml",
+    |r| r.local() == b"MPD",
+    |r, _| attr(r, b"type").map(|t| format!("{t} presentation"))
+);
+xml_variant!(
+    XLIFF,
+    XLIFF_INFO,
+    dissect_xliff,
+    "xliff",
+    "XLIFF localisation",
+    ["xlf", "xliff"],
+    "application/xliff+xml",
+    |r| r.local() == b"xliff",
+    |r, _| attr(r, b"version").map(|v| format!("version {v}"))
+);
+xml_variant!(
+    OPF,
+    OPF_INFO,
+    dissect_opf,
+    "opf",
+    "EPUB package document",
+    ["opf"],
     "application/oebps-package+xml",
     |r| r.local() == b"package" && r.mentions(b"http://www.idpf.org/2007/opf"),
-    |_, head| first_text(head, b"dc:title"));
-xml_variant!(OSM, OSM_INFO, dissect_osm, "osm", "OpenStreetMap data", ["osm"],
-    "application/vnd.openstreetmap.data+xml", |r| r.is(b"osm"),
-    |r, _| attr(r, b"generator"));
-xml_variant!(XSPF, XSPF_INFO, dissect_xspf, "xspf", "XML Shareable Playlist", ["xspf"],
+    |_, head| first_text(head, b"dc:title")
+);
+xml_variant!(
+    OSM,
+    OSM_INFO,
+    dissect_osm,
+    "osm",
+    "OpenStreetMap data",
+    ["osm"],
+    "application/vnd.openstreetmap.data+xml",
+    |r| r.is(b"osm"),
+    |r, _| attr(r, b"generator")
+);
+xml_variant!(
+    XSPF,
+    XSPF_INFO,
+    dissect_xspf,
+    "xspf",
+    "XML Shareable Playlist",
+    ["xspf"],
     "application/xspf+xml",
     |r| r.local() == b"playlist" && r.mentions(b"http://xspf.org/ns/0/"),
-    |_, head| first_text(head, b"title"));
-xml_variant!(TEI, TEI_INFO, dissect_tei, "tei", "TEI document", ["tei"],
-    "application/tei+xml", |r| r.local() == b"TEI" || r.local() == b"teiCorpus",
-    |_, head| first_text(head, b"title"));
-xml_variant!(DOCBOOK, DOCBOOK_INFO, dissect_docbook, "docbook", "DocBook document", ["dbk", "docbook"],
-    "application/docbook+xml", |r| r.mentions(b"http://docbook.org/ns/docbook"),
-    |_, head| first_text(head, b"title"));
-xml_variant!(ANDROID_MANIFEST, ANDROID_MANIFEST_INFO, dissect_android_manifest, "android-manifest",
-    "Android manifest (text)", [], "application/xml",
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    TEI,
+    TEI_INFO,
+    dissect_tei,
+    "tei",
+    "TEI document",
+    ["tei"],
+    "application/tei+xml",
+    |r| r.local() == b"TEI" || r.local() == b"teiCorpus",
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    DOCBOOK,
+    DOCBOOK_INFO,
+    dissect_docbook,
+    "docbook",
+    "DocBook document",
+    ["dbk", "docbook"],
+    "application/docbook+xml",
+    |r| r.mentions(b"http://docbook.org/ns/docbook"),
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    ANDROID_MANIFEST,
+    ANDROID_MANIFEST_INFO,
+    dissect_android_manifest,
+    "android-manifest",
+    "Android manifest (text)",
+    [],
+    "application/xml",
     |r| r.is(b"manifest") && r.mentions(b"schemas.android.com/apk/res/android"),
-    |r, _| attr(r, b"package"));
-xml_variant!(WSDL, WSDL_INFO, dissect_wsdl, "wsdl", "WSDL service description", ["wsdl"],
+    |r, _| attr(r, b"package")
+);
+xml_variant!(
+    WSDL,
+    WSDL_INFO,
+    dissect_wsdl,
+    "wsdl",
+    "WSDL service description",
+    ["wsdl"],
     "application/wsdl+xml",
     |r| matches!(r.local(), b"definitions" | b"description") && r.mentions(b"wsdl"),
-    |r, _| attr(r, b"name"));
-xml_variant!(SOAP, SOAP_INFO, dissect_soap, "soap", "SOAP message", [], "application/soap+xml",
-    |r| r.local() == b"Envelope" && r.mentions(b"soap"), no_detail);
-xml_variant!(SITEMAP, SITEMAP_INFO, dissect_sitemap, "sitemap", "Sitemap", [], "application/xml",
-    |r| matches!(r.local(), b"urlset" | b"sitemapindex") && r.mentions(b"sitemaps.org"), no_detail);
-xml_variant!(DRAWIO, DRAWIO_INFO, dissect_drawio, "drawio", "draw.io diagram", ["drawio"],
-    "application/vnd.jgraph.mxfile", |r| r.is(b"mxfile") || r.is(b"mxGraphModel"),
-    |r, _| attr(r, b"host"));
-xml_variant!(OPML, OPML_INFO, dissect_opml, "opml", "OPML outline", ["opml"],
-    "text/x-opml", |r| r.is(b"opml"), |_, head| first_text(head, b"title"));
-xml_variant!(FB2, FB2_INFO, dissect_fb2, "fb2", "FictionBook e-book", ["fb2"],
-    "application/x-fictionbook+xml", |r| r.is(b"FictionBook"),
-    |_, head| first_text(head, b"book-title"));
-xml_variant!(GRAPHML, GRAPHML_INFO, dissect_graphml, "graphml", "GraphML graph", ["graphml"],
-    "application/graphml+xml", |r| r.local() == b"graphml", no_detail);
-xml_variant!(SMIL, SMIL_INFO, dissect_smil, "smil", "SMIL presentation", ["smil", "smi", "wpl"],
-    "application/smil+xml", |r| r.local() == b"smil", |_, head| first_text(head, b"title"));
-xml_variant!(NZB, NZB_INFO, dissect_nzb, "nzb", "NZB Usenet index", ["nzb"],
-    "application/x-nzb", |r| r.local() == b"nzb", no_detail);
-xml_variant!(JUNIT, JUNIT_INFO, dissect_junit, "junit-xml", "JUnit test report", [],
-    "application/xml", |r| matches!(r.local(), b"testsuites" | b"testsuite"),
+    |r, _| attr(r, b"name")
+);
+xml_variant!(
+    SOAP,
+    SOAP_INFO,
+    dissect_soap,
+    "soap",
+    "SOAP message",
+    [],
+    "application/soap+xml",
+    |r| r.local() == b"Envelope" && r.mentions(b"soap"),
+    no_detail
+);
+xml_variant!(
+    SITEMAP,
+    SITEMAP_INFO,
+    dissect_sitemap,
+    "sitemap",
+    "Sitemap",
+    [],
+    "application/xml",
+    |r| matches!(r.local(), b"urlset" | b"sitemapindex") && r.mentions(b"sitemaps.org"),
+    no_detail
+);
+xml_variant!(
+    DRAWIO,
+    DRAWIO_INFO,
+    dissect_drawio,
+    "drawio",
+    "draw.io diagram",
+    ["drawio"],
+    "application/vnd.jgraph.mxfile",
+    |r| r.is(b"mxfile") || r.is(b"mxGraphModel"),
+    |r, _| attr(r, b"host")
+);
+xml_variant!(
+    OPML,
+    OPML_INFO,
+    dissect_opml,
+    "opml",
+    "OPML outline",
+    ["opml"],
+    "text/x-opml",
+    |r| r.is(b"opml"),
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    FB2,
+    FB2_INFO,
+    dissect_fb2,
+    "fb2",
+    "FictionBook e-book",
+    ["fb2"],
+    "application/x-fictionbook+xml",
+    |r| r.is(b"FictionBook"),
+    |_, head| first_text(head, b"book-title")
+);
+xml_variant!(
+    GRAPHML,
+    GRAPHML_INFO,
+    dissect_graphml,
+    "graphml",
+    "GraphML graph",
+    ["graphml"],
+    "application/graphml+xml",
+    |r| r.local() == b"graphml",
+    no_detail
+);
+xml_variant!(
+    SMIL,
+    SMIL_INFO,
+    dissect_smil,
+    "smil",
+    "SMIL presentation",
+    ["smil", "smi", "wpl"],
+    "application/smil+xml",
+    |r| r.local() == b"smil",
+    |_, head| first_text(head, b"title")
+);
+xml_variant!(
+    NZB,
+    NZB_INFO,
+    dissect_nzb,
+    "nzb",
+    "NZB Usenet index",
+    ["nzb"],
+    "application/x-nzb",
+    |r| r.local() == b"nzb",
+    no_detail
+);
+xml_variant!(
+    JUNIT,
+    JUNIT_INFO,
+    dissect_junit,
+    "junit-xml",
+    "JUnit test report",
+    [],
+    "application/xml",
+    |r| matches!(r.local(), b"testsuites" | b"testsuite"),
     |r, _| match (attr(r, b"tests"), attr(r, b"failures")) {
         (Some(t), Some(f)) => Some(format!("{t} tests, {f} failures")),
         (t, _) => t.map(|t| format!("{t} tests")),
-    });
-xml_variant!(MUSICXML, MUSICXML_INFO, dissect_musicxml, "musicxml", "MusicXML score", ["musicxml"],
+    }
+);
+xml_variant!(
+    MUSICXML,
+    MUSICXML_INFO,
+    dissect_musicxml,
+    "musicxml",
+    "MusicXML score",
+    ["musicxml"],
     "application/vnd.recordare.musicxml+xml",
     |r| matches!(r.local(), b"score-partwise" | b"score-timewise"),
-    |_, head| first_text(head, b"work-title").or_else(|| first_text(head, b"movement-title")));
-xml_variant!(X3D, X3D_INFO, dissect_x3d, "x3d", "X3D scene", ["x3d"],
-    "model/x3d+xml", |r| r.is(b"X3D"), |r, _| attr(r, b"profile"));
-xml_variant!(WIX, WIX_INFO, dissect_wix, "wix", "WiX installer source", ["wxs", "wxi", "wxl"],
-    "application/xml", |r| r.is(b"Wix"), no_detail);
-xml_variant!(NUSPEC, NUSPEC_INFO, dissect_nuspec, "nuspec", "NuGet package manifest", ["nuspec"],
-    "application/xml", |r| r.local() == b"package" && r.mentions(b"nuspec.xsd"),
-    |_, head| first_text(head, b"id"));
-xml_variant!(XIB, XIB_INFO, dissect_xib, "interface-builder", "Interface Builder document",
-    ["xib", "storyboard"], "application/xml",
-    |r| r.is(b"document") && r.mentions(b"com.apple.InterfaceBuilder"), |r, _| attr(r, b"type"));
-xml_variant!(GLADE, GLADE_INFO, dissect_glade, "gtkbuilder", "GtkBuilder UI definition", ["ui", "glade"],
-    "application/x-gtk-builder", |r| r.is(b"interface"), no_detail);
-xml_variant!(FLAT_ODF, FLAT_ODF_INFO, dissect_flat_odf, "flat-odf", "Flat OpenDocument",
-    ["fodt", "fods", "fodp", "fodg"], "application/vnd.oasis.opendocument.text-flat-xml",
-    |r| r.is(b"office:document"), |r, _| attr(r, b"office:mimetype"));
-xml_variant!(VSTEMPLATE, VSTEMPLATE_INFO, dissect_vsixmanifest, "vsix-manifest", "VSIX extension manifest",
-    ["vsixmanifest"], "application/xml", |r| r.local() == b"PackageManifest", no_detail);
+    |_, head| first_text(head, b"work-title").or_else(|| first_text(head, b"movement-title"))
+);
+xml_variant!(
+    X3D,
+    X3D_INFO,
+    dissect_x3d,
+    "x3d",
+    "X3D scene",
+    ["x3d"],
+    "model/x3d+xml",
+    |r| r.is(b"X3D"),
+    |r, _| attr(r, b"profile")
+);
+xml_variant!(
+    WIX,
+    WIX_INFO,
+    dissect_wix,
+    "wix",
+    "WiX installer source",
+    ["wxs", "wxi", "wxl"],
+    "application/xml",
+    |r| r.is(b"Wix"),
+    no_detail
+);
+xml_variant!(
+    NUSPEC,
+    NUSPEC_INFO,
+    dissect_nuspec,
+    "nuspec",
+    "NuGet package manifest",
+    ["nuspec"],
+    "application/xml",
+    |r| r.local() == b"package" && r.mentions(b"nuspec.xsd"),
+    |_, head| first_text(head, b"id")
+);
+xml_variant!(
+    XIB,
+    XIB_INFO,
+    dissect_xib,
+    "interface-builder",
+    "Interface Builder document",
+    ["xib", "storyboard"],
+    "application/xml",
+    |r| r.is(b"document") && r.mentions(b"com.apple.InterfaceBuilder"),
+    |r, _| attr(r, b"type")
+);
+xml_variant!(
+    GLADE,
+    GLADE_INFO,
+    dissect_glade,
+    "gtkbuilder",
+    "GtkBuilder UI definition",
+    ["ui", "glade"],
+    "application/x-gtk-builder",
+    |r| r.is(b"interface"),
+    no_detail
+);
+xml_variant!(
+    FLAT_ODF,
+    FLAT_ODF_INFO,
+    dissect_flat_odf,
+    "flat-odf",
+    "Flat OpenDocument",
+    ["fodt", "fods", "fodp", "fodg"],
+    "application/vnd.oasis.opendocument.text-flat-xml",
+    |r| r.is(b"office:document"),
+    |r, _| attr(r, b"office:mimetype")
+);
+xml_variant!(
+    VSTEMPLATE,
+    VSTEMPLATE_INFO,
+    dissect_vsixmanifest,
+    "vsix-manifest",
+    "VSIX extension manifest",
+    ["vsixmanifest"],
+    "application/xml",
+    |r| r.local() == b"PackageManifest",
+    no_detail
+);
 
 /// The value of attribute `name` in the root's start tag.
 fn attr(root: &Root, name: &[u8]) -> Option<String> {
@@ -324,7 +651,11 @@ pub fn first_text(head: &[u8], tag: &[u8]) -> Option<String> {
 }
 
 fn svg_detail(root: &Root, _: &[u8]) -> Option<String> {
-    match (attr(root, b"width"), attr(root, b"height"), attr(root, b"viewBox")) {
+    match (
+        attr(root, b"width"),
+        attr(root, b"height"),
+        attr(root, b"viewBox"),
+    ) {
         (Some(w), Some(h), _) => Some(format!("{w}×{h}")),
         (_, _, Some(v)) => Some(format!("viewBox {v}")),
         _ => None,
@@ -381,13 +712,35 @@ pub fn is_name(b: u8) -> bool {
 
 /// HTML elements whose content is raw text up to their end tag.
 const RAW_TEXT: &[&[u8]] = &[
-    b"script", b"style", b"textarea", b"title", b"xmp", b"noembed", b"noframes", b"iframe",
+    b"script",
+    b"style",
+    b"textarea",
+    b"title",
+    b"xmp",
+    b"noembed",
+    b"noframes",
+    b"iframe",
 ];
 
 /// HTML elements that never have content.
 pub const VOID: &[&[u8]] = &[
-    b"area", b"base", b"br", b"col", b"embed", b"hr", b"img", b"input", b"link", b"meta",
-    b"param", b"source", b"track", b"wbr", b"keygen", b"basefont", b"frame",
+    b"area",
+    b"base",
+    b"br",
+    b"col",
+    b"embed",
+    b"hr",
+    b"img",
+    b"input",
+    b"link",
+    b"meta",
+    b"param",
+    b"source",
+    b"track",
+    b"wbr",
+    b"keygen",
+    b"basefont",
+    b"frame",
 ];
 
 pub struct Lexer<'a> {
@@ -463,7 +816,10 @@ impl<'a> Lexer<'a> {
             Some(b'<') => self.markup(start).await?,
             Some(_) => self.text(start).await?,
         };
-        self.pos = tok.end.max(start.saturating_add(1)).min(self.scan.len().max(start));
+        self.pos = tok
+            .end
+            .max(start.saturating_add(1))
+            .min(self.scan.len().max(start));
         if tok.kind == Kind::Eof {
             self.pos = start;
         }
@@ -623,7 +979,12 @@ pub struct Attr<'a> {
 
 /// The attributes of a start tag (`tag` starts at `<`).
 pub fn attributes(tag: Piece<'_>) -> Vec<Attr<'_>> {
-    let name_len = tag.from(1).bytes().iter().take_while(|&&b| is_name(b)).count();
+    let name_len = tag
+        .from(1)
+        .bytes()
+        .iter()
+        .take_while(|&&b| is_name(b))
+        .count();
     let mut rest = tag.from(name_len.saturating_add(1));
     let mut out = Vec::new();
     loop {
@@ -797,9 +1158,34 @@ pub struct Extent {
 /// Whether, in HTML, a start tag `new` implicitly closes an open `open`.
 fn html_closes(open: &[u8], new: &[u8]) -> bool {
     const BLOCK: &[&[u8]] = &[
-        b"p", b"div", b"ul", b"ol", b"dl", b"table", b"h1", b"h2", b"h3", b"h4", b"h5", b"h6",
-        b"pre", b"blockquote", b"form", b"hr", b"section", b"article", b"header", b"footer",
-        b"nav", b"aside", b"main", b"figure", b"fieldset", b"address", b"details", b"menu",
+        b"p",
+        b"div",
+        b"ul",
+        b"ol",
+        b"dl",
+        b"table",
+        b"h1",
+        b"h2",
+        b"h3",
+        b"h4",
+        b"h5",
+        b"h6",
+        b"pre",
+        b"blockquote",
+        b"form",
+        b"hr",
+        b"section",
+        b"article",
+        b"header",
+        b"footer",
+        b"nav",
+        b"aside",
+        b"main",
+        b"figure",
+        b"fieldset",
+        b"address",
+        b"details",
+        b"menu",
     ];
     match open {
         b"p" => BLOCK.contains(&new),
@@ -1058,7 +1444,9 @@ async fn element_node(
         node = node.summary(summary);
     }
     match ext.closure {
-        Closure::Unclosed => node = node.diag(Diagnostic::new(DiagKind::Truncated, "element not closed")),
+        Closure::Unclosed => {
+            node = node.diag(Diagnostic::new(DiagKind::Truncated, "element not closed"))
+        }
         Closure::Implicit if lex.mode == Mode::Xml => {
             node = node.diag(Diagnostic::malformed("end tag missing"));
         }
@@ -1103,7 +1491,15 @@ pub async fn element(cx: Cx, e: Elem) -> Result<()> {
     }
     let mut inner: Vec<Vec<u8>> = e.ancestors.iter().take(MAX_STACK).cloned().collect();
     inner.push(own_name.clone());
-    content(&cx, &mut lex, e.input, &ns, Some(&own_name), &Arc::new(inner)).await
+    content(
+        &cx,
+        &mut lex,
+        e.input,
+        &ns,
+        Some(&own_name),
+        &Arc::new(inner),
+    )
+    .await
 }
 
 /// Pushes the nodes of element content (or of the document top level when
@@ -1130,7 +1526,9 @@ async fn content(
                 Node::new("Stray end tag")
                     .span(span)
                     .value(Value::Text(String::from_utf8_lossy(&name).into_owned()))
-                    .diag(Diagnostic::malformed("end tag without a matching start tag"))
+                    .diag(Diagnostic::malformed(
+                        "end tag without a matching start tag",
+                    ))
             }
             Kind::Start => {
                 let ext = skip_element(lex, &t, ancestors).await?;
@@ -1159,12 +1557,19 @@ async fn content(
                 )
             }
             Kind::Doctype => doctype_node(lex, &t).await?,
-            Kind::Bang => text_node("<!…>", span, &lex.owned(&t, VALUE_CAP).await?.piece().text()),
+            Kind::Bang => text_node(
+                "<!…>",
+                span,
+                &lex.owned(&t, VALUE_CAP).await?.piece().text(),
+            ),
         };
         let node = if t.closed {
             node
         } else {
-            node.diag(Diagnostic::new(DiagKind::Truncated, "markup not terminated"))
+            node.diag(Diagnostic::new(
+                DiagKind::Truncated,
+                "markup not terminated",
+            ))
         };
         cx.push(node).await;
     }
@@ -1184,7 +1589,11 @@ async fn declaration(cx: Cx, (span, mode): (Span, Mode)) -> Result<()> {
                 b"standalone" => "Standalone".to_owned(),
                 other => String::from_utf8_lossy(other).into_owned(),
             };
-            cx.emit(text_node(name, v.span(), &decode_entities(&v.text(), mode == Mode::Html)));
+            cx.emit(text_node(
+                name,
+                v.span(),
+                &decode_entities(&v.text(), mode == Mode::Html),
+            ));
         }
     }
     Ok(())
@@ -1210,7 +1619,9 @@ async fn doctype_node(lex: &mut Lexer<'_>, t: &Tok) -> Result<Node> {
     }
     if let Some(i) = p.find(b'[') {
         let subset = p.from(i);
-        let subset = subset.to(subset.rfind(b']').map_or(subset.len(), |j| j.saturating_add(1)));
+        let subset = subset.to(subset
+            .rfind(b']')
+            .map_or(subset.len(), |j| j.saturating_add(1)));
         node = node.lazy(internal_subset, subset.span());
     }
     Ok(node)
@@ -1273,7 +1684,11 @@ async fn root_extent(lex: &mut Lexer<'_>, open: &Tok) -> Result<Extent> {
         .find_map(|(i, _)| {
             let after = tail.get(i.saturating_add(close.len())..)?;
             let gt = after.iter().position(|&b| !b.is_ascii_whitespace())?;
-            (after.get(gt) == Some(&b'>')).then(|| i.saturating_add(close.len()).saturating_add(gt).saturating_add(1))
+            (after.get(gt) == Some(&b'>')).then(|| {
+                i.saturating_add(close.len())
+                    .saturating_add(gt)
+                    .saturating_add(1)
+            })
         });
     let unknown = Extent {
         end: total,
@@ -1301,9 +1716,10 @@ pub async fn document(cx: &Cx, input: Input, mode: Mode) -> Result<()> {
     let prepared = prepare(cx, input).await?;
     let input = prepared.input(input);
     let mut lex = Lexer::new(cx, prepared.span, mode);
-    let ns: Bindings = Arc::new(vec![
-        ("xml".to_owned(), "http://www.w3.org/XML/1998/namespace".to_owned()),
-    ]);
+    let ns: Bindings = Arc::new(vec![(
+        "xml".to_owned(),
+        "http://www.w3.org/XML/1998/namespace".to_owned(),
+    )]);
     let mut roots = 0u32;
     loop {
         let t = lex.next().await?;

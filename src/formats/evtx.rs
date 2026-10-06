@@ -143,7 +143,10 @@ async fn chunk(cx: Cx, span: Span) -> Result<()> {
     cx.emit(node);
     cx.emit(
         Node::new("String and template tables")
-            .span(span.sub(ChunkHeader::SIZE, RECORDS_START.saturating_sub(ChunkHeader::SIZE)))
+            .span(span.sub(
+                ChunkHeader::SIZE,
+                RECORDS_START.saturating_sub(ChunkHeader::SIZE),
+            ))
             .desc("64 string offsets and 32 template offsets used by Binary XML"),
     );
     let end = u64::from(header.free_offset).clamp(RECORDS_START, CHUNK);
@@ -196,7 +199,11 @@ async fn record(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     RecordHeader::read(&mut f)?;
-    let body = span.sub(RecordHeader::SIZE, span.len.saturating_sub(RecordHeader::SIZE.saturating_add(4)));
+    let body = span.sub(
+        RecordHeader::SIZE,
+        span.len
+            .saturating_sub(RecordHeader::SIZE.saturating_add(4)),
+    );
     cx.emit(
         Node::new("Event (Binary XML)")
             .span(body)

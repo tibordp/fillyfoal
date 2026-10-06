@@ -21,7 +21,14 @@ const BE: Endian = Endian::Big;
 declare_format!(pub GNOME_KEYRING = "gnome-keyring", "GNOME Keyring file", ["keyring"], "application/x-gnome-keyring",
     Probe::Magic(&[(0, b"GnomeKeyring\n\r\0\n")]), gnome_keyring);
 
-const ITEM_TYPES: EnumTable = &[(0, "generic secret"), (1, "network password"), (2, "note"), (3, "chained keyring password"), (4, "encryption key password"), (0x100, "public key storage")];
+const ITEM_TYPES: EnumTable = &[
+    (0, "generic secret"),
+    (1, "network password"),
+    (2, "note"),
+    (3, "chained keyring password"),
+    (4, "encryption key password"),
+    (0x100, "public key storage"),
+];
 
 /// A keyring string: u32 length (0xffffffff for none), then UTF-8.
 async fn kr_string(cur: &mut Cursor<'_>) -> Result<(Option<String>, Span)> {
@@ -34,7 +41,10 @@ async fn kr_string(cur: &mut Cursor<'_>) -> Result<(Option<String>, Span)> {
         return Err(Diagnostic::malformed("string longer than the file").at(cur.since(start)));
     }
     let raw = cur.bytes(len.into()).await?;
-    Ok((Some(String::from_utf8_lossy(&raw).into_owned()), cur.since(start)))
+    Ok((
+        Some(String::from_utf8_lossy(&raw).into_owned()),
+        cur.since(start),
+    ))
 }
 
 async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
@@ -45,14 +55,31 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
     let vspan = cur.span(4);
     let v = cur.bytes(4).await?;
     let get = |i: usize| v.get(i).copied().unwrap_or(0);
-    cx.emit(Node::new("Version").span(vspan).value(text(format!("{}.{}", get(0), get(1)))).summary(format!(
-        "{}, {}",
-        if get(2) == 0 { "AES-128" } else { "unknown cipher" },
-        if get(3) == 0 { "MD5 key derivation" } else { "unknown hash" }
-    )));
+    cx.emit(
+        Node::new("Version")
+            .span(vspan)
+            .value(text(format!("{}.{}", get(0), get(1))))
+            .summary(format!(
+                "{}, {}",
+                if get(2) == 0 {
+                    "AES-128"
+                } else {
+                    "unknown cipher"
+                },
+                if get(3) == 0 {
+                    "MD5 key derivation"
+                } else {
+                    "unknown hash"
+                }
+            )),
+    );
     let (name, span) = kr_string(&mut cur).await?;
     let name = name.unwrap_or_default();
-    cx.emit(Node::new("Keyring name").span(span).value(text(name.clone())));
+    cx.emit(
+        Node::new("Keyring name")
+            .span(span)
+            .value(text(name.clone())),
+    );
     let fixed = cur.span(52);
     let block = cx.block(fixed).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
@@ -66,7 +93,15 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
     cur.skip(52);
     let count_span = cur.span(4);
     let count = cur.u32().await?;
-    cx.emit(Node::new("Number of items").span(count_span).value(Value::UInt { value: count.into(), bits: 32, radix: crate::value::Radix::Dec }));
+    cx.emit(
+        Node::new("Number of items")
+            .span(count_span)
+            .value(Value::UInt {
+                value: count.into(),
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
     for i in 0..count.min(100_000) {
         let start = cur.pos();
         let id = cur.u32().await?;
@@ -86,7 +121,11 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Item {id}"))
                 .span(cur.since(start))
-                .value(Value::Enum { raw: kind.into(), bits: 32, name: lookup(ITEM_TYPES, kind.into()) })
+                .value(Value::Enum {
+                    raw: kind.into(),
+                    bits: 32,
+                    name: lookup(ITEM_TYPES, kind.into()),
+                })
                 .summary(format!("hashed attributes: {}", names.join(", ")))
                 .desc(format!("Item index {i}")),
         )
@@ -94,9 +133,26 @@ async fn gnome_keyring(cx: Cx, input: Input) -> Result<()> {
     }
     let len_span = cur.span(4);
     let enc = u64::from(cur.u32().await?);
-    cx.emit(Node::new("Encrypted size").span(len_span).value(Value::UInt { value: enc, bits: 32, radix: crate::value::Radix::Dec }));
-    cx.emit(Node::new("Encrypted data").span(cur.span(enc)).diag(Diagnostic::note("AES-128-CBC; requires the keyring password")));
-    cx.annotate(format!("GNOME Keyring {name:?}, {count} items, {} encrypted", size(enc)));
+    cx.emit(
+        Node::new("Encrypted size")
+            .span(len_span)
+            .value(Value::UInt {
+                value: enc,
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
+    cx.emit(
+        Node::new("Encrypted data")
+            .span(cur.span(enc))
+            .diag(Diagnostic::note(
+                "AES-128-CBC; requires the keyring password",
+            )),
+    );
+    cx.annotate(format!(
+        "GNOME Keyring {name:?}, {count} items, {} encrypted",
+        size(enc)
+    ));
     Ok(())
 }
 
@@ -139,7 +195,11 @@ async fn kwallet(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.emit(Node::new("Encrypted data").span(file.tail(cur.pos())).diag(Diagnostic::note("requires the wallet password")));
+    cx.emit(
+        Node::new("Encrypted data")
+            .span(file.tail(cur.pos()))
+            .diag(Diagnostic::note("requires the wallet password")),
+    );
     cx.annotate(format!(
         "KWallet {major}.{minor}, {}, {}, {folders} folders, {entries_total} entries",
         lookup(KW_CIPHERS, cipher.into()).unwrap_or("unknown cipher"),
@@ -151,7 +211,13 @@ async fn kwallet(cx: Cx, input: Input) -> Result<()> {
 async fn kw_entries(cx: Cx, list: Span) -> Result<()> {
     let raw = cx.read(list).await?;
     for (i, h) in raw.as_chunks::<16>().0.iter().enumerate() {
-        cx.push(Node::new(format!("Entry {i}")).span(list.sub(crate::bytes::to_u64(i).saturating_mul(16), 16)).value(text(hex_string(h))).desc("MD5 of the entry key")).await;
+        cx.push(
+            Node::new(format!("Entry {i}"))
+                .span(list.sub(crate::bytes::to_u64(i).saturating_mul(16), 16))
+                .value(text(hex_string(h)))
+                .desc("MD5 of the entry key"),
+        )
+        .await;
     }
     Ok(())
 }

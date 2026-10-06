@@ -64,14 +64,27 @@ record! {
 }
 
 const ASE_CHUNKS: EnumTable = &[
-    (0x0004, "Old palette"), (0x0011, "Old palette (64 colours)"), (0x2004, "Layer"), (0x2005, "Cel"),
-    (0x2006, "Cel extra"), (0x2007, "Colour profile"), (0x2008, "External files"), (0x2016, "Mask"),
-    (0x2017, "Path"), (0x2018, "Tags"), (0x2019, "Palette"), (0x2020, "User data"), (0x2022, "Slice"),
+    (0x0004, "Old palette"),
+    (0x0011, "Old palette (64 colours)"),
+    (0x2004, "Layer"),
+    (0x2005, "Cel"),
+    (0x2006, "Cel extra"),
+    (0x2007, "Colour profile"),
+    (0x2008, "External files"),
+    (0x2016, "Mask"),
+    (0x2017, "Path"),
+    (0x2018, "Tags"),
+    (0x2019, "Palette"),
+    (0x2020, "User data"),
+    (0x2022, "Slice"),
     (0x2023, "Tileset"),
 ];
 
 fn ase_chunk_name(t: u16) -> &'static str {
-    ASE_CHUNKS.iter().find(|(k, _)| *k == u64::from(t)).map_or("Unknown chunk", |(_, v)| v)
+    ASE_CHUNKS
+        .iter()
+        .find(|(k, _)| *k == u64::from(t))
+        .map_or("Unknown chunk", |(_, v)| v)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -85,7 +98,10 @@ async fn aseprite(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, LE);
     let (h, span) = cur.record::<AseHeader>().await?;
     cx.emit(AseHeader::node("Header", span, LE));
-    let sprite = Sprite { input, depth: h.depth };
+    let sprite = Sprite {
+        input,
+        depth: h.depth,
+    };
     for i in 0..h.frames {
         if cur.at_end() {
             break;
@@ -93,24 +109,48 @@ async fn aseprite(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let (f, _) = cur.record::<AseFrame>().await?;
         if f.magic != 0xf1fa || f.size < 16 {
-            cx.emit(Node::new(format!("Frame {i}")).span(file.tail(start)).diag(Diagnostic::malformed("bad frame magic or size")));
+            cx.emit(
+                Node::new(format!("Frame {i}"))
+                    .span(file.tail(start))
+                    .diag(Diagnostic::malformed("bad frame magic or size")),
+            );
             break;
         }
         let span = file.sub_exact(start, f.size.into())?;
         cur.seek(start.saturating_add(f.size.into()));
-        let chunks = if f.chunks == 0 { u32::from(f.old_chunks) } else { f.chunks };
-        cx.push(Node::new(format!("Frame {i}")).span(span).summary(format!("{} ms, {chunks} chunks", f.duration)).lazy(ase_frame, (span, chunks, sprite))).await;
+        let chunks = if f.chunks == 0 {
+            u32::from(f.old_chunks)
+        } else {
+            f.chunks
+        };
+        cx.push(
+            Node::new(format!("Frame {i}"))
+                .span(span)
+                .summary(format!("{} ms, {chunks} chunks", f.duration))
+                .lazy(ase_frame, (span, chunks, sprite)),
+        )
+        .await;
     }
-    cx.annotate(format!("Aseprite sprite, {}×{}, {} frames, {}", h.width, h.height, h.frames, match h.depth {
-        8 => "indexed",
-        16 => "grayscale",
-        _ => "RGBA",
-    }));
+    cx.annotate(format!(
+        "Aseprite sprite, {}×{}, {} frames, {}",
+        h.width,
+        h.height,
+        h.frames,
+        match h.depth {
+            8 => "indexed",
+            16 => "grayscale",
+            _ => "RGBA",
+        }
+    ));
     Ok(())
 }
 
 async fn ase_frame(cx: Cx, (span, count, sprite): (Span, u32, Sprite)) -> Result<()> {
-    cx.emit(AseFrame::node("Frame header", span.sub(0, AseFrame::SIZE), LE));
+    cx.emit(AseFrame::node(
+        "Frame header",
+        span.sub(0, AseFrame::SIZE),
+        LE,
+    ));
     let mut cur = Cursor::new(&cx, span, LE);
     cur.seek(AseFrame::SIZE);
     let mut n = 0u32;
@@ -124,17 +164,25 @@ async fn ase_frame(cx: Cx, (span, count, sprite): (Span, u32, Sprite)) -> Result
         let chunk = span.sub_exact(start, size.into())?;
         cur.seek(start.saturating_add(size.into()));
         let body = chunk.tail(6);
-        let mut node = Node::new(ase_chunk_name(kind)).span(chunk).summary(format!("{size} bytes"));
+        let mut node = Node::new(ase_chunk_name(kind))
+            .span(chunk)
+            .summary(format!("{size} bytes"));
         match kind {
             0x2004 => {
                 let b = cx.read(body.sub(0, 18)).await?;
                 let name_len = u64::from(u16_le(&b, 16).unwrap_or(0));
                 let name = cx.read(body.sub(18, name_len.min(256))).await?;
-                node = node.value(text(String::from_utf8_lossy(&name))).summary(format!("{} layer, opacity {}", match u16_le(&b, 2) {
-                    Some(1) => "group",
-                    Some(2) => "tilemap",
-                    _ => "image",
-                }, b.get(12).copied().unwrap_or(0)));
+                node = node
+                    .value(text(String::from_utf8_lossy(&name)))
+                    .summary(format!(
+                        "{} layer, opacity {}",
+                        match u16_le(&b, 2) {
+                            Some(1) => "group",
+                            Some(2) => "tilemap",
+                            _ => "image",
+                        },
+                        b.get(12).copied().unwrap_or(0)
+                    ));
             }
             0x2005 => node = node.lazy(ase_cel, (body, sprite)),
             0x2018 => node = node.lazy(ase_tags, body),
@@ -147,31 +195,73 @@ async fn ase_frame(cx: Cx, (span, count, sprite): (Span, u32, Sprite)) -> Result
     Ok(())
 }
 
-const CEL_TYPES: EnumTable = &[(0, "raw image"), (1, "linked"), (2, "compressed image"), (3, "compressed tilemap")];
+const CEL_TYPES: EnumTable = &[
+    (0, "raw image"),
+    (1, "linked"),
+    (2, "compressed image"),
+    (3, "compressed tilemap"),
+];
 
 async fn ase_cel(cx: Cx, (body, sprite): (Span, Sprite)) -> Result<()> {
     let b = cx.read(body.sub_exact(0, 16)?).await?;
     let word = |i: usize| u16_le(&b, i).unwrap_or(0);
     let signed = |i: usize| i16::from_ne_bytes(word(i).to_ne_bytes());
     let kind = word(7);
-    cx.emit(Node::new("Layer index").span(body.sub(0, 2)).value(uint(word(0), 16)));
-    cx.emit(Node::new("Position").span(body.sub(2, 4)).value(text(format!("{}, {}", signed(2), signed(4)))));
-    cx.emit(Node::new("Opacity").span(body.sub(6, 1)).value(uint(b.get(6).copied().unwrap_or(0), 8)));
-    cx.emit(Node::new("Cel type").span(body.sub(7, 2)).value(Value::Enum { raw: kind.into(), bits: 16, name: CEL_TYPES.iter().find(|(k, _)| *k == u64::from(kind)).map(|(_, v)| *v) }));
-    cx.emit(Node::new("Z-index").span(body.sub(9, 2)).value(int(signed(9), 16)));
+    cx.emit(
+        Node::new("Layer index")
+            .span(body.sub(0, 2))
+            .value(uint(word(0), 16)),
+    );
+    cx.emit(
+        Node::new("Position")
+            .span(body.sub(2, 4))
+            .value(text(format!("{}, {}", signed(2), signed(4)))),
+    );
+    cx.emit(
+        Node::new("Opacity")
+            .span(body.sub(6, 1))
+            .value(uint(b.get(6).copied().unwrap_or(0), 8)),
+    );
+    cx.emit(
+        Node::new("Cel type")
+            .span(body.sub(7, 2))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 16,
+                name: CEL_TYPES
+                    .iter()
+                    .find(|(k, _)| *k == u64::from(kind))
+                    .map(|(_, v)| *v),
+            }),
+    );
+    cx.emit(
+        Node::new("Z-index")
+            .span(body.sub(9, 2))
+            .value(int(signed(9), 16)),
+    );
     match kind {
-        1 => cx.emit(Node::new("Linked frame").span(body.sub(16, 2)).value(uint(u16_le(&cx.read(body.sub(16, 2)).await?, 0).unwrap_or(0), 16))),
+        1 => cx.emit(Node::new("Linked frame").span(body.sub(16, 2)).value(uint(
+            u16_le(&cx.read(body.sub(16, 2)).await?, 0).unwrap_or(0),
+            16,
+        ))),
         0 | 2 => {
             let wh = cx.read(body.sub_exact(16, 4)?).await?;
             let (w, h) = (u16_le(&wh, 0).unwrap_or(0), u16_le(&wh, 2).unwrap_or(0));
-            cx.emit(Node::new("Size").span(body.sub(16, 4)).value(text(format!("{w}×{h}"))));
+            cx.emit(
+                Node::new("Size")
+                    .span(body.sub(16, 4))
+                    .value(text(format!("{w}×{h}"))),
+            );
             let bpp = u64::from(sprite.depth / 8).max(1);
             let pixels = u64::from(w).saturating_mul(h.into()).saturating_mul(bpp);
             let data = body.tail(20);
             cx.emit(if kind == 2 {
-                content("Pixels", sprite.input, data, Codec::Zlib, Some(pixels)).summary(format!("zlib, {pixels} bytes decompressed"))
+                content("Pixels", sprite.input, data, Codec::Zlib, Some(pixels))
+                    .summary(format!("zlib, {pixels} bytes decompressed"))
             } else {
-                Node::new("Pixels").span(data).summary(format!("{pixels} bytes"))
+                Node::new("Pixels")
+                    .span(data)
+                    .summary(format!("{pixels} bytes"))
             });
         }
         _ => cx.emit(Node::new("Tilemap").span(body.tail(16))),
@@ -201,7 +291,13 @@ async fn ase_tags(cx: Cx, body: Span) -> Result<()> {
             2 => "ping-pong",
             _ => "ping-pong reverse",
         };
-        cx.push(Node::new(name).span(cur.since(start)).value(text(format!("frames {from}-{to}"))).summary(dir)).await;
+        cx.push(
+            Node::new(name)
+                .span(cur.since(start))
+                .value(text(format!("frames {from}-{to}")))
+                .summary(dir),
+        )
+        .await;
     }
     Ok(())
 }
@@ -223,8 +319,15 @@ async fn ase_palette(cx: Cx, body: Span) -> Result<()> {
         if flags & 1 != 0 {
             node = node.summary(ase_string(&mut cur).await?);
         }
-        let [r, g, b, a] = c.get(..4).and_then(|s| <[u8; 4]>::try_from(s).ok()).unwrap_or_default();
-        cx.push(node.span(cur.since(start)).value(text(format!("#{r:02x}{g:02x}{b:02x}{a:02x}")))).await;
+        let [r, g, b, a] = c
+            .get(..4)
+            .and_then(|s| <[u8; 4]>::try_from(s).ok())
+            .unwrap_or_default();
+        cx.push(
+            node.span(cur.since(start))
+                .value(text(format!("#{r:02x}{g:02x}{b:02x}{a:02x}"))),
+        )
+        .await;
     }
     Ok(())
 }
@@ -251,9 +354,25 @@ async fn gem(cx: Cx, input: Input) -> Result<()> {
     let h = cx.read(file.sub_exact(0, 16)?).await?;
     let w = |i: usize| u16_be(&h, i).unwrap_or(0);
     let words = u64::from(w(2));
-    for (i, name) in ["Version", "Header length (words)", "Planes", "Pattern length", "Pixel width (µm)", "Pixel height (µm)", "Width", "Height"].iter().enumerate() {
+    for (i, name) in [
+        "Version",
+        "Header length (words)",
+        "Planes",
+        "Pattern length",
+        "Pixel width (µm)",
+        "Pixel height (µm)",
+        "Width",
+        "Height",
+    ]
+    .iter()
+    .enumerate()
+    {
         let at = i.saturating_mul(2);
-        cx.emit(Node::new(*name).span(file.sub(to_u64(at), 2)).value(uint(w(at), 16)));
+        cx.emit(
+            Node::new(*name)
+                .span(file.sub(to_u64(at), 2))
+                .value(uint(w(at), 16)),
+        );
     }
     let header = words.saturating_mul(2);
     if header > 16 {
@@ -261,19 +380,32 @@ async fn gem(cx: Cx, input: Input) -> Result<()> {
         let node = Node::new("Header extension").span(file.sub(16, header.saturating_sub(16)));
         cx.emit(if ext.starts_with(b"XIMG") {
             let model = u16_be(&ext, 4).unwrap_or(0);
-            node.value(text("XIMG")).summary(format!("colour model {}", match model {
-                0 => "RGB",
-                1 => "CMY",
-                2 => "HLS",
-                3 => "Pantone",
-                _ => "unknown",
-            }))
+            node.value(text("XIMG")).summary(format!(
+                "colour model {}",
+                match model {
+                    0 => "RGB",
+                    1 => "CMY",
+                    2 => "HLS",
+                    3 => "Pantone",
+                    _ => "unknown",
+                }
+            ))
         } else {
             node
         });
     }
-    cx.emit(Node::new("Compressed scan lines").span(file.tail(header)).summary("pattern runs, solid runs, bit strings, vertical replication"));
-    cx.annotate(format!("GEM bitmap{}, {}×{}, {} planes", if header > 16 { " (XIMG)" } else { "" }, w(12), w(14), w(4)));
+    cx.emit(
+        Node::new("Compressed scan lines")
+            .span(file.tail(header))
+            .summary("pattern runs, solid runs, bit strings, vertical replication"),
+    );
+    cx.annotate(format!(
+        "GEM bitmap{}, {}×{}, {} planes",
+        if header > 16 { " (XIMG)" } else { "" },
+        w(12),
+        w(14),
+        w(4)
+    ));
     Ok(())
 }
 
@@ -285,7 +417,10 @@ fn cgm_probe(h: &Head<'_>) -> bool {
     u16_be(h.data, 0).is_some_and(|w| w >> 5 == 1 && (w & 0x1f) > 0)
         && h.data.get(2).is_some_and(|&n| {
             let len = usize::from(w0_len(h.data));
-            usize::from(n) < len && h.data.get(3..3usize.saturating_add(usize::from(n))).is_some_and(|s| s.iter().all(|b| b.is_ascii_graphic() || *b == b' '))
+            usize::from(n) < len
+                && h.data
+                    .get(3..3usize.saturating_add(usize::from(n)))
+                    .is_some_and(|s| s.iter().all(|b| b.is_ascii_graphic() || *b == b' '))
         })
 }
 
@@ -297,12 +432,110 @@ declare_format!(pub CGM = "cgm", "Computer Graphics Metafile (binary)", ["cgm"],
     Probe::Custom(cgm_probe), cgm);
 
 const CGM_NAMES: &[&[&str]] = &[
-    &["No-op", "BEGIN METAFILE", "END METAFILE", "BEGIN PICTURE", "BEGIN PICTURE BODY", "END PICTURE", "BEGIN SEGMENT", "END SEGMENT", "BEGIN FIGURE", "END FIGURE"],
-    &["", "METAFILE VERSION", "METAFILE DESCRIPTION", "VDC TYPE", "INTEGER PRECISION", "REAL PRECISION", "INDEX PRECISION", "COLOUR PRECISION", "COLOUR INDEX PRECISION", "MAXIMUM COLOUR INDEX", "COLOUR VALUE EXTENT", "METAFILE ELEMENT LIST", "METAFILE DEFAULTS REPLACEMENT", "FONT LIST", "CHARACTER SET LIST", "CHARACTER CODING ANNOUNCER"],
-    &["", "SCALING MODE", "COLOUR SELECTION MODE", "LINE WIDTH SPECIFICATION MODE", "MARKER SIZE SPECIFICATION MODE", "EDGE WIDTH SPECIFICATION MODE", "VDC EXTENT", "BACKGROUND COLOUR"],
-    &["", "VDC INTEGER PRECISION", "VDC REAL PRECISION", "AUXILIARY COLOUR", "TRANSPARENCY", "CLIP RECTANGLE", "CLIP INDICATOR"],
-    &["", "POLYLINE", "DISJOINT POLYLINE", "POLYMARKER", "TEXT", "RESTRICTED TEXT", "APPEND TEXT", "POLYGON", "POLYGON SET", "CELL ARRAY", "GENERALIZED DRAWING PRIMITIVE", "RECTANGLE", "CIRCLE", "CIRCULAR ARC 3 POINT", "CIRCULAR ARC 3 POINT CLOSE", "CIRCULAR ARC CENTRE", "CIRCULAR ARC CENTRE CLOSE", "ELLIPSE", "ELLIPTICAL ARC", "ELLIPTICAL ARC CLOSE"],
-    &["", "LINE BUNDLE INDEX", "LINE TYPE", "LINE WIDTH", "LINE COLOUR", "MARKER BUNDLE INDEX", "MARKER TYPE", "MARKER SIZE", "MARKER COLOUR", "TEXT BUNDLE INDEX", "TEXT FONT INDEX", "TEXT PRECISION", "CHARACTER EXPANSION FACTOR", "CHARACTER SPACING", "TEXT COLOUR", "CHARACTER HEIGHT", "CHARACTER ORIENTATION", "TEXT PATH", "TEXT ALIGNMENT", "CHARACTER SET INDEX", "ALTERNATE CHARACTER SET INDEX", "FILL BUNDLE INDEX", "INTERIOR STYLE", "FILL COLOUR", "HATCH INDEX", "PATTERN INDEX", "EDGE BUNDLE INDEX", "EDGE TYPE", "EDGE WIDTH", "EDGE COLOUR", "EDGE VISIBILITY"],
+    &[
+        "No-op",
+        "BEGIN METAFILE",
+        "END METAFILE",
+        "BEGIN PICTURE",
+        "BEGIN PICTURE BODY",
+        "END PICTURE",
+        "BEGIN SEGMENT",
+        "END SEGMENT",
+        "BEGIN FIGURE",
+        "END FIGURE",
+    ],
+    &[
+        "",
+        "METAFILE VERSION",
+        "METAFILE DESCRIPTION",
+        "VDC TYPE",
+        "INTEGER PRECISION",
+        "REAL PRECISION",
+        "INDEX PRECISION",
+        "COLOUR PRECISION",
+        "COLOUR INDEX PRECISION",
+        "MAXIMUM COLOUR INDEX",
+        "COLOUR VALUE EXTENT",
+        "METAFILE ELEMENT LIST",
+        "METAFILE DEFAULTS REPLACEMENT",
+        "FONT LIST",
+        "CHARACTER SET LIST",
+        "CHARACTER CODING ANNOUNCER",
+    ],
+    &[
+        "",
+        "SCALING MODE",
+        "COLOUR SELECTION MODE",
+        "LINE WIDTH SPECIFICATION MODE",
+        "MARKER SIZE SPECIFICATION MODE",
+        "EDGE WIDTH SPECIFICATION MODE",
+        "VDC EXTENT",
+        "BACKGROUND COLOUR",
+    ],
+    &[
+        "",
+        "VDC INTEGER PRECISION",
+        "VDC REAL PRECISION",
+        "AUXILIARY COLOUR",
+        "TRANSPARENCY",
+        "CLIP RECTANGLE",
+        "CLIP INDICATOR",
+    ],
+    &[
+        "",
+        "POLYLINE",
+        "DISJOINT POLYLINE",
+        "POLYMARKER",
+        "TEXT",
+        "RESTRICTED TEXT",
+        "APPEND TEXT",
+        "POLYGON",
+        "POLYGON SET",
+        "CELL ARRAY",
+        "GENERALIZED DRAWING PRIMITIVE",
+        "RECTANGLE",
+        "CIRCLE",
+        "CIRCULAR ARC 3 POINT",
+        "CIRCULAR ARC 3 POINT CLOSE",
+        "CIRCULAR ARC CENTRE",
+        "CIRCULAR ARC CENTRE CLOSE",
+        "ELLIPSE",
+        "ELLIPTICAL ARC",
+        "ELLIPTICAL ARC CLOSE",
+    ],
+    &[
+        "",
+        "LINE BUNDLE INDEX",
+        "LINE TYPE",
+        "LINE WIDTH",
+        "LINE COLOUR",
+        "MARKER BUNDLE INDEX",
+        "MARKER TYPE",
+        "MARKER SIZE",
+        "MARKER COLOUR",
+        "TEXT BUNDLE INDEX",
+        "TEXT FONT INDEX",
+        "TEXT PRECISION",
+        "CHARACTER EXPANSION FACTOR",
+        "CHARACTER SPACING",
+        "TEXT COLOUR",
+        "CHARACTER HEIGHT",
+        "CHARACTER ORIENTATION",
+        "TEXT PATH",
+        "TEXT ALIGNMENT",
+        "CHARACTER SET INDEX",
+        "ALTERNATE CHARACTER SET INDEX",
+        "FILL BUNDLE INDEX",
+        "INTERIOR STYLE",
+        "FILL COLOUR",
+        "HATCH INDEX",
+        "PATTERN INDEX",
+        "EDGE BUNDLE INDEX",
+        "EDGE TYPE",
+        "EDGE WIDTH",
+        "EDGE COLOUR",
+        "EDGE VISIBILITY",
+    ],
     &["", "ESCAPE"],
     &["", "MESSAGE", "APPLICATION DATA"],
 ];
@@ -312,7 +545,10 @@ fn cgm_name(class: u16, id: u16) -> String {
         .get(usize::from(class))
         .and_then(|c| c.get(usize::from(id)))
         .filter(|s| !s.is_empty())
-        .map_or_else(|| format!("Class {class} element {id}"), |s| (*s).to_owned())
+        .map_or_else(
+            || format!("Class {class} element {id}"),
+            |s| (*s).to_owned(),
+        )
 }
 
 /// One element: class, id, the span of the whole element (with padding)
@@ -343,7 +579,10 @@ async fn cgm_element(cur: &mut Cursor<'_>) -> Result<(u16, u16, Span, Span)> {
         cur.skip(len.saturating_add(len & 1));
     }
     if cur.pos() > cur.region().len {
-        return Err(Diagnostic::truncated(cur.region().tail(start), cur.region().len.saturating_sub(start)));
+        return Err(Diagnostic::truncated(
+            cur.region().tail(start),
+            cur.region().len.saturating_sub(start),
+        ));
     }
     let region = cur.region();
     Ok((class, id, cur.since(start), region.sub(params_at, len)))
@@ -352,7 +591,8 @@ async fn cgm_element(cur: &mut Cursor<'_>) -> Result<(u16, u16, Span, Span)> {
 async fn cgm_string(cx: &Cx, params: Span) -> Result<Option<String>> {
     let d = cx.read(params.sub(0, 256)).await?;
     let n = usize::from(d.first().copied().unwrap_or(0));
-    Ok(d.get(1..n.saturating_add(1)).map(|s| String::from_utf8_lossy(s).into_owned()))
+    Ok(d.get(1..n.saturating_add(1))
+        .map(|s| String::from_utf8_lossy(s).into_owned()))
 }
 
 async fn cgm_node(cx: &Cx, class: u16, id: u16, span: Span, params: Span) -> Result<Node> {
@@ -364,7 +604,10 @@ async fn cgm_node(cx: &Cx, class: u16, id: u16, span: Span, params: Span) -> Res
             None => node,
         }
     } else if (class, id) == (1, 1) {
-        node.value(uint(u16_be(&cx.read(params.sub(0, 2)).await?, 0).unwrap_or(0), 16))
+        node.value(uint(
+            u16_be(&cx.read(params.sub(0, 2)).await?, 0).unwrap_or(0),
+            16,
+        ))
     } else if (class, id) == (4, 4) && params.len > 7 {
         // TEXT: point (16-bit VDC), final flag, string.
         match cgm_string(cx, params.tail(6)).await? {
@@ -400,7 +643,13 @@ async fn cgm(cx: Cx, input: Input) -> Result<()> {
             }
             pictures = pictures.saturating_add(1);
             let whole = cur.since(start);
-            cx.push(Node::new(format!("Picture {pictures}")).span(whole).value(text(title)).lazy(cgm_elements, whole)).await;
+            cx.push(
+                Node::new(format!("Picture {pictures}"))
+                    .span(whole)
+                    .value(text(title))
+                    .lazy(cgm_elements, whole),
+            )
+            .await;
             continue;
         }
         let node = cgm_node(&cx, class, id, span, params).await?;
@@ -439,7 +688,8 @@ fn pict_start(h: &Head<'_>) -> Option<(u64, bool)> {
         let v = at.checked_add(10)?;
         if h.at(v, b"\x00\x11\x02\xff\x0c\x00") {
             Some((to_u64(at), true))
-        } else if h.at(v, b"\x11\x01") && h.data.get(v.checked_add(2)?).is_some_and(|&op| op < 0xa2) {
+        } else if h.at(v, b"\x11\x01") && h.data.get(v.checked_add(2)?).is_some_and(|&op| op < 0xa2)
+        {
             Some((to_u64(at), false))
         } else {
             None
@@ -504,21 +754,42 @@ fn pict_fixed(op: u16) -> Option<(u64, &'static str)> {
 async fn pict(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 0x220)).await?;
-    let probe_head = Head { data: &head, tail: &[], len: file.len };
-    let (at, v2) = pict_start(&probe_head).ok_or_else(|| Diagnostic::malformed("no PICT version opcode").at(file.sub(0, 0x220)))?;
+    let probe_head = Head {
+        data: &head,
+        tail: &[],
+        len: file.len,
+    };
+    let (at, v2) = pict_start(&probe_head)
+        .ok_or_else(|| Diagnostic::malformed("no PICT version opcode").at(file.sub(0, 0x220)))?;
     if at > 0 {
         cx.emit(Node::new("Application header").span(file.sub(0, 512)));
     }
     let h = cx.read(file.sub_exact(at, 10)?).await?;
     let w = |i: usize| i16::from_ne_bytes(u16_be(&h, i).unwrap_or(0).to_ne_bytes());
-    cx.emit(Node::new("Size (low 16 bits)").span(file.sub(at, 2)).value(uint(u16_be(&h, 0).unwrap_or(0), 16)));
+    cx.emit(
+        Node::new("Size (low 16 bits)")
+            .span(file.sub(at, 2))
+            .value(uint(u16_be(&h, 0).unwrap_or(0), 16)),
+    );
     let (top, left, bottom, right) = (w(2), w(4), w(6), w(8));
-    cx.emit(Node::new("Frame").span(file.sub(at.saturating_add(2), 8)).value(text(format!("({left}, {top})–({right}, {bottom})"))));
+    cx.emit(
+        Node::new("Frame")
+            .span(file.sub(at.saturating_add(2), 8))
+            .value(text(format!("({left}, {top})–({right}, {bottom})"))),
+    );
     let width = i32::from(right).saturating_sub(left.into());
     let height = i32::from(bottom).saturating_sub(top.into());
     if !v2 {
-        cx.emit(Node::new("Version").span(file.sub(at.saturating_add(10), 2)).value(uint(1u8, 8)));
-        cx.emit(Node::new("Opcodes").span(file.tail(at.saturating_add(12))).diag(Diagnostic::unsupported("version 1 opcodes")));
+        cx.emit(
+            Node::new("Version")
+                .span(file.sub(at.saturating_add(10), 2))
+                .value(uint(1u8, 8)),
+        );
+        cx.emit(
+            Node::new("Opcodes")
+                .span(file.tail(at.saturating_add(12)))
+                .diag(Diagnostic::unsupported("version 1 opcodes")),
+        );
         cx.annotate(format!("QuickDraw PICT v1, {width}×{height}"));
         return Ok(());
     }
@@ -548,46 +819,95 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
                         _ => "Rgn",
                     };
                     // Clip, polygon and region sizes include the size word.
-                    (if op == 0x002c || op == 0x002e { l.saturating_add(2) } else { l }, name.to_owned())
+                    (
+                        if op == 0x002c || op == 0x002e {
+                            l.saturating_add(2)
+                        } else {
+                            l
+                        },
+                        name.to_owned(),
+                    )
                 }
                 0x0028 => {
                     let t = cx.read(cur.span(5)).await?;
-                    (5u64.saturating_add(t.get(4).copied().unwrap_or(0).into()), "LongText".to_owned())
+                    (
+                        5u64.saturating_add(t.get(4).copied().unwrap_or(0).into()),
+                        "LongText".to_owned(),
+                    )
                 }
                 0x0029 | 0x002a => {
                     let t = cx.read(cur.span(2)).await?;
-                    (2u64.saturating_add(t.get(1).copied().unwrap_or(0).into()), if op == 0x29 { "DHText".to_owned() } else { "DVText".to_owned() })
+                    (
+                        2u64.saturating_add(t.get(1).copied().unwrap_or(0).into()),
+                        if op == 0x29 {
+                            "DHText".to_owned()
+                        } else {
+                            "DVText".to_owned()
+                        },
+                    )
                 }
                 0x002b => {
                     let t = cx.read(cur.span(3)).await?;
-                    (3u64.saturating_add(t.get(2).copied().unwrap_or(0).into()), "DHDVText".to_owned())
+                    (
+                        3u64.saturating_add(t.get(2).copied().unwrap_or(0).into()),
+                        "DHDVText".to_owned(),
+                    )
                 }
                 0x00a1 => {
                     let t = cx.read(cur.span(4)).await?;
-                    (4u64.saturating_add(u16_be(&t, 2).unwrap_or(0).into()), "LongComment".to_owned())
+                    (
+                        4u64.saturating_add(u16_be(&t, 2).unwrap_or(0).into()),
+                        "LongComment".to_owned(),
+                    )
                 }
-                0x0100..=0x7fff => (u64::from(op >> 8).saturating_mul(2), format!("Reserved {op:#06x}")),
+                0x0100..=0x7fff => (
+                    u64::from(op >> 8).saturating_mul(2),
+                    format!("Reserved {op:#06x}"),
+                ),
                 0x8000..=0x80ff => (0, format!("Reserved {op:#06x}")),
                 0x8100..=0xffff => {
                     let t = cx.read(cur.span(4)).await?;
-                    let l = u64::from(u32::from_be_bytes(t.get(..4).and_then(|s| s.try_into().ok()).unwrap_or_default()));
-                    (l.saturating_add(4), if op == 0x8200 { "CompressedQuickTime".to_owned() } else { format!("Reserved {op:#06x}") })
+                    let l = u64::from(u32::from_be_bytes(
+                        t.get(..4)
+                            .and_then(|s| s.try_into().ok())
+                            .unwrap_or_default(),
+                    ));
+                    (
+                        l.saturating_add(4),
+                        if op == 0x8200 {
+                            "CompressedQuickTime".to_owned()
+                        } else {
+                            format!("Reserved {op:#06x}")
+                        },
+                    )
                 }
                 _ => {
                     // Bitmap opcodes (0x90, 0x91, 0x98, 0x99, 0x9a, 0x9b) need a
                     // pixel map walk to find their end.
-                    cx.push(Node::new(format!("Opcode {op:#06x}")).span(file.tail(start)).diag(Diagnostic::unsupported("pixel map opcodes"))).await;
+                    cx.push(
+                        Node::new(format!("Opcode {op:#06x}"))
+                            .span(file.tail(start))
+                            .diag(Diagnostic::unsupported("pixel map opcodes")),
+                    )
+                    .await;
                     break;
                 }
             }
         };
         cur.skip(len);
         if cur.pos() > file.len {
-            return Err(Diagnostic::truncated(file.tail(start), file.len.saturating_sub(start)));
+            return Err(Diagnostic::truncated(
+                file.tail(start),
+                file.len.saturating_sub(start),
+            ));
         }
         let span = cur.since(start);
         let node = Node::new(name).span(span).value(hex(op, 16));
-        let node = if op == 0x0c00 { node.lazy(pict_header, span.tail(2)) } else { node };
+        let node = if op == 0x0c00 {
+            node.lazy(pict_header, span.tail(2))
+        } else {
+            node
+        };
         cx.push(node).await;
         if op == 0x00ff {
             break;
@@ -600,13 +920,48 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
 async fn pict_header(cx: Cx, span: Span) -> Result<()> {
     let d = cx.read(span).await?;
     let version = i16::from_ne_bytes(u16_be(&d, 0).unwrap_or(0).to_ne_bytes());
-    cx.emit(Node::new("Version").span(span.sub(0, 2)).value(int(version, 16)).summary(if version == -2 { "extended" } else { "standard" }));
+    cx.emit(
+        Node::new("Version")
+            .span(span.sub(0, 2))
+            .value(int(version, 16))
+            .summary(if version == -2 {
+                "extended"
+            } else {
+                "standard"
+            }),
+    );
     if version == -2 {
-        let fixed = |i: usize| f64::from(u32::from_be_bytes(d.get(i..i.saturating_add(4)).and_then(|s| s.try_into().ok()).unwrap_or_default())) / 65536.0;
-        cx.emit(Node::new("Horizontal resolution").span(span.sub(4, 4)).value(Value::Float(fixed(4))).summary("dpi"));
-        cx.emit(Node::new("Vertical resolution").span(span.sub(8, 4)).value(Value::Float(fixed(8))).summary("dpi"));
+        let fixed = |i: usize| {
+            f64::from(u32::from_be_bytes(
+                d.get(i..i.saturating_add(4))
+                    .and_then(|s| s.try_into().ok())
+                    .unwrap_or_default(),
+            )) / 65536.0
+        };
+        cx.emit(
+            Node::new("Horizontal resolution")
+                .span(span.sub(4, 4))
+                .value(Value::Float(fixed(4)))
+                .summary("dpi"),
+        );
+        cx.emit(
+            Node::new("Vertical resolution")
+                .span(span.sub(8, 4))
+                .value(Value::Float(fixed(8)))
+                .summary("dpi"),
+        );
         let s = |i: usize| u16_be(&d, i).unwrap_or(0);
-        cx.emit(Node::new("Source rectangle").span(span.sub(12, 8)).value(text(format!("({}, {})–({}, {})", s(14), s(12), s(18), s(16)))));
+        cx.emit(
+            Node::new("Source rectangle")
+                .span(span.sub(12, 8))
+                .value(text(format!(
+                    "({}, {})–({}, {})",
+                    s(14),
+                    s(12),
+                    s(18),
+                    s(16)
+                ))),
+        );
     }
     Ok(())
 }
@@ -624,19 +979,31 @@ async fn jasc(cx: Cx, input: Input) -> Result<()> {
     while let Some(line) = lines.next().await? {
         let t = line.text();
         match line.number {
-            1 => cx.push(Node::new("Signature").span(line.span).value(text(t))).await,
-            2 => cx.push(Node::new("Version").span(line.span).value(text(t))).await,
+            1 => {
+                cx.push(Node::new("Signature").span(line.span).value(text(t)))
+                    .await
+            }
+            2 => {
+                cx.push(Node::new("Version").span(line.span).value(text(t)))
+                    .await
+            }
             3 => {
                 declared = t.trim().to_owned();
-                cx.push(Node::new("Colours").span(line.span).value(text(t.trim()))).await;
+                cx.push(Node::new("Colours").span(line.span).value(text(t.trim())))
+                    .await;
             }
             _ if line.is_blank() => {}
             _ => {
-                let c: Vec<u8> = t.split_whitespace().filter_map(|v| v.parse().ok()).collect();
+                let c: Vec<u8> = t
+                    .split_whitespace()
+                    .filter_map(|v| v.parse().ok())
+                    .collect();
                 let node = Node::new(format!("[{n}]")).span(line.span);
                 cx.push(match c.as_slice() {
                     [r, g, b, ..] => node.value(text(format!("#{r:02x}{g:02x}{b:02x}"))),
-                    _ => node.value(text(t)).diag(Diagnostic::malformed("expected three components")),
+                    _ => node
+                        .value(text(t))
+                        .diag(Diagnostic::malformed("expected three components")),
                 })
                 .await;
                 n = n.saturating_add(1);
@@ -650,7 +1017,14 @@ async fn jasc(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub GGR = "gimp-gradient", "GIMP gradient", ["ggr"], "application/x-gimp-gradient",
     Probe::Custom(|h| h.starts_with(b"GIMP Gradient\n") || h.starts_with(b"GIMP Gradient\r\n")), ggr);
 
-const GGR_BLEND: &[&str] = &["linear", "curved", "sine", "sphere increasing", "sphere decreasing", "step"];
+const GGR_BLEND: &[&str] = &[
+    "linear",
+    "curved",
+    "sine",
+    "sphere increasing",
+    "sphere decreasing",
+    "step",
+];
 const GGR_COLOR: &[&str] = &["RGB", "HSV counter-clockwise", "HSV clockwise"];
 
 async fn ggr(cx: Cx, input: Input) -> Result<()> {
@@ -662,20 +1036,48 @@ async fn ggr(cx: Cx, input: Input) -> Result<()> {
             cx.push(Node::new("Signature").span(line.span)).await;
         } else if let Some(v) = t.strip_prefix("Name: ") {
             name = v.to_owned();
-            cx.push(Node::new("Name").span(line.span).value(text(v))).await;
+            cx.push(Node::new("Name").span(line.span).value(text(v)))
+                .await;
         } else if line.number <= 3 && t.trim().parse::<u32>().is_ok() {
-            cx.push(Node::new("Segments").span(line.span).value(text(t.trim()))).await;
+            cx.push(Node::new("Segments").span(line.span).value(text(t.trim())))
+                .await;
         } else if !line.is_blank() {
-            let v: Vec<f64> = t.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+            let v: Vec<f64> = t
+                .split_whitespace()
+                .filter_map(|x| x.parse().ok())
+                .collect();
             let node = Node::new(format!("Segment {n}")).span(line.span);
             cx.push(match v.as_slice() {
                 [l, m, r, lr, lg, lb, la, rr, rg, rb, ra, rest @ ..] => {
-                    let blend = rest.first().and_then(|&b| GGR_BLEND.get(b as usize)).copied().unwrap_or("linear");
-                    let color = rest.get(1).and_then(|&c| GGR_COLOR.get(c as usize)).copied().unwrap_or("RGB");
-                    let hexc = |r: f64, g: f64, b: f64, a: f64| format!("#{:02x}{:02x}{:02x}{:02x}", (r.clamp(0.0, 1.0) * 255.0).round() as u8, (g.clamp(0.0, 1.0) * 255.0).round() as u8, (b.clamp(0.0, 1.0) * 255.0).round() as u8, (a.clamp(0.0, 1.0) * 255.0).round() as u8);
-                    node.value(text(format!("{l:.3}–{r:.3} (mid {m:.3}): {} → {}", hexc(*lr, *lg, *lb, *la), hexc(*rr, *rg, *rb, *ra)))).summary(format!("{blend}, {color}"))
+                    let blend = rest
+                        .first()
+                        .and_then(|&b| GGR_BLEND.get(b as usize))
+                        .copied()
+                        .unwrap_or("linear");
+                    let color = rest
+                        .get(1)
+                        .and_then(|&c| GGR_COLOR.get(c as usize))
+                        .copied()
+                        .unwrap_or("RGB");
+                    let hexc = |r: f64, g: f64, b: f64, a: f64| {
+                        format!(
+                            "#{:02x}{:02x}{:02x}{:02x}",
+                            (r.clamp(0.0, 1.0) * 255.0).round() as u8,
+                            (g.clamp(0.0, 1.0) * 255.0).round() as u8,
+                            (b.clamp(0.0, 1.0) * 255.0).round() as u8,
+                            (a.clamp(0.0, 1.0) * 255.0).round() as u8
+                        )
+                    };
+                    node.value(text(format!(
+                        "{l:.3}–{r:.3} (mid {m:.3}): {} → {}",
+                        hexc(*lr, *lg, *lb, *la),
+                        hexc(*rr, *rg, *rb, *ra)
+                    )))
+                    .summary(format!("{blend}, {color}"))
                 }
-                _ => node.value(text(t)).diag(Diagnostic::malformed("expected at least 11 numbers")),
+                _ => node
+                    .value(text(t))
+                    .diag(Diagnostic::malformed("expected at least 11 numbers")),
             })
             .await;
             n = n.saturating_add(1);
@@ -688,7 +1090,9 @@ async fn ggr(cx: Cx, input: Input) -> Result<()> {
 fn cube_probe(h: &Head<'_>) -> bool {
     let head = h.data.get(..8192).unwrap_or(h.data);
     probe::is_text(h)
-        && probe::significant(head, &[b"#"]).take(8).any(|l| l.starts_with(b"LUT_3D_SIZE") || l.starts_with(b"LUT_1D_SIZE"))
+        && probe::significant(head, &[b"#"])
+            .take(8)
+            .any(|l| l.starts_with(b"LUT_3D_SIZE") || l.starts_with(b"LUT_1D_SIZE"))
 }
 
 declare_format!(pub CUBE = "cube-lut", "Colour lookup table (.cube)", ["cube"], "application/x-cube-lut",
@@ -705,7 +1109,12 @@ async fn cube(cx: Cx, input: Input) -> Result<()> {
         let t = t.trim();
         if t.is_empty() || t.starts_with('#') {
             if t.starts_with('#') && table_start.is_none() {
-                cx.push(Node::new("Comment").span(line.span).value(text(t.trim_start_matches('#').trim()))).await;
+                cx.push(
+                    Node::new("Comment")
+                        .span(line.span)
+                        .value(text(t.trim_start_matches('#').trim())),
+                )
+                .await;
             }
             continue;
         }
@@ -721,7 +1130,12 @@ async fn cube(cx: Cx, input: Input) -> Result<()> {
                 }
                 _ => {}
             }
-            cx.push(Node::new(k.to_owned()).span(line.span).value(text(v.trim().trim_matches('"')))).await;
+            cx.push(
+                Node::new(k.to_owned())
+                    .span(line.span)
+                    .value(text(v.trim().trim_matches('"'))),
+            )
+            .await;
             continue;
         }
         if table_start.is_none() {
@@ -732,9 +1146,22 @@ async fn cube(cx: Cx, input: Input) -> Result<()> {
     }
     if let Some(start) = table_start {
         let span = input.span.sub(start, last.saturating_sub(start));
-        cx.push(Node::new("Table").span(span).summary(format!("{entries} entries")).lazy(cube_rows, span)).await;
+        cx.push(
+            Node::new("Table")
+                .span(span)
+                .summary(format!("{entries} entries"))
+                .lazy(cube_rows, span),
+        )
+        .await;
     }
-    cx.annotate(format!("{kind} colour LUT{}, size {size}, {entries} entries", if title.is_empty() { String::new() } else { format!(" {title:?}") }));
+    cx.annotate(format!(
+        "{kind} colour LUT{}, size {size}, {entries} entries",
+        if title.is_empty() {
+            String::new()
+        } else {
+            format!(" {title:?}")
+        }
+    ));
     Ok(())
 }
 
@@ -745,7 +1172,12 @@ async fn cube_rows(cx: Cx, span: Span) -> Result<()> {
         if line.is_blank() || line.bytes.first() == Some(&b'#') {
             continue;
         }
-        cx.push(Node::new(format!("[{i}]")).span(line.span).value(text(line.text().trim()))).await;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(line.span)
+                .value(text(line.text().trim())),
+        )
+        .await;
         i = i.saturating_add(1);
     }
     Ok(())

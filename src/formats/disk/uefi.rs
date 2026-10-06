@@ -39,7 +39,10 @@ const FILE_SYSTEMS: &[(&str, &str)] = &[
 fn fs_name(g: &Guid) -> Option<&'static str> {
     let text = g.to_string();
     let key = text.trim_matches(|c| c == '{' || c == '}');
-    FILE_SYSTEMS.iter().find(|(k, _)| *k == key).map(|(_, n)| *n)
+    FILE_SYSTEMS
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, n)| *n)
 }
 
 const FV_ATTRIBUTES: FlagTable = &[
@@ -160,7 +163,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(node);
     let kind = fs_name(&h.file_system).unwrap_or("unknown file system");
     let volume = fv.sub(0, h.length);
-    cx.annotate(format!("UEFI firmware volume ({kind}), {}", size(volume.len)));
+    cx.annotate(format!(
+        "UEFI firmware volume ({kind}), {}",
+        size(volume.len)
+    ));
     // Block map: (count, length) pairs after the fixed header, ending in zeros.
     let map: Vec<String> = raw
         .get(crate::bytes::to_usize(VolumeHeader::SIZE)..)
@@ -174,7 +180,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .collect();
     cx.emit(
         Node::new("Block map")
-            .span(fv.sub(VolumeHeader::SIZE, header_len.saturating_sub(VolumeHeader::SIZE)))
+            .span(fv.sub(
+                VolumeHeader::SIZE,
+                header_len.saturating_sub(VolumeHeader::SIZE),
+            ))
             .summary(map.join(", ")),
     );
     let mut files_at = header_len;
@@ -191,7 +200,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     if kind.starts_with("FFS") {
         let files = volume.tail(files_at.next_multiple_of(8));
-        let erase = if h.attributes & 0x800 != 0 { 0xff } else { 0x00 };
+        let erase = if h.attributes & 0x800 != 0 {
+            0xff
+        } else {
+            0x00
+        };
         cx.emit(
             Node::new("Files")
                 .span(files)
@@ -210,8 +223,12 @@ async fn list_files(cx: Cx, (input, area, erase): (Input, Span, u8)) -> Result<(
         let head_span = area.sub(at, FileHeader::SIZE);
         let raw = cx.read(head_span).await?;
         if raw.iter().all(|&b| b == erase) {
-            cx.push(Node::new("Free space").span(area.tail(at)).summary(size(area.len.saturating_sub(at))))
-                .await;
+            cx.push(
+                Node::new("Free space")
+                    .span(area.tail(at))
+                    .summary(size(area.len.saturating_sub(at))),
+            )
+            .await;
             break;
         }
         if count >= MAX_ITEMS {
@@ -222,7 +239,9 @@ async fn list_files(cx: Cx, (input, area, erase): (Input, Span, u8)) -> Result<(
         let mut len = u64::from(u24(&h.size));
         let mut header_len = FileHeader::SIZE;
         if h.attributes & 0x01 != 0 {
-            let ext = cx.read(area.sub(at.saturating_add(FileHeader::SIZE), 8)).await?;
+            let ext = cx
+                .read(area.sub(at.saturating_add(FileHeader::SIZE), 8))
+                .await?;
             len = u64_le(&ext, 0).unwrap_or(0);
             header_len = FileHeader::SIZE.saturating_add(8);
         }
@@ -275,13 +294,16 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
         }
         let span = area.sub(at, len);
         let body = span.tail(header);
-        let name = lookup(SECTION_TYPES, kind.into()).map_or_else(|| format!("Section {kind:#04x}"), |n| {
-            let mut s = n.to_owned();
-            if let Some(f) = s.get_mut(..1) {
-                f.make_ascii_uppercase();
-            }
-            s
-        });
+        let name = lookup(SECTION_TYPES, kind.into()).map_or_else(
+            || format!("Section {kind:#04x}"),
+            |n| {
+                let mut s = n.to_owned();
+                if let Some(f) = s.get_mut(..1) {
+                    f.make_ascii_uppercase();
+                }
+                s
+            },
+        );
         let node = Node::new(name).span(span);
         let node = match kind {
             0x10 => embedded("PE32 image", input.nested(body)).summary(size(body.len)),
@@ -299,9 +321,10 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
             0x01 => {
                 let data = cx.read_avail(body.sub(0, 5)).await?;
                 match data.get(4) {
-                    Some(0) if depth < MAX_DEPTH => node
-                        .summary("not compressed")
-                        .lazy(crate::expander!(self::sections: (Input, Span, u32)), (input, body.tail(5), depth.saturating_add(1))),
+                    Some(0) if depth < MAX_DEPTH => node.summary("not compressed").lazy(
+                        crate::expander!(self::sections: (Input, Span, u32)),
+                        (input, body.tail(5), depth.saturating_add(1)),
+                    ),
                     Some(t) => node.diag(Diagnostic::unsupported(format!(
                         "compression type {t} ({})",
                         if *t == 1 { "EFI/Tiano" } else { "unknown" }
@@ -317,9 +340,14 @@ async fn sections(cx: Cx, (input, area, depth): (Input, Span, u32)) -> Result<()
                 let node = node.summary(guid.to_string());
                 // Not processing-required: the content is plain sections.
                 if attributes & 1 == 0 && depth < MAX_DEPTH {
-                    node.lazy(crate::expander!(self::sections: (Input, Span, u32)), (input, body.tail(offset), depth.saturating_add(1)))
+                    node.lazy(
+                        crate::expander!(self::sections: (Input, Span, u32)),
+                        (input, body.tail(offset), depth.saturating_add(1)),
+                    )
                 } else {
-                    node.diag(Diagnostic::unsupported("encoded GUID-defined section (e.g. LZMA)"))
+                    node.diag(Diagnostic::unsupported(
+                        "encoded GUID-defined section (e.g. LZMA)",
+                    ))
                 }
             }
             _ => node.summary(size(body.len)),

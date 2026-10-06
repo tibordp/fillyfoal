@@ -95,40 +95,62 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if sb.features & 0x800 != 0 {
         let at = u64::from(sb.checksum_offset).min(3072);
         let raw = cx.read_avail(vol.sub(SUPER, at.saturating_add(4))).await?;
-        let computed = crc32_update(MAGIC, raw.get(..crate::bytes::to_usize(at)).unwrap_or_default());
+        let computed = crc32_update(
+            MAGIC,
+            raw.get(..crate::bytes::to_usize(at)).unwrap_or_default(),
+        );
         if u32_le(&raw, crate::bytes::to_usize(at)) != Some(computed) {
             node = node.diag(Diagnostic::warning("superblock checksum mismatch"));
         }
     }
     cx.emit(node);
-    let block = 1u64.checked_shl(sb.log_block_size).filter(|b| (512..=65536).contains(b)).ok_or_else(|| {
-        Diagnostic::malformed(format!("block size 2^{}", sb.log_block_size)).at(span)
-    })?;
+    let block = 1u64
+        .checked_shl(sb.log_block_size)
+        .filter(|b| (512..=65536).contains(b))
+        .ok_or_else(|| {
+            Diagnostic::malformed(format!("block size 2^{}", sb.log_block_size)).at(span)
+        })?;
     cx.annotate(format!(
         "F2FS {}.{} filesystem{}, {}, {}",
         sb.major,
         sb.minor,
-        if sb.volume_name.is_empty() { String::new() } else { format!(" \"{}\"", sb.volume_name) },
+        if sb.volume_name.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{}\"", sb.volume_name)
+        },
         size(sb.block_count.saturating_mul(block)),
         sb.version.trim_end()
     ));
-    cx.emit(Node::new("Backup superblock").span(vol.sub(block.saturating_add(SUPER), Superblock::SIZE)));
+    cx.emit(
+        Node::new("Backup superblock").span(vol.sub(block.saturating_add(SUPER), Superblock::SIZE)),
+    );
     let seg_blocks = 1u64.checked_shl(sb.log_blocks_per_segment).unwrap_or(0);
     for (name, start, segments) in [
         ("Checkpoint area", sb.cp_block, sb.segment_count_ckpt),
-        ("Segment information table", sb.sit_block, sb.segment_count_sit),
+        (
+            "Segment information table",
+            sb.sit_block,
+            sb.segment_count_sit,
+        ),
         ("Node address table", sb.nat_block, sb.segment_count_nat),
         ("Segment summary area", sb.ssa_block, sb.segment_count_ssa),
         ("Main area", sb.main_block, sb.segment_count_main),
     ] {
         let area = vol.sub(
             u64::from(start).saturating_mul(block),
-            u64::from(segments).saturating_mul(seg_blocks).saturating_mul(block),
+            u64::from(segments)
+                .saturating_mul(seg_blocks)
+                .saturating_mul(block),
         );
         cx.emit(
             Node::new(name)
                 .span(area)
-                .value(Value::UInt { value: start.into(), bits: 32, radix: crate::value::Radix::Dec })
+                .value(Value::UInt {
+                    value: start.into(),
+                    bits: 32,
+                    radix: crate::value::Radix::Dec,
+                })
                 .summary(format!("{segments} segments")),
         );
     }

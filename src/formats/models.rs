@@ -15,7 +15,11 @@ use crate::value::{EnumTable, Radix, Value, lookup};
 const LE: Endian = Endian::Little;
 
 fn uint(value: u64) -> Value {
-    Value::UInt { value, bits: 64, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits: 64,
+        radix: Radix::Dec,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -23,7 +27,8 @@ fn uint(value: u64) -> Value {
 
 fn stl_binary_probe(h: &Head<'_>) -> bool {
     h.len >= 134
-        && u32_le(h.data, 80).is_some_and(|n| n > 0 && u64::from(n).saturating_mul(50).saturating_add(84) == h.len)
+        && u32_le(h.data, 80)
+            .is_some_and(|n| n > 0 && u64::from(n).saturating_mul(50).saturating_add(84) == h.len)
 }
 
 fn stl_ascii_probe(h: &Head<'_>) -> bool {
@@ -57,9 +62,17 @@ async fn stl(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let header = cx.read(file.sub(0, 84)).await?;
     let text = crate::text::until_nul(header.get(..80).unwrap_or_default());
-    cx.emit(Node::new("Header").span(file.sub(0, 80)).value(Value::Text(text.trim_end().to_owned())));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 80))
+            .value(Value::Text(text.trim_end().to_owned())),
+    );
     let count = u32_le(&header, 80).unwrap_or(0);
-    cx.emit(Node::new("Triangle count").span(file.sub(80, 4)).value(uint(count.into())));
+    cx.emit(
+        Node::new("Triangle count")
+            .span(file.sub(80, 4))
+            .value(uint(count.into())),
+    );
     let triangles = file.tail(84);
     cx.emit(
         Node::new("Triangles")
@@ -77,10 +90,10 @@ async fn stl_triangles(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     for i in 0..count {
         let (t, at) = cur.record::<StlTriangle>().await?;
-        cx.push(
-            StlTriangle::node(format!("#{i}"), at, LE)
-                .summary(format!("({}, {}, {}) ({}, {}, {}) ({}, {}, {})", t.ax, t.ay, t.az, t.bx, t.by, t.bz, t.cx, t.cy, t.cz)),
-        )
+        cx.push(StlTriangle::node(format!("#{i}"), at, LE).summary(format!(
+            "({}, {}, {}) ({}, {}, {}) ({}, {}, {})",
+            t.ax, t.ay, t.az, t.bx, t.by, t.bz, t.cx, t.cy, t.cz
+        )))
         .await;
     }
     Ok(())
@@ -91,7 +104,9 @@ async fn stl_ascii(cx: Cx, input: Input) -> Result<()> {
     let max = cx.limits().max_read;
     let text = cx.read_avail(file.sub(0, max)).await?;
     if to_u64(text.len()) < file.len {
-        cx.diag(Diagnostic::limit("only the beginning of the file was scanned"));
+        cx.diag(Diagnostic::limit(
+            "only the beginning of the file was scanned",
+        ));
     }
     let mut facets = 0u64;
     let mut name = String::new();
@@ -149,7 +164,9 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
     let header_len = head
         .get(end..)
         .and_then(|rest| rest.iter().position(|&b| b == b'\n'))
-        .map_or(to_u64(end).saturating_add(10), |nl| to_u64(end.saturating_add(nl).saturating_add(1)));
+        .map_or(to_u64(end).saturating_add(10), |nl| {
+            to_u64(end.saturating_add(nl).saturating_add(1))
+        });
     let text = String::from_utf8_lossy(head.get(..end).unwrap_or_default()).into_owned();
     let mut format = String::new();
     // (name, count, fixed record size if no list properties, properties)
@@ -161,7 +178,12 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
         let words: Vec<&str> = line.split_whitespace().collect();
         match words.as_slice() {
             ["format", f, v] => format = format!("{f} {v}"),
-            ["element", name, count] => elements.push(((*name).to_owned(), count.parse().unwrap_or(0), Some(0), Vec::new())),
+            ["element", name, count] => elements.push((
+                (*name).to_owned(),
+                count.parse().unwrap_or(0),
+                Some(0),
+                Vec::new(),
+            )),
             ["property", "list", ..] => {
                 if let Some(e) = elements.last_mut() {
                     e.2 = None;
@@ -170,7 +192,8 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
             }
             ["property", kind, name] => {
                 if let Some(e) = elements.last_mut() {
-                    e.2 = e.2.and_then(|s| Some(s.saturating_add(ply_type_size(kind)?)));
+                    e.2 =
+                        e.2.and_then(|s| Some(s.saturating_add(ply_type_size(kind)?)));
                     e.3.push(format!("{name}: {kind}"));
                 }
             }
@@ -181,13 +204,19 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
         }
         pos = pos.saturating_add(len);
     }
-    cx.emit(Node::new("Header").span(file.sub(0, header_len)).summary(format.clone()).lazy(emit_nodes, header_nodes));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, header_len))
+            .summary(format.clone())
+            .lazy(emit_nodes, header_nodes),
+    );
     let binary = format.starts_with("binary");
     let mut at = header_len;
     let mut summary = Vec::new();
     for (name, count, size, properties) in elements {
         summary.push(format!("{count} {name}"));
-        let node = Node::new(name.clone()).summary(format!("{count} × [{}]", properties.join(", ")));
+        let node =
+            Node::new(name.clone()).summary(format!("{count} × [{}]", properties.join(", ")));
         match (binary, size) {
             (true, Some(size)) => {
                 let len = size.saturating_mul(count);
@@ -254,7 +283,11 @@ async fn glb(cx: Cx, input: Input) -> Result<()> {
             b"BIN\0" => Node::new("BIN chunk").span(data),
             _ => Node::new(format!("Chunk {}", String::from_utf8_lossy(&kind))).span(data),
         };
-        cx.push(node.summary(format!("{len} bytes")).target(cur.since(start))).await;
+        cx.push(
+            node.summary(format!("{len} bytes"))
+                .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(match generator {
         Some(g) => format!("glTF {} by {g}", h.version),
@@ -313,7 +346,10 @@ async fn fbx_nodes(cx: Cx, (input, list, wide): (Input, Span, bool)) -> Result<(
             break; // null record
         }
         if end_offset <= pos || end_offset > file.len {
-            return Err(Diagnostic::malformed(format!("node end offset {end_offset:#x} is out of order")).at(file.sub(pos, header_len)));
+            return Err(Diagnostic::malformed(format!(
+                "node end offset {end_offset:#x} is out of order"
+            ))
+            .at(file.sub(pos, header_len)));
         }
         let name_span = file.sub(pos.saturating_add(header_len), name_len.into());
         let name = String::from_utf8_lossy(&cx.read(name_span).await?).into_owned();
@@ -321,10 +357,14 @@ async fn fbx_nodes(cx: Cx, (input, list, wide): (Input, Span, bool)) -> Result<(
         let props_span = file.sub(name_span.end().saturating_sub(file.offset), props_len);
         let nested = record.tail(props_span.end().saturating_sub(record.offset));
         cx.push(
-            Node::new(if name.is_empty() { "(unnamed)".to_owned() } else { name })
-                .span(record)
-                .summary(format!("{props} properties"))
-                .lazy(fbx_node, (input, props_span, props, nested, wide)),
+            Node::new(if name.is_empty() {
+                "(unnamed)".to_owned()
+            } else {
+                name
+            })
+            .span(record)
+            .summary(format!("{props} properties"))
+            .lazy(fbx_node, (input, props_span, props, nested, wide)),
         )
         .await;
         pos = end_offset;
@@ -345,12 +385,21 @@ async fn fbx_node(
         let kind = cur.u8().await?;
         let name = format!("[{i}] {}", char::from(kind));
         let node = match kind {
-            b'Y' => Node::new(name).value(Value::Int { value: i64::from(cur.int::<i16>().await?), bits: 16 }),
+            b'Y' => Node::new(name).value(Value::Int {
+                value: i64::from(cur.int::<i16>().await?),
+                bits: 16,
+            }),
             b'C' => Node::new(name).value(Value::Bool(cur.u8().await? != 0)),
-            b'I' => Node::new(name).value(Value::Int { value: i64::from(cur.int::<i32>().await?), bits: 32 }),
+            b'I' => Node::new(name).value(Value::Int {
+                value: i64::from(cur.int::<i32>().await?),
+                bits: 32,
+            }),
             b'F' => Node::new(name).value(Value::Float(f64::from(cur.int::<f32>().await?))),
             b'D' => Node::new(name).value(Value::Float(cur.int::<f64>().await?)),
-            b'L' => Node::new(name).value(Value::Int { value: cur.int::<i64>().await?, bits: 64 }),
+            b'L' => Node::new(name).value(Value::Int {
+                value: cur.int::<i64>().await?,
+                bits: 64,
+            }),
             b'S' | b'R' => {
                 let len = cur.u32().await?;
                 let data = cur.span(len.into());
@@ -372,26 +421,33 @@ async fn fbx_node(
                 cur.skip(len.into());
                 let summary = format!("{elements} elements");
                 if encoding == 1 {
-                    content(name, input, data, Codec::Zlib, None).summary(format!("{summary}, zlib"))
+                    content(name, input, data, Codec::Zlib, None)
+                        .summary(format!("{summary}, zlib"))
                 } else {
                     Node::new(name).span(data).summary(summary)
                 }
             }
             _ => {
-                cx.diag(Diagnostic::malformed(format!("unknown property type {kind:#04x}")).at(cur.span(1)));
+                cx.diag(
+                    Diagnostic::malformed(format!("unknown property type {kind:#04x}"))
+                        .at(cur.span(1)),
+                );
                 break;
             }
         };
         let span = cur.since(start);
-        let node = if node.span.is_none() { node.span(span) } else { node.target(span) };
+        let node = if node.span.is_none() {
+            node.span(span)
+        } else {
+            node.target(span)
+        };
         cx.push(node).await;
     }
     if nested.len > 0 {
-        cx.emit(
-            Node::new("Children")
-                .span(nested)
-                .lazy(crate::expander!(self::fbx_nodes: (Input, Span, bool)), (input, nested, wide)),
-        );
+        cx.emit(Node::new("Children").span(nested).lazy(
+            crate::expander!(self::fbx_nodes: (Input, Span, bool)),
+            (input, nested, wide),
+        ));
     }
     Ok(())
 }
@@ -401,7 +457,8 @@ async fn fbx_node(
 
 fn three_ds_probe(h: &Head<'_>) -> bool {
     h.at(0, b"\x4d\x4d")
-        && u32_le(h.data, 2).is_some_and(|len| u64::from(len) <= h.len.saturating_add(16) && len > 16)
+        && u32_le(h.data, 2)
+            .is_some_and(|len| u64::from(len) <= h.len.saturating_add(16) && len > 16)
         && u16_le(h.data, 6).is_some_and(|id| id == 0x0002 || id == 0x3d3d)
 }
 
@@ -443,7 +500,8 @@ const CHUNKS_3DS: EnumTable = &[
 /// Chunks whose payload consists of sub-chunks (after a fixed prefix).
 fn container_3ds(id: u16) -> Option<bool> {
     match id {
-        0x4d4d | 0x3d3d | 0x4100 | 0xafff | 0xa200 | 0xb000 | 0xb002 | 0x4600 | 0xa010 | 0xa020 | 0xa030 => Some(false),
+        0x4d4d | 0x3d3d | 0x4100 | 0xafff | 0xa200 | 0xb000 | 0xb002 | 0x4600 | 0xa010 | 0xa020
+        | 0xa030 => Some(false),
         0x4000 => Some(true), // name first
         _ => None,
     }
@@ -466,8 +524,13 @@ async fn chunks_3ds(cx: Cx, span: Span) -> Result<()> {
         }
         let chunk = span.sub(start, len.into());
         cur.seek(start.saturating_add(len.into()));
-        let name = lookup(CHUNKS_3DS, id.into()).map_or_else(|| format!("Chunk {id:#06x}"), str::to_owned);
-        let mut node = Node::new(name).span(chunk).value(Value::UInt { value: id.into(), bits: 16, radix: Radix::Hex });
+        let name =
+            lookup(CHUNKS_3DS, id.into()).map_or_else(|| format!("Chunk {id:#06x}"), str::to_owned);
+        let mut node = Node::new(name).span(chunk).value(Value::UInt {
+            value: id.into(),
+            bits: 16,
+            radix: Radix::Hex,
+        });
         match container_3ds(id) {
             Some(named) => {
                 let mut body = chunk.tail(6);
@@ -514,7 +577,12 @@ async fn blend(cx: Cx, input: Input) -> Result<()> {
     // Blender 5 uses "BLENDER17-01v0500"; older files "BLENDER-v300".
     let modern = head.get(7..9) == Some(b"17");
     let (header_len, pointer, little, version) = if modern {
-        (17u64, 8u64, true, String::from_utf8_lossy(head.get(13..17).unwrap_or_default()).into_owned())
+        (
+            17u64,
+            8u64,
+            true,
+            String::from_utf8_lossy(head.get(13..17).unwrap_or_default()).into_owned(),
+        )
     } else {
         (
             12,
@@ -523,24 +591,30 @@ async fn blend(cx: Cx, input: Input) -> Result<()> {
             String::from_utf8_lossy(head.get(9..12).unwrap_or_default()).into_owned(),
         )
     };
-    cx.emit(Node::new("Header").span(file.sub(0, header_len)).summary(format!(
-        "{}-bit pointers, {} endian",
-        pointer.saturating_mul(8),
-        if little { "little" } else { "big" }
-    )));
-    let endian = if little { LE } else { Endian::Big };
     cx.emit(
-        Node::new("File blocks")
-            .span(file.tail(header_len))
-            .lazy(blend_blocks, (file.tail(header_len), pointer, endian, modern)),
+        Node::new("Header")
+            .span(file.sub(0, header_len))
+            .summary(format!(
+                "{}-bit pointers, {} endian",
+                pointer.saturating_mul(8),
+                if little { "little" } else { "big" }
+            )),
     );
+    let endian = if little { LE } else { Endian::Big };
+    cx.emit(Node::new("File blocks").span(file.tail(header_len)).lazy(
+        blend_blocks,
+        (file.tail(header_len), pointer, endian, modern),
+    ));
     let version = version.trim_start_matches('0');
     let (major, minor) = version.split_at(1.min(version.len()));
     cx.annotate(format!("Blender {major}.{minor}"));
     Ok(())
 }
 
-async fn blend_blocks(cx: Cx, (span, pointer, endian, modern): (Span, u64, Endian, bool)) -> Result<()> {
+async fn blend_blocks(
+    cx: Cx,
+    (span, pointer, endian, modern): (Span, u64, Endian, bool),
+) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, endian);
     while cur.remaining() >= 16 {
         let start = cur.pos();
@@ -605,11 +679,19 @@ async fn usdc(cx: Cx, input: Input) -> Result<()> {
     let version = f.bytes("Version", 8).emit()?;
     let toc = f.u64("Table of contents offset").hex().emit()?;
     let count = u64_le(&cx.read(file.sub(toc, 8)).await?, 0).unwrap_or(0);
-    let table = file.sub_exact(toc.saturating_add(8), count.saturating_mul(UsdcSection::SIZE))?;
+    let table = file.sub_exact(
+        toc.saturating_add(8),
+        count.saturating_mul(UsdcSection::SIZE),
+    )?;
     let mut cur = Cursor::new(&cx, table, LE);
     for _ in 0..count {
         let (s, span) = cur.record::<UsdcSection>().await?;
-        cx.push(UsdcSection::node(s.name.clone(), span, LE).summary(format!("{} bytes", s.size)).target(file.sub(s.start, s.size))).await;
+        cx.push(
+            UsdcSection::node(s.name.clone(), span, LE)
+                .summary(format!("{} bytes", s.size))
+                .target(file.sub(s.start, s.size)),
+        )
+        .await;
     }
     cx.annotate(format!(
         "USD crate {}.{}.{}, {count} sections",
@@ -629,7 +711,11 @@ declare_format!(pub VOX = "vox", "MagicaVoxel model", ["vox"], "model/x-vox",
 async fn vox(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
-    cx.emit(Node::new("Header").span(file.sub(0, 8)).summary(format!("version {}", u32_le(&head, 4).unwrap_or(0))));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 8))
+            .summary(format!("version {}", u32_le(&head, 4).unwrap_or(0))),
+    );
     cx.annotate(format!("MagicaVoxel v{}", u32_le(&head, 4).unwrap_or(0)));
     vox_chunks(cx, file.tail(8)).await
 }
@@ -701,8 +787,16 @@ async fn dwg(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 0x20)).await?;
     let tag = String::from_utf8_lossy(head.get(..6).unwrap_or_default()).into_owned();
-    let release = DWG_VERSIONS.iter().find(|(v, _)| *v == tag).map_or("unknown", |(_, r)| r);
-    cx.emit(Node::new("Version").span(file.sub(0, 6)).value(Value::Text(tag.clone())).summary(release));
+    let release = DWG_VERSIONS
+        .iter()
+        .find(|(v, _)| *v == tag)
+        .map_or("unknown", |(_, r)| r);
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(0, 6))
+            .value(Value::Text(tag.clone()))
+            .summary(release),
+    );
     if tag.as_str() >= "AC1012" {
         let block = cx.block(file.sub(0, 0x19)).await?;
         let mut f = Fields::emitting(&cx, &block, LE);
@@ -733,7 +827,9 @@ async fn dxf_pairs(cx: &Cx, span: Span) -> Result<Vec<(i32, String, Span)>> {
     let max = cx.limits().max_read;
     let bytes = cx.read_avail(span.sub(0, max)).await?;
     if to_u64(bytes.len()) < span.len {
-        cx.diag(Diagnostic::limit("only the beginning of the drawing was scanned"));
+        cx.diag(Diagnostic::limit(
+            "only the beginning of the drawing was scanned",
+        ));
     }
     let mut pairs = Vec::new();
     let mut lines = Vec::new();
@@ -748,7 +844,11 @@ async fn dxf_pairs(cx: &Cx, span: Span) -> Result<Vec<(i32, String, Span)>> {
             break;
         };
         let end = value_start.saturating_add(value.len());
-        pairs.push((code, value, span.sub(to_u64(start), to_u64(end.saturating_sub(start)))));
+        pairs.push((
+            code,
+            value,
+            span.sub(to_u64(start), to_u64(end.saturating_sub(start))),
+        ));
     }
     Ok(pairs)
 }
@@ -764,12 +864,18 @@ async fn dxf(cx: Cx, input: Input) -> Result<()> {
     for (i, (code, value, span)) in pairs.iter().enumerate() {
         match (code, value.as_str()) {
             (0, "SECTION") => {
-                let name = pairs.get(i.saturating_add(1)).map_or(String::new(), |p| p.1.clone());
+                let name = pairs
+                    .get(i.saturating_add(1))
+                    .map_or(String::new(), |p| p.1.clone());
                 sections.push((name, *span, Vec::new()));
             }
             (0, "ENDSEC") => {
                 if let Some(s) = sections.last_mut() {
-                    s.1 = Span::new(s.1.source, s.1.offset, span.end().saturating_sub(s.1.offset));
+                    s.1 = Span::new(
+                        s.1.source,
+                        s.1.offset,
+                        span.end().saturating_sub(s.1.offset),
+                    );
                 }
             }
             (0, kind) => {

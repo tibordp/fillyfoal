@@ -36,7 +36,11 @@ impl Params {
 }
 
 fn plane_sizes(width: u64, height: u64, colour: &str) -> [u64; 4] {
-    let depth = if colour.contains("p10") || colour.contains("p12") || colour.contains("p14") || colour.contains("p16") {
+    let depth = if colour.contains("p10")
+        || colour.contains("p12")
+        || colour.contains("p14")
+        || colour.contains("p16")
+    {
         2
     } else {
         1
@@ -101,16 +105,28 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
     params.planes = plane_sizes(params.width, params.height, &colour);
-    cx.emit(Node::new("Stream header").span(header_span).lazy(header_fields, header_span));
+    cx.emit(
+        Node::new("Stream header")
+            .span(header_span)
+            .lazy(header_fields, header_span),
+    );
     let frame_size = params.frame_size();
     // Frames without parameters are "FRAME\n" + planes.
     let per_frame = frame_size.saturating_add(6);
-    let count = file.len.saturating_sub(len).checked_div(per_frame).unwrap_or(0);
+    let count = file
+        .len
+        .saturating_sub(len)
+        .checked_div(per_frame)
+        .unwrap_or(0);
     let mut summary = format!(
         "YUV4MPEG2, {}×{} {}",
         params.width,
         params.height,
-        if colour.is_empty() { "420jpeg" } else { &colour }
+        if colour.is_empty() {
+            "420jpeg"
+        } else {
+            &colour
+        }
     );
     if let Some(r) = rate {
         let fps = match r.split_once(':') {
@@ -131,11 +147,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Frames")
             .span(file.tail(len))
             .summary(format!("{frame_size} bytes per frame"))
-            .lazy(frames, Frames {
-                file,
-                start: len,
-                params,
-            }),
+            .lazy(
+                frames,
+                Frames {
+                    file,
+                    start: len,
+                    params,
+                },
+            ),
     );
     Ok(())
 }
@@ -152,7 +171,11 @@ async fn header_fields(cx: Cx, span: Span) -> Result<()> {
         let value = String::from_utf8_lossy(value).into_owned();
         let name = match tag {
             b'Y' => {
-                cx.emit(text("Signature", tspan, String::from_utf8_lossy(token).into_owned()));
+                cx.emit(text(
+                    "Signature",
+                    tspan,
+                    String::from_utf8_lossy(token).into_owned(),
+                ));
                 continue;
             }
             b'W' => "Width",
@@ -224,7 +247,8 @@ async fn frames(cx: Cx, f: Frames) -> Result<()> {
 
 async fn frame(cx: Cx, (span, header, params): (Span, u64, Params)) -> Result<()> {
     let d = cx.read_avail(span.sub(0, header)).await?;
-    let line = String::from_utf8_lossy(d.get(..d.len().saturating_sub(1)).unwrap_or_default()).into_owned();
+    let line = String::from_utf8_lossy(d.get(..d.len().saturating_sub(1)).unwrap_or_default())
+        .into_owned();
     cx.emit(text("Frame header", span.sub(0, header), line));
     let mut at = header;
     for (name, size) in ["Y plane", "Cb plane", "Cr plane", "Alpha plane"]

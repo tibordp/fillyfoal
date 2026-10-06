@@ -66,7 +66,9 @@ async fn checksum_node(cx: &Cx, file: Span, name: &'static str) -> Result<Node> 
     let at = file.len.saturating_sub(HASH);
     let span = file.sub(at, HASH);
     let stored = cx.read(span).await?;
-    let mut node = Node::new(name).span(span).value(Value::Text(hex_string(&stored)));
+    let mut node = Node::new(name)
+        .span(span)
+        .value(Value::Text(hex_string(&stored)));
     if at <= cx.limits().max_read {
         let body = cx.read(file.sub(0, at)).await?;
         node = if sha1(&body).as_slice() == stored.as_slice() {
@@ -161,19 +163,24 @@ pub async fn pack(cx: Cx, input: Input) -> Result<()> {
         match kind {
             6 => {
                 let rest = head.get(to_usize(header)..).unwrap_or_default();
-                let (offset, len) = delta_offset(rest)
-                    .ok_or_else(|| Diagnostic::malformed("bad delta offset").at(file.sub(pos, 1)))?;
+                let (offset, len) = delta_offset(rest).ok_or_else(|| {
+                    Diagnostic::malformed("bad delta offset").at(file.sub(pos, 1))
+                })?;
                 base = format!(", base at {:#x}", pos.saturating_sub(offset));
                 header = header.saturating_add(len);
             }
             7 => {
-                let sha = cx.read(file.sub_exact(pos.saturating_add(header), HASH)?).await?;
+                let sha = cx
+                    .read(file.sub_exact(pos.saturating_add(header), HASH)?)
+                    .await?;
                 base = format!(", base {}", hex_string(&sha));
                 header = header.saturating_add(HASH);
             }
             1..=4 => {}
             _ => {
-                return Err(Diagnostic::malformed(format!("object type {kind}")).at(file.sub(pos, 1)));
+                return Err(
+                    Diagnostic::malformed(format!("object type {kind}")).at(file.sub(pos, 1))
+                );
             }
         }
         let start = pos.saturating_add(header);
@@ -183,7 +190,10 @@ pub async fn pack(cx: Cx, input: Input) -> Result<()> {
         let name = lookup(OBJECT_TYPES, kind.into()).unwrap_or("?");
         let mut node = Node::new(format!("{name} at {pos:#x}"))
             .span(span)
-            .summary(format!("object {index}, {} → {size} bytes{base}", decoded.consumed))
+            .summary(format!(
+                "object {index}, {} → {size} bytes{base}",
+                decoded.consumed
+            ))
             .lazy(
                 object,
                 Object {
@@ -212,13 +222,11 @@ async fn object(cx: Cx, o: Object) -> Result<()> {
     {
         let mut f = Fields::emitting(&cx, &head, BE);
         let first = f.u8("Type and size").hex().emit()?;
-        f.node(
-            Node::new("Type").value(Value::Enum {
-                raw: ((first >> 4) & 7).into(),
-                bits: 3,
-                name: lookup(OBJECT_TYPES, ((first >> 4) & 7).into()),
-            }),
-        );
+        f.node(Node::new("Type").value(Value::Enum {
+            raw: ((first >> 4) & 7).into(),
+            bits: 3,
+            name: lookup(OBJECT_TYPES, ((first >> 4) & 7).into()),
+        }));
         f.node(Node::new("Size").value(Value::UInt {
             value: o.size,
             bits: 64,
@@ -269,7 +277,10 @@ async fn commit_like(cx: &Cx, data: Span) -> Result<()> {
         if matches!(key, "author" | "committer" | "tagger")
             && let Some((who, when)) = value.rsplit_once("> ")
         {
-            let seconds = when.split_whitespace().next().and_then(|s| s.parse::<i64>().ok());
+            let seconds = when
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.parse::<i64>().ok());
             node = node.value(Value::Text(format!("{who}>")));
             if let Some(s) = seconds {
                 node = node.summary(format!(
@@ -287,7 +298,11 @@ async fn commit_like(cx: &Cx, data: Span) -> Result<()> {
     if let Some(m) = message_at {
         let span = data.tail(to_u64(m));
         let text = String::from_utf8_lossy(bytes.get(m..).unwrap_or_default()).into_owned();
-        cx.emit(Node::new("Message").span(span).value(Value::Text(clip(text.trim_end(), 4000))));
+        cx.emit(
+            Node::new("Message")
+                .span(span)
+                .value(Value::Text(clip(text.trim_end(), 4000))),
+        );
     }
     Ok(())
 }
@@ -302,7 +317,9 @@ async fn tree_entries(cx: Cx, data: Span) -> Result<()> {
         };
         let head = String::from_utf8_lossy(rest.get(..nul).unwrap_or_default()).into_owned();
         let (mode, name) = head.split_once(' ').unwrap_or(("?", head.as_str()));
-        let sha = rest.get(nul.saturating_add(1)..nul.saturating_add(21)).unwrap_or_default();
+        let sha = rest
+            .get(nul.saturating_add(1)..nul.saturating_add(21))
+            .unwrap_or_default();
         let len = nul.saturating_add(21);
         let kind = match mode {
             "40000" => "tree",
@@ -329,11 +346,15 @@ async fn delta(cx: Cx, data: Span) -> Result<()> {
     for name in ["Source size", "Target size"] {
         let (v, n) = crate::bytes::uleb128(bytes.get(at..).unwrap_or_default())
             .ok_or_else(|| Diagnostic::malformed("bad delta size").at(data))?;
-        cx.emit(Node::new(name).span(data.sub(to_u64(at), to_u64(n))).value(Value::UInt {
-            value: v,
-            bits: 64,
-            radix: crate::value::Radix::Dec,
-        }));
+        cx.emit(
+            Node::new(name)
+                .span(data.sub(to_u64(at), to_u64(n)))
+                .value(Value::UInt {
+                    value: v,
+                    bits: 64,
+                    radix: crate::value::Radix::Dec,
+                }),
+        );
         at = at.saturating_add(n);
     }
     while let Some(&op) = bytes.get(at) {
@@ -349,7 +370,9 @@ async fn delta(cx: Cx, data: Span) -> Result<()> {
                     if bit < 4 {
                         offset |= b.checked_shl(bit.saturating_mul(8)).unwrap_or(0);
                     } else {
-                        len |= b.checked_shl(bit.saturating_sub(4).saturating_mul(8)).unwrap_or(0);
+                        len |= b
+                            .checked_shl(bit.saturating_sub(4).saturating_mul(8))
+                            .unwrap_or(0);
                     }
                 }
             }
@@ -388,8 +411,14 @@ pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
             .lazy(fanout_table, fanout),
     );
     let names = file.sub_exact(1032, count.saturating_mul(HASH))?;
-    let crcs = file.sub_exact(names.end().saturating_sub(file.offset), count.saturating_mul(4))?;
-    let offsets = file.sub_exact(crcs.end().saturating_sub(file.offset), count.saturating_mul(4))?;
+    let crcs = file.sub_exact(
+        names.end().saturating_sub(file.offset),
+        count.saturating_mul(4),
+    )?;
+    let offsets = file.sub_exact(
+        crcs.end().saturating_sub(file.offset),
+        count.saturating_mul(4),
+    )?;
     cx.emit(
         Node::new("Objects")
             .span(names)
@@ -401,7 +430,10 @@ pub async fn pack_index(cx: Cx, input: Input) -> Result<()> {
     let trailer_at = file.len.saturating_sub(2 * HASH);
     let large_at = offsets.end().saturating_sub(file.offset);
     if trailer_at > large_at {
-        cx.emit(Node::new("Large offsets").span(file.sub(large_at, trailer_at.saturating_sub(large_at))));
+        cx.emit(
+            Node::new("Large offsets")
+                .span(file.sub(large_at, trailer_at.saturating_sub(large_at))),
+        );
     }
     let pack_sum = file.sub(trailer_at, HASH);
     cx.emit(
@@ -420,7 +452,11 @@ async fn fanout_table(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("{i:02x}"))
                 .span(span.sub(to_u64(i).saturating_mul(4), 4))
-                .value(Value::UInt { value: v.into(), bits: 32, radix: crate::value::Radix::Dec }),
+                .value(Value::UInt {
+                    value: v.into(),
+                    bits: 32,
+                    radix: crate::value::Radix::Dec,
+                }),
         )
         .await;
     }
@@ -500,7 +536,9 @@ async fn index_entry(cx: &Cx, file: Span, version: u32, pos: u64, prev: &str) ->
         let window = cx.read_avail(file.sub(at, 10)).await?;
         let (strip, n) = crate::bytes::uleb128(&window)
             .ok_or_else(|| Diagnostic::malformed("bad path prefix").at(file.sub(at, 1)))?;
-        let (suffix, span) = cx.cstr(file.sub(at.saturating_add(to_u64(n)), 0x10000)).await?;
+        let (suffix, span) = cx
+            .cstr(file.sub(at.saturating_add(to_u64(n)), 0x10000))
+            .await?;
         let keep = prev.len().saturating_sub(to_usize(strip));
         let path = format!("{}{suffix}", prev.get(..keep).unwrap_or_default());
         (path, span.end().saturating_sub(file.offset))
@@ -538,10 +576,7 @@ pub async fn index(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{count}"))
             .lazy(index_entries, (file, version, count)),
     );
-    cx.emit(
-        Node::new("Extensions")
-            .lazy(index_extensions, (file, version, count)),
-    );
+    cx.emit(Node::new("Extensions").lazy(index_extensions, (file, version, count)));
     cx.emit(checksum_node(&cx, file, "Checksum").await?);
     Ok(())
 }
@@ -579,7 +614,9 @@ async fn entry_fields(cx: Cx, (span, version): (Span, u32)) -> Result<()> {
     f.u32("UID").emit()?;
     f.u32("GID").emit()?;
     f.u32("File size").emit()?;
-    f.bytes("Object name", HASH).with(|b, n| n.value(Value::Text(hex_string(b)))).emit()?;
+    f.bytes("Object name", HASH)
+        .with(|b, n| n.value(Value::Text(hex_string(b))))
+        .emit()?;
     let flags = f
         .u16("Flags")
         .hex()
@@ -601,7 +638,11 @@ async fn entry_fields(cx: Cx, (span, version): (Span, u32)) -> Result<()> {
             f.node(
                 Node::new("Prefix strip length")
                     .span(span.sub(f.pos(), to_u64(n)))
-                    .value(Value::UInt { value: strip, bits: 64, radix: crate::value::Radix::Dec }),
+                    .value(Value::UInt {
+                        value: strip,
+                        bits: 64,
+                        radix: crate::value::Radix::Dec,
+                    }),
             );
             f.skip(to_u64(n));
         }
@@ -631,9 +672,12 @@ async fn index_extensions(cx: Cx, (file, version, count): (Span, u32, u32)) -> R
             .iter()
             .find(|(s, _)| **s == sig)
             .map_or_else(|| "Extension".to_owned(), |(_, n)| (*n).to_owned());
-        let mut node = Node::new(format!("{} ({name})", crate::formats::datakit::fourcc(&sig)))
-            .span(span)
-            .summary(format!("{len} bytes"));
+        let mut node = Node::new(format!(
+            "{} ({name})",
+            crate::formats::datakit::fourcc(&sig)
+        ))
+        .span(span)
+        .summary(format!("{len} bytes"));
         if &sig == b"TREE" {
             node = node.lazy(cache_tree, span.tail(8));
         }
@@ -655,12 +699,18 @@ async fn cache_tree(cx: Cx, span: Span) -> Result<()> {
             return Err(Diagnostic::malformed("bad cache tree record").at(span.tail(to_u64(at))));
         }
         let path = String::from_utf8_lossy(rest.get(..nul).unwrap_or_default()).into_owned();
-        let counts = String::from_utf8_lossy(rest.get(nul.saturating_add(1)..lf).unwrap_or_default()).into_owned();
+        let counts =
+            String::from_utf8_lossy(rest.get(nul.saturating_add(1)..lf).unwrap_or_default())
+                .into_owned();
         let (entries, subtrees) = counts.split_once(' ').unwrap_or((counts.as_str(), "0"));
         let valid = !entries.starts_with('-');
         let mut len = lf.saturating_add(1);
-        let mut node = Node::new(if path.is_empty() { "(root)".to_owned() } else { path })
-            .summary(format!("{entries} entries, {subtrees} subtrees"));
+        let mut node = Node::new(if path.is_empty() {
+            "(root)".to_owned()
+        } else {
+            path
+        })
+        .summary(format!("{entries} entries, {subtrees} subtrees"));
         if valid {
             let sha = rest.get(len..len.saturating_add(20)).unwrap_or_default();
             node = node.value(Value::Text(hex_string(sha)));

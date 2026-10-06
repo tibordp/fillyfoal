@@ -56,8 +56,12 @@ fn begin(line: &[u8]) -> Option<(Kind, &[u8])> {
 fn end(line: &[u8], kind: Kind, label: &[u8]) -> bool {
     let t = probe::trim(line);
     let rest = match kind {
-        Kind::Ssh2 => t.strip_prefix(b"---- END ").and_then(|r| r.strip_suffix(b" ----")),
-        _ => t.strip_prefix(b"-----END ").and_then(|r| r.strip_suffix(b"-----")),
+        Kind::Ssh2 => t
+            .strip_prefix(b"---- END ")
+            .and_then(|r| r.strip_suffix(b" ----")),
+        _ => t
+            .strip_prefix(b"-----END ")
+            .and_then(|r| r.strip_suffix(b"-----")),
     };
     rest == Some(label)
 }
@@ -170,7 +174,13 @@ fn annotation(labels: &[String]) -> String {
     }
     let parts: Vec<String> = counts
         .iter()
-        .map(|(n, c)| if *c == 1 { (*n).to_owned() } else { format!("{c} × {n}") })
+        .map(|(n, c)| {
+            if *c == 1 {
+                (*n).to_owned()
+            } else {
+                format!("{c} × {n}")
+            }
+        })
         .collect();
     match parts.as_slice() {
         [] => "ASCII armor (no blocks)".to_owned(),
@@ -185,7 +195,9 @@ fn header_line(line: &[u8]) -> bool {
     };
     let name = line.get(..colon).unwrap_or_default();
     !name.is_empty()
-        && name.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        && name
+            .iter()
+            .all(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         && line.get(colon.saturating_add(1)).is_none_or(|&b| b == b' ')
 }
 
@@ -209,7 +221,11 @@ async fn expand(cx: Cx, b: Block) -> Result<()> {
     let Some(first) = lines.next().await? else {
         return Ok(());
     };
-    cx.emit(Node::new("Begin").span(first.span).value(Value::Text(b.label.clone())));
+    cx.emit(
+        Node::new("Begin")
+            .span(first.span)
+            .value(Value::Text(b.label.clone())),
+    );
     let label_bytes = b.label.as_bytes().to_vec();
     // Headers: `Name: value`, continued by indented lines (PEM, SSH2) or a
     // trailing backslash (SSH2).

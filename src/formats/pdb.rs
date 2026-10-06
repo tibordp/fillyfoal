@@ -51,7 +51,13 @@ const PDB_VERSIONS: EnumTable = &[
     (20_140_508, "VC140"),
 ];
 
-const MACHINES: EnumTable = &[(0x14c, "x86"), (0x8664, "x64"), (0xaa64, "ARM64"), (0x1c4, "ARMNT"), (0x200, "IA64")];
+const MACHINES: EnumTable = &[
+    (0x14c, "x86"),
+    (0x8664, "x64"),
+    (0xaa64, "ARM64"),
+    (0x1c4, "ARMNT"),
+    (0x200, "IA64"),
+];
 
 /// Fixed stream numbers.
 const STREAM_NAMES: [&str; 5] = [
@@ -78,19 +84,33 @@ fn stream_pieces(file: Span, block_size: u64, blocks: &[u32], len: u64) -> Vec<S
 async fn pdb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let sb: SuperBlock = read_record(&cx, file.sub(0, SuperBlock::SIZE), LE).await?;
-    cx.emit(SuperBlock::node("Superblock", file.sub(0, SuperBlock::SIZE), LE));
+    cx.emit(SuperBlock::node(
+        "Superblock",
+        file.sub(0, SuperBlock::SIZE),
+        LE,
+    ));
     let block_size = u64::from(sb.block_size);
     if !matches!(block_size, 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768) {
-        return Err(Diagnostic::malformed(format!("unexpected block size {block_size}")));
+        return Err(Diagnostic::malformed(format!(
+            "unexpected block size {block_size}"
+        )));
     }
     // The block map lists the blocks holding the stream directory.
     let directory_blocks = u64::from(sb.directory_bytes).div_ceil(block_size);
     let map = cx
-        .read(file.sub_exact(u64::from(sb.block_map).saturating_mul(block_size), directory_blocks.saturating_mul(4))?)
+        .read(file.sub_exact(
+            u64::from(sb.block_map).saturating_mul(block_size),
+            directory_blocks.saturating_mul(4),
+        )?)
         .await?;
-    let map: Vec<u32> = (0..to_usize(directory_blocks)).filter_map(|i| u32_le(&map, i.saturating_mul(4))).collect();
+    let map: Vec<u32> = (0..to_usize(directory_blocks))
+        .filter_map(|i| u32_le(&map, i.saturating_mul(4)))
+        .collect();
     let directory = cx.add_pieces(
-        Origin { parent: file, transform: "msf-directory" },
+        Origin {
+            parent: file,
+            transform: "msf-directory",
+        },
         stream_pieces(file, block_size, &map, sb.directory_bytes.into()),
     )?;
     let dir = cx.read(directory).await?;
@@ -99,25 +119,36 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
     if to_u64(count_usize).saturating_mul(4) > directory.len {
         return Err(Diagnostic::malformed("stream count exceeds the directory"));
     }
-    let sizes: Vec<u32> = (0..count_usize).filter_map(|i| u32_le(&dir, 4usize.saturating_add(i.saturating_mul(4)))).collect();
+    let sizes: Vec<u32> = (0..count_usize)
+        .filter_map(|i| u32_le(&dir, 4usize.saturating_add(i.saturating_mul(4))))
+        .collect();
     let mut at = 4usize.saturating_add(count_usize.saturating_mul(4));
     let mut streams = Vec::new();
     for (i, &size) in sizes.iter().enumerate() {
         // Deleted streams have size 0xffffffff and no blocks.
         let len = if size == u32::MAX { 0 } else { u64::from(size) };
         let n = to_usize(len.div_ceil(block_size));
-        let blocks: Vec<u32> = (0..n).filter_map(|j| u32_le(&dir, at.saturating_add(j.saturating_mul(4)))).collect();
+        let blocks: Vec<u32> = (0..n)
+            .filter_map(|j| u32_le(&dir, at.saturating_add(j.saturating_mul(4))))
+            .collect();
         at = at.saturating_add(n.saturating_mul(4));
         // Each stream needs its own memo key: use the directory source with
         // the stream number as the (empty) parent offset.
         let key = Span::new(directory.source, u64::try_from(i).unwrap_or(0), 0);
         let span = cx.add_pieces(
-            Origin { parent: key, transform: "msf-stream" },
+            Origin {
+                parent: key,
+                transform: "msf-stream",
+            },
             stream_pieces(file, block_size, &blocks, len),
         )?;
         streams.push((size, span));
     }
-    cx.emit(Node::new("Stream directory").span(directory).summary(format!("{count} streams")));
+    cx.emit(
+        Node::new("Stream directory")
+            .span(directory)
+            .summary(format!("{count} streams")),
+    );
 
     let mut summary = format!("PDB, {count} streams");
     if let Some((_, info)) = streams.get(1) {
@@ -127,7 +158,10 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
         let _signature = f.u32("Signature").get()?;
         let age = f.u32("Age").get()?;
         let guid = f.guid("GUID").get()?;
-        summary = format!("PDB {}, GUID {guid}, age {age}", lookup(PDB_VERSIONS, version.into()).unwrap_or("unknown version"));
+        summary = format!(
+            "PDB {}, GUID {guid}, age {age}",
+            lookup(PDB_VERSIONS, version.into()).unwrap_or("unknown version")
+        );
     }
     if let Some((_, dbi)) = streams.get(3)
         && dbi.len >= 64
@@ -150,13 +184,21 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
 async fn pdb_streams(cx: Cx, (input, streams): (Input, Vec<(u32, Span)>)) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(streams.len())));
     for (i, (size, span)) in streams.into_iter().enumerate() {
-        let name = STREAM_NAMES.get(i).map_or_else(|| format!("Stream {i}"), |n| format!("Stream {i}: {n}"));
+        let name = STREAM_NAMES
+            .get(i)
+            .map_or_else(|| format!("Stream {i}"), |n| format!("Stream {i}: {n}"));
         let node = if size == u32::MAX {
             Node::new(name).summary("deleted")
         } else if i == 1 {
-            Node::new(name).span(span).summary(format!("{size} bytes")).lazy(pdb_info, span)
+            Node::new(name)
+                .span(span)
+                .summary(format!("{size} bytes"))
+                .lazy(pdb_info, span)
         } else if i == 3 {
-            Node::new(name).span(span).summary(format!("{size} bytes")).lazy(dbi_header, span)
+            Node::new(name)
+                .span(span)
+                .summary(format!("{size} bytes"))
+                .lazy(dbi_header, span)
         } else {
             embedded(name, input.nested(span)).summary(format!("{size} bytes"))
         };
@@ -171,7 +213,9 @@ async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
     f.u32("Version").enumeration(PDB_VERSIONS).emit()?;
     f.u32("Signature").timestamp().emit()?;
     f.u32("Age").emit()?;
-    f.guid("GUID").desc("Matches the CodeView record of the image").emit()?;
+    f.guid("GUID")
+        .desc("Matches the CodeView record of the image")
+        .emit()?;
     let names_len = f.u32("Named stream map: string buffer size").emit()?;
     let strings = span.sub(32, names_len.into());
     let text = cx.read_avail(strings).await?;
@@ -180,7 +224,11 @@ async fn pdb_info(cx: Cx, span: Span) -> Result<()> {
         .filter(|s| !s.is_empty())
         .map(|s| String::from_utf8_lossy(s).into_owned())
         .collect();
-    cx.emit(Node::new("Named streams").span(strings).value(Value::Text(names.join(", "))));
+    cx.emit(
+        Node::new("Named streams")
+            .span(strings)
+            .value(Value::Text(names.join(", "))),
+    );
     Ok(())
 }
 
@@ -210,7 +258,11 @@ record! {
 }
 
 async fn dbi_header(cx: Cx, span: Span) -> Result<()> {
-    cx.emit(DbiHeader::node("DBI header", span.sub(0, DbiHeader::SIZE), LE));
+    cx.emit(DbiHeader::node(
+        "DBI header",
+        span.sub(0, DbiHeader::SIZE),
+        LE,
+    ));
     cx.emit(Node::new("Substreams").span(span.tail(DbiHeader::SIZE)));
     Ok(())
 }
@@ -225,6 +277,8 @@ async fn pdb2(cx: Cx, input: Input) -> Result<()> {
     let blocks = f.u16("Number of blocks").emit()?;
     let dir = f.u32("Stream directory size").emit()?;
     cx.emit(Node::new("Blocks").span(file.tail(u64::from(block_size))));
-    cx.annotate(format!("PDB 2.00, {blocks} blocks of {block_size} bytes, directory {dir} bytes"));
+    cx.annotate(format!(
+        "PDB 2.00, {blocks} blocks of {block_size} bytes, directory {dir} bytes"
+    ));
     Ok(())
 }

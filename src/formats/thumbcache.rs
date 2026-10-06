@@ -122,8 +122,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let size = u32_le(&head, 4).unwrap_or(0);
         if u64::from(size) < hsize {
-            return Err(Diagnostic::malformed("cache entry smaller than its header")
-                .at(file.sub(start, 8)));
+            return Err(
+                Diagnostic::malformed("cache entry smaller than its header").at(file.sub(start, 8))
+            );
         }
         let span = file.sub(start, size.into());
         cur.seek(start.saturating_add(size.into()));
@@ -145,12 +146,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             clip(&id, 80)
         };
-        cx.push(
-            Node::new(name)
-                .span(span)
-                .summary(summary)
-                .lazy(cache_entry, (input, span, version, id_size, padding, data_size)),
-        )
+        cx.push(Node::new(name).span(span).summary(summary).lazy(
+            cache_entry,
+            (input, span, version, id_size, padding, data_size),
+        ))
         .await;
         count = count.saturating_add(1);
     }
@@ -166,15 +165,26 @@ async fn cache_entry(
     (input, span, version, id_size, padding, data_size): (Input, Span, u32, u32, u32, u32),
 ) -> Result<()> {
     let hsize = entry_header_size(version);
-    cx.emit(struct_node("Entry header", span.sub(0, hsize), LE, version, entry));
+    cx.emit(struct_node(
+        "Entry header",
+        span.sub(0, hsize),
+        LE,
+        version,
+        entry,
+    ));
     let id_span = span.sub(hsize, id_size.into());
     if id_size > 0 {
         let id = crate::text::utf16(&cx.read(id_span).await?, LE);
         cx.emit(Node::new("Identifier").span(id_span).value(Value::Text(id)));
     }
-    let data_at = hsize.saturating_add(id_size.into()).saturating_add(padding.into());
+    let data_at = hsize
+        .saturating_add(id_size.into())
+        .saturating_add(padding.into());
     if padding > 0 {
-        cx.emit(Node::new("Padding").span(span.sub(hsize.saturating_add(id_size.into()), padding.into())));
+        cx.emit(
+            Node::new("Padding")
+                .span(span.sub(hsize.saturating_add(id_size.into()), padding.into())),
+        );
     }
     if data_size > 0 {
         let data = span.sub(data_at, data_size.into());

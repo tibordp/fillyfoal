@@ -112,17 +112,27 @@ async fn bgzf_block(cx: &Cx, file: Span, pos: u64) -> Result<Option<BgzfBlock>> 
         return Ok(None);
     }
     let xlen = u16_le(&head, 10).unwrap_or(0);
-    let extra = cx.read_avail(file.sub(pos.saturating_add(12), xlen.into())).await?;
+    let extra = cx
+        .read_avail(file.sub(pos.saturating_add(12), xlen.into()))
+        .await?;
     let Some(bsize) = bc_subfield(&extra) else {
         return Ok(None);
     };
     let total = u64::from(bsize).saturating_add(1);
     let span = file.sub(pos, total);
     let header_len = 12u64.saturating_add(xlen.into());
-    let cdata = span.sub(header_len, total.saturating_sub(header_len).saturating_sub(8));
+    let cdata = span.sub(
+        header_len,
+        total.saturating_sub(header_len).saturating_sub(8),
+    );
     let trailer = cx.read_avail(span.sub(total.saturating_sub(4), 4)).await?;
     let isize = u32_le(&trailer, 0).unwrap_or(0);
-    Ok(Some(BgzfBlock { span, xlen, cdata, isize }))
+    Ok(Some(BgzfBlock {
+        span,
+        xlen,
+        cdata,
+        isize,
+    }))
 }
 
 /// Lists the blocks of a BGZF file.
@@ -142,28 +152,48 @@ async fn bgzf_blocks(cx: Cx, input: Input) -> Result<()> {
                 .span(block.span)
                 .value(hex(pos, 64))
                 .summary(summary)
-                .lazy(bgzf_block_node, (input, block.span, block.xlen, block.cdata, block.isize)),
+                .lazy(
+                    bgzf_block_node,
+                    (input, block.span, block.xlen, block.cdata, block.isize),
+                ),
         )
         .await;
         index = index.saturating_add(1);
         pos = pos.saturating_add(block.span.len.max(1));
     }
     if pos < file.len {
-        cx.diag(Diagnostic::malformed("data after the last BGZF block is not a BGZF block").at(file.tail(pos)));
+        cx.diag(
+            Diagnostic::malformed("data after the last BGZF block is not a BGZF block")
+                .at(file.tail(pos)),
+        );
     }
     Ok(())
 }
 
-async fn bgzf_block_node(cx: Cx, (input, span, xlen, cdata, isize): (Input, Span, u16, Span, u32)) -> Result<()> {
-    cx.emit(BgzfHeader::node("Header", span.sub(0, BgzfHeader::SIZE), LE));
+async fn bgzf_block_node(
+    cx: Cx,
+    (input, span, xlen, cdata, isize): (Input, Span, u16, Span, u32),
+) -> Result<()> {
+    cx.emit(BgzfHeader::node(
+        "Header",
+        span.sub(0, BgzfHeader::SIZE),
+        LE,
+    ));
     let extra = span.sub(12, xlen.into());
     let data = cx.block(extra).await?;
     let mut f = Fields::emitting(&cx, &data, LE);
     f.ascii("Subfield ID", 2).emit()?;
     f.u16("Subfield length").emit()?;
     f.u16("BSIZE").desc("Total block size minus 1").emit()?;
-    cx.emit(content("Data", input, cdata, Codec::Deflate, Some(isize.into())).summary(format!("{} compressed bytes", cdata.len)));
-    cx.emit(BgzfTrailer::node("Trailer", span.sub(span.len.saturating_sub(8), 8), LE));
+    cx.emit(
+        content("Data", input, cdata, Codec::Deflate, Some(isize.into()))
+            .summary(format!("{} compressed bytes", cdata.len)),
+    );
+    cx.emit(BgzfTrailer::node(
+        "Trailer",
+        span.sub(span.len.saturating_sub(8), 8),
+        LE,
+    ));
     Ok(())
 }
 
@@ -185,7 +215,9 @@ async fn bgzf_stream(cx: &Cx, file: Span, head_only: bool) -> Result<(Span, bool
             break;
         }
         if block.isize > 0 {
-            let decoded = crate::codec::inflate_span(cx, block.cdata, false, Some(block.isize.into())).await?;
+            let decoded =
+                crate::codec::inflate_span(cx, block.cdata, false, Some(block.isize.into()))
+                    .await?;
             pieces.push(decoded.span);
             if decoded.error.is_some() {
                 complete = false;
@@ -197,17 +229,27 @@ async fn bgzf_stream(cx: &Cx, file: Span, head_only: bool) -> Result<(Span, bool
     }
     let origin = Origin {
         parent: file,
-        transform: if head_only { "bgzf (first blocks)" } else { "bgzf" },
+        transform: if head_only {
+            "bgzf (first blocks)"
+        } else {
+            "bgzf"
+        },
     };
     Ok((cx.add_pieces(origin, pieces)?, complete))
 }
 
 fn blocks_node(input: Input) -> Node {
-    Node::new("BGZF blocks").span(input.span).lazy(bgzf_blocks, input)
+    Node::new("BGZF blocks")
+        .span(input.span)
+        .lazy(bgzf_blocks, input)
 }
 
 fn stream_note(complete: bool) -> Option<Diagnostic> {
-    (!complete).then(|| Diagnostic::limit(format!("only the first {STREAM_BLOCKS} BGZF blocks are decompressed")))
+    (!complete).then(|| {
+        Diagnostic::limit(format!(
+            "only the first {STREAM_BLOCKS} BGZF blocks are decompressed"
+        ))
+    })
 }
 
 async fn bgzf(cx: Cx, input: Input) -> Result<()> {
@@ -225,13 +267,22 @@ async fn bgzf(cx: Cx, input: Input) -> Result<()> {
 async fn vcf_bgzf(cx: Cx, input: Input) -> Result<()> {
     let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
     cx.emit(blocks_node(input));
-    let mut node = embedded_as("Decompressed VCF", input.nested(stream), &crate::formats::biotext::VCF);
+    let mut node = embedded_as(
+        "Decompressed VCF",
+        input.nested(stream),
+        &crate::formats::biotext::VCF,
+    );
     if let Some(d) = stream_note(complete) {
         node = node.diag(d);
     }
     cx.emit(node);
     let head = cx.read_avail(stream.sub(0, 64)).await?;
-    let version = String::from_utf8_lossy(&head).lines().next().unwrap_or_default().trim_start_matches("##fileformat=").to_owned();
+    let version = String::from_utf8_lossy(&head)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim_start_matches("##fileformat=")
+        .to_owned();
     cx.annotate(format!("{version}, BGZF-compressed"));
     Ok(())
 }
@@ -267,7 +318,15 @@ async fn bam(cx: Cx, input: Input) -> Result<()> {
         refs.push((crate::text::until_nul(&name), len));
     }
     let header = head.sub(0, cur.pos());
-    cx.emit(Node::new("Header").span(header).lazy(bam_header, (magic_span, text_span, head.sub(refs_start.saturating_sub(4), 4), head.sub(refs_start, cur.pos().saturating_sub(refs_start)))));
+    cx.emit(Node::new("Header").span(header).lazy(
+        bam_header,
+        (
+            magic_span,
+            text_span,
+            head.sub(refs_start.saturating_sub(4), 4),
+            head.sub(refs_start, cur.pos().saturating_sub(refs_start)),
+        ),
+    ));
     let refs = References(refs);
     cx.emit(Node::new("Alignments").lazy(bam_alignments, (input, header.len, refs.clone())));
     let sort = header_text
@@ -280,15 +339,34 @@ async fn bam(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "BAM, {} reference(s){}{}",
         refs.0.len(),
-        if names.is_empty() { String::new() } else { format!(" ({}{})", names.join(", "), if refs.0.len() > 3 { ", …" } else { "" }) },
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " ({}{})",
+                names.join(", "),
+                if refs.0.len() > 3 { ", …" } else { "" }
+            )
+        },
         sort
     ));
     Ok(())
 }
 
-async fn bam_header(cx: Cx, (magic, text_span, n_ref, refs): (Span, Span, Span, Span)) -> Result<()> {
+async fn bam_header(
+    cx: Cx,
+    (magic, text_span, n_ref, refs): (Span, Span, Span, Span),
+) -> Result<()> {
     cx.emit(Node::new("Magic").span(magic).value(text("BAM\\1")));
-    cx.emit(Node::new("l_text").span(Span::new(text_span.source, text_span.offset.saturating_sub(4), 4)).value(uint(text_span.len)));
+    cx.emit(
+        Node::new("l_text")
+            .span(Span::new(
+                text_span.source,
+                text_span.offset.saturating_sub(4),
+                4,
+            ))
+            .value(uint(text_span.len)),
+    );
     cx.emit(
         Node::new("Header text")
             .span(text_span)
@@ -296,7 +374,11 @@ async fn bam_header(cx: Cx, (magic, text_span, n_ref, refs): (Span, Span, Span, 
             .lazy(sam_header_lines, text_span),
     );
     let count = cx.read_avail(n_ref).await?;
-    cx.emit(Node::new("n_ref").span(n_ref).value(uint(u32_le(&count, 0).unwrap_or(0).into())));
+    cx.emit(
+        Node::new("n_ref")
+            .span(n_ref)
+            .value(uint(u32_le(&count, 0).unwrap_or(0).into())),
+    );
     cx.emit(Node::new("References").span(refs).lazy(bam_refs, refs));
     Ok(())
 }
@@ -311,7 +393,12 @@ async fn sam_header_lines(cx: Cx, span: Span) -> Result<()> {
             continue;
         }
         let tag = t.get(..3).unwrap_or(t).to_owned();
-        cx.push(Node::new(tag).span(line.span).value(text(t.get(3..).unwrap_or_default().trim()))).await;
+        cx.push(
+            Node::new(tag)
+                .span(line.span)
+                .value(text(t.get(3..).unwrap_or_default().trim())),
+        )
+        .await;
     }
     Ok(())
 }
@@ -392,7 +479,11 @@ async fn bam_alignments(cx: Cx, (input, start, refs): (Input, u64, References)) 
             break;
         }
         let rec: BamRecord = read_record(&cx, span.sub(0, BamRecord::SIZE), LE).await?;
-        let name = cx.cstr(span.sub(BamRecord::SIZE, rec.l_read_name.into())).await.map(|(n, _)| n).unwrap_or_default();
+        let name = cx
+            .cstr(span.sub(BamRecord::SIZE, rec.l_read_name.into()))
+            .await
+            .map(|(n, _)| n)
+            .unwrap_or_default();
         let summary = format!(
             "{}:{} mapq {} flag {:#x}",
             ref_name(&refs, rec.ref_id),
@@ -400,7 +491,13 @@ async fn bam_alignments(cx: Cx, (input, start, refs): (Input, u64, References)) 
             rec.mapq,
             rec.flag
         );
-        cx.push(Node::new(name).span(span).summary(summary).lazy(bam_record, (span, refs.clone()))).await;
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(summary)
+                .lazy(bam_record, (span, refs.clone())),
+        )
+        .await;
         count = count.saturating_add(1);
         cur.seek(at.saturating_add(span.len));
     }
@@ -420,15 +517,24 @@ async fn bam_record(cx: Cx, (span, refs): (Span, References)) -> Result<()> {
     let cigar_span = f.peek_span(u64::from(rec.n_cigar_op).saturating_mul(4));
     let cigar = cx.read_avail(cigar_span).await?;
     let ops: String = cigar
-        .as_chunks::<4>().0.iter()
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|c| {
             let v = u32_le(c, 0).unwrap_or(0);
-            let op = CIGAR_OPS.get(to_usize((v & 0xf).into())).copied().unwrap_or(b'?');
+            let op = CIGAR_OPS
+                .get(to_usize((v & 0xf).into()))
+                .copied()
+                .unwrap_or(b'?');
             format!("{}{}", v >> 4, char::from(op))
         })
         .collect();
     f.skip(cigar_span.len);
-    cx.emit(Node::new("cigar").span(cigar_span).value(text(if ops.is_empty() { "*".to_owned() } else { ops })));
+    cx.emit(
+        Node::new("cigar")
+            .span(cigar_span)
+            .value(text(if ops.is_empty() { "*".to_owned() } else { ops })),
+    );
     let seq_len = u64::from(rec.l_seq).div_ceil(2);
     let seq_span = f.peek_span(seq_len);
     let packed = cx.read_avail(seq_span.sub(0, 4096)).await?;
@@ -436,18 +542,27 @@ async fn bam_record(cx: Cx, (span, refs): (Span, References)) -> Result<()> {
     for b in &packed {
         for nibble in [b >> 4, b & 0xf] {
             if to_u64(seq.len()) < u64::from(rec.l_seq) {
-                seq.push(char::from(SEQ_CODES.get(usize::from(nibble)).copied().unwrap_or(b'N')));
+                seq.push(char::from(
+                    SEQ_CODES.get(usize::from(nibble)).copied().unwrap_or(b'N'),
+                ));
             }
         }
     }
     f.skip(seq_len);
-    cx.emit(Node::new("seq").span(seq_span).value(text(preview(&seq, 200))));
+    cx.emit(
+        Node::new("seq")
+            .span(seq_span)
+            .value(text(preview(&seq, 200))),
+    );
     let qual_span = f.peek_span(rec.l_seq.into());
     let qual = cx.read_avail(qual_span.sub(0, 4096)).await?;
     let mean = if qual.is_empty() || qual.first() == Some(&0xff) {
         None
     } else {
-        qual.iter().map(|&q| u64::from(q)).sum::<u64>().checked_div(to_u64(qual.len()))
+        qual.iter()
+            .map(|&q| u64::from(q))
+            .sum::<u64>()
+            .checked_div(to_u64(qual.len()))
     };
     f.skip(rec.l_seq.into());
     cx.emit(
@@ -501,13 +616,21 @@ async fn bam_tags(cx: Cx, span: Span) -> Result<()> {
         } else if kind == b'B' {
             let sub = cur.u8().await?;
             let n = cur.u32().await?;
-            let size = tag_size(sub).ok_or_else(|| Diagnostic::malformed(format!("bad array type {sub:#x}")).at(cur.since(start)))?;
+            let size = tag_size(sub).ok_or_else(|| {
+                Diagnostic::malformed(format!("bad array type {sub:#x}")).at(cur.since(start))
+            })?;
             cur.skip(size.saturating_mul(n.into()));
             Node::new(tag).summary(format!("array of {n} '{}'", char::from(sub)))
         } else {
-            return Err(Diagnostic::malformed(format!("unknown tag type {kind:#x}")).at(cur.since(start)));
+            return Err(
+                Diagnostic::malformed(format!("unknown tag type {kind:#x}")).at(cur.since(start))
+            );
         };
-        cx.push(node.span(cur.since(start)).desc(format!("type {}", char::from(kind)))).await;
+        cx.push(
+            node.span(cur.since(start))
+                .desc(format!("type {}", char::from(kind))),
+        )
+        .await;
     }
     Ok(())
 }
@@ -522,20 +645,55 @@ async fn bcf(cx: Cx, input: Input) -> Result<()> {
     let magic = cur.bytes(5).await?;
     let l_text = cur.u32().await?;
     let text_span = cur.span(l_text.into());
-    cx.emit(Node::new("Magic").span(head.sub(0, 5)).value(text(format!("BCF {}.{}", magic.get(3).unwrap_or(&0), magic.get(4).unwrap_or(&0)))));
-    cx.emit(Node::new("l_text").span(head.sub(5, 4)).value(uint(l_text.into())));
-    let vcf_text = if l_text > 0 && cx.read_avail(text_span.sub(text_span.len.saturating_sub(1), 1)).await? == [0] { text_span.sub(0, text_span.len.saturating_sub(1)) } else { text_span };
-    cx.emit(embedded_as("Header (VCF)", input.nested(vcf_text), &crate::formats::biotext::VCF));
+    cx.emit(Node::new("Magic").span(head.sub(0, 5)).value(text(format!(
+        "BCF {}.{}",
+        magic.get(3).unwrap_or(&0),
+        magic.get(4).unwrap_or(&0)
+    ))));
+    cx.emit(
+        Node::new("l_text")
+            .span(head.sub(5, 4))
+            .value(uint(l_text.into())),
+    );
+    let vcf_text = if l_text > 0
+        && cx
+            .read_avail(text_span.sub(text_span.len.saturating_sub(1), 1))
+            .await?
+            == [0]
+    {
+        text_span.sub(0, text_span.len.saturating_sub(1))
+    } else {
+        text_span
+    };
+    cx.emit(embedded_as(
+        "Header (VCF)",
+        input.nested(vcf_text),
+        &crate::formats::biotext::VCF,
+    ));
     let header = cx.read_avail(text_span.sub(0, 0x100000)).await?;
     let header = String::from_utf8_lossy(&header).into_owned();
     // Dictionary indexes: contigs in order; strings (FILTER/INFO/FORMAT) by IDX or order with PASS first.
     let contigs: Vec<String> = header
         .lines()
         .filter_map(|l| l.strip_prefix("##contig=<"))
-        .filter_map(|l| l.split(',').find_map(|f| f.strip_prefix("ID=")).map(|s| s.trim_end_matches('>').to_owned()))
+        .filter_map(|l| {
+            l.split(',')
+                .find_map(|f| f.strip_prefix("ID="))
+                .map(|s| s.trim_end_matches('>').to_owned())
+        })
         .collect();
-    let samples = header.lines().find(|l| l.starts_with("#CHROM")).map_or(0, |l| l.split('\t').count().saturating_sub(9));
-    cx.emit(Node::new("Records").lazy(bcf_records, (input, 9u64.saturating_add(l_text.into()), References(contigs.iter().map(|c| (c.clone(), 0)).collect()))));
+    let samples = header
+        .lines()
+        .find(|l| l.starts_with("#CHROM"))
+        .map_or(0, |l| l.split('\t').count().saturating_sub(9));
+    cx.emit(Node::new("Records").lazy(
+        bcf_records,
+        (
+            input,
+            9u64.saturating_add(l_text.into()),
+            References(contigs.iter().map(|c| (c.clone(), 0)).collect()),
+        ),
+    ));
     cx.annotate(format!(
         "BCF {}.{}, {} contig(s), {samples} sample(s)",
         magic.get(3).unwrap_or(&0),
@@ -581,11 +739,35 @@ async fn bcf_typed(cur: &mut Cursor<'_>) -> Result<String> {
     };
     let data = cur.bytes(size.saturating_mul(count).min(0x10000)).await?;
     Ok(match kind {
-        7 => String::from_utf8_lossy(&data).trim_end_matches('\0').to_owned(),
-        1 => data.iter().map(|b| b.cast_signed().to_string()).collect::<Vec<_>>().join(","),
-        2 => data.as_chunks::<2>().0.iter().map(|c| crate::bytes::i16_le(c, 0).unwrap_or(0).to_string()).collect::<Vec<_>>().join(","),
-        3 => data.as_chunks::<4>().0.iter().map(|c| crate::bytes::i32_le(c, 0).unwrap_or(0).to_string()).collect::<Vec<_>>().join(","),
-        5 => data.as_chunks::<4>().0.iter().map(|c| f32::from_bits(u32_le(c, 0).unwrap_or(0)).to_string()).collect::<Vec<_>>().join(","),
+        7 => String::from_utf8_lossy(&data)
+            .trim_end_matches('\0')
+            .to_owned(),
+        1 => data
+            .iter()
+            .map(|b| b.cast_signed().to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        2 => data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|c| crate::bytes::i16_le(c, 0).unwrap_or(0).to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        3 => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| crate::bytes::i32_le(c, 0).unwrap_or(0).to_string())
+            .collect::<Vec<_>>()
+            .join(","),
+        5 => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_bits(u32_le(c, 0).unwrap_or(0)).to_string())
+            .collect::<Vec<_>>()
+            .join(","),
         _ => String::new(),
     })
 }
@@ -598,7 +780,11 @@ async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) 
         let at = cur.pos();
         let l_shared = cur.u32().await?;
         let l_indiv = cur.u32().await?;
-        let span = stream.sub(at, 8u64.saturating_add(l_shared.into()).saturating_add(l_indiv.into()));
+        let span = stream.sub(
+            at,
+            8u64.saturating_add(l_shared.into())
+                .saturating_add(l_indiv.into()),
+        );
         let shared: BcfShared = read_record(&cx, span.sub(0, BcfShared::SIZE), LE).await?;
         let mut body = Cursor::new(&cx, span, LE);
         body.seek(BcfShared::SIZE);
@@ -615,10 +801,14 @@ async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) 
             alleles.get(1..).map(|a| a.join(",")).unwrap_or_default()
         );
         cx.push(
-            Node::new(if id.is_empty() || id == "." { format!("Record @{at:#x}") } else { id })
-                .span(span)
-                .summary(summary)
-                .lazy(bcf_record, span),
+            Node::new(if id.is_empty() || id == "." {
+                format!("Record @{at:#x}")
+            } else {
+                id
+            })
+            .span(span)
+            .summary(summary)
+            .lazy(bcf_record, span),
         )
         .await;
         cur.seek(at.saturating_add(span.len.max(8)));
@@ -631,7 +821,11 @@ async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) 
 
 async fn bcf_record(cx: Cx, span: Span) -> Result<()> {
     let shared: BcfShared = read_record(&cx, span.sub(0, BcfShared::SIZE), LE).await?;
-    cx.emit(BcfShared::node("Fixed fields", span.sub(0, BcfShared::SIZE), LE));
+    cx.emit(BcfShared::node(
+        "Fixed fields",
+        span.sub(0, BcfShared::SIZE),
+        LE,
+    ));
     let mut cur = Cursor::new(&cx, span, LE);
     cur.seek(BcfShared::SIZE);
     let start = cur.pos();
@@ -640,18 +834,38 @@ async fn bcf_record(cx: Cx, span: Span) -> Result<()> {
     for i in 0..(shared.n_info_allele >> 16).min(1024) {
         let start = cur.pos();
         let allele = bcf_typed(&mut cur).await?;
-        cx.emit(Node::new(if i == 0 { "REF" } else { "ALT" }).span(cur.since(start)).value(text(allele)));
+        cx.emit(
+            Node::new(if i == 0 { "REF" } else { "ALT" })
+                .span(cur.since(start))
+                .value(text(allele)),
+        );
     }
     let start = cur.pos();
     let filters = bcf_typed(&mut cur).await?;
-    cx.emit(Node::new("FILTER").span(cur.since(start)).value(text(filters)).desc("Indexes into the header's string dictionary"));
-    let info = span.sub(cur.pos(), 8u64.saturating_add(shared.l_shared.into()).saturating_sub(cur.pos()));
-    cx.emit(Node::new("INFO").span(info).summary(format!("{} key/value pair(s)", shared.n_info_allele & 0xffff)));
-    cx.emit(Node::new("Genotype data").span(span.tail(8u64.saturating_add(shared.l_shared.into()))).summary(format!(
-        "{} FORMAT field(s) × {} sample(s)",
-        shared.n_fmt_sample >> 24,
-        shared.n_fmt_sample & 0xff_ffff
+    cx.emit(
+        Node::new("FILTER")
+            .span(cur.since(start))
+            .value(text(filters))
+            .desc("Indexes into the header's string dictionary"),
+    );
+    let info = span.sub(
+        cur.pos(),
+        8u64.saturating_add(shared.l_shared.into())
+            .saturating_sub(cur.pos()),
+    );
+    cx.emit(Node::new("INFO").span(info).summary(format!(
+        "{} key/value pair(s)",
+        shared.n_info_allele & 0xffff
     )));
+    cx.emit(
+        Node::new("Genotype data")
+            .span(span.tail(8u64.saturating_add(shared.l_shared.into())))
+            .summary(format!(
+                "{} FORMAT field(s) × {} sample(s)",
+                shared.n_fmt_sample >> 24,
+                shared.n_fmt_sample & 0xff_ffff
+            )),
+    );
     Ok(())
 }
 
@@ -697,11 +911,25 @@ async fn index_refs(cx: Cx, (span, kind, names): (Span, IndexKind, Vec<String>))
     let mut i = 0usize;
     while cur.remaining() >= 4 {
         let start = cur.pos();
-        let n_bin = cur.peek(4).await.ok().and_then(|b| u32_le(&b, 0)).unwrap_or(0);
+        let n_bin = cur
+            .peek(4)
+            .await
+            .ok()
+            .and_then(|b| u32_le(&b, 0))
+            .unwrap_or(0);
         index_ref_len(&mut cur, kind).await?;
         let s = cur.since(start);
-        let name = names.get(i).cloned().unwrap_or_else(|| format!("Reference {i}"));
-        cx.push(Node::new(name).span(s).summary(format!("{n_bin} bin(s)")).lazy(index_ref, (s, kind))).await;
+        let name = names
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| format!("Reference {i}"));
+        cx.push(
+            Node::new(name)
+                .span(s)
+                .summary(format!("{n_bin} bin(s)"))
+                .lazy(index_ref, (s, kind)),
+        )
+        .await;
         i = i.saturating_add(1);
         if names.len() == i {
             break;
@@ -710,7 +938,12 @@ async fn index_refs(cx: Cx, (span, kind, names): (Span, IndexKind, Vec<String>))
     let rest = span.tail(cur.pos());
     if rest.len >= 8 {
         let b = cx.read_avail(rest.sub(0, 8)).await?;
-        cx.emit(Node::new("n_no_coor").span(rest.sub(0, 8)).value(uint(crate::bytes::u64_le(&b, 0).unwrap_or(0))).desc("Unplaced unmapped reads"));
+        cx.emit(
+            Node::new("n_no_coor")
+                .span(rest.sub(0, 8))
+                .value(uint(crate::bytes::u64_le(&b, 0).unwrap_or(0)))
+                .desc("Unplaced unmapped reads"),
+        );
     }
     Ok(())
 }
@@ -718,26 +951,46 @@ async fn index_refs(cx: Cx, (span, kind, names): (Span, IndexKind, Vec<String>))
 async fn index_ref(cx: Cx, (span, kind): (Span, IndexKind)) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     let n_bin = cur.u32().await?;
-    cx.emit(Node::new("n_bin").span(span.sub(0, 4)).value(uint(n_bin.into())));
+    cx.emit(
+        Node::new("n_bin")
+            .span(span.sub(0, 4))
+            .value(uint(n_bin.into())),
+    );
     for _ in 0..n_bin {
         if cur.at_end() {
             break;
         }
         let start = cur.pos();
         let bin = cur.u32().await?;
-        let loffset = if kind == IndexKind::Csi { Some(cur.u64().await?) } else { None };
+        let loffset = if kind == IndexKind::Csi {
+            Some(cur.u64().await?)
+        } else {
+            None
+        };
         let n_chunk = cur.u32().await?;
         let chunks = cur.span(u64::from(n_chunk).saturating_mul(16));
         let data = cx.read_avail(chunks.sub(0, 16 * 16)).await?;
         cur.skip(chunks.len);
         let shown: Vec<String> = data
-            .as_chunks::<16>().0.iter()
-            .map(|c| format!("{}–{}", voffset(crate::bytes::u64_le(c, 0).unwrap_or(0)), voffset(crate::bytes::u64_le(c, 8).unwrap_or(0))))
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .map(|c| {
+                format!(
+                    "{}–{}",
+                    voffset(crate::bytes::u64_le(c, 0).unwrap_or(0)),
+                    voffset(crate::bytes::u64_le(c, 8).unwrap_or(0))
+                )
+            })
             .collect();
         let pseudo = bin == 37450 || (kind == IndexKind::Csi && bin > 37449 && n_chunk == 2);
         let mut node = Node::new(format!("Bin {bin}"))
             .span(cur.since(start))
-            .summary(format!("{n_chunk} chunk(s): {}{}", shown.join(", "), if n_chunk > 16 { ", …" } else { "" }));
+            .summary(format!(
+                "{n_chunk} chunk(s): {}{}",
+                shown.join(", "),
+                if n_chunk > 16 { ", …" } else { "" }
+            ));
         if pseudo {
             node = node.desc("Pseudo-bin with mapped/unmapped counts");
         }
@@ -751,12 +1004,22 @@ async fn index_ref(cx: Cx, (span, kind): (Span, IndexKind)) -> Result<()> {
         let n_intv = cur.u32().await?;
         let s = cur.span(u64::from(n_intv).saturating_mul(8));
         cur.skip(s.len);
-        cx.push(Node::new("Linear index").span(cur.since(start)).summary(format!("{n_intv} 16 kbp interval(s)"))).await;
+        cx.push(
+            Node::new("Linear index")
+                .span(cur.since(start))
+                .summary(format!("{n_intv} 16 kbp interval(s)")),
+        )
+        .await;
     }
     Ok(())
 }
 
-const TABIX_PRESETS: EnumTable = &[(0, "generic"), (1, "SAM"), (2, "VCF"), (0x10000, "generic, UCSC 0-based")];
+const TABIX_PRESETS: EnumTable = &[
+    (0, "generic"),
+    (1, "SAM"),
+    (2, "VCF"),
+    (0x10000, "generic, UCSC 0-based"),
+];
 
 async fn tabix_header(cx: &Cx, stream: Span) -> Result<(u32, Vec<String>, u64)> {
     let block = cx.block(stream.sub(0, 36)).await?;
@@ -764,16 +1027,35 @@ async fn tabix_header(cx: &Cx, stream: Span) -> Result<(u32, Vec<String>, u64)> 
     f.ascii("Magic", 4).emit()?;
     f.u32("n_ref").emit()?;
     let format = f.u32("format").enumeration(TABIX_PRESETS).emit()?;
-    f.u32("col_seq").desc("Column of the sequence name (1-based)").emit()?;
+    f.u32("col_seq")
+        .desc("Column of the sequence name (1-based)")
+        .emit()?;
     f.u32("col_beg").emit()?;
     f.u32("col_end").emit()?;
-    f.u32("meta").desc("Comment line prefix character").with(|&v, n| n.summary(char::from_u32(v).map(|c| format!("{c:?}")).unwrap_or_default())).emit()?;
+    f.u32("meta")
+        .desc("Comment line prefix character")
+        .with(|&v, n| {
+            n.summary(
+                char::from_u32(v)
+                    .map(|c| format!("{c:?}"))
+                    .unwrap_or_default(),
+            )
+        })
+        .emit()?;
     f.u32("skip").desc("Header lines to skip").emit()?;
     let l_nm = f.u32("l_nm").emit()?;
     let names_span = stream.sub(36, l_nm.into());
     let names = cx.read_avail(names_span.sub(0, 0x100000)).await?;
-    let names: Vec<String> = names.split(|&b| b == 0).filter(|n| !n.is_empty()).map(|n| String::from_utf8_lossy(n).into_owned()).collect();
-    cx.emit(Node::new("Sequence names").span(names_span).summary(preview(&names.join(", "), 120)));
+    let names: Vec<String> = names
+        .split(|&b| b == 0)
+        .filter(|n| !n.is_empty())
+        .map(|n| String::from_utf8_lossy(n).into_owned())
+        .collect();
+    cx.emit(
+        Node::new("Sequence names")
+            .span(names_span)
+            .summary(preview(&names.join(", "), 120)),
+    );
     Ok((format, names, 36u64.saturating_add(l_nm.into())))
 }
 
@@ -781,12 +1063,19 @@ async fn tabix(cx: Cx, input: Input) -> Result<()> {
     let (stream, complete) = bgzf_stream(&cx, input.span, false).await?;
     cx.emit(blocks_node(input));
     let (format, names, start) = tabix_header(&cx, stream).await?;
-    let mut node = Node::new("Index").span(stream.tail(start)).lazy(index_refs, (stream.tail(start), IndexKind::Tabix, names.clone()));
+    let mut node = Node::new("Index").span(stream.tail(start)).lazy(
+        index_refs,
+        (stream.tail(start), IndexKind::Tabix, names.clone()),
+    );
     if let Some(d) = stream_note(complete) {
         node = node.diag(d);
     }
     cx.emit(node);
-    cx.annotate(format!("Tabix index ({}), {} sequence(s)", lookup(TABIX_PRESETS, format.into()).unwrap_or("custom"), names.len()));
+    cx.annotate(format!(
+        "Tabix index ({}), {} sequence(s)",
+        lookup(TABIX_PRESETS, format.into()).unwrap_or("custom"),
+        names.len()
+    ));
     Ok(())
 }
 
@@ -805,21 +1094,47 @@ async fn csi(cx: Cx, input: Input) -> Result<()> {
         // Tabix-style auxiliary data: the same header fields and names.
         let a = cx.read_avail(aux.sub(0, 0x100000)).await?;
         let nm = a.get(28..).unwrap_or_default();
-        names = nm.split(|&b| b == 0).filter(|n| !n.is_empty()).map(|n| String::from_utf8_lossy(n).into_owned()).collect();
+        names = nm
+            .split(|&b| b == 0)
+            .filter(|n| !n.is_empty())
+            .map(|n| String::from_utf8_lossy(n).into_owned())
+            .collect();
     }
-    cx.emit(Node::new("Auxiliary data").span(aux).summary(if names.is_empty() { format!("{l_aux} bytes") } else { preview(&names.join(", "), 120) }));
+    cx.emit(
+        Node::new("Auxiliary data")
+            .span(aux)
+            .summary(if names.is_empty() {
+                format!("{l_aux} bytes")
+            } else {
+                preview(&names.join(", "), 120)
+            }),
+    );
     let n_ref_at = 16u64.saturating_add(l_aux.into());
     let n = cx.read_avail(stream.sub(n_ref_at, 4)).await?;
     let n_ref = u32_le(&n, 0).unwrap_or(0);
-    cx.emit(Node::new("n_ref").span(stream.sub(n_ref_at, 4)).value(uint(n_ref.into())));
+    cx.emit(
+        Node::new("n_ref")
+            .span(stream.sub(n_ref_at, 4))
+            .value(uint(n_ref.into())),
+    );
     let refs = stream.tail(n_ref_at.saturating_add(4));
-    let names = if names.len() == to_usize(n_ref.into()) { names } else { (0..n_ref.min(100_000)).map(|i| format!("Reference {i}")).collect() };
-    let mut node = Node::new("Index").span(refs).lazy(index_refs, (refs, IndexKind::Csi, names));
+    let names = if names.len() == to_usize(n_ref.into()) {
+        names
+    } else {
+        (0..n_ref.min(100_000))
+            .map(|i| format!("Reference {i}"))
+            .collect()
+    };
+    let mut node = Node::new("Index")
+        .span(refs)
+        .lazy(index_refs, (refs, IndexKind::Csi, names));
     if let Some(d) = stream_note(complete) {
         node = node.diag(d);
     }
     cx.emit(node);
-    cx.annotate(format!("CSI index, min_shift {min_shift}, depth {depth}, {n_ref} reference(s)"));
+    cx.annotate(format!(
+        "CSI index, min_shift {min_shift}, depth {depth}, {n_ref} reference(s)"
+    ));
     Ok(())
 }
 
@@ -829,11 +1144,25 @@ declare_format!(pub BAI = "bai", "BAM index", ["bai"], "application/x-bai",
 async fn bai(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(text("BAI\\1")));
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(text("BAI\\1")),
+    );
     let n_ref = u32_le(&head, 4).unwrap_or(0);
-    cx.emit(Node::new("n_ref").span(file.sub(4, 4)).value(uint(n_ref.into())));
-    let names = (0..n_ref.min(100_000)).map(|i| format!("Reference {i}")).collect();
-    cx.emit(Node::new("Index").span(file.tail(8)).lazy(index_refs, (file.tail(8), IndexKind::Bai, names)));
+    cx.emit(
+        Node::new("n_ref")
+            .span(file.sub(4, 4))
+            .value(uint(n_ref.into())),
+    );
+    let names = (0..n_ref.min(100_000))
+        .map(|i| format!("Reference {i}"))
+        .collect();
+    cx.emit(
+        Node::new("Index")
+            .span(file.tail(8))
+            .lazy(index_refs, (file.tail(8), IndexKind::Bai, names)),
+    );
     cx.annotate(format!("BAM index, {n_ref} reference(s)"));
     Ok(())
 }
@@ -856,7 +1185,10 @@ async fn itf8(cur: &mut Cursor<'_>) -> Result<i64> {
     };
     let rest = cur.bytes(extra.into()).await?;
     let v = if extra < 4 {
-        rest.iter().fold(u32::from(b0) & (0xffu32 >> extra.saturating_add(1)), |a, &b| (a << 8) | u32::from(b))
+        rest.iter().fold(
+            u32::from(b0) & (0xffu32 >> extra.saturating_add(1)),
+            |a, &b| (a << 8) | u32::from(b),
+        )
     } else {
         let r = |i: usize| u32::from(rest.get(i).copied().unwrap_or(0));
         (u32::from(b0 & 0xf) << 28) | (r(0) << 20) | (r(1) << 12) | (r(2) << 4) | (r(3) & 0xf)
@@ -869,7 +1201,11 @@ async fn ltf8(cur: &mut Cursor<'_>) -> Result<i64> {
     let b0 = cur.u8().await?;
     let extra = u64::from(b0.leading_ones());
     let rest = cur.bytes(extra).await?;
-    let mut v = if extra >= 7 { 0 } else { u64::from(b0) & (0xffu64 >> extra.saturating_add(1)) };
+    let mut v = if extra >= 7 {
+        0
+    } else {
+        u64::from(b0) & (0xffu64 >> extra.saturating_add(1))
+    };
     for &b in &rest {
         v = (v << 8) | u64::from(b);
     }
@@ -949,11 +1285,17 @@ async fn cram(cx: Cx, input: Input) -> Result<()> {
     let major = f.u8("Major version").emit()?;
     let minor = f.u8("Minor version").emit()?;
     let id = f.bytes("File ID", 20).emit()?;
-    cx.emit(Node::new("Containers").span(file.tail(26)).lazy(cram_containers, (input, major)));
+    cx.emit(
+        Node::new("Containers")
+            .span(file.tail(26))
+            .lazy(cram_containers, (input, major)),
+    );
     let first = cram_container(&cx, file, 26, major).await;
     let mut summary = format!("CRAM {major}.{minor}, {}", crate::text::until_nul(&id));
     if let Ok(c) = first {
-        let text = cram_header_text(&cx, c.blocks, major).await.unwrap_or_default();
+        let text = cram_header_text(&cx, c.blocks, major)
+            .await
+            .unwrap_or_default();
         let refs = text.lines().filter(|l| l.starts_with("@SQ")).count();
         summary = format!("{summary}, {refs} reference(s) in header");
     }
@@ -969,7 +1311,11 @@ async fn cram_header_text(cx: &Cx, blocks: Span, major: u8) -> Result<String> {
     }
     let data = cx.read_avail(block.data.sub(0, 0x10000)).await?;
     let len = u32_le(&data, 0).unwrap_or(0);
-    Ok(String::from_utf8_lossy(data.get(4..to_usize(u64::from(len).saturating_add(4)).min(data.len())).unwrap_or_default()).into_owned())
+    Ok(String::from_utf8_lossy(
+        data.get(4..to_usize(u64::from(len).saturating_add(4)).min(data.len()))
+            .unwrap_or_default(),
+    )
+    .into_owned())
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1012,31 +1358,75 @@ async fn cram_containers(cx: Cx, (input, major): (Input, u8)) -> Result<()> {
     while pos < file.len {
         let c = cram_container(&cx, file, pos, major).await?;
         let eof = c.ref_id == -1 && c.start == 4_542_278;
-        let name = if index == 0 { "Header container".to_owned() } else if eof { "EOF container".to_owned() } else { format!("Container {index}") };
+        let name = if index == 0 {
+            "Header container".to_owned()
+        } else if eof {
+            "EOF container".to_owned()
+        } else {
+            format!("Container {index}")
+        };
         let summary = if index == 0 || eof {
             format!("{} block(s)", c.n_blocks)
         } else {
-            format!("ref {} @{}, {} record(s), {} block(s)", c.ref_id, c.start, c.records, c.n_blocks)
+            format!(
+                "ref {} @{}, {} record(s), {} block(s)",
+                c.ref_id, c.start, c.records, c.n_blocks
+            )
         };
-        cx.push(Node::new(name).span(c.span).summary(summary).lazy(cram_container_node, (input, c.header, c.blocks, major))).await;
+        cx.push(
+            Node::new(name)
+                .span(c.span)
+                .summary(summary)
+                .lazy(cram_container_node, (input, c.header, c.blocks, major)),
+        )
+        .await;
         index = index.saturating_add(1);
-        pos = c.span.end().saturating_sub(file.offset).max(pos.saturating_add(1));
+        pos = c
+            .span
+            .end()
+            .saturating_sub(file.offset)
+            .max(pos.saturating_add(1));
     }
     Ok(())
 }
 
-async fn cram_container_node(cx: Cx, (input, header, blocks, major): (Input, Span, Span, u8)) -> Result<()> {
+async fn cram_container_node(
+    cx: Cx,
+    (input, header, blocks, major): (Input, Span, Span, u8),
+) -> Result<()> {
     let mut cur = Cursor::new(&cx, header, LE);
     let length = cur.u32().await?;
-    cx.emit(Node::new("Length").span(header.sub(0, 4)).value(uint(length.into())));
+    cx.emit(
+        Node::new("Length")
+            .span(header.sub(0, 4))
+            .value(uint(length.into())),
+    );
     let fields: &[(&str, bool)] = if major >= 2 {
-        &[("Reference sequence ID", false), ("Start position", false), ("Alignment span", false), ("Number of records", false), ("Record counter", true), ("Bases", true), ("Number of blocks", false)]
+        &[
+            ("Reference sequence ID", false),
+            ("Start position", false),
+            ("Alignment span", false),
+            ("Number of records", false),
+            ("Record counter", true),
+            ("Bases", true),
+            ("Number of blocks", false),
+        ]
     } else {
-        &[("Reference sequence ID", false), ("Start position", false), ("Alignment span", false), ("Number of records", false), ("Number of blocks", false)]
+        &[
+            ("Reference sequence ID", false),
+            ("Start position", false),
+            ("Alignment span", false),
+            ("Number of records", false),
+            ("Number of blocks", false),
+        ]
     };
     for &(name, long) in fields {
         let start = cur.pos();
-        let v = if long { ltf8(&mut cur).await? } else { itf8(&mut cur).await? };
+        let v = if long {
+            ltf8(&mut cur).await?
+        } else {
+            itf8(&mut cur).await?
+        };
         cx.emit(Node::new(name).span(cur.since(start)).value(int(v)));
     }
     let start = cur.pos();
@@ -1045,10 +1435,18 @@ async fn cram_container_node(cx: Cx, (input, header, blocks, major): (Input, Spa
     for _ in 0..n.clamp(0, 100_000) {
         landmarks.push(itf8(&mut cur).await?.to_string());
     }
-    cx.emit(Node::new("Landmarks").span(cur.since(start)).value(text(landmarks.join(", "))));
+    cx.emit(
+        Node::new("Landmarks")
+            .span(cur.since(start))
+            .value(text(landmarks.join(", "))),
+    );
     if major >= 3 {
         let crc = cur.u32().await?;
-        cx.emit(Node::new("CRC32").span(header.sub(cur.pos().saturating_sub(4), 4)).value(hex(crc.into(), 32)));
+        cx.emit(
+            Node::new("CRC32")
+                .span(header.sub(cur.pos().saturating_sub(4), 4))
+                .value(hex(crc.into(), 32)),
+        );
     }
     let mut pos = 0u64;
     let mut i = 0u32;
@@ -1059,7 +1457,10 @@ async fn cram_container_node(cx: Cx, (input, header, blocks, major): (Input, Spa
         cx.push(
             Node::new(format!("Block {i}"))
                 .span(b.span)
-                .summary(format!("{kind} (content {}), {method}, {} → {} bytes", b.content_id, b.data.len, b.raw_size))
+                .summary(format!(
+                    "{kind} (content {}), {method}, {} → {} bytes",
+                    b.content_id, b.data.len, b.raw_size
+                ))
                 .lazy(cram_block_node, (input, b.span, b.data, b.method, major)),
         )
         .await;
@@ -1069,14 +1470,25 @@ async fn cram_container_node(cx: Cx, (input, header, blocks, major): (Input, Spa
     Ok(())
 }
 
-async fn cram_block_node(cx: Cx, (input, span, data, method, major): (Input, Span, Span, u8, u8)) -> Result<()> {
+async fn cram_block_node(
+    cx: Cx,
+    (input, span, data, method, major): (Input, Span, Span, u8, u8),
+) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     let start = cur.pos();
     let m = cur.u8().await?;
-    cx.emit(Node::new("Method").span(cur.since(start)).value(enumeration(CRAM_METHODS, m.into(), 8)));
+    cx.emit(
+        Node::new("Method")
+            .span(cur.since(start))
+            .value(enumeration(CRAM_METHODS, m.into(), 8)),
+    );
     let start = cur.pos();
     let t = cur.u8().await?;
-    cx.emit(Node::new("Content type").span(cur.since(start)).value(enumeration(CRAM_CONTENT, t.into(), 8)));
+    cx.emit(
+        Node::new("Content type")
+            .span(cur.since(start))
+            .value(enumeration(CRAM_CONTENT, t.into(), 8)),
+    );
     for name in ["Content ID", "Compressed size", "Raw size"] {
         let start = cur.pos();
         let v = itf8(&mut cur).await?;
@@ -1085,18 +1497,39 @@ async fn cram_block_node(cx: Cx, (input, span, data, method, major): (Input, Spa
     if method == 0 && t == 0 {
         let head = cx.read_avail(data.sub(0, 4)).await?;
         let len = u32_le(&head, 0).unwrap_or(0);
-        cx.emit(Node::new("Header length").span(data.sub(0, 4)).value(uint(len.into())));
-        cx.emit(Node::new("SAM header").span(data.sub(4, len.into())).lazy(sam_header_lines, data.sub(4, len.into())));
+        cx.emit(
+            Node::new("Header length")
+                .span(data.sub(0, 4))
+                .value(uint(len.into())),
+        );
+        cx.emit(
+            Node::new("SAM header")
+                .span(data.sub(4, len.into()))
+                .lazy(sam_header_lines, data.sub(4, len.into())),
+        );
     } else if method == 1 {
         cx.emit(embedded("Data (gzip)", input.nested(data)));
     } else if method == 0 {
         cx.emit(Node::new("Data").span(data));
     } else {
-        cx.emit(Node::new("Data").span(data).diag(Diagnostic::unsupported(format!("{} compression", lookup(CRAM_METHODS, method.into()).unwrap_or("unknown")))));
+        cx.emit(
+            Node::new("Data")
+                .span(data)
+                .diag(Diagnostic::unsupported(format!(
+                    "{} compression",
+                    lookup(CRAM_METHODS, method.into()).unwrap_or("unknown")
+                ))),
+        );
     }
     if major >= 3 {
-        let crc = cx.read_avail(span.sub(span.len.saturating_sub(4), 4)).await?;
-        cx.emit(Node::new("CRC32").span(span.sub(span.len.saturating_sub(4), 4)).value(hex(u32_le(&crc, 0).unwrap_or(0).into(), 32)));
+        let crc = cx
+            .read_avail(span.sub(span.len.saturating_sub(4), 4))
+            .await?;
+        cx.emit(
+            Node::new("CRC32")
+                .span(span.sub(span.len.saturating_sub(4), 4))
+                .value(hex(u32_le(&crc, 0).unwrap_or(0).into(), 32)),
+        );
     }
     Ok(())
 }
@@ -1117,12 +1550,19 @@ async fn twobit(cx: Cx, input: Input) -> Result<()> {
     let version = f.u32("Version").emit()?;
     let count = f.u32("Sequence count").emit()?;
     f.u32("Reserved").emit()?;
-    cx.emit(Node::new("Sequences").span(file.tail(16)).lazy(twobit_index, (input, endian, version, count)));
+    cx.emit(
+        Node::new("Sequences")
+            .span(file.tail(16))
+            .lazy(twobit_index, (input, endian, version, count)),
+    );
     cx.annotate(format!("2bit v{version}, {count} sequence(s)"));
     Ok(())
 }
 
-async fn twobit_index(cx: Cx, (input, endian, version, count): (Input, Endian, u32, u32)) -> Result<()> {
+async fn twobit_index(
+    cx: Cx,
+    (input, endian, version, count): (Input, Endian, u32, u32),
+) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, endian);
     cur.seek(16);
@@ -1131,7 +1571,11 @@ async fn twobit_index(cx: Cx, (input, endian, version, count): (Input, Endian, u
         let start = cur.pos();
         let n = cur.u8().await?;
         let name = String::from_utf8_lossy(&cur.bytes(n.into()).await?).into_owned();
-        let offset = if version == 1 { cur.u64().await? } else { cur.u32().await?.into() };
+        let offset = if version == 1 {
+            cur.u64().await?
+        } else {
+            cur.u32().await?.into()
+        };
         let entry = cur.since(start);
         let mut rec = Cursor::new(&cx, file, endian);
         rec.seek(offset);
@@ -1154,7 +1598,11 @@ async fn twobit_record(cx: Cx, (input, endian, offset): (Input, Endian, u64)) ->
     cur.seek(offset);
     let start = cur.pos();
     let dna = cur.u32().await?;
-    cx.emit(Node::new("DNA size").span(cur.since(start)).value(uint(dna.into())));
+    cx.emit(
+        Node::new("DNA size")
+            .span(cur.since(start))
+            .value(uint(dna.into())),
+    );
     let mut n_blocks = Vec::new();
     for name in ["N blocks", "Mask blocks"] {
         let start = cur.pos();
@@ -1169,12 +1617,19 @@ async fn twobit_record(cx: Cx, (input, endian, offset): (Input, Endian, u64)) ->
             Endian::Little => u32_le(b, i.saturating_mul(4)).unwrap_or(0),
             Endian::Big => u32_be(b, i.saturating_mul(4)).unwrap_or(0),
         };
-        let shown: Vec<(u32, u32)> = (0..to_usize(count.min(16).into())).map(|i| (read(&s, i), read(&z, i))).collect();
+        let shown: Vec<(u32, u32)> = (0..to_usize(count.min(16).into()))
+            .map(|i| (read(&s, i), read(&z, i)))
+            .collect();
         if name == "N blocks" {
             n_blocks.clone_from(&shown);
         }
         let list: Vec<String> = shown.iter().map(|(a, b)| format!("{a}+{b}")).collect();
-        cx.emit(summarize(Node::new(name).span(cur.since(start)).value(uint(count.into())), format!("{}{}", list.join(", "), if count > 16 { ", …" } else { "" })));
+        cx.emit(summarize(
+            Node::new(name)
+                .span(cur.since(start))
+                .value(uint(count.into())),
+            format!("{}{}", list.join(", "), if count > 16 { ", …" } else { "" }),
+        ));
     }
     let start = cur.pos();
     cur.skip(4);
@@ -1189,11 +1644,26 @@ async fn twobit_record(cx: Cx, (input, endian, offset): (Input, Endian, u64)) ->
                 break;
             }
             let base = (b >> (6u32.saturating_sub(k.saturating_mul(2)))) & 3;
-            let in_n = n_blocks.iter().any(|&(s, l)| pos >= u64::from(s) && pos < u64::from(s).saturating_add(l.into()));
-            seq.push(if in_n { 'N' } else { char::from(b"TCAG".get(usize::from(base)).copied().unwrap_or(b'N')) });
+            let in_n = n_blocks
+                .iter()
+                .any(|&(s, l)| pos >= u64::from(s) && pos < u64::from(s).saturating_add(l.into()));
+            seq.push(if in_n {
+                'N'
+            } else {
+                char::from(b"TCAG".get(usize::from(base)).copied().unwrap_or(b'N'))
+            });
         }
     }
-    cx.emit(Node::new("Packed DNA").span(packed).value(text(if u64::from(dna) > 128 { format!("{seq}…") } else { seq })).desc("2 bits per base: T, C, A, G"));
+    cx.emit(
+        Node::new("Packed DNA")
+            .span(packed)
+            .value(text(if u64::from(dna) > 128 {
+                format!("{seq}…")
+            } else {
+                seq
+            }))
+            .desc("2 bits per base: T, C, A, G"),
+    );
     Ok(())
 }
 
@@ -1283,23 +1753,43 @@ async fn bbi(cx: Cx, input: Input, bed: bool) -> Result<()> {
     let file = input.span;
     let sig = cx.read(file.sub(0, 4)).await?;
     let magic: u32 = if bed { 0x8789_f2eb } else { 0x888f_fc26 };
-    let endian = if u32_le(&sig, 0) == Some(magic) { LE } else { BE };
+    let endian = if u32_le(&sig, 0) == Some(magic) {
+        LE
+    } else {
+        BE
+    };
     let hspan = file.sub(0, BbiHeader::SIZE);
     let h: BbiHeader = read_record(&cx, hspan, endian).await?;
     cx.emit(BbiHeader::node("Header", hspan, endian));
-    let zooms = file.sub(BbiHeader::SIZE, u64::from(h.zoom_levels).saturating_mul(BbiZoom::SIZE));
-    cx.emit(Node::new("Zoom levels").span(zooms).value(uint(h.zoom_levels.into())).lazy(bbi_zooms, (zooms, endian)));
+    let zooms = file.sub(
+        BbiHeader::SIZE,
+        u64::from(h.zoom_levels).saturating_mul(BbiZoom::SIZE),
+    );
+    cx.emit(
+        Node::new("Zoom levels")
+            .span(zooms)
+            .value(uint(h.zoom_levels.into()))
+            .lazy(bbi_zooms, (zooms, endian)),
+    );
     let mut summary = None;
     if h.total_summary != 0 {
         let s = file.sub(h.total_summary, BbiSummary::SIZE);
         let sum: BbiSummary = read_record(&cx, s, endian).await?;
-        cx.emit(BbiSummary::node("Total summary", s, endian).summary(format!("{} bases, {}–{}", sum.bases, sum.min, sum.max)));
+        cx.emit(
+            BbiSummary::node("Total summary", s, endian)
+                .summary(format!("{} bases, {}–{}", sum.bases, sum.min, sum.max)),
+        );
         summary = Some(sum);
     }
     if h.auto_sql != 0 {
         let (sql, span) = cx.cstr(file.sub(h.auto_sql, 0x10000)).await?;
         let name = sql.split_whitespace().nth(1).unwrap_or_default().to_owned();
-        cx.emit(Node::new("autoSql").span(span).value(text(sql)).summary(name));
+        cx.emit(
+            Node::new("autoSql")
+                .span(span)
+                .value(text(sql))
+                .summary(name),
+        );
     }
     if h.extension != 0 {
         let e = file.sub(h.extension, 12);
@@ -1307,10 +1797,22 @@ async fn bbi(cx: Cx, input: Input, bed: bool) -> Result<()> {
         let mut f = Fields::new(&b, endian);
         let size = f.u16("extensionSize").get()?;
         let extra = f.u16("extraIndexCount").get()?;
-        cx.emit(Node::new("Extension header").span(e).summary(format!("{size} bytes, {extra} extra index(es)")).lazy(bbi_extension, (e, endian)));
+        cx.emit(
+            Node::new("Extension header")
+                .span(e)
+                .summary(format!("{size} bytes, {extra} extra index(es)"))
+                .lazy(bbi_extension, (e, endian)),
+        );
     }
-    let chroms = bbi_chroms(&cx, file, h.chrom_tree, endian).await.unwrap_or_default();
-    cx.emit(Node::new("Chromosome B+ tree").span(file.sub(h.chrom_tree, BptHeader::SIZE)).summary(format!("{} chromosome(s)", chroms.0.len())).lazy(bbi_tree, (file, h.chrom_tree, endian)));
+    let chroms = bbi_chroms(&cx, file, h.chrom_tree, endian)
+        .await
+        .unwrap_or_default();
+    cx.emit(
+        Node::new("Chromosome B+ tree")
+            .span(file.sub(h.chrom_tree, BptHeader::SIZE))
+            .summary(format!("{} chromosome(s)", chroms.0.len()))
+            .lazy(bbi_tree, (file, h.chrom_tree, endian)),
+    );
     let count_len = if bed { 8 } else { 4 };
     let dc = cx.read_avail(file.sub(h.full_data, count_len)).await?;
     let data_count = if bed {
@@ -1328,12 +1830,25 @@ async fn bbi(cx: Cx, input: Input, bed: bool) -> Result<()> {
     cx.emit(
         Node::new("Data")
             .span(file.sub(h.full_data, h.full_index.saturating_sub(h.full_data)))
-            .summary(format!("{data_count} {}", if bed { "item(s)" } else { "section(s)" })),
+            .summary(format!(
+                "{data_count} {}",
+                if bed { "item(s)" } else { "section(s)" }
+            )),
     );
     cx.emit(
         Node::new("R-tree index")
             .span(file.sub(h.full_index, RTreeHeader::SIZE))
-            .lazy(rtree, (input, h.full_index, endian, bed, h.uncompress_buf > 0, chroms.clone())),
+            .lazy(
+                rtree,
+                (
+                    input,
+                    h.full_index,
+                    endian,
+                    bed,
+                    h.uncompress_buf > 0,
+                    chroms.clone(),
+                ),
+            ),
     );
     let mut note = format!(
         "{} v{}, {} chromosome(s), {} zoom level(s){}",
@@ -1341,7 +1856,11 @@ async fn bbi(cx: Cx, input: Input, bed: bool) -> Result<()> {
         h.version,
         chroms.0.len(),
         h.zoom_levels,
-        if h.uncompress_buf > 0 { ", zlib-compressed" } else { "" }
+        if h.uncompress_buf > 0 {
+            ", zlib-compressed"
+        } else {
+            ""
+        }
     );
     if let Some(s) = summary {
         note = format!("{note}, {} bases covered", s.bases);
@@ -1355,7 +1874,11 @@ async fn bbi_zooms(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
     while at < span.len {
         let s = span.sub(at, BbiZoom::SIZE);
         let z: BbiZoom = read_record(&cx, s, endian).await?;
-        cx.push(BbiZoom::node(format!("Level {}", at / BbiZoom::SIZE), s, endian).summary(format!("{} bp per item", z.reduction))).await;
+        cx.push(
+            BbiZoom::node(format!("Level {}", at / BbiZoom::SIZE), s, endian)
+                .summary(format!("{} bp per item", z.reduction)),
+        )
+        .await;
         at = at.saturating_add(BbiZoom::SIZE);
     }
     Ok(())
@@ -1401,7 +1924,9 @@ async fn bbi_chroms(cx: &Cx, file: Span, at: u64, endian: Endian) -> Result<Refe
         stack.extend(children.into_iter().rev());
     }
     out.sort_by_key(|(id, _, _)| *id);
-    Ok(References(out.into_iter().map(|(_, n, s)| (n, s)).collect()))
+    Ok(References(
+        out.into_iter().map(|(_, n, s)| (n, s)).collect(),
+    ))
 }
 
 async fn bbi_tree(cx: Cx, (file, at, endian): (Span, u64, Endian)) -> Result<()> {
@@ -1409,12 +1934,20 @@ async fn bbi_tree(cx: Cx, (file, at, endian): (Span, u64, Endian)) -> Result<()>
     cx.emit(BptHeader::node("Header", hs, endian));
     let chroms = bbi_chroms(&cx, file, at, endian).await?;
     for (i, (name, size)) in chroms.0.iter().enumerate() {
-        cx.push(Node::new(name.clone()).value(uint((*size).into())).summary(format!("ID {i}, {size} bp"))).await;
+        cx.push(
+            Node::new(name.clone())
+                .value(uint((*size).into()))
+                .summary(format!("ID {i}, {size} bp")),
+        )
+        .await;
     }
     Ok(())
 }
 
-async fn rtree(cx: Cx, (input, at, endian, bed, compressed, chroms): (Input, u64, Endian, bool, bool, References)) -> Result<()> {
+async fn rtree(
+    cx: Cx,
+    (input, at, endian, bed, compressed, chroms): (Input, u64, Endian, bool, bool, References),
+) -> Result<()> {
     let file = input.span;
     let hs = file.sub(at, RTreeHeader::SIZE);
     cx.emit(RTreeHeader::node("Header", hs, endian));
@@ -1441,14 +1974,24 @@ async fn rtree(cx: Cx, (input, at, endian, bed, compressed, chroms): (Input, u64
             if leaf {
                 let size = cur.u64().await?;
                 let data = file.sub(offset, size);
-                let (from, to) = (ref_name(&chroms, sc.cast_signed()), ref_name(&chroms, ec.cast_signed()));
-                let range = if sc == ec { format!("{from}:{sb}-{eb}") } else { format!("{from}:{sb}–{to}:{eb}") };
+                let (from, to) = (
+                    ref_name(&chroms, sc.cast_signed()),
+                    ref_name(&chroms, ec.cast_signed()),
+                );
+                let range = if sc == ec {
+                    format!("{from}:{sb}-{eb}")
+                } else {
+                    format!("{from}:{sb}–{to}:{eb}")
+                };
                 cx.push(
                     Node::new(format!("Block {range}"))
                         .span(data)
                         .target(cur.since(start))
                         .summary(format!("{size} bytes"))
-                        .lazy(bbi_block, (input, data, endian, bed, compressed, chroms.clone())),
+                        .lazy(
+                            bbi_block,
+                            (input, data, endian, bed, compressed, chroms.clone()),
+                        ),
                 )
                 .await;
             } else {
@@ -1462,7 +2005,10 @@ async fn rtree(cx: Cx, (input, at, endian, bed, compressed, chroms): (Input, u64
 
 const BW_TYPES: EnumTable = &[(1, "bedGraph"), (2, "variableStep"), (3, "fixedStep")];
 
-async fn bbi_block(cx: Cx, (input, data, endian, bed, compressed, chroms): (Input, Span, Endian, bool, bool, References)) -> Result<()> {
+async fn bbi_block(
+    cx: Cx,
+    (input, data, endian, bed, compressed, chroms): (Input, Span, Endian, bool, bool, References),
+) -> Result<()> {
     let body = if compressed {
         let d = crate::codec::inflate_span(&cx, data, true, None).await?;
         if let Some(e) = d.error {
@@ -1482,9 +2028,12 @@ async fn bbi_block(cx: Cx, (input, data, endian, bed, compressed, chroms): (Inpu
             let e = cur.u32().await?;
             let (rest, _) = cur.cstr(0x10000).await?;
             cx.push(
-                Node::new(format!("{}:{s}-{e}", ref_name(&chroms, chrom.cast_signed())))
-                    .span(cur.since(start))
-                    .value(text(rest.replace('\t', " "))),
+                Node::new(format!(
+                    "{}:{s}-{e}",
+                    ref_name(&chroms, chrom.cast_signed())
+                ))
+                .span(cur.since(start))
+                .value(text(rest.replace('\t', " "))),
             )
             .await;
         }
@@ -1520,7 +2069,12 @@ async fn bbi_block(cx: Cx, (input, data, endian, bed, compressed, chroms): (Inpu
                 (s, s.saturating_add(span), cur.int::<f32>().await?)
             }
         };
-        cx.push(Node::new(format!("{chrom}:{s}-{e}")).span(cur.since(at)).value(float32(v))).await;
+        cx.push(
+            Node::new(format!("{chrom}:{s}-{e}"))
+                .span(cur.since(at))
+                .value(float32(v)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1597,8 +2151,16 @@ async fn abif(cx: Cx, input: Input) -> Result<()> {
     let dir_span = file.sub(6, AbifEntry::SIZE);
     let dir: AbifEntry = read_record(&cx, dir_span, BE).await?;
     cx.emit(AbifEntry::node("Directory entry", dir_span, BE));
-    let entries = file.sub(dir.data_offset.into(), u64::from(dir.count).saturating_mul(AbifEntry::SIZE));
-    cx.emit(Node::new("Directory").span(entries).value(uint(dir.count.into())).lazy(abif_dir, (file, entries)));
+    let entries = file.sub(
+        dir.data_offset.into(),
+        u64::from(dir.count).saturating_mul(AbifEntry::SIZE),
+    );
+    cx.emit(
+        Node::new("Directory")
+            .span(entries)
+            .value(uint(dir.count.into()))
+            .lazy(abif_dir, (file, entries)),
+    );
     // Summary: sample name, base count.
     let mut sample = String::new();
     let mut bases = None;
@@ -1606,7 +2168,9 @@ async fn abif(cx: Cx, input: Input) -> Result<()> {
     while cur < entries.len {
         let e: AbifEntry = read_record(&cx, entries.sub(cur, AbifEntry::SIZE), BE).await?;
         if e.name == "SMPL" && e.number == 1 {
-            sample = abif_value(&cx, file, &e, entries.sub(cur, AbifEntry::SIZE)).await.unwrap_or_default();
+            sample = abif_value(&cx, file, &e, entries.sub(cur, AbifEntry::SIZE))
+                .await
+                .unwrap_or_default();
         }
         if e.name == "PBAS" && e.number == 2 {
             bases = Some(e.count);
@@ -1618,8 +2182,14 @@ async fn abif(cx: Cx, input: Input) -> Result<()> {
         version / 100,
         version % 100,
         dir.count,
-        if sample.is_empty() { String::new() } else { format!(", sample {sample}") },
-        bases.map(|b| format!(", {b} bases called")).unwrap_or_default()
+        if sample.is_empty() {
+            String::new()
+        } else {
+            format!(", sample {sample}")
+        },
+        bases
+            .map(|b| format!(", {b} bases called"))
+            .unwrap_or_default()
     ));
     Ok(())
 }
@@ -1640,13 +2210,62 @@ async fn abif_value(cx: &Cx, file: Span, e: &AbifEntry, entry: Span) -> Result<S
         2 if e.name == "PBAS" => String::from_utf8_lossy(&data).into_owned(),
         2 | 19 => crate::text::until_nul(&data),
         18 => String::from_utf8_lossy(data.get(1..).unwrap_or_default()).into_owned(),
-        4 => data.as_chunks::<2>().0.iter().take(16).map(|c| crate::bytes::u16_be(c, 0).unwrap_or(0).cast_signed().to_string()).collect::<Vec<_>>().join(", "),
-        3 => data.as_chunks::<2>().0.iter().take(16).map(|c| crate::bytes::u16_be(c, 0).unwrap_or(0).to_string()).collect::<Vec<_>>().join(", "),
-        5 => data.as_chunks::<4>().0.iter().take(16).map(|c| u32_be(c, 0).unwrap_or(0).cast_signed().to_string()).collect::<Vec<_>>().join(", "),
-        1 => data.iter().take(32).map(u8::to_string).collect::<Vec<_>>().join(", "),
-        7 => data.as_chunks::<4>().0.iter().take(16).map(|c| f32::from_bits(u32_be(c, 0).unwrap_or(0)).to_string()).collect::<Vec<_>>().join(", "),
-        10 => format!("{:04}-{:02}-{:02}", crate::bytes::u16_be(&data, 0).unwrap_or(0), data.get(2).unwrap_or(&0), data.get(3).unwrap_or(&0)),
-        11 => format!("{:02}:{:02}:{:02}.{:02}", data.first().unwrap_or(&0), data.get(1).unwrap_or(&0), data.get(2).unwrap_or(&0), data.get(3).unwrap_or(&0)),
+        4 => data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .take(16)
+            .map(|c| {
+                crate::bytes::u16_be(c, 0)
+                    .unwrap_or(0)
+                    .cast_signed()
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
+        3 => data
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .take(16)
+            .map(|c| crate::bytes::u16_be(c, 0).unwrap_or(0).to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        5 => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .take(16)
+            .map(|c| u32_be(c, 0).unwrap_or(0).cast_signed().to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        1 => data
+            .iter()
+            .take(32)
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(", "),
+        7 => data
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .take(16)
+            .map(|c| f32::from_bits(u32_be(c, 0).unwrap_or(0)).to_string())
+            .collect::<Vec<_>>()
+            .join(", "),
+        10 => format!(
+            "{:04}-{:02}-{:02}",
+            crate::bytes::u16_be(&data, 0).unwrap_or(0),
+            data.get(2).unwrap_or(&0),
+            data.get(3).unwrap_or(&0)
+        ),
+        11 => format!(
+            "{:02}:{:02}:{:02}.{:02}",
+            data.first().unwrap_or(&0),
+            data.get(1).unwrap_or(&0),
+            data.get(2).unwrap_or(&0),
+            data.get(3).unwrap_or(&0)
+        ),
         _ => format!("{} bytes", e.data_size),
     })
 }
@@ -1657,7 +2276,10 @@ async fn abif_dir(cx: Cx, (file, entries): (Span, Span)) -> Result<()> {
         let s = entries.sub(at, AbifEntry::SIZE);
         let e: AbifEntry = read_record(&cx, s, BE).await?;
         let value = abif_value(&cx, file, &e, s).await.unwrap_or_default();
-        let desc = ABIF_TAGS.iter().find(|(t, _)| *t == e.name).map(|(_, d)| *d);
+        let desc = ABIF_TAGS
+            .iter()
+            .find(|(t, _)| *t == e.name)
+            .map(|(_, d)| *d);
         let mut node = AbifEntry::node(format!("{}{}", e.name, e.number), s, BE)
             .value(text(preview(&value, 120)))
             .target(abif_data_span(file, &e, s));
@@ -1703,25 +2325,57 @@ async fn scf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: ScfHeader = read_record(&cx, file.sub(0, ScfHeader::SIZE), BE).await?;
     cx.emit(ScfHeader::node("Header", file.sub(0, ScfHeader::SIZE), BE));
-    let sample_bytes = u64::from(h.samples).saturating_mul(4).saturating_mul(h.sample_size.into());
-    cx.emit(Node::new("Samples").span(file.sub(h.samples_offset.into(), sample_bytes)).summary(format!("4 channels × {} samples", h.samples)));
+    let sample_bytes = u64::from(h.samples)
+        .saturating_mul(4)
+        .saturating_mul(h.sample_size.into());
+    cx.emit(
+        Node::new("Samples")
+            .span(file.sub(h.samples_offset.into(), sample_bytes))
+            .summary(format!("4 channels × {} samples", h.samples)),
+    );
     let bases = file.sub(h.bases_offset.into(), u64::from(h.bases).saturating_mul(12));
     let v3 = h.version.starts_with('3');
     // Version 3 stores the base calls column-wise: peak indexes, 4 probability arrays, then bases.
-    let calls = if v3 { bases.sub(u64::from(h.bases).saturating_mul(8), h.bases.into()) } else { bases };
-    let called = cx.read_avail(calls.sub(0, if v3 { 200 } else { 2400 })).await?;
+    let calls = if v3 {
+        bases.sub(u64::from(h.bases).saturating_mul(8), h.bases.into())
+    } else {
+        bases
+    };
+    let called = cx
+        .read_avail(calls.sub(0, if v3 { 200 } else { 2400 }))
+        .await?;
     let seq: String = if v3 {
         called.iter().map(|&b| char::from(b)).collect()
     } else {
-        called.as_chunks::<12>().0.iter().map(|c| char::from(c.get(8).copied().unwrap_or(b'N'))).collect()
+        called
+            .as_chunks::<12>()
+            .0
+            .iter()
+            .map(|c| char::from(c.get(8).copied().unwrap_or(b'N')))
+            .collect()
     };
-    cx.emit(Node::new("Bases").span(bases).value(text(preview(&seq, 200))).summary(format!("{} base(s)", h.bases)));
+    cx.emit(
+        Node::new("Bases")
+            .span(bases)
+            .value(text(preview(&seq, 200)))
+            .summary(format!("{} base(s)", h.bases)),
+    );
     let comments = file.sub(h.comments_offset.into(), h.comments_size.into());
-    cx.emit(Node::new("Comments").span(comments).lazy(scf_comments, comments));
+    cx.emit(
+        Node::new("Comments")
+            .span(comments)
+            .lazy(scf_comments, comments),
+    );
     if h.private_size > 0 {
-        cx.emit(Node::new("Private data").span(file.sub(h.private_offset.into(), h.private_size.into())));
+        cx.emit(
+            Node::new("Private data")
+                .span(file.sub(h.private_offset.into(), h.private_size.into())),
+        );
     }
-    cx.annotate(format!("SCF {}, {} bases, {} samples", h.version, h.bases, h.samples));
+    cx.annotate(format!(
+        "SCF {}, {} bases, {} samples",
+        h.version, h.bases, h.samples
+    ));
     Ok(())
 }
 
@@ -1731,7 +2385,12 @@ async fn scf_comments(cx: Cx, span: Span) -> Result<()> {
         let t = line.text();
         let t = t.trim_end_matches('\0');
         if let Some((k, v)) = t.split_once('=') {
-            cx.push(Node::new(k.trim().to_owned()).span(line.content()).value(text(v.trim()))).await;
+            cx.push(
+                Node::new(k.trim().to_owned())
+                    .span(line.content())
+                    .value(text(v.trim())),
+            )
+            .await;
         }
     }
     Ok(())
@@ -1750,7 +2409,10 @@ mod tests {
 
     #[test]
     fn flags_value_is_typed() {
-        assert!(matches!(crate::formats::lines::flags(SAM_FLAGS, 0x41, 16), crate::value::Value::Flags { .. }));
+        assert!(matches!(
+            crate::formats::lines::flags(SAM_FLAGS, 0x41, 16),
+            crate::value::Value::Flags { .. }
+        ));
         assert_eq!(voffset(0x0001_0000_0005), "0x10000:5");
     }
 }

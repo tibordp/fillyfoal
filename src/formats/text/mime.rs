@@ -48,10 +48,27 @@ pub static MBOX: Format = Format {
 
 /// Header names that identify a message.
 const KNOWN: &[&[u8]] = &[
-    b"received", b"return-path", b"from", b"to", b"cc", b"subject", b"date", b"message-id",
-    b"mime-version", b"delivered-to", b"content-type", b"reply-to", b"dkim-signature",
-    b"x-mailer", b"user-agent", b"in-reply-to", b"references", b"sender",
-    b"content-transfer-encoding", b"snapshot-content-location", b"authentication-results",
+    b"received",
+    b"return-path",
+    b"from",
+    b"to",
+    b"cc",
+    b"subject",
+    b"date",
+    b"message-id",
+    b"mime-version",
+    b"delivered-to",
+    b"content-type",
+    b"reply-to",
+    b"dkim-signature",
+    b"x-mailer",
+    b"user-agent",
+    b"in-reply-to",
+    b"references",
+    b"sender",
+    b"content-transfer-encoding",
+    b"snapshot-content-location",
+    b"authentication-results",
 ];
 
 /// The name of a header field line, if it is one.
@@ -99,7 +116,11 @@ fn probe_mbox(h: &Head<'_>) -> bool {
         return false;
     };
     first.starts_with(b"From ")
-        && first.split(|&b| b == b' ').filter(|w| !w.is_empty()).count() >= 3
+        && first
+            .split(|&b| b == b' ')
+            .filter(|w| !w.is_empty())
+            .count()
+            >= 3
         && field_name(second).is_some()
 }
 
@@ -127,12 +148,21 @@ pub fn decode_words(text: &str) -> String {
                 "Q" | "q" => decode::quoted_printable(payload.replace('_', " ").as_bytes()).bytes,
                 _ => return None,
             };
-            let charset = charset.split('*').next().unwrap_or_default().to_ascii_lowercase();
+            let charset = charset
+                .split('*')
+                .next()
+                .unwrap_or_default()
+                .to_ascii_lowercase();
             let text = match charset.as_str() {
                 "utf-8" | "utf8" | "us-ascii" => String::from_utf8_lossy(&bytes).into_owned(),
                 _ => windows_1252(&bytes),
             };
-            Some((text, end.saturating_add(enc.len()).saturating_add(charset.len()).saturating_add(4)))
+            Some((
+                text,
+                end.saturating_add(enc.len())
+                    .saturating_add(charset.len())
+                    .saturating_add(4),
+            ))
         })();
         match decoded {
             Some((text, used)) => {
@@ -195,7 +225,10 @@ async fn headers(cx: &Cx, span: Span) -> Result<(Vec<Field>, Option<u64>)> {
             );
             continue;
         }
-        let Some((name, value)) = p.split_once(b':').filter(|(n, _)| field_name(p.bytes()).is_some() && !n.is_empty()) else {
+        let Some((name, value)) = p
+            .split_once(b':')
+            .filter(|(n, _)| field_name(p.bytes()).is_some() && !n.is_empty())
+        else {
             // Not a header: the body starts here (no blank line).
             return Ok((fields, Some(line.start)));
         };
@@ -230,7 +263,10 @@ impl Params {
                 let (k, v) = p.split_once('=')?;
                 let k = k.trim().to_ascii_lowercase();
                 let v = v.trim();
-                let v = v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(v);
+                let v = v
+                    .strip_prefix('"')
+                    .and_then(|v| v.strip_suffix('"'))
+                    .unwrap_or(v);
                 // RFC 2231: `name*=charset'lang'percent-encoded`.
                 let (k, v) = match k.strip_suffix('*') {
                     Some(k) => {
@@ -301,7 +337,10 @@ fn mail_date(text: &str) -> Option<i64> {
     let mut words = text.split_whitespace();
     let day: u32 = words.next()?.parse().ok()?;
     let month = words.next()?.to_ascii_lowercase();
-    let month = MONTHS.iter().position(|m| month.starts_with(m))?.saturating_add(1);
+    let month = MONTHS
+        .iter()
+        .position(|m| month.starts_with(m))?
+        .saturating_add(1);
     let mut year: u32 = words.next()?.parse().ok()?;
     if year < 100 {
         year = year.saturating_add(if year < 50 { 2000 } else { 1900 });
@@ -339,7 +378,11 @@ async fn entity(cx: Cx, e: Entity) -> Result<()> {
     cx.push(
         Node::new("Headers")
             .span(header_span)
-            .summary(plural(crate::bytes::to_u64(fields.len()), "field", "fields"))
+            .summary(plural(
+                crate::bytes::to_u64(fields.len()),
+                "field",
+                "fields",
+            ))
             .lazy(header_nodes, header_span),
     )
     .await;
@@ -359,7 +402,8 @@ async fn entity(cx: Cx, e: Entity) -> Result<()> {
             None => cx.diag(Diagnostic::malformed("multipart without a boundary")),
         }
     }
-    cx.push(body_node(&fields, &ctype, e.input, body, e.depth)).await;
+    cx.push(body_node(&fields, &ctype, e.input, body, e.depth))
+        .await;
     Ok(())
 }
 
@@ -426,11 +470,18 @@ async fn parts(cx: &Cx, e: &Entity, body: Span, boundary: &[u8]) -> Result<()> {
         match part.take() {
             Some(start) => {
                 index = index.saturating_add(1);
-                push_part(cx, e, body.sub(start, content_end.saturating_sub(start)), index).await?;
+                push_part(
+                    cx,
+                    e,
+                    body.sub(start, content_end.saturating_sub(start)),
+                    index,
+                )
+                .await?;
             }
             None => {
                 if content_end > 0 && preamble_end.is_none() {
-                    cx.push(Node::new("Preamble").span(body.sub(0, content_end))).await;
+                    cx.push(Node::new("Preamble").span(body.sub(0, content_end)))
+                        .await;
                 }
                 preamble_end = Some(content_end);
             }
@@ -451,7 +502,10 @@ async fn parts(cx: &Cx, e: &Entity, body: Span, boundary: &[u8]) -> Result<()> {
         push_part(cx, e, body.tail(start), index).await?;
     }
     if !closed {
-        cx.diag(Diagnostic::new(DiagKind::Truncated, "closing boundary missing"));
+        cx.diag(Diagnostic::new(
+            DiagKind::Truncated,
+            "closing boundary missing",
+        ));
     }
     if index == 0 {
         cx.diag(Diagnostic::malformed("no parts found for the boundary"));
@@ -467,7 +521,8 @@ async fn push_part(cx: &Cx, e: &Entity, span: Span, index: u64) -> Result<()> {
     let filename = get(&fields, "Content-Disposition")
         .and_then(|f| Params::parse(&f.value).get("filename").map(str::to_owned))
         .or_else(|| {
-            get(&fields, "Content-Type").and_then(|f| Params::parse(&f.value).get("name").map(str::to_owned))
+            get(&fields, "Content-Type")
+                .and_then(|f| Params::parse(&f.value).get("name").map(str::to_owned))
         });
     let name = match &filename {
         Some(f) => format!("Part {index}: {f}"),
@@ -609,6 +664,9 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
         };
         current = Some((l.start, decode_8bit(&l.bytes), l.next));
     }
-    cx.annotate(format!("Mailbox (mbox), {}", plural(count, "message", "messages")));
+    cx.annotate(format!(
+        "Mailbox (mbox), {}",
+        plural(count, "message", "messages")
+    ));
     Ok(())
 }

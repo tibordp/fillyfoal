@@ -45,7 +45,11 @@ pub struct Span {
 impl Span {
     /// A hole of `len` zero bytes (see [`SourceId::ZEROS`]).
     pub const fn zeros(len: u64) -> Span {
-        Span { source: SourceId::ZEROS, offset: 0, len }
+        Span {
+            source: SourceId::ZEROS,
+            offset: 0,
+            len,
+        }
     }
 
     pub const fn new(source: SourceId, offset: u64, len: u64) -> Self {

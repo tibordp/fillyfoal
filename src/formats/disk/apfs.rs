@@ -267,8 +267,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if sb0.desc_blocks & 0x8000_0000 == 0 {
         for i in 0..desc.1.min(65536) {
             let n = desc.0.saturating_add(i);
-            let Ok((data, ok)) = c.object(&cx, n).await else { break };
-            if ok && u32_le(&data, 24).is_some_and(|t| t & 0xffff == 1) && data.get(32..36) == Some(b"NXSB") {
+            let Ok((data, ok)) = c.object(&cx, n).await else {
+                break;
+            };
+            if ok
+                && u32_le(&data, 24).is_some_and(|t| t & 0xffff == 1)
+                && data.get(32..36) == Some(b"NXSB")
+            {
                 let xid = u64_le(&data, 16).unwrap_or(0);
                 if xid > latest.0 {
                     latest = (xid, n);
@@ -282,16 +287,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(checkpoint_area, (c.clone(), desc.0, desc.1)),
         );
     } else {
-        cx.diag(Diagnostic::unsupported("checkpoint descriptor area stored as a B-tree"));
+        cx.diag(Diagnostic::unsupported(
+            "checkpoint descriptor area stored as a B-tree",
+        ));
     }
     if sb0.data_blocks & 0x8000_0000 == 0 {
-        cx.emit(
-            Node::new("Checkpoint data area")
-                .span(vol.sub(sb0.data_base.saturating_mul(block), u64::from(sb0.data_blocks).saturating_mul(block))),
-        );
+        cx.emit(Node::new("Checkpoint data area").span(vol.sub(
+            sb0.data_base.saturating_mul(block),
+            u64::from(sb0.data_blocks).saturating_mul(block),
+        )));
     }
     let sb_block = latest.1;
-    let sb = parse(&cx, c.block_span(sb_block).sub(0, ContainerSuperblock::SIZE), LE, &(), ContainerSuperblock::layout).await?;
+    let sb = parse(
+        &cx,
+        c.block_span(sb_block).sub(0, ContainerSuperblock::SIZE),
+        LE,
+        &(),
+        ContainerSuperblock::layout,
+    )
+    .await?;
     if sb_block != 0 {
         cx.emit(
             ContainerSuperblock::node("Latest container superblock", c.block_span(sb_block), LE)
@@ -320,13 +334,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         match resolved {
             Ok(Some(paddr)) => {
-                let v = parse(&cx, c.block_span(paddr).sub(0, VolumeSuperblock::SIZE), LE, &(), VolumeSuperblock::layout).await;
+                let v = parse(
+                    &cx,
+                    c.block_span(paddr).sub(0, VolumeSuperblock::SIZE),
+                    LE,
+                    &(),
+                    VolumeSuperblock::layout,
+                )
+                .await;
                 if let Ok(v) = &v {
                     names.push(v.name.clone());
                 }
                 volumes.push((*oid, Ok(paddr)));
             }
-            Ok(None) => volumes.push((*oid, Err(Diagnostic::malformed(format!("object {oid} is not in the object map"))))),
+            Ok(None) => volumes.push((
+                *oid,
+                Err(Diagnostic::malformed(format!(
+                    "object {oid} is not in the object map"
+                ))),
+            )),
             Err(e) => volumes.push((*oid, Err(e))),
         }
     }
@@ -338,7 +364,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if names.is_empty() {
             String::new()
         } else {
-            format!(" ({})", names.iter().map(|n| format!("\"{n}\"")).collect::<Vec<_>>().join(", "))
+            format!(
+                " ({})",
+                names
+                    .iter()
+                    .map(|n| format!("\"{n}\""))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
         }
     ));
     cx.emit(
@@ -395,7 +428,10 @@ async fn superblock_node(cx: Cx, span: Span) -> Result<()> {
 async fn omap_tree(cx: &Cx, c: &Container, omap: u64) -> Result<u64> {
     let (data, _) = c.object(cx, omap).await?;
     if u32_le(&data, 24).is_none_or(|t| t & 0xffff != 0x0b) {
-        return Err(Diagnostic::malformed(format!("block {omap} is not an object map")).at(c.block_span(omap)));
+        return Err(
+            Diagnostic::malformed(format!("block {omap} is not an object map"))
+                .at(c.block_span(omap)),
+        );
     }
     Ok(u64_le(&data, 48).unwrap_or(0))
 }
@@ -413,13 +449,25 @@ fn toc(node: &[u8], block: u64, fixed: (usize, usize)) -> Vec<(usize, usize, usi
     for i in 0..count.min(to_usize(block) / 4) {
         let entry = if flags & FIXED != 0 {
             let at = table.saturating_add(i.saturating_mul(4));
-            let (Some(k), Some(v)) = (u16_le(node, at), u16_le(node, at.saturating_add(2))) else { break };
+            let (Some(k), Some(v)) = (u16_le(node, at), u16_le(node, at.saturating_add(2))) else {
+                break;
+            };
             let vlen = if leaf { fixed.1 } else { 8 };
-            (keys.saturating_add(k.into()), fixed.0, values_end.saturating_sub(v.into()), vlen)
+            (
+                keys.saturating_add(k.into()),
+                fixed.0,
+                values_end.saturating_sub(v.into()),
+                vlen,
+            )
         } else {
             let at = table.saturating_add(i.saturating_mul(8));
             let field = |o: usize| usize::from(u16_le(node, at.saturating_add(o)).unwrap_or(0));
-            (keys.saturating_add(field(0)), field(2), values_end.saturating_sub(field(4)), field(6))
+            (
+                keys.saturating_add(field(0)),
+                field(2),
+                values_end.saturating_sub(field(4)),
+                field(6),
+            )
         };
         out.push(entry);
     }
@@ -432,7 +480,9 @@ async fn omap_lookup(cx: &Cx, c: &Container, root: u64, oid: u64, xid: u64) -> R
     let mut seen = HashSet::new();
     for _ in 0..MAX_DEPTH {
         if !seen.insert(n) {
-            return Err(Diagnostic::malformed(format!("object map loops at block {n}")));
+            return Err(Diagnostic::malformed(format!(
+                "object map loops at block {n}"
+            )));
         }
         let (node, _) = c.object(cx, n).await?;
         let leaf = u16_le(&node, 32).unwrap_or(0) & LEAF != 0;
@@ -442,9 +492,12 @@ async fn omap_lookup(cx: &Cx, c: &Container, root: u64, oid: u64, xid: u64) -> R
             let kx = u64_le(&node, k.saturating_add(8)).unwrap_or(u64::MAX);
             (ko, kx) <= (oid, xid)
         });
-        let Some(&(k, _, v, _)) = pick else { return Ok(None) };
+        let Some(&(k, _, v, _)) = pick else {
+            return Ok(None);
+        };
         if leaf {
-            return Ok((u64_le(&node, k) == Some(oid)).then(|| u64_le(&node, v.saturating_add(8)).unwrap_or(0)));
+            return Ok((u64_le(&node, k) == Some(oid))
+                .then(|| u64_le(&node, v.saturating_add(8)).unwrap_or(0)));
         }
         n = u64_le(&node, v).unwrap_or(0);
     }
@@ -454,21 +507,16 @@ async fn omap_lookup(cx: &Cx, c: &Container, root: u64, oid: u64, xid: u64) -> R
 async fn object_map(cx: Cx, (c, omap): (Arc<Container>, u64)) -> Result<()> {
     let span = c.block_span(omap);
     let data = cx.read(span.sub(0, 88)).await?;
-    cx.emit(
-        Node::new("Header")
-            .span(span.sub(0, 88))
-            .summary(format!(
-                "{} snapshots, tree at block {}",
-                u32_le(&data, 36).unwrap_or(0),
-                u64_le(&data, 48).unwrap_or(0)
-            )),
-    );
+    cx.emit(Node::new("Header").span(span.sub(0, 88)).summary(format!(
+        "{} snapshots, tree at block {}",
+        u32_le(&data, 36).unwrap_or(0),
+        u64_le(&data, 48).unwrap_or(0)
+    )));
     let root = u64_le(&data, 48).unwrap_or(0);
-    cx.emit(
-        Node::new("Mappings")
-            .span(c.block_span(root))
-            .lazy(crate::expander!(self::omap_node: (Arc<Container>, u64, u32)), (c.clone(), root, MAX_DEPTH)),
-    );
+    cx.emit(Node::new("Mappings").span(c.block_span(root)).lazy(
+        crate::expander!(self::omap_node: (Arc<Container>, u64, u32)),
+        (c.clone(), root, MAX_DEPTH),
+    ));
     Ok(())
 }
 
@@ -480,7 +528,9 @@ async fn omap_node(cx: Cx, (c, n, depth): (Arc<Container>, u64, u32)) -> Result<
     let span = c.block_span(n);
     let level = u32::from(u16_le(&node, 34).unwrap_or(0));
     if level > depth {
-        return Err(Diagnostic::malformed(format!("node level {level} does not decrease")).at(span));
+        return Err(
+            Diagnostic::malformed(format!("node level {level} does not decrease")).at(span),
+        );
     }
     let leaf = level == 0;
     let entries = toc(&node, c.block, (16, 16));
@@ -489,14 +539,19 @@ async fn omap_node(cx: Cx, (c, n, depth): (Arc<Container>, u64, u32)) -> Result<
         let oid = u64_le(&node, k).unwrap_or(0);
         let xid = u64_le(&node, k.saturating_add(8)).unwrap_or(0);
         let value = span.sub(to_u64(v), to_u64(vlen));
-        let item = Node::new(format!("Object {oid} @ transaction {xid}")).span(span.sub(to_u64(k), 16));
+        let item =
+            Node::new(format!("Object {oid} @ transaction {xid}")).span(span.sub(to_u64(k), 16));
         cx.push(if leaf {
             let paddr = u64_le(&node, v.saturating_add(8)).unwrap_or(0);
-            item.summary(format!("block {paddr}")).target(c.block_span(paddr))
+            item.summary(format!("block {paddr}"))
+                .target(c.block_span(paddr))
         } else {
             let child = u64_le(&node, v).unwrap_or(0);
             let item = item.summary(format!("child node {child}")).target(value);
-            item.lazy(crate::expander!(self::omap_node: (Arc<Container>, u64, u32)), (c.clone(), child, level.saturating_sub(1)))
+            item.lazy(
+                crate::expander!(self::omap_node: (Arc<Container>, u64, u32)),
+                (c.clone(), child, level.saturating_sub(1)),
+            )
         })
         .await;
     }
@@ -505,7 +560,14 @@ async fn omap_node(cx: Cx, (c, n, depth): (Arc<Container>, u64, u32)) -> Result<
 
 async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
     let span = c.block_span(paddr);
-    let v = parse(&cx, span.sub(0, VolumeSuperblock::SIZE), LE, &(), VolumeSuperblock::layout).await?;
+    let v = parse(
+        &cx,
+        span.sub(0, VolumeSuperblock::SIZE),
+        LE,
+        &(),
+        VolumeSuperblock::layout,
+    )
+    .await?;
     let (_, ok) = c.object(&cx, paddr).await?;
     cx.annotate(format!(
         "\"{}\" ({}), {} files, {} directories",
@@ -536,7 +598,10 @@ async fn volume(cx: Cx, (c, paddr): (Arc<Container>, u64)) -> Result<()> {
     cx.emit(
         Node::new("File-system tree")
             .summary(format!("root object {}", v.root_tree_oid))
-            .lazy(crate::expander!(self::fs_node: (Arc<FsTree>, u64, u32)), (Arc::new(fs), v.root_tree_oid, MAX_DEPTH)),
+            .lazy(
+                crate::expander!(self::fs_node: (Arc<FsTree>, u64, u32)),
+                (Arc::new(fs), v.root_tree_oid, MAX_DEPTH),
+            ),
     );
     Ok(())
 }
@@ -569,7 +634,9 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
     let c = &fs.c;
     let paddr = omap_lookup(&cx, c, fs.omap, oid, fs.xid)
         .await?
-        .ok_or_else(|| Diagnostic::malformed(format!("object {oid} is not in the volume's object map")))?;
+        .ok_or_else(|| {
+            Diagnostic::malformed(format!("object {oid} is not in the volume's object map"))
+        })?;
     let (node, ok) = c.object(&cx, paddr).await?;
     if !ok {
         cx.diag(Diagnostic::warning("object checksum mismatch"));
@@ -577,32 +644,46 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
     let span = c.block_span(paddr);
     let level = u32::from(u16_le(&node, 34).unwrap_or(0));
     if level > depth {
-        return Err(Diagnostic::malformed(format!("node level {level} does not decrease")).at(span));
+        return Err(
+            Diagnostic::malformed(format!("node level {level} does not decrease")).at(span),
+        );
     }
     let leaf = level == 0;
     let entries = toc(&node, c.block, (0, 0));
-    cx.annotate(format!("block {paddr}, level {}, {} records", u16_le(&node, 34).unwrap_or(0), entries.len()));
+    cx.annotate(format!(
+        "block {paddr}, level {}, {} records",
+        u16_le(&node, 34).unwrap_or(0),
+        entries.len()
+    ));
     for (k, klen, v, vlen) in entries {
         let header = u64_le(&node, k).unwrap_or(0);
         let id = header & 0x0fff_ffff_ffff_ffff;
         let kind = header >> 60;
         let kind_name = lookup(RECORD_TYPES, kind).unwrap_or("unknown record");
         let value = span.sub(to_u64(v), to_u64(vlen));
-        let mut item = Node::new(format!("{id}: {kind_name}")).span(span.sub(to_u64(k), to_u64(klen)));
+        let mut item =
+            Node::new(format!("{id}: {kind_name}")).span(span.sub(to_u64(k), to_u64(klen)));
         if !leaf {
             let child = u64_le(&node, v).unwrap_or(0);
-            item = item
-                .summary(format!("child object {child}"))
-                .lazy(crate::expander!(self::fs_node: (Arc<FsTree>, u64, u32)), (fs.clone(), child, level.saturating_sub(1)));
+            item = item.summary(format!("child object {child}")).lazy(
+                crate::expander!(self::fs_node: (Arc<FsTree>, u64, u32)),
+                (fs.clone(), child, level.saturating_sub(1)),
+            );
         } else {
             item = item.target(value);
             match kind {
                 9 => {
                     // Hashed directory entry key: length (10 bits) and hash, name.
-                    let len = to_usize((u32_le(&node, k.saturating_add(8)).unwrap_or(0) & 0x3ff).into());
-                    let name = crate::text::until_nul(node.get(k.saturating_add(12)..k.saturating_add(12).saturating_add(len)).unwrap_or_default());
+                    let len =
+                        to_usize((u32_le(&node, k.saturating_add(8)).unwrap_or(0) & 0x3ff).into());
+                    let name = crate::text::until_nul(
+                        node.get(k.saturating_add(12)..k.saturating_add(12).saturating_add(len))
+                            .unwrap_or_default(),
+                    );
                     let file = u64_le(&node, v).unwrap_or(0);
-                    item = item.value(Value::Text(name)).summary(format!("→ inode {file}"));
+                    item = item
+                        .value(Value::Text(name))
+                        .summary(format!("→ inode {file}"));
                 }
                 3 => {
                     let parent = u64_le(&node, v).unwrap_or(0);
@@ -618,8 +699,17 @@ async fn fs_node(cx: Cx, (fs, oid, depth): (Arc<FsTree>, u64, u32)) -> Result<()
                     let block = u64_le(&node, v.saturating_add(8)).unwrap_or(0);
                     let data = c.vol.sub(block.saturating_mul(c.block), len);
                     // The extent's bytes, dissected on expansion.
-                    item = crate::formats::content(format!("{id}: {kind_name}"), c.input, data, Codec::Stored, None)
-                        .summary(format!("offset {logical:#x}: {} at block {block}", size(len)));
+                    item = crate::formats::content(
+                        format!("{id}: {kind_name}"),
+                        c.input,
+                        data,
+                        Codec::Stored,
+                        None,
+                    )
+                    .summary(format!(
+                        "offset {logical:#x}: {} at block {block}",
+                        size(len)
+                    ));
                 }
                 _ => {}
             }

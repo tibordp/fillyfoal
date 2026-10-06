@@ -103,10 +103,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let content_offset = if h.version >= 3 {
         let span = file.sub(Header::SIZE, 8);
         let b = cx.read(span).await?;
-        cx.emit(Node::new("Content offset").span(span).value(crate::formats::datakit::hex(
-            crate::bytes::u64_le(&b, 0).unwrap_or(0),
-            64,
-        )));
+        cx.emit(
+            Node::new("Content offset")
+                .span(span)
+                .value(crate::formats::datakit::hex(
+                    crate::bytes::u64_le(&b, 0).unwrap_or(0),
+                    64,
+                )),
+        );
         crate::bytes::u64_le(&b, 0).unwrap_or(0)
     } else {
         h.dir_offset.saturating_add(h.dir_len)
@@ -114,7 +118,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Section 0 (file size)").span(file.sub(h.section0_offset, h.section0_len)));
     let dir = file.sub(h.dir_offset, h.dir_len);
     let d = parse(&cx, dir.sub(0, Directory::SIZE), LE, &(), Directory::layout).await?;
-    cx.emit(Directory::node("Directory header", dir.sub(0, Directory::SIZE), LE));
+    cx.emit(Directory::node(
+        "Directory header",
+        dir.sub(0, Directory::SIZE),
+        LE,
+    ));
     if d.chunk_size < 32 {
         return Err(Diagnostic::malformed(format!("chunk size {}", d.chunk_size)).at(dir));
     }
@@ -131,7 +139,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         d.chunks, h.language
     ));
     cx.emit(Node::new("Files").span(chm.dir).lazy(files, chm));
-    cx.emit(Node::new("Content").span(file.tail(content_offset)).summary(size(file.len.saturating_sub(content_offset))));
+    cx.emit(
+        Node::new("Content")
+            .span(file.tail(content_offset))
+            .summary(size(file.len.saturating_sub(content_offset))),
+    );
     Ok(())
 }
 
@@ -140,7 +152,10 @@ async fn files(cx: Cx, chm: Chm) -> Result<()> {
     let mut seen = 0u32;
     while chunk != u32::MAX && seen < chm.chunks.min(MAX_CHUNKS) {
         seen = seen.saturating_add(1);
-        let span = chm.dir.sub_exact(u64::from(chunk).saturating_mul(chm.chunk_size), chm.chunk_size)?;
+        let span = chm.dir.sub_exact(
+            u64::from(chunk).saturating_mul(chm.chunk_size),
+            chm.chunk_size,
+        )?;
         let data = cx.read(span).await?;
         if data.get(..4) != Some(b"PMGL".as_slice()) {
             return Err(Diagnostic::malformed("expected a PMGL listing chunk").at(span.sub(0, 4)));
@@ -151,13 +166,18 @@ async fn files(cx: Cx, chm: Chm) -> Result<()> {
         let mut at = 20usize;
         while at < end {
             let start = at;
-            let Some(len) = encint(&data, &mut at) else { break };
+            let Some(len) = encint(&data, &mut at) else {
+                break;
+            };
             let name_end = at.saturating_add(to_usize(len));
-            let name = String::from_utf8_lossy(data.get(at..name_end).unwrap_or_default()).into_owned();
+            let name =
+                String::from_utf8_lossy(data.get(at..name_end).unwrap_or_default()).into_owned();
             at = name_end;
-            let (Some(section), Some(offset), Some(length)) =
-                (encint(&data, &mut at), encint(&data, &mut at), encint(&data, &mut at))
-            else {
+            let (Some(section), Some(offset), Some(length)) = (
+                encint(&data, &mut at),
+                encint(&data, &mut at),
+                encint(&data, &mut at),
+            ) else {
                 break;
             };
             if name_end > end {
@@ -166,12 +186,23 @@ async fn files(cx: Cx, chm: Chm) -> Result<()> {
             let entry = span.sub(to_u64(start), to_u64(at.saturating_sub(start)));
             let mut node = Node::new(clip(&name, 200))
                 .span(entry)
-                .value(Value::UInt { value: length, bits: 64, radix: crate::value::Radix::Dec })
+                .value(Value::UInt {
+                    value: length,
+                    bits: 64,
+                    radix: crate::value::Radix::Dec,
+                })
                 .summary(format!("section {section}, offset {offset:#x}"));
             if section == 0 && length > 0 {
-                let data_span = chm.input.span.sub(chm.content.saturating_add(offset), length);
+                let data_span = chm
+                    .input
+                    .span
+                    .sub(chm.content.saturating_add(offset), length);
                 node = content(clip(&name, 200), chm.input, data_span, Codec::Stored, None)
-                    .value(Value::UInt { value: length, bits: 64, radix: crate::value::Radix::Dec })
+                    .value(Value::UInt {
+                        value: length,
+                        bits: 64,
+                        radix: crate::value::Radix::Dec,
+                    })
                     .summary(format!("section 0, offset {offset:#x}"))
                     .target(entry);
             } else if section != 0 {

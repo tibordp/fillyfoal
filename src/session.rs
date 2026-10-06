@@ -11,6 +11,7 @@ use crate::cx::{Cx, Output, Shared, Stop, lock};
 use crate::error::Diagnostic;
 use crate::formats;
 use crate::node::{Count, Expansion, Node};
+use crate::secret::{Secret, SecretRequest};
 use crate::span::{Origin, SourceId, Span};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -76,6 +77,8 @@ pub enum Wait {
     Bytes,
     /// Suspended because the work budget ran out.
     Budget,
+    /// Waiting for the host to answer a secret request.
+    Secret,
 }
 
 pub struct Children<'a> {
@@ -103,6 +106,10 @@ pub enum Progress {
     /// Expansions are blocked on these bytes. Supply them and poll again.
     /// (Other expansions may also be runnable.)
     NeedBytes(Vec<ByteRequest>),
+    /// Expansions are blocked on secrets (passwords). Answer each with
+    /// [`Session::answer_secret`] (or decline) and poll again. Reported only
+    /// when no bytes are wanted and nothing else can run.
+    NeedSecret(Vec<SecretRequest>),
 }
 
 pub struct Session {
@@ -137,6 +144,7 @@ struct Run {
     future: Expansion,
     out: Arc<Mutex<Output>>,
     waiting: Vec<(SourceId, u64)>,
+    secret: Option<SecretRequest>,
 }
 
 impl Entry {
@@ -181,6 +189,8 @@ impl Session {
             budget: 0,
             stop: None,
             wanted: Vec::new(),
+            secrets: std::collections::HashMap::new(),
+            secret_wanted: None,
             limits,
         };
         Session {
@@ -359,6 +369,7 @@ impl Session {
                     future: expander.start(cx),
                     out,
                     waiting: Vec::new(),
+                    secret: None,
                 });
                 entry.state = ChildState::Running(Wait::Ready);
                 self.active.push(id);
@@ -430,12 +441,18 @@ impl Session {
         });
 
         let mut wanted: Vec<(SourceId, u64)> = Vec::new();
+        let mut secrets: Vec<SecretRequest> = Vec::new();
         let mut runnable = false;
         for &id in &self.active {
             if self.is_runnable(id) {
                 runnable = true;
             } else if let Some(run) = self.entry(id).and_then(|e| e.run.as_ref()) {
                 wanted.extend(run.waiting.iter().copied());
+                if let Some(request) = &run.secret
+                    && !secrets.iter().any(|r| r.key() == request.key())
+                {
+                    secrets.push(request.clone());
+                }
             }
         }
         let requests = self.requests(wanted);
@@ -443,9 +460,17 @@ impl Session {
             Progress::NeedBytes(requests)
         } else if runnable {
             Progress::Yielded
+        } else if !secrets.is_empty() {
+            Progress::NeedSecret(secrets)
         } else {
             Progress::Idle
         }
+    }
+
+    /// Answers a secret request (`None` declines it). The answer is kept for
+    /// the session and serves every request with the same realm and attempt.
+    pub fn answer_secret(&mut self, request: &SecretRequest, secret: Option<Secret>) {
+        lock(&self.shared).secrets.insert(request.key(), secret);
     }
 
     /// Supplies source bytes starting at `offset`. Any whole cache chunks
@@ -489,6 +514,10 @@ impl Session {
                 let sh = lock(&self.shared);
                 run.waiting.iter().all(|&(s, i)| sh.cache.contains(s, i))
             }
+            ChildState::Running(Wait::Secret) => run
+                .secret
+                .as_ref()
+                .is_some_and(|r| lock(&self.shared).secrets.contains_key(&r.key())),
             _ => false,
         }
     }
@@ -501,17 +530,19 @@ impl Session {
             let mut sh = lock(&self.shared);
             sh.stop = None;
             sh.wanted.clear();
+            sh.secret_wanted = None;
             sh.budget
         };
         let result = run
             .future
             .as_mut()
             .poll(&mut Context::from_waker(Waker::noop()));
-        let (stop, wanted, used, max_work) = {
+        let (stop, wanted, secret, used, max_work) = {
             let mut sh = lock(&self.shared);
             (
                 sh.stop.take(),
                 take(&mut sh.wanted),
+                sh.secret_wanted.take(),
                 budget_before.saturating_sub(sh.budget),
                 sh.limits.max_work,
             )
@@ -565,6 +596,10 @@ impl Session {
                         ChildState::Running(Wait::Bytes)
                     }
                     Some(Stop::Budget) => ChildState::Running(Wait::Budget),
+                    Some(Stop::Secret) => {
+                        run.secret = secret;
+                        ChildState::Running(Wait::Secret)
+                    }
                     Some(Stop::Page) => ChildState::More,
                     None => {
                         entry.state = ChildState::Failed;

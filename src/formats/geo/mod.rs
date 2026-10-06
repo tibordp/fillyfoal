@@ -36,11 +36,19 @@ pub(crate) fn text(s: impl Into<String>) -> Value {
 }
 
 pub(crate) fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 pub(crate) fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Hex }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Hex,
+    }
 }
 
 pub(crate) fn int(value: i64, bits: u8) -> Value {
@@ -48,7 +56,11 @@ pub(crate) fn int(value: i64, bits: u8) -> Value {
 }
 
 pub(crate) fn enumv(table: EnumTable, raw: u64, bits: u8) -> Value {
-    Value::Enum { raw, bits, name: lookup(table, raw) }
+    Value::Enum {
+        raw,
+        bits,
+        name: lookup(table, raw),
+    }
 }
 
 pub(crate) fn time(unix_seconds: i64) -> Value {
@@ -88,7 +100,11 @@ pub(crate) fn crc16_xmodem(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { (crc << 1) ^ 0x1021 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                (crc << 1) ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
     crc
@@ -180,7 +196,14 @@ pub(crate) fn pb_field(data: &[u8], at: &mut usize) -> Option<PbField> {
         }
         _ => return None,
     };
-    Some(PbField { number, wire, value, start, end: *at, body })
+    Some(PbField {
+        number,
+        wire,
+        value,
+        start,
+        end: *at,
+        body,
+    })
 }
 
 /// All fields of a message, or `None` if it does not parse exactly.
@@ -207,17 +230,31 @@ pub(crate) type Labels = &'static [&'static str];
 
 /// A node for one line of delimited fields; expanding it shows the fields
 /// labelled from `labels` (extra fields are numbered).
-pub(crate) fn delimited_node(name: impl Into<Cow<'static, str>>, line: &LineBuf, sep: u8, labels: Labels) -> Node {
+pub(crate) fn delimited_node(
+    name: impl Into<Cow<'static, str>>,
+    line: &LineBuf,
+    sep: u8,
+    labels: Labels,
+) -> Node {
     delimited_span(name, line.span, sep, labels)
 }
 
 /// Like [`delimited_node`], for part of a line.
-pub(crate) fn delimited_span(name: impl Into<Cow<'static, str>>, span: Span, sep: u8, labels: Labels) -> Node {
-    Node::new(name).span(span).lazy(delimited, (span, sep, labels))
+pub(crate) fn delimited_span(
+    name: impl Into<Cow<'static, str>>,
+    span: Span,
+    sep: u8,
+    labels: Labels,
+) -> Node {
+    Node::new(name)
+        .span(span)
+        .lazy(delimited, (span, sep, labels))
 }
 
 async fn delimited(cx: Cx, (span, sep, labels): (Span, u8, Labels)) -> Result<()> {
-    let bytes = cx.read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64)).await?;
+    let bytes = cx
+        .read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64))
+        .await?;
     let piece = Piece::new(&bytes, span);
     for (i, field) in piece.split(sep).enumerate() {
         let name: Cow<'static, str> = match labels.get(i) {
@@ -230,12 +267,20 @@ async fn delimited(cx: Cx, (span, sep, labels): (Span, u8, Labels)) -> Result<()
 }
 
 /// Whitespace-separated words of a line, labelled.
-pub(crate) fn words_node(name: impl Into<Cow<'static, str>>, line: &LineBuf, labels: Labels) -> Node {
-    Node::new(name).span(line.span).lazy(words, (line.span, labels))
+pub(crate) fn words_node(
+    name: impl Into<Cow<'static, str>>,
+    line: &LineBuf,
+    labels: Labels,
+) -> Node {
+    Node::new(name)
+        .span(line.span)
+        .lazy(words, (line.span, labels))
 }
 
 async fn words(cx: Cx, (span, labels): (Span, Labels)) -> Result<()> {
-    let bytes = cx.read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64)).await?;
+    let bytes = cx
+        .read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64))
+        .await?;
     let piece = Piece::new(&bytes, span);
     for (i, word) in piece.words().enumerate() {
         let name: Cow<'static, str> = match labels.get(i) {
@@ -256,7 +301,9 @@ pub(crate) fn columns_node(name: impl Into<Cow<'static, str>>, span: Span, cols:
 }
 
 async fn columns(cx: Cx, (span, cols): (Span, Columns)) -> Result<()> {
-    let bytes = cx.read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64)).await?;
+    let bytes = cx
+        .read_avail(span.sub(0, crate::formats::text::scan::LINE_CAP as u64))
+        .await?;
     let piece = Piece::new(&bytes, span);
     for &(start, width, label) in cols {
         if start >= piece.len() {
@@ -273,8 +320,16 @@ pub(crate) fn field_node(name: impl Into<Cow<'static, str>>, field: Piece<'_>) -
     let t = field.trim();
     let s = t.text();
     // Zero-padded codes (dates, IDs) stay text.
-    let padded = s.len() > 1 && !s.contains('.') && s.starts_with('0') && s.as_bytes().get(1).is_some_and(u8::is_ascii_digit);
-    let value = if padded { None } else { crate::formats::text::number(&s) }.unwrap_or(Value::Text(s));
+    let padded = s.len() > 1
+        && !s.contains('.')
+        && s.starts_with('0')
+        && s.as_bytes().get(1).is_some_and(u8::is_ascii_digit);
+    let value = if padded {
+        None
+    } else {
+        crate::formats::text::number(&s)
+    }
+    .unwrap_or(Value::Text(s));
     Node::new(name).span(t.span()).value(value)
 }
 
@@ -354,7 +409,11 @@ impl FbTable {
         let len = usize::try_from(crate::bytes::u32_le(data, at)?).ok()?;
         let start = at.checked_add(4)?;
         let end = start.checked_add(len)?;
-        Some((String::from_utf8_lossy(data.get(start..end)?).into_owned(), start, end))
+        Some((
+            String::from_utf8_lossy(data.get(start..end)?).into_owned(),
+            start,
+            end,
+        ))
     }
 
     /// A vector: element count and the position of the first element. The
@@ -404,6 +463,8 @@ impl<'a> Bits<'a> {
     pub fn i(&mut self, n: u32) -> Option<i64> {
         let v = self.u(n)?;
         let shift = 64u32.saturating_sub(n.min(64));
-        v.cast_signed().checked_shl(shift).and_then(|x| x.checked_shr(shift))
+        v.cast_signed()
+            .checked_shl(shift)
+            .and_then(|x| x.checked_shr(shift))
     }
 }

@@ -271,13 +271,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let model = word(i.saturating_add(1)).unwrap_or(0);
                 let at = i.saturating_add(3).saturating_mul(4);
                 let (name, _) = literal(data.get(at..).unwrap_or_default());
-                entries.push(format!("{name} ({})", name_or(EXECUTION_MODEL, model.into(), "model")));
+                entries.push(format!(
+                    "{name} ({})",
+                    name_or(EXECUTION_MODEL, model.into(), "model")
+                ));
             }
-            17 => caps.push(name_or(CAPABILITY, word(i.saturating_add(1)).unwrap_or(0).into(), "capability")),
+            17 => caps.push(name_or(
+                CAPABILITY,
+                word(i.saturating_add(1)).unwrap_or(0).into(),
+                "capability",
+            )),
             3 => {
                 source = Some(format!(
                     "{} {}",
-                    name_or(SOURCE_LANGUAGE, word(i.saturating_add(1)).unwrap_or(0).into(), "language"),
+                    name_or(
+                        SOURCE_LANGUAGE,
+                        word(i.saturating_add(1)).unwrap_or(0).into(),
+                        "language"
+                    ),
                     word(i.saturating_add(2)).unwrap_or(0)
                 ));
             }
@@ -291,13 +302,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         (version >> 8) & 0xff
     );
     if !entries.is_empty() {
-        summary.push_str(&format!(", entry points {}", ellipsize(&entries.join(", "), 120)));
+        summary.push_str(&format!(
+            ", entry points {}",
+            ellipsize(&entries.join(", "), 120)
+        ));
     }
     if let Some(s) = source {
         summary.push_str(&format!(", from {s}"));
     }
     if !caps.is_empty() {
-        summary.push_str(&format!(", capabilities {}", ellipsize(&caps.join(" "), 80)));
+        summary.push_str(&format!(
+            ", capabilities {}",
+            ellipsize(&caps.join(" "), 80)
+        ));
     }
     cx.annotate(summary);
 
@@ -305,9 +322,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     while i < words {
         let Some(w) = word(i) else { break };
         let (count, op) = (usize::try_from(w >> 16).unwrap_or(0), w & 0xffff);
-        let span: Span = file.sub(to_u64(i.saturating_mul(4)), to_u64(count.max(1).saturating_mul(4)));
+        let span: Span = file.sub(
+            to_u64(i.saturating_mul(4)),
+            to_u64(count.max(1).saturating_mul(4)),
+        );
         if count == 0 {
-            cx.push(Node::new("<bad instruction>").span(span).diag(Diagnostic::malformed("zero word count"))).await;
+            cx.push(
+                Node::new("<bad instruction>")
+                    .span(span)
+                    .diag(Diagnostic::malformed("zero word count")),
+            )
+            .await;
             break;
         }
         let operand = |k: usize| word(i.saturating_add(k)).unwrap_or(0);

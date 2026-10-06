@@ -50,8 +50,15 @@ fn quoted_or_word(s: &str) -> Option<(String, &str)> {
         }
         None
     } else {
-        let end = s.find(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '.' | '-'))).unwrap_or(s.len());
-        (end > 0).then(|| (s.get(..end).unwrap_or_default().to_owned(), s.get(end..).unwrap_or_default()))
+        let end = s
+            .find(|c: char| !(c.is_alphanumeric() || matches!(c, '_' | '.' | '-')))
+            .unwrap_or(s.len());
+        (end > 0).then(|| {
+            (
+                s.get(..end).unwrap_or_default().to_owned(),
+                s.get(end..).unwrap_or_default(),
+            )
+        })
     }
 }
 
@@ -78,7 +85,10 @@ async fn strings(cx: Cx, input: Input) -> Result<()> {
         let trimmed = t.trim();
         if in_comment || trimmed.starts_with("/*") {
             in_comment = !trimmed.ends_with("*/");
-            let c = trimmed.trim_start_matches("/*").trim_end_matches("*/").trim();
+            let c = trimmed
+                .trim_start_matches("/*")
+                .trim_end_matches("*/")
+                .trim();
             if !c.is_empty() {
                 if !comment.is_empty() {
                     comment.push(' ');
@@ -97,10 +107,17 @@ async fn strings(cx: Cx, input: Input) -> Result<()> {
             }
             None => Node::new(format!("Line {}", line.number)).value(text(trimmed)),
         };
-        let node = if comment.is_empty() { node } else { node.desc(std::mem::take(&mut comment)) };
+        let node = if comment.is_empty() {
+            node
+        } else {
+            node.desc(std::mem::take(&mut comment))
+        };
         cx.push(node.span(line.span)).await;
     }
-    cx.annotate(format!("Apple strings table ({}), {count} entries", prepared.encoding.name()));
+    cx.annotate(format!(
+        "Apple strings table ({}), {count} entries",
+        prepared.encoding.name()
+    ));
     Ok(())
 }
 
@@ -109,7 +126,8 @@ async fn strings(cx: Cx, input: Input) -> Result<()> {
 
 fn tbd_probe(h: &Head<'_>) -> bool {
     h.starts_with(b"--- !tapi-tbd")
-        || (trim_start(&probe::head(h)).starts_with(b"{") && contains(h.data, b"\"tapi_tbd_version\""))
+        || (trim_start(&probe::head(h)).starts_with(b"{")
+            && contains(h.data, b"\"tapi_tbd_version\""))
 }
 
 declare_format!(pub TBD = "tbd", "Text-based dylib stub (.tbd)", ["tbd"], "text/x-tbd",
@@ -117,16 +135,24 @@ declare_format!(pub TBD = "tbd", "Text-based dylib stub (.tbd)", ["tbd"], "text/
 
 async fn tbd(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 64 * 1024)).await?;
-    let lines: Vec<String> = probe::lines(&head).map(|l| String::from_utf8_lossy(l).into_owned()).collect();
+    let lines: Vec<String> = probe::lines(&head)
+        .map(|l| String::from_utf8_lossy(l).into_owned())
+        .collect();
     let field = |key: &str| {
         lines.iter().find_map(|l| {
-            l.trim_start_matches(['-', ' ']).strip_prefix(key).map(|v| v.trim().trim_matches(['\'', '"']).to_owned())
+            l.trim_start_matches(['-', ' '])
+                .strip_prefix(key)
+                .map(|v| v.trim().trim_matches(['\'', '"']).to_owned())
         })
     };
     let documents = lines.iter().filter(|l| l.starts_with("--- !tapi")).count();
     let summary = if head.starts_with(b"---") {
         yaml::dissect(cx.clone(), input).await?;
-        let version = lines.first().and_then(|l| l.strip_prefix("--- !tapi-tbd")).unwrap_or_default().trim_start_matches('-');
+        let version = lines
+            .first()
+            .and_then(|l| l.strip_prefix("--- !tapi-tbd"))
+            .unwrap_or_default()
+            .trim_start_matches('-');
         let version = match field("tbd-version:") {
             Some(v) => format!("v{v}"),
             None if version.is_empty() => "v1".to_owned(),
@@ -135,7 +161,9 @@ async fn tbd(cx: Cx, input: Input) -> Result<()> {
         format!(
             "Text-based stub {version}, {}, targets {}, {documents} document(s)",
             field("install-name:").unwrap_or_default(),
-            field("targets:").or_else(|| field("archs:")).unwrap_or_default()
+            field("targets:")
+                .or_else(|| field("archs:"))
+                .unwrap_or_default()
         )
     } else {
         json::dissect(cx.clone(), input).await?;
@@ -175,7 +203,10 @@ async fn pbxproj(cx: Cx, input: Input) -> Result<()> {
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let trimmed = t.trim();
-        if let Some(name) = trimmed.strip_prefix("/* Begin ").and_then(|r| r.strip_suffix(" section */")) {
+        if let Some(name) = trimmed
+            .strip_prefix("/* Begin ")
+            .and_then(|r| r.strip_suffix(" section */"))
+        {
             section = Some((line.start, name.to_owned(), 0));
             continue;
         }
@@ -213,7 +244,9 @@ async fn pbxproj(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node.span(line.span)).await;
     }
-    cx.annotate(format!("Xcode project, object version {archive}, {objects} objects in {sections} sections"));
+    cx.annotate(format!(
+        "Xcode project, object version {archive}, {objects} objects in {sections} sections"
+    ));
     Ok(())
 }
 
@@ -229,7 +262,12 @@ async fn pbx_section(cx: Cx, span: Span) -> Result<()> {
                 .and_then(|(_, r)| r.split_once("*/"))
                 .map(|(c, _)| c.trim().to_owned())
                 .unwrap_or_default();
-            let isa = trimmed.split("isa = ").nth(1).and_then(|r| r.split(';').next()).unwrap_or_default().to_owned();
+            let isa = trimmed
+                .split("isa = ")
+                .nth(1)
+                .and_then(|r| r.split(';').next())
+                .unwrap_or_default()
+                .to_owned();
             current = Some((line.start, id.to_owned(), comment, isa));
         } else if let Some((_, _, _, isa)) = current.as_mut()
             && isa.is_empty()
@@ -240,8 +278,19 @@ async fn pbx_section(cx: Cx, span: Span) -> Result<()> {
         let closes = trimmed.ends_with("};");
         if closes && let Some((start, id, comment, isa)) = current.take() {
             let obj = span.sub(start, line.next.saturating_sub(start));
-            let name = if comment.is_empty() { id.clone() } else { comment };
-            cx.push(Node::new(name).span(obj).value(text(isa)).summary(id).lazy(block_lines, obj)).await;
+            let name = if comment.is_empty() {
+                id.clone()
+            } else {
+                comment
+            };
+            cx.push(
+                Node::new(name)
+                    .span(obj)
+                    .value(text(isa))
+                    .summary(id)
+                    .lazy(block_lines, obj),
+            )
+            .await;
         }
     }
     Ok(())
@@ -252,7 +301,9 @@ async fn pbx_section(cx: Cx, span: Span) -> Result<()> {
 
 fn ips_probe(h: &Head<'_>) -> bool {
     let mut lines = probe::lines(h.data);
-    lines.next().is_some_and(|l| l.starts_with(b"{") && contains(l, b"\"bug_type\""))
+    lines
+        .next()
+        .is_some_and(|l| l.starts_with(b"{") && contains(l, b"\"bug_type\""))
 }
 
 declare_format!(pub IPS = "apple-ips", "Apple diagnostic report (.ips)", ["ips"], "application/x-apple-ips",
@@ -280,11 +331,17 @@ async fn ips(cx: Cx, input: Input) -> Result<()> {
     if body.is_empty() {
         json::dissect(cx.clone(), input).await?;
     } else {
-        cx.emit(embedded_as("Header", input.nested(first.span), &json::FORMAT));
+        cx.emit(embedded_as(
+            "Header",
+            input.nested(first.span),
+            &json::FORMAT,
+        ));
         cx.emit(embedded_as("Report", input.nested(body), &json::FORMAT));
     }
     let get = |k: &str| json_field(&header, k).unwrap_or_default();
-    let name = json_field(&header, "app_name").or_else(|| json_field(&header, "name")).unwrap_or_default();
+    let name = json_field(&header, "app_name")
+        .or_else(|| json_field(&header, "name"))
+        .unwrap_or_default();
     cx.annotate(format!(
         "Apple diagnostic report, bug type {}, {name} {}, {}, {}",
         get("bug_type"),
@@ -313,7 +370,13 @@ async fn crash(cx: Cx, input: Input) -> Result<()> {
         {
             let end = line.as_ref().map_or(file.len, |l| l.start);
             let span = file.sub(start, end.saturating_sub(start));
-            cx.push(Node::new(name).span(span).summary(format!("{n} lines")).lazy(block_lines, span)).await;
+            cx.push(
+                Node::new(name)
+                    .span(span)
+                    .summary(format!("{n} lines"))
+                    .lazy(block_lines, span),
+            )
+            .await;
         }
         let Some(line) = line else { break };
         if blank {
@@ -327,7 +390,9 @@ async fn crash(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let starts_section = !t.starts_with([' ', '\t'])
-            && (t.trim_end().ends_with(':') || t.starts_with("Thread ") || t.starts_with("Binary Images"));
+            && (t.trim_end().ends_with(':')
+                || t.starts_with("Thread ")
+                || t.starts_with("Binary Images"));
         if starts_section {
             let name = t.trim_end().trim_end_matches(':').to_owned();
             if name.contains("Crashed") {
@@ -336,16 +401,32 @@ async fn crash(cx: Cx, input: Input) -> Result<()> {
             section = Some((line.start, name, 0));
             continue;
         }
-        let (key, value) = t.split_once(':').map_or((t.as_str(), ""), |(k, v)| (k, v.trim()));
+        let (key, value) = t
+            .split_once(':')
+            .map_or((t.as_str(), ""), |(k, v)| (k, v.trim()));
         fields.push((key.trim().to_owned(), value.to_owned()));
-        cx.push(Node::new(key.trim().to_owned()).span(line.span).value(text(value))).await;
+        cx.push(
+            Node::new(key.trim().to_owned())
+                .span(line.span)
+                .value(text(value)),
+        )
+        .await;
     }
-    let get = |k: &str| fields.iter().find(|(f, _)| f == k).map_or("", |(_, v)| v.as_str());
+    let get = |k: &str| {
+        fields
+            .iter()
+            .find(|(f, _)| f == k)
+            .map_or("", |(_, v)| v.as_str())
+    };
     cx.annotate(format!(
         "Apple crash report: {}, {}, {}",
         get("Process"),
         get("Exception Type"),
-        if crashed.is_empty() { "no crashed thread" } else { crashed.as_str() }
+        if crashed.is_empty() {
+            "no crashed thread"
+        } else {
+            crashed.as_str()
+        }
     ));
     Ok(())
 }
@@ -363,7 +444,10 @@ async fn bcsymbolmap(cx: Cx, input: Input) -> Result<()> {
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let node = if line.number == 1 {
-            version = t.trim_start_matches("BCSymbolMap Version:").trim().to_owned();
+            version = t
+                .trim_start_matches("BCSymbolMap Version:")
+                .trim()
+                .to_owned();
             Node::new("Version").value(text(version.clone()))
         } else {
             let index = n;

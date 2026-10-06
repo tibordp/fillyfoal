@@ -39,7 +39,11 @@ async fn unpack(cx: &Cx, file: Span, magic: &[u8]) -> Result<(Span, bool)> {
     if let Some(e) = decoded.error {
         cx.diag(e);
     }
-    cx.emit(Node::new("zlib stream").span(file).summary(format!("{} → {}", size(file.len), size(decoded.span.len))));
+    cx.emit(Node::new("zlib stream").span(file).summary(format!(
+        "{} → {}",
+        size(file.len),
+        size(decoded.span.len)
+    )));
     Ok((decoded.span, true))
 }
 
@@ -48,7 +52,11 @@ async fn pstring(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str) -> Result<St
     let start = cur.pos();
     let len = cur.u8().await?;
     let s = String::from_utf8_lossy(&cur.bytes(len.into()).await?).into_owned();
-    cx.emit(Node::new(name).span(cur.since(start)).value(text(s.clone())));
+    cx.emit(
+        Node::new(name)
+            .span(cur.since(start))
+            .value(text(s.clone())),
+    );
     Ok(s)
 }
 
@@ -58,7 +66,14 @@ async fn pstring(cx: &Cx, cur: &mut Cursor<'_>, name: &'static str) -> Result<St
 declare_format!(pub FAMITRACKER = "famitracker", "FamiTracker module", ["ftm", "0cc", "dnm"],
     "audio/x-famitracker", Probe::Magic(&[(0, b"FamiTracker Module")]), famitracker);
 
-const FTM_EXPANSIONS: &[(u8, &str)] = &[(1, "VRC6"), (2, "VRC7"), (4, "FDS"), (8, "MMC5"), (16, "N163"), (32, "5B")];
+const FTM_EXPANSIONS: &[(u8, &str)] = &[
+    (1, "VRC6"),
+    (2, "VRC7"),
+    (4, "FDS"),
+    (8, "MMC5"),
+    (16, "N163"),
+    (32, "5B"),
+];
 
 async fn famitracker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -82,17 +97,31 @@ async fn famitracker(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(len);
         cur.skip(len);
         blocks = blocks.saturating_add(1);
-        let mut node = Node::new(id.clone()).span(cur.since(start)).value(dec(block_version.into(), 32)).summary(format!("version {block_version}, {len} bytes")).target(data);
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .value(dec(block_version.into(), 32))
+            .summary(format!("version {block_version}, {len} bytes"))
+            .target(data);
         if id == "INFO" {
             let raw = cx.read_avail(data.sub(0, 96)).await?;
             title = crate::text::until_nul(raw.get(..32).unwrap_or_default());
             author = crate::text::until_nul(raw.get(32..64).unwrap_or_default());
-            node = node.summary(format!("{title:?} by {author}")).lazy(ftm_info, data);
+            node = node
+                .summary(format!("{title:?} by {author}"))
+                .lazy(ftm_info, data);
         } else if id == "PARAMS" {
             let raw = cx.read_avail(data.sub(0, 1)).await?;
             let mask = raw.first().copied().unwrap_or(0);
-            let names: Vec<&str> = FTM_EXPANSIONS.iter().filter(|e| mask & e.0 != 0).map(|e| e.1).collect();
-            chips = if names.is_empty() { "2A03".to_owned() } else { format!("2A03 + {}", names.join(" + ")) };
+            let names: Vec<&str> = FTM_EXPANSIONS
+                .iter()
+                .filter(|e| mask & e.0 != 0)
+                .map(|e| e.1)
+                .collect();
+            chips = if names.is_empty() {
+                "2A03".to_owned()
+            } else {
+                format!("2A03 + {}", names.join(" + "))
+            };
             node = node.summary(format!("expansion chips: {chips}"));
         }
         cx.push(node).await;
@@ -118,7 +147,8 @@ async fn ftm_info(cx: Cx, data: Span) -> Result<()> {
 // DefleMask module (zlib-compressed)
 
 fn dmf_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b".DelekDefleMask.") || zlib_peek(h).is_some_and(|d| d.starts_with(b".DelekDefleMask."))
+    h.starts_with(b".DelekDefleMask.")
+        || zlib_peek(h).is_some_and(|d| d.starts_with(b".DelekDefleMask."))
 }
 
 declare_format!(pub DEFLEMASK = "deflemask", "DefleMask module", ["dmf"],
@@ -139,14 +169,26 @@ const DMF_SYSTEMS: EnumTable = &[
 async fn deflemask(cx: Cx, input: Input) -> Result<()> {
     let (body, packed) = unpack(&cx, input.span, b".DelekDefleMask.").await?;
     let mut cur = Cursor::new(&cx, body, LE);
-    cx.emit(Node::new("Magic").span(cur.span(16)).value(text(".DelekDefleMask.")));
+    cx.emit(
+        Node::new("Magic")
+            .span(cur.span(16))
+            .value(text(".DelekDefleMask.")),
+    );
     cur.skip(16);
     let at = cur.pos();
     let version = cur.u8().await?;
-    cx.emit(Node::new("Version").span(cur.since(at)).value(dec(version.into(), 8)));
+    cx.emit(
+        Node::new("Version")
+            .span(cur.since(at))
+            .value(dec(version.into(), 8)),
+    );
     let at = cur.pos();
     let system = cur.u8().await?;
-    cx.emit(Node::new("System").span(cur.since(at)).value(Value::Enum { raw: system.into(), bits: 8, name: lookup(DMF_SYSTEMS, system.into()) }));
+    cx.emit(Node::new("System").span(cur.since(at)).value(Value::Enum {
+        raw: system.into(),
+        bits: 8,
+        name: lookup(DMF_SYSTEMS, system.into()),
+    }));
     let name = pstring(&cx, &mut cur, "Song name").await?;
     let author = pstring(&cx, &mut cur, "Author").await?;
     let rest = cur.span(14);
@@ -157,15 +199,29 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
     f.u8("Time base").emit()?;
     f.u8("Tick time 1").emit()?;
     f.u8("Tick time 2").emit()?;
-    let ntsc = f.u8("Frames mode").enumeration(&[(0, "PAL (50 Hz)"), (1, "NTSC (60 Hz)")]).emit()?;
+    let ntsc = f
+        .u8("Frames mode")
+        .enumeration(&[(0, "PAL (50 Hz)"), (1, "NTSC (60 Hz)")])
+        .emit()?;
     f.u8("Custom rate").emit()?;
     f.ascii("Custom rate value", 3).emit()?;
-    let rows = if version >= 24 { f.u32("Rows per pattern").emit()? } else { f.u8("Rows per pattern").emit()?.into() };
+    let rows = if version >= 24 {
+        f.u32("Rows per pattern").emit()?
+    } else {
+        f.u8("Rows per pattern").emit()?.into()
+    };
     cur.seek(cur.pos().saturating_add(f.pos()));
     let at = cur.pos();
     let matrix = cur.u8().await?;
-    cx.emit(Node::new("Pattern matrix rows").span(cur.since(at)).value(dec(matrix.into(), 8)));
-    cx.emit(Node::new("Pattern matrix, instruments, wavetables, patterns, samples").span(body.tail(cur.pos())));
+    cx.emit(
+        Node::new("Pattern matrix rows")
+            .span(cur.since(at))
+            .value(dec(matrix.into(), 8)),
+    );
+    cx.emit(
+        Node::new("Pattern matrix, instruments, wavetables, patterns, samples")
+            .span(body.tail(cur.pos())),
+    );
     cx.annotate(format!(
         "DefleMask module v{version}{}, {:?} by {author}, {}, {} Hz, {matrix} orders of {rows} rows",
         if packed { " (zlib)" } else { "" },
@@ -180,7 +236,8 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
 // Furnace module (zlib-compressed)
 
 fn furnace_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"-Furnace module-") || zlib_peek(h).is_some_and(|d| d.starts_with(b"-Furnace module-"))
+    h.starts_with(b"-Furnace module-")
+        || zlib_peek(h).is_some_and(|d| d.starts_with(b"-Furnace module-"))
 }
 
 declare_format!(pub FURNACE = "furnace", "Furnace tracker module", ["fur"],
@@ -253,15 +310,25 @@ async fn furnace(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(cur.u32().await?);
         let data = cur.span(len);
         cur.skip(len);
-        let meaning = FURNACE_BLOCKS.iter().find(|b| b.0 == id).map_or("unknown block", |b| b.1);
-        let mut node = Node::new(id.clone()).span(cur.since(start)).desc(meaning).summary(format!("{len} bytes")).target(data);
+        let meaning = FURNACE_BLOCKS
+            .iter()
+            .find(|b| b.0 == id)
+            .map_or("unknown block", |b| b.1);
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .desc(meaning)
+            .summary(format!("{len} bytes"))
+            .target(data);
         let n = counts.entry(id.clone()).or_insert(0u32);
         *n = n.saturating_add(1);
         if id == "INFO" {
             let raw = cx.read_avail(data.sub(0, 512)).await?;
             for &c in raw.get(24..56).unwrap_or_default() {
                 if c != 0 {
-                    chips.push(lookup(FURNACE_CHIPS, c.into()).map_or_else(|| format!("chip {c:#04x}"), str::to_owned));
+                    chips.push(
+                        lookup(FURNACE_CHIPS, c.into())
+                            .map_or_else(|| format!("chip {c:#04x}"), str::to_owned),
+                    );
                 }
             }
             // Name and author are NUL-terminated after the 32+32+32+128 chip tables.
@@ -269,7 +336,9 @@ async fn furnace(cx: Cx, input: Input) -> Result<()> {
             let mut it = strings.split(|&b| b == 0);
             name = String::from_utf8_lossy(it.next().unwrap_or_default()).into_owned();
             author = String::from_utf8_lossy(it.next().unwrap_or_default()).into_owned();
-            node = node.summary(format!("{name:?} by {author}")).lazy(furnace_info, data);
+            node = node
+                .summary(format!("{name:?} by {author}"))
+                .lazy(furnace_info, data);
         }
         cx.push(node).await;
     }
@@ -277,7 +346,11 @@ async fn furnace(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "Furnace module (format {version}){}, {name:?} by {author}, {}, blocks: {}",
         if packed { ", zlib" } else { "" },
-        if chips.is_empty() { "no chips".to_owned() } else { chips.join(" + ") },
+        if chips.is_empty() {
+            "no chips".to_owned()
+        } else {
+            chips.join(" + ")
+        },
         tally.join(", ")
     ));
     Ok(())
@@ -310,7 +383,15 @@ async fn furnace_info(cx: Cx, data: Span) -> Result<()> {
     let _: FurnaceInfo = emit_record(&cx, span, LE).await?;
     let raw = cx.read_avail(data.sub(24, 32)).await?;
     for (i, &c) in raw.iter().enumerate().filter(|(_, c)| **c != 0) {
-        cx.emit(Node::new(format!("Chip {i}")).span(data.sub(24u64.saturating_add(to_u64(i)), 1)).value(Value::Enum { raw: c.into(), bits: 8, name: lookup(FURNACE_CHIPS, c.into()) }));
+        cx.emit(
+            Node::new(format!("Chip {i}"))
+                .span(data.sub(24u64.saturating_add(to_u64(i)), 1))
+                .value(Value::Enum {
+                    raw: c.into(),
+                    bits: 8,
+                    name: lookup(FURNACE_CHIPS, c.into()),
+                }),
+        );
     }
     Ok(())
 }
@@ -359,7 +440,11 @@ async fn s98(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, S98Header::SIZE);
     let h: S98Header = read_record(&cx, span, LE).await?;
     cx.emit(S98Header::node("Header", span, LE));
-    let devices = if h.version == "3" { h.devices.min(64) } else { 0 };
+    let devices = if h.version == "3" {
+        h.devices.min(64)
+    } else {
+        0
+    };
     let mut names = Vec::new();
     for i in 0..u64::from(devices) {
         let d = file.sub(32u64.saturating_add(i.saturating_mul(16)), 16);
@@ -368,13 +453,32 @@ async fn s98(cx: Cx, input: Input) -> Result<()> {
         let clock = u32_le(&raw, 4).unwrap_or(0);
         let name = lookup(S98_DEVICES, kind.into()).unwrap_or("unknown");
         names.push(name);
-        cx.emit(Node::new(format!("Device {i}")).span(d).value(Value::Enum { raw: kind.into(), bits: 32, name: lookup(S98_DEVICES, kind.into()) }).summary(format!("{clock} Hz, pan {:#x}", u32_le(&raw, 8).unwrap_or(0))));
+        cx.emit(
+            Node::new(format!("Device {i}"))
+                .span(d)
+                .value(Value::Enum {
+                    raw: kind.into(),
+                    bits: 32,
+                    name: lookup(S98_DEVICES, kind.into()),
+                })
+                .summary(format!(
+                    "{clock} Hz, pan {:#x}",
+                    u32_le(&raw, 8).unwrap_or(0)
+                )),
+        );
     }
     if names.is_empty() {
         names.push("YM2608 (OPNA)");
     }
-    let dump_end = if h.tag > h.dump { u64::from(h.tag) } else { file.len };
-    cx.emit(Node::new("Register dump").span(file.sub(h.dump.into(), dump_end.saturating_sub(h.dump.into()))));
+    let dump_end = if h.tag > h.dump {
+        u64::from(h.tag)
+    } else {
+        file.len
+    };
+    cx.emit(
+        Node::new("Register dump")
+            .span(file.sub(h.dump.into(), dump_end.saturating_sub(h.dump.into()))),
+    );
     let mut title = None;
     if h.tag != 0 {
         let tag = file.tail(h.tag.into());
@@ -382,8 +486,15 @@ async fn s98(cx: Cx, input: Input) -> Result<()> {
         let body = raw.strip_prefix(b"[S98]").unwrap_or(&raw);
         let body = body.strip_prefix(b"\xef\xbb\xbf").unwrap_or(body);
         let s = crate::text::until_nul(body);
-        title = s.lines().find_map(|l| l.strip_prefix("title=")).map(str::to_owned);
-        cx.emit(Node::new("Tags").span(tag).value(text(s.replace('\n', "; "))));
+        title = s
+            .lines()
+            .find_map(|l| l.strip_prefix("title="))
+            .map(str::to_owned);
+        cx.emit(
+            Node::new("Tags")
+                .span(tag)
+                .value(text(s.replace('\n', "; "))),
+        );
     }
     let ms = f64::from(h.timer.max(1)) / f64::from(h.timer2.max(1)) * 1000.0;
     cx.annotate(format!(
@@ -446,12 +557,20 @@ async fn gym(cx: Cx, input: Input) -> Result<()> {
         frames = Some(n);
     }
     let node = Node::new("Commands").span(data).summary(summary);
-    cx.emit(if h.packed != 0 { node.diag(Diagnostic::note("zlib-compressed")) } else { node });
+    cx.emit(if h.packed != 0 {
+        node.diag(Diagnostic::note("zlib-compressed"))
+    } else {
+        node
+    });
     cx.annotate(format!(
         "GYM log {:?} from {:?}{}",
         clean(&h.song),
         clean(&h.game),
-        frames.map_or_else(String::new, |n| format!(", {n} frames ({}:{:02} at 60 Hz)", n / 3600, n / 60 % 60))
+        frames.map_or_else(String::new, |n| format!(
+            ", {n} frames ({}:{:02} at 60 Hz)",
+            n / 3600,
+            n / 60 % 60
+        ))
     ));
     Ok(())
 }
@@ -497,18 +616,15 @@ async fn organya(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Track {i} ({kind})"))
                 .span(entry)
                 .value(dec(notes, 16))
-                .summary(format!("{notes} notes, instrument {inst}, frequency {freq}"))
+                .summary(format!(
+                    "{notes} notes, instrument {inst}, frequency {freq}"
+                ))
                 .target(notes_span),
         );
     }
     cx.annotate(format!(
         "Organya {}, {} ms/step, {}/{}, loop {}..{}, {used} tracks, {total} notes",
-        h.magic,
-        h.wait,
-        h.beats,
-        h.steps,
-        h.loop_start,
-        h.loop_end
+        h.magic, h.wait, h.beats, h.steps, h.loop_start, h.loop_end
     ));
     Ok(())
 }
@@ -536,8 +652,16 @@ record! {
 async fn goattracker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: GtsHeader = emit_record(&cx, file.sub(0, GtsHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Order lists, instruments, tables and patterns").span(file.tail(GtsHeader::SIZE)));
-    cx.annotate(format!("GoatTracker {} song {:?} by {}, {} subtune(s)", h.magic, clean(&h.name), clean(&h.author), h.subtunes));
+    cx.emit(
+        Node::new("Order lists, instruments, tables and patterns").span(file.tail(GtsHeader::SIZE)),
+    );
+    cx.annotate(format!(
+        "GoatTracker {} song {:?} by {}, {} subtune(s)",
+        h.magic,
+        clean(&h.name),
+        clean(&h.author),
+        h.subtunes
+    ));
     Ok(())
 }
 
@@ -551,7 +675,13 @@ fn sndh_probe(h: &Head<'_>) -> bool {
 declare_format!(pub SNDH = "sndh", "SNDH Atari ST music", ["sndh", "snd"],
     "audio/x-sndh", Probe::Custom(sndh_probe), sndh);
 
-const SNDH_STRINGS: &[(&str, &str)] = &[("TITL", "Title"), ("COMM", "Composer"), ("RIPP", "Ripper"), ("CONV", "Converter"), ("YEAR", "Year")];
+const SNDH_STRINGS: &[(&str, &str)] = &[
+    ("TITL", "Title"),
+    ("COMM", "Composer"),
+    ("RIPP", "Ripper"),
+    ("CONV", "Converter"),
+    ("YEAR", "Year"),
+];
 
 async fn sndh(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -560,12 +690,15 @@ async fn sndh(cx: Cx, input: Input) -> Result<()> {
     let raw = cx.read_avail(tags_span).await?;
     let mut pos = 4usize;
     cx.emit(Node::new("Magic").span(file.sub(12, 4)).value(text("SNDH")));
-    let (mut title, mut composer, mut tunes, mut timer) = (String::new(), String::new(), 1u64, String::new());
+    let (mut title, mut composer, mut tunes, mut timer) =
+        (String::new(), String::new(), 1u64, String::new());
     loop {
         while raw.get(pos) == Some(&0) {
             pos = pos.saturating_add(1);
         }
-        let Some(tag) = raw.get(pos..pos.saturating_add(4)) else { break };
+        let Some(tag) = raw.get(pos..pos.saturating_add(4)) else {
+            break;
+        };
         let tag = String::from_utf8_lossy(tag).into_owned();
         let at = to_u64(pos).saturating_add(12);
         if tag == "HDNS" {
@@ -581,35 +714,70 @@ async fn sndh(cx: Cx, input: Input) -> Result<()> {
                 "COMM" => composer = s.clone(),
                 _ => {}
             }
-            cx.emit(Node::new(label).span(file.sub(at, to_u64(len))).value(text(s)));
+            cx.emit(
+                Node::new(label)
+                    .span(file.sub(at, to_u64(len)))
+                    .value(text(s)),
+            );
             pos = pos.saturating_add(len);
         } else if tag.starts_with("##") {
             tunes = tag.get(2..).and_then(|n| n.parse().ok()).unwrap_or(1);
-            cx.emit(Node::new("Subtunes").span(file.sub(at, 4)).value(dec(tunes, 8)));
+            cx.emit(
+                Node::new("Subtunes")
+                    .span(file.sub(at, 4))
+                    .value(dec(tunes, 8)),
+            );
             pos = pos.saturating_add(4);
-        } else if ["TA", "TB", "TC", "TD", "!V"].iter().any(|p| tag.starts_with(p)) {
+        } else if ["TA", "TB", "TC", "TD", "!V"]
+            .iter()
+            .any(|p| tag.starts_with(p))
+        {
             let s = crate::text::until_nul(raw.get(pos..).unwrap_or_default());
             let len = s.len().saturating_add(1);
             timer = s.clone();
-            cx.emit(Node::new("Timer").span(file.sub(at, to_u64(len))).value(text(s)));
+            cx.emit(
+                Node::new("Timer")
+                    .span(file.sub(at, to_u64(len)))
+                    .value(text(s)),
+            );
             pos = pos.saturating_add(len);
         } else if tag == "TIME" {
             let len = 4usize.saturating_add(usize::try_from(tunes).unwrap_or(0).saturating_mul(2));
             let times: Vec<String> = (0..usize::try_from(tunes).unwrap_or(0))
-                .map(|i| u16_be(&raw, pos.saturating_add(4).saturating_add(i.saturating_mul(2))).unwrap_or(0))
+                .map(|i| {
+                    u16_be(
+                        &raw,
+                        pos.saturating_add(4).saturating_add(i.saturating_mul(2)),
+                    )
+                    .unwrap_or(0)
+                })
                 .map(|s| format!("{}:{:02}", s / 60, s % 60))
                 .collect();
-            cx.emit(Node::new("Durations").span(file.sub(at, to_u64(len))).value(text(times.join(", "))));
+            cx.emit(
+                Node::new("Durations")
+                    .span(file.sub(at, to_u64(len)))
+                    .value(text(times.join(", "))),
+            );
             pos = pos.saturating_add(len);
         } else {
-            cx.emit(Node::new(format!("Tag {tag}")).span(file.sub(at, 4)).diag(Diagnostic::unsupported("unknown SNDH tag; stopping")));
+            cx.emit(
+                Node::new(format!("Tag {tag}"))
+                    .span(file.sub(at, 4))
+                    .diag(Diagnostic::unsupported("unknown SNDH tag; stopping")),
+            );
             break;
         }
     }
-    cx.emit(Node::new("68000 replay code and data").span(file.tail(to_u64(pos).saturating_add(12))));
+    cx.emit(
+        Node::new("68000 replay code and data").span(file.tail(to_u64(pos).saturating_add(12))),
+    );
     cx.annotate(format!(
         "SNDH {title:?} by {composer}, {tunes} tune(s){}",
-        if timer.is_empty() { String::new() } else { format!(", timer {timer}") }
+        if timer.is_empty() {
+            String::new()
+        } else {
+            format!(", timer {timer}")
+        }
     ));
     Ok(())
 }
@@ -620,7 +788,12 @@ async fn sndh(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub PT3 = "pt3", "Pro Tracker 3 module (ZX Spectrum)", ["pt3"],
     "audio/x-pt3", Probe::Magic(&[(0, b"ProTracker 3."), (0, b"Vortex Tracker II")]), pt3);
 
-const PT3_TABLES: EnumTable = &[(0, "Pro Tracker"), (1, "Sound Tracker"), (2, "ASC Sound Master"), (3, "Real sound")];
+const PT3_TABLES: EnumTable = &[
+    (0, "Pro Tracker"),
+    (1, "Sound Tracker"),
+    (2, "ASC Sound Master"),
+    (3, "Real sound"),
+];
 
 async fn pt3(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -640,9 +813,20 @@ async fn pt3(cx: Cx, input: Input) -> Result<()> {
     f.node(Node::new("Ornament offsets").span(file.sub(0xa9, 32)));
     let list = file.sub(0xc9, u64::from(positions).saturating_add(1));
     let raw = cx.read_avail(list).await?;
-    let patterns: Vec<String> = raw.iter().take(usize::from(positions)).map(|&p| (p / 3).to_string()).collect();
-    cx.emit(Node::new("Position list").span(list).value(text(patterns.join(" "))));
-    cx.emit(Node::new("Patterns, samples and ornaments").span(file.tail(list.end().saturating_sub(file.offset))));
+    let patterns: Vec<String> = raw
+        .iter()
+        .take(usize::from(positions))
+        .map(|&p| (p / 3).to_string())
+        .collect();
+    cx.emit(
+        Node::new("Position list")
+            .span(list)
+            .value(text(patterns.join(" "))),
+    );
+    cx.emit(
+        Node::new("Patterns, samples and ornaments")
+            .span(file.tail(list.end().saturating_sub(file.offset))),
+    );
     cx.annotate(format!(
         "{} module {:?} by {}, {positions} positions, speed {delay}",
         banner.trim_end().trim_end_matches(" compilation of").trim(),
@@ -679,7 +863,10 @@ async fn psg(cx: Cx, input: Input) -> Result<()> {
                     i = i.saturating_add(1);
                 }
                 0xfe => {
-                    n = n.saturating_add(u64::from(raw.get(i.saturating_add(1)).copied().unwrap_or(0)).saturating_mul(4));
+                    n = n.saturating_add(
+                        u64::from(raw.get(i.saturating_add(1)).copied().unwrap_or(0))
+                            .saturating_mul(4),
+                    );
                     i = i.saturating_add(2);
                 }
                 0xfd => break,

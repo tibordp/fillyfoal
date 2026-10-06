@@ -7,13 +7,13 @@
 use super::tables::{PLATFORM, uuid, version};
 use crate::bytes::u32_le;
 use crate::cx::Cx;
+use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::binutil::{get_at, hex, name_or, perms, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::dsl::Record;
 use crate::span::Span;
 
 const LE: Endian = Endian::Little;
@@ -184,14 +184,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let limit = u64::from(u32_le(&fixed, 0x10).unwrap_or(0)).min(0x1000);
     let span = file.sub(0, limit);
     cx.emit(struct_node("Header", span, LE, limit, header));
-    let field = |offset: u64| (offset.saturating_add(4) <= limit).then(|| get_at::<u32>(&fixed, offset, LE)).flatten();
+    let field = |offset: u64| {
+        (offset.saturating_add(4) <= limit)
+            .then(|| get_at::<u32>(&fixed, offset, LE))
+            .flatten()
+    };
 
     let mapping_offset = u64::from(field(0x10).unwrap_or(0));
     let mapping_count = field(0x14).unwrap_or(0);
-    let (images_offset, images_count) = match (field(IMAGES_OFFSET), field(IMAGES_OFFSET.saturating_add(4))) {
-        (Some(o), Some(c)) if o != 0 => (o, c),
-        _ => (field(0x18).unwrap_or(0), field(0x1c).unwrap_or(0)),
-    };
+    let (images_offset, images_count) =
+        match (field(IMAGES_OFFSET), field(IMAGES_OFFSET.saturating_add(4))) {
+            (Some(o), Some(c)) if o != 0 => (o, c),
+            _ => (field(0x18).unwrap_or(0), field(0x1c).unwrap_or(0)),
+        };
 
     let arch = magic.trim_start_matches("dyld_v1").trim();
     let mut summary = format!("dyld shared cache, {arch}, {images_count} images");
@@ -235,8 +240,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{images_count} images"))
             .lazy(image_list, (images, file, ranges)),
     );
-    if let (Some(offset), Some(count)) = (field(SUBCACHE_ARRAY), field(SUBCACHE_ARRAY.saturating_add(4)))
-        && count > 0
+    if let (Some(offset), Some(count)) = (
+        field(SUBCACHE_ARRAY),
+        field(SUBCACHE_ARRAY.saturating_add(4)),
+    ) && count > 0
     {
         let v2 = limit > CACHE_SUB_TYPE;
         let size: u64 = if v2 { 56 } else { 24 };
@@ -283,7 +290,10 @@ async fn image_list(
     for i in 0..count {
         let at = span.sub(i.saturating_mul(Image::SIZE), Image::SIZE);
         let image = parse(&cx, at, LE, &(), Image::layout).await?;
-        let name = match cx.cstr(file.tail(image.path_offset.into()).sub(0, 1024)).await {
+        let name = match cx
+            .cstr(file.tail(image.path_offset.into()).sub(0, 1024))
+            .await
+        {
             Ok((s, _)) => s,
             Err(_) => format!("#{i}"),
         };

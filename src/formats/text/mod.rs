@@ -138,7 +138,11 @@ pub fn parse_datetime(text: &str) -> Option<i64> {
         None => (t, ""),
     };
     let (y, m, d) = if date.len() == 8 && !date.contains('-') {
-        (digits(date.get(..4)?)?, digits(date.get(4..6)?)?, digits(date.get(6..8)?)?)
+        (
+            digits(date.get(..4)?)?,
+            digits(date.get(4..6)?)?,
+            digits(date.get(6..8)?)?,
+        )
     } else {
         let mut parts = date.split('-');
         let y = digits(parts.next()?)?;
@@ -160,7 +164,9 @@ pub fn parse_datetime(text: &str) -> Option<i64> {
             if hours > 23 || minutes > 59 {
                 return None;
             }
-            let offset = hours.saturating_mul(3600).saturating_add(minutes.saturating_mul(60));
+            let offset = hours
+                .saturating_mul(3600)
+                .saturating_add(minutes.saturating_mul(60));
             (time.get(..i)?, offset.saturating_mul(sign))
         }
         None => (time, 0),

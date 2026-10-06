@@ -24,7 +24,11 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 fn zstr(b: &[u8]) -> String {
@@ -61,7 +65,15 @@ record! {
 async fn ptm(cx: Cx, input: Input) -> Result<()> {
     let h: PtmHeader = emit_record(&cx, input.span.sub(0, PtmHeader::SIZE), LE).await?;
     cx.emit(Node::new("Orders, samples and patterns").span(input.span.tail(PtmHeader::SIZE)));
-    cx.annotate(format!("PolyTracker {}.{:02x} module {:?}: {} channels, {} patterns, {} samples", h.major, h.minor, h.title.trim(), h.channels, h.patterns, h.samples));
+    cx.annotate(format!(
+        "PolyTracker {}.{:02x} module {:?}: {} channels, {} patterns, {} samples",
+        h.major,
+        h.minor,
+        h.title.trim(),
+        h.channels,
+        h.patterns,
+        h.samples
+    ));
     Ok(())
 }
 
@@ -89,7 +101,12 @@ async fn dmf(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    cx.annotate(format!("{} v{version} module {:?} by {:?}", tracker.trim(), title.trim(), composer.trim()));
+    cx.annotate(format!(
+        "{} v{version} module {:?} by {:?}",
+        tracker.trim(),
+        title.trim(),
+        composer.trim()
+    ));
     Ok(())
 }
 
@@ -119,8 +136,17 @@ record! {
 
 async fn imf(cx: Cx, input: Input) -> Result<()> {
     let h: ImfHeader = emit_record(&cx, input.span.sub(0, ImfHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Channels, orders, patterns and instruments").span(input.span.tail(ImfHeader::SIZE)));
-    cx.annotate(format!("Imago Orpheus module {:?}: {} patterns, {} instruments, {} BPM", h.title.trim(), h.patterns, h.instruments, h.bpm));
+    cx.emit(
+        Node::new("Channels, orders, patterns and instruments")
+            .span(input.span.tail(ImfHeader::SIZE)),
+    );
+    cx.annotate(format!(
+        "Imago Orpheus module {:?}: {} patterns, {} instruments, {} BPM",
+        h.title.trim(),
+        h.patterns,
+        h.instruments,
+        h.bpm
+    ));
     Ok(())
 }
 
@@ -136,8 +162,16 @@ async fn j2b(cx: Cx, input: Input) -> Result<()> {
     f.u32("CRC32").hex().emit()?;
     let packed = f.u32("Compressed length").emit()?;
     let unpacked = f.u32("Uncompressed length").emit()?;
-    cx.emit(content("Module (RIFF AM)", input, file.sub(24, packed.into()), Codec::Zlib, Some(unpacked.into())));
-    cx.annotate(format!("Jazz Jackrabbit 2 music, {packed} → {unpacked} bytes"));
+    cx.emit(content(
+        "Module (RIFF AM)",
+        input,
+        file.sub(24, packed.into()),
+        Codec::Zlib,
+        Some(unpacked.into()),
+    ));
+    cx.annotate(format!(
+        "Jazz Jackrabbit 2 music, {packed} → {unpacked} bytes"
+    ));
     Ok(())
 }
 
@@ -166,10 +200,26 @@ async fn gdm(cx: Cx, input: Input) -> Result<()> {
     f.u8("Master volume").emit()?;
     f.u8("Tempo").emit()?;
     f.u8("BPM").emit()?;
-    let original = f.u16("Original format").enumeration(&[(1, "MOD"), (2, "MTM"), (3, "S3M"), (4, "669"), (5, "FAR"), (6, "ULT"), (7, "STM"), (8, "MED")]).emit()?;
+    let original = f
+        .u16("Original format")
+        .enumeration(&[
+            (1, "MOD"),
+            (2, "MTM"),
+            (3, "S3M"),
+            (4, "669"),
+            (5, "FAR"),
+            (6, "ULT"),
+            (7, "STM"),
+            (8, "MED"),
+        ])
+        .emit()?;
     cx.emit(Node::new("Tables, patterns and samples").span(file.tail(0x76)));
     let _ = original;
-    cx.annotate(format!("GDM {major}.{minor} module {:?} by {:?}", title.trim(), musician.trim()));
+    cx.annotate(format!(
+        "GDM {major}.{minor} module {:?} by {:?}",
+        title.trim(),
+        musician.trim()
+    ));
     Ok(())
 }
 
@@ -211,15 +261,27 @@ async fn ams(cx: Cx, input: Input) -> Result<()> {
         let title = String::from_utf8_lossy(&cx.read(file.sub(8, len)).await?).into_owned();
         let v = cx.read(file.sub(8u64.saturating_add(len), 2)).await?;
         cx.emit(Node::new("Signature").span(file.sub(0, 7)));
-        cx.emit(Node::new("Title").span(file.sub(8, len)).value(text(title.clone())));
+        cx.emit(
+            Node::new("Title")
+                .span(file.sub(8, len))
+                .value(text(title.clone())),
+        );
         let version = u16_le(&v, 0).unwrap_or(0);
-        cx.emit(Node::new("Version").span(file.sub(8u64.saturating_add(len), 2)).value(text(format!("{}.{}", version >> 8, version & 0xff))));
+        cx.emit(
+            Node::new("Version")
+                .span(file.sub(8u64.saturating_add(len), 2))
+                .value(text(format!("{}.{}", version >> 8, version & 0xff))),
+        );
         cx.emit(Node::new("Module").span(file.tail(10u64.saturating_add(len))));
         cx.annotate(format!("Velvet Studio module {title:?}"));
     } else {
         let version = u16_le(&head, 7).unwrap_or(0);
         cx.emit(Node::new("Signature").span(file.sub(0, 7)));
-        cx.emit(Node::new("Version").span(file.sub(7, 2)).value(text(format!("{}.{}", version >> 8, version & 0xff))));
+        cx.emit(
+            Node::new("Version")
+                .span(file.sub(7, 2))
+                .value(text(format!("{}.{}", version >> 8, version & 0xff))),
+        );
         cx.emit(Node::new("Module").span(file.tail(9)));
         cx.annotate("Extreme's Tracker module");
     }
@@ -233,12 +295,22 @@ async fn symphonie(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 4)).value(uint(u32_be(&head, 4).unwrap_or(0).into(), 32)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 4))
+            .value(uint(u32_be(&head, 4).unwrap_or(0).into(), 32)),
+    );
     // Chunks: a signed type, then (for data chunks) a length.
     let mut pos = 8u64;
     let mut n = 0u32;
     while pos.saturating_add(4) <= file.len && n < 4096 {
-        let t = i32::from_be_bytes(cx.read(file.sub(pos, 4)).await?.get(..4).and_then(|s| s.try_into().ok()).unwrap_or([0; 4]));
+        let t = i32::from_be_bytes(
+            cx.read(file.sub(pos, 4))
+                .await?
+                .get(..4)
+                .and_then(|s| s.try_into().ok())
+                .unwrap_or([0; 4]),
+        );
         let (len, name) = match t {
             -1 => (8u64, "Channels"),
             -2 => (8, "Track length"),
@@ -252,11 +324,22 @@ async fn symphonie(cx: Cx, input: Input) -> Result<()> {
             -12 => (8, "Stereo detune"),
             -13 => (8, "Stereo phase"),
             _ => {
-                let l = u64::from(u32_be(&cx.read(file.sub_exact(pos.saturating_add(4), 4)?).await?, 0).unwrap_or(0));
+                let l = u64::from(
+                    u32_be(
+                        &cx.read(file.sub_exact(pos.saturating_add(4), 4)?).await?,
+                        0,
+                    )
+                    .unwrap_or(0),
+                );
                 (l.saturating_add(8), "Data chunk")
             }
         };
-        cx.push(Node::new(name).span(file.sub(pos, len)).summary(format!("type {t}"))).await;
+        cx.push(
+            Node::new(name)
+                .span(file.sub(pos, len))
+                .summary(format!("type {t}")),
+        )
+        .await;
         pos = pos.saturating_add(len);
         n = n.saturating_add(1);
     }
@@ -271,7 +354,11 @@ async fn digitrakker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let version = cx.read(file.sub(4, 1)).await?.first().copied().unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 1)).value(text(format!("{}.{}", version >> 4, version & 0xf))));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 1))
+            .value(text(format!("{}.{}", version >> 4, version & 0xf))),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(5);
     let mut title = String::new();
@@ -279,8 +366,12 @@ async fn digitrakker(cx: Cx, input: Input) -> Result<()> {
         let mut node = chunk.node();
         if chunk.id == b"IN" {
             let b = cx.read(chunk.body.sub(0, 52)).await?;
-            title = String::from_utf8_lossy(b.get(..32).unwrap_or_default()).trim().to_owned();
-            let composer = String::from_utf8_lossy(b.get(32..52).unwrap_or_default()).trim().to_owned();
+            title = String::from_utf8_lossy(b.get(..32).unwrap_or_default())
+                .trim()
+                .to_owned();
+            let composer = String::from_utf8_lossy(b.get(32..52).unwrap_or_default())
+                .trim()
+                .to_owned();
             node = node.summary(format!("{title:?} by {composer:?}"));
         }
         cx.push(node).await;
@@ -333,7 +424,11 @@ async fn psm(cx: Cx, input: Input) -> Result<()> {
         cx.annotate(format!("Protracker Studio module {:?}", title.trim()));
         return Ok(());
     }
-    cx.emit(Node::new("Header").span(file.sub(0, 12)).summary("PSM FILE"));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 12))
+            .summary("PSM FILE"),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(12);
     let mut title = String::new();
@@ -355,7 +450,8 @@ async fn psm(cx: Cx, input: Input) -> Result<()> {
 }
 
 fn amf_probe(h: &Head<'_>) -> bool {
-    (h.starts_with(b"AMF") && h.data.get(3).is_some_and(|v| (0x0a..=0x0e).contains(v))) || h.starts_with(b"ASYLUM Music Format V1.0\0")
+    (h.starts_with(b"AMF") && h.data.get(3).is_some_and(|v| (0x0a..=0x0e).contains(v)))
+        || h.starts_with(b"ASYLUM Music Format V1.0\0")
 }
 
 declare_format!(pub AMF = "amf-module", "DSMI / ASYLUM module (AMF)", ["amf"], "audio/x-amf",
@@ -374,7 +470,9 @@ async fn amf(cx: Cx, input: Input) -> Result<()> {
         let orders = f.u8("Orders").emit()?;
         f.u8("Restart position").emit()?;
         cx.emit(Node::new("Orders, samples and patterns").span(file.tail(38)));
-        cx.annotate(format!("ASYLUM module: {samples} samples, {patterns} patterns, {orders} orders"));
+        cx.annotate(format!(
+            "ASYLUM module: {samples} samples, {patterns} patterns, {orders} orders"
+        ));
         return Ok(());
     }
     let head = cx.block(file.sub(0, 41)).await?;
@@ -411,7 +509,14 @@ async fn gus_patch(cx: Cx, input: Input) -> Result<()> {
     f.u32("Data size").emit()?;
     let ins = cx.read(file.sub_exact(129, 63)?).await?;
     let name = zstr(ins.get(2..18).unwrap_or_default());
-    cx.emit(Node::new("Instrument").span(file.sub(129, 63)).summary(format!("{name:?}, {} layer(s)", ins.get(22).copied().unwrap_or(0))));
+    cx.emit(
+        Node::new("Instrument")
+            .span(file.sub(129, 63))
+            .summary(format!(
+                "{name:?}, {} layer(s)",
+                ins.get(22).copied().unwrap_or(0)
+            )),
+    );
     cx.emit(Node::new("Layer").span(file.sub(192, 47)));
     let mut pos = 239u64;
     for _ in 0..waves.min(256) {
@@ -423,14 +528,25 @@ async fn gus_patch(cx: Cx, input: Input) -> Result<()> {
         let modes = w.get(55).copied().unwrap_or(0);
         let bits = if modes & 1 != 0 { 16 } else { 8 };
         cx.push(
-            Node::new(if wname.is_empty() { "Waveform".to_owned() } else { wname })
-                .span(file.sub(pos, 96u64.saturating_add(size)))
-                .summary(format!("{size} bytes, {rate} Hz, {bits}-bit, root {:.1} Hz{}", f64::from(root) / 1000.0, if modes & 4 != 0 { ", looped" } else { "" })),
+            Node::new(if wname.is_empty() {
+                "Waveform".to_owned()
+            } else {
+                wname
+            })
+            .span(file.sub(pos, 96u64.saturating_add(size)))
+            .summary(format!(
+                "{size} bytes, {rate} Hz, {bits}-bit, root {:.1} Hz{}",
+                f64::from(root) / 1000.0,
+                if modes & 4 != 0 { ", looped" } else { "" }
+            )),
         )
         .await;
         pos = pos.saturating_add(96).saturating_add(size);
     }
-    cx.annotate(format!("GUS patch {name:?} ({}), {waves} waveforms", description.trim()));
+    cx.annotate(format!(
+        "GUS patch {name:?} ({}), {waves} waveforms",
+        description.trim()
+    ));
     Ok(())
 }
 
@@ -443,14 +559,21 @@ declare_format!(pub REALAUDIO = "realaudio", "RealAudio (.ra)", ["ra"], "audio/x
 async fn pascal(cur: &mut Cursor<'_>) -> Result<(String, Span)> {
     let len = u64::from(cur.u8().await?);
     let span = cur.span(len);
-    Ok((String::from_utf8_lossy(&cur.bytes(len).await?).into_owned(), span))
+    Ok((
+        String::from_utf8_lossy(&cur.bytes(len).await?).into_owned(),
+        span,
+    ))
 }
 
 async fn realaudio(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let version = u16_be(&cx.read(file.sub(4, 2)).await?, 0).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 2)).value(uint(version.into(), 16)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 2))
+            .value(uint(version.into(), 16)),
+    );
     if version == 3 {
         let mut cur = Cursor::new(&cx, file, BE);
         cur.seek(22);
@@ -461,7 +584,10 @@ async fn realaudio(cx: Cx, input: Input) -> Result<()> {
             parts.push(s);
         }
         cx.emit(Node::new("Audio (14.4 kbps)").span(file.tail(cur.pos())));
-        cx.annotate(format!("RealAudio 1.0 {:?}", parts.first().cloned().unwrap_or_default()));
+        cx.annotate(format!(
+            "RealAudio 1.0 {:?}",
+            parts.first().cloned().unwrap_or_default()
+        ));
         return Ok(());
     }
     let head = cx.read(file.sub(0, 70)).await?;
@@ -471,11 +597,31 @@ async fn realaudio(cx: Cx, input: Input) -> Result<()> {
     let bits = u16_be(&head, 52).unwrap_or(0);
     let channels = u16_be(&head, 54).unwrap_or(0);
     let fourcc = String::from_utf8_lossy(head.get(62..66).unwrap_or_default()).into_owned();
-    cx.emit(Node::new("Data size").span(file.sub(12, 4)).value(uint(data.into(), 32)));
-    cx.emit(Node::new("Codec flavor").span(file.sub(22, 2)).value(uint(flavor.into(), 16)));
-    cx.emit(Node::new("Sample rate").span(file.sub(48, 2)).value(uint(rate.into(), 16)));
-    cx.emit(Node::new("Channels").span(file.sub(54, 2)).value(uint(channels.into(), 16)));
-    cx.emit(Node::new("Codec").span(file.sub(62, 4)).value(text(fourcc.clone())));
+    cx.emit(
+        Node::new("Data size")
+            .span(file.sub(12, 4))
+            .value(uint(data.into(), 32)),
+    );
+    cx.emit(
+        Node::new("Codec flavor")
+            .span(file.sub(22, 2))
+            .value(uint(flavor.into(), 16)),
+    );
+    cx.emit(
+        Node::new("Sample rate")
+            .span(file.sub(48, 2))
+            .value(uint(rate.into(), 16)),
+    );
+    cx.emit(
+        Node::new("Channels")
+            .span(file.sub(54, 2))
+            .value(uint(channels.into(), 16)),
+    );
+    cx.emit(
+        Node::new("Codec")
+            .span(file.sub(62, 4))
+            .value(text(fourcc.clone())),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(69);
     let mut title = String::new();
@@ -487,7 +633,9 @@ async fn realaudio(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new(label).span(span).value(text(s)));
     }
     cx.emit(Node::new("Audio").span(file.sub(file.len.saturating_sub(data.into()), data.into())));
-    cx.annotate(format!("RealAudio v{version} {title:?}: {fourcc}, {rate} Hz, {bits}-bit, {channels} ch"));
+    cx.annotate(format!(
+        "RealAudio v{version} {title:?}: {fourcc}, {rate} Hz, {bits}-bit, {channels} ch"
+    ));
     Ok(())
 }
 
@@ -504,7 +652,10 @@ async fn psion_wve(cx: Cx, input: Input) -> Result<()> {
     f.u16("Silence before repeat").emit()?;
     f.u16("Repeats").emit()?;
     cx.emit(Node::new("A-law samples (8 kHz)").span(file.tail(32)));
-    cx.annotate(format!("Psion A-law sound, {samples} samples ({:.2} s)", f64::from(samples) / 8000.0));
+    cx.annotate(format!(
+        "Psion A-law sound, {samples} samples ({:.2} s)",
+        f64::from(samples) / 8000.0
+    ));
     Ok(())
 }
 
@@ -515,7 +666,11 @@ async fn evs(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let channels = u32_be(&cx.read(file.sub(12, 4)).await?, 0).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 12)));
-    cx.emit(Node::new("Channels").span(file.sub(12, 4)).value(uint(channels.into(), 32)));
+    cx.emit(
+        Node::new("Channels")
+            .span(file.sub(12, 4))
+            .value(uint(channels.into(), 32)),
+    );
     cx.emit(Node::new("Frames").span(file.tail(16)));
     cx.annotate(format!("EVS speech, {channels} channel(s)"));
     Ok(())
@@ -534,7 +689,11 @@ declare_format!(pub SMUSH = "smush", "LucasArts SMUSH animation (SAN/ANM)", ["sa
 async fn smush(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let size = u64::from(u32_be(&cx.read(file.sub(4, 4)).await?, 0).unwrap_or(0));
-    cx.emit(Node::new("ANIM").span(file.sub(0, 8)).summary(format!("{size} bytes")));
+    cx.emit(
+        Node::new("ANIM")
+            .span(file.sub(0, 8))
+            .summary(format!("{size} bytes")),
+    );
     let mut cur = Cursor::new(&cx, file.sub(8, size), BE);
     let mut frames = 0u32;
     let mut version = 0u16;
@@ -549,7 +708,9 @@ async fn smush(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(chunk.node()).await;
     }
-    cx.annotate(format!("SMUSH animation v{version}, {declared} frames declared, {frames} present"));
+    cx.annotate(format!(
+        "SMUSH animation v{version}, {declared} frames declared, {frames} present"
+    ));
     Ok(())
 }
 
@@ -575,12 +736,22 @@ async fn dxa(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 15u64;
     let tag = cx.read_avail(file.sub(pos, 4)).await?;
     if tag == b"WAVE" {
-        let size = u64::from(u32_be(&cx.read(file.sub(pos.saturating_add(4), 4)).await?, 0).unwrap_or(0));
-        cx.emit(embedded("Sound (WAV)", input.nested(file.sub(pos.saturating_add(8), size))));
+        let size =
+            u64::from(u32_be(&cx.read(file.sub(pos.saturating_add(4), 4)).await?, 0).unwrap_or(0));
+        cx.emit(embedded(
+            "Sound (WAV)",
+            input.nested(file.sub(pos.saturating_add(8), size)),
+        ));
         pos = pos.saturating_add(8).saturating_add(size);
     }
-    cx.emit(Node::new("Frames").span(file.tail(pos)).summary(format!("{frames} FRAM/NULL records")));
-    cx.annotate(format!("DXA video, {w}×{h}, {frames} frames at {fps:.2} fps"));
+    cx.emit(
+        Node::new("Frames")
+            .span(file.tail(pos))
+            .summary(format!("{frames} FRAM/NULL records")),
+    );
+    cx.annotate(format!(
+        "DXA video, {w}×{h}, {frames} frames at {fps:.2} fps"
+    ));
     Ok(())
 }
 
@@ -590,8 +761,21 @@ declare_format!(pub ARMOVIE = "armovie", "Acorn Replay movie (ARMovie)", ["rpl"]
 async fn armovie(cx: Cx, input: Input) -> Result<()> {
     let lines = head_lines(&cx, input.span, 1024).await?;
     const LABELS: [&str; 15] = [
-        "Signature", "Name", "Date and copyright", "Author", "Video format", "Width", "Height", "Pixel depth", "Frames per second",
-        "Sound format", "Sound rate", "Sound channels", "Sound precision", "Frames per chunk", "Chunks",
+        "Signature",
+        "Name",
+        "Date and copyright",
+        "Author",
+        "Video format",
+        "Width",
+        "Height",
+        "Pixel depth",
+        "Frames per second",
+        "Sound format",
+        "Sound rate",
+        "Sound channels",
+        "Sound precision",
+        "Frames per chunk",
+        "Chunks",
     ];
     let mut values = Vec::new();
     for ((line, span), label) in lines.iter().zip(LABELS) {
@@ -600,7 +784,13 @@ async fn armovie(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new(label).span(*span).value(text(value)));
     }
     let get = |i: usize| values.get(i).cloned().unwrap_or_default();
-    cx.annotate(format!("Acorn Replay movie {:?}: {}×{}, {} fps", get(1), get(5), get(6), get(8)));
+    cx.annotate(format!(
+        "Acorn Replay movie {:?}: {}×{}, {} fps",
+        get(1),
+        get(5),
+        get(6),
+        get(8)
+    ));
     Ok(())
 }
 
@@ -612,7 +802,11 @@ async fn sgi_movie(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub(0, 8)).await?;
     let version = u16_be(&head, 4).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 2)).value(uint(version.into(), 16)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 2))
+            .value(uint(version.into(), 16)),
+    );
     cx.emit(Node::new("Movie").span(file.tail(8)));
     cx.annotate(format!("SGI movie, version {version}"));
     Ok(())

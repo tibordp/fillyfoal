@@ -39,7 +39,10 @@ pub fn base64(data: &[u8]) -> Decoded {
             break;
         }
         let Some(v) = base64_value(b) else {
-            error = Some(format!("invalid base64 character {:?} at {i}", char::from(b)));
+            error = Some(format!(
+                "invalid base64 character {:?} at {i}",
+                char::from(b)
+            ));
             break;
         };
         acc = (acc << 6 | v) & 0x00ff_ffff;
@@ -108,10 +111,7 @@ pub fn quoted_printable(data: &[u8]) -> Decoded {
             _ => bytes.push(b'='),
         }
     }
-    Decoded {
-        bytes,
-        error: None,
-    }
+    Decoded { bytes, error: None }
 }
 
 /// One line of uuencoded data (the first character encodes the length).
@@ -222,10 +222,7 @@ pub async fn derive_with(
     derive(cx, span, transform.name(), |d| transform.decode(d)).await
 }
 
-async fn expand_decoded(
-    cx: Cx,
-    (input, span, transform): (Input, Span, Transform),
-) -> Result<()> {
+async fn expand_decoded(cx: Cx, (input, span, transform): (Input, Span, Transform)) -> Result<()> {
     let (decoded, error) = derive_with(&cx, span, transform).await?;
     if let Some(e) = error {
         cx.diag(e);
@@ -256,4 +253,3 @@ pub fn preview(text: &str, max: usize) -> String {
         (s, false) => s,
     }
 }
-

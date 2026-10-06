@@ -21,7 +21,9 @@ pub static FORMAT: Format = Format {
     title: "Ruby YARV bytecode",
     extensions: &["yarb", "rbbin"],
     mime: "application/octet-stream",
-    probe: Probe::Custom(|h| h.starts_with(b"YARB") && u32_le(h.data, 4).is_some_and(|v| (2..=4).contains(&v))),
+    probe: Probe::Custom(|h| {
+        h.starts_with(b"YARB") && u32_le(h.data, 4).is_some_and(|v| (2..=4).contains(&v))
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -56,7 +58,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(iseqs)
             .lazy(offsets, (file, iseqs, "iseq")),
     );
-    let objects = file.sub(h.object_offset.into(), u64::from(h.objects).saturating_mul(4));
+    let objects = file.sub(
+        h.object_offset.into(),
+        u64::from(h.objects).saturating_mul(4),
+    );
     cx.emit(
         Node::new("Global Object List")
             .span(objects)

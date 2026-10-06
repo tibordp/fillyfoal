@@ -86,7 +86,11 @@ async fn logical(lines: &mut Lines<'_>) -> Result<Option<Logical>> {
         end = more.span.end();
         next = more.next;
     }
-    let span = Span::new(first.span.source, first.span.offset, end.saturating_sub(first.span.offset));
+    let span = Span::new(
+        first.span.source,
+        first.span.offset,
+        end.saturating_sub(first.span.offset),
+    );
     Ok(Some(Logical {
         bytes,
         span,
@@ -126,7 +130,10 @@ fn parse_property(line: &[u8]) -> Option<Property> {
     }
     let params = parts
         .map(|p| match p.split_once('=') {
-            Some((k, v)) => (k.trim().to_ascii_uppercase(), v.trim_matches('"').to_owned()),
+            Some((k, v)) => (
+                k.trim().to_ascii_uppercase(),
+                v.trim_matches('"').to_owned(),
+            ),
             // vCard 2.1 bare parameters (`TEL;HOME:`) are types.
             None => ("TYPE".to_owned(), p.trim().to_owned()),
         })
@@ -176,16 +183,39 @@ fn unescape(text: &str) -> String {
 
 /// Properties holding date-times.
 const DATES: &[&str] = &[
-    "DTSTART", "DTEND", "DTSTAMP", "CREATED", "LAST-MODIFIED", "DUE", "COMPLETED",
-    "RECURRENCE-ID", "BDAY", "ANNIVERSARY", "REV", "EXDATE", "RDATE",
+    "DTSTART",
+    "DTEND",
+    "DTSTAMP",
+    "CREATED",
+    "LAST-MODIFIED",
+    "DUE",
+    "COMPLETED",
+    "RECURRENCE-ID",
+    "BDAY",
+    "ANNIVERSARY",
+    "REV",
+    "EXDATE",
+    "RDATE",
 ];
 
 /// Names of the parts of structured values.
 fn structure(base: &str) -> &'static [&'static str] {
     match base {
-        "N" => &["Family name", "Given name", "Additional names", "Prefix", "Suffix"],
+        "N" => &[
+            "Family name",
+            "Given name",
+            "Additional names",
+            "Prefix",
+            "Suffix",
+        ],
         "ADR" => &[
-            "PO box", "Extended address", "Street", "Locality", "Region", "Postal code", "Country",
+            "PO box",
+            "Extended address",
+            "Street",
+            "Locality",
+            "Region",
+            "Postal code",
+            "Country",
         ],
         "ORG" => &["Organisation", "Unit", "Subunit"],
         "GEO" => &["Latitude", "Longitude"],
@@ -242,8 +272,13 @@ fn property_node(p: &Property, line: &[u8], span: Span, input: Input) -> Node {
         && meta.ends_with(";base64")
     {
         let skip = crate::bytes::to_u64(meta.len().saturating_add(6));
-        return decoded_node(p.name.clone(), input, value_span.sub(skip, u64::MAX), Transform::Base64)
-            .summary(format!("{}, data URI", meta.trim_end_matches(";base64")));
+        return decoded_node(
+            p.name.clone(),
+            input,
+            value_span.sub(skip, u64::MAX),
+            Transform::Base64,
+        )
+        .summary(format!("{}, data URI", meta.trim_end_matches(";base64")));
     }
     let text = if encoding.as_deref() == Some("QUOTED-PRINTABLE") {
         decode_8bit(&super::decode::quoted_printable(p.value.as_bytes()).bytes)
@@ -291,9 +326,10 @@ async fn property_parts(cx: Cx, (span, base): (Span, String)) -> Result<()> {
             if part.is_empty() {
                 continue;
             }
-            let name = names
-                .get(i)
-                .map_or_else(|| format!("Part {}", i.saturating_add(1)), |n| (*n).to_owned());
+            let name = names.get(i).map_or_else(
+                || format!("Part {}", i.saturating_add(1)),
+                |n| (*n).to_owned(),
+            );
             cx.emit(Node::new(name).value(Value::Text(part)));
         }
     }
@@ -347,14 +383,18 @@ impl Summary {
 
 fn begin_name(line: &[u8]) -> Option<String> {
     let t = probe::trim(line);
-    let name = t.get(6..).filter(|_| t.get(..6).is_some_and(|p| p.eq_ignore_ascii_case(b"BEGIN:")))?;
+    let name = t.get(6..).filter(|_| {
+        t.get(..6)
+            .is_some_and(|p| p.eq_ignore_ascii_case(b"BEGIN:"))
+    })?;
     Some(decode_8bit(name).to_ascii_uppercase())
 }
 
 fn is_end(line: &[u8], name: &str) -> bool {
     let t = probe::trim(line);
     t.get(..4).is_some_and(|p| p.eq_ignore_ascii_case(b"END:"))
-        && t.get(4..).is_some_and(|n| n.eq_ignore_ascii_case(name.as_bytes()))
+        && t.get(4..)
+            .is_some_and(|n| n.eq_ignore_ascii_case(name.as_bytes()))
 }
 
 /// Pushes the properties and sub-components of a component body (or of the
@@ -391,7 +431,10 @@ async fn walk(cx: &Cx, c: &Component, skip_begin: bool) -> Result<u64> {
                     closed = true;
                     break;
                 }
-                if probe::trim(&inner.bytes).get(..4).is_some_and(|p| p.eq_ignore_ascii_case(b"END:")) {
+                if probe::trim(&inner.bytes)
+                    .get(..4)
+                    .is_some_and(|p| p.eq_ignore_ascii_case(b"END:"))
+                {
                     depth = depth.saturating_sub(1);
                     continue;
                 }
@@ -420,12 +463,18 @@ async fn walk(cx: &Cx, c: &Component, skip_begin: bool) -> Result<u64> {
             cx.push(node).await;
             continue;
         }
-        if probe::trim(&line.bytes).get(..4).is_some_and(|p| p.eq_ignore_ascii_case(b"END:")) {
+        if probe::trim(&line.bytes)
+            .get(..4)
+            .is_some_and(|p| p.eq_ignore_ascii_case(b"END:"))
+        {
             // Our own END line.
             continue;
         }
         match parse_property(&line.bytes) {
-            Some(p) => cx.push(property_node(&p, &line.bytes, line.span, c.input)).await,
+            Some(p) => {
+                cx.push(property_node(&p, &line.bytes, line.span, c.input))
+                    .await
+            }
             None => {
                 cx.push(
                     text_node("Line", line.span, &decode_8bit(&line.bytes))

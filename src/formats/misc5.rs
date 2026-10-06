@@ -47,7 +47,11 @@ fn tally(found: &[Chunk]) -> String {
             None => counts.push((id, 1)),
         }
     }
-    counts.iter().map(|(k, n)| format!("{n}× {k}")).collect::<Vec<_>>().join(", ")
+    counts
+        .iter()
+        .map(|(k, n)| format!("{n}× {k}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 // ---------------------------------------------------------------------------
@@ -98,7 +102,10 @@ async fn fsb(cx: Cx, input: Input) -> Result<()> {
         }
         let at = at.saturating_add(names.into());
         cx.emit(Node::new("Sample data").span(file.sub(at, data.into())));
-        let codec = FSB5_CODECS.iter().find(|(k, _)| *k == u64::from(mode)).map_or("unknown codec", |(_, v)| v);
+        let codec = FSB5_CODECS
+            .iter()
+            .find(|(k, _)| *k == u64::from(mode))
+            .map_or("unknown codec", |(_, v)| v);
         cx.annotate(format!("FMOD FSB5 bank, {samples} samples, {codec}"));
     } else {
         let v4 = magic == b"FSB4";
@@ -121,12 +128,20 @@ async fn fsb(cx: Cx, input: Input) -> Result<()> {
             if size < 32 {
                 break;
             }
-            cx.push(Node::new(zstr(h.get(2..32).unwrap_or_default())).span(file.sub(pos, size)).summary("sample header")).await;
+            cx.push(
+                Node::new(zstr(h.get(2..32).unwrap_or_default()))
+                    .span(file.sub(pos, size))
+                    .summary("sample header"),
+            )
+            .await;
             pos = pos.saturating_add(size);
             n = n.saturating_add(1);
         }
         cx.emit(Node::new("Sample data").span(file.sub(end, data.into())));
-        cx.annotate(format!("FMOD {} bank, {samples} samples", if v4 { "FSB4" } else { "FSB3" }));
+        cx.annotate(format!(
+            "FMOD {} bank, {samples} samples",
+            if v4 { "FSB4" } else { "FSB3" }
+        ));
     }
     Ok(())
 }
@@ -139,7 +154,11 @@ declare_format!(pub XWB = "xwb", "XACT wave bank", ["xwb"], "audio/x-xwb",
 
 async fn xwb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let endian = if cx.read(file.sub(0, 4)).await? == b"WBND" { LE } else { BE };
+    let endian = if cx.read(file.sub(0, 4)).await? == b"WBND" {
+        LE
+    } else {
+        BE
+    };
     let head = cx.block(file.sub(0, 52)).await?;
     let mut f = Fields::emitting(&cx, &head, endian);
     f.ascii("Signature", 4).emit()?;
@@ -150,7 +169,11 @@ async fn xwb(cx: Cx, input: Input) -> Result<()> {
     }
     const SEGMENTS: [(&str, &str, &str); 5] = [
         ("Bank data", "Bank data offset", "Bank data length"),
-        ("Entry metadata", "Entry metadata offset", "Entry metadata length"),
+        (
+            "Entry metadata",
+            "Entry metadata offset",
+            "Entry metadata length",
+        ),
         ("Seek tables", "Seek tables offset", "Seek tables length"),
         ("Entry names", "Entry names offset", "Entry names length"),
         ("Wave data", "Wave data offset", "Wave data length"),
@@ -171,13 +194,20 @@ async fn xwb(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(*name).span(span);
         if *name == "Bank data" {
             let b = cx.read_avail(span.sub(0, 72)).await?;
-            count = if endian == LE { u32_le(&b, 4) } else { u32_be(&b, 4) }.unwrap_or(0);
+            count = if endian == LE {
+                u32_le(&b, 4)
+            } else {
+                u32_be(&b, 4)
+            }
+            .unwrap_or(0);
             bank = zstr(b.get(8..72).unwrap_or_default());
             node = node.summary(format!("{bank:?}, {count} entries"));
         }
         cx.emit(node);
     }
-    cx.annotate(format!("XACT wave bank {bank:?} (v{version}), {count} waves"));
+    cx.annotate(format!(
+        "XACT wave bank {bank:?} (v{version}), {count} waves"
+    ));
     Ok(())
 }
 
@@ -206,37 +236,70 @@ async fn wwise_bnk(cx: Cx, input: Input) -> Result<()> {
                 let b = cx.read_avail(body.sub(0, 8)).await?;
                 version = u32_le(&b, 0).unwrap_or(0);
                 id = u32_le(&b, 4).unwrap_or(0);
-                cx.push(Node::new("BKHD").span(span).summary(format!("bank header, version {version}, id {id:#x}"))).await;
+                cx.push(
+                    Node::new("BKHD")
+                        .span(span)
+                        .summary(format!("bank header, version {version}, id {id:#x}")),
+                )
+                .await;
             }
             "DIDX" => {
                 let b = cx.read(body.sub(0, size.min(12 * 4096))).await?;
                 for e in b.as_chunks::<12>().0 {
-                    index.push((u32_le(e, 0).unwrap_or(0), u32_le(e, 4).unwrap_or(0).into(), u32_le(e, 8).unwrap_or(0).into()));
+                    index.push((
+                        u32_le(e, 0).unwrap_or(0),
+                        u32_le(e, 4).unwrap_or(0).into(),
+                        u32_le(e, 8).unwrap_or(0).into(),
+                    ));
                 }
                 media = index.len();
-                cx.push(Node::new("DIDX").span(span).summary(format!("media index, {media} entries"))).await;
+                cx.push(
+                    Node::new("DIDX")
+                        .span(span)
+                        .summary(format!("media index, {media} entries")),
+                )
+                .await;
             }
             "DATA" => {
-                let mut node = Node::new("DATA").span(span).summary(format!("{} media files", index.len()));
+                let mut node = Node::new("DATA")
+                    .span(span)
+                    .summary(format!("{} media files", index.len()));
                 // Media are embedded WEM (RIFF) files.
                 node = node.lazy(bnk_media, (input, body, index.clone()));
                 cx.push(node).await;
             }
             "HIRC" => {
                 let b = cx.read_avail(body.sub(0, 4)).await?;
-                cx.push(Node::new("HIRC").span(span).summary(format!("{} hierarchy objects", u32_le(&b, 0).unwrap_or(0)))).await;
+                cx.push(
+                    Node::new("HIRC")
+                        .span(span)
+                        .summary(format!("{} hierarchy objects", u32_le(&b, 0).unwrap_or(0))),
+                )
+                .await;
             }
-            _ => cx.push(Node::new(kind).span(span).summary(format!("{size} bytes"))).await,
+            _ => {
+                cx.push(Node::new(kind).span(span).summary(format!("{size} bytes")))
+                    .await
+            }
         }
         pos = pos.saturating_add(8).saturating_add(size);
     }
-    cx.annotate(format!("Wwise sound bank {id:#x} (v{version}), {media} embedded media"));
+    cx.annotate(format!(
+        "Wwise sound bank {id:#x} (v{version}), {media} embedded media"
+    ));
     Ok(())
 }
 
-async fn bnk_media(cx: Cx, (input, data, index): (Input, Span, Vec<(u32, u64, u64)>)) -> Result<()> {
+async fn bnk_media(
+    cx: Cx,
+    (input, data, index): (Input, Span, Vec<(u32, u64, u64)>),
+) -> Result<()> {
     for (id, offset, size) in index {
-        cx.push(embedded(format!("{id}.wem"), input.nested(data.sub(offset, size)))).await;
+        cx.push(embedded(
+            format!("{id}.wem"),
+            input.nested(data.sub(offset, size)),
+        ))
+        .await;
     }
     Ok(())
 }
@@ -264,8 +327,17 @@ record! {
 async fn vag(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: VagHeader = emit_record(&cx, file.sub(0, VagHeader::SIZE), BE).await?;
-    cx.emit(Node::new("ADPCM data").span(file.sub(48, h.size.into())).summary(format!("{} frames of 16 bytes", h.size / 16)));
-    cx.annotate(format!("Sony VAG {:?}, {} Hz, {} channel(s)", h.name.trim(), h.rate, h.channels.max(1)));
+    cx.emit(
+        Node::new("ADPCM data")
+            .span(file.sub(48, h.size.into()))
+            .summary(format!("{} frames of 16 bytes", h.size / 16)),
+    );
+    cx.annotate(format!(
+        "Sony VAG {:?}, {} Hz, {} channel(s)",
+        h.name.trim(),
+        h.rate,
+        h.channels.max(1)
+    ));
     Ok(())
 }
 
@@ -275,9 +347,17 @@ declare_format!(pub OMA = "openmg", "Sony OpenMG audio (OMA/AA3)", ["oma", "omg"
 async fn oma(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 10)).await?;
-    let size = head.get(6..10).unwrap_or_default().iter().fold(0u64, |a, &b| a.wrapping_shl(7) | u64::from(b & 0x7f));
+    let size = head
+        .get(6..10)
+        .unwrap_or_default()
+        .iter()
+        .fold(0u64, |a, &b| a.wrapping_shl(7) | u64::from(b & 0x7f));
     let tag = file.sub(0, size.saturating_add(10));
-    cx.emit(Node::new("ID3-style tag").span(tag).summary(format!("{} bytes", size)));
+    cx.emit(
+        Node::new("ID3-style tag")
+            .span(tag)
+            .summary(format!("{} bytes", size)),
+    );
     let at = tag.len;
     let h = cx.read_avail(file.sub(at, 0x60)).await?;
     let codec = h.get(0x20).copied().unwrap_or(0xff);
@@ -290,7 +370,15 @@ async fn oma(cx: Cx, input: Input) -> Result<()> {
         _ => "unknown codec",
     };
     cx.emit(Node::new("EA3 header").span(file.sub(at, 0x60)));
-    cx.emit(Node::new("Codec").span(file.sub(at.saturating_add(0x20), 1)).value(Value::Enum { raw: codec.into(), bits: 8, name: Some(name) }));
+    cx.emit(
+        Node::new("Codec")
+            .span(file.sub(at.saturating_add(0x20), 1))
+            .value(Value::Enum {
+                raw: codec.into(),
+                bits: 8,
+                name: Some(name),
+            }),
+    );
     cx.emit(Node::new("Audio").span(file.tail(at.saturating_add(0x60))));
     cx.annotate(format!("OpenMG audio, {name}"));
     Ok(())
@@ -300,7 +388,9 @@ async fn oma(cx: Cx, input: Input) -> Result<()> {
 // CRI Middleware: HCA, USM, CPK, AFS
 
 fn hca_probe(h: &Head<'_>) -> bool {
-    h.data.get(..4).is_some_and(|m| m.iter().map(|b| b & 0x7f).eq(b"HCA\0".iter().copied()))
+    h.data
+        .get(..4)
+        .is_some_and(|m| m.iter().map(|b| b & 0x7f).eq(b"HCA\0".iter().copied()))
 }
 
 declare_format!(pub HCA = "hca", "CRI HCA audio", ["hca"], "audio/x-hca",
@@ -312,14 +402,31 @@ async fn hca(cx: Cx, input: Input) -> Result<()> {
     let version = u16_be(&head, 4).unwrap_or(0);
     let header_len = u64::from(u16_be(&head, 6).unwrap_or(0));
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 2)).value(text(format!("{}.{}", version >> 8, version & 0xff))));
-    cx.emit(Node::new("Header size").span(file.sub(6, 2)).value(Value::UInt { value: header_len, bits: 16, radix: crate::value::Radix::Dec }));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 2))
+            .value(text(format!("{}.{}", version >> 8, version & 0xff))),
+    );
+    cx.emit(
+        Node::new("Header size")
+            .span(file.sub(6, 2))
+            .value(Value::UInt {
+                value: header_len,
+                bits: 16,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
     let header = cx.read(file.sub(0, header_len)).await?;
     let mut at = 8usize;
     let mut summary = String::new();
     let mut encrypted = false;
     while at.saturating_add(4) <= header.len().saturating_sub(2) {
-        let id: String = header.get(at..at.saturating_add(4)).unwrap_or_default().iter().map(|b| char::from(b & 0x7f)).collect();
+        let id: String = header
+            .get(at..at.saturating_add(4))
+            .unwrap_or_default()
+            .iter()
+            .map(|b| char::from(b & 0x7f))
+            .collect();
         let id = id.trim_end_matches('\0').to_owned();
         let len: usize = match id.as_str() {
             "fmt" => 16,
@@ -330,7 +437,9 @@ async fn hca(cx: Cx, input: Input) -> Result<()> {
             "loop" => 16,
             "ciph" => 6,
             "rva" => 8,
-            "comm" => 5usize.saturating_add(usize::from(header.get(at.saturating_add(4)).copied().unwrap_or(0))),
+            "comm" => 5usize.saturating_add(usize::from(
+                header.get(at.saturating_add(4)).copied().unwrap_or(0),
+            )),
             "pad" => header.len().saturating_sub(2).saturating_sub(at),
             _ => break,
         };
@@ -338,20 +447,34 @@ async fn hca(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(id.clone()).span(span);
         if id == "fmt" {
             let channels = header.get(at.saturating_add(4)).copied().unwrap_or(0);
-            let rate = header.get(at.saturating_add(5)..at.saturating_add(8)).unwrap_or_default().iter().fold(0u32, |a, &b| a.wrapping_shl(8) | u32::from(b));
+            let rate = header
+                .get(at.saturating_add(5)..at.saturating_add(8))
+                .unwrap_or_default()
+                .iter()
+                .fold(0u32, |a, &b| a.wrapping_shl(8) | u32::from(b));
             let blocks = u32_be(&header, at.saturating_add(8)).unwrap_or(0);
             summary = format!("{channels} channel(s), {rate} Hz, {blocks} blocks");
             node = node.summary(summary.clone());
         } else if id == "ciph" {
             let kind = u16_be(&header, at.saturating_add(4)).unwrap_or(0);
             encrypted = kind != 0;
-            node = node.summary(match kind { 0 => "no encryption", 1 => "static key", 56 => "keyed", _ => "unknown" });
+            node = node.summary(match kind {
+                0 => "no encryption",
+                1 => "static key",
+                56 => "keyed",
+                _ => "unknown",
+            });
         }
         cx.emit(node);
         at = at.saturating_add(len);
     }
     cx.emit(Node::new("Frames").span(file.tail(header_len)));
-    cx.annotate(format!("CRI HCA v{}.{}, {summary}{}", version >> 8, version & 0xff, if encrypted { ", encrypted" } else { "" }));
+    cx.annotate(format!(
+        "CRI HCA v{}.{}, {summary}{}",
+        version >> 8,
+        version & 0xff,
+        if encrypted { ", encrypted" } else { "" }
+    ));
     Ok(())
 }
 
@@ -388,13 +511,22 @@ async fn cpk(cx: Cx, input: Input) -> Result<()> {
         let name_at = u64::from(u32_be(&t, 20).unwrap_or(0));
         let columns = u16_be(&t, 24).unwrap_or(0);
         let rows = u32_be(&t, 28).unwrap_or(0);
-        let (n, _) = cx.cstr(table.sub(8u64.saturating_add(strings).saturating_add(name_at), 256)).await?;
+        let (n, _) = cx
+            .cstr(table.sub(8u64.saturating_add(strings).saturating_add(name_at), 256))
+            .await?;
         name = n;
         node = node.summary(format!("{name:?}, {columns} columns × {rows} rows"));
     }
     cx.emit(node);
     cx.emit(Node::new("Content").span(file.tail(16u64.saturating_add(size))));
-    cx.annotate(format!("CRI CPK package{}", if masked { " (masked table)".to_owned() } else { format!(", table {name:?}") }));
+    cx.annotate(format!(
+        "CRI CPK package{}",
+        if masked {
+            " (masked table)".to_owned()
+        } else {
+            format!(", table {name:?}")
+        }
+    ));
     Ok(())
 }
 
@@ -404,16 +536,23 @@ declare_format!(pub AFS = "cri-afs", "CRI AFS archive", ["afs"], "application/x-
 async fn afs(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let count = u32_le(&cx.read(file.sub(4, 4)).await?, 0).unwrap_or(0);
-    cx.emit(Node::new("Files").span(file.sub(4, 4)).value(Value::UInt { value: count.into(), bits: 32, radix: crate::value::Radix::Dec }));
+    cx.emit(Node::new("Files").span(file.sub(4, 4)).value(Value::UInt {
+        value: count.into(),
+        bits: 32,
+        radix: crate::value::Radix::Dec,
+    }));
     let table_len = u64::from(count).saturating_mul(8);
     let table = cx.read(file.sub_exact(8, table_len)?).await?;
     // The name directory's location follows the table (or sits just before
     // the first file).
-    let dir = cx.read_avail(file.sub(8u64.saturating_add(table_len), 8)).await?;
+    let dir = cx
+        .read_avail(file.sub(8u64.saturating_add(table_len), 8))
+        .await?;
     let dir_at = u64::from(u32_le(&dir, 0).unwrap_or(0));
     let dir_len = u64::from(u32_le(&dir, 4).unwrap_or(0));
     let names = if dir_at > 0 && dir_len >= u64::from(count).saturating_mul(48) {
-        cx.read_avail(file.sub(dir_at, u64::from(count).saturating_mul(48))).await?
+        cx.read_avail(file.sub(dir_at, u64::from(count).saturating_mul(48)))
+            .await?
     } else {
         Vec::new()
     };
@@ -425,7 +564,11 @@ async fn afs(cx: Cx, input: Input) -> Result<()> {
             .map(zstr)
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| format!("file{i:04}"));
-        cx.push(embedded(name, input.nested(file.sub(offset, size))).target(file.sub(8u64.saturating_add(to_u64(i).saturating_mul(8)), 8))).await;
+        cx.push(
+            embedded(name, input.nested(file.sub(offset, size)))
+                .target(file.sub(8u64.saturating_add(to_u64(i).saturating_mul(8)), 8)),
+        )
+        .await;
     }
     cx.annotate(format!("CRI AFS archive, {count} files"));
     Ok(())
@@ -464,8 +607,14 @@ async fn nsv(cx: Cx, input: Input) -> Result<()> {
         f.u32("TOC allocated").emit()?;
         f.u32("TOC entries").emit()?;
         if meta > 0 {
-            let m = cx.read_avail(file.sub(28, u64::from(meta).min(4096))).await?;
-            cx.emit(Node::new("Metadata").span(file.sub(28, meta.into())).value(text(String::from_utf8_lossy(&m).into_owned())));
+            let m = cx
+                .read_avail(file.sub(28, u64::from(meta).min(4096)))
+                .await?;
+            cx.emit(
+                Node::new("Metadata")
+                    .span(file.sub(28, meta.into()))
+                    .value(text(String::from_utf8_lossy(&m).into_owned())),
+            );
         }
         at = size.into();
     }
@@ -475,9 +624,17 @@ async fn nsv(cx: Cx, input: Input) -> Result<()> {
         let audio = String::from_utf8_lossy(s.get(8..12).unwrap_or_default()).into_owned();
         let w = u16_le(&s, 12).unwrap_or(0);
         let h = u16_le(&s, 14).unwrap_or(0);
-        cx.emit(Node::new("First sync frame").span(file.sub(at, 19)).summary(format!("video {video}, audio {audio}, {w}×{h}")));
+        cx.emit(
+            Node::new("First sync frame")
+                .span(file.sub(at, 19))
+                .summary(format!("video {video}, audio {audio}, {w}×{h}")),
+        );
         cx.emit(Node::new("Stream").span(file.tail(at)));
-        cx.annotate(format!("NSV, video {}, audio {}, {w}×{h}", video.trim(), audio.trim()));
+        cx.annotate(format!(
+            "NSV, video {}, audio {}, {w}×{h}",
+            video.trim(),
+            audio.trim()
+        ));
     } else {
         cx.emit(Node::new("Stream").span(file.tail(at)));
         cx.annotate("NSV");
@@ -512,7 +669,10 @@ async fn nuv(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: NuvHeader = emit_record(&cx, file.sub(0, NuvHeader::SIZE), LE).await?;
     cx.emit(Node::new("Frames").span(file.tail(NuvHeader::SIZE)));
-    cx.annotate(format!("{} {} recording, {}×{} at {:.2} fps", h.magic, h.version, h.width, h.height, h.fps));
+    cx.annotate(format!(
+        "{} {} recording, {}×{} at {:.2} fps",
+        h.magic, h.version, h.width, h.height, h.fps
+    ));
     Ok(())
 }
 
@@ -524,7 +684,13 @@ declare_format!(pub R3D = "r3d", "RED camera raw video (R3D)", ["r3d"], "video/x
     Probe::Custom(r3d_probe), r3d);
 
 async fn r3d(cx: Cx, input: Input) -> Result<()> {
-    let found = chunks(&cx, input.span, 0, ChunkLayout::new(4, 4, BE).size_first().inclusive()).await?;
+    let found = chunks(
+        &cx,
+        input.span,
+        0,
+        ChunkLayout::new(4, 4, BE).size_first().inclusive(),
+    )
+    .await?;
     cx.annotate(format!("RED R3D clip: {}", tally(&found)));
     Ok(())
 }
@@ -558,8 +724,14 @@ async fn dpaint_anm(cx: Cx, input: Input) -> Result<()> {
     let fps = f.u16("Frames per second").emit()?;
     cx.emit(Node::new("Palette").span(file.sub(0x80, 0x400)));
     cx.emit(Node::new("Large page table").span(file.sub(0x500, 0x600)));
-    cx.emit(Node::new("Large pages").span(file.tail(0xb00)).summary(format!("{pages} × 64 KiB")));
-    cx.annotate(format!("Deluxe Paint animation, {w}×{h}, {frames} frames at {fps} fps, {records} records"));
+    cx.emit(
+        Node::new("Large pages")
+            .span(file.tail(0xb00))
+            .summary(format!("{pages} × 64 KiB")),
+    );
+    cx.annotate(format!(
+        "Deluxe Paint animation, {w}×{h}, {frames} frames at {fps} fps, {records} records"
+    ));
     Ok(())
 }
 
@@ -575,7 +747,11 @@ async fn twinvq(cx: Cx, input: Input) -> Result<()> {
     let version = String::from_utf8_lossy(head.get(4..12).unwrap_or_default()).into_owned();
     let size = u64::from(u32_be(&head, 12).unwrap_or(0));
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 8)).value(text(version.clone())));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 8))
+            .value(text(version.clone())),
+    );
     let header = file.sub(16, size);
     let mut summary = String::new();
     let mut pos = 0u64;
@@ -587,7 +763,12 @@ async fn twinvq(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(id.clone()).span(header.sub(pos, len.saturating_add(8)));
         if id == "COMM" {
             let b = cx.read_avail(body.sub(0, 12)).await?;
-            summary = format!("{} channel(s), {} kbps, {} kHz", u32_be(&b, 0).unwrap_or(0).saturating_add(1), u32_be(&b, 4).unwrap_or(0), u32_be(&b, 8).unwrap_or(0));
+            summary = format!(
+                "{} channel(s), {} kbps, {} kHz",
+                u32_be(&b, 0).unwrap_or(0).saturating_add(1),
+                u32_be(&b, 4).unwrap_or(0),
+                u32_be(&b, 8).unwrap_or(0)
+            );
             node = node.summary(summary.clone());
         } else if matches!(id.as_str(), "NAME" | "AUTH" | "(c) " | "FILE" | "COMT") {
             let t = cx.read_avail(body.sub(0, 256)).await?;
@@ -634,11 +815,18 @@ async fn exs(cx: Cx, input: Input) -> Result<()> {
         if index == 0 {
             name = chunk_name.clone();
         }
-        cx.push(Node::new(label).span(file.sub(pos, size.saturating_add(84))).summary(chunk_name)).await;
+        cx.push(
+            Node::new(label)
+                .span(file.sub(pos, size.saturating_add(84)))
+                .summary(chunk_name),
+        )
+        .await;
         pos = pos.saturating_add(84).saturating_add(size);
     }
     let [_, zones, groups, samples, ..] = counts;
-    cx.annotate(format!("EXS24 instrument {name:?}: {zones} zones, {groups} groups, {samples} samples"));
+    cx.annotate(format!(
+        "EXS24 instrument {name:?}: {zones} zones, {groups} groups, {samples} samples"
+    ));
     Ok(())
 }
 
@@ -651,10 +839,17 @@ declare_format!(pub REX2 = "rex2", "Propellerhead ReCycle loop (REX2)", ["rx2", 
 
 async fn rex2(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Container").span(file.sub(0, 12)).summary("CAT REX2"));
+    cx.emit(
+        Node::new("Container")
+            .span(file.sub(0, 12))
+            .summary("CAT REX2"),
+    );
     let found = chunks(&cx, file, 12, ChunkLayout::IFF).await?;
     let slices = found.iter().filter(|c| c.id == b"SLCE").count();
-    cx.annotate(format!("REX2 loop, {} chunks, {slices} slices", found.len()));
+    cx.annotate(format!(
+        "REX2 loop, {} chunks, {slices} slices",
+        found.len()
+    ));
     Ok(())
 }
 
@@ -679,12 +874,36 @@ async fn power_tab(cx: Cx, input: Input) -> Result<()> {
     let version = cur.u16().await?;
     let kind = cur.u8().await?;
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 2)).value(text(format!("{}.{}", version >> 8, version & 0xff))));
-    cx.emit(Node::new("File type").span(file.sub(6, 1)).value(Value::Enum { raw: kind.into(), bits: 8, name: match kind { 0 => Some("song"), 1 => Some("lesson"), _ => None } }));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 2))
+            .value(text(format!("{}.{}", version >> 8, version & 0xff))),
+    );
+    cx.emit(
+        Node::new("File type")
+            .span(file.sub(6, 1))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 8,
+                name: match kind {
+                    0 => Some("song"),
+                    1 => Some("lesson"),
+                    _ => None,
+                },
+            }),
+    );
     let mut title = String::new();
     if kind == 0 {
         let content = cur.u8().await?;
-        cx.emit(Node::new("Content type").span(cur.since(cur.pos().saturating_sub(1))).value(Value::UInt { value: content.into(), bits: 8, radix: crate::value::Radix::Hex }));
+        cx.emit(
+            Node::new("Content type")
+                .span(cur.since(cur.pos().saturating_sub(1)))
+                .value(Value::UInt {
+                    value: content.into(),
+                    bits: 8,
+                    radix: crate::value::Radix::Hex,
+                }),
+        );
         let (t, span) = mfc_string(&mut cur).await?;
         cx.emit(Node::new("Title").span(span).value(text(t.clone())));
         title = t;
@@ -695,6 +914,9 @@ async fn power_tab(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.emit(Node::new("Body").span(file.tail(cur.pos())));
-    cx.annotate(format!("Power Tab {} {title:?}", if kind == 0 { "song" } else { "lesson" }));
+    cx.annotate(format!(
+        "Power Tab {} {title:?}",
+        if kind == 0 { "song" } else { "lesson" }
+    ));
     Ok(())
 }

@@ -32,8 +32,14 @@ const CHUNK: EnumTable = &[
     (u32::from_le_bytes(*b"ISG1") as u64, "input signature"),
     (u32::from_le_bytes(*b"OSGN") as u64, "output signature"),
     (u32::from_le_bytes(*b"OSG1") as u64, "output signature"),
-    (u32::from_le_bytes(*b"OSG5") as u64, "output signature (SM5)"),
-    (u32::from_le_bytes(*b"PCSG") as u64, "patch constant signature"),
+    (
+        u32::from_le_bytes(*b"OSG5") as u64,
+        "output signature (SM5)",
+    ),
+    (
+        u32::from_le_bytes(*b"PCSG") as u64,
+        "patch constant signature",
+    ),
     (u32::from_le_bytes(*b"SHDR") as u64, "shader bytecode (SM4)"),
     (u32::from_le_bytes(*b"SHEX") as u64, "shader bytecode (SM5)"),
     (u32::from_le_bytes(*b"STAT") as u64, "statistics"),
@@ -41,7 +47,10 @@ const CHUNK: EnumTable = &[
     (u32::from_le_bytes(*b"ILDB") as u64, "DXIL with debug info"),
     (u32::from_le_bytes(*b"ILDN") as u64, "debug name"),
     (u32::from_le_bytes(*b"HASH") as u64, "shader hash"),
-    (u32::from_le_bytes(*b"PSV0") as u64, "pipeline state validation"),
+    (
+        u32::from_le_bytes(*b"PSV0") as u64,
+        "pipeline state validation",
+    ),
     (u32::from_le_bytes(*b"SFI0") as u64, "feature info"),
     (u32::from_le_bytes(*b"RTS0") as u64, "root signature"),
     (u32::from_le_bytes(*b"SDBG") as u64, "debug info"),
@@ -121,7 +130,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let hdr = cx.read_avail(file.sub(off, 8)).await?;
         let id = u32_le(&hdr, 0).unwrap_or(0);
         let size = u64::from(u32_le(&hdr, 4).unwrap_or(0));
-        chunks.push((id, file.sub(off, size.saturating_add(8)), file.sub(off.saturating_add(8), size)));
+        chunks.push((
+            id,
+            file.sub(off, size.saturating_add(8)),
+            file.sub(off.saturating_add(8), size),
+        ));
     }
     let mut summary = vec!["DirectX shader".to_owned()];
     let names: Vec<String> = chunks.iter().map(|(id, ..)| fourcc(*id)).collect();
@@ -133,7 +146,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             b"DXIL" | b"ILDB" => {
                 let v = cx.read_avail(data.sub(0, 4)).await?;
-                summary.push(format!("{} (DXIL)", shader_model(u32_le(&v, 0).unwrap_or(0))));
+                summary.push(format!(
+                    "{} (DXIL)",
+                    shader_model(u32_le(&v, 0).unwrap_or(0))
+                ));
             }
             _ => {}
         }
@@ -163,7 +179,11 @@ async fn chunk(cx: Cx, (input, id, data): (Input, u32, Span)) -> Result<()> {
                 .with(|&v, n| n.summary(shader_model(v)))
                 .emit()?;
             f.u32("length").desc("In 32-bit tokens").emit()?;
-            cx.emit(data_node("Tokens", data.tail(8), data.len.saturating_sub(8)));
+            cx.emit(data_node(
+                "Tokens",
+                data.tail(8),
+                data.len.saturating_sub(8),
+            ));
             Ok(())
         }
         b"DXIL" | b"ILDB" => {
@@ -179,7 +199,11 @@ async fn chunk(cx: Cx, (input, id, data): (Input, u32, Span)) -> Result<()> {
                 .hex()
                 .with(|&v, n| n.summary(format!("{}.{}", v >> 8, v & 0xff)))
                 .emit()?;
-            let offset = f.u32("bitcode offset").hex().desc("From the DXIL magic").emit()?;
+            let offset = f
+                .u32("bitcode offset")
+                .hex()
+                .desc("From the DXIL magic")
+                .emit()?;
             let size = f.u32("bitcode size").hex().emit()?;
             let bitcode = data.sub(8u64.saturating_add(offset.into()), size.into());
             cx.emit(embedded_as(
@@ -221,17 +245,38 @@ async fn chunk(cx: Cx, (input, id, data): (Input, u32, Span)) -> Result<()> {
 async fn signature(cx: &Cx, data: Span, id: u32) -> Result<()> {
     let bytes = cx.read(data.sub(0, 0x10000)).await?;
     let count = u32_le(&bytes, 0).unwrap_or(0);
-    cx.emit(Node::new("element count").span(data.sub(0, 4)).value(crate::formats::binutil::dec(count.into(), 32)));
-    let width = if matches!(&id.to_le_bytes(), b"ISG1" | b"OSG1") { 32usize } else { 24 };
+    cx.emit(
+        Node::new("element count")
+            .span(data.sub(0, 4))
+            .value(crate::formats::binutil::dec(count.into(), 32)),
+    );
+    let width = if matches!(&id.to_le_bytes(), b"ISG1" | b"OSG1") {
+        32usize
+    } else {
+        24
+    };
     let first = 8usize;
     for i in 0..usize::try_from(count).unwrap_or(0).min(256) {
         let at = first.saturating_add(i.saturating_mul(width));
         let off = if width == 32 { 4 } else { 0 };
-        let w = |k: usize| u32_le(&bytes, at.saturating_add(off).saturating_add(k.saturating_mul(4)));
-        let (Some(name_off), Some(index), Some(sv), Some(comp), Some(reg)) = (w(0), w(1), w(2), w(3), w(4)) else {
-            return Err(Diagnostic::truncated(data.sub(to_u64(at), to_u64(width)), 0));
+        let w = |k: usize| {
+            u32_le(
+                &bytes,
+                at.saturating_add(off).saturating_add(k.saturating_mul(4)),
+            )
         };
-        let mask = bytes.get(at.saturating_add(off).saturating_add(20)).copied().unwrap_or(0);
+        let (Some(name_off), Some(index), Some(sv), Some(comp), Some(reg)) =
+            (w(0), w(1), w(2), w(3), w(4))
+        else {
+            return Err(Diagnostic::truncated(
+                data.sub(to_u64(at), to_u64(width)),
+                0,
+            ));
+        };
+        let mask = bytes
+            .get(at.saturating_add(off).saturating_add(20))
+            .copied()
+            .unwrap_or(0);
         let name_start = usize::try_from(name_off).unwrap_or(usize::MAX);
         let name = crate::text::until_nul(bytes.get(name_start..).unwrap_or_default());
         let mask_s: String = ['x', 'y', 'z', 'w']

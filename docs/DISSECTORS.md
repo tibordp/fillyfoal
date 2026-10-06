@@ -187,6 +187,35 @@ tests fail if that ever happens on a fixture.
   decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
   bytes, consumed, error)`. Counts against `Limits::max_derived`.
 
+### Encrypted content
+
+Ask for a password only when the user expands encrypted content, never in
+a probe or a top-level listing:
+
+```rust
+// Try the free default first (PDF's empty user password, a known key).
+let key = match derive_key(b"") {
+    Some(k) => k,
+    None => match cx.unlock(archive_span, "Password for the ZIP entries", |s| check(s)).await {
+        Some(secret) => derive_key(secret.expose()).unwrap_or_default(),
+        None => return Err(Diagnostic::unsupported("encrypted (no password)").at(span)),
+    },
+};
+```
+
+- The *realm* (first argument) is the container the password unlocks; use
+  the same span for every entry so the user is asked once.
+- `cx.unlock` asks up to `secret::MAX_ATTEMPTS` times while `verify`
+  rejects the answer; `None` means declined or exhausted. Verify wherever
+  the format has a check value (ZIP check byte, AES verifier, MAC, PDF `/U`).
+- Derive sources from the plaintext only *after* verification: derived
+  sources are memoized by `Origin`, which does not include the secret.
+- Expensive key derivations (high-iteration PBKDF2, scrypt, Argon2) must
+  run in budgeted steps: loop over `cx.secret(...)` yourself and call
+  `cx.checkpoint().await` between rounds.
+- Never put secrets or derived keys in node values or diagnostics.
+- Test fixtures use the password `fillyfoal`; the test host answers with it.
+
 ## 7. Values and presentation
 
 Prefer typed values over formatted strings: `Value::UInt` (with radix),

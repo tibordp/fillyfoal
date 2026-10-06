@@ -102,7 +102,9 @@ async fn segment_header(cur: &mut Cursor<'_>) -> Result<Header> {
 
 fn page_info(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Width").emit()?;
-    f.u32("Height").desc("0xffffffff: unknown (striped)").emit()?;
+    f.u32("Height")
+        .desc("0xffffffff: unknown (striped)")
+        .emit()?;
     f.u32("X resolution").desc("Pixels per metre").emit()?;
     f.u32("Y resolution").desc("Pixels per metre").emit()?;
     f.u8("Flags").hex().emit()?;
@@ -180,7 +182,8 @@ async fn annotate(cx: &Cx, data: Span, pages: Option<u32>) {
 }
 
 fn segment_node(h: Header, data: Span) -> Node {
-    let kind = lookup(SEGMENT_TYPES, h.kind.into()).map_or_else(|| format!("Segment type {}", h.kind), str::to_owned);
+    let kind = lookup(SEGMENT_TYPES, h.kind.into())
+        .map_or_else(|| format!("Segment type {}", h.kind), str::to_owned);
     Node::new(format!("Segment {}", h.number))
         .span(h.span)
         .summary(format!("{kind}, page {}, {} bytes", h.page, data.len))

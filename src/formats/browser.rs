@@ -22,7 +22,9 @@ const BE: Endian = Endian::Big;
 
 /// Chromium's internal time: microseconds since 1601-01-01.
 fn chrome_time(us: u64) -> Value {
-    Value::Timestamp { unix_seconds: crate::text::filetime_to_unix(us.saturating_mul(10)) }
+    Value::Timestamp {
+        unix_seconds: crate::text::filetime_to_unix(us.saturating_mul(10)),
+    }
 }
 
 /// A FAT date/time pair stored as one little-endian u32 (date in the high
@@ -84,9 +86,15 @@ async fn ie_index(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{dirs} directories"))
             .lazy(ie_directories, (file, dirs)),
     );
-    cx.emit(Node::new("Allocation bitmap").span(file.sub(0x250, IE_DATA_START.saturating_sub(0x250))));
+    cx.emit(
+        Node::new("Allocation bitmap").span(file.sub(0x250, IE_DATA_START.saturating_sub(0x250))),
+    );
     cx.emit(Node::new("Hash tables").lazy(ie_hash_tables, (file, h.hash_table)));
-    cx.emit(Node::new("Records").desc("Records referenced from the hash tables, in table order").lazy(ie_records, (file, h.hash_table)));
+    cx.emit(
+        Node::new("Records")
+            .desc("Records referenced from the hash tables, in table order")
+            .lazy(ie_records, (file, h.hash_table)),
+    );
     let records = ie_record_offsets(&cx, file, h.hash_table).await?.len();
     cx.annotate(format!(
         "Internet Explorer 5.2 URL cache, {records} records, {} of {} blocks allocated",
@@ -101,7 +109,13 @@ async fn ie_directories(cx: Cx, (file, count): (Span, u64)) -> Result<()> {
         let d = cx.read(span).await?;
         let files = u32_le(&d, 0).unwrap_or(0);
         let name = crate::text::latin1(d.get(4..12).unwrap_or_default());
-        cx.push(Node::new(format!("Directory {i}")).span(span).value(text(name)).summary(format!("{files} cached files"))).await;
+        cx.push(
+            Node::new(format!("Directory {i}"))
+                .span(span)
+                .value(text(name))
+                .summary(format!("{files} cached files")),
+        )
+        .await;
     }
     Ok(())
 }
@@ -134,7 +148,9 @@ fn ie_free(hash: u32, offset: u32) -> bool {
 async fn ie_record_offsets(cx: &Cx, file: Span, first: u32) -> Result<Vec<u64>> {
     let mut out = Vec::new();
     for (at, len) in ie_tables(cx, file, first).await? {
-        let table = cx.read_avail(file.sub(at.saturating_add(16), len.saturating_sub(16))).await?;
+        let table = cx
+            .read_avail(file.sub(at.saturating_add(16), len.saturating_sub(16)))
+            .await?;
         for e in table.as_chunks::<8>().0.iter() {
             let (hash, offset) = (u32_le(e, 0).unwrap_or(0), u32_le(e, 4).unwrap_or(0));
             if !ie_free(hash, offset) && u64::from(offset) < file.len {
@@ -148,7 +164,12 @@ async fn ie_record_offsets(cx: &Cx, file: Span, first: u32) -> Result<Vec<u64>> 
 async fn ie_hash_tables(cx: Cx, (file, first): (Span, u32)) -> Result<()> {
     for (i, (at, len)) in ie_tables(&cx, file, first).await?.into_iter().enumerate() {
         let span = file.sub(at, len);
-        cx.push(Node::new(format!("Hash table {i}")).span(span).lazy(ie_hash_table, span)).await;
+        cx.push(
+            Node::new(format!("Hash table {i}"))
+                .span(span)
+                .lazy(ie_hash_table, span),
+        )
+        .await;
     }
     Ok(())
 }
@@ -183,9 +204,13 @@ fn ie_url_layout(f: &mut Fields<'_>, _: &()) -> Result<String> {
     f.u32("Number of blocks").emit()?;
     f.u64("Last modification time").filetime().emit()?;
     f.u64("Last access time").filetime().emit()?;
-    f.u32("Expiration time").with(|&v, n| n.value(fat_time(v))).emit()?;
+    f.u32("Expiration time")
+        .with(|&v, n| n.value(fat_time(v)))
+        .emit()?;
     f.u32("Unknown").emit()?;
-    f.u32("Cached file size").with(|&v, n| n.summary(size(v.into()))).emit()?;
+    f.u32("Cached file size")
+        .with(|&v, n| n.summary(size(v.into())))
+        .emit()?;
     f.bytes("Unknown", 16).emit()?;
     let location = f.u32("Location offset").hex().emit()?;
     f.u8("Cache directory index").emit()?;
@@ -195,10 +220,14 @@ fn ie_url_layout(f: &mut Fields<'_>, _: &()) -> Result<String> {
     let data = f.u32("Data offset").hex().emit()?;
     let data_size = f.u32("Data size").emit()?;
     f.u32("Unknown").emit()?;
-    f.u32("Last checked time").with(|&v, n| n.value(fat_time(v))).emit()?;
+    f.u32("Last checked time")
+        .with(|&v, n| n.value(fat_time(v)))
+        .emit()?;
     f.u32("Number of hits").emit()?;
     f.u32("Unknown").emit()?;
-    f.u32("Synchronization time").with(|&v, n| n.value(fat_time(v))).emit()?;
+    f.u32("Synchronization time")
+        .with(|&v, n| n.value(fat_time(v)))
+        .emit()?;
     let mut url = String::new();
     if location != 0 {
         f.seek(location.into());
@@ -238,7 +267,9 @@ async fn ie_records(cx: Cx, (file, first): (Span, u32)) -> Result<()> {
                 let url = ie_url_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
                 let accessed = u64_le(&block.data, 0x10).unwrap_or(0);
                 struct_node(kind, span, LE, (), ie_url_layout)
-                    .value(Value::Timestamp { unix_seconds: crate::text::filetime_to_unix(accessed) })
+                    .value(Value::Timestamp {
+                        unix_seconds: crate::text::filetime_to_unix(accessed),
+                    })
                     .summary(url)
             }
             "REDR" => {
@@ -274,7 +305,11 @@ async fn binarycookies(cx: Cx, input: Input) -> Result<()> {
     cur.skip(4);
     let pages_span = cur.span(4);
     let pages = cur.u32().await?;
-    cx.emit(Node::new("Number of pages").span(pages_span).value(crate::formats::datakit::uint(pages, 32)));
+    cx.emit(
+        Node::new("Number of pages")
+            .span(pages_span)
+            .value(crate::formats::datakit::uint(pages, 32)),
+    );
     let sizes_span = file.sub_exact(8, u64::from(pages).saturating_mul(4))?;
     let sizes = cx.read(sizes_span).await?;
     cx.emit(Node::new("Page sizes").span(sizes_span));
@@ -286,11 +321,21 @@ async fn binarycookies(cx: Cx, input: Input) -> Result<()> {
         let head = cx.read_avail(span.sub(0, 8)).await?;
         let count = u32_le(&head, 4).unwrap_or(0);
         total = total.saturating_add(count.into());
-        cx.push(Node::new(format!("Page {i}")).span(span).summary(format!("{count} cookies")).lazy(cookie_page, span)).await;
+        cx.push(
+            Node::new(format!("Page {i}"))
+                .span(span)
+                .summary(format!("{count} cookies"))
+                .lazy(cookie_page, span),
+        )
+        .await;
         at = at.saturating_add(len);
     }
     if file.len >= at.saturating_add(4) {
-        cx.emit(Node::new("Checksum").span(file.sub(at, 4)).desc("Sum of every fourth byte of each page"));
+        cx.emit(
+            Node::new("Checksum")
+                .span(file.sub(at, 4))
+                .desc("Sum of every fourth byte of each page"),
+        );
         let footer = file.sub(at.saturating_add(4), 8);
         cx.emit(Node::new("Footer").span(footer));
         let rest = file.tail(at.saturating_add(12));
@@ -306,7 +351,17 @@ async fn cookie_page(cx: Cx, page: Span) -> Result<()> {
     let head = cx.read(page.sub(0, 8)).await?;
     let count = u64::from(u32_le(&head, 4).unwrap_or(0));
     let offsets_span = page.sub_exact(8, count.saturating_mul(4))?;
-    let block = cx.block(page.sub(0, offsets_span.end().saturating_sub(page.offset).saturating_add(4))).await?;
+    let block = cx
+        .block(
+            page.sub(
+                0,
+                offsets_span
+                    .end()
+                    .saturating_sub(page.offset)
+                    .saturating_add(4),
+            ),
+        )
+        .await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.bytes("Page header", 4).emit()?;
     f.u32("Number of cookies").emit()?;
@@ -321,8 +376,14 @@ async fn cookie_page(cx: Cx, page: Span) -> Result<()> {
         let len = u64::from(u32_le(&len_bytes, 0).unwrap_or(0)).max(4);
         let span = page.sub(at, len);
         let block = cx.block(span).await?;
-        let (name, value, domain, path) = cookie_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
-        let expiry = block.data.get(40..48).and_then(|b| crate::bytes::array::<8>(b, 0)).map(f64::from_le_bytes).unwrap_or(0.0);
+        let (name, value, domain, path) =
+            cookie_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
+        let expiry = block
+            .data
+            .get(40..48)
+            .and_then(|b| crate::bytes::array::<8>(b, 0))
+            .map(f64::from_le_bytes)
+            .unwrap_or(0.0);
         cx.push(
             struct_node(format!("Cookie {name}"), span, LE, (), cookie_layout)
                 .value(cf_time(expiry))
@@ -346,8 +407,12 @@ fn cookie_layout(f: &mut Fields<'_>, _: &()) -> Result<(String, String, String, 
         f.u32("Comment offset").hex().emit()?,
     ];
     f.u32("Comment URL offset").hex().emit()?;
-    f.f64("Expiry time").with(|&v, n| n.value(cf_time(v))).emit()?;
-    f.f64("Creation time").with(|&v, n| n.value(cf_time(v))).emit()?;
+    f.f64("Expiry time")
+        .with(|&v, n| n.value(cf_time(v)))
+        .emit()?;
+    f.f64("Creation time")
+        .with(|&v, n| n.value(cf_time(v)))
+        .emit()?;
     if has_port != 0 {
         f.u16("Port").emit()?;
     }
@@ -459,9 +524,18 @@ async fn chrome_index(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, ChromeIndexHeader::SIZE);
     let h: ChromeIndexHeader = read_record(&cx, span, LE).await?;
     cx.emit(ChromeIndexHeader::node("Header", file.sub(0, 256), LE));
-    cx.emit(ChromeLru::node("LRU data", file.sub(256, ChromeLru::SIZE), LE));
+    cx.emit(ChromeLru::node(
+        "LRU data",
+        file.sub(256, ChromeLru::SIZE),
+        LE,
+    ));
     let table = file.tail(CHROME_INDEX_TABLE);
-    cx.emit(Node::new("Index table").span(table).summary(format!("{} buckets", table.len / 4)).lazy(chrome_index_table, table));
+    cx.emit(
+        Node::new("Index table")
+            .span(table)
+            .summary(format!("{} buckets", table.len / 4))
+            .lazy(chrome_index_table, table),
+    );
     cx.annotate(format!(
         "Chromium disk cache index v{}.{}, {} entries, {}",
         h.version >> 16,
@@ -479,7 +553,13 @@ async fn chrome_index_table(cx: Cx, table: Span) -> Result<()> {
         let span = cur.span(4);
         let addr = cur.u32().await?;
         if addr != 0 {
-            cx.push(Node::new(format!("Bucket {bucket}")).span(span).value(addr_value(addr)).summary(cache_addr(addr))).await;
+            cx.push(
+                Node::new(format!("Bucket {bucket}"))
+                    .span(span)
+                    .value(addr_value(addr))
+                    .summary(cache_addr(addr)),
+            )
+            .await;
         } else if bucket.is_multiple_of(256) {
             cx.checkpoint().await;
         }
@@ -514,7 +594,10 @@ async fn chrome_block_file(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, ChromeBlockHeader::SIZE);
     let h: ChromeBlockHeader = read_record(&cx, span, LE).await?;
     cx.emit(ChromeBlockHeader::node("Header", span, LE));
-    let map = file.sub(ChromeBlockHeader::SIZE, CHROME_BLOCK_HEADER.saturating_sub(ChromeBlockHeader::SIZE));
+    let map = file.sub(
+        ChromeBlockHeader::SIZE,
+        CHROME_BLOCK_HEADER.saturating_sub(ChromeBlockHeader::SIZE),
+    );
     cx.emit(Node::new("Allocation bitmap").span(map));
     let block = u64::try_from(h.entry_size).unwrap_or(0);
     let kind = match block {
@@ -532,14 +615,21 @@ async fn chrome_block_file(cx: Cx, input: Input) -> Result<()> {
                 .lazy(chrome_blocks, (input, map, block)),
         );
     }
-    cx.annotate(format!("Chromium cache block file data_{}, {kind}, {} of {} blocks used", h.this_file, h.entries, h.max_entries));
+    cx.annotate(format!(
+        "Chromium cache block file data_{}, {kind}, {} of {} blocks used",
+        h.this_file, h.entries, h.max_entries
+    ));
     Ok(())
 }
 
 async fn chrome_blocks(cx: Cx, (input, map, block): (Input, Span, u64)) -> Result<()> {
     let file = input.span;
     let bitmap = cx.read_avail(map).await?;
-    let max_blocks = file.len.saturating_sub(CHROME_BLOCK_HEADER).checked_div(block).unwrap_or(0);
+    let max_blocks = file
+        .len
+        .saturating_sub(CHROME_BLOCK_HEADER)
+        .checked_div(block)
+        .unwrap_or(0);
     let mut skip_until = 0u64;
     for index in 0..max_blocks.min(to_u64(bitmap.len()).saturating_mul(8)) {
         if index < skip_until {
@@ -559,11 +649,14 @@ async fn chrome_blocks(cx: Cx, (input, map, block): (Input, Span, u64)) -> Resul
                 let data = cx.read(span).await?;
                 let key_len = u64::from(u32_le(&data, 32).unwrap_or(0));
                 // Keys longer than the inline space spill into following blocks.
-                let blocks = (96u64.saturating_add(key_len).saturating_add(1)).div_ceil(256).clamp(1, 4);
+                let blocks = (96u64.saturating_add(key_len).saturating_add(1))
+                    .div_ceil(256)
+                    .clamp(1, 4);
                 skip_until = index.saturating_add(blocks);
                 let span = file.sub(at, blocks.saturating_mul(256));
                 let block = cx.block(span).await?;
-                let key = chrome_entry_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
+                let key =
+                    chrome_entry_layout(&mut Fields::new(&block, LE), &()).unwrap_or_default();
                 let created = u64_le(&data, 24).unwrap_or(0);
                 struct_node(format!("Entry {index}"), span, LE, (), chrome_entry_layout)
                     .value(chrome_time(created))
@@ -571,8 +664,14 @@ async fn chrome_blocks(cx: Cx, (input, map, block): (Input, Span, u64)) -> Resul
             }
             36 => {
                 let data = cx.read(span).await?;
-                struct_node(format!("Rankings node {index}"), span, LE, (), chrome_rankings_layout)
-                    .value(chrome_time(u64_le(&data, 0).unwrap_or(0)))
+                struct_node(
+                    format!("Rankings node {index}"),
+                    span,
+                    LE,
+                    (),
+                    chrome_rankings_layout,
+                )
+                .value(chrome_time(u64_le(&data, 0).unwrap_or(0)))
             }
             _ => embedded(format!("Block {index}"), input.nested(span)),
         };
@@ -586,19 +685,47 @@ const ENTRY_FLAGS: FlagTable = &[flag(1, "PARENT_ENTRY"), flag(2, "CHILD_ENTRY")
 
 fn chrome_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<String> {
     f.u32("Hash").hex().emit()?;
-    f.u32("Next entry").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
-    f.u32("Rankings node").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
+    f.u32("Next entry")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
+    f.u32("Rankings node")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
     f.i32("Reuse count").emit()?;
     f.i32("Refetch count").emit()?;
-    f.i32("State").map(|v| u32::try_from(v).unwrap_or(u32::MAX)).enumeration(ENTRY_STATES).emit()?;
-    f.u64("Creation time").with(|&v, n| n.value(chrome_time(v))).emit()?;
+    f.i32("State")
+        .map(|v| u32::try_from(v).unwrap_or(u32::MAX))
+        .enumeration(ENTRY_STATES)
+        .emit()?;
+    f.u64("Creation time")
+        .with(|&v, n| n.value(chrome_time(v)))
+        .emit()?;
     let key_len = f.i32("Key length").emit()?;
-    let long_key = f.u32("Long key address").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
-    for name in ["Stream 0 size (headers)", "Stream 1 size (body)", "Stream 2 size", "Stream 3 size"] {
+    let long_key = f
+        .u32("Long key address")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
+    for name in [
+        "Stream 0 size (headers)",
+        "Stream 1 size (body)",
+        "Stream 2 size",
+        "Stream 3 size",
+    ] {
         f.i32(name).emit()?;
     }
-    for name in ["Stream 0 address", "Stream 1 address", "Stream 2 address", "Stream 3 address"] {
-        f.u32(name).hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
+    for name in [
+        "Stream 0 address",
+        "Stream 1 address",
+        "Stream 2 address",
+        "Stream 3 address",
+    ] {
+        f.u32(name)
+            .hex()
+            .with(|&v, n| n.summary(cache_addr(v)))
+            .emit()?;
     }
     f.u32("Flags").flags(ENTRY_FLAGS).emit()?;
     f.bytes("Padding", 16).emit()?;
@@ -611,11 +738,24 @@ fn chrome_entry_layout(f: &mut Fields<'_>, _: &()) -> Result<String> {
 }
 
 fn chrome_rankings_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u64("Last used").with(|&v, n| n.value(chrome_time(v))).emit()?;
-    f.u64("Last modified").with(|&v, n| n.value(chrome_time(v))).emit()?;
-    f.u32("Next").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
-    f.u32("Previous").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
-    f.u32("Entry").hex().with(|&v, n| n.summary(cache_addr(v))).emit()?;
+    f.u64("Last used")
+        .with(|&v, n| n.value(chrome_time(v)))
+        .emit()?;
+    f.u64("Last modified")
+        .with(|&v, n| n.value(chrome_time(v)))
+        .emit()?;
+    f.u32("Next")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
+    f.u32("Previous")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
+    f.u32("Entry")
+        .hex()
+        .with(|&v, n| n.summary(cache_addr(v)))
+        .emit()?;
     f.i32("Dirty").emit()?;
     f.u32("Self hash").hex().emit()?;
     Ok(())
@@ -654,9 +794,20 @@ async fn chrome_simple(cx: Cx, input: Input) -> Result<()> {
     let end = file.len;
     let eof0_at = end.saturating_sub(SIMPLE_EOF);
     let eof0 = cx.read(file.sub(eof0_at, SIMPLE_EOF)).await?;
-    if u64_le(&eof0, 0) != Some(SIMPLE_EOF_MAGIC) || eof0_at < key_span.end().saturating_sub(file.offset) {
-        cx.emit(Node::new("Streams").span(file.tail(key_span.end().saturating_sub(file.offset))).diag(Diagnostic::malformed("no EOF record at the end of the file")));
-        cx.annotate(format!("Chromium simple cache entry v{version}: {}", clip(&key, 100)));
+    if u64_le(&eof0, 0) != Some(SIMPLE_EOF_MAGIC)
+        || eof0_at < key_span.end().saturating_sub(file.offset)
+    {
+        cx.emit(
+            Node::new("Streams")
+                .span(file.tail(key_span.end().saturating_sub(file.offset)))
+                .diag(Diagnostic::malformed(
+                    "no EOF record at the end of the file",
+                )),
+        );
+        cx.annotate(format!(
+            "Chromium simple cache entry v{version}: {}",
+            clip(&key, 100)
+        ));
         return Ok(());
     }
     let flags = u32_le(&eof0, 8).unwrap_or(0);
@@ -673,13 +824,33 @@ async fn chrome_simple(cx: Cx, input: Input) -> Result<()> {
     let body_at = key_span.end().saturating_sub(file.offset);
     let body = file.sub(body_at, eof1_at.saturating_sub(body_at));
     cx.emit(embedded("Stream 1 (body)", input.nested(body)).summary(size(body.len)));
-    cx.emit(struct_node("Stream 1 EOF", file.sub(eof1_at, SIMPLE_EOF), LE, (), simple_eof_layout));
-    cx.emit(Node::new("Stream 0 (response headers)").span(file.sub(s0_at, stream0)).summary(size(stream0)));
+    cx.emit(struct_node(
+        "Stream 1 EOF",
+        file.sub(eof1_at, SIMPLE_EOF),
+        LE,
+        (),
+        simple_eof_layout,
+    ));
+    cx.emit(
+        Node::new("Stream 0 (response headers)")
+            .span(file.sub(s0_at, stream0))
+            .summary(size(stream0)),
+    );
     if let Some(sha) = sha {
         cx.emit(Node::new("Key SHA-256").span(sha));
     }
-    cx.emit(struct_node("Stream 0 EOF", file.sub(eof0_at, SIMPLE_EOF), LE, (), simple_eof_layout));
-    cx.annotate(format!("Chromium simple cache entry v{version}: {}, {} body", clip(&key, 100), size(body.len)));
+    cx.emit(struct_node(
+        "Stream 0 EOF",
+        file.sub(eof0_at, SIMPLE_EOF),
+        LE,
+        (),
+        simple_eof_layout,
+    ));
+    cx.annotate(format!(
+        "Chromium simple cache entry v{version}: {}, {} body",
+        clip(&key, 100),
+        size(body.len)
+    ));
     Ok(())
 }
 
@@ -705,8 +876,16 @@ async fn chrome_visited(cx: Cx, input: Input) -> Result<()> {
     let h: VisitedHeader = read_record(&cx, span, LE).await?;
     cx.emit(VisitedHeader::node("Header", span, LE));
     let table = file.sub(VisitedHeader::SIZE, u64::from(h.length).saturating_mul(8));
-    cx.emit(Node::new("Fingerprints").span(table).summary(format!("{} of {} slots used", h.used, h.length)).lazy(visited_table, table));
-    cx.annotate(format!("Chromium visited links v{}, {} links in {} slots", h.version, h.used, h.length));
+    cx.emit(
+        Node::new("Fingerprints")
+            .span(table)
+            .summary(format!("{} of {} slots used", h.used, h.length))
+            .lazy(visited_table, table),
+    );
+    cx.annotate(format!(
+        "Chromium visited links v{}, {} links in {} slots",
+        h.version, h.used, h.length
+    ));
     Ok(())
 }
 
@@ -717,7 +896,12 @@ async fn visited_table(cx: Cx, table: Span) -> Result<()> {
         let span = cur.span(8);
         let fp = cur.u64().await?;
         if fp != 0 {
-            cx.push(Node::new(format!("Slot {slot}")).span(span).value(crate::formats::datakit::hex(fp, 64))).await;
+            cx.push(
+                Node::new(format!("Slot {slot}"))
+                    .span(span)
+                    .value(crate::formats::datakit::hex(fp, 64)),
+            )
+            .await;
         } else if slot.is_multiple_of(256) {
             cx.checkpoint().await;
         }
@@ -766,24 +950,32 @@ async fn snss(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let len = u64::from(cur.u16().await?);
         if len == 0 || len > cur.remaining() {
-            cx.diag(Diagnostic::malformed("command extends past the end of the file").at(cur.since(start)));
+            cx.diag(
+                Diagnostic::malformed("command extends past the end of the file")
+                    .at(cur.since(start)),
+            );
             break;
         }
         let id = cur.u8().await?;
         let payload = cur.span(len.saturating_sub(1));
         let data = cur.bytes(len.saturating_sub(1)).await?;
         count = count.saturating_add(1);
-        let name = lookup(SESSION_COMMANDS, id.into()).map_or_else(|| format!("Command {id}"), str::to_owned);
+        let name = lookup(SESSION_COMMANDS, id.into())
+            .map_or_else(|| format!("Command {id}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start)).target(payload);
         if let Some((tab, index, url, title)) = navigation(&data) {
             urls = urls.saturating_add(1);
-            node = node.value(text(url.clone())).summary(clip(&format!("tab {tab} #{index}: {title}"), 120));
+            node = node
+                .value(text(url.clone()))
+                .summary(clip(&format!("tab {tab} #{index}: {title}"), 120));
         } else {
             node = node.summary(format!("{} bytes", data.len()));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("Chromium session (SNSS v{version}), {count} commands, {urls} navigations"));
+    cx.annotate(format!(
+        "Chromium session (SNSS v{version}), {count} commands, {urls} navigations"
+    ));
     Ok(())
 }
 
@@ -804,8 +996,15 @@ fn navigation(data: &[u8]) -> Option<(i32, i32, String, String)> {
     let title_at = 16usize.checked_add(url_len.next_multiple_of(4))?;
     let title_chars = to_usize(u32_le(data, title_at)?.into());
     let title_start = title_at.checked_add(4)?;
-    let title = data.get(title_start..title_start.checked_add(title_chars.checked_mul(2)?)?).unwrap_or_default();
-    Some((tab, index, String::from_utf8_lossy(url).into_owned(), crate::text::utf16(title, LE)))
+    let title = data
+        .get(title_start..title_start.checked_add(title_chars.checked_mul(2)?)?)
+        .unwrap_or_default();
+    Some((
+        tab,
+        index,
+        String::from_utf8_lossy(url).into_owned(),
+        crate::text::utf16(title, LE),
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -901,8 +1100,11 @@ fn mork_scan(data: &[u8], from: usize, to: usize) -> Vec<(MorkKind, usize, usize
             i = mork_skip_comment(data, i);
             continue;
         } else if rest.starts_with(b"@$${") || rest.starts_with(b"@$$}") {
-            let (kind, close): (MorkKind, &[u8]) =
-                if rest.get(3) == Some(&b'{') { (MorkKind::GroupStart, b"{@") } else { (MorkKind::GroupEnd, b"}@") };
+            let (kind, close): (MorkKind, &[u8]) = if rest.get(3) == Some(&b'{') {
+                (MorkKind::GroupStart, b"{@")
+            } else {
+                (MorkKind::GroupEnd, b"}@")
+            };
             let end = rest
                 .windows(2)
                 .skip(4)
@@ -963,7 +1165,9 @@ fn mork_unescape(raw: &[u8]) -> String {
 /// Splits a cell `(col=value)` or `(^col^atom)` into its two halves; the
 /// boolean says whether the value is an atom reference.
 fn mork_cell(cell: &[u8]) -> (&[u8], &[u8], bool) {
-    let inner = cell.get(1..cell.len().saturating_sub(1)).unwrap_or_default();
+    let inner = cell
+        .get(1..cell.len().saturating_sub(1))
+        .unwrap_or_default();
     // The column part ends at '=' or at the next '^'.
     let skip = usize::from(inner.first() == Some(&b'^'));
     let split = inner
@@ -974,7 +1178,11 @@ fn mork_cell(cell: &[u8]) -> (&[u8], &[u8], bool) {
     match split {
         Some(p) => {
             let atom = inner.get(p) == Some(&b'^');
-            (inner.get(..p).unwrap_or_default(), inner.get(p.saturating_add(1)..).unwrap_or_default(), atom)
+            (
+                inner.get(..p).unwrap_or_default(),
+                inner.get(p.saturating_add(1)..).unwrap_or_default(),
+                atom,
+            )
         }
         None => (inner, &[], false),
     }
@@ -1002,8 +1210,15 @@ impl MorkAliases {
                     MorkKind::Dict => columns = slice.windows(5).any(|w| w == b"(a=c)"),
                     MorkKind::Cell => {
                         let (id, value, _) = mork_cell(slice);
-                        let map = if columns { &mut a.columns } else { &mut a.atoms };
-                        map.insert(String::from_utf8_lossy(id).into_owned(), mork_unescape(value));
+                        let map = if columns {
+                            &mut a.columns
+                        } else {
+                            &mut a.atoms
+                        };
+                        map.insert(
+                            String::from_utf8_lossy(id).into_owned(),
+                            mork_unescape(value),
+                        );
                     }
                     _ => {}
                 }
@@ -1023,7 +1238,11 @@ impl MorkAliases {
     fn value(&self, raw: &[u8], atom: bool) -> String {
         if atom {
             let id = String::from_utf8_lossy(raw).into_owned();
-            return self.atoms.get(&id).cloned().unwrap_or_else(|| format!("^{id}"));
+            return self
+                .atoms
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| format!("^{id}"));
         }
         mork_unescape(raw)
     }
@@ -1043,22 +1262,40 @@ async fn mork(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
     let first_line = data.iter().position(|&b| b == b'\n').unwrap_or(data.len());
-    let magic = String::from_utf8_lossy(data.get(..first_line).unwrap_or_default()).trim_end().to_owned();
-    cx.emit(Node::new("Magic").span(file.sub(0, to_u64(first_line))).value(text(magic.clone())));
+    let magic = String::from_utf8_lossy(data.get(..first_line).unwrap_or_default())
+        .trim_end()
+        .to_owned();
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, to_u64(first_line)))
+            .value(text(magic.clone())),
+    );
     let items = mork_scan(&data, first_line, data.len());
     let count = |k: MorkKind| items.iter().filter(|(kind, _, _)| *kind == k).count();
-    let (dicts, tables, rows, groups) =
-        (count(MorkKind::Dict), count(MorkKind::Table), count(MorkKind::Row), count(MorkKind::GroupStart));
+    let (dicts, tables, rows, groups) = (
+        count(MorkKind::Dict),
+        count(MorkKind::Table),
+        count(MorkKind::Row),
+        count(MorkKind::GroupStart),
+    );
     cx.set_count(Count::Exact(to_u64(items.len()).saturating_add(1)));
     for (kind, start, end) in items {
         let span = file.sub(to_u64(start), to_u64(end.saturating_sub(start)));
         let slice = data.get(start..end).unwrap_or_default();
         let node = match kind {
             MorkKind::GroupStart | MorkKind::GroupEnd => {
-                let name = if kind == MorkKind::GroupStart { "Group start" } else { "Group end" };
-                Node::new(name).span(span).value(text(String::from_utf8_lossy(slice).into_owned()))
+                let name = if kind == MorkKind::GroupStart {
+                    "Group start"
+                } else {
+                    "Group end"
+                };
+                Node::new(name)
+                    .span(span)
+                    .value(text(String::from_utf8_lossy(slice).into_owned()))
             }
-            MorkKind::Cell => Node::new("Cell").span(span).value(text(String::from_utf8_lossy(slice).into_owned())),
+            MorkKind::Cell => Node::new("Cell")
+                .span(span)
+                .value(text(String::from_utf8_lossy(slice).into_owned())),
             _ => mork_node(kind, file, span, slice, false),
         };
         cx.push(node).await;
@@ -1073,15 +1310,28 @@ fn mork_id(slice: &[u8]) -> String {
     let inner = slice.get(1..).unwrap_or_default();
     let end = inner
         .iter()
-        .position(|&b| matches!(b, b'(' | b'[' | b'{' | b'<' | b'\n' | b'}' | b']' | b'>' | b' '))
+        .position(|&b| {
+            matches!(
+                b,
+                b'(' | b'[' | b'{' | b'<' | b'\n' | b'}' | b']' | b'>' | b' '
+            )
+        })
         .unwrap_or(inner.len());
-    String::from_utf8_lossy(inner.get(..end).unwrap_or_default()).trim().to_owned()
+    String::from_utf8_lossy(inner.get(..end).unwrap_or_default())
+        .trim()
+        .to_owned()
 }
 
 fn mork_node(kind: MorkKind, file: Span, span: Span, slice: &[u8], meta: bool) -> Node {
     let children = mork_scan(slice, 1, slice.len().saturating_sub(1));
-    let cells = children.iter().filter(|(k, _, _)| *k == MorkKind::Cell).count();
-    let rows = children.iter().filter(|(k, _, _)| *k == MorkKind::Row).count();
+    let cells = children
+        .iter()
+        .filter(|(k, _, _)| *k == MorkKind::Cell)
+        .count();
+    let rows = children
+        .iter()
+        .filter(|(k, _, _)| *k == MorkKind::Row)
+        .count();
     let (name, summary) = match (kind, meta) {
         (MorkKind::Dict, false) => ("Dictionary".to_owned(), format!("{cells} cells")),
         (MorkKind::Dict, true) => ("Meta-dictionary".to_owned(), format!("{cells} cells")),
@@ -1089,7 +1339,10 @@ fn mork_node(kind: MorkKind, file: Span, span: Span, slice: &[u8], meta: bool) -
         (MorkKind::Table, true) => ("Meta-table".to_owned(), format!("{cells} cells")),
         _ => (format!("Row {}", mork_id(slice)), format!("{cells} cells")),
     };
-    Node::new(name).span(span).summary(summary).lazy(mork_expand, (file, span, kind))
+    Node::new(name)
+        .span(span)
+        .summary(summary)
+        .lazy(mork_expand, (file, span, kind))
 }
 
 async fn mork_expand(cx: Cx, (file, span, kind): (Span, Span, MorkKind)) -> Result<()> {
@@ -1101,11 +1354,15 @@ async fn mork_expand(cx: Cx, (file, span, kind): (Span, Span, MorkKind)) -> Resu
         let node = match child {
             MorkKind::Cell if kind == MorkKind::Dict => {
                 let (id, value, _) = mork_cell(slice);
-                Node::new(String::from_utf8_lossy(id).into_owned()).span(sub).value(text(mork_unescape(value)))
+                Node::new(String::from_utf8_lossy(id).into_owned())
+                    .span(sub)
+                    .value(text(mork_unescape(value)))
             }
             MorkKind::Cell => {
                 let (column, value, atom) = mork_cell(slice);
-                Node::new(aliases.column(column)).span(sub).value(text(aliases.value(value, atom)))
+                Node::new(aliases.column(column))
+                    .span(sub)
+                    .value(text(aliases.value(value, atom)))
             }
             // Dictionaries and tables nested directly are meta-objects.
             _ => mork_node(child, file, sub, slice, child != MorkKind::Row),
@@ -1136,11 +1393,18 @@ fn head_or_tail_u32(h: &Head<'_>, at: u64) -> Option<u32> {
 /// Where the metadata header starts, given the metadata offset.
 fn cache2_header_at(offset: u64) -> u64 {
     let chunks = offset.div_ceil(CACHE2_CHUNK);
-    offset.saturating_add(4).saturating_add(chunks.saturating_mul(2))
+    offset
+        .saturating_add(4)
+        .saturating_add(chunks.saturating_mul(2))
 }
 
 fn cache2_probe(h: &Head<'_>) -> bool {
-    let Some(offset) = h.len.checked_sub(4).and_then(|end| head_or_tail_u32(h, end)).map(u64::from) else {
+    let Some(offset) = h
+        .len
+        .checked_sub(4)
+        .and_then(|end| head_or_tail_u32(h, end))
+        .map(u64::from)
+    else {
         return false;
     };
     let header = cache2_header_at(offset);
@@ -1150,7 +1414,9 @@ fn cache2_probe(h: &Head<'_>) -> bool {
     }
     let version = head_or_tail_u32(h, header);
     let key_size = head_or_tail_u32(h, header.saturating_add(24)).map_or(0, u64::from);
-    matches!(version, Some(1..=3)) && key_size > 0 && header.saturating_add(28).saturating_add(key_size) < h.len
+    matches!(version, Some(1..=3))
+        && key_size > 0
+        && header.saturating_add(28).saturating_add(key_size) < h.len
 }
 
 declare_format!(pub FIREFOX_CACHE2 = "firefox-cache2", "Firefox cache entry (cache2)", [], "application/x-firefox-cache2",
@@ -1164,7 +1430,17 @@ fn cache2_header(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
     f.u32("Last fetched").timestamp().emit()?;
     f.u32("Last modified").timestamp().emit()?;
     f.u32("Frecency").emit()?;
-    f.u32("Expiration time").with(|&v, n| if v == u32::MAX { n.summary("never") } else { n.value(Value::Timestamp { unix_seconds: v.into() }) }).emit()?;
+    f.u32("Expiration time")
+        .with(|&v, n| {
+            if v == u32::MAX {
+                n.summary("never")
+            } else {
+                n.value(Value::Timestamp {
+                    unix_seconds: v.into(),
+                })
+            }
+        })
+        .emit()?;
     let key = f.u32("Key size").emit()?;
     if version >= 2 {
         f.u32("Flags").flags(CACHE2_FLAGS).emit()?;
@@ -1178,18 +1454,30 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     let tail = cx.read(file.sub(end, 4)).await?;
     let offset = u64::from(u32_be(&tail, 0).unwrap_or(0));
     let body = file.sub(0, offset);
-    let mut body_node = crate::formats::winforensics::text_or_embedded(&cx, input, body).await?.summary(size(offset));
+    let mut body_node = crate::formats::winforensics::text_or_embedded(&cx, input, body)
+        .await?
+        .summary(size(offset));
     body_node.name = "Body".into();
     cx.emit(body_node);
     let chunks = offset.div_ceil(CACHE2_CHUNK);
     cx.emit(Node::new("Metadata hash").span(file.sub(offset, 4)));
-    cx.emit(Node::new("Chunk hashes").span(file.sub(offset.saturating_add(4), chunks.saturating_mul(2))).summary(format!("{chunks} chunks")));
+    cx.emit(
+        Node::new("Chunk hashes")
+            .span(file.sub(offset.saturating_add(4), chunks.saturating_mul(2)))
+            .summary(format!("{chunks} chunks")),
+    );
     let header_at = cache2_header_at(offset);
     let header_span = file.sub(header_at, 32);
     let block = cx.block(header_span).await?;
     let (version, key_len) = cache2_header(&mut Fields::new(&block, BE), &())?;
     let header_len = if version >= 2 { 32 } else { 28 };
-    cx.emit(struct_node("Header", file.sub(header_at, header_len), BE, (), cache2_header));
+    cx.emit(struct_node(
+        "Header",
+        file.sub(header_at, header_len),
+        BE,
+        (),
+        cache2_header,
+    ));
     let key_at = header_at.saturating_add(header_len);
     let key_span = file.sub_exact(key_at, u64::from(key_len).saturating_add(1))?;
     let key = crate::text::until_nul(&cx.read(key_span).await?);
@@ -1206,7 +1494,9 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
         if name.is_empty() {
             break;
         }
-        let len = to_u64(name.len()).saturating_add(to_u64(value.len())).saturating_add(2);
+        let len = to_u64(name.len())
+            .saturating_add(to_u64(value.len()))
+            .saturating_add(2);
         let name = String::from_utf8_lossy(name).into_owned();
         let value = String::from_utf8_lossy(value).into_owned();
         if name == "response-head" {
@@ -1215,15 +1505,34 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
         list.push((name, value, elements.sub(at, len)));
         at = at.saturating_add(len);
     }
-    cx.emit(Node::new("Elements").span(elements).summary(format!("{} elements", list.len())).lazy(cache2_elements, list));
-    cx.emit(Node::new("Metadata offset").span(file.sub(end, 4)).value(crate::formats::datakit::hex(offset, 32)));
+    cx.emit(
+        Node::new("Elements")
+            .span(elements)
+            .summary(format!("{} elements", list.len()))
+            .lazy(cache2_elements, list),
+    );
+    cx.emit(
+        Node::new("Metadata offset")
+            .span(file.sub(end, 4))
+            .value(crate::formats::datakit::hex(offset, 32)),
+    );
     // The key is "[flags],:URL" (e.g. "a,:https://...", "O^partitionKey=...,:URL").
-    let url = key.split_once(":http").map_or(key.as_str(), |(_, rest)| rest);
-    let url = if key.contains(":http") { format!("http{url}") } else { key.clone() };
+    let url = key
+        .split_once(":http")
+        .map_or(key.as_str(), |(_, rest)| rest);
+    let url = if key.contains(":http") {
+        format!("http{url}")
+    } else {
+        key.clone()
+    };
     cx.annotate(format!(
         "Firefox cache entry v{version}: {}{}, {} body",
         clip(&url, 120),
-        if status.is_empty() { String::new() } else { format!(" ({status})") },
+        if status.is_empty() {
+            String::new()
+        } else {
+            format!(" ({status})")
+        },
         size(offset)
     ));
     Ok(())
@@ -1232,7 +1541,13 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
 async fn cache2_elements(cx: Cx, list: Vec<(String, String, Span)>) -> Result<()> {
     for (name, value, span) in list {
         let node = Node::new(name).span(span);
-        cx.push(if value.lines().count() > 1 { node.value(text(value.lines().next().unwrap_or_default())).summary(clip(value.trim_end().replace("\r\n", " | ").as_str(), 200)) } else { node.value(text(value)) }).await;
+        cx.push(if value.lines().count() > 1 {
+            node.value(text(value.lines().next().unwrap_or_default()))
+                .summary(clip(value.trim_end().replace("\r\n", " | ").as_str(), 200))
+        } else {
+            node.value(text(value))
+        })
+        .await;
     }
     Ok(())
 }
@@ -1241,7 +1556,8 @@ async fn cache2_elements(cx: Cx, list: Vec<(String, String, Span)>) -> Result<()
 // Chromium simple cache index (index-dir/the-real-index)
 
 fn simple_index_probe(h: &Head<'_>) -> bool {
-    u64_le(h.data, 8) == Some(SIMPLE_INDEX_MAGIC) && u32_le(h.data, 16).is_some_and(|v| (4..=20).contains(&v))
+    u64_le(h.data, 8) == Some(SIMPLE_INDEX_MAGIC)
+        && u32_le(h.data, 16).is_some_and(|v| (4..=20).contains(&v))
 }
 
 const SIMPLE_INDEX_MAGIC: u64 = 0x656e_7465_7220_796f;
@@ -1258,7 +1574,10 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
     f.u64("Magic").hex().emit()?;
     let version = f.u32("Version").emit()?;
     let entries = f.u64("Number of entries").emit()?;
-    let bytes = f.u64("Cache size").with(|&v, n| n.summary(size(v))).emit()?;
+    let bytes = f
+        .u64("Cache size")
+        .with(|&v, n| n.summary(size(v)))
+        .emit()?;
     let mut at = 36u64;
     if version >= 7 {
         f.u32("Write reason").emit()?;
@@ -1268,13 +1587,25 @@ async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
     // version 7 (seconds and 256-byte units in 32 bits each).
     let entry = if version >= 7 { 16u64 } else { 24 };
     let list = file.sub(at, entries.saturating_mul(entry));
-    cx.emit(Node::new("Entries").span(list).summary(format!("{entries} entries")).lazy(simple_index_entries, (list, version)));
+    cx.emit(
+        Node::new("Entries")
+            .span(list)
+            .summary(format!("{entries} entries"))
+            .lazy(simple_index_entries, (list, version)),
+    );
     let end = at.saturating_add(entries.saturating_mul(entry));
     if file.len >= end.saturating_add(8) {
         let raw = cx.read(file.sub(end, 8)).await?;
-        cx.emit(Node::new("Last modified").span(file.sub(end, 8)).value(chrome_time(u64_le(&raw, 0).unwrap_or(0))));
+        cx.emit(
+            Node::new("Last modified")
+                .span(file.sub(end, 8))
+                .value(chrome_time(u64_le(&raw, 0).unwrap_or(0))),
+        );
     }
-    cx.annotate(format!("Chromium simple cache index v{version}, {entries} entries, {}", size(bytes)));
+    cx.annotate(format!(
+        "Chromium simple cache index v{version}, {entries} entries, {}",
+        size(bytes)
+    ));
     Ok(())
 }
 
@@ -1289,11 +1620,25 @@ async fn simple_index_entries(cx: Cx, (list, version): (Span, u32)) -> Result<()
         let (time, bytes) = if version >= 7 {
             let t = u32_le(&e, 8).unwrap_or(0);
             let s = u32_le(&e, 12).unwrap_or(0);
-            (Value::Timestamp { unix_seconds: t.into() }, u64::from(s & 0x00ff_ffff).saturating_mul(256))
+            (
+                Value::Timestamp {
+                    unix_seconds: t.into(),
+                },
+                u64::from(s & 0x00ff_ffff).saturating_mul(256),
+            )
         } else {
-            (chrome_time(u64_le(&e, 8).unwrap_or(0)), u64_le(&e, 16).unwrap_or(0))
+            (
+                chrome_time(u64_le(&e, 8).unwrap_or(0)),
+                u64_le(&e, 16).unwrap_or(0),
+            )
         };
-        cx.push(Node::new(format!("{hash:016x}")).span(span).value(time).summary(size(bytes))).await;
+        cx.push(
+            Node::new(format!("{hash:016x}"))
+                .span(span)
+                .value(time)
+                .summary(size(bytes)),
+        )
+        .await;
     }
     Ok(())
 }

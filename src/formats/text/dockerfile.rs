@@ -22,8 +22,24 @@ pub static FORMAT: Format = Format {
 };
 
 const INSTRUCTIONS: &[&str] = &[
-    "FROM", "RUN", "CMD", "LABEL", "EXPOSE", "ENV", "ADD", "COPY", "ENTRYPOINT", "VOLUME",
-    "USER", "WORKDIR", "ARG", "ONBUILD", "STOPSIGNAL", "HEALTHCHECK", "SHELL", "MAINTAINER",
+    "FROM",
+    "RUN",
+    "CMD",
+    "LABEL",
+    "EXPOSE",
+    "ENV",
+    "ADD",
+    "COPY",
+    "ENTRYPOINT",
+    "VOLUME",
+    "USER",
+    "WORKDIR",
+    "ARG",
+    "ONBUILD",
+    "STOPSIGNAL",
+    "HEALTHCHECK",
+    "SHELL",
+    "MAINTAINER",
 ];
 
 fn instruction(line: &[u8]) -> Option<&'static str> {
@@ -100,7 +116,11 @@ async fn next(lines: &mut Lines<'_>) -> Result<Option<Instr>> {
         return Ok(Some(Instr {
             keyword: word.text().to_ascii_uppercase(),
             args,
-            span: Span::new(line.span.source, line.span.offset, end.saturating_sub(line.span.offset)),
+            span: Span::new(
+                line.span.source,
+                line.span.offset,
+                end.saturating_sub(line.span.offset),
+            ),
             start: line.start,
         }));
     }
@@ -156,7 +176,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             break;
         };
         stages = stages.saturating_add(1);
-        let words: Vec<&str> = i.args.split_whitespace().filter(|w| !w.starts_with("--")).collect();
+        let words: Vec<&str> = i
+            .args
+            .split_whitespace()
+            .filter(|w| !w.starts_with("--"))
+            .collect();
         let image = words.first().copied().unwrap_or_default().to_owned();
         let title = match words.as_slice() {
             [_, kw, name, ..] if kw.eq_ignore_ascii_case("as") => format!("Stage {name} ({image})"),

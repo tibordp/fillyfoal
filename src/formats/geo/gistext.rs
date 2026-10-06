@@ -24,7 +24,11 @@ use crate::value::Value;
 
 /// A text line as a leaf.
 fn line_leaf(line: &LineBuf) -> Node {
-    leaf(format!("Line {}", line.number), line.span, text(line.text()))
+    leaf(
+        format!("Line {}", line.number),
+        line.span,
+        text(line.text()),
+    )
 }
 
 /// Emits a region's lines as leaves (paged).
@@ -41,8 +45,14 @@ async fn region_lines(cx: Cx, span: Span) -> Result<()> {
 
 fn igc_probe(h: &Head<'_>) -> bool {
     let lines = super::head_lines(h, 3);
-    let (Some(a), Some(b)) = (lines.first(), lines.get(1)) else { return false };
-    a.first() == Some(&b'A') && a.len() >= 4 && a.get(1..4).is_some_and(|m| m.iter().all(u8::is_ascii_alphanumeric)) && b.starts_with(b"H")
+    let (Some(a), Some(b)) = (lines.first(), lines.get(1)) else {
+        return false;
+    };
+    a.first() == Some(&b'A')
+        && a.len() >= 4
+        && a.get(1..4)
+            .is_some_and(|m| m.iter().all(u8::is_ascii_alphanumeric))
+        && b.starts_with(b"H")
         && (b.get(1..5) == Some(b"FDTE") || probe::contains(&probe::head(h), b"\nHFDTE"))
 }
 
@@ -50,16 +60,31 @@ declare_format!(pub IGC = "igc", "IGC flight recorder log", ["igc"], "text/x-igc
     Probe::Custom(igc_probe), igc);
 
 const B_RECORD: super::Columns = &[
-    (0, 1, "Record"), (1, 6, "UTC time (HHMMSS)"), (7, 8, "Latitude (DDMMmmmN)"), (15, 9, "Longitude (DDDMMmmmE)"),
-    (24, 1, "Fix validity"), (25, 5, "Pressure altitude (m)"), (30, 5, "GNSS altitude (m)"), (35, 64, "Extensions"),
+    (0, 1, "Record"),
+    (1, 6, "UTC time (HHMMSS)"),
+    (7, 8, "Latitude (DDMMmmmN)"),
+    (15, 9, "Longitude (DDDMMmmmE)"),
+    (24, 1, "Fix validity"),
+    (25, 5, "Pressure altitude (m)"),
+    (30, 5, "GNSS altitude (m)"),
+    (35, 64, "Extensions"),
 ];
 
 /// `DDMMmmmH` / `DDDMMmmmH` as signed degrees.
 fn igc_degrees(s: &str, deg_digits: usize) -> Option<f64> {
     let d: f64 = s.get(..deg_digits)?.parse().ok()?;
-    let m: f64 = s.get(deg_digits..deg_digits.checked_add(5)?)?.parse().ok()?;
+    let m: f64 = s
+        .get(deg_digits..deg_digits.checked_add(5)?)?
+        .parse()
+        .ok()?;
     let v = d + m / 60_000.0;
-    Some(if matches!(s.get(deg_digits.checked_add(5)?..)?, "S" | "W") { -v } else { v })
+    Some(
+        if matches!(s.get(deg_digits.checked_add(5)?..)?, "S" | "W") {
+            -v
+        } else {
+            v
+        },
+    )
 }
 
 async fn igc(cx: Cx, input: Input) -> Result<()> {
@@ -73,12 +98,18 @@ async fn igc(cx: Cx, input: Input) -> Result<()> {
         let t = line.text();
         let node = match t.as_bytes().first() {
             Some(b'A') => {
-                cx.annotate(format!("IGC flight log, recorder {}", t.get(1..).unwrap_or_default().trim()));
+                cx.annotate(format!(
+                    "IGC flight log, recorder {}",
+                    t.get(1..).unwrap_or_default().trim()
+                ));
                 leaf("Logger ID", line.span, text(t.get(1..).unwrap_or_default()))
             }
             Some(b'H') => {
                 let body = t.get(2..).unwrap_or_default();
-                let (k, v) = body.split_once(':').unwrap_or((body.get(..3).unwrap_or_default(), body.get(3..).unwrap_or_default()));
+                let (k, v) = body.split_once(':').unwrap_or((
+                    body.get(..3).unwrap_or_default(),
+                    body.get(3..).unwrap_or_default(),
+                ));
                 leaf(format!("Header {}", k.trim()), line.span, text(v.trim()))
             }
             Some(b'B') => {
@@ -87,15 +118,28 @@ async fn igc(cx: Cx, input: Input) -> Result<()> {
                 let lat = igc_degrees(t.get(7..15).unwrap_or_default(), 2);
                 let lon = igc_degrees(t.get(15..24).unwrap_or_default(), 3);
                 let alt = t.get(30..35).unwrap_or_default().trim_start_matches('0');
-                let pos = lat.zip(lon).map(|(a, b)| format!(", {a:.5}°, {b:.5}°")).unwrap_or_default();
-                super::columns_node("Fix", line.span, B_RECORD).summary(format!("{}:{}:{}{pos}, {} m", time.get(..2).unwrap_or_default(), time.get(2..4).unwrap_or_default(), time.get(4..).unwrap_or_default(), if alt.is_empty() { "0" } else { alt }))
+                let pos = lat
+                    .zip(lon)
+                    .map(|(a, b)| format!(", {a:.5}°, {b:.5}°"))
+                    .unwrap_or_default();
+                super::columns_node("Fix", line.span, B_RECORD).summary(format!(
+                    "{}:{}:{}{pos}, {} m",
+                    time.get(..2).unwrap_or_default(),
+                    time.get(2..4).unwrap_or_default(),
+                    time.get(4..).unwrap_or_default(),
+                    if alt.is_empty() { "0" } else { alt }
+                ))
             }
             Some(b'I') => leaf("Fix extensions", line.span, text(t)),
             Some(b'J') => leaf("Data extensions", line.span, text(t)),
             Some(b'C') => leaf("Task", line.span, text(t.get(1..).unwrap_or_default())),
             Some(b'L') => leaf("Comment", line.span, text(t.get(1..).unwrap_or_default())),
             Some(b'E') => leaf("Event", line.span, text(t.get(1..).unwrap_or_default())),
-            Some(b'F') => leaf("Satellites", line.span, text(t.get(1..).unwrap_or_default())),
+            Some(b'F') => leaf(
+                "Satellites",
+                line.span,
+                text(t.get(1..).unwrap_or_default()),
+            ),
             Some(b'K') => leaf("Data", line.span, text(t.get(1..).unwrap_or_default())),
             Some(b'G') => leaf("Security", line.span, text(t.get(1..).unwrap_or_default())),
             _ => line_leaf(&line),
@@ -109,7 +153,9 @@ async fn igc(cx: Cx, input: Input) -> Result<()> {
 // OziExplorer
 
 fn ozi(h: &Head<'_>, title: &[u8]) -> bool {
-    super::head_lines(h, 1).first().is_some_and(|l| l.starts_with(title))
+    super::head_lines(h, 1)
+        .first()
+        .is_some_and(|l| l.starts_with(title))
 }
 
 declare_format!(pub OZI_TRACK = "ozi-track", "OziExplorer track", ["plt"], "text/x-ozi-track",
@@ -121,22 +167,77 @@ declare_format!(pub OZI_ROUTE = "ozi-route", "OziExplorer route", ["rte"], "text
 declare_format!(pub OZI_MAP = "ozi-map", "OziExplorer map calibration", ["map"], "text/x-ozi-map",
     Probe::Custom(|h| ozi(h, b"OziExplorer Map Data File")), ozi_map);
 
-const TRACK_HEADER: &[&str] = &["File type", "Datum", "Altitude units", "Reserved", "Track info", "Point count"];
-const TRACK_POINT: super::Labels = &["Latitude", "Longitude", "New segment", "Altitude (ft)", "Date (days since 1899-12-30)", "Date", "Time"];
+const TRACK_HEADER: &[&str] = &[
+    "File type",
+    "Datum",
+    "Altitude units",
+    "Reserved",
+    "Track info",
+    "Point count",
+];
+const TRACK_POINT: super::Labels = &[
+    "Latitude",
+    "Longitude",
+    "New segment",
+    "Altitude (ft)",
+    "Date (days since 1899-12-30)",
+    "Date",
+    "Time",
+];
 const WPT_HEADER: &[&str] = &["File type", "Datum", "Reserved", "GPS symbol set"];
-const WAYPOINT: super::Labels = &["Number", "Name", "Latitude", "Longitude", "Date (days since 1899-12-30)", "Symbol", "Status", "Map display format", "Foreground colour", "Background colour", "Description", "Pointer direction", "Garmin display format", "Proximity distance", "Altitude (ft)", "Font size", "Font style", "Symbol size"];
+const WAYPOINT: super::Labels = &[
+    "Number",
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Date (days since 1899-12-30)",
+    "Symbol",
+    "Status",
+    "Map display format",
+    "Foreground colour",
+    "Background colour",
+    "Description",
+    "Pointer direction",
+    "Garmin display format",
+    "Proximity distance",
+    "Altitude (ft)",
+    "Font size",
+    "Font style",
+    "Symbol size",
+];
 const RTE_HEADER: &[&str] = &["File type", "Datum", "Reserved", "Reserved"];
 const ROUTE: super::Labels = &["Record", "Route number", "Name", "Description", "Colour"];
-const ROUTE_WAYPOINT: super::Labels = &["Record", "Route number", "Waypoint number", "Waypoint ID", "Name", "Latitude", "Longitude", "Date", "Symbol", "Status", "Map display format", "Foreground colour", "Background colour", "Description"];
+const ROUTE_WAYPOINT: super::Labels = &[
+    "Record",
+    "Route number",
+    "Waypoint number",
+    "Waypoint ID",
+    "Name",
+    "Latitude",
+    "Longitude",
+    "Date",
+    "Symbol",
+    "Status",
+    "Map display format",
+    "Foreground colour",
+    "Background colour",
+    "Description",
+];
 
 /// Walks an Ozi file: a fixed number of header lines, then records.
-async fn ozi_walk(cx: &Cx, file: Span, header: &[&'static str], record: fn(&LineBuf) -> Node) -> Result<u64> {
+async fn ozi_walk(
+    cx: &Cx,
+    file: Span,
+    header: &[&'static str],
+    record: fn(&LineBuf) -> Node,
+) -> Result<u64> {
     let mut lines = Lines::new(cx, file);
     let mut n = 0u64;
     while let Some(line) = lines.next().await? {
         let index = usize::try_from(line.number.saturating_sub(1)).unwrap_or(usize::MAX);
         if let Some(name) = header.get(index) {
-            cx.push(leaf(*name, line.span, text(line.text().trim()))).await;
+            cx.push(leaf(*name, line.span, text(line.text().trim())))
+                .await;
             continue;
         }
         if line.is_blank() {
@@ -149,13 +250,22 @@ async fn ozi_walk(cx: &Cx, file: Span, header: &[&'static str], record: fn(&Line
 }
 
 fn csv_field(line: &LineBuf, i: usize) -> String {
-    line.text().split(',').nth(i).unwrap_or_default().trim().to_owned()
+    line.text()
+        .split(',')
+        .nth(i)
+        .unwrap_or_default()
+        .trim()
+        .to_owned()
 }
 
 async fn ozi_track(cx: Cx, input: Input) -> Result<()> {
     cx.annotate("OziExplorer track");
     ozi_walk(&cx, input.span, TRACK_HEADER, |l| {
-        super::delimited_node("Point", l, b',', TRACK_POINT).summary(format!("{}, {}", csv_field(l, 0), csv_field(l, 1)))
+        super::delimited_node("Point", l, b',', TRACK_POINT).summary(format!(
+            "{}, {}",
+            csv_field(l, 0),
+            csv_field(l, 1)
+        ))
     })
     .await?;
     Ok(())
@@ -164,7 +274,11 @@ async fn ozi_track(cx: Cx, input: Input) -> Result<()> {
 async fn ozi_waypoints(cx: Cx, input: Input) -> Result<()> {
     cx.annotate("OziExplorer waypoints");
     ozi_walk(&cx, input.span, WPT_HEADER, |l| {
-        super::delimited_node(Cow::Owned(csv_field(l, 1)), l, b',', WAYPOINT).summary(format!("{}, {}", csv_field(l, 2), csv_field(l, 3)))
+        super::delimited_node(Cow::Owned(csv_field(l, 1)), l, b',', WAYPOINT).summary(format!(
+            "{}, {}",
+            csv_field(l, 2),
+            csv_field(l, 3)
+        ))
     })
     .await?;
     Ok(())
@@ -174,16 +288,37 @@ async fn ozi_route(cx: Cx, input: Input) -> Result<()> {
     cx.annotate("OziExplorer route");
     ozi_walk(&cx, input.span, RTE_HEADER, |l| {
         if l.bytes.starts_with(b"W") {
-            super::delimited_node(Cow::Owned(format!("Waypoint {}", csv_field(l, 4))), l, b',', ROUTE_WAYPOINT).summary(format!("{}, {}", csv_field(l, 5), csv_field(l, 6)))
+            super::delimited_node(
+                Cow::Owned(format!("Waypoint {}", csv_field(l, 4))),
+                l,
+                b',',
+                ROUTE_WAYPOINT,
+            )
+            .summary(format!("{}, {}", csv_field(l, 5), csv_field(l, 6)))
         } else {
-            super::delimited_node(Cow::Owned(format!("Route {}", csv_field(l, 2))), l, b',', ROUTE)
+            super::delimited_node(
+                Cow::Owned(format!("Route {}", csv_field(l, 2))),
+                l,
+                b',',
+                ROUTE,
+            )
         }
     })
     .await?;
     Ok(())
 }
 
-const MAP_HEADER: &[&str] = &["File type", "Title", "Image file", "Map code", "Datum", "Reserved", "Reserved", "Magnetic variation", "Projection"];
+const MAP_HEADER: &[&str] = &[
+    "File type",
+    "Title",
+    "Image file",
+    "Map code",
+    "Datum",
+    "Reserved",
+    "Reserved",
+    "Magnetic variation",
+    "Projection",
+];
 
 async fn ozi_map(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -217,10 +352,14 @@ async fn ozi_map(cx: Cx, input: Input) -> Result<()> {
 fn mif_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
     let mut lines = probe::significant(&data, &[]);
-    let Some(first) = lines.next() else { return false };
+    let Some(first) = lines.next() else {
+        return false;
+    };
     let first = probe::trim(first);
     probe::starts_with_nocase(first, b"version ")
-        && first.get(8..).is_some_and(|v| !v.is_empty() && probe::trim(v).iter().all(u8::is_ascii_digit))
+        && first
+            .get(8..)
+            .is_some_and(|v| !v.is_empty() && probe::trim(v).iter().all(u8::is_ascii_digit))
         && probe::find_nocase(&data, b"\ncolumns ").is_some()
         && probe::find_nocase(&data, b"\ndata").is_some()
 }
@@ -228,7 +367,20 @@ fn mif_probe(h: &Head<'_>) -> bool {
 declare_format!(pub MIF = "mapinfo-mif", "MapInfo Interchange Format", ["mif"], "text/x-mapinfo-mif",
     Probe::Custom(mif_probe), mif);
 
-const MIF_OBJECTS: &[&str] = &["point", "line", "pline", "region", "arc", "text", "rect", "roundrect", "ellipse", "multipoint", "collection", "none"];
+const MIF_OBJECTS: &[&str] = &[
+    "point",
+    "line",
+    "pline",
+    "region",
+    "arc",
+    "text",
+    "rect",
+    "roundrect",
+    "ellipse",
+    "multipoint",
+    "collection",
+    "none",
+];
 
 async fn mif(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -237,26 +389,45 @@ async fn mif(cx: Cx, input: Input) -> Result<()> {
     let mut columns = 0u64;
     while let Some(line) = lines.next().await? {
         let t = line.text();
-        let word = t.split_whitespace().next().unwrap_or_default().to_ascii_lowercase();
+        let word = t
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         header_end = line.next;
         if word == "columns" {
-            columns = t.split_whitespace().nth(1).and_then(|n| n.parse().ok()).unwrap_or(0);
+            columns = t
+                .split_whitespace()
+                .nth(1)
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
         }
         if word == "data" {
             break;
         }
     }
     let hspan = file.sub(0, header_end);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{columns} columns")).lazy(mif_header, hspan));
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{columns} columns"))
+            .lazy(mif_header, hspan),
+    );
     cx.annotate(format!("MapInfo MIF, {columns} attribute columns"));
     let body = file.tail(header_end);
     let mut lines = Lines::new(&cx, body);
     let mut current: Option<(u64, String)> = None;
     let mut n = 0u64;
     loop {
-        let Some(line) = lines.peek().await? else { break };
+        let Some(line) = lines.peek().await? else {
+            break;
+        };
         let t = line.text();
-        let word = t.split_whitespace().next().unwrap_or_default().to_ascii_lowercase();
+        let word = t
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_ascii_lowercase();
         let starts = MIF_OBJECTS.contains(&word.as_str());
         if starts && let Some((from, first)) = current.take() {
             let span = body.sub(from, line.start.saturating_sub(from));
@@ -276,7 +447,10 @@ async fn mif(cx: Cx, input: Input) -> Result<()> {
 
 fn mif_object(span: Span, first: &str, index: u64) -> Node {
     let kind = first.split_whitespace().next().unwrap_or_default();
-    Node::new(format!("Object {index}: {kind}")).span(span).summary(first.chars().take(80).collect::<String>()).lazy(region_lines, span)
+    Node::new(format!("Object {index}: {kind}"))
+        .span(span)
+        .summary(first.chars().take(80).collect::<String>())
+        .lazy(region_lines, span)
 }
 
 async fn mif_header(cx: Cx, span: Span) -> Result<()> {
@@ -299,8 +473,12 @@ async fn mif_header(cx: Cx, span: Span) -> Result<()> {
 
 fn tab_probe(h: &Head<'_>) -> bool {
     let lines = super::head_lines(h, 2);
-    lines.first().is_some_and(|l| probe::starts_with_nocase(probe::trim(l), b"!table"))
-        && lines.get(1).is_some_and(|l| probe::starts_with_nocase(probe::trim(l), b"!version"))
+    lines
+        .first()
+        .is_some_and(|l| probe::starts_with_nocase(probe::trim(l), b"!table"))
+        && lines
+            .get(1)
+            .is_some_and(|l| probe::starts_with_nocase(probe::trim(l), b"!version"))
 }
 
 declare_format!(pub TAB = "mapinfo-tab", "MapInfo table definition", ["tab"], "text/x-mapinfo-tab",
@@ -308,13 +486,20 @@ declare_format!(pub TAB = "mapinfo-tab", "MapInfo table definition", ["tab"], "t
 
 fn tab_name(first: &str) -> (Cow<'static, str>, Option<String>) {
     let (k, v) = first.split_once(char::is_whitespace).unwrap_or((first, ""));
-    (Cow::Owned(k.to_owned()), Some(v.trim().to_owned()).filter(|v| !v.is_empty()))
+    (
+        Cow::Owned(k.to_owned()),
+        Some(v.trim().to_owned()).filter(|v| !v.is_empty()),
+    )
 }
 
 async fn tab(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(input.span.sub(0, 4096)).await?;
     let raster = probe::find_nocase(&head, b"\"RASTER\"").is_some();
-    cx.annotate(if raster { "MapInfo raster table" } else { "MapInfo table definition" });
+    cx.annotate(if raster {
+        "MapInfo raster table"
+    } else {
+        "MapInfo table definition"
+    });
     super::vehicle::statements(&cx, input.span, tab_name).await?;
     Ok(())
 }
@@ -332,13 +517,26 @@ fn grass_probe(h: &Head<'_>) -> bool {
             (!v.trim().is_empty()).then(|| k.trim().to_ascii_lowercase())
         })
         .collect();
-    keys.len() == 6 && ["north", "south", "east", "west", "rows", "cols"].iter().all(|k| keys.iter().any(|x| x == k))
+    keys.len() == 6
+        && ["north", "south", "east", "west", "rows", "cols"]
+            .iter()
+            .all(|k| keys.iter().any(|x| x == k))
 }
 
 declare_format!(pub GRASS_ASCII = "grass-ascii", "GRASS ASCII raster", ["asc", "txt", "grass"], "text/x-grass-ascii",
     Probe::Custom(grass_probe), grass_ascii);
 
-const GRASS_KEYS: &[&str] = &["north", "south", "east", "west", "rows", "cols", "null", "type", "multiplier"];
+const GRASS_KEYS: &[&str] = &[
+    "north",
+    "south",
+    "east",
+    "west",
+    "rows",
+    "cols",
+    "null",
+    "type",
+    "multiplier",
+];
 
 async fn grass_ascii(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -367,7 +565,8 @@ async fn grass_ascii(cx: Cx, input: Input) -> Result<()> {
         if row == 0 {
             cx.annotate(format!("GRASS ASCII raster, {rows} rows × {cols} columns"));
         }
-        cx.push(super::words_node(format!("Row {row}"), &line, &[])).await;
+        cx.push(super::words_node(format!("Row {row}"), &line, &[]))
+            .await;
         row = row.saturating_add(1);
     }
     Ok(())
@@ -398,7 +597,12 @@ async fn grass_vector(cx: Cx, input: Input) -> Result<()> {
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let mut words = t.split_whitespace();
-        let (Some(kind), Some(count)) = (words.next(), words.next().and_then(|c| c.parse::<u64>().ok())) else { continue };
+        let (Some(kind), Some(count)) = (
+            words.next(),
+            words.next().and_then(|c| c.parse::<u64>().ok()),
+        ) else {
+            continue;
+        };
         if !kind.chars().all(|c| c.is_ascii_alphabetic()) {
             continue;
         }
@@ -420,7 +624,13 @@ async fn grass_vector(cx: Cx, input: Input) -> Result<()> {
             _ => "Feature",
         };
         let span = region.sub(start, end.saturating_sub(start));
-        cx.push(Node::new(format!("{kind_name} {n}")).span(span).summary(format!("{count} coordinates")).lazy(region_lines, span)).await;
+        cx.push(
+            Node::new(format!("{kind_name} {n}"))
+                .span(span)
+                .summary(format!("{count} coordinates"))
+                .lazy(region_lines, span),
+        )
+        .await;
         n = n.saturating_add(1);
     }
     Ok(())
@@ -432,7 +642,8 @@ async fn grass_vector(cx: Cx, input: Input) -> Result<()> {
 fn idrisi_probe(h: &Head<'_>) -> bool {
     super::head_lines(h, 1).first().is_some_and(|l| {
         let t = String::from_utf8_lossy(l);
-        t.split_once(':').is_some_and(|(k, v)| k.trim() == "file format" && v.trim().starts_with("IDRISI"))
+        t.split_once(':')
+            .is_some_and(|(k, v)| k.trim() == "file format" && v.trim().starts_with("IDRISI"))
     })
 }
 
@@ -442,7 +653,8 @@ declare_format!(pub IDRISI = "idrisi-doc", "IDRISI raster/vector documentation f
 async fn idrisi(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
-    let (mut format, mut cols, mut rows, mut ty) = (String::new(), String::new(), String::new(), String::new());
+    let (mut format, mut cols, mut rows, mut ty) =
+        (String::new(), String::new(), String::new(), String::new());
     while let Some(line) = lines.next().await? {
         let t = line.text();
         if let Some((k, v)) = t.split_once(':') {
@@ -457,7 +669,11 @@ async fn idrisi(cx: Cx, input: Input) -> Result<()> {
         let node = super::key_value(&line, b':').unwrap_or_else(|| line_leaf(&line));
         cx.push(node).await;
         if line.number == 8 {
-            let size = if cols.is_empty() { String::new() } else { format!(", {cols}×{rows} {ty}") };
+            let size = if cols.is_empty() {
+                String::new()
+            } else {
+                format!(", {cols}×{rows} {ty}")
+            };
             cx.annotate(format!("{format}{size}"));
         }
     }
@@ -468,8 +684,20 @@ async fn idrisi(cx: Cx, input: Input) -> Result<()> {
 // WKT coordinate reference systems
 
 const WKT_ROOTS: &[&[u8]] = &[
-    b"PROJCS[", b"GEOGCS[", b"GEOCCS[", b"COMPD_CS[", b"VERT_CS[", b"LOCAL_CS[", b"FITTED_CS[",
-    b"PROJCRS[", b"GEOGCRS[", b"GEODCRS[", b"COMPOUNDCRS[", b"VERTCRS[", b"ENGCRS[", b"BOUNDCRS[",
+    b"PROJCS[",
+    b"GEOGCS[",
+    b"GEOCCS[",
+    b"COMPD_CS[",
+    b"VERT_CS[",
+    b"LOCAL_CS[",
+    b"FITTED_CS[",
+    b"PROJCRS[",
+    b"GEOGCRS[",
+    b"GEODCRS[",
+    b"COMPOUNDCRS[",
+    b"VERTCRS[",
+    b"ENGCRS[",
+    b"BOUNDCRS[",
 ];
 
 fn wkt_probe(h: &Head<'_>) -> bool {
@@ -491,7 +719,10 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
         *at = at.saturating_add(1);
     }
     let start = *at;
-    while b.get(*at).is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_') {
+    while b
+        .get(*at)
+        .is_some_and(|c| c.is_ascii_alphanumeric() || *c == b'_')
+    {
         *at = at.saturating_add(1);
     }
     let keyword = p.slice(start, *at).text();
@@ -503,7 +734,10 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
     let mut children = Vec::new();
     let mut params = Vec::new();
     loop {
-        while b.get(*at).is_some_and(|c| c.is_ascii_whitespace() || *c == b',') {
+        while b
+            .get(*at)
+            .is_some_and(|c| c.is_ascii_whitespace() || *c == b',')
+        {
             *at = at.saturating_add(1);
         }
         match b.get(*at) {
@@ -529,7 +763,11 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
                 if name.is_none() {
                     name = Some(s_text);
                 } else {
-                    params.push(Node::new("Text").span(p.slice(s, e).span()).value(Value::Text(s_text)));
+                    params.push(
+                        Node::new("Text")
+                            .span(p.slice(s, e).span())
+                            .value(Value::Text(s_text)),
+                    );
                 }
                 *at = e.saturating_add(1);
             }
@@ -547,7 +785,11 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
                         *at = at.saturating_add(1);
                     }
                     let w = p.slice(save, *at).trim();
-                    params.push(Node::new("Value").span(w.span()).value(Value::Text(w.text())));
+                    params.push(
+                        Node::new("Value")
+                            .span(w.span())
+                            .value(Value::Text(w.text())),
+                    );
                 }
             }
             Some(_) => {
@@ -567,7 +809,11 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
     if let Some(n) = name {
         node = node.value(Value::Text(n));
     }
-    Some(if nodes.is_empty() { node } else { node.lazy(super::emit_nodes, nodes) })
+    Some(if nodes.is_empty() {
+        node
+    } else {
+        node.lazy(super::emit_nodes, nodes)
+    })
 }
 
 async fn wkt(cx: Cx, input: Input) -> Result<()> {
@@ -578,8 +824,16 @@ async fn wkt(cx: Cx, input: Input) -> Result<()> {
     let data = cx.read(file).await?;
     let piece = Piece::new(&data, file);
     let mut at = 0usize;
-    let root = wkt_element(piece, &mut at, 0).ok_or_else(|| Diagnostic::malformed("unbalanced WKT").at(file))?;
-    let summary = format!("{}{}", root.name, root.value.as_ref().map(|v| format!(" {}", crate::render::value(v))).unwrap_or_default());
+    let root = wkt_element(piece, &mut at, 0)
+        .ok_or_else(|| Diagnostic::malformed("unbalanced WKT").at(file))?;
+    let summary = format!(
+        "{}{}",
+        root.name,
+        root.value
+            .as_ref()
+            .map(|v| format!(" {}", crate::render::value(v)))
+            .unwrap_or_default()
+    );
     cx.annotate(format!("WKT CRS: {summary}"));
     cx.emit(root);
     Ok(())
@@ -591,15 +845,29 @@ async fn wkt(cx: Cx, input: Input) -> Result<()> {
 fn bil_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
     let lines: Vec<&[u8]> = probe::significant(&data, &[]).take(24).collect();
-    let keys: Vec<String> = lines.iter().map(|l| String::from_utf8_lossy(probe::trim(l)).split_whitespace().next().unwrap_or_default().to_ascii_uppercase()).collect();
+    let keys: Vec<String> = lines
+        .iter()
+        .map(|l| {
+            String::from_utf8_lossy(probe::trim(l))
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_ascii_uppercase()
+        })
+        .collect();
     let all_keys = lines.iter().all(|l| {
         let t = probe::trim(l);
-        t.iter().take_while(|b| !b.is_ascii_whitespace()).all(|b| b.is_ascii_alphanumeric() || *b == b'_') && t.iter().any(u8::is_ascii_whitespace)
+        t.iter()
+            .take_while(|b| !b.is_ascii_whitespace())
+            .all(|b| b.is_ascii_alphanumeric() || *b == b'_')
+            && t.iter().any(u8::is_ascii_whitespace)
     });
     all_keys
         && keys.iter().any(|k| k == "NROWS")
         && keys.iter().any(|k| k == "NCOLS")
-        && keys.iter().any(|k| matches!(k.as_str(), "LAYOUT" | "BYTEORDER" | "NBITS"))
+        && keys
+            .iter()
+            .any(|k| matches!(k.as_str(), "LAYOUT" | "BYTEORDER" | "NBITS"))
 }
 
 declare_format!(pub BIL_HDR = "esri-bil-hdr", "ESRI BIL/BIP/BSQ raster header", ["hdr"], "text/x-esri-hdr",
@@ -626,7 +894,9 @@ async fn bil_hdr(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(super::field_node(key, v).span(line.span)).await;
     }
-    cx.annotate(format!("ESRI {layout} header, {rows}×{cols}, {bands} bands"));
+    cx.annotate(format!(
+        "ESRI {layout} header, {rows}×{cols}, {bands} bands"
+    ));
     Ok(())
 }
 
@@ -640,10 +910,13 @@ async fn sections(cx: &Cx, file: Span) -> Result<u64> {
     let mut current: Option<(u64, String)> = None;
     let mut n = 0u64;
     loop {
-        let Some(line) = lines.peek().await? else { break };
+        let Some(line) = lines.peek().await? else {
+            break;
+        };
         let t = line.text();
         let trimmed = t.trim();
-        let starts = trimmed.starts_with('[') && trimmed.ends_with(']') && !trimmed.starts_with("[END");
+        let starts =
+            trimmed.starts_with('[') && trimmed.ends_with(']') && !trimmed.starts_with("[END");
         if starts && let Some((from, name)) = current.take() {
             push_section(cx, file.sub(from, line.start.saturating_sub(from)), name).await;
             n = n.saturating_add(1);
@@ -661,7 +934,8 @@ async fn sections(cx: &Cx, file: Span) -> Result<u64> {
 }
 
 async fn push_section(cx: &Cx, span: Span, name: String) {
-    cx.push(Node::new(name).span(span).lazy(section_lines, span)).await;
+    cx.push(Node::new(name).span(span).lazy(section_lines, span))
+        .await;
 }
 
 async fn section_lines(cx: Cx, span: Span) -> Result<()> {
@@ -686,7 +960,9 @@ async fn section_lines(cx: Cx, span: Span) -> Result<()> {
 
 fn hrm_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
-    probe::trim_start(&data).starts_with(b"[Params]") && probe::contains(&data, b"Version=") && (probe::contains(&data, b"SMode=") || probe::contains(&data, b"Monitor="))
+    probe::trim_start(&data).starts_with(b"[Params]")
+        && probe::contains(&data, b"Version=")
+        && (probe::contains(&data, b"SMode=") || probe::contains(&data, b"Monitor="))
 }
 
 declare_format!(pub HRM = "polar-hrm", "Polar HRM exercise file", ["hrm"], "text/x-polar-hrm",
@@ -695,8 +971,19 @@ declare_format!(pub HRM = "polar-hrm", "Polar HRM exercise file", ["hrm"], "text
 async fn hrm(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(input.span.sub(0, 2048)).await?;
     let t = String::from_utf8_lossy(&head);
-    let get = |k: &str| t.lines().find_map(|l| l.strip_prefix(k)).map(|v| v.trim().to_owned()).unwrap_or_default();
-    cx.annotate(format!("Polar HRM v{}, {} {}, duration {}", get("Version="), get("Date="), get("StartTime="), get("Length=")));
+    let get = |k: &str| {
+        t.lines()
+            .find_map(|l| l.strip_prefix(k))
+            .map(|v| v.trim().to_owned())
+            .unwrap_or_default()
+    };
+    cx.annotate(format!(
+        "Polar HRM v{}, {} {}, duration {}",
+        get("Version="),
+        get("Date="),
+        get("StartTime="),
+        get("Length=")
+    ));
     sections(&cx, input.span).await?;
     Ok(())
 }
@@ -707,8 +994,20 @@ declare_format!(pub ERG = "erg-workout", "ERG/MRC trainer workout", ["erg", "mrc
 async fn erg(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(input.span.sub(0, 2048)).await?;
     let t = String::from_utf8_lossy(&head);
-    let units = t.lines().find_map(|l| l.trim().split_once(' ').filter(|(a, _)| a.eq_ignore_ascii_case("MINUTES")).map(|(_, b)| b.trim().to_owned())).unwrap_or_default();
-    let kind = if units.eq_ignore_ascii_case("PERCENT") { "MRC (% FTP)" } else { "ERG (watts)" };
+    let units = t
+        .lines()
+        .find_map(|l| {
+            l.trim()
+                .split_once(' ')
+                .filter(|(a, _)| a.eq_ignore_ascii_case("MINUTES"))
+                .map(|(_, b)| b.trim().to_owned())
+        })
+        .unwrap_or_default();
+    let kind = if units.eq_ignore_ascii_case("PERCENT") {
+        "MRC (% FTP)"
+    } else {
+        "ERG (watts)"
+    };
     cx.annotate(format!("{kind} trainer workout"));
     sections(&cx, input.span).await?;
     Ok(())
@@ -738,11 +1037,24 @@ record! {
 async fn srm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: SrmHeader = read_record(&cx, file.sub(0, SrmHeader::SIZE), Endian::Little).await?;
-    cx.emit(SrmHeader::node("Header", file.sub(0, SrmHeader::SIZE), Endian::Little));
+    cx.emit(SrmHeader::node(
+        "Header",
+        file.sub(0, SrmHeader::SIZE),
+        Endian::Little,
+    ));
     cx.emit(Node::new("Markers, blocks and samples").span(file.tail(SrmHeader::SIZE)));
     // 1880-01-01 is 32,873 days before the Unix epoch.
-    let date = i64::from(h.days).saturating_sub(32_873).saturating_mul(86_400);
-    cx.emit(leaf("Ride date", file.sub(4, 2), Value::Timestamp { unix_seconds: date }));
-    cx.annotate(format!("SRM ride ({}), {} blocks, {} markers, interval {}/{} s", h.magic, h.blocks, h.markers, h.recint1, h.recint2));
+    let date = i64::from(h.days)
+        .saturating_sub(32_873)
+        .saturating_mul(86_400);
+    cx.emit(leaf(
+        "Ride date",
+        file.sub(4, 2),
+        Value::Timestamp { unix_seconds: date },
+    ));
+    cx.annotate(format!(
+        "SRM ride ({}), {} blocks, {} markers, interval {}/{} s",
+        h.magic, h.blocks, h.markers, h.recint1, h.recint2
+    ));
     Ok(())
 }

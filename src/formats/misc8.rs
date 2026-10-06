@@ -27,7 +27,11 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 fn zstr(b: &[u8]) -> String {
@@ -66,7 +70,12 @@ async fn directx_x(cx: Cx, input: Input) -> Result<()> {
             match b {
                 b'{' => {
                     if depth == 0 && !word.is_empty() && templates.len() < 64 {
-                        templates.push(word.split_whitespace().next().unwrap_or_default().to_owned());
+                        templates.push(
+                            word.split_whitespace()
+                                .next()
+                                .unwrap_or_default()
+                                .to_owned(),
+                        );
                     }
                     depth = depth.saturating_add(1);
                     word.clear();
@@ -76,15 +85,36 @@ async fn directx_x(cx: Cx, input: Input) -> Result<()> {
                     word.clear();
                 }
                 b';' | b'\n' if depth == 0 => word.clear(),
-                _ if depth == 0 && (b.is_ascii_alphanumeric() || b == b'_' || b == b' ') => word.push(char::from(b)),
+                _ if depth == 0 && (b.is_ascii_alphanumeric() || b == b'_' || b == b' ') => {
+                    word.push(char::from(b))
+                }
                 _ => {}
             }
         }
-        cx.emit(Node::new("Objects").span(file.tail(16)).summary(templates.join(", ")));
+        cx.emit(
+            Node::new("Objects")
+                .span(file.tail(16))
+                .summary(templates.join(", ")),
+        );
     } else {
-        cx.emit(Node::new("Data").span(file.tail(16)).summary(format.trim().to_owned()));
+        cx.emit(
+            Node::new("Data")
+                .span(file.tail(16))
+                .summary(format.trim().to_owned()),
+        );
     }
-    cx.annotate(format!("DirectX model {}.{} ({}, {}-bit floats){}", version.get(..2).unwrap_or("?"), version.get(2..).unwrap_or("?"), format.trim(), float, if templates.is_empty() { String::new() } else { format!(": {}", templates.join(", ")) }));
+    cx.annotate(format!(
+        "DirectX model {}.{} ({}, {}-bit floats){}",
+        version.get(..2).unwrap_or("?"),
+        version.get(2..).unwrap_or("?"),
+        format.trim(),
+        float,
+        if templates.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", templates.join(", "))
+        }
+    ));
     Ok(())
 }
 
@@ -100,15 +130,27 @@ async fn milkshape(cx: Cx, input: Input) -> Result<()> {
     cur.skip(10);
     let version = cur.u32().await?;
     cx.emit(Node::new("Signature").span(file.sub(0, 10)));
-    cx.emit(Node::new("Version").span(file.sub(10, 4)).value(uint(version.into(), 32)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(10, 4))
+            .value(uint(version.into(), 32)),
+    );
     let at = cur.pos();
     let vertices = u64::from(cur.u16().await?);
     cur.skip(vertices.saturating_mul(15));
-    cx.emit(Node::new("Vertices").span(cur.since(at)).summary(format!("{vertices} × 15 bytes")));
+    cx.emit(
+        Node::new("Vertices")
+            .span(cur.since(at))
+            .summary(format!("{vertices} × 15 bytes")),
+    );
     let at = cur.pos();
     let triangles = u64::from(cur.u16().await?);
     cur.skip(triangles.saturating_mul(70));
-    cx.emit(Node::new("Triangles").span(cur.since(at)).summary(format!("{triangles} × 70 bytes")));
+    cx.emit(
+        Node::new("Triangles")
+            .span(cur.since(at))
+            .summary(format!("{triangles} × 70 bytes")),
+    );
     let at = cur.pos();
     let groups = cur.u16().await?;
     let mut names = Vec::new();
@@ -121,16 +163,28 @@ async fn milkshape(cx: Cx, input: Input) -> Result<()> {
         names.push(name.clone());
         let _ = g;
     }
-    cx.emit(Node::new("Groups").span(cur.since(at)).summary(names.join(", ")));
+    cx.emit(
+        Node::new("Groups")
+            .span(cur.since(at))
+            .summary(names.join(", ")),
+    );
     let at = cur.pos();
     let materials = u64::from(cur.u16().await?);
     cur.skip(materials.saturating_mul(361));
-    cx.emit(Node::new("Materials").span(cur.since(at)).summary(format!("{materials} × 361 bytes")));
+    cx.emit(
+        Node::new("Materials")
+            .span(cur.since(at))
+            .summary(format!("{materials} × 361 bytes")),
+    );
     if cur.remaining() >= 14 {
         let at = cur.pos();
         cur.skip(12);
         let joints = cur.u16().await?;
-        cx.emit(Node::new("Animation and joints").span(file.tail(at)).summary(format!("{joints} joints")));
+        cx.emit(
+            Node::new("Animation and joints")
+                .span(file.tail(at))
+                .summary(format!("{joints} joints")),
+        );
     }
     cx.annotate(format!("MilkShape 3D v{version}: {vertices} vertices, {triangles} triangles, {groups} groups, {materials} materials"));
     Ok(())
@@ -148,11 +202,28 @@ async fn cal3d(cx: Cx, input: Input) -> Result<()> {
     let kind = head.get(1).copied().unwrap_or(0);
     let version = u32_le(&head, 4).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 4)).value(uint(version.into(), 32)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 4))
+            .value(uint(version.into(), 32)),
+    );
     let (what, detail) = match kind {
-        b'M' => ("mesh", format!("{} submeshes", u32_le(&head, 8).unwrap_or(0))),
-        b'S' => ("skeleton", format!("{} bones", u32_le(&head, 8).unwrap_or(0))),
-        b'A' => ("animation", format!("{:.2} s, {} tracks", f32::from_bits(u32_le(&head, 8).unwrap_or(0)), u32_le(&head, 12).unwrap_or(0))),
+        b'M' => (
+            "mesh",
+            format!("{} submeshes", u32_le(&head, 8).unwrap_or(0)),
+        ),
+        b'S' => (
+            "skeleton",
+            format!("{} bones", u32_le(&head, 8).unwrap_or(0)),
+        ),
+        b'A' => (
+            "animation",
+            format!(
+                "{:.2} s, {} tracks",
+                f32::from_bits(u32_le(&head, 8).unwrap_or(0)),
+                u32_le(&head, 12).unwrap_or(0)
+            ),
+        ),
         _ => ("material", "colours, shininess and maps".to_owned()),
     };
     cx.emit(Node::new("Body").span(file.tail(8)).summary(detail.clone()));
@@ -195,13 +266,22 @@ fn ogre_chunk(id: u16) -> &'static str {
 async fn ogre(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (version, span) = line_at(&cx, file.sub(2, 64)).await?;
-    cx.emit(Node::new("Header").span(file.sub(0, span.len.saturating_add(3))).value(text(version.clone())));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, span.len.saturating_add(3)))
+            .value(text(version.clone())),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(span.len.saturating_add(3));
     let mut n = 0u32;
     while let Some(chunk) = cur.chunk(ChunkLayout::new(2, 4, LE).inclusive()).await? {
         let id = u16_le(&chunk.id, 0).unwrap_or(0);
-        cx.push(Node::new(ogre_chunk(id)).span(chunk.span).summary(format!("id {id:#06x}, {} bytes", chunk.body.len))).await;
+        cx.push(
+            Node::new(ogre_chunk(id))
+                .span(chunk.span)
+                .summary(format!("id {id:#06x}, {} bytes", chunk.body.len)),
+        )
+        .await;
         n = n.saturating_add(1);
     }
     cx.annotate(format!("OGRE {version}, {n} top-level chunks"));
@@ -224,12 +304,20 @@ async fn maya(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     if cx.read(file.sub(0, 4)).await? == b"FOR8" {
         cx.emit(Node::new("Header").span(file.sub(0, 20)));
-        cx.emit(Node::new("Chunks").span(file.tail(20)).diag(Diagnostic::unsupported("64-bit (FOR8) layout")));
+        cx.emit(
+            Node::new("Chunks")
+                .span(file.tail(20))
+                .diag(Diagnostic::unsupported("64-bit (FOR8) layout")),
+        );
         cx.annotate("Maya binary scene (64-bit)");
         return Ok(());
     }
     let size = u64::from(u32_be(&cx.read(file.sub(4, 4)).await?, 0).unwrap_or(0));
-    cx.emit(Node::new("FOR4 Maya").span(file.sub(0, 12)).summary(format!("{size} bytes")));
+    cx.emit(
+        Node::new("FOR4 Maya")
+            .span(file.sub(0, 12))
+            .summary(format!("{size} bytes")),
+    );
     let body = file.sub(12, size.saturating_sub(4));
     maya_group(cx.clone(), (body, Path::new())).await?;
     cx.annotate("Maya binary scene");
@@ -241,16 +329,42 @@ async fn maya_group(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
     while let Some(chunk) = cur.chunk(ChunkLayout::new(4, 4, BE).align(4)).await? {
         if MAYA_GROUPS.contains(&chunk.id.as_slice()) && chunk.body.len >= 4 {
             let kind = String::from_utf8_lossy(&cx.read(chunk.body.sub(0, 4)).await?).into_owned();
-            let node = Node::new(format!("{} {kind}", chunk.name())).span(chunk.span).summary(format!("{} bytes", chunk.body.len));
+            let node = Node::new(format!("{} {kind}", chunk.name()))
+                .span(chunk.span)
+                .summary(format!("{} bytes", chunk.body.len));
             match path.enter(chunk.span.offset, 32) {
-                Ok(child) => cx.push(node.lazy(crate::expander!(self::maya_group: (Span, Path)), (chunk.body.tail(4), child))).await,
+                Ok(child) => {
+                    cx.push(node.lazy(
+                        crate::expander!(self::maya_group: (Span, Path)),
+                        (chunk.body.tail(4), child),
+                    ))
+                    .await
+                }
                 Err(d) => cx.push(node.diag(d)).await,
             }
         } else {
             let mut node = chunk.node();
-            if matches!(chunk.id.as_slice(), b"VERS" | b"PLAT" | b"FINF" | b"AUNI" | b"LUNI" | b"TUNI" | b"MADE" | b"CHNG" | b"OBJN" | b"INCL" | b"STR ") {
+            if matches!(
+                chunk.id.as_slice(),
+                b"VERS"
+                    | b"PLAT"
+                    | b"FINF"
+                    | b"AUNI"
+                    | b"LUNI"
+                    | b"TUNI"
+                    | b"MADE"
+                    | b"CHNG"
+                    | b"OBJN"
+                    | b"INCL"
+                    | b"STR "
+            ) {
                 let t = cx.read_avail(chunk.body.sub(0, 256)).await?;
-                node = node.value(text(String::from_utf8_lossy(&t).replace('\0', " ").trim().to_owned()));
+                node = node.value(text(
+                    String::from_utf8_lossy(&t)
+                        .replace('\0', " ")
+                        .trim()
+                        .to_owned(),
+                ));
             }
             cx.push(node).await;
         }
@@ -296,7 +410,9 @@ async fn bgeo(cx: Cx, input: Input) -> Result<()> {
     f.u32("Primitive attributes").emit()?;
     f.u32("Detail attributes").emit()?;
     cx.emit(Node::new("Geometry").span(file.tail(41)));
-    cx.annotate(format!("Houdini classic geometry v{version}: {points} points, {prims} primitives"));
+    cx.annotate(format!(
+        "Houdini classic geometry v{version}: {points} points, {prims} primitives"
+    ));
     Ok(())
 }
 
@@ -307,14 +423,32 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 16)).await?;
     cx.emit(Node::new("Signature").span(file.sub(0, 5)));
-    cx.emit(Node::new("Frozen").span(file.sub(5, 1)).value(Value::Bool(head.get(5) == Some(&0xff))));
-    cx.emit(Node::new("Version").span(file.sub(6, 2)).value(uint(u16_be(&head, 6).unwrap_or(0).into(), 16)));
+    cx.emit(
+        Node::new("Frozen")
+            .span(file.sub(5, 1))
+            .value(Value::Bool(head.get(5) == Some(&0xff))),
+    );
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(6, 2))
+            .value(uint(u16_be(&head, 6).unwrap_or(0).into(), 16)),
+    );
     let root = u64_le(&head, 8).unwrap_or(0);
-    cx.emit(Node::new("Root group offset").span(file.sub(8, 8)).value(Value::UInt { value: root, bits: 64, radix: Radix::Hex }));
+    cx.emit(
+        Node::new("Root group offset")
+            .span(file.sub(8, 8))
+            .value(Value::UInt {
+                value: root,
+                bits: 64,
+                radix: Radix::Hex,
+            }),
+    );
     // A group: a child count, then child offsets (high bit: data, else group).
     let count = u64_le(&cx.read(file.sub_exact(root, 8)?).await?, 0).unwrap_or(0);
     let shown = count.min(256);
-    let children = cx.read(file.sub_exact(root.saturating_add(8), shown.saturating_mul(8))?).await?;
+    let children = cx
+        .read(file.sub_exact(root.saturating_add(8), shown.saturating_mul(8))?)
+        .await?;
     let mut groups = 0u32;
     let mut data = 0u32;
     for c in children.chunks(8) {
@@ -325,8 +459,14 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
             groups = groups.saturating_add(1);
         }
     }
-    cx.emit(Node::new("Root group").span(file.sub(root, count.saturating_add(1).saturating_mul(8))).summary(format!("{count} children: {groups} groups, {data} data")));
-    cx.annotate(format!("Alembic (Ogawa) archive, root with {count} children"));
+    cx.emit(
+        Node::new("Root group")
+            .span(file.sub(root, count.saturating_add(1).saturating_mul(8)))
+            .summary(format!("{count} children: {groups} groups, {data} data")),
+    );
+    cx.annotate(format!(
+        "Alembic (Ogawa) archive, root with {count} children"
+    ));
     Ok(())
 }
 
@@ -334,7 +474,8 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
 // Gamebryo / NetImmerse NIF
 
 fn nif_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"Gamebryo File Format, Version ") || h.starts_with(b"NetImmerse File Format, Version")
+    h.starts_with(b"Gamebryo File Format, Version ")
+        || h.starts_with(b"NetImmerse File Format, Version")
 }
 
 declare_format!(pub NIF = "nif", "Gamebryo/NetImmerse model (NIF)", ["nif", "kf", "kfm", "nifcache"], "model/x-nif",
@@ -349,27 +490,59 @@ async fn short_string(cur: &mut Cursor<'_>) -> Result<(String, Span)> {
 async fn nif(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (header, span) = line_at(&cx, file.sub(0, 128)).await?;
-    cx.emit(Node::new("Header string").span(span).value(text(header.clone())));
+    cx.emit(
+        Node::new("Header string")
+            .span(span)
+            .value(text(header.clone())),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(span.len.saturating_add(1));
     let at = cur.pos();
     let version = cur.u32().await?;
-    let dotted = format!("{}.{}.{}.{}", version >> 24, (version >> 16) & 0xff, (version >> 8) & 0xff, version & 0xff);
-    cx.emit(Node::new("Version").span(cur.since(at)).value(text(dotted.clone())));
+    let dotted = format!(
+        "{}.{}.{}.{}",
+        version >> 24,
+        (version >> 16) & 0xff,
+        (version >> 8) & 0xff,
+        version & 0xff
+    );
+    cx.emit(
+        Node::new("Version")
+            .span(cur.since(at))
+            .value(text(dotted.clone())),
+    );
     if version < 0x1402_0005 {
-        cx.emit(Node::new("Header and blocks").span(file.tail(cur.pos())).diag(Diagnostic::unsupported("block sizes are recorded only from version 20.2.0.5")));
+        cx.emit(
+            Node::new("Header and blocks")
+                .span(file.tail(cur.pos()))
+                .diag(Diagnostic::unsupported(
+                    "block sizes are recorded only from version 20.2.0.5",
+                )),
+        );
         cx.annotate(format!("NIF {dotted}"));
         return Ok(());
     }
     let at = cur.pos();
     let endian = cur.u8().await?;
-    cx.emit(Node::new("Endianness").span(cur.since(at)).value(text(if endian == 0 { "big" } else { "little" })));
+    cx.emit(
+        Node::new("Endianness")
+            .span(cur.since(at))
+            .value(text(if endian == 0 { "big" } else { "little" })),
+    );
     let at = cur.pos();
     let user = cur.u32().await?;
-    cx.emit(Node::new("User version").span(cur.since(at)).value(uint(user.into(), 32)));
+    cx.emit(
+        Node::new("User version")
+            .span(cur.since(at))
+            .value(uint(user.into(), 32)),
+    );
     let at = cur.pos();
     let blocks = cur.u32().await?;
-    cx.emit(Node::new("Blocks").span(cur.since(at)).value(uint(blocks.into(), 32)));
+    cx.emit(
+        Node::new("Blocks")
+            .span(cur.since(at))
+            .value(uint(blocks.into(), 32)),
+    );
     let mut game = String::new();
     if user >= 3 {
         // Bethesda stream header.
@@ -396,7 +569,11 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
             _ => "Bethesda",
         }
         .to_owned();
-        cx.emit(Node::new("Bethesda header").span(cur.since(at)).summary(format!("BS version {bs} ({game}), author {author:?}")));
+        cx.emit(
+            Node::new("Bethesda header")
+                .span(cur.since(at))
+                .summary(format!("BS version {bs} ({game}), author {author:?}")),
+        );
     }
     let at = cur.pos();
     let ntypes = cur.u16().await?;
@@ -405,7 +582,9 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
         let l = u64::from(cur.u32().await?);
         types.push(String::from_utf8_lossy(&cur.bytes(l.min(1 << 10)).await?).into_owned());
     }
-    cx.emit(Node::new("Block types").span(cur.since(at)).summary(format!("{ntypes}: {}", types.iter().take(12).cloned().collect::<Vec<_>>().join(", "))));
+    cx.emit(Node::new("Block types").span(cur.since(at)).summary(
+        format!("{ntypes}: {}", types.iter().take(12).cloned().collect::<Vec<_>>().join(", ")),
+    ));
     let n = u64::from(blocks);
     let index = cur.bytes(n.saturating_mul(2)).await?;
     let sizes = cur.bytes(n.saturating_mul(4)).await?;
@@ -418,16 +597,35 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
     }
     let groups = cur.u32().await?;
     cur.skip(u64::from(groups).saturating_mul(4));
-    cx.emit(Node::new("String table and groups").span(cur.since(at)).summary(format!("{strings} strings")));
+    cx.emit(
+        Node::new("String table and groups")
+            .span(cur.since(at))
+            .summary(format!("{strings} strings")),
+    );
     let mut pos = cur.pos();
     for i in 0..usize::try_from(blocks).unwrap_or(0) {
         let t = u16_le(&index, i.saturating_mul(2)).unwrap_or(0) & 0x7fff;
         let size = u64::from(u32_le(&sizes, i.saturating_mul(4)).unwrap_or(0));
-        let kind = types.get(usize::from(t)).cloned().unwrap_or_else(|| format!("type {t}"));
-        cx.push(Node::new(format!("{i}: {kind}")).span(file.sub(pos, size)).summary(format!("{size} bytes"))).await;
+        let kind = types
+            .get(usize::from(t))
+            .cloned()
+            .unwrap_or_else(|| format!("type {t}"));
+        cx.push(
+            Node::new(format!("{i}: {kind}"))
+                .span(file.sub(pos, size))
+                .summary(format!("{size} bytes")),
+        )
+        .await;
         pos = pos.saturating_add(size);
     }
-    cx.annotate(format!("NIF {dotted}{}, {blocks} blocks", if game.is_empty() { String::new() } else { format!(" ({game})") }));
+    cx.annotate(format!(
+        "NIF {dotted}{}, {blocks} blocks",
+        if game.is_empty() {
+            String::new()
+        } else {
+            format!(" ({game})")
+        }
+    ));
     Ok(())
 }
 
@@ -445,7 +643,12 @@ async fn hkx(cx: Cx, input: Input) -> Result<()> {
     f.u32("Magic 1").hex().emit()?;
     f.u32("User tag").hex().emit()?;
     let version = f.u32("File version").emit()?;
-    let rules = f.bytes("Layout rules (pointer size, little-endian, reuse padding, empty base)", 4).emit()?;
+    let rules = f
+        .bytes(
+            "Layout rules (pointer size, little-endian, reuse padding, empty base)",
+            4,
+        )
+        .emit()?;
     let sections = f.u32("Sections").emit()?;
     f.u32("Contents section").emit()?;
     f.u32("Contents offset").hex().emit()?;
@@ -467,11 +670,20 @@ async fn hkx(cx: Cx, input: Input) -> Result<()> {
         let name = zstr(s.get(..20).unwrap_or_default());
         let start = u64::from(u32_le(&s, 20).unwrap_or(0));
         let end = u64::from(u32_le(&s, 44).unwrap_or(0));
-        cx.push(Node::new(format!("Section {name}")).span(file.sub(pos, section_len)).summary(format!("data at {start:#x}, {end} bytes")).target(file.sub(start, end))).await;
+        cx.push(
+            Node::new(format!("Section {name}"))
+                .span(file.sub(pos, section_len))
+                .summary(format!("data at {start:#x}, {end} bytes"))
+                .target(file.sub(start, end)),
+        )
+        .await;
         pos = pos.saturating_add(section_len);
     }
     let pointer = rules.first().copied().unwrap_or(0);
-    cx.annotate(format!("Havok packfile v{version} ({}), {pointer}-byte pointers, {sections} sections", sdk.trim()));
+    cx.annotate(format!(
+        "Havok packfile v{version} ({}), {pointer}-byte pointers, {sections} sections",
+        sdk.trim()
+    ));
     Ok(())
 }
 
@@ -484,7 +696,11 @@ async fn bgsm(cx: Cx, input: Input) -> Result<()> {
     let effect = head.starts_with(b"BGEM");
     let version = u32_le(&head, 4).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 4)).value(uint(version.into(), 32)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 4))
+            .value(uint(version.into(), 32)),
+    );
     // Texture paths: length-prefixed strings ending in ".dds".
     let body = cx.read_avail(file.sub(0, 1 << 14)).await?;
     let mut textures = 0u32;
@@ -495,16 +711,26 @@ async fn bgsm(cx: Cx, input: Input) -> Result<()> {
         if let Some(s) = s.filter(|s| len > 4 && s.last() == Some(&0)) {
             let t = zstr(s);
             let lower = t.to_ascii_lowercase();
-            if t.bytes().all(|b| b.is_ascii_graphic() || b == b' ') && (lower.ends_with(".dds") || lower.ends_with(".bgsm")) {
+            if t.bytes().all(|b| b.is_ascii_graphic() || b == b' ')
+                && (lower.ends_with(".dds") || lower.ends_with(".bgsm"))
+            {
                 textures = textures.saturating_add(1);
-                cx.push(Node::new("Texture").span(file.sub(to_u64(i), to_u64(len).saturating_add(4))).value(text(t))).await;
+                cx.push(
+                    Node::new("Texture")
+                        .span(file.sub(to_u64(i), to_u64(len).saturating_add(4)))
+                        .value(text(t)),
+                )
+                .await;
                 i = i.saturating_add(4).saturating_add(len);
                 continue;
             }
         }
         i = i.saturating_add(1);
     }
-    cx.annotate(format!("Bethesda {} material v{version}, {textures} textures", if effect { "effect" } else { "shader" }));
+    cx.annotate(format!(
+        "Bethesda {} material v{version}, {textures} textures",
+        if effect { "effect" } else { "shader" }
+    ));
     Ok(())
 }
 
@@ -535,10 +761,18 @@ async fn wow_chunked(cx: Cx, input: Input) -> Result<()> {
                 _ => "chunked file",
             });
         }
-        cx.push(Node::new(id).span(chunk.span).summary(format!("{} bytes", chunk.body.len))).await;
+        cx.push(
+            Node::new(id)
+                .span(chunk.span)
+                .summary(format!("{} bytes", chunk.body.len)),
+        )
+        .await;
         n = n.saturating_add(1);
     }
-    cx.annotate(format!("World of Warcraft {}, {n} chunks", kinds.first().copied().unwrap_or("chunked file")));
+    cx.annotate(format!(
+        "World of Warcraft {}, {n} chunks",
+        kinds.first().copied().unwrap_or("chunked file")
+    ));
     Ok(())
 }
 
@@ -556,17 +790,40 @@ async fn wow_db(cx: Cx, input: Input) -> Result<()> {
     let strings = f.u32("String block size").emit()?;
     if magic == "WDBC" {
         let data = u64::from(records).saturating_mul(size.into());
-        cx.emit(Node::new("Records").span(file.sub(20, data)).summary(format!("{records} × {size} bytes")));
+        cx.emit(
+            Node::new("Records")
+                .span(file.sub(20, data))
+                .summary(format!("{records} × {size} bytes")),
+        );
         let block = file.sub(20u64.saturating_add(data), strings.into());
         let sample = cx.read_avail(block.sub(0, 256)).await?;
-        let first: Vec<String> = sample.split(|&b| b == 0).filter(|s| !s.is_empty()).take(6).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
-        cx.emit(Node::new("String block").span(block).summary(first.join(", ")));
+        let first: Vec<String> = sample
+            .split(|&b| b == 0)
+            .filter(|s| !s.is_empty())
+            .take(6)
+            .map(|s| String::from_utf8_lossy(s).into_owned())
+            .collect();
+        cx.emit(
+            Node::new("String block")
+                .span(block)
+                .summary(first.join(", ")),
+        );
     } else {
         let more = cx.read_avail(file.sub(20, 8)).await?;
-        cx.emit(Node::new("Table hash").span(file.sub(20, 4)).value(Value::UInt { value: u32_le(&more, 0).unwrap_or(0).into(), bits: 32, radix: Radix::Hex }));
+        cx.emit(
+            Node::new("Table hash")
+                .span(file.sub(20, 4))
+                .value(Value::UInt {
+                    value: u32_le(&more, 0).unwrap_or(0).into(),
+                    bits: 32,
+                    radix: Radix::Hex,
+                }),
+        );
         cx.emit(Node::new("Remaining header and sections").span(file.tail(24)));
     }
-    cx.annotate(format!("WoW {magic} database: {records} records × {fields} fields"));
+    cx.annotate(format!(
+        "WoW {magic} database: {records} records × {fields} fields"
+    ));
     Ok(())
 }
 
@@ -613,9 +870,25 @@ async fn quake_spr(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Signature", 4).emit()?;
     f.u32("Version").emit()?;
-    let kind = f.u32("Orientation").enumeration(&[(0, "parallel upright"), (1, "facing upright"), (2, "parallel"), (3, "oriented"), (4, "parallel oriented")]).emit()?;
+    let kind = f
+        .u32("Orientation")
+        .enumeration(&[
+            (0, "parallel upright"),
+            (1, "facing upright"),
+            (2, "parallel"),
+            (3, "oriented"),
+            (4, "parallel oriented"),
+        ])
+        .emit()?;
     if hl {
-        f.u32("Texture format").enumeration(&[(0, "normal"), (1, "additive"), (2, "index alpha"), (3, "alpha test")]).emit()?;
+        f.u32("Texture format")
+            .enumeration(&[
+                (0, "normal"),
+                (1, "additive"),
+                (2, "index alpha"),
+                (3, "alpha test"),
+            ])
+            .emit()?;
     }
     f.f32("Bounding radius").emit()?;
     let w = f.u32("Maximum width").emit()?;
@@ -625,7 +898,10 @@ async fn quake_spr(cx: Cx, input: Input) -> Result<()> {
     f.u32("Sync type").emit()?;
     let _ = kind;
     cx.emit(Node::new(if hl { "Palette and frames" } else { "Frames" }).span(file.tail(len)));
-    cx.annotate(format!("{} sprite, {frames} frames, up to {w}×{h}", if hl { "Half-Life" } else { "Quake" }));
+    cx.annotate(format!(
+        "{} sprite, {frames} frames, up to {w}×{h}",
+        if hl { "Half-Life" } else { "Quake" }
+    ));
     Ok(())
 }
 
@@ -637,13 +913,26 @@ async fn sp2(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub(0, 12)).await?;
     let frames = u32_le(&head, 8).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Version").span(file.sub(4, 4)).value(uint(u32_le(&head, 4).unwrap_or(0).into(), 32)));
-    cx.emit(Node::new("Frames").span(file.sub(8, 4)).value(uint(frames.into(), 32)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 4))
+            .value(uint(u32_le(&head, 4).unwrap_or(0).into(), 32)),
+    );
+    cx.emit(
+        Node::new("Frames")
+            .span(file.sub(8, 4))
+            .value(uint(frames.into(), 32)),
+    );
     for i in 0..u64::from(frames.min(1024)) {
         let at = 12u64.saturating_add(i.saturating_mul(80));
         let fr = cx.read(file.sub_exact(at, 80)?).await?;
         let name = zstr(fr.get(16..80).unwrap_or_default());
-        cx.push(Node::new(name).span(file.sub(at, 80)).summary(format!("{}×{}", u32_le(&fr, 0).unwrap_or(0), u32_le(&fr, 4).unwrap_or(0)))).await;
+        cx.push(Node::new(name).span(file.sub(at, 80)).summary(format!(
+            "{}×{}",
+            u32_le(&fr, 0).unwrap_or(0),
+            u32_le(&fr, 4).unwrap_or(0)
+        )))
+        .await;
     }
     cx.annotate(format!("Quake II sprite, {frames} frames"));
     Ok(())
@@ -725,19 +1014,31 @@ async fn rtcw_model(cx: Cx, input: Input) -> Result<()> {
     let summary = match magic.as_slice() {
         b"IDPC" => {
             let h: MdcHeader = emit_record(&cx, file.sub(0, MdcHeader::SIZE), LE).await?;
-            format!("MDC compressed model {:?}: {} frames, {} surfaces, {} tags", h.name, h.frames, h.surfaces, h.tags)
+            format!(
+                "MDC compressed model {:?}: {} frames, {} surfaces, {} tags",
+                h.name, h.frames, h.surfaces, h.tags
+            )
         }
         b"MDSW" => {
             let h: MdsHeader = emit_record(&cx, file.sub(0, MdsHeader::SIZE), LE).await?;
-            format!("MDS skeletal model {:?}: {} frames, {} bones, {} surfaces", h.name, h.frames, h.bones, h.surfaces)
+            format!(
+                "MDS skeletal model {:?}: {} frames, {} bones, {} surfaces",
+                h.name, h.frames, h.bones, h.surfaces
+            )
         }
         b"MDXW" => {
             let h: MdxHeader = emit_record(&cx, file.sub(0, MdxHeader::SIZE), LE).await?;
-            format!("MDX skeletal animation {:?}: {} frames, {} bones", h.name, h.frames, h.bones)
+            format!(
+                "MDX skeletal animation {:?}: {} frames, {} bones",
+                h.name, h.frames, h.bones
+            )
         }
         _ => {
             let h: MdmHeader = emit_record(&cx, file.sub(0, MdmHeader::SIZE), LE).await?;
-            format!("MDM skeletal mesh {:?}: {} surfaces, {} tags", h.name, h.surfaces, h.tags)
+            format!(
+                "MDM skeletal mesh {:?}: {} surfaces, {} tags",
+                h.name, h.surfaces, h.tags
+            )
         }
     };
     cx.annotate(summary);
@@ -769,8 +1070,14 @@ declare_format!(pub HEXEN2_MDL = "hexen2-mdl", "Hexen II model", ["mdl"], "model
 
 async fn hexen2_mdl(cx: Cx, input: Input) -> Result<()> {
     let h: Hexen2Header = emit_record(&cx, input.span.sub(0, Hexen2Header::SIZE), LE).await?;
-    cx.emit(Node::new("Skins, vertices, triangles and frames").span(input.span.tail(Hexen2Header::SIZE)));
-    cx.annotate(format!("Hexen II model: {} vertices, {} triangles, {} frames, {} skins", h.vertices, h.triangles, h.frames, h.skins));
+    cx.emit(
+        Node::new("Skins, vertices, triangles and frames")
+            .span(input.span.tail(Hexen2Header::SIZE)),
+    );
+    cx.annotate(format!(
+        "Hexen II model: {} vertices, {} triangles, {} frames, {} skins",
+        h.vertices, h.triangles, h.frames, h.skins
+    ));
     Ok(())
 }
 
@@ -797,9 +1104,15 @@ async fn vvd(cx: Cx, input: Input) -> Result<()> {
     let vertex = f.u32("Vertex data offset").hex().emit()?;
     let tangent = f.u32("Tangent data offset").hex().emit()?;
     let n = u64::from(counts.first().copied().unwrap_or(0));
-    cx.emit(Node::new("Vertices").span(file.sub(vertex.into(), n.saturating_mul(48))).summary(format!("{n} × 48 bytes")));
+    cx.emit(
+        Node::new("Vertices")
+            .span(file.sub(vertex.into(), n.saturating_mul(48)))
+            .summary(format!("{n} × 48 bytes")),
+    );
     cx.emit(Node::new("Tangents").span(file.sub(tangent.into(), n.saturating_mul(16))));
-    cx.annotate(format!("Source VVD v{version}: {lods} LODs, {n} vertices, {fixups} fixups"));
+    cx.annotate(format!(
+        "Source VVD v{version}: {lods} LODs, {n} vertices, {fixups} fixups"
+    ));
     Ok(())
 }
 
@@ -809,15 +1122,24 @@ declare_format!(pub DMX = "source-dmx", "Valve Data Model Exchange (DMX)", ["dmx
 async fn dmx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let lines = head_lines(&cx, file, 256).await?;
-    let (header, span) = lines.first().cloned().unwrap_or((String::new(), file.sub(0, 0)));
+    let (header, span) = lines
+        .first()
+        .cloned()
+        .unwrap_or((String::new(), file.sub(0, 0)));
     let words: Vec<&str> = header.split_whitespace().collect();
     let encoding = words.get(3).copied().unwrap_or("?");
     let enc_version = words.get(4).copied().unwrap_or("?");
     let format = words.get(6).copied().unwrap_or("?");
     let fmt_version = words.get(7).copied().unwrap_or("?");
     cx.emit(Node::new("Header").span(span).value(text(header.clone())));
-    cx.emit(Node::new("Body").span(file.tail(span.len.saturating_add(1))).summary(format!("{encoding} encoding")));
-    cx.annotate(format!("DMX {format} v{fmt_version} ({encoding} encoding v{enc_version})"));
+    cx.emit(
+        Node::new("Body")
+            .span(file.tail(span.len.saturating_add(1)))
+            .summary(format!("{encoding} encoding")),
+    );
+    cx.annotate(format!(
+        "DMX {format} v{fmt_version} ({encoding} encoding v{enc_version})"
+    ));
     Ok(())
 }
 
@@ -868,9 +1190,24 @@ async fn xp3(cx: Cx, input: Input) -> Result<()> {
     let compressed = h.first().copied().unwrap_or(0) & 7 == 1;
     let (index, error) = if compressed {
         let packed = u64_le(&h, 1).unwrap_or(0);
-        let original = u64_le(&cx.read(file.sub_exact(index_at.saturating_add(9), 8)?).await?, 0).unwrap_or(0);
-        let d = inflate_span(&cx, file.sub(index_at.saturating_add(17), packed), true, Some(original)).await?;
-        cx.emit(Node::new("Index (zlib)").span(file.sub(index_at, packed.saturating_add(17))).summary(format!("{packed} → {original} bytes")));
+        let original = u64_le(
+            &cx.read(file.sub_exact(index_at.saturating_add(9), 8)?)
+                .await?,
+            0,
+        )
+        .unwrap_or(0);
+        let d = inflate_span(
+            &cx,
+            file.sub(index_at.saturating_add(17), packed),
+            true,
+            Some(original),
+        )
+        .await?;
+        cx.emit(
+            Node::new("Index (zlib)")
+                .span(file.sub(index_at, packed.saturating_add(17)))
+                .summary(format!("{packed} → {original} bytes")),
+        );
         (d.span, d.error)
     } else {
         let size = u64_le(&h, 1).unwrap_or(0);
@@ -939,13 +1276,21 @@ async fn allegro(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     if cx.read(file.sub(0, 4)).await? == b"slh!" {
         cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-        cx.emit(Node::new("Packed data").span(file.tail(4)).diag(Diagnostic::unsupported("Allegro LZSS packing")));
+        cx.emit(
+            Node::new("Packed data")
+                .span(file.tail(4))
+                .diag(Diagnostic::unsupported("Allegro LZSS packing")),
+        );
         cx.annotate("Allegro packed datafile");
         return Ok(());
     }
     let count = u32_be(&cx.read(file.sub(4, 4)).await?, 0).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
-    cx.emit(Node::new("Objects").span(file.sub(4, 4)).value(uint(count.into(), 32)));
+    cx.emit(
+        Node::new("Objects")
+            .span(file.sub(4, 4))
+            .value(uint(count.into(), 32)),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(8);
     for _ in 0..count {
@@ -970,7 +1315,13 @@ async fn allegro(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(packed);
         cur.skip(packed);
         let kind = String::from_utf8_lossy(&kind).trim().to_owned();
-        cx.push(Node::new(if name.is_empty() { kind.clone() } else { name }).span(cur.since(start)).summary(format!("{kind}, {packed} bytes")).target(data)).await;
+        cx.push(
+            Node::new(if name.is_empty() { kind.clone() } else { name })
+                .span(cur.since(start))
+                .summary(format!("{kind}, {packed} bytes"))
+                .target(data),
+        )
+        .await;
     }
     cx.annotate(format!("Allegro datafile, {count} objects"));
     Ok(())
@@ -994,7 +1345,17 @@ async fn rpyc(cx: Cx, input: Input) -> Result<()> {
         let start = u64::from(u32_le(&e, 4).unwrap_or(0));
         let len = u64::from(u32_le(&e, 8).unwrap_or(0));
         // Each slot is a zlib-compressed pickle.
-        cx.push(content(format!("Slot {slot}"), input, file.sub(start, len), Codec::Zlib, None).target(file.sub(pos, 12))).await;
+        cx.push(
+            content(
+                format!("Slot {slot}"),
+                input,
+                file.sub(start, len),
+                Codec::Zlib,
+                None,
+            )
+            .target(file.sub(pos, 12)),
+        )
+        .await;
         slots = slots.saturating_add(1);
         pos = pos.saturating_add(12);
     }

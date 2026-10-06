@@ -96,14 +96,23 @@ impl Entry {
                     Some(b'|') => "Previous",
                     _ => "Comment",
                 };
-                let body = if kind == "Comment" { p.from(1) } else { p.from(2) };
-                e.comments.push((kind.to_owned(), body.trim().text(), line.span));
+                let body = if kind == "Comment" {
+                    p.from(1)
+                } else {
+                    p.from(2)
+                };
+                e.comments
+                    .push((kind.to_owned(), body.trim().text(), line.span));
                 continue;
             }
             if p.first() == Some(b'"') {
                 if let Some(f) = e.fields.last_mut() {
                     f.text.push_str(&unquote(p.bytes()));
-                    f.span = Span::new(f.span.source, f.span.offset, line.span.end().saturating_sub(f.span.offset));
+                    f.span = Span::new(
+                        f.span.source,
+                        f.span.offset,
+                        line.span.end().saturating_sub(f.span.offset),
+                    );
                 }
                 continue;
             }
@@ -125,7 +134,11 @@ impl Entry {
         self.comments
             .iter()
             .filter(|(k, _, _)| k == "Flags")
-            .flat_map(|(_, v, _)| v.split(',').map(|f| f.trim().to_owned()).collect::<Vec<_>>())
+            .flat_map(|(_, v, _)| {
+                v.split(',')
+                    .map(|f| f.trim().to_owned())
+                    .collect::<Vec<_>>()
+            })
             .collect()
     }
 
@@ -165,7 +178,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let (Some(first), Some(last)) = (block.first(), block.last()) else {
             break;
         };
-        let span = Span::new(first.span.source, first.span.offset, last.span.end().saturating_sub(first.span.offset));
+        let span = Span::new(
+            first.span.source,
+            first.span.offset,
+            last.span.end().saturating_sub(first.span.offset),
+        );
         let e = Entry::parse(&block);
         let id = e.get("msgid").map(|f| f.text.clone()).unwrap_or_default();
         let header = id.is_empty() && e.get("msgctxt").is_none();
@@ -235,7 +252,13 @@ async fn entry(cx: Cx, span: Span) -> Result<()> {
                 .filter_map(|l| l.split_once(':'))
                 .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
                 .collect();
-            node = node.summary(plural(crate::bytes::to_u64(fields.len()), "field", "fields")).lazy(header_fields, f.span);
+            node = node
+                .summary(plural(
+                    crate::bytes::to_u64(fields.len()),
+                    "field",
+                    "fields",
+                ))
+                .lazy(header_fields, f.span);
         }
         cx.emit(node);
     }

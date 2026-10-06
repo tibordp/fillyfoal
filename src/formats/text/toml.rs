@@ -72,7 +72,11 @@ fn probe_toml(h: &Head<'_>) -> bool {
             let body = inner
                 .strip_prefix(b"[[")
                 .and_then(|b| b.split(|&c| c == b']').next())
-                .or_else(|| inner.strip_prefix(b"[").and_then(|b| b.split(|&c| c == b']').next()));
+                .or_else(|| {
+                    inner
+                        .strip_prefix(b"[")
+                        .and_then(|b| b.split(|&c| c == b']').next())
+                });
             if body.is_some_and(valid_key) {
                 headers = headers.saturating_add(1);
                 continue;
@@ -271,13 +275,27 @@ impl<'a> Parser<'a> {
             match self.peek()? {
                 q @ (b'"' | b'\'') => {
                     let len = string_len(self.s.get(self.i..).unwrap_or_default());
-                    let raw = self.s.get(self.i.saturating_add(1)..self.i.saturating_add(len).saturating_sub(1))?;
-                    parts.push(if q == b'"' { unescape(raw) } else { super::encoding::decode_8bit(raw) });
+                    let raw = self.s.get(
+                        self.i.saturating_add(1)..self.i.saturating_add(len).saturating_sub(1),
+                    )?;
+                    parts.push(if q == b'"' {
+                        unescape(raw)
+                    } else {
+                        super::encoding::decode_8bit(raw)
+                    });
                     self.bump(len);
                 }
                 b if is_bare(b) => {
-                    let n = self.s.get(self.i..)?.iter().take_while(|&&b| is_bare(b)).count();
-                    parts.push(String::from_utf8_lossy(self.s.get(self.i..self.i.saturating_add(n))?).into_owned());
+                    let n = self
+                        .s
+                        .get(self.i..)?
+                        .iter()
+                        .take_while(|&&b| is_bare(b))
+                        .count();
+                    parts.push(
+                        String::from_utf8_lossy(self.s.get(self.i..self.i.saturating_add(n))?)
+                            .into_owned(),
+                    );
                     self.bump(n);
                 }
                 _ => return None,
@@ -312,7 +330,11 @@ impl<'a> Parser<'a> {
                     .get(self.i.saturating_add(1)..self.i.saturating_add(len).saturating_sub(1))
                     .unwrap_or_default();
                 self.bump(len.max(1));
-                Val::Str(if q == b'"' { unescape(raw) } else { super::encoding::decode_8bit(raw) })
+                Val::Str(if q == b'"' {
+                    unescape(raw)
+                } else {
+                    super::encoding::decode_8bit(raw)
+                })
             }
             Some(b'[') => {
                 self.bump(1);
@@ -435,7 +457,9 @@ fn scalar(text: &str) -> Val {
     if looks_float && let Ok(v) = clean.parse::<f64>() {
         return Val::Float(v);
     }
-    if text.bytes().next().is_some_and(|b| b.is_ascii_digit()) && (text.contains('-') || text.contains(':')) {
+    if text.bytes().next().is_some_and(|b| b.is_ascii_digit())
+        && (text.contains('-') || text.contains(':'))
+    {
         return Val::DateTime(text.to_owned());
     }
     Val::Invalid(text.to_owned())
@@ -488,12 +512,18 @@ fn unescape(raw: &[u8]) -> String {
 fn value_node(name: String, val: Val, span: Span) -> Node {
     match val {
         Val::Str(s) => text_node(name, span, &s),
-        Val::Int(v) => Node::new(name).span(span).value(Value::Int { value: v, bits: 64 }),
+        Val::Int(v) => Node::new(name)
+            .span(span)
+            .value(Value::Int { value: v, bits: 64 }),
         Val::Float(v) => Node::new(name).span(span).value(Value::Float(v)),
         Val::Bool(v) => Node::new(name).span(span).value(Value::Bool(v)),
         Val::DateTime(text) => match parse_datetime(&text) {
-            Some(t) if text.contains(['Z', 'z', '+']) || text.rfind('-').is_some_and(|i| i > 10) => {
-                Node::new(name).span(span).value(Value::Timestamp { unix_seconds: t })
+            Some(t)
+                if text.contains(['Z', 'z', '+']) || text.rfind('-').is_some_and(|i| i > 10) =>
+            {
+                Node::new(name)
+                    .span(span)
+                    .value(Value::Timestamp { unix_seconds: t })
             }
             _ => text_node(name, span, &text).summary("local date/time"),
         },
@@ -507,9 +537,15 @@ fn value_node(name: String, val: Val, span: Span) -> Node {
             let node = Node::new(name)
                 .span(span)
                 .summary(format!("inline table, {}", plural(n, "key", "keys")));
-            if n == 0 { node } else { node.lazy(inline_table, span) }
+            if n == 0 {
+                node
+            } else {
+                node.lazy(inline_table, span)
+            }
         }
-        Val::Invalid(text) => text_node(name, span, &text).diag(Diagnostic::malformed("invalid value")),
+        Val::Invalid(text) => {
+            text_node(name, span, &text).diag(Diagnostic::malformed("invalid value"))
+        }
     }
 }
 
@@ -529,7 +565,9 @@ fn sub(span: Span, start: usize, end: usize) -> Span {
 async fn entries(cx: Cx, span: Span) -> Result<()> {
     let data = read(&cx, span).await?;
     if to_u64(data.len()) < span.len {
-        cx.diag(Diagnostic::limit("table too large; only its start is shown"));
+        cx.diag(Diagnostic::limit(
+            "table too large; only its start is shown",
+        ));
     }
     let mut p = Parser { s: &data, i: 0 };
     loop {
@@ -541,7 +579,8 @@ async fn entries(cx: Cx, span: Span) -> Result<()> {
         let line_start = p.i;
         let Some((key, _, _)) = p.key() else {
             p.line_end();
-            let text = String::from_utf8_lossy(data.get(line_start..p.i).unwrap_or_default()).into_owned();
+            let text =
+                String::from_utf8_lossy(data.get(line_start..p.i).unwrap_or_default()).into_owned();
             cx.push(
                 text_node("Line", sub(span, line_start, p.i), text.trim())
                     .diag(Diagnostic::malformed("expected `key = value`")),
@@ -570,7 +609,9 @@ async fn entries(cx: Cx, span: Span) -> Result<()> {
         } else if p.peek().is_some() {
             let junk = p.i;
             p.line_end();
-            cx.diag(Diagnostic::malformed("unexpected text after a value").at(sub(span, junk, p.i)));
+            cx.diag(
+                Diagnostic::malformed("unexpected text after a value").at(sub(span, junk, p.i)),
+            );
         }
     }
 }
@@ -588,7 +629,8 @@ async fn array(cx: Cx, span: Span) -> Result<()> {
             _ => {
                 let before = p.i;
                 let (val, a, b) = p.value(0);
-                cx.push(value_node(format!("[{index}]"), val, sub(span, a, b))).await;
+                cx.push(value_node(format!("[{index}]"), val, sub(span, a, b)))
+                    .await;
                 index = index.saturating_add(1);
                 if p.i == before {
                     p.bump(1);
@@ -716,7 +758,11 @@ fn annotation(head: &[u8]) -> String {
                 let v = probe::trim(probe::trim(v).strip_prefix(b"=")?);
                 let v = v.strip_prefix(b"\"")?;
                 let end = v.iter().position(|&b| b == b'"')?;
-                Some(format!("{} {}", section, String::from_utf8_lossy(v.get(..end)?)))
+                Some(format!(
+                    "{} {}",
+                    section,
+                    String::from_utf8_lossy(v.get(..end)?)
+                ))
             })
         });
     let mut out = String::from("TOML document");

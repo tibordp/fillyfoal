@@ -59,7 +59,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         f.u32("bootclasspath_checksums_size").hex().emit()?;
         f.u32("class_loader_context_size").hex().emit()?;
         cx.annotate(format!("Android VDEX v{version}, {dexes} DEX files"));
-        cx.emit(data_node("Contents", file.tail(28), file.len.saturating_sub(28)));
+        cx.emit(data_node(
+            "Contents",
+            file.tail(28),
+            file.len.saturating_sub(28),
+        ));
         return Ok(());
     }
     let count = f.u32("number_of_sections").emit()?;
@@ -85,8 +89,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(node);
         match s.kind {
             0 => cx.emit(Node::new("Checksums").span(span).lazy(checksums, span)),
-            1 if s.size > 0 => cx.emit(Node::new("DEX Files").span(span).lazy(dex_files, (input, span))),
-            _ if s.size > 0 => cx.emit(data_node(name_or(SECTION, s.kind.into(), "section"), span, s.size.into())),
+            1 if s.size > 0 => cx.emit(
+                Node::new("DEX Files")
+                    .span(span)
+                    .lazy(dex_files, (input, span)),
+            ),
+            _ if s.size > 0 => cx.emit(data_node(
+                name_or(SECTION, s.kind.into(), "section"),
+                span,
+                s.size.into(),
+            )),
             _ => {}
         }
     }
@@ -120,7 +132,12 @@ async fn dex_files(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             break;
         }
         let dex = span.sub(offset, size);
-        cx.push(embedded_as(format!("DEX {index}"), input.nested(dex), &super::dex::FORMAT)).await;
+        cx.push(embedded_as(
+            format!("DEX {index}"),
+            input.nested(dex),
+            &super::dex::FORMAT,
+        ))
+        .await;
         offset = offset
             .saturating_add(size)
             .checked_next_multiple_of(4)

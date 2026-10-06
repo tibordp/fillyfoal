@@ -100,10 +100,18 @@ async fn nes(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Trainer").span(file.sub(at, 512)));
         at = at.saturating_add(512);
     }
-    cx.emit(Node::new("PRG ROM").span(file.sub(at, prg)).summary(kib(prg)));
+    cx.emit(
+        Node::new("PRG ROM")
+            .span(file.sub(at, prg))
+            .summary(kib(prg)),
+    );
     at = at.saturating_add(prg);
     if chr > 0 {
-        cx.emit(Node::new("CHR ROM").span(file.sub(at, chr)).summary(kib(chr)));
+        cx.emit(
+            Node::new("CHR ROM")
+                .span(file.sub(at, chr))
+                .summary(kib(chr)),
+        );
         at = at.saturating_add(chr);
     }
     if at < file.len {
@@ -160,7 +168,11 @@ async fn fds(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn fds_side(cx: Cx, span: Span) -> Result<()> {
-    cx.emit(FdsDiskInfo::node("Disk info block", span.sub(0, FdsDiskInfo::SIZE), LE));
+    cx.emit(FdsDiskInfo::node(
+        "Disk info block",
+        span.sub(0, FdsDiskInfo::SIZE),
+        LE,
+    ));
     cx.emit(Node::new("Remaining blocks").span(span.tail(FdsDiskInfo::SIZE)));
     Ok(())
 }
@@ -183,7 +195,11 @@ declare_format!(pub GBC = "gbc", "Game Boy Color ROM", ["gbc", "cgb"],
 declare_format!(pub GB = "gb", "Game Boy ROM", ["gb", "sgb"],
     "application/x-gameboy-rom", Probe::Custom(gb_probe), gameboy);
 
-const GB_CGB: EnumTable = &[(0x00, "DMG only"), (0x80, "CGB enhanced"), (0xc0, "CGB only")];
+const GB_CGB: EnumTable = &[
+    (0x00, "DMG only"),
+    (0x80, "CGB enhanced"),
+    (0xc0, "CGB only"),
+];
 const GB_SGB: EnumTable = &[(0x00, "No SGB functions"), (0x03, "SGB functions")];
 const GB_CART: EnumTable = &[
     (0x00, "ROM ONLY"),
@@ -374,7 +390,11 @@ fn crc16(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b);
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { crc >> 1 ^ 0xa001 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                crc >> 1 ^ 0xa001
+            } else {
+                crc >> 1
+            };
         }
     }
     crc
@@ -390,11 +410,17 @@ async fn nds(cx: Cx, input: Input) -> Result<()> {
     let computed = crc16(header.get(..0x15e).unwrap_or_default());
     let mut crc = Node::new("Header CRC")
         .span(file.sub(0x15e, 2))
-        .value(Value::UInt { value: stored.into(), bits: 16, radix: crate::value::Radix::Hex });
+        .value(Value::UInt {
+            value: stored.into(),
+            bits: 16,
+            radix: crate::value::Radix::Hex,
+        });
     crc = if stored == computed {
         crc.summary("valid")
     } else {
-        crc.diag(Diagnostic::warning(format!("CRC mismatch: computed {computed:#06x}")))
+        crc.diag(Diagnostic::warning(format!(
+            "CRC mismatch: computed {computed:#06x}"
+        )))
     };
     cx.emit(Node::new("Nintendo logo").span(file.sub(0xc0, 156)));
     cx.emit(crc);
@@ -491,12 +517,19 @@ async fn n64(cx: Cx, input: Input) -> Result<()> {
         Some(b"\x80\x37\x12\x40") => (file.sub(0, 0x40), "big-endian (.z64)"),
         Some(magic) => {
             let swapped: Vec<u8> = if magic == b"\x37\x80\x40\x12" {
-                head.chunks(2).flat_map(|c| c.iter().rev().copied()).collect()
+                head.chunks(2)
+                    .flat_map(|c| c.iter().rev().copied())
+                    .collect()
             } else {
-                head.chunks(4).flat_map(|c| c.iter().rev().copied()).collect()
+                head.chunks(4)
+                    .flat_map(|c| c.iter().rev().copied())
+                    .collect()
             };
             let decoded = cx.add_derived(
-                Origin { parent: file.sub(0, 0x40), transform: "n64-byteswap" },
+                Origin {
+                    parent: file.sub(0, 0x40),
+                    transform: "n64-byteswap",
+                },
                 swapped,
                 0x40,
                 None,
@@ -557,9 +590,17 @@ async fn genesis(cx: Cx, input: Input) -> Result<()> {
     let h: GenesisHeader = read_record(&cx, span, BE).await?;
     cx.emit(GenesisHeader::node("Header", span, BE));
     cx.emit(Node::new("Program").span(file.tail(0x200)));
-    let title = if h.overseas.trim().is_empty() { &h.domestic } else { &h.overseas };
+    let title = if h.overseas.trim().is_empty() {
+        &h.domestic
+    } else {
+        &h.overseas
+    };
     let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ");
-    cx.annotate(format!("{title:?}, {}, region {}", h.system.trim(), h.region.trim()));
+    cx.annotate(format!(
+        "{title:?}, {}, region {}",
+        h.system.trim(),
+        h.region.trim()
+    ));
     Ok(())
 }
 
@@ -568,13 +609,23 @@ async fn genesis(cx: Cx, input: Input) -> Result<()> {
 
 fn snes_header_at(h: &Head<'_>) -> Option<usize> {
     [0x7fc0usize, 0x81c0].into_iter().find(|&base| {
-        let complement = h.data.get(base.saturating_add(0x1c)..base.saturating_add(0x1e));
-        let checksum = h.data.get(base.saturating_add(0x1e)..base.saturating_add(0x20));
+        let complement = h
+            .data
+            .get(base.saturating_add(0x1c)..base.saturating_add(0x1e));
+        let checksum = h
+            .data
+            .get(base.saturating_add(0x1e)..base.saturating_add(0x20));
         let map = h.data.get(base.saturating_add(0x15)).copied().unwrap_or(0);
         match (complement, checksum) {
             (Some(c), Some(s)) => {
-                let c = u16::from_le_bytes([c.first().copied().unwrap_or(0), c.get(1).copied().unwrap_or(0)]);
-                let s = u16::from_le_bytes([s.first().copied().unwrap_or(0), s.get(1).copied().unwrap_or(0)]);
+                let c = u16::from_le_bytes([
+                    c.first().copied().unwrap_or(0),
+                    c.get(1).copied().unwrap_or(0),
+                ]);
+                let s = u16::from_le_bytes([
+                    s.first().copied().unwrap_or(0),
+                    s.get(1).copied().unwrap_or(0),
+                ]);
                 c ^ s == 0xffff && matches!(map & 0xef, 0x20 | 0x21 | 0x23 | 0x25 | 0x2a)
             }
             _ => false,
@@ -634,7 +685,11 @@ record! {
 async fn snes(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (head, tail) = crate::formats::head(&cx, file).await?;
-    let probe = Head { data: &head, tail: &tail, len: file.len };
+    let probe = Head {
+        data: &head,
+        tail: &tail,
+        len: file.len,
+    };
     let base = to_u64(snes_header_at(&probe).unwrap_or(0x7fc0));
     if base == 0x81c0 {
         cx.emit(Node::new("Copier header").span(file.sub(0, 0x200)));
@@ -686,26 +741,42 @@ declare_format!(pub PBP = "pbp", "PSP package (EBOOT.PBP)", ["pbp"],
     "application/octet-stream", Probe::Magic(&[(0, b"\0PBP")]), pbp);
 
 const PBP_ENTRIES: [&str; 8] = [
-    "PARAM.SFO", "ICON0.PNG", "ICON1.PMF", "PIC0.PNG", "PIC1.PNG", "SND0.AT3", "DATA.PSP", "DATA.PSAR",
+    "PARAM.SFO",
+    "ICON0.PNG",
+    "ICON1.PMF",
+    "PIC0.PNG",
+    "PIC1.PNG",
+    "SND0.AT3",
+    "DATA.PSP",
+    "DATA.PSAR",
 ];
 
 async fn pbp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let header = cx.read(file.sub(0, 0x28)).await?;
-    cx.emit(Node::new("Header").span(file.sub(0, 0x28)).summary(format!(
-        "version {:#x}",
-        u32_le(&header, 4).unwrap_or(0)
-    )));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 0x28))
+            .summary(format!("version {:#x}", u32_le(&header, 4).unwrap_or(0))),
+    );
     let offsets: Vec<u64> = (0..8)
-        .map(|i: usize| u64::from(u32_le(&header, 8usize.saturating_add(i.saturating_mul(4))).unwrap_or(0)))
+        .map(|i: usize| {
+            u64::from(u32_le(&header, 8usize.saturating_add(i.saturating_mul(4))).unwrap_or(0))
+        })
         .collect();
     for (i, name) in PBP_ENTRIES.iter().enumerate() {
         let start = offsets.get(i).copied().unwrap_or(0);
-        let end = offsets.get(i.saturating_add(1)).copied().unwrap_or(file.len);
+        let end = offsets
+            .get(i.saturating_add(1))
+            .copied()
+            .unwrap_or(file.len);
         if end <= start {
             continue;
         }
-        cx.emit(embedded(*name, input.nested(file.sub(start, end.saturating_sub(start)))));
+        cx.emit(embedded(
+            *name,
+            input.nested(file.sub(start, end.saturating_sub(start))),
+        ));
     }
     Ok(())
 }
@@ -745,7 +816,11 @@ async fn sfo(cx: Cx, input: Input) -> Result<()> {
         );
         let bytes = cx.read_avail(value_span).await?;
         let value = if fmt == 0x0404 {
-            Value::UInt { value: u32_le(&bytes, 0).unwrap_or(0).into(), bits: 32, radix: crate::value::Radix::Dec }
+            Value::UInt {
+                value: u32_le(&bytes, 0).unwrap_or(0).into(),
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            }
         } else {
             Value::Text(crate::text::until_nul(&bytes))
         };
@@ -823,7 +898,10 @@ async fn xbe(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Certificate").span(cert).summary(title.clone()));
         cx.annotate(format!("{title:?}"));
     }
-    let table = file.sub_exact(at(h.section_headers), u64::from(h.sections).saturating_mul(XbeSection::SIZE))?;
+    let table = file.sub_exact(
+        at(h.section_headers),
+        u64::from(h.sections).saturating_mul(XbeSection::SIZE),
+    )?;
     cx.emit(
         Node::new("Sections")
             .span(table)
@@ -935,7 +1013,11 @@ async fn nro(cx: Cx, input: Input) -> Result<()> {
     let asset = file.tail(h.size.into());
     let magic = cx.read_avail(asset.sub(0, 4)).await?;
     if magic == b"ASET" {
-        cx.emit(Node::new("Assets").span(asset).lazy(nro_assets, (input, asset)));
+        cx.emit(
+            Node::new("Assets")
+                .span(asset)
+                .lazy(nro_assets, (input, asset)),
+        );
     }
     cx.annotate(format!("NRO, {:#x} bytes of code and data", h.size));
     Ok(())
@@ -1064,12 +1146,22 @@ async fn ncsd(cx: Cx, input: Input) -> Result<()> {
     let header = cx.read(file.sub(0, 0x200)).await?;
     cx.emit(Node::new("Signature").span(file.sub(0, 0x100)));
     cx.emit(Node::new("Header").span(file.sub(0x100, 0x100)));
-    let names = ["Game (CXI)", "Manual (CFA)", "Download Play (CFA)", "Partition 3", "Partition 4", "Partition 5", "N3DS update (CFA)", "O3DS update (CFA)"];
+    let names = [
+        "Game (CXI)",
+        "Manual (CFA)",
+        "Download Play (CFA)",
+        "Partition 3",
+        "Partition 4",
+        "Partition 5",
+        "N3DS update (CFA)",
+        "O3DS update (CFA)",
+    ];
     let mut partitions = 0u32;
     for (i, name) in names.iter().enumerate() {
         let at = 0x120usize.saturating_add(i.saturating_mul(8));
         let offset = u64::from(u32_le(&header, at).unwrap_or(0)).saturating_mul(MEDIA_UNIT);
-        let size = u64::from(u32_le(&header, at.saturating_add(4)).unwrap_or(0)).saturating_mul(MEDIA_UNIT);
+        let size = u64::from(u32_le(&header, at.saturating_add(4)).unwrap_or(0))
+            .saturating_mul(MEDIA_UNIT);
         if size == 0 {
             continue;
         }
@@ -1077,7 +1169,9 @@ async fn ncsd(cx: Cx, input: Input) -> Result<()> {
         cx.emit(embedded(*name, input.nested(file.sub(offset, size))).summary(kib(size)));
     }
     let media_id = crate::bytes::u64_le(&header, 0x108).unwrap_or(0);
-    cx.annotate(format!("media ID {media_id:016x}, {partitions} partition(s)"));
+    cx.annotate(format!(
+        "media ID {media_id:016x}, {partitions} partition(s)"
+    ));
     Ok(())
 }
 
@@ -1131,7 +1225,11 @@ async fn ncch(cx: Cx, input: Input) -> Result<()> {
             cx.emit(Node::new(name).span(file.sub(mu(offset), mu(size))));
         }
     }
-    cx.annotate(format!("{} (program {:016x})", h.product.trim_end(), h.program_id));
+    cx.annotate(format!(
+        "{} (program {:016x})",
+        h.product.trim_end(),
+        h.program_id
+    ));
     Ok(())
 }
 
@@ -1157,7 +1255,11 @@ record! {
 async fn lynx(cx: Cx, input: Input) -> Result<()> {
     let h: LynxHeader = emit_record(&cx, input.span.sub(0, LynxHeader::SIZE), LE).await?;
     cx.emit(Node::new("ROM").span(input.span.tail(LynxHeader::SIZE)));
-    cx.annotate(format!("{:?} by {}", h.name.trim_end(), h.manufacturer.trim_end()));
+    cx.annotate(format!(
+        "{:?} by {}",
+        h.name.trim_end(),
+        h.manufacturer.trim_end()
+    ));
     Ok(())
 }
 

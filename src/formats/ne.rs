@@ -158,7 +158,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mz = cx.read_avail(file.sub(0, 64)).await?;
     let lfanew = u64::from(u32_le(&mz, 0x3c).unwrap_or(0));
-    cx.emit(Node::new("MZ Header").span(file.sub(0, 64)).desc("DOS header; e_lfanew points at the NE header"));
+    cx.emit(
+        Node::new("MZ Header")
+            .span(file.sub(0, 64))
+            .desc("DOS header; e_lfanew points at the NE header"),
+    );
     if lfanew > 64 {
         cx.emit(Node::new("DOS Stub").span(file.sub(64, lfanew.saturating_sub(64))));
     }
@@ -172,10 +176,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let shift = u32::from(h.align.min(16));
 
     let resident = names(&tables, h.restab.into());
-    let module = resident.first().map(|(s, ..)| s.clone()).unwrap_or_default();
-    let nonres = cx.read_avail(file.sub(h.nrestab.into(), h.cbnrestab.into())).await?;
+    let module = resident
+        .first()
+        .map(|(s, ..)| s.clone())
+        .unwrap_or_default();
+    let nonres = cx
+        .read_avail(file.sub(h.nrestab.into(), h.cbnrestab.into()))
+        .await?;
     let description = pascal(&nonres, 0).map(|(s, _)| s).unwrap_or_default();
-    let kind = if h.flags & 0x8000 != 0 { "DLL" } else { "executable" };
+    let kind = if h.flags & 0x8000 != 0 {
+        "DLL"
+    } else {
+        "executable"
+    };
     cx.annotate(format!(
         "NE {kind} ({} {}), module {module}{}, {} segments",
         name_or(TARGET_OS, h.exetyp.into(), "OS"),
@@ -198,7 +211,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     // Resources.
     if h.rsrctab != h.restab {
-        let span = ne.sub(h.rsrctab.into(), u64::from(h.restab.saturating_sub(h.rsrctab)));
+        let span = ne.sub(
+            h.rsrctab.into(),
+            u64::from(h.restab.saturating_sub(h.rsrctab)),
+        );
         cx.emit(
             Node::new("Resource Table")
                 .span(span)
@@ -206,15 +222,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     // Names.
-    let resident_span = ne.sub(h.restab.into(), u64::from(h.modtab.saturating_sub(h.restab)));
+    let resident_span = ne.sub(
+        h.restab.into(),
+        u64::from(h.modtab.saturating_sub(h.restab)),
+    );
     cx.emit(name_list("Resident Names", resident_span, &resident, ne));
     let nonres_span = file.sub(h.nrestab.into(), h.cbnrestab.into());
     let nonresident = names(&nonres, 0);
-    cx.emit(name_list("Non-resident Names", nonres_span, &nonresident, nonres_span));
+    cx.emit(name_list(
+        "Non-resident Names",
+        nonres_span,
+        &nonresident,
+        nonres_span,
+    ));
     // Imported modules.
     let mut modules = Vec::new();
     for i in 0..usize::from(h.cmod) {
-        let off = u16_le(&tables, usize::from(h.modtab).saturating_add(i.saturating_mul(2))).unwrap_or(0);
+        let off = u16_le(
+            &tables,
+            usize::from(h.modtab).saturating_add(i.saturating_mul(2)),
+        )
+        .unwrap_or(0);
         let at = usize::from(h.imptab).saturating_add(off.into());
         if let Some((s, len)) = pascal(&tables, at) {
             modules.push(Node::new(s).span(ne.sub(to_u64(at), to_u64(len))));
@@ -234,7 +262,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn name_list(label: &'static str, span: Span, list: &[(String, u16, usize, usize)], base: Span) -> Node {
+fn name_list(
+    label: &'static str,
+    span: Span,
+    list: &[(String, u16, usize, usize)],
+    base: Span,
+) -> Node {
     let nodes: Vec<Node> = list
         .iter()
         .enumerate()
@@ -268,7 +301,11 @@ async fn segments(cx: Cx, (file, table, shift): (Span, Span, u32)) -> Result<()>
         let at = table.sub(i.saturating_mul(8), 8);
         let s = parse(&cx, at, LE, &(), SegmentEntry::layout).await?;
         let offset = u64::from(s.sector).checked_shl(shift).unwrap_or(0);
-        let len = if s.length == 0 && s.sector != 0 { 0x1_0000 } else { u64::from(s.length) };
+        let len = if s.length == 0 && s.sector != 0 {
+            0x1_0000
+        } else {
+            u64::from(s.length)
+        };
         let kind = if s.flags & 1 != 0 { "DATA" } else { "CODE" };
         let mut node = SegmentEntry::node(format!("Segment {}", i.saturating_add(1)), at, LE)
             .summary(format!("{kind}, {len:#x} bytes at {offset:#x}"));
@@ -284,7 +321,11 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let data = cx.read_avail(span).await?;
     let shift = u32::from(u16_le(&data, 0).unwrap_or(0).min(16));
     let file = input.span;
-    cx.emit(Node::new("rscAlignShift").span(span.sub(0, 2)).value(crate::formats::binutil::dec(shift.into(), 16)));
+    cx.emit(
+        Node::new("rscAlignShift")
+            .span(span.sub(0, 2))
+            .value(crate::formats::binutil::dec(shift.into(), 16)),
+    );
     let mut at = 2usize;
     while let Some(kind) = u16_le(&data, at) {
         if kind == 0 {
@@ -310,12 +351,16 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             };
             let content = file.sub(offset, len);
             items.push(
-                Node::new(name).span(content).lazy(crate::formats::dissect_or_data, input.nested(content))
+                Node::new(name)
+                    .span(content)
+                    .lazy(crate::formats::dissect_or_data, input.nested(content))
                     .summary(format!("{len:#x} bytes at {offset:#x}"))
                     .target(span.sub(to_u64(e), 12)),
             );
         }
-        let end = at.saturating_add(8).saturating_add(count.saturating_mul(12));
+        let end = at
+            .saturating_add(8)
+            .saturating_add(count.saturating_mul(12));
         cx.push(
             Node::new(type_name)
                 .span(span.sub(to_u64(at), to_u64(end.saturating_sub(at))))

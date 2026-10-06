@@ -68,7 +68,13 @@ fn classify(k: &[u8]) -> (Kind, String) {
         };
         return (Kind::Partition, format!("{kind} partition pack ({status})"));
     }
-    if b(4) == 0x02 && b(5) == 0x53 && b(8) == 0x0d && b(9) == 0x01 && b(10) == 0x02 && b(13) == 0x10 {
+    if b(4) == 0x02
+        && b(5) == 0x53
+        && b(8) == 0x0d
+        && b(9) == 0x01
+        && b(10) == 0x02
+        && b(13) == 0x10
+    {
         return (Kind::Index, "Index table segment".to_owned());
     }
     if b(4) == 0x01 && b(8) == 0x03 && b(9) == 0x01 && b(10) == 0x02 && b(11) == 0x10 {
@@ -78,7 +84,13 @@ fn classify(k: &[u8]) -> (Kind, String) {
         let name = set_name(b(13), b(14));
         return (Kind::Set, name.to_owned());
     }
-    if b(4) == 0x01 && b(5) == 0x02 && b(8) == 0x0d && b(9) == 0x01 && b(10) == 0x03 && b(11) == 0x01 {
+    if b(4) == 0x01
+        && b(5) == 0x02
+        && b(8) == 0x0d
+        && b(9) == 0x01
+        && b(10) == 0x03
+        && b(11) == 0x01
+    {
         let item = match b(12) {
             0x04 => "CP system item",
             0x05 => "CP picture element",
@@ -91,7 +103,16 @@ fn classify(k: &[u8]) -> (Kind, String) {
             0x18 => "GC compound element",
             _ => "Essence element",
         };
-        return (Kind::Essence, format!("{item} (track {:02x}{:02x}{:02x}{:02x})", b(12), b(13), b(14), b(15)));
+        return (
+            Kind::Essence,
+            format!(
+                "{item} (track {:02x}{:02x}{:02x}{:02x})",
+                b(12),
+                b(13),
+                b(14),
+                b(15)
+            ),
+        );
     }
     if b(8) == 0x0d && b(9) == 0x01 && b(10) == 0x03 && b(11) == 0x01 && b(12) == 0x04 {
         return (Kind::Other, "System metadata".to_owned());
@@ -144,7 +165,10 @@ fn operational_pattern(ul: &[u8]) -> Option<String> {
     let item = *ul.get(12)?;
     let package = *ul.get(13)?;
     if ul.get(11) == Some(&0x01) && (1..=3).contains(&item) && (1..=3).contains(&package) {
-        return Some(format!("OP{item}{}", char::from(b'a'.saturating_add(package.saturating_sub(1)))));
+        return Some(format!(
+            "OP{item}{}",
+            char::from(b'a'.saturating_add(package.saturating_sub(1)))
+        ));
     }
     (ul.get(11) == Some(&0x10)).then(|| "OP-Atom".to_owned())
 }
@@ -182,7 +206,10 @@ fn ber(d: &[u8]) -> Option<(u64, usize)> {
         return None;
     }
     let bytes = d.get(1..n.checked_add(1)?)?;
-    Some((bytes.iter().fold(0u64, |a, &b| (a << 8) | u64::from(b)), n.checked_add(1)?))
+    Some((
+        bytes.iter().fold(0u64, |a, &b| (a << 8) | u64::from(b)),
+        n.checked_add(1)?,
+    ))
 }
 
 fn ul_text(d: &[u8]) -> String {
@@ -242,7 +269,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             node = node.summary(s);
         }
         if span.len < total {
-            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, total), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, total),
+                span.len,
+            ));
         }
         cx.push(node.lazy(expand_klv, klv)).await;
         pos = pos.saturating_add(total);
@@ -348,7 +378,10 @@ fn set_summary(d: &[u8]) -> Option<String> {
             0x3d03 => {
                 let (n, den) = rational(v)?;
                 if den != 0 {
-                    parts.push(format!("{} Hz", vidutil::num(f64::from(n) / f64::from(den))));
+                    parts.push(format!(
+                        "{} Hz",
+                        vidutil::num(f64::from(n) / f64::from(den))
+                    ));
                 }
             }
             0x3d07 => parts.push(format!("{} ch", u32_be(v, 0)?)),
@@ -429,7 +462,13 @@ impl Summary {
         }];
         let streams: Vec<&String> = [&self.picture, &self.sound].into_iter().flatten().collect();
         if !streams.is_empty() {
-            parts.push(streams.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(" + "));
+            parts.push(
+                streams
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join(" + "),
+            );
         }
         if let Some(d) = &self.duration {
             parts.push(d.clone());
@@ -496,8 +535,12 @@ async fn expand_klv(cx: Cx, klv: Klv) -> Result<()> {
                 let span = ul.span();
                 let ul = ul.get()?;
                 f.node(
-                    text(format!("Tag {tag:#06x}"), Span::new(span.source, span.offset.saturating_sub(2), 18), ul_text(&ul))
-                        .summary(local_tag_name(tag).unwrap_or("")),
+                    text(
+                        format!("Tag {tag:#06x}"),
+                        Span::new(span.source, span.offset.saturating_sub(2), 18),
+                        ul_text(&ul),
+                    )
+                    .summary(local_tag_name(tag).unwrap_or("")),
                 );
             }
         }
@@ -516,7 +559,11 @@ async fn expand_klv(cx: Cx, klv: Klv) -> Result<()> {
         Kind::Index => local_set(&cx, value, klv.primer).await?,
         _ => {
             if !value.is_empty() {
-                cx.emit(Node::new("Value").span(value).summary(format!("{} bytes", value.len)));
+                cx.emit(
+                    Node::new("Value")
+                        .span(value)
+                        .summary(format!("{} bytes", value.len)),
+                );
             }
         }
     }
@@ -673,7 +720,9 @@ fn dynamic_ul(primer: &[u8], tag: u16) -> Option<Vec<u8>> {
     let mut at = 8usize;
     for _ in 0..n.min(65536) {
         if u16_be(primer, at)? == tag {
-            return primer.get(at.saturating_add(2)..at.saturating_add(18)).map(<[u8]>::to_vec);
+            return primer
+                .get(at.saturating_add(2)..at.saturating_add(18))
+                .map(<[u8]>::to_vec);
         }
         at = at.saturating_add(18);
     }
@@ -686,24 +735,23 @@ fn item_node(name: String, tag: u16, span: Span, vspan: Span, v: &[u8]) -> Node 
         0x3c01 | 0x3c02 | 0x3c04 | 0x3c08 | 0x4402 | 0x4802 => node.value(Value::Text(utf16be(v))),
         0x3b02 | 0x3c06 | 0x4404 | 0x4405 => node.value(Value::Text(timestamp(v))),
         0x4b01 | 0x3001 | 0x3d03 | 0x320e | 0x3f0b => match rational(v) {
-            Some((n, d)) => node.value(Value::Text(format!("{n}/{d}"))).summary(if d != 0 {
-                vidutil::num(f64::from(n) / f64::from(d))
-            } else {
-                "∞".to_owned()
-            }),
+            Some((n, d)) => node
+                .value(Value::Text(format!("{n}/{d}")))
+                .summary(if d != 0 {
+                    vidutil::num(f64::from(n) / f64::from(d))
+                } else {
+                    "∞".to_owned()
+                }),
             None => node.value(Value::Bytes(v.to_vec())),
         },
-        0x0202 | 0x3002 | 0x4b02 | 0x1201 | 0x3f0c | 0x3f0d => {
-            node.value(Value::Int {
-                value: crate::bytes::array::<8>(v, 0).map_or(0, i64::from_be_bytes),
-                bits: 64,
-            })
-        }
-        0x3203 | 0x3202 | 0x3204 | 0x3205 | 0x3208 | 0x3209 | 0x3301 | 0x3302 | 0x3308
-        | 0x3d01 | 0x3d07 | 0x3d09 | 0x4801 | 0x3006 | 0x1102 | 0x3f06 | 0x3f07 | 0x3f05 | 0x3206
-        | 0x3207 | 0x3304 | 0x3305 | 0x3306 | 0x320c | 0x3303 | 0x3d0a | 0x1502 | 0x1503 | 0x1501 => {
-            uint_value(node, v)
-        }
+        0x0202 | 0x3002 | 0x4b02 | 0x1201 | 0x3f0c | 0x3f0d => node.value(Value::Int {
+            value: crate::bytes::array::<8>(v, 0).map_or(0, i64::from_be_bytes),
+            bits: 64,
+        }),
+        0x3203 | 0x3202 | 0x3204 | 0x3205 | 0x3208 | 0x3209 | 0x3301 | 0x3302 | 0x3308 | 0x3d01
+        | 0x3d07 | 0x3d09 | 0x4801 | 0x3006 | 0x1102 | 0x3f06 | 0x3f07 | 0x3f05 | 0x3206
+        | 0x3207 | 0x3304 | 0x3305 | 0x3306 | 0x320c | 0x3303 | 0x3d0a | 0x1502 | 0x1503
+        | 0x1501 => uint_value(node, v),
         0x4804 => match u32_be(v, 0) {
             Some(n) => node.value(Value::UInt {
                 value: n.into(),
@@ -725,7 +773,8 @@ fn item_node(name: String, tag: u16, span: Span, vspan: Span, v: &[u8]) -> Node 
         | 0x4803 => node.value(Value::Text(ul_text(v))),
         0x3b06 | 0x1901 | 0x1902 | 0x4403 | 0x1001 | 0x3f01 | 0x3b0a | 0x3b0b | 0x2f01 => {
             let count = u32_be(v, 0).unwrap_or(0);
-            node.summary(format!("{count} items")).desc("Batch or array of references")
+            node.summary(format!("{count} items"))
+                .desc("Batch or array of references")
         }
         _ if v.len() <= 16 => node.value(Value::Bytes(v.to_vec())),
         _ => node.summary(format!("{} bytes", vspan.len)),

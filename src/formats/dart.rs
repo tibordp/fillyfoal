@@ -23,8 +23,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &block, Endian::Big);
     f.u32("magic").hex().emit()?;
     let version = f.u32("formatVersion").emit()?;
-    let hash = f.ascii("sdkHash", 10).desc("Git hash of the SDK, or 0000000000").emit()?;
+    let hash = f
+        .ascii("sdkHash", 10)
+        .desc("Git hash of the SDK, or 0000000000")
+        .emit()?;
     cx.annotate(format!("Dart kernel binary, format {version}, SDK {hash}"));
-    cx.emit(data_node("Component", file.tail(18), file.len.saturating_sub(18)));
+    cx.emit(data_node(
+        "Component",
+        file.tail(18),
+        file.len.saturating_sub(18),
+    ));
     Ok(())
 }

@@ -22,7 +22,9 @@ fn probe(h: &Head<'_>) -> bool {
     let d = h.data;
     if d.starts_with(b"\x00\x00\x01\xb0") {
         // Visual object sequence, then a visual object or user data.
-        return d.get(5..9).is_some_and(|w| w == b"\x00\x00\x01\xb5" || w == b"\x00\x00\x01\xb2");
+        return d
+            .get(5..9)
+            .is_some_and(|w| w == b"\x00\x00\x01\xb5" || w == b"\x00\x00\x01\xb2");
     }
     // A video object start code followed directly by a VOL header.
     d.get(..3) == Some(b"\x00\x00\x01")
@@ -110,7 +112,9 @@ fn parse_vol(d: &[u8]) -> Option<Vol> {
     vol.resolution = b.bits(16)?;
     b.bit()?;
     if b.flag()? {
-        let bits = 64u32.saturating_sub(vol.resolution.saturating_sub(1).leading_zeros()).max(1);
+        let bits = 64u32
+            .saturating_sub(vol.resolution.saturating_sub(1).leading_zeros())
+            .max(1);
         b.bits(bits)?;
     }
     if vol.shape == 0 {
@@ -168,7 +172,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }),
             0xb6 => {
                 let t = body.first().copied().unwrap_or(0) >> 6;
-                Some(format!("{}-VOP", VOP_TYPES.get(usize::from(t)).copied().unwrap_or("?")))
+                Some(format!(
+                    "{}-VOP",
+                    VOP_TYPES.get(usize::from(t)).copied().unwrap_or("?")
+                ))
             }
             0xb2 => Some(format!("\"{}\"", crate::text::until_nul(body))),
             0xb3 => {
@@ -197,13 +204,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
     let d = vidutil::read_small(&cx, span, 256).await?;
-    cx.emit(hex("Start code", span.sub(0, 4), 0x100u64 | u64::from(code), 32));
+    cx.emit(hex(
+        "Start code",
+        span.sub(0, 4),
+        0x100u64 | u64::from(code),
+        32,
+    ));
     let body = span.tail(4);
     let data = d.get(4..).unwrap_or_default();
     match code {
         0xb0 => {
             let p = data.first().copied().unwrap_or(0);
-            cx.emit(vidutil::enumerated("Profile and level", body.sub(0, 1), p.into(), 8, PROFILES));
+            cx.emit(vidutil::enumerated(
+                "Profile and level",
+                body.sub(0, 1),
+                p.into(),
+                8,
+                PROFILES,
+            ));
         }
         0xb6 => {
             let t = data.first().copied().unwrap_or(0) >> 6;
@@ -221,7 +239,12 @@ async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
                     uint("Shape", body, v.shape, 2)
                         .summary(SHAPES.get(vidutil::us(v.shape)).copied().unwrap_or("?")),
                 );
-                cx.emit(uint("VOP time increment resolution", body, v.resolution, 16));
+                cx.emit(uint(
+                    "VOP time increment resolution",
+                    body,
+                    v.resolution,
+                    16,
+                ));
                 cx.emit(uint("Width", body, v.width, 13));
                 cx.emit(uint("Height", body, v.height, 13));
             }

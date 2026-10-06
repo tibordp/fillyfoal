@@ -61,7 +61,12 @@ record! {
 async fn nsf(cx: Cx, input: Input) -> Result<()> {
     let h: NsfHeader = emit_record(&cx, input.span.sub(0, NsfHeader::SIZE), LE).await?;
     cx.emit(Node::new("Program data").span(input.span.tail(NsfHeader::SIZE)));
-    cx.annotate(format!("{:?} by {}, {} songs", h.name.trim_end(), h.artist.trim_end(), h.songs));
+    cx.annotate(format!(
+        "{:?} by {}, {} songs",
+        h.name.trim_end(),
+        h.artist.trim_end(),
+        h.songs
+    ));
     Ok(())
 }
 
@@ -78,7 +83,9 @@ async fn nsfe(cx: Cx, input: Input) -> Result<()> {
         let id = String::from_utf8_lossy(&cur.bytes(4).await?).into_owned();
         let data = cur.span(len.into());
         cur.skip(len.into());
-        let mut node = Node::new(id.clone()).span(cur.since(start)).summary(format!("{len} bytes"));
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .summary(format!("{len} bytes"));
         if id == "auth" || id == "tlbl" {
             let bytes = cx.read_avail(data).await?;
             let strings: Vec<String> = bytes
@@ -123,7 +130,12 @@ record! {
 async fn gbs(cx: Cx, input: Input) -> Result<()> {
     let h: GbsHeader = emit_record(&cx, input.span.sub(0, GbsHeader::SIZE), LE).await?;
     cx.emit(Node::new("Code").span(input.span.tail(GbsHeader::SIZE)));
-    cx.annotate(format!("{:?} by {}, {} songs", h.title.trim_end(), h.author.trim_end(), h.songs));
+    cx.annotate(format!(
+        "{:?} by {}, {} songs",
+        h.title.trim_end(),
+        h.author.trim_end(),
+        h.songs
+    ));
     Ok(())
 }
 
@@ -216,8 +228,17 @@ record! {
 }
 
 const GD3_FIELDS: [&str; 11] = [
-    "Track name", "Track name (Japanese)", "Game name", "Game name (Japanese)", "System",
-    "System (Japanese)", "Author", "Author (Japanese)", "Release date", "Converted by", "Notes",
+    "Track name",
+    "Track name (Japanese)",
+    "Game name",
+    "Game name (Japanese)",
+    "System",
+    "System (Japanese)",
+    "Author",
+    "Author (Japanese)",
+    "Release date",
+    "Converted by",
+    "Notes",
 ];
 
 async fn vgm(cx: Cx, input: Input) -> Result<()> {
@@ -229,10 +250,20 @@ async fn vgm(cx: Cx, input: Input) -> Result<()> {
     } else {
         0x40
     };
-    let gd3 = if h.gd3 != 0 { 0x14u64.saturating_add(h.gd3.into()) } else { file.len };
+    let gd3 = if h.gd3 != 0 {
+        0x14u64.saturating_add(h.gd3.into())
+    } else {
+        file.len
+    };
     cx.emit(Node::new("Command stream").span(file.sub(data_start, gd3.saturating_sub(data_start))));
     let seconds = h.samples / 44100;
-    let mut summary = format!("VGM {}.{:02x}, {}:{:02}", h.version >> 8, h.version & 0xff, seconds / 60, seconds % 60);
+    let mut summary = format!(
+        "VGM {}.{:02x}, {}:{:02}",
+        h.version >> 8,
+        h.version & 0xff,
+        seconds / 60,
+        seconds % 60
+    );
     if gd3 < file.len {
         let tag = file.tail(gd3);
         let head = cx.read(tag.sub(0, 12)).await?;
@@ -244,13 +275,21 @@ async fn vgm(cx: Cx, input: Input) -> Result<()> {
             for name in GD3_FIELDS {
                 let rest = strings.get(at..).unwrap_or_default();
                 let (value, used, _) = crate::text::utf16z(rest, LE);
-                values.push((name, value, tag.sub(12u64.saturating_add(to_u64(at)), to_u64(used))));
+                values.push((
+                    name,
+                    value,
+                    tag.sub(12u64.saturating_add(to_u64(at)), to_u64(used)),
+                ));
                 at = at.saturating_add(used);
             }
             if let (Some((_, track, _)), Some((_, game, _))) = (values.first(), values.get(2)) {
                 summary = format!("{track:?} from {game:?}, {summary}");
             }
-            cx.emit(Node::new("GD3 tag").span(tag).lazy(gd3_tag, values_state(values)));
+            cx.emit(
+                Node::new("GD3 tag")
+                    .span(tag)
+                    .lazy(gd3_tag, values_state(values)),
+            );
         }
     }
     cx.annotate(summary);
@@ -274,7 +313,10 @@ async fn gd3_tag(cx: Cx, values: std::sync::Arc<Gd3>) -> Result<()> {
 // PSF family (PlayStation, Saturn, GBA, ...)
 
 fn psf_probe(h: &crate::formats::Head<'_>) -> bool {
-    h.starts_with(b"PSF") && h.data.get(3).is_some_and(|v| lookup(PSF_SYSTEMS, (*v).into()).is_some())
+    h.starts_with(b"PSF")
+        && h.data
+            .get(3)
+            .is_some_and(|v| lookup(PSF_SYSTEMS, (*v).into()).is_some())
 }
 
 declare_format!(pub PSF = "psf", "Portable Sound Format", ["psf", "minipsf", "psf2", "ssf", "dsf", "usf", "gsf", "2sf", "snsf", "qsf"],
@@ -381,7 +423,13 @@ async fn sid(cx: Cx, input: Input) -> Result<()> {
         f.u8("Third SID address").hex().emit()?;
     }
     cx.emit(Node::new("C64 data").span(file.tail(h.data_offset.into())));
-    cx.annotate(format!("{:?} by {}, {} songs ({})", h.name.trim_end(), h.author.trim_end(), h.songs, h.magic));
+    cx.annotate(format!(
+        "{:?} by {}, {} songs ({})",
+        h.name.trim_end(),
+        h.author.trim_end(),
+        h.songs,
+        h.magic
+    ));
     Ok(())
 }
 
@@ -454,7 +502,8 @@ async fn relative_string(cx: &Cx, file: Span, at: u64) -> Result<(String, Span)>
     let raw = cx.read(file.sub(at, 2)).await?;
     let delta = i64::from(u16_be(&raw, 0).unwrap_or(0) as i16);
     let target = i64::try_from(at).unwrap_or(0).saturating_add(delta);
-    let target = u64::try_from(target).map_err(|_| Diagnostic::malformed("pointer before start of file"))?;
+    let target =
+        u64::try_from(target).map_err(|_| Diagnostic::malformed("pointer before start of file"))?;
     cx.cstr(file.sub(target, 256)).await
 }
 
@@ -471,10 +520,17 @@ async fn ay(cx: Cx, input: Input) -> Result<()> {
     let songs = f.u8("Last song index").emit()?;
     f.u8("First song index").emit()?;
     let (author, author_span) = relative_string(&cx, file, 0x0e).await?;
-    cx.emit(Node::new("Author").span(author_span).value(text(author.clone())));
+    cx.emit(
+        Node::new("Author")
+            .span(author_span)
+            .value(text(author.clone())),
+    );
     let (misc, misc_span) = relative_string(&cx, file, 0x10).await?;
     cx.emit(Node::new("Misc").span(misc_span).value(text(misc)));
-    cx.annotate(format!("by {author:?}, {} songs", u16::from(songs).saturating_add(1)));
+    cx.annotate(format!(
+        "by {author:?}, {} songs",
+        u16::from(songs).saturating_add(1)
+    ));
     Ok(())
 }
 
@@ -501,7 +557,11 @@ async fn sap(cx: Cx, input: Input) -> Result<()> {
             if key == "NAME" {
                 name = Some(value.trim_matches('"').to_owned());
             }
-            cx.emit(Node::new(key.to_owned()).span(file.sub(pos, len)).value(text(value.trim_matches('"').to_owned())));
+            cx.emit(
+                Node::new(key.to_owned())
+                    .span(file.sub(pos, len))
+                    .value(text(value.trim_matches('"').to_owned())),
+            );
         }
         pos = pos.saturating_add(len);
     }
@@ -534,7 +594,10 @@ async fn ym(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: YmHeader = emit_record(&cx, file.sub(0, YmHeader::SIZE), BE).await?;
     if h.digidrums > 0 {
-        cx.diag(Diagnostic::note(format!("{} digidrum samples precede the strings", h.digidrums)));
+        cx.diag(Diagnostic::note(format!(
+            "{} digidrum samples precede the strings",
+            h.digidrums
+        )));
         cx.annotate(format!("{} frames at {} Hz", h.frames, h.rate));
         return Ok(());
     }

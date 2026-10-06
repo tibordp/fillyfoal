@@ -62,7 +62,11 @@ record! {
 
 const BINK_FLAGS: FlagTable = &[flag(0x0010_0000, "ALPHA"), flag(0x0002_0000, "GRAYSCALE")];
 
-const AUDIO_FLAGS: FlagTable = &[flag(0x1000, "USE_DCT"), flag(0x2000, "STEREO"), flag(0x4000, "16_BIT")];
+const AUDIO_FLAGS: FlagTable = &[
+    flag(0x1000, "USE_DCT"),
+    flag(0x2000, "STEREO"),
+    flag(0x4000, "16_BIT"),
+];
 
 const MAX_TRACKS: u32 = 256;
 
@@ -76,17 +80,26 @@ struct Frames {
 
 pub async fn dissect_bink(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (h, span) = crate::dsl::Cursor::new(&cx, file, LE).record::<BinkHeader>().await?;
+    let (h, span) = crate::dsl::Cursor::new(&cx, file, LE)
+        .record::<BinkHeader>()
+        .await?;
     cx.emit(BinkHeader::node("Header", span, LE));
     let fps = if h.fps_den > 0 {
-        format!(", {} fps", vidutil::num(f64::from(h.fps_num) / f64::from(h.fps_den)))
+        format!(
+            ", {} fps",
+            vidutil::num(f64::from(h.fps_num) / f64::from(h.fps_den))
+        )
     } else {
         String::new()
     };
     let version = h.signature.get(3..).unwrap_or("").to_owned();
     cx.annotate(format!(
         "Bink {}{version}, {}×{}, {}{fps}, {}",
-        if h.signature.starts_with("KB2") { "2 " } else { "" },
+        if h.signature.starts_with("KB2") {
+            "2 "
+        } else {
+            ""
+        },
         h.width,
         h.height,
         vidutil::plural(h.frames, "frame"),
@@ -143,7 +156,11 @@ async fn bink_frames(cx: Cx, fr: Frames) -> Result<()> {
     let count = fr.count.min(fits);
     if count < fr.count {
         cx.diag(Diagnostic::truncated(
-            Span::new(fr.index.source, fr.index.offset, fr.count.saturating_add(1).saturating_mul(4)),
+            Span::new(
+                fr.index.source,
+                fr.index.offset,
+                fr.count.saturating_add(1).saturating_mul(4),
+            ),
             fr.index.len,
         ));
     }
@@ -152,7 +169,10 @@ async fn bink_frames(cx: Cx, fr: Frames) -> Result<()> {
     while i < count {
         let n = count.saturating_sub(i).min(PAGE);
         let d = cx
-            .read(fr.index.sub(i.saturating_mul(4), n.saturating_add(1).saturating_mul(4)))
+            .read(
+                fr.index
+                    .sub(i.saturating_mul(4), n.saturating_add(1).saturating_mul(4)),
+            )
             .await?;
         for j in 0..n {
             let at = vidutil::us(j.saturating_mul(4));
@@ -163,10 +183,15 @@ async fn bink_frames(cx: Cx, fr: Frames) -> Result<()> {
             let len = u64::from(end).saturating_sub(start);
             let entry = fr.index.sub(i.saturating_add(j).saturating_mul(4), 4);
             let mut node = uint(format!("Frame {}", i.saturating_add(j)), entry, start, 32)
-                .summary(format!("{len} bytes{}", if key { ", keyframe" } else { "" }))
+                .summary(format!(
+                    "{len} bytes{}",
+                    if key { ", keyframe" } else { "" }
+                ))
                 .target(fr.file.sub(start, len));
             if start > fr.file.len {
-                node = node.diag(Diagnostic::malformed("frame offset beyond the end of the file"));
+                node = node.diag(Diagnostic::malformed(
+                    "frame offset beyond the end of the file",
+                ));
             }
             cx.push(node).await;
         }
@@ -206,7 +231,11 @@ record! {
     }
 }
 
-const SMK_FLAGS: FlagTable = &[flag(1, "RING_FRAME"), flag(2, "Y_INTERLACED"), flag(4, "Y_DOUBLED")];
+const SMK_FLAGS: FlagTable = &[
+    flag(1, "RING_FRAME"),
+    flag(2, "Y_INTERLACED"),
+    flag(4, "Y_DOUBLED"),
+];
 
 fn audio_rate(v: u32) -> String {
     if v & 0x4000_0000 == 0 {
@@ -216,8 +245,16 @@ fn audio_rate(v: u32) -> String {
         "{} Hz, {}-bit, {}{}",
         v & 0x00ff_ffff,
         if v & 0x2000_0000 != 0 { 16 } else { 8 },
-        if v & 0x1000_0000 != 0 { "stereo" } else { "mono" },
-        if v & 0x8000_0000 != 0 { ", compressed" } else { "" }
+        if v & 0x1000_0000 != 0 {
+            "stereo"
+        } else {
+            "mono"
+        },
+        if v & 0x8000_0000 != 0 {
+            ", compressed"
+        } else {
+            ""
+        }
     )
 }
 
@@ -231,17 +268,21 @@ struct SmkFrames {
 
 pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (h, span) = crate::dsl::Cursor::new(&cx, file, LE).record::<SmackerHeader>().await?;
+    let (h, span) = crate::dsl::Cursor::new(&cx, file, LE)
+        .record::<SmackerHeader>()
+        .await?;
     cx.emit(SmackerHeader::node("Header", span, LE));
     let fps = match h.rate {
         r if r > 0 => 1000.0 / f64::from(r),
         r if r < 0 => 100_000.0 / -f64::from(r),
         _ => 10.0,
     };
-    let audio = [h.rate0, h.rate1, h.rate2, h.rate3, h.rate4, h.rate5, h.rate6]
-        .iter()
-        .filter(|&&r| r & 0x4000_0000 != 0)
-        .count();
+    let audio = [
+        h.rate0, h.rate1, h.rate2, h.rate3, h.rate4, h.rate5, h.rate6,
+    ]
+    .iter()
+    .filter(|&&r| r & 0x4000_0000 != 0)
+    .count();
     cx.annotate(format!(
         "Smacker {}, {}×{}, {}, {} fps, {}",
         h.signature.get(3..).unwrap_or(""),
@@ -259,7 +300,11 @@ pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
     pos = pos.saturating_add(count);
     let trees = file.sub(pos, h.trees.into());
     pos = pos.saturating_add(h.trees.into());
-    cx.emit(Node::new("Frame sizes").span(sizes).summary(format!("{count} entries")));
+    cx.emit(
+        Node::new("Frame sizes")
+            .span(sizes)
+            .summary(format!("{count} entries")),
+    );
     cx.emit(Node::new("Frame types").span(types));
     cx.emit(
         Node::new("Huffman trees")
@@ -271,12 +316,15 @@ pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
         Node::new("Frames")
             .span(data)
             .summary(vidutil::plural(count, "frame"))
-            .lazy(smacker_frames, SmkFrames {
-                sizes,
-                types,
-                data,
-                count,
-            }),
+            .lazy(
+                smacker_frames,
+                SmkFrames {
+                    sizes,
+                    types,
+                    data,
+                    count,
+                },
+            ),
     );
     Ok(())
 }
@@ -288,7 +336,9 @@ async fn smacker_frames(cx: Cx, fr: SmkFrames) -> Result<()> {
     let mut i = 0u64;
     while i < count {
         let n = count.saturating_sub(i).min(PAGE);
-        let sizes = cx.read(fr.sizes.sub(i.saturating_mul(4), n.saturating_mul(4))).await?;
+        let sizes = cx
+            .read(fr.sizes.sub(i.saturating_mul(4), n.saturating_mul(4)))
+            .await?;
         let types = cx.read(fr.types.sub(i, n)).await?;
         for j in 0..n {
             let raw = u32_le(&sizes, vidutil::us(j.saturating_mul(4))).unwrap_or(0);

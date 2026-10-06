@@ -77,7 +77,9 @@ struct Toc {
 async fn toc(cx: &Cx, file: Span) -> Result<Vec<Toc>> {
     let head = cx.read(file.sub_exact(0, 8)?).await?;
     let count = u32_le(&head, 4).unwrap_or(0).min(MAX_ENTRIES);
-    let data = cx.read(file.sub_exact(8, u64::from(count).saturating_mul(16))?).await?;
+    let data = cx
+        .read(file.sub_exact(8, u64::from(count).saturating_mul(16))?)
+        .await?;
     Ok(data
         .as_chunks::<16>()
         .0
@@ -85,7 +87,10 @@ async fn toc(cx: &Cx, file: Span) -> Result<Vec<Toc>> {
         .map(|e| Toc {
             kind: u32_le(e, 0).unwrap_or(0),
             format: u32_le(e, 4).unwrap_or(0),
-            span: file.sub(u32_le(e, 12).unwrap_or(0).into(), u32_le(e, 8).unwrap_or(0).into()),
+            span: file.sub(
+                u32_le(e, 12).unwrap_or(0).into(),
+                u32_le(e, 8).unwrap_or(0).into(),
+            ),
         })
         .collect())
 }
@@ -100,20 +105,32 @@ async fn properties(cx: &Cx, t: &Toc) -> Result<Vec<(String, Value, Span)>> {
     };
     let n = get(4).unwrap_or(0).min(MAX_ENTRIES);
     let props_end = 8usize.saturating_add(to_usize(n.into()).saturating_mul(9));
-    let pad = if n & 3 == 0 { 0 } else { 4usize.saturating_sub(to_usize((n & 3).into())) };
+    let pad = if n & 3 == 0 {
+        0
+    } else {
+        4usize.saturating_sub(to_usize((n & 3).into()))
+    };
     let strings_at = props_end.saturating_add(pad).saturating_add(4);
     let strings = data.get(strings_at..).unwrap_or_default();
     let mut out = Vec::new();
     for i in 0..to_usize(n.into()) {
         let at = 8usize.saturating_add(i.saturating_mul(9));
-        let (Some(name), Some(&is_string), Some(value)) = (get(at), data.get(at.saturating_add(4)), get(at.saturating_add(5))) else {
+        let (Some(name), Some(&is_string), Some(value)) = (
+            get(at),
+            data.get(at.saturating_add(4)),
+            get(at.saturating_add(5)),
+        ) else {
             break;
         };
-        let text_at = |o: u32| crate::text::until_nul(strings.get(to_usize(o.into())..).unwrap_or_default());
+        let text_at =
+            |o: u32| crate::text::until_nul(strings.get(to_usize(o.into())..).unwrap_or_default());
         let v = if is_string != 0 {
             Value::Text(text_at(value))
         } else {
-            Value::Int { value: i64::from(value as i32), bits: 32 }
+            Value::Int {
+                value: i64::from(value as i32),
+                bits: 32,
+            }
         };
         out.push((text_at(name), v, t.span.sub(to_u64(at), 9)));
     }
@@ -123,7 +140,12 @@ async fn properties(cx: &Cx, t: &Toc) -> Result<Vec<(String, Value, Span)>> {
 pub async fn pcf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let tables = toc(&cx, file).await?;
-    let header = cx.block(file.sub(0, 8u64.saturating_add(to_u64(tables.len()).saturating_mul(16)))).await?;
+    let header = cx
+        .block(file.sub(
+            0,
+            8u64.saturating_add(to_u64(tables.len()).saturating_mul(16)),
+        ))
+        .await?;
     {
         let mut f = Fields::emitting(&cx, &header, Endian::Little);
         f.bytes("Signature", 4).emit()?;
@@ -143,7 +165,8 @@ pub async fn pcf(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!("{summary}, {} tables", tables.len()));
     for (i, t) in tables.iter().enumerate() {
         let entry = file.sub(8u64.saturating_add(to_u64(i).saturating_mul(16)), 16);
-        let name = lookup(TABLE_TYPES, t.kind.into()).map_or_else(|| format!("Table type {:#x}", t.kind), str::to_owned);
+        let name = lookup(TABLE_TYPES, t.kind.into())
+            .map_or_else(|| format!("Table type {:#x}", t.kind), str::to_owned);
         cx.push(
             Node::new(name)
                 .span(t.span)
@@ -181,7 +204,16 @@ async fn pcf_table(cx: Cx, (t, entry): (Toc, Span)) -> Result<()> {
             );
         }
         2 | 256 => {
-            for name in ["noOverlap", "constantMetrics", "terminalFont", "constantWidth", "inkInside", "inkMetrics", "drawDirection", "padding"] {
+            for name in [
+                "noOverlap",
+                "constantMetrics",
+                "terminalFont",
+                "constantWidth",
+                "inkInside",
+                "inkMetrics",
+                "drawDirection",
+                "padding",
+            ] {
                 f.u8(name).emit()?;
             }
             f.i32("fontAscent").emit()?;
@@ -199,7 +231,13 @@ async fn pcf_table(cx: Cx, (t, entry): (Toc, Span)) -> Result<()> {
             f.u32("Glyph count").emit()?;
         }
         32 => {
-            for name in ["min_char_or_byte2", "max_char_or_byte2", "min_byte1", "max_byte1", "default_char"] {
+            for name in [
+                "min_char_or_byte2",
+                "max_char_or_byte2",
+                "min_byte1",
+                "max_byte1",
+                "default_char",
+            ] {
                 f.u16(name).emit()?;
             }
         }
@@ -234,7 +272,9 @@ async fn glyph_names(cx: Cx, t: Toc) -> Result<()> {
         Endian::Big => crate::bytes::u32_be(&data, at),
     };
     let n = get(4).unwrap_or(0).min(MAX_ENTRIES);
-    let strings_at = 8usize.saturating_add(to_usize(n.into()).saturating_mul(4)).saturating_add(4);
+    let strings_at = 8usize
+        .saturating_add(to_usize(n.into()).saturating_mul(4))
+        .saturating_add(4);
     let strings = data.get(strings_at..).unwrap_or_default();
     cx.set_count(Count::Exact(n.into()));
     for i in 0..to_usize(n.into()) {
@@ -277,8 +317,12 @@ async fn next_line(cx: &Cx, region: Span, pos: u64) -> Result<Option<(u64, u64, 
 }
 
 async fn line_text(cx: &Cx, region: Span, start: u64, end: u64) -> Result<String> {
-    let bytes = cx.read(region.sub(start, end.saturating_sub(start).min(0x10000))).await?;
-    Ok(String::from_utf8_lossy(&bytes).trim_end_matches('\r').to_owned())
+    let bytes = cx
+        .read(region.sub(start, end.saturating_sub(start).min(0x10000)))
+        .await?;
+    Ok(String::from_utf8_lossy(&bytes)
+        .trim_end_matches('\r')
+        .to_owned())
 }
 
 pub async fn bdf(cx: Cx, input: Input) -> Result<()> {
@@ -327,7 +371,11 @@ pub async fn bdf(cx: Cx, input: Input) -> Result<()> {
             "COMMENT" => {}
             _ => {}
         }
-        cx.emit(Node::new(key.to_owned()).span(span).value(Value::Text(rest.to_owned())));
+        cx.emit(
+            Node::new(key.to_owned())
+                .span(span)
+                .value(Value::Text(rest.to_owned())),
+        );
         pos = next;
         cx.checkpoint().await;
     }
@@ -357,8 +405,12 @@ async fn bdf_properties(cx: Cx, block: Span) -> Result<()> {
                 Err(_) => Value::Text(value.to_owned()),
             },
         };
-        cx.push(Node::new(key.to_owned()).span(block.sub(start, end.saturating_sub(start))).value(value))
-            .await;
+        cx.push(
+            Node::new(key.to_owned())
+                .span(block.sub(start, end.saturating_sub(start)))
+                .value(value),
+        )
+        .await;
     }
     Ok(())
 }
@@ -385,7 +437,10 @@ async fn bdf_glyphs(cx: Cx, region: Span) -> Result<()> {
             "ENDCHAR" => {
                 if let Some((s, name, enc, bbx)) = current.take() {
                     let span = region.sub(s, next.saturating_sub(s));
-                    let code = enc.split_whitespace().next().and_then(|c| c.parse::<u32>().ok());
+                    let code = enc
+                        .split_whitespace()
+                        .next()
+                        .and_then(|c| c.parse::<u32>().ok());
                     let mut summary = format!("encoding {enc}");
                     if let Some(ch) = code.and_then(char::from_u32).filter(|c| !c.is_control()) {
                         summary = format!("{summary} ({ch:?})");
@@ -424,7 +479,11 @@ async fn bdf_glyph(cx: Cx, span: Span) -> Result<()> {
             break;
         }
         if bitmap.is_none() {
-            cx.emit(Node::new(key.to_owned()).span(span.sub(start, end.saturating_sub(start))).value(Value::Text(rest.to_owned())));
+            cx.emit(
+                Node::new(key.to_owned())
+                    .span(span.sub(start, end.saturating_sub(start)))
+                    .value(Value::Text(rest.to_owned())),
+            );
         }
     }
     Ok(())

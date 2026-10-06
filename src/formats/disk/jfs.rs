@@ -22,7 +22,14 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const STATES: EnumTable = &[(0, "clean"), (1, "mounted"), (2, "dirty"), (4, "log redo"), (8, "extend"), (0x10, "resize")];
+const STATES: EnumTable = &[
+    (0, "clean"),
+    (1, "mounted"),
+    (2, "dirty"),
+    (4, "log redo"),
+    (8, "extend"),
+    (0x10, "resize"),
+];
 const FLAGS: FlagTable = &[
     flag(0x1, "COMMIT"),
     flag(0x2, "GROUPCOMMIT"),
@@ -85,7 +92,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "JFS v{} filesystem{}, {}, {}-byte blocks",
         sb.version,
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(sb.size.saturating_mul(sb.physical_block.into())),
         sb.block_size
     ));

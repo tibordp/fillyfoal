@@ -14,9 +14,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{
-    NodeExt, Reader, ellipsize, mutf8, name_or, text,
-};
+use crate::formats::binutil::{NodeExt, Reader, ellipsize, mutf8, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -397,14 +395,25 @@ async fn load(cx: &Cx, file: Span) -> Result<ClassInfo> {
     }
     let pool_span = (pool_start, r.pos().saturating_sub(pool_start));
     let access_offset = r.pos();
-    let access = r.int::<u16>(BE).ok_or_else(|| bad("class header", access_offset))?;
-    let this_class = r.int::<u16>(BE).ok_or_else(|| bad("class header", access_offset))?;
-    let super_class = r.int::<u16>(BE).ok_or_else(|| bad("class header", access_offset))?;
+    let access = r
+        .int::<u16>(BE)
+        .ok_or_else(|| bad("class header", access_offset))?;
+    let this_class = r
+        .int::<u16>(BE)
+        .ok_or_else(|| bad("class header", access_offset))?;
+    let super_class = r
+        .int::<u16>(BE)
+        .ok_or_else(|| bad("class header", access_offset))?;
     let interfaces_at = r.pos();
-    let n = r.int::<u16>(BE).ok_or_else(|| bad("interfaces", interfaces_at))?;
+    let n = r
+        .int::<u16>(BE)
+        .ok_or_else(|| bad("interfaces", interfaces_at))?;
     let mut interfaces = Vec::new();
     for _ in 0..n {
-        interfaces.push(r.int::<u16>(BE).ok_or_else(|| bad("interfaces", interfaces_at))?);
+        interfaces.push(
+            r.int::<u16>(BE)
+                .ok_or_else(|| bad("interfaces", interfaces_at))?,
+        );
     }
     cx.checkpoint().await;
     let fields = read_members(&mut r, file)?;
@@ -412,7 +421,11 @@ async fn load(cx: &Cx, file: Span) -> Result<ClassInfo> {
     let methods = read_members(&mut r, file)?;
     let attributes_at = r.pos();
     let attributes = read_attributes(&mut r, file)?;
-    let attributes = (attributes_at, r.pos().saturating_sub(attributes_at), attributes);
+    let attributes = (
+        attributes_at,
+        r.pos().saturating_sub(attributes_at),
+        attributes,
+    );
     Ok(ClassInfo {
         file,
         data,
@@ -545,7 +558,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("magic").hex().desc("0xcafebabe").emit()?;
     f.u16("minor_version")
-        .with(|&v, n| if v == 0xffff { n.summary("preview features") } else { n })
+        .with(|&v, n| {
+            if v == 0xffff {
+                n.summary("preview features")
+            } else {
+                n
+            }
+        })
         .emit()?;
     f.u16("major_version")
         .with(|&v, n| n.summary(release(v)))
@@ -604,9 +623,7 @@ async fn constant_node(cx: Cx, (c, index): (Class, u16)) -> Result<()> {
     let mut f = Fields::emitting(&cx, &block, BE);
     let tag = f.u8("tag").enumeration(TAG).emit()?;
     let reference = |f: &mut Fields<'_>, name: &'static str| -> Result<u16> {
-        f.u16(name)
-            .with(|&v, n| n.summary(c.resolve(v)))
-            .emit()
+        f.u16(name).with(|&v, n| n.summary(c.resolve(v))).emit()
     };
     match tag {
         1 => {
@@ -823,9 +840,21 @@ enum Owner {
 fn attributes_of(c: &ClassInfo, owner: Owner) -> Vec<Attribute> {
     match owner {
         Owner::Class => c.attributes.2.clone(),
-        Owner::Field(i) => c.fields.2.get(i).map(|m| m.attributes.clone()).unwrap_or_default(),
-        Owner::Method(i) => c.methods.2.get(i).map(|m| m.attributes.clone()).unwrap_or_default(),
-        Owner::Code(offset) => code_parts(c, offset).map(|p| p.attributes).unwrap_or_default(),
+        Owner::Field(i) => c
+            .fields
+            .2
+            .get(i)
+            .map(|m| m.attributes.clone())
+            .unwrap_or_default(),
+        Owner::Method(i) => c
+            .methods
+            .2
+            .get(i)
+            .map(|m| m.attributes.clone())
+            .unwrap_or_default(),
+        Owner::Code(offset) => code_parts(c, offset)
+            .map(|p| p.attributes)
+            .unwrap_or_default(),
     }
 }
 
@@ -875,9 +904,15 @@ fn attribute_summary(c: &ClassInfo, name: &str, a: &Attribute) -> String {
                 .collect();
             names.join(", ")
         }
-        "LineNumberTable" | "LocalVariableTable" | "LocalVariableTypeTable" | "InnerClasses"
-        | "BootstrapMethods" | "NestMembers" | "PermittedSubclasses"
-        | "StackMapTable" | "ModulePackages" => format!("{} entries", u16_at(0)),
+        "LineNumberTable"
+        | "LocalVariableTable"
+        | "LocalVariableTypeTable"
+        | "InnerClasses"
+        | "BootstrapMethods"
+        | "NestMembers"
+        | "PermittedSubclasses"
+        | "StackMapTable"
+        | "ModulePackages" => format!("{} entries", u16_at(0)),
         "RuntimeVisibleAnnotations" | "RuntimeInvisibleAnnotations" => {
             annotation_types(c, b).join(", ")
         }
@@ -898,9 +933,14 @@ fn annotation_types(c: &ClassInfo, b: &[u8]) -> Vec<String> {
     };
     for _ in 0..n.min(64) {
         let Some(kind) = r.int::<u16>(BE) else { break };
-        out.push(c.utf8(kind).map_or_else(|| format!("#{kind}"), |s| {
-            s.trim_start_matches('L').trim_end_matches(';').replace('/', ".")
-        }));
+        out.push(c.utf8(kind).map_or_else(
+            || format!("#{kind}"),
+            |s| {
+                s.trim_start_matches('L')
+                    .trim_end_matches(';')
+                    .replace('/', ".")
+            },
+        ));
         let Some(pairs) = r.int::<u16>(BE) else { break };
         for _ in 0..pairs {
             if r.int::<u16>(BE).is_none() || !skip_element(&mut r, 0) {
@@ -925,11 +965,16 @@ fn skip_element(r: &mut Reader<'_>, depth: u32) -> bool {
             if r.int::<u16>(BE).is_none() {
                 return false;
             }
-            let Some(pairs) = r.int::<u16>(BE) else { return false };
-            (0..pairs).all(|_| r.int::<u16>(BE).is_some() && skip_element(r, depth.saturating_add(1)))
+            let Some(pairs) = r.int::<u16>(BE) else {
+                return false;
+            };
+            (0..pairs)
+                .all(|_| r.int::<u16>(BE).is_some() && skip_element(r, depth.saturating_add(1)))
         }
         b'[' => {
-            let Some(n) = r.int::<u16>(BE) else { return false };
+            let Some(n) = r.int::<u16>(BE) else {
+                return false;
+            };
             (0..n).all(|_| skip_element(r, depth.saturating_add(1)))
         }
         _ => false,
@@ -1034,7 +1079,10 @@ async fn attribute(cx: Cx, (c, owner, depth, index): (Class, Owner, u32, usize))
                     Node::new(format!("slot {slot}"))
                         .span(block.span.sub(start, 10))
                         .value(text(declaration(name, c.utf8(desc).unwrap_or("?"))))
-                        .summary(format!("pc {pc}..{}", u32::from(pc).saturating_add(len.into()))),
+                        .summary(format!(
+                            "pc {pc}..{}",
+                            u32::from(pc).saturating_add(len.into())
+                        )),
                 );
             }
         }
@@ -1143,7 +1191,11 @@ fn code(cx: &Cx, c: &Class, f: &mut Fields<'_>, a: Attribute, depth: u32) -> Res
         return Ok(());
     }
     let owner = Owner::Code(a.offset);
-    for (i, attr) in attributes_of(c, owner).iter().take(count.into()).enumerate() {
+    for (i, attr) in attributes_of(c, owner)
+        .iter()
+        .take(count.into())
+        .enumerate()
+    {
         f.node(attribute_node(c, attr, owner, depth.saturating_add(1), i));
     }
     Ok(())
@@ -1151,7 +1203,8 @@ fn code(cx: &Cx, c: &Class, f: &mut Fields<'_>, a: Attribute, depth: u32) -> Res
 
 /// Lists the instructions of the `Code` attribute at `offset`.
 async fn disassemble(cx: Cx, (c, offset): (Class, usize)) -> Result<()> {
-    let parts = code_parts(&c, offset).ok_or_else(|| Diagnostic::malformed("bad Code attribute"))?;
+    let parts =
+        code_parts(&c, offset).ok_or_else(|| Diagnostic::malformed("bad Code attribute"))?;
     let (start, len) = parts.code;
     let end = start.saturating_add(len).min(c.data.len());
     let code = c.data.get(start..end).unwrap_or_default();
@@ -1243,7 +1296,11 @@ fn operand(c: &ClassInfo, r: &mut Reader<'_>, pc: usize, kind: Operands) -> Opti
                 let n = i64::from(high).checked_sub(low.into())?.checked_add(1)?;
                 for i in 0..n.clamp(0, 0x10000) {
                     let off = r.int::<i32>(BE)?;
-                    cases.push(format!("{}: {}", i64::from(low).saturating_add(i), target(off.into())));
+                    cases.push(format!(
+                        "{}: {}",
+                        i64::from(low).saturating_add(i),
+                        target(off.into())
+                    ));
                 }
             } else {
                 let n = r.int::<i32>(BE)?;

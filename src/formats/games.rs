@@ -41,7 +41,10 @@ async fn wad(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: WadHeader = read_record(&cx, file.sub(0, WadHeader::SIZE), LE).await?;
     cx.emit(WadHeader::node("Header", file.sub(0, WadHeader::SIZE), LE));
-    let dir = file.sub_exact(h.directory.into(), u64::from(h.lumps).saturating_mul(WadEntry::SIZE))?;
+    let dir = file.sub_exact(
+        h.directory.into(),
+        u64::from(h.lumps).saturating_mul(WadEntry::SIZE),
+    )?;
     cx.emit(
         Node::new("Directory")
             .span(dir)
@@ -135,13 +138,21 @@ async fn wad2(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: WadHeader = read_record(&cx, file.sub(0, WadHeader::SIZE), LE).await?;
     cx.emit(WadHeader::node("Header", file.sub(0, WadHeader::SIZE), LE));
-    let dir = file.sub_exact(h.directory.into(), u64::from(h.lumps).saturating_mul(Wad2Entry::SIZE))?;
+    let dir = file.sub_exact(
+        h.directory.into(),
+        u64::from(h.lumps).saturating_mul(Wad2Entry::SIZE),
+    )?;
     cx.set_count(Count::Exact(u64::from(h.lumps).saturating_add(1)));
     let mut cur = Cursor::new(&cx, dir, LE);
     for _ in 0..h.lumps {
         let (e, span) = cur.record::<Wad2Entry>().await?;
         let data = file.sub(e.offset.into(), e.disk_size.into());
-        cx.push(Wad2Entry::node(e.name.clone(), span, LE).summary(format!("{} bytes", e.size)).target(data)).await;
+        cx.push(
+            Wad2Entry::node(e.name.clone(), span, LE)
+                .summary(format!("{} bytes", e.size))
+                .target(data),
+        )
+        .await;
     }
     cx.annotate(format!("{}, {} entries", h.magic, h.lumps));
     Ok(())
@@ -167,7 +178,11 @@ async fn vpk(cx: Cx, input: Input) -> Result<()> {
     let header_len = if h.version == 2 { 28 } else { 12 };
     cx.emit(VpkHeader::node("Header", file.sub(0, header_len), LE));
     let tree = file.sub(header_len, h.tree_size.into());
-    cx.emit(Node::new("Directory tree").span(tree).lazy(vpk_tree, (input, tree)));
+    cx.emit(
+        Node::new("Directory tree")
+            .span(tree)
+            .lazy(vpk_tree, (input, tree)),
+    );
     cx.annotate(format!("VPK v{}", h.version));
     Ok(())
 }
@@ -200,15 +215,24 @@ async fn vpk_tree(cx: Cx, (input, tree): (Input, Span)) -> Result<()> {
                 let _terminator = cur.u16().await?;
                 let preload_span = cur.span(preload.into());
                 cur.skip(preload.into());
-                let full = if path == " " { format!("{name}.{ext}") } else { format!("{path}/{name}.{ext}") };
+                let full = if path == " " {
+                    format!("{name}.{ext}")
+                } else {
+                    format!("{path}/{name}.{ext}")
+                };
                 let node = if archive == 0x7fff {
                     // Stored in this file, after the tree.
-                    let data = input
-                        .span
-                        .sub(tree.offset.saturating_sub(input.span.offset).saturating_add(tree.len).saturating_add(offset.into()), length.into());
+                    let data = input.span.sub(
+                        tree.offset
+                            .saturating_sub(input.span.offset)
+                            .saturating_add(tree.len)
+                            .saturating_add(offset.into()),
+                        length.into(),
+                    );
                     embedded(full, input.nested(data)).summary(format!("{length} bytes"))
                 } else if preload > 0 {
-                    embedded(full, input.nested(preload_span)).summary(format!("{preload} preloaded bytes"))
+                    embedded(full, input.nested(preload_span))
+                        .summary(format!("{preload} preloaded bytes"))
                 } else {
                     Node::new(full).summary(format!("{length} bytes in archive {archive:03}"))
                 };
@@ -237,18 +261,61 @@ declare_format!(pub BSP = "bsp", "Quake / Quake II / Quake III / Source map", ["
     Probe::Custom(|h| h.starts_with(b"IBSP") || h.starts_with(b"VBSP") || h.starts_with(b"RBSP") || quake1_bsp(h)), bsp);
 
 const Q1_LUMPS: [&str; 15] = [
-    "entities", "planes", "textures", "vertexes", "visibility", "nodes", "texinfo", "faces",
-    "lighting", "clipnodes", "leafs", "marksurfaces", "edges", "surfedges", "models",
+    "entities",
+    "planes",
+    "textures",
+    "vertexes",
+    "visibility",
+    "nodes",
+    "texinfo",
+    "faces",
+    "lighting",
+    "clipnodes",
+    "leafs",
+    "marksurfaces",
+    "edges",
+    "surfedges",
+    "models",
 ];
 const Q2_LUMPS: [&str; 19] = [
-    "entities", "planes", "vertices", "visibility", "nodes", "texinfo", "faces", "lighting",
-    "leafs", "leaf faces", "leaf brushes", "edges", "surface edges", "models", "brushes",
-    "brush sides", "pop", "areas", "area portals",
+    "entities",
+    "planes",
+    "vertices",
+    "visibility",
+    "nodes",
+    "texinfo",
+    "faces",
+    "lighting",
+    "leafs",
+    "leaf faces",
+    "leaf brushes",
+    "edges",
+    "surface edges",
+    "models",
+    "brushes",
+    "brush sides",
+    "pop",
+    "areas",
+    "area portals",
 ];
 const Q3_LUMPS: [&str; 17] = [
-    "entities", "shaders", "planes", "nodes", "leafs", "leaf surfaces", "leaf brushes", "models",
-    "brushes", "brush sides", "draw vertices", "draw indices", "fogs", "surfaces", "lightmaps",
-    "light grid", "visibility",
+    "entities",
+    "shaders",
+    "planes",
+    "nodes",
+    "leafs",
+    "leaf surfaces",
+    "leaf brushes",
+    "models",
+    "brushes",
+    "brush sides",
+    "draw vertices",
+    "draw indices",
+    "fogs",
+    "surfaces",
+    "lightmaps",
+    "light grid",
+    "visibility",
 ];
 
 async fn bsp(cx: Cx, input: Input) -> Result<()> {
@@ -262,10 +329,23 @@ async fn bsp(cx: Cx, input: Input) -> Result<()> {
         b"VBSP" => ("Source", &[], 8, true),
         _ => ("Quake", &Q1_LUMPS, 4, false),
     };
-    cx.emit(Node::new("Header").span(file.sub(0, table)).summary(format!("{kind} BSP version {}", if table == 4 { u32_le(&head, 0).unwrap_or(0) } else { version })));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, table))
+            .summary(format!(
+                "{kind} BSP version {}",
+                if table == 4 {
+                    u32_le(&head, 0).unwrap_or(0)
+                } else {
+                    version
+                }
+            )),
+    );
     let count = if source { 64u64 } else { to_u64(names.len()) };
     let entry = if source { 16u64 } else { 8 };
-    let lumps = cx.read(file.sub(table, count.saturating_mul(entry))).await?;
+    let lumps = cx
+        .read(file.sub(table, count.saturating_mul(entry)))
+        .await?;
     let mut entities = None;
     for i in 0..count {
         let at = crate::bytes::to_usize(i.saturating_mul(entry));
@@ -323,8 +403,15 @@ record! {
 
 async fn mdl(cx: Cx, input: Input) -> Result<()> {
     let h: MdlHeader = read_record(&cx, input.span.sub(0, MdlHeader::SIZE), LE).await?;
-    cx.emit(MdlHeader::node("Header", input.span.sub(0, MdlHeader::SIZE), LE));
-    cx.annotate(format!("{} vertices, {} triangles, {} frames", h.vertices, h.triangles, h.frames));
+    cx.emit(MdlHeader::node(
+        "Header",
+        input.span.sub(0, MdlHeader::SIZE),
+        LE,
+    ));
+    cx.annotate(format!(
+        "{} vertices, {} triangles, {} frames",
+        h.vertices, h.triangles, h.frames
+    ));
     Ok(())
 }
 
@@ -356,8 +443,14 @@ async fn md2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Md2Header::node("Header", file.sub(0, Md2Header::SIZE), LE));
     let skins = file.sub(h.skins_offset.into(), u64::from(h.skins).saturating_mul(64));
     cx.emit(Node::new("Skins").span(skins).lazy(md2_skins, skins));
-    cx.emit(Node::new("Frames").span(file.sub(h.frames_offset.into(), u64::from(h.frames).saturating_mul(h.frame_size.into()))));
-    cx.annotate(format!("{} vertices, {} triangles, {} frames", h.vertices, h.triangles, h.frames));
+    cx.emit(Node::new("Frames").span(file.sub(
+        h.frames_offset.into(),
+        u64::from(h.frames).saturating_mul(h.frame_size.into()),
+    )));
+    cx.annotate(format!(
+        "{} vertices, {} triangles, {} frames",
+        h.vertices, h.triangles, h.frames
+    ));
     Ok(())
 }
 
@@ -415,7 +508,12 @@ async fn md3(cx: Cx, input: Input) -> Result<()> {
         }
         at = at.saturating_add(end);
     }
-    cx.annotate(format!("{:?}, {} surfaces, {} frames", h.name.trim_end(), h.surfaces, h.frames));
+    cx.annotate(format!(
+        "{:?}, {} surfaces, {} frames",
+        h.name.trim_end(),
+        h.surfaces,
+        h.frames
+    ));
     Ok(())
 }
 
@@ -434,22 +532,68 @@ async fn unreal(cx: Cx, input: Input) -> Result<()> {
     // Since UE4 the second field is a negative "legacy file version".
     if (version as i32) < 0 {
         cx.emit(Node::new("Tag").span(file.sub(0, 4)));
-        cx.emit(Node::new("Legacy file version").span(file.sub(4, 4)).value(Value::Int { value: (version as i32).into(), bits: 32 }));
-        cx.annotate(format!("Unreal Engine 4/5 package (legacy version {})", version as i32));
+        cx.emit(
+            Node::new("Legacy file version")
+                .span(file.sub(4, 4))
+                .value(Value::Int {
+                    value: (version as i32).into(),
+                    bits: 32,
+                }),
+        );
+        cx.annotate(format!(
+            "Unreal Engine 4/5 package (legacy version {})",
+            version as i32
+        ));
         return Ok(());
     }
     let table = cx.read(file.sub(8, 28)).await?;
     cx.emit(Node::new("Tag").span(file.sub(0, 4)));
-    cx.emit(Node::new("File version").span(file.sub(4, 2)).value(Value::UInt { value: legacy.into(), bits: 16, radix: crate::value::Radix::Dec }));
-    cx.emit(Node::new("Licensee version").span(file.sub(6, 2)).value(Value::UInt { value: licensee.into(), bits: 16, radix: crate::value::Radix::Dec }));
+    cx.emit(
+        Node::new("File version")
+            .span(file.sub(4, 2))
+            .value(Value::UInt {
+                value: legacy.into(),
+                bits: 16,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
+    cx.emit(
+        Node::new("Licensee version")
+            .span(file.sub(6, 2))
+            .value(Value::UInt {
+                value: licensee.into(),
+                bits: 16,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
     let field = |at: usize| u32_le(&table, at).unwrap_or(0);
     let offset = if legacy >= 249 { 4usize } else { 0 };
-    let names = (field(offset.saturating_add(4)), field(offset.saturating_add(8)));
-    let exports = (field(offset.saturating_add(12)), field(offset.saturating_add(16)));
-    let imports = (field(offset.saturating_add(20)), field(offset.saturating_add(24)));
-    cx.emit(Node::new("Name table").summary(format!("{} names at {:#x}", names.0, names.1)).span(file.tail(names.1.into()).sub(0, 0)));
-    cx.emit(Node::new("Export table").summary(format!("{} exports at {:#x}", exports.0, exports.1)));
-    cx.emit(Node::new("Import table").summary(format!("{} imports at {:#x}", imports.0, imports.1)));
-    cx.annotate(format!("Unreal package v{legacy}, {} names, {} exports", names.0, exports.0));
+    let names = (
+        field(offset.saturating_add(4)),
+        field(offset.saturating_add(8)),
+    );
+    let exports = (
+        field(offset.saturating_add(12)),
+        field(offset.saturating_add(16)),
+    );
+    let imports = (
+        field(offset.saturating_add(20)),
+        field(offset.saturating_add(24)),
+    );
+    cx.emit(
+        Node::new("Name table")
+            .summary(format!("{} names at {:#x}", names.0, names.1))
+            .span(file.tail(names.1.into()).sub(0, 0)),
+    );
+    cx.emit(
+        Node::new("Export table").summary(format!("{} exports at {:#x}", exports.0, exports.1)),
+    );
+    cx.emit(
+        Node::new("Import table").summary(format!("{} imports at {:#x}", imports.0, imports.1)),
+    );
+    cx.annotate(format!(
+        "Unreal package v{legacy}, {} names, {} exports",
+        names.0, exports.0
+    ));
     Ok(())
 }

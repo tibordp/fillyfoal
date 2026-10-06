@@ -78,7 +78,11 @@ pub const IP_PROTOCOLS: EnumTable = &[
     (132, "SCTP"),
 ];
 
-const IPV4_FLAGS: FlagTable = &[flag(0x8000, "RESERVED"), flag(0x4000, "DF"), flag(0x2000, "MF")];
+const IPV4_FLAGS: FlagTable = &[
+    flag(0x8000, "RESERVED"),
+    flag(0x4000, "DF"),
+    flag(0x2000, "MF"),
+];
 
 const TCP_FLAGS: FlagTable = &[
     flag(0x001, "FIN"),
@@ -126,7 +130,12 @@ const ICMPV6_TYPES: EnumTable = &[
     (136, "Neighbor advertisement"),
 ];
 
-const ARP_OPS: EnumTable = &[(1, "request"), (2, "reply"), (3, "RARP request"), (4, "RARP reply")];
+const ARP_OPS: EnumTable = &[
+    (1, "request"),
+    (2, "reply"),
+    (3, "RARP request"),
+    (4, "RARP reply"),
+];
 
 const SLL_PACKET_TYPES: EnumTable = &[
     (0, "to us"),
@@ -234,7 +243,9 @@ pub fn ipv6(b: &[u8]) -> String {
         return hexes(&groups);
     }
     let head = groups.get(..best).unwrap_or_default();
-    let tail = groups.get(best.saturating_add(best_len)..).unwrap_or_default();
+    let tail = groups
+        .get(best.saturating_add(best_len)..)
+        .unwrap_or_default();
     format!("{}::{}", hexes(head), hexes(tail))
 }
 
@@ -314,7 +325,10 @@ fn layers(data: &[u8], link: u32) -> Vec<Layer> {
         Some(0x0806) if rest.len() >= 8 => {
             let hlen = usize::from(rest.get(4).copied().unwrap_or(0));
             let plen = usize::from(rest.get(5).copied().unwrap_or(0));
-            let len = hlen.saturating_add(plen).saturating_mul(2).saturating_add(8);
+            let len = hlen
+                .saturating_add(plen)
+                .saturating_mul(2)
+                .saturating_add(8);
             push(&mut out, Kind::Arp, at, len);
             None
         }
@@ -392,7 +406,8 @@ pub fn summarize(data: &[u8], link: u32) -> Option<String> {
             let t = u16_be(data, 12).unwrap_or(0);
             return Some(format!(
                 "Ethernet, {}",
-                lookup(ETHERTYPES, t.into()).map_or_else(|| format!("type {t:#06x}"), str::to_owned)
+                lookup(ETHERTYPES, t.into())
+                    .map_or_else(|| format!("type {t:#06x}"), str::to_owned)
             ));
         }
         return None;
@@ -464,14 +479,20 @@ fn sll(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("ARPHRD type").emit()?;
     let len = f.u16("Address length").emit()?;
     f.bytes("Address", 8)
-        .with(|b, n| n.value(Value::Text(mac(b.get(..usize::from(len.min(8))).unwrap_or_default()))))
+        .with(|b, n| {
+            n.value(Value::Text(mac(b
+                .get(..usize::from(len.min(8)))
+                .unwrap_or_default())))
+        })
         .emit()?;
     f.u16("Protocol").enumeration(ETHERTYPES).emit()?;
     Ok(())
 }
 
 fn loopback(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u32("Address family").enumeration(LOOPBACK_FAMILIES).emit()?;
+    f.u32("Address family")
+        .enumeration(LOOPBACK_FAMILIES)
+        .emit()?;
     Ok(())
 }
 
@@ -504,7 +525,13 @@ fn arp(f: &mut Fields<'_>, _: &()) -> Result<()> {
 fn ipv4_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u8("Version / IHL")
         .hex()
-        .with(|&v, n| n.summary(format!("version {}, header {} bytes", v >> 4, (v & 0x0f).saturating_mul(4))))
+        .with(|&v, n| {
+            n.summary(format!(
+                "version {}, header {} bytes",
+                v >> 4,
+                (v & 0x0f).saturating_mul(4)
+            ))
+        })
         .emit()?;
     f.u8("DSCP / ECN")
         .hex()
@@ -514,7 +541,12 @@ fn ipv4_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Identification").hex().emit()?;
     f.u16("Flags / fragment offset")
         .flags(IPV4_FLAGS)
-        .with(|&v, n| n.summary(format!("fragment offset {}", (v & 0x1fff).saturating_mul(8))))
+        .with(|&v, n| {
+            n.summary(format!(
+                "fragment offset {}",
+                (v & 0x1fff).saturating_mul(8)
+            ))
+        })
         .emit()?;
     f.u8("TTL").emit()?;
     f.u8("Protocol").enumeration(IP_PROTOCOLS).emit()?;

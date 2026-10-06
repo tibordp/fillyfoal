@@ -151,13 +151,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new(name)
                     .span(span)
-                    .diag(Diagnostic::malformed(format!("no FVE metadata at {offset:#x}"))),
+                    .diag(Diagnostic::malformed(format!(
+                        "no FVE metadata at {offset:#x}"
+                    ))),
             );
             continue;
         }
         let meta = vol.sub(offset.saturating_add(64), MetadataHeader::SIZE);
         let header = parse(&cx, meta, LE, &(), MetadataHeader::layout).await.ok();
-        let len = header.as_ref().map_or(64, |h| u64::from(h.size).saturating_add(64));
+        let len = header
+            .as_ref()
+            .map_or(64, |h| u64::from(h.size).saturating_add(64));
         if method.is_none() {
             method = header;
         }
@@ -181,7 +185,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn block(cx: Cx, (vol, offset): (Span, u64)) -> Result<()> {
     let header = vol.sub(offset, BlockHeader::SIZE);
     cx.emit(BlockHeader::node("Block header", header, LE));
-    let meta_span = vol.sub(offset.saturating_add(BlockHeader::SIZE), MetadataHeader::SIZE);
+    let meta_span = vol.sub(
+        offset.saturating_add(BlockHeader::SIZE),
+        MetadataHeader::SIZE,
+    );
     let meta = parse(&cx, meta_span, LE, &(), MetadataHeader::layout).await?;
     cx.emit(MetadataHeader::node("Metadata header", meta_span, LE));
     // Entries follow the metadata header, up to the metadata size.
@@ -200,15 +207,16 @@ async fn block(cx: Cx, (vol, offset): (Span, u64)) -> Result<()> {
         let kind = u16_le(&data, at.saturating_add(2)).unwrap_or(0);
         let value_type = u16_le(&data, at.saturating_add(4)).unwrap_or(0);
         let span = entries.sub(to_u64(at), to_u64(len));
-        let mut node = Node::new(
-            lookup(ENTRY_TYPES, kind.into()).map_or_else(|| format!("Entry {kind:#06x}"), |n| {
+        let mut node = Node::new(lookup(ENTRY_TYPES, kind.into()).map_or_else(
+            || format!("Entry {kind:#06x}"),
+            |n| {
                 let mut s = n.to_owned();
                 if let Some(first) = s.get_mut(..1) {
                     first.make_ascii_uppercase();
                 }
                 s
-            }),
-        )
+            },
+        ))
         .span(span)
         .lazy(entry, span);
         if value_type == 0x0002 {
@@ -225,14 +233,27 @@ async fn block(cx: Cx, (vol, offset): (Span, u64)) -> Result<()> {
         count = count.saturating_add(1);
     }
     if count >= MAX_ENTRIES {
-        cx.diag(Diagnostic::limit(format!("more than {MAX_ENTRIES} metadata entries")));
+        cx.diag(Diagnostic::limit(format!(
+            "more than {MAX_ENTRIES} metadata entries"
+        )));
     }
     Ok(())
 }
 
 async fn entry(cx: Cx, span: Span) -> Result<()> {
-    let header = parse(&cx, span.sub(0, EntryHeader::SIZE), LE, &(), EntryHeader::layout).await?;
-    cx.emit(EntryHeader::node("Header", span.sub(0, EntryHeader::SIZE), LE));
+    let header = parse(
+        &cx,
+        span.sub(0, EntryHeader::SIZE),
+        LE,
+        &(),
+        EntryHeader::layout,
+    )
+    .await?;
+    cx.emit(EntryHeader::node(
+        "Header",
+        span.sub(0, EntryHeader::SIZE),
+        LE,
+    ));
     let value = span.tail(EntryHeader::SIZE);
     let data = cx.read_avail(value).await?;
     let node = Node::new("Value").span(value);

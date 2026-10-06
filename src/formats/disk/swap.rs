@@ -29,9 +29,9 @@ fn signature_at(page: u64) -> usize {
 }
 
 fn probe(h: &Head<'_>) -> bool {
-    PAGES.iter().any(|&p| {
-        h.at(signature_at(p), b"SWAPSPACE2") || h.at(signature_at(p), b"SWAP-SPACE")
-    })
+    PAGES
+        .iter()
+        .any(|&p| h.at(signature_at(p), b"SWAPSPACE2") || h.at(signature_at(p), b"SWAP-SPACE"))
 }
 
 record! {
@@ -59,7 +59,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Boot bits").span(area.sub(0, 1024)));
     let sig = area.sub(page.saturating_sub(10), 10);
     if !v2 {
-        cx.annotate(format!("Linux swap (old bitmap format), {}-byte pages", page));
+        cx.annotate(format!(
+            "Linux swap (old bitmap format), {}-byte pages",
+            page
+        ));
         cx.emit(
             Node::new("Page bitmap")
                 .span(area.sub(0, page.saturating_sub(10)))
@@ -87,7 +90,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Info::node("Header", info_span, LE));
     if info.bad_pages > 0 {
         let count = u64::from(info.bad_pages).min(page.saturating_sub(1536) / 4);
-        let list = area.sub(1024u64.saturating_add(Info::SIZE).saturating_add(117 * 4), count.saturating_mul(4));
+        let list = area.sub(
+            1024u64.saturating_add(Info::SIZE).saturating_add(117 * 4),
+            count.saturating_mul(4),
+        );
         let data = cx.read_avail(list).await?;
         let pages: Vec<String> = data
             .as_chunks::<4>()
@@ -95,11 +101,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .iter()
             .map(|b| u32::from_le_bytes(*b).to_string())
             .collect();
-        cx.emit(
-            Node::new("Bad pages")
-                .span(list)
-                .summary(pages.join(", ")),
-        );
+        cx.emit(Node::new("Bad pages").span(list).summary(pages.join(", ")));
     }
     cx.emit(Node::new("Signature").span(sig).value(text(b"SWAPSPACE2")));
     let used = area.sub(page, pages.saturating_sub(1).saturating_mul(page));

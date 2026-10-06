@@ -111,7 +111,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("jtrgLength")
                 .span(file.sub(Header::SIZE, 4))
-                .value(crate::formats::binutil::hex(u32_le(&j, 0).unwrap_or(0).into(), 32)),
+                .value(crate::formats::binutil::hex(
+                    u32_le(&j, 0).unwrap_or(0).into(),
+                    32,
+                )),
         );
     }
     cx.annotate(format!(
@@ -125,9 +128,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{} instructions", h.instructions))
             .lazy(disassemble, (code, h.instructions)),
     );
-    cx.emit(data_node("Data", file.sub(h.data_offset.into(), h.data_length.into()), h.data_length.into()));
-    let lit = file.sub(u64::from(h.data_offset).saturating_add(h.data_length.into()), h.lit_length.into());
-    cx.emit(Node::new("Literals").span(lit).lazy(crate::formats::binutil::cstrings, lit));
+    cx.emit(data_node(
+        "Data",
+        file.sub(h.data_offset.into(), h.data_length.into()),
+        h.data_length.into(),
+    ));
+    let lit = file.sub(
+        u64::from(h.data_offset).saturating_add(h.data_length.into()),
+        h.lit_length.into(),
+    );
+    cx.emit(
+        Node::new("Literals")
+            .span(lit)
+            .lazy(crate::formats::binutil::cstrings, lit),
+    );
     Ok(())
 }
 
@@ -138,13 +152,23 @@ async fn disassemble(cx: Cx, (code, count): (Span, u32)) -> Result<()> {
     for i in 0..count {
         let Some(&op) = data.get(at) else { break };
         let Some(&(name, operand)) = OPCODES.get(usize::from(op)) else {
-            cx.push(Node::new(format!("{i}")).span(code.sub(to_u64(at), 1)).diag(Diagnostic::malformed(format!("opcode {op}")))).await;
+            cx.push(
+                Node::new(format!("{i}"))
+                    .span(code.sub(to_u64(at), 1))
+                    .diag(Diagnostic::malformed(format!("opcode {op}"))),
+            )
+            .await;
             break;
         };
         let len = usize::from(operand).saturating_add(1);
         let arg = match operand {
-            4 => u32_le(&data, at.saturating_add(1)).map(|v| format!("{v:#x}")).unwrap_or_default(),
-            1 => data.get(at.saturating_add(1)).map(u8::to_string).unwrap_or_default(),
+            4 => u32_le(&data, at.saturating_add(1))
+                .map(|v| format!("{v:#x}"))
+                .unwrap_or_default(),
+            1 => data
+                .get(at.saturating_add(1))
+                .map(u8::to_string)
+                .unwrap_or_default(),
             _ => String::new(),
         };
         cx.push(

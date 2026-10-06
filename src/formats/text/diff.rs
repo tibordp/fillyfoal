@@ -85,8 +85,17 @@ async fn push_file(cx: &Cx, span: Span, f: File, end: u64) {
     } else {
         f.new.clone()
     };
-    let name = if name.is_empty() { "(file)".to_owned() } else { name };
-    let mut summary = format!("+{} −{}, {}", f.added, f.removed, plural(f.hunks, "hunk", "hunks"));
+    let name = if name.is_empty() {
+        "(file)".to_owned()
+    } else {
+        name
+    };
+    let mut summary = format!(
+        "+{} −{}, {}",
+        f.added,
+        f.removed,
+        plural(f.hunks, "hunk", "hunks")
+    );
     if f.old == "/dev/null" {
         summary = format!("new file, {summary}");
     } else if f.new == "/dev/null" {
@@ -94,7 +103,8 @@ async fn push_file(cx: &Cx, span: Span, f: File, end: u64) {
     } else if !f.old.is_empty() && !f.new.is_empty() && f.old != f.new {
         summary = format!("renamed from {}, {summary}", f.old);
     }
-    cx.push(Node::new(name).span(s).summary(summary).lazy(file, s)).await;
+    cx.push(Node::new(name).span(s).summary(summary).lazy(file, s))
+        .await;
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -161,9 +171,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let starts_header = b.starts_with(b"diff ") || b.starts_with(b"Index: ");
         let starts_unified = b.starts_with(b"--- ")
-            && lines.peek().await?.is_some_and(|n| n.bytes.starts_with(b"+++ "));
+            && lines
+                .peek()
+                .await?
+                .is_some_and(|n| n.bytes.starts_with(b"+++ "));
         // `---` after a `diff` header belongs to the same file.
-        let same_file = starts_unified && current.as_ref().is_some_and(|f| f.hunks == 0 && !f.unified);
+        let same_file =
+            starts_unified && current.as_ref().is_some_and(|f| f.hunks == 0 && !f.unified);
         if starts_header || (starts_unified && !same_file) {
             match current.take() {
                 Some(f) => push_file(&cx, span, f, before).await,
@@ -216,7 +230,9 @@ async fn file(cx: Cx, span: Span) -> Result<()> {
     loop {
         let before = lines.pos();
         let line = lines.next().await?;
-        let starts = line.as_ref().is_some_and(|l| hunk_header(&l.bytes).is_some());
+        let starts = line
+            .as_ref()
+            .is_some_and(|l| hunk_header(&l.bytes).is_some());
         if line.is_none() || starts {
             if let Some((start, header)) = hunk.take() {
                 let s = span.sub(start, before.saturating_sub(start));
@@ -253,13 +269,27 @@ async fn file(cx: Cx, span: Span) -> Result<()> {
 /// 100644`, `rename from x` → (`index`, `abc..def 100644`) ...
 fn extended_header<'a>(p: &Piece<'a>) -> Option<(String, Piece<'a>)> {
     const KEYS: &[&str] = &[
-        "diff --git", "index", "new file mode", "deleted file mode", "old mode", "new mode",
-        "similarity index", "dissimilarity index", "rename from", "rename to", "copy from",
-        "copy to", "Index:", "Binary files",
+        "diff --git",
+        "index",
+        "new file mode",
+        "deleted file mode",
+        "old mode",
+        "new mode",
+        "similarity index",
+        "dissimilarity index",
+        "rename from",
+        "rename to",
+        "copy from",
+        "copy to",
+        "Index:",
+        "Binary files",
     ];
     let text = p.text();
     let key = KEYS.iter().find(|k| text.starts_with(*k))?;
-    Some(((*key).trim_end_matches(':').to_owned(), p.from(key.len()).trim()))
+    Some((
+        (*key).trim_end_matches(':').to_owned(),
+        p.from(key.len()).trim(),
+    ))
 }
 
 /// The lines of a hunk, numbered in the old and new file.
@@ -271,7 +301,11 @@ async fn hunk_lines(cx: Cx, span: Span) -> Result<()> {
     let Some((mut old, _, mut new, _)) = hunk_header(&header.bytes) else {
         return Err(Diagnostic::malformed("invalid hunk header").at(header.span));
     };
-    if let Some(ctx) = header.piece().from(4).find_seq(b" @@").map(|i| header.piece().from(4).from(i.saturating_add(3)).trim())
+    if let Some(ctx) = header
+        .piece()
+        .from(4)
+        .find_seq(b" @@")
+        .map(|i| header.piece().from(4).from(i.saturating_add(3)).trim())
         && !ctx.is_empty()
     {
         cx.push(text_node("Context", ctx.span(), &ctx.text())).await;
@@ -292,7 +326,10 @@ async fn hunk_lines(cx: Cx, span: Span) -> Result<()> {
             _ => {
                 old = old.saturating_add(1);
                 new = new.saturating_add(1);
-                ("Context", format!("line {} → {}", old.saturating_sub(1), new.saturating_sub(1)))
+                (
+                    "Context",
+                    format!("line {} → {}", old.saturating_sub(1), new.saturating_sub(1)),
+                )
             }
         };
         let mut node = text_node(name, line.span, &content.text());

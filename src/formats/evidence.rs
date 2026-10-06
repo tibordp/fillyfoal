@@ -34,7 +34,13 @@ record! {
     }
 }
 
-const EWF_MEDIA: EnumTable = &[(0, "removable"), (1, "fixed disk"), (3, "optical"), (0x0e, "logical evidence"), (0x10, "memory")];
+const EWF_MEDIA: EnumTable = &[
+    (0, "removable"),
+    (1, "fixed disk"),
+    (3, "optical"),
+    (0x0e, "logical evidence"),
+    (0x10, "memory"),
+];
 const EWF_COMPRESSION: EnumTable = &[(0, "none"), (1, "fast"), (2, "best")];
 
 fn ewf_volume(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32, u64)> {
@@ -52,25 +58,48 @@ fn ewf_volume(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32, u64)> {
     f.u32("PALM volume start sector").emit()?;
     f.bytes("Padding", 4).emit()?;
     f.u32("SMART logs start sector").emit()?;
-    f.u8("Compression level").enumeration(EWF_COMPRESSION).emit()?;
+    f.u8("Compression level")
+        .enumeration(EWF_COMPRESSION)
+        .emit()?;
     f.bytes("Padding", 3).emit()?;
     f.u32("Error granularity").emit()?;
     f.bytes("Padding", 4).emit()?;
     f.guid("Set identifier").emit()?;
-    Ok((chunks, per_chunk.saturating_mul(sector), sectors.saturating_mul(sector.into())))
+    Ok((
+        chunks,
+        per_chunk.saturating_mul(sector),
+        sectors.saturating_mul(sector.into()),
+    ))
 }
 
-const EWF_MEDIA_FLAGS: FlagTable = &[flag(1, "IMAGE"), flag(2, "PHYSICAL"), flag(4, "FASTBLOC"), flag(8, "TABLEAU")];
+const EWF_MEDIA_FLAGS: FlagTable = &[
+    flag(1, "IMAGE"),
+    flag(2, "PHYSICAL"),
+    flag(4, "FASTBLOC"),
+    flag(8, "TABLEAU"),
+];
 
 /// Header text fields (EnCase 'c\tn\ta\te\tt...' table) by key.
 fn ewf_header_values(text_data: &str) -> Vec<(String, String)> {
     let lines: Vec<&str> = text_data.lines().collect();
-    let Some(keys_at) = lines.iter().position(|l| l.starts_with("c\t") || l.starts_with("a\t")) else {
+    let Some(keys_at) = lines
+        .iter()
+        .position(|l| l.starts_with("c\t") || l.starts_with("a\t"))
+    else {
         return Vec::new();
     };
-    let keys = lines.get(keys_at).map(|l| l.split('\t').collect::<Vec<_>>()).unwrap_or_default();
-    let values = lines.get(keys_at.saturating_add(1)).map(|l| l.split('\t').collect::<Vec<_>>()).unwrap_or_default();
-    keys.iter().zip(values.iter()).map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect()
+    let keys = lines
+        .get(keys_at)
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .unwrap_or_default();
+    let values = lines
+        .get(keys_at.saturating_add(1))
+        .map(|l| l.split('\t').collect::<Vec<_>>())
+        .unwrap_or_default();
+    keys.iter()
+        .zip(values.iter())
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect()
 }
 
 const EWF_HEADER_KEYS: &[(&str, &str)] = &[
@@ -110,25 +139,40 @@ async fn ewf(cx: Cx, input: Input) -> Result<()> {
         seen.push(at);
         let desc_span = file.sub(at, EwfSection::SIZE);
         let s: EwfSection = read_record(&cx, desc_span, LE).await?;
-        let data = file.sub(at.saturating_add(EwfSection::SIZE), s.size.saturating_sub(EwfSection::SIZE));
+        let data = file.sub(
+            at.saturating_add(EwfSection::SIZE),
+            s.size.saturating_sub(EwfSection::SIZE),
+        );
         let kind = s.kind.trim().to_owned();
-        let mut node = Node::new(kind.clone()).span(file.sub(at, s.size.max(EwfSection::SIZE))).lazy(ewf_section, (input, desc_span, data, kind.clone()));
+        let mut node = Node::new(kind.clone())
+            .span(file.sub(at, s.size.max(EwfSection::SIZE)))
+            .lazy(ewf_section, (input, desc_span, data, kind.clone()));
         match kind.as_str() {
             "header" | "header2" => {
                 if info.is_empty()
                     && let Ok(decoded) = crate::codec::inflate_span(&cx, data, true, None).await
                 {
                     let raw = cx.read_avail(decoded.span.sub(0, 0x10000)).await?;
-                    let txt = if kind == "header2" { crate::text::utf16(raw.get(2..).unwrap_or_default(), LE) } else { crate::text::latin1(&raw) };
+                    let txt = if kind == "header2" {
+                        crate::text::utf16(raw.get(2..).unwrap_or_default(), LE)
+                    } else {
+                        crate::text::latin1(&raw)
+                    };
                     info = ewf_header_values(&txt);
                 }
                 node = node.summary("zlib-compressed case information");
             }
             "volume" | "disk" => {
                 let block = cx.block(data.sub(0, 94)).await?;
-                if let Ok((chunks, chunk_size, bytes)) = ewf_volume(&mut Fields::new(&block, LE), &()) {
+                if let Ok((chunks, chunk_size, bytes)) =
+                    ewf_volume(&mut Fields::new(&block, LE), &())
+                {
                     media = bytes;
-                    node = node.summary(format!("{chunks} chunks of {}, media {}", size(chunk_size.into()), size(bytes)));
+                    node = node.summary(format!(
+                        "{chunks} chunks of {}, media {}",
+                        size(chunk_size.into()),
+                        size(bytes)
+                    ));
                 }
             }
             "table" | "table2" => {
@@ -146,8 +190,20 @@ async fn ewf(cx: Cx, input: Input) -> Result<()> {
         at = s.next;
     }
     let _ = table_base;
-    let get = |k: &str| info.iter().find(|(key, _)| key == k).map(|(_, v)| v.clone()).filter(|v| !v.is_empty());
-    let mut parts = vec![format!("{} segment {segment}", if logical { "EnCase logical evidence (L01)" } else { "EnCase evidence (E01)" })];
+    let get = |k: &str| {
+        info.iter()
+            .find(|(key, _)| key == k)
+            .map(|(_, v)| v.clone())
+            .filter(|v| !v.is_empty())
+    };
+    let mut parts = vec![format!(
+        "{} segment {segment}",
+        if logical {
+            "EnCase logical evidence (L01)"
+        } else {
+            "EnCase evidence (E01)"
+        }
+    )];
     if media > 0 {
         parts.push(format!("{} media", size(media)));
     }
@@ -173,9 +229,16 @@ async fn ewf_section(cx: Cx, (input, desc, data, kind): (Input, Span, Span, Stri
                 && let Ok(decoded) = crate::codec::inflate_span(&cx, data, true, None).await
             {
                 let raw = cx.read_avail(decoded.span.sub(0, 0x10000)).await?;
-                let txt = if kind == "header2" { crate::text::utf16(raw.get(2..).unwrap_or_default(), LE) } else { crate::text::latin1(&raw) };
+                let txt = if kind == "header2" {
+                    crate::text::utf16(raw.get(2..).unwrap_or_default(), LE)
+                } else {
+                    crate::text::latin1(&raw)
+                };
                 for (k, v) in ewf_header_values(&txt) {
-                    let name = EWF_HEADER_KEYS.iter().find(|(key, _)| *key == k).map_or_else(|| k.clone(), |(_, n)| (*n).to_owned());
+                    let name = EWF_HEADER_KEYS
+                        .iter()
+                        .find(|(key, _)| *key == k)
+                        .map_or_else(|| k.clone(), |(_, n)| (*n).to_owned());
                     cx.push(Node::new(name).value(text(v))).await;
                 }
             }
@@ -190,7 +253,12 @@ async fn ewf_section(cx: Cx, (input, desc, data, kind): (Input, Span, Span, Stri
             f.u32("Padding").emit()?;
             f.u32("Adler-32").hex().emit()?;
             let entries = data.sub_exact(24, u64::from(count).saturating_mul(4))?;
-            cx.emit(Node::new("Chunks").span(entries).summary(format!("{count} chunks")).lazy(ewf_chunks, (input, entries, base)));
+            cx.emit(
+                Node::new("Chunks")
+                    .span(entries)
+                    .summary(format!("{count} chunks"))
+                    .lazy(ewf_chunks, (input, entries, base)),
+            );
         }
         "hash" => {
             let block = cx.block(data.sub(0, 16)).await?;
@@ -214,23 +282,40 @@ async fn ewf_section(cx: Cx, (input, desc, data, kind): (Input, Span, Span, Stri
 async fn ewf_chunks(cx: Cx, (input, entries, base): (Input, Span, u64)) -> Result<()> {
     let file = input.span;
     let raw = cx.read(entries).await?;
-    let offsets: Vec<u32> = raw.as_chunks::<4>().0.iter().map(|c| u32::from_le_bytes(*c)).collect();
+    let offsets: Vec<u32> = raw
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_le_bytes(*c))
+        .collect();
     cx.set_count(Count::Exact(to_u64(offsets.len())));
     for (i, &o) in offsets.iter().enumerate() {
         let start = base.saturating_add(u64::from(o & 0x7fff_ffff));
         // The last chunk ends where the table section begins.
-        let end = offsets
-            .get(i.saturating_add(1))
-            .map_or_else(|| entries.offset.saturating_sub(file.offset).saturating_sub(24).saturating_sub(EwfSection::SIZE), |n| base.saturating_add(u64::from(n & 0x7fff_ffff)));
+        let end = offsets.get(i.saturating_add(1)).map_or_else(
+            || {
+                entries
+                    .offset
+                    .saturating_sub(file.offset)
+                    .saturating_sub(24)
+                    .saturating_sub(EwfSection::SIZE)
+            },
+            |n| base.saturating_add(u64::from(n & 0x7fff_ffff)),
+        );
         let span = file.sub(start, end.saturating_sub(start));
         let compressed = o & 0x8000_0000 != 0;
         let node = if compressed {
             content(format!("Chunk {i}"), input, span, Codec::Zlib, None).summary("zlib")
         } else {
             // Stored chunks carry a trailing Adler-32.
-            embedded(format!("Chunk {i}"), input.nested(span.sub(0, span.len.saturating_sub(4)))).summary("stored")
+            embedded(
+                format!("Chunk {i}"),
+                input.nested(span.sub(0, span.len.saturating_sub(4))),
+            )
+            .summary("stored")
         };
-        cx.push(node.target(entries.sub(to_u64(i).saturating_mul(4), 4))).await;
+        cx.push(node.target(entries.sub(to_u64(i).saturating_mul(4), 4)))
+            .await;
     }
     Ok(())
 }
@@ -243,14 +328,25 @@ declare_format!(pub AFF = "aff", "Advanced Forensic Format image (AFF)", ["aff"]
 
 /// Data pages are named `page<N>` (also `seg<N>` in early versions).
 fn aff_page(name: &str) -> Option<&str> {
-    name.strip_prefix("page").or_else(|| name.strip_prefix("seg")).filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+    name.strip_prefix("page")
+        .or_else(|| name.strip_prefix("seg"))
+        .filter(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
 }
 
-const AFF_PAGE_FLAGS: FlagTable = &[flag(1, "COMPRESSED"), flag(2, "ZLIB"), flag(4, "LZMA"), flag(8, "ZERO")];
+const AFF_PAGE_FLAGS: FlagTable = &[
+    flag(1, "COMPRESSED"),
+    flag(2, "ZLIB"),
+    flag(4, "LZMA"),
+    flag(8, "ZERO"),
+];
 
 async fn aff(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Signature").span(file.sub(0, 8)).value(text("AFF10")));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 8))
+            .value(text("AFF10")),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(8);
     let (mut pages, mut image, mut segments) = (0u64, None, 0u64);
@@ -258,7 +354,9 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let magic = cur.bytes(4).await?;
         if magic != b"AFF\0" {
-            cx.diag(Diagnostic::malformed("expected a segment header (AFF\\0)").at(cur.since(start)));
+            cx.diag(
+                Diagnostic::malformed("expected a segment header (AFF\\0)").at(cur.since(start)),
+            );
             break;
         }
         let name_len = u64::from(cur.u32().await?);
@@ -275,7 +373,13 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         segments = segments.saturating_add(1);
-        let mut node = Node::new(name.clone()).span(cur.since(start)).target(data).lazy(aff_segment, (input, cur.since(start), name_span, data, arg, name.clone()));
+        let mut node = Node::new(name.clone())
+            .span(cur.since(start))
+            .target(data)
+            .lazy(
+                aff_segment,
+                (input, cur.since(start), name_span, data, arg, name.clone()),
+            );
         if let Some(n) = aff_page(&name) {
             pages = pages.saturating_add(1);
             node = node.summary(format!("page {n}, {} stored", size(data_len)));
@@ -283,9 +387,19 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
             let raw = cx.read(data).await?;
             let v = u64_be(&raw, 0).unwrap_or(0);
             image = Some(v);
-            node = node.value(Value::UInt { value: v, bits: 64, radix: Radix::Dec }).summary(size(v));
+            node = node
+                .value(Value::UInt {
+                    value: v,
+                    bits: 64,
+                    radix: Radix::Dec,
+                })
+                .summary(size(v));
         } else if data_len == 0 {
-            node = node.value(Value::UInt { value: arg.into(), bits: 32, radix: Radix::Dec });
+            node = node.value(Value::UInt {
+                value: arg.into(),
+                bits: 32,
+                radix: Radix::Dec,
+            });
         } else {
             let raw = cx.read_avail(data.sub(0, 256)).await?;
             if crate::text::looks_like_text(&raw) {
@@ -296,11 +410,19 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("AFF image, {segments} segments, {pages} pages{}", image.map(|i| format!(", {} image", size(i))).unwrap_or_default()));
+    cx.annotate(format!(
+        "AFF image, {segments} segments, {pages} pages{}",
+        image
+            .map(|i| format!(", {} image", size(i)))
+            .unwrap_or_default()
+    ));
     Ok(())
 }
 
-async fn aff_segment(cx: Cx, (input, seg, name_span, data, arg, name): (Input, Span, Span, Span, u32, String)) -> Result<()> {
+async fn aff_segment(
+    cx: Cx,
+    (input, seg, name_span, data, arg, name): (Input, Span, Span, Span, u32, String),
+) -> Result<()> {
     let head = cx.block(seg.sub(0, 16)).await?;
     let mut f = Fields::emitting(&cx, &head, BE);
     f.ascii("Magic", 4).emit()?;
@@ -316,7 +438,11 @@ async fn aff_segment(cx: Cx, (input, seg, name_span, data, arg, name): (Input, S
     if page && arg & 3 == 3 {
         cx.emit(content("Data (zlib)", input, data, Codec::Zlib, None));
     } else if page && arg & 1 != 0 {
-        cx.emit(Node::new("Data").span(data).diag(Diagnostic::unsupported("LZMA compression")));
+        cx.emit(
+            Node::new("Data")
+                .span(data)
+                .diag(Diagnostic::unsupported("LZMA compression")),
+        );
     } else if page {
         cx.emit(embedded("Data", input.nested(data)));
     } else {
@@ -375,7 +501,10 @@ async fn lime(cx: Cx, input: Input) -> Result<()> {
         total = total.saturating_add(len);
         at = at.saturating_add(LimeHeader::SIZE).saturating_add(len);
     }
-    cx.annotate(format!("LiME memory capture, {ranges} ranges, {} of physical memory", size(total)));
+    cx.annotate(format!(
+        "LiME memory capture, {ranges} ranges, {} of physical memory",
+        size(total)
+    ));
     Ok(())
 }
 
@@ -389,7 +518,8 @@ async fn lime_range(cx: Cx, (header, data): (Span, Span)) -> Result<()> {
 // makedumpfile / diskdump compressed kernel dumps
 
 fn kdump_probe(h: &Head<'_>) -> bool {
-    (h.starts_with(b"KDUMP   ") || h.starts_with(b"DISKDUMP")) && u32_le(h.data, 8).is_some_and(|v| (1..=10).contains(&v))
+    (h.starts_with(b"KDUMP   ") || h.starts_with(b"DISKDUMP"))
+        && u32_le(h.data, 8).is_some_and(|v| (1..=10).contains(&v))
 }
 
 declare_format!(pub KDUMP = "kdump-compressed", "Linux compressed kernel dump (makedumpfile)", ["vmcore", "kdump"], "application/x-kdump",
@@ -452,29 +582,60 @@ async fn kdump(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let hspan = file.sub(0, 468);
     let block = cx.block(hspan).await?;
-    let (node, release, block_size, sub_blocks, bitmap_blocks) = kdump_header(&mut Fields::new(&block, LE), &())?;
+    let (node, release, block_size, sub_blocks, bitmap_blocks) =
+        kdump_header(&mut Fields::new(&block, LE), &())?;
     cx.emit(struct_node("Disk dump header", hspan, LE, (), kdump_header));
     let bs = u64::from(block_size).max(1);
     let sub = file.sub(bs, u64::from(sub_blocks).saturating_mul(bs));
     let sblock = cx.block(sub.sub(0, 112)).await?;
-    let (info_at, info_len) = kdump_sub_header(&mut Fields::new(&sblock, LE), &()).unwrap_or((0, 0));
+    let (info_at, info_len) =
+        kdump_sub_header(&mut Fields::new(&sblock, LE), &()).unwrap_or((0, 0));
     cx.emit(struct_node("Sub-header", sub, LE, (), kdump_sub_header));
     let mut osrelease = String::new();
     if info_at != 0 && info_len > 0 {
         let info = file.sub(info_at, info_len);
         let raw = cx.read_avail(info.sub(0, 0x10000)).await?;
         let txt = crate::text::latin1(&raw);
-        osrelease = txt.lines().find_map(|l| l.strip_prefix("OSRELEASE=")).unwrap_or_default().to_owned();
-        let entries: Vec<(String, String)> = txt.lines().filter_map(|l| l.split_once('=')).map(|(k, v)| (k.to_owned(), v.to_owned())).collect();
-        cx.emit(Node::new("vmcoreinfo").span(info).summary(format!("{} entries", entries.len())).lazy(kdump_info, entries));
+        osrelease = txt
+            .lines()
+            .find_map(|l| l.strip_prefix("OSRELEASE="))
+            .unwrap_or_default()
+            .to_owned();
+        let entries: Vec<(String, String)> = txt
+            .lines()
+            .filter_map(|l| l.split_once('='))
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+            .collect();
+        cx.emit(
+            Node::new("vmcoreinfo")
+                .span(info)
+                .summary(format!("{} entries", entries.len()))
+                .lazy(kdump_info, entries),
+        );
     }
     let bitmap_at = bs.saturating_mul(1u64.saturating_add(sub_blocks.into()));
     let bitmap = file.sub(bitmap_at, u64::from(bitmap_blocks).saturating_mul(bs));
-    cx.emit(Node::new("Page bitmaps").span(bitmap).summary("valid and dumpable pages"));
+    cx.emit(
+        Node::new("Page bitmaps")
+            .span(bitmap)
+            .summary("valid and dumpable pages"),
+    );
     let descs = file.tail(bitmap.end().saturating_sub(file.offset));
-    cx.emit(Node::new("Page descriptors and data").span(descs).diag(Diagnostic::note("pages are compressed individually")));
-    let release = if osrelease.is_empty() { release } else { osrelease };
-    cx.annotate(format!("Linux kernel dump of {}, kernel {release}, {} blocks", node.trim(), size(bs)));
+    cx.emit(
+        Node::new("Page descriptors and data")
+            .span(descs)
+            .diag(Diagnostic::note("pages are compressed individually")),
+    );
+    let release = if osrelease.is_empty() {
+        release
+    } else {
+        osrelease
+    };
+    cx.annotate(format!(
+        "Linux kernel dump of {}, kernel {release}, {} blocks",
+        node.trim(),
+        size(bs)
+    ));
     Ok(())
 }
 
@@ -489,9 +650,12 @@ async fn kdump_info(cx: Cx, entries: Vec<(String, String)>) -> Result<()> {
 // VMware suspended state and snapshot memory (.vmss, .vmsn)
 
 fn vmss_probe(h: &Head<'_>) -> bool {
-    u32_le(h.data, 0).is_some_and(|m| matches!(m, 0xbed2_bed0 | 0xbad1_bad1 | 0xbed2_bed2 | 0xbed3_bed3))
+    u32_le(h.data, 0)
+        .is_some_and(|m| matches!(m, 0xbed2_bed0 | 0xbad1_bad1 | 0xbed2_bed2 | 0xbed3_bed3))
         && u32_le(h.data, 8).is_some_and(|n| (1..=1024).contains(&n))
-        && h.data.get(12..16).is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic()))
+        && h.data
+            .get(12..16)
+            .is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic()))
 }
 
 declare_format!(pub VMSS = "vmware-state", "VMware suspended state / snapshot (vmss, vmsn)", ["vmss", "vmsn"], "application/x-vmware-vmss",
@@ -523,7 +687,10 @@ async fn vmss(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("VMware saved state, {count} groups: {}", clip(&names.join(", "), 120)));
+    cx.annotate(format!(
+        "VMware saved state, {count} groups: {}",
+        clip(&names.join(", "), 120)
+    ));
     Ok(())
 }
 
@@ -555,22 +722,48 @@ async fn vmss_tags(cx: Cx, group: Span) -> Result<()> {
             }
             let span = cur.span(disk);
             cur.skip(disk);
-            (span, Some(format!("{} on disk, {} in memory", size(disk), size(mem))))
+            (
+                span,
+                Some(format!("{} on disk, {} in memory", size(disk), size(mem))),
+            )
         } else {
             let span = cur.span(small);
             cur.skip(small);
             (span, None)
         };
-        let label = if indices.is_empty() { name.clone() } else { format!("{name}[{}]", indices.iter().map(u32::to_string).collect::<Vec<_>>().join("][")) };
+        let label = if indices.is_empty() {
+            name.clone()
+        } else {
+            format!(
+                "{name}[{}]",
+                indices
+                    .iter()
+                    .map(u32::to_string)
+                    .collect::<Vec<_>>()
+                    .join("][")
+            )
+        };
         let mut node = Node::new(label).span(cur.since(start)).target(data);
-        let raw = if data.len <= 256 { cx.read(data).await? } else { Vec::new() };
+        let raw = if data.len <= 256 {
+            cx.read(data).await?
+        } else {
+            Vec::new()
+        };
         let printable = raw.iter().filter(|&&b| b.is_ascii_alphabetic()).count() >= 3
             && raw.iter().all(|&b| b == 0 || (0x20..0x7f).contains(&b));
         node = match (note, data.len) {
             (Some(n), _) => node.summary(n),
             _ if printable => node.value(text(crate::text::until_nul(&raw))),
-            (None, 1) => node.value(Value::UInt { value: u64::from(raw.first().copied().unwrap_or(0)), bits: 8, radix: Radix::Dec }),
-            (None, 2) => node.value(Value::UInt { value: u16_le(&raw, 0).unwrap_or(0).into(), bits: 16, radix: Radix::Dec }),
+            (None, 1) => node.value(Value::UInt {
+                value: u64::from(raw.first().copied().unwrap_or(0)),
+                bits: 8,
+                radix: Radix::Dec,
+            }),
+            (None, 2) => node.value(Value::UInt {
+                value: u16_le(&raw, 0).unwrap_or(0).into(),
+                bits: 16,
+                radix: Radix::Dec,
+            }),
             (None, 4) => node.value(hex(u32_le(&raw, 0).unwrap_or(0), 32)),
             (None, 8) => node.value(hex(u64_le(&raw, 0).unwrap_or(0), 64)),
             _ => node.summary(size(data.len)),
@@ -616,10 +809,15 @@ async fn vbox_sav(cx: Cx, input: Input) -> Result<()> {
     let mut names = Vec::new();
     const WINDOW: u64 = 0x10000;
     while at < file.len && names.len() < 4096 {
-        let window = cx.read_avail(file.sub(at, WINDOW.saturating_add(64))).await?;
+        let window = cx
+            .read_avail(file.sub(at, WINDOW.saturating_add(64)))
+            .await?;
         let mut found = None;
         let mut i = 0usize;
-        while let Some(p) = window.get(i..).and_then(|w| w.windows(8).position(|x| x == SSM_UNIT)) {
+        while let Some(p) = window
+            .get(i..)
+            .and_then(|w| w.windows(8).position(|x| x == SSM_UNIT))
+        {
             let pos = i.saturating_add(p);
             let off = at.saturating_add(to_u64(pos));
             if u64_le(&window, pos.saturating_add(8)) == Some(off) {
@@ -640,8 +838,14 @@ async fn vbox_sav(cx: Cx, input: Input) -> Result<()> {
         let instance = u32_le(&uh, 24).unwrap_or(0);
         names.push(name.clone());
         cx.push(
-            struct_node(name, file.sub(unit, 40u64.saturating_add(name_len)), LE, (), ssm_unit)
-                .summary(format!("version {version}, instance {instance}")),
+            struct_node(
+                name,
+                file.sub(unit, 40u64.saturating_add(name_len)),
+                LE,
+                (),
+                ssm_unit,
+            )
+            .summary(format!("version {version}, instance {instance}")),
         )
         .await;
         at = unit.saturating_add(8);

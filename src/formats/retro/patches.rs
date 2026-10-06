@@ -2,7 +2,9 @@
 //! updates: IPS (and EBP), IPS32, UPS, BPS, VCDIFF (xdelta3), bsdiff, PPF, APS,
 //! GDIFF, Ninja RUP and Windows delta (PA30).
 
-use super::util::{Varint, crc32_of, crc_node, dec, find_zero, hex, size, text, uint_be, varint, varint_field};
+use super::util::{
+    Varint, crc_node, crc32_of, dec, find_zero, hex, size, text, uint_be, varint, varint_field,
+};
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -50,7 +52,11 @@ fn ips_record(f: &mut Fields<'_>, width: &u64) -> Result<()> {
 
 async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Result<()> {
     let file = input.span;
-    let (name, magic) = if width == 3 { ("IPS", "PATCH") } else { ("IPS32", "IPS32") };
+    let (name, magic) = if width == 3 {
+        ("IPS", "PATCH")
+    } else {
+        ("IPS32", "IPS32")
+    };
     cx.emit(Node::new("Magic").span(file.sub(0, 5)).value(text(magic)));
     cx.annotate(format!("{name} patch"));
     let mut cur = Cursor::new(&cx, file, BE);
@@ -61,7 +67,11 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
         let start = cur.pos();
         let raw = cur.bytes(width).await?;
         if raw == eof {
-            cx.emit(Node::new("End marker").span(cur.since(start)).value(text(String::from_utf8_lossy(eof))));
+            cx.emit(
+                Node::new("End marker")
+                    .span(cur.since(start))
+                    .value(text(String::from_utf8_lossy(eof))),
+            );
             terminated = true;
             break;
         }
@@ -71,7 +81,10 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
             let run = cur.u16().await?;
             let value = cur.u8().await?;
             rle = rle.saturating_add(1);
-            (u64::from(run), format!("{run} × {value:#04x} at {offset:#x} (RLE)"))
+            (
+                u64::from(run),
+                format!("{run} × {value:#04x} at {offset:#x} (RLE)"),
+            )
         } else {
             cur.skip(len.into());
             (u64::from(len), format!("{len} bytes at {offset:#x}"))
@@ -83,7 +96,11 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
             .value(hex(offset, 32))
             .summary(summary);
         if cur.pos() > file.len {
-            node = node.diag(Diagnostic::truncated(span, file.len.saturating_sub(span.offset.saturating_sub(file.offset))));
+            node = node.diag(Diagnostic::truncated(
+                span,
+                file.len
+                    .saturating_sub(span.offset.saturating_sub(file.offset)),
+            ));
         }
         cx.push(node).await;
     }
@@ -91,14 +108,21 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
     let mut ebp = false;
     if terminated && cur.peek(1).await?.first() == Some(&b'{') {
         // EarthBound patches (EBP) append JSON metadata after the IPS body.
-        cx.emit(embedded("Metadata (EBP JSON)", input.nested(file.tail(cur.pos()))));
+        cx.emit(embedded(
+            "Metadata (EBP JSON)",
+            input.nested(file.tail(cur.pos())),
+        ));
         ebp = true;
     } else if terminated && cur.remaining() >= 3 {
         let start = cur.pos();
         let raw = cur.bytes(cur.remaining().min(4)).await?;
         let value = raw.iter().fold(0u64, |acc, &b| acc << 8 | u64::from(b));
         truncate = Some(value);
-        cx.emit(Node::new("Truncate target to").span(cur.since(start)).value(hex(value, 32)));
+        cx.emit(
+            Node::new("Truncate target to")
+                .span(cur.since(start))
+                .value(hex(value, 32)),
+        );
     }
     if !terminated {
         cx.diag(Diagnostic::warning("no end-of-file marker"));
@@ -123,9 +147,22 @@ async fn beat_footer(cx: &Cx, file: Span) -> Result<bool> {
     let footer = cx.read(file.sub(at, 12)).await?;
     let computed = crc32_of(cx, file.sub(0, file.len.saturating_sub(4))).await;
     let stored = u32_le(&footer, 8).unwrap_or(0);
-    cx.emit(Node::new("Source CRC-32").span(file.sub(at, 4)).value(hex(u32_le(&footer, 0).unwrap_or(0).into(), 32)));
-    cx.emit(Node::new("Target CRC-32").span(file.sub(at.saturating_add(4), 4)).value(hex(u32_le(&footer, 4).unwrap_or(0).into(), 32)));
-    cx.emit(crc_node("Patch CRC-32", file.sub(at.saturating_add(8), 4), stored, computed));
+    cx.emit(
+        Node::new("Source CRC-32")
+            .span(file.sub(at, 4))
+            .value(hex(u32_le(&footer, 0).unwrap_or(0).into(), 32)),
+    );
+    cx.emit(
+        Node::new("Target CRC-32")
+            .span(file.sub(at.saturating_add(4), 4))
+            .value(hex(u32_le(&footer, 4).unwrap_or(0).into(), 32)),
+    );
+    cx.emit(crc_node(
+        "Patch CRC-32",
+        file.sub(at.saturating_add(8), 4),
+        stored,
+        computed,
+    ));
     Ok(computed == Some(stored))
 }
 
@@ -149,7 +186,12 @@ async fn ups(cx: Cx, input: Input) -> Result<()> {
         offset = offset.saturating_add(skip);
         let data = cur.pos();
         let Some(zero) = find_zero(&cx, body, data).await? else {
-            cx.push(Node::new("Hunk").span(cur.since(start)).diag(Diagnostic::malformed("XOR data not terminated"))).await;
+            cx.push(
+                Node::new("Hunk")
+                    .span(cur.since(start))
+                    .diag(Diagnostic::malformed("XOR data not terminated")),
+            )
+            .await;
             break;
         };
         let len = zero.saturating_sub(data);
@@ -161,7 +203,10 @@ async fn ups(cx: Cx, input: Input) -> Result<()> {
                 .span(cur.since(start))
                 .value(hex(offset, 64))
                 .summary(format!("{len} bytes XORed at {offset:#x}"))
-                .lazy(ups_hunk, (cur.since(start), data.saturating_sub(start), len)),
+                .lazy(
+                    ups_hunk,
+                    (cur.since(start), data.saturating_sub(start), len),
+                ),
         )
         .await;
         offset = offset.saturating_add(len).saturating_add(1);
@@ -229,12 +274,23 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
             _ => {
                 let raw = varint(&mut cur, Varint::Beat).await?;
                 let delta = i128::from(raw >> 1);
-                let delta = if raw & 1 != 0 { delta.saturating_neg() } else { delta };
-                let rel = if kind == 2 { &mut source_rel } else { &mut target_rel };
+                let delta = if raw & 1 != 0 {
+                    delta.saturating_neg()
+                } else {
+                    delta
+                };
+                let rel = if kind == 2 {
+                    &mut source_rel
+                } else {
+                    &mut target_rel
+                };
                 *rel = rel.saturating_add(delta);
                 let from = *rel;
                 *rel = rel.saturating_add(i128::from(len));
-                format!("{len} bytes from {} {from:#x}", if kind == 2 { "source" } else { "target" })
+                format!(
+                    "{len} bytes from {} {from:#x}",
+                    if kind == 2 { "source" } else { "target" }
+                )
             }
         };
         if let Some(c) = counts.get_mut(kind) {
@@ -252,7 +308,9 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
         out = out.saturating_add(len);
     }
     if out != target {
-        cx.diag(Diagnostic::warning(format!("actions produce {out} bytes, header says {target}")));
+        cx.diag(Diagnostic::warning(format!(
+            "actions produce {out} bytes, header says {target}"
+        )));
     }
     let [sr, tr, sc, tc] = counts;
     cx.annotate(format!(
@@ -270,9 +328,21 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub VCDIFF = "vcdiff", "VCDIFF delta (xdelta3)", ["vcdiff", "xdelta", "xd3", "vcd"],
     "application/vcdiff", Probe::Magic(&[(0, b"\xd6\xc3\xc4\x00")]), vcdiff);
 
-const VCD_HDR: FlagTable = &[flag(1, "VCD_DECOMPRESS"), flag(2, "VCD_CODETABLE"), flag(4, "VCD_APPHEADER")];
-const VCD_WIN: FlagTable = &[flag(1, "VCD_SOURCE"), flag(2, "VCD_TARGET"), flag(4, "VCD_ADLER32")];
-const VCD_DELTA: FlagTable = &[flag(1, "VCD_DATACOMP"), flag(2, "VCD_INSTCOMP"), flag(4, "VCD_ADDRCOMP")];
+const VCD_HDR: FlagTable = &[
+    flag(1, "VCD_DECOMPRESS"),
+    flag(2, "VCD_CODETABLE"),
+    flag(4, "VCD_APPHEADER"),
+];
+const VCD_WIN: FlagTable = &[
+    flag(1, "VCD_SOURCE"),
+    flag(2, "VCD_TARGET"),
+    flag(4, "VCD_ADLER32"),
+];
+const VCD_DELTA: FlagTable = &[
+    flag(1, "VCD_DATACOMP"),
+    flag(2, "VCD_INSTCOMP"),
+    flag(4, "VCD_ADDRCOMP"),
+];
 const VCD_COMPRESSORS: EnumTable = &[(1, "DJW"), (2, "LZMA"), (16, "FGK")];
 
 async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
@@ -281,14 +351,35 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Magic").span(cur.span(3)));
     cur.skip(3);
     let version = cur.u8().await?;
-    cx.emit(Node::new("Version").span(file.sub(3, 1)).value(dec(version.into(), 8)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(3, 1))
+            .value(dec(version.into(), 8)),
+    );
     let indicator = cur.u8().await?;
     let (set, unknown) = crate::value::decode_flags(VCD_HDR, indicator.into());
-    cx.emit(Node::new("Header indicator").span(file.sub(4, 1)).value(Value::Flags { raw: indicator.into(), bits: 8, set, unknown }));
+    cx.emit(
+        Node::new("Header indicator")
+            .span(file.sub(4, 1))
+            .value(Value::Flags {
+                raw: indicator.into(),
+                bits: 8,
+                set,
+                unknown,
+            }),
+    );
     if indicator & 1 != 0 {
         let at = cur.pos();
         let id = cur.u8().await?;
-        cx.emit(Node::new("Secondary compressor").span(cur.since(at)).value(Value::Enum { raw: id.into(), bits: 8, name: lookup(VCD_COMPRESSORS, id.into()) }));
+        cx.emit(
+            Node::new("Secondary compressor")
+                .span(cur.since(at))
+                .value(Value::Enum {
+                    raw: id.into(),
+                    bits: 8,
+                    name: lookup(VCD_COMPRESSORS, id.into()),
+                }),
+        );
     }
     if indicator & 2 != 0 {
         let len = varint_field(&cx, &mut cur, Varint::Vcdiff, "Code table length").await?;
@@ -302,7 +393,11 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
         let bytes = cx.read_avail(span.sub(0, 1024)).await?;
         // xdelta3 stores "target/encoding/source/encoding/".
         let header = String::from_utf8_lossy(&bytes).into_owned();
-        cx.emit(Node::new("Application header").span(span).value(text(header.clone())));
+        cx.emit(
+            Node::new("Application header")
+                .span(span)
+                .value(text(header.clone())),
+        );
         app = Some(header);
         cur.skip(len);
     }
@@ -323,11 +418,20 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
         windows = windows.saturating_add(1);
         total = total.saturating_add(target_len);
         let span = cur.since(start);
-        let mut summary = format!("{target_len} bytes at {:#x}", total.saturating_sub(target_len));
+        let mut summary = format!(
+            "{target_len} bytes at {:#x}",
+            total.saturating_sub(target_len)
+        );
         if let Some((len, pos)) = source {
-            summary.push_str(&format!(", copies from {} {pos:#x}+{len:#x}", if win & 1 != 0 { "source" } else { "target" }));
+            summary.push_str(&format!(
+                ", copies from {} {pos:#x}+{len:#x}",
+                if win & 1 != 0 { "source" } else { "target" }
+            ));
         }
-        let mut node = Node::new(format!("Window {windows}")).span(span).summary(summary).lazy(vcdiff_window, span);
+        let mut node = Node::new(format!("Window {windows}"))
+            .span(span)
+            .summary(summary)
+            .lazy(vcdiff_window, span);
         if cur.pos() > file.len {
             node = node.diag(Diagnostic::truncated(span, file.len.saturating_sub(start)));
         }
@@ -335,9 +439,16 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
     }
     let names = app.as_deref().map(|a| {
         let parts: Vec<&str> = a.split('/').collect();
-        format!(", {:?} from {:?}", parts.first().copied().unwrap_or(""), parts.get(2).copied().unwrap_or(""))
+        format!(
+            ", {:?} from {:?}",
+            parts.first().copied().unwrap_or(""),
+            parts.get(2).copied().unwrap_or("")
+        )
     });
-    cx.annotate(format!("VCDIFF delta, {windows} windows, {total} target bytes{}", names.unwrap_or_default()));
+    cx.annotate(format!(
+        "VCDIFF delta, {windows} windows, {total} target bytes{}",
+        names.unwrap_or_default()
+    ));
     Ok(())
 }
 
@@ -345,7 +456,16 @@ async fn vcdiff_window(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     let win = cur.u8().await?;
     let (set, unknown) = crate::value::decode_flags(VCD_WIN, win.into());
-    cx.emit(Node::new("Window indicator").span(span.sub(0, 1)).value(Value::Flags { raw: win.into(), bits: 8, set, unknown }));
+    cx.emit(
+        Node::new("Window indicator")
+            .span(span.sub(0, 1))
+            .value(Value::Flags {
+                raw: win.into(),
+                bits: 8,
+                set,
+                unknown,
+            }),
+    );
     if win & 3 != 0 {
         varint_field(&cx, &mut cur, Varint::Vcdiff, "Source segment length").await?;
         varint_field(&cx, &mut cur, Varint::Vcdiff, "Source segment position").await?;
@@ -355,16 +475,33 @@ async fn vcdiff_window(cx: Cx, span: Span) -> Result<()> {
     let at = cur.pos();
     let delta = cur.u8().await?;
     let (set, unknown) = crate::value::decode_flags(VCD_DELTA, delta.into());
-    cx.emit(Node::new("Delta indicator").span(cur.since(at)).value(Value::Flags { raw: delta.into(), bits: 8, set, unknown }));
+    cx.emit(
+        Node::new("Delta indicator")
+            .span(cur.since(at))
+            .value(Value::Flags {
+                raw: delta.into(),
+                bits: 8,
+                set,
+                unknown,
+            }),
+    );
     let data = varint_field(&cx, &mut cur, Varint::Vcdiff, "Data section length").await?;
     let inst = varint_field(&cx, &mut cur, Varint::Vcdiff, "Instructions section length").await?;
     let addr = varint_field(&cx, &mut cur, Varint::Vcdiff, "Addresses section length").await?;
     if win & 4 != 0 {
         let at = cur.pos();
         let sum = cur.u32().await?;
-        cx.emit(Node::new("Adler-32").span(cur.since(at)).value(hex(sum.into(), 32)));
+        cx.emit(
+            Node::new("Adler-32")
+                .span(cur.since(at))
+                .value(hex(sum.into(), 32)),
+        );
     }
-    for (name, len) in [("Data section", data), ("Instructions section", inst), ("Addresses section", addr)] {
+    for (name, len) in [
+        ("Data section", data),
+        ("Instructions section", inst),
+        ("Addresses section", addr),
+    ] {
         cx.emit(Node::new(name).span(cur.span(len)).summary(size(len)));
         cur.skip(len);
     }
@@ -384,7 +521,11 @@ const BSDF2_CODECS: EnumTable = &[(0, "raw"), (1, "bzip2"), (2, "brotli")];
 /// bsdiff's `offtout`: 64-bit sign-magnitude, little-endian.
 fn offtin(raw: u64) -> i64 {
     let magnitude = i64::try_from(raw & 0x7fff_ffff_ffff_ffff).unwrap_or(i64::MAX);
-    if raw >> 63 != 0 { magnitude.saturating_neg() } else { magnitude }
+    if raw >> 63 != 0 {
+        magnitude.saturating_neg()
+    } else {
+        magnitude
+    }
 }
 
 async fn bsdiff(cx: Cx, input: Input) -> Result<()> {
@@ -395,7 +536,14 @@ async fn bsdiff(cx: Cx, input: Input) -> Result<()> {
     let mut codecs = [1u8; 3];
     if bsdf2 {
         f.ascii("Magic", 5).emit()?;
-        for (i, name) in ["Control block codec", "Diff block codec", "Extra block codec"].into_iter().enumerate() {
+        for (i, name) in [
+            "Control block codec",
+            "Diff block codec",
+            "Extra block codec",
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let codec = f.u8(name).enumeration(BSDF2_CODECS).emit()?;
             if let Some(c) = codecs.get_mut(i) {
                 *c = codec;
@@ -404,17 +552,33 @@ async fn bsdiff(cx: Cx, input: Input) -> Result<()> {
     } else {
         f.ascii("Magic", 8).emit()?;
     }
-    let ctrl = f.u64("Control block length").check(|&v| (v >> 63 != 0).then(|| Diagnostic::malformed("negative length"))).emit()?;
-    let diff = f.u64("Diff block length").check(|&v| (v >> 63 != 0).then(|| Diagnostic::malformed("negative length"))).emit()?;
+    let ctrl = f
+        .u64("Control block length")
+        .check(|&v| (v >> 63 != 0).then(|| Diagnostic::malformed("negative length")))
+        .emit()?;
+    let diff = f
+        .u64("Diff block length")
+        .check(|&v| (v >> 63 != 0).then(|| Diagnostic::malformed("negative length")))
+        .emit()?;
     let new = f.u64("New file size").emit()?;
     let header = 32u64;
     let ctrl_span = file.sub(header, ctrl);
     let diff_span = file.sub(header.saturating_add(ctrl), diff);
     let extra_span = file.tail(header.saturating_add(ctrl).saturating_add(diff));
-    for (i, (name, span)) in [("Control block", ctrl_span), ("Diff block", diff_span), ("Extra block", extra_span)].into_iter().enumerate() {
+    for (i, (name, span)) in [
+        ("Control block", ctrl_span),
+        ("Diff block", diff_span),
+        ("Extra block", extra_span),
+    ]
+    .into_iter()
+    .enumerate()
+    {
         let node = if codecs.get(i) == Some(&0) {
             if i == 0 {
-                Node::new(name).span(span).summary(format!("{} triples", span.len / 24)).lazy(bsdiff_control, span)
+                Node::new(name)
+                    .span(span)
+                    .summary(format!("{} triples", span.len / 24))
+                    .lazy(bsdiff_control, span)
             } else {
                 Node::new(name).span(span).summary(size(span.len))
             }
@@ -423,10 +587,15 @@ async fn bsdiff(cx: Cx, input: Input) -> Result<()> {
         };
         cx.emit(node);
     }
-    let codec = lookup(BSDF2_CODECS, codecs.first().copied().unwrap_or(1).into()).unwrap_or("unknown");
+    let codec =
+        lookup(BSDF2_CODECS, codecs.first().copied().unwrap_or(1).into()).unwrap_or("unknown");
     cx.annotate(format!(
         "{}, new file {}, control/diff/extra {}/{}/{} bytes ({codec})",
-        if bsdf2 { "BSDF2 patch" } else { "bsdiff 4.0 patch" },
+        if bsdf2 {
+            "BSDF2 patch"
+        } else {
+            "bsdiff 4.0 patch"
+        },
         size(new),
         ctrl,
         diff,
@@ -446,7 +615,9 @@ async fn bsdiff_control(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("Triple {i}"))
                 .span(entry)
-                .summary(format!("add {add} bytes, insert {copy} bytes, seek {seek:+}")),
+                .summary(format!(
+                    "add {add} bytes, insert {copy} bytes, seek {seek:+}"
+                )),
         )
         .await;
     }
@@ -459,8 +630,14 @@ async fn bsdiff43(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 16).emit()?;
     let new = f.u64("New file size").emit()?;
-    cx.emit(embedded("Interleaved control/diff/extra (bzip2)", input.nested(file.tail(24))));
-    cx.annotate(format!("bsdiff 4.3 (Endsley) patch, new file {}", size(new)));
+    cx.emit(embedded(
+        "Interleaved control/diff/extra (bzip2)",
+        input.nested(file.tail(24)),
+    ));
+    cx.annotate(format!(
+        "bsdiff 4.3 (Endsley) patch, new file {}",
+        size(new)
+    ));
     Ok(())
 }
 
@@ -475,28 +652,53 @@ const PPF_IMAGE: EnumTable = &[(0, "BIN"), (1, "GI (PrimoDVD)")];
 async fn ppf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 60)).await?;
-    let version = head.data.get(3).copied().unwrap_or(b'1').saturating_sub(b'0');
+    let version = head
+        .data
+        .get(3)
+        .copied()
+        .unwrap_or(b'1')
+        .saturating_sub(b'0');
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 5).emit()?;
-    f.u8("Encoding").desc("0 = PPF1, 1 = PPF2, 2 = PPF3").emit()?;
+    f.u8("Encoding")
+        .desc("0 = PPF1, 1 = PPF2, 2 = PPF3")
+        .emit()?;
     let description = f.ascii("Description", 50).emit()?;
     let mut at = 56u64;
     let mut undo = false;
     if version == 2 {
         let tail = cx.block(file.sub(56, 4)).await?;
-        Fields::emitting(&cx, &tail, LE).u32("Input file size").emit()?;
-        cx.emit(Node::new("Validation block").span(file.sub(60, 1024)).desc("1024 bytes of the image at 0x9320"));
+        Fields::emitting(&cx, &tail, LE)
+            .u32("Input file size")
+            .emit()?;
+        cx.emit(
+            Node::new("Validation block")
+                .span(file.sub(60, 1024))
+                .desc("1024 bytes of the image at 0x9320"),
+        );
         at = 60 + 1024;
     } else if version == 3 {
         let tail = cx.block(file.sub(56, 4)).await?;
         let mut g = Fields::emitting(&cx, &tail, LE);
         g.u8("Image type").enumeration(PPF_IMAGE).emit()?;
-        let blockcheck = g.u8("Block check").enumeration(&[(0, "disabled"), (1, "enabled")]).emit()? != 0;
-        undo = g.u8("Undo data").enumeration(&[(0, "absent"), (1, "present")]).emit()? != 0;
+        let blockcheck = g
+            .u8("Block check")
+            .enumeration(&[(0, "disabled"), (1, "enabled")])
+            .emit()?
+            != 0;
+        undo = g
+            .u8("Undo data")
+            .enumeration(&[(0, "absent"), (1, "present")])
+            .emit()?
+            != 0;
         g.u8("Reserved").emit()?;
         at = 60;
         if blockcheck {
-            cx.emit(Node::new("Validation block").span(file.sub(60, 1024)).desc("1024 bytes of the image at 0x9320 (BIN) or 0x80A0 (GI)"));
+            cx.emit(
+                Node::new("Validation block")
+                    .span(file.sub(60, 1024))
+                    .desc("1024 bytes of the image at 0x9320 (BIN) or 0x80A0 (GI)"),
+            );
             at = 60 + 1024;
         }
     }
@@ -506,14 +708,24 @@ async fn ppf(cx: Cx, input: Input) -> Result<()> {
     if version >= 2 && file.len > 34 {
         let marker_at = file.len.saturating_sub(16u64.saturating_add(len_size));
         if cx.read_avail(file.sub(marker_at, 16)).await? == b"@END_FILE_ID.DIZ" {
-            let raw = cx.read(file.sub(marker_at.saturating_add(16), len_size)).await?;
-            let len = if len_size == 4 { u64::from(u32_le(&raw, 0).unwrap_or(0)) } else { u64::from(u16_le(&raw, 0).unwrap_or(0)) };
+            let raw = cx
+                .read(file.sub(marker_at.saturating_add(16), len_size))
+                .await?;
+            let len = if len_size == 4 {
+                u64::from(u32_le(&raw, 0).unwrap_or(0))
+            } else {
+                u64::from(u16_le(&raw, 0).unwrap_or(0))
+            };
             let begin = marker_at.saturating_sub(len).saturating_sub(18);
             if cx.read_avail(file.sub(begin, 18)).await? == b"@BEGIN_FILE_ID.DIZ" {
                 end = begin;
                 let span = file.sub(begin.saturating_add(18), len);
                 let diz = cx.read_avail(span.sub(0, 4096)).await?;
-                cx.emit(Node::new("FILE_ID.DIZ").span(file.tail(begin)).value(text(String::from_utf8_lossy(&diz).trim_end().to_owned())));
+                cx.emit(
+                    Node::new("FILE_ID.DIZ")
+                        .span(file.tail(begin))
+                        .value(text(String::from_utf8_lossy(&diz).trim_end().to_owned())),
+                );
             }
         }
     }
@@ -523,11 +735,17 @@ async fn ppf(cx: Cx, input: Input) -> Result<()> {
     let (mut records, mut bytes) = (0u64, 0u64);
     while cur.remaining() > offset_size {
         let start = cur.pos();
-        let offset = if version == 3 { cur.u64().await? } else { u64::from(cur.u32().await?) };
+        let offset = if version == 3 {
+            cur.u64().await?
+        } else {
+            u64::from(cur.u32().await?)
+        };
         let len = cur.u8().await?;
         let data = cur.span(len.into());
         cur.skip(len.into());
-        let mut node = Node::new(format!("Record {}", records.saturating_add(1))).value(hex(offset, 64)).summary(format!("{len} bytes at {offset:#x}"));
+        let mut node = Node::new(format!("Record {}", records.saturating_add(1)))
+            .value(hex(offset, 64))
+            .summary(format!("{len} bytes at {offset:#x}"));
         if undo {
             node = node.summary(format!("{len} bytes at {offset:#x}, with undo data"));
             cur.skip(len.into());
@@ -552,7 +770,10 @@ declare_format!(pub APS_N64 = "aps-n64", "APS patch (Nintendo 64)", ["aps"],
     "application/x-aps-patch", Probe::Magic(&[(0, b"APS10")]), aps_n64);
 
 fn aps_gba_probe(h: &Head<'_>) -> bool {
-    h.at(0, b"APS1") && !h.at(0, b"APS10") && h.len >= 12 && h.len.saturating_sub(12).is_multiple_of(65544)
+    h.at(0, b"APS1")
+        && !h.at(0, b"APS10")
+        && h.len >= 12
+        && h.len.saturating_sub(12).is_multiple_of(65544)
 }
 
 declare_format!(pub APS_GBA = "aps-gba", "APS patch (Game Boy Advance)", ["aps"],
@@ -571,7 +792,9 @@ async fn aps_n64(cx: Cx, input: Input) -> Result<()> {
     let description = f.ascii("Description", 50).emit()?;
     let mut cart = String::new();
     if mode == 1 {
-        f.u8("Original image format").enumeration(APS_N64_FORMAT).emit()?;
+        f.u8("Original image format")
+            .enumeration(APS_N64_FORMAT)
+            .emit()?;
         cart = f.ascii("Cartridge ID", 3).emit()?;
         f.bytes("CRC", 8).emit()?;
         f.bytes("Padding", 5).emit()?;
@@ -593,12 +816,22 @@ async fn aps_n64(cx: Cx, input: Input) -> Result<()> {
             format!("{len} bytes at {offset:#x}")
         };
         records = records.saturating_add(1);
-        cx.push(Node::new(format!("Record {records}")).span(cur.since(start)).value(hex(offset.into(), 32)).summary(summary)).await;
+        cx.push(
+            Node::new(format!("Record {records}"))
+                .span(cur.since(start))
+                .value(hex(offset.into(), 32))
+                .summary(summary),
+        )
+        .await;
     }
     cx.annotate(format!(
         "APS N64 patch {:?}{}, {records} records, output {}",
         description.trim(),
-        if cart.is_empty() { String::new() } else { format!(" for cart {cart}") },
+        if cart.is_empty() {
+            String::new()
+        } else {
+            format!(" for cart {cart}")
+        },
         size(out.into())
     ));
     Ok(())
@@ -628,12 +861,20 @@ async fn aps_gba(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("Block {i}"))
                 .span(span)
                 .value(hex(offset.into(), 32))
-                .summary(format!("64 KiB XOR at {offset:#x}, CRC16 {:#06x} → {:#06x}", u16_le(&head, 4).unwrap_or(0), u16_le(&head, 6).unwrap_or(0)))
+                .summary(format!(
+                    "64 KiB XOR at {offset:#x}, CRC16 {:#06x} → {:#06x}",
+                    u16_le(&head, 4).unwrap_or(0),
+                    u16_le(&head, 6).unwrap_or(0)
+                ))
                 .lazy(aps_gba_block, span),
         )
         .await;
     }
-    cx.annotate(format!("APS GBA patch, {} → {}, {count} blocks", size(h.source.into()), size(h.target.into())));
+    cx.annotate(format!(
+        "APS GBA patch, {} → {}, {count} blocks",
+        size(h.source.into()),
+        size(h.target.into())
+    ));
     Ok(())
 }
 
@@ -655,7 +896,11 @@ declare_format!(pub GDIFF = "gdiff", "Generic Diff Format (GDIFF)", ["gdiff", "g
 
 async fn gdiff(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(hex(0xd1ff_d1ff, 32)));
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(hex(0xd1ff_d1ff, 32)),
+    );
     cx.emit(Node::new("Version").span(file.sub(4, 1)).value(dec(4, 8)));
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(5);
@@ -695,7 +940,13 @@ async fn gdiff(cx: Cx, input: Input) -> Result<()> {
             }
         };
         commands = commands.saturating_add(1);
-        cx.push(Node::new(name).span(cur.since(start)).value(hex(out, 64)).summary(format!("opcode {op}: {summary}"))).await;
+        cx.push(
+            Node::new(name)
+                .span(cur.since(start))
+                .value(hex(out, 64))
+                .summary(format!("opcode {op}: {summary}")),
+        )
+        .await;
         out = out.saturating_add(len);
         if ended {
             break;
@@ -704,7 +955,9 @@ async fn gdiff(cx: Cx, input: Input) -> Result<()> {
     if !ended {
         cx.diag(Diagnostic::warning("no EOF command"));
     }
-    cx.annotate(format!("GDIFF, {commands} commands ({copies} copies, {data} literal bytes), output {out} bytes"));
+    cx.annotate(format!(
+        "GDIFF, {commands} commands ({copies} copies, {data} literal bytes), output {out} bytes"
+    ));
     Ok(())
 }
 
@@ -720,8 +973,15 @@ async fn msdelta(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 4).emit()?;
     f.u64("Target file time").filetime().emit()?;
-    cx.emit(Node::new("Bit-packed header and delta").span(file.tail(12)).diag(Diagnostic::unsupported("MSDelta bitstream")));
-    cx.annotate(format!("Windows delta patch (PA30), {} of delta", size(file.len.saturating_sub(12))));
+    cx.emit(
+        Node::new("Bit-packed header and delta")
+            .span(file.tail(12))
+            .diag(Diagnostic::unsupported("MSDelta bitstream")),
+    );
+    cx.annotate(format!(
+        "Windows delta patch (PA30), {} of delta",
+        size(file.len.saturating_sub(12))
+    ));
     Ok(())
 }
 
@@ -763,10 +1023,15 @@ record! {
 async fn rup_vlv(cur: &mut Cursor<'_>) -> Result<u64> {
     let n = cur.u8().await?;
     if n > 8 {
-        return Err(Diagnostic::malformed(format!("{n}-byte variable-length value")).at(cur.span(0)));
+        return Err(
+            Diagnostic::malformed(format!("{n}-byte variable-length value")).at(cur.span(0)),
+        );
     }
     let raw = cur.bytes(n.into()).await?;
-    Ok(raw.iter().rev().fold(0u64, |acc, &b| acc << 8 | u64::from(b)))
+    Ok(raw
+        .iter()
+        .rev()
+        .fold(0u64, |acc, &b| acc << 8 | u64::from(b)))
 }
 
 async fn rup(cx: Cx, input: Input) -> Result<()> {
@@ -784,7 +1049,8 @@ async fn rup(cx: Cx, input: Input) -> Result<()> {
             }
             1 => {
                 let name_len = rup_vlv(&mut cur).await?;
-                let name = String::from_utf8_lossy(&cur.bytes(name_len.min(4096)).await?).into_owned();
+                let name =
+                    String::from_utf8_lossy(&cur.bytes(name_len.min(4096)).await?).into_owned();
                 let kind = cur.u8().await?;
                 let source = rup_vlv(&mut cur).await?;
                 let target = rup_vlv(&mut cur).await?;
@@ -794,13 +1060,24 @@ async fn rup(cx: Cx, input: Input) -> Result<()> {
                     let mode = cur.u8().await?;
                     let len = rup_vlv(&mut cur).await?;
                     cur.skip(len);
-                    overflow = format!(", {} {len} bytes", if mode == b'A' { "appends" } else { "minifies by" });
+                    overflow = format!(
+                        ", {} {len} bytes",
+                        if mode == b'A' {
+                            "appends"
+                        } else {
+                            "minifies by"
+                        }
+                    );
                 }
                 files = files.saturating_add(1);
                 cx.push(
                     Node::new(format!("Open file {name:?}"))
                         .span(cur.since(start))
-                        .value(Value::Enum { raw: kind.into(), bits: 8, name: lookup(RUP_ROM_TYPES, kind.into()) })
+                        .value(Value::Enum {
+                            raw: kind.into(),
+                            bits: 8,
+                            name: lookup(RUP_ROM_TYPES, kind.into()),
+                        })
                         .summary(format!("{} → {}{overflow}", size(source), size(target))),
                 )
                 .await;
@@ -812,10 +1089,23 @@ async fn rup(cx: Cx, input: Input) -> Result<()> {
                 cur.skip(len);
                 records = records.saturating_add(1);
                 bytes = bytes.saturating_add(len);
-                cx.push(Node::new("XOR record").span(cur.since(start)).value(hex(offset, 64)).summary(format!("{len} bytes at {offset:#x}")).target(data)).await;
+                cx.push(
+                    Node::new("XOR record")
+                        .span(cur.since(start))
+                        .value(hex(offset, 64))
+                        .summary(format!("{len} bytes at {offset:#x}"))
+                        .target(data),
+                )
+                .await;
             }
             other => {
-                cx.push(Node::new("Unknown command").span(cur.since(start)).value(hex(other.into(), 8)).diag(Diagnostic::malformed("unknown RUP command"))).await;
+                cx.push(
+                    Node::new("Unknown command")
+                        .span(cur.since(start))
+                        .value(hex(other.into(), 8))
+                        .diag(Diagnostic::malformed("unknown RUP command")),
+                )
+                .await;
                 break;
             }
         }

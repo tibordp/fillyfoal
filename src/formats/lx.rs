@@ -165,11 +165,19 @@ fn pascal_list(data: &[u8], ordinals: bool, limit: usize, base: Span) -> Vec<Nod
         let end = start.saturating_add(usize::from(n));
         let Some(s) = data.get(start..end) else { break };
         let name = String::from_utf8_lossy(s).into_owned();
-        let len = if ordinals { usize::from(n).saturating_add(3) } else { usize::from(n).saturating_add(1) };
+        let len = if ordinals {
+            usize::from(n).saturating_add(3)
+        } else {
+            usize::from(n).saturating_add(1)
+        };
         let mut node = Node::new(name).span(base.sub(to_u64(at), to_u64(len)));
         if ordinals {
             let ordinal = crate::bytes::u16_le(data, end).unwrap_or(0);
-            node = node.summary(if out.is_empty() { "module name".to_owned() } else { format!("ordinal {ordinal}") });
+            node = node.summary(if out.is_empty() {
+                "module name".to_owned()
+            } else {
+                format!("ordinal {ordinal}")
+            });
         }
         out.push(node);
         at = at.saturating_add(len);
@@ -190,13 +198,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", hspan, LE));
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
 
-    let resident_span = base.sub(h.resident_names.into(), u64::from(h.entry_table.saturating_sub(h.resident_names)));
+    let resident_span = base.sub(
+        h.resident_names.into(),
+        u64::from(h.entry_table.saturating_sub(h.resident_names)),
+    );
     let resident_data = cx.read_avail(resident_span.sub(0, 0x10000)).await?;
     let resident = pascal_list(&resident_data, true, 0x4000, resident_span);
-    let imports_span = base.sub(h.imports_offset.into(), u64::from(h.import_procs.saturating_sub(h.imports_offset)));
+    let imports_span = base.sub(
+        h.imports_offset.into(),
+        u64::from(h.import_procs.saturating_sub(h.imports_offset)),
+    );
     let imports_data = cx.read_avail(imports_span.sub(0, 0x10000)).await?;
-    let imports = pascal_list(&imports_data, false, crate::bytes::to_usize(h.imports.into()), imports_span);
-    let module = resident.first().map(|n| n.name.to_string()).unwrap_or_default();
+    let imports = pascal_list(
+        &imports_data,
+        false,
+        crate::bytes::to_usize(h.imports.into()),
+        imports_span,
+    );
+    let module = resident
+        .first()
+        .map(|n| n.name.to_string())
+        .unwrap_or_default();
     let kind = match h.flags & 0x3_8000 {
         0x8000 => "DLL",
         0x2_8000 => "VxD",
@@ -210,21 +232,40 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         name_or(OS, h.os.into(), "OS"),
         name_or(CPU, h.cpu.into(), "CPU"),
         h.objects,
-        if names.is_empty() { String::new() } else { format!(", imports {}", ellipsize(&names.join(", "), 80)) }
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(", imports {}", ellipsize(&names.join(", "), 80))
+        }
     ));
-    let table = base.sub(h.objects_offset.into(), u64::from(h.objects).saturating_mul(Object::SIZE));
+    let table = base.sub(
+        h.objects_offset.into(),
+        u64::from(h.objects).saturating_mul(Object::SIZE),
+    );
     cx.emit(
         Node::new("Object Table")
             .span(table)
             .summary(format!("{} objects", h.objects))
             .lazy(objects, table),
     );
-    cx.emit(Node::new("Resident Names").span(resident_span).lazy(emit_all, resident));
-    cx.emit(Node::new("Imported Modules").span(imports_span).lazy(emit_all, imports));
+    cx.emit(
+        Node::new("Resident Names")
+            .span(resident_span)
+            .lazy(emit_all, resident),
+    );
+    cx.emit(
+        Node::new("Imported Modules")
+            .span(imports_span)
+            .lazy(emit_all, imports),
+    );
     if h.nonresident_length > 0 {
         let span = file.sub(h.nonresident_names.into(), h.nonresident_length.into());
         let data = cx.read_avail(span.sub(0, 0x10000)).await?;
-        cx.emit(Node::new("Non-resident Names").span(span).lazy(emit_all, pascal_list(&data, true, 0x4000, span)));
+        cx.emit(
+            Node::new("Non-resident Names")
+                .span(span)
+                .lazy(emit_all, pascal_list(&data, true, 0x4000, span)),
+        );
     }
     Ok(())
 }

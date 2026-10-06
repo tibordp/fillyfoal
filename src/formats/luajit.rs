@@ -21,7 +21,12 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const FLAGS: FlagTable = &[flag(1, "BE"), flag(2, "STRIP"), flag(4, "FFI"), flag(8, "FR2")];
+const FLAGS: FlagTable = &[
+    flag(1, "BE"),
+    flag(2, "STRIP"),
+    flag(4, "FFI"),
+    flag(8, "FR2"),
+];
 
 const PROTO_FLAGS: FlagTable = &[
     flag(1, "CHILD"),
@@ -38,24 +43,34 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let data = cx.read(file).await?;
     let mut r = Reader::new(&data);
-    let at = |start: usize, end: usize| {
-        file.sub(to_u64(start), to_u64(end.saturating_sub(start)))
-    };
+    let at = |start: usize, end: usize| file.sub(to_u64(start), to_u64(end.saturating_sub(start)));
     r.bytes(3);
     let version = r.u8().unwrap_or(0);
-    cx.emit(Node::new("signature").span(file.sub(0, 3)).value(text("\\x1bLJ")));
-    cx.emit(Node::new("version").span(file.sub(3, 1)).value(dec(version.into(), 8)));
+    cx.emit(
+        Node::new("signature")
+            .span(file.sub(0, 3))
+            .value(text("\\x1bLJ")),
+    );
+    cx.emit(
+        Node::new("version")
+            .span(file.sub(3, 1))
+            .value(dec(version.into(), 8)),
+    );
     let start = r.pos();
     let flags = r
         .uleb()
         .ok_or_else(|| Diagnostic::malformed("bad flags").at(file.sub(4, 1)))?;
     let (set, unknown) = crate::value::decode_flags(FLAGS, flags);
-    cx.emit(Node::new("flags").span(at(start, r.pos())).value(Value::Flags {
-        raw: flags,
-        bits: 32,
-        set,
-        unknown,
-    }));
+    cx.emit(
+        Node::new("flags")
+            .span(at(start, r.pos()))
+            .value(Value::Flags {
+                raw: flags,
+                bits: 32,
+                set,
+                unknown,
+            }),
+    );
     let mut name = None;
     if flags & 2 == 0 {
         let start = r.pos();
@@ -64,14 +79,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .bytes(usize::try_from(len).unwrap_or(usize::MAX))
             .unwrap_or_default();
         let s = String::from_utf8_lossy(bytes).into_owned();
-        cx.emit(Node::new("chunkname").span(at(start, r.pos())).value(text(s.clone())));
+        cx.emit(
+            Node::new("chunkname")
+                .span(at(start, r.pos()))
+                .value(text(s.clone())),
+        );
         name = Some(s);
     }
     // Count the prototypes first, so the summary is available at once.
     let mut total = 0usize;
     let mut scan = Reader::at(&data, r.pos());
     while let Some(size) = scan.uleb() {
-        if size == 0 || scan.bytes(usize::try_from(size).unwrap_or(usize::MAX)).is_none() {
+        if size == 0
+            || scan
+                .bytes(usize::try_from(size).unwrap_or(usize::MAX))
+                .is_none()
+        {
             break;
         }
         total = total.saturating_add(1);
@@ -102,7 +125,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut field = |label: &'static str, p: &mut Reader<'_>, wide: bool| -> Option<u64> {
             let s = p.pos();
             let v = if wide { p.uleb()? } else { u64::from(p.u8()?) };
-            let span = at(body_start.saturating_add(s), body_start.saturating_add(p.pos()));
+            let span = at(
+                body_start.saturating_add(s),
+                body_start.saturating_add(p.pos()),
+            );
             let value = if label == "flags" {
                 let (set, unknown) = crate::value::decode_flags(PROTO_FLAGS, v);
                 Value::Flags {

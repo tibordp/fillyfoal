@@ -113,7 +113,11 @@ fn entry(f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
         }
         3 if c.jceks => {
             // A serialized javax.crypto.SealedObject, without a length.
-            let rest = f.block().data.get(crate::bytes::to_usize(f.pos())..).unwrap_or_default();
+            let rest = f
+                .block()
+                .data
+                .get(crate::bytes::to_usize(f.pos())..)
+                .unwrap_or_default();
             let len = serialization::stream_len(rest)
                 .ok_or_else(|| Diagnostic::malformed("unreadable sealed key").at(f.peek_span(1)))?;
             let span = f.peek_span(to_u64(len));
@@ -179,7 +183,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Entries")
             .span(table)
             .summary(format!("{} entries", entries.len()))
-            .lazy(entry_list, (ctx, entries.iter().map(|(s, _)| *s).collect::<Vec<_>>())),
+            .lazy(
+                entry_list,
+                (ctx, entries.iter().map(|(s, _)| *s).collect::<Vec<_>>()),
+            ),
     );
     let digest = file.sub(offset, 20);
     let bytes = cx.read_avail(digest).await?;
@@ -207,11 +214,8 @@ async fn entry_list(cx: Cx, (ctx, spans): (Ctx, Vec<Span>)) -> Result<()> {
         if info.tag == 1 {
             summary.push_str(&format!(", chain of {}", info.certificates));
         }
-        cx.push(
-            struct_node(info.alias, span, BE, ctx, entry)
-                .summary(summary)
-        )
-        .await;
+        cx.push(struct_node(info.alias, span, BE, ctx, entry).summary(summary))
+            .await;
     }
     Ok(())
 }

@@ -114,7 +114,9 @@ record! {
 /// A Pascal string in a fixed field.
 fn pascal(v: &[u8]) -> String {
     let len = usize::from(v.first().copied().unwrap_or(0));
-    let text = v.get(1..len.saturating_add(1).min(v.len())).unwrap_or_default();
+    let text = v
+        .get(1..len.saturating_add(1).min(v.len()))
+        .unwrap_or_default();
     String::from_utf8_lossy(text).into_owned()
 }
 
@@ -202,7 +204,9 @@ pub struct EntryInfo {
 
 impl EntryInfo {
     pub fn describe(&self) -> String {
-        let mut s = self.codec.map_or_else(|| self.fourcc.clone(), str::to_owned);
+        let mut s = self
+            .codec
+            .map_or_else(|| self.fourcc.clone(), str::to_owned);
         if self.width > 0 || self.height > 0 {
             s = format!("{s} {}×{}", self.width, self.height);
         }
@@ -497,7 +501,16 @@ pub async fn describe_config(cx: &Cx, st: &BoxState) -> Option<String> {
     let kind = &st.header.kind;
     if !matches!(
         kind,
-        b"avcC" | b"hvcC" | b"av1C" | b"vpcC" | b"esds" | b"dOps" | b"dac3" | b"colr" | b"pasp" | b"btrt"
+        b"avcC"
+            | b"hvcC"
+            | b"av1C"
+            | b"vpcC"
+            | b"esds"
+            | b"dOps"
+            | b"dac3"
+            | b"colr"
+            | b"pasp"
+            | b"btrt"
     ) {
         return None;
     }
@@ -522,11 +535,7 @@ pub async fn describe_config(cx: &Cx, st: &BoxState) -> Option<String> {
             d.get(6)? >> 4
         )),
         b"esds" => esds_summary(d.get(4..)?),
-        b"dOps" => Some(format!(
-            "{} ch, input {} Hz",
-            d.get(1)?,
-            u32_be(&d, 4)?
-        )),
+        b"dOps" => Some(format!("{} ch, input {} Hz", d.get(1)?, u32_be(&d, 4)?)),
         b"dac3" => dac3_summary(d.get(..3)?),
         b"colr" => colr_summary(&d),
         b"pasp" => Some(format!("{}:{}", u32_be(&d, 0)?, u32_be(&d, 4)?)),
@@ -656,7 +665,13 @@ fn av1c(f: &mut Fields<'_>) -> Result<()> {
         .emit()?;
     f.u8("Profile / level")
         .hex()
-        .with(|&v, n| n.summary(format!("seq_profile {}, seq_level_idx {}", v >> 5, v & 0x1f)))
+        .with(|&v, n| {
+            n.summary(format!(
+                "seq_profile {}, seq_level_idx {}",
+                v >> 5,
+                v & 0x1f
+            ))
+        })
         .emit()?;
     f.u8("Tier / depth / chroma")
         .hex()
@@ -694,7 +709,9 @@ fn vpcc(f: &mut Fields<'_>) -> Result<()> {
             ))
         })
         .emit()?;
-    f.u8("Colour primaries").enumeration(COLOUR_PRIMARIES).emit()?;
+    f.u8("Colour primaries")
+        .enumeration(COLOUR_PRIMARIES)
+        .emit()?;
     f.u8("Transfer characteristics")
         .enumeration(TRANSFER_CHARACTERISTICS)
         .emit()?;
@@ -827,7 +844,11 @@ fn colr_summary(d: &[u8]) -> Option<String> {
             );
             if kind == b"nclx" {
                 let full = d.get(10).is_some_and(|b| b & 0x80 != 0);
-                s.push_str(if full { ", full range" } else { ", limited range" });
+                s.push_str(if full {
+                    ", full range"
+                } else {
+                    ", limited range"
+                });
             }
             Some(s)
         }
@@ -932,7 +953,13 @@ async fn descriptor_summary(cx: &Cx, d: &Descriptor) -> Option<String> {
 
 async fn descriptor(cx: Cx, d: Descriptor) -> Result<()> {
     let header = d.span.sub(0, d.header_len);
-    cx.emit(vidutil::enumerated("Tag", header.sub(0, 1), d.tag.into(), 8, DESCRIPTOR_TAGS));
+    cx.emit(vidutil::enumerated(
+        "Tag",
+        header.sub(0, 1),
+        d.tag.into(),
+        8,
+        DESCRIPTOR_TAGS,
+    ));
     cx.emit(uint(
         "Size",
         header.tail(1),

@@ -31,15 +31,26 @@ pub(crate) fn text(s: impl Into<String>) -> Value {
 }
 
 pub(crate) fn uint(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt { value: value.into(), bits, radix: Radix::Dec }
+    Value::UInt {
+        value: value.into(),
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 pub(crate) fn hex(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt { value: value.into(), bits, radix: Radix::Hex }
+    Value::UInt {
+        value: value.into(),
+        bits,
+        radix: Radix::Hex,
+    }
 }
 
 pub(crate) fn int(value: impl Into<i64>, bits: u8) -> Value {
-    Value::Int { value: value.into(), bits }
+    Value::Int {
+        value: value.into(),
+        bits,
+    }
 }
 
 /// A four-character code as text (lossy).
@@ -58,7 +69,11 @@ pub(crate) struct Rd<'a> {
 
 impl<'a> Rd<'a> {
     pub fn new(data: &'a [u8], endian: Endian) -> Self {
-        Rd { data, pos: 0, endian }
+        Rd {
+            data,
+            pos: 0,
+            endian,
+        }
     }
 
     pub fn at(data: &'a [u8], pos: usize, endian: Endian) -> Self {
@@ -130,6 +145,10 @@ impl<'a> Rd<'a> {
     pub fn unicode(&mut self) -> Option<String> {
         let units = usize::try_from(self.u32()?).ok()?;
         let b = self.take(units.checked_mul(2)?)?;
-        Some(crate::text::utf16(b, self.endian).trim_end_matches('\0').to_owned())
+        Some(
+            crate::text::utf16(b, self.endian)
+                .trim_end_matches('\0')
+                .to_owned(),
+        )
     }
 }

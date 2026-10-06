@@ -4,9 +4,9 @@
 //! binaries (ncnn, MXNet, NNEF, fastText, MLIR bytecode) and text model
 //! descriptions (Caffe, Darknet, OpenVINO, PMML, LIBSVM, ...).
 
+pub mod binary;
+pub mod flatbuf;
 pub mod proto;
 pub mod protos;
-pub mod flatbuf;
-pub mod tflite;
-pub mod binary;
 pub mod text;
+pub mod tflite;

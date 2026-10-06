@@ -300,7 +300,11 @@ pub async fn dissect_wmf(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!("WMF{size_summary}, {} objects", h.objects));
     pos = pos.saturating_add(u64::from(h.header_size).saturating_mul(2));
     let records = file.tail(pos);
-    cx.emit(Node::new("Records").span(records).lazy(wmf_records, records));
+    cx.emit(
+        Node::new("Records")
+            .span(records)
+            .lazy(wmf_records, records),
+    );
     Ok(())
 }
 
@@ -313,13 +317,16 @@ async fn wmf_records(cx: Cx, span: Span) -> Result<()> {
         let function = u16_le(&head, 4).unwrap_or(0);
         let len = words.saturating_mul(2);
         if len < 6 {
-            return Err(Diagnostic::malformed(format!("record size {len} is too small"))
-                .at(span.sub(pos, 6)));
+            return Err(
+                Diagnostic::malformed(format!("record size {len} is too small"))
+                    .at(span.sub(pos, 6)),
+            );
         }
         let record = span.sub(pos, len);
         let name = lookup(WMF_RECORDS, function.into())
             .map_or_else(|| format!("Record {function:#06x}"), str::to_owned);
-        cx.push(Node::new(name).span(record).summary(format!("{len} bytes"))).await;
+        cx.push(Node::new(name).span(record).summary(format!("{len} bytes")))
+            .await;
         pos = pos.saturating_add(len);
         index = index.saturating_add(1);
         if function == 0 {
@@ -337,7 +344,11 @@ fn emf_header(f: &mut Fields<'_>, _: &()) -> Result<(i32, i32, u32)> {
         f.int::<i32>(name).desc("Device units").emit()?;
     }
     let mut frame = [0i32; 4];
-    for (slot, name) in frame.iter_mut().zip(["Frame left", "Frame top", "Frame right", "Frame bottom"]) {
+    for (slot, name) in
+        frame
+            .iter_mut()
+            .zip(["Frame left", "Frame top", "Frame right", "Frame bottom"])
+    {
         *slot = f.int::<i32>(name).desc("0.01 mm").emit()?;
     }
     f.ascii("Signature", 4).emit()?;
@@ -346,15 +357,25 @@ fn emf_header(f: &mut Fields<'_>, _: &()) -> Result<(i32, i32, u32)> {
     let records = f.u32("Records").emit()?;
     f.u16("Handles").emit()?;
     f.u16("Reserved").emit()?;
-    f.u32("Description length").desc("In UTF-16 characters").emit()?;
+    f.u32("Description length")
+        .desc("In UTF-16 characters")
+        .emit()?;
     f.u32("Description offset").hex().emit()?;
     f.u32("Palette entries").emit()?;
-    f.int::<i32>("Reference device width").desc("Pixels").emit()?;
-    f.int::<i32>("Reference device height").desc("Pixels").emit()?;
+    f.int::<i32>("Reference device width")
+        .desc("Pixels")
+        .emit()?;
+    f.int::<i32>("Reference device height")
+        .desc("Pixels")
+        .emit()?;
     f.int::<i32>("Reference device width (mm)").emit()?;
     f.int::<i32>("Reference device height (mm)").emit()?;
     let [left, top, right, bottom] = frame;
-    Ok((right.saturating_sub(left), bottom.saturating_sub(top), records))
+    Ok((
+        right.saturating_sub(left),
+        bottom.saturating_sub(top),
+        records,
+    ))
 }
 
 pub async fn dissect_emf(cx: Cx, input: Input) -> Result<()> {
@@ -377,11 +398,19 @@ pub async fn dissect_emf(cx: Cx, input: Input) -> Result<()> {
         let description = crate::text::utf16(&text_bytes, LE).replace('\0', " / ");
         let description = description.trim_end_matches(" / ").to_owned();
         summary = format!("{summary}, {description:?}");
-        cx.emit(Node::new("Description").span(desc_span).value(text(description)));
+        cx.emit(
+            Node::new("Description")
+                .span(desc_span)
+                .value(text(description)),
+        );
     }
     cx.annotate(summary);
     let rest = file.tail(header_len);
-    cx.emit(Node::new("Records").span(rest).lazy(emf_records, (input, rest)));
+    cx.emit(
+        Node::new("Records")
+            .span(rest)
+            .lazy(emf_records, (input, rest)),
+    );
     Ok(())
 }
 
@@ -393,8 +422,10 @@ async fn emf_records(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let kind = u32_le(&head, 0).unwrap_or(0);
         let len = u64::from(u32_le(&head, 4).unwrap_or(0));
         if len < 8 {
-            return Err(Diagnostic::malformed(format!("record size {len} is too small"))
-                .at(span.sub(pos, 8)));
+            return Err(
+                Diagnostic::malformed(format!("record size {len} is too small"))
+                    .at(span.sub(pos, 8)),
+            );
         }
         let record = span.sub(pos, len);
         let name = lookup(EMF_RECORDS, kind.into())
@@ -449,7 +480,9 @@ async fn bitmap_record(cx: Cx, (input, record, kind): (Input, Span, u32)) -> Res
     }
     // The bitmap header and the bits normally follow each other; show them
     // as one DIB.
-    let end = u64::from(off_bits).saturating_add(cb_bits.into()).max(u64::from(off_bmi).saturating_add(cb_bmi.into()));
+    let end = u64::from(off_bits)
+        .saturating_add(cb_bits.into())
+        .max(u64::from(off_bmi).saturating_add(cb_bmi.into()));
     let dib = record.sub(off_bmi.into(), end.saturating_sub(off_bmi.into()));
     let pixels = u64::from(off_bits).saturating_sub(off_bmi.into());
     cx.emit(

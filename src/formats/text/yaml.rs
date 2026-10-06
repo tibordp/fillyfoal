@@ -240,7 +240,11 @@ struct Block {
 
 /// Indentation of a line (columns of leading spaces and tabs).
 fn indent(line: &[u8]) -> u64 {
-    to_u64(line.iter().take_while(|&&b| b == b' ' || b == b'\t').count())
+    to_u64(
+        line.iter()
+            .take_while(|&&b| b == b' ' || b == b'\t')
+            .count(),
+    )
 }
 
 fn is_marker(line: &[u8]) -> bool {
@@ -336,7 +340,11 @@ async fn entry(
         } else if key_colon(&content).is_some() || content.starts_with(b"- ") {
             // A mapping (or sequence) starting on the item's line.
             let inner = scan.span(p.start.saturating_add(offset), end);
-            let kind = if content.starts_with(b"- ") { "sequence" } else { "mapping" };
+            let kind = if content.starts_with(b"- ") {
+                "sequence"
+            } else {
+                "mapping"
+            };
             block_node(name, inner, p.col.saturating_add(offset), kind)
         } else {
             value_node(cx, name, content, span, rest).await?
@@ -357,7 +365,9 @@ async fn entry(
 }
 
 fn block_node(name: String, span: Span, col: u64, kind: &str) -> Node {
-    let mut node = Node::new(name).span(span).lazy(expand_block, Block { span, col });
+    let mut node = Node::new(name)
+        .span(span)
+        .lazy(expand_block, Block { span, col });
     if !kind.is_empty() {
         node = node.summary(kind.to_owned());
     }
@@ -398,7 +408,11 @@ async fn value_node(
     };
     let has_rest = first.is_some();
     if value.is_empty() {
-        let kind = if first == Some(true) { "sequence" } else { "mapping" };
+        let kind = if first == Some(true) {
+            "sequence"
+        } else {
+            "mapping"
+        };
         return Ok(if has_rest {
             with_props(block_node(name, rest, 0, kind))
         } else {
@@ -410,7 +424,9 @@ async fn value_node(
             let folded = value.first() == Some(b'>');
             let text = block_scalar(cx, rest, folded, value.bytes()).await?;
             let style = if folded { "folded" } else { "literal" };
-            return Ok(with_props(text_node(name, span, &text).summary(format!("{style} block"))));
+            return Ok(with_props(
+                text_node(name, span, &text).summary(format!("{style} block")),
+            ));
         }
         Some(b'[' | b'{') => {
             let flow = Span::new(
@@ -442,7 +458,11 @@ async fn value_node(
         }
     }
     let value_span = if has_rest {
-        Span::new(span.source, value.span().offset, span.end().saturating_sub(value.span().offset))
+        Span::new(
+            span.source,
+            value.span().offset,
+            span.end().saturating_sub(value.span().offset),
+        )
     } else {
         value.span()
     };
@@ -507,7 +527,11 @@ async fn block_scalar(cx: &Cx, span: Span, folded: bool, header: &[u8]) -> Resul
             continue;
         }
         let n = *strip.get_or_insert_with(|| indent(&line.bytes));
-        let content = decode_8bit(line.bytes.get(to_usize(n.min(indent(&line.bytes)))..).unwrap_or_default());
+        let content = decode_8bit(
+            line.bytes
+                .get(to_usize(n.min(indent(&line.bytes)))..)
+                .unwrap_or_default(),
+        );
         if folded && !out.is_empty() && !out.ends_with('\n') {
             out.push(' ');
         } else if !folded && !out.is_empty() && !out.ends_with('\n') {
@@ -634,7 +658,11 @@ async fn flow(cx: Cx, span: Span) -> Result<()> {
         let node = match value.first() {
             Some(b'[' | b'{') => flow_node(&cx, name, value.span()).await?,
             Some(b'"') => text_node(name, value.span(), &double_quoted(&value.unquote().text())),
-            Some(b'\'') => text_node(name, value.span(), &value.unquote().text().replace("''", "'")),
+            Some(b'\'') => text_node(
+                name,
+                value.span(),
+                &value.unquote().text().replace("''", "'"),
+            ),
             _ => match plain_value(&value.text()) {
                 Some(Value::Text(t)) => text_node(name, value.span(), &t),
                 Some(v) => Node::new(name).span(value.span()).value(v),
@@ -706,26 +734,47 @@ macro_rules! yaml_variant {
     };
 }
 
-yaml_variant!(KUBERNETES, dissect_k8s, "kubernetes", "Kubernetes manifest", [],
+yaml_variant!(
+    KUBERNETES,
+    dissect_k8s,
+    "kubernetes",
+    "Kubernetes manifest",
+    [],
     [b"apiVersion", b"kind"],
     |h: &[u8]| match (scrape(h, b"kind"), scrape(h, b"name")) {
         (Some(k), Some(n)) => Some(format!("{k} {n}")),
         (k, _) => k,
-    });
-yaml_variant!(COMPOSE, dissect_compose, "docker-compose", "Docker Compose file",
-    ["compose.yaml", "docker-compose.yml"], [b"services"],
-    |h: &[u8]| scrape(h, b"image").map(|i| format!("first image {i}")));
-yaml_variant!(GITHUB_WORKFLOW, dissect_workflow, "github-workflow", "GitHub Actions workflow", [],
-    [b"on", b"jobs"], |h: &[u8]| scrape(h, b"name"));
-yaml_variant!(OPENAPI, dissect_openapi, "openapi-yaml", "OpenAPI description (YAML)", [],
-    [b"info", b"paths"], |h: &[u8]| scrape(h, b"title"));
+    }
+);
+yaml_variant!(
+    COMPOSE,
+    dissect_compose,
+    "docker-compose",
+    "Docker Compose file",
+    ["compose.yaml", "docker-compose.yml"],
+    [b"services"],
+    |h: &[u8]| scrape(h, b"image").map(|i| format!("first image {i}"))
+);
+yaml_variant!(
+    GITHUB_WORKFLOW,
+    dissect_workflow,
+    "github-workflow",
+    "GitHub Actions workflow",
+    [],
+    [b"on", b"jobs"],
+    |h: &[u8]| scrape(h, b"name")
+);
+yaml_variant!(
+    OPENAPI,
+    dissect_openapi,
+    "openapi-yaml",
+    "OpenAPI description (YAML)",
+    [],
+    [b"info", b"paths"],
+    |h: &[u8]| scrape(h, b"title")
+);
 
-async fn document(
-    cx: Cx,
-    input: Input,
-    title: &str,
-    detail: Option<Detail>,
-) -> Result<()> {
+async fn document(cx: Cx, input: Input, title: &str, detail: Option<Detail>) -> Result<()> {
     let prepared = prepare(&cx, input).await?;
     let span = prepared.span;
     let head = cx.read_avail(span.sub(0, 16 * 1024)).await?;

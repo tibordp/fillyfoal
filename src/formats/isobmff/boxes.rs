@@ -81,7 +81,8 @@ pub fn language(code: u16) -> String {
         // QuickTime Macintosh language code.
         return format!("Mac language {code}");
     }
-    let letter = |shift: u16| char::from(u8::try_from(((code >> shift) & 0x1f) | 0x60).unwrap_or(b'?'));
+    let letter =
+        |shift: u16| char::from(u8::try_from(((code >> shift) & 0x1f) | 0x60).unwrap_or(b'?'));
     [letter(10), letter(5), letter(0)].iter().collect()
 }
 
@@ -294,8 +295,22 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     let kind = &st.header.kind;
     if !matches!(
         kind,
-        b"ftyp" | b"styp" | b"mvhd" | b"tkhd" | b"mdhd" | b"hdlr" | b"dref" | b"stsd" | b"mfhd"
-            | b"tfhd" | b"tfdt" | b"pssh" | b"frma" | b"schm" | b"moof" | b"traf"
+        b"ftyp"
+            | b"styp"
+            | b"mvhd"
+            | b"tkhd"
+            | b"mdhd"
+            | b"hdlr"
+            | b"dref"
+            | b"stsd"
+            | b"mfhd"
+            | b"tfhd"
+            | b"tfdt"
+            | b"pssh"
+            | b"frma"
+            | b"schm"
+            | b"moof"
+            | b"traf"
     ) {
         return None;
     }
@@ -315,7 +330,9 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let compat: Vec<String> = d
                 .get(8..)
                 .unwrap_or_default()
-                .as_chunks::<4>().0.iter()
+                .as_chunks::<4>()
+                .0
+                .iter()
                 .map(|c| fourcc(c))
                 .collect();
             Some(format!("{major}, compatible: {}", compat.join(" ")))
@@ -367,7 +384,11 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         b"mfhd" => Some(format!("sequence {}", u32_be(&d, 4)?)),
         b"tfhd" => Some(format!("track {}", u32_be(&d, 4)?)),
         b"tfdt" => Some(format!("base decode time {}", word(4, wide)?)),
-        b"pssh" => Some(drm_system(d.get(4..20)?).unwrap_or("unknown DRM system").to_owned()),
+        b"pssh" => Some(
+            drm_system(d.get(4..20)?)
+                .unwrap_or("unknown DRM system")
+                .to_owned(),
+        ),
         b"frma" => Some(fourcc(d.get(..4)?)),
         b"schm" => Some(fourcc(d.get(4..8)?)),
         b"moof" | b"traf" => None,

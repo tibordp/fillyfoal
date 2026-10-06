@@ -60,7 +60,11 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
         _ if &ctx.parent == b"iref" => {
             // The iref version decides the width of item IDs; it sits just
             // before the children region.
-            let at = Span::new(ctx.siblings.source, ctx.siblings.offset.saturating_sub(4), 1);
+            let at = Span::new(
+                ctx.siblings.source,
+                ctx.siblings.offset.saturating_sub(4),
+                1,
+            );
             let narrow = cx.read_avail(at).await?.first().copied().unwrap_or(0) == 0;
             emit_fields(cx, body, |f| {
                 item_id(f, narrow, "From item ID")?;
@@ -95,7 +99,12 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
         b"irot" => {
             emit_fields(cx, body, |f| {
                 f.u8("Angle")
-                    .with(|&a, n| n.summary(format!("{}° anti-clockwise", u16::from(a & 3).saturating_mul(90))))
+                    .with(|&a, n| {
+                        n.summary(format!(
+                            "{}° anti-clockwise",
+                            u16::from(a & 3).saturating_mul(90)
+                        ))
+                    })
                     .emit()?;
                 Ok(())
             })
@@ -394,7 +403,8 @@ async fn iloc_items(cx: Cx, s: Iloc) -> Result<()> {
             .fold(0u64, |acc, e| acc.saturating_add(e.length));
         let mut summary = format!(
             "{}{} extent(s), {total} bytes",
-            kind.map(|k| format!("{}, ", fourcc(&k))).unwrap_or_default(),
+            kind.map(|k| format!("{}, ", fourcc(&k)))
+                .unwrap_or_default(),
             item.extents.len()
         );
         if item.method == 1 {
@@ -417,19 +427,30 @@ async fn item_node(cx: Cx, (s, item, kind): (Iloc, ItemLoc, Option<[u8; 4]>)) ->
     let mut pos = if wide { 4 } else { 2 };
     cx.emit(uint("Item ID", span.sub(0, pos), item.id.into(), 32));
     if s.version >= 1 {
-        cx.emit(uint("Construction method", span.sub(pos, 2), item.method.into(), 16).summary(
-            match item.method {
+        cx.emit(
+            uint(
+                "Construction method",
+                span.sub(pos, 2),
+                item.method.into(),
+                16,
+            )
+            .summary(match item.method {
                 0 => "file offset",
                 1 => "idat offset",
                 2 => "item offset",
                 _ => "unknown",
-            },
-        ));
+            }),
+        );
         pos = pos.saturating_add(2);
     }
     pos = pos.saturating_add(2);
     if s.base_size > 0 {
-        cx.emit(hex("Base offset", span.sub(pos, s.base_size.into()), item.base, 64));
+        cx.emit(hex(
+            "Base offset",
+            span.sub(pos, s.base_size.into()),
+            item.base,
+            64,
+        ));
     }
     // Where offsets are relative to.
     let origin = match item.method {
@@ -463,7 +484,10 @@ async fn item_node(cx: Cx, (s, item, kind): (Iloc, ItemLoc, Option<[u8; 4]>)) ->
                 // A 4-byte offset to the TIFF header precedes the payload.
                 let skip = cx.read_avail(data.sub(0, 4)).await?;
                 let skip = u32_be(&skip, 0).unwrap_or(0);
-                embedded("Exif", s.input.nested(data.tail(4u64.saturating_add(skip.into()))))
+                embedded(
+                    "Exif",
+                    s.input.nested(data.tail(4u64.saturating_add(skip.into()))),
+                )
             }
             Some(b"mime") | Some(b"jpeg") | Some(b"j2k1") | Some(b"uri ") => {
                 embedded("Data", s.input.nested(data))
@@ -551,11 +575,7 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         b"ipma" => Some(crate::formats::vidutil::plural(u32_be(&d, 4)?, "item")),
         b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
         b"irot" => Some(format!("{}°", u16::from(v & 3).saturating_mul(90))),
-        b"pixi" => Some(format!(
-            "{} channels, {} bits",
-            d.get(4)?,
-            d.get(5)?
-        )),
+        b"pixi" => Some(format!("{} channels, {} bits", d.get(4)?, d.get(5)?)),
         b"auxC" => Some(crate::text::until_nul(d.get(4..)?)),
         _ => None,
     }
@@ -576,7 +596,10 @@ pub async fn summary(cx: &Cx, meta: Span) -> Result<Option<String>> {
         }
         None => None,
     };
-    let mut parts = vec![crate::formats::vidutil::plural(crate::bytes::to_u64(types.len()), "item")];
+    let mut parts = vec![crate::formats::vidutil::plural(
+        crate::bytes::to_u64(types.len()),
+        "item",
+    )];
     if let Some(p) = primary {
         let kind = types
             .iter()
@@ -640,7 +663,9 @@ async fn primary_size(cx: &Cx, meta: Span, item: u32) -> Result<Option<(u32, u32
     let mut index = 1u16;
     while let Some(h) = super::read_header(cx, ipco, pos).await? {
         if &h.kind == b"ispe" && indices.contains(&index) {
-            let d = cx.read_avail(ipco.sub(pos.saturating_add(h.header_len), 12)).await?;
+            let d = cx
+                .read_avail(ipco.sub(pos.saturating_add(h.header_len), 12))
+                .await?;
             return Ok(u32_be(&d, 4).zip(u32_be(&d, 8)));
         }
         pos = pos.saturating_add(h.size);

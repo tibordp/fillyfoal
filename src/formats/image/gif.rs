@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::{Input, Format, Probe, embedded};
+use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -147,12 +147,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .value(text(String::from_utf8_lossy(&version))),
     );
     let (screen, screen_span) = cur.record::<ScreenDescriptor>().await?;
-    cx.emit(ScreenDescriptor::node("Logical Screen Descriptor", screen_span, LE));
+    cx.emit(ScreenDescriptor::node(
+        "Logical Screen Descriptor",
+        screen_span,
+        LE,
+    ));
     let version = String::from_utf8_lossy(version.get(3..).unwrap_or_default()).into_owned();
     let mut summary = format!("GIF{version}, {}", dims(screen.width, screen.height));
     if screen.flags & 0x80 != 0 {
         let len = table_size(screen.flags);
-        cx.emit(palette("Global Color Table", cur.span(len), ColorOrder::Rgb));
+        cx.emit(palette(
+            "Global Color Table",
+            cur.span(len),
+            ColorOrder::Rgb,
+        ));
         cur.skip(len);
         summary = format!("{summary}, {} colors", 2u32 << (screen.flags & 7));
     }
@@ -285,9 +293,15 @@ async fn sub_block_data(cx: &Cx, span: Span, max: u64) -> Result<Vec<u8>> {
 async fn extension_summary(cx: &Cx, span: Span, label: u8) -> Option<String> {
     match label {
         0xf9 => {
-            let gce = parse(cx, span.sub(2, GraphicControl::SIZE), LE, &(), GraphicControl::layout)
-                .await
-                .ok()?;
+            let gce = parse(
+                cx,
+                span.sub(2, GraphicControl::SIZE),
+                LE,
+                &(),
+                GraphicControl::layout,
+            )
+            .await
+            .ok()?;
             let mut out = format!("delay {} ms", u32::from(gce.delay).saturating_mul(10));
             if gce.flags & 1 != 0 {
                 out = format!("{out}, transparent index {}", gce.transparent);
@@ -295,14 +309,21 @@ async fn extension_summary(cx: &Cx, span: Span, label: u8) -> Option<String> {
             Some(out)
         }
         0xff => {
-            let app = parse(cx, span.sub(2, Application::SIZE), LE, &(), Application::layout)
-                .await
-                .ok()?;
+            let app = parse(
+                cx,
+                span.sub(2, Application::SIZE),
+                LE,
+                &(),
+                Application::layout,
+            )
+            .await
+            .ok()?;
             let id = format!("{}{}", app.identifier, app.auth);
             if id == "NETSCAPE2.0" || id == "ANIMEXTS1.0" {
-                let data = sub_block_data(cx, span.tail(2u64.saturating_add(Application::SIZE)), 16)
-                    .await
-                    .ok()?;
+                let data =
+                    sub_block_data(cx, span.tail(2u64.saturating_add(Application::SIZE)), 16)
+                        .await
+                        .ok()?;
                 if data.first() == Some(&1) {
                     let loops = crate::bytes::u16_le(&data, 1)?;
                     return Some(if loops == 0 {
@@ -317,7 +338,14 @@ async fn extension_summary(cx: &Cx, span: Span, label: u8) -> Option<String> {
         0xfe => {
             let data = sub_block_data(cx, span.tail(2), 80).await.ok()?;
             let line = String::from_utf8_lossy(&data);
-            Some(line.lines().next().unwrap_or_default().chars().take(60).collect())
+            Some(
+                line.lines()
+                    .next()
+                    .unwrap_or_default()
+                    .chars()
+                    .take(60)
+                    .collect(),
+            )
         }
         _ => None,
     }
@@ -339,7 +367,11 @@ async fn extension(cx: Cx, (input, span, label): (Input, Span, u8)) -> Result<()
             pos = pos.saturating_add(GraphicControl::SIZE);
         }
         0x01 => {
-            cx.emit(PlainText::node("Text grid", span.sub(pos, PlainText::SIZE), LE));
+            cx.emit(PlainText::node(
+                "Text grid",
+                span.sub(pos, PlainText::SIZE),
+                LE,
+            ));
             pos = pos.saturating_add(PlainText::SIZE);
         }
         0xff => {
@@ -390,7 +422,11 @@ async fn image(cx: Cx, span: Span) -> Result<()> {
     let mut pos = ImageDescriptor::SIZE;
     if desc.flags & 0x80 != 0 {
         let len = table_size(desc.flags);
-        cx.emit(palette("Local Color Table", span.sub(pos, len), ColorOrder::Rgb));
+        cx.emit(palette(
+            "Local Color Table",
+            span.sub(pos, len),
+            ColorOrder::Rgb,
+        ));
         pos = pos.saturating_add(len);
     }
     let code_size = cx.block(span.sub(pos, 1)).await?;

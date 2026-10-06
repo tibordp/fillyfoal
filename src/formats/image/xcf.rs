@@ -156,7 +156,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let props_start = cur.pos();
     skip_properties(&mut cur).await?;
     let props = cur.since(props_start);
-    cx.emit(Node::new("Image properties").span(props).lazy(properties, props));
+    cx.emit(
+        Node::new("Image properties")
+            .span(props)
+            .lazy(properties, props),
+    );
 
     let wide = v >= 11;
     let (layers, layer_ptrs) = pointers(&mut cur, wide).await?;
@@ -215,7 +219,8 @@ async fn properties(cx: Cx, span: Span) -> Result<()> {
         let len = cur.u32().await?;
         let payload = cur.span(len.into());
         cur.skip(len.into());
-        let name = lookup(PROPERTIES, kind.into()).map_or_else(|| format!("Property {kind}"), str::to_owned);
+        let name = lookup(PROPERTIES, kind.into())
+            .map_or_else(|| format!("Property {kind}"), str::to_owned);
         let data = cx.read_avail(payload.sub(0, 16)).await?;
         let summary = match (kind, len) {
             (17, 1) => data
@@ -262,7 +267,9 @@ async fn list_layers(cx: Cx, (file, list, wide): (Span, Span, bool)) -> Result<(
         let head = cx.read_avail(file.sub(offset, 16)).await?;
         let (w, h) = (u32_be(&head, 0).unwrap_or(0), u32_be(&head, 4).unwrap_or(0));
         let name_len = u64::from(u32_be(&head, 12).unwrap_or(0));
-        let name = cx.read_avail(file.sub(offset.saturating_add(16), name_len.min(256))).await?;
+        let name = cx
+            .read_avail(file.sub(offset.saturating_add(16), name_len.min(256)))
+            .await?;
         cx.push(
             Node::new(format!("Layer {i}"))
                 .span(span)
@@ -289,7 +296,11 @@ async fn layer(cx: Cx, (file, offset, wide): (Span, u64, bool)) -> Result<()> {
     cur.skip(16);
     let name_span = cur.span(name_len.into());
     let name = cx.read(name_span).await?;
-    cx.emit(Node::new("Name").span(name_span).value(text(crate::text::until_nul(&name))));
+    cx.emit(
+        Node::new("Name")
+            .span(name_span)
+            .value(text(crate::text::until_nul(&name))),
+    );
     cur.skip(name_len.into());
     let start = cur.pos();
     skip_properties(&mut cur).await?;

@@ -140,7 +140,10 @@ fn index_len(data: &[u8], at: usize) -> usize {
 fn describe(kind: u8, data: &[u8]) -> String {
     let wide = kind & 1 == 1;
     match kind {
-        0x80 | 0x82 => counted(data, 0, |_, e| e).into_iter().next().unwrap_or_default(),
+        0x80 | 0x82 => counted(data, 0, |_, e| e)
+            .into_iter()
+            .next()
+            .unwrap_or_default(),
         0x96 | 0xca => counted(data, 0, |_, e| e).join(", "),
         0x8c | 0xb4 => counted(data, 0, |d, e| e.saturating_add(index_len(d, e))).join(", "),
         0x90 | 0x91 | 0xb6 | 0xb7 => {
@@ -152,15 +155,29 @@ fn describe(kind: u8, data: &[u8]) -> String {
                 at = at.saturating_add(2);
             }
             let offset = if wide { 4 } else { 2 };
-            counted(data, at, |d, e| e.saturating_add(offset).saturating_add(index_len(d, e.saturating_add(offset)))).join(", ")
+            counted(data, at, |d, e| {
+                e.saturating_add(offset)
+                    .saturating_add(index_len(d, e.saturating_add(offset)))
+            })
+            .join(", ")
         }
         0x88 => {
             let class = data.get(1).copied().unwrap_or(0);
             let body = data.get(2..).unwrap_or_default();
-            let counted = body.first().is_some_and(|&n| usize::from(n) == body.len().saturating_sub(1));
-            let body = if counted { body.get(1..).unwrap_or_default() } else { body };
+            let counted = body
+                .first()
+                .is_some_and(|&n| usize::from(n) == body.len().saturating_sub(1));
+            let body = if counted {
+                body.get(1..).unwrap_or_default()
+            } else {
+                body
+            };
             let textual = String::from_utf8_lossy(body);
-            format!("{}: {}", name_or(COMMENT_CLASS, class.into(), "class"), ellipsize(textual.trim_end_matches('\0'), 80))
+            format!(
+                "{}: {}",
+                name_or(COMMENT_CLASS, class.into(), "class"),
+                ellipsize(textual.trim_end_matches('\0'), 80)
+            )
         }
         0x98 | 0x99 => {
             let attr = data.first().copied().unwrap_or(0);
@@ -186,10 +203,16 @@ fn describe(kind: u8, data: &[u8]) -> String {
             } else {
                 u16_le(data, len_at).unwrap_or(0).into()
             };
-            format!("{align} aligned, {combine}, {length:#x} bytes{}", if attr & 1 != 0 { ", 32-bit" } else { "" })
+            format!(
+                "{align} aligned, {combine}, {length:#x} bytes{}",
+                if attr & 1 != 0 { ", 32-bit" } else { "" }
+            )
         }
         0xa0 | 0xa1 => {
-            let n = data.len().saturating_sub(index_len(data, 0)).saturating_sub(if wide { 4 } else { 2 });
+            let n = data
+                .len()
+                .saturating_sub(index_len(data, 0))
+                .saturating_sub(if wide { 4 } else { 2 });
             format!("{n} bytes of data")
         }
         _ => String::new(),
@@ -209,7 +232,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let kind = head.first().copied().unwrap_or(0);
         let len = u64::from(u16_le(&head, 1).unwrap_or(0));
         let span = file.sub(start, len.saturating_add(3));
-        let data = cx.read_avail(span.sub(3, len.saturating_sub(1).min(0x10000))).await?;
+        let data = cx
+            .read_avail(span.sub(3, len.saturating_sub(1).min(0x10000)))
+            .await?;
         let record = cx.read_avail(span).await?;
         let sum = record.iter().fold(0u8, |a, &b| a.wrapping_add(b));
         let stored = record.last().copied().unwrap_or(0);
@@ -231,7 +256,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cur.seek(start.saturating_add(len).saturating_add(3));
         // Library members start on page boundaries.
         if library_page > 0 && matches!(kind, 0x8a | 0x8b | 0xf0) {
-            let p = cur.pos().checked_next_multiple_of(library_page).unwrap_or(u64::MAX);
+            let p = cur
+                .pos()
+                .checked_next_multiple_of(library_page)
+                .unwrap_or(u64::MAX);
             cur.seek(p);
         }
         if kind == 0xf1 {
@@ -241,7 +269,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "OMF {}{}, {records} records",
-        if library_page > 0 { "library" } else { "object module" },
+        if library_page > 0 {
+            "library"
+        } else {
+            "object module"
+        },
         module.map(|m| format!(" {m}")).unwrap_or_default()
     ));
     for n in nodes {
@@ -262,7 +294,10 @@ async fn record_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("checksum")
             .span(checksum)
-            .value(crate::formats::binutil::hex(byte.first().copied().unwrap_or(0).into(), 8)),
+            .value(crate::formats::binutil::hex(
+                byte.first().copied().unwrap_or(0).into(),
+                8,
+            )),
     );
     Ok(())
 }

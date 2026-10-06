@@ -119,7 +119,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             );
             break;
         }
-        if head.get(4..8) != Some(b"LfLe".as_slice()) || length < 0x38 || !length.is_multiple_of(4) {
+        if head.get(4..8) != Some(b"LfLe".as_slice()) || length < 0x38 || !length.is_multiple_of(4)
+        {
             // Slack space of the ring buffer.
             let rest = file.tail(start);
             cx.emit(Node::new("Unused space").span(rest));
@@ -127,7 +128,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         cur.seek(start.saturating_add(length.into()));
         let span = file.sub(start, length.into());
-        let rec = crate::fields::parse(&cx, span.sub(0, EventRecord::SIZE), LE, &(), EventRecord::layout).await?;
+        let rec = crate::fields::parse(
+            &cx,
+            span.sub(0, EventRecord::SIZE),
+            LE,
+            &(),
+            EventRecord::layout,
+        )
+        .await?;
         let source = source_name(&cx, span).await.unwrap_or_default();
         let kind = lookup(EVENT_TYPES, rec.event_type.into())
             .unwrap_or("?")

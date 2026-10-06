@@ -110,12 +110,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             u64::from(e.start).saturating_mul(block),
             u64::from(e.blocks).saturating_mul(block),
         );
-        let label = if e.name.is_empty() { e.kind.clone() } else { e.name.clone() };
+        let label = if e.name.is_empty() {
+            e.kind.clone()
+        } else {
+            e.name.clone()
+        };
         cx.push(
             Node::new(format!("Partition {i}: {label}"))
                 .span(span)
-                .summary(format!("{}, {} at block {}", e.kind, size(data.len), e.start))
-                .lazy(partition, (input, span, data, e.kind == "Apple_partition_map" || e.kind == "Apple_Free")),
+                .summary(format!(
+                    "{}, {} at block {}",
+                    e.kind,
+                    size(data.len),
+                    e.start
+                ))
+                .lazy(
+                    partition,
+                    (
+                        input,
+                        span,
+                        data,
+                        e.kind == "Apple_partition_map" || e.kind == "Apple_Free",
+                    ),
+                ),
         )
         .await;
     }

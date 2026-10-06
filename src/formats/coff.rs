@@ -53,8 +53,24 @@ pub static IMPORT: Format = Format {
 fn known_machine(m: u16) -> bool {
     matches!(
         m,
-        0x14c | 0x8664 | 0x1c0 | 0x1c2 | 0x1c4 | 0xaa64 | 0xa641 | 0xa64e | 0x200 | 0x5032
-            | 0x5064 | 0x1f0 | 0x1f1 | 0x166 | 0x169 | 0x1a2 | 0x1a6 | 0xebc
+        0x14c
+            | 0x8664
+            | 0x1c0
+            | 0x1c2
+            | 0x1c4
+            | 0xaa64
+            | 0xa641
+            | 0xa64e
+            | 0x200
+            | 0x5032
+            | 0x5064
+            | 0x1f0
+            | 0x1f1
+            | 0x166
+            | 0x169
+            | 0x1a2
+            | 0x1a6
+            | 0xebc
     )
 }
 
@@ -81,9 +97,7 @@ fn probe(h: &Head<'_>) -> bool {
         && optional == 0
         && table_end <= h.len
         && (symptr == 0 || (u64::from(symptr) >= table_end && symbols_end <= h.len))
-        && first_name
-            .iter()
-            .all(|&b| b == 0 || b.is_ascii_graphic())
+        && first_name.iter().all(|&b| b == 0 || b.is_ascii_graphic())
         && first_name.first().is_some_and(|&b| b != 0)
 }
 
@@ -276,7 +290,8 @@ impl CoffInfo {
     fn symbol_name(&self, raw: &[u8]) -> String {
         if raw.get(..4) == Some(&[0, 0, 0, 0]) {
             let offset = u32_le(raw, 4).unwrap_or(0);
-            self.string(offset).unwrap_or_else(|| format!("<string {offset:#x}>"))
+            self.string(offset)
+                .unwrap_or_else(|| format!("<string {offset:#x}>"))
         } else {
             crate::text::until_nul(raw)
         }
@@ -296,8 +311,10 @@ impl CoffInfo {
     }
 
     fn symbol_span(&self, index: u32) -> Span {
-        self.symbols
-            .sub(u64::from(index).saturating_mul(self.record()), self.record())
+        self.symbols.sub(
+            u64::from(index).saturating_mul(self.record()),
+            self.record(),
+        )
     }
 }
 
@@ -341,7 +358,9 @@ fn bigobj_header(f: &mut Fields<'_>, _: &()) -> Result<Header> {
     f.u16("Version").emit()?;
     let machine = f.u16("Machine").enumeration(MACHINE).emit()?;
     f.u32("TimeDateStamp").timestamp().emit()?;
-    f.guid("ClassID").desc("{d1baa1c7-baee-4ba9-af20-faf66aa4dcb8} for /bigobj").emit()?;
+    f.guid("ClassID")
+        .desc("{d1baa1c7-baee-4ba9-af20-faf66aa4dcb8} for /bigobj")
+        .emit()?;
     f.u32("SizeOfData").emit()?;
     f.u32("Flags").hex().emit()?;
     f.u32("MetaDataSize").emit()?;
@@ -369,7 +388,13 @@ fn section_header(f: &mut Fields<'_>, c: &Coff) -> Result<()> {
     let file = c.file;
     f.u32("PointerToRawData")
         .hex()
-        .with(|&p, n| if p == 0 { n } else { n.target(file.sub(p.into(), size.into())) })
+        .with(|&p, n| {
+            if p == 0 {
+                n
+            } else {
+                n.target(file.sub(p.into(), size.into()))
+            }
+        })
         .emit()?;
     f.u32("PointerToRelocations").hex().emit()?;
     f.u32("PointerToLinenumbers").hex().emit()?;
@@ -422,7 +447,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for i in 0..u64::from(h.sections) {
         cx.checkpoint().await;
         let at = to_usize(i.saturating_mul(40));
-        let d = block.data.get(at..at.saturating_add(40)).unwrap_or_default();
+        let d = block
+            .data
+            .get(at..at.saturating_add(40))
+            .unwrap_or_default();
         info.sections.push(Section {
             header: table.sub(i.saturating_mul(40), 40),
             name: info.section_name(d.get(..8).unwrap_or_default()),
@@ -535,7 +563,9 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
 
 async fn symbol_name_at(cx: &Cx, c: &CoffInfo, index: u32) -> Result<String> {
     if index >= c.nsyms {
-        return Err(Diagnostic::malformed(format!("symbol index {index} out of range")));
+        return Err(Diagnostic::malformed(format!(
+            "symbol index {index} out of range"
+        )));
     }
     let data = cx.read(c.symbol_span(index).sub(0, 8)).await?;
     Ok(c.symbol_name(&data))
@@ -593,7 +623,13 @@ fn symbol(f: &mut Fields<'_>, c: &Coff) -> Result<Symbol> {
     let kind = f
         .u16("Type")
         .hex()
-        .with(|&v, n| if v & 0x30 == 0x20 { n.summary("function") } else { n })
+        .with(|&v, n| {
+            if v & 0x30 == 0x20 {
+                n.summary("function")
+            } else {
+                n
+            }
+        })
         .emit()?;
     let class = f.u8("StorageClass").enumeration(STORAGE_CLASS).emit()?;
     let aux = f.u8("NumberOfAuxSymbols").emit()?;
@@ -618,9 +654,10 @@ async fn symbol_list(cx: Cx, c: Coff) -> Result<()> {
             name = format!("#{index}");
         }
         let aux = u32::from(sym.aux).min(c.nsyms.saturating_sub(index).saturating_sub(1));
-        let whole = c
-            .symbols
-            .sub(u64::from(index).saturating_mul(record), u64::from(aux).saturating_add(1).saturating_mul(record));
+        let whole = c.symbols.sub(
+            u64::from(index).saturating_mul(record),
+            u64::from(aux).saturating_add(1).saturating_mul(record),
+        );
         let mut summary = format!(
             "{} {}",
             name_or(STORAGE_CLASS, sym.class.into(), "class"),
@@ -690,7 +727,9 @@ fn aux_section(f: &mut Fields<'_>, big: &bool) -> Result<()> {
     f.u16("NumberOfRelocations").emit()?;
     f.u16("NumberOfLinenumbers").emit()?;
     f.u32("CheckSum").hex().emit()?;
-    f.u16("Number").desc("Associated section (for ASSOCIATIVE COMDATs)").emit()?;
+    f.u16("Number")
+        .desc("Associated section (for ASSOCIATIVE COMDATs)")
+        .emit()?;
     f.u8("Selection").enumeration(COMDAT_SELECTION).emit()?;
     f.u8("Reserved").emit()?;
     if *big {
@@ -700,7 +739,9 @@ fn aux_section(f: &mut Fields<'_>, big: &bool) -> Result<()> {
 }
 
 fn aux_weak(f: &mut Fields<'_>, _: &bool) -> Result<()> {
-    f.u32("TagIndex").desc("Symbol to use if the weak external is not defined").emit()?;
+    f.u32("TagIndex")
+        .desc("Symbol to use if the weak external is not defined")
+        .emit()?;
     f.u32("Characteristics").enumeration(WEAK_SEARCH).emit()?;
     Ok(())
 }
@@ -728,7 +769,9 @@ fn import_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16)> {
     f.u16("Version").emit()?;
     f.u16("Machine").enumeration(MACHINE).emit()?;
     f.u32("TimeDateStamp").timestamp().emit()?;
-    f.u32("SizeOfData").desc("Bytes of names after this header").emit()?;
+    f.u32("SizeOfData")
+        .desc("Bytes of names after this header")
+        .emit()?;
     let hint = f.u16("OrdinalOrHint").emit()?;
     let kind = f
         .u16("Type")

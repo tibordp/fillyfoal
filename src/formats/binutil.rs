@@ -178,9 +178,7 @@ impl Tree {
         if t.children.is_empty() {
             t.node.clone()
         } else {
-            t.node
-                .clone()
-                .lazy(tree_children, (tree.clone(), index))
+            t.node.clone().lazy(tree_children, (tree.clone(), index))
         }
     }
 
@@ -191,7 +189,9 @@ impl Tree {
             .get(index)
             .map(|t| t.children.clone())
             .unwrap_or_default();
-        cx.set_count(crate::node::Count::Exact(crate::bytes::to_u64(children.len())));
+        cx.set_count(crate::node::Count::Exact(crate::bytes::to_u64(
+            children.len(),
+        )));
         for child in children {
             cx.push(Tree::node(tree, child)).await;
         }

@@ -39,15 +39,28 @@ async fn fits_header(cx: &Cx, file: Span, start: u64) -> Result<FitsHeader> {
     loop {
         let block = cx.read(file.sub_exact(pos, FITS_BLOCK)?).await?;
         for i in 0..36u64 {
-            let card = block.get(crate::bytes::to_usize(i.saturating_mul(80))..crate::bytes::to_usize(i.saturating_add(1).saturating_mul(80))).unwrap_or_default();
+            let card = block
+                .get(
+                    crate::bytes::to_usize(i.saturating_mul(80))
+                        ..crate::bytes::to_usize(i.saturating_add(1).saturating_mul(80)),
+                )
+                .unwrap_or_default();
             let line = String::from_utf8_lossy(card).into_owned();
             let keyword = line.get(..8).unwrap_or_default().trim().to_owned();
             let span = file.sub(pos.saturating_add(i.saturating_mul(80)), 80);
             if keyword == "END" {
-                return Ok(FitsHeader { cards, end: pos.saturating_add(FITS_BLOCK) });
+                return Ok(FitsHeader {
+                    cards,
+                    end: pos.saturating_add(FITS_BLOCK),
+                });
             }
             if !keyword.is_empty() {
-                let value = line.get(8..).unwrap_or_default().trim_start_matches(['=', ' ']).trim_end().to_owned();
+                let value = line
+                    .get(8..)
+                    .unwrap_or_default()
+                    .trim_start_matches(['=', ' '])
+                    .trim_end()
+                    .to_owned();
                 cards.push((keyword, value, span));
             }
         }
@@ -61,7 +74,13 @@ async fn fits_header(cx: &Cx, file: Span, start: u64) -> Result<FitsHeader> {
 
 fn fits_value(cards: &[(String, String, Span)], key: &str) -> Option<String> {
     cards.iter().find(|(k, _, _)| k == key).map(|(_, v, _)| {
-        v.split('/').next().unwrap_or_default().trim().trim_matches('\'').trim().to_owned()
+        v.split('/')
+            .next()
+            .unwrap_or_default()
+            .trim()
+            .trim_matches('\'')
+            .trim()
+            .to_owned()
     })
 }
 
@@ -82,7 +101,10 @@ async fn fits(cx: Cx, input: Input) -> Result<()> {
         let mut size: u64 = if naxis > 0 { 1 } else { 0 };
         let mut dims = Vec::new();
         for n in 1..=naxis.min(999) {
-            let d = fits_int(cards, &format!("NAXIS{n}")).unwrap_or(0).max(0).unsigned_abs();
+            let d = fits_int(cards, &format!("NAXIS{n}"))
+                .unwrap_or(0)
+                .max(0)
+                .unsigned_abs();
             dims.push(d.to_string());
             size = size.saturating_mul(d);
         }
@@ -91,7 +113,15 @@ async fn fits(cx: Cx, input: Input) -> Result<()> {
         let data_len = bitpix.saturating_mul(gcount.saturating_mul(pcount.saturating_add(size)));
         let padded = data_len.div_ceil(FITS_BLOCK).saturating_mul(FITS_BLOCK);
         let kind = fits_value(cards, "XTENSION").unwrap_or_else(|| "PRIMARY".to_owned());
-        let describe = format!("{kind}, BITPIX {}, {}", fits_int(cards, "BITPIX").unwrap_or(0), if dims.is_empty() { "no data".to_owned() } else { dims.join("×") });
+        let describe = format!(
+            "{kind}, BITPIX {}, {}",
+            fits_int(cards, "BITPIX").unwrap_or(0),
+            if dims.is_empty() {
+                "no data".to_owned()
+            } else {
+                dims.join("×")
+            }
+        );
         if first.is_none() {
             first = Some(describe.clone());
         }
@@ -117,7 +147,9 @@ async fn fits_hdu(cx: Cx, (cards, data): (Vec<(String, String, Span)>, Span)) ->
             Some((v, c)) => (v.trim().to_owned(), Some(c.trim().to_owned())),
             None => (value, None),
         };
-        let mut node = Node::new(keyword).span(span).value(text(value.trim_matches('\'').trim()));
+        let mut node = Node::new(keyword)
+            .span(span)
+            .value(text(value.trim_matches('\'').trim()));
         if let Some(c) = comment {
             node = node.desc(c);
         }
@@ -203,7 +235,10 @@ const DICOM_TAGS: &[(u16, u16, &str, &str)] = &[
 const DICOM_UIDS: &[(&str, &str)] = &[
     ("1.2.840.10008.1.2", "Implicit VR Little Endian"),
     ("1.2.840.10008.1.2.1", "Explicit VR Little Endian"),
-    ("1.2.840.10008.1.2.1.99", "Deflated Explicit VR Little Endian"),
+    (
+        "1.2.840.10008.1.2.1.99",
+        "Deflated Explicit VR Little Endian",
+    ),
     ("1.2.840.10008.1.2.2", "Explicit VR Big Endian"),
     ("1.2.840.10008.1.2.4.50", "JPEG Baseline"),
     ("1.2.840.10008.1.2.4.51", "JPEG Extended"),
@@ -214,11 +249,17 @@ const DICOM_UIDS: &[(&str, &str)] = &[
     ("1.2.840.10008.1.2.4.90", "JPEG 2000 Lossless"),
     ("1.2.840.10008.1.2.4.91", "JPEG 2000"),
     ("1.2.840.10008.1.2.5", "RLE Lossless"),
-    ("1.2.840.10008.5.1.4.1.1.1", "Computed Radiography Image Storage"),
+    (
+        "1.2.840.10008.5.1.4.1.1.1",
+        "Computed Radiography Image Storage",
+    ),
     ("1.2.840.10008.5.1.4.1.1.2", "CT Image Storage"),
     ("1.2.840.10008.5.1.4.1.1.4", "MR Image Storage"),
     ("1.2.840.10008.5.1.4.1.1.6.1", "Ultrasound Image Storage"),
-    ("1.2.840.10008.5.1.4.1.1.7", "Secondary Capture Image Storage"),
+    (
+        "1.2.840.10008.5.1.4.1.1.7",
+        "Secondary Capture Image Storage",
+    ),
     ("1.2.840.10008.5.1.4.1.1.128", "PET Image Storage"),
 ];
 
@@ -231,7 +272,22 @@ fn dicom_tag(group: u16, element: u16) -> Option<(&'static str, &'static str)> {
 
 /// VRs whose explicit encoding has a 2-byte reserved field and 4-byte length.
 fn long_vr(vr: &[u8]) -> bool {
-    matches!(vr, b"OB" | b"OW" | b"OF" | b"OD" | b"OL" | b"OV" | b"SQ" | b"UT" | b"UN" | b"UC" | b"UR" | b"SV" | b"UV")
+    matches!(
+        vr,
+        b"OB"
+            | b"OW"
+            | b"OF"
+            | b"OD"
+            | b"OL"
+            | b"OV"
+            | b"SQ"
+            | b"UT"
+            | b"UN"
+            | b"UC"
+            | b"UR"
+            | b"SV"
+            | b"UV"
+    )
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -243,7 +299,11 @@ struct Encoding {
 async fn dicom(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Preamble").span(file.sub(0, 128)));
-    cx.emit(Node::new("Prefix").span(file.sub(128, 4)).value(text("DICM")));
+    cx.emit(
+        Node::new("Prefix")
+            .span(file.sub(128, 4))
+            .value(text("DICM")),
+    );
     // The meta group is always explicit little endian; its length is known.
     let meta_head = cx.read(file.sub(132, 12)).await?;
     let meta_len = if meta_head.get(0..4) == Some(&[2, 0, 0, 0]) {
@@ -254,27 +314,56 @@ async fn dicom(cx: Cx, input: Input) -> Result<()> {
     let meta = file.sub(132, meta_len);
     let meta_bytes = cx.read_avail(meta).await?;
     let syntax = find_uid(&meta_bytes, 0x0010).unwrap_or_default();
-    let syntax_name = DICOM_UIDS.iter().find(|(u, _)| *u == syntax).map_or("unknown transfer syntax", |(_, n)| n);
-    cx.emit(
-        Node::new("File Meta Information")
-            .span(meta)
-            .lazy(dicom_elements, (meta, Encoding { explicit: true, endian: LE }, 0u32)),
-    );
+    let syntax_name = DICOM_UIDS
+        .iter()
+        .find(|(u, _)| *u == syntax)
+        .map_or("unknown transfer syntax", |(_, n)| n);
+    cx.emit(Node::new("File Meta Information").span(meta).lazy(
+        dicom_elements,
+        (
+            meta,
+            Encoding {
+                explicit: true,
+                endian: LE,
+            },
+            0u32,
+        ),
+    ));
     let encoding = match syntax.as_str() {
-        "1.2.840.10008.1.2" => Encoding { explicit: false, endian: LE },
-        "1.2.840.10008.1.2.2" => Encoding { explicit: true, endian: BE },
-        _ => Encoding { explicit: true, endian: LE },
+        "1.2.840.10008.1.2" => Encoding {
+            explicit: false,
+            endian: LE,
+        },
+        "1.2.840.10008.1.2.2" => Encoding {
+            explicit: true,
+            endian: BE,
+        },
+        _ => Encoding {
+            explicit: true,
+            endian: LE,
+        },
     };
     let dataset = file.tail(132u64.saturating_add(meta_len));
     if syntax.ends_with(".99") {
-        cx.emit(
-            crate::formats::content("Data Set (deflated)", input, dataset, crate::formats::Codec::Deflate, None),
-        );
+        cx.emit(crate::formats::content(
+            "Data Set (deflated)",
+            input,
+            dataset,
+            crate::formats::Codec::Deflate,
+            None,
+        ));
     } else {
-        cx.emit(Node::new("Data Set").span(dataset).lazy(dicom_elements, (dataset, encoding, 0u32)));
+        cx.emit(
+            Node::new("Data Set")
+                .span(dataset)
+                .lazy(dicom_elements, (dataset, encoding, 0u32)),
+        );
     }
     let sop = find_uid(&meta_bytes, 0x0002).unwrap_or_default();
-    let sop_name = DICOM_UIDS.iter().find(|(u, _)| *u == sop).map_or(sop.as_str(), |(_, n)| n);
+    let sop_name = DICOM_UIDS
+        .iter()
+        .find(|(u, _)| *u == sop)
+        .map_or(sop.as_str(), |(_, n)| n);
     cx.annotate(format!("{sop_name}, {syntax_name}"));
     Ok(())
 }
@@ -290,9 +379,14 @@ fn find_uid(meta: &[u8], element: u16) -> Option<String> {
         } else {
             (usize::from(u16_le(meta, at.saturating_add(6))?), 8)
         };
-        let value = meta.get(at.saturating_add(header)..at.saturating_add(header).saturating_add(len))?;
+        let value =
+            meta.get(at.saturating_add(header)..at.saturating_add(header).saturating_add(len))?;
         if e == element {
-            return Some(String::from_utf8_lossy(value).trim_end_matches(['\0', ' ']).to_owned());
+            return Some(
+                String::from_utf8_lossy(value)
+                    .trim_end_matches(['\0', ' '])
+                    .to_owned(),
+            );
         }
         at = at.saturating_add(header).saturating_add(len);
     }
@@ -324,9 +418,15 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
             };
             (String::from_utf8_lossy(&vr).into_owned(), len)
         } else {
-            (known.map_or("UN", |(vr, _)| vr).to_owned(), cur.u32().await?)
+            (
+                known.map_or("UN", |(vr, _)| vr).to_owned(),
+                cur.u32().await?,
+            )
         };
-        let name = known.map_or_else(|| format!("({group:04x},{element:04x})"), |(_, n)| n.to_owned());
+        let name = known.map_or_else(
+            || format!("({group:04x},{element:04x})"),
+            |(_, n)| n.to_owned(),
+        );
         let label = format!("{name} [{vr}]");
         let value_start = cur.pos();
         if group == 0xfffe && element != 0xe000 {
@@ -337,14 +437,27 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
             continue;
         }
         let undefined = len == UNDEFINED;
-        let body = if undefined { cur.region().tail(value_start) } else { cur.span(len.into()) };
+        let body = if undefined {
+            cur.region().tail(value_start)
+        } else {
+            cur.span(len.into())
+        };
         let mut node = Node::new(label);
         if vr == "SQ" || (group == 0xfffe && element == 0xe000) || (undefined && group != 0x7fe0) {
             // Nested data sets: an item's body holds elements; a sequence's
             // body holds items. Undefined lengths end at a delimiter.
-            node = node.lazy(crate::expander!(self::dicom_elements: (Span, Encoding, u32)), (body, enc, depth.saturating_add(1)));
+            node = node.lazy(
+                crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
+                (body, enc, depth.saturating_add(1)),
+            );
             if undefined {
-                let end = find_delimiter(&cx, body, enc.endian, if vr == "SQ" { 0xe0dd } else { 0xe00d }).await?;
+                let end = find_delimiter(
+                    &cx,
+                    body,
+                    enc.endian,
+                    if vr == "SQ" { 0xe0dd } else { 0xe00d },
+                )
+                .await?;
                 cur.seek(value_start.saturating_add(end));
                 node = node.span(cur.since(start));
             } else {
@@ -354,10 +467,20 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
         } else if undefined {
             // Encapsulated pixel data: fragments until a sequence delimiter.
             let end = find_delimiter(&cx, body, enc.endian, 0xe0dd).await?;
-            node = node.span(span.sub(start, value_start.saturating_add(end).saturating_sub(start))).summary("encapsulated").lazy(
-                crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
-                (body.sub(0, end), Encoding { explicit: false, endian: enc.endian }, depth.saturating_add(1)),
-            );
+            node = node
+                .span(span.sub(start, value_start.saturating_add(end).saturating_sub(start)))
+                .summary("encapsulated")
+                .lazy(
+                    crate::expander!(self::dicom_elements: (Span, Encoding, u32)),
+                    (
+                        body.sub(0, end),
+                        Encoding {
+                            explicit: false,
+                            endian: enc.endian,
+                        },
+                        depth.saturating_add(1),
+                    ),
+                );
             cur.seek(value_start.saturating_add(end));
         } else {
             cur.skip(len.into());
@@ -427,26 +550,59 @@ async fn dicom_value(cx: &Cx, vr: &str, span: Span, endian: Endian) -> Result<Op
         let b = bytes.get(..n)?;
         let mut v = 0u64;
         for (i, byte) in b.iter().enumerate() {
-            let shift = if endian == LE { i } else { n.saturating_sub(i).saturating_sub(1) };
+            let shift = if endian == LE {
+                i
+            } else {
+                n.saturating_sub(i).saturating_sub(1)
+            };
             v |= u64::from(*byte).checked_shl(u32::try_from(shift.saturating_mul(8)).ok()?)?;
         }
         Some(v)
     };
     Ok(match vr {
-        "AE" | "AS" | "CS" | "DA" | "DS" | "DT" | "IS" | "LO" | "LT" | "PN" | "SH" | "ST" | "TM" | "UI" | "UC" | "UR" | "UT" => {
-            let s = String::from_utf8_lossy(&bytes).trim_end_matches(['\0', ' ']).to_owned();
-            let named = if vr == "UI" { DICOM_UIDS.iter().find(|(u, _)| *u == s).map(|(_, n)| format!("{s} ({n})")) } else { None };
+        "AE" | "AS" | "CS" | "DA" | "DS" | "DT" | "IS" | "LO" | "LT" | "PN" | "SH" | "ST"
+        | "TM" | "UI" | "UC" | "UR" | "UT" => {
+            let s = String::from_utf8_lossy(&bytes)
+                .trim_end_matches(['\0', ' '])
+                .to_owned();
+            let named = if vr == "UI" {
+                DICOM_UIDS
+                    .iter()
+                    .find(|(u, _)| *u == s)
+                    .map(|(_, n)| format!("{s} ({n})"))
+            } else {
+                None
+            };
             Some(text(named.unwrap_or(s)))
         }
-        "US" => num(2).map(|v| Value::UInt { value: v, bits: 16, radix: Radix::Dec }),
-        "UL" => num(4).map(|v| Value::UInt { value: v, bits: 32, radix: Radix::Dec }),
-        "SS" => num(2).map(|v| Value::Int { value: i64::from(v as u16 as i16), bits: 16 }),
-        "SL" => num(4).map(|v| Value::Int { value: i64::from(v as u32 as i32), bits: 32 }),
+        "US" => num(2).map(|v| Value::UInt {
+            value: v,
+            bits: 16,
+            radix: Radix::Dec,
+        }),
+        "UL" => num(4).map(|v| Value::UInt {
+            value: v,
+            bits: 32,
+            radix: Radix::Dec,
+        }),
+        "SS" => num(2).map(|v| Value::Int {
+            value: i64::from(v as u16 as i16),
+            bits: 16,
+        }),
+        "SL" => num(4).map(|v| Value::Int {
+            value: i64::from(v as u32 as i32),
+            bits: 32,
+        }),
         "FL" => num(4).map(|v| Value::Float(f64::from(f32::from_bits(v as u32)))),
         "FD" => num(8).map(|v| Value::Float(f64::from_bits(v))),
         "AT" => match (num(2), bytes.get(2..4)) {
             (Some(g), Some(_)) => {
-                let e = if endian == LE { u16_le(&bytes, 2) } else { u16_be(&bytes, 2) }.unwrap_or(0);
+                let e = if endian == LE {
+                    u16_le(&bytes, 2)
+                } else {
+                    u16_be(&bytes, 2)
+                }
+                .unwrap_or(0);
                 Some(text(format!("({g:04x},{e:04x})")))
             }
             _ => None,
@@ -515,7 +671,11 @@ record! {
 }
 
 async fn shape_common(cx: &Cx, file: Span) -> Result<ShapeBounds> {
-    cx.emit(ShapeHeader::node("File header", file.sub(0, ShapeHeader::SIZE), BE));
+    cx.emit(ShapeHeader::node(
+        "File header",
+        file.sub(0, ShapeHeader::SIZE),
+        BE,
+    ));
     let span = file.sub(ShapeHeader::SIZE, ShapeBounds::SIZE);
     let b: ShapeBounds = read_record(cx, span, LE).await?;
     cx.emit(ShapeBounds::node("Bounds", span, LE));
@@ -526,9 +686,16 @@ async fn shp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let b = shape_common(&cx, file).await?;
     let records = file.tail(100);
-    cx.emit(Node::new("Records").span(records).lazy(shp_records, records));
+    cx.emit(
+        Node::new("Records")
+            .span(records)
+            .lazy(shp_records, records),
+    );
     let kind = lookup(SHAPE_TYPES, b.shape.into()).unwrap_or("unknown shapes");
-    cx.annotate(format!("{kind}, x {}..{}, y {}..{}", b.x_min, b.x_max, b.y_min, b.y_max));
+    cx.annotate(format!(
+        "{kind}, x {}..{}, y {}..{}",
+        b.x_min, b.x_max, b.y_min, b.y_max
+    ));
     Ok(())
 }
 
@@ -542,7 +709,12 @@ async fn shp_records(cx: Cx, span: Span) -> Result<()> {
         let kind = u32_le(&cx.read_avail(content.sub(0, 4)).await?, 0).unwrap_or(0);
         cur.skip(u64::from(words).saturating_mul(2));
         let name = lookup(SHAPE_TYPES, kind.into()).unwrap_or("unknown");
-        cx.push(Node::new(format!("Record {number}")).span(cur.since(start)).summary(name)).await;
+        cx.push(
+            Node::new(format!("Record {number}"))
+                .span(cur.since(start))
+                .summary(name),
+        )
+        .await;
     }
     Ok(())
 }
@@ -551,7 +723,12 @@ async fn shx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let b = shape_common(&cx, file).await?;
     let count = file.len.saturating_sub(100) / 8;
-    cx.emit(Node::new("Index").span(file.tail(100)).summary(format!("{count} records")).lazy(shx_index, file.tail(100)));
+    cx.emit(
+        Node::new("Index")
+            .span(file.tail(100))
+            .summary(format!("{count} records"))
+            .lazy(shx_index, file.tail(100)),
+    );
     let kind = lookup(SHAPE_TYPES, b.shape.into()).unwrap_or("unknown shapes");
     cx.annotate(format!("index of {count} {kind} records"));
     Ok(())
@@ -568,7 +745,11 @@ async fn shx_index(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("Record {}", i.saturating_add(1)))
                 .span(at)
-                .summary(format!("offset {:#x}, {} bytes", u64::from(offset).saturating_mul(2), u64::from(words).saturating_mul(2))),
+                .summary(format!(
+                    "offset {:#x}, {} bytes",
+                    u64::from(offset).saturating_mul(2),
+                    u64::from(words).saturating_mul(2)
+                )),
         )
         .await;
     }
@@ -607,7 +788,10 @@ fn dbf_probe(h: &Head<'_>) -> bool {
         && header >= 65
         && record > 0
         && d.get(usize::from(header).saturating_sub(1)) == Some(&0x0d)
-        && u64::from(records).saturating_mul(record.into()).saturating_add(header.into()) <= h.len.saturating_add(1)
+        && u64::from(records)
+            .saturating_mul(record.into())
+            .saturating_add(header.into())
+            <= h.len.saturating_add(1)
 }
 
 declare_format!(pub DBF = "dbf", "dBase table", ["dbf"], "application/x-dbf",
@@ -651,8 +835,16 @@ async fn dbf(cx: Cx, input: Input) -> Result<()> {
         fields.push((f.name.clone(), f.kind.clone(), u64::from(f.length), span));
     }
     let descriptors = file.sub(DbfHeader::SIZE, count.saturating_mul(DbfField::SIZE));
-    cx.emit(Node::new("Fields").span(descriptors).summary(format!("{count} fields")).lazy(dbf_fields, descriptors));
-    let records = file.sub(h.header.into(), u64::from(h.records).saturating_mul(h.record.into()));
+    cx.emit(
+        Node::new("Fields")
+            .span(descriptors)
+            .summary(format!("{count} fields"))
+            .lazy(dbf_fields, descriptors),
+    );
+    let records = file.sub(
+        h.header.into(),
+        u64::from(h.records).saturating_mul(h.record.into()),
+    );
     cx.emit(
         Node::new("Records")
             .span(records)
@@ -661,7 +853,11 @@ async fn dbf(cx: Cx, input: Input) -> Result<()> {
     );
     let version = lookup(DBF_VERSIONS, h.version.into()).unwrap_or("dBase");
     let names: Vec<String> = fields.iter().map(|f| f.0.clone()).collect();
-    cx.annotate(format!("{version}, {} records × [{}]", h.records, names.join(", ")));
+    cx.annotate(format!(
+        "{version}, {} records × [{}]",
+        h.records,
+        names.join(", ")
+    ));
     Ok(())
 }
 
@@ -669,7 +865,10 @@ async fn dbf_fields(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     while cur.remaining() >= DbfField::SIZE {
         let (f, at) = cur.record::<DbfField>().await?;
-        cx.push(DbfField::node(f.name.clone(), at, LE).summary(format!("{} ({})", f.kind, f.length))).await;
+        cx.push(
+            DbfField::node(f.name.clone(), at, LE).summary(format!("{} ({})", f.kind, f.length)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -690,15 +889,22 @@ async fn dbf_records(cx: Cx, (span, size, fields): (Span, u64, DbfFields)) -> Re
         let mut values = Vec::new();
         for (name, _, len, _) in &fields {
             let len = crate::bytes::to_usize(*len);
-            let value = String::from_utf8_lossy(bytes.get(at..at.saturating_add(len)).unwrap_or_default()).trim().to_owned();
+            let value =
+                String::from_utf8_lossy(bytes.get(at..at.saturating_add(len)).unwrap_or_default())
+                    .trim()
+                    .to_owned();
             values.push(format!("{name}={value}"));
             at = at.saturating_add(len);
         }
         let deleted = bytes.first() == Some(&b'*');
         cx.push(
-            Node::new(format!("#{}{}", i.saturating_add(1), if deleted { " (deleted)" } else { "" }))
-                .span(record)
-                .summary(values.join(", ")),
+            Node::new(format!(
+                "#{}{}",
+                i.saturating_add(1),
+                if deleted { " (deleted)" } else { "" }
+            ))
+            .span(record)
+            .summary(values.join(", ")),
         )
         .await;
     }
@@ -748,7 +954,11 @@ record! {
 async fn las(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: LasHeader = read_record(&cx, file.sub(0, LasHeader::SIZE), LE).await?;
-    cx.emit(LasHeader::node("Public header block", file.sub(0, h.header_size.into()), LE));
+    cx.emit(LasHeader::node(
+        "Public header block",
+        file.sub(0, h.header_size.into()),
+        LE,
+    ));
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(h.header_size.into());
     for _ in 0..h.vlrs.min(10_000) {
@@ -759,12 +969,20 @@ async fn las(cx: Cx, input: Input) -> Result<()> {
         let len = cur.u16().await?;
         let description = crate::text::until_nul(&cur.bytes(32).await?);
         cur.skip(len.into());
-        cx.push(Node::new(format!("VLR {user}/{record}")).span(cur.since(start)).summary(description)).await;
+        cx.push(
+            Node::new(format!("VLR {user}/{record}"))
+                .span(cur.since(start))
+                .summary(description),
+        )
+        .await;
     }
     cx.emit(
         Node::new("Point records")
             .span(file.tail(h.points_offset.into()))
-            .summary(format!("{} points × {} bytes (format {})", h.points, h.point_length, h.point_format)),
+            .summary(format!(
+                "{} points × {} bytes (format {})",
+                h.points, h.point_length, h.point_format
+            )),
     );
     cx.annotate(format!(
         "LAS {}.{}, {} points, by {}",
@@ -783,8 +1001,15 @@ declare_format!(pub GRIB = "grib", "GRIB weather data", ["grib", "grb", "grib2",
     Probe::Magic(&[(0, b"GRIB")]), grib);
 
 const GRIB2_SECTIONS: [&str; 9] = [
-    "Indicator", "Identification", "Local use", "Grid definition", "Product definition",
-    "Data representation", "Bit-map", "Data", "End",
+    "Indicator",
+    "Identification",
+    "Local use",
+    "Grid definition",
+    "Product definition",
+    "Data representation",
+    "Bit-map",
+    "Data",
+    "End",
 ];
 
 async fn grib(cx: Cx, input: Input) -> Result<()> {
@@ -812,7 +1037,9 @@ async fn grib(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Message {}", messages.saturating_add(1)))
                 .span(span)
-                .summary(format!("edition {edition}, discipline {discipline}, {len} bytes"))
+                .summary(format!(
+                    "edition {edition}, discipline {discipline}, {len} bytes"
+                ))
                 .lazy(grib_sections, (span, edition)),
         )
         .await;
@@ -841,8 +1068,15 @@ async fn grib_sections(cx: Cx, (span, edition): (Span, u8)) -> Result<()> {
             break;
         }
         cur.seek(start.saturating_add(len.into()));
-        let name = GRIB2_SECTIONS.get(usize::from(number)).unwrap_or(&"Unknown");
-        cx.push(Node::new(format!("Section {number}: {name}")).span(cur.since(start)).summary(format!("{len} bytes"))).await;
+        let name = GRIB2_SECTIONS
+            .get(usize::from(number))
+            .unwrap_or(&"Unknown");
+        cx.push(
+            Node::new(format!("Section {number}: {name}"))
+                .span(cur.since(start))
+                .summary(format!("{len} bytes")),
+        )
+        .await;
     }
     cx.emit(Node::new("End (7777)").span(cur.span(4)));
     Ok(())
@@ -856,7 +1090,15 @@ async fn bufr(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub(0, 8)).await?;
     let len = u64::from(crate::bytes::u24_be(&head, 4).unwrap_or(0));
     let edition = head.get(7).copied().unwrap_or(0);
-    cx.emit(Node::new("Section 0 (indicator)").span(file.sub(0, 8)).value(Value::UInt { value: edition.into(), bits: 8, radix: Radix::Dec }));
+    cx.emit(
+        Node::new("Section 0 (indicator)")
+            .span(file.sub(0, 8))
+            .value(Value::UInt {
+                value: edition.into(),
+                bits: 8,
+                radix: Radix::Dec,
+            }),
+    );
     let mut cur = Cursor::new(&cx, file.sub(0, len), BE);
     cur.seek(8);
     for number in 1..=4u8 {
@@ -869,7 +1111,11 @@ async fn bufr(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         cur.skip(section_len);
-        cx.emit(Node::new(format!("Section {number}")).span(cur.since(start)).summary(format!("{section_len} bytes")));
+        cx.emit(
+            Node::new(format!("Section {number}"))
+                .span(cur.since(start))
+                .summary(format!("{section_len} bytes")),
+        );
         // Section 2 is optional (flag in section 1); a 7777 here ends it.
         if cur.peek(4).await? == b"7777" {
             break;

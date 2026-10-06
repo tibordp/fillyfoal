@@ -77,29 +77,28 @@ const STRINGS: &[&str] = &[
     "rs1", "rs2", "rs3", "rf", "rc", "vpa", "sc", "ind", "ri", "sgr", "hts", "wind", "ht", "tsl",
     "uc", "hu", "iprog", "ka1", "ka3", "kb2", "kc1", "kc3", "mc5p", "rmp", "acsc", "pln", "kcbt",
     "smxon", "rmxon", "smam", "rmam", "xonc", "xoffc", "enacs", "smln", "rmln", "kbeg", "kcan",
-    "kclo", "kcmd", "kcpy", "kcrt", "kend", "kent", "kext", "kfnd", "khlp", "kmrk", "kmsg",
-    "kmov", "knxt", "kopn", "kopt", "kprv", "kprt", "krdo", "kref", "krfr", "krpl", "krst",
-    "kres", "ksav", "kspd", "kund", "kBEG", "kCAN", "kCMD", "kCPY", "kCRT", "kDC", "kDL", "kslt",
-    "kEND", "kEOL", "kEXT", "kFND", "kHLP", "kHOM", "kIC", "kLFT", "kMSG", "kMOV", "kNXT",
-    "kOPT", "kPRV", "kPRT", "kRDO", "kRPL", "kRIT", "kRES", "kSAV", "kSPD", "kUND", "rfi",
-    "kf11", "kf12", "kf13", "kf14", "kf15", "kf16", "kf17", "kf18", "kf19", "kf20", "kf21",
-    "kf22", "kf23", "kf24", "kf25", "kf26", "kf27", "kf28", "kf29", "kf30", "kf31", "kf32",
-    "kf33", "kf34", "kf35", "kf36", "kf37", "kf38", "kf39", "kf40", "kf41", "kf42", "kf43",
-    "kf44", "kf45", "kf46", "kf47", "kf48", "kf49", "kf50", "kf51", "kf52", "kf53", "kf54",
-    "kf55", "kf56", "kf57", "kf58", "kf59", "kf60", "kf61", "kf62", "kf63", "el1", "mgc", "smgl",
-    "smgr", "fln", "sclk", "dclk", "rmclk", "cwin", "wingo", "hup", "dial", "qdial", "tone",
-    "pulse", "hook", "pause", "wait", "u0", "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9",
-    "op", "oc", "initc", "initp", "scp", "setf", "setb", "cpi", "lpi", "chr", "cvr", "defc",
-    "swidm", "sdrfq", "sitm", "slm", "smicm", "snlq", "snrmq", "sshm", "ssubm", "ssupm", "sum",
-    "rwidm", "ritm", "rlm", "rmicm", "rshm", "rsubm", "rsupm", "rum", "mhpa", "mcud1", "mcub1",
-    "mcuf1", "mvpa", "mcuu1", "porder", "mcud", "mcub", "mcuf", "mcuu", "scs", "smgb", "smgbp",
-    "smglp", "smgrp", "smgt", "smgtp", "sbim", "scsd", "rbim", "rcsd", "subcs", "supcs", "docr",
-    "zerom", "csnm", "kmous", "minfo", "reqmp", "getm", "setaf", "setab", "pfxl", "devt", "csin",
-    "s0ds", "s1ds", "s2ds", "s3ds", "smglr", "smgtb", "birep", "binel", "bicr", "colornm",
-    "defbi", "endbi", "setcolor", "slines", "dispc", "smpch", "rmpch", "smsc", "rmsc", "pctrm",
-    "scesc", "scesa", "ehhlm", "elhlm", "elohlm", "erhlm", "ethlm", "evhlm", "sgr1", "slength",
-    "OTi2", "OTrs", "OTnl", "OTbc", "OTko", "OTma", "OTG2", "OTG3", "OTG1", "OTG4", "OTGR",
-    "OTGL", "OTGU", "OTGD", "OTGH", "OTGV", "OTGC", "meml", "memu", "box1",
+    "kclo", "kcmd", "kcpy", "kcrt", "kend", "kent", "kext", "kfnd", "khlp", "kmrk", "kmsg", "kmov",
+    "knxt", "kopn", "kopt", "kprv", "kprt", "krdo", "kref", "krfr", "krpl", "krst", "kres", "ksav",
+    "kspd", "kund", "kBEG", "kCAN", "kCMD", "kCPY", "kCRT", "kDC", "kDL", "kslt", "kEND", "kEOL",
+    "kEXT", "kFND", "kHLP", "kHOM", "kIC", "kLFT", "kMSG", "kMOV", "kNXT", "kOPT", "kPRV", "kPRT",
+    "kRDO", "kRPL", "kRIT", "kRES", "kSAV", "kSPD", "kUND", "rfi", "kf11", "kf12", "kf13", "kf14",
+    "kf15", "kf16", "kf17", "kf18", "kf19", "kf20", "kf21", "kf22", "kf23", "kf24", "kf25", "kf26",
+    "kf27", "kf28", "kf29", "kf30", "kf31", "kf32", "kf33", "kf34", "kf35", "kf36", "kf37", "kf38",
+    "kf39", "kf40", "kf41", "kf42", "kf43", "kf44", "kf45", "kf46", "kf47", "kf48", "kf49", "kf50",
+    "kf51", "kf52", "kf53", "kf54", "kf55", "kf56", "kf57", "kf58", "kf59", "kf60", "kf61", "kf62",
+    "kf63", "el1", "mgc", "smgl", "smgr", "fln", "sclk", "dclk", "rmclk", "cwin", "wingo", "hup",
+    "dial", "qdial", "tone", "pulse", "hook", "pause", "wait", "u0", "u1", "u2", "u3", "u4", "u5",
+    "u6", "u7", "u8", "u9", "op", "oc", "initc", "initp", "scp", "setf", "setb", "cpi", "lpi",
+    "chr", "cvr", "defc", "swidm", "sdrfq", "sitm", "slm", "smicm", "snlq", "snrmq", "sshm",
+    "ssubm", "ssupm", "sum", "rwidm", "ritm", "rlm", "rmicm", "rshm", "rsubm", "rsupm", "rum",
+    "mhpa", "mcud1", "mcub1", "mcuf1", "mvpa", "mcuu1", "porder", "mcud", "mcub", "mcuf", "mcuu",
+    "scs", "smgb", "smgbp", "smglp", "smgrp", "smgt", "smgtp", "sbim", "scsd", "rbim", "rcsd",
+    "subcs", "supcs", "docr", "zerom", "csnm", "kmous", "minfo", "reqmp", "getm", "setaf", "setab",
+    "pfxl", "devt", "csin", "s0ds", "s1ds", "s2ds", "s3ds", "smglr", "smgtb", "birep", "binel",
+    "bicr", "colornm", "defbi", "endbi", "setcolor", "slines", "dispc", "smpch", "rmpch", "smsc",
+    "rmsc", "pctrm", "scesc", "scesa", "ehhlm", "elhlm", "elohlm", "erhlm", "ethlm", "evhlm",
+    "sgr1", "slength", "OTi2", "OTrs", "OTnl", "OTbc", "OTko", "OTma", "OTG2", "OTG3", "OTG1",
+    "OTG4", "OTGR", "OTGL", "OTGU", "OTGD", "OTGH", "OTGV", "OTGC", "meml", "memu", "box1",
 ];
 
 /// Escapes control characters the way terminfo sources write them.
@@ -192,11 +191,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let name_text = crate::text::until_nul(&cx.read(names_span).await?);
     let primary = name_text.split('|').next().unwrap_or_default().to_owned();
     let description = name_text.rsplit('|').next().unwrap_or_default().to_owned();
-    cx.annotate(format!(
-        "terminfo {primary}, {}",
-        clip(&description, 80)
-    ));
-    cx.emit(Node::new("Names").span(names_span).value(Value::Text(name_text)));
+    cx.annotate(format!("terminfo {primary}, {}", clip(&description, 80)));
+    cx.emit(
+        Node::new("Names")
+            .span(names_span)
+            .value(Value::Text(name_text)),
+    );
     cx.emit(
         Node::new("Booleans")
             .span(file.sub(l.bools_at(), l.bools))
@@ -230,8 +230,14 @@ async fn booleans(cx: Cx, (file, l): (Span, Layout)) -> Result<()> {
     let data = cx.read(span).await?;
     for (i, &b) in data.iter().enumerate() {
         if b == 1 {
-            let name = BOOLEANS.get(i).map_or_else(|| format!("bool {i}"), |n| (*n).to_owned());
-            cx.emit(Node::new(name).span(span.sub(to_u64(i), 1)).value(Value::Bool(true)));
+            let name = BOOLEANS
+                .get(i)
+                .map_or_else(|| format!("bool {i}"), |n| (*n).to_owned());
+            cx.emit(
+                Node::new(name)
+                    .span(span.sub(to_u64(i), 1))
+                    .value(Value::Bool(true)),
+            );
         }
     }
     Ok(())
@@ -249,15 +255,22 @@ async fn numbers(cx: Cx, (file, l): (Span, Layout)) -> Result<()> {
     let span = file.sub_exact(l.nums_at(), l.nums.saturating_mul(l.num_size()))?;
     let data = cx.read(span).await?;
     for i in 0..to_usize(l.nums) {
-        let Some(v) = number(&data, l.wide, i) else { break };
+        let Some(v) = number(&data, l.wide, i) else {
+            break;
+        };
         if v < 0 {
             continue; // absent or cancelled
         }
-        let name = NUMBERS.get(i).map_or_else(|| format!("num {i}"), |n| (*n).to_owned());
+        let name = NUMBERS
+            .get(i)
+            .map_or_else(|| format!("num {i}"), |n| (*n).to_owned());
         cx.emit(
             Node::new(name)
                 .span(span.sub(to_u64(i).saturating_mul(l.num_size()), l.num_size()))
-                .value(Value::Int { value: v.into(), bits: 32 }),
+                .value(Value::Int {
+                    value: v.into(),
+                    bits: 32,
+                }),
         );
     }
     Ok(())
@@ -269,12 +282,18 @@ async fn strings(cx: Cx, (file, l): (Span, Layout)) -> Result<()> {
     let table_span = file.sub_exact(l.table_at(), l.table)?;
     let table = cx.read(table_span).await?;
     for i in 0..to_usize(l.strs) {
-        let Some(off) = crate::bytes::i16_le(&offsets, i.saturating_mul(2)) else { break };
-        let Ok(off) = usize::try_from(off) else { continue };
+        let Some(off) = crate::bytes::i16_le(&offsets, i.saturating_mul(2)) else {
+            break;
+        };
+        let Ok(off) = usize::try_from(off) else {
+            continue;
+        };
         let rest = table.get(off..).unwrap_or_default();
         let end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
         let value = rest.get(..end).unwrap_or_default();
-        let name = STRINGS.get(i).map_or_else(|| format!("str {i}"), |n| (*n).to_owned());
+        let name = STRINGS
+            .get(i)
+            .map_or_else(|| format!("str {i}"), |n| (*n).to_owned());
         cx.emit(
             Node::new(name)
                 .span(table_span.sub(to_u64(off), to_u64(end)))
@@ -300,7 +319,9 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
     let names_count = bools.saturating_add(nums).saturating_add(strs);
     let table_at = offs_at.saturating_add(strs.saturating_add(names_count).saturating_mul(2));
     let bool_data = cx.read(span.sub_exact(bools_at, bools)?).await?;
-    let num_data = cx.read(span.sub_exact(nums_at, nums.saturating_mul(num_size))?).await?;
+    let num_data = cx
+        .read(span.sub_exact(nums_at, nums.saturating_mul(num_size))?)
+        .await?;
     let offs = cx
         .read(span.sub_exact(offs_at, strs.saturating_add(names_count).saturating_mul(2))?)
         .await?;
@@ -321,13 +342,19 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
     }
     let name_of = |k: u64| -> String {
         match get_off(strs.saturating_add(k)).map(usize::try_from) {
-            Some(Ok(o)) => String::from_utf8_lossy(&text_at(values_end.saturating_add(o))).into_owned(),
+            Some(Ok(o)) => {
+                String::from_utf8_lossy(&text_at(values_end.saturating_add(o))).into_owned()
+            }
             _ => format!("#{k}"),
         }
     };
     for i in 0..bools {
         if bool_data.get(to_usize(i)) == Some(&1) {
-            cx.emit(Node::new(name_of(i)).span(span.sub(bools_at.saturating_add(i), 1)).value(Value::Bool(true)));
+            cx.emit(
+                Node::new(name_of(i))
+                    .span(span.sub(bools_at.saturating_add(i), 1))
+                    .value(Value::Bool(true)),
+            );
         }
     }
     for i in 0..nums {
@@ -337,7 +364,10 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
             cx.emit(
                 Node::new(name_of(bools.saturating_add(i)))
                     .span(span.sub(nums_at.saturating_add(i.saturating_mul(num_size)), num_size))
-                    .value(Value::Int { value: v.into(), bits: 32 }),
+                    .value(Value::Int {
+                        value: v.into(),
+                        bits: 32,
+                    }),
             );
         }
     }
@@ -356,7 +386,9 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
         }
     }
     if values_end > table.len() {
-        cx.diag(Diagnostic::malformed("extended string values overrun the table"));
+        cx.diag(Diagnostic::malformed(
+            "extended string values overrun the table",
+        ));
     }
     Ok(())
 }

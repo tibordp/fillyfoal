@@ -21,7 +21,9 @@ const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 fn unix_time(seconds: i64) -> Value {
-    Value::Timestamp { unix_seconds: seconds }
+    Value::Timestamp {
+        unix_seconds: seconds,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +79,10 @@ async fn fsevents(cx: Cx, input: Input) -> Result<()> {
         let head = cx.read(file.sub(at, 12)).await?;
         let magic = head.get(..4).unwrap_or_default();
         if !matches!(magic, b"1SLD" | b"2SLD" | b"3SLD") {
-            cx.diag(Diagnostic::malformed("expected a page signature (1SLD/2SLD/3SLD)").at(file.sub(at, 4)));
+            cx.diag(
+                Diagnostic::malformed("expected a page signature (1SLD/2SLD/3SLD)")
+                    .at(file.sub(at, 4)),
+            );
             break;
         }
         version = magic.first().map_or(1, |b| b.saturating_sub(b'0'));
@@ -95,7 +100,9 @@ async fn fsevents(cx: Cx, input: Input) -> Result<()> {
         pages = pages.saturating_add(1);
         at = at.saturating_add(len);
     }
-    cx.annotate(format!("FSEvents log (version {version}), {pages} pages, {records} records"));
+    cx.annotate(format!(
+        "FSEvents log (version {version}), {pages} pages, {records} records"
+    ));
     Ok(())
 }
 
@@ -113,7 +120,10 @@ async fn fsevents_count(cx: &Cx, page: Span, version: u8) -> Result<u64> {
     let mut at = 0usize;
     let mut n = 0u64;
     while let Some(nul) = data.get(at..).and_then(|r| r.iter().position(|&b| b == 0)) {
-        at = at.saturating_add(nul).saturating_add(1).saturating_add(to_usize(fsevents_tail(version)));
+        at = at
+            .saturating_add(nul)
+            .saturating_add(1)
+            .saturating_add(to_usize(fsevents_tail(version)));
         if at > data.len() {
             break;
         }
@@ -182,7 +192,10 @@ fn timesync_boot(f: &mut Fields<'_>, _: &()) -> Result<(String, i64)> {
     let uuid = f.bytes("Boot UUID", 16).emit()?;
     f.u32("Timebase numerator").emit()?;
     f.u32("Timebase denominator").emit()?;
-    let ns = f.int::<i64>("Boot time").with(|&v, n| n.value(unix_time(v / 1_000_000_000))).emit()?;
+    let ns = f
+        .int::<i64>("Boot time")
+        .with(|&v, n| n.value(unix_time(v / 1_000_000_000)))
+        .emit()?;
     f.int::<i32>("Timezone offset (minutes)").emit()?;
     f.u32("Daylight saving").emit()?;
     Ok((hex_string(&uuid).to_uppercase(), ns / 1_000_000_000))
@@ -192,7 +205,10 @@ fn timesync_sync(f: &mut Fields<'_>, _: &()) -> Result<i64> {
     f.ascii("Signature", 4).emit()?;
     f.u32("Unknown").hex().emit()?;
     f.u64("Kernel continuous time").emit()?;
-    let ns = f.int::<i64>("Wall time").with(|&v, n| n.value(unix_time(v / 1_000_000_000))).emit()?;
+    let ns = f
+        .int::<i64>("Wall time")
+        .with(|&v, n| n.value(unix_time(v / 1_000_000_000)))
+        .emit()?;
     f.int::<i32>("Timezone offset (minutes)").emit()?;
     f.u32("Daylight saving").emit()?;
     Ok(ns / 1_000_000_000)
@@ -210,14 +226,19 @@ async fn timesync(cx: Cx, input: Input) -> Result<()> {
             let span = file.sub(start, len);
             let block = cx.block(span).await?;
             let (uuid, time) = timesync_boot(&mut Fields::new(&block, LE), &())?;
-            cx.push(struct_node(format!("Boot {uuid}"), span, LE, (), timesync_boot).value(unix_time(time))).await;
+            cx.push(
+                struct_node(format!("Boot {uuid}"), span, LE, (), timesync_boot)
+                    .value(unix_time(time)),
+            )
+            .await;
             boots = boots.saturating_add(1);
             cur.seek(start.saturating_add(len));
         } else if sig == b"Ts \0" {
             let span = file.sub(start, 32);
             let block = cx.block(span).await?;
             let time = timesync_sync(&mut Fields::new(&block, LE), &())?;
-            cx.push(struct_node("Sync", span, LE, (), timesync_sync).value(unix_time(time))).await;
+            cx.push(struct_node("Sync", span, LE, (), timesync_sync).value(unix_time(time)))
+                .await;
             syncs = syncs.saturating_add(1);
             cur.seek(start.saturating_add(32));
         } else {
@@ -225,7 +246,9 @@ async fn timesync(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
-    cx.annotate(format!("Unified Log timesync, {boots} boots, {syncs} sync records"));
+    cx.annotate(format!(
+        "Unified Log timesync, {boots} boots, {syncs} sync records"
+    ));
     Ok(())
 }
 
@@ -233,7 +256,9 @@ async fn timesync(cx: Cx, input: Input) -> Result<()> {
 // macOS Unified Log: tracev3
 
 fn tracev3_probe(h: &Head<'_>) -> bool {
-    u32_le(h.data, 0) == Some(0x1000) && u32_le(h.data, 4) == Some(0x11) && u64_le(h.data, 8) == Some(0xd0)
+    u32_le(h.data, 0) == Some(0x1000)
+        && u32_le(h.data, 4) == Some(0x11)
+        && u64_le(h.data, 8) == Some(0xd0)
 }
 
 declare_format!(pub TRACEV3 = "tracev3", "macOS Unified Log (tracev3)", ["tracev3"], "application/x-apple-tracev3",
@@ -300,7 +325,10 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
         let sub = cur.u32().await?;
         let len = cur.u64().await?;
         if len > cur.remaining() {
-            cx.diag(Diagnostic::malformed("chunk extends past the end of the file").at(cur.since(start)));
+            cx.diag(
+                Diagnostic::malformed("chunk extends past the end of the file")
+                    .at(cur.since(start)),
+            );
             break;
         }
         let data = cur.span(len);
@@ -308,7 +336,8 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
         cur.seek(cur.pos().next_multiple_of(8).min(file.len));
         let entry = counts.entry(tag).or_insert(0);
         *entry = entry.saturating_add(1);
-        let name = lookup(TRACEV3_CHUNKS, tag.into()).map_or_else(|| format!("Chunk {tag:#x}"), str::to_owned);
+        let name = lookup(TRACEV3_CHUNKS, tag.into())
+            .map_or_else(|| format!("Chunk {tag:#x}"), str::to_owned);
         let node = match tag {
             0x1000 => {
                 let block = cx.block(data).await?;
@@ -323,20 +352,36 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
                 let mut node = Node::new(name).span(data);
                 if head.starts_with(b"bv41") {
                     let out = u32_le(&head, 4).unwrap_or(0);
-                    node = node.summary(format!("LZ4, {} uncompressed", size(out.into()))).diag(Diagnostic::unsupported("LZ4 compression"));
+                    node = node
+                        .summary(format!("LZ4, {} uncompressed", size(out.into())))
+                        .diag(Diagnostic::unsupported("LZ4 compression"));
                 }
                 node
             }
             _ => Node::new(name).span(data),
         };
-        cx.push(node.target(cur.since(start)).desc(format!("Tag {tag:#x}, subtag {sub:#x}"))).await;
+        cx.push(
+            node.target(cur.since(start))
+                .desc(format!("Tag {tag:#x}, subtag {sub:#x}")),
+        )
+        .await;
     }
     let parts: Vec<String> = counts
         .iter()
         .filter(|(t, _)| **t != 0x1000)
-        .map(|(t, n)| format!("{n} {}", lookup(TRACEV3_CHUNKS, (*t).into()).unwrap_or("other").to_lowercase()))
+        .map(|(t, n)| {
+            format!(
+                "{n} {}",
+                lookup(TRACEV3_CHUNKS, (*t).into())
+                    .unwrap_or("other")
+                    .to_lowercase()
+            )
+        })
         .collect();
-    cx.annotate(format!("Unified Log tracev3 ({summary}), {}", parts.join(", ")));
+    cx.annotate(format!(
+        "Unified Log tracev3 ({summary}), {}",
+        parts.join(", ")
+    ));
     Ok(())
 }
 
@@ -358,7 +403,16 @@ record! {
     }
 }
 
-const ASL_LEVELS: EnumTable = &[(0, "Emergency"), (1, "Alert"), (2, "Critical"), (3, "Error"), (4, "Warning"), (5, "Notice"), (6, "Info"), (7, "Debug")];
+const ASL_LEVELS: EnumTable = &[
+    (0, "Emergency"),
+    (1, "Alert"),
+    (2, "Critical"),
+    (3, "Error"),
+    (4, "Warning"),
+    (5, "Notice"),
+    (6, "Info"),
+    (7, "Debug"),
+];
 
 /// Resolves a string reference: inline (high bit set, length in the low
 /// bits of the first byte) or the offset of a string record.
@@ -369,11 +423,16 @@ async fn asl_string(cx: &Cx, file: Span, raw: u64) -> Result<String> {
     if raw & (1 << 63) != 0 {
         let bytes = raw.to_be_bytes();
         let len = usize::from(bytes.first().copied().unwrap_or(0) & 0x7f).min(7);
-        return Ok(String::from_utf8_lossy(bytes.get(1..1usize.saturating_add(len)).unwrap_or_default()).into_owned());
+        return Ok(String::from_utf8_lossy(
+            bytes.get(1..1usize.saturating_add(len)).unwrap_or_default(),
+        )
+        .into_owned());
     }
     let head = cx.read(file.sub(raw, 6)).await?;
     let len = u64::from(u32_be(&head, 2).unwrap_or(0));
-    let data = cx.read_avail(file.sub(raw.saturating_add(6), len.min(0x10000))).await?;
+    let data = cx
+        .read_avail(file.sub(raw.saturating_add(6), len.min(0x10000)))
+        .await?;
     Ok(crate::text::until_nul(&data))
 }
 
@@ -394,7 +453,14 @@ fn asl_message(f: &mut Fields<'_>, _: &()) -> Result<(u64, u64, u16, u32)> {
     f.u32("Real GID").emit()?;
     f.u32("Reference PID").emit()?;
     f.u32("Key/value count").emit()?;
-    for name in ["Host", "Sender", "Facility", "Message", "Reference process", "Session"] {
+    for name in [
+        "Host",
+        "Sender",
+        "Facility",
+        "Message",
+        "Reference process",
+        "Session",
+    ] {
         f.u64(name).hex().emit()?;
     }
     Ok((next, time, level, pid))
@@ -421,14 +487,20 @@ async fn asl(cx: Cx, input: Input) -> Result<()> {
         let rec = file.sub(at, len.saturating_add(6));
         let block = cx.block(rec).await?;
         let (next, time, level, pid) = asl_message(&mut Fields::new(&block, BE), &())?;
-        let refs: Vec<u64> = (0..6usize).map(|i| u64_be(&block.data, 66usize.saturating_add(i.saturating_mul(8))).unwrap_or(0)).collect();
+        let refs: Vec<u64> = (0..6usize)
+            .map(|i| u64_be(&block.data, 66usize.saturating_add(i.saturating_mul(8))).unwrap_or(0))
+            .collect();
         let sender = asl_string(&cx, file, refs.get(1).copied().unwrap_or(0)).await?;
         let message = asl_string(&cx, file, refs.get(3).copied().unwrap_or(0)).await?;
         cx.push(
             Node::new(format!("{sender}[{pid}]"))
                 .span(rec)
                 .value(unix_time(i64::try_from(time).unwrap_or(0)))
-                .summary(format!("{}: {}", lookup(ASL_LEVELS, level.into()).unwrap_or("?"), clip(&message, 120)))
+                .summary(format!(
+                    "{}: {}",
+                    lookup(ASL_LEVELS, level.into()).unwrap_or("?"),
+                    clip(&message, 120)
+                ))
                 .lazy(asl_record, (file, rec)),
         )
         .await;
@@ -449,14 +521,23 @@ async fn asl_record(cx: Cx, (file, rec): (Span, Span)) -> Result<()> {
         let raw = u64_be(&block.data, to_usize(at)).unwrap_or(0);
         let s = asl_string(&cx, file, raw).await?;
         let label = if i % 2 == 0 { "Key" } else { "Value" };
-        cx.push(Node::new(label).span(rec.sub(at, 8)).value(text(s))).await;
+        cx.push(Node::new(label).span(rec.sub(at, 8)).value(text(s)))
+            .await;
     }
-    let names = ["Host", "Sender", "Facility", "Message", "Reference process", "Session"];
+    let names = [
+        "Host",
+        "Sender",
+        "Facility",
+        "Message",
+        "Reference process",
+        "Session",
+    ];
     for (i, name) in names.iter().enumerate() {
         let raw = u64_be(&block.data, 66usize.saturating_add(i.saturating_mul(8))).unwrap_or(0);
         if raw != 0 {
             let s = asl_string(&cx, file, raw).await?;
-            cx.push(Node::new(format!("{name} (resolved)")).value(text(s))).await;
+            cx.push(Node::new(format!("{name} (resolved)")).value(text(s)))
+                .await;
         }
     }
     Ok(())
@@ -502,7 +583,11 @@ fn file_mode(mode: u16) -> String {
 
 async fn mbdb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Signature").span(file.sub(0, 6)).value(text("mbdb 5.0")));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 6))
+            .value(text("mbdb 5.0")),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(6);
     let (mut files, mut dirs, mut bytes) = (0u64, 0u64, 0u64);
@@ -534,7 +619,11 @@ async fn mbdb(cx: Cx, input: Input) -> Result<()> {
         }
         let domain = String::from_utf8_lossy(&domain.unwrap_or_default()).into_owned();
         let path = String::from_utf8_lossy(&path.unwrap_or_default()).into_owned();
-        let name = if path.is_empty() { domain.clone() } else { format!("{domain}/{path}") };
+        let name = if path.is_empty() {
+            domain.clone()
+        } else {
+            format!("{domain}/{path}")
+        };
         cx.push(
             Node::new(name)
                 .span(cur.since(start))
@@ -544,7 +633,10 @@ async fn mbdb(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("iOS backup manifest, {files} files ({}), {dirs} directories", size(bytes)));
+    cx.annotate(format!(
+        "iOS backup manifest, {files} files ({}), {dirs} directories",
+        size(bytes)
+    ));
     Ok(())
 }
 
@@ -564,12 +656,20 @@ const PROTECTION_CLASSES: EnumTable = &[
 
 async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
-    for name in ["Domain", "Path", "Link target", "Data hash (SHA-1)", "Encryption key"] {
+    for name in [
+        "Domain",
+        "Path",
+        "Link target",
+        "Data hash (SHA-1)",
+        "Encryption key",
+    ] {
         let (value, s) = mbdb_string(&mut cur).await?;
         let node = Node::new(name).span(s);
         cx.emit(match value {
             None => node.summary("absent"),
-            Some(v) if name.starts_with("Data") || name.starts_with("Encryption") => node.value(text(hex_string(&v))),
+            Some(v) if name.starts_with("Data") || name.starts_with("Encryption") => {
+                node.value(text(hex_string(&v)))
+            }
             Some(v) => node.value(text(String::from_utf8_lossy(&v).into_owned())),
         });
     }
@@ -584,7 +684,9 @@ async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
     f.u32("Accessed").timestamp().emit()?;
     f.u32("Changed").timestamp().emit()?;
     f.u64("Length").with(|&v, n| n.summary(size(v))).emit()?;
-    f.u8("Protection class").enumeration(PROTECTION_CLASSES).emit()?;
+    f.u8("Protection class")
+        .enumeration(PROTECTION_CLASSES)
+        .emit()?;
     let props = f.u8("Property count").emit()?;
     cur.seek(fixed_at.saturating_add(40));
     for _ in 0..props {
@@ -592,8 +694,17 @@ async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
         let (k, _) = mbdb_string(&mut cur).await?;
         let (v, _) = mbdb_string(&mut cur).await?;
         let v = v.unwrap_or_default();
-        let value = if crate::text::looks_like_text(&v) { text(String::from_utf8_lossy(&v).into_owned()) } else { Value::Bytes(v) };
-        cx.push(Node::new(String::from_utf8_lossy(&k.unwrap_or_default()).into_owned()).span(cur.since(start)).value(value)).await;
+        let value = if crate::text::looks_like_text(&v) {
+            text(String::from_utf8_lossy(&v).into_owned())
+        } else {
+            Value::Bytes(v)
+        };
+        cx.push(
+            Node::new(String::from_utf8_lossy(&k.unwrap_or_default()).into_owned())
+                .span(cur.since(start))
+                .value(value),
+        )
+        .await;
     }
     Ok(())
 }
@@ -619,7 +730,8 @@ const UTMP_TYPES: EnumTable = &[
 /// A NUL-padded field holding printable ASCII only.
 fn clean_field(data: &[u8]) -> bool {
     let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
-    data.get(..end).is_some_and(|t| t.iter().all(|&b| (0x20..0x7f).contains(&b)))
+    data.get(..end)
+        .is_some_and(|t| t.iter().all(|&b| (0x20..0x7f).contains(&b)))
 }
 
 fn utmp_plausible(r: &[u8]) -> bool {
@@ -641,20 +753,30 @@ fn utmp_probe(h: &Head<'_>) -> bool {
     let records: Vec<&[u8]> = h.data.chunks_exact(to_usize(UTMP_RECORD)).take(8).collect();
     !records.is_empty()
         && records.iter().all(|r| utmp_plausible(r))
-        && records.iter().any(|r| u16_le(r, 0).is_some_and(|k| (1..=8).contains(&k)) && u32_le(r, 340).is_some_and(|s| s > 0))
+        && records.iter().any(|r| {
+            u16_le(r, 0).is_some_and(|k| (1..=8).contains(&k))
+                && u32_le(r, 340).is_some_and(|s| s > 0)
+        })
 }
 
 declare_format!(pub UTMP = "utmp", "Linux login records (utmp/wtmp/btmp)", ["utmp", "wtmp", "btmp"], "application/x-utmp",
     Probe::Custom(utmp_probe), utmp);
 
 fn utmp_address(r: &[u8]) -> String {
-    let words: Vec<u32> = (0..4usize).map(|i| u32_le(r, 348usize.saturating_add(i.saturating_mul(4))).unwrap_or(0)).collect();
+    let words: Vec<u32> = (0..4usize)
+        .map(|i| u32_le(r, 348usize.saturating_add(i.saturating_mul(4))).unwrap_or(0))
+        .collect();
     let bytes = r.get(348..364).unwrap_or_default();
     if words.iter().all(|&w| w == 0) {
         return String::new();
     }
     if words.iter().skip(1).all(|&w| w == 0) {
-        return bytes.iter().take(4).map(u8::to_string).collect::<Vec<_>>().join(".");
+        return bytes
+            .iter()
+            .take(4)
+            .map(u8::to_string)
+            .collect::<Vec<_>>()
+            .join(".");
     }
     bytes
         .as_chunks::<2>()
@@ -679,7 +801,15 @@ fn utmp_layout(f: &mut Fields<'_>, _: &()) -> Result<(u16, String, String, Strin
     let sec = f.u32("Time").timestamp().emit()?;
     f.u32("Microseconds").emit()?;
     let addr = utmp_address(f.block().data.as_slice());
-    f.bytes("Address", 16).with(|_, n| if addr.is_empty() { n } else { n.summary(addr.clone()) }).emit()?;
+    f.bytes("Address", 16)
+        .with(|_, n| {
+            if addr.is_empty() {
+                n
+            } else {
+                n.summary(addr.clone())
+            }
+        })
+        .emit()?;
     f.bytes("Unused", 20).emit()?;
     Ok((kind, line, user, host, sec))
 }
@@ -706,8 +836,17 @@ async fn utmp(cx: Cx, input: Input) -> Result<()> {
         if !host.is_empty() {
             summary.push_str(&format!(" from {host}"));
         }
-        let name = if user.is_empty() { format!("Record {i}") } else { user };
-        cx.push(struct_node(name, span, LE, (), utmp_layout).value(unix_time(sec.into())).summary(summary)).await;
+        let name = if user.is_empty() {
+            format!("Record {i}")
+        } else {
+            user
+        };
+        cx.push(
+            struct_node(name, span, LE, (), utmp_layout)
+                .value(unix_time(sec.into()))
+                .summary(summary),
+        )
+        .await;
     }
     cx.annotate(format!(
         "login records, {count} entries, {logins} user sessions ({})",
@@ -764,7 +903,8 @@ impl AbxReader<'_> {
 
     fn utf(&mut self) -> Option<String> {
         let n = usize::from(self.u16()?);
-        self.take(n).map(|b| String::from_utf8_lossy(b).into_owned())
+        self.take(n)
+            .map(|b| String::from_utf8_lossy(b).into_owned())
     }
 
     fn interned(&mut self) -> Option<String> {
@@ -788,12 +928,24 @@ impl AbxReader<'_> {
                 let n = usize::from(self.u16()?);
                 Value::Bytes(self.take(n)?.to_vec())
             }
-            6 => Value::Int { value: i64::from(crate::bytes::i32_be(self.take(4)?, 0)?), bits: 32 },
+            6 => Value::Int {
+                value: i64::from(crate::bytes::i32_be(self.take(4)?, 0)?),
+                bits: 32,
+            },
             7 => hex(u32_be(self.take(4)?, 0)?, 32),
-            8 => Value::Int { value: i64::from_be_bytes(crate::bytes::array::<8>(self.take(8)?, 0)?), bits: 64 },
+            8 => Value::Int {
+                value: i64::from_be_bytes(crate::bytes::array::<8>(self.take(8)?, 0)?),
+                bits: 64,
+            },
             9 => hex(u64_be(self.take(8)?, 0)?, 64),
-            10 => Value::Float(f64::from(f32::from_be_bytes(crate::bytes::array::<4>(self.take(4)?, 0)?))),
-            11 => Value::Float(f64::from_be_bytes(crate::bytes::array::<8>(self.take(8)?, 0)?)),
+            10 => Value::Float(f64::from(f32::from_be_bytes(crate::bytes::array::<4>(
+                self.take(4)?,
+                0,
+            )?))),
+            11 => Value::Float(f64::from_be_bytes(crate::bytes::array::<8>(
+                self.take(8)?,
+                0,
+            )?)),
             12 => Value::Bool(true),
             13 => Value::Bool(false),
             _ => return None,
@@ -803,17 +955,27 @@ impl AbxReader<'_> {
 
 fn abx_parse(data: &[u8]) -> AbxDoc {
     let mut doc = AbxDoc::default();
-    let mut r = AbxReader { data, at: 4, strings: Vec::new() };
+    let mut r = AbxReader {
+        data,
+        at: 4,
+        strings: Vec::new(),
+    };
     let mut stack: Vec<usize> = Vec::new();
     while r.at < data.len() {
         let start = to_u64(r.at);
-        let Some(token) = r.take(1).and_then(|b| b.first().copied()) else { break };
+        let Some(token) = r.take(1).and_then(|b| b.first().copied()) else {
+            break;
+        };
         let (command, kind) = (token & 0xf, token >> 4);
         let ok = match command {
             0 | 1 => Some(()),
             2 => r.interned().map(|name| {
                 let index = doc.elements.len();
-                doc.elements.push(AbxElement { name, start, ..AbxElement::default() });
+                doc.elements.push(AbxElement {
+                    name,
+                    start,
+                    ..AbxElement::default()
+                });
                 match stack.last().and_then(|&p| doc.elements.get_mut(p)) {
                     Some(parent) => parent.children.push(AbxChild::Element(index)),
                     None => doc.roots.push(AbxChild::Element(index)),
@@ -826,7 +988,11 @@ fn abx_parse(data: &[u8]) -> AbxDoc {
                 }
             }),
             4..=10 => {
-                let value = if kind == 1 { Some(String::new()) } else { r.utf() };
+                let value = if kind == 1 {
+                    Some(String::new())
+                } else {
+                    r.utf()
+                };
                 value.map(|s| {
                     let child = AbxChild::Text(s, start, to_u64(r.at));
                     match stack.last().and_then(|&p| doc.elements.get_mut(p)) {
@@ -835,11 +1001,14 @@ fn abx_parse(data: &[u8]) -> AbxDoc {
                     }
                 })
             }
-            15 => r.interned().and_then(|name| r.value(kind).map(|v| (name, v))).map(|(name, v)| {
-                if let Some(e) = stack.last().and_then(|&p| doc.elements.get_mut(p)) {
-                    e.attrs.push((name, v, start, to_u64(r.at)));
-                }
-            }),
+            15 => r
+                .interned()
+                .and_then(|name| r.value(kind).map(|v| (name, v)))
+                .map(|(name, v)| {
+                    if let Some(e) = stack.last().and_then(|&p| doc.elements.get_mut(p)) {
+                        e.attrs.push((name, v, start, to_u64(r.at)));
+                    }
+                }),
             _ => None,
         };
         if ok.is_none() {
@@ -887,13 +1056,24 @@ fn abx_children(file: Span, doc: &AbxDoc, children: &[AbxChild]) -> Vec<Node> {
         .map(|c| match c {
             AbxChild::Element(i) => {
                 let e = doc.elements.get(*i).cloned().unwrap_or_default();
-                let attrs: Vec<String> = e.attrs.iter().take(3).map(|(k, v, _, _)| format!("{k}={}", abx_value_text(v))).collect();
+                let attrs: Vec<String> = e
+                    .attrs
+                    .iter()
+                    .take(3)
+                    .map(|(k, v, _, _)| format!("{k}={}", abx_value_text(v)))
+                    .collect();
                 let node = Node::new(format!("<{}>", e.name))
                     .span(file.sub(e.start, e.end.saturating_sub(e.start)))
                     .lazy(abx_element, (file, *i));
-                if attrs.is_empty() { node } else { node.summary(clip(&attrs.join(" "), 100)) }
+                if attrs.is_empty() {
+                    node
+                } else {
+                    node.summary(clip(&attrs.join(" "), 100))
+                }
             }
-            AbxChild::Text(s, start, end) => Node::new("Text").span(file.sub(*start, end.saturating_sub(*start))).value(text(s.clone())),
+            AbxChild::Text(s, start, end) => Node::new("Text")
+                .span(file.sub(*start, end.saturating_sub(*start)))
+                .value(text(s.clone())),
         })
         .collect()
 }
@@ -908,8 +1088,15 @@ async fn abx(cx: Cx, input: Input) -> Result<()> {
     if let Some((msg, at)) = &doc.error {
         cx.diag(Diagnostic::malformed(msg.clone()).at(file.sub(*at, 1)));
     }
-    let root = doc.elements.first().map(|e| e.name.clone()).unwrap_or_default();
-    cx.annotate(format!("Android binary XML, root <{root}>, {} elements", doc.elements.len()));
+    let root = doc
+        .elements
+        .first()
+        .map(|e| e.name.clone())
+        .unwrap_or_default();
+    cx.annotate(format!(
+        "Android binary XML, root <{root}>, {} elements",
+        doc.elements.len()
+    ));
     Ok(())
 }
 
@@ -919,7 +1106,12 @@ async fn abx_element(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
         return Ok(());
     };
     for (name, value, start, end) in &e.attrs {
-        cx.push(Node::new(format!("@{name}")).span(file.sub(*start, end.saturating_sub(*start))).value(value.clone())).await;
+        cx.push(
+            Node::new(format!("@{name}"))
+                .span(file.sub(*start, end.saturating_sub(*start)))
+                .value(value.clone()),
+        )
+        .await;
     }
     for node in abx_children(file, &doc, &e.children) {
         cx.push(node).await;
@@ -933,7 +1125,9 @@ async fn abx_element(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
 const UTMPX_RECORD: u64 = 640;
 
 fn utmpx_probe(h: &Head<'_>) -> bool {
-    h.starts_with(b"utmpx-1.00\0") && h.len.is_multiple_of(UTMPX_RECORD) && u16_le(h.data, 296) == Some(10)
+    h.starts_with(b"utmpx-1.00\0")
+        && h.len.is_multiple_of(UTMPX_RECORD)
+        && u16_le(h.data, 296) == Some(10)
 }
 
 declare_format!(pub UTMPX = "macos-utmpx", "macOS login records (utmpx)", ["utmpx"], "application/x-utmpx",
@@ -962,7 +1156,10 @@ fn utmpx_layout(f: &mut Fields<'_>, _: &()) -> Result<(String, String, u16, i64)
     let kind = f.u16("Type").enumeration(UTMPX_TYPES).emit()?;
     f.u16("Padding").emit()?;
     f.seek(304);
-    let sec = f.int::<i64>("Time").with(|&v, n| n.value(unix_time(v))).emit()?;
+    let sec = f
+        .int::<i64>("Time")
+        .with(|&v, n| n.value(unix_time(v)))
+        .emit()?;
     f.u32("Microseconds").emit()?;
     f.u32("Padding").emit()?;
     f.ascii("Host", 256).emit()?;
@@ -982,11 +1179,26 @@ async fn utmpx(cx: Cx, input: Input) -> Result<()> {
             sessions = sessions.saturating_add(1);
         }
         let kind_name = lookup(UTMPX_TYPES, kind.into()).unwrap_or("?");
-        let name = if user.is_empty() { format!("Record {i}") } else { user };
-        let summary = if line.is_empty() { kind_name.to_owned() } else { format!("{kind_name} on {line}") };
-        cx.push(struct_node(name, span, LE, (), utmpx_layout).value(unix_time(sec)).summary(summary)).await;
+        let name = if user.is_empty() {
+            format!("Record {i}")
+        } else {
+            user
+        };
+        let summary = if line.is_empty() {
+            kind_name.to_owned()
+        } else {
+            format!("{kind_name} on {line}")
+        };
+        cx.push(
+            struct_node(name, span, LE, (), utmpx_layout)
+                .value(unix_time(sec))
+                .summary(summary),
+        )
+        .await;
     }
-    cx.annotate(format!("macOS utmpx, {count} records, {sessions} user sessions"));
+    cx.annotate(format!(
+        "macOS utmpx, {count} records, {sessions} user sessions"
+    ));
     Ok(())
 }
 
@@ -994,7 +1206,9 @@ async fn utmpx(cx: Cx, input: Input) -> Result<()> {
 // macOS Unified Log format-string files (/var/db/uuidtext/XX/<UUID>)
 
 fn uuidtext_probe(h: &Head<'_>) -> bool {
-    u32_le(h.data, 0) == Some(0x6677_8899) && u32_le(h.data, 4) == Some(2) && u32_le(h.data, 12).is_some_and(|n| n < 0x10_0000)
+    u32_le(h.data, 0) == Some(0x6677_8899)
+        && u32_le(h.data, 4) == Some(2)
+        && u32_le(h.data, 12).is_some_and(|n| n < 0x10_0000)
 }
 
 declare_format!(pub UUIDTEXT = "macos-uuidtext", "macOS Unified Log format strings (uuidtext)", [], "application/x-apple-uuidtext",
@@ -1017,13 +1231,29 @@ async fn uuidtext(cx: Cx, input: Input) -> Result<()> {
     for (i, e) in raw.as_chunks::<8>().0.iter().enumerate() {
         let start = u32_le(e, 0).unwrap_or(0);
         let len = u64::from(u32_le(e, 4).unwrap_or(0));
-        ranges.push((i, start, file.sub(at, len), table.sub(to_u64(i).saturating_mul(8), 8)));
+        ranges.push((
+            i,
+            start,
+            file.sub(at, len),
+            table.sub(to_u64(i).saturating_mul(8), 8),
+        ));
         at = at.saturating_add(len);
     }
     let (path, path_span) = cx.cstr(file.tail(at).sub(0, 4096)).await?;
-    cx.emit(Node::new("Ranges").span(table).summary(format!("{count} ranges")).lazy(uuidtext_ranges, ranges));
-    cx.emit(Node::new("Image path").span(path_span).value(text(path.clone())));
-    cx.annotate(format!("Unified Log format strings v{major}.{minor} for {path}, {count} ranges"));
+    cx.emit(
+        Node::new("Ranges")
+            .span(table)
+            .summary(format!("{count} ranges"))
+            .lazy(uuidtext_ranges, ranges),
+    );
+    cx.emit(
+        Node::new("Image path")
+            .span(path_span)
+            .value(text(path.clone())),
+    );
+    cx.annotate(format!(
+        "Unified Log format strings v{major}.{minor} for {path}, {count} ranges"
+    ));
     Ok(())
 }
 
@@ -1033,7 +1263,11 @@ type UuidRange = (usize, u32, Span, Span);
 async fn uuidtext_ranges(cx: Cx, ranges: Vec<UuidRange>) -> Result<()> {
     for (i, start, data, entry) in ranges {
         let raw = cx.read_avail(data.sub(0, 0x10000)).await?;
-        let strings: Vec<String> = raw.split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
+        let strings: Vec<String> = raw
+            .split(|&b| b == 0)
+            .filter(|s| !s.is_empty())
+            .map(|s| String::from_utf8_lossy(s).into_owned())
+            .collect();
         cx.push(
             Node::new(format!("Range {i} at {start:#x}"))
                 .span(data)
@@ -1053,7 +1287,12 @@ async fn uuidtext_strings(cx: Cx, (data, base): (Span, u32)) -> Result<()> {
         let len = s.len();
         if len > 0 {
             let offset = u64::from(base).saturating_add(to_u64(at));
-            cx.push(Node::new(format!("{offset:#x}")).span(data.sub(to_u64(at), to_u64(len))).value(text(String::from_utf8_lossy(s).into_owned()))).await;
+            cx.push(
+                Node::new(format!("{offset:#x}"))
+                    .span(data.sub(to_u64(at), to_u64(len)))
+                    .value(text(String::from_utf8_lossy(s).into_owned())),
+            )
+            .await;
         }
         at = at.saturating_add(len).saturating_add(1);
     }
@@ -1081,7 +1320,17 @@ async fn mbdx(cx: Cx, input: Input) -> Result<()> {
         let id = hex_string(r.get(..20).unwrap_or_default());
         let offset = u32_be(&r, 20).unwrap_or(0);
         let mode = u16_be(&r, 24).unwrap_or(0);
-        cx.push(Node::new(id).span(span).value(hex(offset, 32)).summary(format!("{} (record at {:#x} in Manifest.mbdb)", file_mode(mode), u64::from(offset).saturating_add(6)))).await;
+        cx.push(
+            Node::new(id)
+                .span(span)
+                .value(hex(offset, 32))
+                .summary(format!(
+                    "{} (record at {:#x} in Manifest.mbdb)",
+                    file_mode(mode),
+                    u64::from(offset).saturating_add(6)
+                )),
+        )
+        .await;
     }
     cx.annotate(format!("iOS backup manifest index, {count} files"));
     Ok(())
@@ -1095,7 +1344,9 @@ const LASTLOG_RECORD: u64 = 292;
 fn lastlog_record_ok(r: &[u8]) -> bool {
     let t = u32_le(r, 0).unwrap_or(0);
     let zero = r.iter().all(|&b| b == 0);
-    zero || ((100_000_000..0x8000_0000).contains(&t) && clean_field(r.get(4..36).unwrap_or_default()) && clean_field(r.get(36..292).unwrap_or_default()))
+    zero || ((100_000_000..0x8000_0000).contains(&t)
+        && clean_field(r.get(4..36).unwrap_or_default())
+        && clean_field(r.get(36..292).unwrap_or_default()))
 }
 
 fn lastlog_probe(h: &Head<'_>) -> bool {
@@ -1103,7 +1354,8 @@ fn lastlog_probe(h: &Head<'_>) -> bool {
         return false;
     }
     let records: Vec<&[u8]> = h.data.chunks_exact(to_usize(LASTLOG_RECORD)).collect();
-    records.iter().all(|r| lastlog_record_ok(r)) && records.iter().any(|r| r.iter().any(|&b| b != 0))
+    records.iter().all(|r| lastlog_record_ok(r))
+        && records.iter().any(|r| r.iter().any(|&b| b != 0))
 }
 
 declare_format!(pub LASTLOG = "lastlog", "Linux last login records (lastlog)", ["lastlog"], "application/x-lastlog",
@@ -1133,9 +1385,21 @@ async fn lastlog(cx: Cx, input: Input) -> Result<()> {
         let t = u32_le(&r, 0).unwrap_or(0);
         let line = crate::text::until_nul(r.get(4..36).unwrap_or_default());
         let host = crate::text::until_nul(r.get(36..292).unwrap_or_default());
-        let summary = if host.is_empty() { line } else { format!("{line} from {host}") };
-        cx.push(struct_node(format!("UID {uid}"), span, LE, (), lastlog_layout).value(unix_time(t.into())).summary(summary)).await;
+        let summary = if host.is_empty() {
+            line
+        } else {
+            format!("{line} from {host}")
+        };
+        cx.push(
+            struct_node(format!("UID {uid}"), span, LE, (), lastlog_layout)
+                .value(unix_time(t.into()))
+                .summary(summary),
+        )
+        .await;
     }
-    cx.annotate(format!("lastlog, {logins} users with logins (UIDs 0–{})", count.saturating_sub(1)));
+    cx.annotate(format!(
+        "lastlog, {logins} users with logins (UIDs 0–{})",
+        count.saturating_sub(1)
+    ));
     Ok(())
 }

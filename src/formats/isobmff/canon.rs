@@ -4,8 +4,8 @@
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
-use crate::formats::vidutil::{Entry, find, table};
 use crate::formats::embedded;
+use crate::formats::vidutil::{Entry, find, table};
 use crate::node::Node;
 use crate::record;
 

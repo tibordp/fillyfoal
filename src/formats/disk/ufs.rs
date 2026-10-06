@@ -31,15 +31,22 @@ pub static FORMAT: Format = Format {
 
 /// The magic (and byte order) of a superblock whose magic field is at `o`.
 fn magic_at(data: &[u8], o: usize) -> Option<(u32, Endian)> {
-    [(u32_le(data, o)?, Endian::Little), (u32_be(data, o)?, Endian::Big)]
-        .into_iter()
-        .find(|(m, _)| *m == UFS1 || *m == UFS2)
+    [
+        (u32_le(data, o)?, Endian::Little),
+        (u32_be(data, o)?, Endian::Big),
+    ]
+    .into_iter()
+    .find(|(m, _)| *m == UFS1 || *m == UFS2)
 }
 
 fn probe(h: &Head<'_>) -> bool {
-    LOCATIONS
-        .iter()
-        .any(|&l| magic_at(h.data, crate::bytes::to_usize(l).saturating_add(MAGIC_OFFSET)).is_some())
+    LOCATIONS.iter().any(|&l| {
+        magic_at(
+            h.data,
+            crate::bytes::to_usize(l).saturating_add(MAGIC_OFFSET),
+        )
+        .is_some()
+    })
 }
 
 record! {
@@ -83,7 +90,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let ufs2 = magic == UFS2;
     let raw = cx.read_avail(vol.sub(at, 1376)).await?;
     let get_u64 = |o: usize| -> u64 {
-        let b: [u8; 8] = raw.get(o..o.saturating_add(8)).and_then(|s| s.try_into().ok()).unwrap_or([0; 8]);
+        let b: [u8; 8] = raw
+            .get(o..o.saturating_add(8))
+            .and_then(|s| s.try_into().ok())
+            .unwrap_or([0; 8]);
         match endian {
             Endian::Little => u64::from_le_bytes(b),
             Endian::Big => u64::from_be_bytes(b),
@@ -96,22 +106,46 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             crate::text::until_nul(raw.get(680..712).unwrap_or_default()),
         )
     } else {
-        (u64::from(sb.old_size), crate::text::until_nul(raw.get(212..724).unwrap_or_default()), String::new())
+        (
+            u64::from(sb.old_size),
+            crate::text::until_nul(raw.get(212..724).unwrap_or_default()),
+            String::new(),
+        )
     };
-    cx.emit(Node::new("Last mount point").span(vol.sub(at.saturating_add(212), 468)).value(Value::Text(mount.clone())));
+    cx.emit(
+        Node::new("Last mount point")
+            .span(vol.sub(at.saturating_add(212), 468))
+            .value(Value::Text(mount.clone())),
+    );
     if ufs2 {
-        cx.emit(Node::new("Volume name").span(vol.sub(at.saturating_add(680), 32)).value(Value::Text(volume.clone())));
+        cx.emit(
+            Node::new("Volume name")
+                .span(vol.sub(at.saturating_add(680), 32))
+                .value(Value::Text(volume.clone())),
+        );
     }
-    cx.emit(Node::new("Magic").span(vol.sub(at.saturating_add(MAGIC), 4)).value(Value::UInt {
-        value: magic.into(),
-        bits: 32,
-        radix: crate::value::Radix::Hex,
-    }));
+    cx.emit(
+        Node::new("Magic")
+            .span(vol.sub(at.saturating_add(MAGIC), 4))
+            .value(Value::UInt {
+                value: magic.into(),
+                bits: 32,
+                radix: crate::value::Radix::Hex,
+            }),
+    );
     cx.annotate(format!(
         "{} filesystem{}{}, {}, {} cylinder groups, {}-byte blocks",
         if ufs2 { "UFS2" } else { "UFS1" },
-        if volume.is_empty() { String::new() } else { format!(" \"{volume}\"") },
-        if mount.is_empty() { String::new() } else { format!(" (last mounted on {mount})") },
+        if volume.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{volume}\"")
+        },
+        if mount.is_empty() {
+            String::new()
+        } else {
+            format!(" (last mounted on {mount})")
+        },
         size(fragments.saturating_mul(sb.fsize.into())),
         sb.ncg,
         sb.bsize

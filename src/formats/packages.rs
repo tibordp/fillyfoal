@@ -55,7 +55,12 @@ async fn godot_pck(cx: Cx, input: Input) -> Result<()> {
             cur.skip(4); // flags
         }
         let data = file.sub(base.saturating_add(offset), size);
-        cx.push(embedded(path, input.nested(data)).summary(format!("{size} bytes")).target(cur.since(start))).await;
+        cx.push(
+            embedded(path, input.nested(data))
+                .summary(format!("{size} bytes"))
+                .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(format!("Godot {major}.{minor} pack, {count} files"));
     Ok(())
@@ -67,7 +72,13 @@ async fn godot_pck(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub UNITYFS = "unityfs", "Unity asset bundle", ["unity3d", "bundle", "assetbundle"], "application/x-unityfs",
     Probe::Magic(&[(0, b"UnityFS\0"), (0, b"UnityWeb\0"), (0, b"UnityRaw\0")]), unityfs);
 
-const UNITY_COMPRESSION: EnumTable = &[(0, "none"), (1, "LZMA"), (2, "LZ4"), (3, "LZ4HC"), (4, "LZHAM")];
+const UNITY_COMPRESSION: EnumTable = &[
+    (0, "none"),
+    (1, "LZMA"),
+    (2, "LZ4"),
+    (3, "LZ4HC"),
+    (4, "LZHAM"),
+];
 
 async fn unityfs(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -76,10 +87,30 @@ async fn unityfs(cx: Cx, input: Input) -> Result<()> {
     let version = cur.u32().await?;
     let (player, s2) = cur.cstr(64).await?;
     let (engine, s3) = cur.cstr(64).await?;
-    cx.emit(Node::new("Signature").span(s1).value(Value::Text(signature.clone())));
-    cx.emit(Node::new("Format version").span(file.sub(s1.len, 4)).value(Value::UInt { value: version.into(), bits: 32, radix: crate::value::Radix::Dec }));
-    cx.emit(Node::new("Player version").span(s2).value(Value::Text(player)));
-    cx.emit(Node::new("Engine version").span(s3).value(Value::Text(engine.clone())));
+    cx.emit(
+        Node::new("Signature")
+            .span(s1)
+            .value(Value::Text(signature.clone())),
+    );
+    cx.emit(
+        Node::new("Format version")
+            .span(file.sub(s1.len, 4))
+            .value(Value::UInt {
+                value: version.into(),
+                bits: 32,
+                radix: crate::value::Radix::Dec,
+            }),
+    );
+    cx.emit(
+        Node::new("Player version")
+            .span(s2)
+            .value(Value::Text(player)),
+    );
+    cx.emit(
+        Node::new("Engine version")
+            .span(s3)
+            .value(Value::Text(engine.clone())),
+    );
     if signature == "UnityFS" {
         let start = cur.pos();
         let size = cur.u64().await?;
@@ -87,10 +118,14 @@ async fn unityfs(cx: Cx, input: Input) -> Result<()> {
         let uncompressed = cur.u32().await?;
         let flags = cur.u32().await?;
         let scheme = flags & 0x3f;
-        cx.emit(Node::new("Bundle header").span(cur.since(start)).summary(format!(
-            "{size} bytes; blocks info {compressed} → {uncompressed} bytes, {}",
-            lookup(UNITY_COMPRESSION, scheme.into()).unwrap_or("unknown compression")
-        )));
+        cx.emit(
+            Node::new("Bundle header")
+                .span(cur.since(start))
+                .summary(format!(
+                    "{size} bytes; blocks info {compressed} → {uncompressed} bytes, {}",
+                    lookup(UNITY_COMPRESSION, scheme.into()).unwrap_or("unknown compression")
+                )),
+        );
         let rest = file.tail(cur.pos());
         let mut node = Node::new("Blocks and directory").span(rest);
         if scheme != 0 {
@@ -126,12 +161,20 @@ async fn gamemaker(cx: Cx, input: Input) -> Result<()> {
         let len = cur.u32().await?;
         cur.skip(len.into());
         chunks = chunks.saturating_add(1);
-        cx.push(Node::new(id).span(cur.since(start)).summary(format!("{len} bytes"))).await;
+        cx.push(
+            Node::new(id)
+                .span(cur.since(start))
+                .summary(format!("{len} bytes")),
+        )
+        .await;
     }
     let gen8 = cx.read_avail(file.sub(16, 0x40)).await?;
     let name_offset = u32_le(&gen8, 0x28).unwrap_or(0);
     let name = if name_offset > 0 {
-        cx.cstr(file.sub(name_offset.into(), 128)).await.map(|(n, _)| n).unwrap_or_default()
+        cx.cstr(file.sub(name_offset.into(), 128))
+            .await
+            .map(|(n, _)| n)
+            .unwrap_or_default()
     } else {
         String::new()
     };
@@ -154,11 +197,24 @@ async fn rpa(cx: Cx, input: Input) -> Result<()> {
     let version = parts.next().unwrap_or_default().to_owned();
     let offset = u64::from_str_radix(parts.next().unwrap_or("0"), 16).unwrap_or(0);
     let key = parts.next().map(str::to_owned);
-    cx.emit(Node::new("Header").span(file.sub(0, crate::bytes::to_u64(end).saturating_add(1))).value(Value::Text(text.clone())));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, crate::bytes::to_u64(end).saturating_add(1)))
+            .value(Value::Text(text.clone())),
+    );
     // The index is a zlib-compressed Python pickle.
     let index = file.tail(offset);
-    cx.emit(crate::formats::content("Index (pickle)", input, index, crate::formats::Codec::Zlib, None));
-    cx.annotate(format!("{version}{}", key.map_or(String::new(), |k| format!(", key {k}"))));
+    cx.emit(crate::formats::content(
+        "Index (pickle)",
+        input,
+        index,
+        crate::formats::Codec::Zlib,
+        None,
+    ));
+    cx.annotate(format!(
+        "{version}{}",
+        key.map_or(String::new(), |k| format!(", key {k}"))
+    ));
     Ok(())
 }
 
@@ -180,7 +236,9 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let header_len = u64::from(cur.u16().await?);
-        let fields = cx.read_avail(file.sub(start.saturating_add(6), header_len.saturating_sub(6))).await?;
+        let fields = cx
+            .read_avail(file.sub(start.saturating_add(6), header_len.saturating_sub(6)))
+            .await?;
         // Fields are 3-letter keys plus a type letter; we pick out PAT and
         // the data size (DAT with a B-type size).
         let mut path = String::new();
@@ -196,7 +254,9 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
                 b'2' => 2,
                 b'4' => 4,
                 b'8' => 8,
-                b'P' => usize::from(crate::bytes::u16_le(&fields, at).unwrap_or(0)).saturating_add(2),
+                b'P' => {
+                    usize::from(crate::bytes::u16_le(&fields, at).unwrap_or(0)).saturating_add(2)
+                }
                 b'A' => 2,
                 b'B' => 4,
                 b'C' => 8,
@@ -209,7 +269,12 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
             };
             if key == b"PAT" && kind == b'P' {
                 let len = usize::from(crate::bytes::u16_le(&fields, at).unwrap_or(0));
-                path = String::from_utf8_lossy(fields.get(at.saturating_add(2)..at.saturating_add(2).saturating_add(len)).unwrap_or_default()).into_owned();
+                path = String::from_utf8_lossy(
+                    fields
+                        .get(at.saturating_add(2)..at.saturating_add(2).saturating_add(len))
+                        .unwrap_or_default(),
+                )
+                .into_owned();
             }
             if key == b"DAT" {
                 data_len = match kind {
@@ -225,9 +290,21 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(data_len);
         cur.skip(data_len);
         entries = entries.saturating_add(1);
-        let name = if path.is_empty() { "(root)".to_owned() } else { path };
-        let node = if data_len > 0 { embedded(name, input.nested(data)) } else { Node::new(name) };
-        cx.push(node.summary(format!("{data_len} bytes")).target(cur.since(start))).await;
+        let name = if path.is_empty() {
+            "(root)".to_owned()
+        } else {
+            path
+        };
+        let node = if data_len > 0 {
+            embedded(name, input.nested(data))
+        } else {
+            Node::new(name)
+        };
+        cx.push(
+            node.summary(format!("{data_len} bytes"))
+                .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(format!("Apple Archive, {entries} entries"));
     Ok(())
@@ -246,7 +323,8 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
         let magic = cur.bytes(4).await?;
         let (name, header, payload): (&str, u64, u64) = match magic.as_slice() {
             b"bvx$" => {
-                cx.push(Node::new("End of stream").span(cur.since(start))).await;
+                cx.push(Node::new("End of stream").span(cur.since(start)))
+                    .await;
                 break;
             }
             b"bvx-" => {
@@ -280,7 +358,11 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
                 let literal_bytes = (f0 >> 20) & 0xf_ffff;
                 let lmd_bytes = (f2 >> 40) & 0xf_ffff;
                 total = total.saturating_add(raw.into());
-                ("LZFSE v2 block", header_size, literal_bytes.saturating_add(lmd_bytes))
+                (
+                    "LZFSE v2 block",
+                    header_size,
+                    literal_bytes.saturating_add(lmd_bytes),
+                )
             }
             _ => {
                 cx.diag(Diagnostic::malformed("unknown block magic").at(cur.since(start)));
@@ -289,9 +371,17 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
         };
         cur.seek(start.saturating_add(header).saturating_add(payload));
         blocks = blocks.saturating_add(1);
-        cx.push(Node::new(name).span(cur.since(start)).summary(format!("{payload} payload bytes")).diag(Diagnostic::unsupported("LZFSE decoding"))).await;
+        cx.push(
+            Node::new(name)
+                .span(cur.since(start))
+                .summary(format!("{payload} payload bytes"))
+                .diag(Diagnostic::unsupported("LZFSE decoding")),
+        )
+        .await;
     }
-    cx.annotate(format!("LZFSE, {blocks} block(s), {total} bytes uncompressed"));
+    cx.annotate(format!(
+        "LZFSE, {blocks} block(s), {total} bytes uncompressed"
+    ));
     Ok(())
 }
 
@@ -303,7 +393,11 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, BE);
     cur.skip(4);
     let flags = cur.u64().await?;
-    cx.emit(Node::new("Header").span(file.sub(0, 12)).summary(format!("chunk size {flags:#x}")));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 12))
+            .summary(format!("chunk size {flags:#x}")),
+    );
     let mut chunks = 0u32;
     while cur.remaining() >= 16 {
         let start = cur.pos();
@@ -312,7 +406,12 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(len);
         cur.skip(len);
         chunks = chunks.saturating_add(1);
-        cx.push(crate::formats::embedded(format!("Chunk {chunks}"), input.nested(data)).summary(format!("{len} bytes")).target(cur.since(start))).await;
+        cx.push(
+            crate::formats::embedded(format!("Chunk {chunks}"), input.nested(data))
+                .summary(format!("{len} bytes"))
+                .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(format!("pbzx, {chunks} chunk(s)"));
     Ok(())
@@ -346,11 +445,32 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
     f.u32("Modification time (high)").emit()?;
     let name_len = f.u8("Name length").emit()?;
     let pos = f.pos();
-    let name = cx.read_avail(file.sub(9u64.saturating_add(pos), name_len.into())).await?;
+    let name = cx
+        .read_avail(file.sub(9u64.saturating_add(pos), name_len.into()))
+        .await?;
     let name = String::from_utf8_lossy(&name).into_owned();
-    cx.emit(Node::new("Original name").span(file.sub(9u64.saturating_add(pos), name_len.into())).value(Value::Text(name.clone())));
-    cx.emit(Node::new("Compressed blocks").span(file.tail(9u64.saturating_add(pos).saturating_add(name_len.into()).saturating_add(4))).diag(Diagnostic::unsupported("LZO decoding")));
-    cx.annotate(format!("lzop, originally {name:?} ({})", crate::render::value(&Value::Timestamp { unix_seconds: mtime.into() })));
+    cx.emit(
+        Node::new("Original name")
+            .span(file.sub(9u64.saturating_add(pos), name_len.into()))
+            .value(Value::Text(name.clone())),
+    );
+    cx.emit(
+        Node::new("Compressed blocks")
+            .span(
+                file.tail(
+                    9u64.saturating_add(pos)
+                        .saturating_add(name_len.into())
+                        .saturating_add(4),
+                ),
+            )
+            .diag(Diagnostic::unsupported("LZO decoding")),
+    );
+    cx.annotate(format!(
+        "lzop, originally {name:?} ({})",
+        crate::render::value(&Value::Timestamp {
+            unix_seconds: mtime.into()
+        })
+    ));
     Ok(())
 }
 
@@ -365,7 +485,11 @@ async fn lrzip(cx: Cx, input: Input) -> Result<()> {
     let major = f.u8("Version major").emit()?;
     let minor = f.u8("Version minor").emit()?;
     let size = f.u64("Uncompressed size").emit()?;
-    cx.emit(Node::new("Streams").span(file.tail(24)).diag(Diagnostic::unsupported("lrzip decoding")));
+    cx.emit(
+        Node::new("Streams")
+            .span(file.tail(24))
+            .diag(Diagnostic::unsupported("lrzip decoding")),
+    );
     cx.annotate(format!("lrzip {major}.{minor}, {size} bytes uncompressed"));
     Ok(())
 }
@@ -391,11 +515,23 @@ async fn powerpacker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
     cx.emit(Node::new("Magic").span(file.sub(0, 4)));
-    cx.emit(Node::new("Efficiency table").span(file.sub(4, 4)).value(Value::Bytes(head.get(4..8).unwrap_or_default().to_vec())));
+    cx.emit(
+        Node::new("Efficiency table")
+            .span(file.sub(4, 4))
+            .value(Value::Bytes(head.get(4..8).unwrap_or_default().to_vec())),
+    );
     let tail = cx.read(file.sub(file.len.saturating_sub(4), 4)).await?;
     let size = crate::bytes::u24_be(&tail, 0).unwrap_or(0);
-    cx.emit(Node::new("Compressed data").span(file.sub(8, file.len.saturating_sub(12))).diag(Diagnostic::unsupported("PowerPacker decoding")));
-    cx.emit(Node::new("Trailer").span(file.tail(file.len.saturating_sub(4))).summary(format!("{size} bytes uncompressed")));
+    cx.emit(
+        Node::new("Compressed data")
+            .span(file.sub(8, file.len.saturating_sub(12)))
+            .diag(Diagnostic::unsupported("PowerPacker decoding")),
+    );
+    cx.emit(
+        Node::new("Trailer")
+            .span(file.tail(file.len.saturating_sub(4)))
+            .summary(format!("{size} bytes uncompressed")),
+    );
     cx.annotate(format!("PowerPacker, {size} bytes uncompressed"));
     Ok(())
 }
@@ -410,9 +546,23 @@ async fn zpaq(cx: Cx, input: Input) -> Result<()> {
     let at = if journaling { 13u64 } else { 0 };
     let block = cx.read_avail(file.sub(at, 4)).await?;
     let level = block.get(3).copied().unwrap_or(0);
-    cx.emit(Node::new(if journaling { "Locator tag" } else { "Block header" }).span(file.sub(0, at.max(4))));
-    cx.emit(Node::new("Blocks").span(file.tail(at)).diag(Diagnostic::unsupported("ZPAQ decoding")));
-    cx.annotate(format!("ZPAQ level {level}{}", if journaling { ", journaling" } else { "" }));
+    cx.emit(
+        Node::new(if journaling {
+            "Locator tag"
+        } else {
+            "Block header"
+        })
+        .span(file.sub(0, at.max(4))),
+    );
+    cx.emit(
+        Node::new("Blocks")
+            .span(file.tail(at))
+            .diag(Diagnostic::unsupported("ZPAQ decoding")),
+    );
+    cx.annotate(format!(
+        "ZPAQ level {level}{}",
+        if journaling { ", journaling" } else { "" }
+    ));
     Ok(())
 }
 
@@ -470,12 +620,27 @@ async fn pgs(cx: Cx, input: Input) -> Result<()> {
         let seconds = h.pts / 90_000;
         let name = lookup(PGS_SEGMENTS, h.kind.into()).unwrap_or("Unknown segment");
         cx.push(
-            PgsHeader::node(name, Span::new(span.source, span.offset, span.len.saturating_add(body.len)), BE)
-                .summary(format!("{}:{:02}:{:02}.{:03}", seconds / 3600, seconds / 60 % 60, seconds % 60, h.pts % 90_000 / 90)),
+            PgsHeader::node(
+                name,
+                Span::new(span.source, span.offset, span.len.saturating_add(body.len)),
+                BE,
+            )
+            .summary(format!(
+                "{}:{:02}:{:02}.{:03}",
+                seconds / 3600,
+                seconds / 60 % 60,
+                seconds % 60,
+                h.pts % 90_000 / 90
+            )),
         )
         .await;
     }
     let seconds = last / 90_000;
-    cx.annotate(format!("{sets} display set(s), until {}:{:02}:{:02}", seconds / 3600, seconds / 60 % 60, seconds % 60));
+    cx.annotate(format!(
+        "{sets} display set(s), until {}:{:02}:{:02}",
+        seconds / 3600,
+        seconds / 60 % 60,
+        seconds % 60
+    ));
     Ok(())
 }

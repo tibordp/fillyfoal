@@ -236,7 +236,11 @@ impl ElfInfo {
             }
         }
         if self.segments.is_empty() {
-            for s in self.sections.iter().filter(|s| s.has_data() && s.flags & 2 != 0) {
+            for s in self
+                .sections
+                .iter()
+                .filter(|s| s.has_data() && s.flags & 2 != 0)
+            {
                 if let Some(delta) = vaddr.checked_sub(s.addr)
                     && delta < s.size
                 {
@@ -545,9 +549,8 @@ fn image_end(elf: &ElfInfo) -> u64 {
         elf.class.ehdr_size(),
         h.phoff
             .saturating_add(u64::from(h.phnum).saturating_mul(h.phentsize.into())),
-        h.shoff.saturating_add(
-            to_u64(elf.sections.len()).saturating_mul(h.shentsize.into()),
-        ),
+        h.shoff
+            .saturating_add(to_u64(elf.sections.len()).saturating_mul(h.shentsize.into())),
     ];
     let sections = elf
         .sections
@@ -591,16 +594,15 @@ fn elf_header(f: &mut Fields<'_>, c: &HeaderCtx) -> Result<Header> {
     let id = f.peek_span(16);
     let osabi = f.block().data.get(7).copied().unwrap_or(0);
     f.node(
-        struct_node("e_ident", id, c.class.endian, (), ident)
-            .summary(format!(
-                "{}-bit, {}, {}",
-                c.class.bits(),
-                match c.class.endian {
-                    Endian::Little => "little-endian",
-                    Endian::Big => "big-endian",
-                },
-                name_or(OSABI, osabi.into(), "OS/ABI")
-            )),
+        struct_node("e_ident", id, c.class.endian, (), ident).summary(format!(
+            "{}-bit, {}, {}",
+            c.class.bits(),
+            match c.class.endian {
+                Endian::Little => "little-endian",
+                Endian::Big => "big-endian",
+            },
+            name_or(OSABI, osabi.into(), "OS/ABI")
+        )),
     );
     f.skip(16);
     let kind = f
@@ -894,9 +896,7 @@ fn section_header(f: &mut Fields<'_>, c: &SectionCtx) -> Result<Section> {
         index: 0,
         header,
         name_offset,
-        name: elf
-            .and_then(|e| e.name_at(name_offset))
-            .unwrap_or_default(),
+        name: elf.and_then(|e| e.name_at(name_offset)).unwrap_or_default(),
         kind,
         flags,
         addr,
@@ -1059,7 +1059,9 @@ async fn section_contents(cx: &Cx, elf: &Elf, section: &Section) -> Result<Optio
                 lazy("Interpreter").value(text(crate::text::until_nul(&bytes)))
             }
             ".gnu_debuglink" => lazy("Debug Link").lazy(symbols::debuglink, (elf.class, data)),
-            ".gnu_debugaltlink" => lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data)),
+            ".gnu_debugaltlink" => {
+                lazy("Debug Alt Link").lazy(symbols::debuglink, (elf.class, data))
+            }
             ".nv_fatbin" | "__nv_relfatbin" => embedded("Fat Binary", elf.input.nested(data)),
             _ => raw,
         },
@@ -1080,13 +1082,7 @@ async fn compressed(cx: &Cx, elf: &Elf, section: &Section, data: Span) -> Result
     let size = f.uword("ch_size", wide).get()?;
     let payload = data.tail(header_size);
     let node = match kind {
-        1 => content(
-            "Decompressed",
-            elf.input,
-            payload,
-            Codec::Zlib,
-            Some(size),
-        ),
+        1 => content("Decompressed", elf.input, payload, Codec::Zlib, Some(size)),
         _ => data_node("Compressed data", payload, payload.len).diag(Diagnostic::unsupported(
             format!("{} compression", name_or(COMPRESSION, kind.into(), "type")),
         )),
@@ -1156,10 +1152,7 @@ async fn all_notes(cx: Cx, (elf, regions): (Elf, Vec<notes::Region>)) -> Result<
 fn dynamic_node(elf: &Elf) -> Option<Node> {
     let section = elf.sections.iter().find(|s| s.kind == SHT_DYNAMIC);
     let (span, link) = match elf.segments.iter().find(|s| s.kind == PT_DYNAMIC) {
-        Some(s) => (
-            elf.file().sub(s.offset, s.filesz),
-            section.map(|s| s.link),
-        ),
+        Some(s) => (elf.file().sub(s.offset, s.filesz), section.map(|s| s.link)),
         None => {
             let s = section?;
             (elf.data(s), Some(s.link))

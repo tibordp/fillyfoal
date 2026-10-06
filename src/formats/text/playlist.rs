@@ -101,8 +101,15 @@ fn tag(line: Piece<'_>) -> (Piece<'_>, Option<Piece<'_>>) {
 fn entry_tag(name: &[u8]) -> bool {
     matches!(
         name,
-        b"#EXTINF" | b"#EXT-X-STREAM-INF" | b"#EXT-X-BYTERANGE" | b"#EXT-X-PROGRAM-DATE-TIME"
-            | b"#EXT-X-DISCONTINUITY" | b"#EXTGRP" | b"#EXTVLCOPT" | b"#EXT-X-GAP" | b"#EXT-X-BITRATE"
+        b"#EXTINF"
+            | b"#EXT-X-STREAM-INF"
+            | b"#EXT-X-BYTERANGE"
+            | b"#EXT-X-PROGRAM-DATE-TIME"
+            | b"#EXT-X-DISCONTINUITY"
+            | b"#EXTGRP"
+            | b"#EXTVLCOPT"
+            | b"#EXT-X-GAP"
+            | b"#EXT-X-BITRATE"
     )
 }
 
@@ -127,7 +134,10 @@ async fn tag_fields(cx: Cx, span: Span) -> Result<()> {
             let (head, title) = value.split_once(b',').unwrap_or((value, value.to(0)));
             let (duration, attrs) = head.split_word();
             cx.emit(match duration.text().parse::<f64>() {
-                Ok(d) => Node::new("Duration").span(duration.span()).value(Value::Float(d)).summary("seconds"),
+                Ok(d) => Node::new("Duration")
+                    .span(duration.span())
+                    .value(Value::Float(d))
+                    .summary("seconds"),
                 Err(_) => text_node("Duration", duration.span(), &duration.text()),
             });
             for word in attrs.words() {
@@ -136,7 +146,11 @@ async fn tag_fields(cx: Cx, span: Span) -> Result<()> {
                 }
             }
             if !title.trim().is_empty() {
-                cx.emit(text_node("Title", title.trim().span(), &title.trim().text()));
+                cx.emit(text_node(
+                    "Title",
+                    title.trim().span(),
+                    &title.trim().text(),
+                ));
             }
             continue;
         }
@@ -192,7 +206,12 @@ pub async fn dissect_m3u(cx: Cx, input: Input) -> Result<()> {
                     entry.3 = true;
                     if let Some(v) = value {
                         let attrs = attribute_list(v);
-                        let get = |k: &[u8]| attrs.iter().find(|(n, _)| n.bytes() == k).map(|(_, v)| v.unquote().text());
+                        let get = |k: &[u8]| {
+                            attrs
+                                .iter()
+                                .find(|(n, _)| n.bytes() == k)
+                                .map(|(_, v)| v.unquote().text())
+                        };
                         let mut parts = Vec::new();
                         parts.extend(get(b"RESOLUTION"));
                         parts.extend(get(b"BANDWIDTH").map(|b| format!("{b} bit/s")));
@@ -203,7 +222,12 @@ pub async fn dissect_m3u(cx: Cx, input: Input) -> Result<()> {
                 continue;
             }
             if name.bytes() == b"#EXTM3U" {
-                cx.push(Node::new("Header").span(p.span()).value(Value::Text(p.text()))).await;
+                cx.push(
+                    Node::new("Header")
+                        .span(p.span())
+                        .value(Value::Text(p.text())),
+                )
+                .await;
                 continue;
             }
             let node = match value {
@@ -222,8 +246,16 @@ pub async fn dissect_m3u(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         // A URI: closes the pending entry.
-        let (start, title, duration, variant) = pending.take().unwrap_or((line.start, String::new(), None, false));
-        let entry = span.sub(start, line.start.saturating_add(line.span.len).saturating_sub(start));
+        let (start, title, duration, variant) =
+            pending
+                .take()
+                .unwrap_or((line.start, String::new(), None, false));
+        let entry = span.sub(
+            start,
+            line.start
+                .saturating_add(line.span.len)
+                .saturating_sub(start),
+        );
         entries = entries.saturating_add(1);
         let uri = p.text();
         let (name, kind) = if variant {
@@ -234,17 +266,36 @@ pub async fn dissect_m3u(cx: Cx, input: Input) -> Result<()> {
                 segments = segments.saturating_add(1);
                 total += d;
             }
-            let name = if title.is_empty() { format!("Entry {entries}") } else { title };
+            let name = if title.is_empty() {
+                format!("Entry {entries}")
+            } else {
+                title
+            };
             (name, duration.map(|d| format!("{d} s")).unwrap_or_default())
         };
-        let summary = if kind.is_empty() { uri } else { format!("{kind}: {uri}") };
-        cx.push(Node::new(name).span(entry).summary(preview(&summary, 120)).lazy(tag_fields, entry))
-            .await;
+        let summary = if kind.is_empty() {
+            uri
+        } else {
+            format!("{kind}: {uri}")
+        };
+        cx.push(
+            Node::new(name)
+                .span(entry)
+                .summary(preview(&summary, 120))
+                .lazy(tag_fields, entry),
+        )
+        .await;
     }
     let summary = if variants > 0 {
-        format!("HLS master playlist, {}", plural(variants, "variant", "variants"))
+        format!(
+            "HLS master playlist, {}",
+            plural(variants, "variant", "variants")
+        )
     } else if hls {
-        format!("HLS media playlist, {}, {total:.1} s", plural(segments, "segment", "segments"))
+        format!(
+            "HLS media playlist, {}, {total:.1} s",
+            plural(segments, "segment", "segments")
+        )
     } else {
         format!("M3U playlist, {}", plural(entries, "entry", "entries"))
     };
@@ -321,7 +372,10 @@ pub async fn dissect_pls(cx: Cx, input: Input) -> Result<()> {
         flush(&cx, g).await;
         count = count.saturating_add(1);
     }
-    cx.annotate(format!("PLS playlist, {}", plural(count, "entry", "entries")));
+    cx.annotate(format!(
+        "PLS playlist, {}",
+        plural(count, "entry", "entries")
+    ));
     Ok(())
 }
 
@@ -336,7 +390,10 @@ async fn pls_entry(cx: Cx, span: Span) -> Result<()> {
         let name = indexed(&key).map_or(key.clone(), |(n, _)| n.to_owned());
         let v = v.trim();
         cx.emit(match (name.as_str(), super::number(&v.text())) {
-            ("Length", Some(n)) => Node::new(name).span(v.span()).value(n).summary("seconds (-1: unknown)"),
+            ("Length", Some(n)) => Node::new(name)
+                .span(v.span())
+                .value(n)
+                .summary("seconds (-1: unknown)"),
             _ => text_node(name, v.span(), &v.text()),
         });
     }
@@ -347,8 +404,19 @@ async fn pls_entry(cx: Cx, span: Span) -> Result<()> {
 // CUE sheets
 
 const CUE_COMMANDS: &[&[u8]] = &[
-    b"REM", b"CATALOG", b"CDTEXTFILE", b"FILE", b"FLAGS", b"INDEX", b"ISRC", b"PERFORMER",
-    b"POSTGAP", b"PREGAP", b"SONGWRITER", b"TITLE", b"TRACK",
+    b"REM",
+    b"CATALOG",
+    b"CDTEXTFILE",
+    b"FILE",
+    b"FLAGS",
+    b"INDEX",
+    b"ISRC",
+    b"PERFORMER",
+    b"POSTGAP",
+    b"PREGAP",
+    b"SONGWRITER",
+    b"TITLE",
+    b"TRACK",
 ];
 
 fn probe_cue(h: &Head<'_>) -> bool {
@@ -399,7 +467,11 @@ fn command(line: &LineBuf) -> Node {
         }
         "REM" => {
             let (key, value) = rest.split_word();
-            text_node(format!("REM {}", key.text()), value.span(), &value.unquote().text())
+            text_node(
+                format!("REM {}", key.text()),
+                value.span(),
+                &value.unquote().text(),
+            )
         }
         _ => text_node(name, rest.span(), &rest.unquote().text()),
     }
@@ -430,12 +502,19 @@ async fn cue_group(cx: Cx, g: Group) -> Result<()> {
                 let (word, rest) = p.split_word();
                 if word.eq_nocase(b"FILE") || word.eq_nocase(b"TRACK") {
                     let (a, b) = if rest.first() == Some(b'"') {
-                        let end = rest.from(1).find(b'"').map_or(rest.len(), |e| e.saturating_add(2));
+                        let end = rest
+                            .from(1)
+                            .find(b'"')
+                            .map_or(rest.len(), |e| e.saturating_add(2));
                         (rest.to(end), rest.from(end).trim())
                     } else {
                         rest.split_word()
                     };
-                    let (first, second) = if word.eq_nocase(b"FILE") { ("File name", "Type") } else { ("Number", "Type") };
+                    let (first, second) = if word.eq_nocase(b"FILE") {
+                        ("File name", "Type")
+                    } else {
+                        ("Number", "Type")
+                    };
                     cx.emit(text_node(first, a.span(), &a.unquote().text()));
                     cx.emit(text_node(second, b.span(), &b.text()));
                     continue;
@@ -450,14 +529,16 @@ async fn cue_group(cx: Cx, g: Group) -> Result<()> {
                 let span = g.span.sub(start, before.saturating_sub(start));
                 let p = first.piece().trim();
                 let label = p.split_word().1;
-                let name = format!("{} {}", String::from_utf8_lossy(g.child), label.unquote().text());
+                let name = format!(
+                    "{} {}",
+                    String::from_utf8_lossy(g.child),
+                    label.unquote().text()
+                );
                 let next: &'static [u8] = if g.child == b"FILE" { b"TRACK" } else { b"" };
-                cx.push(
-                    Node::new(name)
-                        .span(span)
-                        .summary(notes.join(", "))
-                        .lazy(crate::expander!(self::cue_group: Group), Group { span, child: next }),
-                )
+                cx.push(Node::new(name).span(span).summary(notes.join(", ")).lazy(
+                    crate::expander!(self::cue_group: Group),
+                    Group { span, child: next },
+                ))
                 .await;
             }
             let Some(l) = line else {
@@ -477,7 +558,9 @@ async fn cue_group(cx: Cx, g: Group) -> Result<()> {
                 let p = l.piece().trim();
                 let (word, rest) = p.split_word();
                 if notes.len() < 3
-                    && (word.eq_nocase(b"TITLE") || word.eq_nocase(b"PERFORMER") || word.eq_nocase(b"TRACK"))
+                    && (word.eq_nocase(b"TITLE")
+                        || word.eq_nocase(b"PERFORMER")
+                        || word.eq_nocase(b"TRACK"))
                 {
                     notes.push(preview(&rest.unquote().text(), 40));
                 }
@@ -496,7 +579,11 @@ pub async fn dissect_cue(cx: Cx, input: Input) -> Result<()> {
         probe::lines(&text).find_map(|l| {
             let t = probe::trim(l);
             let rest = t.strip_prefix(cmd)?.strip_prefix(b" ")?;
-            Some(super::encoding::decode_8bit(probe::trim(rest)).trim_matches('"').to_owned())
+            Some(
+                super::encoding::decode_8bit(probe::trim(rest))
+                    .trim_matches('"')
+                    .to_owned(),
+            )
         })
     };
     let tracks = probe::lines(&text)
@@ -508,6 +595,16 @@ pub async fn dissect_cue(cx: Cx, input: Input) -> Result<()> {
         (None, Some(t)) => summary = format!("{summary}: {t}"),
         _ => {}
     }
-    cx.annotate(format!("{summary}, {}", plural(crate::bytes::to_u64(tracks), "track", "tracks")));
-    cue_group(cx, Group { span: prepared.span, child: b"FILE" }).await
+    cx.annotate(format!(
+        "{summary}, {}",
+        plural(crate::bytes::to_u64(tracks), "track", "tracks")
+    ));
+    cue_group(
+        cx,
+        Group {
+            span: prepared.span,
+            child: b"FILE",
+        },
+    )
+    .await
 }

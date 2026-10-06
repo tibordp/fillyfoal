@@ -169,7 +169,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, header_span, LE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", header_span, LE));
     let kind = lookup(IMAGE_TYPES, h.image_type.into()).unwrap_or("unknown type");
-    cx.annotate(format!("{}, {}-bit, {kind}", dims(h.width, h.height), h.depth));
+    cx.annotate(format!(
+        "{}, {}-bit, {kind}",
+        dims(h.width, h.height),
+        h.depth
+    ));
 
     let mut pos = Header::SIZE;
     if h.id_length > 0 {
@@ -227,7 +231,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let raw_len = u64::from(h.width)
         .saturating_mul(h.height.into())
         .saturating_mul(u64::from(h.depth).saturating_add(7) / 8);
-    let len = if rle { end.saturating_sub(pos) } else { raw_len };
+    let len = if rle {
+        end.saturating_sub(pos)
+    } else {
+        raw_len
+    };
     cx.emit(region("Image data", file, pos, len).summary(if rle {
         "run-length encoded".to_owned()
     } else {
@@ -244,7 +252,9 @@ async fn developer_directory(cx: Cx, (file, offset): (Span, u64)) -> Result<()> 
     let block = cx.block(count_span).await?;
     let count = Fields::emitting(&cx, &block, LE).u16("Tag count").emit()?;
     for i in 0..u64::from(count) {
-        let at = offset.saturating_add(2).saturating_add(i.saturating_mul(10));
+        let at = offset
+            .saturating_add(2)
+            .saturating_add(i.saturating_mul(10));
         let entry = file.sub(at, 10);
         let block = cx.block(entry).await?;
         let mut f = Fields::new(&block, LE);

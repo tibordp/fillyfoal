@@ -61,7 +61,12 @@ const COMPAT_RO: FlagTable = &[
     flag(0x8, "BLOCK_GROUP_TREE"),
 ];
 
-const CSUM: EnumTable = &[(0, "CRC32C"), (1, "xxHash64"), (2, "SHA-256"), (3, "BLAKE2b")];
+const CSUM: EnumTable = &[
+    (0, "CRC32C"),
+    (1, "xxHash64"),
+    (2, "SHA-256"),
+    (3, "BLAKE2b"),
+];
 
 const CHUNK_TYPE: FlagTable = &[
     flag(0x1, "DATA"),
@@ -177,8 +182,19 @@ fn parse_chunks(array: &[u8]) -> Vec<(u64, usize, Chunk, u64)> {
         let kind = u64_le(array, item.saturating_add(24)).unwrap_or(0);
         let stripes = usize::from(u16_le(array, item.saturating_add(44)).unwrap_or(0));
         let physical = u64_le(array, item.saturating_add(48 + 8)).unwrap_or(0);
-        out.push((logical, at, Chunk { logical, length, physical }, kind));
-        at = item.saturating_add(48).saturating_add(stripes.saturating_mul(32));
+        out.push((
+            logical,
+            at,
+            Chunk {
+                logical,
+                length,
+                physical,
+            },
+            kind,
+        ));
+        at = item
+            .saturating_add(48)
+            .saturating_add(stripes.saturating_mul(32));
         if stripes == 0 {
             break;
         }
@@ -189,9 +205,13 @@ fn parse_chunks(array: &[u8]) -> Vec<(u64, usize, Chunk, u64)> {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
     let span = vol.sub(SUPER, Superblock::SIZE);
-    let magic = cx.read_avail(vol.sub(SUPER.saturating_add(0x40), 8)).await?;
+    let magic = cx
+        .read_avail(vol.sub(SUPER.saturating_add(0x40), 8))
+        .await?;
     if magic != MAGIC {
-        let reiser = cx.read_avail(vol.sub(SUPER.saturating_add(0x34), 10)).await?;
+        let reiser = cx
+            .read_avail(vol.sub(SUPER.saturating_add(0x34), 10))
+            .await?;
         if reiser.starts_with(b"ReIsEr") {
             cx.annotate("ReiserFS filesystem");
             return Err(Diagnostic::unsupported("ReiserFS").at(vol.sub(SUPER, 0x100)));
@@ -203,26 +223,36 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let sb = parse(&cx, span, LE, &(), Superblock::layout).await?;
     let full = vol.sub(SUPER, 0x1000);
-    let mut node = Superblock::node("Superblock", full, LE).summary(format!("generation {}", sb.generation));
+    let mut node =
+        Superblock::node("Superblock", full, LE).summary(format!("generation {}", sb.generation));
     if sb.csum_type == 0 {
         let data = cx.read_avail(full).await?;
         let computed = crc32c(data.get(32..).unwrap_or_default());
         if sb.csum.get(..4) != Some(&computed.to_le_bytes()[..]) {
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {computed:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {computed:#010x}"
+            )));
         }
     }
     cx.emit(node);
     let label = crate::text::until_nul(&sb.label);
     cx.annotate(format!(
         "Btrfs filesystem{}, {} ({} used), {} device{}",
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(sb.total_bytes),
         size(sb.bytes_used),
         sb.num_devices,
         if sb.num_devices == 1 { "" } else { "s" }
     ));
 
-    let array_span = vol.sub(SUPER.saturating_add(0x32b), u64::from(sb.sys_chunk_array_size).min(2048));
+    let array_span = vol.sub(
+        SUPER.saturating_add(0x32b),
+        u64::from(sb.sys_chunk_array_size).min(2048),
+    );
     let array = cx.read_avail(array_span).await?;
     let chunks = parse_chunks(&array);
     cx.emit(
@@ -238,21 +268,34 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         })
     };
     let node_size = u64::from(sb.node_size);
-    for (name, logical) in [("Chunk tree root", sb.chunk_root), ("Root tree root", sb.root)] {
+    for (name, logical) in [
+        ("Chunk tree root", sb.chunk_root),
+        ("Root tree root", sb.root),
+    ] {
         let node = Node::new(name).summary(format!("logical {logical:#x}"));
         cx.emit(match map(logical) {
             Some(physical) => {
                 let span = vol.sub(physical, node_size);
                 node.span(span).lazy(tree_node, span)
             }
-            None => node.diag(Diagnostic::note("not in a system chunk; needs the full chunk tree")),
+            None => node.diag(Diagnostic::note(
+                "not in a system chunk; needs the full chunk tree",
+            )),
         });
     }
-    cx.emit(Node::new("Superblock backups").span(vol.sub(SUPER.saturating_add(0xb2b), 4 * 168)).summary("4 root backups"));
+    cx.emit(
+        Node::new("Superblock backups")
+            .span(vol.sub(SUPER.saturating_add(0xb2b), 4 * 168))
+            .summary("4 root backups"),
+    );
     for (i, at) in MIRRORS.iter().enumerate() {
         let mirror = vol.sub(*at, 0x1000);
         if mirror.len == 0x1000 {
-            cx.emit(Superblock::node(format!("Mirror superblock {}", i.saturating_add(1)), mirror, LE));
+            cx.emit(Superblock::node(
+                format!("Mirror superblock {}", i.saturating_add(1)),
+                mirror,
+                LE,
+            ));
         }
     }
     Ok(())
@@ -302,7 +345,12 @@ async fn tree_node(cx: Cx, span: Span) -> Result<()> {
     cx.emit(NodeHeader::node("Header", header, LE));
     let leaf = h.level == 0;
     let stride: u64 = if leaf { 25 } else { 33 };
-    let count = u64::from(h.items).min(span.len.saturating_sub(NodeHeader::SIZE).checked_div(stride).unwrap_or(0));
+    let count = u64::from(h.items).min(
+        span.len
+            .saturating_sub(NodeHeader::SIZE)
+            .checked_div(stride)
+            .unwrap_or(0),
+    );
     cx.set_count(Count::Exact(count.saturating_add(1)));
     for i in 0..count {
         let at = NodeHeader::SIZE.saturating_add(i.saturating_mul(stride));
@@ -321,7 +369,10 @@ async fn tree_node(cx: Cx, span: Span) -> Result<()> {
                 .summary(format!("{data_len} bytes of item data"))
                 .target(span.sub(NodeHeader::SIZE.saturating_add(data_off), data_len));
         } else {
-            node = node.summary(format!("child at logical {:#x}", u64_le(&raw, 17).unwrap_or(0)));
+            node = node.summary(format!(
+                "child at logical {:#x}",
+                u64_le(&raw, 17).unwrap_or(0)
+            ));
         }
         cx.push(node).await;
     }

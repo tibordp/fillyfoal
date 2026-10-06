@@ -11,14 +11,17 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::bio::SAM_FLAGS;
-use crate::formats::lines::{Line, Lines, flags, head_lines, is_text, number, preview, summarize, tally, text, uint};
+use crate::formats::lines::{
+    Line, Lines, flags, head_lines, is_text, number, preview, summarize, tally, text, uint,
+};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
 /// Whether every byte is a sequence letter (IUPAC codes, gaps, stops).
 fn is_sequence(line: &[u8]) -> bool {
-    line.iter().all(|b| b.is_ascii_alphabetic() || matches!(b, b'*' | b'-' | b'.'))
+    line.iter()
+        .all(|b| b.is_ascii_alphabetic() || matches!(b, b'*' | b'-' | b'.'))
 }
 
 /// Mean Phred quality of a FASTQ quality string (offset 33).
@@ -26,12 +29,17 @@ fn mean_quality(q: &[u8]) -> Option<u64> {
     if q.is_empty() {
         return None;
     }
-    q.iter().map(|&b| u64::from(b.saturating_sub(33))).sum::<u64>().checked_div(to_u64(q.len()))
+    q.iter()
+        .map(|&b| u64::from(b.saturating_sub(33)))
+        .sum::<u64>()
+        .checked_div(to_u64(q.len()))
 }
 
 /// A node for one line, with its text as the value.
 fn line_node(name: impl Into<String>, line: &Line) -> Node {
-    Node::new(name.into()).span(line.content()).value(text(line.text()))
+    Node::new(name.into())
+        .span(line.content())
+        .value(text(line.text()))
 }
 
 // ---------------------------------------------------------------------------
@@ -40,8 +48,12 @@ fn line_node(name: impl Into<String>, line: &Line) -> Node {
 fn fasta_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 3);
     is_text(h)
-        && lines.first().is_some_and(|l| l.starts_with(b">") && l.len() > 1)
-        && lines.get(1).is_some_and(|l| !l.is_empty() && is_sequence(l))
+        && lines
+            .first()
+            .is_some_and(|l| l.starts_with(b">") && l.len() > 1)
+        && lines
+            .get(1)
+            .is_some_and(|l| !l.is_empty() && is_sequence(l))
 }
 
 declare_format!(pub FASTA = "fasta", "FASTA sequences", ["fasta", "fa", "fna", "faa", "ffn", "frn", "fas", "mpfa"], "text/x-fasta",
@@ -69,10 +81,14 @@ async fn fasta(cx: Cx, input: Input) -> Result<()> {
             if !desc.trim().is_empty() {
                 node = node.value(text(desc.trim()));
             }
-            cx.push(
-                node.summary(format!("{len} residues"))
-                    .lazy(fasta_record, (header.content(), span.tail(header.span.len), String::from_utf8_lossy(&sample).into_owned())),
-            )
+            cx.push(node.summary(format!("{len} residues")).lazy(
+                fasta_record,
+                (
+                    header.content(),
+                    span.tail(header.span.len),
+                    String::from_utf8_lossy(&sample).into_owned(),
+                ),
+            ))
             .await;
             records = records.saturating_add(1);
             residues = residues.saturating_add(len);
@@ -81,23 +97,41 @@ async fn fasta(cx: Cx, input: Input) -> Result<()> {
         if line.bytes.starts_with(b">") {
             current = Some((line, 0, Vec::new()));
         } else if let Some((_, len, sample)) = current.as_mut() {
-            let seq: Vec<u8> = line.bytes.iter().copied().filter(|b| !b.is_ascii_whitespace()).collect();
+            let seq: Vec<u8> = line
+                .bytes
+                .iter()
+                .copied()
+                .filter(|b| !b.is_ascii_whitespace())
+                .collect();
             *len = len.saturating_add(to_u64(seq.len()));
             if sample.len() < 200 {
                 sample.extend(seq.iter().take(200usize.saturating_sub(sample.len())));
             }
         } else if !line.bytes.is_empty() && !line.bytes.starts_with(b";") {
-            cx.diag(Diagnostic::malformed("sequence data before the first header").at(line.content()));
+            cx.diag(
+                Diagnostic::malformed("sequence data before the first header").at(line.content()),
+            );
         }
     }
     cx.set_count(Count::Exact(records));
-    cx.annotate(format!("FASTA, {records} {} sequence(s), {residues} residues", if nucleotide { "nucleotide" } else { "protein" }));
+    cx.annotate(format!(
+        "FASTA, {records} {} sequence(s), {residues} residues",
+        if nucleotide { "nucleotide" } else { "protein" }
+    ));
     Ok(())
 }
 
 async fn fasta_record(cx: Cx, (header, body, sample): (Span, Span, String)) -> Result<()> {
     cx.emit(Node::new("Header").span(header));
-    cx.emit(Node::new("Sequence").span(body).value(text(if sample.len() >= 200 { format!("{sample}…") } else { sample })));
+    cx.emit(
+        Node::new("Sequence")
+            .span(body)
+            .value(text(if sample.len() >= 200 {
+                format!("{sample}…")
+            } else {
+                sample
+            })),
+    );
     Ok(())
 }
 
@@ -108,7 +142,8 @@ fn fastq_probe(h: &Head<'_>) -> bool {
     let l = head_lines(h, 4);
     is_text(h)
         && l.len() == 4
-        && l.first().is_some_and(|x| x.starts_with(b"@") && x.len() > 1)
+        && l.first()
+            .is_some_and(|x| x.starts_with(b"@") && x.len() > 1)
         && l.get(1).is_some_and(|x| is_sequence(x))
         && l.get(2).is_some_and(|x| x.starts_with(b"+"))
         && l.get(1).map(|x| x.len()) == l.get(3).map(|x| x.len())
@@ -130,18 +165,35 @@ async fn fastq(cx: Cx, input: Input) -> Result<()> {
             cx.diag(Diagnostic::malformed("expected a read header ('@')").at(header.content()));
             break;
         }
-        let (Some(seq), Some(plus), Some(qual)) = (lines.next().await?, lines.next().await?, lines.next().await?) else {
+        let (Some(seq), Some(plus), Some(qual)) = (
+            lines.next().await?,
+            lines.next().await?,
+            lines.next().await?,
+        ) else {
             cx.diag(Diagnostic::malformed("incomplete record").at(file.tail(header.pos)));
             break;
         };
         let span = file.sub(header.pos, lines.pos().saturating_sub(header.pos));
         let t = header.text();
-        let id = t.trim_start_matches('@').split_whitespace().next().unwrap_or_default().to_owned();
+        let id = t
+            .trim_start_matches('@')
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_owned();
         let len = to_u64(seq.bytes.len());
         let mut node = Node::new(id)
             .span(span)
-            .summary(format!("{len} bp{}", mean_quality(&qual.bytes).map(|q| format!(", mean Q{q}")).unwrap_or_default()))
-            .lazy(fastq_record, (header.clone(), seq.clone(), plus.clone(), qual.clone()));
+            .summary(format!(
+                "{len} bp{}",
+                mean_quality(&qual.bytes)
+                    .map(|q| format!(", mean Q{q}"))
+                    .unwrap_or_default()
+            ))
+            .lazy(
+                fastq_record,
+                (header.clone(), seq.clone(), plus.clone(), qual.clone()),
+            );
         if seq.bytes.len() != qual.bytes.len() {
             node = node.diag(Diagnostic::malformed("sequence and quality lengths differ"));
         }
@@ -151,18 +203,36 @@ async fn fastq(cx: Cx, input: Input) -> Result<()> {
         lengths = (lengths.0.min(len), lengths.1.max(len));
     }
     cx.set_count(Count::Exact(reads));
-    let range = if reads == 0 { String::new() } else if lengths.0 == lengths.1 { format!(", {} bp each", lengths.0) } else { format!(", {}–{} bp", lengths.0, lengths.1) };
+    let range = if reads == 0 {
+        String::new()
+    } else if lengths.0 == lengths.1 {
+        format!(", {} bp each", lengths.0)
+    } else {
+        format!(", {}–{} bp", lengths.0, lengths.1)
+    };
     cx.annotate(format!("FASTQ, {reads} read(s), {bases} bases{range}"));
     Ok(())
 }
 
 async fn fastq_record(cx: Cx, (header, seq, plus, qual): (Line, Line, Line, Line)) -> Result<()> {
     let h = header.text();
-    let (id, desc) = h.trim_start_matches('@').split_once(' ').unwrap_or((h.trim_start_matches('@'), ""));
-    cx.emit(summarize(Node::new("Header").span(header.content()).value(text(id)), desc));
+    let (id, desc) = h
+        .trim_start_matches('@')
+        .split_once(' ')
+        .unwrap_or((h.trim_start_matches('@'), ""));
+    cx.emit(summarize(
+        Node::new("Header").span(header.content()).value(text(id)),
+        desc,
+    ));
     cx.emit(line_node("Sequence", &seq).summary(format!("{} bp", seq.bytes.len())));
     cx.emit(line_node("Separator", &plus));
-    cx.emit(line_node("Quality", &qual).summary(mean_quality(&qual.bytes).map(|q| format!("mean Phred {q}")).unwrap_or_default()));
+    cx.emit(
+        line_node("Quality", &qual).summary(
+            mean_quality(&qual.bytes)
+                .map(|q| format!("mean Phred {q}"))
+                .unwrap_or_default(),
+        ),
+    );
     Ok(())
 }
 
@@ -170,13 +240,24 @@ async fn fastq_record(cx: Cx, (header, seq, plus, qual): (Line, Line, Line, Line
 // SAM
 
 fn sam_probe(h: &Head<'_>) -> bool {
-    is_text(h) && [&b"@HD\tVN:"[..], b"@SQ\tSN:", b"@PG\tID:", b"@RG\tID:", b"@CO\t"].iter().any(|m| h.starts_with(m))
+    is_text(h)
+        && [
+            &b"@HD\tVN:"[..],
+            b"@SQ\tSN:",
+            b"@PG\tID:",
+            b"@RG\tID:",
+            b"@CO\t",
+        ]
+        .iter()
+        .any(|m| h.starts_with(m))
 }
 
 declare_format!(pub SAM = "sam", "Sequence Alignment/Map (SAM)", ["sam"], "text/x-sam",
     Probe::Custom(sam_probe), sam);
 
-const SAM_COLUMNS: [&str; 11] = ["QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL"];
+const SAM_COLUMNS: [&str; 11] = [
+    "QNAME", "FLAG", "RNAME", "POS", "MAPQ", "CIGAR", "RNEXT", "PNEXT", "TLEN", "SEQ", "QUAL",
+];
 
 async fn sam(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -193,13 +274,24 @@ async fn sam(cx: Cx, input: Input) -> Result<()> {
         if t.starts_with("@SQ") {
             refs = refs.saturating_add(1);
         } else if t.starts_with("@HD") {
-            sort = t.split('\t').find_map(|f| f.strip_prefix("SO:")).unwrap_or_default().to_owned();
+            sort = t
+                .split('\t')
+                .find_map(|f| f.strip_prefix("SO:"))
+                .unwrap_or_default()
+                .to_owned();
         }
         header_end = lines.pos();
     }
     let header = file.sub(0, header_end);
     cx.emit(Node::new("Header").span(header).lazy(sam_header, header));
-    cx.annotate(format!("SAM, {refs} reference(s){}", if sort.is_empty() { String::new() } else { format!(", sorted by {sort}") }));
+    cx.annotate(format!(
+        "SAM, {refs} reference(s){}",
+        if sort.is_empty() {
+            String::new()
+        } else {
+            format!(", sorted by {sort}")
+        }
+    ));
     let mut count = 0u64;
     let mut next = first;
     while let Some(line) = next {
@@ -211,14 +303,24 @@ async fn sam(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!("{}:{} mapq {} {}", get(2), get(3), get(4), get(5)))
                 .lazy(sam_record, line.clone());
             if fields.len() < 11 {
-                node = node.diag(Diagnostic::malformed(format!("{} of 11 mandatory fields", fields.len())));
+                node = node.diag(Diagnostic::malformed(format!(
+                    "{} of 11 mandatory fields",
+                    fields.len()
+                )));
             }
             cx.push(node).await;
             count = count.saturating_add(1);
         }
         next = lines.next().await?;
     }
-    cx.annotate(format!("SAM, {refs} reference(s){}, {count} alignment(s)", if sort.is_empty() { String::new() } else { format!(", sorted by {sort}") }));
+    cx.annotate(format!(
+        "SAM, {refs} reference(s){}, {count} alignment(s)",
+        if sort.is_empty() {
+            String::new()
+        } else {
+            format!(", sorted by {sort}")
+        }
+    ));
     Ok(())
 }
 
@@ -228,7 +330,9 @@ async fn sam_header(cx: Cx, span: Span) -> Result<()> {
         let fields = line.split(b'\t');
         let tag = fields.first().map_or(String::new(), |(s, _)| s.clone());
         let rest: Vec<&str> = fields.iter().skip(1).map(|(s, _)| s.as_str()).collect();
-        let mut node = Node::new(tag).span(line.content()).value(text(rest.join(" ")));
+        let mut node = Node::new(tag)
+            .span(line.content())
+            .value(text(rest.join(" ")));
         if fields.len() > 2 {
             node = node.lazy(sam_tag_list, (line.clone(), 1usize, b':'));
         }
@@ -264,7 +368,9 @@ async fn sam_record(cx: Cx, line: Line) -> Result<()> {
     for (i, (value, span)) in fields.iter().enumerate().take(11) {
         let name = SAM_COLUMNS.get(i).copied().unwrap_or("?");
         let v = match i {
-            1 => value.parse::<u16>().map_or_else(|_| text(value.as_str()), |f| flags(SAM_FLAGS, f.into(), 16)),
+            1 => value
+                .parse::<u16>()
+                .map_or_else(|_| text(value.as_str()), |f| flags(SAM_FLAGS, f.into(), 16)),
             3 | 4 | 7 | 8 => number(value),
             9 | 10 => text(preview(value, 200)),
             _ => text(value.as_str()),
@@ -277,7 +383,14 @@ async fn sam_record(cx: Cx, line: Line) -> Result<()> {
     }
     if fields.len() > 11 {
         let start = fields.get(11).map_or(line.content(), |(_, s)| *s);
-        cx.emit(Node::new("Tags").span(line.content().tail(start.offset.saturating_sub(line.span.offset))).lazy(sam_tag_list, (line.clone(), 11usize, b':')));
+        cx.emit(
+            Node::new("Tags")
+                .span(
+                    line.content()
+                        .tail(start.offset.saturating_sub(line.span.offset)),
+                )
+                .lazy(sam_tag_list, (line.clone(), 11usize, b':')),
+        );
     }
     Ok(())
 }
@@ -288,7 +401,9 @@ async fn sam_record(cx: Cx, line: Line) -> Result<()> {
 declare_format!(pub VCF = "vcf", "Variant Call Format", ["vcf"], "text/x-vcf",
     Probe::Magic(&[(0, b"##fileformat=VCFv")]), vcf);
 
-const VCF_COLUMNS: [&str; 9] = ["CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT"];
+const VCF_COLUMNS: [&str; 9] = [
+    "CHROM", "POS", "ID", "REF", "ALT", "QUAL", "FILTER", "INFO", "FORMAT",
+];
 
 async fn vcf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -317,11 +432,18 @@ async fn vcf(cx: Cx, input: Input) -> Result<()> {
         meta_end = lines.pos();
     }
     let meta = file.sub(0, meta_end);
-    cx.emit(Node::new("Meta-information").span(meta).lazy(vcf_meta, meta));
+    cx.emit(
+        Node::new("Meta-information")
+            .span(meta)
+            .lazy(vcf_meta, meta),
+    );
     if let Some(h) = &header_line {
         cx.emit(line_node("Header line", h).summary(format!("{} sample(s)", samples.len())));
     }
-    let summary = format!("{version}, {contigs} contig(s), {} sample(s)", samples.len());
+    let summary = format!(
+        "{version}, {contigs} contig(s), {} sample(s)",
+        samples.len()
+    );
     cx.annotate(summary.clone());
     let mut count = 0u64;
     while let Some(line) = lines.next().await? {
@@ -335,7 +457,13 @@ async fn vcf(cx: Cx, input: Input) -> Result<()> {
             Node::new(format!("{}:{}", get(0), get(1)))
                 .span(line.content())
                 .value(text(if id == "." { "" } else { id }))
-                .summary(format!("{}>{} qual {} {}", preview(get(3), 20), preview(get(4), 30), get(5), get(6)))
+                .summary(format!(
+                    "{}>{} qual {} {}",
+                    preview(get(3), 20),
+                    preview(get(4), 30),
+                    get(5),
+                    get(6)
+                ))
                 .lazy(vcf_record, (line.clone(), samples.clone())),
         )
         .await;
@@ -353,8 +481,14 @@ async fn vcf_meta(cx: Cx, span: Span) -> Result<()> {
         let (key, value) = body.split_once('=').unwrap_or((body, ""));
         let mut node = Node::new(key.to_owned()).span(line.content());
         if let Some(inner) = value.strip_prefix('<').and_then(|v| v.strip_suffix('>')) {
-            let id = inner.split(',').find_map(|kv| kv.strip_prefix("ID=")).unwrap_or_default();
-            let desc = inner.split_once("Description=\"").map(|(_, d)| d.split('"').next().unwrap_or_default()).unwrap_or_default();
+            let id = inner
+                .split(',')
+                .find_map(|kv| kv.strip_prefix("ID="))
+                .unwrap_or_default();
+            let desc = inner
+                .split_once("Description=\"")
+                .map(|(_, d)| d.split('"').next().unwrap_or_default())
+                .unwrap_or_default();
             node = node.value(text(id)).desc(inner.to_owned());
             if !desc.is_empty() {
                 node = node.summary(desc.to_owned());
@@ -374,15 +508,29 @@ async fn vcf_record(cx: Cx, (line, samples): (Line, Vec<String>)) -> Result<()> 
             let mut node = Node::new(name).span(*span);
             node = match i {
                 1 | 5 => node.value(number(value)),
-                7 => node.value(text(preview(value, 120))).lazy(vcf_info, (value.clone(), *span)),
+                7 => node
+                    .value(text(preview(value, 120)))
+                    .lazy(vcf_info, (value.clone(), *span)),
                 _ => node.value(text(value.as_str())),
             };
             cx.emit(node);
         } else {
-            let sample = samples.get(i.saturating_sub(9)).cloned().unwrap_or_else(|| format!("Sample {}", i.saturating_sub(8)));
+            let sample = samples
+                .get(i.saturating_sub(9))
+                .cloned()
+                .unwrap_or_else(|| format!("Sample {}", i.saturating_sub(8)));
             let format = fields.get(8).map_or("", |(s, _)| s.as_str());
-            let pairs: Vec<String> = format.split(':').zip(value.split(':')).map(|(k, v)| format!("{k}={v}")).collect();
-            cx.emit(Node::new(sample).span(*span).value(text(value.as_str())).summary(pairs.join(" ")));
+            let pairs: Vec<String> = format
+                .split(':')
+                .zip(value.split(':'))
+                .map(|(k, v)| format!("{k}={v}"))
+                .collect();
+            cx.emit(
+                Node::new(sample)
+                    .span(*span)
+                    .value(text(value.as_str()))
+                    .summary(pairs.join(" ")),
+            );
         }
     }
     Ok(())
@@ -394,7 +542,11 @@ async fn vcf_info(cx: Cx, (info, span): (String, Span)) -> Result<()> {
         let len = to_u64(kv.len());
         let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
         let node = Node::new(k.to_owned()).span(span.sub(at, len));
-        cx.emit(if v.is_empty() { node.value(crate::value::Value::Bool(true)) } else { node.value(number(v)) });
+        cx.emit(if v.is_empty() {
+            node.value(crate::value::Value::Bool(true))
+        } else {
+            node.value(number(v))
+        });
         at = at.saturating_add(len).saturating_add(1);
     }
     Ok(())
@@ -406,7 +558,17 @@ async fn vcf_info(cx: Cx, (info, span): (String, Span)) -> Result<()> {
 declare_format!(pub GFF3 = "gff3", "General Feature Format (GFF3)", ["gff3", "gff"], "text/x-gff3",
     Probe::Magic(&[(0, b"##gff-version 3"), (0, b"##gff-version\t3")]), gff3);
 
-const GFF_COLUMNS: [&str; 9] = ["seqid", "source", "type", "start", "end", "score", "strand", "phase", "attributes"];
+const GFF_COLUMNS: [&str; 9] = [
+    "seqid",
+    "source",
+    "type",
+    "start",
+    "end",
+    "score",
+    "strand",
+    "phase",
+    "attributes",
+];
 
 fn unescape(s: &str) -> String {
     let mut out = Vec::new();
@@ -414,7 +576,10 @@ fn unescape(s: &str) -> String {
     let mut i = 0usize;
     while let Some(&c) = b.get(i) {
         if c == b'%'
-            && let Some(v) = b.get(i.saturating_add(1)..i.saturating_add(3)).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok())
+            && let Some(v) = b
+                .get(i.saturating_add(1)..i.saturating_add(3))
+                .and_then(|h| std::str::from_utf8(h).ok())
+                .and_then(|h| u8::from_str_radix(h, 16).ok())
         {
             out.push(v);
             i = i.saturating_add(3);
@@ -439,12 +604,25 @@ async fn gff3(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         if t == "###" {
-            cx.push(Node::new("###").span(line.content()).summary("forward references resolved")).await;
+            cx.push(
+                Node::new("###")
+                    .span(line.content())
+                    .summary("forward references resolved"),
+            )
+            .await;
             continue;
         }
         if t.starts_with("##") {
-            let (k, v) = t.trim_start_matches('#').split_once([' ', '\t']).unwrap_or((t.trim_start_matches('#'), ""));
-            cx.push(Node::new(format!("##{k}")).span(line.content()).value(text(v.trim()))).await;
+            let (k, v) = t
+                .trim_start_matches('#')
+                .split_once([' ', '\t'])
+                .unwrap_or((t.trim_start_matches('#'), ""));
+            cx.push(
+                Node::new(format!("##{k}"))
+                    .span(line.content())
+                    .value(text(v.trim())),
+            )
+            .await;
             directives = directives.saturating_add(1);
             continue;
         }
@@ -472,8 +650,19 @@ async fn gff3(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
         features = features.saturating_add(1);
     }
-    let top: Vec<String> = types.iter().take(5).map(|(k, n)| format!("{n} {k}")).collect();
-    cx.annotate(format!("GFF3, {features} feature(s){}, {directives} directive(s)", if top.is_empty() { String::new() } else { format!(" ({})", top.join(", ")) }));
+    let top: Vec<String> = types
+        .iter()
+        .take(5)
+        .map(|(k, n)| format!("{n} {k}"))
+        .collect();
+    cx.annotate(format!(
+        "GFF3, {features} feature(s){}, {directives} directive(s)",
+        if top.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", top.join(", "))
+        }
+    ));
     Ok(())
 }
 
@@ -483,7 +672,9 @@ async fn gff_record(cx: Cx, line: Line) -> Result<()> {
         let node = Node::new(name).span(span);
         cx.emit(match i {
             3 | 4 | 5 | 7 => node.value(number(&value)),
-            8 => node.value(text(preview(&value, 120))).lazy(gff_attributes, (value, span)),
+            8 => node
+                .value(text(preview(&value, 120)))
+                .lazy(gff_attributes, (value, span)),
             _ => node.value(text(value)),
         });
     }
@@ -496,7 +687,11 @@ async fn gff_attributes(cx: Cx, (attrs, span): (String, Span)) -> Result<()> {
         let len = to_u64(kv.len());
         let (k, v) = kv.split_once(['=', ' ']).unwrap_or((kv, ""));
         if !k.trim().is_empty() {
-            cx.emit(Node::new(unescape(k.trim())).span(span.sub(at, len)).value(text(unescape(v.trim().trim_matches('"')))));
+            cx.emit(
+                Node::new(unescape(k.trim()))
+                    .span(span.sub(at, len))
+                    .value(text(unescape(v.trim().trim_matches('"')))),
+            );
         }
         at = at.saturating_add(len).saturating_add(1);
     }
@@ -514,25 +709,36 @@ fn is_track_line(l: &[u8]) -> bool {
 fn bed_data_line(l: &[u8]) -> bool {
     let f: Vec<&[u8]> = l.split(|&b| b == b'\t').collect();
     f.len() >= 3
-        && f.get(1).is_some_and(|x| !x.is_empty() && x.iter().all(u8::is_ascii_digit))
-        && f.get(2).is_some_and(|x| !x.is_empty() && x.iter().all(u8::is_ascii_digit))
+        && f.get(1)
+            .is_some_and(|x| !x.is_empty() && x.iter().all(u8::is_ascii_digit))
+        && f.get(2)
+            .is_some_and(|x| !x.is_empty() && x.iter().all(u8::is_ascii_digit))
 }
 
 fn wig_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 16);
     is_text(h)
-        && lines.iter().find(|l| !l.starts_with(b"browser ") && !l.starts_with(b"#")).is_some_and(|l| {
-            l.starts_with(b"variableStep ")
-                || l.starts_with(b"fixedStep ")
-                || (l.starts_with(b"track ") && crate::formats::lines::contains(l, b"type=wiggle_0"))
-        })
+        && lines
+            .iter()
+            .find(|l| !l.starts_with(b"browser ") && !l.starts_with(b"#"))
+            .is_some_and(|l| {
+                l.starts_with(b"variableStep ")
+                    || l.starts_with(b"fixedStep ")
+                    || (l.starts_with(b"track ")
+                        && crate::formats::lines::contains(l, b"type=wiggle_0"))
+            })
 }
 
 fn bed_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 16);
     is_text(h)
-        && lines.first().is_some_and(|l| l.starts_with(b"track ") || l.starts_with(b"browser "))
-        && lines.iter().find(|l| !is_track_line(l)).is_some_and(|l| bed_data_line(l))
+        && lines
+            .first()
+            .is_some_and(|l| l.starts_with(b"track ") || l.starts_with(b"browser "))
+        && lines
+            .iter()
+            .find(|l| !is_track_line(l))
+            .is_some_and(|l| bed_data_line(l))
 }
 
 declare_format!(pub WIG = "wig", "UCSC wiggle track", ["wig"], "text/x-wiggle",
@@ -540,7 +746,20 @@ declare_format!(pub WIG = "wig", "UCSC wiggle track", ["wig"], "text/x-wiggle",
 declare_format!(pub BED = "bed", "Browser Extensible Data (BED) track", ["bed"], "text/x-bed",
     Probe::Custom(bed_probe), bed);
 
-const BED_COLUMNS: [&str; 12] = ["chrom", "chromStart", "chromEnd", "name", "score", "strand", "thickStart", "thickEnd", "itemRgb", "blockCount", "blockSizes", "blockStarts"];
+const BED_COLUMNS: [&str; 12] = [
+    "chrom",
+    "chromStart",
+    "chromEnd",
+    "name",
+    "score",
+    "strand",
+    "thickStart",
+    "thickEnd",
+    "itemRgb",
+    "blockCount",
+    "blockSizes",
+    "blockStarts",
+];
 
 async fn bed(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -559,7 +778,12 @@ async fn bed(cx: Cx, input: Input) -> Result<()> {
             }
             let node = Node::new(k.to_owned()).span(line.content()).value(text(v));
             let settings_span = line.content().tail(to_u64(k.len()).saturating_add(1));
-            cx.push(if k == "track" { node.lazy(track_settings, (v.to_owned(), settings_span)) } else { node }).await;
+            cx.push(if k == "track" {
+                node.lazy(track_settings, (v.to_owned(), settings_span))
+            } else {
+                node
+            })
+            .await;
             continue;
         }
         let f = line.split(b'\t');
@@ -574,7 +798,9 @@ async fn bed(cx: Cx, input: Input) -> Result<()> {
         .await;
         features = features.saturating_add(1);
     }
-    cx.annotate(format!("BED{columns}, {features} feature(s), {tracks} track(s)"));
+    cx.annotate(format!(
+        "BED{columns}, {features} feature(s), {tracks} track(s)"
+    ));
     Ok(())
 }
 
@@ -604,8 +830,16 @@ fn settings(s: &str) -> Vec<(String, String, usize, usize)> {
 async fn track_settings(cx: Cx, (s, span): (String, Span)) -> Result<()> {
     for (k, v, start, end) in settings(&s) {
         let len = end.saturating_sub(start);
-        let len = if s.as_bytes().get(end.saturating_sub(1)) == Some(&b' ') { len.saturating_sub(1) } else { len };
-        cx.emit(Node::new(k).span(span.sub(to_u64(start), to_u64(len))).value(text(v)));
+        let len = if s.as_bytes().get(end.saturating_sub(1)) == Some(&b' ') {
+            len.saturating_sub(1)
+        } else {
+            len
+        };
+        cx.emit(
+            Node::new(k)
+                .span(span.sub(to_u64(start), to_u64(len)))
+                .value(text(v)),
+        );
     }
     Ok(())
 }
@@ -613,7 +847,15 @@ async fn track_settings(cx: Cx, (s, span): (String, Span)) -> Result<()> {
 async fn bed_record(cx: Cx, line: Line) -> Result<()> {
     for (i, (value, span)) in line.split(b'\t').into_iter().enumerate() {
         let name = BED_COLUMNS.get(i).copied().unwrap_or("extra");
-        cx.emit(Node::new(name).span(span).value(if matches!(i, 1 | 2 | 4 | 6 | 7 | 9) { number(&value) } else { text(value) }));
+        cx.emit(
+            Node::new(name)
+                .span(span)
+                .value(if matches!(i, 1 | 2 | 4 | 6 | 7 | 9) {
+                    number(&value)
+                } else {
+                    text(value)
+                }),
+        );
     }
     Ok(())
 }
@@ -627,15 +869,35 @@ async fn wig(cx: Cx, input: Input) -> Result<()> {
     loop {
         let next = lines.next().await?;
         let starts_section = next.as_ref().is_none_or(|l| {
-            l.bytes.starts_with(b"variableStep") || l.bytes.starts_with(b"fixedStep") || l.bytes.starts_with(b"track") || l.bytes.starts_with(b"browser")
+            l.bytes.starts_with(b"variableStep")
+                || l.bytes.starts_with(b"fixedStep")
+                || l.bytes.starts_with(b"track")
+                || l.bytes.starts_with(b"browser")
         });
         if starts_section && let Some((decl, values)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
             let t = decl.text();
             let (k, v) = t.split_once(' ').unwrap_or((t.as_str(), ""));
-            let node = Node::new(k.to_owned()).span(file.sub(decl.pos, end.saturating_sub(decl.pos))).value(text(v));
-            let node = if k == "browser" { node } else { node.lazy(track_settings, (v.to_owned(), decl.content().tail(to_u64(k.len()).saturating_add(1)))) };
-            cx.push(if k == "track" || k == "browser" { node } else { node.summary(format!("{values} value(s)")) }).await;
+            let node = Node::new(k.to_owned())
+                .span(file.sub(decl.pos, end.saturating_sub(decl.pos)))
+                .value(text(v));
+            let node = if k == "browser" {
+                node
+            } else {
+                node.lazy(
+                    track_settings,
+                    (
+                        v.to_owned(),
+                        decl.content().tail(to_u64(k.len()).saturating_add(1)),
+                    ),
+                )
+            };
+            cx.push(if k == "track" || k == "browser" {
+                node
+            } else {
+                node.summary(format!("{values} value(s)"))
+            })
+            .await;
             sections = sections.saturating_add(1);
         }
         let Some(line) = next else { break };
@@ -648,7 +910,9 @@ async fn wig(cx: Cx, input: Input) -> Result<()> {
             total = total.saturating_add(1);
         }
     }
-    cx.annotate(format!("Wiggle track, {sections} section(s), {total} value(s)"));
+    cx.annotate(format!(
+        "Wiggle track, {sections} section(s), {total} value(s)"
+    ));
     Ok(())
 }
 
@@ -677,16 +941,36 @@ async fn genbank(cx: Cx, input: Input) -> Result<()> {
             let words: Vec<&str> = locus.split_whitespace().collect();
             let name = words.first().copied().unwrap_or("record").to_owned();
             if first.is_empty() {
-                first = format!("{name}, {}", words.get(1..).map(|w| w.join(" ")).unwrap_or_default());
+                first = format!(
+                    "{name}, {}",
+                    words.get(1..).map(|w| w.join(" ")).unwrap_or_default()
+                );
             }
-            cx.push(summarize(Node::new(name).span(span), words.get(1..).map(|w| w.join(" ")).unwrap_or_default()).lazy(genbank_record, span)).await;
+            cx.push(
+                summarize(
+                    Node::new(name).span(span),
+                    words.get(1..).map(|w| w.join(" ")).unwrap_or_default(),
+                )
+                .lazy(genbank_record, span),
+            )
+            .await;
             count = count.saturating_add(1);
         }
     }
     if let Some(s) = start {
-        cx.diag(Diagnostic::truncated(file.tail(s), file.len.saturating_sub(s)));
+        cx.diag(Diagnostic::truncated(
+            file.tail(s),
+            file.len.saturating_sub(s),
+        ));
     }
-    cx.annotate(format!("GenBank, {count} record(s){}", if first.is_empty() { String::new() } else { format!("; {first}") }));
+    cx.annotate(format!(
+        "GenBank, {count} record(s){}",
+        if first.is_empty() {
+            String::new()
+        } else {
+            format!("; {first}")
+        }
+    ));
     Ok(())
 }
 
@@ -696,7 +980,11 @@ async fn genbank_record(cx: Cx, span: Span) -> Result<()> {
     let mut current: Option<(String, u64, String)> = None;
     loop {
         let next = lines.next().await?;
-        let new_key = next.as_ref().is_none_or(|l| l.bytes.first().is_some_and(|b| b.is_ascii_uppercase() || *b == b'/'));
+        let new_key = next.as_ref().is_none_or(|l| {
+            l.bytes
+                .first()
+                .is_some_and(|b| b.is_ascii_uppercase() || *b == b'/')
+        });
         if new_key && let Some((key, start, value)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
             let s = span.sub(start, end.saturating_sub(start));
@@ -715,7 +1003,11 @@ async fn genbank_record(cx: Cx, span: Span) -> Result<()> {
                 break;
             }
             let key = t.get(..12).unwrap_or(&t).trim().to_owned();
-            current = Some((key, line.pos, t.get(12..).unwrap_or_default().trim().to_owned()));
+            current = Some((
+                key,
+                line.pos,
+                t.get(12..).unwrap_or_default().trim().to_owned(),
+            ));
         } else if let Some((_, _, value)) = current.as_mut()
             && value.len() < 400
         {
@@ -731,17 +1023,35 @@ async fn genbank_features(cx: Cx, span: Span) -> Result<()> {
     let mut current: Option<(String, u64, String, Vec<String>)> = None;
     loop {
         let next = lines.next().await?;
-        let new_feature = next.as_ref().is_none_or(|l| l.bytes.get(5).is_some_and(|b| *b != b' ') && l.bytes.starts_with(b"     "));
+        let new_feature = next.as_ref().is_none_or(|l| {
+            l.bytes.get(5).is_some_and(|b| *b != b' ') && l.bytes.starts_with(b"     ")
+        });
         if new_feature && let Some((key, start, location, quals)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
-            let label = quals.iter().find_map(|q| q.strip_prefix("/gene=").or_else(|| q.strip_prefix("/product=")).or_else(|| q.strip_prefix("/locus_tag="))).map(|s| s.trim_matches('"').to_owned()).unwrap_or_default();
-            let node = Node::new(key).span(span.sub(start, end.saturating_sub(start))).value(text(location));
-            cx.push(summarize(node, label).lazy(genbank_qualifiers, quals)).await;
+            let label = quals
+                .iter()
+                .find_map(|q| {
+                    q.strip_prefix("/gene=")
+                        .or_else(|| q.strip_prefix("/product="))
+                        .or_else(|| q.strip_prefix("/locus_tag="))
+                })
+                .map(|s| s.trim_matches('"').to_owned())
+                .unwrap_or_default();
+            let node = Node::new(key)
+                .span(span.sub(start, end.saturating_sub(start)))
+                .value(text(location));
+            cx.push(summarize(node, label).lazy(genbank_qualifiers, quals))
+                .await;
         }
         let Some(line) = next else { break };
         let t = line.text();
         if new_feature {
-            current = Some((t.get(5..21).unwrap_or_default().trim().to_owned(), line.pos, t.get(21..).unwrap_or_default().trim().to_owned(), Vec::new()));
+            current = Some((
+                t.get(5..21).unwrap_or_default().trim().to_owned(),
+                line.pos,
+                t.get(21..).unwrap_or_default().trim().to_owned(),
+                Vec::new(),
+            ));
         } else if let Some((_, _, _, quals)) = current.as_mut() {
             let body = t.trim();
             if body.starts_with('/') || quals.is_empty() {
@@ -761,7 +1071,10 @@ async fn genbank_features(cx: Cx, span: Span) -> Result<()> {
 
 async fn genbank_qualifiers(cx: Cx, quals: Vec<String>) -> Result<()> {
     for q in quals {
-        let (k, v) = q.trim_start_matches('/').split_once('=').map_or((q.trim_start_matches('/').to_owned(), String::new()), |(k, v)| (k.to_owned(), v.trim_matches('"').to_owned()));
+        let (k, v) = q.trim_start_matches('/').split_once('=').map_or(
+            (q.trim_start_matches('/').to_owned(), String::new()),
+            |(k, v)| (k.to_owned(), v.trim_matches('"').to_owned()),
+        );
         cx.emit(Node::new(k).value(text(preview(&v, 200))));
     }
     Ok(())
@@ -790,7 +1103,13 @@ impl Alignment {
 
     async fn emit(&self, cx: &Cx) {
         for (name, span, len) in &self.rows {
-            cx.push(Node::new(name.clone()).span(*span).value(uint(*len)).summary(format!("{len} columns"))).await;
+            cx.push(
+                Node::new(name.clone())
+                    .span(*span)
+                    .value(uint(*len))
+                    .summary(format!("{len} columns")),
+            )
+            .await;
         }
     }
 }
@@ -815,7 +1134,11 @@ async fn stockholm(cx: Cx, input: Input) -> Result<()> {
             if k == "ID" && id.is_empty() {
                 id = v.trim().to_owned();
             }
-            cx.emit(Node::new(format!("GF {k}")).span(line.content()).value(text(v.trim())));
+            cx.emit(
+                Node::new(format!("GF {k}"))
+                    .span(line.content())
+                    .value(text(v.trim())),
+            );
         } else if t.starts_with("#=") || t.trim().is_empty() || t.starts_with('#') {
             continue;
         } else if t.starts_with("//") {
@@ -829,8 +1152,19 @@ async fn stockholm(cx: Cx, input: Input) -> Result<()> {
     }
     let n = aln.rows.len();
     let width = aln.rows.first().map_or(0, |r| r.2);
-    cx.emit(Node::new("Sequences").value(uint(to_u64(n))).lazy(alignment_rows, aln.rows));
-    cx.annotate(format!("Stockholm alignment{}, {n} sequence(s) × {width} columns, {alignments} block(s)", if id.is_empty() { String::new() } else { format!(" {id}") }));
+    cx.emit(
+        Node::new("Sequences")
+            .value(uint(to_u64(n)))
+            .lazy(alignment_rows, aln.rows),
+    );
+    cx.annotate(format!(
+        "Stockholm alignment{}, {n} sequence(s) × {width} columns, {alignments} block(s)",
+        if id.is_empty() {
+            String::new()
+        } else {
+            format!(" {id}")
+        }
+    ));
     Ok(())
 }
 
@@ -868,8 +1202,15 @@ async fn clustal(cx: Cx, input: Input) -> Result<()> {
     }
     let n = aln.rows.len();
     let width = aln.rows.first().map_or(0, |r| r.2);
-    cx.emit(Node::new("Sequences").value(uint(to_u64(n))).lazy(alignment_rows, aln.rows));
-    cx.annotate(format!("{}, {n} sequence(s) × {width} columns in {blocks} block(s)", preview(&header, 40)));
+    cx.emit(
+        Node::new("Sequences")
+            .value(uint(to_u64(n)))
+            .lazy(alignment_rows, aln.rows),
+    );
+    cx.annotate(format!(
+        "{}, {n} sequence(s) × {width} columns in {blocks} block(s)",
+        preview(&header, 40)
+    ));
     Ok(())
 }
 
@@ -883,13 +1224,22 @@ async fn maf(cx: Cx, input: Input) -> Result<()> {
     let mut blocks = 0u64;
     loop {
         let next = lines.next().await?;
-        let ends = next.as_ref().is_none_or(|l| l.bytes.is_empty() || l.bytes.starts_with(b"a"));
+        let ends = next
+            .as_ref()
+            .is_none_or(|l| l.bytes.is_empty() || l.bytes.starts_with(b"a"));
         if ends && let Some((a, rows)) = current.take() {
             let end = rows.last().map_or(a.span.end(), |r| r.span.end());
             let span = file.sub(a.pos, end.saturating_sub(a.span.offset));
-            let species: Vec<String> = rows.iter().filter(|r| r.bytes.starts_with(b"s ")).filter_map(|r| r.words().get(1).map(|(s, _)| s.clone())).collect();
-            let node = Node::new(format!("Block {blocks}")).span(span).value(text(a.text().trim_start_matches('a').trim()));
-            cx.push(summarize(node, preview(&species.join(", "), 100)).lazy(maf_block, rows)).await;
+            let species: Vec<String> = rows
+                .iter()
+                .filter(|r| r.bytes.starts_with(b"s "))
+                .filter_map(|r| r.words().get(1).map(|(s, _)| s.clone()))
+                .collect();
+            let node = Node::new(format!("Block {blocks}"))
+                .span(span)
+                .value(text(a.text().trim_start_matches('a').trim()));
+            cx.push(summarize(node, preview(&species.join(", "), 100)).lazy(maf_block, rows))
+                .await;
             blocks = blocks.saturating_add(1);
         }
         let Some(line) = next else { break };
@@ -917,7 +1267,15 @@ async fn maf_block(cx: Cx, rows: Vec<Line>) -> Result<()> {
         let src = words.get(1).map_or(String::new(), |(w, _)| w.clone());
         let node = Node::new(format!("{kind} {src}")).span(row.content());
         if kind == "s" {
-            cx.emit(node.summary(format!("{}+{} ({})", words.get(2).map_or("", |w| w.0.as_str()), words.get(3).map_or("", |w| w.0.as_str()), words.get(4).map_or("", |w| w.0.as_str()))).lazy(maf_row, row));
+            cx.emit(
+                node.summary(format!(
+                    "{}+{} ({})",
+                    words.get(2).map_or("", |w| w.0.as_str()),
+                    words.get(3).map_or("", |w| w.0.as_str()),
+                    words.get(4).map_or("", |w| w.0.as_str())
+                ))
+                .lazy(maf_row, row),
+            );
         } else {
             cx.emit(node.value(text(row.text())));
         }
@@ -928,7 +1286,11 @@ async fn maf_block(cx: Cx, rows: Vec<Line>) -> Result<()> {
 async fn maf_row(cx: Cx, row: Line) -> Result<()> {
     for (i, (w, span)) in row.words().into_iter().enumerate().skip(1) {
         let name = MAF_S.get(i).copied().unwrap_or("extra");
-        cx.emit(Node::new(name).span(span).value(if matches!(i, 2 | 3 | 5) { number(&w) } else { text(preview(&w, 200)) }));
+        cx.emit(Node::new(name).span(span).value(if matches!(i, 2 | 3 | 5) {
+            number(&w)
+        } else {
+            text(preview(&w, 200))
+        }));
     }
     Ok(())
 }
@@ -957,10 +1319,19 @@ async fn nexus(cx: Cx, input: Input) -> Result<()> {
         {
             let span = file.sub(start, lines.pos().saturating_sub(start));
             names.push(name.clone());
-            cx.push(Node::new(format!("BEGIN {name}")).span(span).summary(format!("{} command(s)", commands.len())).lazy(nexus_commands, commands)).await;
+            cx.push(
+                Node::new(format!("BEGIN {name}"))
+                    .span(span)
+                    .summary(format!("{} command(s)", commands.len()))
+                    .lazy(nexus_commands, commands),
+            )
+            .await;
         } else if let Some((_, _, commands)) = current.as_mut() {
             let word = t.split_whitespace().next().unwrap_or_default();
-            if !word.is_empty() && word.chars().all(|c| c.is_ascii_alphabetic()) && commands.len() < 10_000 {
+            if !word.is_empty()
+                && word.chars().all(|c| c.is_ascii_alphabetic())
+                && commands.len() < 10_000
+            {
                 commands.push((t.trim().to_owned(), line.content()));
             }
         } else if line.pos == 0 {
@@ -973,8 +1344,15 @@ async fn nexus(cx: Cx, input: Input) -> Result<()> {
 
 async fn nexus_commands(cx: Cx, commands: Vec<(String, Span)>) -> Result<()> {
     for (c, span) in commands {
-        let (k, v) = c.split_once(char::is_whitespace).unwrap_or((c.as_str(), ""));
-        cx.push(Node::new(k.to_ascii_uppercase()).span(span).value(text(preview(v.trim_end_matches(';'), 200)))).await;
+        let (k, v) = c
+            .split_once(char::is_whitespace)
+            .unwrap_or((c.as_str(), ""));
+        cx.push(
+            Node::new(k.to_ascii_uppercase())
+                .span(span)
+                .value(text(preview(v.trim_end_matches(';'), 200))),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1011,7 +1389,10 @@ async fn gfa(cx: Cx, input: Input) -> Result<()> {
         }
         let f = line.split(b'\t');
         let kind = f.first().map_or("", |(s, _)| s.as_str());
-        let name = GFA_KINDS.iter().find(|(k, _)| *k == kind).map_or("Record", |(_, n)| n);
+        let name = GFA_KINDS
+            .iter()
+            .find(|(k, _)| *k == kind)
+            .map_or("Record", |(_, n)| n);
         tally(&mut counts, name, 64);
         let get = |i: usize| f.get(i).map_or("", |(s, _)| s.as_str());
         let label = match kind {
@@ -1020,9 +1401,18 @@ async fn gfa(cx: Cx, input: Input) -> Result<()> {
             "P" | "W" => get(1).to_owned(),
             _ => preview(&line.text(), 60),
         };
-        cx.push(Node::new(name).span(line.content()).value(text(label)).lazy(gfa_record, line.clone())).await;
+        cx.push(
+            Node::new(name)
+                .span(line.content())
+                .value(text(label))
+                .lazy(gfa_record, line.clone()),
+        )
+        .await;
     }
-    let parts: Vec<String> = counts.iter().map(|(k, n)| format!("{n} {}", k.to_lowercase())).collect();
+    let parts: Vec<String> = counts
+        .iter()
+        .map(|(k, n)| format!("{n} {}", k.to_lowercase()))
+        .collect();
     cx.annotate(format!("GFA, {}", parts.join(", ")));
     Ok(())
 }
@@ -1030,25 +1420,60 @@ async fn gfa(cx: Cx, input: Input) -> Result<()> {
 /// Names of the positional fields of GFA 1 records.
 const GFA_FIELDS: &[(&str, &[&str])] = &[
     ("S", &["Name", "Sequence"]),
-    ("L", &["From", "From orientation", "To", "To orientation", "Overlap"]),
-    ("C", &["Container", "Container orientation", "Contained", "Contained orientation", "Position", "Overlap"]),
+    (
+        "L",
+        &[
+            "From",
+            "From orientation",
+            "To",
+            "To orientation",
+            "Overlap",
+        ],
+    ),
+    (
+        "C",
+        &[
+            "Container",
+            "Container orientation",
+            "Contained",
+            "Contained orientation",
+            "Position",
+            "Overlap",
+        ],
+    ),
     ("P", &["Path name", "Segments", "Overlaps"]),
-    ("W", &["Sample", "Haplotype", "Sequence", "Start", "End", "Walk"]),
+    (
+        "W",
+        &["Sample", "Haplotype", "Sequence", "Start", "End", "Walk"],
+    ),
 ];
 
 async fn gfa_record(cx: Cx, line: Line) -> Result<()> {
     let fields = line.split(b'\t');
     let kind = fields.first().map_or("", |(k, _)| k.as_str());
-    let names = GFA_FIELDS.iter().find(|(k, _)| *k == kind).map_or(&[][..], |(_, n)| n);
+    let names = GFA_FIELDS
+        .iter()
+        .find(|(k, _)| *k == kind)
+        .map_or(&[][..], |(_, n)| n);
     for (i, (value, span)) in fields.iter().cloned().enumerate().skip(1) {
         if let Some(name) = names.get(i.saturating_sub(1)) {
-            cx.emit(Node::new(*name).span(span).value(text(preview(&value, 200))));
+            cx.emit(
+                Node::new(*name)
+                    .span(span)
+                    .value(text(preview(&value, 200))),
+            );
             continue;
         }
         let mut parts = value.splitn(3, ':');
         let (a, b, c) = (parts.next(), parts.next(), parts.next());
         let node = match (a, b, c) {
-            (Some(tag), Some(kind), Some(v)) if tag.len() == 2 && kind.len() == 1 => Node::new(tag.to_owned()).value(if kind == "i" || kind == "f" { number(v) } else { text(v) }),
+            (Some(tag), Some(kind), Some(v)) if tag.len() == 2 && kind.len() == 1 => {
+                Node::new(tag.to_owned()).value(if kind == "i" || kind == "f" {
+                    number(v)
+                } else {
+                    text(v)
+                })
+            }
             _ => Node::new(format!("Field {i}")).value(text(preview(&value, 200))),
         };
         cx.emit(node.span(span));
@@ -1059,14 +1484,22 @@ async fn gfa_record(cx: Cx, line: Line) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Protein Data Bank (PDB) coordinate files
 
-const PDB_RECORDS: &[&str] = &["HEADER", "OBSLTE", "TITLE ", "SPLIT ", "CAVEAT", "COMPND", "SOURCE", "KEYWDS", "EXPDTA", "NUMMDL", "MDLTYP", "AUTHOR", "REVDAT", "SPRSDE", "JRNL  ", "REMARK", "DBREF ", "SEQRES", "CRYST1", "ORIGX1", "SCALE1", "MODEL ", "ATOM  ", "HETATM"];
+const PDB_RECORDS: &[&str] = &[
+    "HEADER", "OBSLTE", "TITLE ", "SPLIT ", "CAVEAT", "COMPND", "SOURCE", "KEYWDS", "EXPDTA",
+    "NUMMDL", "MDLTYP", "AUTHOR", "REVDAT", "SPRSDE", "JRNL  ", "REMARK", "DBREF ", "SEQRES",
+    "CRYST1", "ORIGX1", "SCALE1", "MODEL ", "ATOM  ", "HETATM",
+];
 
 fn pdb_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 3);
     is_text(h)
-        && lines.first().is_some_and(|l| l.starts_with(b"HEADER    ") || l.starts_with(b"CRYST1 "))
+        && lines
+            .first()
+            .is_some_and(|l| l.starts_with(b"HEADER    ") || l.starts_with(b"CRYST1 "))
         && lines.iter().all(|l| l.len() <= 80)
-        && lines.get(1).is_some_and(|l| PDB_RECORDS.iter().any(|r| l.starts_with(r.as_bytes())))
+        && lines
+            .get(1)
+            .is_some_and(|l| PDB_RECORDS.iter().any(|r| l.starts_with(r.as_bytes())))
 }
 
 declare_format!(pub PDB_STRUCTURE = "pdb-structure", "Protein Data Bank structure", ["pdb", "ent"], "chemical/x-pdb",
@@ -1105,13 +1538,24 @@ async fn pdb_structure(cx: Cx, input: Input) -> Result<()> {
             "MODEL" => models = models.saturating_add(1),
             _ => {}
         }
-        if matches!(record.as_str(), "MODEL" | "ATOM" | "HETATM" | "TER" | "ENDMDL" | "ANISOU") {
+        if matches!(
+            record.as_str(),
+            "MODEL" | "ATOM" | "HETATM" | "TER" | "ENDMDL" | "ANISOU"
+        ) {
             coords_start.get_or_insert(line.pos);
             coords_end = lines.pos();
         }
     }
     let start = coords_start.unwrap_or(lines.pos());
-    let sections = [("Title and annotation", 0u64, start), ("Coordinates", start, coords_end.max(start)), ("Connectivity and bookkeeping", coords_end.max(start), lines.pos())];
+    let sections = [
+        ("Title and annotation", 0u64, start),
+        ("Coordinates", start, coords_end.max(start)),
+        (
+            "Connectivity and bookkeeping",
+            coords_end.max(start),
+            lines.pos(),
+        ),
+    ];
     for (name, from, to) in sections {
         if to > from {
             let span = file.sub(from, to.saturating_sub(from));
@@ -1121,10 +1565,26 @@ async fn pdb_structure(cx: Cx, input: Input) -> Result<()> {
     let chain_list: String = chains.iter().filter(|c| **c != ' ').collect();
     cx.annotate(format!(
         "PDB {}{}: {atoms} atom(s), {hetatms} hetero atom(s){}{}",
-        if id.is_empty() { "entry".to_owned() } else { id },
-        if classification.is_empty() { String::new() } else { format!(" ({})", classification.to_lowercase()) },
-        if chain_list.is_empty() { String::new() } else { format!(", chains {chain_list}") },
-        if models > 1 { format!(", {models} models") } else { String::new() }
+        if id.is_empty() {
+            "entry".to_owned()
+        } else {
+            id
+        },
+        if classification.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", classification.to_lowercase())
+        },
+        if chain_list.is_empty() {
+            String::new()
+        } else {
+            format!(", chains {chain_list}")
+        },
+        if models > 1 {
+            format!(", {models} models")
+        } else {
+            String::new()
+        }
     ));
     if !title.is_empty() {
         cx.emit(Node::new("Title").value(text(title.trim())));
@@ -1142,11 +1602,26 @@ async fn pdb_section(cx: Cx, span: Span) -> Result<()> {
         let node = Node::new(record.clone()).span(line.content());
         let node = match record.as_str() {
             "ATOM" | "HETATM" => node
-                .value(text(format!("{} {} {}{}", line.column(12, 16), line.column(17, 20), line.column(21, 22), line.column(22, 26))))
-                .summary(format!("({}, {}, {})", line.column(30, 38), line.column(38, 46), line.column(46, 54)))
+                .value(text(format!(
+                    "{} {} {}{}",
+                    line.column(12, 16),
+                    line.column(17, 20),
+                    line.column(21, 22),
+                    line.column(22, 26)
+                )))
+                .summary(format!(
+                    "({}, {}, {})",
+                    line.column(30, 38),
+                    line.column(38, 46),
+                    line.column(46, 54)
+                ))
                 .lazy(pdb_atom, line.clone()),
-            "HEADER" => node.value(text(line.column(10, 50))).lazy(pdb_header, line.clone()),
-            "CRYST1" => node.value(text(line.column(6, 70))).lazy(pdb_cryst1, line.clone()),
+            "HEADER" => node
+                .value(text(line.column(10, 50)))
+                .lazy(pdb_header, line.clone()),
+            "CRYST1" => node
+                .value(text(line.column(6, 70)))
+                .lazy(pdb_cryst1, line.clone()),
             _ => node.value(text(line.column(6, 80))),
         };
         cx.push(node).await;
@@ -1158,8 +1633,20 @@ async fn pdb_section(cx: Cx, span: Span) -> Result<()> {
 fn pdb_columns(cx: &Cx, line: &Line, columns: &[(&'static str, usize, usize, bool)]) {
     for &(name, from, to, numeric) in columns {
         let v = line.column(from, to);
-        let span = line.sub(from, to.saturating_sub(from).min(line.bytes.len().saturating_sub(from)));
-        cx.emit(Node::new(name).span(span).value(if numeric && !v.is_empty() { number(&v) } else { text(v) }));
+        let span = line.sub(
+            from,
+            to.saturating_sub(from)
+                .min(line.bytes.len().saturating_sub(from)),
+        );
+        cx.emit(
+            Node::new(name)
+                .span(span)
+                .value(if numeric && !v.is_empty() {
+                    number(&v)
+                } else {
+                    text(v)
+                }),
+        );
     }
 }
 
@@ -1188,7 +1675,15 @@ async fn pdb_atom(cx: Cx, line: Line) -> Result<()> {
 }
 
 async fn pdb_header(cx: Cx, line: Line) -> Result<()> {
-    pdb_columns(&cx, &line, &[("classification", 10, 50, false), ("depDate", 50, 59, false), ("idCode", 62, 66, false)]);
+    pdb_columns(
+        &cx,
+        &line,
+        &[
+            ("classification", 10, 50, false),
+            ("depDate", 50, 59, false),
+            ("idCode", 62, 66, false),
+        ],
+    );
     Ok(())
 }
 
@@ -1196,7 +1691,16 @@ async fn pdb_cryst1(cx: Cx, line: Line) -> Result<()> {
     pdb_columns(
         &cx,
         &line,
-        &[("a", 6, 15, true), ("b", 15, 24, true), ("c", 24, 33, true), ("alpha", 33, 40, true), ("beta", 40, 47, true), ("gamma", 47, 54, true), ("sGroup", 55, 66, false), ("z", 66, 70, true)],
+        &[
+            ("a", 6, 15, true),
+            ("b", 15, 24, true),
+            ("c", 24, 33, true),
+            ("alpha", 33, 40, true),
+            ("beta", 40, 47, true),
+            ("gamma", 47, 54, true),
+            ("sGroup", 55, 66, false),
+            ("z", 66, 70, true),
+        ],
     );
     Ok(())
 }
@@ -1208,8 +1712,11 @@ fn cif_probe(h: &Head<'_>) -> bool {
     if !is_text(h) {
         return false;
     }
-    let first = head_lines(h, 64).into_iter().find(|l| !l.is_empty() && !(l.starts_with(b"#") && !l.starts_with(b"#\\#CIF")));
-    (h.starts_with(b"#\\#CIF_") || first.is_some_and(|l| l.starts_with(b"data_"))) && h.data.windows(2).any(|w| w == b"\n_")
+    let first = head_lines(h, 64)
+        .into_iter()
+        .find(|l| !l.is_empty() && !(l.starts_with(b"#") && !l.starts_with(b"#\\#CIF")));
+    (h.starts_with(b"#\\#CIF_") || first.is_some_and(|l| l.starts_with(b"data_")))
+        && h.data.windows(2).any(|w| w == b"\n_")
 }
 
 declare_format!(pub CIF = "cif", "Crystallographic Information File (CIF/mmCIF)", ["cif", "mmcif", "mcif"], "chemical/x-cif",
@@ -1226,13 +1733,20 @@ fn cif_tokens(s: &str) -> Vec<String> {
                 // A closing quote must be followed by whitespace or the end.
                 let mut end = None;
                 for (i, c) in body.char_indices() {
-                    if c == q && body.get(i.saturating_add(1)..).is_none_or(|t| t.is_empty() || t.starts_with(char::is_whitespace)) {
+                    if c == q
+                        && body
+                            .get(i.saturating_add(1)..)
+                            .is_none_or(|t| t.is_empty() || t.starts_with(char::is_whitespace))
+                    {
                         end = Some(i);
                         break;
                     }
                 }
                 match end {
-                    Some(i) => (body.get(..i).unwrap_or_default(), body.get(i.saturating_add(1)..).unwrap_or_default()),
+                    Some(i) => (
+                        body.get(..i).unwrap_or_default(),
+                        body.get(i.saturating_add(1)..).unwrap_or_default(),
+                    ),
                     None => (body, ""),
                 }
             }
@@ -1247,8 +1761,16 @@ fn cif_tokens(s: &str) -> Vec<String> {
 /// One data item or loop of a CIF data block.
 #[derive(Clone, Debug)]
 enum CifEntry {
-    Item { name: String, value: String, span: Span },
-    Loop { columns: Vec<String>, rows: u64, span: Span },
+    Item {
+        name: String,
+        value: String,
+        span: Span,
+    },
+    Loop {
+        columns: Vec<String>,
+        rows: u64,
+        span: Span,
+    },
 }
 
 async fn cif(cx: Cx, input: Input) -> Result<()> {
@@ -1261,10 +1783,18 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
     let mut pending: Option<(String, Span)> = None;
     let mut in_text: Option<(String, Span, String)> = None;
     let mut first_block = String::new();
-    let flush_loop = |lp: &mut Option<(Vec<String>, u64, u64, bool)>, block: &mut Option<(String, u64, Vec<CifEntry>)>, end: u64| {
-        if let (Some((columns, values, start, _)), Some((_, _, entries))) = (lp.take(), block.as_mut()) {
+    let flush_loop = |lp: &mut Option<(Vec<String>, u64, u64, bool)>,
+                      block: &mut Option<(String, u64, Vec<CifEntry>)>,
+                      end: u64| {
+        if let (Some((columns, values, start, _)), Some((_, _, entries))) =
+            (lp.take(), block.as_mut())
+        {
             let rows = values.checked_div(to_u64(columns.len())).unwrap_or(0);
-            entries.push(CifEntry::Loop { columns, rows, span: file.sub(start, end.saturating_sub(start)) });
+            entries.push(CifEntry::Loop {
+                columns,
+                rows,
+                span: file.sub(start, end.saturating_sub(start)),
+            });
         }
     };
     loop {
@@ -1280,14 +1810,23 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
         // Semicolon-delimited text fields.
         if let Some((name, span, value)) = in_text.as_mut() {
             if t.starts_with(';') {
-                let full = file.sub(span.offset.saturating_sub(file.offset), lines.pos().saturating_sub(span.offset.saturating_sub(file.offset)));
+                let full = file.sub(
+                    span.offset.saturating_sub(file.offset),
+                    lines
+                        .pos()
+                        .saturating_sub(span.offset.saturating_sub(file.offset)),
+                );
                 if let Some((_, _, entries)) = block.as_mut() {
                     if name.is_empty() {
                         if let Some((_, values, _, _)) = lp.as_mut() {
                             *values = values.saturating_add(1);
                         }
                     } else {
-                        entries.push(CifEntry::Item { name: name.clone(), value: value.trim().to_owned(), span: full });
+                        entries.push(CifEntry::Item {
+                            name: name.clone(),
+                            value: value.trim().to_owned(),
+                            span: full,
+                        });
                     }
                 }
                 in_text = None;
@@ -1325,7 +1864,13 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
         if let Some((columns, values, _, header)) = lp.as_mut() {
             if trimmed.starts_with('_') && *header {
                 if columns.len() < 4096 {
-                    columns.push(trimmed.split_whitespace().next().unwrap_or_default().to_owned());
+                    columns.push(
+                        trimmed
+                            .split_whitespace()
+                            .next()
+                            .unwrap_or_default()
+                            .to_owned(),
+                    );
                 }
                 continue;
             }
@@ -1341,7 +1886,11 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
             let name = tokens.first().cloned().unwrap_or_default();
             if let Some(value) = tokens.get(1) {
                 if let Some((_, _, entries)) = block.as_mut() {
-                    entries.push(CifEntry::Item { name, value: value.clone(), span: line.content() });
+                    entries.push(CifEntry::Item {
+                        name,
+                        value: value.clone(),
+                        span: line.content(),
+                    });
                 }
             } else {
                 pending = Some((name, line.content()));
@@ -1350,7 +1899,11 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
             && let Some((_, _, entries)) = block.as_mut()
         {
             let value = cif_tokens(trimmed).into_iter().next().unwrap_or_default();
-            entries.push(CifEntry::Item { name, value, span: span.sub(0, line.span.end().saturating_sub(span.offset)) });
+            entries.push(CifEntry::Item {
+                name,
+                value,
+                span: span.sub(0, line.span.end().saturating_sub(span.offset)),
+            });
         }
         if blocks.len() > 10_000 {
             break;
@@ -1358,21 +1911,51 @@ async fn cif(cx: Cx, input: Input) -> Result<()> {
     }
     let count = blocks.len();
     for (name, start, entries) in blocks {
-        let end = entries.iter().map(|e| match e { CifEntry::Item { span, .. } | CifEntry::Loop { span, .. } => span.end() }).max().unwrap_or(file.offset);
+        let end = entries
+            .iter()
+            .map(|e| match e {
+                CifEntry::Item { span, .. } | CifEntry::Loop { span, .. } => span.end(),
+            })
+            .max()
+            .unwrap_or(file.offset);
         let span = file.sub(start, end.saturating_sub(file.offset).saturating_sub(start));
         let n = entries.len();
-        cx.push(Node::new(format!("data_{name}")).span(span).summary(format!("{n} item(s)/loop(s)")).lazy(cif_block, entries)).await;
+        cx.push(
+            Node::new(format!("data_{name}"))
+                .span(span)
+                .summary(format!("{n} item(s)/loop(s)"))
+                .lazy(cif_block, entries),
+        )
+        .await;
     }
-    cx.annotate(format!("CIF, {count} data block(s){}", if first_block.is_empty() { String::new() } else { format!(", first {first_block}") }));
+    cx.annotate(format!(
+        "CIF, {count} data block(s){}",
+        if first_block.is_empty() {
+            String::new()
+        } else {
+            format!(", first {first_block}")
+        }
+    ));
     Ok(())
 }
 
 async fn cif_block(cx: Cx, entries: Vec<CifEntry>) -> Result<()> {
     for e in entries {
         match e {
-            CifEntry::Item { name, value, span } => cx.push(Node::new(name).span(span).value(number(&value))).await,
-            CifEntry::Loop { columns, rows, span } => {
-                let category = columns.first().and_then(|c| c.split('.').next()).unwrap_or("loop").to_owned();
+            CifEntry::Item { name, value, span } => {
+                cx.push(Node::new(name).span(span).value(number(&value)))
+                    .await
+            }
+            CifEntry::Loop {
+                columns,
+                rows,
+                span,
+            } => {
+                let category = columns
+                    .first()
+                    .and_then(|c| c.split('.').next())
+                    .unwrap_or("loop")
+                    .to_owned();
                 cx.push(
                     Node::new(format!("loop_ {category}"))
                         .span(span)
@@ -1389,7 +1972,8 @@ async fn cif_block(cx: Cx, entries: Vec<CifEntry>) -> Result<()> {
 
 async fn cif_columns(cx: Cx, columns: Vec<String>) -> Result<()> {
     for (i, c) in columns.into_iter().enumerate() {
-        cx.push(Node::new(format!("Column {i}")).value(text(c))).await;
+        cx.push(Node::new(format!("Column {i}")).value(text(c)))
+            .await;
     }
     Ok(())
 }
@@ -1401,7 +1985,10 @@ fn molfile_counts(h: &Head<'_>) -> bool {
     head_lines(h, 4).get(3).is_some_and(|l| {
         let t = String::from_utf8_lossy(l);
         let t = t.trim_end();
-        (t.ends_with("V2000") || t.ends_with("V3000")) && t.len() >= 39 && t.get(..6).is_some_and(|c| c.chars().all(|ch| ch.is_ascii_digit() || ch == ' '))
+        (t.ends_with("V2000") || t.ends_with("V3000"))
+            && t.len() >= 39
+            && t.get(..6)
+                .is_some_and(|c| c.chars().all(|ch| ch.is_ascii_digit() || ch == ' '))
     })
 }
 
@@ -1414,7 +2001,17 @@ declare_format!(pub SDF = "mdl-sdf", "MDL structure-data file (SDF)", ["sdf", "s
 declare_format!(pub MOLFILE = "mdl-mol", "MDL molfile", ["mol"], "chemical/x-mdl-molfile",
     Probe::Custom(|h| is_text(h) && molfile_counts(h) && !is_sdf(h)), molfile);
 
-const BOND_TYPES: &[&str] = &["", "single", "double", "triple", "aromatic", "single or double", "single or aromatic", "double or aromatic", "any"];
+const BOND_TYPES: &[&str] = &[
+    "",
+    "single",
+    "double",
+    "triple",
+    "aromatic",
+    "single or double",
+    "single or aromatic",
+    "double or aromatic",
+    "any",
+];
 
 /// What the counts line and blocks of one molfile say.
 struct Molecule {
@@ -1427,7 +2024,12 @@ struct Molecule {
 /// Emits the parts of a molfile in `span`; returns a summary.
 async fn molfile_body(cx: &Cx, span: Span, emit: bool) -> Result<Molecule> {
     let mut lines = Lines::new(cx, span);
-    let mut mol = Molecule { name: String::new(), atoms: 0, bonds: 0, formula: String::new() };
+    let mut mol = Molecule {
+        name: String::new(),
+        atoms: 0,
+        bonds: 0,
+        formula: String::new(),
+    };
     let mut elements: Vec<(String, u64)> = Vec::new();
     let mut index = 0u64;
     let (mut atoms_left, mut bonds_left) = (0u64, 0u64);
@@ -1453,7 +2055,13 @@ async fn molfile_body(cx: &Cx, span: Span, emit: bool) -> Result<Molecule> {
                 mol.bonds = line.column(3, 6).parse().unwrap_or(0);
                 atoms_left = if v3000 { 0 } else { mol.atoms };
                 bonds_left = if v3000 { 0 } else { mol.bonds };
-                push(line_node("Counts line", &line).summary(format!("{} atoms, {} bonds, {}", mol.atoms, mol.bonds, if v3000 { "V3000" } else { "V2000" }))).await;
+                push(line_node("Counts line", &line).summary(format!(
+                    "{} atoms, {} bonds, {}",
+                    mol.atoms,
+                    mol.bonds,
+                    if v3000 { "V3000" } else { "V2000" }
+                )))
+                .await;
             }
             _ if t.starts_with("M  END") => {
                 push(line_node("End", &line)).await;
@@ -1467,7 +2075,12 @@ async fn molfile_body(cx: &Cx, span: Span, emit: bool) -> Result<Molecule> {
                     Node::new(format!("Atom {}", mol.atoms.saturating_sub(atoms_left)))
                         .span(line.content())
                         .value(text(symbol))
-                        .summary(format!("({}, {}, {})", line.column(0, 10), line.column(10, 20), line.column(20, 30))),
+                        .summary(format!(
+                            "({}, {}, {})",
+                            line.column(0, 10),
+                            line.column(10, 20),
+                            line.column(20, 30)
+                        )),
                 )
                 .await;
             }
@@ -1489,18 +2102,43 @@ async fn molfile_body(cx: &Cx, span: Span, emit: bool) -> Result<Molecule> {
                 } else if body.starts_with("END ") {
                     v3000_section.clear();
                 } else if let Some(c) = body.strip_prefix("COUNTS ") {
-                    let n: Vec<u64> = c.split_whitespace().filter_map(|x| x.parse().ok()).collect();
+                    let n: Vec<u64> = c
+                        .split_whitespace()
+                        .filter_map(|x| x.parse().ok())
+                        .collect();
                     mol.atoms = n.first().copied().unwrap_or(0);
                     mol.bonds = n.get(1).copied().unwrap_or(0);
                 } else if v3000_section == "ATOM" {
-                    let symbol = body.split_whitespace().nth(1).unwrap_or_default().to_owned();
+                    let symbol = body
+                        .split_whitespace()
+                        .nth(1)
+                        .unwrap_or_default()
+                        .to_owned();
                     tally(&mut elements, &symbol, 200);
                 }
-                push(Node::new(if v3000_section.is_empty() { "V30" } else { "V30 entry" }).span(line.content()).value(text(body))).await;
+                push(
+                    Node::new(if v3000_section.is_empty() {
+                        "V30"
+                    } else {
+                        "V30 entry"
+                    })
+                    .span(line.content())
+                    .value(text(body)),
+                )
+                .await;
             }
             _ => {
                 let key = line.column(0, 6);
-                push(Node::new(if key.is_empty() { "Line".to_owned() } else { key }).span(line.content()).value(text(line.column(6, 200)))).await;
+                push(
+                    Node::new(if key.is_empty() {
+                        "Line".to_owned()
+                    } else {
+                        key
+                    })
+                    .span(line.content())
+                    .value(text(line.column(6, 200))),
+                )
+                .await;
             }
         }
         index = index.saturating_add(1);
@@ -1514,13 +2152,25 @@ async fn molfile_body(cx: &Cx, span: Span, emit: bool) -> Result<Molecule> {
         };
         rank(&a.0).cmp(&rank(&b.0)).then(a.0.cmp(&b.0))
     });
-    mol.formula = elements.iter().map(|(e, n)| if *n == 1 { e.clone() } else { format!("{e}{n}") }).collect();
+    mol.formula = elements
+        .iter()
+        .map(|(e, n)| {
+            if *n == 1 {
+                e.clone()
+            } else {
+                format!("{e}{n}")
+            }
+        })
+        .collect();
     Ok(mol)
 }
 
 async fn molfile(cx: Cx, input: Input) -> Result<()> {
     let mol = molfile_body(&cx, input.span, true).await?;
-    cx.annotate(format!("MDL molfile {:?}, {}, {} atom(s), {} bond(s)", mol.name, mol.formula, mol.atoms, mol.bonds));
+    cx.annotate(format!(
+        "MDL molfile {:?}, {}, {} atom(s), {} bond(s)",
+        mol.name, mol.formula, mol.atoms, mol.bonds
+    ));
     Ok(())
 }
 
@@ -1537,14 +2187,25 @@ async fn sdf(cx: Cx, input: Input) -> Result<()> {
         if line.bytes.starts_with(b"$$$$") {
             let span = file.sub(start, lines.pos().saturating_sub(start));
             let mol = file.sub(start, mol_end.unwrap_or(line.pos).saturating_sub(start));
-            let data = file.sub(mol.end().saturating_sub(file.offset), line.pos.saturating_sub(mol.end().saturating_sub(file.offset)));
+            let data = file.sub(
+                mol.end().saturating_sub(file.offset),
+                line.pos
+                    .saturating_sub(mol.end().saturating_sub(file.offset)),
+            );
             let summary = molfile_body(&cx, mol, false).await?;
             cx.push(
-                Node::new(if summary.name.is_empty() { format!("Record {count}") } else { summary.name.clone() })
-                    .span(span)
-                    .value(text(summary.formula.clone()))
-                    .summary(format!("{} atom(s), {} bond(s)", summary.atoms, summary.bonds))
-                    .lazy(sdf_record, (mol, data)),
+                Node::new(if summary.name.is_empty() {
+                    format!("Record {count}")
+                } else {
+                    summary.name.clone()
+                })
+                .span(span)
+                .value(text(summary.formula.clone()))
+                .summary(format!(
+                    "{} atom(s), {} bond(s)",
+                    summary.atoms, summary.bonds
+                ))
+                .lazy(sdf_record, (mol, data)),
             )
             .await;
             count = count.saturating_add(1);
@@ -1569,12 +2230,20 @@ async fn sdf_record(cx: Cx, (mol, data): (Span, Span)) -> Result<()> {
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b">"));
         if starts && let Some((name, s, values)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
-            cx.push(Node::new(name).span(data.sub(s, end.saturating_sub(s))).value(number(&values.join("\n")))).await;
+            cx.push(
+                Node::new(name)
+                    .span(data.sub(s, end.saturating_sub(s)))
+                    .value(number(&values.join("\n"))),
+            )
+            .await;
         }
         let Some(line) = next else { break };
         let t = line.text();
         if starts {
-            let name = t.split_once('<').and_then(|(_, r)| r.split_once('>')).map_or_else(|| t.clone(), |(n, _)| n.to_owned());
+            let name = t
+                .split_once('<')
+                .and_then(|(_, r)| r.split_once('>'))
+                .map_or_else(|| t.clone(), |(n, _)| n.to_owned());
             current = Some((name, line.pos, Vec::new()));
         } else if let Some((_, _, values)) = current.as_mut()
             && !t.is_empty()
@@ -1596,7 +2265,10 @@ async fn sdf_molfile(cx: Cx, mol: Span) -> Result<()> {
 
 fn jcamp_probe(h: &Head<'_>) -> bool {
     let head = h.data.get(..2048).unwrap_or(h.data);
-    is_text(h) && h.starts_with(b"##TITLE=") && (crate::formats::lines::contains(head, b"##JCAMP-DX=") || crate::formats::lines::contains(head, b"##JCAMPDX="))
+    is_text(h)
+        && h.starts_with(b"##TITLE=")
+        && (crate::formats::lines::contains(head, b"##JCAMP-DX=")
+            || crate::formats::lines::contains(head, b"##JCAMPDX="))
 }
 
 declare_format!(pub JCAMP = "jcamp-dx", "JCAMP-DX spectrum", ["jdx", "dx", "jcm"], "chemical/x-jcamp-dx",
@@ -1606,7 +2278,8 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
     let mut current: Option<(String, u64, String, u64)> = None;
-    let (mut title, mut kind, mut version, mut npoints) = (String::new(), String::new(), String::new(), String::new());
+    let (mut title, mut kind, mut version, mut npoints) =
+        (String::new(), String::new(), String::new(), String::new());
     let mut blocks = 0u32;
     let mut depth = 0u32;
     loop {
@@ -1615,7 +2288,9 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
         if starts && let Some((label, s, value, extra)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
             let span = file.sub(s, end.saturating_sub(s));
-            let mut node = Node::new(format!("##{label}")).span(span).value(number(&value));
+            let mut node = Node::new(format!("##{label}"))
+                .span(span)
+                .value(number(&value));
             if extra > 0 {
                 node = node.summary(format!("{extra} data line(s)"));
             }
@@ -1627,8 +2302,17 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
             let body = t.trim_start_matches('#');
             let (label, value) = body.split_once('=').unwrap_or((body, ""));
             // Labels compare without spaces, dashes, slashes and underscores.
-            let norm: String = label.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_uppercase();
-            let value = value.split("$$").next().unwrap_or_default().trim().to_owned();
+            let norm: String = label
+                .chars()
+                .filter(|c| c.is_ascii_alphanumeric())
+                .collect::<String>()
+                .to_ascii_uppercase();
+            let value = value
+                .split("$$")
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
             match norm.as_str() {
                 "TITLE" => {
                     depth = depth.saturating_add(1);
@@ -1653,9 +2337,21 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "JCAMP-DX {version}, {}{}{}",
-        if kind.is_empty() { "spectrum".to_owned() } else { kind.to_lowercase() },
-        if npoints.is_empty() { String::new() } else { format!(", {npoints} points") },
-        if blocks > 1 { format!(", {blocks} blocks") } else { format!(": {}", preview(&title, 60)) }
+        if kind.is_empty() {
+            "spectrum".to_owned()
+        } else {
+            kind.to_lowercase()
+        },
+        if npoints.is_empty() {
+            String::new()
+        } else {
+            format!(", {npoints} points")
+        },
+        if blocks > 1 {
+            format!(", {blocks} blocks")
+        } else {
+            format!(": {}", preview(&title, 60))
+        }
     ));
     Ok(())
 }
@@ -1666,18 +2362,30 @@ mod tests {
 
     #[test]
     fn cif_tokens_handle_quotes() {
-        assert_eq!(cif_tokens("_a 'it''s x' \"b c\" d"), vec!["_a", "it''s x", "b c", "d"]);
+        assert_eq!(
+            cif_tokens("_a 'it''s x' \"b c\" d"),
+            vec!["_a", "it''s x", "b c", "d"]
+        );
         assert_eq!(cif_tokens("'a'b' c"), vec!["a'b", "c"]);
     }
 
     #[test]
     fn settings_split() {
-        assert_eq!(settings("name=\"my track\" visibility=2"), vec![("name".to_owned(), "my track".to_owned(), 0, 15), ("visibility".to_owned(), "2".to_owned(), 16, 28)]);
+        assert_eq!(
+            settings("name=\"my track\" visibility=2"),
+            vec![
+                ("name".to_owned(), "my track".to_owned(), 0, 15),
+                ("visibility".to_owned(), "2".to_owned(), 16, 28)
+            ]
+        );
     }
 
     #[test]
     fn unescape_percent() {
         assert_eq!(unescape("a%3Bb%2C"), "a;b,");
-        assert_eq!(crate::formats::lines::int(1), crate::value::Value::Int { value: 1, bits: 64 });
+        assert_eq!(
+            crate::formats::lines::int(1),
+            crate::value::Value::Int { value: 1, bits: 64 }
+        );
     }
 }

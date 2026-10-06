@@ -52,7 +52,9 @@ declare_format!(pub IONEX = "ionex", "IONEX ionosphere maps", ["inx", "i", "24i"
 
 fn sp3_probe(h: &Head<'_>) -> bool {
     let lines = super::head_lines(h, 2);
-    let (Some(a), Some(b)) = (lines.first(), lines.get(1)) else { return false };
+    let (Some(a), Some(b)) = (lines.first(), lines.get(1)) else {
+        return false;
+    };
     matches!(a.get(..3), Some([b'#', b'a'..=b'd', b'P' | b'V'])) && b.starts_with(b"## ")
 }
 
@@ -84,13 +86,25 @@ fn starts_record(style: Style, line: &[u8]) -> bool {
     let at = |i: usize| line.get(i).copied().unwrap_or(b' ');
     match style {
         Style::EpochMarker => at(0) == b'>',
-        Style::Epoch2 => at(0) == b' ' && at(1).is_ascii_digit() && at(2).is_ascii_digit() && at(3) == b' ' && at(28).is_ascii_digit(),
+        Style::Epoch2 => {
+            at(0) == b' '
+                && at(1).is_ascii_digit()
+                && at(2).is_ascii_digit()
+                && at(3) == b' '
+                && at(28).is_ascii_digit()
+        }
         Style::Nav => {
             (at(0).is_ascii_uppercase() && at(1).is_ascii_digit() && at(2).is_ascii_digit())
-                || (at(1).is_ascii_digit() && (at(0) == b' ' || at(0).is_ascii_digit()) && at(2) == b' ' && at(3) != b' ')
+                || (at(1).is_ascii_digit()
+                    && (at(0) == b' ' || at(0).is_ascii_digit())
+                    && at(2) == b' '
+                    && at(3) != b' ')
         }
         Style::Line => true,
-        Style::Blocks => label(line) == b"START OF ANTENNA" || (label(line).starts_with(b"START OF") && label(line).ends_with(b"MAP")),
+        Style::Blocks => {
+            label(line) == b"START OF ANTENNA"
+                || (label(line).starts_with(b"START OF") && label(line).ends_with(b"MAP"))
+        }
         Style::Sp3 => at(0) == b'*' || line.starts_with(b"EOF"),
         Style::Sinex => at(0) == b'+' || line.starts_with(b"%ENDSNX"),
     }
@@ -105,7 +119,12 @@ fn record_name(style: Style, line: &str, index: u64) -> String {
             format!("Satellite {sat}")
         }
         Style::Blocks => {
-            let kind = line.get(60..).unwrap_or_default().trim().trim_start_matches("START OF ").to_lowercase();
+            let kind = line
+                .get(60..)
+                .unwrap_or_default()
+                .trim()
+                .trim_start_matches("START OF ")
+                .to_lowercase();
             format!("{kind} {index}")
         }
         Style::Sinex if line.starts_with('%') => "End of file".to_owned(),
@@ -126,7 +145,12 @@ async fn header(cx: &Cx, file: Span, skip: u64) -> Result<(u64, Vec<(String, Str
             continue;
         }
         let l = String::from_utf8_lossy(label(&line.bytes)).into_owned();
-        let value = String::from_utf8_lossy(line.bytes.get(..60.min(line.bytes.len())).unwrap_or_default()).into_owned();
+        let value = String::from_utf8_lossy(
+            line.bytes
+                .get(..60.min(line.bytes.len()))
+                .unwrap_or_default(),
+        )
+        .into_owned();
         end = line.next;
         if l == "END OF HEADER" || out.len() >= 4096 {
             break;
@@ -143,7 +167,11 @@ async fn header_lines(cx: Cx, span: Span) -> Result<()> {
         let piece = line.piece();
         let l = label(&line.bytes);
         if l.is_empty() || line.bytes.len() <= 60 {
-            cx.emit(leaf(format!("Line {}", line.number), line.span, text(line.text())));
+            cx.emit(leaf(
+                format!("Line {}", line.number),
+                line.span,
+                text(line.text()),
+            ));
             continue;
         }
         let value = piece.to(60).trim();
@@ -157,7 +185,12 @@ async fn header_lines(cx: Cx, span: Span) -> Result<()> {
 async fn record_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
-        cx.push(leaf(format!("Line {}", line.number), line.span, text(line.text()))).await;
+        cx.push(leaf(
+            format!("Line {}", line.number),
+            line.span,
+            text(line.text()),
+        ))
+        .await;
     }
     Ok(())
 }
@@ -168,7 +201,9 @@ async fn records(cx: &Cx, body: Span, style: Style) -> Result<u64> {
     let mut index = 0u64;
     let mut pending: Option<(u64, String)> = None;
     loop {
-        let Some(line) = lines.peek().await? else { break };
+        let Some(line) = lines.peek().await? else {
+            break;
+        };
         let start = starts_record(style, &line.bytes) || pending.is_none();
         if start && let Some((from, first)) = pending.take() {
             let span = body.sub(from, line.start.saturating_sub(from));
@@ -184,7 +219,10 @@ async fn records(cx: &Cx, body: Span, style: Style) -> Result<u64> {
             pending = Some((line.start, line.text()));
         }
         // SINEX blocks end at their `-BLOCK` line.
-        if matches!(style, Style::Sinex) && line.bytes.first() == Some(&b'-') && let Some((from, first)) = pending.take() {
+        if matches!(style, Style::Sinex)
+            && line.bytes.first() == Some(&b'-')
+            && let Some((from, first)) = pending.take()
+        {
             let span = body.sub(from, line.next.saturating_sub(from));
             push_record(cx, style, span, &first, index).await;
             index = index.saturating_add(1);
@@ -204,8 +242,15 @@ async fn push_record(cx: &Cx, style: Style, span: Span, first: &str, index: u64)
         Style::Sinex | Style::Nav => String::new(),
         _ => first.trim().chars().take(80).collect(),
     };
-    let node = Node::new(Cow::Owned(name)).span(span).lazy(record_lines, span);
-    cx.push(if summary.is_empty() { node } else { node.summary(summary) }).await;
+    let node = Node::new(Cow::Owned(name))
+        .span(span)
+        .lazy(record_lines, span);
+    cx.push(if summary.is_empty() {
+        node
+    } else {
+        node.summary(summary)
+    })
+    .await;
 }
 
 fn find<'a>(values: &'a [(String, String)], l: &str) -> Option<&'a str> {
@@ -216,12 +261,21 @@ async fn rinex(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (end, values) = header(&cx, file, 0).await?;
     let hspan = file.sub(0, end);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{} lines", values.len())).lazy(header_lines, hspan));
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{} lines", values.len()))
+            .lazy(header_lines, hspan),
+    );
     let vt = find(&values, "RINEX VERSION / TYPE").unwrap_or_default();
     let version = vt.get(..9).unwrap_or_default().trim().to_owned();
     let kind = vt.as_bytes().get(20).copied().unwrap_or(b' ');
     let system = vt.get(40..).unwrap_or_default().trim().to_owned();
-    let major = version.split('.').next().and_then(|v| v.parse::<u32>().ok()).unwrap_or(3);
+    let major = version
+        .split('.')
+        .next()
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(3);
     let style = match kind {
         b'O' if major >= 3 => Style::EpochMarker,
         b'O' => Style::Epoch2,
@@ -234,8 +288,14 @@ async fn rinex(cx: Cx, input: Input) -> Result<()> {
         b'C' => "clock data",
         _ => "navigation data",
     };
-    let marker = find(&values, "MARKER NAME").map(|m| format!(", marker {}", m.trim())).unwrap_or_default();
-    let sys = if system.is_empty() { String::new() } else { format!(" ({system})") };
+    let marker = find(&values, "MARKER NAME")
+        .map(|m| format!(", marker {}", m.trim()))
+        .unwrap_or_default();
+    let sys = if system.is_empty() {
+        String::new()
+    } else {
+        format!(" ({system})")
+    };
     cx.annotate(format!("RINEX {version} {what}{sys}{marker}"));
     records(&cx, file.tail(end), style).await?;
     Ok(())
@@ -245,11 +305,32 @@ async fn crinex(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (end, values) = header(&cx, file, 0).await?;
     let hspan = file.sub(0, end);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{} lines", values.len())).lazy(header_lines, hspan));
-    let version = find(&values, "CRINEX VERS   / TYPE").unwrap_or_default().get(..9).unwrap_or_default().trim().to_owned();
-    let rinex = find(&values, "RINEX VERSION / TYPE").unwrap_or_default().get(..9).unwrap_or_default().trim().to_owned();
-    cx.emit(Node::new("Compressed observations").span(file.tail(end)).lazy(record_lines, file.tail(end)));
-    cx.annotate(format!("Compact RINEX {version} (RINEX {rinex} observations)"));
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{} lines", values.len()))
+            .lazy(header_lines, hspan),
+    );
+    let version = find(&values, "CRINEX VERS   / TYPE")
+        .unwrap_or_default()
+        .get(..9)
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    let rinex = find(&values, "RINEX VERSION / TYPE")
+        .unwrap_or_default()
+        .get(..9)
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    cx.emit(
+        Node::new("Compressed observations")
+            .span(file.tail(end))
+            .lazy(record_lines, file.tail(end)),
+    );
+    cx.annotate(format!(
+        "Compact RINEX {version} (RINEX {rinex} observations)"
+    ));
     Ok(())
 }
 
@@ -261,12 +342,28 @@ async fn ionex(cx: Cx, input: Input) -> Result<()> {
     labelled_blocks(cx, input, "IONEX VERSION / TYPE", "IONEX", "maps").await
 }
 
-async fn labelled_blocks(cx: Cx, input: Input, version_label: &str, name: &str, what: &str) -> Result<()> {
+async fn labelled_blocks(
+    cx: Cx,
+    input: Input,
+    version_label: &str,
+    name: &str,
+    what: &str,
+) -> Result<()> {
     let file = input.span;
     let (end, values) = header(&cx, file, 0).await?;
     let hspan = file.sub(0, end);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{} lines", values.len())).lazy(header_lines, hspan));
-    let version = find(&values, version_label).unwrap_or_default().get(..9).unwrap_or_default().trim().to_owned();
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{} lines", values.len()))
+            .lazy(header_lines, hspan),
+    );
+    let version = find(&values, version_label)
+        .unwrap_or_default()
+        .get(..9)
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
     cx.annotate(format!("{name} {version}"));
     let n = records(&cx, file.tail(end), Style::Blocks).await?;
     cx.annotate(format!("{name} {version}, {n} {what}"));
@@ -293,19 +390,41 @@ async fn sp3(cx: Cx, input: Input) -> Result<()> {
         }
     }
     let hspan = file.sub(0, end);
-    cx.emit(Node::new("Header").span(hspan).summary(format!("{count} lines")).lazy(sp3_header, hspan));
+    cx.emit(
+        Node::new("Header")
+            .span(hspan)
+            .summary(format!("{count} lines"))
+            .lazy(sp3_header, hspan),
+    );
     let epochs = first.get(32..39).unwrap_or_default().trim().to_owned();
     let agency = first.get(56..60).unwrap_or_default().trim().to_owned();
-    let kind = if first.as_bytes().get(2) == Some(&b'V') { "positions and velocities" } else { "positions" };
-    cx.annotate(format!("SP3-{} orbits ({kind}), {epochs} epochs, {agency}", first.get(1..2).unwrap_or_default()));
+    let kind = if first.as_bytes().get(2) == Some(&b'V') {
+        "positions and velocities"
+    } else {
+        "positions"
+    };
+    cx.annotate(format!(
+        "SP3-{} orbits ({kind}), {epochs} epochs, {agency}",
+        first.get(1..2).unwrap_or_default()
+    ));
     records(&cx, file.tail(end), Style::Sp3).await?;
     Ok(())
 }
 
 const SP3_FIRST: super::Columns = &[
-    (0, 2, "Version"), (2, 1, "Position/velocity flag"), (3, 4, "Year"), (8, 2, "Month"), (11, 2, "Day"),
-    (14, 2, "Hour"), (17, 2, "Minute"), (20, 11, "Second"), (32, 7, "Epochs"), (40, 5, "Data used"),
-    (46, 5, "Coordinate system"), (52, 3, "Orbit type"), (56, 4, "Agency"),
+    (0, 2, "Version"),
+    (2, 1, "Position/velocity flag"),
+    (3, 4, "Year"),
+    (8, 2, "Month"),
+    (11, 2, "Day"),
+    (14, 2, "Hour"),
+    (17, 2, "Minute"),
+    (20, 11, "Second"),
+    (32, 7, "Epochs"),
+    (40, 5, "Data used"),
+    (46, 5, "Coordinate system"),
+    (52, 3, "Orbit type"),
+    (56, 4, "Agency"),
 ];
 
 async fn sp3_header(cx: Cx, span: Span) -> Result<()> {
@@ -334,16 +453,34 @@ async fn sp3_header(cx: Cx, span: Span) -> Result<()> {
 async fn sinex(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
-    let Some(line) = lines.next().await? else { return Ok(()) };
+    let Some(line) = lines.next().await? else {
+        return Ok(());
+    };
     let piece = Piece::new(&line.bytes, line.span);
     let words: Vec<Piece<'_>> = piece.words().collect();
-    let labels = ["Marker", "Version", "Agency", "Creation time", "Data agency", "Start", "End", "Technique", "Parameters", "Constraint", "Solution types"];
+    let labels = [
+        "Marker",
+        "Version",
+        "Agency",
+        "Creation time",
+        "Data agency",
+        "Start",
+        "End",
+        "Technique",
+        "Parameters",
+        "Constraint",
+        "Solution types",
+    ];
     let mut nodes = Vec::new();
     for (i, w) in words.iter().enumerate() {
         let name = labels.get(i).copied().unwrap_or("Field");
         nodes.push(super::field_node(name, *w));
     }
-    cx.emit(Node::new("Header line").span(line.span).lazy(super::emit_nodes, nodes));
+    cx.emit(
+        Node::new("Header line")
+            .span(line.span)
+            .lazy(super::emit_nodes, nodes),
+    );
     let version = words.get(1).map(Piece::text).unwrap_or_default();
     let agency = words.get(2).map(Piece::text).unwrap_or_default();
     cx.annotate(format!("SINEX {version} from {agency}"));

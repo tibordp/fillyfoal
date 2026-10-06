@@ -40,10 +40,7 @@ pub fn lines(data: &[u8]) -> impl Iterator<Item = &[u8]> {
 
 /// Non-blank lines that do not start (after indentation) with any of
 /// `comments`.
-pub fn significant<'a>(
-    data: &'a [u8],
-    comments: &'a [&'a [u8]],
-) -> impl Iterator<Item = &'a [u8]> {
+pub fn significant<'a>(data: &'a [u8], comments: &'a [&'a [u8]]) -> impl Iterator<Item = &'a [u8]> {
     lines(data).filter(move |l| {
         let t = trim_start(l);
         !t.is_empty() && !comments.iter().any(|c| t.starts_with(c))

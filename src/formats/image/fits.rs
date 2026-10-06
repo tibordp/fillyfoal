@@ -36,9 +36,13 @@ fn padded(len: u64) -> u64 {
 
 /// A parsed card: keyword and the value text (without comment).
 fn card(raw: &[u8]) -> (String, Option<String>, Option<String>) {
-    let keyword = crate::text::latin1(raw.get(..8).unwrap_or_default()).trim_end().to_owned();
+    let keyword = crate::text::latin1(raw.get(..8).unwrap_or_default())
+        .trim_end()
+        .to_owned();
     if raw.get(8..10) != Some(b"= ") {
-        let rest = crate::text::latin1(raw.get(8..).unwrap_or_default()).trim().to_owned();
+        let rest = crate::text::latin1(raw.get(8..).unwrap_or_default())
+            .trim()
+            .to_owned();
         return (keyword, None, (!rest.is_empty()).then_some(rest));
     }
     let field = crate::text::latin1(raw.get(10..).unwrap_or_default());
@@ -114,7 +118,8 @@ async fn read_hdu(cx: &Cx, file: Span, offset: u64) -> Result<Hdu> {
                 "XTENSION" => hdu.extension = Some(value.clone()),
                 "EXTNAME" => hdu.name = Some(value.clone()),
                 k if k.starts_with("NAXIS") && k.len() > 5 && hdu.axes.len() < 999 => {
-                    hdu.axes.push(int.and_then(|v| u64::try_from(v).ok()).unwrap_or(0));
+                    hdu.axes
+                        .push(int.and_then(|v| u64::try_from(v).ok()).unwrap_or(0));
                 }
                 _ => {}
             }
@@ -124,7 +129,10 @@ async fn read_hdu(cx: &Cx, file: Span, offset: u64) -> Result<Hdu> {
 }
 
 fn describe(hdu: &Hdu) -> String {
-    let kind = hdu.extension.clone().unwrap_or_else(|| "Primary".to_owned());
+    let kind = hdu
+        .extension
+        .clone()
+        .unwrap_or_else(|| "Primary".to_owned());
     let shape = match hdu.axes.as_slice() {
         [] => "no data".to_owned(),
         [w, h] => dims(w, h),
@@ -150,8 +158,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let hdu = match read_hdu(&cx, file, offset).await {
             Ok(hdu) => hdu,
             Err(e) if index > 0 => {
-                cx.push(region("Trailing data", file, offset, file.len.saturating_sub(offset)).diag(e))
-                    .await;
+                cx.push(
+                    region(
+                        "Trailing data",
+                        file,
+                        offset,
+                        file.len.saturating_sub(offset),
+                    )
+                    .diag(e),
+                )
+                .await;
                 break;
             }
             Err(e) => return Err(e),
@@ -205,7 +221,12 @@ async fn cards(cx: Cx, header: Span) -> Result<()> {
         if keyword.is_empty() && value.is_none() && comment.is_none() {
             continue;
         }
-        let mut node = Node::new(if keyword.is_empty() { "(blank)".to_owned() } else { keyword.clone() }).span(span);
+        let mut node = Node::new(if keyword.is_empty() {
+            "(blank)".to_owned()
+        } else {
+            keyword.clone()
+        })
+        .span(span);
         if let Some(v) = value {
             node = node.value(match v.parse::<i64>() {
                 Ok(i) => Value::Int { value: i, bits: 64 },

@@ -17,7 +17,9 @@ use crate::span::Span;
 use crate::value::Value;
 
 fn unix_time(seconds: i64) -> Value {
-    Value::Timestamp { unix_seconds: seconds }
+    Value::Timestamp {
+        unix_seconds: seconds,
+    }
 }
 
 fn first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
@@ -56,7 +58,13 @@ fn percent_decode(s: &str) -> String {
 }
 
 /// One history entry: lines, optional time, and the command text.
-fn history_node(file: Span, lines: Lines, time: Option<i64>, command: &str, extra: Option<String>) -> Node {
+fn history_node(
+    file: Span,
+    lines: Lines,
+    time: Option<i64>,
+    command: &str,
+    extra: Option<String>,
+) -> Node {
     let mut node = line_group(clip(&command.replace('\n', " ⏎ "), 120), file, lines);
     if let Some(t) = time {
         node = node.value(unix_time(t));
@@ -81,12 +89,20 @@ fn zsh_entry(line: &str) -> Option<(i64, i64, &str)> {
     let rest = line.strip_prefix(": ")?;
     let (stamps, command) = rest.split_once(';')?;
     let (start, elapsed) = stamps.split_once(':')?;
-    Some((start.trim().parse().ok()?, elapsed.trim().parse().ok()?, command))
+    Some((
+        start.trim().parse().ok()?,
+        elapsed.trim().parse().ok()?,
+        command,
+    ))
 }
 
 fn zsh_probe(h: &Head<'_>) -> bool {
     let line = first_line(h);
-    line.starts_with(b": ") && std::str::from_utf8(line).ok().and_then(zsh_entry).is_some_and(|(t, _, _)| t > 100_000_000)
+    line.starts_with(b": ")
+        && std::str::from_utf8(line)
+            .ok()
+            .and_then(zsh_entry)
+            .is_some_and(|(t, _, _)| t > 100_000_000)
 }
 
 declare_format!(pub ZSH = "zsh-history", "zsh extended history", ["zsh_history", "histfile"], "text/x-zsh-history",
@@ -100,7 +116,14 @@ async fn zsh_history(cx: Cx, input: Input) -> Result<()> {
     for l in all {
         if let Some((start, elapsed, command)) = zsh_entry(&l.2) {
             if let Some((t, e, c, lines)) = current.take() {
-                cx.push(history_node(file, lines, Some(t), &c, Some(format!("{e} s")))).await;
+                cx.push(history_node(
+                    file,
+                    lines,
+                    Some(t),
+                    &c,
+                    Some(format!("{e} s")),
+                ))
+                .await;
             }
             times.push(start);
             current = Some((start, elapsed, command.to_owned(), vec![l]));
@@ -112,9 +135,20 @@ async fn zsh_history(cx: Cx, input: Input) -> Result<()> {
         }
     }
     if let Some((t, e, c, lines)) = current.take() {
-        cx.push(history_node(file, lines, Some(t), &c, Some(format!("{e} s")))).await;
+        cx.push(history_node(
+            file,
+            lines,
+            Some(t),
+            &c,
+            Some(format!("{e} s")),
+        ))
+        .await;
     }
-    cx.annotate(format!("zsh history, {} commands{}", times.len(), time_range(&times)));
+    cx.annotate(format!(
+        "zsh history, {} commands{}",
+        times.len(),
+        time_range(&times)
+    ));
     Ok(())
 }
 
@@ -123,13 +157,17 @@ async fn zsh_history(cx: Cx, input: Input) -> Result<()> {
 
 fn bash_stamp(line: &str) -> Option<i64> {
     let d = line.strip_prefix('#')?;
-    (d.len() >= 9 && d.len() <= 11 && digits(d.as_bytes())).then(|| d.parse().ok()).flatten()
+    (d.len() >= 9 && d.len() <= 11 && digits(d.as_bytes()))
+        .then(|| d.parse().ok())
+        .flatten()
 }
 
 fn bash_probe(h: &Head<'_>) -> bool {
     let d = strip_bom(h.data);
     let mut it = d.split(|&b| b == b'\n');
-    let first = std::str::from_utf8(it.next().unwrap_or_default()).unwrap_or_default().trim_end();
+    let first = std::str::from_utf8(it.next().unwrap_or_default())
+        .unwrap_or_default()
+        .trim_end();
     let second = it.next().unwrap_or_default();
     bash_stamp(first).is_some() && !second.is_empty() && !second.starts_with(b"#")
 }
@@ -161,9 +199,14 @@ async fn bash_history(cx: Cx, input: Input) -> Result<()> {
         };
         let command = l.2.clone();
         lines.push(l);
-        cx.push(history_node(file, lines, time, &command, None)).await;
+        cx.push(history_node(file, lines, time, &command, None))
+            .await;
     }
-    cx.annotate(format!("bash history, {count} commands, {} timestamped{}", times.len(), time_range(&times)));
+    cx.annotate(format!(
+        "bash history, {count} commands, {} timestamped{}",
+        times.len(),
+        time_range(&times)
+    ));
     Ok(())
 }
 
@@ -172,7 +215,11 @@ async fn bash_history(cx: Cx, input: Input) -> Result<()> {
 
 fn fish_probe(h: &Head<'_>) -> bool {
     let d = strip_bom(h.data);
-    d.starts_with(b"- cmd: ") && d.get(..512).unwrap_or(d).windows(9).any(|w| w == b"\n  when: ")
+    d.starts_with(b"- cmd: ")
+        && d.get(..512)
+            .unwrap_or(d)
+            .windows(9)
+            .any(|w| w == b"\n  when: ")
 }
 
 declare_format!(pub FISH = "fish-history", "fish shell history", ["fish_history"], "text/x-fish-history",
@@ -204,7 +251,11 @@ async fn fish_history(cx: Cx, input: Input) -> Result<()> {
     if let Some((c, t, lines)) = current.take() {
         cx.push(history_node(file, lines, t, &c, None)).await;
     }
-    cx.annotate(format!("fish history, {} commands{}", times.len(), time_range(&times)));
+    cx.annotate(format!(
+        "fish history, {} commands{}",
+        times.len(),
+        time_range(&times)
+    ));
     Ok(())
 }
 
@@ -250,7 +301,12 @@ async fn libedit_history(cx: Cx, input: Input) -> Result<()> {
         }
         count = count.saturating_add(1);
         let span = file.sub(l.0, l.1);
-        cx.push(Node::new(format!("Entry {count}")).span(span).value(text(unvis(&l.2)))).await;
+        cx.push(
+            Node::new(format!("Entry {count}"))
+                .span(span)
+                .value(text(unvis(&l.2))),
+        )
+        .await;
     }
     cx.annotate(format!("libedit history, {count} entries"));
     Ok(())
@@ -271,7 +327,10 @@ async fn less_history(cx: Cx, input: Input) -> Result<()> {
         if let Some(name) = l.2.strip_prefix('.') {
             if let Some((n, lines)) = section.take() {
                 let count = lines.len();
-                cx.push(line_group(format!(".{n}"), file, lines).summary(format!("{count} entries"))).await;
+                cx.push(
+                    line_group(format!(".{n}"), file, lines).summary(format!("{count} entries")),
+                )
+                .await;
             }
             section = Some((name.to_owned(), Vec::new()));
             continue;
@@ -285,7 +344,8 @@ async fn less_history(cx: Cx, input: Input) -> Result<()> {
     }
     if let Some((n, lines)) = section.take() {
         let count = lines.len();
-        cx.push(line_group(format!(".{n}"), file, lines).summary(format!("{count} entries"))).await;
+        cx.push(line_group(format!(".{n}"), file, lines).summary(format!("{count} entries")))
+            .await;
     }
     cx.annotate(format!("less history, {searches} searches"));
     Ok(())
@@ -307,15 +367,32 @@ async fn wget_hsts(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let f: Vec<&str> = l.2.split_whitespace().collect();
-        let (host, port, subs, created, max_age) =
-            (f.first().copied().unwrap_or(""), f.get(1).copied().unwrap_or("0"), f.get(2).copied().unwrap_or("0"), f.get(3).copied().unwrap_or("0"), f.get(4).copied().unwrap_or("0"));
+        let (host, port, subs, created, max_age) = (
+            f.first().copied().unwrap_or(""),
+            f.get(1).copied().unwrap_or("0"),
+            f.get(2).copied().unwrap_or("0"),
+            f.get(3).copied().unwrap_or("0"),
+            f.get(4).copied().unwrap_or("0"),
+        );
         hosts = hosts.saturating_add(1);
         let mut node = Node::new(host.to_owned()).span(span);
         if let Ok(t) = created.parse::<i64>() {
             node = node.value(unix_time(t));
         }
-        let port = if port == "0" { String::new() } else { format!("port {port}, ") };
-        cx.push(node.summary(format!("{port}max-age {max_age}{}", if subs == "1" { ", includeSubDomains" } else { "" }))).await;
+        let port = if port == "0" {
+            String::new()
+        } else {
+            format!("port {port}, ")
+        };
+        cx.push(node.summary(format!(
+            "{port}max-age {max_age}{}",
+            if subs == "1" {
+                ", includeSubDomains"
+            } else {
+                ""
+            }
+        )))
+        .await;
     }
     cx.annotate(format!("Wget HSTS database, {hosts} hosts"));
     Ok(())
@@ -350,14 +427,37 @@ async fn netscape_cookies(cx: Cx, input: Input) -> Result<()> {
         let get = |i: usize| f.get(i).copied().unwrap_or("");
         count = count.saturating_add(1);
         domains.insert(get(0).trim_start_matches('.').to_owned());
-        let mut node = Node::new(format!("{}={}", get(5), clip(get(6), 60))).span(file.sub(l.0, l.1));
+        let mut node =
+            Node::new(format!("{}={}", get(5), clip(get(6), 60))).span(file.sub(l.0, l.1));
         if let Ok(t) = get(4).parse::<i64>() {
-            node = node.value(if t == 0 { text("session") } else { unix_time(t) });
+            node = node.value(if t == 0 {
+                text("session")
+            } else {
+                unix_time(t)
+            });
         }
-        let flags = [(get(3) == "TRUE", "secure"), (http_only, "HttpOnly")].iter().filter(|(on, _)| *on).map(|(_, n)| *n).collect::<Vec<_>>().join(", ");
-        cx.push(node.summary(format!("{}{}{}", get(0), get(2), if flags.is_empty() { String::new() } else { format!(" ({flags})") }))).await;
+        let flags = [(get(3) == "TRUE", "secure"), (http_only, "HttpOnly")]
+            .iter()
+            .filter(|(on, _)| *on)
+            .map(|(_, n)| *n)
+            .collect::<Vec<_>>()
+            .join(", ");
+        cx.push(node.summary(format!(
+            "{}{}{}",
+            get(0),
+            get(2),
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!(" ({flags})")
+            }
+        )))
+        .await;
     }
-    cx.annotate(format!("Netscape cookie file, {count} cookies for {} domains", domains.len()));
+    cx.annotate(format!(
+        "Netscape cookie file, {count} cookies for {} domains",
+        domains.len()
+    ));
     Ok(())
 }
 
@@ -366,7 +466,10 @@ async fn netscape_cookies(cx: Cx, input: Input) -> Result<()> {
 
 fn bookmarks_probe(h: &Head<'_>) -> bool {
     let line = first_line(h);
-    line.len() >= 35 && line.get(..35).is_some_and(|p| p.eq_ignore_ascii_case(b"<!DOCTYPE NETSCAPE-Bookmark-file-1>"))
+    line.len() >= 35
+        && line
+            .get(..35)
+            .is_some_and(|p| p.eq_ignore_ascii_case(b"<!DOCTYPE NETSCAPE-Bookmark-file-1>"))
 }
 
 declare_format!(pub BOOKMARKS = "netscape-bookmarks", "Netscape bookmark file (bookmarks.html)", ["html", "htm"], "text/x-netscape-bookmarks",
@@ -398,7 +501,11 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 }
 
 fn unescape_html(s: &str) -> String {
-    s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'")
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
 }
 
 fn parse_bookmarks(data: &str) -> BookmarkTree {
@@ -409,7 +516,13 @@ fn parse_bookmarks(data: &str) -> BookmarkTree {
     let lower = data.to_ascii_lowercase();
     while let Some(p) = lower.get(i..).and_then(|r| r.find('<')) {
         let open = i.saturating_add(p);
-        let Some(close) = lower.get(open..).and_then(|r| r.find('>')).map(|c| open.saturating_add(c)) else { break };
+        let Some(close) = lower
+            .get(open..)
+            .and_then(|r| r.find('>'))
+            .map(|c| open.saturating_add(c))
+        else {
+            break;
+        };
         let tag = data.get(open..=close).unwrap_or_default();
         let tag_lower = lower.get(open..=close).unwrap_or_default();
         i = close.saturating_add(1);
@@ -423,12 +536,23 @@ fn parse_bookmarks(data: &str) -> BookmarkTree {
             index
         };
         if tag_lower.starts_with("<h3") || tag_lower.starts_with("<a ") {
-            let end_tag = if tag_lower.starts_with("<h3") { "</h3>" } else { "</a>" };
-            let text_end = lower.get(i..).and_then(|r| r.find(end_tag)).map_or(data.len(), |e| i.saturating_add(e));
+            let end_tag = if tag_lower.starts_with("<h3") {
+                "</h3>"
+            } else {
+                "</a>"
+            };
+            let text_end = lower
+                .get(i..)
+                .and_then(|r| r.find(end_tag))
+                .map_or(data.len(), |e| i.saturating_add(e));
             let title = unescape_html(data.get(i..text_end).unwrap_or_default().trim());
             let item = Bookmark {
                 title,
-                href: if end_tag == "</a>" { attr(tag, "href") } else { None },
+                href: if end_tag == "</a>" {
+                    attr(tag, "href")
+                } else {
+                    None
+                },
                 added: attr(tag, "add_date").and_then(|d| d.parse().ok()),
                 start: to_u64(open),
                 end: to_u64(text_end.saturating_add(end_tag.len()).min(data.len())),
@@ -446,10 +570,10 @@ fn parse_bookmarks(data: &str) -> BookmarkTree {
             }
         } else if tag_lower.starts_with("</dl")
             && let Some(f) = stack.pop()
-                && let Some(item) = tree.items.get_mut(f)
-            {
-                item.end = to_u64(i);
-            }
+            && let Some(item) = tree.items.get_mut(f)
+        {
+            item.end = to_u64(i);
+        }
         if tree.items.len() > 1_000_000 {
             break;
         }
@@ -471,13 +595,20 @@ fn bookmark_nodes(file: Span, tree: &BookmarkTree, list: &[usize]) -> Vec<Node> 
     list.iter()
         .filter_map(|&i| tree.items.get(i).map(|b| (i, b)))
         .map(|(i, b)| {
-            let mut node = Node::new(if b.title.is_empty() { "(untitled)".to_owned() } else { b.title.clone() }).span(file.sub(b.start, b.end.saturating_sub(b.start)));
+            let mut node = Node::new(if b.title.is_empty() {
+                "(untitled)".to_owned()
+            } else {
+                b.title.clone()
+            })
+            .span(file.sub(b.start, b.end.saturating_sub(b.start)));
             if let Some(t) = b.added {
                 node = node.value(unix_time(t));
             }
             match &b.href {
                 Some(h) => node.summary(clip(h, 160)),
-                None => node.summary(format!("folder, {} items", b.children.len())).lazy(bookmark_folder, (file, i)),
+                None => node
+                    .summary(format!("folder, {} items", b.children.len()))
+                    .lazy(bookmark_folder, (file, i)),
             }
         })
         .collect()
@@ -491,7 +622,9 @@ async fn netscape_bookmarks(cx: Cx, input: Input) -> Result<()> {
     }
     let links = tree.items.iter().filter(|b| b.href.is_some()).count();
     let folders = tree.items.len().saturating_sub(links);
-    cx.annotate(format!("Netscape bookmarks, {links} links in {folders} folders"));
+    cx.annotate(format!(
+        "Netscape bookmarks, {links} links in {folders} folders"
+    ));
     Ok(())
 }
 
@@ -522,9 +655,21 @@ async fn opera_hotlist(cx: Cx, input: Input) -> Result<()> {
     let mut path: Vec<String> = Vec::new();
     let flush = |record: Option<(String, Lines)>, path: &[String]| -> Option<(Node, String)> {
         let (kind, lines) = record?;
-        let get = |key: &str| lines.iter().find_map(|l| l.2.trim_start().strip_prefix(key).map(str::to_owned));
+        let get = |key: &str| {
+            lines
+                .iter()
+                .find_map(|l| l.2.trim_start().strip_prefix(key).map(str::to_owned))
+        };
         let name = get("NAME=").unwrap_or_default();
-        let mut node = line_group(if name.is_empty() { kind.clone() } else { name.clone() }, file, lines.clone());
+        let mut node = line_group(
+            if name.is_empty() {
+                kind.clone()
+            } else {
+                name.clone()
+            },
+            file,
+            lines.clone(),
+        );
         if !path.is_empty() {
             node = node.desc(format!("In {}", path.join(" › ")));
         }
@@ -569,7 +714,9 @@ async fn opera_hotlist(cx: Cx, input: Input) -> Result<()> {
     if let Some((n, _)) = flush(record.take(), &path) {
         cx.push(n).await;
     }
-    cx.annotate(format!("Opera hotlist, {urls} bookmarks in {folders} folders"));
+    cx.annotate(format!(
+        "Opera hotlist, {urls} bookmarks in {folders} folders"
+    ));
     Ok(())
 }
 
@@ -600,8 +747,18 @@ fn pref_line(line: &str) -> Option<(String, String)> {
             _ => name.push(c),
         }
     }
-    let value = rest.get(value_at?..)?.trim_start().strip_prefix(',')?.trim();
-    let value = value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).map_or_else(|| value.to_owned(), |v| v.replace("\\\"", "\"").replace("\\\\", "\\"));
+    let value = rest
+        .get(value_at?..)?
+        .trim_start()
+        .strip_prefix(',')?
+        .trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|v| v.strip_suffix('"'))
+        .map_or_else(
+            || value.to_owned(),
+            |v| v.replace("\\\"", "\"").replace("\\\\", "\\"),
+        );
     Some((name, value))
 }
 
@@ -615,22 +772,42 @@ async fn firefox_prefs(cx: Cx, input: Input) -> Result<()> {
             continue;
         };
         count = count.saturating_add(1);
-        if matches!(name.as_str(), "browser.startup.homepage" | "browser.download.dir" | "browser.download.lastDir" | "network.proxy.http") {
+        if matches!(
+            name.as_str(),
+            "browser.startup.homepage"
+                | "browser.download.dir"
+                | "browser.download.lastDir"
+                | "network.proxy.http"
+        ) {
             notable.push(format!("{name}={}", clip(&value, 60)));
         }
         let node = Node::new(name.clone()).span(file.sub(l.0, l.1));
         let node = match value.parse::<i64>() {
-            Ok(v) if name.ends_with("Time") || name.ends_with("_time") || name.contains("lastUpdate") => {
+            Ok(v)
+                if name.ends_with("Time")
+                    || name.ends_with("_time")
+                    || name.contains("lastUpdate") =>
+            {
                 // Times are seconds, or milliseconds when they look too large.
-                node.value(unix_time(if v > 100_000_000_000 { v / 1000 } else { v })).summary(value)
+                node.value(unix_time(if v > 100_000_000_000 { v / 1000 } else { v }))
+                    .summary(value)
             }
             Ok(v) => node.value(Value::Int { value: v, bits: 64 }),
-            Err(_) if value == "true" || value == "false" => node.value(Value::Bool(value == "true")),
+            Err(_) if value == "true" || value == "false" => {
+                node.value(Value::Bool(value == "true"))
+            }
             Err(_) => node.value(text(value)),
         };
         cx.push(node).await;
     }
-    cx.annotate(format!("Firefox prefs.js, {count} preferences{}", if notable.is_empty() { String::new() } else { format!(" ({})", clip(&notable.join("; "), 160)) }));
+    cx.annotate(format!(
+        "Firefox prefs.js, {count} preferences{}",
+        if notable.is_empty() {
+            String::new()
+        } else {
+            format!(" ({})", clip(&notable.join("; "), 160))
+        }
+    ));
     Ok(())
 }
 
@@ -652,17 +829,25 @@ async fn cert_override(cx: Cx, input: Input) -> Result<()> {
         let host = f.first().copied().unwrap_or_default().trim_end_matches(':');
         let fingerprint = f.get(2).copied().unwrap_or_default();
         let flags = f.get(3).copied().unwrap_or_default();
-        let reasons: Vec<&str> = [('M', "mismatched domain"), ('U', "untrusted"), ('T', "expired")]
-            .iter()
-            .filter(|(c, _)| flags.contains(*c))
-            .map(|(_, n)| *n)
-            .collect();
+        let reasons: Vec<&str> = [
+            ('M', "mismatched domain"),
+            ('U', "untrusted"),
+            ('T', "expired"),
+        ]
+        .iter()
+        .filter(|(c, _)| flags.contains(*c))
+        .map(|(_, n)| *n)
+        .collect();
         count = count.saturating_add(1);
         cx.push(
             Node::new(host.to_owned())
                 .span(file.sub(l.0, l.1))
                 .value(text(fingerprint))
-                .summary(if reasons.is_empty() { flags.to_owned() } else { reasons.join(", ") }),
+                .summary(if reasons.is_empty() {
+                    flags.to_owned()
+                } else {
+                    reasons.join(", ")
+                }),
         )
         .await;
     }
@@ -688,10 +873,17 @@ async fn trashinfo(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(l.0, l.1);
         if let Some(p) = l.2.strip_prefix("Path=") {
             path = percent_decode(p);
-            cx.push(Node::new("Path").span(span).value(text(path.clone())).summary(p.to_owned())).await;
+            cx.push(
+                Node::new("Path")
+                    .span(span)
+                    .value(text(path.clone()))
+                    .summary(p.to_owned()),
+            )
+            .await;
         } else if let Some(d) = l.2.strip_prefix("DeletionDate=") {
             date = d.to_owned();
-            cx.push(Node::new("DeletionDate").span(span).value(text(d))).await;
+            cx.push(Node::new("DeletionDate").span(span).value(text(d)))
+                .await;
         } else if !l.2.is_empty() {
             cx.push(Node::new("Line").span(span).value(text(l.2))).await;
         }
@@ -720,24 +912,43 @@ async fn recently_used(cx: Cx, input: Input) -> Result<()> {
     let mut apps = std::collections::BTreeSet::new();
     while let Some(p) = s.get(at..).and_then(|r| r.find("<bookmark ")) {
         let start = at.saturating_add(p);
-        let end = s.get(start..).and_then(|r| r.find("</bookmark>")).map_or(s.len(), |e| start.saturating_add(e).saturating_add(11));
-        let tag_end = s.get(start..).and_then(|r| r.find('>')).map_or(end, |e| start.saturating_add(e));
+        let end = s
+            .get(start..)
+            .and_then(|r| r.find("</bookmark>"))
+            .map_or(s.len(), |e| start.saturating_add(e).saturating_add(11));
+        let tag_end = s
+            .get(start..)
+            .and_then(|r| r.find('>'))
+            .map_or(end, |e| start.saturating_add(e));
         let tag = s.get(start..=tag_end).unwrap_or_default();
         let body = s.get(start..end).unwrap_or_default();
         let href = attr(tag, "href").unwrap_or_default();
-        let visited = attr(tag, "visited").or_else(|| attr(tag, "modified")).unwrap_or_default();
-        let names: Vec<String> = body.match_indices("<bookmark:application ").filter_map(|(i, _)| body.get(i..).and_then(|r| attr(r.split('>').next().unwrap_or_default(), "name"))).collect();
+        let visited = attr(tag, "visited")
+            .or_else(|| attr(tag, "modified"))
+            .unwrap_or_default();
+        let names: Vec<String> = body
+            .match_indices("<bookmark:application ")
+            .filter_map(|(i, _)| {
+                body.get(i..)
+                    .and_then(|r| attr(r.split('>').next().unwrap_or_default(), "name"))
+            })
+            .collect();
         apps.extend(names.iter().cloned());
         count = count.saturating_add(1);
         cx.push(
-            Node::new(percent_decode(href.strip_prefix("file://").unwrap_or(&href)))
-                .span(file.sub(to_u64(start), to_u64(end.saturating_sub(start))))
-                .value(text(visited))
-                .summary(names.join(", ")),
+            Node::new(percent_decode(
+                href.strip_prefix("file://").unwrap_or(&href),
+            ))
+            .span(file.sub(to_u64(start), to_u64(end.saturating_sub(start))))
+            .value(text(visited))
+            .summary(names.join(", ")),
         )
         .await;
         at = end.max(start.saturating_add(1));
     }
-    cx.annotate(format!("Recently used files, {count} entries from {} applications", apps.len()));
+    cx.annotate(format!(
+        "Recently used files, {count} entries from {} applications",
+        apps.len()
+    ));
     Ok(())
 }

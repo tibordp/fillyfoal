@@ -137,10 +137,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let span = disk.sub(LABEL, Label::SIZE);
     let label = parse(&cx, span, LE, &(), Label::layout).await?;
     let count = label.partitions.min(MAX_PARTITIONS);
-    let table = disk.sub(LABEL.saturating_add(Label::SIZE), u64::from(count).saturating_mul(Partition::SIZE));
-    let raw = cx.read_avail(disk.sub(LABEL, Label::SIZE.saturating_add(table.len))).await?;
+    let table = disk.sub(
+        LABEL.saturating_add(Label::SIZE),
+        u64::from(count).saturating_mul(Partition::SIZE),
+    );
+    let raw = cx
+        .read_avail(disk.sub(LABEL, Label::SIZE.saturating_add(table.len)))
+        .await?;
     // The XOR of all 16-bit words, checksum included, is zero.
-    let xor = raw.as_chunks::<2>().0.iter().fold(0u16, |x, w| x ^ u16::from_le_bytes(*w));
+    let xor = raw
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .fold(0u16, |x, w| x ^ u16::from_le_bytes(*w));
     let mut node = Label::node("Disklabel", span, LE);
     if xor != 0 {
         node = node.diag(Diagnostic::warning("disklabel checksum mismatch"));
@@ -152,7 +161,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .as_chunks::<16>()
         .0
         .iter()
-        .map(|p| (u32_le(p, 0).unwrap_or(0), u32_le(p, 4).unwrap_or(0), p.get(12).copied().unwrap_or(0)))
+        .map(|p| {
+            (
+                u32_le(p, 0).unwrap_or(0),
+                u32_le(p, 4).unwrap_or(0),
+                p.get(12).copied().unwrap_or(0),
+            )
+        })
         .collect();
     // Old-style labels give absolute offsets; the raw partition `c` then
     // starts where this slice starts.
@@ -168,7 +183,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let letter = char::from(b'a'.saturating_add(u8::try_from(i).unwrap_or(0)));
         let entry = table.sub(to_u64(i).saturating_mul(Partition::SIZE), Partition::SIZE);
-        let start = u64::from(offset).saturating_sub(base.into()).saturating_mul(SECTOR);
+        let start = u64::from(offset)
+            .saturating_sub(base.into())
+            .saturating_mul(SECTOR);
         let data = disk.sub(start, u64::from(sectors).saturating_mul(SECTOR));
         let kind = lookup(FSTYPES, fstype.into()).unwrap_or("unknown");
         let whole = i == 2 || start == 0;

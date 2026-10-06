@@ -21,15 +21,32 @@ const BE: Endian = Endian::Big;
 declare_format!(pub ROMFS = "romfs", "Linux ROM file system", ["romfs", "img"], "application/x-romfs",
     Probe::Magic(&[(0, b"-rom1fs-")]), romfs);
 
-const ROMFS_TYPES: [&str; 8] = ["hard link", "directory", "file", "symlink", "block device", "char device", "socket", "fifo"];
+const ROMFS_TYPES: [&str; 8] = [
+    "hard link",
+    "directory",
+    "file",
+    "symlink",
+    "block device",
+    "char device",
+    "socket",
+    "fifo",
+];
 
 async fn romfs(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 16)).await?;
     let size = u32_be(&head, 8).unwrap_or(0);
     let (name, name_span) = cx.cstr(file.sub(16, 256)).await?;
-    cx.emit(Node::new("Superblock").span(file.sub(0, 16)).summary(format!("{size} bytes")));
-    cx.emit(Node::new("Volume name").span(name_span).value(Value::Text(name.clone())));
+    cx.emit(
+        Node::new("Superblock")
+            .span(file.sub(0, 16))
+            .summary(format!("{size} bytes")),
+    );
+    cx.emit(
+        Node::new("Volume name")
+            .span(name_span)
+            .value(Value::Text(name.clone())),
+    );
     let first = 16u64.saturating_add(name_span.len.next_multiple_of(16));
     cx.emit(Node::new("/").lazy(romfs_dir, (input, first, 0u32)));
     cx.annotate(format!("romfs {name:?}, {size} bytes"));
@@ -53,13 +70,18 @@ async fn romfs_dir(cx: Cx, (input, mut offset, depth): (Input, u64, u32)) -> Res
         let spec = u32_be(&head, 4).unwrap_or(0);
         let size = u64::from(u32_be(&head, 8).unwrap_or(0));
         let (name, name_span) = cx.cstr(file.sub(offset.saturating_add(16), 256)).await?;
-        let data = offset.saturating_add(16).saturating_add(name_span.len.next_multiple_of(16));
+        let data = offset
+            .saturating_add(16)
+            .saturating_add(name_span.len.next_multiple_of(16));
         let kind = usize::try_from(next & 7).unwrap_or(0);
         let header = file.sub(offset, data.saturating_sub(offset));
         let node = match kind {
-            1 if name != "." && name != ".." => Node::new(format!("{name}/"))
-                .lazy(crate::expander!(self::romfs_dir: (Input, u64, u32)), (input, u64::from(spec), depth.saturating_add(1))),
-            2 => embedded(name.clone(), input.nested(file.sub(data, size))).summary(format!("{size} bytes")),
+            1 if name != "." && name != ".." => Node::new(format!("{name}/")).lazy(
+                crate::expander!(self::romfs_dir: (Input, u64, u32)),
+                (input, u64::from(spec), depth.saturating_add(1)),
+            ),
+            2 => embedded(name.clone(), input.nested(file.sub(data, size)))
+                .summary(format!("{size} bytes")),
             _ => Node::new(name.clone()).summary(ROMFS_TYPES.get(kind).copied().unwrap_or("?")),
         };
         if name != "." && name != ".." {
@@ -74,8 +96,10 @@ async fn romfs_dir(cx: Cx, (input, mut offset, depth): (Input, u64, u32)) -> Res
 // JFFS2, UBI, UBIFS (raw flash images)
 
 fn jffs2_probe(h: &Head<'_>) -> bool {
-    (h.at(0, b"\x85\x19") && u16_le(h.data, 2).is_some_and(|t| t & 0xff00 == 0xe000 || t & 0xff00 == 0x2000))
-        || (h.at(0, b"\x19\x85") && u16_be(h.data, 2).is_some_and(|t| t & 0xff00 == 0xe000 || t & 0xff00 == 0x2000))
+    (h.at(0, b"\x85\x19")
+        && u16_le(h.data, 2).is_some_and(|t| t & 0xff00 == 0xe000 || t & 0xff00 == 0x2000))
+        || (h.at(0, b"\x19\x85")
+            && u16_be(h.data, 2).is_some_and(|t| t & 0xff00 == 0xe000 || t & 0xff00 == 0x2000))
 }
 
 declare_format!(pub JFFS2 = "jffs2", "JFFS2 flash file system", ["jffs2", "img"], "application/x-jffs2",
@@ -111,12 +135,17 @@ async fn jffs2(cx: Cx, input: Input) -> Result<()> {
             cur.seek(start.saturating_add(4));
             continue;
         }
-        let mut node = Node::new(lookup(JFFS2_NODES, kind.into()).map_or_else(|| format!("{kind:#06x}"), str::to_owned)).span(file.sub(start, len));
+        let mut node = Node::new(
+            lookup(JFFS2_NODES, kind.into()).map_or_else(|| format!("{kind:#06x}"), str::to_owned),
+        )
+        .span(file.sub(start, len));
         if kind == 0xe001 {
             dirents = dirents.saturating_add(1);
             let d = cx.read_avail(file.sub(start, 40.min(len))).await?;
             let nsize = usize::from(d.get(28).copied().unwrap_or(0));
-            let name = cx.read_avail(file.sub(start.saturating_add(40), nsize as u64)).await?;
+            let name = cx
+                .read_avail(file.sub(start.saturating_add(40), nsize as u64))
+                .await?;
             node = node.summary(String::from_utf8_lossy(&name).into_owned());
         } else if kind == 0xe002 {
             inodes = inodes.saturating_add(1);
@@ -124,7 +153,10 @@ async fn jffs2(cx: Cx, input: Input) -> Result<()> {
         cx.push(node).await;
         cur.seek(start.saturating_add(len).next_multiple_of(4));
     }
-    cx.annotate(format!("JFFS2 ({} endian), {dirents} directory entries, {inodes} inode nodes", if little { "little" } else { "big" }));
+    cx.annotate(format!(
+        "JFFS2 ({} endian), {dirents} directory entries, {inodes} inode nodes",
+        if little { "little" } else { "big" }
+    ));
     Ok(())
 }
 
@@ -148,7 +180,11 @@ record! {
 async fn ubi(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: UbiEcHeader = read_record(&cx, file.sub(0, UbiEcHeader::SIZE), BE).await?;
-    cx.emit(UbiEcHeader::node("Erase counter header", file.sub(0, UbiEcHeader::SIZE), BE));
+    cx.emit(UbiEcHeader::node(
+        "Erase counter header",
+        file.sub(0, UbiEcHeader::SIZE),
+        BE,
+    ));
     // Find the eraseblock size: the next "UBI#" at a power of two.
     let mut peb = 0u64;
     for shift in 14..=21u32 {
@@ -163,17 +199,30 @@ async fn ubi(cx: Cx, input: Input) -> Result<()> {
     }
     let vid = cx.read_avail(file.sub(h.vid_offset.into(), 64)).await?;
     if vid.starts_with(b"UBI!") {
-        cx.emit(Node::new("Volume ID header").span(file.sub(h.vid_offset.into(), 64)).summary(format!(
-            "volume {}, LEB {}",
-            u32_be(&vid, 8).unwrap_or(0),
-            u32_be(&vid, 12).unwrap_or(0)
-        )));
+        cx.emit(
+            Node::new("Volume ID header")
+                .span(file.sub(h.vid_offset.into(), 64))
+                .summary(format!(
+                    "volume {}, LEB {}",
+                    u32_be(&vid, 8).unwrap_or(0),
+                    u32_be(&vid, 12).unwrap_or(0)
+                )),
+        );
     }
     let blocks = file.len.checked_div(peb).unwrap_or(1);
     let first = if peb > 0 { peb } else { file.len };
-    let data = file.sub(h.data_offset.into(), first.saturating_sub(h.data_offset.into()));
+    let data = file.sub(
+        h.data_offset.into(),
+        first.saturating_sub(h.data_offset.into()),
+    );
     cx.emit(embedded("Data (first eraseblock)", input.nested(data)));
-    cx.annotate(format!("UBI v{}, {} eraseblocks of {} KiB, image {:#x}", h.version, blocks, peb / 1024, h.image_seq));
+    cx.annotate(format!(
+        "UBI v{}, {} eraseblocks of {} KiB, image {:#x}",
+        h.version,
+        blocks,
+        peb / 1024,
+        h.image_seq
+    ));
     Ok(())
 }
 
@@ -211,8 +260,14 @@ async fn ubifs(cx: Cx, input: Input) -> Result<()> {
     f.u32("Fanout").emit()?;
     f.u32("LSAVE count").emit()?;
     f.u32("Format version").emit()?;
-    let compr = f.u16("Default compressor").enumeration(&[(0, "none"), (1, "LZO"), (2, "zlib"), (3, "zstd")]).emit()?;
-    cx.annotate(format!("UBIFS, {lebs} LEBs of {} KiB, min I/O {min_io}, compressor {compr}", leb / 1024));
+    let compr = f
+        .u16("Default compressor")
+        .enumeration(&[(0, "none"), (1, "LZO"), (2, "zlib"), (3, "zstd")])
+        .emit()?;
+    cx.annotate(format!(
+        "UBIFS, {lebs} LEBs of {} KiB, min I/O {min_io}, compressor {compr}",
+        leb / 1024
+    ));
     Ok(())
 }
 
@@ -231,16 +286,43 @@ async fn trx(cx: Cx, input: Input) -> Result<()> {
     f.u32("CRC-32").hex().emit()?;
     let flags = f.u16("Flags").hex().emit()?;
     let version = f.u16("Version").emit()?;
-    let offsets = [f.u32("Partition 1 offset").hex().emit()?, f.u32("Partition 2 offset").hex().emit()?, f.u32("Partition 3 offset").hex().emit()?];
-    let mut ends: Vec<u64> = offsets.iter().skip(1).map(|&o| u64::from(o)).filter(|&o| o != 0).collect();
+    let offsets = [
+        f.u32("Partition 1 offset").hex().emit()?,
+        f.u32("Partition 2 offset").hex().emit()?,
+        f.u32("Partition 3 offset").hex().emit()?,
+    ];
+    let mut ends: Vec<u64> = offsets
+        .iter()
+        .skip(1)
+        .map(|&o| u64::from(o))
+        .filter(|&o| o != 0)
+        .collect();
     ends.push(u64::from(len));
     for (i, &start) in offsets.iter().enumerate() {
         if start == 0 {
             continue;
         }
-        let end = ends.get(i).copied().unwrap_or(u64::from(len)).max(start.into());
-        let name = ["Loader / kernel", "Kernel / root filesystem", "Root filesystem"].get(i).copied().unwrap_or("Partition");
-        cx.push(embedded(name, input.nested(file.sub(start.into(), end.saturating_sub(start.into())))).summary(format!("at {start:#x}"))).await;
+        let end = ends
+            .get(i)
+            .copied()
+            .unwrap_or(u64::from(len))
+            .max(start.into());
+        let name = [
+            "Loader / kernel",
+            "Kernel / root filesystem",
+            "Root filesystem",
+        ]
+        .get(i)
+        .copied()
+        .unwrap_or("Partition");
+        cx.push(
+            embedded(
+                name,
+                input.nested(file.sub(start.into(), end.saturating_sub(start.into()))),
+            )
+            .summary(format!("at {start:#x}")),
+        )
+        .await;
     }
     cx.annotate(format!("TRX v{version}, {len} bytes, flags {flags:#x}"));
     Ok(())
@@ -275,7 +357,19 @@ async fn img3(cx: Cx, input: Input) -> Result<()> {
         }
         cur.seek(start.saturating_add(full));
         let body = file.sub(start.saturating_add(12), data);
-        cx.push(embedded(tag, Input { span: body, nesting: input.nesting.saturating_add(1), outer: file }).summary(format!("{data} bytes")).target(cur.since(start))).await;
+        cx.push(
+            embedded(
+                tag,
+                Input {
+                    span: body,
+                    nesting: input.nesting.saturating_add(1),
+                    outer: file,
+                },
+            )
+            .summary(format!("{data} bytes"))
+            .target(cur.since(start)),
+        )
+        .await;
     }
     cx.annotate(format!("IMG3 {ident}"));
     Ok(())
@@ -321,14 +415,30 @@ async fn xex(cx: Cx, input: Input) -> Result<()> {
         let id = u32_be(&entry, 0).unwrap_or(0);
         let value = u32_be(&entry, 4).unwrap_or(0);
         if id == 0x0001_83ff
-            && let Ok((n, _)) = cx.cstr(file.sub(u64::from(value).saturating_add(4), 256)).await
+            && let Ok((n, _)) = cx
+                .cstr(file.sub(u64::from(value).saturating_add(4), 256))
+                .await
         {
             name = Some(n);
         }
-        cx.push(Node::new(lookup(XEX_HEADERS, id.into()).map_or_else(|| format!("{id:#010x}"), str::to_owned)).span(file.sub(at, 8)).value(Value::UInt { value: value.into(), bits: 32, radix: crate::value::Radix::Hex })).await;
+        cx.push(
+            Node::new(
+                lookup(XEX_HEADERS, id.into()).map_or_else(|| format!("{id:#010x}"), str::to_owned),
+            )
+            .span(file.sub(at, 8))
+            .value(Value::UInt {
+                value: value.into(),
+                bits: 32,
+                radix: crate::value::Radix::Hex,
+            }),
+        )
+        .await;
     }
     cx.emit(Node::new("PE image (encrypted/compressed)").span(file.tail(pe_offset.into())));
-    cx.annotate(format!("{magic}{}", name.map_or(String::new(), |n| format!(", {n}"))));
+    cx.annotate(format!(
+        "{magic}{}",
+        name.map_or(String::new(), |n| format!(", {n}"))
+    ));
     Ok(())
 }
 
@@ -349,7 +459,10 @@ async fn ps3_self(cx: Cx, input: Input) -> Result<()> {
     let header_len = f.u64("Header length").hex().emit()?;
     let data_len = f.u64("Data length").emit()?;
     cx.emit(Node::new("Encrypted data").span(file.sub(header_len, data_len)));
-    cx.annotate(format!("SCE {} container, {data_len} bytes of data", lookup(SCE_TYPES, kind.into()).unwrap_or("unknown")));
+    cx.annotate(format!(
+        "SCE {} container, {data_len} bytes of data",
+        lookup(SCE_TYPES, kind.into()).unwrap_or("unknown")
+    ));
     Ok(())
 }
 
@@ -362,7 +475,10 @@ async fn ps3_pkg(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, BE);
     f.bytes("Magic", 4).emit()?;
     let revision = f.u16("Revision").hex().emit()?;
-    let kind = f.u16("Type").enumeration(&[(1, "PS3"), (2, "PSP/PS Vita")]).emit()?;
+    let kind = f
+        .u16("Type")
+        .enumeration(&[(1, "PS3"), (2, "PSP/PS Vita")])
+        .emit()?;
     f.u32("Metadata offset").hex().emit()?;
     f.u32("Metadata count").emit()?;
     f.u32("Header size").emit()?;
@@ -375,7 +491,11 @@ async fn ps3_pkg(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "{} package {content_id}, {items} items, {total} bytes{}",
         if kind == 1 { "PS3" } else { "PSP/Vita" },
-        if revision & 0x8000 != 0 { ", retail" } else { ", debug" }
+        if revision & 0x8000 != 0 {
+            ", retail"
+        } else {
+            ", debug"
+        }
     ));
     Ok(())
 }
@@ -395,7 +515,11 @@ async fn nsp(cx: Cx, input: Input) -> Result<()> {
     let table = file.sub_exact(16, entries_len)?;
     let names_at = 16u64.saturating_add(entries_len);
     let data_at = names_at.saturating_add(strings.into());
-    cx.emit(Node::new("Header").span(file.sub(0, 16)).summary(format!("{count} files")));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 16))
+            .summary(format!("{count} files")),
+    );
     let entries = cx.read(table).await?;
     cx.set_count(Count::Exact(u64::from(count).saturating_add(1)));
     for i in 0..usize::try_from(count).unwrap_or(0) {
@@ -403,8 +527,20 @@ async fn nsp(cx: Cx, input: Input) -> Result<()> {
         let offset = u64_le(&entries, at).unwrap_or(0);
         let size = u64_le(&entries, at.saturating_add(8)).unwrap_or(0);
         let name_offset = u32_le(&entries, at.saturating_add(16)).unwrap_or(0);
-        let name = cx.cstr(file.sub(names_at.saturating_add(name_offset.into()), 256)).await.map(|(n, _)| n).unwrap_or_default();
-        cx.push(embedded(name, input.nested(file.sub(data_at.saturating_add(offset), size))).summary(format!("{size} bytes")).target(table.sub(to_u64(at), 24))).await;
+        let name = cx
+            .cstr(file.sub(names_at.saturating_add(name_offset.into()), 256))
+            .await
+            .map(|(n, _)| n)
+            .unwrap_or_default();
+        cx.push(
+            embedded(
+                name,
+                input.nested(file.sub(data_at.saturating_add(offset), size)),
+            )
+            .summary(format!("{size} bytes"))
+            .target(table.sub(to_u64(at), 24)),
+        )
+        .await;
     }
     cx.annotate(format!("PFS0, {count} files"));
     Ok(())
@@ -425,7 +561,17 @@ async fn xci(cx: Cx, input: Input) -> Result<()> {
     f.u32("Secure area start (pages)").emit()?;
     f.u32("Backup area start").hex().emit()?;
     f.u8("Title key decryption index").emit()?;
-    let size = f.u8("Cartridge size").enumeration(&[(0xfa, "1 GB"), (0xf8, "2 GB"), (0xf0, "4 GB"), (0xe0, "8 GB"), (0xe1, "16 GB"), (0xe2, "32 GB")]).emit()?;
+    let size = f
+        .u8("Cartridge size")
+        .enumeration(&[
+            (0xfa, "1 GB"),
+            (0xf8, "2 GB"),
+            (0xf0, "4 GB"),
+            (0xe0, "8 GB"),
+            (0xe1, "16 GB"),
+            (0xe2, "32 GB"),
+        ])
+        .emit()?;
     f.u8("Header version").emit()?;
     f.u8("Flags").hex().emit()?;
     f.u64("Package ID").hex().emit()?;
@@ -435,12 +581,15 @@ async fn xci(cx: Cx, input: Input) -> Result<()> {
     let hfs0 = f.u64("Root HFS0 offset").hex().emit()?;
     f.u64("Root HFS0 header size").emit()?;
     cx.emit(Node::new("Root HFS0").span(file.tail(hfs0)));
-    cx.annotate(format!("Switch cartridge, size code {size:#x}, root HFS0 at {hfs0:#x}"));
+    cx.annotate(format!(
+        "Switch cartridge, size code {size:#x}, root HFS0 at {hfs0:#x}"
+    ));
     Ok(())
 }
 
 fn wad_probe(h: &Head<'_>) -> bool {
-    u32_be(h.data, 0) == Some(0x20) && (h.at(4, b"Is\0\0") || h.at(4, b"ib\0\0") || h.at(4, b"Bk\0\0"))
+    u32_be(h.data, 0) == Some(0x20)
+        && (h.at(4, b"Is\0\0") || h.at(4, b"ib\0\0") || h.at(4, b"Bk\0\0"))
 }
 
 declare_format!(pub WII_WAD = "wii-wad", "Wii installable package (WAD)", ["wad"], "application/x-wii-wad",
@@ -459,11 +608,20 @@ async fn wii_wad(cx: Cx, input: Input) -> Result<()> {
     let data = f.u32("Data size").emit()?;
     let footer = f.u32("Footer size").emit()?;
     let mut at = 0x40u64;
-    for (name, size) in [("Certificate chain", cert), ("Ticket", ticket), ("Title metadata (TMD)", tmd), ("Encrypted content", data), ("Footer", footer)] {
+    for (name, size) in [
+        ("Certificate chain", cert),
+        ("Ticket", ticket),
+        ("Title metadata (TMD)", tmd),
+        ("Encrypted content", data),
+        ("Footer", footer),
+    ] {
         cx.emit(Node::new(name).span(file.sub(at, size.into())));
         at = at.saturating_add(u64::from(size)).next_multiple_of(0x40);
     }
-    cx.annotate(format!("Wii WAD ({}), {data} bytes of content", kind.trim_end_matches('\0')));
+    cx.annotate(format!(
+        "Wii WAD ({}), {data} bytes of content",
+        kind.trim_end_matches('\0')
+    ));
     Ok(())
 }
 
@@ -487,12 +645,22 @@ async fn cia(cx: Cx, input: Input) -> Result<()> {
     let meta = f.u32("Meta size").emit()?;
     let content = f.u64("Content size").emit()?;
     let mut at = 0x2020u64.next_multiple_of(64);
-    for (name, size) in [("Certificate chain", u64::from(cert)), ("Ticket", ticket.into()), ("Title metadata (TMD)", tmd.into()), ("Content", content), ("Meta", meta.into())] {
+    for (name, size) in [
+        ("Certificate chain", u64::from(cert)),
+        ("Ticket", ticket.into()),
+        ("Title metadata (TMD)", tmd.into()),
+        ("Content", content),
+        ("Meta", meta.into()),
+    ] {
         if size == 0 {
             continue;
         }
         let span = file.sub(at, size);
-        let node = if name == "Content" { embedded(name, input.nested(span)) } else { Node::new(name).span(span) };
+        let node = if name == "Content" {
+            embedded(name, input.nested(span))
+        } else {
+            Node::new(name).span(span)
+        };
         cx.emit(node);
         at = at.saturating_add(size).next_multiple_of(64);
     }
@@ -506,7 +674,14 @@ async fn cia(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub KERNEL_DUMP = "windows-kernel-dump", "Windows kernel crash dump", ["dmp"], "application/x-windows-kernel-dump",
     Probe::Magic(&[(0, b"PAGEDU64"), (0, b"PAGEDUMP")]), kernel_dump);
 
-const DUMP_TYPES: EnumTable = &[(1, "full"), (2, "kernel"), (4, "small (minidump)"), (5, "triage"), (6, "bitmap"), (8, "automatic")];
+const DUMP_TYPES: EnumTable = &[
+    (1, "full"),
+    (2, "kernel"),
+    (4, "small (minidump)"),
+    (5, "triage"),
+    (6, "bitmap"),
+    (8, "automatic"),
+];
 
 async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -521,12 +696,23 @@ async fn kernel_dump(cx: Cx, input: Input) -> Result<()> {
     f.uword("PFN database", wide).hex().emit()?;
     f.uword("Loaded module list", wide).hex().emit()?;
     f.uword("Active process list", wide).hex().emit()?;
-    let machine = f.u32("Machine").enumeration(&[(0x14c, "x86"), (0x8664, "x64"), (0xaa64, "ARM64")]).emit()?;
+    let machine = f
+        .u32("Machine")
+        .enumeration(&[(0x14c, "x86"), (0x8664, "x64"), (0xaa64, "ARM64")])
+        .emit()?;
     let processors = f.u32("Processors").emit()?;
     let code = f.u32("Bug check code").hex().emit()?;
     let kind_at = if wide { 0xf98u64 } else { 0xf88 };
     let kind = u32_le(&cx.read_avail(file.sub(kind_at, 4)).await?, 0).unwrap_or(0);
-    cx.emit(Node::new("Dump type").span(file.sub(kind_at, 4)).value(Value::Enum { raw: kind.into(), bits: 32, name: lookup(DUMP_TYPES, kind.into()) }));
+    cx.emit(
+        Node::new("Dump type")
+            .span(file.sub(kind_at, 4))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 32,
+                name: lookup(DUMP_TYPES, kind.into()),
+            }),
+    );
     cx.emit(Node::new("Memory pages").span(file.tail(if wide { 0x2000 } else { 0x1000 })));
     cx.annotate(format!(
         "Windows {major}.{minor} {} dump, bug check {code:#x}, {processors} CPU(s), machine {machine:#x}",
@@ -579,9 +765,16 @@ record! {
 }
 
 async fn verity(cx: Cx, input: Input) -> Result<()> {
-    let h: VeritySuperblock = emit_record(&cx, input.span.sub(0, VeritySuperblock::SIZE), LE).await?;
+    let h: VeritySuperblock =
+        emit_record(&cx, input.span.sub(0, VeritySuperblock::SIZE), LE).await?;
     cx.emit(Node::new("Hash tree").span(input.span.tail(u64::from(h.hash_block))));
-    cx.annotate(format!("dm-verity v{}, {}, {} data blocks of {} bytes", h.version, h.algorithm.trim_end_matches('\0'), h.data_blocks, h.data_block));
+    cx.annotate(format!(
+        "dm-verity v{}, {}, {} data blocks of {} bytes",
+        h.version,
+        h.algorithm.trim_end_matches('\0'),
+        h.data_blocks,
+        h.data_block
+    ));
     Ok(())
 }
 
@@ -616,7 +809,11 @@ const SEND_COMMANDS: EnumTable = &[
 async fn btrfs_send(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let version = u32_le(&cx.read(file.sub(13, 4)).await?, 0).unwrap_or(0);
-    cx.emit(Node::new("Header").span(file.sub(0, 17)).summary(format!("version {version}")));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 17))
+            .summary(format!("version {version}")),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(17);
     let mut commands = 0u32;
@@ -627,12 +824,25 @@ async fn btrfs_send(cx: Cx, input: Input) -> Result<()> {
         let _crc = cur.u32().await?;
         cur.skip(len.into());
         commands = commands.saturating_add(1);
-        let mut node = Node::new(lookup(SEND_COMMANDS, cmd.into()).map_or_else(|| format!("command {cmd}"), str::to_owned)).span(cur.since(start));
+        let mut node = Node::new(
+            lookup(SEND_COMMANDS, cmd.into())
+                .map_or_else(|| format!("command {cmd}"), str::to_owned),
+        )
+        .span(cur.since(start));
         // The first attribute of most commands is the path.
-        let attrs = cx.read_avail(file.sub(start.saturating_add(10), u64::from(len).min(512))).await?;
+        let attrs = cx
+            .read_avail(file.sub(start.saturating_add(10), u64::from(len).min(512)))
+            .await?;
         if u16_le(&attrs, 0) == Some(15) {
             let plen = usize::from(u16_le(&attrs, 2).unwrap_or(0));
-            node = node.summary(String::from_utf8_lossy(attrs.get(4..4usize.saturating_add(plen)).unwrap_or_default()).into_owned());
+            node = node.summary(
+                String::from_utf8_lossy(
+                    attrs
+                        .get(4..4usize.saturating_add(plen))
+                        .unwrap_or_default(),
+                )
+                .into_owned(),
+            );
         }
         cx.push(node).await;
         if cmd == 21 {

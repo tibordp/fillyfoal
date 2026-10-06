@@ -114,7 +114,9 @@ fn checksum(data: &[u8], field: usize) -> u32 {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     // The footer is the last 512 bytes (511 in some old images).
-    let tail = cx.read_avail(file.tail(file.len.saturating_sub(SECTOR))).await?;
+    let tail = cx
+        .read_avail(file.tail(file.len.saturating_sub(SECTOR)))
+        .await?;
     let footer_at = if tail.starts_with(COOKIE) {
         Some(file.len.saturating_sub(SECTOR))
     } else if tail.get(1..).is_some_and(|t| t.starts_with(COOKIE)) {
@@ -127,7 +129,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let footer = parse(&cx, footer_span, BE, &(), Footer::layout).await?;
     let raw = cx.read_avail(footer_span).await?;
     let mut node = Footer::node(
-        if footer_at.is_some() { "Footer" } else { "Footer (copy at start)" },
+        if footer_at.is_some() {
+            "Footer"
+        } else {
+            "Footer (copy at start)"
+        },
         footer_span,
         BE,
     );
@@ -135,7 +141,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         node = node.diag(Diagnostic::warning("footer checksum mismatch"));
     }
     if footer_at.is_none() {
-        node = node.diag(Diagnostic::warning("no footer at the end; using the copy at the start"));
+        node = node.diag(Diagnostic::warning(
+            "no footer at the end; using the copy at the start",
+        ));
     }
     let kind = crate::value::lookup(DISK_TYPES, footer.disk_type.into()).unwrap_or("unknown");
     cx.annotate(format!(
@@ -170,7 +178,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if block < SECTOR || !block.is_power_of_two() {
         return Err(Diagnostic::malformed(format!("block size {block}")).at(header_span));
     }
-    let bat = file.sub_exact(header.table_offset, u64::from(header.max_entries).saturating_mul(4))?;
+    let bat = file.sub_exact(
+        header.table_offset,
+        u64::from(header.max_entries).saturating_mul(4),
+    )?;
     let disk = Arc::new(Dynamic {
         input,
         bat,
@@ -187,9 +198,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     if footer.disk_type == 4 {
         let parent = header.parent_name.clone();
-        cx.emit(Node::new("Virtual disk").diag(Diagnostic::unsupported(format!(
-            "differencing disk: unallocated blocks come from the parent {parent:?}"
-        ))));
+        cx.emit(
+            Node::new("Virtual disk").diag(Diagnostic::unsupported(format!(
+                "differencing disk: unallocated blocks come from the parent {parent:?}"
+            ))),
+        );
     } else {
         cx.emit(
             Node::new("Virtual disk")

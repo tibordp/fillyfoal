@@ -160,12 +160,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, header_span, BE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", header_span, BE));
     let class = crate::value::lookup(CLASSES, h.class.into()).unwrap_or("unknown class");
-    let space = crate::value::lookup(SPACES, h.space.into()).map_or_else(|| fourcc(h.space), str::to_owned);
+    let space =
+        crate::value::lookup(SPACES, h.space.into()).map_or_else(|| fourcc(h.space), str::to_owned);
     let version = format!("{}.{}", h.version >> 24, (h.version >> 20) & 15);
     let mut summary = format!("ICC v{version}, {class}, {space}");
     let count_span = file.sub(Header::SIZE, 4);
     let count = u32_be(&cx.read(count_span).await?, 0).unwrap_or(0);
-    let table = file.sub(Header::SIZE.saturating_add(4), u64::from(count.min(MAX_TAGS)).saturating_mul(12));
+    let table = file.sub(
+        Header::SIZE.saturating_add(4),
+        u64::from(count.min(MAX_TAGS)).saturating_mul(12),
+    );
     if let Some(desc) = description(&cx, file, table).await {
         summary = format!("{summary}, {desc:?}");
     }
@@ -208,7 +212,9 @@ async fn tags(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
         let data = file.sub(offset.into(), size.into());
         let (value, kind) = decode(&cx, data).await;
         let mut node = Node::new(fourcc(tag)).span(span).target(data);
-        let mut summary = crate::value::lookup(TAGS, tag.into()).unwrap_or("").to_owned();
+        let mut summary = crate::value::lookup(TAGS, tag.into())
+            .unwrap_or("")
+            .to_owned();
         if let Some(kind) = kind {
             summary = if summary.is_empty() {
                 kind
@@ -240,14 +246,22 @@ async fn decode(cx: &Cx, data: Span) -> (Option<Value>, Option<String>) {
     let value = match kind {
         b"text" => Some(text(crate::text::until_nul(body))),
         b"desc" => {
-            let len = u32_be(body, 0).and_then(|l| usize::try_from(l).ok()).unwrap_or(0);
+            let len = u32_be(body, 0)
+                .and_then(|l| usize::try_from(l).ok())
+                .unwrap_or(0);
             let s = body.get(4..).unwrap_or_default();
-            Some(text(crate::text::until_nul(s.get(..len.min(s.len())).unwrap_or_default())))
+            Some(text(crate::text::until_nul(
+                s.get(..len.min(s.len())).unwrap_or_default(),
+            )))
         }
         b"mluc" => {
             // First record: language, country, length, offset (from the tag start).
-            let len = u32_be(body, 12).and_then(|l| usize::try_from(l).ok()).unwrap_or(0);
-            let off = u32_be(body, 16).and_then(|o| usize::try_from(o).ok()).unwrap_or(0);
+            let len = u32_be(body, 12)
+                .and_then(|l| usize::try_from(l).ok())
+                .unwrap_or(0);
+            let off = u32_be(body, 16)
+                .and_then(|o| usize::try_from(o).ok())
+                .unwrap_or(0);
             let s = off
                 .checked_add(len)
                 .and_then(|end| bytes.get(off..end))

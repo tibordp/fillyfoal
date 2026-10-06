@@ -60,11 +60,16 @@ async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
         let mut kind = String::new();
         let mut size = 0u64;
         while at < header.len() {
-            let Some(key) = varint(&header, &mut at) else { break };
+            let Some(key) = varint(&header, &mut at) else {
+                break;
+            };
             match key {
                 0x0a => {
                     let n = crate::bytes::to_usize(varint(&header, &mut at).unwrap_or(0));
-                    kind = String::from_utf8_lossy(header.get(at..at.saturating_add(n)).unwrap_or_default()).into_owned();
+                    kind = String::from_utf8_lossy(
+                        header.get(at..at.saturating_add(n)).unwrap_or_default(),
+                    )
+                    .into_owned();
                     at = at.saturating_add(n);
                 }
                 0x18 => size = varint(&header, &mut at).unwrap_or(0),
@@ -78,16 +83,20 @@ async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
         // Blob: 1 = raw, 2 = raw_size, 3 = zlib_data.
         let b = cx.read_avail(blob.sub(0, 16)).await?;
         let mut bat = 0usize;
-        let mut node = crate::node::Node::new(kind.clone()).span(file.sub(pos, 4u64.saturating_add(len).saturating_add(size)));
+        let mut node = crate::node::Node::new(kind.clone())
+            .span(file.sub(pos, 4u64.saturating_add(len).saturating_add(size)));
         let mut raw_size = None;
         while bat < b.len() {
-            let Some(key) = varint(&b, &mut bat) else { break };
+            let Some(key) = varint(&b, &mut bat) else {
+                break;
+            };
             match key {
                 0x10 => raw_size = varint(&b, &mut bat),
                 0x1a => {
                     let n = varint(&b, &mut bat).unwrap_or(0);
                     let data = blob.sub(to_u64(bat), n);
-                    node = content(kind.clone(), input, data, Codec::Zlib, raw_size).span(file.sub(pos, 4u64.saturating_add(len).saturating_add(size)));
+                    node = content(kind.clone(), input, data, Codec::Zlib, raw_size)
+                        .span(file.sub(pos, 4u64.saturating_add(len).saturating_add(size)));
                     break;
                 }
                 _ => break,
@@ -95,7 +104,10 @@ async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
         }
         blocks = blocks.saturating_add(1);
         cx.push(node.summary(format!("{size} bytes"))).await;
-        pos = pos.saturating_add(4).saturating_add(len).saturating_add(size);
+        pos = pos
+            .saturating_add(4)
+            .saturating_add(len)
+            .saturating_add(size);
     }
     cx.annotate(format!("OSM PBF, {blocks} blocks"));
     Ok(())
@@ -116,12 +128,31 @@ async fn hgt(cx: Cx, input: Input) -> Result<()> {
     let side = if file.len == 2_884_802 { 1201u64 } else { 3601 };
     let row = side.saturating_mul(2);
     // Sample the centre post.
-    let centre = (side / 2).saturating_mul(row).saturating_add((side / 2).saturating_mul(2));
+    let centre = (side / 2)
+        .saturating_mul(row)
+        .saturating_add((side / 2).saturating_mul(2));
     let sample = cx.read(file.sub(centre, 2)).await?;
-    let height = i16::from_be_bytes([sample.first().copied().unwrap_or(0), sample.get(1).copied().unwrap_or(0)]);
-    cx.emit(Node::new("Grid").span(file).summary(format!("{side}×{side} big-endian 16-bit posts")));
-    cx.emit(Node::new("Centre elevation").span(file.sub(centre, 2)).value(Value::Int { value: height.into(), bits: 16 }));
-    cx.annotate(format!("SRTM{} tile, {side}×{side} posts", if side == 1201 { 3 } else { 1 }));
+    let height = i16::from_be_bytes([
+        sample.first().copied().unwrap_or(0),
+        sample.get(1).copied().unwrap_or(0),
+    ]);
+    cx.emit(
+        Node::new("Grid")
+            .span(file)
+            .summary(format!("{side}×{side} big-endian 16-bit posts")),
+    );
+    cx.emit(
+        Node::new("Centre elevation")
+            .span(file.sub(centre, 2))
+            .value(Value::Int {
+                value: height.into(),
+                bits: 16,
+            }),
+    );
+    cx.annotate(format!(
+        "SRTM{} tile, {side}×{side} posts",
+        if side == 1201 { 3 } else { 1 }
+    ));
     Ok(())
 }
 
@@ -150,7 +181,10 @@ async fn dted(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Data set identification (DSI)").span(file.sub(80, 648)));
     cx.emit(Node::new("Accuracy (ACC)").span(file.sub(728, 2700)));
     cx.emit(Node::new("Elevation records").span(file.tail(3428)));
-    cx.annotate(format!("DTED tile at {} {}, {}×{} posts", h.latitude, h.longitude, h.lon_lines, h.lat_points));
+    cx.annotate(format!(
+        "DTED tile at {} {}, {}×{} posts",
+        h.latitude, h.longitude, h.lon_lines, h.lat_points
+    ));
     Ok(())
 }
 
@@ -173,7 +207,13 @@ record! {
 async fn nitf(cx: Cx, input: Input) -> Result<()> {
     let h: NitfHeader = emit_record(&cx, input.span.sub(0, NitfHeader::SIZE), BE).await?;
     cx.emit(Node::new("Security and segments").span(input.span.tail(NitfHeader::SIZE)));
-    cx.annotate(format!("{}{} {:?} from {}", h.profile, h.version, h.title.trim(), h.station.trim()));
+    cx.annotate(format!(
+        "{}{} {:?} from {}",
+        h.profile,
+        h.version,
+        h.title.trim(),
+        h.station.trim()
+    ));
     Ok(())
 }
 
@@ -215,7 +255,11 @@ declare_format!(pub KGB = "kgb", "KGB archive", ["kgb", "kge"], "application/x-k
 async fn kgb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Signature").span(file.sub(0, 8)));
-    cx.emit(Node::new("Compressed data").span(file.tail(8)).diag(Diagnostic::unsupported("PAQ6-based compression")));
+    cx.emit(
+        Node::new("Compressed data")
+            .span(file.tail(8))
+            .diag(Diagnostic::unsupported("PAQ6-based compression")),
+    );
     cx.annotate("KGB archive");
     Ok(())
 }
@@ -252,8 +296,14 @@ async fn isz(cx: Cx, input: Input) -> Result<()> {
     let total = u32_le(&head, 0x12).unwrap_or(0);
     let dirs = u16_le(&head, 0x31).unwrap_or(0);
     cx.emit(Node::new("Header").span(file.sub(0, 0xff)));
-    cx.emit(Node::new("Compressed data").span(file.tail(0xff)).diag(Diagnostic::unsupported("PKWARE DCL implode")));
-    cx.annotate(format!("InstallShield 3 archive, {files} files, {total} bytes, {dirs} directories"));
+    cx.emit(
+        Node::new("Compressed data")
+            .span(file.tail(0xff))
+            .diag(Diagnostic::unsupported("PKWARE DCL implode")),
+    );
+    cx.annotate(format!(
+        "InstallShield 3 archive, {files} files, {total} bytes, {dirs} directories"
+    ));
     Ok(())
 }
 
@@ -291,20 +341,33 @@ async fn x3f(cx: Cx, input: Input) -> Result<()> {
     let width = f.u32("Width").emit()?;
     let height = f.u32("Height").emit()?;
     let rotation = f.u32("Rotation").emit()?;
-    let dir_at = u64::from(u32_le(&cx.read(file.sub(file.len.saturating_sub(4), 4)).await?, 0).unwrap_or(0));
+    let dir_at =
+        u64::from(u32_le(&cx.read(file.sub(file.len.saturating_sub(4), 4)).await?, 0).unwrap_or(0));
     let dir = cx.read_avail(file.sub(dir_at, 12)).await?;
     if dir.starts_with(b"SECd") {
         let count = u32_le(&dir, 8).unwrap_or(0);
         for i in 0..count.min(256) {
-            let at = dir_at.saturating_add(12).saturating_add(u64::from(i).saturating_mul(12));
+            let at = dir_at
+                .saturating_add(12)
+                .saturating_add(u64::from(i).saturating_mul(12));
             let e = cx.read(file.sub(at, 12)).await?;
             let offset = u64::from(u32_le(&e, 0).unwrap_or(0));
             let len = u64::from(u32_le(&e, 4).unwrap_or(0));
             let kind = String::from_utf8_lossy(e.get(8..12).unwrap_or_default()).into_owned();
-            cx.push(Node::new(kind).span(file.sub(offset, len)).summary(format!("{len} bytes")).target(file.sub(at, 12))).await;
+            cx.push(
+                Node::new(kind)
+                    .span(file.sub(offset, len))
+                    .summary(format!("{len} bytes"))
+                    .target(file.sub(at, 12)),
+            )
+            .await;
         }
     }
-    cx.annotate(format!("Sigma X3F v{}.{}, {width}×{height}, rotation {rotation}", version >> 16, version & 0xffff));
+    cx.annotate(format!(
+        "Sigma X3F v{}.{}, {width}×{height}, rotation {rotation}",
+        version >> 16,
+        version & 0xffff
+    ));
     Ok(())
 }
 
@@ -352,7 +415,15 @@ async fn ebu_stl(cx: Cx, input: Input) -> Result<()> {
         let block = cur.bytes(128).await?;
         n = n.saturating_add(1);
         let number = u16_le(&block, 1).unwrap_or(0);
-        let tc = |at: usize| format!("{:02}:{:02}:{:02}:{:02}", block.get(at).copied().unwrap_or(0), block.get(at.saturating_add(1)).copied().unwrap_or(0), block.get(at.saturating_add(2)).copied().unwrap_or(0), block.get(at.saturating_add(3)).copied().unwrap_or(0));
+        let tc = |at: usize| {
+            format!(
+                "{:02}:{:02}:{:02}:{:02}",
+                block.get(at).copied().unwrap_or(0),
+                block.get(at.saturating_add(1)).copied().unwrap_or(0),
+                block.get(at.saturating_add(2)).copied().unwrap_or(0),
+                block.get(at.saturating_add(3)).copied().unwrap_or(0)
+            )
+        };
         let text_field: String = block
             .get(16..128)
             .unwrap_or_default()
@@ -360,9 +431,18 @@ async fn ebu_stl(cx: Cx, input: Input) -> Result<()> {
             .filter(|&&b| (0x20..0x7f).contains(&b))
             .map(|&b| char::from(b))
             .collect();
-        cx.push(Node::new(format!("Subtitle {number}")).span(cur.since(start)).summary(format!("{} → {}: {}", tc(5), tc(9), text_field.trim()))).await;
+        cx.push(
+            Node::new(format!("Subtitle {number}"))
+                .span(cur.since(start))
+                .summary(format!("{} → {}: {}", tc(5), tc(9), text_field.trim())),
+        )
+        .await;
     }
-    cx.annotate(format!("EBU STL ({}), {:?}, {n} TTI blocks", gsi.disk_format, gsi.programme.trim()));
+    cx.annotate(format!(
+        "EBU STL ({}), {:?}, {n} TTI blocks",
+        gsi.disk_format,
+        gsi.programme.trim()
+    ));
     Ok(())
 }
 
@@ -375,7 +455,12 @@ async fn scc(cx: Cx, input: Input) -> Result<()> {
     for (line, span) in all {
         if let Some((tc, codes)) = line.split_once('\t') {
             captions = captions.saturating_add(1);
-            cx.push(Node::new(tc.to_owned()).span(span).summary(format!("{} code words", codes.split_whitespace().count()))).await;
+            cx.push(
+                Node::new(tc.to_owned())
+                    .span(span)
+                    .summary(format!("{} code words", codes.split_whitespace().count())),
+            )
+            .await;
         } else if line.starts_with("Scenarist") {
             cx.emit(Node::new("Header").span(span).value(text(line)));
         }
@@ -398,10 +483,14 @@ async fn vobsub(cx: Cx, input: Input) -> Result<()> {
         } else if line.starts_with("timestamp:") {
             stamps = stamps.saturating_add(1);
         } else if let Some((k, v)) = line.split_once(": ").filter(|_| !line.starts_with('#')) {
-            cx.push(Node::new(k.to_owned()).span(span).value(text(v))).await;
+            cx.push(Node::new(k.to_owned()).span(span).value(text(v)))
+                .await;
         }
     }
-    cx.annotate(format!("VobSub index, tracks [{}], {stamps} subtitles", tracks.join(", ")));
+    cx.annotate(format!(
+        "VobSub index, tracks [{}], {stamps} subtitles",
+        tracks.join(", ")
+    ));
     Ok(())
 }
 
@@ -419,7 +508,9 @@ async fn nut(cx: Cx, input: Input) -> Result<()> {
     let main = count(0x4e4d_7a56_1f5f_04ad);
     let streams = count(0x4e53_1140_5bf2_f9db);
     cx.emit(Node::new("Packets").span(file.tail(25)));
-    cx.annotate(format!("NUT container, {main} main header(s), {streams} stream header(s) in the first 64 KiB"));
+    cx.annotate(format!(
+        "NUT container, {main} main header(s), {streams} stream header(s) in the first 64 KiB"
+    ));
     Ok(())
 }
 
@@ -440,15 +531,35 @@ async fn vrml(cx: Cx, input: Input) -> Result<()> {
         let t = line.trim_start();
         if let Some(rest) = t.strip_prefix("DEF ") {
             defs = defs.saturating_add(1);
-            cx.push(Node::new(rest.split_whitespace().next().unwrap_or_default().to_owned()).span(*span).summary(rest.split_whitespace().nth(1).unwrap_or_default().to_owned())).await;
+            cx.push(
+                Node::new(
+                    rest.split_whitespace()
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned(),
+                )
+                .span(*span)
+                .summary(
+                    rest.split_whitespace()
+                        .nth(1)
+                        .unwrap_or_default()
+                        .to_owned(),
+                ),
+            )
+            .await;
         }
     }
-    cx.annotate(format!("{}, {defs} named nodes", header.trim_start_matches('#').trim()));
+    cx.annotate(format!(
+        "{}, {defs} named nodes",
+        header.trim_start_matches('#').trim()
+    ));
     Ok(())
 }
 
 fn off_probe(h: &Head<'_>) -> bool {
-    ["OFF\n", "OFF\r\n", "COFF\n", "NOFF\n", "OFF \n"].iter().any(|m| h.starts_with(m.as_bytes()))
+    ["OFF\n", "OFF\r\n", "COFF\n", "NOFF\n", "OFF \n"]
+        .iter()
+        .any(|m| h.starts_with(m.as_bytes()))
         || (h.starts_with(b"OFF ") && h.data.get(4).is_some_and(u8::is_ascii_digit))
 }
 
@@ -463,7 +574,9 @@ async fn off(cx: Cx, input: Input) -> Result<()> {
         if t.is_empty() || t.starts_with('#') {
             continue;
         }
-        let t = t.trim_start_matches(|c: char| c.is_ascii_alphabetic()).trim();
+        let t = t
+            .trim_start_matches(|c: char| c.is_ascii_alphabetic())
+            .trim();
         numbers.extend(t.split_whitespace().filter_map(|w| w.parse::<u64>().ok()));
         if numbers.len() >= 2 {
             break;
@@ -493,15 +606,31 @@ async fn md5mesh(cx: Cx, input: Input) -> Result<()> {
             && (k.starts_with("num") || k == "MD5Version" || k == "commandline" || k == "frameRate")
         {
             kv.push((k.to_owned(), v.to_owned()));
-            cx.emit(Node::new(k.to_owned()).span(*span).value(text(v.trim_matches('"'))));
+            cx.emit(
+                Node::new(k.to_owned())
+                    .span(*span)
+                    .value(text(v.trim_matches('"'))),
+            );
         }
     }
-    let get = |k: &str| kv.iter().find(|(a, _)| a == k).map_or(String::from("?"), |(_, v)| v.clone());
+    let get = |k: &str| {
+        kv.iter()
+            .find(|(a, _)| a == k)
+            .map_or(String::from("?"), |(_, v)| v.clone())
+    };
     let anim = kv.iter().any(|(k, _)| k == "numFrames");
     cx.annotate(if anim {
-        format!("MD5 animation, {} frames at {} fps", get("numFrames"), get("frameRate"))
+        format!(
+            "MD5 animation, {} frames at {} fps",
+            get("numFrames"),
+            get("frameRate")
+        )
     } else {
-        format!("MD5 mesh, {} joints, {} meshes", get("numJoints"), get("numMeshes"))
+        format!(
+            "MD5 mesh, {} joints, {} meshes",
+            get("numJoints"),
+            get("numMeshes")
+        )
     });
     Ok(())
 }
@@ -522,7 +651,11 @@ record! {
 async fn source_mdl(cx: Cx, input: Input) -> Result<()> {
     let h: StudioHeader = emit_record(&cx, input.span.sub(0, StudioHeader::SIZE), LE).await?;
     cx.emit(Node::new("Model data").span(input.span.tail(StudioHeader::SIZE)));
-    cx.annotate(format!("Source model {:?}, version {}", h.name.trim_end(), h.version));
+    cx.annotate(format!(
+        "Source model {:?}, version {}",
+        h.name.trim_end(),
+        h.version
+    ));
     Ok(())
 }
 
@@ -541,9 +674,22 @@ async fn psk(cx: Cx, input: Input) -> Result<()> {
         let count = cur.u32().await?;
         cur.skip(u64::from(size).saturating_mul(count.into()));
         chunks.push(id.clone());
-        cx.push(Node::new(id).span(cur.since(start)).summary(format!("{count} × {size} bytes"))).await;
+        cx.push(
+            Node::new(id)
+                .span(cur.since(start))
+                .summary(format!("{count} × {size} bytes")),
+        )
+        .await;
     }
-    cx.annotate(format!("Unreal {} ({} chunks)", if chunks.first().is_some_and(|c| c == "ANIMHEAD") { "animation" } else { "skeletal mesh" }, chunks.len()));
+    cx.annotate(format!(
+        "Unreal {} ({} chunks)",
+        if chunks.first().is_some_and(|c| c == "ANIMHEAD") {
+            "animation"
+        } else {
+            "skeletal mesh"
+        },
+        chunks.len()
+    ));
     Ok(())
 }
 
@@ -578,7 +724,9 @@ async fn afm(cx: Cx, input: Input) -> Result<()> {
     for (line, span) in &all {
         let (k, v) = line.split_once(' ').unwrap_or((line.as_str(), ""));
         match k {
-            "FontName" | "FullName" | "FamilyName" | "Weight" | "Version" | "Notice" | "EncodingScheme" | "ItalicAngle" | "IsFixedPitch" | "FontBBox" | "CapHeight" | "XHeight" | "Ascender" | "Descender" | "StartFontMetrics" => {
+            "FontName" | "FullName" | "FamilyName" | "Weight" | "Version" | "Notice"
+            | "EncodingScheme" | "ItalicAngle" | "IsFixedPitch" | "FontBBox" | "CapHeight"
+            | "XHeight" | "Ascender" | "Descender" | "StartFontMetrics" => {
                 if k == "FontName" {
                     name = v.to_owned();
                 }
@@ -601,13 +749,30 @@ async fn pfa(cx: Cx, input: Input) -> Result<()> {
     if let Some((_, span)) = all.first() {
         cx.emit(Node::new("Header").span(*span).value(text(first.clone())));
     }
-    let mut name = first.split(':').nth(1).unwrap_or_default().trim().to_owned();
+    let mut name = first
+        .split(':')
+        .nth(1)
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
     for (line, span) in &all {
         if let Some(rest) = line.trim().strip_prefix("/FontName") {
-            name = rest.trim().trim_start_matches('/').split_whitespace().next().unwrap_or_default().to_owned();
+            name = rest
+                .trim()
+                .trim_start_matches('/')
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
             cx.emit(Node::new("FontName").span(*span).value(text(name.clone())));
         } else if line.contains("eexec") {
-            cx.emit(Node::new("eexec-encrypted portion").span(input.span.tail(span.end().saturating_sub(input.span.offset))));
+            cx.emit(
+                Node::new("eexec-encrypted portion").span(
+                    input
+                        .span
+                        .tail(span.end().saturating_sub(input.span.offset)),
+                ),
+            );
             break;
         }
     }

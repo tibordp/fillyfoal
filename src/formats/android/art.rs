@@ -71,7 +71,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut values = Vec::new();
     for name in names {
         let field = f.u32(name);
-        let field = if name.ends_with("_count") || *name == "pointer_size" || name.starts_with("is_") || name.starts_with("compile_") {
+        let field = if name.ends_with("_count")
+            || *name == "pointer_size"
+            || name.starts_with("is_")
+            || name.starts_with("compile_")
+        {
             field
         } else {
             field.hex()
@@ -87,6 +91,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         get("oat_data_end"),
         get("pointer_size").saturating_mul(8)
     ));
-    cx.emit(data_node("Image contents", file.tail(len), file.len.saturating_sub(len)));
+    cx.emit(data_node(
+        "Image contents",
+        file.tail(len),
+        file.len.saturating_sub(len),
+    ));
     Ok(())
 }

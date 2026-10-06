@@ -263,7 +263,10 @@ async fn string(cx: &Cx, file: Span, rva: u32) -> Result<(String, Span)> {
     let len = u32_le(&len, 0).unwrap_or(0).min(0x10000);
     let span = file.sub(u64::from(rva).saturating_add(4), len.into());
     let data = cx.read(span).await?;
-    Ok((crate::text::utf16(&data, LE), file.sub(rva.into(), u64::from(len).saturating_add(4))))
+    Ok((
+        crate::text::utf16(&data, LE),
+        file.sub(rva.into(), u64::from(len).saturating_add(4)),
+    ))
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -288,7 +291,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(d.rva.into(), d.size.into());
         match d.kind {
             7 => {
-                if let Ok(s) = parse(&cx, span.sub(0, SystemInfo::SIZE), LE, &(), SystemInfo::layout).await {
+                if let Ok(s) = parse(
+                    &cx,
+                    span.sub(0, SystemInfo::SIZE),
+                    LE,
+                    &(),
+                    SystemInfo::layout,
+                )
+                .await
+                {
                     parts.push(format!(
                         "{}, {} {}.{}.{}",
                         name_or(ARCHITECTURE, s.arch.into(), "arch"),
@@ -302,7 +313,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             3 | 4 => {
                 if let Ok(n) = cx.read(span.sub(0, 4)).await {
                     let n = u32_le(&n, 0).unwrap_or(0);
-                    parts.push(format!("{n} {}", if d.kind == 3 { "threads" } else { "modules" }));
+                    parts.push(format!(
+                        "{n} {}",
+                        if d.kind == 3 { "threads" } else { "modules" }
+                    ));
                 }
             }
             6 => {
@@ -404,7 +418,10 @@ async fn stream(cx: Cx, (input, entry, kind, span): (Input, Span, u32, Span)) ->
             let table = span.tail(16);
             let count = table.len.checked_div(Memory64Descriptor::SIZE).unwrap_or(0);
             for i in 0..count {
-                let at = table.sub(i.saturating_mul(Memory64Descriptor::SIZE), Memory64Descriptor::SIZE);
+                let at = table.sub(
+                    i.saturating_mul(Memory64Descriptor::SIZE),
+                    Memory64Descriptor::SIZE,
+                );
                 let m = parse(&cx, at, LE, &(), Memory64Descriptor::layout).await?;
                 cx.push(
                     Memory64Descriptor::node(format!("{:#x}", m.start), at, LE)
@@ -417,12 +434,27 @@ async fn stream(cx: Cx, (input, entry, kind, span): (Input, Span, u32, Span)) ->
             Ok(())
         }
         6 => {
-            cx.emit(ExceptionStream::node("Exception", span.sub(0, ExceptionStream::SIZE), LE));
+            cx.emit(ExceptionStream::node(
+                "Exception",
+                span.sub(0, ExceptionStream::SIZE),
+                LE,
+            ));
             Ok(())
         }
         7 => {
-            cx.emit(SystemInfo::node("System Info", span.sub(0, SystemInfo::SIZE), LE));
-            let s = parse(&cx, span.sub(0, SystemInfo::SIZE), LE, &(), SystemInfo::layout).await?;
+            cx.emit(SystemInfo::node(
+                "System Info",
+                span.sub(0, SystemInfo::SIZE),
+                LE,
+            ));
+            let s = parse(
+                &cx,
+                span.sub(0, SystemInfo::SIZE),
+                LE,
+                &(),
+                SystemInfo::layout,
+            )
+            .await?;
             if s.csd != 0
                 && let Ok((t, at)) = string(&cx, file, s.csd).await
             {
@@ -432,12 +464,20 @@ async fn stream(cx: Cx, (input, entry, kind, span): (Input, Span, u32, Span)) ->
         }
         10 => {
             let data = cx.read_avail(span.sub(0, 0x10000)).await?;
-            cx.emit(Node::new("Comment").span(span).value(text(crate::text::until_nul(&data))));
+            cx.emit(
+                Node::new("Comment")
+                    .span(span)
+                    .value(text(crate::text::until_nul(&data))),
+            );
             Ok(())
         }
         11 => {
             let data = cx.read_avail(span.sub(0, 0x20000)).await?;
-            cx.emit(Node::new("Comment").span(span).value(text(crate::text::utf16z(&data, LE).0)));
+            cx.emit(
+                Node::new("Comment")
+                    .span(span)
+                    .value(text(crate::text::utf16z(&data, LE).0)),
+            );
             Ok(())
         }
         15 => {
@@ -447,7 +487,11 @@ async fn stream(cx: Cx, (input, entry, kind, span): (Input, Span, u32, Span)) ->
         0x4767_0003..=0x4767_0007 | 0x4767_0009 => {
             let data = cx.read_avail(span.sub(0, 0x10_0000)).await?;
             let t = String::from_utf8_lossy(&data).replace('\0', " ");
-            cx.emit(Node::new("Text").span(span).value(text(ellipsize(t.trim_end(), 0x4000))));
+            cx.emit(
+                Node::new("Text")
+                    .span(span)
+                    .value(text(ellipsize(t.trim_end(), 0x4000))),
+            );
             Ok(())
         }
         _ => {

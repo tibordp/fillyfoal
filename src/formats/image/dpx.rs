@@ -92,7 +92,9 @@ fn file_info(f: &mut Fields<'_>, _: &()) -> Result<u32> {
     let offset = f.u32("Image data offset").hex().emit()?;
     f.ascii("Version", 8).emit()?;
     f.u32("File size").emit()?;
-    f.u32("Ditto key").desc("0 = same as the previous frame, 1 = new").emit()?;
+    f.u32("Ditto key")
+        .desc("0 = same as the previous frame, 1 = new")
+        .emit()?;
     f.u32("Generic header size").emit()?;
     f.u32("Industry header size").emit()?;
     f.u32("User data size").emit()?;
@@ -112,7 +114,13 @@ fn image_info(f: &mut Fields<'_>, endian: &Endian) -> Result<()> {
     f.u32("Pixels per line").emit()?;
     f.u32("Lines per element").emit()?;
     for _ in 0..elements.min(8) {
-        f.node(struct_node("Image element", f.peek_span(72), *endian, (), element));
+        f.node(struct_node(
+            "Image element",
+            f.peek_span(72),
+            *endian,
+            (),
+            element,
+        ));
         f.skip(72);
     }
     let unused = u64::from(8u16.saturating_sub(elements)).saturating_mul(72);
@@ -131,8 +139,12 @@ fn element(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u32("Reference high data code").emit()?;
     f.f32("Reference high quantity").emit()?;
     f.u8("Descriptor").enumeration(DESCRIPTORS).emit()?;
-    f.u8("Transfer characteristic").enumeration(TRANSFER).emit()?;
-    f.u8("Colorimetric specification").enumeration(TRANSFER).emit()?;
+    f.u8("Transfer characteristic")
+        .enumeration(TRANSFER)
+        .emit()?;
+    f.u8("Colorimetric specification")
+        .enumeration(TRANSFER)
+        .emit()?;
     f.u8("Bit depth").emit()?;
     f.u16("Packing").enumeration(PACKING).emit()?;
     f.u16("Encoding").enumeration(ENCODING).emit()?;
@@ -167,7 +179,13 @@ pub async fn dissect_dpx(cx: Cx, input: Input) -> Result<()> {
     let descriptor = f.u8("").get()?;
     f.skip(2);
     let bits = f.u8("").get()?;
-    cx.emit(struct_node("Image information", ii, endian, endian, image_info));
+    cx.emit(struct_node(
+        "Image information",
+        ii,
+        endian,
+        endian,
+        image_info,
+    ));
     cx.emit(region("Orientation header", file, 1408, 256));
     cx.emit(region("Film header", file, 1664, 256));
     cx.emit(region("Television header", file, 1920, 128));
@@ -179,9 +197,18 @@ pub async fn dissect_dpx(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "{}, {descriptor}, {bits}-bit, {elements} elements, {}",
         dims(width, height),
-        if endian == Endian::Big { "big-endian" } else { "little-endian" }
+        if endian == Endian::Big {
+            "big-endian"
+        } else {
+            "little-endian"
+        }
     ));
-    cx.emit(region("Image data", file, offset, file.len.saturating_sub(offset)));
+    cx.emit(region(
+        "Image data",
+        file,
+        offset,
+        file.len.saturating_sub(offset),
+    ));
     Ok(())
 }
 
@@ -205,7 +232,13 @@ fn cineon_image_info(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let channels = f.u8("Channels").emit()?;
     f.u16("Padding").emit()?;
     for _ in 0..channels.min(8) {
-        f.node(struct_node("Channel", f.peek_span(28), Endian::Big, (), cineon_channel));
+        f.node(struct_node(
+            "Channel",
+            f.peek_span(28),
+            Endian::Big,
+            (),
+            cineon_channel,
+        ));
         f.skip(28);
     }
     let unused = u64::from(8u8.saturating_sub(channels)).saturating_mul(28);
@@ -216,8 +249,12 @@ fn cineon_image_info(f: &mut Fields<'_>, _: &()) -> Result<()> {
 }
 
 fn cineon_channel(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u8("Designator byte 0").desc("0 = universal metric").emit()?;
-    f.u8("Designator byte 1").desc("0 = B&W, 1–3 = R, G, B printing density").emit()?;
+    f.u8("Designator byte 0")
+        .desc("0 = universal metric")
+        .emit()?;
+    f.u8("Designator byte 1")
+        .desc("0 = B&W, 1–3 = R, G, B printing density")
+        .emit()?;
     f.u8("Bits per pixel").emit()?;
     f.u8("Padding").emit()?;
     f.u32("Pixels per line").emit()?;
@@ -235,7 +272,13 @@ pub async fn dissect_cineon(cx: Cx, input: Input) -> Result<()> {
     let fi = file.sub(0, 192);
     let block = cx.block(fi).await?;
     let offset = cineon_file_info(&mut Fields::new(&block, be), &())?;
-    cx.emit(struct_node("File information", fi, be, (), cineon_file_info));
+    cx.emit(struct_node(
+        "File information",
+        fi,
+        be,
+        (),
+        cineon_file_info,
+    ));
     let ii = file.sub(192, 4 + 8 * 28);
     let block = cx.block(ii).await?;
     let mut f = Fields::new(&block, be);
@@ -247,11 +290,27 @@ pub async fn dissect_cineon(cx: Cx, input: Input) -> Result<()> {
     f.skip(1);
     let w = f.u32("").get()?;
     let h = f.u32("").get()?;
-    cx.emit(struct_node("Image information", ii, be, (), cineon_image_info));
+    cx.emit(struct_node(
+        "Image information",
+        ii,
+        be,
+        (),
+        cineon_image_info,
+    ));
     let header_end = ii.end().saturating_sub(file.offset);
     let offset = u64::from(offset);
-    cx.emit(region("Remaining headers", file, header_end, offset.saturating_sub(header_end)));
+    cx.emit(region(
+        "Remaining headers",
+        file,
+        header_end,
+        offset.saturating_sub(header_end),
+    ));
     cx.annotate(format!("{}, {channels} channels, {bits}-bit", dims(w, h)));
-    cx.emit(region("Image data", file, offset, file.len.saturating_sub(offset)));
+    cx.emit(region(
+        "Image data",
+        file,
+        offset,
+        file.len.saturating_sub(offset),
+    ));
     Ok(())
 }

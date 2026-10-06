@@ -18,18 +18,32 @@ use fillyfoal::{Cx, Limits, Node, Origin, Result, Span, Value};
 async fn reassemble(cx: Cx, file: Span) -> Result<()> {
     let at = |offset, len| Span::new(file.source, offset, len);
     let first = cx.add_pieces(
-        Origin { parent: file, transform: "test-chain" },
+        Origin {
+            parent: file,
+            transform: "test-chain",
+        },
         vec![at(10, 5), at(0, 5), at(20, 6), at(5, 5)],
     )?;
     let text = cx.read(first).await?;
-    cx.emit(Node::new("first").span(first).value(Value::Text(String::from_utf8(text).unwrap())));
+    cx.emit(
+        Node::new("first")
+            .span(first)
+            .value(Value::Text(String::from_utf8(text).unwrap())),
+    );
     // Pieces of a piecewise source.
     let second = cx.add_pieces(
-        Origin { parent: first, transform: "test-nested" },
+        Origin {
+            parent: first,
+            transform: "test-nested",
+        },
         vec![first.sub(15, 6), first.sub(0, 5)],
     )?;
     let text = cx.read(second).await?;
-    cx.emit(Node::new("second").span(second).value(Value::Text(String::from_utf8(text).unwrap())));
+    cx.emit(
+        Node::new("second")
+            .span(second)
+            .value(Value::Text(String::from_utf8(text).unwrap())),
+    );
     Ok(())
 }
 
@@ -39,7 +53,9 @@ fn piecewise_sources_reassemble_and_resolve() {
     for chunk in [1, 3, 64] {
         let mut host = Host::with_chunk(data.clone(), chunk);
         let file = Span::new(fillyfoal::SourceId::default_host(), 0, data.len() as u64);
-        let root = host.session.add_root(Node::new("test").lazy(reassemble, file));
+        let root = host
+            .session
+            .add_root(Node::new("test").lazy(reassemble, file));
         host.session.expand(root, 10);
         host.run();
         let children = host.session.children(root).unwrap();
@@ -50,9 +66,17 @@ fn piecewise_sources_reassemble_and_resolve() {
             .map(|&id| host.session.node(id).unwrap().value.clone().unwrap())
             .collect();
         // data[10..15] + data[0..5] + data[20..26] + data[5..10]
-        assert_eq!(values[0], Value::Text("_ld! HELLOIGNORE, wor".into()), "chunk {chunk}");
+        assert_eq!(
+            values[0],
+            Value::Text("_ld! HELLOIGNORE, wor".into()),
+            "chunk {chunk}"
+        );
         // first[15..21] + first[0..5]
-        assert_eq!(values[1], Value::Text("E, wor_ld! ".into()), "chunk {chunk}");
+        assert_eq!(
+            values[1],
+            Value::Text("E, wor_ld! ".into()),
+            "chunk {chunk}"
+        );
 
         // Provenance: bytes 3..8 of the nested source come from two places.
         let second = host.session.node(children.ids[1]).unwrap().span.unwrap();
@@ -68,8 +92,15 @@ fn piecewise_sources_reassemble_and_resolve() {
 /// A sparse stream: data, a hole, data.
 async fn sparse(cx: Cx, file: Span) -> Result<()> {
     let s = cx.add_pieces(
-        Origin { parent: file, transform: "test-sparse" },
-        vec![Span::new(file.source, 0, 2), Span::zeros(3), Span::new(file.source, 2, 2)],
+        Origin {
+            parent: file,
+            transform: "test-sparse",
+        },
+        vec![
+            Span::new(file.source, 0, 2),
+            Span::zeros(3),
+            Span::new(file.source, 2, 2),
+        ],
     )?;
     let bytes = cx.read(s).await?;
     cx.emit(Node::new("sparse").span(s).value(Value::Bytes(bytes)));
@@ -99,7 +130,11 @@ fn holes_read_as_zeros_and_resolve_to_nothing() {
 /// must not decompress the whole stream.
 #[test]
 fn large_members_are_decompressed_lazily() {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/gzip/large-member.tar.gz")).unwrap();
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/gzip/large-member.tar.gz"
+    ))
+    .unwrap();
     let mut host = Host::with_chunk(data, 4096);
     host.session.expand(host.root, 100);
     host.run();
@@ -107,10 +142,62 @@ fn large_members_are_decompressed_lazily() {
     host.session.expand(content, 1);
     host.run();
     let decoded = host.session.derived_bytes();
-    assert!(decoded < 512 << 10, "decoded {decoded} bytes to show one entry");
+    assert!(
+        decoded < 512 << 10,
+        "decoded {decoded} bytes to show one entry"
+    );
     let rendered = host.render();
     assert!(rendered.contains("a.txt"), "{rendered}");
     // Paging through everything does reach the end.
     host.explore(content, 4, 100);
     assert!(host.render().contains("z.txt"));
+}
+
+/// Two "entries" of one encrypted container, each unlocked with the same
+/// realm: the host is asked once per attempt, not once per entry.
+async fn locked(cx: Cx, file: Span) -> Result<()> {
+    for name in ["first", "second"] {
+        let secret = cx.unlock(file, "Password for the test container", |s| s.expose() == b"fillyfoal").await;
+        let value = match secret {
+            Some(_) => Value::Text(format!("{name}: unlocked")),
+            None => Value::Text(format!("{name}: locked")),
+        };
+        cx.emit(Node::new(name).span(file).value(value));
+    }
+    Ok(())
+}
+
+fn run_locked(passwords: &[&str]) -> (Vec<Value>, Vec<fillyfoal::SecretRequest>) {
+    let data = b"ciphertext".to_vec();
+    let mut host = Host::with_chunk(data, 4);
+    host.passwords = passwords.iter().map(|p| p.to_string()).collect();
+    let file = Span::new(fillyfoal::SourceId::default_host(), 0, 10);
+    let root = host.session.add_root(Node::new("test").lazy(locked, file));
+    host.session.expand(root, 10);
+    host.run();
+    let children = host.session.children(root).unwrap();
+    let values = children.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
+    (values, host.secret_requests)
+}
+
+#[test]
+fn secrets_are_requested_once_per_realm_and_attempt() {
+    let (values, requests) = run_locked(&["fillyfoal"]);
+    assert_eq!(values, vec![Value::Text("first: unlocked".into()), Value::Text("second: unlocked".into())]);
+    assert_eq!(requests.len(), 1);
+    assert_eq!(requests[0].attempt, 0);
+
+    // A wrong password leads to a second request, then success.
+    let (values, requests) = run_locked(&["wrong", "fillyfoal"]);
+    assert_eq!(values[1], Value::Text("second: unlocked".into()));
+    assert_eq!(requests.iter().map(|r| r.attempt).collect::<Vec<_>>(), vec![0, 1]);
+
+    // Declining keeps the content locked, without asking again.
+    let (values, requests) = run_locked(&[]);
+    assert_eq!(values, vec![Value::Text("first: locked".into()), Value::Text("second: locked".into())]);
+    assert_eq!(requests.len(), 1);
+
+    // Wrong every time: bounded attempts.
+    let (_, requests) = run_locked(&["a", "b", "c", "d"]);
+    assert_eq!(requests.len(), fillyfoal::secret::MAX_ATTEMPTS as usize);
 }

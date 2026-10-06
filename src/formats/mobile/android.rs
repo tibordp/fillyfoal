@@ -28,7 +28,11 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 fn uint(value: u64) -> Value {
-    Value::UInt { value, bits: 64, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits: 64,
+        radix: Radix::Dec,
+    }
 }
 
 fn zstr(b: &[u8]) -> String {
@@ -86,17 +90,38 @@ fn lp_header(f: &mut Fields<'_>, _: &()) -> Result<LpHeader> {
     f.bytes("Header checksum (SHA-256)", 32).emit()?;
     let tables_size = f.u32("Tables size").emit()?;
     f.bytes("Tables checksum (SHA-256)", 32).emit()?;
-    let desc = |f: &mut Fields<'_>, a: &'static str, b: &'static str, c: &'static str| -> Result<TableDesc> {
+    let desc = |f: &mut Fields<'_>,
+                a: &'static str,
+                b: &'static str,
+                c: &'static str|
+     -> Result<TableDesc> {
         Ok((f.u32(a).hex().emit()?, f.u32(b).emit()?, f.u32(c).emit()?))
     };
-    let partitions = desc(f, "Partitions offset", "Partition count", "Partition entry size")?;
+    let partitions = desc(
+        f,
+        "Partitions offset",
+        "Partition count",
+        "Partition entry size",
+    )?;
     let extents = desc(f, "Extents offset", "Extent count", "Extent entry size")?;
     let groups = desc(f, "Groups offset", "Group count", "Group entry size")?;
-    let devices = desc(f, "Block devices offset", "Block device count", "Block device entry size")?;
+    let devices = desc(
+        f,
+        "Block devices offset",
+        "Block device count",
+        "Block device entry size",
+    )?;
     if minor >= 2 && f.remaining() >= 4 {
         f.u32("Flags").flags(LP_HEADER_FLAGS).emit()?;
     }
-    Ok(LpHeader { header_size, tables_size, partitions, extents, groups, devices })
+    Ok(LpHeader {
+        header_size,
+        tables_size,
+        partitions,
+        extents,
+        groups,
+        devices,
+    })
 }
 
 const SLOT_SUFFIXED: FlagTable = &[flag(1, "SLOT_SUFFIXED")];
@@ -117,12 +142,27 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
     let geo_span = file.sub(LP_GEOMETRY_AT, 52);
     let (max, slots) = crate::fields::parse(&cx, geo_span, LE, &(), lp_geometry).await?;
     cx.emit(struct_node("Geometry", geo_span, LE, (), lp_geometry));
-    cx.emit(struct_node("Backup geometry", file.sub(LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE), 52), LE, (), lp_geometry));
+    cx.emit(struct_node(
+        "Backup geometry",
+        file.sub(LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE), 52),
+        LE,
+        (),
+        lp_geometry,
+    ));
     let meta_at = LP_GEOMETRY_AT.saturating_add(LP_GEOMETRY_SIZE.saturating_mul(2));
     let head = file.sub(meta_at, 256);
     let h = crate::fields::parse(&cx, head, LE, &(), lp_header).await?;
-    cx.emit(struct_node("Metadata header (slot 0)", head.sub(0, h.header_size.into()), LE, (), lp_header));
-    let tables = file.sub_exact(meta_at.saturating_add(h.header_size.into()), h.tables_size.into())?;
+    cx.emit(struct_node(
+        "Metadata header (slot 0)",
+        head.sub(0, h.header_size.into()),
+        LE,
+        (),
+        lp_header,
+    ));
+    let tables = file.sub_exact(
+        meta_at.saturating_add(h.header_size.into()),
+        h.tables_size.into(),
+    )?;
     let table = |d: TableDesc| tables.sub(d.0.into(), u64::from(d.1).saturating_mul(d.2.into()));
     // Block devices and groups (small).
     let devices = cx.read(table(h.devices)).await?;
@@ -131,9 +171,22 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         .map(|d| zstr(d.get(24..60).unwrap_or_default()))
         .collect();
     let groups = cx.read(table(h.groups)).await?;
-    let group_names: Vec<String> = groups.chunks(chunk_size(h.groups.2)).map(|g| zstr(g.get(..36).unwrap_or_default())).collect();
-    cx.emit(Node::new("Block devices").span(table(h.devices)).summary(device_names.join(", ")).lazy(lp_devices, (table(h.devices), h.devices.2)));
-    cx.emit(Node::new("Groups").span(table(h.groups)).summary(group_names.join(", ")).lazy(lp_groups, (table(h.groups), h.groups.2)));
+    let group_names: Vec<String> = groups
+        .chunks(chunk_size(h.groups.2))
+        .map(|g| zstr(g.get(..36).unwrap_or_default()))
+        .collect();
+    cx.emit(
+        Node::new("Block devices")
+            .span(table(h.devices))
+            .summary(device_names.join(", "))
+            .lazy(lp_devices, (table(h.devices), h.devices.2)),
+    );
+    cx.emit(
+        Node::new("Groups")
+            .span(table(h.groups))
+            .summary(group_names.join(", "))
+            .lazy(lp_groups, (table(h.groups), h.groups.2)),
+    );
     let extents = cx.read(table(h.extents)).await?;
     let parts = cx.read(table(h.partitions)).await?;
     let mut names = Vec::new();
@@ -166,16 +219,39 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
                 Span::zeros(len)
             });
         }
-        let entry = pspan.sub(to_u64(i).saturating_mul(h.partitions.2.into()), h.partitions.2.into());
-        let group_name = usize::try_from(group).ok().and_then(|g| group_names.get(g)).cloned().unwrap_or_default();
+        let entry = pspan.sub(
+            to_u64(i).saturating_mul(h.partitions.2.into()),
+            h.partitions.2.into(),
+        );
+        let group_name = usize::try_from(group)
+            .ok()
+            .and_then(|g| group_names.get(g))
+            .cloned()
+            .unwrap_or_default();
         let (flags, _) = crate::value::decode_flags(LP_PARTITION_ATTRS, attrs.into());
-        let summary = format!("{}, {count} extent(s), group {group_name}{}", size(total), if flags.is_empty() { String::new() } else { format!(", {}", flags.join("|")) });
+        let summary = format!(
+            "{}, {count} extent(s), group {group_name}{}",
+            size(total),
+            if flags.is_empty() {
+                String::new()
+            } else {
+                format!(", {}", flags.join("|"))
+            }
+        );
         names.push(name.clone());
         let node = if pieces.is_empty() {
             Node::new(name).span(entry).summary(summary)
         } else {
-            let data = cx.add_pieces(Origin { parent: entry, transform: "lp-extents" }, pieces)?;
-            embedded(name, input.nested(data)).summary(summary).target(entry)
+            let data = cx.add_pieces(
+                Origin {
+                    parent: entry,
+                    transform: "lp-extents",
+                },
+                pieces,
+            )?;
+            embedded(name, input.nested(data))
+                .summary(summary)
+                .target(entry)
         };
         cx.push(node).await;
     }
@@ -219,7 +295,15 @@ async fn lp_groups(cx: Cx, (span, entry): (Span, u32)) -> Result<()> {
         cx.push(struct_node("Group", one, LE, (), |f, _| {
             f.ascii("Name", 36).emit()?;
             f.u32("Flags").flags(SLOT_SUFFIXED).emit()?;
-            f.u64("Maximum size").with(|&s, n| n.summary(if s == 0 { "unlimited".to_owned() } else { size(s) })).emit()?;
+            f.u64("Maximum size")
+                .with(|&s, n| {
+                    n.summary(if s == 0 {
+                        "unlimited".to_owned()
+                    } else {
+                        size(s)
+                    })
+                })
+                .emit()?;
             Ok(())
         }))
         .await;
@@ -251,14 +335,29 @@ fn vendor_layout(f: &mut Fields<'_>, _: &()) -> Result<VendorBoot> {
     let page = f.u32("Page size").emit()?;
     f.u32("Kernel load address").hex().emit()?;
     f.u32("Ramdisk load address").hex().emit()?;
-    let ramdisk = f.u32("Vendor ramdisk size").with(|&s, n| n.summary(size(s.into()))).emit()?;
+    let ramdisk = f
+        .u32("Vendor ramdisk size")
+        .with(|&s, n| n.summary(size(s.into())))
+        .emit()?;
     f.ascii("Command line", 2048).emit()?;
     f.u32("Tags address").hex().emit()?;
     f.ascii("Product name", 16).emit()?;
     f.u32("Header size").emit()?;
-    let dtb = f.u32("DTB size").with(|&s, n| n.summary(size(s.into()))).emit()?;
+    let dtb = f
+        .u32("DTB size")
+        .with(|&s, n| n.summary(size(s.into())))
+        .emit()?;
     f.u64("DTB load address").hex().emit()?;
-    let mut b = VendorBoot { version, page, ramdisk, dtb, table: 0, entries: 0, entry_size: 0, bootconfig: 0 };
+    let mut b = VendorBoot {
+        version,
+        page,
+        ramdisk,
+        dtb,
+        table: 0,
+        entries: 0,
+        entry_size: 0,
+        bootconfig: 0,
+    };
     if version >= 4 {
         b.table = f.u32("Ramdisk table size").emit()?;
         b.entries = f.u32("Ramdisk table entries").emit()?;
@@ -279,7 +378,10 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::malformed(format!("page size {page}")).at(file.sub(12, 4)));
     }
     let header_len = if b.version >= 4 { 2128 } else { 2112 };
-    cx.emit(struct_node("Header", file.sub(0, header_len), LE, (), vendor_layout).summary(format!("version {}", b.version)));
+    cx.emit(
+        struct_node("Header", file.sub(0, header_len), LE, (), vendor_layout)
+            .summary(format!("version {}", b.version)),
+    );
     let mut at = align_up(header_len, page);
     let ramdisk = file.sub(at, b.ramdisk.into());
     at = align_up(at.saturating_add(b.ramdisk.into()), page);
@@ -289,7 +391,15 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
     at = align_up(at.saturating_add(b.table.into()), page);
     let bootconfig = file.sub(at, b.bootconfig.into());
     if b.entries > 0 && b.entry_size >= 108 {
-        cx.emit(Node::new("Vendor ramdisks").span(ramdisk).summary(format!("{} ramdisks, {}", b.entries, size(ramdisk.len))).lazy(vendor_ramdisks, (input, ramdisk, table, b.entries, b.entry_size)));
+        cx.emit(
+            Node::new("Vendor ramdisks")
+                .span(ramdisk)
+                .summary(format!("{} ramdisks, {}", b.entries, size(ramdisk.len)))
+                .lazy(
+                    vendor_ramdisks,
+                    (input, ramdisk, table, b.entries, b.entry_size),
+                ),
+        );
     } else if !ramdisk.is_empty() {
         cx.emit(embedded("Vendor ramdisk", input.nested(ramdisk)).summary(size(ramdisk.len)));
     }
@@ -297,27 +407,50 @@ async fn vendor_boot(cx: Cx, input: Input) -> Result<()> {
         cx.emit(embedded("DTB", input.nested(dtb)).summary(size(dtb.len)));
     }
     if !table.is_empty() {
-        cx.emit(Node::new("Ramdisk table").span(table).summary(format!("{} entries", b.entries)));
+        cx.emit(
+            Node::new("Ramdisk table")
+                .span(table)
+                .summary(format!("{} entries", b.entries)),
+        );
     }
     if !bootconfig.is_empty() {
         cx.emit(embedded("Bootconfig", input.nested(bootconfig)).summary(size(bootconfig.len)));
     }
-    cx.annotate(format!("Android vendor boot image v{}, ramdisk {}, DTB {}", b.version, size(ramdisk.len), size(dtb.len)));
+    cx.annotate(format!(
+        "Android vendor boot image v{}, ramdisk {}, DTB {}",
+        b.version,
+        size(ramdisk.len),
+        size(dtb.len)
+    ));
     Ok(())
 }
 
-async fn vendor_ramdisks(cx: Cx, (input, ramdisk, table, entries, entry_size): (Input, Span, Span, u32, u32)) -> Result<()> {
+async fn vendor_ramdisks(
+    cx: Cx,
+    (input, ramdisk, table, entries, entry_size): (Input, Span, Span, u32, u32),
+) -> Result<()> {
     for i in 0..entries.min(256) {
-        let entry = table.sub_exact(u64::from(i).saturating_mul(entry_size.into()), entry_size.into())?;
+        let entry = table.sub_exact(
+            u64::from(i).saturating_mul(entry_size.into()),
+            entry_size.into(),
+        )?;
         let e = cx.read(entry).await?;
         let len = u32_le(&e, 0).unwrap_or(0);
         let offset = u32_le(&e, 4).unwrap_or(0);
         let kind = u32_le(&e, 8).unwrap_or(0);
         let name = zstr(e.get(12..44).unwrap_or_default());
-        let label = if name.is_empty() { format!("Ramdisk {i}") } else { name };
+        let label = if name.is_empty() {
+            format!("Ramdisk {i}")
+        } else {
+            name
+        };
         cx.push(
             embedded(label, input.nested(ramdisk.sub(offset.into(), len.into())))
-                .summary(format!("{}, {}", lookup(RAMDISK_TYPE, kind.into()).unwrap_or("?"), size(len.into())))
+                .summary(format!(
+                    "{}, {}",
+                    lookup(RAMDISK_TYPE, kind.into()).unwrap_or("?"),
+                    size(len.into())
+                ))
                 .target(entry),
         )
         .await;
@@ -351,10 +484,18 @@ async fn bootldr(cx: Cx, input: Input) -> Result<()> {
         let name = zstr(e.get(..64).unwrap_or_default());
         let len = u64::from(u32_le(&e, 64).unwrap_or(0));
         names.push(name.clone());
-        cx.push(embedded(name, input.nested(file.sub(at, len))).summary(size(len)).target(entry)).await;
+        cx.push(
+            embedded(name, input.nested(file.sub(at, len)))
+                .summary(size(len))
+                .target(entry),
+        )
+        .await;
         at = at.saturating_add(len);
     }
-    cx.annotate(format!("Android bootloader bundle, {count} images: {}", names.join(", ")));
+    cx.annotate(format!(
+        "Android bootloader bundle, {count} images: {}",
+        names.join(", ")
+    ));
     Ok(())
 }
 
@@ -391,7 +532,11 @@ async fn mtk(cx: Cx, input: Input) -> Result<()> {
         let next = at.saturating_add(512).saturating_add(len);
         // Images are concatenated, sometimes padded to 16 bytes.
         let probe = cx.read_avail(file.sub(next, 4)).await?;
-        at = if probe.starts_with(MTK_MAGIC) { next } else { align_up(next, 16) };
+        at = if probe.starts_with(MTK_MAGIC) {
+            next
+        } else {
+            align_up(next, 16)
+        };
     }
     cx.annotate(format!("MediaTek image: {}", names.join(", ")));
     Ok(())
@@ -416,10 +561,18 @@ async fn mtk_part(cx: Cx, (input, header, data): (Input, Span, Span)) -> Result<
 declare_format!(pub PIT = "samsung-pit", "Samsung partition information table", ["pit"], "application/x-samsung-pit",
     Probe::Custom(|h| h.starts_with(b"\x76\x98\x34\x12") && u32_le(h.data, 4).is_some_and(|n| (1..=512).contains(&n) && u64::from(n).saturating_mul(132).saturating_add(28) <= h.len)), pit);
 
-const PIT_DEVICE: EnumTable = &[(0, "OneNAND"), (1, "File/FAT"), (2, "MMC"), (3, "All"), (8, "UFS")];
+const PIT_DEVICE: EnumTable = &[
+    (0, "OneNAND"),
+    (1, "File/FAT"),
+    (2, "MMC"),
+    (3, "All"),
+    (8, "UFS"),
+];
 
 fn pit_entry(f: &mut Fields<'_>, _: &()) -> Result<String> {
-    f.u32("Binary type").enumeration(&[(0, "AP"), (1, "CP")]).emit()?;
+    f.u32("Binary type")
+        .enumeration(&[(0, "AP"), (1, "CP")])
+        .emit()?;
     f.u32("Device type").enumeration(PIT_DEVICE).emit()?;
     f.u32("Identifier").emit()?;
     f.u32("Attributes").flags(PIT_ATTRS).emit()?;
@@ -454,10 +607,10 @@ async fn pit(cx: Cx, input: Input) -> Result<()> {
         let e = &block.data;
         let blocks = u32_le(e, 24).unwrap_or(0);
         let flash = zstr(e.get(68..100).unwrap_or_default());
-        cx.push(
-            struct_node(name, span, LE, (), pit_entry)
-                .summary(format!("id {}, {blocks} blocks, {flash}", u32_le(e, 8).unwrap_or(0))),
-        )
+        cx.push(struct_node(name, span, LE, (), pit_entry).summary(format!(
+            "id {}, {blocks} blocks, {flash}",
+            u32_le(e, 8).unwrap_or(0)
+        )))
         .await;
     }
     cx.annotate(format!("Samsung PIT, {count} partitions"));
@@ -488,23 +641,48 @@ async fn qcdt(cx: Cx, input: Input) -> Result<()> {
     };
     let mut seen = std::collections::BTreeSet::new();
     for i in 0..count.min(4096) {
-        let span = file.sub_exact(12u64.saturating_add(u64::from(i).saturating_mul(entry_size)), entry_size)?;
+        let span = file.sub_exact(
+            12u64.saturating_add(u64::from(i).saturating_mul(entry_size)),
+            entry_size,
+        )?;
         let e = cx.read(span).await?;
-        let words: Vec<u32> = (0..to_u64(e.len()) / 4).filter_map(|w| u32_le(&e, crate::bytes::to_usize(w.saturating_mul(4)))).collect();
-        let (platform, variant) = (words.first().copied().unwrap_or(0), words.get(1).copied().unwrap_or(0));
+        let words: Vec<u32> = (0..to_u64(e.len()) / 4)
+            .filter_map(|w| u32_le(&e, crate::bytes::to_usize(w.saturating_mul(4))))
+            .collect();
+        let (platform, variant) = (
+            words.first().copied().unwrap_or(0),
+            words.get(1).copied().unwrap_or(0),
+        );
         let n = words.len();
         let offset = words.get(n.saturating_sub(2)).copied().unwrap_or(0);
         let len = words.get(n.saturating_sub(1)).copied().unwrap_or(0);
-        let soc_rev = if version == 1 { words.get(2) } else { words.get(3) }.copied().unwrap_or(0);
-        let summary = format!("platform {platform}, variant {variant:#x}, SoC rev {soc_rev:#x}, DTB at {offset:#x} ({len} bytes)");
-        let node = if seen.insert(offset) {
-            embedded(format!("Entry {i}"), input.nested(file.sub(offset.into(), len.into()))).target(span)
+        let soc_rev = if version == 1 {
+            words.get(2)
         } else {
-            Node::new(format!("Entry {i}")).span(span).desc("Shares a DTB with an earlier entry")
+            words.get(3)
+        }
+        .copied()
+        .unwrap_or(0);
+        let summary = format!(
+            "platform {platform}, variant {variant:#x}, SoC rev {soc_rev:#x}, DTB at {offset:#x} ({len} bytes)"
+        );
+        let node = if seen.insert(offset) {
+            embedded(
+                format!("Entry {i}"),
+                input.nested(file.sub(offset.into(), len.into())),
+            )
+            .target(span)
+        } else {
+            Node::new(format!("Entry {i}"))
+                .span(span)
+                .desc("Shares a DTB with an earlier entry")
         };
         cx.push(node.summary(summary)).await;
     }
-    cx.annotate(format!("Qualcomm DT table v{version}, {count} entries, {} DTBs", seen.len()));
+    cx.annotate(format!(
+        "Qualcomm DT table v{version}, {count} entries, {} DTBs",
+        seen.len()
+    ));
     Ok(())
 }
 
@@ -513,7 +691,9 @@ async fn qcdt(cx: Cx, input: Input) -> Result<()> {
 
 fn art_profile_probe(h: &Head<'_>) -> bool {
     (h.starts_with(b"pro\0") || h.starts_with(b"prm\0"))
-        && h.data.get(4..8).is_some_and(|v| v.get(..3).is_some_and(|d| d.iter().all(u8::is_ascii_digit)) && v.get(3) == Some(&0))
+        && h.data.get(4..8).is_some_and(|v| {
+            v.get(..3).is_some_and(|d| d.iter().all(u8::is_ascii_digit)) && v.get(3) == Some(&0)
+        })
 }
 
 declare_format!(pub ART_PROFILE = "art-profile", "Android ART profile", ["prof", "profm"], "application/x-art-profile",
@@ -531,24 +711,43 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 8)).await?;
     let metadata = head.starts_with(b"prm");
-    let version: u32 = String::from_utf8_lossy(head.get(4..7).unwrap_or_default()).parse().unwrap_or(0);
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(text(if metadata { "prm" } else { "pro" })));
-    cx.emit(Node::new("Version").span(file.sub(4, 4)).value(text(format!("{version:03}"))));
+    let version: u32 = String::from_utf8_lossy(head.get(4..7).unwrap_or_default())
+        .parse()
+        .unwrap_or(0);
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(text(if metadata { "prm" } else { "pro" })),
+    );
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 4))
+            .value(text(format!("{version:03}"))),
+    );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(8);
     if !metadata && version >= 13 {
         let at = cur.pos();
         let sections = cur.u32().await?;
-        cx.emit(Node::new("Section count").span(cur.since(at)).value(uint(sections.into())));
+        cx.emit(
+            Node::new("Section count")
+                .span(cur.since(at))
+                .value(uint(sections.into())),
+        );
         for _ in 0..sections.min(64) {
             let at = cur.pos();
             let kind = cur.u32().await?;
             let offset = cur.u32().await?;
             let len = cur.u32().await?;
             let inflated = cur.u32().await?;
-            let name = lookup(ART_SECTIONS, kind.into()).map_or_else(|| format!("section {kind}"), str::to_owned);
+            let name = lookup(ART_SECTIONS, kind.into())
+                .map_or_else(|| format!("section {kind}"), str::to_owned);
             let body = file.sub(offset.into(), len.into());
-            let summary = if inflated != 0 { format!("{len} bytes, zlib → {inflated}") } else { format!("{len} bytes") };
+            let summary = if inflated != 0 {
+                format!("{len} bytes, zlib → {inflated}")
+            } else {
+                format!("{len} bytes")
+            };
             let node = if inflated != 0 {
                 content(name, input, body, Codec::Zlib, Some(inflated.into()))
             } else {
@@ -562,15 +761,49 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
         let dex_files = cur.u8().await?;
         let inflated = cur.u32().await?;
         let compressed = cur.u32().await?;
-        cx.emit(Node::new("Dex file count").span(Span::new(file.source, file.offset.saturating_add(at), 1)).value(uint(dex_files.into())));
-        cx.emit(Node::new("Uncompressed size").span(Span::new(file.source, file.offset.saturating_add(at).saturating_add(1), 4)).value(uint(inflated.into())));
-        cx.emit(Node::new("Compressed size").span(Span::new(file.source, file.offset.saturating_add(at).saturating_add(5), 4)).value(uint(compressed.into())));
+        cx.emit(
+            Node::new("Dex file count")
+                .span(Span::new(file.source, file.offset.saturating_add(at), 1))
+                .value(uint(dex_files.into())),
+        );
+        cx.emit(
+            Node::new("Uncompressed size")
+                .span(Span::new(
+                    file.source,
+                    file.offset.saturating_add(at).saturating_add(1),
+                    4,
+                ))
+                .value(uint(inflated.into())),
+        );
+        cx.emit(
+            Node::new("Compressed size")
+                .span(Span::new(
+                    file.source,
+                    file.offset.saturating_add(at).saturating_add(5),
+                    4,
+                ))
+                .value(uint(compressed.into())),
+        );
         let body = file.sub(cur.pos(), compressed.into());
-        cx.emit(content("Profile data (zlib)", input, body, Codec::Zlib, Some(inflated.into())));
-        cx.annotate(format!("ART profile v{version:03}, {dex_files} dex file(s)"));
+        cx.emit(content(
+            "Profile data (zlib)",
+            input,
+            body,
+            Codec::Zlib,
+            Some(inflated.into()),
+        ));
+        cx.annotate(format!(
+            "ART profile v{version:03}, {dex_files} dex file(s)"
+        ));
     } else {
         cx.emit(Node::new("Data").span(file.tail(8)));
-        cx.annotate(format!("ART profile {} v{version:03}", if metadata { "metadata" } else { "" }).replace("  ", " "));
+        cx.annotate(
+            format!(
+                "ART profile {} v{version:03}",
+                if metadata { "metadata" } else { "" }
+            )
+            .replace("  ", " "),
+        );
     }
     Ok(())
 }
@@ -585,10 +818,18 @@ async fn fcontext(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
     cur.skip(4);
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(Value::UInt { value: 0xf97c_ff8a, bits: 32, radix: Radix::Hex }));
+    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(Value::UInt {
+        value: 0xf97c_ff8a,
+        bits: 32,
+        radix: Radix::Hex,
+    }));
     let at = cur.pos();
     let version = cur.u32().await?;
-    cx.emit(Node::new("Version").span(cur.since(at)).value(uint(version.into())));
+    cx.emit(
+        Node::new("Version")
+            .span(cur.since(at))
+            .value(uint(version.into())),
+    );
     let mut summary = Vec::new();
     for (min, label) in [(2u32, "PCRE version"), (5, "Regex architecture")] {
         if version >= min {
@@ -611,11 +852,22 @@ async fn fcontext(cx: Cx, input: Input) -> Result<()> {
         names.push(zstr(&s));
         cx.checkpoint().await;
     }
-    cx.emit(Node::new("Stems").span(cur.since(stems_at)).summary(format!("{stems}: {}", names.join(" "))));
+    cx.emit(
+        Node::new("Stems")
+            .span(cur.since(stems_at))
+            .summary(format!("{stems}: {}", names.join(" "))),
+    );
     let at = cur.pos();
     let specs = cur.u32().await?;
-    cx.emit(Node::new("Specifications").span(file.tail(at)).summary(format!("{specs} regular expressions")));
-    cx.annotate(format!("Compiled SELinux file contexts v{version}, {stems} stems, {specs} specs, {}", summary.join(", ")));
+    cx.emit(
+        Node::new("Specifications")
+            .span(file.tail(at))
+            .summary(format!("{specs} regular expressions")),
+    );
+    cx.annotate(format!(
+        "Compiled SELinux file contexts v{version}, {stems} stems, {specs} specs, {}",
+        summary.join(", ")
+    ));
     Ok(())
 }
 
@@ -649,13 +901,23 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Format").span(vspan).value(text(version.clone())));
     let at = cur.pos();
     let id_size = cur.u32().await?;
-    cx.emit(Node::new("Identifier size").span(cur.since(at)).value(uint(id_size.into())));
+    cx.emit(
+        Node::new("Identifier size")
+            .span(cur.since(at))
+            .value(uint(id_size.into())),
+    );
     if !matches!(id_size, 4 | 8) {
         return Err(Diagnostic::malformed(format!("identifier size {id_size}")).at(cur.since(at)));
     }
     let at = cur.pos();
     let millis = cur.u64().await?;
-    cx.emit(Node::new("Timestamp").span(cur.since(at)).value(Value::Timestamp { unix_seconds: i64::try_from(millis / 1000).unwrap_or(0) }));
+    cx.emit(
+        Node::new("Timestamp")
+            .span(cur.since(at))
+            .value(Value::Timestamp {
+                unix_seconds: i64::try_from(millis / 1000).unwrap_or(0),
+            }),
+    );
     let mut counts = BTreeMap::<u8, u64>::new();
     let mut n = 0u64;
     while !cur.at_end() {
@@ -665,20 +927,29 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
         let len = cur.u32().await?;
         let body = cur.span(len.into());
         if body.len < u64::from(len) {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len.into()), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len.into()),
+                body.len,
+            ));
         }
         cur.skip(len.into());
-        let name = lookup(HPROF_TAGS, tag.into()).map_or_else(|| format!("tag {tag:#04x}"), str::to_owned);
+        let name =
+            lookup(HPROF_TAGS, tag.into()).map_or_else(|| format!("tag {tag:#04x}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start));
         let id = u64::from(id_size);
         match tag {
             0x01 => {
                 let data = cx.read(body.sub(0, id.saturating_add(256))).await?;
-                let s = String::from_utf8_lossy(data.get(crate::bytes::to_usize(id)..).unwrap_or_default()).into_owned();
+                let s = String::from_utf8_lossy(
+                    data.get(crate::bytes::to_usize(id)..).unwrap_or_default(),
+                )
+                .into_owned();
                 node = node.value(text(s));
             }
             0x02 => {
-                let data = cx.read(body.sub(0, id.saturating_mul(2).saturating_add(8))).await?;
+                let data = cx
+                    .read(body.sub(0, id.saturating_mul(2).saturating_add(8)))
+                    .await?;
                 let serial = u32_be(&data, 0).unwrap_or(0);
                 node = node.summary(format!("class serial {serial}"));
             }
@@ -691,7 +962,11 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
     }
     let strings = counts.get(&1).copied().unwrap_or(0);
     let classes = counts.get(&2).copied().unwrap_or(0);
-    let heap = counts.get(&0x1c).copied().unwrap_or(0).saturating_add(counts.get(&0x0c).copied().unwrap_or(0));
+    let heap = counts
+        .get(&0x1c)
+        .copied()
+        .unwrap_or(0)
+        .saturating_add(counts.get(&0x0c).copied().unwrap_or(0));
     cx.annotate(format!("{} heap dump, {n} records ({strings} strings, {classes} classes, {heap} heap dump segments)", version.trim_end_matches('\0')));
     Ok(())
 }
@@ -715,7 +990,12 @@ async fn method_trace(cx: Cx, input: Input) -> Result<()> {
         if let Some(name) = t.strip_prefix('*') {
             if !section.is_empty() {
                 let span = file.sub(section_start, line.start.saturating_sub(section_start));
-                cx.push(Node::new(format!("*{section}")).span(span).lazy(crate::formats::ml::text::block_lines, span)).await;
+                cx.push(
+                    Node::new(format!("*{section}"))
+                        .span(span)
+                        .lazy(crate::formats::ml::text::block_lines, span),
+                )
+                .await;
             }
             if name == "end" {
                 cx.push(Node::new("*end").span(line.span)).await;
@@ -730,7 +1010,10 @@ async fn method_trace(cx: Cx, input: Input) -> Result<()> {
             "threads" => threads = threads.saturating_add(1),
             "methods" => {
                 let mut parts = t.split('\t');
-                if let Some(id) = parts.next().and_then(|i| u64::from_str_radix(i.trim_start_matches("0x"), 16).ok()) {
+                if let Some(id) = parts
+                    .next()
+                    .and_then(|i| u64::from_str_radix(i.trim_start_matches("0x"), 16).ok())
+                {
                     let class = parts.next().unwrap_or_default();
                     let method = parts.next().unwrap_or_default();
                     methods.insert(id, format!("{class}.{method}"));
@@ -754,29 +1037,44 @@ async fn method_trace(cx: Cx, input: Input) -> Result<()> {
         2 => 10,
         _ => u16_le(&head, 16).unwrap_or(14),
     };
-    cx.emit(struct_node("Binary header", data.sub(0, offset.into()), LE, version, |f, &v| {
-        f.ascii("Magic", 4).emit()?;
-        f.u16("Version").emit()?;
-        f.u16("Data offset").emit()?;
-        f.u64("Start time (µs)").emit()?;
-        if v >= 3 {
-            f.u16("Record size").emit()?;
-        }
-        Ok(())
-    }));
+    cx.emit(struct_node(
+        "Binary header",
+        data.sub(0, offset.into()),
+        LE,
+        version,
+        |f, &v| {
+            f.ascii("Magic", 4).emit()?;
+            f.u16("Version").emit()?;
+            f.u16("Data offset").emit()?;
+            f.u64("Start time (µs)").emit()?;
+            if v >= 3 {
+                f.u16("Record size").emit()?;
+            }
+            Ok(())
+        },
+    ));
     let records = data.tail(offset.into());
     let count = records.len.checked_div(u64::from(record)).unwrap_or(0);
     cx.emit(
         Node::new("Records")
             .span(records)
             .summary(format!("{count} records of {record} bytes"))
-            .lazy(trace_records, (records, version, record, Arc::new(methods.clone()))),
+            .lazy(
+                trace_records,
+                (records, version, record, Arc::new(methods.clone())),
+            ),
     );
-    cx.annotate(format!("Android method trace v{version}, {threads} threads, {} methods, {count} events", methods.len()));
+    cx.annotate(format!(
+        "Android method trace v{version}, {threads} threads, {} methods, {count} events",
+        methods.len()
+    ));
     Ok(())
 }
 
-async fn trace_records(cx: Cx, (records, version, record, methods): (Span, u16, u16, Arc<BTreeMap<u64, String>>)) -> Result<()> {
+async fn trace_records(
+    cx: Cx,
+    (records, version, record, methods): (Span, u16, u16, Arc<BTreeMap<u64, String>>),
+) -> Result<()> {
     let size = u64::from(record.max(1));
     let count = records.len.checked_div(size).unwrap_or(0);
     cx.set_count(Count::Exact(count));
@@ -796,8 +1094,17 @@ async fn trace_records(cx: Cx, (records, version, record, methods): (Span, u16, 
             2 => "unwind",
             _ => "?",
         };
-        let method = methods.get(&u64::from(id & !3)).cloned().unwrap_or_else(|| format!("{:#x}", id & !3));
-        cx.push(Node::new(format!("[{i}]")).span(span).value(text(method)).summary(format!("thread {thread}, {action}, +{time} µs"))).await;
+        let method = methods
+            .get(&u64::from(id & !3))
+            .cloned()
+            .unwrap_or_else(|| format!("{:#x}", id & !3));
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(span)
+                .value(text(method))
+                .summary(format!("thread {thread}, {action}, +{time} µs")),
+        )
+        .await;
     }
     Ok(())
 }
@@ -825,7 +1132,11 @@ fn logcat_entry_ok(d: &[u8], at: usize) -> Option<usize> {
     let nsec = u32_le(d, at.checked_add(16)?)?;
     let sec = u32_le(d, at.checked_add(12)?)?;
     let hdr = if hdr == 0 { 20 } else { hdr };
-    if !matches!(hdr, 20 | 24 | 28) || !(1..=5120).contains(&len) || nsec >= 1_000_000_000 || sec < 946_684_800 {
+    if !matches!(hdr, 20 | 24 | 28)
+        || !(1..=5120).contains(&len)
+        || nsec >= 1_000_000_000
+        || sec < 946_684_800
+    {
         return None;
     }
     if hdr >= 24 && u32_le(d, at.checked_add(20)?)? > 7 {
@@ -864,17 +1175,30 @@ async fn logcat(cx: Cx, input: Input) -> Result<()> {
         let pid = i32::from_ne_bytes(u32_le(&h, 4).unwrap_or(0).to_ne_bytes());
         let tid = u32_le(&h, 8).unwrap_or(0);
         let extra = cur.bytes(u64::from(hdr).saturating_sub(20)).await?;
-        let lid = if hdr >= 24 { u32_le(&extra, 0).unwrap_or(0) } else { 0 };
+        let lid = if hdr >= 24 {
+            u32_le(&extra, 0).unwrap_or(0)
+        } else {
+            0
+        };
         let payload = cur.span(len.into());
         if payload.len < u64::from(len) {
-            return Err(Diagnostic::truncated(Span::new(payload.source, payload.offset, len.into()), payload.len));
+            return Err(Diagnostic::truncated(
+                Span::new(payload.source, payload.offset, len.into()),
+                payload.len,
+            ));
         }
         cur.skip(len.into());
         let data = cx.read(payload.sub(0, 1024)).await?;
         let buffer = lookup(LOG_IDS, lid.into()).unwrap_or("?");
         let node = if lid == 2 || lid == 5 || lid == 6 {
             let tag = u32_le(&data, 0).unwrap_or(0);
-            Node::new(format!("{buffer} event")).value(Value::UInt { value: tag.into(), bits: 32, radix: Radix::Dec }).summary(format!("pid {pid}, tid {tid}, {len} bytes"))
+            Node::new(format!("{buffer} event"))
+                .value(Value::UInt {
+                    value: tag.into(),
+                    bits: 32,
+                    radix: Radix::Dec,
+                })
+                .summary(format!("pid {pid}, tid {tid}, {len} bytes"))
         } else {
             let prio = data.first().copied().unwrap_or(0);
             let rest = data.get(1..).unwrap_or_default();
@@ -882,15 +1206,27 @@ async fn logcat(cx: Cx, input: Input) -> Result<()> {
             let tag = String::from_utf8_lossy(rest.get(..tag_end).unwrap_or_default()).into_owned();
             let msg = zstr(rest.get(tag_end.saturating_add(1)..).unwrap_or_default());
             let p = PRIORITY.get(usize::from(prio)).copied().unwrap_or("?");
-            Node::new(format!("{p}/{tag}")).value(text(msg.trim_end())).summary(format!("{buffer}, pid {pid}, tid {tid}"))
+            Node::new(format!("{p}/{tag}"))
+                .value(text(msg.trim_end()))
+                .summary(format!("{buffer}, pid {pid}, tid {tid}"))
         };
         let c = buffers.entry(lid).or_default();
         *c = c.saturating_add(1);
-        cx.push(node.span(cur.since(start)).lazy(logcat_entry, (cur.since(start), hdr))).await;
+        cx.push(
+            node.span(cur.since(start))
+                .lazy(logcat_entry, (cur.since(start), hdr)),
+        )
+        .await;
         n = n.saturating_add(1);
     }
-    let parts: Vec<String> = buffers.iter().map(|(b, c)| format!("{} {c}", lookup(LOG_IDS, (*b).into()).unwrap_or("?"))).collect();
-    cx.annotate(format!("Android binary logcat, {n} entries ({})", parts.join(", ")));
+    let parts: Vec<String> = buffers
+        .iter()
+        .map(|(b, c)| format!("{} {c}", lookup(LOG_IDS, (*b).into()).unwrap_or("?")))
+        .collect();
+    cx.annotate(format!(
+        "Android binary logcat, {n} entries ({})",
+        parts.join(", ")
+    ));
     Ok(())
 }
 
@@ -912,6 +1248,10 @@ async fn logcat_entry(cx: Cx, (span, hdr): (Span, u16)) -> Result<()> {
     }
     let payload = span.tail(hdr.into());
     let data = cx.read(payload.sub(0, 64)).await?;
-    cx.emit(Node::new("Payload").span(payload).summary(hex_string(data.get(..16).unwrap_or(&data))));
+    cx.emit(
+        Node::new("Payload")
+            .span(payload)
+            .summary(hex_string(data.get(..16).unwrap_or(&data))),
+    );
     Ok(())
 }

@@ -218,7 +218,10 @@ pub async fn dissect_ktx1(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn ktx1_levels(cx: Cx, (data, endian, levels, cube): (Span, Endian, u64, bool)) -> Result<()> {
+async fn ktx1_levels(
+    cx: Cx,
+    (data, endian, levels, cube): (Span, Endian, u64, bool),
+) -> Result<()> {
     let mut pos = 0u64;
     for level in 0..levels {
         if pos >= data.len {
@@ -257,7 +260,12 @@ async fn key_values(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
         let shown = if trimmed.is_empty() || crate::text::looks_like_text(trimmed) {
             text(crate::text::until_nul(value))
         } else {
-            crate::value::Value::Bytes(value.get(..value.len().min(32)).unwrap_or_default().to_vec())
+            crate::value::Value::Bytes(
+                value
+                    .get(..value.len().min(32))
+                    .unwrap_or_default()
+                    .to_vec(),
+            )
         };
         cx.push(
             Node::new(key)
@@ -298,7 +306,12 @@ pub async fn dissect_ktx2(cx: Cx, input: Input) -> Result<()> {
             .lazy(ktx2_levels, (file, index, levels)),
     );
     if h.dfd_length > 0 {
-        cx.emit(region("Data format descriptor", file, h.dfd_offset.into(), h.dfd_length.into()));
+        cx.emit(region(
+            "Data format descriptor",
+            file,
+            h.dfd_offset.into(),
+            h.dfd_length.into(),
+        ));
     }
     if h.kvd_length > 0 {
         let kv = file.sub(h.kvd_offset.into(), h.kvd_length.into());
@@ -309,7 +322,12 @@ pub async fn dissect_ktx2(cx: Cx, input: Input) -> Result<()> {
         );
     }
     if h.sgd_length > 0 {
-        cx.emit(region("Supercompression global data", file, h.sgd_offset, h.sgd_length));
+        cx.emit(region(
+            "Supercompression global data",
+            file,
+            h.sgd_offset,
+            h.sgd_length,
+        ));
     }
     Ok(())
 }

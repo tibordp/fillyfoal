@@ -59,22 +59,40 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
     loop {
         let start = cur.pos();
         let id = cur.u8().await?;
-        let len = if major >= 4 { cur.u32().await? } else { u32::from(cur.u16().await?) };
+        let len = if major >= 4 {
+            cur.u32().await?
+        } else {
+            u32::from(cur.u16().await?)
+        };
         let data = cur.span(len.into());
         let bytes = cur.bytes(len.into()).await?;
-        let name = lookup(KDBX_FIELDS, id.into()).map_or_else(|| format!("Field {id}"), str::to_owned);
+        let name =
+            lookup(KDBX_FIELDS, id.into()).map_or_else(|| format!("Field {id}"), str::to_owned);
         let mut node = Node::new(name).span(cur.since(start)).target(data);
         match id {
             2 => {
                 let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-                cipher = KDBX_CIPHERS.iter().find(|(g, _)| *g == hex).map_or(hex, |(_, n)| (*n).to_owned());
+                cipher = KDBX_CIPHERS
+                    .iter()
+                    .find(|(g, _)| *g == hex)
+                    .map_or(hex, |(_, n)| (*n).to_owned());
                 node = node.value(Value::Text(cipher.clone()));
             }
             3 => {
                 let v = u32_le(&bytes, 0).unwrap_or(0);
-                node = node.value(Value::Enum { raw: v.into(), bits: 32, name: lookup(&[(0, "none"), (1, "gzip")], v.into()) });
+                node = node.value(Value::Enum {
+                    raw: v.into(),
+                    bits: 32,
+                    name: lookup(&[(0, "none"), (1, "gzip")], v.into()),
+                });
             }
-            6 => node = node.value(Value::UInt { value: crate::bytes::u64_le(&bytes, 0).unwrap_or(0), bits: 64, radix: Radix::Dec }),
+            6 => {
+                node = node.value(Value::UInt {
+                    value: crate::bytes::u64_le(&bytes, 0).unwrap_or(0),
+                    bits: 64,
+                    radix: Radix::Dec,
+                })
+            }
             _ => node = node.summary(format!("{len} bytes")),
         }
         cx.push(node).await;
@@ -87,7 +105,11 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Header HMAC-SHA-256").span(file.sub(cur.pos().saturating_add(32), 32)));
         cur.skip(64);
     }
-    cx.emit(Node::new("Encrypted payload").span(file.tail(cur.pos())).diag(Diagnostic::note("encrypted; requires the master key")));
+    cx.emit(
+        Node::new("Encrypted payload")
+            .span(file.tail(cur.pos()))
+            .diag(Diagnostic::note("encrypted; requires the master key")),
+    );
     cx.annotate(format!("KeePass KDBX {major}.{minor}, {cipher}"));
     Ok(())
 }
@@ -111,7 +133,10 @@ record! {
 async fn kdb(cx: Cx, input: Input) -> Result<()> {
     let h: KdbHeader = emit_record(&cx, input.span.sub(0, KdbHeader::SIZE), LE).await?;
     cx.emit(Node::new("Encrypted payload").span(input.span.tail(KdbHeader::SIZE)));
-    cx.annotate(format!("KeePass 1, {} groups, {} entries", h.groups, h.entries));
+    cx.annotate(format!(
+        "KeePass 1, {} groups, {} entries",
+        h.groups, h.entries
+    ));
     Ok(())
 }
 
@@ -137,7 +162,9 @@ async fn openssh_key(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Magic").span(cur.span(15)));
     cur.skip(15);
     let text = |name: &'static str, bytes: &[u8], span: Span| {
-        Node::new(name).span(span).value(Value::Text(String::from_utf8_lossy(bytes).into_owned()))
+        Node::new(name)
+            .span(span)
+            .value(Value::Text(String::from_utf8_lossy(bytes).into_owned()))
     };
     let (cipher, span) = ssh_string(&mut cur).await?;
     cx.emit(text("Cipher", &cipher, span));
@@ -150,9 +177,17 @@ async fn openssh_key(cx: Cx, input: Input) -> Result<()> {
     for i in 0..count.min(16) {
         let (blob, span) = ssh_string(&mut cur).await?;
         let algo_len = usize::try_from(u32_be(&blob, 0).unwrap_or(0)).unwrap_or(0);
-        let algo = String::from_utf8_lossy(blob.get(4..4usize.saturating_add(algo_len)).unwrap_or_default()).into_owned();
+        let algo = String::from_utf8_lossy(
+            blob.get(4..4usize.saturating_add(algo_len))
+                .unwrap_or_default(),
+        )
+        .into_owned();
         algorithms.push(algo.clone());
-        cx.emit(Node::new(format!("Public key {i}")).span(span).value(Value::Text(algo)));
+        cx.emit(
+            Node::new(format!("Public key {i}"))
+                .span(span)
+                .value(Value::Text(algo)),
+        );
     }
     let (_, span) = ssh_string(&mut cur).await?;
     let encrypted = cipher != b"none";
@@ -165,7 +200,11 @@ async fn openssh_key(cx: Cx, input: Input) -> Result<()> {
         "{} key(s): {}{}",
         count,
         algorithms.join(", "),
-        if encrypted { ", passphrase-protected" } else { ", unencrypted" }
+        if encrypted {
+            ", passphrase-protected"
+        } else {
+            ", unencrypted"
+        }
     ));
     Ok(())
 }
@@ -198,9 +237,17 @@ async fn keybox(cx: Cx, input: Input) -> Result<()> {
             *c = c.saturating_add(1);
         }
         let name = lookup(KEYBOX_TYPES, kind.into()).unwrap_or("unknown");
-        cx.push(Node::new(format!("{name} blob")).span(cur.since(start)).summary(format!("{len} bytes"))).await;
+        cx.push(
+            Node::new(format!("{name} blob"))
+                .span(cur.since(start))
+                .summary(format!("{len} bytes")),
+        )
+        .await;
     }
-    cx.annotate(format!("{} OpenPGP and {} X.509 blob(s)", counts[2], counts[3]));
+    cx.annotate(format!(
+        "{} OpenPGP and {} X.509 blob(s)",
+        counts[2], counts[3]
+    ));
     Ok(())
 }
 
@@ -222,11 +269,19 @@ record! {
 async fn keychain(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: KeychainHeader = read_record(&cx, file.sub(0, KeychainHeader::SIZE), BE).await?;
-    cx.emit(KeychainHeader::node("Header", file.sub(0, KeychainHeader::SIZE), BE));
+    cx.emit(KeychainHeader::node(
+        "Header",
+        file.sub(0, KeychainHeader::SIZE),
+        BE,
+    ));
     let schema = file.tail(h.schema_offset.into());
     let head = cx.read_avail(schema.sub(0, 8)).await?;
     let tables = u32_be(&head, 4).unwrap_or(0);
-    cx.emit(Node::new("Schema").span(schema).summary(format!("{tables} tables")));
+    cx.emit(
+        Node::new("Schema")
+            .span(schema)
+            .summary(format!("{tables} tables")),
+    );
     cx.annotate(format!("keychain, {tables} tables"));
     Ok(())
 }
@@ -244,9 +299,16 @@ async fn android_backup(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Vec::new();
     for (i, line) in head.split(|&b| b == b'\n').take(4).enumerate() {
         let len = crate::bytes::to_u64(line.len()).saturating_add(1);
-        let label = ["Magic", "Version", "Compressed", "Encryption"].get(i).copied().unwrap_or("Line");
+        let label = ["Magic", "Version", "Compressed", "Encryption"]
+            .get(i)
+            .copied()
+            .unwrap_or("Line");
         let text = String::from_utf8_lossy(line).into_owned();
-        cx.emit(Node::new(label).span(file.sub(pos, len)).value(Value::Text(text.clone())));
+        cx.emit(
+            Node::new(label)
+                .span(file.sub(pos, len))
+                .value(Value::Text(text.clone())),
+        );
         lines.push(text);
         pos = pos.saturating_add(len);
     }
@@ -255,16 +317,32 @@ async fn android_backup(cx: Cx, input: Input) -> Result<()> {
     let body = file.tail(pos);
     if encryption == "none" {
         // The payload is a (zlib-compressed) tar archive.
-        let codec = if compressed { Codec::Zlib } else { Codec::Stored };
+        let codec = if compressed {
+            Codec::Zlib
+        } else {
+            Codec::Stored
+        };
         cx.emit(content("Payload (tar)", input, body, codec, None));
     } else {
-        cx.emit(Node::new("Payload").span(body).diag(Diagnostic::note(format!("encrypted ({encryption})"))));
+        cx.emit(
+            Node::new("Payload")
+                .span(body)
+                .diag(Diagnostic::note(format!("encrypted ({encryption})"))),
+        );
     }
     cx.annotate(format!(
         "Android backup v{}, {}{}",
         lines.get(1).cloned().unwrap_or_default(),
-        if compressed { "compressed" } else { "uncompressed" },
-        if encryption == "none" { String::new() } else { format!(", {encryption}") }
+        if compressed {
+            "compressed"
+        } else {
+            "uncompressed"
+        },
+        if encryption == "none" {
+            String::new()
+        } else {
+            format!(", {encryption}")
+        }
     ));
     Ok(())
 }

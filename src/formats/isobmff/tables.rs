@@ -142,7 +142,11 @@ record! {
 
 impl Entry for EditV0 {
     fn summary(&self) -> Option<String> {
-        Some(edit_summary(self.duration.into(), self.media_time.into(), self.rate))
+        Some(edit_summary(
+            self.duration.into(),
+            self.media_time.into(),
+            self.rate,
+        ))
     }
 }
 
@@ -248,7 +252,12 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             })
             .await?;
             if size == 0 {
-                cx.emit(table::<SampleSize>("Sample sizes", body.tail(12), count.into(), BE));
+                cx.emit(table::<SampleSize>(
+                    "Sample sizes",
+                    body.tail(12),
+                    count.into(),
+                    BE,
+                ));
             }
         }
         b"stz2" => {
@@ -274,7 +283,12 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             .await?;
             let (v, _) = super::version_flags(cx, body).await?;
             let at = if v == 1 { 16 } else { 12 };
-            cx.emit(table::<SampleToGroup>("Entries", body.tail(at), count.into(), BE));
+            cx.emit(table::<SampleToGroup>(
+                "Entries",
+                body.tail(at),
+                count.into(),
+                BE,
+            ));
         }
         b"sidx" => {
             let (wide, count) = header(cx, body, |f| {
@@ -369,7 +383,9 @@ async fn header<T>(
 pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     let kind = &st.header.kind;
     let at = match kind {
-        b"stts" | b"ctts" | b"stsc" | b"stco" | b"co64" | b"stss" | b"stps" | b"elst" | b"trun" => 4,
+        b"stts" | b"ctts" | b"stsc" | b"stco" | b"co64" | b"stss" | b"stps" | b"elst" | b"trun" => {
+            4
+        }
         b"stsz" | b"stz2" => 8,
         b"sidx" | b"sbgp" => 0,
         _ => return None,
@@ -383,7 +399,10 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             Some(if size == 0 {
                 crate::formats::vidutil::plural(n, "sample")
             } else {
-                format!("{} of {size} bytes", crate::formats::vidutil::plural(n, "sample"))
+                format!(
+                    "{} of {size} bytes",
+                    crate::formats::vidutil::plural(n, "sample")
+                )
             })
         }
         b"sidx" => Some(format!(

@@ -98,7 +98,11 @@ struct Unit {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.annotate(summary(&cx, file).await.unwrap_or_else(|| "MPEG program stream".to_owned()));
+    cx.annotate(
+        summary(&cx, file)
+            .await
+            .unwrap_or_else(|| "MPEG program stream".to_owned()),
+    );
     let mut pos = 0u64;
     while pos < file.len {
         let d = cx.read_avail(file.sub(pos, 32)).await?;
@@ -208,10 +212,10 @@ fn pack_header(cx: &Cx, span: Span, d: &[u8]) {
     }
     if mpeg2 {
         let rate = crate::bytes::u24_be(d, 10).unwrap_or(0) >> 2;
-        cx.emit(uint("Program mux rate", span.sub(10, 3), rate.into(), 22).summary(format!(
-            "{} bytes/s",
-            u64::from(rate).saturating_mul(50)
-        )));
+        cx.emit(
+            uint("Program mux rate", span.sub(10, 3), rate.into(), 22)
+                .summary(format!("{} bytes/s", u64::from(rate).saturating_mul(50))),
+        );
         let stuffing = d.get(13).copied().unwrap_or(0) & 7;
         cx.emit(uint("Stuffing length", span.sub(13, 1), stuffing.into(), 3));
         if stuffing > 0 {
@@ -219,10 +223,10 @@ fn pack_header(cx: &Cx, span: Span, d: &[u8]) {
         }
     } else {
         let rate = (crate::bytes::u24_be(d, 9).unwrap_or(0) >> 1) & 0x3f_ffff;
-        cx.emit(uint("Mux rate", span.sub(9, 3), rate.into(), 22).summary(format!(
-            "{} bytes/s",
-            u64::from(rate).saturating_mul(50)
-        )));
+        cx.emit(
+            uint("Mux rate", span.sub(9, 3), rate.into(), 22)
+                .summary(format!("{} bytes/s", u64::from(rate).saturating_mul(50))),
+        );
     }
 }
 
@@ -235,10 +239,22 @@ fn system_header(cx: &Cx, span: Span, d: &[u8]) {
     let b9 = d.get(9).copied().unwrap_or(0);
     cx.emit(uint("Audio bound", span.sub(9, 1), (b9 >> 2).into(), 6));
     cx.emit(flag_node("Fixed bitrate", span.sub(9, 1), b9 & 2 != 0));
-    cx.emit(flag_node("Constrained parameters", span.sub(9, 1), b9 & 1 != 0));
+    cx.emit(flag_node(
+        "Constrained parameters",
+        span.sub(9, 1),
+        b9 & 1 != 0,
+    ));
     let b10 = d.get(10).copied().unwrap_or(0);
-    cx.emit(flag_node("System audio lock", span.sub(10, 1), b10 & 0x80 != 0));
-    cx.emit(flag_node("System video lock", span.sub(10, 1), b10 & 0x40 != 0));
+    cx.emit(flag_node(
+        "System audio lock",
+        span.sub(10, 1),
+        b10 & 0x80 != 0,
+    ));
+    cx.emit(flag_node(
+        "System video lock",
+        span.sub(10, 1),
+        b10 & 0x40 != 0,
+    ));
     cx.emit(uint("Video bound", span.sub(10, 1), (b10 & 0x1f).into(), 5));
     let end = usize::from(len).saturating_add(6).min(d.len());
     let mut at = 12usize;
@@ -291,7 +307,10 @@ async fn summary(cx: &Cx, file: Span) -> Option<String> {
     ids.sort_unstable();
     let mut parts = vec![kind.to_owned()];
     if !ids.is_empty() {
-        let names: Vec<String> = ids.iter().map(|&i| stream_id_name(i).to_lowercase()).collect();
+        let names: Vec<String> = ids
+            .iter()
+            .map(|&i| stream_id_name(i).to_lowercase())
+            .collect();
         parts.push(names.join(" + "));
     }
     // The last SCR: search the tail for a pack header.

@@ -102,7 +102,11 @@ const FRAME_TYPES: EnumTable = &[
     (0xf7, "JPEG-LS"),
 ];
 
-const DENSITY_UNITS: EnumTable = &[(0, "aspect ratio only"), (1, "dots per inch"), (2, "dots per cm")];
+const DENSITY_UNITS: EnumTable = &[
+    (0, "aspect ratio only"),
+    (1, "dots per inch"),
+    (2, "dots per cm"),
+];
 
 const JFXX_CODES: EnumTable = &[
     (0x10, "JPEG thumbnail"),
@@ -164,7 +168,9 @@ async fn next_segment(cur: &mut Cursor<'_>) -> Result<Option<Segment>> {
         let len = cur.u16().await?;
         cur.skip(u64::from(len).saturating_sub(2));
     }
-    let span = cur.region().sub(marker_at, cur.pos().saturating_sub(marker_at));
+    let span = cur
+        .region()
+        .sub(marker_at, cur.pos().saturating_sub(marker_at));
     Ok(Some(Segment { marker, span }))
 }
 
@@ -180,7 +186,10 @@ async fn scan_entropy(cx: &Cx, region: Span, start: u64) -> Result<u64> {
         }
         let mut i = 0usize;
         let mut resume = None;
-        while let Some(off) = chunk.get(i..).and_then(|c| c.iter().position(|&b| b == 0xff)) {
+        while let Some(off) = chunk
+            .get(i..)
+            .and_then(|c| c.iter().position(|&b| b == 0xff))
+        {
             let at = i.saturating_add(off);
             match chunk.get(at.saturating_add(1)) {
                 None => {
@@ -310,7 +319,9 @@ fn adobe(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Version").emit()?;
     f.u16("Flags 0").hex().emit()?;
     f.u16("Flags 1").hex().emit()?;
-    f.u8("Color transform").enumeration(ADOBE_TRANSFORM).emit()?;
+    f.u8("Color transform")
+        .enumeration(ADOBE_TRANSFORM)
+        .emit()?;
     Ok(())
 }
 
@@ -430,7 +441,10 @@ async fn segment(cx: Cx, (input, seg): (Input, Segment)) -> Result<()> {
     let head = seg.span.sub(0, 4);
     let block = cx.block(head).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
-    f.u16("Marker").hex().with(|_, n| n.summary(marker_name(seg.marker))).emit()?;
+    f.u16("Marker")
+        .hex()
+        .with(|_, n| n.summary(marker_name(seg.marker)))
+        .emit()?;
     f.u16("Length").desc("Includes these two bytes").emit()?;
     let payload = seg.payload();
     match seg.marker {
@@ -477,7 +491,9 @@ async fn application(cx: &Cx, input: Input, seg: &Segment) -> Result<()> {
     let id_node = |name: &'static str| {
         Node::new(name)
             .span(payload.sub(0, id_len))
-            .value(text(String::from_utf8_lossy(id.strip_suffix(b"\0").unwrap_or(&id))))
+            .value(text(String::from_utf8_lossy(
+                id.strip_suffix(b"\0").unwrap_or(&id),
+            )))
     };
     let rest = payload.tail(id_len);
     match (seg.marker, id.as_slice()) {
@@ -510,7 +526,11 @@ async fn application(cx: &Cx, input: Input, seg: &Segment) -> Result<()> {
             // "Exif\0" is followed by one pad byte.
             let tiff = payload.tail(6);
             cx.emit(id_node("Identifier"));
-            cx.emit(embedded_as("Exif", input.nested(tiff), &super::tiff::FORMAT));
+            cx.emit(embedded_as(
+                "Exif",
+                input.nested(tiff),
+                &super::tiff::FORMAT,
+            ));
         }
         (0xe1, XMP) => {
             cx.emit(id_node("Namespace"));
@@ -523,7 +543,9 @@ async fn application(cx: &Cx, input: Input, seg: &Segment) -> Result<()> {
             cx.emit(id_node("Namespace"));
             let block = cx.block(rest.sub(0, 40)).await?;
             let mut f = Fields::emitting(cx, &block, BE);
-            f.ascii("GUID", 32).desc("MD5 of the full extended XMP").emit()?;
+            f.ascii("GUID", 32)
+                .desc("MD5 of the full extended XMP")
+                .emit()?;
             f.u32("Full length").emit()?;
             f.u32("Offset").hex().emit()?;
             cx.emit(Node::new("XMP portion").span(rest.tail(40)));
@@ -627,7 +649,13 @@ async fn quantization_tables(cx: &Cx, payload: Span) -> Result<()> {
 fn quantization_table(f: &mut Fields<'_>, wide: &bool) -> Result<()> {
     f.u8("Precision and destination")
         .hex()
-        .with(|&v, n| n.summary(format!("{}-bit, table {}", if v >> 4 == 0 { 8 } else { 16 }, v & 15)))
+        .with(|&v, n| {
+            n.summary(format!(
+                "{}-bit, table {}",
+                if v >> 4 == 0 { 8 } else { 16 },
+                v & 15
+            ))
+        })
         .emit()?;
     f.bytes("Values (zigzag order)", if *wide { 128 } else { 64 })
         .emit()?;

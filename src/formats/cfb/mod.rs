@@ -115,7 +115,10 @@ cfb_format!(
     "Microsoft Publisher document",
     ["pub", "puz"],
     "application/vnd.ms-publisher",
-    |h| { let n = probe_names(h); n.iter().any(|n| n == "Quill") && n.iter().any(|n| n == "Contents") }
+    |h| {
+        let n = probe_names(h);
+        n.iter().any(|n| n == "Quill") && n.iter().any(|n| n == "Contents")
+    }
 );
 cfb_format!(
     FORMAT,

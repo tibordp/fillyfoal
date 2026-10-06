@@ -64,8 +64,16 @@ async fn zsnes(cx: Cx, input: Input) -> Result<()> {
     let sig = f.ascii("Signature", 26).emit()?;
     f.u8("End of text").hex().emit()?;
     let version = f.u8("Version").emit()?;
-    cx.emit(Node::new("CPU, PPU and memory snapshot").span(file.tail(28)).summary(size(file.len.saturating_sub(28))));
-    cx.annotate(format!("{}, version {version}, {}", sig.trim(), size(file.len)));
+    cx.emit(
+        Node::new("CPU, PPU and memory snapshot")
+            .span(file.tail(28))
+            .summary(size(file.len.saturating_sub(28))),
+    );
+    cx.annotate(format!(
+        "{}, version {version}, {}",
+        sig.trim(),
+        size(file.len)
+    ));
     Ok(())
 }
 
@@ -103,7 +111,9 @@ async fn snes9x(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 14)).await?;
     let version = String::from_utf8_lossy(head.get(9..13).unwrap_or_default()).into_owned();
-    cx.emit(Node::new("Signature").span(file.sub(0, 14)).value(text(String::from_utf8_lossy(head.get(..13).unwrap_or_default()).into_owned())));
+    cx.emit(Node::new("Signature").span(file.sub(0, 14)).value(text(
+        String::from_utf8_lossy(head.get(..13).unwrap_or_default()).into_owned(),
+    )));
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(14);
     let (mut blocks, mut rom) = (0u32, None);
@@ -111,16 +121,31 @@ async fn snes9x(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let h = cur.bytes(11).await?;
         if h.get(3) != Some(&b':') || h.get(10) != Some(&b':') {
-            cx.push(Node::new("Unrecognised data").span(file.tail(start)).diag(Diagnostic::malformed("expected a block header"))).await;
+            cx.push(
+                Node::new("Unrecognised data")
+                    .span(file.tail(start))
+                    .diag(Diagnostic::malformed("expected a block header")),
+            )
+            .await;
             break;
         }
         let name = String::from_utf8_lossy(h.get(..3).unwrap_or_default()).into_owned();
-        let len: u64 = String::from_utf8_lossy(h.get(4..10).unwrap_or_default()).trim().parse().unwrap_or(0);
+        let len: u64 = String::from_utf8_lossy(h.get(4..10).unwrap_or_default())
+            .trim()
+            .parse()
+            .unwrap_or(0);
         let data = cur.span(len);
         cur.skip(len);
         blocks = blocks.saturating_add(1);
-        let meaning = SNES9X_BLOCKS.iter().find(|b| b.0 == name).map_or("unknown block", |b| b.1);
-        let mut node = Node::new(name.clone()).span(cur.since(start)).desc(meaning).target(data).summary(format!("{meaning}, {len} bytes"));
+        let meaning = SNES9X_BLOCKS
+            .iter()
+            .find(|b| b.0 == name)
+            .map_or("unknown block", |b| b.1);
+        let mut node = Node::new(name.clone())
+            .span(cur.since(start))
+            .desc(meaning)
+            .target(data)
+            .summary(format!("{meaning}, {len} bytes"));
         if name == "NAM" {
             let s = crate::text::until_nul(&cx.read_avail(data.sub(0, 1024)).await?);
             node = node.value(text(s.clone()));
@@ -142,7 +167,15 @@ async fn snes9x(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub FCEUX = "fceux-state", "FCEUX save state", ["fc0", "fc1", "fc2", "fcs"],
     "application/x-fceux-state", Probe::Magic(&[(0, b"FCSX")]), fceux);
 
-const FCEUX_SECTIONS: EnumTable = &[(1, "CPU"), (2, "CPU cycle counter"), (3, "PPU"), (4, "input"), (5, "sound"), (16, "mapper and game data"), (31, "new PPU")];
+const FCEUX_SECTIONS: EnumTable = &[
+    (1, "CPU"),
+    (2, "CPU cycle counter"),
+    (3, "PPU"),
+    (4, "input"),
+    (5, "sound"),
+    (16, "mapper and game data"),
+    (31, "new PPU"),
+];
 
 async fn fceux(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -151,24 +184,52 @@ async fn fceux(cx: Cx, input: Input) -> Result<()> {
     f.ascii("Magic", 4).emit()?;
     let total = f.u32("Uncompressed size").emit()?;
     let version = f.u32("FCEUX version").emit()?;
-    let compressed = f.u32("Compressed size").with(|&v, n| if v == u32::MAX { n.summary("not compressed") } else { n }).emit()?;
+    let compressed = f
+        .u32("Compressed size")
+        .with(|&v, n| {
+            if v == u32::MAX {
+                n.summary("not compressed")
+            } else {
+                n
+            }
+        })
+        .emit()?;
     let body = if compressed == u32::MAX {
         file.sub(16, total.into())
     } else {
-        let decoded = crate::codec::inflate_span(&cx, file.sub(16, compressed.into()), true, Some(total.into())).await?;
+        let decoded = crate::codec::inflate_span(
+            &cx,
+            file.sub(16, compressed.into()),
+            true,
+            Some(total.into()),
+        )
+        .await?;
         if let Some(e) = decoded.error {
             cx.diag(e);
         }
         decoded.span
     };
-    cx.emit(Node::new("Sections").span(body).summary(if compressed == u32::MAX { "stored".to_owned() } else { format!("zlib, {compressed} bytes compressed") }).lazy(fceux_sections, body));
+    cx.emit(
+        Node::new("Sections")
+            .span(body)
+            .summary(if compressed == u32::MAX {
+                "stored".to_owned()
+            } else {
+                format!("zlib, {compressed} bytes compressed")
+            })
+            .lazy(fceux_sections, body),
+    );
     cx.annotate(format!(
         "FCEUX save state, emulator {}.{}.{}, {} of state{}",
         version / 10000,
         version / 100 % 100,
         version % 100,
         size(total.into()),
-        if compressed == u32::MAX { "" } else { ", zlib-compressed" }
+        if compressed == u32::MAX {
+            ""
+        } else {
+            ", zlib-compressed"
+        }
     ));
     Ok(())
 }
@@ -182,11 +243,18 @@ async fn fceux_sections(cx: Cx, body: Span) -> Result<()> {
         let data = cur.span(len);
         cur.skip(len);
         cx.push(
-            Node::new(lookup(FCEUX_SECTIONS, kind.into()).map_or_else(|| format!("Section {kind}"), str::to_owned))
-                .span(cur.since(start))
-                .value(Value::Enum { raw: kind.into(), bits: 8, name: lookup(FCEUX_SECTIONS, kind.into()) })
-                .summary(format!("{len} bytes"))
-                .lazy(fceux_vars, data),
+            Node::new(
+                lookup(FCEUX_SECTIONS, kind.into())
+                    .map_or_else(|| format!("Section {kind}"), str::to_owned),
+            )
+            .span(cur.since(start))
+            .value(Value::Enum {
+                raw: kind.into(),
+                bits: 8,
+                name: lookup(FCEUX_SECTIONS, kind.into()),
+            })
+            .summary(format!("{len} bytes"))
+            .lazy(fceux_vars, data),
         )
         .await;
     }
@@ -203,7 +271,13 @@ async fn fceux_vars(cx: Cx, data: Span) -> Result<()> {
         let value = cur.span(len);
         cur.skip(len);
         let raw = cx.read_avail(value.sub(0, 8)).await?;
-        let mut node = Node::new(if name.is_empty() { "(unnamed)".to_owned() } else { name }).span(cur.since(start)).target(value);
+        let mut node = Node::new(if name.is_empty() {
+            "(unnamed)".to_owned()
+        } else {
+            name
+        })
+        .span(cur.since(start))
+        .target(value);
         node = match len {
             1 => node.value(hex(raw.first().copied().unwrap_or(0).into(), 8)),
             2 => node.value(hex(u16_le(&raw, 0).unwrap_or(0).into(), 16)),
@@ -222,7 +296,12 @@ async fn fceux_vars(cx: Cx, data: Span) -> Result<()> {
 declare_format!(pub RETROARCH = "retroarch-state", "RetroArch save state", ["state", "state1", "state2", "state3"],
     "application/x-retroarch-state", Probe::Magic(&[(0, b"RASTATE")]), retroarch);
 
-const RA_BLOCKS: &[(&str, &str)] = &[("MEM ", "core serialised state"), ("ACHV", "achievements state"), ("RPLY", "replay/movie"), ("END ", "end marker")];
+const RA_BLOCKS: &[(&str, &str)] = &[
+    ("MEM ", "core serialised state"),
+    ("ACHV", "achievements state"),
+    ("RPLY", "replay/movie"),
+    ("END ", "end marker"),
+];
 
 async fn retroarch(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -244,13 +323,27 @@ async fn retroarch(cx: Cx, input: Input) -> Result<()> {
             core = len;
         }
         names.push(id.trim().to_owned());
-        let meaning = RA_BLOCKS.iter().find(|b| b.0 == id).map_or("unknown block", |b| b.1);
-        cx.push(Node::new(id.clone()).span(cur.since(start)).desc(meaning).summary(format!("{len} bytes")).target(data)).await;
+        let meaning = RA_BLOCKS
+            .iter()
+            .find(|b| b.0 == id)
+            .map_or("unknown block", |b| b.1);
+        cx.push(
+            Node::new(id.clone())
+                .span(cur.since(start))
+                .desc(meaning)
+                .summary(format!("{len} bytes"))
+                .target(data),
+        )
+        .await;
         if id == "END " {
             break;
         }
     }
-    cx.annotate(format!("RetroArch state v{version}, {} core state, blocks {}", size(core), names.join(", ")));
+    cx.annotate(format!(
+        "RetroArch state v{version}, {} core state, blocks {}",
+        size(core),
+        names.join(", ")
+    ));
     Ok(())
 }
 
@@ -329,8 +422,17 @@ async fn dtm(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, DtmHeader::SIZE);
     let h: DtmHeader = read_record(&cx, span, LE).await?;
     cx.emit(DtmHeader::node("Header", span, LE));
-    cx.emit(Node::new("Input data").span(file.tail(DtmHeader::SIZE)).summary(format!("{} polls", h.inputs)));
-    let rev: String = h.revision.iter().take(4).map(|b| format!("{b:02x}")).collect();
+    cx.emit(
+        Node::new("Input data")
+            .span(file.tail(DtmHeader::SIZE))
+            .summary(format!("{} polls", h.inputs)),
+    );
+    let rev: String = h
+        .revision
+        .iter()
+        .take(4)
+        .map(|b| format!("{b:02x}"))
+        .collect();
     cx.annotate(format!(
         "Dolphin movie of {} ({}), {} frames, {} rerecords, by {:?}, revision {rev}",
         h.game_id,
@@ -348,16 +450,36 @@ async fn dtm(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub SMV = "smv", "Snes9x movie", ["smv"],
     "application/x-smv", Probe::Magic(&[(0, b"SMV\x1a")]), smv);
 
-const SMV_OPTIONS: FlagTable = &[flag(0x01, "FROM_SNAPSHOT"), flag(0x02, "PAL"), flag(0x04, "NO_SRAM")];
-const SMV_CONTROLLERS: FlagTable = &[flag(0x01, "PAD_1"), flag(0x02, "PAD_2"), flag(0x04, "PAD_3"), flag(0x08, "PAD_4"), flag(0x10, "PAD_5")];
-const SMV_PORTS: EnumTable = &[(0, "none"), (1, "joypad"), (2, "mouse"), (3, "Super Scope"), (4, "Justifier"), (5, "multitap")];
+const SMV_OPTIONS: FlagTable = &[
+    flag(0x01, "FROM_SNAPSHOT"),
+    flag(0x02, "PAL"),
+    flag(0x04, "NO_SRAM"),
+];
+const SMV_CONTROLLERS: FlagTable = &[
+    flag(0x01, "PAD_1"),
+    flag(0x02, "PAD_2"),
+    flag(0x04, "PAD_3"),
+    flag(0x08, "PAD_4"),
+    flag(0x10, "PAD_5"),
+];
+const SMV_PORTS: EnumTable = &[
+    (0, "none"),
+    (1, "joypad"),
+    (2, "mouse"),
+    (3, "Super Scope"),
+    (4, "Justifier"),
+    (5, "multitap"),
+];
 
 async fn smv(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 0x40)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.bytes("Signature", 4).emit()?;
-    let version = f.u32("Version").enumeration(&[(1, "1.43"), (4, "1.51"), (5, "1.52+")]).emit()?;
+    let version = f
+        .u32("Version")
+        .enumeration(&[(1, "1.43"), (4, "1.51"), (5, "1.52+")])
+        .emit()?;
     f.u32("Movie UID (recording time)").timestamp().emit()?;
     let rerecords = f.u32("Rerecords").emit()?;
     let frames = f.u32("Frames").emit()?;
@@ -385,7 +507,12 @@ async fn smv(cx: Cx, input: Input) -> Result<()> {
     if state >= meta_start.saturating_add(30) && raw.get(..3) == Some(&[0, 0, 0]) {
         meta_end = state.saturating_sub(30);
         let name = crate::text::until_nul(raw.get(7..).unwrap_or_default());
-        cx.emit(Node::new("ROM info").span(info).value(text(name.clone())).summary(format!("CRC-32 {:#010x}", u32_le(&raw, 3).unwrap_or(0))));
+        cx.emit(
+            Node::new("ROM info")
+                .span(info)
+                .value(text(name.clone()))
+                .summary(format!("CRC-32 {:#010x}", u32_le(&raw, 3).unwrap_or(0))),
+        );
         rom = Some(name);
     }
     let meta = file.sub(meta_start, meta_end.saturating_sub(meta_start));
@@ -393,14 +520,22 @@ async fn smv(cx: Cx, input: Input) -> Result<()> {
     if meta.len > 0 {
         cx.emit(Node::new("Author").span(meta).value(text(author.clone())));
     }
-    let what = if options & 1 != 0 { "Save state" } else { "SRAM" };
+    let what = if options & 1 != 0 {
+        "Save state"
+    } else {
+        "SRAM"
+    };
     cx.emit(Node::new(what).span(file.sub(state, u64::from(controller).saturating_sub(state))));
     cx.emit(Node::new("Controller data").span(file.tail(controller.into())));
     cx.annotate(format!(
         "Snes9x movie{}, {frames} frames ({}), {rerecords} rerecords{}",
         rom.map_or_else(String::new, |r| format!(" of {r:?}")),
         if options & 2 != 0 { "PAL" } else { "NTSC" },
-        if author.is_empty() { String::new() } else { format!(", by {author:?}") }
+        if author.is_empty() {
+            String::new()
+        } else {
+            format!(", by {author:?}")
+        }
     ));
     Ok(())
 }
@@ -444,10 +579,30 @@ async fn vbm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: VbmHeader = emit_record(&cx, file.sub(0, VbmHeader::SIZE), LE).await?;
     if h.start != 0 {
-        cx.emit(Node::new(if h.start & 1 != 0 { "Save state" } else { "SRAM" }).span(file.sub(h.state.into(), u64::from(h.controller).saturating_sub(h.state.into()))));
+        cx.emit(
+            Node::new(if h.start & 1 != 0 {
+                "Save state"
+            } else {
+                "SRAM"
+            })
+            .span(file.sub(
+                h.state.into(),
+                u64::from(h.controller).saturating_sub(h.state.into()),
+            )),
+        );
     }
-    cx.emit(Node::new("Controller data").span(file.tail(h.controller.into())).summary(format!("{} frames", h.frames)));
-    let system = if h.system & 1 != 0 { "GBA" } else if h.system & 2 != 0 { "GBC" } else { "GB" };
+    cx.emit(
+        Node::new("Controller data")
+            .span(file.tail(h.controller.into()))
+            .summary(format!("{} frames", h.frames)),
+    );
+    let system = if h.system & 1 != 0 {
+        "GBA"
+    } else if h.system & 2 != 0 {
+        "GBC"
+    } else {
+        "GB"
+    };
     cx.annotate(format!(
         "VBA movie of {:?} ({system}), {} frames, {} rerecords, by {:?}",
         clean(&h.title),
@@ -464,7 +619,12 @@ async fn vbm(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub FCM = "fcm", "FCE Ultra movie (FCM)", ["fcm"],
     "application/x-fcm", Probe::Magic(&[(0, b"FCM\x1a")]), fcm);
 
-const FCM_FLAGS: FlagTable = &[flag(0x02, "POWER_ON"), flag(0x04, "PAL"), flag(0x08, "RESET"), flag(0x10, "HAS_SAVESTATE")];
+const FCM_FLAGS: FlagTable = &[
+    flag(0x02, "POWER_ON"),
+    flag(0x04, "PAL"),
+    flag(0x08, "RESET"),
+    flag(0x10, "HAS_SAVESTATE"),
+];
 
 async fn fcm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -482,15 +642,31 @@ async fn fcm(cx: Cx, input: Input) -> Result<()> {
     f.bytes("ROM MD5", 16).emit()?;
     f.u32("Emulator version").emit()?;
     let (rom, rom_span) = cx.cstr(file.sub(0x34, 256)).await?;
-    cx.emit(Node::new("ROM name").span(rom_span).value(text(rom.clone())));
+    cx.emit(
+        Node::new("ROM name")
+            .span(rom_span)
+            .value(text(rom.clone())),
+    );
     let author_at = rom_span.end().saturating_sub(file.offset);
-    let (author, author_span) = cx.cstr(file.sub(author_at, 256)).await.unwrap_or_else(|_| (String::new(), file.sub(author_at, 0)));
-    cx.emit(Node::new("Author").span(author_span).value(text(author.clone())));
+    let (author, author_span) = cx
+        .cstr(file.sub(author_at, 256))
+        .await
+        .unwrap_or_else(|_| (String::new(), file.sub(author_at, 0)));
+    cx.emit(
+        Node::new("Author")
+            .span(author_span)
+            .value(text(author.clone())),
+    );
     if state != 0 {
-        cx.emit(Node::new("Save state").span(file.sub(state.into(), u64::from(data).saturating_sub(state.into()))));
+        cx.emit(
+            Node::new("Save state")
+                .span(file.sub(state.into(), u64::from(data).saturating_sub(state.into()))),
+        );
     }
     cx.emit(Node::new("Controller data").span(file.sub(data.into(), data_len.into())));
-    cx.annotate(format!("FCM movie of {rom:?}, {frames} frames, {rerecords} rerecords, by {author:?}"));
+    cx.annotate(format!(
+        "FCM movie of {rom:?}, {frames} frames, {rerecords} rerecords, by {author:?}"
+    ));
     Ok(())
 }
 
@@ -533,7 +709,11 @@ record! {
 async fn m64(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: M64Header = emit_record(&cx, file.sub(0, M64Header::SIZE), LE).await?;
-    cx.emit(Node::new("Input data").span(file.tail(M64Header::SIZE)).summary(format!("{} samples", h.samples)));
+    cx.emit(
+        Node::new("Input data")
+            .span(file.tail(M64Header::SIZE))
+            .summary(format!("{} samples", h.samples)),
+    );
     cx.annotate(format!(
         "Mupen64 movie of {:?}, {} frames at {} Hz, {} rerecords, from {}, by {:?}",
         clean(&h.rom_name),
@@ -552,7 +732,11 @@ async fn m64(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub GMV = "gmv", "Gens movie (GMV)", ["gmv"],
     "application/x-gmv", Probe::Magic(&[(0, b"Gens Movie TEST")]), gmv);
 
-const GMV_FLAGS: FlagTable = &[flag(0x20, "THREE_PLAYERS"), flag(0x40, "FROM_SAVESTATE"), flag(0x80, "PAL")];
+const GMV_FLAGS: FlagTable = &[
+    flag(0x20, "THREE_PLAYERS"),
+    flag(0x40, "FROM_SAVESTATE"),
+    flag(0x80, "PAL"),
+];
 
 async fn gmv(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -567,7 +751,11 @@ async fn gmv(cx: Cx, input: Input) -> Result<()> {
     f.u8("Reserved").emit()?;
     let comment = f.ascii("Comment", 40).emit()?;
     let frames = file.len.saturating_sub(64) / 3;
-    cx.emit(Node::new("Input frames").span(file.tail(64)).summary(format!("{frames} frames of 3 bytes")));
+    cx.emit(
+        Node::new("Input frames")
+            .span(file.tail(64))
+            .summary(format!("{frames} frames of 3 bytes")),
+    );
     cx.annotate(format!(
         "Gens movie v{version}, {frames} frames ({}), {rerecords} rerecords, {p1}/{p2}-button pads, {:?}",
         if flags & 0x80 != 0 { "PAL" } else { "NTSC" },
@@ -581,7 +769,9 @@ async fn gmv(cx: Cx, input: Input) -> Result<()> {
 
 fn fm2_probe(h: &Head<'_>) -> bool {
     let first = h.data.get(..h.data.len().min(2048)).unwrap_or_default();
-    h.starts_with(b"version 3") && is_ascii_text(first) && first.windows(11).any(|w| w == b"emuVersion ")
+    h.starts_with(b"version 3")
+        && is_ascii_text(first)
+        && first.windows(11).any(|w| w == b"emuVersion ")
 }
 
 declare_format!(pub FM2 = "fm2", "FCEUX movie (FM2)", ["fm2"],
@@ -602,14 +792,30 @@ async fn fm2(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         fields.push((key.to_owned(), value.to_owned()));
-        let v = value.parse::<i64>().map_or_else(|_| text(value.to_owned()), |n| Value::Int { value: n, bits: 64 });
+        let v = value.parse::<i64>().map_or_else(
+            |_| text(value.to_owned()),
+            |n| Value::Int { value: n, bits: 64 },
+        );
         cx.emit(Node::new(key.to_owned()).span(span).value(v));
     }
-    let get = |k: &str| fields.iter().find(|f| f.0 == k).map_or("", |f| f.1.as_str());
+    let get = |k: &str| {
+        fields
+            .iter()
+            .find(|f| f.0 == k)
+            .map_or("", |f| f.1.as_str())
+    };
     let count = crate::bytes::to_u64(frames.len());
     if let (Some(first), Some(last)) = (frames.first(), frames.last()) {
-        let span = Span { len: last.end().saturating_sub(first.offset), ..*first };
-        cx.emit(Node::new("Input log").span(span).summary(format!("{count} frames")).lazy(fm2_frames, frames.clone()));
+        let span = Span {
+            len: last.end().saturating_sub(first.offset),
+            ..*first
+        };
+        cx.emit(
+            Node::new("Input log")
+                .span(span)
+                .summary(format!("{count} frames"))
+                .lazy(fm2_frames, frames.clone()),
+        );
     }
     cx.annotate(format!(
         "FCEUX movie of {:?}, {count} frames, {} rerecords{}",
@@ -624,7 +830,8 @@ async fn fm2_frames(cx: Cx, frames: Vec<Span>) -> Result<()> {
     cx.set_count(Count::Exact(crate::bytes::to_u64(frames.len())));
     for (i, span) in frames.into_iter().enumerate() {
         let line = String::from_utf8_lossy(&cx.read(span).await?).into_owned();
-        cx.push(Node::new(format!("Frame {i}")).span(span).value(text(line))).await;
+        cx.push(Node::new(format!("Frame {i}")).span(span).value(text(line)))
+            .await;
     }
     Ok(())
 }
@@ -633,7 +840,12 @@ async fn fm2_frames(cx: Cx, frames: Vec<Span>) -> Result<()> {
 // PlayStation memory card (raw 128 KiB) and DexDrive (.gme)
 
 fn psx_mc_probe(h: &Head<'_>) -> bool {
-    h.at(0, b"MC") && h.len == 0x20000 && h.data.get(127) == Some(&0x0e) && h.data.get(2..127).is_some_and(|r| r.iter().all(|&b| b == 0))
+    h.at(0, b"MC")
+        && h.len == 0x20000
+        && h.data.get(127) == Some(&0x0e)
+        && h.data
+            .get(2..127)
+            .is_some_and(|r| r.iter().all(|&b| b == 0))
 }
 
 declare_format!(pub PSX_MEMCARD = "psx-memcard", "PlayStation memory card image", ["mcr", "mcd", "mc", "srm", "mem", "vgs", "ps"],
@@ -674,28 +886,53 @@ async fn psx_memcard(cx: Cx, input: Input) -> Result<()> {
         let block = file.sub(slot.saturating_mul(0x2000), 0x2000);
         let mut node = PsxDirFrame::node(format!("Slot {slot}"), span, LE).target(block);
         if xor != d.checksum {
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {xor:#04x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {xor:#04x}"
+            )));
         }
         if matches!(d.state, 0x51..=0x53) {
             used = used.saturating_add(1);
         }
         if d.state == 0x51 {
             let head = cx.read_avail(block.sub(0, 0x44)).await?;
-            let title = if head.starts_with(b"SC") { sjis(head.get(4..).unwrap_or_default()) } else { String::new() };
-            let region = PSX_REGIONS.iter().find(|r| d.name.starts_with(r.0)).map_or("unknown region", |r| r.1);
-            node = node.summary(format!("{} ({region}): {title}", d.name.get(2..12).unwrap_or(&d.name)));
+            let title = if head.starts_with(b"SC") {
+                sjis(head.get(4..).unwrap_or_default())
+            } else {
+                String::new()
+            };
+            let region = PSX_REGIONS
+                .iter()
+                .find(|r| d.name.starts_with(r.0))
+                .map_or("unknown region", |r| r.1);
+            node = node.summary(format!(
+                "{} ({region}): {title}",
+                d.name.get(2..12).unwrap_or(&d.name)
+            ));
             saves.push(title);
             cx.emit(node);
-            cx.emit(Node::new(format!("Block {slot}")).span(block).summary(format!("{} KiB save", d.size / 1024)).lazy(psx_block, block));
+            cx.emit(
+                Node::new(format!("Block {slot}"))
+                    .span(block)
+                    .summary(format!("{} KiB save", d.size / 1024))
+                    .lazy(psx_block, block),
+            );
         } else {
-            cx.emit(node.summary(lookup(PSX_ALLOC, d.state.into()).unwrap_or("unknown").to_owned()));
+            cx.emit(
+                node.summary(
+                    lookup(PSX_ALLOC, d.state.into())
+                        .unwrap_or("unknown")
+                        .to_owned(),
+                ),
+            );
         }
     }
     cx.emit(Node::new("Broken sector list and unused frames").span(file.sub(0x800, 0x1800)));
     cx.annotate(format!(
         "PlayStation memory card, {used}/15 blocks used, {} save(s){}",
         saves.len(),
-        saves.first().map_or_else(String::new, |s| format!(": {s:?}"))
+        saves
+            .first()
+            .map_or_else(String::new, |s| format!(": {s:?}"))
     ));
     Ok(())
 }
@@ -704,16 +941,28 @@ async fn psx_block(cx: Cx, block: Span) -> Result<()> {
     let head = cx.block(block.sub(0, 0x80)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Magic", 2).emit()?;
-    let icon = f.u8("Icon display").enumeration(&[(0x11, "1 frame"), (0x12, "2 frames"), (0x13, "3 frames")]).emit()?;
+    let icon = f
+        .u8("Icon display")
+        .enumeration(&[(0x11, "1 frame"), (0x12, "2 frames"), (0x13, "3 frames")])
+        .emit()?;
     f.u8("Blocks used").emit()?;
     let span = f.peek_span(64);
     let title = f.bytes("Title (Shift-JIS)", 64).get()?;
-    f.node(Node::new("Title (Shift-JIS)").span(span).value(text(sjis(&title))));
+    f.node(
+        Node::new("Title (Shift-JIS)")
+            .span(span)
+            .value(text(sjis(&title))),
+    );
     f.bytes("Reserved", 28).emit()?;
     f.bytes("Icon palette", 32).emit()?;
     let frames = u64::from(icon & 3);
-    cx.emit(Node::new("Icon frames (16×16, 4-bit)").span(block.sub(0x80, frames.saturating_mul(0x80))));
-    cx.emit(Node::new("Save data").span(block.tail(0x80u64.saturating_add(frames.saturating_mul(0x80)))));
+    cx.emit(
+        Node::new("Icon frames (16×16, 4-bit)").span(block.sub(0x80, frames.saturating_mul(0x80))),
+    );
+    cx.emit(
+        Node::new("Save data")
+            .span(block.tail(0x80u64.saturating_add(frames.saturating_mul(0x80)))),
+    );
     Ok(())
 }
 
@@ -722,14 +971,32 @@ declare_format!(pub DEXDRIVE = "dexdrive", "DexDrive memory card image", ["gme"]
 
 async fn dexdrive(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Signature").span(file.sub(0, 11)).value(text("123-456-STD")));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 11))
+            .value(text("123-456-STD")),
+    );
     let comments = file.sub(0x40, 15 * 256);
     let raw = cx.read_avail(comments).await?;
-    let notes: Vec<String> = raw.chunks(256).map(crate::text::until_nul).filter(|s| !s.is_empty()).collect();
-    cx.emit(Node::new("Slot comments").span(comments).summary(format!("{} non-empty", notes.len())));
+    let notes: Vec<String> = raw
+        .chunks(256)
+        .map(crate::text::until_nul)
+        .filter(|s| !s.is_empty())
+        .collect();
+    cx.emit(
+        Node::new("Slot comments")
+            .span(comments)
+            .summary(format!("{} non-empty", notes.len())),
+    );
     let card = file.sub(0xf40, 0x20000);
     cx.emit(embedded_as("Memory card", input.nested(card), &PSX_MEMCARD));
-    cx.annotate(format!("DexDrive image, {} of card data{}", size(card.len), notes.first().map_or_else(String::new, |n| format!(", note {n:?}"))));
+    cx.annotate(format!(
+        "DexDrive image, {} of card data{}",
+        size(card.len),
+        notes
+            .first()
+            .map_or_else(String::new, |n| format!(", note {n:?}"))
+    ));
     Ok(())
 }
 
@@ -761,7 +1028,11 @@ record! {
     }
 }
 
-const PS2_FLAGS: FlagTable = &[flag(0x01, "ECC"), flag(0x08, "BAD_BLOCKS"), flag(0x10, "ERASE_ZEROES")];
+const PS2_FLAGS: FlagTable = &[
+    flag(0x01, "ECC"),
+    flag(0x08, "BAD_BLOCKS"),
+    flag(0x10, "ERASE_ZEROES"),
+];
 
 async fn ps2_memcard(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -770,9 +1041,22 @@ async fn ps2_memcard(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Ps2Superblock::node("Superblock", span, LE));
     let cluster = u64::from(h.page_len).saturating_mul(h.pages_per_cluster.into());
     let total = u64::from(h.clusters).saturating_mul(cluster);
-    let raw_page = if h.flags & 1 != 0 { u64::from(h.page_len).saturating_add(u64::from(h.page_len) / 32) } else { u64::from(h.page_len) };
+    let raw_page = if h.flags & 1 != 0 {
+        u64::from(h.page_len).saturating_add(u64::from(h.page_len) / 32)
+    } else {
+        u64::from(h.page_len)
+    };
     let ifc0 = u32_le(&h.ifc, 0).unwrap_or(0);
-    cx.emit(Node::new("Indirect FAT cluster 0").span(file.sub(u64::from(ifc0).saturating_mul(raw_page).saturating_mul(h.pages_per_cluster.into()), cluster)));
+    cx.emit(
+        Node::new("Indirect FAT cluster 0").span(
+            file.sub(
+                u64::from(ifc0)
+                    .saturating_mul(raw_page)
+                    .saturating_mul(h.pages_per_cluster.into()),
+                cluster,
+            ),
+        ),
+    );
     cx.annotate(format!(
         "PS2 memory card v{}, {} ({} clusters of {} bytes){}, root at cluster {}",
         clean(&h.version),
@@ -789,19 +1073,29 @@ async fn ps2_memcard(cx: Cx, input: Input) -> Result<()> {
 // GameCube save (GCI)
 
 fn gci_probe(h: &Head<'_>) -> bool {
-    let id_ok = h.data.get(..6).is_some_and(|s| s.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()));
+    let id_ok = h.data.get(..6).is_some_and(|s| {
+        s.iter()
+            .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+    });
     let blocks = crate::bytes::u16_be(h.data, 0x38).unwrap_or(0);
     id_ok
         && h.data.get(6) == Some(&0xff)
         && h.at(0x3a, b"\xff\xff")
         && blocks > 0
-        && h.len == u64::from(blocks).saturating_mul(0x2000).saturating_add(0x40)
+        && h.len
+            == u64::from(blocks)
+                .saturating_mul(0x2000)
+                .saturating_add(0x40)
 }
 
 declare_format!(pub GCI = "gci", "GameCube memory card save (GCI)", ["gci", "gcs", "sav"],
     "application/x-gci", Probe::Custom(gci_probe), gci);
 
-const GCI_PERMISSIONS: FlagTable = &[flag(0x04, "PUBLIC"), flag(0x08, "NO_COPY"), flag(0x10, "NO_MOVE")];
+const GCI_PERMISSIONS: FlagTable = &[
+    flag(0x04, "PUBLIC"),
+    flag(0x08, "NO_COPY"),
+    flag(0x10, "NO_MOVE"),
+];
 
 record! {
     pub struct GciHeader {
@@ -833,8 +1127,22 @@ async fn gci(cx: Cx, input: Input) -> Result<()> {
     let raw = cx.read_avail(comments).await?;
     let title = crate::text::until_nul(raw.get(..32).unwrap_or_default());
     let detail = crate::text::until_nul(raw.get(32..).unwrap_or_default());
-    cx.emit(Node::new("Comments").span(comments).value(text(format!("{title} / {detail}"))));
-    cx.emit(Node::new("Save data").span(data).summary(format!("{} blocks", h.blocks)));
-    cx.annotate(format!("GameCube save {:?} for {}{}: {title}, {} blocks", clean(&h.name), h.game, h.maker, h.blocks));
+    cx.emit(
+        Node::new("Comments")
+            .span(comments)
+            .value(text(format!("{title} / {detail}"))),
+    );
+    cx.emit(
+        Node::new("Save data")
+            .span(data)
+            .summary(format!("{} blocks", h.blocks)),
+    );
+    cx.annotate(format!(
+        "GameCube save {:?} for {}{}: {title}, {} blocks",
+        clean(&h.name),
+        h.game,
+        h.maker,
+        h.blocks
+    ));
     Ok(())
 }

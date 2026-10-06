@@ -25,7 +25,8 @@ pub static FORMAT: Format = Format {
 
 /// The version, and a length that matches it exactly.
 fn probe(h: &Head<'_>) -> bool {
-    let plausible_time = u64_le(h.data, 16).is_some_and(|t| (0x01b0_0000_0000_0000..0x0300_0000_0000_0000).contains(&t));
+    let plausible_time = u64_le(h.data, 16)
+        .is_some_and(|t| (0x01b0_0000_0000_0000..0x0300_0000_0000_0000).contains(&t));
     match u64_le(h.data, 0) {
         Some(1) => h.len == 544 && plausible_time,
         Some(2) => {
@@ -44,7 +45,10 @@ fn layout(f: &mut Fields<'_>, _: &()) -> Result<(u64, String)> {
         .emit()?;
     f.u64("Deletion time").filetime().emit()?;
     let path = if version >= 2 {
-        let chars = f.u32("Path length").desc("Characters, including the terminator").emit()?;
+        let chars = f
+            .u32("Path length")
+            .desc("Characters, including the terminator")
+            .emit()?;
         f.utf16("Original path", chars.into()).emit()?
     } else {
         f.utf16("Original path", 260).emit()?

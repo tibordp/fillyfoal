@@ -32,7 +32,9 @@ fn cmp_probe(h: &Head<'_>) -> bool {
     let s = String::from_utf8_lossy(t);
     is_ascii_text(t.get(..t.len().min(256)).unwrap_or_default()) && {
         let trimmed = s.trim_start();
-        trimmed.starts_with("clrmamepro (") || trimmed.starts_with("clrmamepro(") || trimmed.starts_with("emulator (")
+        trimmed.starts_with("clrmamepro (")
+            || trimmed.starts_with("clrmamepro(")
+            || trimmed.starts_with("emulator (")
     }
 }
 
@@ -64,17 +66,37 @@ fn tokenize(data: &[u8]) -> Vec<(Token, usize, usize)> {
             b'"' => {
                 let start = i;
                 let body = i.saturating_add(1);
-                let end = data.get(body..).and_then(|r| r.iter().position(|&c| c == b'"')).map_or(data.len(), |p| body.saturating_add(p));
-                out.push((Token::Word(String::from_utf8_lossy(data.get(body..end).unwrap_or_default()).into_owned()), start, end.saturating_add(1)));
+                let end = data
+                    .get(body..)
+                    .and_then(|r| r.iter().position(|&c| c == b'"'))
+                    .map_or(data.len(), |p| body.saturating_add(p));
+                out.push((
+                    Token::Word(
+                        String::from_utf8_lossy(data.get(body..end).unwrap_or_default())
+                            .into_owned(),
+                    ),
+                    start,
+                    end.saturating_add(1),
+                ));
                 i = end.saturating_add(1);
             }
             _ if b.is_ascii_whitespace() => i = i.saturating_add(1),
             _ => {
                 let start = i;
-                while data.get(i).is_some_and(|&c| !c.is_ascii_whitespace() && c != b'(' && c != b')') {
+                while data
+                    .get(i)
+                    .is_some_and(|&c| !c.is_ascii_whitespace() && c != b'(' && c != b')')
+                {
                     i = i.saturating_add(1);
                 }
-                out.push((Token::Word(String::from_utf8_lossy(data.get(start..i).unwrap_or_default()).into_owned()), start, i));
+                out.push((
+                    Token::Word(
+                        String::from_utf8_lossy(data.get(start..i).unwrap_or_default())
+                            .into_owned(),
+                    ),
+                    start,
+                    i,
+                ));
             }
         }
     }
@@ -102,7 +124,12 @@ fn blocks(tokens: &[(Token, usize, usize)]) -> Vec<Block> {
             i = i.saturating_add(1);
             continue;
         }
-        let mut block = Block { kind: kind.clone(), span: (*start, *start), fields: Vec::new(), children: Vec::new() };
+        let mut block = Block {
+            kind: kind.clone(),
+            span: (*start, *start),
+            fields: Vec::new(),
+            children: Vec::new(),
+        };
         let mut j = i.saturating_add(2);
         while let Some((t, _, end)) = tokens.get(j) {
             match t {
@@ -162,20 +189,40 @@ async fn clrmamepro(cx: Cx, input: Input) -> Result<()> {
     for b in all {
         let span = file.sub(to_u64(b.span.0), to_u64(b.span.1.saturating_sub(b.span.0)));
         if b.kind == "clrmamepro" || b.kind == "emulator" {
-            header = get(&b.fields, "description").or_else(|| get(&b.fields, "name")).unwrap_or_default().to_owned();
+            header = get(&b.fields, "description")
+                .or_else(|| get(&b.fields, "name"))
+                .unwrap_or_default()
+                .to_owned();
             let version = get(&b.fields, "version").unwrap_or_default().to_owned();
-            cx.emit(Node::new(b.kind.clone()).span(span).value(text(header.clone())).summary(format!("version {version}")).lazy(dat_pairs, b.fields.clone()));
+            cx.emit(
+                Node::new(b.kind.clone())
+                    .span(span)
+                    .value(text(header.clone()))
+                    .summary(format!("version {version}"))
+                    .lazy(dat_pairs, b.fields.clone()),
+            );
         } else {
-            roms = roms.saturating_add(b.children.iter().filter(|c| c.0 == "rom" || c.0 == "disk").count());
+            roms = roms.saturating_add(
+                b.children
+                    .iter()
+                    .filter(|c| c.0 == "rom" || c.0 == "disk")
+                    .count(),
+            );
             games.push((b, span));
         }
     }
     let count = games.len();
-    cx.emit(Node::new("Entries").summary(format!("{count} games, {roms} ROMs")).lazy(dat_games, games));
+    cx.emit(
+        Node::new("Entries")
+            .summary(format!("{count} games, {roms} ROMs"))
+            .lazy(dat_games, games),
+    );
     if cut {
         cx.diag(Diagnostic::limit("only the first 4 MiB were parsed"));
     }
-    cx.annotate(format!("clrmamepro DAT {header:?}, {count} games, {roms} ROMs"));
+    cx.annotate(format!(
+        "clrmamepro DAT {header:?}, {count} games, {roms} ROMs"
+    ));
     Ok(())
 }
 
@@ -200,10 +247,20 @@ async fn dat_games(cx: Cx, games: Vec<(Block, Span)>) -> Result<()> {
                     get(pairs, "size").unwrap_or("?"),
                     get(pairs, "crc").unwrap_or("?")
                 );
-                (format!("{k} {}", get(pairs, "name").unwrap_or("?")), size_crc)
+                (
+                    format!("{k} {}", get(pairs, "name").unwrap_or("?")),
+                    size_crc,
+                )
             })
             .collect();
-        cx.push(Node::new(format!("{} {name}", b.kind)).span(span).value(text(desc)).summary(format!("{} ROMs", roms.len())).lazy(dat_pairs, roms)).await;
+        cx.push(
+            Node::new(format!("{} {name}", b.kind))
+                .span(span)
+                .value(text(desc))
+                .summary(format!("{} ROMs", roms.len()))
+                .lazy(dat_pairs, roms),
+        )
+        .await;
     }
     Ok(())
 }
@@ -239,7 +296,11 @@ fn attr(tag: &str, key: &str) -> Option<String> {
 }
 
 fn unescape(s: &str) -> String {
-    s.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&apos;", "'")
+    s.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&apos;", "'")
 }
 
 fn element(body: &str, name: &str) -> Option<String> {
@@ -260,34 +321,84 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
     let softlist = s.contains("<softwarelist");
     let (list_name, list_desc) = if softlist {
         let at = s.find("<softwarelist").unwrap_or(0);
-        let tag = s.get(at..).and_then(|r| r.find('>').map(|e| r.get(..e).unwrap_or_default())).unwrap_or_default();
-        (attr(tag, "name").unwrap_or_default(), attr(tag, "description").unwrap_or_default())
+        let tag = s
+            .get(at..)
+            .and_then(|r| r.find('>').map(|e| r.get(..e).unwrap_or_default()))
+            .unwrap_or_default();
+        (
+            attr(tag, "name").unwrap_or_default(),
+            attr(tag, "description").unwrap_or_default(),
+        )
     } else {
-        let header = s.find("<header>").and_then(|a| s.get(a..)).and_then(|r| r.find("</header>").map(|e| r.get(..e).unwrap_or_default())).unwrap_or_default();
+        let header = s
+            .find("<header>")
+            .and_then(|a| s.get(a..))
+            .and_then(|r| r.find("</header>").map(|e| r.get(..e).unwrap_or_default()))
+            .unwrap_or_default();
         if let Some(a) = s.find("<header>") {
-            let end = s.get(a..).and_then(|r| r.find("</header>")).map_or(a, |e| a.saturating_add(e).saturating_add(9));
-            let fields: Vec<(String, String)> = ["name", "description", "version", "date", "author", "homepage", "url"]
-                .iter()
-                .filter_map(|k| element(header, k).map(|v| ((*k).to_owned(), v)))
-                .collect();
-            cx.emit(Node::new("Header").span(file.sub(to_u64(a), to_u64(end.saturating_sub(a)))).lazy(dat_pairs, fields));
+            let end = s
+                .get(a..)
+                .and_then(|r| r.find("</header>"))
+                .map_or(a, |e| a.saturating_add(e).saturating_add(9));
+            let fields: Vec<(String, String)> = [
+                "name",
+                "description",
+                "version",
+                "date",
+                "author",
+                "homepage",
+                "url",
+            ]
+            .iter()
+            .filter_map(|k| element(header, k).map(|v| ((*k).to_owned(), v)))
+            .collect();
+            cx.emit(
+                Node::new("Header")
+                    .span(file.sub(to_u64(a), to_u64(end.saturating_sub(a))))
+                    .lazy(dat_pairs, fields),
+            );
         }
-        (element(header, "name").unwrap_or_default(), element(header, "description").unwrap_or_default())
+        (
+            element(header, "name").unwrap_or_default(),
+            element(header, "description").unwrap_or_default(),
+        )
     };
-    let tags: &[&str] = if softlist { &["software"] } else { &["game", "machine"] };
+    let tags: &[&str] = if softlist {
+        &["software"]
+    } else {
+        &["game", "machine"]
+    };
     let mut entries: Vec<XmlEntry> = Vec::new();
     let mut roms = 0usize;
     let mut pos = 0usize;
-    while let Some(found) = tags.iter().filter_map(|t| s.get(pos..).and_then(|r| r.find(&format!("<{t} ")).map(|p| (pos.saturating_add(p), *t)))).min() {
+    while let Some(found) = tags
+        .iter()
+        .filter_map(|t| {
+            s.get(pos..).and_then(|r| {
+                r.find(&format!("<{t} "))
+                    .map(|p| (pos.saturating_add(p), *t))
+            })
+        })
+        .min()
+    {
         let (start, tag) = found;
         let close = format!("</{tag}>");
-        let end = s.get(start..).and_then(|r| r.find(&close)).map_or(s.len(), |e| start.saturating_add(e).saturating_add(close.len()));
+        let end = s
+            .get(start..)
+            .and_then(|r| r.find(&close))
+            .map_or(s.len(), |e| {
+                start.saturating_add(e).saturating_add(close.len())
+            });
         let body = s.get(start..end).unwrap_or_default();
         let open = body.get(..body.find('>').unwrap_or(0)).unwrap_or_default();
         let name = attr(open, "name").unwrap_or_default();
         let desc = element(body, "description").unwrap_or_default();
         let extra = if softlist {
-            format!("{} {}", element(body, "year").unwrap_or_default(), element(body, "publisher").unwrap_or_default())
+            format!(
+                "{} {}",
+                element(body, "year").unwrap_or_default(),
+                element(body, "publisher").unwrap_or_default()
+            )
         } else {
             attr(open, "cloneof").map_or_else(String::new, |c| format!("clone of {c}"))
         };
@@ -300,15 +411,27 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
         }
     }
     let count = entries.len();
-    cx.emit(Node::new(if softlist { "Software" } else { "Games" }).summary(format!("{count} entries, {roms} ROMs")).lazy(xml_entries, (file, entries)));
+    cx.emit(
+        Node::new(if softlist { "Software" } else { "Games" })
+            .summary(format!("{count} entries, {roms} ROMs"))
+            .lazy(xml_entries, (file, entries)),
+    );
     if cut {
         cx.diag(Diagnostic::limit("only the first 4 MiB were parsed"));
     }
     cx.annotate(format!(
         "{} {:?}{}, {count} entries, {roms} ROMs",
-        if softlist { "MAME software list" } else { "Logiqx DAT" },
+        if softlist {
+            "MAME software list"
+        } else {
+            "Logiqx DAT"
+        },
         list_name,
-        if list_desc.is_empty() || list_desc == list_name { String::new() } else { format!(" ({list_desc})") }
+        if list_desc.is_empty() || list_desc == list_name {
+            String::new()
+        } else {
+            format!(" ({list_desc})")
+        }
     ));
     Ok(())
 }
@@ -316,8 +439,18 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
 async fn xml_entries(cx: Cx, (file, entries): (Span, Vec<XmlEntry>)) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for (name, desc, extra, roms, start, end) in entries {
-        let summary = if extra.is_empty() { format!("{roms} ROMs") } else { format!("{extra}, {roms} ROMs") };
-        cx.push(Node::new(name).span(file.sub(to_u64(start), to_u64(end.saturating_sub(start)))).value(text(desc)).summary(summary)).await;
+        let summary = if extra.is_empty() {
+            format!("{roms} ROMs")
+        } else {
+            format!("{extra}, {roms} ROMs")
+        };
+        cx.push(
+            Node::new(name)
+                .span(file.sub(to_u64(start), to_u64(end.saturating_sub(start))))
+                .value(text(desc))
+                .summary(summary),
+        )
+        .await;
     }
     Ok(())
 }
@@ -336,8 +469,15 @@ fn toc_probe(h: &Head<'_>) -> bool {
         return false;
     }
     let s = String::from_utf8_lossy(t);
-    let first = s.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("//"));
-    first.is_some_and(|l| TOC_TYPES.iter().any(|k| l == *k || l.starts_with(&format!("{k} ")))) && s.contains("TRACK ")
+    let first = s
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty() && !l.starts_with("//"));
+    first.is_some_and(|l| {
+        TOC_TYPES
+            .iter()
+            .any(|k| l == *k || l.starts_with(&format!("{k} ")))
+    }) && s.contains("TRACK ")
 }
 
 declare_format!(pub CDRDAO_TOC = "cdrdao-toc", "cdrdao table of contents", ["toc"],
@@ -368,7 +508,10 @@ async fn cdrdao_toc(cx: Cx, input: Input) -> Result<()> {
         }
         match tracks.last_mut() {
             Some((_, tspan, children)) => {
-                *tspan = Span { len: span.end().saturating_sub(tspan.offset), ..*tspan };
+                *tspan = Span {
+                    len: span.end().saturating_sub(tspan.offset),
+                    ..*tspan
+                };
                 children.push((t.to_owned(), span));
             }
             None => cx.emit(Node::new("Disc").span(span).value(text(t.to_owned()))),
@@ -377,18 +520,33 @@ async fn cdrdao_toc(cx: Cx, input: Input) -> Result<()> {
     let count = tracks.len();
     let modes: Vec<String> = tracks.iter().map(|t| t.0.clone()).collect();
     for (i, (mode, span, children)) in tracks.into_iter().enumerate() {
-        cx.push(Node::new(format!("Track {}", i.saturating_add(1))).span(span).value(text(mode)).summary(format!("{} statements", children.len())).lazy(toc_lines, children)).await;
+        cx.push(
+            Node::new(format!("Track {}", i.saturating_add(1)))
+                .span(span)
+                .value(text(mode))
+                .summary(format!("{} statements", children.len()))
+                .lazy(toc_lines, children),
+        )
+        .await;
     }
     let mut distinct = modes.clone();
     distinct.dedup();
-    cx.annotate(format!("cdrdao TOC, {disc}, {count} tracks ({}), {files} data file reference(s)", distinct.join(", ")));
+    cx.annotate(format!(
+        "cdrdao TOC, {disc}, {count} tracks ({}), {files} data file reference(s)",
+        distinct.join(", ")
+    ));
     Ok(())
 }
 
 async fn toc_lines(cx: Cx, children: Statements) -> Result<()> {
     for (line, span) in children {
         let (k, v) = line.split_once(' ').unwrap_or((&line, ""));
-        cx.push(Node::new(k.to_owned()).span(span).value(text(v.trim().to_owned()))).await;
+        cx.push(
+            Node::new(k.to_owned())
+                .span(span)
+                .value(text(v.trim().to_owned())),
+        )
+        .await;
     }
     Ok(())
 }
@@ -401,7 +559,10 @@ type CheatFields = Vec<(String, String, Span)>;
 
 fn cht_probe(h: &Head<'_>) -> bool {
     let t = head_text(h, 512);
-    is_ascii_text(t) && String::from_utf8_lossy(t).trim_start().starts_with("cheats = ")
+    is_ascii_text(t)
+        && String::from_utf8_lossy(t)
+            .trim_start()
+            .starts_with("cheats = ")
 }
 
 declare_format!(pub RETROARCH_CHT = "retroarch-cht", "RetroArch cheat file", ["cht"],
@@ -413,36 +574,72 @@ async fn cht(cx: Cx, input: Input) -> Result<()> {
     let mut declared = 0u64;
     let mut cheats: Vec<(u64, Span, CheatFields)> = Vec::new();
     for (line, span) in lines(&data, file) {
-        let Some((k, v)) = line.split_once('=') else { continue };
+        let Some((k, v)) = line.split_once('=') else {
+            continue;
+        };
         let (k, v) = (k.trim(), v.trim().trim_matches('"'));
         if k == "cheats" {
             declared = v.parse().unwrap_or(0);
             cx.emit(Node::new("cheats").span(span).value(dec(declared, 32)));
             continue;
         }
-        let Some(rest) = k.strip_prefix("cheat") else { continue };
+        let Some(rest) = k.strip_prefix("cheat") else {
+            continue;
+        };
         let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
-        let Ok(index) = digits.parse::<u64>() else { continue };
-        let field = rest.get(digits.len()..).unwrap_or_default().trim_start_matches('_').to_owned();
+        let Ok(index) = digits.parse::<u64>() else {
+            continue;
+        };
+        let field = rest
+            .get(digits.len()..)
+            .unwrap_or_default()
+            .trim_start_matches('_')
+            .to_owned();
         match cheats.iter_mut().find(|c| c.0 == index) {
             Some((_, cspan, fields)) => {
-                *cspan = Span { len: span.end().saturating_sub(cspan.offset).max(cspan.len), ..*cspan };
+                *cspan = Span {
+                    len: span.end().saturating_sub(cspan.offset).max(cspan.len),
+                    ..*cspan
+                };
                 fields.push((field, v.to_owned(), span));
             }
             None => cheats.push((index, span, vec![(field, v.to_owned(), span)])),
         }
     }
-    let enabled = cheats.iter().filter(|c| c.2.iter().any(|f| f.0 == "enable" && f.1 == "true")).count();
+    let enabled = cheats
+        .iter()
+        .filter(|c| c.2.iter().any(|f| f.0 == "enable" && f.1 == "true"))
+        .count();
     let count = cheats.len();
     for (index, span, fields) in cheats {
-        let desc = fields.iter().find(|f| f.0 == "desc").map(|f| f.1.clone()).unwrap_or_default();
-        let code = fields.iter().find(|f| f.0 == "code").map(|f| f.1.clone()).unwrap_or_default();
-        cx.push(Node::new(format!("Cheat {index}")).span(span).value(text(desc)).summary(code).lazy(cht_fields, fields)).await;
+        let desc = fields
+            .iter()
+            .find(|f| f.0 == "desc")
+            .map(|f| f.1.clone())
+            .unwrap_or_default();
+        let code = fields
+            .iter()
+            .find(|f| f.0 == "code")
+            .map(|f| f.1.clone())
+            .unwrap_or_default();
+        cx.push(
+            Node::new(format!("Cheat {index}"))
+                .span(span)
+                .value(text(desc))
+                .summary(code)
+                .lazy(cht_fields, fields),
+        )
+        .await;
     }
     if to_u64(count) != declared {
-        cx.diag(Diagnostic::warning(format!("header declares {declared} cheats, found {count}")));
+        cx.diag(Diagnostic::warning(format!(
+            "header declares {declared} cheats, found {count}"
+        )));
     }
-    cx.annotate(format!("RetroArch cheat file, {count} cheats ({enabled} enabled), {}", size(file.len)));
+    cx.annotate(format!(
+        "RetroArch cheat file, {count} cheats ({enabled} enabled), {}",
+        size(file.len)
+    ));
     Ok(())
 }
 
@@ -451,7 +648,9 @@ async fn cht_fields(cx: Cx, fields: CheatFields) -> Result<()> {
         let value = match v.as_str() {
             "true" => Value::Bool(true),
             "false" => Value::Bool(false),
-            _ => v.parse::<i64>().map_or_else(|_| text(v.clone()), |n| Value::Int { value: n, bits: 64 }),
+            _ => v
+                .parse::<i64>()
+                .map_or_else(|_| text(v.clone()), |n| Value::Int { value: n, bits: 64 }),
         };
         cx.push(Node::new(k).span(span).value(value)).await;
     }

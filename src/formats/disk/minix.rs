@@ -140,20 +140,37 @@ type FsRef = Arc<Fs>;
 
 impl Fs {
     fn zone(&self) -> u64 {
-        self.block.checked_shl(self.zone_shift).unwrap_or(self.block)
+        self.block
+            .checked_shl(self.zone_shift)
+            .unwrap_or(self.block)
     }
 
     fn inode_span(&self, ino: u32) -> Span {
         let index = u64::from(ino.saturating_sub(1));
-        self.inodes.sub(index.saturating_mul(self.inode_size), self.inode_size)
+        self.inodes
+            .sub(index.saturating_mul(self.inode_size), self.inode_size)
     }
 
     /// Zone pointers of an inode: (direct..., indirect, double, triple).
     fn zone_ptrs(&self, inode: &[u8]) -> Vec<u64> {
         if self.version == 1 {
-            inode.get(14..32).unwrap_or_default().as_chunks::<2>().0.iter().map(|z| u64::from(u16::from_le_bytes(*z))).collect()
+            inode
+                .get(14..32)
+                .unwrap_or_default()
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|z| u64::from(u16::from_le_bytes(*z)))
+                .collect()
         } else {
-            inode.get(24..64).unwrap_or_default().as_chunks::<4>().0.iter().map(|z| u64::from(u32::from_le_bytes(*z))).collect()
+            inode
+                .get(24..64)
+                .unwrap_or_default()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|z| u64::from(u32::from_le_bytes(*z)))
+                .collect()
         }
     }
 
@@ -196,7 +213,10 @@ impl Fs {
             }
         }
         let mut list = PieceList::new(inode_span);
-        for &z in zones.iter().take(usize::try_from(needed).unwrap_or(usize::MAX)) {
+        for &z in zones
+            .iter()
+            .take(usize::try_from(needed).unwrap_or(usize::MAX))
+        {
             let len = zone.min(size.saturating_sub(list.len()));
             if z == 0 {
                 list.hole(cx, len)?;
@@ -209,18 +229,36 @@ impl Fs {
     }
 
     /// The pointers in indirect zone `z` (zeros for an absent zone).
-    async fn pointers(&self, cx: &Cx, z: u64, per: u64, seen: &mut HashSet<u64>) -> Result<Vec<u64>> {
+    async fn pointers(
+        &self,
+        cx: &Cx,
+        z: u64,
+        per: u64,
+        seen: &mut HashSet<u64>,
+    ) -> Result<Vec<u64>> {
         if z == 0 {
             return Ok(vec![0; crate::bytes::to_usize(per.min(65536))]);
         }
         if !seen.insert(z) {
-            return Err(Diagnostic::malformed(format!("zone {z} is used twice as an indirect zone")));
+            return Err(Diagnostic::malformed(format!(
+                "zone {z} is used twice as an indirect zone"
+            )));
         }
-        let data = cx.read(self.vol.sub(z.saturating_mul(self.zone()), self.zone())).await?;
+        let data = cx
+            .read(self.vol.sub(z.saturating_mul(self.zone()), self.zone()))
+            .await?;
         Ok(if self.version == 1 {
-            data.as_chunks::<2>().0.iter().map(|p| u64::from(u16::from_le_bytes(*p))).collect()
+            data.as_chunks::<2>()
+                .0
+                .iter()
+                .map(|p| u64::from(u16::from_le_bytes(*p)))
+                .collect()
         } else {
-            data.as_chunks::<4>().0.iter().map(|p| u64::from(u32::from_le_bytes(*p))).collect()
+            data.as_chunks::<4>()
+                .0
+                .iter()
+                .map(|p| u64::from(u32::from_le_bytes(*p)))
+                .collect()
         })
     }
 }
@@ -228,16 +266,57 @@ impl Fs {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
     let head = cx.read_avail(vol.sub(SUPER, 32)).await?;
-    let (version, name_len) = version(&head).ok_or_else(|| Diagnostic::malformed("no Minix magic"))?;
+    let (version, name_len) =
+        version(&head).ok_or_else(|| Diagnostic::malformed("no Minix magic"))?;
     let (imap, zmap, log_zone, block, inodes, zones) = if version == 3 {
-        let sb = parse(&cx, vol.sub(SUPER, Superblock3::SIZE), LE, &(), Superblock3::layout).await?;
-        cx.emit(Superblock3::node("Superblock", vol.sub(SUPER, Superblock3::SIZE), LE));
-        (sb.imap_blocks, sb.zmap_blocks, sb.log_zone_size, u64::from(sb.block_size), u64::from(sb.inodes), u64::from(sb.zones))
+        let sb = parse(
+            &cx,
+            vol.sub(SUPER, Superblock3::SIZE),
+            LE,
+            &(),
+            Superblock3::layout,
+        )
+        .await?;
+        cx.emit(Superblock3::node(
+            "Superblock",
+            vol.sub(SUPER, Superblock3::SIZE),
+            LE,
+        ));
+        (
+            sb.imap_blocks,
+            sb.zmap_blocks,
+            sb.log_zone_size,
+            u64::from(sb.block_size),
+            u64::from(sb.inodes),
+            u64::from(sb.zones),
+        )
     } else {
-        let sb = parse(&cx, vol.sub(SUPER, Superblock12::SIZE), LE, &(), Superblock12::layout).await?;
-        cx.emit(Superblock12::node("Superblock", vol.sub(SUPER, Superblock12::SIZE), LE));
-        let zones = if version == 1 { u64::from(sb.zones_v1) } else { u64::from(sb.zones) };
-        (sb.imap_blocks, sb.zmap_blocks, sb.log_zone_size, 1024, u64::from(sb.inodes), zones)
+        let sb = parse(
+            &cx,
+            vol.sub(SUPER, Superblock12::SIZE),
+            LE,
+            &(),
+            Superblock12::layout,
+        )
+        .await?;
+        cx.emit(Superblock12::node(
+            "Superblock",
+            vol.sub(SUPER, Superblock12::SIZE),
+            LE,
+        ));
+        let zones = if version == 1 {
+            u64::from(sb.zones_v1)
+        } else {
+            u64::from(sb.zones)
+        };
+        (
+            sb.imap_blocks,
+            sb.zmap_blocks,
+            sb.log_zone_size,
+            1024,
+            u64::from(sb.inodes),
+            zones,
+        )
     };
     if !matches!(block, 1024 | 2048 | 4096 | 8192) || log_zone > 8 {
         return Err(Diagnostic::malformed(format!("block size {block}")));
@@ -250,7 +329,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         version,
         block,
         zone_shift: log_zone.into(),
-        inodes: vol.sub(table_block.saturating_mul(block), inodes.saturating_mul(inode_size)),
+        inodes: vol.sub(
+            table_block.saturating_mul(block),
+            inodes.saturating_mul(inode_size),
+        ),
         inode_size,
         name_len,
     });
@@ -258,14 +340,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "Minix v{version} filesystem, {}, {inodes} inodes, {name_len}-character names",
         size(zones.saturating_mul(fs.zone()))
     ));
-    cx.emit(Node::new("Inode bitmap").span(vol.sub(2u64.saturating_mul(block), u64::from(imap).saturating_mul(block))));
-    cx.emit(Node::new("Zone bitmap").span(vol.sub(2u64.saturating_add(imap.into()).saturating_mul(block), u64::from(zmap).saturating_mul(block))));
-    cx.emit(Node::new("Inode table").span(fs.inodes).summary(format!("{inodes} inodes of {inode_size} bytes")));
+    cx.emit(Node::new("Inode bitmap").span(vol.sub(
+        2u64.saturating_mul(block),
+        u64::from(imap).saturating_mul(block),
+    )));
+    cx.emit(Node::new("Zone bitmap").span(vol.sub(
+        2u64.saturating_add(imap.into()).saturating_mul(block),
+        u64::from(zmap).saturating_mul(block),
+    )));
     cx.emit(
-        Node::new("Root directory")
-            .summary("inode 1")
-            .lazy(crate::expander!(self::directory: (FsRef, u32, Arc<Vec<u32>>)), (fs.clone(), ROOT, Arc::new(Vec::new()))),
+        Node::new("Inode table")
+            .span(fs.inodes)
+            .summary(format!("{inodes} inodes of {inode_size} bytes")),
     );
+    cx.emit(Node::new("Root directory").summary("inode 1").lazy(
+        crate::expander!(self::directory: (FsRef, u32, Arc<Vec<u32>>)),
+        (fs.clone(), ROOT, Arc::new(Vec::new())),
+    ));
     Ok(())
 }
 
@@ -293,7 +384,11 @@ async fn directory(cx: Cx, (fs, ino, ancestors): (FsRef, u32, Arc<Vec<u32>>)) ->
     let ancestors = Arc::new(ancestors);
     let bytes = cx.read_avail(data).await?;
     for (i, e) in bytes.chunks(crate::bytes::to_usize(entry)).enumerate() {
-        let child = if ptr == 4 { u32_le(e, 0).unwrap_or(0) } else { u32::from(u16_le(e, 0).unwrap_or(0)) };
+        let child = if ptr == 4 {
+            u32_le(e, 0).unwrap_or(0)
+        } else {
+            u32::from(u16_le(e, 0).unwrap_or(0))
+        };
         let name = crate::text::until_nul(e.get(crate::bytes::to_usize(ptr)..).unwrap_or_default());
         if child == 0 || name == "." || name == ".." {
             cx.checkpoint().await;
@@ -302,12 +397,19 @@ async fn directory(cx: Cx, (fs, ino, ancestors): (FsRef, u32, Arc<Vec<u32>>)) ->
         let entry_span = data.sub(to_u64(i).saturating_mul(entry), entry);
         let child_span = fs.inode_span(child);
         let mode = u16_le(&cx.read_avail(child_span.sub(0, 2)).await?, 0).unwrap_or(0);
-        let node = Node::new(name).span(entry_span).summary(format!("{}, inode {child}", unix_mode(mode.into())));
+        let node = Node::new(name)
+            .span(entry_span)
+            .summary(format!("{}, inode {child}", unix_mode(mode.into())));
         let node = if mode & 0xf000 == 0x4000 {
             if ancestors.contains(&child) || ancestors.len() > MAX_DEPTH {
-                node.diag(Diagnostic::malformed("directory contains itself; not followed"))
+                node.diag(Diagnostic::malformed(
+                    "directory contains itself; not followed",
+                ))
             } else {
-                node.lazy(crate::expander!(self::directory: (FsRef, u32, Arc<Vec<u32>>)), (fs.clone(), child, ancestors.clone()))
+                node.lazy(
+                    crate::expander!(self::directory: (FsRef, u32, Arc<Vec<u32>>)),
+                    (fs.clone(), child, ancestors.clone()),
+                )
             }
         } else {
             node.lazy(file, (fs.clone(), child))

@@ -200,7 +200,10 @@ impl PieceList {
         }
         self.len = self.len.saturating_add(piece.len);
         match self.pieces.last_mut() {
-            Some(prev) if prev.source == crate::span::SourceId::ZEROS && piece.source == crate::span::SourceId::ZEROS => {
+            Some(prev)
+                if prev.source == crate::span::SourceId::ZEROS
+                    && piece.source == crate::span::SourceId::ZEROS =>
+            {
                 prev.len = prev.len.saturating_add(piece.len);
             }
             Some(prev) if prev.source == piece.source && prev.end() == piece.offset => {

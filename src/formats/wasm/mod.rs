@@ -156,7 +156,11 @@ fn name(r: &mut Reader<'_>) -> Option<String> {
 fn limits(r: &mut Reader<'_>) -> Option<String> {
     let flags = r.u8()?;
     let min = r.uleb()?;
-    let max = if flags & 1 != 0 { Some(r.uleb()?) } else { None };
+    let max = if flags & 1 != 0 {
+        Some(r.uleb()?)
+    } else {
+        None
+    };
     let mut s = match max {
         Some(max) => format!("{min}..{max}"),
         None => format!("{min}.."),
@@ -194,8 +198,14 @@ fn const_expr(r: &mut Reader<'_>) -> Option<String> {
             0x0b => break,
             0x41 => format!("i32.const {}", r.sleb()?),
             0x42 => format!("i64.const {}", r.sleb()?),
-            0x43 => format!("f32.const {}", f32::from_le_bytes(r.bytes(4)?.try_into().ok()?)),
-            0x44 => format!("f64.const {}", f64::from_le_bytes(r.bytes(8)?.try_into().ok()?)),
+            0x43 => format!(
+                "f32.const {}",
+                f32::from_le_bytes(r.bytes(4)?.try_into().ok()?)
+            ),
+            0x44 => format!(
+                "f64.const {}",
+                f64::from_le_bytes(r.bytes(8)?.try_into().ok()?)
+            ),
             0x23 => format!("global.get {}", r.uleb()?),
             0xd0 => format!("ref.null {}", heap_type(r)?),
             0xd2 => format!("ref.func {}", r.uleb()?),
@@ -222,7 +232,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     f.bytes("magic", 4).get()?;
     let version = f.u16("version").get()?;
     let layer = f.u16("layer").get()?;
-    cx.emit(crate::fields::struct_node("Header", file.sub(0, 8), LE, (), header));
+    cx.emit(crate::fields::struct_node(
+        "Header",
+        file.sub(0, 8),
+        LE,
+        (),
+        header,
+    ));
 
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(8);
@@ -375,10 +391,8 @@ struct Body<'a> {
 
 impl Body<'_> {
     fn at(&self, start: usize) -> Span {
-        self.span.sub(
-            to_u64(start),
-            to_u64(self.r.pos().saturating_sub(start)),
-        )
+        self.span
+            .sub(to_u64(start), to_u64(self.r.pos().saturating_sub(start)))
     }
 
     fn malformed(&self, what: &str) -> Diagnostic {
@@ -392,7 +406,9 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
         .sections
         .get(index)
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
-    let header = cx.block(s.span.sub(0, s.span.len.saturating_sub(s.body.len))).await?;
+    let header = cx
+        .block(s.span.sub(0, s.span.len.saturating_sub(s.body.len)))
+        .await?;
     let mut f = Fields::emitting(&cx, &header, LE);
     f.u8("id").enumeration(SECTION).emit()?;
     let size_len = header.span.len.saturating_sub(1);
@@ -426,36 +442,47 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
             })
             .await
         }
-        4 => vector(&cx, &mut b, "table", |b, i| {
-            Some((format!("table {i}"), text(table_type(&mut b.r)?), String::new()))
-        })
-        .await,
-        5 => vector(&cx, &mut b, "memory", |b, i| {
-            let l = limits(&mut b.r)?;
-            Some((
-                format!("memory {i}"),
-                text(l),
-                "pages of 64 KiB".to_owned(),
-            ))
-        })
-        .await,
-        6 => vector(&cx, &mut b, "global", |b, i| {
-            let t = global_type(&mut b.r)?;
-            let init = const_expr(&mut b.r)?;
-            Some((format!("global {i}"), text(t), init))
-        })
-        .await,
-        7 => vector(&cx, &mut b, "export", |b, _| {
-            let n = name(&mut b.r)?;
-            let kind = b.r.u8()?;
-            let index = b.r.uleb()?;
-            Some((
-                n,
-                text(format!("{} {index}", name_or(EXTERNAL_KIND, kind.into(), "kind"))),
-                String::new(),
-            ))
-        })
-        .await,
+        4 => {
+            vector(&cx, &mut b, "table", |b, i| {
+                Some((
+                    format!("table {i}"),
+                    text(table_type(&mut b.r)?),
+                    String::new(),
+                ))
+            })
+            .await
+        }
+        5 => {
+            vector(&cx, &mut b, "memory", |b, i| {
+                let l = limits(&mut b.r)?;
+                Some((format!("memory {i}"), text(l), "pages of 64 KiB".to_owned()))
+            })
+            .await
+        }
+        6 => {
+            vector(&cx, &mut b, "global", |b, i| {
+                let t = global_type(&mut b.r)?;
+                let init = const_expr(&mut b.r)?;
+                Some((format!("global {i}"), text(t), init))
+            })
+            .await
+        }
+        7 => {
+            vector(&cx, &mut b, "export", |b, _| {
+                let n = name(&mut b.r)?;
+                let kind = b.r.u8()?;
+                let index = b.r.uleb()?;
+                Some((
+                    n,
+                    text(format!(
+                        "{} {index}",
+                        name_or(EXTERNAL_KIND, kind.into(), "kind")
+                    )),
+                    String::new(),
+                ))
+            })
+            .await
+        }
         8 => {
             let start = b.r.pos();
             let f = b.r.uleb().ok_or_else(|| b.malformed("start"))?;
@@ -468,44 +495,53 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
         }
         9 => vector(&cx, &mut b, "element segment", element).await,
         10 => code(&cx, &m, &mut b).await,
-        11 => vector(&cx, &mut b, "data segment", |b, i| {
-            let flags = b.r.uleb()?;
-            let mode = match flags {
-                0 => format!("active, offset {}", const_expr(&mut b.r)?),
-                1 => "passive".to_owned(),
-                2 => {
-                    let mem = b.r.uleb()?;
-                    format!("active in memory {mem}, offset {}", const_expr(&mut b.r)?)
-                }
-                _ => return None,
-            };
-            let len = b.r.uleb()?;
-            let bytes = b.r.bytes(usize::try_from(len).ok()?)?;
-            let preview = bytes.get(..32).unwrap_or(bytes).to_vec();
-            Some((
-                format!("segment {i}"),
-                Value::Bytes(preview),
-                format!("{mode}, {len} bytes"),
-            ))
-        })
-        .await,
+        11 => {
+            vector(&cx, &mut b, "data segment", |b, i| {
+                let flags = b.r.uleb()?;
+                let mode = match flags {
+                    0 => format!("active, offset {}", const_expr(&mut b.r)?),
+                    1 => "passive".to_owned(),
+                    2 => {
+                        let mem = b.r.uleb()?;
+                        format!("active in memory {mem}, offset {}", const_expr(&mut b.r)?)
+                    }
+                    _ => return None,
+                };
+                let len = b.r.uleb()?;
+                let bytes = b.r.bytes(usize::try_from(len).ok()?)?;
+                let preview = bytes.get(..32).unwrap_or(bytes).to_vec();
+                Some((
+                    format!("segment {i}"),
+                    Value::Bytes(preview),
+                    format!("{mode}, {len} bytes"),
+                ))
+            })
+            .await
+        }
         12 => {
             let start = b.r.pos();
             let n = b.r.uleb().ok_or_else(|| b.malformed("data count"))?;
-            cx.emit(Node::new("data segments").span(b.at(start)).value(dec(n, 32)));
+            cx.emit(
+                Node::new("data segments")
+                    .span(b.at(start))
+                    .value(dec(n, 32)),
+            );
             Ok(())
         }
-        13 => vector(&cx, &mut b, "tag", |b, i| {
-            b.r.u8()?;
-            let t = b.r.uleb()?;
-            Some((format!("tag {i}"), text(format!("type {t}")), String::new()))
-        })
-        .await,
+        13 => {
+            vector(&cx, &mut b, "tag", |b, i| {
+                b.r.u8()?;
+                let t = b.r.uleb()?;
+                Some((format!("tag {i}"), text(format!("type {t}")), String::new()))
+            })
+            .await
+        }
         _ => {
-            cx.emit(Node::new("Contents").span(s.body).diag(Diagnostic::unsupported(format!(
-                "section id {}",
-                s.id
-            ))));
+            cx.emit(
+                Node::new("Contents")
+                    .span(s.body)
+                    .diag(Diagnostic::unsupported(format!("section id {}", s.id))),
+            );
             Ok(())
         }
     }
@@ -519,10 +555,9 @@ async fn vector(
     what: &str,
     mut entry: impl FnMut(&mut Body<'_>, u64) -> Option<(String, Value, String)>,
 ) -> Result<()> {
-    let n = b
-        .r
-        .uleb()
-        .ok_or_else(|| b.malformed(&format!("{what} count")))?;
+    let n =
+        b.r.uleb()
+            .ok_or_else(|| b.malformed(&format!("{what} count")))?;
     for i in 0..n {
         let start = b.r.pos();
         let Some((label, value, summary)) = entry(b, i) else {
@@ -752,7 +787,9 @@ async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
     cx.set_count(Count::Exact(n));
     for i in 0..n {
         let start = b.r.pos();
-        let size = b.r.uleb().ok_or_else(|| b.malformed("function body size"))?;
+        let size =
+            b.r.uleb()
+                .ok_or_else(|| b.malformed("function body size"))?;
         let body_start = b.r.pos();
         let Some(body) = b.r.bytes(usize::try_from(size).unwrap_or(usize::MAX)) else {
             return Err(b.malformed("function body"));
@@ -786,7 +823,10 @@ async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
                 .span(span)
                 .value(hex(index, 32))
                 .summary(summary)
-                .lazy(function_body, (locals_span, code_span, locals, names.clone())),
+                .lazy(
+                    function_body,
+                    (locals_span, code_span, locals, names.clone()),
+                ),
         )
         .await;
     }
@@ -829,7 +869,10 @@ async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
             .await;
             break;
         };
-        if matches!(mnemonic.as_str(), "end" | "else" | "catch" | "catch_all" | "delegate") {
+        if matches!(
+            mnemonic.as_str(),
+            "end" | "else" | "catch" | "catch_all" | "delegate"
+        ) {
             depth = depth.saturating_sub(1);
         }
         let indent = "  ".repeat(depth.min(32));
@@ -856,7 +899,11 @@ async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
 async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
     let start = b.r.pos();
     let section = name(&mut b.r).ok_or_else(|| b.malformed("custom section name"))?;
-    cx.emit(Node::new("name").span(b.at(start)).value(text(section.clone())));
+    cx.emit(
+        Node::new("name")
+            .span(b.at(start))
+            .value(text(section.clone())),
+    );
     let rest = b.span.tail(to_u64(b.r.pos()));
     match section.as_str() {
         "name" => {
@@ -865,11 +912,10 @@ async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
                 let id = b.r.u8().ok_or_else(|| b.malformed("name subsection"))?;
                 let size = b.r.uleb().ok_or_else(|| b.malformed("name subsection"))?;
                 let body_start = b.r.pos();
-                let sub = b
-                    .r
-                    .bytes(usize::try_from(size).unwrap_or(usize::MAX))
-                    .ok_or_else(|| b.malformed("name subsection"))?
-                    .to_vec();
+                let sub =
+                    b.r.bytes(usize::try_from(size).unwrap_or(usize::MAX))
+                        .ok_or_else(|| b.malformed("name subsection"))?
+                        .to_vec();
                 let span = b.at(start);
                 let body = b.span.sub(to_u64(body_start), size);
                 let label = name_or(NAME_SUBSECTION, id.into(), "Subsection");
@@ -923,7 +969,11 @@ async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
             let url = name(&mut b.r).ok_or_else(|| b.malformed("URL"))?;
             cx.emit(Node::new("URL").span(b.at(start)).value(text(url)));
         }
-        _ => cx.emit(Node::new("Contents").span(rest).summary(format!("{:#x} bytes", rest.len))),
+        _ => cx.emit(
+            Node::new("Contents")
+                .span(rest)
+                .summary(format!("{:#x} bytes", rest.len)),
+        ),
     }
     Ok(())
 }

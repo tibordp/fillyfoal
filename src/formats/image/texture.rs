@@ -83,7 +83,8 @@ pub async fn dissect_astc(cx: Cx, input: Input) -> Result<()> {
         .saturating_mul(blocks(y, by))
         .saturating_mul(blocks(z, bz));
     cx.emit(
-        region("Blocks", file, 16, count.saturating_mul(16)).summary(format!("{count} 128-bit blocks")),
+        region("Blocks", file, 16, count.saturating_mul(16))
+            .summary(format!("{count} 128-bit blocks")),
     );
     Ok(())
 }
@@ -182,11 +183,7 @@ fn pvr_format(v: u64) -> String {
 pub async fn dissect_pvr(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let magic = cx.read(file.sub(0, 4)).await?;
-    let endian = if magic == b"PVR\x03" {
-        LE
-    } else {
-        Endian::Big
-    };
+    let endian = if magic == b"PVR\x03" { LE } else { Endian::Big };
     let span = file.sub(0, PvrHeader::SIZE);
     let h = parse(&cx, span, endian, &(), PvrHeader::layout).await?;
     cx.emit(PvrHeader::node("Header", span, endian).summary(pvr_format(h.pixel_format)));
@@ -205,7 +202,12 @@ pub async fn dissect_pvr(cx: Cx, input: Input) -> Result<()> {
         );
     }
     let start = PvrHeader::SIZE.saturating_add(h.metadata_size.into());
-    cx.emit(region("Texture data", file, start, file.len.saturating_sub(start)));
+    cx.emit(region(
+        "Texture data",
+        file,
+        start,
+        file.len.saturating_sub(start),
+    ));
     Ok(())
 }
 
@@ -312,9 +314,14 @@ fn vtf_header(f: &mut Fields<'_>, _: &()) -> Result<(u32, u16, u16, u32, u8, u32
     f.f32("Reflectivity B").emit()?;
     f.bytes("Padding", 4).emit()?;
     f.f32("Bump map scale").emit()?;
-    let format = f.u32("High-resolution format").enumeration(VTF_FORMATS).emit()?;
+    let format = f
+        .u32("High-resolution format")
+        .enumeration(VTF_FORMATS)
+        .emit()?;
     let mipmaps = f.u8("MIP-map count").emit()?;
-    f.u32("Low-resolution format").enumeration(VTF_FORMATS).emit()?;
+    f.u32("Low-resolution format")
+        .enumeration(VTF_FORMATS)
+        .emit()?;
     f.u8("Low-resolution width").emit()?;
     f.u8("Low-resolution height").emit()?;
     if minor >= 2 {
@@ -336,8 +343,15 @@ pub async fn dissect_vtf(cx: Cx, input: Input) -> Result<()> {
     // The fixed part is 80 bytes at most; 7.3 resource entries follow it.
     let span = file.sub(0, header_size.min(80));
     let block = cx.block(span).await?;
-    let (minor, width, height, format, mipmaps, resources) = vtf_header(&mut Fields::new(&block, LE), &())?;
-    cx.emit(crate::fields::struct_node("Header", span, LE, (), vtf_header));
+    let (minor, width, height, format, mipmaps, resources) =
+        vtf_header(&mut Fields::new(&block, LE), &())?;
+    cx.emit(crate::fields::struct_node(
+        "Header",
+        span,
+        LE,
+        (),
+        vtf_header,
+    ));
     let format_name = lookup(VTF_FORMATS, format.into()).unwrap_or("unknown format");
     cx.annotate(format!(
         "VTF 7.{minor}, {}, {format_name}, {mipmaps} mip levels",
@@ -346,9 +360,18 @@ pub async fn dissect_vtf(cx: Cx, input: Input) -> Result<()> {
     if resources > 0 {
         // Resource entries follow the 80-byte fixed header.
         let table = file.sub(80, u64::from(resources.min(32)).saturating_mul(8));
-        cx.emit(Node::new("Resources").span(table).lazy(vtf_resources, (file, table)));
+        cx.emit(
+            Node::new("Resources")
+                .span(table)
+                .lazy(vtf_resources, (file, table)),
+        );
     } else {
-        cx.emit(region("Image data", file, header_size, file.len.saturating_sub(header_size)));
+        cx.emit(region(
+            "Image data",
+            file,
+            header_size,
+            file.len.saturating_sub(header_size),
+        ));
     }
     Ok(())
 }
@@ -361,7 +384,8 @@ async fn vtf_resources(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
         let tag = u24(&b);
         let flags = b.get(3).copied().unwrap_or(0);
         let data = u32_le(&b, 4).unwrap_or(0);
-        let name = lookup(VTF_RESOURCES, tag.into()).map_or_else(|| format!("Resource {tag:#08x}"), str::to_owned);
+        let name = lookup(VTF_RESOURCES, tag.into())
+            .map_or_else(|| format!("Resource {tag:#08x}"), str::to_owned);
         let mut node = Node::new(name).span(span);
         node = if flags & 0x2 != 0 {
             node.value(super::hex(data)).summary("inline value")

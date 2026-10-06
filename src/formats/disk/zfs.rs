@@ -59,7 +59,10 @@ struct NvList {
 
 impl NvList {
     fn get(&self, key: &str) -> Option<&Nv> {
-        self.pairs.iter().find(|(k, _, _)| k == key).map(|(_, v, _)| v)
+        self.pairs
+            .iter()
+            .find(|(k, _, _)| k == key)
+            .map(|(_, v, _)| v)
     }
 
     fn text(&self, key: &str) -> Option<String> {
@@ -149,7 +152,9 @@ impl Xdr<'_> {
             let name = self.string()?;
             let kind = self.u32()?;
             let count = self.u32()?;
-            let value = self.value(kind, count, depth).unwrap_or(Nv::Other("undecoded"));
+            let value = self
+                .value(kind, count, depth)
+                .unwrap_or(Nv::Other("undecoded"));
             let span = self.base.sub(to_u64(start), to_u64(encoded));
             list.pairs.push((name, value, span));
             self.at = end;
@@ -160,7 +165,13 @@ impl Xdr<'_> {
     }
 
     fn value(&mut self, kind: u32, count: u32, depth: u32) -> Option<Nv> {
-        let uint = |v: u64, bits: u8| Nv::Scalar(Value::UInt { value: v, bits, radix: Radix::Dec });
+        let uint = |v: u64, bits: u8| {
+            Nv::Scalar(Value::UInt {
+                value: v,
+                bits,
+                radix: Radix::Dec,
+            })
+        };
         Some(match kind {
             1 => Nv::Scalar(Value::Bool(true)),
             21 => Nv::Scalar(Value::Bool(self.u32()? != 0)),
@@ -177,7 +188,8 @@ impl Xdr<'_> {
             9 => Nv::Scalar(Value::Text(self.string()?)),
             16 => {
                 let n = self.u32()?.min(1024);
-                let items: Option<Vec<String>> = (0..n).map(|_| self.u64().map(|v| v.to_string())).collect();
+                let items: Option<Vec<String>> =
+                    (0..n).map(|_| self.u64().map(|v| v.to_string())).collect();
                 Nv::Scalar(Value::Text(format!("[{}]", items?.join(", "))))
             }
             19 if depth < MAX_DEPTH => Nv::List(Arc::new(self.list(depth.saturating_add(1))?)),
@@ -225,7 +237,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Boot block header").span(dev.sub(8 * 1024, 8 * 1024)));
     let nv_span = dev.sub(NVLIST, NVLIST_LEN);
     let data = cx.read_avail(nv_span).await?;
-    let list = decode(&data, nv_span).ok_or_else(|| Diagnostic::malformed("undecodable nvlist").at(nv_span))?;
+    let list = decode(&data, nv_span)
+        .ok_or_else(|| Diagnostic::malformed("undecodable nvlist").at(nv_span))?;
     let name = list.text("name").unwrap_or_default();
     let state = list
         .get("state")
@@ -250,7 +263,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .lazy(crate::expander!(self::nvlist: Arc<NvList>), Arc::new(list)),
     );
     let ring = dev.sub(UBERBLOCKS, UBERBLOCKS);
-    cx.emit(Node::new("Uberblocks (label 0)").span(ring).lazy(uberblocks, ring));
+    cx.emit(
+        Node::new("Uberblocks (label 0)")
+            .span(ring)
+            .lazy(uberblocks, ring),
+    );
     for (i, at) in [
         Some(LABEL),
         dev.len.checked_sub(2 * LABEL),
@@ -275,9 +292,10 @@ async fn nvlist(cx: Cx, list: Arc<NvList>) -> Result<()> {
             Nv::List(inner) => node
                 .summary(format!("{} pairs", inner.pairs.len()))
                 .lazy(crate::expander!(self::nvlist: Arc<NvList>), inner.clone()),
-            Nv::Lists(lists) => node
-                .summary(format!("{} nvlists", lists.len()))
-                .lazy(crate::expander!(self::nvlists: Arc<Vec<Arc<NvList>>>), Arc::new(lists.clone())),
+            Nv::Lists(lists) => node.summary(format!("{} nvlists", lists.len())).lazy(
+                crate::expander!(self::nvlists: Arc<Vec<Arc<NvList>>>),
+                Arc::new(lists.clone()),
+            ),
             Nv::Other(kind) => node.summary(format!("({kind})")),
         };
         cx.push(node).await;
@@ -288,7 +306,9 @@ async fn nvlist(cx: Cx, list: Arc<NvList>) -> Result<()> {
 async fn nvlists(cx: Cx, lists: Arc<Vec<Arc<NvList>>>) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(lists.len())));
     for (i, list) in lists.iter().enumerate() {
-        let label = list.text("type").map_or_else(String::new, |t| format!("{t} "));
+        let label = list
+            .text("type")
+            .map_or_else(String::new, |t| format!("{t} "));
         let path = list.text("path").unwrap_or_default();
         cx.push(
             Node::new(format!("[{i}]"))
@@ -329,8 +349,12 @@ async fn uberblocks(cx: Cx, ring: Span) -> Result<()> {
         let ub = parse(&cx, span, endian, &(), Uberblock::layout).await?;
         best = Some(best.map_or(ub.txg, |b| b.max(ub.txg)));
         cx.push(
-            Uberblock::node(format!("Slot {i}"), ring.sub(i.saturating_mul(SLOT), SLOT), endian)
-                .summary(format!("txg {}", ub.txg)),
+            Uberblock::node(
+                format!("Slot {i}"),
+                ring.sub(i.saturating_mul(SLOT), SLOT),
+                endian,
+            )
+            .summary(format!("txg {}", ub.txg)),
         )
         .await;
     }

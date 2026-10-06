@@ -18,9 +18,18 @@ use super::{number, parse_datetime, plural, text_node};
 pub static FORMAT: Format = Format {
     name: "plist-xml",
     title: "Property list (XML)",
-    extensions: &["plist", "webloc", "entitlements", "xcprivacy", "scriptSuite", "strings"],
+    extensions: &[
+        "plist",
+        "webloc",
+        "entitlements",
+        "xcprivacy",
+        "scriptSuite",
+        "strings",
+    ],
     mime: "application/x-plist",
-    probe: Probe::Custom(|h| xml::root(h).is_some_and(|r| r.is(b"plist")) && super::probe::is_text(h)),
+    probe: Probe::Custom(|h| {
+        xml::root(h).is_some_and(|r| r.is(b"plist")) && super::probe::is_text(h)
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 

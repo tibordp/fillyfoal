@@ -99,10 +99,11 @@ fn probe_lrc(h: &Head<'_>) -> bool {
         .take(10)
         .filter(|l| {
             let t = probe::trim(l);
-            t.starts_with(b"[") && t.iter().position(|&b| b == b']').is_some_and(|e| {
-                let inner = t.get(1..e).unwrap_or_default();
-                inner.contains(&b':') && inner.len() < 200
-            })
+            t.starts_with(b"[")
+                && t.iter().position(|&b| b == b']').is_some_and(|e| {
+                    let inner = t.get(1..e).unwrap_or_default();
+                    inner.contains(&b':') && inner.len() < 200
+                })
         })
         .count();
     let total = probe::significant(&head, &[]).take(10).count();
@@ -143,7 +144,11 @@ async fn block(lines: &mut Lines<'_>) -> Result<Vec<LineBuf>> {
 fn block_span(block: &[LineBuf]) -> Option<Span> {
     let first = block.first()?.span;
     let last = block.last()?.span;
-    Some(Span::new(first.source, first.offset, last.end().saturating_sub(first.offset)))
+    Some(Span::new(
+        first.source,
+        first.offset,
+        last.end().saturating_sub(first.offset),
+    ))
 }
 
 /// A cue: identifier, timing line and text lines.
@@ -194,7 +199,11 @@ async fn cue(cx: Cx, c: Cue) -> Result<()> {
     }
     let text: Vec<&LineBuf> = block.iter().skip(at.saturating_add(1)).collect();
     if let (Some(first), Some(last)) = (text.first(), text.last()) {
-        let span = Span::new(first.span.source, first.span.offset, last.span.end().saturating_sub(first.span.offset));
+        let span = Span::new(
+            first.span.source,
+            first.span.offset,
+            last.span.end().saturating_sub(first.span.offset),
+        );
         let joined: Vec<String> = text.iter().map(|l| l.text()).collect();
         cx.emit(text_node("Text", span, &joined.join("\n")));
     }
@@ -235,7 +244,11 @@ pub async fn dissect_srt(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    let mut summary = format!("SubRip subtitles{}, {}", prepared.note(), plural(count, "cue", "cues"));
+    let mut summary = format!(
+        "SubRip subtitles{}, {}",
+        prepared.note(),
+        plural(count, "cue", "cues")
+    );
     if let Some(end) = last_end {
         summary = format!("{summary}, until {end}");
     }
@@ -252,7 +265,11 @@ pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
         cx.emit(text_node("Header", span, &first));
         for line in header.iter().skip(1) {
             if let Some((k, v)) = line.piece().split_once(b':') {
-                cx.emit(text_node(k.trim().text(), v.trim().span(), &v.trim().text()));
+                cx.emit(text_node(
+                    k.trim().text(),
+                    v.trim().span(),
+                    &v.trim().text(),
+                ));
             }
         }
     }
@@ -285,7 +302,11 @@ pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node).await;
     }
-    cx.annotate(format!("WebVTT subtitles{}, {}", prepared.note(), plural(cues, "cue", "cues")));
+    cx.annotate(format!(
+        "WebVTT subtitles{}, {}",
+        prepared.note(),
+        plural(cues, "cue", "cues")
+    ));
     Ok(())
 }
 
@@ -316,7 +337,11 @@ fn frames(line: &[u8]) -> Option<(u64, Option<u64>, usize)> {
     let rest = rest.get(a_end.saturating_add(1)..)?.strip_prefix(b"{")?;
     let b_end = rest.iter().position(|&b| b == b'}')?;
     let b_text = rest.get(..b_end)?;
-    let b = if b_text.is_empty() { None } else { Some(num(b_text)?) };
+    let b = if b_text.is_empty() {
+        None
+    } else {
+        Some(num(b_text)?)
+    };
     Some((a, b, a_end.saturating_add(b_end).saturating_add(4)))
 }
 
@@ -340,7 +365,12 @@ pub async fn dissect_microdvd(cx: Cx, input: Input) -> Result<()> {
             && let Ok(rate) = text.text().trim().parse::<f64>()
         {
             fps = Some(rate);
-            cx.push(Node::new("Frame rate").span(text.span()).value(Value::Float(rate))).await;
+            cx.push(
+                Node::new("Frame rate")
+                    .span(text.span())
+                    .value(Value::Float(rate)),
+            )
+            .await;
             continue;
         }
         cues = cues.saturating_add(1);
@@ -351,9 +381,13 @@ pub async fn dissect_microdvd(cx: Cx, input: Input) -> Result<()> {
             let at = a as f64 / rate;
             summary = format!("{summary} ({at:.3} s)");
         }
-        cx.push(text_node(format!("Cue {cues}"), line.span, &shown).summary(summary)).await;
+        cx.push(text_node(format!("Cue {cues}"), line.span, &shown).summary(summary))
+            .await;
     }
-    cx.annotate(format!("MicroDVD subtitles, {}", plural(cues, "cue", "cues")));
+    cx.annotate(format!(
+        "MicroDVD subtitles, {}",
+        plural(cues, "cue", "cues")
+    ));
     Ok(())
 }
 
@@ -401,8 +435,12 @@ pub async fn dissect_lrc(cx: Cx, input: Input) -> Result<()> {
                             "ar" => artist = Some(value.text()),
                             _ => {}
                         }
-                        cx.push(text_node(lrc_tag(&key).to_owned(), value.span(), &value.text()))
-                            .await;
+                        cx.push(text_node(
+                            lrc_tag(&key).to_owned(),
+                            value.span(),
+                            &value.text(),
+                        ))
+                        .await;
                     }
                 }
             }

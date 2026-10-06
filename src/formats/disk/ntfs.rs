@@ -68,7 +68,12 @@ record! {
     }
 }
 
-const RECORD_FLAGS: FlagTable = &[flag(1, "IN_USE"), flag(2, "DIRECTORY"), flag(4, "EXTENSION"), flag(8, "VIEW_INDEX")];
+const RECORD_FLAGS: FlagTable = &[
+    flag(1, "IN_USE"),
+    flag(2, "DIRECTORY"),
+    flag(4, "EXTENSION"),
+    flag(8, "VIEW_INDEX"),
+];
 
 record! {
     /// MFT record header (`FILE`).
@@ -188,10 +193,14 @@ struct Attr {
 fn le_int(b: &[u8], signed: bool) -> i64 {
     let mut v = 0i64;
     for (i, &byte) in b.iter().enumerate().take(8) {
-        v |= i64::from(byte).checked_shl(u32::try_from(i.saturating_mul(8)).unwrap_or(64)).unwrap_or(0);
+        v |= i64::from(byte)
+            .checked_shl(u32::try_from(i.saturating_mul(8)).unwrap_or(64))
+            .unwrap_or(0);
     }
     if signed && !b.is_empty() && b.len() < 8 && b.last().is_some_and(|&x| x & 0x80 != 0) {
-        v |= (-1i64).checked_shl(u32::try_from(b.len().saturating_mul(8)).unwrap_or(64)).unwrap_or(0);
+        v |= (-1i64)
+            .checked_shl(u32::try_from(b.len().saturating_mul(8)).unwrap_or(64))
+            .unwrap_or(0);
     }
     v
 }
@@ -213,10 +222,18 @@ fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
             data.get(len_at..off_at),
             data.get(off_at..off_at.saturating_add(off_bytes)),
         ) else {
-            return (out, Some(Diagnostic::malformed("runlist ends inside a run")));
+            return (
+                out,
+                Some(Diagnostic::malformed("runlist ends inside a run")),
+            );
         };
         if len_bytes == 0 || len_bytes > 8 || off_bytes > 8 {
-            return (out, Some(Diagnostic::malformed(format!("bad run header {header:#04x}"))));
+            return (
+                out,
+                Some(Diagnostic::malformed(format!(
+                    "bad run header {header:#04x}"
+                ))),
+            );
         }
         let count = u64::try_from(le_int(len, false)).unwrap_or(0);
         let start = if off_bytes == 0 {
@@ -231,12 +248,18 @@ fn parse_runs(data: &[u8]) -> (Vec<(u64, Option<u64>)>, Option<Diagnostic>) {
         }
         at = off_at.saturating_add(off_bytes);
     }
-    (out, Some(Diagnostic::malformed("runlist is not terminated")))
+    (
+        out,
+        Some(Diagnostic::malformed("runlist is not terminated")),
+    )
 }
 
 impl Volume {
     fn cluster_span(&self, lcn: u64, count: u64) -> Span {
-        self.vol.sub(lcn.saturating_mul(self.cluster), count.saturating_mul(self.cluster))
+        self.vol.sub(
+            lcn.saturating_mul(self.cluster),
+            count.saturating_mul(self.cluster),
+        )
     }
 
     /// The span of MFT record `n`, located through the $MFT's runs.
@@ -253,13 +276,21 @@ impl Volume {
     }
 
     /// The bytes of a non-resident attribute, as pieces (holes as zeros).
-    fn runs_list(&self, cx: &Cx, anchor: Span, runs: &[(u64, Option<u64>)], size: u64) -> Result<PieceList> {
+    fn runs_list(
+        &self,
+        cx: &Cx,
+        anchor: Span,
+        runs: &[(u64, Option<u64>)],
+        size: u64,
+    ) -> Result<PieceList> {
         let mut list = PieceList::new(anchor);
         for &(count, start) in runs {
             if list.len() >= size {
                 break;
             }
-            let len = count.saturating_mul(self.cluster).min(size.saturating_sub(list.len()));
+            let len = count
+                .saturating_mul(self.cluster)
+                .min(size.saturating_sub(list.len()));
             match start {
                 Some(lcn) => list.data(self.vol.sub(lcn.saturating_mul(self.cluster), len)),
                 None => list.hole(cx, len)?,
@@ -284,7 +315,10 @@ async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
     let count = u64::from(u16_le(&head, 6).unwrap_or(0));
     let sectors = span.len / 512;
     if count != sectors.saturating_add(1) || usa.saturating_add(count.saturating_mul(2)) > 512 {
-        return Err(Diagnostic::malformed(format!("update sequence of {count} entries for {sectors} sectors")).at(span));
+        return Err(Diagnostic::malformed(format!(
+            "update sequence of {count} entries for {sectors} sectors"
+        ))
+        .at(span));
     }
     let array = cx.read(span.sub(usa, count.saturating_mul(2))).await?;
     let mut pieces = Vec::new();
@@ -293,7 +327,9 @@ async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
         let sector = span.sub(s.saturating_mul(512), 512);
         let end = cx.read(sector.sub(510, 2)).await?;
         if end.get(..2) != array.get(..2) {
-            problem = Some(Diagnostic::warning(format!("sector {s} fails its update sequence check")));
+            problem = Some(Diagnostic::warning(format!(
+                "sector {s} fails its update sequence check"
+            )));
         }
         pieces.push(sector.sub(0, 510));
         pieces.push(span.sub(usa.saturating_add(s.saturating_add(1).saturating_mul(2)), 2));
@@ -301,7 +337,13 @@ async fn fixed_up(cx: &Cx, span: Span, magic: &[u8]) -> Result<Span> {
     if let Some(d) = problem {
         cx.diag(d.at(span));
     }
-    cx.add_pieces(Origin { parent: span, transform: "ntfs-fixup" }, pieces)
+    cx.add_pieces(
+        Origin {
+            parent: span,
+            transform: "ntfs-fixup",
+        },
+        pieces,
+    )
 }
 
 /// Parses the attributes of a (fixed-up) record.
@@ -320,8 +362,19 @@ async fn attributes(cx: &Cx, rec: Span) -> Result<Vec<Attr>> {
         let span = rec.sub(at, len);
         let name_len = u64::from(h.get(9).copied().unwrap_or(0));
         let name_off = u64::from(u16_le(&h, 10).unwrap_or(0));
-        let name = crate::text::utf16(&cx.read_avail(span.sub(name_off, name_len.saturating_mul(2))).await?, LE);
-        let mut attr = Attr { kind, name, span, resident: None, runs: None, data_size: 0 };
+        let name = crate::text::utf16(
+            &cx.read_avail(span.sub(name_off, name_len.saturating_mul(2)))
+                .await?,
+            LE,
+        );
+        let mut attr = Attr {
+            kind,
+            name,
+            span,
+            resident: None,
+            runs: None,
+            data_size: 0,
+        };
         if h.get(8) == Some(&0) {
             let vlen = u64::from(u32_le(&h, 16).unwrap_or(0));
             let voff = u64::from(u16_le(&h, 20).unwrap_or(0));
@@ -345,20 +398,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(BootSector::node("Boot sector", vol.sub(0, 512), LE));
     let sector = u64::from(b.bytes_per_sector);
     let spc = if b.sectors_per_cluster > 0x80 {
-        1u64.checked_shl(256u32.saturating_sub(b.sectors_per_cluster.into())).unwrap_or(0)
+        1u64.checked_shl(256u32.saturating_sub(b.sectors_per_cluster.into()))
+            .unwrap_or(0)
     } else {
         b.sectors_per_cluster.into()
     };
     let cluster = sector.saturating_mul(spc);
     let unit = |v: u8| -> u64 {
         if v >= 0x80 {
-            1u64.checked_shl(256u32.saturating_sub(v.into())).unwrap_or(0)
+            1u64.checked_shl(256u32.saturating_sub(v.into()))
+                .unwrap_or(0)
         } else {
             u64::from(v).saturating_mul(cluster)
         }
     };
     let record = unit(b.record_size);
-    if !matches!(sector, 512 | 1024 | 2048 | 4096) || cluster == 0 || !(512..=65536).contains(&record) || record % 512 != 0 {
+    if !matches!(sector, 512 | 1024 | 2048 | 4096)
+        || cluster == 0
+        || !(512..=65536).contains(&record)
+        || record % 512 != 0
+    {
         return Err(Diagnostic::malformed("implausible sector, cluster or record size").at(span));
     }
     cx.annotate(format!(
@@ -371,7 +430,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let rec0 = fixed_up(&cx, mft0, b"FILE").await?;
     let attrs0 = attributes(&cx, rec0).await?;
     let mut mft = vec![mft0];
-    if let Some(runs) = attrs0.iter().find(|a| a.kind == 0x80 && a.name.is_empty()).and_then(|a| a.runs.map(|r| (r, a.data_size))) {
+    if let Some(runs) = attrs0
+        .iter()
+        .find(|a| a.kind == 0x80 && a.name.is_empty())
+        .and_then(|a| a.runs.map(|r| (r, a.data_size)))
+    {
         let raw = cx.read_avail(runs.0).await?;
         let (list, problem) = parse_runs(&raw);
         if let Some(d) = problem {
@@ -379,17 +442,34 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         mft = list
             .iter()
-            .filter_map(|&(count, lcn)| lcn.map(|l| vol.sub(l.saturating_mul(cluster), count.saturating_mul(cluster))))
+            .filter_map(|&(count, lcn)| {
+                lcn.map(|l| vol.sub(l.saturating_mul(cluster), count.saturating_mul(cluster)))
+            })
             .collect();
         mft = crate::formats::disk::coalesce(mft, runs.1);
     }
-    let fs: Vol = Arc::new(Volume { input, vol, cluster, record, mft });
-    let mft_records = fs.mft.iter().map(|p| p.len).fold(0u64, u64::saturating_add).checked_div(record).unwrap_or(0);
+    let fs: Vol = Arc::new(Volume {
+        input,
+        vol,
+        cluster,
+        record,
+        mft,
+    });
+    let mft_records = fs
+        .mft
+        .iter()
+        .map(|p| p.len)
+        .fold(0u64, u64::saturating_add)
+        .checked_div(record)
+        .unwrap_or(0);
     // The volume label, from $Volume (record 3).
     if let Some(span) = fs.record_span(3)
         && let Ok(rec) = fixed_up(&cx, span, b"FILE").await
         && let Ok(attrs) = attributes(&cx, rec).await
-        && let Some(name) = attrs.iter().find(|a| a.kind == 0x60).and_then(|a| a.resident)
+        && let Some(name) = attrs
+            .iter()
+            .find(|a| a.kind == 0x60)
+            .and_then(|a| a.resident)
     {
         let label = crate::text::utf16(&cx.read_avail(name).await?, LE);
         cx.annotate(format!(
@@ -403,12 +483,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{mft_records} records of {}", size(record)))
             .lazy(mft_listing, (fs.clone(), mft_records)),
     );
-    cx.emit(Node::new("MFT mirror").span(vol.sub(b.mftmirr_lcn.saturating_mul(cluster), record.saturating_mul(4))));
-    cx.emit(
-        Node::new("Root directory")
-            .summary("record 5")
-            .lazy(crate::expander!(self::directory: Dir), Dir { fs: fs.clone(), record: ROOT_RECORD, ancestors: Arc::new(Vec::new()) }),
-    );
+    cx.emit(Node::new("MFT mirror").span(vol.sub(
+        b.mftmirr_lcn.saturating_mul(cluster),
+        record.saturating_mul(4),
+    )));
+    cx.emit(Node::new("Root directory").summary("record 5").lazy(
+        crate::expander!(self::directory: Dir),
+        Dir {
+            fs: fs.clone(),
+            record: ROOT_RECORD,
+            ancestors: Arc::new(Vec::new()),
+        },
+    ));
     Ok(())
 }
 
@@ -426,7 +512,11 @@ async fn mft_listing(cx: Cx, (fs, count): (Vol, u64)) -> Result<()> {
             Ok(rec) => best_name(&cx, &attributes(&cx, rec).await.unwrap_or_default()).await?,
             Err(_) => None,
         };
-        cx.push(node.summary(name.unwrap_or_default()).lazy(record_node, (fs.clone(), n))).await;
+        cx.push(
+            node.summary(name.unwrap_or_default())
+                .lazy(record_node, (fs.clone(), n)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -439,7 +529,11 @@ async fn best_name(cx: &Cx, attrs: &[Attr]) -> Result<Option<String>> {
         let raw = cx.read_avail(value).await?;
         let len = usize::from(raw.get(64).copied().unwrap_or(0));
         let namespace = raw.get(65).copied().unwrap_or(0);
-        let name = crate::text::utf16(raw.get(66..66usize.saturating_add(len.saturating_mul(2))).unwrap_or_default(), LE);
+        let name = crate::text::utf16(
+            raw.get(66..66usize.saturating_add(len.saturating_mul(2)))
+                .unwrap_or_default(),
+            LE,
+        );
         let rank = if namespace == 2 { 0 } else { 1 };
         if best.as_ref().is_none_or(|(r, _)| rank > *r) {
             best = Some((rank, name));
@@ -450,9 +544,15 @@ async fn best_name(cx: &Cx, attrs: &[Attr]) -> Result<Option<String>> {
 
 /// Shows a record: header, attributes, and the unnamed $DATA content.
 async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
-    let span = fs.record_span(n).ok_or_else(|| Diagnostic::malformed(format!("record {n} is outside the MFT")))?;
+    let span = fs
+        .record_span(n)
+        .ok_or_else(|| Diagnostic::malformed(format!("record {n} is outside the MFT")))?;
     let rec = fixed_up(&cx, span, b"FILE").await?;
-    cx.emit(RecordHeader::node("Header", rec.sub(0, RecordHeader::SIZE), LE));
+    cx.emit(RecordHeader::node(
+        "Header",
+        rec.sub(0, RecordHeader::SIZE),
+        LE,
+    ));
     let attrs = attributes(&cx, rec).await?;
     for a in &attrs {
         cx.emit(attribute_node(&fs, a));
@@ -464,21 +564,31 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
 }
 
 fn attribute_node(fs: &Vol, a: &Attr) -> Node {
-    let kind = lookup(ATTR_TYPES, a.kind.into()).map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
-    let name = if a.name.is_empty() { kind } else { format!("{kind}:{}", a.name) };
+    let kind = lookup(ATTR_TYPES, a.kind.into())
+        .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
+    let name = if a.name.is_empty() {
+        kind
+    } else {
+        format!("{kind}:{}", a.name)
+    };
     let node = Node::new(name).span(a.span);
     let summary = if a.resident.is_some() {
         format!("resident, {}", size(a.data_size))
     } else {
         format!("non-resident, {}", size(a.data_size))
     };
-    node.summary(summary).lazy(attribute_fields, (fs.clone(), Arc::new(a.clone())))
+    node.summary(summary)
+        .lazy(attribute_fields, (fs.clone(), Arc::new(a.clone())))
 }
 
 async fn attribute_fields(cx: Cx, (fs, a): (Vol, Arc<Attr>)) -> Result<()> {
     if let Some(value) = a.resident {
         match a.kind {
-            0x10 => cx.emit(StandardInformation::node("Value", value.sub(0, StandardInformation::SIZE), LE)),
+            0x10 => cx.emit(StandardInformation::node(
+                "Value",
+                value.sub(0, StandardInformation::SIZE),
+                LE,
+            )),
             0x30 => {
                 cx.emit(FileName::node("Value", value.sub(0, FileName::SIZE), LE));
                 let raw = cx.read_avail(value).await?;
@@ -489,20 +599,32 @@ async fn attribute_fields(cx: Cx, (fs, a): (Vol, Arc<Attr>)) -> Result<()> {
             }
             0x60 => {
                 let text = crate::text::utf16(&cx.read_avail(value).await?, LE);
-                cx.emit(Node::new("Volume name").span(value).value(Value::Text(text)));
+                cx.emit(
+                    Node::new("Volume name")
+                        .span(value)
+                        .value(Value::Text(text)),
+                );
             }
             0x70 => {
                 let raw = cx.read_avail(value).await?;
-                cx.emit(Node::new("NTFS version").span(value.sub(8, 2)).value(Value::Text(format!(
-                    "{}.{}",
-                    raw.get(8).copied().unwrap_or(0),
-                    raw.get(9).copied().unwrap_or(0)
-                ))));
-                cx.emit(Node::new("Flags").span(value.sub(10, 2)).value(Value::UInt {
-                    value: u16_le(&raw, 10).unwrap_or(0).into(),
-                    bits: 16,
-                    radix: crate::value::Radix::Hex,
-                }));
+                cx.emit(
+                    Node::new("NTFS version")
+                        .span(value.sub(8, 2))
+                        .value(Value::Text(format!(
+                            "{}.{}",
+                            raw.get(8).copied().unwrap_or(0),
+                            raw.get(9).copied().unwrap_or(0)
+                        ))),
+                );
+                cx.emit(
+                    Node::new("Flags")
+                        .span(value.sub(10, 2))
+                        .value(Value::UInt {
+                            value: u16_le(&raw, 10).unwrap_or(0).into(),
+                            bits: 16,
+                            radix: crate::value::Radix::Hex,
+                        }),
+                );
             }
             _ => cx.emit(Node::new("Value").span(value).summary(size(value.len))),
         }
@@ -580,26 +702,44 @@ async fn index_entries(cx: &Cx, node: Span, out: &mut Vec<(u64, Span)>) -> Resul
 
 async fn directory(cx: Cx, dir: Dir) -> Result<()> {
     let fs = dir.fs.clone();
-    let span = fs.record_span(dir.record).ok_or_else(|| Diagnostic::malformed(format!("record {} is outside the MFT", dir.record)))?;
+    let span = fs.record_span(dir.record).ok_or_else(|| {
+        Diagnostic::malformed(format!("record {} is outside the MFT", dir.record))
+    })?;
     let rec = fixed_up(&cx, span, b"FILE").await?;
     let attrs = attributes(&cx, rec).await?;
-    cx.emit(Node::new("MFT record").span(span).lazy(record_node, (fs.clone(), dir.record)));
+    cx.emit(
+        Node::new("MFT record")
+            .span(span)
+            .lazy(record_node, (fs.clone(), dir.record)),
+    );
     let mut entries = Vec::new();
-    if let Some(root) = attrs.iter().find(|a| a.kind == 0x90 && a.name == "$I30").and_then(|a| a.resident) {
+    if let Some(root) = attrs
+        .iter()
+        .find(|a| a.kind == 0x90 && a.name == "$I30")
+        .and_then(|a| a.resident)
+    {
         index_entries(&cx, root.tail(16), &mut entries).await?;
     }
     if let Some(alloc) = attrs.iter().find(|a| a.kind == 0xa0 && a.name == "$I30") {
-        let raw = cx.read_avail(alloc.runs.unwrap_or(alloc.span.sub(0, 0))).await?;
+        let raw = cx
+            .read_avail(alloc.runs.unwrap_or(alloc.span.sub(0, 0)))
+            .await?;
         let (runs, problem) = parse_runs(&raw);
         if let Some(d) = problem {
             cx.diag(d);
         }
-        let stream = fs.runs_list(&cx, alloc.span, &runs, alloc.data_size.min(MAX_INDEX_BYTES))?.finish(&cx, "ntfs-runs")?;
+        let stream = fs
+            .runs_list(&cx, alloc.span, &runs, alloc.data_size.min(MAX_INDEX_BYTES))?
+            .finish(&cx, "ntfs-runs")?;
         let block = match index_block_size(&attrs) {
             Some(v) => u64::from(u32_le(&cx.read_avail(v).await?, 8).unwrap_or(4096)),
             None => 4096,
         };
-        let block = if block >= 512 && block % 512 == 0 { block } else { 4096 };
+        let block = if block >= 512 && block % 512 == 0 {
+            block
+        } else {
+            4096
+        };
         let mut at = 0u64;
         while at < stream.len {
             let indx = stream.sub(at, block);
@@ -624,7 +764,11 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             continue;
         }
         let len = usize::from(raw.get(64).copied().unwrap_or(0));
-        let name = crate::text::utf16(raw.get(66..66usize.saturating_add(len.saturating_mul(2))).unwrap_or_default(), LE);
+        let name = crate::text::utf16(
+            raw.get(66..66usize.saturating_add(len.saturating_mul(2)))
+                .unwrap_or_default(),
+            LE,
+        );
         let record = reference & 0xffff_ffff_ffff;
         let attributes = u32_le(&raw, 56).unwrap_or(0);
         let real = u64_le(&raw, 48).unwrap_or(0);
@@ -632,9 +776,18 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
         let node = if attributes & 0x1000_0000 != 0 {
             let node = node.summary(format!("directory, record {record}"));
             if record == dir.record || ancestors.contains(&record) || ancestors.len() > MAX_DEPTH {
-                node.diag(Diagnostic::note("refers back to an enclosing directory; not followed"))
+                node.diag(Diagnostic::note(
+                    "refers back to an enclosing directory; not followed",
+                ))
             } else {
-                node.lazy(crate::expander!(self::directory: Dir), Dir { fs: fs.clone(), record, ancestors: ancestors.clone() })
+                node.lazy(
+                    crate::expander!(self::directory: Dir),
+                    Dir {
+                        fs: fs.clone(),
+                        record,
+                        ancestors: ancestors.clone(),
+                    },
+                )
             }
         } else {
             node.summary(format!("{}, record {record}", size(real)))

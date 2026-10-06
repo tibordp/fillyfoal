@@ -8,7 +8,9 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{Line, Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint};
+use crate::formats::lines::{
+    Line, Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint,
+};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -33,7 +35,13 @@ struct Statements<'a> {
 
 impl<'a> Statements<'a> {
     fn new(cx: &'a Cx, region: Span) -> Self {
-        Statements { cx, region, pos: 0, buf: Vec::new(), buf_at: 0 }
+        Statements {
+            cx,
+            region,
+            pos: 0,
+            buf: Vec::new(),
+            buf_at: 0,
+        }
     }
 
     /// The next statement (trimmed text, span without leading whitespace).
@@ -72,7 +80,9 @@ impl<'a> Statements<'a> {
             let buf_end = self.buf_at.saturating_add(to_u64(self.buf.len()));
             let found = match end {
                 Some(e) => Some(e.saturating_add(1)),
-                None if buf_end >= self.region.len || avail.len() >= MAX => (!avail.is_empty()).then_some(avail.len()),
+                None if buf_end >= self.region.len || avail.len() >= MAX => {
+                    (!avail.is_empty()).then_some(avail.len())
+                }
                 None => {
                     if off > 0 {
                         self.buf.drain(..off.min(self.buf.len()));
@@ -89,8 +99,13 @@ impl<'a> Statements<'a> {
             let Some(len) = found else { return Ok(None) };
             let raw = avail.get(..len).unwrap_or_default();
             let lead = raw.iter().take_while(|b| b.is_ascii_whitespace()).count();
-            let text = strip_step_comments(&String::from_utf8_lossy(raw)).trim().to_owned();
-            let span = self.region.sub(self.pos.saturating_add(to_u64(lead)), to_u64(len.saturating_sub(lead)));
+            let text = strip_step_comments(&String::from_utf8_lossy(raw))
+                .trim()
+                .to_owned();
+            let span = self.region.sub(
+                self.pos.saturating_add(to_u64(lead)),
+                to_u64(len.saturating_sub(lead)),
+            );
             self.pos = self.pos.saturating_add(to_u64(len).max(1));
             if text.is_empty() && self.pos >= self.region.len {
                 return Ok(None);
@@ -134,7 +149,15 @@ fn step_string(s: &str) -> String {
         out.push_str(rest.get(..p).unwrap_or_default());
         let after = rest.get(p.saturating_add(4)..).unwrap_or_default();
         let (hexs, tail) = after.split_once("\\X0\\").unwrap_or((after, ""));
-        let units: Vec<u16> = hexs.as_bytes().chunks(4).filter_map(|c| std::str::from_utf8(c).ok().and_then(|h| u16::from_str_radix(h, 16).ok())).collect();
+        let units: Vec<u16> = hexs
+            .as_bytes()
+            .chunks(4)
+            .filter_map(|c| {
+                std::str::from_utf8(c)
+                    .ok()
+                    .and_then(|h| u16::from_str_radix(h, 16).ok())
+            })
+            .collect();
         out.push_str(&String::from_utf16_lossy(&units));
         rest = tail;
     }
@@ -185,17 +208,29 @@ async fn step(cx: Cx, input: Input) -> Result<()> {
         let upper = t.to_ascii_uppercase();
         match upper.as_str() {
             "ISO-10303-21;" | "END-ISO-10303-21;" => {
-                cx.push(Node::new(t.trim_end_matches(';').to_owned()).span(span)).await;
+                cx.push(Node::new(t.trim_end_matches(';').to_owned()).span(span))
+                    .await;
                 continue;
             }
             "HEADER;" | "ENDSEC;" => {
-                section = if upper == "HEADER;" { "HEADER".to_owned() } else { String::new() };
-                cx.push(Node::new(t.trim_end_matches(';').to_owned()).span(span)).await;
+                section = if upper == "HEADER;" {
+                    "HEADER".to_owned()
+                } else {
+                    String::new()
+                };
+                cx.push(Node::new(t.trim_end_matches(';').to_owned()).span(span))
+                    .await;
                 continue;
             }
             _ => {}
         }
-        if upper.starts_with("DATA") && t.trim_end_matches(';').trim_start_matches(|c: char| c.is_ascii_alphabetic()).trim().starts_with(['(', ';']) || upper == "DATA;" {
+        if upper.starts_with("DATA")
+            && t.trim_end_matches(';')
+                .trim_start_matches(|c: char| c.is_ascii_alphabetic())
+                .trim()
+                .starts_with(['(', ';'])
+            || upper == "DATA;"
+        {
             section = "DATA".to_owned();
             data_start.get_or_insert(span.offset.saturating_sub(file.offset));
             continue;
@@ -208,15 +243,37 @@ async fn step(cx: Cx, input: Input) -> Result<()> {
                 "FILE_SCHEMA" => schema = strings.join(", "),
                 "FILE_NAME" => {
                     name = strings.first().cloned().unwrap_or_default();
-                    system = strings.get(strings.len().saturating_sub(2)).cloned().unwrap_or_default();
+                    system = strings
+                        .get(strings.len().saturating_sub(2))
+                        .cloned()
+                        .unwrap_or_default();
                 }
                 _ => {}
             }
-            cx.push(Node::new(kind).span(span).value(text(preview(&strings.join(" | "), 200))).lazy(step_params, t.clone())).await;
+            cx.push(
+                Node::new(kind)
+                    .span(span)
+                    .value(text(preview(&strings.join(" | "), 200)))
+                    .lazy(step_params, t.clone()),
+            )
+            .await;
         } else if section == "DATA" {
             entities = entities.saturating_add(1);
-            let kind = t.split_once('=').map(|(_, r)| r.trim().split(['(', ' ']).next().unwrap_or_default().to_owned()).unwrap_or_default();
-            tally(&mut kinds, if kind.is_empty() { "(complex)" } else { &kind }, 512);
+            let kind = t
+                .split_once('=')
+                .map(|(_, r)| {
+                    r.trim()
+                        .split(['(', ' '])
+                        .next()
+                        .unwrap_or_default()
+                        .to_owned()
+                })
+                .unwrap_or_default();
+            tally(
+                &mut kinds,
+                if kind.is_empty() { "(complex)" } else { &kind },
+                512,
+            );
             if kind == "PRODUCT" && products.len() < 8 {
                 products.extend(step_strings(&t).into_iter().nth(1));
             }
@@ -224,16 +281,41 @@ async fn step(cx: Cx, input: Input) -> Result<()> {
     }
     if let Some(start) = data_start {
         let data = file.tail(start);
-        cx.emit(Node::new("DATA").span(data).value(uint(entities)).lazy(step_entities, data));
+        cx.emit(
+            Node::new("DATA")
+                .span(data)
+                .value(uint(entities))
+                .lazy(step_entities, data),
+        );
     }
     kinds.sort_by_key(|k| std::cmp::Reverse(k.1));
-    let top: Vec<String> = kinds.iter().take(5).map(|(k, n)| format!("{n} {k}")).collect();
-    cx.emit(Node::new("Entity types").value(uint(to_u64(kinds.len()))).lazy(step_kinds, kinds));
+    let top: Vec<String> = kinds
+        .iter()
+        .take(5)
+        .map(|(k, n)| format!("{n} {k}"))
+        .collect();
+    cx.emit(
+        Node::new("Entity types")
+            .value(uint(to_u64(kinds.len())))
+            .lazy(step_kinds, kinds),
+    );
     cx.annotate(format!(
         "STEP {schema}, {entities} entities{}{}{}; {}",
-        if name.is_empty() { String::new() } else { format!(", {name:?}") },
-        if system.is_empty() { String::new() } else { format!(", from {system}") },
-        if products.is_empty() { String::new() } else { format!(", product(s) {}", products.join(", ")) },
+        if name.is_empty() {
+            String::new()
+        } else {
+            format!(", {name:?}")
+        },
+        if system.is_empty() {
+            String::new()
+        } else {
+            format!(", from {system}")
+        },
+        if products.is_empty() {
+            String::new()
+        } else {
+            format!(", product(s) {}", products.join(", "))
+        },
         top.join(", ")
     ));
     Ok(())
@@ -265,8 +347,18 @@ async fn step_entities(cx: Cx, span: Span) -> Result<()> {
         let (id, rest) = t.split_once('=').unwrap_or(("?", t.as_str()));
         let rest = rest.trim().trim_end_matches(';');
         let (kind, params) = rest.split_once('(').unwrap_or((rest, ""));
-        let kind = if kind.trim().is_empty() { "(complex)" } else { kind.trim() };
-        cx.push(Node::new(id.trim().to_owned()).span(s).value(text(kind)).summary(preview(&format!("({params}"), 120))).await;
+        let kind = if kind.trim().is_empty() {
+            "(complex)"
+        } else {
+            kind.trim()
+        };
+        cx.push(
+            Node::new(id.trim().to_owned())
+                .span(s)
+                .value(text(kind))
+                .summary(preview(&format!("({params}"), 120)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -276,8 +368,11 @@ async fn step_entities(cx: Cx, span: Span) -> Result<()> {
 
 fn iges_probe(h: &Head<'_>) -> bool {
     let lines = head_lines(h, 3);
-    lines.first().is_some_and(|l| l.len() == 80 && l.get(72) == Some(&b'S') && l.get(73..80).is_some_and(|n| n.trim_ascii() == b"1"))
-        && lines.iter().all(|l| l.len() == 80)
+    lines.first().is_some_and(|l| {
+        l.len() == 80
+            && l.get(72) == Some(&b'S')
+            && l.get(73..80).is_some_and(|n| n.trim_ascii() == b"1")
+    }) && lines.iter().all(|l| l.len() == 80)
 }
 
 declare_format!(pub IGES = "iges", "IGES (Initial Graphics Exchange Specification)", ["igs", "iges"], "model/iges",
@@ -378,10 +473,20 @@ fn iges_params(s: &str, delim: char, record: char) -> Vec<String> {
         if !digits.is_empty() && rest.get(digits.len()..).is_some_and(|r| r.starts_with('H')) {
             let n: usize = digits.parse().unwrap_or(0);
             let start = digits.len().saturating_add(1);
-            let value: String = rest.get(start..).unwrap_or_default().chars().take(n).collect();
+            let value: String = rest
+                .get(start..)
+                .unwrap_or_default()
+                .chars()
+                .take(n)
+                .collect();
             out.push(value.clone());
-            rest = rest.get(start.saturating_add(value.len())..).unwrap_or_default();
-            rest = rest.strip_prefix(delim).or_else(|| rest.strip_prefix(record)).unwrap_or(rest);
+            rest = rest
+                .get(start.saturating_add(value.len())..)
+                .unwrap_or_default();
+            rest = rest
+                .strip_prefix(delim)
+                .or_else(|| rest.strip_prefix(record))
+                .unwrap_or(rest);
             continue;
         }
         let end = rest.find([delim, record]).unwrap_or(rest.len());
@@ -410,11 +515,22 @@ async fn iges(cx: Cx, input: Input) -> Result<()> {
                     list.push(line.clone());
                 }
             }
-            _ => sections.push((letter, line.pos, lines.pos(), if letter == 'D' { vec![line.clone()] } else { Vec::new() })),
+            _ => sections.push((
+                letter,
+                line.pos,
+                lines.pos(),
+                if letter == 'D' {
+                    vec![line.clone()]
+                } else {
+                    Vec::new()
+                },
+            )),
         }
         let body = line.column(0, 72);
         match letter {
-            'G' if global.len() < 0x10000 => global.push_str(line.text().get(..72).unwrap_or_default()),
+            'G' if global.len() < 0x10000 => {
+                global.push_str(line.text().get(..72).unwrap_or_default())
+            }
             'S' if start_text.len() < 400 => {
                 start_text.push_str(&body);
                 start_text.push(' ');
@@ -422,10 +538,18 @@ async fn iges(cx: Cx, input: Input) -> Result<()> {
             _ => {}
         }
     }
-    let delim = if global.starts_with("1H") { global.chars().nth(2).unwrap_or(',') } else { ',' };
+    let delim = if global.starts_with("1H") {
+        global.chars().nth(2).unwrap_or(',')
+    } else {
+        ','
+    };
     let record = {
         let after = global.get(4..).unwrap_or_default();
-        if after.starts_with("1H") { after.chars().nth(2).unwrap_or(';') } else { ';' }
+        if after.starts_with("1H") {
+            after.chars().nth(2).unwrap_or(';')
+        } else {
+            ';'
+        }
     };
     let params = iges_params(&global, delim, record);
     let mut directory = Vec::new();
@@ -445,20 +569,46 @@ async fn iges(cx: Cx, input: Input) -> Result<()> {
             'G' => cx.emit(node.lazy(iges_globals, params.clone())),
             'D' => {
                 directory = list.clone();
-                cx.emit(node.value(uint(to_u64(list.len() / 2))).lazy(iges_directory, list));
+                cx.emit(
+                    node.value(uint(to_u64(list.len() / 2)))
+                        .lazy(iges_directory, list),
+                );
             }
-            _ => cx.emit(node.value(text(preview(&cx.read_avail(span.sub(0, 72)).await.map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default(), 72)))),
+            _ => cx.emit(
+                node.value(text(preview(
+                    &cx.read_avail(span.sub(0, 72))
+                        .await
+                        .map(|b| String::from_utf8_lossy(&b).into_owned())
+                        .unwrap_or_default(),
+                    72,
+                ))),
+            ),
         }
     }
     let mut kinds: Vec<(String, u64)> = Vec::new();
     for pair in directory.chunks(2) {
-        let t: u64 = pair.first().map(|l| l.column(0, 8)).and_then(|v| v.parse().ok()).unwrap_or(0);
+        let t: u64 = pair
+            .first()
+            .map(|l| l.column(0, 8))
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         tally(&mut kinds, lookup(IGES_ENTITIES, t).unwrap_or("other"), 128);
     }
     kinds.sort_by_key(|k| std::cmp::Reverse(k.1));
-    let top: Vec<String> = kinds.iter().take(5).map(|(k, n)| format!("{n} {}", k.to_lowercase())).collect();
+    let top: Vec<String> = kinds
+        .iter()
+        .take(5)
+        .map(|(k, n)| format!("{n} {}", k.to_lowercase()))
+        .collect();
     let g = |i: usize| params.get(i).cloned().unwrap_or_default();
-    cx.annotate(format!("IGES, {} entit(ies) from {:?} ({}), units {}; {}", directory.len() / 2, g(3), g(4), g(14), top.join(", ")));
+    cx.annotate(format!(
+        "IGES, {} entit(ies) from {:?} ({}), units {}; {}",
+        directory.len() / 2,
+        g(3),
+        g(4),
+        g(14),
+        top.join(", ")
+    ));
     Ok(())
 }
 
@@ -474,15 +624,32 @@ async fn iges_globals(cx: Cx, params: Vec<String>) -> Result<()> {
 
 async fn iges_directory(cx: Cx, list: Vec<Line>) -> Result<()> {
     for pair in list.chunks(2) {
-        let (Some(a), b) = (pair.first(), pair.get(1)) else { continue };
+        let (Some(a), b) = (pair.first(), pair.get(1)) else {
+            continue;
+        };
         let t: u64 = a.column(0, 8).parse().unwrap_or(0);
         let pointer = a.column(8, 16);
         let form = b.map(|l| l.column(32, 40)).unwrap_or_default();
         let label = b.map(|l| l.column(56, 64)).unwrap_or_default();
         let seq = a.column(73, 80);
-        let span = b.map_or(a.span, |l| a.span.sub(0, l.span.end().saturating_sub(a.span.offset)));
-        let node = Node::new(format!("D{seq}")).span(span).value(crate::formats::lines::enumeration(IGES_ENTITIES, t, 16));
-        cx.push(summarize(node, format!("form {form}, parameters at P{pointer}{}", if label.is_empty() { String::new() } else { format!(", label {label}") }))).await;
+        let span = b.map_or(a.span, |l| {
+            a.span.sub(0, l.span.end().saturating_sub(a.span.offset))
+        });
+        let node = Node::new(format!("D{seq}"))
+            .span(span)
+            .value(crate::formats::lines::enumeration(IGES_ENTITIES, t, 16));
+        cx.push(summarize(
+            node,
+            format!(
+                "form {form}, parameters at P{pointer}{}",
+                if label.is_empty() {
+                    String::new()
+                } else {
+                    format!(", label {label}")
+                }
+            ),
+        ))
+        .await;
     }
     Ok(())
 }
@@ -504,18 +671,49 @@ async fn parasolid(cx: Cx, input: Input) -> Result<()> {
             header_end = lines.pos();
             break;
         }
-        if line.pos > 0 && !t.starts_with("**ABC") && !t.starts_with("**PARASOLID") && header.len() < 0x10000 {
+        if line.pos > 0
+            && !t.starts_with("**ABC")
+            && !t.starts_with("**PARASOLID")
+            && header.len() < 0x10000
+        {
             header.push_str(&t);
         }
     }
     let pairs: Vec<(String, String)> = header
         .split(';')
-        .filter_map(|kv| kv.trim().trim_start_matches('*').split_once('=').map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned())))
+        .filter_map(|kv| {
+            kv.trim()
+                .trim_start_matches('*')
+                .split_once('=')
+                .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+        })
         .collect();
-    cx.emit(Node::new("Header").span(file.sub(0, header_end)).value(uint(to_u64(pairs.len()))).lazy(key_values, pairs.clone()));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, header_end))
+            .value(uint(to_u64(pairs.len())))
+            .lazy(key_values, pairs.clone()),
+    );
     cx.emit(Node::new("Body").span(file.tail(header_end)));
-    let get = |k: &str| pairs.iter().find(|(a, _)| a.eq_ignore_ascii_case(k)).map_or(String::new(), |(_, v)| v.clone());
-    cx.annotate(format!("Parasolid transmit file{}{}", if get("APPL").is_empty() { String::new() } else { format!(" from {}", get("APPL")) }, if get("SCH").is_empty() { String::new() } else { format!(", schema {}", get("SCH")) }));
+    let get = |k: &str| {
+        pairs
+            .iter()
+            .find(|(a, _)| a.eq_ignore_ascii_case(k))
+            .map_or(String::new(), |(_, v)| v.clone())
+    };
+    cx.annotate(format!(
+        "Parasolid transmit file{}{}",
+        if get("APPL").is_empty() {
+            String::new()
+        } else {
+            format!(" from {}", get("APPL"))
+        },
+        if get("SCH").is_empty() {
+            String::new()
+        } else {
+            format!(", schema {}", get("SCH"))
+        }
+    ));
     Ok(())
 }
 
@@ -561,13 +759,24 @@ const JT_SEGMENTS: EnumTable = &[
 async fn jt(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 120)).await?;
-    let version_text = String::from_utf8_lossy(head.data.get(..80).unwrap_or_default()).trim_end_matches([' ', '\0', '\n']).to_owned();
-    let major: u32 = version_text.trim_start_matches("Version ").split('.').next().and_then(|v| v.trim().parse().ok()).unwrap_or(9);
+    let version_text = String::from_utf8_lossy(head.data.get(..80).unwrap_or_default())
+        .trim_end_matches([' ', '\0', '\n'])
+        .to_owned();
+    let major: u32 = version_text
+        .trim_start_matches("Version ")
+        .split('.')
+        .next()
+        .and_then(|v| v.trim().parse().ok())
+        .unwrap_or(9);
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("Version", 80).emit()?;
     let order = f.u8("Byte order").emit()?;
     f.u32("Empty field").emit()?;
-    let toc = if major >= 10 { f.u64("TOC offset").hex().emit()? } else { u64::from(f.u32("TOC offset").hex().emit()?) };
+    let toc = if major >= 10 {
+        f.u64("TOC offset").hex().emit()?
+    } else {
+        u64::from(f.u32("TOC offset").hex().emit()?)
+    };
     f.guid("LSG segment ID").emit()?;
     if order != 0 {
         cx.diag(Diagnostic::unsupported("big-endian JT"));
@@ -576,16 +785,32 @@ async fn jt(cx: Cx, input: Input) -> Result<()> {
     cur.seek(toc);
     let count = cur.u32().await?;
     let entry = if major >= 10 { 32u64 } else { 28 };
-    let entries = file.sub(toc.saturating_add(4), u64::from(count).saturating_mul(entry));
-    cx.emit(Node::new("TOC").span(file.sub(toc, entries.len.saturating_add(4))).value(uint(count.into())).lazy(jt_toc, (file, entries, major >= 10)));
+    let entries = file.sub(
+        toc.saturating_add(4),
+        u64::from(count).saturating_mul(entry),
+    );
+    cx.emit(
+        Node::new("TOC")
+            .span(file.sub(toc, entries.len.saturating_add(4)))
+            .value(uint(count.into()))
+            .lazy(jt_toc, (file, entries, major >= 10)),
+    );
     let mut kinds: Vec<(String, u64)> = Vec::new();
     let b = cx.read_avail(entries.sub(0, 0x100000)).await?;
     for c in b.chunks(to_usize(entry)) {
         let attr = u32_le(c, to_usize(entry).saturating_sub(4)).unwrap_or(0);
-        tally(&mut kinds, lookup(JT_SEGMENTS, (attr >> 24).into()).unwrap_or("other"), 32);
+        tally(
+            &mut kinds,
+            lookup(JT_SEGMENTS, (attr >> 24).into()).unwrap_or("other"),
+            32,
+        );
     }
     let parts: Vec<String> = kinds.iter().map(|(k, n)| format!("{n} {k}")).collect();
-    cx.annotate(format!("JT {}, {count} segment(s): {}", version_text.trim_start_matches("Version ").trim(), parts.join(", ")));
+    cx.annotate(format!(
+        "JT {}, {count} segment(s): {}",
+        version_text.trim_start_matches("Version ").trim(),
+        parts.join(", ")
+    ));
     Ok(())
 }
 
@@ -597,11 +822,22 @@ async fn jt_toc(cx: Cx, (file, entries, wide): (Span, Span, bool)) -> Result<()>
         let b = cx.block(s).await?;
         let mut f = Fields::new(&b, LE);
         let id = f.guid("Segment ID").get()?;
-        let offset = if wide { f.u64("Offset").get()? } else { u64::from(f.u32("Offset").get()?) };
+        let offset = if wide {
+            f.u64("Offset").get()?
+        } else {
+            u64::from(f.u32("Offset").get()?)
+        };
         let len = f.u32("Length").get()?;
         let attr = f.u32("Attributes").get()?;
         let kind = lookup(JT_SEGMENTS, (attr >> 24).into()).unwrap_or("unknown");
-        cx.push(Node::new(kind).span(s).value(text(id.to_string())).summary(format!("{len} bytes")).target(file.sub(offset, len.into()))).await;
+        cx.push(
+            Node::new(kind)
+                .span(s)
+                .value(text(id.to_string()))
+                .summary(format!("{len} bytes"))
+                .target(file.sub(offset, len.into())),
+        )
+        .await;
         at = at.saturating_add(entry);
     }
     Ok(())
@@ -617,7 +853,8 @@ async fn gmsh(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
     let mut current: Option<(String, u64, Vec<String>, u64)> = None;
-    let (mut version, mut binary, mut nodes, mut elements) = (String::new(), false, String::new(), String::new());
+    let (mut version, mut binary, mut nodes, mut elements) =
+        (String::new(), false, String::new(), String::new());
     let mut names = Vec::new();
     while let Some(line) = lines.next().await? {
         let t = line.text();
@@ -627,7 +864,10 @@ async fn gmsh(cx: Cx, input: Input) -> Result<()> {
                 let span = file.sub(start, lines.pos().saturating_sub(start));
                 match name.as_str() {
                     "MeshFormat" => {
-                        let w: Vec<&str> = first.first().map(|s| s.split_whitespace().collect()).unwrap_or_default();
+                        let w: Vec<&str> = first
+                            .first()
+                            .map(|s| s.split_whitespace().collect())
+                            .unwrap_or_default();
                         version = w.first().copied().unwrap_or_default().to_owned();
                         binary = w.get(1) == Some(&"1");
                     }
@@ -637,8 +877,11 @@ async fn gmsh(cx: Cx, input: Input) -> Result<()> {
                     _ => {}
                 }
                 let _ = end;
-                let node = Node::new(format!("${name}")).span(span).value(text(preview(first.first().map_or("", String::as_str), 100)));
-                cx.push(node.summary(format!("{n} line(s)")).lazy(gmsh_lines, span)).await;
+                let node = Node::new(format!("${name}"))
+                    .span(span)
+                    .value(text(preview(first.first().map_or("", String::as_str), 100)));
+                cx.push(node.summary(format!("{n} line(s)")).lazy(gmsh_lines, span))
+                    .await;
             }
             continue;
         }
@@ -651,21 +894,36 @@ async fn gmsh(cx: Cx, input: Input) -> Result<()> {
         if let Some((_, _, first, n)) = current.as_mut() {
             *n = n.saturating_add(1);
             if first.len() < 32 {
-                first.push(if binary { preview(&t.chars().filter(|c| !c.is_control()).collect::<String>(), 60) } else { t.to_owned() });
+                first.push(if binary {
+                    preview(
+                        &t.chars().filter(|c| !c.is_control()).collect::<String>(),
+                        60,
+                    )
+                } else {
+                    t.to_owned()
+                });
             }
         }
     }
     let count = |s: &str, major: &str| -> String {
         let w: Vec<&str> = s.split_whitespace().collect();
         // Version 4 headers: numEntityBlocks numNodes minTag maxTag; version 2: count.
-        if major.starts_with('4') { w.get(1).copied().unwrap_or("?").to_owned() } else { w.first().copied().unwrap_or("?").to_owned() }
+        if major.starts_with('4') {
+            w.get(1).copied().unwrap_or("?").to_owned()
+        } else {
+            w.first().copied().unwrap_or("?").to_owned()
+        }
     };
     cx.annotate(format!(
         "Gmsh {version} mesh ({}), {} node(s), {} element(s){}",
         if binary { "binary" } else { "ASCII" },
         count(&nodes, &version),
         count(&elements, &version),
-        if names.is_empty() { String::new() } else { format!(", physical groups {}", preview(&names.join(", "), 80)) }
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(", physical groups {}", preview(&names.join(", "), 80))
+        }
     ));
     Ok(())
 }
@@ -676,7 +934,15 @@ async fn gmsh_lines(cx: Cx, span: Span) -> Result<()> {
     while let Some(line) = lines.next().await? {
         if i > 0 && !line.bytes.starts_with(b"$End") {
             let t = line.text();
-            cx.push(Node::new("Line").span(line.content()).value(text(preview(&t.chars().map(|c| if c.is_control() { '.' } else { c }).collect::<String>(), 120)))).await;
+            cx.push(
+                Node::new("Line").span(line.content()).value(text(preview(
+                    &t.chars()
+                        .map(|c| if c.is_control() { '.' } else { c })
+                        .collect::<String>(),
+                    120,
+                ))),
+            )
+            .await;
         }
         i = i.saturating_add(1);
     }
@@ -688,7 +954,10 @@ async fn gmsh_lines(cx: Cx, span: Span) -> Result<()> {
 
 fn openfoam_probe(h: &Head<'_>) -> bool {
     let head = h.data.get(..2048).unwrap_or(h.data);
-    is_text(h) && (head.starts_with(b"/*") || head.starts_with(b"FoamFile") || head.starts_with(b"//")) && contains(head, b"FoamFile") && contains(head, b"{")
+    is_text(h)
+        && (head.starts_with(b"/*") || head.starts_with(b"FoamFile") || head.starts_with(b"//"))
+        && contains(head, b"FoamFile")
+        && contains(head, b"{")
 }
 
 declare_format!(pub OPENFOAM = "openfoam", "OpenFOAM dictionary/field file", ["foam"], "text/x-openfoam",
@@ -713,11 +982,14 @@ fn strip_comments(data: &[u8]) -> Vec<u8> {
             }
             continue;
         } else if !in_str && c == b'/' && n == b'*' {
-            while i < out.len() && !(out.get(i) == Some(&b'*') && out.get(i.saturating_add(1)) == Some(&b'/')) {
+            while i < out.len()
+                && !(out.get(i) == Some(&b'*') && out.get(i.saturating_add(1)) == Some(&b'/'))
+            {
                 if let Some(b) = out.get_mut(i)
-                    && *b != b'\n' {
-                        *b = b' ';
-                    }
+                    && *b != b'\n'
+                {
+                    *b = b' ';
+                }
                 i = i.saturating_add(1);
             }
             for _ in 0..2 {
@@ -745,7 +1017,10 @@ fn foam_entries(data: &[u8]) -> Vec<(String, Option<String>, usize, usize)> {
             break;
         }
         let start = i;
-        while data.get(i).is_some_and(|b| !b.is_ascii_whitespace() && *b != b'{' && *b != b';') {
+        while data
+            .get(i)
+            .is_some_and(|b| !b.is_ascii_whitespace() && *b != b'{' && *b != b';')
+        {
             i = i.saturating_add(1);
         }
         let key = String::from_utf8_lossy(data.get(start..i).unwrap_or_default()).into_owned();
@@ -780,7 +1055,9 @@ fn foam_entries(data: &[u8]) -> Vec<(String, Option<String>, usize, usize)> {
                 }
                 i = i.saturating_add(1);
             }
-            let value = String::from_utf8_lossy(data.get(vstart..i).unwrap_or_default()).trim().to_owned();
+            let value = String::from_utf8_lossy(data.get(vstart..i).unwrap_or_default())
+                .trim()
+                .to_owned();
             i = i.saturating_add(1).min(data.len());
             if key.is_empty() {
                 break;
@@ -803,7 +1080,11 @@ async fn openfoam(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(to_u64(*start), to_u64(end.saturating_sub(*start)));
         if key == "FoamFile" {
             let inner = data.get(start.saturating_add(8)..*end).unwrap_or_default();
-            let body = inner.iter().position(|&b| b == b'{').map_or(inner, |p| inner.get(p.saturating_add(1)..inner.len().saturating_sub(1)).unwrap_or_default());
+            let body = inner.iter().position(|&b| b == b'{').map_or(inner, |p| {
+                inner
+                    .get(p.saturating_add(1)..inner.len().saturating_sub(1))
+                    .unwrap_or_default()
+            });
             for (k, v, _, _) in foam_entries(body) {
                 match k.as_str() {
                     "class" => class = v.clone().unwrap_or_default(),
@@ -820,7 +1101,10 @@ async fn openfoam(cx: Cx, input: Input) -> Result<()> {
         })
         .await;
     }
-    cx.annotate(format!("OpenFOAM {class} {object:?} ({format}), {} top-level entr(ies)", entries.len()));
+    cx.annotate(format!(
+        "OpenFOAM {class} {object:?} ({format}), {} top-level entr(ies)",
+        entries.len()
+    ));
     Ok(())
 }
 
@@ -830,14 +1114,26 @@ async fn foam_dict(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
     }
     let raw = cx.read_avail(span.sub(0, cx.limits().max_read)).await?;
     let data = strip_comments(&raw);
-    let open = data.iter().position(|&b| b == b'{').unwrap_or(0).saturating_add(1);
-    let body = data.get(open..data.len().saturating_sub(1)).unwrap_or_default();
+    let open = data
+        .iter()
+        .position(|&b| b == b'{')
+        .unwrap_or(0)
+        .saturating_add(1);
+    let body = data
+        .get(open..data.len().saturating_sub(1))
+        .unwrap_or_default();
     for (key, value, start, end) in foam_entries(body) {
-        let s = span.sub(to_u64(open.saturating_add(start)), to_u64(end.saturating_sub(start)));
+        let s = span.sub(
+            to_u64(open.saturating_add(start)),
+            to_u64(end.saturating_sub(start)),
+        );
         let node = Node::new(key).span(s);
         cx.push(match value {
             Some(v) => node.value(number(&v)),
-            None => node.lazy(crate::expander!(self::foam_dict: (Span, u32)), (s, depth.saturating_add(1))),
+            None => node.lazy(
+                crate::expander!(self::foam_dict: (Span, u32)),
+                (s, depth.saturating_add(1)),
+            ),
         })
         .await;
     }
@@ -861,14 +1157,28 @@ async fn keyword_deck(cx: Cx, input: Input) -> Result<()> {
     let mut lsdyna = false;
     loop {
         let next = lines.next().await?;
-        let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"*") && !l.bytes.starts_with(b"**"));
+        let starts = next
+            .as_ref()
+            .is_none_or(|l| l.bytes.starts_with(b"*") && !l.bytes.starts_with(b"**"));
         if starts && let Some((kw, start, n)) = current.take() {
             let end = next.as_ref().map_or(lines.pos(), |l| l.pos);
             let span = file.sub(start, end.saturating_sub(start));
             let (name, params) = kw.split_once(',').unwrap_or((kw.as_str(), ""));
             let node = Node::new(name.trim().to_owned()).span(span);
-            let node = summarize(node, if n > 0 { format!("{n} data line(s)") } else { String::new() });
-            cx.push(if params.trim().is_empty() { node } else { node.value(text(params.trim())) }).await;
+            let node = summarize(
+                node,
+                if n > 0 {
+                    format!("{n} data line(s)")
+                } else {
+                    String::new()
+                },
+            );
+            cx.push(if params.trim().is_empty() {
+                node
+            } else {
+                node.value(text(params.trim()))
+            })
+            .await;
             tally(&mut counts, &name.trim().to_ascii_uppercase(), 512);
         }
         let Some(line) = next else { break };
@@ -879,16 +1189,38 @@ async fn keyword_deck(cx: Cx, input: Input) -> Result<()> {
             }
             current = Some((t.trim().to_owned(), line.pos, 0));
         } else if let Some((kw, _, n)) = current.as_mut()
-            && !t.starts_with("**") && !t.starts_with('$') && !t.trim().is_empty() {
-                *n = n.saturating_add(1);
-                if (kw.eq_ignore_ascii_case("*HEADING") || kw.eq_ignore_ascii_case("*TITLE")) && title.is_empty() {
-                    title = t.trim().to_owned();
-                }
+            && !t.starts_with("**")
+            && !t.starts_with('$')
+            && !t.trim().is_empty()
+        {
+            *n = n.saturating_add(1);
+            if (kw.eq_ignore_ascii_case("*HEADING") || kw.eq_ignore_ascii_case("*TITLE"))
+                && title.is_empty()
+            {
+                title = t.trim().to_owned();
             }
+        }
     }
     counts.sort_by_key(|c| std::cmp::Reverse(c.1));
-    let top: Vec<String> = counts.iter().take(6).map(|(k, n)| format!("{n} {k}")).collect();
-    cx.annotate(format!("{}{}, {}", if lsdyna { "LS-DYNA keyword deck" } else { "Abaqus input deck" }, if title.is_empty() { String::new() } else { format!(" {title:?}") }, top.join(", ")));
+    let top: Vec<String> = counts
+        .iter()
+        .take(6)
+        .map(|(k, n)| format!("{n} {k}"))
+        .collect();
+    cx.annotate(format!(
+        "{}{}, {}",
+        if lsdyna {
+            "LS-DYNA keyword deck"
+        } else {
+            "Abaqus input deck"
+        },
+        if title.is_empty() {
+            String::new()
+        } else {
+            format!(" {title:?}")
+        },
+        top.join(", ")
+    ));
     Ok(())
 }
 
@@ -898,7 +1230,10 @@ mod tests {
 
     #[test]
     fn step_strings_decode() {
-        assert_eq!(step_strings("('a''b','',\\X2\\00E9\\X0\\)"), vec!["a'b".to_owned(), String::new()]);
+        assert_eq!(
+            step_strings("('a''b','',\\X2\\00E9\\X0\\)"),
+            vec!["a'b".to_owned(), String::new()]
+        );
         assert_eq!(step_string("caf\\X2\\00E9\\X0\\"), "café");
     }
 
@@ -911,8 +1246,14 @@ mod tests {
     #[test]
     fn foam_entries_split() {
         let e = foam_entries(b"a 1; b { c 2; } d (1 2 3);");
-        assert_eq!(e.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(), vec!["a", "b", "d"]);
+        assert_eq!(
+            e.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
+            vec!["a", "b", "d"]
+        );
         assert!(e.get(1).is_some_and(|x| x.1.is_none()));
-        assert_eq!(strip_comments(b"a // x\nb /* y */ c"), b"a     \nb         c".to_vec());
+        assert_eq!(
+            strip_comments(b"a // x\nb /* y */ c"),
+            b"a     \nb         c".to_vec()
+        );
     }
 }

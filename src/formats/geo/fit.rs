@@ -50,45 +50,118 @@ fn crc16(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b);
         for _ in 0..8 {
-            crc = if crc & 1 != 0 { (crc >> 1) ^ 0xa001 } else { crc >> 1 };
+            crc = if crc & 1 != 0 {
+                (crc >> 1) ^ 0xa001
+            } else {
+                crc >> 1
+            };
         }
     }
     crc
 }
 
 const MESSAGES: EnumTable = &[
-    (0, "file_id"), (1, "capabilities"), (2, "device_settings"), (3, "user_profile"),
-    (4, "hrm_profile"), (5, "sdm_profile"), (6, "bike_profile"), (7, "zones_target"),
-    (8, "hr_zone"), (9, "power_zone"), (10, "met_zone"), (12, "sport"), (15, "goal"),
-    (18, "session"), (19, "lap"), (20, "record"), (21, "event"), (23, "device_info"),
-    (26, "workout"), (27, "workout_step"), (28, "schedule"), (30, "weight_scale"),
-    (31, "course"), (32, "course_point"), (33, "totals"), (34, "activity"), (35, "software"),
-    (37, "file_capabilities"), (38, "mesg_capabilities"), (39, "field_capabilities"),
-    (49, "file_creator"), (51, "blood_pressure"), (53, "speed_zone"), (55, "monitoring"),
-    (72, "training_file"), (78, "hrv"), (101, "length"), (103, "monitoring_info"),
-    (127, "connectivity"), (128, "weather_conditions"), (129, "weather_alert"),
-    (131, "cadence_zone"), (132, "hr"), (142, "segment_lap"), (145, "memo_glob"),
-    (148, "segment_id"), (150, "segment_point"), (151, "segment_file"), (160, "gps_metadata"),
-    (206, "field_description"), (207, "developer_data_id"), (216, "time_in_zone"),
+    (0, "file_id"),
+    (1, "capabilities"),
+    (2, "device_settings"),
+    (3, "user_profile"),
+    (4, "hrm_profile"),
+    (5, "sdm_profile"),
+    (6, "bike_profile"),
+    (7, "zones_target"),
+    (8, "hr_zone"),
+    (9, "power_zone"),
+    (10, "met_zone"),
+    (12, "sport"),
+    (15, "goal"),
+    (18, "session"),
+    (19, "lap"),
+    (20, "record"),
+    (21, "event"),
+    (23, "device_info"),
+    (26, "workout"),
+    (27, "workout_step"),
+    (28, "schedule"),
+    (30, "weight_scale"),
+    (31, "course"),
+    (32, "course_point"),
+    (33, "totals"),
+    (34, "activity"),
+    (35, "software"),
+    (37, "file_capabilities"),
+    (38, "mesg_capabilities"),
+    (39, "field_capabilities"),
+    (49, "file_creator"),
+    (51, "blood_pressure"),
+    (53, "speed_zone"),
+    (55, "monitoring"),
+    (72, "training_file"),
+    (78, "hrv"),
+    (101, "length"),
+    (103, "monitoring_info"),
+    (127, "connectivity"),
+    (128, "weather_conditions"),
+    (129, "weather_alert"),
+    (131, "cadence_zone"),
+    (132, "hr"),
+    (142, "segment_lap"),
+    (145, "memo_glob"),
+    (148, "segment_id"),
+    (150, "segment_point"),
+    (151, "segment_file"),
+    (160, "gps_metadata"),
+    (206, "field_description"),
+    (207, "developer_data_id"),
+    (216, "time_in_zone"),
 ];
 
 const FILE_TYPES: EnumTable = &[
-    (1, "device"), (2, "settings"), (3, "sport"), (4, "activity"), (5, "workout"), (6, "course"),
-    (7, "schedules"), (9, "weight"), (10, "totals"), (11, "goals"), (14, "blood_pressure"),
-    (15, "monitoring_a"), (20, "activity_summary"), (28, "monitoring_daily"), (32, "monitoring_b"),
-    (34, "segment"), (35, "segment_list"),
+    (1, "device"),
+    (2, "settings"),
+    (3, "sport"),
+    (4, "activity"),
+    (5, "workout"),
+    (6, "course"),
+    (7, "schedules"),
+    (9, "weight"),
+    (10, "totals"),
+    (11, "goals"),
+    (14, "blood_pressure"),
+    (15, "monitoring_a"),
+    (20, "activity_summary"),
+    (28, "monitoring_daily"),
+    (32, "monitoring_b"),
+    (34, "segment"),
+    (35, "segment_list"),
 ];
 
 const MANUFACTURERS: EnumTable = &[
-    (1, "garmin"), (13, "dynastream_oem"), (15, "dynastream"), (23, "suunto"), (32, "wahoo_fitness"),
+    (1, "garmin"),
+    (13, "dynastream_oem"),
+    (15, "dynastream"),
+    (23, "suunto"),
+    (32, "wahoo_fitness"),
     (255, "development"),
 ];
 
 const BASE_TYPES: EnumTable = &[
-    (0x00, "enum"), (0x01, "sint8"), (0x02, "uint8"), (0x83, "sint16"), (0x84, "uint16"),
-    (0x85, "sint32"), (0x86, "uint32"), (0x07, "string"), (0x88, "float32"), (0x89, "float64"),
-    (0x0a, "uint8z"), (0x8b, "uint16z"), (0x8c, "uint32z"), (0x0d, "byte"), (0x8e, "sint64"),
-    (0x8f, "uint64"), (0x90, "uint64z"),
+    (0x00, "enum"),
+    (0x01, "sint8"),
+    (0x02, "uint8"),
+    (0x83, "sint16"),
+    (0x84, "uint16"),
+    (0x85, "sint32"),
+    (0x86, "uint32"),
+    (0x07, "string"),
+    (0x88, "float32"),
+    (0x89, "float64"),
+    (0x0a, "uint8z"),
+    (0x8b, "uint16z"),
+    (0x8c, "uint32z"),
+    (0x0d, "byte"),
+    (0x8e, "sint64"),
+    (0x8f, "uint64"),
+    (0x90, "uint64z"),
 ];
 
 /// How a field is shown.
@@ -175,7 +248,10 @@ fn field_info(global: u16, num: u8) -> Option<(&'static str, Kind)> {
         250 => return Some(("part_index", Kind::Plain)),
         _ => {}
     }
-    FIELDS.iter().find(|f| f.0 == global && f.1 == num).map(|f| (f.2, f.3))
+    FIELDS
+        .iter()
+        .find(|f| f.0 == global && f.1 == num)
+        .map(|f| (f.2, f.3))
 }
 
 /// A definition message: the layout of a local message type.
@@ -191,11 +267,16 @@ struct Def {
 
 impl Def {
     fn size(&self) -> u64 {
-        self.fields.iter().chain(&self.dev).map(|f| u64::from(f.1)).sum()
+        self.fields
+            .iter()
+            .chain(&self.dev)
+            .map(|f| u64::from(f.1))
+            .sum()
     }
 
     fn name(&self) -> String {
-        lookup(MESSAGES, self.global.into()).map_or_else(|| format!("message {}", self.global), str::to_owned)
+        lookup(MESSAGES, self.global.into())
+            .map_or_else(|| format!("message {}", self.global), str::to_owned)
     }
 }
 
@@ -212,14 +293,29 @@ async fn read_def(cur: &mut Cursor<'_>, developer: bool) -> Result<Def> {
     .unwrap_or(0);
     let n = cur.u8().await?;
     let raw = cur.bytes(u64::from(n).saturating_mul(3)).await?;
-    let fields = raw.as_chunks::<3>().0.iter().map(|&[a, b, c]| (a, b, c)).collect();
+    let fields = raw
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .map(|&[a, b, c]| (a, b, c))
+        .collect();
     let mut dev = Vec::new();
     if developer {
         let n = cur.u8().await?;
         let raw = cur.bytes(u64::from(n).saturating_mul(3)).await?;
-        dev = raw.as_chunks::<3>().0.iter().map(|&[a, b, c]| (a, b, c)).collect();
+        dev = raw
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .map(|&[a, b, c]| (a, b, c))
+            .collect();
     }
-    Ok(Def { global, endian, fields, dev })
+    Ok(Def {
+        global,
+        endian,
+        fields,
+        dev,
+    })
 }
 
 async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -232,18 +328,29 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let b = cx.read(file.sub(0, 14)).await?;
         let stored = u16_le(&b, 12).unwrap_or(0);
         if stored != 0 && stored != crc16(b.get(..12).unwrap_or_default()) {
-            header = header.diag(Diagnostic::warning(format!("header CRC {stored:#06x} does not match")).at(file.sub(12, 2)));
+            header = header.diag(
+                Diagnostic::warning(format!("header CRC {stored:#06x} does not match"))
+                    .at(file.sub(12, 2)),
+            );
         }
     }
     cx.emit(header);
     let data = file.sub(header_len, h.data_size.into());
     if data.len < u64::from(h.data_size) {
-        cx.diag(Diagnostic::truncated(Span::new(data.source, data.offset, h.data_size.into()), data.len));
+        cx.diag(Diagnostic::truncated(
+            Span::new(data.source, data.offset, h.data_size.into()),
+            data.len,
+        ));
     }
 
     // The file_id message (normally first) says what kind of file this is.
     let summary = file_id_summary(&cx, data).await.unwrap_or_default();
-    cx.emit(Node::new("Records").span(data).summary(format!("{} bytes", data.len)).lazy(records, data));
+    cx.emit(
+        Node::new("Records")
+            .span(data)
+            .summary(format!("{} bytes", data.len))
+            .lazy(records, data),
+    );
 
     let crc_at = header_len.saturating_add(h.data_size.into());
     let crc_span = file.sub(crc_at, 2);
@@ -266,8 +373,17 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(embedded_as("Chained FIT file", input.nested(rest), &FIT));
         }
     }
-    let kind = if summary.is_empty() { String::new() } else { format!(" ({summary})") };
-    cx.annotate(format!("FIT {}.{}{kind}, {} bytes of records", h.protocol >> 4, h.protocol & 15, h.data_size));
+    let kind = if summary.is_empty() {
+        String::new()
+    } else {
+        format!(" ({summary})")
+    };
+    cx.annotate(format!(
+        "FIT {}.{}{kind}, {} bytes of records",
+        h.protocol >> 4,
+        h.protocol & 15,
+        h.data_size
+    ));
     Ok(())
 }
 
@@ -288,8 +404,14 @@ async fn file_id_summary(cx: &Cx, data: Span) -> Result<String> {
             }
             continue;
         }
-        let local = if rh & 0x80 != 0 { (rh >> 5) & 3 } else { rh & 15 };
-        let Some(Some(def)) = defs.get(usize::from(local)) else { break };
+        let local = if rh & 0x80 != 0 {
+            (rh >> 5) & 3
+        } else {
+            rh & 15
+        };
+        let Some(Some(def)) = defs.get(usize::from(local)) else {
+            break;
+        };
         let size = def.size();
         cur.skip(size);
         if def.global != 0 {
@@ -299,7 +421,9 @@ async fn file_id_summary(cx: &Cx, data: Span) -> Result<String> {
         let mut at = 0usize;
         let (mut kind, mut maker) = (None, None);
         for &(num, sz, base) in &def.fields {
-            let bytes = body.get(at..at.saturating_add(usize::from(sz))).unwrap_or_default();
+            let bytes = body
+                .get(at..at.saturating_add(usize::from(sz)))
+                .unwrap_or_default();
             at = at.saturating_add(usize::from(sz));
             if let Some(Value::UInt { value, .. }) = decode(bytes, base, def.endian).first() {
                 match num {
@@ -331,27 +455,53 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
             let def = Arc::new(read_def(&mut cur, rh & 0x20 != 0).await?);
             let span = cur.since(start);
             let name = format!("Definition {local}: {}", def.name());
-            let summary = format!("{} fields, {} bytes per message", def.fields.len().saturating_add(def.dev.len()), def.size());
-            cx.push(Node::new(name).span(span).summary(summary).lazy(definition, (span, rh))).await;
+            let summary = format!(
+                "{} fields, {} bytes per message",
+                def.fields.len().saturating_add(def.dev.len()),
+                def.size()
+            );
+            cx.push(
+                Node::new(name)
+                    .span(span)
+                    .summary(summary)
+                    .lazy(definition, (span, rh)),
+            )
+            .await;
             if let Some(slot) = defs.get_mut(usize::from(local)) {
                 *slot = Some(def);
             }
         } else {
-            let (local, offset) = if rh & 0x80 != 0 { ((rh >> 5) & 3, Some(rh & 31)) } else { (rh & 15, None) };
+            let (local, offset) = if rh & 0x80 != 0 {
+                ((rh >> 5) & 3, Some(rh & 31))
+            } else {
+                (rh & 15, None)
+            };
             let Some(Some(def)) = defs.get(usize::from(local)).cloned() else {
-                return Err(Diagnostic::malformed(format!("data message for undefined local type {local}")).at(data.sub(start, 1)));
+                return Err(Diagnostic::malformed(format!(
+                    "data message for undefined local type {local}"
+                ))
+                .at(data.sub(start, 1)));
             };
             let size = def.size();
             cur.skip(size);
             let span = data.sub(start, size.saturating_add(1));
             if span.len < size.saturating_add(1) {
-                return Err(Diagnostic::truncated(Span::new(span.source, span.offset, size.saturating_add(1)), span.len));
+                return Err(Diagnostic::truncated(
+                    Span::new(span.source, span.offset, size.saturating_add(1)),
+                    span.len,
+                ));
             }
             let summary = match offset {
                 Some(o) => format!("local {local}, compressed timestamp +{o}"),
                 None => format!("local {local}"),
             };
-            cx.push(Node::new(def.name()).span(span).summary(summary).lazy(message, (span, def))).await;
+            cx.push(
+                Node::new(def.name())
+                    .span(span)
+                    .summary(summary)
+                    .lazy(message, (span, def)),
+            )
+            .await;
         }
         n = n.saturating_add(1);
     }
@@ -360,24 +510,59 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
 }
 
 async fn definition(cx: Cx, (span, rh): (Span, u8)) -> Result<()> {
-    cx.emit(leaf("Record header", span.sub(0, 1), hex(rh.into(), 8)).summary(format!("local type {}{}", rh & 15, if rh & 0x20 != 0 { ", developer data" } else { "" })));
+    cx.emit(
+        leaf("Record header", span.sub(0, 1), hex(rh.into(), 8)).summary(format!(
+            "local type {}{}",
+            rh & 15,
+            if rh & 0x20 != 0 {
+                ", developer data"
+            } else {
+                ""
+            }
+        )),
+    );
     let mut cur = Cursor::new(&cx, span, LE);
     cur.seek(1);
     let def = read_def(&mut cur, rh & 0x20 != 0).await?;
-    cx.emit(leaf("Architecture", span.sub(2, 1), text(if def.endian == Endian::Big { "big-endian" } else { "little-endian" })));
-    cx.emit(leaf("Global message number", span.sub(3, 2), enumv(MESSAGES, def.global.into(), 16)));
-    cx.emit(leaf("Fields", span.sub(5, 1), uint(to_u64(def.fields.len()), 8)));
+    cx.emit(leaf(
+        "Architecture",
+        span.sub(2, 1),
+        text(if def.endian == Endian::Big {
+            "big-endian"
+        } else {
+            "little-endian"
+        }),
+    ));
+    cx.emit(leaf(
+        "Global message number",
+        span.sub(3, 2),
+        enumv(MESSAGES, def.global.into(), 16),
+    ));
+    cx.emit(leaf(
+        "Fields",
+        span.sub(5, 1),
+        uint(to_u64(def.fields.len()), 8),
+    ));
     let mut at = 6u64;
     for &(num, size, base) in &def.fields {
-        let name = field_info(def.global, num).map_or_else(|| format!("Field {num}"), |(n, _)| n.to_owned());
+        let name = field_info(def.global, num)
+            .map_or_else(|| format!("Field {num}"), |(n, _)| n.to_owned());
         let base_name = lookup(BASE_TYPES, base.into()).unwrap_or("unknown");
-        cx.emit(Node::new(name).span(span.sub(at, 3)).summary(format!("#{num}, {size} bytes, {base_name}")));
+        cx.emit(
+            Node::new(name)
+                .span(span.sub(at, 3))
+                .summary(format!("#{num}, {size} bytes, {base_name}")),
+        );
         at = at.saturating_add(3);
     }
     if !def.dev.is_empty() {
         at = at.saturating_add(1);
         for &(num, size, index) in &def.dev {
-            cx.emit(Node::new(format!("Developer field {num}")).span(span.sub(at, 3)).summary(format!("{size} bytes, developer {index}")));
+            cx.emit(
+                Node::new(format!("Developer field {num}"))
+                    .span(span.sub(at, 3))
+                    .summary(format!("{size} bytes, developer {index}")),
+            );
             at = at.saturating_add(3);
         }
     }
@@ -414,7 +599,10 @@ fn decode(bytes: &[u8], base: u8, endian: Endian) -> Vec<Value> {
             match base & 0x1f {
                 0x01 | 0x03 | 0x05 | 0x0e => {
                     let shift = 64u32.saturating_sub(u32::from(bits));
-                    let v = i64::from_ne_bytes(raw.to_ne_bytes()).checked_shl(shift).and_then(|v| v.checked_shr(shift)).unwrap_or(0);
+                    let v = i64::from_ne_bytes(raw.to_ne_bytes())
+                        .checked_shl(shift)
+                        .and_then(|v| v.checked_shr(shift))
+                        .unwrap_or(0);
                     Value::Int { value: v, bits }
                 }
                 0x08 => Value::Float(f32::from_bits(u32::try_from(raw).unwrap_or(0)).into()),
@@ -430,7 +618,9 @@ fn invalid(v: &Value, base: u8) -> bool {
     match (v, base & 0x1f) {
         (Value::UInt { value, .. }, 0x0a | 0x0b | 0x0c | 0x10) => *value == 0,
         (Value::UInt { value, bits, .. }, _) => *value == u64::MAX >> 64u8.saturating_sub(*bits),
-        (Value::Int { value, bits }, _) => i64::MAX.checked_shr(64u32.saturating_sub(u32::from(*bits))) == Some(*value),
+        (Value::Int { value, bits }, _) => {
+            i64::MAX.checked_shr(64u32.saturating_sub(u32::from(*bits))) == Some(*value)
+        }
         _ => false,
     }
 }
@@ -446,15 +636,30 @@ fn present(v: &Value, kind: Kind) -> (Value, Option<String>) {
             if *value < 0x1000_0000 {
                 (v.clone(), Some(format!("{value} s (relative)")))
             } else {
-                (time(FIT_EPOCH.saturating_add(i64::try_from(*value).unwrap_or(0))), None)
+                (
+                    time(FIT_EPOCH.saturating_add(i64::try_from(*value).unwrap_or(0))),
+                    None,
+                )
             }
         }
-        (Kind::Degrees, Some(n), _) => (v.clone(), Some(format!("{:.6}°", n * 180.0 / 2_147_483_648.0))),
+        (Kind::Degrees, Some(n), _) => (
+            v.clone(),
+            Some(format!("{:.6}°", n * 180.0 / 2_147_483_648.0)),
+        ),
         (Kind::Scaled(scale, offset, unit), Some(n), _) => {
             let x = super::round(n / scale - offset);
-            (v.clone(), Some(if unit.is_empty() { format!("{x}") } else { format!("{x} {unit}") }))
+            (
+                v.clone(),
+                Some(if unit.is_empty() {
+                    format!("{x}")
+                } else {
+                    format!("{x} {unit}")
+                }),
+            )
         }
-        (Kind::Enum(table), _, Value::UInt { value, bits, .. }) => (enumv(table, *value, *bits), None),
+        (Kind::Enum(table), _, Value::UInt { value, bits, .. }) => {
+            (enumv(table, *value, *bits), None)
+        }
         _ => (v.clone(), None),
     }
 }
@@ -464,12 +669,20 @@ async fn message(cx: Cx, (span, def): (Span, Arc<Def>)) -> Result<()> {
     let mut at = 0u64;
     for &(num, size, base) in &def.fields {
         let fspan = span.sub(at.saturating_add(1), size.into());
-        let bytes = body.get(crate::bytes::to_usize(at)..crate::bytes::to_usize(at.saturating_add(size.into()))).unwrap_or_default();
+        let bytes = body
+            .get(crate::bytes::to_usize(at)..crate::bytes::to_usize(at.saturating_add(size.into())))
+            .unwrap_or_default();
         at = at.saturating_add(size.into());
-        let (name, kind) = field_info(def.global, num).map_or_else(|| (format!("Field {num}"), Kind::Plain), |(n, k)| (n.to_owned(), k));
+        let (name, kind) = field_info(def.global, num).map_or_else(
+            || (format!("Field {num}"), Kind::Plain),
+            |(n, k)| (n.to_owned(), k),
+        );
         let values = decode(bytes, base, def.endian);
         let node = match values.as_slice() {
-            [v] if invalid(v, base) => Node::new(name).span(fspan).value(v.clone()).summary("invalid"),
+            [v] if invalid(v, base) => Node::new(name)
+                .span(fspan)
+                .value(v.clone())
+                .summary("invalid"),
             [v] => {
                 let (value, summary) = present(v, kind);
                 let node = Node::new(name).span(fspan).value(value);
@@ -480,7 +693,9 @@ async fn message(cx: Cx, (span, def): (Span, Arc<Def>)) -> Result<()> {
             }
             list => {
                 let shown: Vec<String> = list.iter().take(16).map(crate::render::value).collect();
-                Node::new(name).span(fspan).summary(format!("[{}]", shown.join(", ")))
+                Node::new(name)
+                    .span(fspan)
+                    .summary(format!("[{}]", shown.join(", ")))
             }
         };
         cx.emit(node);
@@ -488,7 +703,11 @@ async fn message(cx: Cx, (span, def): (Span, Arc<Def>)) -> Result<()> {
     for &(num, size, index) in &def.dev {
         let fspan = span.sub(at.saturating_add(1), size.into());
         at = at.saturating_add(size.into());
-        cx.emit(Node::new(format!("Developer field {num}")).span(fspan).summary(format!("developer {index}")));
+        cx.emit(
+            Node::new(format!("Developer field {num}"))
+                .span(fspan)
+                .summary(format!("developer {index}")),
+        );
     }
     Ok(())
 }

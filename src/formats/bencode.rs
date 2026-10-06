@@ -102,7 +102,14 @@ impl<'a> Scan<'a> {
                 return Err(self.malformed(start, "number too long"));
             }
         }
-        Ok((if negative { value.saturating_neg() } else { value }, at))
+        Ok((
+            if negative {
+                value.saturating_neg()
+            } else {
+                value
+            },
+            at,
+        ))
     }
 
     fn malformed(&self, at: u64, what: &str) -> Diagnostic {
@@ -178,8 +185,7 @@ impl<'a> Scan<'a> {
                 b'i' => pos = self.number(pos.saturating_add(1), b'e').await?.1,
                 b'0'..=b'9' => {
                     let (len, data) = self.number(pos, b':').await?;
-                    let len =
-                        u64::try_from(len).map_err(|_| self.malformed(pos, "bad length"))?;
+                    let len = u64::try_from(len).map_err(|_| self.malformed(pos, "bad length"))?;
                     pos = data.saturating_add(len);
                 }
                 _ => return Err(self.malformed(pos, "expected a bencode value")),
@@ -248,13 +254,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(node);
     // The info hash identifies the torrent: SHA-1 of the bencoded info dict.
     if let Ok(Some(info)) = scan.lookup(&root, b"info").await {
-        let span = input.span.sub(info.start, info.end.saturating_sub(info.start));
+        let span = input
+            .span
+            .sub(info.start, info.end.saturating_sub(info.start));
         if span.len <= cx.limits().max_read {
             let bytes = cx.read(span).await?;
             cx.emit(
                 Node::new("Info hash")
                     .span(span)
-                    .value(Value::Text(hex_string(&crate::formats::datakit::sha1(&bytes))))
+                    .value(Value::Text(hex_string(&crate::formats::datakit::sha1(
+                        &bytes,
+                    ))))
                     .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
             );
         }
@@ -323,10 +333,7 @@ async fn item_node(
             Ok(v) if key == Some(b"creation date") => {
                 node.value(Value::Timestamp { unix_seconds: v })
             }
-            Ok(v) => node.value(Value::Int {
-                value: v,
-                bits: 64,
-            }),
+            Ok(v) => node.value(Value::Int { value: v, bits: 64 }),
             Err(_) => node.value(Value::Text(v.to_string())),
         },
         Kind::Str { data, len } => {
@@ -350,12 +357,14 @@ async fn item_node(
                     .summary(format!("{len} bytes")),
             }
         }
-        Kind::List => node
-            .summary(format!("list ({})", item.count))
-            .lazy(crate::expander!(self::members: (Span, u64)), (region, item.start)),
-        Kind::Dict => node
-            .summary(format!("dict ({})", item.count))
-            .lazy(crate::expander!(self::members: (Span, u64)), (region, item.start)),
+        Kind::List => node.summary(format!("list ({})", item.count)).lazy(
+            crate::expander!(self::members: (Span, u64)),
+            (region, item.start),
+        ),
+        Kind::Dict => node.summary(format!("dict ({})", item.count)).lazy(
+            crate::expander!(self::members: (Span, u64)),
+            (region, item.start),
+        ),
     })
 }
 
@@ -398,7 +407,9 @@ async fn pieces(cx: Cx, span: Span) -> Result<()> {
         .await;
     }
     if !span.len.is_multiple_of(20) {
-        cx.diag(Diagnostic::malformed("piece hashes are not a multiple of 20 bytes"));
+        cx.diag(Diagnostic::malformed(
+            "piece hashes are not a multiple of 20 bytes",
+        ));
     }
     Ok(())
 }

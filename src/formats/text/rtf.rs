@@ -107,7 +107,10 @@ impl<'a> Lexer<'a> {
             return Ok(Self::tok(Kind::Symbol, start, at));
         };
         if c == b'\'' {
-            let hex = self.scan.bytes(at.saturating_add(1), at.saturating_add(3), 2).await?;
+            let hex = self
+                .scan
+                .bytes(at.saturating_add(1), at.saturating_add(3), 2)
+                .await?;
             let value = u8::from_str_radix(&String::from_utf8_lossy(&hex), 16).ok();
             let mut t = Self::tok(Kind::Hex, start, at.saturating_add(3));
             t.param = value.map(i64::from);
@@ -255,12 +258,48 @@ async fn skip_group(lex: &mut Lexer<'_>, open: &Tok) -> Result<GroupInfo> {
 
 /// Destinations whose content is not document text.
 const NON_TEXT: &[&str] = &[
-    "fonttbl", "colortbl", "stylesheet", "info", "pict", "object", "objdata", "listtable",
-    "listoverridetable", "rsidtbl", "generator", "themedata", "colorschememapping",
-    "datastore", "latentstyles", "header", "footer", "headerl", "headerr", "footerl", "footerr",
-    "fldinst", "xmlnstbl", "mmathPr", "pgdsctbl", "filetbl", "revtbl", "bkmkstart", "bkmkend",
-    "shpinst", "nonshppict", "blipuid", "userprops", "docvar", "wgrffmtfilter", "pnseclvl",
-    "listtext", "panose", "falt", "leveltext", "levelnumbers", "fname",
+    "fonttbl",
+    "colortbl",
+    "stylesheet",
+    "info",
+    "pict",
+    "object",
+    "objdata",
+    "listtable",
+    "listoverridetable",
+    "rsidtbl",
+    "generator",
+    "themedata",
+    "colorschememapping",
+    "datastore",
+    "latentstyles",
+    "header",
+    "footer",
+    "headerl",
+    "headerr",
+    "footerl",
+    "footerr",
+    "fldinst",
+    "xmlnstbl",
+    "mmathPr",
+    "pgdsctbl",
+    "filetbl",
+    "revtbl",
+    "bkmkstart",
+    "bkmkend",
+    "shpinst",
+    "nonshppict",
+    "blipuid",
+    "userprops",
+    "docvar",
+    "wgrffmtfilter",
+    "pnseclvl",
+    "listtext",
+    "panose",
+    "falt",
+    "leveltext",
+    "levelnumbers",
+    "fname",
 ];
 
 /// A date from `\yrN\moN\dyN\hrN\minN` parameters.
@@ -312,10 +351,9 @@ fn group_node(info: &GroupInfo, span: Span, input: Input) -> Node {
             format!("{summary} ({groups})")
         };
     }
-    let mut node = Node::new(name).span(span).lazy(
-        crate::expander!(self::group: Group),
-        Group { input, span },
-    );
+    let mut node = Node::new(name)
+        .span(span)
+        .lazy(crate::expander!(self::group: Group), Group { input, span });
     if !summary.is_empty() {
         node = node.summary(summary);
     }
@@ -368,7 +406,11 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
                     }
                     Kind::Hex => r.2.extend(t.param.and_then(|p| u8::try_from(p).ok())),
                     _ => {
-                        let sym = lex.scan.byte(t.start.saturating_add(1)).await?.unwrap_or(b' ');
+                        let sym = lex
+                            .scan
+                            .byte(t.start.saturating_add(1))
+                            .await?
+                            .unwrap_or(b' ');
                         r.2.push(match sym {
                             b'~' => b' ',
                             b'-' | b'*' => continue,
@@ -378,12 +420,25 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
                 }
             }
             Kind::Symbol => {
-                let sym = lex.scan.byte(t.start.saturating_add(1)).await?.unwrap_or(b' ');
-                cx.push(Node::new(format!("\\{}", char::from(sym))).span(lex.span(&t))).await;
+                let sym = lex
+                    .scan
+                    .byte(t.start.saturating_add(1))
+                    .await?
+                    .unwrap_or(b' ');
+                cx.push(Node::new(format!("\\{}", char::from(sym))).span(lex.span(&t)))
+                    .await;
             }
             Kind::Bin => {
-                let data_span = lex.scan.span(t.end.saturating_sub(u64::try_from(t.param.unwrap_or(0)).unwrap_or(0)), t.end);
-                cx.push(crate::formats::embedded("\\bin data", input.nested(data_span))).await;
+                let data_span = lex.scan.span(
+                    t.end
+                        .saturating_sub(u64::try_from(t.param.unwrap_or(0)).unwrap_or(0)),
+                    t.end,
+                );
+                cx.push(crate::formats::embedded(
+                    "\\bin data",
+                    input.nested(data_span),
+                ))
+                .await;
             }
             Kind::Word => {
                 let name = lex.name(&t).await?;
@@ -431,9 +486,16 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
     }
     if let Some((a, b)) = data {
         let span = lex.scan.span(a, b);
-        let name = if dest == "pict" { "Picture data" } else { "Object data" };
-        cx.push(decoded_node(name, input, span, Transform::Hex).summary(format!("hex, {:#x} bytes decoded", span.len / 2)))
-            .await;
+        let name = if dest == "pict" {
+            "Picture data"
+        } else {
+            "Object data"
+        };
+        cx.push(
+            decoded_node(name, input, span, Transform::Hex)
+                .summary(format!("hex, {:#x} bytes decoded", span.len / 2)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -461,7 +523,8 @@ async fn flush(
     if text.trim().is_empty() {
         return;
     }
-    cx.push(text_node("Text", lex.scan.span(start, end), &text)).await;
+    cx.push(text_node("Text", lex.scan.span(start, end), &text))
+        .await;
 }
 
 /// The picture format named by a `\pict` control word.
@@ -574,7 +637,11 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
                 }
             }
             Kind::Symbol => {
-                let sym = lex.scan.byte(t.start.saturating_add(1)).await?.unwrap_or(b' ');
+                let sym = lex
+                    .scan
+                    .byte(t.start.saturating_add(1))
+                    .await?
+                    .unwrap_or(b' ');
                 match sym {
                     b'*' if just_opened => {
                         star = true;
@@ -610,8 +677,12 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
                         if let Some(s) = start.take() {
                             number = number.saturating_add(1);
                             let span = lex.scan.span(s, end);
-                            cx.push(text_node(format!("Paragraph {number}"), span, text.trim_end()))
-                                .await;
+                            cx.push(text_node(
+                                format!("Paragraph {number}"),
+                                span,
+                                text.trim_end(),
+                            ))
+                            .await;
                         }
                         text.clear();
                     }
@@ -649,7 +720,12 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
     if let Some(s) = start {
         number = number.saturating_add(1);
         let span = lex.scan.span(s, end);
-        cx.push(text_node(format!("Paragraph {number}"), span, text.trim_end())).await;
+        cx.push(text_node(
+            format!("Paragraph {number}"),
+            span,
+            text.trim_end(),
+        ))
+        .await;
     }
     Ok(())
 }

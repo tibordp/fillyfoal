@@ -36,35 +36,84 @@ macro_rules! tiff_variant {
     };
 }
 
-tiff_variant!(DNG, "dng", "Adobe Digital Negative", ["dng"], "image/x-adobe-dng", |h| {
-    ifd0(h).is_some_and(|ifd| ifd.has(0xc612))
-});
-tiff_variant!(CR2, "cr2", "Canon raw (CR2)", ["cr2"], "image/x-canon-cr2", |h| {
-    classic(h) && h.at(8, b"CR\x02\x00")
-});
-tiff_variant!(NEF, "nef", "Nikon raw (NEF)", ["nef", "nrw"], "image/x-nikon-nef", |h| {
-    ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"NIKON"))
-});
-tiff_variant!(ARW, "arw", "Sony raw (ARW)", ["arw", "srf", "sr2"], "image/x-sony-arw", |h| {
-    ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"SONY"))
-});
-tiff_variant!(PEF, "pef", "Pentax raw (PEF)", ["pef"], "image/x-pentax-pef", |h| {
-    ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"PENTAX") || ifd.make_starts_with(b"RICOH"))
-});
-tiff_variant!(SRW, "srw", "Samsung raw (SRW)", ["srw"], "image/x-samsung-srw", |h| {
-    ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"SAMSUNG"))
-});
-tiff_variant!(ORF, "orf", "Olympus raw (ORF)", ["orf"], "image/x-olympus-orf", |h| {
-    h.starts_with(b"IIRO\x08\x00\x00\x00")
-        || h.starts_with(b"IIRS\x08\x00\x00\x00")
-        || h.starts_with(b"MMOR\x00\x00\x00\x08")
-});
-tiff_variant!(RW2, "rw2", "Panasonic raw (RW2)", ["rw2", "rwl"], "image/x-panasonic-rw2", |h| {
-    h.starts_with(b"IIU\x00\x18\x00\x00\x00")
-});
-tiff_variant!(JXR, "jxr", "JPEG XR (HD Photo)", ["jxr", "wdp", "hdp"], "image/jxr", |h| {
-    h.starts_with(b"II\xbc\x01")
-});
+tiff_variant!(
+    DNG,
+    "dng",
+    "Adobe Digital Negative",
+    ["dng"],
+    "image/x-adobe-dng",
+    |h| { ifd0(h).is_some_and(|ifd| ifd.has(0xc612)) }
+);
+tiff_variant!(
+    CR2,
+    "cr2",
+    "Canon raw (CR2)",
+    ["cr2"],
+    "image/x-canon-cr2",
+    |h| { classic(h) && h.at(8, b"CR\x02\x00") }
+);
+tiff_variant!(
+    NEF,
+    "nef",
+    "Nikon raw (NEF)",
+    ["nef", "nrw"],
+    "image/x-nikon-nef",
+    |h| { ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"NIKON")) }
+);
+tiff_variant!(
+    ARW,
+    "arw",
+    "Sony raw (ARW)",
+    ["arw", "srf", "sr2"],
+    "image/x-sony-arw",
+    |h| { ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"SONY")) }
+);
+tiff_variant!(
+    PEF,
+    "pef",
+    "Pentax raw (PEF)",
+    ["pef"],
+    "image/x-pentax-pef",
+    |h| {
+        ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"PENTAX") || ifd.make_starts_with(b"RICOH"))
+    }
+);
+tiff_variant!(
+    SRW,
+    "srw",
+    "Samsung raw (SRW)",
+    ["srw"],
+    "image/x-samsung-srw",
+    |h| { ifd0(h).is_some_and(|ifd| ifd.make_starts_with(b"SAMSUNG")) }
+);
+tiff_variant!(
+    ORF,
+    "orf",
+    "Olympus raw (ORF)",
+    ["orf"],
+    "image/x-olympus-orf",
+    |h| {
+        h.starts_with(b"IIRO\x08\x00\x00\x00")
+            || h.starts_with(b"IIRS\x08\x00\x00\x00")
+            || h.starts_with(b"MMOR\x00\x00\x00\x08")
+    }
+);
+tiff_variant!(
+    RW2,
+    "rw2",
+    "Panasonic raw (RW2)",
+    ["rw2", "rwl"],
+    "image/x-panasonic-rw2",
+    |h| { h.starts_with(b"IIU\x00\x18\x00\x00\x00") }
+);
+tiff_variant!(
+    JXR,
+    "jxr",
+    "JPEG XR (HD Photo)",
+    ["jxr", "wdp", "hdp"],
+    "image/jxr",
+    |h| { h.starts_with(b"II\xbc\x01") }
+);
 
 pub static FORMAT: Format = Format {
     name: "tiff",
@@ -261,7 +310,6 @@ impl Entry {
             inline,
         })
     }
-
 }
 
 struct Ifd {
@@ -419,7 +467,10 @@ async fn describe(cx: &Cx, t: Tiff, dir: Dir, e: &Entry) -> (Option<Value>, Opti
         } else {
             crate::text::until_nul(rest)
         };
-        return (Some(Value::Text(text)), Some(crate::text::until_nul(charset)));
+        return (
+            Some(Value::Text(text)),
+            Some(crate::text::until_nul(charset)),
+        );
     }
     if matches!(e.kind, 1 | 7) && e.count > 1 {
         let printable = bytes
@@ -428,8 +479,14 @@ async fn describe(cx: &Cx, t: Tiff, dir: Dir, e: &Entry) -> (Option<Value>, Opti
         if printable && e.count <= 64 && bytes.first().is_some_and(u8::is_ascii_graphic) {
             return (Some(Value::Text(crate::text::until_nul(&bytes))), None);
         }
-        let shown = bytes.get(..bytes.len().min(32)).unwrap_or_default().to_vec();
-        return (Some(Value::Bytes(shown)), Some(format!("{} bytes", e.count)));
+        let shown = bytes
+            .get(..bytes.len().min(32))
+            .unwrap_or_default()
+            .to_vec();
+        return (
+            Some(Value::Bytes(shown)),
+            Some(format!("{} bytes", e.count)),
+        );
     }
     let values: Vec<Num> = (0..usize::try_from(e.count.min(PREVIEW)).unwrap_or(0))
         .map_while(|i| num(t, e.kind, &bytes, i))
@@ -438,9 +495,7 @@ async fn describe(cx: &Cx, t: Tiff, dir: Dir, e: &Entry) -> (Option<Value>, Opti
         && let Some(&v) = values.first()
     {
         let raw = v.as_u64();
-        if main
-            && let (Some(table), Some(raw)) = (enumeration(e.tag), raw)
-        {
+        if main && let (Some(table), Some(raw)) = (enumeration(e.tag), raw) {
             let bits = u8::try_from(type_size(e.kind).saturating_mul(8)).unwrap_or(64);
             let name = lookup(table, raw);
             return (Some(Value::Enum { raw, bits, name }), None);
@@ -502,7 +557,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     while offset != 0 {
         let index = seen.len();
         if seen.contains(&offset) {
-            cx.diag(Diagnostic::malformed(format!("IFD chain loops back to {offset:#x}")));
+            cx.diag(Diagnostic::malformed(format!(
+                "IFD chain loops back to {offset:#x}"
+            )));
             break;
         }
         if index >= MAX_IFDS {
@@ -598,7 +655,8 @@ async fn ifd_summary(cx: &Cx, t: Tiff, ifd: &Ifd) -> String {
         });
     }
     if let Some(c) = first(0x0103).await {
-        parts.push(lookup(COMPRESSION, c).map_or_else(|| format!("compression {c}"), str::to_owned));
+        parts
+            .push(lookup(COMPRESSION, c).map_or_else(|| format!("compression {c}"), str::to_owned));
     }
     if first(0x00fe).await.is_some_and(|v| v & 1 != 0) {
         parts.push("reduced resolution".to_owned());
@@ -655,7 +713,13 @@ struct IfdState {
     path: Vec<u64>,
 }
 
-fn ifd_node(name: impl Into<std::borrow::Cow<'static, str>>, t: Tiff, dir: Dir, offset: u64, path: Vec<u64>) -> Node {
+fn ifd_node(
+    name: impl Into<std::borrow::Cow<'static, str>>,
+    t: Tiff,
+    dir: Dir,
+    offset: u64,
+    path: Vec<u64>,
+) -> Node {
     Node::new(name)
         .span(t.file().sub(offset, t.count_len()))
         .lazy(
@@ -702,7 +766,10 @@ async fn ifd(cx: Cx, st: IfdState) -> Result<()> {
             }
         }
         if type_size(e.kind) == 0 {
-            node = node.diag(Diagnostic::malformed(format!("unknown field type {}", e.kind)));
+            node = node.diag(Diagnostic::malformed(format!(
+                "unknown field type {}",
+                e.kind
+            )));
         }
         let state = EntryState {
             t,
@@ -744,7 +811,10 @@ async fn image_data(cx: &Cx, t: Tiff, ifd: &Ifd) {
         }
     }
     // JPEG XR keeps its bitstream (and an optional alpha plane) out of line.
-    for (offset, count, what) in [(0xbcc0, 0xbcc1, "Image bitstream"), (0xbcc2, 0xbcc3, "Alpha bitstream")] {
+    for (offset, count, what) in [
+        (0xbcc0, 0xbcc1, "Image bitstream"),
+        (0xbcc2, 0xbcc3, "Alpha bitstream"),
+    ] {
         if let (Some(o), Some(c)) = (ifd.find(offset), ifd.find(count)) {
             let read = |e: Entry| async move {
                 let bytes = cx.read_avail(e.data.sub(0, 8)).await.ok()?;
@@ -762,12 +832,16 @@ async fn image_data(cx: &Cx, t: Tiff, ifd: &Ifd) {
         };
         if let (Some(offset), Some(len)) = (read(*o).await, read(*l).await) {
             let span = t.file().sub(offset, len);
-            cx.push(embedded("JPEG thumbnail", t.input.nested(span))).await;
+            cx.push(embedded("JPEG thumbnail", t.input.nested(span)))
+                .await;
         }
     }
 }
 
-async fn pieces(cx: Cx, (t, offsets, counts, compression): (Tiff, Entry, Entry, u64)) -> Result<()> {
+async fn pieces(
+    cx: Cx,
+    (t, offsets, counts, compression): (Tiff, Entry, Entry, u64),
+) -> Result<()> {
     let n = offsets.count.min(counts.count);
     cx.set_count(Count::Exact(n));
     let (os, cs) = (type_size(offsets.kind), type_size(counts.kind));
@@ -786,7 +860,8 @@ async fn pieces(cx: Cx, (t, offsets, counts, compression): (Tiff, Entry, Entry, 
         } else {
             region(name, t.file(), offset, len)
         };
-        cx.push(node.summary(format!("{len:#x} bytes at {offset:#x}"))).await;
+        cx.push(node.summary(format!("{len:#x} bytes at {offset:#x}")))
+            .await;
     }
     Ok(())
 }
@@ -836,7 +911,9 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
     };
     if let Some((name, dir)) = target {
         if st.path.len() >= MAX_DEPTH {
-            cx.diag(Diagnostic::limit(format!("IFDs nested deeper than {MAX_DEPTH}")));
+            cx.diag(Diagnostic::limit(format!(
+                "IFDs nested deeper than {MAX_DEPTH}"
+            )));
             return Ok(());
         }
         let size = type_size(e.kind);

@@ -130,7 +130,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn first_leaf(cx: &Cx, tree: &Tree) -> Result<u16> {
     let mut page = tree.root;
     for _ in 1..tree.levels {
-        let span = tree.pages.sub_exact(u64::from(page).saturating_mul(tree.page_size), 6)?;
+        let span = tree
+            .pages
+            .sub_exact(u64::from(page).saturating_mul(tree.page_size), 6)?;
         let data = cx.read(span).await?;
         page = u16_le(&data, 4).unwrap_or(0);
     }
@@ -139,9 +141,10 @@ async fn first_leaf(cx: &Cx, tree: &Tree) -> Result<u16> {
 
 /// Leaf entries `(name, offset, span)` of one page, and the next page.
 async fn leaf(cx: &Cx, tree: &Tree, page: u16) -> Result<(Vec<(String, u32, Span)>, i16)> {
-    let span = tree
-        .pages
-        .sub_exact(u64::from(page).saturating_mul(tree.page_size), tree.page_size)?;
+    let span = tree.pages.sub_exact(
+        u64::from(page).saturating_mul(tree.page_size),
+        tree.page_size,
+    )?;
     let data = cx.read(span).await?;
     let count = u16_le(&data, 2).unwrap_or(0);
     let next = i16_le(&data, 6).unwrap_or(-1);
@@ -149,9 +152,13 @@ async fn leaf(cx: &Cx, tree: &Tree, page: u16) -> Result<(Vec<(String, u32, Span
     let mut out = Vec::new();
     for _ in 0..count {
         let rest = data.get(at..).unwrap_or_default();
-        let Some(nul) = rest.iter().position(|&b| b == 0) else { break };
+        let Some(nul) = rest.iter().position(|&b| b == 0) else {
+            break;
+        };
         let name = crate::text::latin1(rest.get(..nul).unwrap_or_default());
-        let Some(offset) = u32_le(rest, nul.saturating_add(1)) else { break };
+        let Some(offset) = u32_le(rest, nul.saturating_add(1)) else {
+            break;
+        };
         let len = nul.saturating_add(5);
         out.push((name, offset, span.sub(to_u64(at), to_u64(len))));
         at = at.saturating_add(len);
@@ -184,9 +191,13 @@ async fn files(cx: Cx, tree: Tree) -> Result<()> {
         seen.push(page);
         let (entries, next) = leaf(&cx, &tree, u16::try_from(page).unwrap_or(0)).await?;
         for (name, offset, entry) in entries {
-            let head = cx.read_avail(tree.file.sub(offset.into(), FileHeader::SIZE)).await?;
+            let head = cx
+                .read_avail(tree.file.sub(offset.into(), FileHeader::SIZE))
+                .await?;
             let used = u32_le(&head, 4).unwrap_or(0);
-            let span = tree.file.sub(offset.into(), FileHeader::SIZE.saturating_add(used.into()));
+            let span = tree
+                .file
+                .sub(offset.into(), FileHeader::SIZE.saturating_add(used.into()));
             cx.push(
                 Node::new(name.clone())
                     .span(span)
@@ -205,11 +216,18 @@ async fn internal_file(cx: Cx, (file, offset, name): (Span, u32, String)) -> Res
     let hspan = file.sub(offset.into(), FileHeader::SIZE);
     let h = parse(&cx, hspan, LE, &(), FileHeader::layout).await?;
     cx.emit(FileHeader::node("File header", hspan, LE));
-    let body = file.sub(u64::from(offset).saturating_add(FileHeader::SIZE), h.used.into());
+    let body = file.sub(
+        u64::from(offset).saturating_add(FileHeader::SIZE),
+        h.used.into(),
+    );
     if name == "|SYSTEM" {
         return system(&cx, body).await;
     }
-    cx.emit(Node::new("Data").span(body).summary(format!("{} bytes", body.len)));
+    cx.emit(
+        Node::new("Data")
+            .span(body)
+            .summary(format!("{} bytes", body.len)),
+    );
     Ok(())
 }
 
@@ -218,13 +236,17 @@ async fn system_title(cx: &Cx, file: Span, offset: u32) -> Result<Option<String>
     let data = cx.read_avail(body).await?;
     let minor = u16_le(&data, 2).unwrap_or(0);
     if minor <= 16 {
-        return Ok(Some(crate::text::until_nul(data.get(12..).unwrap_or_default())));
+        return Ok(Some(crate::text::until_nul(
+            data.get(12..).unwrap_or_default(),
+        )));
     }
     let mut at = 12usize;
     while let (Some(kind), Some(len)) = (u16_le(&data, at), u16_le(&data, at.saturating_add(2))) {
         let start = at.saturating_add(4);
         if kind == 1 {
-            return Ok(Some(crate::text::until_nul(data.get(start..).unwrap_or_default())));
+            return Ok(Some(crate::text::until_nul(
+                data.get(start..).unwrap_or_default(),
+            )));
         }
         at = start.saturating_add(usize::from(len));
     }
@@ -235,14 +257,21 @@ async fn system(cx: &Cx, body: Span) -> Result<()> {
     let block = cx.block(body.sub(0, 12)).await?;
     let mut f = Fields::emitting(cx, &block, LE);
     f.u16("Magic").hex().emit()?;
-    let minor = f.u16("Minor version").desc("15 = 3.0, 21 = 3.1, 33 = 4.0").emit()?;
+    let minor = f
+        .u16("Minor version")
+        .desc("15 = 3.0, 21 = 3.1, 33 = 4.0")
+        .emit()?;
     f.u16("Major version").emit()?;
     f.u32("Generated").timestamp().emit()?;
     f.u16("Flags").hex().emit()?;
     let data = cx.read(body).await?;
     if minor <= 16 {
         let title = crate::text::until_nul(data.get(12..).unwrap_or_default());
-        cx.emit(Node::new("Title").span(body.tail(12)).value(Value::Text(title)));
+        cx.emit(
+            Node::new("Title")
+                .span(body.tail(12))
+                .value(Value::Text(title)),
+        );
         return Ok(());
     }
     let mut at = 12usize;
@@ -254,7 +283,9 @@ async fn system(cx: &Cx, body: Span) -> Result<()> {
             .map_or_else(|| format!("Record {kind}"), str::to_owned);
         let mut node = Node::new(name).span(body.sub(to_u64(at), to_u64(end.saturating_sub(at))));
         node = match kind {
-            1 | 2 | 4 | 8 | 10 | 18 => node.value(Value::Text(clip(&crate::text::until_nul(value), 400))),
+            1 | 2 | 4 | 8 | 10 | 18 => {
+                node.value(Value::Text(clip(&crate::text::until_nul(value), 400)))
+            }
             3 | 9 | 11 => node.value(Value::UInt {
                 value: crate::formats::datakit::le_uint(value.get(..4).unwrap_or(value)),
                 bits: 32,

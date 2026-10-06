@@ -19,7 +19,11 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 fn uint(value: u64) -> Value {
-    Value::UInt { value, bits: 64, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits: 64,
+        radix: Radix::Dec,
+    }
 }
 
 /// The root offset must point inside the file, past the identifier.
@@ -29,7 +33,9 @@ fn root_ok(h: &Head<'_>) -> bool {
 
 /// A node with the header fields of a FlatBuffer file.
 fn header(file: Span, ident: &str) -> Node {
-    Node::new("Header").span(file.sub(0, 8)).summary(format!("root table offset, identifier {ident}"))
+    Node::new("Header")
+        .span(file.sub(0, 8))
+        .summary(format!("root table offset, identifier {ident}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -57,25 +63,133 @@ const TENSOR_TYPE: EnumTable = &[
 ];
 
 const BUILTIN: &[&str] = &[
-    "ADD", "AVERAGE_POOL_2D", "CONCATENATION", "CONV_2D", "DEPTHWISE_CONV_2D", "DEPTH_TO_SPACE",
-    "DEQUANTIZE", "EMBEDDING_LOOKUP", "FLOOR", "FULLY_CONNECTED", "HASHTABLE_LOOKUP",
-    "L2_NORMALIZATION", "L2_POOL_2D", "LOCAL_RESPONSE_NORMALIZATION", "LOGISTIC", "LSH_PROJECTION",
-    "LSTM", "MAX_POOL_2D", "MUL", "RELU", "RELU_N1_TO_1", "RELU6", "RESHAPE", "RESIZE_BILINEAR",
-    "RNN", "SOFTMAX", "SPACE_TO_DEPTH", "SVDF", "TANH", "CONCAT_EMBEDDINGS", "SKIP_GRAM", "CALL",
-    "CUSTOM", "EMBEDDING_LOOKUP_SPARSE", "PAD", "UNIDIRECTIONAL_SEQUENCE_RNN", "GATHER",
-    "BATCH_TO_SPACE_ND", "SPACE_TO_BATCH_ND", "TRANSPOSE", "MEAN", "SUB", "DIV", "SQUEEZE",
-    "UNIDIRECTIONAL_SEQUENCE_LSTM", "STRIDED_SLICE", "BIDIRECTIONAL_SEQUENCE_RNN", "EXP", "TOPK_V2",
-    "SPLIT", "LOG_SOFTMAX", "DELEGATE", "BIDIRECTIONAL_SEQUENCE_LSTM", "CAST", "PRELU", "MAXIMUM",
-    "ARG_MAX", "MINIMUM", "LESS", "NEG", "PADV2", "GREATER", "GREATER_EQUAL", "LESS_EQUAL",
-    "SELECT", "SLICE", "SIN", "TRANSPOSE_CONV", "SPARSE_TO_DENSE", "TILE", "EXPAND_DIMS", "EQUAL",
-    "NOT_EQUAL", "LOG", "SUM", "SQRT", "RSQRT", "SHAPE", "POW", "ARG_MIN", "FAKE_QUANT",
-    "REDUCE_PROD", "REDUCE_MAX", "PACK", "LOGICAL_OR", "ONE_HOT", "LOGICAL_AND", "LOGICAL_NOT",
-    "UNPACK", "REDUCE_MIN", "FLOOR_DIV", "REDUCE_ANY", "SQUARE", "ZEROS_LIKE", "FILL", "FLOOR_MOD",
-    "RANGE", "RESIZE_NEAREST_NEIGHBOR", "LEAKY_RELU", "SQUARED_DIFFERENCE", "MIRROR_PAD", "ABS",
-    "SPLIT_V", "UNIQUE", "CEIL", "REVERSE_V2", "ADD_N", "GATHER_ND", "COS", "WHERE", "RANK", "ELU",
-    "REVERSE_SEQUENCE", "MATRIX_DIAG", "QUANTIZE", "MATRIX_SET_DIAG", "ROUND", "HARD_SWISH", "IF",
-    "WHILE", "NON_MAX_SUPPRESSION_V4", "NON_MAX_SUPPRESSION_V5", "SCATTER_ND", "SELECT_V2",
-    "DENSIFY", "SEGMENT_SUM", "BATCH_MATMUL",
+    "ADD",
+    "AVERAGE_POOL_2D",
+    "CONCATENATION",
+    "CONV_2D",
+    "DEPTHWISE_CONV_2D",
+    "DEPTH_TO_SPACE",
+    "DEQUANTIZE",
+    "EMBEDDING_LOOKUP",
+    "FLOOR",
+    "FULLY_CONNECTED",
+    "HASHTABLE_LOOKUP",
+    "L2_NORMALIZATION",
+    "L2_POOL_2D",
+    "LOCAL_RESPONSE_NORMALIZATION",
+    "LOGISTIC",
+    "LSH_PROJECTION",
+    "LSTM",
+    "MAX_POOL_2D",
+    "MUL",
+    "RELU",
+    "RELU_N1_TO_1",
+    "RELU6",
+    "RESHAPE",
+    "RESIZE_BILINEAR",
+    "RNN",
+    "SOFTMAX",
+    "SPACE_TO_DEPTH",
+    "SVDF",
+    "TANH",
+    "CONCAT_EMBEDDINGS",
+    "SKIP_GRAM",
+    "CALL",
+    "CUSTOM",
+    "EMBEDDING_LOOKUP_SPARSE",
+    "PAD",
+    "UNIDIRECTIONAL_SEQUENCE_RNN",
+    "GATHER",
+    "BATCH_TO_SPACE_ND",
+    "SPACE_TO_BATCH_ND",
+    "TRANSPOSE",
+    "MEAN",
+    "SUB",
+    "DIV",
+    "SQUEEZE",
+    "UNIDIRECTIONAL_SEQUENCE_LSTM",
+    "STRIDED_SLICE",
+    "BIDIRECTIONAL_SEQUENCE_RNN",
+    "EXP",
+    "TOPK_V2",
+    "SPLIT",
+    "LOG_SOFTMAX",
+    "DELEGATE",
+    "BIDIRECTIONAL_SEQUENCE_LSTM",
+    "CAST",
+    "PRELU",
+    "MAXIMUM",
+    "ARG_MAX",
+    "MINIMUM",
+    "LESS",
+    "NEG",
+    "PADV2",
+    "GREATER",
+    "GREATER_EQUAL",
+    "LESS_EQUAL",
+    "SELECT",
+    "SLICE",
+    "SIN",
+    "TRANSPOSE_CONV",
+    "SPARSE_TO_DENSE",
+    "TILE",
+    "EXPAND_DIMS",
+    "EQUAL",
+    "NOT_EQUAL",
+    "LOG",
+    "SUM",
+    "SQRT",
+    "RSQRT",
+    "SHAPE",
+    "POW",
+    "ARG_MIN",
+    "FAKE_QUANT",
+    "REDUCE_PROD",
+    "REDUCE_MAX",
+    "PACK",
+    "LOGICAL_OR",
+    "ONE_HOT",
+    "LOGICAL_AND",
+    "LOGICAL_NOT",
+    "UNPACK",
+    "REDUCE_MIN",
+    "FLOOR_DIV",
+    "REDUCE_ANY",
+    "SQUARE",
+    "ZEROS_LIKE",
+    "FILL",
+    "FLOOR_MOD",
+    "RANGE",
+    "RESIZE_NEAREST_NEIGHBOR",
+    "LEAKY_RELU",
+    "SQUARED_DIFFERENCE",
+    "MIRROR_PAD",
+    "ABS",
+    "SPLIT_V",
+    "UNIQUE",
+    "CEIL",
+    "REVERSE_V2",
+    "ADD_N",
+    "GATHER_ND",
+    "COS",
+    "WHERE",
+    "RANK",
+    "ELU",
+    "REVERSE_SEQUENCE",
+    "MATRIX_DIAG",
+    "QUANTIZE",
+    "MATRIX_SET_DIAG",
+    "ROUND",
+    "HARD_SWISH",
+    "IF",
+    "WHILE",
+    "NON_MAX_SUPPRESSION_V4",
+    "NON_MAX_SUPPRESSION_V5",
+    "SCATTER_ND",
+    "SELECT_V2",
+    "DENSIFY",
+    "SEGMENT_SUM",
+    "BATCH_MATMUL",
 ];
 
 fn builtin_name(code: i32) -> String {
@@ -127,9 +241,13 @@ async fn tflite(cx: Cx, input: Input) -> Result<()> {
         for i in 0..v.len.min(64) {
             let g = fb.table_in(v, i).await?;
             ops = ops.saturating_add(fb.vector(&g, 3, 4).await?.map_or(0, |o| o.len.into()));
-            tensors = tensors.saturating_add(fb.vector(&g, 0, 4).await?.map_or(0, |t| t.len.into()));
+            tensors =
+                tensors.saturating_add(fb.vector(&g, 0, 4).await?.map_or(0, |t| t.len.into()));
         }
-        stats = format!(", {} subgraph(s), {ops} operators, {tensors} tensors", v.len);
+        stats = format!(
+            ", {} subgraph(s), {ops} operators, {tensors} tensors",
+            v.len
+        );
         cx.emit(
             Node::new("Subgraphs")
                 .span(fb.vector_span(v, 4))
@@ -231,7 +349,12 @@ async fn subgraph(cx: Cx, (file, g, names): (Span, Table, Arc<Vec<String>>)) -> 
     for (slot, label) in [(1u16, "Inputs"), (2, "Outputs")] {
         if let Some(v) = fb.vector(&g, slot, 4).await? {
             let values = fb.i32s(v, 64).await?;
-            cx.emit(Node::new(label).span(fb.vector_span(v, 4)).value(text(dims(&values, v.len))).desc("Tensor indices"));
+            cx.emit(
+                Node::new(label)
+                    .span(fb.vector_span(v, 4))
+                    .value(text(dims(&values, v.len)))
+                    .desc("Tensor indices"),
+            );
         }
     }
     if let Some(v) = fb.vector(&g, 0, 4).await? {
@@ -270,7 +393,13 @@ async fn tensors(cx: Cx, (file, v): (Span, Vector)) -> Result<()> {
         if buffer != 0 {
             summary.push_str(&format!(", buffer {buffer}"));
         }
-        cx.push(Node::new(format!("[{i}]")).span(fb.table_span(&t)).value(text(name)).summary(summary)).await;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(fb.table_span(&t))
+                .value(text(name))
+                .summary(summary),
+        )
+        .await;
     }
     Ok(())
 }
@@ -320,16 +449,23 @@ async fn buffer_list(cx: Cx, (input, model): (Input, Table)) -> Result<()> {
                 // Metadata buffers hold files (e.g. a zipped label map).
                 let head = cx.read_avail(span.sub(0, 4)).await?;
                 if head.starts_with(b"PK\x03\x04") {
-                    embedded(format!("[{i}]"), input.nested(span)).summary(format!("{} bytes", d.len))
+                    embedded(format!("[{i}]"), input.nested(span))
+                        .summary(format!("{} bytes", d.len))
                 } else {
-                    Node::new(format!("[{i}]")).span(span).summary(format!("{} bytes", d.len))
+                    Node::new(format!("[{i}]"))
+                        .span(span)
+                        .summary(format!("{} bytes", d.len))
                 }
             }
             _ => match (fb.u64_field(&b, 1).await?, fb.u64_field(&b, 2).await?) {
                 (Some(offset), Some(size)) if size > 0 => Node::new(format!("[{i}]"))
                     .span(file.sub(offset, size))
-                    .summary(format!("{size} bytes at {offset:#x} (outside the FlatBuffer)")),
-                _ => Node::new(format!("[{i}]")).span(fb.table_span(&b)).summary("empty"),
+                    .summary(format!(
+                        "{size} bytes at {offset:#x} (outside the FlatBuffer)"
+                    )),
+                _ => Node::new(format!("[{i}]"))
+                    .span(fb.table_span(&b))
+                    .summary("empty"),
             },
         };
         cx.push(node).await;
@@ -346,7 +482,13 @@ async fn metadata_list(cx: Cx, (file, model): (Span, Table)) -> Result<()> {
         let m = fb.table_in(v, i).await?;
         let name = fb.string(&m, 0).await?.unwrap_or_default();
         let buffer = fb.u32_field(&m, 1).await?.unwrap_or(0);
-        cx.push(Node::new(format!("[{i}]")).span(fb.table_span(&m)).value(text(name)).summary(format!("buffer {buffer}"))).await;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(fb.table_span(&m))
+                .value(text(name))
+                .summary(format!("buffer {buffer}")),
+        )
+        .await;
     }
     Ok(())
 }
@@ -376,17 +518,34 @@ async fn ort(cx: Cx, input: Input) -> Result<()> {
         let producer_version = fb.string(&model, 3).await?.unwrap_or_default();
         cx.emit(Node::new("IR version").value(uint(ir)));
         if !producer.is_empty() {
-            cx.emit(Node::new("Producer").value(text(format!("{producer} {producer_version}").trim_end().to_owned())));
+            cx.emit(
+                Node::new("Producer").value(text(
+                    format!("{producer} {producer_version}")
+                        .trim_end()
+                        .to_owned(),
+                )),
+            );
             parts.push(format!("from {producer}"));
         }
         if let Some(v) = fb.vector(&model, 1, 4).await? {
             let mut sets = Vec::new();
             for i in 0..v.len.min(32) {
                 let s = fb.table_in(v, i).await?;
-                let domain = fb.string(&s, 0).await?.filter(|d| !d.is_empty()).unwrap_or_else(|| "ai.onnx".to_owned());
-                sets.push(format!("{domain} {}", fb.u64_field(&s, 1).await?.unwrap_or(0)));
+                let domain = fb
+                    .string(&s, 0)
+                    .await?
+                    .filter(|d| !d.is_empty())
+                    .unwrap_or_else(|| "ai.onnx".to_owned());
+                sets.push(format!(
+                    "{domain} {}",
+                    fb.u64_field(&s, 1).await?.unwrap_or(0)
+                ));
             }
-            cx.emit(Node::new("Opset imports").span(fb.vector_span(v, 4)).value(text(sets.join(", "))));
+            cx.emit(
+                Node::new("Opset imports")
+                    .span(fb.vector_span(v, 4))
+                    .value(text(sets.join(", "))),
+            );
         }
         if let Some(gat) = fb.field(&model, 7).await? {
             let graph = fb.table(fb.deref(gat).await?).await?;
@@ -399,10 +558,18 @@ async fn ort(cx: Cx, input: Input) -> Result<()> {
                         .lazy(ort_nodes, (file, v)),
                 );
             }
-            cx.emit(Node::new("Graph table").span(fb.table_span(&graph)).lazy(raw_table, (file, graph)));
+            cx.emit(
+                Node::new("Graph table")
+                    .span(fb.table_span(&graph))
+                    .lazy(raw_table, (file, graph)),
+            );
         }
     }
-    cx.emit(Node::new("Session table").span(fb.table_span(&session)).lazy(raw_table, (file, session)));
+    cx.emit(
+        Node::new("Session table")
+            .span(fb.table_span(&session))
+            .lazy(raw_table, (file, session)),
+    );
     cx.annotate(parts.join(", "));
     Ok(())
 }
@@ -419,7 +586,13 @@ async fn ort_nodes(cx: Cx, (file, v): (Span, Vector)) -> Result<()> {
             Some(d) => format!("{d}::{op}"),
             None => op,
         };
-        cx.push(Node::new(format!("[{i}]")).span(fb.table_span(&n)).value(text(op)).summary(name)).await;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(fb.table_span(&n))
+                .value(text(op))
+                .summary(name),
+        )
+        .await;
     }
     Ok(())
 }
@@ -429,7 +602,9 @@ async fn ort_nodes(cx: Cx, (file, v): (Span, Vector)) -> Result<()> {
 
 fn pte_probe(h: &Head<'_>) -> bool {
     h.at(4, b"ET")
-        && h.data.get(6..8).is_some_and(|v| v.iter().all(u8::is_ascii_digit))
+        && h.data
+            .get(6..8)
+            .is_some_and(|v| v.iter().all(u8::is_ascii_digit))
         && root_ok(h)
 }
 
@@ -445,13 +620,19 @@ async fn executorch(cx: Cx, input: Input) -> Result<()> {
     let ext = cx.read_avail(file.sub(8, 32)).await?;
     if ext.starts_with(b"eh00") {
         let len = u32_le(&ext, 4).unwrap_or(0);
-        cx.emit(crate::fields::struct_node("Extended header", file.sub(8, len.into()), crate::fields::Endian::Little, (), |f, _| {
-            f.ascii("Magic", 4).emit()?;
-            f.u32("Length").emit()?;
-            f.u64("Program size").emit()?;
-            f.u64("Segment base offset").hex().emit()?;
-            Ok(())
-        }));
+        cx.emit(crate::fields::struct_node(
+            "Extended header",
+            file.sub(8, len.into()),
+            crate::fields::Endian::Little,
+            (),
+            |f, _| {
+                f.ascii("Magic", 4).emit()?;
+                f.u32("Length").emit()?;
+                f.u64("Program size").emit()?;
+                f.u64("Segment base offset").hex().emit()?;
+                Ok(())
+            },
+        ));
     }
     let program = fb.root().await?;
     let version = fb.u32_field(&program, 0).await?.unwrap_or(0);
@@ -470,10 +651,21 @@ async fn executorch(cx: Cx, input: Input) -> Result<()> {
         );
     }
     if let Some(v) = fb.vector(&program, 4, 4).await? {
-        cx.emit(Node::new("Segments").span(fb.vector_span(v, 4)).summary(format!("{} segments", v.len)));
+        cx.emit(
+            Node::new("Segments")
+                .span(fb.vector_span(v, 4))
+                .summary(format!("{} segments", v.len)),
+        );
     }
-    cx.emit(Node::new("Program table").span(fb.table_span(&program)).lazy(raw_table, (file, program)));
-    cx.annotate(format!("ExecuTorch program ({ident}), version {version}, methods: {}", plans.join(", ")));
+    cx.emit(
+        Node::new("Program table")
+            .span(fb.table_span(&program))
+            .lazy(raw_table, (file, program)),
+    );
+    cx.annotate(format!(
+        "ExecuTorch program ({ident}), version {version}, methods: {}",
+        plans.join(", ")
+    ));
     Ok(())
 }
 

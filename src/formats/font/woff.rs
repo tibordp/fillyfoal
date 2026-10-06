@@ -85,7 +85,13 @@ fn metadata_nodes(cx: &Cx, input: Input, file: Span, h: (u32, u32, u32, u32, u32
                 .span(span)
                 .diag(Diagnostic::unsupported("Brotli compression"))
         } else {
-            content("Metadata (XML)", input, span, Codec::Zlib, Some(meta_orig.into()))
+            content(
+                "Metadata (XML)",
+                input,
+                span,
+                Codec::Zlib,
+                Some(meta_orig.into()),
+            )
         };
         cx.emit(node.summary(format!("{meta_orig} bytes uncompressed")));
     }
@@ -107,8 +113,24 @@ pub async fn woff(cx: Cx, input: Input) -> Result<()> {
         size(h.sfnt_size.into())
     ));
     let dir = file.sub_exact(WoffHeader::SIZE, u64::from(h.tables).saturating_mul(20))?;
-    cx.emit(Node::new("Table directory").span(dir).summary(format!("{} tables", h.tables)));
-    metadata_nodes(&cx, input, file, (h.meta_offset, h.meta_length, h.meta_orig, h.priv_offset, h.priv_length), false);
+    cx.emit(
+        Node::new("Table directory")
+            .span(dir)
+            .summary(format!("{} tables", h.tables)),
+    );
+    metadata_nodes(
+        &cx,
+        input,
+        file,
+        (
+            h.meta_offset,
+            h.meta_length,
+            h.meta_orig,
+            h.priv_offset,
+            h.priv_length,
+        ),
+        false,
+    );
     let data = cx.read(dir).await?;
     for (i, rec) in data.as_chunks::<20>().0.iter().enumerate() {
         let tag = fourcc(rec.get(..4).unwrap_or_default());
@@ -141,14 +163,20 @@ async fn woff_table(
     cx: Cx,
     (entry, span, tag, compressed, orig, checksum): (Span, Span, String, bool, u32, u32),
 ) -> Result<()> {
-    cx.emit(crate::fields::struct_node("Directory entry", entry, BE, (), |f, _| {
-        f.ascii("Tag", 4).emit()?;
-        f.u32("Offset").hex().emit()?;
-        f.u32("Compressed length").emit()?;
-        f.u32("Original length").emit()?;
-        f.u32("Original checksum").hex().emit()?;
-        Ok(())
-    }));
+    cx.emit(crate::fields::struct_node(
+        "Directory entry",
+        entry,
+        BE,
+        (),
+        |f, _| {
+            f.ascii("Tag", 4).emit()?;
+            f.u32("Offset").hex().emit()?;
+            f.u32("Compressed length").emit()?;
+            f.u32("Original length").emit()?;
+            f.u32("Original checksum").hex().emit()?;
+            Ok(())
+        },
+    ));
     let table = if compressed {
         let decoded = inflate_span(&cx, span, true, Some(orig.into())).await?;
         if let Some(e) = decoded.error {
@@ -165,7 +193,9 @@ async fn woff_table(
         cx.emit(if computed == checksum {
             node.summary("valid")
         } else {
-            node.diag(Diagnostic::warning(format!("mismatch: computed {computed:#010x}")))
+            node.diag(Diagnostic::warning(format!(
+                "mismatch: computed {computed:#010x}"
+            )))
         });
     }
     tables::decode(&cx, &tag, table).await
@@ -264,10 +294,25 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Compressed font data")
             .span(stream)
-            .summary(format!("{} bytes → {total} bytes of table data", stream.len))
+            .summary(format!(
+                "{} bytes → {total} bytes of table data",
+                stream.len
+            ))
             .diag(Diagnostic::unsupported("Brotli compression")),
     );
-    metadata_nodes(&cx, input, file, (h.meta_offset, h.meta_length, h.meta_orig, h.priv_offset, h.priv_length), true);
+    metadata_nodes(
+        &cx,
+        input,
+        file,
+        (
+            h.meta_offset,
+            h.meta_length,
+            h.meta_orig,
+            h.priv_offset,
+            h.priv_length,
+        ),
+        true,
+    );
     Ok(())
 }
 
@@ -278,7 +323,10 @@ async fn woff2_directory(cx: Cx, (entries,): (Vec<Woff2Entry>,)) -> Result<()> {
     for (span, tag, flags, orig, transform) in entries {
         let mut summary = format!("{orig} bytes");
         if let Some(t) = transform {
-            summary = format!("{summary}, transformed (version {}) to {t} bytes", flags >> 6);
+            summary = format!(
+                "{summary}, transformed (version {}) to {t} bytes",
+                flags >> 6
+            );
         }
         if let Some(name) = tables::table_name(&tag) {
             summary = format!("{name}, {summary}");

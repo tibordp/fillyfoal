@@ -207,86 +207,316 @@ zip_variant!(
     |h| has_entry_suffix(h, b".usdc") || has_entry_suffix(h, b".usda")
 );
 
-zip_variant!(KRITA, "krita", "Krita document", ["kra"], "application/x-krita",
-    |h| mimetype(h, b"application/x-krita"));
-zip_variant!(ORA, "ora", "OpenRaster image", ["ora"], "image/openraster",
-    |h| mimetype(h, b"image/openraster"));
-zip_variant!(IDML, "idml", "InDesign markup package", ["idml"], "application/vnd.adobe.indesign-idml-package",
-    |h| mimetype(h, b"application/vnd.adobe.indesign-idml-package"));
-zip_variant!(ODF_FORMULA, "odf", "OpenDocument formula", ["odf"], "application/vnd.oasis.opendocument.formula",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.formula"));
-zip_variant!(ODB, "odb", "OpenDocument database", ["odb"], "application/vnd.oasis.opendocument.base",
-    |h| mimetype(h, b"application/vnd.oasis.opendocument.base"));
-zip_variant!(IWORK, "iwork", "Apple iWork document (Pages/Numbers/Keynote)", ["pages", "numbers", "key"], "application/x-iwork",
-    |h| has_entry(h, b"Index/Document.iwa") || has_entry(h, b"Index.zip"));
-zip_variant!(APPX, "appx", "Windows app package (APPX/MSIX)", ["appx", "msix", "appxbundle", "msixbundle"], "application/vnd.ms-appx",
-    |h| has_entry(h, b"AppxManifest.xml") || has_entry(h, b"AppxMetadata/AppxBundleManifest.xml") || has_entry(h, b"AppxSignature.p7x"));
-zip_variant!(XAP, "xap", "Silverlight / Windows Phone package", ["xap"], "application/x-silverlight-app",
-    |h| has_entry(h, b"AppManifest.xaml"));
-zip_variant!(SCRATCH, "sb3", "Scratch 3 project", ["sb3", "sb2"], "application/x-scratch-project",
-    |h| has_entry(h, b"project.json"));
-zip_variant!(MCPACK, "mcpack", "Minecraft Bedrock pack", ["mcpack", "mcaddon", "mcworld"], "application/zip",
-    |h| has_entry(h, b"manifest.json") && (has_entry_suffix(h, b"pack_icon.png") || has_entry(h, b"level.dat")));
-zip_variant!(AAR, "aar", "Android library archive", ["aar"], "application/zip",
-    |h| has_entry(h, b"AndroidManifest.xml") && has_entry(h, b"classes.jar"));
-zip_variant!(XLSB, "xlsb", "Excel binary workbook", ["xlsb"], "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
-    |h| ooxml(h, b"xl/") && has_entry_suffix(h, b".bin"));
-zip_variant!(SNUPKG, "snupkg", "NuGet symbols package", ["snupkg"], "application/zip",
-    |h| has_entry_suffix(h, b".nuspec") && has_entry_suffix(h, b".pdb"));
-zip_variant!(FBZ, "fbz", "FictionBook (zipped)", ["fbz"], "application/x-zip-compressed-fb2",
-    |h| has_entry_suffix(h, b".fb2"));
-zip_variant!(CBZ, "cbz", "Comic book archive (ZIP)", ["cbz"], "application/vnd.comicbook+zip",
-    |h| has_entry(h, b"ComicInfo.xml"));
-zip_variant!(GEOGEBRA, "ggb", "GeoGebra file", ["ggb"], "application/vnd.geogebra.file",
-    |h| has_entry(h, b"geogebra.xml"));
-zip_variant!(ADOBE_XD, "adobe-xd", "Adobe XD document", ["xd"], "application/vnd.adobe.sparkler.project+dcxucf",
-    |h| mimetype(h, b"application/vnd.adobe.sparkler.project+dcxucf"));
-zip_variant!(PROCREATE, "procreate", "Procreate artwork", ["procreate", "brush", "brushset", "swatches"], "application/x-procreate",
-    |h| has_entry(h, b"Document.archive"));
-zip_variant!(XFL, "flash-fla", "Adobe Animate / Flash document (XFL)", ["fla", "xfl"], "application/vnd.adobe.fla",
-    |h| has_entry(h, b"DOMDocument.xml"));
-zip_variant!(PYTORCH, "pytorch", "PyTorch model/checkpoint", ["pt", "pth", "ckpt", "bin"], "application/x-pytorch",
-    |h| has_entry_suffix(h, b"/data.pkl") || has_entry(h, b"data.pkl"));
-zip_variant!(NPZ, "npz", "NumPy array archive (NPZ)", ["npz"], "application/x-npz",
-    |h| is_zip(h) && entry_names(h).next().is_some() && entry_names(h).all(|n| n.ends_with(b".npy")));
-zip_variant!(KERAS, "keras", "Keras v3 model", ["keras"], "application/x-keras",
-    |h| has_entry(h, b"config.json") && (has_entry(h, b"model.weights.h5") || has_entry(h, b"metadata.json")));
-zip_variant!(SIGROK, "sigrok", "sigrok logic analyzer session", ["sr"], "application/x-sigrok",
-    |h| has_entry(h, b"version") && has_entry(h, b"metadata"));
-zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
-    |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
+zip_variant!(
+    KRITA,
+    "krita",
+    "Krita document",
+    ["kra"],
+    "application/x-krita",
+    |h| mimetype(h, b"application/x-krita")
+);
+zip_variant!(
+    ORA,
+    "ora",
+    "OpenRaster image",
+    ["ora"],
+    "image/openraster",
+    |h| mimetype(h, b"image/openraster")
+);
+zip_variant!(
+    IDML,
+    "idml",
+    "InDesign markup package",
+    ["idml"],
+    "application/vnd.adobe.indesign-idml-package",
+    |h| mimetype(h, b"application/vnd.adobe.indesign-idml-package")
+);
+zip_variant!(
+    ODF_FORMULA,
+    "odf",
+    "OpenDocument formula",
+    ["odf"],
+    "application/vnd.oasis.opendocument.formula",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.formula")
+);
+zip_variant!(
+    ODB,
+    "odb",
+    "OpenDocument database",
+    ["odb"],
+    "application/vnd.oasis.opendocument.base",
+    |h| mimetype(h, b"application/vnd.oasis.opendocument.base")
+);
+zip_variant!(
+    IWORK,
+    "iwork",
+    "Apple iWork document (Pages/Numbers/Keynote)",
+    ["pages", "numbers", "key"],
+    "application/x-iwork",
+    |h| has_entry(h, b"Index/Document.iwa") || has_entry(h, b"Index.zip")
+);
+zip_variant!(
+    APPX,
+    "appx",
+    "Windows app package (APPX/MSIX)",
+    ["appx", "msix", "appxbundle", "msixbundle"],
+    "application/vnd.ms-appx",
+    |h| has_entry(h, b"AppxManifest.xml")
+        || has_entry(h, b"AppxMetadata/AppxBundleManifest.xml")
+        || has_entry(h, b"AppxSignature.p7x")
+);
+zip_variant!(
+    XAP,
+    "xap",
+    "Silverlight / Windows Phone package",
+    ["xap"],
+    "application/x-silverlight-app",
+    |h| has_entry(h, b"AppManifest.xaml")
+);
+zip_variant!(
+    SCRATCH,
+    "sb3",
+    "Scratch 3 project",
+    ["sb3", "sb2"],
+    "application/x-scratch-project",
+    |h| has_entry(h, b"project.json")
+);
+zip_variant!(
+    MCPACK,
+    "mcpack",
+    "Minecraft Bedrock pack",
+    ["mcpack", "mcaddon", "mcworld"],
+    "application/zip",
+    |h| has_entry(h, b"manifest.json")
+        && (has_entry_suffix(h, b"pack_icon.png") || has_entry(h, b"level.dat"))
+);
+zip_variant!(
+    AAR,
+    "aar",
+    "Android library archive",
+    ["aar"],
+    "application/zip",
+    |h| has_entry(h, b"AndroidManifest.xml") && has_entry(h, b"classes.jar")
+);
+zip_variant!(
+    XLSB,
+    "xlsb",
+    "Excel binary workbook",
+    ["xlsb"],
+    "application/vnd.ms-excel.sheet.binary.macroEnabled.12",
+    |h| ooxml(h, b"xl/") && has_entry_suffix(h, b".bin")
+);
+zip_variant!(
+    SNUPKG,
+    "snupkg",
+    "NuGet symbols package",
+    ["snupkg"],
+    "application/zip",
+    |h| has_entry_suffix(h, b".nuspec") && has_entry_suffix(h, b".pdb")
+);
+zip_variant!(
+    FBZ,
+    "fbz",
+    "FictionBook (zipped)",
+    ["fbz"],
+    "application/x-zip-compressed-fb2",
+    |h| has_entry_suffix(h, b".fb2")
+);
+zip_variant!(
+    CBZ,
+    "cbz",
+    "Comic book archive (ZIP)",
+    ["cbz"],
+    "application/vnd.comicbook+zip",
+    |h| has_entry(h, b"ComicInfo.xml")
+);
+zip_variant!(
+    GEOGEBRA,
+    "ggb",
+    "GeoGebra file",
+    ["ggb"],
+    "application/vnd.geogebra.file",
+    |h| has_entry(h, b"geogebra.xml")
+);
+zip_variant!(
+    ADOBE_XD,
+    "adobe-xd",
+    "Adobe XD document",
+    ["xd"],
+    "application/vnd.adobe.sparkler.project+dcxucf",
+    |h| mimetype(h, b"application/vnd.adobe.sparkler.project+dcxucf")
+);
+zip_variant!(
+    PROCREATE,
+    "procreate",
+    "Procreate artwork",
+    ["procreate", "brush", "brushset", "swatches"],
+    "application/x-procreate",
+    |h| has_entry(h, b"Document.archive")
+);
+zip_variant!(
+    XFL,
+    "flash-fla",
+    "Adobe Animate / Flash document (XFL)",
+    ["fla", "xfl"],
+    "application/vnd.adobe.fla",
+    |h| has_entry(h, b"DOMDocument.xml")
+);
+zip_variant!(
+    PYTORCH,
+    "pytorch",
+    "PyTorch model/checkpoint",
+    ["pt", "pth", "ckpt", "bin"],
+    "application/x-pytorch",
+    |h| has_entry_suffix(h, b"/data.pkl") || has_entry(h, b"data.pkl")
+);
+zip_variant!(
+    NPZ,
+    "npz",
+    "NumPy array archive (NPZ)",
+    ["npz"],
+    "application/x-npz",
+    |h| is_zip(h)
+        && entry_names(h).next().is_some()
+        && entry_names(h).all(|n| n.ends_with(b".npy"))
+);
+zip_variant!(
+    KERAS,
+    "keras",
+    "Keras v3 model",
+    ["keras"],
+    "application/x-keras",
+    |h| has_entry(h, b"config.json")
+        && (has_entry(h, b"model.weights.h5") || has_entry(h, b"metadata.json"))
+);
+zip_variant!(
+    SIGROK,
+    "sigrok",
+    "sigrok logic analyzer session",
+    ["sr"],
+    "application/x-sigrok",
+    |h| has_entry(h, b"version") && has_entry(h, b"metadata")
+);
+zip_variant!(
+    DWFX,
+    "dwfx",
+    "Autodesk Design Web Format (XPS)",
+    ["dwfx"],
+    "model/vnd.dwfx+xps",
+    |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq")
+);
 // OpenOffice.org 1.x / StarOffice 6–7 (the predecessors of OpenDocument).
-zip_variant!(SXW, "sxw", "OpenOffice.org 1.x text document", ["sxw", "stw", "sxg"], "application/vnd.sun.xml.writer",
-    |h| mimetype(h, b"application/vnd.sun.xml.writer"));
-zip_variant!(SXC, "sxc", "OpenOffice.org 1.x spreadsheet", ["sxc", "stc"], "application/vnd.sun.xml.calc",
-    |h| mimetype(h, b"application/vnd.sun.xml.calc"));
-zip_variant!(SXI, "sxi", "OpenOffice.org 1.x presentation", ["sxi", "sti"], "application/vnd.sun.xml.impress",
-    |h| mimetype(h, b"application/vnd.sun.xml.impress"));
-zip_variant!(SXD, "sxd", "OpenOffice.org 1.x drawing", ["sxd", "std"], "application/vnd.sun.xml.draw",
-    |h| mimetype(h, b"application/vnd.sun.xml.draw"));
-zip_variant!(SXM, "sxm", "OpenOffice.org 1.x formula", ["sxm"], "application/vnd.sun.xml.math",
-    |h| mimetype(h, b"application/vnd.sun.xml.math"));
-zip_variant!(CDR_ZIP, "cdr-zip", "CorelDRAW X4+ drawing (ZIP)", ["cdr", "cdt"], "application/vnd.corel-draw",
-    |h| has_entry(h, b"content/riffData.cdr") || has_entry(h, b"content/root.dat"));
-zip_variant!(IWORK09, "iwork09", "Apple iWork '09 document (Pages/Numbers/Keynote)", ["pages", "numbers", "key"], "application/x-iwork09",
+zip_variant!(
+    SXW,
+    "sxw",
+    "OpenOffice.org 1.x text document",
+    ["sxw", "stw", "sxg"],
+    "application/vnd.sun.xml.writer",
+    |h| mimetype(h, b"application/vnd.sun.xml.writer")
+);
+zip_variant!(
+    SXC,
+    "sxc",
+    "OpenOffice.org 1.x spreadsheet",
+    ["sxc", "stc"],
+    "application/vnd.sun.xml.calc",
+    |h| mimetype(h, b"application/vnd.sun.xml.calc")
+);
+zip_variant!(
+    SXI,
+    "sxi",
+    "OpenOffice.org 1.x presentation",
+    ["sxi", "sti"],
+    "application/vnd.sun.xml.impress",
+    |h| mimetype(h, b"application/vnd.sun.xml.impress")
+);
+zip_variant!(
+    SXD,
+    "sxd",
+    "OpenOffice.org 1.x drawing",
+    ["sxd", "std"],
+    "application/vnd.sun.xml.draw",
+    |h| mimetype(h, b"application/vnd.sun.xml.draw")
+);
+zip_variant!(
+    SXM,
+    "sxm",
+    "OpenOffice.org 1.x formula",
+    ["sxm"],
+    "application/vnd.sun.xml.math",
+    |h| mimetype(h, b"application/vnd.sun.xml.math")
+);
+zip_variant!(
+    CDR_ZIP,
+    "cdr-zip",
+    "CorelDRAW X4+ drawing (ZIP)",
+    ["cdr", "cdt"],
+    "application/vnd.corel-draw",
+    |h| has_entry(h, b"content/riffData.cdr") || has_entry(h, b"content/root.dat")
+);
+zip_variant!(
+    IWORK09,
+    "iwork09",
+    "Apple iWork '09 document (Pages/Numbers/Keynote)",
+    ["pages", "numbers", "key"],
+    "application/x-iwork09",
     |h| has_entry(h, b"index.apxl")
         || has_entry(h, b"index.apxl.gz")
-        || ((has_entry(h, b"index.xml") || has_entry(h, b"index.xml.gz")) && has_entry(h, b"buildVersionHistory.plist")));
+        || ((has_entry(h, b"index.xml") || has_entry(h, b"index.xml.gz"))
+            && has_entry(h, b"buildVersionHistory.plist"))
+);
 
 // ML models and mobile platform packages (registered before the other
 // variants: APEX and OTA packages also carry Android/JAR markers).
-zip_variant!(TORCHSCRIPT, "torchscript", "TorchScript module (ZIP)", ["pt", "pth", "ptl"], "application/x-torchscript",
-    |h| has_entry_suffix(h, b"/constants.pkl") || entry_names(h).any(|n| probe_contains(n, b"/code/")));
-zip_variant!(APEX, "apex", "Android APEX package", ["apex", "capex"], "application/x-apex",
-    |h| has_entry(h, b"apex_manifest.pb") || has_entry(h, b"apex_manifest.json"));
-zip_variant!(ANDROID_OTA, "android-ota", "Android OTA update package", ["zip"], "application/zip",
-    |h| has_entry(h, b"META-INF/com/android/metadata") || has_entry(h, b"payload_properties.txt"));
-zip_variant!(ANDROID_DM, "android-dm", "Android dex metadata", ["dm"], "application/zip",
-    |h| has_entry(h, b"primary.prof") || has_entry(h, b"primary.vdex"));
-zip_variant!(BUGREPORT, "android-bugreport", "Android bug report", ["zip"], "application/zip",
-    |h| has_entry(h, b"main_entry.txt") && has_entry(h, b"version.txt"));
-zip_variant!(IPSW, "ipsw", "Apple firmware (IPSW)", ["ipsw"], "application/x-ipsw",
-    |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist"));
+zip_variant!(
+    TORCHSCRIPT,
+    "torchscript",
+    "TorchScript module (ZIP)",
+    ["pt", "pth", "ptl"],
+    "application/x-torchscript",
+    |h| has_entry_suffix(h, b"/constants.pkl")
+        || entry_names(h).any(|n| probe_contains(n, b"/code/"))
+);
+zip_variant!(
+    APEX,
+    "apex",
+    "Android APEX package",
+    ["apex", "capex"],
+    "application/x-apex",
+    |h| has_entry(h, b"apex_manifest.pb") || has_entry(h, b"apex_manifest.json")
+);
+zip_variant!(
+    ANDROID_OTA,
+    "android-ota",
+    "Android OTA update package",
+    ["zip"],
+    "application/zip",
+    |h| has_entry(h, b"META-INF/com/android/metadata") || has_entry(h, b"payload_properties.txt")
+);
+zip_variant!(
+    ANDROID_DM,
+    "android-dm",
+    "Android dex metadata",
+    ["dm"],
+    "application/zip",
+    |h| has_entry(h, b"primary.prof") || has_entry(h, b"primary.vdex")
+);
+zip_variant!(
+    BUGREPORT,
+    "android-bugreport",
+    "Android bug report",
+    ["zip"],
+    "application/zip",
+    |h| has_entry(h, b"main_entry.txt") && has_entry(h, b"version.txt")
+);
+zip_variant!(
+    IPSW,
+    "ipsw",
+    "Apple firmware (IPSW)",
+    ["ipsw"],
+    "application/x-ipsw",
+    |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist")
+);
 
 fn probe_contains(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)

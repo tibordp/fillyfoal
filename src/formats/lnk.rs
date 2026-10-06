@@ -116,7 +116,10 @@ const EXTRA_BLOCKS: EnumTable = &[
 const FOLDERS: &[(&str, &str)] = &[
     ("{20d04fe0-3aea-1069-a2d8-08002b30309d}", "My Computer"),
     ("{450d8fba-ad25-11d0-98a8-0800361b1103}", "My Documents"),
-    ("{208d2c60-3aea-1069-a2d7-08002b30309d}", "My Network Places"),
+    (
+        "{208d2c60-3aea-1069-a2d7-08002b30309d}",
+        "My Network Places",
+    ),
     ("{645ff040-5081-101b-9f08-00aa002f954e}", "Recycle Bin"),
     ("{59031a47-3f72-44a7-89c5-5595fe6b30ee}", "User Files"),
     ("{21ec2020-3aea-1069-a2dd-08002b30309d}", "Control Panel"),
@@ -259,7 +262,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let mut summary = String::from("shell link");
-    let relative = strings.iter().find(|(b, _)| *b == 0x08).map(|(_, t)| t.clone());
+    let relative = strings
+        .iter()
+        .find(|(b, _)| *b == 0x08)
+        .map(|(_, t)| t.clone());
     if let Some(t) = target.or(relative) {
         summary = format!("{summary} → {}", clip(&t, 120));
     }
@@ -344,10 +350,16 @@ fn shell_item(item: &[u8]) -> ShellItem {
                 (t, n)
             } else {
                 let end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
-                (crate::text::latin1(rest.get(..end).unwrap_or_default()), end.saturating_add(1))
+                (
+                    crate::text::latin1(rest.get(..end).unwrap_or_default()),
+                    end.saturating_add(1),
+                )
             };
             // The BEEF0004 extension block (2-aligned) holds the long name.
-            let ext = 12usize.saturating_add(used).checked_next_multiple_of(2).unwrap_or(usize::MAX);
+            let ext = 12usize
+                .saturating_add(used)
+                .checked_next_multiple_of(2)
+                .unwrap_or(usize::MAX);
             let long = item.get(ext..).and_then(|e| {
                 if u32_le(e, 4)? != 0xbeef_0004 {
                     return None;
@@ -406,7 +418,11 @@ async fn id_list(cx: Cx, list: Span) -> Result<()> {
                 format!(
                     "{}{}, {size} bytes, modified {}, attributes {attributes:#x}",
                     long.as_deref().unwrap_or(&short),
-                    if long.is_some() { format!(" ({short})") } else { String::new() },
+                    if long.is_some() {
+                        format!(" ({short})")
+                    } else {
+                        String::new()
+                    },
                     crate::text::dos_datetime(modified.0, modified.1)
                 ),
             ),
@@ -551,8 +567,19 @@ async fn link_info_path(cx: &Cx, span: Span) -> Result<Option<String>> {
 }
 
 async fn link_info(cx: Cx, span: Span) -> Result<()> {
-    let header = parse(&cx, span.sub(0, LinkInfoHeader::SIZE), LE, &(), LinkInfoHeader::layout).await?;
-    cx.emit(LinkInfoHeader::node("Header", span.sub(0, LinkInfoHeader::SIZE), LE));
+    let header = parse(
+        &cx,
+        span.sub(0, LinkInfoHeader::SIZE),
+        LE,
+        &(),
+        LinkInfoHeader::layout,
+    )
+    .await?;
+    cx.emit(LinkInfoHeader::node(
+        "Header",
+        span.sub(0, LinkInfoHeader::SIZE),
+        LE,
+    ));
     if header.header_size >= 0x24 {
         let ext = span.sub(LinkInfoHeader::SIZE, 8);
         cx.emit(struct_node("Unicode offsets", ext, LE, (), |f, _| {
@@ -574,7 +601,13 @@ async fn link_info(cx: Cx, span: Span) -> Result<()> {
         let at = u64::from(header.network);
         let size = crate::bytes::u32_le(&cx.read(span.sub_exact(at, 4)?).await?, 0).unwrap_or(0);
         let link = span.sub(at, size.into());
-        cx.emit(struct_node("CommonNetworkRelativeLink", link, LE, (), network_link));
+        cx.emit(struct_node(
+            "CommonNetworkRelativeLink",
+            link,
+            LE,
+            (),
+            network_link,
+        ));
     }
     if header.suffix > 0 {
         cx.emit(cstring(&cx, "CommonPathSuffix", span, header.suffix).await?);
@@ -620,7 +653,9 @@ fn network_link(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .emit()?;
     let net_name = f.u32("NetNameOffset").hex().emit()?;
     let device = f.u32("DeviceNameOffset").hex().emit()?;
-    f.u32("NetworkProviderType").enumeration(NETWORK_PROVIDERS).emit()?;
+    f.u32("NetworkProviderType")
+        .enumeration(NETWORK_PROVIDERS)
+        .emit()?;
     f.seek(net_name.into());
     f.cstr("NetName").emit()?;
     if flags & 1 != 0 && device > 0 {

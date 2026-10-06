@@ -28,7 +28,11 @@ fn probe(h: &Head<'_>) -> bool {
     u32_le(h.data, 1024) == Some(MAGIC)
 }
 
-const COMPAT: FlagTable = &[flag(1, "SB_CHKSUM"), flag(2, "MTIME"), flag(4, "XATTR_FILTER")];
+const COMPAT: FlagTable = &[
+    flag(1, "SB_CHKSUM"),
+    flag(2, "MTIME"),
+    flag(4, "XATTR_FILTER"),
+];
 const INCOMPAT: FlagTable = &[
     flag(0x1, "ZERO_PADDING / LZ4_0PADDING"),
     flag(0x2, "COMPR_CFGS"),
@@ -82,7 +86,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut node = Superblock::node("Superblock", span, LE);
     if sb.compat & 1 != 0 {
         // CRC-32C over the rest of the superblock block, checksum zeroed.
-        let mut raw = cx.read_avail(vol.sub(SUPER, block.saturating_sub(SUPER).max(128))).await?;
+        let mut raw = cx
+            .read_avail(vol.sub(SUPER, block.saturating_sub(SUPER).max(128)))
+            .await?;
         if let Some(f) = raw.get_mut(4..8) {
             f.fill(0);
         }
@@ -94,14 +100,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let label = crate::text::until_nul(&sb.volume_name);
     cx.annotate(format!(
         "EROFS filesystem{}, {}, {} inodes",
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(u64::from(sb.blocks).saturating_mul(block)),
         sb.inodes
     ));
     let meta = vol.sub(u64::from(sb.meta_block).saturating_mul(block), 0);
     cx.emit(
         Node::new("Root inode")
-            .span(vol.sub(meta.offset.saturating_sub(vol.offset).saturating_add(u64::from(sb.root_nid).saturating_mul(32)), 32))
+            .span(
+                vol.sub(
+                    meta.offset
+                        .saturating_sub(vol.offset)
+                        .saturating_add(u64::from(sb.root_nid).saturating_mul(32)),
+                    32,
+                ),
+            )
             .summary(format!("nid {}", sb.root_nid)),
     );
     Ok(())

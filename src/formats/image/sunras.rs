@@ -54,7 +54,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let h = parse(&cx, header_span, BE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", header_span, BE));
     let kind = lookup(TYPES, h.kind.into()).unwrap_or("unknown type");
-    cx.annotate(format!("{}, {}-bit, {kind}", dims(h.width, h.height), h.depth));
+    cx.annotate(format!(
+        "{}, {}-bit, {kind}",
+        dims(h.width, h.height),
+        h.depth
+    ));
     let mut pos = Header::SIZE;
     if h.map_length > 0 {
         let map = region("Color map", file, pos, h.map_length.into());

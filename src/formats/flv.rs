@@ -221,12 +221,17 @@ async fn expand_tag(cx: Cx, tag: Tag) -> Result<()> {
     match tag.kind {
         8 => audio(&cx, data).await?,
         9 => video(&cx, data).await?,
-        18 => amf_values(cx.clone(), AmfList {
-            span: data,
-            kind: ListKind::Values,
-            depth: 0,
-        })
-        .await?,
+        18 => {
+            amf_values(
+                cx.clone(),
+                AmfList {
+                    span: data,
+                    kind: ListKind::Values,
+                    depth: 0,
+                },
+            )
+            .await?
+        }
         _ => cx.emit(Node::new("Data").span(data)),
     }
     let prev = tag.span.sub(tag.size.saturating_add(11), 4);
@@ -247,25 +252,45 @@ async fn audio(cx: &Cx, data: Span) -> Result<()> {
         return Ok(());
     };
     let s = data.sub(0, 1);
-    cx.emit(enumerated("Sound format", s, (b >> 4).into(), 4, SOUND_FORMATS));
+    cx.emit(enumerated(
+        "Sound format",
+        s,
+        (b >> 4).into(),
+        4,
+        SOUND_FORMATS,
+    ));
     cx.emit(
-        uint("Sound rate", s, ((b >> 2) & 3).into(), 2)
-            .summary(SOUND_RATES.get(usize::from((b >> 2) & 3)).copied().unwrap_or("")),
+        uint("Sound rate", s, ((b >> 2) & 3).into(), 2).summary(
+            SOUND_RATES
+                .get(usize::from((b >> 2) & 3))
+                .copied()
+                .unwrap_or(""),
+        ),
     );
-    cx.emit(uint("Sound size", s, ((b >> 1) & 1).into(), 1).summary(if b & 2 != 0 {
-        "16-bit"
-    } else {
-        "8-bit"
-    }));
-    cx.emit(uint("Sound type", s, (b & 1).into(), 1).summary(if b & 1 != 0 {
-        "stereo"
-    } else {
-        "mono"
-    }));
+    cx.emit(
+        uint("Sound size", s, ((b >> 1) & 1).into(), 1).summary(if b & 2 != 0 {
+            "16-bit"
+        } else {
+            "8-bit"
+        }),
+    );
+    cx.emit(
+        uint("Sound type", s, (b & 1).into(), 1).summary(if b & 1 != 0 {
+            "stereo"
+        } else {
+            "mono"
+        }),
+    );
     let mut at = 1u64;
     if b >> 4 == 10 {
         let p = d.get(1).copied().unwrap_or(0);
-        cx.emit(enumerated("AAC packet type", data.sub(1, 1), p.into(), 8, AAC_PACKET));
+        cx.emit(enumerated(
+            "AAC packet type",
+            data.sub(1, 1),
+            p.into(),
+            8,
+            AAC_PACKET,
+        ));
         at = 2;
         if p == 0 {
             let config = data.tail(2);
@@ -296,15 +321,23 @@ async fn video(cx: &Cx, data: Span) -> Result<()> {
     let s = data.sub(0, 1);
     if b & 0x80 != 0 {
         // Enhanced RTMP: frame type, packet type and a FourCC.
-        cx.emit(enumerated("Frame type", s, ((b >> 4) & 7).into(), 3, FRAME_TYPES));
-        cx.emit(uint("Packet type", s, (b & 15).into(), 4).summary(match b & 15 {
-            0 => "sequence start",
-            1 => "coded frames",
-            2 => "sequence end",
-            3 => "coded frames (no composition time)",
-            4 => "metadata",
-            _ => "other",
-        }));
+        cx.emit(enumerated(
+            "Frame type",
+            s,
+            ((b >> 4) & 7).into(),
+            3,
+            FRAME_TYPES,
+        ));
+        cx.emit(
+            uint("Packet type", s, (b & 15).into(), 4).summary(match b & 15 {
+                0 => "sequence start",
+                1 => "coded frames",
+                2 => "sequence end",
+                3 => "coded frames (no composition time)",
+                4 => "metadata",
+                _ => "other",
+            }),
+        );
         cx.emit(text(
             "FourCC",
             data.sub(1, 4),
@@ -317,7 +350,13 @@ async fn video(cx: &Cx, data: Span) -> Result<()> {
     cx.emit(enumerated("Codec ID", s, (b & 15).into(), 4, VIDEO_CODECS));
     if matches!(b & 15, 7 | 12) {
         let p = d.get(1).copied().unwrap_or(0);
-        cx.emit(enumerated("Packet type", data.sub(1, 1), p.into(), 8, AVC_PACKET));
+        cx.emit(enumerated(
+            "Packet type",
+            data.sub(1, 1),
+            p.into(),
+            8,
+            AVC_PACKET,
+        ));
         let ct = crate::bytes::u24_be(&d, 2).unwrap_or(0);
         let ct = i32::from_ne_bytes((ct << 8).to_ne_bytes()) >> 8;
         cx.emit(
@@ -401,7 +440,9 @@ fn amf_skip(d: &[u8], at: usize, depth: u32) -> Option<usize> {
     match t {
         0 => body.checked_add(8),
         1 => body.checked_add(1),
-        2 => body.checked_add(2)?.checked_add(usize::from(u16_be(d, body)?)),
+        2 => body
+            .checked_add(2)?
+            .checked_add(usize::from(u16_be(d, body)?)),
         3 => props_end(d, body, depth),
         5 | 6 | 9 | 13 => Some(body),
         7 => body.checked_add(2),
@@ -480,7 +521,12 @@ async fn amf_values(cx: Cx, list: AmfList) -> Result<()> {
         let span = vidutil::at(list.span, pos, end.saturating_sub(pos));
         let t = d.get(pos).copied().unwrap_or(0);
         if list.kind == ListKind::Values && index < 2 {
-            name = if index == 0 && t == 2 { "Name" } else { "Value" }.to_owned();
+            name = if index == 0 && t == 2 {
+                "Name"
+            } else {
+                "Value"
+            }
+            .to_owned();
         }
         cx.push(amf_node(name, &d, pos, span, list.depth)).await;
         pos = end;
@@ -518,23 +564,38 @@ fn amf_node(name: String, d: &[u8], pos: usize, span: Span, depth: u32) -> Node 
                 .unwrap_or_default();
             node.value(Value::Text(String::from_utf8_lossy(s).into_owned()))
         }
-        3 => node
-            .summary("object")
-            .lazy(crate::expander!(self::amf_values: AmfList), child(ListKind::Properties, 1)),
+        3 => node.summary("object").lazy(
+            crate::expander!(self::amf_values: AmfList),
+            child(ListKind::Properties, 1),
+        ),
         16 => {
             let len = u16_be(d, body).map_or(0, usize::from);
             let start = body.saturating_add(2);
             let class = d.get(start..start.saturating_add(len)).unwrap_or_default();
-            node.summary(format!("object of class {}", String::from_utf8_lossy(class)))
-                .lazy(crate::expander!(self::amf_values: AmfList), child(ListKind::Properties, 3usize.saturating_add(len)))
+            node.summary(format!(
+                "object of class {}",
+                String::from_utf8_lossy(class)
+            ))
+            .lazy(
+                crate::expander!(self::amf_values: AmfList),
+                child(ListKind::Properties, 3usize.saturating_add(len)),
+            )
         }
         8 => node
-            .summary(format!("ECMA array, {} entries", u32_be(d, body).unwrap_or(0)))
-            .lazy(crate::expander!(self::amf_values: AmfList), child(ListKind::Properties, 5)),
+            .summary(format!(
+                "ECMA array, {} entries",
+                u32_be(d, body).unwrap_or(0)
+            ))
+            .lazy(
+                crate::expander!(self::amf_values: AmfList),
+                child(ListKind::Properties, 5),
+            ),
         10 => {
             let n = u32_be(d, body).unwrap_or(0);
-            node.summary(format!("strict array, {n} items"))
-                .lazy(crate::expander!(self::amf_values: AmfList), child(ListKind::Items(n), 5))
+            node.summary(format!("strict array, {n} items")).lazy(
+                crate::expander!(self::amf_values: AmfList),
+                child(ListKind::Items(n), 5),
+            )
         }
         11 => {
             let ms = crate::bytes::array::<8>(d, body).map_or(0.0, f64::from_be_bytes);
@@ -572,7 +633,8 @@ impl Summary {
         let b = body.first().copied().unwrap_or(0);
         match tag.kind {
             8 if self.audio.is_none() => {
-                self.audio = crate::value::lookup(SOUND_FORMATS, (b >> 4).into()).map(str::to_owned);
+                self.audio =
+                    crate::value::lookup(SOUND_FORMATS, (b >> 4).into()).map(str::to_owned);
             }
             9 if self.video.is_none() => {
                 self.video = if b & 0x80 != 0 {
@@ -610,7 +672,9 @@ impl Summary {
                 return;
             }
             let key_start = pos.saturating_add(2);
-            let key = d.get(key_start..key_start.saturating_add(len)).unwrap_or_default();
+            let key = d
+                .get(key_start..key_start.saturating_add(len))
+                .unwrap_or_default();
             let at = key_start.saturating_add(len);
             let number = (d.get(at) == Some(&0))
                 .then(|| crate::bytes::array::<8>(d, at.saturating_add(1)).map(f64::from_be_bytes))
@@ -639,7 +703,9 @@ impl Summary {
         let mut streams = Vec::new();
         if let Some(v) = &self.video {
             streams.push(match (self.width, self.height) {
-                (Some(w), Some(h)) if w > 0.0 => format!("{}×{} {v}", vidutil::num(w), vidutil::num(h)),
+                (Some(w), Some(h)) if w > 0.0 => {
+                    format!("{}×{} {v}", vidutil::num(w), vidutil::num(h))
+                }
                 _ => v.clone(),
             });
         }

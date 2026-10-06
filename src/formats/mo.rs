@@ -115,7 +115,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if h.hash_size > 0 {
         cx.emit(
             Node::new("Hash table")
-                .span(file.sub(h.hash_offset.into(), u64::from(h.hash_size).saturating_mul(4)))
+                .span(file.sub(
+                    h.hash_offset.into(),
+                    u64::from(h.hash_size).saturating_mul(4),
+                ))
                 .summary(format!("{} slots", h.hash_size)),
         );
     }
@@ -146,9 +149,13 @@ async fn messages(cx: Cx, cat: Catalog) -> Result<()> {
             clip(&singular, 80)
         };
         let forms = translation.split('\0').count();
-        let mut node = Node::new(name)
-            .span(tspan)
-            .value(Value::Text(translation.split('\0').next().unwrap_or_default().to_owned()));
+        let mut node = Node::new(name).span(tspan).value(Value::Text(
+            translation
+                .split('\0')
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
+        ));
         if forms > 1 {
             node = node.summary(format!("{forms} plural forms"));
         }
@@ -158,7 +165,8 @@ async fn messages(cx: Cx, cat: Catalog) -> Result<()> {
         if ospan.len > MAX_TEXT || tspan.len > MAX_TEXT {
             node = node.diag(Diagnostic::note("long string truncated for display"));
         }
-        cx.push(node.lazy(message, (oentry, ospan, tentry, tspan))).await;
+        cx.push(node.lazy(message, (oentry, ospan, tentry, tspan)))
+            .await;
     }
     Ok(())
 }
@@ -176,12 +184,20 @@ async fn message(cx: Cx, (oentry, ospan, tentry, tspan): (Span, Span, Span, Span
             _ => cx.emit(Node::new("msgid_plural").value(Value::Text(part.to_owned()))),
         }
     }
-    cx.emit(Node::new("Original").span(ospan).summary(format!("{} bytes", ospan.len)));
+    cx.emit(
+        Node::new("Original")
+            .span(ospan)
+            .summary(format!("{} bytes", ospan.len)),
+    );
     cx.emit(Node::new("Translation descriptor").span(tentry));
     let translation = text(&cx, tspan).await?;
     for (i, part) in translation.split('\0').enumerate() {
         cx.emit(Node::new(format!("msgstr[{i}]")).value(Value::Text(part.to_owned())));
     }
-    cx.emit(Node::new("Translation").span(tspan).summary(format!("{} bytes", tspan.len)));
+    cx.emit(
+        Node::new("Translation")
+            .span(tspan)
+            .summary(format!("{} bytes", tspan.len)),
+    );
     Ok(())
 }

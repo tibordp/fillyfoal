@@ -20,7 +20,10 @@ pub static FORMAT: Format = Format {
     probe: Probe::Custom(|h| {
         let head = probe::head(h);
         let top = head.get(..head.len().min(512)).unwrap_or_default();
-        probe::contains(top, b"Microsoft Visual Studio Solution File, Format Version")
+        probe::contains(
+            top,
+            b"Microsoft Visual Studio Solution File, Format Version",
+        )
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -101,7 +104,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if let Some((start, name, summary, end)) = &open {
             if t.starts_with(end) && !t.starts_with(b"EndProjectSection") {
                 let s = span.sub(*start, line.next.saturating_sub(*start));
-                let mut node = Node::new(name.clone()).span(s).lazy(block, Block { span: s });
+                let mut node = Node::new(name.clone())
+                    .span(s)
+                    .lazy(block, Block { span: s });
                 if !summary.is_empty() {
                     node = node.summary(summary.clone());
                 }
@@ -112,26 +117,42 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         if t.starts_with(b"Project(") {
             let q = quoted(t);
-            let kind = q.first().map(|g| project_kind(&g.text())).unwrap_or("project");
+            let kind = q
+                .first()
+                .map(|g| project_kind(&g.text()))
+                .unwrap_or("project");
             let name = q.get(1).map_or_else(|| "Project".to_owned(), Piece::text);
             let path = q.get(2).map(Piece::text).unwrap_or_default();
             projects = projects.saturating_add(1);
             open = Some((line.start, name, format!("{kind}: {path}"), b"EndProject"));
         } else if let Some(rest) = t.strip_prefix(b"GlobalSection(") {
             let name = rest.split_once(b')').map_or(rest, |(n, _)| n).text();
-            open = Some((line.start, format!("GlobalSection {name}"), String::new(), b"EndGlobalSection"));
+            open = Some((
+                line.start,
+                format!("GlobalSection {name}"),
+                String::new(),
+                b"EndGlobalSection",
+            ));
         } else if t.is_empty() || t.bytes() == b"Global" || t.bytes() == b"EndGlobal" {
             continue;
         } else if let Some((k, v)) = t.split_once(b'=') {
             if k.trim().bytes() == b"VisualStudioVersion" {
                 version = Some(v.trim().text());
             }
-            cx.push(text_node(k.trim().text(), v.trim().span(), &v.trim().text())).await;
+            cx.push(text_node(
+                k.trim().text(),
+                v.trim().span(),
+                &v.trim().text(),
+            ))
+            .await;
         } else {
             cx.push(text_node("Header", t.span(), &t.text())).await;
         }
     }
-    let mut summary = format!("Visual Studio solution, {}", plural(projects, "project", "projects"));
+    let mut summary = format!(
+        "Visual Studio solution, {}",
+        plural(projects, "project", "projects")
+    );
     if let Some(v) = version {
         summary = format!("{summary} (Visual Studio {v})");
     }

@@ -37,7 +37,11 @@ async fn dvi(cx: Cx, input: Input) -> Result<()> {
     let k = f.u8("Comment length").emit()?;
     let comment = cx.read_avail(file.sub(15, k.into())).await?;
     let comment = String::from_utf8_lossy(&comment).into_owned();
-    cx.emit(Node::new("Comment").span(file.sub(15, k.into())).value(text(comment.trim())));
+    cx.emit(
+        Node::new("Comment")
+            .span(file.sub(15, k.into()))
+            .value(text(comment.trim())),
+    );
     // The postamble is found from the end: post_post, then 4+ 223 bytes.
     let tail = cx.read(file.sub(file.len.saturating_sub(64), 64)).await?;
     let end = tail.iter().rposition(|&b| b != 223).unwrap_or(0);
@@ -63,7 +67,13 @@ async fn dvi(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub WORDPERFECT = "wordperfect", "WordPerfect document", ["wpd", "wp", "wp5", "wp6"], "application/vnd.wordperfect",
     Probe::Magic(&[(0, b"\xffWPC")]), wordperfect);
 
-const WP_TYPES: EnumTable = &[(10, "document"), (11, "dictionary"), (12, "thesaurus"), (17, "macro"), (22, "graphics")];
+const WP_TYPES: EnumTable = &[
+    (10, "document"),
+    (11, "dictionary"),
+    (12, "thesaurus"),
+    (17, "macro"),
+    (22, "graphics"),
+];
 
 async fn wordperfect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -83,7 +93,10 @@ async fn wordperfect(cx: Cx, input: Input) -> Result<()> {
         2 => "6.x or later",
         _ => "unknown version",
     };
-    cx.annotate(format!("WordPerfect {version} {} (format {major}.{minor})", lookup(WP_TYPES, kind.into()).unwrap_or("file")));
+    cx.annotate(format!(
+        "WordPerfect {version} {} (format {major}.{minor})",
+        lookup(WP_TYPES, kind.into()).unwrap_or("file")
+    ));
     Ok(())
 }
 
@@ -102,7 +115,11 @@ async fn mswrite(cx: Cx, input: Input) -> Result<()> {
     let _ = f.u16("Paragraph info page (pnPara)").emit()?;
     let text_span = file.sub(128, u64::from(text_end).saturating_sub(128));
     let sample = cx.read_avail(text_span.sub(0, 120)).await?;
-    cx.emit(Node::new("Text").span(text_span).summary(String::from_utf8_lossy(&sample).replace(['\r', '\n'], " ")));
+    cx.emit(
+        Node::new("Text")
+            .span(text_span)
+            .summary(String::from_utf8_lossy(&sample).replace(['\r', '\n'], " ")),
+    );
     cx.annotate(format!("Write document, {} characters", text_span.len));
     Ok(())
 }
@@ -124,7 +141,10 @@ async fn onenote(cx: Cx, input: Input) -> Result<()> {
     f.u32("Oldest code required").hex().emit()?;
     let toc = kind.data1 == 0x43ff_2fa1;
     cx.emit(Node::new("File data").span(file.tail(0x400)));
-    cx.annotate(format!("OneNote {} (last accessed by code {last_code:#x})", if toc { "table of contents" } else { "section" }));
+    cx.annotate(format!(
+        "OneNote {} (last accessed by code {last_code:#x})",
+        if toc { "table of contents" } else { "section" }
+    ));
     Ok(())
 }
 
@@ -135,8 +155,13 @@ async fn framemaker(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 64)).await?;
     let end = head.iter().position(|&b| b == b'>').unwrap_or(0);
-    let tag = String::from_utf8_lossy(head.get(..end.saturating_add(1)).unwrap_or_default()).into_owned();
-    cx.emit(Node::new("Identification").span(file.sub(0, to_u64(end).saturating_add(1))).value(text(tag.clone())));
+    let tag =
+        String::from_utf8_lossy(head.get(..end.saturating_add(1)).unwrap_or_default()).into_owned();
+    cx.emit(
+        Node::new("Identification")
+            .span(file.sub(0, to_u64(end).saturating_add(1)))
+            .value(text(tag.clone())),
+    );
     cx.emit(Node::new("Body").span(file.tail(to_u64(end).saturating_add(1))));
     cx.annotate(tag.trim_matches(['<', '>']).to_owned());
     Ok(())
@@ -160,11 +185,15 @@ async fn warc(cx: Cx, input: Input) -> Result<()> {
         };
         let headers = String::from_utf8_lossy(head.get(..end).unwrap_or_default()).into_owned();
         let field = |name: &str| {
-            headers
-                .lines()
-                .find_map(|l| l.split_once(':').filter(|(k, _)| k.trim().eq_ignore_ascii_case(name)).map(|(_, v)| v.trim().to_owned()))
+            headers.lines().find_map(|l| {
+                l.split_once(':')
+                    .filter(|(k, _)| k.trim().eq_ignore_ascii_case(name))
+                    .map(|(_, v)| v.trim().to_owned())
+            })
         };
-        let length: u64 = field("Content-Length").and_then(|v| v.parse().ok()).unwrap_or(0);
+        let length: u64 = field("Content-Length")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
         let kind = field("WARC-Type").unwrap_or_default();
         let target = field("WARC-Target-URI").unwrap_or_default();
         let header_len = to_u64(end).saturating_add(4);
@@ -174,7 +203,10 @@ async fn warc(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("{kind} {target}").trim().to_owned())
                 .span(file.sub(pos, total))
-                .lazy(warc_record, (input, file.sub(pos, to_u64(end)), block, headers)),
+                .lazy(
+                    warc_record,
+                    (input, file.sub(pos, to_u64(end)), block, headers),
+                ),
         )
         .await;
         pos = pos.saturating_add(total);
@@ -183,14 +215,25 @@ async fn warc(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn warc_record(cx: Cx, (input, header_span, block, headers): (Input, Span, Span, String)) -> Result<()> {
+async fn warc_record(
+    cx: Cx,
+    (input, header_span, block, headers): (Input, Span, Span, String),
+) -> Result<()> {
     let mut at = 0u64;
     for line in headers.split("\r\n") {
         let len = to_u64(line.len());
         if let Some((k, v)) = line.split_once(':') {
-            cx.emit(Node::new(k.trim().to_owned()).span(header_span.sub(at, len)).value(text(v.trim())));
+            cx.emit(
+                Node::new(k.trim().to_owned())
+                    .span(header_span.sub(at, len))
+                    .value(text(v.trim())),
+            );
         } else {
-            cx.emit(Node::new("Version").span(header_span.sub(at, len)).value(text(line)));
+            cx.emit(
+                Node::new("Version")
+                    .span(header_span.sub(at, len))
+                    .value(text(line)),
+            );
         }
         at = at.saturating_add(len).saturating_add(2);
     }
@@ -207,24 +250,51 @@ declare_format!(pub AGE = "age", "age-encrypted file", ["age"], "application/x-a
 async fn age(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 16384)).await?;
-    let mac = head.windows(4).position(|w| w == b"\n---").ok_or_else(|| Diagnostic::malformed("no header MAC line"))?;
+    let mac = head
+        .windows(4)
+        .position(|w| w == b"\n---")
+        .ok_or_else(|| Diagnostic::malformed("no header MAC line"))?;
     let header = String::from_utf8_lossy(head.get(..mac).unwrap_or_default()).into_owned();
     let mut pos = 0u64;
     let mut kinds = Vec::new();
     for line in header.split('\n') {
         let len = to_u64(line.len()).saturating_add(1);
         if let Some(stanza) = line.strip_prefix("-> ") {
-            let kind = stanza.split_whitespace().next().unwrap_or_default().to_owned();
+            let kind = stanza
+                .split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned();
             kinds.push(kind.clone());
-            cx.emit(Node::new(format!("Recipient stanza ({kind})")).span(file.sub(pos, len)).value(text(stanza)));
+            cx.emit(
+                Node::new(format!("Recipient stanza ({kind})"))
+                    .span(file.sub(pos, len))
+                    .value(text(stanza)),
+            );
         } else if pos == 0 {
-            cx.emit(Node::new("Version").span(file.sub(pos, len)).value(text(line)));
+            cx.emit(
+                Node::new("Version")
+                    .span(file.sub(pos, len))
+                    .value(text(line)),
+            );
         }
         pos = pos.saturating_add(len);
     }
-    let mac_line_end = head.get(mac.saturating_add(1)..).and_then(|r| r.iter().position(|&b| b == b'\n')).map_or(head.len(), |p| mac.saturating_add(1).saturating_add(p).saturating_add(1));
-    cx.emit(Node::new("Header MAC").span(file.sub(to_u64(mac).saturating_add(1), to_u64(mac_line_end.saturating_sub(mac).saturating_sub(1)))));
-    cx.emit(Node::new("Payload").span(file.tail(to_u64(mac_line_end))).diag(Diagnostic::note("ChaCha20-Poly1305 encrypted")));
+    let mac_line_end = head
+        .get(mac.saturating_add(1)..)
+        .and_then(|r| r.iter().position(|&b| b == b'\n'))
+        .map_or(head.len(), |p| {
+            mac.saturating_add(1).saturating_add(p).saturating_add(1)
+        });
+    cx.emit(Node::new("Header MAC").span(file.sub(
+        to_u64(mac).saturating_add(1),
+        to_u64(mac_line_end.saturating_sub(mac).saturating_sub(1)),
+    )));
+    cx.emit(
+        Node::new("Payload")
+            .span(file.tail(to_u64(mac_line_end)))
+            .diag(Diagnostic::note("ChaCha20-Poly1305 encrypted")),
+    );
     cx.annotate(format!("age, recipients: {}", kinds.join(", ")));
     Ok(())
 }
@@ -265,7 +335,9 @@ async fn bitcoin_blocks(cx: Cx, input: Input) -> Result<()> {
         first.get_or_insert(header.time);
         cx.push(
             BlockHeader::node(format!("Block {blocks}"), header_span, LE)
-                .value(Value::Timestamp { unix_seconds: header.time.into() })
+                .value(Value::Timestamp {
+                    unix_seconds: header.time.into(),
+                })
                 .summary(format!("{size} bytes"))
                 .target(cur.since(start)),
         )
@@ -287,7 +359,12 @@ async fn bitcoin_blocks(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub BTSNOOP = "btsnoop", "Bluetooth HCI capture (btsnoop)", ["log", "cfa", "btsnoop"], "application/x-btsnoop",
     Probe::Magic(&[(0, b"btsnoop\0")]), btsnoop);
 
-const BTSNOOP_LINKS: EnumTable = &[(1001, "HCI UART (H4)"), (1002, "HCI UART (H4) without direction"), (1003, "HCI BSCP"), (1004, "HCI Serial (H5)")];
+const BTSNOOP_LINKS: EnumTable = &[
+    (1001, "HCI UART (H4)"),
+    (1002, "HCI UART (H4) without direction"),
+    (1003, "HCI BSCP"),
+    (1004, "HCI Serial (H5)"),
+];
 
 async fn btsnoop(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -310,16 +387,28 @@ async fn btsnoop(cx: Cx, input: Input) -> Result<()> {
         packets = packets.saturating_add(1);
         // Timestamps are microseconds since 0 AD; the Unix epoch is at
         // 0x00dcddb30f2f8000.
-        let unix = i64::try_from(micros.saturating_sub(0x00dc_ddb3_0f2f_8000) / 1_000_000).unwrap_or(0);
+        let unix =
+            i64::try_from(micros.saturating_sub(0x00dc_ddb3_0f2f_8000) / 1_000_000).unwrap_or(0);
         cx.push(
             Node::new(format!("Packet {packets}"))
                 .span(cur.since(start))
                 .value(Value::Timestamp { unix_seconds: unix })
-                .summary(format!("{} {}, {included}/{original} bytes", if flags & 1 == 0 { "sent" } else { "received" }, if flags & 2 == 0 { "data" } else { "command/event" })),
+                .summary(format!(
+                    "{} {}, {included}/{original} bytes",
+                    if flags & 1 == 0 { "sent" } else { "received" },
+                    if flags & 2 == 0 {
+                        "data"
+                    } else {
+                        "command/event"
+                    }
+                )),
         )
         .await;
     }
-    cx.annotate(format!("btsnoop v{version}, {}, {packets} packets", lookup(BTSNOOP_LINKS, link.into()).unwrap_or("unknown link")));
+    cx.annotate(format!(
+        "btsnoop v{version}, {}, {packets} packets",
+        lookup(BTSNOOP_LINKS, link.into()).unwrap_or("unknown link")
+    ));
     Ok(())
 }
 
@@ -337,8 +426,15 @@ async fn netmon(cx: Cx, input: Input) -> Result<()> {
     f.bytes("Capture start time (SYSTEMTIME)", 16).emit()?;
     let table = f.u32("Frame table offset").hex().emit()?;
     let table_len = f.u32("Frame table length").emit()?;
-    cx.emit(Node::new("Frame table").span(file.sub(table.into(), table_len.into())).summary(format!("{} frames", table_len / 4)));
-    cx.annotate(format!("Network Monitor {major}.{minor} ({magic}), {} frames", table_len / 4));
+    cx.emit(
+        Node::new("Frame table")
+            .span(file.sub(table.into(), table_len.into()))
+            .summary(format!("{} frames", table_len / 4)),
+    );
+    cx.annotate(format!(
+        "Network Monitor {major}.{minor} ({magic}), {} frames",
+        table_len / 4
+    ));
     Ok(())
 }
 
@@ -355,7 +451,11 @@ async fn ota_payload(cx: Cx, input: Input) -> Result<()> {
     f.ascii("Magic", 4).emit()?;
     let version = f.u64("Format version").emit()?;
     let manifest = f.u64("Manifest size").emit()?;
-    let signature = if version >= 2 { f.u32("Metadata signature size").emit()? } else { 0 };
+    let signature = if version >= 2 {
+        f.u32("Metadata signature size").emit()?
+    } else {
+        0
+    };
     let at = if version >= 2 { 24u64 } else { 20 };
     cx.emit(Node::new("Manifest (protobuf)").span(file.sub(at, manifest)));
     let sig_at = at.saturating_add(manifest);
@@ -363,7 +463,9 @@ async fn ota_payload(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Metadata signature").span(file.sub(sig_at, signature.into())));
     }
     cx.emit(Node::new("Data blobs").span(file.tail(sig_at.saturating_add(signature.into()))));
-    cx.annotate(format!("Android OTA payload v{version}, manifest {manifest} bytes"));
+    cx.annotate(format!(
+        "Android OTA payload v{version}, manifest {manifest} bytes"
+    ));
     Ok(())
 }
 
@@ -407,20 +509,33 @@ async fn registry_pol(cx: Cx, input: Input) -> Result<()> {
         let kind = u32_le(&data, cursor).unwrap_or(0);
         let size = u32_le(&data, cursor.saturating_add(6)).unwrap_or(0);
         let value_at = cursor.saturating_add(12);
-        let value = data.get(value_at..value_at.saturating_add(usize::try_from(size).unwrap_or(0))).unwrap_or_default();
+        let value = data
+            .get(value_at..value_at.saturating_add(usize::try_from(size).unwrap_or(0)))
+            .unwrap_or_default();
         let shown = match kind {
-            1 | 2 | 7 => crate::text::utf16(value, LE).trim_end_matches('\0').replace('\0', " | "),
+            1 | 2 | 7 => crate::text::utf16(value, LE)
+                .trim_end_matches('\0')
+                .replace('\0', " | "),
             4 => u32_le(value, 0).unwrap_or(0).to_string(),
             11 => crate::bytes::u64_le(value, 0).unwrap_or(0).to_string(),
             _ => format!("{} bytes", value.len()),
         };
-        at = value_at.saturating_add(usize::try_from(size).unwrap_or(0)).saturating_add(2); // ']'
+        at = value_at
+            .saturating_add(usize::try_from(size).unwrap_or(0))
+            .saturating_add(2); // ']'
         count = count.saturating_add(1);
         cx.push(
-            Node::new(format!("{}\\{}", fields.first().cloned().unwrap_or_default(), fields.get(1).cloned().unwrap_or_default()))
-                .span(file.sub(8u64.saturating_add(to_u64(start)), to_u64(at.saturating_sub(start))))
-                .value(text(shown))
-                .summary(lookup(REG_TYPES, kind.into()).unwrap_or("unknown type")),
+            Node::new(format!(
+                "{}\\{}",
+                fields.first().cloned().unwrap_or_default(),
+                fields.get(1).cloned().unwrap_or_default()
+            ))
+            .span(file.sub(
+                8u64.saturating_add(to_u64(start)),
+                to_u64(at.saturating_sub(start)),
+            ))
+            .value(text(shown))
+            .summary(lookup(REG_TYPES, kind.into()).unwrap_or("unknown type")),
         )
         .await;
     }
@@ -438,7 +553,13 @@ fn ese_probe(h: &Head<'_>) -> bool {
 declare_format!(pub ESE = "ese", "Extensible Storage Engine database", ["edb", "dat", "sdb"], "application/x-ese",
     Probe::Custom(ese_probe), ese);
 
-const ESE_STATES: EnumTable = &[(1, "just created"), (2, "dirty shutdown"), (3, "clean shutdown"), (4, "being converted"), (5, "force detach")];
+const ESE_STATES: EnumTable = &[
+    (1, "just created"),
+    (2, "dirty shutdown"),
+    (3, "clean shutdown"),
+    (4, "being converted"),
+    (5, "force detach"),
+];
 
 record! {
     pub struct EseHeader {
@@ -458,10 +579,22 @@ async fn ese(cx: Cx, input: Input) -> Result<()> {
     let more = cx.read_avail(file.sub(0xe8, 12)).await?;
     let revision = u32_le(&more, 0).unwrap_or(0);
     let page_size = u32_le(&cx.read_avail(file.sub(0xec, 4)).await?, 0).unwrap_or(0);
-    cx.emit(Node::new("Page size").span(file.sub(0xec, 4)).value(Value::UInt { value: page_size.into(), bits: 32, radix: Radix::Dec }));
+    cx.emit(
+        Node::new("Page size")
+            .span(file.sub(0xec, 4))
+            .value(Value::UInt {
+                value: page_size.into(),
+                bits: 32,
+                radix: Radix::Dec,
+            }),
+    );
     cx.emit(Node::new("Pages").span(file.tail(u64::from(page_size).saturating_mul(2))));
     let state = lookup(ESE_STATES, h.state.into()).unwrap_or("unknown state");
-    cx.annotate(format!("ESE database v{:#x} rev {revision}, {} KiB pages, {state}", h.version, page_size / 1024));
+    cx.annotate(format!(
+        "ESE database v{:#x} rev {revision}, {} KiB pages, {state}",
+        h.version,
+        page_size / 1024
+    ));
     Ok(())
 }
 
@@ -487,7 +620,9 @@ async fn bomstore(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: BomHeader = read_record(&cx, file.sub(0, BomHeader::SIZE), BE).await?;
     cx.emit(BomHeader::node("Header", file.sub(0, BomHeader::SIZE), BE));
-    let index = cx.read(file.sub(h.index_offset.into(), h.index_length.into())).await?;
+    let index = cx
+        .read(file.sub(h.index_offset.into(), h.index_length.into()))
+        .await?;
     let block_count = u32_be(&index, 0).unwrap_or(0);
     let vars = file.sub(h.vars_offset.into(), h.vars_length.into());
     let mut cur = Cursor::new(&cx, vars, BE);
@@ -499,8 +634,14 @@ async fn bomstore(cx: Cx, input: Input) -> Result<()> {
         let len = cur.u8().await?;
         let name = String::from_utf8_lossy(&cur.bytes(len.into()).await?).into_owned();
         names.push(name.clone());
-        let at = usize::try_from(block).unwrap_or(0).saturating_mul(8).saturating_add(4);
-        let (offset, length) = (u32_be(&index, at).unwrap_or(0), u32_be(&index, at.saturating_add(4)).unwrap_or(0));
+        let at = usize::try_from(block)
+            .unwrap_or(0)
+            .saturating_mul(8)
+            .saturating_add(4);
+        let (offset, length) = (
+            u32_be(&index, at).unwrap_or(0),
+            u32_be(&index, at.saturating_add(4)).unwrap_or(0),
+        );
         cx.push(
             embedded(name, input.nested(file.sub(offset.into(), length.into())))
                 .summary(format!("block {block}, {length} bytes"))
@@ -508,7 +649,10 @@ async fn bomstore(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("BOMStore, {block_count} blocks, variables: {}", names.join(", ")));
+    cx.annotate(format!(
+        "BOMStore, {block_count} blocks, variables: {}",
+        names.join(", ")
+    ));
     Ok(())
 }
 
@@ -560,7 +704,13 @@ record! {
 async fn spss(cx: Cx, input: Input) -> Result<()> {
     let h: SpssHeader = emit_record(&cx, input.span.sub(0, SpssHeader::SIZE), LE).await?;
     cx.emit(Node::new("Dictionary and data").span(input.span.tail(SpssHeader::SIZE)));
-    cx.annotate(format!("SPSS, {} cases, {} ({} {})", h.cases, h.product.trim().trim_start_matches("@(#) "), h.date, h.time));
+    cx.annotate(format!(
+        "SPSS, {} cases, {} ({} {})",
+        h.cases,
+        h.product.trim().trim_start_matches("@(#) "),
+        h.date,
+        h.time
+    ));
     Ok(())
 }
 
@@ -577,12 +727,37 @@ async fn sas7bdat(cx: Cx, input: Input) -> Result<()> {
     let name = crate::text::until_nul(head.get(92..156).unwrap_or_default());
     let kind = crate::text::until_nul(head.get(156..164).unwrap_or_default());
     cx.emit(Node::new("Magic").span(file.sub(0, 32)));
-    cx.emit(Node::new("Dataset name").span(file.sub(92, 64)).value(text(name.trim())));
-    cx.emit(Node::new("File type").span(file.sub(156, 8)).value(text(kind.trim())));
-    let version_at = 216u64.saturating_add(align.saturating_mul(2)).saturating_add(64);
+    cx.emit(
+        Node::new("Dataset name")
+            .span(file.sub(92, 64))
+            .value(text(name.trim())),
+    );
+    cx.emit(
+        Node::new("File type")
+            .span(file.sub(156, 8))
+            .value(text(kind.trim())),
+    );
+    let version_at = 216u64
+        .saturating_add(align.saturating_mul(2))
+        .saturating_add(64);
     let version = crate::text::until_nul(&cx.read_avail(file.sub(version_at, 8)).await?);
-    cx.emit(Node::new("SAS release").span(file.sub(version_at, 8)).value(text(version.trim())));
-    cx.annotate(format!("SAS {} {:?}, release {}, {}-bit {}", kind.trim(), name.trim(), version.trim(), if align == 4 { 64 } else { 32 }, if little { "little-endian" } else { "big-endian" }));
+    cx.emit(
+        Node::new("SAS release")
+            .span(file.sub(version_at, 8))
+            .value(text(version.trim())),
+    );
+    cx.annotate(format!(
+        "SAS {} {:?}, release {}, {}-bit {}",
+        kind.trim(),
+        name.trim(),
+        version.trim(),
+        if align == 4 { 64 } else { 32 },
+        if little {
+            "little-endian"
+        } else {
+            "big-endian"
+        }
+    ));
     Ok(())
 }
 
@@ -597,7 +772,10 @@ async fn stata(cx: Cx, input: Input) -> Result<()> {
         let open = format!("<{name}>");
         let start = text_head.find(&open)?.saturating_add(open.len());
         let end = text_head.get(start..)?.find(&format!("</{name}>"))?;
-        Some((start, text_head.get(start..start.saturating_add(end))?.to_owned()))
+        Some((
+            start,
+            text_head.get(start..start.saturating_add(end))?.to_owned(),
+        ))
     };
     let release = tag("release").map(|(_, r)| r).unwrap_or_default();
     let order = tag("byteorder").map(|(_, r)| r).unwrap_or_default();
@@ -609,13 +787,29 @@ async fn stata(cx: Cx, input: Input) -> Result<()> {
     if let Some((k_at, _)) = tag("K") {
         let at = crate::bytes::to_u64(k_at);
         let raw = cx.read_avail(file.sub(at, 2)).await?;
-        vars = u64::from(if little { u16_le(&raw, 0) } else { crate::bytes::u16_be(&raw, 0) }.unwrap_or(0));
+        vars = u64::from(
+            if little {
+                u16_le(&raw, 0)
+            } else {
+                crate::bytes::u16_be(&raw, 0)
+            }
+            .unwrap_or(0),
+        );
         let n_at = text_head.find("<N>").map_or(0, |p| p.saturating_add(3));
-        let raw = cx.read_avail(file.sub(crate::bytes::to_u64(n_at), 8)).await?;
-        obs = if little { crate::bytes::u64_le(&raw, 0) } else { crate::bytes::u64_be(&raw, 0) }.unwrap_or(0);
+        let raw = cx
+            .read_avail(file.sub(crate::bytes::to_u64(n_at), 8))
+            .await?;
+        obs = if little {
+            crate::bytes::u64_le(&raw, 0)
+        } else {
+            crate::bytes::u64_be(&raw, 0)
+        }
+        .unwrap_or(0);
     }
     cx.emit(Node::new("Data").span(file));
-    cx.annotate(format!("Stata release {release}, {vars} variables, {obs} observations"));
+    cx.annotate(format!(
+        "Stata release {release}, {vars} variables, {obs} observations"
+    ));
     Ok(())
 }
 
@@ -644,7 +838,12 @@ async fn cern_root(cx: Cx, input: Input) -> Result<()> {
     let compression = f.u32("Compression").emit()?;
     cx.emit(Node::new("Records").span(file.tail(begin.into())));
     let v = version % 1_000_000;
-    cx.annotate(format!("ROOT {}.{:02}/{:02}, compression {compression}", v / 10000, v / 100 % 100, v % 100));
+    cx.annotate(format!(
+        "ROOT {}.{:02}/{:02}, compression {compression}",
+        v / 10000,
+        v / 100 % 100,
+        v % 100
+    ));
     Ok(())
 }
 
@@ -656,7 +855,17 @@ fn nifti_probe(h: &Head<'_>) -> bool {
 declare_format!(pub NIFTI = "nifti", "NIfTI neuroimaging volume", ["nii", "hdr"], "application/x-nifti",
     Probe::Custom(nifti_probe), nifti);
 
-const NIFTI_TYPES: EnumTable = &[(2, "uint8"), (4, "int16"), (8, "int32"), (16, "float32"), (64, "float64"), (128, "rgb24"), (256, "int8"), (512, "uint16"), (768, "uint32")];
+const NIFTI_TYPES: EnumTable = &[
+    (2, "uint8"),
+    (4, "int16"),
+    (8, "int32"),
+    (16, "float32"),
+    (64, "float64"),
+    (128, "rgb24"),
+    (256, "int8"),
+    (512, "uint16"),
+    (768, "uint32"),
+];
 
 async fn nifti(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -666,18 +875,57 @@ async fn nifti(cx: Cx, input: Input) -> Result<()> {
         cx.annotate("NIfTI-2 volume");
         return Ok(());
     }
-    let dims: Vec<String> = (0..usize::from(crate::bytes::i16_le(&head, 40).unwrap_or(0).clamp(0, 7) as u16))
-        .map(|i| crate::bytes::i16_le(&head, 42usize.saturating_add(i.saturating_mul(2))).unwrap_or(0).to_string())
-        .collect();
+    let dims: Vec<String> =
+        (0..usize::from(crate::bytes::i16_le(&head, 40).unwrap_or(0).clamp(0, 7) as u16))
+            .map(|i| {
+                crate::bytes::i16_le(&head, 42usize.saturating_add(i.saturating_mul(2)))
+                    .unwrap_or(0)
+                    .to_string()
+            })
+            .collect();
     let datatype = u16_le(&head, 70).unwrap_or(0);
     let description = crate::text::until_nul(head.get(148..228).unwrap_or_default());
-    let offset = f32::from_le_bytes([head.get(108).copied().unwrap_or(0), head.get(109).copied().unwrap_or(0), head.get(110).copied().unwrap_or(0), head.get(111).copied().unwrap_or(0)]);
-    cx.emit(Node::new("Header").span(file.sub(0, 348)).summary(description.clone()));
-    cx.emit(Node::new("Dimensions").span(file.sub(40, 16)).value(text(dims.join("×"))));
-    cx.emit(Node::new("Data type").span(file.sub(70, 2)).value(Value::Enum { raw: datatype.into(), bits: 16, name: lookup(NIFTI_TYPES, datatype.into()) }));
-    let data_at = if offset.is_finite() && offset >= 348.0 { offset as u64 } else { 352 };
+    let offset = f32::from_le_bytes([
+        head.get(108).copied().unwrap_or(0),
+        head.get(109).copied().unwrap_or(0),
+        head.get(110).copied().unwrap_or(0),
+        head.get(111).copied().unwrap_or(0),
+    ]);
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 348))
+            .summary(description.clone()),
+    );
+    cx.emit(
+        Node::new("Dimensions")
+            .span(file.sub(40, 16))
+            .value(text(dims.join("×"))),
+    );
+    cx.emit(
+        Node::new("Data type")
+            .span(file.sub(70, 2))
+            .value(Value::Enum {
+                raw: datatype.into(),
+                bits: 16,
+                name: lookup(NIFTI_TYPES, datatype.into()),
+            }),
+    );
+    let data_at = if offset.is_finite() && offset >= 348.0 {
+        offset as u64
+    } else {
+        352
+    };
     cx.emit(Node::new("Voxel data").span(file.tail(data_at)));
-    cx.annotate(format!("NIfTI-1, {} {}{}", dims.join("×"), lookup(NIFTI_TYPES, datatype.into()).unwrap_or("?"), if description.is_empty() { String::new() } else { format!(", {description:?}") }));
+    cx.annotate(format!(
+        "NIfTI-1, {} {}{}",
+        dims.join("×"),
+        lookup(NIFTI_TYPES, datatype.into()).unwrap_or("?"),
+        if description.is_empty() {
+            String::new()
+        } else {
+            format!(", {description:?}")
+        }
+    ));
     Ok(())
 }
 
@@ -687,7 +935,10 @@ declare_format!(pub NRRD = "nrrd", "Nearly raw raster data (NRRD)", ["nrrd", "nh
 async fn nrrd(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 8192)).await?;
-    let end = head.windows(2).position(|w| w == b"\n\n").map_or(head.len(), |p| p.saturating_add(2));
+    let end = head
+        .windows(2)
+        .position(|w| w == b"\n\n")
+        .map_or(head.len(), |p| p.saturating_add(2));
     let header = String::from_utf8_lossy(head.get(..end).unwrap_or_default()).into_owned();
     let mut pos = 0u64;
     let mut fields = Vec::new();
@@ -695,15 +946,33 @@ async fn nrrd(cx: Cx, input: Input) -> Result<()> {
         let len = to_u64(line.len()).saturating_add(1);
         if let Some((k, v)) = line.split_once(':') {
             fields.push((k.trim().to_owned(), v.trim().to_owned()));
-            cx.emit(Node::new(k.trim().to_owned()).span(file.sub(pos, len)).value(text(v.trim())));
+            cx.emit(
+                Node::new(k.trim().to_owned())
+                    .span(file.sub(pos, len))
+                    .value(text(v.trim())),
+            );
         } else if !line.starts_with('#') && !line.is_empty() {
-            cx.emit(Node::new("Magic").span(file.sub(pos, len)).value(text(line)));
+            cx.emit(
+                Node::new("Magic")
+                    .span(file.sub(pos, len))
+                    .value(text(line)),
+            );
         }
         pos = pos.saturating_add(len);
     }
     cx.emit(Node::new("Data").span(file.tail(to_u64(end))));
-    let get = |k: &str| fields.iter().find(|(f, _)| f == k).map_or(String::new(), |(_, v)| v.clone());
-    cx.annotate(format!("NRRD {} {}, {} encoding", get("sizes").replace(' ', "×"), get("type"), get("encoding")));
+    let get = |k: &str| {
+        fields
+            .iter()
+            .find(|(f, _)| f == k)
+            .map_or(String::new(), |(_, v)| v.clone())
+    };
+    cx.annotate(format!(
+        "NRRD {} {}, {} encoding",
+        get("sizes").replace(' ', "×"),
+        get("type"),
+        get("encoding")
+    ));
     Ok(())
 }
 
@@ -722,7 +991,12 @@ async fn hdf4(cx: Cx, input: Input) -> Result<()> {
         let next = u64::from(u32_be(&head, 2).unwrap_or(0));
         blocks = blocks.saturating_add(1);
         descriptors = descriptors.saturating_add(count.into());
-        cx.push(Node::new(format!("DD block {blocks}")).span(file.sub(at, 6u64.saturating_add(u64::from(count).saturating_mul(12)))).summary(format!("{count} descriptors"))).await;
+        cx.push(
+            Node::new(format!("DD block {blocks}"))
+                .span(file.sub(at, 6u64.saturating_add(u64::from(count).saturating_mul(12))))
+                .summary(format!("{count} descriptors")),
+        )
+        .await;
         if next <= at {
             break;
         }
@@ -752,7 +1026,9 @@ async fn vtk(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Data").span(file.tail(pos)));
     cx.annotate(format!(
         "{} {}, {}",
-        values.get(3).map_or("", |s| s.trim_start_matches("DATASET ")),
+        values
+            .get(3)
+            .map_or("", |s| s.trim_start_matches("DATASET ")),
         values.get(2).cloned().unwrap_or_default(),
         values.get(1).cloned().unwrap_or_default()
     ));

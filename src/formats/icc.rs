@@ -190,7 +190,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Header::node("Header", hspan, BE));
     let count_bytes = cx.read(file.sub_exact(Header::SIZE, 4)?).await?;
     let count = u32_be(&count_bytes, 0).unwrap_or(0);
-    let table = file.sub(Header::SIZE, 4u64.saturating_add(u64::from(count).saturating_mul(12)));
+    let table = file.sub(
+        Header::SIZE,
+        4u64.saturating_add(u64::from(count).saturating_mul(12)),
+    );
     cx.emit(
         Node::new("Tag table")
             .span(table)
@@ -220,11 +223,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 /// The text of the `desc` tag, if any.
 async fn description(cx: &Cx, file: Span, count: u32) -> Result<Option<String>> {
     for i in 0..count.min(MAX_TAGS) {
-        let entry = cx.read(file.sub_exact(Header::SIZE.saturating_add(4).saturating_add(u64::from(i).saturating_mul(12)), 12)?).await?;
+        let entry = cx
+            .read(
+                file.sub_exact(
+                    Header::SIZE
+                        .saturating_add(4)
+                        .saturating_add(u64::from(i).saturating_mul(12)),
+                    12,
+                )?,
+            )
+            .await?;
         if entry.get(..4) == Some(b"desc".as_slice()) {
             let at = u32_be(&entry, 4).unwrap_or(0);
             let len = u32_be(&entry, 8).unwrap_or(0);
-            let data = cx.read_avail(file.sub(at.into(), u64::from(len).min(0x1000))).await?;
+            let data = cx
+                .read_avail(file.sub(at.into(), u64::from(len).min(0x1000)))
+                .await?;
             return Ok(text_of(&data));
         }
     }
@@ -255,7 +269,10 @@ fn text_of(data: &[u8]) -> Option<String> {
 }
 
 async fn tags(cx: Cx, (file, count): (Span, u32)) -> Result<()> {
-    let table = file.sub_exact(Header::SIZE.saturating_add(4), u64::from(count).saturating_mul(12))?;
+    let table = file.sub_exact(
+        Header::SIZE.saturating_add(4),
+        u64::from(count).saturating_mul(12),
+    )?;
     cx.set_count(Count::Exact(count.into()));
     for i in 0..u64::from(count) {
         let span = table.sub(i.saturating_mul(12), 12);
@@ -320,7 +337,10 @@ fn short_value(head: &[u8]) -> Option<String> {
 async fn tag_data(cx: Cx, span: Span) -> Result<()> {
     let block = cx.block(span.sub(0, 0x10000)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
-    let kind = f.bytes("Type", 4).with(|b, n| n.value(Value::Text(fourcc(b)))).emit()?;
+    let kind = f
+        .bytes("Type", 4)
+        .with(|b, n| n.value(Value::Text(fourcc(b))))
+        .emit()?;
     f.u32("Reserved").emit()?;
     match kind.as_slice() {
         b"desc" => {
@@ -359,7 +379,9 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
             let mut i = 0u32;
             while f.remaining() >= 12 && i < MAX_TAGS {
                 for name in ["X", "Y", "Z"] {
-                    f.int::<i32>(name).with(|&v, n| n.value(Value::Float(s15(v)))).emit()?;
+                    f.int::<i32>(name)
+                        .with(|&v, n| n.value(Value::Float(s15(v))))
+                        .emit()?;
                 }
                 i = i.saturating_add(1);
             }
@@ -367,7 +389,9 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
         b"sf32" => {
             let mut i = 0u32;
             while f.remaining() >= 4 && i < 64 {
-                f.int::<i32>("Value").with(|&v, n| n.value(Value::Float(s15(v)))).emit()?;
+                f.int::<i32>("Value")
+                    .with(|&v, n| n.value(Value::Float(s15(v))))
+                    .emit()?;
                 i = i.saturating_add(1);
             }
         }
@@ -402,11 +426,15 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
                 _ => 0,
             };
             for name in ["g", "a", "b", "c", "d", "e", "f"].into_iter().take(params) {
-                f.int::<i32>(name).with(|&v, n| n.value(Value::Float(s15(v)))).emit()?;
+                f.int::<i32>(name)
+                    .with(|&v, n| n.value(Value::Float(s15(v))))
+                    .emit()?;
             }
         }
         b"sig " => {
-            f.bytes("Signature", 4).with(|b, n| n.value(Value::Text(fourcc(b)))).emit()?;
+            f.bytes("Signature", 4)
+                .with(|b, n| n.value(Value::Text(fourcc(b))))
+                .emit()?;
         }
         b"dtim" => {
             for name in ["Year", "Month", "Day", "Hour", "Minute", "Second"] {
@@ -416,7 +444,9 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
         b"meas" => {
             f.u32("Standard observer").emit()?;
             for name in ["Backing X", "Backing Y", "Backing Z"] {
-                f.int::<i32>(name).with(|&v, n| n.value(Value::Float(s15(v)))).emit()?;
+                f.int::<i32>(name)
+                    .with(|&v, n| n.value(Value::Float(s15(v))))
+                    .emit()?;
             }
             f.u32("Geometry").emit()?;
             f.u32("Flare").emit()?;
@@ -426,13 +456,26 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
             let channels = f.u16("Channels").emit()?;
             f.u16("Phosphor/colorant type").emit()?;
             for _ in 0..channels.min(16) {
-                f.u32("x").with(|&v, n| n.value(Value::Float(f64::from(v) / 65536.0))).emit()?;
-                f.u32("y").with(|&v, n| n.value(Value::Float(f64::from(v) / 65536.0))).emit()?;
+                f.u32("x")
+                    .with(|&v, n| n.value(Value::Float(f64::from(v) / 65536.0)))
+                    .emit()?;
+                f.u32("y")
+                    .with(|&v, n| n.value(Value::Float(f64::from(v) / 65536.0)))
+                    .emit()?;
             }
         }
         b"view" => {
-            for name in ["Illuminant X", "Illuminant Y", "Illuminant Z", "Surround X", "Surround Y", "Surround Z"] {
-                f.int::<i32>(name).with(|&v, n| n.value(Value::Float(s15(v)))).emit()?;
+            for name in [
+                "Illuminant X",
+                "Illuminant Y",
+                "Illuminant Z",
+                "Surround X",
+                "Surround Y",
+                "Surround Z",
+            ] {
+                f.int::<i32>(name)
+                    .with(|&v, n| n.value(Value::Float(s15(v))))
+                    .emit()?;
             }
             f.u32("Illuminant type").emit()?;
         }
@@ -440,7 +483,13 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
             f.u8("Input channels").emit()?;
             f.u8("Output channels").emit()?;
             f.u16("Padding").emit()?;
-            for name in ["B curves offset", "Matrix offset", "M curves offset", "CLUT offset", "A curves offset"] {
+            for name in [
+                "B curves offset",
+                "Matrix offset",
+                "M curves offset",
+                "CLUT offset",
+                "A curves offset",
+            ] {
                 f.u32(name).hex().emit()?;
             }
         }

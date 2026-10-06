@@ -131,7 +131,12 @@ const UNICODE_ENCODINGS: EnumTable = &[
     (6, "Unicode full"),
 ];
 
-const MAC_ENCODINGS: EnumTable = &[(0, "Roman"), (1, "Japanese"), (2, "Chinese (Traditional)"), (3, "Korean")];
+const MAC_ENCODINGS: EnumTable = &[
+    (0, "Roman"),
+    (1, "Japanese"),
+    (2, "Chinese (Traditional)"),
+    (3, "Korean"),
+];
 
 pub fn encoding_name(platform: u16, encoding: u16) -> String {
     let table = match platform {
@@ -187,7 +192,9 @@ fn fixed(v: u32) -> f64 {
 
 /// F2DOT14 is not needed; `Fixed` is shown as a number.
 fn fixed_field(f: &mut Fields<'_>, name: &'static str) -> Result<u32> {
-    f.u32(name).with(|&v, n| n.value(Value::Float(fixed(v)))).emit()
+    f.u32(name)
+        .with(|&v, n| n.value(Value::Float(fixed(v))))
+        .emit()
 }
 
 /// The checksum of a table: the sum of its big-endian words.
@@ -298,7 +305,13 @@ fn head(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.u16("Smallest readable size (ppem)").emit()?;
     f.int::<i16>("Font direction hint").emit()?;
     f.int::<i16>("Index to location format")
-        .with(|&v, n| n.summary(if v == 0 { "short offsets" } else { "long offsets" }))
+        .with(|&v, n| {
+            n.summary(if v == 0 {
+                "short offsets"
+            } else {
+                "long offsets"
+            })
+        })
         .emit()?;
     f.int::<i16>("Glyph data format").emit()?;
     Ok(())
@@ -331,7 +344,13 @@ fn maxp(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let version = f
         .u32("Version")
         .hex()
-        .with(|&v, n| n.summary(if v == 0x5000 { "0.5 (CFF)" } else { "1.0 (TrueType)" }))
+        .with(|&v, n| {
+            n.summary(if v == 0x5000 {
+                "0.5 (CFF)"
+            } else {
+                "1.0 (TrueType)"
+            })
+        })
         .emit()?;
     f.u16("Number of glyphs").emit()?;
     if version == 0x0001_0000 {
@@ -361,9 +380,16 @@ fn os2(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.int::<i16>("Average char width").emit()?;
     f.u16("Weight class").enumeration(WEIGHTS).emit()?;
     f.u16("Width class").enumeration(WIDTHS).emit()?;
-    f.u16("Embedding (fsType)").flags(FS_TYPE).with(|&v, n| {
-        if v & 0x000f == 0 { n.summary("Installable") } else { n }
-    }).emit()?;
+    f.u16("Embedding (fsType)")
+        .flags(FS_TYPE)
+        .with(|&v, n| {
+            if v & 0x000f == 0 {
+                n.summary("Installable")
+            } else {
+                n
+            }
+        })
+        .emit()?;
     for name in [
         "Subscript x size",
         "Subscript y size",
@@ -382,7 +408,12 @@ fn os2(f: &mut Fields<'_>, _: &()) -> Result<()> {
         .with(|&v, n| n.summary(format!("class {}, subclass {}", v >> 8, v & 0xff)))
         .emit()?;
     f.bytes("PANOSE", 10).emit()?;
-    for name in ["Unicode range 1", "Unicode range 2", "Unicode range 3", "Unicode range 4"] {
+    for name in [
+        "Unicode range 1",
+        "Unicode range 2",
+        "Unicode range 3",
+        "Unicode range 4",
+    ] {
         f.u32(name).hex().emit()?;
     }
     f.ascii("Vendor ID", 4).emit()?;
@@ -421,12 +452,21 @@ fn post(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.int::<i16>("Underline position").emit()?;
     f.int::<i16>("Underline thickness").emit()?;
     f.u32("Is fixed pitch").emit()?;
-    for name in ["Min memory (Type 42)", "Max memory (Type 42)", "Min memory (Type 1)", "Max memory (Type 1)"] {
+    for name in [
+        "Min memory (Type 42)",
+        "Max memory (Type 42)",
+        "Min memory (Type 1)",
+        "Max memory (Type 1)",
+    ] {
         f.u32(name).emit()?;
     }
     if f.remaining() > 0 {
         let rest = f.remaining();
-        f.node(Node::new("Glyph names").span(f.peek_span(rest)).summary(format!("{rest} bytes")));
+        f.node(
+            Node::new("Glyph names")
+                .span(f.peek_span(rest))
+                .summary(format!("{rest} bytes")),
+        );
     }
     Ok(())
 }
@@ -450,7 +490,11 @@ pub async fn decode(cx: &Cx, tag: &str, span: Span) -> Result<()> {
         "cmap" => cmap(cx, span).await,
         "fvar" => fvar(cx, span).await,
         _ => {
-            cx.emit(Node::new("Data").span(span).summary(format!("{} bytes", span.len)));
+            cx.emit(
+                Node::new("Data")
+                    .span(span)
+                    .summary(format!("{} bytes", span.len)),
+            );
             Ok(())
         }
     }
@@ -483,7 +527,8 @@ async fn name_records(cx: Cx, (span, count, strings): (Span, u16, u64)) -> Resul
         let rspan = table.sub(i.saturating_mul(12), 12);
         let r = cx.read(rspan).await?;
         let get = |at: usize| u16_be(&r, at).unwrap_or(0);
-        let (platform, encoding, language, id, len, offset) = (get(0), get(2), get(4), get(6), get(8), get(10));
+        let (platform, encoding, language, id, len, offset) =
+            (get(0), get(2), get(4), get(6), get(8), get(10));
         let text_span = span.sub(strings.saturating_add(offset.into()), len.into());
         let bytes = cx.read_avail(text_span).await?;
         let text = decode_name(platform, encoding, &bytes);
@@ -648,8 +693,12 @@ async fn format4_segments(cx: Cx, (span, segs): (Span, u64)) -> Result<()> {
     let n = segs.saturating_mul(2);
     let ends = cx.read(span.sub_exact(14, n)?).await?;
     let starts = cx.read(span.sub_exact(16u64.saturating_add(n), n)?).await?;
-    let deltas = cx.read(span.sub_exact(16u64.saturating_add(n.saturating_mul(2)), n)?).await?;
-    let offsets = cx.read(span.sub_exact(16u64.saturating_add(n.saturating_mul(3)), n)?).await?;
+    let deltas = cx
+        .read(span.sub_exact(16u64.saturating_add(n.saturating_mul(2)), n)?)
+        .await?;
+    let offsets = cx
+        .read(span.sub_exact(16u64.saturating_add(n.saturating_mul(3)), n)?)
+        .await?;
     cx.set_count(Count::Exact(segs));
     for i in 0..crate::bytes::to_usize(segs) {
         let at = i.saturating_mul(2);
@@ -663,9 +712,13 @@ async fn format4_segments(cx: Cx, (span, segs): (Span, u64)) -> Result<()> {
             "via glyph index array".to_owned()
         };
         cx.push(
-            Node::new(format!("{}–{}", codepoint(start.into()), codepoint(end.into())))
-                .span(span.sub(14u64.saturating_add(to_u64(at)), 2))
-                .summary(mapping),
+            Node::new(format!(
+                "{}–{}",
+                codepoint(start.into()),
+                codepoint(end.into())
+            ))
+            .span(span.sub(14u64.saturating_add(to_u64(at)), 2))
+            .summary(mapping),
         )
         .await;
     }
@@ -684,7 +737,10 @@ async fn format12_groups(cx: Cx, (span, groups, format): (Span, u32, u16)) -> Re
         let summary = if format == 13 {
             format!("all → glyph {glyph}")
         } else {
-            format!("→ glyphs {glyph}–{}", glyph.saturating_add(end.saturating_sub(start)))
+            format!(
+                "→ glyphs {glyph}–{}",
+                glyph.saturating_add(end.saturating_sub(start))
+            )
         };
         cx.push(
             Node::new(format!("{}–{}", codepoint(start), codepoint(end)))
@@ -707,7 +763,10 @@ async fn fvar(cx: &Cx, span: Span) -> Result<()> {
     let axis_size = f.u16("Axis size").emit()?;
     let instance_count = f.u16("Instance count").emit()?;
     let instance_size = f.u16("Instance size").emit()?;
-    let axes = span.sub(axes_offset.into(), u64::from(axis_count).saturating_mul(axis_size.into()));
+    let axes = span.sub(
+        axes_offset.into(),
+        u64::from(axis_count).saturating_mul(axis_size.into()),
+    );
     cx.emit(
         Node::new("Axes")
             .span(axes)
@@ -715,12 +774,18 @@ async fn fvar(cx: &Cx, span: Span) -> Result<()> {
             .lazy(fvar_axes, (axes, axis_count, axis_size)),
     );
     let instances_at = u64::from(axes_offset).saturating_add(axes.len);
-    let instances = span.sub(instances_at, u64::from(instance_count).saturating_mul(instance_size.into()));
+    let instances = span.sub(
+        instances_at,
+        u64::from(instance_count).saturating_mul(instance_size.into()),
+    );
     cx.emit(
         Node::new("Instances")
             .span(instances)
             .summary(format!("{instance_count}"))
-            .lazy(fvar_instances, (instances, instance_count, instance_size, axis_count)),
+            .lazy(
+                fvar_instances,
+                (instances, instance_count, instance_size, axis_count),
+            ),
     );
     Ok(())
 }
@@ -728,7 +793,9 @@ async fn fvar(cx: &Cx, span: Span) -> Result<()> {
 async fn fvar_axes(cx: Cx, (span, count, size): (Span, u16, u16)) -> Result<()> {
     let span = span.sub_exact(0, u64::from(count).saturating_mul(size.into()))?;
     if size < 20 {
-        return Err(Diagnostic::malformed(format!("axis records of {size} bytes")));
+        return Err(Diagnostic::malformed(format!(
+            "axis records of {size} bytes"
+        )));
     }
     for i in 0..u64::from(count) {
         let aspan = span.sub(i.saturating_mul(size.into()), size.into());
@@ -767,19 +834,27 @@ fn axis_record(f: &mut Fields<'_>, _: &()) -> Result<()> {
 async fn fvar_instances(cx: Cx, (span, count, size, axes): (Span, u16, u16, u16)) -> Result<()> {
     let span = span.sub_exact(0, u64::from(count).saturating_mul(size.into()))?;
     if size < 4 {
-        return Err(Diagnostic::malformed(format!("instance records of {size} bytes")));
+        return Err(Diagnostic::malformed(format!(
+            "instance records of {size} bytes"
+        )));
     }
     for i in 0..u64::from(count) {
         let ispan = span.sub(i.saturating_mul(size.into()), size.into());
         let data = cx.read(ispan).await?;
         let name_id = u16_be(&data, 0).unwrap_or(0);
         let coords: Vec<String> = (0..usize::from(axes))
-            .map(|a| u32_be(&data, 4usize.saturating_add(a.saturating_mul(4))).map_or_else(String::new, |v| format!("{}", fixed(v))))
+            .map(|a| {
+                u32_be(&data, 4usize.saturating_add(a.saturating_mul(4)))
+                    .map_or_else(String::new, |v| format!("{}", fixed(v)))
+            })
             .collect();
         cx.push(
             Node::new(format!("Instance {i}"))
                 .span(ispan)
-                .summary(format!("name ID {name_id}, coordinates ({})", coords.join(", "))),
+                .summary(format!(
+                    "name ID {name_id}, coordinates ({})",
+                    coords.join(", ")
+                )),
         )
         .await;
     }
@@ -799,7 +874,11 @@ pub fn short(tag: &str, head: &[u8]) -> Option<String> {
         )),
         "name" => Some(format!("{} records", u16_be(head, 2)?)),
         "cmap" => Some(format!("{} subtables", u16_be(head, 2)?)),
-        "fvar" => Some(format!("{} axes, {} instances", u16_be(head, 8)?, u16_be(head, 12)?)),
+        "fvar" => Some(format!(
+            "{} axes, {} instances",
+            u16_be(head, 8)?,
+            u16_be(head, 12)?
+        )),
         "post" => Some(format!("version {}", fixed(u32_be(head, 0)?))),
         _ => None,
     }

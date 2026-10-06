@@ -2,7 +2,7 @@
 
 #![allow(dead_code)]
 
-use fillyfoal::{ChildState, Limits, NodeId, Progress, Session, Span, formats, render};
+use fillyfoal::{ChildState, Limits, NodeId, Progress, Secret, SecretRequest, Session, Span, formats, render};
 
 // ---------------------------------------------------------------------------
 // Byte-level image writer
@@ -218,6 +218,11 @@ pub struct Host {
     pub max_polls: u64,
     /// Exploration stops expanding once this many nodes exist.
     pub max_nodes: usize,
+    /// Answers to secret requests: attempt n gets `passwords[n]`; later
+    /// attempts are declined. Encrypted fixtures use "fillyfoal".
+    pub passwords: Vec<String>,
+    /// Every secret request seen, in order.
+    pub secret_requests: Vec<SecretRequest>,
 }
 
 impl Host {
@@ -239,6 +244,8 @@ impl Host {
             bytes_supplied: 0,
             max_polls: 1_000_000,
             max_nodes: usize::MAX,
+            passwords: vec![String::from("fillyfoal")],
+            secret_requests: Vec::new(),
         }
     }
 
@@ -260,6 +267,16 @@ impl Host {
             match self.session.poll(self.budget) {
                 Progress::Idle => return,
                 Progress::Yielded => {}
+                Progress::NeedSecret(requests) => {
+                    for r in requests {
+                        let answer = self
+                            .passwords
+                            .get(r.attempt as usize)
+                            .map(|p| Secret::password(p));
+                        self.secret_requests.push(r.clone());
+                        self.session.answer_secret(&r, answer);
+                    }
+                }
                 Progress::NeedBytes(requests) => {
                     assert!(!requests.is_empty());
                     for r in requests {
@@ -399,7 +416,10 @@ pub fn robustness(name: &str, data: &[u8]) {
         host.max_nodes = 20_000;
         host.explore(host.root, 24, 1000);
         for d in diagnostics(&host) {
-            assert!(d.kind != fillyfoal::DiagKind::Internal, "{name}: internal error after {what}: {d}");
+            assert!(
+                d.kind != fillyfoal::DiagKind::Internal,
+                "{name}: internal error after {what}: {d}"
+            );
             assert!(
                 !d.message.contains("units of work"),
                 "{name}: runaway expansion after {what} (a loop that makes no progress?)"

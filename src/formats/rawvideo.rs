@@ -19,7 +19,9 @@ pub static DIRAC: Format = Format {
     title: "Dirac/VC-2 video stream",
     extensions: &["drc", "vc2"],
     mime: "video/x-dirac",
-    probe: Probe::Custom(|h| h.starts_with(b"BBCD\x00") && u32_be(h.data, 5).is_some_and(|n| n >= 13)),
+    probe: Probe::Custom(|h| {
+        h.starts_with(b"BBCD\x00") && u32_be(h.data, 5).is_some_and(|n| n >= 13)
+    }),
     dissect: crate::expander!(dissect_dirac: Input),
 };
 
@@ -31,7 +33,11 @@ fn parse_code_name(code: u8) -> String {
         0x30 => "Padding".to_owned(),
         c if c & 0x08 != 0 => {
             let kind = if c & 0x80 != 0 {
-                if c & 0x20 != 0 { "High-quality picture" } else { "Low-delay picture" }
+                if c & 0x20 != 0 {
+                    "High-quality picture"
+                } else {
+                    "Low-delay picture"
+                }
             } else {
                 "Core picture"
             };
@@ -118,7 +124,11 @@ pub async fn dissect_dirac(cx: Cx, input: Input) -> Result<()> {
         }
         let code = d.get(4).copied().unwrap_or(0);
         let next = u64::from(u32_be(&d, 5).unwrap_or(0));
-        let len = if next == 0 { file.len.saturating_sub(pos) } else { next.max(13) };
+        let len = if next == 0 {
+            file.len.saturating_sub(pos)
+        } else {
+            next.max(13)
+        };
         let span = file.sub(pos, len);
         let mut summary = format!("{len} bytes");
         if code & 0x08 != 0 {
@@ -142,23 +152,44 @@ async fn dirac_unit(cx: Cx, span: Span) -> Result<()> {
     cx.emit(vidutil::text("Prefix", span.sub(0, 4), "BBCD"));
     let code = d.get(4).copied().unwrap_or(0);
     cx.emit(hex("Parse code", span.sub(4, 1), code.into(), 8).summary(parse_code_name(code)));
-    cx.emit(uint("Next parse offset", span.sub(5, 4), u32_be(&d, 5).unwrap_or(0).into(), 32));
-    cx.emit(uint("Previous parse offset", span.sub(9, 4), u32_be(&d, 9).unwrap_or(0).into(), 32));
+    cx.emit(uint(
+        "Next parse offset",
+        span.sub(5, 4),
+        u32_be(&d, 5).unwrap_or(0).into(),
+        32,
+    ));
+    cx.emit(uint(
+        "Previous parse offset",
+        span.sub(9, 4),
+        u32_be(&d, 9).unwrap_or(0).into(),
+        32,
+    ));
     let body = span.tail(13);
     if code == 0 {
-        if let Some([major, minor, profile, level, base, w, h]) = d.get(13..).and_then(sequence_header) {
+        if let Some([major, minor, profile, level, base, w, h]) =
+            d.get(13..).and_then(sequence_header)
+        {
             cx.emit(uint("Major version", body, major, 32));
             cx.emit(uint("Minor version", body, minor, 32));
             cx.emit(uint("Profile", body, profile, 32));
             cx.emit(uint("Level", body, level, 32));
-            cx.emit(uint("Base video format", body, base, 32).summary(
-                VIDEO_FORMATS.get(vidutil::us(base)).map_or("unknown", |f| f.0),
-            ));
+            cx.emit(
+                uint("Base video format", body, base, 32).summary(
+                    VIDEO_FORMATS
+                        .get(vidutil::us(base))
+                        .map_or("unknown", |f| f.0),
+                ),
+            );
             cx.emit(uint("Width", body, w, 32));
             cx.emit(uint("Height", body, h, 32));
         }
     } else if code & 0x08 != 0 {
-        cx.emit(uint("Picture number", span.sub(13, 4), u32_be(&d, 13).unwrap_or(0).into(), 32));
+        cx.emit(uint(
+            "Picture number",
+            span.sub(13, 4),
+            u32_be(&d, 13).unwrap_or(0).into(),
+            32,
+        ));
         cx.emit(Node::new("Picture data").span(span.tail(17)));
     } else if code == 0x20 {
         let text = crate::text::until_nul(d.get(13..).unwrap_or_default());
@@ -220,7 +251,10 @@ fn dnx_summary(d: &[u8]) -> String {
         _ => 8,
     };
     let cid = u32_be(d, 0x28).unwrap_or(0);
-    format!("{}, {w}×{h}, {depth}-bit", vidutil::lookup_or(DNX_CIDS, cid.into()))
+    format!(
+        "{}, {w}×{h}, {depth}-bit",
+        vidutil::lookup_or(DNX_CIDS, cid.into())
+    )
 }
 
 pub async fn dissect_dnxhd(cx: Cx, input: Input) -> Result<()> {
@@ -230,7 +264,9 @@ pub async fn dissect_dnxhd(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut index = 0u32;
     while pos < file.len {
-        let next = find_prefix(&cx, file, pos.saturating_add(4), DNX_PREFIX).await?.unwrap_or(file.len);
+        let next = find_prefix(&cx, file, pos.saturating_add(4), DNX_PREFIX)
+            .await?
+            .unwrap_or(file.len);
         let span = file.sub(pos, next.saturating_sub(pos));
         let d = cx.read_avail(span.sub(0, 0x30)).await?;
         cx.push(
@@ -267,10 +303,32 @@ async fn find_prefix(cx: &Cx, span: Span, from: u64, needle: &[u8]) -> Result<Op
 
 async fn dnx_frame(cx: Cx, span: Span) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 0x30)).await?;
-    cx.emit(hex("Header prefix", span.sub(0, 5), d.get(..5).map_or(0, |b| b.iter().fold(0u64, |a, &x| (a << 8) | u64::from(x))), 40));
-    cx.emit(uint("Lines", span.sub(0x18, 2), u16_be(&d, 0x18).unwrap_or(0).into(), 16));
-    cx.emit(uint("Samples per line", span.sub(0x1a, 2), u16_be(&d, 0x1a).unwrap_or(0).into(), 16));
-    cx.emit(enumerated("Compression ID", span.sub(0x28, 4), u32_be(&d, 0x28).unwrap_or(0).into(), 32, DNX_CIDS));
+    cx.emit(hex(
+        "Header prefix",
+        span.sub(0, 5),
+        d.get(..5)
+            .map_or(0, |b| b.iter().fold(0u64, |a, &x| (a << 8) | u64::from(x))),
+        40,
+    ));
+    cx.emit(uint(
+        "Lines",
+        span.sub(0x18, 2),
+        u16_be(&d, 0x18).unwrap_or(0).into(),
+        16,
+    ));
+    cx.emit(uint(
+        "Samples per line",
+        span.sub(0x1a, 2),
+        u16_be(&d, 0x1a).unwrap_or(0).into(),
+        16,
+    ));
+    cx.emit(enumerated(
+        "Compression ID",
+        span.sub(0x28, 4),
+        u32_be(&d, 0x28).unwrap_or(0).into(),
+        32,
+        DNX_CIDS,
+    ));
     cx.emit(Node::new("Coded data").span(span.tail(0x280)));
     Ok(())
 }
@@ -315,7 +373,10 @@ fn probe_h263(h: &Head<'_>) -> bool {
     }
     let window = h.data.get(..h.data.len().min(0x8000)).unwrap_or_default();
     match window.windows(3).skip(3).position(is_psc) {
-        Some(i) => window.get(i.saturating_add(3)..).and_then(picture_header).is_some(),
+        Some(i) => window
+            .get(i.saturating_add(3)..)
+            .and_then(picture_header)
+            .is_some(),
         None => to_u64(h.data.len()) == h.len,
     }
 }
@@ -352,13 +413,18 @@ pub async fn dissect_h263(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 8)).await?;
     if let Some((_, format, _)) = picture_header(&head) {
-        let f = SOURCE_FORMATS.get(usize::from(format)).copied().unwrap_or(("?", 0, 0));
+        let f = SOURCE_FORMATS
+            .get(usize::from(format))
+            .copied()
+            .unwrap_or(("?", 0, 0));
         cx.annotate(format!("H.263, {} ({}×{})", f.0, f.1, f.2));
     }
     let mut pos = 0u64;
     let mut index = 0u32;
     while pos < file.len {
-        let next = next_psc(&cx, file, pos.saturating_add(3)).await?.unwrap_or(file.len);
+        let next = next_psc(&cx, file, pos.saturating_add(3))
+            .await?
+            .unwrap_or(file.len);
         let span = file.sub(pos, next.saturating_sub(pos));
         let d = cx.read_avail(span.sub(0, 8)).await?;
         let mut node = Node::new(format!("Picture {index}")).span(span);
@@ -388,9 +454,20 @@ async fn h263_picture(cx: Cx, span: Span) -> Result<()> {
     cx.emit(hex("Picture start code", span.sub(0, 3), 0x20, 22));
     cx.emit(uint("Temporal reference", span.sub(2, 2), tr.into(), 8));
     let s4 = span.sub(4, 1);
-    let f = SOURCE_FORMATS.get(usize::from(format)).copied().unwrap_or(("?", 0, 0));
-    cx.emit(uint("Source format", s4, format.into(), 3).summary(format!("{} ({}×{})", f.0, f.1, f.2)));
-    cx.emit(uint("Picture coding type", s4, u64::from(inter), 1).summary(if inter { "P (inter)" } else { "I (intra)" }));
+    let f = SOURCE_FORMATS
+        .get(usize::from(format))
+        .copied()
+        .unwrap_or(("?", 0, 0));
+    cx.emit(
+        uint("Source format", s4, format.into(), 3).summary(format!("{} ({}×{})", f.0, f.1, f.2)),
+    );
+    cx.emit(
+        uint("Picture coding type", s4, u64::from(inter), 1).summary(if inter {
+            "P (inter)"
+        } else {
+            "I (intra)"
+        }),
+    );
     cx.emit(Node::new("Picture data").span(span.tail(5)));
     Ok(())
 }

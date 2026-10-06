@@ -28,7 +28,9 @@ fn tmr_at(h: &Head<'_>) -> Option<usize> {
 }
 
 fn tmr_region(h: &Head<'_>) -> Option<u8> {
-    tmr_at(h).and_then(|o| h.data.get(o.saturating_add(15))).map(|b| b >> 4)
+    tmr_at(h)
+        .and_then(|o| h.data.get(o.saturating_add(15)))
+        .map(|b| b >> 4)
 }
 
 fn gg_probe(h: &Head<'_>) -> bool {
@@ -44,7 +46,13 @@ declare_format!(pub GAME_GEAR = "game-gear", "Sega Game Gear ROM", ["gg"],
 declare_format!(pub SMS = "sms", "Sega Master System ROM", ["sms", "sg"],
     "application/x-sms-rom", Probe::Custom(sms_probe), sms);
 
-const TMR_REGIONS: EnumTable = &[(3, "SMS Japan"), (4, "SMS Export"), (5, "GG Japan"), (6, "GG Export"), (7, "GG International")];
+const TMR_REGIONS: EnumTable = &[
+    (3, "SMS Japan"),
+    (4, "SMS Export"),
+    (5, "GG Japan"),
+    (6, "GG Export"),
+    (7, "GG International"),
+];
 const TMR_SIZES: [(u8, u64, &str); 9] = [
     (0xa, 0x2000, "8 KiB"),
     (0xb, 0x4000, "16 KiB"),
@@ -58,13 +66,19 @@ const TMR_SIZES: [(u8, u64, &str); 9] = [
 ];
 
 fn bcd(b: u8) -> u32 {
-    u32::from(b >> 4).saturating_mul(10).saturating_add(u32::from(b & 0xf))
+    u32::from(b >> 4)
+        .saturating_mul(10)
+        .saturating_add(u32::from(b & 0xf))
 }
 
 async fn sms(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (head, tail) = crate::formats::head(&cx, file).await?;
-    let probe = Head { data: &head, tail: &tail, len: file.len };
+    let probe = Head {
+        data: &head,
+        tail: &tail,
+        len: file.len,
+    };
     let at = to_u64(tmr_at(&probe).unwrap_or(0x7ff0));
     let span = file.sub(at, 16);
     let raw = cx.read(span).await?;
@@ -76,7 +90,10 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
         g.u16("Checksum").get()?
     };
     let [p0, p1, p2, last] = [12usize, 13, 14, 15].map(|i| raw.get(i).copied().unwrap_or(0));
-    let product = u32::from(p2 >> 4).saturating_mul(10000).saturating_add(bcd(p1).saturating_mul(100)).saturating_add(bcd(p0));
+    let product = u32::from(p2 >> 4)
+        .saturating_mul(10000)
+        .saturating_add(bcd(p1).saturating_mul(100))
+        .saturating_add(bcd(p0));
     let region = last >> 4;
     let size_code = last & 0xf;
     let rom = TMR_SIZES.iter().find(|s| s.0 == size_code);
@@ -89,30 +106,67 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
         let first = cx.read(file.sub(0, len.min(0x7ff0))).await?;
         let mut sum = first.iter().fold(0u16, |s, &b| s.wrapping_add(b.into()));
         if len > 0x8000 {
-            let rest = cx.read(file.sub(0x8000, len.saturating_sub(0x8000))).await?;
+            let rest = cx
+                .read(file.sub(0x8000, len.saturating_sub(0x8000)))
+                .await?;
             sum = rest.iter().fold(sum, |s, &b| s.wrapping_add(b.into()));
         }
         computed = Some(sum);
     }
     f.ascii("Signature", 8).emit()?;
     f.bytes("Reserved", 2).emit()?;
-    f.u16("Checksum").hex().check(|&v| computed.filter(|&c| c != v).map(|c| Diagnostic::warning(format!("checksum mismatch: computed {c:#06x}")))).emit()?;
-    f.node(Node::new("Product code").span(file.sub(at.saturating_add(12), 3)).value(dec(product.into(), 32)));
-    f.node(Node::new("Version").span(file.sub(at.saturating_add(14), 1)).value(dec((p2 & 0xf).into(), 8)));
-    f.node(Node::new("Region").span(file.sub(at.saturating_add(15), 1)).value(Value::Enum { raw: region.into(), bits: 4, name: lookup(TMR_REGIONS, region.into()) }));
-    f.node(Node::new("ROM size").span(file.sub(at.saturating_add(15), 1)).value(Value::Enum { raw: size_code.into(), bits: 4, name: rom.map(|r| r.2) }));
+    f.u16("Checksum")
+        .hex()
+        .check(|&v| {
+            computed
+                .filter(|&c| c != v)
+                .map(|c| Diagnostic::warning(format!("checksum mismatch: computed {c:#06x}")))
+        })
+        .emit()?;
+    f.node(
+        Node::new("Product code")
+            .span(file.sub(at.saturating_add(12), 3))
+            .value(dec(product.into(), 32)),
+    );
+    f.node(
+        Node::new("Version")
+            .span(file.sub(at.saturating_add(14), 1))
+            .value(dec((p2 & 0xf).into(), 8)),
+    );
+    f.node(
+        Node::new("Region")
+            .span(file.sub(at.saturating_add(15), 1))
+            .value(Value::Enum {
+                raw: region.into(),
+                bits: 4,
+                name: lookup(TMR_REGIONS, region.into()),
+            }),
+    );
+    f.node(
+        Node::new("ROM size")
+            .span(file.sub(at.saturating_add(15), 1))
+            .value(Value::Enum {
+                raw: size_code.into(),
+                bits: 4,
+                name: rom.map(|r| r.2),
+            }),
+    );
     let sdsc = file.sub(at.saturating_sub(16), 16);
     if cx.read_avail(sdsc.sub(0, 4)).await? == b"SDSC" {
         let d = cx.read(sdsc).await?;
-        cx.emit(Node::new("SDSC homebrew header").span(sdsc).summary(format!(
-            "v{}.{:02}, {:02x}{:02x}-{:02x}-{:02x}",
-            d.get(4).copied().unwrap_or(0),
-            bcd(d.get(5).copied().unwrap_or(0)),
-            d.get(9).copied().unwrap_or(0),
-            d.get(8).copied().unwrap_or(0),
-            d.get(7).copied().unwrap_or(0),
-            d.get(6).copied().unwrap_or(0)
-        )));
+        cx.emit(
+            Node::new("SDSC homebrew header")
+                .span(sdsc)
+                .summary(format!(
+                    "v{}.{:02}, {:02x}{:02x}-{:02x}-{:02x}",
+                    d.get(4).copied().unwrap_or(0),
+                    bcd(d.get(5).copied().unwrap_or(0)),
+                    d.get(9).copied().unwrap_or(0),
+                    d.get(8).copied().unwrap_or(0),
+                    d.get(7).copied().unwrap_or(0),
+                    d.get(6).copied().unwrap_or(0)
+                )),
+        );
     }
     cx.annotate(format!(
         "{}, product {product}, {}{}",
@@ -156,13 +210,44 @@ async fn smd(cx: Cx, input: Input) -> Result<()> {
     let first = cx.read(file.sub(512, 0x4000)).await?;
     let (odd, even) = first.split_at(0x2000);
     let plain: Vec<u8> = even.iter().zip(odd).flat_map(|(&e, &o)| [e, o]).collect();
-    let decoded = cx.add_derived(Origin { parent: file.sub(512, 0x4000), transform: "smd-deinterleave" }, plain, 0x4000, None)?;
-    cx.emit(Node::new("Interleaved data").span(file.tail(512)).summary(format!("{blocks} blocks of 16 KiB")));
-    cx.emit(embedded_as("First block (de-interleaved)", input.nested(decoded.span), &super::consoles::GENESIS));
-    let g: super::consoles::GenesisHeader = read_record(&cx, decoded.span.sub(0x100, super::consoles::GenesisHeader::SIZE), BE).await?;
-    let title = if clean(&g.overseas).is_empty() { clean(&g.domestic) } else { clean(&g.overseas) };
+    let decoded = cx.add_derived(
+        Origin {
+            parent: file.sub(512, 0x4000),
+            transform: "smd-deinterleave",
+        },
+        plain,
+        0x4000,
+        None,
+    )?;
+    cx.emit(
+        Node::new("Interleaved data")
+            .span(file.tail(512))
+            .summary(format!("{blocks} blocks of 16 KiB")),
+    );
+    cx.emit(embedded_as(
+        "First block (de-interleaved)",
+        input.nested(decoded.span),
+        &super::consoles::GENESIS,
+    ));
+    let g: super::consoles::GenesisHeader = read_record(
+        &cx,
+        decoded
+            .span
+            .sub(0x100, super::consoles::GenesisHeader::SIZE),
+        BE,
+    )
+    .await?;
+    let title = if clean(&g.overseas).is_empty() {
+        clean(&g.domestic)
+    } else {
+        clean(&g.overseas)
+    };
     let title: String = title.split_whitespace().collect::<Vec<_>>().join(" ");
-    cx.annotate(format!("SMD dump of {title:?} ({}), {blocks} blocks{}", clean(&g.serial), if h.split == 0x40 { ", split" } else { "" }));
+    cx.annotate(format!(
+        "SMD dump of {title:?} ({}), {blocks} blocks{}",
+        clean(&g.serial),
+        if h.split == 0x40 { ", split" } else { "" }
+    ));
     Ok(())
 }
 
@@ -170,7 +255,8 @@ async fn smd(cx: Cx, input: Input) -> Result<()> {
 // Neo Geo Pocket (Color)
 
 fn ngp_probe(h: &Head<'_>) -> bool {
-    (h.at(0, b"COPYRIGHT BY SNK CORPORATION") || h.at(0, b" LICENSED BY SNK CORPORATION")) && h.data.len() >= 0x40
+    (h.at(0, b"COPYRIGHT BY SNK CORPORATION") || h.at(0, b" LICENSED BY SNK CORPORATION"))
+        && h.data.len() >= 0x40
 }
 
 fn ngpc_probe(h: &Head<'_>) -> bool {
@@ -203,7 +289,11 @@ async fn ngp(cx: Cx, input: Input) -> Result<()> {
         clean(&h.title),
         h.catalog,
         h.sub_catalog,
-        if h.mode == 0x10 { "colour" } else { "monochrome" },
+        if h.mode == 0x10 {
+            "colour"
+        } else {
+            "monochrome"
+        },
         h.entry,
         size(file.len)
     ));
@@ -232,7 +322,12 @@ async fn pokemini(cx: Cx, input: Input) -> Result<()> {
     let title = f.ascii("Title", 12).emit()?;
     f.ascii("Players marker", 2).emit()?;
     cx.emit(Node::new("Program").span(file.tail(0x21c0)));
-    cx.annotate(format!("Pokémon mini {:?} ({}), {}", clean(&title), clean(&code), size(file.len)));
+    cx.annotate(format!(
+        "Pokémon mini {:?} ({}), {}",
+        clean(&title),
+        clean(&code),
+        size(file.len)
+    ));
     Ok(())
 }
 
@@ -290,7 +385,12 @@ async fn neo(cx: Cx, input: Input) -> Result<()> {
         ("C ROM", h.c, "sprite graphics"),
     ] {
         if len > 0 {
-            cx.emit(Node::new(name).span(file.sub(at, len.into())).summary(size(len.into())).desc(desc));
+            cx.emit(
+                Node::new(name)
+                    .span(file.sub(at, len.into()))
+                    .summary(size(len.into()))
+                    .desc(desc),
+            );
         }
         at = at.saturating_add(len.into());
     }
@@ -328,7 +428,14 @@ const UNIF_CHUNKS: &[(&str, &str)] = &[
     ("CHR", "CHR ROM"),
 ];
 
-const UNIF_MIRRORING: EnumTable = &[(0, "horizontal"), (1, "vertical"), (2, "single-screen A"), (3, "single-screen B"), (4, "four-screen"), (5, "mapper-controlled")];
+const UNIF_MIRRORING: EnumTable = &[
+    (0, "horizontal"),
+    (1, "vertical"),
+    (2, "single-screen A"),
+    (3, "single-screen B"),
+    (4, "four-screen"),
+    (5, "mapper-controlled"),
+];
 
 async fn unif(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -347,8 +454,14 @@ async fn unif(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(cur.u32().await?);
         let data = cur.span(len);
         cur.skip(len);
-        let meaning = UNIF_CHUNKS.iter().find(|c| id.starts_with(c.0)).map_or("unknown", |c| c.1);
-        let mut node = Node::new(id.clone()).span(cur.since(start)).desc(meaning).target(data);
+        let meaning = UNIF_CHUNKS
+            .iter()
+            .find(|c| id.starts_with(c.0))
+            .map_or("unknown", |c| c.1);
+        let mut node = Node::new(id.clone())
+            .span(cur.since(start))
+            .desc(meaning)
+            .target(data);
         match id.get(..3).unwrap_or_default() {
             "MAP" | "NAM" | "REA" | "WRT" => {
                 let s = crate::text::until_nul(&cx.read_avail(data.sub(0, 1024)).await?);
@@ -360,12 +473,30 @@ async fn unif(cx: Cx, input: Input) -> Result<()> {
                 node = node.value(text(s));
             }
             "MIR" => {
-                let b = cx.read_avail(data.sub(0, 1)).await?.first().copied().unwrap_or(0);
-                node = node.value(Value::Enum { raw: b.into(), bits: 8, name: lookup(UNIF_MIRRORING, b.into()) });
+                let b = cx
+                    .read_avail(data.sub(0, 1))
+                    .await?
+                    .first()
+                    .copied()
+                    .unwrap_or(0);
+                node = node.value(Value::Enum {
+                    raw: b.into(),
+                    bits: 8,
+                    name: lookup(UNIF_MIRRORING, b.into()),
+                });
             }
             "TVC" => {
-                let b = cx.read_avail(data.sub(0, 1)).await?.first().copied().unwrap_or(0);
-                node = node.value(Value::Enum { raw: b.into(), bits: 8, name: lookup(&[(0, "NTSC"), (1, "PAL"), (2, "both")], b.into()) });
+                let b = cx
+                    .read_avail(data.sub(0, 1))
+                    .await?
+                    .first()
+                    .copied()
+                    .unwrap_or(0);
+                node = node.value(Value::Enum {
+                    raw: b.into(),
+                    bits: 8,
+                    name: lookup(&[(0, "NTSC"), (1, "PAL"), (2, "both")], b.into()),
+                });
             }
             "PCK" | "CCK" => {
                 let raw = cx.read_avail(data.sub(0, 4)).await?;
@@ -402,12 +533,24 @@ declare_format!(pub VECTREX = "vectrex", "Vectrex cartridge ROM", ["vec", "gam"]
 async fn vectrex(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = cx.read_avail(file.sub(0, 512)).await?;
-    let copyright_end = data.iter().position(|&b| b == 0x80).ok_or_else(|| Diagnostic::malformed("copyright string not terminated"))?;
-    let copyright = String::from_utf8_lossy(data.get(..copyright_end).unwrap_or_default()).into_owned();
-    cx.emit(Node::new("Copyright").span(file.sub(0, to_u64(copyright_end).saturating_add(1))).value(text(copyright.clone())));
+    let copyright_end = data
+        .iter()
+        .position(|&b| b == 0x80)
+        .ok_or_else(|| Diagnostic::malformed("copyright string not terminated"))?;
+    let copyright =
+        String::from_utf8_lossy(data.get(..copyright_end).unwrap_or_default()).into_owned();
+    cx.emit(
+        Node::new("Copyright")
+            .span(file.sub(0, to_u64(copyright_end).saturating_add(1)))
+            .value(text(copyright.clone())),
+    );
     let music_at = copyright_end.saturating_add(1);
     let music = u16_be(&data, music_at).unwrap_or(0);
-    cx.emit(Node::new("Music pointer").span(file.sub(to_u64(music_at), 2)).value(hex(music.into(), 16)));
+    cx.emit(
+        Node::new("Music pointer")
+            .span(file.sub(to_u64(music_at), 2))
+            .value(hex(music.into(), 16)),
+    );
     let mut pos = music_at.saturating_add(2);
     let mut titles = Vec::new();
     while let Some(&height) = data.get(pos) {
@@ -416,9 +559,21 @@ async fn vectrex(cx: Cx, input: Input) -> Result<()> {
             pos = pos.saturating_add(1);
             break;
         }
-        let Some(len) = data.get(pos.saturating_add(4)..).and_then(|r| r.iter().position(|&b| b == 0x80)) else { break };
-        let s = String::from_utf8_lossy(data.get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len)).unwrap_or_default()).into_owned();
-        let [h, w, y, x] = [0usize, 1, 2, 3].map(|i| data.get(pos.saturating_add(i)).map_or(0, |&b| i8::from_le_bytes([b])));
+        let Some(len) = data
+            .get(pos.saturating_add(4)..)
+            .and_then(|r| r.iter().position(|&b| b == 0x80))
+        else {
+            break;
+        };
+        let s = String::from_utf8_lossy(
+            data.get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len))
+                .unwrap_or_default(),
+        )
+        .into_owned();
+        let [h, w, y, x] = [0usize, 1, 2, 3].map(|i| {
+            data.get(pos.saturating_add(i))
+                .map_or(0, |&b| i8::from_le_bytes([b]))
+        });
         cx.emit(
             Node::new("Title line")
                 .span(file.sub(to_u64(pos), to_u64(len).saturating_add(5)))
@@ -429,7 +584,11 @@ async fn vectrex(cx: Cx, input: Input) -> Result<()> {
         pos = pos.saturating_add(len).saturating_add(5);
     }
     cx.emit(Node::new("Program").span(file.tail(to_u64(pos))));
-    cx.annotate(format!("Vectrex {:?}, {copyright}, {}", titles.join(" "), size(file.len)));
+    cx.annotate(format!(
+        "Vectrex {:?}, {copyright}, {}",
+        titles.join(" "),
+        size(file.len)
+    ));
     Ok(())
 }
 
@@ -458,14 +617,20 @@ async fn intellivision(cx: Cx, input: Input) -> Result<()> {
         let lo = u64::from(raw.first().copied().unwrap_or(0));
         let hi = u64::from(raw.get(1).copied().unwrap_or(0));
         let count = hi.saturating_add(1).saturating_sub(lo).saturating_mul(256);
-        let len = 2u64.saturating_add(count.saturating_mul(2)).saturating_add(2);
+        let len = 2u64
+            .saturating_add(count.saturating_mul(2))
+            .saturating_add(2);
         let span = file.sub(pos, len);
         words = words.saturating_add(count);
         cx.push(
             Node::new(format!("Segment {i}"))
                 .span(span)
                 .value(hex(lo << 8, 16))
-                .summary(format!("${:04x}-${:04x}, {count} words", lo << 8, (hi << 8) | 0xff))
+                .summary(format!(
+                    "${:04x}-${:04x}, {count} words",
+                    lo << 8,
+                    (hi << 8) | 0xff
+                ))
                 .lazy(intv_segment, span),
         )
         .await;
@@ -474,7 +639,9 @@ async fn intellivision(cx: Cx, input: Input) -> Result<()> {
     if pos < file.len {
         cx.emit(Node::new("Memory attribute table and CRC").span(file.tail(pos)));
     }
-    cx.annotate(format!("Intellivision ROM, {segments} segment(s), {words} decles"));
+    cx.annotate(format!(
+        "Intellivision ROM, {segments} segment(s), {words} decles"
+    ));
     Ok(())
 }
 
@@ -530,17 +697,38 @@ async fn coleco(cx: Cx, input: Input) -> Result<()> {
     let name = cx.read_avail(file.sub(ColecoHeader::SIZE, 96)).await?;
     let mut title = String::new();
     if h.magic == 0x55aa {
-        let end = name.iter().position(|&b| b == 0 || !(0x20..0x7f).contains(&b)).unwrap_or(name.len());
+        let end = name
+            .iter()
+            .position(|&b| b == 0 || !(0x20..0x7f).contains(&b))
+            .unwrap_or(name.len());
         let s = String::from_utf8_lossy(name.get(..end).unwrap_or_default()).into_owned();
         // "LINE 2/LINE 1/YEAR"
         let parts: Vec<&str> = s.split('/').collect();
         if parts.len() == 3 {
-            title = format!("{:?} ({}, {})", parts.get(1).copied().unwrap_or(""), parts.first().copied().unwrap_or(""), parts.get(2).copied().unwrap_or(""));
-            cx.emit(Node::new("Title string").span(file.sub(ColecoHeader::SIZE, to_u64(end))).value(text(s)));
+            title = format!(
+                "{:?} ({}, {})",
+                parts.get(1).copied().unwrap_or(""),
+                parts.first().copied().unwrap_or(""),
+                parts.get(2).copied().unwrap_or("")
+            );
+            cx.emit(
+                Node::new("Title string")
+                    .span(file.sub(ColecoHeader::SIZE, to_u64(end)))
+                    .value(text(s)),
+            );
         }
     }
     cx.emit(Node::new("Program").span(file.tail(ColecoHeader::SIZE)));
-    cx.annotate(format!("ColecoVision {}{}, start {:#06x}", if title.is_empty() { String::new() } else { format!("{title}, ") }, size(file.len), h.start));
+    cx.annotate(format!(
+        "ColecoVision {}{}, start {:#06x}",
+        if title.is_empty() {
+            String::new()
+        } else {
+            format!("{title}, ")
+        },
+        size(file.len),
+        h.start
+    ));
     Ok(())
 }
 
@@ -555,7 +743,9 @@ fn msx_probe(h: &Head<'_>) -> bool {
     let init = u16_le(h.data, 2);
     let text = u16_le(h.data, 8);
     h.at(0, b"AB")
-        && h.data.get(10..16).is_some_and(|r| r.iter().all(|&b| b == 0))
+        && h.data
+            .get(10..16)
+            .is_some_and(|r| r.iter().all(|&b| b == 0))
         && msx_ptr_ok(init)
         && msx_ptr_ok(u16_le(h.data, 4))
         && msx_ptr_ok(u16_le(h.data, 6))
@@ -589,7 +779,11 @@ async fn msx(cx: Cx, input: Input) -> Result<()> {
         0x8001..=0x10000 => "plain (64 KiB)",
         _ => "mapped (MegaROM)",
     };
-    cx.annotate(format!("MSX {kind} ROM, {}, {mapper}, INIT {:#06x}", size(file.len), h.init));
+    cx.annotate(format!(
+        "MSX {kind} ROM, {}, {mapper}, INIT {:#06x}",
+        size(file.len),
+        h.init
+    ));
     Ok(())
 }
 
@@ -643,7 +837,11 @@ const WS_SAVE: EnumTable = &[
     (0x20, "EEPROM 16 Kbit"),
     (0x50, "EEPROM 8 Kbit"),
 ];
-const WS_FLAGS: FlagTable = &[flag(0x01, "VERTICAL"), flag(0x02, "BUS_8BIT"), flag(0x04, "ROM_1_CYCLE")];
+const WS_FLAGS: FlagTable = &[
+    flag(0x01, "VERTICAL"),
+    flag(0x02, "BUS_8BIT"),
+    flag(0x04, "ROM_1_CYCLE"),
+];
 
 record! {
     pub struct WsFooter {
@@ -674,14 +872,20 @@ async fn wonderswan(cx: Cx, input: Input) -> Result<()> {
         if sum == h.checksum {
             verified = ", checksum valid";
         } else {
-            node = node.diag(Diagnostic::warning(format!("checksum mismatch: computed {sum:#06x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {sum:#06x}"
+            )));
             verified = ", checksum mismatch";
         }
     }
     cx.emit(node);
     cx.annotate(format!(
         "{} game {:02x}-{:02x} v{}, {}, save {}{verified}",
-        if h.color == 1 { "WonderSwan Color" } else { "WonderSwan" },
+        if h.color == 1 {
+            "WonderSwan Color"
+        } else {
+            "WonderSwan"
+        },
         h.publisher,
         h.game,
         h.version,
@@ -696,11 +900,20 @@ async fn wonderswan(cx: Cx, input: Input) -> Result<()> {
 
 fn vb_header<'a>(h: &Head<'a>) -> Option<&'a [u8]> {
     let n = h.tail.len();
-    let header = h.tail.get(n.checked_sub(0x220)?..n.checked_sub(0x220 - 0x20)?)?;
-    let alnum = |r: std::ops::Range<usize>| header.get(r).is_some_and(|s| s.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()));
+    let header = h
+        .tail
+        .get(n.checked_sub(0x220)?..n.checked_sub(0x220 - 0x20)?)?;
+    let alnum = |r: std::ops::Range<usize>| {
+        header.get(r).is_some_and(|s| {
+            s.iter()
+                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit())
+        })
+    };
     let ok = h.len.is_power_of_two()
         && (0x1_0000..=0x100_0000).contains(&h.len)
-        && header.get(0x14..0x19).is_some_and(|r| r.iter().all(|&b| b == 0))
+        && header
+            .get(0x14..0x19)
+            .is_some_and(|r| r.iter().all(|&b| b == 0))
         && alnum(0x19..0x1b)
         && alnum(0x1b..0x1f)
         && header.first().is_some_and(|&b| b >= 0x20);
@@ -727,9 +940,30 @@ async fn virtual_boy(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(at, VbHeader::SIZE);
     let h: VbHeader = read_record(&cx, span, LE).await?;
     cx.emit(VbHeader::node("Header", span, LE));
-    cx.emit(Node::new("Interrupt and exception vectors").span(file.tail(file.len.saturating_sub(0x200))));
+    cx.emit(
+        Node::new("Interrupt and exception vectors")
+            .span(file.tail(file.len.saturating_sub(0x200))),
+    );
     // Titles are Shift-JIS; show the ASCII part.
-    let title: String = h.title.iter().take_while(|&&b| b != 0).map(|&b| if (0x20..0x7f).contains(&b) { char::from(b) } else { '?' }).collect();
-    cx.annotate(format!("Virtual Boy {:?} ({}{}) v1.{}, {}", title.trim(), h.game, h.maker, h.version, size(file.len)));
+    let title: String = h
+        .title
+        .iter()
+        .take_while(|&&b| b != 0)
+        .map(|&b| {
+            if (0x20..0x7f).contains(&b) {
+                char::from(b)
+            } else {
+                '?'
+            }
+        })
+        .collect();
+    cx.annotate(format!(
+        "Virtual Boy {:?} ({}{}) v1.{}, {}",
+        title.trim(),
+        h.game,
+        h.maker,
+        h.version,
+        size(file.len)
+    ));
     Ok(())
 }

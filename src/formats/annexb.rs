@@ -7,8 +7,8 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::vidutil::{
-    self, Bits, H264_NAL_TYPES, HEVC_NAL_TYPES, SpsInfo, enumerated, flag_node, h264_sps,
-    hevc_sps, text, uint, unescape_rbsp,
+    self, Bits, H264_NAL_TYPES, HEVC_NAL_TYPES, SpsInfo, enumerated, flag_node, h264_sps, hevc_sps,
+    text, uint, unescape_rbsp,
 };
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -76,9 +76,12 @@ impl Codec {
                 match t {
                     1 | 5 => !first,
                     6 | 9 => ref_idc == 0,
-                    7 => ref_idc != 0 && d.get(1).is_some_and(|p| {
-                        crate::value::lookup(vidutil::H264_PROFILES, (*p).into()).is_some()
-                    }),
+                    7 => {
+                        ref_idc != 0
+                            && d.get(1).is_some_and(|p| {
+                                crate::value::lookup(vidutil::H264_PROFILES, (*p).into()).is_some()
+                            })
+                    }
                     8 => ref_idc != 0,
                     10..=12 => !first,
                     _ => false,
@@ -178,7 +181,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .await?
             .unwrap_or(file.len);
         let mut end = next;
-        if end < file.len && end > pos && cx.read_avail(file.sub(end.saturating_sub(1), 1)).await? == [0] {
+        if end < file.len
+            && end > pos
+            && cx.read_avail(file.sub(end.saturating_sub(1), 1)).await? == [0]
+        {
             end = end.saturating_sub(1);
         }
         let unit = Unit {
@@ -193,16 +199,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             None => "Invalid NAL unit".to_owned(),
         };
         let summary = unit_summary(codec, t, &d);
-        if !annotated && index < 64 && let Some(sps) = sps_info(codec, t, &d) {
+        if !annotated
+            && index < 64
+            && let Some(sps) = sps_info(codec, t, &d)
+        {
             annotated = true;
             let detail = match codec {
                 Codec::Avc => sps.h264_summary(),
                 Codec::Hevc => sps.hevc_summary(),
             };
-            cx.annotate(format!("{name} elementary stream, {detail}", name = match codec {
-                Codec::Avc => "H.264",
-                Codec::Hevc => "HEVC",
-            }));
+            cx.annotate(format!(
+                "{name} elementary stream, {detail}",
+                name = match codec {
+                    Codec::Avc => "H.264",
+                    Codec::Hevc => "HEVC",
+                }
+            ));
         }
         let mut node = Node::new(name).span(unit.span).lazy(expand_unit, unit);
         node = node.summary(match summary {
@@ -244,7 +256,14 @@ fn sps_info(codec: Codec, t: Option<u8>, d: &[u8]) -> Option<SpsInfo> {
 
 const SLICE_TYPES: [&str; 5] = ["P", "B", "I", "SP", "SI"];
 const PRIMARY_PIC: [&str; 8] = [
-    "I", "I, P", "I, P, B", "SI", "SI, SP", "I, SI", "I, SI, P, SP", "I, SI, P, SP, B",
+    "I",
+    "I, P",
+    "I, P, B",
+    "SI",
+    "SI, SP",
+    "I, SI",
+    "I, SI, P, SP",
+    "I, SI, P, SP, B",
 ];
 
 fn unit_summary(codec: Codec, t: Option<u8>, d: &[u8]) -> Option<String> {
@@ -317,7 +336,10 @@ fn sei_name(kind: u64, payload: &[u8]) -> String {
         3 => "filler payload".to_owned(),
         4 => "user data (ITU-T T.35)".to_owned(),
         5 => {
-            let text = payload.get(16..).map(crate::text::until_nul).unwrap_or_default();
+            let text = payload
+                .get(16..)
+                .map(crate::text::until_nul)
+                .unwrap_or_default();
             let short: String = text.chars().take(48).collect();
             if short.is_empty() {
                 "user data unregistered".to_owned()
@@ -346,25 +368,55 @@ async fn expand_unit(cx: Cx, unit: Unit) -> Result<()> {
     match unit.codec {
         Codec::Avc => {
             cx.emit(uint("NAL ref idc", h0, ((b0 >> 5) & 3).into(), 2));
-            cx.emit(enumerated("NAL unit type", h0, (b0 & 0x1f).into(), 5, H264_NAL_TYPES));
+            cx.emit(enumerated(
+                "NAL unit type",
+                h0,
+                (b0 & 0x1f).into(),
+                5,
+                H264_NAL_TYPES,
+            ));
         }
         Codec::Hevc => {
             let b1 = d.get(1).copied().unwrap_or(0);
             let h01 = nal.sub(0, 2);
-            cx.emit(enumerated("NAL unit type", h0, ((b0 >> 1) & 0x3f).into(), 6, HEVC_NAL_TYPES));
-            cx.emit(uint("Layer ID", h01, (u64::from(b0 & 1) << 5) | u64::from(b1 >> 3), 6));
-            cx.emit(uint("Temporal ID plus 1", nal.sub(1, 1), (b1 & 7).into(), 3));
+            cx.emit(enumerated(
+                "NAL unit type",
+                h0,
+                ((b0 >> 1) & 0x3f).into(),
+                6,
+                HEVC_NAL_TYPES,
+            ));
+            cx.emit(uint(
+                "Layer ID",
+                h01,
+                (u64::from(b0 & 1) << 5) | u64::from(b1 >> 3),
+                6,
+            ));
+            cx.emit(uint(
+                "Temporal ID plus 1",
+                nal.sub(1, 1),
+                (b1 & 7).into(),
+                3,
+            ));
         }
     }
     let payload = nal.tail(unit.codec.header_len());
     let t = unit.codec.nal_type(&d);
     if let Some(sps) = sps_info(unit.codec, t, &d) {
         sps_fields(&cx, unit.codec, payload, &sps);
-    } else if matches!((unit.codec, t), (Codec::Avc, Some(6)) | (Codec::Hevc, Some(39 | 40))) {
-        let rbsp = unescape_rbsp(d.get(vidutil::us(unit.codec.header_len())..).unwrap_or_default());
+    } else if matches!(
+        (unit.codec, t),
+        (Codec::Avc, Some(6)) | (Codec::Hevc, Some(39 | 40))
+    ) {
+        let rbsp = unescape_rbsp(
+            d.get(vidutil::us(unit.codec.header_len())..)
+                .unwrap_or_default(),
+        );
         for (kind, body) in sei_messages(&rbsp) {
             // Spans are approximate when emulation prevention bytes occur.
-            let node = Node::new("SEI message").span(payload).summary(sei_name(kind, body));
+            let node = Node::new("SEI message")
+                .span(payload)
+                .summary(sei_name(kind, body));
             cx.emit(node);
         }
     }
@@ -384,28 +436,50 @@ fn sps_fields(cx: &Cx, codec: Codec, payload: Span, sps: &SpsInfo) {
     let at = |o: u64, n: u64| payload.sub(o, n);
     match codec {
         Codec::Avc => {
-            cx.emit(enumerated("Profile", at(0, 1), sps.profile.into(), 8, profiles));
-            cx.emit(vidutil::hex("Constraint flags", at(1, 1), sps.tier_or_constraints.into(), 8));
+            cx.emit(enumerated(
+                "Profile",
+                at(0, 1),
+                sps.profile.into(),
+                8,
+                profiles,
+            ));
+            cx.emit(vidutil::hex(
+                "Constraint flags",
+                at(1, 1),
+                sps.tier_or_constraints.into(),
+                8,
+            ));
             cx.emit(uint("Level", at(2, 1), sps.level.into(), 8).summary(level));
         }
         Codec::Hevc => {
-            cx.emit(enumerated("Profile", at(1, 1), sps.profile.into(), 5, profiles));
+            cx.emit(enumerated(
+                "Profile",
+                at(1, 1),
+                sps.profile.into(),
+                5,
+                profiles,
+            ));
             cx.emit(text(
                 "Tier",
                 at(1, 1),
-                if sps.tier_or_constraints != 0 { "High" } else { "Main" },
+                if sps.tier_or_constraints != 0 {
+                    "High"
+                } else {
+                    "Main"
+                },
             ));
             cx.emit(uint("Level", at(12, 1), sps.level.into(), 8).summary(level));
         }
     }
     let rest = payload.tail(3);
     cx.emit(
-        enumerated("Chroma format", rest, sps.chroma_format, 2, &[
-            (0, "monochrome"),
-            (1, "4:2:0"),
-            (2, "4:2:2"),
-            (3, "4:4:4"),
-        ])
+        enumerated(
+            "Chroma format",
+            rest,
+            sps.chroma_format,
+            2,
+            &[(0, "monochrome"), (1, "4:2:0"), (2, "4:2:2"), (3, "4:4:4")],
+        )
         .desc("Decoded from the Exp-Golomb coded remainder"),
     );
     cx.emit(uint("Bit depth", rest, sps.bit_depth, 8));

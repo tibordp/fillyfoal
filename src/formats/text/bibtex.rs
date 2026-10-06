@@ -109,7 +109,9 @@ fn split_fields(p: Piece<'_>) -> Vec<Piece<'_>> {
 fn value_text(v: Piece<'_>) -> String {
     let t = v.trim();
     let inner = match (t.first(), t.last()) {
-        (Some(b'{'), Some(b'}')) | (Some(b'"'), Some(b'"')) if t.len() >= 2 => t.slice(1, t.len().saturating_sub(1)),
+        (Some(b'{'), Some(b'}')) | (Some(b'"'), Some(b'"')) if t.len() >= 2 => {
+            t.slice(1, t.len().saturating_sub(1))
+        }
         _ => t,
     };
     let text = inner.text();
@@ -134,7 +136,9 @@ fn body(p: Piece<'_>) -> Option<(String, Piece<'_>)> {
 }
 
 async fn entry(cx: Cx, e: Entry) -> Result<()> {
-    let owned = Scanner::new(&cx, e.span).owned(0, e.span.len, ENTRY_CAP).await?;
+    let owned = Scanner::new(&cx, e.span)
+        .owned(0, e.span.len, ENTRY_CAP)
+        .await?;
     let Some((ty, inner)) = body(owned.piece()) else {
         return Ok(());
     };
@@ -147,7 +151,11 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
     for f in fields {
         match f.split_once(b'=') {
             Some((name, value)) => {
-                cx.emit(text_node(name.trim().text().to_ascii_lowercase(), value.trim().span(), &value_text(value)));
+                cx.emit(text_node(
+                    name.trim().text().to_ascii_lowercase(),
+                    value.trim().span(),
+                    &value_text(value),
+                ));
             }
             None => cx.emit(text_node("Text", f.trim().span(), &value_text(f))),
         }
@@ -202,7 +210,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         cx.push(node).await;
     }
-    let kinds: Vec<String> = types.iter().take(4).map(|(t, n)| format!("{n} {t}")).collect();
+    let kinds: Vec<String> = types
+        .iter()
+        .take(4)
+        .map(|(t, n)| format!("{n} {t}"))
+        .collect();
     cx.annotate(format!(
         "BibTeX, {} ({})",
         plural(count, "entry", "entries"),

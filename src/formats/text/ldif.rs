@@ -65,7 +65,11 @@ async fn record(lines: &mut Lines<'_>) -> Result<Vec<Attr>> {
                     last.value.push_str(&p.from(1).text());
                 }
                 let end = line.span.end();
-                last.span = Span::new(last.span.source, last.span.offset, end.saturating_sub(last.span.offset));
+                last.span = Span::new(
+                    last.span.source,
+                    last.span.offset,
+                    end.saturating_sub(last.span.offset),
+                );
                 last.value_span = Span::new(
                     last.value_span.source,
                     last.value_span.offset,
@@ -105,7 +109,10 @@ fn text_value(a: &Attr) -> Option<String> {
     }
     let bytes = super::decode::base64(a.value.as_bytes()).bytes;
     let text = std::str::from_utf8(&bytes).ok()?;
-    (!text.chars().any(|c| c.is_control() && c != '\n' && c != '\t')).then(|| text.to_owned())
+    (!text
+        .chars()
+        .any(|c| c.is_control() && c != '\n' && c != '\t'))
+    .then(|| text.to_owned())
 }
 
 #[derive(Clone, Debug)]
@@ -146,11 +153,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             break;
         };
         if first.name.eq_ignore_ascii_case("version") && attrs.len() == 1 {
-            cx.push(text_node("version", first.span, &first.value)).await;
+            cx.push(text_node("version", first.span, &first.value))
+                .await;
             continue;
         }
         let start = first.span.offset.saturating_sub(span.offset).max(before);
-        let end = attrs.last().map_or(start, |a| a.span.end().saturating_sub(span.offset));
+        let end = attrs
+            .last()
+            .map_or(start, |a| a.span.end().saturating_sub(span.offset));
         let s = span.sub(start, end.saturating_sub(start));
         // A `version:` line may share the first record.
         let dn = attrs
@@ -172,12 +182,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             None => preview(&classes.join(", "), 80),
         };
         entries = entries.saturating_add(1);
-        cx.push(
-            Node::new(dn)
-                .span(s)
-                .summary(summary)
-                .lazy(entry, Entry { input: inner, span: s }),
-        )
+        cx.push(Node::new(dn).span(s).summary(summary).lazy(
+            entry,
+            Entry {
+                input: inner,
+                span: s,
+            },
+        ))
         .await;
     }
     cx.annotate(format!("LDIF, {}", plural(entries, "entry", "entries")));

@@ -23,7 +23,8 @@ const BE: Endian = Endian::Big;
 
 fn mrc_probe(h: &Head<'_>) -> bool {
     let mode = u32_le(h.data, 12).unwrap_or(u32::MAX);
-    h.at(208, b"MAP ") && (mode <= 6 || mode == 12 || mode == 101 || u32_be(h.data, 12).is_some_and(|m| m <= 6))
+    h.at(208, b"MAP ")
+        && (mode <= 6 || mode == 12 || mode == 101 || u32_be(h.data, 12).is_some_and(|m| m <= 6))
 }
 
 declare_format!(pub MRC = "mrc", "MRC/CCP4 density map or image stack", ["mrc", "mrcs", "map", "ccp4", "rec", "st", "ali"], "application/x-mrc",
@@ -99,19 +100,58 @@ async fn mrc(cx: Cx, input: Input) -> Result<()> {
     let h: MrcHeader = read_record(&cx, hs, endian).await?;
     cx.emit(MrcHeader::node("Header", hs, endian));
     let labels = cx.read_avail(file.sub(224, 800)).await?;
-    let list: Vec<String> = labels.chunks(80).take(to_usize(h.nlabl.min(10).into())).map(|l| String::from_utf8_lossy(l).trim_end_matches(['\0', ' ']).to_owned()).collect();
-    cx.emit(Node::new("Labels").span(file.sub(224, 800)).value(uint(h.nlabl.into())).lazy(mrc_labels, (file.sub(224, 800), list.clone())));
+    let list: Vec<String> = labels
+        .chunks(80)
+        .take(to_usize(h.nlabl.min(10).into()))
+        .map(|l| {
+            String::from_utf8_lossy(l)
+                .trim_end_matches(['\0', ' '])
+                .to_owned()
+        })
+        .collect();
+    cx.emit(
+        Node::new("Labels")
+            .span(file.sub(224, 800))
+            .value(uint(h.nlabl.into()))
+            .lazy(mrc_labels, (file.sub(224, 800), list.clone())),
+    );
     if h.nsymbt > 0 {
-        cx.emit(Node::new("Extended header").span(file.sub(1024, h.nsymbt.into())).value(text(h.exttyp.trim_end_matches('\0'))));
+        cx.emit(
+            Node::new("Extended header")
+                .span(file.sub(1024, h.nsymbt.into()))
+                .value(text(h.exttyp.trim_end_matches('\0'))),
+        );
     }
     let data_at = 1024u64.saturating_add(h.nsymbt.into());
-    let section = u64::from(h.nx).saturating_mul(h.ny.into()).saturating_mul(mrc_voxel_bits(h.mode)).div_ceil(8);
+    let section = u64::from(h.nx)
+        .saturating_mul(h.ny.into())
+        .saturating_mul(mrc_voxel_bits(h.mode))
+        .div_ceil(8);
     let data = file.tail(data_at);
-    cx.emit(Node::new("Sections").span(data).value(uint(h.nz.into())).summary(format!("{}×{} {}", h.nx, h.ny, lookup(MRC_MODES, h.mode.into()).unwrap_or("?"))).lazy(mrc_sections, (data, section, h.nz)));
-    let apix = if h.mx > 0 { h.cell_a / h.mx as f32 } else { 0.0 };
+    cx.emit(
+        Node::new("Sections")
+            .span(data)
+            .value(uint(h.nz.into()))
+            .summary(format!(
+                "{}×{} {}",
+                h.nx,
+                h.ny,
+                lookup(MRC_MODES, h.mode.into()).unwrap_or("?")
+            ))
+            .lazy(mrc_sections, (data, section, h.nz)),
+    );
+    let apix = if h.mx > 0 {
+        h.cell_a / h.mx as f32
+    } else {
+        0.0
+    };
     cx.annotate(format!(
         "MRC{}, {}×{}×{} {}, {apix:.3} Å/pixel, density {}…{} (mean {}){}",
-        if h.nversion > 0 { format!(" {}", h.nversion) } else { String::new() },
+        if h.nversion > 0 {
+            format!(" {}", h.nversion)
+        } else {
+            String::new()
+        },
         h.nx,
         h.ny,
         h.nz,
@@ -119,14 +159,20 @@ async fn mrc(cx: Cx, input: Input) -> Result<()> {
         h.dmin,
         h.dmax,
         h.dmean,
-        list.first().map(|l| format!("; {}", preview(l, 60))).unwrap_or_default()
+        list.first()
+            .map(|l| format!("; {}", preview(l, 60)))
+            .unwrap_or_default()
     ));
     Ok(())
 }
 
 async fn mrc_labels(cx: Cx, (span, list): (Span, Vec<String>)) -> Result<()> {
     for (i, l) in list.into_iter().enumerate() {
-        cx.emit(Node::new(format!("Label {i}")).span(span.sub(to_u64(i).saturating_mul(80), 80)).value(text(l)));
+        cx.emit(
+            Node::new(format!("Label {i}"))
+                .span(span.sub(to_u64(i).saturating_mul(80), 80))
+                .value(text(l)),
+        );
     }
     Ok(())
 }
@@ -165,7 +211,14 @@ const CZI_PIXELS: EnumTable = &[
     (12, "Gray32"),
     (13, "Gray64"),
 ];
-const CZI_COMPRESSION: EnumTable = &[(0, "uncompressed"), (1, "JPEG"), (2, "LZW"), (4, "JPEG XR"), (5, "zstd"), (6, "zstd (with header)")];
+const CZI_COMPRESSION: EnumTable = &[
+    (0, "uncompressed"),
+    (1, "JPEG"),
+    (2, "LZW"),
+    (4, "JPEG XR"),
+    (5, "zstd"),
+    (6, "zstd (with header)"),
+];
 
 record! {
     pub struct CziSegment {
@@ -203,13 +256,28 @@ async fn czi_entry(cx: &Cx, span: Span) -> Result<(u32, u64, u32, String, u64)> 
     f.u8("Pyramid type").get()?;
     f.bytes("Reserved", 5).get()?;
     let n = f.u32("Dimension count").get()?;
-    let dims = cx.read_avail(span.sub(32, u64::from(n.min(64)).saturating_mul(20))).await?;
+    let dims = cx
+        .read_avail(span.sub(32, u64::from(n.min(64)).saturating_mul(20)))
+        .await?;
     let list: Vec<String> = dims
         .chunks(20)
         .filter(|c| c.len() == 20)
-        .map(|c| format!("{}={}+{}", String::from_utf8_lossy(c.get(..4).unwrap_or_default()).trim_end_matches('\0'), crate::bytes::i32_le(c, 4).unwrap_or(0), u32_le(c, 8).unwrap_or(0)))
+        .map(|c| {
+            format!(
+                "{}={}+{}",
+                String::from_utf8_lossy(c.get(..4).unwrap_or_default()).trim_end_matches('\0'),
+                crate::bytes::i32_le(c, 4).unwrap_or(0),
+                u32_le(c, 8).unwrap_or(0)
+            )
+        })
         .collect();
-    Ok((pixel, pos, compression, list.join(" "), 32u64.saturating_add(u64::from(n).saturating_mul(20))))
+    Ok((
+        pixel,
+        pos,
+        compression,
+        list.join(" "),
+        32u64.saturating_add(u64::from(n).saturating_mul(20)),
+    ))
 }
 
 async fn czi(cx: Cx, input: Input) -> Result<()> {
@@ -230,51 +298,100 @@ async fn czi(cx: Cx, input: Input) -> Result<()> {
         crate::formats::lines::tally(&mut counts, &id, 32);
         let summary = match id.as_str() {
             "ZISRAWSUBBLOCK" => {
-                let (pixel, _, compression, dims, _) = czi_entry(&cx, data.sub(16, 0x1000)).await.unwrap_or_default();
-                format!("{} {}, {dims}", lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"), lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?"))
+                let (pixel, _, compression, dims, _) = czi_entry(&cx, data.sub(16, 0x1000))
+                    .await
+                    .unwrap_or_default();
+                format!(
+                    "{} {}, {dims}",
+                    lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"),
+                    lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?")
+                )
             }
             "ZISRAWATTACH" => {
                 let b = cx.read_avail(data.sub(16, 128)).await?;
-                format!("{} ({})", crate::text::until_nul(b.get(48..128).unwrap_or_default()), crate::text::until_nul(b.get(40..48).unwrap_or_default()))
+                format!(
+                    "{} ({})",
+                    crate::text::until_nul(b.get(48..128).unwrap_or_default()),
+                    crate::text::until_nul(b.get(40..48).unwrap_or_default())
+                )
             }
             _ => format!("{} bytes", seg.used),
         };
-        cx.push(Node::new(format!("{id} @{pos:#x}")).span(span).summary(summary).lazy(czi_segment, (input, pos, id.clone(), seg.used))).await;
+        cx.push(
+            Node::new(format!("{id} @{pos:#x}"))
+                .span(span)
+                .summary(summary)
+                .lazy(czi_segment, (input, pos, id.clone(), seg.used)),
+        )
+        .await;
         i = i.saturating_add(1);
-        pos = pos.saturating_add(CziSegment::SIZE).saturating_add(seg.allocated.max(1));
+        pos = pos
+            .saturating_add(CziSegment::SIZE)
+            .saturating_add(seg.allocated.max(1));
     }
-    let subblocks = counts.iter().find(|(k, _)| k == "ZISRAWSUBBLOCK").map_or(0, |(_, n)| *n);
-    cx.annotate(format!("CZI {}.{}, {i} segment(s), {subblocks} subblock(s), file {}", h.major, h.minor, h.file_guid));
+    let subblocks = counts
+        .iter()
+        .find(|(k, _)| k == "ZISRAWSUBBLOCK")
+        .map_or(0, |(_, n)| *n);
+    cx.annotate(format!(
+        "CZI {}.{}, {i} segment(s), {subblocks} subblock(s), file {}",
+        h.major, h.minor, h.file_guid
+    ));
     Ok(())
 }
 
 async fn czi_segment(cx: Cx, (input, pos, id, used): (Input, u64, String, u64)) -> Result<()> {
     let file = input.span;
-    cx.emit(CziSegment::node("Segment header", file.sub(pos, CziSegment::SIZE), LE));
+    cx.emit(CziSegment::node(
+        "Segment header",
+        file.sub(pos, CziSegment::SIZE),
+        LE,
+    ));
     let data = file.sub(pos.saturating_add(CziSegment::SIZE), used);
     match id.as_str() {
-        "ZISRAWFILE" => cx.emit(CziFileHeader::node("File header", data.sub(0, CziFileHeader::SIZE), LE)),
+        "ZISRAWFILE" => cx.emit(CziFileHeader::node(
+            "File header",
+            data.sub(0, CziFileHeader::SIZE),
+            LE,
+        )),
         "ZISRAWMETADATA" => {
             let b = cx.read_avail(data.sub(0, 8)).await?;
             let xml = u64::from(u32_le(&b, 0).unwrap_or(0));
             let att = u64::from(u32_le(&b, 4).unwrap_or(0));
             cx.emit(Node::new("XML size").span(data.sub(0, 4)).value(uint(xml)));
-            cx.emit(Node::new("Attachment size").span(data.sub(4, 4)).value(uint(att)));
+            cx.emit(
+                Node::new("Attachment size")
+                    .span(data.sub(4, 4))
+                    .value(uint(att)),
+            );
             let x = cx.read_avail(data.sub(256, xml.min(512))).await?;
-            cx.emit(Node::new("XML").span(data.sub(256, xml)).value(text(preview(&String::from_utf8_lossy(&x), 200))));
+            cx.emit(
+                Node::new("XML")
+                    .span(data.sub(256, xml))
+                    .value(text(preview(&String::from_utf8_lossy(&x), 200))),
+            );
         }
         "ZISRAWDIRECTORY" => {
             let b = cx.read_avail(data.sub(0, 4)).await?;
             let n = u32_le(&b, 0).unwrap_or(0);
-            cx.emit(Node::new("Entry count").span(data.sub(0, 4)).value(uint(n.into())));
+            cx.emit(
+                Node::new("Entry count")
+                    .span(data.sub(0, 4))
+                    .value(uint(n.into())),
+            );
             let mut at = 128u64;
             for k in 0..n.min(1_000_000) {
-                let (pixel, fpos, compression, dims, len) = czi_entry(&cx, data.sub(at, 0x1000)).await?;
+                let (pixel, fpos, compression, dims, len) =
+                    czi_entry(&cx, data.sub(at, 0x1000)).await?;
                 cx.push(
                     Node::new(format!("Entry {k}"))
                         .span(data.sub(at, len))
                         .value(text(dims))
-                        .summary(format!("{} {}", lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"), lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?")))
+                        .summary(format!(
+                            "{} {}",
+                            lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"),
+                            lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?")
+                        ))
                         .target(file.sub(fpos, CziSegment::SIZE)),
                 )
                 .await;
@@ -292,29 +409,56 @@ async fn czi_segment(cx: Cx, (input, pos, id, used): (Input, u64, String, u64)) 
                 Node::new("Directory entry")
                     .span(data.sub(16, len))
                     .value(text(dims))
-                    .summary(format!("{} {}", lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"), lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?"))),
+                    .summary(format!(
+                        "{} {}",
+                        lookup(CZI_PIXELS, pixel.into()).unwrap_or("?"),
+                        lookup(CZI_COMPRESSION, compression.into()).unwrap_or("?")
+                    )),
             );
             let header = 16u64.saturating_add(len).max(256);
             let m = data.sub(header, meta.into());
             let x = cx.read_avail(m.sub(0, 512)).await?;
-            cx.emit(Node::new("Metadata").span(m).value(text(preview(&String::from_utf8_lossy(&x), 200))));
+            cx.emit(
+                Node::new("Metadata")
+                    .span(m)
+                    .value(text(preview(&String::from_utf8_lossy(&x), 200))),
+            );
             let d = data.sub(header.saturating_add(meta.into()), size);
-            cx.emit(if compression == 1 { embedded("Data (JPEG)", input.nested(d)) } else { Node::new("Data").span(d) });
+            cx.emit(if compression == 1 {
+                embedded("Data (JPEG)", input.nested(d))
+            } else {
+                Node::new("Data").span(d)
+            });
             if att > 0 {
-                cx.emit(Node::new("Attachments").span(data.sub(header.saturating_add(meta.into()).saturating_add(size), att.into())));
+                cx.emit(Node::new("Attachments").span(data.sub(
+                    header.saturating_add(meta.into()).saturating_add(size),
+                    att.into(),
+                )));
             }
         }
         "ZISRAWATTACH" => {
             let b = cx.read_avail(data.sub(0, 256)).await?;
             let size = u64::from(u32_le(&b, 0).unwrap_or(0));
-            cx.emit(Node::new("Data size").span(data.sub(0, 4)).value(uint(size)));
+            cx.emit(
+                Node::new("Data size")
+                    .span(data.sub(0, 4))
+                    .value(uint(size)),
+            );
             let name = crate::text::until_nul(b.get(64..144).unwrap_or_default());
             let kind = crate::text::until_nul(b.get(56..64).unwrap_or_default());
             cx.emit(Node::new("Name").span(data.sub(64, 80)).value(text(name)));
-            cx.emit(Node::new("Content type").span(data.sub(56, 8)).value(text(kind.clone())));
+            cx.emit(
+                Node::new("Content type")
+                    .span(data.sub(56, 8))
+                    .value(text(kind.clone())),
+            );
             // Embedded images and CZI files are dissected; other attachments are Zeiss-specific tables.
             let body = data.sub(256, size);
-            cx.emit(if matches!(kind.as_str(), "JPG" | "CZI" | "PNG" | "BMP") { embedded("Data", input.nested(body)) } else { Node::new("Data").span(body) });
+            cx.emit(if matches!(kind.as_str(), "JPG" | "CZI" | "PNG" | "BMP") {
+                embedded("Data", input.nested(body))
+            } else {
+                Node::new("Data").span(body)
+            });
         }
         _ => cx.emit(Node::new("Data").span(data)),
     }
@@ -341,34 +485,56 @@ async fn nd2(cx: Cx, input: Input) -> Result<()> {
             let tail = cx.read_avail(file.sub(start, 40)).await?;
             if tail.starts_with(b"ND2 CHUNK MAP SIGNATURE") {
                 let at = crate::bytes::u64_le(&tail, 32).unwrap_or(0);
-                cx.push(Node::new("Chunk map pointer").span(file.sub(start, 40)).value(crate::formats::lines::hex(at, 64))).await;
+                cx.push(
+                    Node::new("Chunk map pointer")
+                        .span(file.sub(start, 40))
+                        .value(crate::formats::lines::hex(at, 64)),
+                )
+                .await;
             } else {
-                cx.diag(Diagnostic::malformed(format!("chunk magic {magic:#010x}")).at(file.sub(start, 4)));
+                cx.diag(
+                    Diagnostic::malformed(format!("chunk magic {magic:#010x}"))
+                        .at(file.sub(start, 4)),
+                );
             }
             break;
         }
         let name_len = cur.u32().await?;
         let data_len = cur.u64().await?;
-        let name = cur.cstr(name_len.into()).await.map(|(s, _)| s).unwrap_or_default();
+        let name = cur
+            .cstr(name_len.into())
+            .await
+            .map(|(s, _)| s)
+            .unwrap_or_default();
         cur.seek(start.saturating_add(16).saturating_add(name_len.into()));
         let data = cur.span(data_len);
         cur.skip(data_len);
         if name.starts_with("ND2 FILE SIGNATURE") {
-            version = String::from_utf8_lossy(&cx.read_avail(data.sub(0, 16)).await?).trim_end_matches('\0').to_owned();
+            version = String::from_utf8_lossy(&cx.read_avail(data.sub(0, 16)).await?)
+                .trim_end_matches('\0')
+                .to_owned();
         }
         if name.starts_with("ImageDataSeq") {
             images = images.saturating_add(1);
         }
-        let mut node = Node::new(name.clone()).span(cur.since(start)).summary(format!("{data_len} bytes"));
+        let mut node = Node::new(name.clone())
+            .span(cur.since(start))
+            .summary(format!("{data_len} bytes"));
         if name.starts_with("ND2 CHUNK MAP") {
             node = node.lazy(nd2_map, data);
-        } else if name.contains("TextInfo") || name.ends_with("LV!") || name.contains("Metadata") || name.contains("Attributes") {
+        } else if name.contains("TextInfo")
+            || name.ends_with("LV!")
+            || name.contains("Metadata")
+            || name.contains("Attributes")
+        {
             node = node.lazy(nd2_lv, (data, 0u32));
         }
         cx.push(node).await;
         count = count.saturating_add(1);
     }
-    cx.annotate(format!("Nikon ND2 {version}, {count} chunk(s), {images} image frame(s)"));
+    cx.annotate(format!(
+        "Nikon ND2 {version}, {count} chunk(s), {images} image frame(s)"
+    ));
     Ok(())
 }
 
@@ -377,7 +543,9 @@ async fn nd2_map(cx: Cx, data: Span) -> Result<()> {
     let b = cx.read_avail(data.sub(0, cx.limits().max_read)).await?;
     let mut at = 0usize;
     while at < b.len() {
-        let Some(bang) = b.get(at..).and_then(|r| r.iter().position(|&c| c == b'!')) else { break };
+        let Some(bang) = b.get(at..).and_then(|r| r.iter().position(|&c| c == b'!')) else {
+            break;
+        };
         let end = at.saturating_add(bang).saturating_add(1);
         let name = String::from_utf8_lossy(b.get(at..end).unwrap_or_default()).into_owned();
         if name.starts_with("ND2 CHUNK MAP") {
@@ -385,7 +553,16 @@ async fn nd2_map(cx: Cx, data: Span) -> Result<()> {
         }
         let pos = crate::bytes::u64_le(&b, end).unwrap_or(0);
         let size = crate::bytes::u64_le(&b, end.saturating_add(8)).unwrap_or(0);
-        cx.push(Node::new(name).span(data.sub(to_u64(at), to_u64(end.saturating_add(16).saturating_sub(at)))).value(crate::formats::lines::hex(pos, 64)).summary(format!("{size} bytes"))).await;
+        cx.push(
+            Node::new(name)
+                .span(data.sub(
+                    to_u64(at),
+                    to_u64(end.saturating_add(16).saturating_sub(at)),
+                ))
+                .value(crate::formats::lines::hex(pos, 64))
+                .summary(format!("{size} bytes")),
+        )
+        .await;
         at = end.saturating_add(16);
     }
     Ok(())
@@ -402,7 +579,9 @@ async fn nd2_lv(cx: Cx, (data, depth): (Span, u32)) -> Result<()> {
         let start = cur.pos();
         let kind = cur.u8().await?;
         let name_len = cur.u8().await?;
-        let name = crate::text::utf16(&cur.bytes(u64::from(name_len).saturating_mul(2)).await?, LE).trim_end_matches('\0').to_owned();
+        let name = crate::text::utf16(&cur.bytes(u64::from(name_len).saturating_mul(2)).await?, LE)
+            .trim_end_matches('\0')
+            .to_owned();
         let value = match kind {
             1 => uint(cur.u8().await?.into()),
             2 => int(i64::from(cur.u32().await?.cast_signed())),
@@ -437,18 +616,24 @@ async fn nd2_lv(cx: Cx, (data, depth): (Span, u32)) -> Result<()> {
                     Node::new(name)
                         .span(cur.since(start))
                         .summary(format!("{count} item(s)"))
-                        .lazy(crate::expander!(self::nd2_lv: (Span, u32)), (body, depth.saturating_add(1))),
+                        .lazy(
+                            crate::expander!(self::nd2_lv: (Span, u32)),
+                            (body, depth.saturating_add(1)),
+                        ),
                 )
                 .await;
                 items = items.saturating_add(1);
                 continue;
             }
             _ => {
-                cx.diag(Diagnostic::unsupported(format!("variant type {kind}")).at(cur.since(start)));
+                cx.diag(
+                    Diagnostic::unsupported(format!("variant type {kind}")).at(cur.since(start)),
+                );
                 break;
             }
         };
-        cx.push(Node::new(name).span(cur.since(start)).value(value)).await;
+        cx.push(Node::new(name).span(cur.since(start)).value(value))
+            .await;
         items = items.saturating_add(1);
     }
     Ok(())
@@ -470,9 +655,21 @@ async fn lif(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(xml_span.sub(0, 0x10000)).await?;
     let xml = crate::text::utf16(&head, LE);
     cur.skip(xml_span.len);
-    cx.emit(Node::new("XML header").span(cur.since(start)).value(text(preview(&xml, 200))).summary(format!("{chars} characters")));
-    let version: u32 = xml.split_once("Version=\"").and_then(|(_, r)| r.split('"').next()).and_then(|v| v.parse().ok()).unwrap_or(2);
-    let images = xml.matches("<Image>").count().saturating_add(xml.matches("<Image ").count());
+    cx.emit(
+        Node::new("XML header")
+            .span(cur.since(start))
+            .value(text(preview(&xml, 200)))
+            .summary(format!("{chars} characters")),
+    );
+    let version: u32 = xml
+        .split_once("Version=\"")
+        .and_then(|(_, r)| r.split('"').next())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2);
+    let images = xml
+        .matches("<Image>")
+        .count()
+        .saturating_add(xml.matches("<Image ").count());
     let names: Vec<String> = xml
         .split("<Element Name=\"")
         .skip(1)
@@ -484,20 +681,44 @@ async fn lif(cx: Cx, input: Input) -> Result<()> {
         let bstart = cur.pos();
         let magic = cur.u32().await?;
         if magic != 0x70 {
-            cx.diag(Diagnostic::malformed(format!("memory block test value {magic:#x}")).at(cur.since(bstart)));
+            cx.diag(
+                Diagnostic::malformed(format!("memory block test value {magic:#x}"))
+                    .at(cur.since(bstart)),
+            );
             break;
         }
         cur.skip(5);
-        let size = if version >= 2 { cur.u64().await? } else { u64::from(cur.u32().await?) };
+        let size = if version >= 2 {
+            cur.u64().await?
+        } else {
+            u64::from(cur.u32().await?)
+        };
         cur.skip(1);
         let dchars = cur.u32().await?;
-        let desc = crate::text::utf16(&cur.bytes(u64::from(dchars.min(0x1000)).saturating_mul(2)).await?, LE);
+        let desc = crate::text::utf16(
+            &cur.bytes(u64::from(dchars.min(0x1000)).saturating_mul(2))
+                .await?,
+            LE,
+        );
         let data = cur.span(size);
         cur.skip(size);
-        cx.push(Node::new(desc).span(cur.since(bstart)).summary(format!("{size} bytes")).target(data)).await;
+        cx.push(
+            Node::new(desc)
+                .span(cur.since(bstart))
+                .summary(format!("{size} bytes"))
+                .target(data),
+        )
+        .await;
         blocks = blocks.saturating_add(1);
     }
-    cx.annotate(format!("Leica LIF v{version}, {images} image(s), {blocks} memory block(s){}", if names.is_empty() { String::new() } else { format!(": {}", preview(&names.join(", "), 80)) }));
+    cx.annotate(format!(
+        "Leica LIF v{version}, {images} image(s), {blocks} memory block(s){}",
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", preview(&names.join(", "), 80))
+        }
+    ));
     Ok(())
 }
 
@@ -509,7 +730,18 @@ declare_format!(pub SER = "tia-ser", "FEI TIA series (SER)", ["ser"], "applicati
 
 const SER_DATA: EnumTable = &[(0x4120, "1D spectra"), (0x4122, "2D images")];
 const SER_TAGS: EnumTable = &[(0x4152, "time"), (0x4142, "time and position")];
-const SER_TYPES: EnumTable = &[(1, "uint8"), (2, "uint16"), (3, "uint32"), (4, "int8"), (5, "int16"), (6, "int32"), (7, "float32"), (8, "float64"), (9, "complex64"), (10, "complex128")];
+const SER_TYPES: EnumTable = &[
+    (1, "uint8"),
+    (2, "uint16"),
+    (3, "uint32"),
+    (4, "int8"),
+    (5, "int16"),
+    (6, "int32"),
+    (7, "float32"),
+    (8, "float64"),
+    (9, "complex64"),
+    (10, "complex128"),
+];
 
 fn ser_size(t: u16) -> u64 {
     match t {
@@ -534,7 +766,11 @@ async fn ser(cx: Cx, input: Input) -> Result<()> {
     let total = f.u32("Total elements").emit()?;
     let valid = f.u32("Valid elements").emit()?;
     let wide = version >= 0x220;
-    let offsets = if wide { f.u64("Offset array offset").hex().emit()? } else { u64::from(f.u32("Offset array offset").hex().emit()?) };
+    let offsets = if wide {
+        f.u64("Offset array offset").hex().emit()?
+    } else {
+        u64::from(f.u32("Offset array offset").hex().emit()?)
+    };
     let ndims = f.u32("Number of dimensions").emit()?;
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(f.pos());
@@ -548,24 +784,50 @@ async fn ser(cx: Cx, input: Input) -> Result<()> {
         let dlen = cur.u32().await?;
         let desc = String::from_utf8_lossy(&cur.bytes(dlen.min(0x1000).into()).await?).into_owned();
         let ulen = cur.u32().await?;
-        let units = String::from_utf8_lossy(&cur.bytes(ulen.min(0x1000).into()).await?).into_owned();
-        cx.emit(Node::new(format!("Dimension {desc}")).span(cur.since(start)).value(uint(size.into())).summary(format!("offset {offset}, step {delta} {units}")));
+        let units =
+            String::from_utf8_lossy(&cur.bytes(ulen.min(0x1000).into()).await?).into_owned();
+        cx.emit(
+            Node::new(format!("Dimension {desc}"))
+                .span(cur.since(start))
+                .value(uint(size.into()))
+                .summary(format!("offset {offset}, step {delta} {units}")),
+        );
         dims.push(size);
     }
     let entry = if wide { 8u64 } else { 4 };
     let table = file.sub(offsets, u64::from(total).saturating_mul(entry));
-    cx.emit(Node::new("Elements").span(table).value(uint(valid.into())).lazy(ser_elements, (input, table, valid, wide, kind)));
-    cx.emit(Node::new("Tag offsets").span(file.sub(table.end().saturating_sub(file.offset), u64::from(total).saturating_mul(entry))));
-    cx.annotate(format!("FEI TIA series v{version:#x}, {valid} {} of {total}", lookup(SER_DATA, kind.into()).unwrap_or("elements")));
+    cx.emit(
+        Node::new("Elements")
+            .span(table)
+            .value(uint(valid.into()))
+            .lazy(ser_elements, (input, table, valid, wide, kind)),
+    );
+    cx.emit(Node::new("Tag offsets").span(file.sub(
+        table.end().saturating_sub(file.offset),
+        u64::from(total).saturating_mul(entry),
+    )));
+    cx.annotate(format!(
+        "FEI TIA series v{version:#x}, {valid} {} of {total}",
+        lookup(SER_DATA, kind.into()).unwrap_or("elements")
+    ));
     Ok(())
 }
 
-async fn ser_elements(cx: Cx, (input, table, valid, wide, kind): (Input, Span, u32, bool, u32)) -> Result<()> {
+async fn ser_elements(
+    cx: Cx,
+    (input, table, valid, wide, kind): (Input, Span, u32, bool, u32),
+) -> Result<()> {
     let file = input.span;
     let entry = if wide { 8u64 } else { 4 };
-    let raw = cx.read_avail(table.sub(0, u64::from(valid).saturating_mul(entry))).await?;
+    let raw = cx
+        .read_avail(table.sub(0, u64::from(valid).saturating_mul(entry)))
+        .await?;
     for (i, c) in raw.chunks(to_usize(entry)).enumerate() {
-        let at = if wide { crate::bytes::u64_le(c, 0).unwrap_or(0) } else { u64::from(u32_le(c, 0).unwrap_or(0)) };
+        let at = if wide {
+            crate::bytes::u64_le(c, 0).unwrap_or(0)
+        } else {
+            u64::from(u32_le(c, 0).unwrap_or(0))
+        };
         let (header, node) = if kind == 0x4122 {
             let b = cx.block(file.sub(at, 50)).await?;
             let mut f = Fields::new(&b, LE);
@@ -573,8 +835,18 @@ async fn ser_elements(cx: Cx, (input, table, valid, wide, kind): (Input, Span, u
             let t = f.u16("Data type").get()?;
             let x = f.u32("Array size X").get()?;
             let y = f.u32("Array size Y").get()?;
-            let len = u64::from(x).saturating_mul(y.into()).saturating_mul(ser_size(t));
-            (50u64, Node::new(format!("Image {i}")).summary(format!("{x}×{y} {}", lookup(SER_TYPES, t.into()).unwrap_or("?"))).span(file.sub(at, 50u64.saturating_add(len))))
+            let len = u64::from(x)
+                .saturating_mul(y.into())
+                .saturating_mul(ser_size(t));
+            (
+                50u64,
+                Node::new(format!("Image {i}"))
+                    .summary(format!(
+                        "{x}×{y} {}",
+                        lookup(SER_TYPES, t.into()).unwrap_or("?")
+                    ))
+                    .span(file.sub(at, 50u64.saturating_add(len))),
+            )
         } else {
             let b = cx.block(file.sub(at, 26)).await?;
             let mut f = Fields::new(&b, LE);
@@ -582,9 +854,18 @@ async fn ser_elements(cx: Cx, (input, table, valid, wide, kind): (Input, Span, u
             let t = f.u16("Data type").get()?;
             let n = f.u32("Array length").get()?;
             let len = u64::from(n).saturating_mul(ser_size(t));
-            (26u64, Node::new(format!("Spectrum {i}")).summary(format!("{n} {}", lookup(SER_TYPES, t.into()).unwrap_or("?"))).span(file.sub(at, 26u64.saturating_add(len))))
+            (
+                26u64,
+                Node::new(format!("Spectrum {i}"))
+                    .summary(format!(
+                        "{n} {}",
+                        lookup(SER_TYPES, t.into()).unwrap_or("?")
+                    ))
+                    .span(file.sub(at, 26u64.saturating_add(len))),
+            )
         };
-        cx.push(node.lazy(ser_element, (file.sub(at, header), kind))).await;
+        cx.push(node.lazy(ser_element, (file.sub(at, header), kind)))
+            .await;
     }
     Ok(())
 }
@@ -614,8 +895,16 @@ async fn ser_element(cx: Cx, (span, kind): (Span, u32)) -> Result<()> {
 
 fn dm_probe(h: &Head<'_>) -> bool {
     match u32_be(h.data, 0) {
-        Some(3) => u32_be(h.data, 8).is_some_and(|o| o <= 1) && h.data.get(12).is_some_and(|&b| b <= 1) && h.data.get(13).is_some_and(|&b| b <= 1),
-        Some(4) => u32_be(h.data, 12).is_some_and(|o| o <= 1) && h.data.get(16).is_some_and(|&b| b <= 1) && h.data.get(17).is_some_and(|&b| b <= 1),
+        Some(3) => {
+            u32_be(h.data, 8).is_some_and(|o| o <= 1)
+                && h.data.get(12).is_some_and(|&b| b <= 1)
+                && h.data.get(13).is_some_and(|&b| b <= 1)
+        }
+        Some(4) => {
+            u32_be(h.data, 12).is_some_and(|o| o <= 1)
+                && h.data.get(16).is_some_and(|&b| b <= 1)
+                && h.data.get(17).is_some_and(|&b| b <= 1)
+        }
         _ => false,
     }
 }
@@ -634,7 +923,22 @@ fn dm_size(t: u64) -> u64 {
     }
 }
 
-const DM_TYPES: EnumTable = &[(2, "int16"), (3, "int32"), (4, "uint16"), (5, "uint32"), (6, "float32"), (7, "float64"), (8, "bool"), (9, "char"), (10, "int8"), (11, "int64"), (12, "uint64"), (15, "struct"), (18, "string"), (20, "array")];
+const DM_TYPES: EnumTable = &[
+    (2, "int16"),
+    (3, "int32"),
+    (4, "uint16"),
+    (5, "uint32"),
+    (6, "float32"),
+    (7, "float64"),
+    (8, "bool"),
+    (9, "char"),
+    (10, "int8"),
+    (11, "int64"),
+    (12, "uint64"),
+    (15, "struct"),
+    (18, "string"),
+    (20, "array"),
+];
 
 #[derive(Clone, Copy, Debug)]
 struct DmCtx {
@@ -656,24 +960,50 @@ async fn gatan_dm(cx: Cx, input: Input) -> Result<()> {
         f.u32("Root length").emit()?;
     }
     let order = f.u32("Byte order").desc("1 = little-endian data").emit()?;
-    let ctx = DmCtx { file, v4, little: order == 1 };
+    let ctx = DmCtx {
+        file,
+        v4,
+        little: order == 1,
+    };
     let root_at = if v4 { 16u64 } else { 12 };
     let (n, _) = dm_group_header(&cx, ctx, root_at).await?;
-    cx.emit(Node::new("Root tag group").span(file.tail(root_at)).value(uint(n)).lazy(dm_group, (ctx, root_at, 0u32)));
+    cx.emit(
+        Node::new("Root tag group")
+            .span(file.tail(root_at))
+            .value(uint(n))
+            .lazy(dm_group, (ctx, root_at, 0u32)),
+    );
     // Image dimensions are in ImageList, the last image usually being the main one.
-    cx.annotate(format!("Gatan DM{version} ({} data), {n} root tag(s)", if ctx.little { "little-endian" } else { "big-endian" }));
+    cx.annotate(format!(
+        "Gatan DM{version} ({} data), {n} root tag(s)",
+        if ctx.little {
+            "little-endian"
+        } else {
+            "big-endian"
+        }
+    ));
     Ok(())
 }
 
 /// Reads a group header: (tag count, header length).
 async fn dm_group_header(cx: &Cx, ctx: DmCtx, at: u64) -> Result<(u64, u64)> {
-    let b = cx.read(ctx.file.sub_exact(at, if ctx.v4 { 10 } else { 6 })?).await?;
-    let n = if ctx.v4 { u64_be(&b, 2).unwrap_or(0) } else { u64::from(u32_be(&b, 2).unwrap_or(0)) };
+    let b = cx
+        .read(ctx.file.sub_exact(at, if ctx.v4 { 10 } else { 6 })?)
+        .await?;
+    let n = if ctx.v4 {
+        u64_be(&b, 2).unwrap_or(0)
+    } else {
+        u64::from(u32_be(&b, 2).unwrap_or(0))
+    };
     Ok((n, if ctx.v4 { 10 } else { 6 }))
 }
 
 async fn dm_word(cur: &mut Cursor<'_>, v4: bool) -> Result<u64> {
-    if v4 { cur.u64().await } else { Ok(u64::from(cur.u32().await?)) }
+    if v4 {
+        cur.u64().await
+    } else {
+        Ok(u64::from(cur.u32().await?))
+    }
 }
 
 /// Walks a group's tags; returns the position after the group.
@@ -696,7 +1026,13 @@ async fn dm_group(cx: Cx, (ctx, at, depth): (DmCtx, u64, u32)) -> Result<()> {
 }
 
 /// Reads one tag at `pos`: a node and the position after it.
-async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) -> Result<(Node, u64)> {
+async fn dm_tag(
+    cx: &Cx,
+    ctx: DmCtx,
+    pos: u64,
+    depth: u32,
+    unnamed: &mut u64,
+) -> Result<(Node, u64)> {
     let mut cur = Cursor::new(cx, ctx.file, BE);
     cur.seek(pos);
     let kind = cur.u8().await?;
@@ -719,7 +1055,13 @@ async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) ->
             None => dm_skip_group(cx, ctx, at, depth.saturating_add(1)).await?,
         };
         let (n, _) = dm_group_header(cx, ctx, at).await?;
-        let node = Node::new(label).span(ctx.file.sub(pos, end.saturating_sub(pos))).summary(format!("{n} tag(s)")).lazy(crate::expander!(self::dm_group: (DmCtx, u64, u32)), (ctx, at, depth.saturating_add(1)));
+        let node = Node::new(label)
+            .span(ctx.file.sub(pos, end.saturating_sub(pos)))
+            .summary(format!("{n} tag(s)"))
+            .lazy(
+                crate::expander!(self::dm_group: (DmCtx, u64, u32)),
+                (ctx, at, depth.saturating_add(1)),
+            );
         return Ok((node, end));
     }
     if kind != 21 {
@@ -727,7 +1069,8 @@ async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) ->
     }
     let delim = cur.bytes(4).await?;
     if delim != b"%%%%" {
-        return Err(Diagnostic::malformed("missing %%%% delimiter").at(ctx.file.sub(cur.pos().saturating_sub(4), 4)));
+        return Err(Diagnostic::malformed("missing %%%% delimiter")
+            .at(ctx.file.sub(cur.pos().saturating_sub(4), 4)));
     }
     let ninfo = dm_word(&mut cur, ctx.v4).await?;
     let mut info = Vec::new();
@@ -747,11 +1090,18 @@ async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) ->
         18 => {
             let n = info.get(1).copied().unwrap_or(0);
             let b = dcur.bytes(n.saturating_mul(2).min(0x10000)).await?;
-            (Some(text(crate::text::utf16(&b, endian))), String::new(), n.saturating_mul(2))
+            (
+                Some(text(crate::text::utf16(&b, endian))),
+                String::new(),
+                n.saturating_mul(2),
+            )
         }
         15 => {
             let fields = info.get(2).copied().unwrap_or(0);
-            let types: Vec<u64> = (0..fields.min(64)).filter_map(|i| info.get(to_usize(i.saturating_mul(2).saturating_add(4)))).copied().collect();
+            let types: Vec<u64> = (0..fields.min(64))
+                .filter_map(|i| info.get(to_usize(i.saturating_mul(2).saturating_add(4))))
+                .copied()
+                .collect();
             let mut vals = Vec::new();
             for &ft in &types {
                 vals.push(match dm_simple(&mut dcur, ft).await? {
@@ -763,14 +1113,21 @@ async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) ->
                 });
             }
             let size: u64 = types.iter().map(|&ft| dm_size(ft)).sum();
-            (Some(text(format!("({})", vals.join(", ")))), "struct".to_owned(), size)
+            (
+                Some(text(format!("({})", vals.join(", ")))),
+                "struct".to_owned(),
+                size,
+            )
         }
         20 => {
             let elem = info.get(1).copied().unwrap_or(0);
             let count = info.last().copied().unwrap_or(0);
             let elem_size = if elem == 15 {
                 let fields = info.get(3).copied().unwrap_or(0);
-                (0..fields.min(64)).filter_map(|i| info.get(to_usize(i.saturating_mul(2).saturating_add(5)))).map(|&ft| dm_size(ft)).sum()
+                (0..fields.min(64))
+                    .filter_map(|i| info.get(to_usize(i.saturating_mul(2).saturating_add(5))))
+                    .map(|&ft| dm_size(ft))
+                    .sum()
             } else {
                 dm_size(elem)
             };
@@ -782,12 +1139,19 @@ async fn dm_tag(cx: &Cx, ctx: DmCtx, pos: u64, depth: u32, unnamed: &mut u64) ->
             } else {
                 None
             };
-            (value, format!("array of {count} {}", lookup(DM_TYPES, elem).unwrap_or("?")), len)
+            (
+                value,
+                format!("array of {count} {}", lookup(DM_TYPES, elem).unwrap_or("?")),
+                len,
+            )
         }
         _ => (None, format!("type {t}"), 0),
     };
     let end = total.map_or(data_at.saturating_add(len), |t| after.saturating_add(t));
-    let mut node = Node::new(label).span(ctx.file.sub(pos, data_at.saturating_add(len).saturating_sub(pos)));
+    let mut node = Node::new(label).span(
+        ctx.file
+            .sub(pos, data_at.saturating_add(len).saturating_sub(pos)),
+    );
     if let Some(v) = value {
         node = node.value(v);
     }

@@ -21,7 +21,10 @@ pub static FORMAT: Format = Format {
     mime: "text/x-uuencode",
     probe: Probe::Custom(|h| {
         let head = probe::head(h);
-        probe::significant(&head, &[]).take(20).any(|l| begin(l).is_some()) && probe::is_text(h)
+        probe::significant(&head, &[])
+            .take(20)
+            .any(|l| begin(l).is_some())
+            && probe::is_text(h)
     }),
     dissect: crate::expander!(dissect: Input),
 };
@@ -35,8 +38,10 @@ fn begin(line: &[u8]) -> Option<(bool, &[u8], &[u8])> {
     let space = rest.iter().position(|&b| b == b' ')?;
     let mode = rest.get(..space)?;
     let name = probe::trim(rest.get(space.saturating_add(1)..)?);
-    ((3..=4).contains(&mode.len()) && mode.iter().all(|b| (b'0'..=b'7').contains(b)) && !name.is_empty())
-        .then_some((base64, mode, name))
+    ((3..=4).contains(&mode.len())
+        && mode.iter().all(|b| (b'0'..=b'7').contains(b))
+        && !name.is_empty())
+    .then_some((base64, mode, name))
 }
 
 /// Decodes uuencoded lines up to the terminating empty line.
@@ -107,14 +112,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let block = span.sub(line.start, stop.saturating_sub(line.start));
         let mut node = Node::new(name.clone())
             .span(block)
-            .summary(format!("mode {mode}, {}", if base64 { "base64" } else { "uuencoded" }))
+            .summary(format!(
+                "mode {mode}, {}",
+                if base64 { "base64" } else { "uuencoded" }
+            ))
             .lazy(block_fields, (inner, block, body, base64, mode, name));
         if end_line.is_none() {
             node = node.diag(Diagnostic::new(DiagKind::Truncated, "end line missing"));
         }
         cx.push(node).await;
     }
-    cx.annotate(format!("uuencoded data, {}", plural(files, "file", "files")));
+    cx.annotate(format!(
+        "uuencoded data, {}",
+        plural(files, "file", "files")
+    ));
     Ok(())
 }
 
@@ -124,11 +135,18 @@ async fn block_fields(
 ) -> Result<()> {
     let first = block.sub(0, body.offset.saturating_sub(block.offset));
     cx.emit(text_node("File name", first, &name));
-    cx.emit(Node::new("Mode").value(Value::Text(mode)).desc("Unix permissions, octal"));
     cx.emit(
-        Node::new("Content")
-            .span(body)
-            .lazy(content, Block { input, body, base64 }),
+        Node::new("Mode")
+            .value(Value::Text(mode))
+            .desc("Unix permissions, octal"),
     );
+    cx.emit(Node::new("Content").span(body).lazy(
+        content,
+        Block {
+            input,
+            body,
+            base64,
+        },
+    ));
     Ok(())
 }

@@ -24,16 +24,20 @@ fn is_property(line: &[u8]) -> bool {
         return false;
     };
     eq > 0
-        && line
-            .get(..eq)
-            .is_some_and(|k| k.iter().all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-')))
+        && line.get(..eq).is_some_and(|k| {
+            k.iter()
+                .all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+        })
 }
 
 fn build_prop_probe(h: &Head<'_>) -> bool {
     let data = probe::head(h);
     let lines: Vec<&[u8]> = significant(&data, &[b"#"]).take(8).collect();
     lines.len() >= 3
-        && lines.iter().take(lines.len().saturating_sub(1)).all(|l| is_property(l))
+        && lines
+            .iter()
+            .take(lines.len().saturating_sub(1))
+            .all(|l| is_property(l))
         && lines.iter().filter(|l| l.starts_with(b"ro.")).count() >= 2
 }
 
@@ -48,7 +52,10 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
     let close = |section: &mut Option<(u64, String, u64)>, end: u64| {
         section.take().map(|(start, name, n)| {
             let span = file.sub(start, end.saturating_sub(start));
-            Node::new(name).span(span).summary(format!("{n} properties")).lazy(block_lines, span)
+            Node::new(name)
+                .span(span)
+                .summary(format!("{n} properties"))
+                .lazy(block_lines, span)
         })
     };
     while let Some(line) = lines.next().await? {
@@ -75,7 +82,8 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
         if let Some((_, _, n)) = section.as_mut() {
             *n = n.saturating_add(1);
         } else {
-            cx.push(Node::new(key.to_owned()).span(line.span).value(text(value))).await;
+            cx.push(Node::new(key.to_owned()).span(line.span).value(text(value)))
+                .await;
         }
     }
     if let Some(node) = close(&mut section, file.len) {
@@ -90,8 +98,17 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
         .or_else(|| get("ro.system.build.version.release"))
         .or_else(|| get("ro.vendor.build.version.release"))
         .unwrap_or("?");
-    let id = get("ro.build.display.id").or_else(|| get("ro.build.id")).unwrap_or("");
-    cx.annotate(format!("Android build properties, {} entries, Android {release} {id} {device}", props.len()).trim_end().to_owned());
+    let id = get("ro.build.display.id")
+        .or_else(|| get("ro.build.id"))
+        .unwrap_or("");
+    cx.annotate(
+        format!(
+            "Android build properties, {} entries, Android {release} {id} {device}",
+            props.len()
+        )
+        .trim_end()
+        .to_owned(),
+    );
     Ok(())
 }
 
@@ -134,7 +151,13 @@ async fn tombstone(cx: Cx, input: Input) -> Result<()> {
         {
             let end = line.as_ref().map_or(file.len, |l| l.start);
             let span = file.sub(start, end.saturating_sub(start));
-            cx.push(Node::new(name).span(span).summary(format!("{n} lines")).lazy(block_lines, span)).await;
+            cx.push(
+                Node::new(name)
+                    .span(span)
+                    .summary(format!("{n} lines"))
+                    .lazy(block_lines, span),
+            )
+            .await;
         }
         let Some(line) = line else { break };
         if starts {
@@ -149,7 +172,13 @@ async fn tombstone(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let node = if let Some(rest) = t.strip_prefix("pid: ") {
-            process = rest.split(">>>").nth(1).and_then(|r| r.split("<<<").next()).unwrap_or(rest).trim().to_owned();
+            process = rest
+                .split(">>>")
+                .nth(1)
+                .and_then(|r| r.split("<<<").next())
+                .unwrap_or(rest)
+                .trim()
+                .to_owned();
             Node::new("Thread").value(text(format!("pid: {rest}")))
         } else if t.starts_with("signal ") {
             signal = t.split(',').next().unwrap_or_default().to_owned();
@@ -164,7 +193,9 @@ async fn tombstone(cx: Cx, input: Input) -> Result<()> {
         };
         cx.push(node.span(line.span)).await;
     }
-    cx.annotate(format!("Android tombstone: {process}, {signal}, {fingerprint}"));
+    cx.annotate(format!(
+        "Android tombstone: {process}, {signal}, {fingerprint}"
+    ));
     Ok(())
 }
 
@@ -186,7 +217,12 @@ async fn anr(cx: Cx, input: Input) -> Result<()> {
         let t = line.text();
         if let Some(rest) = t.strip_prefix("----- pid ") {
             let pid = rest.split(' ').next().unwrap_or_default().to_owned();
-            let at = rest.split(" at ").nth(1).unwrap_or_default().trim_end_matches(" -----").to_owned();
+            let at = rest
+                .split(" at ")
+                .nth(1)
+                .unwrap_or_default()
+                .trim_end_matches(" -----")
+                .to_owned();
             current = Some((line.start, pid, at, 0));
             continue;
         }
@@ -215,7 +251,9 @@ async fn anr(cx: Cx, input: Input) -> Result<()> {
             processes = processes.saturating_add(1);
         }
     }
-    cx.annotate(format!("Android ANR traces, {processes} process(es), {first}"));
+    cx.annotate(format!(
+        "Android ANR traces, {processes} process(es), {first}"
+    ));
     Ok(())
 }
 
@@ -230,7 +268,13 @@ async fn anr_process(cx: Cx, span: Span) -> Result<()> {
         if ends && let Some((start, name, state)) = thread.take() {
             let end = line.as_ref().map_or(span.len, |l| l.start);
             let s = span.sub(start, end.saturating_sub(start));
-            cx.push(Node::new(name).span(s).value(text(state)).lazy(block_lines, s)).await;
+            cx.push(
+                Node::new(name)
+                    .span(s)
+                    .value(text(state))
+                    .lazy(block_lines, s),
+            )
+            .await;
         }
         let Some(line) = line else { break };
         if t.starts_with('"') {

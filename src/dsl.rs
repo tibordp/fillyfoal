@@ -442,8 +442,13 @@ impl Cursor<'_> {
             .get(size_at..size_at.saturating_add(usize::from(layout.size_len)))
             .unwrap_or_default();
         let size = match layout.endian {
-            Endian::Big => raw.iter().fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
-            Endian::Little => raw.iter().rev().fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
+            Endian::Big => raw
+                .iter()
+                .fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
+            Endian::Little => raw
+                .iter()
+                .rev()
+                .fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
         };
         let total = if layout.size_includes_header {
             if size < header_len {
@@ -503,7 +508,9 @@ impl Path {
     /// path (a cycle) or the path would exceed `max_depth`.
     pub fn enter(&self, id: u64, max_depth: usize) -> Result<Path> {
         if self.contains(id) {
-            return Err(Diagnostic::malformed(format!("cycle: {id:#x} refers back to an ancestor")));
+            return Err(Diagnostic::malformed(format!(
+                "cycle: {id:#x} refers back to an ancestor"
+            )));
         }
         if self.0.len() >= max_depth {
             return Err(Diagnostic::limit(format!("nested deeper than {max_depth}")));

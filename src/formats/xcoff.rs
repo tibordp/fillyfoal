@@ -127,13 +127,25 @@ fn header(f: &mut Fields<'_>, wide: &bool) -> Result<Header> {
         let opthdr = f.u16("f_opthdr").emit()?;
         let flags = f.u16("f_flags").flags(FILE_FLAGS).emit()?;
         let nsyms = f.u32("f_nsyms").emit()?;
-        Ok(Header { sections, symptr, nsyms, opthdr, flags })
+        Ok(Header {
+            sections,
+            symptr,
+            nsyms,
+            opthdr,
+            flags,
+        })
     } else {
         let symptr = f.u32("f_symptr").hex().emit()?.into();
         let nsyms = f.u32("f_nsyms").emit()?;
         let opthdr = f.u16("f_opthdr").emit()?;
         let flags = f.u16("f_flags").flags(FILE_FLAGS).emit()?;
-        Ok(Header { sections, symptr, nsyms, opthdr, flags })
+        Ok(Header {
+            sections,
+            symptr,
+            nsyms,
+            opthdr,
+            flags,
+        })
     }
 }
 
@@ -170,7 +182,15 @@ fn section(f: &mut Fields<'_>, wide: &bool) -> Result<Section> {
     if *wide {
         f.u32("s_pad").emit()?;
     }
-    Ok(Section { name, header, size, scnptr, relptr, nreloc, flags })
+    Ok(Section {
+        name,
+        header,
+        size,
+        scnptr,
+        relptr,
+        nreloc,
+        flags,
+    })
 }
 
 type Xcoff = Arc<Info>;
@@ -186,14 +206,23 @@ struct Info {
 
 impl Info {
     async fn symbol_name(&self, cx: &Cx, index: u32) -> Option<String> {
-        let data = cx.read(self.symbols.sub(u64::from(index).saturating_mul(18), 18)).await.ok()?;
+        let data = cx
+            .read(self.symbols.sub(u64::from(index).saturating_mul(18), 18))
+            .await
+            .ok()?;
         if self.wide {
             let offset = u32_be(&data, 8)?;
-            return crate::formats::binutil::string_at(cx, self.strings, offset.into()).await.ok().map(|(s, _)| s);
+            return crate::formats::binutil::string_at(cx, self.strings, offset.into())
+                .await
+                .ok()
+                .map(|(s, _)| s);
         }
         if data.get(..4) == Some(&[0, 0, 0, 0]) {
             let offset = u32_be(&data, 4)?;
-            crate::formats::binutil::string_at(cx, self.strings, offset.into()).await.ok().map(|(s, _)| s)
+            crate::formats::binutil::string_at(cx, self.strings, offset.into())
+                .await
+                .ok()
+                .map(|(s, _)| s)
         } else {
             Some(crate::text::until_nul(data.get(..8)?))
         }
@@ -222,13 +251,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(struct_node("File Header", hspan, BE, wide, header));
     let h = parse(&cx, hspan, BE, &wide, header).await?;
     if h.opthdr > 0 {
-        cx.emit(data_node("Auxiliary Header", file.sub(hsize, h.opthdr.into()), h.opthdr.into()));
+        cx.emit(data_node(
+            "Auxiliary Header",
+            file.sub(hsize, h.opthdr.into()),
+            h.opthdr.into(),
+        ));
     }
     let ssize: u64 = if wide { 72 } else { 40 };
-    let table = file.sub(hsize.saturating_add(h.opthdr.into()), u64::from(h.sections).saturating_mul(ssize));
+    let table = file.sub(
+        hsize.saturating_add(h.opthdr.into()),
+        u64::from(h.sections).saturating_mul(ssize),
+    );
     let mut sections = Vec::new();
     for i in 0..table.len.checked_div(ssize).unwrap_or(0) {
-        sections.push(parse(&cx, table.sub(i.saturating_mul(ssize), ssize), BE, &wide, section).await?);
+        sections.push(
+            parse(
+                &cx,
+                table.sub(i.saturating_mul(ssize), ssize),
+                BE,
+                &wide,
+                section,
+            )
+            .await?,
+        );
     }
     let symbols = file.sub(h.symptr, u64::from(h.nsyms).saturating_mul(18));
     let strings_at = h.symptr.saturating_add(symbols.len);
@@ -269,7 +314,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!("{} entries", h.nsyms))
                 .lazy(symbol_list, x.clone()),
         );
-        cx.emit(Node::new("String Table").span(strings).lazy(cstrings, strings.tail(4)));
+        cx.emit(
+            Node::new("String Table")
+                .span(strings)
+                .lazy(cstrings, strings.tail(4)),
+        );
     }
     Ok(())
 }
@@ -281,7 +330,12 @@ async fn section_list(cx: Cx, x: Xcoff) -> Result<()> {
         cx.push(
             Node::new(s.name.clone())
                 .span(s.header)
-                .summary(format!("{}, {:#x} bytes, {} relocations", set.join(" "), s.size, s.nreloc))
+                .summary(format!(
+                    "{}, {:#x} bytes, {} relocations",
+                    set.join(" "),
+                    s.size,
+                    s.nreloc
+                ))
                 .lazy(section_node, (x.clone(), i)),
         )
         .await;
@@ -290,7 +344,10 @@ async fn section_list(cx: Cx, x: Xcoff) -> Result<()> {
 }
 
 async fn section_node(cx: Cx, (x, index): (Xcoff, usize)) -> Result<()> {
-    let s = x.sections.get(index).ok_or_else(|| Diagnostic::internal("section index"))?;
+    let s = x
+        .sections
+        .get(index)
+        .ok_or_else(|| Diagnostic::internal("section index"))?;
     let block = cx.block(s.header).await?;
     section(&mut Fields::emitting(&cx, &block, BE), &x.wide)?;
     if s.scnptr != 0 && s.flags & 0x80 == 0 {
@@ -298,7 +355,9 @@ async fn section_node(cx: Cx, (x, index): (Xcoff, usize)) -> Result<()> {
     }
     if s.nreloc > 0 {
         let width: u64 = if x.wide { 14 } else { 10 };
-        let span = x.file.sub(s.relptr, u64::from(s.nreloc).saturating_mul(width));
+        let span = x
+            .file
+            .sub(s.relptr, u64::from(s.nreloc).saturating_mul(width));
         cx.emit(
             Node::new("Relocations")
                 .span(span)
@@ -324,12 +383,19 @@ async fn relocations(cx: Cx, (x, span): (Xcoff, Span)) -> Result<()> {
         let symbol = u32_be(&data, rest).unwrap_or(0);
         let size = data.get(rest.saturating_add(4)).copied().unwrap_or(0);
         let kind = data.get(rest.saturating_add(5)).copied().unwrap_or(0);
-        let target = x.symbol_name(&cx, symbol).await.unwrap_or_else(|| format!("#{symbol}"));
+        let target = x
+            .symbol_name(&cx, symbol)
+            .await
+            .unwrap_or_else(|| format!("#{symbol}"));
         cx.push(
             Node::new(name_or(RELOCATION, kind.into(), "type"))
                 .span(at)
                 .value(hex(addr, 64))
-                .summary(format!("{target}, {} bits{}", (size & 0x3f).saturating_add(1), if size & 0x80 != 0 { ", signed" } else { "" })),
+                .summary(format!(
+                    "{target}, {} bits{}",
+                    (size & 0x3f).saturating_add(1),
+                    if size & 0x80 != 0 { ", signed" } else { "" }
+                )),
         )
         .await;
     }
@@ -350,17 +416,28 @@ async fn symbol_list(cx: Cx, x: Xcoff) -> Result<()> {
         let class = data.get(16).copied().unwrap_or(0);
         let aux = u32::from(data.get(17).copied().unwrap_or(0));
         let name = x.symbol_name(&cx, index).await.unwrap_or_default();
-        let span = x.symbols.sub(u64::from(index).saturating_mul(18), u64::from(aux).saturating_add(1).saturating_mul(18));
+        let span = x.symbols.sub(
+            u64::from(index).saturating_mul(18),
+            u64::from(aux).saturating_add(1).saturating_mul(18),
+        );
         cx.push(
-            Node::new(if name.is_empty() { format!("#{index}") } else { name })
-                .span(span)
-                .value(hex(value, if x.wide { 64 } else { 32 }))
-                .summary(format!(
-                    "{} {}{}",
-                    name_or(STORAGE_CLASS, class.into(), "class"),
-                    x.section_name(scnum),
-                    if aux > 0 { format!(", {aux} aux") } else { String::new() }
-                )),
+            Node::new(if name.is_empty() {
+                format!("#{index}")
+            } else {
+                name
+            })
+            .span(span)
+            .value(hex(value, if x.wide { 64 } else { 32 }))
+            .summary(format!(
+                "{} {}{}",
+                name_or(STORAGE_CLASS, class.into(), "class"),
+                x.section_name(scnum),
+                if aux > 0 {
+                    format!(", {aux} aux")
+                } else {
+                    String::new()
+                }
+            )),
         )
         .await;
         index = index.saturating_add(aux).saturating_add(1);

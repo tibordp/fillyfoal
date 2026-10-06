@@ -79,18 +79,102 @@ macro_rules! bmff_format {
     };
 }
 
-bmff_format!(CR3, "cr3", "Canon RAW 3", ["cr3", "crm"], "image/x-canon-cr3", Brand::Cr3);
-bmff_format!(HEIF, "heif", "High Efficiency Image File", ["heic", "heif", "heics", "heifs", "hif"], "image/heic", Brand::Heif);
-bmff_format!(AVIF, "avif", "AV1 Image File", ["avif", "avifs"], "image/avif", Brand::Avif);
-bmff_format!(JP2, "jp2", "JPEG 2000 image", ["jp2"], "image/jp2", Brand::Jp2);
-bmff_format!(JPX, "jpx", "JPEG 2000 extended image", ["jpx", "jpf"], "image/jpx", Brand::Jpx);
-bmff_format!(MJ2, "mj2", "Motion JPEG 2000", ["mj2", "mjp2"], "video/mj2", Brand::Mj2);
-bmff_format!(THREE_GP, "3gp", "3GPP multimedia", ["3gp", "3gpp"], "video/3gpp", Brand::ThreeGp);
-bmff_format!(THREE_G2, "3g2", "3GPP2 multimedia", ["3g2", "3gp2"], "video/3gpp2", Brand::ThreeG2);
-bmff_format!(M4A, "m4a", "MPEG-4 audio", ["m4a", "m4b", "m4p", "m4r"], "audio/mp4", Brand::M4a);
-bmff_format!(M4V, "m4v", "MPEG-4 video (Apple)", ["m4v"], "video/x-m4v", Brand::M4v);
-bmff_format!(MOV, "mov", "QuickTime movie", ["mov", "qt"], "video/quicktime", Brand::Mov);
-bmff_format!(MP4, "mp4", "MPEG-4 Part 14", ["mp4", "m4s", "mp4v", "f4v", "ismv", "cmfv", "cmfa"], "video/mp4", Brand::Mp4);
+bmff_format!(
+    CR3,
+    "cr3",
+    "Canon RAW 3",
+    ["cr3", "crm"],
+    "image/x-canon-cr3",
+    Brand::Cr3
+);
+bmff_format!(
+    HEIF,
+    "heif",
+    "High Efficiency Image File",
+    ["heic", "heif", "heics", "heifs", "hif"],
+    "image/heic",
+    Brand::Heif
+);
+bmff_format!(
+    AVIF,
+    "avif",
+    "AV1 Image File",
+    ["avif", "avifs"],
+    "image/avif",
+    Brand::Avif
+);
+bmff_format!(
+    JP2,
+    "jp2",
+    "JPEG 2000 image",
+    ["jp2"],
+    "image/jp2",
+    Brand::Jp2
+);
+bmff_format!(
+    JPX,
+    "jpx",
+    "JPEG 2000 extended image",
+    ["jpx", "jpf"],
+    "image/jpx",
+    Brand::Jpx
+);
+bmff_format!(
+    MJ2,
+    "mj2",
+    "Motion JPEG 2000",
+    ["mj2", "mjp2"],
+    "video/mj2",
+    Brand::Mj2
+);
+bmff_format!(
+    THREE_GP,
+    "3gp",
+    "3GPP multimedia",
+    ["3gp", "3gpp"],
+    "video/3gpp",
+    Brand::ThreeGp
+);
+bmff_format!(
+    THREE_G2,
+    "3g2",
+    "3GPP2 multimedia",
+    ["3g2", "3gp2"],
+    "video/3gpp2",
+    Brand::ThreeG2
+);
+bmff_format!(
+    M4A,
+    "m4a",
+    "MPEG-4 audio",
+    ["m4a", "m4b", "m4p", "m4r"],
+    "audio/mp4",
+    Brand::M4a
+);
+bmff_format!(
+    M4V,
+    "m4v",
+    "MPEG-4 video (Apple)",
+    ["m4v"],
+    "video/x-m4v",
+    Brand::M4v
+);
+bmff_format!(
+    MOV,
+    "mov",
+    "QuickTime movie",
+    ["mov", "qt"],
+    "video/quicktime",
+    Brand::Mov
+);
+bmff_format!(
+    MP4,
+    "mp4",
+    "MPEG-4 Part 14",
+    ["mp4", "m4s", "mp4v", "f4v", "ismv", "cmfv", "cmfa"],
+    "video/mp4",
+    Brand::Mp4
+);
 
 const JP2_SIGNATURE: &[u8] = b"\0\0\0\x0cjP  \r\n\x87\n";
 
@@ -112,7 +196,10 @@ pub fn classify(h: &Head<'_>) -> Option<Brand> {
             return None;
         }
         let major: [u8; 4] = crate::bytes::array(h.data, 8)?;
-        if !major.iter().all(|b| b.is_ascii_graphic() || *b == b' ' || *b == 0) {
+        if !major
+            .iter()
+            .all(|b| b.is_ascii_graphic() || *b == b' ' || *b == 0)
+        {
             return None;
         }
         let end = size.min(h.data.len());
@@ -172,10 +259,7 @@ fn legacy_quicktime(h: &Head<'_>) -> bool {
     let next = usize::try_from(size).unwrap_or(usize::MAX);
     match kind_at(next) {
         Some(k) => QT_TOP.contains(&&k) && u32_be(h.data, next).is_some_and(|s| s >= 8 || s == 0),
-        None => {
-            u64::from(size) < h.len
-                && h.tail.windows(4).any(|w| w == b"moov" || w == b"mvhd")
-        }
+        None => u64::from(size) < h.len && h.tail.windows(4).any(|w| w == b"moov" || w == b"mvhd"),
     }
 }
 
@@ -223,7 +307,10 @@ pub async fn read_header(cx: &Cx, region: Span, pos: u64) -> Result<Option<Heade
     if &kind == b"uuid" {
         uuid = crate::bytes::array::<16>(&data, crate::bytes::to_usize(header_len));
         if uuid.is_none() {
-            return Err(Diagnostic::truncated(region.sub(pos, header_len.saturating_add(16)), remaining));
+            return Err(Diagnostic::truncated(
+                region.sub(pos, header_len.saturating_add(16)),
+                remaining,
+            ));
         }
         header_len = header_len.saturating_add(16);
     }
@@ -321,8 +408,8 @@ const CONTAINERS: &[&[u8; 4]] = &[
     b"moov", b"trak", b"mdia", b"minf", b"stbl", b"dinf", b"edts", b"udta", b"mvex", b"moof",
     b"traf", b"mfra", b"tref", b"sinf", b"schi", b"iprp", b"ipco", b"gmhd", b"tapt", b"clip",
     b"matt", b"rinf", b"strk", b"strd", b"wave", b"meco", b"trgr", b"jp2h", b"res ", b"uinf",
-    b"jpch", b"jplh", b"cgrp", b"ftab", b"ilst", b"grpl", b"hnti", b"hinf", b"tmcd",
-    b"imap", b"rmra", b"rmda", b"cmov", b"fiin", b"paen", b"ludt", b"vttc",
+    b"jpch", b"jplh", b"cgrp", b"ftab", b"ilst", b"grpl", b"hnti", b"hinf", b"tmcd", b"imap",
+    b"rmra", b"rmda", b"cmov", b"fiin", b"paen", b"ludt", b"vttc",
 ];
 
 /// Containers whose children start after a fixed prefix (FullBox header,
@@ -402,7 +489,13 @@ async fn expand_box(cx: Cx, st: BoxState) -> Result<()> {
     let block = cx.block(st.span.sub(0, h.header_len)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     f.u32("Size")
-        .with(|&s, n| if s == 0 { n.summary("to end of container") } else { n })
+        .with(|&s, n| {
+            if s == 0 {
+                n.summary("to end of container")
+            } else {
+                n
+            }
+        })
         .emit()?;
     f.node(text("Type", f.peek_span(4), h.name()));
     f.skip(4);
@@ -430,7 +523,9 @@ async fn decode(cx: &Cx, st: &BoxState) -> Result<()> {
     }
     if is_container(h, &ctx) {
         let handler = match &h.kind {
-            b"mdia" | b"trak" => summary::handler_of(cx, &h.kind, body).await.unwrap_or(ctx.handler),
+            b"mdia" | b"trak" => summary::handler_of(cx, &h.kind, body)
+                .await
+                .unwrap_or(ctx.handler),
             _ => ctx.handler,
         };
         let child = Ctx {
@@ -476,10 +571,11 @@ async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         return sample::describe(cx, st).await;
     }
     match &h.kind {
-        b"mdat" | b"free" | b"skip" | b"wide" | b"idat" => {
-            Some(format!("{} bytes", st.body().len))
-        }
-        b"trak" => summary::track(cx, st.body()).await.ok().map(|t| t.describe()),
+        b"mdat" | b"free" | b"skip" | b"wide" | b"idat" => Some(format!("{} bytes", st.body().len)),
+        b"trak" => summary::track(cx, st.body())
+            .await
+            .ok()
+            .map(|t| t.describe()),
         _ => {
             if let Some(s) = boxes::describe(cx, st).await {
                 return Some(s);
@@ -531,9 +627,7 @@ pub fn full_box(f: &mut Fields<'_>) -> Result<(u8, u32)> {
     let field = f.bytes("Flags", 3);
     let span = field.span();
     let raw = field.get()?;
-    let flags = raw
-        .iter()
-        .fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
+    let flags = raw.iter().fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
     f.node(hex("Flags", span, flags.into(), 24));
     Ok((version, flags))
 }

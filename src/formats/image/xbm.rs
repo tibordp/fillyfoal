@@ -107,9 +107,15 @@ pub async fn dissect_xbm(cx: Cx, input: Input) -> Result<()> {
     let expected = (width.saturating_add(7) / 8).saturating_mul(height);
     if let (Some(open), Some(close)) = (open, close) {
         let body = data.get(open..close).unwrap_or_default();
-        let values = body.split(|&b| b == b',').filter(|v| v.iter().any(u8::is_ascii_hexdigit)).count();
+        let values = body
+            .split(|&b| b == b',')
+            .filter(|v| v.iter().any(u8::is_ascii_hexdigit))
+            .count();
         let mut node = Node::new("Bits")
-            .span(file.sub(to_u64(open), to_u64(close.saturating_sub(open)).saturating_add(1)))
+            .span(file.sub(
+                to_u64(open),
+                to_u64(close.saturating_sub(open)).saturating_add(1),
+            ))
             .summary(format!("{values} bytes, LSB is the leftmost pixel"));
         if to_u64(values) != expected {
             node = node.diag(Diagnostic::warning(format!("expected {expected} bytes")));
@@ -152,7 +158,8 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = whole(&cx, file).await?;
     let all = strings(&data);
-    let span_of = |(start, s): (usize, &[u8])| file.sub(to_u64(start), to_u64(s.len()).saturating_add(2));
+    let span_of =
+        |(start, s): (usize, &[u8])| file.sub(to_u64(start), to_u64(s.len()).saturating_add(2));
     let Some(&first) = all.first() else {
         return Err(Diagnostic::malformed("no strings").at(file));
     };
@@ -167,7 +174,10 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
         Node::new("Values")
             .span(span_of(first))
             .value(text(crate::text::latin1(first.1)))
-            .summary(format!("{}, {colors} colors, {cpp} chars per pixel", dims(width, height))),
+            .summary(format!(
+                "{}, {colors} colors, {cpp} chars per pixel",
+                dims(width, height)
+            )),
     );
     cx.annotate(format!("{}, {colors} colors", dims(width, height)));
     let color_lines: Vec<Span> = all
@@ -193,7 +203,11 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
         .collect();
     if let (Some(a), Some(b)) = (rows.first(), rows.last()) {
         let mut node = Node::new("Pixels")
-            .span(Span::new(a.source, a.offset, b.end().saturating_sub(a.offset)))
+            .span(Span::new(
+                a.source,
+                a.offset,
+                b.end().saturating_sub(a.offset),
+            ))
             .summary(format!("{} rows", rows.len()));
         if to_u64(rows.len()) != *height {
             node = node.diag(Diagnostic::warning(format!("expected {height} rows")));

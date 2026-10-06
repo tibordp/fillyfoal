@@ -44,9 +44,17 @@ fn fixtures() -> Vec<PathBuf> {
 /// `fixtures/gzip/`; they are decompressed with our own inflate.
 fn load(path: &Path) -> Vec<u8> {
     let data = std::fs::read(path).unwrap();
-    let in_gzip_dir = path.parent().and_then(|p| p.file_name()).is_some_and(|n| n == "gzip");
+    let in_gzip_dir = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "gzip");
     if path.extension().is_some_and(|e| e == "gz") && !in_gzip_dir {
-        assert_eq!(data[3] & 0x1e, 0, "{}: write fixtures with `gzip -n`", path.display());
+        assert_eq!(
+            data[3] & 0x1e,
+            0,
+            "{}: write fixtures with `gzip -n`",
+            path.display()
+        );
         return fillyfoal::codec::inflate::inflate(&data[10..], 64 << 20).unwrap();
     }
     data
@@ -54,7 +62,10 @@ fn load(path: &Path) -> Vec<u8> {
 
 fn display_name(path: &Path) -> String {
     let name = path.file_name().unwrap().to_string_lossy().into_owned();
-    let in_gzip_dir = path.parent().and_then(|p| p.file_name()).is_some_and(|n| n == "gzip");
+    let in_gzip_dir = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .is_some_and(|n| n == "gzip");
     match name.strip_suffix(".gz") {
         Some(stem) if !in_gzip_dir => stem.to_owned(),
         _ => name,
@@ -73,7 +84,10 @@ fn snapshot_name(path: &Path) -> String {
 fn fixtures_snapshot() {
     for path in fixtures() {
         let data = load(&path);
-        insta::assert_snapshot!(snapshot_name(&path), common::explore(&display_name(&path), &data));
+        insta::assert_snapshot!(
+            snapshot_name(&path),
+            common::explore(&display_name(&path), &data)
+        );
     }
 }
 
@@ -85,11 +99,13 @@ fn fixtures_are_robust() {
     let next = std::sync::atomic::AtomicUsize::new(0);
     std::thread::scope(|scope| {
         for _ in 0..threads {
-            scope.spawn(|| loop {
-                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                let Some(path) = paths.get(i) else { break };
-                let data = load(path);
-                common::robustness(&snapshot_name(path), &data);
+            scope.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(path) = paths.get(i) else { break };
+                    let data = load(path);
+                    common::robustness(&snapshot_name(path), &data);
+                }
             });
         }
     });

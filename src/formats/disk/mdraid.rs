@@ -122,7 +122,13 @@ fn md_checksum(data: &[u8]) -> u32 {
     }
     if data.len() % 4 == 2 {
         let tail = data.get(data.len().saturating_sub(2)..).unwrap_or_default();
-        sum = sum.wrapping_add(u16::from_le_bytes([tail.first().copied().unwrap_or(0), tail.get(1).copied().unwrap_or(0)]).into());
+        sum = sum.wrapping_add(
+            u16::from_le_bytes([
+                tail.first().copied().unwrap_or(0),
+                tail.get(1).copied().unwrap_or(0),
+            ])
+            .into(),
+        );
     }
     let folded = (sum & 0xffff_ffff).wrapping_add(sum >> 32);
     u32::try_from(folded & 0xffff_ffff).unwrap_or(0)
@@ -137,10 +143,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let roles = u64::from(sb.max_dev.min(MAX_DEVS));
     let full = dev.sub(at, Superblock::SIZE.saturating_add(roles.saturating_mul(2)));
     let data = cx.read_avail(full).await?;
-    let mut node = Superblock::node("Superblock", sb_span, LE).summary(format!(
-        "version 1.{}",
-        if at == 0 { 1 } else { 2 }
-    ));
+    let mut node = Superblock::node("Superblock", sb_span, LE)
+        .summary(format!("version 1.{}", if at == 0 { 1 } else { 2 }));
     if md_checksum(&data) != sb.checksum {
         node = node.diag(Diagnostic::warning(format!(
             "checksum mismatch: computed {:#010x}",
@@ -181,7 +185,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sb.data_size.saturating_mul(512),
     );
     let member = if sb.level == 1 || (sb.level == 0xffff_ffff && sb.raid_disks == 1) {
-        embedded("Data", input.nested(data_span)).summary(format!("{level} data, {}", size(data_span.len)))
+        embedded("Data", input.nested(data_span))
+            .summary(format!("{level} data, {}", size(data_span.len)))
     } else {
         Node::new("Data")
             .span(data_span)

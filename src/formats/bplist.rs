@@ -86,9 +86,9 @@ struct Obj {
 }
 
 fn be_uint(bytes: &[u8]) -> u64 {
-    bytes
-        .iter()
-        .fold(0u64, |acc, &b| acc.checked_shl(8).unwrap_or(0) | u64::from(b))
+    bytes.iter().fold(0u64, |acc, &b| {
+        acc.checked_shl(8).unwrap_or(0) | u64::from(b)
+    })
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -109,7 +109,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let table_len = trailer.objects.saturating_mul(trailer.offset_size.into());
     let table_span = file.sub(trailer.table, table_len);
     // Only objects whose offsets exist can be listed.
-    let listed = table_span.len.checked_div(trailer.offset_size.into()).unwrap_or(0);
+    let listed = table_span
+        .len
+        .checked_div(trailer.offset_size.into())
+        .unwrap_or(0);
     let pl: Pl = Arc::new(Plist {
         input,
         offset_size: trailer.offset_size,
@@ -188,14 +191,19 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
     // Variable-length objects store a count in the low nibble, or 0xf and an
     // integer object with the real count.
     let (count, header) = if lo == 0x0f && matches!(hi, 0x4 | 0x5 | 0x6 | 0xa | 0xb | 0xc | 0xd) {
-        let int = cx.read(file.sub_exact(offset.saturating_add(1), 1)?).await?;
+        let int = cx
+            .read(file.sub_exact(offset.saturating_add(1), 1)?)
+            .await?;
         let int = int.first().copied().unwrap_or(0);
         if int >> 4 != 1 || int & 0x0f > 3 {
-            return Err(Diagnostic::malformed("bad count after object marker")
-                .at(file.sub(offset, 2)));
+            return Err(
+                Diagnostic::malformed("bad count after object marker").at(file.sub(offset, 2))
+            );
         }
         let size = 1u64 << (int & 0x0f);
-        let bytes = cx.read(file.sub_exact(offset.saturating_add(2), size)?).await?;
+        let bytes = cx
+            .read(file.sub_exact(offset.saturating_add(2), size)?)
+            .await?;
         (be_uint(&bytes), size.saturating_add(2))
     } else {
         (u64::from(lo), 1)
@@ -241,7 +249,10 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
                     value: be_uint(bytes.get(8..).unwrap_or_default()) as i64,
                     bits: 64,
                 },
-                _ => uint(be_uint(&bytes), u8::try_from(size.saturating_mul(8)).unwrap_or(64)),
+                _ => uint(
+                    be_uint(&bytes),
+                    u8::try_from(size.saturating_mul(8)).unwrap_or(64),
+                ),
             };
             scalar(span_of(size), value, "integer".into())
         }
@@ -253,7 +264,11 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
         (0x3, 0x3) => {
             let bytes = cx.read(file.sub_exact(body, 8)?).await?;
             let seconds = real(&bytes);
-            scalar(span_of(8), cf_time(seconds), format!("date ({seconds} s since 2001)"))
+            scalar(
+                span_of(8),
+                cf_time(seconds),
+                format!("date ({seconds} s since 2001)"),
+            )
         }
         (0x4, _) => {
             let data = file.sub_exact(body, count)?;
@@ -262,7 +277,11 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
                 nested: head.starts_with(b"bplist00"),
                 count,
                 refs: body,
-                ..scalar(span_of(count), Value::Bytes(head), format!("data, {count} bytes"))
+                ..scalar(
+                    span_of(count),
+                    Value::Bytes(head),
+                    format!("data, {count} bytes"),
+                )
             }
         }
         (0x5, _) => {
@@ -293,11 +312,17 @@ async fn object(cx: &Cx, pl: &Plist, index: u64) -> Result<Obj> {
         }
         (0xd, _) => {
             fits(count.saturating_mul(2))?;
-            container(Kind::Dict, count.saturating_mul(2), format!("dict ({count})"))
+            container(
+                Kind::Dict,
+                count.saturating_mul(2),
+                format!("dict ({count})"),
+            )
         }
         _ => {
-            return Err(Diagnostic::unsupported(format!("object marker {marker:#04x}"))
-                .at(file.sub(offset, 1)));
+            return Err(
+                Diagnostic::unsupported(format!("object marker {marker:#04x}"))
+                    .at(file.sub(offset, 1)),
+            );
         }
     })
 }
@@ -312,7 +337,9 @@ fn real(bytes: &[u8]) -> f64 {
 /// Whether a dictionary has a string key `wanted` (among its first keys).
 async fn has_key(cx: &Cx, pl: &Plist, dict: &Obj, wanted: &str) -> bool {
     for i in 0..dict.count.min(16) {
-        let at = dict.refs.saturating_add(i.saturating_mul(pl.ref_size.into()));
+        let at = dict
+            .refs
+            .saturating_add(i.saturating_mul(pl.ref_size.into()));
         let Ok(key) = reference(cx, pl, at).await else {
             return false;
         };
@@ -409,7 +436,9 @@ async fn objects(cx: Cx, pl: Pl) -> Result<()> {
         let node = match object(&cx, &pl, index).await {
             // A flat listing: containers are walked from the root instead.
             Ok(o) => {
-                let node = Node::new(format!("#{index}")).span(o.span).summary(o.summary);
+                let node = Node::new(format!("#{index}"))
+                    .span(o.span)
+                    .summary(o.summary);
                 match o.value {
                     Some(v) => node.value(v),
                     None => node,

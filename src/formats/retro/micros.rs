@@ -24,7 +24,15 @@ const BE: Endian = Endian::Big;
 declare_format!(pub CPC_SNA = "cpc-sna", "Amstrad CPC snapshot", ["sna"],
     "application/x-cpc-sna", Probe::Magic(&[(0, b"MV - SNA")]), cpc_sna);
 
-const CPC_MODELS: EnumTable = &[(0, "CPC 464"), (1, "CPC 664"), (2, "CPC 6128"), (3, "unknown"), (4, "6128 Plus"), (5, "464 Plus"), (6, "GX4000")];
+const CPC_MODELS: EnumTable = &[
+    (0, "CPC 464"),
+    (1, "CPC 664"),
+    (2, "CPC 6128"),
+    (3, "unknown"),
+    (4, "6128 Plus"),
+    (5, "464 Plus"),
+    (6, "GX4000"),
+];
 
 record! {
     pub struct CpcSnaHeader {
@@ -86,15 +94,28 @@ async fn cpc_sna(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(cur.u32().await?);
         cur.skip(len);
         chunks.push(id.clone());
-        cx.push(Node::new(id).span(cur.since(start)).summary(format!("{len} bytes"))).await;
+        cx.push(
+            Node::new(id)
+                .span(cur.since(start))
+                .summary(format!("{len} bytes")),
+        )
+        .await;
     }
     cx.annotate(format!(
         "CPC snapshot v{}, {}, {} RAM, PC {:#06x}{}",
         h.version,
-        if h.version >= 2 { lookup(CPC_MODELS, h.model.into()).unwrap_or("unknown model") } else { "CPC" },
+        if h.version >= 2 {
+            lookup(CPC_MODELS, h.model.into()).unwrap_or("unknown model")
+        } else {
+            "CPC"
+        },
         size(dump.len),
         h.pc,
-        if chunks.is_empty() { String::new() } else { format!(", chunks {}", chunks.join(" ")) }
+        if chunks.is_empty() {
+            String::new()
+        } else {
+            format!(", chunks {}", chunks.join(" "))
+        }
     ));
     Ok(())
 }
@@ -103,7 +124,9 @@ async fn cpc_sna(cx: Cx, input: Input) -> Result<()> {
 // ZX Spectrum SNA (identified by its exact size)
 
 fn zx_sna_probe(h: &Head<'_>) -> bool {
-    matches!(h.len, 49_179 | 131_103 | 147_487) && h.data.get(25).is_some_and(|&im| im <= 2) && h.data.get(26).is_some_and(|&b| b <= 7)
+    matches!(h.len, 49_179 | 131_103 | 147_487)
+        && h.data.get(25).is_some_and(|&im| im <= 2)
+        && h.data.get(26).is_some_and(|&b| b <= 7)
 }
 
 declare_format!(pub ZX_SNA = "zx-sna", "ZX Spectrum snapshot (SNA)", ["sna"],
@@ -135,11 +158,23 @@ async fn zx_sna(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, ZxSnaHeader::SIZE);
     let h: ZxSnaHeader = read_record(&cx, span, LE).await?;
     cx.emit(ZxSnaHeader::node("Registers", span, LE));
-    cx.emit(Node::new("RAM 0x4000-0xFFFF").span(file.sub(27, 49152)).summary("screen at 0x4000"));
+    cx.emit(
+        Node::new("RAM 0x4000-0xFFFF")
+            .span(file.sub(27, 49152))
+            .summary("screen at 0x4000"),
+    );
     let wide = file.len > 49_179;
     let pc = if wide {
         let raw = cx.read(file.sub(49_179, 4)).await?;
-        cx.emit(Node::new("128K state").span(file.sub(49_179, 4)).summary(format!("PC {:#06x}, port 0x7FFD = {:#04x}", u16_le(&raw, 0).unwrap_or(0), raw.get(2).copied().unwrap_or(0))));
+        cx.emit(
+            Node::new("128K state")
+                .span(file.sub(49_179, 4))
+                .summary(format!(
+                    "PC {:#06x}, port 0x7FFD = {:#04x}",
+                    u16_le(&raw, 0).unwrap_or(0),
+                    raw.get(2).copied().unwrap_or(0)
+                )),
+        );
         cx.emit(Node::new("Remaining RAM banks").span(file.tail(49_183)));
         u16_le(&raw, 0).unwrap_or(0)
     } else {
@@ -147,7 +182,12 @@ async fn zx_sna(cx: Cx, input: Input) -> Result<()> {
         let at = u64::from(h.sp).saturating_sub(0x4000).saturating_add(27);
         u16_le(&cx.read_avail(file.sub(at, 2)).await?, 0).unwrap_or(0)
     };
-    cx.annotate(format!("ZX Spectrum {} snapshot, PC {pc:#06x}, SP {:#06x}, IM {}", if wide { "128K" } else { "48K" }, h.sp, h.im));
+    cx.annotate(format!(
+        "ZX Spectrum {} snapshot, PC {pc:#06x}, SP {:#06x}, IM {}",
+        if wide { "128K" } else { "48K" },
+        h.sp,
+        h.im
+    ));
     Ok(())
 }
 
@@ -230,8 +270,14 @@ async fn szx(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(cur.u32().await?);
         let data = cur.span(len);
         cur.skip(len);
-        let meaning = SZX_BLOCKS.iter().find(|b| b.0 == id).map_or("unknown block", |b| b.1);
-        let mut node = Node::new(id.trim_end_matches('\0').to_owned()).span(cur.since(start)).desc(meaning).summary(format!("{len} bytes"));
+        let meaning = SZX_BLOCKS
+            .iter()
+            .find(|b| b.0 == id)
+            .map_or("unknown block", |b| b.1);
+        let mut node = Node::new(id.trim_end_matches('\0').to_owned())
+            .span(cur.since(start))
+            .desc(meaning)
+            .summary(format!("{len} bytes"));
         if id == "RAMP" {
             pages = pages.saturating_add(1);
             let h = cx.read_avail(data.sub(0, 3)).await?;
@@ -239,21 +285,37 @@ async fn szx(cx: Cx, input: Input) -> Result<()> {
             let page = h.get(2).copied().unwrap_or(0);
             let body = data.tail(3);
             node = if flags & 1 != 0 {
-                content(format!("RAMP page {page}"), input, body, Codec::Zlib, Some(0x4000)).span(cur.since(start)).summary("zlib-compressed 16 KiB page")
+                content(
+                    format!("RAMP page {page}"),
+                    input,
+                    body,
+                    Codec::Zlib,
+                    Some(0x4000),
+                )
+                .span(cur.since(start))
+                .summary("zlib-compressed 16 KiB page")
             } else {
                 node.summary(format!("page {page}, uncompressed"))
             };
         } else if id == "CRTR" {
             let h = cx.read_avail(data.sub(0, 36)).await?;
             creator = crate::text::until_nul(h.get(..32).unwrap_or_default());
-            node = node.value(text(creator.clone())).summary(format!("v{}.{}", u16_le(&h, 32).unwrap_or(0), u16_le(&h, 34).unwrap_or(0)));
+            node = node.value(text(creator.clone())).summary(format!(
+                "v{}.{}",
+                u16_le(&h, 32).unwrap_or(0),
+                u16_le(&h, 34).unwrap_or(0)
+            ));
         }
         cx.push(node).await;
     }
     cx.annotate(format!(
         "SZX v{major}.{minor} snapshot, {}, {pages} RAM pages{}",
         lookup(SZX_MACHINES, machine.into()).unwrap_or("unknown machine"),
-        if creator.is_empty() { String::new() } else { format!(", by {creator:?}") }
+        if creator.is_empty() {
+            String::new()
+        } else {
+            format!(", by {creator:?}")
+        }
     ));
     Ok(())
 }
@@ -265,7 +327,13 @@ declare_format!(pub RZX = "rzx", "ZX Spectrum input recording (RZX)", ["rzx"],
     "application/x-rzx", Probe::Magic(&[(0, b"RZX!")]), rzx);
 
 const RZX_FLAGS: FlagTable = &[flag(1, "SIGNED")];
-const RZX_BLOCKS: EnumTable = &[(0x10, "creator information"), (0x20, "security information"), (0x21, "security signature"), (0x30, "snapshot"), (0x80, "input recording")];
+const RZX_BLOCKS: EnumTable = &[
+    (0x10, "creator information"),
+    (0x20, "security information"),
+    (0x21, "security signature"),
+    (0x30, "snapshot"),
+    (0x80, "input recording"),
+];
 
 async fn rzx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -283,21 +351,35 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
         let id = cur.u8().await?;
         let len = u64::from(cur.u32().await?);
         if len < 5 {
-            cx.push(Node::new(format!("Block {id:#04x}")).span(cur.since(start)).diag(Diagnostic::malformed("block shorter than its header"))).await;
+            cx.push(
+                Node::new(format!("Block {id:#04x}"))
+                    .span(cur.since(start))
+                    .diag(Diagnostic::malformed("block shorter than its header")),
+            )
+            .await;
             break;
         }
         let block = file.sub(start, len);
         cur.seek(start.saturating_add(len));
         let raw = cx.read_avail(block.sub(5, 32)).await?;
-        let name = lookup(RZX_BLOCKS, id.into()).map_or_else(|| format!("Block {id:#04x}"), |n| {
-            let mut c = n.chars();
-            c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
-        });
+        let name = lookup(RZX_BLOCKS, id.into()).map_or_else(
+            || format!("Block {id:#04x}"),
+            |n| {
+                let mut c = n.chars();
+                c.next()
+                    .map(|f| f.to_uppercase().chain(c).collect())
+                    .unwrap_or_default()
+            },
+        );
         let mut node = Node::new(name).span(block).value(hex(id.into(), 8));
         match id {
             0x10 => {
                 creator = crate::text::until_nul(raw.get(..20).unwrap_or_default());
-                node = node.summary(format!("{creator} {}.{}", u16_le(&raw, 20).unwrap_or(0), u16_le(&raw, 22).unwrap_or(0)));
+                node = node.summary(format!(
+                    "{creator} {}.{}",
+                    u16_le(&raw, 20).unwrap_or(0),
+                    u16_le(&raw, 22).unwrap_or(0)
+                ));
             }
             0x30 => {
                 snapshots = snapshots.saturating_add(1);
@@ -308,16 +390,33 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
                 node = if flags & 1 != 0 {
                     node.summary(format!("external {ext} file"))
                 } else if flags & 2 != 0 {
-                    content(format!("Snapshot ({ext})"), input, data, Codec::Zlib, Some(unpacked)).value(text(ext.clone())).summary(format!("{ext}, zlib, {}", size(unpacked)))
+                    content(
+                        format!("Snapshot ({ext})"),
+                        input,
+                        data,
+                        Codec::Zlib,
+                        Some(unpacked),
+                    )
+                    .value(text(ext.clone()))
+                    .summary(format!("{ext}, zlib, {}", size(unpacked)))
                 } else {
-                    embedded(format!("Snapshot ({ext})"), input.nested(data)).summary(format!("{ext}, {}", size(unpacked)))
+                    embedded(format!("Snapshot ({ext})"), input.nested(data))
+                        .summary(format!("{ext}, {}", size(unpacked)))
                 };
             }
             0x80 => {
                 let n = u64::from(u32_le(&raw, 0).unwrap_or(0));
                 frames = frames.saturating_add(n);
                 let flags = u32_le(&raw, 9).unwrap_or(0);
-                node = node.summary(format!("{n} frames, starting at T-state {}{}", u32_le(&raw, 5).unwrap_or(0), if flags & 2 != 0 { ", zlib-compressed" } else { "" }));
+                node = node.summary(format!(
+                    "{n} frames, starting at T-state {}{}",
+                    u32_le(&raw, 5).unwrap_or(0),
+                    if flags & 2 != 0 {
+                        ", zlib-compressed"
+                    } else {
+                        ""
+                    }
+                ));
             }
             _ => node = node.summary(format!("{len} bytes")),
         }
@@ -325,7 +424,11 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(format!(
         "RZX v{major}.{minor} recording, {frames} frames, {snapshots} snapshot(s){}",
-        if creator.is_empty() { String::new() } else { format!(", by {creator}") }
+        if creator.is_empty() {
+            String::new()
+        } else {
+            format!(", by {creator}")
+        }
     ));
     Ok(())
 }
@@ -339,9 +442,17 @@ declare_format!(pub NIB = "c64-nib", "Commodore 1541 nibbler image (NIB)", ["nib
 async fn nib(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 0x100)).await?;
-    cx.emit(Node::new("Signature").span(file.sub(0, 13)).value(text("MNIB-1541-RAW")));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(0, 13))
+            .value(text("MNIB-1541-RAW")),
+    );
     let version = head.get(13).copied().unwrap_or(0);
-    cx.emit(Node::new("Version").span(file.sub(13, 1)).value(dec(version.into(), 8)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(13, 1))
+            .value(dec(version.into(), 8)),
+    );
     let mut tracks = 0u64;
     for (i, pair) in head.get(0x10..).unwrap_or_default().chunks(2).enumerate() {
         let halftrack = pair.first().copied().unwrap_or(0);
@@ -349,13 +460,28 @@ async fn nib(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let density = pair.get(1).copied().unwrap_or(0);
-        let data = file.sub(0x100u64.saturating_add(to_u64(i).saturating_mul(0x2000)), 0x2000);
+        let data = file.sub(
+            0x100u64.saturating_add(to_u64(i).saturating_mul(0x2000)),
+            0x2000,
+        );
         tracks = tracks.saturating_add(1);
         cx.push(
-            Node::new(format!("Track {}{}", halftrack / 2, if halftrack % 2 == 1 { ".5" } else { "" }))
-                .span(file.sub(0x10u64.saturating_add(to_u64(i).saturating_mul(2)), 2))
-                .summary(format!("density {}{}", density & 3, if density & 0x80 != 0 { " (killer track)" } else { "" }))
-                .target(data),
+            Node::new(format!(
+                "Track {}{}",
+                halftrack / 2,
+                if halftrack % 2 == 1 { ".5" } else { "" }
+            ))
+            .span(file.sub(0x10u64.saturating_add(to_u64(i).saturating_mul(2)), 2))
+            .summary(format!(
+                "density {}{}",
+                density & 3,
+                if density & 0x80 != 0 {
+                    " (killer track)"
+                } else {
+                    ""
+                }
+            ))
+            .target(data),
         )
         .await;
     }
@@ -381,8 +507,18 @@ async fn vice(cx: Cx, input: Input) -> Result<()> {
     let mut emulator = String::new();
     if cx.read_avail(file.sub(37, 13)).await? == b"VICE Version\x1a" {
         let v = cx.read(file.sub(50, 8)).await?;
-        emulator = format!("{}.{}.{}", v.first().copied().unwrap_or(0), v.get(1).copied().unwrap_or(0), v.get(2).copied().unwrap_or(0));
-        cx.emit(Node::new("VICE version").span(file.sub(37, 21)).value(text(emulator.clone())).summary(format!("SVN r{}", u32_be(&v, 4).unwrap_or(0))));
+        emulator = format!(
+            "{}.{}.{}",
+            v.first().copied().unwrap_or(0),
+            v.get(1).copied().unwrap_or(0),
+            v.get(2).copied().unwrap_or(0)
+        );
+        cx.emit(
+            Node::new("VICE version")
+                .span(file.sub(37, 21))
+                .value(text(emulator.clone()))
+                .summary(format!("SVN r{}", u32_be(&v, 4).unwrap_or(0))),
+        );
         at = 58;
     }
     let mut cur = Cursor::new(&cx, file, LE);
@@ -399,12 +535,21 @@ async fn vice(cx: Cx, input: Input) -> Result<()> {
         }
         cur.seek(start.saturating_add(len));
         modules = modules.saturating_add(1);
-        cx.push(Node::new(name).span(cur.since(start)).summary(format!("v{mmaj}.{mmin}, {len} bytes"))).await;
+        cx.push(
+            Node::new(name)
+                .span(cur.since(start))
+                .summary(format!("v{mmaj}.{mmin}, {len} bytes")),
+        )
+        .await;
     }
     cx.annotate(format!(
         "VICE snapshot v{major}.{minor} of {}{}, {modules} modules",
         clean(&machine),
-        if emulator.is_empty() { String::new() } else { format!(" (VICE {emulator})") }
+        if emulator.is_empty() {
+            String::new()
+        } else {
+            format!(" (VICE {emulator})")
+        }
     ));
     Ok(())
 }
@@ -415,7 +560,10 @@ async fn vice(cx: Cx, input: Input) -> Result<()> {
 fn atari_xex_probe(h: &Head<'_>) -> bool {
     let start = u16_le(h.data, 2).unwrap_or(0);
     let end = u16_le(h.data, 4).unwrap_or(0);
-    h.at(0, b"\xff\xff") && start <= end && end != 0xffff && u64::from(end.saturating_sub(start)).saturating_add(7) <= h.len
+    h.at(0, b"\xff\xff")
+        && start <= end
+        && end != 0xffff
+        && u64::from(end.saturating_sub(start)).saturating_add(7) <= h.len
 }
 
 declare_format!(pub ATARI_XEX = "atari-xex", "Atari 8-bit executable (XEX)", ["xex", "com", "exe", "obx"],
@@ -436,7 +584,12 @@ async fn atari_xex(cx: Cx, input: Input) -> Result<()> {
         }
         let last = cur.u16().await?;
         if last < first {
-            cx.push(Node::new("Invalid segment").span(cur.since(start)).diag(Diagnostic::malformed("end address before start"))).await;
+            cx.push(
+                Node::new("Invalid segment")
+                    .span(cur.since(start))
+                    .diag(Diagnostic::malformed("end address before start")),
+            )
+            .await;
             break;
         }
         let len = u64::from(last.saturating_sub(first)).saturating_add(1);
@@ -458,12 +611,23 @@ async fn atari_xex(cx: Cx, input: Input) -> Result<()> {
                 format!("${first:04x}-${last:04x}")
             }
         };
-        cx.push(Node::new(format!("Segment {segments}")).span(cur.since(start)).value(hex(first.into(), 16)).summary(name).target(data)).await;
+        cx.push(
+            Node::new(format!("Segment {segments}"))
+                .span(cur.since(start))
+                .value(hex(first.into(), 16))
+                .summary(name)
+                .target(data),
+        )
+        .await;
     }
     cx.annotate(format!(
         "Atari 8-bit executable, {segments} segments, {bytes} bytes loaded{}{}",
         run.map_or_else(String::new, |r| format!(", runs at ${r:04x}")),
-        if inits > 0 { format!(", {inits} init call(s)") } else { String::new() }
+        if inits > 0 {
+            format!(", {inits} init call(s)")
+        } else {
+            String::new()
+        }
     ));
     Ok(())
 }
@@ -477,7 +641,8 @@ declare_format!(pub ATARI_CAS = "atari-cas", "Atari 8-bit cassette image (CAS)",
 async fn atari_cas(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
-    let (mut records, mut data_bytes, mut description, mut baud) = (0u32, 0u64, String::new(), 600u16);
+    let (mut records, mut data_bytes, mut description, mut baud) =
+        (0u32, 0u64, String::new(), 600u16);
     while cur.remaining() >= 8 {
         let start = cur.pos();
         let kind = String::from_utf8_lossy(&cur.bytes(4).await?).into_owned();
@@ -487,7 +652,8 @@ async fn atari_cas(cx: Cx, input: Input) -> Result<()> {
         cur.skip(len);
         let summary = match kind.as_str() {
             "FUJI" => {
-                description = String::from_utf8_lossy(&cx.read_avail(data.sub(0, 256)).await?).into_owned();
+                description =
+                    String::from_utf8_lossy(&cx.read_avail(data.sub(0, 256)).await?).into_owned();
                 description.clone()
             }
             "baud" => {
@@ -501,11 +667,21 @@ async fn atari_cas(cx: Cx, input: Input) -> Result<()> {
             }
             _ => format!("{len} bytes, aux {aux}"),
         };
-        cx.push(Node::new(kind).span(cur.since(start)).summary(summary).target(data)).await;
+        cx.push(
+            Node::new(kind)
+                .span(cur.since(start))
+                .summary(summary)
+                .target(data),
+        )
+        .await;
     }
     cx.annotate(format!(
         "Atari cassette{}, {records} records ({data_bytes} bytes) at {baud} baud",
-        if description.is_empty() { String::new() } else { format!(" {:?}", description.trim()) }
+        if description.is_empty() {
+            String::new()
+        } else {
+            format!(" {:?}", description.trim())
+        }
     ));
     Ok(())
 }
@@ -557,13 +733,23 @@ async fn atx(cx: Cx, input: Input) -> Result<()> {
             tracks = tracks.saturating_add(1);
             let n = u16_le(&raw, 2).unwrap_or(0);
             sectors = sectors.saturating_add(n.into());
-            Node::new(format!("Track {}", raw.first().copied().unwrap_or(0))).summary(format!("{n} sectors, rate {}", u16_le(&raw, 4).unwrap_or(0)))
+            Node::new(format!("Track {}", raw.first().copied().unwrap_or(0))).summary(format!(
+                "{n} sectors, rate {}",
+                u16_le(&raw, 4).unwrap_or(0)
+            ))
         } else {
             Node::new(format!("Record type {kind}")).summary(format!("{len} bytes"))
         };
         cx.push(node.span(cur.since(start))).await;
     }
-    cx.annotate(format!("ATX v{} image, {} density, {tracks} tracks, {sectors} sectors", h.version, ["single", "medium", "double"].get(usize::from(h.density)).copied().unwrap_or("unknown")));
+    cx.annotate(format!(
+        "ATX v{} image, {} density, {tracks} tracks, {sectors} sectors",
+        h.version,
+        ["single", "medium", "double"]
+            .get(usize::from(h.density))
+            .copied()
+            .unwrap_or("unknown")
+    ));
     Ok(())
 }
 
@@ -576,13 +762,28 @@ const NUFX: &[u8] = b"\x4e\xf5\x46\xd8";
 declare_format!(pub NUFX_ARCHIVE = "nufx", "ShrinkIt archive (NuFX)", ["shk", "sdk", "bxy", "sea"],
     "application/x-nufx", Probe::Magic(&[(0, NUFILE)]), nufx);
 
-const NUFX_FORMATS: EnumTable = &[(0, "uncompressed"), (1, "Huffman squeeze"), (2, "LZW/1"), (3, "LZW/2"), (4, "LZC-12"), (5, "LZC-16")];
+const NUFX_FORMATS: EnumTable = &[
+    (0, "uncompressed"),
+    (1, "Huffman squeeze"),
+    (2, "LZW/1"),
+    (3, "LZW/2"),
+    (4, "LZC-12"),
+    (5, "LZC-16"),
+];
 const NUFX_CLASSES: EnumTable = &[(0, "message"), (1, "control"), (2, "data"), (3, "filename")];
 
 fn prodos_date(raw: &[u8]) -> String {
     // second, minute, hour, year (since 1900), day, month, filler, weekday
     let g = |i: usize| raw.get(i).copied().unwrap_or(0);
-    format!("{}-{:02}-{:02} {:02}:{:02}:{:02}", 1900u32.saturating_add(g(3).into()), g(5).saturating_add(1), g(4).saturating_add(1), g(2), g(1), g(0))
+    format!(
+        "{}-{:02}-{:02} {:02}:{:02}:{:02}",
+        1900u32.saturating_add(g(3).into()),
+        g(5).saturating_add(1),
+        g(4).saturating_add(1),
+        g(2),
+        g(1),
+        g(0)
+    )
 }
 
 async fn nufx(cx: Cx, input: Input) -> Result<()> {
@@ -592,8 +793,13 @@ async fn nufx(cx: Cx, input: Input) -> Result<()> {
     f.bytes("Signature (NuFile)", 6).emit()?;
     f.u16("Master CRC").hex().emit()?;
     let total = f.u32("Total records").emit()?;
-    let created = f.bytes("Created", 8).with(|v, n| n.summary(prodos_date(v))).emit()?;
-    f.bytes("Modified", 8).with(|v, n| n.summary(prodos_date(v))).emit()?;
+    let created = f
+        .bytes("Created", 8)
+        .with(|v, n| n.summary(prodos_date(v)))
+        .emit()?;
+    f.bytes("Modified", 8)
+        .with(|v, n| n.summary(prodos_date(v)))
+        .emit()?;
     f.u16("Master version").emit()?;
     f.bytes("Reserved", 8).emit()?;
     f.u32("Master EOF").emit()?;
@@ -602,15 +808,28 @@ async fn nufx(cx: Cx, input: Input) -> Result<()> {
     for _ in 0..total.min(65_536) {
         let raw = cx.read_avail(file.sub(at, 64)).await?;
         if raw.get(..4) != Some(NUFX) {
-            cx.diag(Diagnostic::malformed(format!("expected a record at {at:#x}")));
+            cx.diag(Diagnostic::malformed(format!(
+                "expected a record at {at:#x}"
+            )));
             break;
         }
         let attribs = u64::from(u16_le(&raw, 6).unwrap_or(0));
         let threads = u64::from(u32_le(&raw, 10).unwrap_or(0));
         let file_type = u32_le(&raw, 22).unwrap_or(0);
         let aux = u32_le(&raw, 26).unwrap_or(0);
-        let name_len = u64::from(u16_le(&cx.read(file.sub(at.saturating_add(attribs).saturating_sub(2), 2)).await?, 0).unwrap_or(0));
-        let mut name = String::from_utf8_lossy(&cx.read_avail(file.sub(at.saturating_add(attribs), name_len)).await?).into_owned();
+        let name_len = u64::from(
+            u16_le(
+                &cx.read(file.sub(at.saturating_add(attribs).saturating_sub(2), 2))
+                    .await?,
+                0,
+            )
+            .unwrap_or(0),
+        );
+        let mut name = String::from_utf8_lossy(
+            &cx.read_avail(file.sub(at.saturating_add(attribs), name_len))
+                .await?,
+        )
+        .into_owned();
         let threads_at = at.saturating_add(attribs).saturating_add(name_len);
         let table = file.sub(threads_at, threads.min(64).saturating_mul(16));
         let traw = cx.read(table).await?;
@@ -624,7 +843,9 @@ async fn nufx(cx: Cx, input: Input) -> Result<()> {
             let comp = u64::from(u32_le(t, 12).unwrap_or(0));
             let span = file.sub(data_at, comp);
             if class == 3 && name.is_empty() {
-                name = crate::text::until_nul(&cx.read_avail(span.sub(0, eof.min(comp).min(1024))).await?);
+                name = crate::text::until_nul(
+                    &cx.read_avail(span.sub(0, eof.min(comp).min(1024))).await?,
+                );
             }
             parts.push((class, format, kind, eof, span));
             data_at = data_at.saturating_add(comp);
@@ -635,13 +856,24 @@ async fn nufx(cx: Cx, input: Input) -> Result<()> {
             Node::new(name.clone())
                 .span(record)
                 .value(hex(file_type.into(), 8))
-                .summary(format!("type ${file_type:02x}/${aux:04x}, {} thread(s)", parts.len()))
+                .summary(format!(
+                    "type ${file_type:02x}/${aux:04x}, {} thread(s)",
+                    parts.len()
+                ))
                 .lazy(nufx_threads, (input, parts)),
         )
         .await;
         at = data_at;
     }
-    cx.annotate(format!("ShrinkIt archive, {total} record(s), created {}{}", prodos_date(&created), if names.is_empty() { String::new() } else { format!(": {}", names.join(", ")) }));
+    cx.annotate(format!(
+        "ShrinkIt archive, {total} record(s), created {}{}",
+        prodos_date(&created),
+        if names.is_empty() {
+            String::new()
+        } else {
+            format!(": {}", names.join(", "))
+        }
+    ));
     Ok(())
 }
 
@@ -661,11 +893,18 @@ async fn nufx_threads(cx: Cx, (input, parts): (Input, NufxThreads)) -> Result<()
         };
         let fmt = lookup(NUFX_FORMATS, format.into()).unwrap_or("unknown format");
         let node = if format == 0 && class == 2 {
-            let span = Span { len: eof.min(span.len), ..span };
+            let span = Span {
+                len: eof.min(span.len),
+                ..span
+            };
             embedded(label, input.nested(span))
         } else {
             let n = Node::new(label).span(span);
-            if format == 0 { n } else { n.diag(Diagnostic::unsupported(format!("{fmt} compression"))) }
+            if format == 0 {
+                n
+            } else {
+                n.diag(Diagnostic::unsupported(format!("{fmt} compression")))
+            }
         };
         cx.push(node.summary(format!("{fmt}, {eof} bytes"))).await;
     }
@@ -680,14 +919,20 @@ fn crc16_xmodem(data: &[u8]) -> u16 {
     for &b in data {
         crc ^= u16::from(b) << 8;
         for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 { crc << 1 ^ 0x1021 } else { crc << 1 };
+            crc = if crc & 0x8000 != 0 {
+                crc << 1 ^ 0x1021
+            } else {
+                crc << 1
+            };
         }
     }
     crc
 }
 
 fn macbinary_probe(h: &Head<'_>) -> bool {
-    let Some(header) = h.data.get(..128) else { return false };
+    let Some(header) = h.data.get(..128) else {
+        return false;
+    };
     let name_len = header.get(1).copied().unwrap_or(0);
     let data = u64::from(u32_be(header, 83).unwrap_or(u32::MAX));
     let rsrc = u64::from(u32_be(header, 87).unwrap_or(u32::MAX));
@@ -697,7 +942,10 @@ fn macbinary_probe(h: &Head<'_>) -> bool {
         && header.get(82) == Some(&0)
         && (1..=63).contains(&name_len)
         && (crc_ok || h.at(102, b"mBIN"))
-        && 128u64.saturating_add(data.next_multiple_of(128)).saturating_add(rsrc) <= h.len.saturating_add(128)
+        && 128u64
+            .saturating_add(data.next_multiple_of(128))
+            .saturating_add(rsrc)
+            <= h.len.saturating_add(128)
         && data.saturating_add(rsrc) > 0
 }
 
@@ -720,7 +968,10 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, BE);
     f.u8("Old version").emit()?;
     let name_len = f.u8("Name length").emit()?;
-    let name = f.ascii("File name", 63).map(|s| s.chars().take(usize::from(name_len)).collect::<String>()).emit()?;
+    let name = f
+        .ascii("File name", 63)
+        .map(|s| s.chars().take(usize::from(name_len)).collect::<String>())
+        .emit()?;
     let kind = f.ascii("File type", 4).emit()?;
     let creator = f.ascii("Creator", 4).emit()?;
     f.u8("Finder flags (high)").flags(FINDER_FLAGS).emit()?;
@@ -742,23 +993,48 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
     f.bytes("Reserved", 8).emit()?;
     f.u32("Total unpacked length").emit()?;
     let secondary = f.u16("Secondary header length").emit()?;
-    let version = f.u8("Version").enumeration(&[(129, "MacBinary II"), (130, "MacBinary III")]).emit()?;
+    let version = f
+        .u8("Version")
+        .enumeration(&[(129, "MacBinary II"), (130, "MacBinary III")])
+        .emit()?;
     f.u8("Minimum version").emit()?;
     let crc = f.u16("Header CRC").hex().emit()?;
     let computed = crc16_xmodem(head.data.get(..124).unwrap_or_default());
     if version >= 129 && computed != crc {
-        cx.diag(Diagnostic::warning(format!("header CRC mismatch: computed {computed:#06x}")));
+        cx.diag(Diagnostic::warning(format!(
+            "header CRC mismatch: computed {computed:#06x}"
+        )));
     }
     let mut at = 128u64.saturating_add(u64::from(secondary).next_multiple_of(128));
     if data_len > 0 {
-        cx.emit(embedded("Data fork", input.nested(file.sub(at, data_len.into()))).summary(size(data_len.into())));
+        cx.emit(
+            embedded("Data fork", input.nested(file.sub(at, data_len.into())))
+                .summary(size(data_len.into())),
+        );
         at = at.saturating_add(u64::from(data_len).next_multiple_of(128));
     }
     if rsrc_len > 0 {
-        cx.emit(embedded_as("Resource fork", input.nested(file.sub(at, rsrc_len.into())), &crate::formats::platform::MAC_RESOURCE).summary(size(rsrc_len.into())));
+        cx.emit(
+            embedded_as(
+                "Resource fork",
+                input.nested(file.sub(at, rsrc_len.into())),
+                &crate::formats::platform::MAC_RESOURCE,
+            )
+            .summary(size(rsrc_len.into())),
+        );
     }
-    let flavour = if sig == "mBIN" { "III" } else if version >= 129 { "II" } else { "I" };
-    cx.annotate(format!("MacBinary {flavour} {name:?} ({kind}/{creator}), data {}, resource {}", size(data_len.into()), size(rsrc_len.into())));
+    let flavour = if sig == "mBIN" {
+        "III"
+    } else if version >= 129 {
+        "II"
+    } else {
+        "I"
+    };
+    cx.annotate(format!(
+        "MacBinary {flavour} {name:?} ({kind}/{creator}), data {}, resource {}",
+        size(data_len.into()),
+        size(rsrc_len.into())
+    ));
     Ok(())
 }
 
@@ -769,7 +1045,9 @@ const BINHEX_BANNER: &[u8] = b"(This file must be converted with BinHex";
 const BINHEX_ALPHABET: &[u8] = b"!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr";
 
 fn binhex_probe(h: &Head<'_>) -> bool {
-    h.data.get(..h.data.len().min(4096)).is_some_and(|d| d.windows(BINHEX_BANNER.len()).any(|w| w == BINHEX_BANNER))
+    h.data
+        .get(..h.data.len().min(4096))
+        .is_some_and(|d| d.windows(BINHEX_BANNER.len()).any(|w| w == BINHEX_BANNER))
 }
 
 declare_format!(pub BINHEX = "binhex", "BinHex 4.0 encoded Mac file", ["hqx"],
@@ -783,7 +1061,9 @@ fn binhex_decode(encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) 
         if c == b':' {
             break;
         }
-        let Some(v) = BINHEX_ALPHABET.iter().position(|&a| a == c) else { continue };
+        let Some(v) = BINHEX_ALPHABET.iter().position(|&a| a == c) else {
+            continue;
+        };
         acc = (acc << 6 | u32::try_from(v).unwrap_or(0)) & 0x00ff_ffff;
         n = n.saturating_add(6);
         if n >= 8 {
@@ -809,7 +1089,10 @@ fn binhex_decode(encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) 
             out.push(b);
         }
         if out.len() > limit {
-            return (out, Some(Diagnostic::limit("decoded BinHex data too large")));
+            return (
+                out,
+                Some(Diagnostic::limit("decoded BinHex data too large")),
+            );
         }
     }
     (out, None)
@@ -819,16 +1102,54 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let max = cx.limits().max_read;
     let raw = cx.read(file.sub(0, file.len.min(max))).await?;
-    let banner_at = raw.windows(BINHEX_BANNER.len()).position(|w| w == BINHEX_BANNER).unwrap_or(0);
-    let banner_end = raw.get(banner_at..).and_then(|r| r.iter().position(|&b| b == b')')).map_or(banner_at, |p| banner_at.saturating_add(p).saturating_add(1));
-    cx.emit(Node::new("Banner").span(file.sub(to_u64(banner_at), to_u64(banner_end.saturating_sub(banner_at)))).value(text(String::from_utf8_lossy(raw.get(banner_at..banner_end).unwrap_or_default()).into_owned())));
-    let start = raw.get(banner_end..).and_then(|r| r.iter().position(|&b| b == b':')).map(|p| banner_end.saturating_add(p).saturating_add(1)).ok_or_else(|| Diagnostic::malformed("no ':' starting the encoded data"))?;
-    let end = raw.get(start..).and_then(|r| r.iter().position(|&b| b == b':')).map_or(raw.len(), |p| start.saturating_add(p));
+    let banner_at = raw
+        .windows(BINHEX_BANNER.len())
+        .position(|w| w == BINHEX_BANNER)
+        .unwrap_or(0);
+    let banner_end = raw
+        .get(banner_at..)
+        .and_then(|r| r.iter().position(|&b| b == b')'))
+        .map_or(banner_at, |p| banner_at.saturating_add(p).saturating_add(1));
+    cx.emit(
+        Node::new("Banner")
+            .span(file.sub(
+                to_u64(banner_at),
+                to_u64(banner_end.saturating_sub(banner_at)),
+            ))
+            .value(text(
+                String::from_utf8_lossy(raw.get(banner_at..banner_end).unwrap_or_default())
+                    .into_owned(),
+            )),
+    );
+    let start = raw
+        .get(banner_end..)
+        .and_then(|r| r.iter().position(|&b| b == b':'))
+        .map(|p| banner_end.saturating_add(p).saturating_add(1))
+        .ok_or_else(|| Diagnostic::malformed("no ':' starting the encoded data"))?;
+    let end = raw
+        .get(start..)
+        .and_then(|r| r.iter().position(|&b| b == b':'))
+        .map_or(raw.len(), |p| start.saturating_add(p));
     let encoded = file.sub(to_u64(start), to_u64(end.saturating_sub(start)));
-    let (decoded, error) = binhex_decode(raw.get(start..end).unwrap_or_default(), usize::try_from(cx.limits().max_derived / 4).unwrap_or(usize::MAX));
-    let derived = cx.add_derived(Origin { parent: encoded, transform: "binhex" }, decoded.clone(), encoded.len, error)?;
+    let (decoded, error) = binhex_decode(
+        raw.get(start..end).unwrap_or_default(),
+        usize::try_from(cx.limits().max_derived / 4).unwrap_or(usize::MAX),
+    );
+    let derived = cx.add_derived(
+        Origin {
+            parent: encoded,
+            transform: "binhex",
+        },
+        decoded.clone(),
+        encoded.len,
+        error,
+    )?;
     let body = derived.span;
-    cx.emit(Node::new("Encoded data").span(encoded).summary(format!("{} → {}", size(encoded.len), size(body.len))));
+    cx.emit(Node::new("Encoded data").span(encoded).summary(format!(
+        "{} → {}",
+        size(encoded.len),
+        size(body.len)
+    )));
     let name_len = u64::from(decoded.first().copied().unwrap_or(0));
     let hlen = name_len.saturating_add(22);
     let hspan = body.sub(0, hlen);
@@ -850,21 +1171,42 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
         v.extend_from_slice(&[0, 0]);
         crc16_xmodem(&v) == stored
     };
-    if !check(decoded.get(..usize::try_from(hlen.saturating_sub(2)).unwrap_or(0)).unwrap_or_default(), stored) {
+    if !check(
+        decoded
+            .get(..usize::try_from(hlen.saturating_sub(2)).unwrap_or(0))
+            .unwrap_or_default(),
+        stored,
+    ) {
         status.push("header CRC mismatch");
     }
     let data = body.sub(hlen, data_len);
     cx.emit(embedded("Data fork", input.nested(data)).summary(size(data_len)));
     let rsrc_at = hlen.saturating_add(data_len).saturating_add(2);
     if rsrc_len > 0 {
-        cx.emit(embedded_as("Resource fork", input.nested(body.sub(rsrc_at, rsrc_len)), &crate::formats::platform::MAC_RESOURCE).summary(size(rsrc_len)));
+        cx.emit(
+            embedded_as(
+                "Resource fork",
+                input.nested(body.sub(rsrc_at, rsrc_len)),
+                &crate::formats::platform::MAC_RESOURCE,
+            )
+            .summary(size(rsrc_len)),
+        );
     }
     let crc_at = |at: u64| u16_be(&decoded, usize::try_from(at).unwrap_or(usize::MAX));
-    let section = |from: u64, len: u64| decoded.get(usize::try_from(from).unwrap_or(0)..usize::try_from(from.saturating_add(len)).unwrap_or(0)).unwrap_or_default();
+    let section = |from: u64, len: u64| {
+        decoded
+            .get(
+                usize::try_from(from).unwrap_or(0)
+                    ..usize::try_from(from.saturating_add(len)).unwrap_or(0),
+            )
+            .unwrap_or_default()
+    };
     if crc_at(hlen.saturating_add(data_len)).is_some_and(|c| !check(section(hlen, data_len), c)) {
         status.push("data CRC mismatch");
     }
-    if crc_at(rsrc_at.saturating_add(rsrc_len)).is_some_and(|c| !check(section(rsrc_at, rsrc_len), c)) {
+    if crc_at(rsrc_at.saturating_add(rsrc_len))
+        .is_some_and(|c| !check(section(rsrc_at, rsrc_len), c))
+    {
         status.push("resource CRC mismatch");
     }
     for s in &status {
@@ -874,7 +1216,11 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
         "BinHex 4.0 {name:?} ({kind}/{creator}), data {}, resource {}{}",
         size(data_len),
         size(rsrc_len),
-        if status.is_empty() { ", CRCs valid".to_owned() } else { format!(", {}", status.join(", ")) }
+        if status.is_empty() {
+            ", CRCs valid".to_owned()
+        } else {
+            format!(", {}", status.join(", "))
+        }
     ));
     Ok(())
 }

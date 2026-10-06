@@ -142,7 +142,12 @@ fn utc_offset(o: u8) -> String {
     // Seven-bit signed count of 15-minute increments.
     let quarters = i32::from(i8::from_le_bytes([o << 1]) >> 1);
     let minutes = quarters.saturating_mul(15);
-    format!("UTC{}{:02}:{:02}", if minutes < 0 { '-' } else { '+' }, minutes.abs() / 60, minutes.abs() % 60)
+    format!(
+        "UTC{}{:02}:{:02}",
+        if minutes < 0 { '-' } else { '+' },
+        minutes.abs() / 60,
+        minutes.abs() % 60
+    )
 }
 
 #[derive(Debug)]
@@ -159,18 +164,31 @@ type Vol = Arc<Volume>;
 impl Volume {
     fn cluster_span(&self, c: u32) -> Option<Span> {
         let index = c.checked_sub(2)?;
-        (index < self.clusters).then(|| self.heap.sub(u64::from(index).saturating_mul(self.cluster), self.cluster))
+        (index < self.clusters).then(|| {
+            self.heap
+                .sub(u64::from(index).saturating_mul(self.cluster), self.cluster)
+        })
     }
 
     /// The clusters of an allocation: contiguous, or following the FAT.
-    async fn chain(&self, cx: &Cx, first: u32, contiguous: bool, len: u64) -> Result<(Vec<Span>, Option<Diagnostic>)> {
+    async fn chain(
+        &self,
+        cx: &Cx,
+        first: u32,
+        contiguous: bool,
+        len: u64,
+    ) -> Result<(Vec<Span>, Option<Diagnostic>)> {
         let needed = len.div_ceil(self.cluster.max(1));
         if contiguous {
             let start = self
                 .cluster_span(first)
                 .ok_or_else(|| Diagnostic::malformed(format!("cluster {first} is out of range")))?;
-            let span = self.heap.sub(start.offset.saturating_sub(self.heap.offset), needed.saturating_mul(self.cluster));
-            let problem = (span.len < len).then(|| Diagnostic::truncated(Span::new(span.source, span.offset, len), span.len));
+            let span = self.heap.sub(
+                start.offset.saturating_sub(self.heap.offset),
+                needed.saturating_mul(self.cluster),
+            );
+            let problem = (span.len < len)
+                .then(|| Diagnostic::truncated(Span::new(span.source, span.offset, len), span.len));
             return Ok((vec![span], problem));
         }
         let mut out = Vec::new();
@@ -178,13 +196,25 @@ impl Volume {
         let mut c = first;
         while to_u64(out.len()) < needed {
             let Some(span) = self.cluster_span(c) else {
-                return Ok((out, Some(Diagnostic::malformed(format!("cluster {c} is out of range")))));
+                return Ok((
+                    out,
+                    Some(Diagnostic::malformed(format!(
+                        "cluster {c} is out of range"
+                    ))),
+                ));
             };
             if !seen.insert(c) {
-                return Ok((out, Some(Diagnostic::malformed(format!("cluster chain loops back to {c}")))));
+                return Ok((
+                    out,
+                    Some(Diagnostic::malformed(format!(
+                        "cluster chain loops back to {c}"
+                    ))),
+                ));
             }
             out.push(span);
-            let raw = cx.read(self.fat.sub(u64::from(c).saturating_mul(4), 4)).await?;
+            let raw = cx
+                .read(self.fat.sub(u64::from(c).saturating_mul(4), 4))
+                .await?;
             let next = u32_le(&raw, 0).unwrap_or(u32::MAX);
             if next >= 0xffff_fff7 {
                 break;
@@ -192,7 +222,10 @@ impl Volume {
             c = next;
         }
         let problem = (to_u64(out.len()) < needed).then(|| {
-            Diagnostic::malformed(format!("cluster chain has {} clusters, {needed} needed", out.len()))
+            Diagnostic::malformed(format!(
+                "cluster chain has {} clusters, {needed} needed",
+                out.len()
+            ))
         });
         Ok((out, problem))
     }
@@ -212,8 +245,17 @@ fn boot_checksum(data: &[u8]) -> u32 {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
-    let bs = parse(&cx, vol.sub(0, BootSector::SIZE), LE, &(), BootSector::layout).await?;
-    if !(9..=12).contains(&bs.sector_shift) || bs.cluster_shift > 25u8.saturating_sub(bs.sector_shift) {
+    let bs = parse(
+        &cx,
+        vol.sub(0, BootSector::SIZE),
+        LE,
+        &(),
+        BootSector::layout,
+    )
+    .await?;
+    if !(9..=12).contains(&bs.sector_shift)
+        || bs.cluster_shift > 25u8.saturating_sub(bs.sector_shift)
+    {
         return Err(Diagnostic::malformed("implausible sector or cluster size").at(vol.sub(108, 2)));
     }
     let sector = 1u64 << bs.sector_shift;
@@ -221,10 +263,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let region = vol.sub(0, sector.saturating_mul(12));
     let data = cx.read_avail(region).await?;
     let mut boot = BootSector::node("Boot sector", vol.sub(0, sector), LE);
-    let computed = boot_checksum(data.get(..crate::bytes::to_usize(sector.saturating_mul(11))).unwrap_or_default());
+    let computed = boot_checksum(
+        data.get(..crate::bytes::to_usize(sector.saturating_mul(11)))
+            .unwrap_or_default(),
+    );
     let stored = u32_le(&data, crate::bytes::to_usize(sector.saturating_mul(11)));
     if stored.is_some_and(|s| s != computed) {
-        boot = boot.diag(Diagnostic::warning(format!("boot region checksum mismatch: computed {computed:#010x}")));
+        boot = boot.diag(Diagnostic::warning(format!(
+            "boot region checksum mismatch: computed {computed:#010x}"
+        )));
     }
     cx.emit(boot);
     cx.emit(Node::new("Extended boot sectors").span(vol.sub(sector, sector.saturating_mul(8))));
@@ -232,14 +279,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Boot checksum sector")
             .span(vol.sub(sector.saturating_mul(11), sector))
-            .value(Value::UInt { value: stored.unwrap_or(0).into(), bits: 32, radix: crate::value::Radix::Hex }),
+            .value(Value::UInt {
+                value: stored.unwrap_or(0).into(),
+                bits: 32,
+                radix: crate::value::Radix::Hex,
+            }),
     );
-    cx.emit(Node::new("Backup boot region").span(vol.sub(sector.saturating_mul(12), sector.saturating_mul(12))));
+    cx.emit(
+        Node::new("Backup boot region")
+            .span(vol.sub(sector.saturating_mul(12), sector.saturating_mul(12))),
+    );
     let fat = vol.sub(
         u64::from(bs.fat_offset).saturating_mul(sector),
         u64::from(bs.fat_length).saturating_mul(sector),
     );
-    cx.emit(Node::new("FAT").span(fat).summary(format!("{} entries", bs.cluster_count.saturating_add(2))));
+    cx.emit(
+        Node::new("FAT")
+            .span(fat)
+            .summary(format!("{} entries", bs.cluster_count.saturating_add(2))),
+    );
     let heap = vol.sub(
         u64::from(bs.heap_offset).saturating_mul(sector),
         u64::from(bs.cluster_count).saturating_mul(cluster),
@@ -259,14 +317,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         for e in raw.as_chunks::<32>().0 {
             if e.first() == Some(&0x83) {
                 let n = usize::from(e.get(1).copied().unwrap_or(0).min(11));
-                label = crate::text::utf16(e.get(2..2usize.saturating_add(n.saturating_mul(2))).unwrap_or_default(), LE);
+                label = crate::text::utf16(
+                    e.get(2..2usize.saturating_add(n.saturating_mul(2)))
+                        .unwrap_or_default(),
+                    LE,
+                );
                 break;
             }
         }
     }
     cx.annotate(format!(
         "exFAT filesystem{}, {}, {} clusters of {}",
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(bs.volume_length.saturating_mul(sector)),
         bs.cluster_count,
         size(cluster)
@@ -331,20 +397,31 @@ impl Entries {
 
 async fn directory(cx: Cx, dir: Dir) -> Result<()> {
     let fs = dir.vol.clone();
-    let (pieces, problem) = fs.chain(&cx, dir.first, dir.contiguous, dir.len.min(MAX_DIR_BYTES)).await?;
+    let (pieces, problem) = fs
+        .chain(&cx, dir.first, dir.contiguous, dir.len.min(MAX_DIR_BYTES))
+        .await?;
     if let Some(d) = problem.filter(|_| dir.len < MAX_DIR_BYTES) {
         cx.diag(d);
     }
     let mut ancestors = (*dir.ancestors).clone();
     ancestors.push(dir.first);
     let ancestors = Arc::new(ancestors);
-    let mut entries = Entries { pieces, piece: 0, data: Vec::new(), at: 0 };
+    let mut entries = Entries {
+        pieces,
+        piece: 0,
+        data: Vec::new(),
+        at: 0,
+    };
     while let Some((e, span)) = entries.next(&cx).await? {
         let kind = e[0];
         match kind {
             0x00 => break,
             0x81 | 0x82 => {
-                let name = if kind == 0x81 { "Allocation bitmap" } else { "Up-case table" };
+                let name = if kind == 0x81 {
+                    "Allocation bitmap"
+                } else {
+                    "Up-case table"
+                };
                 let first = u32_le(&e, 20).unwrap_or(0);
                 let len = u64_le(&e, 24).unwrap_or(0);
                 let (pieces, _) = fs.chain(&cx, first, false, len).await?;
@@ -357,16 +434,33 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             }
             0x83 => {
                 let n = usize::from(e[1].min(11));
-                let label = crate::text::utf16(e.get(2..2usize.saturating_add(n.saturating_mul(2))).unwrap_or_default(), LE);
-                cx.push(Node::new("Volume label").span(span).value(Value::Text(label))).await;
+                let label = crate::text::utf16(
+                    e.get(2..2usize.saturating_add(n.saturating_mul(2)))
+                        .unwrap_or_default(),
+                    LE,
+                );
+                cx.push(
+                    Node::new("Volume label")
+                        .span(span)
+                        .value(Value::Text(label)),
+                )
+                .await;
             }
-            0xa0 => cx.push(Node::new("Volume GUID").span(span).value(Value::Guid(crate::formats::disk::guid_le(e.get(6..22).unwrap_or_default())))).await,
+            0xa0 => {
+                cx.push(Node::new("Volume GUID").span(span).value(Value::Guid(
+                    crate::formats::disk::guid_le(e.get(6..22).unwrap_or_default()),
+                )))
+                .await
+            }
             0x85 => {
                 let set = file_set(&cx, &mut entries, e, span).await?;
                 cx.push(file_node(&fs, &ancestors, set)).await;
             }
             k if k & 0x80 == 0 => cx.checkpoint().await,
-            _ => cx.push(Node::new(format!("Entry {kind:#04x}")).span(span)).await,
+            _ => {
+                cx.push(Node::new(format!("Entry {kind:#04x}")).span(span))
+                    .await
+            }
         }
     }
     Ok(())
@@ -403,14 +497,23 @@ async fn file_set(cx: &Cx, it: &mut Entries, first: [u8; 32], span: Span) -> Res
     }
     let mut units: Vec<u16> = Vec::new();
     for _ in 0..secondary {
-        let Some((e, s)) = it.next(cx).await? else { break };
+        let Some((e, s)) = it.next(cx).await? else {
+            break;
+        };
         for &b in &e {
             checksum = checksum.rotate_right(1).wrapping_add(b.into());
         }
         set.entries.push(s);
         match e[0] {
             0xc0 => set.stream = Some(e),
-            0xc1 => units.extend(e.get(2..).unwrap_or_default().as_chunks::<2>().0.iter().map(|p| u16::from_le_bytes(*p))),
+            0xc1 => units.extend(
+                e.get(2..)
+                    .unwrap_or_default()
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|p| u16::from_le_bytes(*p)),
+            ),
             _ => {}
         }
     }
@@ -436,17 +539,26 @@ fn file_node(fs: &Vol, ancestors: &Arc<Vec<u32>>, set: FileSet) -> Node {
     let first = u32_le(&stream, 20).unwrap_or(0);
     let len = u64_le(&stream, 24).unwrap_or(0);
     let contiguous = stream[1] & 2 != 0;
-    let mut node = Node::new(if set.name.is_empty() { "(unnamed)".to_owned() } else { set.name.clone() }).span(set.span);
+    let mut node = Node::new(if set.name.is_empty() {
+        "(unnamed)".to_owned()
+    } else {
+        set.name.clone()
+    })
+    .span(set.span);
     if !set.checksum_ok {
         node = node.diag(Diagnostic::warning("entry set checksum mismatch"));
     }
     if set.stream.is_none() {
-        return node.diag(Diagnostic::malformed("file entry without a stream extension"));
+        return node.diag(Diagnostic::malformed(
+            "file entry without a stream extension",
+        ));
     }
     if set.attributes & 0x10 != 0 {
         node = node.summary(format!("directory, modified {when}"));
         if first == 0 || ancestors.contains(&first) || ancestors.len() > MAX_DEPTH {
-            return node.diag(Diagnostic::malformed(format!("directory refers back to cluster {first}; not followed")));
+            return node.diag(Diagnostic::malformed(format!(
+                "directory refers back to cluster {first}; not followed"
+            )));
         }
         return node.lazy(
             crate::expander!(self::directory_with_entries: (Dir, Arc<FileSet>)),
@@ -503,7 +615,9 @@ async fn file(cx: Cx, (fs, set): (Vol, Arc<FileSet>)) -> Result<()> {
         return Ok(());
     }
     if valid < len {
-        cx.diag(Diagnostic::note(format!("only the first {valid} bytes are valid data")));
+        cx.diag(Diagnostic::note(format!(
+            "only the first {valid} bytes are valid data"
+        )));
     }
     let (pieces, problem) = fs.chain(&cx, first, stream[1] & 2 != 0, len).await?;
     if let Some(d) = problem {

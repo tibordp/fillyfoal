@@ -37,7 +37,12 @@ fn probe(h: &Head<'_>) -> bool {
     u32_le(h.data, 64) == Some(SIGNATURE)
 }
 
-const TYPES: EnumTable = &[(1, "dynamic"), (2, "fixed"), (3, "undo"), (4, "differencing")];
+const TYPES: EnumTable = &[
+    (1, "dynamic"),
+    (2, "fixed"),
+    (3, "undo"),
+    (4, "differencing"),
+];
 
 record! {
     pub struct Header {
@@ -106,7 +111,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let image = Arc::new(Image {
         input,
-        map: file.sub_exact(h.blocks_offset.into(), u64::from(h.blocks).saturating_mul(4))?,
+        map: file.sub_exact(
+            h.blocks_offset.into(),
+            u64::from(h.blocks).saturating_mul(4),
+        )?,
         data: h.data_offset.into(),
         block,
         extra: h.block_extra.into(),
@@ -141,7 +149,11 @@ async fn block_map(cx: Cx, image: Arc<Image>) -> Result<()> {
             FREE => node.value(Value::Text("not allocated".to_owned())),
             ZERO => node.value(Value::Text("zero".to_owned())),
             n => node
-                .value(Value::UInt { value: n.into(), bits: 32, radix: crate::value::Radix::Dec })
+                .value(Value::UInt {
+                    value: n.into(),
+                    bits: 32,
+                    radix: crate::value::Radix::Dec,
+                })
                 .target(image.block_span(n)),
         };
         cx.push(node).await;

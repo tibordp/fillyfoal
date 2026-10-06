@@ -59,17 +59,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let header = body.sub(at, hsize);
         let content = body.sub(at.saturating_add(hsize), payload);
-        archs.push(format!("sm_{arch} {}", if kind == 1 { "PTX" } else { "SASS" }));
+        archs.push(format!(
+            "sm_{arch} {}",
+            if kind == 1 { "PTX" } else { "SASS" }
+        ));
         entries.push((header, content, kind, flags, arch));
         at = at.saturating_add(hsize).saturating_add(payload);
         cx.checkpoint().await;
     }
-    cx.annotate(format!("CUDA fat binary, {} entries: {}", entries.len(), archs.join(", ")));
+    cx.annotate(format!(
+        "CUDA fat binary, {} entries: {}",
+        entries.len(),
+        archs.join(", ")
+    ));
     for (header, content, kind, flags, arch) in entries {
-        let label = format!("{} sm_{arch}", crate::formats::binutil::name_or(KIND, kind.into(), "kind"));
+        let label = format!(
+            "{} sm_{arch}",
+            crate::formats::binutil::name_or(KIND, kind.into(), "kind")
+        );
         cx.emit(
             Node::new(label)
-                .span(Span::new(header.source, header.offset, content.end().saturating_sub(header.offset)))
+                .span(Span::new(
+                    header.source,
+                    header.offset,
+                    content.end().saturating_sub(header.offset),
+                ))
                 .summary(format!("{:#x} bytes", content.len))
                 .lazy(entry, (input, header, content, kind, flags)),
         );
@@ -77,7 +91,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn entry(cx: Cx, (input, header, content, kind, flags): (Input, Span, Span, u16, u64)) -> Result<()> {
+async fn entry(
+    cx: Cx,
+    (input, header, content, kind, flags): (Input, Span, Span, u16, u64),
+) -> Result<()> {
     let block = cx.block(header.sub(0, 64)).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u16("kind").enumeration(KIND).emit()?;
@@ -88,7 +105,9 @@ async fn entry(cx: Cx, (input, header, content, kind, flags): (Input, Span, Span
     f.u32("unknown").emit()?;
     f.u16("minor version").emit()?;
     f.u16("major version").emit()?;
-    f.u32("arch").with(|&v, n| n.summary(format!("sm_{v}"))).emit()?;
+    f.u32("arch")
+        .with(|&v, n| n.summary(format!("sm_{v}")))
+        .emit()?;
     f.u32("name offset").hex().emit()?;
     f.u32("name length").emit()?;
     f.u64("flags").flags(FLAGS).emit()?;
@@ -98,7 +117,9 @@ async fn entry(cx: Cx, (input, header, content, kind, flags): (Input, Span, Span
         data_node("Compressed payload", content, content.len)
     } else if kind == 1 {
         let ptx = cx.read_avail(content.sub(0, 0x10_0000)).await?;
-        Node::new("PTX").span(content).value(text(crate::text::until_nul(&ptx)))
+        Node::new("PTX")
+            .span(content)
+            .value(text(crate::text::until_nul(&ptx)))
     } else {
         embedded("Cubin", input.nested(content))
     };

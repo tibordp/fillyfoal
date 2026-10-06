@@ -149,7 +149,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (i, &(offset, len)) in data_areas.iter().enumerate() {
         cx.emit(
             Node::new(format!("Data area {}", i.saturating_add(1)))
-                .span(pv.sub(offset, if len == 0 { pv.len.saturating_sub(offset) } else { len }))
+                .span(pv.sub(
+                    offset,
+                    if len == 0 {
+                        pv.len.saturating_sub(offset)
+                    } else {
+                        len
+                    },
+                ))
                 .summary(format!("physical extents from {offset:#x}")),
         );
     }
@@ -161,7 +168,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mda = parse(&cx, mda_span, LE, &(), MdaHeader::layout).await?;
         let name = format!("Metadata area {}", i.saturating_add(1));
         if mda.magic != MDA_MAGIC {
-            cx.emit(Node::new(name).span(area).diag(Diagnostic::malformed("bad metadata area magic")));
+            cx.emit(
+                Node::new(name)
+                    .span(area)
+                    .diag(Diagnostic::malformed("bad metadata area magic")),
+            );
             continue;
         }
         let loc_span = area.sub(MdaHeader::SIZE, RawLocation::SIZE);
@@ -182,7 +193,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let uuid = dashed(&header.uuid);
     let Some(config) = vg else {
-        cx.annotate(format!("LVM2 physical volume {uuid}, {}", size(header.device_size)));
+        cx.annotate(format!(
+            "LVM2 physical volume {uuid}, {}",
+            size(header.device_size)
+        ));
         return Ok(());
     };
     let Some((vg_name, Val::Section(vg_items))) = config.first() else {
@@ -194,16 +208,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     let extent = get(vg_items, "extent_size").and_then(Val::int).unwrap_or(0);
     // Which PV name in the metadata is this device, and where its extents start.
-    let pvs = get(vg_items, "physical_volumes").map(Val::items).unwrap_or_default();
+    let pvs = get(vg_items, "physical_volumes")
+        .map(Val::items)
+        .unwrap_or_default();
     let this = pvs.iter().find(|(_, v)| {
-        get(v.items(), "id").and_then(Val::str).is_some_and(|id| id == uuid)
+        get(v.items(), "id")
+            .and_then(Val::str)
+            .is_some_and(|id| id == uuid)
     });
     let Some((pv_name, pv_val)) = this else {
-        cx.diag(Diagnostic::warning("this PV is not listed in its volume group"));
+        cx.diag(Diagnostic::warning(
+            "this PV is not listed in its volume group",
+        ));
         return Ok(());
     };
-    let pe_start = get(pv_val.items(), "pe_start").and_then(Val::int).unwrap_or(0);
-    let lvs = get(vg_items, "logical_volumes").map(Val::items).unwrap_or_default();
+    let pe_start = get(pv_val.items(), "pe_start")
+        .and_then(Val::int)
+        .unwrap_or(0);
+    let lvs = get(vg_items, "logical_volumes")
+        .map(Val::items)
+        .unwrap_or_default();
     for (lv_name, lv) in lvs {
         cx.checkpoint().await;
         let node = logical_volume(&cx, &input, lv_name, lv, pv_name, pe_start, extent);
@@ -279,7 +303,11 @@ fn logical_volume(
 
 async fn metadata_area(cx: Cx, (area, text): (Span, Span)) -> Result<()> {
     cx.emit(MdaHeader::node("Header", area.sub(0, MdaHeader::SIZE), LE));
-    cx.emit(RawLocation::node("Raw location", area.sub(MdaHeader::SIZE, RawLocation::SIZE), LE));
+    cx.emit(RawLocation::node(
+        "Raw location",
+        area.sub(MdaHeader::SIZE, RawLocation::SIZE),
+        LE,
+    ));
     let data = cx.read_avail(text).await?;
     let content = crate::text::until_nul(&data);
     cx.emit(

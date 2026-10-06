@@ -97,15 +97,35 @@ async fn wmf(cx: Cx, input: Input) -> Result<()> {
     let mut size = String::new();
     if cx.read(file.sub(0, 4)).await? == b"\xd7\xcd\xc6\x9a" {
         let p: WmfPlaceable = read_record(&cx, file.sub(0, WmfPlaceable::SIZE), LE).await?;
-        cx.emit(WmfPlaceable::node("Placeable header", file.sub(0, WmfPlaceable::SIZE), LE));
-        size = format!(", {}×{} units at {}/inch", i32::from(p.right).saturating_sub(p.left.into()), i32::from(p.bottom).saturating_sub(p.top.into()), p.inch);
+        cx.emit(WmfPlaceable::node(
+            "Placeable header",
+            file.sub(0, WmfPlaceable::SIZE),
+            LE,
+        ));
+        size = format!(
+            ", {}×{} units at {}/inch",
+            i32::from(p.right).saturating_sub(p.left.into()),
+            i32::from(p.bottom).saturating_sub(p.top.into()),
+            p.inch
+        );
         at = WmfPlaceable::SIZE;
     }
     let h: WmfHeader = read_record(&cx, file.sub(at, WmfHeader::SIZE), LE).await?;
-    cx.emit(WmfHeader::node("Metafile header", file.sub(at, WmfHeader::SIZE), LE));
+    cx.emit(WmfHeader::node(
+        "Metafile header",
+        file.sub(at, WmfHeader::SIZE),
+        LE,
+    ));
     let records = file.tail(at.saturating_add(WmfHeader::SIZE));
-    cx.emit(Node::new("Records").span(records).lazy(wmf_records, records));
-    cx.annotate(format!("WMF v{:#x}, {} objects{size}", h.version, h.objects));
+    cx.emit(
+        Node::new("Records")
+            .span(records)
+            .lazy(wmf_records, records),
+    );
+    cx.annotate(format!(
+        "WMF v{:#x}, {} objects{size}",
+        h.version, h.objects
+    ));
     Ok(())
 }
 
@@ -120,7 +140,8 @@ async fn wmf_records(cx: Cx, span: Span) -> Result<()> {
             break;
         }
         cur.seek(start.saturating_add(u64::from(words).saturating_mul(2)));
-        let name = lookup(WMF_RECORDS, function.into()).map_or_else(|| format!("{function:#06x}"), str::to_owned);
+        let name = lookup(WMF_RECORDS, function.into())
+            .map_or_else(|| format!("{function:#06x}"), str::to_owned);
         cx.push(Node::new(name).span(cur.since(start))).await;
         if function == 0 {
             break;
@@ -206,18 +227,38 @@ async fn emf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(EmfHeader::node("Header", file.sub(0, h.size.into()), LE));
     let mut description = String::new();
     if h.description_len > 0 {
-        let span = file.sub(h.description_offset.into(), u64::from(h.description_len).saturating_mul(2));
+        let span = file.sub(
+            h.description_offset.into(),
+            u64::from(h.description_len).saturating_mul(2),
+        );
         let text = crate::text::utf16(&cx.read_avail(span).await?, LE);
-        description = text.split('\0').filter(|s| !s.is_empty()).collect::<Vec<_>>().join(" / ");
-        cx.emit(Node::new("Description").span(span).value(Value::Text(description.clone())));
+        description = text
+            .split('\0')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" / ");
+        cx.emit(
+            Node::new("Description")
+                .span(span)
+                .value(Value::Text(description.clone())),
+        );
     }
     let records = file.tail(h.size.into());
-    cx.emit(Node::new("Records").span(records).summary(format!("{} records", h.records)).lazy(emf_records, records));
+    cx.emit(
+        Node::new("Records")
+            .span(records)
+            .summary(format!("{} records", h.records))
+            .lazy(emf_records, records),
+    );
     cx.annotate(format!(
         "EMF, {}×{} (0.01 mm){}",
         h.frame_right.saturating_sub(h.frame_left),
         h.frame_bottom.saturating_sub(h.frame_top),
-        if description.is_empty() { String::new() } else { format!(", {description}") }
+        if description.is_empty() {
+            String::new()
+        } else {
+            format!(", {description}")
+        }
     ));
     Ok(())
 }
@@ -233,7 +274,8 @@ async fn emf_records(cx: Cx, span: Span) -> Result<()> {
             break;
         }
         cur.seek(start.saturating_add(size.into()));
-        let name = lookup(EMF_RECORDS, kind.into()).map_or_else(|| format!("record {kind}"), str::to_owned);
+        let name = lookup(EMF_RECORDS, kind.into())
+            .map_or_else(|| format!("record {kind}"), str::to_owned);
         cx.push(Node::new(name).span(cur.since(start))).await;
         if kind == 14 {
             break;
@@ -275,12 +317,30 @@ async fn dpx(cx: Cx, input: Input) -> Result<()> {
         f.u32("Pixels per line").emit()?;
         f.u32("Lines per element").emit()?;
     }
-    let width = if big { u32_be(&head.data, 772) } else { u32_le(&head.data, 772) }.unwrap_or(0);
-    let height = if big { u32_be(&head.data, 776) } else { u32_le(&head.data, 776) }.unwrap_or(0);
+    let width = if big {
+        u32_be(&head.data, 772)
+    } else {
+        u32_le(&head.data, 772)
+    }
+    .unwrap_or(0);
+    let height = if big {
+        u32_be(&head.data, 776)
+    } else {
+        u32_le(&head.data, 776)
+    }
+    .unwrap_or(0);
     let depth = head.data.get(803).copied().unwrap_or(0);
-    let offset = if big { u32_be(&head.data, 4) } else { u32_le(&head.data, 4) }.unwrap_or(0);
+    let offset = if big {
+        u32_be(&head.data, 4)
+    } else {
+        u32_le(&head.data, 4)
+    }
+    .unwrap_or(0);
     cx.emit(Node::new("Image data").span(file.tail(offset.into())));
-    cx.annotate(format!("{width}×{height}, {depth}-bit, {} endian", if big { "big" } else { "little" }));
+    cx.annotate(format!(
+        "{width}×{height}, {depth}-bit, {} endian",
+        if big { "big" } else { "little" }
+    ));
     Ok(())
 }
 
@@ -308,9 +368,18 @@ async fn cineon(cx: Cx, input: Input) -> Result<()> {
     let endian = if big { BE } else { LE };
     let h: CineonHeader = emit_record(&cx, file.sub(0, CineonHeader::SIZE), endian).await?;
     let dims = cx.read_avail(file.sub(200, 8)).await?;
-    let (w, hgt) = if big { (u32_be(&dims, 0), u32_be(&dims, 4)) } else { (u32_le(&dims, 0), u32_le(&dims, 4)) };
+    let (w, hgt) = if big {
+        (u32_be(&dims, 0), u32_be(&dims, 4))
+    } else {
+        (u32_le(&dims, 0), u32_le(&dims, 4))
+    };
     cx.emit(Node::new("Image data").span(file.tail(h.image_offset.into())));
-    cx.annotate(format!("Cineon {}, {}×{}", h.version.trim(), w.unwrap_or(0), hgt.unwrap_or(0)));
+    cx.annotate(format!(
+        "Cineon {}, {}×{}",
+        h.version.trim(),
+        w.unwrap_or(0),
+        hgt.unwrap_or(0)
+    ));
     Ok(())
 }
 
@@ -365,7 +434,10 @@ async fn vtf(cx: Cx, input: Input) -> Result<()> {
     let h: VtfHeader = emit_record(&cx, input.span.sub(0, VtfHeader::SIZE), LE).await?;
     cx.emit(Node::new("Image data").span(input.span.tail(h.header_size.into())));
     let format = lookup(VTF_FORMATS, h.format.into()).unwrap_or("unknown format");
-    cx.annotate(format!("VTF {}.{}, {}×{}, {format}, {} mipmaps", h.major, h.minor, h.width, h.height, h.mipmaps));
+    cx.annotate(format!(
+        "VTF {}.{}, {}×{}, {format}, {} mipmaps",
+        h.major, h.minor, h.width, h.height, h.mipmaps
+    ));
     Ok(())
 }
 
@@ -410,8 +482,12 @@ async fn pvr(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Metadata").span(input.span.sub(PvrHeader::SIZE, h.metadata.into())));
     }
     cx.emit(Node::new("Texture data").span(input.span.tail(data)));
-    let format = lookup(PVR_FORMATS, h.pixel_format).map_or_else(|| format!("format {:#x}", h.pixel_format), str::to_owned);
-    cx.annotate(format!("{}×{}, {format}, {} mipmaps", h.width, h.height, h.mipmaps));
+    let format = lookup(PVR_FORMATS, h.pixel_format)
+        .map_or_else(|| format!("format {:#x}", h.pixel_format), str::to_owned);
+    cx.annotate(format!(
+        "{}×{}, {format}, {} mipmaps",
+        h.width, h.height, h.mipmaps
+    ));
     Ok(())
 }
 
@@ -426,12 +502,23 @@ async fn astc(cx: Cx, input: Input) -> Result<()> {
     let bx = f.u8("Block width").emit()?;
     let by = f.u8("Block height").emit()?;
     let bz = f.u8("Block depth").emit()?;
-    let dim = |d: &[u8]| u32::from_le_bytes([d.first().copied().unwrap_or(0), d.get(1).copied().unwrap_or(0), d.get(2).copied().unwrap_or(0), 0]);
+    let dim = |d: &[u8]| {
+        u32::from_le_bytes([
+            d.first().copied().unwrap_or(0),
+            d.get(1).copied().unwrap_or(0),
+            d.get(2).copied().unwrap_or(0),
+            0,
+        ])
+    };
     let w = dim(h.data.get(7..10).unwrap_or_default());
     let hh = dim(h.data.get(10..13).unwrap_or_default());
     let d = dim(h.data.get(13..16).unwrap_or_default());
     for (name, value, at) in [("Width", w, 7u64), ("Height", hh, 10), ("Depth", d, 13)] {
-        cx.emit(Node::new(name).span(file.sub(at, 3)).value(Value::UInt { value: value.into(), bits: 24, radix: Radix::Dec }));
+        cx.emit(Node::new(name).span(file.sub(at, 3)).value(Value::UInt {
+            value: value.into(),
+            bits: 24,
+            radix: Radix::Dec,
+        }));
     }
     cx.emit(Node::new("Blocks").span(file.tail(16)));
     cx.annotate(format!("{w}×{hh}×{d}, {bx}×{by}×{bz} blocks"));
@@ -496,11 +583,18 @@ async fn ase(cx: Cx, input: Input) -> Result<()> {
         if kind == 0x0001 || kind == 0xc001 {
             let data = cx.read_avail(body).await?;
             let units = usize::from(u16_be(&data, 0).unwrap_or(0));
-            let name_bytes = data.get(2..2usize.saturating_add(units.saturating_mul(2))).unwrap_or_default();
+            let name_bytes = data
+                .get(2..2usize.saturating_add(units.saturating_mul(2)))
+                .unwrap_or_default();
             let name = crate::text::utf16z(name_bytes, BE).0;
             if kind == 0x0001 {
                 colors = colors.saturating_add(1);
-                let model = String::from_utf8_lossy(data.get(2usize.saturating_add(units.saturating_mul(2))..).and_then(|r| r.get(..4)).unwrap_or_default()).into_owned();
+                let model = String::from_utf8_lossy(
+                    data.get(2usize.saturating_add(units.saturating_mul(2))..)
+                        .and_then(|r| r.get(..4))
+                        .unwrap_or_default(),
+                )
+                .into_owned();
                 node = node.summary(format!("{name} ({})", model.trim()));
             } else {
                 node = node.summary(name);
@@ -515,7 +609,8 @@ async fn ase(cx: Cx, input: Input) -> Result<()> {
 fn aco_probe(h: &Head<'_>) -> bool {
     // Version 1 or 2, then a plausible count, then colour space ids.
     u16_be(h.data, 0).is_some_and(|v| v == 1 || v == 2)
-        && u16_be(h.data, 2).is_some_and(|n| n > 0 && u64::from(n).saturating_mul(10).saturating_add(4) <= h.len)
+        && u16_be(h.data, 2)
+            .is_some_and(|n| n > 0 && u64::from(n).saturating_mul(10).saturating_add(4) <= h.len)
         && u16_be(h.data, 4).is_some_and(|space| matches!(space, 0..=2 | 7..=9))
         && h.len.saturating_sub(4).is_multiple_of(10)
 }
@@ -523,14 +618,25 @@ fn aco_probe(h: &Head<'_>) -> bool {
 declare_format!(pub ACO = "aco", "Adobe Photoshop colour swatches", ["aco"], "application/x-adobe-color-swatches",
     Probe::Custom(aco_probe), aco);
 
-const ACO_SPACES: EnumTable = &[(0, "RGB"), (1, "HSB"), (2, "CMYK"), (7, "Lab"), (8, "Grayscale"), (9, "Wide CMYK")];
+const ACO_SPACES: EnumTable = &[
+    (0, "RGB"),
+    (1, "HSB"),
+    (2, "CMYK"),
+    (7, "Lab"),
+    (8, "Grayscale"),
+    (9, "Wide CMYK"),
+];
 
 async fn aco(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, BE);
     let version = cur.u16().await?;
     let count = cur.u16().await?;
-    cx.emit(Node::new("Header").span(file.sub(0, 4)).summary(format!("version {version}, {count} colours")));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, 4))
+            .summary(format!("version {version}, {count} colours")),
+    );
     for i in 0..count {
         let start = cur.pos();
         let space = cur.u16().await?;
@@ -539,7 +645,12 @@ async fn aco(cx: Cx, input: Input) -> Result<()> {
         let c = cur.u16().await?;
         let _d = cur.u16().await?;
         let space_name = lookup(ACO_SPACES, space.into()).unwrap_or("unknown");
-        cx.push(Node::new(format!("Colour {i}")).span(cur.since(start)).summary(format!("{space_name} {} {} {}", a >> 8, b >> 8, c >> 8))).await;
+        cx.push(
+            Node::new(format!("Colour {i}"))
+                .span(cur.since(start))
+                .summary(format!("{space_name} {} {} {}", a >> 8, b >> 8, c >> 8)),
+        )
+        .await;
     }
     cx.annotate(format!("{count} colours"));
     Ok(())
@@ -579,7 +690,11 @@ async fn gimp_brush(cx: Cx, input: Input) -> Result<()> {
         (cx.read_avail(rest).await?, rest)
     };
     let name = crate::text::until_nul(&name);
-    cx.emit(Node::new("Name").span(name_span).value(Value::Text(name.clone())));
+    cx.emit(
+        Node::new("Name")
+            .span(name_span)
+            .value(Value::Text(name.clone())),
+    );
     cx.emit(Node::new("Pixels").span(file.tail(header.into())));
     cx.annotate(format!("{name:?}, {w}×{h}, {bytes} byte(s) per pixel"));
     Ok(())
@@ -635,15 +750,26 @@ async fn bpg(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 32)).await?;
     let b4 = head.get(4).copied().unwrap_or(0);
-    let format = ["grayscale", "4:2:0", "4:2:2", "4:4:4", "4:2:0 (MPEG2)", "4:2:2 (MPEG2)"]
-        .get(usize::from(b4 >> 5))
-        .copied()
-        .unwrap_or("unknown");
+    let format = [
+        "grayscale",
+        "4:2:0",
+        "4:2:2",
+        "4:4:4",
+        "4:2:0 (MPEG2)",
+        "4:2:2 (MPEG2)",
+    ]
+    .get(usize::from(b4 >> 5))
+    .copied()
+    .unwrap_or("unknown");
     let depth = (b4 & 0x0f).saturating_add(8);
     let mut at = 6usize;
     let width = ue7(&head, &mut at);
     let height = ue7(&head, &mut at);
-    cx.emit(Node::new("Header").span(file.sub(0, crate::bytes::to_u64(at))).summary(format!("{format}, {depth}-bit, alpha: {}", b4 & 0x10 != 0)));
+    cx.emit(
+        Node::new("Header")
+            .span(file.sub(0, crate::bytes::to_u64(at)))
+            .summary(format!("{format}, {depth}-bit, alpha: {}", b4 & 0x10 != 0)),
+    );
     cx.emit(Node::new("HEVC data").span(file.tail(crate::bytes::to_u64(at))));
     cx.annotate(format!("{width}×{height}, {format}, {depth}-bit"));
     Ok(())
@@ -728,7 +854,12 @@ async fn jxr(cx: Cx, input: Input) -> Result<()> {
             0x02bc => "XMP metadata",
             _ => "Tag",
         };
-        cx.push(Node::new(format!("{name} ({tag:#06x})")).span(cur.since(start)).summary(format!("type {kind}, count {n}, value {value:#x}"))).await;
+        cx.push(
+            Node::new(format!("{name} ({tag:#06x})"))
+                .span(cur.since(start))
+                .summary(format!("type {kind}, count {n}, value {value:#x}")),
+        )
+        .await;
     }
     cx.annotate(format!("{width}×{height}"));
     Ok(())

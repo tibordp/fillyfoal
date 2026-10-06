@@ -181,7 +181,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Node::new(name)
                 .span(span)
                 .summary(format!("{} attributes", attrs.len()))
-                .lazy(header, attrs.iter().map(|(_, _, a)| a.span).collect::<Vec<_>>()),
+                .lazy(
+                    header,
+                    attrs.iter().map(|(_, _, a)| a.span).collect::<Vec<_>>(),
+                ),
         );
         parts.push(summary);
         if !multipart {
@@ -199,7 +202,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         description.push(dims(w, h));
     }
     if let Some(c) = first.compression {
-        description.push(lookup(COMPRESSION, c.into()).unwrap_or("unknown compression").to_owned());
+        description.push(
+            lookup(COMPRESSION, c.into())
+                .unwrap_or("unknown compression")
+                .to_owned(),
+        );
     }
     if !first.channels.is_empty() {
         description.push(format!("channels {}", first.channels.join(",")));
@@ -221,11 +228,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if part.tiled {
                 return None;
             }
-            let lines = u64::try_from(i64::from(y1).saturating_sub(y0.into()).saturating_add(1)).ok()?;
+            let lines =
+                u64::try_from(i64::from(y1).saturating_sub(y0.into()).saturating_add(1)).ok()?;
             Some(lines.div_ceil(lines_per_chunk(part.compression.unwrap_or(0))))
         });
         let Some(count) = count else {
-            cx.emit(region("Offset tables and chunks", file, pos, file.len.saturating_sub(pos)));
+            cx.emit(region(
+                "Offset tables and chunks",
+                file,
+                pos,
+                file.len.saturating_sub(pos),
+            ));
             return Ok(());
         };
         let table = file.sub(pos, count.saturating_mul(8));
@@ -302,7 +315,13 @@ async fn describe(cx: &Cx, kind: &str, span: Span) -> (Option<Value>, Option<Str
         })
     };
     match kind {
-        "int" => (i32_le(&v, 0).map(|x| Value::Int { value: x.into(), bits: 32 }), None),
+        "int" => (
+            i32_le(&v, 0).map(|x| Value::Int {
+                value: x.into(),
+                bits: 32,
+            }),
+            None,
+        ),
         "float" => (f32_at(0).map(|x| Value::Float(x.into())), None),
         "double" => (
             crate::bytes::array::<8>(&v, 0).map(|b| Value::Float(f64::from_le_bytes(b))),
@@ -320,7 +339,10 @@ async fn describe(cx: &Cx, kind: &str, span: Span) -> (Option<Value>, Option<Str
             };
             let w = i64::from(c).saturating_sub(a.into()).saturating_add(1);
             let h = i64::from(d).saturating_sub(b.into()).saturating_add(1);
-            (None, Some(format!("({a}, {b}) – ({c}, {d}), {}", dims(w, h))))
+            (
+                None,
+                Some(format!("({a}, {b}) – ({c}, {d}), {}", dims(w, h))),
+            )
         }
         "v2f" | "v3f" | "box2f" | "chromaticities" | "m33f" | "m44f" => {
             let n = v.len() / 4;
@@ -371,8 +393,12 @@ async fn attribute(cx: Cx, (span, kind): (Span, String)) -> Result<()> {
             let (channel, _) = c.cstr(256).await?;
             let rest = c.bytes(16).await?;
             let pixel = i32_le(&rest, 0).unwrap_or(0);
-            let (xs, ys) = (i32_le(&rest, 8).unwrap_or(0), i32_le(&rest, 12).unwrap_or(0));
-            let pixel_name = lookup(PIXEL_TYPES, u64::try_from(pixel).unwrap_or(u64::MAX)).unwrap_or("?");
+            let (xs, ys) = (
+                i32_le(&rest, 8).unwrap_or(0),
+                i32_le(&rest, 12).unwrap_or(0),
+            );
+            let pixel_name =
+                lookup(PIXEL_TYPES, u64::try_from(pixel).unwrap_or(u64::MAX)).unwrap_or("?");
             cx.emit(
                 Node::new(format!("Channel {channel}"))
                     .span(c.since(start))

@@ -147,7 +147,11 @@ impl Exec {
 fn header(f: &mut Fields<'_>, flavor: &Flavor) -> Result<Exec> {
     let span = f.peek_span(4);
     let raw = f
-        .u32(if *flavor == Flavor::Linux { "a_info" } else { "a_midmag" })
+        .u32(if *flavor == Flavor::Linux {
+            "a_info"
+        } else {
+            "a_midmag"
+        })
         .hex()
         .emit()?;
     let magic = raw & 0xffff;
@@ -175,11 +179,23 @@ fn header(f: &mut Fields<'_>, flavor: &Flavor) -> Result<Exec> {
     );
     let text = f.u32("a_text").hex().desc("Text segment size").emit()?;
     let data = f.u32("a_data").hex().desc("Initialized data size").emit()?;
-    let bss = f.u32("a_bss").hex().desc("Uninitialized data size").emit()?;
+    let bss = f
+        .u32("a_bss")
+        .hex()
+        .desc("Uninitialized data size")
+        .emit()?;
     let syms = f.u32("a_syms").hex().desc("Symbol table size").emit()?;
     let entry = f.u32("a_entry").hex().desc("Entry point").emit()?;
-    let trsize = f.u32("a_trsize").hex().desc("Text relocation size").emit()?;
-    let drsize = f.u32("a_drsize").hex().desc("Data relocation size").emit()?;
+    let trsize = f
+        .u32("a_trsize")
+        .hex()
+        .desc("Text relocation size")
+        .emit()?;
+    let drsize = f
+        .u32("a_drsize")
+        .hex()
+        .desc("Data relocation size")
+        .emit()?;
     Ok(Exec {
         magic,
         machine,
@@ -238,7 +254,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         "a.out {}, {}, {}, text {:#x}, data {:#x}, bss {:#x}, entry {:#x}{}",
         name_or(MAGIC, x.magic.into(), "magic"),
         name_or(MACHINE, x.machine.into(), "machine"),
-        if flavor == Flavor::Linux { "little-endian" } else { "big-endian" },
+        if flavor == Flavor::Linux {
+            "little-endian"
+        } else {
+            "big-endian"
+        },
         x.text,
         x.data,
         x.bss,
@@ -376,7 +396,10 @@ fn plan9_probe(h: &Head<'_>) -> bool {
         .iter()
         .filter_map(|&i| words.get(i.saturating_sub(1)))
         .fold(header as u64, |acc, &v| acc.saturating_add(v));
-    plan9_machine(magic).is_some() && words.len() == 7 && sizes <= h.len && words.first().is_some_and(|&t| t > 0)
+    plan9_machine(magic).is_some()
+        && words.len() == 7
+        && sizes <= h.len
+        && words.first().is_some_and(|&t| t > 0)
 }
 
 fn plan9_header(f: &mut Fields<'_>, _: &()) -> Result<[u32; 8]> {
@@ -426,7 +449,11 @@ pub async fn plan9(cx: Cx, input: Input) -> Result<()> {
     }
     at = at.saturating_add(syms.into());
     if pcsz > 0 {
-        cx.emit(data_node("PC/Line Table", file.sub(at, pcsz.into()), pcsz.into()));
+        cx.emit(data_node(
+            "PC/Line Table",
+            file.sub(at, pcsz.into()),
+            pcsz.into(),
+        ));
     }
     Ok(())
 }

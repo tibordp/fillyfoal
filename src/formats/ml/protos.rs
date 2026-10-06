@@ -35,7 +35,9 @@ fn delimited_at(d: &[u8], at: usize, tag: u8) -> Option<(usize, usize)> {
 }
 
 fn is_identifier(s: &[u8]) -> bool {
-    !s.is_empty() && s.iter().all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-' | b'/' | b':'))
+    !s.is_empty()
+        && s.iter()
+            .all(|&b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-' | b'/' | b':'))
 }
 
 fn is_label(s: &[u8]) -> bool {
@@ -106,7 +108,11 @@ static ONNX_OPSET: Msg = Msg {
 
 static ONNX_DIM: Msg = Msg {
     name: "Dimension",
-    fields: &[f(1, "dim_value", Ty::Int), f(2, "dim_param", Ty::Str), f(3, "denotation", Ty::Str)],
+    fields: &[
+        f(1, "dim_value", Ty::Int),
+        f(2, "dim_param", Ty::Str),
+        f(3, "denotation", Ty::Str),
+    ],
     title: &[1, 2],
 };
 
@@ -118,7 +124,10 @@ static ONNX_SHAPE: Msg = Msg {
 
 static ONNX_TENSOR_TYPE: Msg = Msg {
     name: "TypeProto.Tensor",
-    fields: &[f(1, "elem_type", Ty::Enum(ONNX_TYPE)), f(2, "shape", Ty::Msg(&ONNX_SHAPE))],
+    fields: &[
+        f(1, "elem_type", Ty::Enum(ONNX_TYPE)),
+        f(2, "shape", Ty::Msg(&ONNX_SHAPE)),
+    ],
     title: &[1],
 };
 
@@ -137,7 +146,11 @@ static ONNX_TYPE_PROTO: Msg = Msg {
 
 static ONNX_VALUE_INFO: Msg = Msg {
     name: "ValueInfoProto",
-    fields: &[f(1, "name", Ty::Str), f(2, "type", Ty::Msg(&ONNX_TYPE_PROTO)), f(3, "doc_string", Ty::Str)],
+    fields: &[
+        f(1, "name", Ty::Str),
+        f(2, "type", Ty::Msg(&ONNX_TYPE_PROTO)),
+        f(3, "doc_string", Ty::Str),
+    ],
     title: &[1],
 };
 
@@ -157,7 +170,11 @@ static ONNX_TENSOR: Msg = Msg {
         f(11, "uint64_data", Ty::Packed(Elem::Varint)),
         f(12, "doc_string", Ty::Str),
         f(13, "external_data", Ty::Msg(&ONNX_ENTRY)),
-        f(14, "data_location", Ty::Enum(&[(0, "DEFAULT"), (1, "EXTERNAL")])),
+        f(
+            14,
+            "data_location",
+            Ty::Enum(&[(0, "DEFAULT"), (1, "EXTERNAL")]),
+        ),
     ],
     title: &[8, 2],
 };
@@ -248,13 +265,18 @@ fn onnx_probe(h: &Head<'_>) -> bool {
         let next = body.saturating_add(len);
         return (1..=64).contains(&len)
             && is_label(name)
-            && matches!(d.get(next), Some(0x1a | 0x22 | 0x28 | 0x32 | 0x3a | 0x42 | 0x72) | None);
+            && matches!(
+                d.get(next),
+                Some(0x1a | 0x22 | 0x28 | 0x32 | 0x3a | 0x42 | 0x72) | None
+            );
     }
     // No producer: the graph follows, starting with a node or its name.
     delimited_at(d, at, 0x3a).is_some_and(|(body, len)| {
         to_u64(body.saturating_add(len)) <= h.len
             && d.get(body).is_some_and(|&b| b == 0x0a || b == 0x12)
-            && delimited_at(d, body, 0x0a).or_else(|| delimited_at(d, body, 0x12)).is_some()
+            && delimited_at(d, body, 0x0a)
+                .or_else(|| delimited_at(d, body, 0x12))
+                .is_some()
     })
 }
 
@@ -271,11 +293,20 @@ async fn onnx(cx: Cx, input: Input) -> Result<()> {
     let producer = small_string(&cx, file, &top, 2).await?;
     let producer_version = small_string(&cx, file, &top, 3).await?;
     if let Some(p) = producer {
-        parts.push(format!("from {p} {}", producer_version.unwrap_or_default()).trim_end().to_owned());
+        parts.push(
+            format!("from {p} {}", producer_version.unwrap_or_default())
+                .trim_end()
+                .to_owned(),
+        );
     }
-    for r in top.iter().filter(|r| r.num == 8 && r.wire == 2 && r.len <= 256) {
+    for r in top
+        .iter()
+        .filter(|r| r.num == 8 && r.wire == 2 && r.len <= 256)
+    {
         let data = cx.read(file.sub(r.at, r.len)).await?;
-        let domain = string_in(&data, 1).filter(|d| !d.is_empty()).unwrap_or_else(|| "ai.onnx".to_owned());
+        let domain = string_in(&data, 1)
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| "ai.onnx".to_owned());
         if let Some(v) = varint_in(&data, 2) {
             parts.push(format!("opset {domain} {v}"));
         }
@@ -294,7 +325,10 @@ async fn onnx(cx: Cx, input: Input) -> Result<()> {
 
 /// The value of a short string field `num` among top-level fields.
 async fn small_string(cx: &Cx, file: Span, top: &[proto::Raw], num: u64) -> Result<Option<String>> {
-    match top.iter().find(|r| r.num == num && r.wire == 2 && r.len <= 1024) {
+    match top
+        .iter()
+        .find(|r| r.num == num && r.wire == 2 && r.len <= 1024)
+    {
         Some(r) => {
             let data = cx.read(file.sub(r.at, r.len)).await?;
             Ok(Some(String::from_utf8_lossy(&data).into_owned()))
@@ -334,7 +368,10 @@ static COREML_IMAGE: Msg = Msg {
 
 static COREML_MULTIARRAY: Msg = Msg {
     name: "ArrayFeatureType",
-    fields: &[f(1, "shape", Ty::Packed(Elem::Varint)), f(2, "dataType", Ty::Enum(COREML_ARRAY))],
+    fields: &[
+        f(1, "shape", Ty::Packed(Elem::Varint)),
+        f(2, "dataType", Ty::Enum(COREML_ARRAY)),
+    ],
     title: &[2],
 };
 
@@ -407,7 +444,10 @@ static COREML_LAYER: Msg = Msg {
 
 static COREML_NN: Msg = Msg {
     name: "NeuralNetwork",
-    fields: &[f(1, "layers", Ty::Msg(&COREML_LAYER)), f(2, "preprocessing", Ty::Msg(&proto::UNKNOWN))],
+    fields: &[
+        f(1, "layers", Ty::Msg(&COREML_LAYER)),
+        f(2, "preprocessing", Ty::Msg(&proto::UNKNOWN)),
+    ],
     title: &[],
 };
 
@@ -480,7 +520,9 @@ fn coreml_probe(h: &Head<'_>) -> bool {
             to_u64(body.saturating_add(len)) <= h.len
                 && delimited_at(d, body, 0x0a).is_some_and(|(feature, _)| {
                     delimited_at(d, feature, 0x0a).is_some_and(|(name, n)| {
-                        name.checked_add(n).and_then(|e| d.get(name..e)).is_some_and(is_label)
+                        name.checked_add(n)
+                            .and_then(|e| d.get(name..e))
+                            .is_some_and(is_label)
                     })
                 })
         })
@@ -492,13 +534,24 @@ declare_format!(pub COREML = "coreml", "Core ML model specification", ["mlmodel"
 async fn coreml(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let top = proto::scan(&cx, file, 4096).await?;
-    let version = top.iter().find(|r| r.num == 1 && r.wire == 0).map_or(0, |r| r.value);
+    let version = top
+        .iter()
+        .find(|r| r.num == 1 && r.wire == 0)
+        .map_or(0, |r| r.value);
     let kind = top
         .iter()
-        .find_map(|r| COREML_KINDS.iter().find(|(n, _)| *n == r.num).map(|(_, k)| *k))
+        .find_map(|r| {
+            COREML_KINDS
+                .iter()
+                .find(|(n, _)| *n == r.num)
+                .map(|(_, k)| *k)
+        })
         .unwrap_or("unknown model type");
     let mut io = String::new();
-    if let Some(d) = top.iter().find(|r| r.num == 2 && r.wire == 2 && r.len <= 64 * 1024) {
+    if let Some(d) = top
+        .iter()
+        .find(|r| r.num == 2 && r.wire == 2 && r.len <= 64 * 1024)
+    {
         let data = cx.read(file.sub(d.at, d.len)).await?;
         let names = |num: u64| -> Vec<String> {
             fields_in(&data)
@@ -509,10 +562,16 @@ async fn coreml(cx: Cx, input: Input) -> Result<()> {
                 })
                 .collect()
         };
-        io = format!(", inputs {}, outputs {}", names(1).join(", "), names(10).join(", "));
+        io = format!(
+            ", inputs {}, outputs {}",
+            names(1).join(", "),
+            names(10).join(", ")
+        );
     }
     proto::message(cx.clone(), (file, &COREML_MODEL, 0)).await?;
-    cx.annotate(format!("Core ML model, specification v{version}, {kind}{io}"));
+    cx.annotate(format!(
+        "Core ML model, specification v{version}, {kind}{io}"
+    ));
     Ok(())
 }
 
@@ -554,7 +613,10 @@ static TF_DIM: Msg = Msg {
 
 static TF_SHAPE: Msg = Msg {
     name: "TensorShapeProto",
-    fields: &[f(2, "dim", Ty::Msg(&TF_DIM)), f(3, "unknown_rank", Ty::Bool)],
+    fields: &[
+        f(2, "dim", Ty::Msg(&TF_DIM)),
+        f(3, "unknown_rank", Ty::Bool),
+    ],
     title: &[],
 };
 
@@ -613,7 +675,11 @@ static TF_NODE: Msg = Msg {
 
 static TF_VERSIONS: Msg = Msg {
     name: "VersionDef",
-    fields: &[f(1, "producer", Ty::Int), f(2, "min_consumer", Ty::Int), f(3, "bad_consumers", Ty::Packed(Elem::Varint))],
+    fields: &[
+        f(1, "producer", Ty::Int),
+        f(2, "min_consumer", Ty::Int),
+        f(3, "bad_consumers", Ty::Packed(Elem::Varint)),
+    ],
     title: &[1],
 };
 
@@ -644,7 +710,10 @@ static TF_META_INFO: Msg = Msg {
 
 static TF_SIGNATURE_ENTRY: Msg = Msg {
     name: "signature_def entry",
-    fields: &[f(1, "key", Ty::Str), f(2, "value", Ty::Msg(&proto::UNKNOWN))],
+    fields: &[
+        f(1, "key", Ty::Str),
+        f(2, "value", Ty::Msg(&proto::UNKNOWN)),
+    ],
     title: &[1],
 };
 
@@ -664,7 +733,10 @@ static TF_META_GRAPH: Msg = Msg {
 
 static TF_SAVED_MODEL: Msg = Msg {
     name: "SavedModel",
-    fields: &[f(1, "saved_model_schema_version", Ty::Int), f(2, "meta_graphs", Ty::Msg(&TF_META_GRAPH))],
+    fields: &[
+        f(1, "saved_model_schema_version", Ty::Int),
+        f(2, "meta_graphs", Ty::Msg(&TF_META_GRAPH)),
+    ],
     title: &[],
 };
 
@@ -706,19 +778,31 @@ async fn saved_model(cx: Cx, input: Input) -> Result<()> {
     let mut tags = Vec::new();
     for g in top.iter().filter(|r| r.num == 2 && r.wire == 2) {
         let meta = proto::scan(&cx, file.sub(g.at, g.len), 16).await?;
-        if let Some(info) = meta.iter().find(|r| r.num == 1 && r.wire == 2 && r.len <= 64 * 1024) {
-            let data = cx.read(file.sub(g.at.saturating_add(info.at), info.len)).await?;
-            tags.extend(fields_in(&data).filter(|r| r.num == 4 && r.wire == 2).filter_map(|r| {
-                data.get(to_usize(r.at)..to_usize(r.at.saturating_add(r.len)))
-                    .map(|b| String::from_utf8_lossy(b).into_owned())
-            }));
+        if let Some(info) = meta
+            .iter()
+            .find(|r| r.num == 1 && r.wire == 2 && r.len <= 64 * 1024)
+        {
+            let data = cx
+                .read(file.sub(g.at.saturating_add(info.at), info.len))
+                .await?;
+            tags.extend(
+                fields_in(&data)
+                    .filter(|r| r.num == 4 && r.wire == 2)
+                    .filter_map(|r| {
+                        data.get(to_usize(r.at)..to_usize(r.at.saturating_add(r.len)))
+                            .map(|b| String::from_utf8_lossy(b).into_owned())
+                    }),
+            );
             if let Some(v) = string_in(&data, 5) {
                 tags.push(format!("TF {v}"));
             }
         }
     }
     proto::message(cx.clone(), (file, &TF_SAVED_MODEL, 0)).await?;
-    cx.annotate(format!("TensorFlow SavedModel, {graphs} meta graph(s) [{}]", tags.join(", ")));
+    cx.annotate(format!(
+        "TensorFlow SavedModel, {graphs} meta graph(s) [{}]",
+        tags.join(", ")
+    ));
     Ok(())
 }
 
@@ -729,12 +813,18 @@ fn graphdef_probe(h: &Head<'_>) -> bool {
         delimited_at(d, node, 0x0a).is_some_and(|(name, n)| {
             let after = name.saturating_add(n);
             (1..=512).contains(&n)
-                && name.checked_add(n).and_then(|e| d.get(name..e)).is_some_and(is_label)
+                && name
+                    .checked_add(n)
+                    .and_then(|e| d.get(name..e))
+                    .is_some_and(is_label)
                 && delimited_at(d, after, 0x12).is_some_and(|(op, m)| {
                     (1..=64).contains(&m)
-                        && op.checked_add(m).and_then(|e| d.get(op..e)).is_some_and(|s| {
-                            is_identifier(s) && s.first().is_some_and(u8::is_ascii_uppercase)
-                        })
+                        && op
+                            .checked_add(m)
+                            .and_then(|e| d.get(op..e))
+                            .is_some_and(|s| {
+                                is_identifier(s) && s.first().is_some_and(u8::is_ascii_uppercase)
+                            })
                 })
         })
     })
@@ -748,7 +838,11 @@ async fn graphdef(cx: Cx, input: Input) -> Result<()> {
     let top = proto::scan(&cx, file, 200_000).await?;
     let nodes = top.iter().filter(|r| r.num == 1).count();
     let mut ops = std::collections::BTreeMap::<String, usize>::new();
-    for r in top.iter().filter(|r| r.num == 1 && r.wire == 2 && r.len <= 4096).take(2000) {
+    for r in top
+        .iter()
+        .filter(|r| r.num == 1 && r.wire == 2 && r.len <= 4096)
+        .take(2000)
+    {
         let data = cx.read(file.sub(r.at, r.len)).await?;
         if let Some(op) = string_in(&data, 2) {
             let n = ops.entry(op).or_default();
@@ -757,9 +851,16 @@ async fn graphdef(cx: Cx, input: Input) -> Result<()> {
     }
     let mut common: Vec<(String, usize)> = ops.into_iter().collect();
     common.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    let common: Vec<String> = common.iter().take(5).map(|(op, n)| format!("{op}×{n}")).collect();
+    let common: Vec<String> = common
+        .iter()
+        .take(5)
+        .map(|(op, n)| format!("{op}×{n}"))
+        .collect();
     proto::message(cx.clone(), (file, &TF_GRAPH, 0)).await?;
-    cx.annotate(format!("TensorFlow GraphDef, {nodes} nodes ({})", common.join(", ")));
+    cx.annotate(format!(
+        "TensorFlow GraphDef, {nodes} nodes ({})",
+        common.join(", ")
+    ));
     Ok(())
 }
 
@@ -777,7 +878,11 @@ const PIECE_TYPE: EnumTable = &[
 
 static SP_PIECE: Msg = Msg {
     name: "SentencePiece",
-    fields: &[f(1, "piece", Ty::Str), f(2, "score", Ty::Float), f(3, "type", Ty::Enum(PIECE_TYPE))],
+    fields: &[
+        f(1, "piece", Ty::Str),
+        f(2, "score", Ty::Float),
+        f(3, "type", Ty::Enum(PIECE_TYPE)),
+    ],
     title: &[1, 3],
 };
 
@@ -786,7 +891,11 @@ static SP_TRAINER: Msg = Msg {
     fields: &[
         f(1, "input", Ty::Str),
         f(2, "model_prefix", Ty::Str),
-        f(3, "model_type", Ty::Enum(&[(1, "UNIGRAM"), (2, "BPE"), (3, "WORD"), (4, "CHAR")])),
+        f(
+            3,
+            "model_type",
+            Ty::Enum(&[(1, "UNIGRAM"), (2, "BPE"), (3, "WORD"), (4, "CHAR")]),
+        ),
         f(4, "vocab_size", Ty::Int),
         f(5, "accept_language", Ty::Str),
         f(7, "input_format", Ty::Str),
@@ -831,7 +940,9 @@ fn piece_at(d: &[u8], at: usize) -> Option<usize> {
 }
 
 fn sentencepiece_probe(h: &Head<'_>) -> bool {
-    piece_at(h.data, 0).and_then(|next| piece_at(h.data, next)).is_some()
+    piece_at(h.data, 0)
+        .and_then(|next| piece_at(h.data, next))
+        .is_some()
 }
 
 declare_format!(pub SENTENCEPIECE = "sentencepiece", "SentencePiece tokenizer model", ["model"], "application/x-sentencepiece",
@@ -842,10 +953,17 @@ async fn sentencepiece(cx: Cx, input: Input) -> Result<()> {
     let top = proto::scan(&cx, file, 1_000_000).await?;
     let pieces = top.iter().filter(|r| r.num == 1).count();
     let mut kind = String::new();
-    if let Some(t) = top.iter().find(|r| r.num == 2 && r.wire == 2 && r.len <= 64 * 1024) {
+    if let Some(t) = top
+        .iter()
+        .find(|r| r.num == 2 && r.wire == 2 && r.len <= 64 * 1024)
+    {
         let data = cx.read(file.sub(t.at, t.len)).await?;
         if let Some(k) = varint_in(&data, 3) {
-            kind = format!(", {}", crate::value::lookup(&[(1, "unigram"), (2, "BPE"), (3, "word"), (4, "char")], k).unwrap_or("?"));
+            kind = format!(
+                ", {}",
+                crate::value::lookup(&[(1, "unigram"), (2, "BPE"), (3, "word"), (4, "char")], k)
+                    .unwrap_or("?")
+            );
         }
     }
     proto::message(cx.clone(), (file, &SP_MODEL, 0)).await?;
@@ -856,9 +974,21 @@ async fn sentencepiece(cx: Cx, input: Input) -> Result<()> {
 // ---------------------------------------------------------------------------
 // TFRecord
 
-static TF_BYTES_LIST: Msg = Msg { name: "BytesList", fields: &[f(1, "value", Ty::Bytes)], title: &[] };
-static TF_FLOAT_LIST: Msg = Msg { name: "FloatList", fields: &[f(1, "value", Ty::Packed(Elem::Float))], title: &[] };
-static TF_INT64_LIST: Msg = Msg { name: "Int64List", fields: &[f(1, "value", Ty::Packed(Elem::Varint))], title: &[] };
+static TF_BYTES_LIST: Msg = Msg {
+    name: "BytesList",
+    fields: &[f(1, "value", Ty::Bytes)],
+    title: &[],
+};
+static TF_FLOAT_LIST: Msg = Msg {
+    name: "FloatList",
+    fields: &[f(1, "value", Ty::Packed(Elem::Float))],
+    title: &[],
+};
+static TF_INT64_LIST: Msg = Msg {
+    name: "Int64List",
+    fields: &[f(1, "value", Ty::Packed(Elem::Varint))],
+    title: &[],
+};
 
 static TF_FEATURE: Msg = Msg {
     name: "Feature",
@@ -876,9 +1006,17 @@ static TF_FEATURE_ENTRY: Msg = Msg {
     title: &[1],
 };
 
-static TF_FEATURES: Msg = Msg { name: "Features", fields: &[f(1, "feature", Ty::Msg(&TF_FEATURE_ENTRY))], title: &[] };
+static TF_FEATURES: Msg = Msg {
+    name: "Features",
+    fields: &[f(1, "feature", Ty::Msg(&TF_FEATURE_ENTRY))],
+    title: &[],
+};
 
-static TF_EXAMPLE: Msg = Msg { name: "Example", fields: &[f(1, "features", Ty::Msg(&TF_FEATURES))], title: &[] };
+static TF_EXAMPLE: Msg = Msg {
+    name: "Example",
+    fields: &[f(1, "features", Ty::Msg(&TF_FEATURES))],
+    title: &[],
+};
 
 static TF_SUMMARY_VALUE: Msg = Msg {
     name: "Summary.Value",
@@ -895,7 +1033,11 @@ static TF_SUMMARY_VALUE: Msg = Msg {
     title: &[1],
 };
 
-static TF_SUMMARY: Msg = Msg { name: "Summary", fields: &[f(1, "value", Ty::Msg(&TF_SUMMARY_VALUE))], title: &[] };
+static TF_SUMMARY: Msg = Msg {
+    name: "Summary",
+    fields: &[f(1, "value", Ty::Msg(&TF_SUMMARY_VALUE))],
+    title: &[],
+};
 
 static TF_EVENT: Msg = Msg {
     name: "Event",
@@ -918,7 +1060,9 @@ fn masked_crc(data: &[u8]) -> u32 {
 }
 
 fn tfrecord_probe(h: &Head<'_>) -> bool {
-    let (Some(len), Some(crc), Some(bytes)) = (u64_le(h.data, 0), u32_le(h.data, 8), h.data.get(..8)) else {
+    let (Some(len), Some(crc), Some(bytes)) =
+        (u64_le(h.data, 0), u32_le(h.data, 8), h.data.get(..8))
+    else {
         return false;
     };
     len.checked_add(16).is_some_and(|total| total <= h.len) && masked_crc(bytes) == crc
@@ -942,19 +1086,26 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
         let len_crc = u32_le(&head, 8).unwrap_or(0);
         let body = cur.span(len);
         if body.len < len {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len),
+                body.len,
+            ));
         }
         cur.skip(len);
         let crc_at = cur.pos();
         let data_crc = cur.u32().await?;
         let mut node = Node::new(format!("Record {n}")).span(cur.since(start));
         if head.get(..8).map(masked_crc) != Some(len_crc) {
-            node = node.diag(Diagnostic::malformed("length CRC mismatch").at(file.sub(start.saturating_add(8), 4)));
+            node = node.diag(
+                Diagnostic::malformed("length CRC mismatch")
+                    .at(file.sub(start.saturating_add(8), 4)),
+            );
         }
         if len <= CRC_MAX {
             let data = cx.read(body).await?;
             if masked_crc(&data) != data_crc {
-                node = node.diag(Diagnostic::malformed("data CRC mismatch").at(file.sub(crc_at, 4)));
+                node =
+                    node.diag(Diagnostic::malformed("data CRC mismatch").at(file.sub(crc_at, 4)));
             }
         }
         let first = cx.read_avail(body.sub(0, 1)).await?;
@@ -981,16 +1132,38 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn record(cx: Cx, (_start, body, len_crc, data_crc, schema): (u64, Span, u32, u32, &'static Msg)) -> Result<()> {
+async fn record(
+    cx: Cx,
+    (_start, body, len_crc, data_crc, schema): (u64, Span, u32, u32, &'static Msg),
+) -> Result<()> {
     let header = Span::new(body.source, body.offset.saturating_sub(12), 12);
-    cx.emit(Node::new("Length").span(header.sub(0, 8)).value(Value::UInt { value: body.len, bits: 64, radix: Radix::Dec }));
-    cx.emit(Node::new("Length CRC (masked CRC-32C)").span(header.sub(8, 4)).value(Value::UInt { value: len_crc.into(), bits: 32, radix: Radix::Hex }));
+    cx.emit(
+        Node::new("Length")
+            .span(header.sub(0, 8))
+            .value(Value::UInt {
+                value: body.len,
+                bits: 64,
+                radix: Radix::Dec,
+            }),
+    );
+    cx.emit(
+        Node::new("Length CRC (masked CRC-32C)")
+            .span(header.sub(8, 4))
+            .value(Value::UInt {
+                value: len_crc.into(),
+                bits: 32,
+                radix: Radix::Hex,
+            }),
+    );
     cx.emit(proto::node(schema.name, body, schema));
     cx.emit(
         Node::new("Data CRC (masked CRC-32C)")
             .span(Span::new(body.source, body.end(), 4))
-            .value(Value::UInt { value: data_crc.into(), bits: 32, radix: Radix::Hex }),
+            .value(Value::UInt {
+                value: data_crc.into(),
+                bits: 32,
+                radix: Radix::Hex,
+            }),
     );
     Ok(())
 }
-

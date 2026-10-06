@@ -279,7 +279,11 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
     };
     let header = looks_like_header(&first_texts, second_texts.as_deref());
     let columns = Columns {
-        names: Arc::new(if header { first_texts.clone() } else { Vec::new() }),
+        names: Arc::new(if header {
+            first_texts.clone()
+        } else {
+            Vec::new()
+        }),
     };
 
     // Annotation: dialect, columns, estimated records.
@@ -311,7 +315,17 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
             Node::new("Header")
                 .span(span)
                 .summary(preview(&first_texts.join(", "), 100))
-                .lazy(fields, (span, delim, Columns { names: Arc::default() }, true)),
+                .lazy(
+                    fields,
+                    (
+                        span,
+                        delim,
+                        Columns {
+                            names: Arc::default(),
+                        },
+                        true,
+                    ),
+                ),
         );
     }
 

@@ -10,11 +10,19 @@ use crate::span::Span;
 use crate::value::{Radix, Value};
 
 pub fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Hex }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Hex,
+    }
 }
 
 pub fn dec(value: u64, bits: u8) -> Value {
-    Value::UInt { value, bits, radix: Radix::Dec }
+    Value::UInt {
+        value,
+        bits,
+        radix: Radix::Dec,
+    }
 }
 
 pub fn text(value: impl Into<String>) -> Value {
@@ -38,7 +46,9 @@ pub fn size(n: u64) -> String {
 pub fn uint_be(f: &mut Fields<'_>, name: &'static str, width: u64) -> Result<u64> {
     let span = f.peek_span(width);
     let bytes = f.bytes(name, width).get()?;
-    let value = bytes.iter().fold(0u64, |acc, &b| acc.checked_shl(8).unwrap_or(0) | u64::from(b));
+    let value = bytes.iter().fold(0u64, |acc, &b| {
+        acc.checked_shl(8).unwrap_or(0) | u64::from(b)
+    });
     let bits = u8::try_from(width.saturating_mul(8)).unwrap_or(64);
     f.node(Node::new(name).span(span).value(hex(value, bits)));
     Ok(value)
@@ -68,13 +78,17 @@ pub async fn varint(cur: &mut Cursor<'_>, kind: Varint) -> Result<u64> {
             Varint::Beat => low.checked_mul(shift).and_then(|v| value.checked_add(v)),
             Varint::Vcdiff => value.checked_mul(128).and_then(|v| v.checked_add(low)),
         };
-        value = next.ok_or_else(|| Diagnostic::malformed("variable-length integer overflows").at(cur.since(start)))?;
+        value = next.ok_or_else(|| {
+            Diagnostic::malformed("variable-length integer overflows").at(cur.since(start))
+        })?;
         match kind {
             Varint::Beat if byte & 0x80 != 0 => return Ok(value),
             Varint::Vcdiff if byte & 0x80 == 0 => return Ok(value),
             Varint::Beat => {
                 shift = shift.saturating_mul(128);
-                value = value.checked_add(shift).ok_or_else(|| Diagnostic::malformed("variable-length integer overflows"))?;
+                value = value
+                    .checked_add(shift)
+                    .ok_or_else(|| Diagnostic::malformed("variable-length integer overflows"))?;
             }
             Varint::Vcdiff => {}
         }
@@ -83,7 +97,12 @@ pub async fn varint(cur: &mut Cursor<'_>, kind: Varint) -> Result<u64> {
 }
 
 /// Reads a variable-length integer and emits it as a field.
-pub async fn varint_field(cx: &Cx, cur: &mut Cursor<'_>, kind: Varint, name: &'static str) -> Result<u64> {
+pub async fn varint_field(
+    cx: &Cx,
+    cur: &mut Cursor<'_>,
+    kind: Varint,
+    name: &'static str,
+) -> Result<u64> {
     let start = cur.pos();
     let value = varint(cur, kind).await?;
     cx.emit(Node::new(name).span(cur.since(start)).value(dec(value, 64)));
@@ -112,7 +131,10 @@ pub async fn crc32_of(cx: &Cx, span: Span) -> Option<u32> {
     if span.len > cx.limits().max_read {
         return None;
     }
-    cx.read(span).await.ok().map(|data| crate::codec::crc32(&data))
+    cx.read(span)
+        .await
+        .ok()
+        .map(|data| crate::codec::crc32(&data))
 }
 
 /// A node for a stored CRC-32, marked valid or mismatched against `computed`.
@@ -120,8 +142,12 @@ pub fn crc_node(name: &'static str, span: Span, stored: u32, computed: Option<u3
     let node = Node::new(name).span(span).value(hex(stored.into(), 32));
     match computed {
         Some(c) if c == stored => node.summary("valid"),
-        Some(c) => node.diag(Diagnostic::warning(format!("CRC mismatch: computed {c:#010x}"))),
-        None => node.diag(Diagnostic::note("not verified (region too large to read at once)")),
+        Some(c) => node.diag(Diagnostic::warning(format!(
+            "CRC mismatch: computed {c:#010x}"
+        ))),
+        None => node.diag(Diagnostic::note(
+            "not verified (region too large to read at once)",
+        )),
     }
 }
 
@@ -135,7 +161,10 @@ pub fn lines(data: &[u8], region: Span) -> Vec<(String, Span)> {
             let line = line.strip_suffix(b"\r").unwrap_or(line);
             out.push((
                 String::from_utf8_lossy(line).into_owned(),
-                region.sub(crate::bytes::to_u64(start), crate::bytes::to_u64(line.len())),
+                region.sub(
+                    crate::bytes::to_u64(start),
+                    crate::bytes::to_u64(line.len()),
+                ),
             ));
             start = i.saturating_add(1);
         }
@@ -146,7 +175,10 @@ pub fn lines(data: &[u8], region: Span) -> Vec<(String, Span)> {
         let rest = rest.strip_suffix(b"\r").unwrap_or(rest);
         out.push((
             String::from_utf8_lossy(rest).into_owned(),
-            region.sub(crate::bytes::to_u64(start), crate::bytes::to_u64(rest.len())),
+            region.sub(
+                crate::bytes::to_u64(start),
+                crate::bytes::to_u64(rest.len()),
+            ),
         ));
     }
     out
@@ -154,10 +186,12 @@ pub fn lines(data: &[u8], region: Span) -> Vec<(String, Span)> {
 
 /// Whether `data` is printable ASCII text (tabs and line breaks allowed).
 pub fn is_ascii_text(data: &[u8]) -> bool {
-    data.iter().all(|&b| b == b'\t' || b == b'\n' || b == b'\r' || (0x20..0x7f).contains(&b))
+    data.iter()
+        .all(|&b| b == b'\t' || b == b'\n' || b == b'\r' || (0x20..0x7f).contains(&b))
 }
 
 /// Trims ASCII text read from a fixed-size, space- or NUL-padded field.
 pub fn clean(s: &str) -> String {
-    s.trim_matches(|c: char| c == '\0' || c.is_whitespace()).to_owned()
+    s.trim_matches(|c: char| c == '\0' || c.is_whitespace())
+        .to_owned()
 }

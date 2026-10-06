@@ -128,7 +128,10 @@ pub(super) async fn emit_all(cx: &Cx, elf: &Elf, region: &Region) -> Result<()> 
             Node::new(label(&note))
                 .span(note.span)
                 .maybe_summary(summary)
-                .lazy(detail, (*region, note.span, note.name.clone(), note.desc, note.kind)),
+                .lazy(
+                    detail,
+                    (*region, note.span, note.name.clone(), note.desc, note.kind),
+                ),
         )
         .await;
         offset = next;
@@ -178,19 +181,22 @@ async fn summarise(cx: &Cx, region: &Region, note: &Note) -> String {
             format!("{provider}:{name}")
         }
         ("CORE", NT_PRSTATUS) => {
-            let (pid_at, sig_at) = if region.class.wide { (32, 12) } else { (24, 12) };
+            let (pid_at, sig_at) = if region.class.wide {
+                (32, 12)
+            } else {
+                (24, 12)
+            };
             let pid = get_at::<u32>(&desc, pid_at, e).unwrap_or(0);
             let sig = get_at::<u16>(&desc, sig_at, e).unwrap_or(0);
-            format!(
-                "pid {pid}, signal {}",
-                name_or(SIGNAL, sig.into(), "")
-            )
+            format!("pid {pid}, signal {}", name_or(SIGNAL, sig.into(), ""))
         }
         ("CORE", NT_PRPSINFO) => {
             let at: usize = if region.class.wide { 40 } else { 28 };
             let fname = desc.get(at..at.saturating_add(16)).unwrap_or_default();
             let args_at: usize = if region.class.wide { 56 } else { 44 };
-            let args = desc.get(args_at..args_at.saturating_add(80)).unwrap_or_default();
+            let args = desc
+                .get(args_at..args_at.saturating_add(80))
+                .unwrap_or_default();
             let args = crate::text::until_nul(args);
             if args.is_empty() {
                 crate::text::until_nul(fname)
@@ -222,11 +228,7 @@ async fn detail(
     f.u32("n_type").enumeration(types_for(&owner)).emit()?;
     let name_len = desc.offset.saturating_sub(span.offset).saturating_sub(12);
     let name_span = span.sub(12, name_len);
-    cx.emit(
-        Node::new("Name")
-            .span(name_span)
-            .value(text(owner.clone())),
-    );
+    cx.emit(Node::new("Name").span(name_span).value(text(owner.clone())));
     if desc.len == 0 {
         return Ok(());
     }
@@ -321,7 +323,10 @@ fn android_ident(f: &mut Fields<'_>, _: &Class) -> Result<()> {
 
 fn stapsdt(f: &mut Fields<'_>, c: &Class) -> Result<()> {
     f.uword("pc", c.wide).hex().desc("Probe address").emit()?;
-    f.uword("base", c.wide).hex().desc("Address of .stapsdt.base").emit()?;
+    f.uword("base", c.wide)
+        .hex()
+        .desc("Address of .stapsdt.base")
+        .emit()?;
     f.uword("semaphore", c.wide).hex().emit()?;
     f.cstr("Provider").emit()?;
     f.cstr("Name").emit()?;
@@ -371,7 +376,10 @@ fn properties(desc: &[u8], region: &Region) -> Vec<Property> {
                     }),
                 )
             }
-            _ if size == 4 => (format!("{}: {value:#x}", short_property(&name)), Some(hex(value.into(), 32))),
+            _ if size == 4 => (
+                format!("{}: {value:#x}", short_property(&name)),
+                Some(hex(value.into(), 32)),
+            ),
             _ => (short_property(&name).to_owned(), None),
         };
         out.push(Property {
@@ -438,20 +446,20 @@ fn prstatus(f: &mut Fields<'_>, c: &Class) -> Result<()> {
 }
 
 const REGS_X86_64: &[&str] = &[
-    "r15", "r14", "r13", "r12", "rbp", "rbx", "r11", "r10", "r9", "r8", "rax", "rcx", "rdx",
-    "rsi", "rdi", "orig_rax", "rip", "cs", "eflags", "rsp", "ss", "fs_base", "gs_base", "ds",
-    "es", "fs", "gs",
+    "r15", "r14", "r13", "r12", "rbp", "rbx", "r11", "r10", "r9", "r8", "rax", "rcx", "rdx", "rsi",
+    "rdi", "orig_rax", "rip", "cs", "eflags", "rsp", "ss", "fs_base", "gs_base", "ds", "es", "fs",
+    "gs",
 ];
 
 const REGS_I386: &[&str] = &[
-    "ebx", "ecx", "edx", "esi", "edi", "ebp", "eax", "xds", "xes", "xfs", "xgs", "orig_eax",
-    "eip", "xcs", "eflags", "esp", "xss",
+    "ebx", "ecx", "edx", "esi", "edi", "ebp", "eax", "xds", "xes", "xfs", "xgs", "orig_eax", "eip",
+    "xcs", "eflags", "esp", "xss",
 ];
 
 const REGS_AARCH64: &[&str] = &[
-    "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13",
-    "x14", "x15", "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26",
-    "x27", "x28", "x29 (fp)", "x30 (lr)", "sp", "pc", "pstate",
+    "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14",
+    "x15", "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27",
+    "x28", "x29 (fp)", "x30 (lr)", "sp", "pc", "pstate",
 ];
 
 const REGS_ARM: &[&str] = &[
@@ -460,9 +468,9 @@ const REGS_ARM: &[&str] = &[
 ];
 
 const REGS_RISCV: &[&str] = &[
-    "pc", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4",
-    "a5", "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4",
-    "t5", "t6",
+    "pc", "ra", "sp", "gp", "tp", "t0", "t1", "t2", "s0", "s1", "a0", "a1", "a2", "a3", "a4", "a5",
+    "a6", "a7", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "t3", "t4", "t5",
+    "t6",
 ];
 
 fn register_names(machine: u16) -> Option<&'static [&'static str]> {

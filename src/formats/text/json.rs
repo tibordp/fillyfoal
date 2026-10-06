@@ -25,7 +25,14 @@ use super::{VALUE_CAP, plural, text_node};
 pub static FORMAT: Format = Format {
     name: "json",
     title: "JSON",
-    extensions: &["json", "jsonc", "json5", "webmanifest", "babelrc", "eslintrc"],
+    extensions: &[
+        "json",
+        "jsonc",
+        "json5",
+        "webmanifest",
+        "babelrc",
+        "eslintrc",
+    ],
     mime: "application/json",
     probe: Probe::Custom(probe_json),
     dissect: crate::expander!(dissect: Input),
@@ -146,7 +153,9 @@ fn probe_tokens(data: &[u8], max: usize) -> Option<(u32, usize)> {
                     .get(i..)
                     .unwrap_or_default()
                     .iter()
-                    .take_while(|c| c.is_ascii_digit() || matches!(c, b'-' | b'+' | b'.' | b'e' | b'E'))
+                    .take_while(|c| {
+                        c.is_ascii_digit() || matches!(c, b'-' | b'+' | b'.' | b'e' | b'E')
+                    })
                     .count();
                 i = i.saturating_add(n);
             }
@@ -158,9 +167,7 @@ fn probe_tokens(data: &[u8], max: usize) -> Option<(u32, usize)> {
                     .count();
                 let word = rest.get(..n).unwrap_or_default();
                 // Literals, or an unquoted (JSON5-style) key.
-                let key = || {
-                    probe::trim_start(rest.get(n..).unwrap_or_default()).starts_with(b":")
-                };
+                let key = || probe::trim_start(rest.get(n..).unwrap_or_default()).starts_with(b":");
                 if !matches!(word, b"true" | b"false" | b"null") && !(prev != b'[' && key()) {
                     return None;
                 }
@@ -169,7 +176,9 @@ fn probe_tokens(data: &[u8], max: usize) -> Option<(u32, usize)> {
             _ => return None,
         }
         // An object must start with a key or end.
-        if prev == b'{' && !(matches!(b, b'"' | b'}' | b'/' | b'_' | b'$') || b.is_ascii_alphabetic()) {
+        if prev == b'{'
+            && !(matches!(b, b'"' | b'}' | b'/' | b'_' | b'$') || b.is_ascii_alphabetic())
+        {
             return None;
         }
         prev = b;
@@ -323,7 +332,9 @@ impl<'a> Lexer<'a> {
             b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$' => {
                 let end = self
                     .scan
-                    .find(start, |c| !(c.is_ascii_alphanumeric() || c == b'_' || c == b'$'))
+                    .find(start, |c| {
+                        !(c.is_ascii_alphanumeric() || c == b'_' || c == b'$')
+                    })
                     .await?
                     .unwrap_or(self.scan.len());
                 let word = self.scan.bytes(start, end, 16).await?;
@@ -570,10 +581,12 @@ struct Walk {
 fn item_node(name: String, item: Item, span: Span, walk: &Walk) -> Node {
     match item {
         Item::Str(text, false) => text_node(name, span, &text),
-        Item::Str(text, true) => text_node(name, span, &text)
-            .summary(format!("{:#x} bytes, truncated", span.len)),
-        Item::BadStr(text) => text_node(name, span, &text)
-            .diag(Diagnostic::malformed("unterminated string").at(span)),
+        Item::Str(text, true) => {
+            text_node(name, span, &text).summary(format!("{:#x} bytes, truncated", span.len))
+        }
+        Item::BadStr(text) => {
+            text_node(name, span, &text).diag(Diagnostic::malformed("unterminated string").at(span))
+        }
         Item::Num(Some(v), _) => Node::new(name).span(span).value(v),
         Item::Num(None, raw) => Node::new(name)
             .span(span)
@@ -827,7 +840,11 @@ async fn describe(cx: &Cx, flavor: Flavor, span: Span) -> Result<Option<String>>
             let mut parts = Vec::new();
             if let Some(req) = object_member(cx, span, "request").await? {
                 parts.extend(string_member(cx, req, "method").await?);
-                parts.extend(string_member(cx, req, "url").await?.map(|u| preview(&u, 80)));
+                parts.extend(
+                    string_member(cx, req, "url")
+                        .await?
+                        .map(|u| preview(&u, 80)),
+                );
             }
             if let Some(resp) = object_member(cx, span, "response").await? {
                 parts.extend(
@@ -958,7 +975,10 @@ pub async fn dissect_geojson(cx: Cx, input: Input) -> Result<()> {
         .await?
         .and_then(|w| w.collection)
     {
-        cx.annotate(format!("GeoJSON {kind}, {}", plural(n, "feature", "features")));
+        cx.annotate(format!(
+            "GeoJSON {kind}, {}",
+            plural(n, "feature", "features")
+        ));
     }
     Ok(())
 }

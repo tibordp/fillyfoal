@@ -149,7 +149,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     let sig = f.ascii("Signature", 3).emit()?;
     let version = f.u8("Version").emit()?;
-    let length = f.u32("File length").desc("Uncompressed length of the whole file").emit()?;
+    let length = f
+        .u32("File length")
+        .desc("Uncompressed length of the whole file")
+        .emit()?;
     let body = file.tail(8);
     match sig.as_str() {
         "FWS" => {
@@ -165,7 +168,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Node::new("Compressed body")
                     .span(body)
                     .summary(format!("zlib, {} bytes", body.len))
-                    .lazy(compressed, (input, body, u64::from(length).saturating_sub(8))),
+                    .lazy(
+                        compressed,
+                        (input, body, u64::from(length).saturating_sub(8)),
+                    ),
             );
         }
         _ => {
@@ -197,7 +203,8 @@ async fn compressed(cx: Cx, (input, body, expected): (Input, Span, u64)) -> Resu
 /// Emits the movie header (frame size, rate, count) and the tags.
 async fn body_fields(cx: &Cx, input: Input, body: Span) -> Result<String> {
     let head = cx.read_avail(body.sub(0, 17)).await?;
-    let (r, rect_len) = rect(&head).ok_or_else(|| Diagnostic::truncated(body.sub(0, 17), to_u64(head.len())))?;
+    let (r, rect_len) =
+        rect(&head).ok_or_else(|| Diagnostic::truncated(body.sub(0, 17), to_u64(head.len())))?;
     let width = r[1].saturating_sub(r[0]) / 20;
     let height = r[3].saturating_sub(r[2]) / 20;
     let rect_span = body.sub(0, rect_len);
@@ -218,10 +225,17 @@ async fn body_fields(cx: &Cx, input: Input, body: Span) -> Result<String> {
     cx.emit(
         Node::new("Frame count")
             .span(body.sub(rect_len.saturating_add(2), 2))
-            .value(Value::UInt { value: frames.into(), bits: 16, radix: crate::value::Radix::Dec }),
+            .value(Value::UInt {
+                value: frames.into(),
+                bits: 16,
+                radix: crate::value::Radix::Dec,
+            }),
     );
     let tags = body.tail(rect_len.saturating_add(4));
-    cx.emit(Node::new("Tags").span(tags).lazy(crate::expander!(self::tag_list: (Input, Span, u32)), (input, tags, 0u32)));
+    cx.emit(Node::new("Tags").span(tags).lazy(
+        crate::expander!(self::tag_list: (Input, Span, u32)),
+        (input, tags, 0u32),
+    ));
     Ok(format!(
         "{width}×{height}, {} fps, {frames} frames",
         f64::from(rate) / 256.0
@@ -230,11 +244,18 @@ async fn body_fields(cx: &Cx, input: Input, body: Span) -> Result<String> {
 
 async fn rect_fields(cx: Cx, (span, r): (Span, [i32; 4])) -> Result<()> {
     let nbits = cx.read(span.sub(0, 1)).await?.first().copied().unwrap_or(0) >> 3;
-    cx.emit(Node::new("Nbits").value(Value::UInt { value: nbits.into(), bits: 5, radix: crate::value::Radix::Dec }));
+    cx.emit(Node::new("Nbits").value(Value::UInt {
+        value: nbits.into(),
+        bits: 5,
+        radix: crate::value::Radix::Dec,
+    }));
     for (name, v) in ["Xmin", "Xmax", "Ymin", "Ymax"].into_iter().zip(r) {
         cx.emit(
             Node::new(name)
-                .value(Value::Int { value: v.into(), bits: 32 })
+                .value(Value::Int {
+                    value: v.into(),
+                    bits: 32,
+                })
                 .summary(format!("{} px", f64::from(v) / 20.0)),
         );
     }
@@ -258,13 +279,19 @@ async fn tag_list(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()
         let name = lookup(TAGS, code.into()).map_or_else(|| format!("Tag {code}"), str::to_owned);
         let mut node = Node::new(name).span(tag).summary(format!("{len} bytes"));
         if body.len < len {
-            node = node.diag(Diagnostic::truncated(Span::new(body.source, body.offset, len), body.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len),
+                body.len,
+            ));
         }
         if code == 1 {
             node = node.summary(format!("frame {frame}"));
             frame = frame.saturating_add(1);
         } else if len > 0 {
-            node = node.lazy(crate::expander!(self::tag: (Input, Span, u16, u32)), (input, body, code, depth));
+            node = node.lazy(
+                crate::expander!(self::tag: (Input, Span, u16, u32)),
+                (input, body, code, depth),
+            );
         }
         cx.push(node).await;
         if code == 0 {
@@ -280,7 +307,12 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
     match code {
         9 => {
             f.bytes("Background colour", 3)
-                .with(|b, n| n.value(Value::Text(format!("#{}", crate::formats::datakit::hex_string(b)))))
+                .with(|b, n| {
+                    n.value(Value::Text(format!(
+                        "#{}",
+                        crate::formats::datakit::hex_string(b)
+                    )))
+                })
                 .emit()?;
         }
         69 => {
@@ -302,13 +334,20 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
             for _ in 0..n {
                 let id = f.u16("Character ID").get()?;
                 let name = f.cstr("Name").get()?;
-                cx.emit(Node::new(clip(&name, 120)).value(Value::UInt { value: id.into(), bits: 16, radix: crate::value::Radix::Dec }));
+                cx.emit(Node::new(clip(&name, 120)).value(Value::UInt {
+                    value: id.into(),
+                    bits: 16,
+                    radix: crate::value::Radix::Dec,
+                }));
             }
         }
         87 => {
             f.u16("Character ID").emit()?;
             f.u32("Reserved").emit()?;
-            cx.emit(embedded("Data", input.nested(body.tail(6))).summary(format!("{} bytes", body.len.saturating_sub(6))));
+            cx.emit(
+                embedded("Data", input.nested(body.tail(6)))
+                    .summary(format!("{} bytes", body.len.saturating_sub(6))),
+            );
         }
         6 | 21 => {
             f.u16("Character ID").emit()?;
@@ -322,13 +361,19 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
             }
             let at = f.pos();
             cx.emit(embedded("Image", input.nested(body.sub(at, alpha.into()))));
-            cx.emit(Node::new("Alpha data (zlib)").span(body.tail(at.saturating_add(alpha.into()))));
+            cx.emit(
+                Node::new("Alpha data (zlib)").span(body.tail(at.saturating_add(alpha.into()))),
+            );
         }
         82 => {
             f.u32("Flags").hex().desc("1 = lazy initialize").emit()?;
             f.cstr("Name").emit()?;
             let at = f.pos();
-            cx.emit(Node::new("ABC bytecode").span(body.tail(at)).summary(format!("{} bytes", body.len.saturating_sub(at))));
+            cx.emit(
+                Node::new("ABC bytecode")
+                    .span(body.tail(at))
+                    .summary(format!("{} bytes", body.len.saturating_sub(at))),
+            );
         }
         41 => {
             f.u32("Product ID").emit()?;
@@ -337,7 +382,11 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
             f.u8("Minor version").emit()?;
             f.u64("Build number").emit()?;
             f.u64("Compilation date")
-                .with(|&ms, n| n.value(Value::Timestamp { unix_seconds: i64::try_from(ms / 1000).unwrap_or(0) }))
+                .with(|&ms, n| {
+                    n.value(Value::Timestamp {
+                        unix_seconds: i64::try_from(ms / 1000).unwrap_or(0),
+                    })
+                })
                 .emit()?;
         }
         39 => {
@@ -345,17 +394,24 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
             f.u16("Frame count").emit()?;
             let tags = body.tail(4);
             if depth < MAX_SPRITE_DEPTH {
+                cx.emit(Node::new("Tags").span(tags).lazy(
+                    crate::expander!(self::tag_list: (Input, Span, u32)),
+                    (input, tags, depth.saturating_add(1)),
+                ));
+            } else {
                 cx.emit(
                     Node::new("Tags")
                         .span(tags)
-                        .lazy(crate::expander!(self::tag_list: (Input, Span, u32)), (input, tags, depth.saturating_add(1))),
+                        .diag(Diagnostic::limit("sprites nested too deeply")),
                 );
-            } else {
-                cx.emit(Node::new("Tags").span(tags).diag(Diagnostic::limit("sprites nested too deeply")));
             }
         }
         _ => {
-            f.node(Node::new("Data").span(body).summary(format!("{} bytes", body.len)));
+            f.node(
+                Node::new("Data")
+                    .span(body)
+                    .summary(format!("{} bytes", body.len)),
+            );
         }
     }
     Ok(())

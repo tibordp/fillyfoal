@@ -19,6 +19,7 @@ use crate::cache::ByteCache;
 use crate::error::{Diagnostic, Result};
 use crate::node::{Count, Node};
 use crate::session::Limits;
+use crate::secret::{MAX_ATTEMPTS, Secret, SecretRequest};
 use crate::span::{Origin, SourceId, Span};
 
 /// Why the most recently polled expansion suspended.
@@ -27,6 +28,7 @@ pub(crate) enum Stop {
     Bytes,
     Budget,
     Page,
+    Secret,
 }
 
 /// A source assembled from pieces of other sources, in order.
@@ -80,6 +82,10 @@ pub(crate) struct Shared {
     pub budget: u64,
     pub stop: Option<Stop>,
     pub wanted: Vec<(SourceId, u64)>,
+    /// Secrets answered by the host, by realm and attempt (`None`: declined).
+    pub secrets: HashMap<(Span, u32), Option<Secret>>,
+    /// The secret the current expansion is waiting for.
+    pub secret_wanted: Option<SecretRequest>,
     pub limits: Limits,
 }
 
@@ -197,14 +203,18 @@ impl Shared {
             return Ok(Vec::new());
         };
         let before = st.out.len().saturating_add(st.input.len());
-        let limit = crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
+        let limit =
+            crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
         let result = loop {
             if to_u64(st.out.len()) >= end || st.done {
                 let from = crate::bytes::to_usize(start).min(st.out.len());
                 let to = crate::bytes::to_usize(end).min(st.out.len());
                 break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
             }
-            let pending = st.input.len().saturating_sub(st.skip.saturating_add(st.inflater.consumed()));
+            let pending = st
+                .input
+                .len()
+                .saturating_sub(st.skip.saturating_add(st.inflater.consumed()));
             if !st.input_eof && pending < LOOKAHEAD {
                 let fed = to_u64(st.input.len());
                 let want = (LOOKAHEAD as u64).min(st.parent.len.saturating_sub(fed));
@@ -213,7 +223,12 @@ impl Shared {
                     continue;
                 }
                 let from = st.parent.offset.saturating_add(fed);
-                match self.read_range(st.parent.source, from, from.saturating_add(want), depth.saturating_add(1)) {
+                match self.read_range(
+                    st.parent.source,
+                    from,
+                    from.saturating_add(want),
+                    depth.saturating_add(1),
+                ) {
                     Ok(bytes) => {
                         if to_u64(bytes.len()) < want {
                             st.input_eof = true;
@@ -224,7 +239,14 @@ impl Shared {
                 }
                 continue;
             }
-            let LazyInflate { input, out, inflater, skip, done, .. } = &mut *st;
+            let LazyInflate {
+                input,
+                out,
+                inflater,
+                skip,
+                done,
+                ..
+            } = &mut *st;
             let body = input.get(*skip..).unwrap_or_default();
             match inflater.step(body, out, LAZY_STEP, out.len().saturating_add(limit)) {
                 Ok(crate::codec::inflate::Step::More) => {}
@@ -234,7 +256,9 @@ impl Shared {
         // Once the stream has ended, its real length is known.
         let finished_len = st.done.then(|| to_u64(st.out.len()));
         let after = st.out.len().saturating_add(st.input.len());
-        self.derived_bytes = self.derived_bytes.saturating_add(to_u64(after.saturating_sub(before)));
+        self.derived_bytes = self
+            .derived_bytes
+            .saturating_add(to_u64(after.saturating_sub(before)));
         self.charge(to_u64(after.saturating_sub(before)) >> 12);
         if let Some(entry) = self.sources.get_mut(index) {
             entry.lazy = Some(st);
@@ -368,6 +392,47 @@ impl Cx {
         .await
     }
 
+    /// Asks the host for a secret (see [`crate::secret`]). Suspends until the
+    /// host answers; `None` means the host declined. Answers are cached per
+    /// realm and attempt for the whole session.
+    pub async fn secret(&self, request: SecretRequest) -> Option<Secret> {
+        let key = request.key();
+        poll_fn(|_| {
+            let mut sh = lock(&self.shared);
+            if let Some(answer) = sh.secrets.get(&key) {
+                return Poll::Ready(answer.clone());
+            }
+            sh.secret_wanted = Some(request.clone());
+            sh.stop = Some(Stop::Secret);
+            Poll::Pending
+        })
+        .await
+    }
+
+    /// Asks for a password for `realm` until `verify` accepts one, up to
+    /// [`MAX_ATTEMPTS`] times. `None` if the host declined or every attempt
+    /// failed. Formats with a free default (an empty password) should check
+    /// it before calling this, so the user is never asked needlessly.
+    ///
+    /// `verify` must be cheap; with an expensive key derivation, loop over
+    /// [`Cx::secret`] yourself and derive in budgeted steps.
+    pub async fn unlock(
+        &self,
+        realm: Span,
+        prompt: &str,
+        verify: impl Fn(&Secret) -> bool,
+    ) -> Option<Secret> {
+        for attempt in 0..MAX_ATTEMPTS {
+            let secret = self
+                .secret(SecretRequest::password(realm, prompt, attempt))
+                .await?;
+            if verify(&secret) {
+                return Some(secret);
+            }
+        }
+        None
+    }
+
     /// Reads exactly `span`, failing with a truncation diagnostic otherwise.
     pub async fn read(&self, span: Span) -> Result<Vec<u8>> {
         let data = self.read_avail(span).await?;
@@ -417,7 +482,9 @@ impl Cx {
 
     /// Whether `source` is decoded on demand (reading its end decodes it all).
     pub fn is_lazy(&self, source: SourceId) -> bool {
-        lock(&self.shared).source(source).is_some_and(|s| s.lazy.is_some())
+        lock(&self.shared)
+            .source(source)
+            .is_some_and(|s| s.lazy.is_some())
     }
 
     /// A previously derived source with this origin, if any. Dissectors use
@@ -521,14 +588,23 @@ impl Cx {
     /// same structure for many nodes (a PDF object stream, a string table)
     /// can parse it once and share the result. Values must be deterministic
     /// functions of the bytes, like everything else a dissector produces.
-    pub fn cached<T: std::any::Any + Send + Sync>(&self, span: Span, kind: &'static str) -> Option<Arc<T>> {
+    pub fn cached<T: std::any::Any + Send + Sync>(
+        &self,
+        span: Span,
+        kind: &'static str,
+    ) -> Option<Arc<T>> {
         let value = lock(&self.shared).memo.get(&(span, kind)).cloned()?;
         value.downcast::<T>().ok()
     }
 
     /// Stores a parsed value for later [`Cx::cached`] lookups. The cache is
     /// bounded; old entries are dropped arbitrarily when it is full.
-    pub fn cache<T: std::any::Any + Send + Sync>(&self, span: Span, kind: &'static str, value: Arc<T>) {
+    pub fn cache<T: std::any::Any + Send + Sync>(
+        &self,
+        span: Span,
+        kind: &'static str,
+        value: Arc<T>,
+    ) {
         const MAX_ENTRIES: usize = 4096;
         let mut sh = lock(&self.shared);
         if sh.memo.len() >= MAX_ENTRIES
@@ -547,7 +623,11 @@ impl Cx {
     pub fn inflate_lazy(&self, span: Span, zlib: bool, len: u64) -> Result<Span> {
         let origin = Origin {
             parent: span,
-            transform: if zlib { "zlib (lazy)" } else { "deflate (lazy)" },
+            transform: if zlib {
+                "zlib (lazy)"
+            } else {
+                "deflate (lazy)"
+            },
         };
         if let Some(found) = self.derived(origin) {
             return Ok(found.span);

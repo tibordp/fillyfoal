@@ -125,7 +125,9 @@ fn children(data: &[u8], start: usize, end: usize) -> Vec<Chunk> {
     let mut out = Vec::new();
     let mut at = start;
     while at.saturating_add(8) <= end {
-        let Some(c) = chunk_at(data, at, end) else { break };
+        let Some(c) = chunk_at(data, at, end) else {
+            break;
+        };
         out.push(c);
         at = at.saturating_add(c.size);
     }
@@ -147,7 +149,9 @@ fn pool_strings(data: &[u8], c: &Chunk) -> Vec<String> {
         let Some(off) = u32_le(chunk, offsets.saturating_add(i.saturating_mul(4))) else {
             break;
         };
-        let at = base.saturating_add(start).saturating_add(to_usize(off.into()));
+        let at = base
+            .saturating_add(start)
+            .saturating_add(to_usize(off.into()));
         out.push(pool_string(chunk, at, utf8).unwrap_or_default());
     }
     out
@@ -188,7 +192,13 @@ fn string(pool: &[String], index: u32) -> Option<&str> {
 /// A `Res_value` rendered as text.
 fn render_value(kind: u8, data: u32, pool: &[String]) -> String {
     match kind {
-        0x00 => if data == 1 { "@empty".to_owned() } else { "@null".to_owned() },
+        0x00 => {
+            if data == 1 {
+                "@empty".to_owned()
+            } else {
+                "@null".to_owned()
+            }
+        }
         0x01 | 0x07 => format!("@0x{data:08x}"),
         0x02 | 0x08 => format!("?0x{data:08x}"),
         0x03 => string(pool, data).unwrap_or("?").to_owned(),
@@ -248,13 +258,23 @@ fn pool_node(doc: &Doc, c: &Chunk, label: &str) -> Node {
         .span(doc.at(c.offset, c.size))
         .summary(format!(
             "{count} strings, {}",
-            if flags & 0x100 != 0 { "UTF-8" } else { "UTF-16" }
+            if flags & 0x100 != 0 {
+                "UTF-8"
+            } else {
+                "UTF-16"
+            }
         ))
         .lazy(string_pool, (doc.clone(), *c))
 }
 
 async fn string_pool(cx: Cx, (doc, c): (Doc, Chunk)) -> Result<()> {
-    cx.emit(struct_node("Header", doc.at(c.offset, c.header), LE, (), pool_header));
+    cx.emit(struct_node(
+        "Header",
+        doc.at(c.offset, c.header),
+        LE,
+        (),
+        pool_header,
+    ));
     let strings = pool_strings(&doc.data, &c);
     for (i, s) in strings.into_iter().enumerate() {
         cx.push(Node::new(format!("{i}")).value(text(s))).await;
@@ -367,7 +387,13 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
     let data = doc.data.clone();
     let root = chunk_at(&data, 0, data.len())
         .ok_or_else(|| Diagnostic::malformed("bad XML chunk").at(doc.at(0, 8)))?;
-    cx.emit(struct_node("Header", doc.at(0, root.header), LE, (), chunk_header));
+    cx.emit(struct_node(
+        "Header",
+        doc.at(0, root.header),
+        LE,
+        (),
+        chunk_header,
+    ));
     let chunks = children(&data, root.header, root.size);
     let pool = chunks
         .iter()
@@ -403,7 +429,10 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
             0x0180 => cx.emit(
                 Node::new("Resource Map")
                     .span(doc.at(c.offset, c.size))
-                    .summary(format!("{} attribute IDs", c.size.saturating_sub(c.header) / 4)),
+                    .summary(format!(
+                        "{} attribute IDs",
+                        c.size.saturating_sub(c.header) / 4
+                    )),
             ),
             0x0102 => b.element(c),
             0x0103 => {
@@ -413,7 +442,9 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
             }
             0x0100 => {
                 let body = c.offset.saturating_add(c.header);
-                let prefix = string(&pool, u32_le(&data, body).unwrap_or(0)).unwrap_or("").to_owned();
+                let prefix = string(&pool, u32_le(&data, body).unwrap_or(0))
+                    .unwrap_or("")
+                    .to_owned();
                 let uri = string(&pool, u32_le(&data, body.saturating_add(4)).unwrap_or(0))
                     .unwrap_or("")
                     .to_owned();
@@ -427,10 +458,16 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
             }
             0x0104 => {
                 let body = c.offset.saturating_add(c.header);
-                let t = string(&pool, u32_le(&data, body).unwrap_or(0)).unwrap_or("").to_owned();
+                let t = string(&pool, u32_le(&data, body).unwrap_or(0))
+                    .unwrap_or("")
+                    .to_owned();
                 let parent = b.stack.last().copied();
-                b.tree
-                    .add(parent, Node::new("text").span(doc.at(c.offset, c.size)).value(text(t)));
+                b.tree.add(
+                    parent,
+                    Node::new("text")
+                        .span(doc.at(c.offset, c.size))
+                        .value(text(t)),
+                );
             }
             _ => {}
         }
@@ -442,8 +479,7 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
     });
     let tree = Arc::new(b.tree);
     cx.emit(
-        Tree::node(&tree, top)
-            .span(doc.at(root.header, root.size.saturating_sub(root.header))),
+        Tree::node(&tree, top).span(doc.at(root.header, root.size.saturating_sub(root.header))),
     );
     Ok(())
 }
@@ -456,7 +492,13 @@ pub async fn dissect_table(cx: Cx, input: Input) -> Result<()> {
     let data = doc.data.clone();
     let root = chunk_at(&data, 0, data.len())
         .ok_or_else(|| Diagnostic::malformed("bad table chunk").at(doc.at(0, 8)))?;
-    cx.emit(struct_node("Header", doc.at(0, root.header), LE, (), table_header));
+    cx.emit(struct_node(
+        "Header",
+        doc.at(0, root.header),
+        LE,
+        (),
+        table_header,
+    ));
     let chunks = children(&data, root.header, root.size);
     let pool: Arc<Vec<String>> = Arc::new(
         chunks
@@ -527,13 +569,32 @@ struct Package {
 
 async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Result<()> {
     let data = doc.data.clone();
-    cx.emit(struct_node("Header", doc.at(c.offset, c.header), LE, (), package_header));
-    let type_strings = to_usize(u32_le(&data, c.offset.saturating_add(268)).unwrap_or(0).into());
-    let key_strings = to_usize(u32_le(&data, c.offset.saturating_add(276)).unwrap_or(0).into());
+    cx.emit(struct_node(
+        "Header",
+        doc.at(c.offset, c.header),
+        LE,
+        (),
+        package_header,
+    ));
+    let type_strings = to_usize(
+        u32_le(&data, c.offset.saturating_add(268))
+            .unwrap_or(0)
+            .into(),
+    );
+    let key_strings = to_usize(
+        u32_le(&data, c.offset.saturating_add(276))
+            .unwrap_or(0)
+            .into(),
+    );
     let end = c.offset.saturating_add(c.size);
-    let pool_at = |rel: usize| chunk_at(&data, c.offset.saturating_add(rel), end).filter(|p| p.kind == 1);
-    let types = pool_at(type_strings).map(|p| pool_strings(&data, &p)).unwrap_or_default();
-    let keys = pool_at(key_strings).map(|p| pool_strings(&data, &p)).unwrap_or_default();
+    let pool_at =
+        |rel: usize| chunk_at(&data, c.offset.saturating_add(rel), end).filter(|p| p.kind == 1);
+    let types = pool_at(type_strings)
+        .map(|p| pool_strings(&data, &p))
+        .unwrap_or_default();
+    let keys = pool_at(key_strings)
+        .map(|p| pool_strings(&data, &p))
+        .unwrap_or_default();
     let pkg = Package {
         doc: doc.clone(),
         pool,
@@ -559,14 +620,20 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
                 pool_node(&doc, &child, label)
             }
             0x0202 => {
-                let id = data.get(child.offset.saturating_add(8)).copied().unwrap_or(0);
+                let id = data
+                    .get(child.offset.saturating_add(8))
+                    .copied()
+                    .unwrap_or(0);
                 let n = u32_le(&data, child.offset.saturating_add(12)).unwrap_or(0);
                 Node::new(format!("Type Spec {}", type_name(id)))
                     .span(span)
                     .summary(format!("{n} entries"))
             }
             0x0201 => {
-                let id = data.get(child.offset.saturating_add(8)).copied().unwrap_or(0);
+                let id = data
+                    .get(child.offset.saturating_add(8))
+                    .copied()
+                    .unwrap_or(0);
                 let n = u32_le(&data, child.offset.saturating_add(12)).unwrap_or(0);
                 let config = config_summary(&data, child.offset.saturating_add(20));
                 Node::new(format!("{} ({config})", type_name(id)))
@@ -574,9 +641,8 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
                     .summary(format!("{n} entries"))
                     .lazy(type_chunk, (pkg.clone(), child))
             }
-            other => {
-                Node::new(crate::value::lookup(CHUNK_TYPE, other.into()).unwrap_or("chunk")).span(span)
-            }
+            other => Node::new(crate::value::lookup(CHUNK_TYPE, other.into()).unwrap_or("chunk"))
+                .span(span),
         };
         cx.push(node).await;
     }
@@ -643,7 +709,13 @@ async fn type_chunk(cx: Cx, (pkg, c): (Package, Chunk)) -> Result<()> {
     let config = config_summary(&data, c.offset.saturating_add(20));
     f.node(
         Node::new("config")
-            .span(f.peek_span(u32_le(&data, c.offset.saturating_add(20)).unwrap_or(0).into()))
+            .span(
+                f.peek_span(
+                    u32_le(&data, c.offset.saturating_add(20))
+                        .unwrap_or(0)
+                        .into(),
+                ),
+            )
             .value(text(config)),
     );
     let offsets = c.offset.saturating_add(c.header);
@@ -695,9 +767,16 @@ async fn type_chunk(cx: Cx, (pkg, c): (Package, Chunk)) -> Result<()> {
             let parent = u32_le(&data, at.saturating_add(8)).unwrap_or(0);
             let n = u32_le(&data, at.saturating_add(12)).unwrap_or(0);
             Node::new(name)
-                .span(pkg.doc.at(at, size.saturating_add(to_usize(n.into()).saturating_mul(12))))
+                .span(pkg.doc.at(
+                    at,
+                    size.saturating_add(to_usize(n.into()).saturating_mul(12)),
+                ))
                 .value(text(format!("bag of {n}")))
-                .maybe_summary(if parent == 0 { String::new() } else { format!("parent @0x{parent:08x}") })
+                .maybe_summary(if parent == 0 {
+                    String::new()
+                } else {
+                    format!("parent @0x{parent:08x}")
+                })
         } else {
             let value_at = at.saturating_add(size);
             let kind = data.get(value_at.saturating_add(3)).copied().unwrap_or(0);
@@ -708,7 +787,11 @@ async fn type_chunk(cx: Cx, (pkg, c): (Package, Chunk)) -> Result<()> {
                 .summary(crate::value::lookup(VALUE_TYPE, kind.into()).unwrap_or("?"))
         };
         let (set, _) = crate::value::decode_flags(ENTRY_FLAGS, eflags.into());
-        let node = if set.is_empty() { node } else { node.desc(set.join(" ")) };
+        let node = if set.is_empty() {
+            node
+        } else {
+            node.desc(set.join(" "))
+        };
         cx.push(node).await;
     }
     Ok(())

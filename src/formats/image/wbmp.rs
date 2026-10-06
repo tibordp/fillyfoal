@@ -61,10 +61,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let Some((w, h, len)) = header(&head) else {
         return Err(Diagnostic::malformed("bad WBMP header").at(file.sub(0, 12)));
     };
-    cx.emit(Node::new("Type").span(file.sub(0, 1)).value(uint(0u8)).desc("0 = monochrome, uncompressed"));
-    cx.emit(Node::new("Fixed header").span(file.sub(1, 1)).value(uint(0u8)));
+    cx.emit(
+        Node::new("Type")
+            .span(file.sub(0, 1))
+            .value(uint(0u8))
+            .desc("0 = monochrome, uncompressed"),
+    );
+    cx.emit(
+        Node::new("Fixed header")
+            .span(file.sub(1, 1))
+            .value(uint(0u8)),
+    );
     let (_, wl) = multibyte(&head, 2).unwrap_or((0, 0));
-    cx.emit(Node::new("Width").span(file.sub(2, to_u64(wl))).value(uint(w)));
+    cx.emit(
+        Node::new("Width")
+            .span(file.sub(2, to_u64(wl)))
+            .value(uint(w)),
+    );
     let hl = len.saturating_sub(2).saturating_sub(wl);
     cx.emit(
         Node::new("Height")
@@ -73,8 +86,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     cx.annotate(format!("{}, 1-bit", dims(w, h)));
     cx.emit(
-        region("Raster", file, to_u64(len), raster_len(w, h))
-            .summary(format!("{h} rows of {} bytes, 1 = white", w.saturating_add(7) / 8)),
+        region("Raster", file, to_u64(len), raster_len(w, h)).summary(format!(
+            "{h} rows of {} bytes, 1 = white",
+            w.saturating_add(7) / 8
+        )),
     );
     Ok(())
 }

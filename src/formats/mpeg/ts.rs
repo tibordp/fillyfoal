@@ -47,7 +47,12 @@ struct Layout {
 
 fn layout(h: &Head<'_>) -> Option<Layout> {
     for (stride, prefix) in [(188usize, 0usize), (192, 4), (204, 0)] {
-        let available = h.data.len().saturating_sub(prefix).checked_div(stride).unwrap_or(0);
+        let available = h
+            .data
+            .len()
+            .saturating_sub(prefix)
+            .checked_div(stride)
+            .unwrap_or(0);
         let need = available.min(6);
         if need < 2 {
             continue;
@@ -336,7 +341,10 @@ async fn scan_psi(cx: &Cx, ts: &Ts) -> Result<Psi> {
         );
         let data = cx.read_avail(page).await?;
         for j in 0..n {
-            let at = vidutil::us(j.saturating_mul(ts.layout.stride).saturating_add(ts.layout.prefix));
+            let at = vidutil::us(
+                j.saturating_mul(ts.layout.stride)
+                    .saturating_add(ts.layout.prefix),
+            );
             let Some(p) = data.get(at..at.saturating_add(188)) else {
                 break;
             };
@@ -430,8 +438,16 @@ fn parse_pmt(section: &[u8], span: Span, prog: &mut Program) {
         };
         for (tag, body) in descriptors(desc) {
             match tag {
-                0x0a => stream.language = body.get(..3).map(|l| String::from_utf8_lossy(l).into_owned()),
-                0x05 => stream.registration = body.get(..4).map(|r| String::from_utf8_lossy(r).into_owned()),
+                0x0a => {
+                    stream.language = body
+                        .get(..3)
+                        .map(|l| String::from_utf8_lossy(l).into_owned())
+                }
+                0x05 => {
+                    stream.registration = body
+                        .get(..4)
+                        .map(|r| String::from_utf8_lossy(r).into_owned())
+                }
                 0x6a => stream.registration = Some("AC-3".to_owned()),
                 0x7a => stream.registration = Some("EAC3".to_owned()),
                 _ => {}
@@ -468,7 +484,14 @@ async fn duration(cx: &Cx, ts: &Ts) -> Result<Option<f64>> {
     })
 }
 
-async fn find_pcr(cx: &Cx, ts: &Ts, pid: u16, from: u64, n: u64, last: bool) -> Result<Option<u64>> {
+async fn find_pcr(
+    cx: &Cx,
+    ts: &Ts,
+    pid: u16,
+    from: u64,
+    n: u64,
+    last: bool,
+) -> Result<Option<u64>> {
     let page = ts.input.span.sub(
         from.saturating_mul(ts.layout.stride),
         n.saturating_mul(ts.layout.stride),
@@ -476,7 +499,10 @@ async fn find_pcr(cx: &Cx, ts: &Ts, pid: u16, from: u64, n: u64, last: bool) -> 
     let data = cx.read_avail(page).await?;
     let mut found = None;
     for j in 0..n {
-        let at = vidutil::us(j.saturating_mul(ts.layout.stride).saturating_add(ts.layout.prefix));
+        let at = vidutil::us(
+            j.saturating_mul(ts.layout.stride)
+                .saturating_add(ts.layout.prefix),
+        );
         let Some(p) = data.get(at..at.saturating_add(188)) else {
             break;
         };
@@ -549,13 +575,13 @@ async fn program(cx: Cx, (ts, index): (Ts, usize)) -> Result<()> {
         if let Some(r) = &s.registration {
             extras.push(format!("registration {r}"));
         }
-        let mut node = Node::new(format!("PID {:#06x}", s.pid))
-            .span(s.span)
-            .value(crate::value::Value::Enum {
+        let mut node = Node::new(format!("PID {:#06x}", s.pid)).span(s.span).value(
+            crate::value::Value::Enum {
                 raw: s.kind.into(),
                 bits: 8,
                 name: crate::value::lookup(STREAM_TYPES, s.kind.into()),
-            });
+            },
+        );
         if !extras.is_empty() {
             node = node.summary(extras.join(", "));
         }
@@ -569,26 +595,55 @@ async fn section(cx: Cx, span: Span) -> Result<()> {
     let d = cx.read_avail(span.sub(0, 1024)).await?;
     let s = section_body(&d);
     let table = s.first().copied().unwrap_or(0xff);
-    cx.emit(enumerated("Table ID", span.sub(0, 1), table.into(), 8, TABLE_IDS));
+    cx.emit(enumerated(
+        "Table ID",
+        span.sub(0, 1),
+        table.into(),
+        8,
+        TABLE_IDS,
+    ));
     let word = u16_be(s, 1).unwrap_or(0);
     let s12 = span.sub(1, 2);
-    cx.emit(flag_node("Section syntax indicator", s12, word & 0x8000 != 0));
+    cx.emit(flag_node(
+        "Section syntax indicator",
+        s12,
+        word & 0x8000 != 0,
+    ));
     cx.emit(uint("Section length", s12, (word & 0x0fff).into(), 12));
     if word & 0x8000 == 0 || s.len() < 8 {
         cx.emit(Node::new("Data").span(span.tail(3)));
         return Ok(());
     }
     cx.emit(uint(
-        if table == 2 { "Program number" } else { "Table ID extension" },
+        if table == 2 {
+            "Program number"
+        } else {
+            "Table ID extension"
+        },
         span.sub(3, 2),
         u16_be(s, 3).unwrap_or(0).into(),
         16,
     ));
     let b5 = s.get(5).copied().unwrap_or(0);
-    cx.emit(uint("Version", span.sub(5, 1), ((b5 >> 1) & 0x1f).into(), 5));
+    cx.emit(uint(
+        "Version",
+        span.sub(5, 1),
+        ((b5 >> 1) & 0x1f).into(),
+        5,
+    ));
     cx.emit(flag_node("Current/next", span.sub(5, 1), b5 & 1 != 0));
-    cx.emit(uint("Section number", span.sub(6, 1), s.get(6).copied().unwrap_or(0).into(), 8));
-    cx.emit(uint("Last section number", span.sub(7, 1), s.get(7).copied().unwrap_or(0).into(), 8));
+    cx.emit(uint(
+        "Section number",
+        span.sub(6, 1),
+        s.get(6).copied().unwrap_or(0).into(),
+        8,
+    ));
+    cx.emit(uint(
+        "Last section number",
+        span.sub(7, 1),
+        s.get(7).copied().unwrap_or(0).into(),
+        8,
+    ));
     let end = s.len().saturating_sub(4);
     match table {
         0 => {
@@ -601,18 +656,30 @@ async fn section(cx: Cx, span: Span) -> Result<()> {
                 } else {
                     format!("Program {number}")
                 };
-                cx.emit(hex(name, vidutil::at(span, at, 4), pid.into(), 13).summary(if number == 0 {
-                    "NIT"
-                } else {
-                    "PMT PID"
-                }));
+                cx.emit(
+                    hex(name, vidutil::at(span, at, 4), pid.into(), 13).summary(if number == 0 {
+                        "NIT"
+                    } else {
+                        "PMT PID"
+                    }),
+                );
                 at = at.saturating_add(4);
             }
         }
         2 => {
-            cx.emit(hex("PCR PID", span.sub(8, 2), (u16_be(s, 8).unwrap_or(0) & 0x1fff).into(), 13));
+            cx.emit(hex(
+                "PCR PID",
+                span.sub(8, 2),
+                (u16_be(s, 8).unwrap_or(0) & 0x1fff).into(),
+                13,
+            ));
             let info = u16_be(s, 10).unwrap_or(0) & 0x0fff;
-            cx.emit(uint("Program info length", span.sub(10, 2), info.into(), 12));
+            cx.emit(uint(
+                "Program info length",
+                span.sub(10, 2),
+                info.into(),
+                12,
+            ));
             let info_end = 12usize.saturating_add(usize::from(info)).min(end);
             emit_descriptors(&cx, span, 12, s.get(12..info_end).unwrap_or_default());
             let mut at = info_end;
@@ -632,7 +699,13 @@ async fn section(cx: Cx, span: Span) -> Result<()> {
                     .summary(format!("{} bytes of descriptors", es_len)),
                 );
                 let ds = at.saturating_add(5);
-                emit_descriptors(&cx, span, ds, s.get(ds..ds.saturating_add(es_len).min(end)).unwrap_or_default());
+                emit_descriptors(
+                    &cx,
+                    span,
+                    ds,
+                    s.get(ds..ds.saturating_add(es_len).min(end))
+                        .unwrap_or_default(),
+                );
                 at = ds.saturating_add(es_len);
             }
         }
@@ -665,7 +738,8 @@ fn emit_descriptors(cx: &Cx, span: Span, base: usize, d: &[u8]) {
             DESCRIPTORS,
         );
         node = match tag {
-            0x0a => node.summary(String::from_utf8_lossy(body.get(..3).unwrap_or_default()).into_owned()),
+            0x0a => node
+                .summary(String::from_utf8_lossy(body.get(..3).unwrap_or_default()).into_owned()),
             0x05 => node.summary(vidutil::fourcc(body.get(..4).unwrap_or_default())),
             _ => node.summary(format!("{} bytes", body.len())),
         };
@@ -696,11 +770,16 @@ async fn packets(cx: Cx, ts: Ts) -> Result<()> {
     let mut i = 0u64;
     while i < ts.count {
         let n = ts.count.saturating_sub(i).min(PAGE);
-        let page = ts.input.span.sub(i.saturating_mul(stride), n.saturating_mul(stride));
+        let page = ts
+            .input
+            .span
+            .sub(i.saturating_mul(stride), n.saturating_mul(stride));
         let data = cx.read_avail(page).await?;
         for j in 0..n {
             let at = vidutil::us(j.saturating_mul(stride));
-            let raw = data.get(at..at.saturating_add(vidutil::us(stride))).unwrap_or_default();
+            let raw = data
+                .get(at..at.saturating_add(vidutil::us(stride)))
+                .unwrap_or_default();
             let index = i.saturating_add(j);
             let span = ts.packet(index);
             let p = raw.get(vidutil::us(ts.layout.prefix)..).unwrap_or_default();
@@ -732,8 +811,14 @@ fn packet_summary(psi: &Psi, p: &[u8]) -> String {
             s = format!("{s}, {}", pes_summary(payload));
         } else if psi.is_psi(pid) {
             let pointer = usize::from(payload.first().copied().unwrap_or(0));
-            let table = payload.get(pointer.saturating_add(1)).copied().unwrap_or(0xff);
-            s = format!("{s}, {} section", vidutil::lookup_or(TABLE_IDS, table.into()));
+            let table = payload
+                .get(pointer.saturating_add(1))
+                .copied()
+                .unwrap_or(0xff);
+            s = format!(
+                "{s}, {} section",
+                vidutil::lookup_or(TABLE_IDS, table.into())
+            );
         } else {
             s.push_str(", unit start");
         }
@@ -749,13 +834,30 @@ async fn packet(cx: Cx, (ts, index): (Ts, u64)) -> Result<()> {
     let data = cx.read_avail(whole).await?;
     if ts.layout.prefix == 4 {
         let tc = u32_be(&data, 0).unwrap_or(0);
-        cx.emit(uint("Copy permission", whole.sub(0, 4), (tc >> 30).into(), 2));
-        cx.emit(uint("Arrival timestamp", whole.sub(0, 4), (tc & 0x3fff_ffff).into(), 30));
+        cx.emit(uint(
+            "Copy permission",
+            whole.sub(0, 4),
+            (tc >> 30).into(),
+            2,
+        ));
+        cx.emit(uint(
+            "Arrival timestamp",
+            whole.sub(0, 4),
+            (tc & 0x3fff_ffff).into(),
+            30,
+        ));
     }
     let span = whole.sub(ts.layout.prefix, 188);
-    let p = data.get(vidutil::us(ts.layout.prefix)..).unwrap_or_default();
+    let p = data
+        .get(vidutil::us(ts.layout.prefix)..)
+        .unwrap_or_default();
     let p = p.get(..188.min(p.len())).unwrap_or_default();
-    let mut sync = hex("Sync byte", span.sub(0, 1), p.first().copied().unwrap_or(0).into(), 8);
+    let mut sync = hex(
+        "Sync byte",
+        span.sub(0, 1),
+        p.first().copied().unwrap_or(0).into(),
+        8,
+    );
     if p.first() != Some(&0x47) {
         sync = sync.diag(crate::error::Diagnostic::malformed("expected 0x47"));
     }
@@ -774,7 +876,13 @@ async fn packet(cx: Cx, (ts, index): (Ts, u64)) -> Result<()> {
     let b3 = p.get(3).copied().unwrap_or(0);
     let s3 = span.sub(3, 1);
     cx.emit(uint("Scrambling control", s3, (b3 >> 6).into(), 2));
-    cx.emit(enumerated("Adaptation field control", s3, ((b3 >> 4) & 3).into(), 2, ADAPTATION));
+    cx.emit(enumerated(
+        "Adaptation field control",
+        s3,
+        ((b3 >> 4) & 3).into(),
+        2,
+        ADAPTATION,
+    ));
     cx.emit(uint("Continuity counter", s3, (b3 & 15).into(), 4));
     let mut at = 4usize;
     if b3 & 0x20 != 0 {
@@ -796,12 +904,19 @@ async fn packet(cx: Cx, (ts, index): (Ts, u64)) -> Result<()> {
     if w & 0x4000 != 0 && payload.starts_with(&[0, 0, 1]) {
         let (header, _) = pes_header_len(payload);
         let head = payload_span.sub(0, header);
-        cx.emit(Node::new("PES header").span(head).summary(pes_summary(payload)).lazy(pes, head));
+        cx.emit(
+            Node::new("PES header")
+                .span(head)
+                .summary(pes_summary(payload))
+                .lazy(pes, head),
+        );
         cx.emit(Node::new("PES payload").span(payload_span.tail(header)));
     } else if w & 0x4000 != 0 && ts.psi.is_psi(pid) {
         let pointer = u64::from(payload.first().copied().unwrap_or(0));
         cx.emit(uint("Pointer field", payload_span.sub(0, 1), pointer, 8));
-        let body = payload.get(vidutil::us(pointer.saturating_add(1))..).unwrap_or_default();
+        let body = payload
+            .get(vidutil::us(pointer.saturating_add(1))..)
+            .unwrap_or_default();
         let sec = payload_span.sub(pointer.saturating_add(1), to_u64(section_body(body).len()));
         let table = body.first().copied().unwrap_or(0xff);
         if table == 0xff {
@@ -828,7 +943,10 @@ fn pes_header_len(d: &[u8]) -> (u64, u16) {
     let id = d.get(3).copied().unwrap_or(0);
     let len = u16_be(d, 4).unwrap_or(0);
     if super::has_optional_header(id) && d.get(6).is_some_and(|b| b & 0xc0 == 0x80) {
-        (9u64.saturating_add(d.get(8).copied().unwrap_or(0).into()), len)
+        (
+            9u64.saturating_add(d.get(8).copied().unwrap_or(0).into()),
+            len,
+        )
     } else {
         (6, len)
     }
@@ -843,7 +961,12 @@ async fn pes(cx: Cx, span: Span) -> Result<()> {
 async fn adaptation(cx: Cx, span: Span) -> Result<()> {
     let d = cx.read_avail(span).await?;
     let len = d.first().copied().unwrap_or(0);
-    cx.emit(uint("Adaptation field length", span.sub(0, 1), len.into(), 8));
+    cx.emit(uint(
+        "Adaptation field length",
+        span.sub(0, 1),
+        len.into(),
+        8,
+    ));
     if len == 0 {
         return Ok(());
     }
@@ -879,10 +1002,10 @@ async fn adaptation(cx: Cx, span: Span) -> Result<()> {
     fake.extend_from_slice(&d);
     if flags & 0x10 != 0 {
         if let Some(v) = pcr(&fake) {
-            cx.emit(uint("PCR", span.sub(at, 6), v, 42).summary(format!(
-                "{:.6} s",
-                v as f64 / 27_000_000.0
-            )));
+            cx.emit(
+                uint("PCR", span.sub(at, 6), v, 42)
+                    .summary(format!("{:.6} s", v as f64 / 27_000_000.0)),
+            );
         }
         at = at.saturating_add(6);
     }
@@ -891,7 +1014,12 @@ async fn adaptation(cx: Cx, span: Span) -> Result<()> {
         at = at.saturating_add(6);
     }
     if flags & 0x04 != 0 {
-        cx.emit(uint("Splice countdown", span.sub(at, 1), d.get(vidutil::us(at)).copied().unwrap_or(0).into(), 8));
+        cx.emit(uint(
+            "Splice countdown",
+            span.sub(at, 1),
+            d.get(vidutil::us(at)).copied().unwrap_or(0).into(),
+            8,
+        ));
         at = at.saturating_add(1);
     }
     let rest = span.tail(at);

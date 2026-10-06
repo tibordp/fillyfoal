@@ -32,7 +32,9 @@ pub static OBU: Format = Format {
     mime: "video/av1",
     // A temporal delimiter (type 2, has_size, size 0), then a sequence
     // header (type 1, has_size).
-    probe: Probe::Custom(|h| h.starts_with(b"\x12\x00") && h.data.get(2).is_some_and(|b| b & 0xfa == 0x0a)),
+    probe: Probe::Custom(|h| {
+        h.starts_with(b"\x12\x00") && h.data.get(2).is_some_and(|b| b & 0xfa == 0x0a)
+    }),
     dissect: crate::expander!(dissect_obu: Input),
 };
 
@@ -83,16 +85,29 @@ struct Frame {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (h, _) = crate::dsl::Cursor::new(&cx, file, LE).record::<Header>().await?;
+    let (h, _) = crate::dsl::Cursor::new(&cx, file, LE)
+        .record::<Header>()
+        .await?;
     let header_len = u64::from(h.header_size).max(32);
     cx.emit(Header::node("Header", file.sub(0, Header::SIZE), LE));
     if header_len > Header::SIZE {
-        cx.emit(Node::new("Header extension").span(file.sub(Header::SIZE, header_len.saturating_sub(Header::SIZE))));
+        cx.emit(
+            Node::new("Header extension")
+                .span(file.sub(Header::SIZE, header_len.saturating_sub(Header::SIZE))),
+        );
     }
-    let fourcc: [u8; 4] = h.fourcc.as_bytes().get(..4).and_then(|b| b.try_into().ok()).unwrap_or([0; 4]);
+    let fourcc: [u8; 4] = h
+        .fourcc
+        .as_bytes()
+        .get(..4)
+        .and_then(|b| b.try_into().ok())
+        .unwrap_or([0; 4]);
     let codec = vidutil::codec_name(&fourcc).map_or_else(|| h.fourcc.clone(), str::to_owned);
     let fps = if h.scale > 0 {
-        format!(", {} fps", vidutil::num(f64::from(h.rate) / f64::from(h.scale)))
+        format!(
+            ", {} fps",
+            vidutil::num(f64::from(h.rate) / f64::from(h.scale))
+        )
     } else {
         String::new()
     };
@@ -221,7 +236,10 @@ pub async fn obus(cx: &Cx, data: Span) -> Result<()> {
         let t = (h >> 3) & 15;
         let ext = u64::from((h >> 2) & 1);
         let (size, len) = if h & 2 != 0 {
-            match d.get(vidutil::us(1u64.saturating_add(ext))..).and_then(crate::bytes::uleb128) {
+            match d
+                .get(vidutil::us(1u64.saturating_add(ext))..)
+                .and_then(crate::bytes::uleb128)
+            {
                 Some((s, l)) => (s, crate::bytes::to_u64(l)),
                 None => {
                     cx.emit(Node::new("Invalid OBU").span(data.tail(pos)));
@@ -229,19 +247,19 @@ pub async fn obus(cx: &Cx, data: Span) -> Result<()> {
                 }
             }
         } else {
-            (data.len.saturating_sub(pos).saturating_sub(1).saturating_sub(ext), 0)
+            (
+                data.len
+                    .saturating_sub(pos)
+                    .saturating_sub(1)
+                    .saturating_sub(ext),
+                0,
+            )
         };
         let header = 1u64.saturating_add(ext).saturating_add(len);
         let total = header.saturating_add(size);
         let span = data.sub(pos, total);
-        let mut node = vidutil::enumerated(
-            "OBU",
-            span,
-            t.into(),
-            4,
-            OBU_TYPES,
-        )
-        .summary(format!("{size} bytes"));
+        let mut node = vidutil::enumerated("OBU", span, t.into(), 4, OBU_TYPES)
+            .summary(format!("{size} bytes"));
         if h & 0x80 != 0 {
             node = node.diag(Diagnostic::malformed("forbidden bit set"));
         }

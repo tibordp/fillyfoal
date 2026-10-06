@@ -84,11 +84,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         f.u16("Number of entries").emit()?;
         for _ in 0..count {
             let at = f.pos();
-            let (Ok(id), Ok(offset), Ok(len)) = (
-                f.u32("").get(),
-                f.u32("").get(),
-                f.u32("").get(),
-            ) else {
+            let (Ok(id), Ok(offset), Ok(len)) = (f.u32("").get(), f.u32("").get(), f.u32("").get())
+            else {
                 break;
             };
             entries.push((header.sub(at, 12), id, offset, len));
@@ -97,13 +94,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut name = None;
     for &(_, id, offset, len) in &entries {
         if id == 3 {
-            let bytes = cx.read_avail(file.sub(offset.into(), u64::from(len).min(1024))).await?;
+            let bytes = cx
+                .read_avail(file.sub(offset.into(), u64::from(len).min(1024)))
+                .await?;
             name = Some(String::from_utf8_lossy(&bytes).into_owned());
         }
     }
     let ids: Vec<String> = entries
         .iter()
-        .map(|(_, id, _, _)| lookup(ENTRY_IDS, (*id).into()).map_or_else(|| format!("#{id}"), |s| s.to_lowercase()))
+        .map(|(_, id, _, _)| {
+            lookup(ENTRY_IDS, (*id).into()).map_or_else(|| format!("#{id}"), |s| s.to_lowercase())
+        })
         .collect();
     let mut summary = format!(
         "{}, {}",
@@ -117,14 +118,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(entries.len()).saturating_add(4)));
     for (desc, id, offset, len) in entries {
         let span = file.sub(offset.into(), len.into());
-        let label = lookup(ENTRY_IDS, id.into()).map_or_else(|| format!("Entry {id}"), str::to_owned);
+        let label =
+            lookup(ENTRY_IDS, id.into()).map_or_else(|| format!("Entry {id}"), str::to_owned);
         let mut node = match id {
             1 | 2 => content(label, input, span, Codec::Stored, None),
-            _ => Node::new(label).span(span).lazy(entry, (input, desc, span, id)),
+            _ => Node::new(label)
+                .span(span)
+                .lazy(entry, (input, desc, span, id)),
         };
         node = node.summary(format!("{} bytes", len)).target(desc);
         if span.len < u64::from(len) {
-            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, len.into()), span.len));
+            node = node.diag(Diagnostic::truncated(
+                Span::new(span.source, span.offset, len.into()),
+                span.len,
+            ));
         }
         cx.push(node).await;
     }
@@ -158,8 +165,12 @@ async fn entry(cx: Cx, (input, desc, span, id): (Input, Span, Span, u32)) -> Res
             }
         }
         9 => {
-            f.bytes("File type", 4).with(|b, n| n.value(Value::Text(fourcc(b)))).emit()?;
-            f.bytes("Creator", 4).with(|b, n| n.value(Value::Text(fourcc(b)))).emit()?;
+            f.bytes("File type", 4)
+                .with(|b, n| n.value(Value::Text(fourcc(b))))
+                .emit()?;
+            f.bytes("Creator", 4)
+                .with(|b, n| n.value(Value::Text(fourcc(b))))
+                .emit()?;
             f.u16("Finder flags").flags(FINDER_FLAGS).emit()?;
             f.int::<i16>("Location v").emit()?;
             f.int::<i16>("Location h").emit()?;
@@ -177,9 +188,15 @@ async fn entry(cx: Cx, (input, desc, span, id): (Input, Span, Span, u32)) -> Res
             }
         }
         10 => {
-            f.int::<i32>("Created").with(|&v, n| n.value(date(v))).emit()?;
-            f.int::<i32>("Modified").with(|&v, n| n.value(date(v))).emit()?;
-            f.int::<i32>("Backed up").with(|&v, n| n.value(date(v))).emit()?;
+            f.int::<i32>("Created")
+                .with(|&v, n| n.value(date(v)))
+                .emit()?;
+            f.int::<i32>("Modified")
+                .with(|&v, n| n.value(date(v)))
+                .emit()?;
+            f.int::<i32>("Backed up")
+                .with(|&v, n| n.value(date(v)))
+                .emit()?;
             f.u32("Attributes").hex().emit()?;
         }
         12 => {
@@ -215,8 +232,14 @@ async fn attributes(cx: Cx, (input, at): (Input, Span)) -> Result<()> {
         let offset = u32_be(&head, 0).unwrap_or(0);
         let len = u32_be(&head, 4).unwrap_or(0);
         let name_len = u64::from(head.get(10).copied().unwrap_or(0));
-        let name = crate::text::until_nul(&cx.read(at.sub_exact(pos.saturating_add(11), name_len)?).await?);
-        let entry_len = 11u64.saturating_add(name_len).checked_next_multiple_of(4).unwrap_or(u64::MAX);
+        let name = crate::text::until_nul(
+            &cx.read(at.sub_exact(pos.saturating_add(11), name_len)?)
+                .await?,
+        );
+        let entry_len = 11u64
+            .saturating_add(name_len)
+            .checked_next_multiple_of(4)
+            .unwrap_or(u64::MAX);
         let value = file.sub(offset.into(), len.into());
         let preview = cx.read_avail(value.sub(0, 64)).await?;
         let mut node = Node::new(name.clone())

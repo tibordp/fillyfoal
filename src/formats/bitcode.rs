@@ -121,7 +121,9 @@ struct Bits<'a> {
 
 impl Bits<'_> {
     fn remaining(&self) -> u64 {
-        to_u64(self.data.len()).saturating_mul(8).saturating_sub(self.pos)
+        to_u64(self.data.len())
+            .saturating_mul(8)
+            .saturating_sub(self.pos)
     }
 
     fn read(&mut self, n: u32) -> Option<u64> {
@@ -262,7 +264,9 @@ fn abbreviated(b: &mut Bits<'_>, abbrev: &Abbrev) -> Option<Record> {
                 let element = abbrev.get(i.checked_add(1)?)?;
                 let n = b.vbr(6)?;
                 // Every element costs at least one bit, except literals.
-                if n > b.remaining().saturating_add(1) || matches!(element, Op::Literal(_)) && n > 0x1_0000 {
+                if n > b.remaining().saturating_add(1)
+                    || matches!(element, Op::Literal(_)) && n > 0x1_0000
+                {
                     return None;
                 }
                 for _ in 0..n {
@@ -321,7 +325,9 @@ struct BlockState {
 /// Reads an ENTER_SUBBLOCK header (after its abbreviation ID).
 fn enter(b: &mut Bits<'_>) -> Option<(u64, u32, u64)> {
     let id = b.vbr(8)?;
-    let width = u32::try_from(b.vbr(4)?).ok().filter(|&w| (1..=32).contains(&w))?;
+    let width = u32::try_from(b.vbr(4)?)
+        .ok()
+        .filter(|&w| (1..=32).contains(&w))?;
     b.align32();
     let words = b.read(32)?;
     let start = b.pos;
@@ -364,7 +370,11 @@ fn as_text(ops: &[u64]) -> Option<String> {
     }
     let bytes: Option<Vec<u8>> = ops
         .iter()
-        .map(|&v| u8::try_from(v).ok().filter(|c| c.is_ascii_graphic() || *c == b' '))
+        .map(|&v| {
+            u8::try_from(v)
+                .ok()
+                .filter(|c| c.is_ascii_graphic() || *c == b' ')
+        })
         .collect();
     bytes.map(|b| String::from_utf8_lossy(&b).into_owned())
 }
@@ -375,7 +385,12 @@ fn block_label(id: u64) -> String {
 
 /// Walks a block's contents: records become nodes (decoded), nested blocks
 /// become lazy nodes. `visit` sees every record (for summaries).
-async fn walk(cx: &Cx, s: &BlockState, emit: bool, visit: &mut (dyn FnMut(u64, &Record) + Send)) -> Result<()> {
+async fn walk(
+    cx: &Cx,
+    s: &BlockState,
+    emit: bool,
+    visit: &mut (dyn FnMut(u64, &Record) + Send),
+) -> Result<()> {
     let mut b = Bits {
         data: &s.stream.data,
         pos: s.start,
@@ -384,14 +399,13 @@ async fn walk(cx: &Cx, s: &BlockState, emit: bool, visit: &mut (dyn FnMut(u64, &
     // BLOCKINFO contents are attributed to the block named by SETBID.
     let mut info = (*s.info).clone();
     let mut current: Option<u64> = None;
-    let bad = |pos: u64| {
-        Diagnostic::malformed("malformed bitstream")
-            .at(s.stream.span.sub(pos >> 3, 1))
-    };
+    let bad =
+        |pos: u64| Diagnostic::malformed("malformed bitstream").at(s.stream.span.sub(pos >> 3, 1));
     let span_of = |from: u64, to: u64| {
-        s.stream
-            .span
-            .sub(from >> 3, (to.saturating_add(7) >> 3).saturating_sub(from >> 3))
+        s.stream.span.sub(
+            from >> 3,
+            (to.saturating_add(7) >> 3).saturating_sub(from >> 3),
+        )
     };
     while b.pos < s.end {
         cx.checkpoint().await;
@@ -441,7 +455,8 @@ async fn walk(cx: &Cx, s: &BlockState, emit: bool, visit: &mut (dyn FnMut(u64, &
                     abbrevs.push(abbrev);
                 }
                 if emit {
-                    cx.push(Node::new("DEFINE_ABBREV").span(span_of(at, b.pos))).await;
+                    cx.push(Node::new("DEFINE_ABBREV").span(span_of(at, b.pos)))
+                        .await;
                 }
             }
             _ => {
@@ -522,7 +537,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, 20)).await?;
     let mut stream_span = file;
     if head.starts_with(b"\xde\xc0\x17\x0b") {
-        cx.emit(struct_node("Wrapper Header", file.sub(0, 20), Endian::Little, (), wrapper));
+        cx.emit(struct_node(
+            "Wrapper Header",
+            file.sub(0, 20),
+            Endian::Little,
+            (),
+            wrapper,
+        ));
         let offset = u32_le(&head, 8).unwrap_or(0);
         let size = u32_le(&head, 12).unwrap_or(0);
         stream_span = file.sub(offset.into(), size.into());
@@ -531,7 +552,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::limit("bitcode too large to decode").at(stream_span));
     }
     let data = Arc::new(cx.read(stream_span).await?);
-    cx.emit(Node::new("Magic").span(stream_span.sub(0, 4)).value(text("BC 0xC0DE")));
+    cx.emit(
+        Node::new("Magic")
+            .span(stream_span.sub(0, 4))
+            .value(text("BC 0xC0DE")),
+    );
     let stream = Stream {
         data,
         span: stream_span,
@@ -560,7 +585,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if b.read(2) != Some(1) {
                 break;
             }
-            let Some((id, width, end)) = enter(&mut b) else { break };
+            let Some((id, width, end)) = enter(&mut b) else {
+                break;
+            };
             let state = BlockState {
                 start: b.pos,
                 end,

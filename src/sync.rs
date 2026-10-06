@@ -6,14 +6,21 @@
 use std::io::{self, Read, Seek, SeekFrom};
 
 use crate::bytes::{to_u64, to_usize};
+use crate::secret::{Secret, SecretRequest};
 use crate::session::{Progress, Session};
 use crate::span::SourceId;
+
+/// Answers secret requests (prompts the user, reads a keychain...); `None`
+/// declines.
+pub type SecretProvider = Box<dyn FnMut(&SecretRequest) -> Option<Secret>>;
 
 pub struct Driver<R> {
     sources: Vec<(SourceId, R)>,
     /// Work units per poll. Smaller values return control to the caller more
     /// often; this driver simply polls again.
     pub budget: u64,
+    /// Answers secret requests; without one, every request is declined.
+    pub secrets: Option<SecretProvider>,
 }
 
 impl<R: Read + Seek> Default for Driver<R> {
@@ -27,6 +34,7 @@ impl<R: Read + Seek> Driver<R> {
         Driver {
             sources: Vec::new(),
             budget: 10_000,
+            secrets: None,
         }
     }
 
@@ -44,6 +52,12 @@ impl<R: Read + Seek> Driver<R> {
             match session.poll(self.budget) {
                 Progress::Idle => return Ok(()),
                 Progress::Yielded => {}
+                Progress::NeedSecret(requests) => {
+                    for req in requests {
+                        let answer = self.secrets.as_mut().and_then(|f| f(&req));
+                        session.answer_secret(&req, answer);
+                    }
+                }
                 Progress::NeedBytes(requests) => {
                     for req in requests {
                         let Some((_, reader)) =

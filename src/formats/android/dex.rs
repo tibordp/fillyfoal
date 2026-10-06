@@ -174,7 +174,10 @@ impl DexInfo {
         };
         let n = u32_le(&head, 0).unwrap_or(0).min(256);
         let Ok(list) = cx
-            .read_avail(self.file.sub(u64::from(off).saturating_add(4), u64::from(n).saturating_mul(2)))
+            .read_avail(self.file.sub(
+                u64::from(off).saturating_add(4),
+                u64::from(n).saturating_mul(2),
+            ))
             .await
         else {
             return out;
@@ -261,7 +264,13 @@ fn java_name(descriptor: &str) -> String {
 // ---------------------------------------------------------------------------
 // Header
 
-fn table(f: &mut Fields<'_>, size: &'static str, off: &'static str, file: Span, width: u64) -> Result<Table> {
+fn table(
+    f: &mut Fields<'_>,
+    size: &'static str,
+    off: &'static str,
+    file: Span,
+    width: u64,
+) -> Result<Table> {
     let size = f.u32(size).emit()?;
     let off = f
         .u32(off)
@@ -382,7 +391,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Err(_) => String::new(),
         };
         if !first.is_empty() {
-            summary.push_str(&format!(" ({first}{})", if h.classes.size > 1 { ", …" } else { "" }));
+            summary.push_str(&format!(
+                " ({first}{})",
+                if h.classes.size > 1 { ", …" } else { "" }
+            ));
         }
     }
     cx.annotate(summary);
@@ -550,21 +562,56 @@ async fn id_item(cx: Cx, (dex, kind, at): (Dex, Kind, Span)) -> Result<()> {
             let shorty = u32_at(0);
             let ret = u32_at(4);
             let params = u32_at(8);
-            parts.push(("shorty_idx", at.sub(0, 4), shorty, dex.string(&cx, shorty).await.unwrap_or_default()));
-            parts.push(("return_type_idx", at.sub(4, 4), ret, dex.type_name(&cx, ret).await));
-            parts.push(("parameters_off", at.sub(8, 4), params, dex.type_list(&cx, params).await.join(", ")));
+            parts.push((
+                "shorty_idx",
+                at.sub(0, 4),
+                shorty,
+                dex.string(&cx, shorty).await.unwrap_or_default(),
+            ));
+            parts.push((
+                "return_type_idx",
+                at.sub(4, 4),
+                ret,
+                dex.type_name(&cx, ret).await,
+            ));
+            parts.push((
+                "parameters_off",
+                at.sub(8, 4),
+                params,
+                dex.type_list(&cx, params).await.join(", "),
+            ));
         }
         Kind::Field | Kind::Method => {
             let class = u16_at(0);
             let second = u16_at(2);
             let name = u32_at(4);
-            parts.push(("class_idx", at.sub(0, 2), class, dex.type_name(&cx, class).await));
+            parts.push((
+                "class_idx",
+                at.sub(0, 2),
+                class,
+                dex.type_name(&cx, class).await,
+            ));
             if kind == Kind::Field {
-                parts.push(("type_idx", at.sub(2, 2), second, dex.type_name(&cx, second).await));
+                parts.push((
+                    "type_idx",
+                    at.sub(2, 2),
+                    second,
+                    dex.type_name(&cx, second).await,
+                ));
             } else {
-                parts.push(("proto_idx", at.sub(2, 2), second, dex.proto(&cx, second).await));
+                parts.push((
+                    "proto_idx",
+                    at.sub(2, 2),
+                    second,
+                    dex.proto(&cx, second).await,
+                ));
             }
-            parts.push(("name_idx", at.sub(4, 4), name, dex.string(&cx, name).await.unwrap_or_default()));
+            parts.push((
+                "name_idx",
+                at.sub(4, 4),
+                name,
+                dex.string(&cx, name).await.unwrap_or_default(),
+            ));
         }
         _ => {}
     }
@@ -612,10 +659,14 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
     let source = if def.source_file_idx == NO_INDEX {
         String::new()
     } else {
-        dex.string(&cx, def.source_file_idx).await.unwrap_or_default()
+        dex.string(&cx, def.source_file_idx)
+            .await
+            .unwrap_or_default()
     };
     let target = |off: u32| (off != 0).then(|| dex.file.sub(off.into(), 0));
-    f.u32("class_idx").with(|_, n| n.summary(class.clone())).emit()?;
+    f.u32("class_idx")
+        .with(|_, n| n.summary(class.clone()))
+        .emit()?;
     f.u32("access_flags").flags(ACCESS).emit()?;
     f.u32("superclass_idx")
         .with(|_, n| n.summary(superclass.clone()))
@@ -675,7 +726,11 @@ async fn class_data(cx: Cx, (dex, span): (Dex, Span)) -> Result<()> {
             let start = r.pos();
             let diff = r.uleb().ok_or_else(bad)?;
             let access = r.uleb().ok_or_else(bad)?;
-            let code = if methods { r.uleb().ok_or_else(bad)? } else { 0 };
+            let code = if methods {
+                r.uleb().ok_or_else(bad)?
+            } else {
+                0
+            };
             index = index.saturating_add(u32::try_from(diff).unwrap_or(u32::MAX));
             let at = span.sub(to_u64(start), to_u64(r.pos().saturating_sub(start)));
             let (set, _) = decode_flags(ACCESS, access);
@@ -731,7 +786,11 @@ async fn code_item(cx: Cx, (dex, off): (Dex, u64)) -> Result<()> {
     if item.tries > 0 {
         let pad = if item.insns % 2 == 1 { 2 } else { 0 };
         let tries = dex.file.sub(
-            insns.offset.saturating_sub(dex.file.offset).saturating_add(insns.len).saturating_add(pad),
+            insns
+                .offset
+                .saturating_sub(dex.file.offset)
+                .saturating_add(insns.len)
+                .saturating_add(pad),
             u64::from(item.tries).saturating_mul(8),
         );
         cx.emit(
@@ -820,7 +879,10 @@ pub async fn odex(cx: Cx, input: Input) -> Result<()> {
     let head = file.sub(0, OdexHeader::SIZE);
     cx.emit(OdexHeader::node("Header", head, LE));
     let h = parse(&cx, head, LE, &(), OdexHeader::layout).await?;
-    cx.annotate(format!("Android optimized DEX, {:#x}-byte DEX", h.dex_length));
+    cx.annotate(format!(
+        "Android optimized DEX, {:#x}-byte DEX",
+        h.dex_length
+    ));
     let dex = file.sub(h.dex_offset.into(), h.dex_length.into());
     cx.emit(embedded_as("DEX", input.nested(dex), &FORMAT));
     cx.emit(Node::new("Dependencies").span(file.sub(h.deps_offset.into(), h.deps_length.into())));

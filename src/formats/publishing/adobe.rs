@@ -42,7 +42,10 @@ const IMAGE_MODES: EnumTable = &[
 ];
 
 fn mode_name(mode: u32) -> &'static str {
-    IMAGE_MODES.iter().find(|(k, _)| *k == u64::from(mode)).map_or("unknown mode", |(_, v)| v)
+    IMAGE_MODES
+        .iter()
+        .find(|(k, _)| *k == u64::from(mode))
+        .map_or("unknown mode", |(_, v)| v)
 }
 
 /// A Photoshop Unicode string read through a cursor: u32 code units, UTF-16BE.
@@ -50,7 +53,9 @@ async fn ustr(cur: &mut Cursor<'_>) -> Result<String> {
     let at = cur.pos();
     let units = cur.u32().await?;
     if units > MAX_STRING {
-        return Err(Diagnostic::malformed(format!("string of {units} characters")).at(cur.since(at)));
+        return Err(
+            Diagnostic::malformed(format!("string of {units} characters")).at(cur.since(at)),
+        );
     }
     let b = cur.bytes(u64::from(units).saturating_mul(2)).await?;
     Ok(crate::text::utf16(&b, BE).trim_end_matches('\0').to_owned())
@@ -100,7 +105,10 @@ const TYPE_NAMES: &[(&[u8; 4], &str)] = &[
 ];
 
 fn type_name(t: &[u8; 4]) -> &'static str {
-    TYPE_NAMES.iter().find(|(k, _)| *k == t).map_or("unknown type", |(_, v)| v)
+    TYPE_NAMES
+        .iter()
+        .find(|(k, _)| *k == t)
+        .map_or("unknown type", |(_, v)| v)
 }
 
 const UNITS: &[(&[u8; 4], &str)] = &[
@@ -115,13 +123,20 @@ const UNITS: &[(&[u8; 4], &str)] = &[
 ];
 
 fn unit_name(u: &[u8; 4]) -> String {
-    UNITS.iter().find(|(k, _)| *k == u).map_or_else(|| fourcc(u), |(_, v)| (*v).to_owned())
+    UNITS
+        .iter()
+        .find(|(k, _)| *k == u)
+        .map_or_else(|| fourcc(u), |(_, v)| (*v).to_owned())
 }
 
 /// A class or key ID: a length, or 0 followed by a four-character code.
 fn key(r: &mut Rd<'_>) -> Option<String> {
     let n = r.u32()?;
-    let n = if n == 0 { 4 } else { usize::try_from(n).ok().filter(|&n| n <= 0x1_0000)? };
+    let n = if n == 0 {
+        4
+    } else {
+        usize::try_from(n).ok().filter(|&n| n <= 0x1_0000)?
+    };
     Some(crate::text::latin1(r.take(n)?).trim_end().to_owned())
 }
 
@@ -242,14 +257,23 @@ pub(crate) fn measure_descriptor(data: &[u8]) -> Option<usize> {
 
 /// A lazy node for the descriptor at `span` (exactly its bytes).
 pub(crate) fn descriptor_node(name: impl Into<std::borrow::Cow<'static, str>>, span: Span) -> Node {
-    Node::new(name).span(span).lazy(items, (span, Kind::Descriptor, 0u32))
+    Node::new(name)
+        .span(span)
+        .lazy(items, (span, Kind::Descriptor, 0u32))
 }
 
 fn bad(span: Span) -> Diagnostic {
     Diagnostic::malformed("descriptor item is cut off or has an unknown type").at(span)
 }
 
-fn item_node(name: String, t: &[u8; 4], val: Option<Val>, whole: Span, inner: Span, depth: u32) -> Node {
+fn item_node(
+    name: String,
+    t: &[u8; 4],
+    val: Option<Val>,
+    whole: Span,
+    inner: Span,
+    depth: u32,
+) -> Node {
     let node = Node::new(name).span(whole);
     let ty = type_name(t);
     match val {
@@ -297,7 +321,12 @@ async fn items(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
         };
         let t = r.fourcc();
         let (Some(name), Some(t)) = (name, t) else {
-            cx.push(Node::new(format!("[{i}]")).span(sub(at, data.len())).diag(bad(sub(at, data.len())))).await;
+            cx.push(
+                Node::new(format!("[{i}]"))
+                    .span(sub(at, data.len()))
+                    .diag(bad(sub(at, data.len()))),
+            )
+            .await;
             break;
         };
         let vat = r.pos;
@@ -318,7 +347,8 @@ async fn items(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
         let val = value(&mut r, &t, depth);
         let ok = val.is_some();
         let end = if ok { r.pos } else { data.len() };
-        cx.push(item_node(name, &t, val, sub(at, end), sub(vat, end), depth)).await;
+        cx.push(item_node(name, &t, val, sub(at, end), sub(vat, end), depth))
+            .await;
         if !ok {
             break;
         }
@@ -328,19 +358,29 @@ async fn items(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
 
 /// A versioned descriptor (u32 16, then the descriptor) at `pos` of `data`
 /// (which starts at `base` of `region`): its node and end offset.
-fn versioned_descriptor(name: &'static str, region: Span, data: &[u8], pos: usize) -> (Node, Option<usize>) {
+fn versioned_descriptor(
+    name: &'static str,
+    region: Span,
+    data: &[u8],
+    pos: usize,
+) -> (Node, Option<usize>) {
     let mut r = Rd::at(data, pos, BE);
     let version = r.u32();
     let start = r.pos;
     match (version, data.get(start..).and_then(measure_descriptor)) {
         (Some(16), Some(len)) => {
             let span = region.sub(to_u64(start), to_u64(len));
-            (descriptor_node(name, span).summary("descriptor version 16"), start.checked_add(len))
+            (
+                descriptor_node(name, span).summary("descriptor version 16"),
+                start.checked_add(len),
+            )
         }
         (v, _) => (
             Node::new(name)
                 .span(region.tail(to_u64(pos)))
-                .diag(Diagnostic::malformed(format!("descriptor version {v:?} or contents not understood"))),
+                .diag(Diagnostic::malformed(format!(
+                    "descriptor version {v:?} or contents not understood"
+                ))),
             None,
         ),
     }
@@ -361,60 +401,129 @@ struct Pattern {
 async fn pattern(cx: &Cx, cur: &mut Cursor<'_>, on: bool) -> Result<Pattern> {
     let at = cur.pos();
     let version = cur.u32().await?;
-    put(cx, on, Node::new("Version").span(cur.since(at)).value(uint(version, 32)));
+    put(
+        cx,
+        on,
+        Node::new("Version")
+            .span(cur.since(at))
+            .value(uint(version, 32)),
+    );
     let at = cur.pos();
     let mode = cur.u32().await?;
-    put(cx, on, Node::new("Image mode").span(cur.since(at)).value(Value::Enum { raw: mode.into(), bits: 32, name: Some(mode_name(mode)) }));
+    put(
+        cx,
+        on,
+        Node::new("Image mode")
+            .span(cur.since(at))
+            .value(Value::Enum {
+                raw: mode.into(),
+                bits: 32,
+                name: Some(mode_name(mode)),
+            }),
+    );
     let at = cur.pos();
     let height = cur.u16().await?;
     let width = cur.u16().await?;
-    put(cx, on, Node::new("Size").span(cur.since(at)).value(text(format!("{width}×{height}"))));
+    put(
+        cx,
+        on,
+        Node::new("Size")
+            .span(cur.since(at))
+            .value(text(format!("{width}×{height}"))),
+    );
     let at = cur.pos();
     let name = ustr(cur).await?;
-    put(cx, on, Node::new("Name").span(cur.since(at)).value(text(name.clone())));
+    put(
+        cx,
+        on,
+        Node::new("Name")
+            .span(cur.since(at))
+            .value(text(name.clone())),
+    );
     let at = cur.pos();
     let id_len = cur.u8().await?;
     let id = cur.bytes(id_len.into()).await?;
-    put(cx, on, Node::new("ID").span(cur.since(at)).value(text(String::from_utf8_lossy(&id))));
+    put(
+        cx,
+        on,
+        Node::new("ID")
+            .span(cur.since(at))
+            .value(text(String::from_utf8_lossy(&id))),
+    );
     if mode == 2 {
         let at = cur.pos();
         cur.bytes(768).await?;
-        put(cx, on, Node::new("Colour table").span(cur.since(at)).summary("256 RGB entries"));
+        put(
+            cx,
+            on,
+            Node::new("Colour table")
+                .span(cur.since(at))
+                .summary("256 RGB entries"),
+        );
     }
     let at = cur.pos();
     let vm_version = cur.u32().await?;
     let len = cur.u32().await?;
     let body = cur.span(u64::from(len));
     if body.len < u64::from(len) {
-        return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len.into()), body.len));
+        return Err(Diagnostic::truncated(
+            Span::new(body.source, body.offset, len.into()),
+            body.len,
+        ));
     }
     cur.skip(len.into());
     if on {
         cx.emit(
             Node::new("Pixel data")
                 .span(cur.since(at))
-                .summary(format!("virtual memory array list v{vm_version}, {len} bytes"))
+                .summary(format!(
+                    "virtual memory array list v{vm_version}, {len} bytes"
+                ))
                 .lazy(vmal, body),
         );
     }
-    Ok(Pattern { name, mode, width, height })
+    Ok(Pattern {
+        name,
+        mode,
+        width,
+        height,
+    })
 }
 
 /// The virtual memory array list body: bounds and channel records.
 async fn vmal(cx: Cx, body: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, body, BE);
     let at = cur.pos();
-    let (t, l, b, r) = (cur.u32().await?, cur.u32().await?, cur.u32().await?, cur.u32().await?);
-    cx.emit(Node::new("Rectangle").span(cur.since(at)).value(text(format!("top {t}, left {l}, bottom {b}, right {r}"))));
+    let (t, l, b, r) = (
+        cur.u32().await?,
+        cur.u32().await?,
+        cur.u32().await?,
+        cur.u32().await?,
+    );
+    cx.emit(
+        Node::new("Rectangle")
+            .span(cur.since(at))
+            .value(text(format!("top {t}, left {l}, bottom {b}, right {r}"))),
+    );
     let at = cur.pos();
     let channels = cur.u32().await?;
-    cx.emit(Node::new("Channels").span(cur.since(at)).value(uint(channels, 32)).desc("Highest channel index plus two (user and sheet masks)"));
+    cx.emit(
+        Node::new("Channels")
+            .span(cur.since(at))
+            .value(uint(channels, 32))
+            .desc("Highest channel index plus two (user and sheet masks)"),
+    );
     let mut i = 0u32;
     while cur.remaining() >= 8 && i < channels.saturating_add(2) {
         let at = cur.pos();
         let written = cur.u32().await?;
         if written == 0 {
-            cx.push(Node::new(format!("Channel {i}")).span(cur.since(at)).summary("not written")).await;
+            cx.push(
+                Node::new(format!("Channel {i}"))
+                    .span(cur.since(at))
+                    .summary("not written"),
+            )
+            .await;
             i = i.saturating_add(1);
             continue;
         }
@@ -426,7 +535,10 @@ async fn vmal(cx: Cx, body: Span) -> Result<()> {
             let h = cx.read(data.sub(0, 23)).await?;
             let depth = u32_be(&h, 0).unwrap_or(0);
             let comp = h.get(22).copied().unwrap_or(0);
-            node = node.summary(format!("{depth}-bit, {}, {len} bytes", if comp == 1 { "RLE" } else { "raw" }));
+            node = node.summary(format!(
+                "{depth}-bit, {}, {len} bytes",
+                if comp == 1 { "RLE" } else { "raw" }
+            ));
         }
         cx.push(node).await;
         i = i.saturating_add(1);
@@ -438,10 +550,14 @@ async fn pattern_node(cx: &Cx, cur: &mut Cursor<'_>, index: u32) -> Result<Node>
     let start = cur.pos();
     let p = pattern(cx, cur, false).await?;
     let span = cur.since(start);
-    Ok(Node::new(if p.name.is_empty() { format!("Pattern {index}") } else { p.name })
-        .span(span)
-        .summary(format!("{}×{}, {}", p.width, p.height, mode_name(p.mode)))
-        .lazy(pattern_fields, span))
+    Ok(Node::new(if p.name.is_empty() {
+        format!("Pattern {index}")
+    } else {
+        p.name
+    })
+    .span(span)
+    .summary(format!("{}×{}, {}", p.width, p.height, mode_name(p.mode)))
+    .lazy(pattern_fields, span))
 }
 
 async fn pattern_fields(cx: Cx, span: Span) -> Result<()> {
@@ -481,7 +597,8 @@ fn abr_probe(h: &Head<'_>) -> bool {
         Some(1 | 2) => {
             u16_be(h.data, 2).is_some_and(|n| n > 0 && n < 1000)
                 && matches!(u16_be(h.data, 4), Some(1 | 2))
-                && u32_be(h.data, 6).is_some_and(|s| s >= 14 && u64::from(s).saturating_add(10) <= h.len)
+                && u32_be(h.data, 6)
+                    .is_some_and(|s| s >= 14 && u64::from(s).saturating_add(10) <= h.len)
         }
         _ => false,
     }
@@ -508,11 +625,22 @@ async fn abr(cx: Cx, input: Input) -> Result<()> {
             let len = cur.u32().await?;
             let body = cur.span(len.into());
             if body.len < u64::from(len) {
-                return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len.into()), body.len));
+                return Err(Diagnostic::truncated(
+                    Span::new(body.source, body.offset, len.into()),
+                    body.len,
+                ));
             }
             cur.skip(len.into());
-            let name = BRUSH_TYPES.iter().find(|(k, _)| *k == u64::from(kind)).map_or("unknown", |(_, v)| v);
-            cx.push(Node::new(format!("Brush {n}")).span(cur.since(start)).summary(format!("{name}, {len} bytes"))).await;
+            let name = BRUSH_TYPES
+                .iter()
+                .find(|(k, _)| *k == u64::from(kind))
+                .map_or("unknown", |(_, v)| v);
+            cx.push(
+                Node::new(format!("Brush {n}"))
+                    .span(cur.since(start))
+                    .summary(format!("{name}, {len} bytes")),
+            )
+            .await;
             n = n.saturating_add(1);
         }
         cx.annotate(format!("Photoshop brushes v{version}, {count} brushes"));
@@ -525,21 +653,38 @@ async fn abr(cx: Cx, input: Input) -> Result<()> {
     while let Some(chunk) = cur.chunk(ChunkLayout::new(8, 4, BE)).await? {
         let key = chunk.id.get(4..).map(fourcc).unwrap_or_default();
         if !chunk.id.starts_with(b"8BIM") {
-            cx.emit(Node::new("Unknown section").span(chunk.span).diag(Diagnostic::malformed("section signature is not 8BIM")));
+            cx.emit(
+                Node::new("Unknown section")
+                    .span(chunk.span)
+                    .diag(Diagnostic::malformed("section signature is not 8BIM")),
+            );
             break;
         }
-        let node = Node::new(key.clone()).span(chunk.span).summary(format!("{} bytes", chunk.body.len));
+        let node = Node::new(key.clone())
+            .span(chunk.span)
+            .summary(format!("{} bytes", chunk.body.len));
         let node = match key.as_str() {
-            "samp" => node.desc("Sampled brush tips").lazy(abr_samples, chunk.body),
-            "patt" => node.desc("Patterns used by brushes").lazy(abr_patterns, chunk.body),
-            "desc" => node.desc("Brush presets (descriptor)").lazy(abr_desc, chunk.body),
-            "phry" => node.desc("Brush hierarchy (descriptor)").lazy(abr_desc, chunk.body),
+            "samp" => node
+                .desc("Sampled brush tips")
+                .lazy(abr_samples, chunk.body),
+            "patt" => node
+                .desc("Patterns used by brushes")
+                .lazy(abr_patterns, chunk.body),
+            "desc" => node
+                .desc("Brush presets (descriptor)")
+                .lazy(abr_desc, chunk.body),
+            "phry" => node
+                .desc("Brush hierarchy (descriptor)")
+                .lazy(abr_desc, chunk.body),
             _ => node,
         };
         kinds.push(key);
         cx.push(node).await;
     }
-    cx.annotate(format!("Photoshop brushes v{version} ({})", kinds.join(", ")));
+    cx.annotate(format!(
+        "Photoshop brushes v{version} ({})",
+        kinds.join(", ")
+    ));
     Ok(())
 }
 
@@ -552,13 +697,20 @@ async fn abr_samples(cx: Cx, body: Span) -> Result<()> {
         let len = cur.u32().await?;
         let data = cur.span(len.into());
         if data.len < u64::from(len) {
-            return Err(Diagnostic::truncated(Span::new(data.source, data.offset, len.into()), data.len));
+            return Err(Diagnostic::truncated(
+                Span::new(data.source, data.offset, len.into()),
+                data.len,
+            ));
         }
         cur.skip(u64::from(len).saturating_add(3) & !3);
         let id = cx.read_avail(data.sub(0, 37)).await?;
-        let mut node = Node::new(format!("Brush {n}")).span(cur.since(start)).summary(format!("{len} bytes"));
+        let mut node = Node::new(format!("Brush {n}"))
+            .span(cur.since(start))
+            .summary(format!("{len} bytes"));
         if id.first() == Some(&36) {
-            node = node.value(text(String::from_utf8_lossy(id.get(1..).unwrap_or_default())));
+            node = node.value(text(String::from_utf8_lossy(
+                id.get(1..).unwrap_or_default(),
+            )));
         }
         cx.push(node).await;
         n = n.saturating_add(1);
@@ -575,7 +727,10 @@ async fn abr_patterns(cx: Cx, body: Span) -> Result<()> {
         let len = cur.u32().await?;
         let data = cur.span(len.into());
         if data.len < u64::from(len) {
-            return Err(Diagnostic::truncated(Span::new(data.source, data.offset, len.into()), data.len));
+            return Err(Diagnostic::truncated(
+                Span::new(data.source, data.offset, len.into()),
+                data.len,
+            ));
         }
         cur.skip(u64::from(len).saturating_add(3) & !3);
         let mut inner = Cursor::new(&cx, data, BE);
@@ -610,8 +765,16 @@ async fn grd(cx: Cx, input: Input) -> Result<()> {
     let version = f.u16("Version").emit()?;
     if version != 5 {
         let count = u16_be(&cx.read(file.sub(6, 2)).await?, 0).unwrap_or(0);
-        cx.emit(Node::new("Gradients").span(file.sub(6, 2)).value(uint(count, 16)));
-        cx.emit(Node::new("Gradient data").span(file.tail(8)).diag(Diagnostic::unsupported("pre-CS gradient records")));
+        cx.emit(
+            Node::new("Gradients")
+                .span(file.sub(6, 2))
+                .value(uint(count, 16)),
+        );
+        cx.emit(
+            Node::new("Gradient data")
+                .span(file.tail(8))
+                .diag(Diagnostic::unsupported("pre-CS gradient records")),
+        );
         cx.annotate(format!("Photoshop gradients v{version}, {count} gradients"));
         return Ok(());
     }
@@ -657,22 +820,38 @@ async fn asl(cx: Cx, input: Input) -> Result<()> {
     f.u16("Patterns version").emit()?;
     let plen = f.u32("Patterns length").emit()?;
     let patterns = file.sub_exact(12, plen.into())?;
-    cx.emit(Node::new("Patterns").span(patterns).summary(format!("{plen} bytes")).lazy(abr_patterns, patterns));
+    cx.emit(
+        Node::new("Patterns")
+            .span(patterns)
+            .summary(format!("{plen} bytes"))
+            .lazy(abr_patterns, patterns),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(12u64.saturating_add(plen.into()));
     let at = cur.pos();
     let count = cur.u32().await?;
-    cx.emit(Node::new("Styles").span(cur.since(at)).value(uint(count, 32)));
+    cx.emit(
+        Node::new("Styles")
+            .span(cur.since(at))
+            .value(uint(count, 32)),
+    );
     let mut n = 0u32;
     while n < count && !cur.at_end() {
         let start = cur.pos();
         let len = cur.u32().await?;
         let body = cur.span(len.into());
         if body.len < u64::from(len) {
-            return Err(Diagnostic::truncated(Span::new(body.source, body.offset, len.into()), body.len));
+            return Err(Diagnostic::truncated(
+                Span::new(body.source, body.offset, len.into()),
+                body.len,
+            ));
         }
         cur.skip(u64::from(len).saturating_add(3) & !3);
-        let name = if len <= 0x1000 { style_name(&cx, body).await? } else { None };
+        let name = if len <= 0x1000 {
+            style_name(&cx, body).await?
+        } else {
+            None
+        };
         cx.push(
             Node::new(name.unwrap_or_else(|| format!("Style {n}")))
                 .span(cur.since(start))
@@ -730,10 +909,16 @@ fn atn_probe(h: &Head<'_>) -> bool {
     };
     h.starts_with(b"\x00\x00\x00\x10")
         && (1..=256).contains(&units)
-        && h.data.get(8..8usize.saturating_add(units.saturating_mul(2))).is_some_and(|s| {
-            s.ends_with(b"\x00\x00")
-                && s.as_chunks::<2>().0.iter().take(units.saturating_sub(1)).all(|c| c != &[0, 0])
-        })
+        && h.data
+            .get(8..8usize.saturating_add(units.saturating_mul(2)))
+            .is_some_and(|s| {
+                s.ends_with(b"\x00\x00")
+                    && s.as_chunks::<2>()
+                        .0
+                        .iter()
+                        .take(units.saturating_sub(1))
+                        .all(|c| c != &[0, 0])
+            })
 }
 
 declare_format!(pub ATN = "photoshop-actions", "Adobe Photoshop actions", ["atn"], "application/x-photoshop-actions",
@@ -786,21 +971,43 @@ async fn atn(cx: Cx, input: Input) -> Result<()> {
     r.u32().ok_or_else(short)?;
     cx.emit(Node::new("Version").span(sub(0, 4)).value(uint(16u32, 32)));
     let set = r.unicode().ok_or_else(short)?;
-    cx.emit(Node::new("Set name").span(sub(4, r.pos)).value(text(set.clone())));
+    cx.emit(
+        Node::new("Set name")
+            .span(sub(4, r.pos))
+            .value(text(set.clone())),
+    );
     let at = r.pos;
     let expanded = r.u8().ok_or_else(short)?;
-    cx.emit(Node::new("Expanded").span(sub(at, r.pos)).value(Value::Bool(expanded != 0)));
+    cx.emit(
+        Node::new("Expanded")
+            .span(sub(at, r.pos))
+            .value(Value::Bool(expanded != 0)),
+    );
     let at = r.pos;
     let count = r.u32().ok_or_else(short)?;
-    cx.emit(Node::new("Actions").span(sub(at, r.pos)).value(uint(count, 32)));
+    cx.emit(
+        Node::new("Actions")
+            .span(sub(at, r.pos))
+            .value(uint(count, 32)),
+    );
     for i in 0..count {
         let at = r.pos;
         let Some((name, events)) = atn_action(&mut r) else {
-            cx.emit(Node::new(format!("Action {i}")).span(sub(at, data.len())).diag(Diagnostic::malformed("action is cut off or not understood")));
+            cx.emit(
+                Node::new(format!("Action {i}"))
+                    .span(sub(at, data.len()))
+                    .diag(Diagnostic::malformed("action is cut off or not understood")),
+            );
             break;
         };
         let span = sub(at, r.pos);
-        cx.push(Node::new(name).span(span).summary(format!("{events} steps")).lazy(atn_steps, span)).await;
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(format!("{events} steps"))
+                .lazy(atn_steps, span),
+        )
+        .await;
     }
     cx.annotate(format!("Photoshop actions {set:?}, {count} actions"));
     Ok(())
@@ -815,10 +1022,26 @@ async fn atn_steps(cx: Cx, span: Span) -> Result<()> {
     let shift = r.u8().ok_or_else(err)?;
     let command = r.u8().ok_or_else(err)?;
     let colour = r.u16().ok_or_else(err)?;
-    cx.emit(Node::new("Function key").span(sub(0, 2)).value(uint(key_index, 16)));
-    cx.emit(Node::new("Shift").span(sub(2, 3)).value(Value::Bool(shift != 0)));
-    cx.emit(Node::new("Command").span(sub(3, 4)).value(Value::Bool(command != 0)));
-    cx.emit(Node::new("Colour index").span(sub(4, 6)).value(uint(colour, 16)));
+    cx.emit(
+        Node::new("Function key")
+            .span(sub(0, 2))
+            .value(uint(key_index, 16)),
+    );
+    cx.emit(
+        Node::new("Shift")
+            .span(sub(2, 3))
+            .value(Value::Bool(shift != 0)),
+    );
+    cx.emit(
+        Node::new("Command")
+            .span(sub(3, 4))
+            .value(Value::Bool(command != 0)),
+    );
+    cx.emit(
+        Node::new("Colour index")
+            .span(sub(4, 6))
+            .value(uint(colour, 16)),
+    );
     let name = r.unicode().ok_or_else(err)?;
     cx.emit(Node::new("Name").span(sub(6, r.pos)).value(text(name)));
     r.skip(1).ok_or_else(err)?;
@@ -826,12 +1049,20 @@ async fn atn_steps(cx: Cx, span: Span) -> Result<()> {
     for i in 0..count {
         let at = r.pos;
         let Some((event, desc)) = atn_event(&mut r) else {
-            cx.emit(Node::new(format!("Step {i}")).span(sub(at, data.len())).diag(err()));
+            cx.emit(
+                Node::new(format!("Step {i}"))
+                    .span(sub(at, data.len()))
+                    .diag(err()),
+            );
             break;
         };
-        let node = Node::new(format!("Step {i}")).span(sub(at, r.pos)).value(text(event));
+        let node = Node::new(format!("Step {i}"))
+            .span(sub(at, r.pos))
+            .value(text(event));
         let node = match desc {
-            Some((a, b)) => node.summary("with descriptor").lazy(items, (sub(a, b), Kind::Descriptor, 0u32)),
+            Some((a, b)) => node
+                .summary("with descriptor")
+                .lazy(items, (sub(a, b), Kind::Descriptor, 0u32)),
             None => node,
         };
         cx.push(node).await;
@@ -871,22 +1102,40 @@ fn acv_measure(data: &[u8]) -> Option<usize> {
 fn acv_probe(h: &Head<'_>) -> bool {
     acv_measure(h.data).is_some_and(|end| {
         let end = to_u64(end);
-        if h.data.starts_with(b"\x00\x01") { end == h.len } else { end <= h.len }
+        if h.data.starts_with(b"\x00\x01") {
+            end == h.len
+        } else {
+            end <= h.len
+        }
     })
 }
 
 declare_format!(pub ACV = "photoshop-curves", "Adobe Photoshop curves preset", ["acv"], "application/x-photoshop-curves",
     Probe::Custom(acv_probe), acv);
 
-const CURVE_NAMES: &[&str] = &["Composite", "Channel 1", "Channel 2", "Channel 3", "Channel 4"];
+const CURVE_NAMES: &[&str] = &[
+    "Composite",
+    "Channel 1",
+    "Channel 2",
+    "Channel 3",
+    "Channel 4",
+];
 
 async fn acv(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, BE);
     let version = cur.u16().await?;
-    cx.emit(Node::new("Version").span(file.sub(0, 2)).value(uint(version, 16)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(0, 2))
+            .value(uint(version, 16)),
+    );
     let count = cur.u16().await?;
-    cx.emit(Node::new("Curves").span(file.sub(2, 2)).value(uint(count, 16)));
+    cx.emit(
+        Node::new("Curves")
+            .span(file.sub(2, 2))
+            .value(uint(count, 16)),
+    );
     for i in 0..count {
         let start = cur.pos();
         let points = cur.u16().await?;
@@ -896,11 +1145,23 @@ async fn acv(cx: Cx, input: Input) -> Result<()> {
             let input = cur.u16().await?;
             pts.push(format!("{input}→{out}"));
         }
-        let name = CURVE_NAMES.get(usize::from(i)).map_or_else(|| format!("Curve {i}"), |s| (*s).to_owned());
-        cx.push(Node::new(name).span(cur.since(start)).value(text(pts.join(", "))).summary(format!("{points} points"))).await;
+        let name = CURVE_NAMES
+            .get(usize::from(i))
+            .map_or_else(|| format!("Curve {i}"), |s| (*s).to_owned());
+        cx.push(
+            Node::new(name)
+                .span(cur.since(start))
+                .value(text(pts.join(", ")))
+                .summary(format!("{points} points")),
+        )
+        .await;
     }
     if !cur.at_end() {
-        cx.emit(Node::new("Extra data").span(file.tail(cur.pos())).desc("Version 4 per-channel curve records"));
+        cx.emit(
+            Node::new("Extra data")
+                .span(file.tail(cur.pos()))
+                .desc("Version 4 per-channel curve records"),
+        );
     }
     cx.annotate(format!("Photoshop curves v{version}, {count} curves"));
     Ok(())
@@ -928,9 +1189,17 @@ async fn acb(cx: Cx, input: Input) -> Result<()> {
     cur.seek(4);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
     let version = cur.u16().await?;
-    cx.emit(Node::new("Version").span(file.sub(4, 2)).value(uint(version, 16)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 2))
+            .value(uint(version, 16)),
+    );
     let id = cur.u16().await?;
-    cx.emit(Node::new("Book ID").span(file.sub(6, 2)).value(uint(id, 16)));
+    cx.emit(
+        Node::new("Book ID")
+            .span(file.sub(6, 2))
+            .value(uint(id, 16)),
+    );
     let mut title = String::new();
     for name in ["Title", "Prefix", "Postfix", "Description"] {
         let at = cur.pos();
@@ -942,36 +1211,71 @@ async fn acb(cx: Cx, input: Input) -> Result<()> {
     }
     let at = cur.pos();
     let count = cur.u16().await?;
-    cx.emit(Node::new("Colours").span(cur.since(at)).value(uint(count, 16)));
+    cx.emit(
+        Node::new("Colours")
+            .span(cur.since(at))
+            .value(uint(count, 16)),
+    );
     let at = cur.pos();
     let page = cur.u16().await?;
-    cx.emit(Node::new("Page size").span(cur.since(at)).value(uint(page, 16)));
+    cx.emit(
+        Node::new("Page size")
+            .span(cur.since(at))
+            .value(uint(page, 16)),
+    );
     let at = cur.pos();
     let selector = cur.u16().await?;
-    cx.emit(Node::new("Page selector offset").span(cur.since(at)).value(uint(selector, 16)));
+    cx.emit(
+        Node::new("Page selector offset")
+            .span(cur.since(at))
+            .value(uint(selector, 16)),
+    );
     let at = cur.pos();
     let space = cur.u16().await?;
-    let space_name = COLOR_SPACES.iter().find(|(k, _)| *k == u64::from(space)).map(|(_, v)| *v);
-    cx.emit(Node::new("Colour space").span(cur.since(at)).value(Value::Enum { raw: space.into(), bits: 16, name: space_name }));
+    let space_name = COLOR_SPACES
+        .iter()
+        .find(|(k, _)| *k == u64::from(space))
+        .map(|(_, v)| *v);
+    cx.emit(
+        Node::new("Colour space")
+            .span(cur.since(at))
+            .value(Value::Enum {
+                raw: space.into(),
+                bits: 16,
+                name: space_name,
+            }),
+    );
     let comps: u64 = if space == 2 { 4 } else { 3 };
     let start = cur.pos();
-    let colours = Node::new("Colour records").span(file.tail(start)).summary(format!("{count} colours"));
+    let colours = Node::new("Colour records")
+        .span(file.tail(start))
+        .summary(format!("{count} colours"));
     cx.emit(colours.lazy(acb_colours, (file.tail(start), count, space)));
     // Skip the records to find the spot/process marker at the end.
     for _ in 0..count {
         ustr(&mut cur).await?;
         cur.skip(6u64.saturating_add(comps));
         if cur.pos() > file.len {
-            return Err(Diagnostic::truncated(file.tail(start), file.len.saturating_sub(start)));
+            return Err(Diagnostic::truncated(
+                file.tail(start),
+                file.len.saturating_sub(start),
+            ));
         }
         cx.checkpoint().await;
     }
     if cur.remaining() >= 8 {
         let at = cur.pos();
         let kind = cur.bytes(8).await?;
-        cx.emit(Node::new("Kind").span(cur.since(at)).value(text(String::from_utf8_lossy(&kind))));
+        cx.emit(
+            Node::new("Kind")
+                .span(cur.since(at))
+                .value(text(String::from_utf8_lossy(&kind))),
+        );
     }
-    cx.annotate(format!("Photoshop colour book {title:?}, {count} {} colours", space_name.unwrap_or("unknown")));
+    cx.annotate(format!(
+        "Photoshop colour book {title:?}, {count} {} colours",
+        space_name.unwrap_or("unknown")
+    ));
     Ok(())
 }
 
@@ -987,12 +1291,24 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
             (0, [r, g, b]) => format!("#{r:02x}{g:02x}{b:02x}"),
             (2, [c0, m, y, k]) => {
                 // Stored inverted: 0 is full ink.
-                let pct = |v: &u8| (255u32.saturating_sub(u32::from(*v))).saturating_mul(100).checked_div(255).unwrap_or(0);
+                let pct = |v: &u8| {
+                    (255u32.saturating_sub(u32::from(*v)))
+                        .saturating_mul(100)
+                        .checked_div(255)
+                        .unwrap_or(0)
+                };
                 format!("C{} M{} Y{} K{}", pct(c0), pct(m), pct(y), pct(k))
             }
             (7, [l, a, b]) => {
-                let l = u32::from(*l).saturating_mul(100).checked_div(255).unwrap_or(0);
-                format!("L{l} a{} b{}", i16::from(*a).saturating_sub(128), i16::from(*b).saturating_sub(128))
+                let l = u32::from(*l)
+                    .saturating_mul(100)
+                    .checked_div(255)
+                    .unwrap_or(0);
+                format!(
+                    "L{l} a{} b{}",
+                    i16::from(*a).saturating_sub(128),
+                    i16::from(*b).saturating_sub(128)
+                )
             }
             _ => format!("{c:02x?}"),
         };
@@ -1003,7 +1319,13 @@ async fn acb_colours(cx: Cx, (region, count, space): (Span, u16, u16)) -> Result
             (true, false) => code.clone(),
             (true, true) => "(unnamed)".to_owned(),
         };
-        cx.push(Node::new(label).span(cur.since(start)).value(text(value)).summary(code)).await;
+        cx.push(
+            Node::new(label)
+                .span(cur.since(start))
+                .value(text(value))
+                .summary(code),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1027,10 +1349,27 @@ async fn act(cx: Cx, input: Input) -> Result<()> {
     let count = u16_be(&tail, 0).unwrap_or(256).min(256);
     let transparent = u16_be(&tail, 2).unwrap_or(0xffff);
     let table = file.sub(0, u64::from(count).saturating_mul(3));
-    cx.emit(Node::new("Colours").span(table).summary(format!("{count} entries")).lazy(act_colours, table));
-    cx.emit(Node::new("Unused entries").span(file.sub(table.len, 768u64.saturating_sub(table.len))));
-    cx.emit(Node::new("Colour count").span(file.sub(768, 2)).value(uint(count, 16)));
-    cx.emit(Node::new("Transparent index").span(file.sub(770, 2)).value(if transparent == 0xffff { text("none") } else { uint(transparent, 16) }));
+    cx.emit(
+        Node::new("Colours")
+            .span(table)
+            .summary(format!("{count} entries"))
+            .lazy(act_colours, table),
+    );
+    cx.emit(
+        Node::new("Unused entries").span(file.sub(table.len, 768u64.saturating_sub(table.len))),
+    );
+    cx.emit(
+        Node::new("Colour count")
+            .span(file.sub(768, 2))
+            .value(uint(count, 16)),
+    );
+    cx.emit(Node::new("Transparent index").span(file.sub(770, 2)).value(
+        if transparent == 0xffff {
+            text("none")
+        } else {
+            uint(transparent, 16)
+        },
+    ));
     cx.annotate(format!("Photoshop colour table, {count} colours"));
     Ok(())
 }
@@ -1039,7 +1378,12 @@ async fn act_colours(cx: Cx, table: Span) -> Result<()> {
     let data = cx.read(table).await?;
     for (i, c) in data.as_chunks::<3>().0.iter().enumerate() {
         let [r, g, b] = *c;
-        cx.push(Node::new(format!("[{i}]")).span(table.sub(to_u64(i).saturating_mul(3), 3)).value(text(format!("#{r:02x}{g:02x}{b:02x}")))).await;
+        cx.push(
+            Node::new(format!("[{i}]"))
+                .span(table.sub(to_u64(i).saturating_mul(3), 3))
+                .value(text(format!("#{r:02x}{g:02x}{b:02x}"))),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1057,7 +1401,13 @@ async fn csh(cx: Cx, input: Input) -> Result<()> {
     f.ascii("Signature", 4).emit()?;
     let version = f.u32("Version").emit()?;
     let count = f.u32("Shapes").emit()?;
-    cx.emit(Node::new("Shape records").span(file.tail(12)).diag(Diagnostic::unsupported("custom shape records")));
-    cx.annotate(format!("Photoshop custom shapes v{version}, {count} shapes"));
+    cx.emit(
+        Node::new("Shape records")
+            .span(file.tail(12))
+            .diag(Diagnostic::unsupported("custom shape records")),
+    );
+    cx.annotate(format!(
+        "Photoshop custom shapes v{version}, {count} shapes"
+    ));
     Ok(())
 }

@@ -284,7 +284,8 @@ impl Parser<'_> {
                     fields.push(Field { code, name: field });
                 }
                 self.annotation(node, depth)?;
-                let parent_desc = self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
+                let parent_desc =
+                    self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
                 let (set, _) = decode_flags(CLASS_FLAGS, flags.into());
                 self.set_handle(
                     handle,
@@ -320,7 +321,8 @@ impl Parser<'_> {
                     names.push(name);
                 }
                 self.annotation(node, depth)?;
-                let parent_desc = self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
+                let parent_desc =
+                    self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
                 self.set_handle(
                     handle,
                     Handle::Class(ClassDesc {
@@ -519,10 +521,9 @@ impl Parser<'_> {
                 let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
                 let h = self.new_handle(Handle::Object(name.clone()));
                 for class in self.hierarchy(desc) {
-                    let data = self.tree.add(
-                        Some(node),
-                        Node::new(format!("{} data", class.name)),
-                    );
+                    let data = self
+                        .tree
+                        .add(Some(node), Node::new(format!("{} data", class.name)));
                     let at = self.r.pos();
                     if class.flags & SC_SERIALIZABLE != 0 {
                         for field in &class.fields {
@@ -555,8 +556,10 @@ impl Parser<'_> {
                 }
                 Ok(Some(h))
             }
-            other => Err(Diagnostic::malformed(format!("unexpected type code {other:#04x}"))
-                .at(self.file.sub(to_u64(start), 1))),
+            other => Err(
+                Diagnostic::malformed(format!("unexpected type code {other:#04x}"))
+                    .at(self.file.sub(to_u64(start), 1)),
+            ),
         }
     }
 }
@@ -580,16 +583,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     p.r.int::<u16>(BE);
     p.leaf(root, "magic", 0, hex(0xaced, 16));
     let version = p.r.int::<u16>(BE).unwrap_or(0);
-    p.leaf(root, "version", 2, crate::formats::binutil::dec(version.into(), 16));
+    p.leaf(
+        root,
+        "version",
+        2,
+        crate::formats::binutil::dec(version.into(), 16),
+    );
     let mut items = 0u32;
     while !p.r.at_end() {
         let at = p.r.pos();
         if let Err(e) = p.content(root, "content", 0) {
             p.tree.add(
                 Some(root),
-                Node::new("Undecoded")
-                    .span(file.tail(to_u64(at)))
-                    .diag(e),
+                Node::new("Undecoded").span(file.tail(to_u64(at))).diag(e),
             );
             break;
         }

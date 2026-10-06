@@ -15,7 +15,10 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::disk::{PieceList, content_node, crc32c_update, fragments_node, size, text, unix_mode, unix_time, uuid_value};
+use crate::formats::disk::{
+    PieceList, content_node, crc32c_update, fragments_node, size, text, unix_mode, unix_time,
+    uuid_value,
+};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -50,7 +53,13 @@ fn probe(h: &Head<'_>) -> bool {
 
 const STATES: FlagTable = &[flag(1, "CLEAN"), flag(2, "ERRORS"), flag(4, "ORPHANS")];
 const ERRORS: EnumTable = &[(1, "continue"), (2, "remount read-only"), (3, "panic")];
-const OS: EnumTable = &[(0, "Linux"), (1, "Hurd"), (2, "Masix"), (3, "FreeBSD"), (4, "Lites")];
+const OS: EnumTable = &[
+    (0, "Linux"),
+    (1, "Hurd"),
+    (2, "Masix"),
+    (3, "FreeBSD"),
+    (4, "Lites"),
+];
 
 const COMPAT: FlagTable = &[
     flag(0x1, "DIR_PREALLOC"),
@@ -231,7 +240,11 @@ record! {
     }
 }
 
-const BG_FLAGS: FlagTable = &[flag(1, "INODE_UNINIT"), flag(2, "BLOCK_UNINIT"), flag(4, "INODE_ZEROED")];
+const BG_FLAGS: FlagTable = &[
+    flag(1, "INODE_UNINIT"),
+    flag(2, "BLOCK_UNINIT"),
+    flag(4, "INODE_ZEROED"),
+];
 
 const INODE_FLAGS: FlagTable = &[
     flag(0x10, "IMMUTABLE"),
@@ -311,19 +324,32 @@ impl Fs {
 
     /// The span of inode `ino`'s record.
     async fn inode_span(&self, cx: &Cx, ino: u32) -> Result<Span> {
-        let index = u64::from(ino.checked_sub(1).ok_or_else(|| Diagnostic::malformed("inode 0"))?);
+        let index = u64::from(
+            ino.checked_sub(1)
+                .ok_or_else(|| Diagnostic::malformed("inode 0"))?,
+        );
         let group = index.checked_div(self.inodes_per_group).unwrap_or(0);
         if group >= self.groups {
-            return Err(Diagnostic::malformed(format!("inode {ino} is beyond the last group")));
+            return Err(Diagnostic::malformed(format!(
+                "inode {ino} is beyond the last group"
+            )));
         }
-        let desc = self.gdt.sub(group.saturating_mul(self.desc_size), self.desc_size);
+        let desc = self
+            .gdt
+            .sub(group.saturating_mul(self.desc_size), self.desc_size);
         let raw = cx.read(desc).await?;
         let lo = u64::from(u32_le(&raw, 8).unwrap_or(0));
-        let hi = if self.desc_size >= 64 { u64::from(u32_le(&raw, 40).unwrap_or(0)) } else { 0 };
+        let hi = if self.desc_size >= 64 {
+            u64::from(u32_le(&raw, 40).unwrap_or(0))
+        } else {
+            0
+        };
         let table = hi << 32 | lo;
         let within = index.checked_rem(self.inodes_per_group).unwrap_or(0);
         Ok(self.vol.sub(
-            table.saturating_mul(self.block).saturating_add(within.saturating_mul(self.inode_size)),
+            table
+                .saturating_mul(self.block)
+                .saturating_add(within.saturating_mul(self.inode_size)),
             self.inode_size,
         ))
     }
@@ -332,21 +358,41 @@ impl Fs {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let vol = input.span;
     let span = vol.sub(SUPER, 1024);
-    let sb = parse(&cx, span.sub(0, Superblock::SIZE), LE, &(), Superblock::layout).await?;
+    let sb = parse(
+        &cx,
+        span.sub(0, Superblock::SIZE),
+        LE,
+        &(),
+        Superblock::layout,
+    )
+    .await?;
     let mut node = Superblock::node("Superblock", span, LE);
     if sb.ro_compat & 0x400 != 0 {
         let raw = cx.read_avail(span).await?;
         let computed = crc32c_update(!0, raw.get(..1020).unwrap_or_default());
         if u32_le(&raw, 1020) != Some(computed) {
-            node = node.diag(Diagnostic::warning(format!("superblock checksum mismatch: computed {computed:#010x}")));
+            node = node.diag(Diagnostic::warning(format!(
+                "superblock checksum mismatch: computed {computed:#010x}"
+            )));
         }
     }
     cx.emit(node);
-    let block = 1024u64.checked_shl(sb.log_block_size).filter(|&b| b <= 65536).ok_or_else(|| {
-        Diagnostic::malformed(format!("block size 2^{}", sb.log_block_size.saturating_add(10))).at(span)
-    })?;
+    let block = 1024u64
+        .checked_shl(sb.log_block_size)
+        .filter(|&b| b <= 65536)
+        .ok_or_else(|| {
+            Diagnostic::malformed(format!(
+                "block size 2^{}",
+                sb.log_block_size.saturating_add(10)
+            ))
+            .at(span)
+        })?;
     let wide = sb.incompat & 0x80 != 0;
-    let blocks = if wide { u64::from(sb.blocks_hi) << 32 | u64::from(sb.blocks_lo) } else { sb.blocks_lo.into() };
+    let blocks = if wide {
+        u64::from(sb.blocks_hi) << 32 | u64::from(sb.blocks_lo)
+    } else {
+        sb.blocks_lo.into()
+    };
     let kind = if sb.incompat & 0x2c0 != 0 || sb.ro_compat & 0x448 != 0 {
         "ext4"
     } else if sb.compat & 4 != 0 {
@@ -357,7 +403,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let label = crate::text::until_nul(&sb.volume_name);
     cx.annotate(format!(
         "{kind} filesystem{}, {}, {}-byte blocks, {} inodes",
-        if label.is_empty() { String::new() } else { format!(" \"{label}\"") },
+        if label.is_empty() {
+            String::new()
+        } else {
+            format!(" \"{label}\"")
+        },
         size(blocks.saturating_mul(block)),
         block,
         sb.inodes
@@ -368,8 +418,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let groups = blocks
         .saturating_sub(sb.first_data_block.into())
         .div_ceil(sb.blocks_per_group.into());
-    let desc_size = if wide { u64::from(sb.desc_size).max(32) } else { 32 };
-    let inode_size = if sb.rev_level == 0 { 128 } else { u64::from(sb.inode_size).max(128) };
+    let desc_size = if wide {
+        u64::from(sb.desc_size).max(32)
+    } else {
+        32
+    };
+    let inode_size = if sb.rev_level == 0 {
+        128
+    } else {
+        u64::from(sb.inode_size).max(128)
+    };
     let gdt_block = u64::from(sb.first_data_block).saturating_add(1);
     let fs: FsRef = Arc::new(Fs {
         input,
@@ -379,7 +437,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         inodes_per_group: sb.inodes_per_group.into(),
         inode_size,
         desc_size,
-        gdt: vol.sub(gdt_block.saturating_mul(block), groups.saturating_mul(desc_size)),
+        gdt: vol.sub(
+            gdt_block.saturating_mul(block),
+            groups.saturating_mul(desc_size),
+        ),
         groups,
         filetype: sb.incompat & 2 != 0,
     });
@@ -387,13 +448,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Block group descriptors")
             .span(fs.gdt)
             .summary(format!("{groups} groups of {} blocks", sb.blocks_per_group))
-            .lazy(group_descriptors, (fs.clone(), u64::from(sb.blocks_per_group))),
+            .lazy(
+                group_descriptors,
+                (fs.clone(), u64::from(sb.blocks_per_group)),
+            ),
     );
-    cx.emit(
-        Node::new("Root directory")
-            .summary("inode 2")
-            .lazy(crate::expander!(self::directory: Dir), Dir { fs: fs.clone(), ino: ROOT_INODE, ancestors: Arc::new(Vec::new()) }),
-    );
+    cx.emit(Node::new("Root directory").summary("inode 2").lazy(
+        crate::expander!(self::directory: Dir),
+        Dir {
+            fs: fs.clone(),
+            ino: ROOT_INODE,
+            ancestors: Arc::new(Vec::new()),
+        },
+    ));
     if sb.compat & 4 != 0 && sb.journal_inode != 0 {
         cx.emit(
             Node::new("Journal")
@@ -408,8 +475,17 @@ async fn group_descriptors(cx: Cx, (fs, per_group): (FsRef, u64)) -> Result<()> 
     cx.set_count(Count::Exact(fs.groups));
     for g in 0..fs.groups {
         let span = fs.gdt.sub(g.saturating_mul(fs.desc_size), fs.desc_size);
-        let d = parse(&cx, span.sub(0, GroupDesc::SIZE), LE, &(), GroupDesc::layout).await?;
-        let first = fs.first_data_block.saturating_add(g.saturating_mul(per_group));
+        let d = parse(
+            &cx,
+            span.sub(0, GroupDesc::SIZE),
+            LE,
+            &(),
+            GroupDesc::layout,
+        )
+        .await?;
+        let first = fs
+            .first_data_block
+            .saturating_add(g.saturating_mul(per_group));
         cx.push(
             GroupDesc::node(format!("Group {g}"), span, LE).summary(format!(
                 "blocks {first}–{}, inode table at {}, {} free blocks, {} free inodes",
@@ -428,7 +504,12 @@ async fn group_descriptors(cx: Cx, (fs, per_group): (FsRef, u64)) -> Result<()> 
 type Mapping = (u64, u64, u64, bool);
 
 /// Collects an inode's block mappings, sorted by logical block.
-async fn mappings(cx: &Cx, fs: &Fs, inode: &[u8], size: u64) -> Result<(Vec<Mapping>, Option<Diagnostic>)> {
+async fn mappings(
+    cx: &Cx,
+    fs: &Fs,
+    inode: &[u8],
+    size: u64,
+) -> Result<(Vec<Mapping>, Option<Diagnostic>)> {
     let flags = u32_le(inode, 32).unwrap_or(0);
     let i_block = inode.get(40..100).unwrap_or_default();
     let mut out = Vec::new();
@@ -460,24 +541,36 @@ async fn extents(
         let entries = usize::from(u16_le(&data, 2).unwrap_or(0));
         let depth = u16_le(&data, 6).unwrap_or(0);
         if depth >= limit {
-            return Ok(Some(Diagnostic::malformed("extent tree depth does not decrease")));
+            return Ok(Some(Diagnostic::malformed(
+                "extent tree depth does not decrease",
+            )));
         }
         for i in 0..entries {
             let at = 12usize.saturating_add(i.saturating_mul(12));
-            let Some(e) = data.get(at..at.saturating_add(12)) else { break };
+            let Some(e) = data.get(at..at.saturating_add(12)) else {
+                break;
+            };
             let logical = u64::from(u32_le(e, 0).unwrap_or(0));
             if depth == 0 {
                 let raw_len = u16_le(e, 4).unwrap_or(0);
-                let (len, init) = if raw_len > 32768 { (raw_len.saturating_sub(32768), false) } else { (raw_len, true) };
-                let start = u64::from(u16_le(e, 6).unwrap_or(0)) << 32 | u64::from(u32_le(e, 8).unwrap_or(0));
+                let (len, init) = if raw_len > 32768 {
+                    (raw_len.saturating_sub(32768), false)
+                } else {
+                    (raw_len, true)
+                };
+                let start = u64::from(u16_le(e, 6).unwrap_or(0)) << 32
+                    | u64::from(u32_le(e, 8).unwrap_or(0));
                 out.push((logical, start, len.into(), init));
                 if out.len() >= MAX_MAPPINGS {
                     return Ok(Some(Diagnostic::limit("too many extents")));
                 }
             } else {
-                let child = u64::from(u16_le(e, 8).unwrap_or(0)) << 32 | u64::from(u32_le(e, 4).unwrap_or(0));
+                let child = u64::from(u16_le(e, 8).unwrap_or(0)) << 32
+                    | u64::from(u32_le(e, 4).unwrap_or(0));
                 if !seen.insert(child) {
-                    return Ok(Some(Diagnostic::malformed(format!("extent tree revisits block {child}"))));
+                    return Ok(Some(Diagnostic::malformed(format!(
+                        "extent tree revisits block {child}"
+                    ))));
                 }
                 let block = cx.read(fs.block_span(child)).await?;
                 stack.push((block, depth));
@@ -490,7 +583,13 @@ async fn extents(
 
 /// Walks the classic block map: 12 direct pointers, then single, double
 /// and triple indirect blocks.
-async fn block_map(cx: &Cx, fs: &Fs, i_block: &[u8], size: u64, out: &mut Vec<Mapping>) -> Result<Option<Diagnostic>> {
+async fn block_map(
+    cx: &Cx,
+    fs: &Fs,
+    i_block: &[u8],
+    size: u64,
+    out: &mut Vec<Mapping>,
+) -> Result<Option<Diagnostic>> {
     let per = fs.block / 4;
     let needed = size.div_ceil(fs.block);
     let ptr = |i: usize| u64::from(u32_le(i_block, i.saturating_mul(4)).unwrap_or(0));
@@ -518,7 +617,9 @@ async fn block_map(cx: &Cx, fs: &Fs, i_block: &[u8], size: u64, out: &mut Vec<Ma
             continue;
         }
         if !seen.insert(block) {
-            return Ok(Some(Diagnostic::malformed(format!("block map revisits block {block}"))));
+            return Ok(Some(Diagnostic::malformed(format!(
+                "block map revisits block {block}"
+            ))));
         }
         let data = cx.read(fs.block_span(block)).await?;
         let span = per.saturating_pow(level.saturating_sub(1));
@@ -545,7 +646,13 @@ async fn block_map(cx: &Cx, fs: &Fs, i_block: &[u8], size: u64, out: &mut Vec<Ma
 }
 
 /// The inode's content as a span (fragments assembled, holes as zeros).
-async fn content(cx: &Cx, fs: &Fs, inode_span: Span, inode: &[u8], size: u64) -> Result<(Span, Vec<Span>)> {
+async fn content(
+    cx: &Cx,
+    fs: &Fs,
+    inode_span: Span,
+    inode: &[u8],
+    size: u64,
+) -> Result<(Span, Vec<Span>)> {
     let flags = u32_le(inode, 32).unwrap_or(0);
     let mode = u16_le(inode, 0).unwrap_or(0);
     // Inline data and fast symlinks live in the inode itself.
@@ -566,7 +673,9 @@ async fn content(cx: &Cx, fs: &Fs, inode_span: Span, inode: &[u8], size: u64) ->
         if at > list.len() {
             list.hole(cx, at.saturating_sub(list.len()))?;
         } else if at < list.len() {
-            cx.diag(Diagnostic::malformed(format!("overlapping mapping at logical block {logical}")));
+            cx.diag(Diagnostic::malformed(format!(
+                "overlapping mapping at logical block {logical}"
+            )));
             continue;
         }
         let len = count.saturating_mul(fs.block).min(size.saturating_sub(at));
@@ -580,7 +689,11 @@ async fn content(cx: &Cx, fs: &Fs, inode_span: Span, inode: &[u8], size: u64) ->
         list.hole(cx, size.saturating_sub(list.len()))?;
     }
     let pieces = list.pieces().to_vec();
-    let transform = if flags & 0x80000 != 0 { "ext4-extents" } else { "ext2-blocks" };
+    let transform = if flags & 0x80000 != 0 {
+        "ext4-extents"
+    } else {
+        "ext2-blocks"
+    };
     Ok((list.finish(cx, transform)?, pieces))
 }
 
@@ -598,7 +711,11 @@ async fn inode_node(cx: Cx, (fs, ino): (FsRef, u32)) -> Result<()> {
     cx.emit(fragments_node("Blocks", pieces));
     if u16_le(&raw, 0).unwrap_or(0) & 0xf000 == 0xa000 {
         let target = crate::text::until_nul(&cx.read_avail(data.sub(0, 4096)).await?);
-        cx.emit(Node::new("Symlink target").span(data).value(Value::Text(target)));
+        cx.emit(
+            Node::new("Symlink target")
+                .span(data)
+                .value(Value::Text(target)),
+        );
     } else {
         cx.emit(content_node(&fs.input, data));
     }
@@ -628,7 +745,9 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
     let span = fs.inode_span(&cx, dir.ino).await?;
     let raw = cx.read(span).await?;
     if u16_le(&raw, 0).unwrap_or(0) & 0xf000 != 0x4000 {
-        return Err(Diagnostic::malformed(format!("inode {} is not a directory", dir.ino)).at(span));
+        return Err(
+            Diagnostic::malformed(format!("inode {} is not a directory", dir.ino)).at(span),
+        );
     }
     cx.emit(Inode::node(format!("Inode {}", dir.ino), span, LE));
     let size = inode_size_of(&raw).min(MAX_DIR_BYTES);
@@ -651,11 +770,16 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             let name_len = usize::from(bytes.get(at.saturating_add(6)).copied().unwrap_or(0));
             let file_type = bytes.get(at.saturating_add(7)).copied().unwrap_or(0);
             if rec_len < 8 {
-                cx.diag(Diagnostic::malformed("directory entry with a record length below 8").at(block.sub(to_u64(at), 8)));
+                cx.diag(
+                    Diagnostic::malformed("directory entry with a record length below 8")
+                        .at(block.sub(to_u64(at), 8)),
+                );
                 break;
             }
             let entry = block.sub(to_u64(at), to_u64(rec_len));
-            let name_bytes = bytes.get(at.saturating_add(8)..at.saturating_add(8).saturating_add(name_len)).unwrap_or_default();
+            let name_bytes = bytes
+                .get(at.saturating_add(8)..at.saturating_add(8).saturating_add(name_len))
+                .unwrap_or_default();
             let name = String::from_utf8_lossy(name_bytes).into_owned();
             at = at.saturating_add(rec_len);
             if ino == 0 || name == "." || name == ".." {
@@ -667,12 +791,23 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
             } else {
                 "entry"
             };
-            let node = Node::new(name).span(entry).summary(format!("{kind}, inode {ino}"));
+            let node = Node::new(name)
+                .span(entry)
+                .summary(format!("{kind}, inode {ino}"));
             let node = if fs.filetype && file_type == 2 {
                 if ancestors.contains(&ino) || ancestors.len() > MAX_DIR_DEPTH {
-                    node.diag(Diagnostic::malformed(format!("directory inode {ino} contains itself; not followed")))
+                    node.diag(Diagnostic::malformed(format!(
+                        "directory inode {ino} contains itself; not followed"
+                    )))
                 } else {
-                    node.lazy(crate::expander!(self::directory: Dir), Dir { fs: fs.clone(), ino, ancestors: ancestors.clone() })
+                    node.lazy(
+                        crate::expander!(self::directory: Dir),
+                        Dir {
+                            fs: fs.clone(),
+                            ino,
+                            ancestors: ancestors.clone(),
+                        },
+                    )
                 }
             } else {
                 node.lazy(inode_node, (fs.clone(), ino))

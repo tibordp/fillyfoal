@@ -25,7 +25,11 @@ pub static FORMAT: Format = Format {
 
 /// The level of an ATX heading line (`## Title`).
 fn atx(line: &[u8]) -> Option<u8> {
-    let t = line.strip_prefix(b"   ").or_else(|| line.strip_prefix(b"  ")).or_else(|| line.strip_prefix(b" ")).unwrap_or(line);
+    let t = line
+        .strip_prefix(b"   ")
+        .or_else(|| line.strip_prefix(b"  "))
+        .or_else(|| line.strip_prefix(b" "))
+        .unwrap_or(line);
     let n = t.iter().take_while(|&&b| b == b'#').count();
     let after = t.get(n);
     ((1..=6).contains(&n) && matches!(after, None | Some(b' ' | b'\t')))
@@ -68,7 +72,10 @@ fn probe_markdown(h: &Head<'_>) -> bool {
     {
         let marker = probe::trim(first).to_vec();
         lines.next();
-        let closed = lines.by_ref().take(100).any(|l| probe::trim(l) == marker.as_slice());
+        let closed = lines
+            .by_ref()
+            .take(100)
+            .any(|l| probe::trim(l) == marker.as_slice());
         let next = lines.find(|l| !probe::trim(l).is_empty());
         return closed
             && next.is_some_and(|l| atx(l).is_some() || !l.contains(&b':'))
@@ -93,7 +100,10 @@ fn probe_markdown(h: &Head<'_>) -> bool {
         // `key: value` lines suggest YAML with `#` comments.
         if t.iter().position(|&b| b == b':').is_some_and(|c| {
             c > 0
-                && t.get(..c).is_some_and(|k| k.iter().all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+                && t.get(..c).is_some_and(|k| {
+                    k.iter()
+                        .all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+                })
                 && matches!(t.get(c.saturating_add(1)), None | Some(b' '))
         }) {
             mappings = mappings.saturating_add(1);
@@ -107,7 +117,12 @@ fn probe_markdown(h: &Head<'_>) -> bool {
         {
             signals = signals.saturating_add(1);
         }
-        if t.ends_with(b";") || t.ends_with(b"{") || t.starts_with(b"#include") || t.starts_with(b"#!") || t.starts_with(b"import ") {
+        if t.ends_with(b";")
+            || t.ends_with(b"{")
+            || t.starts_with(b"#include")
+            || t.starts_with(b"#!")
+            || t.starts_with(b"import ")
+        {
             code_like = code_like.saturating_add(1);
         }
     }
@@ -155,7 +170,10 @@ async fn section(cx: Cx, s: Section) -> Result<()> {
         // The heading itself (and a setext underline).
         let first = lines.next().await?;
         if first.as_ref().is_some_and(|f| atx(&f.bytes).is_none())
-            && lines.peek().await?.is_some_and(|l| setext(&l.bytes).is_some())
+            && lines
+                .peek()
+                .await?
+                .is_some_and(|l| setext(&l.bytes).is_some())
         {
             lines.next().await?;
         }
@@ -275,7 +293,11 @@ async fn push_section(cx: &Cx, s: &Section, start: u64, end: u64, level: u8, tit
 fn lines_span(block: &[LineBuf]) -> Option<Span> {
     let first = block.first()?.span;
     let last = block.last()?.span;
-    Some(Span::new(first.source, first.offset, last.end().saturating_sub(first.offset)))
+    Some(Span::new(
+        first.source,
+        first.offset,
+        last.end().saturating_sub(first.offset),
+    ))
 }
 
 fn is_item(line: &[u8]) -> bool {
@@ -284,7 +306,10 @@ fn is_item(line: &[u8]) -> bool {
         return true;
     }
     let digits = t.iter().take_while(|b| b.is_ascii_digit()).count();
-    digits > 0 && digits < 10 && matches!(t.get(digits), Some(b'.' | b')')) && matches!(t.get(digits.saturating_add(1)), Some(b' ' | b'\t'))
+    digits > 0
+        && digits < 10
+        && matches!(t.get(digits), Some(b'.' | b')'))
+        && matches!(t.get(digits.saturating_add(1)), Some(b' ' | b'\t'))
 }
 
 /// Pushes the node for a block of lines and clears it.
@@ -304,15 +329,30 @@ async fn flush(cx: &Cx, block: &mut Vec<LineBuf>) {
         block.iter().map(strip).collect::<Vec<_>>().join(sep)
     };
     let node = if let Some(_marker) = fence(&first) {
-        let info = super::encoding::decode_8bit(probe::trim(probe::trim_start(&first).get(3..).unwrap_or_default()));
+        let info = super::encoding::decode_8bit(probe::trim(
+            probe::trim_start(&first).get(3..).unwrap_or_default(),
+        ));
         let body: Vec<String> = block
             .iter()
             .skip(1)
-            .take(block.len().saturating_sub(2).max(usize::from(block.len() == 1)))
+            .take(
+                block
+                    .len()
+                    .saturating_sub(2)
+                    .max(usize::from(block.len() == 1)),
+            )
             .map(LineBuf::text)
             .collect();
-        let name = if info.is_empty() { "Code".to_owned() } else { format!("Code ({info})") };
-        text_node(name, span, &body.join("\n")).summary(plural(crate::bytes::to_u64(body.len()), "line", "lines"))
+        let name = if info.is_empty() {
+            "Code".to_owned()
+        } else {
+            format!("Code ({info})")
+        };
+        text_node(name, span, &body.join("\n")).summary(plural(
+            crate::bytes::to_u64(body.len()),
+            "line",
+            "lines",
+        ))
     } else if first.starts_with(b"    ") || first.starts_with(b"\t") {
         text_node("Code", span, &joined("\n", &|l| l.text()))
     } else if probe::trim_start(&first).starts_with(b">") {
@@ -325,13 +365,19 @@ async fn flush(cx: &Cx, block: &mut Vec<LineBuf>) {
         let items = block.iter().filter(|l| is_item(&l.bytes)).count();
         Node::new("List")
             .span(span)
-            .summary(format!("{}: {}", plural(crate::bytes::to_u64(items), "item", "items"), preview(&String::from_utf8_lossy(probe::trim(&first)), 50)))
+            .summary(format!(
+                "{}: {}",
+                plural(crate::bytes::to_u64(items), "item", "items"),
+                preview(&String::from_utf8_lossy(probe::trim(&first)), 50)
+            ))
             .lazy(list, span)
     } else if block.len() >= 2
         && first.contains(&b'|')
         && block.get(1).is_some_and(|l| {
             let t = probe::trim(&l.bytes);
-            t.contains(&b'-') && t.iter().all(|&b| matches!(b, b'|' | b'-' | b':' | b' ' | b'\t'))
+            t.contains(&b'-')
+                && t.iter()
+                    .all(|&b| matches!(b, b'|' | b'-' | b':' | b' ' | b'\t'))
         })
     {
         let cols = probe::trim(&first)
@@ -342,21 +388,34 @@ async fn flush(cx: &Cx, block: &mut Vec<LineBuf>) {
             .span(span)
             .summary(format!(
                 "{} × {}",
-                plural(crate::bytes::to_u64(block.len().saturating_sub(2)), "row", "rows"),
+                plural(
+                    crate::bytes::to_u64(block.len().saturating_sub(2)),
+                    "row",
+                    "rows"
+                ),
                 plural(crate::bytes::to_u64(cols), "column", "columns")
             ))
             .lazy(table, span)
-    } else if block.len() == 1
-        && {
-            let t: Vec<u8> = first.iter().copied().filter(|b| !b.is_ascii_whitespace()).collect();
-            t.len() >= 3 && (t.iter().all(|&b| b == b'-') || t.iter().all(|&b| b == b'*') || t.iter().all(|&b| b == b'_'))
-        }
-    {
+    } else if block.len() == 1 && {
+        let t: Vec<u8> = first
+            .iter()
+            .copied()
+            .filter(|b| !b.is_ascii_whitespace())
+            .collect();
+        t.len() >= 3
+            && (t.iter().all(|&b| b == b'-')
+                || t.iter().all(|&b| b == b'*')
+                || t.iter().all(|&b| b == b'_'))
+    } {
         Node::new("Rule").span(span)
     } else if probe::trim_start(&first).starts_with(b"<") {
         text_node("HTML", span, &joined("\n", &|l| l.text()))
     } else {
-        text_node("Paragraph", span, &joined(" ", &|l| l.piece().trim().text()))
+        text_node(
+            "Paragraph",
+            span,
+            &joined(" ", &|l| l.piece().trim().text()),
+        )
     };
     block.clear();
     cx.push(node).await;
@@ -457,11 +516,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let headings: Vec<&[u8]> = probe::lines(&text).filter(|l| atx(l).is_some()).collect();
     let mut summary = String::from("Markdown");
     if let Some(first) = headings.first() {
-        let t = String::from_utf8_lossy(probe::trim(first)).trim_start_matches('#').trim().to_owned();
+        let t = String::from_utf8_lossy(probe::trim(first))
+            .trim_start_matches('#')
+            .trim()
+            .to_owned();
         summary = format!("{summary}: {}", preview(&t, 60));
     }
     if headings.len() > 1 {
-        summary = format!("{summary}, {}", plural(crate::bytes::to_u64(headings.len()), "heading", "headings"));
+        summary = format!(
+            "{summary}, {}",
+            plural(crate::bytes::to_u64(headings.len()), "heading", "headings")
+        );
     }
     cx.annotate(summary);
     section(
