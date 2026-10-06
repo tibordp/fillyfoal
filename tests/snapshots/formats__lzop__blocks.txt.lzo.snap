@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ blocks.txt.lzo — lzop, originally "blocks.txt" (2023-11-14 22:13:20 UTC), 4 block(s), 900 bytes uncompressed  [0x0+0x213]
+    Version: 0x1040  [0x9+0x2]
+    Library version: 0x20a0  [0xb+0x2]
+    Version needed: 0x940  [0xd+0x2]
+    Method: LZO1X-1 (0x1)  [0xf+0x1]
+    Level: 5  [0x10+0x1]
+    Flags: 0x3000003 [ADLER32_D | ADLER32_C | OS_UNIX]  [0x11+0x4]
+    Mode: 0x81a4  [0x15+0x4]
+    Modification time: 2023-11-14 22:13:20 UTC  [0x19+0x4]
+    Modification time (high): 0  [0x1d+0x4]
+    Name length: 10  [0x21+0x1]
+    Original name: "blocks.txt"  [0x22+0xa]
+    Header checksum: 0x77fb084a — Adler-32  [0x2c+0x4]
+    Block 1 — 37 bytes, 256 uncompressed  [0x30+0x35]
+    Block 2 — 93 bytes, 256 uncompressed  [0x65+0x6d]
+    Block 3 — 256 bytes, stored  [0xd2+0x10c]
+    Block 4 — 33 bytes, 132 uncompressed  [0x1de+0x31]
+    End of stream  [0x20f+0x4]
+  ▾ Decompressed — 0x384 bytes decompressed  [0x0+0x213]
+      Data  [#1:0x0+0x384]

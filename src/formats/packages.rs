@@ -10,7 +10,7 @@ use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -470,48 +470,113 @@ declare_format!(pub LZOP = "lzop", "lzop compressed file", ["lzo", "tzo"], "appl
 
 const LZO_METHODS: EnumTable = &[(1, "LZO1X-1"), (2, "LZO1X-1(15)"), (3, "LZO1X-999")];
 
+const LZOP_FLAGS: FlagTable = &[
+    flag(0x1, "ADLER32_D"),
+    flag(0x2, "ADLER32_C"),
+    flag(0x4, "STDIN"),
+    flag(0x8, "STDOUT"),
+    flag(0x10, "NAME_DEFAULT"),
+    flag(0x20, "DOSISH"),
+    flag(0x40, "H_EXTRA_FIELD"),
+    flag(0x80, "H_GMTDIFF"),
+    flag(0x100, "CRC32_D"),
+    flag(0x200, "CRC32_C"),
+    flag(0x400, "MULTIPART"),
+    flag(0x800, "H_FILTER"),
+    flag(0x1000, "H_CRC32"),
+    flag(0x2000, "H_PATH"),
+    field(0xff00_0000, 0x0000_0000, "OS_FAT"),
+    field(0xff00_0000, 0x0300_0000, "OS_UNIX"),
+    field(0xff00_0000, 0x0b00_0000, "OS_NTFS"),
+];
+
 async fn lzop(cx: Cx, input: Input) -> Result<()> {
+    use crate::codec::lzo;
     let file = input.span;
-    let head = cx.block(file.sub(9, 40)).await?;
+    // The largest header: fixed fields, a 255-byte name, the checksum and
+    // an extra field's length.
+    let raw = cx.read_avail(file.sub(0, 9 + 33 + 255 + 8)).await?;
+    let parsed = lzo::lzop_header(&raw).map_err(|e| e.at(file))?;
+    let head = cx.block(file.sub(9, 33 + 255 + 8)).await?;
     let mut f = Fields::emitting(&cx, &head, BE);
     f.u16("Version").hex().emit()?;
     f.u16("Library version").hex().emit()?;
-    let needed = f.u16("Version needed").hex().emit()?;
+    if parsed.version >= 0x0940 {
+        f.u16("Version needed").hex().emit()?;
+    }
     f.u8("Method").enumeration(LZO_METHODS).emit()?;
-    if needed >= 0x0940 {
+    if parsed.version >= 0x0940 {
         f.u8("Level").emit()?;
     }
-    let flags = f.u32("Flags").hex().emit()?;
-    if flags & 0x40 != 0 {
+    let flags = f.u32("Flags").flags(LZOP_FLAGS).emit()?;
+    if flags & lzo::F_H_FILTER != 0 {
         f.u32("Filter").emit()?;
     }
     f.u32("Mode").hex().emit()?;
     let mtime = f.u32("Modification time").timestamp().emit()?;
-    f.u32("Modification time (high)").emit()?;
+    if parsed.version >= 0x0940 {
+        f.u32("Modification time (high)").emit()?;
+    }
     let name_len = f.u8("Name length").emit()?;
-    let pos = f.pos();
-    let name = cx
-        .read_avail(file.sub(9u64.saturating_add(pos), name_len.into()))
-        .await?;
+    let name_span = f.peek_span(name_len.into());
+    let name = f.bytes("Original name", name_len.into()).get()?;
     let name = String::from_utf8_lossy(&name).into_owned();
-    cx.emit(
-        Node::new("Original name")
-            .span(file.sub(9u64.saturating_add(pos), name_len.into()))
-            .value(Value::Text(name.clone())),
-    );
-    cx.emit(
-        Node::new("Compressed blocks")
-            .span(
-                file.tail(
-                    9u64.saturating_add(pos)
-                        .saturating_add(name_len.into())
-                        .saturating_add(4),
-                ),
-            )
-            .diag(Diagnostic::unsupported("LZO decoding")),
-    );
+    f.node(Node::new("Original name").span(name_span).value(Value::Text(name.clone())));
+    let kind = if flags & lzo::F_H_CRC32 != 0 { "CRC-32" } else { "Adler-32" };
+    let ok = parsed.checksum_ok;
+    f.u32("Header checksum")
+        .hex()
+        .summary(kind)
+        .check(|_| (!ok).then(|| Diagnostic::warning("header checksum mismatch")))
+        .emit()?;
+    if flags & lzo::F_H_EXTRA_FIELD != 0 {
+        let len = f.u32("Extra field length").emit()?;
+        f.bytes("Extra field", len.into()).emit()?;
+        f.u32("Extra field checksum").hex().emit()?;
+    }
+    let mut cur = Cursor::new(&cx, file, BE);
+    cur.seek(u64::try_from(parsed.len).unwrap_or(u64::MAX));
+    let mut blocks = 0u32;
+    let mut total = 0u64;
+    let mut ended = false;
+    while cur.remaining() >= 4 {
+        let start = cur.pos();
+        let raw_len = cur.u32().await?;
+        if raw_len == 0 {
+            cx.push(Node::new("End of stream").span(cur.since(start))).await;
+            ended = true;
+            break;
+        }
+        let packed = cur.u32().await?;
+        let compressed = packed < raw_len;
+        let checks = lzo::lzop_block_header_len(flags, compressed).saturating_sub(8);
+        cur.skip(u64::try_from(checks).unwrap_or(0).saturating_add(packed.into()));
+        blocks = blocks.saturating_add(1);
+        total = total.saturating_add(raw_len.into());
+        let summary = if compressed {
+            format!("{packed} bytes, {raw_len} uncompressed")
+        } else {
+            format!("{raw_len} bytes, stored")
+        };
+        let node = Node::new(format!("Block {blocks}")).span(cur.since(start)).summary(summary);
+        if packed > raw_len || raw_len > lzo::LZOP_MAX_BLOCK {
+            cx.push(node.diag(Diagnostic::malformed("bad block size"))).await;
+            break;
+        }
+        cx.push(node).await;
+    }
+    if !ended {
+        cx.diag(Diagnostic::malformed("lzop stream has no end marker").at(file));
+    }
+    if !matches!(parsed.method, 1..=3) {
+        cx.emit(Node::new("Decompressed").span(file).diag(Diagnostic::unsupported(format!("lzop method {}", parsed.method))));
+    } else if flags & lzo::F_H_FILTER != 0 {
+        cx.emit(Node::new("Decompressed").span(file).diag(Diagnostic::unsupported("lzop filters")));
+    } else {
+        cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Lzop, Some(total)));
+    }
     cx.annotate(format!(
-        "lzop, originally {name:?} ({})",
+        "lzop, originally {name:?} ({}), {blocks} block(s), {total} bytes uncompressed",
         crate::render::value(&Value::Timestamp {
             unix_seconds: mtime.into()
         })
@@ -519,7 +584,46 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-declare_format!(pub LRZIP = "lrzip", "lrzip compressed file", ["lrz"], "application/x-lrzip",
+fn lzf_probe(h: &crate::formats::Head<'_>) -> bool {
+    match crate::codec::legacy::zv_block(h.data) {
+        Some((_, clen, ulen, compressed)) => clen > 0 && (!compressed || clen < ulen),
+        None => false,
+    }
+}
+
+declare_format!(pub LZF = "lzf", "LZF compressed data", ["lzf"], "application/x-lzf",
+    Probe::Custom(lzf_probe), lzf);
+
+/// The `lzf` tool's output: `ZV` blocks of up to 64 KiB, each compressed
+/// alone or stored.
+async fn lzf(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let mut cur = Cursor::new(&cx, file, BE);
+    let mut blocks = 0u32;
+    let mut total = 0u64;
+    while cur.remaining() >= 5 {
+        let start = cur.pos();
+        let head = cx.read_avail(file.sub(start, 7)).await?;
+        let Some((hlen, clen, ulen, compressed)) = crate::codec::legacy::zv_block(&head) else {
+            cx.diag(Diagnostic::malformed("bad ZV block header").at(file.tail(start)));
+            break;
+        };
+        cur.skip(u64::try_from(hlen.saturating_add(clen)).unwrap_or(u64::MAX));
+        blocks = blocks.saturating_add(1);
+        total = total.saturating_add(u64::try_from(ulen).unwrap_or(0));
+        let summary = if compressed {
+            format!("{clen} bytes, {ulen} uncompressed")
+        } else {
+            format!("{ulen} bytes, stored")
+        };
+        cx.push(Node::new(format!("Block {blocks}")).span(cur.since(start)).summary(summary)).await;
+    }
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::LzfFramed, Some(total)));
+    cx.annotate(format!("LZF, {blocks} block(s), {total} bytes uncompressed"));
+    Ok(())
+}
+
+declare_format!(pub LRZIP ="lrzip", "lrzip compressed file", ["lrz"], "application/x-lrzip",
     Probe::Magic(&[(0, b"LRZI")]), lrzip);
 
 async fn lrzip(cx: Cx, input: Input) -> Result<()> {

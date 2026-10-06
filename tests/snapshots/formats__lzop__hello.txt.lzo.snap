@@ -2,17 +2,20 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ hello.txt.lzo — lzop, originally "hello.txt" (2023-11-14 22:13:20 UTC)  [0x0+0x3f]
+▾ hello.txt.lzo — lzop, originally "hello.txt" (2023-11-14 22:13:20 UTC), 0 block(s), 0 bytes uncompressed  [0x0+0x3f]
     Version: 0x1040  [0x9+0x2]
     Library version: 0x2080  [0xb+0x2]
     Version needed: 0x940  [0xd+0x2]
     Method: LZO1X-1 (0x1)  [0xf+0x1]
     Level: 5  [0x10+0x1]
-    Flags: 0x3000001  [0x11+0x4]
+    Flags: 0x3000001 [ADLER32_D | OS_UNIX]  [0x11+0x4]
     Mode: 0x81a4  [0x15+0x4]
     Modification time: 2023-11-14 22:13:20 UTC  [0x19+0x4]
     Modification time (high): 0  [0x1d+0x4]
     Name length: 9  [0x21+0x1]
     Original name: "hello.txt"  [0x22+0x9]
-    Compressed blocks  [0x2f+0x10]
-      ! unsupported: LZO decoding
+    Header checksum: 0x0 — Adler-32  [0x2b+0x4]
+      ! warning: header checksum mismatch [0x2b+0x4]
+    End of stream  [0x2f+0x4]
+  ▾ Decompressed  [0x0+0x3f]
+      ! malformed: LZO: lzop header checksum mismatch [0x0+0x3f]

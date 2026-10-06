@@ -22,6 +22,9 @@ pub mod zstd;
 pub mod pipeline;
 pub mod unixz;
 pub mod xpress;
+pub mod lzo;
+pub mod legacy;
+pub mod implode;
 
 use std::sync::Arc;
 
@@ -87,6 +90,20 @@ pub enum Codec {
     XpressHuffman { size: u64 },
     /// Zstandard frames.
     Zstd,
+    /// One raw LZO1X stream (with its end marker).
+    Lzo1x,
+    /// The lzop (`.lzo`) container.
+    Lzop,
+    /// Raw LZF (liblzf).
+    Lzf,
+    /// LZF in the `lzf` tool's `ZV` blocks.
+    LzfFramed,
+    /// Apple Data Compression (DMG chunk type `0x80000004`).
+    Adc,
+    /// PKWARE implode (ZIP method 6).
+    Implode(implode::Implode),
+    /// PKWARE Data Compression Library implode (ZIP method 10, "blast").
+    DclImplode,
     /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
     Xz,
     /// `.lzma` ("LZMA alone").
@@ -160,6 +177,13 @@ impl Codec {
             Codec::Lznt1 { .. } => "lznt1",
             Codec::Xpress { .. } => "xpress",
             Codec::XpressHuffman { .. } => "xpress-huffman",
+            Codec::Lzo1x => "lzo1x",
+            Codec::Lzop => "lzop",
+            Codec::Lzf => "lzf",
+            Codec::LzfFramed => "lzf-framed",
+            Codec::Adc => "adc",
+            Codec::Implode(_) => "implode",
+            Codec::DclImplode => "dcl-implode",
             Codec::Lzfse => "lzfse",
             Codec::Pbz => "pbz",
             Codec::Brotli => "brotli",
@@ -199,6 +223,13 @@ impl Codec {
             Codec::Lznt1 { .. } => "lznt1 (lazy)",
             Codec::Xpress { .. } => "xpress (lazy)",
             Codec::XpressHuffman { .. } => "xpress-huffman (lazy)",
+            Codec::Lzo1x => "lzo1x (lazy)",
+            Codec::Lzop => "lzop (lazy)",
+            Codec::Lzf => "lzf (lazy)",
+            Codec::LzfFramed => "lzf-framed (lazy)",
+            Codec::Adc => "adc (lazy)",
+            Codec::Implode(_) => "implode (lazy)",
+            Codec::DclImplode => "dcl-implode (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
             Codec::Pbz => "pbz (lazy)",
             Codec::Brotli => "brotli (lazy)",
@@ -236,6 +267,13 @@ impl Codec {
             | Codec::Lznt1 { .. }
             | Codec::Xpress { .. }
             | Codec::XpressHuffman { .. }
+            | Codec::Lzo1x
+            | Codec::Lzop
+            | Codec::Lzf
+            | Codec::LzfFramed
+            | Codec::Adc
+            | Codec::Implode(_)
+            | Codec::DclImplode
             | Codec::Lzfse
             | Codec::Pbz
             | Codec::Brotli
@@ -277,6 +315,14 @@ impl Codec {
             // Each 64 KiB block costs at least its 256-byte table.
             Codec::XpressHuffman { .. } => 512,
             Codec::Xpress { .. } => 32_768,
+            // Each zero length byte adds 255 bytes.
+            Codec::Lzo1x | Codec::Lzop => 512,
+            // At most 264 bytes per 3-byte back reference.
+            Codec::Lzf | Codec::LzfFramed => 128,
+            // At most 67 bytes per 3-byte match.
+            Codec::Adc => 32,
+            // Matches of up to 320 or 518 bytes in about 17 or 24 bits.
+            Codec::Implode(_) | Codec::DclImplode => 256,
             Codec::Lzfse => 4_096,
             Codec::Pbz => 7_000,
             // A copy of 16 MiB costs a few bits.
@@ -316,6 +362,13 @@ impl Codec {
             Codec::XpressHuffman { size } => {
                 Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman { size: *size })))
             }
+            Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
+            Codec::Lzop => Box::new(Streaming(filters::Whole::new(lzo::Lzop))),
+            Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
+            Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
+            Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
+            Codec::Implode(params) => Box::new(Streaming(filters::Whole::new(*params))),
+            Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),

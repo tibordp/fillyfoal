@@ -608,7 +608,19 @@ async fn rdb_string(cur: &mut Cursor<'_>) -> Result<String> {
             0 => (cur.u8().await? as i8).to_string(),
             1 => (cur.u16().await? as i16).to_string(),
             2 => (cur.u32().await? as i32).to_string(),
-            _ => return Err(Diagnostic::unsupported("LZF-compressed string")),
+            3 => {
+                // LZF: compressed and uncompressed lengths, then the data.
+                let packed = rdb_length(cur).await?;
+                let size = rdb_length(cur).await?;
+                if packed > 1 << 20 {
+                    return Err(Diagnostic::limit("LZF-compressed string over 1 MiB"));
+                }
+                let data = cur.bytes(packed).await?;
+                let mut out = Vec::new();
+                crate::codec::legacy::lzf(&data, &mut out, usize::try_from(size.min(1 << 20)).unwrap_or(0))?;
+                String::from_utf8_lossy(&out).into_owned()
+            }
+            _ => return Err(Diagnostic::malformed("unknown string encoding")),
         });
     }
     Ok(String::from_utf8_lossy(&cur.bytes(len.min(1 << 20)).await?).into_owned())

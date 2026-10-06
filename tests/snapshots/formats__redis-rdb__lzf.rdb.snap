@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lzf.rdb — RDB v11, Redis 7.2.4  [0x0+0x4f]
+    Magic: "REDIS"  [0x0+0x5]
+    Version: "0011"  [0x5+0x4]
+    redis-ver: "7.2.4"  [0x9+0x11]
+    note: "compressed compressed compressed compressed compressed "  [0x1a+0x1c]
+    SELECTDB 0  [0x36+0x2]
+    RESIZEDB — 1 keys, 0 with expiry  [0x38+0x3]
+    Key-value pairs  [0x3b+0x14]

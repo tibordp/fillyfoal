@@ -520,3 +520,144 @@ fn xca_codecs_decode_reference_output() {
         }
     }
 }
+
+fn legacy_noise(n: usize) -> Vec<u8> {
+    let mut x: u32 = 12345;
+    (0..n)
+        .map(|_| {
+            x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+            ((x >> 16) & 0xff) as u8
+        })
+        .collect()
+}
+
+/// `text[..20000] + noise(9000) + text[..30000]`, as the generators write.
+fn legacy_mixed() -> Vec<u8> {
+    let text = lzma_text();
+    [&text[..20000], &legacy_noise(9000), &text[..30000]].concat()
+}
+
+fn legacy_read(dir: &str, name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/data/{dir}/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+fn legacy_decode_bytes(codec: &fillyfoal::codec::Codec, data: &[u8], limit: usize) -> fillyfoal::error::Result<Vec<u8>> {
+    let mut d = codec.decoder().unwrap();
+    fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, limit)
+}
+
+fn legacy_decode(codec: fillyfoal::codec::Codec, dir: &str, name: &str) -> Vec<u8> {
+    legacy_decode_bytes(&codec, &legacy_read(dir, name), 1 << 26).unwrap()
+}
+
+#[test]
+fn lzo_decodes_liblzo_output() {
+    // Raw streams from liblzo2 2.10; lzop containers built around them.
+    use fillyfoal::codec::Codec;
+    assert!(legacy_decode(Codec::Lzo1x, "lzo", "text.lzo1x_1") == lzma_text());
+    assert!(legacy_decode(Codec::Lzo1x, "lzo", "text.lzo1x_999") == lzma_text());
+    assert!(legacy_decode(Codec::Lzo1x, "lzo", "mixed.lzo1x_1_15") == legacy_mixed());
+    assert!(legacy_decode(Codec::Lzo1x, "lzo", "empty.lzo1x_1").is_empty());
+    assert!(legacy_decode(Codec::Lzop, "lzo", "text.lzo") == lzma_text());
+    assert!(legacy_decode(Codec::Lzop, "lzo", "mixed.lzo") == legacy_mixed());
+    // A small output limit, truncation and corruption fail cleanly.
+    let data = legacy_read("lzo", "text.lzo");
+    assert!(legacy_decode_bytes(&Codec::Lzop, &data, 1000).is_err());
+    assert!(legacy_decode_bytes(&Codec::Lzop, &data[..data.len() / 2], 1 << 26).is_err());
+    let mut bad = data.clone();
+    let at = bad.len() - 10;
+    bad[at] ^= 0x55;
+    assert!(legacy_decode_bytes(&Codec::Lzop, &bad, 1 << 26).is_err());
+    let raw = legacy_read("lzo", "text.lzo1x_1");
+    for cut in [1, 2, 100, raw.len() / 2, raw.len() - 1] {
+        assert!(legacy_decode_bytes(&Codec::Lzo1x, &raw[..cut], 1 << 26).is_err());
+    }
+}
+
+#[test]
+fn lzf_decodes_liblzf_output() {
+    use fillyfoal::codec::Codec;
+    assert!(legacy_decode(Codec::Lzf, "lzf", "text.lzf") == lzma_text());
+    let framed = legacy_decode(Codec::LzfFramed, "lzf", "mixed.zv");
+    assert!(framed == [legacy_mixed(), lzma_text()].concat());
+}
+
+#[test]
+fn adc_decodes_hdiutil_chunks() {
+    // ADC chunks of a UDCO image made by hdiutil; the expected sectors come
+    // from the same image converted to a raw (UDTO) one.
+    use fillyfoal::codec::Codec;
+    let text = legacy_decode(Codec::Adc, "adc", "text.adc");
+    assert_eq!(text.len(), 69632);
+    let expected = lzma_text();
+    assert!(text[..expected.len()] == expected[..]);
+    assert!(text[expected.len()..].iter().all(|&b| b == 0));
+    assert!(legacy_decode(Codec::Adc, "adc", "gpt.adc") == legacy_read("adc", "gpt.bin"));
+}
+
+#[test]
+fn implode_decodes_method_6() {
+    // Written by an APPNOTE-based encoder (no real PKZIP 1.x encoder is at
+    // hand) and checked with 7-Zip's independent implode decoder.
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::implode::Implode;
+    let text = lzma_text();
+    let mixed = legacy_mixed();
+    let runs = [vec![b'A'; 5000], text[..3000].repeat(4), vec![0; 2000]].concat();
+    let cases: [(&str, bool, bool, &[u8]); 5] = [
+        ("text_8k_lit", true, true, &text),
+        ("text_4k", false, false, &text),
+        ("mixed_8k", true, false, &mixed),
+        ("mixed_4k_lit", false, true, &mixed[..30000]),
+        ("runs_4k_lit", false, true, &runs),
+    ];
+    for (name, large_window, literal_tree, expected) in cases {
+        let file = format!("{name}.imploded");
+        let params = Implode { large_window, literal_tree, size: Some(expected.len() as u64) };
+        assert!(legacy_decode(Codec::Implode(params), "implode", &file) == expected, "{name}");
+        // Without a size, decoding runs to the end of the input (padding
+        // bits may decode as one more literal).
+        let out = legacy_decode(Codec::Implode(Implode { size: None, ..params }), "implode", &file);
+        assert!(out.starts_with(expected) && out.len() <= expected.len() + 1, "{name}");
+    }
+}
+
+#[test]
+fn legacy_codecs_survive_corruption() {
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::implode::Implode;
+    let implode = Codec::Implode(Implode { large_window: false, literal_tree: true, size: Some(19000) });
+    let cases = [
+        (Codec::Lzo1x, "lzo", "text.lzo1x_999"),
+        (Codec::Lzop, "lzo", "mixed.lzo"),
+        (Codec::Lzf, "lzf", "text.lzf"),
+        (Codec::LzfFramed, "lzf", "mixed.zv"),
+        (Codec::Adc, "adc", "gpt.adc"),
+        (implode, "implode", "runs_4k_lit.imploded"),
+        (Codec::DclImplode, "dcl", "text_binary2k.pk"),
+    ];
+    for (codec, dir, name) in cases {
+        let data = legacy_read(dir, name);
+        for cut in [0, 1, 2, 3, 7, data.len() / 3, data.len() - 1] {
+            let _ = legacy_decode_bytes(&codec, &data[..cut], 1 << 22);
+        }
+        for i in (0..data.len()).step_by(data.len() / 50 + 1) {
+            let mut bad = data.clone();
+            bad[i] ^= 0xa5;
+            let _ = legacy_decode_bytes(&codec, &bad, 1 << 22);
+        }
+        assert!(legacy_decode_bytes(&codec, &data, 100).is_err(), "{name}: limit");
+    }
+}
+
+#[test]
+fn dcl_implode_decodes_pklib_output() {
+    // From the dclimplode package (StormLib's pklib implode, checked there
+    // against zlib's blast): ASCII (coded literals) and binary modes, 1-4 KiB
+    // dictionaries.
+    use fillyfoal::codec::Codec;
+    let text = lzma_text();
+    assert!(legacy_decode(Codec::DclImplode, "dcl", "text_ascii4k.pk") == text);
+    assert!(legacy_decode(Codec::DclImplode, "dcl", "text_binary2k.pk") == text[..5000]);
+    assert!(legacy_decode(Codec::DclImplode, "dcl", "mixed_binary1k.pk") == legacy_mixed());
+}

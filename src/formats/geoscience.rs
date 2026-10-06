@@ -1600,7 +1600,7 @@ async fn pcd(cx: Cx, input: Input) -> Result<()> {
             )
         }
         "binary" => node = node.lazy(pcd_binary, (data, fields.clone(), points)),
-        "binary_compressed" => node = node.diag(Diagnostic::unsupported("LZF compression")),
+        "binary_compressed" => node = node.lazy(pcd_compressed, (input, data)),
         _ => {}
     }
     cx.emit(node);
@@ -1636,7 +1636,24 @@ async fn pcd_ascii(cx: Cx, (data, names): (Span, Vec<String>)) -> Result<()> {
     Ok(())
 }
 
-async fn pcd_binary(cx: Cx, (data, fields, points): (Span, Vec<PcdField>, u64)) -> Result<()> {
+/// `binary_compressed`: compressed and uncompressed sizes, then LZF data
+/// holding the fields one after another (each for all points).
+async fn pcd_compressed(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
+    let head = cx.block(data.sub(0, 8)).await?;
+    let mut f = Fields::emitting(&cx, &head, Endian::Little);
+    let packed = f.u32("Compressed size").emit()?;
+    let size = f.u32("Uncompressed size").emit()?;
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        data.sub(8, packed.into()),
+        crate::codec::Codec::Lzf,
+        Some(size.into()),
+    ));
+    Ok(())
+}
+
+async fn pcd_binary(cx: Cx,(data, fields, points): (Span, Vec<PcdField>, u64)) -> Result<()> {
     let size: u64 = fields.iter().map(|f| f.size.saturating_mul(f.count)).sum();
     if size == 0 {
         return Ok(());
