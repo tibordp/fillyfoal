@@ -1,5 +1,5 @@
-//! Music-production files: VST presets and banks (FXP/FXB), FL Studio
-//! projects and Guitar Pro tablature.
+//! Music-production files: VST presets and banks (FXP/FXB) and FL Studio
+//! projects. Guitar Pro tablature lives in [`super::guitar_pro`].
 
 use crate::bytes::u32_le;
 use crate::cx::Cx;
@@ -7,16 +7,16 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::{Head, Input, Probe};
+use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::{EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 // ---------------------------------------------------------------------------
-// VST presets (FXP/FXB), FL Studio projects, Guitar Pro
+// VST presets (FXP/FXB), FL Studio projects
 
 declare_format!(pub FXP = "fxp", "VST preset / bank", ["fxp", "fxb"], "application/x-vst-preset",
     Probe::Magic(&[(0, b"CcnK")]), fxp);
@@ -116,49 +116,5 @@ async fn flp_events(cx: Cx, span: Span) -> Result<()> {
         }
         cx.push(node).await;
     }
-    Ok(())
-}
-
-fn guitar_pro_probe(h: &Head<'_>) -> bool {
-    h.at(1, b"FICHIER GUITAR PRO") || h.at(1, b"FICHIER GUITARE PRO")
-}
-
-declare_format!(pub GUITAR_PRO = "guitar-pro", "Guitar Pro tablature", ["gp3", "gp4", "gp5", "gtp"], "application/x-guitar-pro",
-    Probe::Custom(guitar_pro_probe), guitar_pro);
-
-async fn guitar_pro(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 31)).await?;
-    let len = usize::from(head.first().copied().unwrap_or(0)).min(30);
-    let version =
-        String::from_utf8_lossy(head.get(1..1usize.saturating_add(len)).unwrap_or_default())
-            .into_owned();
-    cx.emit(
-        Node::new("Version")
-            .span(file.sub(0, 31))
-            .value(Value::Text(version.clone())),
-    );
-    // Then: title as an int-length-prefixed byte string.
-    let mut cur = Cursor::new(&cx, file, LE);
-    cur.seek(31);
-    let mut fields = Vec::new();
-    for name in ["Title", "Subtitle", "Artist", "Album"] {
-        let start = cur.pos();
-        let _total = cur.u32().await?;
-        let len = cur.u8().await?;
-        let text = String::from_utf8_lossy(&cur.bytes(len.into()).await?).into_owned();
-        cx.emit(
-            Node::new(name)
-                .span(cur.since(start))
-                .value(Value::Text(text.clone())),
-        );
-        fields.push(text);
-    }
-    cx.emit(Node::new("Song data").span(file.tail(cur.pos())));
-    cx.annotate(format!(
-        "{version}: {:?} by {}",
-        fields.first().cloned().unwrap_or_default(),
-        fields.get(2).cloned().unwrap_or_default()
-    ));
     Ok(())
 }

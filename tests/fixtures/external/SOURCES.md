@@ -148,6 +148,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `csi/small.vcf.bgz.csi` | htslib (via pysam, inferred) | CSI index with metadata pseudo-bins |
 | `cram/small.cram` | htslib (via pysam, inferred) | CRAM file id holds the file name, as htslib writes it |
 | `cram/bzip2-lzma.cram` | htslib (via pysam, inferred) | CRAM file id holds the file name; bzip2 and lzma blocks |
+| `guitar-pro/` | PyGuitarPro 0.11 (`guitarpro.write`, versions 3.00, 4.06, 5.10, 5.00) | reproduced byte-for-byte: `uv run --with pyguitarpro==0.11 python tests/data/guitar-pro/make.py gp`; the song (notes, effects, names) is ours |
 | `pdf/encrypted-empty-aes-128.pdf` | pypdf | `/Producer (pypdf)` (encrypted); the page content is ours. Owner/user passwords: empty |
 | `pdf/encrypted-empty-aes-256-r5.pdf` | pypdf | `/Producer (pypdf)`; empty user password |
 | `pdf/encrypted-empty-aes-256.pdf` | pypdf | `/Producer (pypdf)`; empty user password |

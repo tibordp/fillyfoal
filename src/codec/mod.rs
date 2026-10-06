@@ -31,6 +31,7 @@ pub mod implode;
 pub mod cab;
 pub mod lzx;
 pub mod quantum;
+pub mod bcfz;
 
 use std::sync::Arc;
 
@@ -104,6 +105,9 @@ pub enum Codec {
     CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
+    /// The bit-level LZ77 of Guitar Pro 6 `BCFZ` files (after their 8-byte
+    /// header), decoding to `size` bytes (see [`bcfz`]).
+    Bcfz { size: u64 },
     /// Exactly one Zstandard frame (after any skippable frames); what
     /// follows it is left unconsumed.
     ZstdFrame,
@@ -198,6 +202,7 @@ impl Codec {
             Codec::Xpress { .. } => "xpress",
             Codec::XpressHuffman { .. } => "xpress-huffman",
             Codec::Lzo1x => "lzo1x",
+            Codec::Bcfz { .. } => "bcfz",
             Codec::Lzop => "lzop",
             Codec::Lzf => "lzf",
             Codec::LzfFramed => "lzf-framed",
@@ -248,6 +253,7 @@ impl Codec {
             Codec::Xpress { .. } => "xpress (lazy)",
             Codec::XpressHuffman { .. } => "xpress-huffman (lazy)",
             Codec::Lzo1x => "lzo1x (lazy)",
+            Codec::Bcfz { .. } => "bcfz (lazy)",
             Codec::Lzop => "lzop (lazy)",
             Codec::Lzf => "lzf (lazy)",
             Codec::LzfFramed => "lzf-framed (lazy)",
@@ -296,6 +302,7 @@ impl Codec {
             | Codec::Xpress { .. }
             | Codec::XpressHuffman { .. }
             | Codec::Lzo1x
+            | Codec::Bcfz { .. }
             | Codec::Lzop
             | Codec::Lzf
             | Codec::LzfFramed
@@ -341,6 +348,8 @@ impl Codec {
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd | Codec::ZstdFrame => 32_768,
             Codec::UnixCompress => 8_000,
+            // A 32 KiB copy costs 35 bits.
+            Codec::Bcfz { .. } => 8_000,
             // A 3-byte chunk stands for 4 KiB of zeros when another follows.
             Codec::Lznt1 { .. } => 1_400,
             // Each 64 KiB block costs at least its 256-byte table.
@@ -400,6 +409,7 @@ impl Codec {
                 Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman { size: *size })))
             }
             Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
+            Codec::Bcfz { size } => Box::new(Streaming(bcfz::Bcfz::new(*size))),
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),

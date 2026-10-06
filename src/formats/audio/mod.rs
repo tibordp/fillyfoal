@@ -3,7 +3,8 @@
 //! ID3, WavPack, Musepack, TTA and other lossless codecs, DSD, CAF, Wave64,
 //! Sun `.au`, Creative VOC, Yamaha SMAF, MIDI, headered PCM (`simple_audio`,
 //! `pcm_headers`), codec streams (`codecs`: RealAudio, Psion, EVS), sequenced
-//! music (`sequenced`) and production files (`production`, `projects`).
+//! music (`sequenced`), production files (`production`, `projects`) and
+//! Guitar Pro tablature (`guitar_pro`: GP3-5, GPX and the GPIF score XML).
 //!
 //! RIFF/IFF audio (WAVE, AIFF) lives in [`super::iff`], tracker modules in
 //! [`super::tracker`].
@@ -19,6 +20,7 @@ pub mod codecs;
 pub mod dsd;
 pub mod dts;
 pub mod flac;
+pub mod guitar_pro;
 pub mod id3;
 pub mod lossless;
 pub mod midi;
