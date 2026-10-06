@@ -35,6 +35,7 @@ pub mod lx;
 pub mod macho;
 pub mod minidump;
 pub mod ne;
+pub mod ocaml;
 pub mod pdb;
 pub mod pe;
 pub mod pef;
@@ -192,6 +193,7 @@ pub static FORMATS: &[&Format] = &[
     &te::FORMAT,
     &xcoff::FORMAT,
     &pef::FORMAT,
+    &ocaml::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
