@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ recovery.jsonlz4 — Mozilla LZ4 file, 70 bytes uncompressed  [0x0+0x54]
+    Magic: "mozLz40"  [0x0+0x8]
+    Decompressed size: 70  [0x8+0x4]
+    LZ4 block  [0xc+0x48]
+      ! unsupported: LZ4 compression

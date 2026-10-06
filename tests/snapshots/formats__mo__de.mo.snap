@@ -1,0 +1,62 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ de.mo — gettext catalog, 6 messages, fillyfoal 0.1, de  [0x0+0x1f1]
+  ▾ Header  [0x0+0x1c]
+      Magic: 0x950412de  [0x0+0x4]
+      Revision: 0x0 — 0.0  [0x4+0x4]
+      Number of strings: 6  [0x8+0x4]
+      Original strings table offset: 0x1c  [0xc+0x4]
+      Translated strings table offset: 0x4c  [0x10+0x4]
+      Hash table size: 11  [0x14+0x4]
+      Hash table offset: 0x7c  [0x18+0x4]
+    Original strings table  [0x1c+0x30]
+    Translated strings table  [0x4c+0x30]
+    Hash table — 11 slots  [0x7c+0x2c]
+  ▾ Messages — 6
+    ▾ (header): "Project-Id-Version: fillyfoal 0.1\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\nPlural-Forms: nplurals=2; plural=(n != 1);\n"  [0xed+0xb4]
+        Original descriptor  [0x1c+0x8]
+        msgid: ""
+        Original — 0 bytes  [0xa8+0x0]
+        Translation descriptor  [0x4c+0x8]
+        msgstr[0]: "Project-Id-Version: fillyfoal 0.1\nLanguage: de\nMIME-Version: 1.0\nContent-Type: text/plain; charset=UTF-8\nContent-Transfer-Encoding: 8bit\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
+        Translation — 180 bytes  [0xed+0xb4]
+    ▾ %d byte: "%d Byte" — 2 plural forms  [0x1a2+0x10]
+        Original descriptor  [0x24+0x8]
+        msgid: "%d byte"
+        msgid_plural: "%d bytes"
+        Original — 16 bytes  [0xa9+0x10]
+        Translation descriptor  [0x54+0x8]
+        msgstr[0]: "%d Byte"
+        msgstr[1]: "%d Bytes"
+        Translation — 16 bytes  [0x1a2+0x10]
+    ▾ Expand all: "Alle aufklappen"  [0x1b3+0xf]
+        Original descriptor  [0x2c+0x8]
+        msgid: "Expand all"
+        Original — 10 bytes  [0xba+0xa]
+        Translation descriptor  [0x5c+0x8]
+        msgstr[0]: "Alle aufklappen"
+        Translation — 15 bytes  [0x1b3+0xf]
+    ▾ Open file: "Datei öffnen"  [0x1c3+0xd]
+        Original descriptor  [0x34+0x8]
+        msgid: "Open file"
+        Original — 9 bytes  [0xc5+0x9]
+        Translation descriptor  [0x64+0x8]
+        msgstr[0]: "Datei öffnen"
+        Translation — 13 bytes  [0x1c3+0xd]
+    ▾ Truncated structure: "Abgeschnittene Struktur"  [0x1d1+0x17]
+        Original descriptor  [0x3c+0x8]
+        msgid: "Truncated structure"
+        Original — 19 bytes  [0xcf+0x13]
+        Translation descriptor  [0x6c+0x8]
+        msgstr[0]: "Abgeschnittene Struktur"
+        Translation — 23 bytes  [0x1d1+0x17]
+    ▾ View: "Ansicht"  [0x1e9+0x7]
+        Original descriptor  [0x44+0x8]
+        msgctxt: "menu"
+        msgid: "View"
+        Original — 9 bytes  [0xe3+0x9]
+        Translation descriptor  [0x74+0x8]
+        msgstr[0]: "Ansicht"
+        Translation — 7 bytes  [0x1e9+0x7]

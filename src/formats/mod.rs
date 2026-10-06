@@ -86,6 +86,35 @@ pub mod wavpack;
 // -- end audio & video --
 
 // -- documents & data --
+// data, system artifacts, fonts
+pub mod applesingle;
+pub mod bencode;
+pub mod bookmark;
+pub mod bplist;
+pub mod cbor;
+pub mod dsstore;
+pub mod chm;
+pub mod crx;
+pub mod datakit;
+pub mod evt;
+pub mod evtx;
+pub mod font;
+pub mod gguf;
+pub mod git;
+pub mod icc;
+pub mod json;
+pub mod lnk;
+pub mod mo;
+pub mod npy;
+pub mod pcap;
+pub mod pickle;
+pub mod prefetch;
+pub mod recyclebin;
+pub mod regf;
+pub mod winhelp;
+pub mod swf;
+pub mod terminfo;
+pub mod thumbcache;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -224,7 +253,6 @@ pub static FORMATS: &[&Format] = &[
     &image::icns::FORMAT,
     &image::j2k::FORMAT,
     &image::jxl::FORMAT,
-    &image::icc::FORMAT,
     &image::pcx::DCX,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
@@ -338,6 +366,47 @@ pub static FORMATS: &[&Format] = &[
     // -- end audio & video --
 
     // -- documents & data --
+    // data, system artifacts, fonts
+    &bplist::FORMAT,
+    &bencode::FORMAT,
+    &cbor::FORMAT,
+    &pcap::FORMAT,
+    &pcap::ng::FORMAT,
+    &lnk::FORMAT,
+    &regf::FORMAT,
+    &evtx::FORMAT,
+    &evt::FORMAT,
+    &prefetch::FORMAT,
+    &recyclebin::FORMAT,
+    &thumbcache::FORMAT,
+    &thumbcache::INDEX,
+    &icc::FORMAT,
+    &font::SFNT,
+    &font::TTC,
+    &font::woff::WOFF,
+    &font::woff::WOFF2,
+    &font::eot::FORMAT,
+    &font::pfb::FORMAT,
+    &font::bitmap::PCF,
+    &font::bitmap::BDF,
+    &mo::FORMAT,
+    &terminfo::FORMAT,
+    &npy::NPY,
+    &npy::SAFETENSORS,
+    &crx::CRX,
+    &crx::MOZLZ4,
+    &applesingle::APPLESINGLE,
+    &applesingle::APPLEDOUBLE,
+    &gguf::FORMAT,
+    &pickle::FORMAT,
+    &git::PACK,
+    &git::PACK_INDEX,
+    &git::INDEX,
+    &swf::FORMAT,
+    &chm::FORMAT,
+    &winhelp::FORMAT,
+    &dsstore::FORMAT,
+    &bookmark::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
