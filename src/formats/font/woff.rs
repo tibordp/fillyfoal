@@ -2,8 +2,9 @@
 //!
 //! WOFF 1.0 compresses each sfnt table separately with zlib; a table is
 //! decompressed when expanded and then decoded like an sfnt table. WOFF2
-//! compresses all tables together with Brotli (not decoded here); its table
-//! directory, with variable-length sizes and transforms, is shown in full.
+//! compresses all tables together into one Brotli stream; its table
+//! directory, with variable-length sizes and transforms, is shown in full,
+//! and the decompressed tables are decoded unless WOFF2 transformed them.
 
 use crate::bytes::u32_be;
 use crate::codec::inflate_span;
@@ -80,19 +81,8 @@ fn metadata_nodes(cx: &Cx, input: Input, file: Span, h: (u32, u32, u32, u32, u32
     let (meta_offset, meta_length, meta_orig, priv_offset, priv_length) = h;
     if meta_length > 0 {
         let span = file.sub(meta_offset.into(), meta_length.into());
-        let node = if brotli {
-            Node::new("Metadata (XML)")
-                .span(span)
-                .diag(Diagnostic::unsupported("Brotli compression"))
-        } else {
-            content(
-                "Metadata (XML)",
-                input,
-                span,
-                Codec::Zlib,
-                Some(meta_orig.into()),
-            )
-        };
+        let codec = if brotli { Codec::Brotli } else { Codec::Zlib };
+        let node = content("Metadata (XML)", input, span, codec, Some(meta_orig.into()));
         cx.emit(node.summary(format!("{meta_orig} bytes uncompressed")));
     }
     if priv_length > 0 {
@@ -298,7 +288,7 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
                 "{} bytes → {total} bytes of table data",
                 stream.len
             ))
-            .diag(Diagnostic::unsupported("Brotli compression")),
+            .lazy(woff2_tables, (stream, entries, total)),
     );
     metadata_nodes(
         &cx,
@@ -317,6 +307,41 @@ pub async fn woff2(cx: Cx, input: Input) -> Result<()> {
 }
 
 type Woff2Entry = (Span, String, u8, u32, Option<u32>);
+
+/// Decompresses the table data and lists the tables in it, in directory
+/// order and without padding (each is its transformed length, if any).
+async fn woff2_tables(cx: Cx, (stream, entries, total): (Span, Vec<Woff2Entry>, u64)) -> Result<()> {
+    let decoded = crate::codec::decode_span(&cx, stream, &Codec::Brotli, Some(total)).await?;
+    cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    cx.set_count(Count::Exact(crate::bytes::to_u64(entries.len())));
+    let mut offset = 0u64;
+    for (_, tag, flags, orig, transform) in entries {
+        let len = u64::from(transform.unwrap_or(orig));
+        let span = decoded.span.sub(offset, len);
+        offset = offset.saturating_add(len);
+        let mut summary = format!("{len} bytes");
+        if let Some(name) = tables::table_name(&tag) {
+            summary = format!("{name}, {summary}");
+        }
+        let node = Node::new(format!("'{tag}'")).span(span);
+        cx.push(match transform {
+            Some(_) => node.summary(format!(
+                "{summary}, transformed (version {}; not decoded)",
+                flags >> 6
+            )),
+            None => node.summary(summary).lazy(woff2_table, (span, tag)),
+        })
+        .await;
+    }
+    Ok(())
+}
+
+async fn woff2_table(cx: Cx, (span, tag): (Span, String)) -> Result<()> {
+    tables::decode(&cx, &tag, span).await
+}
 
 async fn woff2_directory(cx: Cx, (entries,): (Vec<Woff2Entry>,)) -> Result<()> {
     cx.set_count(Count::Exact(crate::bytes::to_u64(entries.len())));

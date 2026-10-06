@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ page.html.br — Brotli, 1008 bytes window, 117 bytes compressed  [0x0+0x75]
+  ▾ Decompressed — HTML document: Brotli fixture (utf-8)  [0x0+0x75]
+      DOCTYPE: "html"  [#1:0x0+0xf]
+    ▾ html — lang="en" (2 elements)  [#1:0x10+0x119]
+        @lang: "en"  [#1:0x1c+0x2]
+      ▾ head — 2 elements  [#1:0x21+0x43]
+        ▾ meta — charset="utf-8"  [#1:0x28+0x16]
+            @charset: "utf-8"  [#1:0x37+0x5]
+          title: "Brotli fixture"  [#1:0x3f+0x1d]
+      ▾ body — 2 elements  [#1:0x65+0xbc]
+          p: "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog again."  [#1:0x6c+0x66]
+        ▾ a: "Click here for more information" — href="https://www.example.com/"  [#1:0xd3+0x46]
+            @href: "https://www.example.com/"  [#1:0xdc+0x18]
+            #text: "Click here for more information"  [#1:0xf6+0x1f]
+    Compressed data  [0x0+0x75]

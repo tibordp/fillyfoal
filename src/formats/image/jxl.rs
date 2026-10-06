@@ -235,10 +235,14 @@ async fn jxl_box(
         b"brob" => {
             let inner = cx.read_avail(payload.sub(0, 4)).await?;
             cx.emit(
-                Node::new("Brotli-compressed box")
-                    .span(payload.tail(4))
-                    .value(text(crate::text::latin1(&inner)))
-                    .diag(Diagnostic::unsupported("Brotli compression")),
+                crate::formats::content(
+                    "Brotli-compressed box",
+                    input,
+                    payload.tail(4),
+                    crate::codec::Codec::Brotli,
+                    None,
+                )
+                .value(text(crate::text::latin1(&inner))),
             );
         }
         b"jbrd" => cx.emit(Node::new("JPEG reconstruction data").span(payload)),
