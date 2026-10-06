@@ -1,0 +1,16 @@
+WEBVTT - demo
+Kind: captions
+Language: en
+
+NOTE This is a comment
+spanning lines
+
+STYLE
+::cue { color: yellow; }
+
+intro
+00:00.000 --> 00:02.500 align:start position:10%
+<v Ana>Hi there
+
+00:00:03.000 --> 00:00:05.000
+Second cue

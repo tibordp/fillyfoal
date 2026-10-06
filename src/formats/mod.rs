@@ -150,6 +150,7 @@ pub mod sst;
 // -- end documents --
 
 // -- disk images & filesystems --
+pub mod disk;
 // -- end disk images --
 
 // -- retro & consoles --
@@ -170,14 +171,18 @@ pub mod misc2;
 pub mod pdb;
 pub mod platform;
 pub mod devices;
+pub mod devtools;
+pub mod misc3;
 // -- end misc --
 
 // -- text --
+pub mod text;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
-/// a file, such as ISO 9660's volume descriptor at 0x8001.
-pub const HEAD_LEN: u64 = 0x9000;
+/// a file, such as ISO 9660's volume descriptor at 0x8001 and the btrfs and
+/// UFS2 superblocks at 64 KiB.
+pub const HEAD_LEN: u64 = 0x10800;
 /// How many trailing bytes probes see.
 pub const TAIL_LEN: u64 = 0x400;
 
@@ -523,6 +528,43 @@ pub static FORMATS: &[&Format] = &[
     // -- end documents --
 
     // -- disk images & filesystems --
+    // Virtual disk containers first: their payload may start with an MBR.
+    &disk::vhd::FORMAT,
+    &disk::vhdx::FORMAT,
+    &disk::qcow::FORMAT,
+    &disk::vmdk::FORMAT,
+    &disk::vmdk::DESCRIPTOR,
+    &disk::vdi::FORMAT,
+    &disk::parallels::FORMAT,
+    // Partition tables and volumes with distinctive signatures.
+    &disk::gpt::FORMAT,
+    &disk::bitlocker::FORMAT,
+    &disk::luks::FORMAT,
+    &disk::lvm::FORMAT,
+    &disk::mdraid::FORMAT,
+    &disk::swap::FORMAT,
+    &disk::xfs::FORMAT,
+    &disk::apm::FORMAT,
+    &disk::uefi::FORMAT,
+    &disk::zfs::FORMAT,
+    &disk::hfs::FORMAT,
+    &disk::apfs::FORMAT,
+    &disk::ext::FORMAT,
+    &disk::minix::FORMAT,
+    &disk::bfs::FORMAT,
+    &disk::f2fs::FORMAT,
+    &disk::erofs::FORMAT,
+    &disk::jfs::FORMAT,
+    &disk::nilfs::FORMAT,
+    &disk::ufs::FORMAT,
+    // Boot sectors ending in 0x55AA, before the plain MBR.
+    &disk::ntfs::FORMAT,
+    &disk::exfat::FORMAT,
+    &disk::fat::FORMAT,
+    &disk::mbr::FORMAT,
+    &disk::bsdlabel::FORMAT,
+    // Detected only if the probe window reaches 64 KiB.
+    &disk::btrfs::FORMAT,
     // -- end disk images --
 
     // -- archives & compression --
@@ -870,12 +912,173 @@ pub static FORMATS: &[&Format] = &[
     &devices::HIBERFIL,
     &devices::VERITY,
     &devices::BTRFS_SEND,
+    &devtools::GCC_PCH,
+    &devtools::CLANG_PCH,
+    &devtools::WIN_RES,
+    &devtools::ILK,
+    &devtools::TYPELIB,
+    &devtools::NAR,
+    &devtools::GIT_BUNDLE,
+    &devtools::HG_BUNDLE,
+    &devtools::SVN_DUMP,
+    &devtools::DUCKDB,
+    &devtools::LMDB,
+    &devtools::BOLT,
+    &devtools::PROM_CHUNKS,
+    &devtools::PROM_INDEX,
+    &devtools::INFLUX_TSM,
+    &devtools::LUCENE,
     &ebooks::PDB,
+    &misc3::OSM_PBF,
+    &misc3::DTED,
+    &misc3::NITF,
+    &misc3::ALZ,
+    &misc3::EGG,
+    &misc3::KGB,
+    &misc3::ISCAB,
+    &misc3::ISZ,
+    &misc3::PHOTO_CD,
+    &misc3::X3F,
+    &misc3::EBU_STL,
+    &misc3::SCC,
+    &misc3::VOBSUB,
+    &misc3::NUT,
+    &misc3::VRML,
+    &misc3::OFF,
+    &misc3::MD5MESH,
+    &misc3::SOURCE_MDL,
+    &misc3::PSK,
+    &misc3::LRF,
+    &misc3::AFM,
+    &misc3::PFA,
     // Weak, size-based probes last.
+    &misc3::HGT,
     &models::STL,
     // -- end misc --
 
     // -- text (generic probes, keep last) --
+    // Documents with a fixed signature.
+    &text::rtf::FORMAT,
+    &text::postscript::DOS_EPS,
+    &text::postscript::EPS,
+    &text::postscript::POSTSCRIPT,
+    // Binary formats found inside text armor.
+    &text::ssh::BLOB,
+    // Armor and keys.
+    &text::pem::SSH2,
+    &text::ssh::KEYS,
+    // Messages (header blocks look like YAML; keep them before it).
+    &text::mime::MBOX,
+    &text::mime::MHTML,
+    &text::mime::EML,
+    &text::ldif::FORMAT,
+    &text::diff::FORMAT,
+    &text::vcard::VCARD,
+    &text::vcard::ICALENDAR,
+    // Timed text and playlists.
+    &text::subtitles::WEBVTT,
+    &text::subtitles::SRT,
+    &text::subtitles::LRC,
+    &text::playlist::HLS,
+    &text::playlist::M3U,
+    &text::playlist::PLS,
+    &text::playlist::CUE,
+    &text::subtitles::MICRODVD,
+    &text::sln::FORMAT,
+    &text::dockerfile::FORMAT,
+    &text::dot::FORMAT,
+    // Line-oriented data with distinctive keywords.
+    &text::uuencode::FORMAT,
+    &text::po::FORMAT,
+    &text::bibtex::FORMAT,
+    &text::checksums::FORMAT,
+    &text::obj::OBJ,
+    &text::obj::MTL,
+    // Markup: specific XML vocabularies, then HTML, then generic XML.
+    &text::plist::FORMAT,
+    &text::xml::XHTML,
+    &text::xml::SVG,
+    &text::xml::RSS,
+    &text::xml::ATOM,
+    &text::xml::GPX,
+    &text::xml::KML,
+    &text::xml::POM,
+    &text::xml::XAML,
+    &text::xml::MATHML,
+    &text::xml::XSLT,
+    &text::xml::XSD,
+    &text::xml::MSBUILD,
+    &text::xml::COLLADA,
+    &text::xml::TTML,
+    &text::xml::DASH,
+    &text::xml::XLIFF,
+    &text::xml::OPF,
+    &text::xml::OSM,
+    &text::xml::XSPF,
+    &text::xml::TEI,
+    &text::xml::DOCBOOK,
+    &text::xml::ANDROID_MANIFEST,
+    &text::xml::WSDL,
+    &text::xml::SOAP,
+    &text::xml::SITEMAP,
+    &text::xml::DRAWIO,
+    &text::xml::OPML,
+    &text::xml::FB2,
+    &text::xml::GRAPHML,
+    &text::xml::SMIL,
+    &text::xml::NZB,
+    &text::xml::JUNIT,
+    &text::xml::MUSICXML,
+    &text::xml::X3D,
+    &text::xml::WIX,
+    &text::xml::NUSPEC,
+    &text::xml::XIB,
+    &text::xml::GLADE,
+    &text::xml::FLAT_ODF,
+    &text::xml::VSTEMPLATE,
+    &text::html::FORMAT,
+    &text::xml::FORMAT,
+    // JSON and its vocabularies.
+    &text::json::IPYNB,
+    &text::json::GLTF,
+    &text::json::JSON_SCHEMA,
+    &text::json::TOPOJSON,
+    &text::json::WEB_MANIFEST,
+    &text::json::EXTENSION_MANIFEST,
+    &text::json::LOTTIE,
+    &text::json::EXCALIDRAW,
+    &text::json::SARIF,
+    &text::json::OPENAPI,
+    &text::json::TSCONFIG,
+    &text::json::NPM_PACKAGE,
+    &text::json::GEOJSON,
+    &text::json::HAR,
+    &text::json::NDJSON,
+    &text::json::FORMAT,
+    // TOML before INI: its values are typed, INI's are not.
+    &text::ini::EDITORCONFIG,
+    &text::toml::FORMAT,
+    // INI family: specific first.
+    &text::ini::REG,
+    &text::ini::DESKTOP,
+    &text::ini::URL,
+    &text::ini::SYSTEMD,
+    &text::ini::INF,
+    &text::ini::ASS,
+    &text::ini::FORMAT,
+    // Markdown before YAML: front matter starts like a YAML document.
+    &text::markdown::FORMAT,
+    &text::yaml::KUBERNETES,
+    &text::yaml::COMPOSE,
+    &text::yaml::GITHUB_WORKFLOW,
+    &text::yaml::OPENAPI,
+    &text::yaml::FORMAT,
+    &text::plain::SCRIPT,
+    // Weak, statistical probes.
+    &text::csv::TSV,
+    &text::csv::CSV,
+    // Plain text matches anything textual: keep it last.
+    &text::plain::FORMAT,
     // -- end text --
 ];
 
@@ -923,7 +1126,10 @@ fn check_nesting(cx: &Cx, input: &Input) -> Result<()> {
 pub async fn head(cx: &Cx, span: Span) -> Result<(Vec<u8>, Vec<u8>)> {
     let max = cx.limits().max_read;
     let data = cx.read_avail(span.sub(0, HEAD_LEN.min(max))).await?;
-    let tail = if span.len > HEAD_LEN {
+    // Reading the tail of a lazily decoded stream would decode all of it.
+    let tail = if span.len > HEAD_LEN && cx.is_lazy(span.source) {
+        Vec::new()
+    } else if span.len > HEAD_LEN {
         cx.read_avail(span.tail(span.len.saturating_sub(TAIL_LEN.min(max))))
             .await?
     } else {
@@ -967,6 +1173,9 @@ pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
     }
 }
 
+/// Members larger than this are decompressed lazily rather than up front.
+const LAZY_THRESHOLD: u64 = 1024 * 1024;
+
 /// How compressed content is encoded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Codec {
@@ -996,6 +1205,18 @@ async fn expand_content(
 ) -> Result<()> {
     let inner = match codec {
         Codec::Stored => input.nested(span),
+        // Large members are decoded lazily: listing the first entries of a
+        // multi-gigabyte tarball only decodes what those entries need.
+        // DEFLATE cannot expand by more than about 1032:1, so larger claims
+        // are bogus and get the eager path (which reports the real size).
+        Codec::Deflate | Codec::Zlib
+            if expected.is_some_and(|e| e > LAZY_THRESHOLD && e <= span.len.saturating_mul(1032)) =>
+        {
+            let len = expected.unwrap_or(0);
+            let decoded = cx.inflate_lazy(span, codec == Codec::Zlib, len)?;
+            cx.annotate(format!("{len:#x} bytes, decompressed on demand"));
+            input.nested(decoded)
+        }
         Codec::Deflate | Codec::Zlib => {
             let decoded =
                 crate::codec::inflate_span(&cx, span, codec == Codec::Zlib, expected).await?;

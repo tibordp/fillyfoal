@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ product.wxs — WiX installer source  [0x0+0xf4]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ Wix — 1 element  [0x27+0xcc]
+      @xmlns: "http://wixtoolset.org/schemas/v4/wxs"  [0x33+0x24]
+    ▾ Package — Name="Demo" Version="1.0.0" Manufacturer="Fillyfoal" UpgradeCode="12345678-1234-1234-1234-1234567890… (1 element)  [0x59+0x94]
+        @Name: "Demo"  [0x68+0x4]
+        @Version: "1.0.0"  [0x77+0x5]
+        @Manufacturer: "Fillyfoal"  [0x8c+0x9]
+        @UpgradeCode: "12345678-1234-1234-1234-123456789012"  [0xa4+0x24]
+      ▾ File — Source="demo.exe"  [0xca+0x19]
+          @Source: "demo.exe"  [0xd8+0x8]

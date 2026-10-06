@@ -1,0 +1,9 @@
+; Sample driver
+[Version]
+Signature="$Windows NT$"
+Class=USB
+Provider=%Mfg%
+DriverVer=10/05/2026,1.0.0.0
+
+[Strings]
+Mfg="Fillyfoal Inc."

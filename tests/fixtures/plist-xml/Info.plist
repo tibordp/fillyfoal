@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>net.example.demo</string>
+	<key>CFBundleVersion</key>
+	<integer>42</integer>
+	<key>Scale</key>
+	<real>1.5</real>
+	<key>Enabled</key>
+	<true/>
+	<key>Created</key>
+	<date>2026-10-05T10:00:00Z</date>
+	<key>Icon</key>
+	<data>
+	iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwAD
+	hgGAWjR9awAAAABJRU5ErkJggg==
+	</data>
+	<key>Items</key>
+	<array>
+		<string>one</string>
+		<dict>
+			<key>Nested</key>
+			<false/>
+		</dict>
+		<array/>
+	</array>
+</dict>
+</plist>

@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ box.eps — Encapsulated PostScript: Box, 100×50 pt  [0x0+0xd8]
+  ▾ Header  [0x0+0x4f]
+      Version: "%!PS-Adobe-3.0 EPSF-3.0"  [0x0+0x17]
+      BoundingBox: "10 20 110 70" — 100×50 pt at (10, 20)  [0x27+0xc]
+      Title: "Box"  [0x3d+0x3]
+      EndComments  [0x41+0xd]
+  ▾ Preview — 8 2 1 2 (width height depth lines)  [0x4f+0x33]
+      Line 5: "%%BeginPreview: 8 2 1 2"  [0x4f+0x17]
+      Line 6: "% FF00"  [0x67+0x6]
+      Line 7: "% 00FF"  [0x6e+0x6]
+      Line 8: "%%EndPreview"  [0x75+0xc]
+  ▾ Code  [0x82+0x50]
+      Line 9: "newpath 10 20 moveto 100 0 rlineto 0 50 rlineto -100 0 rlineto closepath stroke"  [0x82+0x4f]
+    %%EOF  [0xd2+0x5]

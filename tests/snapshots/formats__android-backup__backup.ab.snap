@@ -26,6 +26,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Device major: 0  [#1:0x149+0x8]
           Device minor: 0  [#1:0x151+0x8]
           Prefix: ""  [#1:0x159+0x9b]
-      ▾ Content — 29 bytes  [#1:0x200+0x1d]
-          ! unsupported: unrecognized format [#1:0x200+0x1d]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#1:0x200+0x1d]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x200+0x1d]
+            Line 1: "hello from an android backup"  [#1:0x200+0x1c]
       End of archive — 18 zero blocks  [#1:0x400+0x2400]

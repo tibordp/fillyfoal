@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.kgb — KGB archive  [0x0+0x4c]
+    Signature  [0x0+0x8]
+    Compressed data  [0x8+0x44]
+      ! unsupported: PAQ6-based compression

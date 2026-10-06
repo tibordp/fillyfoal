@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ score.musicxml — MusicXML score: Etude  [0x0+0x15b]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ score-partwise — version="4.0" (3 elements)  [0x27+0x133]
+      @version: "4.0"  [0x40+0x3]
+    ▾ work — 1 element  [0x45+0x2b]
+        work-title: "Etude"  [0x4b+0x1e]
+    ▾ part-list — 1 element  [0x70+0x54]
+      ▾ score-part — id="P1" (1 element)  [0x7b+0x3d]
+          @id: "P1"  [0x8b+0x2]
+          part-name: "Piano"  [0x8f+0x1c]
+    ▾ part — id="P1" (1 element)  [0xc4+0x85]
+        @id: "P1"  [0xce+0x2]
+      ▾ measure — number="1" (1 element)  [0xd2+0x70]
+          @number: "1"  [0xe3+0x1]
+        ▾ note — 2 elements  [0xe6+0x52]
+          ▾ pitch — 2 elements  [0xec+0x2f]
+              step: "C"  [0xf3+0xe]
+              octave: "4"  [0x101+0x12]
+            duration: "4"  [0x11b+0x16]

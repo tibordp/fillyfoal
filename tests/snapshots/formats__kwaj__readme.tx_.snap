@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ readme.tx_ — MS-DOS COMPRESS (KWAJ), stored, 21 bytes uncompressed  [0x0+0x32]
   ▾ Header  [0x0+0x1d]
@@ -11,5 +11,8 @@ expression: "common::explore(&name, &data)"
       Uncompressed size: 21 — 21 bytes  [0xe+0x4]
       File name: "README"  [0x12+0x7]
       Extension: "TXT"  [0x19+0x4]
-  ▾ Data  [0x1d+0x15]
-      ! unsupported: unrecognized format [0x1d+0x15]
+  ▾ Data — UTF-8 text, CRLF line endings, 1 line  [0x1d+0x15]
+      Encoding: "UTF-8"
+      Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x1d+0x15]
+        Line 1: "stored KWAJ payload"  [0x1d+0x13]

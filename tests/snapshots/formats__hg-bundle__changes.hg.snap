@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ changes.hg — Mercurial bundle (HG10GZ)  [0x0+0x12]
+    Header: "HG10GZ"  [0x0+0x6]
+  ▾ Changegroup (zlib) — 0x40 bytes decompressed  [0x6+0xc]
+      Data  [#1:0x0+0x40]

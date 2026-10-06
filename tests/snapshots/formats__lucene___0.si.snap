@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ _0.si — Lucene Lucene90SegmentInfo v0  [0x0+0x4c]
+    Codec header: "Lucene90SegmentInfo" — version 0  [0x0+0x1c]
+    Body  [0x1c+0x20]
+    Codec footer — CRC 0x12345678  [0x3c+0x10]

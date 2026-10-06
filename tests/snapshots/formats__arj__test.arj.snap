@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.arj — ARJ archive, 3 files, 289 bytes uncompressed (TEST.ARJ)  [0x0+0x173]
   ▾ Main header — TEST.ARJ  [0x0+0x45]
@@ -50,8 +50,11 @@ expression: "common::explore(&name, &data)"
         File name: "HELLO.TXT"  [0x67+0x9]
         Header CRC-32: 0x38eb5c6e — valid  [0x72+0x4]
       End of extended headers  [0x76+0x2]
-    ▾ Content — 22 bytes  [0x78+0x16]
-        ! unsupported: unrecognized format [0x78+0x16]
+    ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x78+0x16]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x78+0x16]
+          Line 1: "hello, old archivers"  [0x78+0x14]
   ▾ IMAGES/PIXEL.PNG — 67 bytes  [0x8e+0x7d]
     ▾ Local header  [0x8e+0x38]
         Header ID: 0xea60  [0x8e+0x2]

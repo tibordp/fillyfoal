@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ note.msg — Outlook message "Test message"; Compound File v3, 512-byte sectors, 20 directory entries  [0x0+0x1400]
   ▾ Header  [0x0+0x4c]
@@ -720,8 +720,11 @@ expression: "common::explore(&name, &data)"
             Stream size: 19  [#1:0x878+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 11 — mini sector → #3:0x2c0+0x40
-        ▾ Content — 19 bytes  [#15:0x0+0x13]
-            Data  [#15:0x0+0x13]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [#15:0x0+0x13]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#15:0x0+0x13]
+              Line 1: "Hello, attachment!"  [#15:0x0+0x12]
       ▾ PidTagAttachLongFilename — property 0x3707, PT_UNICODE, 18 bytes  [#1:0x780+0x80]
         ▾ Directory entry  [#1:0x780+0x80]
             Name: "__substg1.0_3707001F"  [#1:0x780+0x40]

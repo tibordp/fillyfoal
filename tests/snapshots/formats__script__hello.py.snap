@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ hello.py — Python script (/usr/bin/env python3 -u), 12 lines  [0x0+0x8b]
+  ▾ Interpreter line: "#!/usr/bin/env python3 -u"  [0x0+0x19]
+      Interpreter: "/usr/bin/env"  [0x2+0xc]
+      Program: "python3"
+      Language: "Python"
+      Arguments: "python3 -u"  [0xf+0xa]
+    Encoding: "UTF-8"
+    Line endings: "LF" — 12 LF, 0 CRLF, 0 CR
+  ▾ Lines — 12 lines  [0x0+0x8b]
+      Line 1: "#!/usr/bin/env python3 -u"  [0x0+0x19]
+      Line 2: "\"\"\"Greets.\"\"\""  [0x1a+0xd]
+      Line 3: ""  [0x28+0x0]
+      Line 4: "import sys"  [0x29+0xa]
+      Line 5: ""  [0x34+0x0]
+      Line 6: ""  [0x35+0x0]
+      Line 7: "def main():"  [0x36+0xb]
+      Line 8: "    print(\"hello\", sys.argv[1:])"  [0x42+0x20]
+      Line 9: ""  [0x63+0x0]
+      Line 10: ""  [0x64+0x0]
+      Line 11: "if __name__ == \"__main__\":"  [0x65+0x1a]
+      Line 12: "    main()"  [0x80+0xa]

@@ -10,6 +10,7 @@ why; this is the how. Good examples to copy from:
 | Directory at the end, paged entries, variants by probe | `src/formats/zip.rs` |
 | Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/pe/` |
 | Recursive variable-length blocks | `src/formats/pe/version.rs` |
+| Text: windowed lines/tokens, encodings, base64 into derived sources | `src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |
 
 ## 1. Register the format
 
@@ -152,14 +153,20 @@ tests fail if that ever happens on a fixture.
   `Diagnostic::unsupported("LZMA compression")` and the span. Do not pull in
   crates (see the codec policy in `DESIGN.md`).
 - `crate::codec::inflate_span(&cx, span, zlib, expected)` if you need the
-  decoded bytes yourself (e.g. a compressed text chunk).
+  decoded bytes yourself (e.g. a compressed text chunk). `content()` already
+  switches to `cx.inflate_lazy(span, zlib, len)` for large members, which
+  decodes only as far as reads reach — so never read the *end* of a large
+  decoded member unless the user asked for it.
 - **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
   sector chains, SQLite overflow pages): describe it as pieces instead of
   copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },
   vec![span_a, span_b, ...])` returns a span of a new source whose reads are
   mapped onto the pieces (through the cache, no copy, any size). Then
   `embedded(name, input.nested(span))`. Provenance stays exact:
-  `Session::resolve(span)` maps it back to file offsets.
+  `Session::resolve(span)` maps it back to file offsets. Holes (sparse
+  files, unallocated virtual-disk blocks) are `Span::zeros(len)` pieces:
+  they read as zeros and resolve to nothing. `formats::disk::PieceList`
+  collects and merges pieces for you.
 - **Decoded data** you computed yourself (base64, quoted-printable, a custom
   decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
   bytes, consumed, error)`. Counts against `Limits::max_derived`.
@@ -185,9 +192,17 @@ filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`.
 - Deterministic output: no hash-map iteration order, no clocks.
 - Recursion: an expander that refers to itself (directly or mutually) must
   use `node.lazy(crate::expander!(self::walk: State), state)`. If a local
-  variable shadows the function name, use the `self::` path.
-- Graph-shaped formats: detect cycles (keep the path of visited offsets in
-  the state) and cap depth with a `Diagnostic::limit`.
+  variable shadows the function name, use the `self::` path. A recursive
+  *helper* `async fn` (not an expander) needs a boxed future with an
+  explicit `Send` bound, e.g.
+  `fn walk_boxed<'a>(..) -> Pin<Box<dyn Future<Output = Result<Node>> + Send + 'a>> { Box::pin(walk(..)) }`,
+  and calls itself through that (see `nar_node` in `devtools.rs`).
+- Graph-shaped formats: detect cycles and cap depth with `dsl::Path`
+  (`path.enter(id, max_depth)` returns the child path or a diagnostic); keep
+  the path in the expander state.
+- Parsing the same structure for many nodes (an object stream, a string
+  table)? Parse once and share it: `cx.cached::<T>(span, "kind")` /
+  `cx.cache(span, "kind", Arc::new(value))`.
 
 ## 9. Testing
 

@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ results.sarif — SARIF analysis results: 2.1.0  [0x0+0x14a]
+    $schema: "https://json.schemastore.org/sarif-2.1.0.json"  [0xf+0x2f]
+    version: "2.1.0"  [0x4d+0x7]
+  ▾ runs — array, 1 element  [0x60+0xe7]
+    ▾ [0] — object, 2 members  [0x66+0xdd]
+      ▾ tool — object, 1 member  [0x76+0x40]
+        ▾ driver — object, 1 member  [0x8a+0x24]
+            name: "lint"  [0x9e+0x6]
+      ▾ results — array, 1 element  [0xc9+0x74]
+        ▾ [0] — object, 2 members  [0xd3+0x62]
+            ruleId: "R1"  [0xe9+0x4]
+          ▾ message — object, 1 member  [0x104+0x27]
+              text: "bad"  [0x11a+0x5]

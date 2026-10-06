@@ -1,0 +1,16 @@
+MD5Version 10
+commandline "fillyfoal"
+
+numJoints 1
+numMeshes 1
+
+joints {
+	"origin"	-1 ( 0 0 0 ) ( 0 0 0 )
+}
+
+mesh {
+	shader "x"
+	numverts 0
+	numtris 0
+	numweights 0
+}

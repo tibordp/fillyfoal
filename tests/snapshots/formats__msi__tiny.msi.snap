@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tiny.msi — Windows Installer package "Installation Database"; Compound File v3, 512-byte sectors, 8 directory entries  [0x0+0xe00]
   ▾ Header  [0x0+0x4c]
@@ -344,8 +344,11 @@ expression: "common::explore(&name, &data)"
           Stream size: 8  [#1:0x278+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 7 — mini sector → #3:0x1c0+0x40
-      ▾ Content — 8 bytes  [#7:0x0+0x8]
-          Data  [#7:0x0+0x8]
+      ▾ Content — UTF-8 text, 1 line  [#7:0x0+0x8]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#7:0x0+0x8]
+            Line 1: "Property"  [#7:0x0+0x8]
     ▾ _StringPool — MSI table, 8 bytes  [#1:0x180+0x80]
       ▾ Directory entry  [#1:0x180+0x80]
           Name: "䡀㼿䕷䑬㹪䒲䠯"  [#1:0x180+0x40]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ movie.sub — MicroDVD subtitles, 3 cues  [0x0+0x47]
+    Frame rate: 25  [0x6+0x6]
+    Cue 1: "Hello\nworld" — frames 25–75 (1.000 s)  [0xd+0x13]
+    Cue 2: "Second line" — frames 100–150 (4.000 s)  [0x21+0x15]
+    Cue 3: "Open end" — frames 200–? (8.000 s)  [0x37+0xf]

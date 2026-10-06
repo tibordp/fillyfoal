@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ settings.ini — INI configuration  [0x0+0xb3]
+  ▾ [general] — 3 entries  [0x17+0x55]
+      name: "Fillyfoal"  [0x28+0x9]
+      debug: "true"  [0x38+0x4]
+      path: "C:\\Program Files\\Demo"  [0x43+0x17]
+    [empty] — 0 entries  [0x6c+0x9]
+  ▾ [network] — 3 entries  [0x75+0x3e]
+      host: "example.com"  [0x86+0xb]
+      port: "8080"  [0x99+0x4]
+      Line: "not a key value line"  [0x9e+0x14]
+        ! warning: not a key/value entry

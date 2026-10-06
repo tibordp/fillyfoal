@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sketch.excalidraw — Excalidraw drawing: https://excalidraw.com  [0x0+0xe1]
+    type: "excalidraw"  [0xc+0xc]
+    version: 2  [0x27+0x1]
+    source: "https://excalidraw.com"  [0x36+0x18]
+  ▾ elements — array, 1 element  [0x5e+0x6e]
+    ▾ [0] — object, 5 members  [0x64+0x64]
+        type: "rectangle"  [0x74+0xb]
+        x: 0  [0x8c+0x1]
+        y: 0  [0x9a+0x1]
+        width: 10  [0xac+0x2]
+        height: 10  [0xc0+0x2]
+    appState — object, 0 members  [0xdc+0x2]

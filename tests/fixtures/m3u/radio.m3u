@@ -1,0 +1,7 @@
+#EXTM3U
+#PLAYLIST:Favourites
+#EXTINF:-1 tvg-id="r1" group-title="Radio",Radio One
+http://radio.example.com/stream
+#EXTINF:215,Artist - Song
+music/song.mp3
+plain/file.ogg

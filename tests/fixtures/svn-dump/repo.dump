@@ -1,0 +1,33 @@
+SVN-fs-dump-format-version: 2
+
+UUID: 7bf7a5ef-cabf-0310-b7d4-93df341afa7e
+
+Revision-number: 0
+Prop-content-length: 10
+Content-length: 10
+
+PROPS-END
+
+Revision-number: 1
+Prop-content-length: 10
+Content-length: 10
+
+PROPS-END
+
+Node-path: trunk
+Node-kind: dir
+Node-action: add
+Prop-content-length: 10
+Content-length: 10
+
+PROPS-END
+
+
+Node-path: trunk/a.txt
+Node-kind: file
+Node-action: add
+Text-content-length: 3
+Content-length: 3
+
+hi
+

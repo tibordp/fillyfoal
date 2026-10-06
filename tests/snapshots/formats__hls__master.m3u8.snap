@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ master.m3u8 — HLS master playlist, 2 variants  [0x0+0x166]
+    Header: "#EXTM3U"  [0x0+0x7]
+    #EXT-X-VERSION: 6  [0x17+0x1]
+    #EXT-X-INDEPENDENT-SEGMENTS  [0x19+0x1b]
+  ▾ #EXT-X-MEDIA — TYPE=AUDIO,GROUP-ID="aud",NAME="English",LANGUAGE="en",URI="audio/en.m3u8"  [0x35+0x57]
+      TYPE: "AUDIO"  [0x47+0x5]
+      GROUP-ID: "aud"  [0x57+0x3]
+      NAME: "English"  [0x62+0x7]
+      LANGUAGE: "en"  [0x75+0x2]
+      URI: "audio/en.m3u8"  [0x7e+0xd]
+  ▾ Variant 1 — 640x360, 1280000 bit/s, avc1.4d401e,mp4a.40.2: low/index.m3u8  [0x8d+0x70]
+      BANDWIDTH: 1280000  [0xa9+0x7]
+      RESOLUTION: "640x360"  [0xbc+0x7]
+      CODECS: "avc1.4d401e,mp4a.40.2"  [0xcc+0x15]
+      AUDIO: "aud"  [0xea+0x3]
+      URI: "low/index.m3u8"  [0xef+0xe]
+  ▾ Variant 2 — 1920x1080, 5000000 bit/s, avc1.640028,mp4a.40.2: high/index.m3u8  [0xfe+0x67]
+      BANDWIDTH: 5000000  [0x11a+0x7]
+      RESOLUTION: "1920x1080"  [0x12d+0x9]
+      CODECS: "avc1.640028,mp4a.40.2"  [0x13f+0x15]
+      URI: "high/index.m3u8"  [0x156+0xf]

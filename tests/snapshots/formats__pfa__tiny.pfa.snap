@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pfa — Type 1 font Tiny-Regular  [0x0+0x144]
+    Header: "%!PS-AdobeFont-1.0: Tiny-Regular 001.000"  [0x0+0x28]
+    FontName: "Tiny-Regular"  [0x45+0x1b]
+    eexec-encrypted portion  [0x72+0xd2]

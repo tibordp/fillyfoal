@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ feed.atom — Atom feed: Example Feed  [0x0+0xf0]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "utf-8"  [0x1e+0x5]
+  ▾ feed — 3 elements  [0x27+0xc8]
+      @xmlns: "http://www.w3.org/2005/Atom"  [0x34+0x1b]
+      title: "Example Feed"  [0x54+0x1b]
+      updated: "2026-10-05T18:30:02Z"  [0x72+0x27]
+    ▾ entry — 2 elements  [0x9c+0x4b]
+        title: "Atom-Powered Robots"  [0xa3+0x22]
+        id: "urn:uuid:1225c695"  [0xc5+0x1a]

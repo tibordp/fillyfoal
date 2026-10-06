@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .editorconfig — EditorConfig: root = true  [0x0+0x76]
+    root: "true"  [0x7+0x4]
+  ▾ [*] — 3 entries  [0xd+0x3b]
+      indent_style: "space"  [0x20+0x5]
+      indent_size: "4"  [0x34+0x1]
+      end_of_line: "lf"  [0x44+0x2]
+  ▾ [*.{md,txt}] — 1 entry  [0x48+0x2e]
+      trim_trailing_whitespace: "false"  [0x70+0x5]

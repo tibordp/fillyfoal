@@ -6,5 +6,8 @@ expression: "common::explore(&display_name(&path), &data)"
     Name: 0xaa640001  [0x0+0x4]
     Serial number: 305419896  [0x4+0x4]
     Flags: 0x0  [0x8+0x8]
-  ▾ BL31 (EL3 runtime firmware) — 16 bytes  [0x60+0x10] → 0x10+0x28
-      ! unsupported: unrecognized format [0x60+0x10]
+  ▾ BL31 (EL3 runtime firmware) — UTF-8 text, 1 line  [0x60+0x10] → 0x10+0x28
+      Encoding: "UTF-8"
+      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x60+0x10]
+        Line 1: "BL31 IMAGE DATA!"  [0x60+0x10]

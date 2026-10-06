@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ v4-stored.rar — RAR archive (v4), 4 files, 177 bytes uncompressed  [0x0+0x135]
     Signature: "Rar!" — RAR 1.5–4.x  [0x0+0x7]
@@ -28,8 +28,11 @@ expression: "common::explore(&name, &data)"
         Name size: 9  [0x2e+0x2]
         Attributes: 0x20  [0x30+0x4]
         Name: "hello.txt"  [0x34+0x9]
-    ▾ Content — 10 bytes  [0x3d+0xa]
-        ! unsupported: unrecognized format [0x3d+0xa]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x3d+0xa]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x3d+0xa]
+          Line 1: "hello rar"  [0x3d+0x9]
   ▾ docs — directory  [0x47+0x24]
     ▾ Header  [0x47+0x24]
         Header CRC: 0x8890 — valid  [0x47+0x2]

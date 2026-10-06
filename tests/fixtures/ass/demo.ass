@@ -1,0 +1,13 @@
+[Script Info]
+Title: Demo subtitles
+ScriptType: v4.00+
+PlayResX: 1920
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour
+Style: Default,Arial,48,&H00FFFFFF
+
+[Events]
+Format: Layer, Start, End, Style, Text
+Dialogue: 0,0:00:01.00,0:00:03.50,Default,Hello, world!
+Comment: 0,0:00:04.00,0:00:05.00,Default,{\i1}not shown{\i0}

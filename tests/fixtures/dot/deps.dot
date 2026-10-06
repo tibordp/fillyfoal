@@ -1,0 +1,14 @@
+// dependency graph
+digraph "deps" {
+  rankdir=LR;
+  node [shape=box, style=filled];
+  a [label="Core"];
+  a -> b -> c [color=red];
+  b -> {d e};
+  subgraph cluster_x {
+    label = "Cluster";
+    x; y;
+    x -> y;
+  }
+  "quoted node" -- weird;
+}

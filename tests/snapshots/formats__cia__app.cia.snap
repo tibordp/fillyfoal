@@ -77,5 +77,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: "IEND" — critical, public, unsafe to copy  [0x319e+0x4]
         Data  [0x31a2+0x0]
         CRC: 0xae426082 — valid  [0x31a2+0x4]
-    ▾ Trailing data — 0x7 bytes after the end chunk  [0x31a6+0x7]
-        ! unsupported: unrecognized format [0x31a6+0x7]
+    ▾ Trailing data — UTF-8 text, 1 line  [0x31a6+0x7]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x31a6+0x7]
+          Line 1: "TRAILER"  [0x31a6+0x7]

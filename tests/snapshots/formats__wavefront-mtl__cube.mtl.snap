@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cube.mtl — Wavefront MTL: 2 materials  [0x0+0x74]
+  ▾ red  [0xc+0x3e]
+      newmtl: "red"  [0x13+0x3]
+      Ka: "0.1 0.0 0.0"  [0x1a+0xb]
+      Kd: "0.8 0.0 0.0"  [0x29+0xb]
+      Ns: 10  [0x38+0x2]
+      d: 1  [0x3d+0x3]
+      illum: 2  [0x47+0x1]
+  ▾ textured  [0x4a+0x2a]
+      newmtl: "textured"  [0x51+0x8]
+      Kd: "1 1 1"  [0x5d+0x5]
+      map_Kd: "brick.png"  [0x6a+0x9]

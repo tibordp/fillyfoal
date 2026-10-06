@@ -79,10 +79,20 @@ fn fixtures_snapshot() {
 
 #[test]
 fn fixtures_are_robust() {
-    for path in fixtures() {
-        let data = load(&path);
-        common::robustness(&snapshot_name(&path), &data);
-    }
+    // Fixtures are independent; sweep them on all cores.
+    let paths = fixtures();
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| loop {
+                let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                let Some(path) = paths.get(i) else { break };
+                let data = load(path);
+                common::robustness(&snapshot_name(path), &data);
+            });
+        }
+    });
 }
 
 /// The directory a fixture lives in names the format it must be identified

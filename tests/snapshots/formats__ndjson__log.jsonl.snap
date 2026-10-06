@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ log.jsonl — JSON Lines, 4 records  [0x0+0xfb]
+  ▾ Line 1 — {"ts": "2026-10-05T10:00:00Z", "level": "info", "msg": "started", "pid": 4242}  [0x0+0x4e]
+      ts: "2026-10-05T10:00:00Z"  [0x7+0x16]
+      level: "info"  [0x28+0x6]
+      msg: "started"  [0x37+0x9]
+      pid: 4242  [0x49+0x4]
+  ▾ Line 2 — {"ts": "2026-10-05T10:00:01Z", "level": "warn", "msg": "slow", "ms": 1234.5}  [0x4f+0x4c]
+      ts: "2026-10-05T10:00:01Z"  [0x56+0x16]
+      level: "warn"  [0x77+0x6]
+      msg: "slow"  [0x86+0x6]
+      ms: 1234.5  [0x94+0x6]
+  ▾ Line 3 — [1, 2, 3]  [0x9c+0x9]
+      [0]: 1  [0x9d+0x1]
+      [1]: 2  [0xa0+0x1]
+      [2]: 3  [0xa3+0x1]
+  ▾ Line 4 — {"ts": "2026-10-05T10:00:02Z", "level": "error", "msg": "boom", "err": {"code": …  [0xa6+0x53]
+      ts: "2026-10-05T10:00:02Z"  [0xad+0x16]
+      level: "error"  [0xce+0x7]
+      msg: "boom"  [0xde+0x6]
+    ▾ err — object, 1 member  [0xed+0xb]
+        code: 7  [0xf6+0x1]

@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ refs.bib — BibTeX, 3 entries (1 article, 1 book, 1 misc)  [0x0+0x1b8]
+  ▾ @string — string  [0xf+0x1a]
+      acm: "ACM Press"  [0x1d+0xb]
+  ▾ knuth1974 — article: Computer Programming as an Art  [0x2a+0xc8]
+      Key: "knuth1974"  [0x33+0x9]
+      author: "Donald E. Knuth"  [0x4a+0x11]
+      title: "Computer Programming as an Art"  [0x69+0x22]
+      journal: "Communications of the ACM"  [0x99+0x1b]
+      year: "1974"  [0xc2+0x4]
+      volume: "17"  [0xd4+0x4]
+      pages: "667--673"  [0xe6+0xa]
+  ▾ lamport94 — book: LaTeX: A Document Preparation System  [0xf3+0x90]
+      Key: "lamport94"  [0xf9+0x9]
+      author: "Leslie Lamport"  [0x10f+0x10]
+      title: "LaTeX: A Document Preparation System"  [0x12b+0x28]
+      publisher: "acm # \" Inc.\""  [0x163+0xd]
+      year: "1994"  [0x17b+0x6]
+  ▾ @comment — comment  [0x184+0x11]
+      Text: "ignored"  [0x18d+0x7]
+  ▾ unclosed — misc: No end  [0x196+0x22]
+      ! truncated: entry not closed
+      Key: "unclosed"  [0x19c+0x8]
+      title: "No end"  [0x1b0+0x7]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ package.json — npm package manifest: fillyfoal-demo  [0x0+0xac]
+    name: "fillyfoal-demo"  [0xc+0x10]
+    version: "1.2.3"  [0x2b+0x7]
+    main: "index.js"  [0x3e+0xa]
+  ▾ scripts — object, 1 member  [0x57+0x20]
+      test: "node test.js"  [0x65+0xe]
+  ▾ dependencies — object, 1 member  [0x8b+0x1e]
+      left-pad: "^1.3.0"  [0x9d+0x8]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ utf16.xml — XML document, root <greeting>  [0x0+0x9c]
+    Byte order mark: "UTF-16LE"  [0x0+0x2]
+  ▾ XML declaration  [#1:0x0+0x27]
+      Version: "1.0"  [#1:0xf+0x3]
+      Encoding: "UTF-16"  [#1:0x1e+0x6]
+  ▾ greeting: "Živjo" — lang="sl"  [#1:0x28+0x25]
+      @lang: "sl"  [#1:0x38+0x2]
+      #text: "Živjo"  [#1:0x3c+0x6]

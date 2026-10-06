@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ window.xaml — XAML markup  [0x0+0xe9]
+  ▾ Window — x:Class="Demo.MainWindow" Title="Demo" (1 element)  [0x0+0xe8]
+      @x:Class: "Demo.MainWindow"  [0x11+0xf]
+      @xmlns: "http://schemas.microsoft.com/winfx/2006/xaml/presentation"  [0x31+0x39]
+      @xmlns:x: "http://schemas.microsoft.com/winfx/2006/xaml"  [0x7d+0x2c]
+      @Title: "Demo"  [0xb2+0x4]
+    ▾ Grid — 1 element  [0xbb+0x23]
+      ▾ Button — Content="OK"  [0xc1+0x16]
+          @Content: "OK"  [0xd2+0x2]

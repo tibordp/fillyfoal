@@ -298,8 +298,10 @@ expression: "common::explore(&display_name(&path), &data)"
       Marker: 0xffe1 — APP1  [0x396+0x2]
       Length: 89  [0x398+0x2]
       Namespace: "http://ns.adobe.com/xap/1.0/"  [0x39a+0x1d]
-    ▾ XMP packet — 0x3a bytes of XML  [0x3b7+0x3a]
-        ! unsupported: unrecognized format [0x3b7+0x3a]
+    ▾ XMP packet — XML document, root <x:xmpmeta>  [0x3b7+0x3a]
+      ▾ x:xmpmeta — 1 element  [0x3b7+0x3a]
+          @xmlns:x: "adobe:ns:meta/"  [0x3cb+0xe]
+          rdf:RDF  [0x3db+0xa]
   ▾ APP2 — ICC profile, chunk 1 of 2  [0x3f1+0xda]
       Marker: 0xffe2 — APP2  [0x3f1+0x2]
       Length: 216  [0x3f3+0x2]
@@ -472,5 +474,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Successive approximation: 0x0 — high 0, low 0  [0x6b2+0x1]
     Entropy-coded data — scan 1, 0x26 bytes  [0x6b3+0x26]
     EOI  [0x6d9+0x2]
-  ▾ Trailing data — 0xd bytes after EOI  [0x6db+0xd]
-      ! unsupported: unrecognized format [0x6db+0xd]
+  ▾ Trailing data — UTF-8 text, 1 line  [0x6db+0xd]
+      Encoding: "UTF-8"
+      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x6db+0xd]
+        Line 1: "TRAILING DATA"  [0x6db+0xd]

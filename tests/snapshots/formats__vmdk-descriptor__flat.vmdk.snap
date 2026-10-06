@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ flat.vmdk — VMDK descriptor (monolithicFlat)  [0x0+0x14b]
+    version: "1"  [0x16+0x9]
+    encoding: "UTF-8"  [0x20+0x10]
+    CID: "fffffffe"  [0x31+0xc]
+    parentCID: "ffffffff"  [0x3e+0x12]
+    createType: "monolithicFlat"  [0x51+0x1b]
+    Extent: "RW 4194304 FLAT \"fixture-flat.vmdk\" 0" — RW FLAT, 2 GiB in "fixture-flat.vmdk" 0  [0x83+0x25]
+    ddb.virtualHWVersion: "4"  [0xc5+0x1a]
+    ddb.geometry.cylinders: "1"  [0xe0+0x1c]
+    ddb.geometry.heads: "16"  [0xfd+0x19]
+    ddb.geometry.sectors: "63"  [0x117+0x1b]
+    ddb.adapterType: "ide"  [0x133+0x17]

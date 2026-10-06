@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.osm.pbf — OSM PBF, 2 blocks  [0x0+0x69]
+  ▾ OSMHeader — 0x27 bytes decompressed  [0x0+0x44]
+      Data  [#1:0x0+0x27]
+  ▾ OSMData — 0x1c bytes decompressed  [0x44+0x25]
+      Data  [#2:0x0+0x1c]
