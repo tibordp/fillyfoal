@@ -30,7 +30,7 @@ pub mod text;
 pub mod value;
 
 pub use cx::{Block, Cx};
-pub use dsl::{Cursor, Record};
+pub use dsl::{Cursor, Path, Record};
 pub use error::{DiagKind, Diagnostic, Error, Result};
 pub use fields::{Endian, Field, Fields};
 pub use node::{Count, Node};

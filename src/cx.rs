@@ -53,6 +53,8 @@ pub(crate) struct Shared {
     pub sources: Vec<SourceEntry>,
     pub derived: HashMap<Origin, SourceId>,
     pub derived_bytes: u64,
+    /// Parsed results shared between expansions (see [`Cx::cached`]).
+    pub memo: HashMap<(Span, &'static str), Arc<dyn std::any::Any + Send + Sync>>,
     pub cache: ByteCache,
     pub budget: u64,
     pub stop: Option<Stop>,
@@ -409,6 +411,30 @@ impl Cx {
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))
+    }
+
+    /// A value previously stored with [`Cx::cache`] for `(span, kind)`.
+    ///
+    /// Expansions are independent futures, so a dissector that parses the
+    /// same structure for many nodes (a PDF object stream, a string table)
+    /// can parse it once and share the result. Values must be deterministic
+    /// functions of the bytes, like everything else a dissector produces.
+    pub fn cached<T: std::any::Any + Send + Sync>(&self, span: Span, kind: &'static str) -> Option<Arc<T>> {
+        let value = lock(&self.shared).memo.get(&(span, kind)).cloned()?;
+        value.downcast::<T>().ok()
+    }
+
+    /// Stores a parsed value for later [`Cx::cached`] lookups. The cache is
+    /// bounded; old entries are dropped arbitrarily when it is full.
+    pub fn cache<T: std::any::Any + Send + Sync>(&self, span: Span, kind: &'static str, value: Arc<T>) {
+        const MAX_ENTRIES: usize = 4096;
+        let mut sh = lock(&self.shared);
+        if sh.memo.len() >= MAX_ENTRIES
+            && let Some(key) = sh.memo.keys().next().copied()
+        {
+            sh.memo.remove(&key);
+        }
+        sh.memo.insert((span, kind), value);
     }
 
     /// Charges one unit of work, suspending first if the budget is exhausted.
