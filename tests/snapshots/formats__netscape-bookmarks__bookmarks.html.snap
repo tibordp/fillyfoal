@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bookmarks.html — Netscape bookmarks, 3 links in 1 folders  [0x0+0x292]
+  ▾ Work: 2020-09-13 12:26:40 UTC — folder, 2 items  [0x114+0x105]
+      Intranet & Wiki: 2020-09-13 12:26:50 UTC — https://intranet.example.com/  [0x16b+0x55]
+      Mail: 2020-09-13 12:27:00 UTC — https://mail.example.com/  [0x1cd+0x42]
+    Example: 2020-09-13 12:30:00 UTC — https://www.example.org/  [0x225+0x66]

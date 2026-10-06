@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .wget-hsts — Wget HSTS database, 2 hosts  [0x0+0xce]
+    www.example.com: 2023-11-14 22:13:20 UTC — max-age 31536000, includeSubDomains  [0x82+0x28]
+    example.org: 2023-11-14 22:21:40 UTC — max-age 63072000  [0xaa+0x24]

@@ -18,8 +18,8 @@ use crate::value::{FlagTable, Value, flag};
 const LE: Endian = Endian::Little;
 
 /// A text line: offset, length including the line break, and the text.
-type Line = (u64, u64, String);
-type Lines = Vec<Line>;
+pub(crate) type Line = (u64, u64, String);
+pub(crate) type Lines = Vec<Line>;
 /// An audit event: serial, time, record types and lines.
 type AuditEvent = (String, i64, Vec<String>, Lines);
 
@@ -38,12 +38,12 @@ fn lines(data: &[u8]) -> Lines {
         .collect()
 }
 
-fn strip_bom(data: &[u8]) -> &[u8] {
+pub(crate) fn strip_bom(data: &[u8]) -> &[u8] {
     data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(data)
 }
 
 /// The text of a file, read up to the session limit, with its lines.
-async fn text_lines(cx: &Cx, file: Span) -> Result<Lines> {
+pub(crate) async fn text_lines(cx: &Cx, file: Span) -> Result<Lines> {
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
     let mut all = lines(&data);
     if let Some(first) = all.first_mut() {
@@ -53,7 +53,7 @@ async fn text_lines(cx: &Cx, file: Span) -> Result<Lines> {
 }
 
 /// A group node over a run of lines, expanding to one node per line.
-fn line_group(name: String, file: Span, lines: Lines) -> Node {
+pub(crate) fn line_group(name: String, file: Span, lines: Lines) -> Node {
     let start = lines.first().map_or(0, |l| l.0);
     let end = lines.last().map_or(start, |l| l.0.saturating_add(l.1));
     Node::new(name).span(file.sub(start, end.saturating_sub(start))).lazy(expand_lines, (file, Arc::new(lines)))

@@ -1,0 +1,22 @@
+Opera Hotlist version 2.0
+Options: encoding = utf8, version=3
+
+#FOLDER
+	ID=1
+	NAME=Research
+	CREATED=1300000000
+
+#URL
+	ID=2
+	NAME=Example Domain
+	URL=http://www.example.com/
+	CREATED=1300000100
+	VISITED=1300000200
+
+-
+
+#URL
+	ID=3
+	NAME=Opera
+	URL=http://www.opera.com/
+	CREATED=1300000300

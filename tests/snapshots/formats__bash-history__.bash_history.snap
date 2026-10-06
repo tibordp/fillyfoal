@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .bash_history — bash history, 4 commands, 3 timestamped, 300 s span  [0x0+0x8b]
+  ▾ cd /var/www: 2023-11-14 22:13:20 UTC  [0x0+0x18]
+      Line: "#1700000000"  [0x0+0xc]
+      Line: "cd /var/www"  [0xc+0xc]
+  ▾ sudo tail -f /var/log/nginx/access.log: 2023-11-14 22:13:25 UTC  [0x18+0x33]
+      Line: "#1700000005"  [0x18+0xc]
+      Line: "sudo tail -f /var/log/nginx/access.log"  [0x24+0x27]
+  ▾ scp backup.tar.gz bob@198.51.100.7:/tmp/: 2023-11-14 22:18:20 UTC  [0x4b+0x35]
+      Line: "#1700000300"  [0x4b+0xc]
+      Line: "scp backup.tar.gz bob@198.51.100.7:/tmp/"  [0x57+0x29]
+  ▾ history -c  [0x80+0xb]
+      Line: "history -c"  [0x80+0xb]

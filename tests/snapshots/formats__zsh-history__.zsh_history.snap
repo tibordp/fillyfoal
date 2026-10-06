@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ .zsh_history — zsh history, 4 commands, 200 s span  [0x0+0x89]
+  ▾ ls -la: 2023-11-14 22:13:20 UTC — 0 s  [0x0+0x16]
+      Line: ": 1700000000:0;ls -la"  [0x0+0x16]
+  ▾ git status: 2023-11-14 22:13:32 UTC — 3 s  [0x16+0x1a]
+      Line: ": 1700000012:3;git status"  [0x16+0x1a]
+  ▾ for f in *.txt; do\ ⏎   wc -l $f\ ⏎ done: 2023-11-14 22:15:00 UTC — 0 s  [0x30+0x34]
+      Line: ": 1700000100:0;for f in *.txt; do\\"  [0x30+0x23]
+      Line: "  wc -l $f\\"  [0x53+0xc]
+      Line: "done"  [0x5f+0x5]
+  ▾ ssh alice@192.0.2.10: 2023-11-14 22:16:40 UTC — 12 s  [0x64+0x25]
+      Line: ": 1700000200:12;ssh alice@192.0.2.10"  [0x64+0x25]

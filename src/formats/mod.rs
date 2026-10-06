@@ -209,6 +209,7 @@ pub mod office_legacy;
 pub mod windiag;
 pub mod logs;
 pub mod evidence;
+pub mod userdata;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1035,6 +1036,19 @@ pub static FORMATS: &[&Format] = &[
     &evidence::KDUMP,
     &evidence::VMSS,
     &evidence::VBOX_SAV,
+    &userdata::ZSH,
+    &userdata::BASH,
+    &userdata::FISH,
+    &userdata::LIBEDIT,
+    &userdata::LESS,
+    &userdata::WGET_HSTS,
+    &userdata::COOKIES_TXT,
+    &userdata::BOOKMARKS,
+    &userdata::OPERA_HOTLIST,
+    &userdata::FIREFOX_PREFS,
+    &userdata::CERT_OVERRIDE,
+    &userdata::TRASHINFO,
+    &userdata::XBEL,
     &misc3::OSM_PBF,
     &misc3::DTED,
     &misc3::NITF,

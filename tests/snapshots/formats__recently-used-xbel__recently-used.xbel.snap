@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ recently-used.xbel — Recently used files, 2 entries from 2 applications  [0x0+0x4b0]
+    /home/alice/Documents/plan B.odt: "2023-11-14T22:05:00.000000Z" — LibreOffice  [0xd6+0x21a]
+    /tmp/dump.sql: "2023-11-15T08:00:00.000000Z" — gedit  [0x2f3+0x1b4]
