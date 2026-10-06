@@ -212,6 +212,7 @@ pub mod cad;
 pub mod microscopy;
 pub mod molecular;
 pub mod instruments2;
+pub mod bio2;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1149,6 +1150,17 @@ pub static FORMATS: &[&Format] = &[
     &instruments2::MGH,
     &instruments2::ANALYZE,
     &instruments2::GALACTIC_SPC,
+    &bio2::SFF,
+    &bio2::ZTR,
+    &bio2::SLOW5,
+    &bio2::BLOW5,
+    &bio2::HIC,
+    &bio2::HMMER3,
+    &bio2::EMBL,
+    &bio2::PSL,
+    &bio2::MZTAB,
+    &bio2::AMBER_PRMTOP,
+    &bio2::GTF,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

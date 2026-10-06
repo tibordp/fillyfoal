@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ globins.hmm — HMMER3/f profile library, 2 model(s), first globins4  [0x0+0x436]
+  ▾ globins4: "Globin family" — PF00042.1 amino, length 3  [0x0+0x3cb]
+      NAME: "globins4"  [0x21+0xe]
+      ACC: "PF00042.1"  [0x30+0xf]
+      DESC: "Globin family"  [0x40+0x13]
+      LENG: 3  [0x54+0x7]
+      ALPH: "amino"  [0x5c+0xb]
+      RF: "no"  [0x68+0x8]
+      MM: "no"  [0x71+0x8]
+      CONS: "yes"  [0x7a+0x9]
+      CS: "no"  [0x84+0x8]
+      MAP: "yes"  [0x8d+0x9]
+      DATE: "Fri May 17 10:30:00 2024"  [0x97+0x1e]
+      NSEQ: 4  [0xb6+0x7]
+      EFFN: 0.964844  [0xbe+0xe]
+      CKSUM: 2027839109  [0xcd+0x10]
+      STATS: "LOCAL MSV       -9.8664  0.70955"  [0xde+0x26]
+  ▾ tiny: "" —  DNA, length 1  [0x3cb+0x6b]
+      NAME: "tiny"  [0x3ec+0xa]
+      LENG: 1  [0x3f7+0x7]
+      ALPH: "DNA"  [0x3ff+0x9]

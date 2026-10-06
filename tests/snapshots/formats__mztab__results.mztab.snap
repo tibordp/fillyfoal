@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ results.mztab — mzTab 1.0.0, 2 protein, 1 psm  [0x0+0x249]
+  ▾ Metadata: 5  [0x0+0x9d]
+      mzTab-version: "1.0.0"  [0x0+0x17]
+      mzTab-mode: "Summary"  [0x18+0x16]
+      mzTab-type: "Identification"  [0x2f+0x1d]
+      description: "Synthetic results"  [0x4d+0x21]
+      ms_run[1]-location: "file:///data/run1.mzML"  [0x6f+0x2d]
+  ▾ Comment: 1  [0x9d+0x14]
+      Proteins follow: ""  [0x9d+0x13]
+  ▾ Protein header: 1  [0xb1+0x6c]
+      accession: "description | taxid | species | database | database_version | search_engine | best_search_engine_score[1]"  [0xb1+0x6b]
+  ▾ Protein: 2  [0x11d+0xb9]
+      P12345: "Test protein | 9606 | Homo sapiens | UniProtKB | 2024_01 | [MS, MS:1001207, Mascot, ] | 52.3"  [0x11d+0x5b]
+      P67890: "Other protein | 9606 | Homo sapiens | UniProtKB | 2024_01 | [MS, MS:1001207, Mascot, ] | 31.0"  [0x179+0x5c]
+  ▾ PSM header: 1  [0x1d6+0x48]
+      sequence: "PSM_ID | accession | unique | database | charge | exp_mass_to_charge"  [0x1d6+0x47]
+  ▾ PSM: 1  [0x21e+0x2b]
+      PEPTIDER: "1 | P12345 | 1 | UniProtKB | 2 | 478.73"  [0x21e+0x2a]

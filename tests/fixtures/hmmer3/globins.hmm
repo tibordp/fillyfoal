@@ -1,0 +1,28 @@
+HMMER3/f [3.1b2 | February 2015]
+NAME  globins4
+ACC   PF00042.1
+DESC  Globin family
+LENG  3
+ALPH  amino
+RF    no
+MM    no
+CONS  yes
+CS    no
+MAP   yes
+DATE  Fri May 17 10:30:00 2024
+NSEQ  4
+EFFN  0.964844
+CKSUM 2027839109
+STATS LOCAL MSV       -9.8664  0.70955
+HMM          A        C        D        E        F        G        H        I        K        L        M        N        P        Q        R        S        T        V        W        Y
+            m->m     m->i     m->d     i->m     i->i     d->m     d->d
+  COMPO   2.36553  4.52577  2.96709  2.70473  3.20818  3.02665  3.41186  2.90203  2.55813  2.35266  3.67312  3.19804  3.45784  3.16284  3.07950  2.66920  2.85763  2.56767  4.55208  3.62716
+          2.68618  4.42225  2.77519  2.73123  3.46354  2.40513  3.72494  3.29354  2.67741  2.69355  4.24690  2.90347  2.73739  3.18146  2.89801  2.37887  2.77519  2.98518  4.58477  3.61503
+          0.57544  1.78073  1.31293  1.75577  0.18968  0.00000        *
+//
+HMMER3/f [3.1b2 | February 2015]
+NAME  tiny
+LENG  1
+ALPH  DNA
+HMM          A        C        G        T
+//

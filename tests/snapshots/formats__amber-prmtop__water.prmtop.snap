@@ -1,0 +1,42 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ water.prmtop — AMBER prmtop "TIP3P water", 3 atom(s), 1 residue(s), 2 bond(s), 5 section(s)  [0x0+0x21b]
+    Version: "VERSION_STAMP = V0001.000  DATE = 05/17/24  10:30:00"  [0x0+0x3e]
+    TITLE: "(20a4)" — 1 line(s)  [0x3f+0x26]
+  ▾ POINTERS: "(10I8)" — 4 line(s)  [0x65+0x119]
+      NATOM: 3
+      NTYPES: 2
+      NBONH: 2
+      MBONA: 0
+      NTHETH: 1
+      MTHETA: 0
+      NPHIH: 0
+      MPHIA: 0
+      NHPARM: 0
+      NPARM: 0
+      NNB: 3
+      NRES: 1
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 2
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 0
+      pointer: 3
+      pointer: 0
+      pointer: 0
+    ATOM_NAME: "(20a4)" — 1 line(s)  [0x17e+0x29]
+    CHARGE: "(5E16.8)" — 1 line(s)  [0x1a7+0x4e]
+    RESIDUE_LABEL: "(20a4)" — 1 line(s)  [0x1f5+0x26]
