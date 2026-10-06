@@ -618,3 +618,39 @@ fn cab_and_lzx_release() {
         }
     }
 }
+
+#[test]
+fn lzma_family_releases() {
+    let big = lzma_sample(7500);
+    let small = lzma_sample(2000);
+    let step = 2 * 16 * 1024;
+    // A 4 KiB dictionary (`xz --lzma2=dict=4KiB`, `--format=lzma
+    // --lzma1=dict=4KiB`): the window slides, holding the dictionary plus
+    // a step and at most one match.
+    assert_releases(&Codec::Xz, &lzma_file("big-dict4k.xz"), &big, 4096 + step + 512);
+    assert_releases(&Codec::LzmaAlone, &lzma_file("big-dict4k.lzma"), &big, 4096 + step + 512);
+    // 64 KiB blocks: a block's output goes once it ends (its 8 MiB
+    // dictionary holds all of it until then).
+    assert_releases(&Codec::Xz, &lzma_file("big-blocks.xz"), &big, 65_536 + step);
+    // Filtered blocks decode into a private window: `out` holds a step.
+    assert_releases(&Codec::Xz, &lzma_file("big-x86.xz"), &big, step + 1024);
+    for name in ["small-delta.xz", "small-x86-delta.xz", "small-x86-dict4k.xz", "small-arm64.xz"] {
+        assert_releases(&Codec::Xz, &lzma_file(name), &small, step + 1024);
+    }
+    // Two streams with padding, and single blocks whose dictionary is
+    // larger than the data.
+    for name in ["big-streams.xz", "big.xz"] {
+        assert_releases(&Codec::Xz, &lzma_file(name), &big, big.len());
+    }
+    for name in ["small-sha256.xz", "small-none.xz"] {
+        assert_releases(&Codec::Xz, &lzma_file(name), &small, small.len());
+    }
+    assert_releases(&Codec::LzmaAlone, &lzma_file("big.lzma"), &big, big.len());
+    // Raw LZMA and LZMA2 are not told their dictionary size: they release
+    // input as they go, and output only before a dictionary reset or at
+    // the end.
+    assert_releases(&Codec::Lzma2, &lzma_file("big.lzma2"), &big, big.len());
+    let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
+    assert_releases(&Codec::LzmaRaw { props, size: None }, &lzma_file("big.lzma1"), &big, big.len());
+    assert_releases(&Codec::LzmaRaw { props, size: Some(1000) }, &lzma_file("big.lzma1"), &big[..1000], 1000);
+}
