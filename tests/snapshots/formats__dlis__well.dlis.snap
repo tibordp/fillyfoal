@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ well.dlis — DLIS "Default Storage Set", 3 visible record(s); 1 FHLR, 1 OLR, 1 CHANNL, 1 FDATA  [0x0+0xde]
+  ▾ Storage unit label  [0x0+0x50]
+      Sequence number: "   1"  [0x0+0x4]
+      DLIS version: "V1.00"  [0x4+0x5]
+      Storage unit structure: "RECORD"  [0x9+0x6]
+      Maximum record length: " 8192"  [0xf+0x5]
+      Storage set identifier: "Default Storage Set                                         "  [0x14+0x3c]
+  ▾ Visible record 0 — 2 segment(s)  [0x50+0x52]
+      FHLR (file header): 0x80 [explicitly formatted] — set FILE-HEADER  [0x54+0x38]
+      OLR (origin): 0x80 [explicitly formatted] — set ORIGIN  [0x8c+0x16]
+  ▾ Visible record 1 — 1 segment(s)  [0xa2+0x1e]
+      CHANNL (channels): 0xa1 [explicitly formatted | has successor | padding] — set CHANNEL  [0xa6+0x1a]
+  ▾ Visible record 2 — 2 segment(s)  [0xc0+0x1e]
+      CHANNL (channels): 0xc0 [explicitly formatted | has predecessor]  [0xc4+0xa]
+      FDATA (frame data): 0x1 [padding]  [0xce+0x10]

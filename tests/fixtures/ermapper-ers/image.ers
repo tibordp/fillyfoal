@@ -1,0 +1,23 @@
+DatasetHeader Begin
+	Version		= "7.0"
+	Name		= "image.ers"
+	LastUpdated	= Fri May 17 10:30:00 GMT 2024
+	DataSetType	= ERStorage
+	DataType	= Raster
+	ByteOrder	= LSBFirst
+	CoordinateSpace Begin
+		Datum		= "WGS84"
+		Projection	= "GEODETIC"
+		CoordinateType	= LL
+		Rotation	= 0:0:0.0
+	CoordinateSpace End
+	RasterInfo Begin
+		CellType	= Unsigned8BitInteger
+		NrOfLines	= 512
+		NrOfCellsPerLine	= 640
+		NrOfBands	= 3
+		BandId Begin
+			Value		= "Red"
+		BandId End
+	RasterInfo End
+DatasetHeader End

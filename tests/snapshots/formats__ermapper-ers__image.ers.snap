@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.ers — ER Mapper header, 640×512 × 3 band(s), Unsigned8BitInteger, datum WGS84  [0x0+0x1eb]
+  ▾ DatasetHeader — 8 entr(ies)  [0x0+0x1eb]
+      Version: 7  [0x14+0x11]
+      Name: "image.ers"  [0x26+0x14]
+      LastUpdated: "Fri May 17 10:30:00 GMT 2024"  [0x3b+0x2b]
+      DataSetType: "ERStorage"  [0x67+0x18]
+      DataType: "Raster"  [0x80+0x12]
+      ByteOrder: "LSBFirst"  [0x93+0x15]
+    ▾ CoordinateSpace — 4 entr(ies)  [0xa9+0x84]
+        Datum: "WGS84"  [0xc0+0x12]
+        Projection: "GEODETIC"  [0xd3+0x19]
+        CoordinateType: "LL"  [0xed+0x15]
+        Rotation: "0:0:0.0"  [0x103+0x14]
+    ▾ RasterInfo — 5 entr(ies)  [0x12d+0xac]
+        CellType: "Unsigned8BitInteger"  [0x13f+0x20]
+        NrOfLines: 512  [0x160+0x11]
+        NrOfCellsPerLine: 640  [0x172+0x18]
+        NrOfBands: 3  [0x18b+0xf]
+      ▾ BandId — 1 entr(ies)  [0x19b+0x2e]
+          Value: "Red"  [0x1aa+0x11]

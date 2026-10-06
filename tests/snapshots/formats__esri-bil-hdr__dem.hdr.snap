@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dem.hdr — ESRI BIL raster header, 3601×3601 × 1 band(s), 16-bit  [0x0+0x130]
+    BYTEORDER: "I"  [0x0+0x10]
+    LAYOUT: "BIL"  [0x11+0x12]
+    NROWS: 3601  [0x24+0x13]
+    NCOLS: 3601  [0x38+0x13]
+    NBANDS: 1  [0x4c+0x10]
+    NBITS: 16  [0x5d+0x11]
+    BANDROWBYTES: 7202  [0x6f+0x13]
+    TOTALROWBYTES: 7202  [0x83+0x13]
+    PIXELTYPE: "SIGNEDINT"  [0x97+0x18]
+    ULXMAP: 14  [0xb0+0x13]
+    ULYMAP: 47  [0xc4+0x13]
+    XDIM: 0.000277777777778  [0xd8+0x20]
+    YDIM: 0.000277777777778  [0xf9+0x20]
+    NODATA: -32768  [0x11a+0x15]

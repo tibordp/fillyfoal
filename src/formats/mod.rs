@@ -214,6 +214,7 @@ pub mod molecular;
 pub mod instruments2;
 pub mod bio2;
 pub mod cad2;
+pub mod geo2;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1170,6 +1171,12 @@ pub static FORMATS: &[&Format] = &[
     &cad2::ENSIGHT_GOLD,
     &cad2::OPENVDB,
     &cad2::NASTRAN,
+    &geo2::ESRI_PRJ,
+    &geo2::ERMAPPER_ERS,
+    &geo2::IDRISI_RDC,
+    &geo2::ISO8211,
+    &geo2::DLIS,
+    &geo2::ESRI_BIL_HDR,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

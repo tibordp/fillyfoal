@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ GB5X01SW.000 — S-57 chart, 3 record(s), 4 field definition(s); 2 0001, 1 DSID, 1 VRID  [0x0+0x1ad]
+  ▾ Data descriptive record — 4 field(s)  [0x0+0x129]
+      0000: "S-57 chart" — controls "0000;&   "  [0x45+0x14]
+      0001: "ISO 8211 Record Identifier" — controls "0100;&   ", subfields (b12)  [0x59+0x2b]
+      DSID: "Data set identification field" — controls "1600;&   ", subfields RCNM!RCID!EXPP!INTU!DSNM!EDTN  [0x84+0x57]
+      VRID: "Vector record identifier field" — controls "1600;&   ", subfields RCNM!RCID!RVER!RUIN  [0xdb+0x4e]
+  ▾ Record 1 (DSID) — 2 field(s)  [0x129+0x49]
+      0001: ".." — ISO 8211 Record Identifier  [0x158+0x3]
+      DSID: ".......GB5X01SW.000|1|" — Data set identification field  [0x15b+0x17]
+  ▾ Record 2 (VRID) — 2 field(s)  [0x172+0x3b]
+      0001: ".." — ISO 8211 Record Identifier  [0x1a1+0x3]
+      VRID: "n*......" — Vector record identifier field  [0x1a4+0x9]

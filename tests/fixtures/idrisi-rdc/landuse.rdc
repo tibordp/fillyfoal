@@ -1,0 +1,19 @@
+file format : IDRISI Raster A.1
+file title  : Land use classes
+data type   : byte
+file type   : binary
+columns     : 512
+rows        : 480
+ref. system : utm-33n
+ref. units  : m
+unit dist.  : 1
+min. X      : 500000
+max. X      : 515360
+min. Y      : 5200000
+max. Y      : 5214400
+pos'n error : unknown
+resolution  : 30
+min. value  : 1
+max. value  : 9
+value units : classes
+legend cats : 0
