@@ -1,0 +1,9 @@
+3.0                 COMPACT RINEX FORMAT                    CRINEX VERS   / TYPE
+RNX2CRX ver.4.1.0                       01-May-24 00:00     CRINEX PROG / DATE  
+     3.04           OBSERVATION DATA    M (MIXED)           RINEX VERSION / TYPE
+LJUB                                                        MARKER NAME         
+                                                            END OF HEADER       
+> 2024 05 01 00 00  0.0000000  0  2      G01G05
+
+3&22000000123 3&115600000123
+3&23000000456 3&120800000543

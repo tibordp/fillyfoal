@@ -1,0 +1,12 @@
+     1.0            IONOSPHERE MAPS     GPS                 IONEX VERSION / TYPE
+     2                                                      # OF MAPS IN FILE   
+                                                            END OF HEADER       
+     1                                                      START OF TEC MAP    
+  2024     5     1     0     0     0                        EPOCH OF CURRENT MAP
+    87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H
+   92   92   93   93   94
+     1                                                      END OF TEC MAP      
+     2                                                      START OF TEC MAP    
+   95   95   96
+     2                                                      END OF TEC MAP      
+                                                            END OF FILE         

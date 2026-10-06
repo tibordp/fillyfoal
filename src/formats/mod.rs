@@ -815,6 +815,15 @@ pub static FORMATS: &[&Format] = &[
     &geo::gnss::SBF,
     &geo::gnss::NOVATEL,
     &geo::gnss::NMEA,
+    &geo::rinex::OBS,
+    &geo::rinex::NAV,
+    &geo::rinex::MET,
+    &geo::rinex::CLOCK,
+    &geo::rinex::CRINEX,
+    &geo::rinex::ANTEX,
+    &geo::rinex::IONEX,
+    &geo::rinex::SP3,
+    &geo::rinex::SINEX,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

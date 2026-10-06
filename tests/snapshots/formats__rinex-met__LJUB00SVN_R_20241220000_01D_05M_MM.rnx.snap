@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ LJUB00SVN_R_20241220000_01D_05M_MM.rnx — RINEX 3.04 meteorological data, marker LJUB  [0x0+0x198]
+  ▾ Header — 3 lines  [0x0+0x144]
+      RINEX VERSION / TYPE: "3.04           METEOROLOGICAL DATA"  [0x0+0x50]
+      MARKER NAME: "LJUB"  [0x51+0x50]
+      # / TYPES OF OBSERV: "3    PR    TD    HR"  [0xa2+0x50]
+      END OF HEADER: ""  [0xf3+0x50]
+  ▾ Record 0 — 2024  5  1  0  0  0  987.6   15.2   65.0  [0x144+0x2a]
+      Line 1: " 2024  5  1  0  0  0  987.6   15.2   65.0"  [0x144+0x29]
+  ▾ Record 1 — 2024  5  1  0  5  0  987.5   15.4   64.0  [0x16e+0x2a]
+      Line 1: " 2024  5  1  0  5  0  987.5   15.4   64.0"  [0x16e+0x29]

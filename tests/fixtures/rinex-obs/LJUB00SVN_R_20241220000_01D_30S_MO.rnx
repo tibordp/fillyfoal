@@ -1,0 +1,13 @@
+     3.04           OBSERVATION DATA    M (MIXED)           RINEX VERSION / TYPE
+fillyfoal           Test                20240501 000000 UTC PGM / RUN BY / DATE 
+LJUB                                                        MARKER NAME         
+14500M001                                                   MARKER NUMBER       
+  4282000.0000  1130000.0000  4570000.0000                  APPROX POSITION XYZ 
+G    4 C1C L1C D1C S1C                                      SYS / # / OBS TYPES 
+  2024     5     1     0     0    0.0000000     GPS         TIME OF FIRST OBS   
+                                                            END OF HEADER       
+> 2024 05 01 00 00  0.0000000  0  2
+G01  22000000.123   115600000.12345     -1234.567          45.000
+G05  23000000.456   120800000.54321      2345.678          42.000
+> 2024 05 01 00 00 30.0000000  0  1
+G01  22000100.123   115600500.12345     -1234.000          45.000

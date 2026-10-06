@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ igsg1220.24i — IONEX 1.0, 2 maps  [0x0+0x354]
+  ▾ Header — 2 lines  [0x0+0xf3]
+      IONEX VERSION / TYPE: "1.0            IONOSPHERE MAPS     GPS"  [0x0+0x50]
+      # OF MAPS IN FILE: "2"  [0x51+0x50]
+      END OF HEADER: ""  [0xa2+0x50]
+  ▾ tec map 0 — 1  [0xf3+0x15e]
+      Line 1: "     1                                                      START OF TEC MAP    "  [0xf3+0x50]
+      Line 2: "  2024     5     1     0     0     0                        EPOCH OF CURRENT MAP"  [0x144+0x50]
+      Line 3: "    87.5-180.0 180.0   5.0 450.0                            LAT/LON1/LON2/DLON/H"  [0x195+0x50]
+      Line 4: "   92   92   93   93   94"  [0x1e6+0x19]
+      Line 5: "     1                                                      END OF TEC MAP      "  [0x200+0x50]
+  ▾ tec map 1 — 2  [0x251+0x103]
+      Line 1: "     2                                                      START OF TEC MAP    "  [0x251+0x50]
+      Line 2: "   95   95   96"  [0x2a2+0xf]
+      Line 3: "     2                                                      END OF TEC MAP      "  [0x2b2+0x50]
+      Line 4: "                                                            END OF FILE         "  [0x303+0x50]
