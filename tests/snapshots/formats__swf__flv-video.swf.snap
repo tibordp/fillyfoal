@@ -2,23 +2,29 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ flv-video.swf — SWF v6, 16×16, 5 fps, 2 frames  [0x0+0x2cb]
-    Signature: "FWS" — uncompressed  [0x0+0x3]
+▾ flv-video.swf — Flash movie v6, 16×16, 5 fps, 2 frames  [0x0+0x2cb]
+    Signature: "FWS"  [0x0+0x3]
     Version: 6  [0x3+0x1]
     File length: 715  [0x4+0x4]
-    Frame size — 320×320 twips (16×16 px)  [0x8+0x6]
-    Frame rate: 1280 — 5 fps  [0xe+0x2]
+  ▾ Frame size — 16×16 px  [0x8+0x6]
+      Nbits: 10
+      Xmin: 0 — 0 px
+      Xmax: 320 — 16 px
+      Ymin: 0 — 0 px
+      Ymax: 320 — 16 px
+    Frame rate: 5 — 8.8 fixed point, frames per second  [0xe+0x2]
     Frame count: 2  [0x10+0x2]
-  ▾ DefineVideoStream: 60 — character 0, 2 frames, 16×16, Sorenson H.263  [0x12+0xc]
-      Data — 10 bytes  [0x14+0xa]
-  ▾ PlaceObject2: 26 — 21 bytes  [0x1e+0x17]
-      Data — 21 bytes  [0x20+0x15]
-  ▾ VideoFrame: 61 — stream 0, frame 0, 539 bytes  [0x35+0x221]
-      Data — 539 bytes  [0x3b+0x21b]
-    ShowFrame: 1 — frame 0  [0x256+0x2]
-  ▾ PlaceObject2: 26 — 5 bytes  [0x258+0x7]
-      Data — 5 bytes  [0x25a+0x5]
-  ▾ VideoFrame: 61 — stream 0, frame 1, 98 bytes  [0x25f+0x68]
-      Data — 98 bytes  [0x265+0x62]
-    ShowFrame: 1 — frame 1  [0x2c7+0x2]
-    End: 0 — 0 bytes  [0x2c9+0x2]
+  ▾ Tags  [0x12+0x2b9]
+    ▾ DefineVideoStream — 10 bytes  [0x12+0xc]
+        Data — 10 bytes  [0x14+0xa]
+    ▾ PlaceObject2 — 21 bytes  [0x1e+0x17]
+        Data — 21 bytes  [0x20+0x15]
+    ▾ VideoFrame — 539 bytes  [0x35+0x221]
+        Data — 539 bytes  [0x3b+0x21b]
+      ShowFrame — frame 0  [0x256+0x2]
+    ▾ PlaceObject2 — 5 bytes  [0x258+0x7]
+        Data — 5 bytes  [0x25a+0x5]
+    ▾ VideoFrame — 98 bytes  [0x25f+0x68]
+        Data — 98 bytes  [0x265+0x62]
+      ShowFrame — frame 1  [0x2c7+0x2]
+      End — 0 bytes  [0x2c9+0x2]

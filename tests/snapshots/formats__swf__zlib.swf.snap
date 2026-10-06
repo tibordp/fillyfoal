@@ -2,24 +2,30 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zlib.swf — SWF v6 (zlib), 16×16, 5 fps, 2 frames  [0x0+0x2ab]
-    Signature: "CWS" — zlib-compressed  [0x0+0x3]
+▾ zlib.swf — Flash movie v6, zlib-compressed, 715 bytes uncompressed  [0x0+0x2ab]
+    Signature: "CWS"  [0x0+0x3]
     Version: 6  [0x3+0x1]
     File length: 715  [0x4+0x4]
-  ▾ Compressed body — 707 bytes decompressed  [0x8+0x2a3]
-      Frame size — 320×320 twips (16×16 px)  [#1:0x0+0x6]
-      Frame rate: 1280 — 5 fps  [#1:0x6+0x2]
+  ▾ Compressed body — 16×16, 5 fps, 2 frames  [0x8+0x2a3]
+    ▾ Frame size — 16×16 px  [#1:0x0+0x6]
+        Nbits: 10
+        Xmin: 0 — 0 px
+        Xmax: 320 — 16 px
+        Ymin: 0 — 0 px
+        Ymax: 320 — 16 px
+      Frame rate: 5 — 8.8 fixed point, frames per second  [#1:0x6+0x2]
       Frame count: 2  [#1:0x8+0x2]
-    ▾ DefineVideoStream: 60 — character 0, 2 frames, 16×16, Sorenson H.263  [#1:0xa+0xc]
-        Data — 10 bytes  [#1:0xc+0xa]
-    ▾ PlaceObject2: 26 — 21 bytes  [#1:0x16+0x17]
-        Data — 21 bytes  [#1:0x18+0x15]
-    ▾ VideoFrame: 61 — stream 0, frame 0, 539 bytes  [#1:0x2d+0x221]
-        Data — 539 bytes  [#1:0x33+0x21b]
-      ShowFrame: 1 — frame 0  [#1:0x24e+0x2]
-    ▾ PlaceObject2: 26 — 5 bytes  [#1:0x250+0x7]
-        Data — 5 bytes  [#1:0x252+0x5]
-    ▾ VideoFrame: 61 — stream 0, frame 1, 98 bytes  [#1:0x257+0x68]
-        Data — 98 bytes  [#1:0x25d+0x62]
-      ShowFrame: 1 — frame 1  [#1:0x2bf+0x2]
-      End: 0 — 0 bytes  [#1:0x2c1+0x2]
+    ▾ Tags  [#1:0xa+0x2b9]
+      ▾ DefineVideoStream — 10 bytes  [#1:0xa+0xc]
+          Data — 10 bytes  [#1:0xc+0xa]
+      ▾ PlaceObject2 — 21 bytes  [#1:0x16+0x17]
+          Data — 21 bytes  [#1:0x18+0x15]
+      ▾ VideoFrame — 539 bytes  [#1:0x2d+0x221]
+          Data — 539 bytes  [#1:0x33+0x21b]
+        ShowFrame — frame 0  [#1:0x24e+0x2]
+      ▾ PlaceObject2 — 5 bytes  [#1:0x250+0x7]
+          Data — 5 bytes  [#1:0x252+0x5]
+      ▾ VideoFrame — 98 bytes  [#1:0x257+0x68]
+          Data — 98 bytes  [#1:0x25d+0x62]
+        ShowFrame — frame 1  [#1:0x2bf+0x2]
+        End — 0 bytes  [#1:0x2c1+0x2]
