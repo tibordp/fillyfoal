@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ sample.pxl — PCL XL stream () HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x0+0x95]
+▾ sample.pxl — PCL XL stream (HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x0+0x95]
     Stream header: ") HP-PCL XL;2;0;Comment Fixture" — little-endian binding  [0x0+0x21]
     BeginSession: "137=uint16 (600, 600), 134=ubyte 0" — 2 attributes  [0x21+0xc]
     OpenDataSource: "136=ubyte 0, 135=ubyte 1" — 2 attributes  [0x2d+0x9]

@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
     SET: "RESOLUTION=600"  [0x22+0x19]
     COMMENT: "test job"  [0x3b+0x17]
     ENTER: "LANGUAGE=PCLXL"  [0x52+0x1b]
-  ▾ PCLXL data — PCL XL stream () HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x6d+0x95]
+  ▾ PCLXL data — PCL XL stream (HP-PCL XL;2;0;Comment Fixture), 10 operators, 1 pages  [0x6d+0x95]
       Stream header: ") HP-PCL XL;2;0;Comment Fixture" — little-endian binding  [0x6d+0x21]
       BeginSession: "137=uint16 (600, 600), 134=ubyte 0" — 2 attributes  [0x8e+0xc]
       OpenDataSource: "136=ubyte 0, 135=ubyte 1" — 2 attributes  [0x9a+0x9]

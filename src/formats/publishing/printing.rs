@@ -396,7 +396,7 @@ async fn pclxl(cx: Cx, input: Input) -> Result<()> {
             }
         }
     }
-    cx.annotate(format!("PCL XL stream ({header}), {ops} operators, {pages} pages"));
+    cx.annotate(format!("PCL XL stream ({}), {ops} operators, {pages} pages", header.get(2..).unwrap_or_default()));
     Ok(())
 }
 
@@ -775,7 +775,7 @@ async fn star_entries(cx: Cx, region: Span) -> Result<()> {
                 }
             }
             let span = lines.since(start);
-            cx.push(Node::new(name).span(span).value(text(value)).lazy(crate::expander!(self::star_block: (Span, bool)), (span, true))).await;
+            cx.push(Node::new(name).span(span).value(text(value)).lazy(crate::expander!(self::star_block: Span), span)).await;
             continue;
         }
         let mut depth = braces(trimmed);
@@ -788,7 +788,7 @@ async fn star_entries(cx: Cx, region: Span) -> Result<()> {
                 }
             }
             let span = lines.since(start);
-            cx.push(Node::new(name).span(span).value(text(value.trim_end_matches('{').trim())).lazy(crate::expander!(self::star_block: (Span, bool)), (span, false))).await;
+            cx.push(Node::new(name).span(span).value(text(value.trim_end_matches('{').trim())).lazy(crate::expander!(self::star_block: Span), span)).await;
             continue;
         }
         // A quoted value may continue over several lines, ending in *End.
@@ -811,7 +811,7 @@ async fn star_entries(cx: Cx, region: Span) -> Result<()> {
 }
 
 /// The inside of a block: everything but its first and last line.
-async fn star_block(cx: Cx, (span, _ppd): (Span, bool)) -> Result<()> {
+async fn star_block(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let Some(first) = lines.next().await? else { return Ok(()) };
     let mut start = first.next;
