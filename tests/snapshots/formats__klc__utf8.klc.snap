@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ utf8.klc — Keyboard layout fillyu8 (UTF-8 test), 2 keys, 2 shift states, 1 dead keys  [0x0+0x7b]
+    ! malformed: no ENDKBD: the layout is incomplete
+    KBD: "fillyu8" — UTF-8 test  [0x0+0x18]
+    LOCALEID: "00000409" — en-US  [0x1a+0x13]
+  ▾ SHIFTSTATE — Base, Shift  [0x2f+0x11]
+      Shift state 0: 0 — Base  [0x3b+0x1]
+      Shift state 1: 1 — Shift  [0x3d+0x1]
+  ▾ LAYOUT — 2 rows  [0x40+0x23]
+    ▾ 10 VK_Q — Base: q, Shift: Q  [0x48+0xa]
+        Scan code: 0x10  [0x48+0x2]
+        Virtual key: "VK_Q"  [0x4b+0x1]
+        Caps: "1" — CAPLOK  [0x4d+0x1]
+        Shift state 0 (Base): "q" — U+0071  [0x4f+0x1]
+        Shift state 1 (Shift): "Q" — U+0051  [0x51+0x1]
+    ▾ 1e VK_A — Base: a, Shift: å (dead)  [0x53+0xe]
+        Scan code: 0x1e  [0x53+0x2]
+        Virtual key: "VK_A"  [0x56+0x1]
+        Caps: "1" — CAPLOK  [0x58+0x1]
+        Shift state 0 (Base): "a" — U+0061  [0x5a+0x1]
+        Shift state 1 (Shift): "å" — U+00E5, dead key  [0x5c+0x5]
+  ▾ DEADKEY 00e5 — U+00E5 å, 1 compositions  [0x63+0x18]
+      a → å — U+0061 a + dead key → U+00E5 å  [0x71+0x9]

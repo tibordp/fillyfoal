@@ -6,6 +6,7 @@
 //! when expanded.
 
 mod extra;
+pub(crate) mod resource;
 pub(crate) mod tables;
 pub(crate) mod version;
 
@@ -661,6 +662,7 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
                 offset: 0,
                 path: vec![0],
                 kind: None,
+                name: None,
             },
         ),
         DIR_SECURITY => node.lazy(certificates, (pe.input, dir)),
@@ -966,6 +968,8 @@ struct ResourceDir {
     path: Vec<u32>,
     /// Resource type (`RT_*`), once known from the first level.
     kind: Option<u32>,
+    /// Ordinal resource name, once known from the second level.
+    name: Option<u32>,
 }
 
 async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
@@ -1034,6 +1038,11 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
                         } else {
                             dir.kind
                         },
+                        name: if level == 2 && name & HIGH_BIT == 0 {
+                            Some(name)
+                        } else {
+                            dir.name
+                        },
                     },
                 );
             }
@@ -1043,7 +1052,7 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
                 Ok(e) => node = node.summary(format!("{:#x} bytes", e.size)).target(span),
                 Err(e) => node = node.diag(e),
             }
-            node = node.lazy(resource_data, (pe.clone(), span, dir.kind));
+            node = node.lazy(resource_data, (pe.clone(), span, dir.kind, dir.name));
         }
         cx.push(node).await;
     }
@@ -1090,7 +1099,7 @@ fn data_entry(f: &mut Fields<'_>, _: &()) -> Result<DataEntry> {
 fn id_label(level: usize, id: u32) -> String {
     match level {
         1 => lookup(RESOURCE_TYPE, id.into()).map_or_else(|| format!("#{id}"), str::to_owned),
-        3 => format!("Language {id:#06x}"),
+        3 => format!("Language {}", crate::formats::util::lcid::describe(id)),
         _ => format!("#{id}"),
     }
 }
@@ -1127,7 +1136,10 @@ fn resource_data_entry(f: &mut Fields<'_>, pe: &Pe) -> Result<DataEntry> {
     Ok(DataEntry { rva, size })
 }
 
-async fn resource_data(cx: Cx, (pe, span, kind): (Pe, Span, Option<u32>)) -> Result<()> {
+async fn resource_data(
+    cx: Cx,
+    (pe, span, kind, name): (Pe, Span, Option<u32>, Option<u32>),
+) -> Result<()> {
     cx.emit(struct_node(
         "Data Entry",
         span,
@@ -1138,17 +1150,7 @@ async fn resource_data(cx: Cx, (pe, span, kind): (Pe, Span, Option<u32>)) -> Res
     let entry = parse(&cx, span, LE, &pe, resource_data_entry).await?;
     let wanted = u64::from(entry.size);
     let content = pe.rva_span(entry.rva, wanted)?;
-    let mut node = if kind == Some(RT_VERSION) {
-        let node = Node::new("Version Info")
-            .span(content)
-            .lazy(version::block, content);
-        match version::summary(&cx, content).await {
-            Ok(summary) => node.summary(summary),
-            Err(e) => node.diag(e),
-        }
-    } else {
-        embedded("Content", pe.input.nested(content)).summary(format!("{:#x} bytes", entry.size))
-    };
+    let mut node = resource::content(&cx, pe.input, content, kind, name).await;
     if content.len < wanted {
         node = node.diag(Diagnostic::truncated(
             Span::new(content.source, content.offset, wanted),

@@ -39,6 +39,7 @@ pub mod dot;
 pub mod html;
 pub mod ini;
 pub mod json;
+pub mod klc;
 pub mod ldif;
 pub mod markdown;
 pub mod mime;

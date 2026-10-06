@@ -1094,6 +1094,7 @@ pub static FORMATS: &[&Format] = &[
     &games::archives::BA2,
     &games::archives::MPQ,
     &games::archives::RGSSAD,
+    &audio::cool_edit::SES,
     &audio::projects::FXP,
     &audio::projects::FLP,
     &audio::guitar_pro::FORMAT,
@@ -1159,6 +1160,7 @@ pub static FORMATS: &[&Format] = &[
     &system::devtools::GCC_PCH,
     &system::devtools::CLANG_PCH,
     &system::devtools::WIN_RES,
+    &system::delphi::DFM,
     &system::devtools::ILK,
     &system::devtools::TYPELIB,
     &system::devtools::NAR,
@@ -1626,6 +1628,7 @@ pub static FORMATS: &[&Format] = &[
     &text::playlist::CUE,
     &text::subtitles::MICRODVD,
     &text::sln::FORMAT,
+    &text::klc::FORMAT,
     &text::dockerfile::FORMAT,
     &text::dot::FORMAT,
     // Line-oriented data with distinctive keywords.
