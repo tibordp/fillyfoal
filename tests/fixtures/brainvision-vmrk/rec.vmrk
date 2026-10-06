@@ -1,0 +1,10 @@
+Brain Vision Data Exchange Marker File, Version 1.0
+
+[Common Infos]
+Codepage=UTF-8
+DataFile=rec.eeg
+
+[Marker Infos]
+Mk1=New Segment,,1,1,0,20240517103000000000
+Mk2=Stimulus,S  1,500,1,0
+Mk3=Response,R  2,750,1,0

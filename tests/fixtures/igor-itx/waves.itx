@@ -1,0 +1,9 @@
+IGOR
+WAVES/D wave0, wave1
+BEGIN
+	1.0	10.0
+	2.0	20.0
+	3.0	30.0
+END
+X SetScale/P x 0,0.001,"s", wave0, wave1
+X SetScale y 0,0,"V", wave1

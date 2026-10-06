@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ benzene.mol — MDL molfile "benzene", C6, 6 atom(s), 6 bond(s)  [0x0+0x241]
+    Molecule name: "benzene"  [0x0+0x7]
+    Program/timestamp: "  Example 01012012002D" — Example  [0x8+0x16]
+    Comment: ""  [0x1f+0x0]
+    Counts line: "  6  6  0  0  0  0  0  0  0  0999 V2000" — 6 atoms, 6 bonds, V2000  [0x20+0x27]
+    Atom 1: "C" — (1.2124, 0.7000, 0.0000)  [0x48+0x45]
+    Atom 2: "C" — (1.2124, -0.7000, 0.0000)  [0x8e+0x45]
+    Atom 3: "C" — (0.0000, -1.4000, 0.0000)  [0xd4+0x45]
+    Atom 4: "C" — (-1.2124, -0.7000, 0.0000)  [0x11a+0x45]
+    Atom 5: "C" — (-1.2124, 0.7000, 0.0000)  [0x160+0x45]
+    Atom 6: "C" — (0.0000, 1.4000, 0.0000)  [0x1a6+0x45]
+    Bond 1: "1–2" — double  [0x1ec+0xc]
+    Bond 2: "2–3" — single  [0x1f9+0xc]
+    Bond 3: "3–4" — double  [0x206+0xc]
+    Bond 4: "4–5" — single  [0x213+0xc]
+    Bond 5: "5–6" — double  [0x220+0xc]
+    Bond 6: "6–1" — single  [0x22d+0xc]
+    End: "M  END"  [0x23a+0x6]

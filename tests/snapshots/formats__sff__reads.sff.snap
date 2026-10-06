@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ reads.sff — SFF, 2 read(s), 16 flows (TACGTACG…), key TCAG  [0x0+0xf0]
+  ▾ Common header  [0x0+0x1f]
+      Magic: ".sff"  [0x0+0x4]
+      Version: 00 00 00 01  |....|  [0x4+0x4]
+      Index offset: 0x0  [0x8+0x8]
+      Index length: 0  [0x10+0x4]
+      Reads: 2  [0x14+0x4]
+      Header length: 56  [0x18+0x2]
+      Key length: 4  [0x1a+0x2]
+      Flows per read: 16  [0x1c+0x2]
+      Flowgram format: 1  [0x1e+0x1]
+    Flow characters: "TACGTACGTACGTACG"  [0x1f+0x10]
+    Key sequence: "TCAG"  [0x2f+0x4]
+  ▾ Reads: 2  [0x38+0xb8]
+      E3MFGYR02JWQ7T: "TCAGGCTA" — 8 bases, quality clip 5–8  [0x38+0x58]
+      E3MFGYR02JA6IL: "TCAGTTCAGT" — 10 bases, quality clip 5–10  [0x90+0x60]

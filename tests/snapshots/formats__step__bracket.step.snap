@@ -1,0 +1,42 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bracket.step — STEP AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }, 10 entities, "bracket.step", from Fillyfoal CAD, product(s) Bracket; 3 CARTESIAN_POINT, 2 VERTEX_POINT, 1 APPLICATION_CONTEXT, 1 PRODUCT, 1 PRODUCT_CONTEXT  [0x0+0x2dd]
+    ISO-10303-21  [0x0+0xd]
+    HEADER  [0xe+0x7]
+  ▾ FILE_DESCRIPTION: "A bracket for testing | 2;1"  [0x16+0x32]
+      String 0: "A bracket for testing"
+      String 1: "2;1"
+  ▾ FILE_NAME: "bracket.step | 2024-05-17T10:30:00 | Tester | Fillyfoal | Test preprocessor 1.0 | Fillyfoal CAD |"  [0x49+0x77]
+      String 0: "bracket.step"
+      String 1: "2024-05-17T10:30:00"
+      String 2: "Tester"
+      String 3: "Fillyfoal"
+      String 4: "Test preprocessor 1.0"
+      String 5: "Fillyfoal CAD"
+      String 6: ""
+  ▾ FILE_SCHEMA: "AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }"  [0xc1+0x3d]
+      String 0: "AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }"
+    ENDSEC  [0xff+0x7]
+    ENDSEC  [0x2c3+0x7]
+    END-ISO-10303-21  [0x2cb+0x11]
+  ▾ DATA: 10  [0x107+0x1d6]
+      #1: "APPLICATION_CONTEXT" — ('automotive design')  [0x10d+0x2c]
+      #2: "PRODUCT" — ('BRACKET','Bracket','caf\X2\00E9\X0\ bracket',(#3))  [0x13a+0x3f]
+      #3: "PRODUCT_CONTEXT" — ('',#1,'mechanical')  [0x17a+0x27]
+      #4: "CARTESIAN_POINT" — ('',(0.,0.,0.))  [0x1a2+0x22]
+      #5: "CARTESIAN_POINT" — ('',(10.,0.,0.))  [0x1c5+0x23]
+      #6: "DIRECTION" — ('',(0.,0.,1.))  [0x1e9+0x1c]
+      #7: "VERTEX_POINT" — ('',#4)  [0x206+0x17]
+      #8: "VERTEX_POINT" — ('',#5)  [0x21e+0x17]
+      #9: "(complex)" — ( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) )  [0x236+0x5e]
+      #10: "CARTESIAN_POINT" — ('it''s here',(5.,5.,0.))  [0x295+0x2d]
+  ▾ Entity types: 7
+      CARTESIAN_POINT: 3
+      VERTEX_POINT: 2
+      APPLICATION_CONTEXT: 1
+      PRODUCT: 1
+      PRODUCT_CONTEXT: 1
+      DIRECTION: 1
+      (complex): 1

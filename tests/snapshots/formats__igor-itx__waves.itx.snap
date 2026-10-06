@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ waves.itx — Igor Pro text, wave(s) wave0, wave1, 2 command(s)  [0x0+0x87]
+    WAVES/D wave0, wave1: 3  [0x5+0x3d]
+    Command: "SetScale/P x 0,0.001,\"s\", wave0, wave1"  [0x42+0x28]
+    Command: "SetScale y 0,0,\"V\", wave1"  [0x6b+0x1b]

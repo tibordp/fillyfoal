@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ session.rhd — Intan RHD 1.5, 20000 Hz, 2 amplifier channel(s), 2 enabled channel(s) in 1 group(s)  [0x0+0x122]
+    Magic: 0xc6912702  [0x0+0x4]
+    Version: "1.5"  [0x4+0x4]
+    Sample rate (Hz): 20000  [0x8+0x4]
+    DSP enabled: 1  [0xc+0x2]
+    Actual DSP cutoff (Hz): 1  [0xe+0x4]
+    Actual lower bandwidth (Hz): 0.1  [0x12+0x4]
+    Actual upper bandwidth (Hz): 7500  [0x16+0x4]
+    Desired DSP cutoff (Hz): 1  [0x1a+0x4]
+    Desired lower bandwidth (Hz): 0.1  [0x1e+0x4]
+    Desired upper bandwidth (Hz): 7500  [0x22+0x4]
+    Notch filter mode: 0  [0x26+0x2]
+    Desired impedance test frequency (Hz): 1000  [0x28+0x4]
+    Actual impedance test frequency (Hz): 1000  [0x2c+0x4]
+    Note 1: "first note"  [0x30+0x18]
+    Note 2: ""  [0x48+0x4]
+    Note 3: ""  [0x4c+0x4]
+    Temperature sensor channels: 0  [0x50+0x2]
+    Eval board mode: 0  [0x52+0x2]
+    Signal groups: 1  [0x54+0x2]
+  ▾ Group Port A (A) — 2 channel(s), 2 amplifier(s)  [0x56+0x8c]
+      A-000: amplifier (0x0) — native A-000, impedance 150000 Ω  [0x72+0x38]
+      A-001: amplifier (0x0) — native A-001, impedance 150001 Ω  [0xaa+0x38]
+    Data blocks — 64 bytes  [0xe2+0x40]

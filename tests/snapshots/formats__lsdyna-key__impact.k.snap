@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ impact.k — LS-DYNA keyword deck "Impact test", 1 *KEYWORD, 1 *TITLE, 1 *NODE, 1 *PART, 1 *MAT_ELASTIC, 1 *END  [0x0+0x1c6]
+    *KEYWORD  [0x23+0x9]
+    *TITLE — 1 data line(s)  [0x2c+0x13]
+    *NODE — 2 data line(s)  [0x3f+0xb1]
+    *PART — 2 data line(s)  [0xf0+0x9b]
+    *MAT_ELASTIC — 1 data line(s)  [0x18b+0x36]
+    *END  [0x1c1+0x5]

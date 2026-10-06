@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ entry.embl — EMBL/UniProt flat file, 1 entr(ies); X56734; SV 1; linear; mRNA; STD; PLN; 30 BP.  [0x0+0x363]
+  ▾ X56734: "X56734; SV 1; linear; mRNA; STD; PLN; 30 BP."  [0x0+0x363]
+      ID: "X56734; SV 1; linear; mRNA; STD; PLN; 30 BP."  [0x0+0x32]
+      AC: "X56734; S46826;"  [0x35+0x15]
+      DT: "12-SEP-1991 (Rel. 29, Created) 25-NOV-2005 (Rel. 85, Last updated, Version 11)"  [0x4d+0x59]
+      DE: "Trifolium repens mRNA for non-cyanogenic beta-glucosidase"  [0xa9+0x3f]
+      KW: "beta-glucosidase."  [0xeb+0x17]
+      OS: "Trifolium repens (white clover)"  [0x105+0x25]
+      OC: "Eukaryota; Viridiplantae; Streptophyta; Embryophyta; Tracheophyta; Spermatophyta; Magnoliophyta; eudicotyledons."  [0x12a+0x7b]
+      FH: "Key             Location/Qualifiers"  [0x1a8+0x2c]
+    ▾ FT — 2 feature(s)  [0x1d4+0x108]
+        source: "1..30"  [0x1d4+0x72]
+        CDS: "4..>30" — beta-glucosidase  [0x247+0x94]
+      SQ: "Sequence 30 BP; 8 A; 6 C; 7 G; 9 T; 0 other;" — 2 line(s)  [0x2df+0x81]

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lh.white — FreeSurfer surface, 4 vertices, 2 triangles (created by tester on Fri May 17 10:30:00 2024)  [0x0+0x82]
+    Magic: 0xfffffe  [0x0+0x3]
+    Comment: "created by tester on Fri May 17 10:30:00 2024"  [0x3+0x2f]
+    Vertices: 4  [0x32+0x4]
+    Faces: 2  [0x36+0x4]
+  ▾ Vertex coordinates  [0x3a+0x30]
+      Vertex 0: "(0, 0, 0)"  [0x3a+0xc]
+      Vertex 1: "(1, 0, 0)"  [0x46+0xc]
+      Vertex 2: "(0, 1, 0)"  [0x52+0xc]
+      Vertex 3: "(1, 1, 0)"  [0x5e+0xc]
+    Face indices  [0x6a+0x18]

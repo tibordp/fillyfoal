@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ project.lif — Leica LIF v2, 1 image(s), 1 memory block(s): Project, Series001  [0x0+0x2f3]
+    XML header: "<LMSDataContainerHeader Version=\"2\"><Element Name=\"Project\"><Children><Element Name=\"Series001\"><Data><Image><ImageDescription><Dimensions><DimensionDescription DimID=\"1\" NumberOfElements=\"4\"/></Dimen…" — 342 characters  [0x0+0x2b9]
+    MemBlock_1 — 16 bytes  [0x2b9+0x3a] → 0x2e3+0x10

@@ -1,0 +1,17 @@
+	
+ics_version	2.0
+filename	image
+layout	parameters	4
+layout	order	bits	x	y	z
+layout	sizes	16	4	4	2
+layout	coordinates	video
+layout	significant_bits	12
+representation	format	integer
+representation	sign	unsigned
+representation	compression	uncompressed
+representation	byte_order	1	2
+parameter	scale	1.0	0.1	0.1	0.5
+parameter	units	bits	micrometers	micrometers	micrometers
+history	software	fillyfoal test
+end
+ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKL

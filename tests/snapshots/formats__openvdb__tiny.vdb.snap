@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.vdb — OpenVDB file v224 (library 10.0), 0123abcd-0000-4000-8000-0123456789ab  [0x0+0x59]
+▾ tiny.vdb — OpenVDB file v224 (library 10.0), 0 grid(s)  [0x0+0x59]
     Magic: 0x56444220  [0x0+0x8]
     File version: 224  [0x8+0x4]
     Library major: 10  [0xc+0x4]
     Library minor: 0  [0x10+0x4]
     Has grid offsets: 0  [0x14+0x1]
     UUID: "0123abcd-0000-4000-8000-0123456789ab"  [0x15+0x24]
-    Metadata and grids  [0x39+0x20]
+  ▾ File metadata: 0  [0x39+0x4]

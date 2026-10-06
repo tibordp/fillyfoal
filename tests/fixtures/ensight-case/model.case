@@ -1,0 +1,14 @@
+# EnSight Gold case file
+FORMAT
+type:  ensight gold
+
+GEOMETRY
+model:  model.geo
+
+VARIABLE
+scalar per node:  pressure  model.pres
+
+TIME
+time set:  1
+number of steps:  1
+time values:  0.0

@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ contacts.hic — Juicer .hic v8, genome hg19, 3 chromosome(s) (All, chr1, chr2…), resolutions 2500000/1000000/500000 bp  [0x0+0xc4]
+    Magic: "HIC"  [0x0+0x4]
+    Version: 8  [0x4+0x4]
+    Footer position: 0x9c  [0x8+0x8]
+    Genome: "hg19"  [0x10+0x5]
+  ▾ Attributes: 2  [0x15+0x45]
+      software: "Juicer Tools 1.22"  [0x19+0x1b]
+      statistics: "Sequenced Read Pairs: 1000"  [0x34+0x26]
+  ▾ Chromosomes: 3  [0x5a+0x1e]
+      All: 1000  [0x5e+0x8]
+      chr1: 249250621  [0x66+0x9]
+      chr2: 243199373  [0x6f+0x9]
+    Base-pair resolutions: "2500000, 1000000, 500000"  [0x78+0x10]
+    Fragment resolutions: 0  [0x88+0x4]
+  ▾ Footer (master index)  [0x9c+0x28]
+      Size: 36  [0x9c+0x4]
+      Entries: 2  [0xa0+0x4]
+      1_1: 0x1000 — 200 bytes  [0xa4+0x10] → 0xc4+0x0
+      1_2: 0x10c8 — 120 bytes  [0xb4+0x10] → 0xc4+0x0

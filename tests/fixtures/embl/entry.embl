@@ -1,0 +1,28 @@
+ID   X56734; SV 1; linear; mRNA; STD; PLN; 30 BP.
+XX
+AC   X56734; S46826;
+XX
+DT   12-SEP-1991 (Rel. 29, Created)
+DT   25-NOV-2005 (Rel. 85, Last updated, Version 11)
+XX
+DE   Trifolium repens mRNA for non-cyanogenic beta-glucosidase
+XX
+KW   beta-glucosidase.
+XX
+OS   Trifolium repens (white clover)
+OC   Eukaryota; Viridiplantae; Streptophyta; Embryophyta; Tracheophyta;
+OC   Spermatophyta; Magnoliophyta; eudicotyledons.
+XX
+FH   Key             Location/Qualifiers
+FH
+FT   source          1..30
+FT                   /organism="Trifolium repens"
+FT                   /mol_type="mRNA"
+FT   CDS             4..>30
+FT                   /product="beta-glucosidase"
+FT                   /translation="MDFLVLLSLMS
+FT                   RS"
+XX
+SQ   Sequence 30 BP; 8 A; 6 C; 7 G; 9 T; 0 other;
+     aaacaaacca aatatggatt ttattgtagc                                       30
+//

@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ landuse.rdc — IDRISI Raster A.1, 512×480 byte  [0x0+0x184]
+    file format: "IDRISI Raster A.1"  [0x0+0x1f]
+    file title: "Land use classes"  [0x20+0x1e]
+    data type: "byte"  [0x3f+0x12]
+    file type: "binary"  [0x52+0x14]
+    columns: 512  [0x67+0x11]
+    rows: 480  [0x79+0x11]
+    ref. system: "utm-33n"  [0x8b+0x15]
+    ref. units: "m"  [0xa1+0xf]
+    unit dist.: 1  [0xb1+0xf]
+    min. X: 500000  [0xc1+0x14]
+    max. X: 515360  [0xd6+0x14]
+    min. Y: 5200000  [0xeb+0x15]
+    max. Y: 5214400  [0x101+0x15]
+    pos'n error: "unknown"  [0x117+0x15]
+    resolution: 30  [0x12d+0x10]
+    min. value: 1  [0x13e+0xf]
+    max. value: 9  [0x14e+0xf]
+    value units: "classes"  [0x15e+0x15]
+    legend cats: 0  [0x174+0xf]

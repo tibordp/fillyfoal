@@ -1,0 +1,14 @@
+Title: AC test
+Date: Fri May 17 10:30:00 2024
+Plotname: AC Analysis
+Flags: complex
+No. Variables: 2
+No. Points: 2
+Variables:
+	0	frequency	frequency
+	1	v(out)	voltage
+Values:
+ 0	1.0,0.0
+	0.99,-0.1
+ 1	10.0,0.0
+	0.7,-0.45

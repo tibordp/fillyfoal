@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ binary7.grd — Surfer 7 grid, 3×2 nodes  [0x0+0x94]
+    DSRB — 4 bytes  [0x0+0xc]
+  ▾ GRID — 72 bytes  [0xc+0x50]
+      Rows: 2  [0x14+0x4]
+      Columns: 3  [0x18+0x4]
+      xLL: 0  [0x1c+0x8]
+      yLL: 0  [0x24+0x8]
+      xSize: 1  [0x2c+0x8]
+      ySize: 1  [0x34+0x8]
+      zMin: 1  [0x3c+0x8]
+      zMax: 6  [0x44+0x8]
+      Rotation: 0  [0x4c+0x8]
+      Blank value: 170141000000000000000000000000000000000  [0x54+0x8]
+    DATA — 48 bytes  [0x5c+0x38]

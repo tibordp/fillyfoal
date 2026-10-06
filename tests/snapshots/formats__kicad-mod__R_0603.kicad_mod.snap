@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ R_0603.kicad_mod — KiCad footprint (version 20221018, generator pcbnew); 2 pad, 1 version, 1 generator, 1 layer, 1 descr, 1 attr  [0x0+0x19a]
+  ▾ (footprint — 9 element(s)  [0x0+0x199]
+      atom: "R_0603"  [0xb+0x8]
+      (version: "20221018"  [0x14+0x12]
+      (generator: "pcbnew"  [0x27+0x12]
+      (layer: "F.Cu"  [0x3c+0xe]
+      (descr: "Resistor SMD 0603"  [0x4d+0x1b]
+      (attr: "smd"  [0x6b+0xa]
+    ▾ (fp_text: "reference REF**" — 2 sub-list(s)  [0x78+0x3a]
+        (at: "0 -1.43"  [0x93+0xc]
+        (layer: "F.SilkS"  [0xa0+0x11]
+    ▾ (pad: "1 smd roundrect" — 4 sub-list(s)  [0xb5+0x70]
+        (at: "-0.825 0"  [0xcc+0xd]
+        (size: "0.8 0.95"  [0xda+0xf]
+        (layers: "F.Cu F.Paste F.Mask"  [0xea+0x22]
+        (roundrect_rratio: "0.25"  [0x10d+0x17]
+    ▾ (pad: "2 smd roundrect" — 4 sub-list(s)  [0x128+0x6f]
+        (at: "0.825 0"  [0x13f+0xc]
+        (size: "0.8 0.95"  [0x14c+0xf]
+        (layers: "F.Cu F.Paste F.Mask"  [0x15c+0x22]
+        (roundrect_rratio: "0.25"  [0x17f+0x17]

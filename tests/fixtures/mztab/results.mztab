@@ -1,0 +1,11 @@
+MTD	mzTab-version	1.0.0
+MTD	mzTab-mode	Summary
+MTD	mzTab-type	Identification
+MTD	description	Synthetic results
+MTD	ms_run[1]-location	file:///data/run1.mzML
+COM	Proteins follow
+PRH	accession	description	taxid	species	database	database_version	search_engine	best_search_engine_score[1]
+PRT	P12345	Test protein	9606	Homo sapiens	UniProtKB	2024_01	[MS, MS:1001207, Mascot, ]	52.3
+PRT	P67890	Other protein	9606	Homo sapiens	UniProtKB	2024_01	[MS, MS:1001207, Mascot, ]	31.0
+PSH	sequence	PSM_ID	accession	unique	database	charge	exp_mass_to_charge
+PSM	PEPTIDER	1	P12345	1	UniProtKB	2	478.73

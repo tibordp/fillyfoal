@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ block.x_t — Parasolid transmit file from fillyfoal test, schema SCH_3500165_35000  [0x0+0x263]
+  ▾ Header: 16  [0x0+0x1ff]
+      MC: "x86"
+      MC_MODEL: "x86_64"
+      MC_ID: "unknown"
+      OS: "Linux"
+      OS_RELEASE: 6.1
+      FRU: "sdl_parasolid_customer_support"
+      APPL: "fillyfoal test"
+      SITE: "lab"
+      USER: "tester"
+      FORMAT: "text"
+      GUISE: "transmit"
+      KEY: "block"
+      FILE: "block.x_t"
+      DATE: "17-may-2024"
+      SCH: "SCH_3500165_35000"
+      USFLD_SIZE: 0
+    Body  [0x1ff+0x64]

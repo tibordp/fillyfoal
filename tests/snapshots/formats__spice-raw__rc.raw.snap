@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rc.raw — SPICE raw file: Transient Analysis "RC low-pass test", 3 variable(s) (time, v(in), v(out)), 4 point(s)  [0x0+0x122]
+    Title: "RC low-pass test"  [0x0+0x17]
+    Date: "Fri May 17 10:30:00 2024"  [0x18+0x1e]
+    Plotname: "Transient Analysis"  [0x37+0x1c]
+    Flags: "real"  [0x54+0xb]
+    No. Variables: 3  [0x60+0x10]
+    No. Points: 4  [0x71+0xd]
+  ▾ Variables: 3
+      time: "time" — index 0
+      v(in): "voltage" — index 1
+      v(out): "voltage" — index 2
+    Header  [0x0+0xc2]
+  ▾ Data — 4 point(s), binary  [0xc2+0x60]
+      Point 0: "time=0 v(in)=1 v(out)=0"  [0xc2+0x18]
+      Point 1: "time=0.000001 v(in)=1 v(out)=0.6321205587664327"  [0xda+0x18]
+      Point 2: "time=0.000002 v(in)=1 v(out)=0.8646647167176782"  [0xf2+0x18]
+      Point 3: "time=0.000003 v(in)=1 v(out)=0.9502129316069129"  [0x10a+0x18]

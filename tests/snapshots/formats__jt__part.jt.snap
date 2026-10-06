@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ part.jt — JT 9.5 JT, 3 segment(s): 1 Logical Scene Graph, 1 Shape, 1 Meta Data  [0x0+0x159]
+    Version: "Version 9.5 JT                                                             \n \n \n"  [0x0+0x50]
+    Byte order: 0  [0x50+0x1]
+    Empty field: 0  [0x51+0x4]
+    TOC offset: 0x101  [0x55+0x4]
+    LSG segment ID: {12345678-1234-5678-9abc-def012345678}  [0x59+0x10]
+  ▾ TOC: 3  [0x101+0x58]
+      Logical Scene Graph: "{996ad860-2a9a-504f-8861-aeafd0b2ae29}" — 56 bytes  [0x105+0x1c] → 0x69+0x38
+      Shape: "{1883fdfb-249b-58f5-b445-87dff6eabc06}" — 56 bytes  [0x121+0x1c] → 0xa1+0x38
+      Meta Data: "{22fe83ae-a20f-54fc-b436-cec85c94c5e8}" — 40 bytes  [0x13d+0x1c] → 0xd9+0x28

@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ activity.saif — SAIF switching activity (SAIFVERSION 2.0, DESIGN , TIMESCALE 1, DURATION 1000); 1 SAIFVERSION, 1 DIRECTION, 1 DESIGN, 1 DATE, 1 VENDOR, 1 DIVIDER  [0x0+0x13f]
+  ▾ (SAIFILE — 9 element(s)  [0x0+0x13e]
+      (SAIFVERSION: "2.0"  [0xb+0x13]
+      (DIRECTION: "backward"  [0x21+0x16]
+      (DESIGN  [0x3a+0x9]
+      (DATE: "Fri May 17 10:30:00 2024"  [0x46+0x21]
+      (VENDOR: "fillyfoal"  [0x6a+0x14]
+      (DIVIDER: "/"  [0x81+0xc]
+      (TIMESCALE: "1 ns"  [0x90+0x10]
+      (DURATION: "1000"  [0xa3+0xf]
+    ▾ (INSTANCE: "top" — 1 sub-list(s)  [0xb5+0x87]
+      ▾ (NET — 2 sub-list(s)  [0xc7+0x71]
+        ▾ (clk — 5 sub-list(s)  [0xd2+0x2e]
+            (T0: "500"  [0xd7+0x8]
+            (T1: "500"  [0xe0+0x8]
+            (TX: "0"  [0xe9+0x6]
+            (TC: "200"  [0xf0+0x8]
+            (IG: "0"  [0xf9+0x6]
+        ▾ (rst — 5 sub-list(s)  [0x107+0x2b]
+            (T0: "990"  [0x10c+0x8]
+            (T1: "10"  [0x115+0x7]
+            (TX: "0"  [0x11d+0x6]
+            (TC: "2"  [0x124+0x6]
+            (IG: "0"  [0x12b+0x6]

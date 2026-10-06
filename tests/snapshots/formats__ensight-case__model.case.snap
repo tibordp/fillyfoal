@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ model.case — EnSight case file, files model.geo, model.pres  [0x0+0xba]
+  ▾ FORMAT: 1  [0x19+0x1c]
+      type: "ensight gold"  [0x20+0x13]
+  ▾ GEOMETRY: 1  [0x35+0x1c]
+      model: "model.geo"  [0x3e+0x11]
+  ▾ VARIABLE: 1  [0x51+0x31]
+      scalar per node: "pressure  model.pres"  [0x5a+0x26]
+  ▾ TIME: 3  [0x82+0x38]
+      time set: 1  [0x87+0xc]
+      number of steps: 1  [0x94+0x13]
+      time values: 0  [0xa8+0x11]

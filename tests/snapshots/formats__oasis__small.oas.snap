@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.oas — OASIS 1.0, 1 cell(s); 1 START, 2 CELLNAME, 1 LAYERNAME, 1 PROPNAME, 1 CELL, 1 RECTANGLE, 1 POLYGON, 1 PLACEMENT  [0x0+0x87]
+    Magic: "%SEMI-OASIS"  [0x0+0xd]
+    START — version 1.0, unit 1000 per µm, table offsets here  [0xd+0x15]
+    CELLNAME — "TOP"  [0x22+0x5]
+    CELLNAME — "SUB"  [0x27+0x5]
+    LAYERNAME — "METAL1": layer 1, type any  [0x2c+0xb]
+    PROPNAME — "note"  [0x37+0x6]
+    CELL — #0  [0x3d+0x2]
+    RECTANGLE — layer 1, datatype 0, w=100, h=50, x=0, y=0  [0x3f+0x8]
+    POLYGON — layer 1, datatype 0, 3 point(s), x=10, y=20  [0x47+0xe]
+    PLACEMENT — cell #1, x=200, y=0, repetition: 3 along x, pitch 100  [0x55+0x9]
+    TEXT — "label", textlayer 1, texttype 0, x=5, y=5  [0x5e+0xc]
+    PROPERTY — "note", = "hi"  [0x6a+0xb]
+  ▾ CBLOCK — deflate 11 → 9 bytes  [0x75+0xf]
+      CELL — #1  [#1:0x0+0x2]
+      CIRCLE — layer 1, datatype 0, r=25, x=50, y=50  [#1:0x2+0x7]
+    END — validation none  [0x84+0x3]

@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ opamp.asy — LTspice CELL symbol, prefix X, 3 pin(s)  [0x0+0x120]
+  ▾ PIN — 3 line(s)  [0x70+0x3c]
+      PIN: "-32 -16 NONE 0"  [0x70+0x12]
+      PINATTR: "PinName In+"  [0x83+0x13]
+      PINATTR: "SpiceOrder 1"  [0x97+0x14]
+  ▾ PIN — 3 line(s)  [0xac+0x3b]
+      PIN: "-32 16 NONE 0"  [0xac+0x11]
+      PINATTR: "PinName In-"  [0xbe+0x13]
+      PINATTR: "SpiceOrder 2"  [0xd2+0x14]
+  ▾ PIN — 3 line(s)  [0xe7+0x39]
+      PIN: "32 0 NONE 0"  [0xe7+0xf]
+      PINATTR: "PinName Out"  [0xf7+0x13]
+      PINATTR: "SpiceOrder 3"  [0x10b+0x14]
+  ▾ Other lines: 6
+      Version: "4"  [0x0+0x9]
+      SymbolType: "CELL"  [0xa+0xf]
+      LINE: "Normal -32 -32 32 0"  [0x1a+0x18]
+      LINE: "Normal 32 0 -32 32"  [0x33+0x17]
+      SYMATTR: "Prefix X"  [0x4b+0x10]
+      SYMATTR: "Value opamp"  [0x5c+0x13]

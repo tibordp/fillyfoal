@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ trace.ztr — ZTR trace, 4 chunk(s), 10 bases  [0x0+0xca]
+    Magic  [0x0+0x8]
+    Version: "1.2"  [0x8+0x2]
+  ▾ TEXT — 28 bytes, raw  [0xa+0x28]
+      NAME: "sample1"
+      MACH: "ABI 3730"
+  ▾ BASE — 11 bytes, raw  [0x32+0x18]
+      Text: "ACGTACGTNN"  [0x40+0xa]
+  ▾ SMP4 — 95 bytes, zlib  [0x4a+0x6b]
+      Format: "zlib"  [0x56+0x1]
+      Uncompressed length: 82  [0x57+0x4]
+    ▾ Data — 0x52 bytes decompressed  [0x5b+0x5a]
+        Data  [#1:0x0+0x52]
+    CLIP — 9 bytes, raw  [0xb5+0x15]

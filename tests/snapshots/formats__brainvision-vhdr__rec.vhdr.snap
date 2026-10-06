@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rec.vhdr — Brain Vision Data Exchange Header File Version 1.0; 2 channel(s) at 500 Hz, data in rec.eeg  [0x0+0x169]
+    Identification: "Brain Vision Data Exchange Header File Version 1.0"  [0x0+0x32]
+  ▾ [Common Infos] — 7 entr(ies)  [0x5a+0x9b]
+      Codepage: "UTF-8"  [0x69+0xe]
+      DataFile: "rec.eeg"  [0x78+0x10]
+      MarkerFile: "rec.vmrk"  [0x89+0x13]
+      DataFormat: "BINARY"  [0x9d+0x11]
+      DataOrientation: "MULTIPLEXED"  [0xaf+0x1b]
+      NumberOfChannels: "2"  [0xcb+0x12]
+      SamplingInterval: "2000"  [0xde+0x15]
+  ▾ [Binary Infos] — 1 entr(ies)  [0xf5+0x24]
+      BinaryFormat: "INT_16"  [0x104+0x13]
+  ▾ [Channel Infos] — 2 entr(ies)  [0x119+0x31]
+      Ch1: "Fp1,,0.1,uV"  [0x129+0xf]
+      Ch2: "Fp2,,0.1,uV"  [0x139+0xf]
+  ▾ [Comment] — 0 entr(ies)  [0x14a+0x1f]

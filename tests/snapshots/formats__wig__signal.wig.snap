@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ signal.wig — Wiggle track, 3 section(s), 7 value(s)  [0x0+0xd3]
+  ▾ track: "type=wiggle_0 name=\"example\" description=\"variable step\""  [0x0+0x3f]
+      type: "wiggle_0"  [0x6+0xd]
+      name: "example"  [0x14+0xe]
+      description: "variable step"  [0x23+0x1b]
+  ▾ variableStep: "chrom=chr19 span=150" — 3 value(s)  [0x3f+0x4c]
+      chrom: "chr19"  [0x4c+0xb]
+      span: "150"  [0x58+0x8]
+  ▾ fixedStep: "chrom=chr19 start=59307401 step=300 span=200" — 4 value(s)  [0x8b+0x48]
+      chrom: "chr19"  [0x95+0xb]
+      start: "59307401"  [0xa1+0xe]
+      step: "300"  [0xb0+0x8]
+      span: "200"  [0xb9+0x8]

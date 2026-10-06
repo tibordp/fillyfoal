@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gal.jed — JEDEC fuse map for GAL16V8, 2194 fuse(s), 20 pin(s), 3 fuse list field(s)  [0x0+0x123]
+    Design specification: "JEDEC file for: GAL16V8 V1.0  Created on: Fri May 17 10:30:00 2024"  [0x1+0x44]
+    Pin count: 20  [0x46+0x6]
+    Fuse count: 2194  [0x4d+0x8]
+    Test vector count: 0  [0x56+0x5]
+    Default fuse state: "0"  [0x5c+0x4]
+    Security fuse: "0"  [0x61+0x4]
+    Note: "DEVICE GAL16V8"  [0x66+0x12]
+    Fuse list: "@0000: 32 fuse(s) 11111111111111111111111111111111"  [0x79+0x28]
+    Fuse list: "@0032: 32 fuse(s) 01110111111111111111111111111111"  [0xa2+0x28]
+    Fuse list: "@2128: 64 fuse(s) 0000000000000000000000000000000000000000000000000000000000000000"  [0xcb+0x48]
+    Fuse checksum: "1234"  [0x114+0x7]
+    Transmission checksum: "395D"  [0x11f+0x4]

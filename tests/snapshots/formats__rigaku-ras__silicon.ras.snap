@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ silicon.ras — Rigaku RAS, 1 scan(s), 3 point(s), axis 2-Theta/Omega, Cu target  [0x0+0x131]
+    Scan 0: 3 — 20.0000–20.0400  [0xc8+0x5a]
+  ▾ Header: 5
+      FILE_COMMENT: "Silicon powder"  [0x24+0x1e]
+      HW_XG_TARGET_NAME: "Cu"  [0x44+0x17]
+      MEAS_SCAN_AXIS_X: "2-Theta/Omega"  [0x5d+0x21]
+      MEAS_SCAN_START: 20  [0x80+0x1a]
+      MEAS_SCAN_STOP: 20.04  [0x9c+0x19]

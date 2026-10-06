@@ -1,0 +1,21 @@
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('A bracket for testing'),'2;1');
+FILE_NAME('bracket.step','2024-05-17T10:30:00',('Tester'),('Fillyfoal'),
+  'Test preprocessor 1.0','Fillyfoal CAD','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));
+ENDSEC;
+DATA;
+#1=APPLICATION_CONTEXT('automotive design');
+#2=PRODUCT('BRACKET','Bracket','caf\X2\00E9\X0\ bracket',(#3));
+#3=PRODUCT_CONTEXT('',#1,'mechanical');
+#4=CARTESIAN_POINT('',(0.,0.,0.));
+#5=CARTESIAN_POINT('',(10.,0.,0.));
+#6=DIRECTION('',(0.,0.,1.));
+#7=VERTEX_POINT('',#4);
+#8=VERTEX_POINT('',#5);
+/* a comment; with a semicolon */
+#9=( LENGTH_UNIT() NAMED_UNIT(*) SI_UNIT(.MILLI.,.METRE.) );
+#10=CARTESIAN_POINT('it''s here',(5.,5.,0.));
+ENDSEC;
+END-ISO-10303-21;

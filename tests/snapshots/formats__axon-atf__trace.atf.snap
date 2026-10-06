@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ trace.atf — Axon ATF, 3 column(s) (Time (s), IN 0 (pA), IN 1 (mV)), 3 row(s)  [0x0+0xa5]
+    Version: "ATF\t1.0"  [0x0+0x7]
+    Header records / columns: "3\t3"  [0x8+0x3]
+    Column titles: "Time (s), IN 0 (pA), IN 1 (mV)"  [0x4e+0x22]
+  ▾ Header records: 3
+      AcquisitionMode: "Gap Free"  [0xc+0x1a]
+      Comment: ""  [0x27+0xa]
+      SignalsExported: "IN 0,IN 1"  [0x32+0x1b]
+    Data: 3 — 3 column(s)  [0x71+0x34]

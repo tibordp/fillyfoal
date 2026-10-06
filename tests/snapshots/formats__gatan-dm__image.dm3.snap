@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.dm3 — Gatan DM3 (little-endian data), 3 root tag(s)  [0x0+0x1b2]
+    Version: 3  [0x0+0x4]
+    Root length: 414  [0x4+0x4]
+    Byte order: 1  [0x8+0x4]
+  ▾ Root tag group: 3  [0xc+0x1a6]
+    ▾ ImageList — 1 tag(s)  [0x12+0x15f]
+      ▾ [0] — 3 tag(s)  [0x24+0x14d]
+        ▾ ImageData — 4 tag(s)  [0x2d+0xde]
+            Data — array of 16 float32  [0x3f+0x5b] → 0x5a+0x40
+            DataType: 2  [0x9a+0x1b]
+          ▾ Dimensions — 2 tag(s)  [0xb5+0x39]
+              [0]: 4  [0xc8+0x13]
+              [1]: 4  [0xdb+0x13]
+            PixelDepth: 4  [0xee+0x1d]
+          Name: "test image" — array of 10 uint16  [0x10b+0x2f] → 0x126+0x14
+          UniqueID: "(7, 8)" — struct  [0x13a+0x37]
+      InImageMode: true  [0x171+0x1b]
+      Version: 3.5  [0x18c+0x1e]

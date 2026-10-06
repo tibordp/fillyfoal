@@ -1,0 +1,25 @@
+|************************************************************************
+| IBIS file buffer.ibs
+|************************************************************************
+[IBIS Ver]   5.0
+[File Name]  buffer.ibs
+[File Rev]   1.0
+[Date]       May 17, 2024
+[Source]     Synthetic model for testing.
+[Copyright]  Public domain
+[Component]  TESTCHIP
+[Manufacturer] Fillyfoal
+[Package]
+| variable    typ       min       max
+R_pkg         0.2       0.1       0.3
+C_pkg         1.0pF     0.8pF     1.2pF
+[Pin]  signal_name  model_name
+1      IN           input_model
+2      OUT          output_model
+[Model]  input_model
+Model_type  Input
+C_comp      2.0pF   1.8pF   2.2pF
+[Model]  output_model
+Model_type  Output
+C_comp      3.0pF   2.8pF   3.2pF
+[End]

@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ board.drl — Excellon drill file (METRIC), 3 tool(s), 6 hole(s)  [0x0+0xb0]
+  ▾ Header  [0x0+0x59]
+      Line: "M48"  [0x0+0x3]
+      Line: "; DRILL file {KiCad 7} date 2024-05-17"  [0x4+0x26]
+      Line: "FMAT,2"  [0x2b+0x6]
+      Line: "METRIC,TZ"  [0x32+0x9]
+      Line: "T1C0.300"  [0x3c+0x8]
+      Line: "T2C0.800"  [0x45+0x8]
+      Line: "T3C3.200"  [0x4e+0x8]
+      Line: "%"  [0x57+0x1]
+  ▾ T1: 0.3 — 3 hole(s)
+      Hit: "X10.0Y10.0"  [0x64+0xa]
+      Hit: "X12.5Y10.0"  [0x6f+0xa]
+      Hit: "X15.0Y10.0"  [0x7a+0xa]
+  ▾ T2: 0.8 — 2 hole(s)
+      Hit: "X20.0Y5.0"  [0x88+0x9]
+      Hit: "X20.0Y7.54"  [0x92+0xa]
+  ▾ T3: 3.2 — 1 hole(s)
+      Hit: "X2.5Y2.5"  [0xa0+0x8]

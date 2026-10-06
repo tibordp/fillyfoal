@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ test.tdms_index — TDMS 2.0, 1 segment(s)  [0x0+0x116]
+  ▾ Segment 0 — 222 bytes of metadata, 32 bytes of raw data  [0x0+0x116]
+    ▾ Lead-in  [0x0+0x1c]
+        Tag: "TDSh"  [0x0+0x4]
+        ToC mask: 0xe [kTocMetaData | kTocNewObjList | kTocRawData]  [0x4+0x4]
+        Version: 4713  [0x8+0x4]
+        Next segment offset: 0xfe  [0xc+0x8]
+        Raw data offset: 0xde  [0x14+0x8]
+    ▾ Metadata  [0x1c+0xde]
+        Object count: 3  [0x1c+0x4]
+      ▾ / (file) — no raw data  [0x20+0x46]
+          name: "test.tdms"  [0x2d+0x19]
+          datetime: 2024-05-31 11:33:20 UTC  [0x46+0x20]
+      ▾ /'Group' — no raw data  [0x66+0x36]
+          description: "first group"  [0x7a+0x22]
+      ▾ /'Group'/'Ch1' — f64 × 4  [0x9c+0x5e]
+          unit_string: "V"  [0xc6+0x18]
+          wf_increment: 0.001  [0xde+0x1c]
+      Raw data — contiguous  [0xfa+0x1c]

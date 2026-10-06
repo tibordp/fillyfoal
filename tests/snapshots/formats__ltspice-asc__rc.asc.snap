@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rc.asc — LTspice schematic, 3 symbol(s) (V1, R1, C1), 2 wire(s), 2 label(s), directives .tran 50u  [0x0+0x144]
+  ▾ SYMBOL voltage — 3 line(s)  [0x5d+0x54]
+      SYMBOL: "voltage 32 80 R0"  [0x5d+0x17]
+      SYMATTR: "InstName V1"  [0x75+0x13]
+      SYMATTR: "Value PULSE(0 1 0 1n 1n 5u 10u)"  [0x89+0x27]
+  ▾ SYMBOL res — 3 line(s)  [0xb1+0x3b]
+      SYMBOL: "res 208 80 R90"  [0xb1+0x15]
+      SYMATTR: "InstName R1"  [0xc7+0x13]
+      SYMATTR: "Value 1k"  [0xdb+0x10]
+  ▾ SYMBOL cap — 4 line(s)  [0xec+0x58]
+      SYMBOL: "cap 224 96 R0"  [0xec+0x14]
+      SYMATTR: "InstName C1"  [0x101+0x13]
+      SYMATTR: "Value 1n"  [0x115+0x10]
+      TEXT: "32 240 Left 2 !.tran 50u"  [0x126+0x1d]
+  ▾ Other lines: 6
+      Version: "4"  [0x0+0x9]
+      SHEET: "1 880 680"  [0xa+0xf]
+      WIRE: "112 96 32 96"  [0x1a+0x11]
+      WIRE: "240 96 192 96"  [0x2c+0x12]
+      FLAG: "32 176 0"  [0x3f+0xd]
+      FLAG: "240 96 out"  [0x4d+0xf]

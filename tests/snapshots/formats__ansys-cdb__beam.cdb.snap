@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ beam.cdb — ANSYS CDB (ANSYS RELEASE 2023 R1           BUILD 23.1      UP20221122), 4 node(s), 1 element(s), 10 command type(s)  [0x0+0x359]
+    /COM: "ANSYS RELEASE 2023 R1           BUILD 23.1      UP20221122"  [0x0+0x3f]
+    /PREP7: ""  [0x40+0x6]
+    /NOPR: ""  [0x47+0x5]
+    /TITLE: "beam test"  [0x4d+0x10]
+    ET: "1,185"  [0x5e+0xf]
+    KEYOP: "1,  2,       0"  [0x6e+0x1b]
+    NBLOCK: 4  [0x8a+0x1b3]
+    EBLOCK: 1  [0x23d+0xbb]
+    MPTEMP: "R5.0, 1, 1,  0.00000000    ,"  [0x2f8+0x23]
+    MPDATA: "R5.0, 1,EX  ,       1, 1,  210000.000    ,"  [0x31c+0x31]
+    /GO: ""  [0x34e+0x3]
+    FINISH: ""  [0x352+0x6]

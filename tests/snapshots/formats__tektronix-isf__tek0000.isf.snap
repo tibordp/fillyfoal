@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tek0000.isf — Tektronix ISF, 10 point(s), Ch1, DC coupling, 2.0E-1 V/div, 1.0E-6 s/div, 10 points, Sam…, Δx 1.0E-7 s  [0x0+0x119]
+  ▾ Preamble: 16  [0x0+0xf9]
+      BYT_NR: 2  [0x0+0x10]
+      BIT_NR: 16  [0x11+0x9]
+      ENCDG: "BIN"  [0x1b+0x9]
+      BN_FMT: "RI"  [0x25+0x9]
+      BYT_OR: "MSB"  [0x2f+0xa]
+      NR_PT: 10  [0x3a+0x8]
+      WFID: "Ch1, DC coupling, 2.0E-1 V/div, 1.0E-6 s/div, 10 points, Sample mode"  [0x43+0x4b]
+      PT_FMT: "Y"  [0x8f+0x8]
+      XINCR: 0.0000001  [0x98+0xc]
+      PT_OFF: 0  [0xa5+0x8]
+      XZERO: -0.0000005  [0xae+0xd]
+      XUNIT: "s"  [0xbc+0x9]
+      YMULT: 0.00015625  [0xc6+0xf]
+      YZERO: 0  [0xd6+0xc]
+      YOFF: 0  [0xe3+0xb]
+      YUNIT: "V"  [0xef+0x9]
+    Curve block header: 20  [0x100+0x4]
+    Curve data — 10 2-byte point(s)  [0x104+0x14]

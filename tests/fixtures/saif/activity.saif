@@ -1,0 +1,16 @@
+(SAIFILE
+  (SAIFVERSION "2.0")
+  (DIRECTION "backward")
+  (DESIGN )
+  (DATE "Fri May 17 10:30:00 2024")
+  (VENDOR "fillyfoal")
+  (DIVIDER / )
+  (TIMESCALE 1 ns)
+  (DURATION 1000)
+  (INSTANCE top
+    (NET
+      (clk (T0 500) (T1 500) (TX 0) (TC 200) (IG 0))
+      (rst (T0 990) (T1 10) (TX 0) (TC 2) (IG 0))
+    )
+  )
+)

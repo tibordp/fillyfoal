@@ -1,0 +1,21 @@
+*Heading
+ Cantilever beam test model
+** Job name: beam
+*Preprint, echo=NO, model=NO, history=NO, contact=NO
+*Part, name=Beam
+*Node
+      1,           0.,           0.
+      2,          10.,           0.
+      3,          20.,           0.
+*Element, type=B21
+1, 1, 2
+2, 2, 3
+*End Part
+*Material, name=Steel
+*Elastic
+ 210000., 0.3
+*Step, name=Load
+*Static
+*Cload
+3, 2, -100.
+*End Step

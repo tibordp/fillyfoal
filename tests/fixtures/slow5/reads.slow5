@@ -1,0 +1,9 @@
+#slow5_version	0.2.0
+#num_read_groups	1
+@asic_id	123456
+@experiment_type	genomic_dna
+@run_id	run0001
+#char*	uint32_t	double	double	double	double	uint64_t	int16_t*
+#read_id	read_group	digitisation	offset	range	sampling_rate	len_raw_signal	raw_signal
+read_0001	0	8192	16	1489.52	4000	5	430,472,463,467,454
+read_0002	0	8192	13	1489.52	4000	3	500,501,502

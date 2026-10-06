@@ -1,0 +1,21 @@
+(pcb board.dsn
+  (parser
+    (string_quote ")
+    (space_in_quoted_tokens on)
+    (host_cad "KiCad's Pcbnew")
+    (host_version "7.0")
+  )
+  (resolution um 10)
+  (unit um)
+  (structure
+    (layer F.Cu (type signal) (property (index 0)))
+    (layer B.Cu (type signal) (property (index 1)))
+    (boundary (path pcb 0 100000 -50000 0 -50000 0 0 100000 0))
+  )
+  (placement
+    (component R_0603 (place R1 20000 -20000 front 0))
+  )
+  (network
+    (net GND (pins R1-1))
+  )
+)

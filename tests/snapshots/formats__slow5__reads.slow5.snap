@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ reads.slow5 — SLOW5 0.2.0, 2 read(s), 1 read group(s)  [0x0+0x15f]
+  ▾ Header: 6 — read_id, read_group, digitisation, offset, range, sampling_rate, len_raw_signal, raw_signal  [0x0+0xf9]
+      #slow5_version: "0.2.0"  [0x0+0x14]
+      #num_read_groups: 1  [0x15+0x12]
+      @asic_id: 123456  [0x28+0xf]
+      @experiment_type: "genomic_dna"  [0x38+0x1c]
+      @run_id: "run0001"  [0x55+0xf]
+      #char*: "uint32_t\tdouble\tdouble\tdouble\tdouble\tuint64_t\tint16_t*"  [0x65+0x3d]
+    read_0001 — 5 sample(s) at 4000 Hz  [0xf9+0x36]
+    read_0002 — 3 sample(s) at 4000 Hz  [0x130+0x2e]

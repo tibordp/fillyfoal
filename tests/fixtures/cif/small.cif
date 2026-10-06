@@ -1,0 +1,34 @@
+data_1A3N
+#
+_entry.id   1A3N
+#
+_struct.entry_id                  1A3N
+_struct.title                     'DEOXY HUMAN HEMOGLOBIN'
+_struct.pdbx_descriptor
+;Hemoglobin (deoxy),
+ alpha and beta chains
+;
+#
+_cell.length_a           63.150
+_cell.length_b           83.590
+_cell.length_c           53.800
+#
+loop_
+_atom_site.group_PDB
+_atom_site.id
+_atom_site.type_symbol
+_atom_site.label_atom_id
+_atom_site.Cartn_x
+_atom_site.Cartn_y
+_atom_site.Cartn_z
+ATOM   1 N N   19.323 29.727 42.781
+ATOM   2 C CA  20.141 30.469 41.825
+HETATM 3 FE FE 17.010 19.540 22.400
+#
+loop_
+_citation_author.name
+'Tame, J.'
+"O'Brien, A."
+#
+data_second
+_cell.volume  1000

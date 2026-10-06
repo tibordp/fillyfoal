@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ traj.dcd — DCD trajectory (CHARMM), 3 atom(s), 2 frame(s), Δt 0.002; * Test trajectory  [0x0+0x1fc]
+    Signature: "CORD"  [0x4+0x4]
+    NSET (frames): 2  [0x8+0x4]
+    ISTART (first step): 0  [0xc+0x4]
+    NSAVC (steps between frames): 1  [0x10+0x4]
+    NSTEP: 2  [0x14+0x4]
+    Unused: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x18+0x10]
+    NAMNF (fixed atoms): 0  [0x28+0x4]
+    DELTA (time step): 0.0020000000949949026  [0x2c+0x4]
+    Unit cell flag: 1  [0x30+0x4]
+    4D flag: 0  [0x34+0x4]
+    Unused: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x38+0x1c]
+    CHARMM version: 24  [0x54+0x4]
+    Titles: "* Test trajectory / * Created by a script"  [0x60+0xa4]
+    Atoms: 3  [0x10c+0x4]
+  ▾ Frames: 2  [0x114+0xe8]
+      Frame 0 — atom 1 at (0, 0.5, 1)  [0x114+0x74]
+      Frame 1 — atom 1 at (1, 1.5, 2)  [0x188+0x74]

@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ frames.spe — Princeton SPE 2.5, 4×2 uint16 × 2 frame(s), exposure 0.25 s  [0x0+0x1024]
+    Exposure (s): 0.25  [0xa+0x4]
+    Date: "17May2024"  [0x14+0xa]
+    X dimension: 4  [0x2a+0x2]
+    Data type: uint16 (0x3)  [0x6c+0x2]
+    Comments: "test acquisition"  [0xc8+0x190]
+    Y dimension: 2  [0x290+0x2]
+    XML footer offset: 0x0  [0x2a6+0x8]
+    Frames: 2  [0x5a6+0x4]
+    File header version: 2.5  [0x7c8+0x4]
+    Last value: 0x5555  [0x1002+0x2]
+    Frames: 2  [0x1004+0x20]

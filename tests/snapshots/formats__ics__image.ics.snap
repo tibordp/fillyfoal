@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ image.ics — ICS 2.0 image, order bits x y z, sizes 16 4 4 2, integer uncompressed  [0x0+0x1d5]
+    Separators  [0x0+0x2]
+  ▾ Parameters: 14
+      ics_version: 2  [0x2+0xf]
+      filename: "image"  [0x12+0xe]
+      layout parameters: 4  [0x21+0x13]
+      layout order: "bits x y z"  [0x35+0x17]
+      layout sizes: "16 4 4 2"  [0x4d+0x15]
+      layout coordinates: "video"  [0x63+0x18]
+      layout significant_bits: 12  [0x7c+0x1a]
+      representation format: "integer"  [0x97+0x1d]
+      representation sign: "unsigned"  [0xb5+0x1c]
+      representation compression: "uncompressed"  [0xd2+0x27]
+      representation byte_order: "1 2"  [0xfa+0x1d]
+      parameter scale: "1.0 0.1 0.1 0.5"  [0x118+0x1f]
+      parameter units: "bits micrometers micrometers micrometers"  [0x138+0x38]
+      history software: "fillyfoal test"  [0x171+0x1f]
+    Image data  [0x195+0x40]

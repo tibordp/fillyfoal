@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.cti — CITIfile CAL_SET, variable(s) FREQ MAG 3, data S[1,1] RI, S[2,1] RI  [0x0+0xc7]
+    CITIFILE: "A.01.00"  [0x0+0x10]
+    NAME: "CAL_SET"  [0x11+0xc]
+    VAR: "FREQ MAG 3"  [0x1e+0xe]
+    DATA: "S[1,1] RI"  [0x2d+0xe]
+    DATA: "S[2,1] RI"  [0x3c+0xe]
+    SEG_LIST_BEGIN — 1 value(s)  [0x4b+0x38]
+    Data S[1,1] RI — 3 value(s)  [0x83+0x22]
+    Data S[2,1] RI — 3 value(s)  [0xa5+0x22]

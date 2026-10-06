@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.sto — Stockholm alignment CBS, 3 sequence(s) × 43 columns, 1 block(s)  [0x0+0x213]
+    Header: "# STOCKHOLM 1.0"  [0x0+0xf]
+    GF ID: "CBS"  [0x10+0xe]
+    GF AC: "PF00571"  [0x1f+0x12]
+    GF DE: "CBS domain"  [0x32+0x15]
+    GF AU: "Bateman A"  [0x48+0x14]
+  ▾ Sequences: 3
+      O83071/192-246: 43 — 43 columns  [0x7c+0xe]
+      O83071/259-312: 43 — 43 columns  [0xf8+0xe]
+      O31698/18-71: 43 — 43 columns  [0x136+0xc]

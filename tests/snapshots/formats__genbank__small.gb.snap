@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.gb — GenBank, 2 record(s); SCU49845, 120 bp DNA linear PLN 21-JUN-1999  [0x0+0x57f]
+  ▾ SCU49845 — 120 bp DNA linear PLN 21-JUN-1999  [0x0+0x4e7]
+      LOCUS: "SCU49845                 120 bp    DNA     linear   PLN 21-JUN-1999"  [0x0+0x50]
+      DEFINITION: "Saccharomyces cerevisiae TCP1-beta gene, partial cds; and Axl2p (AXL2) and Rev7p (REV7) genes, complete cds."  [0x50+0x85]
+      ACCESSION: "U49845"  [0xd5+0x13]
+      VERSION: "U49845.1  GI:1293613"  [0xe8+0x21]
+      KEYWORDS: "."  [0x109+0xe]
+      SOURCE: "Saccharomyces cerevisiae (baker's yeast) ORGANISM  Saccharomyces cerevisiae Eukaryota; Fungi; Ascomycota; Saccharomycetales."  [0x117+0x97]
+      REFERENCE: "1  (bases 1 to 120) AUTHORS   Roemer,T., Madden,K., Chang,J. and Snyder,M. TITLE     Selection of axial growth sites in yeast JOURNAL   Genes Dev. 10 (7), 777-793 (1996)"  [0x1ae+0xbc]
+    ▾ FEATURES  [0x26a+0x1db]
+      ▾ source: "1..120"  [0x293+0x81]
+          organism: "Saccharomyces cerevisiae"
+          db_xref: "taxon:4932"
+      ▾ gene: "10..100" — AXL2  [0x314+0x3f]
+          gene: "AXL2"
+      ▾ CDS: "10..100" — AXL2  [0x353+0xf2]
+          gene: "AXL2"
+          product: "Axl2p"
+          translation: "MTQLQISLLLTATISLLHLVVATPYEAYPIGKQYPPVARVNESF TFQISNDTYKSSVDKTAQITYNCFDLPSDLTTAANATQ"
+      ORIGIN — sequence  [0x445+0x9f]
+  ▾ TINY — 12 bp DNA circular SYN 01-JAN-2020  [0x4e7+0x98]
+      LOCUS: "TINY                      12 bp    DNA     circular SYN 01-JAN-2020"  [0x4e7+0x50]
+      DEFINITION: "A tiny synthetic plasmid."  [0x537+0x26]
+      ORIGIN — sequence  [0x55d+0x1f]

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dem.asc — ESRI ASCII grid, 4×3 cells of 30  [0x0+0x98]
+    ncols: 4  [0x0+0xe]
+    nrows: 3  [0xf+0xe]
+    xllcorner: 378923  [0x1e+0x15]
+    yllcorner: 4072345  [0x34+0x16]
+    cellsize: 30  [0x4b+0xf]
+    NODATA_value: -9999  [0x5b+0x12]
+  ▾ Rows: 3  [0x6e+0x2a]
+      Row 0 — 4 value(s): -9999 -9999 5 2  [0x6e+0xf]
+      Row 1 — 4 value(s): -9999 20 100 36  [0x7e+0xf]
+      Row 2 — 4 value(s): 3 8 35 10  [0x8e+0x9]

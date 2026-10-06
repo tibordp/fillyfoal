@@ -1,0 +1,16 @@
+ENVI
+description = {
+  Synthetic test scene [Fri May 17 10:30:00 2024]}
+samples = 640
+lines   = 480
+bands   = 3
+header offset = 0
+file type = ENVI Standard
+data type = 12
+interleave = bsq
+byte order = 0
+band names = {
+ Red,
+ Green,
+ Blue}
+wavelength units = Nanometers

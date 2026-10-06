@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ethanol.mol2 — MOL2, 1 molecule(s) (ethanol), 3 atom(s), 2 bond(s)  [0x0+0x1c8]
+  ▾ @<TRIPOS>MOLECULE — 4 line(s)  [0x10+0x36]
+      Name: "ethanol"  [0x22+0x7]
+      Counts (atoms bonds substructures features sets): "3 2 1 0 0"  [0x2a+0xa]
+      Molecule type: "SMALL"  [0x35+0x5]
+      Charge type: "GASTEIGER"  [0x3b+0x9]
+  ▾ @<TRIPOS>ATOM — 3 line(s)  [0x46+0xf5]
+      Atom 1: "C1 (C.3)" — (0.0000, 0.0000, 0.0000), charge -0.0420  [0x54+0x4c]
+      Atom 2: "C2 (C.3)" — (1.5200, 0.0000, 0.0000), charge 0.0500  [0xa1+0x4c]
+      Atom 3: "O1 (O.3)" — (2.0100, 1.3500, 0.0000), charge -0.3940  [0xee+0x4c]
+  ▾ @<TRIPOS>BOND — 2 line(s)  [0x13b+0x3e]
+      Bond 1: "1–2" — single  [0x149+0x17]
+      Bond 2: "2–3" — single  [0x161+0x17]
+  ▾ @<TRIPOS>SUBSTRUCTURE — 1 line(s)  [0x179+0x4f]
+      Line: "1 ETH1        1 GROUP             0 ****  ****    0"  [0x18f+0x38]

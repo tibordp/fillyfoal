@@ -1,0 +1,38 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ part.igs — IGES, 2 entit(ies) from "test.igs" (Fillyfoal CAD), units MM; 1 line, 1 point  [0x0+0x37b]
+    Start section: "IGES test file generated for fillyfoal."  [0x0+0x51]
+  ▾ Global section  [0x51+0xf3]
+      Parameter delimiter: ","
+      Record delimiter: ";"
+      Product ID (sender): "FILLYFL"
+      File name: "test.igs"
+      Native system ID: "Fillyfoal CAD"
+      Preprocessor version: "1.0"
+      Integer bits: 32
+      Single-precision magnitude: 38
+      Single-precision significance: 6
+      Double-precision magnitude: 308
+      Double-precision significance: 15
+      Product ID (receiver): "FILLYFL"
+      Model space scale: 1
+      Units flag: 2
+      Units name: "MM"
+      Line weight gradations: 1
+      Maximum line weight: 0.08
+      Date and time of exchange: "20240517.103000"
+      Minimum resolution: 0.000001
+      Maximum coordinate: 100
+      Author: "Tester"
+      Organization: "Fillyfoal"
+      IGES version: 11
+      Drafting standard: 0
+      Model creation date: "20240517.103000"
+      Application protocol: ""
+  ▾ Directory entry section: 2  [0x144+0x144]
+      D1: Line (0x6e) — form 0, parameters at P1, label LINE  [0x144+0x51]
+      D3: Point (0x74) — form 0, parameters at P2, label POINT  [0x1e6+0x51]
+    Parameter data section: "110,0.,0.,0.,10.,0.,0.;                                                1"  [0x288+0xa2]
+    Terminate section: "S      1G      3D      4P      2"  [0x32a+0x51]

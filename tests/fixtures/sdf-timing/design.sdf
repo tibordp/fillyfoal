@@ -1,0 +1,18 @@
+(DELAYFILE
+  (SDFVERSION "3.0")
+  (DESIGN "top")
+  (DATE "Fri May 17 10:30:00 2024")
+  (VENDOR "fillyfoal")
+  (DIVIDER /)
+  (TIMESCALE 1ns)
+  (CELL
+    (CELLTYPE "INV")
+    (INSTANCE u1)
+    (DELAY (ABSOLUTE (IOPATH A Y (0.1:0.2:0.3) (0.1:0.2:0.3))))
+  )
+  (CELL
+    (CELLTYPE "DFF")
+    (INSTANCE u2)
+    (TIMINGCHECK (SETUP D (posedge CK) (0.05)) (HOLD D (posedge CK) (0.02)))
+  )
+)
