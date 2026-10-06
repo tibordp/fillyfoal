@@ -208,6 +208,7 @@ pub mod misc4;
 pub mod misc5;
 pub mod misc6;
 pub mod misc7;
+pub mod misc8;
 // -- end misc --
 
 // -- ml models & mobile platforms --
@@ -1083,6 +1084,31 @@ pub static FORMATS: &[&Format] = &[
     &misc7::SOLARIS_PKG,
     &misc7::HPKG,
     &misc7::ASAR,
+    &misc8::DIRECTX_X,
+    &misc8::MS3D,
+    &misc8::CAL3D,
+    &misc8::OGRE,
+    &misc8::MAYA,
+    &misc8::C4D,
+    &misc8::BGEO,
+    &misc8::ALEMBIC,
+    &misc8::OPENVDB,
+    &misc8::NIF,
+    &misc8::HKX,
+    &misc8::BGSM,
+    &misc8::WOW_CHUNKED,
+    &misc8::WOW_DB,
+    &misc8::WC3_MDX,
+    &misc8::QUAKE_SPR,
+    &misc8::QUAKE2_SP2,
+    &misc8::RTCW_MODEL,
+    &misc8::HEXEN2_MDL,
+    &misc8::VVD,
+    &misc8::DMX,
+    &misc8::UTOC,
+    &misc8::XP3,
+    &misc8::ALLEGRO,
+    &misc8::RPYC,
     // Weak, size-based probes last.
     &misc6::SQUEEZE,
     &misc6::CRUNCH,

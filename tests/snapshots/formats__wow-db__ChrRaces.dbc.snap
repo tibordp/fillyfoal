@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ChrRaces.dbc — WoW WDBC database: 2 records × 2 fields  [0x0+0x2f]
+    Signature: "WDBC"  [0x0+0x4]
+    Records: 2  [0x4+0x4]
+    Fields: 2  [0x8+0x4]
+    Record size: 8  [0xc+0x4]
+    String block size: 11  [0x10+0x4]
+    Records — 2 × 8 bytes  [0x14+0x10]
+    String block — Human, Orc  [0x24+0xb]

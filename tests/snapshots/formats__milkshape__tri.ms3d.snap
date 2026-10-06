@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tri.ms3d — MilkShape 3D v4: 3 vertices, 1 triangles, 1 groups, 0 materials  [0x0+0xbd]
+    Signature  [0x0+0xa]
+    Version: 4  [0xa+0x4]
+    Vertices — 3 × 15 bytes  [0xe+0x2f]
+    Triangles — 1 × 70 bytes  [0x3d+0x48]
+    Groups — Triangle  [0x85+0x28]
+    Materials — 0 × 361 bytes  [0xad+0x2]
+    Animation and joints — 0 joints  [0xaf+0xe]
