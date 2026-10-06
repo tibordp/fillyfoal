@@ -2,7 +2,7 @@
 //!
 //! The header gives the cluster size and the L1 table; L1 entries point at
 //! L2 tables, whose entries map guest clusters to host clusters (possibly
-//! deflate-compressed). The virtual disk is assembled from that mapping on
+//! deflate- or zstd-compressed). The virtual disk is assembled from that mapping on
 //! expansion: allocated clusters in place, compressed clusters decoded,
 //! unallocated ones as zeros.
 
@@ -14,7 +14,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, align, size};
-use crate::formats::{Format, Head, Input, Probe, dissect_or_data};
+use crate::formats::{Codec, Format, Head, Input, Probe, dissect_or_data};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -135,6 +135,8 @@ struct Image {
     l1: Span,
     size: u64,
     backing: bool,
+    /// How compressed clusters are encoded.
+    codec: Codec,
 }
 
 impl Image {
@@ -231,6 +233,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         l1: file.sub_exact(h.l1_offset, u64::from(h.l1_size).saturating_mul(8))?,
         size: h.size,
         backing: backing.is_some(),
+        codec: if compression == 1 { Codec::Zstd } else { Codec::Deflate },
     });
     cx.emit(
         Node::new("L1 table")
@@ -251,17 +254,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(snapshots, (file, h.snapshots_offset, h.snapshots)),
         );
     }
-    cx.emit(virtual_disk_node(image, h.crypt, compression));
+    if compression > 1 {
+        cx.emit(Node::new("Virtual disk").diag(Diagnostic::unsupported(format!("compression type {compression}"))));
+        return Ok(());
+    }
+    cx.emit(virtual_disk_node(image, h.crypt));
     Ok(())
 }
 
-fn virtual_disk_node(image: Arc<Image>, crypt: u32, compression: u8) -> Node {
+fn virtual_disk_node(image: Arc<Image>, crypt: u32) -> Node {
     let node = Node::new("Virtual disk").summary(size(image.size));
     if crypt != 0 {
         return node.diag(Diagnostic::unsupported("encrypted image"));
-    }
-    if compression != 0 {
-        return node.diag(Diagnostic::unsupported("zstd-compressed clusters"));
     }
     node.lazy(virtual_disk, image)
 }
@@ -313,6 +317,7 @@ async fn qcow1(cx: &Cx, input: Input) -> Result<()> {
         l1: file.sub_exact(h.l1_offset, l1_entries.saturating_mul(8))?,
         size: h.size,
         backing: backing.is_some(),
+        codec: Codec::Deflate,
     });
     cx.emit(
         Node::new("L1 table")
@@ -320,7 +325,7 @@ async fn qcow1(cx: &Cx, input: Input) -> Result<()> {
             .summary(format!("{l1_entries} entries"))
             .lazy(l1_table, image.clone()),
     );
-    cx.emit(virtual_disk_node(image, h.crypt, 0));
+    cx.emit(virtual_disk_node(image, h.crypt));
     Ok(())
 }
 
@@ -439,6 +444,48 @@ async fn l1_table(cx: Cx, image: Arc<Image>) -> Result<()> {
     Ok(())
 }
 
+/// The length of the zstd frame at the start of `data` (walking its block
+/// headers), or `None` if it is not a complete frame.
+fn zstd_frame_len(data: &[u8]) -> Option<usize> {
+    if data.get(..4)? != [0x28, 0xb5, 0x2f, 0xfd] {
+        return None;
+    }
+    let fhd = *data.get(4)?;
+    let single = fhd & 0x20 != 0;
+    let dict_len = [0usize, 1, 2, 4].get(usize::from(fhd & 3)).copied()?;
+    let fcs_len = match fhd >> 6 {
+        0 => usize::from(single),
+        1 => 2,
+        2 => 4,
+        _ => 8,
+    };
+    let mut pos = 5usize
+        .saturating_add(usize::from(!single))
+        .saturating_add(dict_len)
+        .saturating_add(fcs_len);
+    loop {
+        let header = data.get(pos..pos.checked_add(3)?)?;
+        let h = u32::from(*header.first()?)
+            | u32::from(*header.get(1)?) << 8
+            | u32::from(*header.get(2)?) << 16;
+        let last = h & 1 != 0;
+        let size = usize::try_from(h >> 3).ok()?;
+        let body = match (h >> 1) & 3 {
+            0 | 2 => size,
+            1 => 1,
+            _ => return None,
+        };
+        pos = pos.checked_add(3)?.checked_add(body)?;
+        if last {
+            break;
+        }
+    }
+    if fhd & 0x04 != 0 {
+        pos = pos.checked_add(4)?;
+    }
+    (pos <= data.len()).then_some(pos)
+}
+
 /// A guest cluster's backing, from its L2 entry.
 enum Mapping {
     Zero,
@@ -531,7 +578,15 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
                     Ok(())
                 }
                 Mapping::Compressed(span) if image.version >= 2 => {
-                    match crate::codec::inflate_span(&cx, span, false, Some(cluster)).await {
+                    let span = if image.codec == Codec::Zstd {
+                        // The span runs to the end of a sector and may hold
+                        // the start of the next cluster's frame: keep one.
+                        let head = cx.read_avail(span).await?;
+                        span.sub(0, zstd_frame_len(&head).map_or(span.len, to_u64))
+                    } else {
+                        span
+                    };
+                    match crate::codec::decode_span(&cx, span, &image.codec, Some(cluster)).await {
                         Ok(decoded) => {
                             list.data(decoded.span.sub(0, want));
                             Ok(())
