@@ -248,3 +248,30 @@ fn decoders_resume_across_input_shortages_and_chain() {
     let out = fillyfoal::codec::pipeline::decode_all(decoder.as_mut(), &bad, 1 << 20).unwrap();
     assert!(decoder.warning(&out).is_some());
 }
+
+fn render_zip(name: &str, passwords: &[&str]) -> (String, usize) {
+    let path = format!("{}/tests/fixtures/zip/{name}", env!("CARGO_MANIFEST_DIR"));
+    let data = std::fs::read(path).unwrap();
+    let mut host = Host::named(name, data, Limits::default());
+    host.passwords = passwords.iter().map(|p| p.to_string()).collect();
+    host.explore_all();
+    (host.render(), host.secret_requests.len())
+}
+
+#[test]
+fn encrypted_zip_entries_unlock_once_and_stay_locked_on_wrong_passwords() {
+    for name in ["zipcrypto.zip", "winzip-aes.zip"] {
+        let (text, asked) = render_zip(name, &["fillyfoal"]);
+        assert!(text.contains("secret text inside the archive"), "{name}");
+        assert_eq!(asked, 1, "{name}: one prompt for the whole archive");
+
+        let (text, asked) = render_zip(name, &["wrong", "fillyfoal"]);
+        assert!(text.contains("secret text inside the archive"), "{name}");
+        assert_eq!(asked, 2, "{name}: a retry after the wrong password");
+
+        let (text, asked) = render_zip(name, &[]);
+        assert!(!text.contains("secret text"), "{name}");
+        assert!(text.contains("no password, or a wrong one"), "{name}");
+        assert_eq!(asked, 1, "{name}: declining is remembered");
+    }
+}

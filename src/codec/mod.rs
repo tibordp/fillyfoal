@@ -43,6 +43,12 @@ pub enum Codec {
     Deflate,
     /// zlib-wrapped DEFLATE (RFC 1950), with its Adler-32 checked.
     Zlib,
+    /// Traditional PKWARE encryption with this password (the 12-byte
+    /// encryption header is consumed, not output).
+    ZipCrypto(crypto::Key),
+    /// AES-CTR with a little-endian counter from 1 (WinZip AE-x), with this
+    /// AES key.
+    AesCtrLe(crypto::Key),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -67,6 +73,8 @@ impl Codec {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate",
             Codec::Zlib => "zlib",
+            Codec::ZipCrypto(_) => "zipcrypto",
+            Codec::AesCtrLe(_) => "aes-ctr",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -77,6 +85,8 @@ impl Codec {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate (lazy)",
             Codec::Zlib => "zlib (lazy)",
+            Codec::ZipCrypto(_) => "zipcrypto (lazy)",
+            Codec::AesCtrLe(_) => "aes-ctr (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -86,6 +96,7 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Zlib => "decompressed",
+            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) => "decrypted",
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -94,7 +105,7 @@ impl Codec {
     /// from a container are treated as bogus.
     pub fn max_ratio(&self) -> u64 {
         match self {
-            Codec::Stored => 1,
+            Codec::Stored | Codec::ZipCrypto(_) | Codec::AesCtrLe(_) => 1,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
                 .iter()
@@ -109,6 +120,11 @@ impl Codec {
             Codec::Stored => return None,
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),
+            Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
+            Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
+                Some(d) => Box::new(Streaming(d)),
+                None => Box::new(Streaming(pipeline::Failing("invalid AES key length"))),
+            },
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),

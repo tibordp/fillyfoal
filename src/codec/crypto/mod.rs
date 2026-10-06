@@ -6,8 +6,10 @@
 
 pub mod cipher;
 pub mod hash;
+pub mod stream;
 
 pub use cipher::{Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7};
+pub use stream::{Key, ZipCryptoKeys};
 pub use hash::{Hash, Hmac, Md5, Sha1, Sha256, Sha384, Sha512, hmac, pbkdf2};
 
 /// The PKCS#12 key derivation (RFC 7292 appendix B) with hash `H`. `id` is

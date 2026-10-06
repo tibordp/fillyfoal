@@ -198,3 +198,17 @@ pub fn decode_all(decoder: &mut dyn Decoder, input: &[u8], limit: usize) -> Resu
         }
     }
 }
+
+/// A decoder that fails immediately (an invalid codec configuration).
+#[derive(Clone)]
+pub struct Failing(pub &'static str);
+
+impl Decode for Failing {
+    fn step(&mut self, _: &[u8], _: bool, _: &mut Vec<u8>, _: usize, _: usize) -> Result<Step> {
+        Err(Diagnostic::malformed(self.0))
+    }
+
+    fn consumed(&self) -> usize {
+        0
+    }
+}

@@ -1080,11 +1080,11 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         ));
     }
     if header.flags & 0x0001 != 0 {
-        cx.emit(
-            Node::new("Encrypted data")
-                .span(data)
-                .diag(Diagnostic::unsupported("encrypted entry")),
-        );
+        let is_dir = name_is_dir(&cx, name_span).await;
+        let node = encrypted_content(&cx, input, file, data, extra, &header, sizes.uncompressed).await?;
+        if !is_dir {
+            cx.emit(node);
+        }
         return Ok(());
     }
     let codec = match header.method {
@@ -1112,6 +1112,92 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
         }
     }
     Ok(())
+}
+
+/// The content of an encrypted entry: asks for the archive's password,
+/// verifies it, and decrypts then decompresses on expansion.
+async fn encrypted_content(
+    cx: &Cx,
+    input: Input,
+    archive: Span,
+    data: Span,
+    extra: Span,
+    header: &CentralHeader,
+    uncompressed: u64,
+) -> Result<Node> {
+    use crate::codec::crypto::{Key, Sha1, ZipCryptoKeys, pbkdf2};
+    const PROMPT: &str = "Password for the encrypted ZIP entries";
+    let locked = |why: &str| Node::new("Encrypted data").span(data).diag(Diagnostic::unsupported(why.to_owned()));
+    if header.flags & 0x0040 != 0 {
+        return Ok(locked("PKWARE strong encryption"));
+    }
+    let (decrypt, payload, method) = if header.method == 99 {
+        // WinZip AES: salt, 2-byte password verifier, data, 10-byte MAC.
+        let fields = cx.read_avail(extra).await?;
+        let Some((strength, method)) = extra_field(&fields, 0x9901)
+            .and_then(|f| Some((*f.get(4)?, u16_le(f, 5)?)))
+        else {
+            return Ok(locked("AES-encrypted entry without its 0x9901 extra field"));
+        };
+        if !(1..=3).contains(&strength) {
+            return Ok(locked("unknown AES key strength"));
+        }
+        let key_len = 8usize.saturating_add(8usize.saturating_mul(strength.into()));
+        let salt_len = key_len / 2;
+        let head = cx.read(data.sub_exact(0, to_u64(salt_len.saturating_add(2)))?).await?;
+        let (salt, verifier) = head.split_at(salt_len);
+        let derive = |password: &[u8]| pbkdf2::<Sha1>(password, salt, 1000, key_len.saturating_mul(2).saturating_add(2));
+        let Some(secret) = cx.unlock(archive, PROMPT, |s| derive(s.expose()).ends_with(verifier)).await else {
+            return Ok(locked("encrypted entry (no password, or a wrong one)"));
+        };
+        let key = derive(secret.expose());
+        let body = to_u64(salt_len.saturating_add(2));
+        let payload = data.sub(body, data.len.saturating_sub(body).saturating_sub(10));
+        (Codec::AesCtrLe(Key::new(key.get(..key_len).unwrap_or_default())), payload, method)
+    } else {
+        // ZipCrypto: a 12-byte header whose last byte checks the password.
+        let head = cx.read(data.sub_exact(0, 12)?).await?;
+        let check = if header.flags & 0x0008 != 0 {
+            header.time.to_be_bytes()[0]
+        } else {
+            header.crc.to_be_bytes()[0]
+        };
+        let verify = |password: &[u8]| {
+            let mut keys = ZipCryptoKeys::new(password);
+            head.iter().map(|&c| keys.decrypt(c)).last() == Some(check)
+        };
+        let Some(secret) = cx.unlock(archive, PROMPT, |s| verify(s.expose())).await else {
+            return Ok(locked("encrypted entry (no password, or a wrong one)"));
+        };
+        (Codec::ZipCrypto(Key::new(secret.expose())), data, header.method)
+    };
+    let codec = match (method, &decrypt) {
+        (0, _) => decrypt,
+        (8, Codec::ZipCrypto(_)) => Codec::chain("zipcrypto+deflate", "zipcrypto+deflate (lazy)", vec![decrypt, Codec::Deflate]),
+        (8, _) => Codec::chain("aes-ctr+deflate", "aes-ctr+deflate (lazy)", vec![decrypt, Codec::Deflate]),
+        _ => {
+            let name = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
+            return Ok(Node::new("Decrypted data")
+                .span(payload)
+                .diag(Diagnostic::unsupported(format!("compression method {name}"))));
+        }
+    };
+    Ok(content("Content", input, payload, codec, Some(uncompressed))
+        .summary(format!("encrypted, {uncompressed:#x} bytes")))
+}
+
+/// The body of extra field `id` in `fields`.
+fn extra_field(fields: &[u8], id: u16) -> Option<&[u8]> {
+    let mut at = 0usize;
+    while let (Some(fid), Some(len)) = (u16_le(fields, at), u16_le(fields, at.saturating_add(2))) {
+        let body = at.saturating_add(4);
+        let end = body.saturating_add(len.into());
+        if fid == id {
+            return fields.get(body..end);
+        }
+        at = end;
+    }
+    None
 }
 
 async fn name_is_dir(cx: &Cx, name: Span) -> bool {
