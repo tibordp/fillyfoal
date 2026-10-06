@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ access.org — Organya Org-02, 120 ms/step, 4/4, loop 0..256, 2 tracks, 4 notes  [0x0+0x92]
+    Magic: "Org-02"  [0x0+0x6]
+    Tempo (ms per step): 120  [0x6+0x2]
+    Beats per bar: 4  [0x8+0x1]
+    Steps per beat: 4  [0x9+0x1]
+    Loop start (step): 0  [0xa+0x4]
+    Loop end (step): 256  [0xe+0x4]
+    Track 0 (melody): 2 — 2 notes, instrument 0, frequency 1000  [0x12+0x6] → 0x72+0x10
+    Track 1 (melody): 0 — 0 notes, instrument 3, frequency 1000  [0x18+0x6] → 0x82+0x0
+    Track 2 (melody): 0 — 0 notes, instrument 6, frequency 1000  [0x1e+0x6] → 0x82+0x0
+    Track 3 (melody): 0 — 0 notes, instrument 9, frequency 1000  [0x24+0x6] → 0x82+0x0
+    Track 4 (melody): 0 — 0 notes, instrument 12, frequency 1000  [0x2a+0x6] → 0x82+0x0
+    Track 5 (melody): 0 — 0 notes, instrument 15, frequency 1000  [0x30+0x6] → 0x82+0x0
+    Track 6 (melody): 0 — 0 notes, instrument 18, frequency 1000  [0x36+0x6] → 0x82+0x0
+    Track 7 (melody): 0 — 0 notes, instrument 21, frequency 1000  [0x3c+0x6] → 0x82+0x0
+    Track 8 (drum): 2 — 2 notes, instrument 24, frequency 1000  [0x42+0x6] → 0x82+0x10
+    Track 9 (drum): 0 — 0 notes, instrument 27, frequency 1000  [0x48+0x6] → 0x92+0x0
+    Track 10 (drum): 0 — 0 notes, instrument 30, frequency 1000  [0x4e+0x6] → 0x92+0x0
+    Track 11 (drum): 0 — 0 notes, instrument 33, frequency 1000  [0x54+0x6] → 0x92+0x0
+    Track 12 (drum): 0 — 0 notes, instrument 36, frequency 1000  [0x5a+0x6] → 0x92+0x0
+    Track 13 (drum): 0 — 0 notes, instrument 39, frequency 1000  [0x60+0x6] → 0x92+0x0
+    Track 14 (drum): 0 — 0 notes, instrument 42, frequency 1000  [0x66+0x6] → 0x92+0x0
+    Track 15 (drum): 0 — 0 notes, instrument 45, frequency 1000  [0x6c+0x6] → 0x92+0x0

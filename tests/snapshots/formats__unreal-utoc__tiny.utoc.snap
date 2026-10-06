@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.utoc — Unreal IoStore TOC v3: 2 chunks, 2 compressed blocks of 65536 bytes, 1 methods  [0x0+0xd0]
+    Signature: "-==--==--==--==-"  [0x0+0x10]
+    Version: 3  [0x10+0x1]
+    Reserved: 00 00 00  |...|  [0x11+0x3]
+    Header size: 144  [0x14+0x4]
+    Entries: 2  [0x18+0x4]
+    Compressed blocks: 2  [0x1c+0x4]
+    Compressed block entry size: 12  [0x20+0x4]
+    Compression methods: 1  [0x24+0x4]
+    Compression method name length: 32  [0x28+0x4]
+    Compression block size: 65536  [0x2c+0x4]
+    Directory index size: 0  [0x30+0x4]
+    Partitions: 1  [0x34+0x4]
+    Container ID: 0x1122334455667788  [0x38+0x8]
+    Tables  [0x40+0x90]

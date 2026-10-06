@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ra — RealAudio v4 "Tiny tune": 28_8, 8000 Hz, 16-bit, 1 ch  [0x0+0x7e]
+    Signature  [0x0+0x4]
+    Version: 4  [0x4+0x2]
+    Data size: 32  [0xc+0x4]
+    Codec flavor: 3  [0x16+0x2]
+    Sample rate: 8000  [0x30+0x2]
+    Channels: 1  [0x36+0x2]
+    Codec: "28_8"  [0x3e+0x4]
+    Title: "Tiny tune"  [0x46+0x9]
+    Author: "filly"  [0x50+0x5]
+    Copyright: "(c) 2026"  [0x56+0x8]
+    Audio  [0x5e+0x20]

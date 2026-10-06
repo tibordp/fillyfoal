@@ -1,0 +1,34 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ chemical.fur — Furnace module (format 143), zlib, "Chemical Plant" by tildearrow, Genesis + AY-3-8910, blocks: 1 INFO, 1 INS2, 1 PATN, 1 WAVE  [0x0+0x7a]
+    zlib stream — 122 bytes → 380 bytes  [0x0+0x7a]
+    Magic: "-Furnace module-"  [#1:0x0+0x10]
+    Format version: 143  [#1:0x10+0x2]
+    Reserved: 0  [#1:0x12+0x2]
+    Song info pointer: 0x20  [#1:0x14+0x4]
+    Reserved: 00 00 00 00 00 00 00 00  |........|  [#1:0x18+0x8]
+  ▾ INFO — "Chemical Plant" by tildearrow  [#1:0x20+0x12a] → #1:0x28+0x122
+      Time base: 1  [#1:0x28+0x1]
+      Speed 1: 6  [#1:0x29+0x1]
+      Speed 2: 6  [#1:0x2a+0x1]
+      Initial arpeggio time: 1  [#1:0x2b+0x1]
+      Ticks per second: 60  [#1:0x2c+0x4]
+      Pattern length: 64  [#1:0x30+0x2]
+      Orders length: 4  [#1:0x32+0x2]
+      Highlight A: 4  [#1:0x34+0x1]
+      Highlight B: 16  [#1:0x35+0x1]
+      Instruments: 2  [#1:0x36+0x2]
+      Wavetables: 1  [#1:0x38+0x2]
+      Samples: 0  [#1:0x3a+0x2]
+      Patterns: 8  [#1:0x3c+0x4]
+      Sound chips: 02 80 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [#1:0x40+0x20]
+      Chip volumes: 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 40 …  |@@@@@@@@@@@@@@@@|  [#1:0x60+0x20]
+      Chip panning: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [#1:0x80+0x20]
+      Chip flags: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [#1:0xa0+0x80]
+      Chip 0: Genesis (0x2)  [#1:0x40+0x1]
+      Chip 1: AY-3-8910 (0x80)  [#1:0x41+0x1]
+    INS2 — 12 bytes  [#1:0x14a+0x14] → #1:0x152+0xc
+    WAVE — 8 bytes  [#1:0x15e+0x10] → #1:0x166+0x8
+    PATN — 6 bytes  [#1:0x16e+0xe] → #1:0x176+0x6

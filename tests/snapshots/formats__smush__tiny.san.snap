@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.san — SMUSH animation v2, 2 frames declared, 2 present  [0x0+0x338]
+    ANIM — 816 bytes  [0x0+0x8]
+    AHDR — 772 bytes  [0x8+0x30c]
+    FRME — 10 bytes  [0x314+0x12]
+    FRME — 9 bytes  [0x326+0x11]

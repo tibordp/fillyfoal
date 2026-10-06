@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.xpr — Xbox packed resource (XPR0)  [0x0+0x40]
+    Signature: "XPR0"  [0x0+0x4]
+    Total size: 64  [0x4+0x4]
+    Header size: 32  [0x8+0x4]
+    Resource headers  [0xc+0x14]
+    Resource data  [0x20+0x20]

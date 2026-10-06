@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osmChange version="0.6" generator="fillyfoal">
+  <create>
+    <node id="-1" lat="46.0569" lon="14.5058" version="0" changeset="1"><tag k="amenity" v="cafe"/></node>
+  </create>
+  <modify>
+    <way id="42" version="3" changeset="1"><nd ref="1"/><nd ref="2"/></way>
+  </modify>
+  <delete>
+    <node id="7" version="2" changeset="1"/>
+  </delete>
+</osmChange>

@@ -1,0 +1,12 @@
+OziExplorer Map Data File Version 2.2
+Ljubljana
+C:\maps\ljubljana.jpg
+1 ,Map Code,
+WGS 84,WGS 84,   0.0000,   0.0000,WGS 84
+Reserved 1
+Reserved 2
+Magnetic Variation,,,E
+Map Projection,Latitude/Longitude,PolyCal,No,AutoCalOnly,No,BSBUseWPX,No
+Point01,xy,    0,    0,in, deg,  46,  4.0000,N,  14, 28.0000,E, grid,   ,           ,           ,N
+Point02,xy, 1000,  800,in, deg,  46,  1.0000,N,  14, 33.0000,E, grid,   ,           ,           ,N
+IWH,Map Image Width/Height,1000,800

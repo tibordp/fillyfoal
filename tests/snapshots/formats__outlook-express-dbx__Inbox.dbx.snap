@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Inbox.dbx — Outlook Express messages store, 2 items  [0x0+0x2a00]
+    Signature: 0xfe12adcf  [0x0+0x4]
+    Class ID: {6f74fdc5-e366-11d1-9a4e-00c04fa309d4} — messages  [0x4+0x10]
+    Number of items: 2  [0xc4+0x4]
+    Index root offset: 0x24bc  [0xe4+0x4]
+    Header  [0x0+0x24bc]
+  ▾ Index  [0x24bc+0x27c]
+      Entry 0: 0x2800  [0x24d4+0xc] → 0x2800+0x4
+      Entry 1: 0x2900  [0x24e0+0xc] → 0x2900+0x4

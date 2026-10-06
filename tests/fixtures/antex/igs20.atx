@@ -1,0 +1,14 @@
+     1.4            G                                       ANTEX VERSION / SYST
+A                                                           PCV TYPE / REFANT   
+                                                            END OF HEADER       
+                                                            START OF ANTENNA    
+TRM59800.00     NONE                                        TYPE / SERIAL NO    
+     0.0                                                    DAZI                
+   G01                                                      START OF FREQUENCY  
+      1.29     -0.80     88.88                              NORTH / EAST / UP   
+   NOAZI    0.00   -0.10   -0.30
+   G01                                                      END OF FREQUENCY    
+                                                            END OF ANTENNA      
+                                                            START OF ANTENNA    
+LEIAR25.R4      LEIT                                        TYPE / SERIAL NO    
+                                                            END OF ANTENNA      

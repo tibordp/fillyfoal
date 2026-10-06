@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ a00000009.gdbtable — File Geodatabase table, 5 fields, 2 rows, polygon geometry  [0x0+0xc5]
+  ▾ Header  [0x0+0x28]
+      Version: 3  [0x0+0x4]
+      Valid rows: 2  [0x4+0x4]
+      Largest row size: 4  [0x8+0x4]
+      Magic: 5  [0xc+0x4]
+      Reserved: 0  [0x10+0x8]
+      File size: 197  [0x18+0x8]
+      Field descriptors offset: 0x28  [0x20+0x8]
+  ▾ Field descriptors — 5 fields, polygon geometry  [0x28+0x8d]
+      Section size: 137  [0x28+0x4]
+      Version: 4  [0x2c+0x4]
+      Layer flags: 0x4 — polygon  [0x30+0x4]
+      Field count: 5  [0x34+0x2]
+      OBJECTID: objectid (0x6) — not null  [0x36+0x15]
+      NAME: string (0x4) — max length 50, nullable  [0x4b+0x19]
+      POP: int32 (0x1) — 4 bytes, nullable  [0x64+0xc]
+      AREA: float64 (0x3) — 8 bytes, nullable  [0x70+0x22]
+      SHAPE: geometry (0x7)  [0x92+0xd]
+        ! unsupported: field definition not decoded; later fields not shown
+    Rows — 2 rows (located through the .gdbtablx index)  [0xb5+0x10]

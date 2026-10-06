@@ -1,0 +1,49 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ dump.202311141413 — Linux kernel dump of web01, kernel 5.15.0-91-generic, 1.0 KiB blocks  [0x0+0x1818]
+  ▾ Disk dump header  [0x0+0x1d4]
+      Signature: "KDUMP   "  [0x0+0x8]
+      Header version: 6  [0x8+0x4]
+      System name: "Linux"  [0xc+0x41]
+      Node name: "web01"  [0x4d+0x41]
+      Release: "5.15.0-91-generic"  [0x8e+0x41]
+      Version: "#101-Ubuntu SMP"  [0xcf+0x41]
+      Machine: "x86_64"  [0x110+0x41]
+      Domain name: "(none)"  [0x151+0x41]
+      Timestamp: 2023-11-14 22:13:20 UTC  [0x198+0x8]
+      Microseconds: 0  [0x1a0+0x8]
+      Status: 0x1 [COMPRESSED_ZLIB]  [0x1a8+0x4]
+      Block size: 1024  [0x1ac+0x4]
+      Sub-header size (blocks): 1  [0x1b0+0x4]
+      Bitmap size (blocks): 2  [0x1b4+0x4]
+      Maximum PFN (32-bit): 4096  [0x1b8+0x4]
+      Total RAM blocks: 4096  [0x1bc+0x4]
+      Device blocks: 4096  [0x1c0+0x4]
+      Written blocks: 4096  [0x1c4+0x4]
+      Current CPU: 0  [0x1c8+0x4]
+      Number of CPUs: 2  [0x1cc+0x4]
+  ▾ Sub-header  [0x400+0x400]
+      Physical base: 0x1000000  [0x400+0x8]
+      Dump level: 31  [0x408+0x4]
+      Split: 0  [0x40c+0x4]
+      Start PFN: 0  [0x410+0x8]
+      End PFN: 4096  [0x418+0x8]
+      vmcoreinfo offset: 0x1400  [0x420+0x8]
+      vmcoreinfo size: 100  [0x428+0x8]
+      ELF notes offset: 0x0  [0x430+0x8]
+      ELF notes size: 0  [0x438+0x8]
+      Erase info offset: 0x0  [0x440+0x8]
+      Erase info size: 0  [0x448+0x8]
+      Start PFN (64-bit): 0  [0x450+0x8]
+      End PFN (64-bit): 4096  [0x458+0x8]
+      Maximum PFN (64-bit): 4096  [0x460+0x8]
+  ▾ vmcoreinfo — 4 entries  [0x1400+0x64]
+      OSRELEASE: "5.15.0-91-generic"
+      PAGESIZE: "4096"
+      SYMBOL(init_uts_ns): "ffffffff82a1c3a0"
+      CRASHTIME: "1700000000"
+    Page bitmaps — valid and dumpable pages  [0x800+0x800]
+    Page descriptors and data  [0x1000+0x818]
+      ! note: pages are compressed individually

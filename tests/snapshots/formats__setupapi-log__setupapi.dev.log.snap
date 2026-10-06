@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ setupapi.dev.log — SetupAPI device log (Windows 10.0.19041), 1 boot sessions, 2 sections (1 USB devices)  [0x0+0x3ab]
+  ▾ Header  [0x0+0x98]
+      Line: "[Device Install Log]"  [0x0+0x19]
+      Line: "     OS Version = 10.0.19041"  [0x19+0x1e]
+      Line: "     Service Pack = 0.0"  [0x37+0x19]
+      Line: "     Suite = 0x0100"  [0x50+0x15]
+      Line: "     ProductType = 1"  [0x65+0x16]
+      Line: "     Architecture = amd64"  [0x7b+0x1b]
+      Line: ""  [0x96+0x2]
+    Boot session: "2023/03/01 08:00:00.500"  [0xa6+0x29]
+  ▾ Device Install (Hardware initiated) - USB\VID_0781&PID_5567\4C530001231120115142: "2023/03/02 11:22:33.444" — SUCCESS  [0xd1+0x1c2]
+      Line: ">>>  [Device Install (Hardware initiated) - USB\\VID_0781&PID_5567\\4C530001231120115142]"  [0xd1+0x59]
+      Line: ">>>  Section start 2023/03/02 11:22:33.444"  [0x12a+0x2c]
+      Line: "     ump: Creating Install Process: DrvInst.exe 11:22:33.448"  [0x156+0x3e]
+      Line: "     ndv: Retrieving device info..."  [0x194+0x25]
+      Line: "     dvi: Selected driver installs from section [USBSTOR_BULK] in 'c:\\windows\\system32\\driverstore\\filerepository\\usbstor.inf_amd64\\usbstor.inf'."  [0x1b9+0x93]
+      Line: "<<<  Section end 2023/03/02 11:22:35.111"  [0x24c+0x2a]
+      Line: "<<<  [Exit status: SUCCESS]"  [0x276+0x1d]
+  ▾ Device Install (Hardware initiated) - SWD\WPDBUSENUM\_??_USBSTOR#Disk&Ven_Example&Prod_Flash&Rev_1.00#4C530001231120115142&0#: "2023/03/02 11:22:36.010" — SUCCESS  [0x295+0x116]
+      Line: ">>>  [Device Install (Hardware initiated) - SWD\\WPDBUSENUM\\_??_USBSTOR#Disk&Ven_Example&Prod_Flash&Rev_1.00#4C530001231120115142&0#]"  [0x295+0x86]
+      Line: ">>>  Section start 2023/03/02 11:22:36.010"  [0x31b+0x2c]
+      Line: "     dvi: Device installed."  [0x347+0x1d]
+      Line: "<<<  Section end 2023/03/02 11:22:36.900"  [0x364+0x2a]
+      Line: "<<<  [Exit status: SUCCESS]"  [0x38e+0x1d]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ TestSans.cff2 — CFF2 font, 4 glyphs  [0x0+0x43]
+    Version: "2.0"  [0x0+0x2]
+    Header size: 5  [0x2+0x1]
+  ▾ Top DICT  [0x5+0x5]
+      FDArray: 57  [0x5+0x3]
+      CharStrings: 14  [0x8+0x2]
+    Global Subrs INDEX — 0 entries  [0xa+0x4]
+    CharStrings INDEX — 4 glyphs  [0xe+0x2b]

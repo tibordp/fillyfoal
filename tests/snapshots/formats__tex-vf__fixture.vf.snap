@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.vf — TeX virtual font, 1 fonts, 3 characters  [0x0+0x4b]
+    Preamble: "fixture vf" — checksum 0x12345678, design size 10pt  [0x0+0x15]
+    Font 0: "cmr10"  [0x15+0x15]
+    Char 0x41 'A' — 2 bytes of DVI, width 0.5000  [0x2a+0x7]
+    Char 0x42 'B' — 2 bytes of DVI, width 0.5000  [0x31+0x7]
+    Char 0x43 'C' — 2 bytes of DVI, width 0.5000  [0x38+0xf]
+    Postamble  [0x47+0x4]

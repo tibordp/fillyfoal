@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<pwx xmlns="http://www.peaksware.com/PWX/1/0" version="1.0" creator="fillyfoal">
+  <workout>
+    <athlete><name>Jane</name></athlete>
+    <sportType>Bike</sportType>
+    <time>2024-05-01T12:00:00</time>
+    <summarydata><beginning>0</beginning><duration>3600</duration></summarydata>
+    <sample><timeoffset>0</timeoffset><hr>120</hr><pwr>200</pwr></sample>
+  </workout>
+</pwx>

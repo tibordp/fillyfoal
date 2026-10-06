@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ report%20final.pdf.trashinfo — Trash record: /home/alice/Documents/report final.pdf deleted 2023-11-14T22:13:20  [0x0+0x5c]
+    Line: "[Trash Info]"  [0x0+0xd]
+    Path: "/home/alice/Documents/report final.pdf" — /home/alice/Documents/report%20final.pdf  [0xd+0x2e]
+    DeletionDate: "2023-11-14T22:13:20"  [0x3b+0x21]

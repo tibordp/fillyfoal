@@ -1,0 +1,6 @@
+FMT, 128, 89, FMT, BBnNZ, Type,Length,Name,Format,Columns
+FMT, 129, 75, MSG, QZ, TimeUS,Message
+FMT, 130, 33, GPS, QLLeH, TimeUS,Lat,Lng,Alt,Spd
+MSG, 100, ArduCopter V4.5.0
+GPS, 300, 46.0569000, 14.5058000, 300.50, 1.20
+GPS, 400, 46.0569100, 14.5058100, 300.60, 1.25

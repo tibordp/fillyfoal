@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ workout.pwx — TrainingPeaks workout (PWX), Bike  [0x0+0x1a1]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ pwx — version="1.0" creator="fillyfoal" (1 element)  [0x27+0x179]
+      @xmlns: "http://www.peaksware.com/PWX/1/0"  [0x33+0x20]
+      @version: "1.0"  [0x5e+0x3]
+      @creator: "fillyfoal"  [0x6c+0x9]
+    ▾ workout — 5 elements  [0x7a+0x11f]
+      ▾ athlete — 1 element  [0x88+0x24]
+          name: "Jane"  [0x91+0x11]
+        sportType: "Bike"  [0xb1+0x1b]
+        time: "2024-05-01T12:00:00"  [0xd1+0x20]
+      ▾ summarydata — 2 elements  [0xf6+0x4c]
+          beginning: "0"  [0x103+0x18]
+          duration: "3600"  [0x11b+0x19]
+      ▾ sample — 3 elements  [0x147+0x45]
+          timeoffset: "0"  [0x14f+0x1a]
+          hr: "120"  [0x169+0xc]
+          pwr: "200"  [0x175+0xe]

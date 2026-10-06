@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ igs20.atx — ANTEX 1.4, 2 antennas  [0x0+0x43e]
+  ▾ Header — 2 lines  [0x0+0xf3]
+      ANTEX VERSION / SYST: "1.4            G"  [0x0+0x50]
+      PCV TYPE / REFANT: "A"  [0x51+0x50]
+      END OF HEADER: ""  [0xa2+0x50]
+  ▾ antenna 0  [0xf3+0x258]
+      Line 1: "                                                            START OF ANTENNA    "  [0xf3+0x50]
+      Line 2: "TRM59800.00     NONE                                        TYPE / SERIAL NO    "  [0x144+0x50]
+      Line 3: "     0.0                                                    DAZI                "  [0x195+0x50]
+      Line 4: "   G01                                                      START OF FREQUENCY  "  [0x1e6+0x50]
+      Line 5: "      1.29     -0.80     88.88                              NORTH / EAST / UP   "  [0x237+0x50]
+      Line 6: "   NOAZI    0.00   -0.10   -0.30"  [0x288+0x20]
+      Line 7: "   G01                                                      END OF FREQUENCY    "  [0x2a9+0x50]
+      Line 8: "                                                            END OF ANTENNA      "  [0x2fa+0x50]
+  ▾ antenna 1  [0x34b+0xf3]
+      Line 1: "                                                            START OF ANTENNA    "  [0x34b+0x50]
+      Line 2: "LEIAR25.R4      LEIT                                        TYPE / SERIAL NO    "  [0x39c+0x50]
+      Line 3: "                                                            END OF ANTENNA      "  [0x3ed+0x50]

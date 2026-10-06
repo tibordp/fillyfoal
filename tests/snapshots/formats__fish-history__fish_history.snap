@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fish_history — fish history, 3 commands, 50 s span  [0x0+0x94]
+  ▾ cd ~/projects: 2023-11-14 22:13:20 UTC  [0x0+0x28]
+      Line: "- cmd: cd ~/projects"  [0x0+0x15]
+      Line: "  when: 1700000000"  [0x15+0x13]
+  ▾ vim notes.md: 2023-11-14 22:13:40 UTC  [0x28+0x3f]
+      Line: "- cmd: vim notes.md"  [0x28+0x14]
+      Line: "  when: 1700000020"  [0x3c+0x13]
+      Line: "  paths:"  [0x4f+0x9]
+      Line: "    - notes.md"  [0x58+0xf]
+  ▾ echo "multi ⏎ line": 2023-11-14 22:14:10 UTC  [0x67+0x2d]
+      Line: "- cmd: echo \"multi\\nline\""  [0x67+0x1a]
+      Line: "  when: 1700000050"  [0x81+0x13]

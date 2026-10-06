@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ SyncEngine-2023-11-14.odl — OneDrive log v2, 2 records, OneDrive 23.071.0402.0001, 10.0.19045  [0x0+0x1b0]
+  ▾ Header  [0x0+0x100]
+      Signature: "EBFGONED"  [0x0+0x8]
+      Version: 2  [0x8+0x4]
+      Unknown: 0x0  [0xc+0x4]
+      Unknown: 0x0  [0x10+0x8]
+      Unknown: 0x0  [0x18+0x4]
+      OneDrive version: "23.071.0402.0001"  [0x1c+0x40]
+      Windows version: "10.0.19045"  [0x5c+0x40]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x9c+0x64]
+    SyncEngine.cpp: 2023-11-14 22:13:20 UTC — 36 bytes  [0x100+0x5c] → 0x138+0x24
+    LogUploader.cpp: 2023-11-14 22:13:25 UTC — 28 bytes  [0x15c+0x54] → 0x194+0x1c

@@ -1,0 +1,9 @@
+     2.11           OBSERVATION DATA    G (GPS)             RINEX VERSION / TYPE
+LJUB                                                        MARKER NAME         
+     2    C1    L1                                          # / TYPES OF OBSERV 
+                                                            END OF HEADER       
+ 24  5  1  0  0  0.0000000  0  2G01G05
+  22000000.123   115600000.12345
+  23000000.456   120800000.54321
+ 24  5  1  0  0 30.0000000  0  1G01
+  22000100.123   115600500.12345

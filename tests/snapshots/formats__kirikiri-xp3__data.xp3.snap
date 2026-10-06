@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data.xp3 — KiriKiri XP3 archive, 2 files  [0x0+0xad]
+    Signature  [0x0+0xb]
+    Index (zlib) — 90 → 244 bytes  [0x42+0x6b]
+  ▾ readme.txt — UTF-8 text, LF line endings, 1 line  [0x13+0x10]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x13+0x10]
+        Line 1: "Hello from XP3!"  [0x13+0xf]
+  ▾ data/c.txt — UTF-8 text, LF line endings, 1 line  [0x23+0x1f]
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [#2:0x0+0x17]
+        Line 1: "compressed text in xp3"  [#2:0x0+0x16]

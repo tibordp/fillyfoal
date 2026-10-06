@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Visited Links — Chromium visited links v3, 3 links in 16 slots  [0x0+0x98]
+  ▾ Header  [0x0+0x18]
+      Signature: "VLnk"  [0x0+0x4]
+      Version: 3  [0x4+0x4]
+      Table length: 16  [0x8+0x4]
+      Used entries: 3  [0xc+0x4]
+      Salt: 00 01 02 03 04 05 06 07  |........|  [0x10+0x8]
+  ▾ Fingerprints — 3 of 16 slots used  [0x18+0x80]
+      Slot 3: 0x1122334455667788  [0x30+0x8]
+      Slot 9: 0xbadc0ffee123456  [0x60+0x8]
+      Slot 14: 0x7777777777777777  [0x88+0x8]

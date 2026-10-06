@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ljub1220.24o — RINEX 2.11 observations (G (GPS)), marker LJUB  [0x0+0x1f2]
+  ▾ Header — 3 lines  [0x0+0x144]
+      RINEX VERSION / TYPE: "2.11           OBSERVATION DATA    G (GPS)"  [0x0+0x50]
+      MARKER NAME: "LJUB"  [0x51+0x50]
+      # / TYPES OF OBSERV: "2    C1    L1"  [0xa2+0x50]
+      END OF HEADER: ""  [0xf3+0x50]
+  ▾ Epoch 0 — 24  5  1  0  0  0.0000000  0  2G01G05  [0x144+0x69]
+      Line 1: " 24  5  1  0  0  0.0000000  0  2G01G05"  [0x144+0x26]
+      Line 2: "  22000000.123   115600000.12345"  [0x16b+0x20]
+      Line 3: "  23000000.456   120800000.54321"  [0x18c+0x20]
+  ▾ Epoch 1 — 24  5  1  0  0 30.0000000  0  1G01  [0x1ad+0x45]
+      Line 1: " 24  5  1  0  0 30.0000000  0  1G01"  [0x1ad+0x23]
+      Line 2: "  22000100.123   115600500.12345"  [0x1d1+0x20]

@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.acb — Photoshop colour book "Test Book", 4 RGB colours  [0x0+0x142]
+    Signature  [0x0+0x4]
+    Version: 1  [0x4+0x2]
+    Book ID: 3000  [0x6+0x2]
+    Title: "$$$/colorbook/TEST/title=Test Book"  [0x8+0x4a]
+    Prefix: "TEST "  [0x52+0x10]
+    Postfix: " C"  [0x62+0xa]
+    Description: "A test colour book"  [0x6c+0x2a]
+    Colours: 4  [0x96+0x2]
+    Page size: 4  [0x98+0x2]
+    Page selector offset: 2  [0x9a+0x2]
+    Colour space: RGB (0x0)  [0x9c+0x2]
+  ▾ Colour records — 4 colours  [0x9e+0xa4]
+      Test Red: "#ff0000" — TR0001  [0x9e+0x49]
+      Test Green: "#00c800" — TG0002  [0xe7+0x23]
+      (unnamed): "#000000" —   [0x10a+0xf]
+      Test Blue: "#0000ff" — TB0003  [0x119+0x21]
+    Kind: "spflspot"  [0x13a+0x8]

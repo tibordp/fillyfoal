@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiles.json — TileJSON tile set description, OpenMapTiles  [0x0+0x13f]
+    tilejson: "3.0.0"  [0x10+0x7]
+    name: "OpenMapTiles"  [0x23+0xe]
+  ▾ tiles — array, 1 element  [0x3e+0x2f]
+      [0]: "https://example.org/{z}/{x}/{y}.pbf"  [0x44+0x25]
+    minzoom: 0  [0x7c+0x1]
+    maxzoom: 14  [0x8c+0x2]
+  ▾ bounds — array, 4 elements  [0x9c+0x32]
+      [0]: -180  [0xa2+0x4]
+      [1]: -85.0511  [0xac+0x8]
+      [2]: 180  [0xba+0x3]
+      [3]: 85.0511  [0xc3+0x7]
+  ▾ vector_layers — array, 1 element  [0xe3+0x5a]
+    ▾ [0] — object, 2 members  [0xe9+0x50]
+        id: "water"  [0xf7+0x7]
+      ▾ fields — object, 1 member  [0x110+0x23]
+          class: "String"  [0x123+0x8]

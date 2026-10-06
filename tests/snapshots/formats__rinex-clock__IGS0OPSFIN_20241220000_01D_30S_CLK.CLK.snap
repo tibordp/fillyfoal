@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ IGS0OPSFIN_20241220000_01D_30S_CLK.CLK — RINEX 3.04 clock data (G)  [0x0+0x16b]
+  ▾ Header — 2 lines  [0x0+0xf3]
+      RINEX VERSION / TYPE: "3.04           C                   G"  [0x0+0x50]
+      # / TYPES OF DATA: "2    AR    AS"  [0x51+0x50]
+      END OF HEADER: ""  [0xa2+0x50]
+  ▾ Record 0 — AR LJUB 2024 05 01 00 00  0.000000  1    1.234567890123E-07  [0xf3+0x3c]
+      Line 1: "AR LJUB 2024 05 01 00 00  0.000000  1    1.234567890123E-07"  [0xf3+0x3b]
+  ▾ Record 1 — AS G01  2024 05 01 00 00  0.000000  1    4.123456789012E-04  [0x12f+0x3c]
+      Line 1: "AS G01  2024 05 01 00 00  0.000000  1    4.123456789012E-04"  [0x12f+0x3b]

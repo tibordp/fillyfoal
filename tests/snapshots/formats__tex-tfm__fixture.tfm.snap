@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fixture.tfm — TeX font metrics, 10pt, TeX text  [0x0+0xb0]
+    Table lengths: "lf=44 lh=18 bc=65 ec=67 nw=4 nh=3 nd=2 ni=1 nl=0 nk=0 ne=0 np=7"  [0x0+0x18]
+    Checksum: 0x12345678  [0x18+0x4]
+    Design size: 10 — points  [0x1c+0x4]
+    Coding scheme: "TeX text"  [0x20+0x28]
+    Font family: "FIXTURE"  [0x48+0x14]
+    Widths — 4 words  [0x6c+0x10]
+    Heights — 3 words  [0x7c+0xc]
+    Depths — 2 words  [0x88+0x8]
+    Italic corrections — 1 words  [0x90+0x4]
+    Lig/kern program — 0 words  [0x94+0x0]
+    Kerns — 0 words  [0x94+0x0]
+    Extensible recipes — 0 words  [0x94+0x0]
+  ▾ Parameters — 7 words  [0x94+0x1c]
+      slant: 0  [0x94+0x4]
+      space: 3.3300018310546875  [0x98+0x4]
+      space_stretch: 1.660003662109375  [0x9c+0x4]
+      space_shrink: 1.1100006103515625  [0xa0+0x4]
+      x_height: 4.3000030517578125  [0xa4+0x4]
+      quad: 10  [0xa8+0x4]
+      extra_space: 1.1100006103515625  [0xac+0x4]
+  ▾ Characters — codes 65-67  [0x60+0xc]
+      0x41 'A': 5 — height 6.800, depth 1.900  [0x60+0x4]
+      0x43 'C': 7.5 — height 4.300, depth 1.900  [0x68+0x4]

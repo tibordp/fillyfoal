@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ LJUB00SVN_R_20241220000_01D_30S_MO.crx — Compact RINEX 3.0 (RINEX 3.04 observations)  [0x0+0x200]
+  ▾ Header — 4 lines  [0x0+0x195]
+      CRINEX VERS   / TYPE: "3.0                 COMPACT RINEX FORMAT"  [0x0+0x50]
+      CRINEX PROG / DATE: "RNX2CRX ver.4.1.0                       01-May-24 00:00"  [0x51+0x50]
+      RINEX VERSION / TYPE: "3.04           OBSERVATION DATA    M (MIXED)"  [0xa2+0x50]
+      MARKER NAME: "LJUB"  [0xf3+0x50]
+      END OF HEADER: ""  [0x144+0x50]
+  ▾ Compressed observations  [0x195+0x6b]
+      Line 1: "> 2024 05 01 00 00  0.0000000  0  2      G01G05"  [0x195+0x2f]
+      Line 2: ""  [0x1c5+0x0]
+      Line 3: "3&22000000123 3&115600000123"  [0x1c6+0x1c]
+      Line 4: "3&23000000456 3&120800000543"  [0x1e3+0x1c]

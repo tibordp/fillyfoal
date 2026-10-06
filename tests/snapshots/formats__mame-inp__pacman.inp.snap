@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pacman.inp — MAME input recording v3.0 of "pacman", 0.143 (Sep 2011)  [0x0+0x5d]
+    Magic: "MAMEINP"  [0x0+0x8]
+    Recording time: 2011-03-13 07:06:40 UTC  [0x8+0x8]
+    Major version: 3  [0x10+0x1]
+    Minor version: 0  [0x11+0x1]
+    Reserved: 00 00  |..|  [0x12+0x2]
+    Game: "pacman"  [0x14+0xc]
+    MAME version: "0.143 (Sep 2011)"  [0x20+0x20]
+  ▾ Input data — 0x200 bytes decompressed  [0x40+0x1d]
+      Data  [#1:0x0+0x200]

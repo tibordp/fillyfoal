@@ -1,0 +1,29 @@
+{
+  "version": 8,
+  "name": "Basic",
+  "sources": {
+    "omt": {
+      "type": "vector",
+      "url": "https://example.org/tiles.json"
+    }
+  },
+  "glyphs": "https://example.org/fonts/{fontstack}/{range}.pbf",
+  "layers": [
+    {
+      "id": "background",
+      "type": "background",
+      "paint": {
+        "background-color": "#f8f4f0"
+      }
+    },
+    {
+      "id": "water",
+      "type": "fill",
+      "source": "omt",
+      "source-layer": "water",
+      "paint": {
+        "fill-color": "#a0c8f0"
+      }
+    }
+  ]
+}

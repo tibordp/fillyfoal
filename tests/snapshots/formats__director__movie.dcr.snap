@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ movie.dcr — Shockwave movie (Afterburner), 4 sections  [0x0+0x59]
+    Header: "FGDM" — RIFX (big-endian), 81 bytes  [0x0+0xc]
+    Fver — File version, 15 bytes  [0xc+0x14]
+  ▾ Fcdr — Compression descriptions, 17 bytes  [0x20+0x16]
+    ▾ Compressed data — 0x17 bytes decompressed  [0x25+0x11]
+        Data  [#1:0x0+0x17]
+  ▾ ABMP — Afterburner map, 13 bytes  [0x36+0x12]
+      Header: "0, uncompressed 6 bytes"  [0x3b+0x2]
+    ▾ Compressed data — 0x3 bytes decompressed  [0x3d+0xb]
+        Data  [#2:0x0+0x3]
+    FGEI — initial load segment (compressed chunks)  [0x48+0x11]

@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B — Firefox cache entry v3: https://www.example.com/images/hello.js (HTTP/2 200 OK), 46 bytes body  [0x0+0x147]
+    Body: "/* example */\nfunction hello() { return 42; }\n" — 46 bytes  [0x0+0x2e]
+    Metadata hash  [0x2e+0x4]
+    Chunk hashes — 1 chunks  [0x32+0x2]
+  ▾ Header  [0x34+0x20]
+      Version: 3  [0x34+0x4]
+      Fetch count: 4  [0x38+0x4]
+      Last fetched: 2020-09-13 12:26:40 UTC  [0x3c+0x4]
+      Last modified: 2020-09-13 09:40:00 UTC  [0x40+0x4]
+      Frecency: 12345  [0x44+0x4]
+      Expiration time: 2020-09-14 12:26:40 UTC  [0x48+0x4]
+      Key size: 42  [0x4c+0x4]
+      Flags: 0x0 []  [0x50+0x4]
+    Key: "a,:https://www.example.com/images/hello.js"  [0x54+0x2b]
+  ▾ Elements — 4 elements  [0x7f+0xc4]
+      request-method: "GET"  [0x7f+0x13]
+      response-head: "HTTP/2 200 OK" — HTTP/2 200 OK | content-type: application/javascript | content-length: 43 | cache-control: max-age=86400  [0x92+0x76]
+      net-response-time-onstart: "120"  [0x108+0x1e]
+      net-response-time-onstop: "128"  [0x126+0x1d]
+    Metadata offset: 0x2e  [0x143+0x4]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Cube.skp — SketchUp model, version 20.0.373  [0x0+0x71]
+    Signature: "SketchUp Model"  [0x0+0x20]
+    Version: "{20.0.373}"  [0x20+0x18]
+    Model data  [0x38+0x39]
+      ! note: MFC archive objects are not dissected

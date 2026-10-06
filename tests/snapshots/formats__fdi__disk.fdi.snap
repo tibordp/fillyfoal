@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.fdi — FDI v2.0 3.5" disk, 2 tracks × 2 heads, 300 RPM, by "fillyfoal generator"  [0x0+0xe0]
+    Signature: "Formatted Disk Image file\r\n"  [0x0+0x1b]
+    Creator: "fillyfoal generator           "  [0x1b+0x1e]
+    Line break: 0d 0a  |..|  [0x39+0x2]
+    Comment: "A test disk                                                                     "  [0x3b+0x50]
+    End of text: 0x1a  [0x8b+0x1]
+    Version: 0x200  [0x8c+0x2]
+    Last track: 1  [0x8e+0x2]
+    Last head: 1  [0x90+0x1]
+    Disk type: 3.5" (0x2)  [0x91+0x1]
+    Rotation speed (RPM - 128): 172  [0x92+0x1]
+    Flags: 0x1 [WRITE_PROTECTED]  [0x93+0x1]
+    Tracks per inch: 96 (0x2)  [0x94+0x1]
+    Head width: 96 (0x2)  [0x95+0x1]
+    Reserved: 0  [0x96+0x2]
+    Track descriptors — 4 tracks  [0x98+0x8]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.acv — Photoshop curves v1, 5 curves  [0x0+0x42]
+    Version: 1  [0x0+0x2]
+    Curves: 5  [0x2+0x2]
+    Composite: "0→0, 64→80, 192→200, 255→255" — 4 points  [0x4+0x12]
+    Channel 1: "0→0, 255→255" — 2 points  [0x16+0xa]
+    Channel 2: "0→10, 255→245" — 2 points  [0x20+0xa]
+    Channel 3: "0→0, 128→120, 255→255" — 3 points  [0x2a+0xe]
+    Channel 4: "0→0, 255→255" — 2 points  [0x38+0xa]

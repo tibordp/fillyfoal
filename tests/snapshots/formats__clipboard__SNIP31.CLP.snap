@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ SNIP31.CLP — Clipboard file (Windows 3.x), 2 formats: CF_TEXT, CF_OEMTEXT  [0x0+0xe8]
+    File identifier: Windows 3.x (0xc350)  [0x0+0x2]
+    Number of formats: 2  [0x2+0x2]
+  ▾ CF_TEXT — 25 bytes  [0x4+0x59]
+    ▾ Directory entry  [0x4+0x59]
+        Format ID: CF_TEXT (0x1)  [0x4+0x2]
+        Data length: 25  [0x6+0x4]
+        Data offset: 0xb6  [0xa+0x4]
+        Format name: ""  [0xe+0x4f]
+      Text: "Hello from Windows 3.1\r\n"  [0xb6+0x19]
+  ▾ CF_OEMTEXT — 25 bytes  [0x5d+0x59]
+    ▾ Directory entry  [0x5d+0x59]
+        Format ID: CF_OEMTEXT (0x7)  [0x5d+0x2]
+        Data length: 25  [0x5f+0x4]
+        Data offset: 0xcf  [0x63+0x4]
+        Format name: ""  [0x67+0x4f]
+      Text: "Hello from Windows 3.1\r\n"  [0xcf+0x19]

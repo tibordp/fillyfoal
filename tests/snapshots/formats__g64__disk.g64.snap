@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.g64 — GCR-1541 image, 3 tracks present of 84 half-track slots, max 7928 bytes per track  [0x0+0x372]
+    Signature: "GCR-1541"  [0x0+0x8]
+    Version: 0  [0x8+0x1]
+    Track entries (half tracks): 84  [0x9+0x1]
+    Maximum track size: 7928  [0xa+0x2]
+    Speed zones  [0x15c+0x150]
+  ▾ Tracks — 3 of 84 half-tracks present  [0xc+0x150]
+      Track 1: 64 — 64 GCR bytes, speed zone 3  [0x2ac+0x42]
+      Track 2: 64 — 64 GCR bytes, speed zone 3  [0x2ee+0x42]
+      Track 18: 64 — 64 GCR bytes, speed zone 2  [0x330+0x42]

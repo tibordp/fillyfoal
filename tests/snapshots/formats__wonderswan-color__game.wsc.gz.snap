@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.wsc — WonderSwan Color game 01-23 v0, 128 KiB, save SRAM 64 Kbit, checksum valid  [0x0+0x20000]
+    Program  [0x0+0x1fff0]
+    Reset code (JMP FAR)  [0x1fff0+0x6]
+  ▾ Footer  [0x1fff6+0xa]
+      Publisher ID: 0x1  [0x1fff6+0x1]
+      System: WonderSwan Color (0x1)  [0x1fff7+0x1]
+      Game ID: 0x23  [0x1fff8+0x1]
+      Version: 0  [0x1fff9+0x1]
+      ROM size: 1 Mbit (0x0)  [0x1fffa+0x1]
+      Save type: SRAM 64 Kbit (0x1)  [0x1fffb+0x1]
+      Flags: 0x4 [ROM_1_CYCLE]  [0x1fffc+0x1]
+      Mapper / RTC: none (0x0)  [0x1fffd+0x1]
+      Checksum: 0x4a2  [0x1fffe+0x2]

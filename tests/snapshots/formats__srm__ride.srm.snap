@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ride.srm — SRM ride (SRM7), 1 blocks, 1 markers, interval 1/1 s  [0x0+0x96]
+  ▾ Header  [0x0+0x56]
+      Magic: "SRM7"  [0x0+0x4]
+      Days since 1880-01-01: 52000  [0x4+0x2]
+      Wheel circumference (mm): 2096  [0x6+0x2]
+      Recording interval numerator: 1  [0x8+0x1]
+      Recording interval denominator: 1  [0x9+0x1]
+      Data blocks: 1  [0xa+0x2]
+      Markers: 1  [0xc+0x2]
+      Padding: 0  [0xe+0x1]
+      Comment length: 11  [0xf+0x1]
+      Comment: "Test ride 1"  [0x10+0x46]
+    Markers, blocks and samples  [0x56+0x40]
+    Ride date: 2022-05-15 00:00:00 UTC  [0x4+0x2]

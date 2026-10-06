@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<SCRIBUSUTF8NEW Version="1.6.1">
+    <DOCUMENT ANZPAGES="2" PAGEWIDTH="595.28" PAGEHEIGHT="841.89" TITLE="Fixture newsletter" AUTHOR="Fixture">
+        <COLOR NAME="Black" SPACE="CMYK" C="0" M="0" Y="0" K="100"/>
+        <PAGE PAGEXPOS="100" PAGEYPOS="20" PAGEWIDTH="595.28" PAGEHEIGHT="841.89" NUM="0"/>
+        <PAGE PAGEXPOS="100" PAGEYPOS="881" PAGEWIDTH="595.28" PAGEHEIGHT="841.89" NUM="1"/>
+        <PAGEOBJECT XPOS="140" YPOS="60" OwnPage="0" PTYPE="4" WIDTH="300" HEIGHT="100">
+            <StoryText><ITEXT CH="Hello from Scribus"/><trail/></StoryText>
+        </PAGEOBJECT>
+    </DOCUMENT>
+</SCRIBUSUTF8NEW>

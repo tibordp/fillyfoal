@@ -1,0 +1,24 @@
+file format : IDRISI Raster A.1
+file title  : Elevation
+data type   : integer
+file type   : binary
+columns     : 512
+rows        : 480
+ref. system : utm-33n
+ref. units  : m
+unit dist.  : 1.0000000
+min. X      : 500000.0000000
+max. X      : 512800.0000000
+min. Y      : 5090000.0000000
+max. Y      : 5102000.0000000
+pos'n error : unknown
+resolution  : 25.0000000
+min. value  : 280
+max. value  : 1200
+display min : 280
+display max : 1200
+value units : m
+value error : unknown
+flag value  : none
+flag def'n  : none
+legend cats : 0

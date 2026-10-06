@@ -1,0 +1,5 @@
+     3.04           C                   G                   RINEX VERSION / TYPE
+     2    AR    AS                                          # / TYPES OF DATA   
+                                                            END OF HEADER       
+AR LJUB 2024 05 01 00 00  0.000000  1    1.234567890123E-07
+AS G01  2024 05 01 00 00  0.000000  1    4.123456789012E-04

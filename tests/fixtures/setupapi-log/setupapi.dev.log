@@ -1,0 +1,24 @@
+﻿[Device Install Log]
+     OS Version = 10.0.19041
+     Service Pack = 0.0
+     Suite = 0x0100
+     ProductType = 1
+     Architecture = amd64
+
+[BeginLog]
+
+[Boot Session: 2023/03/01 08:00:00.500]
+
+>>>  [Device Install (Hardware initiated) - USB\VID_0781&PID_5567\4C530001231120115142]
+>>>  Section start 2023/03/02 11:22:33.444
+     ump: Creating Install Process: DrvInst.exe 11:22:33.448
+     ndv: Retrieving device info...
+     dvi: Selected driver installs from section [USBSTOR_BULK] in 'c:\windows\system32\driverstore\filerepository\usbstor.inf_amd64\usbstor.inf'.
+<<<  Section end 2023/03/02 11:22:35.111
+<<<  [Exit status: SUCCESS]
+
+>>>  [Device Install (Hardware initiated) - SWD\WPDBUSENUM\_??_USBSTOR#Disk&Ven_Example&Prod_Flash&Rev_1.00#4C530001231120115142&0#]
+>>>  Section start 2023/03/02 11:22:36.010
+     dvi: Device installed.
+<<<  Section end 2023/03/02 11:22:36.900
+<<<  [Exit status: SUCCESS]

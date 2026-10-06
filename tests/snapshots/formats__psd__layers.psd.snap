@@ -33,7 +33,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Name length: 0  [0x44+0x1]
         Name: ""  [0x45+0x0]
         Data size: 12  [0x46+0x4]
-      ▾ XMP packet — XML document, root <x:xmpmeta>  [0x4a+0xc]
+      ▾ XMP packet — XMP metadata  [0x4a+0xc]
           x:xmpmeta  [0x4a+0xc]
     ▾ Path information #0: 2000 — "Path 1", 0x4 bytes  [0x56+0x16]
         Signature: "8BIM"  [0x56+0x4]

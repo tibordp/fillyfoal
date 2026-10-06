@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ zany.min — Pokémon mini "Pokemon Zany" (MPZE), 9 KiB  [0x0+0x2400]
+    BIOS area (not in cartridge)  [0x0+0x2100]
+    Signature: "MN"  [0x2100+0x2]
+    Reset and interrupt vectors: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x2102+0xa2]
+    Nintendo: "NINTENDO"  [0x21a4+0x8]
+    Game code: "MPZE"  [0x21ac+0x4]
+    Title: "Pokemon Zany"  [0x21b0+0xc]
+    Players marker: "2P"  [0x21bc+0x2]
+    Program  [0x21c0+0x240]

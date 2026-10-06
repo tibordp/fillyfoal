@@ -1,0 +1,24 @@
+VERSION ""
+
+
+NS_ :
+	NS_DESC_
+	CM_
+	BA_DEF_
+
+BS_:
+
+BU_: ECU Dashboard
+
+
+BO_ 291 EngineData: 8 ECU
+ SG_ RPM : 0|16@1+ (0.25,0) [0|16383.75] "rpm" Dashboard
+ SG_ CoolantTemp : 16|8@1+ (1,-40) [-40|215] "degC" Dashboard
+
+BO_ 2566844672 VehicleSpeed: 8 ECU
+ SG_ Speed : 8|16@1+ (0.00390625,0) [0|250.996] "km/h" Dashboard
+
+CM_ SG_ 291 RPM "Engine speed";
+BA_DEF_ BO_ "GenMsgCycleTime" INT 0 65535;
+BA_ "GenMsgCycleTime" BO_ 291 100;
+VAL_ 291 CoolantTemp 255 "Invalid" ;

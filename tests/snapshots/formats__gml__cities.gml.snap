@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cities.gml — Geography Markup Language, 1 feature members in the head  [0x0+0x1a6]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ wfs:FeatureCollection — 1 element  [0x27+0x17e]
+      @xmlns:wfs: "http://www.opengis.net/wfs/2.0"  [0x49+0x1e]
+      @xmlns:gml: "http://www.opengis.net/gml/3.2"  [0x74+0x1e]
+      @xmlns:app: "urn:example"  [0x9f+0xb]
+    ▾ wfs:member — 1 element  [0xaf+0xdd]
+      ▾ app:City — gml:id="c1" (2 elements)  [0xc0+0xbc]
+          @gml:id: "c1"  [0xd2+0x2]
+          app:name: "Ljubljana"  [0xdd+0x1e]
+        ▾ app:location — 1 element  [0x102+0x6a]
+          ▾ gml:Point — srsName="EPSG:4326" (1 element)  [0x110+0x4d]
+              @srsName: "EPSG:4326"  [0x124+0x9]
+              gml:pos: "46.0569 14.5058"  [0x12f+0x22]

@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ signals.arxml — AUTOSAR XML, Signals  [0x0+0x17c]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ AUTOSAR — 1 element  [0x27+0x154]
+      @xmlns: "http://autosar.org/schema/r4.0"  [0x37+0x1e]
+      @xmlns:xsi: "http://www.w3.org/2001/XMLSchema-instance"  [0x62+0x29]
+    ▾ AR-PACKAGES — 1 element  [0x90+0xe0]
+      ▾ AR-PACKAGE — 2 elements  [0xa2+0xbd]
+          SHORT-NAME: "Signals"  [0xb5+0x20]
+        ▾ ELEMENTS — 1 element  [0xdc+0x71]
+          ▾ I-SIGNAL — 2 elements  [0xef+0x4c]
+              SHORT-NAME: "EngineSpeed"  [0xf9+0x24]
+              LENGTH: "16"  [0x11d+0x13]

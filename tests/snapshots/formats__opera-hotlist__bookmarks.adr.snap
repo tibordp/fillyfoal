@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bookmarks.adr — Opera hotlist, 2 bookmarks in 1 folders  [0x0+0x120]
+  ▾ Research: 2011-03-13 07:06:40 UTC — folder  [0x3f+0x31]
+      Line: "#FOLDER"  [0x3f+0x8]
+      Line: "\tID=1"  [0x47+0x6]
+      Line: "\tNAME=Research"  [0x4d+0xf]
+      Line: "\tCREATED=1300000000"  [0x5c+0x14]
+  ▾ Example Domain: 2011-03-13 07:08:20 UTC — http://www.example.com/  [0x71+0x65]
+      Line: "#URL"  [0x71+0x5]
+      Line: "\tID=2"  [0x76+0x6]
+      Line: "\tNAME=Example Domain"  [0x7c+0x15]
+      Line: "\tURL=http://www.example.com/"  [0x91+0x1d]
+      Line: "\tCREATED=1300000100"  [0xae+0x14]
+      Line: "\tVISITED=1300000200"  [0xc2+0x14]
+  ▾ Opera: 2011-03-13 07:11:40 UTC — http://www.opera.com/  [0xda+0x46]
+      Line: "#URL"  [0xda+0x5]
+      Line: "\tID=3"  [0xdf+0x6]
+      Line: "\tNAME=Opera"  [0xe5+0xc]
+      Line: "\tURL=http://www.opera.com/"  [0xf1+0x1b]
+      Line: "\tCREATED=1300000300"  [0x10c+0x14]

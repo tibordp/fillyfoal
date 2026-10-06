@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FitnessWorkbook xmlns="http://www.zonefivesoftware.com/xmlschemas/FitnessLogbook/v2">
+  <AthleteLog>
+    <Athlete Id="1" Name="Jane" />
+    <Activity StartTime="2024-05-01T12:00:00Z" Id="a1">
+      <Duration TotalSeconds="3600" />
+      <Distance TotalMeters="30000" />
+      <Category Id="c1" Name="Cycling" />
+    </Activity>
+  </AthleteLog>
+</FitnessWorkbook>

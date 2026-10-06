@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pvr — Sega PVR (Dreamcast) texture, 4×4  [0x0+0x40]
+    Global index: 42  [0x0+0x10]
+    PVRT — 4×4, pixel format 1, data format 0x01  [0x10+0x30]

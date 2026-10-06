@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ FIXT.CHR — BGI stroked font FIXT, 3 characters from 65  [0x0+0xa7]
+    Description: "BGI Stroked Font V1.1 - Jun 05, 2026\r\nCopyright (c) 2026 Fixture"  [0x0+0x47]
+    Header size: 128  [0x47+0x2]
+    Font name: "FIXT"  [0x49+0x4]
+    Font data size: 39  [0x4d+0x2]
+    Version: "1.1"  [0x4f+0x2]
+    Characters: 3  [0x81+0x2]
+    First character: 65  [0x84+0x1]
+    Stroke data offset: 0x19  [0x85+0x2]
+    Origin to capital: 7  [0x88+0x1]
+    Origin to baseline: 0  [0x89+0x1]
+    Origin to descender: -2  [0x8a+0x1]
+    Stroke offsets — 3 entries  [0x90+0x6]
+    Widths — 3 entries  [0x96+0x3]
+    Stroke data  [0x99+0xe]

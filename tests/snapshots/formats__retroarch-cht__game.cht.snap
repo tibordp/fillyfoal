@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.cht — RetroArch cheat file, 3 cheats (1 enabled), 255 bytes  [0x0+0xff]
+    cheats: 3  [0x0+0xa]
+  ▾ Cheat 0: "Infinite lives" — 00C1-B7A4  [0xc+0x4e]
+      desc: "Infinite lives"  [0xc+0x1e]
+      code: "00C1-B7A4"  [0x2b+0x19]
+      enable: false  [0x45+0x15]
+  ▾ Cheat 1: "Max money" — 7E0DBF63+7E0DC063  [0x5c+0x50]
+      desc: "Max money"  [0x5c+0x19]
+      code: "7E0DBF63+7E0DC063"  [0x76+0x21]
+      enable: true  [0x98+0x14]
+  ▾ Cheat 2: "Start on level 5" — C2A2-4F0D  [0xae+0x50]
+      desc: "Start on level 5"  [0xae+0x20]
+      code: "C2A2-4F0D"  [0xcf+0x19]
+      enable: false  [0xe9+0x15]

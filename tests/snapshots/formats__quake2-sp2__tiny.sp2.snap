@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.sp2 — Quake II sprite, 2 frames  [0x0+0xac]
+    Signature  [0x0+0x4]
+    Version: 2  [0x4+0x4]
+    Frames: 2  [0x8+0x4]
+    sprites/a_0.pcx — 32×32  [0xc+0x50]
+    sprites/a_1.pcx — 32×32  [0x5c+0x50]

@@ -1,0 +1,14 @@
+%=SNX 2.02 IGS 24:122:00000 IGS 24:121:00000 24:122:00000 P 00006 2 S
+*-------------------------------------------------------------------------------
++FILE/REFERENCE
+ DESCRIPTION        International GNSS Service
+ OUTPUT             Weekly combined solution
+-FILE/REFERENCE
++SITE/ID
+*CODE PT __DOMES__ T _STATION DESCRIPTION__ APPROX_LON_ APPROX_LAT_ _APP_H_
+ LJUB  A 14500M001 P Ljubljana, Slovenia     14 32 37.1  46  2 37.6   351.3
+-SITE/ID
++SOLUTION/ESTIMATE
+     1 STAX   LJUB  A    1 24:122:00000 m    2 0.428200000000000E+07 0.123E-02
+-SOLUTION/ESTIMATE
+%ENDSNX

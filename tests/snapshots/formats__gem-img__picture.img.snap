@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ picture.img — GEM bitmap (XIMG), 16×4, 1 planes  [0x0+0x32]
+    Version: 1  [0x0+0x2]
+    Header length (words): 17  [0x2+0x2]
+    Planes: 1  [0x4+0x2]
+    Pattern length: 2  [0x6+0x2]
+    Pixel width (µm): 85  [0x8+0x2]
+    Pixel height (µm): 85  [0xa+0x2]
+    Width: 16  [0xc+0x2]
+    Height: 4  [0xe+0x2]
+    Header extension: "XIMG" — colour model RGB  [0x10+0x12]
+    Compressed scan lines — pattern runs, solid runs, bit strings, vertical replication  [0x22+0x10]

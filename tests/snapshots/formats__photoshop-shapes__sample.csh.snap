@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.csh — Photoshop custom shapes v2, 1 shapes  [0x0+0x2c]
+    Signature: "cush"  [0x0+0x4]
+    Version: 2  [0x4+0x4]
+    Shapes: 1  [0x8+0x4]
+    Shape records  [0xc+0x20]
+      ! unsupported: custom shape records

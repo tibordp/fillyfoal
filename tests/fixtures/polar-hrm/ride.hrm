@@ -1,0 +1,27 @@
+[Params]
+Version=106
+Monitor=34
+SMode=111000100
+Date=20240501
+StartTime=12:00:00.0
+Length=00:00:05.0
+Interval=1
+Upper1=0
+Lower1=0
+MaxHR=190
+RestHR=50
+Weight=70
+
+[Note]
+Morning ride
+
+[IntTimes]
+00:00:05.0	140	120	145	160
+0	0	0	30	22
+
+[HRData]
+120	250	85	300
+122	252	86	302
+125	255	88	305
+128	260	90	310
+130	262	91	312

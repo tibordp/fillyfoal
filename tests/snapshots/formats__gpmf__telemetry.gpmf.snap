@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ telemetry.gpmf — GoPro GPMF telemetry  [0x0+0xe4]
+  ▾ DEVC — device  [0x0+0xe4]
+      DVID — [1]  [0x8+0xc]
+      DVNM — HERO12  [0x14+0xe]
+    ▾ STRM — stream  [0x24+0x64]
+        STMP — [1000000]  [0x2c+0x10]
+        STNM — Accelerometer  [0x3c+0x15]
+        SIUN — m/s²  [0x54+0xc]
+        SCAL — [418]  [0x60+0xa]
+        ACCL — [4100, 10, -20, 4095, 12, -18, 4102, 9, -22]  [0x6c+0x1a]
+    ▾ STRM — stream  [0x88+0x5c]
+        GPSF — [3]  [0x90+0xc]
+        GPSU — 240501120000.000  [0x9c+0x18]
+        GPS5 — [460569000, 145058000, 300000, 1200, 1300, 460569010, 145058010, 300010, 1210, 1310]  [0xb4+0x30]

@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.o5m — o5m, 2 nodes, 1 ways, 1 relations  [0x0+0x33]
+    reset: 0xff  [0x0+0x1]
+    header: "o5m2" — 4 bytes  [0x1+0x6]
+    file timestamp — 5 bytes  [0x7+0x7]
+    node — id 100, 13 bytes  [0xe+0xf]
+    node — id 102, 4 bytes  [0x1d+0x6]
+    way — id 500, 7 bytes  [0x23+0x9]
+    reset: 0xff  [0x2c+0x1]
+    relation — id 7, 3 bytes  [0x2d+0x5]
+    end of file: 0xfe  [0x32+0x1]

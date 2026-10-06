@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bgsm — Bethesda shader material v2, 2 textures  [0x0+0x88]
+    Signature  [0x0+0x4]
+    Version: 2  [0x4+0x4]
+    Texture: "textures\\tiny\\tiny_d.dds"  [0x44+0x22]
+    Texture: "textures\\tiny\\tiny_n.dds"  [0x66+0x22]

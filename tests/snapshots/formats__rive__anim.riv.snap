@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ anim.riv — Rive runtime file v7.0, file ID 12345  [0x0+0x1e]
+    Signature  [0x0+0x4]
+    Major version: 7  [0x4+0x1]
+    Minor version: 0  [0x5+0x1]
+    File ID: 12345  [0x6+0x2]
+    Table of contents: "4, 5, 13, 14, 196, 197" — 6 property keys  [0x8+0xd]
+    Objects  [0x15+0x9]
+      ! unsupported: Rive object records

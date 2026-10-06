@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ mario.aps — APS N64 patch "Mario hack" for cart NSM, 2 records, output 8.0 MiB  [0x0+0x5e]
+    Magic: "APS10"  [0x0+0x5]
+    Header type: N64-specific (0x1)  [0x5+0x1]
+    Encoding method: 0  [0x6+0x1]
+    Description: "Mario hack"  [0x7+0x32]
+    Original image format: big-endian (.z64) (0x1)  [0x39+0x1]
+    Cartridge ID: "NSM"  [0x3a+0x3]
+    CRC: 00 01 02 03 04 05 06 07  |........|  [0x3d+0x8]
+    Padding: 00 00 00 00 00  |.....|  [0x45+0x5]
+    Output size: 8388608  [0x4a+0x4]
+    Record 1: 0x1000 — 4 bytes at 0x1000  [0x4e+0x9]
+    Record 2: 0x2000 — 16 × 0xff at 0x2000 (RLE)  [0x57+0x7]

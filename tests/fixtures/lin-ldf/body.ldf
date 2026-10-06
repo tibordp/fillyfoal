@@ -1,0 +1,21 @@
+// LIN description
+LIN_description_file;
+LIN_protocol_version = "2.1";
+LIN_language_version = "2.1";
+LIN_speed = 19.2 kbps;
+
+Nodes {
+  Master: BCM, 5 ms, 0.1 ms ;
+  Slaves: WiperMotor, RainSensor ;
+}
+
+Signals {
+  WiperSpeed: 2, 0, BCM, WiperMotor ;
+  RainIntensity: 8, 0, RainSensor, BCM ;
+}
+
+Frames {
+  WiperCmd: 0x10, BCM, 1 {
+    WiperSpeed, 0 ;
+  }
+}

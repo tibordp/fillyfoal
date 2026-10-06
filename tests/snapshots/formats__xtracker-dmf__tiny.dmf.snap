@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.dmf — XTRACKER v8 module "Tiny DMF" by "filly"  [0x0+0x66]
+    Signature: "DDMF"  [0x0+0x4]
+    Version: 8  [0x4+0x1]
+    Tracker: "XTRACKER"  [0x5+0x8]
+    Song name: "Tiny DMF"  [0xd+0x1e]
+    Composer: "filly"  [0x2b+0x14]
+    Day: 6  [0x3f+0x1]
+    Month: 10  [0x40+0x1]
+    Year: 26  [0x41+0x1]
+    INFO — 4 bytes  [0x42+0xc]
+    SEQU — 8 bytes  [0x4e+0x10]
+    ENDE — 0 bytes  [0x5e+0x8]
