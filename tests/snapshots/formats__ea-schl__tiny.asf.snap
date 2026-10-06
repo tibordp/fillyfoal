@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.asf — EA audio stream, 2 data blocks  [0x0+0x5c]
+    SCHl — 16 bytes  [0x0+0x18]
+    SCCl — 4 bytes  [0x18+0xc]
+    SCDl — 16 bytes  [0x24+0x18]
+    SCDl — 16 bytes  [0x3c+0x18]
+    SCEl — 0 bytes  [0x54+0x8]

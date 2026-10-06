@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ storages.cfb — Compound File v3, 512-byte sectors, 12 directory entries  [0x0+0x2200]
   ▾ Header  [0x0+0x4c]
@@ -450,8 +450,11 @@ expression: "common::explore(&name, &data)"
         ▾ Sector chain — mini sectors
             Link 0: 6 — mini sector → #3:0x180+0x40
             Link 1: 7 — mini sector → #3:0x1c0+0x40
-        ▾ Content — 100 bytes  [#7:0x0+0x64]
-            Data  [#7:0x0+0x64]
+        ▾ Content — UTF-8 text, 1 line  [#7:0x0+0x64]
+            Encoding: "UTF-8"
+            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#7:0x0+0x64]
+              Line 1: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  [#7:0x0+0x64]
       ▾ Nested — storage  [#1:0x200+0x80]
         ▾ Directory entry  [#1:0x200+0x80]
             Name: "Nested"  [#1:0x200+0x40]
@@ -484,8 +487,11 @@ expression: "common::explore(&name, &data)"
               Stream size: 26  [#1:0x2f8+0x8]
           ▾ Sector chain — mini sectors
               Link 0: 5 — mini sector → #3:0x140+0x40
-          ▾ Content — 26 bytes  [#8:0x0+0x1a]
-              Data  [#8:0x0+0x1a]
+          ▾ Content — UTF-8 text, 1 line  [#8:0x0+0x1a]
+              Encoding: "UTF-8"
+              Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#8:0x0+0x1a]
+                Line 1: "hello from a nested stream"  [#8:0x0+0x1a]
     ▾ \x05SummaryInformation — summary information property set, 224 bytes  [#1:0x80+0x80]
       ▾ Directory entry  [#1:0x80+0x80]
           Name: "\u{5}SummaryInformation"  [#1:0x80+0x40]

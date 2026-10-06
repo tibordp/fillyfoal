@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ntf — NITF02.10 "Test image" from STATION  [0x0+0x140]
+    File profile: "NITF"  [0x0+0x4]
+    Version: "02.10"  [0x4+0x5]
+    Complexity level: "03"  [0x9+0x2]
+    Standard type: "BF01"  [0xb+0x4]
+    Originating station: "STATION   "  [0xf+0xa]
+    File date and time: "20261006013000"  [0x19+0xe]
+    File title: "Test image                                                                      "  [0x27+0x50]
+    Security classification: "U"  [0x77+0x1]
+    Security and segments  [0x78+0xc8]

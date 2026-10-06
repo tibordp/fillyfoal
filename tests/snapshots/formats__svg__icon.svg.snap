@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ icon.svg — Scalable Vector Graphics: 64×64  [0x0+0x135]
+  ▾ XML declaration  [0x0+0x15]
+      Version: "1.0"  [0xf+0x3]
+  ▾ svg — width="64" height="64" viewBox="0 0 64 64" (3 elements)  [0x16+0x11e]
+      @xmlns: "http://www.w3.org/2000/svg"  [0x22+0x1a]
+      @xmlns:xlink: "http://www.w3.org/1999/xlink"  [0x4b+0x1c]
+      @width: "64"  [0x70+0x2]
+      @height: "64"  [0x7c+0x2]
+      @viewBox: "0 0 64 64"  [0x89+0x9]
+      title: "Icon"  [0x97+0x13]
+    ▾ g — fill="none" stroke="#000" (2 elements)  [0xad+0x67]
+        @fill: "none"  [0xb6+0x4]
+        @stroke: "#000"  [0xc4+0x4]
+      ▾ circle — cx="32" cy="32" r="30"  [0xcf+0x20]
+          @cx: "32"  [0xdb+0x2]
+          @cy: "32"  [0xe3+0x2]
+          @r: "30"  [0xea+0x2]
+      ▾ path — d="M16 32 L48 32"  [0xf4+0x19]
+          @d: "M16 32 L48 32"  [0xfd+0xd]
+    ▾ use — xlink:href="#a"  [0x117+0x16]
+        @xlink:href: "#a"  [0x128+0x2]

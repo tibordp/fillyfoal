@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ settings.reg — Windows Registry export  [0x0+0x3a6]
+    Byte order mark: "UTF-16LE"  [0x0+0x2]
+    Header: "Windows Registry Editor Version 5.00"  [#1:0x0+0x24]
+  ▾ [HKEY_CURRENT_USER\Software\Fillyfoal] — 9 entries  [#1:0x28+0x187]
+      (Default): "default value" — REG_SZ  [#1:0x52+0xf]
+      Name: "Fillyfoal \"viewer\"" — REG_SZ  [#1:0x6a+0x16]
+      Count: 0x2a — REG_DWORD (42)  [#1:0x8a+0xe]
+      Blob: de ad be ef  |....| — REG_BINARY  [#1:0xa1+0xf]
+      Path: "%APPDATA%" — REG_EXPAND_SZ  [#1:0xb9+0x42]
+      List: "a\nbc" — REG_MULTI_SZ, 2 strings  [#1:0x104+0x2a]
+      Big: 0x1 — REG_QWORD  [#1:0x136+0x1e]
+      Long: 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e 0f …  |................| — REG_BINARY  [#1:0x15d+0x44]
+      Gone — value deleted  [#1:0x1aa+0x1]
+    [-HKEY_CURRENT_USER\Software\Old] — key deleted  [#1:0x1af+0x23]

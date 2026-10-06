@@ -1,0 +1,7 @@
+Shopping list
+=============
+
+- café au lait
+- 2× croissants
+
+Last line without terminator

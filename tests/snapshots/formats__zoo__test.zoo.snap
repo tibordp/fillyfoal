@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.zoo — ZOO archive, 3 files, 289 bytes uncompressed  [0x0+0x1d6]
   ▾ Archive header — ZOO 2.10 Archive.  [0x0+0x22]
@@ -37,8 +37,11 @@ expression: "common::explore(&name, &data)"
         Long name: "hello.txt"  [0x65+0xa]
         System ID: 0  [0x6f+0x2]
         Attributes and version: 00 00 00 00 00 00 00  |.......|  [0x71+0x7]
-    ▾ Content — 22 bytes  [0x78+0x16]
-        ! unsupported: unrecognized format [0x78+0x16]
+    ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x78+0x16]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x78+0x16]
+          Line 1: "hello, old archivers"  [0x78+0x14]
   ▾ images/pixel.png — 67 bytes  [0x8e+0x54]
     ▾ Directory entry  [0x8e+0x54]
         Tag: 0xfdc4a7dc  [0x8e+0x4]

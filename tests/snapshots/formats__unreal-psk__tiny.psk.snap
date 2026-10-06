@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.psk — Unreal skeletal mesh (3 chunks)  [0x0+0x6c]
+    ACTRHEAD — 0 × 0 bytes  [0x0+0x20]
+    PNTS0000 — 1 × 12 bytes  [0x20+0x2c]
+    VTXW0000 — 0 × 16 bytes  [0x4c+0x20]

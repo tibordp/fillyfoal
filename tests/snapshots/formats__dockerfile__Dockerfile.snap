@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Dockerfile — Dockerfile, 2 stages: rust:${RUST_VERSION}, debian:bookworm-slim  [0x0+0x145]
+    ARG: "RUST_VERSION=1.88"  [0x1d+0x15]
+  ▾ Stage build (rust:${RUST_VERSION}) — 4 instructions  [0x33+0x9b]
+      FROM: "rust:${RUST_VERSION} AS build"  [0x33+0x22]
+      WORKDIR: "/src"  [0x56+0xc]
+      COPY: ". ."  [0x63+0x8]
+      RUN: "cargo build --release && strip target/release/app"  [0x6c+0x61]
+  ▾ Stage 2 (debian:bookworm-slim) — 4 instructions  [0xcf+0x76]
+      FROM: "debian:bookworm-slim"  [0xcf+0x19]
+      COPY: "--from=build /src/target/release/app /usr/local/bin/app"  [0xe9+0x3c]
+      EXPOSE: "8080"  [0x126+0xb]
+      ENTRYPOINT: "[\"app\"]"  [0x132+0x12]

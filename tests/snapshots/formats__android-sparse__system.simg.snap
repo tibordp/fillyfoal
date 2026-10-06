@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ system.simg — Android sparse image, 32.0 KiB expanded, 4 chunks  [0x0+0x1054]
   ▾ Header  [0x0+0x1c]
@@ -30,9 +30,15 @@ expression: "common::explore(&name, &data)"
         ▾ Trailer  [0x1020+0x8]
             CRC32: 0x0  [0x1020+0x4]
             ISIZE: 0  [0x1024+0x4]
-        ▾ Content — 0x64 bytes decompressed  [0x32+0xfee]
+        ▾ Content — UTF-8 text, LF line endings, 4 lines  [0x32+0xfee]
             ! warning: decoded 0x64 bytes, expected 0x0
-            Data  [#1:0x0+0x64]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+          ▾ Lines — 4 lines  [#1:0x0+0x64]
+              Line 1: "sparse raw chunk payload"  [#1:0x0+0x18]
+              Line 2: "sparse raw chunk payload"  [#1:0x19+0x18]
+              Line 3: "sparse raw chunk payload"  [#1:0x32+0x18]
+              Line 4: "sparse raw chunk payload"  [#1:0x4b+0x18]
     ▾ Chunk 1 — fill, blocks 1..+2 (8.0 KiB)  [0x1028+0x10]
         Chunk type: fill (0xcac2)  [0x1028+0x2]
         Reserved  [0x102a+0x2]

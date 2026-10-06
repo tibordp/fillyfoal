@@ -1311,8 +1311,13 @@ async fn envi(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-declare_format!(pub PDS3 = "pds3", "NASA Planetary Data System label (PDS3)", ["lbl", "img", "pds"], "application/x-pds",
-    Probe::Custom(|h| (h.starts_with(b"PDS_VERSION_ID") || h.starts_with(b"ODL_VERSION_ID")) && is_text(&Head { data: h.data.get(..512).unwrap_or(h.data), tail: h.tail, len: h.len })), pds3);
+fn pds_probe(h: &Head<'_>) -> bool {
+    let first = h.data.get(..32).unwrap_or(h.data);
+    (h.starts_with(b"PDS_VERSION_ID") || h.starts_with(b"ODL_VERSION_ID") || h.starts_with(b"PDS3")) && first.iter().all(|&b| b >= 0x20 || b == b'\r' || b == b'\n')
+}
+
+declare_format!(pub PDS3 = "pds", "NASA Planetary Data System label (PDS3/ODL)", ["lbl", "img", "pds"], "application/x-pds",
+    Probe::Custom(pds_probe), pds3);
 
 /// One ODL statement: keyword, value, span, and nested statements.
 #[derive(Clone, Debug)]

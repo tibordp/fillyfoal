@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ prefix.pch — Clang AST file (clang version 17.0.0 (fixture))  [0x0+0x7f]
+    Magic  [0x0+0x4]
+    LLVM bitstream  [0x4+0x7b]

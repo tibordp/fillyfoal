@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="3" failures="1"><testsuite name="core" tests="3" failures="1" time="0.5"><testcase name="ok" time="0.1"/><testcase name="bad"><failure message="boom">trace</failure></testcase><testcase name="skip"><skipped/></testcase></testsuite></testsuites>

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.rx2 — REX2 loop, 4 chunks, 2 slices  [0x0+0x64]
+    Container — CAT REX2  [0x0+0xc]
+    HEAD — 10 bytes  [0xc+0x12]
+    GLOB — 22 bytes  [0x1e+0x1e]
+    SLCE — 11 bytes  [0x3c+0x13]
+    SLCE — 11 bytes  [0x50+0x13]

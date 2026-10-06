@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ hello-1.0-1.noarch.rpm — RPM hello-1.0-1.noarch, payload cpio/gzip  [0x0+0x2ef]
   ▾ Lead — hello-1.0-1  [0x0+0x60]
@@ -165,8 +165,11 @@ expression: "common::explore(&name, &data)"
             Name size: 29  [#1:0x5e+0x8]
             Checksum: 0x0  [#1:0x66+0x8]
           Name: "./usr/share/doc/hello/README"  [#1:0x6e+0x1d]
-        ▾ Content — 15 bytes  [#1:0x8c+0xf]
-            ! unsupported: unrecognized format [#1:0x8c+0xf]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [#1:0x8c+0xf]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0x8c+0xf]
+              Line 1: "hello from rpm"  [#1:0x8c+0xe]
       ▾ TRAILER!!! — end of archive  [#1:0x9c+0x7c]
         ▾ Header  [#1:0x9c+0x6e]
             Magic: "070701"  [#1:0x9c+0x6]

@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ lenient.jsonc — JSON object, 5 members  [0x0+0x78]
+    ! malformed: expected a quoted key [0x3f+0x8]
+    editor.fontSize: 14  [0x39+0x2]
+    unquoted: true  [0x49+0x4]
+  ▾ list — array, 3 elements  [0x59+0xa]
+      [0]: 1  [0x5a+0x1]
+      [1]: 2  [0x5d+0x1]
+      [2]: 3  [0x60+0x1]
+    a: 1  [0x6c+0x1]
+    b: 2  [0x73+0x1]

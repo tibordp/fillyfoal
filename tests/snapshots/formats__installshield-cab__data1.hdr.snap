@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ data1.hdr — InstallShield cabinet, version 7  [0x0+0x304]
+    Signature: "ISc("  [0x0+0x4]
+    Version: 0x1007000  [0x4+0x4]
+    Volume info: 0x0  [0x8+0x4]
+    Cabinet descriptor offset: 0x200  [0xc+0x4]
+    Cabinet descriptor size: 256  [0x10+0x4]
+    Cabinet descriptor  [0x200+0x104]

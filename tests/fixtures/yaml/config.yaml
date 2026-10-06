@@ -1,0 +1,45 @@
+%YAML 1.2
+---
+# Service configuration
+name: fillyfoal
+version: 1.2
+port: 8080
+enabled: true
+nothing: ~
+released: 2026-10-05
+hex: 0x1F
+quoted: "tab\tand \u00e9"
+single: 'it''s'
+anchor: &base
+  retries: 3
+  timeout: 1.5
+merged: *base
+servers:
+  - name: alpha
+    host: 10.0.0.1
+  - name: beta
+    host: 10.0.0.2
+    tags: [prod, "eu-west", 3]
+plain list:
+- one
+- two # comment
+- - nested
+  - seq
+literal: |
+  line one
+    indented
+  line three
+folded: >-
+  folded
+  text here
+long: this plain scalar
+  continues here
+inline: {a: 1, b: [x, y], c: "z"}
+empty:
+...
+---
+second: document
+list: [1, 2, 3]
+---
+- just
+- a sequence

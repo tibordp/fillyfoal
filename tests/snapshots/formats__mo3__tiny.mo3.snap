@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mo3 — MO3 v5 module, 1234-byte header  [0x0+0x30]
+    Signature: "MO3"  [0x0+0x3]
+    Version: 5  [0x3+0x1]
+    Decompressed header size: 1234  [0x4+0x4]
+    Compressed music data  [0x8+0x28]
+      ! unsupported: MO3 delta/LZ compression

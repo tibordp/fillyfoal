@@ -338,3 +338,196 @@ impl<'a> Cursor<'a> {
         Ok((text, span))
     }
 }
+
+/// The header layout of tag-length-value chunks: an ID and a size, in some
+/// order, width and byte order. Covers IFF, RIFF, and the many formats that
+/// borrowed the idea (game banks, camera raws, movie containers).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ChunkLayout {
+    /// Bytes of ID (usually 4; 0 for size-only records).
+    pub id_len: u8,
+    /// Bytes of size: 1, 2, 4 or 8.
+    pub size_len: u8,
+    /// The size comes before the ID.
+    pub size_first: bool,
+    pub endian: Endian,
+    /// The size counts the header too.
+    pub size_includes_header: bool,
+    /// Chunks start at multiples of this (1: packed; 2: IFF/RIFF padding).
+    pub align: u64,
+}
+
+impl ChunkLayout {
+    /// `ID, u32 BE size of body`, padded to even (EA IFF 85).
+    pub const IFF: ChunkLayout = ChunkLayout::new(4, 4, Endian::Big).align(2);
+    /// `ID, u32 LE size of body`, padded to even (Microsoft RIFF).
+    pub const RIFF: ChunkLayout = ChunkLayout::new(4, 4, Endian::Little).align(2);
+
+    /// `ID` then a size of the body, packed.
+    pub const fn new(id_len: u8, size_len: u8, endian: Endian) -> Self {
+        ChunkLayout {
+            id_len,
+            size_len,
+            size_first: false,
+            endian,
+            size_includes_header: false,
+            align: 1,
+        }
+    }
+
+    pub const fn size_first(mut self) -> Self {
+        self.size_first = true;
+        self
+    }
+
+    pub const fn inclusive(mut self) -> Self {
+        self.size_includes_header = true;
+        self
+    }
+
+    pub const fn align(mut self, align: u64) -> Self {
+        self.align = align;
+        self
+    }
+
+    pub const fn header_len(&self) -> u64 {
+        (self.id_len as u64).saturating_add(self.size_len as u64)
+    }
+}
+
+/// One chunk: its ID, the whole span, and the body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Chunk {
+    pub id: Vec<u8>,
+    pub span: Span,
+    pub body: Span,
+}
+
+impl Chunk {
+    /// The ID as text (lossy; trailing NULs and spaces kept).
+    pub fn name(&self) -> String {
+        String::from_utf8_lossy(&self.id).into_owned()
+    }
+
+    /// A plain node for the chunk: its ID, span and body size.
+    pub fn node(&self) -> Node {
+        Node::new(self.name())
+            .span(self.span)
+            .summary(format!("{} bytes", self.body.len))
+    }
+}
+
+impl Cursor<'_> {
+    /// Reads the next chunk header, advancing past the whole chunk (and any
+    /// alignment padding). `None` at the end of the region or when fewer
+    /// bytes than a header remain. A size smaller than the header, or one
+    /// running past the region, is an error.
+    pub async fn chunk(&mut self, layout: ChunkLayout) -> Result<Option<Chunk>> {
+        let header_len = layout.header_len();
+        if self.remaining() < header_len.max(1) {
+            return Ok(None);
+        }
+        let start = self.pos;
+        let header = self.bytes(header_len).await?;
+        let (id_at, size_at) = if layout.size_first {
+            (usize::from(layout.size_len), 0)
+        } else {
+            (0, usize::from(layout.id_len))
+        };
+        let id = header
+            .get(id_at..id_at.saturating_add(usize::from(layout.id_len)))
+            .unwrap_or_default()
+            .to_vec();
+        let raw = header
+            .get(size_at..size_at.saturating_add(usize::from(layout.size_len)))
+            .unwrap_or_default();
+        let size = match layout.endian {
+            Endian::Big => raw.iter().fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
+            Endian::Little => raw.iter().rev().fold(0u64, |a, &b| a.wrapping_shl(8) | u64::from(b)),
+        };
+        let total = if layout.size_includes_header {
+            if size < header_len {
+                return Err(Diagnostic::malformed("chunk size smaller than its header")
+                    .at(self.since(start)));
+            }
+            size
+        } else {
+            size.saturating_add(header_len)
+        };
+        let span = self.region.sub(start, total);
+        if span.len < total {
+            return Err(Diagnostic::truncated(
+                Span::new(span.source, span.offset, total),
+                span.len,
+            ));
+        }
+        let body = span.tail(header_len);
+        self.pos = start.saturating_add(total);
+        if layout.align > 1 {
+            let rem = self.pos.checked_rem(layout.align).unwrap_or(0);
+            if rem != 0 {
+                self.pos = self.pos.saturating_add(layout.align.saturating_sub(rem));
+            }
+        }
+        Ok(Some(Chunk { id, span, body }))
+    }
+}
+
+/// The path from a graph's root to the current node, for cycle and depth
+/// checks in graph-shaped formats (object references, directory trees,
+/// B-tree pages). Cheap to clone into expander state.
+///
+/// ```ignore
+/// match path.enter(page_number, 64) {
+///     Ok(child_path) => node.lazy(expander!(self::page: (Path, u32)), (child_path, page_number)),
+///     Err(diagnostic) => node.diag(diagnostic),
+/// }
+/// ```
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Path(std::sync::Arc<Vec<u64>>);
+
+impl Path {
+    pub fn new() -> Self {
+        Path::default()
+    }
+
+    pub fn depth(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn contains(&self, id: u64) -> bool {
+        self.0.contains(&id)
+    }
+
+    /// The path extended by `id`, or a diagnostic if `id` is already on the
+    /// path (a cycle) or the path would exceed `max_depth`.
+    pub fn enter(&self, id: u64, max_depth: usize) -> Result<Path> {
+        if self.contains(id) {
+            return Err(Diagnostic::malformed(format!("cycle: {id:#x} refers back to an ancestor")));
+        }
+        if self.0.len() >= max_depth {
+            return Err(Diagnostic::limit(format!("nested deeper than {max_depth}")));
+        }
+        let mut ids = Vec::with_capacity(self.0.len().saturating_add(1));
+        ids.extend_from_slice(&self.0);
+        ids.push(id);
+        Ok(Path(std::sync::Arc::new(ids)))
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::Path;
+
+    #[test]
+    fn path_detects_cycles_and_depth() {
+        let root = Path::new();
+        let a = root.enter(1, 3).unwrap();
+        let b = a.enter(2, 3).unwrap();
+        assert!(b.enter(1, 3).is_err());
+        let c = b.enter(3, 3).unwrap();
+        assert!(c.enter(4, 3).is_err());
+        assert_eq!(c.depth(), 3);
+    }
+}

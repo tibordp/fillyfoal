@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.afm — Tiny-Regular, 1 character metrics  [0x0+0xf1]
+    StartFontMetrics: "4.1"  [0x0+0x14]
+    FontName: "Tiny-Regular"  [0x15+0x15]
+    FullName: "Tiny Regular"  [0x2b+0x15]
+    FamilyName: "Tiny"  [0x41+0xf]
+    Weight: "Regular"  [0x51+0xe]
+    ItalicAngle: "0"  [0x60+0xd]
+    IsFixedPitch: "false"  [0x6e+0x12]
+    FontBBox: "0 -200 1000 800"  [0x81+0x18]

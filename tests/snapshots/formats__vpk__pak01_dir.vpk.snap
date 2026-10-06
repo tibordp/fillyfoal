@@ -8,7 +8,13 @@ expression: "common::explore(&display_name(&path), &data)"
       Version: 1  [0x4+0x4]
       Directory tree size: 69  [0x8+0x4]
   ▾ Directory tree  [0xc+0x45]
-    ▾ docs/readme.txt — 13 bytes  [0x51+0xd] → 0x15+0x19
-        ! unsupported: unrecognized format [0x51+0xd]
-    ▾ notes.txt — 5 preloaded bytes  [0x49+0x5] → 0x31+0x1d
-        ! unsupported: unrecognized format [0x49+0x5]
+    ▾ docs/readme.txt — UTF-8 text, 1 line  [0x51+0xd] → 0x15+0x19
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x51+0xd]
+          Line 1: "Fillyfoal VPK"  [0x51+0xd]
+    ▾ notes.txt — UTF-8 text, 1 line  [0x49+0x5] → 0x31+0x1d
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x49+0x5]
+          Line 1: "hello"  [0x49+0x5]

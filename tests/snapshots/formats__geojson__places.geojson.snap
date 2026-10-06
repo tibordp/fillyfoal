@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ places.geojson — GeoJSON FeatureCollection, 2 features  [0x0+0x21a]
+    type: "FeatureCollection"  [0xc+0x13]
+  ▾ features — array, 2 elements  [0x2f+0x1e8]
+    ▾ [0] — Point: Ljubljana  [0x35+0xd8]
+        type: "Feature"  [0x45+0x9]
+      ▾ geometry — object, 2 members  [0x62+0x6a]
+          type: "Point"  [0x74+0x7]
+        ▾ coordinates — array, 2 elements  [0x94+0x30]
+            [0]: 14.5058  [0xa0+0x7]
+            [1]: 46.0569  [0xb3+0x7]
+      ▾ properties — object, 1 member  [0xe2+0x25]
+          name: "Ljubljana"  [0xf4+0xb]
+    ▾ [1] — LineString  [0x113+0x100]
+        type: "Feature"  [0x123+0x9]
+      ▾ geometry — object, 2 members  [0x140+0xb5]
+          type: "LineString"  [0x152+0xc]
+        ▾ coordinates — array, 2 elements  [0x177+0x76]
+          ▾ [0] — array, 2 elements  [0x183+0x2a]
+              [0]: 0  [0x191+0x1]
+              [1]: 0  [0x1a0+0x1]
+          ▾ [1] — array, 2 elements  [0x1b9+0x2a]
+              [0]: 1  [0x1c7+0x1]
+              [1]: 1  [0x1d6+0x1]
+        properties — object, 0 members  [0x20b+0x2]

@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<smil xmlns="http://www.w3.org/ns/SMIL"><head><title>Slides</title></head><body><seq><img src="a.png" dur="5s"/><audio src="b.mp3"/></seq></body></smil>

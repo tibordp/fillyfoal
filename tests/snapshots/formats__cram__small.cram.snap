@@ -77,8 +77,11 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Trailer  [0xf4+0x8]
               CRC32: 0x1f9b8bd3  [0xf4+0x4]
               ISIZE: 20  [0xf8+0x4]
-          ▾ Content — 0x14 bytes decompressed  [0xec+0x8]
-              Data  [#1:0x0+0x14]
+          ▾ Content — UTF-8 text, 1 line  [0xec+0x8]
+              Encoding: "UTF-8"
+              Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#1:0x0+0x14]
+                Line 1: "ACGTACGTACGTACGTACGT"  [#1:0x0+0x14]
           CRC32: 0x5ffed472  [0xfc+0x4]
       ▾ Block 3 — CORE_DATA (content 0), rANS 4x8, 3 → 9 bytes  [0x100+0xc]
           Method: rANS 4x8 (0x4)  [0x100+0x1]

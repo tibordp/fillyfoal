@@ -18,6 +18,11 @@ impl SourceId {
     pub const fn default_host() -> Self {
         SourceId(0)
     }
+
+    /// A virtual, endless source of zero bytes. Spans of it serve as holes in
+    /// [`Cx::add_pieces`](crate::Cx::add_pieces) (sparse files, unallocated
+    /// virtual-disk blocks); they read as zeros and resolve to nothing.
+    pub const ZEROS: SourceId = SourceId(u32::MAX);
 }
 
 /// How a derived source was produced: by applying `transform` (e.g.
@@ -38,6 +43,11 @@ pub struct Span {
 }
 
 impl Span {
+    /// A hole of `len` zero bytes (see [`SourceId::ZEROS`]).
+    pub const fn zeros(len: u64) -> Span {
+        Span { source: SourceId::ZEROS, offset: 0, len }
+    }
+
     pub const fn new(source: SourceId, offset: u64, len: u64) -> Self {
         Span {
             source,

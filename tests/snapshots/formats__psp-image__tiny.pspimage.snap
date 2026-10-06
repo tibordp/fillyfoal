@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pspimage — Paint Shop Pro image v5.0, 3 blocks  [0x0+0x84]
+    Signature: 50 61 69 6e 74 20 53 68 6f 70 20 50 72 6f 20 49 …  |Paint Shop Pro I|  [0x0+0x20]
+    Major version: 5  [0x20+0x2]
+    Minor version: 0  [0x22+0x2]
+    Image attributes — 64×48  [0x24+0x34]
+    Creator — 16 bytes  [0x58+0x1a]
+    Layer bank — 8 bytes  [0x72+0x12]

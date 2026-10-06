@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ 000001 — Prometheus chunk segment  [0x0+0x48]
+    Header — format version 1  [0x0+0x8]
+    Chunks  [0x8+0x40]

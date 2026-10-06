@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tsconfig.json — TypeScript configuration: ./base.json  [0x0+0x84]
+    extends: "./base.json"  [0xf+0xd]
+  ▾ compilerOptions — object, 2 members  [0x33+0x30]
+      strict: true  [0x43+0x4]
+      target: "ES2022"  [0x57+0x8]
+  ▾ include — array, 1 element  [0x72+0xf]
+      [0]: "src"  [0x78+0x5]

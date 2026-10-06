@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Fillyfoal Viewer
+Name[sl]=Pregledovalnik
+Exec=fillyfoal %F
+Icon=fillyfoal
+Categories=Utility;Viewer;
+
+[Desktop Action New]
+Name=New Window
+Exec=fillyfoal --new

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ptb — Power Tab song "Tiny Song by Filly"  [0x0+0x28]
+    Signature  [0x0+0x4]
+    Version: "1.4"  [0x4+0x2]
+    File type: song (0x0)  [0x6+0x1]
+    Content type: 0x0  [0x7+0x1]
+    Title: "Tiny Song"  [0x9+0x9]
+    Artist: "Filly"  [0x13+0x5]
+    Body  [0x18+0x10]

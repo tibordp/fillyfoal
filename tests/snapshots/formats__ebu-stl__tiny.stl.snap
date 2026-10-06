@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.stl — EBU STL (STL25.01), "Programme", 2 TTI blocks  [0x0+0x506]
+    Code page: "850"  [0x0+0x3]
+    Disk format code: "STL25.01"  [0x3+0x8]
+    Display standard: "1"  [0xb+0x1]
+    Character code table: "00"  [0xc+0x2]
+    Language code: "09"  [0xe+0x2]
+    Original programme title: "Programme                       "  [0x10+0x20]
+    Original episode title: "Episode                         "  [0x30+0x20]
+    Translated programme title: "                                "  [0x50+0x20]
+    Translated episode title: "                                "  [0x70+0x20]
+    Translator's name: "                                "  [0x90+0x20]
+    Translator's contact details: "                                "  [0xb0+0x20]
+    Subtitle list reference: "REF             "  [0xd0+0x10]
+    Creation date: "261006"  [0xe0+0x6]
+    Revision date: "261006"  [0xe6+0x6]
+    Revision number: "01"  [0xec+0x2]
+    Total TTI blocks: "00002"  [0xee+0x5]
+    Total subtitles: "00002"  [0xf3+0x5]
+    Subtitle groups: "001"  [0xf8+0x3]
+    Subtitle 1 — 00:00:01:00 → 00:00:03:00: Hello  [0x400+0x80]
+    Subtitle 36751 — 00:255:00:00 → 00:04:00:00: World  [0x480+0x80]

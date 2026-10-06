@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.hca — CRI HCA v2.0, 2 channel(s), 44100 Hz, 10 blocks  [0x0+0x138]
+    Signature  [0x0+0x4]
+    Version: "2.0"  [0x4+0x2]
+    Header size: 56  [0x6+0x2]
+    fmt — 2 channel(s), 44100 Hz, 10 blocks  [0x8+0x10]
+    comp  [0x18+0x10]
+    ciph — no encryption  [0x28+0x6]
+    pad  [0x2e+0x8]
+    Frames  [0x38+0x100]

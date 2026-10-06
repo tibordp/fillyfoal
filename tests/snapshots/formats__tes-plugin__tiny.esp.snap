@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.esp — Gamebryo/Creation engine plugin, v1.70, 2 records by fillyfoal, masters: Skyrim.esm  [0x0+0x95]
+    TES4 — v1.70, 2 records by fillyfoal, masters: Skyrim.esm  [0x0+0x59]
+    GRUP — GMST — 56 bytes  [0x59+0x38]

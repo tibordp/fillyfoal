@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.miff — MIFF DirectClass image, 2×2, sRGB  [0x0+0x8a]
+    id: "ImageMagick"  [0x0+0xe]
+    version: "1.0"  [0x10+0xb]
+    class: "DirectClass"  [0x1c+0x11]
+    colors: "0"  [0x2f+0x8]
+    alpha-trait: "Undefined"  [0x39+0x15]
+    columns: "2"  [0x4f+0x9]
+    rows: "2"  [0x5a+0x6]
+    depth: "8"  [0x62+0x7]
+    colorspace: "sRGB"  [0x6a+0xf]
+    Pixels  [0x7e+0xc]

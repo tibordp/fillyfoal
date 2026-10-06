@@ -156,7 +156,10 @@ layout.
 3. In-house inflate behind the codec interface; ZIP deflate members. Done
    (whole-member decoding into memory, budgeted; streaming is still open).
 4. tar.gz: streaming-only derived source, checkpoints, budgets under load.
-   Open: today tar.gz works up to `max_derived` decoded bytes.
+   Partly done: large members are decoded lazily (`Cx::inflate_lazy`), so
+   the first page of a huge tarball costs only what it reads. Decoded bytes
+   are kept (bounded by `max_derived`); checkpoints that allow discarding
+   and re-decoding are still open.
 5. SQLite: page graph, resume keys with traversal stacks, overflow chains as
    fragmented sources.
 6. MP4: generic recursive boxes, huge fixed-stride tables, random index access.
@@ -206,7 +209,13 @@ The core is not considered stable until SQLite and PDF fit without contortion.
   local `Limit` diagnostic.
 - **Piecewise sources** (`Cx::add_pieces`) cover fragmented data without
   copying: CBM sector chains, MSF (PDB) streams and their directory,
-  filesystem extents. `Session::resolve` maps them back to file offsets.
+  filesystem extents, NTFS update-sequence fixups (sector bodies plus 2-byte
+  pieces of the fixup array, so every field keeps its true file offset).
+  `Session::resolve` maps them back to file offsets. Holes are spans of a
+  virtual `SourceId::ZEROS`, so a sparse 2 TiB disk costs nothing.
+- **Probe window.** `HEAD_LEN` grew from 36 KiB to 66 KiB so superblocks at
+  64 KiB (btrfs, UFS2) are detectable; signatures at the end of a device (md
+  v0.90/1.0) still are not, since probes see only the last 1 KiB.
 - **Composition compounds.** Each new format improves others: text inside
   archives, JPEG frames inside AVI, PNG inside game packs, TAR inside Android
   backups. Snapshot diffs after merges are mostly such improvements.

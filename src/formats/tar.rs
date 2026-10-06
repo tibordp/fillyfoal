@@ -352,7 +352,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let end_start = cur.pos();
     while cur.remaining() >= BLOCK {
         let block = cur.peek(BLOCK).await?;
-        if block.iter().any(|&b| b != 0) {
+        if to_u64(block.len()) < BLOCK || block.iter().any(|&b| b != 0) {
             break;
         }
         cur.skip(BLOCK);

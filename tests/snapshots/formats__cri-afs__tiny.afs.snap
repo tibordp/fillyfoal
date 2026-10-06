@@ -1,0 +1,29 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.afs — CRI AFS archive, 2 files  [0x0+0x1860]
+    Files: 2  [0x4+0x4]
+  ▾ beep.wav — PCM, 8000 Hz, 1 ch, 16-bit, 1 ms  [0x800+0x3c] → 0x8+0x8
+    ▾ Header  [0x800+0xc]
+        Chunk ID: "RIFF"  [0x800+0x4]
+        Size: 52  [0x804+0x4]
+        Form type: "WAVE"  [0x808+0x4]
+    ▾ fmt — PCM, 8000 Hz, 1 ch, 16-bit  [0x80c+0x18]
+        Chunk ID: "fmt "  [0x80c+0x4]
+        Chunk size: 16  [0x810+0x4]
+        Format tag: PCM (0x1)  [0x814+0x2]
+        Channels: 1  [0x816+0x2]
+        Sample rate: 8000  [0x818+0x4]
+        Average bytes per second: 16000  [0x81c+0x4]
+        Block align: 2  [0x820+0x2]
+        Bits per sample: 16  [0x822+0x2]
+    ▾ data — 16 bytes, 1 ms  [0x824+0x18]
+        Chunk ID: "data"  [0x824+0x4]
+        Chunk size: 16  [0x828+0x4]
+        Samples — 1 ms  [0x82c+0x10]
+  ▾ readme.txt — UTF-8 text, LF line endings, 1 line  [0x1000+0xa] → 0x10+0x8
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x1000+0xa]
+        Line 1: "hello afs"  [0x1000+0x9]

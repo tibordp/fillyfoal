@@ -1,0 +1,11 @@
+{
+  "name": "fillyfoal-demo",
+  "version": "1.2.3",
+  "main": "index.js",
+  "scripts": {
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "left-pad": "^1.3.0"
+  }
+}

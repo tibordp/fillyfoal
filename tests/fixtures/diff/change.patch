@@ -1,0 +1,26 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 83db48f..bf269f4 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,5 @@ //! Crate docs
+ pub mod a;
+-pub mod b;
++pub mod b2;
++pub mod c;
+ pub mod d;
+--- not a header, just a removed line starting with dashes
+@@ -10,2 +11,2 @@ fn main() {
+-    old();
++    new();
+\ No newline at end of file
+diff --git a/README.md b/docs/README.md
+similarity index 90%
+rename from README.md
+rename to docs/README.md
+diff --git a/new.txt b/new.txt
+new file mode 100644
+index 0000000..e69de29
+--- /dev/null
++++ b/new.txt
+@@ -0,0 +1 @@
++hello

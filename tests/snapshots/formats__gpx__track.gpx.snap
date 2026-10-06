@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ track.gpx — GPS Exchange Format: created by fillyfoal  [0x0+0x150]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ gpx — version="1.1" creator="fillyfoal" (1 element)  [0x27+0x128]
+      @version: "1.1"  [0x35+0x3]
+      @creator: "fillyfoal"  [0x43+0x9]
+      @xmlns: "http://www.topografix.com/GPX/1/1"  [0x55+0x21]
+    ▾ trk — 2 elements  [0x7b+0xcd]
+        name: "Walk"  [0x80+0x11]
+      ▾ trkseg — 2 elements  [0x91+0xb1]
+        ▾ trkpt — lat="46.0569" lon="14.5058" (2 elements)  [0x9e+0x5a]
+            @lat: "46.0569"  [0xaa+0x7]
+            @lon: "14.5058"  [0xb8+0x7]
+            ele: "295"  [0xc1+0xe]
+            time: "2026-10-05T10:00:00Z"  [0xcf+0x21]
+        ▾ trkpt — lat="46.0570" lon="14.5060" (1 element)  [0xfd+0x39]
+            @lat: "46.0570"  [0x109+0x7]
+            @lon: "14.5060"  [0x117+0x7]
+            ele: "296"  [0x120+0xe]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ hello_1.0_all.deb — Debian package, format 2.0, 3 members  [0x0+0x1d0]
     Signature: "!<arch>"  [0x0+0x8]
@@ -13,8 +13,11 @@ expression: "common::explore(&name, &data)"
         Mode: 33188 — 0o100644 -rw-r--r--  [0x30+0x8]
         Size: 4 — 4 bytes  [0x38+0xa]
         Terminator: 60 0a  |`.|  [0x42+0x2]
-    ▾ Content — 4 bytes  [0x44+0x4]
-        ! unsupported: unrecognized format [0x44+0x4]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x44+0x4]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x44+0x4]
+          Line 1: "2.0"  [0x44+0x3]
   ▾ control.tar.gz — 159 bytes  [0x48+0xdc]
     ▾ Header  [0x48+0x3c]
         Name: "control.tar.gz  "  [0x48+0x10]
@@ -54,8 +57,12 @@ expression: "common::explore(&name, &data)"
               Device major: 0  [#1:0x149+0x8]
               Device minor: 0  [#1:0x151+0x8]
               Prefix: ""  [#1:0x159+0x9b]
-          ▾ Content — 83 bytes  [#1:0x200+0x53]
-              ! unsupported: unrecognized format [#1:0x200+0x53]
+          ▾ Content — YAML document  [#1:0x200+0x53]
+              Package: "hello"  [#1:0x209+0x5]
+              Version: 1  [#1:0x218+0x3]
+              Architecture: "all"  [#1:0x22a+0x3]
+              Maintainer: "nobody"  [#1:0x23a+0x6]
+              Description: "test"  [#1:0x24e+0x4]
           End of archive — 2 zero blocks  [#1:0x400+0x400]
       Padding  [0x123+0x1]
   ▾ data.tar.gz — 111 bytes  [0x124+0xac]
@@ -97,7 +104,10 @@ expression: "common::explore(&name, &data)"
               Device major: 0  [#2:0x149+0x8]
               Device minor: 0  [#2:0x151+0x8]
               Prefix: ""  [#2:0x159+0x9b]
-          ▾ Content — 6 bytes  [#2:0x200+0x6]
-              ! unsupported: unrecognized format [#2:0x200+0x6]
+          ▾ Content — UTF-8 text, LF line endings, 1 line  [#2:0x200+0x6]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#2:0x200+0x6]
+                Line 1: "hello"  [#2:0x200+0x5]
           End of archive — 2 zero blocks  [#2:0x400+0x400]
       Padding  [0x1cf+0x1]

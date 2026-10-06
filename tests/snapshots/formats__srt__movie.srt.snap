@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ movie.srt — SubRip subtitles, 4 cues, until 01:00:00,000  [0x0+0xa4]
+    Byte order mark: "UTF-8"  [0x0+0x3]
+  ▾ Cue 1 — 00:00:01,000 → 00:00:04,000 (3.000 s): Hello, world!  [0x3+0x2f]
+      Index: 1  [0x3+0x1]
+      Start: 1 — 00:00:01,000 (seconds)  [0x6+0xc]
+      End: 4 — 00:00:04,000 (seconds)  [0x17+0xc]
+      Text: "Hello, world!"  [0x25+0xd]
+  ▾ Cue 2 — 00:00:05,500 → 00:00:07,250 (1.750 s): <i>Two</i> / lines  [0x36+0x33]
+      Index: 2  [0x36+0x1]
+      Start: 5.5 — 00:00:05,500 (seconds)  [0x39+0xc]
+      End: 7.25 — 00:00:07,250 (seconds)  [0x4a+0xc]
+      Text: "<i>Two</i>\nlines"  [0x58+0x11]
+  ▾ Cue 3 — 00:01:00,000 → 01:00:00,000 (3540.000 s): Last  [0x6d+0x26]
+      Index: 3  [0x6d+0x1]
+      Start: 60 — 00:01:00,000 (seconds)  [0x70+0xc]
+      End: 3600 — 01:00:00,000 (seconds)  [0x81+0xc]
+      Text: "Last"  [0x8f+0x4]
+    Cue 4  [0x97+0xb]
+      ! malformed: no timing line
