@@ -1,0 +1,8 @@
+@database "tiny.guide"
+@author "fillyfoal"
+@node Main "Tiny Guide"
+Welcome! @{"More" link More}
+@endnode
+@node More "More stuff"
+More.
+@endnode

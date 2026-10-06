@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.rff — Blood RFF v2.0, 1 entries  [0x0+0x50]
+    Signature: "RFF\u{1a}"  [0x0+0x4]
+    Version: 0x200  [0x4+0x2]
+    Padding: 0  [0x6+0x2]
+    Directory offset: 0x20  [0x8+0x4]
+    Entries: 1  [0xc+0x4]
+    Directory — 1 × 48-byte entries  [0x20+0x30]

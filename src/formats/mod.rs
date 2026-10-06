@@ -47,7 +47,38 @@ pub mod zip;
 // -- end archives --
 
 // -- executables & code --
+mod binutil;
+pub mod android;
+pub mod aout;
+pub mod beam;
+pub mod bitcode;
+pub mod coff;
+pub mod dart;
+pub mod dxbc;
+pub mod elc;
+pub mod elf;
+pub mod fatbin;
+pub mod hermes;
+pub mod il2cpp;
+pub mod java;
+pub mod lua;
+pub mod luajit;
+pub mod lx;
+pub mod macho;
+pub mod minidump;
+pub mod ne;
+pub mod ocaml;
+pub mod omf;
+pub mod opcache;
 pub mod pe;
+pub mod pef;
+pub mod pyc;
+pub mod qvm;
+pub mod spirv;
+pub mod te;
+pub mod wasm;
+pub mod xcoff;
+pub mod yarb;
 // -- end executables --
 
 // -- images --
@@ -173,6 +204,9 @@ pub mod platform;
 pub mod devices;
 pub mod devtools;
 pub mod misc3;
+pub mod misc4;
+pub mod misc5;
+pub mod misc6;
 // -- end misc --
 
 // -- text --
@@ -270,6 +304,49 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::DOS_EXE,
     &pe::FORMAT,
+    &elf::FORMAT,
+    &macho::FORMAT,
+    &macho::fat::FORMAT,
+    &macho::dyld_cache::FORMAT,
+    // After the universal binary probe, which shares the 0xcafebabe magic.
+    &java::class::FORMAT,
+    &java::serialization::FORMAT,
+    &java::keystore::FORMAT,
+    &wasm::FORMAT,
+    &android::dex::FORMAT,
+    &android::dex::ODEX,
+    &android::resources::AXML,
+    &android::resources::ARSC,
+    &android::vdex::FORMAT,
+    &android::art::FORMAT,
+    &minidump::FORMAT,
+    &ne::FORMAT,
+    &lx::FORMAT,
+    &omf::FORMAT,
+    &qvm::FORMAT,
+    &fatbin::FORMAT,
+    &elc::FORMAT,
+    &il2cpp::FORMAT,
+    &opcache::FORMAT,
+    &spirv::FORMAT,
+    &dxbc::FORMAT,
+    &te::FORMAT,
+    &xcoff::FORMAT,
+    &pef::FORMAT,
+    &ocaml::FORMAT,
+    &hermes::FORMAT,
+    &dart::FORMAT,
+    &yarb::FORMAT,
+    &pyc::FORMAT,
+    &lua::FORMAT,
+    &luajit::FORMAT,
+    &bitcode::FORMAT,
+    &beam::FORMAT,
+    // Weaker probes (sizes and machine numbers rather than long magics).
+    &coff::FORMAT,
+    &coff::IMPORT,
+    &aout::PLAN9,
+    &aout::FORMAT,
     // -- end executables --
 
     // -- images --
@@ -355,6 +432,8 @@ pub static FORMATS: &[&Format] = &[
     &iff::FTXT,
     &iff::MAUD,
     &iff::RIFF,
+    // IFF-shaped formats with their own dissectors, before generic IFF.
+    &misc5::REX2,
     &iff::IFF,
     &midi::FORMAT,
     &au::FORMAT,
@@ -1004,7 +1083,88 @@ pub static FORMATS: &[&Format] = &[
     &misc3::LRF,
     &misc3::AFM,
     &misc3::PFA,
+    &misc4::BLP,
+    &misc4::M2,
+    &misc4::W3M,
+    &misc4::TES,
+    &misc4::GTA_IMG,
+    &misc4::HOG,
+    &misc4::GRP,
+    &misc4::BIG,
+    &misc4::RFF,
+    &misc4::BND,
+    &misc4::NW4,
+    &misc4::NW4R,
+    &misc4::MUS,
+    &misc4::HMI,
+    &misc4::AHX,
+    &misc4::MO3,
+    &misc4::DBM,
+    &misc4::FAR,
+    &misc4::PSF_FONT,
+    &misc4::BMFONT,
+    &misc4::FIGLET,
+    &misc4::TEX_PK,
+    &misc4::TEX_GF,
+    &misc4::PPK,
+    &misc4::SPHERE,
+    &misc4::AVR,
+    &misc4::PVF,
+    &misc4::VICAR,
+    &misc4::PDS,
+    &misc4::ERDAS,
+    &misc4::MIFF,
+    &misc4::UTAH_RLE,
+    &misc4::PSP,
+    &misc5::FSB,
+    &misc5::XWB,
+    &misc5::WWISE_BNK,
+    &misc5::VAG,
+    &misc5::OMA,
+    &misc5::HCA,
+    &misc5::USM,
+    &misc5::CPK,
+    &misc5::AFS,
+    &misc5::EA_SCHL,
+    &misc5::NSV,
+    &misc5::NUV,
+    &misc5::R3D,
+    &misc5::DPAINT_ANM,
+    &misc5::TWINVQ,
+    &misc5::EXS,
+    &misc5::PTAB,
+    &misc6::HA,
+    &misc6::UHARC,
+    &misc6::YZ1,
+    &misc6::DGCA,
+    &misc6::GCA,
+    &misc6::PAQ8,
+    &misc6::FREEZE,
+    &misc6::COMPACT,
+    &misc6::XPK,
+    &misc6::AMIGA_LZX,
+    &misc6::PACKIT,
+    &misc6::BINHEX,
+    &misc6::CPT,
+    &misc6::CLIP,
+    &misc6::MDP,
+    &misc6::GIMP_GPL,
+    &misc6::PGF,
+    &misc6::XV_THUMB,
+    &misc6::VIFF,
+    &misc6::OS2_INF,
+    &misc6::TCR,
+    &misc6::AMIGAGUIDE,
+    &misc6::TOKYO,
+    &misc6::KYOTO,
+    &misc6::GDBM,
+    &misc6::RRD,
+    &misc6::WIREDTIGER,
+    &misc6::REALM,
     // Weak, size-based probes last.
+    &misc6::SQUEEZE,
+    &misc6::CRUNCH,
+    &misc4::NBT,
     &misc3::HGT,
     &models::STL,
     // -- end misc --

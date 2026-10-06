@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ app.dill — Dart kernel binary, format 118, SDK 0000000000  [0x0+0x32]
+    magic: 0x90abcdef  [0x0+0x4]
+    formatVersion: 118  [0x4+0x4]
+    sdkHash: "0000000000"  [0x8+0xa]
+    Component  [0x12+0x20]

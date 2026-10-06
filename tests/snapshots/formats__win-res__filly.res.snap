@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ filly.res — 3 resources  [0x0+0x2b0]
+  ▾ RT_VERSION #1 — 460 bytes, language 0x0409  [0x40+0x1cc] → 0x20+0x20
+      ! unsupported: unrecognized format [0x40+0x1cc]
+  ▾ RT_RCDATA GREETING — 6 bytes, language 0x0409  [0x23c+0x6] → 0x20c+0x30
+      ! unsupported: unrecognized format [0x23c+0x6]
+  ▾ RT_STRING #1 — 76 bytes, language 0x0409  [0x264+0x4c] → 0x244+0x20
+      ! unsupported: unrecognized format [0x264+0x4c]

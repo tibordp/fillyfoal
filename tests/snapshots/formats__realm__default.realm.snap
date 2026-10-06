@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ default.realm — Realm database, format 22  [0x0+0x98]
+    Top ref 0: 0x60  [0x0+0x8]
+    Top ref 1: 0x0  [0x8+0x8]
+    Signature: "T-DB"  [0x10+0x4]
+    File format 0: 22  [0x14+0x1]
+    File format 1: 22  [0x15+0x1]
+    Reserved: 0  [0x16+0x1]
+    Flags: 0x0  [0x17+0x1]
+    Arrays  [0x18+0x80]

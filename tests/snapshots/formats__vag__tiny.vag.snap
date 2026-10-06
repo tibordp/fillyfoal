@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.vag — Sony VAG "tiny", 22050 Hz, 1 channel(s)  [0x0+0x50]
+    Signature: "VAGp"  [0x0+0x4]
+    Version: 0x20  [0x4+0x4]
+    Reserved: 0  [0x8+0x4]
+    Data size: 32  [0xc+0x4]
+    Sample rate: 22050  [0x10+0x4]
+    Reserved: 00 00 00 00 00 00 00 00 00 00  |..........|  [0x14+0xa]
+    Channels: 1  [0x1e+0x1]
+    Reserved: 0  [0x1f+0x1]
+    Name: "tiny"  [0x20+0x10]
+    ADPCM data — 2 frames of 16 bytes  [0x30+0x20]

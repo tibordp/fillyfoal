@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.sph — NIST SPHERE, 16000 Hz, 1 channel(s), pcm  [0x0+0x440]
+    sample_rate: "16000"  [0x10+0x14]
+    channel_count: "1"  [0x25+0x12]
+    sample_n_bytes: "2"  [0x38+0x13]
+    sample_coding: "pcm"  [0x4c+0x15]
+    Samples  [0x400+0x40]

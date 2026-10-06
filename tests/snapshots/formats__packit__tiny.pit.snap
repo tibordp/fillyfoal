@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pit — PackIt archive, 1 files  [0x0+0x74]
+  ▾ Read Me — TEXT/ttxt, data 12, resource 0  [0x0+0x70]
+      Header  [0x0+0x62]
+    ▾ Data fork — UTF-8 text, LF line endings, 1 line  [0x62+0xc]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x62+0xc]
+          Line 1: "PackIt data"  [0x62+0xb]
+      CRC  [0x6e+0x2]
+    End marker  [0x70+0x4]

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny2.psfu — PSF2 font, 2 glyphs, 8×8  [0x0+0x34]
+    Magic: 0x864ab572  [0x0+0x4]
+    Version: 0  [0x4+0x4]
+    Header size: 32  [0x8+0x4]
+    Flags: 0x1 [Unicode table]  [0xc+0x4]
+    Glyphs: 2  [0x10+0x4]
+    Bytes per glyph: 8  [0x14+0x4]
+    Height: 8  [0x18+0x4]
+    Width: 8  [0x1c+0x4]
+    Glyphs — 2 × 8×8  [0x20+0x10]
+    Unicode table  [0x30+0x4]

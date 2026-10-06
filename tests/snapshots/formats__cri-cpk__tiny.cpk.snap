@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.cpk — CRI CPK package, table "CpkHeader"  [0x0+0x120]
+    Signature: "CPK "  [0x0+0x4]
+    Flags: 0xff  [0x4+0x4]
+    Table size: 49  [0x8+0x8]
+    @UTF table — "CpkHeader", 3 columns × 1 rows  [0x10+0x31]
+    Content  [0x41+0xdf]

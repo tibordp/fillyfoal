@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ README.TZT — crunched "README.TXT" (LZW)  [0x0+0x21]
+    Magic  [0x0+0x2]
+    Original name: "README.TXT"  [0x2+0xb]
+    Reference revision: 32  [0xd+0x1]
+    Significant revision: 32  [0xe+0x1]
+    Crunched data  [0x11+0x10]

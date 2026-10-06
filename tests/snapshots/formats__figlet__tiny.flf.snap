@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.flf — FIGlet font, height 2  [0x0+0x40]
+    Signature  [0x0+0x5]
+    Hard blank: "$"  [0x5+0x1]
+    Height: "2"  [0x0+0x11]
+    Baseline: "1"  [0x0+0x11]
+    Maximum length: "5"  [0x0+0x11]
+    Old layout: "-1"  [0x0+0x11]
+    Comment lines: "2"  [0x0+0x11]
+    Comments  [0x12+0x1d]

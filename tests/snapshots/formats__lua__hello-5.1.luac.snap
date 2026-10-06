@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello-5.1.luac — Lua 5.1 bytecode, from hello.lua, main function of 2 instructions  [0x0+0x43]
+  ▾ Header  [0x0+0xc]
+      signature: 1b 4c 75 61  |.Lua|  [0x0+0x4]
+      version: 0x51 — Lua 5.1  [0x4+0x1]
+      format: 0  [0x5+0x1]
+      endianness: 1  [0x6+0x1]
+      sizeof(int): 4  [0x7+0x1]
+      sizeof(size_t): 8  [0x8+0x1]
+      sizeof(Instruction): 4  [0x9+0x1]
+      sizeof(lua_Number): 8  [0xa+0x1]
+      integral: 0  [0xb+0x1]
+  ▾ Main function  [0xc+0x37]
+      source: "@hello.lua"  [0xc+0x13]
+      linedefined: 0  [0x1f+0x4]
+      lastlinedefined: 0  [0x23+0x4]
+      nups: 0  [0x27+0x1]
+      numparams: 0  [0x28+0x1]
+      is_vararg: 2  [0x29+0x1]
+      maxstacksize: 2  [0x2a+0x1]
+      code: 2 — 2 instructions  [0x2b+0xc]
+      rest of the prototype  [0x37+0xc]

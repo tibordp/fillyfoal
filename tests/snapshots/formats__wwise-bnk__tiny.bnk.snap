@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bnk — Wwise sound bank 0x1234 (v113), 1 embedded media  [0x0+0x80]
+    BKHD — bank header, version 113, id 0x1234  [0x0+0x18]
+    DIDX — media index, 1 entries  [0x18+0x14]
+  ▾ DATA — 1 media files  [0x2c+0x48]
+    ▾ 42.wem — PCM, 8000 Hz, 1 ch, 16-bit, 1 ms  [0x34+0x3c]
+      ▾ Header  [0x34+0xc]
+          Chunk ID: "RIFF"  [0x34+0x4]
+          Size: 52  [0x38+0x4]
+          Form type: "WAVE"  [0x3c+0x4]
+      ▾ fmt — PCM, 8000 Hz, 1 ch, 16-bit  [0x40+0x18]
+          Chunk ID: "fmt "  [0x40+0x4]
+          Chunk size: 16  [0x44+0x4]
+          Format tag: PCM (0x1)  [0x48+0x2]
+          Channels: 1  [0x4a+0x2]
+          Sample rate: 8000  [0x4c+0x4]
+          Average bytes per second: 16000  [0x50+0x4]
+          Block align: 2  [0x54+0x2]
+          Bits per sample: 16  [0x56+0x2]
+      ▾ data — 16 bytes, 1 ms  [0x58+0x18]
+          Chunk ID: "data"  [0x58+0x4]
+          Chunk size: 16  [0x5c+0x4]
+          Samples — 1 ms  [0x60+0x10]
+    HIRC — 0 hierarchy objects  [0x74+0xc]

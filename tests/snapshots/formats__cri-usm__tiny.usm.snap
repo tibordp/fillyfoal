@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.usm — CRI USM movie: 1× CRID, 2× @SFV, 1× @SFA  [0x0+0x98]
+    CRID — 24 bytes  [0x0+0x20]
+    @SFV — 40 bytes  [0x20+0x30]
+    @SFA — 16 bytes  [0x50+0x18]
+    @SFV — 40 bytes  [0x68+0x30]

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ahx — AHX v1 "Tiny Tune", 1 positions, 0 tracks, 0 instruments  [0x0+0x25]
+    Signature: "THX"  [0x0+0x3]
+    Revision: 1  [0x3+0x1]
+    Name table offset: 0x16  [0x4+0x2]
+    Positions and flags: 0x1  [0x6+0x2]
+    Restart position: 0  [0x8+0x2]
+    Track length: 64  [0xa+0x1]
+    Tracks: 0  [0xb+0x1]
+    Instruments: 0  [0xc+0x1]
+    Subsongs: 0  [0xd+0x1]
+    Title: "Tiny Tune"  [0x16+0xa]

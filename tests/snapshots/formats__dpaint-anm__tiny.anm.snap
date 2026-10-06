@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.anm — Deluxe Paint animation, 320×200, 2 frames at 15 fps, 2 records  [0x0+0xac0]
+    Signature: "LPF "  [0x0+0x4]
+    Maximum large pages: 256  [0x4+0x2]
+    Large pages: 1  [0x6+0x2]
+    Records: 2  [0x8+0x4]
+    Maximum records per page: 256  [0xc+0x2]
+    Page table offset: 0x500  [0xe+0x2]
+    Content type: "ANIM"  [0x10+0x4]
+    Width: 320  [0x14+0x2]
+    Height: 200  [0x16+0x2]
+    Variant: 0  [0x18+0x1]
+    Version: 0  [0x19+0x1]
+    Has last delta: 0  [0x1a+0x1]
+    Last delta valid: 0  [0x1b+0x1]
+    Pixel type: 0  [0x1c+0x1]
+    Compression: 1  [0x1d+0x1]
+    Other records per frame: 0  [0x1e+0x1]
+    Bitmap type: 1  [0x1f+0x1]
+    Record types: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x20+0x20]
+    Frames: 2  [0x40+0x4]
+    Frames per second: 15  [0x44+0x2]
+    Palette  [0x80+0x400]
+    Large page table  [0x500+0x5c0]
+    Large pages — 1 × 64 KiB  [0xac0+0x0]

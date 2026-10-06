@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.m2 — M2 model "Tiny", version 264 (Wrath of the Lich King)  [0x0+0x20]
+    Signature: "MD20"  [0x0+0x4]
+    Version: 264  [0x4+0x4]
+    Name length: 5  [0x8+0x4]
+    Name offset: 0x10  [0xc+0x4]
+    Name: "Tiny"  [0x10+0x5]

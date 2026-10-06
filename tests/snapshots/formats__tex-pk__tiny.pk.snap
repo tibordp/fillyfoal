@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pk — PK font "fillyfoal!", design size 10.0 pt  [0x0+0x1e]
+    Preamble  [0x0+0x1d]
+    Comment: "fillyfoal!"  [0x3+0xa]
+    Design size: 10 — pt  [0xd+0x4]
+    Checksum: 0xdeadbeef  [0x11+0x4]
+    Character packets  [0x1d+0x1]

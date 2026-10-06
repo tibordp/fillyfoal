@@ -122,6 +122,22 @@ Cursor has `record`, `bytes`, `peek`, `u8..u64`, `int::<T>`, `uleb128`,
 `sleb128`, `cstr`, `skip`, `seek`, `pos`, `remaining`, `at_end`, `span(n)`,
 `since(start)`.
 
+**Chunked formats** (an ID and a size, repeated) use `cur.chunk(layout)`,
+which returns the next `Chunk { id, span, body }` and advances past it and
+any padding. `ChunkLayout::IFF` and `ChunkLayout::RIFF` are predefined;
+others are built: `ChunkLayout::new(4, 4, Endian::Big).size_first()
+.inclusive().align(2)` (ID bytes, size bytes, byte order; size before ID;
+size counts the header; alignment). Undersized or overrunning chunks are
+errors, so a loop over it always terminates:
+
+```rust
+while let Some(chunk) = cur.chunk(ChunkLayout::new(4, 4, Endian::Little)).await? {
+    let mut node = chunk.node();          // "ID — N bytes"
+    if chunk.id == b"NAME" { /* read chunk.body */ }
+    cx.push(node).await;
+}
+```
+
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than

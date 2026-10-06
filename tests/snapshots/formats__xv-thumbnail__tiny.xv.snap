@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.xv — XV thumbnail, 4×2  [0x0+0x6a]
+    Image info: "32x16 RGB PNG file (1234 bytes)"  [0x20+0x28]
+    Dimensions: "4 2 255"  [0x5a+0x7]
+    Pixels (3-3-2 RGB)  [0x62+0x8]

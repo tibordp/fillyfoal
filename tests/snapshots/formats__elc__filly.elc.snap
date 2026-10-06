@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ filly.elc — Emacs Lisp bytecode (format 29), compiled by Emacs 29.4  [0x0+0xb1]
+    magic: ";ELC"  [0x0+0x4]
+    version: 29  [0x4+0x1]
+    padding  [0x5+0x3]
+    comment: ";;; Compiled"  [0x9+0xc]
+    comment: ";;; in Emacs version 29.4"  [0x16+0x19]
+    comment: ";;; with all optimizations."  [0x30+0x1b]
+    Byte-code forms: "(defalias (quote filly-trot) #[(n) \"\\301\\302\\303\\\"\\207\" [n message \"trot %d\"] 3 \"Trot N times.\"])\n"  [0x4f+0x62]

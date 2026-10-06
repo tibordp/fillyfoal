@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.blp — BLP2 BGRA texture, 4×4  [0x0+0x4e4]
+    Signature: "BLP2"  [0x0+0x4]
+    Type: 1  [0x4+0x4]
+    Encoding: uncompressed BGRA (0x3)  [0x8+0x1]
+    Alpha depth: 8  [0x9+0x1]
+    Alpha encoding: DXT1 (0x0)  [0xa+0x1]
+    Has mipmaps: 1  [0xb+0x1]
+    Width: 4  [0xc+0x4]
+    Height: 4  [0x10+0x4]
+    Mipmap 0 — 4×4  [0x494+0x40]
+    Mipmap 1 — 2×2  [0x4d4+0x10]

@@ -6,8 +6,8 @@
 //! when expanded.
 
 mod extra;
-mod tables;
-mod version;
+pub(crate) mod tables;
+pub(crate) mod version;
 
 pub use extra::DOS_EXE;
 
@@ -67,6 +67,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let nt = file.tail(lfanew);
+    // Older executables behind an MZ stub have their own dissectors.
+    let signature = cx.read_avail(nt.sub(0, 4)).await?;
+    let other = match signature.get(..2) {
+        Some(b"NE") => Some(("NE Executable", "16-bit NE executable", &crate::formats::ne::FORMAT)),
+        Some(b"LE" | b"LX") => Some(("Linear Executable", "LE/LX executable", &crate::formats::lx::FORMAT)),
+        _ if signature.as_slice() != b"PE\0\0" => {
+            Some(("DOS Executable", "MS-DOS executable", &DOS_EXE))
+        }
+        _ => None,
+    };
+    if let Some((name, summary, format)) = other {
+        cx.annotate(summary);
+        cx.emit(crate::formats::embedded_as(name, input.nested(file), format));
+        return Ok(());
+    }
     let header = parse(&cx, nt.sub(4, 20), LE, &(), file_header).await;
     let nt_len = 24u64.saturating_add(header.as_ref().map_or(0, |h| h.optional_size.into()));
     cx.emit(

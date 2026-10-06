@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.C — compact (adaptive Huffman) data  [0x0+0x16]
+    Signature  [0x0+0x2]
+    Adaptive Huffman data  [0x2+0x14]

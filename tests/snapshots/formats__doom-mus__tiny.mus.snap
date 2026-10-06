@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mus — Doom MUS, 2 channels, 2 instruments  [0x0+0x17]
+    Signature: "MUS\u{1a}"  [0x0+0x4]
+    Score length: 3  [0x4+0x2]
+    Score offset: 0x14  [0x6+0x2]
+    Primary channels: 2  [0x8+0x2]
+    Secondary channels: 0  [0xa+0x2]
+    Instruments: 2  [0xc+0x2]
+    Reserved: 0  [0xe+0x2]
+    Instrument list  [0x10+0x4]
+    Score  [0x14+0x3]

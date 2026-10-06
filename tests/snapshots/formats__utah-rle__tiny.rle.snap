@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.rle — Utah RLE, 4×4, 3 channel(s) × 8 bits  [0x0+0x1f]
+    Magic: 0xcc52  [0x0+0x2]
+    X position: 0  [0x2+0x2]
+    Y position: 0  [0x4+0x2]
+    Width: 4  [0x6+0x2]
+    Height: 4  [0x8+0x2]
+    Flags: 0x2 [no background]  [0xa+0x1]
+    Colour channels: 3  [0xb+0x1]
+    Bits per pixel: 8  [0xc+0x1]
+    Colour map channels: 0  [0xd+0x1]
+    Colour map length (log2): 0  [0xe+0x1]
+    Scanline data  [0xf+0x10]
