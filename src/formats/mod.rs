@@ -481,6 +481,10 @@ pub static FORMATS: &[&Format] = &[
     &text::ini::FORMAT,
     // Markdown before YAML: front matter starts like a YAML document.
     &text::markdown::FORMAT,
+    &text::yaml::KUBERNETES,
+    &text::yaml::COMPOSE,
+    &text::yaml::GITHUB_WORKFLOW,
+    &text::yaml::OPENAPI,
     &text::yaml::FORMAT,
     &text::plain::SCRIPT,
     // Weak, statistical probes.

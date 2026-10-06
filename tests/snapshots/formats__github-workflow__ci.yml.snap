@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ci.yml — GitHub Actions workflow: CI  [0x0+0xde]
+    name: "CI"  [0x6+0x2]
+  ▾ on — mapping  [0xd+0x2d]
+    ▾ push — mapping  [0x15+0x15]
+      ▾ branches — sequence, 1 item  [0x23+0x6]
+          [0]: "main"  [0x24+0x4]
+      pull_request — null  [0x2c+0xe]
+  ▾ jobs — mapping  [0x40+0x9e]
+    ▾ test — mapping  [0x48+0x96]
+        runs-on: "ubuntu-latest"  [0x55+0xd]
+      ▾ steps — sequence  [0x6e+0x70]
+        ▾ [0] — mapping  [0x76+0x1a]
+            uses: "actions/checkout@v4"  [0x7c+0x13]
+        ▾ [1] — mapping  [0x98+0x46]
+            name: "Test"  [0x9e+0x4]
+            run: "cargo test\ncargo clippy\n" — literal block  [0xab+0x33]

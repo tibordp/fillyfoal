@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ api.yaml — OpenAPI description (YAML): Pet store  [0x0+0xa5]
+    openapi: "3.0.3"  [0x9+0x5]
+  ▾ info — mapping  [0x15+0x24]
+      title: "Pet store"  [0x1e+0x9]
+      version: "1.0"  [0x33+0x5]
+  ▾ paths — mapping  [0x40+0x65]
+    ▾ /pets — mapping  [0x49+0x5c]
+      ▾ get — mapping  [0x52+0x53]
+          summary: "List pets"  [0x61+0x9]
+        ▾ responses — mapping  [0x7c+0x29]
+          ▾ 200 — mapping  [0x8b+0x1a]
+              description: "ok"  [0xa2+0x2]

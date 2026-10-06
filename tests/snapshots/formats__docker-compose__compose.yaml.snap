@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ compose.yaml — Docker Compose file: first image postgres:16  [0x0+0xb3]
+  ▾ services — mapping  [0xa+0x95]
+    ▾ db — mapping  [0x10+0x49]
+        image: "postgres:16"  [0x1b+0xb]
+      ▾ environment — mapping  [0x38+0x21]
+          POSTGRES_PASSWORD: "example"  [0x51+0x7]
+    ▾ app — mapping  [0x60+0x3f]
+        build: "."  [0x6b+0x1]
+      ▾ depends_on — sequence, 1 item  [0x7d+0x4]
+          [0]: "db"  [0x7e+0x2]
+      ▾ ports — sequence  [0x8d+0x12]
+          [0]: "8080:80"  [0x95+0x9]
+  ▾ volumes — mapping  [0xa8+0xb]
+      data — mapping, 0 keys  [0xb0+0x2]

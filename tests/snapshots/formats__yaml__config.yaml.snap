@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ config.yaml — YAML, 3 documents  [0x0+0x26d]
+▾ config.yaml — YAML document, 3 documents  [0x0+0x26d]
     Directive: "%YAML 1.2"  [0x0+0x9]
     name: "fillyfoal"  [0x2c+0x9]
     version: 1.2  [0x3f+0x3]

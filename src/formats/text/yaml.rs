@@ -68,7 +68,7 @@ fn probe_yaml(h: &Head<'_>) -> bool {
         let item = probe::trim_start(line).starts_with(b"- ") || probe::trim(line) == b"-";
         if probe_mapping(line) {
             entries = entries.saturating_add(1);
-        } else if !(indented || item) {
+        } else if !(indented || item || is_marker(line)) {
             return false;
         }
     }
@@ -650,9 +650,90 @@ async fn flow(cx: Cx, span: Span) -> Result<()> {
 // Documents
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
+    document(cx, input, "YAML document", None).await
+}
+
+/// Extra detail for an annotation, scraped from the head.
+type Detail = fn(&[u8]) -> Option<String>;
+
+/// Top-level keys (`key:` at column 0) in a probe's head.
+fn top_keys(head: &[u8]) -> impl Iterator<Item = &[u8]> {
+    probe::lines(head).filter_map(|l| {
+        let colon = l.iter().position(|&b| b == b':')?;
+        let key = l.get(..colon)?;
+        (!key.is_empty()
+            && key
+                .iter()
+                .all(|&b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-'))
+        .then_some(key)
+    })
+}
+
+/// A YAML vocabulary: a YAML document with all of `keys` at the top level.
+fn has_top_keys(h: &Head<'_>, keys: &[&[u8]]) -> bool {
+    let head = probe::head(h);
+    probe_yaml(h) && keys.iter().all(|k| top_keys(&head).any(|t| t == *k))
+}
+
+/// The value of the first `key:` line (at any indentation) in the head.
+fn scrape(head: &[u8], key: &[u8]) -> Option<String> {
+    probe::lines(head).find_map(|l| {
+        let t = probe::trim_start(l);
+        let t = t.strip_prefix(b"- ").unwrap_or(t);
+        let rest = t.strip_prefix(key)?.strip_prefix(b":")?;
+        let v = probe::trim(rest);
+        let v = v
+            .strip_prefix(b"\"")
+            .and_then(|v| v.strip_suffix(b"\""))
+            .unwrap_or(v);
+        (!v.is_empty()).then(|| decode_8bit(v))
+    })
+}
+
+macro_rules! yaml_variant {
+    ($id:ident, $f:ident, $name:literal, $title:literal, [$($ext:literal),*], [$($key:literal),*], $detail:expr) => {
+        pub static $id: Format = Format {
+            name: $name,
+            title: $title,
+            extensions: &[$($ext),*],
+            mime: "application/yaml",
+            probe: Probe::Custom(|h| has_top_keys(h, &[$($key.as_slice()),*])),
+            dissect: crate::expander!($f: Input),
+        };
+        async fn $f(cx: Cx, input: Input) -> Result<()> {
+            document(cx, input, $title, Some($detail)).await
+        }
+    };
+}
+
+yaml_variant!(KUBERNETES, dissect_k8s, "kubernetes", "Kubernetes manifest", [],
+    [b"apiVersion", b"kind"],
+    |h: &[u8]| match (scrape(h, b"kind"), scrape(h, b"name")) {
+        (Some(k), Some(n)) => Some(format!("{k} {n}")),
+        (k, _) => k,
+    });
+yaml_variant!(COMPOSE, dissect_compose, "docker-compose", "Docker Compose file",
+    ["compose.yaml", "docker-compose.yml"], [b"services"],
+    |h: &[u8]| scrape(h, b"image").map(|i| format!("first image {i}")));
+yaml_variant!(GITHUB_WORKFLOW, dissect_workflow, "github-workflow", "GitHub Actions workflow", [],
+    [b"on", b"jobs"], |h: &[u8]| scrape(h, b"name"));
+yaml_variant!(OPENAPI, dissect_openapi, "openapi-yaml", "OpenAPI description (YAML)", [],
+    [b"info", b"paths"], |h: &[u8]| scrape(h, b"title"));
+
+async fn document(
+    cx: Cx,
+    input: Input,
+    title: &str,
+    detail: Option<Detail>,
+) -> Result<()> {
     let prepared = prepare(&cx, input).await?;
     let span = prepared.span;
-    cx.annotate(format!("YAML document{}", prepared.note()));
+    let head = cx.read_avail(span.sub(0, 16 * 1024)).await?;
+    let title = match detail.and_then(|d| d(&head)) {
+        Some(d) => format!("{title}: {d}"),
+        None => title.to_owned(),
+    };
+    cx.annotate(format!("{title}{}", prepared.note()));
     let mut lines = Lines::new(&cx, span);
     // Directives and the first marker.
     let mut start = 0u64;
@@ -709,7 +790,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     if number > 1 {
         cx.annotate(format!(
-            "YAML{}, {}",
+            "{title}{}, {}",
             prepared.note(),
             plural(number, "document", "documents")
         ));
