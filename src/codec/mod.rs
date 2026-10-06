@@ -8,6 +8,7 @@
 //! bytes count against [`crate::Limits::max_derived`].
 
 pub mod inflate;
+pub mod crypto;
 pub mod pipeline;
 
 use std::sync::Arc;

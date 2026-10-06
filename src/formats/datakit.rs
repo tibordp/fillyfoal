@@ -230,63 +230,8 @@ impl<'a> ByteReader<'a> {
 /// SHA-1 (for verifying Git checksums and computing torrent info hashes;
 /// not for security).
 pub fn sha1(data: &[u8]) -> [u8; 20] {
-    let mut h: [u32; 5] = [
-        0x6745_2301,
-        0xefcd_ab89,
-        0x98ba_dcfe,
-        0x1032_5476,
-        0xc3d2_e1f0,
-    ];
-    let bit_len = to_u64(data.len()).wrapping_mul(8);
-    let mut padded = data.to_vec();
-    padded.push(0x80);
-    while padded.len() % 64 != 56 {
-        padded.push(0);
-    }
-    padded.extend_from_slice(&bit_len.to_be_bytes());
-    for block in padded.as_chunks::<64>().0 {
-        let mut w = [0u32; 80];
-        for (i, word) in block.as_chunks::<4>().0.iter().enumerate() {
-            if let Some(slot) = w.get_mut(i) {
-                *slot = u32::from_be_bytes(*word);
-            }
-        }
-        for i in 16..80usize {
-            let x = |k: usize| w.get(i.wrapping_sub(k)).copied().unwrap_or(0);
-            let v = (x(3) ^ x(8) ^ x(14) ^ x(16)).rotate_left(1);
-            if let Some(slot) = w.get_mut(i) {
-                *slot = v;
-            }
-        }
-        let [mut a, mut b, mut c, mut d, mut e] = h;
-        for (i, &wi) in w.iter().enumerate() {
-            let (f, k) = match i {
-                0..=19 => ((b & c) | (!b & d), 0x5a82_7999),
-                20..=39 => (b ^ c ^ d, 0x6ed9_eba1),
-                40..=59 => ((b & c) | (b & d) | (c & d), 0x8f1b_bcdc),
-                _ => (b ^ c ^ d, 0xca62_c1d6u32),
-            };
-            let t = a
-                .rotate_left(5)
-                .wrapping_add(f)
-                .wrapping_add(e)
-                .wrapping_add(k)
-                .wrapping_add(wi);
-            e = d;
-            d = c;
-            c = b.rotate_left(30);
-            b = a;
-            a = t;
-        }
-        for (slot, v) in h.iter_mut().zip([a, b, c, d, e]) {
-            *slot = slot.wrapping_add(v);
-        }
-    }
-    let mut out = [0u8; 20];
-    for (chunk, v) in out.as_chunks_mut::<4>().0.iter_mut().zip(h) {
-        *chunk = v.to_be_bytes();
-    }
-    out
+    use crate::codec::crypto::{Hash, Sha1};
+    Sha1::digest(data).try_into().unwrap_or([0; 20])
 }
 
 /// Big-endian unsigned integer from up to 8 bytes.

@@ -53,35 +53,7 @@ const PAGE_TYPES: EnumTable = &[
 const KEY: [u8; 4] = [0xc7, 0xda, 0x39, 0x6b];
 
 fn rc4(key: &[u8], data: &[u8]) -> Vec<u8> {
-    let mut s: [u8; 256] = core::array::from_fn(|i| i as u8);
-    let mut j = 0u8;
-    for i in 0..256usize {
-        let si = s.get(i).copied().unwrap_or(0);
-        j = j.wrapping_add(si).wrapping_add(
-            key.get(i.checked_rem(key.len()).unwrap_or(0))
-                .copied()
-                .unwrap_or(0),
-        );
-        s.swap(i, usize::from(j));
-    }
-    let (mut i, mut j) = (0u8, 0u8);
-    data.iter()
-        .map(|&b| {
-            i = i.wrapping_add(1);
-            j = j.wrapping_add(s.get(usize::from(i)).copied().unwrap_or(0));
-            s.swap(usize::from(i), usize::from(j));
-            let k = s
-                .get(usize::from(
-                    s.get(usize::from(i))
-                        .copied()
-                        .unwrap_or(0)
-                        .wrapping_add(s.get(usize::from(j)).copied().unwrap_or(0)),
-                ))
-                .copied()
-                .unwrap_or(0);
-            b ^ k
-        })
-        .collect()
+    crate::codec::crypto::rc4(key, data)
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
