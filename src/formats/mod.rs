@@ -810,6 +810,11 @@ pub static FORMATS: &[&Format] = &[
     &geo::gis::GARMIN_IMG,
     &geo::gis::GARMIN_GDB,
     &geo::gis::OV2,
+    &geo::gnss::UBX,
+    &geo::gnss::RTCM3,
+    &geo::gnss::SBF,
+    &geo::gnss::NOVATEL,
+    &geo::gnss::NMEA,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

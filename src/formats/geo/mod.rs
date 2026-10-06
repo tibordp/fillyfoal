@@ -213,7 +213,12 @@ pub(crate) type Labels = &'static [&'static str];
 /// A node for one line of delimited fields; expanding it shows the fields
 /// labelled from `labels` (extra fields are numbered).
 pub(crate) fn delimited_node(name: impl Into<Cow<'static, str>>, line: &LineBuf, sep: u8, labels: Labels) -> Node {
-    Node::new(name).span(line.span).lazy(delimited, (line.span, sep, labels))
+    delimited_span(name, line.span, sep, labels)
+}
+
+/// Like [`delimited_node`], for part of a line.
+pub(crate) fn delimited_span(name: impl Into<Cow<'static, str>>, span: Span, sep: u8, labels: Labels) -> Node {
+    Node::new(name).span(span).lazy(delimited, (span, sep, labels))
 }
 
 async fn delimited(cx: Cx, (span, sep, labels): (Span, u8, Labels)) -> Result<()> {
@@ -272,7 +277,9 @@ async fn columns(cx: Cx, (span, cols): (Span, Columns)) -> Result<()> {
 pub(crate) fn field_node(name: impl Into<Cow<'static, str>>, field: Piece<'_>) -> Node {
     let t = field.trim();
     let s = t.text();
-    let value = crate::formats::text::number(&s).unwrap_or(Value::Text(s));
+    // Zero-padded codes (dates, IDs) stay text.
+    let padded = s.len() > 1 && !s.contains('.') && s.starts_with('0') && s.as_bytes().get(1).is_some_and(u8::is_ascii_digit);
+    let value = if padded { None } else { crate::formats::text::number(&s) }.unwrap_or(Value::Text(s));
     Node::new(name).span(t.span()).value(value)
 }
 
@@ -368,5 +375,40 @@ impl FbTable {
     /// The `j`th table of a vector of tables starting at `start`.
     pub fn vector_table(data: &[u8], start: usize, j: usize) -> Option<FbTable> {
         fb_table(data, fb_deref(data, start.checked_add(j.checked_mul(4)?)?)?)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Bit fields
+
+/// Big-endian (MSB-first) bit reader over a byte slice, as used by RTCM.
+pub(crate) struct Bits<'a> {
+    data: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Bits<'a> {
+    pub fn new(data: &'a [u8]) -> Self {
+        Bits { data, pos: 0 }
+    }
+
+    /// The next `n` (at most 64) bits as an unsigned number; `None` past
+    /// the end.
+    pub fn u(&mut self, n: u32) -> Option<u64> {
+        let mut v = 0u64;
+        for _ in 0..n.min(64) {
+            let byte = *self.data.get(self.pos / 8)?;
+            let bit = byte.checked_shr(7u32.saturating_sub(u32::try_from(self.pos % 8).ok()?))? & 1;
+            v = (v << 1) | u64::from(bit);
+            self.pos = self.pos.saturating_add(1);
+        }
+        Some(v)
+    }
+
+    /// The next `n` bits as a two's-complement signed number.
+    pub fn i(&mut self, n: u32) -> Option<i64> {
+        let v = self.u(n)?;
+        let shift = 64u32.saturating_sub(n.min(64));
+        v.cast_signed().checked_shl(shift).and_then(|x| x.checked_shr(shift))
     }
 }
