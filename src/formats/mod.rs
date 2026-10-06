@@ -37,6 +37,7 @@ pub mod minidump;
 pub mod ne;
 pub mod pdb;
 pub mod pe;
+pub mod pef;
 pub mod pyc;
 pub mod spirv;
 pub mod te;
@@ -190,6 +191,7 @@ pub static FORMATS: &[&Format] = &[
     &winres::FORMAT,
     &te::FORMAT,
     &xcoff::FORMAT,
+    &pef::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
