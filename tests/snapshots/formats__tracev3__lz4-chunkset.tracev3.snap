@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ 0000000000000001.tracev3 — Unified Log tracev3 (MacBookPro16,1, build 19H15), 1 catalog, 1 chunkset  [0x0+0x180]
+▾ lz4-chunkset.tracev3 — Unified Log tracev3 (MacBookPro16,1, build 19H15), 1 catalog, 1 chunkset  [0x0+0x1e8]
   ▾ Header — MacBookPro16,1, build 19H15  [0x10+0xd0] → 0x0+0xe0
       Timebase numerator: 125  [0x10+0x4]
       Timebase denominator: 3  [0x14+0x4]
@@ -37,6 +37,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of subchunks: 0  [0xf8+0x2]
       Padding: 00 00 00 00 00 00  |......|  [0xfa+0x6]
       Earliest firehose time: 1234000  [0x100+0x8]
-  ▾ Chunkset — LZ4, 512 bytes uncompressed  [0x158+0x24] → 0x148+0x38
-    ▾ Decompressed  [0x164+0x14]
-        ! malformed: match offset outside the output [0x164+0x14]
+  ▾ Chunkset — LZ4, 512 bytes uncompressed  [0x158+0x8c] → 0x148+0xa0
+    ▾ Decompressed — 0x200 bytes decompressed  [0x164+0x7c]
+        Data  [#1:0x0+0x200]

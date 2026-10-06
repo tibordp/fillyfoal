@@ -350,11 +350,21 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
             0x600d => {
                 let head = cx.read_avail(data.sub(0, 12)).await?;
                 let mut node = Node::new(name).span(data);
+                // Apple's LZ4 framing: "bv41", decoded size, block size,
+                // a raw LZ4 block (then more blocks, and "bv4$" at the end).
                 if head.starts_with(b"bv41") {
                     let out = u32_le(&head, 4).unwrap_or(0);
+                    let packed = u32_le(&head, 8).unwrap_or(0);
+                    let block = crate::formats::content(
+                        "Decompressed",
+                        input,
+                        data.sub(12, packed.into()),
+                        crate::codec::Codec::Lz4Block,
+                        Some(out.into()),
+                    );
                     node = node
                         .summary(format!("LZ4, {} uncompressed", size(out.into())))
-                        .diag(Diagnostic::unsupported("LZ4 compression"));
+                        .lazy(crate::formats::arcutil::emit_nodes, Arc::new(vec![block]));
                 }
                 node
             }
