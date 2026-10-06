@@ -819,9 +819,7 @@ pub static FORMATS: &[&Format] = &[
     // Binary formats found inside text armor.
     &text::ssh::BLOB,
     // Armor and keys.
-    &text::pem::PGP,
     &text::pem::SSH2,
-    &text::pem::FORMAT,
     &text::ssh::KEYS,
     // Messages (header blocks look like YAML; keep them before it).
     &text::mime::MBOX,

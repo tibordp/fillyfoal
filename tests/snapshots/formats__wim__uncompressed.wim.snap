@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ uncompressed.wim — Windows image, 1 image, uncompressed, part 1 of 1  [0x0+0x301]
   ▾ Header — version 0x10d00, uncompressed  [0x0+0xd0]
@@ -29,8 +29,13 @@ expression: "common::explore(&name, &data)"
           Part number: 1  [0x1b3+0x2]
           Reference count: 1  [0x1b5+0x4]
           SHA-1: da a9 96 31 13 11 ca 81 89 e4 81 a0 8f df 14 1f …  |...1............|  [0x1b9+0x14]
-        ▾ Data  [0xd0+0x4b]
-            ! unsupported: unrecognized format [0xd0+0x4b]
+        ▾ Data — UTF-8 text, CRLF line endings, 3 lines  [0xd0+0x4b]
+            Encoding: "UTF-8"
+            Line endings: "CRLF" — 0 LF, 3 CRLF, 0 CR
+          ▾ Lines — 3 lines  [0xd0+0x4b]
+              Line 1: "hello from a WIM stream"  [0xd0+0x17]
+              Line 2: "hello from a WIM stream"  [0xe9+0x17]
+              Line 3: "hello from a WIM stream"  [0x102+0x17]
       ▾ metadata 264ade5e71b4…: 0x11b — 128 bytes → 128 bytes  [0x1cd+0x32]
         ▾ Resource header  [0x1cd+0x18]
             Compressed size: 128 — 128 bytes  [0x1cd+0x7]

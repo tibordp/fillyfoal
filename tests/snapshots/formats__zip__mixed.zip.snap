@@ -581,8 +581,11 @@ expression: "common::explore(&display_name(&path), &data)"
                   Type: "IEND" — critical, public, unsafe to copy  [#4:0xb9e+0x4]
                   Data  [#4:0xba2+0x0]
                   CRC: 0xae426082 — valid  [#4:0xba2+0x4]
-              ▾ Trailing data — 0x7 bytes after the end chunk  [#4:0xba6+0x7]
-                  ! unsupported: unrecognized format [#4:0xba6+0x7]
+              ▾ Trailing data — UTF-8 text, 1 line  [#4:0xba6+0x7]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#4:0xba6+0x7]
+                    Line 1: "TRAILER"  [#4:0xba6+0x7]
           ▾ ._b.txt — 163 bytes, -rw-r--r--  [#4:0xc00+0x400]
             ▾ Header — ustar  [#4:0xc00+0x200]
                 Name: "._b.txt"  [#4:0xc00+0x64]
@@ -669,8 +672,11 @@ expression: "common::explore(&display_name(&path), &data)"
                 Device major: 0  [#4:0x1549+0x8]
                 Device minor: 0  [#4:0x1551+0x8]
                 Prefix: ""  [#4:0x1559+0x9b]
-            ▾ Content — 6 bytes  [#4:0x1600+0x6]
-                ! unsupported: unrecognized format [#4:0x1600+0x6]
+            ▾ Content — UTF-8 text, LF line endings, 1 line  [#4:0x1600+0x6]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [#4:0x1600+0x6]
+                  Line 1: "hello"  [#4:0x1600+0x5]
             End of archive — 2 zero blocks  [#4:0x1800+0x400]
     ▾ b.txt — stored, 6 → 6 bytes  [0x7b4+0x4b]
       ▾ Central Directory Header  [0x7b4+0x2e]

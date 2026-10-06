@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ multi.uimg — U-Boot image "multi-file": Linux ARM multi-file, none, 52 bytes  [0x0+0x74]
   ▾ Header — multi-file, header CRC valid  [0x0+0x40]
@@ -18,8 +18,11 @@ expression: "common::explore(&name, &data)"
       Name: "multi-file"  [0x20+0x20]
   ▾ Images — none, 52 bytes  [0x40+0x34]
       Size table: 2 — 2 images  [0x40+0xc]
-    ▾ Image 0 — 11 bytes  [0x4c+0xb]
-        ! unsupported: unrecognized format [0x4c+0xb]
+    ▾ Image 0 — UTF-8 text, LF line endings, 1 line  [0x4c+0xb]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x4c+0xb]
+          Line 1: "first part"  [0x4c+0xa]
     ▾ Image 1 — gzip, 7 bytes uncompressed  [0x58+0x1b]
       ▾ Header  [0x58+0xa]
           ID: 1f 8b  |..|  [0x58+0x2]
@@ -31,5 +34,8 @@ expression: "common::explore(&name, &data)"
       ▾ Trailer  [0x6b+0x8]
           CRC32: 0x60fc07e  [0x6b+0x4]
           ISIZE: 7  [0x6f+0x4]
-      ▾ Content — 0x7 bytes decompressed  [0x62+0x9]
-          Data  [#1:0x0+0x7]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x62+0x9]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x7]
+            Line 1: "second"  [#1:0x0+0x6]

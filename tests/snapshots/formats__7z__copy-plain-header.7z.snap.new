@@ -1,5 +1,6 @@
 ---
 source: tests/formats.rs
+assertion_line: 76
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ copy-plain-header.7z — 7-Zip archive, 4 files, Copy  [0x0+0x1fc]

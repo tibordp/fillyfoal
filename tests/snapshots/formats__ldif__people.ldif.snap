@@ -18,4 +18,10 @@ expression: "common::explore(&display_name(&path), &data)"
       replace: "mail"  [0x125+0xd]
       mail: "bob@example.com"  [0x133+0x15]
     ▾ jpegPhoto — 0xb bytes decoded  [0x157+0x10]
-        Data  [#1:0x0+0xb]
+        ! warning: no EOI marker
+        SOI  [#1:0x0+0x2]
+      ▾ APP0 — JFIF  [#1:0x2+0x9]
+          Marker: 0xffe0 — APP0  [#1:0x2+0x2]
+          Length: 16  [#1:0x4+0x2]
+          Identifier: "JFIF"  [#1:0x6+0x5]
+          ! truncated: needed 0x1 bytes at 0xb, only 0x0 available [#1:0xb+0x1]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ users.avro — Avro object container, codec null, schema User  [0x0+0xf2]
     Magic: 4f 62 6a 01  |Obj.|  [0x0+0x4]
@@ -18,6 +18,10 @@ expression: "common::explore(&name, &data)"
     ▾ Block 1 — 1 objects, 7 bytes  [0xd9+0x19]
         Object count: 1  [0xd9+0x1]
         Size: 7  [0xda+0x1]
-      ▾ Objects — 7 bytes  [0xdb+0x7]
-          Data  [0xdb+0x7]
+      ▾ Objects — UTF-8 text, LF line endings, 2 lines  [0xdb+0x7]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 2 lines  [0xdb+0x7]
+            Line 1: ""  [0xdb+0x0]
+            Line 2: "carolR"  [0xdc+0x6]
         Sync marker  [0xe2+0x10]

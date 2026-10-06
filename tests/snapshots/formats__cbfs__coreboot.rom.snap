@@ -3,8 +3,11 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ coreboot.rom — CBFS, 2 files  [0x0+0x240]
-  ▾ config — raw, 13 bytes  [0x20+0xd] → 0x0+0x20
-      ! unsupported: unrecognized format [0x20+0xd]
+  ▾ config — UTF-8 text, LF line endings, 1 line  [0x20+0xd] → 0x0+0x20
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x20+0xd]
+        Line 1: "CONFIG_FOO=y"  [0x20+0xc]
   ▾ logo.png — 32×24, 8-bit RGB  [0x70+0x1ad] → 0x40+0x30
       Signature  [0x70+0x8]
     ▾ IHDR — 32×24, 8-bit RGB  [0x78+0x19]
@@ -68,5 +71,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: "IEND" — critical, public, unsafe to copy  [0x20e+0x4]
         Data  [0x212+0x0]
         CRC: 0xae426082 — valid  [0x212+0x4]
-    ▾ Trailing data — 0x7 bytes after the end chunk  [0x216+0x7]
-        ! unsupported: unrecognized format [0x216+0x7]
+    ▾ Trailing data — UTF-8 text, 1 line  [0x216+0x7]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x216+0x7]
+          Line 1: "TRAILER"  [0x216+0x7]

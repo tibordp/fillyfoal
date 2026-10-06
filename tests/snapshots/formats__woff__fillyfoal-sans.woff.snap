@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fillyfoal-sans.woff — WOFF 1.0, 11 tables, 1.0 KiB as sfnt  [0x0+0x3ce]
   ▾ Header  [0x0+0x2c]
@@ -18,8 +18,14 @@ expression: "common::explore(&name, &data)"
       Private data offset: 0x0  [0x24+0x4]
       Private data length: 0  [0x28+0x4]
     Table directory — 11 tables  [0x2c+0xdc]
-  ▾ Metadata (XML) — 0x69 bytes decompressed  [0x370+0x5e]
-      Data  [#1:0x0+0x69]
+  ▾ Metadata (XML) — XML document, root <metadata>  [0x370+0x5e]
+    ▾ XML declaration  [#1:0x0+0x26]
+        Version: "1.0"  [#1:0xf+0x3]
+        Encoding: "UTF-8"  [#1:0x1e+0x5]
+    ▾ metadata — version="1.0" (1 element)  [#1:0x26+0x43]
+        @version: "1.0"  [#1:0x39+0x3]
+      ▾ vendor — name="fillyfoal tests"  [#1:0x3e+0x20]
+          @name: "fillyfoal tests"  [#1:0x4c+0xf]
   ▾ 'OS/2' — OS/2 and Windows metrics, zlib, 79 → 96 bytes  [0x108+0x4f]
     ▾ Directory entry  [0x2c+0x14]
         Tag: "OS/2"  [0x2c+0x4]

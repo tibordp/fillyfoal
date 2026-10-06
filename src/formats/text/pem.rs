@@ -1,6 +1,9 @@
-//! ASCII armor: PEM (`-----BEGIN CERTIFICATE-----`), OpenPGP armor (with
-//! its CRC-24 checksum and clear-signed messages) and RFC 4716 SSH2 public
-//! keys (`---- BEGIN SSH2 PUBLIC KEY ----`).
+//! ASCII armor, registered for RFC 4716 SSH2 public keys
+//! (`---- BEGIN SSH2 PUBLIC KEY ----`). The same reader understands PEM
+//! (`-----BEGIN CERTIFICATE-----`) and OpenPGP armor (with its CRC-24
+//! checksum and clear-signed messages) when they appear in the same file;
+//! files that start with those are handled by `formats::pem` and
+//! `formats::pgp`.
 //!
 //! Blocks are a paged collection. Expanding one shows its headers and
 //! base64 body; the body is decoded into a derived source and dissected
@@ -17,24 +20,6 @@ use super::decode::{Transform, derive_with, preview};
 use super::encoding::prepare;
 use super::scan::Lines;
 use super::{probe, text_node};
-
-pub static FORMAT: Format = Format {
-    name: "pem",
-    title: "PEM (Privacy-Enhanced Mail) armor",
-    extensions: &["pem", "crt", "cer", "csr", "key", "pub", "p7b", "p7c", "crl"],
-    mime: "application/x-pem-file",
-    probe: Probe::Custom(|h| armor(h).is_some_and(|k| k == Kind::Pem)),
-    dissect: crate::expander!(dissect: Input),
-};
-
-pub static PGP: Format = Format {
-    name: "pgp-armor",
-    title: "OpenPGP ASCII armor",
-    extensions: &["asc", "sig", "gpg"],
-    mime: "application/pgp-encrypted",
-    probe: Probe::Custom(|h| armor(h).is_some_and(|k| k == Kind::Pgp)),
-    dissect: crate::expander!(dissect: Input),
-};
 
 pub static SSH2: Format = Format {
     name: "ssh2-public-key",

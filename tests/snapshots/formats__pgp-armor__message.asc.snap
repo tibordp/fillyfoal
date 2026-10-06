@@ -1,13 +1,20 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ message.asc — PGP MESSAGE  [0x0+0x90]
-  ▾ PGP MESSAGE — OpenPGP armor, 0x90 bytes  [0x0+0x90]
-      Begin: "PGP MESSAGE"  [0x0+0x1b]
-      Version: "fillyfoal test"  [0x25+0xe]
-      Comment: "not really encrypted"  [0x3d+0x14]
-    ▾ Data — base64, 0x13 bytes decoded  [0x53+0x1c]
-        Data  [#1:0x0+0x13]
-      Checksum: 0xba010b — CRC-24, valid  [0x71+0x4]
-      End  [0x76+0x19]
+▾ message.asc — OpenPGP message (armored)  [0x0+0x90]
+  ▾ PGP MESSAGE  [0x0+0x90]
+      Version: "fillyfoal test"  [0x1c+0x18]
+      Comment: "not really encrypted"  [0x34+0x1e]
+      Checksum: 0xba010b  [0x70+0x6]
+    ▾ Packets — 19 bytes  [#1:0x0+0x13]
+      ▾ Literal Data Packet — "x.txt"  [#1:0x0+0x13]
+          Packet header: Literal Data (0xb) — new format, 17 body bytes  [#1:0x0+0x2]
+          Format: binary (0x62)  [#1:0x2+0x1]
+          File name: "x.txt"  [#1:0x3+0x6]
+          Date: 1970-01-01 00:00:00 UTC  [#1:0x9+0x4]
+        ▾ Literal data — UTF-8 text, LF line endings, 1 line  [#1:0xd+0x6]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0xd+0x6]
+              Line 1: "hello"  [#1:0xd+0x5]

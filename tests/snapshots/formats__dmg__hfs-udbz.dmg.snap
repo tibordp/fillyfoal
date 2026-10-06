@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ hfs-udbz.dmg — Apple disk image (UDIF), 1.8 MiB (3714 sectors)  [0x0+0x128f]
     Data fork — 936 bytes  [0x0+0x3a8]
@@ -164,8 +164,26 @@ expression: "common::explore(&name, &data)"
           Sector count: 0  [#1:0x26c+0x8]
           Compressed offset: 0x0  [#1:0x274+0x8] → 0x0+0x0
           Compressed length: 0  [#1:0x27c+0x8]
-  ▾ Property list — 3.2 KiB  [0x3a8+0xce7]
-      ! unsupported: unrecognized format [0x3a8+0xce7]
+  ▾ Property list — Property list (XML), dict with 1 key  [0x3a8+0xce7]
+      XML declaration: "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"  [0x3a8+0x26]
+      DOCTYPE: "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">"  [0x3cf+0x66]
+      Version: "1.0"
+    ▾ resource-fork — dict, 2 keys  [0x46e+0xc0f]
+      ▾ blkx — array, 1 element  [0x489+0x4fb]
+        ▾ [0] — dict, 5 keys  [0x494+0x4e5]
+            Attributes: "0x0050"  [0x4b9+0x17]
+            CFName: "whole disk (Apple_HFS : 0)"  [0x4eb+0x2b]
+          ▾ Data — 0x284 bytes decoded  [0x535+0x3c5]
+              Data  [#1:0x0+0x284]
+            ID: "0"  [0x918+0x12]
+            Name: "whole disk (Apple_HFS : 0)"  [0x943+0x2b]
+      ▾ plst — array, 1 element  [0x999+0x6db]
+        ▾ [0] — dict, 4 keys  [0x9a4+0x6c5]
+            Attributes: "0x0050"  [0x9c9+0x17]
+          ▾ Data — 0x408 bytes decoded  [0x9ff+0x605]
+              Data  [#2:0x0+0x408]
+            ID: "0"  [0x1022+0x12]
+            Name: ""  [0x104d+0x11]
   ▾ Trailer (koly)  [0x108f+0x200]
       Signature: "koly"  [0x108f+0x4]
       Version: 4  [0x1093+0x4]

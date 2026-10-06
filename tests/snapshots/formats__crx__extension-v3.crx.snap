@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ extension-v3.crx — Chrome extension (CRX3), 356 bytes ZIP payload  [0x0+0x230]
   ▾ Header  [0x0+0xc]
@@ -48,8 +48,10 @@ expression: "common::explore(&name, &data)"
             Uncompressed size: 78  [0xe2+0x4]
             File name length: 13  [0xe6+0x2]
             Extra field length: 0  [0xe8+0x2]
-        ▾ Content — 0x4e bytes decompressed  [0xf7+0x41]
-            Data  [#1:0x0+0x4e]
+        ▾ Content — Browser extension manifest: Fillyfoal fixture  [0xf7+0x41]
+            manifest_version: 3  [#1:0x18+0x1]
+            name: "Fillyfoal fixture"  [#1:0x25+0x13]
+            version: "1.0"  [#1:0x47+0x5]
       ▾ background.js — deflate, 65 → 65 bytes  [0x1df+0x3b]
         ▾ Central Directory Header  [0x1df+0x2e]
             Signature: 50 4b 01 02  |PK..|  [0x1df+0x4]
@@ -83,8 +85,11 @@ expression: "common::explore(&name, &data)"
             Uncompressed size: 65  [0x14e+0x4]
             File name length: 13  [0x152+0x2]
             Extra field length: 0  [0x154+0x2]
-        ▾ Content — 0x41 bytes decompressed  [0x163+0x41]
-            Data  [#2:0x0+0x41]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [0x163+0x41]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#2:0x0+0x41]
+              Line 1: "chrome.runtime.onInstalled.addListener(() => console.log('hi'));"  [#2:0x0+0x40]
     ▾ End of Central Directory — at 0x14e  [0x21a+0x16]
         Signature: 50 4b 05 06  |PK..|  [0x21a+0x4]
         Number of this disk: 0  [0x21e+0x2]

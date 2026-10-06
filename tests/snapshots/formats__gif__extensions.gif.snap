@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ extensions.gif — GIF89a, 2×2  [0x0+0x1a0]
     Signature: "GIF89a"  [0x0+0x6]
@@ -40,8 +40,11 @@ expression: "common::explore(&name, &data)"
         Block size: 11  [0x3d+0x1]
         Application identifier: "ICCRGBG1"  [0x3e+0x8]
         Authentication code: "012"  [0x46+0x3]
-    ▾ ICC profile — 0x130 bytes from sub-blocks  [#1:0x0+0x130]
-        ! unsupported: unrecognized format [#1:0x0+0x130]
+    ▾ ICC profile — UTF-8 text, 1 line  [#1:0x0+0x130]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#1:0x0+0x130]
+          Line 1: "\0\0\00xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  [#1:0x0+0x130]
     ▾ Data sub-blocks  [0x49+0x133]
         [0] — 255 bytes  [0x49+0x100]
         [1] — 49 bytes  [0x149+0x32]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ broken-xref.pdf — PDF 1.4, 2 pages, title "Fixture, updated", producer "pdf_gen.py"  [0x0+0x59b]
     ! malformed: unexpected end of data [0x59b+0x0]
@@ -25,8 +25,11 @@ expression: "common::explore(&name, &data)"
               ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                   Value: 49  [0x236+0x2]
                 /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                  Data  [#1:0x0+0x2b]
+              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                  Encoding: "UTF-8"
+                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#1:0x0+0x2b]
+                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
               ▾ Content operators
                   BT — begin text  [#1:0x0+0x2]
                   Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -49,8 +52,11 @@ expression: "common::explore(&name, &data)"
                 [3]: 841.89  [0x20c+0x6]
             ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
                 /Length: 17  [0x24b+0xa]
-              ▾ Stream data — 17 bytes  [0x260+0x11]
-                  Data  [0x260+0x11]
+              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x260+0x11]
+                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
               ▾ Content operators
                   m: "0 0" — move to  [0x260+0x5]
                   l: "100 100" — line to  [0x266+0x9]
@@ -79,8 +85,11 @@ expression: "common::explore(&name, &data)"
             ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                 Value: 49  [0x236+0x2]
               /Filter: "/FlateDecode"  [0x129+0x14]
-            ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                Data  [#1:0x0+0x2b]
+            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [#1:0x0+0x2b]
+                  Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
             ▾ Content operators
                 BT — begin text  [#1:0x0+0x2]
                 Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -103,8 +112,11 @@ expression: "common::explore(&name, &data)"
               [3]: 841.89  [0x20c+0x6]
           ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
               /Length: 17  [0x24b+0xa]
-            ▾ Stream data — 17 bytes  [0x260+0x11]
-                Data  [0x260+0x11]
+            ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                Encoding: "UTF-8"
+                Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [0x260+0x11]
+                  Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
             ▾ Content operators
                 m: "0 0" — move to  [0x260+0x5]
                 l: "100 100" — line to  [0x266+0x9]
@@ -132,8 +144,11 @@ expression: "common::explore(&name, &data)"
                 [3]: 841.89  [0x20c+0x6]
             ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
                 /Length: 17  [0x24b+0xa]
-              ▾ Stream data — 17 bytes  [0x260+0x11]
-                  Data  [0x260+0x11]
+              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x260+0x11]
+                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
               ▾ Content operators
                   m: "0 0" — move to  [0x260+0x5]
                   l: "100 100" — line to  [0x266+0x9]
@@ -148,8 +163,11 @@ expression: "common::explore(&name, &data)"
         ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
             Value: 49  [0x236+0x2]
           /Filter: "/FlateDecode"  [0x129+0x14]
-        ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-            Data  [#1:0x0+0x2b]
+        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0x0+0x2b]
+              Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
         ▾ Content operators
             BT — begin text  [#1:0x0+0x2]
             Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -179,8 +197,11 @@ expression: "common::explore(&name, &data)"
               ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                   Value: 49  [0x236+0x2]
                 /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                  Data  [#1:0x0+0x2b]
+              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                  Encoding: "UTF-8"
+                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#1:0x0+0x2b]
+                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
               ▾ Content operators
                   BT — begin text  [#1:0x0+0x2]
                   Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -202,8 +223,11 @@ expression: "common::explore(&name, &data)"
           [3]: 841.89  [0x20c+0x6]
       ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
           /Length: 17  [0x24b+0xa]
-        ▾ Stream data — 17 bytes  [0x260+0x11]
-            Data  [0x260+0x11]
+        ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+            Encoding: "UTF-8"
+            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x260+0x11]
+              Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
         ▾ Content operators
             m: "0 0" — move to  [0x260+0x5]
             l: "100 100" — line to  [0x266+0x9]
@@ -226,8 +250,11 @@ expression: "common::explore(&name, &data)"
               ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                   Value: 49  [0x236+0x2]
                 /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                  Data  [#1:0x0+0x2b]
+              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                  Encoding: "UTF-8"
+                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#1:0x0+0x2b]
+                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
               ▾ Content operators
                   BT — begin text  [#1:0x0+0x2]
                   Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -250,8 +277,11 @@ expression: "common::explore(&name, &data)"
                 [3]: 841.89  [0x20c+0x6]
             ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
                 /Length: 17  [0x24b+0xa]
-              ▾ Stream data — 17 bytes  [0x260+0x11]
-                  Data  [0x260+0x11]
+              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x260+0x11]
+                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
               ▾ Content operators
                   m: "0 0" — move to  [0x260+0x5]
                   l: "100 100" — line to  [0x266+0x9]
@@ -273,8 +303,11 @@ expression: "common::explore(&name, &data)"
             ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                 Value: 49  [0x236+0x2]
               /Filter: "/FlateDecode"  [0x129+0x14]
-            ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                Data  [#1:0x0+0x2b]
+            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [#1:0x0+0x2b]
+                  Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
             ▾ Content operators
                 BT — begin text  [#1:0x0+0x2]
                 Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -297,8 +330,11 @@ expression: "common::explore(&name, &data)"
               [3]: 841.89  [0x20c+0x6]
           ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
               /Length: 17  [0x24b+0xa]
-            ▾ Stream data — 17 bytes  [0x260+0x11]
-                Data  [0x260+0x11]
+            ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                Encoding: "UTF-8"
+                Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [0x260+0x11]
+                  Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
             ▾ Content operators
                 m: "0 0" — move to  [0x260+0x5]
                 l: "100 100" — line to  [0x266+0x9]
@@ -320,8 +356,11 @@ expression: "common::explore(&name, &data)"
                 [3]: 841.89  [0x20c+0x6]
             ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
                 /Length: 17  [0x24b+0xa]
-              ▾ Stream data — 17 bytes  [0x260+0x11]
-                  Data  [0x260+0x11]
+              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                  Encoding: "UTF-8"
+                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [0x260+0x11]
+                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
               ▾ Content operators
                   m: "0 0" — move to  [0x260+0x5]
                   l: "100 100" — line to  [0x266+0x9]
@@ -336,8 +375,11 @@ expression: "common::explore(&name, &data)"
         ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
             Value: 49  [0x236+0x2]
           /Filter: "/FlateDecode"  [0x129+0x14]
-        ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-            Data  [#1:0x0+0x2b]
+        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0x0+0x2b]
+              Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
         ▾ Content operators
             BT — begin text  [#1:0x0+0x2]
             Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -354,8 +396,11 @@ expression: "common::explore(&name, &data)"
       ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
           Value: 49  [0x236+0x2]
         /Filter: "/FlateDecode"  [0x129+0x14]
-      ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-          Data  [#1:0x0+0x2b]
+      ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x0+0x2b]
+            Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
       ▾ Content operators
           BT — begin text  [#1:0x0+0x2]
           Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -383,8 +428,11 @@ expression: "common::explore(&name, &data)"
               ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
                   Value: 49  [0x236+0x2]
                 /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-                  Data  [#1:0x0+0x2b]
+              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+                  Encoding: "UTF-8"
+                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#1:0x0+0x2b]
+                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
               ▾ Content operators
                   BT — begin text  [#1:0x0+0x2]
                   Tf: "/F1 24" — set font  [#1:0x3+0x9]
@@ -406,8 +454,11 @@ expression: "common::explore(&name, &data)"
           [3]: 841.89  [0x20c+0x6]
       ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
           /Length: 17  [0x24b+0xa]
-        ▾ Stream data — 17 bytes  [0x260+0x11]
-            Data  [0x260+0x11]
+        ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+            Encoding: "UTF-8"
+            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x260+0x11]
+              Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
         ▾ Content operators
             m: "0 0" — move to  [0x260+0x5]
             l: "100 100" — line to  [0x266+0x9]
@@ -416,8 +467,11 @@ expression: "common::explore(&name, &data)"
         Value: 49  [0x236+0x2]
     ▾ Object 8 0 — stream, 1 entries, 17 bytes  [0x240+0x42]
         /Length: 17  [0x24b+0xa]
-      ▾ Stream data — 17 bytes  [0x260+0x11]
-          Data  [0x260+0x11]
+      ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x260+0x11]
+            Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
       ▾ Content operators
           m: "0 0" — move to  [0x260+0x5]
           l: "100 100" — line to  [0x266+0x9]
@@ -452,8 +506,11 @@ expression: "common::explore(&name, &data)"
                   [3]: 841.89  [0x20c+0x6]
               ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
                   /Length: 17  [0x24b+0xa]
-                ▾ Stream data — 17 bytes  [0x260+0x11]
-                    Data  [0x260+0x11]
+                ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+                    Encoding: "UTF-8"
+                    Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+                  ▾ Lines — 1 line  [0x260+0x11]
+                      Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
                 ▾ Content operators
                     m: "0 0" — move to  [0x260+0x5]
                     l: "100 100" — line to  [0x266+0x9]
@@ -468,8 +525,11 @@ expression: "common::explore(&name, &data)"
           ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
               Value: 49  [0x236+0x2]
             /Filter: "/FlateDecode"  [0x129+0x14]
-          ▾ Stream data — 0x2b bytes decompressed  [0x148+0x31]
-              Data  [#1:0x0+0x2b]
+          ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#1:0x0+0x2b]
+                Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
           ▾ Content operators
               BT — begin text  [#1:0x0+0x2]
               Tf: "/F1 24" — set font  [#1:0x3+0x9]
