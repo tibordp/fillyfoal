@@ -391,3 +391,20 @@ fn unix_compress_decodes_real_output() {
     assert_eq!(words.len(), 2_493_885);
     assert!(words.starts_with(b"A\na\naa\naal\n"));
 }
+
+#[test]
+fn lzfse_decodes_apple_output() {
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/lzfse/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |data: &[u8]| {
+        let mut d = Codec::Lzfse.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    assert!(decode(&read("text.lzfse")) == lzma_text());
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode(&read("rnd.lzfse")) == random);
+    assert_eq!(decode(&read("small.lzfse")), b"hello lzvn hello lzvn hello lzvn small input\n");
+    let words = decode(&read("words.lzfse"));
+    assert_eq!(words.len(), 2_493_885);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+}

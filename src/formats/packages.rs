@@ -353,10 +353,11 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
                 let raw = cur.u32().await?;
                 let fields = cx.read_avail(file.sub(start.saturating_add(8), 24)).await?;
                 let f0 = crate::bytes::u64_le(&fields, 0).unwrap_or(0);
+                let f1 = crate::bytes::u64_le(&fields, 8).unwrap_or(0);
                 let f2 = crate::bytes::u64_le(&fields, 16).unwrap_or(0);
-                let header_size = (f2 >> 32) & 0xffff_ffff;
+                let header_size = f2 & 0xffff_ffff;
                 let literal_bytes = (f0 >> 20) & 0xf_ffff;
-                let lmd_bytes = (f2 >> 40) & 0xf_ffff;
+                let lmd_bytes = (f1 >> 40) & 0xf_ffff;
                 total = total.saturating_add(raw.into());
                 (
                     "LZFSE v2 block",
@@ -371,14 +372,21 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
         };
         cur.seek(start.saturating_add(header).saturating_add(payload));
         blocks = blocks.saturating_add(1);
-        cx.push(
-            Node::new(name)
-                .span(cur.since(start))
-                .summary(format!("{payload} payload bytes"))
-                .diag(Diagnostic::unsupported("LZFSE decoding")),
-        )
-        .await;
+        let mut node = Node::new(name)
+            .span(cur.since(start))
+            .summary(format!("{payload} payload bytes"));
+        if magic == b"bvx1" {
+            node = node.diag(Diagnostic::unsupported("LZFSE v1 blocks"));
+        }
+        cx.push(node).await;
     }
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        file,
+        crate::codec::Codec::Lzfse,
+        Some(total),
+    ));
     cx.annotate(format!(
         "LZFSE, {blocks} block(s), {total} bytes uncompressed"
     ));
