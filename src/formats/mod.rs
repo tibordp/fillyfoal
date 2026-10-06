@@ -211,8 +211,9 @@ pub mod text;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
-/// a file, such as ISO 9660's volume descriptor at 0x8001.
-pub const HEAD_LEN: u64 = 0x9000;
+/// a file, such as ISO 9660's volume descriptor at 0x8001 and the btrfs and
+/// UFS2 superblocks at 64 KiB.
+pub const HEAD_LEN: u64 = 0x10800;
 /// How many trailing bytes probes see.
 pub const TAIL_LEN: u64 = 0x400;
 

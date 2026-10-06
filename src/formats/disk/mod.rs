@@ -166,20 +166,13 @@ pub fn assemble(cx: &Cx, anchor: Span, transform: &'static str, pieces: Vec<Span
     }
 }
 
-/// Zeros materialized for the holes of one sparse source, at most.
-const MAX_ZEROS: u64 = 16 << 30;
-/// Size of the shared zero-filled source holes are made of.
-const ZERO_BLOCK: u64 = 1 << 20;
-
 /// Collects the pieces of a sparse or fragmented byte stream (a file with
 /// holes, a virtual disk with unallocated blocks), merging adjacent pieces.
-/// Holes become pieces of one shared zero-filled derived source.
+/// Holes are [`Span::zeros`] pieces.
 pub struct PieceList {
     anchor: Span,
     pieces: Vec<Span>,
-    zeros: u64,
     len: u64,
-    zero: Option<Span>,
 }
 
 impl PieceList {
@@ -189,9 +182,7 @@ impl PieceList {
         PieceList {
             anchor,
             pieces: Vec::new(),
-            zeros: 0,
             len: 0,
-            zero: None,
         }
     }
 
@@ -209,6 +200,9 @@ impl PieceList {
         }
         self.len = self.len.saturating_add(piece.len);
         match self.pieces.last_mut() {
+            Some(prev) if prev.source == crate::span::SourceId::ZEROS && piece.source == crate::span::SourceId::ZEROS => {
+                prev.len = prev.len.saturating_add(piece.len);
+            }
             Some(prev) if prev.source == piece.source && prev.end() == piece.offset => {
                 prev.len = prev.len.saturating_add(piece.len);
             }
@@ -216,41 +210,9 @@ impl PieceList {
         }
     }
 
-    /// Appends `len` zero bytes. Fails once the total of zeros exceeds a
-    /// limit (a huge, mostly empty virtual disk).
-    pub fn hole(&mut self, cx: &Cx, len: u64) -> Result<()> {
-        self.zeros = self.zeros.saturating_add(len);
-        if self.zeros > MAX_ZEROS {
-            return Err(Diagnostic::limit(format!(
-                "more than {} of holes; the rest is not assembled",
-                size(MAX_ZEROS)
-            ))
-            .at(self.anchor));
-        }
-        let zero = match self.zero {
-            Some(z) => z,
-            None => {
-                let z = cx
-                    .add_derived(
-                        Origin {
-                            parent: Span::new(self.anchor.source, 0, 0),
-                            transform: "zeros",
-                        },
-                        vec![0; crate::bytes::to_usize(ZERO_BLOCK)],
-                        0,
-                        None,
-                    )?
-                    .span;
-                self.zero = Some(z);
-                z
-            }
-        };
-        let mut left = len;
-        while left > 0 {
-            let take = left.min(ZERO_BLOCK);
-            self.data(zero.sub(0, take));
-            left = left.saturating_sub(take);
-        }
+    /// Appends `len` zero bytes.
+    pub fn hole(&mut self, _cx: &Cx, len: u64) -> Result<()> {
+        self.data(Span::zeros(len));
         Ok(())
     }
 

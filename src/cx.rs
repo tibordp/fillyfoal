@@ -89,6 +89,9 @@ impl Shared {
     }
 
     pub fn source_len(&self, source: SourceId) -> u64 {
+        if source == SourceId::ZEROS {
+            return u64::MAX;
+        }
         self.source(source).map_or(0, |s| s.len)
     }
 
@@ -108,6 +111,9 @@ impl Shared {
     ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
         let end = end.min(self.source_len(source));
         let start = start.min(end);
+        if source == SourceId::ZEROS {
+            return Ok(vec![0; crate::bytes::to_usize(end.saturating_sub(start))]);
+        }
         let Some(entry) = self.source(source) else {
             return Ok(Vec::new());
         };
@@ -241,6 +247,9 @@ impl Shared {
 
     /// Resolves a span of any source to spans of non-piecewise sources.
     pub fn resolve(&self, span: Span, depth: u32, out: &mut Vec<Span>) {
+        if span.source == SourceId::ZEROS {
+            return;
+        }
         let pieces = self.source(span.source).and_then(|e| e.pieces.clone());
         let Some(pieces) = pieces.filter(|_| depth <= 32) else {
             out.push(span);
@@ -470,7 +479,8 @@ impl Cx {
     /// Registers a source assembled from `pieces` of other sources (a
     /// fragmented file, a sector chain). Nothing is copied: reads are mapped
     /// to the pieces, and provenance stays exact. Pieces are clamped to their
-    /// sources. Memoized by `origin`.
+    /// sources; [`Span::zeros`] pieces are holes that read as zeros. Memoized
+    /// by `origin`.
     pub fn add_pieces(&self, origin: Origin, pieces: Vec<Span>) -> Result<Span> {
         if let Some(found) = self.derived(origin) {
             return Ok(found.span);

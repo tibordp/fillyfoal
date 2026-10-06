@@ -32,8 +32,6 @@ pub static FORMAT: Format = Format {
 };
 
 fn probe(h: &Head<'_>) -> bool {
-    // Only matches if the probe window reaches the superblock (it does not
-    // with the current `HEAD_LEN`); `BTRFS` can still be dissected by name.
     h.at(crate::bytes::to_usize(SUPER.saturating_add(0x40)), MAGIC)
 }
 
