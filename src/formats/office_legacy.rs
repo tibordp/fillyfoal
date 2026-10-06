@@ -1330,3 +1330,154 @@ async fn wordpro(cx: Cx, input: Input) -> Result<()> {
     cx.annotate("Lotus Word Pro document");
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Word for Windows 1.x and 2.0 (pre-OLE .doc)
+
+fn winword_probe(h: &Head<'_>) -> bool {
+    let fc_min = u32_le(h.data, 0x18).map_or(0, u64::from);
+    let fc_mac = u32_le(h.data, 0x1c).map_or(0, u64::from);
+    u16_le(h.data, 0).is_some_and(|w| w == 0xa59b || w == 0xa5db) && fc_min >= 0x20 && fc_mac >= fc_min && fc_mac <= h.len
+}
+
+declare_format!(pub WINWORD2 = "winword2", "Word for Windows 1.x/2.0 document", ["doc"], "application/msword",
+    Probe::Custom(winword_probe), winword2);
+
+const WINWORD_FLAGS: crate::value::FlagTable = &[
+    crate::value::flag(0x0001, "fDot"),
+    crate::value::flag(0x0002, "fGlsy"),
+    crate::value::flag(0x0004, "fComplex"),
+    crate::value::flag(0x0008, "fHasPic"),
+    crate::value::field(0x00f0, 0x0000, "cQuickSaves=0"),
+    crate::value::flag(0x0100, "fEncrypted"),
+];
+
+const LANGUAGES: EnumTable = &[(0x0407, "German"), (0x0409, "English (US)"), (0x040c, "French"), (0x0410, "Italian"), (0x0413, "Dutch"), (0x0809, "English (UK)"), (0x0c0a, "Spanish")];
+
+fn winword_fib(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, u32, u32)> {
+    let ident = f.u16("wIdent").hex().emit()?;
+    f.u16("nFib").emit()?;
+    f.u16("nProduct").hex().emit()?;
+    let lid = f.u16("Language").enumeration(LANGUAGES).emit()?;
+    f.int::<i16>("pnNext").emit()?;
+    f.u16("Flags").flags(WINWORD_FLAGS).emit()?;
+    f.u16("nFibBack").emit()?;
+    f.u32("Encryption key").hex().emit()?;
+    f.u8("Environment").emit()?;
+    f.u8("Reserved").emit()?;
+    f.u16("Character set").emit()?;
+    f.u16("Character set (tables)").emit()?;
+    let fc_min = f.u32("fcMin (text start)").hex().emit()?;
+    let fc_mac = f.u32("fcMac (text end)").hex().emit()?;
+    Ok((ident, lid, fc_min, fc_mac))
+}
+
+async fn winword2(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let fib = file.sub(0, 0x20);
+    let block = cx.block(fib).await?;
+    let (ident, lid, fc_min, fc_mac) = winword_fib(&mut Fields::new(&block, LE), &())?;
+    cx.emit(crate::fields::struct_node("File information block", fib, LE, (), winword_fib));
+    let body = file.sub(fc_min.into(), u64::from(fc_mac.saturating_sub(fc_min)));
+    let raw = cx.read_avail(body.sub(0, 0x10000)).await?;
+    let txt = crate::text::latin1(&raw).replace('\r', "\n");
+    let words = txt.split_whitespace().count();
+    cx.emit(Node::new("Text").span(body).value(text(clip(&txt, 2000))).summary(format!("{} characters", body.len)));
+    cx.emit(Node::new("Formatting and tables").span(file.tail(u64::from(fc_mac))));
+    cx.annotate(format!(
+        "Word for Windows {} document, {}, {words} words",
+        if ident == 0xa5db { "2.0" } else { "1.x" },
+        lookup(LANGUAGES, lid.into()).unwrap_or("unknown language")
+    ));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Hangul Word Processor 3.0 (.hwp) and the HWP 5 FileHeader stream
+
+declare_format!(pub HWP3 = "hwp3", "Hangul Word Processor 3.0 document", ["hwp"], "application/x-hwp",
+    Probe::Magic(&[(0, b"HWP Document File V3.00 \x1a\x01\x02\x03\x04\x05")]), hwp3);
+
+/// HWP 3 text is 2-byte "hchar" codes; ASCII is stored as itself.
+fn hchar_text(raw: &[u8]) -> String {
+    raw.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| u16::from_le_bytes(*c))
+        .take_while(|&c| c != 0)
+        .map(|c| if c < 0x80 { char::from(u8::try_from(c).unwrap_or(b'?')) } else { '\u{fffd}' })
+        .collect()
+}
+
+const HWP3_SUMMARY: [&str; 9] = ["Title", "Subject", "Author", "Date", "Keyword 1", "Keyword 2", "Other 1", "Other 2", "Other 3"];
+
+async fn hwp3(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    cx.emit(Node::new("Signature").span(file.sub(0, 30)).value(text("HWP Document File V3.00")));
+    let info = file.sub(30, 128);
+    let raw = cx.read_avail(info).await?;
+    let encrypted = u16_le(&raw, 96).unwrap_or(0) != 0;
+    let compressed = raw.get(124).copied().unwrap_or(0) != 0;
+    cx.emit(Node::new("Document information").span(info).summary(format!(
+        "{}{}",
+        if compressed { "compressed" } else { "uncompressed" },
+        if encrypted { ", password-protected" } else { "" }
+    )));
+    let summary = file.sub(158, 1008);
+    let mut title = String::new();
+    for (i, name) in HWP3_SUMMARY.iter().enumerate() {
+        let span = summary.sub(crate::bytes::to_u64(i).saturating_mul(112), 112);
+        let s = hchar_text(&cx.read_avail(span).await?);
+        if i == 0 {
+            title = s.clone();
+        }
+        cx.push(Node::new(*name).span(span).value(text(s))).await;
+    }
+    cx.emit(Node::new("Body").span(file.tail(1166)).diag(Diagnostic::note("paragraph records are not dissected")));
+    cx.annotate(format!("Hangul 3.0 document{}", if title.is_empty() { String::new() } else { format!(" {title:?}") }));
+    Ok(())
+}
+
+fn hwp5_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"HWP Document File\0") && h.len == 256
+}
+
+declare_format!(pub HWP5_HEADER = "hwp5-fileheader", "Hangul Word Processor 5 FileHeader stream", [], "application/x-hwp5-fileheader",
+    Probe::Custom(hwp5_probe), hwp5_header);
+
+const HWP5_FLAGS: crate::value::FlagTable = &[
+    crate::value::flag(0x001, "COMPRESSED"),
+    crate::value::flag(0x002, "PASSWORD"),
+    crate::value::flag(0x004, "DISTRIBUTION"),
+    crate::value::flag(0x008, "SCRIPT"),
+    crate::value::flag(0x010, "DRM"),
+    crate::value::flag(0x020, "XML_TEMPLATE"),
+    crate::value::flag(0x040, "HISTORY"),
+    crate::value::flag(0x080, "SIGNATURE"),
+    crate::value::flag(0x100, "CERT_ENCRYPTED"),
+    crate::value::flag(0x200, "SIGNATURE_RESERVED"),
+    crate::value::flag(0x400, "CERT_DRM"),
+    crate::value::flag(0x800, "CCL"),
+];
+
+async fn hwp5_header(cx: Cx, input: Input) -> Result<()> {
+    let block = cx.block(input.span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.ascii("Signature", 32).emit()?;
+    let v = f.u32("Version").with(|&v, n| n.summary(format!("{}.{}.{}.{}", v >> 24, (v >> 16) & 0xff, (v >> 8) & 0xff, v & 0xff))).emit()?;
+    let flags = f.u32("Properties").flags(HWP5_FLAGS).emit()?;
+    f.u32("License").hex().emit()?;
+    f.u32("Encryption version").emit()?;
+    f.u8("KOGL license country").emit()?;
+    f.bytes("Reserved", 207).emit()?;
+    cx.annotate(format!(
+        "HWP {}.{}.{}.{} file header{}{}",
+        v >> 24,
+        (v >> 16) & 0xff,
+        (v >> 8) & 0xff,
+        v & 0xff,
+        if flags & 1 != 0 { ", compressed" } else { "" },
+        if flags & 2 != 0 { ", password-protected" } else { "" }
+    ));
+    Ok(())
+}

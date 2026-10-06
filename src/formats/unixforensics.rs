@@ -989,3 +989,153 @@ async fn utmpx(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!("macOS utmpx, {count} records, {sessions} user sessions"));
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// macOS Unified Log format-string files (/var/db/uuidtext/XX/<UUID>)
+
+fn uuidtext_probe(h: &Head<'_>) -> bool {
+    u32_le(h.data, 0) == Some(0x6677_8899) && u32_le(h.data, 4) == Some(2) && u32_le(h.data, 12).is_some_and(|n| n < 0x10_0000)
+}
+
+declare_format!(pub UUIDTEXT = "macos-uuidtext", "macOS Unified Log format strings (uuidtext)", [], "application/x-apple-uuidtext",
+    Probe::Custom(uuidtext_probe), uuidtext);
+
+async fn uuidtext(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(0, 16)).await?;
+    let mut f = Fields::emitting(&cx, &head, LE);
+    f.u32("Signature").hex().emit()?;
+    let major = f.u32("Major version").emit()?;
+    let minor = f.u32("Minor version").emit()?;
+    let count = f.u32("Number of ranges").emit()?;
+    let table = file.sub_exact(16, u64::from(count).saturating_mul(8))?;
+    let raw = cx.read(table).await?;
+    // The ranges' strings are stored back to back after the table; the
+    // image path ends the file.
+    let mut at = table.end().saturating_sub(file.offset);
+    let mut ranges = Vec::new();
+    for (i, e) in raw.as_chunks::<8>().0.iter().enumerate() {
+        let start = u32_le(e, 0).unwrap_or(0);
+        let len = u64::from(u32_le(e, 4).unwrap_or(0));
+        ranges.push((i, start, file.sub(at, len), table.sub(to_u64(i).saturating_mul(8), 8)));
+        at = at.saturating_add(len);
+    }
+    let (path, path_span) = cx.cstr(file.tail(at).sub(0, 4096)).await?;
+    cx.emit(Node::new("Ranges").span(table).summary(format!("{count} ranges")).lazy(uuidtext_ranges, ranges));
+    cx.emit(Node::new("Image path").span(path_span).value(text(path.clone())));
+    cx.annotate(format!("Unified Log format strings v{major}.{minor} for {path}, {count} ranges"));
+    Ok(())
+}
+
+/// A range: index, first string offset, data and table entry.
+type UuidRange = (usize, u32, Span, Span);
+
+async fn uuidtext_ranges(cx: Cx, ranges: Vec<UuidRange>) -> Result<()> {
+    for (i, start, data, entry) in ranges {
+        let raw = cx.read_avail(data.sub(0, 0x10000)).await?;
+        let strings: Vec<String> = raw.split(|&b| b == 0).filter(|s| !s.is_empty()).map(|s| String::from_utf8_lossy(s).into_owned()).collect();
+        cx.push(
+            Node::new(format!("Range {i} at {start:#x}"))
+                .span(data)
+                .target(entry)
+                .summary(format!("{} strings", strings.len()))
+                .lazy(uuidtext_strings, (data, start)),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+async fn uuidtext_strings(cx: Cx, (data, base): (Span, u32)) -> Result<()> {
+    let raw = cx.read_avail(data.sub(0, 0x10_0000)).await?;
+    let mut at = 0usize;
+    for s in raw.split(|&b| b == 0) {
+        let len = s.len();
+        if len > 0 {
+            let offset = u64::from(base).saturating_add(to_u64(at));
+            cx.push(Node::new(format!("{offset:#x}")).span(data.sub(to_u64(at), to_u64(len))).value(text(String::from_utf8_lossy(s).into_owned()))).await;
+        }
+        at = at.saturating_add(len).saturating_add(1);
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// iOS backup manifest index (Manifest.mbdx, iOS 4)
+
+declare_format!(pub MBDX = "mbdx", "iOS backup manifest index (Manifest.mbdx)", ["mbdx"], "application/x-apple-mbdx",
+    Probe::Magic(&[(0, b"mbdx\x02\x00")]), mbdx);
+
+async fn mbdx(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(0, 10)).await?;
+    let mut f = Fields::emitting(&cx, &head, BE);
+    f.ascii("Signature", 4).emit()?;
+    f.u16("Version").hex().emit()?;
+    let count = f.u32("Number of records").emit()?;
+    let list = file.sub_exact(10, u64::from(count).saturating_mul(26))?;
+    cx.set_count(Count::Exact(u64::from(count).saturating_add(3)));
+    for i in 0..u64::from(count) {
+        let span = list.sub(i.saturating_mul(26), 26);
+        let r = cx.read(span).await?;
+        let id = hex_string(r.get(..20).unwrap_or_default());
+        let offset = u32_be(&r, 20).unwrap_or(0);
+        let mode = u16_be(&r, 24).unwrap_or(0);
+        cx.push(Node::new(id).span(span).value(hex(offset, 32)).summary(format!("{} (record at {:#x} in Manifest.mbdb)", file_mode(mode), u64::from(offset).saturating_add(6)))).await;
+    }
+    cx.annotate(format!("iOS backup manifest index, {count} files"));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Linux lastlog (/var/log/lastlog: one 292-byte record per UID)
+
+const LASTLOG_RECORD: u64 = 292;
+
+fn lastlog_record_ok(r: &[u8]) -> bool {
+    let t = u32_le(r, 0).unwrap_or(0);
+    let zero = r.iter().all(|&b| b == 0);
+    zero || ((100_000_000..0x8000_0000).contains(&t) && clean_field(r.get(4..36).unwrap_or_default()) && clean_field(r.get(36..292).unwrap_or_default()))
+}
+
+fn lastlog_probe(h: &Head<'_>) -> bool {
+    if h.len < LASTLOG_RECORD || !h.len.is_multiple_of(LASTLOG_RECORD) {
+        return false;
+    }
+    let records: Vec<&[u8]> = h.data.chunks_exact(to_usize(LASTLOG_RECORD)).collect();
+    records.iter().all(|r| lastlog_record_ok(r)) && records.iter().any(|r| r.iter().any(|&b| b != 0))
+}
+
+declare_format!(pub LASTLOG = "lastlog", "Linux last login records (lastlog)", ["lastlog"], "application/x-lastlog",
+    Probe::Custom(lastlog_probe), lastlog);
+
+fn lastlog_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("Time").timestamp().emit()?;
+    f.ascii("Terminal", 32).emit()?;
+    f.ascii("Host", 256).emit()?;
+    Ok(())
+}
+
+async fn lastlog(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let count = file.len / LASTLOG_RECORD;
+    let mut logins = 0u64;
+    for uid in 0..count {
+        let span = file.sub(uid.saturating_mul(LASTLOG_RECORD), LASTLOG_RECORD);
+        let r = cx.read_avail(span).await?;
+        if r.iter().all(|&b| b == 0) {
+            if uid.is_multiple_of(64) {
+                cx.checkpoint().await;
+            }
+            continue;
+        }
+        logins = logins.saturating_add(1);
+        let t = u32_le(&r, 0).unwrap_or(0);
+        let line = crate::text::until_nul(r.get(4..36).unwrap_or_default());
+        let host = crate::text::until_nul(r.get(36..292).unwrap_or_default());
+        let summary = if host.is_empty() { line } else { format!("{line} from {host}") };
+        cx.push(struct_node(format!("UID {uid}"), span, LE, (), lastlog_layout).value(unix_time(t.into())).summary(summary)).await;
+    }
+    cx.annotate(format!("lastlog, {logins} users with logins (UIDs 0–{})", count.saturating_sub(1)));
+    Ok(())
+}

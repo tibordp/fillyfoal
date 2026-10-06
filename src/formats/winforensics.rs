@@ -2032,3 +2032,149 @@ async fn rdp_file(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Jump list DestList stream (inside *.automaticDestinations-ms)
+
+fn destlist_probe(h: &Head<'_>) -> bool {
+    let version = u32_le(h.data, 0).unwrap_or(0);
+    let entries = u32_le(h.data, 4).unwrap_or(u32::MAX);
+    let pinned = u32_le(h.data, 8).unwrap_or(u32::MAX);
+    // The first entry's NetBIOS name: printable, NUL-padded.
+    let host = h.data.get(32 + 72..32 + 88).unwrap_or_default();
+    let end = host.iter().position(|&b| b == 0).unwrap_or(host.len());
+    matches!(version, 1 | 3 | 4)
+        && (1..100_000).contains(&entries)
+        && pinned <= entries
+        && end > 0
+        && host.get(..end).is_some_and(|n| n.iter().all(|&b| b.is_ascii_graphic()))
+        && host.get(end..).is_some_and(|n| n.iter().all(|&b| b == 0))
+}
+
+declare_format!(pub DESTLIST = "jumplist-destlist", "Windows jump list DestList stream", [], "application/x-ms-destlist",
+    Probe::Custom(destlist_probe), destlist);
+
+fn destlist_entry(f: &mut Fields<'_>, version: &u32) -> Result<(String, u64, u32, String)> {
+    f.u64("Checksum").hex().emit()?;
+    f.guid("Volume droid").emit()?;
+    f.guid("File droid").emit()?;
+    f.guid("Birth volume droid").emit()?;
+    f.guid("Birth file droid").emit()?;
+    let host = f.ascii("NetBIOS name", 16).emit()?;
+    let number = f.u32("Entry number").emit()?;
+    f.u32("Unknown").emit()?;
+    f.f32("Access weight").emit()?;
+    let time = f.u64("Last access time").filetime().emit()?;
+    f.int::<i32>("Pin status").with(|&v, n| n.summary(if v < 0 { "not pinned".to_owned() } else { format!("pinned at {v}") })).emit()?;
+    if *version >= 3 {
+        f.u32("Unknown").emit()?;
+        f.u32("Access count").emit()?;
+        f.u64("Unknown").emit()?;
+    }
+    let chars = f.u16("Path length").emit()?;
+    let path = f.utf16("Path", chars.into()).emit()?;
+    if *version >= 3 {
+        f.u32("Unknown").emit()?;
+    }
+    Ok((path, time, number, host))
+}
+
+async fn destlist(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(0, 32)).await?;
+    let mut f = Fields::emitting(&cx, &head, LE);
+    let version = f.u32("Version").emit()?;
+    let entries = f.u32("Number of entries").emit()?;
+    let pinned = f.u32("Number of pinned entries").emit()?;
+    f.f32("Unknown").emit()?;
+    f.u32("Last entry number").emit()?;
+    f.u32("Unknown").emit()?;
+    f.u32("Last revision number").emit()?;
+    f.u32("Unknown").emit()?;
+    let fixed: u64 = if version >= 3 { 130 } else { 114 };
+    let mut at = 32u64;
+    for _ in 0..entries.min(100_000) {
+        let head = cx.read_avail(file.sub(at, fixed)).await?;
+        let chars = u64::from(u16_le(&head, crate::bytes::to_usize(fixed.saturating_sub(2))).unwrap_or(0));
+        let len = fixed.saturating_add(chars.saturating_mul(2)).saturating_add(if version >= 3 { 4 } else { 0 });
+        let span = file.sub(at, len);
+        let block = cx.block(span).await?;
+        let (path, time, number, host) = destlist_entry(&mut Fields::new(&block, LE), &version)?;
+        cx.push(struct_node(path, span, LE, version, destlist_entry).value(filetime(time)).summary(format!("entry {number} on {host}"))).await;
+        at = at.saturating_add(len);
+        if at >= file.len {
+            break;
+        }
+    }
+    cx.annotate(format!("Jump list DestList v{version}, {entries} entries ({pinned} pinned)"));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// OneDrive sync engine logs (.odl, .odlgz)
+
+declare_format!(pub ODL = "onedrive-odl", "OneDrive sync log (.odl)", ["odl", "odlgz", "odlsent"], "application/x-onedrive-odl",
+    Probe::Magic(&[(0, b"EBFGONED")]), odl);
+
+fn odl_header(f: &mut Fields<'_>, _: &()) -> Result<(u32, String, String)> {
+    f.ascii("Signature", 8).emit()?;
+    let version = f.u32("Version").emit()?;
+    f.u32("Unknown").hex().emit()?;
+    f.u64("Unknown").hex().emit()?;
+    f.u32("Unknown").hex().emit()?;
+    let app = f.ascii("OneDrive version", 64).emit()?;
+    let os = f.ascii("Windows version", 64).emit()?;
+    f.bytes("Reserved", 100).emit()?;
+    Ok((version, app, os))
+}
+
+const ODL_BLOCK: u64 = 0xccdd_eeff_0000_0000;
+
+async fn odl(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let hspan = file.sub(0, 256);
+    let block = cx.block(hspan).await?;
+    let (version, app, os) = odl_header(&mut Fields::new(&block, LE), &())?;
+    cx.emit(struct_node("Header", hspan, LE, (), odl_header));
+    let body = file.tail(256);
+    if cx.read_avail(body.sub(0, 2)).await? == b"\x1f\x8b" {
+        cx.emit(embedded("Records (gzip)", input.nested(body)));
+        cx.annotate(format!("OneDrive log v{version} (compressed), OneDrive {}, {}", app.trim(), os.trim()));
+        return Ok(());
+    }
+    let header_len: u64 = if version >= 3 { 32 } else { 56 };
+    let mut cur = Cursor::new(&cx, body, LE);
+    let mut count = 0u64;
+    while cur.remaining() >= header_len {
+        let start = cur.pos();
+        let sig = cur.u64().await?;
+        if sig != ODL_BLOCK {
+            cx.diag(Diagnostic::malformed("expected a record signature").at(cur.since(start)));
+            break;
+        }
+        let ms = cur.u64().await?;
+        cur.skip(header_len.saturating_sub(24));
+        let len = u64::from(cur.u32().await?);
+        cur.skip(4);
+        let data = cur.span(len);
+        let raw = cur.bytes(len.min(0x1000)).await?;
+        cur.seek(data.end().saturating_sub(body.offset));
+        // Data: code file name and function name as length-prefixed strings.
+        let s1 = u32_le(&raw, 0).map_or(0, |n| crate::bytes::to_usize(n.into()));
+        let code_file = String::from_utf8_lossy(raw.get(4..4usize.saturating_add(s1)).unwrap_or_default()).into_owned();
+        let at2 = 4usize.saturating_add(s1).saturating_add(4);
+        let s2 = u32_le(&raw, at2).map_or(0, |n| crate::bytes::to_usize(n.into()));
+        let function = String::from_utf8_lossy(raw.get(at2.saturating_add(4)..at2.saturating_add(4).saturating_add(s2)).unwrap_or_default()).into_owned();
+        count = count.saturating_add(1);
+        cx.push(
+            Node::new(format!("{code_file} {function}").trim().to_owned())
+                .span(cur.since(start))
+                .target(data)
+                .value(Value::Timestamp { unix_seconds: i64::try_from(ms / 1000).unwrap_or(0) })
+                .summary(size(len)),
+        )
+        .await;
+    }
+    cx.annotate(format!("OneDrive log v{version}, {count} records, OneDrive {}, {}", app.trim(), os.trim()));
+    Ok(())
+}

@@ -210,6 +210,7 @@ pub mod windiag;
 pub mod logs;
 pub mod evidence;
 pub mod userdata;
+pub mod keyrings;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1007,6 +1008,8 @@ pub static FORMATS: &[&Format] = &[
     &unixforensics::MBDB,
     &unixforensics::ABX,
     &unixforensics::UTMPX,
+    &unixforensics::UUIDTEXT,
+    &unixforensics::MBDX,
     &browser::CHROME_SIMPLE_INDEX,
     &office_legacy::LOTUS,
     &office_legacy::LOTUS3,
@@ -1049,6 +1052,12 @@ pub static FORMATS: &[&Format] = &[
     &userdata::CERT_OVERRIDE,
     &userdata::TRASHINFO,
     &userdata::XBEL,
+    &keyrings::GNOME_KEYRING,
+    &keyrings::KWALLET,
+    &office_legacy::WINWORD2,
+    &office_legacy::HWP3,
+    &office_legacy::HWP5_HEADER,
+    &winforensics::ODL,
     &misc3::OSM_PBF,
     &misc3::DTED,
     &misc3::NITF,
@@ -1179,6 +1188,8 @@ pub static FORMATS: &[&Format] = &[
     &browser::FIREFOX_CACHE2,
     &logs::ACCT,
     &winforensics::RDP_FILE,
+    &unixforensics::LASTLOG,
+    &winforensics::DESTLIST,
     &winforensics::AUTORUN,
     &winforensics::DESKTOP_INI,
     &models::STL,

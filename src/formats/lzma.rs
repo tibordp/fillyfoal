@@ -53,8 +53,8 @@ fn probe_lzma(h: &Head<'_>) -> bool {
             || dict == u32::MAX);
     // liblzma rejects lc + lp > 4, so real streams stay within it.
     let lclp_ok = (props % 9).saturating_add((props / 9) % 5) <= 4;
-    // LZMA cannot compress much better than about 7000:1.
-    let ratio_ok = size == u64::MAX || size <= h.len.saturating_mul(1 << 16);
+    // LZMA rarely compresses better than about 7000:1.
+    let ratio_ok = size == u64::MAX || size <= h.len.saturating_mul(1 << 14);
     props < 225
         && lclp_ok
         && ratio_ok
