@@ -1,0 +1,12 @@
+StartFontMetrics 4.1
+FontName Tiny-Regular
+FullName Tiny Regular
+FamilyName Tiny
+Weight Regular
+ItalicAngle 0
+IsFixedPitch false
+FontBBox 0 -200 1000 800
+StartCharMetrics 1
+C 32 ; WX 250 ; N space ; B 0 0 0 0 ;
+EndCharMetrics
+EndFontMetrics

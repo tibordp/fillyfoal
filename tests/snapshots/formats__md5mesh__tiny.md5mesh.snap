@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.md5mesh — MD5 mesh, 1 joints, 1 meshes  [0x0+0xa7]
+    MD5Version: "10"  [0x0+0xd]
+    commandline: "fillyfoal"  [0xe+0x17]
+    numJoints: "1"  [0x27+0xb]
+    numMeshes: "1"  [0x33+0xb]
+    numverts: "0"  [0x80+0xb]
+    numtris: "0"  [0x8c+0xa]
+    numweights: "0"  [0x97+0xd]

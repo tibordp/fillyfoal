@@ -1,0 +1,12 @@
+# VobSub index file, v7 (do not modify this line!)
+# comment
+size: 720x480
+org: 0, 0
+scale: 100%, 100%
+alpha: 100%
+langidx: 0
+id: en, index: 0
+timestamp: 00:00:01:000, filepos: 000000000
+timestamp: 00:00:03:000, filepos: 000000800
+id: de, index: 1
+timestamp: 00:00:02:000, filepos: 000001000

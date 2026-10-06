@@ -171,6 +171,7 @@ pub mod pdb;
 pub mod platform;
 pub mod devices;
 pub mod devtools;
+pub mod misc3;
 // -- end misc --
 
 // -- text --
@@ -822,7 +823,30 @@ pub static FORMATS: &[&Format] = &[
     &devtools::INFLUX_TSM,
     &devtools::LUCENE,
     &ebooks::PDB,
+    &misc3::OSM_PBF,
+    &misc3::DTED,
+    &misc3::NITF,
+    &misc3::ALZ,
+    &misc3::EGG,
+    &misc3::KGB,
+    &misc3::ISCAB,
+    &misc3::ISZ,
+    &misc3::PHOTO_CD,
+    &misc3::X3F,
+    &misc3::EBU_STL,
+    &misc3::SCC,
+    &misc3::VOBSUB,
+    &misc3::NUT,
+    &misc3::VRML,
+    &misc3::OFF,
+    &misc3::MD5MESH,
+    &misc3::SOURCE_MDL,
+    &misc3::PSK,
+    &misc3::LRF,
+    &misc3::AFM,
+    &misc3::PFA,
     // Weak, size-based probes last.
+    &misc3::HGT,
     &models::STL,
     // -- end misc --
 
