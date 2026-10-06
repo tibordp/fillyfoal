@@ -4,3 +4,6 @@
 pub mod consoles;
 pub mod music;
 pub mod computers;
+pub mod util;
+pub mod patches;
+pub mod discs;

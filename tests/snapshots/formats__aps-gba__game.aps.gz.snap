@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.aps — APS GBA patch, 4.0 MiB → 4.0 MiB, 1 blocks  [0x0+0x10014]
+    Magic: "APS1"  [0x0+0x4]
+    Source size: 4194304  [0x4+0x4]
+    Target size: 4194304  [0x8+0x4]
+  ▾ Block 0: 0x10000 — 64 KiB XOR at 0x10000, CRC16 0x1234 → 0xabcd  [0xc+0x10008]
+      Offset: 0x10000  [0xc+0x4]
+      Source CRC-16: 0x1234  [0x10+0x2]
+      Target CRC-16: 0xabcd  [0x12+0x2]
+      XOR data  [0x14+0x10000]

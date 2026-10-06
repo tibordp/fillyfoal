@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.cue — CUE sheet, 2 file(s), 3 track(s) (MODE1/2352, AUDIO)  [0x0+0x11b]
+    REM: "GENRE \"Game\""  [0x0+0x10]
+    REM: "DATE 1995"  [0x11+0xd]
+    CATALOG: "0000000000000"  [0x1f+0x15]
+    FILE: "\"game.bin\" BINARY"  [0x35+0x16]
+  ▾ Track 01 — MODE1/2352  [0x4c+0x2b]
+      TRACK: "01 MODE1/2352"  [0x4c+0x15]
+      INDEX: "01 00:00:00"  [0x62+0x15]
+  ▾ Track 02 — AUDIO  [0x78+0x3a]
+      TRACK: "02 AUDIO"  [0x78+0x10]
+      PREGAP: "00:02:00"  [0x89+0x13]
+      INDEX: "01 10:20:30"  [0x9d+0x15]
+    FILE: "\"track03.wav\" WAVE"  [0xb3+0x17]
+  ▾ Track 03 — AUDIO  [0xcb+0x4f]
+      TRACK: "03 AUDIO"  [0xcb+0x10]
+      TITLE: "\"Ending\""  [0xdc+0x12]
+      INDEX: "00 00:00:00"  [0xef+0x15]
+      INDEX: "01 00:02:00"  [0x105+0x15]

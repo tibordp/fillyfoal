@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.iso — 3DO disc "CD-ROM", 300 blocks of 2048 bytes (600 KiB)  [0x0+0x1000]
+  ▾ Volume label  [0x0+0x84]
+      Record type: 1  [0x0+0x1]
+      Sync bytes: 5a 5a 5a 5a 5a  |ZZZZZ|  [0x1+0x5]
+      Structure version: 1  [0x6+0x1]
+      Volume flags: 0x0 []  [0x7+0x1]
+      Volume comment: "opera comment"  [0x8+0x20]
+      Volume label: "CD-ROM"  [0x28+0x20]
+      Volume identifier: 0x12345678  [0x48+0x4]
+      Block size: 2048  [0x4c+0x4]
+      Block count: 300  [0x50+0x4]
+      Root directory identifier: 0xabcdef  [0x54+0x4]
+      Root directory blocks: 1  [0x58+0x4]
+      Root directory block size: 2048  [0x5c+0x4]
+      Last root directory copy: 1  [0x60+0x4]
+      Root directory copy locations: 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x64+0x20]
+    Root directory — 1 block(s)  [0x800+0x800]

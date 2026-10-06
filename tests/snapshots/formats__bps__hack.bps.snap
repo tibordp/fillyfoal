@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hack.bps — BPS patch, 1 KiB → 1 KiB, 6 actions (1 SourceRead, 2 TargetRead, 2 SourceCopy, 1 TargetCopy), patch CRC valid  [0x0+0x4f]
+    Magic: "BPS1"  [0x0+0x4]
+    Source size: 1024  [0x4+0x2]
+    Target size: 1029  [0x6+0x2]
+    Metadata size: 41  [0x8+0x1]
+    Metadata: "<?xml version=\"1.0\"?><patch author=\"me\"/>"  [0x9+0x29]
+    Source CRC-32: 0xb70b4c26  [0x43+0x4]
+    Target CRC-32: 0x44d2d824  [0x47+0x4]
+    Patch CRC-32: 0xb02f54e9 — valid  [0x4b+0x4]
+    SourceRead: 0x0 — 10 bytes from source 0x0  [0x32+0x1]
+    TargetRead: 0xa — 4 literal bytes  [0x33+0x5]
+    SourceCopy: 0xe — 586 bytes from source 0xe  [0x38+0x3]
+    TargetRead: 0x258 — 2 literal bytes  [0x3b+0x3]
+    SourceCopy: 0x25a — 422 bytes from source 0x25a  [0x3e+0x3]
+    TargetCopy: 0x400 — 5 bytes from target 0x0  [0x41+0x2]
