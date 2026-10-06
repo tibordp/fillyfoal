@@ -62,9 +62,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     let nt = file.tail(lfanew);
     // Older executables behind an MZ stub have their own dissectors.
-    let other = match cx.read_avail(nt.sub(0, 2)).await?.as_slice() {
-        b"NE" => Some(("NE Executable", "16-bit NE executable", &crate::formats::ne::FORMAT)),
-        b"LE" | b"LX" => Some(("Linear Executable", "LE/LX executable", &crate::formats::lx::FORMAT)),
+    let signature = cx.read_avail(nt.sub(0, 4)).await?;
+    let other = match signature.get(..2) {
+        Some(b"NE") => Some(("NE Executable", "16-bit NE executable", &crate::formats::ne::FORMAT)),
+        Some(b"LE" | b"LX") => Some(("Linear Executable", "LE/LX executable", &crate::formats::lx::FORMAT)),
+        _ if signature.as_slice() != b"PE\0\0" => {
+            Some(("DOS Executable", "MS-DOS executable", &crate::formats::mz::FORMAT))
+        }
         _ => None,
     };
     if let Some((name, summary, format)) = other {

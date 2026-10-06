@@ -37,6 +37,7 @@ pub mod luajit;
 pub mod lx;
 pub mod macho;
 pub mod minidump;
+pub mod mz;
 pub mod ne;
 pub mod ocaml;
 pub mod pdb;
@@ -192,6 +193,7 @@ pub static FORMATS: &[&Format] = &[
     &minidump::FORMAT,
     &ne::FORMAT,
     &lx::FORMAT,
+    &mz::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
