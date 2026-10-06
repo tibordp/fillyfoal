@@ -1,5 +1,5 @@
 //! Optical-disc and console-disc image containers: MAME CHD, Nero NRG,
-//! Alcohol MDS, DiscJuggler CDI, CloneCD CCD, CUE sheets, GDI, ECM, CSO/ZSO,
+//! Alcohol MDS, DiscJuggler CDI, CloneCD CCD, GDI, ECM, CSO/ZSO,
 //! DAX, ISZ, DAA, and the GameCube/Wii wrappers (WBFS, GCZ, WIA/RVZ, TGC,
 //! CISO).
 
@@ -623,7 +623,7 @@ async fn cdi_descriptor(cx: Cx, span: Span) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// CloneCD control file (INI) and CUE sheets, GDI
+// CloneCD control file (INI), Dreamcast GDI
 
 fn ccd_probe(h: &Head<'_>) -> bool {
     h.starts_with(b"[CloneCD]")
@@ -681,76 +681,6 @@ async fn ini_keys(cx: Cx, entries: IniEntries) -> Result<()> {
         let value = v.parse::<i64>().map_or_else(|_| text(v.clone()), |n| Value::Int { value: n, bits: 64 });
         let value = if let Some(h) = v.strip_prefix("0x").and_then(|h| u64::from_str_radix(h, 16).ok()) { hex(h, 32) } else { value };
         cx.push(Node::new(k).span(span).value(value)).await;
-    }
-    Ok(())
-}
-
-const CUE_KEYWORDS: [&str; 9] = ["FILE ", "REM ", "TITLE ", "PERFORMER ", "CATALOG ", "SONGWRITER ", "CDTEXTFILE ", "TRACK ", "FLAGS "];
-
-fn cue_probe(h: &Head<'_>) -> bool {
-    let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    let first = data.get(..data.len().min(4096)).unwrap_or_default();
-    let text = String::from_utf8_lossy(first);
-    let starts = text.trim_start().to_ascii_uppercase();
-    CUE_KEYWORDS.iter().any(|k| starts.starts_with(k))
-        && (starts.contains("\nFILE ") || starts.starts_with("FILE "))
-        && starts.contains("TRACK ")
-        && starts.contains("INDEX ")
-        && !first.contains(&0)
-}
-
-declare_format!(pub CUE = "cue", "CUE sheet", ["cue"],
-    "application/x-cue", Probe::Custom(cue_probe), cue);
-
-async fn cue(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let data = cx.read(file.sub(0, file.len.min(1 << 20))).await?;
-    let (mut files, mut tracks) = (0u32, 0u32);
-    let mut current: Option<(Node, Vec<(String, Span)>)> = None;
-    let mut modes: Vec<String> = Vec::new();
-    for (line, span) in lines(&data, file) {
-        let trimmed = line.trim();
-        let upper = trimmed.to_ascii_uppercase();
-        if upper.starts_with("TRACK ") {
-            if let Some((node, children)) = current.take() {
-                cx.push(node.lazy(cue_lines, children)).await;
-            }
-            tracks = tracks.saturating_add(1);
-            let mode = trimmed.split_whitespace().nth(2).unwrap_or("").to_owned();
-            if !modes.contains(&mode) {
-                modes.push(mode.clone());
-            }
-            let number = trimmed.split_whitespace().nth(1).unwrap_or("?").to_owned();
-            current = Some((Node::new(format!("Track {number}")).span(span).summary(mode), vec![(trimmed.to_owned(), span)]));
-        } else if let Some((node, children)) = current.as_mut()
-            && !upper.starts_with("FILE ")
-        {
-            if let Some(s) = node.span {
-                node.span = Some(Span { len: span.end().saturating_sub(s.offset), ..s });
-            }
-            children.push((trimmed.to_owned(), span));
-        } else if !trimmed.is_empty() {
-            if let Some((node, children)) = current.take() {
-                cx.push(node.lazy(cue_lines, children)).await;
-            }
-            let (keyword, rest) = trimmed.split_once(' ').unwrap_or((trimmed, ""));
-            if keyword.eq_ignore_ascii_case("FILE") {
-                files = files.saturating_add(1);
-            }
-            cx.push(Node::new(keyword.to_ascii_uppercase()).span(span).value(text(rest.trim().to_owned()))).await;
-        }
-    }
-    if let Some((node, children)) = current.take() {
-        cx.push(node.lazy(cue_lines, children)).await;
-    }
-    cx.annotate(format!("CUE sheet, {files} file(s), {tracks} track(s) ({})", modes.join(", ")));
-    Ok(())
-}
-
-async fn cue_lines(cx: Cx, children: Vec<(String, Span)>) -> Result<()> {
-    for (line, span) in children {
-        let (keyword, rest) = line.split_once(' ').unwrap_or((&line, ""));
-        cx.push(Node::new(keyword.to_ascii_uppercase()).span(span).value(text(rest.trim().to_owned()))).await;
     }
     Ok(())
 }

@@ -756,7 +756,6 @@ pub static FORMATS: &[&Format] = &[
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
-    &retro::discs::CUE,
     &retro::discs::GDI,
     &retro::consoles2::INTELLIVISION,
     &retro::consoles2::COLECOVISION,

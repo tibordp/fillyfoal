@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.cso — CSO (deflate) v1, 4 KiB image in 2 blocks of 2 KiB  [0x0+0x835]
+▾ game.cso — CSO (deflate) v1, 4 KiB image in 2 blocks of 2 KiB  [0x0+0x946]
   ▾ Header  [0x0+0x18]
       Magic: "CISO"  [0x0+0x4]
       Header size: 24  [0x4+0x4]
@@ -12,6 +12,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Index alignment (shift): 0  [0x15+0x1]
       Reserved: 00 00  |..|  [0x16+0x2]
   ▾ Blocks — 2 blocks  [0x18+0xc]
-    ▾ Block 0: 0x24 — 0x800 bytes decompressed  [0x24+0x11]
+    ▾ Block 0: 0x24 — 0x800 bytes decompressed  [0x24+0x122]
         Data  [#1:0x0+0x800]
-      Block 1: 0x35 — stored  [0x35+0x800]
+      Block 1: 0x146 — stored  [0x146+0x800]
