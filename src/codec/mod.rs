@@ -18,6 +18,9 @@ pub mod xz;
 pub mod zstd;
 pub mod pipeline;
 pub mod unixz;
+pub mod cab;
+pub mod lzx;
+pub mod quantum;
 
 use std::sync::Arc;
 
@@ -69,6 +72,12 @@ pub enum Codec {
     Lzfse,
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
+    /// A raw LZX stream (CHM content, WIM chunks); see [`lzx::Params`] for
+    /// the window size, reset interval and E8 translation variant.
+    Lzx(lzx::Params),
+    /// A cabinet folder's data blocks (headers included) through the
+    /// folder's codec: stored, MSZIP, Quantum or LZX (see [`cab`]).
+    CabFolder(cab::Folder),
     /// Zstandard frames.
     Zstd,
     /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
@@ -141,6 +150,8 @@ impl Codec {
             Codec::Bzip2 => "bzip2",
             Codec::Zstd => "zstd",
             Codec::UnixCompress => "unix-compress",
+            Codec::Lzx(_) => "lzx",
+            Codec::CabFolder(_) => "cab-folder",
             Codec::Lzfse => "lzfse",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
@@ -175,6 +186,8 @@ impl Codec {
             Codec::Bzip2 => "bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
+            Codec::Lzx(_) => "lzx (lazy)",
+            Codec::CabFolder(_) => "cab-folder (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
@@ -207,6 +220,8 @@ impl Codec {
             | Codec::Xz
             | Codec::Zstd
             | Codec::UnixCompress
+            | Codec::Lzx(_)
+            | Codec::CabFolder(_)
             | Codec::Lzfse
             | Codec::LzmaAlone
             | Codec::Lzma2
@@ -241,6 +256,10 @@ impl Codec {
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd => 32_768,
             Codec::UnixCompress => 8_000,
+            // A 32 KiB frame (block) takes a few bytes at least.
+            Codec::Lzx(_) => 32_768,
+            Codec::CabFolder(f) if f.method() == 0 => 1,
+            Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
@@ -270,6 +289,8 @@ impl Codec {
             }
             Codec::Lzfse => Box::new(Streaming(filters::Whole::new(lzfse::Lzfse))),
             Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
+            Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
+            Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),
