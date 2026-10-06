@@ -352,3 +352,90 @@ mod lz {
         assert_on_demand(&Codec::UnixCompress, &read("data/compress/lines.Z"), &lines());
     }
 }
+
+/// The sample the LZMA-family test files were made from (`xz` 5.8 CLI):
+/// text lines with x86 CALLs and ARM64 BLs mixed in, so the BCJ filters
+/// have work to do. `lzma_sample(2000)` is a prefix of `lzma_sample(7500)`.
+fn lzma_sample(records: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut x: u32 = 12345;
+    for i in 0..records {
+        x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+        out.extend_from_slice(format!("line {i}: the quick brown fox {}\n", (x >> 16) & 0xff).as_bytes());
+        if i % 3 == 0 {
+            out.push(0xe8);
+            out.extend_from_slice(&(i * 16).to_le_bytes());
+        }
+        if i % 5 == 0 {
+            out.extend_from_slice(&(0x9400_0000 | i).to_le_bytes());
+        }
+    }
+    out
+}
+
+fn lzma_file(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{}/tests/data/lzma/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+}
+
+/// Decodes `input` fed in 4 KiB pieces and returns the input consumed.
+fn lzma_consumed(codec: &Codec, input: &[u8]) -> usize {
+    let mut decoder = codec.decoder().unwrap();
+    let mut out = Vec::new();
+    let mut fed = 0;
+    loop {
+        let eof = fed == input.len();
+        match decoder.decode(&input[..fed], eof, &mut out, 16 * 1024, 1 << 30).unwrap() {
+            Status::Done => return decoder.consumed(),
+            Status::More => {}
+            Status::NeedInput => fed = (fed + 4096).min(input.len()),
+        }
+    }
+}
+
+#[test]
+fn xz_is_on_demand() {
+    let big = lzma_sample(7500);
+    // One block (CRC-64), 64 KiB blocks (CRC-32), x86 BCJ, and two streams
+    // (CRC-32, SHA-256) with stream padding between and after them.
+    for name in ["big.xz", "big-blocks.xz", "big-x86.xz", "big-streams.xz"] {
+        assert_on_demand(&Codec::Xz, &lzma_file(name), &big);
+    }
+    let small = lzma_sample(2000);
+    // The last has a 4 KiB dictionary, so the filtered block's window of
+    // unfiltered bytes is compacted along the way.
+    for name in ["small-sha256.xz", "small-none.xz", "small-arm64.xz", "small-delta.xz", "small-x86-delta.xz", "small-x86-dict4k.xz"] {
+        assert_on_demand(&Codec::Xz, &lzma_file(name), &small);
+    }
+}
+
+#[test]
+fn lzma_is_on_demand() {
+    let big = lzma_sample(7500);
+    assert_on_demand(&Codec::LzmaAlone, &lzma_file("big.lzma"), &big);
+    assert_on_demand(&Codec::Lzma2, &lzma_file("big.lzma2"), &big);
+    let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
+    let raw = lzma_file("big.lzma1");
+    assert_on_demand(&Codec::LzmaRaw { props, size: None }, &raw, &big);
+    assert_on_demand(&Codec::LzmaRaw { props, size: Some(big.len()) }, &raw, &big);
+    assert_on_demand(&Codec::LzmaRaw { props, size: Some(1000) }, &raw, &big[..1000]);
+}
+
+#[test]
+fn lzma_family_consumes_exactly() {
+    let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
+    let cases = [
+        (Codec::Xz, "big-streams.xz"),
+        (Codec::Xz, "small-x86-delta.xz"),
+        (Codec::LzmaAlone, "big.lzma"),
+        (Codec::Lzma2, "big.lzma2"),
+        (Codec::LzmaRaw { props, size: None }, "big.lzma1"),
+        // A known size and an end marker as well: the marker is consumed.
+        (Codec::LzmaRaw { props, size: Some(lzma_sample(7500).len()) }, "big.lzma1"),
+    ];
+    for (codec, name) in cases {
+        let data = lzma_file(name);
+        let trailing = [data.clone(), b"trailing data".to_vec()].concat();
+        assert_eq!(lzma_consumed(&codec, &data), data.len(), "{name}");
+        assert_eq!(lzma_consumed(&codec, &trailing), data.len(), "{name} with trailing data");
+    }
+}

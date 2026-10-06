@@ -17,6 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Dictionary size: 8388608 — 8.0 MiB  [0x1d+0x4]
         Uncompressed size: 0 — 0 bytes  [0x21+0x8]
     ▾ Decompressed — 0x0 bytes decompressed  [0x1c+0x40]
+        ! note: 0x2e bytes follow the encoded stream
         Data  [#1:0x0+0x0]
       Compressed data  [0x29+0x33]
   ▾ Kernel / root filesystem — at 0x5c  [0x5c+0x40]
