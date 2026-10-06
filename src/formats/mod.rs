@@ -32,6 +32,7 @@ pub mod png;
 pub mod annexb;
 pub mod asf;
 pub mod flv;
+pub mod gamevideo;
 pub mod isobmff;
 pub mod ivf;
 pub mod matroska;
@@ -204,6 +205,10 @@ pub static FORMATS: &[&Format] = &[
     &rad::SMACKER,
     &mxf::FORMAT,
     &swf::FORMAT,
+    &gamevideo::ROQ,
+    &gamevideo::FILM,
+    &gamevideo::SMJPEG,
+    &gamevideo::FLIC,
     // -- end audio & video --
 
     // -- documents & data --

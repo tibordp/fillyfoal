@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ mjpeg-pcm.mjpg — SMJPEG, video 0 frames, 16×16, JFIF, audio 8000 Hz, 16-bit, 1 ch, NONE  [0x0+0x1c7e]
+    Signature: "\\0\\nSMJPEG"  [0x0+0x8]
+    Version: 0  [0x8+0x4]
+    Length: 400 — 00:00:00.400  [0xc+0x4]
+    Text — encoder = Lavf62  [0x10+0x1f]
+    Video header — 0 frames, 16×16, JFIF  [0x2f+0x14]
+    Audio header — 8000 Hz, 16-bit, 1 ch, NONE  [0x43+0x10]
+    Header end  [0x53+0x4]
+  ▾ Video chunk 0 — 00:00:00.000, 367 bytes  [0x57+0x17b]
+      Timestamp: 0  [0x5b+0x4]
+      Length: 367  [0x5f+0x4]
+    ▾ JPEG frame  [0x63+0x16f]
+        ! unsupported: unrecognized format [0x63+0x16f]
+    Audio chunk 1 — 00:00:00.000, 2048 bytes  [0x1d2+0x80c]
+    Audio chunk 2 — 00:00:00.128, 2048 bytes  [0x9de+0x80c]
+  ▾ Video chunk 3 — 00:00:00.200, 364 bytes  [0x11ea+0x178]
+      Timestamp: 200  [0x11ee+0x4]
+      Length: 364  [0x11f2+0x4]
+    ▾ JPEG frame  [0x11f6+0x16c]
+        ! unsupported: unrecognized format [0x11f6+0x16c]
+    Audio chunk 4 — 00:00:00.256, 2048 bytes  [0x1362+0x80c]
+    Audio chunk 5 — 00:00:00.384, 256 bytes  [0x1b6e+0x10c]
+    Done  [0x1c7a+0x4]
