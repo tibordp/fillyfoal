@@ -32,6 +32,7 @@ pub mod png;
 
 // -- documents & data --
 // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+pub mod arrow;
 pub mod asn1;
 pub mod avro;
 pub mod bdb;
@@ -208,6 +209,7 @@ pub static FORMATS: &[&Format] = &[
     &bdb::FORMAT,
     &jet::MDB,
     &jet::ACCDB,
+    &arrow::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
