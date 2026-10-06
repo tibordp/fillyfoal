@@ -1,8 +1,10 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ uncompressed-block.lz4 — LZ4, 1 frame  [0x0+0x20f]
+  ▾ Decompressed — 0x200 bytes decompressed  [0x0+0x20f]
+      Data  [#1:0x0+0x200]
   ▾ Frame 0 — 1 block, size unknown  [0x0+0x20f]
       Magic: 0x184d2204  [0x0+0x4]
     ▾ Frame descriptor — content size not recorded  [0x4+0x3]

@@ -17,7 +17,7 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::arcutil::{
-    check_len, count, crc32c, emit_nodes, hex, human_size, uint, unsupported, xxh32,
+    check_len, count, crc32c, emit_nodes, hex, human_size, uint, xxh32,
 };
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -179,6 +179,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut total = Some(0u64);
     let mut legacy = false;
     cx.annotate("LZ4");
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Lz4Frame, None));
     while !cur.at_end() {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
@@ -313,7 +314,9 @@ async fn legacy_frame(cx: Cx, span: Span) -> Result<()> {
                         Node::new("Compressed size")
                             .span(block_span.sub(0, 4))
                             .value(uint(size.into())),
-                        unsupported("Compressed data", data, "LZ4"),
+                        Node::new("Compressed data")
+                            .span(data)
+                            .desc("Decoded as part of the whole stream (see Decompressed)"),
                     ]),
                 ),
             data,
@@ -366,7 +369,9 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
             if stored {
                 Node::new("Uncompressed data").span(data)
             } else {
-                unsupported("Compressed data", data, "LZ4")
+                Node::new("Compressed data")
+                    .span(data)
+                    .desc("Decoded as part of the whole stream (see Decompressed)")
             },
         ];
         if d.block_checksum {
@@ -426,6 +431,7 @@ pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, LE);
     let mut data_chunks = 0u64;
     cx.annotate("Snappy framed");
+    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::SnappyFramed, None));
     while cur.remaining() >= 4 {
         let start = cur.pos();
         let header = cur.bytes(4).await?;
@@ -522,7 +528,11 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
                             .summary(human_size(len)),
                     );
                 }
-                cx.emit(unsupported("Compressed data", data, "Snappy"));
+                cx.emit(
+                    Node::new("Compressed data")
+                        .span(data)
+                        .desc("Decoded as part of the whole stream (see Decompressed)"),
+                );
             }
         }
         0xff => {

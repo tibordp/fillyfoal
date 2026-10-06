@@ -10,6 +10,7 @@
 pub mod inflate;
 pub mod crypto;
 pub mod filters;
+pub mod lz;
 pub mod pipeline;
 
 use std::sync::Arc;
@@ -58,6 +59,14 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// LZ4 frames (also legacy and skippable frames).
+    Lz4Frame,
+    /// One raw LZ4 block.
+    Lz4Block,
+    /// Raw Snappy.
+    Snappy,
+    /// The Snappy framing format.
+    SnappyFramed,
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
     Eexec { hex: bool },
     /// Traditional PKWARE encryption with this password (the 12-byte
@@ -107,6 +116,10 @@ impl Codec {
             Codec::PngPredictor { .. } => "png-predictor",
             Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Eexec { .. } => "eexec",
+            Codec::Lz4Frame => "lz4",
+            Codec::Lz4Block => "lz4-block",
+            Codec::Snappy => "snappy",
+            Codec::SnappyFramed => "snappy-framed",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -129,6 +142,10 @@ impl Codec {
             Codec::PngPredictor { .. } => "png-predictor (lazy)",
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Eexec { .. } => "eexec (lazy)",
+            Codec::Lz4Frame => "lz4 (lazy)",
+            Codec::Lz4Block => "lz4-block (lazy)",
+            Codec::Snappy => "snappy (lazy)",
+            Codec::SnappyFramed => "snappy-framed (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -141,7 +158,13 @@ impl Codec {
             Codec::ZipCrypto(_) | Codec::AesCtrLe(_) | Codec::Rc4(_) | Codec::AesCbc(_) | Codec::Eexec { .. } => {
                 "decrypted"
             }
-            Codec::Lzw { .. } | Codec::RunLength | Codec::PackBits => "decompressed",
+            Codec::Lzw { .. }
+            | Codec::RunLength
+            | Codec::PackBits
+            | Codec::Lz4Frame
+            | Codec::Lz4Block
+            | Codec::Snappy
+            | Codec::SnappyFramed => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
             }
@@ -164,6 +187,7 @@ impl Codec {
             | Codec::PngPredictor { .. }
             | Codec::TiffPredictor { .. } => 1,
             Codec::RunLength | Codec::PackBits => 128,
+            Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -190,6 +214,10 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
+            Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
+            Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
+            Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
+            Codec::SnappyFramed => Box::new(Streaming(filters::Whole::new(lz::SnappyFramed))),
             Codec::Eexec { hex } => Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex }))),
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),
