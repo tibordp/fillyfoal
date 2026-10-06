@@ -73,12 +73,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Some(b"NE") => Some((
             "NE Executable",
             "16-bit NE executable",
-            &crate::formats::ne::FORMAT,
+            &crate::formats::executable::ne::FORMAT,
         )),
         Some(b"LE" | b"LX") => Some((
             "Linear Executable",
             "LE/LX executable",
-            &crate::formats::lx::FORMAT,
+            &crate::formats::executable::lx::FORMAT,
         )),
         _ if signature.as_slice() != b"PE\0\0" => {
             Some(("DOS Executable", "MS-DOS executable", &DOS_EXE))

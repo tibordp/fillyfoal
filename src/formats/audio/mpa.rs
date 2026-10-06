@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::sound::{Bits, bits_node, duration, u24};
-use crate::formats::{Format, Head, Input, Probe, apetag, id3};
+use crate::formats::{Format, Head, Input, Probe, audio::apetag, audio::id3};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};

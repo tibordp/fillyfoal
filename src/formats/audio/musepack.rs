@@ -5,7 +5,7 @@
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::ape::trailing_tags;
+use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::sound::{Bits, channels, duration_of, leaf, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;

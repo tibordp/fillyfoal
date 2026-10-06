@@ -209,7 +209,7 @@ async fn chunk(cx: Cx, (input, id, data): (Input, u32, Span)) -> Result<()> {
             cx.emit(embedded_as(
                 "Bitcode",
                 input.nested(bitcode),
-                &crate::formats::bitcode::FORMAT,
+                &crate::formats::bytecode::bitcode::FORMAT,
             ));
             Ok(())
         }

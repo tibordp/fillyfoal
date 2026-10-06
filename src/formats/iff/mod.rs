@@ -717,7 +717,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             walk(&cx, &ctx, rest, form).await?;
         } else if rest.len == 128 && next.starts_with(b"TAG") {
             // Some taggers append an ID3v1 tag to WAV and AIFF files.
-            cx.emit(crate::formats::id3::v1_node(&cx, rest).await?);
+            cx.emit(crate::formats::audio::id3::v1_node(&cx, rest).await?);
         } else {
             cx.emit(
                 embedded("Trailing data", input.nested(rest))

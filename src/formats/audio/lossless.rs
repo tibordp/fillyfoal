@@ -6,7 +6,7 @@ use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::ape::trailing_tags;
+use crate::formats::audio::ape::trailing_tags;
 use crate::formats::util::sound::{Bits, bits_node, channels, duration_of, parse_bits, u24};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;

@@ -7,7 +7,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::sound::{channels, duration_of};
-use crate::formats::{Format, Input, Probe, apetag, id3};
+use crate::formats::{Format, Input, Probe, audio::apetag, audio::id3};
 use crate::node::Node;
 use crate::record;
 use crate::value::{EnumTable, FlagTable, flag};

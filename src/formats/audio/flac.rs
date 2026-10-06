@@ -13,7 +13,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::util::sound::{
     Bits, bits_node, channels, duration_of, enumerated, hex, leaf, parse_bits, table, text, uint,
 };
-use crate::formats::{Format, Input, Probe, embedded, id3, vorbis};
+use crate::formats::{Format, Input, Probe, embedded, audio::id3, audio::vorbis};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;

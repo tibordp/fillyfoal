@@ -332,7 +332,7 @@ fn code_directory_layout(f: &mut Fields<'_>, _: &()) -> Result<CodeDirectory> {
     if version >= 0x20500 {
         f.u32("runtime")
             .hex()
-            .with(|&v, n| n.summary(crate::formats::macho::tables::version(v)))
+            .with(|&v, n| n.summary(crate::formats::executable::macho::tables::version(v)))
             .emit()?;
         f.u32("preEncryptOffset").hex().emit()?;
     }

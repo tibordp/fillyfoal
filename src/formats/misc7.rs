@@ -1313,7 +1313,7 @@ async fn appimage(cx: Cx, input: Input) -> Result<()> {
     cx.emit(embedded_as(
         "Runtime (ELF)",
         input.nested(file.sub(0, end)),
-        &crate::formats::elf::FORMAT,
+        &crate::formats::executable::elf::FORMAT,
     ));
     cx.emit(embedded(
         if kind == 1 {

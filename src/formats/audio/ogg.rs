@@ -16,7 +16,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::sound::{Bits, duration, leaf, u24};
-use crate::formats::{Format, Head, Input, Probe, flac, vorbis};
+use crate::formats::{Format, Head, Input, Probe, audio::flac, audio::vorbis};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};

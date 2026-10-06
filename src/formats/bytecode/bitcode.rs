@@ -527,7 +527,7 @@ fn wrapper(f: &mut Fields<'_>, _: &()) -> Result<(u32, u32)> {
     let offset = f.u32("offset").hex().emit()?;
     let size = f.u32("size").hex().emit()?;
     f.u32("cputype")
-        .enumeration(crate::formats::macho::tables::CPU_TYPE)
+        .enumeration(crate::formats::executable::macho::tables::CPU_TYPE)
         .emit()?;
     Ok((offset, size))
 }

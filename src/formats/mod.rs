@@ -21,36 +21,8 @@ pub mod hexfile;
 
 // -- executables & code --
 pub mod android;
-pub mod aout;
-pub mod beam;
-pub mod bitcode;
-pub mod coff;
-pub mod dart;
-pub mod dxbc;
-pub mod elc;
-pub mod elf;
-pub mod fatbin;
-pub mod hermes;
-pub mod il2cpp;
 pub mod java;
-pub mod lua;
-pub mod luajit;
-pub mod lx;
-pub mod macho;
 pub mod minidump;
-pub mod ne;
-pub mod ocaml;
-pub mod omf;
-pub mod opcache;
-pub mod pe;
-pub mod pef;
-pub mod pyc;
-pub mod qvm;
-pub mod spirv;
-pub mod te;
-pub mod wasm;
-pub mod xcoff;
-pub mod yarb;
 // -- end executables --
 
 // -- images --
@@ -60,46 +32,11 @@ pub mod png;
 
 // -- audio & video --
 // audio (riff/iff/flac/mp3/ogg/...)
-pub mod ac3;
-pub mod adts;
-pub mod amr;
-pub mod ape;
-pub mod apetag;
-pub mod au;
-pub mod caf;
-pub mod dsd;
-pub mod dts;
-pub mod flac;
-pub mod id3;
 pub mod iff;
-pub mod lossless;
-pub mod midi;
-pub mod mpa;
-pub mod musepack;
-pub mod ogg;
-pub mod simple_audio;
-pub mod smaf;
 pub mod tracker;
-pub mod tta;
-pub mod voc;
-pub mod vorbis;
-pub mod w64;
-pub mod wavpack;
 // video & containers (isobmff/matroska/ts/...)
-pub mod annexb;
-pub mod asf;
-pub mod flv;
-pub mod gamevideo;
 pub mod isobmff;
-pub mod ivf;
-pub mod matroska;
 pub mod mpeg;
-pub mod mxf;
-pub mod rad;
-pub mod rawvideo;
-pub mod realmedia;
-pub mod swf;
-pub mod y4m;
 // -- end audio & video --
 
 // -- documents & data --
@@ -190,7 +127,6 @@ pub mod models;
 pub mod molecular;
 pub mod office_legacy;
 pub mod packages;
-pub mod pdb;
 pub mod platform;
 pub mod science;
 pub mod security;
@@ -219,6 +155,10 @@ pub mod text;
 pub mod util;
 pub mod archive;
 pub mod compression;
+pub mod audio;
+pub mod video;
+pub mod executable;
+pub mod bytecode;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
@@ -310,18 +250,18 @@ pub struct Format {
 /// All formats, in probing order: specific before generic.
 pub static FORMATS: &[&Format] = &[
     // -- executables & code --
-    &pe::DOS_EXE,
-    &pe::FORMAT,
+    &executable::pe::DOS_EXE,
+    &executable::pe::FORMAT,
     &misc7::APPIMAGE,
-    &elf::FORMAT,
-    &macho::FORMAT,
-    &macho::fat::FORMAT,
-    &macho::dyld_cache::FORMAT,
+    &executable::elf::FORMAT,
+    &executable::macho::FORMAT,
+    &executable::macho::fat::FORMAT,
+    &executable::macho::dyld_cache::FORMAT,
     // After the universal binary probe, which shares the 0xcafebabe magic.
     &java::class::FORMAT,
     &java::serialization::FORMAT,
     &java::keystore::FORMAT,
-    &wasm::FORMAT,
+    &bytecode::wasm::FORMAT,
     &android::dex::FORMAT,
     &android::dex::ODEX,
     &android::resources::AXML,
@@ -329,33 +269,33 @@ pub static FORMATS: &[&Format] = &[
     &android::vdex::FORMAT,
     &android::art::FORMAT,
     &minidump::FORMAT,
-    &ne::FORMAT,
-    &lx::FORMAT,
-    &omf::FORMAT,
-    &qvm::FORMAT,
-    &fatbin::FORMAT,
-    &elc::FORMAT,
-    &il2cpp::FORMAT,
-    &opcache::FORMAT,
-    &spirv::FORMAT,
-    &dxbc::FORMAT,
-    &te::FORMAT,
-    &xcoff::FORMAT,
-    &pef::FORMAT,
-    &ocaml::FORMAT,
-    &hermes::FORMAT,
-    &dart::FORMAT,
-    &yarb::FORMAT,
-    &pyc::FORMAT,
-    &lua::FORMAT,
-    &luajit::FORMAT,
-    &bitcode::FORMAT,
-    &beam::FORMAT,
+    &executable::ne::FORMAT,
+    &executable::lx::FORMAT,
+    &executable::omf::FORMAT,
+    &bytecode::qvm::FORMAT,
+    &executable::fatbin::FORMAT,
+    &bytecode::elc::FORMAT,
+    &bytecode::il2cpp::FORMAT,
+    &bytecode::opcache::FORMAT,
+    &bytecode::spirv::FORMAT,
+    &bytecode::dxbc::FORMAT,
+    &executable::te::FORMAT,
+    &executable::xcoff::FORMAT,
+    &executable::pef::FORMAT,
+    &bytecode::ocaml::FORMAT,
+    &bytecode::hermes::FORMAT,
+    &bytecode::dart::FORMAT,
+    &bytecode::yarb::FORMAT,
+    &bytecode::pyc::FORMAT,
+    &bytecode::lua::FORMAT,
+    &bytecode::luajit::FORMAT,
+    &bytecode::bitcode::FORMAT,
+    &bytecode::beam::FORMAT,
     // Weaker probes (sizes and machine numbers rather than long magics).
-    &coff::FORMAT,
-    &coff::IMPORT,
-    &aout::PLAN9,
-    &aout::FORMAT,
+    &executable::coff::FORMAT,
+    &executable::coff::IMPORT,
+    &executable::aout::PLAN9,
+    &executable::aout::FORMAT,
     // -- end executables --
 
     // -- images --
@@ -448,29 +388,29 @@ pub static FORMATS: &[&Format] = &[
     // IFF-shaped formats with their own dissectors, before generic IFF.
     &misc5::REX2,
     &iff::IFF,
-    &midi::FORMAT,
-    &au::FORMAT,
-    &voc::FORMAT,
-    &caf::FORMAT,
-    &amr::FORMAT,
-    &w64::FORMAT,
-    &ape::FORMAT,
-    &wavpack::FORMAT,
-    &musepack::FORMAT,
-    &tta::FORMAT,
-    &lossless::TAK,
-    &lossless::OFR,
-    &lossless::SHORTEN,
-    &dsd::DSF,
-    &dsd::DFF,
-    &smaf::FORMAT,
-    &simple_audio::SOX,
-    &simple_audio::IRCAM,
-    &simple_audio::ADX,
-    &simple_audio::KVAG,
-    &simple_audio::AST,
-    &simple_audio::ILBC,
-    &simple_audio::QOA,
+    &audio::midi::FORMAT,
+    &audio::au::FORMAT,
+    &audio::voc::FORMAT,
+    &audio::caf::FORMAT,
+    &audio::amr::FORMAT,
+    &audio::w64::FORMAT,
+    &audio::ape::FORMAT,
+    &audio::wavpack::FORMAT,
+    &audio::musepack::FORMAT,
+    &audio::tta::FORMAT,
+    &audio::lossless::TAK,
+    &audio::lossless::OFR,
+    &audio::lossless::SHORTEN,
+    &audio::dsd::DSF,
+    &audio::dsd::DFF,
+    &audio::smaf::FORMAT,
+    &audio::simple_audio::SOX,
+    &audio::simple_audio::IRCAM,
+    &audio::simple_audio::ADX,
+    &audio::simple_audio::KVAG,
+    &audio::simple_audio::AST,
+    &audio::simple_audio::ILBC,
+    &audio::simple_audio::QOA,
     &tracker::it::FORMAT,
     &tracker::xm::FORMAT,
     &tracker::s3m::FORMAT,
@@ -481,18 +421,18 @@ pub static FORMATS: &[&Format] = &[
     &tracker::more::OKT,
     &tracker::protracker::FORMAT,
     &tracker::more::COMPOSER669,
-    &simple_audio::RSO,
-    &flac::FORMAT,
-    &ogg::OPUS,
-    &ogg::OGG_FLAC,
-    &ogg::SPEEX,
-    &ogg::THEORA,
-    &ogg::FORMAT,
-    &adts::FORMAT,
-    &ac3::FORMAT,
-    &dts::FORMAT,
-    &mpa::FORMAT,
-    &id3::FORMAT,
+    &audio::simple_audio::RSO,
+    &audio::flac::FORMAT,
+    &audio::ogg::OPUS,
+    &audio::ogg::OGG_FLAC,
+    &audio::ogg::SPEEX,
+    &audio::ogg::THEORA,
+    &audio::ogg::FORMAT,
+    &audio::adts::FORMAT,
+    &audio::ac3::FORMAT,
+    &audio::dts::FORMAT,
+    &audio::mpa::FORMAT,
+    &audio::id3::FORMAT,
     // video & containers (isobmff/matroska/ts/...)
     &isobmff::CR3,
     &isobmff::HEIF,
@@ -506,9 +446,9 @@ pub static FORMATS: &[&Format] = &[
     &isobmff::M4V,
     &isobmff::MOV,
     &isobmff::MP4,
-    &matroska::WEBM,
-    &matroska::MKV,
-    &flv::FORMAT,
+    &video::matroska::WEBM,
+    &video::matroska::MKV,
+    &video::flv::FORMAT,
     &mpeg::ts::M2TS,
     &mpeg::ts::FORMAT,
     &mpeg::ps::MPEG2_PS,
@@ -516,28 +456,28 @@ pub static FORMATS: &[&Format] = &[
     &mpeg::video::MPEG2_VIDEO,
     &mpeg::video::MPEG1_VIDEO,
     &mpeg::mpeg4::FORMAT,
-    &annexb::HEVC,
-    &annexb::H264,
-    &ivf::FORMAT,
-    &ivf::OBU,
-    &y4m::FORMAT,
-    &asf::WMV,
-    &asf::WMA,
-    &asf::ASF,
-    &realmedia::FORMAT,
-    &rad::BINK,
-    &rad::SMACKER,
-    &mxf::FORMAT,
-    &swf::FORMAT,
-    &gamevideo::ROQ,
-    &gamevideo::FILM,
-    &gamevideo::SMJPEG,
-    &gamevideo::FLIC,
-    &gamevideo::MVE,
-    &gamevideo::THP,
-    &rawvideo::DIRAC,
-    &rawvideo::DNXHD,
-    &rawvideo::H263,
+    &video::annexb::HEVC,
+    &video::annexb::H264,
+    &video::ivf::FORMAT,
+    &video::ivf::OBU,
+    &video::y4m::FORMAT,
+    &video::asf::WMV,
+    &video::asf::WMA,
+    &video::asf::ASF,
+    &video::realmedia::FORMAT,
+    &video::rad::BINK,
+    &video::rad::SMACKER,
+    &video::mxf::FORMAT,
+    &video::swf::FORMAT,
+    &video::gamevideo::ROQ,
+    &video::gamevideo::FILM,
+    &video::gamevideo::SMJPEG,
+    &video::gamevideo::FLIC,
+    &video::gamevideo::MVE,
+    &video::gamevideo::THP,
+    &video::rawvideo::DIRAC,
+    &video::rawvideo::DNXHD,
+    &video::rawvideo::H263,
     // -- end audio & video --
 
     // -- documents & data --
@@ -1273,8 +1213,8 @@ pub static FORMATS: &[&Format] = &[
     &misc2::NRRD,
     &misc2::HDF4,
     &misc2::VTK,
-    &pdb::PDB,
-    &pdb::PDB2,
+    &executable::pdb::PDB,
+    &executable::pdb::PDB2,
     &platform::PERF,
     &platform::LDSO_CACHE,
     &platform::SELINUX,
