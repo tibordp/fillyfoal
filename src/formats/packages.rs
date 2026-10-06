@@ -380,7 +380,12 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
                 break;
             }
         };
-        cur.seek(start.saturating_add(header).saturating_add(payload));
+        let end = start.saturating_add(header).saturating_add(payload);
+        if end <= cur.pos() {
+            cx.diag(Diagnostic::malformed("block header too short").at(cur.since(start)));
+            break;
+        }
+        cur.seek(end);
         blocks = blocks.saturating_add(1);
         let mut node = Node::new(name)
             .span(cur.since(start))

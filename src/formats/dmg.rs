@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
+use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -313,9 +313,8 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
             // bzip2 streams and (ULMO) libcompression's LZMA, which is an
             // .xz stream: their dissectors show the structure and content.
             0x0000_0001 | 0x8000_0006 | 0x8000_0008 => fields.push(embedded("Data", input.nested(data))),
-            0x8000_0004 | 0x8000_0007 => {
-                fields.push(unsupported("Data", data, kind_name));
-            }
+            0x8000_0004 => fields.push(content("Data", input, data, Codec::Adc, Some(size))),
+            0x8000_0007 => fields.push(content("Data", input, data, Codec::Lzfse, Some(size))),
             _ => {}
         }
         let mut summary = format!(
