@@ -8,6 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::codec::Codec;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -114,9 +115,8 @@ struct PmState {
     input: Input,
     data: Span,
     leaves: Span,
-    /// Whether directories are uncompressed (otherwise they are shown as
-    /// embedded, compressed blobs).
-    plain: bool,
+    /// The directories' compression (1 none, 2 gzip, 3 brotli, 4 zstd).
+    internal: u8,
 }
 
 async fn pmtiles(cx: Cx, input: Input) -> Result<()> {
@@ -127,18 +127,14 @@ async fn pmtiles(cx: Cx, input: Input) -> Result<()> {
         input,
         data: file.sub(h.data_offset, h.data_len),
         leaves: file.sub(h.leaf_offset, h.leaf_len),
-        plain: h.internal == 1,
+        internal: h.internal,
     };
     let root = file.sub(h.root_offset, h.root_len);
-    if state.plain {
-        cx.emit(
-            Node::new("Root directory")
-                .span(root)
-                .lazy(directory, (state, root, Path::new())),
-        );
-    } else {
-        cx.emit(embedded("Root directory (compressed)", input.nested(root)));
-    }
+    cx.emit(
+        Node::new("Root directory")
+            .span(root)
+            .lazy(directory, (state, root, Path::new())),
+    );
     if h.meta_len > 0 {
         cx.emit(embedded(
             "Metadata",
@@ -203,7 +199,33 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
     if dir.len > MAX_BLOB {
         return Err(Diagnostic::limit("directory too large").at(dir));
     }
-    let data = cx.read(dir).await?;
+    let data = match state.internal {
+        1 => cx.read(dir).await?,
+        compression => {
+            let (span, codec) = match compression {
+                // gzip: a bare 10-byte header (no optional fields), DEFLATE,
+                // then the CRC and size.
+                2 => {
+                    let head = cx.read(dir.sub(0, 10)).await?;
+                    if head.get(..4) != Some(&[0x1f, 0x8b, 8, 0][..]) {
+                        return Err(Diagnostic::unsupported("gzip directory with header fields").at(dir));
+                    }
+                    (dir.sub(10, dir.len.saturating_sub(18)), Codec::Deflate)
+                }
+                3 => (dir, Codec::Brotli),
+                4 => (dir, Codec::Zstd),
+                _ => return Err(Diagnostic::unsupported("directory compression").at(dir)),
+            };
+            let decoded = crate::codec::decode_span(&cx, span, &codec, None).await?;
+            if let Some(e) = decoded.error {
+                return Err(e);
+            }
+            if decoded.span.len > MAX_BLOB {
+                return Err(Diagnostic::limit("directory too large").at(dir));
+            }
+            cx.read(decoded.span).await?
+        }
+    };
     let entries = decode_directory(&data)
         .ok_or_else(|| Diagnostic::malformed("malformed directory").at(dir))?;
     cx.set_count(crate::node::Count::Exact(to_u64(entries.len())));
@@ -211,16 +233,12 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
         if run == 0 {
             let span = state.leaves.sub(off, len);
             let node = match path.enter(to_u64(i).saturating_add(dir.offset), 4) {
-                Ok(child) if state.plain => Node::new(format!("Leaf directory from tile {id}"))
+                Ok(child) => Node::new(format!("Leaf directory from tile {id}"))
                     .span(span)
                     .lazy(
                         crate::expander!(self::directory: (PmState, Span, Path)),
                         (state, span, child),
                     ),
-                Ok(_) => embedded(
-                    format!("Leaf directory from tile {id}"),
-                    state.input.nested(span),
-                ),
                 Err(e) => Node::new(format!("Leaf directory from tile {id}"))
                     .span(span)
                     .diag(e),
