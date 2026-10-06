@@ -33,6 +33,7 @@ pub mod elc;
 pub mod elf;
 pub mod fatbin;
 pub mod hermes;
+pub mod il2cpp;
 pub mod java;
 pub mod lua;
 pub mod luajit;
@@ -203,6 +204,7 @@ pub static FORMATS: &[&Format] = &[
     &qvm::FORMAT,
     &fatbin::FORMAT,
     &elc::FORMAT,
+    &il2cpp::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
