@@ -1592,6 +1592,8 @@ pub static FORMATS: &[&Format] = &[
     &forensics::windows::AUTORUN,
     &forensics::windows::DESKTOP_INI,
     &engineering::models::STL,
+    // A ZIP after a stub or other data (its end record at the very end).
+    &archive::zip::PREFIXED,
     // -- end misc --
 
     // -- text (generic probes, keep last) --

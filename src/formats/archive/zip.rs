@@ -22,6 +22,7 @@ const LE: Endian = Endian::Little;
 const LOCAL: &[u8] = b"PK\x03\x04";
 const CENTRAL: u32 = 0x0201_4b50;
 const EOCD: &[u8] = b"PK\x05\x06";
+const EOCD64: &[u8] = b"PK\x06\x06";
 const EOCD64_LOCATOR: &[u8] = b"PK\x06\x07";
 
 macro_rules! zip_variant {
@@ -535,6 +536,31 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
+/// A ZIP archive after other data (self-extractor stubs, installers, a
+/// script in front): recognised by its end record, which must sit at the
+/// very end of the file (its comment, if any, filling the rest exactly).
+/// Registered after every magic-based probe, so formats that carry a
+/// trailing archive themselves (PE self-extractors) win.
+pub static PREFIXED: Format = Format {
+    name: "zip-prefixed",
+    title: "ZIP archive after other data",
+    extensions: &["zip", "sfx"],
+    mime: "application/zip",
+    probe: Probe::Custom(ends_with_eocd),
+    dissect: crate::expander!(dissect: Input),
+};
+
+fn ends_with_eocd(h: &Head<'_>) -> bool {
+    let tail = h.tail;
+    (0..tail.len().saturating_sub(21)).rev().any(|i| {
+        tail.get(i..i.saturating_add(4)) == Some(EOCD)
+            && crate::bytes::u16_le(tail, i.saturating_add(20))
+                .is_some_and(|c| i.saturating_add(22).saturating_add(c.into()) == tail.len())
+            // The central directory lies before the record.
+            && u32_le(tail, i.saturating_add(16)).is_some_and(|o| u64::from(o) < h.len)
+    })
+}
+
 /// File names of the local headers found in the probe window.
 fn entry_names<'a>(h: &'a Head<'_>) -> impl Iterator<Item = &'a [u8]> {
     let data = h.data;
@@ -753,6 +779,11 @@ fn dos_date(d: u16) -> String {
     )
 }
 
+/// Whether `span` holds `magic`.
+async fn starts_with(cx: &Cx, span: Span, magic: &[u8]) -> bool {
+    matches!(cx.read_avail(span).await, Ok(b) if b == magic)
+}
+
 #[derive(Clone, Copy, Debug)]
 struct Directory {
     offset: u64,
@@ -784,12 +815,27 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
 
     // ZIP64: a locator just before the EOCD points at the ZIP64 end record.
+    // The central directory ends where the last end record starts: the
+    // EOCD, or the ZIP64 end record when there is one.
     let mut nodes = Vec::new();
+    let mut directory_end = eocd_offset;
     if let Some(loc_offset) = eocd_offset.checked_sub(Zip64Locator::SIZE) {
         let loc_span = file.sub(loc_offset, Zip64Locator::SIZE);
         let loc_bytes = cx.read_avail(loc_span).await?;
         if loc_bytes.starts_with(EOCD64_LOCATOR) {
-            let end_offset = u64_le(&loc_bytes, 8).unwrap_or(0);
+            let recorded = u64_le(&loc_bytes, 8).unwrap_or(0);
+            // The record is where the locator says, unless data was
+            // prepended to the archive (offsets unadjusted): then it is
+            // right before the locator.
+            let end_offset = if starts_with(&cx, file.sub(recorded, 4), EOCD64).await {
+                recorded
+            } else {
+                match loc_offset.checked_sub(Zip64End::SIZE) {
+                    Some(o) if starts_with(&cx, file.sub(o, 4), EOCD64).await => o,
+                    _ => recorded,
+                }
+            };
+            directory_end = end_offset;
             let end_span = file.sub(end_offset, Zip64End::SIZE);
             match crate::fields::parse(&cx, end_span, LE, &(), Zip64End::layout).await {
                 Ok(end) => {
@@ -816,8 +862,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     // Self-extracting archives and other prefixed data shift all offsets.
     let expected_end = dir.offset.saturating_add(dir.size);
-    let prefix = eocd_offset.saturating_sub(expected_end);
-    if prefix > 0 && nodes.is_empty() {
+    let prefix = directory_end.saturating_sub(expected_end);
+    if prefix > 0 {
         cx.emit(
             crate::formats::embedded("Prefix data", input.nested(file.sub(0, prefix)))
                 .summary(format!("{prefix:#x} bytes before the archive")),
@@ -893,8 +939,19 @@ async fn central_directory(
     // Resume marks: (position, entries so far).
     let (pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
     cur.seek(pos);
-    while !cur.at_end() && index < entries {
+    // The directory is walked by its size: some writers store the entry
+    // count modulo 65536 even in the ZIP64 record, so headers that continue
+    // past the stated count are listed too (as `unzip` does).
+    while !cur.at_end() {
         let start = cur.pos();
+        if index >= entries {
+            if cur.remaining() < CentralHeader::SIZE || cur.peek(4).await? != CENTRAL.to_le_bytes() {
+                break;
+            }
+            if index == entries {
+                cx.set_count(Count::AtLeast(entries.saturating_add(1)));
+            }
+        }
         let at = (start, index);
         cx.mark(move || at);
         let (header, _) = cur.record::<CentralHeader>().await?;
@@ -930,6 +987,13 @@ async fn central_directory(
         )
         .await;
         index = index.saturating_add(1);
+    }
+    if index > entries {
+        cx.diag(Diagnostic::warning(format!(
+            "the end record says {entries} entries, the central directory holds {index}{}",
+            if index % 65536 == entries % 65536 { " (the count was stored modulo 65536)" } else { "" }
+        )));
+        cx.annotate(format!("{index} entries"));
     }
     Ok(())
 }

@@ -49,6 +49,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `lz4-legacy/legacy.lz4` | lz4 1.10 CLI | reproduced byte-for-byte: `lz4 -l -1` |
 | `brotli/page.html.br` | brotli 1.2 CLI | reproduced byte-for-byte: `brotli -q 10 -w 10` (commit 0b9b5a01: "verified against the brotli CLI") |
 | `compress/bottles.txt.Z` | macOS compress(1) | reproduced byte-for-byte: `compress -c` |
+| `zip/zip64-stdin.zip` | Info-ZIP Zip 3.0 (macOS `/usr/bin/zip`) | `printf 'hello zip64\n' \| zip -q zip64-stdin.zip -`: reading stdin, Info-ZIP writes ZIP64 end records and a ZIP64 extra field |
 | `gzip/png.gz` | macOS gzip | deflate body reproduced byte-for-byte with `gzip -6`; header keeps FNAME `c.png` and its MTIME. The PNG inside is hand-made (synthetic) |
 | `gzip/large-member.tar.gz` | macOS gzip + bsdtar 3.5.3 (libarchive 3.7.4) | reproduced byte-for-byte: `gzip -9 -n` of a bsdtar ustar archive (a.txt, a 2 MiB zeros.bin, z.txt) |
 | `lzfse/test.lzfse` | macOS compression_tool | reproduced byte-for-byte: `compression_tool -encode -a lzfse` of `hello` |
