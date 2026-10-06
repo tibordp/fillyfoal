@@ -12,7 +12,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::crc32c;
+use crate::formats::util::arcutil::crc32c;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

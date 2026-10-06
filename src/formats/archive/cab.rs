@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
 use crate::codec::cab::Folder;
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
@@ -333,7 +333,7 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
                 .summary(format!("{}, decoded with the folder", compression_name(f.kind))),
             _ => unsupported("Data", data, &compression_name(f.kind)),
         });
-        cx.push(crate::formats::arcutil::check_len(
+        cx.push(crate::formats::util::arcutil::check_len(
             Node::new(format!("Block {i}"))
                 .span(span)
                 .summary(format!(

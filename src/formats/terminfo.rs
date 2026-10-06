@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::clip;
+use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

@@ -9,7 +9,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
-use crate::formats::datakit::{clip, text};
+use crate::formats::util::datakit::{clip, text};
 use crate::formats::logs::{Lines, line_group, strip_bom, text_lines};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};

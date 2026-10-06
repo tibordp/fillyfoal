@@ -5,7 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{data_node, hex_string};
+use crate::formats::util::binutil::{data_node, hex_string};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -61,7 +61,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Footer")
             .span(footer)
-            .value(crate::formats::binutil::text(hex_string(&hash)))
+            .value(crate::formats::util::binutil::text(hex_string(&hash)))
             .desc("SHA-1 of everything before it"),
     );
     Ok(())

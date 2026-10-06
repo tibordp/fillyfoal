@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{
+use crate::formats::util::arcutil::{
     Num, ascii_num, check_len, count, human_size, present, text, unix_kind,
 };
 use crate::formats::{Format, Head, Input, Probe, embedded};
@@ -187,7 +187,7 @@ fn header_layout(f: &mut Fields<'_>, variant: &Variant) -> Result<Header> {
             f.node(
                 Node::new("File size")
                     .span(span_back(f, 4))
-                    .value(crate::formats::arcutil::uint(filesize)),
+                    .value(crate::formats::util::arcutil::uint(filesize)),
             );
             Ok(Header {
                 mode: mode.into(),

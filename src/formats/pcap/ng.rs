@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::{enumv, hex, uint};
+use crate::formats::util::datakit::{enumv, hex, uint};
 use crate::formats::pcap::{link_name, net, time_text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;

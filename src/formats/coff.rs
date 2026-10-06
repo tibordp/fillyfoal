@@ -13,7 +13,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{cstrings, data_node, ellipsize, hex, name_or, text};
+use crate::formats::util::binutil::{cstrings, data_node, ellipsize, hex, name_or, text};
 use crate::formats::pe::tables::{FILE_CHARACTERISTICS, MACHINE, SECTION_CHARACTERISTICS};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};

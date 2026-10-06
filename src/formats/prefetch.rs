@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::datakit::clip;
+use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;

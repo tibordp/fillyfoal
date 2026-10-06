@@ -7,7 +7,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::Input;
-use crate::formats::sound::{clip, decode_text, leaf, text};
+use crate::formats::util::sound::{clip, decode_text, leaf, text};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;

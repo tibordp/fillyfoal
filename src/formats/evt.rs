@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::datakit::clip;
+use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -238,7 +238,7 @@ async fn strings_list(cx: Cx, (span, count): (Span, u16)) -> Result<()> {
 pub fn sid(b: &[u8]) -> String {
     let revision = b.first().copied().unwrap_or(0);
     let count = usize::from(b.get(1).copied().unwrap_or(0));
-    let authority = crate::formats::datakit::be_uint(b.get(2..8).unwrap_or_default());
+    let authority = crate::formats::util::datakit::be_uint(b.get(2..8).unwrap_or_default());
     let mut out = format!("S-{revision}-{authority}");
     for i in 0..count {
         match crate::bytes::u32_le(b, 8usize.saturating_add(i.saturating_mul(4))) {

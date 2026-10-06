@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe};
@@ -637,7 +637,7 @@ async fn iges_directory(cx: Cx, list: Vec<Line>) -> Result<()> {
         });
         let node = Node::new(format!("D{seq}"))
             .span(span)
-            .value(crate::formats::lines::enumeration(IGES_ENTITIES, t, 16));
+            .value(crate::formats::util::lines::enumeration(IGES_ENTITIES, t, 16));
         cx.push(summarize(
             node,
             format!(

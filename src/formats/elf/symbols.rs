@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
-use crate::formats::binutil::{NodeExt, ellipsize, get_at, hex, name_or, text};
+use crate::formats::util::binutil::{NodeExt, ellipsize, get_at, hex, name_or, text};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -458,7 +458,7 @@ pub(super) async fn dynamic(cx: Cx, (elf, span, link): (Elf, Span, Option<u32>))
                 node = node.target(at);
             }
         } else {
-            node = node.value(crate::formats::binutil::dec(val, elf.class.bits()));
+            node = node.value(crate::formats::util::binutil::dec(val, elf.class.bits()));
         }
         cx.push(node).await;
     }
@@ -469,7 +469,7 @@ pub(super) async fn dynamic(cx: Cx, (elf, span, link): (Elf, Span, Option<u32>))
 // Simple sections
 
 /// NUL-terminated strings, listed by offset.
-pub(super) use crate::formats::binutil::cstrings as strings;
+pub(super) use crate::formats::util::binutil::cstrings as strings;
 
 /// Arrays of code pointers (`.init_array` and friends).
 pub(super) async fn pointers(cx: Cx, (elf, span): (Elf, Span)) -> Result<()> {
@@ -507,7 +507,7 @@ pub(super) async fn group(cx: Cx, (elf, span): (Elf, Span)) -> Result<()> {
         cx.push(
             Node::new(format!("Member {i}"))
                 .span(at)
-                .value(crate::formats::binutil::dec(index.into(), 32))
+                .value(crate::formats::util::binutil::dec(index.into(), 32))
                 .summary(elf.section_name(index)),
         )
         .await;
@@ -535,7 +535,7 @@ pub(super) async fn debuglink(cx: Cx, (class, span): (Class, Span)) -> Result<()
         cx.emit(
             Node::new("Build ID")
                 .span(id)
-                .value(text(crate::formats::binutil::hex_string(&bytes))),
+                .value(text(crate::formats::util::binutil::hex_string(&bytes))),
         );
     }
     Ok(())

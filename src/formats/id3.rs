@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::sound::{clip, enumerated, latin1_z, leaf, text, uint};
+use crate::formats::util::sound::{clip, enumerated, latin1_z, leaf, text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -544,7 +544,7 @@ async fn frame(cx: Cx, frame: Frame) -> Result<()> {
     let mut f = Fields::emitting(&cx, &header, BE);
     if frame.tag.major == 2 {
         f.ascii("Frame ID", 3).emit()?;
-        crate::formats::sound::u24(&mut f, "Size", BE).emit()?;
+        crate::formats::util::sound::u24(&mut f, "Size", BE).emit()?;
     } else {
         f.ascii("Frame ID", 4).emit()?;
         if frame.tag.major == 4 {

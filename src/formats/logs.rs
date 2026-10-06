@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, text};
+use crate::formats::util::datakit::{clip, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::datakit::{cf_time, clip, uint};
+use crate::formats::util::datakit::{cf_time, clip, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -460,7 +460,7 @@ async fn offset_table(cx: Cx, pl: Pl) -> Result<()> {
         let offset = be_uint(&cx.read(span).await?);
         let mut node = Node::new(format!("#{index}"))
             .span(span)
-            .value(crate::formats::datakit::hex(offset, 64));
+            .value(crate::formats::util::datakit::hex(offset, 64));
         if offset < pl.input.span.len {
             node = node.target(pl.input.span.sub(offset, 1));
         } else {

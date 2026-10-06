@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Lines, contains, float, float32, hex, int, number, preview, summarize, text, uint,
 };
 use crate::formats::{Head, Input, Probe};
@@ -1151,7 +1151,7 @@ async fn gdf_channels(cx: Cx, (span, ns): (Span, u64)) -> Result<()> {
                 b'h' => uint(u16_le(b, 0).unwrap_or(0).into()),
                 b'd' => float(f64::from_bits(u64_le(b, 0).unwrap_or(0))),
                 b'f' => float32(f32::from_bits(u32_le(b, 0).unwrap_or(0))),
-                b't' => crate::formats::lines::enumeration(
+                b't' => crate::formats::util::lines::enumeration(
                     GDF_TYPES,
                     u32_le(b, 0).unwrap_or(0).into(),
                     32,
@@ -1324,7 +1324,7 @@ async fn rhd_channels(cx: Cx, list: Vec<RhdChannel>) -> Result<()> {
         let mut node =
             Node::new(custom.clone())
                 .span(span)
-                .value(crate::formats::lines::enumeration(
+                .value(crate::formats::util::lines::enumeration(
                     RHD_SIGNAL_TYPES,
                     kind.into(),
                     16,
@@ -2428,7 +2428,7 @@ mod tests {
         );
         assert_eq!(read_uint(&[1, 2], Endian::Little), 0x201);
         assert!(
-            crate::formats::lines::head_lines(
+            crate::formats::util::lines::head_lines(
                 &Head {
                     data: b"a\nb",
                     tail: b"",

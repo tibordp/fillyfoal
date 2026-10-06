@@ -19,7 +19,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{
+use crate::formats::util::arcutil::{
     ByteReader, count, crc16_arc, emit_nodes, hex, human_size, unsupported,
 };
 use crate::formats::{Format, Head, Input, Probe, embedded};

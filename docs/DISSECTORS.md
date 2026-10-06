@@ -6,8 +6,8 @@ why; this is the how. Good examples to copy from:
 | Pattern | Example |
 |---|---|
 | Fixed header + chunk stream (big-endian, CRCs) | `src/formats/png.rs` |
-| Header + compressed payload dissected in place | `src/formats/gzip.rs` |
-| Directory at the end, paged entries, variants by probe | `src/formats/zip.rs` |
+| Header + compressed payload dissected in place | `src/formats/compression/gzip.rs` |
+| Directory at the end, paged entries, variants by probe | `src/formats/archive/zip.rs` |
 | Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/pe/` |
 | Recursive variable-length blocks | `src/formats/pe/version.rs` |
 | Text: windowed lines/tokens, encodings, base64 into derived sources | `src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |

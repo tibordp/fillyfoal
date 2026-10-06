@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{NodeExt, Reader, get_at, hex, name_or, string_at, text};
+use crate::formats::util::binutil::{NodeExt, Reader, get_at, hex, name_or, string_at, text};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;

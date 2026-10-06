@@ -17,7 +17,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unix_mode, unsupported};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint, unix_mode, unsupported};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -440,7 +440,7 @@ async fn cram_entry(cx: Cx, e: CramEntry) -> Result<()> {
                         .unwrap_or_default(),
                 );
                 let entry_span = dir.sub(to_u64(at), 12u64.saturating_add(child.namelen));
-                let kind = crate::formats::arcutil::unix_kind(child.mode.into());
+                let kind = crate::formats::util::arcutil::unix_kind(child.mode.into());
                 let summary = if kind == "file" {
                     human_size(child.size.into())
                 } else {

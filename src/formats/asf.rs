@@ -9,7 +9,7 @@ use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::vidutil;
+use crate::formats::util::vidutil;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

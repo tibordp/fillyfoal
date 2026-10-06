@@ -9,7 +9,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::iff::{Chunk, Ctx, FourCc, find, scan};
-use crate::formats::sound::{channels, duration_of, peek_text, table, text};
+use crate::formats::util::sound::{channels, duration_of, peek_text, table, text};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -341,11 +341,11 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"cue " => Some(format!("{} cue points", chunk.size.saturating_sub(4) / 24)),
         b"bext" => {
             let text = peek_text(cx, chunk.data, 256).await?;
-            (!text.is_empty()).then(|| crate::formats::sound::clip(&text, 60))
+            (!text.is_empty()).then(|| crate::formats::util::sound::clip(&text, 60))
         }
         b"labl" | b"note" => {
             let text = peek_text(cx, chunk.data.tail(4), 120).await?;
-            Some(crate::formats::sound::clip(&text, 60))
+            Some(crate::formats::util::sound::clip(&text, 60))
         }
         _ => None,
     })

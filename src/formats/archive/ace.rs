@@ -15,7 +15,7 @@ use crate::codec::crc32;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -443,7 +443,7 @@ async fn arc_entry(cx: Cx, (input, span, header_len): (Input, Span, u64)) -> Res
         let m = crate::value::lookup(ARC_METHOD, method.into()).unwrap_or("unknown");
         unsupported("Compressed data", data, &format!("ARC {m}"))
     };
-    cx.emit(crate::formats::arcutil::check_len(
+    cx.emit(crate::formats::util::arcutil::check_len(
         node,
         data,
         packed.into(),

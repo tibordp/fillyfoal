@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::binutil::{NodeExt, ellipsize, name_or};
+use crate::formats::util::binutil::{NodeExt, ellipsize, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -294,7 +294,7 @@ async fn record_fields(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("checksum")
             .span(checksum)
-            .value(crate::formats::binutil::hex(
+            .value(crate::formats::util::binutil::hex(
                 byte.first().copied().unwrap_or(0).into(),
                 8,
             )),

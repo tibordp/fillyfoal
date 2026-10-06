@@ -5,7 +5,7 @@
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, is_text, preview, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe};

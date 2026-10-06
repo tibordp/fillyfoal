@@ -11,7 +11,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{hex_string, size};
+use crate::formats::util::datakit::{hex_string, size};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;

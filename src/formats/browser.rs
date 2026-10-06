@@ -10,7 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{cf_time, clip, size, text};
+use crate::formats::util::datakit::{cf_time, clip, size, text};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -191,7 +191,7 @@ async fn ie_hash_table(cx: Cx, span: Span) -> Result<()> {
         cx.push(
             Node::new(format!("Entry {i}"))
                 .span(span.sub(at, 8))
-                .value(crate::formats::datakit::hex(offset, 32))
+                .value(crate::formats::util::datakit::hex(offset, 32))
                 .summary(format!("hash {hash:#010x}")),
         )
         .await;
@@ -308,7 +308,7 @@ async fn binarycookies(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Number of pages")
             .span(pages_span)
-            .value(crate::formats::datakit::uint(pages, 32)),
+            .value(crate::formats::util::datakit::uint(pages, 32)),
     );
     let sizes_span = file.sub_exact(8, u64::from(pages).saturating_mul(4))?;
     let sizes = cx.read(sizes_span).await?;
@@ -470,7 +470,7 @@ fn cache_addr(addr: u32) -> String {
 }
 
 fn addr_value(addr: u32) -> Value {
-    crate::formats::datakit::hex(addr, 32)
+    crate::formats::util::datakit::hex(addr, 32)
 }
 
 record! {
@@ -899,7 +899,7 @@ async fn visited_table(cx: Cx, table: Span) -> Result<()> {
             cx.push(
                 Node::new(format!("Slot {slot}"))
                     .span(span)
-                    .value(crate::formats::datakit::hex(fp, 64)),
+                    .value(crate::formats::util::datakit::hex(fp, 64)),
             )
             .await;
         } else if slot.is_multiple_of(256) {
@@ -1514,7 +1514,7 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Metadata offset")
             .span(file.sub(end, 4))
-            .value(crate::formats::datakit::hex(offset, 32)),
+            .value(crate::formats::util::datakit::hex(offset, 32)),
     );
     // The key is "[flags],:URL" (e.g. "a,:https://...", "O^partitionKey=...,:URL").
     let url = key

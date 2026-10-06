@@ -5,7 +5,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::sound::{Bits, FrameSyntax, count_frames, duration, frames_node};
+use crate::formats::util::sound::{Bits, FrameSyntax, count_frames, duration, frames_node};
 use crate::formats::{Format, Input, Probe};
 use crate::value::EnumTable;
 

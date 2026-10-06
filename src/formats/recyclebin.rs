@@ -9,7 +9,7 @@ use crate::bytes::{u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::size;
+use crate::formats::util::datakit::size;
 use crate::formats::{Format, Head, Input, Probe};
 
 const LE: Endian = Endian::Little;

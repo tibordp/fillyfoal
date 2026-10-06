@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{ellipsize, name_or};
+use crate::formats::util::binutil::{ellipsize, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;

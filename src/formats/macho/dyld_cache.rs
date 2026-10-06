@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{get_at, hex, name_or, perms, text};
+use crate::formats::util::binutil::{get_at, hex, name_or, perms, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;

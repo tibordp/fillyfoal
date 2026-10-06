@@ -21,7 +21,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{
+use crate::formats::util::binutil::{
     NodeExt, cstrings, data_node, ellipsize, get_at, hex, name_or, perms, string_at, text,
 };
 use crate::formats::{Format, Input, Probe, embedded};
@@ -1399,7 +1399,7 @@ async fn indirect_symbols(cx: Cx, (m, first, count): (Macho, u32, u32)) -> Resul
             _ => match symbol_name(&cx, &m, sym).await {
                 Ok(name) => node.value(text(name)).summary(format!("symbol {sym}")),
                 Err(e) => node
-                    .value(crate::formats::binutil::dec(sym.into(), 32))
+                    .value(crate::formats::util::binutil::dec(sym.into(), 32))
                     .diag(e),
             },
         };

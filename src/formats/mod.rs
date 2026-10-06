@@ -15,43 +15,14 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
-pub mod ace;
-pub mod ar;
-pub mod arcutil;
-pub mod arj;
-pub mod brotli;
-pub mod bzip2;
-pub mod cab;
-pub mod compress;
-pub mod compressors;
-pub mod cpio;
-pub mod dmg;
 pub mod firmware;
-pub mod gzip;
 pub mod hexfile;
-pub mod iso9660;
-pub mod lha;
-pub mod lz4;
-pub mod lzma;
-pub mod rar;
-pub mod rpm;
-pub mod sevenzip;
-pub mod squashfs;
-pub mod stuffit;
-pub mod tar;
-pub mod wim;
-pub mod xar;
-pub mod xz;
-pub mod zip;
-pub mod zoo;
-pub mod zstd;
 // -- end archives --
 
 // -- executables & code --
 pub mod android;
 pub mod aout;
 pub mod beam;
-mod binutil;
 pub mod bitcode;
 pub mod coff;
 pub mod dart;
@@ -108,7 +79,6 @@ pub mod musepack;
 pub mod ogg;
 pub mod simple_audio;
 pub mod smaf;
-pub mod sound;
 pub mod tracker;
 pub mod tta;
 pub mod voc;
@@ -129,20 +99,16 @@ pub mod rad;
 pub mod rawvideo;
 pub mod realmedia;
 pub mod swf;
-pub mod vidutil;
 pub mod y4m;
 // -- end audio & video --
 
 // -- documents & data --
 // data, system artifacts, fonts
-pub mod applesingle;
 pub mod bencode;
 pub mod bookmark;
 pub mod bplist;
 pub mod cbor;
 pub mod chm;
-pub mod crx;
-pub mod datakit;
 pub mod dsstore;
 pub mod evt;
 pub mod evtx;
@@ -150,7 +116,6 @@ pub mod font;
 pub mod gguf;
 pub mod git;
 pub mod icc;
-pub mod json;
 pub mod lnk;
 pub mod mo;
 pub mod npy;
@@ -210,7 +175,6 @@ pub mod graphics;
 pub mod instruments;
 pub mod instruments2;
 pub mod keyrings;
-pub mod lines;
 pub mod logs;
 pub mod microscopy;
 pub mod misc10;
@@ -252,6 +216,9 @@ pub mod publishing;
 
 // -- text --
 pub mod text;
+pub mod util;
+pub mod archive;
+pub mod compression;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
@@ -601,10 +568,10 @@ pub static FORMATS: &[&Format] = &[
     &terminfo::FORMAT,
     &npy::NPY,
     &npy::SAFETENSORS,
-    &crx::CRX,
-    &crx::MOZLZ4,
-    &applesingle::APPLESINGLE,
-    &applesingle::APPLEDOUBLE,
+    &archive::crx::CRX,
+    &archive::crx::MOZLZ4,
+    &archive::applesingle::APPLESINGLE,
+    &archive::applesingle::APPLEDOUBLE,
     &gguf::FORMAT,
     &pickle::FORMAT,
     &git::PACK,
@@ -702,109 +669,109 @@ pub static FORMATS: &[&Format] = &[
     &bio::TABIX,
     &bio::CSI,
     &bio::BGZF,
-    &gzip::FORMAT,
-    &dmg::FORMAT,
-    &tar::FORMAT,
-    &bzip2::FORMAT,
-    &xz::FORMAT,
-    &lzma::LZIP,
-    &zstd::FORMAT,
-    &zstd::SKIPPABLE,
-    &lz4::FORMAT,
-    &lz4::LEGACY,
-    &lz4::SNAPPY,
-    &compress::COMPRESS,
-    &compress::PACK,
-    &compressors::SZDD,
-    &compressors::KWAJ,
-    &ar::DEB,
-    &ar::FORMAT,
-    &cpio::FORMAT,
-    &rpm::FORMAT,
-    &sevenzip::FORMAT,
-    &rar::FORMAT,
-    &cab::FORMAT,
-    &arj::FORMAT,
-    &xar::FORMAT,
-    &iso9660::FORMAT,
-    &iso9660::UDF,
+    &compression::gzip::FORMAT,
+    &disk::dmg::FORMAT,
+    &archive::tar::FORMAT,
+    &compression::bzip2::FORMAT,
+    &compression::xz::FORMAT,
+    &compression::lzma::LZIP,
+    &compression::zstd::FORMAT,
+    &compression::zstd::SKIPPABLE,
+    &compression::lz4::FORMAT,
+    &compression::lz4::LEGACY,
+    &compression::lz4::SNAPPY,
+    &compression::compress::COMPRESS,
+    &compression::compress::PACK,
+    &compression::szdd::SZDD,
+    &compression::szdd::KWAJ,
+    &archive::ar::DEB,
+    &archive::ar::FORMAT,
+    &archive::cpio::FORMAT,
+    &archive::rpm::FORMAT,
+    &archive::sevenzip::FORMAT,
+    &archive::rar::FORMAT,
+    &archive::cab::FORMAT,
+    &archive::arj::FORMAT,
+    &archive::xar::FORMAT,
+    &disk::iso9660::FORMAT,
+    &disk::iso9660::UDF,
     &firmware::ANDROID_SPARSE,
     &firmware::ANDROID_BOOT,
     &firmware::UIMAGE,
-    &squashfs::SQUASHFS,
-    &squashfs::CRAMFS,
-    &wim::FORMAT,
-    &stuffit::FORMAT,
-    &stuffit::SIT5,
-    &zoo::FORMAT,
-    &ace::ACE,
+    &disk::squashfs::SQUASHFS,
+    &disk::squashfs::CRAMFS,
+    &archive::wim::FORMAT,
+    &archive::stuffit::FORMAT,
+    &archive::stuffit::SIT5,
+    &archive::zoo::FORMAT,
+    &archive::ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
     // (ml models & mobile platforms)
-    &zip::TORCHSCRIPT,
-    &zip::PYTORCH,
-    &zip::KERAS,
-    &zip::NPZ,
-    &zip::SIGROK,
-    &zip::APEX,
-    &zip::ANDROID_OTA,
-    &zip::ANDROID_DM,
-    &zip::BUGREPORT,
-    &zip::IPSW,
+    &archive::zip::TORCHSCRIPT,
+    &archive::zip::PYTORCH,
+    &archive::zip::KERAS,
+    &archive::zip::NPZ,
+    &archive::zip::SIGROK,
+    &archive::zip::APEX,
+    &archive::zip::ANDROID_OTA,
+    &archive::zip::ANDROID_DM,
+    &archive::zip::BUGREPORT,
+    &archive::zip::IPSW,
     // (end ml)
-    &zip::AAR,
-    &zip::XLSB,
-    &zip::SNUPKG,
-    &zip::EPUB,
-    &zip::ODT,
-    &zip::ODS,
-    &zip::ODP,
-    &zip::ODG,
-    &zip::DOCX,
-    &zip::XLSX,
-    &zip::PPTX,
-    &zip::VSDX,
-    &zip::XPS,
-    &zip::APK,
-    &zip::XPI,
-    &zip::NUPKG,
-    &zip::VSIX,
-    &zip::WHL,
-    &zip::IPA,
-    &zip::KMZ,
-    &zip::THREE_MF,
-    &zip::SKETCH,
-    &zip::USDZ,
-    &zip::KRITA,
-    &zip::ORA,
-    &zip::IDML,
-    &zip::ODF_FORMULA,
-    &zip::ODB,
-    &zip::IWORK,
-    &zip::APPX,
-    &zip::XAP,
-    &zip::FBZ,
-    &zip::CBZ,
-    &zip::GEOGEBRA,
-    &zip::DWFX,
-    &zip::ADOBE_XD,
-    &zip::PROCREATE,
-    &zip::XFL,
-    &zip::SXW,
-    &zip::SXC,
-    &zip::SXI,
-    &zip::SXD,
-    &zip::SXM,
-    &zip::CDR_ZIP,
-    &zip::IWORK09,
-    &zip::MCPACK,
-    &zip::SCRATCH,
-    &zip::JAR,
-    &zip::FORMAT,
+    &archive::zip::AAR,
+    &archive::zip::XLSB,
+    &archive::zip::SNUPKG,
+    &archive::zip::EPUB,
+    &archive::zip::ODT,
+    &archive::zip::ODS,
+    &archive::zip::ODP,
+    &archive::zip::ODG,
+    &archive::zip::DOCX,
+    &archive::zip::XLSX,
+    &archive::zip::PPTX,
+    &archive::zip::VSDX,
+    &archive::zip::XPS,
+    &archive::zip::APK,
+    &archive::zip::XPI,
+    &archive::zip::NUPKG,
+    &archive::zip::VSIX,
+    &archive::zip::WHL,
+    &archive::zip::IPA,
+    &archive::zip::KMZ,
+    &archive::zip::THREE_MF,
+    &archive::zip::SKETCH,
+    &archive::zip::USDZ,
+    &archive::zip::KRITA,
+    &archive::zip::ORA,
+    &archive::zip::IDML,
+    &archive::zip::ODF_FORMULA,
+    &archive::zip::ODB,
+    &archive::zip::IWORK,
+    &archive::zip::APPX,
+    &archive::zip::XAP,
+    &archive::zip::FBZ,
+    &archive::zip::CBZ,
+    &archive::zip::GEOGEBRA,
+    &archive::zip::DWFX,
+    &archive::zip::ADOBE_XD,
+    &archive::zip::PROCREATE,
+    &archive::zip::XFL,
+    &archive::zip::SXW,
+    &archive::zip::SXC,
+    &archive::zip::SXI,
+    &archive::zip::SXD,
+    &archive::zip::SXM,
+    &archive::zip::CDR_ZIP,
+    &archive::zip::IWORK09,
+    &archive::zip::MCPACK,
+    &archive::zip::SCRATCH,
+    &archive::zip::JAR,
+    &archive::zip::FORMAT,
     // Weak probes last.
-    &tar::V7,
-    &lha::FORMAT,
-    &ace::ARC,
-    &lzma::LZMA,
+    &archive::tar::V7,
+    &archive::lha::FORMAT,
+    &archive::ace::ARC,
+    &compression::lzma::LZMA,
     &hexfile::IHEX,
     &hexfile::SREC,
     // -- end archives --
@@ -1899,7 +1866,7 @@ pub static FORMATS: &[&Format] = &[
     &text::plain::SCRIPT,
     // Brotli has no magic: only small files that decode as exactly one
     // complete stream (a trial decode, so after everything with magic).
-    &brotli::FORMAT,
+    &compression::brotli::FORMAT,
     // Weak, statistical probes.
     &text::csv::TSV,
     &text::csv::CSV,

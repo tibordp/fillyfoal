@@ -17,7 +17,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::Endian;
-use crate::formats::sound::Describe;
+use crate::formats::util::sound::Describe;
 use crate::node::{Count, Node};
 use crate::span::Span;
 
@@ -59,7 +59,7 @@ pub async fn order_node(cx: &Cx, span: Span) -> Result<Node> {
     Ok(Node::new("Orders")
         .span(span)
         .summary(format!("{} entries", list.len()))
-        .value(crate::formats::sound::text(orders(&list))))
+        .value(crate::formats::util::sound::text(orders(&list))))
 }
 
 /// How a pointer table addresses its targets.

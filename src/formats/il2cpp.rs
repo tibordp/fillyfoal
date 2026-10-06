@@ -6,7 +6,7 @@
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::binutil::{dec, hex, text};
+use crate::formats::util::binutil::{dec, hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -77,7 +77,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Some((_, data, _)) => node.lazy(literals, (span, *data, version)),
                 None => node,
             },
-            2 => node.lazy(crate::formats::binutil::cstrings, span),
+            2 => node.lazy(crate::formats::util::binutil::cstrings, span),
             _ => node,
         };
         cx.emit(node);

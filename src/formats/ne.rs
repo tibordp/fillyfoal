@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{ellipsize, name_or};
+use crate::formats::util::binutil::{ellipsize, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -324,7 +324,7 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     cx.emit(
         Node::new("rscAlignShift")
             .span(span.sub(0, 2))
-            .value(crate::formats::binutil::dec(shift.into(), 16)),
+            .value(crate::formats::util::binutil::dec(shift.into(), 16)),
     );
     let mut at = 2usize;
     while let Some(kind) = u16_le(&data, at) {

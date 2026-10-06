@@ -4,7 +4,7 @@
 use crate::bytes::{u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::vidutil::{duration, fourcc};
+use crate::formats::util::vidutil::{duration, fourcc};
 use crate::span::Span;
 
 use super::boxes::{handler_name, language};

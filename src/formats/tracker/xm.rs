@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::sound::text;
+use crate::formats::util::sound::text;
 use crate::formats::tracker::{named, note_name};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;

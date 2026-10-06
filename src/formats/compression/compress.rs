@@ -5,7 +5,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{human_size, uint, unsupported};
+use crate::formats::util::arcutil::{human_size, uint, unsupported};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;

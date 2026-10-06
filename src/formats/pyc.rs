@@ -13,7 +13,7 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::binutil::{NodeExt, Reader, Tree, ellipsize, text};
+use crate::formats::util::binutil::{NodeExt, Reader, Tree, ellipsize, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -117,7 +117,7 @@ fn header(f: &mut Fields<'_>, v: &(u8, u8)) -> Result<()> {
         let flags = f.u32("flags").flags(PYC_FLAGS).emit()?;
         if flags & 1 != 0 {
             f.bytes("source_hash", 8)
-                .with(|b, n| n.summary(crate::formats::binutil::hex_string(b)))
+                .with(|b, n| n.summary(crate::formats::util::binutil::hex_string(b)))
                 .desc("SipHash of the source file")
                 .emit()?;
         } else {

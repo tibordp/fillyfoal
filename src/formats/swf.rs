@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::{clip, size};
+use crate::formats::util::datakit::{clip, size};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -321,7 +321,7 @@ async fn tag(cx: Cx, (input, body, code, depth): (Input, Span, u16, u32)) -> Res
                 .with(|b, n| {
                     n.value(Value::Text(format!(
                         "#{}",
-                        crate::formats::datakit::hex_string(b)
+                        crate::formats::util::datakit::hex_string(b)
                     )))
                 })
                 .emit()?;

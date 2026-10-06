@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Codec, Head, Input, Probe, content};
@@ -439,7 +439,7 @@ async fn hic(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Footer position")
             .span(cur.since(s))
-            .value(crate::formats::lines::hex(footer, 64)),
+            .value(crate::formats::util::lines::hex(footer, 64)),
     );
     let s = cur.pos();
     let (genome, _) = cur.cstr(0x1000).await?;
@@ -455,7 +455,7 @@ async fn hic(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Normalization vector index")
                 .span(cur.since(s))
-                .value(crate::formats::lines::hex(at, 64))
+                .value(crate::formats::util::lines::hex(at, 64))
                 .summary(format!("{len} bytes")),
         );
     }
@@ -553,7 +553,7 @@ async fn hic_footer(cx: Cx, (file, at, version): (Span, u64, u32)) -> Result<()>
         cx.push(
             Node::new(key)
                 .span(cur.since(s))
-                .value(crate::formats::lines::hex(pos, 64))
+                .value(crate::formats::util::lines::hex(pos, 64))
                 .summary(format!("{size} bytes"))
                 .target(file.sub(pos, size.into())),
         )
@@ -845,8 +845,8 @@ fn gtf_probe(h: &Head<'_>) -> bool {
                     && f.get(4)
                         .is_some_and(|x| !x.is_empty() && x.iter().all(u8::is_ascii_digit))
                     && f.get(8).is_some_and(|a| {
-                        crate::formats::lines::contains(a, b"gene_id \"")
-                            || crate::formats::lines::contains(a, b"transcript_id \"")
+                        crate::formats::util::lines::contains(a, b"gene_id \"")
+                            || crate::formats::util::lines::contains(a, b"transcript_id \"")
                     })
             })
 }
@@ -1045,7 +1045,7 @@ async fn psl_row(cx: Cx, line: Line) -> Result<()> {
 // mzTab proteomics/metabolomics results
 
 declare_format!(pub MZTAB = "mztab", "mzTab results", ["mztab"], "text/x-mztab",
-    Probe::Custom(|h| h.starts_with(b"MTD\tmzTab-version") || h.starts_with(b"MTD  mzTab-version") || (h.starts_with(b"COM\t") && crate::formats::lines::contains(h.data.get(..4096).unwrap_or(h.data), b"\nMTD\tmzTab-version"))), mztab);
+    Probe::Custom(|h| h.starts_with(b"MTD\tmzTab-version") || h.starts_with(b"MTD  mzTab-version") || (h.starts_with(b"COM\t") && crate::formats::util::lines::contains(h.data.get(..4096).unwrap_or(h.data), b"\nMTD\tmzTab-version"))), mztab);
 
 const MZTAB_SECTIONS: &[(&str, &str)] = &[
     ("MTD", "Metadata"),

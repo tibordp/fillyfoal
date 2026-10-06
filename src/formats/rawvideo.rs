@@ -5,7 +5,7 @@
 use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::vidutil::{self, Bits, enumerated, hex, uint};
+use crate::formats::util::vidutil::{self, Bits, enumerated, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

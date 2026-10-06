@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::sound::{fourcc, peek_text, table, text, uint};
+use crate::formats::util::sound::{fourcc, peek_text, table, text, uint};
 use crate::formats::tracker::{named, order_node};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -300,7 +300,7 @@ pub async fn composer669(cx: Cx, input: Input) -> Result<()> {
     cx.emit(Node::new("Sample data").span(file.tail(pspan.end().saturating_sub(file.offset))));
     cx.annotate(format!(
         "669, 8 channels, {patterns} patterns, {samples} samples — {}",
-        crate::formats::sound::clip(&t, 36)
+        crate::formats::util::sound::clip(&t, 36)
     ));
     Ok(())
 }

@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{Num, ascii_num, count, hex, human_size, parse_ascii, text};
+use crate::formats::util::arcutil::{Num, ascii_num, count, hex, human_size, parse_ascii, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -143,7 +143,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(m.name.clone())
             .span(m.span)
             .lazy(member, (input, m.span, m.name.clone()));
-        node = crate::formats::arcutil::check_len(node, m.data, m.data.len);
+        node = crate::formats::util::arcutil::check_len(node, m.data, m.data.len);
         node = match m.kind {
             Kind::Names => {
                 if m.data.len <= MAX_NAMES {
@@ -308,7 +308,7 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
         cx.emit(
             Node::new("Ranlib size")
                 .span(span.sub(0, to_u64(word)))
-                .value(crate::formats::arcutil::uint(to_u64(ranlib_len)))
+                .value(crate::formats::util::arcutil::uint(to_u64(ranlib_len)))
                 .summary(count(to_u64(entries), "symbol", "symbols")),
         );
         for i in 0..entries {
@@ -333,7 +333,7 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
     cx.emit(
         Node::new("Symbol count")
             .span(span.sub(0, to_u64(word)))
-            .value(crate::formats::arcutil::uint(to_u64(n))),
+            .value(crate::formats::util::arcutil::uint(to_u64(n))),
     );
     let mut name_at = word.saturating_add(n.saturating_mul(word));
     for i in 0..n {

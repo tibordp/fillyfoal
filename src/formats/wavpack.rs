@@ -8,7 +8,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::ape::trailing_tags;
-use crate::formats::sound::{duration_of, leaf};
+use crate::formats::util::sound::{duration_of, leaf};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -271,7 +271,7 @@ async fn block(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         );
         let node = Node::new(name)
             .span(cur.since(start))
-            .value(crate::formats::sound::hex(id, 8))
+            .value(crate::formats::util::sound::hex(id, 8))
             .summary(format!("{real} bytes"));
         let state = (
             input,
@@ -293,7 +293,7 @@ async fn sub_block(
     let head = cx.read(span.sub(0, header_len)).await?;
     let id = head.first().copied().unwrap_or(0);
     cx.emit(
-        leaf("ID", span.sub(0, 1), crate::formats::sound::hex(id, 8)).summary(format!(
+        leaf("ID", span.sub(0, 1), crate::formats::util::sound::hex(id, 8)).summary(format!(
             "function {:#04x}{}{}",
             id & 0x3f,
             if id & 0x40 != 0 { ", odd size" } else { "" },
@@ -303,7 +303,7 @@ async fn sub_block(
     cx.emit(leaf(
         "Size (words)",
         span.sub(1, header_len.saturating_sub(1)),
-        crate::formats::sound::uint(
+        crate::formats::util::sound::uint(
             if id & 0x80 != 0 {
                 crate::bytes::u24_le(&head, 1).unwrap_or(0)
             } else {
@@ -321,7 +321,7 @@ async fn sub_block(
             cx.emit(leaf(
                 "Sample rate",
                 data,
-                crate::formats::sound::uint(u32_le(&b, 0).unwrap_or(0), 32),
+                crate::formats::util::sound::uint(u32_le(&b, 0).unwrap_or(0), 32),
             ));
         }
         _ => cx.emit(Node::new("Data").span(data)),

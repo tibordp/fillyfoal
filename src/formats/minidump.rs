@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{ellipsize, name_or, text};
+use crate::formats::util::binutil::{ellipsize, name_or, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;

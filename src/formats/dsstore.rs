@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::datakit::{clip, fourcc};
+use crate::formats::util::datakit::{clip, fourcc};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -186,7 +186,7 @@ async fn allocator(cx: Cx, store: St) -> Result<()> {
     for (i, &addr) in store.blocks.iter().enumerate() {
         let id = u32::try_from(i).unwrap_or(u32::MAX);
         let mut node =
-            Node::new(format!("Block {i}")).value(crate::formats::datakit::hex(addr, 32));
+            Node::new(format!("Block {i}")).value(crate::formats::util::datakit::hex(addr, 32));
         if addr != 0
             && let Ok(span) = store.block(id)
         {

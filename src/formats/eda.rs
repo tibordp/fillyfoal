@@ -10,7 +10,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, hex, is_text, number, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe};

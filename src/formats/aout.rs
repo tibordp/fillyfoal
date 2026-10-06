@@ -8,7 +8,7 @@ use crate::bytes::{to_u64, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{data_node, hex, name_or};
+use crate::formats::util::binutil::{data_node, hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -294,7 +294,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("String Table")
                 .span(strings)
-                .lazy(crate::formats::binutil::cstrings, strings.tail(4)),
+                .lazy(crate::formats::util::binutil::cstrings, strings.tail(4)),
         );
     }
     Ok(())
@@ -313,7 +313,7 @@ async fn symbols(cx: Cx, (table, strings, e): (Span, Span, Endian)) -> Result<()
         f.u16("n_desc").get()?;
         let value = f.u32("n_value").get()?;
         let name = if strx >= 4 {
-            crate::formats::binutil::string_at(&cx, strings, strx.into())
+            crate::formats::util::binutil::string_at(&cx, strings, strx.into())
                 .await
                 .map_or_else(|_| format!("#{i}"), |(s, _)| s)
         } else {

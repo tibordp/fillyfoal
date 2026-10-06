@@ -11,7 +11,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Lines, contains, float32, head_lines, int, is_text, number, preview, summarize, text, uint,
 };
 use crate::formats::{Head, Input, Probe, embedded};
@@ -810,7 +810,7 @@ async fn princeton_spe(cx: Cx, input: Input) -> Result<()> {
         "Data type",
         108,
         2,
-        crate::formats::lines::enumeration(SPE_TYPES, dtype.into(), 16),
+        crate::formats::util::lines::enumeration(SPE_TYPES, dtype.into(), 16),
     );
     let comments: Vec<String> = (0..5usize)
         .map(|i| {
@@ -832,7 +832,7 @@ async fn princeton_spe(cx: Cx, input: Input) -> Result<()> {
         "XML footer offset",
         678,
         8,
-        crate::formats::lines::hex(xml, 64),
+        crate::formats::util::lines::hex(xml, 64),
     );
     let frames = crate::bytes::i32_le(&h, 1446).unwrap_or(0);
     emit("Frames", 1446, 4, int(frames.into()));
@@ -842,7 +842,7 @@ async fn princeton_spe(cx: Cx, input: Input) -> Result<()> {
         "Last value",
         4098,
         2,
-        crate::formats::lines::hex(0x5555, 16),
+        crate::formats::util::lines::hex(0x5555, 16),
     );
     let size: u64 = match dtype {
         0 | 1 | 8 => 4,
@@ -1250,7 +1250,7 @@ async fn freesurfer_surf(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(file.sub(0, 3))
-            .value(crate::formats::lines::hex(0xff_fffe, 24)),
+            .value(crate::formats::util::lines::hex(0xff_fffe, 24)),
     );
     let head = cx.read_avail(file.sub(3, 1024)).await?;
     // The comment ends with two newlines.
@@ -1402,7 +1402,7 @@ async fn son_channels(cx: Cx, span: Span) -> Result<()> {
         let blocks = u16_le(&b, 14).unwrap_or(0);
         if kind != 0 {
             let node = Node::new(format!("{i}: {title}")).span(s).value(
-                crate::formats::lines::enumeration(SON_KINDS, kind.into(), 8),
+                crate::formats::util::lines::enumeration(SON_KINDS, kind.into(), 8),
             );
             cx.push(summarize(
                 node,

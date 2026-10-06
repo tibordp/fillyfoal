@@ -7,7 +7,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::arcutil::human_size;
+use crate::formats::util::arcutil::human_size;
 use crate::formats::{Codec, Format, Head, Input, Probe, content};
 use crate::node::Node;
 

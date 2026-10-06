@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{data_node, ellipsize, name_or};
+use crate::formats::util::binutil::{data_node, ellipsize, name_or};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -128,7 +128,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (at, s) in sections {
         let name = if s.name_offset >= 0 {
             let names = file.tail(names_at);
-            crate::formats::binutil::string_at(
+            crate::formats::util::binutil::string_at(
                 &cx,
                 names,
                 u64::try_from(s.name_offset).unwrap_or(0),
@@ -175,7 +175,7 @@ async fn imported_libraries(cx: &Cx, loader: Span) -> Result<Vec<String>> {
         let at = loader.sub(LoaderHeader::SIZE.saturating_add(i.saturating_mul(24)), 4);
         let off = cx.read(at).await?;
         let name =
-            crate::formats::binutil::string_at(cx, strings, u32_be(&off, 0).unwrap_or(0).into())
+            crate::formats::util::binutil::string_at(cx, strings, u32_be(&off, 0).unwrap_or(0).into())
                 .await?
                 .0;
         out.push(name);
@@ -224,7 +224,7 @@ async fn libraries(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
         let at = span.sub(i.saturating_mul(24), 24);
         let data = cx.read(at).await?;
         let name =
-            crate::formats::binutil::string_at(&cx, strings, u32_be(&data, 0).unwrap_or(0).into())
+            crate::formats::util::binutil::string_at(&cx, strings, u32_be(&data, 0).unwrap_or(0).into())
                 .await
                 .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(
@@ -255,7 +255,7 @@ async fn imported_symbols(cx: Cx, (span, strings): (Span, Span)) -> Result<()> {
         let data = cx.read(at).await?;
         let word = u32_be(&data, 0).unwrap_or(0);
         let class = word >> 24;
-        let name = crate::formats::binutil::string_at(&cx, strings, (word & 0x00ff_ffff).into())
+        let name = crate::formats::util::binutil::string_at(&cx, strings, (word & 0x00ff_ffff).into())
             .await
             .map_or_else(|_| format!("#{i}"), |(s, _)| s);
         cx.push(Node::new(name).span(at).summary(format!(

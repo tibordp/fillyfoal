@@ -5,7 +5,7 @@ use crate::bytes::{u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
-use crate::formats::vidutil::{duration, fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
+use crate::formats::util::vidutil::{duration, fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{FlagTable, Value, flag};

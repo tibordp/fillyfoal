@@ -798,7 +798,7 @@ async fn safetensors_index(cx: Cx, input: Input) -> Result<()> {
     }
     json::dissect(cx.clone(), input).await?;
     let size = total
-        .map(|t| format!(", {}", crate::formats::datakit::size(t)))
+        .map(|t| format!(", {}", crate::formats::util::datakit::size(t)))
         .unwrap_or_default();
     cx.annotate(format!(
         "safetensors index, {} shard(s){size}",

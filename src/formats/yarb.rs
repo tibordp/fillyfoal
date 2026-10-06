@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{data_node, text};
+use crate::formats::util::binutil::{data_node, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -83,7 +83,7 @@ async fn offsets(cx: Cx, (file, span, kind): (Span, Span, &'static str)) -> Resu
         cx.push(
             Node::new(format!("{kind} {i}"))
                 .span(span.sub(i.saturating_mul(4), 4))
-                .value(crate::formats::binutil::hex(off.into(), 32))
+                .value(crate::formats::util::binutil::hex(off.into(), 32))
                 .target(file.sub(off.into(), 0)),
         )
         .await;

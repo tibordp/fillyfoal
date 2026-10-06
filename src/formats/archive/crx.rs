@@ -12,8 +12,8 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::datakit::{hex_string, size};
-use crate::formats::{Format, Input, Probe, embedded_as, zip};
+use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::{Format, Input, Probe, embedded_as, archive::zip};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -157,11 +157,11 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
             }
             1 => {
                 let v = cur.u64().await?;
-                Node::new(label).value(crate::formats::datakit::hex(v, 64))
+                Node::new(label).value(crate::formats::util::datakit::hex(v, 64))
             }
             5 => {
                 let v = cur.u32().await?;
-                Node::new(label).value(crate::formats::datakit::hex(v, 32))
+                Node::new(label).value(crate::formats::util::datakit::hex(v, 32))
             }
             2 => {
                 let len = varint(&mut cur).await?;

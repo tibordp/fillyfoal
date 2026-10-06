@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::sound::{decode_text, fourcc, text};
+use crate::formats::util::sound::{decode_text, fourcc, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

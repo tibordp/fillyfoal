@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::Endian;
-use crate::formats::sound::{clip, leaf, text, uint};
+use crate::formats::util::sound::{clip, leaf, text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
 

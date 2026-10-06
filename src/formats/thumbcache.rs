@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::datakit::clip;
+use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;

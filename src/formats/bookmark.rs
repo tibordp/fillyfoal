@@ -10,7 +10,7 @@ use crate::bytes::{to_u64, u32_le, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::{cf_time, clip, hex_string};
+use crate::formats::util::datakit::{cf_time, clip, hex_string};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -114,7 +114,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("First TOC offset")
             .span(data.sub(0, 4))
-            .value(crate::formats::datakit::hex(toc, 32)),
+            .value(crate::formats::util::datakit::hex(toc, 32)),
     );
     let mut path = Vec::new();
     let mut volume = None;
@@ -232,7 +232,7 @@ async fn item_node(cx: &Cx, book: &Book, name: String, offset: u32, depth: u32) 
     let node = Node::new(name).span(span);
     let type_name =
         lookup(TYPES, kind.into()).map_or_else(|| format!("type {kind:#06x}"), str::to_owned);
-    let num = |n: usize| crate::formats::datakit::le_uint(bytes.get(..n).unwrap_or_default());
+    let num = |n: usize| crate::formats::util::datakit::le_uint(bytes.get(..n).unwrap_or_default());
     let value = match kind {
         0x0101 | 0x0901 => Some(Value::Text(String::from_utf8_lossy(&bytes).into_owned())),
         0x0201 => Some(Value::Bytes(bytes.get(..32).unwrap_or(&bytes).to_vec())),

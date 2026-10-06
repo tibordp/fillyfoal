@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, head_lines, is_text, number, preview, summarize, text, uint,
 };
 use crate::formats::{Head, Input, Probe};
@@ -467,7 +467,7 @@ async fn mol2_section(cx: Cx, (name, body): (String, Vec<Line>)) -> Result<()> {
 // CHARMM/X-PLOR PSF topology
 
 declare_format!(pub CHARMM_PSF = "charmm-psf", "CHARMM/X-PLOR protein structure file (PSF)", ["psf"], "chemical/x-psf",
-    Probe::Custom(|h| is_text(h) && h.starts_with(b"PSF") && head_lines(h, 1).first().is_some_and(|l| l.len() < 40 && l.iter().all(|b| b.is_ascii_uppercase() || *b == b' ')) && crate::formats::lines::contains(h.data, b"!NATOM")), charmm_psf);
+    Probe::Custom(|h| is_text(h) && h.starts_with(b"PSF") && head_lines(h, 1).first().is_some_and(|l| l.len() < 40 && l.iter().all(|b| b.is_ascii_uppercase() || *b == b' ')) && crate::formats::util::lines::contains(h.data, b"!NATOM")), charmm_psf);
 
 async fn charmm_psf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;

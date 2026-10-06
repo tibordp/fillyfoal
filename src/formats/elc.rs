@@ -4,7 +4,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::binutil::{dec, ellipsize, text};
+use crate::formats::util::binutil::{dec, ellipsize, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 

@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{emit_nodes, hex, human_size, text, uint};
+use crate::formats::util::arcutil::{emit_nodes, hex, human_size, text, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;

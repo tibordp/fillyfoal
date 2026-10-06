@@ -5,7 +5,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::sound::{Bits, bits_node, duration};
+use crate::formats::util::sound::{Bits, bits_node, duration};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -95,7 +95,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(file.sub(0, magic_len))
-            .value(crate::formats::sound::text(
+            .value(crate::formats::util::sound::text(
                 String::from_utf8_lossy(
                     head.get(..to_usize(magic_len).saturating_sub(1))
                         .unwrap_or_default(),
@@ -112,7 +112,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Channel description")
                 .span(file.sub(pos, 4))
-                .value(crate::formats::sound::hex(desc, 32))
+                .value(crate::formats::util::sound::hex(desc, 32))
                 .summary(format!("{channels} channels")),
         );
         pos = pos.saturating_add(4);
@@ -198,7 +198,7 @@ async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
     Ok(())
 }
 
-async fn frame(cx: Cx, (span, header): (Span, crate::formats::sound::BitLayout<()>)) -> Result<()> {
+async fn frame(cx: Cx, (span, header): (Span, crate::formats::util::sound::BitLayout<()>)) -> Result<()> {
     cx.emit(bits_node("Header", span.sub(0, 1), header, false));
     cx.emit(Node::new("Speech data").span(span.tail(1)));
     Ok(())

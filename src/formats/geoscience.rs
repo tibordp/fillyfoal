@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, enumeration, float32, head_lines, int, is_text, number, preview, summarize, text,
     uint,
 };
@@ -1249,7 +1249,7 @@ async fn erdas(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header pointer")
             .span(file.sub(16, 4))
-            .value(crate::formats::lines::hex(ptr, 32)),
+            .value(crate::formats::util::lines::hex(ptr, 32)),
     );
     let hs = file.sub(ptr, HfaFile::SIZE);
     let h: HfaFile = read_record(&cx, hs, LE).await?;
@@ -1445,7 +1445,7 @@ async fn e57_pages(cx: Cx, (file, page): (Span, u64)) -> Result<()> {
         let computed = crc32c(body);
         let mut node = Node::new(format!("Page {i}"))
             .span(span)
-            .value(crate::formats::lines::hex(stored.into(), 32));
+            .value(crate::formats::util::lines::hex(stored.into(), 32));
         if stored != computed {
             node = node.diag(Diagnostic::warning(format!(
                 "CRC-32C mismatch (computed {computed:#010x})"
@@ -1978,7 +1978,7 @@ fn envi_probe(h: &Head<'_>) -> bool {
     head_lines(h, 1)
         .first()
         .is_some_and(|l| l.trim_ascii() == b"ENVI")
-        && crate::formats::lines::contains(h.data.get(..4096).unwrap_or(h.data), b"samples")
+        && crate::formats::util::lines::contains(h.data.get(..4096).unwrap_or(h.data), b"samples")
 }
 
 declare_format!(pub ENVI_HDR = "envi-hdr", "ENVI raster header", ["hdr"], "text/x-envi-header",

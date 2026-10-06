@@ -40,6 +40,9 @@ pub mod vhdx;
 pub mod vmdk;
 pub mod xfs;
 pub mod zfs;
+pub mod dmg;
+pub mod iso9660;
+pub mod squashfs;
 
 use std::borrow::Cow;
 use std::sync::Arc;

@@ -9,7 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{enumeration, float32, hex, int, preview, summarize, text, uint};
+use crate::formats::util::lines::{enumeration, float32, hex, int, preview, summarize, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -385,7 +385,7 @@ async fn bam_header(
 
 /// The lines of an embedded SAM header.
 async fn sam_header_lines(cx: Cx, span: Span) -> Result<()> {
-    let mut lines = crate::formats::lines::Lines::new(&cx, span);
+    let mut lines = crate::formats::util::lines::Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let t = t.trim_end_matches('\0');
@@ -2385,7 +2385,7 @@ async fn scf(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn scf_comments(cx: Cx, span: Span) -> Result<()> {
-    let mut lines = crate::formats::lines::Lines::new(&cx, span);
+    let mut lines = crate::formats::util::lines::Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let t = t.trim_end_matches('\0');
@@ -2415,7 +2415,7 @@ mod tests {
     #[test]
     fn flags_value_is_typed() {
         assert!(matches!(
-            crate::formats::lines::flags(SAM_FLAGS, 0x41, 16),
+            crate::formats::util::lines::flags(SAM_FLAGS, 0x41, 16),
             crate::value::Value::Flags { .. }
         ));
         assert_eq!(voffset(0x0001_0000_0005), "0x10000:5");

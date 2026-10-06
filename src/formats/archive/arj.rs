@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -361,7 +361,7 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             &format!("ARJ method {method} ({m})"),
         )
     };
-    cx.emit(crate::formats::arcutil::check_len(
+    cx.emit(crate::formats::util::arcutil::check_len(
         node,
         data,
         compressed.into(),

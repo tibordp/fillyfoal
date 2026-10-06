@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, human_size, uint};
+use crate::formats::util::arcutil::{count, emit_nodes, human_size, uint};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -295,7 +295,7 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         }
         let span = file.sub(at, size);
         let node = embedded(name, input.nested(span)).summary(human_size(size));
-        cx.emit(crate::formats::arcutil::check_len(node, span, size));
+        cx.emit(crate::formats::util::arcutil::check_len(node, span, size));
         parts.push(format!("{} {}", name.to_lowercase(), human_size(size)));
         at = at.saturating_add(size.div_ceil(page).saturating_mul(page));
     }
@@ -452,7 +452,7 @@ pub async fn dissect_uimage(cx: Cx, input: Input) -> Result<()> {
             )));
         }
     }
-    cx.emit(crate::formats::arcutil::check_len(
+    cx.emit(crate::formats::util::arcutil::check_len(
         node,
         data,
         h.size.into(),

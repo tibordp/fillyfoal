@@ -6,7 +6,7 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
-use crate::formats::vidutil::{Entry, table};
+use crate::formats::util::vidutil::{Entry, table};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -330,7 +330,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             let entries = body.tail(at);
             let mut node = Node::new("Samples")
                 .span(entries)
-                .summary(crate::formats::vidutil::plural(count, "sample"));
+                .summary(crate::formats::util::vidutil::plural(count, "sample"));
             if stride > 0 {
                 node = node.lazy(trun_samples, (entries, u64::from(count), flags));
             }
@@ -397,11 +397,11 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             let size = u32_be(&d, 4)?;
             let n = u32_be(&d, 8)?;
             Some(if size == 0 {
-                crate::formats::vidutil::plural(n, "sample")
+                crate::formats::util::vidutil::plural(n, "sample")
             } else {
                 format!(
                     "{} of {size} bytes",
-                    crate::formats::vidutil::plural(n, "sample")
+                    crate::formats::util::vidutil::plural(n, "sample")
                 )
             })
         }
@@ -412,9 +412,9 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         b"sbgp" => Some(format!(
             "{} entries ({})",
             u32_be(&d, if wide { 12 } else { 8 })?,
-            crate::formats::vidutil::fourcc(d.get(4..8)?)
+            crate::formats::util::vidutil::fourcc(d.get(4..8)?)
         )),
-        b"trun" => Some(crate::formats::vidutil::plural(u32_be(&d, at)?, "sample")),
+        b"trun" => Some(crate::formats::util::vidutil::plural(u32_be(&d, at)?, "sample")),
         _ => Some(entries(u32_be(&d, at)?.into())),
     }
 }

@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;

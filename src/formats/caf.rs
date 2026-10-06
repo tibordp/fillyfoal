@@ -6,7 +6,7 @@ use crate::bytes::{to_u64, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::sound::{channels, duration_of, fourcc, hz, leaf, text};
+use crate::formats::util::sound::{channels, duration_of, fourcc, hz, leaf, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -250,7 +250,7 @@ async fn chunk(cx: Cx, (input, id, span): (Input, [u8; 4], Span)) -> Result<()> 
             cx.emit(leaf(
                 "Entries",
                 data.sub(0, 4),
-                crate::formats::sound::uint(count, 32),
+                crate::formats::util::sound::uint(count, 32),
             ));
             let mut at = 4usize;
             for _ in 0..count {

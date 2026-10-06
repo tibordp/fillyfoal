@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{data_node, ellipsize, hex_string, name_or, text};
+use crate::formats::util::binutil::{data_node, ellipsize, hex_string, name_or, text};
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -248,7 +248,7 @@ async fn signature(cx: &Cx, data: Span, id: u32) -> Result<()> {
     cx.emit(
         Node::new("element count")
             .span(data.sub(0, 4))
-            .value(crate::formats::binutil::dec(count.into(), 32)),
+            .value(crate::formats::util::binutil::dec(count.into(), 32)),
     );
     let width = if matches!(&id.to_le_bytes(), b"ISG1" | b"OSG1") {
         32usize

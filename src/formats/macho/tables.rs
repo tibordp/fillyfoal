@@ -552,7 +552,7 @@ pub fn source_version(v: u64) -> String {
 
 /// A UUID in the conventional 8-4-4-4-12 layout.
 pub fn uuid(b: &[u8]) -> String {
-    let h = crate::formats::binutil::hex_string(b).to_ascii_uppercase();
+    let h = crate::formats::util::binutil::hex_string(b).to_ascii_uppercase();
     let part = |r: std::ops::Range<usize>| h.get(r).unwrap_or_default().to_owned();
     format!(
         "{}-{}-{}-{}-{}",

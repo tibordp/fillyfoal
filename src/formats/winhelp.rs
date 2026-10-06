@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::datakit::clip;
+use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -287,7 +287,7 @@ async fn system(cx: &Cx, body: Span) -> Result<()> {
                 node.value(Value::Text(clip(&crate::text::until_nul(value), 400)))
             }
             3 | 9 | 11 => node.value(Value::UInt {
-                value: crate::formats::datakit::le_uint(value.get(..4).unwrap_or(value)),
+                value: crate::formats::util::datakit::le_uint(value.get(..4).unwrap_or(value)),
                 bits: 32,
                 radix: crate::value::Radix::Hex,
             }),

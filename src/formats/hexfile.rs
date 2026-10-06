@@ -10,7 +10,7 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

@@ -6,7 +6,7 @@ use crate::bytes::{to_u64, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{data_node, hex_string, name_or, text};
+use crate::formats::util::binutil::{data_node, hex_string, name_or, text};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};

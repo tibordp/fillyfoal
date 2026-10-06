@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::datakit::{clip, size};
+use crate::formats::util::datakit::{clip, size};
 use crate::codec::lzx;
 use crate::formats::{Codec, Format, Input, Probe, content, dissect_or_data};
 use crate::node::Node;
@@ -110,7 +110,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Content offset")
                 .span(span)
-                .value(crate::formats::datakit::hex(
+                .value(crate::formats::util::datakit::hex(
                     crate::bytes::u64_le(&b, 0).unwrap_or(0),
                     64,
                 )),

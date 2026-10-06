@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{NodeExt, data_node, text};
+use crate::formats::util::binutil::{NodeExt, data_node, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -111,7 +111,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("jtrgLength")
                 .span(file.sub(Header::SIZE, 4))
-                .value(crate::formats::binutil::hex(
+                .value(crate::formats::util::binutil::hex(
                     u32_le(&j, 0).unwrap_or(0).into(),
                     32,
                 )),
@@ -140,7 +140,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Literals")
             .span(lit)
-            .lazy(crate::formats::binutil::cstrings, lit),
+            .lazy(crate::formats::util::binutil::cstrings, lit),
     );
     Ok(())
 }

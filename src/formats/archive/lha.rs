@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{
+use crate::formats::util::arcutil::{
     ByteReader, count, emit_nodes, hex, human_size, text, unix_mode, unsupported,
 };
 use crate::formats::{Format, Head, Input, Probe, embedded};
@@ -491,6 +491,6 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
     } else {
         unsupported("Compressed data", data, &format!("LHA {method}"))
     };
-    cx.emit(crate::formats::arcutil::check_len(node, data, data_len));
+    cx.emit(crate::formats::util::arcutil::check_len(node, data, data_len));
     Ok(())
 }

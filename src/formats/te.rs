@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::{data_node, name_or};
+use crate::formats::util::binutil::{data_node, name_or};
 use crate::formats::pe::tables::{MACHINE, SECTION_CHARACTERISTICS, SUBSYSTEM};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};

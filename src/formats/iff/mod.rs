@@ -21,7 +21,7 @@ use crate::bytes::{u32_be, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::sound::{fourcc, peek_text, text};
+use crate::formats::util::sound::{fourcc, peek_text, text};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -558,7 +558,7 @@ async fn body(cx: &Cx, chunk: &Chunk) -> Result<bool> {
 async fn summarize(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
     if is_text_chunk(chunk) {
         let text = peek_text(cx, chunk.data, 120).await?;
-        return Ok(Some(crate::formats::sound::clip(&text, 60)));
+        return Ok(Some(crate::formats::util::sound::clip(&text, 60)));
     }
     match (chunk.ctx.family, &chunk.ctx.form) {
         (Family::Riff, b"WAVE") => wav::summary(cx, chunk).await,

@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
 use crate::codec::{Codec, wim};
 use crate::formats::{Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};

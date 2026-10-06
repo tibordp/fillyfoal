@@ -16,7 +16,7 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, fourcc};
+use crate::formats::util::datakit::{clip, fourcc};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -198,7 +198,7 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
     if padded <= cx.limits().max_read {
         let data = cx.read_avail(whole).await?;
         let computed = tables::checksum(&data, entry.tag == "head");
-        let node = Node::new("Checksum").value(crate::formats::datakit::hex(entry.checksum, 32));
+        let node = Node::new("Checksum").value(crate::formats::util::datakit::hex(entry.checksum, 32));
         cx.emit(if computed == entry.checksum {
             node.summary("valid")
         } else {

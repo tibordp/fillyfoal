@@ -10,7 +10,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::sound::{Bits, bits_node, duration, u24};
+use crate::formats::util::sound::{Bits, bits_node, duration, u24};
 use crate::formats::{Format, Head, Input, Probe, apetag, id3};
 use crate::node::Node;
 use crate::span::Span;

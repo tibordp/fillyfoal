@@ -7,7 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::{hex_string, size, text};
+use crate::formats::util::datakit::{hex_string, size, text};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

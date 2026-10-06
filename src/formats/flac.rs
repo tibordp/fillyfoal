@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::sound::{
+use crate::formats::util::sound::{
     Bits, bits_node, channels, duration_of, enumerated, hex, leaf, parse_bits, table, text, uint,
 };
 use crate::formats::{Format, Input, Probe, embedded, id3, vorbis};
@@ -140,7 +140,7 @@ pub async fn block_node(cx: &Cx, input: Input, span: Span) -> Result<Node> {
         6 => picture_summary(cx, data).await.ok(),
         2 => {
             let id = cx.read_avail(data.sub(0, 4)).await?;
-            Some(crate::formats::sound::fourcc(&id))
+            Some(crate::formats::util::sound::fourcc(&id))
         }
         _ => None,
     };
@@ -166,7 +166,7 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
                 })
         })
         .emit()?;
-    crate::formats::sound::u24(&mut f, "Length", BE).emit()?;
+    crate::formats::util::sound::u24(&mut f, "Length", BE).emit()?;
     let data = b.span.tail(4);
     match b.kind {
         0 => cx.emit(bits_node(
@@ -232,7 +232,7 @@ pub async fn picture(cx: &Cx, input: Input, data: Span) -> Result<()> {
         .with(|&v, n| n.value(enumerated(v, 32, id3::PICTURE_TYPE)))
         .emit()?;
     let len = f.u32("MIME type length").emit()?;
-    crate::formats::sound::latin1_field(&mut f, "MIME type", len.into()).emit()?;
+    crate::formats::util::sound::latin1_field(&mut f, "MIME type", len.into()).emit()?;
     let len = f.u32("Description length").emit()?;
     f.bytes("Description", len.into())
         .with(|b, n| n.value(text(String::from_utf8_lossy(b).into_owned())))

@@ -9,7 +9,7 @@ use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
+use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -41,7 +41,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut r = ByteReader::new(&head, file.sub(0, 34));
     r.text("Banner", 20);
     r.with(|n| {
-        n.value(crate::formats::arcutil::text(
+        n.value(crate::formats::util::arcutil::text(
             banner.trim_end_matches('\x1a').trim(),
         ))
     });
@@ -188,7 +188,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.u16("Comment size", LE).ok_or_else(bad)?;
     let short = crate::text::until_nul(e.get(38..51).unwrap_or_default());
     r.bytes("Short name", 13).ok_or_else(bad)?;
-    r.with(|n| n.value(crate::formats::arcutil::text(short)));
+    r.with(|n| n.value(crate::formats::util::arcutil::text(short)));
     if kind == 2 {
         r.u16("Variable part length", LE).ok_or_else(bad)?;
         r.u8("Time zone").ok_or_else(bad)?;
@@ -198,7 +198,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         for (name, len) in [("Long name", namlen), ("Directory", dirlen)] {
             if len > 0 {
                 let raw = r.bytes(name, len.into()).ok_or_else(bad)?;
-                let value = crate::formats::arcutil::text(crate::text::until_nul(raw));
+                let value = crate::formats::util::arcutil::text(crate::text::until_nul(raw));
                 r.with(|n| n.value(value));
             }
         }
@@ -223,7 +223,7 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let m = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
         unsupported("Compressed data", data, &format!("ZOO {m}"))
     };
-    cx.emit(crate::formats::arcutil::check_len(
+    cx.emit(crate::formats::util::arcutil::check_len(
         node,
         data,
         packed.into(),

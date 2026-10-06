@@ -6,7 +6,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::lines::{Lines, is_text, number, tally};
+use crate::formats::util::lines::{Lines, is_text, number, tally};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -252,7 +252,7 @@ async fn dlis_segments(cx: Cx, segs: Vec<(Span, u8, u8, String)>) -> Result<()> 
     for (span, attrs, _, name) in segs {
         let mut node = Node::new(name)
             .span(span)
-            .value(crate::formats::lines::flags(DLIS_ATTRS, attrs.into(), 8));
+            .value(crate::formats::util::lines::flags(DLIS_ATTRS, attrs.into(), 8));
         if attrs & 0x80 != 0 && attrs & 0x40 == 0 {
             // EFLR bodies start with a SET component: descriptor, type, name.
             let b = cx.read_avail(span.sub(4, 256)).await?;

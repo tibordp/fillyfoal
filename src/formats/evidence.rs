@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, hex, size, text};
+use crate::formats::util::datakit::{clip, hex, size, text};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;

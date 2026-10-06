@@ -1,7 +1,7 @@
 //! WebAssembly instruction decoding, for listing function bodies.
 
 use super::{heap_type, val_type};
-use crate::formats::binutil::Reader;
+use crate::formats::util::binutil::Reader;
 
 const NUMERIC: [&str; 128] = [
     "i32.eqz",
@@ -408,10 +408,10 @@ pub fn instruction(
             let sub = r.uleb()?;
             let operands = match sub {
                 0..=11 | 92 | 93 => memarg(r)?,
-                12 => format!("v128 {}", crate::formats::binutil::hex_string(r.bytes(16)?)),
+                12 => format!("v128 {}", crate::formats::util::binutil::hex_string(r.bytes(16)?)),
                 13 => format!(
                     "lanes {}",
-                    crate::formats::binutil::hex_string(r.bytes(16)?)
+                    crate::formats::util::binutil::hex_string(r.bytes(16)?)
                 ),
                 21..=34 => format!("lane {}", r.u8()?),
                 84..=91 => format!("{} lane {}", memarg(r)?, r.u8()?),

@@ -14,7 +14,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{NodeExt, Reader, ellipsize, mutf8, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader, ellipsize, mutf8, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

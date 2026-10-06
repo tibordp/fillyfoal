@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::datakit::{clip, enumv, uint};
+use crate::formats::util::datakit::{clip, enumv, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -189,7 +189,7 @@ async fn base_block(cx: Cx, span: Span) -> Result<()> {
             .fold(0u32, |acc, c| acc ^ u32::from_le_bytes(*c));
         let node = Node::new("Checksum")
             .span(check_span)
-            .value(crate::formats::datakit::hex(stored, 32));
+            .value(crate::formats::util::datakit::hex(stored, 32));
         cx.emit(if computed == stored {
             node.summary("valid")
         } else {

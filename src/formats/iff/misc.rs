@@ -9,7 +9,7 @@ use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, find, scan, wav};
-use crate::formats::sound::{peek_text, table};
+use crate::formats::util::sound::{peek_text, table};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;

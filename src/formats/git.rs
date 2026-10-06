@@ -12,7 +12,7 @@ use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, hex_string, sha1, size};
+use crate::formats::util::datakit::{clip, hex_string, sha1, size};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -674,7 +674,7 @@ async fn index_extensions(cx: Cx, (file, version, count): (Span, u32, u32)) -> R
             .map_or_else(|| "Extension".to_owned(), |(_, n)| (*n).to_owned());
         let mut node = Node::new(format!(
             "{} ({name})",
-            crate::formats::datakit::fourcc(&sig)
+            crate::formats::util::datakit::fourcc(&sig)
         ))
         .span(span)
         .summary(format!("{len} bytes"));

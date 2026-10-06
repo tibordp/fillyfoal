@@ -16,7 +16,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{
+use crate::formats::util::arcutil::{
     check_len, count, crc32c, emit_nodes, hex, human_size, uint, xxh32,
 };
 use crate::formats::{Format, Input, Probe};
@@ -540,7 +540,7 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
             cx.emit(
                 Node::new("Stream identifier")
                     .span(body)
-                    .value(crate::formats::arcutil::text(String::from_utf8_lossy(&id))),
+                    .value(crate::formats::util::arcutil::text(String::from_utf8_lossy(&id))),
             );
         }
         _ => cx.emit(Node::new("Data").span(body)),

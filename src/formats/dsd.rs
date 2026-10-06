@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
-use crate::formats::sound::{channels, duration_of, fourcc, leaf, text};
+use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, text};
 use crate::formats::{Format, Input, Probe, embedded, id3};
 use crate::node::Node;
 use crate::record;
@@ -311,7 +311,7 @@ async fn dff_chunk(cx: Cx, (input, id, span): (Input, Vec<u8>, Span)) -> Result<
         }
         b"DIAR" | b"DITI" => {
             let len = f.u32("Length").emit()?;
-            crate::formats::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
+            crate::formats::util::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
         }
         b"ID3 " => cx.emit(embedded("ID3 tag", input.nested(data))),
         b"DSD " => cx.emit(Node::new("Samples").span(data)),

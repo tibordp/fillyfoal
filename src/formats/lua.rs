@@ -9,7 +9,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{Reader, dec, text};
+use crate::formats::util::binutil::{Reader, dec, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

@@ -9,7 +9,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{ellipsize, mutf8, name_or, text};
+use crate::formats::util::binutil::{ellipsize, mutf8, name_or, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -193,7 +193,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Digest")
             .span(digest)
-            .value(text(crate::formats::binutil::hex_string(&bytes)))
+            .value(text(crate::formats::util::binutil::hex_string(&bytes)))
             .desc("SHA-1 over the password (UTF-16), \"Mighty Aphrodite\" and the keystore"),
     );
     if offset.saturating_add(20) < file.len {

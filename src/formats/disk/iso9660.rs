@@ -14,7 +14,7 @@ use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, text, uint, unix_mode};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unix_mode};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -558,7 +558,7 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
         if r.size > 0 {
             let node =
                 embedded("Content", e.input.nested(extent)).summary(human_size(r.size.into()));
-            cx.emit(crate::formats::arcutil::check_len(
+            cx.emit(crate::formats::util::arcutil::check_len(
                 node,
                 extent,
                 r.size.into(),

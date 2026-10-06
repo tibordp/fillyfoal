@@ -7,7 +7,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe};
@@ -92,7 +92,7 @@ async fn rhino_3dm(cx: Cx, input: Input) -> Result<()> {
             .map_or_else(|| format!("Chunk {code:#010x}"), str::to_owned);
         let node = Node::new(name)
             .span(cur.since(start))
-            .value(crate::formats::lines::hex(code.into(), 32));
+            .value(crate::formats::util::lines::hex(code.into(), 32));
         cx.push(if short {
             node.summary(format!("value {len}"))
         } else {
@@ -147,8 +147,8 @@ async fn acis_sab(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let tag = cur.u8().await?;
         let v = match tag {
-            0x04 => crate::formats::lines::int(i64::from(cur.u32().await?.cast_signed())),
-            0x06 => crate::formats::lines::float(cur.int::<f64>().await?),
+            0x04 => crate::formats::util::lines::int(i64::from(cur.u32().await?.cast_signed())),
+            0x06 => crate::formats::util::lines::float(cur.int::<f64>().await?),
             0x07 => {
                 let n = cur.u8().await?;
                 text(String::from_utf8_lossy(&cur.bytes(n.into()).await?).into_owned())
@@ -500,7 +500,7 @@ async fn tecplot(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Zone {name:?}"))
                 .span(cur.since(s))
-                .value(crate::formats::lines::enumeration(
+                .value(crate::formats::util::lines::enumeration(
                     TEC_ZONES,
                     kind.into(),
                     32,

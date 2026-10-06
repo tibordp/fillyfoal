@@ -10,7 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, hex, size, text, uint};
+use crate::formats::util::datakit::{clip, hex, size, text, uint};
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;

@@ -14,7 +14,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{count, emit_nodes, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{count, emit_nodes, human_size, text, uint, unsupported};
 use crate::formats::{Codec, Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -226,7 +226,7 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
             children.push(
                 Node::new("Mode")
                     .value(text(e.mode.clone()))
-                    .summary(crate::formats::arcutil::unix_mode(mode)),
+                    .summary(crate::formats::util::arcutil::unix_mode(mode)),
             );
         }
         if !e.mtime.is_empty() {

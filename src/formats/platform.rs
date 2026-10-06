@@ -619,7 +619,7 @@ async fn jmod(cx: Cx, input: Input) -> Result<()> {
     cx.emit(crate::formats::embedded_as(
         "Module contents (ZIP)",
         input.nested(file.tail(4)),
-        &crate::formats::zip::FORMAT,
+        &crate::formats::archive::zip::FORMAT,
     ));
     cx.annotate("Java module");
     Ok(())

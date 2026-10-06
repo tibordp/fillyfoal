@@ -4,7 +4,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::vidutil::{self, text};
+use crate::formats::util::vidutil::{self, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

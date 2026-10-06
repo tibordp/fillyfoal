@@ -13,7 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use std::sync::Arc;
 
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, uint};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -274,7 +274,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             } else {
                 format!("Skippable frame {:#x}", magic & 0xf)
             };
-            cx.push(crate::formats::arcutil::check_len(
+            cx.push(crate::formats::util::arcutil::check_len(
                 Node::new(name)
                     .span(span)
                     .summary(human_size(len.into()))
@@ -407,7 +407,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
         if last {
             summary.push_str(", last");
         }
-        cx.push(crate::formats::arcutil::check_len(
+        cx.push(crate::formats::util::arcutil::check_len(
             Node::new(format!("Block {index}"))
                 .span(block_span)
                 .summary(summary)

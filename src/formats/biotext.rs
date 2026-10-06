@@ -11,7 +11,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::bio::SAM_FLAGS;
-use crate::formats::lines::{
+use crate::formats::util::lines::{
     Line, Lines, flags, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
 use crate::formats::{Head, Input, Probe, embedded_as};
@@ -725,7 +725,7 @@ fn wig_probe(h: &Head<'_>) -> bool {
                 l.starts_with(b"variableStep ")
                     || l.starts_with(b"fixedStep ")
                     || (l.starts_with(b"track ")
-                        && crate::formats::lines::contains(l, b"type=wiggle_0"))
+                        && crate::formats::util::lines::contains(l, b"type=wiggle_0"))
             })
 }
 
@@ -2267,8 +2267,8 @@ fn jcamp_probe(h: &Head<'_>) -> bool {
     let head = h.data.get(..2048).unwrap_or(h.data);
     is_text(h)
         && h.starts_with(b"##TITLE=")
-        && (crate::formats::lines::contains(head, b"##JCAMP-DX=")
-            || crate::formats::lines::contains(head, b"##JCAMPDX="))
+        && (crate::formats::util::lines::contains(head, b"##JCAMP-DX=")
+            || crate::formats::util::lines::contains(head, b"##JCAMPDX="))
 }
 
 declare_format!(pub JCAMP = "jcamp-dx", "JCAMP-DX spectrum", ["jdx", "dx", "jcm"], "chemical/x-jcamp-dx",
@@ -2384,7 +2384,7 @@ mod tests {
     fn unescape_percent() {
         assert_eq!(unescape("a%3Bb%2C"), "a;b,");
         assert_eq!(
-            crate::formats::lines::int(1),
+            crate::formats::util::lines::int(1),
             crate::value::Value::Int { value: 1, bits: 64 }
         );
     }

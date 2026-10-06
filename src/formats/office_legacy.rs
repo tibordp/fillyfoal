@@ -11,7 +11,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::datakit::{clip, hex, text, uint};
+use crate::formats::util::datakit::{clip, hex, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

@@ -6,7 +6,7 @@
 use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::binutil::{data_node, ellipsize, text};
+use crate::formats::util::binutil::{data_node, ellipsize, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -143,7 +143,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Count")
             .span(count_span)
-            .value(crate::formats::binutil::dec(count.into(), 32)),
+            .value(crate::formats::util::binutil::dec(count.into(), 32)),
     );
     cx.emit(
         Node::new("Magic")
@@ -154,7 +154,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn names(cx: Cx, span: Span) -> Result<()> {
-    crate::formats::binutil::cstrings(cx, span).await
+    crate::formats::util::binutil::cstrings(cx, span).await
 }
 
 async fn code(cx: Cx, span: Span) -> Result<()> {

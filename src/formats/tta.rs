@@ -7,7 +7,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::ape::trailing_tags;
-use crate::formats::sound::{channels, duration_of, hex, leaf, table};
+use crate::formats::util::sound::{channels, duration_of, hex, leaf, table};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

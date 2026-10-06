@@ -6,7 +6,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::vidutil::{
+use crate::formats::util::vidutil::{
     self, Bits, H264_NAL_TYPES, HEVC_NAL_TYPES, SpsInfo, enumerated, flag_node, h264_sps, hevc_sps,
     text, uint, unescape_rbsp,
 };

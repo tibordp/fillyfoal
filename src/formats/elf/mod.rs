@@ -19,7 +19,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{data_node, get_at, name_or, perms, text};
+use crate::formats::util::binutil::{data_node, get_at, name_or, perms, text};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -519,7 +519,7 @@ fn summary(elf: &ElfInfo, facts: &Facts) -> String {
         };
         parts.push(format!(
             "BuildID[{hash}]={}",
-            crate::formats::binutil::hex_string(id)
+            crate::formats::util::binutil::hex_string(id)
         ));
     }
     if let Some(id) = &facts.go_build_id {

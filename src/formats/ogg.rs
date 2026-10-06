@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::sound::{Bits, duration, leaf, u24};
+use crate::formats::util::sound::{Bits, duration, leaf, u24};
 use crate::formats::{Format, Head, Input, Probe, flac, vorbis};
 use crate::node::Node;
 use crate::record;
@@ -858,7 +858,7 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             cx.emit(leaf(
                 "Message headers",
                 headers,
-                crate::formats::sound::text(String::from_utf8_lossy(&text).into_owned()),
+                crate::formats::util::sound::text(String::from_utf8_lossy(&text).into_owned()),
             ));
         }
         Kind::VorbisSetup | Kind::TheoraSetup => {

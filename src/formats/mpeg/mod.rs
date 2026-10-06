@@ -9,7 +9,7 @@ pub mod video;
 
 use crate::bytes::u16_be;
 use crate::cx::Cx;
-use crate::formats::vidutil::{enumerated, flag_node, hex, uint};
+use crate::formats::util::vidutil::{enumerated, flag_node, hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value};

@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::vidutil;
+use crate::formats::util::vidutil;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

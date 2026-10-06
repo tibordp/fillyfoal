@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::binutil::data_node;
+use crate::formats::util::binutil::data_node;
 use crate::formats::{Format, Input, Probe};
 use crate::record;
 

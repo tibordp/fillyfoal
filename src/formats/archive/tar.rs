@@ -12,7 +12,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{Num, ascii_num, count, human_size, parse_tar_number, text};
+use crate::formats::util::arcutil::{Num, ascii_num, count, human_size, parse_tar_number, text};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -411,7 +411,7 @@ fn member_node(input: Input, m: &Member) -> Node {
     let summary = if m.mode != 0 {
         format!(
             "{kind}, {}",
-            crate::formats::arcutil::unix_mode(m.mode | type_bits(m.typeflag))
+            crate::formats::util::arcutil::unix_mode(m.mode | type_bits(m.typeflag))
         )
     } else {
         kind
@@ -524,7 +524,7 @@ async fn member(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                 let data = cur.span(size);
                 if size > 0 {
                     let node = embedded("Content", input.nested(data)).summary(human_size(size));
-                    cx.emit(crate::formats::arcutil::check_len(node, data, size));
+                    cx.emit(crate::formats::util::arcutil::check_len(node, data, size));
                 }
             }
         }

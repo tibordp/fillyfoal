@@ -8,7 +8,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::binutil::{NodeExt, data_node, get_at, hex, hex_string, name_or, text};
+use crate::formats::util::binutil::{NodeExt, data_node, get_at, hex, hex_string, name_or, text};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, decode_flags, lookup};

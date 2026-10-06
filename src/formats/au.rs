@@ -5,7 +5,7 @@
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::sound::{channels, duration_of, leaf, peek_text, text};
+use crate::formats::util::sound::{channels, duration_of, leaf, peek_text, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::value::EnumTable;

@@ -15,7 +15,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{NodeExt, Reader, dec, ellipsize, hex, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader, dec, ellipsize, hex, name_or, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

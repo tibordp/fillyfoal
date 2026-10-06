@@ -21,7 +21,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
+use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -1093,7 +1093,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
             let mut attr = Node::new("Attributes").value(hex(a.into()));
             if a & 0x8000 != 0 {
                 // p7zip keeps the Unix mode in the high 16 bits.
-                attr = attr.summary(crate::formats::arcutil::unix_mode(u64::from(a >> 16)));
+                attr = attr.summary(crate::formats::util::arcutil::unix_mode(u64::from(a >> 16)));
             }
             children.push(attr);
         }

@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::vidutil::{self, text, uint};
+use crate::formats::util::vidutil::{self, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

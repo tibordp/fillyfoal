@@ -7,7 +7,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::binutil::{NodeExt, ellipsize, get_at, name_or};
+use crate::formats::util::binutil::{NodeExt, ellipsize, get_at, name_or};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

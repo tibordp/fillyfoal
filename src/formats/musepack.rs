@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::ape::trailing_tags;
-use crate::formats::sound::{Bits, channels, duration_of, leaf, uint};
+use crate::formats::util::sound::{Bits, channels, duration_of, leaf, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -92,7 +92,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let len = size.max(header_len);
             let span = file.sub(pos, len);
             let name = KEYS.iter().find(|(k, _)| **k == key).map_or_else(
-                || crate::formats::sound::fourcc(&key),
+                || crate::formats::util::sound::fourcc(&key),
                 |(_, n)| (*n).to_owned(),
             );
             let mut node = Node::new(name).span(span).summary(format!("{len} bytes"));
@@ -130,7 +130,7 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
     cx.emit(leaf(
         "Key",
         span.sub(0, 2),
-        crate::formats::sound::text(crate::formats::sound::fourcc(&key)),
+        crate::formats::util::sound::text(crate::formats::util::sound::fourcc(&key)),
     ));
     let head = cx.read(span.sub(2, header_len.saturating_sub(2))).await?;
     let size = varint(&head).map_or(0, |v| v.0);

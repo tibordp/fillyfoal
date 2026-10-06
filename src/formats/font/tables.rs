@@ -7,7 +7,7 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, fourcc, mac_roman};
+use crate::formats::util::datakit::{clip, fourcc, mac_roman};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};

@@ -8,7 +8,7 @@
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::datakit::{ByteReader, clip, le_uint, size};
+use crate::formats::util::datakit::{ByteReader, clip, le_uint, size};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

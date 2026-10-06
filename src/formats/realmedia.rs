@@ -7,7 +7,7 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::vidutil::{self, fixed16, num};
+use crate::formats::util::vidutil::{self, fixed16, num};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;

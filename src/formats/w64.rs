@@ -6,7 +6,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::iff::wav;
-use crate::formats::sound::fourcc;
+use crate::formats::util::sound::fourcc;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

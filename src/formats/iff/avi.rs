@@ -9,7 +9,7 @@ use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, Entry, FourCc, find, scan, wav};
-use crate::formats::sound::{duration, fourcc, peek_text, table, text};
+use crate::formats::util::sound::{duration, fourcc, peek_text, table, text};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -355,7 +355,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             cx.emit(
                 Node::new("Base offset")
                     .span(data.sub(12, 8))
-                    .value(crate::formats::sound::hex(base, 64)),
+                    .value(crate::formats::util::sound::hex(base, 64)),
             );
             cx.emit(table::<StdIndexEntry>(
                 "Entries",

@@ -8,7 +8,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::lines::{float, int, preview, summarize, text, uint};
+use crate::formats::util::lines::{float, int, preview, summarize, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -295,7 +295,7 @@ async fn czi(cx: Cx, input: Input) -> Result<()> {
         }
         let span = file.sub(pos, CziSegment::SIZE.saturating_add(seg.allocated));
         let data = file.sub(pos.saturating_add(CziSegment::SIZE), seg.used);
-        crate::formats::lines::tally(&mut counts, &id, 32);
+        crate::formats::util::lines::tally(&mut counts, &id, 32);
         let summary = match id.as_str() {
             "ZISRAWSUBBLOCK" => {
                 let (pixel, _, compression, dims, _) = czi_entry(&cx, data.sub(16, 0x1000))
@@ -488,7 +488,7 @@ async fn nd2(cx: Cx, input: Input) -> Result<()> {
                 cx.push(
                     Node::new("Chunk map pointer")
                         .span(file.sub(start, 40))
-                        .value(crate::formats::lines::hex(at, 64)),
+                        .value(crate::formats::util::lines::hex(at, 64)),
                 )
                 .await;
             } else {
@@ -559,7 +559,7 @@ async fn nd2_map(cx: Cx, data: Span) -> Result<()> {
                     to_u64(at),
                     to_u64(end.saturating_add(16).saturating_sub(at)),
                 ))
-                .value(crate::formats::lines::hex(pos, 64))
+                .value(crate::formats::util::lines::hex(pos, 64))
                 .summary(format!("{size} bytes")),
         )
         .await;
@@ -1168,7 +1168,7 @@ async fn dm_simple(cur: &mut Cursor<'_>, t: u64) -> Result<Value> {
         3 => int(i64::from(cur.u32().await?.cast_signed())),
         4 => uint(cur.u16().await?.into()),
         5 => uint(cur.u32().await?.into()),
-        6 => crate::formats::lines::float32(cur.int::<f32>().await?),
+        6 => crate::formats::util::lines::float32(cur.int::<f32>().await?),
         7 => float(cur.int::<f64>().await?),
         8 => Value::Bool(cur.u8().await? != 0),
         9 => text(char::from(cur.u8().await?).to_string()),

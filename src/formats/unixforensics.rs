@@ -10,7 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::datakit::{clip, hex, hex_string, size, text};
+use crate::formats::util::datakit::{clip, hex, hex_string, size, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -364,7 +364,7 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
                     );
                     node = node
                         .summary(format!("LZ4, {} uncompressed", size(out.into())))
-                        .lazy(crate::formats::arcutil::emit_nodes, Arc::new(vec![block]));
+                        .lazy(crate::formats::util::arcutil::emit_nodes, Arc::new(vec![block]));
                 }
                 node
             }

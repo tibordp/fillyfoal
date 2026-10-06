@@ -7,7 +7,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::iff::{Chunk, Ctx, FourCc, find};
-use crate::formats::sound::{channels, duration, f80_be, fourcc, hz, text};
+use crate::formats::util::sound::{channels, duration, f80_be, fourcc, hz, text};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -320,7 +320,7 @@ async fn comment(cx: Cx, span: Span) -> Result<()> {
     f.u32("Timestamp").mac_time().emit()?;
     f.int::<i16>("Marker").emit()?;
     let len = f.u16("Count").emit()?;
-    crate::formats::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
+    crate::formats::util::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
     Ok(())
 }
 

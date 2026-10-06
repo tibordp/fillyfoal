@@ -10,7 +10,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::vidutil::{self, seconds_f64, uint};
+use crate::formats::util::vidutil::{self, seconds_f64, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;

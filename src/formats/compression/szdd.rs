@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::arcutil::{human_size, unsupported};
+use crate::formats::util::arcutil::{human_size, unsupported};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::record;
 use crate::value::{EnumTable, FlagTable, flag};

@@ -9,7 +9,7 @@ use crate::bytes::{to_u64, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::binutil::{cstrings, data_node, hex, name_or};
+use crate::formats::util::binutil::{cstrings, data_node, hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -212,14 +212,14 @@ impl Info {
             .ok()?;
         if self.wide {
             let offset = u32_be(&data, 8)?;
-            return crate::formats::binutil::string_at(cx, self.strings, offset.into())
+            return crate::formats::util::binutil::string_at(cx, self.strings, offset.into())
                 .await
                 .ok()
                 .map(|(s, _)| s);
         }
         if data.get(..4) == Some(&[0, 0, 0, 0]) {
             let offset = u32_be(&data, 4)?;
-            crate::formats::binutil::string_at(cx, self.strings, offset.into())
+            crate::formats::util::binutil::string_at(cx, self.strings, offset.into())
                 .await
                 .ok()
                 .map(|(s, _)| s)

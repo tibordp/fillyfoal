@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::vidutil::{self, uint};
+use crate::formats::util::vidutil::{self, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;

@@ -7,7 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::datakit::{clip, text_preview};
+use crate::formats::util::datakit::{clip, text_preview};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;

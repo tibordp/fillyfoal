@@ -7,7 +7,7 @@
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::datakit::{clip, hex_string, size};
+use crate::formats::util::datakit::{clip, hex_string, size};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -262,7 +262,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Info hash")
                     .span(span)
-                    .value(Value::Text(hex_string(&crate::formats::datakit::sha1(
+                    .value(Value::Text(hex_string(&crate::formats::util::datakit::sha1(
                         &bytes,
                     ))))
                     .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
