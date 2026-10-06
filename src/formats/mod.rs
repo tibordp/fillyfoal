@@ -15,6 +15,7 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
+pub mod ace;
 pub mod ar;
 pub mod arcutil;
 pub mod arj;
@@ -224,6 +225,7 @@ pub static FORMATS: &[&Format] = &[
     &stuffit::FORMAT,
     &stuffit::SIT5,
     &zoo::FORMAT,
+    &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
     &zip::AAR,
     &zip::XLSB,
@@ -267,6 +269,7 @@ pub static FORMATS: &[&Format] = &[
     // Weak probes last.
     &tar::V7,
     &lha::FORMAT,
+    &ace::ARC,
     &lzma::LZMA,
     &hexfile::IHEX,
     &hexfile::SREC,
