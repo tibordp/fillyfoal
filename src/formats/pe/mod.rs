@@ -61,6 +61,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let nt = file.tail(lfanew);
+    if cx.read_avail(nt.sub(0, 2)).await?.as_slice() == b"NE" {
+        cx.annotate("16-bit NE executable");
+        cx.emit(crate::formats::embedded_as(
+            "NE Executable",
+            input.nested(file),
+            &crate::formats::ne::FORMAT,
+        ));
+        return Ok(());
+    }
     let header = parse(&cx, nt.sub(4, 20), LE, &(), file_header).await;
     let nt_len = 24u64.saturating_add(header.as_ref().map_or(0, |h| h.optional_size.into()));
     cx.emit(
