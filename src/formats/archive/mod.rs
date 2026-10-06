@@ -17,3 +17,7 @@ pub mod zip;
 pub mod zoo;
 pub mod applesingle;
 pub mod crx;
+pub mod warc;
+pub mod minor;
+pub mod legacy;
+pub mod packaging;

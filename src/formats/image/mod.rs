@@ -40,6 +40,10 @@ pub mod xwd;
 pub mod png;
 pub mod graphics;
 pub mod icc_profile;
+pub mod camera;
+pub mod toolkits;
+pub mod paint;
+pub mod minor;
 
 use std::borrow::Cow;
 

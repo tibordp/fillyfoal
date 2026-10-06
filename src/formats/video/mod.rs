@@ -12,3 +12,8 @@ pub mod rawvideo;
 pub mod realmedia;
 pub mod swf;
 pub mod y4m;
+pub mod pgs;
+pub mod subtitles;
+pub mod nut;
+pub mod containers;
+pub mod movies;

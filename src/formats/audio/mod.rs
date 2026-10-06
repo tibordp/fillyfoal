@@ -23,3 +23,8 @@ pub mod voc;
 pub mod vorbis;
 pub mod w64;
 pub mod wavpack;
+pub mod projects;
+pub mod sequenced;
+pub mod pcm_headers;
+pub mod production;
+pub mod codecs;

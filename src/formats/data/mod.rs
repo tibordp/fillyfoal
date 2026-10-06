@@ -15,3 +15,8 @@ pub mod orc;
 pub mod parquet;
 pub mod pickle;
 pub mod sst;
+pub mod bitcoin;
+pub mod ese;
+pub mod embedded_db;
+pub mod dumps;
+pub mod rdata;

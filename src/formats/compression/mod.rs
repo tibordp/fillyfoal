@@ -9,3 +9,5 @@ pub mod lz4;
 pub mod lzma;
 pub mod xz;
 pub mod zstd;
+pub mod containers;
+pub mod legacy;

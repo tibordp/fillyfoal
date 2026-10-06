@@ -8,6 +8,7 @@
 
 pub mod net;
 pub mod ng;
+pub mod captures;
 
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};

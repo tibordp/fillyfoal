@@ -11,6 +11,7 @@ pub mod more;
 pub mod protracker;
 pub mod s3m;
 pub mod xm;
+pub mod pc;
 
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;

@@ -11,6 +11,8 @@ pub mod pfb;
 pub mod tables;
 pub mod type1;
 pub mod woff;
+pub mod adobe;
+pub mod raster;
 
 use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;

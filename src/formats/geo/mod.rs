@@ -31,6 +31,8 @@ pub mod vehicle;
 pub mod geoscience;
 pub mod dlis;
 pub mod survey;
+pub mod osm;
+pub mod elevation;
 
 // ---------------------------------------------------------------------------
 // Values

@@ -17,3 +17,5 @@ pub mod windiag;
 pub mod windows;
 pub mod bookmark;
 pub mod dsstore;
+pub mod registry_pol;
+pub mod wab;

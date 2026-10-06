@@ -9,3 +9,6 @@ pub mod mo;
 pub mod hexfile;
 pub mod devtools;
 pub mod git;
+pub mod ota;
+pub mod bom;
+pub mod shim_sdb;

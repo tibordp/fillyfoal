@@ -16,3 +16,4 @@ pub mod qvm;
 pub mod spirv;
 pub mod yarb;
 pub mod wasm;
+pub mod applescript;
