@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ opening.s98 — S98 v3 "Opening", YM2608 (OPNA), tick 10.0 ms  [0x0+0x71]
+  ▾ Header  [0x0+0x20]
+      Magic: "S98"  [0x0+0x3]
+      Version: "3"  [0x3+0x1]
+      Timer numerator (default 10): 10  [0x4+0x4]
+      Timer denominator (default 1000): 1000  [0x8+0x4]
+      Compression: 0  [0xc+0x4]
+      Tag offset: 0x3a  [0x10+0x4]
+      Dump data offset: 0x30  [0x14+0x4]
+      Loop offset: 0x0  [0x18+0x4]
+      Device count: 1  [0x1c+0x4]
+    Device 0: YM2608 (OPNA) (0x4) — 7987200 Hz, pan 0x0  [0x20+0x10]
+    Register dump  [0x30+0xa]
+    Tags: "title=Opening; artist=Somebody; game=PC-98 Game; "  [0x3a+0x37]

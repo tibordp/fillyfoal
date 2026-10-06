@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pt3 — ProTracker 3.5 module "Tiny Tune" by Composer, 4 positions, speed 3  [0x0+0x10e]
+    Banner: "ProTracker 3.5 compilation of "  [0x0+0x1e]
+    Title: "Tiny Tune                       "  [0x1e+0x20]
+    Separator: " by "  [0x3e+0x4]
+    Author: "Composer                        "  [0x42+0x20]
+    Padding: " "  [0x62+0x1]
+    Frequency table: Pro Tracker (0x0)  [0x63+0x1]
+    Speed: 3  [0x64+0x1]
+    Positions: 4  [0x65+0x1]
+    Loop position: 0  [0x66+0x1]
+    Patterns offset: 0xd0  [0x67+0x2]
+    Sample offsets  [0x69+0x40]
+    Ornament offsets  [0xa9+0x20]
+    Position list: "0 1 2 1"  [0xc9+0x5]
+    Patterns, samples and ornaments  [0xce+0x40]

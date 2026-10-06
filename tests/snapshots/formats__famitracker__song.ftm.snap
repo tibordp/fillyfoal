@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ song.ftm — FamiTracker module v4.40, "Chiptune Song" by Composer, 2A03 + VRC6, 6 blocks  [0x0+0x159]
+    Magic: "FamiTracker Module"  [0x0+0x12]
+    Version: 0x440  [0x12+0x4]
+    PARAMS: 6 — expansion chips: 2A03 + VRC6  [0x16+0x37] → 0x2e+0x1f
+  ▾ INFO: 1 — "Chiptune Song" by Composer  [0x4d+0x78] → 0x65+0x60
+      Title: "Chiptune Song"  [0x65+0x20]
+      Author: "Composer"  [0x85+0x20]
+      Copyright: "2024"  [0xa5+0x20]
+    HEADER: 3 — version 3, 21 bytes  [0xc5+0x2d] → 0xdd+0x15
+    INSTRUMENTS: 6 — version 6, 4 bytes  [0xf2+0x1c] → 0x10a+0x4
+    FRAMES: 3 — version 3, 16 bytes  [0x10e+0x28] → 0x126+0x10
+    PATTERNS: 5 — version 5, 8 bytes  [0x136+0x20] → 0x14e+0x8
+    END  [0x156+0x3]

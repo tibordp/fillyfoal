@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sunset.ahx — AHX1 module "Sunset", 2 positions, 1 tracks of 4 rows, 2 samples, 1 subsongs  [0x0+0x69]
+    Magic: "THX"  [0x0+0x3]
+    Version: 1  [0x3+0x1]
+    Name table offset: 0x58  [0x4+0x2]
+    Flags and position list length: 0x1002  [0x6+0x2]
+    Position list length: 2  [0x6+0x2]
+    Speed multiplier: 2  [0x6+0x1]
+    Restart position: 0  [0x8+0x2]
+    Track length (rows): 4  [0xa+0x1]
+    Tracks: 1  [0xb+0x1]
+    Samples: 2  [0xc+0x1]
+    Subsongs: 1  [0xd+0x1]
+    Subsong list  [0xe+0x2]
+    Position list — 2 positions × 4 channels  [0x10+0x10]
+  ▾ Names: "Sunset"  [0x58+0x11]
+      Sample 1: "Bass" → 0x58+0x11
+      Sample 2: "Lead" → 0x58+0x11
