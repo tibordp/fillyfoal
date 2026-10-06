@@ -1,8 +1,9 @@
 //! Apache ORC: `ORC`, stripes, then the footer and postscript (Protocol
 //! Buffers), with the postscript's length in the last byte.
 //!
-//! The footer and stripe footers may be compressed in chunks; ZLIB chunks
-//! are inflated one by one and joined as a piecewise source.
+//! The footer and stripe footers may be compressed in chunks; ZLIB, Snappy,
+//! LZ4 and ZSTD chunks are decompressed one by one and joined as a piecewise
+//! source (LZO is unsupported).
 
 use std::sync::Arc;
 
@@ -423,10 +424,18 @@ async fn section(cx: &Cx, span: Span, compression: u64) -> Result<Span> {
     if compression == 0 {
         return Ok(span);
     }
-    if compression != 1 {
-        let name = lookup(COMPRESSION, compression).unwrap_or("unknown");
-        return Err(Diagnostic::unsupported(format!("{name} compression")).at(span));
-    }
+    // Each chunk is one raw stream: DEFLATE, Snappy, an LZ4 block or a
+    // zstd frame.
+    let codec = match compression {
+        1 => crate::codec::Codec::Deflate,
+        2 => crate::codec::Codec::Snappy,
+        4 => crate::codec::Codec::Lz4Block,
+        5 => crate::codec::Codec::Zstd,
+        _ => {
+            let name = lookup(COMPRESSION, compression).unwrap_or("unknown");
+            return Err(Diagnostic::unsupported(format!("{name} compression")).at(span));
+        }
+    };
     let mut pieces = Vec::new();
     let mut pos = 0u64;
     while pos < span.len {
@@ -446,7 +455,7 @@ async fn section(cx: &Cx, span: Span, compression: u64) -> Result<Span> {
         if header & 1 != 0 {
             pieces.push(chunk);
         } else {
-            let decoded = crate::codec::inflate_span(cx, chunk, false, None).await?;
+            let decoded = crate::codec::decode_span(cx, chunk, &codec, None).await?;
             pieces.push(decoded.span);
         }
         pos = pos.saturating_add(3).saturating_add(len);
