@@ -30,6 +30,7 @@ pub mod elf;
 pub mod java;
 pub mod lua;
 pub mod macho;
+pub mod minidump;
 pub mod pe;
 pub mod pyc;
 pub mod wasm;
@@ -170,6 +171,7 @@ pub static FORMATS: &[&Format] = &[
     &android::dex::ODEX,
     &android::resources::AXML,
     &android::resources::ARSC,
+    &minidump::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
