@@ -732,13 +732,109 @@ async fn hiberfil(cx: Cx, input: Input) -> Result<()> {
     let version = f.u32("Image type / version").emit()?;
     f.u32("Checksum").hex().emit()?;
     f.u32("Length self").emit()?;
-    cx.emit(Node::new("Compressed memory image").span(file.tail(0x1000)));
+    cx.emit(
+        Node::new("Compressed memory image")
+            .span(file.tail(0x1000))
+            .lazy(xpress_blocks, input),
+    );
     let state = match sig.as_str() {
         "HIBR" | "hibr" => "hibernated",
         "WAKE" | "wake" => "resumed (stale)",
         _ => "restore pending",
     };
     cx.annotate(format!("hibernation file, {state}, version {version}"));
+    Ok(())
+}
+
+/// The signature of the Xpress blocks of Windows XP to 7 hibernation files.
+const XPRESS_MAGIC: &[u8; 8] = b"\x81\x81xpress";
+
+/// Lists the Xpress blocks of a (Windows XP to 7) hibernation file: a
+/// 32-byte header (signature, then a word holding the page count minus one
+/// in its low 10 bits and the compressed size minus one above), then Plain
+/// LZ77 data padded to 8 bytes; a block whose compressed size is that of
+/// its pages is stored. Blocks follow each other in runs between the
+/// memory range tables, so the image is scanned for them. Later versions
+/// use a different layout, which is not decoded.
+async fn xpress_blocks(cx: Cx, input: Input) -> Result<()> {
+    const WINDOW: u64 = 0x10000;
+    let file = input.span;
+    let mut at = 0x1000u64;
+    let mut index = 0u64;
+    // Runs of blocks are separated by single table pages: give up after
+    // 1 MiB without a block.
+    let mut misses = 0u32;
+    while at.saturating_add(0x20) <= file.len && misses < 16 {
+        let window = cx.read_avail(file.sub(at, WINDOW)).await?;
+        let found = window
+            .chunks(8)
+            .position(|c| c.starts_with(XPRESS_MAGIC))
+            .map(|i| to_u64(i).saturating_mul(8));
+        let Some(offset) = found else {
+            at = at.saturating_add(WINDOW);
+            misses = misses.saturating_add(1);
+            cx.checkpoint().await;
+            continue;
+        };
+        misses = 0;
+        at = at.saturating_add(offset);
+        let head = cx.read_avail(file.sub(at, 0x20)).await?;
+        let word = u32_le(&head, 8).unwrap_or(0);
+        let pages = u64::from(word & 0x3ff).saturating_add(1);
+        let size = u64::from(word >> 10).saturating_add(1);
+        let decoded = pages.saturating_mul(0x1000);
+        let data = file.sub(at.saturating_add(0x20), size);
+        let codec = if size >= decoded {
+            crate::codec::Codec::Stored
+        } else {
+            crate::codec::Codec::Xpress { size: Some(decoded) }
+        };
+        let total = size.saturating_add(7) & !7;
+        cx.push(
+            Node::new(format!("Xpress block {index}"))
+                .span(file.sub(at, total.saturating_add(0x20)))
+                .summary(format!(
+                    "{pages} pages, {}",
+                    if size >= decoded {
+                        "stored".to_owned()
+                    } else {
+                        format!("{size} bytes compressed")
+                    }
+                ))
+                .lazy(xpress_block, (input, at, data, codec, decoded)),
+        )
+        .await;
+        index = index.saturating_add(1);
+        at = at.saturating_add(0x20).saturating_add(total);
+    }
+    if index == 0 {
+        cx.diag(Diagnostic::unsupported(
+            "hibernation image without Xpress blocks (Windows 8 and later layout)",
+        ));
+    }
+    Ok(())
+}
+
+async fn xpress_block(
+    cx: Cx,
+    (input, at, data, codec, decoded): (Input, u64, crate::span::Span, crate::codec::Codec, u64),
+) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(at, 0x20)).await?;
+    let mut f = Fields::emitting(&cx, &head, LE);
+    f.bytes("Signature", 8).emit()?;
+    f.u32("Pages and size")
+        .hex()
+        .with(|&w, n| {
+            n.summary(format!(
+                "{} pages, {} bytes",
+                (w & 0x3ff).saturating_add(1),
+                (w >> 10).saturating_add(1)
+            ))
+        })
+        .emit()?;
+    f.bytes("Reserved", 20).emit()?;
+    cx.emit(crate::formats::content("Pages", input, data, codec, Some(decoded)));
     Ok(())
 }
 

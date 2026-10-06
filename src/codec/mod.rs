@@ -15,11 +15,13 @@ pub mod filters;
 pub mod lz;
 pub mod lzfse;
 pub mod pbz;
+pub mod lznt1;
 pub mod lzma;
 pub mod xz;
 pub mod zstd;
 pub mod pipeline;
 pub mod unixz;
+pub mod xpress;
 
 use std::sync::Arc;
 
@@ -75,6 +77,14 @@ pub enum Codec {
     Pbz,
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
     UnixCompress,
+    /// LZNT1 ([MS-XCA] 2.5); with a `size` (an NTFS compression unit) the
+    /// output is cut or zero-filled to it.
+    Lznt1 { size: Option<u64> },
+    /// Xpress Plain LZ77 ([MS-XCA] 2.4), up to `size` bytes if known.
+    Xpress { size: Option<u64> },
+    /// Xpress LZ77+Huffman ([MS-XCA] 2.2), `size` bytes (the stream does not
+    /// record it).
+    XpressHuffman { size: u64 },
     /// Zstandard frames.
     Zstd,
     /// The `.xz` container (LZMA2 with BCJ/Delta filters, checks).
@@ -147,6 +157,9 @@ impl Codec {
             Codec::Bzip2 => "bzip2",
             Codec::Zstd => "zstd",
             Codec::UnixCompress => "unix-compress",
+            Codec::Lznt1 { .. } => "lznt1",
+            Codec::Xpress { .. } => "xpress",
+            Codec::XpressHuffman { .. } => "xpress-huffman",
             Codec::Lzfse => "lzfse",
             Codec::Pbz => "pbz",
             Codec::Brotli => "brotli",
@@ -183,6 +196,9 @@ impl Codec {
             Codec::Bzip2 => "bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
+            Codec::Lznt1 { .. } => "lznt1 (lazy)",
+            Codec::Xpress { .. } => "xpress (lazy)",
+            Codec::XpressHuffman { .. } => "xpress-huffman (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
             Codec::Pbz => "pbz (lazy)",
             Codec::Brotli => "brotli (lazy)",
@@ -217,6 +233,9 @@ impl Codec {
             | Codec::Xz
             | Codec::Zstd
             | Codec::UnixCompress
+            | Codec::Lznt1 { .. }
+            | Codec::Xpress { .. }
+            | Codec::XpressHuffman { .. }
             | Codec::Lzfse
             | Codec::Pbz
             | Codec::Brotli
@@ -253,6 +272,11 @@ impl Codec {
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd => 32_768,
             Codec::UnixCompress => 8_000,
+            // A 3-byte chunk stands for 4 KiB of zeros when another follows.
+            Codec::Lznt1 { .. } => 1_400,
+            // Each 64 KiB block costs at least its 256-byte table.
+            Codec::XpressHuffman { .. } => 512,
+            Codec::Xpress { .. } => 32_768,
             Codec::Lzfse => 4_096,
             Codec::Pbz => 7_000,
             // A copy of 16 MiB costs a few bits.
@@ -287,6 +311,11 @@ impl Codec {
             Codec::Pbz => Box::new(Streaming(filters::Whole::new(pbz::Pbz))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
+            Codec::Lznt1 { size } => Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size }))),
+            Codec::Xpress { size } => Box::new(Streaming(filters::Whole::new(xpress::Xpress { size: *size }))),
+            Codec::XpressHuffman { size } => {
+                Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman { size: *size })))
+            }
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),
             Codec::LzmaAlone => Box::new(Streaming(filters::Whole::new(lzma::LzmaAlone))),

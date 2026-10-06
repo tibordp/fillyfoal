@@ -463,3 +463,60 @@ fn brotli_decodes_reference_output() {
     let mut d = Codec::Brotli.decoder().unwrap();
     assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read("zeros.br"), 1000).is_err());
 }
+
+#[test]
+fn xca_codecs_decode_reference_output() {
+    // LZNT1 from the `lznt1` PyPI encoder; Plain LZ77 and LZ77+Huffman from
+    // encoders written to [MS-XCA] 2.3.4 / 2.1 (no packaged encoder exists),
+    // all checked against dissect.util's decompressors when generated.
+    use fillyfoal::codec::Codec;
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/xca/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |codec: Codec, data: &[u8]| {
+        let mut d = codec.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
+    };
+    let lcg = |n: usize| {
+        let mut x: u32 = 12345;
+        (0..n)
+            .map(|_| {
+                x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+                ((x >> 16) & 0xff) as u8
+            })
+            .collect::<Vec<u8>>()
+    };
+    let inputs = [
+        ("text", lzma_text()),
+        ("rnd", (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect()),
+        ("zeros", vec![0u8; 150_000]),
+        ("noise", lcg(9000)),
+    ];
+    for (name, data) in inputs {
+        let size = data.len() as u64;
+        assert!(decode(Codec::Lznt1 { size: None }, &read(&format!("{name}.lznt1"))) == data, "{name}.lznt1");
+        assert!(decode(Codec::Xpress { size: None }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
+        assert!(decode(Codec::Xpress { size: Some(size) }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
+        assert!(decode(Codec::XpressHuffman { size }, &read(&format!("{name}.xpressh"))) == data, "{name}.xpressh");
+    }
+    // Corrupt and truncated input fails cleanly (no panics, bounded output).
+    let mut rng = common::Rng(0x8ca);
+    for ext in ["lznt1", "xpress", "xpressh"] {
+        let good = read(&format!("text.{ext}"));
+        for i in 0..64 {
+            let mut bad = good.clone();
+            if i % 2 == 0 {
+                bad.truncate(rng.below(good.len()));
+            } else {
+                for _ in 0..8 {
+                    let at = rng.below(bad.len());
+                    bad[at] = rng.next() as u8;
+                }
+            }
+            for codec in [Codec::Lznt1 { size: None }, Codec::Xpress { size: None }, Codec::XpressHuffman { size: 68670 }] {
+                let mut d = codec.decoder().unwrap();
+                if let Ok(out) = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 20) {
+                    assert!(out.len() <= 1 << 20);
+                }
+            }
+        }
+    }
+}
