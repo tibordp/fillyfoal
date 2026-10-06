@@ -31,6 +31,7 @@ pub mod elf;
 pub mod java;
 pub mod lua;
 pub mod luajit;
+pub mod lx;
 pub mod macho;
 pub mod minidump;
 pub mod ne;
@@ -181,6 +182,7 @@ pub static FORMATS: &[&Format] = &[
     &android::vdex::FORMAT,
     &minidump::FORMAT,
     &ne::FORMAT,
+    &lx::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,

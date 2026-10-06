@@ -61,13 +61,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let nt = file.tail(lfanew);
-    if cx.read_avail(nt.sub(0, 2)).await?.as_slice() == b"NE" {
-        cx.annotate("16-bit NE executable");
-        cx.emit(crate::formats::embedded_as(
-            "NE Executable",
-            input.nested(file),
-            &crate::formats::ne::FORMAT,
-        ));
+    // Older executables behind an MZ stub have their own dissectors.
+    let other = match cx.read_avail(nt.sub(0, 2)).await?.as_slice() {
+        b"NE" => Some(("NE Executable", "16-bit NE executable", &crate::formats::ne::FORMAT)),
+        b"LE" | b"LX" => Some(("Linear Executable", "LE/LX executable", &crate::formats::lx::FORMAT)),
+        _ => None,
+    };
+    if let Some((name, summary, format)) = other {
+        cx.annotate(summary);
+        cx.emit(crate::formats::embedded_as(name, input.nested(file), format));
         return Ok(());
     }
     let header = parse(&cx, nt.sub(4, 20), LE, &(), file_header).await;
