@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ecu.odx-d — ASAM ODX diagnostic data, DLC_ECU  [0x0+0x124]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ ODX — MODEL-VERSION="2.2.0" (1 element)  [0x27+0xfc]
+      @MODEL-VERSION: "2.2.0"  [0x3b+0x5]
+    ▾ DIAG-LAYER-CONTAINER — ID="DLC_ECU" (2 elements)  [0x45+0xd7]
+        @ID: "DLC_ECU"  [0x5f+0x7]
+        SHORT-NAME: "DLC_ECU"  [0x6d+0x20]
+      ▾ BASE-VARIANTS — 1 element  [0x92+0x70]
+        ▾ BASE-VARIANT — ID="BV_ECU" (1 element)  [0xa8+0x45]
+            @ID: "BV_ECU"  [0xba+0x6]
+            SHORT-NAME: "ECU"  [0xc2+0x1c]

@@ -855,6 +855,17 @@ pub static FORMATS: &[&Format] = &[
     &geo::gistext::HRM,
     &geo::gistext::ERG,
     &geo::gistext::SRM,
+    &geo::markup::TCX,
+    &geo::markup::PWX,
+    &geo::markup::FITLOG,
+    &geo::markup::ZWO,
+    &geo::markup::OSC,
+    &geo::markup::GML,
+    &geo::markup::ARXML,
+    &geo::markup::ODX,
+    &geo::markup::TILEJSON,
+    &geo::markup::MAPBOX_STYLE,
+    &geo::markup::QGC_PLAN,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

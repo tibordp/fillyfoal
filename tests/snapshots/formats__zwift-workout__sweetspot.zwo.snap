@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sweetspot.zwo — Zwift workout, Sweet spot 3x10  [0x0+0x1c7]
+  ▾ workout_file — 5 elements  [0x0+0x1c6]
+      author: "Coach"  [0x13+0x16]
+      name: "Sweet spot 3x10"  [0x2e+0x1c]
+      description: "Three ten-minute intervals at 90% FTP."  [0x4f+0x41]
+      sportType: "bike"  [0x95+0x1b]
+    ▾ workout — 3 elements  [0xb5+0x101]
+      ▾ Warmup — Duration="600" PowerLow="0.40" PowerHigh="0.75"  [0xc7+0x39]
+          @Duration: "600"  [0xd9+0x3]
+          @PowerLow: "0.40"  [0xe8+0x4]
+          @PowerHigh: "0.75"  [0xf9+0x4]
+      ▾ IntervalsT — Repeat="3" OnDuration="600" OffDuration="300" OnPower="0.90" OffPower="0.55"  [0x109+0x5a]
+          @Repeat: "3"  [0x11d+0x1]
+          @OnDuration: "600"  [0x12c+0x3]
+          @OffDuration: "300"  [0x13e+0x3]
+          @OnPower: "0.90"  [0x14c+0x4]
+          @OffPower: "0.55"  [0x15c+0x4]
+      ▾ Cooldown — Duration="300" PowerLow="0.70" PowerHigh="0.40"  [0x16c+0x3b]
+          @Duration: "300"  [0x180+0x3]
+          @PowerLow: "0.70"  [0x18f+0x4]
+          @PowerHigh: "0.40"  [0x1a0+0x4]

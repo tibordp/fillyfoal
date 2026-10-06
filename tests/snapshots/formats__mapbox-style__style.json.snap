@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ style.json — Mapbox/MapLibre GL style, Basic  [0x0+0x20e]
+    version: 8  [0xf+0x1]
+    name: "Basic"  [0x1c+0x7]
+  ▾ sources — object, 1 member  [0x32+0x5e]
+    ▾ omt — object, 2 members  [0x3f+0x4d]
+        type: "vector"  [0x4f+0x8]
+        url: "https://example.org/tiles.json"  [0x66+0x20]
+    glyphs: "https://example.org/fonts/{fontstack}/{range}.pbf"  [0x9e+0x33]
+  ▾ layers — array, 2 elements  [0xdf+0x12d]
+    ▾ [0] — object, 3 members  [0xe5+0x7c]
+        id: "background"  [0xf3+0xc]
+        type: "background"  [0x10f+0xc]
+      ▾ paint — object, 1 member  [0x12c+0x2f]
+          background-color: "#f8f4f0"  [0x14a+0x9]
+    ▾ [1] — object, 5 members  [0x167+0xa1]
+        id: "water"  [0x175+0x7]
+        type: "fill"  [0x18c+0x6]
+        source: "omt"  [0x1a4+0x5]
+        source-layer: "water"  [0x1c1+0x7]
+      ▾ paint — object, 1 member  [0x1d9+0x29]
+          fill-color: "#a0c8f0"  [0x1f1+0x9]

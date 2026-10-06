@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ log.fitlog — SportTracks fitness log, 1 activities in the head  [0x0+0x193]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "utf-8"  [0x1e+0x5]
+  ▾ FitnessWorkbook — 1 element  [0x27+0x16b]
+      @xmlns: "http://www.zonefivesoftware.com/xmlschemas/FitnessLogbook/v2"  [0x3f+0x3c]
+    ▾ AthleteLog — 2 elements  [0x80+0xff]
+      ▾ Athlete — Id="1" Name="Jane"  [0x91+0x1e]
+          @Id: "1"  [0x9e+0x1]
+          @Name: "Jane"  [0xa7+0x4]
+      ▾ Activity — StartTime="2024-05-01T12:00:00Z" Id="a1" (3 elements)  [0xb4+0xbb]
+          @StartTime: "2024-05-01T12:00:00Z"  [0xc9+0x14]
+          @Id: "a1"  [0xe3+0x2]
+        ▾ Duration — TotalSeconds="3600"  [0xee+0x20]
+            @TotalSeconds: "3600"  [0x106+0x4]
+        ▾ Distance — TotalMeters="30000"  [0x115+0x20]
+            @TotalMeters: "30000"  [0x12c+0x5]
+        ▾ Category — Id="c1" Name="Cycling"  [0x13c+0x23]
+            @Id: "c1"  [0x14a+0x2]
+            @Name: "Cycling"  [0x154+0x7]

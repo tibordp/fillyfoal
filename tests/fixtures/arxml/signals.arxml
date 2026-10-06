@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AUTOSAR xmlns="http://autosar.org/schema/r4.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <AR-PACKAGES>
+    <AR-PACKAGE>
+      <SHORT-NAME>Signals</SHORT-NAME>
+      <ELEMENTS>
+        <I-SIGNAL><SHORT-NAME>EngineSpeed</SHORT-NAME><LENGTH>16</LENGTH></I-SIGNAL>
+      </ELEMENTS>
+    </AR-PACKAGE>
+  </AR-PACKAGES>
+</AUTOSAR>
