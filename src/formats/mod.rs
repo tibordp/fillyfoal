@@ -36,6 +36,7 @@ pub mod applesingle;
 pub mod bencode;
 pub mod bplist;
 pub mod cbor;
+pub mod dsstore;
 pub mod chm;
 pub mod crx;
 pub mod datakit;
@@ -223,6 +224,7 @@ pub static FORMATS: &[&Format] = &[
     &swf::FORMAT,
     &chm::FORMAT,
     &winhelp::FORMAT,
+    &dsstore::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
