@@ -6,6 +6,7 @@
 
 pub mod cipher;
 pub mod hash;
+pub mod mpq;
 pub mod stream;
 
 pub use cipher::{Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7};

@@ -1,0 +1,53 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ encrypted.mpq — MPQ v1, 3 blocks, 4096-byte sectors  [0x0+0x1c4]
+  ▾ Header  [0x0+0x20]
+      Magic: 4d 50 51 1a  |MPQ.|  [0x0+0x4]
+      Header size: 32  [0x4+0x4]
+      Archive size: 452  [0x8+0x4]
+      Format version: 0  [0xc+0x2]
+      Sector size shift: 3  [0xe+0x2]
+      Hash table offset: 0x94  [0x10+0x4]
+      Block table offset: 0x194  [0x14+0x4]
+      Hash table entries: 16  [0x18+0x4]
+      Block table entries: 3  [0x1c+0x4]
+    Hash table — 16 entries, decrypted  [0x94+0x100]
+    Block table — 3 entries, decrypted  [0x194+0x30]
+  ▾ Files — 3 blocks
+    ▾ (listfile) — UTF-8 text, CRLF line endings, 2 lines  [0x20+0x23]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 2 CRLF, 0 CR
+      ▾ Lines — 2 lines  [#1:0x0+0x1b]
+          Line 1: "readme.txt"  [#1:0x0+0xa]
+          Line 2: "data\\note.txt"  [#1:0xc+0xd]
+    ▾ readme.txt — UTF-8 text, LF line endings, 20 lines  [0x43+0x43]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 20 LF, 0 CRLF, 0 CR
+      ▾ Lines — 20 lines  [#2:0x0+0x334]
+          Line 1: "Hello from inside an encrypted MPQ file!"  [#2:0x0+0x28]
+          Line 2: "Hello from inside an encrypted MPQ file!"  [#2:0x29+0x28]
+          Line 3: "Hello from inside an encrypted MPQ file!"  [#2:0x52+0x28]
+          Line 4: "Hello from inside an encrypted MPQ file!"  [#2:0x7b+0x28]
+          Line 5: "Hello from inside an encrypted MPQ file!"  [#2:0xa4+0x28]
+          Line 6: "Hello from inside an encrypted MPQ file!"  [#2:0xcd+0x28]
+          Line 7: "Hello from inside an encrypted MPQ file!"  [#2:0xf6+0x28]
+          Line 8: "Hello from inside an encrypted MPQ file!"  [#2:0x11f+0x28]
+          Line 9: "Hello from inside an encrypted MPQ file!"  [#2:0x148+0x28]
+          Line 10: "Hello from inside an encrypted MPQ file!"  [#2:0x171+0x28]
+          Line 11: "Hello from inside an encrypted MPQ file!"  [#2:0x19a+0x28]
+          Line 12: "Hello from inside an encrypted MPQ file!"  [#2:0x1c3+0x28]
+          Line 13: "Hello from inside an encrypted MPQ file!"  [#2:0x1ec+0x28]
+          Line 14: "Hello from inside an encrypted MPQ file!"  [#2:0x215+0x28]
+          Line 15: "Hello from inside an encrypted MPQ file!"  [#2:0x23e+0x28]
+          Line 16: "Hello from inside an encrypted MPQ file!"  [#2:0x267+0x28]
+          Line 17: "Hello from inside an encrypted MPQ file!"  [#2:0x290+0x28]
+          Line 18: "Hello from inside an encrypted MPQ file!"  [#2:0x2b9+0x28]
+          Line 19: "Hello from inside an encrypted MPQ file!"  [#2:0x2e2+0x28]
+          Line 20: "Hello from inside an encrypted MPQ file!"  [#2:0x30b+0x28]
+    ▾ data\note.txt — UTF-8 text, LF line endings, 1 line  [0x86+0xe]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x86+0xe]
+          Line 1: "a stored note"  [0x86+0xd]

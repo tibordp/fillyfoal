@@ -457,6 +457,7 @@ record! {
 }
 
 async fn mpq(cx: Cx, input: Input) -> Result<()> {
+    use crate::codec::crypto::mpq::{HASH_FILE_KEY, decrypt, hash_string};
     let file = input.span;
     let magic = cx.read(file.sub(0, 16)).await?;
     let mut base = 0u64;
@@ -467,34 +468,223 @@ async fn mpq(cx: Cx, input: Input) -> Result<()> {
         base = offset;
     }
     let h: MpqHeader = read_record(&cx, file.sub(base, MpqHeader::SIZE), LE).await?;
-    cx.emit(MpqHeader::node(
-        "Header",
-        file.sub(base, MpqHeader::SIZE),
-        LE,
-    ));
-    cx.emit(
-        Node::new("Hash table")
-            .span(file.sub(
-                base.saturating_add(h.hash_table.into()),
-                u64::from(h.hash_entries).saturating_mul(16),
-            ))
-            .diag(Diagnostic::note("encrypted with the MPQ hash key")),
-    );
-    cx.emit(
-        Node::new("Block table")
-            .span(file.sub(
-                base.saturating_add(h.block_table.into()),
-                u64::from(h.block_entries).saturating_mul(16),
-            ))
-            .diag(Diagnostic::note("encrypted with the MPQ block key")),
-    );
+    cx.emit(MpqHeader::node("Header", file.sub(base, MpqHeader::SIZE), LE));
+    let archive = file.tail(base);
+    let sector = 512u32.checked_shl(h.block_size.into()).unwrap_or(4096);
+    let table = |offset: u32, entries: u32| archive.sub(offset.into(), u64::from(entries).saturating_mul(16));
+    let hash_span = table(h.hash_table, h.hash_entries);
+    let block_span = table(h.block_table, h.block_entries);
+    let mut hashes = cx.read(hash_span).await?;
+    decrypt(&mut hashes, hash_string("(hash table)", HASH_FILE_KEY));
+    let mut blocks = cx.read(block_span).await?;
+    decrypt(&mut blocks, hash_string("(block table)", HASH_FILE_KEY));
+    let hashes = std::sync::Arc::new(hashes);
+    let blocks: Vec<MpqBlock> = blocks
+        .as_chunks::<16>()
+        .0
+        .iter()
+        .map(|b| MpqBlock {
+            offset: u32_le(b, 0).unwrap_or(0),
+            packed: u32_le(b, 4).unwrap_or(0),
+            size: u32_le(b, 8).unwrap_or(0),
+            flags: u32_le(b, 12).unwrap_or(0),
+        })
+        .collect();
+    cx.emit(Node::new("Hash table").span(hash_span).summary(format!("{} entries, decrypted", h.hash_entries)));
+    cx.emit(Node::new("Block table").span(block_span).summary(format!("{} entries, decrypted", h.block_entries)));
+    let state = MpqState { input, archive, sector, hashes, blocks: std::sync::Arc::new(blocks) };
+    cx.emit(Node::new("Files").summary(format!("{} blocks", h.block_entries)).lazy(mpq_files, state));
     cx.annotate(format!(
-        "MPQ v{}, {} blocks, {}-byte sectors",
+        "MPQ v{}, {} blocks, {sector}-byte sectors",
         u32::from(h.version).saturating_add(1),
         h.block_entries,
-        512u32.checked_shl(h.block_size.into()).unwrap_or(0)
     ));
     Ok(())
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MpqBlock {
+    offset: u32,
+    packed: u32,
+    size: u32,
+    flags: u32,
+}
+
+const MPQ_IMPLODE: u32 = 0x100;
+const MPQ_COMPRESS: u32 = 0x200;
+const MPQ_ENCRYPTED: u32 = 0x1_0000;
+const MPQ_FIX_KEY: u32 = 0x2_0000;
+const MPQ_SINGLE_UNIT: u32 = 0x100_0000;
+const MPQ_EXISTS: u32 = 0x8000_0000;
+
+#[derive(Clone)]
+struct MpqState {
+    input: Input,
+    archive: Span,
+    sector: u32,
+    hashes: std::sync::Arc<Vec<u8>>,
+    blocks: std::sync::Arc<Vec<MpqBlock>>,
+}
+
+impl MpqState {
+    /// The block index of `name`, through the hash table.
+    fn lookup(&self, name: &str) -> Option<usize> {
+        use crate::codec::crypto::mpq::{HASH_NAME_A, HASH_NAME_B, HASH_OFFSET, hash_string};
+        let entries = self.hashes.len() / 16;
+        if entries == 0 {
+            return None;
+        }
+        let (a, b) = (hash_string(name, HASH_NAME_A), hash_string(name, HASH_NAME_B));
+        let start = usize::try_from(hash_string(name, HASH_OFFSET)).unwrap_or(0).checked_rem(entries).unwrap_or(0);
+        for i in 0..entries {
+            let at = start.wrapping_add(i).checked_rem(entries).unwrap_or(0);
+            let e = self.hashes.get(at.saturating_mul(16)..at.saturating_mul(16).saturating_add(16))?;
+            let block = u32_le(e, 12)?;
+            if block == 0xffff_ffff {
+                return None;
+            }
+            if u32_le(e, 0) == Some(a) && u32_le(e, 4) == Some(b) && block != 0xffff_fffe {
+                return usize::try_from(block).ok();
+            }
+        }
+        None
+    }
+
+    /// Reads a file's contents: decrypted and decompressed sector by sector.
+    async fn read_file(&self, cx: &Cx, block: &MpqBlock, name: Option<&str>) -> Result<Vec<u8>> {
+        use crate::codec::crypto::mpq::{decrypt, file_key};
+        let data = self.archive.sub(block.offset.into(), block.packed.into());
+        let encrypted = block.flags & MPQ_ENCRYPTED != 0;
+        let key = match (encrypted, name) {
+            (false, _) => 0,
+            (true, Some(n)) => file_key(n, block.offset, block.size, block.flags & MPQ_FIX_KEY != 0),
+            (true, None) => return Err(Diagnostic::unsupported("encrypted file whose name is unknown").at(data)),
+        };
+        if block.flags & MPQ_IMPLODE != 0 {
+            return Err(Diagnostic::unsupported("PKWARE DCL implode").at(data));
+        }
+        let raw = crate::codec::read_all(cx, data).await?;
+        let limit = crate::bytes::to_usize(cx.limits().max_derived);
+        let unit = |bytes: &[u8], index: u32, expected: usize| -> Result<Vec<u8>> {
+            let mut bytes = bytes.to_vec();
+            if encrypted {
+                decrypt(&mut bytes, key.wrapping_add(index));
+            }
+            if block.flags & MPQ_COMPRESS == 0 || bytes.len() >= expected {
+                return Ok(bytes);
+            }
+            let (&mask, body) = bytes.split_first().ok_or_else(|| Diagnostic::malformed("empty compressed sector"))?;
+            match mask {
+                0x02 => {
+                    let mut decoder = crate::codec::Codec::Zlib.decoder().ok_or_else(|| Diagnostic::internal("no zlib"))?;
+                    crate::codec::pipeline::decode_all(decoder.as_mut(), body, limit)
+                }
+                0x08 => Err(Diagnostic::unsupported("PKWARE DCL implode")),
+                0x10 => Err(Diagnostic::unsupported("bzip2 compression")),
+                0x12 => Err(Diagnostic::unsupported("LZMA compression")),
+                m => Err(Diagnostic::unsupported(format!("compression mask {m:#04x}"))),
+            }
+        };
+        if block.flags & MPQ_SINGLE_UNIT != 0 {
+            return unit(&raw, 0, crate::bytes::to_usize(block.size.into()));
+        }
+        let sector = crate::bytes::to_usize(self.sector.into()).max(1);
+        let size = crate::bytes::to_usize(block.size.into());
+        let count = size.div_ceil(sector);
+        if block.flags & MPQ_COMPRESS == 0 {
+            // Uncompressed sectors: decrypt each in turn.
+            let mut out = Vec::with_capacity(size);
+            for (i, chunk) in raw.chunks(sector).enumerate() {
+                out.extend(unit(chunk, u32::try_from(i).unwrap_or(0), sector)?);
+                cx.checkpoint().await;
+            }
+            out.truncate(size);
+            return Ok(out);
+        }
+        // A sector offset table (count + 1 entries) precedes the sectors.
+        let mut table = raw.get(..count.saturating_add(1).saturating_mul(4)).ok_or_else(|| Diagnostic::truncated(data.sub(0, 4), 0))?.to_vec();
+        if encrypted {
+            decrypt(&mut table, key.wrapping_sub(1));
+        }
+        let offsets: Vec<usize> = table.as_chunks::<4>().0.iter().map(|w| crate::bytes::to_usize(u32::from_le_bytes(*w).into())).collect();
+        let mut out = Vec::with_capacity(size);
+        for (i, pair) in offsets.windows(2).enumerate() {
+            let (&[from, to], expected) = (pair, sector.min(size.saturating_sub(i.saturating_mul(sector)))) else { break };
+            let bytes = raw.get(from..to).ok_or_else(|| Diagnostic::malformed("sector outside the file").at(data))?;
+            out.extend(unit(bytes, u32::try_from(i).unwrap_or(0), expected)?);
+            if out.len() > limit {
+                return Err(Diagnostic::limit("file exceeds the decoded-data limit"));
+            }
+            cx.checkpoint().await;
+        }
+        Ok(out)
+    }
+}
+
+async fn mpq_files(cx: Cx, state: MpqState) -> Result<()> {
+    // Names come from the (listfile), when there is one.
+    let mut names: Vec<Option<String>> = vec![None; state.blocks.len()];
+    for special in ["(listfile)", "(attributes)", "(signature)"] {
+        if let Some(slot) = state.lookup(special).and_then(|i| names.get_mut(i)) {
+            *slot = Some(special.to_owned());
+        }
+    }
+    if let Some(block) = state.lookup("(listfile)").and_then(|i| state.blocks.get(i))
+        && let Ok(list) = state.read_file(&cx, block, Some("(listfile)")).await
+    {
+        {
+            for name in String::from_utf8_lossy(&list).split([';', '\r', '\n']).filter(|n| !n.is_empty()) {
+                if let Some(i) = state.lookup(name)
+                    && let Some(slot) = names.get_mut(i)
+                {
+                    *slot = Some(name.to_owned());
+                }
+                cx.checkpoint().await;
+            }
+        }
+    }
+    for (i, block) in state.blocks.iter().enumerate() {
+        if block.flags & MPQ_EXISTS == 0 {
+            continue;
+        }
+        let name = names.get(i).cloned().flatten();
+        let label = name.clone().unwrap_or_else(|| format!("File #{i}"));
+        let span = state.archive.sub(block.offset.into(), block.packed.into());
+        if span.len < u64::from(block.packed) || span.len == 0 && block.size > 0 {
+            cx.push(
+                Node::new(name.unwrap_or_else(|| format!("File #{i}")))
+                    .span(span)
+                    .diag(Diagnostic::malformed("block outside the archive (a corrupt or wrongly decrypted block table)")),
+            )
+            .await;
+            continue;
+        }
+        let mut how = Vec::new();
+        if block.flags & MPQ_COMPRESS != 0 {
+            how.push("compressed");
+        }
+        if block.flags & MPQ_IMPLODE != 0 {
+            how.push("imploded");
+        }
+        if block.flags & MPQ_ENCRYPTED != 0 {
+            how.push("encrypted");
+        }
+        let summary = format!("{} → {} bytes{}", block.packed, block.size, if how.is_empty() { String::new() } else { format!(", {}", how.join(", ")) });
+        cx.push(Node::new(label).span(span).summary(summary).lazy(mpq_file, (state.clone(), *block, name))).await;
+    }
+    Ok(())
+}
+
+async fn mpq_file(cx: Cx, (state, block, name): (MpqState, MpqBlock, Option<String>)) -> Result<()> {
+    let span = state.archive.sub(block.offset.into(), block.packed.into());
+    let plain = block.flags & (MPQ_COMPRESS | MPQ_IMPLODE | MPQ_ENCRYPTED) == 0;
+    let content = if plain {
+        span
+    } else {
+        let data = state.read_file(&cx, &block, name.as_deref()).await?;
+        cx.add_derived(crate::span::Origin { parent: span, transform: "mpq-file" }, data, span.len, None)?.span
+    };
+    crate::formats::dissect_or_data(cx, state.input.nested(content)).await
 }
 
 declare_format!(pub RGSSAD = "rgssad", "RPG Maker archive", ["rgssad", "rgss2a", "rgss3a"], "application/x-rgssad",

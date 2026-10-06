@@ -18,7 +18,10 @@ expression: "common::explore(&display_name(&path), &data)"
         Block table offset: 0x40  [0x214+0x4]
         Hash table entries: 2  [0x218+0x4]
         Block table entries: 2  [0x21c+0x4]
-      Hash table  [0x220+0x20]
-        ! note: encrypted with the MPQ hash key
-      Block table  [0x240+0x20]
-        ! note: encrypted with the MPQ block key
+      Hash table — 2 entries, decrypted  [0x220+0x20]
+      Block table — 2 entries, decrypted  [0x240+0x20]
+    ▾ Files — 2 blocks
+        File #0  [0x260+0x0]
+          ! malformed: block outside the archive (a corrupt or wrongly decrypted block table)
+        File #1  [0x260+0x0]
+          ! malformed: block outside the archive (a corrupt or wrongly decrypted block table)
