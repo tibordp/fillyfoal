@@ -1079,19 +1079,21 @@ async fn nso(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h: NsoHeader = read_record(&cx, file.sub(0, NsoHeader::SIZE), LE).await?;
     cx.emit(NsoHeader::node("Header", file.sub(0, NsoHeader::SIZE), LE));
-    for (i, (name, offset, size)) in [
-        (".text", h.text_file, h.text_file_size),
-        (".rodata", h.ro_file, h.ro_file_size),
-        (".data", h.data_file, h.data_file_size),
+    for (i, (name, offset, size, memory)) in [
+        (".text", h.text_file, h.text_file_size, h.text_size),
+        (".rodata", h.ro_file, h.ro_file_size, h.ro_size),
+        (".data", h.data_file, h.data_file_size, h.data_size),
     ]
     .into_iter()
     .enumerate()
     {
-        let mut node = Node::new(name).span(file.sub(offset.into(), size.into()));
-        if h.flags & (1u32 << i) != 0 {
-            node = node.diag(Diagnostic::unsupported("LZ4-compressed segment"));
-        }
-        cx.emit(node);
+        let span = file.sub(offset.into(), size.into());
+        cx.emit(if h.flags & (1u32 << i) != 0 {
+            // A raw LZ4 block decoding to the segment's memory size.
+            crate::formats::content(name, input, span, crate::codec::Codec::Lz4Block, Some(memory.into()))
+        } else {
+            Node::new(name).span(span)
+        });
     }
     cx.annotate("NSO module");
     Ok(())
