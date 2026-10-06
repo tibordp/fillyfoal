@@ -163,7 +163,10 @@ tests fail if that ever happens on a fixture.
   vec![span_a, span_b, ...])` returns a span of a new source whose reads are
   mapped onto the pieces (through the cache, no copy, any size). Then
   `embedded(name, input.nested(span))`. Provenance stays exact:
-  `Session::resolve(span)` maps it back to file offsets.
+  `Session::resolve(span)` maps it back to file offsets. Holes (sparse
+  files, unallocated virtual-disk blocks) are `Span::zeros(len)` pieces:
+  they read as zeros and resolve to nothing. `formats::disk::PieceList`
+  collects and merges pieces for you.
 - **Decoded data** you computed yourself (base64, quoted-printable, a custom
   decompressor): `cx.add_derived(Origin { parent, transform: "base64" },
   bytes, consumed, error)`. Counts against `Limits::max_derived`.

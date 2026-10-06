@@ -65,6 +65,36 @@ fn piecewise_sources_reassemble_and_resolve() {
     let _ = Limits::default();
 }
 
+/// A sparse stream: data, a hole, data.
+async fn sparse(cx: Cx, file: Span) -> Result<()> {
+    let s = cx.add_pieces(
+        Origin { parent: file, transform: "test-sparse" },
+        vec![Span::new(file.source, 0, 2), Span::zeros(3), Span::new(file.source, 2, 2)],
+    )?;
+    let bytes = cx.read(s).await?;
+    cx.emit(Node::new("sparse").span(s).value(Value::Bytes(bytes)));
+    Ok(())
+}
+
+#[test]
+fn holes_read_as_zeros_and_resolve_to_nothing() {
+    let data = b"ABCD".to_vec();
+    let mut host = Host::with_chunk(data, 1);
+    let file = Span::new(fillyfoal::SourceId::default_host(), 0, 4);
+    let root = host.session.add_root(Node::new("test").lazy(sparse, file));
+    host.session.expand(root, 10);
+    host.run();
+    let children = host.session.children(root).unwrap();
+    let node = host.session.node(children.ids[0]).unwrap();
+    assert_eq!(node.value, Some(Value::Bytes(b"AB\0\0\0CD".to_vec())));
+    let span = node.span.unwrap();
+    assert_eq!(span.len, 7);
+    assert_eq!(
+        host.session.resolve(span),
+        vec![Span::new(file.source, 0, 2), Span::new(file.source, 2, 2)]
+    );
+}
+
 /// A tarball whose middle member is 2 MiB of zeros: listing the first entry
 /// must not decompress the whole stream.
 #[test]
