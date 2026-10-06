@@ -207,6 +207,17 @@ async fn block(
     let node = match codec.as_str() {
         "null" => content("Objects", input, data, Codec::Stored, None),
         "deflate" => content("Objects", input, data, Codec::Deflate, None),
+        "bzip2" => content("Objects", input, data, Codec::Bzip2, None),
+        "xz" => content("Objects", input, data, Codec::Xz, None),
+        "zstandard" => content("Objects", input, data, Codec::Zstd, None),
+        // Raw Snappy followed by a big-endian CRC-32 of the decoded data.
+        "snappy" => content(
+            "Objects",
+            input,
+            data.sub(0, data.len.saturating_sub(4)),
+            Codec::Snappy,
+            None,
+        ),
         other => Node::new("Objects")
             .span(data)
             .diag(Diagnostic::unsupported(format!("{other} codec"))),
