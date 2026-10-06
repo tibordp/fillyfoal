@@ -27,27 +27,9 @@ impl fmt::Debug for Key {
     }
 }
 
-// Evaluated at compile time: an out-of-range index is a compile error.
-#[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
-const CRC_TABLE: [u32; 256] = {
-    let mut t = [0u32; 256];
-    let mut i = 0;
-    while i < 256 {
-        let mut c = i as u32;
-        let mut k = 0;
-        while k < 8 {
-            c = if c & 1 != 0 { 0xedb8_8320 ^ (c >> 1) } else { c >> 1 };
-            k += 1;
-        }
-        t[i] = c;
-        i += 1;
-    }
-    t
-};
-
+/// One byte of the raw CRC-32 register update ZipCrypto keys use.
 fn crc_byte(crc: u32, b: u8) -> u32 {
-    let i = usize::from(crc.to_le_bytes()[0] ^ b);
-    CRC_TABLE.get(i).copied().unwrap_or(0) ^ (crc >> 8)
+    u32::try_from(crate::codec::crc::CRC32.update_byte(crc.into(), b)).unwrap_or(0)
 }
 
 /// The traditional PKWARE ("ZipCrypto") cipher state.

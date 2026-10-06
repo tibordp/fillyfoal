@@ -50,6 +50,7 @@ use crate::formats::{Codec, Input, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::Value;
+pub use crate::codec::crc::{crc32_update, crc32c, crc32c_update};
 
 /// Human-readable size: `512 bytes`, `64 KiB`, `1.5 GiB`.
 pub fn size(n: u64) -> String {
@@ -325,26 +326,6 @@ pub fn unix_time<T: Copy + Into<u64>>(v: &T, node: Node) -> Node {
     })
 }
 
-/// CRC-32C (Castagnoli), as used by ext4, XFS, Btrfs and VHDX.
-pub fn crc32c(data: &[u8]) -> u32 {
-    crc32c_update(!0, data) ^ !0
-}
-
-/// Raw CRC-32C register update (no initial or final inversion).
-pub fn crc32c_update(mut crc: u32, data: &[u8]) -> u32 {
-    for &byte in data {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0x82f6_3b78
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
-}
-
 /// APFS's Fletcher-64 checksum of a block whose first 8 bytes hold the
 /// checksum (they are skipped). Returns the value to store there.
 pub fn fletcher64(block: &[u8]) -> u64 {
@@ -413,18 +394,3 @@ pub fn align(v: u64, a: u64) -> u64 {
     v.checked_next_multiple_of(a).unwrap_or(u64::MAX)
 }
 
-/// Raw CRC-32 (IEEE polynomial, reflected) register update, without
-/// initial or final inversion (LVM and F2FS seed it themselves).
-pub fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
-    for &byte in data {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
-}

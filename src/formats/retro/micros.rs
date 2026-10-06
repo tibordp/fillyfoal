@@ -14,6 +14,7 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, flag, lookup};
+use crate::codec::crc::crc16_xmodem;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -913,21 +914,6 @@ async fn nufx_threads(cx: Cx, (input, parts): (Input, NufxThreads)) -> Result<()
 
 // ---------------------------------------------------------------------------
 // MacBinary (I, II, III)
-
-fn crc16_xmodem(data: &[u8]) -> u16 {
-    let mut crc = 0u16;
-    for &b in data {
-        crc ^= u16::from(b) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 {
-                crc << 1 ^ 0x1021
-            } else {
-                crc << 1
-            };
-        }
-    }
-    crc
-}
 
 fn macbinary_probe(h: &Head<'_>) -> bool {
     let Some(header) = h.data.get(..128) else {

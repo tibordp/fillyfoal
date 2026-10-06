@@ -679,18 +679,7 @@ const POSITION_TYPES: EnumTable = &[
 /// NovAtel's CRC-32: the reflected IEEE polynomial with zero initial value
 /// and no final inversion.
 fn novatel_crc(data: &[u8]) -> u32 {
-    let mut crc = 0u32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
+    crate::codec::crc::crc32_update(0, data)
 }
 
 record! {

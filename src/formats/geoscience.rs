@@ -18,6 +18,7 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, lookup};
+use crate::codec::crc::crc32c;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -1357,22 +1358,6 @@ record! {
         xml_length: u64 "XML logical length",
         page_size: u64 "Page size",
     }
-}
-
-/// CRC-32C (Castagnoli), as used by E57 page checksums.
-fn crc32c(data: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0x82f6_3b78
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
 }
 
 async fn e57(cx: Cx, input: Input) -> Result<()> {

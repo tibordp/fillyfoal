@@ -18,6 +18,7 @@ use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::EnumTable;
+use crate::codec::crc::crc8;
 
 const BE: Endian = Endian::Big;
 
@@ -375,18 +376,6 @@ struct FrameHeader {
     number: u64,
     block_size: u64,
     channels: u8,
-}
-
-fn crc8(data: &[u8]) -> u8 {
-    data.iter().fold(0u8, |crc, &b| {
-        (0..8).fold(crc ^ b, |c, _| {
-            if c & 0x80 != 0 {
-                (c << 1) ^ 0x07
-            } else {
-                c << 1
-            }
-        })
-    })
 }
 
 /// Parses (and CRC-checks) the frame header at the start of `d`.

@@ -16,6 +16,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::codec::crc::crc32c;
 
 const LEVELDB_MAGIC: u64 = 0xdb47_7524_8b80_fb57;
 const ROCKSDB_MAGIC: u64 = 0x88e2_41b7_85f4_cff7;
@@ -76,22 +77,6 @@ fn handle(data: &[u8], at: usize) -> Option<(u64, u64, usize)> {
     let (offset, e) = varint(data, at)?;
     let (size, e) = varint(data, e)?;
     Some((offset, size, e))
-}
-
-#[allow(clippy::arithmetic_side_effects)] // CRC arithmetic is modular by design
-fn crc32c(data: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &b in data {
-        crc ^= u32::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0x82f6_3b78
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
 }
 
 fn mask(crc: u32) -> u32 {

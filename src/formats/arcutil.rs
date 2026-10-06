@@ -11,6 +11,7 @@ use crate::fields::{Endian, Field, Fields};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
+pub use crate::codec::crc::{crc16_arc, crc32c};
 
 pub fn uint(value: u64) -> Value {
     Value::UInt {
@@ -221,39 +222,6 @@ pub fn unix_kind(mode: u64) -> &'static str {
         0o010_000 => "FIFO",
         _ => "entry",
     }
-}
-
-/// CRC-16/ARC (polynomial 0x8005, reflected), used by LHA, ARC, ZOO and
-/// StuffIt.
-pub fn crc16_arc(data: &[u8]) -> u16 {
-    let mut crc = 0u16;
-    for &byte in data {
-        crc ^= u16::from(byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0xa001
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
-}
-
-/// CRC-32C (Castagnoli), used by Snappy framing.
-pub fn crc32c(data: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &byte in data {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0x82f6_3b78
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    !crc
 }
 
 /// xxHash32, used by the LZ4 frame format for its header checksum.

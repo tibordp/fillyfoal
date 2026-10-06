@@ -16,6 +16,7 @@ use crate::formats::text::scan::LineBuf;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
+pub(crate) use crate::codec::crc::{crc16_xmodem, crc24q};
 
 pub mod fit;
 pub mod gis;
@@ -93,37 +94,6 @@ pub(crate) fn fixed(b: &[u8]) -> String {
 
 // ---------------------------------------------------------------------------
 // Checksums
-
-/// CRC-16/XMODEM (CCITT polynomial 0x1021, initial value 0).
-pub(crate) fn crc16_xmodem(data: &[u8]) -> u16 {
-    let mut crc = 0u16;
-    for &b in data {
-        crc ^= u16::from(b) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 {
-                (crc << 1) ^ 0x1021
-            } else {
-                crc << 1
-            };
-        }
-    }
-    crc
-}
-
-/// CRC-24Q (RTCM 3, SBAS): polynomial 0x864CFB, initial value 0.
-pub(crate) fn crc24q(data: &[u8]) -> u32 {
-    let mut crc = 0u32;
-    for &b in data {
-        crc ^= u32::from(b) << 16;
-        for _ in 0..8 {
-            crc <<= 1;
-            if crc & 0x0100_0000 != 0 {
-                crc ^= 0x0186_4cfb;
-            }
-        }
-    }
-    crc & 0x00ff_ffff
-}
 
 // ---------------------------------------------------------------------------
 // Protobuf wire format

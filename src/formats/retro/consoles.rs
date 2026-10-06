@@ -11,6 +11,7 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
+use crate::codec::crc::crc16_modbus as crc16;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -382,22 +383,6 @@ record! {
         used_size: u32 "Total used ROM size" .hex(),
         header_size: u32 "ROM header size" .hex(),
     }
-}
-
-/// CRC-16/MODBUS, as used by the DS header.
-fn crc16(data: &[u8]) -> u16 {
-    let mut crc = 0xffffu16;
-    for &b in data {
-        crc ^= u16::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0xa001
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
 }
 
 async fn nds(cx: Cx, input: Input) -> Result<()> {

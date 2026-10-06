@@ -15,6 +15,7 @@ use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
+use crate::codec::crc::crc24;
 
 /// Compressed packets nested inside each other.
 const MAX_DEPTH: u32 = 8;
@@ -1223,20 +1224,6 @@ async fn armor_block(cx: Cx, (input, block): (Input, crate::formats::pem::Block)
             ),
     );
     Ok(())
-}
-
-fn crc24(data: &[u8]) -> u32 {
-    let mut crc = 0x00b7_04ceu32;
-    for &b in data {
-        crc ^= u32::from(b) << 16;
-        for _ in 0..8 {
-            crc <<= 1;
-            if crc & 0x0100_0000 != 0 {
-                crc ^= 0x0186_4cfb;
-            }
-        }
-    }
-    crc & 0x00ff_ffff
 }
 
 // ---------------------------------------------------------------------------

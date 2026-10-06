@@ -750,18 +750,7 @@ fn emit_descriptors(cx: &Cx, span: Span, base: usize, d: &[u8]) {
 
 /// CRC-32/MPEG-2 (polynomial 0x04c11db7, no reflection, no final xor).
 fn mpeg_crc32(data: &[u8]) -> u32 {
-    let mut crc = 0xffff_ffffu32;
-    for &b in data {
-        crc ^= u32::from(b) << 24;
-        for _ in 0..8 {
-            crc = if crc & 0x8000_0000 != 0 {
-                (crc << 1) ^ 0x04c1_1db7
-            } else {
-                crc << 1
-            };
-        }
-    }
-    crc
+    u32::try_from(crate::codec::crc::CRC32_MPEG2.checksum(data)).unwrap_or(0)
 }
 
 async fn packets(cx: Cx, ts: Ts) -> Result<()> {

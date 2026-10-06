@@ -163,16 +163,11 @@ async fn read_page(cx: &Cx, file: Span, pos: u64) -> Result<Page> {
 /// Ogg's CRC-32 (polynomial 0x04c11db7, not reflected), over the page with
 /// the CRC field zeroed.
 fn crc32(data: &[u8]) -> u32 {
-    data.iter().enumerate().fold(0u32, |crc, (i, &b)| {
-        let b = if (22..26).contains(&i) { 0 } else { b };
-        (0..8).fold(crc ^ (u32::from(b) << 24), |c, _| {
-            if c & 0x8000_0000 != 0 {
-                (c << 1) ^ 0x04c1_1db7
-            } else {
-                c << 1
-            }
-        })
-    })
+    use crate::codec::crc::CRC32_OGG;
+    let crc = data.iter().enumerate().fold(CRC32_OGG.init(), |crc, (i, &b)| {
+        CRC32_OGG.update_byte(crc, if (22..26).contains(&i) { 0 } else { b })
+    });
+    u32::try_from(CRC32_OGG.finish(crc)).unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------

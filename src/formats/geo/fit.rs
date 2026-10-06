@@ -21,6 +21,7 @@ use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
+use crate::codec::crc::crc16_arc as crc16;
 
 const LE: Endian = Endian::Little;
 
@@ -42,22 +43,6 @@ record! {
         data_size: u32 "Data size",
         magic: ascii[4] "Data type",
     }
-}
-
-/// CRC-16/ARC as used by FIT.
-fn crc16(data: &[u8]) -> u16 {
-    let mut crc = 0u16;
-    for &b in data {
-        crc ^= u16::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                (crc >> 1) ^ 0xa001
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
 }
 
 const MESSAGES: EnumTable = &[

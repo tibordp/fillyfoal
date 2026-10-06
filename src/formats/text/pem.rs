@@ -20,6 +20,7 @@ use super::decode::{Transform, derive_with, preview};
 use super::encoding::prepare;
 use super::scan::Lines;
 use super::{probe, text_node};
+use crate::codec::crc::crc24;
 
 pub static SSH2: Format = Format {
     name: "ssh2-public-key",
@@ -199,21 +200,6 @@ fn header_line(line: &[u8]) -> bool {
             .iter()
             .all(|&b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
         && line.get(colon.saturating_add(1)).is_none_or(|&b| b == b' ')
-}
-
-/// OpenPGP's CRC-24 (RFC 4880, section 6.1).
-fn crc24(data: &[u8]) -> u32 {
-    let mut crc = 0x00b7_04ceu32;
-    for &b in data {
-        crc ^= u32::from(b) << 16;
-        for _ in 0..8 {
-            crc <<= 1;
-            if crc & 0x0100_0000 != 0 {
-                crc ^= 0x0186_4cfb;
-            }
-        }
-    }
-    crc & 0x00ff_ffff
 }
 
 async fn expand(cx: Cx, b: Block) -> Result<()> {

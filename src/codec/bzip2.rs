@@ -38,11 +38,7 @@ impl Bits<'_> {
 
 /// CRC-32 as bzip2 computes it (MSB-first, polynomial 0x04c11db7).
 fn crc_update(crc: u32, b: u8) -> u32 {
-    let mut c = crc ^ u32::from(b) << 24;
-    for _ in 0..8 {
-        c = if c & 0x8000_0000 != 0 { c << 1 ^ 0x04c1_1db7 } else { c << 1 };
-    }
-    c
+    u32::try_from(crate::codec::crc::CRC32_BZIP2.update_byte(crc.into(), b)).unwrap_or(0)
 }
 
 /// A canonical Huffman code: (length, symbol) sorted, decoded bit by bit.

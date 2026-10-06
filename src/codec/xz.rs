@@ -6,6 +6,7 @@ use crate::codec::crypto::{Hash, Sha256};
 use crate::codec::filters::Filter;
 use crate::codec::lzma::{Post, lzma2};
 use crate::error::{Diagnostic, Result};
+pub use crate::codec::crc::crc64;
 
 fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("xz: {what}"))
@@ -25,18 +26,6 @@ fn varint(data: &[u8], pos: &mut usize) -> Result<u64> {
         }
     }
     Err(bad("integer too long"))
-}
-
-/// CRC-64 (ECMA-182, reflected), as xz uses.
-pub fn crc64(data: &[u8]) -> u64 {
-    let mut crc = !0u64;
-    for &b in data {
-        crc ^= u64::from(b);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 { crc >> 1 ^ 0xc96c_5795_d787_0f42 } else { crc >> 1 };
-        }
-    }
-    !crc
 }
 
 #[derive(Clone, Copy)]

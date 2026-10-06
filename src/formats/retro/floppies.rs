@@ -628,18 +628,7 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
 // Teledisk (TD0)
 
 fn td0_crc(data: &[u8]) -> u16 {
-    let mut crc = 0u16;
-    for &b in data {
-        crc ^= u16::from(b) << 8;
-        for _ in 0..8 {
-            crc = if crc & 0x8000 != 0 {
-                crc << 1 ^ 0xa097
-            } else {
-                crc << 1
-            };
-        }
-    }
-    crc
+    u16::try_from(crate::codec::crc::CRC16_TELEDISK.checksum(data)).unwrap_or(0)
 }
 
 fn td0_probe(h: &Head<'_>) -> bool {
