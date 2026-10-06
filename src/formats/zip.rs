@@ -1129,6 +1129,8 @@ async fn method_codec(cx: &Cx, method: u16, flags: u16, data: Span, size: u64) -
         12 => Codec::Bzip2,
         20 | 93 => Codec::Zstd,
         95 => Codec::Xz,
+        6 => implode(flags, size),
+        10 => Codec::DclImplode,
         14 => {
             let head = cx.read(data.sub_exact(0, 4)?).await?;
             let (stream, codec) = lzma_stream(cx, &head, data, flags, size).await?;
@@ -1137,6 +1139,16 @@ async fn method_codec(cx: &Cx, method: u16, flags: u16, data: Span, size: u64) -
         _ => return Ok(None),
     };
     Ok(Some((codec, data)))
+}
+
+/// ZIP method 6 (PKWARE implode): flag bit 1 selects the 8 KiB window and
+/// bit 2 the literal tree; the stream does not record its own end.
+fn implode(flags: u16, size: u64) -> Codec {
+    Codec::Implode(crate::codec::implode::Implode {
+        large_window: flags & 0x0002 != 0,
+        literal_tree: flags & 0x0004 != 0,
+        size: Some(size),
+    })
 }
 
 /// ZIP method 14: a 2-byte LZMA SDK version, a 2-byte properties size, the
@@ -1239,6 +1251,10 @@ async fn encrypted_content(
         (20 | 93, false) => Codec::chain("aes-ctr+zstd", "aes-ctr+zstd (lazy)", vec![decrypt, Codec::Zstd]),
         (95, true) => Codec::chain("zipcrypto+xz", "zipcrypto+xz (lazy)", vec![decrypt, Codec::Xz]),
         (95, false) => Codec::chain("aes-ctr+xz", "aes-ctr+xz (lazy)", vec![decrypt, Codec::Xz]),
+        (6, true) => Codec::chain("zipcrypto+implode", "zipcrypto+implode (lazy)", vec![decrypt, implode(header.flags, uncompressed)]),
+        (6, false) => Codec::chain("aes-ctr+implode", "aes-ctr+implode (lazy)", vec![decrypt, implode(header.flags, uncompressed)]),
+        (10, true) => Codec::chain("zipcrypto+dcl-implode", "zipcrypto+dcl-implode (lazy)", vec![decrypt, Codec::DclImplode]),
+        (10, false) => Codec::chain("aes-ctr+dcl-implode", "aes-ctr+dcl-implode (lazy)", vec![decrypt, Codec::DclImplode]),
         // The LZMA properties are encrypted too: decrypt first, then read them.
         (14, _) => {
             return Ok(Node::new("Content")
