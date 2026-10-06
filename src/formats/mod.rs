@@ -735,6 +735,8 @@ pub static FORMATS: &[&Format] = &[
     // -- retro & consoles --
     &retro::consoles::NES,
     &retro::consoles::FDS,
+    // GBX footers wrap Game Boy ROMs.
+    &retro::extras::GBX,
     &retro::consoles::GBC,
     &retro::consoles::GB,
     &retro::consoles::GBA,
@@ -885,6 +887,13 @@ pub static FORMATS: &[&Format] = &[
     &retro::consoles3::MAME_STATE,
     &retro::graphics::KICKSTART,
     &retro::graphics::AMIGA_INFO,
+    &retro::extras::DSV,
+    &retro::extras::GC_BANNER,
+    &retro::extras::WII_BANNER,
+    &retro::extras::TPL,
+    &retro::extras::CEL_3DO,
+    &retro::extras::HXC_MFM,
+    &retro::extras::FDI,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
