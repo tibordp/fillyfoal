@@ -201,6 +201,7 @@ pub struct Format {
 /// All formats, in probing order: specific before generic.
 pub static FORMATS: &[&Format] = &[
     // -- executables & code --
+    &pe::DOS_EXE,
     &pe::FORMAT,
     // -- end executables --
 

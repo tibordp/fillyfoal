@@ -5,8 +5,11 @@
 //! translation). Directories, sections and their contents are dissected only
 //! when expanded.
 
+mod extra;
 mod tables;
 mod version;
+
+pub use extra::DOS_EXE;
 
 use std::sync::Arc;
 
@@ -58,6 +61,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .span(file.sub(64, lfanew.saturating_sub(64)))
                 .desc("Real-mode program run when the image is started under DOS"),
         );
+        if let Ok(Some(rich)) = extra::rich_header(&cx, file, lfanew).await {
+            cx.emit(rich);
+        }
     }
 
     let nt = file.tail(lfanew);
@@ -632,6 +638,12 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
         ),
         DIR_SECURITY => node.lazy(certificates, dir),
         DIR_DEBUG => node.lazy(debug_directory, (pe, dir)),
+        3 => node.lazy(extra::exceptions, (pe, dir)),
+        5 => node.lazy(extra::base_relocations, (pe, dir)),
+        9 => node.lazy(extra::tls, (pe, dir)),
+        10 => node.lazy(extra::load_config, (pe, dir)),
+        13 => node.lazy(extra::delay_imports, (pe, dir)),
+        14 => node.lazy(extra::clr, (pe, dir)),
         _ => node,
     }
 }
