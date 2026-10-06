@@ -138,6 +138,11 @@ impl Decoder for FolderDecoder {
                     }
                     frames.pop_front();
                     core.frame(stream, ended && frames.is_empty(), false, len, out, limit)?;
+                    // Drop the data the core has read (it buffers bits
+                    // read ahead), so `stream` holds about a block.
+                    let used = core.consumed().min(stream.len());
+                    core.release_input(used);
+                    stream.drain(..used);
                 }
             }
             if out.len() >= target {
@@ -204,5 +209,20 @@ impl Decoder for FolderDecoder {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         None
+    }
+
+    fn releasable_input(&self) -> usize {
+        // Blocks before the next header are parsed (LZX copies their data).
+        self.at
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.at = self.at.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // No method reads `out`: MSZIP keeps its own 32 KiB dictionary,
+        // Quantum and LZX their own history.
+        out_len
     }
 }

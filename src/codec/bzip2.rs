@@ -367,6 +367,21 @@ impl Decode for Bzip2 {
     fn consumed(&self) -> usize {
         self.bit.div_ceil(8)
     }
+
+    fn releasable_input(&self) -> usize {
+        // A partly read byte is kept.
+        self.bit / 8
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.bit = self.bit.saturating_sub(n.saturating_mul(8));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Blocks never refer to earlier output, and CRCs are computed as
+        // each block is produced.
+        out_len
+    }
 }
 
 #[cfg(test)]

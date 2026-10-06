@@ -3,7 +3,9 @@
 //! distance codes with NPOSTFIX/NDIRECT and the last-distance ring, and the
 //! static dictionary with its 121 word transforms. The output buffer serves
 //! as the sliding window (distances never reach past `2^WBITS - 16`
-//! bytes). The non-standard large-window extension is not supported.
+//! bytes; longer ones are dictionary words), so output before the window
+//! can be released. Decoded a meta-block at a time. The non-standard
+//! large-window extension is not supported.
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
@@ -33,31 +35,144 @@ const fn dict_offsets() -> [usize; 25] {
 }
 const DOFFSET: [usize; 25] = dict_offsets();
 
-/// A [`Decode`] that waits for the whole input (like
-/// [`Whole`](crate::codec::filters::Whole)) and reports where the stream
-/// ended, so trailing bytes show up.
+/// A Brotli stream decoded a meta-block at a time; reports where the
+/// stream ended, so trailing bytes show up.
 #[derive(Clone, Default)]
 pub struct Stream {
-    consumed: usize,
+    /// Position in the input, in bits.
+    bit: usize,
+    /// The window size (`2^WBITS - 16`), once the stream header is read.
+    window: Option<usize>,
+    ring: Option<Ring>,
+    /// Where the stream's output starts in `out` (0 once released).
+    start: Option<usize>,
+    /// Output bytes released from the front of the stream's output.
+    released: usize,
     done: bool,
 }
 
-impl Decode for Stream {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, _step: usize, limit: usize) -> Result<Step> {
-        if !eof {
-            return Err(Diagnostic::malformed("waiting for the whole input"));
-        }
-        if !self.done {
-            let (decoded, bits) = decode(input, limit.saturating_sub(out.len()))?;
-            out.extend_from_slice(&decoded);
-            self.consumed = bits.div_ceil(8);
+impl Stream {
+    /// Decodes the stream header, or the next meta-block (setting `done`
+    /// after the last one).
+    fn next(&mut self, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let mut b = Bits { data: input, pos: self.bit };
+        let Some(window) = self.window else {
+            self.window = Some((1usize << window_bits(&mut b)?).saturating_sub(16));
+            self.bit = b.pos;
+            return Ok(());
+        };
+        let mut ring = self.ring.unwrap_or([4, 11, 15, 16]);
+        let last = b.bit()?;
+        if last && b.bit()? {
+            self.bit = b.pos;
             self.done = true;
+            return Ok(());
         }
-        Ok(Step::Done)
+        let nibbles = match b.read(2)? {
+            3 => 0,
+            n => n.saturating_add(4),
+        };
+        if nibbles == 0 {
+            // Metadata, skipped.
+            if last {
+                return Err(bad("metadata in the last meta-block"));
+            }
+            if b.bit()? {
+                return Err(bad("reserved bit set"));
+            }
+            let nbytes = b.read(2)?;
+            let mut skip = 0usize;
+            for i in 0..nbytes {
+                let v = b.read_usize(8)?;
+                if i.saturating_add(1) == nbytes && nbytes > 1 && v == 0 {
+                    return Err(bad("metadata length has a zero last byte"));
+                }
+                skip |= v << i.saturating_mul(8);
+            }
+            if nbytes > 0 {
+                skip = skip.saturating_add(1);
+            }
+            b.align()?;
+            b.skip(skip.saturating_mul(8))?;
+            self.bit = b.pos;
+            return Ok(());
+        }
+        let mut mlen = 0usize;
+        for i in 0..nibbles {
+            let v = b.read_usize(4)?;
+            if i.saturating_add(1) == nibbles && nibbles > 4 && v == 0 {
+                return Err(bad("meta-block length has a zero last nibble"));
+            }
+            mlen |= v << i.saturating_mul(4);
+        }
+        let mlen = mlen.saturating_add(1);
+        if out.len().saturating_add(mlen) > limit {
+            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+        }
+        if !last && b.bit()? {
+            b.align()?;
+            let start = b.pos >> 3;
+            let data = input
+                .get(start..start.saturating_add(mlen))
+                .ok_or_else(|| bad("truncated uncompressed meta-block"))?;
+            out.extend_from_slice(data);
+            b.skip(mlen.saturating_mul(8))?;
+            self.bit = b.pos;
+            return Ok(());
+        }
+        let (origin, released) = (self.start.unwrap_or(0), self.released);
+        let history = |len: usize| len.saturating_sub(origin).saturating_add(released);
+        meta_block(&mut b, out, mlen, window, &mut ring, history)?;
+        self.ring = Some(ring);
+        self.bit = b.pos;
+        self.done = last;
+        Ok(())
+    }
+}
+
+impl Decode for Stream {
+    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        if self.start.is_none() {
+            self.start = Some(out.len());
+        }
+        let target = out.len().saturating_add(step.max(1));
+        loop {
+            if self.done {
+                return Ok(Step::Done);
+            }
+            if out.len() >= target {
+                return Ok(Step::More);
+            }
+            self.next(input, out, limit)?;
+        }
     }
 
     fn consumed(&self) -> usize {
-        self.consumed
+        self.bit.div_ceil(8)
+    }
+
+    fn releasable_input(&self) -> usize {
+        // A partly read byte is kept.
+        self.bit / 8
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.bit = self.bit.saturating_sub(n.saturating_mul(8));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Distances beyond the window are dictionary words, which do not
+        // read the output; literal contexts need the last two bytes.
+        match self.window {
+            Some(window) => out_len.saturating_sub(window.max(2)),
+            None => 0,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        let start = self.start.unwrap_or(0);
+        self.released = self.released.saturating_add(n.saturating_sub(start));
+        self.start = Some(start.saturating_sub(n));
     }
 }
 
@@ -656,7 +771,16 @@ fn tree<'a>(codes: &'a [Huff], map: &[u8], index: usize) -> Result<&'a Huff> {
 }
 
 /// Decodes one compressed meta-block of `mlen` bytes onto `out`.
-fn meta_block(b: &mut Bits<'_>, out: &mut Vec<u8>, mlen: usize, window: usize, ring: &mut Ring) -> Result<()> {
+/// `history(out.len())` is the length of the stream's output so far,
+/// counting what was released (and not what precedes the stream in `out`).
+fn meta_block(
+    b: &mut Bits<'_>,
+    out: &mut Vec<u8>,
+    mlen: usize,
+    window: usize,
+    ring: &mut Ring,
+    history: impl Fn(usize) -> usize,
+) -> Result<()> {
     let mut lit = Blocks::read(b)?;
     let mut cmd = Blocks::read(b)?;
     let mut dst = Blocks::read(b)?;
@@ -689,8 +813,9 @@ fn meta_block(b: &mut Bits<'_>, out: &mut Vec<u8>, mlen: usize, window: usize, r
         for _ in 0..ilen {
             lit.next(b)?;
             let n = out.len();
-            let p1 = n.checked_sub(1).and_then(|i| out.get(i)).copied().unwrap_or(0);
-            let p2 = n.checked_sub(2).and_then(|i| out.get(i)).copied().unwrap_or(0);
+            let h = history(n);
+            let p1 = if h >= 1 { n.checked_sub(1).and_then(|i| out.get(i)).copied().unwrap_or(0) } else { 0 };
+            let p2 = if h >= 2 { n.checked_sub(2).and_then(|i| out.get(i)).copied().unwrap_or(0) } else { 0 };
             let mode = modes.get(lit.current).copied().unwrap_or(0);
             let ctx = lit.current.saturating_mul(64).saturating_add(literal_context(mode, p1, p2));
             let byte = tree(&lit_codes, &cmap_l, ctx)?.decode(b)?;
@@ -707,7 +832,7 @@ fn meta_block(b: &mut Bits<'_>, out: &mut Vec<u8>, mlen: usize, window: usize, r
             let dcode = usize::from(tree(&dist_codes, &cmap_d, ctx)?.decode(b)?);
             distance(b, dcode, ndirect, npostfix, ring)?
         };
-        let max_distance = window.min(out.len());
+        let max_distance = window.min(history(out.len()));
         if dist > max_distance {
             dictionary(out, dist.saturating_sub(max_distance).saturating_sub(1), clen, end)?;
             continue;
@@ -740,70 +865,10 @@ fn window_bits(b: &mut Bits<'_>) -> Result<u32> {
 
 /// Decodes a stream; also returns the bit position where it ended.
 fn decode(input: &[u8], limit: usize) -> Result<(Vec<u8>, usize)> {
-    let mut b = Bits { data: input, pos: 0 };
-    let window = (1usize << window_bits(&mut b)?).saturating_sub(16);
+    let mut stream = Stream::default();
     let mut out = Vec::new();
-    let mut ring: Ring = [4, 11, 15, 16];
-    loop {
-        let last = b.bit()?;
-        if last && b.bit()? {
-            return Ok((out, b.pos));
-        }
-        let nibbles = match b.read(2)? {
-            3 => 0,
-            n => n.saturating_add(4),
-        };
-        if nibbles == 0 {
-            // Metadata, skipped.
-            if last {
-                return Err(bad("metadata in the last meta-block"));
-            }
-            if b.bit()? {
-                return Err(bad("reserved bit set"));
-            }
-            let nbytes = b.read(2)?;
-            let mut skip = 0usize;
-            for i in 0..nbytes {
-                let v = b.read_usize(8)?;
-                if i.saturating_add(1) == nbytes && nbytes > 1 && v == 0 {
-                    return Err(bad("metadata length has a zero last byte"));
-                }
-                skip |= v << i.saturating_mul(8);
-            }
-            if nbytes > 0 {
-                skip = skip.saturating_add(1);
-            }
-            b.align()?;
-            b.skip(skip.saturating_mul(8))?;
-            continue;
-        }
-        let mut mlen = 0usize;
-        for i in 0..nibbles {
-            let v = b.read_usize(4)?;
-            if i.saturating_add(1) == nibbles && nibbles > 4 && v == 0 {
-                return Err(bad("meta-block length has a zero last nibble"));
-            }
-            mlen |= v << i.saturating_mul(4);
-        }
-        let mlen = mlen.saturating_add(1);
-        if out.len().saturating_add(mlen) > limit {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
-        }
-        if !last && b.bit()? {
-            b.align()?;
-            let start = b.pos >> 3;
-            let data = input
-                .get(start..start.saturating_add(mlen))
-                .ok_or_else(|| bad("truncated uncompressed meta-block"))?;
-            out.extend_from_slice(data);
-            b.skip(mlen.saturating_mul(8))?;
-            continue;
-        }
-        meta_block(&mut b, &mut out, mlen, window, &mut ring)?;
-        if last {
-            return Ok((out, b.pos));
-        }
-    }
+    stream.step(input, true, &mut out, usize::MAX, limit)?;
+    Ok((out, stream.bit))
 }
 
 #[cfg(test)]
