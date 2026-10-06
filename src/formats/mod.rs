@@ -26,8 +26,10 @@ pub mod aout;
 pub mod beam;
 pub mod bitcode;
 pub mod coff;
+pub mod dart;
 pub mod dxbc;
 pub mod elf;
+pub mod hermes;
 pub mod java;
 pub mod lua;
 pub mod luajit;
@@ -44,6 +46,7 @@ pub mod spirv;
 pub mod te;
 pub mod winres;
 pub mod xcoff;
+pub mod yarb;
 pub mod wasm;
 // -- end executables --
 
@@ -194,6 +197,9 @@ pub static FORMATS: &[&Format] = &[
     &xcoff::FORMAT,
     &pef::FORMAT,
     &ocaml::FORMAT,
+    &hermes::FORMAT,
+    &dart::FORMAT,
+    &yarb::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
