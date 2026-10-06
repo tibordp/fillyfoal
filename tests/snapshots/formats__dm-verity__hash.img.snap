@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hash.img — dm-verity v1, sha256, 256 data blocks of 4096 bytes  [0x0+0x1040]
+    Signature: "verity"  [0x0+0x8]
+    Version: 1  [0x8+0x4]
+    Hash type: 1  [0xc+0x4]
+    UUID: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x10+0x10]
+    Hash algorithm: "sha256"  [0x20+0x20]
+    Data block size: 4096  [0x40+0x4]
+    Hash block size: 4096  [0x44+0x4]
+    Data blocks: 256  [0x48+0x8]
+    Salt size: 32  [0x50+0x2]
+    Padding: 00 00 00 00 00 00  |......|  [0x52+0x6]
+    Salt: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x58+0x100]
+    Hash tree  [0x1000+0x40]

@@ -152,6 +152,7 @@ pub mod archives2;
 pub mod misc2;
 pub mod pdb;
 pub mod platform;
+pub mod devices;
 // -- end misc --
 
 // -- text --
@@ -733,6 +734,23 @@ pub static FORMATS: &[&Format] = &[
     &platform::JMOD,
     &platform::JIMAGE,
     &platform::MAC_RESOURCE,
+    &devices::ROMFS,
+    &devices::JFFS2,
+    &devices::UBI,
+    &devices::UBIFS,
+    &devices::TRX,
+    &devices::IMG3,
+    &devices::XEX,
+    &devices::PS3_SELF,
+    &devices::PS3_PKG,
+    &devices::NSP,
+    &devices::XCI,
+    &devices::WII_WAD,
+    &devices::CIA,
+    &devices::KERNEL_DUMP,
+    &devices::HIBERFIL,
+    &devices::VERITY,
+    &devices::BTRFS_SEND,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,

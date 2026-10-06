@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hiberfil.sys — hibernation file, hibernated, version 6  [0x0+0x1050]
+    Signature: "HIBR"  [0x0+0x4]
+    Image type / version: 6  [0x4+0x4]
+    Checksum: 0x0  [0x8+0x4]
+    Length self: 4096  [0xc+0x4]
+    Compressed memory image  [0x1000+0x50]
