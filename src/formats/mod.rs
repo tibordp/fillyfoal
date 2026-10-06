@@ -210,6 +210,15 @@ pub mod misc6;
 pub mod misc7;
 // -- end misc --
 
+// -- ml models & mobile platforms --
+// -- end ml --
+
+// -- geospatial, telemetry & vehicle logs --
+// -- end geo --
+
+// -- publishing, design & multimedia authoring --
+// -- end publishing --
+
 // -- text --
 pub mod text;
 // -- end text --
@@ -782,6 +791,15 @@ pub static FORMATS: &[&Format] = &[
     &retro::computers::ADF,
     &retro::computers::D64,
     // -- end retro --
+
+    // -- ml models & mobile platforms --
+    // -- end ml --
+
+    // -- geospatial, telemetry & vehicle logs --
+    // -- end geo --
+
+    // -- publishing, design & multimedia authoring --
+    // -- end publishing --
 
     // -- games, 3D, science, e-books, misc --
     &games::WAD,
