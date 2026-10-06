@@ -35,6 +35,7 @@ pub mod png;
 pub mod asn1;
 pub mod avro;
 pub mod cfb;
+pub mod hdf5;
 pub mod matlab;
 pub mod netcdf;
 pub mod orc;
@@ -194,6 +195,8 @@ pub static FORMATS: &[&Format] = &[
     &pem::FORMAT,
     &avro::FORMAT,
     &netcdf::FORMAT,
+    &hdf5::MAT73,
+    &hdf5::FORMAT,
     &matlab::FORMAT,
     &parquet::FORMAT,
     &orc::FORMAT,
