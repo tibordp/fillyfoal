@@ -9,6 +9,7 @@
 
 pub mod apfs;
 pub mod apm;
+pub mod bfs;
 pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
@@ -21,6 +22,7 @@ pub mod luks;
 pub mod lvm;
 pub mod mbr;
 pub mod mdraid;
+pub mod minix;
 pub mod ntfs;
 pub mod parallels;
 pub mod ptypes;
