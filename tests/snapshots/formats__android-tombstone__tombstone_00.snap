@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tombstone_00 — Android tombstone: com.example.tiny, signal 11 (SIGSEGV), google/tiny/tiny:14/UQ1A.240105.004/11206848:user/release-keys  [0x0+0x41f]
+    Build fingerprint: "'google/tiny/tiny:14/UQ1A.240105.004/11206848:user/release-keys'"  [0x40+0x53]
+    Revision: "'0'"  [0x94+0xd]
+    ABI: "'arm64'"  [0xa2+0xc]
+    Timestamp: "2024-01-01 00:00:00.000000000+0000"  [0xaf+0x2d]
+    Process uptime: "12s"  [0xdd+0x13]
+    Cmdline: "com.example.tiny"  [0xf1+0x19]
+    Thread: "pid: 1234, tid: 1234, name: example.tiny  >>> com.example.tiny <<<"  [0x10b+0x42]
+    uid: "10100"  [0x14e+0xa]
+    Signal: "signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0000000000000000"  [0x159+0x48]
+    Cause: "null pointer dereference"  [0x1a2+0x1f]
+    Line 12: "x0  0000000000000000  x1  0000007fc0a1b2c8  x2  0000000000000001  x3  0000000000000000"  [0x1c2+0x5a]
+    Line 13: "sp  0000007fc0a1b200  lr  00000071a2b3c4d4  pc  00000071a2b3c4e0  pst 0000000060001000"  [0x21d+0x5a]
+  ▾ backtrace — 3 lines  [0x279+0xd4]
+      Line 1: "backtrace:"  [0x279+0xa]
+      Line 2: "#00 pc 000000000001e4e0  /data/app/com.example.tiny/lib/arm64/libtiny.so (crash+16)"  [0x284+0x59]
+      Line 3: "#01 pc 000000000001e4d0  /data/app/com.example.tiny/lib/arm64/libtiny.so (Java_com_example_Tiny_run+32)"  [0x2de+0x6d]
+  ▾ memory map (2 entries) — 2 lines  [0x34d+0xd2]
+      Line 1: "memory map (2 entries):"  [0x34d+0x17]
+      Line 2: "00000071'a2b20000-00000071'a2b3ffff r-x         0     20000  /data/app/com.example.tiny/lib/arm64/libtiny.so"  [0x365+0x70]
+      Line 3: "0000007f'c0a00000-0000007f'c0afffff rw-         0    100000  [stack]"  [0x3d6+0x48]

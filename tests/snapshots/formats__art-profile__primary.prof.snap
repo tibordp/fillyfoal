@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ primary.prof — ART profile v010, 1 dex file(s)  [0x0+0x24]
+    Magic: "pro"  [0x0+0x4]
+    Version: "010"  [0x4+0x4]
+    Dex file count: 1  [0x8+0x1]
+    Uncompressed size: 20  [0x9+0x4]
+    Compressed size: 19  [0xd+0x4]
+  ▾ Profile data (zlib) — 0x14 bytes decompressed  [0x11+0x13]
+      Data  [#1:0x0+0x14]

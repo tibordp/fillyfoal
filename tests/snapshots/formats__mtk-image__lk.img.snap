@@ -1,0 +1,41 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lk.img — MediaTek image: lk, lk_main_dtb  [0x0+0x4a2]
+  ▾ lk — 58 bytes  [0x0+0x23a]
+    ▾ Header  [0x0+0x200]
+        Magic: 0x58881688  [0x0+0x4]
+        Data size: 58  [0x4+0x4]
+        Name: "lk"  [0x8+0x20]
+        Load address: 0xffffffff  [0x28+0x4]
+        Mode: 0xffffffff  [0x2c+0x4]
+    ▾ Data — UTF-8 text, LF line endings, 2 lines  [0x200+0x3a]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+      ▾ Lines — 2 lines  [0x200+0x3a]
+          Line 1: "LK little kernel placeholder"  [0x200+0x1c]
+          Line 2: "LK little kernel placeholder"  [0x21d+0x1c]
+  ▾ lk_main_dtb — 98 bytes  [0x240+0x262]
+    ▾ Header  [0x240+0x200]
+        Magic: 0x58881688  [0x240+0x4]
+        Data size: 98  [0x244+0x4]
+        Name: "lk_main_dtb"  [0x248+0x20]
+        Load address: 0xffffffff  [0x268+0x4]
+        Mode: 0xffffffff  [0x26c+0x4]
+    ▾ Data — "mt6789", DTB v17  [0x440+0x62]
+      ▾ Header  [0x440+0x28]
+          Magic: 0xd00dfeed  [0x440+0x4]
+          Total size: 98  [0x444+0x4]
+          Structure block offset: 0x38  [0x448+0x4]
+          Strings block offset: 0x5c  [0x44c+0x4]
+          Memory reservation map offset: 0x28  [0x450+0x4]
+          Version: 17  [0x454+0x4]
+          Last compatible version: 16  [0x458+0x4]
+          Boot CPU ID: 0  [0x45c+0x4]
+          Strings block size: 6  [0x460+0x4]
+          Structure block size: 36  [0x464+0x4]
+        Reserved memory map  [0x468+0x10]
+      ▾ /  [0x478+0x24]
+          model: "mt6789"  [0x480+0x14] → 0x48c+0x7
+        Strings  [0x49c+0x6]
