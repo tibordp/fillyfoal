@@ -94,18 +94,7 @@ record! {
 
 /// LVM's CRC: CRC-32 polynomial, initial value 0xf597a6cf, no inversion.
 fn lvm_crc(data: &[u8]) -> u32 {
-    let mut crc = 0xf597_a6cfu32;
-    for &byte in data {
-        crc ^= u32::from(byte);
-        for _ in 0..8 {
-            crc = if crc & 1 != 0 {
-                crc >> 1 ^ 0xedb8_8320
-            } else {
-                crc >> 1
-            };
-        }
-    }
-    crc
+    crate::formats::disk::crc32_update(0xf597_a6cf, data)
 }
 
 /// LVM UUIDs are 32 characters shown in groups 6-4-4-4-4-4-6.

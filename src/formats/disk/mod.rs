@@ -13,22 +13,28 @@ pub mod bfs;
 pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
+pub mod erofs;
 pub mod exfat;
 pub mod ext;
+pub mod f2fs;
 pub mod fat;
 pub mod gpt;
 pub mod hfs;
+pub mod jfs;
 pub mod luks;
 pub mod lvm;
 pub mod mbr;
 pub mod mdraid;
 pub mod minix;
+pub mod nilfs;
 pub mod ntfs;
 pub mod parallels;
 pub mod ptypes;
 pub mod qcow;
+pub mod romfs;
 pub mod swap;
 pub mod uefi;
+pub mod ufs;
 pub mod vdi;
 pub mod vhd;
 pub mod vhdx;
@@ -441,4 +447,20 @@ pub fn guid_le(b: &[u8]) -> crate::value::Guid {
 /// Rounds `v` up to a multiple of `a`, saturating instead of overflowing.
 pub fn align(v: u64, a: u64) -> u64 {
     v.checked_next_multiple_of(a).unwrap_or(u64::MAX)
+}
+
+/// Raw CRC-32 (IEEE polynomial, reflected) register update, without
+/// initial or final inversion (LVM and F2FS seed it themselves).
+pub fn crc32_update(mut crc: u32, data: &[u8]) -> u32 {
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                crc >> 1 ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    crc
 }
