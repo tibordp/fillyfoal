@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ stdafx.h.gch — GCC precompiled header (C++, format 014)  [0x0+0x48]
+    Magic  [0x0+0x4]
+    Language and version: "+014"  [0x4+0x4]
+    Compiler state  [0x8+0x40]

@@ -1,0 +1,36 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ repo.bundle — git bundle, 1 refs, 0 prerequisites  [0x0+0x10a]
+    Signature: "# v2 git bundle"  [0x0+0x10]
+    HEAD: "f6b0a55c3f0c286e5d4da8df05425ae4d1931f6b"  [0x10+0x2e]
+  ▾ Pack — Git pack v2, 3 objects  [0x3f+0xcb]
+    ▾ Header  [0x3f+0xc]
+        Signature: "PACK"  [0x3f+0x4]
+        Version: 2  [0x43+0x4]
+        Number of objects: 3  [0x47+0x4]
+      Pack checksum: "f5f4a7e569f34d95026346d5c3fe58ac4b61fc62" — valid  [0xf6+0x14]
+    ▾ commit at 0xc — object 0, 113 → 163 bytes  [0x4b+0x73]
+        Type and size: 0x93  [0x4b+0x1]
+        Type: commit (0x1)
+        Size: 163
+        Compressed data — zlib, 113 bytes  [0x4d+0x71]
+        tree: "0d8a474fc67971fb3dd7616e26323d3066442555"  [#1:0x0+0x2d]
+        author: "Fixture <fixture@example.com>" — 2026-01-01 00:00:00 UTC +0000  [#1:0x2e+0x35]
+        committer: "Fixture <fixture@example.com>" — 2026-01-01 00:00:00 UTC +0000  [#1:0x64+0x38]
+        Message: "init"  [#1:0x9e+0x5]
+    ▾ tree at 0x7f — object 1, 42 → 33 bytes  [0xbe+0x2c]
+        Type and size: 0xa1  [0xbe+0x1]
+        Type: tree (0x2)
+        Size: 33
+        Compressed data — zlib, 42 bytes  [0xc0+0x2a]
+      ▾ Entries  [#2:0x0+0x21]
+          a.txt: "45b983be36b73c0788dc9cbcb76cbb80fc7bb057" — 100644 blob  [#2:0x0+0x21]
+    ▾ blob at 0xab — object 2, 11 → 3 bytes  [0xea+0xc]
+        Type and size: 0x33  [0xea+0x1]
+        Type: blob (0x3)
+        Size: 3
+        Compressed data — zlib, 11 bytes  [0xeb+0xb]
+      ▾ Content — 3 bytes  [#3:0x0+0x3]
+          Data  [#3:0x0+0x3]

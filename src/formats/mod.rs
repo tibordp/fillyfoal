@@ -170,6 +170,7 @@ pub mod misc2;
 pub mod pdb;
 pub mod platform;
 pub mod devices;
+pub mod devtools;
 // -- end misc --
 
 // -- text --
@@ -804,6 +805,22 @@ pub static FORMATS: &[&Format] = &[
     &devices::HIBERFIL,
     &devices::VERITY,
     &devices::BTRFS_SEND,
+    &devtools::GCC_PCH,
+    &devtools::CLANG_PCH,
+    &devtools::WIN_RES,
+    &devtools::ILK,
+    &devtools::TYPELIB,
+    &devtools::NAR,
+    &devtools::GIT_BUNDLE,
+    &devtools::HG_BUNDLE,
+    &devtools::SVN_DUMP,
+    &devtools::DUCKDB,
+    &devtools::LMDB,
+    &devtools::BOLT,
+    &devtools::PROM_CHUNKS,
+    &devtools::PROM_INDEX,
+    &devtools::INFLUX_TSM,
+    &devtools::LUCENE,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,
