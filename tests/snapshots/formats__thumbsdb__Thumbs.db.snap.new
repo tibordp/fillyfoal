@@ -1,5 +1,6 @@
 ---
 source: tests/formats.rs
+assertion_line: 76
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ Thumbs.db — Thumbs.db thumbnail cache; Compound File v3, 512-byte sectors, 4 directory entries  [0x0+0xa00]
