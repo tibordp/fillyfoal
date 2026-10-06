@@ -40,6 +40,7 @@ pub mod minidump;
 pub mod mz;
 pub mod ne;
 pub mod ocaml;
+pub mod omf;
 pub mod pdb;
 pub mod pe;
 pub mod pef;
@@ -194,6 +195,7 @@ pub static FORMATS: &[&Format] = &[
     &ne::FORMAT,
     &lx::FORMAT,
     &mz::FORMAT,
+    &omf::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
