@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.voc — Creative Voice, 8-bit unsigned PCM, 8000 Hz, 1 ch, 50 ms  [0x0+0x1b1]
+  ▾ Header  [0x0+0x1a]
+      Signature: "Creative Voice File\u{1a}"  [0x0+0x14]
+      Header size: 26  [0x14+0x2]
+      Version: 276 — 1.20  [0x16+0x2]
+      Checksum: 0x111f  [0x18+0x2]
+  ▾ Sound data — 8000 Hz, 8-bit unsigned PCM, 400 bytes  [0x1a+0x196]
+      Type: Sound data (0x1)  [0x1a+0x1]
+      Length: 402  [0x1b+0x3]
+      Frequency divisor: 131 — 8000 Hz  [0x1e+0x1]
+      Codec: 8-bit unsigned PCM (0x0)  [0x1f+0x1]
+      Samples  [0x20+0x190]
+  ▾ Terminator — 1 bytes  [0x1b0+0x1]
+      Type: 0  [0x1b0+0x1]

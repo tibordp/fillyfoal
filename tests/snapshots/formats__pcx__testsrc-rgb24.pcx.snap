@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc-rgb24.pcx — 8×6, 24-bit, 3 planes  [0x0+0x10e]
+  ▾ Header  [0x0+0x80]
+      Manufacturer: 0xa  [0x0+0x1]
+      Version: 3.0 and later (0x5)  [0x1+0x1]
+      Encoding: 1  [0x2+0x1]
+      Bits per pixel per plane: 8  [0x3+0x1]
+      X min: 0  [0x4+0x2]
+      Y min: 0  [0x6+0x2]
+      X max: 7  [0x8+0x2]
+      Y max: 5  [0xa+0x2]
+      Horizontal DPI: 1  [0xc+0x2]
+      Vertical DPI: 1  [0xe+0x2]
+      EGA palette: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x10+0x30]
+      Reserved: 0  [0x40+0x1]
+      Color planes: 3  [0x41+0x1]
+      Bytes per line: 8  [0x42+0x2]
+      Palette info: 0x0 (unknown)  [0x44+0x2]
+      Horizontal screen size: 0  [0x46+0x2]
+      Vertical screen size: 0  [0x48+0x2]
+      Filler: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x4a+0x36]
+    Image data — 6 scanlines × 3 planes × 8 bytes, RLE  [0x80+0x8e]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ readme.tx_ — MS-DOS COMPRESS (SZDD), 25 bytes uncompressed, last character "t"  [0x0+0x2b]
+  ▾ Header  [0x0+0xe]
+      Magic: 53 5a 44 44 88 f0 27 33  |SZDD..'3|  [0x0+0x8]
+      Compression mode: "A"  [0x8+0x1]
+      Missing last character: "t"  [0x9+0x1]
+      Uncompressed size: 25 — 25 bytes  [0xa+0x4]
+    Compressed data — 29 bytes  [0xe+0x1d]
+      ! unsupported: SZDD LZSS compression

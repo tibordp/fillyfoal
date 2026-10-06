@@ -15,7 +15,34 @@ use crate::span::Span;
 // touch different groups, so they merge cleanly.
 
 // -- archives & compression --
+pub mod ace;
+pub mod ar;
+pub mod arcutil;
+pub mod arj;
+pub mod bzip2;
+pub mod cab;
+pub mod compress;
+pub mod compressors;
+pub mod cpio;
+pub mod dmg;
+pub mod firmware;
 pub mod gzip;
+pub mod hexfile;
+pub mod iso9660;
+pub mod lha;
+pub mod lz4;
+pub mod lzma;
+pub mod rar;
+pub mod rpm;
+pub mod sevenzip;
+pub mod squashfs;
+pub mod stuffit;
+pub mod tar;
+pub mod wim;
+pub mod xar;
+pub mod xz;
+pub mod zoo;
+pub mod zstd;
 pub mod zip;
 // -- end archives --
 
@@ -24,10 +51,38 @@ pub mod pe;
 // -- end executables --
 
 // -- images --
+pub mod image;
 pub mod png;
 // -- end images --
 
 // -- audio & video --
+// audio (riff/iff/flac/mp3/ogg/...)
+pub mod ac3;
+pub mod adts;
+pub mod amr;
+pub mod ape;
+pub mod apetag;
+pub mod au;
+pub mod caf;
+pub mod dsd;
+pub mod dts;
+pub mod flac;
+pub mod id3;
+pub mod iff;
+pub mod lossless;
+pub mod midi;
+pub mod mpa;
+pub mod musepack;
+pub mod ogg;
+pub mod simple_audio;
+pub mod smaf;
+pub mod sound;
+pub mod tracker;
+pub mod tta;
+pub mod voc;
+pub mod vorbis;
+pub mod w64;
+pub mod wavpack;
 // video & containers (isobmff/matroska/ts/...)
 pub mod annexb;
 pub mod asf;
@@ -67,6 +122,8 @@ pub mod graphics;
 pub mod packages;
 pub mod archives2;
 pub mod misc2;
+pub mod pdb;
+pub mod platform;
 // -- end misc --
 
 // -- text --
@@ -167,9 +224,132 @@ pub static FORMATS: &[&Format] = &[
     &png::FORMAT,
     &png::MNG,
     &png::JNG,
+    &image::bmp::FORMAT,
+    &image::gif::FORMAT,
+    &image::jpeg::FORMAT,
+    &image::psd::FORMAT,
+    &image::ico::ICO,
+    &image::ico::CUR,
+    &image::qoi::FORMAT,
+    &image::dds::FORMAT,
+    &image::ktx::KTX,
+    &image::ktx::KTX2,
+    &image::exr::FORMAT,
+    &image::xcf::FORMAT,
+    &image::icns::FORMAT,
+    &image::j2k::FORMAT,
+    &image::jxl::FORMAT,
+    &image::icc::FORMAT,
+    &image::pcx::DCX,
+    &image::farbfeld::FORMAT,
+    &image::sunras::FORMAT,
+    &image::sgi::FORMAT,
+    &image::hdr::FORMAT,
+    &image::xbm::XPM,
+    &image::xbm::XBM,
+    &image::pnm::PBM,
+    &image::pnm::PGM,
+    &image::pnm::PPM,
+    &image::pnm::PAM,
+    &image::pnm::PFM,
+    // TIFF-based camera raw formats before plain TIFF.
+    &image::tiff::DNG,
+    &image::tiff::CR2,
+    &image::tiff::NEF,
+    &image::tiff::ARW,
+    &image::tiff::PEF,
+    &image::tiff::SRW,
+    &image::tiff::ORF,
+    &image::tiff::RW2,
+    &image::raw::RAF,
+    &image::raw::MRW,
+    &image::crw::FORMAT,
+    &image::jbig2::FORMAT,
+    &image::tiff::FORMAT,
+    // Weak probes (footer, header sanity checks) last.
+    &image::xwd::FORMAT,
+    &image::tga::FORMAT,
+    &image::pcx::FORMAT,
+    &image::wbmp::FORMAT,
+    // Also implemented in src/formats/image/ but not registered, because main
+    // has its own versions (graphics.rs, science.rs): fits, dpx, cineon, astc,
+    // pvr, vtf, emf, wmf, bpg, flif, jxr. Swap in whichever is deeper.
     // -- end images --
 
     // -- audio & video --
+    // audio (riff/iff/flac/mp3/ogg/...)
+    &iff::WAV,
+    &iff::AVI,
+    &iff::WEBP,
+    &iff::ANI,
+    &iff::RMI,
+    &iff::DLS,
+    &iff::SF2,
+    &iff::XWMA,
+    &iff::CDXA,
+    &iff::RIFF_PALETTE,
+    &iff::RDIB,
+    &iff::RMMP,
+    &iff::QCP,
+    &iff::CDR,
+    &iff::FOURXM,
+    &iff::AMV,
+    &iff::AIFF,
+    &iff::AIFC,
+    &iff::SVX8,
+    &iff::SVX16,
+    &iff::ILBM,
+    &iff::ANIM,
+    &iff::SMUS,
+    &iff::FTXT,
+    &iff::MAUD,
+    &iff::RIFF,
+    &iff::IFF,
+    &midi::FORMAT,
+    &au::FORMAT,
+    &voc::FORMAT,
+    &caf::FORMAT,
+    &amr::FORMAT,
+    &w64::FORMAT,
+    &ape::FORMAT,
+    &wavpack::FORMAT,
+    &musepack::FORMAT,
+    &tta::FORMAT,
+    &lossless::TAK,
+    &lossless::OFR,
+    &lossless::SHORTEN,
+    &dsd::DSF,
+    &dsd::DFF,
+    &smaf::FORMAT,
+    &simple_audio::SOX,
+    &simple_audio::IRCAM,
+    &simple_audio::ADX,
+    &simple_audio::KVAG,
+    &simple_audio::AST,
+    &simple_audio::ILBC,
+    &simple_audio::QOA,
+    &tracker::it::FORMAT,
+    &tracker::xm::FORMAT,
+    &tracker::s3m::FORMAT,
+    &tracker::more::MTM,
+    &tracker::more::STM,
+    &tracker::more::ULT,
+    &tracker::more::MED,
+    &tracker::more::OKT,
+    &tracker::protracker::FORMAT,
+    &tracker::more::COMPOSER669,
+    &simple_audio::RSO,
+    &flac::FORMAT,
+    &ogg::OPUS,
+    &ogg::OGG_FLAC,
+    &ogg::SPEEX,
+    &ogg::THEORA,
+    &ogg::FORMAT,
+    &adts::FORMAT,
+    &ac3::FORMAT,
+    &dts::FORMAT,
+    &mpa::FORMAT,
+    &id3::FORMAT,
     // video & containers (isobmff/matroska/ts/...)
     &isobmff::CR3,
     &isobmff::HEIF,
@@ -225,6 +405,41 @@ pub static FORMATS: &[&Format] = &[
 
     // -- archives & compression --
     &gzip::FORMAT,
+    &dmg::FORMAT,
+    &tar::FORMAT,
+    &bzip2::FORMAT,
+    &xz::FORMAT,
+    &lzma::LZIP,
+    &zstd::FORMAT,
+    &zstd::SKIPPABLE,
+    &lz4::FORMAT,
+    &lz4::LEGACY,
+    &lz4::SNAPPY,
+    &compress::COMPRESS,
+    &compress::PACK,
+    &compressors::SZDD,
+    &compressors::KWAJ,
+    &ar::DEB,
+    &ar::FORMAT,
+    &cpio::FORMAT,
+    &rpm::FORMAT,
+    &sevenzip::FORMAT,
+    &rar::FORMAT,
+    &cab::FORMAT,
+    &arj::FORMAT,
+    &xar::FORMAT,
+    &iso9660::FORMAT,
+    &iso9660::UDF,
+    &firmware::ANDROID_SPARSE,
+    &firmware::ANDROID_BOOT,
+    &firmware::UIMAGE,
+    &squashfs::SQUASHFS,
+    &squashfs::CRAMFS,
+    &wim::FORMAT,
+    &stuffit::FORMAT,
+    &stuffit::SIT5,
+    &zoo::FORMAT,
+    &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
     &zip::AAR,
     &zip::XLSB,
@@ -265,6 +480,13 @@ pub static FORMATS: &[&Format] = &[
     &zip::SCRATCH,
     &zip::JAR,
     &zip::FORMAT,
+    // Weak probes last.
+    &tar::V7,
+    &lha::FORMAT,
+    &ace::ARC,
+    &lzma::LZMA,
+    &hexfile::IHEX,
+    &hexfile::SREC,
     // -- end archives --
 
     // -- retro & consoles --
@@ -428,6 +650,21 @@ pub static FORMATS: &[&Format] = &[
     &misc2::NRRD,
     &misc2::HDF4,
     &misc2::VTK,
+    &pdb::PDB,
+    &pdb::PDB2,
+    &platform::PERF,
+    &platform::LDSO_CACHE,
+    &platform::SELINUX,
+    &platform::VBMETA,
+    &platform::DTBO,
+    &platform::INTEL_FLASH,
+    &platform::CBFS,
+    &platform::ARM_FIP,
+    &platform::NSIS,
+    &platform::INNO,
+    &platform::JMOD,
+    &platform::JIMAGE,
+    &platform::MAC_RESOURCE,
     &ebooks::PDB,
     // Weak, size-based probes last.
     &models::STL,

@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.xbm — 10×3, "image"  [0x0+0x7e]
+    image_width: 10  [0x0+0x16]
+    image_height: 3  [0x17+0x16]
+    Bits — 6 bytes, LSB is the leftmost pixel  [0x52+0x2a]

@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tone.vag — KVAG, IMA ADPCM, 8000 Hz, 1 ch, 50 ms  [0x0+0xd6]
+  ▾ Header  [0x0+0xe]
+      Magic: "KVAG"  [0x0+0x4]
+      Data size: 200  [0x4+0x4]
+      Sample rate: 8000  [0x8+0x4]
+      Stereo: 0  [0xc+0x2]
+    Samples — 50 ms  [0xe+0xc8]

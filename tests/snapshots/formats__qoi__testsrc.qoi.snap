@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ testsrc.qoi — 8×6, RGBA, sRGB  [0x0+0x58]
+  ▾ Header  [0x0+0xe]
+      Magic: "qoif"  [0x0+0x4]
+      Width: 8  [0x4+0x4]
+      Height: 6  [0x8+0x4]
+      Channels: RGBA (0x4)  [0xc+0x1]
+      Colorspace: sRGB with linear alpha (0x0)  [0xd+0x1]
+    Chunks  [0xe+0x42]
+    End marker  [0x50+0x8]
