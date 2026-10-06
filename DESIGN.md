@@ -105,8 +105,8 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 - **Nodes** carry a name, an optional typed `Value`, summary, description,
   `span`, optional `target` (what the field points to), diagnostics, and an
   optional *expander*: a plain-data state plus an `async fn` that emits the
-  children. Expanders are re-runnable (determinism), which is what will make
-  eviction possible later.
+  children. Expanders are re-runnable (determinism), which is what makes
+  eviction possible.
 - **Spans** are `(source, offset, len)`. Sources are host-provided or
   derived: decoded streams (`Cx::add_derived`, `codec::decode_span`, lazily
   `Cx::decode_lazy`) and piece lists over other sources (`Cx::add_pieces`),
@@ -119,6 +119,28 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 - **Pagination.** `expand(node, n)` asks for at least `n` children; the
   expansion suspends when that many are emitted and resumes when more are
   requested. Collections may announce `Count::{Exact, AtLeast, Unknown}`.
+- **Memory.** Everything the session holds is bounded or reproducible:
+  - *Nodes*: `Session::seek(node, start, len)` keeps a window of a
+    collection's children (`Children::first` is its start) and releases the
+    rest; `Session::trim` collapses least recently used subtrees. Re-running
+    an expander reproduces what was released. Seeking forward continues the
+    expansion, dropping children before the window; seeking backward
+    restarts it, from the nearest **resume mark** when the walker records
+    them (`cx.mark(|| state)` before pushing, `cx.resume::<State>()` at the
+    start; marks are kept sparsely, every 256 children). Without marks a
+    restart re-walks from the start, skipping.
+  - *Decoded sources*: `Limits::max_derived` is a budget, not a cap. Sources
+    decoded with a codec record it (a recipe) and are evicted least
+    recently read first; an evicted source decodes again on demand from its
+    parent. Bytes a dissector computed itself (`add_derived`) stay.
+  - *Long streams*: a lazily decoded source keeps a sliding window. Codecs
+    report what they no longer need (consumed input; output before their
+    LZ window — see "Releasing" in `codec::pipeline`), the source drops it
+    once its output exceeds twice the keep size (16 MiB, or a quarter of
+    `max_derived`), and a read behind the window decodes again from the
+    start (restart, no checkpoints).
+  - *Bytes* are an LRU cache of host chunks (`Limits::cache_bytes`);
+    parsed values shared through `cx.cache` are bounded too.
 - **Partial results.** Children are pushed as they are produced; if the
   expansion fails, what was emitted stays and the error is attached to the
   expanded node.
@@ -315,9 +337,13 @@ containers. Consolidated:
 
 ## Open questions
 
-- Eviction: re-deriving collapsed subtrees and resume keys for pages, so that
-  memory stays bounded in long sessions.
-- Random access into collections (`seek(index)`) for fixed-stride arrays.
+- Decoder checkpoints, so a read far behind a lazily decoded source's
+  window resumes from a snapshot instead of the start (deliberately left
+  out: restart is good enough so far).
+- Lazily decoded sources need their decoded length up front; a stream that
+  records none (standalone `.bz2`, `.br`, LZ4 frames without a content
+  size) is decoded eagerly. Provisional lengths would fix this but make
+  tail reads (identification looks at the end) decode everything.
 - Node links (to other nodes, not just spans) for graph-shaped formats.
 - CJK multi-byte encodings (Shift_JIS, EUC-JP, GBK/GB18030, Big5, EUC-KR):
   labels are recognised and reported as unsupported; decoders with

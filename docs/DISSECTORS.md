@@ -138,6 +138,30 @@ while let Some(chunk) = cur.chunk(ChunkLayout::new(4, 4, Endian::Little)).await?
 }
 ```
 
+**Large collections** (thousands of entries or more: archive members,
+lines, records) should record **resume marks**, so a host that seeks deep
+into the collection does not re-walk it from the start. Mark the walker's
+state right before pushing, and restore it at the start:
+
+```rust
+let (pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+cur.seek(pos);
+while !cur.at_end() {
+    let at = (cur.pos(), index);
+    cx.mark(move || at);            // cheap: kept every 256 children
+    // ... read the entry, push it ...
+    index += 1;
+}
+```
+
+On a resumed run the next child pushed must be the one the mark was taken
+before, so the state must include everything the loop carries (counters,
+totals used in a later `annotate`). Children emitted before the loop are
+not re-emitted on a resumed run, so keep marks to walkers whose children
+are all pushed in the loop (see `tar.rs`, `zip.rs`, `text/plain.rs`).
+`cx.skipping()` tells a walker that the next child lies before the host's
+window and will be dropped, if building it is expensive.
+
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than
