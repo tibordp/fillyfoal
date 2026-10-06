@@ -4,8 +4,9 @@
 //! layout depends on the version: 17 for XP, 23 for Vista/7, 26 for 8.1,
 //! 30/31 for 10/11) gives the run count, last run times and the offsets of
 //! the metrics, trace chains, file names and volumes. Windows 10 and later
-//! usually store the file compressed (`MAM`, Xpress Huffman), which is not
-//! decoded.
+//! usually store the file compressed (`MAM\x04`: Xpress Huffman with the
+//! uncompressed size in the header); the decompressed file is dissected as
+//! an uncompressed one.
 
 use std::sync::Arc;
 
@@ -153,11 +154,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 Ok(())
             },
         ));
-        cx.emit(
-            Node::new("Compressed data")
-                .span(file.tail(8))
-                .diag(Diagnostic::unsupported("Xpress Huffman (MAM) compression")),
-        );
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            file.tail(8),
+            crate::codec::Codec::XpressHuffman { size: size.into() },
+            Some(size.into()),
+        ));
+        cx.emit(Node::new("Compressed data").span(file.tail(8)));
         return Ok(());
     }
     let header_span = file.sub(0, Header::SIZE);

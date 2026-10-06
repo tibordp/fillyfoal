@@ -2,9 +2,21 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ hiberfil.sys — hibernation file, hibernated, version 6  [0x0+0x1050]
+▾ hiberfil.sys — hibernation file, hibernated, version 6  [0x0+0x3180]
     Signature: "HIBR"  [0x0+0x4]
     Image type / version: 6  [0x4+0x4]
     Checksum: 0x0  [0x8+0x4]
     Length self: 4096  [0xc+0x4]
-    Compressed memory image  [0x1000+0x50]
+  ▾ Compressed memory image  [0x1000+0x2180]
+    ▾ Xpress block 0 — 2 pages, 4410 bytes compressed  [0x1000+0x1160]
+        Signature: 81 81 78 70 72 65 73 73  |..xpress|  [0x1000+0x8]
+        Pages and size: 0x44e401 — 2 pages, 4410 bytes  [0x1008+0x4]
+        Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x100c+0x14]
+      ▾ Pages — 0x2000 bytes decompressed  [0x1020+0x113a]
+          Data  [#1:0x0+0x2000]
+    ▾ Xpress block 1 — 1 pages, stored  [0x2160+0x1020]
+        Signature: 81 81 78 70 72 65 73 73  |..xpress|  [0x2160+0x8]
+        Pages and size: 0x3ffc00 — 1 pages, 4096 bytes  [0x2168+0x4]
+        Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x216c+0x14]
+      ▾ Pages  [0x2180+0x1000]
+          Data  [0x2180+0x1000]
