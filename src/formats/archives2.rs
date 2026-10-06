@@ -574,14 +574,24 @@ impl MpqState {
                 return Ok(bytes);
             }
             let (&mask, body) = bytes.split_first().ok_or_else(|| Diagnostic::malformed("empty compressed sector"))?;
+            let decode = |codec: crate::codec::Codec, body: &[u8]| {
+                let mut decoder = codec.decoder().ok_or_else(|| Diagnostic::internal("no decoder"))?;
+                crate::codec::pipeline::decode_all(decoder.as_mut(), body, limit)
+            };
             match mask {
-                0x02 => {
-                    let mut decoder = crate::codec::Codec::Zlib.decoder().ok_or_else(|| Diagnostic::internal("no zlib"))?;
-                    crate::codec::pipeline::decode_all(decoder.as_mut(), body, limit)
-                }
+                0x02 => decode(crate::codec::Codec::Zlib, body),
                 0x08 => Err(Diagnostic::unsupported("PKWARE DCL implode")),
-                0x10 => Err(Diagnostic::unsupported("bzip2 compression")),
-                0x12 => Err(Diagnostic::unsupported("LZMA compression")),
+                0x10 => decode(crate::codec::Codec::Bzip2, body),
+                // StormLib: a 0 (no filter) byte, the 5 LZMA properties
+                // bytes and the 8-byte decoded size, then raw LZMA.
+                0x12 => {
+                    let props = match body.first() {
+                        Some(0) => crate::codec::lzma::Props::from_byte(body.get(1).copied().unwrap_or(0xff))?,
+                        _ => return Err(Diagnostic::unsupported("LZMA sector with a filter")),
+                    };
+                    let codec = crate::codec::Codec::LzmaRaw { props, size: Some(expected) };
+                    decode(codec, body.get(14..).unwrap_or_default())
+                }
                 m => Err(Diagnostic::unsupported(format!("compression mask {m:#04x}"))),
             }
         };
