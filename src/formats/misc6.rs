@@ -29,18 +29,7 @@ fn zstr(b: &[u8]) -> String {
     crate::text::until_nul(b)
 }
 
-/// Lines of a text head, with spans.
-async fn lines(cx: &Cx, file: Span, max: u64) -> Result<Vec<(String, Span)>> {
-    let head = cx.read_avail(file.sub(0, max)).await?;
-    let mut out = Vec::new();
-    let mut pos = 0u64;
-    for line in head.split(|&b| b == b'\n') {
-        let len = to_u64(line.len());
-        out.push((String::from_utf8_lossy(line).trim_end_matches('\r').to_owned(), file.sub(pos, len)));
-        pos = pos.saturating_add(len).saturating_add(1);
-    }
-    Ok(out)
-}
+use crate::formats::text::scan::head_lines as lines;
 
 /// Header-only dissector body: emits a signature and the rest as one node.
 async fn signature_and_body(cx: &Cx, file: Span, magic_len: u64, body: &'static str) -> Result<Vec<u8>> {
