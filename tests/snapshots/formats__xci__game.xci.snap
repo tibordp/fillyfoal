@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.xci — Switch cartridge, size code 0xfa, root HFS0 at 0xf000  [0x0+0x200]
+    Magic: "HEAD"  [0x100+0x4]
+    Secure area start (pages): 1  [0x104+0x4]
+    Backup area start: 0xffffffff  [0x108+0x4]
+    Title key decryption index: 0  [0x10c+0x1]
+    Cartridge size: 1 GB (0xfa)  [0x10d+0x1]
+    Header version: 0  [0x10e+0x1]
+    Flags: 0x0  [0x10f+0x1]
+    Package ID: 0x1234  [0x110+0x8]
+    Valid data end (pages): 10  [0x118+0x4]
+    Reserved: 0  [0x11c+0x4]
+    IV: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x120+0x10]
+    Root HFS0 offset: 0xf000  [0x130+0x8]
+    Root HFS0 header size: 512  [0x138+0x8]
+    Root HFS0  [0x200+0x0]

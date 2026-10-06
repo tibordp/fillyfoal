@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ encrypted.gpg — OpenPGP encrypted message  [0x0+0x2ea]
+  ▾ Public-Key Encrypted Session Key Packet — for key E8712CCAAB08519A  [0x0+0x8e]
+      Packet header: Public-Key Encrypted Session Key (0x1) — new format, 140 body bytes  [0x0+0x2]
+      Version: 3  [0x2+0x1]
+      Key ID: "E8712CCAAB08519A"  [0x3+0x8]
+      Public-key algorithm: RSA (0x1)  [0xb+0x1]
+      m^e mod n: c5 00 01 02 03 04 05 06 07 08 09 0a 0b 0c 0d 0e …  |................| — 1024-bit  [0xc+0x82]
+  ▾ Symmetrically Encrypted Integrity Protected Data Packet  [0x8e+0x25c]
+      Packet header: Symmetrically Encrypted Integrity Protected Data (0x12) — new format, 601 body bytes  [0x8e+0x2]
+      Version: 1  [#1:0x0+0x1]
+      Encrypted data — 600 bytes  [#1:0x1+0x258]

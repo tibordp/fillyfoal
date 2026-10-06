@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ tiny.xpm — 4×3, 2 colors  [0x0+0x9b]
+    Values: "4 3 2 1 " — 4×3, 2 colors, 1 chars per pixel  [0x4c+0xa]
+  ▾ Colors — 2 entries  [0x58+0x19]
+      ".": "c None"  [0x58+0xa]
+      "#": "c #FF0000"  [0x64+0xd]
+    Pixels — 3 rows  [0x80+0x16]

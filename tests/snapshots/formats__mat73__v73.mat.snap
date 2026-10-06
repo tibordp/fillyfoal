@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ v73.mat — MATLAB 7.3 MAT-file, HDF5 superblock v2, 300 bytes declared  [0x0+0x32c]
+    User block: "MATLAB 7.3 MAT-file, Platform: fillyfoal, Created on: Thu Jan  1 00:00:00 2026 HDF5 schema 1.00 ."  [0x0+0x200]
+  ▾ Superblock — version 2  [0x200+0x30]
+      Signature: 89 48 44 46 0d 0a 1a 0a  |.HDF....|  [0x200+0x8]
+      Version: 2  [0x208+0x1]
+      Size of offsets: 8  [0x209+0x1]
+      Size of lengths: 8  [0x20a+0x1]
+      File consistency flags: 0  [0x20b+0x1]
+      Base address: 0x0  [0x20c+0x8]
+      Superblock extension address: 0xffffffffffffffff  [0x214+0x8]
+      End of file address: 0x12c  [0x21c+0x8]
+      Root group object header address: 0x30  [0x224+0x8]
+      Checksum: 0x0  [0x22c+0x4]
+  ▾ Root group: 0x30 — group, object header v2, 3 messages → 0x230+0x10
+    ▾ x: 0xa0 — dataset, object header v2, 3 messages  [0x23a+0x10] → 0x2a0+0x10
+        Dataspace — [4]  [0x2aa+0x10]
+        Datatype — fixed-point, 4 bytes  [0x2ba+0x10]
+        Data Layout: 0x104 — contiguous, 16 bytes  [0x2ca+0x16] → 0x304+0x10
+      self: 0x30 — already open above (hard-link cycle)  [0x24a+0x13] → 0x230+0x10
+      Attribute: "title"  [0x25d+0x13]

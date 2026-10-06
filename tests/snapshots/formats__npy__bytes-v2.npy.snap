@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ bytes-v2.npy — NumPy array |u1, shape (16), Fortran order  [0x0+0x90]
+    Magic: 93 4e 55 4d 50 59  |.NUMPY|  [0x0+0x6]
+    Major version: 2  [0x6+0x1]
+    Minor version: 0  [0x7+0x1]
+    Header length: 116  [0x8+0x4]
+    Header: "{'descr': '|u1', 'fortran_order': True, 'shape': (16,), }"  [0xc+0x74]
+    dtype: "|u1"
+    Fortran order: true
+    Shape: "(16)"
+    Data — 16 elements, 16 bytes  [0x80+0x10]

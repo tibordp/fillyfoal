@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ av1.obu — AV1 OBU stream  [0x0+0x13d]
+    OBU: temporal delimiter (0x2) — 0 bytes  [0x0+0x2]
+    OBU: sequence header (0x1) — 10 bytes  [0x2+0xc]
+    OBU: frame (0x6) — 265 bytes  [0xe+0x10c]
+    OBU: temporal delimiter (0x2) — 0 bytes  [0x11a+0x2]
+    OBU: frame (0x6) — 31 bytes  [0x11c+0x21]

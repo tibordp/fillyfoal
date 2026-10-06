@@ -1,0 +1,56 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ ._download.zip — AppleDouble, finder info, resource fork  [0x0+0x149]
+    Magic: 0x51607  [0x0+0x4]
+    Version: 0x20000  [0x4+0x4]
+    Filler: 4d 61 63 20 4f 53 20 58 20 20 20 20 20 20 20 20  |Mac OS X        |  [0x8+0x10]
+    Number of entries: 2  [0x18+0x2]
+  ▾ Finder info — 279 bytes  [0x32+0x117] → 0x1a+0xc
+      Entry ID: 9  [0x1a+0x4]
+      Offset: 0x32  [0x1e+0x4]
+      Length: 279  [0x22+0x4]
+      File type: "\\x00\\x00\\x00\\x00"  [0x32+0x4]
+      Creator: "\\x00\\x00\\x00\\x00"  [0x36+0x4]
+      Finder flags: 0x0 []  [0x3a+0x2]
+      Location v: 0  [0x3c+0x2]
+      Location h: 0  [0x3e+0x2]
+      Folder: 0  [0x40+0x2]
+      Extended Finder info: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x42+0x10]
+    ▾ Extended attributes  [0x52+0xf7]
+        Padding: 0  [0x52+0x2]
+        Magic: "ATTR"  [0x54+0x4]
+        Debug tag: 0x12abcd  [0x58+0x4]
+        Total size: 329  [0x5c+0x4]
+        Data start: 0xc8  [0x60+0x4]
+        Data length: 129  [0x64+0x4]
+        Reserved: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0x68+0xc]
+        Flags: 0x0  [0x74+0x2]
+        Number of attributes: 2  [0x76+0x2]
+        com.apple.quarantine: "0083;66f1a2b3;Safari;" — 21 bytes  [0x78+0x20] → 0xc8+0x15
+      ▾ com.apple.metadata:kMDItemWhereFroms — binary plist, 3 objects, root array (2)  [0xdd+0x6c]
+        ▾ Header  [0xdd+0x8]
+            Magic: "bplist"  [0xdd+0x6]
+            Version: "00"  [0xe3+0x2]
+        ▾ Root — array (2)  [0xe5+0x3]
+            [0]: "https://example.invalid/file.zip" — ASCII string  [0xe8+0x23]
+            [1]: "https://example.invalid/" — ASCII string  [0x10b+0x1b]
+        ▾ Objects — 3 objects  [0xe5+0x41]
+            #0 — array (2)  [0xe5+0x3]
+            #1: "https://example.invalid/file.zip" — ASCII string  [0xe8+0x23]
+            #2: "https://example.invalid/" — ASCII string  [0x10b+0x1b]
+        ▾ Offset table — 3 entries  [0x126+0x3]
+            #0: 0x8  [0x126+0x1] → 0xe5+0x1
+            #1: 0xb  [0x127+0x1] → 0xe8+0x1
+            #2: 0x2e  [0x128+0x1] → 0x10b+0x1
+        ▾ Trailer  [0x129+0x20]
+            Unused: 00 00 00 00 00  |.....|  [0x129+0x5]
+            Sort version: 0  [0x12e+0x1]
+            Offset size: 1  [0x12f+0x1]
+            Object reference size: 1  [0x130+0x1]
+            Number of objects: 3  [0x131+0x8]
+            Top object: 0  [0x139+0x8]
+            Offset table offset: 0x49  [0x141+0x8]
+  ▾ Resource fork — 0 bytes  [0x149+0x0] → 0x26+0xc
+      Data  [0x149+0x0]

@@ -1,0 +1,32 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ report.bookmark — macOS bookmark → /Users/fixture/Documents/report.pdf on "Macintosh HD"  [0x0+0x254]
+    Magic: "book"  [0x0+0x4]
+    Total length: 596  [0x4+0x4]
+    Version: 0x10040000  [0x8+0x4]
+    Header size: 0x30  [0xc+0x4]
+    First TOC offset: 0x180  [0x30+0x4]
+  ▾ Table of contents 1 — 12 entries  [0x1b0+0xa4]
+    ▾ Path — array, 16 bytes  [0x7c+0x18] → 0x1c4+0xc
+        [0]: "Users" — string, 5 bytes  [0x34+0xd]
+        [1]: "fixture" — string, 7 bytes  [0x44+0xf]
+        [2]: "Documents" — string, 9 bytes  [0x54+0x11]
+        [3]: "report.pdf" — string, 10 bytes  [0x68+0x12]
+    ▾ File IDs — array, 16 bytes  [0xd4+0x18] → 0x1d0+0xc
+        [0]: 2 — int64, 8 bytes  [0x94+0x10]
+        [1]: 1234 — int64, 8 bytes  [0xa4+0x10]
+        [2]: 5678 — int64, 8 bytes  [0xb4+0x10]
+        [3]: 91011 — int64, 8 bytes  [0xc4+0x10]
+    ▾ Resource properties — dictionary, 8 bytes  [0x178+0x10] → 0x1dc+0xc
+        NSURLIsDirectoryKey: false — false, 0 bytes  [0x170+0x8]
+      Creation date: 2026-10-05 12:30:00 UTC — date, 8 bytes  [0xec+0x10] → 0x1e8+0xc
+      Volume path: "/" — string, 1 bytes  [0xfc+0x9] → 0x1f4+0xc
+      Volume URL: "file:///" — URL, 8 bytes  [0x134+0x10] → 0x200+0xc
+      Volume name: "Macintosh HD" — string, 12 bytes  [0x108+0x14] → 0x20c+0xc
+      Volume UUID: "12345678123456789abcdef012345678" — UUID, 16 bytes  [0x11c+0x18] → 0x218+0xc
+      Volume size: 500000000000 — int64, 8 bytes  [0x144+0x10] → 0x224+0xc
+      Containing folder index: 2 — int32, 4 bytes  [0x1a4+0xc] → 0x230+0xc
+      Creator user name: "fixture" — string, 7 bytes  [0x188+0xf] → 0x23c+0xc
+      Creator UID: 501 — int32, 4 bytes  [0x198+0xc] → 0x248+0xc

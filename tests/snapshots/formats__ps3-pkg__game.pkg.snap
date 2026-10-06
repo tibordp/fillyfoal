@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.pkg — PS3 package UP0001-FILL00001_00-0000000000000000, 2 items, 512 bytes, retail  [0x0+0x200]
+    Magic: 7f 50 4b 47  |.PKG|  [0x0+0x4]
+    Revision: 0x8000  [0x4+0x2]
+    Type: PS3 (0x1)  [0x6+0x2]
+    Metadata offset: 0xc0  [0x8+0x4]
+    Metadata count: 3  [0xc+0x4]
+    Header size: 192  [0x10+0x4]
+    Item count: 2  [0x14+0x4]
+    Total size: 512  [0x18+0x8]
+    Data offset: 0x140  [0x20+0x8]
+    Data size: 64  [0x28+0x8]
+    Content ID: "UP0001-FILL00001_00-0000000000000000"  [0x30+0x30]
+    Encrypted data  [0x140+0x40]

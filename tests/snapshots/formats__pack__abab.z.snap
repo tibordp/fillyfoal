@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ abab.z — pack, 16 bytes uncompressed  [0x0+0xf]
+  ▾ Header  [0x0+0xb]
+      Magic: 1f 1e  |..|  [0x0+0x2]
+      Original size: 16 — 16 bytes  [0x2+0x4]
+      Tree depth: 2  [0x6+0x1]
+      Leaves at level 1: 1  [0x7+0x1]
+      Leaves at level 2: 2  [0x8+0x1]
+      Leaf characters: 61 62  |ab|  [0x9+0x2]
+    Compressed data — 4 bytes  [0xb+0x4]
+      ! unsupported: pack Huffman compression

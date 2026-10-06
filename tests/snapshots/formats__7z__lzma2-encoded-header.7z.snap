@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ lzma2-encoded-header.7z — 7-Zip archive, header compressed (LZMA), 375 bytes packed  [0x0+0x177]
+  ▾ Signature header — version 0.4  [0x0+0x20]
+      Signature: 37 7a bc af 27 1c  |7z..'.|  [0x0+0x6]
+      Major version: 0  [0x6+0x1]
+      Minor version: 4  [0x7+0x1]
+      Start header CRC: 0x9eaaed0a  [0x8+0x4]
+      Next header offset: 0x135  [0xc+0x8]
+      Next header size: 34 — 34 bytes  [0x14+0x8]
+      Next header CRC: 0x127944ca  [0x1c+0x4]
+    Packed data — 81 bytes  [0x20+0x51]
+    Encoded header — LZMA, 228 bytes → 398 bytes  [0x71+0xe4]
+      ! unsupported: LZMA compression
+  ▾ Next header — kEncodedHeader  [0x155+0x22]
+    ▾ kEncodedHeader  [0x155+0x22]
+      ▾ kPackInfo — 1 packed stream, at 0x51  [0x156+0x7]
+          kSize — 1 size  [0x159+0x3]
+      ▾ kUnPackInfo — 1 folder  [0x15d+0x19]
+          Folder 0 — LZMA  [0x161+0xb]
+          kCodersUnPackSize  [0x16c+0x3]
+          kCRC — 1 CRC  [0x16f+0x6]

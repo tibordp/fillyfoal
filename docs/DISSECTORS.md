@@ -186,8 +186,12 @@ filetime_to_unix, mac_to_unix}`, `crate::codec::{crc32, adler32}`.
 - Recursion: an expander that refers to itself (directly or mutually) must
   use `node.lazy(crate::expander!(self::walk: State), state)`. If a local
   variable shadows the function name, use the `self::` path.
-- Graph-shaped formats: detect cycles (keep the path of visited offsets in
-  the state) and cap depth with a `Diagnostic::limit`.
+- Graph-shaped formats: detect cycles and cap depth with `dsl::Path`
+  (`path.enter(id, max_depth)` returns the child path or a diagnostic); keep
+  the path in the expander state.
+- Parsing the same structure for many nodes (an object stream, a string
+  table)? Parse once and share it: `cx.cached::<T>(span, "kind")` /
+  `cx.cache(span, "kind", Arc::new(value))`.
 
 ## 9. Testing
 
