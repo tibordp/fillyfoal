@@ -4,7 +4,10 @@
 //!
 //! Blocks hold prefix-compressed entries followed by a restart array; each
 //! block has a 5-byte trailer with its compression type and a masked
-//! CRC-32C, which is verified.
+//! CRC-32C, which is verified. Compressed blocks (Snappy; LevelDB zstd;
+//! RocksDB zlib, bzip2, LZ4 and ZSTD) are decompressed into derived sources.
+//! RocksDB format version 4 and later index encodings, version 6 footers
+//! and XXH3 checksums are not handled.
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
 use crate::cx::Cx;
@@ -95,6 +98,14 @@ fn mask(crc: u32) -> u32 {
     crc.rotate_right(15).wrapping_add(0xa282_ead8)
 }
 
+/// Which table flavour a block belongs to: compression type numbers and
+/// framing differ between LevelDB and RocksDB (and its format versions).
+#[derive(Clone, Copy)]
+struct Flavor {
+    rocks: bool,
+    version: u32,
+}
+
 #[derive(Clone, Copy)]
 enum BlockKind {
     Index,
@@ -120,11 +131,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .get(tail.len().saturating_sub(footer_len)..)
         .unwrap_or_default();
     let at = usize::from(rocks);
+    let flavor = Flavor {
+        rocks,
+        version: if rocks { u32_le(footer, 41).unwrap_or(0) } else { 0 },
+    };
     let (meta_off, meta_size, e) = handle(footer, at)
         .ok_or_else(|| Diagnostic::malformed("invalid meta-index handle").at(footer_span))?;
     let (index_off, index_size, _) = handle(footer, e)
         .ok_or_else(|| Diagnostic::malformed("invalid index handle").at(footer_span))?;
-    let index = block_entries(&cx, file, index_off, index_size).await;
+    let index = block_entries(&cx, file, index_off, index_size, flavor).await;
     let blocks = index.as_ref().map_or(0, Vec::len);
     cx.annotate(format!(
         "{} table, {blocks} data block{}",
@@ -135,12 +150,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Index block")
             .span(file.sub(index_off, index_size.saturating_add(5)))
             .summary(format!("{blocks} entries"))
-            .lazy(block, (input, index_off, index_size, BlockKind::Index)),
+            .lazy(block, (input, index_off, index_size, BlockKind::Index, flavor)),
     );
     cx.emit(
         Node::new("Meta-index block")
             .span(file.sub(meta_off, meta_size.saturating_add(5)))
-            .lazy(block, (input, meta_off, meta_size, BlockKind::Meta)),
+            .lazy(block, (input, meta_off, meta_size, BlockKind::Meta, flavor)),
     );
     cx.emit(
         Node::new("Footer")
@@ -285,15 +300,49 @@ async fn read_block(
     Ok((data, kind, diag))
 }
 
-async fn block_entries(cx: &Cx, file: Span, offset: u64, size: u64) -> Result<Vec<Entry>> {
+async fn block_entries(cx: &Cx, file: Span, offset: u64, size: u64, flavor: Flavor) -> Result<Vec<Entry>> {
     let (data, kind, _) = read_block(cx, file, offset, size).await?;
-    if kind != 0 {
-        return Err(Diagnostic::unsupported(format!(
-            "{} block compression",
-            lookup(COMPRESSION, kind.into()).unwrap_or("unknown")
-        )));
-    }
+    let (data, _) = decompress(cx, file.sub(offset, size), data, kind, flavor).await?;
     entries(&data)
+}
+
+/// The plain bytes of a block and their span (in a derived source when the
+/// block is compressed).
+async fn decompress(cx: &Cx, span: Span, data: Vec<u8>, kind: u8, flavor: Flavor) -> Result<(Vec<u8>, Span)> {
+    use crate::codec::Codec;
+    let codec = match (kind, flavor.rocks) {
+        (0, _) => return Ok((data, span)),
+        (1, _) => Codec::Snappy,
+        (2, false) => Codec::Zstd,
+        (2, true) => Codec::Deflate,
+        (3, true) => Codec::Bzip2,
+        (4 | 5, true) => Codec::Lz4Block,
+        (7, true) => Codec::Zstd,
+        _ => {
+            return Err(Diagnostic::unsupported(format!(
+                "{} compression",
+                lookup(COMPRESSION, kind.into()).unwrap_or("unknown")
+            ))
+            .at(span));
+        }
+    };
+    // RocksDB (format version 2 and later) prefixes all but Snappy with the
+    // decoded size as a varint32; version 1 gave LZ4 an 8-byte size.
+    let (skip, expected) = match (kind, flavor.rocks) {
+        (2 | 3 | 4 | 5 | 7, true) if flavor.version >= 2 => {
+            let (size, end) = varint(&data, 0).ok_or_else(|| Diagnostic::malformed("bad size prefix").at(span))?;
+            (end, Some(size))
+        }
+        (4 | 5, true) => (8, u64_le(&data, 0)),
+        _ => (0, None),
+    };
+    let skip = to_u64(skip);
+    let decoded =
+        crate::codec::decode_span(cx, span.sub(skip, span.len.saturating_sub(skip)), &codec, expected).await?;
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
+    Ok((crate::codec::read_all(cx, decoded.span).await?, decoded.span))
 }
 
 fn text(bytes: &[u8]) -> Value {
@@ -322,84 +371,78 @@ fn internal_key(key: &[u8]) -> (Value, String) {
     (text(user), format!("seq {}, {kind}", t >> 8))
 }
 
-async fn block(cx: Cx, (input, offset, size, kind): (Input, u64, u64, BlockKind)) -> Result<()> {
+async fn block(cx: Cx, (input, offset, size, kind, flavor): (Input, u64, u64, BlockKind, Flavor)) -> Result<()> {
     let file = input.span;
     let (data, compression, diag) = read_block(&cx, file, offset, size).await?;
     if let Some(d) = diag {
         cx.diag(d);
     }
     let span = file.sub(offset, size);
-    if compression != 0 {
-        cx.emit(
-            Node::new("Contents")
-                .span(span)
-                .diag(Diagnostic::unsupported(format!(
-                    "{} compression",
-                    lookup(COMPRESSION, compression.into()).unwrap_or("unknown")
-                ))),
-        );
-    } else {
-        let list = entries(&data)?;
-        cx.set_count(Count::AtLeast(to_u64(list.len())));
-        for (i, e) in list.iter().enumerate() {
-            let range = span.sub(
-                to_u64(e.range.0),
-                to_u64(e.range.1.saturating_sub(e.range.0)),
-            );
-            let value = data.get(e.value.0..e.value.1).unwrap_or_default();
-            let node = match kind {
-                BlockKind::Index | BlockKind::Meta => {
-                    let (off, len, _) = handle(value, 0).unwrap_or((0, 0, 0));
-                    let name = String::from_utf8_lossy(&e.key).into_owned();
-                    let sub = match kind {
-                        BlockKind::Meta if name == "rocksdb.properties" => {
-                            Some(BlockKind::Properties)
-                        }
-                        BlockKind::Meta => None,
-                        _ => Some(BlockKind::Data),
-                    };
-                    let label = if matches!(kind, BlockKind::Index) {
-                        format!("Data block {i}")
-                    } else {
-                        name.clone()
-                    };
-                    let mut node = Node::new(label)
-                        .span(range)
-                        .value(Value::UInt {
-                            value: off,
-                            bits: 64,
-                            radix: Radix::Hex,
-                        })
-                        .summary(if matches!(kind, BlockKind::Index) {
-                            format!(
-                                "{len} bytes, keys up to {}",
-                                crate::render::value(&internal_key(&e.key).0)
-                            )
+    match decompress(&cx, span, data, compression, flavor).await {
+        Err(e) => cx.emit(Node::new("Contents").span(span).diag(e)),
+        Ok((data, span)) => {
+            let list = entries(&data)?;
+            cx.set_count(Count::AtLeast(to_u64(list.len())));
+            for (i, e) in list.iter().enumerate() {
+                let range = span.sub(
+                    to_u64(e.range.0),
+                    to_u64(e.range.1.saturating_sub(e.range.0)),
+                );
+                let value = data.get(e.value.0..e.value.1).unwrap_or_default();
+                let node = match kind {
+                    BlockKind::Index | BlockKind::Meta => {
+                        let (off, len, _) = handle(value, 0).unwrap_or((0, 0, 0));
+                        let name = String::from_utf8_lossy(&e.key).into_owned();
+                        let sub = match kind {
+                            BlockKind::Meta if name == "rocksdb.properties" => {
+                                Some(BlockKind::Properties)
+                            }
+                            BlockKind::Meta => None,
+                            _ => Some(BlockKind::Data),
+                        };
+                        let label = if matches!(kind, BlockKind::Index) {
+                            format!("Data block {i}")
                         } else {
-                            format!("{len} bytes")
-                        })
-                        .target(file.sub(off, len));
-                    if let Some(sub) = sub {
-                        node = node.lazy(
-                            crate::expander!(self::block: (Input, u64, u64, BlockKind)),
-                            (input, off, len, sub),
-                        );
+                            name.clone()
+                        };
+                        let mut node = Node::new(label)
+                            .span(range)
+                            .value(Value::UInt {
+                                value: off,
+                                bits: 64,
+                                radix: Radix::Hex,
+                            })
+                            .summary(if matches!(kind, BlockKind::Index) {
+                                format!(
+                                    "{len} bytes, keys up to {}",
+                                    crate::render::value(&internal_key(&e.key).0)
+                                )
+                            } else {
+                                format!("{len} bytes")
+                            })
+                            .target(file.sub(off, len));
+                        if let Some(sub) = sub {
+                            node = node.lazy(
+                                crate::expander!(self::block: (Input, u64, u64, BlockKind, Flavor)),
+                                (input, off, len, sub, flavor),
+                            );
+                        }
+                        node
                     }
-                    node
-                }
-                BlockKind::Data => {
-                    let (key, detail) = internal_key(&e.key);
-                    let label = crate::render::value(&key);
-                    Node::new(label)
+                    BlockKind::Data => {
+                        let (key, detail) = internal_key(&e.key);
+                        let label = crate::render::value(&key);
+                        Node::new(label)
+                            .span(range)
+                            .value(text(value))
+                            .summary(detail)
+                    }
+                    BlockKind::Properties => Node::new(String::from_utf8_lossy(&e.key).into_owned())
                         .span(range)
-                        .value(text(value))
-                        .summary(detail)
-                }
-                BlockKind::Properties => Node::new(String::from_utf8_lossy(&e.key).into_owned())
-                    .span(range)
-                    .value(property(value)),
-            };
-            cx.push(node).await;
+                        .value(property(value)),
+                };
+                cx.push(node).await;
+            }
         }
     }
     cx.emit(
