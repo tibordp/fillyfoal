@@ -1,0 +1,45 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ReadMe.bin — MacBinary III "ReadMe" (TEXT/ttxt), data 23 bytes, resource 321 bytes  [0x0+0x280]
+    Old version: 0  [0x0+0x1]
+    Name length: 6  [0x1+0x1]
+    File name: "ReadMe"  [0x2+0x3f]
+    File type: "TEXT"  [0x41+0x4]
+    Creator: "ttxt"  [0x45+0x4]
+    Finder flags (high): 0x1 [HAS_BEEN_INITED]  [0x49+0x1]
+    Zero: 0  [0x4a+0x1]
+    Vertical position: 0  [0x4b+0x2]
+    Horizontal position: 0  [0x4d+0x2]
+    Window/folder ID: 0  [0x4f+0x2]
+    Protected: 0  [0x51+0x1]
+    Zero: 0  [0x52+0x1]
+    Data fork length: 23  [0x53+0x4]
+    Resource fork length: 321  [0x57+0x4]
+    Created: 1999-01-24 05:20:00 UTC  [0x5b+0x4]
+    Modified: 1999-01-24 05:21:40 UTC  [0x5f+0x4]
+    Get Info comment length: 0  [0x63+0x2]
+    Finder flags (low): 0x0  [0x65+0x1]
+    Signature (MacBinary III): "mBIN"  [0x66+0x4]
+    Script: 0  [0x6a+0x1]
+    Extended Finder flags: 0x0  [0x6b+0x1]
+    Reserved: 00 00 00 00 00 00 00 00  |........|  [0x6c+0x8]
+    Total unpacked length: 0  [0x74+0x4]
+    Secondary header length: 0  [0x78+0x2]
+    Version: MacBinary III (0x82)  [0x7a+0x1]
+    Minimum version: 129  [0x7b+0x1]
+    Header CRC: 0x4ec9  [0x7c+0x2]
+  ▾ Data fork — UTF-8 text, CR line endings, 1 line  [0x80+0x17]
+      Encoding: "UTF-8"
+      Line endings: "CR" — 0 LF, 0 CRLF, 1 CR
+    ▾ Lines — 1 line  [0x80+0x17]
+        Line 1: "This is the data fork."  [0x80+0x16]
+  ▾ Resource fork — resource fork: TEXT×1  [0x100+0x141]
+      Header  [0x100+0x10]
+    ▾ TEXT — 1 resource(s)  [0x22d+0x8]
+      ▾ #128 — UTF-8 text, 1 line  [0x204+0xb] → 0x235+0xc
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x204+0xb]
+            Line 1: "Hello, Mac!"  [0x204+0xb]

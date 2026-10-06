@@ -1,0 +1,46 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ PS3UPDAT.PUP — PS3 update 4.90, image 65536, 3 files, 10 KiB  [0x0+0x2935]
+    Magic: "SCEUF"  [0x0+0x8]
+    Package version: 1  [0x8+0x8]
+    Image version: 65536  [0x10+0x8]
+    File count: 3  [0x18+0x8]
+    Header length: 0x110  [0x20+0x8]
+    Data length: 10277  [0x28+0x8]
+  ▾ version.txt: 0x100 — UTF-8 text, LF line endings, 1 line  [0x110+0x5] → 0x30+0x20
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x110+0x5]
+        Line 1: "4.90"  [0x110+0x4]
+  ▾ license.xml: 0x101 — XML document, root <license>  [0x115+0x20] → 0x50+0x20
+    ▾ XML declaration  [0x115+0x15]
+        Version: "1.0"  [0x124+0x3]
+      license  [0x12a+0xa]
+  ▾ update_files.tar: 0x300 — tar archive (ustar), 1 entry, 22 bytes  [0x135+0x2800] → 0x70+0x20
+    ▾ dev_flash_000.tar — 22 bytes, -rw-r--r--  [0x135+0x400]
+      ▾ Header — ustar  [0x135+0x200]
+          Name: "dev_flash_000.tar"  [0x135+0x64]
+          Mode: 420 — 0o644 -rw-r--r--  [0x199+0x8]
+          UID: 0  [0x1a1+0x8]
+          GID: 0  [0x1a9+0x8]
+          Size: 22 — 22 bytes  [0x1b1+0xc]
+          Modification time: 1970-01-01 00:00:00 UTC  [0x1bd+0xc]
+          Checksum: 4597 — valid  [0x1c9+0x8]
+          Type: regular file (0x30)  [0x1d1+0x1]
+          Link name: ""  [0x1d2+0x64]
+          Magic: "ustar"  [0x236+0x6]
+          Version: "00"  [0x23c+0x2]
+          Owner name: ""  [0x23e+0x20]
+          Group name: ""  [0x25e+0x20]
+          Device major: 0  [0x27e+0x8]
+          Device minor: 0  [0x286+0x8]
+          Prefix: ""  [0x28e+0x9b]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x335+0x16]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x335+0x16]
+            Line 1: "CORE_OS_PACKAGE dummy"  [0x335+0x15]
+      End of archive — 18 zero blocks  [0x535+0x2400]
+    SHA-1 HMAC table  [0x90+0x60]

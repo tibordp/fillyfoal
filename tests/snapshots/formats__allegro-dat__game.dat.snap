@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.dat — Allegro datafile, 2 objects  [0x0+0x346]
+    Signature  [0x0+0x4]
+    Objects: 2  [0x4+0x4]
+    HELLO — DATA, 6 bytes  [0x8+0x23] → 0x25+0x6
+    PAL — PAL, 768 bytes  [0x2b+0x31b] → 0x46+0x300

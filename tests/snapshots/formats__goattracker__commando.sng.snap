@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ commando.sng — GoatTracker GTS5 song "Commando remix" by goat, 1 subtune(s)  [0x0+0x8d]
+    Magic: "GTS5"  [0x0+0x4]
+    Song name: "Commando remix"  [0x4+0x20]
+    Author: "goat"  [0x24+0x20]
+    Copyright: "2024"  [0x44+0x20]
+    Subtunes: 1  [0x64+0x1]
+    Order lists, instruments, tables and patterns  [0x65+0x28]

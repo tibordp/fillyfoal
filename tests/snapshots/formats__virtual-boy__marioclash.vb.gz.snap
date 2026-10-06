@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ marioclash.vb — Virtual Boy "MARIO CLASH" (VMCJ01) v1.0, 64 KiB  [0x0+0x10000]
+    Program  [0x0+0xfde0]
+  ▾ Header  [0xfde0+0x20]
+      Title (Shift-JIS): 4d 41 52 49 4f 20 43 4c 41 53 48 20 20 20 20 20 …  |MARIO CLASH     |  [0xfde0+0x14]
+      Reserved: 00 00 00 00 00  |.....|  [0xfdf4+0x5]
+      Maker code: "01"  [0xfdf9+0x2]
+      Game code: "VMCJ"  [0xfdfb+0x4]
+      Version: 0  [0xfdff+0x1]
+    Interrupt and exception vectors  [0xfe00+0x200]

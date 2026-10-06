@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ native.firm — 3DS FIRM, 2 sections, ARM9 entry 0x08006000, ARM11 entry 0x1ff80000  [0x0+0x380]
+    Magic: "FIRM"  [0x0+0x4]
+    Boot priority: 0  [0x4+0x4]
+    ARM11 entry point: 0x1ff80000  [0x8+0x4]
+    ARM9 entry point: 0x8006000  [0xc+0x4]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x10+0x30]
+    Section 0: 0x8006000 — 256 bytes at 0x08006000, NDMA  [0x200+0x100] → 0x40+0x30
+    Section 1: 0x1ff80000 — 128 bytes at 0x1ff80000, XDMA  [0x300+0x80] → 0x70+0x30
+    RSA-2048 signature  [0x100+0x100]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sonic.ngc — "SONIC", catalogue 0061-16, colour, entry 0x200040, 192 bytes  [0x0+0xc0]
+    Licence: "COPYRIGHT BY SNK CORPORATION"  [0x0+0x1c]
+    Start address: 0x200040  [0x1c+0x4]
+    Catalogue number: 0x61  [0x20+0x2]
+    Catalogue version: 16  [0x22+0x1]
+    System: colour (0x10)  [0x23+0x1]
+    Title: "SONIC       "  [0x24+0xc]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x30+0x10]
+    Program  [0x40+0x80]

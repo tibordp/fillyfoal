@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.dax — DAX v1, 16 KiB image in 2 zlib frames, 0 non-compressed areas  [0x0+0x6a]
+  ▾ Header  [0x0+0x20]
+      Magic: "DAX"  [0x0+0x4]
+      Uncompressed size: 16384  [0x4+0x4]
+      Version: 1  [0x8+0x4]
+      Non-compressed areas: 0  [0xc+0x4]
+      Reserved: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x10+0x10]
+    Frame offsets — 2 entries  [0x20+0x8]
+    Frame lengths — 2 entries  [0x28+0x4]
+  ▾ Frames — 2 frames of 8 KiB
+    ▾ Frame 0: 0x2c — 0x2000 bytes decompressed  [0x2c+0x1f]
+        Data  [#1:0x0+0x2000]
+    ▾ Frame 1: 0x4b — 0x2000 bytes decompressed  [0x4b+0x1f]
+        Data  [#2:0x0+0x2000]

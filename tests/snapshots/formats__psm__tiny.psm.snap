@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.psm — MASI module "Tiny PSM", 1 samples  [0x0+0x45]
+    Header — PSM FILE  [0x0+0xc]
+    SDFT — 8 bytes  [0xc+0x10]
+    TITL: "Tiny PSM" — 9 bytes  [0x1c+0x11]
+    DSMP — 16 bytes  [0x2d+0x18]

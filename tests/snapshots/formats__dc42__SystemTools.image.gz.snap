@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ SystemTools.image — DiskCopy 4.2 image "System Tools", 400K GCR, checksum valid  [0x0+0x665d4]
+    Name length: 12  [0x0+0x1]
+    Disk name: "System Tools"  [0x1+0x3f]
+    Data size: 409600  [0x40+0x4]
+    Tag size: 9600  [0x44+0x4]
+    Data checksum: 0x4244  [0x48+0x4]
+    Tag checksum: 0x0  [0x4c+0x4]
+    Disk format: 400K GCR (0x0)  [0x50+0x1]
+    Format byte: 0x2  [0x51+0x1]
+    Private (0x0100): 0x100  [0x52+0x2]
+  ▾ Disk data  [0x54+0x64000]
+      ! unsupported: unrecognized format [0x54+0x64000]
+    Tag data  [0x64054+0x2580]

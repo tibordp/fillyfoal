@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.scl — SCL archive, 2 file(s): boot.B, game.C  [0x0+0x329]
+    Signature: "SINCLAIR"  [0x0+0x8]
+    Files: 2  [0x8+0x1]
+    boot.B — BASIC, 100 bytes, 1 sectors  [0x9+0xe] → 0x25+0x100
+    game.C — code, 300 bytes at 24576, 2 sectors  [0x17+0xe] → 0x125+0x200
+    Checksum: 0x5d82 — valid  [0x325+0x4]

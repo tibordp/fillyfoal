@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ emerald.sps — SharkPort save "Pokemon Emerald" for "POKEMON EMER", 512 bytes  [0x0+0x26b]
+    Signature: "SharkPortSave"  [0x0+0x11]
+    Platform: 0xf0000  [0x11+0x4]
+    Title: "Pokemon Emerald"  [0x15+0x13]
+    Date: "01/02/2005"  [0x28+0xe]
+    Notes: "Before the E4"  [0x36+0x11]
+    Save block — 512 bytes for "POKEMON EMER"  [0x47+0x220]
+    ROM header excerpt: "POKEMON EMER"  [0x4b+0x1c]
+    Save data  [0x67+0x200]

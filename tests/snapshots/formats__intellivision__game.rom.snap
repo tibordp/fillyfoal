@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.rom — Intellivision ROM, 1 segment(s), 256 decles  [0x0+0x219]
+    Magic: 0xa8  [0x0+0x1]
+    Segments: 1  [0x1+0x1]
+    Segments (complement): 0xfe  [0x2+0x1]
+  ▾ Segment 0: 0x5000 — $5000-$50ff, 256 words  [0x3+0x204]
+      Start address (high byte): 0x50  [0x3+0x1]
+      End address (high byte): 0x50  [0x4+0x1]
+      Data (16-bit words)  [0x5+0x200]
+      CRC-16: 0x1234  [0x205+0x2]
+    Memory attribute table and CRC  [0x207+0x12]

@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.byml — BYML v2 (big-endian), root dictionary, 1 keys  [0x0+0x2c]
+    Signature: "BY"  [0x0+0x2]
+    Version: 2  [0x2+0x2]
+    Key table offset: 0x10  [0x4+0x4]
+    String table offset: 0x0  [0x8+0x4]
+    Root node offset: 0x20  [0xc+0x4]
+    Key table — string table with 1 entries  [0x10+0x4]
+    Root node — dictionary with 1 entries  [0x20+0x4]

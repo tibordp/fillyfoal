@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ mother.rup — Ninja RUP patch "Mother Translation" v1.1 by Translator, 1 file(s), 2 XOR records (5 bytes)  [0x0+0x84f]
+    Magic: "NINJA2"  [0x0+0x6]
+    Text encoding: ISO-8859-1 (0x0)  [0x6+0x1]
+    Author: "Translator"  [0x7+0x54]
+    Version: "1.1"  [0x5b+0xb]
+    Title: "Mother Translation"  [0x66+0x100]
+    Genre: "RPG"  [0x166+0x1a]
+    Language: "English"  [0x180+0x1a]
+    Date (YYYYMMDD): "20080101"  [0x19a+0x8]
+    Website: "http://example.com"  [0x1a2+0x200]
+    Description: "Full translation"  [0x3a2+0x432]
+    Open file "mother.nes": NES (0x1) — 256 KiB → 512 KiB, appends 4 bytes  [0x800+0x3d]
+    XOR record: 0x10 — 3 bytes at 0x10  [0x83d+0x8] → 0x842+0x3
+    XOR record: 0x40010 — 2 bytes at 0x40010  [0x845+0x9] → 0x84c+0x2
+    End  [0x84e+0x1]

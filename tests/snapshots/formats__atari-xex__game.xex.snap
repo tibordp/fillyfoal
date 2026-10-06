@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.xex — Atari 8-bit executable, 4 segments, 56 bytes loaded, runs at $3000, 1 init call(s)  [0x0+0x50]
+    Segment 1: 0x2000 — $2000-$2017  [0x0+0x1e] → 0x6+0x18
+    Segment 2: 0x2e2 — INITAD → $2000  [0x1e+0x6] → 0x22+0x2
+    Segment 3: 0x3000 — $3000-$301f  [0x24+0x26] → 0x2a+0x20
+    Segment 4: 0x2e0 — RUNAD → $3000  [0x4a+0x6] → 0x4e+0x2

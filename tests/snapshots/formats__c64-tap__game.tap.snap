@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.tap — C64 tape v1, PAL, 321 pulses, ~0:00  [0x0+0x158]
+    Signature: "C64-TAPE-RAW"  [0x0+0xc]
+    Version: 1  [0xc+0x1]
+    Platform: C64 (0x0)  [0xd+0x1]
+    Video standard: PAL (0x0)  [0xe+0x1]
+    Reserved: 0  [0xf+0x1]
+    Data size: 324  [0x10+0x4]
+    Pulses — 321 pulses, ~0:00  [0x14+0x144]
