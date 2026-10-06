@@ -2,6 +2,7 @@
 //! and the legacy format) and Snappy (raw and framed).
 
 use crate::codec::filters::Filter;
+use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -35,6 +36,19 @@ fn copy_back(out: &mut Vec<u8>, offset: usize, len: usize, limit: usize) -> Resu
 /// Decodes one LZ4 block from `input` onto `out` (whose existing contents
 /// are the dictionary for linked blocks).
 pub fn lz4_block(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
+    lz4_block_from(input, out, 0, false, limit)
+}
+
+/// [`lz4_block`] with the dictionary starting at `out[base..]`. With
+/// `zero_padding`, zeros from the end of a sequence's literals to the end
+/// of `input` end the block when the sequence's match length nibble is 0,
+/// as in a final sequence (the zeros could only be an invalid offset).
+fn lz4_block_from(input: &[u8], out: &mut Vec<u8>, base: usize, zero_padding: bool, limit: usize) -> Result<()> {
+    let padding = if zero_padding {
+        input.iter().rposition(|&b| b != 0).map_or(0, |i| i.saturating_add(1))
+    } else {
+        input.len()
+    };
     let mut pos = 0usize;
     let byte = |pos: &mut usize| -> Result<u8> {
         let b = input.get(*pos).copied().ok_or_else(|| bad("truncated LZ4 block"))?;
@@ -62,13 +76,16 @@ pub fn lz4_block(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
         out.extend_from_slice(lit);
         limit_check(out, limit)?;
         pos = end;
-        if pos >= input.len() {
+        if pos >= input.len() || (pos >= padding && token & 0x0f == 0) {
             break; // the last sequence has literals only
         }
         let lo = byte(&mut pos)?;
         let hi = byte(&mut pos)?;
         let offset = usize::from(u16::from_le_bytes([lo, hi]));
         let len = length(&mut pos, usize::from(token & 0x0f))?.saturating_add(4);
+        if offset > out.len().saturating_sub(base) {
+            return Err(bad("match offset outside the output"));
+        }
         copy_back(out, offset, len, limit)?;
     }
     Ok(())
@@ -78,89 +95,153 @@ fn u32_at(data: &[u8], at: usize) -> Option<u32> {
     data.get(at..at.checked_add(4)?).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes)
 }
 
-/// LZ4 frames (and legacy frames, and skippable frames), concatenated.
+/// Where an [`Lz4Frame`] decoder is.
 #[derive(Clone, Copy)]
-pub struct Lz4Frame;
+enum Lz4At {
+    /// Before a frame's magic number.
+    Magic,
+    /// Inside a frame whose output starts at `start` (the window of its
+    /// linked blocks).
+    Frame { start: usize, block_checksum: bool, content_checksum: bool },
+    /// Inside a legacy frame.
+    Legacy,
+    Done,
+}
 
-impl Filter for Lz4Frame {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut pos = 0usize;
-        while let Some(magic) = u32_at(input, pos) {
-            pos = pos.saturating_add(4);
-            match magic {
-                0x184d_2204 => {
-                    let flg = *input.get(pos).ok_or_else(|| bad("truncated frame descriptor"))?;
-                    let block_checksum = flg & 0x10 != 0;
-                    let content_size = flg & 0x08 != 0;
-                    let content_checksum = flg & 0x04 != 0;
-                    let dict = flg & 0x01 != 0;
-                    if dict {
-                        return Err(Diagnostic::unsupported("LZ4 frame with an external dictionary"));
-                    }
-                    // FLG, BD, optional content size and dictionary ID, HC.
-                    pos = pos.saturating_add(2).saturating_add(if content_size { 8 } else { 0 }).saturating_add(1);
-                    let frame_start = out.len();
-                    loop {
-                        let size = u32_at(input, pos).ok_or_else(|| bad("truncated LZ4 block size"))?;
-                        pos = pos.saturating_add(4);
-                        if size == 0 {
-                            break;
-                        }
-                        let raw = size & 0x8000_0000 != 0;
-                        let len = crate::bytes::to_usize((size & 0x7fff_ffff).into());
-                        let block = input.get(pos..pos.saturating_add(len)).ok_or_else(|| bad("truncated LZ4 block"))?;
-                        if raw {
-                            out.extend_from_slice(block);
-                            limit_check(&out, limit)?;
-                        } else {
-                            // Linked blocks refer back into earlier output of
-                            // the same frame; earlier frames are not part of
-                            // the window, which an offset check enforces.
-                            let mut frame_out = out.split_off(frame_start);
-                            lz4_block(block, &mut frame_out, limit.saturating_sub(frame_start))?;
-                            out.extend_from_slice(&frame_out);
-                        }
-                        pos = pos.saturating_add(len).saturating_add(if block_checksum { 4 } else { 0 });
-                    }
-                    if content_checksum {
-                        pos = pos.saturating_add(4);
-                    }
-                }
-                0x184c_2102 => {
-                    // Legacy: independent blocks of up to 8 MiB until the next
-                    // magic number or the end.
-                    while let Some(len) = u32_at(input, pos) {
-                        if len == 0x184c_2102 || len & 0xffff_fff0 == 0x184d_2a50 || len == 0x184d_2204 {
-                            break;
-                        }
-                        let len = crate::bytes::to_usize(len.into());
-                        let block = input.get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len)).ok_or_else(|| bad("truncated legacy LZ4 block"))?;
-                        let mut part = Vec::new();
-                        lz4_block(block, &mut part, limit.saturating_sub(out.len()))?;
-                        out.extend_from_slice(&part);
-                        pos = pos.saturating_add(4).saturating_add(len);
-                    }
-                }
-                m if m & 0xffff_fff0 == 0x184d_2a50 => {
-                    let len = u32_at(input, pos).ok_or_else(|| bad("truncated skippable frame"))?;
-                    pos = pos.saturating_add(4).saturating_add(crate::bytes::to_usize(len.into()));
-                }
-                _ => break,
-            }
-        }
-        Ok(out)
+/// LZ4 frames (and legacy frames, and skippable frames), concatenated;
+/// decoded a block at a time. The content checksum is not verified.
+#[derive(Clone)]
+pub struct Lz4Frame {
+    pos: usize,
+    at: Lz4At,
+}
+
+impl Default for Lz4Frame {
+    fn default() -> Self {
+        Lz4Frame { pos: 0, at: Lz4At::Magic }
     }
 }
 
-/// One raw LZ4 block (as embedded in other containers).
+impl Lz4Frame {
+    /// Decodes one unit: a frame header, a block, or an end mark.
+    fn unit(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let pos = self.pos;
+        match self.at {
+            Lz4At::Done => {}
+            Lz4At::Magic => {
+                let Some(magic) = u32_at(input, pos) else {
+                    // The end, unless more input is coming.
+                    if !eof {
+                        return Err(bad("truncated LZ4 frame magic"));
+                    }
+                    self.pos = pos.min(input.len());
+                    self.at = Lz4At::Done;
+                    return Ok(());
+                };
+                let pos = pos.saturating_add(4);
+                match magic {
+                    0x184d_2204 => {
+                        let flg = *input.get(pos).ok_or_else(|| bad("truncated frame descriptor"))?;
+                        let content_size = flg & 0x08 != 0;
+                        if flg & 0x01 != 0 {
+                            return Err(Diagnostic::unsupported("LZ4 frame with an external dictionary"));
+                        }
+                        // FLG, BD, optional content size and dictionary ID, HC.
+                        self.pos = pos.saturating_add(2).saturating_add(if content_size { 8 } else { 0 }).saturating_add(1);
+                        self.at = Lz4At::Frame {
+                            start: out.len(),
+                            block_checksum: flg & 0x10 != 0,
+                            content_checksum: flg & 0x04 != 0,
+                        };
+                    }
+                    0x184c_2102 => {
+                        self.pos = pos;
+                        self.at = Lz4At::Legacy;
+                    }
+                    m if m & 0xffff_fff0 == 0x184d_2a50 => {
+                        let len = u32_at(input, pos).ok_or_else(|| bad("truncated skippable frame"))?;
+                        self.pos = pos.saturating_add(4).saturating_add(crate::bytes::to_usize(len.into()));
+                    }
+                    _ => self.at = Lz4At::Done,
+                }
+            }
+            Lz4At::Frame { start, block_checksum, content_checksum } => {
+                let size = u32_at(input, pos).ok_or_else(|| bad("truncated LZ4 block size"))?;
+                let pos = pos.saturating_add(4);
+                if size == 0 {
+                    self.pos = pos.saturating_add(if content_checksum { 4 } else { 0 });
+                    self.at = Lz4At::Magic;
+                    return Ok(());
+                }
+                let raw = size & 0x8000_0000 != 0;
+                let len = crate::bytes::to_usize((size & 0x7fff_ffff).into());
+                let block = input.get(pos..pos.saturating_add(len)).ok_or_else(|| bad("truncated LZ4 block"))?;
+                if raw {
+                    out.extend_from_slice(block);
+                    limit_check(out, limit)?;
+                } else {
+                    // Linked blocks refer back into earlier output of the
+                    // same frame; earlier frames are not part of the window.
+                    lz4_block_from(block, out, start, false, limit)?;
+                }
+                self.pos = pos.saturating_add(len).saturating_add(if block_checksum { 4 } else { 0 });
+                if self.pos > input.len() && !eof {
+                    return Err(bad("truncated LZ4 block checksum"));
+                }
+            }
+            Lz4At::Legacy => {
+                // Independent blocks of up to 8 MiB until the next magic
+                // number or the end.
+                let Some(len) = u32_at(input, pos) else {
+                    if !eof {
+                        return Err(bad("truncated legacy LZ4 block size"));
+                    }
+                    self.at = Lz4At::Magic;
+                    return Ok(());
+                };
+                if len == 0x184c_2102 || len & 0xffff_fff0 == 0x184d_2a50 || len == 0x184d_2204 {
+                    self.at = Lz4At::Magic;
+                    return Ok(());
+                }
+                let len = crate::bytes::to_usize(len.into());
+                let from = pos.saturating_add(4);
+                let block = input.get(from..from.saturating_add(len)).ok_or_else(|| bad("truncated legacy LZ4 block"))?;
+                lz4_block_from(block, out, out.len(), false, limit)?;
+                self.pos = from.saturating_add(len);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Decode for Lz4Frame {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let mark = out.len();
+        loop {
+            if matches!(self.at, Lz4At::Done) {
+                return Ok(Step::Done);
+            }
+            self.unit(input, eof, out, limit)?;
+            if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
+            }
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+}
+
+/// One raw LZ4 block (as embedded in other containers). Zero padding after
+/// the block is ignored.
 #[derive(Clone, Copy)]
 pub struct Lz4Block;
 
 impl Filter for Lz4Block {
     fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
         let mut out = Vec::new();
-        lz4_block(input, &mut out, limit)?;
+        lz4_block_from(input, &mut out, 0, true, limit)?;
         Ok(out)
     }
 }
@@ -238,14 +319,25 @@ impl Filter for Snappy {
 
 /// The Snappy framing format: chunks of compressed or uncompressed data
 /// (each with a masked CRC-32C, not checked here).
-#[derive(Clone, Copy)]
-pub struct SnappyFramed;
+/// Decoded a chunk at a time.
+#[derive(Clone, Default)]
+pub struct SnappyFramed {
+    pos: usize,
+    done: bool,
+}
 
-impl Filter for SnappyFramed {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut pos = 0usize;
-        while let (Some(&kind), Some(len)) = (input.get(pos), input.get(pos.saturating_add(1)..pos.saturating_add(4))) {
+impl Decode for SnappyFramed {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let mark = out.len();
+        while !self.done {
+            let pos = self.pos;
+            let (Some(&kind), Some(len)) = (input.get(pos), input.get(pos.saturating_add(1)..pos.saturating_add(4))) else {
+                if !eof {
+                    return Err(bad("truncated Snappy chunk header"));
+                }
+                self.done = true;
+                break;
+            };
             let len = len.iter().rev().fold(0usize, |a, &b| a << 8 | usize::from(b));
             let body = input.get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len)).ok_or_else(|| bad("truncated Snappy chunk"))?;
             match kind {
@@ -254,10 +346,17 @@ impl Filter for SnappyFramed {
                 0x02..=0x7f => return Err(Diagnostic::unsupported(format!("reserved Snappy chunk {kind:#04x}"))),
                 _ => {}
             }
-            limit_check(&out, limit)?;
-            pos = pos.saturating_add(4).saturating_add(len);
+            limit_check(out, limit)?;
+            self.pos = pos.saturating_add(4).saturating_add(len);
+            if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
+            }
         }
-        Ok(out)
+        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
     }
 }
 

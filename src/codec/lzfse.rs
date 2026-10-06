@@ -2,7 +2,7 @@
 //! `bvxn` (LZVN), `bvx-` (stored) up to `bvx$`. Version-1 (`bvx1`) blocks
 //! are not supported.
 
-use crate::codec::filters::Filter;
+use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -307,7 +307,7 @@ fn lzvn(payload: &[u8], n_raw: usize, out: &mut Vec<u8>, limit: usize) -> Result
             d = nd;
         }
         if m > 0 {
-            if d == 0 || d > out.len().saturating_sub(start) {
+            if d == 0 || d > out.len() {
                 return Err(bad("LZVN distance outside the output"));
             }
             let from = out.len().saturating_sub(d);
@@ -326,36 +326,62 @@ fn lzvn(payload: &[u8], n_raw: usize, out: &mut Vec<u8>, limit: usize) -> Result
     Ok(())
 }
 
-#[derive(Clone, Copy)]
-pub struct Lzfse;
+/// An LZFSE stream, decoded a block per step. Matches reach back into
+/// earlier blocks' output (`out` is the window), so the state is just the
+/// input position.
+#[derive(Clone, Default)]
+pub struct Lzfse {
+    pos: usize,
+    done: bool,
+}
 
-impl Filter for Lzfse {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut pos = 0usize;
-        loop {
-            let block = input.get(pos..).ok_or_else(|| bad("missing end of stream"))?;
-            match block.get(..4) {
-                Some(b"bvx$") => return Ok(out),
-                Some(b"bvx-") => {
-                    let n = usize::try_from(le(block.get(4..8).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
-                    out.extend_from_slice(block.get(8..8usize.saturating_add(n)).ok_or_else(|| bad("truncated stored block"))?);
-                    pos = pos.saturating_add(8).saturating_add(n);
-                }
-                Some(b"bvxn") => {
-                    let n_raw = usize::try_from(le(block.get(4..8).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
-                    let n_payload = usize::try_from(le(block.get(8..12).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
-                    let payload = block.get(12..12usize.saturating_add(n_payload)).ok_or_else(|| bad("truncated LZVN block"))?;
-                    lzvn(payload, n_raw, &mut out, limit)?;
-                    pos = pos.saturating_add(12).saturating_add(n_payload);
-                }
-                Some(b"bvx2") => pos = pos.saturating_add(block_v2(block, &mut out, limit)?),
-                Some(b"bvx1") => return Err(Diagnostic::unsupported("LZFSE version-1 blocks")),
-                _ => return Err(bad("bad block magic")),
+impl Lzfse {
+    /// Decodes the block at `self.pos`; false at the end of the stream.
+    fn block(&mut self, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<bool> {
+        let block = input.get(self.pos..).ok_or_else(|| bad("missing end of stream"))?;
+        let len = match block.get(..4) {
+            Some(b"bvx$") => {
+                self.pos = self.pos.saturating_add(4);
+                return Ok(false);
             }
-            if out.len() > limit {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            Some(b"bvx-") => {
+                let n = usize::try_from(le(block.get(4..8).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
+                out.extend_from_slice(block.get(8..8usize.saturating_add(n)).ok_or_else(|| bad("truncated stored block"))?);
+                8usize.saturating_add(n)
+            }
+            Some(b"bvxn") => {
+                let n_raw = usize::try_from(le(block.get(4..8).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
+                let n_payload = usize::try_from(le(block.get(8..12).ok_or_else(|| bad("truncated header"))?)).unwrap_or(0);
+                let payload = block.get(12..12usize.saturating_add(n_payload)).ok_or_else(|| bad("truncated LZVN block"))?;
+                lzvn(payload, n_raw, out, limit)?;
+                12usize.saturating_add(n_payload)
+            }
+            Some(b"bvx2") => block_v2(block, out, limit)?,
+            Some(b"bvx1") => return Err(Diagnostic::unsupported("LZFSE version-1 blocks")),
+            _ => return Err(bad("bad block magic")),
+        };
+        if out.len() > limit {
+            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+        }
+        self.pos = self.pos.saturating_add(len);
+        Ok(true)
+    }
+}
+
+impl Decode for Lzfse {
+    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let mark = out.len();
+        while !self.done {
+            if !self.block(input, out, limit)? {
+                self.done = true;
+            } else if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
             }
         }
+        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
     }
 }

@@ -69,3 +69,174 @@ fn deflate_is_on_demand() {
     z.extend_from_slice(&fillyfoal::codec::adler32(&text).to_be_bytes());
     assert_on_demand(&Codec::Zlib, &z, &text);
 }
+
+/// Block- and chunk-framed LZ codecs and containers: LZFSE, LZ4 frames,
+/// framed Snappy, lzop, pbz, WIM resources and Unix `compress`.
+///
+/// `lines.*` (354,318 bytes of `lz::lines`; 713,767 of `lz::lines_n(14000)`
+/// for LZFSE, whose blocks are larger) come from the real encoders: Apple
+/// `compression_tool -encode -a lzfse`, `lz4 -B4 -BD -BX
+/// --content-size` (64 KiB linked blocks with checksums), cramjam's Snappy
+/// framing, `/usr/bin/compress`, and `aa archive -a lzfse|lzma -b 64k` (pbz
+/// chunks around an Apple Archive of the text). No lzop or WIM encoder is
+/// at hand: lzop streams are concatenations of the liblzo-based members in
+/// `tests/data/lzo`, and the WIM resource is built here around the LZX chunk
+/// from the spec-derived test encoder in `tests/data/cab`.
+mod lz {
+    use super::assert_on_demand;
+    use fillyfoal::codec::{Codec, pipeline, wim};
+
+    fn read(path: &str) -> Vec<u8> {
+        std::fs::read(format!("{}/tests/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    }
+
+    fn eager(codec: &Codec, input: &[u8]) -> Vec<u8> {
+        pipeline::decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).unwrap()
+    }
+
+    pub fn lines() -> Vec<u8> {
+        lines_n(7000)
+    }
+
+    fn lines_n(n: u32) -> Vec<u8> {
+        (0..n)
+            .map(|i| format!("line {i}: the quick brown fox {} jumps over {}\n", i * 7919 % 1000, i * 104_729 % 9973))
+            .collect::<String>()
+            .into_bytes()
+    }
+
+    /// `lzma_text` of tests/core.rs.
+    fn text() -> Vec<u8> {
+        (0..2000).map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+    }
+
+    /// `legacy_mixed` of tests/core.rs.
+    fn mixed() -> Vec<u8> {
+        let mut x: u32 = 12345;
+        let noise: Vec<u8> = (0..9000)
+            .map(|_| {
+                x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+                ((x >> 16) & 0xff) as u8
+            })
+            .collect();
+        let text = text();
+        [&text[..20000], &noise, &text[..30000]].concat()
+    }
+
+    /// Checks a fixture against its own eager decoding.
+    fn self_consistent(codec: &Codec, path: &str) {
+        let input = read(path);
+        assert_on_demand(codec, &input, &eager(codec, &input));
+    }
+
+    #[test]
+    fn lzfse_is_on_demand() {
+        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/text.lzfse"), &text());
+        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/rnd.lzfse"), &random);
+        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/small.lzfse"), b"hello lzvn hello lzvn hello lzvn small input\n");
+        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/lines.lzfse"), &lines_n(14000));
+    }
+
+    #[test]
+    fn lz4_frames_are_on_demand() {
+        let big = read("data/lz4/lines.lz4");
+        assert_on_demand(&Codec::Lz4Frame, &big, &lines());
+        for path in ["fixtures/lz4/bottles.txt.lz4", "fixtures/lz4/uncompressed-block.lz4", "fixtures/lz4-legacy/legacy.lz4"] {
+            self_consistent(&Codec::Lz4Frame, path);
+        }
+        // A skippable frame, a frame and a legacy frame, concatenated.
+        let legacy = read("fixtures/lz4-legacy/legacy.lz4");
+        let mut input = vec![0x5a, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 1, 2, 3];
+        input.extend_from_slice(&big);
+        input.extend_from_slice(&legacy);
+        let expected = [lines(), eager(&Codec::Lz4Frame, &legacy)].concat();
+        assert_on_demand(&Codec::Lz4Frame, &input, &expected);
+    }
+
+    #[test]
+    fn lz4_block_ignores_zero_padding() {
+        // "abcabcabcabcabc!" then zeros, as a fixed-size slot leaves it.
+        let block = [0x38, b'a', b'b', b'c', 3, 0, 0x10, b'!', 0, 0, 0, 0];
+        assert_eq!(eager(&Codec::Lz4Block, &block), b"abcabcabcabcabc!");
+    }
+
+    #[test]
+    fn framed_snappy_is_on_demand() {
+        assert_on_demand(&Codec::SnappyFramed, &read("data/snappy/lines.sz"), &lines());
+        self_consistent(&Codec::SnappyFramed, "fixtures/snappy/hello.sz");
+    }
+
+    #[test]
+    fn lzop_is_on_demand() {
+        let text_lzo = read("data/lzo/text.lzo");
+        let mixed_lzo = read("data/lzo/mixed.lzo");
+        assert_on_demand(&Codec::Lzop, &text_lzo, &text());
+        assert_on_demand(&Codec::Lzop, &mixed_lzo, &mixed());
+        // Concatenated members.
+        let input = [&text_lzo[..], &text_lzo, &mixed_lzo, &text_lzo, &text_lzo].concat();
+        let expected = [text(), text(), mixed(), text(), text()].concat();
+        assert_on_demand(&Codec::Lzop, &input, &expected);
+    }
+
+    #[test]
+    fn pbz_is_on_demand() {
+        for path in ["data/pbz/lines-lzfse.aar", "data/pbz/lines-lzma.aar"] {
+            let input = read(path);
+            let expected = eager(&Codec::Pbz, &input);
+            // An Apple Archive holding the text.
+            assert!(expected.starts_with(b"AA01") && expected.windows(lines().len()).any(|w| w == lines()), "{path}");
+            assert_on_demand(&Codec::Pbz, &input, &expected);
+        }
+        for name in ["Payload", "pbz4.aar", "pbze.aar", "pbzz.aar"] {
+            self_consistent(&Codec::Pbz, &format!("fixtures/pbzx/{name}"));
+        }
+    }
+
+    #[test]
+    fn wim_resources_are_on_demand() {
+        // LZX chunks (32 KiB each) and stored ones, the last one short.
+        let lzx = read("data/cab/wim-chunk.lzx");
+        let lzx_out = eager(&Codec::Lzx(fillyfoal::codec::lzx::Params::wim_chunk(32768)), &lzx);
+        assert_eq!(lzx_out.len(), 32768);
+        let text = lines();
+        let stored: Vec<&[u8]> = text.chunks(32768).collect();
+        let chunks: Vec<(&[u8], &[u8])> = vec![
+            (&lzx, &lzx_out),
+            (stored[0], stored[0]),
+            (&lzx, &lzx_out),
+            (&lzx, &lzx_out),
+            (stored[1], stored[1]),
+            (&lzx, &lzx_out),
+            (&lzx, &lzx_out),
+            (&lzx, &lzx_out),
+            (&lzx, &lzx_out),
+            (&text[..1000], &text[..1000]),
+        ];
+        let mut table = Vec::new();
+        let mut body = Vec::new();
+        for (i, (data, _)) in chunks.iter().enumerate() {
+            if i > 0 {
+                table.extend_from_slice(&(body.len() as u32).to_le_bytes());
+            }
+            body.extend_from_slice(data);
+        }
+        let input = [table, body].concat();
+        let expected: Vec<u8> = chunks.iter().flat_map(|(_, out)| out.iter().copied()).collect();
+        let codec = Codec::WimResource(wim::Resource {
+            kind: wim::Kind::Lzx,
+            chunk: 32768,
+            original: expected.len() as u64,
+        });
+        assert_on_demand(&codec, &input, &expected);
+    }
+
+    #[test]
+    fn unix_compress_is_on_demand() {
+        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        assert_on_demand(&Codec::UnixCompress, &read("data/compress/text.Z"), &text());
+        assert_on_demand(&Codec::UnixCompress, &read("data/compress/text12.Z"), &text());
+        assert_on_demand(&Codec::UnixCompress, &read("data/compress/rnd.Z"), &random);
+        assert_on_demand(&Codec::UnixCompress, &read("data/compress/lines.Z"), &lines());
+    }
+}

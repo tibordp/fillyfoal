@@ -381,18 +381,18 @@ impl Codec {
             Codec::TiffPredictor { bpp, row } => {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
-            Codec::Lzfse => Box::new(Streaming(filters::Whole::new(lzfse::Lzfse))),
-            Codec::Pbz => Box::new(Streaming(filters::Whole::new(pbz::Pbz))),
-            Codec::WimResource(r) => Box::new(Streaming(filters::Whole::new(*r))),
+            Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
+            Codec::Pbz => Box::new(Streaming(pbz::Pbz::default())),
+            Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
-            Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
+            Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
             Codec::Lznt1 { size } => Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size }))),
             Codec::Xpress { size } => Box::new(Streaming(filters::Whole::new(xpress::Xpress { size: *size }))),
             Codec::XpressHuffman { size } => {
                 Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman { size: *size })))
             }
             Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
-            Codec::Lzop => Box::new(Streaming(filters::Whole::new(lzo::Lzop))),
+            Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
             Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
@@ -406,10 +406,10 @@ impl Codec {
             Codec::Lzma2 => Box::new(Streaming(filters::Whole::new(lzma::Lzma2))),
             Codec::LzmaRaw { props, size } => Box::new(Streaming(filters::Whole::new(lzma::LzmaRaw { props: *props, end: *size }))),
             Codec::Bzip2 => Box::new(Streaming(filters::Whole::new(bzip2::Bzip2))),
-            Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
+            Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
-            Codec::SnappyFramed => Box::new(Streaming(filters::Whole::new(lz::SnappyFramed))),
+            Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::Eexec { hex } => Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex }))),
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),

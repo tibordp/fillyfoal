@@ -4,6 +4,7 @@
 //! of the compressed and uncompressed bytes.
 
 use crate::codec::filters::Filter;
+use crate::codec::pipeline::{Decode, Step};
 use crate::codec::{adler32, crc32};
 use crate::error::{Diagnostic, Result};
 
@@ -257,83 +258,128 @@ pub fn lzop_block_header_len(flags: u32, compressed: bool) -> usize {
     len
 }
 
-/// The lzop container: one or more concatenated members.
-#[derive(Clone, Copy)]
-pub struct Lzop;
+/// The lzop container: one or more concatenated members, decoded a block
+/// (with its checks) at a time.
+#[derive(Clone, Default)]
+pub struct Lzop {
+    pos: usize,
+    /// The current member's flags, once its header has been read.
+    member: Option<u32>,
+    /// A member has ended: another may follow.
+    between: bool,
+    done: bool,
+}
 
-impl Filter for Lzop {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut pos = 0usize;
-        loop {
-            let rest = input.get(pos..).unwrap_or_default();
-            let header = lzop_header(rest)?;
-            if !header.checksum_ok {
-                return Err(bad("lzop header checksum mismatch"));
+impl Lzop {
+    /// Reads a member header at `self.pos`.
+    fn header(&mut self, input: &[u8]) -> Result<()> {
+        let rest = input.get(self.pos..).unwrap_or_default();
+        let header = lzop_header(rest)?;
+        if !header.checksum_ok {
+            return Err(bad("lzop header checksum mismatch"));
+        }
+        if !matches!(header.method, 1..=3) {
+            return Err(Diagnostic::unsupported(format!("lzop method {}", header.method)));
+        }
+        if header.flags & F_H_FILTER != 0 {
+            return Err(Diagnostic::unsupported("lzop filters"));
+        }
+        self.pos = self.pos.saturating_add(header.len);
+        self.member = Some(header.flags);
+        Ok(())
+    }
+
+    /// Decodes the block at `self.pos` of a member with `flags`.
+    fn block(&mut self, flags: u32, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let pos = self.pos;
+        let raw = be32(input, pos)?;
+        if raw == 0 {
+            self.pos = pos.saturating_add(4);
+            self.member = None;
+            self.between = true;
+            return Ok(());
+        }
+        let packed = be32(input, pos.saturating_add(4))?;
+        if raw > LZOP_MAX_BLOCK || packed > raw {
+            return Err(bad("bad lzop block size"));
+        }
+        let compressed = packed < raw;
+        let mut at = pos.saturating_add(8);
+        let mut check = |flag: u32, data_check: bool| -> Result<Option<(u32, bool, bool)>> {
+            if flags & flag == 0 || !(data_check || compressed) {
+                return Ok(None);
             }
-            if !matches!(header.method, 1..=3) {
-                return Err(Diagnostic::unsupported(format!("lzop method {}", header.method)));
+            let v = be32(input, at)?;
+            at = at.saturating_add(4);
+            Ok(Some((v, data_check, flag & (F_CRC32_C | F_CRC32_D) != 0)))
+        };
+        let checks = [
+            check(F_ADLER32_D, true)?,
+            check(F_CRC32_D, true)?,
+            check(F_ADLER32_C, false)?,
+            check(F_CRC32_C, false)?,
+        ];
+        let (raw, packed) = (usize::try_from(raw).unwrap_or(usize::MAX), usize::try_from(packed).unwrap_or(usize::MAX));
+        let data = input.get(at..at.saturating_add(packed)).ok_or_else(|| bad("truncated lzop block"))?;
+        if out.len().saturating_add(raw) > limit {
+            return Err(too_big(limit));
+        }
+        let start = out.len();
+        if compressed {
+            let used = lzo1x(data, out, raw)?;
+            if used != packed {
+                return Err(bad("lzop block has trailing bytes"));
             }
-            if header.flags & F_H_FILTER != 0 {
-                return Err(Diagnostic::unsupported("lzop filters"));
-            }
-            pos = pos.saturating_add(header.len);
-            loop {
-                let raw = be32(input, pos)?;
-                if raw == 0 {
-                    pos = pos.saturating_add(4);
-                    break;
-                }
-                let packed = be32(input, pos.saturating_add(4))?;
-                if raw > LZOP_MAX_BLOCK || packed > raw {
-                    return Err(bad("bad lzop block size"));
-                }
-                let compressed = packed < raw;
-                let mut at = pos.saturating_add(8);
-                let mut check = |flag: u32, data_check: bool| -> Result<Option<(u32, bool, bool)>> {
-                    if header.flags & flag == 0 || !(data_check || compressed) {
-                        return Ok(None);
-                    }
-                    let v = be32(input, at)?;
-                    at = at.saturating_add(4);
-                    Ok(Some((v, data_check, flag & (F_CRC32_C | F_CRC32_D) != 0)))
-                };
-                let checks = [
-                    check(F_ADLER32_D, true)?,
-                    check(F_CRC32_D, true)?,
-                    check(F_ADLER32_C, false)?,
-                    check(F_CRC32_C, false)?,
-                ];
-                let (raw, packed) = (usize::try_from(raw).unwrap_or(usize::MAX), usize::try_from(packed).unwrap_or(usize::MAX));
-                let data = input.get(at..at.saturating_add(packed)).ok_or_else(|| bad("truncated lzop block"))?;
-                if out.len().saturating_add(raw) > limit {
-                    return Err(too_big(limit));
-                }
-                let start = out.len();
-                if compressed {
-                    let used = lzo1x(data, &mut out, raw)?;
-                    if used != packed {
-                        return Err(bad("lzop block has trailing bytes"));
-                    }
-                } else {
-                    out.extend_from_slice(data);
-                }
-                let block = out.get(start..).unwrap_or_default();
-                if block.len() != raw {
-                    return Err(bad("lzop block decoded to the wrong size"));
-                }
-                for (stored, data_check, crc) in checks.into_iter().flatten() {
-                    let subject = if data_check { block } else { data };
-                    let computed = if crc { crc32(subject) } else { adler32(subject) };
-                    if computed != stored {
-                        return Err(bad("lzop block checksum mismatch"));
-                    }
-                }
-                pos = at.saturating_add(packed);
-            }
-            if input.get(pos..pos.saturating_add(9)) != Some(LZOP_MAGIC.as_slice()) {
-                return Ok(out);
+        } else {
+            out.extend_from_slice(data);
+        }
+        let block = out.get(start..).unwrap_or_default();
+        if block.len() != raw {
+            return Err(bad("lzop block decoded to the wrong size"));
+        }
+        for (stored, data_check, crc) in checks.into_iter().flatten() {
+            let subject = if data_check { block } else { data };
+            let computed = if crc { crc32(subject) } else { adler32(subject) };
+            if computed != stored {
+                return Err(bad("lzop block checksum mismatch"));
             }
         }
+        self.pos = at.saturating_add(packed);
+        Ok(())
+    }
+}
+
+impl Decode for Lzop {
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+        let mark = out.len();
+        while !self.done {
+            match self.member {
+                Some(flags) => self.block(flags, input, out, limit)?,
+                None if self.between => {
+                    // Another member follows if the magic does.
+                    let rest = input.get(self.pos..).unwrap_or_default();
+                    let n = rest.len().min(LZOP_MAGIC.len());
+                    if rest.get(..n) != LZOP_MAGIC.get(..n) {
+                        self.done = true;
+                    } else if n < LZOP_MAGIC.len() {
+                        if !eof {
+                            return Err(bad("truncated lzop file"));
+                        }
+                        self.done = true;
+                    } else {
+                        self.header(input)?;
+                    }
+                }
+                None => self.header(input)?,
+            }
+            if out.len().saturating_sub(mark) >= step {
+                return Ok(Step::More);
+            }
+        }
+        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
     }
 }
