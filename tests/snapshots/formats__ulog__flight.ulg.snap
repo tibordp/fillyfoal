@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ flight.ulg — PX4 ULog v1  [0x0+0x15f]
+    Magic: 55 4c 6f 67 01 12 35  |ULog..5|  [0x0+0x7]
+    Version: 1  [0x7+0x1]
+    Timestamp (µs): 1000  [0x8+0x8]
+    Flag bits  [0x10+0x2b]
+    Info — sys_name = "PX4"  [0x3b+0x1c]
+    Info — ver_hw_subtype = 42  [0x57+0x1e]
+  ▾ Format — vehicle_gps_position  [0x75+0x4d]
+      Name: "vehicle_gps_position"  [0x78+0x14]
+      timestamp: "uint64_t"  [0x8d+0x12]
+      lat: "int32_t"  [0xa0+0xb]
+      lon: "int32_t"  [0xac+0xb]
+      alt: "float"  [0xb8+0x9]
+    Parameter — MC_ROLL_P = 6.5  [0xc2+0x17]
+    Add logged message — #1: vehicle_gps_position (instance 0)  [0xd9+0x1a]
+    Data — vehicle_gps_position @ 2000 µs  [0xf3+0x19]
+    Data — vehicle_gps_position @ 102000 µs  [0x10c+0x19]
+    Data — vehicle_gps_position @ 202000 µs  [0x125+0x19]
+    Log — 5000 µs: Takeoff detected  [0x13e+0x1c]
+    Dropout — 25 ms  [0x15a+0x5]

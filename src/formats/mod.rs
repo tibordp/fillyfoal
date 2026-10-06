@@ -832,6 +832,14 @@ pub static FORMATS: &[&Format] = &[
     &geo::vehicle::DBC,
     &geo::vehicle::LDF,
     &geo::vehicle::A2L,
+    &geo::robotics::ULOG,
+    &geo::robotics::DATAFLASH,
+    &geo::robotics::ARDUPILOT_LOG,
+    &geo::robotics::TLOG,
+    &geo::robotics::GPMF,
+    &geo::robotics::ROSBAG,
+    &geo::robotics::MCAP,
+    &geo::robotics::BLACKBOX_LOG,
     // -- end geo --
 
     // -- publishing, design & multimedia authoring --

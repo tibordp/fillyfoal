@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ recording.mcap — MCAP (ros2), written by fillyfoal-gen  [0x0+0x162]
+    Magic: 89 4d 43 41 50 30 0d 0a  |.MCAP0..|  [0x0+0x8]
+    Header — profile "ros2", library "fillyfoal-gen"  [0x8+0x22]
+  ▾ Chunk — 190 bytes uncompressed, compression ""  [0x2a+0xef]
+      Schema — #1 foxglove.LocationFix (jsonschema)  [0x5b+0x37]
+      Channel — #1 /gps (json), schema 1  [0x92+0x21]
+      Message — channel 1, seq 0, log time 1714564800000000000 ns, 20 bytes  [0xb3+0x33]
+      Message — channel 1, seq 1, log time 1714564800000000001 ns, 20 bytes  [0xe6+0x33]
+    Metadata — "device"  [0x119+0x17]
+    Data end — 4 bytes  [0x130+0xd]
+    Footer — 20 bytes  [0x13d+0x1d]

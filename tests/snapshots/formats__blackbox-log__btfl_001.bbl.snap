@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ btfl_001.bbl — Blackbox flight log, 2 logs  [0x0+0x266]
+  ▾ Log 1  [0x0+0x133]
+      Product: "Blackbox flight data recorder by Nicholas Sherlock"  [0x0+0x3c]
+      Data version: 2  [0x3d+0x10]
+      I interval: 1  [0x4e+0xe]
+      P interval: "1/2"  [0x5d+0x10]
+      Firmware type: "Cleanflight"  [0x6e+0x1b]
+      Firmware revision: "Betaflight 4.4.2 (abc1234) STM32F7X2"  [0x8a+0x38]
+      Craft name: "Quad1"  [0xc3+0x12]
+      Field I name: "loopIteration,time,axisP[0],axisP[1]"  [0xd6+0x33]
+      minthrottle: 1070  [0x10a+0x12]
+      Frames — binary-encoded I/P/G/H/S/E frames  [0x11d+0x16]
+  ▾ Log 2  [0x133+0x133]
+      Product: "Blackbox flight data recorder by Nicholas Sherlock"  [0x133+0x3c]
+      Data version: 2  [0x170+0x10]
+      I interval: 1  [0x181+0xe]
+      P interval: "1/2"  [0x190+0x10]
+      Firmware type: "Cleanflight"  [0x1a1+0x1b]
+      Firmware revision: "Betaflight 4.4.2 (abc1234) STM32F7X2"  [0x1bd+0x38]
+      Craft name: "Quad2"  [0x1f6+0x12]
+      Field I name: "loopIteration,time,axisP[0],axisP[1]"  [0x209+0x33]
+      minthrottle: 1070  [0x23d+0x12]
+      Frames — binary-encoded I/P/G/H/S/E frames  [0x250+0x16]
