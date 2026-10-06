@@ -1,0 +1,45 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ View.nib — NIB archive v10, 4 objects, 4 classes (first: NSObject)  [0x0+0xfe]
+  ▾ Header  [0x0+0x32]
+      Magic: "NIBArchive"  [0x0+0xa]
+      Unknown (1): 1  [0xa+0x4]
+      Format version: 10  [0xe+0x4]
+      Object count: 4  [0x12+0x4]
+      Objects offset: 0x32  [0x16+0x4]
+      Key count: 8  [0x1a+0x4]
+      Keys offset: 0x3e  [0x1e+0x4]
+      Value count: 8  [0x22+0x4]
+      Values offset: 0x9a  [0x26+0x4]
+      Class name count: 4  [0x2a+0x4]
+      Class names offset: 0xd5  [0x2e+0x4]
+  ▾ Objects — 4 objects  [0x32+0x68]
+    ▾ Object 0: "NSObject" — 2 values  [0x32+0x3]
+        UINibTopLevelObjectsKey: "→ object 1"  [0x9a+0x6]
+        UINibObjectsKey: "→ object 2"  [0xa0+0x6]
+    ▾ Object 1: "NSArray" — 1 values  [0x35+0x3]
+        NS.objects: "→ object 2"  [0xa6+0x6]
+    ▾ Object 2: "UIView" — 4 values  [0x38+0x3]
+        UIBounds: 00 00 00 00 00 00 00 00 00 00 a0 43 00 00 f0 43  |...........C...C|  [0xac+0x13]
+        UIAlpha: 0.5  [0xbf+0x6]
+        UIHidden: false  [0xc5+0x2]
+        UITag: 42  [0xc7+0x6]
+    ▾ Object 3: "NSString" — 1 values  [0x3b+0x3]
+        NS.bytes: "Hello"  [0xcd+0x8]
+  ▾ Keys — 8 keys  [0x3e+0x5c]
+      [0]: "UINibTopLevelObjectsKey"
+      [1]: "UINibObjectsKey"
+      [2]: "NS.objects"
+      [3]: "UIBounds"
+      [4]: "UIAlpha"
+      [5]: "UIHidden"
+      [6]: "NS.bytes"
+      [7]: "UITag"
+    Values — 8 values  [0x9a+0x3b]
+  ▾ Class names — NSObject, NSArray, UIView, NSString  [0xd5+0x29]
+      [0]: "NSObject"
+      [1]: "NSArray"
+      [2]: "UIView"
+      [3]: "NSString"

@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ InfoPlist-utf16.strings — Apple strings table (UTF-16LE), 2 entries  [0x0+0x98]
+    Byte order mark: "UTF-16LE"  [0x0+0x2]
+    CFBundleDisplayName: "Tiny"  [#1:0x0+0x1f]
+    NSCameraUsageDescription: "Scan codes"  [#1:0x20+0x2a]

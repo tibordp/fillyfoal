@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Tiny.swiftmodule — Swift module, blocks: BLOCKINFO, MODULE_BLOCK  [0x0+0x2c]
+    Magic: e2 9c a8 0e  |....|  [0x0+0x4]
+    BLOCKINFO — 8 bytes  [0x4+0x10]
+    MODULE_BLOCK — 16 bytes  [0x14+0x18]

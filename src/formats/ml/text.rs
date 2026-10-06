@@ -190,7 +190,7 @@ async fn caffe(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// The lines of a block, one node each.
-async fn block_lines(cx: Cx, span: Span) -> Result<()> {
+pub async fn block_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
         if line.is_blank() {
