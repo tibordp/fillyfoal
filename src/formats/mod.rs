@@ -207,7 +207,19 @@ pub mod misc3;
 pub mod misc4;
 pub mod misc5;
 pub mod misc6;
+pub mod misc7;
+pub mod misc8;
+pub mod misc9;
 // -- end misc --
+
+// -- ml models & mobile platforms --
+// -- end ml --
+
+// -- geospatial, telemetry & vehicle logs --
+// -- end geo --
+
+// -- publishing, design & multimedia authoring --
+// -- end publishing --
 
 // -- text --
 pub mod text;
@@ -304,6 +316,7 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::DOS_EXE,
     &pe::FORMAT,
+    &misc7::APPIMAGE,
     &elf::FORMAT,
     &macho::FORMAT,
     &macho::fat::FORMAT,
@@ -930,6 +943,15 @@ pub static FORMATS: &[&Format] = &[
     &retro::dats::RETROARCH_CHT,
     // -- end retro --
 
+    // -- ml models & mobile platforms --
+    // -- end ml --
+
+    // -- geospatial, telemetry & vehicle logs --
+    // -- end geo --
+
+    // -- publishing, design & multimedia authoring --
+    // -- end publishing --
+
     // -- games, 3D, science, e-books, misc --
     &games::WAD,
     &games::PAK,
@@ -1190,7 +1212,71 @@ pub static FORMATS: &[&Format] = &[
     &misc6::RRD,
     &misc6::WIREDTIGER,
     &misc6::REALM,
+    &misc7::KEYTAB,
+    &misc7::CCACHE,
+    &misc7::PWSAFE,
+    &misc7::OPENSSL_ENC,
+    &misc7::AESCRYPT,
+    &misc7::AXCRYPT,
+    &misc7::MINISIGN,
+    &misc7::MTF,
+    &misc7::ORACLE_EXP,
+    &misc7::PG_DUMP,
+    &misc7::MYSQL_FRM,
+    &misc7::MYISAM,
+    &misc7::H2,
+    &misc7::FILEMAKER,
+    &misc7::R_DATA,
+    &misc7::ASDF,
+    &misc7::WAB,
+    &misc7::APPLESCRIPT,
+    &misc7::SOLARIS_PKG,
+    &misc7::HPKG,
+    &misc7::ASAR,
+    &misc8::DIRECTX_X,
+    &misc8::MS3D,
+    &misc8::CAL3D,
+    &misc8::OGRE,
+    &misc8::MAYA,
+    &misc8::C4D,
+    &misc8::BGEO,
+    &misc8::ALEMBIC,
+    &misc8::OPENVDB,
+    &misc8::NIF,
+    &misc8::HKX,
+    &misc8::BGSM,
+    &misc8::WOW_CHUNKED,
+    &misc8::WOW_DB,
+    &misc8::WC3_MDX,
+    &misc8::QUAKE_SPR,
+    &misc8::QUAKE2_SP2,
+    &misc8::RTCW_MODEL,
+    &misc8::HEXEN2_MDL,
+    &misc8::VVD,
+    &misc8::DMX,
+    &misc8::UTOC,
+    &misc8::XP3,
+    &misc8::ALLEGRO,
+    &misc8::RPYC,
+    &misc9::BFRES,
+    &misc9::BNTX,
+    &misc9::MSBT,
+    &misc9::CGFX,
+    &misc9::J3D,
+    &misc9::RARC,
+    &misc9::TPL,
+    &misc9::BRRES,
+    &misc9::GIM,
+    &misc9::GXT,
+    &misc9::RCO,
+    &misc9::NPD,
+    &misc9::XDBF,
+    &misc9::XPR,
+    &misc9::XACT,
+    &misc9::SEGA_TEXTURE,
+    &misc9::NINJA,
     // Weak, size-based probes last.
+    &misc9::BYML,
     &misc6::SQUEEZE,
     &misc6::CRUNCH,
     &misc4::NBT,

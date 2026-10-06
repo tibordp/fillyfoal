@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cube.x — DirectX model 03.03 (txt, 0032-bit floats): template, Material, Frame  [0x0+0x102]
+    Signature: "xof "  [0x0+0x4]
+    Version: "0303"  [0x4+0x4]
+    Format: "txt "  [0x8+0x4]
+    Float size: "0032"  [0xc+0x4]
+    Objects — template, Material, Frame  [0x10+0xf2]

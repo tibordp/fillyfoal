@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.spr — Quake sprite, 1 frames, up to 16×16  [0x0+0x138]
+    Signature: "IDSP"  [0x0+0x4]
+    Version: 1  [0x4+0x4]
+    Orientation: parallel (0x2)  [0x8+0x4]
+    Bounding radius: 16  [0xc+0x4]
+    Maximum width: 16  [0x10+0x4]
+    Maximum height: 16  [0x14+0x4]
+    Frames: 1  [0x18+0x4]
+    Beam length: 0  [0x1c+0x4]
+    Sync type: 0  [0x20+0x4]
+    Frames  [0x24+0x114]

@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.rds — R object (RDS) (serialization v3, R 4.3.1), top level double vector  [0x0+0x37]
+    Format (XDR): "X\n"  [0x0+0x2]
+    Serialization version: 3  [0x2+0x4]
+    Written by R: 262913  [0x6+0x4]
+    Minimum reader R: 197888  [0xa+0x4]
+    Native encoding: "UTF-8"  [0xe+0x9]
+    Top-level object: double vector (0xe) — flags 0xe  [0x17+0x20]

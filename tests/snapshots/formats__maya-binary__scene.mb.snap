@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ scene.mb — Maya binary scene  [0x0+0x98]
+    FOR4 Maya — 144 bytes  [0x0+0xc]
+  ▾ FOR4 HEAD — 68 bytes  [0xc+0x4c]
+      VERS: "2024" — 5 bytes  [0x18+0xd]
+      PLAT: "Mac OS X" — 9 bytes  [0x28+0x11]
+      FINF: "application maya" — 17 bytes  [0x3c+0x19]
+  ▾ FOR4 XFRM — 56 bytes  [0x58+0x40]
+      CREA — 12 bytes  [0x64+0x14]
+      DBL3 — 24 bytes  [0x78+0x20]

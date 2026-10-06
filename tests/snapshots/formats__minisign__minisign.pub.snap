@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ minisign.pub — minisign/signify public key, key ID 0807060504030201  [0x0+0x71]
+    Untrusted comment: "minisign public key 0807060504030201"  [0x0+0x37]
+    Public key — algorithm Ed, key ID 0807060504030201, 42 bytes  [0x38+0x38]

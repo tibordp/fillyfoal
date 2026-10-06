@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ walk.caf — Cal3D animation v1000, 1.50 s, 3 tracks  [0x0+0x30]
+    Signature  [0x0+0x4]
+    Version: 1000  [0x4+0x4]
+    Body — 1.50 s, 3 tracks  [0x8+0x28]
