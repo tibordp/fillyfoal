@@ -540,10 +540,8 @@ async fn figma(cx: Cx, input: Input) -> Result<()> {
         };
         let magic = cx.read_avail(chunk.body.sub(0, 4)).await?;
         let node = if magic.as_slice() == b"\x28\xb5\x2f\xfd" {
-            Node::new(name)
-                .span(chunk.span)
-                .summary(format!("{} bytes, Zstandard", chunk.body.len))
-                .diag(Diagnostic::unsupported("Zstandard compression"))
+            content(name, input, chunk.body, Codec::Zstd, None)
+                .summary(format!("{} bytes, Zstandard (kiwi binary)", chunk.body.len))
         } else if magic.starts_with(b"\x89PNG") {
             embedded(name, input.nested(chunk.body)).summary("PNG image")
         } else {

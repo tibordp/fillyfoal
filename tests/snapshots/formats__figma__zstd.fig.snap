@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ zstd.fig — Figma design, format version 48, 2 chunks  [0x0+0x56]
+    Signature: "fig-kiwi"  [0x0+0x8]
+    Version: 48  [0x8+0x4]
+  ▾ Schema — 0x3c bytes decompressed  [0x10+0x23]
+      Data  [#1:0x0+0x3c]
+  ▾ Message — 0x30 bytes decompressed  [0x37+0x1f]
+      Data  [#2:0x0+0x30]
