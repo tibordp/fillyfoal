@@ -7,3 +7,4 @@ pub mod computers;
 pub mod util;
 pub mod patches;
 pub mod discs;
+pub mod consoles2;

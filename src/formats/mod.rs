@@ -689,11 +689,26 @@ pub static FORMATS: &[&Format] = &[
     &retro::discs::TGC,
     &retro::discs::WII_CISO,
     &retro::discs::OPERA,
+    &retro::consoles2::GAME_GEAR,
+    &retro::consoles2::SMS,
+    &retro::consoles2::SMD,
+    &retro::consoles2::NGPC,
+    &retro::consoles2::NGP,
+    &retro::consoles2::POKEMON_MINI,
+    &retro::consoles2::NEO_GEO,
+    &retro::consoles2::UNIF,
+    &retro::consoles2::VECTREX,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
     &retro::discs::CUE,
     &retro::discs::GDI,
+    &retro::consoles2::INTELLIVISION,
+    &retro::consoles2::COLECOVISION,
+    &retro::consoles2::MSX_ROM,
+    &retro::consoles2::WONDERSWAN_COLOR,
+    &retro::consoles2::WONDERSWAN,
+    &retro::consoles2::VIRTUAL_BOY,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --
