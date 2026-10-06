@@ -6,7 +6,7 @@
 //! when expanded.
 
 pub(crate) mod tables;
-mod version;
+pub(crate) mod version;
 
 use std::sync::Arc;
 

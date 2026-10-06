@@ -38,6 +38,7 @@ pub mod pdb;
 pub mod pe;
 pub mod pyc;
 pub mod spirv;
+pub mod winres;
 pub mod wasm;
 // -- end executables --
 
@@ -182,6 +183,7 @@ pub static FORMATS: &[&Format] = &[
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
+    &winres::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
