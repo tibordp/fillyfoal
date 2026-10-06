@@ -14,3 +14,4 @@ pub mod tapes;
 pub mod floppies;
 pub mod systems;
 pub mod micros;
+pub mod consoles3;
