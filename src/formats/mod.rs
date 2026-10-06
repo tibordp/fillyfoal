@@ -34,6 +34,7 @@ pub mod png;
 // data, system artifacts, fonts
 pub mod applesingle;
 pub mod bencode;
+pub mod bookmark;
 pub mod bplist;
 pub mod cbor;
 pub mod dsstore;
@@ -225,6 +226,7 @@ pub static FORMATS: &[&Format] = &[
     &chm::FORMAT,
     &winhelp::FORMAT,
     &dsstore::FORMAT,
+    &bookmark::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --
