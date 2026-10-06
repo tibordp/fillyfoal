@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.fasta — FASTA, 3 nucleotide sequence(s), 68 residues  [0x0+0x81]
+  ▾ seq1: "Example nucleotide sequence" — 52 residues  [0x0+0x58]
+      Header  [0x0+0x21]
+      Sequence: "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTNNNNACGT"  [0x22+0x36]
+  ▾ seq2: "second one" — 12 residues  [0x58+0x1e]
+      Header  [0x58+0x10]
+      Sequence: "GGGCCCAAATTT"  [0x69+0xd]
+  ▾ seq3 — 4 residues  [0x76+0xb]
+      Header  [0x76+0x5]
+      Sequence: "ACGU"  [0x7c+0x5]

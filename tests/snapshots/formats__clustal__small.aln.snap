@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.aln — CLUSTAL W (1.83) multiple sequence align…, 2 sequence(s) × 120 columns in 2 block(s)  [0x0+0x1fe]
+    Header: "CLUSTAL W (1.83) multiple sequence alignment"  [0x0+0x2c]
+  ▾ Sequences: 2
+      FOSB_MOUSE: 120 — 120 columns  [0x2f+0xa]
+      FOSB_HUMAN: 120 — 120 columns  [0x7c+0xa]

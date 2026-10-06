@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.nex — NEXUS, block(s): TAXA, CHARACTERS, TREES  [0x0+0x10f]
+    Header: "#NEXUS"  [0x0+0x6]
+  ▾ BEGIN TAXA — 2 command(s)  [0x7+0x3b]
+      DIMENSIONS: "NTAX=4"  [0x13+0x14]
+      TAXLABELS: "A B C D"  [0x28+0x14]
+  ▾ BEGIN CHARACTERS — 7 command(s)  [0x42+0x9d]
+      DIMENSIONS: "NCHAR=8"  [0x54+0x15]
+      FORMAT: "DATATYPE=DNA GAP=- MISSING=?"  [0x6a+0x26]
+      MATRIX: ""  [0x91+0x8]
+      A: "ACGTACGT"  [0x9a+0xe]
+      B: "ACGTACGA"  [0xa9+0xe]
+      C: "ACGAACGA"  [0xb8+0xe]
+      D: "TCGAACGA"  [0xc7+0xe]
+  ▾ BEGIN TREES — 1 command(s)  [0xdf+0x30]
+      TREE: "tree1 = ((A,B),(C,D))"  [0xec+0x1d]

@@ -1,0 +1,33 @@
+LOCUS       SCU49845                 120 bp    DNA     linear   PLN 21-JUN-1999
+DEFINITION  Saccharomyces cerevisiae TCP1-beta gene, partial cds; and Axl2p
+            (AXL2) and Rev7p (REV7) genes, complete cds.
+ACCESSION   U49845
+VERSION     U49845.1  GI:1293613
+KEYWORDS    .
+SOURCE      Saccharomyces cerevisiae (baker's yeast)
+  ORGANISM  Saccharomyces cerevisiae
+            Eukaryota; Fungi; Ascomycota; Saccharomycetales.
+REFERENCE   1  (bases 1 to 120)
+  AUTHORS   Roemer,T., Madden,K., Chang,J. and Snyder,M.
+  TITLE     Selection of axial growth sites in yeast
+  JOURNAL   Genes Dev. 10 (7), 777-793 (1996)
+FEATURES             Location/Qualifiers
+     source          1..120
+                     /organism="Saccharomyces cerevisiae"
+                     /db_xref="taxon:4932"
+     gene            10..100
+                     /gene="AXL2"
+     CDS             10..100
+                     /gene="AXL2"
+                     /product="Axl2p"
+                     /translation="MTQLQISLLLTATISLLHLVVATPYEAYPIGKQYPPVARVNESF
+                     TFQISNDTYKSSVDKTAQITYNCFDLPSDLTTAANATQ"
+ORIGIN
+        1 gatcctccat atacaacggt atctccacct caggtttaga tctcaacaac ggaaccattg
+       61 ccgacatgag acagttaggt atcgtcgaga gttacaagct aaaacgagca gtagtcagct
+//
+LOCUS       TINY                      12 bp    DNA     circular SYN 01-JAN-2020
+DEFINITION  A tiny synthetic plasmid.
+ORIGIN
+        1 acgtacgtac gt
+//

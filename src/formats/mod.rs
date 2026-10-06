@@ -170,6 +170,9 @@ pub mod misc2;
 pub mod pdb;
 pub mod platform;
 pub mod devices;
+pub mod lines;
+pub mod bio;
+pub mod biotext;
 // -- end misc --
 
 // -- text --
@@ -526,6 +529,13 @@ pub static FORMATS: &[&Format] = &[
     // -- end disk images --
 
     // -- archives & compression --
+    // BGZF (blocked gzip) members are gzip members; identify them first.
+    &bio::BAM,
+    &bio::BCF,
+    &bio::VCF_BGZF,
+    &bio::TABIX,
+    &bio::CSI,
+    &bio::BGZF,
     &gzip::FORMAT,
     &dmg::FORMAT,
     &tar::FORMAT,
@@ -805,6 +815,32 @@ pub static FORMATS: &[&Format] = &[
     &devices::VERITY,
     &devices::BTRFS_SEND,
     &ebooks::PDB,
+    // bioinformatics (BGZF-based ones are listed before gzip)
+    &bio::BAI,
+    &bio::CRAM,
+    &bio::TWOBIT,
+    &bio::BIGWIG,
+    &bio::BIGBED,
+    &bio::ABIF,
+    &bio::SCF,
+    &biotext::VCF,
+    &biotext::SAM,
+    &biotext::GFF3,
+    &biotext::GENBANK,
+    &biotext::STOCKHOLM,
+    &biotext::CLUSTAL,
+    &biotext::MAF,
+    &biotext::NEXUS,
+    &biotext::GFA,
+    &biotext::JCAMP,
+    &biotext::PDB_STRUCTURE,
+    &biotext::SDF,
+    &biotext::MOLFILE,
+    &biotext::CIF,
+    &biotext::WIG,
+    &biotext::BED,
+    &biotext::FASTQ,
+    &biotext::FASTA,
     // Weak, size-based probes last.
     &models::STL,
     // -- end misc --

@@ -1,0 +1,17 @@
+HEADER    OXYGEN TRANSPORT                        13-JUL-98   1A3N
+TITLE     DEOXY HUMAN HEMOGLOBIN (FRAGMENT)
+COMPND    MOL_ID: 1;
+COMPND   2 MOLECULE: HEMOGLOBIN (ALPHA CHAIN);
+EXPDTA    X-RAY DIFFRACTION
+REMARK   2 RESOLUTION.    1.80 ANGSTROMS.
+CRYST1   63.150   83.590   53.800  90.00  99.34  90.00 P 1 21 1      4
+ATOM      1  N   VAL A   1      19.323  29.727  42.781  1.00 49.05           N
+ATOM      2  CA  VAL A   1      20.141  30.469  41.825  1.00 43.14           C
+ATOM      3  C   VAL A   1      21.422  29.697  41.528  1.00 24.80           C
+TER       4      VAL A   1
+ATOM      5  N   VAL B   1       5.783  12.110  27.442  1.00 70.29           N
+HETATM    6 FE   HEM A 142      17.010  19.540  22.400  1.00 16.92          FE
+HETATM    7  O   HOH A 201      30.217  18.212  30.412  1.00 35.10           O
+CONECT    6    7
+MASTER        0    0    1    0    0    0    0    6    7    2    1    0
+END

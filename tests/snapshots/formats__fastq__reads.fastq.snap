@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ reads.fastq — FASTQ, 3 read(s), 32 bases, 7–16 bp  [0x0+0x77]
+  ▾ read1 — 16 bp, mean Q39  [0x0+0x38]
+      Header: "read1" — 1:N:0:ATCACG  [0x0+0x13]
+      Sequence: "ACGTACGTACGTAAGG" — 16 bp  [0x14+0x10]
+      Separator: "+"  [0x25+0x1]
+      Quality: "IIIIIIIIIIIIHHGG" — mean Phred 39  [0x27+0x10]
+  ▾ read2/1 — 9 bp, mean Q2  [0x38+0x26]
+      Header: "read2/1"  [0x38+0x8]
+      Sequence: "TTGACCAAN" — 9 bp  [0x41+0x9]
+      Separator: "+read2/1"  [0x4b+0x8]
+      Quality: "#########" — mean Phred 2  [0x54+0x9]
+  ▾ read3 — 7 bp, mean Q35  [0x5e+0x19]
+      Header: "read3"  [0x5e+0x6]
+      Sequence: "GATTACA" — 7 bp  [0x65+0x7]
+      Separator: "+"  [0x6d+0x1]
+      Quality: "ABCDEFG" — mean Phred 35  [0x6f+0x7]

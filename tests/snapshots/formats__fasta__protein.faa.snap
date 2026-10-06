@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ protein.faa — FASTA, 1 protein sequence(s), 142 residues  [0x0+0xbe]
+  ▾ sp|P69905|HBA_HUMAN: "Hemoglobin subunit alpha" — 142 residues  [0x0+0xbe]
+      Header  [0x0+0x2d]
+      Sequence: "MVLSPADKTNVKAAWGKVGAHAGEYGAEALERMFLSFPTTKTYFPHFDLSHGSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKLRVDPVNFKLLSHCLLVTLAAHLPAEFTPAVHASLDKFLASVSTVLTSKYR"  [0x2e+0x90]

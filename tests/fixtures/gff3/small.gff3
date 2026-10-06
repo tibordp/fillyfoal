@@ -1,0 +1,11 @@
+##gff-version 3.1.26
+##sequence-region ctg123 1 1497228
+#!genome-build Example 1.0
+ctg123	.	gene	1000	9000	.	+	.	ID=gene00001;Name=EDEN
+ctg123	.	mRNA	1050	9000	.	+	.	ID=mRNA00001;Parent=gene00001;Name=EDEN.1;Note=protein%20kinase%3B%20putative
+ctg123	.	exon	1050	1500	.	+	.	ID=exon00001;Parent=mRNA00001
+ctg123	.	CDS	1201	1500	.	+	0	ID=cds00001;Parent=mRNA00001;Name=edenprotein.1
+###
+##FASTA
+>ctg123
+ACGTACGTACGTAACCGGTT

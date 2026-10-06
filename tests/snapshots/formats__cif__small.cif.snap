@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ small.cif — CIF, 2 data block(s), first 1A3N  [0x0+0x281]
+  ▾ data_1A3N — 9 item(s)/loop(s)  [0x0+0x262]
+      _entry.id: "1A3N"  [0xc+0x10]
+      _struct.entry_id: "1A3N"  [0x1f+0x26]
+      _struct.title: "DEOXY HUMAN HEMOGLOBIN"  [0x46+0x3a]
+      _struct.pdbx_descriptor: "Hemoglobin (deoxy), alpha and beta chains"  [0x99+0x2e]
+      _cell.length_a: 63.15  [0xc9+0x1f]
+      _cell.length_b: 83.59  [0xe9+0x1f]
+      _cell.length_c: 53.8  [0x109+0x1f]
+    ▾ loop_ _atom_site: 3 — 3 row(s) × 7 column(s)  [0x12b+0x100]
+        Column 0: "_atom_site.group_PDB"
+        Column 1: "_atom_site.id"
+        Column 2: "_atom_site.type_symbol"
+        Column 3: "_atom_site.label_atom_id"
+        Column 4: "_atom_site.Cartn_x"
+        Column 5: "_atom_site.Cartn_y"
+        Column 6: "_atom_site.Cartn_z"
+    ▾ loop_ _citation_author: 2 — 2 row(s) × 1 column(s)  [0x22b+0x37]
+        Column 0: "_citation_author.name"
+  ▾ data_second — 1 item(s)/loop(s)  [0x262+0x1e]
+      _cell.volume: 1000  [0x26e+0x12]

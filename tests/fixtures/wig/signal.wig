@@ -1,0 +1,10 @@
+track type=wiggle_0 name="example" description="variable step"
+variableStep chrom=chr19 span=150
+59304701 10.0
+59304901 12.5
+59305401 15.0
+fixedStep chrom=chr19 start=59307401 step=300 span=200
+1000
+900
+800
+700

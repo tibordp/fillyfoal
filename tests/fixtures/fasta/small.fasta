@@ -1,0 +1,7 @@
+>seq1 Example nucleotide sequence
+ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT
+ACGTNNNNACGT
+>seq2 second one
+GGGCCCAAATTT
+>seq3
+ACGU
