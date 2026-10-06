@@ -222,12 +222,6 @@ pub mod misc10;
 // -- publishing, design & multimedia authoring --
 // -- end publishing --
 
-// -- network captures, telemetry & protocol logs --
-// -- end network --
-
-// -- firmware, hardware & system data --
-// -- end firmware --
-
 // -- text --
 pub mod text;
 // -- end text --
@@ -958,12 +952,6 @@ pub static FORMATS: &[&Format] = &[
 
     // -- publishing, design & multimedia authoring --
     // -- end publishing --
-
-    // -- network captures, telemetry & protocol logs --
-    // -- end network --
-
-    // -- firmware, hardware & system data --
-    // -- end firmware --
 
     // -- games, 3D, science, e-books, misc --
     &games::WAD,
