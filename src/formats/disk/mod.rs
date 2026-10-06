@@ -13,6 +13,7 @@ pub mod bitlocker;
 pub mod bsdlabel;
 pub mod btrfs;
 pub mod exfat;
+pub mod ext;
 pub mod fat;
 pub mod gpt;
 pub mod hfs;
