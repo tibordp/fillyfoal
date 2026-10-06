@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ list.pls — PLS playlist, 2 entries  [0x0+0x83]
+  ▾ Entry 1 — First stream  [0xb+0x3d]
+      File: "http://example.com/a.mp3"  [0x11+0x18]
+      Title: "First stream"  [0x31+0xc]
+      Length: -1 — seconds (-1: unknown)  [0x46+0x2]
+  ▾ Entry 2 — local/b.ogg  [0x49+0x1d]
+      File: "local/b.ogg"  [0x4f+0xb]
+      Length: 245 — seconds (-1: unknown)  [0x63+0x3]
+    NumberOfEntries: 2  [0x77+0x1]
+    Version: 2  [0x81+0x1]

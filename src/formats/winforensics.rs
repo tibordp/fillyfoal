@@ -1440,8 +1440,8 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Windows INI-style artifacts: Internet shortcuts (.url), Shell Command
-// Files (.scf), autorun.inf and desktop.ini
+// Windows INI-style artifacts: Shell Command Files (.scf), autorun.inf and
+// desktop.ini
 
 /// The first meaningful line (after a BOM, blank lines and `;` comments).
 fn ini_first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
@@ -1450,13 +1450,6 @@ fn ini_first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
         .map(|l| l.strip_suffix(b"\r").unwrap_or(l))
         .find(|l| !l.is_empty() && !l.starts_with(b";"))
         .unwrap_or_default()
-}
-
-fn url_probe(h: &Head<'_>) -> bool {
-    let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    data.starts_with(b"[InternetShortcut]")
-        || data.starts_with(b"[{000214A0-0000-0000-C000-000000000046}]")
-        || data.starts_with(b"[DEFAULT]\r\nBASEURL=")
 }
 
 fn scf_probe(h: &Head<'_>) -> bool {
@@ -1472,8 +1465,6 @@ fn desktop_ini_probe(h: &Head<'_>) -> bool {
     (first.eq_ignore_ascii_case(b"[.ShellClassInfo]") || first.eq_ignore_ascii_case(b"[ViewState]")) && h.len < 0x10000
 }
 
-declare_format!(pub URL_SHORTCUT = "url-shortcut", "Internet shortcut (.url)", ["url", "website"], "application/x-mswinurl",
-    Probe::Custom(url_probe), url_shortcut);
 declare_format!(pub SCF = "shell-command-file", "Windows Shell Command File (.scf)", ["scf"], "application/x-ms-scf",
     Probe::Custom(scf_probe), shell_command_file);
 declare_format!(pub AUTORUN = "autorun-inf", "Windows AutoRun configuration (autorun.inf)", ["inf"], "application/x-autorun-inf",
@@ -1532,15 +1523,6 @@ async fn ini_keys(cx: Cx, keys: Vec<IniKey>) -> Result<()> {
     for (k, v, span) in keys {
         cx.push(Node::new(k).span(span).value(text(v))).await;
     }
-    Ok(())
-}
-
-async fn url_shortcut(cx: Cx, input: Input) -> Result<()> {
-    let all = ini_file(&cx, input.span).await?;
-    cx.annotate(match ini_get(&all, "InternetShortcut", "URL") {
-        Some(url) => format!("Internet shortcut to {}", clip(url, 120)),
-        None => "Internet shortcut".to_owned(),
-    });
     Ok(())
 }
 

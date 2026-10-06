@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ small.pack — Git pack v2, 10 objects  [0x0+0x434]
   ▾ Header  [0x0+0xc]
@@ -67,15 +67,61 @@ expression: "common::explore(&name, &data)"
       Type: blob (0x3)
       Size: 50
       Compressed data — zlib, 57 bytes  [0x2e4+0x39]
-    ▾ Content — 50 bytes  [#7:0x0+0x32]
-        Data  [#7:0x0+0x32]
+    ▾ Content — UTF-8 text, LF line endings, 3 lines  [#7:0x0+0x32]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+      ▾ Lines — 3 lines  [#7:0x0+0x32]
+          Line 1: "# fixture"  [#7:0x0+0x9]
+          Line 2: ""  [#7:0xa+0x0]
+          Line 3: "A tiny repository for fillyfoal tests."  [#7:0xb+0x26]
   ▾ blob at 0x31d — object 7, 179 → 2128 bytes  [0x31d+0xb6]
       Type and size: 0xb0  [0x31d+0x1]
       Type: blob (0x3)
       Size: 2128
       Compressed data — zlib, 179 bytes  [0x320+0xb3]
-    ▾ Content — 2.1 KiB  [#8:0x0+0x850]
-        Data  [#8:0x0+0x850]
+    ▾ Content — YAML document  [#8:0x0+0x850]
+        line 0: "the quick brown fox jumps over the lazy dog"  [#8:0x8+0x2b]
+        line 1: "the quick brown fox jumps over the lazy dog"  [#8:0x3c+0x2b]
+        line 2: "the quick brown fox jumps over the lazy dog"  [#8:0x70+0x2b]
+        line 3: "the quick brown fox jumps over the lazy dog"  [#8:0xa4+0x2b]
+        line 4: "the quick brown fox jumps over the lazy dog"  [#8:0xd8+0x2b]
+        line 5: "the quick brown fox jumps over the lazy dog"  [#8:0x10c+0x2b]
+        line 6: "the quick brown fox jumps over the lazy dog"  [#8:0x140+0x2b]
+        line 7: "the quick brown fox jumps over the lazy dog"  [#8:0x174+0x2b]
+        line 8: "the quick brown fox jumps over the lazy dog"  [#8:0x1a8+0x2b]
+        line 9: "the quick brown fox jumps over the lazy dog"  [#8:0x1dc+0x2b]
+        line 10: "the quick brown fox jumps over the lazy dog"  [#8:0x211+0x2b]
+        line 11: "the quick brown fox jumps over the lazy dog"  [#8:0x246+0x2b]
+        line 12: "the quick brown fox jumps over the lazy dog"  [#8:0x27b+0x2b]
+        line 13: "the quick brown fox jumps over the lazy dog"  [#8:0x2b0+0x2b]
+        line 14: "the quick brown fox jumps over the lazy dog"  [#8:0x2e5+0x2b]
+        line 15: "the quick brown fox jumps over the lazy dog"  [#8:0x31a+0x2b]
+        line 16: "the quick brown fox jumps over the lazy dog"  [#8:0x34f+0x2b]
+        line 17: "the quick brown fox jumps over the lazy dog"  [#8:0x384+0x2b]
+        line 18: "the quick brown fox jumps over the lazy dog"  [#8:0x3b9+0x2b]
+        line 19: "the quick brown fox jumps over the lazy dog"  [#8:0x3ee+0x2b]
+        line twenty: "the quick brown fox jumps over the lazy dog"  [#8:0x427+0x2b]
+        line 21: "the quick brown fox jumps over the lazy dog"  [#8:0x45c+0x2b]
+        line 22: "the quick brown fox jumps over the lazy dog"  [#8:0x491+0x2b]
+        line 23: "the quick brown fox jumps over the lazy dog"  [#8:0x4c6+0x2b]
+        line 24: "the quick brown fox jumps over the lazy dog"  [#8:0x4fb+0x2b]
+        line 25: "the quick brown fox jumps over the lazy dog"  [#8:0x530+0x2b]
+        line 26: "the quick brown fox jumps over the lazy dog"  [#8:0x565+0x2b]
+        line 27: "the quick brown fox jumps over the lazy dog"  [#8:0x59a+0x2b]
+        line 28: "the quick brown fox jumps over the lazy dog"  [#8:0x5cf+0x2b]
+        line 29: "the quick brown fox jumps over the lazy dog"  [#8:0x604+0x2b]
+        line 30: "the quick brown fox jumps over the lazy dog"  [#8:0x639+0x2b]
+        line 31: "the quick brown fox jumps over the lazy dog"  [#8:0x66e+0x2b]
+        line 32: "the quick brown fox jumps over the lazy dog"  [#8:0x6a3+0x2b]
+        line 33: "the quick brown fox jumps over the lazy dog"  [#8:0x6d8+0x2b]
+        line 34: "the quick brown fox jumps over the lazy dog"  [#8:0x70d+0x2b]
+        line 35: "the quick brown fox jumps over the lazy dog"  [#8:0x742+0x2b]
+        line 36: "the quick brown fox jumps over the lazy dog"  [#8:0x777+0x2b]
+        line 37: "the quick brown fox jumps over the lazy dog"  [#8:0x7ac+0x2b]
+        line 38: "the quick brown fox jumps over the lazy dog"  [#8:0x7e1+0x2b]
+        line 39: "the quick brown fox jumps over the lazy dog"  [#8:0x816+0x2b]
+        ?: "an extra line"  [#8:0x842+0xe]
+          ! malformed: expected `key: value`
   ▾ ofs-delta at 0x3d3 — object 8, 28 → 19 bytes, base at 0x31d  [0x3d3+0x20]
       Type and size: 0xe3  [0x3d3+0x1]
       Type: ofs-delta (0x6)
@@ -93,5 +139,10 @@ expression: "common::explore(&name, &data)"
       Type: blob (0x3)
       Size: 37
       Compressed data — zlib, 43 bytes  [0x3f5+0x2b]
-    ▾ Content — 37 bytes  [#10:0x0+0x25]
-        Data  [#10:0x0+0x25]
+    ▾ Content — UTF-8 text, LF line endings, 3 lines  [#10:0x0+0x25]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+      ▾ Lines — 3 lines  [#10:0x0+0x25]
+          Line 1: "fn main() {"  [#10:0x0+0xb]
+          Line 2: "    println!(\"hello\");"  [#10:0xc+0x16]
+          Line 3: "}"  [#10:0x23+0x1]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.exs — EXS24 instrument "Tiny Kit": 1 zones, 1 groups, 1 samples  [0x0+0x178]
+    Header — Tiny Kit  [0x0+0x5c]
+    Zone — Kick  [0x5c+0x64]
+    Group — Group 1  [0xc0+0x5c]
+    Sample — kick.wav  [0x11c+0x5c]

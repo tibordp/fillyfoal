@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ N00E000.hgt — SRTM3 tile, 1201×1201 posts  [0x0+0x2c04c2]
+    Grid — 1201×1201 big-endian 16-bit posts  [0x0+0x2c04c2]
+    Centre elevation: 16  [0x160260+0x2]

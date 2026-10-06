@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ files.nzb — NZB Usenet index  [0x0+0x111]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ nzb — 1 element  [0x27+0xe9]
+      @xmlns: "http://www.newzbin.com/DTD/2003/nzb"  [0x33+0x23]
+    ▾ file — poster="a@b" date="1700000000" subject="test" (2 elements)  [0x58+0xb2]
+        @poster: "a@b"  [0x66+0x3]
+        @date: "1700000000"  [0x71+0xa]
+        @subject: "test"  [0x86+0x4]
+      ▾ groups — 1 element  [0x8c+0x31]
+          group: "alt.binaries.test"  [0x94+0x20]
+      ▾ segments — 1 element  [0xbd+0x46]
+        ▾ segment: "id@host" — bytes="100" number="1"  [0xc7+0x31]
+            @bytes: "100"  [0xd7+0x3]
+            @number: "1"  [0xe4+0x1]
+            #text: "id@host"  [0xe7+0x7]

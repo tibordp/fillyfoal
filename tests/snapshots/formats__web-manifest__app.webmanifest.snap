@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ app.webmanifest — Web app manifest: Fillyfoal Viewer  [0x0+0xbd]
+    name: "Fillyfoal Viewer"  [0xc+0x12]
+    short_name: "Fillyfoal"  [0x30+0xb]
+    start_url: "/"  [0x4c+0x3]
+    display: "standalone"  [0x5e+0xc]
+  ▾ icons — array, 1 element  [0x77+0x43]
+    ▾ [0] — object, 2 members  [0x7d+0x39]
+        src: "icon.png"  [0x8c+0xa]
+        sizes: "192x192"  [0xa7+0x9]

@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ scene.x3d — X3D scene: Interchange  [0x0+0x88]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ X3D — profile="Interchange" version="3.3" (1 element)  [0x27+0x60]
+      @profile: "Interchange"  [0x35+0xb]
+      @version: "3.3"  [0x4b+0x3]
+    ▾ Scene — 1 element  [0x50+0x31]
+      ▾ Shape — 1 element  [0x57+0x22]
+        ▾ Box — size="1 1 1"  [0x5e+0x13]
+            @size: "1 1 1"  [0x69+0x5]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.nro — NRO, 0x180 bytes of code and data  [0x0+0x365]
   ▾ Header  [0x0+0x60]
@@ -88,5 +88,8 @@ expression: "common::explore(&name, &data)"
           Type: "IEND" — critical, public, unsafe to copy  [0x356+0x4]
           Data  [0x35a+0x0]
           CRC: 0xae426082 — valid  [0x35a+0x4]
-      ▾ Trailing data — 0x7 bytes after the end chunk  [0x35e+0x7]
-          ! unsupported: unrecognized format [0x35e+0x7]
+      ▾ Trailing data — UTF-8 text, 1 line  [0x35e+0x7]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x35e+0x7]
+            Line 1: "TRAILER"  [0x35e+0x7]

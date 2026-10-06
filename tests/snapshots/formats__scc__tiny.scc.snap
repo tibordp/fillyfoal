@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.scc — SCC captions, 2 lines  [0x0+0x73]
+    Header: "Scenarist_SCC V1.0"  [0x0+0x12]
+    00:00:01:00 — 11 code words  [0x16+0x42]
+    00:00:03:00 — 2 code words  [0x5c+0x15]

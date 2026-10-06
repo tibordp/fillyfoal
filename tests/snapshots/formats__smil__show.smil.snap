@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ show.smil — SMIL presentation: Slides  [0x0+0xc0]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ smil — 2 elements  [0x27+0x98]
+      @xmlns: "http://www.w3.org/ns/SMIL"  [0x34+0x19]
+    ▾ head — 1 element  [0x4f+0x22]
+        title: "Slides"  [0x55+0x15]
+    ▾ body — 1 element  [0x71+0x47]
+      ▾ seq — 2 elements  [0x77+0x3a]
+        ▾ img — src="a.png" dur="5s"  [0x7c+0x1b]
+            @src: "a.png"  [0x86+0x5]
+            @dur: "5s"  [0x92+0x2]
+        ▾ audio — src="b.mp3"  [0x97+0x14]
+            @src: "b.mp3"  [0xa3+0x5]

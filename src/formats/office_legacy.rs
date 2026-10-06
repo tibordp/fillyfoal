@@ -1295,14 +1295,6 @@ async fn money(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// FileMaker Pro 7 and later (.fp7, .fmp12)
-
-declare_format!(pub FILEMAKER = "filemaker", "FileMaker Pro database (fp7/fmp12)", ["fp7", "fmp12", "fmpur"], "application/x-filemaker",
-    Probe::Magic(&[(0, b"\x00\x01\x00\x00\x00\x02\x00\x01\x00\x05\x00\x02\x00\x02\xc0HBAM7")]), filemaker);
-
-const FILEMAKER_BLOCK: u64 = 4096;
-
 /// Printable runs of at least four characters (version strings in headers).
 fn printable_runs(data: &[u8]) -> Vec<(usize, String)> {
     let mut out = Vec::new();
@@ -1317,35 +1309,6 @@ fn printable_runs(data: &[u8]) -> Vec<(usize, String)> {
         }
     }
     out
-}
-
-async fn filemaker(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    cx.emit(Node::new("Signature").span(file.sub(0, 20)).value(text("HBAM7")));
-    let header = file.sub(0, FILEMAKER_BLOCK);
-    let data = cx.read_avail(header).await?;
-    let strings: Vec<(usize, String)> = printable_runs(data.get(20..).unwrap_or_default())
-        .into_iter()
-        .map(|(at, s)| (at.saturating_add(20), s))
-        .collect();
-    let version = strings.iter().find(|(_, s)| s.contains("Pro ") || s.starts_with("HBAM")).map(|(_, s)| s.clone());
-    cx.emit(
-        Node::new("Header block")
-            .span(header)
-            .summary(clip(&strings.iter().map(|(_, s)| s.as_str()).collect::<Vec<_>>().join(", "), 120))
-            .lazy(filemaker_strings, (header, strings)),
-    );
-    let blocks = file.len / FILEMAKER_BLOCK;
-    cx.emit(Node::new("Data blocks").span(file.tail(FILEMAKER_BLOCK)).summary(format!("{} blocks of 4 KiB", blocks.saturating_sub(1))));
-    cx.annotate(format!("FileMaker Pro database{}, {blocks} blocks", version.map(|v| format!(" ({v})")).unwrap_or_default()));
-    Ok(())
-}
-
-async fn filemaker_strings(cx: Cx, (header, strings): (Span, Vec<(usize, String)>)) -> Result<()> {
-    for (at, s) in strings {
-        cx.push(Node::new("String").span(header.sub(to_u64(at), to_u64(s.len()))).value(text(s))).await;
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

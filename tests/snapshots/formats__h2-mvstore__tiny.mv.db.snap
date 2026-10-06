@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mv.db — H2 MVStore, format 2, version 5  [0x0+0x3000]
+    H: "2"  [0x0+0x3]
+    block: 5 — hex 5  [0x4+0x7]
+    blockSize: 4096 — hex 1000  [0xc+0xe]
+    chunk: 5 — hex 5  [0x1b+0x7]
+    clean: "1"  [0x23+0x7]
+    created: 1710930926124 — hex 18e5b6e1a2c  [0x2b+0x13]
+    format: 2 — hex 2  [0x3f+0x8]
+    version: 5 — hex 5  [0x48+0x9]
+    fletcher: "1a2b3c4d"  [0x52+0x11]
+    Second store header  [0x1000+0x1000]
+    Chunks  [0x2000+0x1000]

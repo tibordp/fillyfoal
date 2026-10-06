@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.gpl — GIMP palette "Tiny", 3 colours  [0x0+0x53]
+    Name: "Tiny"  [0xd+0xa]
+    Columns: "2"  [0x18+0xa]
+    #ff0000 — Red  [0x25+0xf]
+    #00ff00 — Green  [0x35+0x11]
+    #0000ff —   [0x47+0xb]

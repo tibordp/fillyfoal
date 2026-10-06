@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.tch — Tokyo Cabinet hash database 1.0:911, 2 records  [0x0+0x11c]
+    Signature  [0x0+0xe]
+    Version: "1.0:911"  [0xe+0x12]
+    Type: hash (0x0)  [0x20+0x1]
+    Buckets: 131071  [0x28+0x8]
+    Records: 2  [0x30+0x8]
+    File size: 600  [0x38+0x8]
+    Body  [0x100+0x1c]

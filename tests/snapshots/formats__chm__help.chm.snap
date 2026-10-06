@@ -40,9 +40,16 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ /#SYSTEM: 19 — section 0, offset 0x0  [0x10cc+0x13] → 0xe5+0xc
         Data  [0x10cc+0x13]
       /compressed.html: 1234 — section 1, offset 0x0  [0xf1+0x15]
-    ▾ /index.html: 80 — section 0, offset 0x13  [0x10df+0x50] → 0x106+0xf
-        Data  [0x10df+0x50]
-    ▾ /style.css: 34 — section 0, offset 0x63  [0x112f+0x22] → 0x115+0xe
-        Data  [0x112f+0x22]
+    ▾ /index.html: 80 — HTML document: Fixture  [0x10df+0x50] → 0x106+0xf
+      ▾ html — 2 elements  [0x10df+0x4f]
+        ▾ head — 1 element  [0x10e5+0x23]
+            title: "Fixture"  [0x10eb+0x16]
+        ▾ body — 1 element  [0x1108+0x1f]
+            h1: "fillyfoal"  [0x110e+0x12]
+    ▾ /style.css: 34 — UTF-8 text, LF line endings, 1 line  [0x112f+0x22] → 0x115+0xe
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x112f+0x22]
+          Line 1: "body { font-family: sans-serif; }"  [0x112f+0x21]
       ::DataSpace/Storage/MSCompressed/Content: 0 — section 0, offset 0x85  [0x123+0x2d]
     Content — 133 bytes  [0x10cc+0x85]

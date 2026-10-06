@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.hmp — HMI HMP song, 2 tracks  [0x0+0x80]
+    Signature: "HMIMIDIP013195"  [0x0+0x8]
+    Tracks: 2  [0x30+0x4]
+    Body  [0x40+0x40]

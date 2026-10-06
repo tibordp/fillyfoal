@@ -1,0 +1,18 @@
+version: 1
+
+# Ana
+dn: cn=Ana Novak,ou=people,dc=example,dc=com
+objectClass: top
+objectClass: person
+cn: Ana Novak
+sn: Novak
+description: A long description that is folded
+  onto a second line.
+cn;lang-sl:: QW5hIE5vdmFr
+
+dn:: Y249QsO2YixvdT1wZW9wbGUsZGM9ZXhhbXBsZSxkYz1jb20=
+changetype: modify
+replace: mail
+mail: bob@example.com
+-
+jpegPhoto:: /9j/4AAQSkZJRgA=

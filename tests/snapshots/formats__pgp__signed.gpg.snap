@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ signed.gpg — OpenPGP message  [0x0+0xac]
   ▾ Compressed Data Packet — ZLIB  [0x0+0xac]
@@ -20,8 +20,11 @@ expression: "common::explore(&name, &data)"
           Format: binary (0x62)  [#1:0x11+0x1]
           File name: "hello.txt"  [#1:0x12+0xa]
           Date: 2026-01-01 00:00:00 UTC  [#1:0x1c+0x4]
-        ▾ Literal data — 16 bytes  [#1:0x20+0x10]
-            Data  [#1:0x20+0x10]
+        ▾ Literal data — UTF-8 text, LF line endings, 1 line  [#1:0x20+0x10]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0x20+0x10]
+              Line 1: "Hello, OpenPGP!"  [#1:0x20+0xf]
       ▾ Signature Packet — v4 binary document, EdDSA (legacy) with SHA-256  [#1:0x30+0x7e]
           Packet header: Signature (0x2) — new format, 124 body bytes  [#1:0x30+0x2]
           Version: 4  [#1:0x32+0x1]

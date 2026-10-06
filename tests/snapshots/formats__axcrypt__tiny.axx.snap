@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.axx — AxCrypt 1.x file, 4 header blocks  [0x0+0xbd]
+    GUID  [0x0+0x10]
+    Preamble — type 1, 16 bytes  [0x10+0x15]
+    Version — type 2, 5 bytes  [0x35+0xa]
+    Key wrap 1 — type 3, 44 bytes  [0x4f+0x31]
+    Data — type 63, 8 bytes  [0x90+0xd]
+    Encrypted data  [0x9d+0x20]

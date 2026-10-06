@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.hqx — BinHex 4.0  [0x0+0x61]
+    Banner: "(This file must be converted with BinHex 4.0)"  [0x0+0x2d]
+    Encoded data — 6-bit encoded, RLE-compressed  [0x2e+0x33]

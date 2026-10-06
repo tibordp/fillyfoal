@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<nzb xmlns="http://www.newzbin.com/DTD/2003/nzb"><file poster="a@b" date="1700000000" subject="test"><groups><group>alt.binaries.test</group></groups><segments><segment bytes="100" number="1">id@host</segment></segments></file></nzb>

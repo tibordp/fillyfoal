@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ setup.z — InstallShield 3 archive, 3 files, 12345 bytes, 0 directories  [0x0+0x120]
+    Header  [0x0+0xff]
+    Compressed data  [0xff+0x21]
+      ! unsupported: PKWARE DCL implode

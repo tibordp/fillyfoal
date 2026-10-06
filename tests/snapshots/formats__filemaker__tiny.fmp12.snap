@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.fmp12 — FileMaker HBAM7 database (Pro 12.0)  [0x0+0x800]
+    Signature  [0x0+0xf]
+    Format: "HBAM7"  [0xf+0x5]
+    Application: "Pro 12.0"
+    Blocks — 4 KiB blocks  [0x400+0x400]

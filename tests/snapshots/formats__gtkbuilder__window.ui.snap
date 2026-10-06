@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ window.ui — GtkBuilder UI definition  [0x0+0xb5]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ interface — 2 elements  [0x27+0x8d]
+    ▾ requires — lib="gtk" version="4.0"  [0x32+0x23]
+        @lib: "gtk"  [0x41+0x3]
+        @version: "4.0"  [0x4f+0x3]
+    ▾ object — class="GtkWindow" id="main" (1 element)  [0x55+0x53]
+        @class: "GtkWindow"  [0x64+0x9]
+        @id: "main"  [0x73+0x4]
+      ▾ property: "Demo" — name="title"  [0x79+0x26]
+          @name: "title"  [0x89+0x5]
+          #text: "Demo"  [0x90+0x4]

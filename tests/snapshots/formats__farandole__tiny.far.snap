@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.far — Farandole 1.0 module "Tiny Farandole"  [0x0+0x80]
+    Signature: 46 41 52 fe  |FAR.|  [0x0+0x4]
+    Title: "Tiny Farandole                          "  [0x4+0x28]
+    EOF marker: 0d 0a 1a  |...|  [0x2c+0x3]
+    Header length: 98  [0x2f+0x2]
+    Version: 0x10  [0x31+0x1]
+    Patterns and samples  [0x62+0x1e]

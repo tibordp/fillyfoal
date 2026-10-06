@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.r3d — RED R3D clip: 1× RED2, 1× RDVO, 2× REDV, 1× REDA  [0x0+0x70]
+    RED2 — 24 bytes  [0x0+0x20]
+    RDVO — 8 bytes  [0x20+0x10]
+    REDV — 16 bytes  [0x30+0x18]
+    REDA — 8 bytes  [0x48+0x10]
+    REDV — 16 bytes  [0x58+0x18]

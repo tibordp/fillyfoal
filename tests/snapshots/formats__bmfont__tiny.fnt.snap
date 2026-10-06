@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.fnt — BMFont "Tiny", 1 characters  [0x0+0x59]
+    Signature  [0x0+0x4]
+    Info — "Tiny", 16 px  [0x4+0x18]
+    Common — line height 18, 1 page(s)  [0x1c+0x14]
+    Pages — tiny_0.png  [0x30+0x10]
+    Characters — 1 × 20 bytes  [0x40+0x19]

@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ hello.byte — OCaml bytecode executable (format 034), sections CODE DLPT DLLS PRIM DATA SYMB CRCS, 3 primitives  [0x0+0xf5]
+    Header: "#!/usr/local/bin/ocamlrun"  [0x0+0x1a]
+  ▾ CODE — bytecode, 0x20 bytes  [0x1a+0x20]
+      Instructions — 8 words  [0x1a+0x20]
+  ▾ DLPT — shared library search path, 0x18 bytes  [0x3a+0x18]
+      0x0: "/usr/lib/ocaml/stublibs"  [0x3a+0x18]
+  ▾ DLLS — shared libraries, 0x5 bytes  [0x52+0x5]
+      0x0: "unix"  [0x52+0x5]
+  ▾ PRIM — primitive names, 0x2e bytes  [0x57+0x2e]
+      0x0: "caml_print_string"  [0x57+0x12]
+      0x12: "caml_ml_flush"  [0x69+0xe]
+      0x20: "caml_sys_exit"  [0x77+0xe]
+    DATA — global data (marshalled), 0x14 bytes  [0x85+0x14]
+    SYMB — global symbols (marshalled), 0xc bytes  [0x99+0xc]
+    CRCS — interface CRCs (marshalled), 0x8 bytes  [0xa5+0x8]
+    Section Table — 7 sections  [0xad+0x38]
+    Section Count: 7  [0xe5+0x4]
+    Magic: "Caml1999X034"  [0xe9+0xc]

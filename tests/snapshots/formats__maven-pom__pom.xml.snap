@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ pom.xml — Maven project (POM): demo  [0x0+0x1a5]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ project — 5 elements  [0x27+0x17d]
+      @xmlns: "http://maven.apache.org/POM/4.0.0"  [0x37+0x21]
+      @xmlns:xsi: "http://www.w3.org/2001/XMLSchema-instance"  [0x65+0x29]
+      modelVersion: "4.0.0"  [0x93+0x22]
+      groupId: "net.example"  [0xb8+0x1e]
+      artifactId: "demo"  [0xd9+0x1d]
+      version: "1.0"  [0xf9+0x16]
+    ▾ dependencies — 1 element  [0x112+0x87]
+      ▾ dependency — 3 elements  [0x125+0x62]
+          groupId: "junit"  [0x131+0x18]
+          artifactId: "junit"  [0x149+0x1e]
+          scope: "test"  [0x167+0x13]

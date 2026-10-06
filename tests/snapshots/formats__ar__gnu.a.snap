@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ gnu.a — ar archive, 3 members, with symbol table  [0x0+0x1b6]
     Signature: "!<arch>"  [0x0+0x8]
@@ -41,8 +41,11 @@ expression: "common::explore(&name, &data)"
         Mode: 33188 — 0o100644 -rw-r--r--  [0x108+0x8]
         Size: 6 — 6 bytes  [0x110+0xa]
         Terminator: 60 0a  |`.|  [0x11a+0x2]
-    ▾ Content — 6 bytes  [0x11c+0x6]
-        ! unsupported: unrecognized format [0x11c+0x6]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x11c+0x6]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x11c+0x6]
+          Line 1: "short"  [0x11c+0x5]
   ▾ a_rather_long_member_name.txt — 9 bytes  [0x122+0x46]
     ▾ Header  [0x122+0x3c]
         Name: "/0              "  [0x122+0x10]
@@ -52,8 +55,11 @@ expression: "common::explore(&name, &data)"
         Mode: 33188 — 0o100644 -rw-r--r--  [0x14a+0x8]
         Size: 9 — 9 bytes  [0x152+0xa]
         Terminator: 60 0a  |`.|  [0x15c+0x2]
-    ▾ Content — 9 bytes  [0x15e+0x9]
-        ! unsupported: unrecognized format [0x15e+0x9]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x15e+0x9]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x15e+0x9]
+          Line 1: "long one"  [0x15e+0x8]
       Padding  [0x167+0x1]
   ▾ another_long_member_name.png — 18 bytes  [0x168+0x4e]
     ▾ Header  [0x168+0x3c]

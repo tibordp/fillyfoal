@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ joliet-rr-eltorito.iso — ISO 9660 image "FILLYTEST", 62.0 KiB, Rock Ridge, Joliet, El Torito  [0x0+0xf800]
     System area — empty  [0x0+0x8000]
@@ -129,8 +129,11 @@ expression: "common::explore(&name, &data)"
         ▾ System use (SUSP)  [0xc0a0+0x32]
             PX: POSIX attributes: 33188 — 0o100644 -rw-r--r--  [0xc0a0+0x24]
             NM: alternate name: "hello.txt"  [0xc0c4+0xe]
-      ▾ Content — 29 bytes  [0xe800+0x1d]
-          ! unsupported: unrecognized format [0xe800+0x1d]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0xe800+0x1d]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0xe800+0x1d]
+            Line 1: "hello from an ISO 9660 image"  [0xe800+0x1c]
     ▾ sub — directory  [0xc0d2+0x50]
       ▾ Directory record  [0xc0d2+0x50]
           Record length: 80  [0xc0d2+0x1]
@@ -213,8 +216,11 @@ expression: "common::explore(&name, &data)"
           Volume sequence number: 1  [0xd060+0x4]
           Name length: 18  [0xd064+0x1]
           Name: "hello.txt"  [0xd065+0x12]
-      ▾ Content — 29 bytes  [0xe800+0x1d]
-          ! unsupported: unrecognized format [0xe800+0x1d]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0xe800+0x1d]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0xe800+0x1d]
+            Line 1: "hello from an ISO 9660 image"  [0xe800+0x1c]
     ▾ sub — directory  [0xd078+0x28]
       ▾ Directory record  [0xd078+0x28]
           Record length: 40  [0xd078+0x1]

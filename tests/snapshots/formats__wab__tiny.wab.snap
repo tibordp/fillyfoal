@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.wab — Windows Address Book, 2 index entries  [0x0+0x200]
+    Signature: {8dcbcb9c-7513-11d2-9158-00c04f7956a4}  [0x0+0x10]
+    Next entry ID: 3  [0x10+0x4]
+    Text index: 0x0  [0x14+0x4]
+    Maximum entries: 100  [0x18+0x4]
+    Offset: 0x30  [0x1c+0x4]
+    Entries: 1  [0x20+0x4]
+    Name index: 0x1  [0x24+0x4]
+    Maximum entries: 100  [0x28+0x4]
+    Offset: 0x40  [0x2c+0x4]
+    Entries: 1  [0x30+0x4]
+    Indexes and records  [0x34+0x1cc]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ extensions.gif — GIF89a, 2×2  [0x0+0x1a0]
     Signature: "GIF89a"  [0x0+0x6]

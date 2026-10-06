@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ manifest.mpd — MPEG-DASH manifest: static presentation  [0x0+0xec]
+  ▾ XML declaration  [0x0+0x15]
+      Version: "1.0"  [0xf+0x3]
+  ▾ MPD — type="static" mediaPresentationDuration="PT10S" (1 element)  [0x16+0xd5]
+      @xmlns: "urn:mpeg:dash:schema:mpd:2011"  [0x22+0x1d]
+      @type: "static"  [0x47+0x6]
+      @mediaPresentationDuration: "PT10S"  [0x6a+0x5]
+    ▾ Period — 1 element  [0x74+0x70]
+      ▾ AdaptationSet — mimeType="video/mp4" (1 element)  [0x7c+0x5f]
+          @mimeType: "video/mp4"  [0x95+0x9]
+        ▾ Representation — id="1" bandwidth="500000"  [0xa0+0x2b]
+            @id: "1"  [0xb4+0x1]
+            @bandwidth: "500000"  [0xc2+0x6]

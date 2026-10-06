@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ manifest.json — Browser extension manifest: Demo extension  [0x0+0xa7]
+    manifest_version: 3  [0x18+0x1]
+    name: "Demo extension"  [0x25+0x10]
+    version: "1.0"  [0x44+0x5]
+  ▾ permissions — array, 1 element  [0x5c+0x13]
+      [0]: "storage"  [0x62+0x9]
+  ▾ background — object, 1 member  [0x81+0x23]
+      service_worker: "bg.js"  [0x99+0x7]

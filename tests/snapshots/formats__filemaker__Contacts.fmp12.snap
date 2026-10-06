@@ -2,10 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Contacts.fmp12 — FileMaker Pro database (Pro 12.0), 2 blocks  [0x0+0x2000]
-    Signature: "HBAM7"  [0x0+0x14]
-  ▾ Header block — Pro 12.0, 12.0v5, HBAM7  [0x0+0x1000]
-      String: "Pro 12.0"  [0x201+0x8]
-      String: "12.0v5"  [0x20b+0x6]
-      String: "HBAM7"  [0x221+0x5]
-    Data blocks — 1 blocks of 4 KiB  [0x1000+0x1000]
+▾ Contacts.fmp12 — FileMaker HBAM7 database (Pro 12.0)  [0x0+0x2000]
+    Signature  [0x0+0xf]
+    Format: "HBAM7"  [0xf+0x5]
+    Application: "Pro 12.0"
+    Blocks — 4 KiB blocks  [0x400+0x1c00]

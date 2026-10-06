@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.kch — Kyoto Cabinet hash database  [0x0+0x80]
+    Signature  [0x0+0x4]
+    Library version: 16  [0x4+0x1]
+    Library revision: 13  [0x5+0x1]
+    Format version: 5  [0x6+0x1]
+    Type: hash (0x31)  [0x8+0x1]
+    Body  [0x40+0x40]

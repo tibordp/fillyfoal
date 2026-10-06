@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ media.m3u8 — HLS media playlist, 3 segments, 21.0 s  [0x0+0xf5]
+    Header: "#EXTM3U"  [0x0+0x7]
+    #EXT-X-TARGETDURATION: 10  [0x1e+0x2]
+    #EXT-X-MEDIA-SEQUENCE: 0  [0x37+0x1]
+  ▾ #EXT-X-KEY — METHOD=AES-128,URI="key.bin",IV=0x00000000000000000000000000000001  [0x39+0x4d]
+      METHOD: "AES-128"  [0x4b+0x7]
+      URI: "key.bin"  [0x58+0x7]
+      IV: "0x00000000000000000000000000000001"  [0x64+0x22]
+  ▾ Entry 1 — 9.009 s: seg0.ts  [0x87+0x16]
+      Duration: 9.009 — seconds  [0x8f+0x5]
+      URI: "seg0.ts"  [0x96+0x7]
+  ▾ title — 9.009 s: seg1.ts  [0x9e+0x30]
+      #EXT-X-DISCONTINUITY  [0x9e+0x14]
+      Duration: 9.009 — seconds  [0xbb+0x5]
+      Title: "title"  [0xc1+0x5]
+      URI: "seg1.ts"  [0xc7+0x7]
+  ▾ Entry 3 — 3.003 s: seg2.ts  [0xcf+0x16]
+      Duration: 3.003 — seconds  [0xd7+0x5]
+      URI: "seg2.ts"  [0xde+0x7]
+    #EXT-X-ENDLIST  [0xe6+0xe]

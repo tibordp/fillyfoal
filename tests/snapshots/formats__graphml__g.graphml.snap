@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ g.graphml — GraphML graph  [0x0+0xcf]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ graphml — 1 element  [0x27+0xa7]
+      @xmlns: "http://graphml.graphdrawing.org/xmlns"  [0x37+0x25]
+    ▾ graph — id="G" edgedefault="directed" (3 elements)  [0x5e+0x66]
+        @id: "G"  [0x69+0x1]
+        @edgedefault: "directed"  [0x79+0x8]
+      ▾ node — id="a"  [0x83+0xe]
+          @id: "a"  [0x8d+0x1]
+      ▾ node — id="b"  [0x91+0xe]
+          @id: "b"  [0x9b+0x1]
+      ▾ edge — source="a" target="b"  [0x9f+0x1d]
+          @source: "a"  [0xad+0x1]
+          @target: "b"  [0xb8+0x1]

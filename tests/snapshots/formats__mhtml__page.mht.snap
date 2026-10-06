@@ -1,0 +1,35 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ page.mht — MHTML web archive: Example page  [0x0+0x2b8]
+  ▾ Headers — 6 fields  [0x0+0xf4]
+      From: "<Saved by Blink>"  [0x0+0x16]
+      Snapshot-Content-Location: "https://example.com/"  [0x17+0x2f]
+      Subject: "Example page"  [0x47+0x15]
+      Date: 2026-10-05 10:00:00 UTC — Mon, 5 Oct 2026 10:00:00 -0000  [0x5d+0x24]
+      MIME-Version: "1.0"  [0x82+0x11]
+      Content-Type: "multipart/related; type=\"text/html\"; boundary=\"----MultipartBoundary--abc----\""  [0x94+0x5e]
+  ▾ Part 1 — text/html, 0xd9 bytes  [0x115+0xd9]
+    ▾ Headers — 4 fields  [0x115+0x8e]
+        Content-Type: "text/html"  [0x115+0x17]
+        Content-ID: "<frame-1@mhtml.blink>"  [0x12d+0x21]
+        Content-Transfer-Encoding: "quoted-printable"  [0x14f+0x2b]
+        Content-Location: "https://example.com/"  [0x17b+0x26]
+    ▾ Body — HTML document: Example  [0x1a3+0x4b]
+      ▾ html — 2 elements  [#1:0x0+0x49]
+        ▾ head — 1 element  [#1:0x6+0x23]
+            title: "Example"  [#1:0xc+0x16]
+        ▾ body: "Hi" — class="x"  [#1:0x29+0x19]
+            @class: "x"  [#1:0x36+0x1]
+            #text: "Hi"  [#1:0x39+0x2]
+  ▾ Part 2 — text/css, 0x84 bytes  [0x210+0x84]
+    ▾ Headers — 3 fields  [0x210+0x70]
+        Content-Type: "text/css"  [0x210+0x16]
+        Content-Transfer-Encoding: "quoted-printable"  [0x227+0x2b]
+        Content-Location: "https://example.com/s.css"  [0x253+0x2b]
+    ▾ Body — UTF-8 text, 1 line  [0x280+0x14]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [#2:0x0+0x14]
+          Line 1: "body { color: red; }"  [#2:0x0+0x14]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ EBOOT.PBP  [0x0+0x291]
     Header — version 0x10000  [0x0+0x28]
@@ -77,7 +77,10 @@ expression: "common::explore(&name, &data)"
         Type: "IEND" — critical, public, unsafe to copy  [0x242+0x4]
         Data  [0x246+0x0]
         CRC: 0xae426082 — valid  [0x246+0x4]
-    ▾ Trailing data — 0x7 bytes after the end chunk  [0x24a+0x7]
-        ! unsupported: unrecognized format [0x24a+0x7]
+    ▾ Trailing data — UTF-8 text, 1 line  [0x24a+0x7]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x24a+0x7]
+          Line 1: "TRAILER"  [0x24a+0x7]
   ▾ DATA.PSP  [0x251+0x40]
       ! unsupported: unrecognized format [0x251+0x40]

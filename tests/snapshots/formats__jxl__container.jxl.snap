@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ container.jxl — 300×100, container  [0x0+0x2b5]
   ▾ JXL   [0x0+0xc]
@@ -210,8 +210,8 @@ expression: "common::explore(&name, &data)"
   ▾ xml   [0x27b+0x14]
       Size: 20  [0x27b+0x4]
       Type: "xml "  [0x27f+0x4]
-    ▾ XMP  [0x283+0xc]
-        ! unsupported: unrecognized format [0x283+0xc]
+    ▾ XMP — XML document, root <x:xmpmeta>  [0x283+0xc]
+        x:xmpmeta  [0x283+0xc]
   ▾ jxlp — 300×100  [0x28f+0x12]
       Size: 18  [0x28f+0x4]
       Type: "jxlp"  [0x293+0x4]

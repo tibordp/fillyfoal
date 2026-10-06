@@ -1,0 +1,23 @@
+BEGIN:VCARD
+VERSION:3.0
+N:Novak;Ana;;Dr.;
+FN:Dr. Ana Novak
+ORG:Fillyfoal Inc.;Research
+TEL;TYPE=work,voice:+386 1 234 5678
+EMAIL;TYPE=INTERNET:ana@example.com
+ADR;TYPE=home:;;Trubarjeva 1;Ljubljana;;1000;Slovenia
+NOTE:Line one\nLine two\, with comma and a long folded
+  continuation.
+BDAY:1990-04-01
+PHOTO;ENCODING=b;TYPE=PNG:iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
+ FcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==
+item1.URL:https://example.com
+END:VCARD
+BEGIN:VCARD
+VERSION:2.1
+N:Kranjc;Bob
+FN:Bob Kranjc
+NOTE;ENCODING=QUOTED-PRINTABLE:Caf=C3=A9 =
+lover
+TEL;HOME:+386 40 000 000
+END:VCARD

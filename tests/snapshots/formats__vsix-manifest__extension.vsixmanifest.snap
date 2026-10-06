@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ extension.vsixmanifest — VSIX extension manifest  [0x0+0x118]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ PackageManifest — Version="2.0.0" (1 element)  [0x27+0xf0]
+      @Version: "2.0.0"  [0x41+0x5]
+      @xmlns: "http://schemas.microsoft.com/developer/vsx-schema/2011"  [0x4f+0x36]
+    ▾ Metadata — 2 elements  [0x87+0x7e]
+      ▾ Identity — Id="demo" Version="1.0" Language="en-US" Publisher="Fillyfoal"  [0x91+0x4a]
+          @Id: "demo"  [0x9f+0x4]
+          @Version: "1.0"  [0xae+0x3]
+          @Language: "en-US"  [0xbd+0x5]
+          @Publisher: "Fillyfoal"  [0xcf+0x9]
+        DisplayName: "Demo"  [0xdb+0x1f]

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.pvf — PVF1 voice, 1 channel(s), 8000 Hz, 16-bit  [0x0+0x2f]
+    Signature: "PVF1"  [0x0+0x4]
+    Channels: "1"  [0x5+0x9]
+    Sample rate: "8000"  [0x5+0x9]
+    Bits per sample: "16"  [0x5+0x9]
+    Samples  [0xf+0x20]

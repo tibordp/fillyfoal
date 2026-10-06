@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ post.md — Markdown: Post  [0x0+0x73]
+  ▾ Front matter — YAML document  [0x4+0x1a]
+      title: "Hello"  [0xb+0x5]
+    ▾ tags — sequence, 2 items  [0x17+0x6]
+        [0]: "a"  [0x18+0x1]
+        [1]: "b"  [0x1b+0x1]
+    Paragraph: "Intro text before any heading."  [0x22+0x1e]
+  ▾ Post — # heading  [0x42+0x31]
+      Paragraph: "Body with a [link](https://example.com)."  [0x4a+0x28]

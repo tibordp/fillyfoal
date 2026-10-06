@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ readme.as — AppleSingle, real name, file dates, finder info, data fork, "Read Me.txt"  [0x0+0xa4]
     Magic: 0x51600  [0x0+0x4]
@@ -31,5 +31,8 @@ expression: "common::explore(&name, &data)"
       Location h: 20  [0x71+0x2]
       Folder: 0  [0x73+0x2]
       Extended Finder info: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x75+0x10]
-  ▾ Data fork — 31 bytes  [0x85+0x1f] → 0x3e+0xc
-      Data  [0x85+0x1f]
+  ▾ Data fork — UTF-8 text, CR line endings, 1 line  [0x85+0x1f] → 0x3e+0xc
+      Encoding: "UTF-8"
+      Line endings: "CR" — 0 LF, 0 CRLF, 1 CR
+    ▾ Lines — 1 line  [0x85+0x1f]
+        Line 1: "Hello from a classic Mac file."  [0x85+0x1e]

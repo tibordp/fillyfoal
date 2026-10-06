@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bnd — BND3 binder "07D7R6", 2 files  [0x0+0x80]
+    Signature  [0x0+0x4]
+    Version: "07D7R6"  [0x4+0x8]
+    Files: 2  [0x10+0x4]
+    Body  [0x20+0x60]

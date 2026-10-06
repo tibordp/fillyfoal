@@ -34,8 +34,11 @@ expression: "common::explore(&display_name(&path), &data)"
         Reserved: 0  [0x3e+0x2]
         Name size: 9  [0x40+0x2]
         Name: "HELLO.TXT"  [0x42+0x9]
-    ▾ Content — 28 bytes  [0x4b+0x1c]
-        ! unsupported: unrecognized format [0x4b+0x1c]
+    ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x4b+0x1c]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x4b+0x1c]
+          Line 1: "hello from an old archiver"  [0x4b+0x1a]
   ▾ IMG/PIXEL.PNG — 67 bytes  [0x67+0x73]
     ▾ Header  [0x67+0x30]
         Header CRC: 0x134c — valid  [0x67+0x2]

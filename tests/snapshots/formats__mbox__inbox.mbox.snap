@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ inbox.mbox — Mailbox (mbox), 2 messages  [0x0+0x11a]
+  ▾ Message 1: 2026-10-05 10:00:00 UTC — First — from ana@example.com  [0x0+0xb6]
+    ▾ Headers — 4 fields  [0x2e+0x5f]
+        From: "ana@example.com"  [0x2e+0x15]
+        To: "bob@example.org"  [0x44+0x13]
+        Subject: "First"  [0x58+0xe]
+        Date: 2026-10-05 10:00:00 UTC — Mon, 5 Oct 2026 10:00:00 +0000  [0x67+0x24]
+    ▾ Body — UTF-8 text, LF line endings, 3 lines  [0x8d+0x29]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+      ▾ Lines — 3 lines  [0x8d+0x29]
+          Line 1: "Hello."  [0x8d+0x6]
+          Line 2: ">From the archives: quoted line."  [0x94+0x20]
+          Line 3: ""  [0xb5+0x0]
+  ▾ Message 2 — Re: First — from bob@example.org  [0xb6+0x64]
+    ▾ Headers — 2 fields  [0xe4+0x2a]
+        From: "bob@example.org"  [0xe4+0x15]
+        Subject: "Re: First"  [0xfa+0x12]
+    ▾ Body — UTF-8 text, LF line endings, 1 line  [0x10e+0xc]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x10e+0xc]
+          Line 1: "Reply body."  [0x10e+0xb]
