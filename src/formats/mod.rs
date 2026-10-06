@@ -1262,6 +1262,7 @@ pub static FORMATS: &[&Format] = &[
     &packages::LZFSE,
     &packages::PBZX,
     &packages::LZOP,
+    &packages::LZF,
     &packages::LRZIP,
     &packages::ZSTD_DICT,
     &packages::POWERPACKER,

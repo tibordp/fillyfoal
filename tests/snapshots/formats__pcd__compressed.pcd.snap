@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ compressed.pcd — PCD v0.7, 20 point(s) (x y z rgb), binary_compressed  [0x0+0x12f]
+    Comment: ".PCD v0.7 - Point Cloud Data file format"  [0x0+0x2a]
+    VERSION: "0.7"  [0x2b+0xb]
+    FIELDS: "x y z rgb"  [0x37+0x10]
+    SIZE: "4 4 4 4"  [0x48+0xc]
+    TYPE: "F F F U"  [0x55+0xc]
+    COUNT: "1 1 1 1"  [0x62+0xd]
+    WIDTH: 20  [0x70+0x8]
+    HEIGHT: 1  [0x79+0x8]
+    VIEWPOINT: "0 0 0 1 0 0 0"  [0x82+0x17]
+    POINTS: 20  [0x9a+0x9]
+    DATA: "binary_compressed"  [0xa4+0x16]
+  ▾ Data — 20 point(s), binary_compressed  [0xbb+0x74]
+      Compressed size: 108  [0xbb+0x4]
+      Uncompressed size: 320  [0xbf+0x4]
+    ▾ Decompressed — 0x140 bytes decompressed  [0xc3+0x6c]
+        Data  [#1:0x0+0x140]
