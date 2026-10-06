@@ -963,6 +963,87 @@ pub async fn dissect_geojson(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Vocabularies recognised by the keys near the top of the document
+
+/// Whether the start of a JSON document contains all of `needles`, one of
+/// `any` (if given) and none of `absent`.
+fn has_keys(h: &Head<'_>, needles: &[&[u8]], any: &[&[u8]], absent: &[&[u8]]) -> bool {
+    let head = probe::head(h);
+    let start = head.get(..head.len().min(4096)).unwrap_or_default();
+    probe_json(h)
+        && needles.iter().all(|n| probe::contains(start, n))
+        && (any.is_empty() || any.iter().any(|n| probe::contains(start, n)))
+        && !absent.iter().any(|n| probe::contains(start, n))
+}
+
+/// Annotates `title` with the first of `keys` found textually near the top,
+/// then dissects the document as JSON.
+async fn dissect_keyed(cx: Cx, input: Input, title: &str, keys: &[&str]) -> Result<()> {
+    let head = cx.read_avail(input.span.sub(0, 16 * 1024)).await?;
+    let text = super::encoding::probe_text(&head);
+    let detail = keys.iter().find_map(|k| scrape(&text, k));
+    cx.annotate(match detail {
+        Some(d) if !d.is_empty() => format!("{title}: {}", preview(&d, 60)),
+        _ => title.to_owned(),
+    });
+    document(&cx, input, Flavor::Plain).await.map(|_| ())
+}
+
+/// A JSON vocabulary: all of `needles`, one of `any`, none of `absent` near
+/// the top; annotated with the first of `keys` found.
+macro_rules! json_variant {
+    ($id:ident, $f:ident, $name:literal, $title:literal, [$($ext:literal),*], $mime:literal,
+     all [$($needle:literal),*], any [$($any:literal),*], none [$($absent:literal),*],
+     keys [$($key:literal),*]) => {
+        pub static $id: Format = Format {
+            name: $name,
+            title: $title,
+            extensions: &[$($ext),*],
+            mime: $mime,
+            probe: Probe::Custom(|h| {
+                has_keys(h, &[$($needle.as_slice()),*], &[$($any.as_slice()),*], &[$($absent.as_slice()),*])
+            }),
+            dissect: crate::expander!($f: Input),
+        };
+        async fn $f(cx: Cx, input: Input) -> Result<()> {
+            dissect_keyed(cx, input, $title, &[$($key),*]).await
+        }
+    };
+}
+
+json_variant!(GLTF, dissect_gltf, "gltf", "glTF 3D asset (JSON)", ["gltf"], "model/gltf+json",
+    all [b"\"asset\"", b"\"version\""],
+    any [b"\"meshes\"", b"\"scenes\"", b"\"buffers\"", b"\"nodes\""], none [],
+    keys ["generator", "version"]);
+json_variant!(JSON_SCHEMA, dissect_schema, "json-schema", "JSON Schema", ["schema.json"],
+    "application/schema+json", all [b"\"$schema\"", b"json-schema.org"], any [], none [],
+    keys ["title", "$id"]);
+json_variant!(TOPOJSON, dissect_topojson, "topojson", "TopoJSON", ["topojson"], "application/json",
+    all [b"\"type\"", b"\"Topology\"", b"\"arcs\""], any [], none [], keys []);
+json_variant!(WEB_MANIFEST, dissect_webmanifest, "web-manifest", "Web app manifest",
+    ["webmanifest"], "application/manifest+json",
+    all [b"\"start_url\""], any [], none [b"\"manifest_version\""], keys ["name", "short_name"]);
+json_variant!(EXTENSION_MANIFEST, dissect_extension, "browser-extension-manifest",
+    "Browser extension manifest", [], "application/json",
+    all [b"\"manifest_version\""], any [], none [], keys ["name", "version"]);
+json_variant!(LOTTIE, dissect_lottie, "lottie", "Lottie animation", ["lottie"], "application/json",
+    all [b"\"fr\"", b"\"ip\"", b"\"op\"", b"\"layers\""], any [], none [], keys ["nm"]);
+json_variant!(EXCALIDRAW, dissect_excalidraw, "excalidraw", "Excalidraw drawing", ["excalidraw"],
+    "application/json", all [b"\"type\"", b"\"excalidraw\"", b"\"elements\""], any [], none [],
+    keys ["source"]);
+json_variant!(SARIF, dissect_sarif, "sarif", "SARIF analysis results", ["sarif"],
+    "application/sarif+json", all [b"\"runs\"", b"sarif"], any [], none [], keys ["version"]);
+json_variant!(OPENAPI, dissect_openapi, "openapi", "OpenAPI description", [], "application/json",
+    all [b"\"paths\"", b"\"info\""], any [b"\"openapi\"", b"\"swagger\""], none [],
+    keys ["title", "openapi", "swagger"]);
+json_variant!(NPM_PACKAGE, dissect_npm, "npm-package", "npm package manifest", [], "application/json",
+    all [b"\"name\"", b"\"version\""],
+    any [b"\"dependencies\"", b"\"devDependencies\"", b"\"scripts\"", b"\"main\""],
+    none [b"\"manifest_version\"", b"\"start_url\""], keys ["name"]);
+json_variant!(TSCONFIG, dissect_tsconfig, "tsconfig", "TypeScript configuration", [],
+    "application/json", all [b"\"compilerOptions\""], any [], none [], keys ["extends"]);
+
 pub async fn dissect_har(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 4096)).await?;
     let mut summary = String::from("HTTP Archive");

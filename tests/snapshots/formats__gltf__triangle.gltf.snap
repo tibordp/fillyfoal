@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ triangle.gltf — glTF 3D asset (JSON): fillyfoal  [0x0+0x1b9]
+  ▾ asset — object, 2 members  [0xd+0x38]
+      version: "2.0"  [0x1e+0x5]
+      generator: "fillyfoal"  [0x36+0xb]
+  ▾ scenes — array, 1 element  [0x53+0x34]
+    ▾ [0] — object, 1 member  [0x59+0x2a]
+      ▾ nodes — array, 1 element  [0x6a+0x13]
+          [0]: 0  [0x74+0x1]
+  ▾ nodes — array, 1 element  [0x94+0x21]
+    ▾ [0] — object, 1 member  [0x9a+0x17]
+        mesh: 0  [0xaa+0x1]
+  ▾ meshes — array, 1 element  [0xc3+0x83]
+    ▾ [0] — object, 1 member  [0xc9+0x79]
+      ▾ primitives — array, 1 element  [0xdf+0x5d]
+        ▾ [0] — object, 1 member  [0xe9+0x4b]
+          ▾ attributes — object, 1 member  [0x103+0x27]
+              POSITION: 0  [0x11d+0x1]
+  ▾ buffers — array, 1 element  [0x155+0x61]
+    ▾ [0] — object, 2 members  [0x15b+0x57]
+        uri: "data:application/octet-stream;base64,AAAA"  [0x16a+0x2b]
+        byteLength: 3  [0x1ab+0x1]
