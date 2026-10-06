@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ demo.nuspec — NuGet package manifest: Fillyfoal.Demo  [0x0+0xdd]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ package — 1 element  [0x27+0xb5]
+      @xmlns: "http://schemas.microsoft.com/packaging/2013/05/nuspec.xsd"  [0x37+0x39]
+    ▾ metadata — 3 elements  [0x72+0x60]
+        id: "Fillyfoal.Demo"  [0x7c+0x17]
+        version: "1.0.0"  [0x93+0x18]
+        authors: "Fillyfoal"  [0xab+0x1c]

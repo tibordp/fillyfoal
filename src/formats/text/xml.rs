@@ -246,6 +246,44 @@ xml_variant!(SITEMAP, SITEMAP_INFO, dissect_sitemap, "sitemap", "Sitemap", [], "
 xml_variant!(DRAWIO, DRAWIO_INFO, dissect_drawio, "drawio", "draw.io diagram", ["drawio"],
     "application/vnd.jgraph.mxfile", |r| r.is(b"mxfile") || r.is(b"mxGraphModel"),
     |r, _| attr(r, b"host"));
+xml_variant!(OPML, OPML_INFO, dissect_opml, "opml", "OPML outline", ["opml"],
+    "text/x-opml", |r| r.is(b"opml"), |_, head| first_text(head, b"title"));
+xml_variant!(FB2, FB2_INFO, dissect_fb2, "fb2", "FictionBook e-book", ["fb2"],
+    "application/x-fictionbook+xml", |r| r.is(b"FictionBook"),
+    |_, head| first_text(head, b"book-title"));
+xml_variant!(GRAPHML, GRAPHML_INFO, dissect_graphml, "graphml", "GraphML graph", ["graphml"],
+    "application/graphml+xml", |r| r.local() == b"graphml", no_detail);
+xml_variant!(SMIL, SMIL_INFO, dissect_smil, "smil", "SMIL presentation", ["smil", "smi", "wpl"],
+    "application/smil+xml", |r| r.local() == b"smil", |_, head| first_text(head, b"title"));
+xml_variant!(NZB, NZB_INFO, dissect_nzb, "nzb", "NZB Usenet index", ["nzb"],
+    "application/x-nzb", |r| r.local() == b"nzb", no_detail);
+xml_variant!(JUNIT, JUNIT_INFO, dissect_junit, "junit-xml", "JUnit test report", [],
+    "application/xml", |r| matches!(r.local(), b"testsuites" | b"testsuite"),
+    |r, _| match (attr(r, b"tests"), attr(r, b"failures")) {
+        (Some(t), Some(f)) => Some(format!("{t} tests, {f} failures")),
+        (t, _) => t.map(|t| format!("{t} tests")),
+    });
+xml_variant!(MUSICXML, MUSICXML_INFO, dissect_musicxml, "musicxml", "MusicXML score", ["musicxml"],
+    "application/vnd.recordare.musicxml+xml",
+    |r| matches!(r.local(), b"score-partwise" | b"score-timewise"),
+    |_, head| first_text(head, b"work-title").or_else(|| first_text(head, b"movement-title")));
+xml_variant!(X3D, X3D_INFO, dissect_x3d, "x3d", "X3D scene", ["x3d"],
+    "model/x3d+xml", |r| r.is(b"X3D"), |r, _| attr(r, b"profile"));
+xml_variant!(WIX, WIX_INFO, dissect_wix, "wix", "WiX installer source", ["wxs", "wxi", "wxl"],
+    "application/xml", |r| r.is(b"Wix"), no_detail);
+xml_variant!(NUSPEC, NUSPEC_INFO, dissect_nuspec, "nuspec", "NuGet package manifest", ["nuspec"],
+    "application/xml", |r| r.local() == b"package" && r.mentions(b"nuspec.xsd"),
+    |_, head| first_text(head, b"id"));
+xml_variant!(XIB, XIB_INFO, dissect_xib, "interface-builder", "Interface Builder document",
+    ["xib", "storyboard"], "application/xml",
+    |r| r.is(b"document") && r.mentions(b"com.apple.InterfaceBuilder"), |r, _| attr(r, b"type"));
+xml_variant!(GLADE, GLADE_INFO, dissect_glade, "gtkbuilder", "GtkBuilder UI definition", ["ui", "glade"],
+    "application/x-gtk-builder", |r| r.is(b"interface"), no_detail);
+xml_variant!(FLAT_ODF, FLAT_ODF_INFO, dissect_flat_odf, "flat-odf", "Flat OpenDocument",
+    ["fodt", "fods", "fodp", "fodg"], "application/vnd.oasis.opendocument.text-flat-xml",
+    |r| r.is(b"office:document"), |r, _| attr(r, b"office:mimetype"));
+xml_variant!(VSTEMPLATE, VSTEMPLATE_INFO, dissect_vsixmanifest, "vsix-manifest", "VSIX extension manifest",
+    ["vsixmanifest"], "application/xml", |r| r.local() == b"PackageManifest", no_detail);
 
 /// The value of attribute `name` in the root's start tag.
 fn attr(root: &Root, name: &[u8]) -> Option<String> {

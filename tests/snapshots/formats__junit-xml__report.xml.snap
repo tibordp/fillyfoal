@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ report.xml — JUnit test report: 3 tests, 1 failures  [0x0+0x12f]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ testsuites — tests="3" failures="1" (1 element)  [0x27+0x107]
+      @tests: "3"  [0x3a+0x1]
+      @failures: "1"  [0x47+0x1]
+    ▾ testsuite — name="core" tests="3" failures="1" time="0.5" (3 elements)  [0x4a+0xd7]
+        @name: "core"  [0x5b+0x4]
+        @tests: "3"  [0x68+0x1]
+        @failures: "1"  [0x75+0x1]
+        @time: "0.5"  [0x7e+0x3]
+      ▾ testcase — name="ok" time="0.1"  [0x83+0x20]
+          @name: "ok"  [0x93+0x2]
+          @time: "0.1"  [0x9d+0x3]
+      ▾ testcase — name="bad" (1 element)  [0xa3+0x47]
+          @name: "bad"  [0xb3+0x3]
+        ▾ failure: "trace" — message="boom"  [0xb8+0x27]
+            @message: "boom"  [0xca+0x4]
+            #text: "trace"  [0xd0+0x5]
+      ▾ testcase — name="skip" (1 element)  [0xea+0x2b]
+          @name: "skip"  [0xfa+0x4]
+          skipped  [0x100+0xa]
