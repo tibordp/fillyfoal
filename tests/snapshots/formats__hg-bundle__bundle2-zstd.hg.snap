@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bundle2-zstd.hg — Mercurial bundle2, 0 parts (Compression=ZS)  [0x0+0x36]
+    Header: "HG20\0\0"  [0x0+0x4]
+    Stream parameters: "Compression=ZS"  [0x4+0x12]
+  ▾ Compressed payload — 0x1e bytes decompressed  [0x16+0x20]
+      Data  [#1:0x0+0x1e]

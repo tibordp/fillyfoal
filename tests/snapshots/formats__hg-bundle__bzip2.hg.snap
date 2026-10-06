@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ bzip2.hg — Mercurial bundle (HG10BZ)  [0x0+0x29]
+    Header: "HG10BZ"  [0x0+0x6]
+  ▾ Changegroup (bzip2) — 0xc bytes decompressed  [0x4+0x25]
+      Data  [#1:0x0+0xc]
