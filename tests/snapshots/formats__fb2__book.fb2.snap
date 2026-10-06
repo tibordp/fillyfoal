@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ book.fb2 — FictionBook e-book: Short Story  [0x0+0x115]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ FictionBook — 2 elements  [0x27+0xed]
+      @xmlns: "http://www.gribuser.ru/xml/fictionbook/2.0"  [0x3b+0x2a]
+    ▾ description — 1 element  [0x67+0x67]
+      ▾ title-info — 2 elements  [0x74+0x4c]
+          book-title: "Short Story"  [0x80+0x24]
+          lang: "en"  [0xa4+0xf]
+    ▾ body — 1 element  [0xce+0x38]
+      ▾ section — 1 element  [0xd4+0x2b]
+          p: "Once upon a time."  [0xdd+0x18]

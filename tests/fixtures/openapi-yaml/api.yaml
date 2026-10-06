@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: Pet store
+  version: "1.0"
+paths:
+  /pets:
+    get:
+      summary: List pets
+      responses:
+        "200":
+          description: ok

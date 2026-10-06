@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ known_hosts — OpenSSH known hosts, 3 keys  [0x0+0x1c1]
+  ▾ example.com,192.0.2.10 — ecdsa-sha2-nistp256, 256 bits  [0x0+0xb7]
+      Hosts: "example.com,192.0.2.10"  [0x0+0x16]
+      Key type: "ecdsa-sha2-nistp256"  [0x17+0x13]
+    ▾ Key — ecdsa-sha2-nistp256, 256 bits  [0x2b+0x8c]
+        Key type: "ecdsa-sha2-nistp256"  [#1:0x0+0x17]
+        Curve: "nistp256"  [#1:0x17+0xc]
+        Public point (Q): 04 83 4c d0 3f 0c 35 f8 f2 29 f2 71 21 1b b4 fa …  |..L.?.5..).q!...| — 65 bytes  [#1:0x23+0x45]
+  ▾ (hashed host) — ssh-ed25519, 256 bits  [0xb8+0x85]
+      Hosts: "|1|c2FsdHNhbHRzYWx0c2FsdA==|aGFzaGhhc2hoYXNoaGFzaA==" — hashed host name  [0xb8+0x34]
+      Key type: "ssh-ed25519"  [0xed+0xb]
+    ▾ Key — ssh-ed25519, 256 bits  [0xf9+0x44]
+        Key type: "ssh-ed25519"  [#2:0x0+0xf]
+        Public key: fa 37 a3 5a aa 21 74 5b e1 fa 7b b0 f2 9f 04 85 …  |.7.Z.!t[..{.....| — 32 bytes  [#2:0xf+0x24]
+  ▾ *.example.org — ssh-ed25519, 256 bits  [0x13e+0x75]
+      Marker: "@cert-authority"  [0x13e+0xf]
+      Hosts: "*.example.org"  [0x14e+0xd]
+      Key type: "ssh-ed25519"  [0x15c+0xb]
+    ▾ Key — ssh-ed25519, 256 bits  [0x168+0x44]
+        Key type: "ssh-ed25519"  [#3:0x0+0xf]
+        Public key: fa 37 a3 5a aa 21 74 5b e1 fa 7b b0 f2 9f 04 85 …  |.7.Z.!t[..{.....| — 32 bytes  [#3:0xf+0x24]
+      Comment: "ca key"  [0x1ad+0x6]
+    Line 4: "garbage line"  [0x1b4+0xc]
+      ! malformed: not a public key line

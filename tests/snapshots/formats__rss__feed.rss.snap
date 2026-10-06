@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ feed.rss — RSS feed: Fillyfoal News  [0x0+0x144]
+  ▾ XML declaration  [0x0+0x26]
+      Version: "1.0"  [0xf+0x3]
+      Encoding: "UTF-8"  [0x1e+0x5]
+  ▾ rss — version="2.0" (1 element)  [0x27+0x11c]
+      @version: "2.0"  [0x35+0x3]
+    ▾ channel — 4 elements  [0x3b+0x101]
+        title: "Fillyfoal News"  [0x47+0x1d]
+        link: "https://example.com/"  [0x67+0x21]
+      ▾ item — 2 elements  [0x8b+0x51]
+          title: "First"  [0x91+0x14]
+          pubDate: "Mon, 05 Oct 2026 10:00:00 GMT"  [0xa5+0x30]
+      ▾ item — 2 elements  [0xdf+0x52]
+          title: "Second"  [0xe5+0x15]
+          description: "<p>Hi</p>"  [0xfa+0x30]

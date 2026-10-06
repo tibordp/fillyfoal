@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ files.md5 — MD5 checksums, 3 files  [0x0+0x95]
+    a.txt: "b1946ac92492d2347c6235b4d2611184" — MD5  [0x6+0x20]
+    dir/b.bin: "441077cc9e57554dd476bdfb8b8b8102" — MD5  [0x2e+0x20]
+    c.txt: "4a8a08f09d37b73795649038408b5f33" — MD5  [0x68+0x20]
+    Line 5: "broken line"  [0x89+0xb]
+      ! malformed: not a checksum line

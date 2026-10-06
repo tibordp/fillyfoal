@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ api.json — OpenAPI description: Pet store  [0x0+0xf7]
+    openapi: "3.0.3"  [0xf+0x7]
+  ▾ info — object, 2 members  [0x22+0x34]
+      title: "Pet store"  [0x31+0xb]
+      version: "1.0"  [0x4d+0x5]
+  ▾ paths — object, 1 member  [0x63+0x91]
+    ▾ /pets — object, 1 member  [0x72+0x7e]
+      ▾ get — object, 1 member  [0x81+0x69]
+        ▾ responses — object, 1 member  [0x98+0x4a]
+          ▾ 200 — object, 1 member  [0xab+0x2d]
+              description: "ok"  [0xc8+0x4]

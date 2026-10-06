@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ gnu-sparse.tar — tar archive (GNU), 2 entries, 641 bytes  [0x0+0xe00]
   ▾ notes.txt — 29 bytes, -rw-r--r--  [0x0+0x400]
@@ -27,8 +27,11 @@ expression: "common::explore(&name, &data)"
         Unused: 0  [0x181+0x1]
         Is extended: 0  [0x1e2+0x1]
         Real size: 0  [0x1e3+0xc]
-    ▾ Content — 29 bytes  [0x200+0x1d]
-        ! unsupported: unrecognized format [0x200+0x1d]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x200+0x1d]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x200+0x1d]
+          Line 1: "GNU tar with a sparse member"  [0x200+0x1c]
   ▾ disk.img — sparse file, 612 bytes stored, -rw-r--r--  [0x400+0x600]
     ▾ Header — GNU  [0x400+0x200]
         Name: "disk.img"  [0x400+0x64]

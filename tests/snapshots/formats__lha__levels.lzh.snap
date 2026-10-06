@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ levels.lzh — LHA archive, 4 files, 306 bytes uncompressed, -lh0- -lh5-  [0x0+0x162]
   ▾ HELLO.TXT — -lh0-, 22 bytes  [0x0+0x37]
@@ -16,8 +16,11 @@ expression: "common::explore(&name, &data)"
         Name length: 9  [0x15+0x1]
         Name: "HELLO.TXT"  [0x16+0x9]
         CRC-16: 0x8850  [0x1f+0x2]
-    ▾ Content — 22 bytes  [0x21+0x16]
-        ! unsupported: unrecognized format [0x21+0x16]
+    ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x21+0x16]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x21+0x16]
+          Line 1: "hello, old archivers"  [0x21+0x14]
   ▾ images/pixel.png — -lh0-, 67 bytes  [0x37+0x7d]
     ▾ Header (level 1)  [0x37+0x24]
         Header size: 34  [0x37+0x1]
@@ -81,8 +84,11 @@ expression: "common::explore(&name, &data)"
     ▾ Unix group and user ID  [0xe6+0x7]
         Group ID: 100  [0xe7+0x2]
         User ID: 1000  [0xe9+0x2]
-    ▾ Content — 17 bytes  [0xed+0x11]
-        ! unsupported: unrecognized format [0xed+0x11]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0xed+0x11]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0xed+0x11]
+          Line 1: "level two header"  [0xed+0x10]
   ▾ packed.bin — -lh5-, 200 bytes  [0xfe+0x63]
     ▾ Header (level 2)  [0xfe+0x33]
         Header size: 51  [0xfe+0x2]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ ed.pub — SSH2 PUBLIC KEY  [0x0+0xd0]
+  ▾ SSH2 PUBLIC KEY — RFC 4716 public key  [0x0+0xd0]
+      Begin: "SSH2 PUBLIC KEY"  [0x0+0x1f]
+      Comment: "fillyfoal test key, with a header that continues"  [0x29+0x34]
+      x-private: "yes"  [0x69+0x3]
+    ▾ Data — ssh-ed25519, 256 bits  [0x6d+0x44]
+        Key type: "ssh-ed25519"  [#1:0x0+0xf]
+        Public key: fa 37 a3 5a aa 21 74 5b e1 fa 7b b0 f2 9f 04 85 …  |.7.Z.!t[..{.....| — 32 bytes  [#1:0xf+0x24]
+      End  [0xb2+0x1d]

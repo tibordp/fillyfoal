@@ -1,0 +1,11 @@
+[Unit]
+Description=Fillyfoal demo service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/fillyfoal --serve
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

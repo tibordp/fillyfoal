@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ style.xsl — XSLT stylesheet: version 1.0  [0x0+0xcd]
+  ▾ XML declaration  [0x0+0x15]
+      Version: "1.0"  [0xf+0x3]
+  ▾ xsl:stylesheet — version="1.0" (1 element)  [0x16+0xb6]
+      @version: "1.0"  [0x2f+0x3]
+      @xmlns:xsl: "http://www.w3.org/1999/XSL/Transform"  [0x3f+0x24]
+    ▾ xsl:template — match="/" (1 element)  [0x68+0x52]
+        @match: "/"  [0x7d+0x1]
+      ▾ html — 1 element  [0x80+0x2b]
+        ▾ xsl:value-of — select="title"  [0x86+0x1e]
+            @select: "title"  [0x9c+0x5]

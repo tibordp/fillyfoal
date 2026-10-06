@@ -1,0 +1,27 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ people.ldif — LDIF, 2 entries  [0x0+0x168]
+    version: "1"  [0x0+0xa]
+  ▾ cn=Ana Novak,ou=people,dc=example,dc=com — top, person  [0x12+0xc8]
+      dn: "cn=Ana Novak,ou=people,dc=example,dc=com"  [0x12+0x2c]
+      objectClass: "top"  [0x3f+0x10]
+      objectClass: "person"  [0x50+0x13]
+      cn: "Ana Novak"  [0x64+0xd]
+      sn: "Novak"  [0x72+0x9]
+      description: "A long description that is folded onto a second line."  [0x7c+0x44]
+      cn;lang-sl: "Ana Novak" — base64  [0xc1+0x19]
+  ▾ cn=Böb,ou=people,dc=example,dc=com — changetype modify  [0xdc+0x8b]
+      dn: "cn=Böb,ou=people,dc=example,dc=com" — base64  [0xdc+0x35]
+      changetype: "modify"  [0x112+0x12]
+      replace: "mail"  [0x125+0xd]
+      mail: "bob@example.com"  [0x133+0x15]
+    ▾ jpegPhoto — 0xb bytes decoded  [0x157+0x10]
+        ! warning: no EOI marker
+        SOI  [#1:0x0+0x2]
+      ▾ APP0 — JFIF  [#1:0x2+0x9]
+          Marker: 0xffe0 — APP0  [#1:0x2+0x2]
+          Length: 16  [#1:0x4+0x2]
+          Identifier: "JFIF"  [#1:0x6+0x5]
+          ! truncated: needed 0x1 bytes at 0xb, only 0x0 available [#1:0xb+0x1]

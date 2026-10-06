@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ utf16le.txt — UTF-16LE text, CRLF line endings, 3 lines  [0x0+0x4e]
+    Encoding: "UTF-16LE" — byte order mark  [0x0+0x2]
+    Line endings: "CRLF" — 0 LF, 3 CRLF, 0 CR
+  ▾ Lines — 3 lines  [0x2+0x4c]
+      Line 1: "Hello, wide world!"  [0x2+0x24]
+      Line 2: "Živjo, svet"  [0x2a+0x16]
+      Line 3: "end"  [0x44+0x6]

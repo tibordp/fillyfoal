@@ -10,6 +10,7 @@ why; this is the how. Good examples to copy from:
 | Directory at the end, paged entries, variants by probe | `src/formats/zip.rs` |
 | Pointers/RVAs, many lazy sub-structures, recursion | `src/formats/pe/` |
 | Recursive variable-length blocks | `src/formats/pe/version.rs` |
+| Text: windowed lines/tokens, encodings, base64 into derived sources | `src/formats/text/` (`scan`, `piece`, `encoding`, `decode`) |
 
 ## 1. Register the format
 

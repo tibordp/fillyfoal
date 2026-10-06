@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ app.csproj — MSBuild project: Microsoft.NET.Sdk  [0x0+0xa1]
+  ▾ Project — Sdk="Microsoft.NET.Sdk" (1 element)  [0x0+0xa0]
+      @Sdk: "Microsoft.NET.Sdk"  [0xe+0x11]
+    ▾ PropertyGroup — 2 elements  [0x24+0x71]
+        OutputType: "Exe"  [0x38+0x1c]
+        TargetFramework: "net8.0"  [0x59+0x29]

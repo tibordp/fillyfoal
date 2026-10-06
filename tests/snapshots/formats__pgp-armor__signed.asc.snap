@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ signed.asc — OpenPGP armor: PGP SIGNED MESSAGE  [0x0+0xc9]
+  ▾ PGP SIGNED MESSAGE  [0x0+0xc9]
+      Hash: "SHA256"  [0x23+0xd]
+      ! malformed: invalid base64 [0x36+0x1]

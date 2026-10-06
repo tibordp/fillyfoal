@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ captions.vtt — WebVTT subtitles, 2 cues  [0x0+0xe3]
+    Header: "WEBVTT - demo"  [0x0+0x29]
+    Kind: "captions"  [0x14+0x8]
+    Language: "en"  [0x27+0x2]
+    NOTE: "NOTE This is a comment\nspanning lines"  [0x2b+0x25]
+    STYLE: "STYLE\n::cue { color: yellow; }"  [0x52+0x1e]
+  ▾ intro — 00:00.000 → 00:02.500 (2.500 s): <v Ana>Hi there  [0x72+0x46]
+      Identifier: "intro"  [0x72+0x5]
+      Start: 0 — 00:00.000 (seconds)  [0x78+0x9]
+      End: 2.5 — 00:02.500 (seconds)  [0x86+0x9]
+      Settings: "align:start position:10%"  [0x90+0x18]
+      Text: "<v Ana>Hi there"  [0xa9+0xf]
+  ▾ Cue 2 — 00:00:03.000 → 00:00:05.000 (2.000 s): Second cue  [0xba+0x28]
+      Start: 3 — 00:00:03.000 (seconds)  [0xba+0xc]
+      End: 5 — 00:00:05.000 (seconds)  [0xcb+0xc]
+      Text: "Second cue"  [0xd8+0xa]

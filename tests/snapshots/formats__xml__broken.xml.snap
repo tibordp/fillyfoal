@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ broken.xml — XML document, root <root>  [0x0+0x3f]
+  ▾ root — 2 elements  [0x0+0x3f]
+      ! truncated: element not closed
+    ▾ a — 1 element  [0x9+0xe]
+        b: "text"  [0xc+0x7]
+          ! malformed: end tag missing
+      Stray end tag: "stray"  [0x1a+0x8]
+        ! malformed: end tag without a matching start tag
+    ▾ c — attr='single' novalue  [0x25+0x1a]
+        ! truncated: element not closed
+        @attr: "single"  [0x2e+0x6]
+        @novalue  [0x36+0x7]

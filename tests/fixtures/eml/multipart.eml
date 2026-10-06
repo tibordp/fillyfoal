@@ -1,0 +1,44 @@
+Return-Path: <ana@example.com>
+Received: from mail.example.com (mail.example.com [192.0.2.1])
+	by mx.example.org with ESMTP id 12345
+	for <bob@example.org>; Mon, 05 Oct 2026 10:00:00 +0200
+From: =?UTF-8?Q?Ana_Novak?= <ana@example.com>
+To: Bob <bob@example.org>
+Subject: =?UTF-8?B?UG96ZHJhdiDFvml2amk=?= =?UTF-8?Q?_and_more?=
+Date: Mon, 5 Oct 2026 10:00:00 +0200
+Message-ID: <1@example.com>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer"
+
+This is a multi-part message in MIME format.
+--outer
+Content-Type: multipart/alternative; boundary=inner
+
+--inner
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+Hello Bob,=20
+caf=C3=A9 soon? This line is soft=
+ wrapped.
+--inner
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>Hello <b>Bob</b></p></body></html>
+--inner--
+--outer
+Content-Type: image/png; name="dot.png"
+Content-Disposition: attachment; filename*=utf-8''d%C3%B6t.png
+Content-Transfer-Encoding: base64
+
+iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9
+awAAAABJRU5ErkJggg==
+--outer
+Content-Type: message/rfc822
+
+From: inner@example.com
+Subject: Forwarded
+
+Inner body.
+--outer--
+Epilogue text.

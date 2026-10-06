@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ table.tsv — TSV, 3 columns (id, value, label), ~4 records  [0x0+0x3d]
+    Delimiter: "tab"
+  ▾ Header — id, value, label  [0x0+0xe]
+      Column 1: "id"  [0x0+0x2]
+      Column 2: "value"  [0x3+0x5]
+      Column 3: "label"  [0x9+0x5]
+  ▾ Record 1 — 1 0.5 alpha  [0xf+0xb]
+      id: 1  [0xf+0x1]
+      value: 0.5  [0x11+0x3]
+      label: "alpha"  [0x15+0x5]
+  ▾ Record 2 — 2 -1e3 beta gamma  [0x1b+0x11]
+      id: 2  [0x1b+0x1]
+      value: -1000  [0x1d+0x4]
+      label: "beta gamma"  [0x22+0xa]
+  ▾ Record 3 — 3  "quoted tab"  [0x2d+0xf]
+      id: 3  [0x2d+0x1]
+      value: ""  [0x2f+0x0]
+      label: "quoted\ttab"  [0x30+0xc]

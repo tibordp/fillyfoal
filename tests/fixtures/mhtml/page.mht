@@ -1,0 +1,23 @@
+From: <Saved by Blink>
+Snapshot-Content-Location: https://example.com/
+Subject: Example page
+Date: Mon, 5 Oct 2026 10:00:00 -0000
+MIME-Version: 1.0
+Content-Type: multipart/related;
+	type="text/html";
+	boundary="----MultipartBoundary--abc----"
+
+------MultipartBoundary--abc----
+Content-Type: text/html
+Content-ID: <frame-1@mhtml.blink>
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://example.com/
+
+<html><head><title>Example</title></head><body class=3D"x">Hi</body></html>
+------MultipartBoundary--abc----
+Content-Type: text/css
+Content-Transfer-Encoding: quoted-printable
+Content-Location: https://example.com/s.css
+
+body { color: red; }
+------MultipartBoundary--abc------

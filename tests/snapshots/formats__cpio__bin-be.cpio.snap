@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ bin-be.cpio — cpio archive (old binary, big-endian), 3 entries, 86 bytes  [0x0+0xea]
   ▾ hello.txt — 10 bytes  [0x0+0x2e]
@@ -17,8 +17,11 @@ expression: "common::explore(&name, &data)"
         Name size: 10  [0x14+0x2]
         File size: 10  [0x16+0x4]
       Name: "hello.txt"  [0x1a+0xa]
-    ▾ Content — 10 bytes  [0x24+0xa]
-        ! unsupported: unrecognized format [0x24+0xa]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x24+0xa]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x24+0xa]
+          Line 1: "hello tar"  [0x24+0x9]
   ▾ link — symlink  [0x2e+0x2a]
     ▾ Header  [0x2e+0x1a]
         Magic: 0x71c7  [0x2e+0x2]

@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ authorized_keys — OpenSSH public keys, 3 keys  [0x0+0x2ce]
+  ▾ test@fillyfoal — ssh-ed25519, 256 bits  [0x12+0x5f]
+      Key type: "ssh-ed25519"  [0x12+0xb]
+    ▾ Key — ssh-ed25519, 256 bits  [0x1e+0x44]
+        Key type: "ssh-ed25519"  [#1:0x0+0xf]
+        Public key: fa 37 a3 5a aa 21 74 5b e1 fa 7b b0 f2 9f 04 85 …  |.7.Z.!t[..{.....| — 32 bytes  [#1:0xf+0x24]
+      Comment: "test@fillyfoal"  [0x63+0xe]
+  ▾ rsa key — ssh-rsa, 2048 bits  [0x72+0x1b9]
+      Options: "no-pty,command=\"echo \\\"hi there\\\"\",from=\"10.0.0.0/8\""  [0x72+0x34]
+      Key type: "ssh-rsa"  [0xa7+0x7]
+    ▾ Key — ssh-rsa, 2048 bits  [0xaf+0x174]
+        Key type: "ssh-rsa"  [#2:0x0+0xb]
+        Public exponent (e): 65537 — 17-bit integer  [#2:0xb+0x7]
+        Modulus (n): 00 c2 ec d6 34 e2 b2 d8 e5 ad 26 dd 4c a2 46 23 …  |....4.....&.L.F#| — 2048-bit integer  [#2:0x12+0x105]
+      Comment: "rsa key"  [0x224+0x7]
+  ▾ ecdsa-sha2-nistp256 — ecdsa-sha2-nistp256, 256 bits  [0x22d+0xa0]
+      Key type: "ecdsa-sha2-nistp256"  [0x22d+0x13]
+    ▾ Key — ecdsa-sha2-nistp256, 256 bits  [0x241+0x8c]
+        Key type: "ecdsa-sha2-nistp256"  [#3:0x0+0x17]
+        Curve: "nistp256"  [#3:0x17+0xc]
+        Public point (Q): 04 83 4c d0 3f 0c 35 f8 f2 29 f2 71 21 1b b4 fa …  |..L.?.5..).q!...| — 65 bytes  [#3:0x23+0x45]

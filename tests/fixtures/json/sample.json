@@ -1,0 +1,29 @@
+{
+  "name": "fillyfoal",
+  "version": 3,
+  "ratio": -1500.0,
+  "big": 18446744073709551615,
+  "enabled": true,
+  "missing": null,
+  "escaped": "tab\tquote\" snow\u2603 pair\ud83d\ude00",
+  "tags": [
+    "a",
+    "b",
+    1,
+    [
+      2,
+      3
+    ],
+    {}
+  ],
+  "nested": {
+    "deep": {
+      "deeper": [
+        true,
+        false,
+        null
+      ]
+    }
+  },
+  "empty": []
+}

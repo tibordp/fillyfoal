@@ -13,8 +13,11 @@ expression: "common::explore(&display_name(&path), &data)"
         Time: 6272 — 2024-01-02 03:04:00  [0x15+0x2]
         CRC-16: 0xf3f1  [0x17+0x2]
         Original size: 28  [0x19+0x4]
-    ▾ Content — 28 bytes  [0x1d+0x1c]
-        ! unsupported: unrecognized format [0x1d+0x1c]
+    ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0x1d+0x1c]
+        Encoding: "UTF-8"
+        Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x1d+0x1c]
+          Line 1: "hello from an old archiver"  [0x1d+0x1a]
   ▾ PIXEL.PNG — 67 bytes, stored  [0x39+0x60]
     ▾ Header  [0x39+0x1d]
         Marker: 26  [0x39+0x1]

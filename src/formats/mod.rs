@@ -176,6 +176,7 @@ pub mod misc3;
 // -- end misc --
 
 // -- text --
+pub mod text;
 // -- end text --
 
 /// How many leading bytes probes see. Large enough for magic numbers deep in
@@ -889,6 +890,128 @@ pub static FORMATS: &[&Format] = &[
     // -- end misc --
 
     // -- text (generic probes, keep last) --
+    // Documents with a fixed signature.
+    &text::rtf::FORMAT,
+    &text::postscript::DOS_EPS,
+    &text::postscript::EPS,
+    &text::postscript::POSTSCRIPT,
+    // Binary formats found inside text armor.
+    &text::ssh::BLOB,
+    // Armor and keys.
+    &text::pem::SSH2,
+    &text::ssh::KEYS,
+    // Messages (header blocks look like YAML; keep them before it).
+    &text::mime::MBOX,
+    &text::mime::MHTML,
+    &text::mime::EML,
+    &text::ldif::FORMAT,
+    &text::diff::FORMAT,
+    &text::vcard::VCARD,
+    &text::vcard::ICALENDAR,
+    // Timed text and playlists.
+    &text::subtitles::WEBVTT,
+    &text::subtitles::SRT,
+    &text::subtitles::LRC,
+    &text::playlist::HLS,
+    &text::playlist::M3U,
+    &text::playlist::PLS,
+    &text::playlist::CUE,
+    &text::subtitles::MICRODVD,
+    &text::sln::FORMAT,
+    &text::dockerfile::FORMAT,
+    &text::dot::FORMAT,
+    // Line-oriented data with distinctive keywords.
+    &text::uuencode::FORMAT,
+    &text::po::FORMAT,
+    &text::bibtex::FORMAT,
+    &text::checksums::FORMAT,
+    &text::obj::OBJ,
+    &text::obj::MTL,
+    // Markup: specific XML vocabularies, then HTML, then generic XML.
+    &text::plist::FORMAT,
+    &text::xml::XHTML,
+    &text::xml::SVG,
+    &text::xml::RSS,
+    &text::xml::ATOM,
+    &text::xml::GPX,
+    &text::xml::KML,
+    &text::xml::POM,
+    &text::xml::XAML,
+    &text::xml::MATHML,
+    &text::xml::XSLT,
+    &text::xml::XSD,
+    &text::xml::MSBUILD,
+    &text::xml::COLLADA,
+    &text::xml::TTML,
+    &text::xml::DASH,
+    &text::xml::XLIFF,
+    &text::xml::OPF,
+    &text::xml::OSM,
+    &text::xml::XSPF,
+    &text::xml::TEI,
+    &text::xml::DOCBOOK,
+    &text::xml::ANDROID_MANIFEST,
+    &text::xml::WSDL,
+    &text::xml::SOAP,
+    &text::xml::SITEMAP,
+    &text::xml::DRAWIO,
+    &text::xml::OPML,
+    &text::xml::FB2,
+    &text::xml::GRAPHML,
+    &text::xml::SMIL,
+    &text::xml::NZB,
+    &text::xml::JUNIT,
+    &text::xml::MUSICXML,
+    &text::xml::X3D,
+    &text::xml::WIX,
+    &text::xml::NUSPEC,
+    &text::xml::XIB,
+    &text::xml::GLADE,
+    &text::xml::FLAT_ODF,
+    &text::xml::VSTEMPLATE,
+    &text::html::FORMAT,
+    &text::xml::FORMAT,
+    // JSON and its vocabularies.
+    &text::json::IPYNB,
+    &text::json::GLTF,
+    &text::json::JSON_SCHEMA,
+    &text::json::TOPOJSON,
+    &text::json::WEB_MANIFEST,
+    &text::json::EXTENSION_MANIFEST,
+    &text::json::LOTTIE,
+    &text::json::EXCALIDRAW,
+    &text::json::SARIF,
+    &text::json::OPENAPI,
+    &text::json::TSCONFIG,
+    &text::json::NPM_PACKAGE,
+    &text::json::GEOJSON,
+    &text::json::HAR,
+    &text::json::NDJSON,
+    &text::json::FORMAT,
+    // TOML before INI: its values are typed, INI's are not.
+    &text::ini::EDITORCONFIG,
+    &text::toml::FORMAT,
+    // INI family: specific first.
+    &text::ini::REG,
+    &text::ini::DESKTOP,
+    &text::ini::URL,
+    &text::ini::SYSTEMD,
+    &text::ini::INF,
+    &text::ini::ASS,
+    &text::ini::FORMAT,
+    // Markdown before YAML: front matter starts like a YAML document.
+    &text::markdown::FORMAT,
+    &text::yaml::KUBERNETES,
+    &text::yaml::COMPOSE,
+    &text::yaml::GITHUB_WORKFLOW,
+    &text::yaml::OPENAPI,
+    &text::yaml::FORMAT,
+    &text::plain::SCRIPT,
+    // Weak, statistical probes.
+    &text::csv::TSV,
+    &text::csv::CSV,
+    // Plain text matches anything textual: keep it last.
+    &text::plain::FORMAT,
     // -- end text --
 ];
 

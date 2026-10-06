@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ v5-stored.rar — RAR archive (v5), 4 files, 177 bytes uncompressed  [0x0+0x131]
     Signature: "Rar!" — RAR 5.0  [0x0+0x8]
@@ -33,8 +33,11 @@ expression: "common::explore(&name, &data)"
             Type: file time (0x3)  [0x33+0x1]
             Flags: 3  [0x34+0x1]
             Modification time: 2024-01-02 03:04:00 UTC  [0x35+0x4]
-    ▾ Content — 10 bytes  [0x39+0xa]
-        ! unsupported: unrecognized format [0x39+0xa]
+    ▾ Content — UTF-8 text, LF line endings, 1 line  [0x39+0xa]
+        Encoding: "UTF-8"
+        Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x39+0xa]
+          Line 1: "hello rar"  [0x39+0x9]
   ▾ docs — directory  [0x43+0x23]
     ▾ Header  [0x43+0x23]
         Header CRC32: 0xc2f82a6f — valid  [0x43+0x4]

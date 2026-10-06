@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ classic.sit — StuffIt archive, 3 files, 206 bytes uncompressed  [0x0+0x2ba]
   ▾ Archive header — SIT!  [0x0+0x16]
@@ -29,8 +29,11 @@ expression: "common::explore(&name, &data)"
         Data fork CRC: 0x1799  [0x7c+0x2]
         Reserved: 00 00 00 00 00 00  |......|  [0x7e+0x6]
         Header CRC: 0xc617 — valid  [0x84+0x2]
-    ▾ Data fork — 19 bytes  [0x86+0x13]
-        ! unsupported: unrecognized format [0x86+0x13]
+    ▾ Data fork — UTF-8 text, CR line endings, 1 line  [0x86+0x13]
+        Encoding: "UTF-8"
+        Line endings: "CR" — 0 LF, 0 CRLF, 1 CR
+      ▾ Lines — 1 line  [0x86+0x13]
+          Line 1: "Hello from StuffIt"  [0x86+0x12]
   ▾ Pictures/ — folder  [0x99+0x70]
     ▾ Entry header  [0x99+0x70]
         Resource fork method: folder start (0x20)  [0x99+0x1]
