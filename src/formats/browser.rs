@@ -1236,3 +1236,64 @@ async fn cache2_elements(cx: Cx, list: Vec<(String, String, Span)>) -> Result<()
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Chromium simple cache index (index-dir/the-real-index)
+
+fn simple_index_probe(h: &Head<'_>) -> bool {
+    u64_le(h.data, 8) == Some(SIMPLE_INDEX_MAGIC) && u32_le(h.data, 16).is_some_and(|v| (4..=20).contains(&v))
+}
+
+const SIMPLE_INDEX_MAGIC: u64 = 0x656e_7465_7220_796f;
+
+declare_format!(pub CHROME_SIMPLE_INDEX = "chrome-simple-index", "Chromium simple cache index", [], "application/x-chrome-cache",
+    Probe::Custom(simple_index_probe), chrome_simple_index);
+
+async fn chrome_simple_index(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let head = cx.block(file.sub(0, 40)).await?;
+    let mut f = Fields::emitting(&cx, &head, LE);
+    f.u32("Payload size").emit()?;
+    f.u32("CRC-32").hex().emit()?;
+    f.u64("Magic").hex().emit()?;
+    let version = f.u32("Version").emit()?;
+    let entries = f.u64("Number of entries").emit()?;
+    let bytes = f.u64("Cache size").with(|&v, n| n.summary(size(v))).emit()?;
+    let mut at = 36u64;
+    if version >= 7 {
+        f.u32("Write reason").emit()?;
+        at = 40;
+    }
+    // Entries: hash, then last-used time and size, whose encoding changed in
+    // version 7 (seconds and 256-byte units in 32 bits each).
+    let entry = if version >= 7 { 16u64 } else { 24 };
+    let list = file.sub(at, entries.saturating_mul(entry));
+    cx.emit(Node::new("Entries").span(list).summary(format!("{entries} entries")).lazy(simple_index_entries, (list, version)));
+    let end = at.saturating_add(entries.saturating_mul(entry));
+    if file.len >= end.saturating_add(8) {
+        let raw = cx.read(file.sub(end, 8)).await?;
+        cx.emit(Node::new("Last modified").span(file.sub(end, 8)).value(chrome_time(u64_le(&raw, 0).unwrap_or(0))));
+    }
+    cx.annotate(format!("Chromium simple cache index v{version}, {entries} entries, {}", size(bytes)));
+    Ok(())
+}
+
+async fn simple_index_entries(cx: Cx, (list, version): (Span, u32)) -> Result<()> {
+    let entry = if version >= 7 { 16u64 } else { 24 };
+    let count = list.len.checked_div(entry).unwrap_or(0);
+    cx.set_count(Count::Exact(count));
+    for i in 0..count {
+        let span = list.sub(i.saturating_mul(entry), entry);
+        let e = cx.read(span).await?;
+        let hash = u64_le(&e, 0).unwrap_or(0);
+        let (time, bytes) = if version >= 7 {
+            let t = u32_le(&e, 8).unwrap_or(0);
+            let s = u32_le(&e, 12).unwrap_or(0);
+            (Value::Timestamp { unix_seconds: t.into() }, u64::from(s & 0x00ff_ffff).saturating_mul(256))
+        } else {
+            (chrome_time(u64_le(&e, 8).unwrap_or(0)), u64_le(&e, 16).unwrap_or(0))
+        };
+        cx.push(Node::new(format!("{hash:016x}")).span(span).value(time).summary(size(bytes))).await;
+    }
+    Ok(())
+}

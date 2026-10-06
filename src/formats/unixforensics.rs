@@ -926,3 +926,66 @@ async fn abx_element(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
     }
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// macOS utmpx (/var/run/utmpx)
+
+const UTMPX_RECORD: u64 = 640;
+
+fn utmpx_probe(h: &Head<'_>) -> bool {
+    h.starts_with(b"utmpx-1.00\0") && h.len.is_multiple_of(UTMPX_RECORD) && u16_le(h.data, 296) == Some(10)
+}
+
+declare_format!(pub UTMPX = "macos-utmpx", "macOS login records (utmpx)", ["utmpx"], "application/x-utmpx",
+    Probe::Custom(utmpx_probe), utmpx);
+
+const UTMPX_TYPES: EnumTable = &[
+    (0, "EMPTY"),
+    (1, "RUN_LVL"),
+    (2, "BOOT_TIME"),
+    (3, "OLD_TIME"),
+    (4, "NEW_TIME"),
+    (5, "INIT_PROCESS"),
+    (6, "LOGIN_PROCESS"),
+    (7, "USER_PROCESS"),
+    (8, "DEAD_PROCESS"),
+    (9, "ACCOUNTING"),
+    (10, "SIGNATURE"),
+    (11, "SHUTDOWN_TIME"),
+];
+
+fn utmpx_layout(f: &mut Fields<'_>, _: &()) -> Result<(String, String, u16, i64)> {
+    let user = f.ascii("User", 256).emit()?;
+    f.ascii("ID", 4).emit()?;
+    let line = f.ascii("Terminal", 32).emit()?;
+    f.int::<i32>("PID").emit()?;
+    let kind = f.u16("Type").enumeration(UTMPX_TYPES).emit()?;
+    f.u16("Padding").emit()?;
+    f.seek(304);
+    let sec = f.int::<i64>("Time").with(|&v, n| n.value(unix_time(v))).emit()?;
+    f.u32("Microseconds").emit()?;
+    f.u32("Padding").emit()?;
+    f.ascii("Host", 256).emit()?;
+    Ok((user, line, kind, sec))
+}
+
+async fn utmpx(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let count = file.len / UTMPX_RECORD;
+    cx.set_count(Count::Exact(count));
+    let mut sessions = 0u64;
+    for i in 0..count {
+        let span = file.sub(i.saturating_mul(UTMPX_RECORD), UTMPX_RECORD);
+        let block = cx.block(span).await?;
+        let (user, line, kind, sec) = utmpx_layout(&mut Fields::new(&block, LE), &())?;
+        if kind == 7 {
+            sessions = sessions.saturating_add(1);
+        }
+        let kind_name = lookup(UTMPX_TYPES, kind.into()).unwrap_or("?");
+        let name = if user.is_empty() { format!("Record {i}") } else { user };
+        let summary = if line.is_empty() { kind_name.to_owned() } else { format!("{kind_name} on {line}") };
+        cx.push(struct_node(name, span, LE, (), utmpx_layout).value(unix_time(sec)).summary(summary)).await;
+    }
+    cx.annotate(format!("macOS utmpx, {count} records, {sessions} user sessions"));
+    Ok(())
+}

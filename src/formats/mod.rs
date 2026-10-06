@@ -208,6 +208,7 @@ pub mod unixforensics;
 pub mod office_legacy;
 pub mod windiag;
 pub mod logs;
+pub mod evidence;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1004,6 +1005,8 @@ pub static FORMATS: &[&Format] = &[
     &unixforensics::ASL,
     &unixforensics::MBDB,
     &unixforensics::ABX,
+    &unixforensics::UTMPX,
+    &browser::CHROME_SIMPLE_INDEX,
     &office_legacy::LOTUS,
     &office_legacy::LOTUS3,
     &office_legacy::QUATTRO,
@@ -1026,6 +1029,12 @@ pub static FORMATS: &[&Format] = &[
     &logs::TRANSCRIPT,
     &logs::AUDIT,
     &logs::VIMINFO,
+    &evidence::EWF,
+    &evidence::AFF,
+    &evidence::LIME,
+    &evidence::KDUMP,
+    &evidence::VMSS,
+    &evidence::VBOX_SAV,
     &misc3::OSM_PBF,
     &misc3::DTED,
     &misc3::NITF,
@@ -1155,6 +1164,7 @@ pub static FORMATS: &[&Format] = &[
     &unixforensics::UTMP,
     &browser::FIREFOX_CACHE2,
     &logs::ACCT,
+    &winforensics::RDP_FILE,
     &winforensics::AUTORUN,
     &winforensics::DESKTOP_INI,
     &models::STL,

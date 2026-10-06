@@ -1965,3 +1965,70 @@ pub(crate) async fn text_or_embedded(cx: &Cx, input: Input, span: Span) -> Resul
     }
     Ok(embedded("Data", input.nested(span)))
 }
+
+// ---------------------------------------------------------------------------
+// Remote Desktop connection files (.rdp)
+
+/// The start of the file as text: UTF-16LE (with BOM) or 8-bit.
+fn rdp_text(data: &[u8]) -> (String, bool) {
+    match data.strip_prefix(b"\xff\xfe") {
+        Some(rest) => (crate::text::utf16(rest, LE), true),
+        None => (crate::text::latin1(data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(data)), false),
+    }
+}
+
+/// A `name:type:value` setting line.
+fn rdp_setting(line: &str) -> Option<(&str, &str, &str)> {
+    let (name, rest) = line.split_once(':')?;
+    let (kind, value) = rest.split_once(':')?;
+    (matches!(kind, "i" | "s" | "b") && !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b' ' || b == b'_'))
+        .then_some((name, kind, value))
+}
+
+fn rdp_probe(h: &Head<'_>) -> bool {
+    let (txt, _) = rdp_text(h.data.get(..2048).unwrap_or(h.data));
+    let first = txt.lines().next().unwrap_or_default();
+    rdp_setting(first.trim_end()).is_some() && txt.contains("full address:s:")
+}
+
+declare_format!(pub RDP_FILE = "rdp-connection", "Remote Desktop connection file (.rdp)", ["rdp"], "application/x-rdp",
+    Probe::Custom(rdp_probe), rdp_file);
+
+async fn rdp_file(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let data = cx.read_avail(file.sub(0, 0x20000)).await?;
+    let (txt, wide) = rdp_text(&data);
+    let unit = if wide { 2u64 } else { 1 };
+    let mut at = if wide { 2u64 } else { 0 };
+    let (mut address, mut user, mut gateway) = (String::new(), String::new(), String::new());
+    for line in txt.split_inclusive('\n') {
+        let len = to_u64(line.chars().map(|c| if wide { c.len_utf16() } else { 1 }).sum::<usize>()).saturating_mul(unit);
+        let span = file.sub(at, len);
+        at = at.saturating_add(len);
+        let Some((name, kind, value)) = rdp_setting(line.trim_end()) else {
+            continue;
+        };
+        match name {
+            "full address" => address = value.to_owned(),
+            "username" => user = value.to_owned(),
+            "gatewayhostname" => gateway = value.to_owned(),
+            _ => {}
+        }
+        let node = Node::new(name.to_owned()).span(span);
+        cx.push(match kind {
+            "i" => node.value(value.parse::<i64>().map_or_else(|_| text(value), |v| Value::Int { value: v, bits: 32 })),
+            "b" => node.value(text(clip(value, 200))).desc("binary (hex)"),
+            _ => node.value(text(value)),
+        })
+        .await;
+    }
+    let mut summary = format!("Remote Desktop connection to {}", if address.is_empty() { "?" } else { &address });
+    if !user.is_empty() {
+        summary.push_str(&format!(" as {user}"));
+    }
+    if !gateway.is_empty() {
+        summary.push_str(&format!(" via {gateway}"));
+    }
+    cx.annotate(summary);
+    Ok(())
+}
