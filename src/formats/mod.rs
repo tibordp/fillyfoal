@@ -208,6 +208,7 @@ pub mod biotext;
 pub mod instruments;
 pub mod geo;
 pub mod eda;
+pub mod cad;
 pub mod devtools;
 pub mod misc3;
 pub mod misc4;
@@ -1101,6 +1102,14 @@ pub static FORMATS: &[&Format] = &[
     &misc5::TWINVQ,
     &misc5::EXS,
     &misc5::PTAB,
+    &cad::STEP,
+    &cad::IGES,
+    &cad::PARASOLID,
+    &cad::JT,
+    &cad::GMSH,
+    &cad::OPENFOAM,
+    &cad::ABAQUS,
+    &cad::LSDYNA,
     // Weak, size-based probes last.
     &misc4::NBT,
     &misc3::HGT,

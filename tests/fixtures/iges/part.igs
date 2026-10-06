@@ -1,0 +1,11 @@
+IGES test file generated for fillyfoal.                                 S      1
+1H,,1H;,7HFILLYFL,8Htest.igs,13HFillyfoal CAD,3H1.0,32,38,6,308,15,7HFILG      1
+LYFL,1.,2,2HMM,1,0.08,15H20240517.103000,1.E-06,100.,6HTester,9HFillyfoaG      2
+l,11,0,15H20240517.103000;                                              G      3
+     110       1       0       1       0       0       0       000000000D      1
+     110       0       0       1       0                    LINE       0D      2
+     116       2       0       1       0       0       0       000000000D      3
+     116       0       0       1       0                   POINT       0D      4
+110,0.,0.,0.,10.,0.,0.;                                                1P      1
+116,5.,5.,0.,0;                                                        3P      2
+S      1G      3D      4P      2                                        T      1

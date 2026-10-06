@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ beam.inp — Abaqus input deck "Cantilever beam test model", 1 *HEADING, 1 *PREPRINT, 1 *PART, 1 *NODE, 1 *ELEMENT, 1 *END PART  [0x0+0x17f]
+    *Heading — 1 data line(s)  [0x0+0x37]
+    *Preprint: "echo=NO, model=NO, history=NO, contact=NO"  [0x37+0x35]
+    *Part: "name=Beam"  [0x6c+0x11]
+    *Node — 3 data line(s)  [0x7d+0x72]
+    *Element: "type=B21" — 2 data line(s)  [0xef+0x23]
+    *End Part  [0x112+0xa]
+    *Material: "name=Steel"  [0x11c+0x16]
+    *Elastic — 1 data line(s)  [0x132+0x17]
+    *Step: "name=Load"  [0x149+0x11]
+    *Static  [0x15a+0x8]
+    *Cload — 1 data line(s)  [0x162+0x13]
+    *End Step  [0x175+0xa]

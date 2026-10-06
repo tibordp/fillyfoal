@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ U — OpenFOAM volVectorField "U" (ascii), 4 top-level entr(ies)  [0x0+0x333]
+  ▾ FoamFile  [0x140+0x6b]
+      version: 2  [0x14f+0x10]
+      format: "ascii"  [0x164+0x12]
+      class: "volVectorField"  [0x17b+0x1b]
+      object: "U"  [0x19b+0xe]
+    dimensions: "[0 1 -1 0 0 0 0]"  [0x1fd+0x21]
+    internalField: "uniform (0 0 0)"  [0x220+0x20]
+  ▾ boundaryField  [0x242+0xf0]
+    ▾ movingWall  [0x256+0x63]
+        type: "fixedValue"  [0x26f+0x1b]
+        value: "uniform (1 0 0)"  [0x293+0x20]
+    ▾ fixedWalls  [0x2be+0x36]
+        type: "noSlip"  [0x2d7+0x17]
+    ▾ frontAndBack  [0x2f9+0x37]
+        type: "empty"  [0x314+0x16]
