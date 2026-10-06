@@ -168,16 +168,6 @@ pub static FORMATS: &[&Format] = &[
     &image::j2k::FORMAT,
     &image::jxl::FORMAT,
     &image::icc::FORMAT,
-    &image::fits::FORMAT,
-    &image::dpx::DPX,
-    &image::dpx::CINEON,
-    &image::texture::ASTC,
-    &image::texture::PVR,
-    &image::texture::VTF,
-    &image::metafile::EMF,
-    &image::metafile::WMF,
-    &image::modern::BPG,
-    &image::modern::FLIF,
     &image::pcx::DCX,
     &image::farbfeld::FORMAT,
     &image::sunras::FORMAT,
@@ -199,7 +189,6 @@ pub static FORMATS: &[&Format] = &[
     &image::tiff::SRW,
     &image::tiff::ORF,
     &image::tiff::RW2,
-    &image::tiff::JXR,
     &image::raw::RAF,
     &image::raw::MRW,
     &image::crw::FORMAT,
@@ -210,6 +199,9 @@ pub static FORMATS: &[&Format] = &[
     &image::tga::FORMAT,
     &image::pcx::FORMAT,
     &image::wbmp::FORMAT,
+    // Also implemented in src/formats/image/ but not registered, because main
+    // has its own versions (graphics.rs, science.rs): fits, dpx, cineon, astc,
+    // pvr, vtf, emf, wmf, bpg, flif, jxr. Swap in whichever is deeper.
     // -- end images --
 
     // -- audio & video --

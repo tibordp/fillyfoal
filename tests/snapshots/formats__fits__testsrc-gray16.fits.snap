@@ -1,17 +1,15 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ testsrc-gray16.fits — Primary, 6×4, BITPIX 16  [0x0+0x1680]
-  ▾ Primary HDU — Primary, 6×4, BITPIX 16  [0x0+0x1680]
-    ▾ Header — 36 cards  [0x0+0xb40]
-        SIMPLE: true  [0x0+0x50]
-        BITPIX: 16  [0x50+0x50]
-        NAXIS: 2  [0xa0+0x50]
-        NAXIS1: 6  [0xf0+0x50]
-        NAXIS2: 4  [0x140+0x50]
-        DATAMIN: 0  [0x190+0x50]
-        DATAMAX: 65535  [0x1e0+0x50]
-        BZERO: 32768  [0x230+0x50]
-        END  [0x280+0x50]
-      Data  [0xb40+0xb40]
+▾ testsrc-gray16.fits — 1 HDU(s); PRIMARY, BITPIX 16, 6×4  [0x0+0x1680]
+  ▾ HDU 0 — PRIMARY, BITPIX 16, 6×4  [0x0+0x1680]
+      SIMPLE: "T"  [0x0+0x50]
+      BITPIX: "16"  [0x50+0x50]
+      NAXIS: "2"  [0xa0+0x50]
+      NAXIS1: "6"  [0xf0+0x50]
+      NAXIS2: "4"  [0x140+0x50]
+      DATAMIN: "0"  [0x190+0x50]
+      DATAMAX: "65535"  [0x1e0+0x50]
+      BZERO: "32768"  [0x230+0x50]
+      Data  [0xb40+0x30]

@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ rect.wmf — WMF, 100×100 units at 1440 per inch, 0 objects  [0x0+0x50]
+▾ rect.wmf — WMF v0x300, 0 objects, 100×100 units at 1440/inch  [0x0+0x50]
   ▾ Placeable header  [0x0+0x16]
       Key: 0x9ac6cdd7  [0x0+0x4]
       Handle: 0  [0x4+0x2]
@@ -13,16 +13,16 @@ expression: "common::explore(&name, &data)"
       Units per inch: 1440  [0xe+0x2]
       Reserved: 0  [0x10+0x4]
       Checksum: 0x52b1  [0x14+0x2]
-  ▾ Header  [0x16+0x12]
-      Type: 1  [0x16+0x2]
-      Header size: 9  [0x18+0x2]
+  ▾ Metafile header  [0x16+0x12]
+      Type: memory (0x1)  [0x16+0x2]
+      Header size (words): 9  [0x18+0x2]
       Version: 0x300  [0x1a+0x2]
-      Size: 29  [0x1c+0x4]
+      File size (words): 29  [0x1c+0x4]
       Number of objects: 0  [0x20+0x2]
-      Largest record: 5  [0x22+0x4]
-      Number of parameters: 0  [0x26+0x2]
+      Largest record (words): 5  [0x22+0x4]
+      Unused: 0  [0x26+0x2]
   ▾ Records  [0x28+0x28]
-      META_SETWINDOWORG — 10 bytes  [0x28+0xa]
-      META_SETWINDOWEXT — 10 bytes  [0x32+0xa]
-      META_RECTANGLE — 14 bytes  [0x3c+0xe]
-      META_EOF — 6 bytes  [0x4a+0x6]
+      META_SETWINDOWORG  [0x28+0xa]
+      META_SETWINDOWEXT  [0x32+0xa]
+      META_RECTANGLE  [0x3c+0xe]
+      META_EOF  [0x4a+0x6]
