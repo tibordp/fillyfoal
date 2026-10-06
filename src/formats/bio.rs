@@ -1509,6 +1509,11 @@ async fn cram_block_node(
         );
     } else if method == 1 {
         cx.emit(embedded("Data (gzip)", input.nested(data)));
+    } else if method == 2 {
+        cx.emit(embedded("Data (bzip2)", input.nested(data)));
+    } else if method == 3 {
+        // htslib's "lzma" blocks are .xz streams.
+        cx.emit(embedded("Data (xz)", input.nested(data)));
     } else if method == 0 {
         cx.emit(Node::new("Data").span(data));
     } else {
