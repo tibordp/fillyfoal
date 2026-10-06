@@ -413,8 +413,6 @@ impl Codec {
             Codec::Lzma2 => Box::new(Streaming(filters::Whole::new(lzma::Lzma2))),
             Codec::LzmaRaw { props, size } => Box::new(Streaming(filters::Whole::new(lzma::LzmaRaw { props: *props, end: *size }))),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
-            Codec::Lz4Frame => Box::new(Streaming(filters::Whole::new(lz::Lz4Frame))),
-            Codec::Bzip2 => Box::new(Streaming(filters::Whole::new(bzip2::Bzip2))),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
