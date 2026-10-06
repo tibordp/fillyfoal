@@ -11,3 +11,4 @@ pub mod consoles2;
 pub mod states;
 pub mod trackers;
 pub mod tapes;
+pub mod floppies;

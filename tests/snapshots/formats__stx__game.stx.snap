@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.stx — Pasti STX v3, 2 tracks, 18 sectors, 8 fuzzy bytes (copy protection)  [0x0+0x1d0]
+    Signature: "RSY"  [0x0+0x4]
+    Version: 3  [0x4+0x2]
+    Tool: Pasti (Atari) (0x1)  [0x6+0x2]
+    Reserved: 0  [0x8+0x2]
+    Tracks: 2  [0xa+0x1]
+    Revision: 2  [0xb+0x1]
+    Reserved: 0  [0xc+0x4]
+    Track 0 side 0: 0x21 [SECTOR_DESCRIPTORS | PROTECTED] — 9 sectors, 6250 MFM bytes, type 0  [0x10+0xe0]
+    Track 0 side 1: 0x21 [SECTOR_DESCRIPTORS | PROTECTED] — 9 sectors, 6250 MFM bytes, type 0, 8 fuzzy bytes  [0xf0+0xe0]

@@ -772,6 +772,14 @@ pub static FORMATS: &[&Format] = &[
     &retro::tapes::SCL,
     &retro::tapes::MSX_CAS,
     &retro::tapes::ATARI_CAR,
+    &retro::floppies::HFE,
+    &retro::floppies::IPF,
+    &retro::floppies::STX,
+    &retro::floppies::IMD,
+    &retro::floppies::TD0,
+    &retro::floppies::A2R,
+    &retro::floppies::MOOF,
+    &retro::floppies::AMIGA_RDB,
     // Weak probes: trailers and text.
     &retro::discs::NRG,
     &retro::discs::CDI,
@@ -788,6 +796,9 @@ pub static FORMATS: &[&Format] = &[
     &retro::tapes::TRD,
     &retro::tapes::ORIC_TAP,
     &retro::tapes::ATARI_ST_PRG,
+    &retro::floppies::SCP,
+    &retro::floppies::DC42,
+    &retro::floppies::D88,
     // -- end retro --
 
     // -- games, 3D, science, e-books, misc --

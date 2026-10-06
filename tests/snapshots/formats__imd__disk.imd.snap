@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.imd — ImageDisk 1.18: 12/03/2020 10:20:30, 2 tracks, 6 sectors (3 compressed, 1 with errors)  [0x0+0x452]
+    Banner: "IMD 1.18: 12/03/2020 10:20:30"  [0x0+0x1e]
+    Comment: "Test disk for fillyfoal"  [0x1f+0x19]
+    Cylinder 0 head 0: 250 kbps MFM (0x5) — 4 sectors of 512 bytes  [0x39+0x40f]
+    Cylinder 0 head 1: 250 kbps MFM (0x5) — 2 sectors of 512 bytes  [0x448+0xa]
