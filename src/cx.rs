@@ -42,12 +42,33 @@ pub(crate) struct SourceEntry {
     pub data: Option<Arc<[u8]>>,
     /// The layout of a piecewise source.
     pub pieces: Option<Arc<Pieces>>,
+    /// A stream decoded on demand, as far as reads reach.
+    pub lazy: Option<Box<LazyInflate>>,
     pub origin: Option<Origin>,
     /// For derived sources: how many parent bytes the decoder consumed, and
     /// why it stopped early, if it did.
     pub consumed: u64,
     pub error: Option<Diagnostic>,
 }
+
+/// State of a lazily inflated source: compressed input read so far, the
+/// resumable decoder, and the output produced so far.
+pub(crate) struct LazyInflate {
+    parent: Span,
+    /// Bytes to skip at the start of the input (the zlib header).
+    skip: usize,
+    input: Vec<u8>,
+    input_eof: bool,
+    out: Vec<u8>,
+    inflater: crate::codec::inflate::Inflate,
+    done: bool,
+}
+
+/// Compressed bytes kept ahead of the decoder, so it never runs out of input
+/// in the middle of a symbol (an output step consumes far less than this).
+const LOOKAHEAD: usize = 64 * 1024;
+/// Output produced per decoder step.
+const LAZY_STEP: usize = 16 * 1024;
 
 pub(crate) struct Shared {
     pub sources: Vec<SourceEntry>,
@@ -95,6 +116,9 @@ impl Shared {
                 .get(crate::bytes::to_usize(start)..crate::bytes::to_usize(end))
                 .unwrap_or_default()
                 .to_vec());
+        }
+        if entry.lazy.is_some() {
+            return self.read_lazy(source, start, end, depth);
         }
         let Some(pieces) = entry.pieces.clone() else {
             return self
@@ -152,6 +176,67 @@ impl Shared {
         } else {
             Err(missing)
         }
+    }
+
+    /// Reads from a lazily inflated source, decoding as far as `end`.
+    fn read_lazy(
+        &mut self,
+        source: SourceId,
+        start: u64,
+        end: u64,
+        depth: u32,
+    ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
+        let index = crate::bytes::to_usize(source.0.into());
+        let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
+            return Ok(Vec::new());
+        };
+        let before = st.out.len().saturating_add(st.input.len());
+        let limit = crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
+        let result = loop {
+            if to_u64(st.out.len()) >= end || st.done {
+                let from = crate::bytes::to_usize(start).min(st.out.len());
+                let to = crate::bytes::to_usize(end).min(st.out.len());
+                break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
+            }
+            let pending = st.input.len().saturating_sub(st.skip.saturating_add(st.inflater.consumed()));
+            if !st.input_eof && pending < LOOKAHEAD {
+                let fed = to_u64(st.input.len());
+                let want = (LOOKAHEAD as u64).min(st.parent.len.saturating_sub(fed));
+                if want == 0 {
+                    st.input_eof = true;
+                    continue;
+                }
+                let from = st.parent.offset.saturating_add(fed);
+                match self.read_range(st.parent.source, from, from.saturating_add(want), depth.saturating_add(1)) {
+                    Ok(bytes) => {
+                        if to_u64(bytes.len()) < want {
+                            st.input_eof = true;
+                        }
+                        st.input.extend_from_slice(&bytes);
+                    }
+                    Err(missing) => break Err(missing),
+                }
+                continue;
+            }
+            let LazyInflate { input, out, inflater, skip, done, .. } = &mut *st;
+            let body = input.get(*skip..).unwrap_or_default();
+            match inflater.step(body, out, LAZY_STEP, out.len().saturating_add(limit)) {
+                Ok(crate::codec::inflate::Step::More) => {}
+                Ok(crate::codec::inflate::Step::Done) | Err(_) => *done = true,
+            }
+        };
+        // Once the stream has ended, its real length is known.
+        let finished_len = st.done.then(|| to_u64(st.out.len()));
+        let after = st.out.len().saturating_add(st.input.len());
+        self.derived_bytes = self.derived_bytes.saturating_add(to_u64(after.saturating_sub(before)));
+        self.charge(to_u64(after.saturating_sub(before)) >> 12);
+        if let Some(entry) = self.sources.get_mut(index) {
+            entry.lazy = Some(st);
+            if let Some(len) = finished_len {
+                entry.len = entry.len.min(len);
+            }
+        }
+        result
     }
 
     /// Resolves a span of any source to spans of non-piecewise sources.
@@ -321,6 +406,11 @@ impl Cx {
         .at(span))
     }
 
+    /// Whether `source` is decoded on demand (reading its end decodes it all).
+    pub fn is_lazy(&self, source: SourceId) -> bool {
+        lock(&self.shared).source(source).is_some_and(|s| s.lazy.is_some())
+    }
+
     /// A previously derived source with this origin, if any. Dissectors use
     /// this to avoid decoding the same bytes twice (e.g. after a collapse).
     pub fn derived(&self, origin: Origin) -> Option<crate::codec::Decoded> {
@@ -363,6 +453,7 @@ impl Cx {
             len,
             data: Some(data.into()),
             pieces: None,
+            lazy: None,
             origin: Some(origin),
             consumed,
             error: error.clone(),
@@ -405,6 +496,7 @@ impl Cx {
             len,
             data: None,
             pieces: Some(Arc::new(Pieces { spans, starts })),
+            lazy: None,
             origin: Some(origin),
             consumed: 0,
             error: None,
@@ -435,6 +527,42 @@ impl Cx {
             sh.memo.remove(&key);
         }
         sh.memo.insert((span, kind), value);
+    }
+
+    /// Registers `span` (raw DEFLATE, or zlib-wrapped) as a source that is
+    /// decoded on demand: reading its first bytes decodes only those. `len` is
+    /// the decoded size recorded by the container; reads beyond what the
+    /// stream actually produces come back short. Memoized like other derived
+    /// sources; decoded bytes count against `Limits::max_derived`.
+    pub fn inflate_lazy(&self, span: Span, zlib: bool, len: u64) -> Result<Span> {
+        let origin = Origin {
+            parent: span,
+            transform: if zlib { "zlib (lazy)" } else { "deflate (lazy)" },
+        };
+        if let Some(found) = self.derived(origin) {
+            return Ok(found.span);
+        }
+        let mut sh = lock(&self.shared);
+        let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
+        sh.sources.push(SourceEntry {
+            len,
+            data: None,
+            pieces: None,
+            lazy: Some(Box::new(LazyInflate {
+                parent: span,
+                skip: if zlib { 2 } else { 0 },
+                input: Vec::new(),
+                input_eof: false,
+                out: Vec::new(),
+                inflater: crate::codec::inflate::Inflate::new(),
+                done: false,
+            })),
+            origin: Some(origin),
+            consumed: 0,
+            error: None,
+        });
+        sh.derived.insert(origin, id);
+        Ok(Span::new(id, 0, len))
     }
 
     /// Charges one unit of work, suspending first if the budget is exhausted.

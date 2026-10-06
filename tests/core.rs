@@ -64,3 +64,23 @@ fn piecewise_sources_reassemble_and_resolve() {
     }
     let _ = Limits::default();
 }
+
+/// A tarball whose middle member is 2 MiB of zeros: listing the first entry
+/// must not decompress the whole stream.
+#[test]
+fn large_members_are_decompressed_lazily() {
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/gzip/large-member.tar.gz")).unwrap();
+    let mut host = Host::with_chunk(data, 4096);
+    host.session.expand(host.root, 100);
+    host.run();
+    let content = host.child(host.root, "Content").expect("content node");
+    host.session.expand(content, 1);
+    host.run();
+    let decoded = host.session.derived_bytes();
+    assert!(decoded < 512 << 10, "decoded {decoded} bytes to show one entry");
+    let rendered = host.render();
+    assert!(rendered.contains("a.txt"), "{rendered}");
+    // Paging through everything does reach the end.
+    host.explore(content, 4, 100);
+    assert!(host.render().contains("z.txt"));
+}

@@ -253,6 +253,7 @@ impl Session {
             len,
             data: None,
             pieces: None,
+            lazy: None,
             origin: None,
             consumed: 0,
             error: None,
@@ -274,6 +275,11 @@ impl Session {
             slot.len = len;
         }
         sh.cache.truncate(source, len);
+    }
+
+    /// Bytes currently held by derived sources (decoded or reassembled data).
+    pub fn derived_bytes(&self) -> u64 {
+        lock(&self.shared).derived_bytes
     }
 
     /// Where a derived source came from (`None` for host sources).
