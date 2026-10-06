@@ -1,0 +1,23 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20230302113000
+Username: EXAMPLE\alice
+RunAs User: EXAMPLE\alice
+Configuration Name:
+Machine: WS01 (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 4321
+PSVersion: 5.1.19041.2364
+**********************
+Transcript started, output file is C:\Users\alice\Documents\PowerShell_transcript.WS01.abc123.20230302113000.txt
+PS C:\Users\alice> whoami
+example\alice
+PS C:\Users\alice> Get-ChildItem C:\Temp | Select-Object Name
+Name
+----
+notes.txt
+PS C:\Users\alice> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20230302113512
+**********************

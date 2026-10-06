@@ -175,6 +175,7 @@ pub mod winforensics;
 pub mod unixforensics;
 pub mod office_legacy;
 pub mod windiag;
+pub mod logs;
 // -- end misc --
 
 // -- text --
@@ -866,9 +867,15 @@ pub static FORMATS: &[&Format] = &[
     &windiag::MINIDUMP,
     &windiag::WER,
     &windiag::PIF,
+    &logs::SETUPAPI,
+    &logs::W3C,
+    &logs::TRANSCRIPT,
+    &logs::AUDIT,
+    &logs::VIMINFO,
     // Weak, size-based probes last.
     &unixforensics::UTMP,
     &browser::FIREFOX_CACHE2,
+    &logs::ACCT,
     &winforensics::AUTORUN,
     &winforensics::DESKTOP_INI,
     &models::STL,
