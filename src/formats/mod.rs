@@ -83,6 +83,22 @@ pub mod voc;
 pub mod vorbis;
 pub mod w64;
 pub mod wavpack;
+// video & containers (isobmff/matroska/ts/...)
+pub mod annexb;
+pub mod asf;
+pub mod flv;
+pub mod gamevideo;
+pub mod isobmff;
+pub mod ivf;
+pub mod matroska;
+pub mod mpeg;
+pub mod mxf;
+pub mod rad;
+pub mod rawvideo;
+pub mod realmedia;
+pub mod swf;
+pub mod vidutil;
+pub mod y4m;
 // -- end audio & video --
 
 // -- documents & data --
@@ -112,7 +128,6 @@ pub mod prefetch;
 pub mod recyclebin;
 pub mod regf;
 pub mod winhelp;
-pub mod swf;
 pub mod terminfo;
 pub mod thumbcache;
 // -- end documents --
@@ -363,6 +378,51 @@ pub static FORMATS: &[&Format] = &[
     &dts::FORMAT,
     &mpa::FORMAT,
     &id3::FORMAT,
+    // video & containers (isobmff/matroska/ts/...)
+    &isobmff::CR3,
+    &isobmff::HEIF,
+    &isobmff::AVIF,
+    &isobmff::JP2,
+    &isobmff::JPX,
+    &isobmff::MJ2,
+    &isobmff::THREE_GP,
+    &isobmff::THREE_G2,
+    &isobmff::M4A,
+    &isobmff::M4V,
+    &isobmff::MOV,
+    &isobmff::MP4,
+    &matroska::WEBM,
+    &matroska::MKV,
+    &flv::FORMAT,
+    &mpeg::ts::M2TS,
+    &mpeg::ts::FORMAT,
+    &mpeg::ps::MPEG2_PS,
+    &mpeg::ps::MPEG1_SYSTEM,
+    &mpeg::video::MPEG2_VIDEO,
+    &mpeg::video::MPEG1_VIDEO,
+    &mpeg::mpeg4::FORMAT,
+    &annexb::HEVC,
+    &annexb::H264,
+    &ivf::FORMAT,
+    &ivf::OBU,
+    &y4m::FORMAT,
+    &asf::WMV,
+    &asf::WMA,
+    &asf::ASF,
+    &realmedia::FORMAT,
+    &rad::BINK,
+    &rad::SMACKER,
+    &mxf::FORMAT,
+    &swf::FORMAT,
+    &gamevideo::ROQ,
+    &gamevideo::FILM,
+    &gamevideo::SMJPEG,
+    &gamevideo::FLIC,
+    &gamevideo::MVE,
+    &gamevideo::THP,
+    &rawvideo::DIRAC,
+    &rawvideo::DNXHD,
+    &rawvideo::H263,
     // -- end audio & video --
 
     // -- documents & data --
@@ -402,7 +462,6 @@ pub static FORMATS: &[&Format] = &[
     &git::PACK,
     &git::PACK_INDEX,
     &git::INDEX,
-    &swf::FORMAT,
     &chm::FORMAT,
     &winhelp::FORMAT,
     &dsstore::FORMAT,
