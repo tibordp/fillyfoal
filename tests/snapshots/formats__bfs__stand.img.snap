@@ -44,8 +44,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Accessed: 2024-05-17 13:37:42 UTC  [0x264+0x4]
           Modified: 2024-05-17 13:37:42 UTC  [0x268+0x4]
           Changed: 2024-05-17 13:37:42 UTC  [0x26c+0x4]
-      ▾ Content — 15 bytes  [0x800+0xf]
-          Data  [0x800+0xf]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x800+0xf]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x800+0xf]
+            Line 1: "hello from bfs"  [0x800+0xe]
     ▾ unix — 604 bytes, inode 4  [0x630+0x10]
       ▾ Inode  [0x280+0x40]
           Inode number: 4  [0x280+0x2]

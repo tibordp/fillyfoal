@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fat32.img — FAT32 filesystem "FAT32 TINY", 48 KiB, 62 clusters of 512 bytes  [0x0+0xc000]
   ▾ Boot sector (BPB) — OEM "MSWIN4.1"  [0x0+0x200]
@@ -115,6 +115,9 @@ expression: "common::explore(&name, &data)"
           File size: 12 — 12 bytes  [0x44bc+0x4]
       ▾ Clusters — contiguous, 12 bytes
           Fragment 0 — file offset 0x0, 12 bytes  [0x4c00+0xc]
-      ▾ Content — 12 bytes  [0x4c00+0xc]
-          Data  [0x4c00+0xc]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x4c00+0xc]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x4c00+0xc]
+            Line 1: "key = value"  [0x4c00+0xb]
     Data region — 31 KiB  [0x4400+0x7c00]

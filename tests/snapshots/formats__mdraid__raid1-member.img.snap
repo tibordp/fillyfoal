@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ raid1-member.img — Linux md RAID1 member "fixture:0" (device 0 of 2), 24 KiB  [0x0+0x8000]
   ▾ Superblock — version 1.2  [0x1000+0x100]
@@ -84,6 +84,9 @@ expression: "common::explore(&name, &data)"
             File size: 14 — 14 bytes  [0x263c+0x4]
         ▾ Clusters — contiguous, 14 bytes
             Fragment 0 — file offset 0x0, 14 bytes  [0x2800+0xe]
-        ▾ Content — 14 bytes  [0x2800+0xe]
-            Data  [0x2800+0xe]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [0x2800+0xe]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x2800+0xe]
+              Line 1: "partition one"  [0x2800+0xd]
       Data region — 22 KiB  [0x2800+0x5800]

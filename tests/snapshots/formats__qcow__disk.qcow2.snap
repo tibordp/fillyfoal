@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ disk.qcow2 — QCOW3 (qcow2 v3) image, 32 KiB virtual, 4 KiB clusters, 1 snapshots  [0x0+0xd000]
   ▾ Header  [0x0+0x48]
@@ -97,8 +97,11 @@ expression: "common::explore(&name, &data)"
                 File size: 22 — 22 bytes  [#2:0x83c+0x4]
             ▾ Clusters — contiguous, 22 bytes
                 Fragment 0 — file offset 0x0, 22 bytes  [#2:0xa00+0x16]
-            ▾ Content — 22 bytes  [#2:0xa00+0x16]
-                Data  [#2:0xa00+0x16]
+            ▾ Content — UTF-8 text, LF line endings, 1 line  [#2:0xa00+0x16]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [#2:0xa00+0x16]
+                  Line 1: "inside a virtual disk"  [#2:0xa00+0x15]
           ▾ FAR.TXT — 680 bytes, modified 2024-05-17 13:37:42  [#2:0x840+0x20]
             ▾ Directory entry  [#2:0x840+0x20]
                 Short name: "FAR.TXT"  [#2:0x840+0xb]
@@ -113,7 +116,29 @@ expression: "common::explore(&name, &data)"
                 File size: 680 — 680 bytes  [#2:0x85c+0x4]
             ▾ Clusters — contiguous, 680 bytes
                 Fragment 0 — file offset 0x0, 680 bytes  [#2:0x4200+0x2a8]
-            ▾ Content — 680 bytes  [#2:0x4200+0x2a8]
-                Data  [#2:0x4200+0x2a8]
+            ▾ Content — UTF-8 text, LF line endings, 20 lines  [#2:0x4200+0x2a8]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 20 LF, 0 CRLF, 0 CR
+              ▾ Lines — 20 lines  [#2:0x4200+0x2a8]
+                  Line 1: "stored near the end of the volume"  [#2:0x4200+0x21]
+                  Line 2: "stored near the end of the volume"  [#2:0x4222+0x21]
+                  Line 3: "stored near the end of the volume"  [#2:0x4244+0x21]
+                  Line 4: "stored near the end of the volume"  [#2:0x4266+0x21]
+                  Line 5: "stored near the end of the volume"  [#2:0x4288+0x21]
+                  Line 6: "stored near the end of the volume"  [#2:0x42aa+0x21]
+                  Line 7: "stored near the end of the volume"  [#2:0x42cc+0x21]
+                  Line 8: "stored near the end of the volume"  [#2:0x42ee+0x21]
+                  Line 9: "stored near the end of the volume"  [#2:0x4310+0x21]
+                  Line 10: "stored near the end of the volume"  [#2:0x4332+0x21]
+                  Line 11: "stored near the end of the volume"  [#2:0x4354+0x21]
+                  Line 12: "stored near the end of the volume"  [#2:0x4376+0x21]
+                  Line 13: "stored near the end of the volume"  [#2:0x4398+0x21]
+                  Line 14: "stored near the end of the volume"  [#2:0x43ba+0x21]
+                  Line 15: "stored near the end of the volume"  [#2:0x43dc+0x21]
+                  Line 16: "stored near the end of the volume"  [#2:0x43fe+0x21]
+                  Line 17: "stored near the end of the volume"  [#2:0x4420+0x21]
+                  Line 18: "stored near the end of the volume"  [#2:0x4442+0x21]
+                  Line 19: "stored near the end of the volume"  [#2:0x4464+0x21]
+                  Line 20: "stored near the end of the volume"  [#2:0x4486+0x21]
           Data region — 22 KiB  [#2:0xa00+0x5800]
       Boot signature: 0xaa55  [#2:0x1fe+0x2]

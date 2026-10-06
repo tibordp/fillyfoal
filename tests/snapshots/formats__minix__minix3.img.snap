@@ -44,8 +44,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Zones (7 direct, indirect, double, triple): 07 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x1058+0x28]
       ▾ Zones — contiguous, 17 bytes
           Fragment 0 — file offset 0x0, 17 bytes  [0x1c00+0x11]
-      ▾ Content — 17 bytes  [0x1c00+0x11]
-          Data  [0x1c00+0x11]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1c00+0x11]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x1c00+0x11]
+            Line 1: "hello from minix"  [0x1c00+0x10]
     ▾ Sub directory — drwxr-xr-x, inode 3  [0x18c0+0x40]
       ▾ Inode 3  [0x1080+0x40]
           Mode: 0x41ed — drwxr-xr-x  [0x1080+0x2]
@@ -70,8 +73,11 @@ expression: "common::explore(&display_name(&path), &data)"
             Zones (7 direct, indirect, double, triple): 09 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x10d8+0x28]
         ▾ Zones — contiguous, 12 bytes
             Fragment 0 — file offset 0x0, 12 bytes  [0x2400+0xc]
-        ▾ Content — 12 bytes  [0x2400+0xc]
-            Data  [0x2400+0xc]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [0x2400+0xc]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x2400+0xc]
+              Line 1: "nested file"  [0x2400+0xb]
     ▾ fragmented.bin — -rw-------, inode 5  [0x1900+0x40]
       ▾ Inode 5  [0x1100+0x40]
           Mode: 0x8180 — -rw-------  [0x1100+0x2]

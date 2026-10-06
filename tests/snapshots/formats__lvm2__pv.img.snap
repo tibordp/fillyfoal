@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ pv.img — LVM2 physical volume of volume group "fixture_vg", 44 KiB  [0x0+0xb000]
   ▾ Label  [0x200+0x20]
@@ -69,6 +69,9 @@ expression: "common::explore(&name, &data)"
             File size: 14 — 14 bytes  [#1:0x63c+0x4]
         ▾ Clusters — contiguous, 14 bytes
             Fragment 0 — file offset 0x0, 14 bytes  [#1:0x800+0xe]
-        ▾ Content — 14 bytes  [#1:0x800+0xe]
-            Data  [#1:0x800+0xe]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [#1:0x800+0xe]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#1:0x800+0xe]
+              Line 1: "partition one"  [#1:0x800+0xd]
       Data region — 22 KiB  [#1:0x800+0x5800]

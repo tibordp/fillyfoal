@@ -32,5 +32,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: blob (0x3)
         Size: 3
         Compressed data — zlib, 11 bytes  [0xeb+0xb]
-      ▾ Content — 3 bytes  [#3:0x0+0x3]
-          Data  [#3:0x0+0x3]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#3:0x0+0x3]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#3:0x0+0x3]
+            Line 1: "hi"  [#3:0x0+0x2]

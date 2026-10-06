@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ fat12.img — FAT12 filesystem "FIXTURE", 64 KiB, 121 clusters of 512 bytes  [0x0+0x10000]
   ▾ Boot sector (BPB) — OEM "MSWIN4.1"  [0x0+0x200]
@@ -57,8 +57,11 @@ expression: "common::explore(&name, &data)"
           File size: 25 — 25 bytes  [0x63c+0x4]
       ▾ Clusters — contiguous, 25 bytes
           Fragment 0 — file offset 0x0, 25 bytes  [0xe00+0x19]
-      ▾ Content — 25 bytes  [0xe00+0x19]
-          Data  [0xe00+0x19]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0xe00+0x19]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0xe00+0x19]
+            Line 1: "Hello from a FAT volume!"  [0xe00+0x18]
     ▾ A long file name.txt — 81 bytes, modified 2024-05-17 13:37:42  [0x640+0x60]
       ▾ Long name entries — 2 entries  [0x640+0x40]
         ▾ Long name entry  [0x640+0x20]
@@ -92,8 +95,13 @@ expression: "common::explore(&name, &data)"
           File size: 81 — 81 bytes  [0x69c+0x4]
       ▾ Clusters — contiguous, 81 bytes
           Fragment 0 — file offset 0x0, 81 bytes  [0x1000+0x51]
-      ▾ Content — 81 bytes  [0x1000+0x51]
-          Data  [0x1000+0x51]
+      ▾ Content — UTF-8 text, LF line endings, 3 lines  [0x1000+0x51]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+        ▾ Lines — 3 lines  [0x1000+0x51]
+            Line 1: "This file has a long name."  [0x1000+0x1a]
+            Line 2: "This file has a long name."  [0x101b+0x1a]
+            Line 3: "This file has a long name."  [0x1036+0x1a]
     ▾ readme.md — 9 bytes, modified 2024-05-17 13:37:42  [0x6a0+0x20]
       ▾ Directory entry  [0x6a0+0x20]
           Short name: "README.MD"  [0x6a0+0xb]
@@ -108,8 +116,11 @@ expression: "common::explore(&name, &data)"
           File size: 9 — 9 bytes  [0x6bc+0x4]
       ▾ Clusters — contiguous, 9 bytes
           Fragment 0 — file offset 0x0, 9 bytes  [0x1200+0x9]
-      ▾ Content — 9 bytes  [0x1200+0x9]
-          Data  [0x1200+0x9]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1200+0x9]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x1200+0x9]
+            Line 1: "# readme"  [0x1200+0x8]
     ▾ Sub directory — directory, modified 2024-05-17 13:37:42  [0x6c0+0x60]
       ▾ Directory entry  [0x700+0x20]
           Short name: "SUBDIR"  [0x700+0xb]
@@ -160,8 +171,11 @@ expression: "common::explore(&name, &data)"
             File size: 12 — 12 bytes  [0x145c+0x4]
         ▾ Clusters — contiguous, 12 bytes
             Fragment 0 — file offset 0x0, 12 bytes  [0x1600+0xc]
-        ▾ Content — 12 bytes  [0x1600+0xc]
-            Data  [0x1600+0xc]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1600+0xc]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x1600+0xc]
+              Line 1: "nested file"  [0x1600+0xb]
       ▾ nested long name.md — 11 bytes, modified 2024-05-17 13:37:42  [0x1460+0x60]
         ▾ Long name entries — 2 entries  [0x1460+0x40]
           ▾ Long name entry  [0x1460+0x20]
@@ -195,8 +209,11 @@ expression: "common::explore(&name, &data)"
             File size: 11 — 11 bytes  [0x14bc+0x4]
         ▾ Clusters — contiguous, 11 bytes
             Fragment 0 — file offset 0x0, 11 bytes  [0x1800+0xb]
-        ▾ Content — 11 bytes  [0x1800+0xb]
-            Data  [0x1800+0xb]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [0x1800+0xb]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [0x1800+0xb]
+              Line 1: "*markdown*"  [0x1800+0xa]
     ▾ FRAG.GZ — 1.8 KiB, modified 2024-05-17 13:37:42  [0x720+0x20]
       ▾ Directory entry  [0x720+0x20]
           Short name: "FRAG.GZ"  [0x720+0xb]

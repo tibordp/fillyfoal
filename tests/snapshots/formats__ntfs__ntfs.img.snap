@@ -629,8 +629,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Name: "hello.txt"  [#13:0xda+0x12]
       ▾ $DATA — resident, 17 bytes  [#13:0xf0+0x30]
           Value — 17 bytes  [#13:0x108+0x11]
-      ▾ Content — 17 bytes  [#13:0x108+0x11]
-          Data  [#13:0x108+0x11]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#13:0x108+0x11]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#13:0x108+0x11]
+            Line 1: "Hello from NTFS!"  [#13:0x108+0x10]
     ▾ Record 17 — fragmented.bin  [0x6400+0x400]
       ▾ Header  [#14:0x0+0x30]
           Magic: "FILE"  [#14:0x0+0x4]
@@ -777,8 +780,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Name: "nested.txt"  [#16:0xda+0x14]
       ▾ $DATA — resident, 12 bytes  [#16:0xf0+0x28]
           Value — 12 bytes  [#16:0x108+0xc]
-      ▾ Content — 12 bytes  [#16:0x108+0xc]
-          Data  [#16:0x108+0xc]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#16:0x108+0xc]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#16:0x108+0xc]
+            Line 1: "nested file"  [#16:0x108+0xb]
     ▾ Record 20 — sparse.bin  [0x7000+0x400]
       ▾ Header  [#17:0x0+0x30]
           Magic: "FILE"  [#17:0x0+0x4]
@@ -1507,8 +1513,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Name: "hello.txt"  [#13:0xda+0x12]
       ▾ $DATA — resident, 17 bytes  [#13:0xf0+0x30]
           Value — 17 bytes  [#13:0x108+0x11]
-      ▾ Content — 17 bytes  [#13:0x108+0x11]
-          Data  [#13:0x108+0x11]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#13:0x108+0x11]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#13:0x108+0x11]
+            Line 1: "Hello from NTFS!"  [#13:0x108+0x10]
     ▾ sparse.bin — 1.5 KiB, record 20  [#22:0x2b0+0x56]
       ▾ Header  [#17:0x0+0x30]
           Magic: "FILE"  [#17:0x0+0x4]
@@ -1644,5 +1653,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Name: "nested.txt"  [#16:0xda+0x14]
         ▾ $DATA — resident, 12 bytes  [#16:0xf0+0x28]
             Value — 12 bytes  [#16:0x108+0xc]
-        ▾ Content — 12 bytes  [#16:0x108+0xc]
-            Data  [#16:0x108+0xc]
+        ▾ Content — UTF-8 text, LF line endings, 1 line  [#16:0x108+0xc]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+          ▾ Lines — 1 line  [#16:0x108+0xc]
+              Line 1: "nested file"  [#16:0x108+0xb]

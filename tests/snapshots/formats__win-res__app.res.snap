@@ -3,8 +3,10 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ app.res — 2 resources  [0x0+0x248]
-  ▾ RT_MANIFEST MANIFEST — 32 bytes, language 0x0409  [0x50+0x20] → 0x20+0x30
-      ! unsupported: unrecognized format [0x50+0x20]
+  ▾ RT_MANIFEST MANIFEST — XML document, root <assembly>  [0x50+0x20] → 0x20+0x30
+    ▾ XML declaration  [0x50+0x15]
+        Version: "1.0"  [0x5f+0x3]
+      assembly  [0x65+0xb]
   ▾ RT_RCDATA LOGO — 32×24, 8-bit RGB  [0x98+0x1ad] → 0x70+0x28
       Signature  [0x98+0x8]
     ▾ IHDR — 32×24, 8-bit RGB  [0xa0+0x19]
@@ -68,5 +70,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Type: "IEND" — critical, public, unsafe to copy  [0x236+0x4]
         Data  [0x23a+0x0]
         CRC: 0xae426082 — valid  [0x23a+0x4]
-    ▾ Trailing data — 0x7 bytes after the end chunk  [0x23e+0x7]
-        ! unsupported: unrecognized format [0x23e+0x7]
+    ▾ Trailing data — UTF-8 text, 1 line  [0x23e+0x7]
+        Encoding: "UTF-8"
+        Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+      ▾ Lines — 1 line  [0x23e+0x7]
+          Line 1: "TRAILER"  [0x23e+0x7]

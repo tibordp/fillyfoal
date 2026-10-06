@@ -6,8 +6,15 @@ expression: "common::explore(&display_name(&path), &data)"
     Magic: "nix-archive-1"  [0x0+0x18]
   ▾ / — 3 entries → 0x18+0x510
     ▾ bin/ — 1 entries → 0xa0+0x138
-      ▾ hello — 18 bytes, executable  [0x190+0x12] → 0x128+0x90
-          ! unsupported: unrecognized format [0x190+0x12]
+      ▾ hello — Shell script (/bin/sh), 2 lines  [0x190+0x12] → 0x128+0x90
+        ▾ Interpreter line: "#!/bin/sh"  [0x190+0x9]
+            Interpreter: "/bin/sh"  [0x192+0x7]
+            Language: "Shell"
+          Encoding: "UTF-8"
+          Line endings: "LF" — 2 LF, 0 CRLF, 0 CR
+        ▾ Lines — 2 lines  [0x190+0x12]
+            Line 1: "#!/bin/sh"  [0x190+0x9]
+            Line 2: "echo hi"  [0x19a+0x7]
     ▾ logo.png — 32×24, 8-bit RGB  [0x280+0x1ad] → 0x238+0x208
         Signature  [0x280+0x8]
       ▾ IHDR — 32×24, 8-bit RGB  [0x288+0x19]
@@ -71,6 +78,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Type: "IEND" — critical, public, unsafe to copy  [0x41e+0x4]
           Data  [0x422+0x0]
           CRC: 0xae426082 — valid  [0x422+0x4]
-      ▾ Trailing data — 0x7 bytes after the end chunk  [0x426+0x7]
-          ! unsupported: unrecognized format [0x426+0x7]
+      ▾ Trailing data — UTF-8 text, 1 line  [0x426+0x7]
+          Encoding: "UTF-8"
+          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [0x426+0x7]
+            Line 1: "TRAILER"  [0x426+0x7]
       link — → bin/hello → 0x4a0+0x68

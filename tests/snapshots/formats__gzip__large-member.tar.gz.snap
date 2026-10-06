@@ -32,8 +32,11 @@ expression: "common::explore(&display_name(&path), &data)"
           Device major: 0  [#1:0x149+0x8]
           Device minor: 0  [#1:0x151+0x8]
           Prefix: ""  [#1:0x159+0x9b]
-      ▾ Content — 6 bytes  [#1:0x200+0x6]
-          ! unsupported: unrecognized format [#1:0x200+0x6]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#1:0x200+0x6]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x200+0x6]
+            Line 1: "hello"  [#1:0x200+0x5]
     ▾ zeros.bin — 2.0 MiB, -rw-r--r--  [#1:0x400+0x200200]
       ▾ Header — ustar  [#1:0x400+0x200]
           Name: "zeros.bin"  [#1:0x400+0x64]
@@ -72,6 +75,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Device major: 0  [#1:0x200749+0x8]
           Device minor: 0  [#1:0x200751+0x8]
           Prefix: ""  [#1:0x200759+0x9b]
-      ▾ Content — 6 bytes  [#1:0x200800+0x6]
-          ! unsupported: unrecognized format [#1:0x200800+0x6]
+      ▾ Content — UTF-8 text, LF line endings, 1 line  [#1:0x200800+0x6]
+          Encoding: "UTF-8"
+          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+        ▾ Lines — 1 line  [#1:0x200800+0x6]
+            Line 1: "world"  [#1:0x200800+0x5]
       End of archive — 2 zero blocks  [#1:0x200a00+0x400]
