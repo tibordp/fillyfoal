@@ -44,6 +44,7 @@ pub mod mz;
 pub mod ne;
 pub mod ocaml;
 pub mod omf;
+pub mod opcache;
 pub mod pdb;
 pub mod pe;
 pub mod pef;
@@ -205,6 +206,7 @@ pub static FORMATS: &[&Format] = &[
     &fatbin::FORMAT,
     &elc::FORMAT,
     &il2cpp::FORMAT,
+    &opcache::FORMAT,
     &pdb::FORMAT,
     &spirv::FORMAT,
     &dxbc::FORMAT,
