@@ -25,6 +25,7 @@ pub mod android;
 pub mod coff;
 pub mod elf;
 pub mod java;
+pub mod lua;
 pub mod macho;
 pub mod pe;
 pub mod pyc;
@@ -167,6 +168,7 @@ pub static FORMATS: &[&Format] = &[
     &coff::FORMAT,
     &coff::IMPORT,
     &pyc::FORMAT,
+    &lua::FORMAT,
     // -- end executables --
 
     // -- images --
