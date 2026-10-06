@@ -209,6 +209,7 @@ pub mod misc5;
 pub mod misc6;
 pub mod misc7;
 pub mod misc8;
+pub mod misc9;
 // -- end misc --
 
 // -- ml models & mobile platforms --
@@ -1109,7 +1110,25 @@ pub static FORMATS: &[&Format] = &[
     &misc8::XP3,
     &misc8::ALLEGRO,
     &misc8::RPYC,
+    &misc9::BFRES,
+    &misc9::BNTX,
+    &misc9::MSBT,
+    &misc9::CGFX,
+    &misc9::J3D,
+    &misc9::RARC,
+    &misc9::TPL,
+    &misc9::BRRES,
+    &misc9::GIM,
+    &misc9::GXT,
+    &misc9::RCO,
+    &misc9::NPD,
+    &misc9::XDBF,
+    &misc9::XPR,
+    &misc9::XACT,
+    &misc9::SEGA_TEXTURE,
+    &misc9::NINJA,
     // Weak, size-based probes last.
+    &misc9::BYML,
     &misc6::SQUEEZE,
     &misc6::CRUNCH,
     &misc4::NBT,

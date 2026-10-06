@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bmd — J3D model (J3D2bmd3), 3 sections: INF1, VTX1, SHP1  [0x0+0x68]
+    Signature: "J3D2bmd3"  [0x0+0x8]
+    File size: 104  [0x8+0x4]
+    Sections: 3  [0xc+0x4]
+    Subversion: "SVR3"  [0x10+0x4]
+    INF1 — 16 bytes  [0x20+0x18]
+    VTX1 — 24 bytes  [0x38+0x20]
+    SHP1 — 8 bytes  [0x58+0x10]

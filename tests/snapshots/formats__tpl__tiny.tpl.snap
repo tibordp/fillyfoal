@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.tpl — TPL texture library, 1 images  [0x0+0x60]
+    Signature  [0x0+0x4]
+    Images: 1  [0x4+0x4]
+    Image 0 — 4×4 RGB565  [0x14+0x24] → 0x40+0x0
