@@ -494,3 +494,268 @@ async fn flic_frame(cx: Cx, span: Span) -> Result<()> {
     f.u16("Height override").emit()?;
     flic_chunks(&cx, span.tail(16), 1).await
 }
+
+// ---------------------------------------------------------------------------
+// Interplay MVE
+
+const MVE_MAGIC: &[u8] = b"Interplay MVE File\x1a\x00\x1a\x00\x00\x01\x33\x11";
+
+pub static MVE: Format = Format {
+    name: "mve",
+    title: "Interplay MVE video",
+    extensions: &["mve"],
+    mime: "video/x-mve",
+    probe: Probe::Magic(&[(0, MVE_MAGIC)]),
+    dissect: crate::expander!(dissect_mve: Input),
+};
+
+const MVE_CHUNKS: EnumTable = &[
+    (0, "Init audio"),
+    (1, "Audio only"),
+    (2, "Init video"),
+    (3, "Video"),
+    (4, "Shutdown"),
+    (5, "End"),
+];
+
+const MVE_OPCODES: EnumTable = &[
+    (0x00, "end of stream"),
+    (0x01, "end of chunk"),
+    (0x02, "create timer"),
+    (0x03, "init audio buffers"),
+    (0x04, "start/stop audio"),
+    (0x05, "init video buffers"),
+    (0x07, "send buffer to display"),
+    (0x08, "audio frame"),
+    (0x09, "audio frame (silence)"),
+    (0x0a, "init video mode"),
+    (0x0b, "create gradient"),
+    (0x0c, "set palette"),
+    (0x0d, "set palette entries (compressed)"),
+    (0x0f, "set decoding map"),
+    (0x11, "video data"),
+];
+
+pub async fn dissect_mve(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    cx.emit(vidutil::text("Signature", file.sub(0, 26), "Interplay MVE File"));
+    cx.annotate("Interplay MVE");
+    let mut pos = 26u64;
+    let mut annotated = false;
+    while pos.saturating_add(4) <= file.len {
+        let d = cx.read_avail(file.sub(pos, 4)).await?;
+        let len = u64::from(u16_le(&d, 0).unwrap_or(0));
+        let kind = u16_le(&d, 2).unwrap_or(0);
+        let span = file.sub(pos, len.saturating_add(4));
+        if !annotated && kind == 2 {
+            // Look for the video buffer opcode for the frame size.
+            let body = vidutil::read_small(&cx, span.tail(4), 256).await?;
+            let mut at = 0usize;
+            while let (Some(l), Some(&op)) = (u16_le(&body, at), body.get(at.saturating_add(2))) {
+                if op == 5 {
+                    let w = u16_le(&body, at.saturating_add(4)).unwrap_or(0);
+                    let h = u16_le(&body, at.saturating_add(6)).unwrap_or(0);
+                    cx.annotate(format!(
+                        "Interplay MVE, {}×{}",
+                        u32::from(w).saturating_mul(8),
+                        u32::from(h).saturating_mul(8)
+                    ));
+                    annotated = true;
+                    break;
+                }
+                at = at.saturating_add(4).saturating_add(usize::from(l));
+            }
+        }
+        cx.push(
+            Node::new(vidutil::lookup_or(MVE_CHUNKS, kind.into()))
+                .span(span)
+                .summary(format!("{len} bytes"))
+                .lazy(mve_chunk, span),
+        )
+        .await;
+        pos = pos.saturating_add(len).saturating_add(4);
+        if kind == 5 {
+            break;
+        }
+    }
+    if pos < file.len {
+        cx.emit(Node::new("Trailing data").span(file.tail(pos)));
+    }
+    Ok(())
+}
+
+async fn mve_chunk(cx: Cx, span: Span) -> Result<()> {
+    let d = cx.read_avail(span.sub(0, 4)).await?;
+    cx.emit(uint("Length", span.sub(0, 2), u16_le(&d, 0).unwrap_or(0).into(), 16));
+    cx.emit(vidutil::enumerated("Type", span.sub(2, 2), u16_le(&d, 2).unwrap_or(0).into(), 16, MVE_CHUNKS));
+    let body = span.tail(4);
+    let mut pos = 0u64;
+    while pos.saturating_add(4) <= body.len {
+        let h = cx.read_avail(body.sub(pos, 8)).await?;
+        let len = u64::from(u16_le(&h, 0).unwrap_or(0));
+        let op = h.get(2).copied().unwrap_or(0);
+        let version = h.get(3).copied().unwrap_or(0);
+        let ospan = body.sub(pos, len.saturating_add(4));
+        let mut node = vidutil::enumerated("Opcode", ospan, op.into(), 8, MVE_OPCODES)
+            .summary(format!("version {version}, {len} bytes"));
+        if op == 5 {
+            node = node.summary(format!(
+                "{}×{} pixels",
+                u32::from(u16_le(&h, 4).unwrap_or(0)).saturating_mul(8),
+                u32::from(u16_le(&h, 6).unwrap_or(0)).saturating_mul(8)
+            ));
+        }
+        cx.push(node).await;
+        pos = pos.saturating_add(len).saturating_add(4);
+        if op == 1 || op == 0 {
+            break;
+        }
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Nintendo THP
+
+pub static THP: Format = Format {
+    name: "thp",
+    title: "Nintendo THP video",
+    extensions: &["thp"],
+    mime: "video/x-thp",
+    probe: Probe::Custom(|h| {
+        h.starts_with(b"THP\0") && matches!(u32_be(h.data, 4), Some(0x0001_0000 | 0x0001_1000))
+    }),
+    dissect: crate::expander!(dissect_thp: Input),
+};
+
+record! {
+    pub struct ThpHeader {
+        signature: ascii[4] "Signature",
+        version: u32 "Version" .hex(),
+        max_buffer: u32 "Max buffer size",
+        max_audio: u32 "Max audio samples",
+        fps: f32 "Frame rate",
+        frames: u32 "Frame count",
+        first_size: u32 "First frame size",
+        data_size: u32 "Data size",
+        components: u32 "Component data offset" .hex(),
+        offsets: u32 "Offsets data offset" .hex(),
+        first: u32 "First frame offset" .hex(),
+        last: u32 "Last frame offset" .hex(),
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ThpFrames {
+    input: Input,
+    file: Span,
+    first: u64,
+    first_size: u64,
+    count: u64,
+    audio: bool,
+}
+
+pub async fn dissect_thp(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let (h, span) = Cursor::new(&cx, file, Endian::Big).record::<ThpHeader>().await?;
+    cx.emit(ThpHeader::node("Header", span, Endian::Big));
+    let comp = file.tail(h.components.into());
+    let d = cx.read_avail(comp.sub(0, 64)).await?;
+    let n = u32_be(&d, 0).unwrap_or(0).min(16);
+    let types: Vec<u8> = d.get(4..20).unwrap_or_default().to_vec();
+    let mut at = 20usize;
+    let mut parts = vec![format!("THP v{}.{}", h.version >> 16, (h.version >> 12) & 0xf)];
+    let mut audio = false;
+    let v11 = h.version == 0x0001_1000;
+    for &t in types.iter().take(vidutil::us(n.into())) {
+        match t {
+            0 => {
+                parts.push(format!(
+                    "{}×{} video",
+                    u32_be(&d, at).unwrap_or(0),
+                    u32_be(&d, at.saturating_add(4)).unwrap_or(0)
+                ));
+                at = at.saturating_add(if v11 { 12 } else { 8 });
+            }
+            1 => {
+                audio = true;
+                parts.push(format!(
+                    "{} ch {} Hz audio",
+                    u32_be(&d, at).unwrap_or(0),
+                    u32_be(&d, at.saturating_add(4)).unwrap_or(0)
+                ));
+                at = at.saturating_add(if v11 { 16 } else { 12 });
+            }
+            _ => {}
+        }
+    }
+    parts.push(format!("{} fps", vidutil::num(f64::from(h.fps))));
+    parts.push(vidutil::plural(h.frames, "frame"));
+    cx.annotate(parts.join(", "));
+    cx.emit(
+        Node::new("Component data")
+            .span(comp.sub(0, crate::bytes::to_u64(at)))
+            .summary(vidutil::plural(n, "component")),
+    );
+    cx.emit(
+        Node::new("Frames")
+            .span(file.tail(h.first.into()))
+            .summary(vidutil::plural(h.frames, "frame"))
+            .lazy(thp_frames, ThpFrames {
+                input,
+                file,
+                first: h.first.into(),
+                first_size: h.first_size.into(),
+                count: h.frames.into(),
+                audio,
+            }),
+    );
+    Ok(())
+}
+
+async fn thp_frames(cx: Cx, f: ThpFrames) -> Result<()> {
+    let mut pos = f.first;
+    let mut size = f.first_size;
+    let mut index = 0u64;
+    while index < f.count && pos < f.file.len && size > 0 {
+        let span = f.file.sub(pos, size);
+        let d = cx.read_avail(span.sub(0, 16)).await?;
+        let next = u64::from(u32_be(&d, 0).unwrap_or(0));
+        let image = u32_be(&d, 8).unwrap_or(0);
+        let mut summary = format!("image {image} bytes");
+        if f.audio {
+            summary = format!("{summary}, audio {} bytes", u32_be(&d, 12).unwrap_or(0));
+        }
+        let mut node = Node::new(format!("Frame {index}"))
+            .span(span)
+            .summary(summary)
+            .lazy(thp_frame, (f.input, span, f.audio));
+        if span.len < size {
+            node = node.diag(Diagnostic::truncated(Span::new(span.source, span.offset, size), span.len));
+        }
+        cx.push(node).await;
+        pos = pos.saturating_add(size);
+        size = next;
+        index = index.saturating_add(1);
+    }
+    Ok(())
+}
+
+async fn thp_frame(cx: Cx, (input, span, audio): (Input, Span, bool)) -> Result<()> {
+    let block = cx.block(span.sub(0, 16)).await?;
+    let mut f = Fields::emitting(&cx, &block, Endian::Big);
+    f.u32("Next frame size").emit()?;
+    f.u32("Previous frame size").emit()?;
+    let image = f.u32("Image size").emit()?;
+    let mut header = 12u64;
+    if audio {
+        f.u32("Audio size").emit()?;
+        header = 16;
+    }
+    cx.emit(crate::formats::embedded("Image (JPEG)", input.nested(span.sub(header, image.into()))));
+    let rest = span.tail(header.saturating_add(image.into()));
+    if !rest.is_empty() {
+        cx.emit(Node::new(if audio { "Audio" } else { "Padding" }).span(rest));
+    }
+    Ok(())
+}

@@ -210,6 +210,8 @@ pub static FORMATS: &[&Format] = &[
     &gamevideo::FILM,
     &gamevideo::SMJPEG,
     &gamevideo::FLIC,
+    &gamevideo::MVE,
+    &gamevideo::THP,
     &rawvideo::DIRAC,
     &rawvideo::DNXHD,
     &rawvideo::H263,
