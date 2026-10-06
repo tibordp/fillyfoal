@@ -30,6 +30,7 @@ pub mod dxbc;
 pub mod elf;
 pub mod java;
 pub mod lua;
+pub mod luajit;
 pub mod macho;
 pub mod minidump;
 pub mod ne;
@@ -187,6 +188,7 @@ pub static FORMATS: &[&Format] = &[
     &coff::IMPORT,
     &pyc::FORMAT,
     &lua::FORMAT,
+    &luajit::FORMAT,
     &bitcode::FORMAT,
     &beam::FORMAT,
     // -- end executables --
