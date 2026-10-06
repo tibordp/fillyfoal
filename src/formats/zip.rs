@@ -239,6 +239,12 @@ zip_variant!(CBZ, "cbz", "Comic book archive (ZIP)", ["cbz"], "application/vnd.c
     |h| has_entry(h, b"ComicInfo.xml"));
 zip_variant!(GEOGEBRA, "ggb", "GeoGebra file", ["ggb"], "application/vnd.geogebra.file",
     |h| has_entry(h, b"geogebra.xml"));
+zip_variant!(PYTORCH, "pytorch", "PyTorch model/checkpoint", ["pt", "pth", "ckpt", "bin"], "application/x-pytorch",
+    |h| has_entry_suffix(h, b"/data.pkl") || has_entry(h, b"data.pkl"));
+zip_variant!(NPZ, "npz", "NumPy array archive (NPZ)", ["npz"], "application/x-npz",
+    |h| is_zip(h) && entry_names(h).next().is_some() && entry_names(h).all(|n| n.ends_with(b".npy")));
+zip_variant!(KERAS, "keras", "Keras v3 model", ["keras"], "application/x-keras",
+    |h| has_entry(h, b"config.json") && (has_entry(h, b"model.weights.h5") || has_entry(h, b"metadata.json")));
 zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
     |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
 

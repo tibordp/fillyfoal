@@ -699,6 +699,9 @@ pub static FORMATS: &[&Format] = &[
     &zoo::FORMAT,
     &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
+    &zip::PYTORCH,
+    &zip::NPZ,
+    &zip::KERAS,
     &zip::AAR,
     &zip::XLSB,
     &zip::SNUPKG,
