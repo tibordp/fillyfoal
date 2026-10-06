@@ -28,7 +28,7 @@ pub mod probe;
 pub mod scan;
 
 pub mod csv;
-// pub mod diff;
+pub mod diff;
 pub mod html;
 pub mod ini;
 pub mod json;

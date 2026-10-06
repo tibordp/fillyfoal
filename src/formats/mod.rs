@@ -390,6 +390,7 @@ pub static FORMATS: &[&Format] = &[
     &text::mime::MBOX,
     &text::mime::MHTML,
     &text::mime::EML,
+    &text::diff::FORMAT,
     &text::vcard::VCARD,
     &text::vcard::ICALENDAR,
     // Timed text and playlists.
