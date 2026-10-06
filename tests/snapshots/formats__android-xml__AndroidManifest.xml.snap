@@ -1,0 +1,50 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ AndroidManifest.xml — Android binary XML: <manifest android:versionCode=7 android:versionName=1.0 package=net.fillyfoal.demo>  [0x0+0x3c0]
+  ▾ Header  [0x0+0x8]
+      type: RES_XML_TYPE (0x3)  [0x0+0x2]
+      headerSize: 8  [0x2+0x2]
+      size: 0x3c0  [0x4+0x4]
+  ▾ String Pool — 17 strings, UTF-16  [0x8+0x1f0]
+    ▾ Header  [0x8+0x1c]
+        type: RES_STRING_POOL_TYPE (0x1)  [0x8+0x2]
+        headerSize: 28  [0xa+0x2]
+        size: 0x1f0  [0xc+0x4]
+        stringCount: 17  [0x10+0x4]
+        styleCount: 0  [0x14+0x4]
+        flags: 0x0 []  [0x18+0x4]
+        stringsStart: 0x60  [0x1c+0x4]
+        stylesStart: 0x0  [0x20+0x4]
+      0: "versionCode"
+      1: "versionName"
+      2: "minSdkVersion"
+      3: "name"
+      4: "label"
+      5: "android"
+      6: "http://schemas.android.com/apk/res/android"
+      7: ""
+      8: "manifest"
+      9: "package"
+      10: "net.fillyfoal.demo"
+      11: "1.0"
+      12: "uses-sdk"
+      13: "application"
+      14: "Filly"
+      15: "activity"
+      16: ".Main"
+    Resource Map — 5 attribute IDs  [0x1f8+0x1c]
+  ▾ Elements  [0x8+0x3b8]
+      xmlns:android: "http://schemas.android.com/apk/res/android"  [0x214+0x18]
+    ▾ <manifest> — android:versionCode=7 android:versionName=1.0 package=net.fillyfoal.demo  [0x22c+0x60]
+        android:versionCode: "7" — INT_DEC  [0x250+0x14]
+        android:versionName: "1.0" — STRING  [0x264+0x14]
+        package: "net.fillyfoal.demo" — STRING  [0x278+0x14]
+      ▾ <uses-sdk> — android:minSdkVersion=24  [0x28c+0x38]
+          android:minSdkVersion: "24" — INT_DEC  [0x2b0+0x14]
+      ▾ <application> — android:label=Filly  [0x2dc+0x38]
+          android:label: "Filly" — STRING  [0x300+0x14]
+        ▾ <activity> — android:name=.Main android:label=@0x7f040000  [0x314+0x4c]
+            android:name: ".Main" — STRING  [0x338+0x14]
+            android:label: "@0x7f040000" — REFERENCE  [0x34c+0x14]

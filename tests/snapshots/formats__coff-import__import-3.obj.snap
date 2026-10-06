@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&name, &data)"
+---
+▾ import-3.obj — Import record: filly.dll!fillyfoal_ordinal (code, by ordinal 7)  [0x0+0x30]
+  ▾ Import Header  [0x0+0x14]
+      Sig1: 0x0  [0x0+0x2]
+      Sig2: 0xffff  [0x2+0x2]
+      Version: 0  [0x4+0x2]
+      Machine: AMD64 (0x8664)  [0x6+0x2]
+      TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x8+0x4]
+      SizeOfData: 28  [0xc+0x4]
+      OrdinalOrHint: 7  [0x10+0x2]
+      Type: 0x0 — CODE, ORDINAL  [0x12+0x2]
+    Symbol: "fillyfoal_ordinal"  [0x14+0x12]
+    DLL: "filly.dll"  [0x26+0xa]

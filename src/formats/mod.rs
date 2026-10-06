@@ -47,7 +47,38 @@ pub mod zip;
 // -- end archives --
 
 // -- executables & code --
+mod binutil;
+pub mod android;
+pub mod aout;
+pub mod beam;
+pub mod bitcode;
+pub mod coff;
+pub mod dart;
+pub mod dxbc;
+pub mod elc;
+pub mod elf;
+pub mod fatbin;
+pub mod hermes;
+pub mod il2cpp;
+pub mod java;
+pub mod lua;
+pub mod luajit;
+pub mod lx;
+pub mod macho;
+pub mod minidump;
+pub mod ne;
+pub mod ocaml;
+pub mod omf;
+pub mod opcache;
 pub mod pe;
+pub mod pef;
+pub mod pyc;
+pub mod qvm;
+pub mod spirv;
+pub mod te;
+pub mod wasm;
+pub mod xcoff;
+pub mod yarb;
 // -- end executables --
 
 // -- images --
@@ -271,6 +302,49 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::DOS_EXE,
     &pe::FORMAT,
+    &elf::FORMAT,
+    &macho::FORMAT,
+    &macho::fat::FORMAT,
+    &macho::dyld_cache::FORMAT,
+    // After the universal binary probe, which shares the 0xcafebabe magic.
+    &java::class::FORMAT,
+    &java::serialization::FORMAT,
+    &java::keystore::FORMAT,
+    &wasm::FORMAT,
+    &android::dex::FORMAT,
+    &android::dex::ODEX,
+    &android::resources::AXML,
+    &android::resources::ARSC,
+    &android::vdex::FORMAT,
+    &android::art::FORMAT,
+    &minidump::FORMAT,
+    &ne::FORMAT,
+    &lx::FORMAT,
+    &omf::FORMAT,
+    &qvm::FORMAT,
+    &fatbin::FORMAT,
+    &elc::FORMAT,
+    &il2cpp::FORMAT,
+    &opcache::FORMAT,
+    &spirv::FORMAT,
+    &dxbc::FORMAT,
+    &te::FORMAT,
+    &xcoff::FORMAT,
+    &pef::FORMAT,
+    &ocaml::FORMAT,
+    &hermes::FORMAT,
+    &dart::FORMAT,
+    &yarb::FORMAT,
+    &pyc::FORMAT,
+    &lua::FORMAT,
+    &luajit::FORMAT,
+    &bitcode::FORMAT,
+    &beam::FORMAT,
+    // Weaker probes (sizes and machine numbers rather than long magics).
+    &coff::FORMAT,
+    &coff::IMPORT,
+    &aout::PLAN9,
+    &aout::FORMAT,
     // -- end executables --
 
     // -- images --
