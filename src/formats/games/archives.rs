@@ -609,7 +609,7 @@ impl MpqState {
                         Some(0) => crate::codec::lzma::Props::from_byte(body.get(1).copied().unwrap_or(0xff))?,
                         _ => return Err(Diagnostic::unsupported("LZMA sector with a filter")),
                     };
-                    let codec = crate::codec::Codec::LzmaRaw { props, size: Some(expected) };
+                    let codec = crate::codec::Codec::LzmaRaw { props, size: Some(expected), dict: crate::bytes::u32_le(body, 2) };
                     decode(codec, body.get(14..).unwrap_or_default())
                 }
                 m => Err(Diagnostic::unsupported(format!("compression mask {m:#04x}"))),

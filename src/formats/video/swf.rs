@@ -182,6 +182,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let mut f = Fields::emitting(&cx, &block, LE);
             f.u32("Compressed length").emit()?;
             let props = f.bytes("LZMA properties", 5).emit()?;
+            let dict = crate::bytes::u32_le(&props, 1);
             let stream = body.tail(9);
             let expected = u64::from(length).saturating_sub(8);
             let node = Node::new("Compressed body").span(stream);
@@ -190,6 +191,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     let codec = Codec::LzmaRaw {
                         props,
                         size: Some(crate::bytes::to_usize(expected)),
+                        dict,
                     };
                     node.summary(format!("LZMA, {} bytes", stream.len))
                         .lazy(compressed, (input, stream, expected, codec))

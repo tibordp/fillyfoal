@@ -460,9 +460,12 @@ impl LzmaStream {
         LzmaStream { header: 13, data_at: 13, props: Props { lc: 0, lp: 0, pb: 0 }, size: None, dict: None, running: None, consumed: 0, done: false }
     }
 
-    /// Raw LZMA with known properties; `size` is the decoded size when known.
-    pub fn raw(props: Props, size: Option<usize>) -> Self {
-        LzmaStream { header: 0, data_at: 0, props, size, dict: None, running: None, consumed: 0, done: false }
+    /// Raw LZMA with known properties; `size` is the decoded size and
+    /// `dict` the dictionary size, when known (with it, output before the
+    /// dictionary can be released).
+    pub fn raw(props: Props, size: Option<usize>, dict: Option<u32>) -> Self {
+        let dict = dict.map(|d| usize::try_from(d).unwrap_or(usize::MAX).max(4096));
+        LzmaStream { header: 0, data_at: 0, props, size, dict, running: None, consumed: 0, done: false }
     }
 
     fn start(&mut self, input: &[u8], out: &[u8], limit: usize) -> Result<Running> {
@@ -772,6 +775,27 @@ impl Lzma2 {
 pub struct Lzma2Stream {
     core: Lzma2,
     view: Option<View>,
+    /// The dictionary size, when known (7-Zip's coder property).
+    window: Option<usize>,
+}
+
+impl Lzma2Stream {
+    /// Raw LZMA2 whose dictionary size is `dict`, if known.
+    pub fn new(dict: Option<u32>) -> Self {
+        Lzma2Stream {
+            window: dict.map(|d| usize::try_from(d).unwrap_or(usize::MAX).max(4096)),
+            ..Self::default()
+        }
+    }
+}
+
+/// The dictionary size an LZMA2 property byte (7-Zip, xz) encodes.
+pub fn lzma2_dict(prop: u8) -> Option<u32> {
+    match prop {
+        40 => Some(u32::MAX),
+        0..=39 => (2u32 | u32::from(prop & 1)).checked_shl(u32::from(prop / 2).saturating_add(11)),
+        _ => None,
+    }
 }
 
 impl Decoder for Lzma2Stream {
@@ -808,12 +832,15 @@ impl Decoder for Lzma2Stream {
         self.core.release_input(n);
     }
 
-    /// Output before the last dictionary reset (all of it once done): the
-    /// dictionary size is a coder property this stream is not given.
+    /// Output before the dictionary (when its size is known) or before the
+    /// last dictionary reset; all of it once done.
     fn releasable_output(&self, out_len: usize) -> usize {
         match self.view {
             _ if self.core.done() => out_len,
-            Some(view) => self.core.dict_start(view).min(out_len),
+            Some(view) => {
+                let beyond = self.window.map_or(0, |w| out_len.saturating_sub(w));
+                self.core.dict_start(view).max(beyond).min(out_len)
+            }
             None => 0,
         }
     }

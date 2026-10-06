@@ -225,7 +225,9 @@ async fn emit_member(cx: &Cx, input: Input, span: Span, size: u64) -> Result<()>
         .saturating_sub(LzipTrailer::SIZE);
     // lzip members are raw LZMA with lc=3, lp=0, pb=2 and an end marker.
     let props = crate::codec::lzma::Props { lc: 3, lp: 0, pb: 2 };
-    let codec = crate::codec::Codec::LzmaRaw { props, size: usize::try_from(size).ok() };
+    let coded = cx.read(span.sub(5, 1)).await?;
+    let dict = coded.first().map(|&b| u32::try_from(lzip_dict(b)).unwrap_or(u32::MAX));
+    let codec = crate::codec::Codec::LzmaRaw { props, size: usize::try_from(size).ok(), dict };
     cx.emit(crate::formats::content("Decompressed", input, span.sub(LzipHeader::SIZE, body_len), codec, Some(size)));
     cx.emit(LzipTrailer::node(
         "Trailer",

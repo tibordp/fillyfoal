@@ -125,10 +125,12 @@ pub enum Codec {
     Xz,
     /// `.lzma` ("LZMA alone").
     LzmaAlone,
-    /// Raw LZMA2 chunks.
-    Lzma2,
-    /// Raw LZMA with known properties and (if known) decoded size.
-    LzmaRaw { props: lzma::Props, size: Option<usize> },
+    /// Raw LZMA2 chunks; `dict` is the dictionary size if known (it lets a
+    /// long stream release output before its dictionary).
+    Lzma2 { dict: Option<u32> },
+    /// Raw LZMA with known properties and (if known) decoded and
+    /// dictionary sizes.
+    LzmaRaw { props: lzma::Props, size: Option<usize>, dict: Option<u32> },
     /// bzip2 streams.
     Bzip2,
     /// LZ4 frames (also legacy and skippable frames).
@@ -210,7 +212,7 @@ impl Codec {
             Codec::Brotli => "brotli",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
-            Codec::Lzma2 => "lzma2",
+            Codec::Lzma2 { .. } => "lzma2",
             Codec::LzmaRaw { .. } => "lzma-raw",
             Codec::Lz4Frame => "lz4",
             Codec::Lz4Block => "lz4-block",
@@ -260,7 +262,7 @@ impl Codec {
             Codec::Brotli => "brotli (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
-            Codec::Lzma2 => "lzma2 (lazy)",
+            Codec::Lzma2 { .. } => "lzma2 (lazy)",
             Codec::LzmaRaw { .. } => "lzma-raw (lazy)",
             Codec::Lz4Frame => "lz4 (lazy)",
             Codec::Lz4Block => "lz4-block (lazy)",
@@ -307,7 +309,7 @@ impl Codec {
             | Codec::WimResource(_)
             | Codec::Brotli
             | Codec::LzmaAlone
-            | Codec::Lzma2
+            | Codec::Lzma2 { .. }
             | Codec::LzmaRaw { .. } => "decompressed",
             Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
                 "decoded"
@@ -335,7 +337,7 @@ impl Codec {
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
-            Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 | Codec::LzmaRaw { .. } => 7_000,
+            Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 { .. } | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
             Codec::Zstd | Codec::ZstdFrame => 32_768,
             Codec::UnixCompress => 8_000,
@@ -412,8 +414,8 @@ impl Codec {
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
             Codec::Xz => Box::new(xz::XzStream::default()),
             Codec::LzmaAlone => Box::new(lzma::LzmaStream::alone()),
-            Codec::Lzma2 => Box::new(lzma::Lzma2Stream::default()),
-            Codec::LzmaRaw { props, size } => Box::new(lzma::LzmaStream::raw(*props, *size)),
+            Codec::Lzma2 { dict } => Box::new(lzma::Lzma2Stream::new(*dict)),
+            Codec::LzmaRaw { props, size, dict } => Box::new(lzma::LzmaStream::raw(*props, *size, *dict)),
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),

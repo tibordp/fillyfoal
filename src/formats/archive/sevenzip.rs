@@ -731,7 +731,9 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     let size = f.unpack_sizes.get(to_usize(first)).copied().unwrap_or(0);
     let codec = match last.id.as_slice() {
         [0x00] => Codec::Stored,
-        [0x21] => Codec::Lzma2,
+        [0x21] => Codec::Lzma2 {
+            dict: last.props.first().and_then(|&p| crate::codec::lzma::lzma2_dict(p)),
+        },
         [0x03, 0x01, 0x01] => {
             let props = last
                 .props
@@ -741,6 +743,7 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
             Codec::LzmaRaw {
                 props,
                 size: Some(to_usize(size)),
+                dict: crate::bytes::u32_le(&last.props, 1),
             }
         }
         [0x04, 0x01, 0x08] => Codec::Deflate,

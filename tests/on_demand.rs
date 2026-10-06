@@ -418,12 +418,12 @@ fn xz_is_on_demand() {
 fn lzma_is_on_demand() {
     let big = lzma_sample(7500);
     assert_on_demand(&Codec::LzmaAlone, &lzma_file("big.lzma"), &big);
-    assert_on_demand(&Codec::Lzma2, &lzma_file("big.lzma2"), &big);
+    assert_on_demand(&Codec::Lzma2 { dict: None }, &lzma_file("big.lzma2"), &big);
     let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
     let raw = lzma_file("big.lzma1");
-    assert_on_demand(&Codec::LzmaRaw { props, size: None }, &raw, &big);
-    assert_on_demand(&Codec::LzmaRaw { props, size: Some(big.len()) }, &raw, &big);
-    assert_on_demand(&Codec::LzmaRaw { props, size: Some(1000) }, &raw, &big[..1000]);
+    assert_on_demand(&Codec::LzmaRaw { props, size: None, dict: None }, &raw, &big);
+    assert_on_demand(&Codec::LzmaRaw { props, size: Some(big.len()), dict: None }, &raw, &big);
+    assert_on_demand(&Codec::LzmaRaw { props, size: Some(1000), dict: None }, &raw, &big[..1000]);
 }
 
 #[test]
@@ -433,10 +433,10 @@ fn lzma_family_consumes_exactly() {
         (Codec::Xz, "big-streams.xz"),
         (Codec::Xz, "small-x86-delta.xz"),
         (Codec::LzmaAlone, "big.lzma"),
-        (Codec::Lzma2, "big.lzma2"),
-        (Codec::LzmaRaw { props, size: None }, "big.lzma1"),
+        (Codec::Lzma2 { dict: None }, "big.lzma2"),
+        (Codec::LzmaRaw { props, size: None, dict: None }, "big.lzma1"),
         // A known size and an end marker as well: the marker is consumed.
-        (Codec::LzmaRaw { props, size: Some(lzma_sample(7500).len()) }, "big.lzma1"),
+        (Codec::LzmaRaw { props, size: Some(lzma_sample(7500).len()), dict: None }, "big.lzma1"),
     ];
     for (codec, name) in cases {
         let data = lzma_file(name);
@@ -802,8 +802,27 @@ fn lzma_family_releases() {
     // Raw LZMA and LZMA2 are not told their dictionary size: they release
     // input as they go, and output only before a dictionary reset or at
     // the end.
-    assert_releases(&Codec::Lzma2, &lzma_file("big.lzma2"), &big, big.len());
+    assert_releases(&Codec::Lzma2 { dict: None }, &lzma_file("big.lzma2"), &big, big.len());
     let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
-    assert_releases(&Codec::LzmaRaw { props, size: None }, &lzma_file("big.lzma1"), &big, big.len());
-    assert_releases(&Codec::LzmaRaw { props, size: Some(1000) }, &lzma_file("big.lzma1"), &big[..1000], 1000);
+    assert_releases(&Codec::LzmaRaw { props, size: None, dict: None }, &lzma_file("big.lzma1"), &big, big.len());
+    assert_releases(&Codec::LzmaRaw { props, size: Some(1000), dict: None }, &lzma_file("big.lzma1"), &big[..1000], 1000);
+}
+
+/// Raw LZMA given its dictionary size (as zip, 7z, SWF and lzip containers
+/// record it) releases output before the dictionary: the stream of the
+/// 4 KiB-dictionary `.lzma` file, without its 13-byte header.
+#[test]
+fn raw_lzma_with_a_known_dictionary_releases() {
+    let file = lzma_file("big-dict4k.lzma");
+    let expected = fillyfoal::codec::pipeline::decode_all(Codec::LzmaAlone.decoder().unwrap().as_mut(), &file, 1 << 30).unwrap();
+    let props = fillyfoal::codec::lzma::Props::from_byte(file[0]).unwrap();
+    let dict = u32::from_le_bytes(file[1..5].try_into().unwrap());
+    assert_eq!(dict, 4096);
+    let codec = Codec::LzmaRaw { props, size: Some(expected.len()), dict: Some(dict) };
+    assert_releases(&codec, &file[13..], &expected, 4096 + 2 * 16 * 1024 + 512);
+    // The LZMA2 property byte: (2 | (p & 1)) << (p / 2 + 11), 40 = 4 GiB - 1.
+    assert_eq!(fillyfoal::codec::lzma::lzma2_dict(0), Some(4096));
+    assert_eq!(fillyfoal::codec::lzma::lzma2_dict(18), Some(2 << 20));
+    assert_eq!(fillyfoal::codec::lzma::lzma2_dict(19), Some(3 << 20));
+    assert_eq!(fillyfoal::codec::lzma::lzma2_dict(40), Some(u32::MAX));
 }

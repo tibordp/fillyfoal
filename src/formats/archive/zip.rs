@@ -1163,19 +1163,20 @@ async fn lzma_stream(cx: &Cx, head: &[u8], data: Span, flags: u16, size: u64) ->
     if props_len < 5 {
         return Err(Diagnostic::malformed("LZMA properties shorter than 5 bytes").at(data));
     }
-    let props = cx.read(data.sub_exact(4, props_len.into())?).await?;
-    let props = crate::codec::lzma::Props::from_byte(props.first().copied().unwrap_or(0xff))
+    let raw = cx.read(data.sub_exact(4, props_len.into())?).await?;
+    let props = crate::codec::lzma::Props::from_byte(raw.first().copied().unwrap_or(0xff))
         .map_err(|e| e.at(data.sub(4, 1)))?;
+    let dict = u32_le(&raw, 1);
     let skip = 4u64.saturating_add(props_len.into());
     let stream = data.sub(skip, data.len.saturating_sub(skip));
     let size = (flags & 0x0002 == 0).then(|| usize::try_from(size).unwrap_or(usize::MAX));
-    Ok((stream, Codec::LzmaRaw { props, size }))
+    Ok((stream, Codec::LzmaRaw { props, size, dict }))
 }
 
 /// A node for the LZMA properties header of a method-14 entry.
 fn lzma_header(span: Span, codec: &Codec) -> Node {
     let mut node = Node::new("LZMA header").span(span);
-    if let Codec::LzmaRaw { props, size } = codec {
+    if let Codec::LzmaRaw { props, size, .. } = codec {
         node = node.summary(format!(
             "lc={} lp={} pb={}{}",
             props.lc,
