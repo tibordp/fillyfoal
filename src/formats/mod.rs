@@ -22,6 +22,7 @@ pub mod zip;
 // -- executables & code --
 mod binutil;
 pub mod android;
+pub mod aout;
 pub mod beam;
 pub mod bitcode;
 pub mod coff;
@@ -169,6 +170,8 @@ pub static FORMATS: &[&Format] = &[
     &android::dex::ODEX,
     &android::resources::AXML,
     &android::resources::ARSC,
+    &aout::PLAN9,
+    &aout::FORMAT,
     &coff::FORMAT,
     &coff::IMPORT,
     &pyc::FORMAT,
