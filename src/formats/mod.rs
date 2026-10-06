@@ -795,6 +795,7 @@ pub static FORMATS: &[&Format] = &[
     &retro::patches::APS_GBA,
     &retro::patches::GDIFF,
     &retro::patches::MSDELTA,
+    &retro::patches::RUP,
     &retro::discs::CHD,
     &retro::discs::MDS,
     &retro::discs::CCD,

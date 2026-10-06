@@ -1,6 +1,6 @@
 //! Binary patch formats used for ROM hacks, translations and software
-//! updates: IPS, IPS32, UPS, BPS, VCDIFF (xdelta3), bsdiff, PPF, APS, GDIFF
-//! and Windows delta (PA30).
+//! updates: IPS (and EBP), IPS32, UPS, BPS, VCDIFF (xdelta3), bsdiff, PPF, APS,
+//! GDIFF, Ninja RUP and Windows delta (PA30).
 
 use super::util::{Varint, crc32_of, crc_node, dec, find_zero, hex, size, text, uint_be, varint, varint_field};
 use crate::bytes::{u16_le, u32_le, u64_le};
@@ -88,7 +88,12 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
         cx.push(node).await;
     }
     let mut truncate = None;
-    if terminated && cur.remaining() >= 3 {
+    let mut ebp = false;
+    if terminated && cur.peek(1).await?.first() == Some(&b'{') {
+        // EarthBound patches (EBP) append JSON metadata after the IPS body.
+        cx.emit(embedded("Metadata (EBP JSON)", input.nested(file.tail(cur.pos()))));
+        ebp = true;
+    } else if terminated && cur.remaining() >= 3 {
         let start = cur.pos();
         let raw = cur.bytes(cur.remaining().min(4)).await?;
         let value = raw.iter().fold(0u64, |acc, &b| acc << 8 | u64::from(b));
@@ -99,7 +104,8 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
         cx.diag(Diagnostic::warning("no end-of-file marker"));
     }
     cx.annotate(format!(
-        "{name} patch, {records} records ({rle} RLE), writes up to {end:#x}{}",
+        "{}{name} patch, {records} records ({rle} RLE), writes up to {end:#x}{}",
+        if ebp { "EBP (EarthBound) " } else { "" },
         truncate.map_or_else(String::new, |t| format!(", truncates to {t:#x}"))
     ));
     Ok(())
@@ -716,5 +722,109 @@ async fn msdelta(cx: Cx, input: Input) -> Result<()> {
     f.u64("Target file time").filetime().emit()?;
     cx.emit(Node::new("Bit-packed header and delta").span(file.tail(12)).diag(Diagnostic::unsupported("MSDelta bitstream")));
     cx.annotate(format!("Windows delta patch (PA30), {} of delta", size(file.len.saturating_sub(12))));
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Ninja 2 (RUP)
+
+declare_format!(pub RUP = "rup", "Ninja patch (RUP)", ["rup"],
+    "application/x-rup-patch", Probe::Magic(&[(0, b"NINJA2")]), rup);
+
+const RUP_ROM_TYPES: EnumTable = &[
+    (0, "raw"),
+    (1, "NES"),
+    (2, "Famicom Disk System"),
+    (3, "SNES"),
+    (4, "Nintendo 64"),
+    (5, "Game Boy"),
+    (6, "Master System"),
+    (7, "Mega Drive"),
+    (8, "PC Engine"),
+    (9, "Lynx"),
+];
+
+record! {
+    pub struct RupHeader {
+        magic: ascii[6] "Magic",
+        encoding: u8 "Text encoding" .enumeration(&[(0, "ISO-8859-1"), (1, "Shift-JIS")]),
+        author: ascii[84] "Author",
+        version: ascii[11] "Version",
+        title: ascii[256] "Title",
+        genre: ascii[26] "Genre",
+        language: ascii[26] "Language",
+        date: ascii[8] "Date (YYYYMMDD)",
+        website: ascii[512] "Website",
+        description: ascii[1074] "Description",
+    }
+}
+
+/// RUP's variable-length value: a byte count, then that many bytes (LE).
+async fn rup_vlv(cur: &mut Cursor<'_>) -> Result<u64> {
+    let n = cur.u8().await?;
+    if n > 8 {
+        return Err(Diagnostic::malformed(format!("{n}-byte variable-length value")).at(cur.span(0)));
+    }
+    let raw = cur.bytes(n.into()).await?;
+    Ok(raw.iter().rev().fold(0u64, |acc, &b| acc << 8 | u64::from(b)))
+}
+
+async fn rup(cx: Cx, input: Input) -> Result<()> {
+    let file = input.span;
+    let h: RupHeader = emit_record(&cx, file.sub(0, RupHeader::SIZE), LE).await?;
+    let mut cur = Cursor::new(&cx, file, LE);
+    cur.seek(0x800);
+    let (mut files, mut records, mut bytes) = (0u32, 0u64, 0u64);
+    while !cur.at_end() {
+        let start = cur.pos();
+        match cur.u8().await? {
+            0 => {
+                cx.push(Node::new("End").span(cur.since(start))).await;
+                break;
+            }
+            1 => {
+                let name_len = rup_vlv(&mut cur).await?;
+                let name = String::from_utf8_lossy(&cur.bytes(name_len.min(4096)).await?).into_owned();
+                let kind = cur.u8().await?;
+                let source = rup_vlv(&mut cur).await?;
+                let target = rup_vlv(&mut cur).await?;
+                cur.skip(32);
+                let mut overflow = String::new();
+                if source != target {
+                    let mode = cur.u8().await?;
+                    let len = rup_vlv(&mut cur).await?;
+                    cur.skip(len);
+                    overflow = format!(", {} {len} bytes", if mode == b'A' { "appends" } else { "minifies by" });
+                }
+                files = files.saturating_add(1);
+                cx.push(
+                    Node::new(format!("Open file {name:?}"))
+                        .span(cur.since(start))
+                        .value(Value::Enum { raw: kind.into(), bits: 8, name: lookup(RUP_ROM_TYPES, kind.into()) })
+                        .summary(format!("{} → {}{overflow}", size(source), size(target))),
+                )
+                .await;
+            }
+            2 => {
+                let offset = rup_vlv(&mut cur).await?;
+                let len = rup_vlv(&mut cur).await?;
+                let data = cur.span(len);
+                cur.skip(len);
+                records = records.saturating_add(1);
+                bytes = bytes.saturating_add(len);
+                cx.push(Node::new("XOR record").span(cur.since(start)).value(hex(offset, 64)).summary(format!("{len} bytes at {offset:#x}")).target(data)).await;
+            }
+            other => {
+                cx.push(Node::new("Unknown command").span(cur.since(start)).value(hex(other.into(), 8)).diag(Diagnostic::malformed("unknown RUP command"))).await;
+                break;
+            }
+        }
+    }
+    cx.annotate(format!(
+        "Ninja RUP patch {:?} v{} by {}, {files} file(s), {records} XOR records ({bytes} bytes)",
+        h.title.trim(),
+        h.version.trim(),
+        h.author.trim()
+    ));
     Ok(())
 }
