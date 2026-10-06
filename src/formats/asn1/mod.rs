@@ -9,6 +9,8 @@
 
 pub mod der;
 pub mod oids;
+mod p12;
+mod pbe;
 mod schema;
 
 use std::borrow::Cow;
@@ -113,6 +115,17 @@ asn1_format!(
     Kind::Pkcs12
 );
 asn1_format!(
+    PKCS8_ENCRYPTED,
+    dissect_pkcs8_encrypted,
+    "pkcs8-encrypted",
+    "Encrypted private key (PKCS#8)",
+    ["p8", "key", "der"],
+    "application/pkcs8-encrypted",
+    probe_pkcs8_encrypted,
+    &schema::UNKNOWN,
+    Kind::EncryptedKey
+);
+asn1_format!(
     DER,
     dissect_der,
     "der",
@@ -132,6 +145,7 @@ enum Kind {
     Csr,
     Pkcs7,
     Pkcs12,
+    EncryptedKey,
 }
 
 /// The content of the single outer SEQUENCE spanning the whole input (as
@@ -216,6 +230,22 @@ fn probe_pkcs12(h: &Head<'_>) -> bool {
 
 /// Generic DER: a single SEQUENCE spanning the whole input, and, when the
 /// whole input is visible, valid all the way down.
+/// EncryptedPrivateKeyInfo: SEQUENCE { AlgorithmIdentifier (a PBE scheme),
+/// OCTET STRING }, filling the input.
+fn probe_pkcs8_encrypted(h: &Head<'_>) -> bool {
+    let Some(content) = outer(h) else { return false };
+    let mut it = der::elements(content);
+    let (Some((alg, alg_content)), Some((data, _)), None) = (it.next(), it.next(), it.next()) else {
+        return false;
+    };
+    alg.tag == 16
+        && data.tag == 4
+        && der::first(alg_content)
+            .filter(|(t, _)| t.tag == 6)
+            .and_then(|(_, oid)| der::oid(oid))
+            .is_some_and(|o| o == "1.2.840.113549.1.5.13" || o.starts_with("1.2.840.113549.1.12.1."))
+}
+
 fn probe_der(h: &Head<'_>) -> bool {
     if outer(h).is_none() || h.len < 4 {
         return false;
@@ -252,6 +282,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn dissect_with(cx: Cx, input: Input, schema: &'static Schema, kind: Kind) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, SUMMARY_READ)).await?;
     cx.annotate(annotation(kind, &head, input.span.len));
+    match kind {
+        Kind::Pkcs12 => cx.emit(p12::contents_node(input)),
+        Kind::EncryptedKey => cx.emit(p12::decrypted_key_node(input)),
+        _ => {}
+    }
     elements(
         cx,
         Level {
@@ -572,6 +607,7 @@ fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
         Kind::Csr => csr_summary(content),
         Kind::Pkcs7 => pkcs7_summary(content),
         Kind::Pkcs12 => pkcs12_summary(content),
+        Kind::EncryptedKey => der::first(content).map(|(_, alg)| format!("encrypted with {}", pbe::describe(alg))),
     });
     let title = match kind {
         Kind::Generic => "ASN.1 DER",
@@ -580,6 +616,7 @@ fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
         Kind::Csr => "PKCS#10 certificate request",
         Kind::Pkcs7 => "PKCS#7",
         Kind::Pkcs12 => "PKCS#12 key store",
+        Kind::EncryptedKey => "Encrypted private key (PKCS#8)",
     };
     match detail {
         Some(d) => format!("{title}, {d}"),

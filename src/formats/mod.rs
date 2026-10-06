@@ -633,6 +633,7 @@ pub static FORMATS: &[&Format] = &[
     &asn1::CSR,
     &asn1::PKCS7,
     &asn1::PKCS12,
+    &asn1::PKCS8_ENCRYPTED,
     &asn1::DER,
     &pgp::FORMAT,
     &pgp::ARMOR,

@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pbes2-aes256.p8 — Encrypted private key (PKCS#8), encrypted with PBES2 (PBKDF2 HMAC-SHA256, AES-256-CBC)  [0x0+0xf7]
+  ▾ Decrypted key — ASN.1 DER, SEQUENCE, 138 bytes
+    ▾ SEQUENCE  [#1:0x0+0x8a]
+        INTEGER: 0  [#1:0x3+0x3]
+      ▾ SEQUENCE — ecPublicKey = prime256v1  [#1:0x6+0x15]
+          OBJECT IDENTIFIER: "1.2.840.10045.2.1" — ecPublicKey  [#1:0x8+0x9]
+          OBJECT IDENTIFIER: "1.2.840.10045.3.1.7" — prime256v1  [#1:0x11+0xa]
+      ▾ OCTET STRING — 109 bytes, encapsulates DER  [#1:0x1b+0x6f]
+        ▾ SEQUENCE  [#1:0x1d+0x6d]
+            INTEGER: 1  [#1:0x1f+0x3]
+            OCTET STRING: d4 48 95 38 07 08 88 87 19 59 ab bf d4 a0 69 e1 …  |.H.8.....Y....i.| — 32 bytes  [#1:0x22+0x22]
+          ▾ [1]  [#1:0x44+0x46]
+              BIT STRING: 04 b4 07 fb 0f ff ad d3 5f d2 7f 5f 37 cd a6 17 …  |........_.._7...| — 520 bits  [#1:0x46+0x44]
+  ▾ SEQUENCE  [0x0+0xf7]
+    ▾ SEQUENCE — PBES2  [0x3+0x61]
+        OBJECT IDENTIFIER: "1.2.840.113549.1.5.13" — PBES2  [0x5+0xb]
+      ▾ SEQUENCE  [0x10+0x54]
+        ▾ SEQUENCE — PBKDF2  [0x12+0x33]
+            OBJECT IDENTIFIER: "1.2.840.113549.1.5.12" — PBKDF2  [0x14+0xb]
+          ▾ SEQUENCE  [0x1f+0x26]
+              OCTET STRING: 98 48 2b 60 70 db 2a 2d de cd 09 98 db 13 c0 f6  |.H+`p.*-........| — 16 bytes  [0x21+0x12]
+              INTEGER: 2048  [0x33+0x4]
+            ▾ SEQUENCE — hmacWithSHA256  [0x37+0xe]
+                OBJECT IDENTIFIER: "1.2.840.113549.2.9" — hmacWithSHA256  [0x39+0xa]
+                NULL  [0x43+0x2]
+        ▾ SEQUENCE — aes256-CBC  [0x45+0x1f]
+            OBJECT IDENTIFIER: "2.16.840.1.101.3.4.1.42" — aes256-CBC  [0x47+0xb]
+            OCTET STRING: 90 d3 f9 20 30 cc 44 81 f0 09 20 e2 9f 64 2d 52  |... 0.D... ..d-R| — 16 bytes  [0x52+0x12]
+      OCTET STRING: 28 ff fe 49 26 15 9f da 7c 70 2c 5c c1 ca 56 e2 …  |(..I&...|p,\..V.| — 144 bytes  [0x64+0x93]

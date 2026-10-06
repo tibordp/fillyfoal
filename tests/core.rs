@@ -299,3 +299,21 @@ fn encrypted_pdfs_ask_only_when_needed() {
     assert!(text.contains("password required"));
     assert_eq!(host.secret_requests.len(), 1);
 }
+
+#[test]
+fn pkcs12_without_the_password_lists_nothing_secret() {
+    let data = std::fs::read(format!("{}/tests/fixtures/pkcs12/modern-aes.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let mut host = Host::named("k.p12", data.clone(), Limits::default());
+    host.passwords.clear();
+    host.explore_all();
+    let text = host.render();
+    assert!(text.contains("no password, or a wrong one"));
+    assert!(!text.contains("CN=fillyfoal p12 test"));
+    // The empty-password store needs no prompt at all.
+    let data = std::fs::read(format!("{}/tests/fixtures/pkcs12/empty-password.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let mut host = Host::named("e.p12", data, Limits::default());
+    host.passwords.clear();
+    host.explore_all();
+    assert!(host.render().contains("CN=fillyfoal p12 test"));
+    assert!(host.secret_requests.is_empty());
+}
