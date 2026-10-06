@@ -130,6 +130,23 @@ pub mod regf;
 pub mod winhelp;
 pub mod terminfo;
 pub mod thumbcache;
+// graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+pub mod arrow;
+pub mod asn1;
+pub mod avro;
+pub mod bdb;
+pub mod cfb;
+pub mod hdf5;
+pub mod jet;
+pub mod matlab;
+pub mod netcdf;
+pub mod orc;
+pub mod parquet;
+pub mod pdf;
+pub mod pem;
+pub mod pgp;
+pub mod sqlite;
+pub mod sst;
 // -- end documents --
 
 // -- disk images & filesystems --
@@ -467,6 +484,42 @@ pub static FORMATS: &[&Format] = &[
     &winhelp::FORMAT,
     &dsstore::FORMAT,
     &bookmark::FORMAT,
+    // graph-shaped: sqlite/cfb/pdf/asn1/pgp/...
+    &sqlite::GEOPACKAGE,
+    &sqlite::MBTILES,
+    &sqlite::FORMAT,
+    &sqlite::WAL,
+    &sqlite::JOURNAL,
+    &cfb::DOC,
+    &cfb::XLS,
+    &cfb::PPT,
+    &cfb::MSG,
+    &cfb::MSI,
+    &cfb::THUMBS,
+    &cfb::FORMAT,
+    &pdf::FORMAT,
+    &asn1::X509,
+    &asn1::CRL,
+    &asn1::CSR,
+    &asn1::PKCS7,
+    &asn1::PKCS12,
+    &asn1::DER,
+    &pgp::FORMAT,
+    &pgp::ARMOR,
+    &pem::FORMAT,
+    &avro::FORMAT,
+    &netcdf::FORMAT,
+    &hdf5::MAT73,
+    &hdf5::FORMAT,
+    &matlab::FORMAT,
+    &parquet::FORMAT,
+    &orc::FORMAT,
+    &sst::LEVELDB,
+    &sst::ROCKSDB,
+    &bdb::FORMAT,
+    &jet::MDB,
+    &jet::ACCDB,
+    &arrow::FORMAT,
     // -- end documents --
 
     // -- disk images & filesystems --

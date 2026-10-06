@@ -636,7 +636,7 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
                 kind: None,
             },
         ),
-        DIR_SECURITY => node.lazy(certificates, dir),
+        DIR_SECURITY => node.lazy(certificates, (pe.input, dir)),
         DIR_DEBUG => node.lazy(debug_directory, (pe, dir)),
         3 => node.lazy(extra::exceptions, (pe, dir)),
         5 => node.lazy(extra::base_relocations, (pe, dir)),
@@ -1250,7 +1250,7 @@ fn win_certificate(f: &mut Fields<'_>, _: &()) -> Result<WinCertificate> {
     Ok(WinCertificate { length, kind })
 }
 
-async fn certificates(cx: Cx, dir: Directory) -> Result<()> {
+async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Result<()> {
     let table = dir.span;
     let mut offset = 0u64;
     while offset < table.len {
@@ -1269,7 +1269,7 @@ async fn certificates(cx: Cx, dir: Directory) -> Result<()> {
             Node::new(label)
                 .span(span)
                 .summary(format!("{:#x} bytes", cert.length))
-                .lazy(certificate, span),
+                .lazy(certificate, (input, span)),
         )
         .await;
         let step = u64::from(cert.length)
@@ -1280,15 +1280,13 @@ async fn certificates(cx: Cx, dir: Directory) -> Result<()> {
     Ok(())
 }
 
-async fn certificate(cx: Cx, span: Span) -> Result<()> {
+async fn certificate(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let block = cx.block(span.sub(0, 8)).await?;
     win_certificate(&mut Fields::emitting(&cx, &block, LE), &())?;
-    cx.emit(
-        Node::new("bCertificate")
-            .span(span.tail(8))
-            .diag(Diagnostic::unsupported(
-                "PKCS#7 SignedData (Authenticode) is not dissected yet",
-            )),
-    );
+    cx.emit(crate::formats::embedded_as(
+        "bCertificate",
+        input.nested(span.tail(8)),
+        &crate::formats::asn1::PKCS7,
+    ));
     Ok(())
 }
