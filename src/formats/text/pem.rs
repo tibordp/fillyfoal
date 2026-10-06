@@ -193,6 +193,31 @@ fn annotation(labels: &[String]) -> String {
     }
 }
 
+/// Formats that DER payloads may be registered under (by other dissector
+/// families); the first one present is used when detection does not
+/// recognise the payload by itself.
+const DER_FORMATS: &[&str] = &["x509", "der", "asn1", "asn.1"];
+
+/// Dissects a decoded armor payload: detected if possible, else (for PEM,
+/// whose payloads are DER) as DER when such a format is registered, else
+/// shown as data.
+async fn payload(cx: Cx, (input, kind): (Input, Kind)) -> Result<()> {
+    let (data, tail) = crate::formats::head(&cx, input.span).await?;
+    let head = Head {
+        data: &data,
+        tail: &tail,
+        len: input.span.len,
+    };
+    if crate::formats::identify(&head).is_none()
+        && kind == Kind::Pem
+        && data.first() == Some(&0x30)
+        && let Some(format) = DER_FORMATS.iter().find_map(|n| crate::formats::by_name(n))
+    {
+        return (format.dissect)(cx, input).await;
+    }
+    crate::formats::dissect_or_data(cx, input).await
+}
+
 /// Whether `line` is an armor header (`Name: value`).
 fn header_line(line: &[u8]) -> bool {
     let Some(colon) = line.iter().position(|&b| b == b':') else {
@@ -309,7 +334,7 @@ async fn expand(cx: Cx, b: Block) -> Result<()> {
     let mut data = Node::new("Data")
         .span(body_span)
         .summary(format!("base64, {:#x} bytes decoded", decoded.len))
-        .lazy(crate::formats::dissect_or_data, b.input.nested(decoded));
+        .lazy(payload, (b.input.nested(decoded), b.kind));
     if let Some(e) = error {
         data = data.diag(e);
     }
