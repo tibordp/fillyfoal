@@ -22,6 +22,7 @@ pub mod zip;
 // -- executables & code --
 mod binutil;
 pub mod android;
+pub mod beam;
 pub mod bitcode;
 pub mod coff;
 pub mod elf;
@@ -171,6 +172,7 @@ pub static FORMATS: &[&Format] = &[
     &pyc::FORMAT,
     &lua::FORMAT,
     &bitcode::FORMAT,
+    &beam::FORMAT,
     // -- end executables --
 
     // -- images --
