@@ -835,13 +835,13 @@ def build():
     readme = b"Compressed cabinet fixture.\r\n" * 12
     words = b"MSZIP, Quantum and LZX folders. " * 20
     calls = bytes([0xE8, 0x10, 0x00, 0x00, 0x00, 0x90]) * 40 + words[:200]
-    name = "../../fixtures/cab/compressed.cab"
+    name = "../../fixtures/synthetic/cab/compressed.cab"
     write_cab(os.path.join(HERE, name),
               [(1, mszip_blocks(readme)), (3 | 15 << 8, lzx_blocks(calls, 15, 1000, [(2, len(calls))])),
                (2 | 3 << 4 | 10 << 8, quantum_blocks(words, 10))],
               [("README.TXT", 0, 0, len(readme)), ("calls.bin", 1, 0, len(calls)), ("words.txt", 2, 0, len(words))])
     built[name] = {"README.TXT": readme, "calls.bin": calls, "words.txt": words}
-    name = "../../fixtures/chm/lzx.chm"
+    name = "../../fixtures/synthetic/chm/lzx.chm"
     pages = [("/index.html", b"<html><body>" + b"Index page. " * 8 + b"</body></html>"),
              ("/about.html", b"<html><body>" + b"About this help file. " * 6 + b"</body></html>")]
     write_chm(os.path.join(HERE, name), pages, window_bits=15, reset_frames=1)

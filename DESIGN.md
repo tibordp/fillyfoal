@@ -304,8 +304,11 @@ unioning `mod.rs` sections. What they reported, consolidated:
 - **Recursive async helpers** hit the `Send` auto-trait cycle (documented in
   `docs/DISSECTORS.md`); it still bit several agents.
 - **Layouts written from memory** are flagged in each family's module docs
-  and commit messages; fixtures are self-generated, so those dissectors are
-  self-consistent but unverified against real files.
+  and commit messages; their fixtures are self-generated, so those
+  dissectors are self-consistent but unverified against real files. The
+  corpus says which is which: `tests/fixtures/external/` holds files made by
+  other implementations (listed with their producer in `SOURCES.md`),
+  `tests/fixtures/synthetic/` everything we generated or wrote by hand.
 
 ## Findings from the codec pass
 

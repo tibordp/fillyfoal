@@ -254,11 +254,11 @@ mod lz {
     fn lz4_frames_are_on_demand() {
         let big = read("data/lz4/lines.lz4");
         assert_on_demand(&Codec::Lz4Frame, &big, &lines());
-        for path in ["fixtures/lz4/bottles.txt.lz4", "fixtures/lz4/uncompressed-block.lz4", "fixtures/lz4-legacy/legacy.lz4"] {
+        for path in ["fixtures/external/lz4/bottles.txt.lz4", "fixtures/external/lz4/uncompressed-block.lz4", "fixtures/external/lz4-legacy/legacy.lz4"] {
             self_consistent(&Codec::Lz4Frame, path);
         }
         // A skippable frame, a frame and a legacy frame, concatenated.
-        let legacy = read("fixtures/lz4-legacy/legacy.lz4");
+        let legacy = read("fixtures/external/lz4-legacy/legacy.lz4");
         let mut input = vec![0x5a, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 1, 2, 3];
         input.extend_from_slice(&big);
         input.extend_from_slice(&legacy);
@@ -276,7 +276,7 @@ mod lz {
     #[test]
     fn framed_snappy_is_on_demand() {
         assert_on_demand(&Codec::SnappyFramed, &read("data/snappy/lines.sz"), &lines());
-        self_consistent(&Codec::SnappyFramed, "fixtures/snappy/hello.sz");
+        self_consistent(&Codec::SnappyFramed, "fixtures/synthetic/snappy/hello.sz");
     }
 
     #[test]
@@ -300,8 +300,8 @@ mod lz {
             assert!(expected.starts_with(b"AA01") && expected.windows(lines().len()).any(|w| w == lines()), "{path}");
             assert_on_demand(&Codec::Pbz, &input, &expected);
         }
-        for name in ["Payload", "pbz4.aar", "pbze.aar", "pbzz.aar"] {
-            self_consistent(&Codec::Pbz, &format!("fixtures/pbzx/{name}"));
+        for path in ["synthetic/pbzx/Payload", "external/pbzx/pbz4.aar", "external/pbzx/pbze.aar", "external/pbzx/pbzz.aar"] {
+            self_consistent(&Codec::Pbz, &format!("fixtures/{path}"));
         }
     }
 
@@ -525,7 +525,7 @@ mod lz_releases {
         let big = read("data/lz4/lines.lz4");
         assert_releases(&Codec::Lz4Frame, &big, &lines(), 65_536 + STEPS + 65_536);
         // A skippable frame, a frame and a legacy frame, concatenated.
-        let legacy = read("fixtures/lz4-legacy/legacy.lz4");
+        let legacy = read("fixtures/external/lz4-legacy/legacy.lz4");
         let mut input = vec![0x5a, 0x2a, 0x4d, 0x18, 3, 0, 0, 0, 1, 2, 3];
         input.extend_from_slice(&big);
         input.extend_from_slice(&legacy);
@@ -613,8 +613,8 @@ mod lz_releases {
     fn zipcrypto_deflate_chain_releases() {
         let max = 32 * 1024 + STEPS + 65_536;
         let codec = deflate_after(Codec::ZipCrypto(Key::new(b"fillyfoal".to_vec())));
-        // The deflated member of tests/fixtures/zip/zipcrypto.zip.
-        let zip = read("fixtures/zip/zipcrypto.zip");
+        // The deflated member of tests/fixtures/external/zip/zipcrypto.zip.
+        let zip = read("fixtures/external/zip/zipcrypto.zip");
         let le16 = |at: usize| usize::from(u16::from_le_bytes([zip[at], zip[at + 1]]));
         let le32 = |at: usize| u32::from_le_bytes(zip[at..at + 4].try_into().unwrap()) as usize;
         assert_eq!(&zip[..4], b"PK\x03\x04");
