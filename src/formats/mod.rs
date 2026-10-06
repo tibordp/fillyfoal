@@ -401,6 +401,13 @@ pub static FORMATS: &[&Format] = &[
     &text::playlist::M3U,
     &text::playlist::PLS,
     &text::playlist::CUE,
+    // Line-oriented data with distinctive keywords.
+    &text::uuencode::FORMAT,
+    &text::po::FORMAT,
+    &text::bibtex::FORMAT,
+    &text::checksums::FORMAT,
+    &text::obj::OBJ,
+    &text::obj::MTL,
     // Markup: specific XML vocabularies, then HTML, then generic XML.
     &text::plist::FORMAT,
     &text::xml::XHTML,

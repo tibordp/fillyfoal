@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cube.obj — Wavefront OBJ: 7 vertices, 2 faces, 2 objects/groups, materials from cube.mtl  [0x0+0xbd]
+  ▾ (default) — 0 vertices, 0 faces  [0x0+0x2f]
+      mtllib: "cube.mtl"  [0x26+0x8]
+  ▾ Object Square — 4 vertices, 1 face  [0x2f+0x60]
+      o: "Square"  [0x31+0x6]
+      Vertex 1: "0, 0, 0"  [0x38+0x7]
+      Vertex 2: "1, 0, 0"  [0x40+0x7]
+      Vertex 3: "1, 1, 0"  [0x48+0x7]
+      Vertex 4: "0, 1, 0"  [0x50+0x7]
+      Normal 1: "0, 0, 1"  [0x58+0x8]
+      Texture coordinate 1: "0, 0"  [0x61+0x6]
+      usemtl: "red"  [0x6f+0x3]
+      s: "off"  [0x75+0x3]
+      Face 1: "1//1 2//1 3//1 4//1" — 4 corners  [0x79+0x15]
+  ▾ Group tri — 3 vertices, 1 face  [0x8f+0x2e]
+      g: "tri"  [0x91+0x3]
+      Vertex 5: "2, 0, 0"  [0x95+0x7]
+      Vertex 6: "3, 0, 0"  [0x9d+0x7]
+      Vertex 7: "2.5, 1, 0"  [0xa5+0x9]
+      Face 2: "5 6 7" — 3 corners  [0xaf+0x7]
+      l: "1 5"  [0xb9+0x3]
