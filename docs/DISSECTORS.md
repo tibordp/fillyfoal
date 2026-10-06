@@ -292,13 +292,33 @@ label).
 
 ## 9. Testing
 
-Put small sample files in `tests/fixtures/<format>/`. Every fixture is
-automatically fully explored and snapshotted (`tests/snapshots/`), then
-truncated at many lengths and mutated hundreds of times; every variant must
-settle without panics, hangs or internal errors. Generate fixtures with real
-tools where possible (`ffmpeg`, `zip`, `tar`, `sqlite3`, `python3`), keep
-them small (ideally < 16 KiB, never > 64 KiB), and never commit files you did
-not create.
+Put small sample files in one of two trees, keeping the `<format>/<file>`
+layout:
+
+- `tests/fixtures/external/<format>/` for files written by an
+  implementation other than ours: a real tool or library (`ffmpeg`, `xz`,
+  `zstd`, `7zz`, `zip`, `bsdtar`, `hdiutil`, `aa`, `openssl`, `sqlite3`,
+  clang, Python's `tarfile`/`zipfile`/`email`/`pickle`, pyarrow, pysam, ...)
+  or found in the wild. **Every external fixture must be listed in
+  `tests/fixtures/external/SOURCES.md`** with its producer (and version if
+  known), the evidence (best: the command that reproduces it byte for byte)
+  and any edits made afterwards (scrubbed IDs, fixed checksums, truncation).
+- `tests/fixtures/synthetic/<format>/` for everything else: files written by
+  our generator scripts or by hand from the spec, containers our scripts
+  assembled around real codec output, and anything whose provenance is
+  unclear. Their snapshots lock behaviour in; they do not show correctness
+  (see `tests/fixtures/synthetic/README.md`).
+
+Prefer external fixtures: a real writer is the only check that the
+dissector agrees with the format as others implement it. Every fixture is
+automatically fully explored and snapshotted (`tests/snapshots/`, named
+`formats__<format>__<file>.snap` whichever tree it is in), then truncated at
+many lengths and mutated hundreds of times; every variant must settle
+without panics, hangs or internal errors. Keep fixtures small (ideally
+< 16 KiB, never > 64 KiB), never commit files you did not create or that
+are not freely redistributable, and never put the same `<format>/<file>` in
+both trees. `fixtures_are_classified` checks the layout and that
+`SOURCES.md` covers every external fixture.
 
 ```sh
 FIXTURE=bmp INSTA_UPDATE=always cargo test --test formats   # write snapshots
@@ -308,8 +328,8 @@ cargo run --example inspect -- file --depth 3                # look at it
 
 Formats identified by an exact image size (e.g. D64, ADF) need full-size
 fixtures; store those as `name.ext.gz` (`gzip -9 -n`) and the harness
-decompresses them first. Each fixture's directory names the format it must
-be identified as (`fixtures_are_identified_correctly`).
+decompresses them first. Each fixture's `<format>` directory names the format
+it must be identified as (`fixtures_are_identified_correctly`).
 
 Review the snapshot by eye: it is the best check that values and spans are
 right.

@@ -1,6 +1,10 @@
-//! Every file under `tests/fixtures/<format>/` is fully explored and
-//! snapshotted, then truncated and mutated many ways to check robustness.
-//! Adding a fixture file is all it takes to cover a new format.
+//! Every file under `tests/fixtures/{external,synthetic}/<format>/` is fully
+//! explored and snapshotted, then truncated and mutated many ways to check
+//! robustness. Adding a fixture file is all it takes to cover a new format.
+//!
+//! `external/` holds files written by other implementations (each listed in
+//! `external/SOURCES.md`); `synthetic/` holds files we generated or wrote by
+//! hand. Snapshots are named `formats__<format>__<file>` either way.
 //!
 //! `FIXTURE=substring cargo test --test formats` restricts the run.
 
@@ -14,26 +18,43 @@
 
 mod common;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-fn fixtures() -> Vec<PathBuf> {
-    fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-        let mut entries: Vec<_> = std::fs::read_dir(dir)
-            .unwrap()
-            .map(|e| e.unwrap().path())
-            .collect();
-        entries.sort();
-        for path in entries {
-            if path.is_dir() {
-                walk(&path, out);
-            } else {
-                out.push(path);
-            }
+/// The two fixture trees: files from other implementations, and our own.
+const TREES: [&str; 2] = ["external", "synthetic"];
+
+/// Documentation kept at the root of each tree, not fixtures.
+const TREE_DOCS: [&str; 2] = ["SOURCES.md", "README.md"];
+
+fn fixtures_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures")
+}
+
+fn sorted_entries(dir: &Path) -> Vec<PathBuf> {
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .collect();
+    entries.sort();
+    entries
+}
+
+/// Every fixture of one tree, as `<tree>/<format>/<file>` paths.
+fn tree_fixtures(tree: &str) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    for format in sorted_entries(&fixtures_root().join(tree)) {
+        if format.is_dir() {
+            out.extend(sorted_entries(&format));
         }
     }
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let mut out = Vec::new();
-    walk(&root, &mut out);
+    out
+}
+
+fn fixtures() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = TREES.iter().flat_map(|tree| tree_fixtures(tree)).collect();
+    // Same order as a single tree: by format, then file.
+    out.sort_by_key(|p| snapshot_name(p));
     let filter = std::env::var("FIXTURE").unwrap_or_default();
     out.retain(|p| p.to_string_lossy().contains(&filter));
     out
@@ -72,12 +93,13 @@ fn display_name(path: &Path) -> String {
     }
 }
 
+/// `<format>__<file>`: the tree a fixture lives in is not part of its name,
+/// so moving a fixture between trees leaves its snapshot alone.
 fn snapshot_name(path: &Path) -> String {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    path.strip_prefix(root)
-        .unwrap()
-        .to_string_lossy()
-        .replace(['/', '\\'], "__")
+    let rel = path.strip_prefix(fixtures_root()).unwrap();
+    let mut parts = rel.components();
+    parts.next(); // the tree
+    parts.as_path().to_string_lossy().replace(['/', '\\'], "__")
 }
 
 #[test]
@@ -145,6 +167,102 @@ fn fixtures_are_identified_correctly() {
         wrong.is_empty(),
         "misidentified fixtures:\n{}",
         wrong.join("\n")
+    );
+}
+
+/// Every fixture is either external or synthetic (never both, never
+/// neither), sits at `<tree>/<format>/<file>`, and every external one is
+/// accounted for in `external/SOURCES.md` (whose entries must all exist).
+#[test]
+fn fixtures_are_classified() {
+    let root = fixtures_root();
+    let mut problems = Vec::new();
+
+    for entry in sorted_entries(&root) {
+        let name = entry.file_name().unwrap().to_string_lossy().into_owned();
+        if !(entry.is_dir() && TREES.contains(&name.as_str())) {
+            problems.push(format!(
+                "tests/fixtures/{name}: fixtures go in external/ or synthetic/"
+            ));
+        }
+    }
+
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut external: BTreeSet<String> = BTreeSet::new();
+    for tree in TREES {
+        for entry in sorted_entries(&root.join(tree)) {
+            let name = entry.file_name().unwrap().to_string_lossy().into_owned();
+            if entry.is_dir() {
+                for file in sorted_entries(&entry) {
+                    if file.is_dir() {
+                        problems.push(format!(
+                            "{tree}/{name}/{}: nested directory (use <format>/<file>)",
+                            file.file_name().unwrap().to_string_lossy()
+                        ));
+                    }
+                }
+            } else if !TREE_DOCS.contains(&name.as_str()) {
+                problems.push(format!("{tree}/{name}: not in a <format>/ directory"));
+            }
+        }
+        for path in tree_fixtures(tree) {
+            if path.is_dir() {
+                continue;
+            }
+            let rel = path
+                .strip_prefix(root.join(tree))
+                .unwrap()
+                .to_string_lossy()
+                .replace('\\', "/");
+            if !seen.insert(rel.clone()) {
+                problems.push(format!(
+                    "{rel}: in both trees (snapshot names would collide)"
+                ));
+            }
+            if tree == "external" {
+                external.insert(rel);
+            }
+        }
+    }
+
+    // SOURCES.md lists fixtures as table rows: | `<format>/<file>` | ... |,
+    // or `<format>/` for a whole directory with one producer.
+    let sources = std::fs::read_to_string(root.join("external/SOURCES.md")).unwrap();
+    let mut listed_files = BTreeSet::new();
+    let mut listed_dirs = BTreeSet::new();
+    for line in sources.lines() {
+        let Some(rest) = line.trim_start().strip_prefix("| `") else {
+            continue;
+        };
+        let Some(end) = rest.find('`') else { continue };
+        let entry = rest.get(..end).unwrap_or_default().to_owned();
+        if let Some(dir) = entry.strip_suffix('/') {
+            if !external.iter().any(|f| f.starts_with(&entry)) {
+                problems.push(format!(
+                    "SOURCES.md lists {entry}, which has no external fixtures"
+                ));
+            }
+            listed_dirs.insert(dir.to_owned());
+        } else {
+            if !external.contains(&entry) {
+                problems.push(format!(
+                    "SOURCES.md lists {entry}, which is not an external fixture"
+                ));
+            }
+            listed_files.insert(entry);
+        }
+    }
+    for rel in &external {
+        let dir = rel.split('/').next().unwrap_or_default();
+        if !listed_files.contains(rel) && !listed_dirs.contains(dir) {
+            problems.push(format!("external/{rel}: not listed in external/SOURCES.md"));
+        }
+    }
+
+    assert!(
+        problems.is_empty(),
+        "fixture classification:\n{}",
+        problems.join("\n")
     );
 }
 

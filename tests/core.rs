@@ -141,7 +141,7 @@ fn large_members_are_decompressed_lazily() {
 }
 
 fn large_member_is_decompressed_lazily(path: &str, node: &str) {
-    let data = std::fs::read(format!("{}/tests/fixtures/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!("{}/tests/fixtures/external/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let mut host = Host::with_chunk(data, 4096);
     host.session.expand(host.root, 100);
     host.run();
@@ -167,7 +167,7 @@ fn large_member_is_decompressed_lazily(path: &str, node: &str) {
 fn lazy_decode_errors_are_reported() {
     let mut data = std::fs::read(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/tests/fixtures/gzip/large-member.tar.gz"
+        "/tests/fixtures/external/gzip/large-member.tar.gz"
     ))
     .unwrap();
     let mid = data.len() / 2;
@@ -283,7 +283,7 @@ fn decoders_resume_across_input_shortages_and_chain() {
 }
 
 fn render_zip(name: &str, passwords: &[&str]) -> (String, usize) {
-    let path = format!("{}/tests/fixtures/zip/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!("{}/tests/fixtures/external/zip/{name}", env!("CARGO_MANIFEST_DIR"));
     let data = std::fs::read(path).unwrap();
     let mut host = Host::named(name, data, Limits::default());
     host.passwords = passwords.iter().map(|p| p.to_string()).collect();
@@ -311,7 +311,7 @@ fn encrypted_zip_entries_unlock_once_and_stay_locked_on_wrong_passwords() {
 
 #[test]
 fn encrypted_pdfs_ask_only_when_needed() {
-    let read = |name: &str| std::fs::read(format!("{}/tests/fixtures/pdf/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| std::fs::read(format!("{}/tests/fixtures/external/pdf/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
     // Empty user password: decrypted without asking.
     let mut host = Host::named("a.pdf", read("encrypted-empty-aes-256.pdf"), Limits::default());
     host.passwords.clear();
@@ -335,7 +335,7 @@ fn encrypted_pdfs_ask_only_when_needed() {
 
 #[test]
 fn pkcs12_without_the_password_lists_nothing_secret() {
-    let data = std::fs::read(format!("{}/tests/fixtures/pkcs12/modern-aes.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!("{}/tests/fixtures/external/pkcs12/modern-aes.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let mut host = Host::named("k.p12", data.clone(), Limits::default());
     host.passwords.clear();
     host.explore_all();
@@ -343,7 +343,7 @@ fn pkcs12_without_the_password_lists_nothing_secret() {
     assert!(text.contains("no password, or a wrong one"));
     assert!(!text.contains("CN=fillyfoal p12 test"));
     // The empty-password store needs no prompt at all.
-    let data = std::fs::read(format!("{}/tests/fixtures/pkcs12/empty-password.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!("{}/tests/fixtures/external/pkcs12/empty-password.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
     let mut host = Host::named("e.p12", data, Limits::default());
     host.passwords.clear();
     host.explore_all();
