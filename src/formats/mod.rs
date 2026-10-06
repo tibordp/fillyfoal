@@ -23,6 +23,7 @@ pub mod zip;
 mod binutil;
 pub mod android;
 pub mod aout;
+pub mod ar;
 pub mod beam;
 pub mod bitcode;
 pub mod coff;
@@ -204,6 +205,7 @@ pub static FORMATS: &[&Format] = &[
     &yarb::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
+    &ar::FORMAT,
     &coff::FORMAT,
     &coff::IMPORT,
     &pyc::FORMAT,
