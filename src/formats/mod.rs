@@ -32,6 +32,7 @@ pub mod lua;
 pub mod macho;
 pub mod minidump;
 pub mod ne;
+pub mod pdb;
 pub mod pe;
 pub mod pyc;
 pub mod wasm;
@@ -175,6 +176,7 @@ pub static FORMATS: &[&Format] = &[
     &android::vdex::FORMAT,
     &minidump::FORMAT,
     &ne::FORMAT,
+    &pdb::FORMAT,
     &aout::PLAN9,
     &aout::FORMAT,
     &coff::FORMAT,
