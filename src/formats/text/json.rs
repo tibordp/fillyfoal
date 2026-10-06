@@ -388,7 +388,7 @@ impl<'a> Lexer<'a> {
         let mut depth = 1u32;
         let mut members = 0u64;
         loop {
-            self.scan.cx().checkpoint().await;
+            self.scan.tick().await;
             let t = self.next().await?;
             let top = depth == 1;
             match t.kind {

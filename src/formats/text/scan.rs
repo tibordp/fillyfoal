@@ -28,6 +28,8 @@ pub struct Scanner<'a> {
     /// Where the bytes actually end (the source may be shorter than the
     /// region claims).
     end: u64,
+    /// Calls to [`Scanner::tick`] since the last checkpoint.
+    ticks: u32,
 }
 
 impl<'a> Scanner<'a> {
@@ -38,6 +40,17 @@ impl<'a> Scanner<'a> {
             buf: Vec::new(),
             start: 0,
             end: region.len,
+            ticks: 0,
+        }
+    }
+
+    /// Charges work for one step of an input-dependent loop, suspending
+    /// every so often (a checkpoint per step would make cheap steps, such
+    /// as tokens in a cached window, dominate the work budget).
+    pub async fn tick(&mut self) {
+        self.ticks = self.ticks.wrapping_add(1);
+        if self.ticks.is_multiple_of(64) {
+            self.cx.checkpoint().await;
         }
     }
 
@@ -327,7 +340,7 @@ impl<'a> Lines<'a> {
 
     /// The next line, without its content (cheap for long lines).
     pub async fn next_bounds(&mut self) -> Result<Option<Line>> {
-        self.scan.cx().checkpoint().await;
+        self.scan.tick().await;
         let Some(line) = self.scan.line(self.pos).await? else {
             return Ok(None);
         };

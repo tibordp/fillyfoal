@@ -197,7 +197,7 @@ async fn skip_group(lex: &mut Lexer<'_>, open: &Tok) -> Result<GroupInfo> {
     let mut depth = 1u32;
     let mut first = true;
     loop {
-        lex.scan.cx().checkpoint().await;
+        lex.scan.tick().await;
         let t = lex.next().await?;
         let top = depth == 1;
         match t.kind {

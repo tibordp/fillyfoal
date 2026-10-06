@@ -808,7 +808,7 @@ pub async fn skip_element(
     let mut untracked = 0u64;
     let mut only_text: Option<Tok> = None;
     loop {
-        lex.scan.cx().checkpoint().await;
+        lex.scan.tick().await;
         let t = lex.next().await?;
         let top = stack.len() == 1 && untracked == 0;
         match t.kind {
