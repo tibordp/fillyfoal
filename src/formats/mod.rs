@@ -19,6 +19,7 @@ pub mod ace;
 pub mod ar;
 pub mod arcutil;
 pub mod arj;
+pub mod brotli;
 pub mod bzip2;
 pub mod cab;
 pub mod compress;
@@ -1894,6 +1895,9 @@ pub static FORMATS: &[&Format] = &[
     &text::yaml::OPENAPI,
     &text::yaml::FORMAT,
     &text::plain::SCRIPT,
+    // Brotli has no magic: only small files that decode as exactly one
+    // complete stream (a trial decode, so after everything with magic).
+    &brotli::FORMAT,
     // Weak, statistical probes.
     &text::csv::TSV,
     &text::csv::CSV,

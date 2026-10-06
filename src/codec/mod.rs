@@ -8,6 +8,7 @@
 //! bytes count against [`crate::Limits::max_derived`].
 
 pub mod inflate;
+pub mod brotli;
 pub mod bzip2;
 pub mod crypto;
 pub mod filters;
@@ -65,6 +66,8 @@ pub enum Codec {
     PngPredictor { bpp: usize, row: usize },
     /// TIFF horizontal differencing (8-bit components).
     TiffPredictor { bpp: usize, row: usize },
+    /// Brotli streams (RFC 7932).
+    Brotli,
     /// Apple LZFSE (with LZVN blocks).
     Lzfse,
     /// Unix `compress` (`.Z`, LSB-first LZW with a header).
@@ -142,6 +145,7 @@ impl Codec {
             Codec::Zstd => "zstd",
             Codec::UnixCompress => "unix-compress",
             Codec::Lzfse => "lzfse",
+            Codec::Brotli => "brotli",
             Codec::Xz => "xz",
             Codec::LzmaAlone => "lzma",
             Codec::Lzma2 => "lzma2",
@@ -176,6 +180,7 @@ impl Codec {
             Codec::Zstd => "zstd (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
             Codec::Lzfse => "lzfse (lazy)",
+            Codec::Brotli => "brotli (lazy)",
             Codec::Xz => "xz (lazy)",
             Codec::LzmaAlone => "lzma (lazy)",
             Codec::Lzma2 => "lzma2 (lazy)",
@@ -208,6 +213,7 @@ impl Codec {
             | Codec::Zstd
             | Codec::UnixCompress
             | Codec::Lzfse
+            | Codec::Brotli
             | Codec::LzmaAlone
             | Codec::Lzma2
             | Codec::LzmaRaw { .. } => "decompressed",
@@ -242,6 +248,8 @@ impl Codec {
             Codec::Zstd => 32_768,
             Codec::UnixCompress => 8_000,
             Codec::Lzfse => 4_096,
+            // A copy of 16 MiB costs a few bits.
+            Codec::Brotli => 1 << 20,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
             Codec::Chain { stages, .. } => stages
@@ -269,6 +277,7 @@ impl Codec {
                 Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
             }
             Codec::Lzfse => Box::new(Streaming(filters::Whole::new(lzfse::Lzfse))),
+            Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(Streaming(filters::Whole::new(unixz::UnixCompress))),
             Codec::Zstd => Box::new(Streaming(filters::Whole::new(zstd::Zstd))),
             Codec::Xz => Box::new(Streaming(filters::Whole::new(xz::Xz))),

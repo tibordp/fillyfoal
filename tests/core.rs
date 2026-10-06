@@ -408,3 +408,58 @@ fn lzfse_decodes_apple_output() {
     assert_eq!(words.len(), 2_493_885);
     assert!(words.starts_with(b"A\na\naa\naal\n"));
 }
+
+/// Streams from the `brotli` 1.2.0 CLI, except `transforms.br`: hand-made
+/// (one meta-block per dictionary reference, all 121 transforms on words of
+/// every length) and checked against `brotli -d`'s output.
+#[test]
+fn brotli_decodes_reference_output() {
+    use fillyfoal::codec::{Codec, crc32};
+    let read = |name: &str| std::fs::read(format!("{}/tests/data/brotli/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let decode = |name: &str| {
+        let mut d = Codec::Brotli.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read(name), 1 << 26).unwrap()
+    };
+    // Qualities 0-11 and window sizes 2^16 and the default 2^22.
+    for name in ["text.q0.br", "text.q1.br", "text.q5.br", "text.q9.br", "text.q11.br", "text.w16.br"] {
+        assert!(decode(name) == lzma_text(), "{name}");
+    }
+    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    assert!(decode("rnd.br") == random);
+    assert!(decode("zeros.br") == vec![0u8; 100_000]);
+    assert!(decode("empty.br").is_empty());
+    let check = |name: &str, len: usize, crc: u32| {
+        let out = decode(name);
+        assert_eq!((out.len(), crc32(&out)), (len, crc), "{name}");
+        out
+    };
+    // English-like text with UTF-8 and HTML (dictionary hits; 2^10 window).
+    for name in ["prose.q0.br", "prose.q11.br", "prose.w10.br"] {
+        check(name, 32656, 0xd184_6982);
+    }
+    // Transformed dictionary words, at quality 11 (113 of the transforms).
+    check("dict.q11.br", 101_373, 0xa334_44cb);
+    check("transforms.br", 39876, 0x0a24_e342);
+    // Binary records: signed context mode, NPOSTFIX 3 and NDIRECT 120.
+    check("struct.q11.br", 30000, 0x3c0f_27cd);
+    // Incompressible: uncompressed meta-blocks.
+    check("noise.br", 20000, 0x1716_a644);
+    // Several meta-blocks (quality 1, 2^16 window).
+    let words = check("words.q1.br", 300_000, 0xe11b_b7a0);
+    assert!(words.starts_with(b"A\na\naa\naal\n"));
+    // Truncation and corruption are errors, not panics.
+    let text = read("text.q11.br");
+    for cut in [0, 1, 10, text.len() / 2, text.len() - 1] {
+        let mut d = Codec::Brotli.decoder().unwrap();
+        assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), &text[..cut], 1 << 26).is_err());
+    }
+    for i in (0..text.len()).step_by(97) {
+        let mut bad = text.clone();
+        bad[i] ^= 0x5a;
+        let mut d = Codec::Brotli.decoder().unwrap();
+        let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 26);
+    }
+    // The output limit holds.
+    let mut d = Codec::Brotli.decoder().unwrap();
+    assert!(fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read("zeros.br"), 1000).is_err());
+}
