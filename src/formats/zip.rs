@@ -242,6 +242,31 @@ zip_variant!(GEOGEBRA, "ggb", "GeoGebra file", ["ggb"], "application/vnd.geogebr
 zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
     |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
 
+// ML models and mobile platform packages (registered before the other
+// variants: APEX and OTA packages also carry Android/JAR markers).
+zip_variant!(TORCHSCRIPT, "torchscript", "TorchScript module (ZIP)", ["pt", "pth", "ptl"], "application/x-torchscript",
+    |h| has_entry_suffix(h, b"/constants.pkl") || entry_names(h).any(|n| probe_contains(n, b"/code/")));
+zip_variant!(PYTORCH, "pytorch", "PyTorch checkpoint (ZIP)", ["pt", "pth", "ckpt", "bin"], "application/x-pytorch",
+    |h| has_entry_suffix(h, b"/data.pkl"));
+zip_variant!(KERAS, "keras", "Keras v3 model", ["keras"], "application/x-keras",
+    |h| has_entry(h, b"metadata.json") && has_entry(h, b"config.json"));
+zip_variant!(NPZ, "npz", "NumPy array archive", ["npz"], "application/x-npz",
+    |h| is_zip(h) && entry_names(h).next().is_some_and(|n| n.ends_with(b".npy")));
+zip_variant!(APEX, "apex", "Android APEX package", ["apex", "capex"], "application/x-apex",
+    |h| has_entry(h, b"apex_manifest.pb") || has_entry(h, b"apex_manifest.json"));
+zip_variant!(ANDROID_OTA, "android-ota", "Android OTA update package", ["zip"], "application/zip",
+    |h| has_entry(h, b"META-INF/com/android/metadata") || has_entry(h, b"payload_properties.txt"));
+zip_variant!(ANDROID_DM, "android-dm", "Android dex metadata", ["dm"], "application/zip",
+    |h| has_entry(h, b"primary.prof") || has_entry(h, b"primary.vdex"));
+zip_variant!(BUGREPORT, "android-bugreport", "Android bug report", ["zip"], "application/zip",
+    |h| has_entry(h, b"main_entry.txt") && has_entry(h, b"version.txt"));
+zip_variant!(IPSW, "ipsw", "Apple firmware (IPSW)", ["ipsw"], "application/x-ipsw",
+    |h| has_entry(h, b"BuildManifest.plist") || has_entry(h, b"Restore.plist"));
+
+fn probe_contains(hay: &[u8], needle: &[u8]) -> bool {
+    hay.windows(needle.len()).any(|w| w == needle)
+}
+
 pub static FORMAT: Format = Format {
     name: "zip",
     title: "ZIP archive",

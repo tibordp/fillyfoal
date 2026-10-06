@@ -201,10 +201,7 @@ impl<'a> Fb<'a> {
     pub async fn i32s(&self, v: Vector, max: u32) -> Result<Vec<i32>> {
         let n = v.len.min(max);
         let data = self.bytes(v.start, u64::from(n).saturating_mul(4)).await?;
-        Ok(data
-            .chunks_exact(4)
-            .filter_map(|c| c.try_into().ok().map(i32::from_le_bytes))
-            .collect())
+        Ok(data.as_chunks::<4>().0.iter().map(|c| i32::from_le_bytes(*c)).collect())
     }
 
     /// The span a table occupies (from its vtable-offset to its inline end).

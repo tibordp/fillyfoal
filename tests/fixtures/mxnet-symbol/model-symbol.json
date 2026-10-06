@@ -1,0 +1,13 @@
+{
+  "nodes": [
+    {"op": "null", "name": "data", "inputs": []},
+    {"op": "null", "name": "fc1_weight", "attrs": {"num_hidden": "10"}, "inputs": []},
+    {"op": "null", "name": "fc1_bias", "attrs": {"num_hidden": "10"}, "inputs": []},
+    {"op": "FullyConnected", "name": "fc1", "attrs": {"num_hidden": "10"}, "inputs": [[0, 0, 0], [1, 0, 0], [2, 0, 0]]},
+    {"op": "SoftmaxOutput", "name": "softmax", "inputs": [[3, 0, 0]]}
+  ],
+  "arg_nodes": [0, 1, 2],
+  "node_row_ptr": [0, 1, 2, 3, 4, 5],
+  "heads": [[4, 0, 0]],
+  "attrs": {"mxnet_version": ["int", 10901]}
+}

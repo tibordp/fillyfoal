@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ model.safetensors.index.json — safetensors index, 2 shard(s), 12.6 GiB  [0x0+0x157]
+  ▾ metadata — object, 1 member  [0x10+0x23]
+      total_size: 13476839424  [0x24+0xb]
+  ▾ weight_map — object, 4 members  [0x45+0x10f]
+      lm_head.weight: "model-00002-of-00002.safetensors"  [0x5d+0x22]
+      model.embed_tokens.weight: "model-00001-of-00002.safetensors"  [0xa2+0x22]
+      model.layers.0.mlp.down_proj.weight: "model-00001-of-00002.safetensors"  [0xf1+0x22]
+      model.norm.weight: "model-00002-of-00002.safetensors"  [0x12e+0x22]

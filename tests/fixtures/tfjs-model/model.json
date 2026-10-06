@@ -1,0 +1,10 @@
+{
+  "format": "graph-model",
+  "generatedBy": "2.15.0",
+  "convertedBy": "TensorFlow.js Converter v4.17.0",
+  "signature": {},
+  "modelTopology": {"node": [{"name": "x", "op": "Placeholder"}], "versions": {"producer": 1645}},
+  "weightsManifest": [
+    {"paths": ["group1-shard1of1.bin"], "weights": [{"name": "dense/kernel", "shape": [4, 2], "dtype": "float32"}]}
+  ]
+}

@@ -8,3 +8,5 @@ pub mod proto;
 pub mod protos;
 pub mod flatbuf;
 pub mod tflite;
+pub mod binary;
+pub mod text;

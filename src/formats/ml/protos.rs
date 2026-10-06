@@ -675,7 +675,7 @@ fn saved_model_probe(h: &Head<'_>) -> bool {
     }
     // Nothing but meta graphs follow, each starting with its meta-info.
     let mut at = 2usize;
-    let mut graphs = 0;
+    let mut graphs = 0u32;
     while at < d.len() {
         let Some((body, len)) = delimited_at(d, at, 0x12) else {
             return false;
@@ -683,7 +683,7 @@ fn saved_model_probe(h: &Head<'_>) -> bool {
         if d.get(body).is_some_and(|&b| b != 0x0a) {
             return false;
         }
-        graphs += 1;
+        graphs = graphs.saturating_add(1);
         let end = body.saturating_add(len);
         if to_u64(end) > h.len {
             return false;

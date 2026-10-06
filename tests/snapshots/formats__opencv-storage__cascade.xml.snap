@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cascade.xml — OpenCV FileStorage (XML), cascade classifier  [0x0+0x14b]
+  ▾ XML declaration  [0x0+0x15]
+      Version: "1.0"  [0xf+0x3]
+  ▾ opencv_storage — 1 element  [0x16+0x134]
+    ▾ cascade — 6 elements  [0x27+0x111]
+        stageType: "BOOST"  [0x33+0x1c]
+        featureType: "HAAR"  [0x52+0x1f]
+        height: "24"  [0x74+0x13]
+        width: "24"  [0x8a+0x11]
+        stageNum: "1"  [0x9e+0x16]
+      ▾ stages — 1 element  [0xb7+0x76]
+        ▾ _ — 2 elements  [0xc4+0x5d]
+            maxWeakCount: "1"  [0xce+0x1e]
+            stageThreshold: "-0.5"  [0xf3+0x25]

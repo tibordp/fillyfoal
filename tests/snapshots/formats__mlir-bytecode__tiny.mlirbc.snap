@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mlirbc — MLIR bytecode v5 from "MLIR18.0.0git", 3 sections  [0x0+0x2e]
+    Magic: 4d 4c ef 52  |ML.R|  [0x0+0x4]
+    Version: 5  [0x4+0x1]
+    Producer: "MLIR18.0.0git"  [0x5+0xe]
+    String section — id 0, 14 bytes  [0x13+0x10]
+    Dialect section — id 1, 3 bytes  [0x23+0x5]
+    IR section — id 4, 4 bytes  [0x28+0x6]

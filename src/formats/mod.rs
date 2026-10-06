@@ -697,6 +697,17 @@ pub static FORMATS: &[&Format] = &[
     &zoo::FORMAT,
     &ace::ACE,
     // ZIP-based formats before plain ZIP (more specific ones first).
+    // (ml models & mobile platforms)
+    &zip::TORCHSCRIPT,
+    &zip::PYTORCH,
+    &zip::KERAS,
+    &zip::NPZ,
+    &zip::APEX,
+    &zip::ANDROID_OTA,
+    &zip::ANDROID_DM,
+    &zip::BUGREPORT,
+    &zip::IPSW,
+    // (end ml)
     &zip::AAR,
     &zip::XLSB,
     &zip::SNUPKG,
@@ -795,6 +806,15 @@ pub static FORMATS: &[&Format] = &[
     // -- end retro --
 
     // -- ml models & mobile platforms --
+    &ml::binary::GGML,
+    &ml::binary::GGMF,
+    &ml::binary::GGJT,
+    &ml::binary::GGLA,
+    &ml::binary::NCNN_BIN,
+    &ml::binary::MXNET,
+    &ml::binary::NNEF_TENSOR,
+    &ml::binary::FASTTEXT,
+    &ml::binary::MLIR,
     &ml::tflite::TFLITE,
     &ml::tflite::ORT,
     &ml::tflite::EXECUTORCH,
@@ -804,6 +824,20 @@ pub static FORMATS: &[&Format] = &[
     &ml::protos::ONNX,
     &ml::protos::GRAPHDEF,
     &ml::protos::SENTENCEPIECE,
+    &ml::text::NCNN,
+    &ml::text::CAFFE,
+    &ml::text::DARKNET,
+    &ml::text::NNEF_GRAPH,
+    &ml::text::LIBSVM,
+    &ml::text::LIBLINEAR,
+    &ml::text::LIGHTGBM,
+    &ml::text::OPENVINO,
+    &ml::text::PMML,
+    &ml::text::OPENCV,
+    &ml::text::MXNET_SYMBOL,
+    &ml::text::TFJS,
+    &ml::text::HF_TOKENIZER,
+    &ml::text::SAFETENSORS_INDEX,
     // -- end ml --
 
     // -- geospatial, telemetry & vehicle logs --

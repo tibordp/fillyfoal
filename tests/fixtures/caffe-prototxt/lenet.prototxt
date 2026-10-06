@@ -1,0 +1,26 @@
+name: "LeNet"
+input: "data"
+input_shape { dim: 64 dim: 1 dim: 28 dim: 28 }
+layer {
+  name: "conv1"
+  type: "Convolution"
+  bottom: "data"
+  top: "conv1"
+  convolution_param {
+    num_output: 20
+    kernel_size: 5
+  }
+}
+layer {
+  name: "pool1"
+  type: "Pooling"
+  bottom: "conv1"
+  top: "pool1"
+  pooling_param { pool: MAX kernel_size: 2 stride: 2 }
+}
+layer {
+  name: "prob"
+  type: "Softmax"
+  bottom: "pool1"
+  top: "prob"
+}

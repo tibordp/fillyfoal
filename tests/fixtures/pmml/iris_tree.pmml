@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PMML xmlns="http://www.dmg.org/PMML-4_4" version="4.4">
+  <Header copyright="none">
+    <Application name="fillyfoal" version="1.0"/>
+  </Header>
+  <DataDictionary numberOfFields="2">
+    <DataField name="petal_length" optype="continuous" dataType="double"/>
+    <DataField name="species" optype="categorical" dataType="string">
+      <Value value="setosa"/><Value value="versicolor"/>
+    </DataField>
+  </DataDictionary>
+  <TreeModel modelName="iris" functionName="classification">
+    <MiningSchema>
+      <MiningField name="petal_length"/>
+      <MiningField name="species" usageType="target"/>
+    </MiningSchema>
+    <Node score="setosa">
+      <True/>
+      <Node score="setosa"><SimplePredicate field="petal_length" operator="lessThan" value="2.45"/></Node>
+      <Node score="versicolor"><SimplePredicate field="petal_length" operator="greaterOrEqual" value="2.45"/></Node>
+    </Node>
+  </TreeModel>
+</PMML>
