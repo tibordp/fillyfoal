@@ -1,0 +1,8 @@
+; generated for a test
+[autorun]
+open=setup.exe /auto
+icon=setup.exe,0
+label=Example Install Disc
+
+[Content]
+MusicFiles=false

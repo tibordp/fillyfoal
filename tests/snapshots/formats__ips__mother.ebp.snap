@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ mother.ebp — EBP (EarthBound) IPS patch, 1 records (0 RLE), writes up to 0x300203  [0x0+0x6c]
+    Magic: "PATCH"  [0x0+0x5]
+  ▾ Record 1: 0x300200 — 3 bytes at 0x300200  [0x5+0x8]
+      Offset: 0x300200  [0x5+0x3]
+      Size: 3  [0x8+0x2]
+      Data  [0xa+0x3]
+    End marker: "EOF"  [0xd+0x3]
+  ▾ Metadata (EBP JSON) — JSON object, 4 members  [0x10+0x5c]
+      patcher: "EBPatcher"  [0x1c+0xb]
+      author: "someone"  [0x33+0x9]
+      title: "Mother 2 fix"  [0x47+0xe]
+      description: "fix"  [0x66+0x5]

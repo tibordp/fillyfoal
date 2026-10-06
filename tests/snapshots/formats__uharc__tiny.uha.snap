@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.uha — UHARC archive, format 0x6  [0x0+0x2c]
+    Signature  [0x0+0x3]
+    Compressed data  [0x3+0x29]

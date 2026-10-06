@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.daa — PowerISO DAA v1.0, 192 KiB ISO in 3 chunks of 64 KiB  [0x0+0x9c]
+  ▾ Header  [0x0+0x4c]
+      Signature: "DAA"  [0x0+0x10]
+      Chunk table offset: 0x4c  [0x10+0x4]
+      Format version: 0x100  [0x14+0x4]
+      Data offset: 0x5c  [0x18+0x4]
+      Unknown (1): 1  [0x1c+0x4]
+      Unknown (0): 0  [0x20+0x4]
+      Chunk size: 65536  [0x24+0x4]
+      ISO size: 196608  [0x28+0x8]
+      DAA size: 156  [0x30+0x8]
+      Format data: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x38+0x10]
+      Header CRC: 0x8d06c6de  [0x48+0x4]
+    Chunk table — 3 chunks  [0x4c+0x10]
+    Compressed data  [0x5c+0x40]

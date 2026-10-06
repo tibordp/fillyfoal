@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ INFO2 — Recycle Bin INFO2 v5, 3 records (1 restored or purged)  [0x0+0x974]
+  ▾ Header  [0x0+0x14]
+      Format version: 5  [0x0+0x4]
+      Number of entries: 3  [0x4+0x4]
+      Unknown: 0  [0x8+0x4]
+      Record size: 800  [0xc+0x4]
+      Total size of deleted files: 1077248 — 1.0 MiB  [0x10+0x4]
+  ▾ Dc1: 2006-06-11 04:26:40 UTC — C:\Documents and Settings\alice\Desktop\report.doc  [0x14+0x320]
+      Original path (ANSI): "C:\\Documents and Settings\\alice\\Desktop\\report.doc"  [0x14+0x104]
+      Record number: 1  [0x118+0x4]
+      Drive number: 2 — C:  [0x11c+0x4]
+      Deletion time: 2006-06-11 04:26:40 UTC  [0x120+0x8]
+      Size on disk: 24576 — 24.0 KiB  [0x128+0x4]
+      Original path (Unicode): "C:\\Documents and Settings\\alice\\Desktop\\report.doc"  [0x12c+0x208]
+  ▾ Dc2: 2006-06-11 05:26:40 UTC — C:\Documents and Settings\alice\My Documents\old.txt  [0x334+0x320]
+      ! note: restored or purged (first path byte cleared)
+      Original path (ANSI): ""  [0x334+0x104]
+      Record number: 2  [0x438+0x4]
+      Drive number: 2 — C:  [0x43c+0x4]
+      Deletion time: 2006-06-11 05:26:40 UTC  [0x440+0x8]
+      Size on disk: 4096 — 4.0 KiB  [0x448+0x4]
+      Original path (Unicode): "C:\\Documents and Settings\\alice\\My Documents\\old.txt"  [0x44c+0x208]
+  ▾ Dc3: 2006-06-11 06:26:40 UTC — D:\photos\IMG_0001.JPG  [0x654+0x320]
+      Original path (ANSI): "D:\\photos\\IMG_0001.JPG"  [0x654+0x104]
+      Record number: 3  [0x758+0x4]
+      Drive number: 3 — D:  [0x75c+0x4]
+      Deletion time: 2006-06-11 06:26:40 UTC  [0x760+0x8]
+      Size on disk: 1048576 — 1.0 MiB  [0x768+0x4]
+      Original path (Unicode): "D:\\photos\\IMG_0001.JPG"  [0x76c+0x208]

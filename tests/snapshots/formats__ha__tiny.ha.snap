@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.ha — HA archive, 2 entries  [0x0+0x56]
+    Signature  [0x0+0x2]
+    Entries: 2  [0x2+0x2]
+  ▾ readme.txt — UTF-8 text, LF line endings, 1 line  [0x24+0xa] → 0x4+0x20
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x24+0xa]
+        Line 1: "Hello HA!"  [0x24+0x9]
+  ▾ docs/note.txt — UTF-8 text, LF line endings, 1 line  [0x51+0x5] → 0x2e+0x23
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x51+0x5]
+        Line 1: "note"  [0x51+0x4]

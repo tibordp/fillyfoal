@@ -373,3 +373,15 @@ impl<'a> Lines<'a> {
         Ok(line)
     }
 }
+
+/// The lines of the first `max` bytes of `region` as text, with the spans of
+/// their content: the simple way to read a small text header (`KEY=value`
+/// labels, `Name: value` preambles) inside binary or text formats.
+pub async fn head_lines(cx: &Cx, region: Span, max: u64) -> Result<Vec<(String, Span)>> {
+    let mut lines = Lines::new(cx, region.sub(0, max));
+    let mut out = Vec::new();
+    while let Some(line) = lines.next().await? {
+        out.push((line.text(), line.span));
+    }
+    Ok(out)
+}

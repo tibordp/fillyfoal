@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.enc — OpenSSL `enc` encrypted data (salted)  [0x0+0x30]
+    Signature  [0x0+0x8]
+    Salt: 00 01 02 03 04 05 06 07  |........|  [0x8+0x8]
+    Ciphertext — block-aligned (CBC/ECB)  [0x10+0x20]

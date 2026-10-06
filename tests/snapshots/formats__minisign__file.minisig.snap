@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ file.minisig — minisign/signify signature, key ID 0807060504030201  [0x0+0x128]
+    Untrusted comment: "signature from minisign secret key"  [0x0+0x35]
+    Signature — algorithm Ed, key ID 0807060504030201, 74 bytes  [0x36+0x64]
+    Trusted comment: "timestamp:1759700000\tfile:tiny.txt"  [0x9b+0x33]
+    Global signature — 64 bytes  [0xcf+0x58]

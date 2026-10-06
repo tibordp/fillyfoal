@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cookies.txt — Netscape cookie file, 2 cookies for 2 domains  [0x0+0xf2]
+    session=abc123: 2025-01-01 00:00:00 UTC — .example.com/ (secure)  [0x83+0x33]
+    sid=XYZ789: "session" — www.example.org/account (HttpOnly)  [0xb6+0x3c]

@@ -10,7 +10,6 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Codec, Head, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
-use crate::span::Span;
 use crate::value::Value;
 
 const LE: Endian = Endian::Little;
@@ -20,19 +19,7 @@ fn text(s: impl Into<String>) -> Value {
     Value::Text(s.into())
 }
 
-/// Lines of a text head, with their spans (for small header-like texts).
-async fn lines(cx: &Cx, file: Span, max: u64) -> Result<Vec<(String, Span)>> {
-    let head = cx.read_avail(file.sub(0, max)).await?;
-    let mut out = Vec::new();
-    let mut pos = 0u64;
-    for line in head.split(|&b| b == b'\n') {
-        let len = to_u64(line.len());
-        let text = String::from_utf8_lossy(line).trim_end_matches('\r').to_owned();
-        out.push((text, file.sub(pos, len)));
-        pos = pos.saturating_add(len).saturating_add(1);
-    }
-    Ok(out)
-}
+use crate::formats::text::scan::head_lines as lines;
 
 // ---------------------------------------------------------------------------
 // OpenStreetMap PBF

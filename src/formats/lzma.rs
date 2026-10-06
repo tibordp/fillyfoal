@@ -51,9 +51,18 @@ fn probe_lzma(h: &Head<'_>) -> bool {
         && (dict.is_power_of_two()
             || (dict % 3 == 0 && (dict / 3).is_power_of_two())
             || dict == u32::MAX);
+    // liblzma rejects lc + lp > 4, so real streams stay within it.
+    let lclp_ok = (props % 9).saturating_add((props / 9) % 5) <= 4;
+    // LZMA rarely compresses better than about 7000:1.
+    let ratio_ok = size == u64::MAX || size <= h.len.saturating_mul(1 << 14);
     props < 225
+        && lclp_ok
+        && ratio_ok
         && dict_ok
         && (size == u64::MAX || size < 1 << 48)
+        // An empty stream is a handful of bytes; a zero size on a longer
+        // input is more likely a structure with a zero field (jump lists).
+        && (size != 0 || h.len <= 64)
         && h.data.get(13) == Some(&0)
         && h.len > 13
 }

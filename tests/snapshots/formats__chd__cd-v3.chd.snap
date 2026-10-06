@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cd-v3.chd — CHD v3, CD-ROM, 8 KiB in 2 hunks of 4 KiB, zlib, 1 metadata entries  [0x0+0x112]
+  ▾ Header — version 3  [0x0+0x78]
+      Magic: "MComprHD"  [0x0+0x8]
+      Header length: 120  [0x8+0x4]
+      Version: 3  [0xc+0x4]
+      Flags: 0x0 []  [0x10+0x4]
+      Compression: zlib (0x1)  [0x14+0x4]
+      Total hunks: 2  [0x18+0x4]
+      Logical size: 8192  [0x1c+0x8]
+      Metadata offset: 0xac  [0x24+0x8]
+      MD5: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x2c+0x10]
+      Parent MD5: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x3c+0x10]
+      Hunk size: 4096  [0x4c+0x4]
+      SHA-1: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x50+0x14]
+      Parent SHA-1: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x64+0x14]
+  ▾ Metadata — 1 entries  [0xac+0x10]
+      CHT2: CD-ROM track v2 (CHT2) (0x43485432) — TRACK:1 TYPE:MODE1_RAW SUBTYPE:NONE FRAMES:4 PREGAP:0 PGTYPE:MODE1 PGSUB:RW POSTGAP:0  [0xac+0x66] → 0xbc+0x56
+  ▾ Hunk map — 2 hunks  [0x78+0x20]
+      Hunk 0: 0x98 — compressed, 20 bytes at 0x98, CRC 0xc71c0011  [0x78+0x10] → 0x98+0x14
+      Hunk 1: 0x1122334455667788 — mini (8 bytes inline): 1122334455667788  [0x88+0x10]

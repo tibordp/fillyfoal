@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ expdat.dmp — Oracle export V11.02.00, user SCOTT  [0x0+0x280]
+    Export version: "V11.02.00"  [0x2+0x10]
+    User: "SCOTT"  [0x13+0x6]
+    Mode: "USERS"  [0x1a+0x6]
+    Buffer: "192"  [0x21+0x4]
+    Dump body  [0x200+0x80]

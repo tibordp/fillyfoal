@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.evs — EVS speech, 1 channel(s)  [0x0+0x20]
+    Signature  [0x0+0xc]
+    Channels: 1  [0xc+0x4]
+    Frames  [0x10+0x10]

@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Letter.cwk — AppleWorks 6 document (format version 6)  [0x0+0x84]
+    Version: 6  [0x0+0x1]
+    Version details: 07 e1 00  |...|  [0x1+0x3]
+    Signature: "BOBO"  [0x4+0x4]
+    Document data  [0x8+0x7c]
+      ! note: zones are not dissected

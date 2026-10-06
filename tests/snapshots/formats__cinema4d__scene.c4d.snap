@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ scene.c4d — Cinema 4D scene (C4D6 hyperfile)  [0x0+0x48]
+    Signature  [0x0+0x8]
+    Hyperfile  [0x8+0x40]

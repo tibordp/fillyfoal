@@ -562,6 +562,6 @@ async fn openvdb(cx: Cx, input: Input) -> Result<()> {
             grids.push(name);
         }
     }
-    cx.annotate(format!("OpenVDB file v{version} (library {major}.{minor}), {} grid(s): {}", grids.len(), grids.join(", ")));
+    cx.annotate(format!("OpenVDB file v{version} (library {major}.{minor}), {} grid(s){}", grids.len(), if grids.is_empty() { String::new() } else { format!(": {}", grids.join(", ")) }));
     Ok(())
 }

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.xsb — XACT sound bank v46, "TinyBank", 2 simple cues  [0x0+0x90]
+    Signature  [0x0+0x4]
+    Content version: 46  [0x4+0x2]
+    Tool version: 43  [0x6+0x2]
+    Body — "TinyBank", 2 simple cues  [0x8+0x88]

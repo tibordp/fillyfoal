@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Current Session — Chromium session (SNSS v3), 5 commands, 2 navigations  [0x0+0xbf]
+    Signature: "SNSS"  [0x0+0x4]
+    Version: 3  [0x4+0x4]
+    SetTabWindow — 8 bytes  [0x8+0xb] → 0xb+0x8
+    UpdateTabNavigation: "https://www.example.com/" — tab 2 #0: Example Domain  [0x13+0x4f] → 0x16+0x4c
+    UpdateTabNavigation: "https://www.example.org/about" — tab 2 #1: About us  [0x62+0x4b] → 0x65+0x48
+    SetSelectedNavigationIndex — 8 bytes  [0xad+0xb] → 0xb0+0x8
+    SetActiveWindow — 4 bytes  [0xb8+0x7] → 0xbb+0x4

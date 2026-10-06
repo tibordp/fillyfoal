@@ -1,0 +1,7 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.gca — GCA archive  [0x0+0x2c]
+    Signature  [0x0+0x4]
+    Archive body  [0x4+0x28]

@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sonic2.gmv — Gens movie v9, 60 frames (NTSC), 12 rerecords, 3/6-button pads, "Sonic 2 any%"  [0x0+0xf4]
+    Signature: "Gens Movie TEST"  [0x0+0xf]
+    Version: "9"  [0xf+0x1]
+    Rerecords: 12  [0x10+0x4]
+    Controller 1 buttons: "3"  [0x14+0x1]
+    Controller 2 buttons: "6"  [0x15+0x1]
+    Flags: 0x40 [FROM_SAVESTATE]  [0x16+0x1]
+    Reserved: 0  [0x17+0x1]
+    Comment: "Sonic 2 any%"  [0x18+0x28]
+    Input frames — 60 frames of 3 bytes  [0x40+0xb4]

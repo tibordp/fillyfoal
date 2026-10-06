@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ memory.lime — LiME memory capture, 2 ranges, 768 bytes of physical memory  [0x0+0x340]
+  ▾ 0x1000–0x10ff — 256 bytes  [0x0+0x120]
+    ▾ Header  [0x0+0x20]
+        Magic: 0x4c694d45  [0x0+0x4]
+        Version: 1  [0x4+0x4]
+        Start address: 0x1000  [0x8+0x8]
+        End address (inclusive): 0x10ff  [0x10+0x8]
+        Reserved: 00 00 00 00 00 00 00 00  |........|  [0x18+0x8]
+      Memory  [0x20+0x100]
+  ▾ 0x100000–0x1001ff — 512 bytes  [0x120+0x220]
+    ▾ Header  [0x120+0x20]
+        Magic: 0x4c694d45  [0x120+0x4]
+        Version: 1  [0x124+0x4]
+        Start address: 0x100000  [0x128+0x8]
+        End address (inclusive): 0x1001ff  [0x130+0x8]
+        Reserved: 00 00 00 00 00 00 00 00  |........|  [0x138+0x8]
+      Memory  [0x140+0x200]

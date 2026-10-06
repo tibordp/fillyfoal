@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.car — Atari cartridge, Standard 8 KiB, checksum valid  [0x0+0x2010]
+  ▾ Header  [0x0+0x10]
+      Signature: "CART"  [0x0+0x4]
+      Cartridge type: Standard 8 KiB (0x1)  [0x4+0x4]
+      Checksum: 0xff000  [0x8+0x4]
+      Unused: 0  [0xc+0x4]
+    ROM — 8 KiB  [0x10+0x2000]

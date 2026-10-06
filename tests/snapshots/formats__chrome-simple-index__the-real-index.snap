@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ the-real-index — Chromium simple cache index v9, 2 entries, 11.2 KiB  [0x0+0x50]
+    Payload size: 72  [0x0+0x4]
+    CRC-32: 0x12345678  [0x4+0x4]
+    Magic: 0x656e74657220796f  [0x8+0x8]
+    Version: 9  [0x10+0x4]
+    Number of entries: 2  [0x14+0x8]
+    Cache size: 11520 — 11.2 KiB  [0x1c+0x8]
+    Write reason: 0  [0x24+0x4]
+  ▾ Entries — 2 entries  [0x28+0x20]
+      1122334455667788: 2020-09-13 12:26:40 UTC — 10.0 KiB  [0x28+0x10]
+      0abcdef012345678: 2020-09-13 12:35:00 UTC — 1.0 KiB  [0x38+0x10]
+    Last modified: 2020-09-13 12:43:20 UTC  [0x48+0x8]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ opening.bnr — GameCube banner BNR1, "Super Smash Bros. Melee" by Nintendo / HAL Laboratory  [0x0+0x1960]
+    Magic: "BNR1"  [0x0+0x4]
+    Banner image (96×32 RGB5A3)  [0x20+0x1800]
+  ▾ Text — "Super Smash Bros. Melee" by Nintendo / HAL Laboratory  [0x1820+0x140]
+      Game name: "Melee"  [0x1820+0x20]
+      Company: "Nintendo"  [0x1840+0x20]
+      Full game name: "Super Smash Bros. Melee"  [0x1860+0x40]
+      Full company: "Nintendo / HAL Laboratory"  [0x18a0+0x40]
+      Description: "Fight!"  [0x18e0+0x80]

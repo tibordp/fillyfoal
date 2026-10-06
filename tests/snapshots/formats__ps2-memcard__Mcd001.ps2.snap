@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Mcd001.ps2 — PS2 memory card v1.2.0.0, 8.0 MiB (8192 clusters of 1024 bytes), with ECC, root at cluster 0  [0x0+0x2400]
+  ▾ Superblock  [0x0+0x152]
+      Magic: "Sony PS2 Memory Card Format "  [0x0+0x1c]
+      Version: "1.2.0.0"  [0x1c+0xc]
+      Page size: 512  [0x28+0x2]
+      Pages per cluster: 2  [0x2a+0x2]
+      Pages per erase block: 16  [0x2c+0x2]
+      Unused: 0xff00  [0x2e+0x2]
+      Clusters per card: 8192  [0x30+0x4]
+      Allocatable clusters offset: 41  [0x34+0x4]
+      Allocatable clusters end: 8135  [0x38+0x4]
+      Root directory cluster: 0  [0x3c+0x4]
+      Backup block 1: 1023  [0x40+0x4]
+      Backup block 2: 1022  [0x44+0x4]
+      Padding: 00 00 00 00 00 00 00 00  |........|  [0x48+0x8]
+      Indirect FAT cluster list: 08 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x50+0x80]
+      Bad block list: ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff ff …  |................|  [0xd0+0x80]
+      Card type: 2  [0x150+0x1]
+      Card flags: 0x2b [ECC | BAD_BLOCKS | 0x22]  [0x151+0x1]
+    Indirect FAT cluster 0  [0x2100+0x300]

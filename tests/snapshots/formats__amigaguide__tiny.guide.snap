@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.guide — AmigaGuide, 2 nodes  [0x0+0x90]
+    @database: "tiny.guide"  [0x0+0x16]
+    @author: "fillyfoal"  [0x17+0x13]
+    Main — Tiny Guide  [0x2b+0x3d]
+    More — More stuff  [0x69+0x26]

@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.tcr — Psion TCR, 3 compressed bytes  [0x0+0x20c]
+    Signature  [0x0+0x9]
+    Dictionary — 256 entries, starting ["\0", "\u{1}", "\u{2}", "\u{3}", "\u{4}", "\u{5}", "\u{6}", "\u{7}"]  [0x9+0x200]
+    Compressed text  [0x209+0x3]

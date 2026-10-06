@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ game.p00 — PC64 file "GIANA SISTERS", load at $0801, 44 bytes  [0x0+0x48]
+    Signature: "C64File"  [0x0+0x8]
+    Original file name (PETSCII): "GIANA SISTERS"  [0x8+0x10]
+    Reserved: 0  [0x18+0x1]
+    REL record size: 0  [0x19+0x1]
+    Load address: 0x801  [0x1a+0x2]
+    Program — 44 bytes  [0x1c+0x2c]

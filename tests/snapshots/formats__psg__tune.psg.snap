@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tune.psg — PSG register dump v1, 50 Hz, 90 frames (0:01)  [0x0+0x1d5]
+    Magic: 50 53 47 1a  |PSG.|  [0x0+0x4]
+    Version: 1  [0x4+0x1]
+    Interrupt frequency (Hz): 50  [0x5+0x1]
+    Reserved: 00 00 00 00 00 00 00 00 00 00  |..........|  [0x6+0xa]
+    Register writes — 90 frames, 200 register writes  [0x10+0x1c5]

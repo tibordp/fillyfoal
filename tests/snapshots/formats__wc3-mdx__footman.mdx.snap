@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ footman.mdx — Warcraft III model "Footman", version 800  [0x0+0x118]
+    Signature  [0x0+0x4]
+    VERS: 800 — 4 bytes  [0x4+0xc]
+    MODL: "Footman" — 116 bytes  [0x10+0x7c]
+    SEQS — 132 bytes  [0x8c+0x8c]

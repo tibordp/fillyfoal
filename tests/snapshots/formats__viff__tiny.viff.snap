@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.viff — VIFF image, 4×2  [0x0+0x408]
+    Identifier  [0x0+0x4]
+    Machine dependency: big-endian (IEEE) (0x2)  [0x4+0x1]
+    Comment: "tiny comment"  [0x8+0x200]
+    Width: 4  [0x208+0x4]
+    Height: 2  [0x20c+0x4]
+    Image data  [0x400+0x8]

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.nj — Sega Ninja file: texture list, pointer fixups, chunk model, pointer fixups  [0x0+0x6c]
+    NJTL — 16 bytes  [0x0+0x18]
+    POF0 — 4 bytes  [0x18+0xc]
+    NJCM — 52 bytes  [0x24+0x3c]
+    POF0 — 4 bytes  [0x60+0xc]

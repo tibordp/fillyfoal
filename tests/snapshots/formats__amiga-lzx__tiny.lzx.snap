@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.lzx — Amiga LZX archive, 2 entries  [0x0+0x60]
+    Archive header  [0x0+0xa]
+  ▾ readme.txt — UTF-8 text, LF line endings, 1 line  [0x33+0xb] → 0xa+0x29
+      Encoding: "UTF-8"
+      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+    ▾ Lines — 1 line  [0x33+0xb]
+        Line 1: "Amiga LZX!"  [0x33+0xa]
+  ▾ s — stored, 2 bytes  [0x5e+0x2] → 0x3e+0x20
+      ! unsupported: unrecognized format [0x5e+0x2]

@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ Manifest.mbdx — iOS backup manifest index, 3 files  [0x0+0x58]
+    Signature: "mbdx"  [0x0+0x4]
+    Version: 0x200  [0x4+0x2]
+    Number of records: 3  [0x6+0x4]
+    3d0d7e5fb2ce288813306e4d4636395e047a3d28: 0x0 — -rw-r--r-- (record at 0x6 in Manifest.mbdb)  [0xa+0x1a]
+    74993910205c2f1633daacbd8bde0773089455c6: 0x4d — -rw-r--r-- (record at 0x53 in Manifest.mbdb)  [0x24+0x1a]
+    c159d5c126017800b79c85665222fbe894c3dd77: 0xcb — drwxr-xr-x (record at 0xd1 in Manifest.mbdb)  [0x3e+0x1a]

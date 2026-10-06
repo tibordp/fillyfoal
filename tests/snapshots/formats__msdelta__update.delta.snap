@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ update.delta — Windows delta patch (PA30), 24 bytes of delta  [0x0+0x24]
+    Magic: "PA30"  [0x0+0x4]
+    Target file time: 2019-04-17 18:40:00 UTC  [0x4+0x8]
+    Bit-packed header and delta  [0xc+0x18]
+      ! unsupported: MSDelta bitstream

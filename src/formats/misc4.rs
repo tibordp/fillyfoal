@@ -31,19 +31,7 @@ fn zstr(b: &[u8]) -> String {
     crate::text::until_nul(b)
 }
 
-/// `KEY value` / `KEY=value` lines of a text header, up to `end` (exclusive)
-/// or `max` bytes, with spans.
-async fn header_lines(cx: &Cx, file: Span, max: u64) -> Result<Vec<(String, Span)>> {
-    let head = cx.read_avail(file.sub(0, max)).await?;
-    let mut out = Vec::new();
-    let mut pos = 0u64;
-    for line in head.split(|&b| b == b'\n') {
-        let len = to_u64(line.len());
-        out.push((String::from_utf8_lossy(line).trim_end_matches('\r').to_owned(), file.sub(pos, len)));
-        pos = pos.saturating_add(len).saturating_add(1);
-    }
-    Ok(out)
-}
+use crate::formats::text::scan::head_lines as header_lines;
 
 // ---------------------------------------------------------------------------
 // Blizzard: BLP textures, M2 models, Warcraft III maps

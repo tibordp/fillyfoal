@@ -1,0 +1,28 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ADDRESS.CRD — Cardfile (Windows 3.0), 2 cards: Alice Example, Bob Example  [0x0+0xac]
+    Signature: "MGC"  [0x0+0x3]
+    Number of cards: 2  [0x3+0x2]
+  ▾ Card "Alice Example"  [0x5+0x34]
+    ▾ Index entry  [0x5+0x34]
+        Reserved: 00 00 00 00 00 00  |......|  [0x5+0x6]
+        Card data offset: 0x6d  [0xb+0x4]
+        Flags: 0x0  [0xf+0x1]
+        Index line: "Alice Example"  [0x10+0x28]
+        Terminator: 0  [0x38+0x1]
+      Bitmap size: 4  [0x6d+0x2]
+      Bitmap — 16×2 monochrome  [0x6f+0xc]
+      Text length: 28  [0x7b+0x2]
+      Text: "12 Example Road\r\nSpringfield"  [0x7d+0x1c]
+  ▾ Card "Bob Example"  [0x39+0x34]
+    ▾ Index entry  [0x39+0x34]
+        Reserved: 00 00 00 00 00 00  |......|  [0x39+0x6]
+        Card data offset: 0x99  [0x3f+0x4]
+        Flags: 0x0  [0x43+0x1]
+        Index line: "Bob Example"  [0x44+0x28]
+        Terminator: 0  [0x6c+0x1]
+      Bitmap size: 0  [0x99+0x2]
+      Text length: 15  [0x9b+0x2]
+      Text: "Phone: 555-0100"  [0x9d+0xf]

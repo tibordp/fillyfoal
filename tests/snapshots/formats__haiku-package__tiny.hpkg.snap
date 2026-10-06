@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.hpkg — Haiku package v2, 96 bytes  [0x0+0x60]
+    Signature: "hpkg"  [0x0+0x4]
+    Header size: 80  [0x4+0x2]
+    Version: 2  [0x6+0x2]
+    Total size: 96  [0x8+0x8]
+    Minor version: 1  [0x10+0x2]
+    Heap compression: none (0x0)  [0x12+0x2]
+    Heap chunk size: 65536  [0x14+0x4]
+    Heap size (compressed): 16  [0x18+0x8]
+    Heap size (uncompressed): 16  [0x20+0x8]
+    Heap — 16 bytes uncompressed in 65536-byte chunks  [0x50+0x10]

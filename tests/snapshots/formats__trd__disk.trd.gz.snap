@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ disk.trd — TR-DOS disk "MYDISK", 80 tracks, double-sided, 2 file(s), 2540 free sectors  [0x0+0xa0000]
+    First free sector: 4  [0x8e1+0x1]
+    First free track: 1  [0x8e2+0x1]
+    Disk type: 80 tracks, double-sided (0x16)  [0x8e3+0x1]
+    Files: 2  [0x8e4+0x1]
+    Free sectors: 2540  [0x8e5+0x2]
+    TR-DOS ID: 0x10  [0x8e7+0x1]
+    Reserved: 00 00 00 00 00 00 00 00 00 00 00 00  |............|  [0x8e8+0xc]
+    Disk label: "MYDISK"  [0x8f5+0x8]
+  ▾ Catalogue — 2 file(s)  [0x0+0x800]
+      boot.B — BASIC, 100 bytes, track 1 sector 1  [0x0+0x10] → 0x1100+0x100
+      game.C — code, 300 bytes at 24576, track 1 sector 2  [0x10+0x10] → 0x1200+0x200

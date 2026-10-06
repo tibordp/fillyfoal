@@ -1,0 +1,11 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ prefs.js — Firefox prefs.js, 6 preferences (browser.download.dir=/home/alice/Downloads/secret; browser.startup.homepage=https://www.example.com/)  [0x0+0x220]
+    app.update.lastUpdateTime.addon-background-update-timer: 2023-11-14 22:13:20 UTC — 1700000000  [0xc0+0x52]
+    browser.download.dir: "/home/alice/Downloads/secret"  [0x112+0x43]
+    browser.startup.homepage: "https://www.example.com/"  [0x155+0x43]
+    browser.tabs.warnOnClose: false  [0x198+0x2e]
+    network.cookie.cookieBehavior: 5  [0x1c6+0x2f]
+    signon.rememberSignons: true  [0x1f5+0x2b]

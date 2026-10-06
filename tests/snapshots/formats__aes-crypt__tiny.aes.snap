@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.aes — AES Crypt v2, created by fillyfoal 1.0  [0x0+0x144]
+    Signature  [0x0+0x3]
+    Version: 2  [0x3+0x1]
+    CREATED_BY: "fillyfoal 1.0"  [0x5+0x1a]
+    Padding  [0x1f+0x82]
+    End of extensions  [0xa1+0x2]
+    IV  [0xa3+0x10]
+    Encrypted IV and key  [0xb3+0x30]
+    HMAC (IV and key)  [0xe3+0x20]
+    Ciphertext (AES-256-CBC)  [0x103+0x20]
+    Last block size  [0x123+0x1]
+    HMAC  [0x124+0x20]

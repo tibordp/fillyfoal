@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ cities.dif — DIF table "EXCEL", 2 columns × 2 rows  [0x0+0xa8]
+    TABLE: "1" — EXCEL  [0x0+0x15]
+    VECTORS: "2"  [0x15+0x12]
+    TUPLES: "2"  [0x27+0x11]
+    DATA: "0"  [0x38+0xf]
+  ▾ Row 1  [0x47+0x2b]
+      Column A: "City"  [0x52+0xd]
+      Column B: "Population"  [0x5f+0x13]
+  ▾ Row 2  [0x72+0x36]
+      Column A: "Springfield"  [0x7d+0x14]
+      Column B: 30720  [0x91+0xc]

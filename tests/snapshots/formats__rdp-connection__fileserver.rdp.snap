@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ fileserver.rdp — Remote Desktop connection to fileserver.example.com:3389 as EXAMPLE\alice via rdgw.example.com  [0x0+0x274]
+    screen mode id: 2  [0x2+0x28]
+    use multimon: 0  [0x2a+0x24]
+    desktopwidth: 1920  [0x4e+0x2a]
+    desktopheight: 1080  [0x78+0x2c]
+    session bpp: 32  [0xa4+0x24]
+    full address: "fileserver.example.com:3389"  [0xc8+0x58]
+    username: "EXAMPLE\\alice"  [0x120+0x34]
+    gatewayhostname: "rdgw.example.com"  [0x154+0x48]
+    audiomode: 0  [0x19c+0x1e]
+    redirectclipboard: 1  [0x1ba+0x2e]
+    redirectdrives: 1  [0x1e8+0x28]
+    drivestoredirect: "*"  [0x210+0x2c]
+    prompt for credentials: 0  [0x23c+0x38]

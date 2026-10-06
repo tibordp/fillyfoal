@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ users.frm — MySQL table definition, InnoDB engine, written by 8.0.36  [0x0+0x1000]
+    Signature  [0x0+0x2]
+    FRM version: 10  [0x2+0x1]
+    Engine: InnoDB (0xc)  [0x3+0x1]
+    I/O size: 4096  [0x4+0x2]
+    Record length: 42  [0x10+0x2]
+    MySQL version: "8.0.36"  [0x33+0x4]
+    Key and column definitions  [0x40+0xfc0]

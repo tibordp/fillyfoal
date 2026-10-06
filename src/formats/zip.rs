@@ -249,6 +249,23 @@ zip_variant!(SIGROK, "sigrok", "sigrok logic analyzer session", ["sr"], "applica
     |h| has_entry(h, b"version") && has_entry(h, b"metadata"));
 zip_variant!(DWFX, "dwfx", "Autodesk Design Web Format (XPS)", ["dwfx"], "model/vnd.dwfx+xps",
     |h| has_entry(h, b"manifest.xml") && has_entry_suffix(h, b".dwfseq"));
+// OpenOffice.org 1.x / StarOffice 6–7 (the predecessors of OpenDocument).
+zip_variant!(SXW, "sxw", "OpenOffice.org 1.x text document", ["sxw", "stw", "sxg"], "application/vnd.sun.xml.writer",
+    |h| mimetype(h, b"application/vnd.sun.xml.writer"));
+zip_variant!(SXC, "sxc", "OpenOffice.org 1.x spreadsheet", ["sxc", "stc"], "application/vnd.sun.xml.calc",
+    |h| mimetype(h, b"application/vnd.sun.xml.calc"));
+zip_variant!(SXI, "sxi", "OpenOffice.org 1.x presentation", ["sxi", "sti"], "application/vnd.sun.xml.impress",
+    |h| mimetype(h, b"application/vnd.sun.xml.impress"));
+zip_variant!(SXD, "sxd", "OpenOffice.org 1.x drawing", ["sxd", "std"], "application/vnd.sun.xml.draw",
+    |h| mimetype(h, b"application/vnd.sun.xml.draw"));
+zip_variant!(SXM, "sxm", "OpenOffice.org 1.x formula", ["sxm"], "application/vnd.sun.xml.math",
+    |h| mimetype(h, b"application/vnd.sun.xml.math"));
+zip_variant!(CDR_ZIP, "cdr-zip", "CorelDRAW X4+ drawing (ZIP)", ["cdr", "cdt"], "application/vnd.corel-draw",
+    |h| has_entry(h, b"content/riffData.cdr") || has_entry(h, b"content/root.dat"));
+zip_variant!(IWORK09, "iwork09", "Apple iWork '09 document (Pages/Numbers/Keynote)", ["pages", "numbers", "key"], "application/x-iwork09",
+    |h| has_entry(h, b"index.apxl")
+        || has_entry(h, b"index.apxl.gz")
+        || ((has_entry(h, b"index.xml") || has_entry(h, b"index.xml.gz")) && has_entry(h, b"buildVersionHistory.plist")));
 
 pub static FORMAT: Format = Format {
     name: "zip",

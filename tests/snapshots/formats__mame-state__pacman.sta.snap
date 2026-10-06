@@ -1,0 +1,12 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pacman.sta — MAME save state v2 of "pacman"  [0x0+0x13e]
+    Magic: "MAMESAVE"  [0x0+0x8]
+    Version: 2  [0x8+0x1]
+    Flags: 0x0 []  [0x9+0x1]
+    Game: "pacman"  [0xa+0x12]
+    Signature: 0xdeadbeef  [0x1c+0x4]
+  ▾ State data — 0x400 bytes decompressed  [0x20+0x11e]
+      Data  [#1:0x0+0x400]

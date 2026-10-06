@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ megadrive.dat — Logiqx DAT "Sega - Mega Drive - Genesis" (Sega - Mega Drive - Genesis (20240101)), 2 entries, 2 ROMs  [0x0+0x34f]
+  ▾ Header  [0x94+0xbd]
+      name: "Sega - Mega Drive - Genesis"
+      description: "Sega - Mega Drive - Genesis (20240101)"
+      version: "20240101"
+      author: "fillyfoal"
+  ▾ Games — 2 entries, 2 ROMs
+      Sonic the Hedgehog (USA, Europe): "Sonic the Hedgehog (USA, Europe)" — 1 ROMs  [0x153+0xf6]
+      Sonic the Hedgehog (Japan) (Rev 1): "Sonic the Hedgehog (Japan) (Rev 1)" — clone of Sonic the Hedgehog (USA, Europe), 1 ROMs  [0x24b+0xf7]

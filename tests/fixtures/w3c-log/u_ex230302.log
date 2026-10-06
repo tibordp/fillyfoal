@@ -1,0 +1,6 @@
+#Software: Microsoft Internet Information Services 10.0
+#Version: 1.0
+#Date: 2023-03-02 00:00:00
+#Fields: date time s-ip cs-method cs-uri-stem cs-uri-query s-port cs-username c-ip cs(User-Agent) sc-status sc-substatus sc-win32-status time-taken
+2023-03-02 00:00:01 10.0.0.5 GET /index.html - 80 - 198.51.100.4 Mozilla/5.0 200 0 0 15
+2023-03-02 00:00:02 10.0.0.5 POST /login.aspx - 443 - 198.51.100.4 Mozilla/5.0 302 0 0 31

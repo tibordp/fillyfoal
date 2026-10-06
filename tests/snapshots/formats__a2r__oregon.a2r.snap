@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ oregon.a2r — Applesauce A2R3 flux image "Oregon Trail", 5.25" SS 40-track, 3 chunks, by "Applesauce v2.0"  [0x0+0x88]
+    Signature: "A2R3"  [0x0+0x8]
+    INFO — 37 bytes  [0x8+0x2d] → 0x10+0x25
+    RWCP — 33 bytes  [0x35+0x29] → 0x3d+0x21
+    META: "title\tOregon Trail; publisher\tMECC; " — 34 bytes  [0x5e+0x2a] → 0x66+0x22

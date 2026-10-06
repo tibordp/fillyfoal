@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ melee.gcz — GCZ GameCube image, 4 KiB → 2 KiB, 2 blocks of 2 KiB  [0x0+0x874]
+  ▾ Header  [0x0+0x20]
+      Magic: 0xb10bc001  [0x0+0x4]
+      Disc type: GameCube (0x0)  [0x4+0x4]
+      Compressed data size: 2108  [0x8+0x8]
+      Uncompressed size: 4096  [0x10+0x8]
+      Block size: 2048  [0x18+0x4]
+      Number of blocks: 2  [0x1c+0x4]
+    Block hashes (Adler-32)  [0x30+0x8]
+  ▾ Blocks — 2 blocks  [0x20+0x10]
+    ▾ Block 0: 0x0 — "Super Smash Bros. Melee" (GALE01)  [0x38+0x3c]
+        Game ID: "GALE01"  [#1:0x0+0x6]
+        Disc number: 0  [#1:0x6+0x1]
+        Version: 0  [#1:0x7+0x1]
+        Audio streaming: 0  [#1:0x8+0x1]
+        Stream buffer size: 0  [#1:0x9+0x1]
+        Unused: 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |..............|  [#1:0xa+0xe]
+        Wii magic: 0x0  [#1:0x18+0x4]
+        GameCube magic: 0xc2339f3d  [#1:0x1c+0x4]
+        Title: "Super Smash Bros. Melee"  [#1:0x20+0x40]
+      Block 1: 0x3c — stored  [0x74+0x800]

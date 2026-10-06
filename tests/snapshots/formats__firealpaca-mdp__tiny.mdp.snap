@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.mdp — MDP image  [0x0+0x7b]
+    Signature  [0x0+0x8]
+    Description length: 91  [0x8+0x4]
+    Binary length: 16  [0xc+0x4]
+  ▾ Description (XML) — XML document, root <Mdipack>  [0x10+0x5b]
+    ▾ XML declaration  [0x10+0x26]
+        Version: "1.0"  [0x1f+0x3]
+        Encoding: "UTF-8"  [0x2e+0x5]
+    ▾ Mdipack — 1 element  [0x37+0x33]
+      ▾ Canvas — width="64" height="64"  [0x40+0x20]
+          @width: "64"  [0x4f+0x2]
+          @height: "64"  [0x5b+0x2]
+    Layer data  [0x6b+0x10]

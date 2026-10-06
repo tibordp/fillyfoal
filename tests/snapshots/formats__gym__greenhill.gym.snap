@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ greenhill.gym — GYM log "Green Hill Zone" from "Sonic the Hedgehog", 120 frames (0:02 at 60 Hz)  [0x0+0x5e4]
+    Magic: "GYMX"  [0x0+0x4]
+    Song: "Green Hill Zone"  [0x4+0x20]
+    Game: "Sonic the Hedgehog"  [0x24+0x20]
+    Publisher: "Sega"  [0x44+0x20]
+    Emulator: "Gens"  [0x64+0x20]
+    Dumper: "dumper"  [0x84+0x20]
+    Comment: "comment"  [0xa4+0x100]
+    Loop start (frame): 0  [0x1a4+0x4]
+    Uncompressed size (0 if not compressed): 0  [0x1a8+0x4]
+    Commands — 120 frames, 360 register writes  [0x1ac+0x438]
