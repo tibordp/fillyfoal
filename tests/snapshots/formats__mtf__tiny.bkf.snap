@@ -1,0 +1,10 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.bkf — MTF 1.x media "Media created 06/10/2026", 1024-byte blocks: 1× TAPE, 1× SSET, 1× ESET  [0x0+0x468]
+    TAPE — descriptor block, streams at +0x90  [0x0+0x90]
+    Stream STAN — 12 bytes  [0x90+0x22]
+    Stream SPAD — 822 bytes  [0xb4+0x34c]
+    SSET — descriptor block, streams at +0x34  [0x400+0x34]
+    ESET — descriptor block, streams at +0x34  [0x434+0x34]

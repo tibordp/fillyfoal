@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ app.asar — Electron ASAR, 47-byte index  [0x0+0x4f]
+    Size field length: 4  [0x0+0x4]
+    Header size: 56  [0x4+0x4]
+    Header pickle payload: 52  [0x8+0x4]
+    Header JSON length: 47  [0xc+0x4]
+  ▾ Header (JSON) — JSON object, 1 member  [0x10+0x2f]
+    ▾ files — object, 1 member  [0x19+0x25]
+      ▾ index.js — object, 2 members  [0x25+0x18]
+          size: 15  [0x2d+0x2]
+          offset: "0"  [0x39+0x3]
+    File data — offsets in the header are relative to here  [0x40+0xf]

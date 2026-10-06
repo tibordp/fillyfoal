@@ -207,6 +207,7 @@ pub mod misc3;
 pub mod misc4;
 pub mod misc5;
 pub mod misc6;
+pub mod misc7;
 // -- end misc --
 
 // -- text --
@@ -304,6 +305,7 @@ pub static FORMATS: &[&Format] = &[
     // -- executables & code --
     &pe::DOS_EXE,
     &pe::FORMAT,
+    &misc7::APPIMAGE,
     &elf::FORMAT,
     &macho::FORMAT,
     &macho::fat::FORMAT,
@@ -1042,6 +1044,27 @@ pub static FORMATS: &[&Format] = &[
     &misc6::RRD,
     &misc6::WIREDTIGER,
     &misc6::REALM,
+    &misc7::KEYTAB,
+    &misc7::CCACHE,
+    &misc7::PWSAFE,
+    &misc7::OPENSSL_ENC,
+    &misc7::AESCRYPT,
+    &misc7::AXCRYPT,
+    &misc7::MINISIGN,
+    &misc7::MTF,
+    &misc7::ORACLE_EXP,
+    &misc7::PG_DUMP,
+    &misc7::MYSQL_FRM,
+    &misc7::MYISAM,
+    &misc7::H2,
+    &misc7::FILEMAKER,
+    &misc7::R_DATA,
+    &misc7::ASDF,
+    &misc7::WAB,
+    &misc7::APPLESCRIPT,
+    &misc7::SOLARIS_PKG,
+    &misc7::HPKG,
+    &misc7::ASAR,
     // Weak, size-based probes last.
     &misc6::SQUEEZE,
     &misc6::CRUNCH,

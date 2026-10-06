@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.asdf — ASDF 1.0.0, 1 binary blocks  [0x0+0xde]
+    Header: "1.0.0"  [0x0+0xb]
+  ▾ Tree (YAML) — YAML document  [0x21+0x83]
+      Directive: "%YAML 1.1"  [0x21+0x9]
+      Directive: "%TAG ! tag:stsci.edu:asdf/"  [0x2b+0x1a]
+    ▾ data — !core/ndarray-1.0.0 mapping  [0x75+0x2b]
+        source: 0  [0x7f+0x1]
+      ▾ shape — sequence, 1 item  [0x8a+0x3]
+          [0]: 4  [0x8b+0x1]
+        datatype: "uint8"  [0x9a+0x5]
+    Block 0 — 4 bytes  [0xa4+0x3a]

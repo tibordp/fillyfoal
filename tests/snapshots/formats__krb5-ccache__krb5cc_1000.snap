@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ krb5cc_1000 — Kerberos credential cache v4, alice@EXAMPLE.TEST, 1 credentials  [0x0+0xd4]
+    Version: 0x504  [0x0+0x2]
+    Header tags — 12 bytes  [0x2+0xe]
+    Default principal: "alice@EXAMPLE.TEST"  [0x10+0x21]
+  ▾ krbtgt/EXAMPLE.TEST@EXAMPLE.TEST — for alice@EXAMPLE.TEST, aes256-cts-hmac-sha1-96, flags 0x50e10000  [0x31+0xa3]
+      Authenticated: 2025-10-05 21:33:20 UTC
+      Expires: 2025-10-06 07:33:20 UTC
+      Session key — aes256-cts-hmac-sha1-96, 32 bytes  [0x8a+0x20]
+    ▾ Ticket  [0xcb+0x5]
+        ! unsupported: unrecognized format [0xcb+0x5]

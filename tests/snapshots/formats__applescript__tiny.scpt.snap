@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ tiny.scpt — compiled AppleScript (FasdUAS 1.101.10)  [0x0+0x61]
+    Signature: "FasdUAS"  [0x0+0x8]
+    Version: "1.101.10"  [0x8+0x8]
+    Serialized script  [0x10+0x51]
+    Trailer — ascr marker  [0x51+0x10]
