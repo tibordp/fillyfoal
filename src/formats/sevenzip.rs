@@ -4,25 +4,28 @@
 //! file. That header is either plain (`kHeader`), describing packed streams,
 //! folders (coder chains) and files, or encoded (`kEncodedHeader`): a small
 //! streams description of where the real, usually LZMA-compressed, header is
-//! packed. Plain headers are decoded fully; encoded ones are shown as far as
-//! possible without decompressing.
+//! packed. Encoded headers are decompressed and then parsed like plain ones.
 //!
-//! Members of "Copy" folders are dissected in place, single-stream Deflate
-//! folders are decompressed; other codecs are unsupported leaves.
+//! Members of "Copy" folders are dissected in place. Folders whose coders
+//! form a simple chain (LZMA, LZMA2, Deflate, BZip2, Zstandard or LZ4, then
+//! optionally BCJ x86/ARM/ARM64 or Delta filters) are decoded, and solid
+//! folders are split into their files by the substream sizes. Multi-stream
+//! coders (BCJ2), PPMd, Deflate64 and encryption are unsupported leaves.
 
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
-use crate::codec::crc32;
+use crate::codec::lzma::Post;
+use crate::codec::{crc32, decode_span, read_all};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
-use crate::formats::{Codec, Format, Input, Probe, content, embedded};
+use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
@@ -134,11 +137,14 @@ struct Coder {
     id: Vec<u8>,
     ins: u64,
     outs: u64,
+    props: Vec<u8>,
 }
 
 #[derive(Clone, Debug, Default)]
 struct Folder {
     coders: Vec<Coder>,
+    /// (input index, output index) pairs connecting coders.
+    binds: Vec<(u64, u64)>,
     unpack_sizes: Vec<u64>,
     /// Packed streams this folder reads.
     packed: u64,
@@ -152,10 +158,12 @@ impl Folder {
         names.join(" + ")
     }
 
-    /// The final output size: the output not bound to another coder's input
-    /// (in practice the first coder's output).
+    /// The final output size: the output not bound to another coder's input.
     fn unpack_size(&self) -> u64 {
-        self.unpack_sizes.first().copied().unwrap_or(0)
+        let last = (0..to_u64(self.unpack_sizes.len()))
+            .find(|i| self.binds.iter().all(|&(_, out)| out != *i))
+            .unwrap_or(0);
+        self.unpack_sizes.get(to_usize(last)).copied().unwrap_or(0)
     }
 }
 
@@ -346,16 +354,19 @@ impl Parser<'_> {
             } else {
                 (1, 1)
             };
-            if flags & 0x20 != 0 {
+            let props = if flags & 0x20 != 0 {
                 let size = self.number()?;
-                self.bytes(size)?;
-            }
+                self.bytes(size)?.to_vec()
+            } else {
+                Vec::new()
+            };
             ins = ins.saturating_add(i);
             outs = outs.saturating_add(o);
             f.coders.push(Coder {
                 id,
                 ins: i,
                 outs: o,
+                props,
             });
         }
         let bind_pairs = outs.saturating_sub(1);
@@ -363,8 +374,8 @@ impl Parser<'_> {
             return Err("too many bind pairs");
         }
         for _ in 0..bind_pairs {
-            self.number()?;
-            self.number()?;
+            let bind = (self.number()?, self.number()?);
+            f.binds.push(bind);
         }
         f.packed = ins.saturating_sub(bind_pairs);
         if f.packed > 1 {
@@ -671,6 +682,135 @@ impl Item {
 }
 
 // ---------------------------------------------------------------------------
+// Decoding folders
+
+/// How a folder decodes: its last coder decompresses the packed stream, and
+/// the coders before it filter that output, last to first.
+#[derive(Clone, Debug)]
+struct Plan {
+    codec: Codec,
+    /// The decompressor's output size.
+    size: u64,
+    /// Post-filters, in the order they are applied.
+    post: Vec<Post>,
+}
+
+/// The decoding plan of `f`, or why it cannot be decoded. Only simple
+/// chains of one-input, one-output coders are supported (not BCJ2): the
+/// packed stream feeds a decompressor, whose output runs through filters.
+fn plan(f: &Folder) -> std::result::Result<Plan, String> {
+    let n = f.coders.len();
+    let simple = f.packed == 1
+        && n > 0
+        && f.coders.iter().all(|c| c.ins == 1 && c.outs == 1)
+        && f.binds.len() == n.saturating_sub(1);
+    if !simple {
+        return Err(f.methods());
+    }
+    // With one-in, one-out coders, input and output indices are coder
+    // indices. The packed stream feeds the coder whose input is unbound;
+    // each bind pair (input, output) feeds coder `output`'s result to coder
+    // `input`.
+    let first = (0..to_u64(n))
+        .find(|i| f.binds.iter().all(|&(inp, _)| inp != *i))
+        .ok_or_else(|| f.methods())?;
+    let mut order = vec![first];
+    let mut at = first;
+    while let Some(&(next, _)) = f.binds.iter().find(|&&(_, out)| out == at) {
+        if order.contains(&next) || order.len() >= n {
+            return Err(f.methods());
+        }
+        order.push(next);
+        at = next;
+    }
+    if order.len() != n {
+        return Err(f.methods());
+    }
+    let coder = |i: u64| f.coders.get(to_usize(i));
+    let last = coder(first).ok_or_else(|| f.methods())?;
+    let size = f.unpack_sizes.get(to_usize(first)).copied().unwrap_or(0);
+    let codec = match last.id.as_slice() {
+        [0x00] => Codec::Stored,
+        [0x21] => Codec::Lzma2,
+        [0x03, 0x01, 0x01] => {
+            let props = last
+                .props
+                .first()
+                .and_then(|&b| crate::codec::lzma::Props::from_byte(b).ok())
+                .ok_or_else(|| "LZMA with invalid properties".to_owned())?;
+            Codec::LzmaRaw {
+                props,
+                size: Some(to_usize(size)),
+            }
+        }
+        [0x04, 0x01, 0x08] => Codec::Deflate,
+        [0x04, 0x02, 0x02] => Codec::Bzip2,
+        [0x04, 0xf7, 0x11, 0x01] => Codec::Zstd,
+        [0x04, 0xf7, 0x11, 0x04] => Codec::Lz4Frame,
+        id => return Err(method_name(id)),
+    };
+    let mut post = Vec::new();
+    for &i in order.get(1..).unwrap_or_default() {
+        let c = coder(i).ok_or_else(|| f.methods())?;
+        post.push(match c.id.as_slice() {
+            [0x04] | [0x03, 0x03, 0x01, 0x03] if c.props.is_empty() => Post::X86,
+            [0x07] | [0x03, 0x03, 0x05, 0x01] if c.props.is_empty() => Post::Arm,
+            [0x0a] if c.props.iter().all(|&b| b == 0) => Post::Arm64,
+            [0x03] => Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1)),
+            id => return Err(method_name(id)),
+        });
+    }
+    Ok(Plan { codec, size, post })
+}
+
+/// Folders larger than this are decoded on demand.
+const LAZY_THRESHOLD: u64 = 1024 * 1024;
+
+/// The decoded output of the folder packed at `span`: lazily decoded when
+/// large and without post-filters, else decoded in full.
+async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option<Diagnostic>)> {
+    if plan.post.is_empty() {
+        if plan.codec == Codec::Stored {
+            return Ok((span, None));
+        }
+        if plan.size > LAZY_THRESHOLD && plan.size <= span.len.saturating_mul(plan.codec.max_ratio()) {
+            let decoded = cx.decode_lazy(span, &plan.codec, plan.size)?;
+            return Ok((decoded, None));
+        }
+        let decoded = decode_span(cx, span, &plan.codec, Some(plan.size)).await?;
+        return Ok((decoded.span, decoded.error));
+    }
+    let origin = Origin {
+        parent: span,
+        transform: "7z coders",
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok((found.span, found.error));
+    }
+    let decoded = decode_span(cx, span, &plan.codec, Some(plan.size)).await?;
+    let mut bytes = read_all(cx, decoded.span).await?;
+    for post in &plan.post {
+        post.apply(&mut bytes);
+    }
+    let out = cx.add_derived(origin, bytes, decoded.consumed, decoded.error)?;
+    Ok((out.span, out.error))
+}
+
+/// Expander: decodes a folder and dissects `len` bytes at `offset` of its
+/// output (a file, or the whole folder).
+async fn folder_part(
+    cx: Cx,
+    (input, span, plan, offset, len): (Input, Span, Arc<Plan>, u64, u64),
+) -> Result<()> {
+    let (out, error) = folder_output(&cx, span, &plan).await?;
+    if let Some(e) = error {
+        cx.diag(e);
+    }
+    cx.annotate(format!("{:#x} bytes {}", len, plan.codec.verb()));
+    dissect_or_data(cx, input.nested(out.sub(offset, len))).await
+}
+
+// ---------------------------------------------------------------------------
 // Dissection
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -725,8 +865,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             return Ok(());
         }
     };
-    let archive = Arc::new(archive);
-    let pack_base = SIGNATURE_HEADER.saturating_add(archive.streams.pack_pos);
+    let mut archive = Arc::new(archive);
+    let mut pack_base = SIGNATURE_HEADER.saturating_add(archive.streams.pack_pos);
+    // Where packed streams end and the (outer) next header starts.
+    let data_end = next.offset.saturating_sub(file.offset.saturating_add(SIGNATURE_HEADER));
+    let mut header = next;
 
     if archive.encoded {
         let methods: Vec<String> = archive
@@ -747,32 +890,43 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .folders
             .first()
             .map_or(0, Folder::unpack_size);
-        let data_len = pack_base.saturating_sub(SIGNATURE_HEADER);
-        if data_len > 0 {
-            cx.emit(
-                Node::new("Packed data")
-                    .span(file.sub(SIGNATURE_HEADER, data_len))
-                    .summary(human_size(data_len)),
-            );
-        }
-        cx.emit(
-            unsupported("Encoded header", header_span, &methods).summary(format!(
-                "{methods}, {} → {}",
-                human_size(packed),
-                human_size(size)
-            )),
-        );
+        let summary = format!("{methods}, {} → {}", human_size(packed), human_size(size));
         let outline: Vec<Node> = archive.outline.iter().map(|i| i.node(next)).collect();
-        cx.emit(
-            next_node
-                .summary("kEncodedHeader")
-                .lazy(emit_nodes, Arc::new(outline)),
-        );
-        cx.annotate(format!(
-            "7-Zip archive, header compressed ({methods}), {} packed",
-            human_size(file.len)
-        ));
-        return Ok(());
+        match decode_header(&cx, &archive, file, pack_base).await {
+            Ok((span, inner)) => {
+                cx.emit(
+                    Node::new("Encoded header")
+                        .span(header_span)
+                        .summary(summary)
+                        .lazy(emit_nodes, Arc::new(outline)),
+                );
+                pack_base = SIGNATURE_HEADER.saturating_add(inner.streams.pack_pos);
+                archive = Arc::new(inner);
+                header = span;
+                next_node = Node::new("Decoded header").span(span);
+            }
+            Err(e) => {
+                let data_len = pack_base.saturating_sub(SIGNATURE_HEADER);
+                if data_len > 0 {
+                    cx.emit(
+                        Node::new("Packed data")
+                            .span(file.sub(SIGNATURE_HEADER, data_len))
+                            .summary(human_size(data_len)),
+                    );
+                }
+                cx.emit(Node::new("Encoded header").span(header_span).summary(summary).diag(e));
+                cx.emit(
+                    next_node
+                        .summary("kEncodedHeader")
+                        .lazy(emit_nodes, Arc::new(outline)),
+                );
+                cx.annotate(format!(
+                    "7-Zip archive, header compressed ({methods}), {} packed",
+                    human_size(file.len)
+                ));
+                return Ok(());
+            }
+        }
     }
 
     let files = to_u64(archive.files.len());
@@ -788,18 +942,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     cx.emit(
         Node::new("Files")
-            .span(next)
+            .span(header)
             .summary(count(files, "file", "files"))
             .lazy(list_files, (input, archive.clone(), pack_base)),
     );
     cx.emit(
         Node::new("Folders")
             .span(
-                file.sub(
-                    SIGNATURE_HEADER,
-                    next.offset
-                        .saturating_sub(file.offset.saturating_add(SIGNATURE_HEADER)),
-                ),
+                file.sub(SIGNATURE_HEADER, data_end),
             )
             .summary(count(
                 to_u64(archive.streams.folders.len()),
@@ -808,7 +958,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ))
             .lazy(list_folders, (input, archive.clone(), pack_base)),
     );
-    let outline: Vec<Node> = archive.outline.iter().map(|i| i.node(next)).collect();
+    let outline: Vec<Node> = archive.outline.iter().map(|i| i.node(header)).collect();
     cx.emit(
         next_node
             .summary("kHeader")
@@ -820,6 +970,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
     Ok(())
+}
+
+/// Decodes an encoded header (its first folder) and parses the plain header
+/// inside: returns the decoded span and the archive it describes.
+async fn decode_header(cx: &Cx, outer: &Archive, file: Span, pack_base: u64) -> Result<(Span, Archive)> {
+    let folder = outer
+        .streams
+        .folders
+        .first()
+        .ok_or_else(|| Diagnostic::malformed("encoded header without a folder"))?;
+    let span = folder_spans(outer, file, pack_base)
+        .first()
+        .copied()
+        .ok_or_else(|| Diagnostic::malformed("encoded header without a packed stream"))?;
+    let p = plan(folder).map_err(|why| Diagnostic::unsupported(format!("{why} compression")).at(span))?;
+    let (out, error) = folder_output(cx, span, &p).await?;
+    if let Some(e) = error {
+        return Err(e);
+    }
+    let bytes = read_all(cx, out).await?;
+    match (Parser { data: &bytes, at: 0 }).header() {
+        Ok(a) if !a.encoded => Ok((out, a)),
+        Ok(_) => Err(Diagnostic::malformed("encoded header inside an encoded header").at(out)),
+        Err(e) => Err(Diagnostic::malformed(e).at(out)),
+    }
 }
 
 /// Spans of each folder's first packed stream.
@@ -871,13 +1046,15 @@ async fn list_folders(
                 .summary(human_size(f.unpack_size())),
         );
         children.push(Node::new("Streams").value(uint(f.streams)));
-        let single = f.coders.len() == 1;
-        children.push(match f.coders.first().map(|c| c.id.as_slice()) {
-            Some([0x00]) if single => embedded("Data", input.nested(span)),
-            Some([0x04, 0x01, 0x08]) if single => {
-                content("Data", input, span, Codec::Deflate, Some(f.unpack_size()))
+        children.push(match plan(f) {
+            Ok(p) if p.codec == Codec::Stored && p.post.is_empty() => embedded("Data", input.nested(span)),
+            Ok(p) => {
+                let size = f.unpack_size();
+                Node::new("Data")
+                    .span(span)
+                    .lazy(folder_part, (input, span, Arc::new(p), 0, size))
             }
-            _ => unsupported("Data", span, &methods),
+            Err(why) => unsupported("Data", span, &why),
         });
         cx.push(
             Node::new(format!("Folder {i}"))
@@ -942,19 +1119,33 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
             );
             children.push(Node::new("Folder").value(uint(to_u64(folder))));
             let methods = fo.map(Folder::methods).unwrap_or_default();
-            let single = fo.is_some_and(|f| f.coders.len() == 1);
-            let id = fo.and_then(|f| f.coders.first()).map(|c| c.id.clone());
-            let content_node = match id.as_deref() {
-                Some([0x00]) if single => {
+            let content_node = match fo.map(plan) {
+                Some(Ok(p)) if p.codec == Codec::Stored && p.post.is_empty() => {
                     let s = span.sub(offset_in_folder, size);
                     node = node.span(s);
                     embedded("Content", input.nested(s))
                 }
-                Some([0x04, 0x01, 0x08]) if single && fo.is_some_and(|f| f.streams == 1) => {
+                Some(Ok(p)) => {
                     node = node.span(span);
-                    content("Content", input, span, Codec::Deflate, Some(size))
+                    let mut c = Node::new("Content")
+                        .span(span)
+                        .lazy(folder_part, (input, span, Arc::new(p), offset_in_folder, size));
+                    if fo.is_some_and(|f| f.streams > 1) {
+                        c = c.summary(format!(
+                            "{methods}, in a {} solid block",
+                            human_size(fo.map_or(0, Folder::unpack_size))
+                        ));
+                    }
+                    c
                 }
-                _ => {
+                Some(Err(why)) => {
+                    node = node.span(span);
+                    unsupported("Content", span, &why).summary(format!(
+                        "{methods}, in a {} solid block",
+                        human_size(fo.map_or(0, Folder::unpack_size))
+                    ))
+                }
+                None => {
                     node = node.span(span);
                     unsupported("Content", span, &methods).summary(format!(
                         "{methods}, in a {} solid block",
