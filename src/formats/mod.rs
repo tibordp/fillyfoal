@@ -39,6 +39,7 @@ pub mod matroska;
 pub mod mpeg;
 pub mod mxf;
 pub mod rad;
+pub mod rawvideo;
 pub mod realmedia;
 pub mod swf;
 pub mod vidutil;
@@ -209,6 +210,9 @@ pub static FORMATS: &[&Format] = &[
     &gamevideo::FILM,
     &gamevideo::SMJPEG,
     &gamevideo::FLIC,
+    &rawvideo::DIRAC,
+    &rawvideo::DNXHD,
+    &rawvideo::H263,
     // -- end audio & video --
 
     // -- documents & data --

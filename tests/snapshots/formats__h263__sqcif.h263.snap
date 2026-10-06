@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sqcif.h263 — H.263, sub-QCIF (128×96)  [0x0+0xf71]
+  ▾ Picture 0 — I, TR 0, sub-QCIF, 2916 bytes  [0x0+0xb64]
+      Picture start code: 0x20  [0x0+0x3]
+      Temporal reference: 0  [0x2+0x2]
+      Source format: 1 — sub-QCIF (128×96)  [0x4+0x1]
+      Picture coding type: 0 — I (intra)  [0x4+0x1]
+      Picture data  [0x5+0xb5f]
+  ▾ Picture 1 — P, TR 5, sub-QCIF, 1037 bytes  [0xb64+0x40d]
+      Picture start code: 0x20  [0xb64+0x3]
+      Temporal reference: 5  [0xb66+0x2]
+      Source format: 1 — sub-QCIF (128×96)  [0xb68+0x1]
+      Picture coding type: 1 — P (inter)  [0xb68+0x1]
+      Picture data  [0xb69+0x408]
