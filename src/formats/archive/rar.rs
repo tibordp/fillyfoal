@@ -4,11 +4,21 @@
 //! an optional data area: RAR 4 headers are fixed little-endian fields, RAR 5
 //! headers are built from variable-length integers and carry "extra area"
 //! records. Blocks are listed in pages; expanding one decodes its header and
-//! shows its data. Stored members are dissected in place; compressed data is
-//! an unsupported leaf (see the codec policy).
+//! shows its data. File contents are embedded children: stored ones in
+//! place, compressed ones (RAR 2.9 LZ/PPMd and RAR 5.0/7.0, see
+//! [`crate::codec::rar`]) decoded on demand, with their CRC32 checked.
+//!
+//! In a solid archive the files of a run share one dictionary: the run is
+//! decoded as one stream over its files' packed data (a pieces source), and
+//! each file is a span of the output. RAR 1.5/2.0 compression, encryption
+//! and multi-volume members remain unsupported leaves; RAR 5 BLAKE2sp
+//! hashes are shown but not checked.
+
+use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::codec::crc32;
+use crate::codec::rar::{Algorithm, Member, Params};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
@@ -16,9 +26,9 @@ use crate::fields::Endian;
 use crate::formats::util::arcutil::{
     ByteReader, count, emit_nodes, hex, human_size, text, unsupported,
 };
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::formats::{Codec, Format, Input, Probe, dissect_or_data};
 use crate::node::Node;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag};
 
 const LE: Endian = Endian::Little;
@@ -121,6 +131,70 @@ struct Block4 {
     name: Option<String>,
     unpacked: u64,
     crc_ok: bool,
+    part: Option<Part>,
+}
+
+/// A file's packed data and how it decodes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Part {
+    /// Offset of the file's block in the archive (identifies the file).
+    block: u64,
+    data: Span,
+    unpacked: u64,
+    crc: Option<u32>,
+    how: How,
+    /// Continues the dictionary of the file before (solid archives).
+    solid: bool,
+    dict: u64,
+    rar5: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum How {
+    Stored,
+    Lz(Algorithm),
+    Unsupported(&'static str),
+}
+
+impl How {
+    fn name(self) -> &'static str {
+        match self {
+            How::Stored => "stored",
+            How::Lz(Algorithm::V29) => "RAR 2.9",
+            How::Lz(Algorithm::V50) => "RAR 5.0",
+            How::Lz(Algorithm::V70) => "RAR 7.0",
+            How::Unsupported(n) => n,
+        }
+    }
+}
+
+/// The part of a RAR 4 file block (`None` for directories and for data that
+/// cannot be shown: encrypted, split across volumes). `block` is the whole
+/// block, `packed` its data size.
+fn part4(header: &[u8], block: Span, flags: u16, packed: u64, unpacked: u64) -> Option<Part> {
+    if flags & 0xe0 == 0xe0 || flags & 0x07 != 0 {
+        return None;
+    }
+    let size = u16_le(header, 5)?;
+    let ver = *header.get(24)?;
+    let method = *header.get(25)?;
+    let how = match (method, ver) {
+        (0x30, _) => How::Stored,
+        (_, 29) => How::Lz(Algorithm::V29),
+        (_, 20 | 26) => How::Unsupported("RAR 2.0"),
+        (_, 15) => How::Unsupported("RAR 1.5"),
+        _ => How::Unsupported("unknown RAR version"),
+    };
+    Some(Part {
+        block: block.offset,
+        data: block.sub(size.into(), packed),
+        unpacked,
+        crc: u32_le(header, 16),
+        how,
+        solid: flags & 0x10 != 0,
+        dict: 0x1_0000u64 << ((flags >> 5) & 7),
+        rar5: false,
+    })
 }
 
 /// The NUL-separated ASCII part of a (possibly Unicode-encoded) name.
@@ -148,6 +222,7 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
     };
     let mut name = None;
     let mut unpacked = 0;
+    let mut part = None;
     if kind == 0x74 || kind == 0x7a {
         unpacked = u64::from(u32_le(&header, 11).unwrap_or(0));
         let mut name_at = 32usize;
@@ -163,6 +238,10 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
             .get(name_at..name_at.saturating_add(len))
             .unwrap_or_default();
         name = Some(name4(bytes));
+        if kind == 0x74 {
+            let block = cur.span(u64::from(size).saturating_add(add));
+            part = part4(&header, block, flags, add, unpacked);
+        }
     }
     let crc_ok = header
         .get(2..)
@@ -176,6 +255,7 @@ async fn next_block4(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block4> {
         name,
         unpacked,
         crc_ok,
+        part,
     })
 }
 
@@ -340,11 +420,18 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
             r.with(|n| n.value(hex(attr.into())));
             let mut packed = u64::from(pack);
+            let mut unpacked = u64::from(unp);
             if flags & 0x100 != 0 {
                 let hp = r.u32("High packed size", LE).ok_or_else(bad)?;
-                r.u32("High unpacked size", LE).ok_or_else(bad)?;
+                let hu = r.u32("High unpacked size", LE).ok_or_else(bad)?;
                 packed |= u64::from(hp) << 32;
+                unpacked |= u64::from(hu) << 32;
             }
+            let part = if kind == 0x74 {
+                part4(&header, span, flags, packed, unpacked)
+            } else {
+                None
+            };
             let raw = r.bytes("Name", name_len.into()).ok_or_else(bad)?;
             let name = name4(raw);
             r.with(|n| n.value(text(name.clone())));
@@ -369,8 +456,8 @@ async fn block4(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
                         .span(data_span)
                         .diag(Diagnostic::unsupported("multi-volume member")),
                 )
-            } else if method == 0x30 {
-                Some(embedded("Content", input.nested(data_span)).summary(human_size(packed)))
+            } else if let Some(p) = part.filter(|p| !matches!(p.how, How::Unsupported(_))) {
+                Some(content_node("Content", input, p))
             } else {
                 let name = crate::value::lookup(METHOD4, method.into()).unwrap_or("unknown");
                 Some(unsupported(
@@ -465,6 +552,8 @@ struct Block5 {
     unpacked: u64,
     directory: bool,
     crc_ok: bool,
+    /// For file headers (type 2) only.
+    part: Option<Part>,
 }
 
 /// The fields of a RAR 5 file or service header after the common part.
@@ -473,6 +562,69 @@ struct FileFields {
     unpacked: u64,
     method: u64,
     name: String,
+    crc: Option<u32>,
+    info: u64,
+}
+
+/// The dictionary size of RAR 5 compression information: 128 KiB << n,
+/// and for RAR 7.0 (version 1) a fraction of 1/32 steps on top.
+fn dict5(info: u64) -> u64 {
+    if info & 0x3f == 0 {
+        0x2_0000u64 << ((info >> 10) & 0xf)
+    } else {
+        let base = 0x2_0000u64 << ((info >> 10) & 0x1f);
+        base.saturating_add((base / 32).saturating_mul((info >> 15) & 0x1f))
+    }
+}
+
+/// The part of a RAR 5 file header (`None` for directories and for data
+/// that cannot be shown: encrypted, split across volumes).
+fn part5(
+    block: Span,
+    header_len: u64,
+    c: &Common,
+    f: &FileFields,
+    encrypted: bool,
+) -> Option<Part> {
+    if f.flags & 0x01 != 0 || encrypted || c.flags & 0x18 != 0 || c.flags & 0x02 == 0 {
+        return None;
+    }
+    let how = match (f.method, f.info & 0x3f) {
+        (0, _) => How::Stored,
+        (_, 0) => How::Lz(Algorithm::V50),
+        (_, 1) => How::Lz(Algorithm::V70),
+        _ => How::Unsupported("unknown RAR 5 algorithm version"),
+    };
+    Some(Part {
+        block: block.offset,
+        data: block.sub(header_len, c.data),
+        unpacked: f.unpacked,
+        crc: f.crc,
+        how,
+        solid: f.info & 0x40 != 0,
+        dict: dict5(f.info),
+        rar5: true,
+    })
+}
+
+/// The record types of an extra area.
+fn extra_types(data: &[u8]) -> Vec<u64> {
+    let mut out = Vec::new();
+    let mut at = 0usize;
+    while at < data.len() {
+        let Some((size, l1)) = crate::bytes::uleb128(data.get(at..).unwrap_or_default()) else {
+            break;
+        };
+        let body = at.saturating_add(l1);
+        if let Some((kind, _)) = crate::bytes::uleb128(data.get(body..).unwrap_or_default()) {
+            out.push(kind);
+        }
+        if size == 0 {
+            break;
+        }
+        at = body.saturating_add(to_usize(size));
+    }
+    out
 }
 
 fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
@@ -498,9 +650,11 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
             })
         });
     }
+    let mut crc = None;
     if flags & 0x04 != 0 {
         let c = r.u32("Data CRC32", LE)?;
         r.with(|n| n.value(hex(c.into())));
+        crc = Some(c);
     }
     let info = r.vint("Compression information")?;
     r.with(|n| {
@@ -509,7 +663,7 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
             info & 0x3f,
             (info >> 7) & 7,
             if info & 0x40 != 0 { ", solid" } else { "" },
-            human_size(0x2_0000u64 << ((info >> 10) & 0xf))
+            human_size(dict5(info))
         ))
     });
     let os = r.vint("Host OS")?;
@@ -527,6 +681,8 @@ fn file_fields(r: &mut ByteReader<'_>) -> Option<FileFields> {
         unpacked,
         method: (info >> 7) & 7,
         name,
+        crc,
+        info,
     })
 }
 
@@ -598,9 +754,16 @@ async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block5> {
     let mut name = None;
     let mut unpacked = 0;
     let mut directory = false;
+    let mut part = None;
     if (c.kind == 2 || c.kind == 3)
         && let Some(f) = file_fields(&mut r)
     {
+        let extra = header
+            .get(to_usize(header_len.saturating_sub(c.extra))..)
+            .unwrap_or_default();
+        let encrypted = c.extra > 0 && extra_types(extra).contains(&1);
+        let block = cur.span(header_len.saturating_add(c.data));
+        part = part5(block, header_len, &c, &f, encrypted);
         name = Some(f.name);
         unpacked = f.unpacked;
         directory = f.flags & 1 != 0;
@@ -613,6 +776,7 @@ async fn next_block5(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Block5> {
         unpacked,
         directory,
         crc_ok,
+        part,
     })
 }
 
@@ -630,8 +794,10 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
     let mut files = 0u64;
     let mut total = 0u64;
     let mut encrypted = false;
+    let mut solid = false;
     while cur.remaining() >= 6 {
         let b = next_block5(cx, &mut cur).await?;
+        solid |= b.part.is_some_and(|p| p.solid);
         let (name, summary) = match (b.kind, b.name) {
             (2, Some(n)) => {
                 files = files.saturating_add(1);
@@ -678,7 +844,8 @@ async fn dissect5(cx: &Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Trailing data").span(file.tail(cur.pos())));
     }
     cx.annotate(format!(
-        "RAR archive (v5), {}, {} uncompressed",
+        "RAR archive (v5), {}{}, {} uncompressed",
+        if solid { "solid, " } else { "" },
         count(files, "file", "files"),
         human_size(total)
     ));
@@ -767,22 +934,34 @@ async fn block5(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     );
     if c.flags & 0x02 != 0 {
         let data = span.sub(header_len, c.data);
+        let part = fields
+            .as_ref()
+            .and_then(|f| part5(span, header_len, &c, f, encrypted))
+            .map(|p| Part {
+                // Service data (comments, ...) is never part of a solid run.
+                solid: p.solid && c.kind == 2,
+                ..p
+            });
         let node = match &fields {
-            _ if c.kind == 3 => Node::new("Data").span(data),
             _ if encrypted => Node::new("Encrypted data")
                 .span(data)
                 .diag(Diagnostic::unsupported("encrypted file")),
             _ if c.flags & 0x18 != 0 => Node::new("Data (split across volumes)")
                 .span(data)
                 .diag(Diagnostic::unsupported("multi-volume member")),
-            Some(f) if f.method == 0 => {
-                embedded("Content", input.nested(data)).summary(human_size(data.len))
-            }
-            Some(f) => unsupported(
-                "Compressed data",
-                data,
-                &format!("RAR 5 (method {})", f.method),
-            ),
+            Some(_) => match part {
+                Some(p) if !matches!(p.how, How::Unsupported(_)) => {
+                    content_node(if c.kind == 3 { "Data" } else { "Content" }, input, p)
+                }
+                _ => unsupported(
+                    "Compressed data",
+                    data,
+                    &format!(
+                        "RAR 5 (version {})",
+                        fields.as_ref().map_or(0, |f| f.info & 0x3f)
+                    ),
+                ),
+            },
             None => Node::new("Data").span(data),
         };
         cx.emit(crate::formats::util::arcutil::check_len(node, data, c.data));
@@ -863,4 +1042,202 @@ fn time_record(r: &mut ByteReader<'_>) -> Option<()> {
         }
     }
     Some(())
+}
+
+// ---------------------------------------------------------------------------
+// File contents
+
+/// Files whose CRC32 is checked when their content is expanded (larger ones
+/// would be read in full just for that).
+const CRC_LIMIT: u64 = 32 << 20;
+
+/// A node for a file's content, decoded and checked when expanded.
+fn content_node(name: &'static str, input: Input, part: Part) -> Node {
+    let mut summary = format!("{}, {}", part.how.name(), human_size(part.unpacked));
+    if part.solid {
+        summary.push_str(", solid");
+    }
+    Node::new(name)
+        .span(part.data)
+        .summary(summary)
+        .lazy(content, (input, part))
+}
+
+/// The runs of files decoded together: one per non-solid compressed file
+/// and the solid files after it.
+struct Groups {
+    groups: Vec<Vec<Part>>,
+}
+
+/// Walks all headers of the archive for its file parts.
+async fn walk_parts(cx: &Cx, input: Input, rar5: bool) -> Result<Vec<Part>> {
+    let mut cur = Cursor::new(cx, input.span, LE);
+    let mut parts = Vec::new();
+    if rar5 {
+        cur.seek(8);
+        while cur.remaining() >= 6 {
+            let b = next_block5(cx, &mut cur).await?;
+            if b.kind == 2
+                && let Some(p) = b.part
+            {
+                parts.push(p);
+            }
+            if b.kind == 4 || b.kind == 5 {
+                break;
+            }
+            cx.checkpoint().await;
+        }
+    } else {
+        cur.seek(7);
+        while cur.remaining() >= 7 {
+            let b = next_block4(cx, &mut cur).await?;
+            if let Some(p) = b.part {
+                parts.push(p);
+            }
+            if b.kind == 0x7b || (b.kind == 0x73 && b.flags & 0x0080 != 0) {
+                break;
+            }
+            cx.checkpoint().await;
+        }
+    }
+    Ok(parts)
+}
+
+async fn groups(cx: &Cx, input: Input, rar5: bool) -> Result<Arc<Groups>> {
+    if let Some(g) = cx.cached::<Groups>(input.span, "rar groups") {
+        return Ok(g);
+    }
+    let mut groups: Vec<Vec<Part>> = Vec::new();
+    let mut open = false;
+    for p in walk_parts(cx, input, rar5).await? {
+        match p.how {
+            How::Stored => {}
+            How::Lz(_) => {
+                match groups.last_mut() {
+                    Some(g) if open && p.solid => g.push(p),
+                    _ => groups.push(vec![p]),
+                }
+                open = true;
+            }
+            // A run cannot continue past what we cannot decode.
+            How::Unsupported(_) => open = false,
+        }
+    }
+    let g = Arc::new(Groups { groups });
+    cx.cache(input.span, "rar groups", g.clone());
+    Ok(g)
+}
+
+/// The decoded output of a run of files.
+fn group_stream(cx: &Cx, parts: &[Part]) -> Result<Span> {
+    let (Some(first), Some(last)) = (parts.first(), parts.last()) else {
+        return Err(Diagnostic::malformed("empty solid run"));
+    };
+    let data = if parts.len() == 1 {
+        first.data
+    } else {
+        let parent = Span::new(
+            first.data.source,
+            first.data.offset,
+            last.data.end().saturating_sub(first.data.offset),
+        );
+        cx.add_pieces(
+            Origin {
+                parent,
+                transform: "rar-solid",
+            },
+            parts.iter().map(|p| p.data).collect(),
+        )?
+    };
+    let members: Arc<[Member]> = parts
+        .iter()
+        .map(|p| Member {
+            packed: p.data.len,
+            unpacked: p.unpacked,
+            algorithm: match p.how {
+                How::Lz(a) => a,
+                _ => Algorithm::V29,
+            },
+        })
+        .collect();
+    let total = parts.iter().fold(0u64, |t, p| t.saturating_add(p.unpacked));
+    let codec = Codec::Rar(Params {
+        dict: parts.iter().map(|p| p.dict).max().unwrap_or(0),
+        members,
+    });
+    let stream = cx.decode_lazy(data, &codec, total)?;
+    Ok(Span::new(stream.source, 0, total))
+}
+
+/// Expander: a file's content (decoded with the files of its solid run),
+/// its CRC32 checked, dissected.
+async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
+    let span = match part.how {
+        How::Stored => part.data,
+        How::Lz(_) => {
+            let (run, index) = if part.solid {
+                let g = groups(&cx, input, part.rar5).await?;
+                g.groups
+                    .iter()
+                    .find_map(|run| {
+                        run.iter()
+                            .position(|p| p.block == part.block)
+                            .map(|i| (run.clone(), i))
+                    })
+                    .ok_or_else(|| Diagnostic::malformed("file not found in its solid run"))?
+            } else {
+                (vec![part], 0)
+            };
+            let stream = group_stream(&cx, &run)?;
+            let offset = run
+                .iter()
+                .take(index)
+                .fold(0u64, |t, p| t.saturating_add(p.unpacked));
+            if run.len() > 1 {
+                cx.emit(Node::new("Solid run").span(stream).summary(format!(
+                    "file {} of {}, at {offset:#x}",
+                    index.saturating_add(1),
+                    count(to_u64(run.len()), "file", "files")
+                )));
+            }
+            stream.sub(offset, part.unpacked)
+        }
+        How::Unsupported(what) => {
+            return Err(Diagnostic::unsupported(format!("{what} compression")));
+        }
+    };
+    if let Some(want) = part.crc
+        && span.len <= CRC_LIMIT
+    {
+        let (got, len) = crc_of(&cx, span).await?;
+        let node = Node::new("CRC32").value(hex(got.into()));
+        cx.emit(if len < part.unpacked {
+            node.diag(Diagnostic::malformed(format!(
+                "decoded {len:#x} of {:#x} bytes",
+                part.unpacked
+            )))
+        } else if got != want {
+            node.diag(Diagnostic::warning(format!(
+                "CRC32 mismatch: stored {want:#010x}"
+            )))
+        } else {
+            node.summary("valid")
+        });
+    }
+    dissect_or_data(cx, input.nested(span)).await
+}
+
+/// CRC32 and length of what `span` holds.
+async fn crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
+    let mut crc = 0xffff_ffffu32;
+    let mut pos = 0u64;
+    while pos < span.len {
+        let data = cx.read(span.sub(pos, 1 << 20)).await?;
+        if data.is_empty() {
+            break;
+        }
+        crc = crate::codec::crc::crc32_update(crc, &data);
+        pos = pos.saturating_add(to_u64(data.len()));
+    }
+    Ok((crc ^ 0xffff_ffff, pos))
 }

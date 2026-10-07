@@ -36,6 +36,7 @@ pub mod pbz;
 pub mod pipeline;
 pub mod psarc;
 pub mod quantum;
+pub mod rar;
 pub mod statdata;
 pub mod stuffit;
 pub mod unixz;
@@ -234,6 +235,9 @@ pub enum Codec {
     Lzh(lzh::Params),
     /// A PSARC entry's zlib or LZMA blocks (see [`psarc`]).
     Psarc(psarc::Entry),
+    /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
+    /// stream (see [`rar`]).
+    Rar(rar::Params),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -317,6 +321,7 @@ impl Codec {
             Codec::DwgLz77 { .. } => "dwg-lz77",
             Codec::Lzh(_) => "lzh",
             Codec::Psarc(_) => "psarc",
+            Codec::Rar(_) => "rar",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -382,6 +387,7 @@ impl Codec {
             Codec::DwgLz77 { .. } => "dwg-lz77 (lazy)",
             Codec::Lzh(_) => "lzh (lazy)",
             Codec::Psarc(_) => "psarc (lazy)",
+            Codec::Rar(_) => "rar (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -437,6 +443,7 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
+            Codec::Rar(_) => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -506,6 +513,8 @@ impl Codec {
             Codec::Implode(_) | Codec::DclImplode => 256,
             // A 32 KiB frame (block) takes a few bytes at least.
             Codec::Lzx(_) => 32_768,
+            // A 4 KiB RAR 5 match costs a few bits; PPMd runs cost less.
+            Codec::Rar(_) => 1 << 16,
             Codec::CabFolder(f) if f.method() == 0 => 1,
             Codec::CabFolder(_) => 32_768,
             Codec::Lzfse => 4_096,
@@ -589,6 +598,7 @@ impl Codec {
             Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
             Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
+            Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),

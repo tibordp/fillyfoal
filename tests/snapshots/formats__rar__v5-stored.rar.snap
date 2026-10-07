@@ -34,6 +34,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Flags: 3  [0x34+0x1]
             Modification time: 2024-01-02 03:04:00 UTC  [0x35+0x4]
     ▾ Content — UTF-8 text, LF line endings, 1 line  [0x39+0xa]
+        CRC32: 0xb180d29d — valid
         Encoding: "UTF-8"
         Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
       ▾ Lines — 1 line  [0x39+0xa]
@@ -82,6 +83,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Flags: 3  [0x8f+0x1]
             Modification time: 2024-01-02 03:04:00 UTC  [0x90+0x4]
     ▾ Content — 1×1, 8-bit Grayscale  [0x94+0x43]
+        CRC32: 0x44dc90b4 — valid
         Signature  [0x94+0x8]
       ▾ IHDR — 1×1, 8-bit Grayscale  [0x9c+0x19]
           Length: 13  [0x9c+0x4]
@@ -127,8 +129,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Type: file time (0x3)  [0xfb+0x1]
             Flags: 3  [0xfc+0x1]
             Modification time: 2024-01-02 03:04:00 UTC  [0xfd+0x4]
-      Compressed data — 40 bytes  [0x101+0x28]
-        ! unsupported: RAR 5 (method 3) compression
+    ▾ Content — RAR 5.0, 100 bytes  [0x101+0x28]
+        ! malformed: decoding stopped: RAR: block header checksum mismatch [#1:0x0+0x64]
   ▾ End of archive  [0x129+0x8]
     ▾ Header  [0x129+0x8]
         Header CRC32: 0x5156771d — valid  [0x129+0x4]
