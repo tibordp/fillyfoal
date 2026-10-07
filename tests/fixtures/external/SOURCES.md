@@ -86,6 +86,9 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `apfs/apfs.img.gz` | macOS newfs_apfs 2811.120.14.0.1 | formatter string in the superblock; populated on a mounted volume. Stored with `gzip -n` (the harness inflates it) |
 | `exfat/exfat.img.gz` | macOS newfs_exfat | populated on a mounted volume (AppleDouble `._` files with `com.apple.provenance`). Stored with `gzip -n` |
 | `hfsplus/hfsplus.img.gz` | macOS (newfs_hfs/hdiutil, inferred) | last-mounted version `10.0` (macOS); not byte-reproduced. Stored with `gzip -n` |
+| `udf/` | macOS hdiutil (DiscRecording 9.0.3d5) | `sh tests/data/udf/gen.sh tests/fixtures/external` (`hdiutil makehybrid -udf -udf-version 1.02` / `1.50`; 2.00 and 2.01 produce the same bytes as 1.50); not byte-reproducible (recording times, volume set ID). Stored with `gzip -9 -n` |
+| `iso9660/udf-bridge.iso.gz` | macOS hdiutil (DiscRecording 9.0.3d5) | same script: `hdiutil makehybrid -iso -udf` (ISO 9660 with Rock Ridge plus a UDF 1.50 bridge); not byte-reproducible |
+| `iso9660/pycdlib-udf.iso.gz` | pycdlib 1.21.0 | same script: `uv run --with pycdlib==1.21.0 python tests/data/udf/pycdlib_udf.py` (`udf="2.60"`, though the descriptors it writes say UDF 1.02 and NSR02; includes a UDF symlink); not byte-reproducible (timestamps) |
 | `swap/mkswap.img` | util-linux mkswap | commit 3dc63ea4 ("a real mkswap fixture"); label `realswap`, UUID chosen with `-U` |
 
 ## Compilers, linkers and toolchains
