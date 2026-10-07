@@ -96,6 +96,20 @@ pub struct Children<'a> {
     pub error: Option<&'a Diagnostic>,
 }
 
+/// How a node's content is being dissected (see [`Session::interpretation`]).
+#[derive(Clone, Copy, Debug)]
+pub struct Interpretation {
+    /// The format dissecting the content; `None` if it was not recognised.
+    pub format: Option<&'static formats::Format>,
+    /// Whether the host chose the format with [`Session::reinterpret`].
+    pub forced: bool,
+}
+
+/// Where a node sits: its root, then its index among its parent's children
+/// at each level down. Expansion is deterministic, so this names the same
+/// node after the subtree holding it is collapsed and expanded again.
+type Address = (NodeId, Vec<u64>);
+
 /// A range of source bytes the host should read and [`Session::supply`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ByteRequest {
@@ -127,6 +141,9 @@ pub struct Session {
     active: Vec<NodeId>,
     live: usize,
     clock: u64,
+    /// Formats forced with [`Session::reinterpret`], by address so they
+    /// outlive the nodes (see [`Session::trim`]).
+    overrides: std::collections::HashMap<Address, &'static formats::Format>,
 }
 
 struct Slot {
@@ -137,6 +154,8 @@ struct Slot {
 struct Entry {
     node: Node,
     parent: Option<NodeId>,
+    /// Index among the parent's children (0 for a root).
+    index: u64,
     /// The materialised window of children, starting at index `first`.
     children: Vec<NodeId>,
     first: u64,
@@ -153,6 +172,8 @@ struct Entry {
     touched: u64,
     /// Work units consumed by the current expansion.
     work: u64,
+    /// What the node's own detection step settled on, once it has run.
+    interpretation: Option<Interpretation>,
 }
 
 struct Run {
@@ -163,7 +184,7 @@ struct Run {
 }
 
 impl Entry {
-    fn new(node: Node, parent: Option<NodeId>) -> Self {
+    fn new(node: Node, parent: Option<NodeId>, index: u64) -> Self {
         let state = if node.has_children() {
             ChildState::NotRequested
         } else {
@@ -173,6 +194,7 @@ impl Entry {
             own_diagnostics: node.diagnostics.len(),
             node,
             parent,
+            index,
             children: Vec::new(),
             first: 0,
             marks: std::collections::BTreeMap::new(),
@@ -182,6 +204,7 @@ impl Entry {
             run: None,
             touched: 0,
             work: 0,
+            interpretation: None,
         }
     }
 }
@@ -219,6 +242,7 @@ impl Session {
             active: Vec::new(),
             live: 0,
             clock: 0,
+            overrides: std::collections::HashMap::new(),
         }
     }
 
@@ -336,7 +360,7 @@ impl Session {
 
     /// Adds a top-level node.
     pub fn add_root(&mut self, node: Node) -> NodeId {
-        self.alloc(Entry::new(node, None))
+        self.alloc(Entry::new(node, None, 0))
     }
 
     /// Registers a source and adds a root node that identifies and dissects it.
@@ -367,6 +391,65 @@ impl Session {
 
     pub fn parent(&self, id: NodeId) -> Option<NodeId> {
         self.entry(id).and_then(|e| e.parent)
+    }
+
+    /// How `id`'s content is dissected: the format its own detection step
+    /// identified, or the one forced with [`Session::reinterpret`]. `None`
+    /// until an expansion of the node reaches that step, and for nodes whose
+    /// children are fields rather than a file within the file.
+    pub fn interpretation(&self, id: NodeId) -> Option<Interpretation> {
+        self.entry(id).and_then(|e| e.interpretation)
+    }
+
+    /// Dissects `id`'s content as `format` ("inspect as"), or, with `None`,
+    /// returns it to identification. Applies to nodes holding a file within
+    /// the file: an archive member, decompressed data, an embedded resource,
+    /// a root (see [`Session::interpretation`]); on others it has no effect.
+    /// The format holds where identification would run, so a "Decompressed"
+    /// node still decompresses first.
+    ///
+    /// The node is collapsed (expand it again to see the result), and
+    /// formats forced below it are dropped. The choice survives
+    /// [`Session::trim`] and collapsing an ancestor. Returns `false` if the
+    /// node is stale or has no children to produce.
+    pub fn reinterpret(&mut self, id: NodeId, format: Option<&'static formats::Format>) -> bool {
+        let Some(address) = self.address(id) else {
+            return false;
+        };
+        let Some(entry) = self.entry_mut(id) else {
+            return false;
+        };
+        if !entry.node.has_children() {
+            return false;
+        }
+        entry.interpretation = None;
+        let (root, path) = &address;
+        self.overrides
+            .retain(|(r, p), _| !(r == root && p.len() > path.len() && p.starts_with(path)));
+        match format {
+            Some(format) => self.overrides.insert(address, format),
+            None => self.overrides.remove(&address),
+        };
+        self.collapse(id);
+        true
+    }
+
+    fn address(&self, id: NodeId) -> Option<Address> {
+        let mut path = Vec::new();
+        let mut cursor = id;
+        loop {
+            let entry = self.entry(cursor)?;
+            match entry.parent {
+                Some(parent) => {
+                    path.push(entry.index);
+                    cursor = parent;
+                }
+                None => {
+                    path.reverse();
+                    return Some((cursor, path));
+                }
+            }
+        }
     }
 
     pub fn children(&self, id: NodeId) -> Option<Children<'_>> {
@@ -472,6 +555,12 @@ impl Session {
     /// index `start` up to `target`, resuming from the nearest mark.
     fn start(&mut self, id: NodeId, start: u64, target: u64) {
         let shared = self.shared.clone();
+        let forced = if self.overrides.is_empty() {
+            None
+        } else {
+            self.address(id)
+                .and_then(|address| self.overrides.get(&address).copied())
+        };
         let Some(entry) = self.entry_mut(id) else {
             return;
         };
@@ -488,6 +577,7 @@ impl Session {
             emitted: from,
             last_mark: from,
             resume,
+            forced,
             ..Output::default()
         }));
         let cx = Cx {
@@ -673,7 +763,7 @@ impl Session {
                 sh.limits.max_work,
             )
         };
-        let (nodes, count, summary, diagnostics, marks, emitted) = {
+        let (nodes, count, summary, diagnostics, marks, emitted, interpretation) = {
             let mut out = lock(&run.out);
             (
                 take(&mut out.nodes),
@@ -682,11 +772,17 @@ impl Session {
                 take(&mut out.diagnostics),
                 take(&mut out.marks),
                 out.emitted,
+                out.interpretation.take(),
             )
         };
+        // The window is contiguous: new children follow the present ones.
+        let base = self
+            .entry(id)
+            .map_or(0, |e| e.first.saturating_add(to_u64(e.children.len())));
         let ids: Vec<NodeId> = nodes
             .into_iter()
-            .map(|node| self.alloc(Entry::new(node, Some(id))))
+            .zip(0u64..)
+            .map(|(node, i)| self.alloc(Entry::new(node, Some(id), base.saturating_add(i))))
             .collect();
 
         let Some(entry) = self.entry_mut(id) else {
@@ -694,6 +790,9 @@ impl Session {
         };
         entry.children.extend(ids);
         entry.marks.extend(marks);
+        if interpretation.is_some() {
+            entry.interpretation = interpretation;
+        }
         // Keep marks sparse: past the cap, drop every other one.
         if entry.marks.len() > MAX_MARKS {
             let mut keep = false;

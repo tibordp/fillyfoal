@@ -310,9 +310,7 @@ async fn expand_block(cx: Cx, (input, block): (Input, Block)) -> Result<()> {
                 .diag(Diagnostic::unsupported("encrypted PEM block"))
         }
         Some(format) => crate::formats::embedded_as("Contents", inner, format),
-        None => Node::new("Contents")
-            .span(decoded)
-            .lazy(crate::formats::asn1::dissect, inner),
+        None => crate::formats::embedded_as("Contents", inner, &crate::formats::asn1::DER),
     };
     cx.emit(node.summary(format!("{} bytes", decoded.len)));
     Ok(())

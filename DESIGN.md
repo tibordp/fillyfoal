@@ -353,4 +353,6 @@ containers. Consolidated:
   labels are recognised and reported as unsupported; decoders with
   generated tables (~200 KB) would belong behind a feature. Single-byte code
   pages are in `codec::charset`.
-- Format detection beyond magic bytes; confidence and "inspect as…".
+- Format detection beyond magic bytes, with confidence. ("Inspect as…" is
+  there: `Session::open_as` for a file, `Session::reinterpret` for content
+  inside one.)

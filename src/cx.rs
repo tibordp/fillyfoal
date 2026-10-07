@@ -18,9 +18,10 @@ use crate::bytes::to_u64;
 use crate::cache::ByteCache;
 use crate::codec::Codec;
 use crate::error::{Diagnostic, Result};
+use crate::formats::Format;
 use crate::node::{Count, Node};
-use crate::session::Limits;
 use crate::secret::{MAX_ATTEMPTS, Secret, SecretRequest};
+use crate::session::{Interpretation, Limits};
 use crate::span::{Origin, SourceId, Span};
 
 /// Why the most recently polled expansion suspended.
@@ -530,6 +531,13 @@ pub(crate) struct Output {
     pub count: Option<Count>,
     pub summary: Option<String>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The format the host forced for this node (see
+    /// [`crate::Session::reinterpret`]).
+    pub forced: Option<&'static Format>,
+    /// Whether a detection step has run (see [`Cx::claim_detection`]).
+    pub claimed: bool,
+    /// What the node's own detection step settled on.
+    pub interpretation: Option<Interpretation>,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -558,6 +566,25 @@ pub struct Cx {
 }
 
 impl Cx {
+    /// Claims the node's own detection step: the first one its expansion
+    /// reaches, which decides what the node's content is (an expander may
+    /// first decode it, as a "Decompressed" node does). Returns `None` to
+    /// every later step, which belong to content nested inside; otherwise
+    /// `Some` of the format the host forced, if any.
+    pub(crate) fn claim_detection(&self) -> Option<Option<&'static Format>> {
+        let mut out = lock(&self.out);
+        if out.claimed {
+            return None;
+        }
+        out.claimed = true;
+        Some(out.forced)
+    }
+
+    /// Records what the node's own detection step settled on.
+    pub(crate) fn interpreted(&self, interpretation: Interpretation) {
+        lock(&self.out).interpretation = Some(interpretation);
+    }
+
     pub fn limits(&self) -> Limits {
         lock(&self.shared).limits
     }

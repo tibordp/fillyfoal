@@ -36,6 +36,8 @@ pub use error::{DiagKind, Diagnostic, Error, Result};
 pub use fields::{Endian, Field, Fields};
 pub use node::{Count, Node};
 pub use secret::{Secret, SecretKind, SecretRequest};
-pub use session::{ByteRequest, ChildState, Children, Limits, NodeId, Progress, Session, Wait};
+pub use session::{
+    ByteRequest, ChildState, Children, Interpretation, Limits, NodeId, Progress, Session, Wait,
+};
 pub use span::{Origin, SourceId, Span};
 pub use value::{Guid, Radix, Value};

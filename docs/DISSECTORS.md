@@ -199,6 +199,12 @@ tests fail if that ever happens on a fixture.
   `expected` size) are decoded lazily, only as far as reads reach. `codec`
   is a `crate::codec::Codec`: a single codec or `Codec::chain(name,
   lazy_name, [stages])` (filters, decryption, then decompression).
+- Hand nested content to one of these (or to `formats::dissect_or_data` /
+  `formats::dissect` from your own expander), never to another format's
+  dissect function directly: that is where "inspect as"
+  (`Session::reinterpret`) takes effect. The first detection step an
+  expansion reaches is the node's own; later ones are content nested inside
+  it and are identified as usual.
 - **Writing a codec:** implement `codec::pipeline::Decode` (decode from all
   input so far into all output so far, a bounded step at a time; running
   out of input is just an error) and add a `Codec` variant. `Streaming`

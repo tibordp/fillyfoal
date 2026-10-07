@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::node::{Expansion, Node};
+use crate::session::Interpretation;
 use crate::span::Span;
 
 // Modules, grouped by theme; each family's `mod.rs` summarises what it
@@ -156,6 +157,12 @@ pub struct Format {
     pub mime: &'static str,
     pub probe: Probe,
     pub dissect: fn(Cx, Input) -> Expansion,
+}
+
+impl std::fmt::Debug for Format {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Format").field(&self.name).finish()
+    }
 }
 
 /// All formats, in probing order: specific before generic.
@@ -1824,35 +1831,61 @@ pub async fn head(cx: &Cx, span: Span) -> Result<(Vec<u8>, Vec<u8>)> {
     Ok((data, tail))
 }
 
+/// Settles the format of `input`: `given` if the caller knows it, else by
+/// identification. A format the host forced on the node (see
+/// [`crate::Session::reinterpret`]) overrides both, but only at the node's
+/// own detection step; content nested inside it is identified as usual.
+/// The second value is whether `input` had no bytes to identify.
+async fn settle(
+    cx: &Cx,
+    input: &Input,
+    given: Option<&'static Format>,
+) -> Result<(Option<&'static Format>, bool)> {
+    check_nesting(cx, input)?;
+    let claim = cx.claim_detection();
+    if let Some(Some(format)) = claim {
+        cx.interpreted(Interpretation {
+            format: Some(format),
+            forced: true,
+        });
+        return Ok((Some(format), false));
+    }
+    let (format, empty) = match given {
+        Some(format) => (Some(format), false),
+        None => {
+            let (data, tail) = head(cx, input.span).await?;
+            let probe = Head {
+                data: &data,
+                tail: &tail,
+                len: input.span.len,
+            };
+            (identify(&probe), data.is_empty())
+        }
+    };
+    if claim.is_some() {
+        cx.interpreted(Interpretation {
+            format,
+            forced: false,
+        });
+    }
+    Ok((format, empty))
+}
+
 /// Identifies the format of `input` and dissects it.
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
-    check_nesting(&cx, &input)?;
-    let (data, tail) = head(&cx, input.span).await?;
-    let probe = Head {
-        data: &data,
-        tail: &tail,
-        len: input.span.len,
-    };
-    match identify(&probe) {
-        Some(format) => (format.dissect)(cx, input).await,
-        None if data.is_empty() => Err(Diagnostic::note("empty").at(input.span)),
-        None => Err(Diagnostic::unsupported("unrecognized format").at(input.span)),
+    match settle(&cx, &input, None).await? {
+        (Some(format), _) => (format.dissect)(cx, input).await,
+        (None, true) => Err(Diagnostic::note("empty").at(input.span)),
+        (None, false) => Err(Diagnostic::unsupported("unrecognized format").at(input.span)),
     }
 }
 
 /// Dissects `input`, or, if its format is not recognised, shows it as a
 /// plain data leaf so its bytes stay reachable (e.g. decompressed content).
 pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
-    check_nesting(&cx, &input)?;
-    let (data, tail) = head(&cx, input.span).await?;
-    let probe = Head {
-        data: &data,
-        tail: &tail,
-        len: input.span.len,
-    };
-    match identify(&probe) {
-        Some(format) => (format.dissect)(cx, input).await,
-        None => {
+    match settle(&cx, &input, None).await? {
+        (Some(format), _) => (format.dissect)(cx, input).await,
+        (None, _) => {
             cx.emit(Node::new("Data").span(input.span));
             Ok(())
         }
@@ -1919,8 +1952,10 @@ pub async fn expand_content(
 }
 
 async fn dissect_as(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> {
-    check_nesting(&cx, &input)?;
-    let format =
+    let given =
         by_name(name).ok_or_else(|| Diagnostic::internal(format!("unknown format {name}")))?;
-    (format.dissect)(cx, input).await
+    match settle(&cx, &input, Some(given)).await? {
+        (Some(format), _) => (format.dissect)(cx, input).await,
+        (None, _) => Err(Diagnostic::internal(format!("format {name} was not settled"))),
+    }
 }

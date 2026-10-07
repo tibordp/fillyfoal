@@ -11,7 +11,7 @@
 mod common;
 
 use common::Host;
-use fillyfoal::{Cx, Limits, Node, Origin, Result, Span, Value};
+use fillyfoal::{formats, Cx, Limits, Node, Origin, Result, Span, Value};
 
 /// Reassembles "fragments" of the input in a scrambled order and emits the
 /// reassembled text, plus a piecewise source built on top of the first one.
@@ -158,6 +158,134 @@ fn large_member_is_decompressed_lazily(path: &str, node: &str) {
     // Paging through everything does reach the end.
     host.explore(content, 4, 100);
     assert!(host.render().contains("z.txt"));
+}
+
+/// The "Content" node of a tar member (beside its "Header").
+fn member_content(host: &mut Host, archive: fillyfoal::NodeId, name: &str) -> fillyfoal::NodeId {
+    let member = host.child(archive, name).expect("member");
+    host.session.expand(member, 100);
+    host.run();
+    let content = host.child(member, "Content").expect("member content");
+    host.session.expand(content, 100);
+    host.run();
+    content
+}
+
+fn interpretation(host: &Host, id: fillyfoal::NodeId) -> Option<(&'static str, bool)> {
+    let i = host.session.interpretation(id)?;
+    Some((i.format.map_or("-", |f| f.name), i.forced))
+}
+
+/// Opens the zstd-compressed tarball and expands its "Decompressed" node.
+fn decompressed_tarball() -> (Host, fillyfoal::NodeId) {
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/zstd/large-member.tar.zst"
+    ))
+    .unwrap();
+    let mut host = Host::with_chunk(data, 4096);
+    host.session.expand(host.root, 100);
+    host.run();
+    let content = host.child(host.root, "Decompressed").expect("content node");
+    host.session.expand(content, 100);
+    host.run();
+    (host, content)
+}
+
+/// "Inspect as" on nested content: the forced format replaces
+/// identification of the decoded bytes (which are not decoded again), only
+/// for that node, and `None` restores identification.
+#[test]
+fn nested_content_can_be_reinterpreted() {
+    let (mut host, content) = decompressed_tarball();
+    assert_eq!(interpretation(&host, host.root), Some(("zstd", false)));
+    assert_eq!(interpretation(&host, content), Some(("tar", false)));
+    let derived = host.session.derived_bytes();
+
+    let text = formats::by_name("text").unwrap();
+    assert!(host.session.reinterpret(content, Some(text)));
+    assert!(host.session.children(content).unwrap().ids.is_empty());
+    assert_eq!(interpretation(&host, content), None);
+    host.session.expand(content, 100);
+    host.run();
+    assert_eq!(interpretation(&host, content), Some(("text", true)));
+    assert!(host.child(content, "Lines").is_some(), "{}", host.render());
+    assert!(host.child(content, "a.txt").is_none());
+    assert_eq!(host.session.derived_bytes(), derived, "decoded again");
+
+    // Forcing what identification found still marks it as forced; members
+    // inside are identified as usual.
+    let tar = formats::by_name("tar").unwrap();
+    host.session.reinterpret(content, Some(tar));
+    host.session.expand(content, 100);
+    host.run();
+    assert_eq!(interpretation(&host, content), Some(("tar", true)));
+    let member = member_content(&mut host, content, "a.txt");
+    assert_eq!(interpretation(&host, member), Some(("text", false)));
+
+    host.session.reinterpret(content, None);
+    host.session.expand(content, 100);
+    host.run();
+    assert_eq!(interpretation(&host, content), Some(("tar", false)));
+}
+
+/// Forced formats are kept by position, so they outlive the nodes: after an
+/// ancestor is collapsed and expanded again, the re-created node gets the
+/// same format. Reinterpreting a node drops what was forced below it.
+#[test]
+fn reinterpretation_survives_collapse_and_is_dropped_below() {
+    let (mut host, content) = decompressed_tarball();
+    let text = formats::by_name("text").unwrap();
+    let der = formats::by_name("der").unwrap();
+    let member = member_content(&mut host, content, "a.txt");
+    assert!(host.session.reinterpret(member, Some(der)));
+
+    host.session.collapse(host.root);
+    let (mut host, content) = {
+        host.session.expand(host.root, 100);
+        host.run();
+        let content = host.child(host.root, "Decompressed").unwrap();
+        host.session.expand(content, 100);
+        host.run();
+        (host, content)
+    };
+    let member = member_content(&mut host, content, "a.txt");
+    assert_eq!(interpretation(&host, member), Some(("der", true)));
+
+    // Trimming re-creates the member too.
+    host.session.trim(0, &[]);
+    host.session.expand(content, 100);
+    host.run();
+    let member = member_content(&mut host, content, "a.txt");
+    assert_eq!(interpretation(&host, member), Some(("der", true)));
+
+    // Reinterpreting the container forgets the member's format: under a
+    // different reading, "the first member" no longer means the same thing.
+    host.session.reinterpret(content, Some(text));
+    host.session.reinterpret(content, None);
+    host.session.expand(content, 100);
+    host.run();
+    let member = member_content(&mut host, content, "a.txt");
+    assert_eq!(interpretation(&host, member), Some(("text", false)));
+}
+
+/// Nodes without children cannot be reinterpreted; structural nodes can be,
+/// but never reach a detection step, so nothing changes.
+#[test]
+fn reinterpreting_fields_has_no_effect() {
+    let (mut host, _) = decompressed_tarball();
+    let text = formats::by_name("text").unwrap();
+    let frame = host.child(host.root, "Frame 0").unwrap();
+    host.session.expand(frame, 100);
+    host.run();
+    let magic = host.child(frame, "Magic").unwrap();
+    assert!(!host.session.reinterpret(magic, Some(text)));
+    let before = host.render();
+    assert!(host.session.reinterpret(frame, Some(text)));
+    host.session.expand(frame, 100);
+    host.run();
+    assert_eq!(interpretation(&host, frame), None);
+    assert_eq!(host.render(), before);
 }
 
 /// The same tarball, corrupted halfway through its DEFLATE stream: paging
