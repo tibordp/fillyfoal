@@ -1,17 +1,17 @@
 //! Survey and observation data: ESRI Shapefiles with their dBase tables,
 //! LAS point clouds, and GRIB and BUFR meteorological messages.
 
-use crate::bytes::{u16_le, u32_be, u32_le, u64_be};
+use crate::bytes::{u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -403,130 +403,7 @@ async fn las(cx: Cx, input: Input) -> Result<()> {
 // GRIB and BUFR (meteorological messages)
 
 declare_format!(pub GRIB = "grib", "GRIB weather data", ["grib", "grb", "grib2", "grb2"], "application/x-grib",
-    Probe::Magic(&[(0, b"GRIB")]), grib);
-
-const GRIB2_SECTIONS: [&str; 9] = [
-    "Indicator",
-    "Identification",
-    "Local use",
-    "Grid definition",
-    "Product definition",
-    "Data representation",
-    "Bit-map",
-    "Data",
-    "End",
-];
-
-async fn grib(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let mut pos = 0u64;
-    let mut messages = 0u32;
-    let mut edition = 0u8;
-    while pos.saturating_add(16) <= file.len {
-        let head = cx.read(file.sub(pos, 16)).await?;
-        if !head.starts_with(b"GRIB") {
-            break;
-        }
-        edition = head.get(7).copied().unwrap_or(0);
-        let len = if edition == 2 {
-            u64_be(&head, 8).unwrap_or(0)
-        } else {
-            u64::from(crate::bytes::u24_be(&head, 4).unwrap_or(0))
-        };
-        if len < 16 {
-            cx.diag(Diagnostic::malformed("message shorter than its indicator"));
-            break;
-        }
-        let span = file.sub(pos, len);
-        let discipline = head.get(6).copied().unwrap_or(0);
-        cx.push(
-            Node::new(format!("Message {}", messages.saturating_add(1)))
-                .span(span)
-                .summary(format!(
-                    "edition {edition}, discipline {discipline}, {len} bytes"
-                ))
-                .lazy(grib_sections, (span, edition)),
-        )
-        .await;
-        messages = messages.saturating_add(1);
-        pos = pos.saturating_add(len);
-    }
-    cx.annotate(format!("{messages} GRIB{edition} message(s)"));
-    Ok(())
-}
-
-async fn grib_sections(cx: Cx, (span, edition): (Span, u8)) -> Result<()> {
-    if edition != 2 {
-        cx.emit(Node::new("Indicator").span(span.sub(0, 8)));
-        cx.emit(Node::new("Sections").span(span.sub(8, span.len.saturating_sub(12))));
-        cx.emit(Node::new("End (7777)").span(span.tail(span.len.saturating_sub(4))));
-        return Ok(());
-    }
-    cx.emit(Node::new("Indicator").span(span.sub(0, 16)));
-    let mut cur = Cursor::new(&cx, span, BE);
-    cur.seek(16);
-    while cur.remaining() > 4 {
-        let start = cur.pos();
-        let len = cur.u32().await?;
-        let number = cur.u8().await?;
-        if len < 5 {
-            break;
-        }
-        cur.seek(start.saturating_add(len.into()));
-        let name = GRIB2_SECTIONS
-            .get(usize::from(number))
-            .unwrap_or(&"Unknown");
-        cx.push(
-            Node::new(format!("Section {number}: {name}"))
-                .span(cur.since(start))
-                .summary(format!("{len} bytes")),
-        )
-        .await;
-    }
-    cx.emit(Node::new("End (7777)").span(cur.span(4)));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"GRIB")]), super::grib::dissect);
 
 declare_format!(pub BUFR = "bufr", "BUFR observation data", ["bufr"], "application/x-bufr",
-    Probe::Magic(&[(0, b"BUFR")]), bufr);
-
-async fn bufr(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 8)).await?;
-    let len = u64::from(crate::bytes::u24_be(&head, 4).unwrap_or(0));
-    let edition = head.get(7).copied().unwrap_or(0);
-    cx.emit(
-        Node::new("Section 0 (indicator)")
-            .span(file.sub(0, 8))
-            .value(Value::UInt {
-                value: edition.into(),
-                bits: 8,
-                radix: Radix::Dec,
-            }),
-    );
-    let mut cur = Cursor::new(&cx, file.sub(0, len), BE);
-    cur.seek(8);
-    for number in 1..=4u8 {
-        if cur.remaining() < 3 {
-            break;
-        }
-        let start = cur.pos();
-        let section_len = u64::from(crate::bytes::u24_be(&cur.peek(3).await?, 0).unwrap_or(0));
-        if section_len < 3 {
-            break;
-        }
-        cur.skip(section_len);
-        cx.emit(
-            Node::new(format!("Section {number}"))
-                .span(cur.since(start))
-                .summary(format!("{section_len} bytes")),
-        );
-        // Section 2 is optional (flag in section 1); a 7777 here ends it.
-        if cur.peek(4).await? == b"7777" {
-            break;
-        }
-    }
-    cx.emit(Node::new("Section 5 (7777)").span(cur.span(4)));
-    cx.annotate(format!("BUFR edition {edition}, {len} bytes"));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"BUFR")]), super::bufr::dissect);

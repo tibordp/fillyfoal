@@ -1,14 +1,14 @@
 //! Scientific datasets: CERN ROOT, NIfTI, NRRD, HDF4 and legacy VTK
 //! (statistics packages live in `stats`).
 
-use crate::bytes::{to_u64, u16_le, u32_be, u32_le};
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::{Head, Input, Probe};
+use crate::formats::{Input, Probe};
 use crate::node::Node;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::Value;
 
 const BE: Endian = Endian::Big;
 
@@ -53,87 +53,8 @@ async fn cern_root(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-fn nifti_probe(h: &Head<'_>) -> bool {
-    (u32_le(h.data, 0) == Some(348) && (h.at(344, b"n+1\0") || h.at(344, b"ni1\0")))
-        || (u32_le(h.data, 0) == Some(540) && (h.at(4, b"n+2\0") || h.at(4, b"ni2\0")))
-}
-
 declare_format!(pub NIFTI = "nifti", "NIfTI neuroimaging volume", ["nii", "hdr"], "application/x-nifti",
-    Probe::Custom(nifti_probe), nifti);
-
-const NIFTI_TYPES: EnumTable = &[
-    (2, "uint8"),
-    (4, "int16"),
-    (8, "int32"),
-    (16, "float32"),
-    (64, "float64"),
-    (128, "rgb24"),
-    (256, "int8"),
-    (512, "uint16"),
-    (768, "uint32"),
-];
-
-async fn nifti(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 348)).await?;
-    if u32_le(&head, 0) == Some(540) {
-        cx.emit(Node::new("NIfTI-2 header").span(file.sub(0, 540)));
-        cx.annotate("NIfTI-2 volume");
-        return Ok(());
-    }
-    let dims: Vec<String> =
-        (0..usize::from(crate::bytes::i16_le(&head, 40).unwrap_or(0).clamp(0, 7) as u16))
-            .map(|i| {
-                crate::bytes::i16_le(&head, 42usize.saturating_add(i.saturating_mul(2)))
-                    .unwrap_or(0)
-                    .to_string()
-            })
-            .collect();
-    let datatype = u16_le(&head, 70).unwrap_or(0);
-    let description = crate::text::until_nul(head.get(148..228).unwrap_or_default());
-    let offset = f32::from_le_bytes([
-        head.get(108).copied().unwrap_or(0),
-        head.get(109).copied().unwrap_or(0),
-        head.get(110).copied().unwrap_or(0),
-        head.get(111).copied().unwrap_or(0),
-    ]);
-    cx.emit(
-        Node::new("Header")
-            .span(file.sub(0, 348))
-            .summary(description.clone()),
-    );
-    cx.emit(
-        Node::new("Dimensions")
-            .span(file.sub(40, 16))
-            .value(text(dims.join("×"))),
-    );
-    cx.emit(
-        Node::new("Data type")
-            .span(file.sub(70, 2))
-            .value(Value::Enum {
-                raw: datatype.into(),
-                bits: 16,
-                name: lookup(NIFTI_TYPES, datatype.into()),
-            }),
-    );
-    let data_at = if offset.is_finite() && offset >= 348.0 {
-        offset as u64
-    } else {
-        352
-    };
-    cx.emit(Node::new("Voxel data").span(file.tail(data_at)));
-    cx.annotate(format!(
-        "NIfTI-1, {} {}{}",
-        dims.join("×"),
-        lookup(NIFTI_TYPES, datatype.into()).unwrap_or("?"),
-        if description.is_empty() {
-            String::new()
-        } else {
-            format!(", {description:?}")
-        }
-    ));
-    Ok(())
-}
+    Probe::Custom(super::nifti::probe), super::nifti::dissect);
 
 declare_format!(pub NRRD = "nrrd", "Nearly raw raster data (NRRD)", ["nrrd", "nhdr"], "application/x-nrrd",
     Probe::Magic(&[(0, b"NRRD000")]), nrrd);
@@ -183,34 +104,7 @@ async fn nrrd(cx: Cx, input: Input) -> Result<()> {
 }
 
 declare_format!(pub HDF4 = "hdf4", "HDF4 scientific data", ["hdf", "hdf4", "h4"], "application/x-hdf4",
-    Probe::Magic(&[(0, b"\x0e\x03\x13\x01")]), hdf4);
-
-async fn hdf4(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)));
-    let mut at = 4u64;
-    let mut blocks = 0u32;
-    let mut descriptors = 0u32;
-    while at != 0 && at < file.len && blocks < 1000 {
-        let head = cx.read(file.sub(at, 6)).await?;
-        let count = crate::bytes::u16_be(&head, 0).unwrap_or(0);
-        let next = u64::from(u32_be(&head, 2).unwrap_or(0));
-        blocks = blocks.saturating_add(1);
-        descriptors = descriptors.saturating_add(count.into());
-        cx.push(
-            Node::new(format!("DD block {blocks}"))
-                .span(file.sub(at, 6u64.saturating_add(u64::from(count).saturating_mul(12))))
-                .summary(format!("{count} descriptors")),
-        )
-        .await;
-        if next <= at {
-            break;
-        }
-        at = next;
-    }
-    cx.annotate(format!("HDF4, {descriptors} data descriptors"));
-    Ok(())
-}
+    Probe::Magic(&[(0, b"\x0e\x03\x13\x01")]), super::hdf4::dissect);
 
 declare_format!(pub VTK = "vtk-legacy", "VTK legacy data file", ["vtk"], "application/x-vtk",
     Probe::Magic(&[(0, b"# vtk DataFile Version")]), vtk);

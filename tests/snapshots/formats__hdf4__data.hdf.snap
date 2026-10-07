@@ -2,6 +2,16 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ data.hdf — HDF4, 2 data descriptors  [0x0+0x32]
-    Magic  [0x0+0x4]
-    DD block 1 — 2 descriptors  [0x4+0x1e]
+▾ data.hdf — HDF4, 1 objects  [0x0+0x32]
+    Magic: 0xe031301  [0x0+0x4]
+  ▾ Data descriptors — 1 block(s), 1 of 2 descriptors used
+    ▾ DD block 1 — 2 descriptors, 1 used, next none  [0x4+0x1e]
+        Number of descriptors: 2  [0x4+0x2]
+        Next block: 0x0  [0x6+0x4]
+      ▾ DFTAG_VERSION ref 1 — 0x64, 10 bytes  [0xa+0xc] → 0x32+0x0
+          ! truncated: needed 0xa bytes at 0x32, only 0x0 available [0x32+0xa]
+          Tag: DFTAG_VERSION (library version) (0x1e)  [0xa+0x2]
+          Reference: 1  [0xc+0x2]
+          Offset: 0x64  [0xe+0x4]
+          Length: 10  [0x12+0x4]
+        DFTAG_NULL ref 2 — empty  [0x16+0xc]

@@ -22,6 +22,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
+pub mod bufr;
 pub mod dlis;
 pub mod elevation;
 pub mod fit;
@@ -29,6 +30,7 @@ pub mod geoscience;
 pub mod gis;
 pub mod gistext;
 pub mod gnss;
+pub mod grib;
 pub mod markup;
 pub mod mdf;
 pub mod osm;
