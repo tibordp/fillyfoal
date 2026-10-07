@@ -337,3 +337,14 @@ and reproduce every file byte for byte.
 | `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
 | `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
 | `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |
+
+## Game engines
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `unityfs/lz4hc.bundle` | UnityPy 1.25.4 (`BundleFile.save(packer="lz4hc")`, `SerializedFile.save`, type-tree writer; LZ4HC from python-lz4) | reproduced byte-for-byte: `uv run --with UnityPy==1.25.4 python tests/data/unityfs/make.py`. UnityPy cannot create files from nothing: the script hands it a seed with empty tables (bytes written by the script), then adds types (UnityPy's type-tree database for Unity 2022.3), objects (two TextAssets, one a JSON document; a Texture2D with pixels in a `.resS` node, GameObject, MonoBehaviour, MonoScript, AssetBundle), a script type and an external through UnityPy's object model; UnityFS 8, SerializedFile 22 |
+| `unityfs/lzma.bundle` | UnityPy 1.25.4 (`packer="lzma"`) | same script; Unity 2018.4, UnityFS 6, SerializedFile 17 |
+| `unityfs/plain.bundle` | UnityPy 1.25.4 (`packer="none"`) | same script; Unity 2020.3, UnityFS 7, SerializedFile 21 |
+| `unityfs/raw.unity3d` | UnityPy 1.25.4 (`save_web_raw`) | same script; UnityRaw 3, Unity 5.2, SerializedFile 15 |
+| `unityfs/web.unity3d` | UnityPy 1.25.4 (`save_web_raw`, LZMA) | same script; UnityWeb 3 |
+| `unity-serialized/sharedassets0.assets` | UnityPy 1.25.4 (`SerializedFile.save`) | same script; standalone SerializedFile 19, Unity 2019.4 |

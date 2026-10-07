@@ -7,6 +7,9 @@ expression: "common::explore(&display_name(&path), &data)"
     Format version: 7  [0x8+0x4]
     Player version: "5.x.x"  [0xc+0x6]
     Engine version: "2022.3.10f1"  [0x12+0xc]
-    Bundle header — 200 bytes; blocks info 50 → 80 bytes, LZ4HC  [0x1e+0x14]
-    Blocks and directory  [0x32+0x40]
-      ! unsupported: LZ4HC compression
+  ▾ Bundle header  [0x1e+0x14]
+      Bundle size: 200  [0x1e+0x8]
+      Blocks info size (compressed): 50  [0x26+0x4]
+      Blocks info size: 80  [0x2a+0x4]
+      Flags: 0x43 [LZ4HC | BlocksAndDirectoryInfoCombined]  [0x2e+0x4]
+    ! warning: decoded 0x0 bytes, expected 0x50

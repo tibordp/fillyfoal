@@ -1,18 +1,17 @@
-//! Game-engine packages: Godot PCK, Unity asset bundles (UnityFS),
-//! GameMaker data files and Ren'Py archives (RPA).
+//! Game-engine packages: Godot PCK, GameMaker data files and Ren'Py
+//! archives (RPA). Unity bundles live in [`super::unity`].
 
 use crate::bytes::{u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::Cursor;
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::Value;
 
 const LE: Endian = Endian::Little;
-const BE: Endian = Endian::Big;
 
 // ---------------------------------------------------------------------------
 // Godot PCK
@@ -62,80 +61,6 @@ async fn godot_pck(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!("Godot {major}.{minor} pack, {count} files"));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Unity asset bundles (UnityFS)
-
-declare_format!(pub UNITYFS = "unityfs", "Unity asset bundle", ["unity3d", "bundle", "assetbundle"], "application/x-unityfs",
-    Probe::Magic(&[(0, b"UnityFS\0"), (0, b"UnityWeb\0"), (0, b"UnityRaw\0")]), unityfs);
-
-const UNITY_COMPRESSION: EnumTable = &[
-    (0, "none"),
-    (1, "LZMA"),
-    (2, "LZ4"),
-    (3, "LZ4HC"),
-    (4, "LZHAM"),
-];
-
-async fn unityfs(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let mut cur = Cursor::new(&cx, file, BE);
-    let (signature, s1) = cur.cstr(16).await?;
-    let version = cur.u32().await?;
-    let (player, s2) = cur.cstr(64).await?;
-    let (engine, s3) = cur.cstr(64).await?;
-    cx.emit(
-        Node::new("Signature")
-            .span(s1)
-            .value(Value::Text(signature.clone())),
-    );
-    cx.emit(
-        Node::new("Format version")
-            .span(file.sub(s1.len, 4))
-            .value(Value::UInt {
-                value: version.into(),
-                bits: 32,
-                radix: crate::value::Radix::Dec,
-            }),
-    );
-    cx.emit(
-        Node::new("Player version")
-            .span(s2)
-            .value(Value::Text(player)),
-    );
-    cx.emit(
-        Node::new("Engine version")
-            .span(s3)
-            .value(Value::Text(engine.clone())),
-    );
-    if signature == "UnityFS" {
-        let start = cur.pos();
-        let size = cur.u64().await?;
-        let compressed = cur.u32().await?;
-        let uncompressed = cur.u32().await?;
-        let flags = cur.u32().await?;
-        let scheme = flags & 0x3f;
-        cx.emit(
-            Node::new("Bundle header")
-                .span(cur.since(start))
-                .summary(format!(
-                    "{size} bytes; blocks info {compressed} → {uncompressed} bytes, {}",
-                    lookup(UNITY_COMPRESSION, scheme.into()).unwrap_or("unknown compression")
-                )),
-        );
-        let rest = file.tail(cur.pos());
-        let mut node = Node::new("Blocks and directory").span(rest);
-        if scheme != 0 {
-            node = node.diag(Diagnostic::unsupported(format!(
-                "{} compression",
-                lookup(UNITY_COMPRESSION, scheme.into()).unwrap_or("unknown")
-            )));
-        }
-        cx.emit(node);
-    }
-    cx.annotate(format!("{signature} v{version}, Unity {engine}"));
     Ok(())
 }
 
