@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ deprecated.bson — BSON document, 111 bytes  [0x0+0x6f]
+    _id: 7  [0x4+0x9]
+    undefined — undefined (deprecated)  [0xd+0xb]
+    pointer: "db.people" — DBPointer (deprecated) to ObjectId 68e4f2a01a2b3c4d5e000001  [0x18+0x23]
+    symbol: "a symbol" — symbol (deprecated)  [0x3b+0x15]
+  ▾ odd array — array, 19 bytes  [0x50+0x1e]
+      [0]: 1  [0x5f+0x7]
+      [5]: 2  [0x66+0x7]
+        ! warning: array index "5" out of sequence

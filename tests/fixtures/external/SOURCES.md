@@ -159,6 +159,20 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `pdf/encrypted-password-aes-256.pdf` | pypdf | `/Producer (pypdf)`; user password `fillyfoal` |
 | `pdf/encrypted-password-rc4-128.pdf` | pypdf | `/Producer (pypdf)`; user password `fillyfoal` |
 
+## Binary value encodings
+
+The values are ours; the generator scripts live in `tests/data/<format>/`
+and reproduce every file byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `msgpack/sample.msgpack` | msgpack-python 1.1.2 | `uv run --with msgpack==1.1.2 python tests/data/msgpack/make.py`; a map16 header followed by keys and values each written by `msgpack.packb` (so one value can be single-precision) |
+| `bson/` | PyMongo 4.15.3 (`bson.encode`) | `uv run --with pymongo==4.15.3 python tests/data/bson/make.py`; `dump.bson` is four encoded documents concatenated, as mongodump writes a collection |
+| `ion/sample.10n` | ion-python (`amazon.ion`) 0.13.0 | `uv run --with amazon.ion==0.13.0 python tests/data/ion/make.py` (`simpleion.dumps(binary=True)`) |
+| `ion-text/sample.ion` | ion-python (`amazon.ion`) 0.13.0 | same script, `simpleion.dumps(binary=False, indent="  ")` |
+| `ubjson/` | py-ubjson 0.16.1 | `uv run --with py-ubjson==0.16.1 python tests/data/ubjson/make.py`; `counted.ubj` with `container_count=True` |
+| `smile/` | smile-js 0.10.1 (npm) | `node tests/data/smile/make.mjs .../smile-js/dist/smile-js.js`; pysmile, the Python binding, is Python 2 only, so the JavaScript encoder stands in |
+
 ## OpenSSL
 
 | Fixture | Producer | Evidence and edits |

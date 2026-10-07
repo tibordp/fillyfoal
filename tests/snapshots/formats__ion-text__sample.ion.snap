@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ sample.ion — Amazon Ion 1.0 (text)  [0x0+0x27f]
+    Ion version marker: "1.0"  [0x0+0x8]
+    Value 0: "{ name: \"fillyfoal\", version: 3, negative: -500, big: 1208925819614629174706176,…" — struct  [0x9+0x23b]
+    Value 1: "second top-level value" — note:: string  [0x245+0x1e]
+    Value 2: "[ 1, 2.5e0, \"three\" ]" — list  [0x264+0x1b]

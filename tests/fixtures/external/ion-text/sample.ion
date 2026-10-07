@@ -1,0 +1,46 @@
+$ion_1_0
+{
+  name: "fillyfoal",
+  version: 3,
+  negative: -500,
+  big: 1208925819614629174706176,
+  pi: 3.141592653589793e0,
+  price: 1234.5678,
+  tiny: -1.5d-30,
+  'zero point': 0.00,
+  enabled: true,
+  nothing: null,
+  'typed null': null.int,
+  kind: widget,
+  tags: [
+    "a",
+    "b",
+    3
+  ],
+  expr: (
+    '+'
+    1
+    2
+  ),
+  blob: {{AAECYmluYXJ5}},
+  clob: {{"clob text"}},
+  day: 2026-10-07T,
+  moment: 2026-10-07T12:30:15.250+02:00,
+  nested: {
+    deep: {
+      deeper: [
+        true,
+        false
+      ]
+    },
+    empty: {
+    }
+  },
+  money: USD::amount::42
+}
+note::"second top-level value"
+[
+  1,
+  2.5e0,
+  "three"
+]

@@ -393,6 +393,9 @@ pub static FORMATS: &[&Format] = &[
     &data::bplist::FORMAT,
     &data::bencode::FORMAT,
     &data::cbor::FORMAT,
+    &data::smile::FORMAT,
+    &data::ion::FORMAT,
+    &data::ion::TEXT,
     &pcap::FORMAT,
     &pcap::ng::FORMAT,
     &forensics::lnk::FORMAT,
@@ -1722,6 +1725,11 @@ pub static FORMATS: &[&Format] = &[
     // Brotli has no magic: only small files that decode as exactly one
     // complete stream (a trial decode, so after everything with magic).
     &compression::brotli::FORMAT,
+    // Magic-less binary value encodings: only whole small files that parse
+    // exactly to their end as one record (see each module).
+    &data::msgpack::FORMAT,
+    &data::ubjson::FORMAT,
+    &data::bson::FORMAT,
     // Weak, statistical probes.
     &text::csv::TSV,
     &text::csv::CSV,
