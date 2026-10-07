@@ -2,13 +2,18 @@
 //!
 //! ACE: blocks with a CRC-16, size, type and flags; the main header carries
 //! the `**ACE**` signature, file headers carry sizes, attributes, CRC-32 and
-//! the compression type, followed by the packed data.
+//! the compression type, followed by the packed data. ACE 1.0 LZ77 and ACE
+//! 2.0 "blocked" data (with its EXE, DELTA, SOUND and PIC modes) are
+//! decompressed by [`crate::codec::ace`], solid archives by decoding the
+//! files before the wanted one; comments are decoded. The layout and the
+//! codecs follow `acefile` (a reimplementation of `unace`); there is no
+//! published specification. Blowfish-encrypted files are not decrypted.
 //!
 //! ARC: a chain of `0x1A`-prefixed headers (method, 13-byte name, sizes,
 //! DOS time, CRC-16), ending with method 0.
 //!
-//! Stored members are dissected in place; the LZ77/Huffman (ACE) and
-//! RLE/Huffman/LZW (ARC) methods are unsupported leaves.
+//! Stored members are dissected in place; the ARC RLE/Huffman/LZW methods
+//! are unsupported leaves.
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::codec::crc32;
@@ -58,22 +63,27 @@ const ACE_FILE_FLAGS: FlagTable = &[
     flag(0x0001, "ADDSIZE"),
     flag(0x0002, "COMMENT"),
     flag(0x0004, "64BIT"),
-    flag(0x1000, "SPLIT_BEFORE"),
-    flag(0x2000, "SPLIT_AFTER"),
+    flag(0x0400, "NTSECURITY"),
+    flag(0x1000, "CONTPREV"),
+    flag(0x2000, "CONTNEXT"),
     flag(0x4000, "PASSWORD"),
     flag(0x8000, "SOLID"),
 ];
 
 const ACE_MAIN_FLAGS: FlagTable = &[
+    flag(0x0001, "ADDSIZE"),
     flag(0x0002, "COMMENT"),
-    flag(0x0100, "SFX"),
-    flag(0x0200, "LIMIT_SFX"),
-    flag(0x0400, "MULTIVOLUME"),
-    flag(0x0800, "AV"),
-    flag(0x1000, "RECOVERY"),
-    flag(0x2000, "LOCKED"),
-    flag(0x4000, "SOLID"),
+    flag(0x0100, "V20FORMAT"),
+    flag(0x0200, "SFX"),
+    flag(0x0400, "LIMITSFXJR"),
+    flag(0x0800, "MULTIVOLUME"),
+    flag(0x1000, "ADVERT"),
+    flag(0x2000, "RECOVERY"),
+    flag(0x4000, "LOCKED"),
+    flag(0x8000, "SOLID"),
 ];
+
+const ACE_RECOVERY_FLAGS: FlagTable = &[flag(0x0001, "ADDSIZE"), flag(0x0004, "64BIT")];
 
 const ACE_HOST: EnumTable = &[
     (0, "MS-DOS"),
@@ -88,96 +98,250 @@ const ACE_HOST: EnumTable = &[
     (9, "VAX VMS"),
     (10, "Amiga"),
     (11, "NeXT"),
+    (12, "Linux"),
 ];
 
 const ACE_COMP: EnumTable = &[(0, "stored"), (1, "LZ77"), (2, "blocked")];
+
+const ACE_QUALITY: EnumTable = &[
+    (0, "store"),
+    (1, "fastest"),
+    (2, "fast"),
+    (3, "normal"),
+    (4, "good"),
+    (5, "best"),
+];
+
+const ACE_ATTRIBUTES: FlagTable = &[
+    flag(0x0001, "READONLY"),
+    flag(0x0002, "HIDDEN"),
+    flag(0x0004, "SYSTEM"),
+    flag(0x0008, "VOLUME_ID"),
+    flag(0x0010, "DIRECTORY"),
+    flag(0x0020, "ARCHIVE"),
+    flag(0x0040, "DEVICE"),
+    flag(0x0080, "NORMAL"),
+    flag(0x0100, "TEMPORARY"),
+    flag(0x0200, "SPARSE_FILE"),
+    flag(0x0400, "REPARSE_POINT"),
+    flag(0x0800, "COMPRESSED"),
+    flag(0x1000, "OFFLINE"),
+    flag(0x2000, "NOT_CONTENT_INDEXED"),
+    flag(0x4000, "ENCRYPTED"),
+];
+
+const ACE_FLAG_COMMENT: u16 = 0x0002;
+const ACE_FLAG_NTSECURITY: u16 = 0x0400;
+const ACE_FLAG_ADVERT: u16 = 0x1000;
+const ACE_FLAG_SPLIT: u16 = 0x3000;
+const ACE_FLAG_PASSWORD: u16 = 0x4000;
+const ACE_FLAG_SOLID: u16 = 0x8000;
+const ACE_FLAG_V20: u16 = 0x0100;
 
 /// ACE's header CRC: CRC-32 without the final inversion, low 16 bits.
 fn ace_crc(data: &[u8]) -> u16 {
     u16::try_from(!crc32(data) & 0xffff).unwrap_or(0)
 }
 
+/// A block as the listing sees it.
+struct AceBlock {
+    kind: u8,
+    flags: u16,
+    /// The data after the header (`ADDSIZE`).
+    packed: u64,
+    original: u64,
+    header_span: Span,
+    span: Span,
+    crc_ok: bool,
+}
+
+async fn ace_block_at(cx: &Cx, file: Span, at: u64) -> Result<AceBlock> {
+    let head = cx.read(file.sub(at, 4)).await?;
+    let size = u64::from(u16_le(&head, 2).unwrap_or(0));
+    let header_span = file.sub(at, size.saturating_add(4));
+    let header = cx.read(header_span).await?;
+    let kind = header.get(4).copied().unwrap_or(0);
+    let flags = u16_le(&header, 5).unwrap_or(0);
+    let crc_ok = header
+        .get(4..)
+        .is_some_and(|b| Some(ace_crc(b)) == u16_le(&header, 0));
+    let wide = flags & 0x0004 != 0 || kind == 3 || kind == 4 || kind == 5;
+    let (packed, original) = if flags & 0x0001 != 0 {
+        if wide {
+            (
+                u64_le(&header, 7).unwrap_or(0),
+                u64_le(&header, 15).unwrap_or(0),
+            )
+        } else {
+            (
+                u64::from(u32_le(&header, 7).unwrap_or(0)),
+                u64::from(u32_le(&header, 11).unwrap_or(0)),
+            )
+        }
+    } else {
+        (0, 0)
+    };
+    // Recovery records have only the one size.
+    let original = if kind == 1 || kind == 3 { original } else { 0 };
+    Ok(AceBlock {
+        kind,
+        flags,
+        packed,
+        original,
+        header_span,
+        span: file.sub(at, header_span.len.saturating_add(packed)),
+        crc_ok,
+    })
+}
+
+/// What a file header says about its data.
+fn ace_member(header: &[u8], block: &AceBlock) -> crate::codec::ace::Member {
+    let at = if block.kind == 3 { 23usize } else { 15 };
+    crate::codec::ace::Member {
+        packed: block.packed,
+        size: block.original,
+        crc: u32_le(header, at.saturating_add(8)).unwrap_or(0),
+        method: header.get(at.saturating_add(12)).copied().unwrap_or(0xff),
+    }
+}
+
+/// The walker's state, for resume marks: offset, files, total size,
+/// blocks seen, and whether the archive is solid / ACE 2.0.
+type AceWalk = (u64, u64, u64, u64, bool, bool);
+
 pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let mut at = 0u64;
-    let mut files = 0u64;
-    let mut total = 0u64;
-    let mut seen = 0u64;
+    let (mut at, mut files, mut total, mut seen, mut solid, mut v20) =
+        cx.resume::<AceWalk>().unwrap_or((0, 0, 0, 0, false, false));
     cx.annotate("ACE archive");
     while at.saturating_add(7) <= file.len && seen < MAX_ENTRIES {
+        let walk = (at, files, total, seen, solid, v20);
+        cx.mark(move || walk);
         seen = seen.saturating_add(1);
-        let head = cx.read(file.sub(at, 4)).await?;
-        let size = u64::from(u16_le(&head, 2).unwrap_or(0));
-        let header_span = file.sub(at, size.saturating_add(4));
-        let header = cx.read(header_span).await?;
-        let kind = header.get(4).copied().unwrap_or(0);
-        let flags = u16_le(&header, 5).unwrap_or(0);
-        let crc_ok = header
-            .get(4..)
-            .is_some_and(|b| Some(ace_crc(b)) == u16_le(&header, 0));
-        let wide = kind == 3 || kind == 5;
-        let (packed, original) = if flags & 0x0001 != 0 {
-            if wide {
-                (
-                    u64_le(&header, 7).unwrap_or(0),
-                    u64_le(&header, 15).unwrap_or(0),
-                )
-            } else {
-                (
-                    u64::from(u32_le(&header, 7).unwrap_or(0)),
-                    u64::from(u32_le(&header, 11).unwrap_or(0)),
-                )
+        let block = ace_block_at(&cx, file, at).await?;
+        let header = cx.read(block.header_span).await?;
+        let (name, summary) = match block.kind {
+            0 => {
+                solid = block.flags & ACE_FLAG_SOLID != 0;
+                v20 = block.flags & ACE_FLAG_V20 != 0 || header.get(14).is_some_and(|&v| v >= 20);
+                ("Main header".to_owned(), String::new())
             }
-        } else {
-            (0, 0)
-        };
-        let span = file.sub(at, header_span.len.saturating_add(packed));
-        let (name, summary) = match kind {
-            0 => ("Main header".to_owned(), String::new()),
             1 | 3 => {
-                let name_at = if wide { 43usize } else { 35 };
+                let name_at = if block.kind == 3 { 43usize } else { 35 };
                 let len = usize::from(u16_le(&header, name_at.saturating_sub(2)).unwrap_or(0));
                 let name = header
                     .get(name_at..name_at.saturating_add(len))
                     .unwrap_or_default();
                 files = files.saturating_add(1);
-                total = total.saturating_add(original);
-                (
-                    String::from_utf8_lossy(name).replace('\\', "/"),
-                    human_size(original),
-                )
+                total = total.saturating_add(block.original);
+                let m = ace_member(&header, &block);
+                let method = crate::value::lookup(ACE_COMP, m.method.into()).unwrap_or("unknown");
+                let mut summary = format!("{}, {method}", human_size(block.original));
+                if block.flags & ACE_FLAG_PASSWORD != 0 {
+                    summary.push_str(", encrypted");
+                }
+                (String::from_utf8_lossy(name).replace('\\', "/"), summary)
             }
             _ => (
-                crate::value::lookup(ACE_TYPE, kind.into())
+                crate::value::lookup(ACE_TYPE, block.kind.into())
                     .unwrap_or("unknown block")
                     .to_owned(),
-                human_size(packed),
+                human_size(block.packed),
             ),
         };
         let mut node = Node::new(name)
-            .span(span)
-            .lazy(ace_block, (input, span, header_span));
+            .span(block.span)
+            .lazy(ace_block, (input, block.span, block.header_span, solid));
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if !crc_ok {
+        if !block.crc_ok {
             node = node.diag(Diagnostic::warning("header CRC mismatch"));
         }
         cx.push(node).await;
-        if size == 0 {
+        if block.header_span.len <= 4 {
             break;
         }
-        at = at.saturating_add(span.len);
+        at = at.saturating_add(block.span.len);
     }
     cx.annotate(format!(
-        "ACE archive, {}, {} uncompressed",
+        "ACE {} archive{}, {}, {} uncompressed",
+        if v20 { "2.0" } else { "1.0" },
+        if solid { " (solid)" } else { "" },
         count(files, "file", "files"),
         human_size(total)
     ));
     Ok(())
 }
 
-async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> Result<()> {
+/// The members of a solid stream up to and including the file whose data
+/// is `data`: their packed data spans and parameters.
+async fn ace_solid_chain(
+    cx: &Cx,
+    file: Span,
+    data: Span,
+) -> Result<Vec<(Span, crate::codec::ace::Member)>> {
+    let mut chain = Vec::new();
+    let mut at = 0u64;
+    let mut seen = 0u64;
+    while at.saturating_add(7) <= file.len && seen < MAX_ENTRIES {
+        seen = seen.saturating_add(1);
+        let block = ace_block_at(cx, file, at).await?;
+        if block.kind == 1 || block.kind == 3 {
+            let header = cx.read(block.header_span).await?;
+            if block.flags & (ACE_FLAG_PASSWORD | ACE_FLAG_SPLIT) != 0 {
+                return Err(Diagnostic::unsupported(
+                    "solid stream with an encrypted or split file before this one",
+                ));
+            }
+            let d = block.span.tail(block.header_span.len);
+            chain.push((d, ace_member(&header, &block)));
+            if d.offset == data.offset {
+                return Ok(chain);
+            }
+        }
+        if block.header_span.len <= 4 {
+            break;
+        }
+        at = at.saturating_add(block.span.len);
+    }
+    Err(Diagnostic::malformed("file not found in the solid stream"))
+}
+
+/// The packed data of a file, decoded on expansion (with the files before
+/// it in a solid archive).
+async fn ace_content(
+    cx: Cx,
+    (input, data, member, solid): (Input, Span, crate::codec::ace::Member, bool),
+) -> Result<()> {
+    let (span, members) = if solid {
+        let chain = ace_solid_chain(&cx, input.span, data).await?;
+        let members: Vec<crate::codec::ace::Member> = chain.iter().map(|(_, m)| *m).collect();
+        let span = if chain.len() > 1 {
+            cx.add_pieces(
+                crate::span::Origin {
+                    parent: data,
+                    transform: "ace-solid",
+                },
+                chain.iter().map(|(s, _)| *s).collect(),
+            )?
+        } else {
+            data
+        };
+        (span, members)
+    } else {
+        (data, vec![member])
+    };
+    let codec = crate::codec::Codec::Ace(crate::codec::ace::Params {
+        members: members.into(),
+    });
+    crate::formats::expand_content(cx, (input, span, codec, Some(member.size))).await
+}
+
+async fn ace_block(
+    cx: Cx,
+    (input, span, header_span, solid): (Input, Span, Span, bool),
+) -> Result<()> {
     let header = cx.read(header_span).await?;
     let mut r = ByteReader::new(&header, header_span);
     let bad = || Diagnostic::truncated(header_span, 0);
@@ -203,10 +367,10 @@ async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> R
         })
     });
     let flags = r.u16("Flags", LE).ok_or_else(bad)?;
-    let table = if kind == 0 {
-        ACE_MAIN_FLAGS
-    } else {
-        ACE_FILE_FLAGS
+    let table = match kind {
+        0 => ACE_MAIN_FLAGS,
+        1 | 3 => ACE_FILE_FLAGS,
+        _ => ACE_RECOVERY_FLAGS,
     };
     r.with(|n| {
         let (set, unknown) = crate::value::decode_flags(table, flags.into());
@@ -217,12 +381,15 @@ async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> R
             unknown,
         })
     });
-    let mut data = None;
+    let mut extra: Vec<Node> = Vec::new();
+    let data = span.tail(header_span.len);
     match kind {
         0 => {
             r.text("Signature", 7).ok_or_else(bad)?;
-            r.u8("Version needed").ok_or_else(bad)?;
-            r.u8("Version created").ok_or_else(bad)?;
+            for name in ["Version needed", "Version created"] {
+                let v = r.u8(name).ok_or_else(bad)?;
+                r.with(|n| n.summary(format!("{}.{}", v / 10, v % 10)));
+            }
             let host = r.u8("Host OS").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -234,27 +401,36 @@ async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> R
             r.u8("Volume number").ok_or_else(bad)?;
             dos_time(&mut r, "Creation time").ok_or_else(bad)?;
             r.bytes("Reserved", 8).ok_or_else(bad)?;
-            let av = r.u8("AV size").ok_or_else(bad)?;
-            if av > 0 {
-                r.text("AV string", av.into()).ok_or_else(bad)?;
+            if flags & ACE_FLAG_ADVERT != 0 {
+                let av = r.u8("Advert size").ok_or_else(bad)?;
+                r.text("Advert", av.into()).ok_or_else(bad)?;
+            }
+            if flags & ACE_FLAG_COMMENT != 0 {
+                extra.push(ace_comment(&mut r).ok_or_else(bad)?);
             }
         }
         1 | 3 => {
             let wide = kind == 3;
-            let packed = if wide {
+            let (packed, original) = if wide {
                 let p = r.u64("Packed size", LE).ok_or_else(bad)?;
-                r.u64("Original size", LE).ok_or_else(bad)?;
-                p
+                (p, r.u64("Original size", LE).ok_or_else(bad)?)
             } else {
                 let p = r.u32("Packed size", LE).ok_or_else(bad)?;
-                r.u32("Original size", LE).ok_or_else(bad)?;
-                p.into()
+                (p.into(), r.u32("Original size", LE).ok_or_else(bad)?.into())
             };
             dos_time(&mut r, "Modification time").ok_or_else(bad)?;
             let attr = r.u32("Attributes", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(attr.into())));
+            r.with(|n| {
+                let (set, unknown) = crate::value::decode_flags(ACE_ATTRIBUTES, attr.into());
+                n.value(Value::Flags {
+                    raw: attr.into(),
+                    bits: 32,
+                    set,
+                    unknown,
+                })
+            });
             let crc = r.u32("CRC-32", LE).ok_or_else(bad)?;
-            r.with(|n| n.value(hex(crc.into())));
+            r.with(|n| n.value(hex(crc.into())).desc("ACE CRC-32 (not inverted)"));
             let comp = r.u8("Compression type").ok_or_else(bad)?;
             r.with(|n| {
                 n.value(Value::Enum {
@@ -263,32 +439,90 @@ async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> R
                     name: crate::value::lookup(ACE_COMP, comp.into()),
                 })
             });
-            r.u8("Compression quality").ok_or_else(bad)?;
-            r.u16("Compression parameters", LE).ok_or_else(bad)?;
+            let quality = r.u8("Compression quality").ok_or_else(bad)?;
+            r.with(|n| {
+                n.value(Value::Enum {
+                    raw: quality.into(),
+                    bits: 8,
+                    name: crate::value::lookup(ACE_QUALITY, quality.into()),
+                })
+            });
+            let params = r.u16("Compression parameters", LE).ok_or_else(bad)?;
+            r.with(|n| {
+                n.value(hex(params.into())).summary(format!(
+                    "dictionary {}",
+                    human_size(1u64 << (u32::from(params & 15).saturating_add(10)))
+                ))
+            });
             r.u16("Reserved", LE).ok_or_else(bad)?;
             let len = r.u16("Name size", LE).ok_or_else(bad)?;
             r.text("Name", len.into()).ok_or_else(bad)?;
-            let d = span.tail(header_span.len);
-            let d = d.sub(0, packed);
-            data = Some(if flags & 0x4000 != 0 {
+            if flags & ACE_FLAG_COMMENT != 0 {
+                extra.push(ace_comment(&mut r).ok_or_else(bad)?);
+            }
+            if flags & ACE_FLAG_NTSECURITY != 0 {
+                let n = r.u16("NT security size", LE).ok_or_else(bad)?;
+                r.bytes("NT security descriptor", n.into())
+                    .ok_or_else(bad)?;
+            }
+            let d = data.sub(0, packed);
+            let member = crate::codec::ace::Member {
+                packed,
+                size: original,
+                crc,
+                method: comp,
+            };
+            let node = if flags & ACE_FLAG_PASSWORD != 0 {
                 Node::new("Encrypted data")
                     .span(d)
-                    .diag(Diagnostic::unsupported("encrypted file"))
-            } else if flags & 0x3000 != 0 {
+                    .diag(Diagnostic::unsupported("ACE Blowfish encryption"))
+            } else if flags & ACE_FLAG_SPLIT != 0 {
                 Node::new("Data (split across volumes)")
                     .span(d)
                     .diag(Diagnostic::unsupported("multi-volume member"))
-            } else if comp == 0 {
+            } else if original == 0 && packed == 0 {
+                Node::new("Content").span(d).summary("empty")
+            } else if comp == 0 && !solid {
                 embedded("Content", input.nested(d)).summary(human_size(packed))
+            } else if comp <= 2 {
+                Node::new("Content")
+                    .span(d)
+                    .summary(human_size(original))
+                    .lazy(ace_content, (input, d, member, solid))
             } else {
-                let c = crate::value::lookup(ACE_COMP, comp.into()).unwrap_or("unknown");
-                unsupported("Compressed data", d, &format!("ACE {c}"))
-            });
+                unsupported("Compressed data", d, &format!("ACE method {comp}"))
+            };
+            extra.push(crate::formats::util::arcutil::check_len(node, d, packed));
+        }
+        2 | 4 | 5 => {
+            let wide = kind != 2;
+            let size = if wide {
+                r.u64("Recovery data size", LE).ok_or_else(bad)?
+            } else {
+                r.u32("Recovery data size", LE).ok_or_else(bad)?.into()
+            };
+            r.text("Signature", 7).ok_or_else(bad)?;
+            let start = if wide {
+                r.u64("Relative start", LE).ok_or_else(bad)?
+            } else {
+                r.u32("Relative start", LE).ok_or_else(bad)?.into()
+            };
+            r.with(|n| n.value(hex(start)));
+            if kind == 5 {
+                r.u16("Sectors", LE).ok_or_else(bad)?;
+                r.u16("Sectors per cluster", LE).ok_or_else(bad)?;
+                r.u32("Cluster size", LE).ok_or_else(bad)?;
+            } else {
+                r.u32("Clusters", LE).ok_or_else(bad)?;
+                r.u32("Cluster size", LE).ok_or_else(bad)?;
+                let c = r.u16("Recovery CRC", LE).ok_or_else(bad)?;
+                r.with(|n| n.value(hex(c.into())));
+            }
+            extra.push(Node::new("Recovery data").span(data.sub(0, size)));
         }
         _ => {
             if flags & 0x0001 != 0 {
-                let d = span.tail(header_span.len);
-                data = Some(Node::new("Data").span(d));
+                extra.push(Node::new("Data").span(data));
             }
         }
     }
@@ -300,10 +534,24 @@ async fn ace_block(cx: Cx, (input, span, header_span): (Input, Span, Span)) -> R
             .span(header_span)
             .lazy(emit_nodes, r.into_nodes()),
     );
-    if let Some(d) = data {
-        cx.emit(d);
+    for node in extra {
+        cx.emit(node);
     }
     Ok(())
+}
+
+/// A comment field (size and compressed text), decoded.
+fn ace_comment(r: &mut ByteReader<'_>) -> Option<Node> {
+    let len = r.u16("Comment size", LE)?;
+    let start = r.at;
+    let raw = r.bytes("Comment", len.into())?;
+    let span = r.since(start);
+    Some(match crate::codec::ace::comment(raw, 1 << 16) {
+        Ok(text) => Node::new("Comment")
+            .span(span)
+            .value(Value::Text(String::from_utf8_lossy(&text).into_owned())),
+        Err(e) => Node::new("Comment").span(span).diag(e),
+    })
 }
 
 fn dos_time(r: &mut ByteReader<'_>, name: &'static str) -> Option<()> {

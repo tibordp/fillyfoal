@@ -7,6 +7,7 @@
 //! reach ([`Cx::decode_lazy`](crate::Cx::decode_lazy)); either way decoded
 //! bytes count against [`crate::Limits::max_derived`].
 
+pub mod ace;
 pub mod bcfz;
 pub mod brotli;
 pub mod bzip2;
@@ -30,6 +31,7 @@ pub mod meatpack;
 pub mod pbz;
 pub mod pipeline;
 pub mod quantum;
+pub mod stuffit;
 pub mod unixz;
 pub mod wim;
 pub mod xpress;
@@ -195,6 +197,11 @@ pub enum Codec {
     /// AES-CBC with this key; the IV is the first 16 bytes and the data is
     /// PKCS#7-padded (PDF AESV2/AESV3).
     AesCbc(crypto::Key),
+    /// ACE LZ77/blocked data (see [`ace`]); solid archives list the files
+    /// before the wanted one.
+    Ace(ace::Params),
+    /// A StuffIt fork (see [`stuffit`]).
+    StuffIt(stuffit::Params),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -267,6 +274,8 @@ impl Codec {
             Codec::Snappy => "snappy",
             Codec::SnappyFramed => "snappy-framed",
             Codec::CapnpPacked => "capnp-packed",
+            Codec::Ace(_) => "ace",
+            Codec::StuffIt(_) => "stuffit",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -321,6 +330,8 @@ impl Codec {
             Codec::Snappy => "snappy (lazy)",
             Codec::SnappyFramed => "snappy-framed (lazy)",
             Codec::CapnpPacked => "capnp-packed (lazy)",
+            Codec::Ace(_) => "ace (lazy)",
+            Codec::StuffIt(_) => "stuffit (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -367,7 +378,9 @@ impl Codec {
             | Codec::Brotli
             | Codec::LzmaAlone
             | Codec::Lzma2 { .. }
-            | Codec::LzmaRaw { .. } => "decompressed",
+            | Codec::LzmaRaw { .. }
+            | Codec::Ace(_)
+            | Codec::StuffIt(_) => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -434,6 +447,13 @@ impl Codec {
             Codec::Brotli => 1 << 20,
             Codec::Lzw { .. } => 4096,
             Codec::Deflate | Codec::Zlib => 1032,
+            // A 259-byte match costs a handful of bits; a solid member's
+            // output is unrelated to the bytes before it, so no bound.
+            Codec::Ace(p) if p.members.len() > 1 => u64::MAX,
+            Codec::Ace(_) => 1024,
+            // Arsenic and RLE90 runs: a few bits for up to 255 bytes, in
+            // blocks of up to 16 MiB.
+            Codec::StuffIt(_) => 32_768,
             Codec::Chain { stages, .. } => stages
                 .iter()
                 .map(Codec::max_ratio)
@@ -510,6 +530,8 @@ impl Codec {
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
+            Codec::Ace(params) => Box::new(Streaming(ace::Decoder::new(params.clone()))),
+            Codec::StuffIt(params) => Box::new(Streaming(stuffit::Decoder::new(*params))),
             Codec::Eexec { hex } => {
                 Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
             }

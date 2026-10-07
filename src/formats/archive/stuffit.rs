@@ -4,17 +4,27 @@
 //! header followed by the resource and data forks. Folders are bracketed by
 //! start/end marker entries, which the listing turns into paths.
 //!
-//! StuffIt 5: an 80-byte banner, an archive header and a linked list of
-//! entries tagged `0xA5A5A5A5`. Its layout is undocumented; this follows
-//! the reverse-engineered description used by The Unarchiver and decodes
-//! the entry headers only.
+//! StuffIt 5: an 80-byte banner, an archive header and entries tagged
+//! `0xA5A5A5A5`, stored depth first: each directory entry is followed by
+//! its contents, and says how many entries it holds. An entry has two
+//! parts: the header proper (sizes, data fork method, name) up to the size
+//! it records, then Finder information and, if there is one, the resource
+//! fork's sizes and method; the resource fork's data comes next, then the
+//! data fork's. Neither format was ever documented; this follows memory of
+//! The Unarchiver's (XADMaster) parsers, unverified against real archives,
+//! so fields that are not understood are shown raw.
 //!
-//! The StuffIt codecs (RLE, LZW, Huffman, Arsenic, ...) are unsupported;
-//! uncompressed forks are dissected in place.
+//! Forks are decompressed by [`crate::codec::stuffit`] (RLE90, LZW,
+//! Huffman, LZAH, method 13's dynamic variant and Arsenic) and dissected
+//! as embedded files; resource forks are identified like any other content
+//! (normally as `mac-rsrc`). Encrypted forks are not decrypted.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_be, u32_be};
+use crate::codec::Codec;
+use crate::codec::stuffit::Params;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -22,7 +32,7 @@ use crate::fields::Endian;
 use crate::formats::util::arcutil::{
     ByteReader, count, crc16_arc, emit_nodes, hex, human_size, unsupported,
 };
-use crate::formats::{Format, Head, Input, Probe, embedded};
+use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -65,7 +75,7 @@ const METHOD: EnumTable = &[
     (1, "RLE90"),
     (2, "LZW"),
     (3, "Huffman"),
-    (5, "LZ + adaptive Huffman"),
+    (5, "LZAH"),
     (6, "fixed Huffman"),
     (8, "Miller-Wegman"),
     (13, "LZ + Huffman"),
@@ -84,6 +94,46 @@ fn method_name(m: u8) -> String {
         base
     }
 }
+
+/// A node for a fork: dissected in place when stored, decompressed on
+/// expansion when the method is supported. `crc` is the CRC-16 of the
+/// uncompressed fork, if the archive records one.
+fn fork_node(
+    name: &'static str,
+    input: Input,
+    span: Span,
+    method: u8,
+    len: u64,
+    crc: Option<u16>,
+    encrypted: bool,
+) -> Node {
+    if encrypted {
+        return Node::new(name)
+            .span(span)
+            .summary(human_size(len))
+            .diag(Diagnostic::unsupported("StuffIt encryption"));
+    }
+    if method == 0 {
+        return embedded(name, input.nested(span.sub(0, len))).summary(human_size(len));
+    }
+    if !crate::codec::stuffit::supported(method) {
+        return unsupported(name, span, &format!("StuffIt {}", method_name(method)));
+    }
+    let codec = Codec::StuffIt(Params {
+        method,
+        size: len,
+        // Arsenic carries its own CRC-32.
+        crc: crc.filter(|_| method != 15),
+    });
+    content(name, input, span, codec, Some(len)).summary(format!(
+        "{}, {}",
+        human_size(len),
+        method_name(method)
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Classic
 
 record! {
     pub struct Header {
@@ -105,6 +155,8 @@ struct Classic {
     data_len: u32,
     rsrc_packed: u32,
     data_packed: u32,
+    rsrc_crc: u16,
+    data_crc: u16,
     crc_ok: bool,
 }
 
@@ -119,23 +171,32 @@ fn classic(b: &[u8]) -> Option<Classic> {
         data_len: u32_be(b, 88)?,
         rsrc_packed: u32_be(b, 92)?,
         data_packed: u32_be(b, 96)?,
+        rsrc_crc: u16_be(b, 100)?,
+        data_crc: u16_be(b, 102)?,
         crc_ok: crc16_arc(b.get(..110)?) == stored,
     })
 }
 
+/// The classic walker's state, for resume marks: offset, folder path,
+/// files, total size, entries seen.
+type ClassicWalk = (u64, Vec<String>, u64, u64, u64);
+
 pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let h = crate::fields::parse(&cx, file.sub(0, Header::SIZE), BE, &(), Header::layout).await?;
-    cx.emit(
-        Header::node("Archive header", file.sub(0, Header::SIZE), BE).summary(h.signature.clone()),
-    );
     let end = u64::from(h.length).min(file.len);
-    let mut at = Header::SIZE;
-    let mut path: Vec<String> = Vec::new();
-    let mut files = 0u64;
-    let mut total = 0u64;
-    let mut seen = 0u64;
+    let resumed = cx.resume::<ClassicWalk>();
+    if resumed.is_none() {
+        cx.emit(
+            Header::node("Archive header", file.sub(0, Header::SIZE), BE)
+                .summary(h.signature.clone()),
+        );
+    }
+    let (mut at, mut path, mut files, mut total, mut seen) =
+        resumed.unwrap_or((Header::SIZE, Vec::new(), 0, 0, 0));
     while at.saturating_add(ENTRY) <= end && seen < MAX_ENTRIES {
+        let walk = (at, path.clone(), files, total, seen);
+        cx.mark(move || walk);
         seen = seen.saturating_add(1);
         let header_span = file.sub(at, ENTRY);
         let raw = cx.read(header_span).await?;
@@ -240,7 +301,7 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     r.u32("Resource fork compressed length", BE)
         .ok_or_else(bad)?;
     r.u32("Data fork compressed length", BE).ok_or_else(bad)?;
-    for name in ["Resource fork CRC", "Data fork CRC"] {
+    for name in ["Resource fork CRC-16", "Data fork CRC-16"] {
         let c = r.u16(name, BE).ok_or_else(bad)?;
         r.with(|n| n.value(hex(c.into())));
     }
@@ -268,25 +329,143 @@ async fn classic_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         ENTRY.saturating_add(e.rsrc_packed.into()),
         e.data_packed.into(),
     );
-    for (name, fork, method, len) in [
-        ("Resource fork", rsrc, e.rsrc_method, e.rsrc_len),
-        ("Data fork", data, e.data_method, e.data_len),
+    for (name, fork, method, len, crc) in [
+        ("Resource fork", rsrc, e.rsrc_method, e.rsrc_len, e.rsrc_crc),
+        ("Data fork", data, e.data_method, e.data_len, e.data_crc),
     ] {
         if fork.len == 0 && len == 0 {
             continue;
         }
-        let node = if method == 0 {
-            embedded(name, input.nested(fork)).summary(human_size(len.into()))
-        } else {
-            unsupported(name, fork, &format!("StuffIt {}", method_name(method)))
-        };
-        cx.emit(node);
+        let encrypted = method & 0x10 != 0;
+        cx.emit(fork_node(
+            name,
+            input,
+            fork,
+            method & !0x10,
+            len.into(),
+            Some(crc),
+            encrypted,
+        ));
     }
     Ok(())
 }
 
 // ---------------------------------------------------------------------------
 // StuffIt 5
+
+const SIT5_DIRECTORY: u8 = 0x40;
+const SIT5_ENCRYPTED: u8 = 0x20;
+
+/// A StuffIt 5 entry as the listing parsed it.
+#[derive(Clone, Debug)]
+struct Sit5Entry {
+    /// Where the entry starts, relative to the archive.
+    at: u64,
+    /// The parent directory entry's offset (0 at the root).
+    parent: u32,
+    /// From the entry's start to its first fork's data.
+    header: Span,
+    /// The first part (up to the recorded header size).
+    first: Span,
+    version: u8,
+    flags: u8,
+    name: String,
+    /// Entries in a directory.
+    children: u16,
+    data_len: u32,
+    data_packed: u32,
+    data_crc: u16,
+    data_method: u8,
+    rsrc: Option<(u32, u32, u16, u8)>,
+}
+
+impl Sit5Entry {
+    fn directory(&self) -> bool {
+        self.flags & SIT5_DIRECTORY != 0
+    }
+
+    fn rsrc_packed(&self) -> u64 {
+        self.rsrc.map_or(0, |r| r.1.into())
+    }
+
+    /// Where the next entry starts, relative to the archive.
+    fn end(&self) -> u64 {
+        let start = self.at.saturating_add(self.header.len);
+        if self.directory() {
+            start
+        } else {
+            start
+                .saturating_add(self.rsrc_packed())
+                .saturating_add(self.data_packed.into())
+        }
+    }
+}
+
+async fn sit5_entry_at(cx: &Cx, file: Span, at: u64) -> Result<Option<Sit5Entry>> {
+    let fixed = file.sub(at, 48);
+    let raw = cx.read_avail(fixed).await?;
+    if raw.len() < 48 || u32_be(&raw, 0) != Some(SIT5_MAGIC) {
+        return Ok(None);
+    }
+    let version = raw.get(4).copied().unwrap_or(0);
+    let header_size = u64::from(u16_be(&raw, 6).unwrap_or(0)).max(48);
+    let flags = raw.get(9).copied().unwrap_or(0);
+    let name_len = usize::from(u16_be(&raw, 30).unwrap_or(0));
+    let first = file.sub(at, header_size);
+    let head = cx.read(first).await?;
+    let directory = flags & SIT5_DIRECTORY != 0;
+    let (name_at, data_method, children) = if directory {
+        (48usize, 0, u16_be(&head, 46).unwrap_or(0))
+    } else {
+        let pass = usize::from(head.get(47).copied().unwrap_or(0));
+        (
+            48usize.saturating_add(pass),
+            head.get(46).copied().unwrap_or(0),
+            0,
+        )
+    };
+    let name = head
+        .get(name_at..name_at.saturating_add(name_len))
+        .unwrap_or_default();
+    // The second part: Finder information, then the resource fork's.
+    let second_at = at.saturating_add(header_size);
+    let skip = if version == 1 { 22u64 } else { 18 };
+    let second_fixed = 14u64.saturating_add(skip);
+    let second = cx
+        .read(file.sub(second_at, second_fixed.saturating_add(14)))
+        .await?;
+    let has_rsrc = u16_be(&second, 0).unwrap_or(0) & 1 != 0;
+    let mut end = second_at.saturating_add(second_fixed);
+    let rsrc = if has_rsrc {
+        let o = usize::try_from(second_fixed).unwrap_or(0);
+        let r = (
+            u32_be(&second, o).unwrap_or(0),
+            u32_be(&second, o.saturating_add(4)).unwrap_or(0),
+            u16_be(&second, o.saturating_add(8)).unwrap_or(0),
+            second.get(o.saturating_add(12)).copied().unwrap_or(0),
+        );
+        let pass = u64::from(second.get(o.saturating_add(13)).copied().unwrap_or(0));
+        end = end.saturating_add(14).saturating_add(pass);
+        Some(r)
+    } else {
+        None
+    };
+    Ok(Some(Sit5Entry {
+        at,
+        parent: u32_be(&head, 26).unwrap_or(0),
+        header: file.sub(at, end.saturating_sub(at)),
+        first,
+        version,
+        flags,
+        name: String::from_utf8_lossy(name).into_owned(),
+        children,
+        data_len: u32_be(&head, 34).unwrap_or(0),
+        data_packed: u32_be(&head, 38).unwrap_or(0),
+        data_crc: u16_be(&head, 42).unwrap_or(0),
+        data_method,
+        rsrc,
+    }))
+}
 
 pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -296,58 +475,84 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
     let banner = r.text("Banner", 80).ok_or_else(bad)?;
     r.bytes("Banner end", 2).ok_or_else(bad)?;
     r.u8("Version").ok_or_else(bad)?;
-    r.u8("Flags").ok_or_else(bad)?;
+    let flags = r.u8("Flags").ok_or_else(bad)?;
+    r.with(|n| n.value(hex(flags.into())));
     let total = r.u32("Total size", BE).ok_or_else(bad)?;
     r.with(|n| n.summary(human_size(total.into())));
     r.u32("Unknown", BE).ok_or_else(bad)?;
     let entries = r.u16("Root entries", BE).ok_or_else(bad)?;
     let first = r.u32("First entry offset", BE).ok_or_else(bad)?;
     r.with(|n| n.value(hex(first.into())));
-    let header_len = to_u64(r.at);
+    let header_len = to_u64(r.at).max(u64::from(first).min(100));
+    if r.at < head.len() && u64::from(first) > to_u64(r.at) {
+        let rest = u64::from(first).min(100).saturating_sub(to_u64(r.at));
+        r.bytes("Unknown", rest);
+    }
     cx.emit(
         Node::new("Archive header")
             .span(file.sub(0, header_len))
             .summary(banner.trim_end().to_owned())
             .lazy(emit_nodes, r.into_nodes()),
     );
+    if flags & 0x80 != 0 {
+        cx.diag(Diagnostic::unsupported("encrypted StuffIt 5 archive"));
+    }
     let mut at = u64::from(first);
+    let mut remaining = u64::from(entries);
     let mut seen = 0u64;
-    while at > 0 && seen < MAX_ENTRIES && seen < u64::from(entries).max(1).saturating_mul(4096) {
-        let fixed = file.sub(at, 48);
-        let raw = cx.read_avail(fixed).await?;
-        if u32_be(&raw, 0) != Some(SIT5_MAGIC) {
-            if seen == 0 {
-                cx.diag(Diagnostic::malformed("no entry at the first entry offset").at(fixed));
-            }
+    let mut files = 0u64;
+    let mut bytes = 0u64;
+    let mut dirs: BTreeMap<u64, String> = BTreeMap::new();
+    while remaining > 0 && seen < MAX_ENTRIES {
+        let Some(e) = sit5_entry_at(&cx, file, at).await? else {
+            cx.diag(Diagnostic::malformed(format!("no entry at {at:#x}")).at(file.sub(at, 4)));
             break;
-        }
-        seen = seen.saturating_add(1);
-        let header_size = u64::from(u16_be(&raw, 6).unwrap_or(0));
-        let flags = raw.get(9).copied().unwrap_or(0);
-        let next = u64::from(u32_be(&raw, 22).unwrap_or(0));
-        let name_len = u64::from(u16_be(&raw, 30).unwrap_or(0));
-        let length = u32_be(&raw, 34).unwrap_or(0);
-        let directory = flags & 0x40 != 0;
-        let name_at = if directory {
-            48u64
-        } else {
-            46u64
-                .saturating_add(2)
-                .saturating_add(u64::from(raw.get(47).copied().unwrap_or(0)))
         };
-        let name = cx
-            .read_avail(file.sub(at.saturating_add(name_at), name_len.min(1024)))
-            .await?;
-        let span = file.sub(at, header_size.max(48));
+        seen = seen.saturating_add(1);
+        remaining = remaining.saturating_sub(1);
+        let path = match dirs.get(&u64::from(e.parent)) {
+            Some(p) => format!("{p}/{}", e.name),
+            None => e.name.clone(),
+        };
+        let span = file.sub(at, e.end().saturating_sub(at).max(e.header.len));
+        let summary = if e.directory() {
+            remaining = remaining.saturating_add(e.children.into());
+            dirs.insert(at, path.clone());
+            format!("folder, {}", count(e.children.into(), "entry", "entries"))
+        } else {
+            files = files.saturating_add(1);
+            let rsrc_len = e.rsrc.map_or(0, |r| u64::from(r.0));
+            bytes = bytes
+                .saturating_add(e.data_len.into())
+                .saturating_add(rsrc_len);
+            let mut s = format!(
+                "data {} ({})",
+                human_size(e.data_len.into()),
+                method_name(e.data_method)
+            );
+            if let Some((len, _, _, m)) = e.rsrc {
+                s.push_str(&format!(
+                    ", resource {} ({})",
+                    human_size(len.into()),
+                    method_name(m)
+                ));
+            }
+            if e.flags & SIT5_ENCRYPTED != 0 {
+                s.push_str(", encrypted");
+            }
+            s
+        };
+        let name = if e.directory() {
+            format!("{path}/")
+        } else {
+            path
+        };
+        let next = e.end();
         cx.push(
-            Node::new(String::from_utf8_lossy(&name).into_owned())
+            Node::new(name)
                 .span(span)
-                .summary(if directory {
-                    "folder".to_owned()
-                } else {
-                    human_size(length.into())
-                })
-                .lazy(sit5_entry, (span, directory)),
+                .summary(summary)
+                .lazy(sit5_entry, (input, Arc::new(e))),
         )
         .await;
         if next <= at {
@@ -356,17 +561,17 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
         at = next;
     }
     cx.annotate(format!(
-        "StuffIt 5 archive, {}, {}",
-        count(entries.into(), "root entry", "root entries"),
-        human_size(total.into())
+        "StuffIt 5 archive, {}, {} uncompressed",
+        count(files, "file", "files"),
+        human_size(bytes)
     ));
     Ok(())
 }
 
-async fn sit5_entry(cx: Cx, (span, directory): (Span, bool)) -> Result<()> {
-    let raw = cx.read(span).await?;
-    let mut r = ByteReader::new(&raw, span);
-    let bad = || Diagnostic::truncated(span, 0);
+async fn sit5_entry(cx: Cx, (input, e): (Input, Arc<Sit5Entry>)) -> Result<()> {
+    let raw = cx.read(e.header).await?;
+    let mut r = ByteReader::new(&raw, e.header);
+    let bad = || Diagnostic::truncated(e.header, 0);
     r.u32("Magic", BE).ok_or_else(bad)?;
     r.with(|n| n.value(hex(SIT5_MAGIC.into())));
     r.u8("Version").ok_or_else(bad)?;
@@ -396,13 +601,26 @@ async fn sit5_entry(cx: Cx, (span, directory): (Span, bool)) -> Result<()> {
     }
     let name_len = r.u16("Name length", BE).ok_or_else(bad)?;
     let crc = r.u16("Header CRC", BE).ok_or_else(bad)?;
-    r.with(|n| n.value(hex(crc.into())));
+    // CRC-16 of the first part with this field zeroed, as far as we know;
+    // only a match is reported.
+    let mut zeroed = raw
+        .get(..crate::bytes::to_usize(e.first.len))
+        .unwrap_or_default()
+        .to_vec();
+    if let Some(f) = zeroed.get_mut(32..34) {
+        f.fill(0);
+    }
+    let matches = crc16_arc(&zeroed) == crc;
+    r.with(|n| {
+        let n = n.value(hex(crc.into()));
+        if matches { n.summary("valid") } else { n }
+    });
     r.u32("Data length", BE).ok_or_else(bad)?;
     r.u32("Data compressed length", BE).ok_or_else(bad)?;
-    let dcrc = r.u16("Data CRC", BE).ok_or_else(bad)?;
+    let dcrc = r.u16("Data CRC-16", BE).ok_or_else(bad)?;
     r.with(|n| n.value(hex(dcrc.into())));
     r.u16("Unknown", BE).ok_or_else(bad)?;
-    if directory {
+    if e.directory() {
         r.u16("Number of entries", BE).ok_or_else(bad)?;
     } else {
         let m = r.u8("Data method").ok_or_else(bad)?;
@@ -413,8 +631,79 @@ async fn sit5_entry(cx: Cx, (span, directory): (Span, bool)) -> Result<()> {
         }
     }
     r.text("Name", name_len.into()).ok_or_else(bad)?;
-    if r.remaining() > 0 {
-        r.bytes("Rest of header", to_u64(r.remaining()));
+    let first_len = crate::bytes::to_usize(e.first.len);
+    if r.at < first_len {
+        let rest = to_u64(first_len.saturating_sub(r.at));
+        r.bytes("Rest of header (comment)", rest).ok_or_else(bad)?;
     }
-    emit_nodes(cx, Arc::new(r.nodes)).await
+    // The second part.
+    let flags2 = r.u16("Flags 2", BE).ok_or_else(bad)?;
+    r.with(|n| {
+        let n = n.value(hex(flags2.into()));
+        if flags2 & 1 != 0 {
+            n.summary("has a resource fork")
+        } else {
+            n
+        }
+    });
+    r.u16("Unknown", BE).ok_or_else(bad)?;
+    for name in ["File type", "Creator"] {
+        let v = r.bytes(name, 4).ok_or_else(bad)?;
+        let t = String::from_utf8_lossy(v).into_owned();
+        r.with(|n| n.value(Value::Text(t)));
+    }
+    let finder = r.u16("Finder flags", BE).ok_or_else(bad)?;
+    r.with(|n| n.value(hex(finder.into())));
+    r.bytes("Unknown", if e.version == 1 { 22 } else { 18 })
+        .ok_or_else(bad)?;
+    if e.rsrc.is_some() {
+        r.u32("Resource fork length", BE).ok_or_else(bad)?;
+        r.u32("Resource fork compressed length", BE)
+            .ok_or_else(bad)?;
+        let c = r.u16("Resource fork CRC-16", BE).ok_or_else(bad)?;
+        r.with(|n| n.value(hex(c.into())));
+        r.u16("Unknown", BE).ok_or_else(bad)?;
+        let m = r.u8("Resource fork method").ok_or_else(bad)?;
+        r.with(|n| n.summary(method_name(m)));
+        let pass = r.u8("Password length").ok_or_else(bad)?;
+        if pass > 0 {
+            r.bytes("Password data", pass.into()).ok_or_else(bad)?;
+        }
+    }
+    cx.emit(
+        Node::new("Entry header")
+            .span(e.header)
+            .lazy(emit_nodes, r.into_nodes()),
+    );
+    if e.directory() {
+        return Ok(());
+    }
+    let file = input.span;
+    let base = e.at.saturating_add(e.header.len);
+    let encrypted = e.flags & SIT5_ENCRYPTED != 0;
+    if let Some((len, packed, crc, method)) = e.rsrc {
+        let span = file.sub(base, packed.into());
+        cx.emit(fork_node(
+            "Resource fork",
+            input,
+            span,
+            method,
+            len.into(),
+            Some(crc),
+            encrypted,
+        ));
+    }
+    let span = file.sub(base.saturating_add(e.rsrc_packed()), e.data_packed.into());
+    if span.len > 0 || e.data_len > 0 {
+        cx.emit(fork_node(
+            "Data fork",
+            input,
+            span,
+            e.data_method,
+            e.data_len.into(),
+            Some(e.data_crc),
+            encrypted,
+        ));
+    }
+    Ok(())
 }
