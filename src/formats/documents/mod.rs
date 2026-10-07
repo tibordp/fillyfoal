@@ -7,6 +7,7 @@
 //! [`super::publishing`].
 
 pub mod chm;
+pub mod djvu;
 pub mod dvi;
 pub mod ebooks;
 pub mod help;

@@ -1060,7 +1060,7 @@ pub static FORMATS: &[&Format] = &[
     &geo::survey::DBF,
     &documents::ebooks::MOBI,
     &documents::ebooks::PALMDOC,
-    &documents::ebooks::DJVU,
+    &documents::djvu::DJVU,
     &documents::ebooks::LIT,
     &security::credentials::KDBX,
     &security::credentials::KDB,
