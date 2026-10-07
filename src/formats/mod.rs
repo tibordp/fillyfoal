@@ -1072,7 +1072,7 @@ pub static FORMATS: &[&Format] = &[
     &system::artifacts::BZIMAGE,
     &system::artifacts::JOURNAL,
     &system::artifacts::REDIS_RDB,
-    &system::artifacts::PST,
+    &system::pst::PST,
     &system::dotnet::DOTNET_RESOURCES,
     &system::dotnet::NRBF,
     &system::artifacts::SNOOP,

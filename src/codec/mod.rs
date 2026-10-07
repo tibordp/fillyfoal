@@ -25,6 +25,7 @@ pub mod inflate;
 pub mod legacy;
 pub mod lz;
 pub mod lzfse;
+pub mod lzfu;
 pub mod lzh;
 pub mod lzma;
 pub mod lznt1;
@@ -155,6 +156,8 @@ pub enum Codec {
     Lzf,
     /// LZF in the `lzf` tool's `ZV` blocks.
     LzfFramed,
+    /// Compressed RTF (`LZFu`/`MELA`, [MS-OXRTFCP]), header included.
+    Lzfu,
     /// Apple Data Compression (DMG chunk type `0x80000004`).
     Adc,
     /// PKWARE implode (ZIP method 6).
@@ -287,6 +290,7 @@ impl Codec {
             Codec::Lzop => "lzop",
             Codec::Lzf => "lzf",
             Codec::LzfFramed => "lzf-framed",
+            Codec::Lzfu => "lzfu",
             Codec::Adc => "adc",
             Codec::Implode(_) => "implode",
             Codec::DclImplode => "dcl-implode",
@@ -351,6 +355,7 @@ impl Codec {
             Codec::Lzop => "lzop (lazy)",
             Codec::Lzf => "lzf (lazy)",
             Codec::LzfFramed => "lzf-framed (lazy)",
+            Codec::Lzfu => "lzfu (lazy)",
             Codec::Adc => "adc (lazy)",
             Codec::Implode(_) => "implode (lazy)",
             Codec::DclImplode => "dcl-implode (lazy)",
@@ -414,6 +419,7 @@ impl Codec {
             | Codec::Lzop
             | Codec::Lzf
             | Codec::LzfFramed
+            | Codec::Lzfu
             | Codec::Adc
             | Codec::Implode(_)
             | Codec::DclImplode
@@ -492,6 +498,8 @@ impl Codec {
             Codec::Lzo1x | Codec::Lzop => 512,
             // At most 264 bytes per 3-byte back reference.
             Codec::Lzf | Codec::LzfFramed => 128,
+            // At most 17 bytes per 2-byte reference (plus control bits).
+            Codec::Lzfu => 16,
             // At most 67 bytes per 3-byte match.
             Codec::Adc => 32,
             // Matches of up to 320 or 518 bytes in about 17 or 24 bits.
@@ -575,6 +583,7 @@ impl Codec {
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
+            Codec::Lzfu => Box::new(Streaming(filters::Whole::new(lzfu::Lzfu))),
             Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
             Codec::Implode(params) => Box::new(Streaming(filters::Whole::new(*params))),
             Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),

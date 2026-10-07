@@ -66,27 +66,30 @@ exploration pays for additional work only as needed.
   build is fully hermetic; content in a codec we lack becomes an
   `Unsupported` leaf that names the codec and keeps its span.
 - In practice every codec so far is in-house (`src/codec/`, no features
-  needed): DEFLATE/zlib, bzip2 (and NSIS's variant), LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
-  Zstandard, Brotli, LZ4, Snappy, LZFSE/LZVN and Apple `pbz*`, Unix `.Z`,
-  LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, ACE 1.0/2.0 (acefile as
-  oracle), the StuffIt methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no
-  oracle), Cap'n Proto packing, the PDF/PostScript
-  LZO1X/lzop, LZF, ADC, SPSS bytecode and SAS7BDAT RLE/RDC row compression, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
-  LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), DjVu BZZ, PKWARE implode and DCL implode, MSZIP/LZX/Quantum
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, the DWG R2004+ LZ77 variant, Cap'n Proto packing, the PDF/PostScript
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, the LHA/ARJ/ZOO/`COMPRESS.EXE`
-  LZSS and LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4,
-  ZOO LZW, SZDD, KWAJ) and PSARC blocks, Cap'n Proto packing, the PDF/PostScript
-  filters and predictors, and the ciphers that unlock content (ZipCrypto,
-  AES, RC4, ChaCha20, Twofish, Type 1 eexec, MPQ; Argon2 and BLAKE2b for
-  KeePass). Each is checked byte-exact against a real
-  encoder where one was available (CLI tools, Python packages via `uv`,
-  `hdiutil`, `compression_tool`, liblzo2, 7-Zip as an extraction oracle),
-  otherwise against spec vectors and spec-derived encoders; the test names
-  and comments say which. CRCs share one table-driven engine
-  (`codec::crc`).
+  needed):
+  - general-purpose: DEFLATE/zlib, bzip2 (and NSIS's variant), LZMA/LZMA2/xz
+    (+ BCJ x86/ARM/ARM64, Delta), Zstandard, Brotli, LZ4, Snappy,
+    LZFSE/LZVN and Apple `pbz*`, Unix `.Z`, LZO1X/lzop, LZF;
+  - archivers: RAR 2.9/3.x and 5/7 (LZ, PPMd var. H, standard filters),
+    MSZIP/LZX/Quantum (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1,
+    PKWARE implode and DCL implode, the LHA/ARJ/ZOO/`COMPRESS.EXE` LZSS and
+    LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4, ZOO LZW,
+    SZDD, KWAJ), PSARC blocks, ACE 1.0/2.0 (acefile as oracle), the StuffIt
+    methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no oracle), ADC;
+  - format-specific: compressed RTF (LZFu), Guitar Pro 6 BCFZ, Heatshrink and
+    MeatPack (Prusa binary G-code), DjVu BZZ, the DWG R2004+ LZ77 variant,
+    SPSS bytecode and SAS7BDAT RLE/RDC row compression, Cap'n Proto packing,
+    the PDF/PostScript filters and predictors;
+  - ciphers and KDFs that unlock content: ZipCrypto, AES (CBC, CTR, GCM), RC4,
+    ChaCha20/Poly1305, Twofish, Type 1 eexec, MPQ; Argon2, BLAKE2b, bcrypt_pbkdf.
+
+  Each is checked byte-exact against a real encoder where one was available
+  (CLI tools, Python packages via `uv`, `hdiutil`, `compression_tool`,
+  liblzo2, 7-Zip or libarchive as extraction oracles), otherwise against spec
+  vectors and spec-derived encoders; the test names and comments say which.
+  CRCs share one table-driven engine (`codec::crc`). Where a decoder was
+  written from a reference implementation rather than a specification, see
+  `LICENSE-REVIEW.md`.
 - CI tests both the hermetic and the feature-enabled build.
 
 ## Architecture (current)

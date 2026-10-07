@@ -5,7 +5,8 @@
 //! gettext catalogs (`mo`), Apple BOM stores, Windows compatibility
 //! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
 //! (`dotnet`), developer artifacts (`devtools`, Delphi form
-//! streams in `delphi`) and Git storage.
+//! streams in `delphi`), Git storage and Outlook PST/OST mail stores
+//! (`pst`).
 
 pub mod artifacts;
 pub mod bom;
@@ -20,5 +21,6 @@ pub mod kvstore;
 pub mod mo;
 pub mod ota;
 pub mod platform;
+pub mod pst;
 pub mod shim_sdb;
 pub mod terminfo;

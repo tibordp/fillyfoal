@@ -376,3 +376,9 @@ and reproduce every file byte for byte.
 | `unityfs/raw.unity3d` | UnityPy 1.25.4 (`save_web_raw`) | same script; UnityRaw 3, Unity 5.2, SerializedFile 15 |
 | `unityfs/web.unity3d` | UnityPy 1.25.4 (`save_web_raw`, LZMA) | same script; UnityWeb 3 |
 | `unity-serialized/sharedassets0.assets` | UnityPy 1.25.4 (`SerializedFile.save`) | same script; standalone SerializedFile 19, Unity 2019.4 |
+
+## Mail stores
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `pst/unicode.pst.gz` | Aspose.Email for Python via .NET 26.8 (unlicensed evaluation mode) | `uv run --with aspose-email-for-python-via-net==26.8 python -I tests/data/pst/generate.py OUT`; not byte-for-byte reproducible (fresh entry IDs, record keys and modification times). Evaluation mode appends "(Aspose.Email Evaluation)" to subjects and an evaluation banner to bodies. Stored as `gzip -9 -n` (mostly zero-filled preallocated pages). Aspose cannot create ANSI files |
