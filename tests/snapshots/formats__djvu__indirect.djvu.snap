@@ -1,0 +1,20 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ indirect.djvu — indirect multi-page DjVu, 2 pages, 2 files  [0x0+0x3d]
+    Magic  [0x0+0x4]
+  ▾ FORM:DJVM — multi-page document, 49 bytes  [0x4+0x39]
+    ▾ DIRM — Multi-page directory, 37 bytes  [0x10+0x2d]
+        Flags: 0x1 — indirect, version 1  [0x18+0x1]
+        File count: 2  [0x19+0x2]
+      ▾ Entries (BZZ) — 2 files, 34 bytes compressed  [0x1b+0x22]
+        ▾ p0001.djvu — page 1, "Front", 1234 bytes  [#1:0x8+0xa]
+            ID: "p0001.djvu"  [#1:0x8+0xa]
+            Title: "Front"  [#1:0x13+0x5]
+            Flags: 0x41 — page, has title  [#1:0x6+0x1]
+            Size: 1234  [#1:0x0+0x3]
+        ▾ p0002.djvu — page 2, 2345 bytes  [#1:0x19+0xa]
+            ID: "p0002.djvu"  [#1:0x19+0xa]
+            Flags: 0x1 — page  [#1:0x7+0x1]
+            Size: 2345  [#1:0x3+0x3]

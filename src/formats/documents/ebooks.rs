@@ -1,5 +1,5 @@
-//! E-book and document containers: Palm databases (MOBI, AZW, PalmDOC),
-//! DjVu and Microsoft Reader.
+//! E-book and document containers: Palm databases (MOBI, AZW, PalmDOC)
+//! and Microsoft Reader. DjVu lives in [`super::djvu`].
 
 use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
@@ -316,94 +316,6 @@ async fn exth_records(cx: Cx, span: Span) -> Result<()> {
         };
         cx.push(Node::new(name).span(cur.since(start)).value(value))
             .await;
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// DjVu
-
-declare_format!(pub DJVU = "djvu", "DjVu document", ["djvu", "djv"], "image/vnd.djvu",
-    Probe::Magic(&[(0, b"AT&TFORM")]), djvu);
-
-async fn djvu(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)));
-    let head = cx.read(file.sub(4, 12)).await?;
-    let form = String::from_utf8_lossy(head.get(8..12).unwrap_or_default()).into_owned();
-    let kind = match form.as_str() {
-        "DJVU" => "single-page DjVu",
-        "DJVM" => "multi-page DjVu",
-        "DJVI" => "shared DjVu data",
-        "THUM" => "DjVu thumbnails",
-        _ => "DjVu",
-    };
-    let mut summary = kind.to_owned();
-    if form == "DJVU" {
-        let info = cx.read_avail(file.sub(16, 18)).await?;
-        if info.starts_with(b"INFO") {
-            summary = format!(
-                "{kind}, {}×{}, {} dpi",
-                u16_be(&info, 8).unwrap_or(0),
-                u16_be(&info, 10).unwrap_or(0),
-                crate::bytes::u16_le(&info, 14).unwrap_or(0)
-            );
-        }
-    }
-    cx.annotate(summary);
-    djvu_chunks(cx, (input, file.tail(4))).await
-}
-
-const DJVU_CHUNKS: &[(&str, &str)] = &[
-    ("FORM", "Composite chunk"),
-    ("DIRM", "Multi-page directory"),
-    ("NAVM", "Bookmarks"),
-    ("INFO", "Page information"),
-    ("INCL", "Included shared data"),
-    ("Sjbz", "JB2 bitonal mask"),
-    ("Smmr", "G4 bitonal mask"),
-    ("BG44", "IW44 background"),
-    ("FG44", "IW44 foreground"),
-    ("FGbz", "Foreground colors"),
-    ("TXTa", "Hidden text"),
-    ("TXTz", "Hidden text (compressed)"),
-    ("ANTa", "Annotations"),
-    ("ANTz", "Annotations (compressed)"),
-    ("Djbz", "Shared shape dictionary"),
-    ("TH44", "Thumbnail"),
-];
-
-async fn djvu_chunks(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, BE);
-    while cur.remaining() >= 8 {
-        let start = cur.pos();
-        let id = String::from_utf8_lossy(&cur.bytes(4).await?).into_owned();
-        let len = cur.u32().await?;
-        let body = cur.span(len.into());
-        cur.skip(u64::from(len).saturating_add(u64::from(len & 1)));
-        let label = DJVU_CHUNKS
-            .iter()
-            .find(|(k, _)| *k == id)
-            .map_or("", |(_, n)| n);
-        let mut node = Node::new(id.clone())
-            .span(cur.since(start))
-            .summary(format!("{label}, {len} bytes"));
-        if id == "FORM" {
-            let kind = String::from_utf8_lossy(&cx.read_avail(body.sub(0, 4)).await?).into_owned();
-            node = node.summary(format!("FORM:{kind}, {len} bytes")).lazy(
-                crate::expander!(self::djvu_chunks: (Input, Span)),
-                (input, body.tail(4)),
-            );
-        } else if id == "INFO" {
-            let info = cx.read_avail(body.sub(0, 10)).await?;
-            node = node.summary(format!(
-                "{}×{} pixels, {} dpi",
-                u16_be(&info, 0).unwrap_or(0),
-                u16_be(&info, 2).unwrap_or(0),
-                crate::bytes::u16_le(&info, 6).unwrap_or(0)
-            ));
-        }
-        cx.push(node).await;
     }
     Ok(())
 }

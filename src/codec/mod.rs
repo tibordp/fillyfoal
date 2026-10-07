@@ -11,6 +11,7 @@ pub mod ace;
 pub mod bcfz;
 pub mod brotli;
 pub mod bzip2;
+pub mod bzz;
 pub mod cab;
 pub mod capnp;
 pub mod charset;
@@ -138,6 +139,8 @@ pub enum Codec {
     },
     /// MeatPack-packed G-code text (Prusa binary G-code).
     MeatPack,
+    /// DjVu's BZZ (Burrows-Wheeler and ZP coder; see [`bzz`]).
+    Bzz,
     /// Exactly one Zstandard frame (after any skippable frames); what
     /// follows it is left unconsumed.
     ZstdFrame,
@@ -264,6 +267,7 @@ impl Codec {
             Codec::Bcfz { .. } => "bcfz",
             Codec::Heatshrink { .. } => "heatshrink",
             Codec::MeatPack => "meatpack",
+            Codec::Bzz => "bzz",
             Codec::Lzop => "lzop",
             Codec::Lzf => "lzf",
             Codec::LzfFramed => "lzf-framed",
@@ -323,6 +327,7 @@ impl Codec {
             Codec::Bcfz { .. } => "bcfz (lazy)",
             Codec::Heatshrink { .. } => "heatshrink (lazy)",
             Codec::MeatPack => "meatpack (lazy)",
+            Codec::Bzz => "bzz (lazy)",
             Codec::Lzop => "lzop (lazy)",
             Codec::Lzf => "lzf (lazy)",
             Codec::LzfFramed => "lzf-framed (lazy)",
@@ -381,6 +386,7 @@ impl Codec {
             | Codec::Lzo1x
             | Codec::Bcfz { .. }
             | Codec::Heatshrink { .. }
+            | Codec::Bzz
             | Codec::Lzop
             | Codec::Lzf
             | Codec::LzfFramed
@@ -447,6 +453,8 @@ impl Codec {
             Codec::Heatshrink { .. } => 16,
             // Two characters per byte, each possibly with a space.
             Codec::MeatPack => 4,
+            // A highly probable symbol costs a small fraction of a bit.
+            Codec::Bzz => 50_000,
             // A 3-byte chunk stands for 4 KiB of zeros when another follows.
             Codec::Lznt1 { .. } => 1_400,
             // Each 64 KiB block costs at least its 256-byte table.
@@ -532,6 +540,7 @@ impl Codec {
                 Box::new(Streaming(heatshrink::Heatshrink::new(*window, *lookahead)))
             }
             Codec::MeatPack => Box::new(Streaming(meatpack::MeatPack::default())),
+            Codec::Bzz => Box::new(Streaming(bzz::Bzz::default())),
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
