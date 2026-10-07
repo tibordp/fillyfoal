@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ vault.kdbx — KeePass KDBX 3.1, AES-256-CBC  [0x0+0x11e]
+▾ vault.kdbx — KeePass KDBX 3.1, AES-256-CBC, AES-KDF, 60000 rounds  [0x0+0x11e]
     Signature 1: 0x9aa2d903  [0x0+0x4]
     Signature 2: 0xb54bfb67  [0x4+0x4]
     Minor version: 1  [0x8+0x2]
@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Encryption IV — 16 bytes  [0x77+0x13] → 0x7a+0x10
     Protected stream key — 32 bytes  [0x8a+0x23] → 0x8d+0x20
     Stream start bytes — 32 bytes  [0xad+0x23] → 0xb0+0x20
-    Inner random stream ID — 4 bytes  [0xd0+0x7] → 0xd3+0x4
+    Inner random stream ID: Salsa20 (0x2)  [0xd0+0x7] → 0xd3+0x4
     End of header — 4 bytes  [0xd7+0x7] → 0xda+0x4
-    Encrypted payload  [0xde+0x40]
-      ! note: encrypted; requires the master key
+  ▾ Payload  [0xde+0x40]
+      ! unsupported: encrypted (no password, or a wrong one) [0xde+0x40]
