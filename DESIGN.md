@@ -72,6 +72,8 @@ exploration pays for additional work only as needed.
   (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, ACE 1.0/2.0 (acefile as
   oracle), the StuffIt methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no
   oracle), Cap'n Proto packing, the PDF/PostScript
+  LZO1X/lzop, LZF, ADC, SPSS bytecode and SAS7BDAT RLE/RDC row compression, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
+  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
   filters and predictors, and the ciphers that unlock content (ZipCrypto,
   AES, RC4, ChaCha20, Twofish, Type 1 eexec, MPQ; Argon2 and BLAKE2b for
   KeePass). Each is checked byte-exact against a real

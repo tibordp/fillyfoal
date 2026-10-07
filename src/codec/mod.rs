@@ -31,6 +31,7 @@ pub mod meatpack;
 pub mod pbz;
 pub mod pipeline;
 pub mod quantum;
+pub mod statdata;
 pub mod stuffit;
 pub mod unixz;
 pub mod wim;
@@ -182,6 +183,16 @@ pub enum Codec {
     SnappyFramed,
     /// Cap'n Proto's packed encoding (see [`capnp`]).
     CapnpPacked,
+    /// SPSS bytecode compression with this bias (an `f64`'s bits) and byte
+    /// order (see [`statdata`]).
+    SpssBytecode {
+        bias: u64,
+        big_endian: bool,
+    },
+    /// SAS7BDAT `SASYZCRL` row compression (run-length).
+    SasRle,
+    /// SAS7BDAT `SASYZCR2` row compression (Ross Data Compression).
+    SasRdc,
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
     Eexec {
         hex: bool,
@@ -276,6 +287,9 @@ impl Codec {
             Codec::CapnpPacked => "capnp-packed",
             Codec::Ace(_) => "ace",
             Codec::StuffIt(_) => "stuffit",
+            Codec::SpssBytecode { .. } => "spss-bytecode",
+            Codec::SasRle => "sas-rle",
+            Codec::SasRdc => "sas-rdc",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -332,6 +346,9 @@ impl Codec {
             Codec::CapnpPacked => "capnp-packed (lazy)",
             Codec::Ace(_) => "ace (lazy)",
             Codec::StuffIt(_) => "stuffit (lazy)",
+            Codec::SpssBytecode { .. } => "spss-bytecode (lazy)",
+            Codec::SasRle => "sas-rle (lazy)",
+            Codec::SasRdc => "sas-rdc (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -381,6 +398,7 @@ impl Codec {
             | Codec::LzmaRaw { .. }
             | Codec::Ace(_)
             | Codec::StuffIt(_) => "decompressed",
+            Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -409,6 +427,12 @@ impl Codec {
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
             // A zero tag and a count stand for 256 zero words.
             Codec::CapnpPacked => 1024,
+            // One command byte per 8-byte value.
+            Codec::SpssBytecode { .. } => 8,
+            // Two bytes insert up to 4112 blanks or zeros.
+            Codec::SasRle => 2_100,
+            // Three bytes (and two control bits) repeat up to 4114 bytes.
+            Codec::SasRdc => 1_400,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
@@ -532,6 +556,11 @@ impl Codec {
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
             Codec::Ace(params) => Box::new(Streaming(ace::Decoder::new(params.clone()))),
             Codec::StuffIt(params) => Box::new(Streaming(stuffit::Decoder::new(*params))),
+            Codec::SpssBytecode { bias, big_endian } => {
+                Box::new(Streaming(statdata::SpssBytecode::new(*bias, *big_endian)))
+            }
+            Codec::SasRle => Box::new(Streaming(filters::Whole::new(statdata::SasRle))),
+            Codec::SasRdc => Box::new(Streaming(filters::Whole::new(statdata::SasRdc))),
             Codec::Eexec { hex } => {
                 Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
             }

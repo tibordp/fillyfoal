@@ -2,8 +2,124 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ cars.sas7bdat — SAS DATA "CARS", release 9.0401M7, 64-bit little-endian  [0x0+0x3fc]
-    Magic  [0x0+0x20]
-    Dataset name: "CARS"  [0x5c+0x40]
-    File type: "DATA"  [0x9c+0x8]
-    SAS release: "9.0401M7"  [0x120+0x8]
+▾ cars.sas7bdat — SAS DATA "CARS", 5 columns × 6 rows, release 9.0401M7, 64-bit little-endian, created 2023-05-18 03:33:20  [0x0+0x2400]
+  ▾ Header — "CARS", release 9.0401M7  [0x0+0x400]
+      Magic  [0x0+0x20]
+      Alignment (64-bit): true — 8-byte pointers  [0x20+0x1]
+      Alignment (padding): true  [0x23+0x1]
+      Byte order: little-endian (0x1)  [0x25+0x1]
+      Platform: Windows (0x32)  [0x27+0x1]
+      Encoding: utf-8 (0x14)  [0x46+0x1]
+      Format: "SAS FILE"  [0x54+0x8]
+      Dataset name: "CARS"  [0x5c+0x40]
+      File type: "DATA"  [0x9c+0x8]
+      Created: 2023-05-18 03:33:20 UTC  [0xa8+0x8]
+      Modified: 2023-05-18 04:33:20 UTC  [0xb0+0x8]
+      Header size: 1024  [0xc8+0x4]
+      Page size: 4096  [0xcc+0x4]
+      Page count: 2  [0xd0+0x8]
+      SAS release: "9.0401M7"  [0xe0+0x8]
+      Host: "X64_10PRO"  [0xe8+0x10]
+      OS version: "10.0.19045"  [0xf8+0x10]
+      OS maker: ""  [0x108+0x10]
+      OS name: "x86_64"  [0x118+0x10]
+  ▾ Pages — 2 × 4096 bytes  [0x400+0x2000]
+    ▾ Page 1 — mix, 12 blocks, 10 subheaders  [0x400+0x1000]
+        Page type: mix (0x200)  [0x420+0x2]
+        Block count: 12  [0x422+0x2]
+        Subheader count: 10  [0x424+0x2]
+      ▾ Row size — 808 bytes, pointer at 0x428, compression 0  [0x10d8+0x328] → 0x10d8+0x328
+          Row length: 39  [0x1100+0x8]
+          Row count: 6  [0x1108+0x8]
+          Column count (part 1): 5  [0x1120+0x8]
+          Column count (part 2): 0  [0x1128+0x8]
+          Rows on a mixed page: 2  [0x1150+0x8]
+          File label (text reference) — blob 0, offset 124, 14 bytes  [0x137e+0x6]
+          Compression (text reference) — blob 0, offset 0, 0 bytes  [0x138a+0x6]
+          Creator procedure (text reference) — blob 0, offset 20, 8 bytes  [0x1396+0x6]
+        Column size — 24 bytes, pointer at 0x440, compression 0  [0x10c0+0x18] → 0x10c0+0x18
+        Column text — 160 bytes, pointer at 0x458, compression 0  [0x1020+0xa0] → 0x1020+0xa0
+        Column names — 68 bytes, pointer at 0x470, compression 0  [0xfd8+0x44] → 0xfd8+0x44
+        Column attributes — 108 bytes, pointer at 0x488, compression 0  [0xf68+0x6c] → 0xf68+0x6c
+        Format and label — 64 bytes, pointer at 0x4a0, compression 0  [0xf28+0x40] → 0xf28+0x40
+        Format and label — 64 bytes, pointer at 0x4b8, compression 0  [0xee8+0x40] → 0xee8+0x40
+        Format and label — 64 bytes, pointer at 0x4d0, compression 0  [0xea8+0x40] → 0xea8+0x40
+        Format and label — 64 bytes, pointer at 0x4e8, compression 0  [0xe68+0x40] → 0xe68+0x40
+        Format and label — 64 bytes, pointer at 0x500, compression 0  [0xe28+0x40] → 0xe28+0x40
+    ▾ Page 2 — data, 4 blocks, 0 subheaders  [0x1400+0x1000]
+        Page type: data (0x100)  [0x1420+0x2]
+        Block count: 4  [0x1422+0x2]
+        Subheader count: 0  [0x1424+0x2]
+  ▾ Columns — 5 columns
+    ▾ ID — numeric(8), BEST12., "Identifier"
+        Name: "ID"
+        Label: "Identifier"
+        Type: "numeric"
+        Width: 8
+        Offset in row: 0
+        Format: "BEST12."
+    ▾ MAKE — character(12), $., "Manufacturer"
+        Name: "MAKE"
+        Label: "Manufacturer"
+        Type: "character"
+        Width: 12
+        Offset in row: 8
+        Format: "$."
+    ▾ PRICE — numeric(8), DOLLAR12.2, "Price in USD"
+        Name: "PRICE"
+        Label: "Price in USD"
+        Type: "numeric"
+        Width: 8
+        Offset in row: 20
+        Format: "DOLLAR12.2"
+    ▾ BUILT — numeric(8), DATE9., "Date built"
+        Name: "BUILT"
+        Label: "Date built"
+        Type: "numeric"
+        Width: 8
+        Offset in row: 28
+        Format: "DATE9."
+    ▾ CYL — numeric(3)
+        Name: "CYL"
+        Label: ""
+        Type: "numeric"
+        Width: 3
+        Offset in row: 36
+        Format: ""
+  ▾ Rows — 6 rows × 39 bytes
+    ▾ Row 1 — ID=1, MAKE="Volvo", PRICE=31250.5, BUILT=2019-03-14, CYL=4  [0x518+0x27]
+        ID: 1  [0x518+0x8]
+        MAKE: "Volvo"  [0x520+0xc]
+        PRICE: 31250.5  [0x52c+0x8]
+        BUILT: 2019-03-14 00:00:00 UTC — 2019-03-14  [0x534+0x8]
+        CYL: 4  [0x53c+0x3]
+    ▾ Row 2 — ID=2, MAKE="Škoda", PRICE=18999, BUILT=1999-12-31, CYL=6  [0x53f+0x27]
+        ID: 2  [0x53f+0x8]
+        MAKE: "Škoda"  [0x547+0xc]
+        PRICE: 18999  [0x553+0x8]
+        BUILT: 1999-12-31 00:00:00 UTC — 1999-12-31  [0x55b+0x8]
+        CYL: 6  [0x563+0x3]
+    ▾ Row 3 — ID=3, MAKE="", PRICE=., BUILT=1960-01-01, CYL=.A  [0x1428+0x27]
+        ID: 3  [0x1428+0x8]
+        MAKE: ""  [0x1430+0xc]
+        PRICE: "." — missing  [0x143c+0x8]
+        BUILT: 1960-01-01 00:00:00 UTC — 1960-01-01  [0x1444+0x8]
+        CYL: ".A" — missing  [0x144c+0x3]
+    ▾ Row 4 — ID=4, MAKE="Tatra", PRICE=1000000000, BUILT=._, CYL=8  [0x144f+0x27]
+        ID: 4  [0x144f+0x8]
+        MAKE: "Tatra"  [0x1457+0xc]
+        PRICE: 1000000000  [0x1463+0x8]
+        BUILT: "._" — missing  [0x146b+0x8]
+        CYL: 8  [0x1473+0x3]
+    ▾ Row 5 — ID=5, MAKE="Trabant", PRICE=-0.25, BUILT=1972-06-01, CYL=2  [0x1476+0x27]
+        ID: 5  [0x1476+0x8]
+        MAKE: "Trabant"  [0x147e+0xc]
+        PRICE: -0.25  [0x148a+0x8]
+        BUILT: 1972-06-01 00:00:00 UTC — 1972-06-01  [0x1492+0x8]
+        CYL: 2  [0x149a+0x3]
+    ▾ Row 6 — ID=6, MAKE="Trabant", PRICE=-0.25, BUILT=1972-06-01, CYL=2  [0x149d+0x27]
+        ID: 6  [0x149d+0x8]
+        MAKE: "Trabant"  [0x14a5+0xc]
+        PRICE: -0.25  [0x14b1+0x8]
+        BUILT: 1972-06-01 00:00:00 UTC — 1972-06-01  [0x14b9+0x8]
+        CYL: 2  [0x14c1+0x3]

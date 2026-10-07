@@ -1,0 +1,143 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pandas-119.dta — Stata release 119, 8 variables × 5 observations, "fillyfoal survey", 07 Oct 2026 11:00, little-endian  [0x0+0x1802]
+  ▾ Header  [0x0+0xb0]
+      Release: 119  [0x1c+0x3]
+      Byte order: "LSF"  [0x34+0x3]
+      Variables (K): 8  [0x46+0x4]
+      Observations (N): 5  [0x51+0x8]
+      Data label: "fillyfoal survey"  [0x64+0x12]
+      Time stamp: "07 Oct 2026 11:00"  [0x89+0x12]
+  ▾ Map  [0xb0+0x7b]
+      <stata_dta>: 0x0  [0xb5+0x8]
+      Map: 0xb0  [0xbd+0x8]
+      Variable types: 0x12b  [0xc5+0x8]
+      Variable names: 0x15c  [0xcd+0x8]
+      Sort order: 0x579  [0xd5+0x8]
+      Display formats: 0x5b2  [0xdd+0x8]
+      Value label names: 0x78d  [0xe5+0x8]
+      Variable labels: 0xbbc  [0xed+0x8]
+      Characteristics: 0x15e7  [0xf5+0x8]
+      Data: 0x160a  [0xfd+0x8]
+      Long strings (strLs): 0x1711  [0x105+0x8]
+      Value labels: 0x1720  [0x10d+0x8]
+      </stata_dta>: 0x17f6  [0x115+0x8]
+      End of file: 0x1802  [0x11d+0x8]
+    Variable types  [0x12b+0x31]
+    Variable names  [0x15c+0x41d]
+    Sort order  [0x579+0x39]
+    Display formats  [0x5b2+0x1db]
+    Value label names  [0x78d+0x42f]
+    Variable labels  [0xbbc+0xa2b]
+    Characteristics  [0x15e7+0x23]
+  ▾ Variables — 8 variables
+    ▾ id — long, %12.0g, "Respondent"
+        Name: "id"
+        Label: "Respondent"
+        Type: "long"
+        Display format: "%12.0g"
+        Value labels: ""
+        Offset in row: 0
+    ▾ small — byte, %8.0g, "An int8"
+        Name: "small"
+        Label: "An int8"
+        Type: "byte"
+        Display format: "%8.0g"
+        Value labels: ""
+        Offset in row: 4
+    ▾ mid — int, %8.0g, "An int16"
+        Name: "mid"
+        Label: "An int16"
+        Type: "int"
+        Display format: "%8.0g"
+        Value labels: ""
+        Offset in row: 5
+    ▾ ratio — float, %9.0g, "A float"
+        Name: "ratio"
+        Label: "A float"
+        Type: "float"
+        Display format: "%9.0g"
+        Value labels: ""
+        Offset in row: 7
+    ▾ score — double, %10.0g, "Test score"
+        Name: "score"
+        Label: "Test score"
+        Type: "double"
+        Display format: "%10.0g"
+        Value labels: ""
+        Offset in row: 11
+    ▾ name — str22, %22s, "Full name"
+        Name: "name"
+        Label: "Full name"
+        Type: "str22"
+        Display format: "%22s"
+        Value labels: ""
+        Offset in row: 19
+    ▾ born — double, %td, "Date of birth"
+        Name: "born"
+        Label: "Date of birth"
+        Type: "double"
+        Display format: "%td"
+        Value labels: ""
+        Offset in row: 41
+    ▾ grade — byte, %8.0g, labels grade
+        Name: "grade"
+        Label: ""
+        Type: "byte"
+        Display format: "%8.0g"
+        Value labels: "grade"
+        Offset in row: 49
+  ▾ Long strings (strLs) — 0 GSO blocks  [0x1718+0x0]
+  ▾ Observations — 5 rows × 50 bytes  [0x1610+0xfa]
+    ▾ Observation 1 — id=1, small=1, mid=300, ratio=0.5, score=12.5, name="Alice", born=1980-01-15, grade=1 (b)  [0x1610+0x32]
+        id: 1  [0x1610+0x4]
+        small: 1  [0x1614+0x1]
+        mid: 300  [0x1615+0x2]
+        ratio: 0.5  [0x1617+0x4]
+        score: 12.5  [0x161b+0x8]
+        name: "Alice"  [0x1623+0x16]
+        born: 1980-01-15 00:00:00 UTC — 1980-01-15  [0x1639+0x8]
+        grade: 1 — b  [0x1641+0x1]
+    ▾ Observation 2 — id=2, small=-2, mid=-300, ratio=-1.25, score=99, name="Bob", born=1999-12-31, grade=0 (a)  [0x1642+0x32]
+        id: 2  [0x1642+0x4]
+        small: -2  [0x1646+0x1]
+        mid: -300  [0x1647+0x2]
+        ratio: -1.25  [0x1649+0x4]
+        score: 99  [0x164d+0x8]
+        name: "Bob"  [0x1655+0x16]
+        born: 1999-12-31 00:00:00 UTC — 1999-12-31  [0x166b+0x8]
+        grade: 0 — a  [0x1673+0x1]
+    ▾ Observation 3 — id=3, small=100, mid=0, ratio=., score=., name="Cedomir", born=., grade=2 (c)  [0x1674+0x32]
+        id: 3  [0x1674+0x4]
+        small: 100  [0x1678+0x1]
+        mid: 0  [0x1679+0x2]
+        ratio: "." — missing  [0x167b+0x4]
+        score: "." — missing  [0x167f+0x8]
+        name: "Cedomir"  [0x1687+0x16]
+        born: "." — missing  [0x169d+0x8]
+        grade: 2 — c  [0x16a5+0x1]
+    ▾ Observation 4 — id=4, small=0, mid=32000, ratio=3, score=7.25, name="", born=1960-01-01, grade=0 (a)  [0x16a6+0x32]
+        id: 4  [0x16a6+0x4]
+        small: 0  [0x16aa+0x1]
+        mid: 32000  [0x16ab+0x2]
+        ratio: 3  [0x16ad+0x4]
+        score: 7.25  [0x16b1+0x8]
+        name: ""  [0x16b9+0x16]
+        born: 1960-01-01 00:00:00 UTC — 1960-01-01  [0x16cf+0x8]
+        grade: 0 — a  [0x16d7+0x1]
+    ▾ Observation 5 — id=5, small=7, mid=1, ratio=0.0010000000474974513, score=10000000000, name="Eve with a longer name", born=2024-02-29, grade=1 (b)  [0x16d8+0x32]
+        id: 5  [0x16d8+0x4]
+        small: 7  [0x16dc+0x1]
+        mid: 1  [0x16dd+0x2]
+        ratio: 0.0010000000474974513  [0x16df+0x4]
+        score: 10000000000  [0x16e3+0x8]
+        name: "Eve with a longer name"  [0x16eb+0x16]
+        born: 2024-02-29 00:00:00 UTC — 2024-02-29  [0x1701+0x8]
+        grade: 1 — b  [0x1709+0x1]
+  ▾ Value labels — 1 tables
+    ▾ grade — 0 = "a", 1 = "b", 2 = "c"  [0x1733+0xae]
+        0: "a"
+        1: "b"
+        2: "c"
