@@ -17,6 +17,7 @@ pub mod capnp;
 pub mod charset;
 pub mod crc;
 pub mod crypto;
+pub mod dwg;
 pub mod filters;
 pub mod heatshrink;
 pub mod implode;
@@ -198,6 +199,11 @@ pub enum Codec {
     SasRle,
     /// SAS7BDAT `SASYZCR2` row compression (Ross Data Compression).
     SasRdc,
+    /// One page of an AutoCAD R2004+ DWG file, decompressing to at most
+    /// `size` bytes (see [`dwg`]).
+    DwgLz77 {
+        size: u64,
+    },
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
     Eexec {
         hex: bool,
@@ -297,6 +303,7 @@ impl Codec {
             Codec::SpssBytecode { .. } => "spss-bytecode",
             Codec::SasRle => "sas-rle",
             Codec::SasRdc => "sas-rdc",
+            Codec::DwgLz77 { .. } => "dwg-lz77",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -358,6 +365,7 @@ impl Codec {
             Codec::SpssBytecode { .. } => "spss-bytecode (lazy)",
             Codec::SasRle => "sas-rle (lazy)",
             Codec::SasRdc => "sas-rdc (lazy)",
+            Codec::DwgLz77 { .. } => "dwg-lz77 (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -410,6 +418,7 @@ impl Codec {
             | Codec::Ace(_)
             | Codec::StuffIt(_) => "decompressed",
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
+            Codec::DwgLz77 { .. } => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -444,6 +453,8 @@ impl Codec {
             Codec::SasRle => 2_100,
             // Three bytes (and two control bits) repeat up to 4114 bytes.
             Codec::SasRdc => 1_400,
+            // Each zero byte of a long length adds 255 bytes.
+            Codec::DwgLz77 { .. } => 256,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 | Codec::NsisBzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
@@ -576,6 +587,7 @@ impl Codec {
             }
             Codec::SasRle => Box::new(Streaming(filters::Whole::new(statdata::SasRle))),
             Codec::SasRdc => Box::new(Streaming(filters::Whole::new(statdata::SasRdc))),
+            Codec::DwgLz77 { size } => Box::new(Streaming(dwg::Lz77::new(*size))),
             Codec::Eexec { hex } => {
                 Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
             }

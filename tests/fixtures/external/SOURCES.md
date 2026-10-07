@@ -362,3 +362,4 @@ and reproduce every file byte for byte.
 | `stata-dta/pandas-117.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=117`, a strL, fixed `time_stamp`), no edits |
 | `stata-dta/pandas-118.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=118`, fixed `time_stamp`), no edits |
 | `stata-dta/pandas-119.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=119`, fixed `time_stamp`), no edits |
+| `dxf/` | ezdxf 1.4.4 (`saveas`, ASCII R12 and R2018, binary R2018) | reproduced byte-for-byte: `PYTHONHASHSEED=0 uv run --with ezdxf==1.4.4 python tests/data/dxf/make.py tests/fixtures/external/dxf` (ezdxf's `write_fixed_meta_data_for_testing` pins dates and GUIDs; the hash seed pins the CLASSES order); the drawing is ours |
