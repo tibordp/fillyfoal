@@ -399,6 +399,7 @@ pub static FORMATS: &[&Format] = &[
     &forensics::regf::FORMAT,
     &forensics::evtx::FORMAT,
     &forensics::evt::FORMAT,
+    &forensics::etl::FORMAT,
     &forensics::prefetch::FORMAT,
     &forensics::recyclebin::FORMAT,
     &forensics::thumbcache::FORMAT,
