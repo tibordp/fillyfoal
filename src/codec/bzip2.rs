@@ -1,6 +1,12 @@
 //! bzip2 decompression: Huffman-coded MTF/RLE symbols, the inverse
 //! Burrows–Wheeler transform, and the final run-length step. Concatenated
 //! streams are decoded in sequence; block CRCs are checked.
+//!
+//! NSIS installers use a variant ([`Bzip2::nsis`]): no stream header, a
+//! single byte instead of each 48-bit block (`0x31`) and end (`0x17`)
+//! magic, no randomised bit and no CRCs, 900 kB blocks. (From memory of
+//! NSIS's modified `decompress.c` and 7-Zip's NSIS decoder; our test
+//! streams are real bzip2 output rewritten that way.)
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
@@ -89,10 +95,17 @@ impl Huffman {
     }
 }
 
-/// Decodes one block, appending to `out`; returns its (checked) CRC.
-fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Result<u32> {
-    let stored_crc = bits.bits(32)?;
-    if bits.bit()? != 0 {
+/// Decodes one block, appending to `out`; returns its (checked) CRC. NSIS
+/// blocks have neither a CRC nor the randomised bit.
+fn block(
+    bits: &mut Bits<'_>,
+    max: usize,
+    out: &mut Vec<u8>,
+    limit: usize,
+    nsis: bool,
+) -> Result<u32> {
+    let stored_crc = if nsis { 0 } else { bits.bits(32)? };
+    if !nsis && bits.bit()? != 0 {
         return Err(Diagnostic::unsupported("bzip2: randomised blocks"));
     }
     let orig_ptr = usize::try_from(bits.bits(24)?).unwrap_or(usize::MAX);
@@ -265,7 +278,7 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
             "decompressed data exceeds {limit:#x} bytes"
         )));
     }
-    if !crc != stored_crc {
+    if !nsis && !crc != stored_crc {
         return Err(bad("block CRC mismatch"));
     }
     Ok(stored_crc)
@@ -313,11 +326,38 @@ pub struct Bzip2 {
     streams: u32,
     stream: Option<Stream>,
     done: bool,
+    /// The NSIS variant (see the module docs).
+    nsis: bool,
 }
 
+/// Input an NSIS block may need before it can be decoded: its markers do
+/// not let us find where it ends, so short of the end of the input, decode
+/// only with this much at hand (more than a 900 kB block compresses to).
+const NSIS_LOOKAHEAD: usize = 1 << 20;
+
 impl Bzip2 {
+    /// The NSIS variant: one headerless stream of CRC-less blocks.
+    pub fn nsis() -> Self {
+        Bzip2 {
+            nsis: true,
+            ..Bzip2::default()
+        }
+    }
+
     /// Starts a stream at the current (byte-aligned) position, or ends.
     fn start_stream(&mut self, input: &[u8], eof: bool) -> Result<()> {
+        if self.nsis {
+            if self.streams > 0 {
+                self.done = true;
+            } else {
+                self.streams = 1;
+                self.stream = Some(Stream {
+                    max: 900_000,
+                    combined: 0,
+                });
+            }
+            return Ok(());
+        }
         let at = self.bit / 8;
         match input.get(at..at.saturating_add(4)) {
             Some([b'B', b'Z', b'h', level @ b'1'..=b'9']) => {
@@ -345,6 +385,20 @@ impl Bzip2 {
             data: input,
             bit: self.bit,
         };
+        if self.nsis {
+            if !eof && input.len().saturating_sub(self.bit / 8) < NSIS_LOOKAHEAD {
+                return Err(bad("unexpected end of data"));
+            }
+            match bits.bits(8)? {
+                0x31 => {
+                    block(&mut bits, stream.max, out, limit, true)?;
+                }
+                0x17 => self.stream = None,
+                _ => return Err(bad("bad block marker")),
+            }
+            self.bit = bits.bit;
+            return Ok(());
+        }
         let magic = u64::from(bits.bits(24)?) << 24 | u64::from(bits.bits(24)?);
         match magic {
             BLOCK_MAGIC if !eof && !next_magic(input, self.bit) => {
@@ -353,7 +407,7 @@ impl Bzip2 {
                 return Err(bad("unexpected end of data"));
             }
             BLOCK_MAGIC => {
-                let crc = block(&mut bits, stream.max, out, limit)?;
+                let crc = block(&mut bits, stream.max, out, limit, false)?;
                 stream.combined = stream.combined.rotate_left(1) ^ crc;
             }
             END_MAGIC => {
@@ -437,5 +491,35 @@ mod tests {
             1 << 20,
         );
         assert_eq!(out.unwrap(), b"hello hello hello hello, bzip2!\n".repeat(3));
+    }
+
+    #[test]
+    fn decodes_nsis_variant() {
+        // tests/data/installer/nsisbz.py: Python's bz2 output rewritten bit for
+        // bit into NSIS's variant (no header, 1-byte markers, no CRCs).
+        let data = [
+            0x31, 0x00, 0x00, 0x2c, 0xb3, 0x00, 0x00, 0x20, 0xc0, 0x08, 0x20, 0x00, 0x24, 0xcb,
+            0x90, 0x20, 0x40, 0x00, 0xa1, 0x4c, 0x00, 0x00, 0x8a, 0x9a, 0x09, 0xa6, 0x8f, 0x24,
+            0x32, 0xfe, 0x86, 0x5d, 0x30, 0xcb, 0xe3, 0xc0, 0x76, 0xc2, 0x14, 0xed, 0xf8, 0x19,
+            0x07, 0x0d, 0x81, 0x91, 0xa6, 0x9e, 0x8b, 0x80,
+        ];
+        let out = crate::codec::pipeline::decode_all(
+            &mut crate::codec::pipeline::Streaming(Bzip2::nsis()),
+            &data,
+            1 << 20,
+        );
+        assert_eq!(
+            out.unwrap(),
+            b"hello hello hello hello, nsis bzip2!\n".repeat(3)
+        );
+        // Standard streams are not NSIS streams.
+        assert!(
+            crate::codec::pipeline::decode_all(
+                &mut crate::codec::pipeline::Streaming(Bzip2::default()),
+                &data,
+                1 << 20,
+            )
+            .is_err()
+        );
     }
 }

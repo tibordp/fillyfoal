@@ -182,6 +182,35 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         });
     }
 
+    // Inno Setup's loader keeps the offsets of the installer data in
+    // RCDATA #11111 (5.1.5 and later) or at file offset 0x30.
+    let inno = if let (Some(rva), Some(size)) = (
+        u32_le(&directories, DIR_RESOURCE.saturating_mul(8)),
+        u32_le(
+            &directories,
+            DIR_RESOURCE.saturating_mul(8).saturating_add(4),
+        ),
+    ) && rva != 0
+        && size != 0
+        && let Ok(Some(span)) = find_resource(&cx, &pe, rva, resource::RT_RCDATA, Some(11111)).await
+    {
+        Some(span)
+    } else {
+        None
+    };
+    if let Some(table) =
+        crate::formats::archive::installer::inno::loader_table(&cx, file, inno).await
+    {
+        cx.emit(
+            crate::formats::embedded_as(
+                "Inno Setup installer",
+                input.nested(table),
+                &crate::formats::archive::installer::inno::FORMAT,
+            )
+            .desc("The installer data, located by the setup loader's offset table"),
+        );
+    }
+
     let end = pe
         .sections
         .iter()
@@ -1062,6 +1091,18 @@ async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
 /// Follows type `RT_VERSION`, then the first name and the first language, to
 /// the version resource's data.
 async fn find_version(cx: &Cx, pe: &PeInfo, base: u32) -> Result<Option<Span>> {
+    find_resource(cx, pe, base, RT_VERSION, None).await
+}
+
+/// Follows type `kind`, then name `id` (or the first name), then the first
+/// language, to a resource's data.
+async fn find_resource(
+    cx: &Cx,
+    pe: &PeInfo,
+    base: u32,
+    kind: u32,
+    id: Option<u32>,
+) -> Result<Option<Span>> {
     let mut offset = 0u32;
     for level in 0..3 {
         let header_rva = base.checked_add(offset).ok_or_else(overflow)?;
@@ -1075,7 +1116,12 @@ async fn find_version(cx: &Cx, pe: &PeInfo, base: u32) -> Result<Option<Span>> {
         let found = (0..total.min(64)).find_map(|i| {
             let name = u32_le(&entries, i.saturating_mul(8))?;
             let target = u32_le(&entries, i.saturating_mul(8).saturating_add(4))?;
-            (level > 0 || name == RT_VERSION).then_some(target)
+            match (level, id) {
+                (0, _) => name == kind,
+                (1, Some(id)) => name == id,
+                _ => true,
+            }
+            .then_some(target)
         });
         let Some(target) = found else {
             return Ok(None);

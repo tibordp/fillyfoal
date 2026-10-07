@@ -1,7 +1,0 @@
----
-source: tests/formats.rs
-expression: "common::explore(&display_name(&path), &data)"
----
-▾ setup.dat — Inno Setup Setup Data (6.2.0)  [0x0+0x80]
-    Version: "Inno Setup Setup Data (6.2.0)"  [0x0+0x40]
-    Setup data  [0x40+0x40]
