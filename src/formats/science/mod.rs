@@ -7,10 +7,13 @@
 
 pub mod bio;
 pub mod datasets;
+pub mod hdf4;
 pub mod imaging;
 pub mod instruments;
 pub mod lab_images;
 pub mod microscopy;
 pub mod molecular;
+pub mod nifti;
+pub mod numarray;
 pub mod spectroscopy;
 pub mod waveforms;
