@@ -1,13 +1,17 @@
-//! A schema-driven protocol buffer walker.
+//! Protocol Buffers wire format.
 //!
-//! Protobuf messages carry no type information, so a dissector supplies a
-//! small static schema ([`Msg`]): field numbers, names and types. Unknown
+//! Low level: [`field`] and [`fields_in`] read fields of a message held in
+//! memory (probes, small headers); [`read_field`] and [`scan`] read through
+//! a cursor without reading the bodies of length-delimited fields.
+//!
+//! Schema-driven walker: protobuf messages carry no type information, so a
+//! dissector supplies a small static schema ([`Msg`]): field numbers, names and types. Unknown
 //! fields are still shown, by wire type, with a guess for length-delimited
 //! ones (text, nested message or bytes). Nested messages are lazy nodes, and
 //! repeated fields are pushed one by one, so a graph with a million nodes
 //! costs only the page being looked at.
 
-use crate::bytes::{to_u64, to_usize, uleb128};
+use crate::bytes::{to_u64, uleb128};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
@@ -76,158 +80,177 @@ pub static UNKNOWN: Msg = Msg {
     title: &[],
 };
 
-/// A raw field, as found by [`fields_in`] or [`scan`].
-#[derive(Clone, Copy, Debug)]
-pub struct Raw {
-    pub num: u64,
-    pub wire: u8,
-    /// The varint or fixed value (0 for length-delimited fields).
-    pub value: u64,
-    /// Body of a length-delimited field, relative to the scanned data
-    /// (or the region, for [`scan`]); empty otherwise.
-    pub at: u64,
-    pub len: u64,
+// ---------------------------------------------------------------------------
+// Wire format, in memory
+
+/// Wire types (the low three bits of a field key).
+pub const VARINT: u8 = 0;
+pub const I64: u8 = 1;
+pub const LEN: u8 = 2;
+pub const SGROUP: u8 = 3;
+pub const EGROUP: u8 = 4;
+pub const I32: u8 = 5;
+
+/// Names of the wire types, as in the protobuf encoding guide.
+pub const WIRE_TYPES: EnumTable = &[
+    (0, "VARINT"),
+    (1, "I64"),
+    (2, "LEN"),
+    (3, "SGROUP"),
+    (4, "EGROUP"),
+    (5, "I32"),
+];
+
+/// The largest valid field number (2^29 - 1).
+pub const MAX_FIELD: u64 = (1 << 29) - 1;
+
+/// A varint at `*at`, advancing past it.
+pub fn varint(data: &[u8], at: &mut usize) -> Option<u64> {
+    let (v, n) = uleb128(data.get(*at..)?)?;
+    *at = at.checked_add(n)?;
+    Some(v)
 }
 
-/// Iterates the fields of a message held in memory. Stops at the first
-/// malformed or truncated field.
-pub fn fields_in(data: &[u8]) -> impl Iterator<Item = Raw> + '_ {
-    let mut pos = 0usize;
-    std::iter::from_fn(move || {
-        let rest = data.get(pos..)?;
-        if rest.is_empty() {
-            return None;
+/// Decodes a zig-zag varint (`sint32`/`sint64`).
+pub fn zigzag(v: u64) -> i64 {
+    let half = i64::from_ne_bytes((v >> 1).to_ne_bytes());
+    if v & 1 == 0 { half } else { !half }
+}
+
+/// One field of a message held in memory: number, wire type, and either
+/// the scalar or the byte range of a length-delimited payload.
+#[derive(Clone, Copy, Debug)]
+pub struct Field {
+    pub number: u64,
+    pub wire: u8,
+    /// The varint or fixed value; the payload length for `LEN` fields.
+    pub value: u64,
+    /// Start and end of the field (key included).
+    pub start: usize,
+    pub end: usize,
+    /// Start of the value (of the payload, for `LEN` fields).
+    pub body: usize,
+}
+
+impl Field {
+    /// The value's bytes (the payload of a `LEN` field).
+    pub fn payload<'a>(&self, data: &'a [u8]) -> &'a [u8] {
+        data.get(self.body..self.end).unwrap_or_default()
+    }
+
+    /// Length of the value's bytes.
+    pub fn value_len(&self) -> usize {
+        self.end.saturating_sub(self.body)
+    }
+}
+
+/// The next field of a message at `*at`; `None` at the end or on malformed
+/// input (field number 0, groups and unknown wire types, overruns).
+pub fn field(data: &[u8], at: &mut usize) -> Option<Field> {
+    let start = *at;
+    let key = varint(data, at)?;
+    let number = key >> 3;
+    let wire = u8::try_from(key & 7).ok()?;
+    if number == 0 {
+        return None;
+    }
+    let mut body = *at;
+    let value = match wire {
+        VARINT => varint(data, at)?,
+        I64 => {
+            let v = crate::bytes::u64_le(data, *at)?;
+            *at = at.checked_add(8)?;
+            v
         }
-        let (key, n) = uleb128(rest)?;
-        let mut at = pos.checked_add(n)?;
-        let num = key >> 3;
-        let wire = u8::try_from(key & 7).ok()?;
-        if num == 0 {
-            return None;
+        I32 => {
+            let v = crate::bytes::u32_le(data, *at)?;
+            *at = at.checked_add(4)?;
+            u64::from(v)
         }
-        let mut raw = Raw {
-            num,
-            wire,
-            value: 0,
-            at: 0,
-            len: 0,
-        };
-        match wire {
-            0 => {
-                let (v, n) = uleb128(data.get(at..)?)?;
-                raw.value = v;
-                at = at.checked_add(n)?;
+        LEN => {
+            let len = usize::try_from(varint(data, at)?).ok()?;
+            body = *at;
+            let end = body.checked_add(len)?;
+            if end > data.len() {
+                return None;
             }
-            1 => {
-                raw.value = crate::bytes::u64_le(data, at)?;
-                at = at.checked_add(8)?;
-            }
-            5 => {
-                raw.value = crate::bytes::u32_le(data, at)?.into();
-                at = at.checked_add(4)?;
-            }
-            2 => {
-                let (len, n) = uleb128(data.get(at..)?)?;
-                at = at.checked_add(n)?;
-                let end = at.checked_add(usize::try_from(len).ok()?)?;
-                if end > data.len() {
-                    return None;
-                }
-                raw.at = to_u64(at);
-                raw.len = len;
-                at = end;
-            }
-            _ => return None,
+            *at = end;
+            to_u64(len)
         }
-        pos = at;
-        Some(raw)
+        _ => return None,
+    };
+    Some(Field {
+        number,
+        wire,
+        value,
+        start,
+        end: *at,
+        body,
     })
 }
 
-/// Whether `data` parses completely as a message (all fields well formed,
-/// ending exactly at the end).
-pub fn is_message(data: &[u8]) -> bool {
+/// Iterates the fields of a message held in memory. Stops at the end or at
+/// the first malformed or truncated field.
+pub fn fields_in(data: &[u8]) -> impl Iterator<Item = Field> + '_ {
     let mut pos = 0usize;
-    for raw in fields_in(data) {
-        match field_end(data, pos, &raw) {
-            Some(end) => pos = end,
-            None => return false,
-        }
-    }
-    pos > 0 && pos == data.len()
+    std::iter::from_fn(move || field(data, &mut pos))
 }
 
-/// The end of `raw`, which starts at `pos` in `data`.
-fn field_end(data: &[u8], pos: usize, raw: &Raw) -> Option<usize> {
-    if raw.wire == 2 {
-        return usize::try_from(raw.at.checked_add(raw.len)?).ok();
+/// All fields of a message, or `None` if it does not parse exactly.
+pub fn all_fields(data: &[u8]) -> Option<Vec<Field>> {
+    let mut at = 0usize;
+    let mut out = Vec::new();
+    while at < data.len() {
+        out.push(field(data, &mut at)?);
     }
-    let (_, n) = uleb128(data.get(pos..)?)?;
-    let at = pos.checked_add(n)?;
-    match raw.wire {
-        0 => uleb128(data.get(at..)?).and_then(|(_, m)| at.checked_add(m)),
-        1 => at.checked_add(8),
-        5 => at.checked_add(4),
-        _ => None,
+    Some(out)
+}
+
+/// Whether `data` parses completely as a non-empty message (all fields
+/// well formed, ending exactly at the end).
+pub fn is_message(data: &[u8]) -> bool {
+    let mut at = 0usize;
+    while at < data.len() {
+        if field(data, &mut at).is_none() {
+            return false;
+        }
     }
+    at > 0
 }
 
 /// The first string value of field `num` in a message held in memory.
 pub fn string_in(data: &[u8], num: u64) -> Option<String> {
     fields_in(data)
-        .find(|r| r.num == num && r.wire == 2)
-        .and_then(|r| {
-            let start = to_usize(r.at);
-            let bytes = data.get(start..start.checked_add(to_usize(r.len))?)?;
-            Some(String::from_utf8_lossy(bytes).into_owned())
-        })
+        .find(|r| r.number == num && r.wire == LEN)
+        .map(|r| String::from_utf8_lossy(r.payload(data)).into_owned())
 }
 
 /// The first varint value of field `num` in a message held in memory.
 pub fn varint_in(data: &[u8], num: u64) -> Option<u64> {
     fields_in(data)
-        .find(|r| r.num == num && r.wire == 0)
+        .find(|r| r.number == num && r.wire == VARINT)
         .map(|r| r.value)
 }
 
-/// Reads the field headers of the message in `span` without reading the
-/// bodies of length-delimited fields; at most `max` fields.
-pub async fn scan(cx: &Cx, span: Span, max: usize) -> Result<Vec<Raw>> {
-    let mut cur = Cursor::new(cx, span, Endian::Little);
-    let mut out = Vec::new();
-    while !cur.at_end() && out.len() < max {
-        let (num, wire) = key(&mut cur).await?;
-        let mut raw = Raw {
-            num,
-            wire,
-            value: 0,
-            at: 0,
-            len: 0,
-        };
-        match wire {
-            0 => raw.value = cur.uleb128().await?,
-            1 => raw.value = cur.u64().await?,
-            5 => raw.value = cur.u32().await?.into(),
-            2 => {
-                let len = cur.uleb128().await?;
-                raw.at = cur.pos();
-                raw.len = len;
-                if cur.remaining() < len {
-                    return Err(Diagnostic::truncated(
-                        Span::new(span.source, span.offset.saturating_add(raw.at), len),
-                        cur.remaining(),
-                    ));
-                }
-                cur.skip(len);
-            }
-            _ => return Err(unsupported_wire(&cur, wire)),
-        }
-        out.push(raw);
-    }
-    Ok(out)
+// ---------------------------------------------------------------------------
+// Wire format, through a cursor
+
+/// The value of a field read through a cursor.
+#[derive(Clone, Copy, Debug)]
+pub enum Payload {
+    Varint(u64),
+    I64(u64),
+    I32(u32),
+    /// A length-delimited payload (not read; the cursor is past it).
+    Len(Span),
+    /// The start or the end of a (deprecated) group; the cursor is past
+    /// the key.
+    StartGroup,
+    EndGroup,
 }
 
-async fn key(cur: &mut Cursor<'_>) -> Result<(u64, u8)> {
+/// Reads a field key: field number (never 0) and wire type.
+pub async fn read_key(cur: &mut Cursor<'_>) -> Result<(u64, u8)> {
     let start = cur.pos();
     let key = cur.uleb128().await?;
     let num = key >> 3;
@@ -237,14 +260,84 @@ async fn key(cur: &mut Cursor<'_>) -> Result<(u64, u8)> {
     Ok((num, u8::try_from(key & 7).unwrap_or(7)))
 }
 
-fn unsupported_wire(cur: &Cursor<'_>, wire: u8) -> Diagnostic {
-    let d = if matches!(wire, 3 | 4) {
-        Diagnostic::unsupported("protobuf groups")
-    } else {
-        Diagnostic::malformed(format!("wire type {wire}"))
+/// Reads one field: its number and value. The body of a length-delimited
+/// field is skipped (and must fit in the region); wire types 6 and 7 are
+/// errors.
+pub async fn read_field(cur: &mut Cursor<'_>) -> Result<(u64, Payload)> {
+    let (num, wire) = read_key(cur).await?;
+    let payload = match wire {
+        VARINT => Payload::Varint(cur.uleb128().await?),
+        I64 => Payload::I64(cur.u64().await?),
+        I32 => Payload::I32(cur.u32().await?),
+        LEN => {
+            let len = cur.uleb128().await?;
+            let body = cur.span(len);
+            if body.len < len {
+                return Err(Diagnostic::truncated(
+                    Span::new(body.source, body.offset, len),
+                    body.len,
+                ));
+            }
+            cur.skip(len);
+            Payload::Len(body)
+        }
+        SGROUP => Payload::StartGroup,
+        EGROUP => Payload::EndGroup,
+        _ => return Err(Diagnostic::malformed(format!("wire type {wire}")).at(cur.span(1))),
     };
-    d.at(cur.span(1))
+    Ok((num, payload))
 }
+
+/// A raw field, as found by [`scan`]: positions are relative to the
+/// scanned region.
+#[derive(Clone, Copy, Debug)]
+pub struct Raw {
+    pub num: u64,
+    pub wire: u8,
+    /// The varint or fixed value (0 for length-delimited fields).
+    pub value: u64,
+    /// Body of a length-delimited field; empty otherwise.
+    pub at: u64,
+    pub len: u64,
+}
+
+/// Reads the field headers of the message in `span` without reading the
+/// bodies of length-delimited fields; at most `max` fields.
+pub async fn scan(cx: &Cx, span: Span, max: usize) -> Result<Vec<Raw>> {
+    let mut cur = Cursor::new(cx, span, Endian::Little);
+    let mut out = Vec::new();
+    while !cur.at_end() && out.len() < max {
+        let (num, payload) = read_field(&mut cur).await?;
+        let mut raw = Raw {
+            num,
+            wire: VARINT,
+            value: 0,
+            at: 0,
+            len: 0,
+        };
+        match payload {
+            Payload::Varint(v) => raw.value = v,
+            Payload::I64(v) => (raw.wire, raw.value) = (I64, v),
+            Payload::I32(v) => (raw.wire, raw.value) = (I32, v.into()),
+            Payload::Len(body) => {
+                raw.wire = LEN;
+                raw.at = body.offset.saturating_sub(span.offset);
+                raw.len = body.len;
+            }
+            Payload::StartGroup | Payload::EndGroup => return Err(groups(&cur)),
+        }
+        out.push(raw);
+    }
+    Ok(out)
+}
+
+/// Groups are not followed by the schema-driven walker.
+fn groups(cur: &Cursor<'_>) -> Diagnostic {
+    Diagnostic::unsupported("protobuf groups").at(cur.span(1))
+}
+
+// ---------------------------------------------------------------------------
+// Schema-driven walker
 
 fn uint(value: u64) -> Value {
     Value::UInt {
@@ -263,15 +356,16 @@ fn signed(value: u64) -> Value {
     }
 }
 
-fn zigzag(value: u64) -> Value {
-    let half = i64::from_ne_bytes((value >> 1).to_ne_bytes());
-    let v = if value & 1 == 0 { half } else { !half };
-    Value::Int { value: v, bits: 64 }
+fn zigzag_value(value: u64) -> Value {
+    Value::Int {
+        value: zigzag(value),
+        bits: 64,
+    }
 }
 
 fn varint_value(ty: Option<Ty>, v: u64) -> Value {
     match ty {
-        Some(Ty::SInt) => zigzag(v),
+        Some(Ty::SInt) => zigzag_value(v),
         Some(Ty::Bool) => Value::Bool(v != 0),
         Some(Ty::Enum(table)) => Value::Enum {
             raw: v,
@@ -280,10 +374,6 @@ fn varint_value(ty: Option<Ty>, v: u64) -> Value {
         },
         _ => signed(v),
     }
-}
-
-fn f32_of(v: u64) -> f64 {
-    widen(f32::from_bits(u32::try_from(v & 0xffff_ffff).unwrap_or(0)))
 }
 
 /// An `f32` as the `f64` with the same shortest decimal form (0.1, not
@@ -357,57 +447,37 @@ pub async fn message(cx: Cx, (span, msg, depth): State) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, Endian::Little);
     while !cur.at_end() {
         let start = cur.pos();
-        let (num, wire) = key(&mut cur).await?;
+        let (num, payload) = read_field(&mut cur).await?;
         let spec = msg.fields.iter().find(|f| f.num == num);
         let label: std::borrow::Cow<'static, str> = match spec {
             Some(f) => f.name.into(),
             None => format!("field {num}").into(),
         };
         let ty = spec.map(|f| f.ty);
-        let node = match wire {
-            0 => {
-                let v = cur.uleb128().await?;
-                Node::new(label).value(varint_value(ty, v))
-            }
-            1 => {
-                let v = cur.u64().await?;
-                match ty {
-                    Some(Ty::Double | Ty::Packed(Elem::Double)) => {
-                        Node::new(label).value(Value::Float(f64::from_bits(v)))
-                    }
-                    _ => Node::new(label).value(Value::UInt {
-                        value: v,
-                        bits: 64,
-                        radix: Radix::Hex,
-                    }),
+        let node = match payload {
+            Payload::Varint(v) => Node::new(label).value(varint_value(ty, v)),
+            Payload::I64(v) => match ty {
+                Some(Ty::Double | Ty::Packed(Elem::Double)) => {
+                    Node::new(label).value(Value::Float(f64::from_bits(v)))
                 }
-            }
-            5 => {
-                let v = u64::from(cur.u32().await?);
-                match ty {
-                    Some(Ty::Float | Ty::Packed(Elem::Float)) => {
-                        Node::new(label).value(Value::Float(f32_of(v)))
-                    }
-                    _ => Node::new(label).value(Value::UInt {
-                        value: v,
-                        bits: 32,
-                        radix: Radix::Hex,
-                    }),
+                _ => Node::new(label).value(Value::UInt {
+                    value: v,
+                    bits: 64,
+                    radix: Radix::Hex,
+                }),
+            },
+            Payload::I32(v) => match ty {
+                Some(Ty::Float | Ty::Packed(Elem::Float)) => {
+                    Node::new(label).value(Value::Float(widen(f32::from_bits(v))))
                 }
-            }
-            2 => {
-                let len = cur.uleb128().await?;
-                let body = cur.span(len);
-                if body.len < len {
-                    return Err(Diagnostic::truncated(
-                        Span::new(body.source, body.offset, len),
-                        body.len,
-                    ));
-                }
-                cur.skip(len);
-                delimited(&cx, label, body, ty, depth).await?
-            }
-            _ => return Err(unsupported_wire(&cur, wire)),
+                _ => Node::new(label).value(Value::UInt {
+                    value: v.into(),
+                    bits: 32,
+                    radix: Radix::Hex,
+                }),
+            },
+            Payload::Len(body) => delimited(&cx, label, body, ty, depth).await?,
+            Payload::StartGroup | Payload::EndGroup => return Err(groups(&cur)),
         };
         cx.push(node.span(cur.since(start))).await;
     }

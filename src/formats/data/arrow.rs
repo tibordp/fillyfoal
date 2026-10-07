@@ -7,12 +7,13 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::formats::util::wire::flatbuffers::mem::{Table, deref, table};
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 const MAGIC: &[u8] = b"ARROW1";
@@ -68,75 +69,7 @@ const HEADERS: EnumTable = &[
 const VERSIONS: EnumTable = &[(0, "V1"), (1, "V2"), (2, "V3"), (3, "V4"), (4, "V5")];
 
 // ---------------------------------------------------------------------------
-// FlatBuffers
-
-/// A table: its position and its vtable.
-#[derive(Clone, Copy)]
-struct Table {
-    pos: usize,
-    vtable: usize,
-    vlen: usize,
-}
-
-fn table(data: &[u8], pos: usize) -> Option<Table> {
-    let soffset = i64::from(u32_le(data, pos)?.cast_signed());
-    let vtable = usize::try_from(i64::try_from(pos).ok()?.checked_sub(soffset)?).ok()?;
-    let vlen = usize::from(u16_le(data, vtable)?);
-    (vlen >= 4).then_some(Table { pos, vtable, vlen })
-}
-
-/// The table an offset at `at` points to.
-fn deref(data: &[u8], at: usize) -> Option<usize> {
-    at.checked_add(to_usize(u32_le(data, at)?.into()))
-}
-
-impl Table {
-    /// Absolute position of field `i`, if present.
-    fn field(&self, data: &[u8], i: usize) -> Option<usize> {
-        let entry = 4usize.checked_add(i.checked_mul(2)?)?;
-        if entry.checked_add(2)? > self.vlen {
-            return None;
-        }
-        let off = u16_le(data, self.vtable.checked_add(entry)?)?;
-        (off != 0).then(|| self.pos.saturating_add(usize::from(off)))
-    }
-
-    fn u8(&self, data: &[u8], i: usize) -> Option<u8> {
-        data.get(self.field(data, i)?).copied()
-    }
-
-    fn i16(&self, data: &[u8], i: usize) -> Option<i16> {
-        u16_le(data, self.field(data, i)?).map(u16::cast_signed)
-    }
-
-    fn i32(&self, data: &[u8], i: usize) -> Option<i32> {
-        u32_le(data, self.field(data, i)?).map(u32::cast_signed)
-    }
-
-    fn i64(&self, data: &[u8], i: usize) -> Option<i64> {
-        u64_le(data, self.field(data, i)?).map(u64::cast_signed)
-    }
-
-    fn table(&self, data: &[u8], i: usize) -> Option<Table> {
-        table(data, deref(data, self.field(data, i)?)?)
-    }
-
-    fn string(&self, data: &[u8], i: usize) -> Option<String> {
-        let at = deref(data, self.field(data, i)?)?;
-        let len = to_usize(u32_le(data, at)?.into());
-        let start = at.checked_add(4)?;
-        Some(String::from_utf8_lossy(data.get(start..start.checked_add(len)?)?).into_owned())
-    }
-
-    /// A vector: element count and the position of the first element.
-    fn vector(&self, data: &[u8], i: usize) -> Option<(usize, usize)> {
-        let at = deref(data, self.field(data, i)?)?;
-        let n = to_usize(u32_le(data, at)?.into());
-        let start = at.checked_add(4)?;
-        // Elements are at least four bytes (offsets) or structs.
-        (n <= data.len()).then_some((n, start))
-    }
-}
+// FlatBuffers (read with `util::wire::flatbuffers::mem`)
 
 #[derive(Clone)]
 struct Buf {
@@ -184,8 +117,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .and_then(|p| table(data, p))
         .ok_or_else(|| Diagnostic::malformed("invalid footer table").at(span))?;
     let schema = footer.table(data, 1);
-    let fields = schema.and_then(|s| s.vector(data, 1)).map_or(0, |(n, _)| n);
-    let batches = footer.vector(data, 3).map_or(0, |(n, _)| n);
+    let fields = schema.and_then(|s| s.vector(data, 1, 4)).map_or(0, |(n, _)| n);
+    let batches = footer.vector(data, 3, 24).map_or(0, |(n, _)| n);
     let version = footer.i16(data, 0).unwrap_or(0);
     cx.annotate(format!(
         "Arrow IPC file, metadata {}, {fields} fields, {batches} record batches",
@@ -234,7 +167,7 @@ async fn footer_node(cx: Cx, (input, buf): (Input, Buf)) -> Result<()> {
         cx.emit(schema_node(&buf, schema));
     }
     for (i, name) in [(2usize, "Dictionaries"), (3, "Record batches")] {
-        if let Some((n, start)) = footer.vector(data, i) {
+        if let Some((n, start)) = footer.vector(data, i, 24) {
             cx.emit(
                 Node::new(name)
                     .summary(format!("{n}"))
@@ -247,7 +180,7 @@ async fn footer_node(cx: Cx, (input, buf): (Input, Buf)) -> Result<()> {
 
 fn schema_node(buf: &Buf, schema: Table) -> Node {
     let data = &buf.data;
-    let (n, start) = schema.vector(data, 1).unwrap_or((0, 0));
+    let (n, start) = schema.vector(data, 1, 4).unwrap_or((0, 0));
     Node::new("Schema")
         .span(buf.at(schema.pos, 4))
         .summary(format!("{n} fields"))
@@ -293,7 +226,7 @@ async fn fields(cx: Cx, (buf, n, start, depth): (Buf, usize, usize, u32)) -> Res
         let Some(field) = deref(&data, at).and_then(|p| table(&data, p)) else {
             return Err(Diagnostic::malformed("invalid field table").at(buf.at(at, 4)));
         };
-        let name = field.string(&data, 0).unwrap_or_default();
+        let name = field.string(&data, 0).map(|s| s.0).unwrap_or_default();
         let nullable = field.u8(&data, 1).unwrap_or(0) != 0;
         let mut summary = type_summary(&data, &field);
         if nullable {
@@ -306,7 +239,7 @@ async fn fields(cx: Cx, (buf, n, start, depth): (Buf, usize, usize, u32)) -> Res
         })
         .span(buf.at(field.pos, 4))
         .summary(summary);
-        if let Some((count, children)) = field.vector(&data, 5).filter(|(c, _)| *c > 0) {
+        if let Some((count, children)) = field.vector(&data, 5, 4).filter(|(c, _)| *c > 0) {
             node = if depth >= MAX_DEPTH {
                 node.diag(Diagnostic::limit("fields nested too deeply"))
             } else {
@@ -460,7 +393,7 @@ async fn message(cx: Cx, (input, pos): (Input, u64)) -> Result<()> {
                     })
                     .summary("rows"),
             );
-            if let Some((n, start)) = batch.vector(data, 1) {
+            if let Some((n, start)) = batch.vector(data, 1, 16) {
                 let nodes: Vec<Node> = (0..n.min(4096))
                     .map(|i| {
                         let at = start.saturating_add(i.saturating_mul(16));
@@ -479,7 +412,7 @@ async fn message(cx: Cx, (input, pos): (Input, u64)) -> Result<()> {
                         .lazy(emit_nodes, Arc::new(nodes)),
                 );
             }
-            if let Some((n, start)) = batch.vector(data, 2) {
+            if let Some((n, start)) = batch.vector(data, 2, 16) {
                 let nodes: Vec<Node> = (0..n.min(4096))
                     .map(|i| {
                         let at = start.saturating_add(i.saturating_mul(16));

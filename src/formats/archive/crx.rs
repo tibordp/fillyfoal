@@ -3,8 +3,7 @@
 //!
 //! A CRX is a small header (`Cr24`) carrying the publisher's key and
 //! signature, followed by a ZIP archive. Version 3 stores them in a
-//! protocol buffer (`CrxFileHeader`), decoded here with a tiny generic
-//! protobuf walker. `mozlz4` (Firefox session and search files) is a magic,
+//! protocol buffer (`CrxFileHeader`), read with `util::wire::protobuf`. `mozlz4` (Firefox session and search files) is a magic,
 //! the decompressed size and an LZ4 block, decompressed on expansion.
 
 use crate::bytes::u32_le;
@@ -13,6 +12,7 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::util::wire::protobuf as pb;
 use crate::formats::{Format, Input, Probe, archive::zip, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -124,57 +124,33 @@ fn field_name(kind: Kind, number: u64) -> (&'static str, Kind) {
     }
 }
 
-async fn varint(cur: &mut Cursor<'_>) -> Result<u64> {
-    let start = cur.pos();
-    let data = cur.peek(10).await?;
-    let (value, len) = crate::bytes::uleb128(&data)
-        .ok_or_else(|| Diagnostic::malformed("bad varint").at(cur.region().sub(start, 10)))?;
-    cur.skip(crate::bytes::to_u64(len));
-    Ok(value)
-}
-
 /// Walks one protocol buffer message.
 async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, LE);
     while !cur.at_end() {
         let start = cur.pos();
-        let key = varint(&mut cur).await?;
-        let (number, wire) = (key >> 3, key & 7);
+        let (number, payload) = pb::read_field(&mut cur).await?;
         let (name, sub) = field_name(kind, number);
         let label = if name == "field" {
             format!("field {number}")
         } else {
             name.to_owned()
         };
-        let node = match wire {
-            0 => {
-                let v = varint(&mut cur).await?;
-                Node::new(label).value(Value::UInt {
-                    value: v,
-                    bits: 64,
-                    radix: crate::value::Radix::Dec,
-                })
-            }
-            1 => {
-                let v = cur.u64().await?;
+        let node = match payload {
+            pb::Payload::Varint(v) => Node::new(label).value(Value::UInt {
+                value: v,
+                bits: 64,
+                radix: crate::value::Radix::Dec,
+            }),
+            pb::Payload::I64(v) => {
                 Node::new(label).value(crate::formats::util::datakit::hex(v, 64))
             }
-            5 => {
-                let v = cur.u32().await?;
+            pb::Payload::I32(v) => {
                 Node::new(label).value(crate::formats::util::datakit::hex(v, 32))
             }
-            2 => {
-                let len = varint(&mut cur).await?;
-                let body = cur.span(len);
-                if body.len < len {
-                    return Err(Diagnostic::truncated(
-                        Span::new(body.source, body.offset, len),
-                        body.len,
-                    ));
-                }
-                cur.skip(len);
+            pb::Payload::Len(body) => {
                 let bytes = cx.read_avail(body.sub(0, 32)).await?;
-                let mut node = Node::new(label).summary(format!("{len} bytes"));
+                let mut node = Node::new(label).summary(format!("{} bytes", body.len));
                 if sub != Kind::Unknown && depth < MAX_DEPTH {
                     node = node.lazy(
                         crate::expander!(self::message: (Span, Kind, u32)),
@@ -187,10 +163,8 @@ async fn message(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
                 }
                 node
             }
-            _ => {
-                return Err(
-                    Diagnostic::malformed(format!("wire type {wire}")).at(span.sub(start, 1))
-                );
+            pb::Payload::StartGroup | pb::Payload::EndGroup => {
+                return Err(Diagnostic::unsupported("protobuf groups").at(span.sub(start, 1)));
             }
         };
         cx.push(node.span(cur.since(start))).await;

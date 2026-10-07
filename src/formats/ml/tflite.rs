@@ -12,7 +12,7 @@ use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
-use super::flatbuf::{Fb, Table, Vector, dims, raw_table};
+use crate::formats::util::wire::flatbuffers::{Fb, Table, Vector, dims, raw_table};
 
 fn text(s: impl Into<String>) -> Value {
     Value::Text(s.into())

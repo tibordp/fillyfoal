@@ -7,12 +7,13 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, to_usize};
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
+use crate::formats::util::wire::protobuf as pb;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 /// Nested messages followed.
@@ -43,7 +44,7 @@ fn probe(h: &Head<'_>) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Protocol Buffers
+// Protocol Buffers (schema-driven, over `util::wire::protobuf`)
 
 #[derive(Clone, Copy)]
 pub enum Kind {
@@ -75,28 +76,6 @@ const fn f(id: u64, name: &'static str, kind: Kind) -> FieldDef {
 const P: Kind = Kind::Plain;
 const T: Kind = Kind::Text;
 
-fn varint(data: &[u8], at: usize) -> Option<(u64, usize)> {
-    let (v, n) = crate::bytes::uleb128(data.get(at..)?)?;
-    Some((v, at.checked_add(n)?))
-}
-
-/// One field: id, wire type, where its value starts and ends.
-fn field(data: &[u8], at: usize) -> Option<(u64, u8, usize, usize)> {
-    let (key, start) = varint(data, at)?;
-    let wire = (key & 7) as u8;
-    let end = match wire {
-        0 => varint(data, start)?.1,
-        1 => start.checked_add(8)?,
-        2 => {
-            let (len, s) = varint(data, start)?;
-            s.checked_add(to_usize(len))?
-        }
-        5 => start.checked_add(4)?,
-        _ => return None,
-    };
-    (end <= data.len()).then_some((key >> 3, wire, start, end))
-}
-
 #[derive(Clone)]
 struct Buf {
     data: Arc<Vec<u8>>,
@@ -125,46 +104,41 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
     let mut pos = state.start;
     while pos < state.end {
         cx.checkpoint().await;
-        let Some((id, wire, start, end)) = field(body, pos) else {
+        let mut next = pos;
+        let Some(fd) = pb::field(body, &mut next) else {
             return Err(Diagnostic::malformed("invalid field").at(state.buf.sub(pos, state.end)));
         };
+        let (id, wire, end) = (fd.number, fd.wire, fd.end);
         let def = state.def.fields.iter().find(|d| d.id == id);
         let name = def.map_or_else(|| format!("Field {id}"), |d| d.name.to_owned());
         let kind = def.map_or(Kind::Plain, |d| d.kind);
         let mut node = Node::new(name).span(state.buf.sub(pos, end));
         node = match (wire, kind) {
-            (0, Kind::Enum(table)) => {
-                let v = varint(body, start).map_or(0, |(v, _)| v);
-                node.value(Value::Enum {
-                    raw: v,
-                    bits: 32,
-                    name: lookup(table, v),
-                })
-            }
-            (0, Kind::Signed) => {
-                let v = varint(body, start).map_or(0, |(v, _)| v);
-                node.value(Value::Int {
-                    value: ((v >> 1) as i64) ^ 0i64.wrapping_sub((v & 1) as i64),
-                    bits: 64,
-                })
-            }
+            (0, Kind::Enum(table)) => node.value(Value::Enum {
+                raw: fd.value,
+                bits: 32,
+                name: lookup(table, fd.value),
+            }),
+            (0, Kind::Signed) => node.value(Value::Int {
+                value: pb::zigzag(fd.value),
+                bits: 64,
+            }),
             (0, _) => node.value(Value::UInt {
-                value: varint(body, start).map_or(0, |(v, _)| v),
+                value: fd.value,
                 bits: 64,
                 radix: Radix::Dec,
             }),
             (1, _) => node.value(Value::UInt {
-                value: crate::bytes::u64_le(body, start).unwrap_or(0),
+                value: fd.value,
                 bits: 64,
                 radix: Radix::Hex,
             }),
             (5, _) => node.value(Value::UInt {
-                value: crate::bytes::u32_le(body, start).unwrap_or(0).into(),
+                value: fd.value,
                 bits: 32,
                 radix: Radix::Hex,
             }),
             (_, Kind::Message(def)) => {
-                let (_, s) = varint(body, start).unwrap_or((0, start));
                 if state.depth >= MAX_DEPTH {
                     node.diag(Diagnostic::limit("messages nested too deeply"))
                 } else {
@@ -177,7 +151,7 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
                         crate::expander!(self::message: MsgState),
                         MsgState {
                             buf: state.buf.clone(),
-                            start: s,
+                            start: fd.body,
                             end,
                             def,
                             depth: state.depth.saturating_add(1),
@@ -186,20 +160,19 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
                 }
             }
             (_, Kind::Packed) => {
-                let (_, mut s) = varint(body, start).unwrap_or((0, start));
+                let packed = fd.payload(body);
+                let mut s = 0usize;
                 let mut values = Vec::new();
-                while s < end && values.len() < 64 {
-                    let Some((v, n)) = varint(body, s) else {
+                while s < packed.len() && values.len() < 64 {
+                    let Some(v) = pb::varint(packed, &mut s) else {
                         break;
                     };
                     values.push(v.to_string());
-                    s = n;
                 }
                 node.value(Value::Text(values.join(", ")))
             }
             _ => {
-                let (_, s) = varint(body, start).unwrap_or((0, start));
-                let bytes = body.get(s..end).unwrap_or_default();
+                let bytes = fd.payload(body);
                 match (kind, std::str::from_utf8(bytes)) {
                     (Kind::Text, Ok(text)) => node.value(Value::Text(text.to_owned())),
                     _ => node
@@ -216,33 +189,18 @@ async fn message(cx: Cx, state: MsgState) -> Result<()> {
 
 /// Varint fields of a message, for the dissector's own use.
 fn ints(data: &[u8]) -> Vec<(u64, u64)> {
-    let mut out = Vec::new();
-    let mut pos = 0usize;
-    while let Some((id, wire, start, end)) = field(data, pos) {
-        if wire == 0
-            && let Some((v, _)) = varint(data, start)
-        {
-            out.push((id, v));
-        }
-        pos = end;
-    }
-    out
+    pb::fields_in(data)
+        .filter(|f| f.wire == pb::VARINT)
+        .map(|f| (f.number, f.value))
+        .collect()
 }
 
 /// Embedded messages with field number `id`: their (start, end).
 fn messages(data: &[u8], id: u64) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
-    let mut pos = 0usize;
-    while let Some((fid, wire, start, end)) = field(data, pos) {
-        if fid == id
-            && wire == 2
-            && let Some((_, s)) = varint(data, start)
-        {
-            out.push((s, end));
-        }
-        pos = end;
-    }
-    out
+    pb::fields_in(data)
+        .filter(|f| f.number == id && f.wire == pb::LEN)
+        .map(|f| (f.body, f.end))
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ use crate::bytes::{to_u64, u32_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::wire::protobuf::varint;
 use crate::formats::{Codec, Head, Input, Probe, content};
 
 // ---------------------------------------------------------------------------
@@ -15,20 +16,6 @@ fn osm_probe(h: &Head<'_>) -> bool {
 
 declare_format!(pub OSM_PBF = "osm-pbf", "OpenStreetMap PBF", ["pbf", "osm.pbf"], "application/x-osm-pbf",
     Probe::Custom(osm_probe), osm_pbf);
-
-/// Decodes a protobuf varint at `at`.
-fn varint(data: &[u8], at: &mut usize) -> Option<u64> {
-    let mut value = 0u64;
-    for i in 0..10u32 {
-        let b = *data.get(*at)?;
-        *at = at.saturating_add(1);
-        value |= u64::from(b & 0x7f).checked_shl(i.saturating_mul(7))?;
-        if b & 0x80 == 0 {
-            return Some(value);
-        }
-    }
-    None
-}
 
 async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;

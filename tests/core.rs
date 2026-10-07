@@ -1179,3 +1179,21 @@ fn open_as_a_chosen_format() {
     let c = host.session.children(zip).unwrap();
     assert!(c.error.is_some() || !host.session.node(zip).unwrap().diagnostics.is_empty());
 }
+
+/// Schemaless wire encodings have no signature: they are offered by
+/// extension, and the ones without a probe never identify anything.
+#[test]
+fn wire_encodings_are_offered_by_extension() {
+    use fillyfoal::formats::{self, Probe};
+    let names = |ext: &str| formats::by_extension(ext).iter().map(|f| f.name).collect::<Vec<_>>();
+    assert!(names("pb").contains(&"protobuf"));
+    assert!(names("binpb").contains(&"protobuf"));
+    assert!(names("fb").contains(&"flatbuffers"));
+    let bin = names("bin");
+    for name in ["flatbuffers", "thrift-binary", "thrift-compact", "capnp", "capnp-packed"] {
+        assert!(bin.contains(&name), "{name} missing from {bin:?}");
+    }
+    for name in ["protobuf", "flatbuffers", "thrift-binary", "thrift-compact", "capnp-packed"] {
+        assert!(matches!(formats::by_name(name).unwrap().probe, Probe::Never), "{name}");
+    }
+}

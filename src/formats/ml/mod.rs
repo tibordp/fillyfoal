@@ -7,9 +7,7 @@
 //! GGUF model files live in `gguf`.
 
 pub mod binary;
-pub mod flatbuf;
 pub mod gguf;
-pub mod proto;
 pub mod protos;
 pub mod text;
 pub mod tflite;

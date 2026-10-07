@@ -2,7 +2,7 @@
 //! robotics logs, and sports and fitness files.
 //!
 //! Shared here: value constructors, checksums used by several receivers'
-//! protocols, a protobuf wire-format reader, and helpers for text formats
+//! protocols, and helpers for text formats
 //! whose records are lines of delimited or fixed-column fields.
 //!
 //! Also here: geoscience (`geoscience`: seismic, well logs, grids, planetary
@@ -103,97 +103,6 @@ pub(crate) fn fixed(b: &[u8]) -> String {
 
 // ---------------------------------------------------------------------------
 // Checksums
-
-// ---------------------------------------------------------------------------
-// Protobuf wire format
-
-/// A protobuf varint at `*at`, advancing past it.
-pub(crate) fn varint(data: &[u8], at: &mut usize) -> Option<u64> {
-    let mut value = 0u64;
-    for i in 0..10u32 {
-        let b = *data.get(*at)?;
-        *at = at.saturating_add(1);
-        value |= u64::from(b & 0x7f).checked_shl(i.saturating_mul(7))?;
-        if b & 0x80 == 0 {
-            return Some(value);
-        }
-    }
-    None
-}
-
-/// One protobuf field: number, wire type, and either the scalar or the
-/// byte range of a length-delimited payload.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct PbField {
-    pub number: u64,
-    pub wire: u8,
-    pub value: u64,
-    /// Start and end of the field (key included).
-    pub start: usize,
-    pub end: usize,
-    /// Start of a length-delimited payload.
-    pub body: usize,
-}
-
-impl PbField {
-    pub fn payload<'a>(&self, data: &'a [u8]) -> &'a [u8] {
-        data.get(self.body..self.end).unwrap_or_default()
-    }
-}
-
-/// The next field of a message at `*at`; `None` at the end or on malformed
-/// input (unknown wire types, overruns).
-pub(crate) fn pb_field(data: &[u8], at: &mut usize) -> Option<PbField> {
-    let start = *at;
-    let key = varint(data, at)?;
-    let number = key >> 3;
-    let wire = u8::try_from(key & 7).ok()?;
-    if number == 0 {
-        return None;
-    }
-    let (value, body) = match wire {
-        0 => (varint(data, at)?, *at),
-        1 => {
-            let v = crate::bytes::u64_le(data, *at)?;
-            *at = at.checked_add(8)?;
-            (v, at.saturating_sub(8))
-        }
-        5 => {
-            let v = crate::bytes::u32_le(data, *at)?;
-            *at = at.checked_add(4)?;
-            (u64::from(v), at.saturating_sub(4))
-        }
-        2 => {
-            let len = usize::try_from(varint(data, at)?).ok()?;
-            let body = *at;
-            let end = body.checked_add(len)?;
-            if end > data.len() {
-                return None;
-            }
-            *at = end;
-            (u64::try_from(len).ok()?, body)
-        }
-        _ => return None,
-    };
-    Some(PbField {
-        number,
-        wire,
-        value,
-        start,
-        end: *at,
-        body,
-    })
-}
-
-/// All fields of a message, or `None` if it does not parse exactly.
-pub(crate) fn pb_fields(data: &[u8]) -> Option<Vec<PbField>> {
-    let mut at = 0usize;
-    let mut out = Vec::new();
-    while at < data.len() {
-        out.push(pb_field(data, &mut at)?);
-    }
-    Some(out)
-}
 
 // ---------------------------------------------------------------------------
 // Text helpers
@@ -321,94 +230,6 @@ pub(crate) fn key_value(line: &LineBuf, sep: u8) -> Option<Node> {
         return None;
     }
     Some(field_node(key, v).span(line.span))
-}
-
-// ---------------------------------------------------------------------------
-// FlatBuffers
-
-/// A FlatBuffers table in an in-memory buffer: its position and vtable.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct FbTable {
-    pub pos: usize,
-    vtable: usize,
-    vlen: usize,
-}
-
-/// The root table of a buffer.
-pub(crate) fn fb_root(data: &[u8]) -> Option<FbTable> {
-    fb_table(data, fb_deref(data, 0)?)
-}
-
-pub(crate) fn fb_table(data: &[u8], pos: usize) -> Option<FbTable> {
-    let soffset = i64::from(crate::bytes::i32_le(data, pos)?);
-    let vtable = usize::try_from(i64::try_from(pos).ok()?.checked_sub(soffset)?).ok()?;
-    let vlen = usize::from(crate::bytes::u16_le(data, vtable)?);
-    (vlen >= 4 && vlen % 2 == 0).then_some(FbTable { pos, vtable, vlen })
-}
-
-/// The position an unsigned offset at `at` points to.
-fn fb_deref(data: &[u8], at: usize) -> Option<usize> {
-    at.checked_add(usize::try_from(crate::bytes::u32_le(data, at)?).ok()?)
-}
-
-impl FbTable {
-    /// Absolute position of field `i`, if present.
-    pub fn field(&self, data: &[u8], i: usize) -> Option<usize> {
-        let entry = 4usize.checked_add(i.checked_mul(2)?)?;
-        if entry.checked_add(2)? > self.vlen {
-            return None;
-        }
-        let off = crate::bytes::u16_le(data, self.vtable.checked_add(entry)?)?;
-        (off != 0).then(|| self.pos.saturating_add(usize::from(off)))
-    }
-
-    pub fn u8(&self, data: &[u8], i: usize) -> Option<u8> {
-        data.get(self.field(data, i)?).copied()
-    }
-
-    pub fn u16(&self, data: &[u8], i: usize) -> Option<u16> {
-        crate::bytes::u16_le(data, self.field(data, i)?)
-    }
-
-    pub fn i32(&self, data: &[u8], i: usize) -> Option<i32> {
-        crate::bytes::i32_le(data, self.field(data, i)?)
-    }
-
-    pub fn u64(&self, data: &[u8], i: usize) -> Option<u64> {
-        crate::bytes::u64_le(data, self.field(data, i)?)
-    }
-
-    pub fn table(&self, data: &[u8], i: usize) -> Option<FbTable> {
-        fb_table(data, fb_deref(data, self.field(data, i)?)?)
-    }
-
-    /// A string: its text and byte range.
-    pub fn string(&self, data: &[u8], i: usize) -> Option<(String, usize, usize)> {
-        let at = fb_deref(data, self.field(data, i)?)?;
-        let len = usize::try_from(crate::bytes::u32_le(data, at)?).ok()?;
-        let start = at.checked_add(4)?;
-        let end = start.checked_add(len)?;
-        Some((
-            String::from_utf8_lossy(data.get(start..end)?).into_owned(),
-            start,
-            end,
-        ))
-    }
-
-    /// A vector: element count and the position of the first element. The
-    /// count is checked against the buffer for elements of `width` bytes.
-    pub fn vector(&self, data: &[u8], i: usize, width: usize) -> Option<(usize, usize)> {
-        let at = fb_deref(data, self.field(data, i)?)?;
-        let n = usize::try_from(crate::bytes::u32_le(data, at)?).ok()?;
-        let start = at.checked_add(4)?;
-        let end = start.checked_add(n.checked_mul(width)?)?;
-        (end <= data.len()).then_some((n, start))
-    }
-
-    /// The `j`th table of a vector of tables starting at `start`.
-    pub fn vector_table(data: &[u8], start: usize, j: usize) -> Option<FbTable> {
-        fb_table(data, fb_deref(data, start.checked_add(j.checked_mul(4)?)?)?)
-    }
 }
 
 // ---------------------------------------------------------------------------

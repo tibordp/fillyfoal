@@ -311,3 +311,14 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `git-pack/small.pack` | git | `git verify-pack` accepts it; commits by `Fixture Author <author@example.invalid>`, one delta object |
 | `git-pack-index/small.idx` | git | v2 index of git-pack/small.pack |
 | `git-bundle/repo.bundle` | git | `git bundle verify` accepts it |
+
+## Serialisation libraries (schemaless wire formats)
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `protobuf/` | protoc (libprotoc 34.1) | reproduced byte-for-byte: `sh tests/data/protobuf/make.sh` (`protoc --encode` of `sample.txtpb` and a generated track with `sample.proto`) |
+| `thrift-binary/` | Apache Thrift Python library 0.25.0 (`TBinaryProtocol`) | reproduced byte-for-byte: `uv run --with thrift==0.25.0 python tests/data/thrift/make.py` (protocol API over `TMemoryBuffer`, no IDL) |
+| `thrift-compact/` | Apache Thrift Python library 0.25.0 (`TCompactProtocol`) | reproduced byte-for-byte by the same script |
+| `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
+| `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
+| `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |

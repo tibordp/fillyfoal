@@ -130,6 +130,10 @@ pub enum Probe {
     /// Any of these `(offset, bytes)` pairs matches.
     Magic(&'static [(usize, &'static [u8])]),
     Custom(fn(&Head<'_>) -> bool),
+    /// No reliable signature: never identified by content, only chosen by
+    /// hand ([`by_extension`], [`crate::Session::open_as`]) or embedded by
+    /// a dissector that knows what it holds.
+    Never,
 }
 
 impl Probe {
@@ -137,6 +141,7 @@ impl Probe {
         match self {
             Probe::Magic(list) => list.iter().any(|(offset, magic)| head.at(*offset, magic)),
             Probe::Custom(f) => f(head),
+            Probe::Never => false,
         }
     }
 }
@@ -467,6 +472,12 @@ pub static FORMATS: &[&Format] = &[
     &data::jet::MDB,
     &data::jet::ACCDB,
     &data::arrow::FORMAT,
+    // Schemaless wire encodings: by extension or "inspect as" only.
+    &data::wire::protobuf::FORMAT,
+    &data::wire::thrift::BINARY,
+    &data::wire::thrift::COMPACT,
+    &data::wire::flatbuffers::FORMAT,
+    &data::wire::capnp::PACKED,
     // -- end documents --
 
     // -- disk images & filesystems --
@@ -1719,6 +1730,9 @@ pub static FORMATS: &[&Format] = &[
     &text::yaml::OPENAPI,
     &text::yaml::FORMAT,
     &text::plain::SCRIPT,
+    // Cap'n Proto has no magic: a segment table that accounts for exactly
+    // the whole file (after everything with magic).
+    &data::wire::capnp::FORMAT,
     // Brotli has no magic: only small files that decode as exactly one
     // complete stream (a trial decode, so after everything with magic).
     &compression::brotli::FORMAT,

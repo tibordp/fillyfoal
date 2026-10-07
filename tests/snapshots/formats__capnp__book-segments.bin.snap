@@ -1,0 +1,57 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ book-segments.bin — Cap'n Proto message, 3 segments, root struct, 0 data words, 1 pointer  [0x0+0x1f0]
+  ▾ Segment table — 3 segments  [0x0+0x10]
+      Segment count - 1: 2  [0x0+0x4]
+      Segment 0 size: 2 — words, at 0x10  [0x4+0x4] → 0x10+0x10
+      Segment 1 size: 26 — words, at 0x20  [0x8+0x4] → 0x20+0xd0
+      Segment 2 size: 32 — words, at 0xf0  [0xc+0x4] → 0xf0+0x100
+  ▾ Root — struct, 0 data words, 1 pointer  [0x10+0x8] → 0x18+0x8
+    ▾ pointer 0 — list of 2 structs (3 data words, 9 pointers each) (through a far pointer to segment 1 word 0)  [0x18+0x8] → 0x28+0xc8
+      ▾ [0] — struct, 3 data words, 9 pointers  [0x30+0x60] → 0x30+0x60
+        ▾ Data section — 3 words  [0x30+0x18]
+            word 0: 0x20000007b — i32 [123, 2]  [0x30+0x8]
+            word 1: 0x3fe8000000000000 — i32 [0, 1072168960] · double 0.75  [0x38+0x8]
+            word 2: 0xffffffffffffffd6 — i32 [-42, -1]  [0x40+0x8]
+          pointer 0: "Alice" — text, 5 bytes (through a far pointer to segment 2 word 0)  [0x48+0x8] → 0xf8+0x6
+          pointer 1: "alice@example.com" — text, 17 bytes (through a far pointer to segment 2 word 2)  [0x50+0x8] → 0x108+0x12
+        ▾ pointer 2 — list of 1 struct (1 data word, 1 pointer each) (through a far pointer to segment 2 word 6)  [0x58+0x8] → 0x128+0x18
+          ▾ [0] — struct, 1 data word, 1 pointer  [0x130+0x10] → 0x130+0x10
+            ▾ Data section — 1 word  [0x130+0x8]
+                word 0: 0x0 — i32 [0, 0]  [0x130+0x8]
+              pointer 0: "555-1212" — text, 8 bytes  [0x138+0x8] → 0x140+0x9
+          pointer 3: "MIT" — text, 3 bytes (through a far pointer to segment 2 word 12)  [0x60+0x8] → 0x158+0x4
+        ▾ pointer 4 — list of 4 BIT (through a far pointer to segment 2 word 14)  [0x68+0x8] → 0x168+0x1
+            [0]: true  [0x168+0x1]
+            [1]: false  [0x168+0x1]
+            [2]: true  [0x168+0x1]
+            [3]: true  [0x168+0x1]
+          pointer 5: 89 50 4e 47 00 01 02  |.PNG...| — data, 7 bytes (through a far pointer to segment 2 word 16)  [0x70+0x8] → 0x178+0x7
+        ▾ pointer 6 — list of 2 FOUR_BYTES (through a far pointer to segment 2 word 18)  [0x78+0x8] → 0x188+0x8
+            [0]: 0.5 — float?; 32-bit 0x3f000000  [0x188+0x4]
+            [1]: -1.25 — float?; 32-bit 0xbfa00000  [0x18c+0x4]
+        ▾ pointer 7 — list of 2 POINTER (through a far pointer to segment 2 word 20)  [0x80+0x8] → 0x198+0x10
+            [0]: "Bob" — text, 3 bytes  [0x198+0x8] → 0x1a8+0x4
+            [1]: "Carol" — text, 5 bytes  [0x1a0+0x8] → 0x1b0+0x6
+        ▾ pointer 8 — list of 2 POINTER (through a far pointer to segment 2 word 25)  [0x88+0x8] → 0x1c0+0x10
+          ▾ [0] — list of 2 TWO_BYTES  [0x1c0+0x8] → 0x1d0+0x4
+              [0]: 1  [0x1d0+0x2]
+              [1]: 2  [0x1d2+0x2]
+          ▾ [1] — list of 1 TWO_BYTES  [0x1c8+0x8] → 0x1d8+0x2
+              [0]: -3  [0x1d8+0x2]
+      ▾ [1] — struct, 3 data words, 9 pointers  [0x90+0x60] → 0x90+0x60
+        ▾ Data section — 3 words  [0x90+0x18]
+            word 0: 0x1c8 — i32 [456, 0]  [0x90+0x8]
+            word 1: 0x0 — i32 [0, 0]  [0x98+0x8]
+            word 2: 0x0 — i32 [0, 0]  [0xa0+0x8]
+          pointer 0: "Bob" — text, 3 bytes (through a far pointer to segment 2 word 30)  [0xa8+0x8] → 0x1e8+0x4
+          pointer 1 — null  [0xb0+0x8]
+          pointer 2 — null  [0xb8+0x8]
+          pointer 3 — null  [0xc0+0x8]
+          pointer 4 — null  [0xc8+0x8]
+          pointer 5 — null  [0xd0+0x8]
+          pointer 6 — null  [0xd8+0x8]
+          pointer 7 — null  [0xe0+0x8]
+          pointer 8 — null  [0xe8+0x8]

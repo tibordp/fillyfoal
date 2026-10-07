@@ -2,7 +2,8 @@
 //! NetCDF, MATLAB, NumPy and safetensors, pickles, CBOR, bencode, binary
 //! plists, Berkeley DB, Access (Jet), ESE, LevelDB/RocksDB tables, embedded
 //! databases (`embedded_db`), backups and database dumps (`dumps`), R and
-//! ASDF data (`rdata`) and Bitcoin block files.
+//! ASDF data (`rdata`), Bitcoin block files, and schemaless wire encodings
+//! (`wire`: protobuf, FlatBuffers, Thrift, Cap'n Proto).
 
 pub mod arrow;
 pub mod avro;
@@ -24,3 +25,4 @@ pub mod parquet;
 pub mod pickle;
 pub mod rdata;
 pub mod sst;
+pub mod wire;

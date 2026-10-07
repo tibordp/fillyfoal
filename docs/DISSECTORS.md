@@ -39,7 +39,11 @@ Probes see the first `HEAD_LEN` (36 KiB) and last `TAIL_LEN` (1 KiB) bytes
 and the total length. Make them cheap and specific: check more than two magic
 bytes when you can (versions, sizes that must be sane), because a false
 positive hides the right format. Weak magics (one or two bytes) need a
-`Probe::Custom` with extra checks.
+`Probe::Custom` with extra checks. A format with no reliable signature at
+all (schemaless protobuf, Thrift) gets `Probe::Never`: it is offered by
+`formats::by_extension` and dissected through `Session::open_as`, and the
+test harness dissects its fixtures as the format their directory names
+(and checks that no probe claims them).
 
 A family of related formats (RIFF → WAV/AVI/WebP, ISO BMFF → MP4/HEIC/AVIF,
 ZIP → DOCX/EPUB/APK) shares one dissector and registers one `Format` per
