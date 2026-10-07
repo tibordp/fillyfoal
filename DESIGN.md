@@ -69,7 +69,8 @@ exploration pays for additional work only as needed.
   needed): DEFLATE/zlib, bzip2, LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
   Zstandard, Brotli, LZ4, Snappy, LZFSE/LZVN and Apple `pbz*`, Unix `.Z`,
   LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
+  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, RAR 2.9 (LZ, PPMd var. H, standard
+  RarVM filters) and RAR 5.0/7.0, Cap'n Proto packing, the PDF/PostScript
   filters and predictors, and the ciphers that unlock content (ZipCrypto,
   AES, RC4, Type 1 eexec, MPQ). Each is checked byte-exact against a real
   encoder where one was available (CLI tools, Python packages via `uv`,
