@@ -4,9 +4,12 @@
 //! sizes, time and name, then the compressed data; a zero byte ends the
 //! archive. Levels 1 and 2 carry extended headers (file name, directory,
 //! Unix permissions, ...). Stored members (`-lh0-`, `-lz4-`) are dissected in
-//! place; LZSS/Huffman methods are unsupported leaves.
+//! place; `-lh1-`, `-lh4-` to `-lh7-` and LArc's `-lzs-`/`-lz5-` are decoded
+//! (see [`crate::codec::lzh`]) and their CRC-16 checked; `-lh2-`, `-lh3-` and
+//! PMarc's methods are unsupported leaves.
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
@@ -80,6 +83,21 @@ const EXT_TYPES: EnumTable = &[
 
 fn stored(method: &str) -> bool {
     matches!(method, "-lh0-" | "-lz4-" | "-pm0-")
+}
+
+/// The codec of a compression method (`-lh2-`, `-lh3-` and PMarc's are
+/// not supported).
+fn codec_method(method: &str) -> Option<lzh::Method> {
+    Some(match method {
+        "-lh1-" => lzh::Method::Lh1,
+        "-lh4-" => lzh::Method::Lh { dict_bits: 12 },
+        "-lh5-" => lzh::Method::Lh { dict_bits: 13 },
+        "-lh6-" => lzh::Method::Lh { dict_bits: 15 },
+        "-lh7-" => lzh::Method::Lh { dict_bits: 16 },
+        "-lzs-" => lzh::Method::Lzs,
+        "-lz5-" => lzh::Method::Lz5,
+        _ => return None,
+    })
 }
 
 /// What the walk learns about a member.
@@ -486,8 +504,20 @@ async fn member(cx: Cx, (input, span, level): (Input, Span, u8)) -> Result<()> {
         return Ok(());
     }
     let data = span.sub(data_at, data_len);
+    let original = u64::from(u32_le(&header, 11).unwrap_or(0));
+    let crc = if level == 2 {
+        u16_le(&header, 21)
+    } else {
+        let name_len = usize::from(header.get(21).copied().unwrap_or(0));
+        u16_le(&header, 22usize.saturating_add(name_len))
+    };
     let node = if stored(&method) {
         embedded("Content", input.nested(data)).summary(human_size(data_len))
+    } else if let Some(m) = codec_method(&method) {
+        let check = crc.map_or(lzh::Check::None, lzh::Check::Crc16);
+        let codec = Codec::Lzh(lzh::Params::new(m, Some(original), check));
+        crate::formats::content("Content", input, data, codec, Some(original))
+            .summary(format!("{}, {method}", human_size(original)))
     } else {
         unsupported("Compressed data", data, &format!("LHA {method}"))
     };

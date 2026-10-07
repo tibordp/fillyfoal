@@ -4,11 +4,13 @@
 //! header (fixed fields, file name, comment), its CRC-32, and extended
 //! headers; the first is the main (archive) header, a size of zero ends the
 //! archive. File headers are followed by their compressed data. Stored
-//! members are dissected in place; the ARJ LZ/Huffman methods are
-//! unsupported leaves.
+//! members are dissected in place; methods 1 to 3 (LZSS with static
+//! Huffman blocks, LHA's `-lh6-` family) and 4 (LZSS with unary-coded
+//! numbers) are decoded (see [`crate::codec::lzh`]) and their CRC-32
+//! checked. Garbled (encrypted) members are unsupported leaves.
 
 use crate::bytes::{to_u64, u16_le, u32_le};
-use crate::codec::crc32;
+use crate::codec::{Codec, crc32, lzh};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
@@ -353,6 +355,17 @@ async fn entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             .diag(Diagnostic::unsupported("garbled (encrypted) file"))
     } else if method == 0 {
         embedded("Content", input.nested(data)).summary(human_size(data.len))
+    } else if let 1..=4 = method {
+        let original = u64::from(u32_le(&header, 20).unwrap_or(0));
+        let crc = u32_le(&header, 24).unwrap_or(0);
+        let m = if method == 4 {
+            lzh::Method::ArjFastest
+        } else {
+            lzh::Method::Arj
+        };
+        let codec = Codec::Lzh(lzh::Params::new(m, Some(original), lzh::Check::Crc32(crc)));
+        crate::formats::content("Content", input, data, codec, Some(original))
+            .summary(format!("{}, method {method}", human_size(original)))
     } else {
         let m = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown method");
         unsupported(

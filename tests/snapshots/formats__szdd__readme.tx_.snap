@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ readme.tx_ — MS-DOS COMPRESS (SZDD), 25 bytes uncompressed, last character "t"  [0x0+0x2b]
   ▾ Header  [0x0+0xe]
@@ -8,5 +8,8 @@ expression: "common::explore(&name, &data)"
       Compression mode: "A"  [0x8+0x1]
       Missing last character: "t"  [0x9+0x1]
       Uncompressed size: 25 — 25 bytes  [0xa+0x4]
-    Compressed data — 29 bytes  [0xe+0x1d]
-      ! unsupported: SZDD LZSS compression
+  ▾ Content — UTF-8 text, CRLF line endings, 1 line  [0xe+0x1d]
+      Encoding: "UTF-8"
+      Line endings: "CRLF" — 0 LF, 1 CRLF, 0 CR
+    ▾ Lines — 1 line  [#1:0x0+0x19]
+        Line 1: "hello from COMPRESS.EXE"  [#1:0x0+0x17]
