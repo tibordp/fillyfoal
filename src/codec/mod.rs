@@ -176,6 +176,8 @@ pub enum Codec {
     },
     /// bzip2 streams.
     Bzip2,
+    /// NSIS's headerless, CRC-less bzip2 variant (see [`bzip2::Bzip2::nsis`]).
+    NsisBzip2,
     /// LZ4 frames (also legacy and skippable frames).
     Lz4Frame,
     /// One raw LZ4 block.
@@ -257,6 +259,7 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor",
             Codec::Eexec { .. } => "eexec",
             Codec::Bzip2 => "bzip2",
+            Codec::NsisBzip2 => "nsis-bzip2",
             Codec::Zstd => "zstd",
             Codec::ZstdFrame => "zstd-frame",
             Codec::UnixCompress => "unix-compress",
@@ -317,6 +320,7 @@ impl Codec {
             Codec::TiffPredictor { .. } => "tiff-predictor (lazy)",
             Codec::Eexec { .. } => "eexec (lazy)",
             Codec::Bzip2 => "bzip2 (lazy)",
+            Codec::NsisBzip2 => "nsis-bzip2 (lazy)",
             Codec::Zstd => "zstd (lazy)",
             Codec::ZstdFrame => "zstd-frame (lazy)",
             Codec::UnixCompress => "unix-compress (lazy)",
@@ -376,6 +380,7 @@ impl Codec {
             | Codec::Snappy
             | Codec::SnappyFramed
             | Codec::Bzip2
+            | Codec::NsisBzip2
             | Codec::Xz
             | Codec::Zstd
             | Codec::ZstdFrame
@@ -440,7 +445,7 @@ impl Codec {
             // Three bytes (and two control bits) repeat up to 4114 bytes.
             Codec::SasRdc => 1_400,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
-            Codec::Bzip2 => 50_000,
+            Codec::Bzip2 | Codec::NsisBzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
             Codec::Xz | Codec::LzmaAlone | Codec::Lzma2 { .. } | Codec::LzmaRaw { .. } => 7_000,
             // RLE blocks can encode 128 KiB in four bytes.
@@ -552,6 +557,7 @@ impl Codec {
             Codec::Zstd => Box::new(Streaming(zstd::Zstd::new())),
             Codec::ZstdFrame => Box::new(Streaming(zstd::Zstd::single_frame())),
             Codec::Bzip2 => Box::new(Streaming(bzip2::Bzip2::default())),
+            Codec::NsisBzip2 => Box::new(Streaming(bzip2::Bzip2::nsis())),
             Codec::Lz4Frame => Box::new(Streaming(lz::Lz4Frame::default())),
             Codec::Xz => Box::new(xz::XzStream::default()),
             Codec::LzmaAlone => Box::new(lzma::LzmaStream::alone()),

@@ -66,7 +66,7 @@ exploration pays for additional work only as needed.
   build is fully hermetic; content in a codec we lack becomes an
   `Unsupported` leaf that names the codec and keeps its span.
 - In practice every codec so far is in-house (`src/codec/`, no features
-  needed): DEFLATE/zlib, bzip2, LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
+  needed): DEFLATE/zlib, bzip2 (and NSIS's variant), LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
   Zstandard, Brotli, LZ4, Snappy, LZFSE/LZVN and Apple `pbz*`, Unix `.Z`,
   LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
   (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, ACE 1.0/2.0 (acefile as

@@ -2,8 +2,9 @@
 //! RAR, 7z, Cabinet, WIM, xar, RPM, StuffIt, LHA, ARJ, ACE and ZOO;
 //! AppleSingle/AppleDouble, Chrome extensions (`crx`), WARC web archives,
 //! application packages (`packaging`: AppImage, Solaris datastreams, Haiku
-//! packages, Electron ASAR), less common archivers and installers (`minor`:
-//! ALZip, EGG, KGB, InstallShield) and legacy archivers (`legacy`: HA, UHARC,
+//! packages, Electron ASAR), Windows installers (`installer`: NSIS, Inno
+//! Setup, InstallShield), less common archivers (`minor`: ALZip, EGG, KGB)
+//! and legacy archivers (`legacy`: HA, UHARC,
 //! YZ1, GCA, PAQ8, Amiga XPK and LZX, PackIt).
 
 pub mod ace;
@@ -13,6 +14,7 @@ pub mod arj;
 pub mod cab;
 pub mod cpio;
 pub mod crx;
+pub mod installer;
 pub mod legacy;
 pub mod lha;
 pub mod minor;

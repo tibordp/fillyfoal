@@ -1,11 +1,11 @@
 //! Platform artifacts: Linux tooling, Android boot security, firmware
-//! images, installer payloads, Java module files and Mac resource forks.
+//! images, Java module files and Mac resource forks.
 
 use crate::bytes::{u16_be, u32_be, u32_le, u64_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
-use crate::error::{Diagnostic, Result};
+use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -529,81 +529,6 @@ async fn arm_fip(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     cx.annotate(format!("FIP, {images} images"));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Installer payloads: NSIS and Inno Setup (typically a PE overlay)
-
-fn nsis_probe(h: &Head<'_>) -> bool {
-    h.at(4, b"\xef\xbe\xad\xdeNullsoftInst")
-}
-
-declare_format!(pub NSIS = "nsis", "NSIS installer data", ["exe"], "application/x-nsis",
-    Probe::Custom(nsis_probe), nsis);
-
-const NSIS_FLAGS: crate::value::FlagTable = &[
-    crate::value::flag(1, "UNINSTALL"),
-    crate::value::flag(2, "SILENT"),
-    crate::value::flag(4, "NO_CRC"),
-    crate::value::flag(8, "FORCE_CRC"),
-];
-
-async fn nsis(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 28)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.u32("Flags").flags(NSIS_FLAGS).emit()?;
-    f.bytes("Signature", 16).emit()?;
-    let header = f.u32("Header size (uncompressed)").emit()?;
-    let length = f.u32("Data length").emit()?;
-    let first = cx.read(file.sub(28, 4)).await?;
-    let compression = match first.as_slice() {
-        [0x5d, 0, 0, ..] => "LZMA",
-        [b'B', b'Z', ..] => "bzip2",
-        _ => "zlib or solid",
-    };
-    cx.emit(
-        Node::new("Compressed header and data")
-            .span(file.sub(28, u64::from(length).saturating_sub(28)))
-            .diag(Diagnostic::unsupported(format!(
-                "{compression} compression"
-            ))),
-    );
-    cx.annotate(format!(
-        "NSIS installer, {length} bytes, header {header} bytes, {compression}"
-    ));
-    Ok(())
-}
-
-declare_format!(pub INNO = "inno-setup", "Inno Setup installer data", ["exe"], "application/x-inno-setup",
-    Probe::Magic(&[(0, b"rDlPtS02\x87eVx"), (0, b"rDlPtS\xcd\xe6\xd7\x7b\x0b\x2a"), (0, b"Inno Setup Setup Data (")]), inno);
-
-async fn inno(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read_avail(file.sub(0, 64)).await?;
-    if head.starts_with(b"Inno Setup") {
-        let version = crate::text::until_nul(&head);
-        cx.emit(
-            Node::new("Version")
-                .span(file.sub(0, 64))
-                .value(text(version.clone())),
-        );
-        cx.emit(Node::new("Setup data").span(file.tail(64)));
-        cx.annotate(version);
-    } else {
-        let block = cx.block(file.sub(0, 44)).await?;
-        let mut f = Fields::emitting(&cx, &block, LE);
-        f.bytes("Signature", 12).emit()?;
-        f.u32("Revision").emit()?;
-        f.u32("Total size").emit()?;
-        f.u32("Setup.exe offset").hex().emit()?;
-        f.u32("Setup.exe compressed size").emit()?;
-        f.u32("Setup.exe CRC").hex().emit()?;
-        let data = f.u32("Setup data offset").hex().emit()?;
-        f.u32("Setup data offset 1").hex().emit()?;
-        cx.annotate(format!("Inno Setup loader table, setup data at {data:#x}"));
-    }
     Ok(())
 }
 
