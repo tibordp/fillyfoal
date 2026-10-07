@@ -1870,3 +1870,31 @@ fn wire_encodings_are_offered_by_extension() {
         );
     }
 }
+
+/// Compressed `.blend` files (zstd from Blender 3.0 on, gzip before) are
+/// identified by their compression; the Blender file inside is recognised,
+/// and opening one as Blender explicitly decompresses it too (see
+/// `tests/data/blend/make_blend.py` for how the files were made).
+#[test]
+fn compressed_blend_files() {
+    for (file, wrapper) in [
+        ("scene.blend.zst", "Decompressed"),
+        ("scene.blend.gz", "Gzip stream"),
+    ] {
+        let path = format!("{}/tests/data/blend/{file}", env!("CARGO_MANIFEST_DIR"));
+        let data = std::fs::read(path).unwrap();
+        // Identified by content: the compression format, the scene inside.
+        let tree = common::explore(file, &data);
+        assert!(tree.contains("OB Cube"), "{file}:\n{tree}");
+        // Opened as Blender: the dissector offers the decompressed file.
+        let len = data.len() as u64;
+        let mut host = Host::with_chunk(data, 4096);
+        let id = host
+            .session
+            .open_as(file, len, formats::by_name("blend").unwrap());
+        host.explore(id, 8, 100);
+        let tree = fillyfoal::render::tree(&host.session, id);
+        assert!(tree.contains(wrapper), "{file}:\n{tree}");
+        assert!(tree.contains("OB Cube"), "{file}:\n{tree}");
+    }
+}
