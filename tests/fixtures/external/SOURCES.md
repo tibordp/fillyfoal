@@ -337,3 +337,9 @@ and reproduce every file byte for byte.
 | `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
 | `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
 | `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |
+
+## Mail stores
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `pst/unicode.pst.gz` | Aspose.Email for Python via .NET 26.8 (unlicensed evaluation mode) | `uv run --with aspose-email-for-python-via-net==26.8 python -I tests/data/pst/generate.py OUT`; not byte-for-byte reproducible (fresh entry IDs, record keys and modification times). Evaluation mode appends "(Aspose.Email Evaluation)" to subjects and an evaluation banner to bodies. Stored as `gzip -9 -n` (mostly zero-filled preallocated pages). Aspose cannot create ANSI files |

@@ -631,34 +631,6 @@ async fn rdb_string(cur: &mut Cursor<'_>) -> Result<String> {
 }
 
 // ---------------------------------------------------------------------------
-// Outlook PST / OST
-
-declare_format!(pub PST = "pst", "Outlook personal folders", ["pst", "ost"], "application/vnd.ms-outlook",
-    Probe::Magic(&[(0, b"!BDN")]), pst);
-
-async fn pst(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 0x20)).await?;
-    let mut f = crate::fields::Fields::emitting(&cx, &head, LE);
-    f.ascii("Magic", 4).emit()?;
-    f.u32("CRC (partial)").hex().emit()?;
-    let client = f.ascii("Client magic", 2).emit()?;
-    let version = f.u16("File format version").emit()?;
-    f.u16("Client version").emit()?;
-    f.u8("Platform create").emit()?;
-    f.u8("Platform access").emit()?;
-    let kind = match (client.as_str(), version) {
-        ("SM", 14 | 15) => "ANSI PST",
-        ("SM", 23) => "Unicode PST",
-        ("SM", 36) => "Unicode PST (4K pages)",
-        ("SO", _) => "OST (offline storage)",
-        _ => "PST",
-    };
-    cx.annotate(format!("{kind}, format version {version}"));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // .NET resources
 
 declare_format!(pub DOTNET_RESOURCES = "dotnet-resources", ".NET resources", ["resources"], "application/x-dotnet-resources",
