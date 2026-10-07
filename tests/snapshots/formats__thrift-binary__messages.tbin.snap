@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ messages.tbin — Thrift binary protocol, 2 records  [0x0+0x41]
+  ▾ Message 0 — CALL getUser, seqid 42  [0x0+0x1f]
+      Name: "getUser"
+      Type: CALL (0x1)
+      Sequence id: 42
+    ▾ Arguments — struct, 1 field  [0x13+0xc]
+        field 1: 7 — i64  [0x13+0xb]
+  ▾ Message 1 — REPLY getUser, seqid 42  [0x1f+0x22]
+      Name: "getUser"
+      Type: REPLY (0x2)
+      Sequence id: 42
+    ▾ Arguments — struct, 1 field  [0x32+0xf]
+      ▾ field 0 — struct, 1 field  [0x32+0xe]
+          field 1: "Ada" — string  [0x35+0xa]

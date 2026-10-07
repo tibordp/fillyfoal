@@ -1,0 +1,65 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ monster-size-prefixed.bin — FlatBuffers data, size-prefixed  [0x0+0x100]
+    Size prefix: 252  [0x0+0x4]
+    Root table offset: 0x24  [0x4+0x4] → 0x28+0x4
+  ▾ Root table — table, 11 fields  [0x28+0x40]
+      vtable offset: 32 — vtable at 0x8  [0x28+0x4] → 0x8+0x20
+    ▾ vtable — 14 slots, table size 64  [0x8+0x20]
+        vtable size: 32  [0x8+0x2]
+        table size: 64  [0xa+0x2]
+        slot 0: 52  [0xc+0x2]
+        slot 1: 0 — absent  [0xe+0x2]
+        slot 2: 50  [0x10+0x2]
+        slot 3: 44  [0x12+0x2]
+        slot 4: 0 — absent  [0x14+0x2]
+        slot 5: 40  [0x16+0x2]
+        slot 6: 0 — absent  [0x18+0x2]
+        slot 7: 36  [0x1a+0x2]
+        slot 8: 35  [0x1c+0x2]
+        slot 9: 28  [0x1e+0x2]
+        slot 10: 24  [0x20+0x2]
+        slot 11: 16  [0x22+0x2]
+        slot 12: 8  [0x24+0x2]
+        slot 13: 4  [0x26+0x2]
+      field 0: 00 00 80 3f 00 00 00 40 00 00 40 40  |...?...@..@@| — inline struct?, 12 bytes  [0x5c+0xc]
+      field 2: 300 — 16-bit  [0x5a+0x2]
+      field 3: "Orc" — string  [0x54+0x4]
+      field 5: 00 01 02 03 04 05 06 07 08 09 00 00 03 00 00 00 …  |................| — vector?, 10 elements  [0x50+0x4] → 0xe8+0x4
+    ▾ field 7 — vector of tables?, 2 elements  [0x4c+0x4] → 0xa8+0x4
+      ▾ [0] — table?  [0xac+0x4] → 0xd0+0xc
+          vtable offset: 8 — vtable at 0xc8  [0xd0+0x4] → 0xc8+0x8
+        ▾ vtable — 2 slots, table size 12  [0xc8+0x8]
+            vtable size: 8  [0xc8+0x2]
+            table size: 12  [0xca+0x2]
+            slot 0: 8  [0xcc+0x2]
+            slot 1: 6  [0xce+0x2]
+          field 0: "Sword" — string  [0xd8+0x4]
+          field 1: 3 — 16-bit  [0xd6+0x2]
+      ▾ [1] — table?  [0xb0+0x4] → 0xb4+0xc
+          vtable offset: -20 — vtable at 0xc8  [0xb4+0x4] → 0xc8+0x8
+        ▾ vtable — 2 slots, table size 12  [0xc8+0x8]
+            vtable size: 8  [0xc8+0x2]
+            table size: 12  [0xca+0x2]
+            slot 0: 8  [0xcc+0x2]
+            slot 1: 6  [0xce+0x2]
+          field 0: "Axe" — string  [0xbc+0x4]
+          field 1: 5 — 16-bit  [0xba+0x2]
+      field 8: 1 — 8-bit  [0x4b+0x1]
+    ▾ field 9 — table?  [0x44+0x4] → 0xb4+0xc
+        vtable offset: -20 — vtable at 0xc8  [0xb4+0x4] → 0xc8+0x8
+      ▾ vtable — 2 slots, table size 12  [0xc8+0x8]
+          vtable size: 8  [0xc8+0x2]
+          table size: 12  [0xca+0x2]
+          slot 0: 8  [0xcc+0x2]
+          slot 1: 6  [0xce+0x2]
+        field 0: "Axe" — string  [0xbc+0x4]
+        field 1: 5 — 16-bit  [0xba+0x2]
+      field 10: 00 00 80 3f 00 00 00 40 00 00 40 40 00 00 80 40 …  |...?...@..@@...@| — vector?, 2 elements  [0x40+0x4] → 0x68+0x4
+      field 11: 0 — 32-bit  [0x38+0x4]
+      field 12: 2309737967 — 32-bit  [0x30+0x4]
+    ▾ field 13 — vector of strings, 2 elements  [0x2c+0x4] → 0x84+0x4
+        [0]: "green" — string  [0x88+0x4]
+        [1]: "angry" — string  [0x8c+0x4]

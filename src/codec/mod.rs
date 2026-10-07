@@ -34,6 +34,7 @@ pub mod quantum;
 pub mod bcfz;
 pub mod heatshrink;
 pub mod meatpack;
+pub mod capnp;
 
 use std::sync::Arc;
 
@@ -152,6 +153,8 @@ pub enum Codec {
     Snappy,
     /// The Snappy framing format.
     SnappyFramed,
+    /// Cap'n Proto's packed encoding (see [`capnp`]).
+    CapnpPacked,
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
     Eexec { hex: bool },
     /// Traditional PKWARE encryption with this password (the 12-byte
@@ -232,6 +235,7 @@ impl Codec {
             Codec::Lz4Block => "lz4-block",
             Codec::Snappy => "snappy",
             Codec::SnappyFramed => "snappy-framed",
+            Codec::CapnpPacked => "capnp-packed",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -285,6 +289,7 @@ impl Codec {
             Codec::Lz4Block => "lz4-block (lazy)",
             Codec::Snappy => "snappy (lazy)",
             Codec::SnappyFramed => "snappy-framed (lazy)",
+            Codec::CapnpPacked => "capnp-packed (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -335,6 +340,7 @@ impl Codec {
             | Codec::PngPredictor { .. }
             | Codec::TiffPredictor { .. }
             | Codec::MeatPack => "decoded",
+            Codec::CapnpPacked => "unpacked",
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -355,6 +361,8 @@ impl Codec {
             | Codec::TiffPredictor { .. } => 1,
             Codec::RunLength | Codec::PackBits => 128,
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
+            // A zero tag and a count stand for 256 zero words.
+            Codec::CapnpPacked => 1024,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
@@ -452,6 +460,7 @@ impl Codec {
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
+            Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
             Codec::Eexec { hex } => Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex }))),
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
             Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),

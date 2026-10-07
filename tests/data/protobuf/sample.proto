@@ -1,0 +1,39 @@
+// Schema for the protobuf fixtures (the dissector does not see it).
+syntax = "proto2";
+
+package demo;
+
+message Point {
+  optional sint32 x = 1;
+  optional sint32 y = 2;
+  optional string label = 3;
+}
+
+message Sample {
+  optional int32 id = 1;
+  optional string name = 2;
+  optional double ratio = 3;
+  optional float scale = 4;
+  optional fixed32 crc = 5;
+  optional sfixed64 offset = 6;
+  optional sint64 delta = 7;
+  optional bool active = 8;
+  optional bytes blob = 9;
+  repeated int32 values = 10 [packed = true];
+  repeated Point points = 11;
+  optional int64 negative = 12;
+  optional group Extra = 13 {
+    optional string note = 14;
+    optional uint32 count = 15;
+  }
+  map<string, int32> tags = 16;
+  repeated float weights = 17 [packed = true];
+  optional bytes empty = 18;
+  optional uint64 last = 536870911;
+}
+
+message Track {
+  optional string title = 1;
+  repeated Point points = 2;
+  repeated sint32 deltas = 3 [packed = true];
+}

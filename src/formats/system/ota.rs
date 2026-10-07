@@ -4,7 +4,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::{Input, Probe};
+use crate::formats::{Input, Probe, embedded_as};
 use crate::node::Node;
 
 const BE: Endian = Endian::Big;
@@ -28,7 +28,12 @@ async fn ota_payload(cx: Cx, input: Input) -> Result<()> {
         0
     };
     let at = if version >= 2 { 24u64 } else { 20 };
-    cx.emit(Node::new("Manifest (protobuf)").span(file.sub(at, manifest)));
+    // DeltaArchiveManifest, shown without its schema.
+    cx.emit(embedded_as(
+        "Manifest (protobuf)",
+        input.nested(file.sub(at, manifest)),
+        &crate::formats::data::wire::protobuf::FORMAT,
+    ));
     let sig_at = at.saturating_add(manifest);
     if signature > 0 {
         cx.emit(Node::new("Metadata signature").span(file.sub(sig_at, signature.into())));

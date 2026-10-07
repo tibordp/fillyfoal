@@ -13,6 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
+use crate::formats::util::wire::thrift::compact::{field_header, list_header, skip, varint, zigzag};
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 /// Nesting of Thrift structures followed.
@@ -38,7 +39,7 @@ fn probe(h: &Head<'_>) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Thrift compact protocol
+// Thrift compact protocol (schema-driven, over `util::wire::thrift`)
 
 #[derive(Clone, Copy)]
 pub enum Kind {
@@ -64,108 +65,6 @@ const fn f(id: i16, name: &'static str, kind: Kind) -> FieldDef {
 }
 
 const P: Kind = Kind::Plain;
-
-fn varint(data: &[u8], at: usize) -> Option<(u64, usize)> {
-    let (v, n) = crate::bytes::uleb128(data.get(at..)?)?;
-    Some((v, at.checked_add(n)?))
-}
-
-fn zigzag(v: u64) -> i64 {
-    ((v >> 1) as i64) ^ 0i64.wrapping_sub((v & 1) as i64)
-}
-
-/// Skips a value of compact type `t` at `at`; returns where it ends.
-fn skip(data: &[u8], at: usize, t: u8, depth: u32) -> Option<usize> {
-    if depth > MAX_DEPTH {
-        return None;
-    }
-    match t {
-        1 | 2 => Some(at),
-        3 => at.checked_add(1).filter(|&e| e <= data.len()),
-        4..=6 => varint(data, at).map(|(_, e)| e),
-        7 => at.checked_add(8).filter(|&e| e <= data.len()),
-        8 => {
-            let (len, e) = varint(data, at)?;
-            e.checked_add(to_usize(len))
-                .filter(|&end| end <= data.len())
-        }
-        9 | 10 => {
-            let (n, elem, mut pos) = list_header(data, at)?;
-            if n > to_u64(data.len()) {
-                return None;
-            }
-            for _ in 0..n {
-                pos = skip_element(data, pos, elem, depth.saturating_add(1))?;
-            }
-            Some(pos)
-        }
-        11 => {
-            let (n, mut pos) = varint(data, at)?;
-            if n == 0 {
-                return Some(pos);
-            }
-            if n > to_u64(data.len()) {
-                return None;
-            }
-            let kv = *data.get(pos)?;
-            pos = pos.checked_add(1)?;
-            for _ in 0..n {
-                pos = skip_element(data, pos, kv >> 4, depth.saturating_add(1))?;
-                pos = skip_element(data, pos, kv & 0x0f, depth.saturating_add(1))?;
-            }
-            Some(pos)
-        }
-        12 => {
-            let mut pos = at;
-            let mut id = 0i16;
-            loop {
-                let (field, t, next) = field_header(data, pos, id)?;
-                if t == 0 {
-                    return Some(next);
-                }
-                id = field;
-                pos = skip(data, next, t, depth.saturating_add(1))?;
-            }
-        }
-        _ => None,
-    }
-}
-
-/// Inside lists and maps, booleans take a byte of their own.
-fn skip_element(data: &[u8], at: usize, t: u8, depth: u32) -> Option<usize> {
-    match t {
-        1 | 2 => at.checked_add(1).filter(|&e| e <= data.len()),
-        _ => skip(data, at, t, depth),
-    }
-}
-
-/// A list/set header: element count, element type, position after.
-fn list_header(data: &[u8], at: usize) -> Option<(u64, u8, usize)> {
-    let b = *data.get(at)?;
-    let elem = b & 0x0f;
-    if b >> 4 == 15 {
-        let (n, e) = varint(data, at.checked_add(1)?)?;
-        Some((n, elem, e))
-    } else {
-        Some((u64::from(b >> 4), elem, at.checked_add(1)?))
-    }
-}
-
-/// A field header: field id, type (0 = stop), position after.
-fn field_header(data: &[u8], at: usize, last: i16) -> Option<(i16, u8, usize)> {
-    let b = *data.get(at)?;
-    let t = b & 0x0f;
-    if t == 0 {
-        return Some((0, 0, at.checked_add(1)?));
-    }
-    let delta = b >> 4;
-    if delta == 0 {
-        let (v, e) = varint(data, at.checked_add(1)?)?;
-        Some((i16::try_from(zigzag(v)).ok()?, t, e))
-    } else {
-        Some((last.checked_add(i16::from(delta))?, t, at.checked_add(1)?))
-    }
-}
 
 /// Bytes held in memory, with the span they came from.
 #[derive(Clone)]

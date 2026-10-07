@@ -1,0 +1,18 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ messages.tcompact — Thrift compact protocol, 2 records  [0x0+0x22]
+  ▾ Message 0 — CALL getUser, seqid 42  [0x0+0xe]
+      Name: "getUser"
+      Type: CALL (0x1)
+      Sequence id: 42
+    ▾ Arguments — struct, 1 field  [0xb+0x3]
+        field 1: 7 — i64  [0xb+0x2]
+  ▾ Message 1 — REPLY getUser, seqid 42  [0xe+0x14]
+      Name: "getUser"
+      Type: REPLY (0x2)
+      Sequence id: 42
+    ▾ Arguments — struct, 1 field  [0x19+0x9]
+      ▾ field 0 — struct, 1 field  [0x19+0x8]
+          field 1: "Ada" — string  [0x1b+0x5]

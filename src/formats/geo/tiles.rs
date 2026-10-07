@@ -1,7 +1,9 @@
 //! Map tiles and vector data: PMTiles archives, FlatGeobuf, Mapbox vector
 //! tiles (protobuf) and OpenStreetMap o5m/o5c streams.
 
-use super::{FbTable, enumv, fb_root, hex, leaf, pb_field, pb_fields, text, uint, varint};
+use super::{enumv, hex, leaf, text, uint};
+use crate::formats::util::wire::flatbuffers::mem::{self as fb, Table as FbTable};
+use crate::formats::util::wire::protobuf::{self as pb, varint, zigzag};
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -342,7 +344,7 @@ async fn flatgeobuf(cx: Cx, input: Input) -> Result<()> {
     }
     let hspan = file.sub_exact(12, size)?;
     let buf = cx.read(hspan).await?;
-    let root = fb_root(&buf).ok_or_else(|| Diagnostic::malformed("bad header table").at(hspan))?;
+    let root = fb::root(&buf).ok_or_else(|| Diagnostic::malformed("bad header table").at(hspan))?;
     let name = root.string(&buf, 0).map(|s| s.0).unwrap_or_default();
     let gtype = root.u8(&buf, 2).unwrap_or(0);
     let features = root.u64(&buf, 8).unwrap_or(0);
@@ -396,7 +398,7 @@ async fn flatgeobuf(cx: Cx, input: Input) -> Result<()> {
 
 async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
     let buf = cx.read(hspan).await?;
-    let root = fb_root(&buf).ok_or_else(|| Diagnostic::malformed("bad header table").at(hspan))?;
+    let root = fb::root(&buf).ok_or_else(|| Diagnostic::malformed("bad header table").at(hspan))?;
     let at = |pos: usize, len: usize| hspan.sub(to_u64(pos), to_u64(len));
     for (i, label) in [
         (0usize, "Name"),
@@ -510,7 +512,7 @@ async fn fgb_features(cx: Cx, (data, columns): (Span, Columns)) -> Result<()> {
 
 /// Geometry type and coordinate count of a feature.
 fn feature_summary(buf: &[u8], columns: &Columns) -> Option<String> {
-    let f = fb_root(buf)?;
+    let f = fb::root(buf)?;
     let g = f.table(buf, 0)?;
     let ty = g.u8(buf, 6).unwrap_or(0);
     let points = g.vector(buf, 1, 8).map_or(0, |v| v.0 / 2);
@@ -528,7 +530,7 @@ fn feature_summary(buf: &[u8], columns: &Columns) -> Option<String> {
 /// Decodes a feature's properties: `(column, value, byte range)`.
 fn properties(buf: &[u8], columns: &Columns) -> Vec<(String, Value, (usize, usize))> {
     let mut out = Vec::new();
-    let Some(f) = fb_root(buf) else { return out };
+    let Some(f) = fb::root(buf) else { return out };
     let Some((n, start)) = f.vector(buf, 1, 1) else {
         return out;
     };
@@ -601,7 +603,7 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
         return Err(Diagnostic::limit("feature too large").at(body));
     }
     let buf = cx.read(body).await?;
-    let f = fb_root(&buf).ok_or_else(|| Diagnostic::malformed("bad feature table").at(body))?;
+    let f = fb::root(&buf).ok_or_else(|| Diagnostic::malformed("bad feature table").at(body))?;
     if let Some(g) = f.table(&buf, 0) {
         let ty = g.u8(&buf, 6).unwrap_or(0);
         let mut node = Node::new("Geometry")
@@ -642,7 +644,7 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
 
 /// Whether `layer` parses as a vector-tile layer (version and name).
 fn is_layer(layer: &[u8]) -> bool {
-    let Some(fields) = pb_fields(layer) else {
+    let Some(fields) = pb::all_fields(layer) else {
         return false;
     };
     let version = fields
@@ -663,7 +665,7 @@ fn mvt_probe(h: &Head<'_>) -> bool {
     let mut at = 0usize;
     let mut layers = 0u32;
     while at < h.data.len() {
-        let Some(f) = pb_field(h.data, &mut at) else {
+        let Some(f) = pb::field(h.data, &mut at) else {
             // A layer cut off by the end of the head is fine after one
             // complete layer; otherwise the data is not a tile.
             return layers > 0 && to_u64(h.data.len()) < h.len;
@@ -695,7 +697,7 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
     let mut at = 0usize;
     let mut names = Vec::new();
     while at < data.len() {
-        let Some(f) = pb_field(&data, &mut at) else {
+        let Some(f) = pb::field(&data, &mut at) else {
             return Err(Diagnostic::malformed("bad protobuf field").at(file.tail(to_u64(at))));
         };
         let span = file.sub(to_u64(f.start), to_u64(f.end.saturating_sub(f.start)));
@@ -705,7 +707,7 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
                 .await;
             continue;
         }
-        let layer = pb_fields(f.payload(&data)).unwrap_or_default();
+        let layer = pb::all_fields(f.payload(&data)).unwrap_or_default();
         let payload = f.payload(&data);
         let name = layer
             .iter()
@@ -732,7 +734,7 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
 
 /// A tile value message as a value.
 fn mvt_value(v: &[u8]) -> Value {
-    let Some(f) = pb_fields(v).and_then(|f| f.into_iter().next()) else {
+    let Some(f) = pb::all_fields(v).and_then(|f| f.into_iter().next()) else {
         return Value::Bytes(v.to_vec());
     };
     match (f.number, f.wire) {
@@ -787,7 +789,7 @@ fn geometry_summary(cmds: &[u64]) -> String {
 
 async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     let data = cx.read(body).await?;
-    let fields = pb_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
+    let fields = pb::all_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
     let keys: Vec<String> = fields
         .iter()
         .filter(|f| f.number == 3)
@@ -825,7 +827,7 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                     .await
             }
             2 => {
-                let feat = pb_fields(f.payload(&data)).unwrap_or_default();
+                let feat = pb::all_fields(f.payload(&data)).unwrap_or_default();
                 let payload = f.payload(&data);
                 let mut node = Node::new(format!("Feature {index}")).span(span);
                 let mut parts = Vec::new();
@@ -895,12 +897,6 @@ const DATASETS: EnumTable = &[
     (0xff, "reset"),
     (0xfe, "end of file"),
 ];
-
-/// An o5m signed number: the low bit is the sign.
-fn zigzag(v: u64) -> i64 {
-    let half = (v >> 1).cast_signed();
-    if v & 1 != 0 { !half } else { half }
-}
 
 async fn o5m(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;

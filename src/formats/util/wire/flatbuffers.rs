@@ -6,6 +6,8 @@
 //! scalars, strings and vectors on demand through the context, so a model
 //! with gigabytes of weights costs only the tables that are looked at.
 //! Every offset is checked against the buffer before it is followed.
+//! [`mem`] is the same for small buffers already held in memory (headers,
+//! footers, per-record metadata).
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
@@ -266,4 +268,107 @@ pub async fn raw_table(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Reading a FlatBuffer held in memory (small buffers: headers, footers,
+/// per-record metadata). Accessors return `None` for absent fields and for
+/// anything that does not fit in the buffer.
+pub mod mem {
+    use crate::bytes::{i32_le, u16_le, u32_le, u64_le};
+
+    /// A table: its position and its vtable.
+    #[derive(Clone, Copy, Debug)]
+    pub struct Table {
+        pub pos: usize,
+        vtable: usize,
+        vlen: usize,
+    }
+
+    /// The root table of a buffer.
+    pub fn root(data: &[u8]) -> Option<Table> {
+        table(data, deref(data, 0)?)
+    }
+
+    /// The table at `pos`.
+    pub fn table(data: &[u8], pos: usize) -> Option<Table> {
+        let soffset = i64::from(i32_le(data, pos)?);
+        let vtable = usize::try_from(i64::try_from(pos).ok()?.checked_sub(soffset)?).ok()?;
+        let vlen = usize::from(u16_le(data, vtable)?);
+        (vlen >= 4 && vlen % 2 == 0).then_some(Table { pos, vtable, vlen })
+    }
+
+    /// The position an unsigned offset at `at` points to.
+    pub fn deref(data: &[u8], at: usize) -> Option<usize> {
+        at.checked_add(usize::try_from(u32_le(data, at)?).ok()?)
+    }
+
+    impl Table {
+        /// Absolute position of field `i`, if present.
+        pub fn field(&self, data: &[u8], i: usize) -> Option<usize> {
+            let entry = 4usize.checked_add(i.checked_mul(2)?)?;
+            if entry.checked_add(2)? > self.vlen {
+                return None;
+            }
+            let off = u16_le(data, self.vtable.checked_add(entry)?)?;
+            (off != 0).then(|| self.pos.saturating_add(usize::from(off)))
+        }
+
+        pub fn u8(&self, data: &[u8], i: usize) -> Option<u8> {
+            data.get(self.field(data, i)?).copied()
+        }
+
+        pub fn u16(&self, data: &[u8], i: usize) -> Option<u16> {
+            u16_le(data, self.field(data, i)?)
+        }
+
+        pub fn i16(&self, data: &[u8], i: usize) -> Option<i16> {
+            self.u16(data, i).map(u16::cast_signed)
+        }
+
+        pub fn i32(&self, data: &[u8], i: usize) -> Option<i32> {
+            i32_le(data, self.field(data, i)?)
+        }
+
+        pub fn u64(&self, data: &[u8], i: usize) -> Option<u64> {
+            u64_le(data, self.field(data, i)?)
+        }
+
+        pub fn i64(&self, data: &[u8], i: usize) -> Option<i64> {
+            self.u64(data, i).map(u64::cast_signed)
+        }
+
+        /// The table field `i` refers to.
+        pub fn table(&self, data: &[u8], i: usize) -> Option<Table> {
+            table(data, deref(data, self.field(data, i)?)?)
+        }
+
+        /// A string: its text and byte range.
+        pub fn string(&self, data: &[u8], i: usize) -> Option<(String, usize, usize)> {
+            let at = deref(data, self.field(data, i)?)?;
+            let len = usize::try_from(u32_le(data, at)?).ok()?;
+            let start = at.checked_add(4)?;
+            let end = start.checked_add(len)?;
+            Some((
+                String::from_utf8_lossy(data.get(start..end)?).into_owned(),
+                start,
+                end,
+            ))
+        }
+
+        /// A vector: element count and the position of the first element.
+        /// The count is checked against the buffer for elements of `width`
+        /// bytes.
+        pub fn vector(&self, data: &[u8], i: usize, width: usize) -> Option<(usize, usize)> {
+            let at = deref(data, self.field(data, i)?)?;
+            let n = usize::try_from(u32_le(data, at)?).ok()?;
+            let start = at.checked_add(4)?;
+            let end = start.checked_add(n.checked_mul(width)?)?;
+            (end <= data.len()).then_some((n, start))
+        }
+
+        /// The `j`th table of a vector of tables starting at `start`.
+        pub fn vector_table(data: &[u8], start: usize, j: usize) -> Option<Table> {
+            table(data, deref(data, start.checked_add(j.checked_mul(4)?)?)?)
+        }
+    }
 }

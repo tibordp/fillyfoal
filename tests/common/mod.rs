@@ -231,10 +231,26 @@ impl Host {
     }
 
     pub fn named(name: &str, data: Vec<u8>, limits: Limits) -> Self {
+        Host::open(name, data, limits, None)
+    }
+
+    /// Like [`Host::named`]; with a `format`, the data is dissected as that
+    /// format ("inspect as") instead of being identified.
+    pub fn open(
+        name: &str,
+        data: Vec<u8>,
+        limits: Limits,
+        format: Option<&'static formats::Format>,
+    ) -> Self {
         let mut session = Session::new(limits);
         let len = data.len() as u64;
-        let source = session.add_source(len);
-        let root = session.add_root(formats::root(name.to_owned(), Span::new(source, 0, len)));
+        let root = match format {
+            Some(format) => session.open_as(name.to_owned(), len, format),
+            None => {
+                let source = session.add_source(len);
+                session.add_root(formats::root(name.to_owned(), Span::new(source, 0, len)))
+            }
+        };
         Host {
             session,
             data,
@@ -381,13 +397,19 @@ pub fn diagnostic_kinds(host: &Host) -> Vec<fillyfoal::DiagKind> {
 
 /// Fully explores `data` and returns the rendered tree.
 pub fn explore(name: &str, data: &[u8]) -> String {
-    let mut host = Host::named(
+    explore_as(name, data, None)
+}
+
+/// Like [`explore`], dissecting `data` as `format` if given.
+pub fn explore_as(name: &str, data: &[u8], format: Option<&'static formats::Format>) -> String {
+    let mut host = Host::open(
         name,
         data.to_vec(),
         Limits {
             chunk_size: 64,
             ..Limits::default()
         },
+        format,
     );
     host.explore(host.root, 24, 1000);
     assert!(
@@ -401,14 +423,21 @@ pub fn explore(name: &str, data: &[u8]) -> String {
 /// Truncates and mutates `data` many ways; every variant must settle without
 /// panics, hangs or internal errors.
 pub fn robustness(name: &str, data: &[u8]) {
+    robustness_as(name, data, None);
+}
+
+/// Like [`robustness`], dissecting every variant as `format` if given.
+pub fn robustness_as(name: &str, data: &[u8], format: Option<&'static formats::Format>) {
     let settle = |variant: Vec<u8>, what: &str| {
-        let mut host = Host::new(
+        let mut host = Host::open(
+            "fixture.dll",
             variant,
             Limits {
                 chunk_size: 256,
                 max_work: 5_000_000,
                 ..Limits::default()
             },
+            format,
         );
         host.max_polls = 200_000;
         // Malformed tables can make trees exponentially wide; a user only

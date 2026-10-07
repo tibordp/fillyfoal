@@ -29,7 +29,7 @@ fn probe(name: &str, data: &[u8]) -> bool {
     };
     match &format.probe {
         Probe::Custom(f) => f(&head),
-        Probe::Magic(_) => panic!("{name} has no magic"),
+        Probe::Magic(_) | Probe::Never => panic!("{name} has no custom probe"),
     }
 }
 

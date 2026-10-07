@@ -1,11 +1,13 @@
 //! Inspect a file from the command line.
 //!
 //! ```text
-//! cargo run --example inspect -- FILE [--depth N] [--page N] [--path 3.0.1] [--chunk BYTES]
+//! cargo run --example inspect -- FILE [--depth N] [--page N] [--path 3.0.1] [--chunk BYTES] [--as FORMAT]
 //! ```
 //!
 //! `--path` selects a node by child indices (expanding along the way);
 //! `--depth` and `--page` control how much of its subtree is expanded.
+//! `--as` dissects the file as the named format ("inspect as") instead of
+//! identifying it.
 //! The last line reports how much of the file was actually read.
 
 use std::error::Error;
@@ -22,6 +24,7 @@ struct Options {
     page: u64,
     path: Vec<usize>,
     chunk: u64,
+    format: Option<&'static formats::Format>,
 }
 
 fn parse_args() -> Result<Options, Box<dyn Error>> {
@@ -32,6 +35,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
         page: 50,
         path: Vec::new(),
         chunk: 4096,
+        format: None,
     };
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or_else(|| format!("{arg} needs a value"));
@@ -39,6 +43,12 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
             "--depth" => options.depth = value()?.parse()?,
             "--page" => options.page = value()?.parse()?,
             "--chunk" => options.chunk = value()?.parse()?,
+            "--as" => {
+                let name = value()?;
+                options.format = Some(
+                    formats::by_name(&name).ok_or_else(|| format!("unknown format {name}"))?,
+                );
+            }
             "--path" => {
                 options.path = value()?
                     .split('.')
@@ -51,7 +61,7 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
     }
     if options.file.is_empty() {
         return Err(
-            "usage: inspect FILE [--depth N] [--page N] [--path 3.0.1] [--chunk BYTES]".into(),
+            "usage: inspect FILE [--depth N] [--page N] [--path 3.0.1] [--chunk BYTES] [--as FORMAT]".into(),
         );
     }
     Ok(options)
@@ -89,11 +99,25 @@ fn main() -> Result<(), Box<dyn Error>> {
         chunk_size: options.chunk,
         ..Limits::default()
     });
-    let source = session.add_source(len);
-    let root = session.add_root(formats::root(
-        options.file.clone(),
-        Span::new(source, 0, len),
-    ));
+    let (source, root) = match options.format {
+        Some(format) => {
+            let root = session.open_as(options.file.clone(), len, format);
+            let source = session
+                .node(root)
+                .and_then(|n| n.span)
+                .map(|s| s.source)
+                .ok_or("no source")?;
+            (source, root)
+        }
+        None => {
+            let source = session.add_source(len);
+            let root = session.add_root(formats::root(
+                options.file.clone(),
+                Span::new(source, 0, len),
+            ));
+            (source, root)
+        }
+    };
     let mut driver = Driver::new();
     driver.add(
         source,

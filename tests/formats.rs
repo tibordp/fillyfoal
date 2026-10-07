@@ -102,14 +102,31 @@ fn snapshot_name(path: &Path) -> String {
     parts.as_path().to_string_lossy().replace(['/', '\\'], "__")
 }
 
+/// The format a fixture is dissected as without identification: the one
+/// its directory names, if that format is never identified by content
+/// (`Probe::Never`; such formats are chosen by extension or by hand).
+fn chosen_format(path: &Path) -> Option<&'static fillyfoal::formats::Format> {
+    let dir = path.parent()?.file_name()?.to_str()?;
+    fillyfoal::formats::by_name(dir)
+        .filter(|f| matches!(f.probe, fillyfoal::formats::Probe::Never))
+}
+
 #[test]
 fn fixtures_snapshot() {
     for path in fixtures() {
         let data = load(&path);
-        insta::assert_snapshot!(
-            snapshot_name(&path),
-            common::explore(&display_name(&path), &data)
-        );
+        // Two calls, so the expression recorded in existing snapshots
+        // stays the same.
+        match chosen_format(&path) {
+            Some(format) => insta::assert_snapshot!(
+                snapshot_name(&path),
+                common::explore_as(&display_name(&path), &data, Some(format))
+            ),
+            None => insta::assert_snapshot!(
+                snapshot_name(&path),
+                common::explore(&display_name(&path), &data)
+            ),
+        }
     }
 }
 
@@ -126,7 +143,7 @@ fn fixtures_are_robust() {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let Some(path) = paths.get(i) else { break };
                     let data = load(path);
-                    common::robustness(&snapshot_name(path), &data);
+                    common::robustness_as(&snapshot_name(path), &data, chosen_format(path));
                 }
             });
         }
@@ -135,7 +152,8 @@ fn fixtures_are_robust() {
 
 /// The directory a fixture lives in names the format it must be identified
 /// as. This catches probes that are too greedy (or too strict) as formats
-/// accumulate.
+/// accumulate. Fixtures of formats that are never identified by content
+/// must not be claimed by any format.
 #[test]
 fn fixtures_are_identified_correctly() {
     use fillyfoal::formats::{HEAD_LEN, Head, TAIL_LEN, identify};
@@ -156,7 +174,11 @@ fn fixtures_are_identified_correctly() {
             len: data.len() as u64,
         };
         let found = identify(&probe).map(|f| f.name);
-        if found != Some(expected.as_str()) {
+        let wanted = match chosen_format(&path) {
+            Some(_) => None,
+            None => Some(expected.as_str()),
+        };
+        if found != wanted {
             wrong.push(format!(
                 "{}: expected {expected}, got {found:?}",
                 snapshot_name(&path)

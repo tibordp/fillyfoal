@@ -6,7 +6,7 @@
 //! against the schema: field numbers, wire types, plausible versions and
 //! the shape of the first nested message.
 
-use crate::bytes::{to_u64, to_usize, u32_le, u64_le, uleb128};
+use crate::bytes::{to_u64, u32_le, u64_le, uleb128};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::Cursor;
@@ -18,7 +18,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value};
 
-use super::proto::{self, Elem, Msg, Ty, f, fields_in, string_in, varint_in};
+use crate::formats::util::wire::protobuf::{self as proto, Elem, Msg, Ty, f, fields_in, string_in, varint_in};
 
 // ---------------------------------------------------------------------------
 // Probe helpers
@@ -555,11 +555,8 @@ async fn coreml(cx: Cx, input: Input) -> Result<()> {
         let data = cx.read(file.sub(d.at, d.len)).await?;
         let names = |num: u64| -> Vec<String> {
             fields_in(&data)
-                .filter(|r| r.num == num && r.wire == 2)
-                .filter_map(|r| {
-                    let body = data.get(to_usize(r.at)..to_usize(r.at.saturating_add(r.len)))?;
-                    string_in(body, 1)
-                })
+                .filter(|r| r.number == num && r.wire == 2)
+                .filter_map(|r| string_in(r.payload(&data), 1))
                 .collect()
         };
         io = format!(
@@ -787,11 +784,8 @@ async fn saved_model(cx: Cx, input: Input) -> Result<()> {
                 .await?;
             tags.extend(
                 fields_in(&data)
-                    .filter(|r| r.num == 4 && r.wire == 2)
-                    .filter_map(|r| {
-                        data.get(to_usize(r.at)..to_usize(r.at.saturating_add(r.len)))
-                            .map(|b| String::from_utf8_lossy(b).into_owned())
-                    }),
+                    .filter(|r| r.number == 4 && r.wire == 2)
+                    .map(|r| String::from_utf8_lossy(r.payload(&data)).into_owned()),
             );
             if let Some(v) = string_in(&data, 5) {
                 tags.push(format!("TF {v}"));

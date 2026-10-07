@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ far-and-caps.bin — Cap'n Proto message, 2 segments, root struct, 1 data word, 5 pointers  [0x0+0x80]
+  ▾ Segment table — 2 segments  [0x0+0x10]
+      Segment count - 1: 1  [0x0+0x4]
+      Segment 0 size: 9 — words, at 0x10  [0x4+0x4] → 0x10+0x48
+      Segment 1 size: 5 — words, at 0x58  [0x8+0x4] → 0x58+0x28
+  ▾ Root — struct, 1 data word, 5 pointers  [0x10+0x8] → 0x18+0x30
+    ▾ Data section — 1 word  [0x18+0x8]
+        word 0: 0x10000002a — i32 [42, 1]  [0x18+0x8]
+    ▾ pointer 0 — struct, 1 data word, 1 pointer (through a far pointer to segment 1 word 0 (double))  [0x20+0x8] → 0x68+0x10
+      ▾ Data section — 1 word  [0x68+0x8]
+          word 0: 0x1234 — i32 [4660, 0]  [0x68+0x8]
+        pointer 0: "hi" — text, 2 bytes  [0x70+0x8] → 0x78+0x3
+      pointer 1 — capability 3  [0x28+0x8]
+      pointer 2 — list of 5 VOID  [0x30+0x8] → 0x38+0x0
+    ▾ pointer 3 — list of 2 EIGHT_BYTES  [0x38+0x8] → 0x48+0x10
+        [0]: -5  [0x48+0x8]
+        [1]: 2.5 — double?; 64-bit 0x4004000000000000  [0x50+0x8]
+      pointer 4 — null  [0x40+0x8]
