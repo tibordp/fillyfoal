@@ -6,6 +6,7 @@
 //! when expanded.
 
 mod extra;
+mod managed;
 pub(crate) mod resource;
 pub(crate) mod tables;
 pub(crate) mod version;

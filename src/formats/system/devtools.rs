@@ -723,74 +723,14 @@ fn lmdb_probe(h: &Head<'_>) -> bool {
 }
 
 declare_format!(pub LMDB = "lmdb", "LMDB database", ["mdb"], "application/x-lmdb",
-    Probe::Custom(lmdb_probe), lmdb);
-
-record! {
-    pub struct LmdbMeta {
-        page: u64 "Page number",
-        _pad: u16 "Padding",
-        flags: u16 "Page flags" .hex(),
-        _bounds: u32 "Bounds",
-        magic: u32 "Magic" .hex(),
-        version: u32 "Version",
-        address: u64 "Fixed map address" .hex(),
-        map_size: u64 "Map size",
-    }
-}
-
-async fn lmdb(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let meta: LmdbMeta = emit_record(&cx, file.sub(0, LmdbMeta::SIZE), LE).await?;
-    // Two meta pages; the second sits one page in (page size from the OS,
-    // usually 4096).
-    let txn_at = 16u64 + 24 + 2 * 48 + 8;
-    let txn = crate::bytes::u64_le(&cx.read_avail(file.sub(txn_at, 8)).await?, 0).unwrap_or(0);
-    cx.emit(
-        Node::new("Last transaction")
-            .span(file.sub(txn_at, 8))
-            .value(Value::UInt {
-                value: txn,
-                bits: 64,
-                radix: crate::value::Radix::Dec,
-            }),
-    );
-    cx.emit(Node::new("Pages").span(file.tail(8192)));
-    cx.annotate(format!(
-        "LMDB v{}, map size {} bytes, txn {txn}",
-        meta.version, meta.map_size
-    ));
-    Ok(())
-}
+    Probe::Custom(lmdb_probe), super::kvstore::lmdb::dissect);
 
 fn bolt_probe(h: &Head<'_>) -> bool {
     u32_le(h.data, 16) == Some(0xed0c_daed)
 }
 
 declare_format!(pub BOLT = "bbolt", "BoltDB / bbolt database", ["db", "bolt"], "application/x-bolt",
-    Probe::Custom(bolt_probe), bolt);
-
-async fn bolt(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 80)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.u64("Page ID").emit()?;
-    f.u16("Flags").hex().emit()?;
-    f.u16("Count").emit()?;
-    f.u32("Overflow").emit()?;
-    f.u32("Magic").hex().emit()?;
-    let version = f.u32("Version").emit()?;
-    let page_size = f.u32("Page size").emit()?;
-    f.u32("Flags").hex().emit()?;
-    f.u64("Root bucket page").emit()?;
-    f.u64("Root bucket sequence").emit()?;
-    f.u64("Freelist page").emit()?;
-    let pages = f.u64("High water mark (pages)").emit()?;
-    let txid = f.u64("Transaction ID").emit()?;
-    cx.annotate(format!(
-        "bbolt v{version}, {pages} pages of {page_size} bytes, txid {txid}"
-    ));
-    Ok(())
-}
+    Probe::Custom(bolt_probe), super::kvstore::bbolt::dissect);
 
 declare_format!(pub PROM_CHUNKS = "prometheus-chunks", "Prometheus TSDB chunk segment", [], "application/x-prometheus-tsdb",
     Probe::Magic(&[(0, b"\x85\xbd\x40\xdd")]), prom_chunks);

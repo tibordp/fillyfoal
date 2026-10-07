@@ -1870,3 +1870,76 @@ fn wire_encodings_are_offered_by_extension() {
         );
     }
 }
+
+/// Compressed `.blend` files (zstd from Blender 3.0 on, gzip before) are
+/// identified by their compression; the Blender file inside is recognised,
+/// and opening one as Blender explicitly decompresses it too (see
+/// `tests/data/blend/make_blend.py` for how the files were made).
+#[test]
+fn compressed_blend_files() {
+    for (file, wrapper) in [
+        ("scene.blend.zst", "Decompressed"),
+        ("scene.blend.gz", "Gzip stream"),
+    ] {
+        let path = format!("{}/tests/data/blend/{file}", env!("CARGO_MANIFEST_DIR"));
+        let data = std::fs::read(path).unwrap();
+        // Identified by content: the compression format, the scene inside.
+        let tree = common::explore(file, &data);
+        assert!(tree.contains("OB Cube"), "{file}:\n{tree}");
+        // Opened as Blender: the dissector offers the decompressed file.
+        let len = data.len() as u64;
+        let mut host = Host::with_chunk(data, 4096);
+        let id = host
+            .session
+            .open_as(file, len, formats::by_name("blend").unwrap());
+        host.explore(id, 8, 100);
+        let tree = fillyfoal::render::tree(&host.session, id);
+        assert!(tree.contains(wrapper), "{file}:\n{tree}");
+        assert!(tree.contains("OB Cube"), "{file}:\n{tree}");
+    }
+}
+
+#[test]
+fn keepass_retries_the_password_and_hides_secrets() {
+    let read = |p: &str| {
+        std::fs::read(format!("{}/tests/fixtures/{p}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    };
+    for (name, path) in [
+        ("a.kdbx", "external/kdbx/argon2d-chacha20.kdbx"),
+        ("b.kdbx", "external/kdbx/kdbx3.kdbx"),
+        ("c.kdb", "synthetic/kdb/twofish.kdb"),
+    ] {
+        let mut host = Host::named(name, read(path), Limits::default());
+        host.passwords = vec!["wrong".into(), "fillyfoal".into()];
+        host.explore_all();
+        let text = host.render();
+        assert_eq!(host.secret_requests.len(), 2, "{name}");
+        assert!(text.contains("Router"), "{name}: not unlocked\n{text}");
+        for secret in ["hunter2", "correct horse", "s3cret"] {
+            assert!(!text.contains(secret), "{name}: {secret} leaked");
+        }
+        // Without a password, nothing beyond the header.
+        let mut host = Host::named(name, read(path), Limits::default());
+        host.passwords.clear();
+        host.explore_all();
+        let text = host.render();
+        assert!(text.contains("no password, or a wrong one"), "{name}");
+        assert!(!text.contains("Router"), "{name}");
+    }
+}
+
+#[test]
+fn keepass_refuses_runaway_key_derivations() {
+    // AES-KDF rounds patched to 2^40 in the KDBX 3.1 fixture: refused up
+    // front instead of running into the work limit.
+    let mut data = std::fs::read(format!(
+        "{}/tests/fixtures/external/kdbx/kdbx3.kdbx",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    data[0x6f..0x77].copy_from_slice(&(1u64 << 40).to_le_bytes());
+    let mut host = Host::named("x.kdbx", data, Limits::default());
+    host.explore_all();
+    let text = host.render();
+    assert!(text.contains("key derivation too expensive"), "{text}");
+}

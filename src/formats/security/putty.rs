@@ -18,10 +18,11 @@
 //! passphrase); AES-256-CBC with a zero IV and the key SHA-1(0 ‖
 //! passphrase) ‖ SHA-1(1 ‖ passphrase) (each counter a 32-bit big-endian
 //! prefix). Version 3: HMAC-SHA-256, with an empty key when unencrypted;
-//! encrypted keys take cipher key, IV and MAC key from Argon2, which we do
-//! not implement (shown as unsupported). Private key material is shown by
-//! size only.
+//! encrypted keys take cipher key, IV and MAC key (32 + 16 + 32 bytes) from
+//! Argon2 over the passphrase and `Argon2-Salt`. Private key material is
+//! shown by size only.
 
+use crate::codec::crypto::argon2::{Argon2, Params, Variant};
 use crate::codec::crypto::{Aes, Hash, Hmac, Sha1, Sha256, cbc_decrypt};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -32,6 +33,7 @@ use crate::formats::text::decode::{Transform, decoded_node, derive_with};
 use crate::formats::text::ssh::key_bits;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
+use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
 use crate::value::{Radix, Value};
 
@@ -55,7 +57,20 @@ struct Private {
     public: Option<Span>,
     private: Span,
     mac: Option<(String, Span)>,
+    /// Version 3 key derivation: variant, memory (KiB), passes,
+    /// parallelism, salt.
+    argon: Option<(String, u32, u32, u32, Vec<u8>)>,
 }
+
+/// The version 3 key derivation lines as read (variant, memory, passes,
+/// parallelism, salt).
+type ArgonHeader = (
+    String,
+    Option<u32>,
+    Option<u32>,
+    Option<u32>,
+    Option<Vec<u8>>,
+);
 
 fn unhex(s: &str) -> Option<Vec<u8>> {
     let s = s.trim();
@@ -84,6 +99,7 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
     let mut comment = String::new();
     let mut public = None;
     let mut mac = None;
+    let mut argon: ArgonHeader = (String::new(), None, None, None, None);
     // The header values the private key's expansion needs (the MAC comes
     // after the private lines).
     for (line, span) in &all {
@@ -95,9 +111,18 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
             Some(("Encryption", v)) => encryption = v.to_owned(),
             Some(("Comment", v)) => comment = v.to_owned(),
             Some(("Private-MAC" | "Private-Hash", v)) => mac = Some((v.to_owned(), *span)),
+            Some(("Key-Derivation", v)) => argon.0 = v.to_owned(),
+            Some(("Argon2-Memory", v)) => argon.1 = v.trim().parse().ok(),
+            Some(("Argon2-Passes", v)) => argon.2 = v.trim().parse().ok(),
+            Some(("Argon2-Parallelism", v)) => argon.3 = v.trim().parse().ok(),
+            Some(("Argon2-Salt", v)) => argon.4 = unhex(v),
             _ => {}
         }
     }
+    let argon = match argon {
+        (variant, Some(m), Some(p), Some(l), Some(salt)) => Some((variant, m, p, l, salt)),
+        _ => None,
+    };
     let encrypted = encryption != "none";
     let mut public_blob = Vec::new();
     let mut i = 0usize;
@@ -158,6 +183,7 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
                     public,
                     private: body,
                     mac: mac.clone(),
+                    argon: argon.clone(),
                 };
                 cx.emit(
                     Node::new("Private key")
@@ -292,6 +318,28 @@ fn v2_open(
 
 const PROMPT: &str = "Passphrase for the PuTTY private key";
 
+/// Most Argon2 block compressions run for a key (PuTTYgen's defaults are
+/// far below: 8 MiB and a pass count tuned to about 100 ms).
+const MAX_ARGON2_COST: u64 = 1 << 22;
+
+fn argon_params(p: &Private) -> Option<Params> {
+    let (variant, memory, passes, lanes, _) = p.argon.as_ref()?;
+    let variant = match variant.as_str() {
+        "Argon2d" => Variant::D,
+        "Argon2i" => Variant::I,
+        "Argon2id" => Variant::Id,
+        _ => return None,
+    };
+    Some(Params {
+        variant,
+        version: 0x13,
+        memory_kib: *memory,
+        iterations: *passes,
+        lanes: *lanes,
+        out_len: 80,
+    })
+}
+
 async fn private_key(cx: Cx, p: Private) -> Result<()> {
     let (decoded, error) = derive_with(&cx, p.private, Transform::Base64).await?;
     if let Some(e) = error {
@@ -309,15 +357,73 @@ async fn private_key(cx: Cx, p: Private) -> Result<()> {
     let mac_span = p.mac.as_ref().map(|(_, s)| *s);
     let encrypted = p.encryption != "none";
     let (plain, mac_ok, what) = match (p.version, encrypted) {
-        (3, true) => {
-            cx.emit(
-                Node::new("Encrypted data")
-                    .span(decoded)
-                    .diag(Diagnostic::unsupported(
-                        "Argon2 key derivation (PPK version 3 encryption)",
-                    )),
-            );
-            return Ok(());
+        (3, true) if p.encryption == "aes256-cbc" => {
+            let Some(mac) = mac else {
+                return Err(Diagnostic::malformed("missing or malformed Private-MAC").at(p.private));
+            };
+            if blob.len().checked_rem(16) != Some(0) {
+                return Err(
+                    Diagnostic::malformed("encrypted length is not a multiple of 16").at(decoded),
+                );
+            }
+            let Some(params) = argon_params(&p) else {
+                return Err(
+                    Diagnostic::malformed("missing or malformed Argon2 parameters").at(p.private),
+                );
+            };
+            if params.blocks().saturating_mul(1024) > cx.limits().max_derived
+                || params.cost() > MAX_ARGON2_COST
+            {
+                cx.emit(
+                    Node::new("Encrypted data")
+                        .span(decoded)
+                        .diag(Diagnostic::limit(format!(
+                            "Argon2 with {} KiB and {} passes exceeds the limits",
+                            params.memory_kib, params.iterations
+                        ))),
+                );
+                return Ok(());
+            }
+            let salt = p.argon.as_ref().map(|a| a.4.clone()).unwrap_or_default();
+            let mut opened = None;
+            for attempt in 0..MAX_ATTEMPTS {
+                let request = SecretRequest::password(p.input.span, PROMPT, attempt);
+                let Some(secret) = cx.secret(request).await else {
+                    break;
+                };
+                let Some(mut state) = Argon2::new(params.clone(), secret.expose(), &salt, &[], &[])
+                else {
+                    break;
+                };
+                while !state.step(1) {
+                    cx.checkpoint().await;
+                }
+                let keys = state.finish();
+                let (Some(key), Some(iv), Some(mac_key)) =
+                    (keys.get(..32), keys.get(32..48), keys.get(48..80))
+                else {
+                    break;
+                };
+                let Some(aes) = Aes::new(key) else {
+                    break;
+                };
+                let plain = cbc_decrypt(&aes, iv, &blob);
+                if hmac_with::<Sha256>(mac_key, &mac_data(&p, &public, &plain)) == mac {
+                    opened = Some(plain);
+                    break;
+                }
+            }
+            let Some(plain) = opened else {
+                cx.emit(
+                    Node::new("Encrypted data")
+                        .span(decoded)
+                        .diag(Diagnostic::unsupported(
+                            "encrypted (no or wrong passphrase)",
+                        )),
+                );
+                return Ok(());
+            };
+            (plain, Some(true), "HMAC-SHA-256")
         }
         (3, false) => {
             let ok = mac
@@ -449,4 +555,32 @@ async fn private_fields(cx: &Cx, algorithm: &str, span: Span) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn argon2_80_byte_output_matches_argon2_cffi() {
+        // `argon2.low_level.hash_secret_raw(b"fillyfoal", bytes(range(16)),
+        // 1, 64, 1, 80, Type.ID)`: the PPK v3 key material length.
+        let params = Params {
+            variant: Variant::Id,
+            version: 0x13,
+            memory_kib: 64,
+            iterations: 1,
+            lanes: 1,
+            out_len: 80,
+        };
+        let salt: Vec<u8> = (0..16).collect();
+        let mut a = Argon2::new(params, b"fillyfoal", &salt, &[], &[]).unwrap();
+        while !a.step(64) {}
+        let hex: String = a.finish().iter().map(|b| format!("{b:02x}")).collect();
+        assert_eq!(
+            hex,
+            "6ebd0e3db8f0afbf7762bb78e8dfefec15a49b9ceea97d8b5e9b95a204d551563b984f20592a4504f52b67891c63f39359cb4885aee38a971ddef308c72388656015a7e02ff1e026973ed690c3994852"
+        );
+    }
 }

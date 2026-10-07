@@ -6,7 +6,9 @@
 //! primary and Joliet descriptors each hold a root directory record;
 //! directories are walked lazily from there, file extents are dissected as
 //! embedded files. Rock Ridge `NM` entries give POSIX names; El Torito boot
-//! records point at a boot catalog whose images are dissected too.
+//! records point at a boot catalog whose images are dissected too. UDF
+//! volumes (UDF-only discs and the UDF side of bridge discs) are handed to
+//! [`super::udf`].
 
 use std::sync::Arc;
 
@@ -863,7 +865,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(count(n, "descriptor", "descriptors"))
             .lazy(emit_nodes, Arc::new(descriptors)),
     );
-    let mut features = Vec::new();
+    let mut features: Vec<String> = Vec::new();
     for (name, vol) in [
         ("Root directory", primary),
         ("Joliet root directory", joliet),
@@ -894,7 +896,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .iter()
                     .any(|(s, _)| s == b"SP" || s == b"RR")
             }) {
-                features.push("Rock Ridge");
+                features.push("Rock Ridge".to_owned());
             }
             let pt = file.sub(
                 u64::from(v.path_table_l).saturating_mul(block_size),
@@ -902,12 +904,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             );
             cx.emit(Node::new("Path table").span(pt).lazy(path_table, pt));
         } else {
-            features.push("Joliet");
+            features.push("Joliet".to_owned());
         }
         cx.emit(entry_node(name.to_owned(), &r, state).summary(human_size(r.size.into())));
     }
     if let Some(catalog) = boot {
-        features.push("El Torito");
+        features.push("El Torito".to_owned());
         let block_size = primary.map_or(SECTOR, |(v, _)| u64::from(v.block_size.max(1)));
         let span = file.sub(u64::from(catalog).saturating_mul(block_size), SECTOR);
         cx.emit(
@@ -916,17 +918,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .lazy(boot_catalog, (input, span, block_size)),
         );
     }
+    let mut udf_summary = None;
     if udf {
-        if primary.is_some() {
-            features.push("UDF");
-        }
-        let anchor = file.sub(256u64.saturating_mul(SECTOR), SECTOR);
-        if anchor.len == SECTOR {
-            cx.emit(
-                Node::new("UDF anchor volume descriptor pointer")
-                    .span(anchor)
-                    .lazy(udf_anchor, anchor),
-            );
+        match super::udf::load(&cx, input).await? {
+            Some(vol) if primary.is_some() => {
+                features.push(vol.version());
+                cx.emit(
+                    Node::new("UDF file system")
+                        .summary(format!("{}, {:?}", vol.version(), super::udf::label(&vol)))
+                        .lazy(super::udf::volume, input),
+                );
+            }
+            Some(vol) => {
+                super::udf::emit(&cx, &vol).await?;
+                udf_summary = Some(format!(
+                    "{} image {:?}, {}",
+                    vol.version(),
+                    super::udf::label(&vol),
+                    human_size(file.len)
+                ));
+            }
+            None => cx.diag(Diagnostic::warning(
+                "no UDF anchor volume descriptor pointer found",
+            )),
         }
     }
     let size = primary.map_or(file.len, |(v, _)| {
@@ -934,6 +948,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     });
     let mut summary = if primary.is_some() {
         format!("ISO 9660 image {label:?}, {}", human_size(size))
+    } else if let Some(s) = udf_summary {
+        s
     } else if udf {
         format!("UDF image, {}", human_size(file.len))
     } else {
@@ -955,38 +971,4 @@ fn capitalize(s: &str) -> String {
         Some(first) => first.to_uppercase().chain(c).collect(),
         None => String::new(),
     }
-}
-
-/// UDF anchor at sector 256: a descriptor tag and two extents.
-async fn udf_anchor(cx: Cx, span: Span) -> Result<()> {
-    let block = cx.block(span.sub(0, 32)).await?;
-    let mut f = Fields::emitting(&cx, &block, LE);
-    let tag = f
-        .u16("Tag identifier")
-        .with(|&t, n| {
-            n.summary(if t == 2 {
-                "anchor volume descriptor pointer"
-            } else {
-                "not an anchor (expected 2)"
-            })
-        })
-        .emit()?;
-    f.u16("Descriptor version").emit()?;
-    f.u8("Tag checksum").hex().emit()?;
-    f.u8("Reserved").emit()?;
-    f.u16("Tag serial number").emit()?;
-    f.u16("Descriptor CRC").hex().emit()?;
-    f.u16("Descriptor CRC length").emit()?;
-    f.u32("Tag location").emit()?;
-    f.u32("Main volume descriptor sequence length").emit()?;
-    f.u32("Main volume descriptor sequence location").emit()?;
-    f.u32("Reserve volume descriptor sequence length").emit()?;
-    f.u32("Reserve volume descriptor sequence location")
-        .emit()?;
-    if tag != 2 {
-        cx.diag(Diagnostic::warning(
-            "no anchor volume descriptor pointer at sector 256",
-        ));
-    }
-    Ok(())
 }

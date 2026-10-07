@@ -3,7 +3,8 @@
 //! images, embedded-device filesystems and console containers (`devices`),
 //! Android OTA payloads, Intel HEX and S-records (`hexfile`), terminfo,
 //! gettext catalogs (`mo`), Apple BOM stores, Windows compatibility
-//! databases (`shim_sdb`), developer artifacts (`devtools`, Delphi form
+//! databases (`shim_sdb`), .NET resources and BinaryFormatter streams
+//! (`dotnet`), developer artifacts (`devtools`, Delphi form
 //! streams in `delphi`) and Git storage.
 
 pub mod artifacts;
@@ -11,9 +12,11 @@ pub mod bom;
 pub mod delphi;
 pub mod devices;
 pub mod devtools;
+pub mod dotnet;
 pub mod firmware;
 pub mod git;
 pub mod hexfile;
+pub mod kvstore;
 pub mod mo;
 pub mod ota;
 pub mod platform;

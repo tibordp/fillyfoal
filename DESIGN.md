@@ -69,10 +69,13 @@ exploration pays for additional work only as needed.
   needed): DEFLATE/zlib, bzip2, LZMA/LZMA2/xz (+ BCJ x86/ARM/ARM64, Delta),
   Zstandard, Brotli, LZ4, Snappy, LZFSE/LZVN and Apple `pbz*`, Unix `.Z`,
   LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
-  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
+  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, ACE 1.0/2.0 (acefile as
+  oracle), the StuffIt methods (RLE90, LZW, Huffman, LZAH, 13, Arsenic; no
+  oracle), Cap'n Proto packing, the PDF/PostScript
   filters and predictors, and the ciphers that unlock content (ZipCrypto,
-  AES, RC4, Type 1 eexec, MPQ, AES-GCM, ChaCha20-Poly1305, and OpenSSH's
-  bcrypt_pbkdf over Blowfish). Each is checked byte-exact against a real
+  AES, RC4, ChaCha20, Twofish, Type 1 eexec, MPQ; Argon2 and BLAKE2b for
+  KeePass; AES-GCM, Poly1305 and bcrypt_pbkdf over Blowfish for OpenSSH
+  keys). Each is checked byte-exact against a real
   encoder where one was available (CLI tools, Python packages via `uv`,
   `hdiutil`, `compression_tool`, liblzo2, 7-Zip as an extraction oracle),
   otherwise against spec vectors and spec-derived encoders; the test names

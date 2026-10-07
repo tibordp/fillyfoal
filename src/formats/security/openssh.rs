@@ -22,8 +22,8 @@
 //! never shown: secret fields show only their size.
 
 use crate::codec::crypto::bcrypt::BcryptPbkdf;
-use crate::codec::crypto::chacha::openssh_chachapoly_open;
 use crate::codec::crypto::gcm::aes_gcm_open;
+use crate::codec::crypto::poly1305::openssh_chachapoly_open;
 use crate::codec::crypto::{Aes, TripleDes, cbc_decrypt};
 use crate::cx::Cx;
 use crate::declare_format;

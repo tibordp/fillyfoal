@@ -621,41 +621,6 @@ async fn clarisworks(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// SketchUp models
-
-declare_format!(pub SKETCHUP = "sketchup", "SketchUp model", ["skp", "skb"], "application/vnd.sketchup.skp",
-    Probe::Magic(&[(0, b"\xff\xfe\xff\x0eS\0k\0e\0t\0c\0h\0U\0p\0 \0M\0o\0d\0e\0l\0")]), sketchup);
-
-/// A CArchive Unicode string: FF FE FF, a length byte, then UTF-16LE.
-async fn carchive_string(cur: &mut Cursor<'_>) -> Result<(String, Span)> {
-    let start = cur.pos();
-    let tag = cur.bytes(3).await?;
-    if tag != b"\xff\xfe\xff" {
-        return Err(Diagnostic::malformed("expected a Unicode string marker").at(cur.since(start)));
-    }
-    let n = cur.u8().await?;
-    let raw = cur.bytes(u64::from(n).saturating_mul(2)).await?;
-    Ok((crate::text::utf16(&raw, LE), cur.since(start)))
-}
-
-async fn sketchup(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let mut cur = Cursor::new(&cx, file, LE);
-    let (magic, span) = carchive_string(&mut cur).await?;
-    cx.emit(Node::new("Signature").span(span).value(text(magic)));
-    let (version, span) = carchive_string(&mut cur).await?;
-    cx.emit(Node::new("Version").span(span).value(text(version.clone())));
-    cx.emit(
-        Node::new("Model data")
-            .span(file.tail(cur.pos()))
-            .diag(Diagnostic::note("MFC archive objects are not dissected")),
-    );
-    let v = version.trim_matches(|c| c == '{' || c == '}');
-    cx.annotate(format!("SketchUp model, version {v}"));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // SYLK (symbolic link interchange: Multiplan, Excel)
 
 declare_format!(pub SYLK = "sylk", "Symbolic Link spreadsheet (SYLK)", ["slk", "sylk"], "application/x-sylk",

@@ -4,13 +4,17 @@
 //! codecs; correct, but not hardened against side channels (they decrypt
 //! local files for display, not secrets in transit).
 
+pub mod argon2;
 pub mod bcrypt;
-pub mod chacha;
+pub mod blake2b;
+pub mod chacha20;
 pub mod cipher;
 pub mod gcm;
 pub mod hash;
 pub mod mpq;
+pub mod poly1305;
 pub mod stream;
+pub mod twofish;
 
 pub use cipher::{
     Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7,

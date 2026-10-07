@@ -1,83 +1,10 @@
-//! ChaCha20 and Poly1305 (RFC 8439), and OpenSSH's
-//! `chacha20-poly1305@openssh.com` as used for private key files.
+//! Poly1305 (RFC 8439), and OpenSSH's `chacha20-poly1305@openssh.com` as
+//! used for private key files (over [`super::chacha20`]).
 //!
 //! Checked against the RFC 8439 test vectors (tests below) and end to end
 //! against `ssh-keygen -Z chacha20-poly1305@openssh.com` keys.
 
-/// One 64-byte ChaCha20 block. `input` is the last four state words as
-/// bytes: counter and nonce (RFC 8439: 32-bit counter + 96-bit nonce; the
-/// original variant OpenSSH uses: 64-bit counter + 64-bit nonce).
-pub fn chacha20_block(key: &[u8; 32], input: &[u8; 16]) -> [u8; 64] {
-    let word = |b: &[u8], i: usize| -> u32 {
-        let at = i.saturating_mul(4);
-        b.get(at..at.saturating_add(4))
-            .and_then(|w| <[u8; 4]>::try_from(w).ok())
-            .map_or(0, u32::from_le_bytes)
-    };
-    let mut init = [0u32; 16];
-    let constants = [0x6170_7865, 0x3320_646e, 0x7962_2d32, 0x6b20_6574];
-    for (i, s) in init.iter_mut().enumerate() {
-        *s = match i {
-            0..4 => constants.get(i).copied().unwrap_or(0),
-            4..12 => word(key, i.saturating_sub(4)),
-            _ => word(input, i.saturating_sub(12)),
-        };
-    }
-    let mut x = init;
-    fn qr(x: &mut [u32; 16], a: usize, b: usize, c: usize, d: usize) {
-        let g = |x: &[u32; 16], i: usize| x.get(i).copied().unwrap_or(0);
-        let set = |x: &mut [u32; 16], i: usize, v: u32| {
-            if let Some(s) = x.get_mut(i) {
-                *s = v;
-            }
-        };
-        set(x, a, g(x, a).wrapping_add(g(x, b)));
-        set(x, d, (g(x, d) ^ g(x, a)).rotate_left(16));
-        set(x, c, g(x, c).wrapping_add(g(x, d)));
-        set(x, b, (g(x, b) ^ g(x, c)).rotate_left(12));
-        set(x, a, g(x, a).wrapping_add(g(x, b)));
-        set(x, d, (g(x, d) ^ g(x, a)).rotate_left(8));
-        set(x, c, g(x, c).wrapping_add(g(x, d)));
-        set(x, b, (g(x, b) ^ g(x, c)).rotate_left(7));
-    }
-    for _ in 0..10 {
-        qr(&mut x, 0, 4, 8, 12);
-        qr(&mut x, 1, 5, 9, 13);
-        qr(&mut x, 2, 6, 10, 14);
-        qr(&mut x, 3, 7, 11, 15);
-        qr(&mut x, 0, 5, 10, 15);
-        qr(&mut x, 1, 6, 11, 12);
-        qr(&mut x, 2, 7, 8, 13);
-        qr(&mut x, 3, 4, 9, 14);
-    }
-    let mut out = [0u8; 64];
-    for ((o, a), b) in out.as_chunks_mut::<4>().0.iter_mut().zip(x).zip(init) {
-        *o = a.wrapping_add(b).to_le_bytes();
-    }
-    out
-}
-
-/// XORs `data` with the original ChaCha20 keystream (64-bit nonce, 64-bit
-/// block counter starting at `counter`).
-pub fn chacha20_xor(key: &[u8; 32], nonce: &[u8; 8], counter: u64, data: &mut [u8]) {
-    let mut counter = counter;
-    for chunk in data.chunks_mut(64) {
-        let mut input = [0u8; 16];
-        input
-            .get_mut(..8)
-            .unwrap_or_default()
-            .copy_from_slice(&counter.to_le_bytes());
-        input
-            .get_mut(8..)
-            .unwrap_or_default()
-            .copy_from_slice(nonce);
-        let ks = chacha20_block(key, &input);
-        for (d, k) in chunk.iter_mut().zip(ks) {
-            *d ^= k;
-        }
-        counter = counter.wrapping_add(1);
-    }
-}
+use super::chacha20::chacha20;
 
 /// The Poly1305 one-time authenticator of `msg` under `key` (r || s).
 pub fn poly1305(key: &[u8; 32], msg: &[u8]) -> [u8; 16] {
@@ -215,16 +142,21 @@ pub fn poly1305(key: &[u8; 32], msg: &[u8]) -> [u8; 16] {
 /// keys only the packet-length cipher, unused here), the nonce is the
 /// sequence number. Returns the plaintext and whether `tag` verified.
 pub fn openssh_chachapoly_open(key: &[u8], seq: u64, data: &[u8], tag: &[u8]) -> (Vec<u8>, bool) {
-    let Some(main) = key.get(..32).and_then(|k| <[u8; 32]>::try_from(k).ok()) else {
+    // The original ChaCha20 (64-bit counter, 64-bit nonce) is RFC 8439's
+    // with the counter's high word as the first nonce word: zero here.
+    let mut nonce = [0u8; 12];
+    nonce
+        .get_mut(4..)
+        .unwrap_or_default()
+        .copy_from_slice(&seq.to_be_bytes());
+    let main = key.get(..32).unwrap_or_default();
+    let Some(poly_key) =
+        chacha20(main, &nonce, 0, &[0; 32]).and_then(|k| <[u8; 32]>::try_from(k.as_slice()).ok())
+    else {
         return (Vec::new(), false);
     };
-    let nonce = seq.to_be_bytes();
-    let mut poly_key = [0u8; 32];
-    chacha20_xor(&main, &nonce, 0, &mut poly_key);
     let ok = poly1305(&poly_key, data).as_slice() == tag;
-    let mut out = data.to_vec();
-    chacha20_xor(&main, &nonce, 1, &mut out);
-    (out, ok)
+    (chacha20(main, &nonce, 1, data).unwrap_or_default(), ok)
 }
 
 #[cfg(test)]
@@ -246,20 +178,6 @@ mod tests {
             .step_by(2)
             .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
             .collect()
-    }
-
-    #[test]
-    fn chacha20_rfc8439_block() {
-        // RFC 8439 2.3.2.
-        let key: [u8; 32] = (0u8..32).collect::<Vec<_>>().try_into().unwrap();
-        let input: [u8; 16] = unhex("01000000 000000090000004a00000000")
-            .try_into()
-            .unwrap();
-        assert_eq!(
-            hex(&chacha20_block(&key, &input)),
-            "10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4e\
-             d2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e"
-        );
     }
 
     #[test]

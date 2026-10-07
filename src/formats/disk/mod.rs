@@ -37,6 +37,7 @@ pub mod ptypes;
 pub mod qcow;
 pub mod squashfs;
 pub mod swap;
+pub mod udf;
 pub mod uefi;
 pub mod ufs;
 pub mod vdi;
