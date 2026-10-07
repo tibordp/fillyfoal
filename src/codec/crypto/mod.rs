@@ -5,11 +5,14 @@
 //! local files for display, not secrets in transit).
 
 pub mod argon2;
+pub mod bcrypt;
 pub mod blake2b;
 pub mod chacha20;
 pub mod cipher;
+pub mod gcm;
 pub mod hash;
 pub mod mpq;
+pub mod poly1305;
 pub mod stream;
 pub mod twofish;
 

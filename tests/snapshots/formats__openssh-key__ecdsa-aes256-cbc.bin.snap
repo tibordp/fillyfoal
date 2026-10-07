@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ecdsa-aes256-cbc.bin — OpenSSH private key, ecdsa-sha2-nistp256, 256 bits, encrypted (aes256-cbc, 4 bcrypt rounds)  [0x0+0x167]
+    Magic: "openssh-key-v1"  [0x0+0xf]
+    Cipher: "aes256-cbc"  [0xf+0xe]
+    KDF: "bcrypt"  [0x1d+0xa]
+  ▾ KDF options — 16-byte salt, 4 rounds  [0x27+0x1c]
+      Salt: 3e 79 25 31 2c 09 6f fb 65 7e 93 78 7a c9 16 a3  |>y%1,.o.e~.xz...| — 16 bytes  [0x2b+0x14]
+      Rounds: 4  [0x3f+0x4]
+    Number of keys: 1  [0x43+0x4]
+  ▾ Public key 1 — ecdsa-sha2-nistp256, 256 bits  [0x4b+0x68]
+      Key type: "ecdsa-sha2-nistp256"  [0x4b+0x17]
+      Curve: "nistp256"  [0x62+0xc]
+      Public point (Q): 04 b2 60 f7 09 d5 21 01 12 2b 89 55 4a 93 15 e9 …  |..`...!..+.UJ...| — 65 bytes  [0x6e+0x45]
+  ▾ Private section (encrypted) — 176 bytes, aes256-cbc  [0xb3+0xb4]
+      Check 1: 0xb13aa882  [#1:0x0+0x4]
+      Check 2: 0xb13aa882  [#1:0x4+0x4]
+    ▾ cbc@fillyfoal — ecdsa-sha2-nistp256  [#1:0x8+0x9d]
+        Key type: "ecdsa-sha2-nistp256"  [#1:0x8+0x17]
+        Curve: "nistp256"  [#1:0x1f+0xc]
+        Public point (Q): 04 b2 60 f7 09 d5 21 01 12 2b 89 55 4a 93 15 e9 …  |..`...!..+.UJ...| — 65 bytes  [#1:0x2b+0x45]
+        Private scalar (d) — present, 32 bytes  [#1:0x70+0x24]
+        Comment: "cbc@fillyfoal"  [#1:0x94+0x11]
+      Padding — 11 bytes  [#1:0xa5+0xb]

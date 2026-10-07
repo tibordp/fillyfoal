@@ -68,16 +68,16 @@ fn h_prime(out_len: usize, parts: &[&[u8]]) -> Vec<u8> {
     }
     let mut v = h.finish();
     let mut out = Vec::with_capacity(out_len);
+    // V_1 .. V_r contribute their first 32 bytes; the tail is
+    // H'^(T - 32r)(V_r), so V_r must be kept rather than hashed again.
     while out_len.saturating_sub(out.len()) > 64 {
         out.extend_from_slice(v.get(..32).unwrap_or_default());
-        v = Blake2b::digest(64, &v);
+        if out_len.saturating_sub(out.len()) > 64 {
+            v = Blake2b::digest(64, &v);
+        }
     }
     let rest = out_len.saturating_sub(out.len());
-    if rest == 64 {
-        out.extend_from_slice(&v);
-    } else {
-        out.extend_from_slice(&Blake2b::digest(rest, &v));
-    }
+    out.extend_from_slice(&Blake2b::digest(rest, &v));
     out
 }
 

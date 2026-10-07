@@ -297,6 +297,7 @@ async fn expand_block(cx: Cx, (input, block): (Input, Block)) -> Result<()> {
         "X509 CRL" => Some(&crate::formats::asn1::CRL),
         "CERTIFICATE REQUEST" | "NEW CERTIFICATE REQUEST" => Some(&crate::formats::asn1::CSR),
         "PKCS7" | "CMS" => Some(&crate::formats::asn1::PKCS7),
+        "OPENSSH PRIVATE KEY" => Some(&super::openssh::OPENSSH_KEY),
         _ => None,
     };
     let node = match format {

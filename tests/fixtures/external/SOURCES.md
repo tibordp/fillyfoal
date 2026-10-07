@@ -386,3 +386,11 @@ and reproduce every file byte for byte.
 | `grib/` | ecCodes 2.49.0 (Python bindings with the bundled C library and samples) | reproduced byte-for-byte: `uv run --with eccodes==2.49.0 python tests/data/grib/make.py` (GRIB2 2 m temperature and accumulated precipitation with a bit-map; GRIB1 mean sea level pressure with the ECMWF local PDS extension) |
 | `bufr/` | ecCodes 2.49.0 (Python bindings with the bundled C library and samples) | reproduced byte-for-byte: `uv run --with eccodes==2.49.0 python tests/data/bufr/make.py` (two-subset surface observations, editions 3 and 4, and ECMWF's local sample with section 2 and compression) |
 | `hdf4/` | pyhdf 0.11.6 (bundled HDF 4.3.0 library) | reproduced byte-for-byte: `uv run --with pyhdf==0.11.6 --with numpy python tests/data/hdf4/make.py` (SD datasets with dimension scales, attributes and deflate compression; a vdata in a vgroup; a vdata appended into linked blocks). `grid.hdf` records its path relative to the repository root as the `CDF0.0` vgroup name |
+## Credential tools
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `openssh-key/` | ssh-keygen (OpenSSH_10.2p1, macOS) | `sh tests/data/openssh-key/make.sh` (keys are random: same structure, new bytes); passphrase `fillyfoal`, `-a 4`, `-Z aes256-ctr` / `aes256-cbc` / `aes256-gcm@openssh.com` / `chacha20-poly1305@openssh.com`; edit: the PEM armor removed (`base64 -d` of the body) to get the binary format; every encrypted key decrypts with matching check values (and AEAD tag) |
+| `openssh-keys/ssh-keygen.pub` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `.pub` files of the keys above and an ed25519 user certificate (`ssh-keygen -s ca -I fillyfoal-user -n alice,bob`), concatenated |
+| `pem/openssh-rsa.key` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -t rsa -b 1024 -N ''`, unedited |
+| `keychain/items.keychain` | macOS `security` (Security.framework, macOS 26) | `sh tests/data/keychain/make.sh` (random salts and keys: same structure, new bytes): `security create-keychain -p fillyfoal`, a generic and an internet password, an OpenSSL self-signed certificate and its EC private key imported; unedited |

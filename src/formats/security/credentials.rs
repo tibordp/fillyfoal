@@ -1,90 +1,18 @@
 //! Credential stores, key files and backups.
 
-use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Cursor, Record, read_record};
+use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
-use crate::record;
-use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
 
 const BE: Endian = Endian::Big;
 
 // KeePass lives in its own module; re-exported for the format table.
 pub use super::keepass::{KDB, KDBX};
-
-// ---------------------------------------------------------------------------
-// OpenSSH private keys (the binary inside the PEM armour)
-
-declare_format!(pub OPENSSH_KEY = "openssh-key", "OpenSSH private key (binary)", [], "application/octet-stream",
-    Probe::Magic(&[(0, b"openssh-key-v1\0")]), openssh_key);
-
-/// Reads an SSH wire-format string (u32 BE length + bytes).
-async fn ssh_string(cur: &mut Cursor<'_>) -> Result<(Vec<u8>, Span)> {
-    let start = cur.pos();
-    let len = cur.u32().await?;
-    if u64::from(len) > cur.remaining() {
-        return Err(Diagnostic::malformed("string length exceeds the data").at(cur.since(start)));
-    }
-    let bytes = cur.bytes(len.into()).await?;
-    Ok((bytes, cur.since(start)))
-}
-
-async fn openssh_key(cx: Cx, input: Input) -> Result<()> {
-    let mut cur = Cursor::new(&cx, input.span, BE);
-    cx.emit(Node::new("Magic").span(cur.span(15)));
-    cur.skip(15);
-    let text = |name: &'static str, bytes: &[u8], span: Span| {
-        Node::new(name)
-            .span(span)
-            .value(Value::Text(String::from_utf8_lossy(bytes).into_owned()))
-    };
-    let (cipher, span) = ssh_string(&mut cur).await?;
-    cx.emit(text("Cipher", &cipher, span));
-    let (kdf, span) = ssh_string(&mut cur).await?;
-    cx.emit(text("KDF", &kdf, span));
-    let (_, span) = ssh_string(&mut cur).await?;
-    cx.emit(Node::new("KDF options").span(span));
-    let count = cur.u32().await?;
-    let mut algorithms = Vec::new();
-    for i in 0..count.min(16) {
-        let (blob, span) = ssh_string(&mut cur).await?;
-        let algo_len = usize::try_from(u32_be(&blob, 0).unwrap_or(0)).unwrap_or(0);
-        let algo = String::from_utf8_lossy(
-            blob.get(4..4usize.saturating_add(algo_len))
-                .unwrap_or_default(),
-        )
-        .into_owned();
-        algorithms.push(algo.clone());
-        cx.emit(
-            Node::new(format!("Public key {i}"))
-                .span(span)
-                .value(Value::Text(algo)),
-        );
-    }
-    let (_, span) = ssh_string(&mut cur).await?;
-    let encrypted = cipher != b"none";
-    let mut private = Node::new("Private section").span(span);
-    if encrypted {
-        private = private.diag(Diagnostic::note("encrypted with a passphrase"));
-    }
-    cx.emit(private);
-    cx.annotate(format!(
-        "{} key(s): {}{}",
-        count,
-        algorithms.join(", "),
-        if encrypted {
-            ", passphrase-protected"
-        } else {
-            ", unencrypted"
-        }
-    ));
-    Ok(())
-}
 
 // ---------------------------------------------------------------------------
 // GnuPG keybox
@@ -125,41 +53,6 @@ async fn keybox(cx: Cx, input: Input) -> Result<()> {
         "{} OpenPGP and {} X.509 blob(s)",
         counts[2], counts[3]
     ));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// macOS keychain (legacy .keychain)
-
-declare_format!(pub KEYCHAIN = "keychain", "macOS keychain", ["keychain", "keychain-db"], "application/x-apple-keychain",
-    Probe::Magic(&[(0, b"kych")]), keychain);
-
-record! {
-    pub struct KeychainHeader {
-        magic: ascii[4] "Magic",
-        version: u32 "Version" .hex(),
-        auth_offset: u32 "Auth offset" .hex(),
-        schema_offset: u32 "Schema offset" .hex(),
-    }
-}
-
-async fn keychain(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let h: KeychainHeader = read_record(&cx, file.sub(0, KeychainHeader::SIZE), BE).await?;
-    cx.emit(KeychainHeader::node(
-        "Header",
-        file.sub(0, KeychainHeader::SIZE),
-        BE,
-    ));
-    let schema = file.tail(h.schema_offset.into());
-    let head = cx.read_avail(schema.sub(0, 8)).await?;
-    let tables = u32_be(&head, 4).unwrap_or(0);
-    cx.emit(
-        Node::new("Schema")
-            .span(schema)
-            .summary(format!("{tables} tables")),
-    );
-    cx.annotate(format!("keychain, {tables} tables"));
     Ok(())
 }
 
