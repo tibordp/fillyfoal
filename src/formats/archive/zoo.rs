@@ -3,9 +3,12 @@
 //! A text banner and an archive header pointing at the first directory
 //! entry; entries form a linked list (each holds the offset of the next and
 //! of its data). The list ends with an entry whose `next` is zero. Stored
-//! members are dissected in place; LZW and LZH data are unsupported leaves.
+//! members are dissected in place, LZW (method 1) and LZH (method 2, LHA's
+//! `-lh5-`) members decoded (see [`crate::codec::lzh`]) and their CRC-16
+//! checked.
 
 use crate::bytes::{u16_le, u32_le};
+use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
@@ -219,6 +222,19 @@ async fn directory_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
     let data = file.sub(offset.into(), packed.into());
     let node = if method == 0 {
         embedded("Content", input.nested(data)).summary(human_size(packed.into()))
+    } else if let 1 | 2 = method {
+        let m = if method == 1 {
+            lzh::Method::ZooLzw
+        } else {
+            lzh::Method::Lh { dict_bits: 13 }
+        };
+        let codec = Codec::Lzh(lzh::Params::new(
+            m,
+            Some(original.into()),
+            lzh::Check::Crc16(crc),
+        ));
+        crate::formats::content("Content", input, data, codec, Some(original.into()))
+            .summary(human_size(original.into()))
     } else {
         let m = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
         unsupported("Compressed data", data, &format!("ZOO {m}"))

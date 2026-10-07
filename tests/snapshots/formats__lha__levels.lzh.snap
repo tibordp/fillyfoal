@@ -107,6 +107,6 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Unix group and user ID  [0x12a+0x7]
         Group ID: 100  [0x12b+0x2]
         User ID: 1000  [0x12d+0x2]
-      Compressed data — 48 bytes  [0x131+0x30]
-        ! unsupported: LHA -lh5- compression
+    ▾ Content — 200 bytes, -lh5-  [0x131+0x30]
+        ! malformed: LZH: over-subscribed Huffman code [0x131+0x30]
     End of archive  [0x161+0x1]

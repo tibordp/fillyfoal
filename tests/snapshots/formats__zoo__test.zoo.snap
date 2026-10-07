@@ -121,6 +121,6 @@ expression: "common::explore(&display_name(&path), &data)"
         Long name: "packed.bin"  [0x15f+0xb]
         System ID: 0  [0x16a+0x2]
         Attributes and version: 00 00 00 00 00 00 00  |.......|  [0x16c+0x7]
-      Compressed data — 48 bytes  [0x173+0x30]
-        ! unsupported: ZOO LZH compression
+    ▾ Content — 200 bytes  [0x173+0x30]
+        ! malformed: LZH: over-subscribed Huffman code [0x173+0x30]
     End of directory  [0x1a3+0x33]

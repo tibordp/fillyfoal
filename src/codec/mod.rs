@@ -25,6 +25,7 @@ pub mod inflate;
 pub mod legacy;
 pub mod lz;
 pub mod lzfse;
+pub mod lzh;
 pub mod lzma;
 pub mod lznt1;
 pub mod lzo;
@@ -32,6 +33,7 @@ pub mod lzx;
 pub mod meatpack;
 pub mod pbz;
 pub mod pipeline;
+pub mod psarc;
 pub mod quantum;
 pub mod statdata;
 pub mod stuffit;
@@ -224,6 +226,11 @@ pub enum Codec {
     Ace(ace::Params),
     /// A StuffIt fork (see [`stuffit`]).
     StuffIt(stuffit::Params),
+    /// The LZSS/LZH family of LHA, ARJ, ZOO and `COMPRESS.EXE` (see
+    /// [`lzh`]).
+    Lzh(lzh::Params),
+    /// A PSARC entry's zlib or LZMA blocks (see [`psarc`]).
+    Psarc(psarc::Entry),
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -304,6 +311,8 @@ impl Codec {
             Codec::SasRle => "sas-rle",
             Codec::SasRdc => "sas-rdc",
             Codec::DwgLz77 { .. } => "dwg-lz77",
+            Codec::Lzh(_) => "lzh",
+            Codec::Psarc(_) => "psarc",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -366,6 +375,8 @@ impl Codec {
             Codec::SasRle => "sas-rle (lazy)",
             Codec::SasRdc => "sas-rdc (lazy)",
             Codec::DwgLz77 { .. } => "dwg-lz77 (lazy)",
+            Codec::Lzh(_) => "lzh (lazy)",
+            Codec::Psarc(_) => "psarc (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -419,6 +430,7 @@ impl Codec {
             | Codec::StuffIt(_) => "decompressed",
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
+            Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -502,6 +514,9 @@ impl Codec {
             // Arsenic and RLE90 runs: a few bits for up to 255 bytes, in
             // blocks of up to 16 MiB.
             Codec::StuffIt(_) => 32_768,
+            Codec::Lzh(p) => p.max_ratio(),
+            // zlib or LZMA blocks, or stored ones.
+            Codec::Psarc(_) => 7_000,
             Codec::Chain { stages, .. } => stages
                 .iter()
                 .map(Codec::max_ratio)
@@ -600,6 +615,8 @@ impl Codec {
                 Some(d) => Box::new(Streaming(d)),
                 None => Box::new(Streaming(pipeline::Failing("invalid AES key length"))),
             },
+            Codec::Lzh(params) => Box::new(Streaming(lzh::Lzh::new(*params))),
+            Codec::Psarc(entry) => Box::new(Streaming(psarc::Decoder::new(entry.clone()))),
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),

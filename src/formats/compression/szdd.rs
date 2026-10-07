@@ -1,8 +1,10 @@
 //! The MS-DOS `COMPRESS.EXE` formats SZDD and KWAJ: a header in front of a
-//! single compressed stream (unsupported, see the codec policy), except for
-//! KWAJ's stored method, which is dissected in place.
+//! single compressed stream, decoded and dissected in place (see
+//! [`crate::codec::lzh`]): SZDD's LZSS, and KWAJ's stored, XOR, LZSS and
+//! MSZIP methods. KWAJ's method 3 (LZ + Huffman) is an unsupported leaf.
 
 use crate::bytes::u16_le;
+use crate::codec::{Codec, lzh};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
@@ -49,11 +51,21 @@ pub async fn dissect_szdd(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, SzddHeader::SIZE);
     let h = crate::fields::parse(&cx, span, LE, &(), SzddHeader::layout).await?;
     cx.emit(SzddHeader::node("Header", span, LE));
-    cx.emit(unsupported(
-        "Compressed data",
-        file.tail(SzddHeader::SIZE),
-        "SZDD LZSS",
+    let codec = Codec::Lzh(lzh::Params::new(
+        lzh::Method::Szdd,
+        Some(h.size.into()),
+        lzh::Check::None,
     ));
+    cx.emit(
+        crate::formats::content(
+            "Content",
+            input,
+            file.tail(SzddHeader::SIZE),
+            codec,
+            Some(h.size.into()),
+        )
+        .summary(human_size(h.size.into())),
+    );
     let missing = if h.missing.trim_matches('\0').is_empty() {
         String::new()
     } else {
@@ -125,8 +137,19 @@ pub async fn dissect_kwaj(cx: Cx, input: Input) -> Result<()> {
     cx.emit(struct_node("Header", span, LE, (), kwaj_header));
     let data = file.tail(data_at);
     let name = crate::value::lookup(KWAJ_METHOD, method.into()).unwrap_or("unknown method");
-    cx.emit(match method {
-        0 => embedded("Data", input.nested(data)),
+    let codec_method = match method {
+        1 => Some(lzh::Method::KwajXor),
+        2 => Some(lzh::Method::Szdd),
+        4 => Some(lzh::Method::KwajMszip),
+        _ => None,
+    };
+    let expected = size.map(u64::from);
+    cx.emit(match (method, codec_method) {
+        (0, _) => embedded("Data", input.nested(data)),
+        (_, Some(m)) => {
+            let codec = Codec::Lzh(lzh::Params::new(m, expected, lzh::Check::None));
+            crate::formats::content("Content", input, data, codec, expected)
+        }
         _ => unsupported("Compressed data", data, &format!("KWAJ {name}")),
     });
     let size = size.map_or_else(String::new, |s| {

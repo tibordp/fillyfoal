@@ -278,24 +278,185 @@ record! {
     }
 }
 
+/// Archive flag: the table of contents is encrypted (PS Vita).
+const PSARC_TOC_ENCRYPTED: u32 = 4;
+/// Bytes of the manifest read to name the entries.
+const PSARC_MANIFEST_MAX: u64 = 1 << 20;
+
+fn be40(b: &[u8]) -> u64 {
+    b.iter().take(5).fold(0u64, |v, &x| v << 8 | u64::from(x))
+}
+
+/// A TOC entry: MD5 of the name, first block, size and offset (40-bit).
+fn psarc_entry(f: &mut Fields<'_>, _: &()) -> Result<(u32, u64, u64)> {
+    f.bytes("Name digest (MD5)", 16).emit()?;
+    let block = f.u32("First block").emit()?;
+    let size = f
+        .bytes("Uncompressed size", 5)
+        .map(|b| be40(&b))
+        .with(|&v, n| {
+            n.value(Value::UInt {
+                value: v,
+                bits: 40,
+                radix: crate::value::Radix::Dec,
+            })
+            .summary(crate::formats::util::arcutil::human_size(v))
+        })
+        .emit()?;
+    let offset = f
+        .bytes("Offset", 5)
+        .map(|b| be40(&b))
+        .with(|&v, n| n.value(crate::formats::util::arcutil::hex(v)))
+        .emit()?;
+    Ok((block, size, offset))
+}
+
+async fn psarc_toc(cx: Cx, (span, entry_size, count): (Span, u64, u32)) -> Result<()> {
+    cx.set_count(Count::Exact(count.into()));
+    for i in 0..u64::from(count) {
+        let at = span.sub(i.saturating_mul(entry_size), entry_size);
+        let label = if i == 0 {
+            "Entry 0 (manifest)".to_owned()
+        } else {
+            format!("Entry {i}")
+        };
+        cx.push(crate::fields::struct_node(label, at, BE, (), psarc_entry))
+            .await;
+    }
+    Ok(())
+}
+
+/// PSARC: a header, the table of contents (entries, then the block-size
+/// table), and the entries' blocks. Entry 0 is the manifest, the other
+/// entries' paths one per line; entries are decoded through
+/// [`crate::codec::psarc`]. From memory of the community documentation.
 async fn psarc(cx: Cx, input: Input) -> Result<()> {
-    let h: PsarcHeader = emit_record(&cx, input.span.sub(0, PsarcHeader::SIZE), BE).await?;
-    cx.emit(Node::new("Table of contents").span(input.span.sub(
-        PsarcHeader::SIZE,
-        u64::from(h.toc_length).saturating_sub(PsarcHeader::SIZE),
-    )));
-    cx.emit(
-        Node::new("Data blocks")
-            .span(input.span.tail(h.toc_length.into()))
-            .diag(Diagnostic::unsupported(format!(
-                "{} compression",
-                h.compression
-            ))),
-    );
-    cx.annotate(format!(
+    use crate::codec::{Codec, psarc::Entry};
+    use crate::formats::util::arcutil::human_size;
+    let file = input.span;
+    let h: PsarcHeader = emit_record(&cx, file.sub(0, PsarcHeader::SIZE), BE).await?;
+    let summary = format!(
         "PSARC {}.{}, {} entries, {}",
         h.major, h.minor, h.entries, h.compression
-    ));
+    );
+    cx.annotate(summary.clone());
+    let toc = file.sub(
+        PsarcHeader::SIZE,
+        u64::from(h.toc_length).saturating_sub(PsarcHeader::SIZE),
+    );
+    if h.flags & PSARC_TOC_ENCRYPTED != 0 {
+        cx.emit(
+            Node::new("Table of contents")
+                .span(toc)
+                .diag(Diagnostic::unsupported("encrypted table of contents")),
+        );
+        return Ok(());
+    }
+    let entry_size = u64::from(h.entry_size);
+    if entry_size < 30 {
+        return Err(
+            Diagnostic::malformed(format!("TOC entry size {entry_size}")).at(file.sub(20, 4)),
+        );
+    }
+    let entries_span = file.sub_exact(
+        PsarcHeader::SIZE,
+        entry_size.saturating_mul(h.entries.into()),
+    )?;
+    cx.emit(
+        Node::new("Table of contents")
+            .span(entries_span)
+            .summary(format!("{} entries", h.entries))
+            .lazy(psarc_toc, (entries_span, entry_size, h.entries)),
+    );
+    // The block-size table fills the rest of the TOC, in the fewest bytes
+    // that hold a block size.
+    let width: u64 = match h.block_size {
+        0..=0x1_0000 => 2,
+        0x1_0001..=0x100_0000 => 3,
+        _ => 4,
+    };
+    let table_at = PsarcHeader::SIZE.saturating_add(entries_span.len);
+    let table_len = u64::from(h.toc_length).saturating_sub(table_at);
+    let table_span = file.sub_exact(
+        table_at,
+        table_len.saturating_sub(table_len.checked_rem(width).unwrap_or(0)),
+    )?;
+    let table = cx.read(table_span).await?;
+    let sizes: Vec<u32> = table
+        .chunks_exact(usize::try_from(width).unwrap_or(2))
+        .map(|c| u32::try_from(be40(c)).unwrap_or(u32::MAX))
+        .collect();
+    cx.emit(
+        Node::new("Block sizes")
+            .span(table_span)
+            .summary(format!("{} blocks, {width}-byte entries", sizes.len())),
+    );
+    let raw = cx.read(entries_span).await?;
+    let entries: Vec<(u32, u64, u64)> = raw
+        .chunks_exact(usize::try_from(entry_size).unwrap_or(30))
+        .map(|e| {
+            (
+                u32_be(e, 16).unwrap_or(0),
+                be40(e.get(20..25).unwrap_or_default()),
+                be40(e.get(25..30).unwrap_or_default()),
+            )
+        })
+        .collect();
+    let block_size = h.block_size.max(1);
+    // An entry's data: its blocks, back to back from its offset.
+    let entry_content = |block: u32, size: u64, offset: u64| -> (Span, Codec) {
+        let count = size.div_ceil(block_size.into());
+        let first = usize::try_from(block).unwrap_or(usize::MAX);
+        let last = first.saturating_add(usize::try_from(count).unwrap_or(usize::MAX));
+        let blocks: Vec<u32> = sizes
+            .get(first..last.min(sizes.len()))
+            .unwrap_or_default()
+            .to_vec();
+        let stored = blocks.iter().fold(0u64, |a, &b| {
+            a.saturating_add(if b == 0 { block_size.into() } else { b.into() })
+        });
+        let codec = Codec::Psarc(Entry {
+            block_size,
+            size,
+            blocks: blocks.into(),
+        });
+        (file.sub(offset, stored), codec)
+    };
+    let mut names: Vec<String> = Vec::new();
+    if let Some(&(block, size, offset)) = entries.first() {
+        let (span, codec) = entry_content(block, size, offset);
+        cx.emit(
+            crate::formats::content("Manifest", input, span, codec.clone(), Some(size))
+                .summary(human_size(size)),
+        );
+        if size <= PSARC_MANIFEST_MAX {
+            match crate::codec::decode_span(&cx, span, &codec, Some(size)).await {
+                Ok(decoded) => {
+                    let text = cx.read(decoded.span).await?;
+                    names = String::from_utf8_lossy(&text)
+                        .split(['\n', '\0'])
+                        .map(str::to_owned)
+                        .collect();
+                }
+                Err(e) => cx.diag(e),
+            }
+        }
+    }
+    let mut total = 0u64;
+    for (i, &(block, size, offset)) in entries.iter().enumerate().skip(1) {
+        let name = names
+            .get(i.saturating_sub(1))
+            .filter(|n| !n.is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("Entry {i}"));
+        total = total.saturating_add(size);
+        let (span, codec) = entry_content(block, size, offset);
+        cx.push(
+            crate::formats::content(name, input, span, codec, Some(size)).summary(human_size(size)),
+        )
+        .await;
+    }
+    cx.annotate(format!("{summary}, {} uncompressed", human_size(total)));
     Ok(())
 }
 

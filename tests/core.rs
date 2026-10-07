@@ -1943,3 +1943,165 @@ fn keepass_refuses_runaway_key_derivations() {
     let text = host.render();
     assert!(text.contains("key derivation too expensive"), "{text}");
 }
+
+/// `text(n, seed)` of `tests/data/lzh/make.py`.
+fn lzh_text(n: usize, seed: u64) -> Vec<u8> {
+    let words: Vec<&str> = "the quick brown fox jumps over lazy dogs while old archivers \
+         squeeze bytes into tiny floppy disks and bulletin boards"
+        .split_whitespace()
+        .collect();
+    let mut out: Vec<String> = Vec::new();
+    let (mut x, mut i) = (seed, 0u64);
+    while out.iter().map(|w| w.len() + 1).sum::<usize>() < n {
+        x = (x * 1103515245 + 12345) & 0x7FFF_FFFF;
+        out.push(words[((x >> 16) as usize) % words.len()].to_owned());
+        i += 1;
+        if i % 12 == 0 {
+            out.push(format!("{i}\r\n"));
+        }
+    }
+    let mut joined = out.join(" ").into_bytes();
+    joined.truncate(n);
+    joined
+}
+
+/// `binary(n, seed)` of `tests/data/lzh/make.py`.
+fn lzh_binary(n: usize, seed: u64) -> Vec<u8> {
+    let mut x = seed;
+    (0..n)
+        .map(|i| {
+            x = (x * 1103515245 + 12345) & 0x7FFF_FFFF;
+            let r = ((x >> 16) & 0xff) as u8;
+            if r < 160 { r } else { (i & 0x0f) as u8 }
+        })
+        .collect()
+}
+
+/// The LHA, ARJ, ZOO, SZDD, KWAJ and PSARC fixtures of
+/// `tests/data/lzh/make.py` decode to the generator's input, with matching
+/// CRCs. 7-Zip extracts the same bytes from the LHA -lh4- to -lh7-, ARJ and
+/// SZDD streams (libarchive and lhafile from -lh5- to -lh7-); the other
+/// methods are checked against our own test encoders only.
+#[test]
+fn lzh_family_fixtures_decode_to_the_generator_input() {
+    let t = lzh_text;
+    let b = lzh_binary;
+    let psarc = vec![
+        t(9000, 61),
+        [b(4096, 9), (0..=255u8).chain(0..=255u8).collect()].concat(),
+        b"short text member\n".to_vec(),
+        b"/docs/readme.txt\n/data/noise.bin\n/data/tail.txt".to_vec(),
+    ];
+    let cases: Vec<(&str, &str, Vec<Vec<u8>>)> = vec![
+        (
+            "lha",
+            "methods.lzh",
+            vec![
+                t(3000, 11),
+                [t(2500, 12), b(500, 7)].concat(),
+                t(3000, 13),
+                [b(1500, 3), t(1500, 14)].concat(),
+                [b(256, 4), t(20000, 15), b(256, 4)].concat(),
+                t(1500, 16),
+                t(1500, 17),
+            ],
+        ),
+        (
+            "arj",
+            "methods.arj",
+            vec![
+                t(3000, 21),
+                [b(800, 5), t(1200, 22)].concat(),
+                t(2000, 23),
+                t(3000, 24),
+            ],
+        ),
+        ("zoo", "methods.zoo", vec![t(9000, 31), t(3000, 32)]),
+        ("szdd", "lzss.tx_", vec![t(3000, 41)]),
+        ("kwaj", "lzss.tx_", vec![t(3000, 51)]),
+        ("kwaj", "mszip.tx_", vec![t(40000, 52)]),
+        ("psarc", "zlib.psarc", psarc.clone()),
+        ("psarc", "lzma.psarc", psarc),
+    ];
+    for (format, name, expected) in cases {
+        let data = std::fs::read(format!(
+            "{}/tests/fixtures/synthetic/{format}/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
+        let (texts, derived) = explore_decoded(name, data);
+        for line in &texts {
+            assert!(
+                !line.starts_with("diag") || line.starts_with("diag Note"),
+                "{format}/{name}: {line}"
+            );
+        }
+        let outputs: Vec<&Vec<u8>> = derived
+            .iter()
+            .filter(|(transform, _)| ["lzh", "psarc"].contains(transform))
+            .map(|(_, d)| d)
+            .collect();
+        for (i, want) in expected.iter().enumerate() {
+            assert!(
+                outputs.contains(&want),
+                "{format}/{name}: expected output {i} ({} bytes) missing",
+                want.len()
+            );
+        }
+    }
+}
+
+/// The LZH codecs decode one byte of input at a time (rolling back short
+/// steps) to the same output, and survive corruption and truncation.
+#[test]
+fn lzh_codecs_trickle_and_survive_corruption() {
+    use fillyfoal::codec::{Codec, lzh};
+    let lha = std::fs::read(format!(
+        "{}/tests/fixtures/synthetic/lha/methods.lzh",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    // Level 0 headers: size, checksum, method, packed and original sizes.
+    let mut at = 0;
+    let mut streams = Vec::new();
+    while lha[at] != 0 {
+        let size = lha[at] as usize + 2;
+        let method = std::str::from_utf8(&lha[at + 2..at + 7])
+            .unwrap()
+            .to_owned();
+        let packed = u32::from_le_bytes(lha[at + 7..at + 11].try_into().unwrap()) as usize;
+        let original = u32::from_le_bytes(lha[at + 11..at + 15].try_into().unwrap()) as u64;
+        streams.push((
+            method,
+            lha[at + size..at + size + packed].to_vec(),
+            original,
+        ));
+        at += size + packed;
+    }
+    for (method, data, original) in streams {
+        let m = match method.as_str() {
+            "-lh1-" => lzh::Method::Lh1,
+            "-lh4-" => lzh::Method::Lh { dict_bits: 12 },
+            "-lh5-" => lzh::Method::Lh { dict_bits: 13 },
+            "-lh6-" => lzh::Method::Lh { dict_bits: 15 },
+            "-lh7-" => lzh::Method::Lh { dict_bits: 16 },
+            "-lzs-" => lzh::Method::Lzs,
+            "-lz5-" => lzh::Method::Lz5,
+            _ => continue,
+        };
+        let codec = Codec::Lzh(lzh::Params::new(m, Some(original), lzh::Check::None));
+        let mut d = codec.decoder().unwrap();
+        let whole = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &data, 1 << 20).unwrap();
+        assert_eq!(whole.len() as u64, original, "{method}");
+        assert!(trickle(&codec, &data) == whole, "{method}: trickled");
+        for i in 0..48usize {
+            let mut bad = data.clone();
+            let at = (i * 7919) % bad.len();
+            bad[at] ^= 1 << (i % 8);
+            let mut d = codec.decoder().unwrap();
+            let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 20);
+            let mut d = codec.decoder().unwrap();
+            let _ = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &data[..at], 1 << 20);
+        }
+    }
+}

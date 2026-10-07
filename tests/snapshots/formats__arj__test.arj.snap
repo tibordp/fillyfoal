@@ -125,6 +125,6 @@ expression: "common::explore(&display_name(&path), &data)"
         File name: "PACKED.BIN"  [0x12d+0xa]
         Header CRC-32: 0x1727398b — valid  [0x139+0x4]
       End of extended headers  [0x13d+0x2]
-      Compressed data — 48 bytes  [0x13f+0x30]
-        ! unsupported: ARJ method 1 (compressed most) compression
+    ▾ Content — 200 bytes, method 1  [0x13f+0x30]
+        ! malformed: LZH: over-subscribed Huffman code [0x13f+0x30]
     End of archive  [0x16f+0x4]

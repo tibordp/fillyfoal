@@ -76,6 +76,9 @@ exploration pays for additional work only as needed.
   LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), DjVu BZZ, PKWARE implode and DCL implode, MSZIP/LZX/Quantum
   (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
   (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, the DWG R2004+ LZ77 variant, Cap'n Proto packing, the PDF/PostScript
+  (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, the LHA/ARJ/ZOO/`COMPRESS.EXE`
+  LZSS and LZH family (`-lh1-`, `-lh4-`..`-lh7-`, `-lzs-`, `-lz5-`, ARJ 1-4,
+  ZOO LZW, SZDD, KWAJ) and PSARC blocks, Cap'n Proto packing, the PDF/PostScript
   filters and predictors, and the ciphers that unlock content (ZipCrypto,
   AES, RC4, ChaCha20, Twofish, Type 1 eexec, MPQ; Argon2 and BLAKE2b for
   KeePass). Each is checked byte-exact against a real
