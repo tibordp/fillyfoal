@@ -25,7 +25,9 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::{hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen};
+use super::{
+    hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen,
+};
 
 declare_format!(pub FORMAT = "flatbuffers", "FlatBuffers data (no schema)",
     ["fb", "bin"], "application/x-flatbuffers", Probe::Never, dissect);
@@ -110,7 +112,10 @@ async fn present_slots(fb: &Fb<'_>, t: &Table) -> Result<u64> {
 
 /// What a 4-byte slot (or vector element) points to.
 enum Target {
-    Str { len: u64, text: String },
+    Str {
+        len: u64,
+        text: String,
+    },
     Table(Table),
     Vector {
         pos: u64,
@@ -144,7 +149,12 @@ async fn string_at(fb: &Fb<'_>, pos: u64) -> Result<Option<(u64, String)>> {
     }
     let text = fb.bytes(pos.saturating_add(4), len.min(1024)).await?;
     let valid = printable(&text, len > 1024);
-    Ok(valid.then(|| (len, short_text(&text, usize::try_from(TEXT_MAX).unwrap_or(256)))))
+    Ok(valid.then(|| {
+        (
+            len,
+            short_text(&text, usize::try_from(TEXT_MAX).unwrap_or(256)),
+        )
+    }))
 }
 
 /// A table at `pos`, if the structure is plausible: its vtable and inline
@@ -231,7 +241,11 @@ async fn elements_kind(fb: &Fb<'_>, start: u64, len: u32) -> Result<Elems> {
             return Ok(Elems::Unknown);
         }
     }
-    Ok(if strings { Elems::Strings } else { Elems::Tables })
+    Ok(if strings {
+        Elems::Strings
+    } else {
+        Elems::Tables
+    })
 }
 
 type TableState = (Span, Table, Path);
@@ -296,12 +310,20 @@ async fn vtable(cx: Cx, (buf, t): (Span, Table)) -> Result<()> {
             .value(uint(t.size.into(), 16)),
     );
     for slot in 0..t.slots() {
-        let at = t.vtable.saturating_add(4).saturating_add(u64::from(slot).saturating_mul(2));
+        let at = t
+            .vtable
+            .saturating_add(4)
+            .saturating_add(u64::from(slot).saturating_mul(2));
         let off = fb.u16_at(at).await?;
         let node = Node::new(format!("slot {slot}"))
             .span(buf.sub(at, 2))
             .value(uint(off.into(), 16));
-        cx.push(if off == 0 { node.summary("absent") } else { node }).await;
+        cx.push(if off == 0 {
+            node.summary("absent")
+        } else {
+            node
+        })
+        .await;
     }
     Ok(())
 }
@@ -315,7 +337,14 @@ fn width(at: u64, gap: u64) -> u64 {
         .unwrap_or(1)
 }
 
-async fn slot_node(cx: &Cx, fb: &Fb<'_>, slot: usize, at: u64, gap: u64, path: &Path) -> Result<Node> {
+async fn slot_node(
+    cx: &Cx,
+    fb: &Fb<'_>,
+    slot: usize,
+    at: u64,
+    gap: u64,
+    path: &Path,
+) -> Result<Node> {
     let name = format!("field {slot}");
     if gap > 8 {
         let bytes = cx.read_avail(fb.buf.sub(at, gap)).await?;
@@ -374,7 +403,8 @@ fn scalar(node: Node, unsigned: u64, signed: i64, bits: u8) -> Node {
         })
         .summary(format!("{bits}-bit; unsigned {unsigned}"))
     } else {
-        node.value(uint(unsigned, bits)).summary(format!("{bits}-bit"))
+        node.value(uint(unsigned, bits))
+            .summary(format!("{bits}-bit"))
     }
 }
 
@@ -391,9 +421,7 @@ fn target_node(node: Node, fb: &Fb<'_>, at: u64, t: Target, path: &Path) -> Resu
         }
         Target::Empty => node.summary("empty string or vector"),
         Target::Table(t) => {
-            let node = node
-                .summary("table?")
-                .target(fb.table_span(&t));
+            let node = node.summary("table?").target(fb.table_span(&t));
             match path.enter(t.pos, MAX_DEPTH) {
                 Ok(child) => node.lazy(
                     crate::expander!(self::table: TableState),
@@ -443,7 +471,9 @@ async fn vector(cx: Cx, (buf, at, kind, path): VectorState) -> Result<()> {
         let elem = start.saturating_add(u64::from(i).saturating_mul(4));
         let node = Node::new(format!("[{i}]")).span(buf.sub(elem, 4));
         let node = match target(&fb, elem, &path).await? {
-            Some(t @ (Target::Str { .. } | Target::Table(_))) => target_node(node, &fb, elem, t, &path)?,
+            Some(t @ (Target::Str { .. } | Target::Table(_))) => {
+                target_node(node, &fb, elem, t, &path)?
+            }
             _ => node
                 .value(hex(fb.u32_at(elem).await?.into(), 32))
                 .summary(match kind {

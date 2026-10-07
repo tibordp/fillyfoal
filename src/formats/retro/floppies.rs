@@ -592,10 +592,10 @@ async fn imd(cx: Cx, input: Input) -> Result<()> {
                     compressed = compressed.saturating_add(1);
                 }
                 _ => {
-                    return Err(
-                        Diagnostic::malformed(format!("unknown sector record type {kind}"))
-                            .at(cur.span(1)),
-                    );
+                    return Err(Diagnostic::malformed(format!(
+                        "unknown sector record type {kind}"
+                    ))
+                    .at(cur.span(1)));
                 }
             }
             if matches!(kind, 5..=8) {

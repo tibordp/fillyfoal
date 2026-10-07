@@ -10,10 +10,12 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::wire::thrift::compact::{
+    field_header, list_header, skip, varint, zigzag,
+};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::formats::util::wire::thrift::compact::{field_header, list_header, skip, varint, zigzag};
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 /// Nesting of Thrift structures followed.

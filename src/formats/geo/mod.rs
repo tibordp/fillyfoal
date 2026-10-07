@@ -11,6 +11,7 @@
 
 use std::borrow::Cow;
 
+pub(crate) use crate::codec::crc::{crc16_xmodem, crc24q};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::Head;
@@ -20,7 +21,6 @@ use crate::formats::text::scan::LineBuf;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
-pub(crate) use crate::codec::crc::{crc16_xmodem, crc24q};
 
 pub mod dlis;
 pub mod elevation;

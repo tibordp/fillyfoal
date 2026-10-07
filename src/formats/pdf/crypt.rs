@@ -14,8 +14,8 @@ use crate::span::Span;
 
 /// The padding string of algorithm 2.
 const PAD: [u8; 32] = [
-    0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08, 0x2e, 0x2e, 0x00, 0xb6,
-    0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
+    0x28, 0xbf, 0x4e, 0x5e, 0x4e, 0x75, 0x8a, 0x41, 0x64, 0x00, 0x4e, 0x56, 0xff, 0xfa, 0x01, 0x08,
+    0x2e, 0x2e, 0x00, 0xb6, 0xd0, 0x68, 0x3e, 0x80, 0x2f, 0x0c, 0xa9, 0xfe, 0x64, 0x53, 0x69, 0x7a,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,7 +77,10 @@ fn method(dict: &Item, which: &str, v: i64) -> Method {
 impl Security {
     /// Parses `/Encrypt`; `Err` names what is unsupported.
     pub fn parse(dict: &Item, id0: Vec<u8>, realm: Span) -> Result<Self, String> {
-        let filter = dict.get("Filter").and_then(Item::name).unwrap_or("Standard");
+        let filter = dict
+            .get("Filter")
+            .and_then(Item::name)
+            .unwrap_or("Standard");
         if filter != "Standard" {
             return Err(format!("security handler /{filter}"));
         }
@@ -93,7 +96,9 @@ impl Security {
             _ => usize::try_from(bits / 8).unwrap_or(5).clamp(5, 16),
         };
         let p = dict.get("P").and_then(Item::int).unwrap_or(0);
-        let p = i32::try_from(p).unwrap_or_else(|_| i32::from_le_bytes(u32::try_from(p & 0xffff_ffff).unwrap_or(0).to_le_bytes()));
+        let p = i32::try_from(p).unwrap_or_else(|_| {
+            i32::from_le_bytes(u32::try_from(p & 0xffff_ffff).unwrap_or(0).to_le_bytes())
+        });
         Ok(Security {
             revision,
             key_len,
@@ -102,7 +107,10 @@ impl Security {
             ue: string(dict, "UE"),
             p,
             id0,
-            encrypt_metadata: !matches!(dict.get("EncryptMetadata").map(|i| &i.obj), Some(Obj::Bool(false))),
+            encrypt_metadata: !matches!(
+                dict.get("EncryptMetadata").map(|i| &i.obj),
+                Some(Obj::Bool(false))
+            ),
             streams: method(dict, "StmF", v),
             strings: method(dict, "StrF", v),
             realm,
@@ -195,7 +203,10 @@ impl Security {
                 return k;
             };
             // AES-128-CBC encryption with IV k[16..32], no padding.
-            let mut prev: [u8; 16] = k.get(16..32).and_then(|s| s.try_into().ok()).unwrap_or([0; 16]);
+            let mut prev: [u8; 16] = k
+                .get(16..32)
+                .and_then(|s| s.try_into().ok())
+                .unwrap_or([0; 16]);
             let mut e = Vec::with_capacity(k1.len());
             for chunk in k1.chunks(16) {
                 let mut block: [u8; 16] = chunk.try_into().unwrap_or([0; 16]);
@@ -206,7 +217,10 @@ impl Security {
                 e.extend_from_slice(&block);
                 prev = block;
             }
-            let sum = e.iter().take(16).fold(0u32, |a, &b| a.wrapping_add(u32::from(b)));
+            let sum = e
+                .iter()
+                .take(16)
+                .fold(0u32, |a, &b| a.wrapping_add(u32::from(b)));
             k = match sum % 3 {
                 0 => Sha256::digest(&e),
                 1 => Sha384::digest(&e),
@@ -253,12 +267,19 @@ impl Security {
     }
 
     /// Decrypts a string of object `id`.
-    pub fn decrypt_string(&self, file_key: &[u8], (num, generation): (u32, u16), data: &[u8]) -> Vec<u8> {
+    pub fn decrypt_string(
+        &self,
+        file_key: &[u8],
+        (num, generation): (u32, u16),
+        data: &[u8],
+    ) -> Vec<u8> {
         let key = self.object_key(file_key, num, generation, self.strings);
         match self.strings {
             Method::Identity => data.to_vec(),
             Method::Rc4 => rc4(&key, data),
-            Method::AesV2 | Method::AesV3 => crate::codec::crypto::aes_cbc_iv_prefixed(&key, data).unwrap_or_default(),
+            Method::AesV2 | Method::AesV3 => {
+                crate::codec::crypto::aes_cbc_iv_prefixed(&key, data).unwrap_or_default()
+            }
         }
     }
 }
@@ -278,15 +299,24 @@ pub async fn file_key(cx: &Cx, security: &Arc<Security>, ask: bool) -> Option<Ar
         }
     };
     if free.is_some() || !ask {
-        return free.or_else(|| cx.cached::<Option<Arc<Vec<u8>>>>(security.realm, ASKED).and_then(|k| (*k).clone()));
+        return free.or_else(|| {
+            cx.cached::<Option<Arc<Vec<u8>>>>(security.realm, ASKED)
+                .and_then(|k| (*k).clone())
+        });
     }
     if let Some(found) = cx.cached::<Option<Arc<Vec<u8>>>>(security.realm, ASKED) {
         return (*found).clone();
     }
     let mut key = None;
     for attempt in 0..crate::secret::MAX_ATTEMPTS {
-        let request = crate::secret::SecretRequest::password(security.realm, "Password to open the PDF", attempt);
-        let Some(secret) = cx.secret(request).await else { break };
+        let request = crate::secret::SecretRequest::password(
+            security.realm,
+            "Password to open the PDF",
+            attempt,
+        );
+        let Some(secret) = cx.secret(request).await else {
+            break;
+        };
         if let Some(k) = security.file_key(secret.expose()) {
             key = Some(Arc::new(k));
             break;

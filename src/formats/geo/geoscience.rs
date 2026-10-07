@@ -4,6 +4,7 @@
 //! and well logs (LAS).
 
 use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be, u32_le};
+use crate::codec::crc::crc32c;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
@@ -18,7 +19,6 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, lookup};
-use crate::codec::crc::crc32c;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -1638,7 +1638,7 @@ async fn pcd_compressed(cx: Cx, (input, data): (Input, Span)) -> Result<()> {
     Ok(())
 }
 
-async fn pcd_binary(cx: Cx,(data, fields, points): (Span, Vec<PcdField>, u64)) -> Result<()> {
+async fn pcd_binary(cx: Cx, (data, fields, points): (Span, Vec<PcdField>, u64)) -> Result<()> {
     let size: u64 = fields.iter().map(|f| f.size.saturating_mul(f.count)).sum();
     if size == 0 {
         return Ok(());

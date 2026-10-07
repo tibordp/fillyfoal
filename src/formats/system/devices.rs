@@ -787,7 +787,9 @@ async fn xpress_blocks(cx: Cx, input: Input) -> Result<()> {
         let codec = if size >= decoded {
             crate::codec::Codec::Stored
         } else {
-            crate::codec::Codec::Xpress { size: Some(decoded) }
+            crate::codec::Codec::Xpress {
+                size: Some(decoded),
+            }
         };
         let total = size.saturating_add(7) & !7;
         cx.push(
@@ -834,7 +836,13 @@ async fn xpress_block(
         })
         .emit()?;
     f.bytes("Reserved", 20).emit()?;
-    cx.emit(crate::formats::content("Pages", input, data, codec, Some(decoded)));
+    cx.emit(crate::formats::content(
+        "Pages",
+        input,
+        data,
+        codec,
+        Some(decoded),
+    ));
     Ok(())
 }
 

@@ -3,7 +3,11 @@
 //! seen the whole input (so a lazily decoded source only reads what its
 //! readers reach).
 
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 
 use fillyfoal::codec::Codec;
 use fillyfoal::codec::pipeline::Status;
@@ -16,7 +20,10 @@ pub fn chunked(codec: &Codec, input: &[u8], chunk: usize, step: usize) -> Vec<u8
     let mut fed = 0;
     loop {
         let eof = fed == input.len();
-        match decoder.decode(&input[..fed], eof, &mut out, step, 1 << 30).unwrap() {
+        match decoder
+            .decode(&input[..fed], eof, &mut out, step, 1 << 30)
+            .unwrap()
+        {
             Status::Done => return out,
             Status::More => {}
             Status::NeedInput => {
@@ -32,7 +39,11 @@ pub fn chunked(codec: &Codec, input: &[u8], chunk: usize, step: usize) -> Vec<u8
 pub fn produced_from_prefix(codec: &Codec, input: &[u8], prefix: usize) -> usize {
     let mut decoder = codec.decoder().unwrap();
     let mut out = Vec::new();
-    while decoder.decode(&input[..prefix], false, &mut out, 16 * 1024, 1 << 30).unwrap() == Status::More {}
+    while decoder
+        .decode(&input[..prefix], false, &mut out, 16 * 1024, 1 << 30)
+        .unwrap()
+        == Status::More
+    {}
     out.len()
 }
 
@@ -44,18 +55,26 @@ pub fn assert_on_demand(codec: &Codec, input: &[u8], expected: &[u8]) {
         chunks.extend([1, 13]);
     }
     for chunk in chunks {
-        assert!(chunked(codec, input, chunk, 16 * 1024) == expected, "{codec:?}: output differs with {chunk}-byte input chunks");
+        assert!(
+            chunked(codec, input, chunk, 16 * 1024) == expected,
+            "{codec:?}: output differs with {chunk}-byte input chunks"
+        );
     }
     if expected.len() >= 256 * 1024 {
         let half = produced_from_prefix(codec, input, input.len() / 2);
-        assert!(half > 0, "{codec:?}: nothing decoded from the first half of the input");
+        assert!(
+            half > 0,
+            "{codec:?}: nothing decoded from the first half of the input"
+        );
     }
 }
 
 #[test]
 fn deflate_is_on_demand() {
     // A large zlib stream from the existing test data.
-    let text: Vec<u8> = (0..200_000u32).flat_map(|i| format!("line {i} of the on-demand test\n").into_bytes()).collect();
+    let text: Vec<u8> = (0..200_000u32)
+        .flat_map(|i| format!("line {i} of the on-demand test\n").into_bytes())
+        .collect();
     let mut z = vec![0x78, 0x01];
     // Stored blocks are enough to exercise the plumbing.
     for block in text.chunks(65_535) {
@@ -72,7 +91,10 @@ fn deflate_is_on_demand() {
 
 /// The text behind `tests/data/{zstd,bzip2}/lines-*` (850,250 bytes).
 fn zstd_bzip2_lines() -> Vec<u8> {
-    (0..24000u32).map(|i| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+    (0..24000u32)
+        .map(|i| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000))
+        .collect::<String>()
+        .into_bytes()
 }
 
 /// The data behind `mixed.zst` and `mixed-1.bz2`: text, 140,000
@@ -90,7 +112,11 @@ fn zstd_bzip2_mixed() -> Vec<u8> {
 }
 
 fn zstd_bzip2_data(dir: &str, name: &str) -> Vec<u8> {
-    std::fs::read(format!("{}/tests/data/{dir}/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    std::fs::read(format!(
+        "{}/tests/data/{dir}/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
 }
 
 /// Decodes all of `input` (eof) and returns the output and the consumed
@@ -114,10 +140,22 @@ fn zstd_bzip2_decode(codec: &Codec, input: &[u8]) -> Result<(Vec<u8>, usize), St
 #[test]
 fn zstd_is_on_demand() {
     let lines = zstd_bzip2_lines();
-    for name in ["lines-1.zst", "lines-19.zst", "lines-long.zst", "lines-nocheck.zst", "lines-nosize.zst", "lines-size.zst", "lines-frames.zst"] {
+    for name in [
+        "lines-1.zst",
+        "lines-19.zst",
+        "lines-long.zst",
+        "lines-nocheck.zst",
+        "lines-nosize.zst",
+        "lines-size.zst",
+        "lines-frames.zst",
+    ] {
         assert_on_demand(&Codec::Zstd, &zstd_bzip2_data("zstd", name), &lines);
     }
-    assert_on_demand(&Codec::Zstd, &zstd_bzip2_data("zstd", "mixed.zst"), &zstd_bzip2_mixed());
+    assert_on_demand(
+        &Codec::Zstd,
+        &zstd_bzip2_data("zstd", "mixed.zst"),
+        &zstd_bzip2_mixed(),
+    );
 }
 
 #[test]
@@ -145,15 +183,24 @@ fn zstd_consumed_and_checks() {
     let mut bad = one.clone();
     let n = bad.len();
     bad[n - 1] ^= 1;
-    assert_eq!(zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(), "zstd: content checksum mismatch");
+    assert_eq!(
+        zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(),
+        "zstd: content checksum mismatch"
+    );
     // A wrong content size (a 4-byte field, after the window descriptor
     // unless the frame is a single segment).
     let mut bad = zstd_bzip2_data("zstd", "lines-size.zst");
     assert_eq!(bad[4] >> 6, 2);
     let at = if bad[4] & 0x20 != 0 { 5 } else { 6 };
-    assert_eq!(u32::from_le_bytes(bad[at..at + 4].try_into().unwrap()), lines.len() as u32);
+    assert_eq!(
+        u32::from_le_bytes(bad[at..at + 4].try_into().unwrap()),
+        lines.len() as u32
+    );
     bad[at] ^= 1;
-    assert_eq!(zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(), "zstd: frame content size mismatch");
+    assert_eq!(
+        zstd_bzip2_decode(&Codec::Zstd, &bad).unwrap_err(),
+        "zstd: frame content size mismatch"
+    );
 }
 
 /// `bzip2` 1.0.8 output: `-1` (five 100k blocks), two concatenated streams
@@ -161,9 +208,21 @@ fn zstd_consumed_and_checks() {
 #[test]
 fn bzip2_is_on_demand() {
     let lines = zstd_bzip2_lines();
-    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-1.bz2"), &lines);
-    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-streams.bz2"), &lines);
-    assert_on_demand(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "mixed-1.bz2"), &zstd_bzip2_mixed());
+    assert_on_demand(
+        &Codec::Bzip2,
+        &zstd_bzip2_data("bzip2", "lines-1.bz2"),
+        &lines,
+    );
+    assert_on_demand(
+        &Codec::Bzip2,
+        &zstd_bzip2_data("bzip2", "lines-streams.bz2"),
+        &lines,
+    );
+    assert_on_demand(
+        &Codec::Bzip2,
+        &zstd_bzip2_data("bzip2", "mixed-1.bz2"),
+        &zstd_bzip2_mixed(),
+    );
 }
 
 #[test]
@@ -179,7 +238,10 @@ fn bzip2_consumed_and_checks() {
     let mut bad = one.clone();
     let n = bad.len();
     bad[n - 2] ^= 1;
-    assert_eq!(zstd_bzip2_decode(&Codec::Bzip2, &bad).unwrap_err(), "bzip2: stream CRC mismatch");
+    assert_eq!(
+        zstd_bzip2_decode(&Codec::Bzip2, &bad).unwrap_err(),
+        "bzip2: stream CRC mismatch"
+    );
 }
 
 /// Block- and chunk-framed LZ codecs and containers: LZFSE, LZ4 frames,
@@ -212,14 +274,23 @@ mod lz {
 
     pub fn lines_n(n: u32) -> Vec<u8> {
         (0..n)
-            .map(|i| format!("line {i}: the quick brown fox {} jumps over {}\n", i * 7919 % 1000, i * 104_729 % 9973))
+            .map(|i| {
+                format!(
+                    "line {i}: the quick brown fox {} jumps over {}\n",
+                    i * 7919 % 1000,
+                    i * 104_729 % 9973
+                )
+            })
             .collect::<String>()
             .into_bytes()
     }
 
     /// `lzma_text` of tests/core.rs.
     pub fn text() -> Vec<u8> {
-        (0..2000).map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+        (0..2000)
+            .map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000))
+            .collect::<String>()
+            .into_bytes()
     }
 
     /// `legacy_mixed` of tests/core.rs.
@@ -243,18 +314,32 @@ mod lz {
 
     #[test]
     fn lzfse_is_on_demand() {
-        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        let random: Vec<u8> = (0..70000u32)
+            .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+            .collect();
         assert_on_demand(&Codec::Lzfse, &read("data/lzfse/text.lzfse"), &text());
         assert_on_demand(&Codec::Lzfse, &read("data/lzfse/rnd.lzfse"), &random);
-        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/small.lzfse"), b"hello lzvn hello lzvn hello lzvn small input\n");
-        assert_on_demand(&Codec::Lzfse, &read("data/lzfse/lines.lzfse"), &lines_n(14000));
+        assert_on_demand(
+            &Codec::Lzfse,
+            &read("data/lzfse/small.lzfse"),
+            b"hello lzvn hello lzvn hello lzvn small input\n",
+        );
+        assert_on_demand(
+            &Codec::Lzfse,
+            &read("data/lzfse/lines.lzfse"),
+            &lines_n(14000),
+        );
     }
 
     #[test]
     fn lz4_frames_are_on_demand() {
         let big = read("data/lz4/lines.lz4");
         assert_on_demand(&Codec::Lz4Frame, &big, &lines());
-        for path in ["fixtures/external/lz4/bottles.txt.lz4", "fixtures/external/lz4/uncompressed-block.lz4", "fixtures/external/lz4-legacy/legacy.lz4"] {
+        for path in [
+            "fixtures/external/lz4/bottles.txt.lz4",
+            "fixtures/external/lz4/uncompressed-block.lz4",
+            "fixtures/external/lz4-legacy/legacy.lz4",
+        ] {
             self_consistent(&Codec::Lz4Frame, path);
         }
         // A skippable frame, a frame and a legacy frame, concatenated.
@@ -275,7 +360,11 @@ mod lz {
 
     #[test]
     fn framed_snappy_is_on_demand() {
-        assert_on_demand(&Codec::SnappyFramed, &read("data/snappy/lines.sz"), &lines());
+        assert_on_demand(
+            &Codec::SnappyFramed,
+            &read("data/snappy/lines.sz"),
+            &lines(),
+        );
         self_consistent(&Codec::SnappyFramed, "fixtures/synthetic/snappy/hello.sz");
     }
 
@@ -297,10 +386,19 @@ mod lz {
             let input = read(path);
             let expected = eager(&Codec::Pbz, &input);
             // An Apple Archive holding the text.
-            assert!(expected.starts_with(b"AA01") && expected.windows(lines().len()).any(|w| w == lines()), "{path}");
+            assert!(
+                expected.starts_with(b"AA01")
+                    && expected.windows(lines().len()).any(|w| w == lines()),
+                "{path}"
+            );
             assert_on_demand(&Codec::Pbz, &input, &expected);
         }
-        for path in ["synthetic/pbzx/Payload", "external/pbzx/pbz4.aar", "external/pbzx/pbze.aar", "external/pbzx/pbzz.aar"] {
+        for path in [
+            "synthetic/pbzx/Payload",
+            "external/pbzx/pbz4.aar",
+            "external/pbzx/pbze.aar",
+            "external/pbzx/pbzz.aar",
+        ] {
             self_consistent(&Codec::Pbz, &format!("fixtures/{path}"));
         }
     }
@@ -315,7 +413,10 @@ mod lz {
     pub fn wim_resource() -> (Codec, Vec<u8>, Vec<u8>) {
         // LZX chunks (32 KiB each) and stored ones, the last one short.
         let lzx = read("data/cab/wim-chunk.lzx");
-        let lzx_out = eager(&Codec::Lzx(fillyfoal::codec::lzx::Params::wim_chunk(32768)), &lzx);
+        let lzx_out = eager(
+            &Codec::Lzx(fillyfoal::codec::lzx::Params::wim_chunk(32768)),
+            &lzx,
+        );
         assert_eq!(lzx_out.len(), 32768);
         let text = lines();
         let stored: Vec<&[u8]> = text.chunks(32768).collect();
@@ -340,7 +441,10 @@ mod lz {
             body.extend_from_slice(data);
         }
         let input = [table, body].concat();
-        let expected: Vec<u8> = chunks.iter().flat_map(|(_, out)| out.iter().copied()).collect();
+        let expected: Vec<u8> = chunks
+            .iter()
+            .flat_map(|(_, out)| out.iter().copied())
+            .collect();
         let codec = Codec::WimResource(wim::Resource {
             kind: wim::Kind::Lzx,
             chunk: 32768,
@@ -351,11 +455,21 @@ mod lz {
 
     #[test]
     fn unix_compress_is_on_demand() {
-        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        let random: Vec<u8> = (0..70000u32)
+            .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+            .collect();
         assert_on_demand(&Codec::UnixCompress, &read("data/compress/text.Z"), &text());
-        assert_on_demand(&Codec::UnixCompress, &read("data/compress/text12.Z"), &text());
+        assert_on_demand(
+            &Codec::UnixCompress,
+            &read("data/compress/text12.Z"),
+            &text(),
+        );
         assert_on_demand(&Codec::UnixCompress, &read("data/compress/rnd.Z"), &random);
-        assert_on_demand(&Codec::UnixCompress, &read("data/compress/lines.Z"), &lines());
+        assert_on_demand(
+            &Codec::UnixCompress,
+            &read("data/compress/lines.Z"),
+            &lines(),
+        );
     }
 }
 
@@ -367,7 +481,9 @@ fn lzma_sample(records: u32) -> Vec<u8> {
     let mut x: u32 = 12345;
     for i in 0..records {
         x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
-        out.extend_from_slice(format!("line {i}: the quick brown fox {}\n", (x >> 16) & 0xff).as_bytes());
+        out.extend_from_slice(
+            format!("line {i}: the quick brown fox {}\n", (x >> 16) & 0xff).as_bytes(),
+        );
         if i % 3 == 0 {
             out.push(0xe8);
             out.extend_from_slice(&(i * 16).to_le_bytes());
@@ -380,7 +496,11 @@ fn lzma_sample(records: u32) -> Vec<u8> {
 }
 
 fn lzma_file(name: &str) -> Vec<u8> {
-    std::fs::read(format!("{}/tests/data/lzma/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    std::fs::read(format!(
+        "{}/tests/data/lzma/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
 }
 
 /// Decodes `input` fed in 4 KiB pieces and returns the input consumed.
@@ -390,7 +510,10 @@ fn lzma_consumed(codec: &Codec, input: &[u8]) -> usize {
     let mut fed = 0;
     loop {
         let eof = fed == input.len();
-        match decoder.decode(&input[..fed], eof, &mut out, 16 * 1024, 1 << 30).unwrap() {
+        match decoder
+            .decode(&input[..fed], eof, &mut out, 16 * 1024, 1 << 30)
+            .unwrap()
+        {
             Status::Done => return decoder.consumed(),
             Status::More => {}
             Status::NeedInput => fed = (fed + 4096).min(input.len()),
@@ -409,7 +532,14 @@ fn xz_is_on_demand() {
     let small = lzma_sample(2000);
     // The last has a 4 KiB dictionary, so the filtered block's window of
     // unfiltered bytes is compacted along the way.
-    for name in ["small-sha256.xz", "small-none.xz", "small-arm64.xz", "small-delta.xz", "small-x86-delta.xz", "small-x86-dict4k.xz"] {
+    for name in [
+        "small-sha256.xz",
+        "small-none.xz",
+        "small-arm64.xz",
+        "small-delta.xz",
+        "small-x86-delta.xz",
+        "small-x86-dict4k.xz",
+    ] {
         assert_on_demand(&Codec::Xz, &lzma_file(name), &small);
     }
 }
@@ -421,9 +551,33 @@ fn lzma_is_on_demand() {
     assert_on_demand(&Codec::Lzma2 { dict: None }, &lzma_file("big.lzma2"), &big);
     let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
     let raw = lzma_file("big.lzma1");
-    assert_on_demand(&Codec::LzmaRaw { props, size: None, dict: None }, &raw, &big);
-    assert_on_demand(&Codec::LzmaRaw { props, size: Some(big.len()), dict: None }, &raw, &big);
-    assert_on_demand(&Codec::LzmaRaw { props, size: Some(1000), dict: None }, &raw, &big[..1000]);
+    assert_on_demand(
+        &Codec::LzmaRaw {
+            props,
+            size: None,
+            dict: None,
+        },
+        &raw,
+        &big,
+    );
+    assert_on_demand(
+        &Codec::LzmaRaw {
+            props,
+            size: Some(big.len()),
+            dict: None,
+        },
+        &raw,
+        &big,
+    );
+    assert_on_demand(
+        &Codec::LzmaRaw {
+            props,
+            size: Some(1000),
+            dict: None,
+        },
+        &raw,
+        &big[..1000],
+    );
 }
 
 #[test]
@@ -434,15 +588,33 @@ fn lzma_family_consumes_exactly() {
         (Codec::Xz, "small-x86-delta.xz"),
         (Codec::LzmaAlone, "big.lzma"),
         (Codec::Lzma2 { dict: None }, "big.lzma2"),
-        (Codec::LzmaRaw { props, size: None, dict: None }, "big.lzma1"),
+        (
+            Codec::LzmaRaw {
+                props,
+                size: None,
+                dict: None,
+            },
+            "big.lzma1",
+        ),
         // A known size and an end marker as well: the marker is consumed.
-        (Codec::LzmaRaw { props, size: Some(lzma_sample(7500).len()), dict: None }, "big.lzma1"),
+        (
+            Codec::LzmaRaw {
+                props,
+                size: Some(lzma_sample(7500).len()),
+                dict: None,
+            },
+            "big.lzma1",
+        ),
     ];
     for (codec, name) in cases {
         let data = lzma_file(name);
         let trailing = [data.clone(), b"trailing data".to_vec()].concat();
         assert_eq!(lzma_consumed(&codec, &data), data.len(), "{name}");
-        assert_eq!(lzma_consumed(&codec, &trailing), data.len(), "{name} with trailing data");
+        assert_eq!(
+            lzma_consumed(&codec, &trailing),
+            data.len(),
+            "{name} with trailing data"
+        );
     }
 }
 
@@ -457,7 +629,9 @@ pub fn released(codec: &Codec, input: &[u8]) -> (Vec<u8>, usize, usize) {
     let (mut max_out, mut max_in) = (0, 0);
     loop {
         let eof = fed == input.len();
-        let status = decoder.decode(&held_in, eof, &mut out, 16 * 1024, 1 << 30).unwrap();
+        let status = decoder
+            .decode(&held_in, eof, &mut out, 16 * 1024, 1 << 30)
+            .unwrap();
         max_out = max_out.max(out.len());
         max_in = max_in.max(held_in.len());
         let n = decoder.releasable_input().min(held_in.len());
@@ -487,15 +661,32 @@ pub fn released(codec: &Codec, input: &[u8]) -> (Vec<u8>, usize, usize) {
 pub fn assert_releases(codec: &Codec, input: &[u8], expected: &[u8], max_out: usize) {
     let (out, held_out, held_in) = released(codec, input);
     assert!(out == expected, "{codec:?}: output differs when releasing");
-    assert!(held_out <= max_out, "{codec:?}: held {held_out} bytes of output (> {max_out})");
-    assert!(held_in <= 4 * 65_536 + 1024, "{codec:?}: held {held_in} bytes of input");
+    assert!(
+        held_out <= max_out,
+        "{codec:?}: held {held_out} bytes of output (> {max_out})"
+    );
+    assert!(
+        held_in <= 4 * 65_536 + 1024,
+        "{codec:?}: held {held_in} bytes of input"
+    );
 }
 
 #[test]
 fn inflate_releases() {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/lazy/big.zlib")).unwrap();
-    let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
-    assert_releases(&Codec::Zlib, &data, &expected, 32 * 1024 + 2 * 16 * 1024 + 65_536);
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/lazy/big.zlib"
+    ))
+    .unwrap();
+    let expected: Vec<u8> = (0..64u64 << 20)
+        .map(|i| ((i * 7) + (i >> 12)) as u8)
+        .collect();
+    assert_releases(
+        &Codec::Zlib,
+        &data,
+        &expected,
+        32 * 1024 + 2 * 16 * 1024 + 65_536,
+    );
 }
 
 /// Releasing for the LZ-family, chunked and stream-cipher codecs, on the
@@ -512,7 +703,12 @@ mod lz_releases {
     fn lzfse_releases() {
         // The window, plus a block (the encoder's are up to about 200 KiB).
         let max = fillyfoal::codec::lzfse::WINDOW + STEPS + 256 * 1024;
-        assert_releases(&Codec::Lzfse, &read("data/lzfse/lines.lzfse"), &lines_n(14000), max);
+        assert_releases(
+            &Codec::Lzfse,
+            &read("data/lzfse/lines.lzfse"),
+            &lines_n(14000),
+            max,
+        );
         let words = read("data/lzfse/words.lzfse");
         let expected = eager(&Codec::Lzfse, &words);
         assert_eq!(expected.len(), 2_493_885);
@@ -536,7 +732,12 @@ mod lz_releases {
     #[test]
     fn framed_snappy_releases() {
         // Independent chunks of at most 64 KiB: only the last step is held.
-        assert_releases(&Codec::SnappyFramed, &read("data/snappy/lines.sz"), &lines(), STEPS + 65_536);
+        assert_releases(
+            &Codec::SnappyFramed,
+            &read("data/snappy/lines.sz"),
+            &lines(),
+            STEPS + 65_536,
+        );
     }
 
     #[test]
@@ -568,13 +769,35 @@ mod lz_releases {
 
     #[test]
     fn unix_compress_releases() {
-        let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+        let random: Vec<u8> = (0..70000u32)
+            .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+            .collect();
         // Output is never read back: a step (and a string) at most.
         let max = STEPS + 65_536;
-        assert_releases(&Codec::UnixCompress, &read("data/compress/text.Z"), &text(), max);
-        assert_releases(&Codec::UnixCompress, &read("data/compress/text12.Z"), &text(), max);
-        assert_releases(&Codec::UnixCompress, &read("data/compress/rnd.Z"), &random, max);
-        assert_releases(&Codec::UnixCompress, &read("data/compress/lines.Z"), &lines(), max);
+        assert_releases(
+            &Codec::UnixCompress,
+            &read("data/compress/text.Z"),
+            &text(),
+            max,
+        );
+        assert_releases(
+            &Codec::UnixCompress,
+            &read("data/compress/text12.Z"),
+            &text(),
+            max,
+        );
+        assert_releases(
+            &Codec::UnixCompress,
+            &read("data/compress/rnd.Z"),
+            &random,
+            max,
+        );
+        assert_releases(
+            &Codec::UnixCompress,
+            &read("data/compress/lines.Z"),
+            &lines(),
+            max,
+        );
         let words = read("data/compress/words.Z");
         let expected = eager(&Codec::UnixCompress, &words);
         assert_eq!(expected.len(), 2_493_885);
@@ -586,7 +809,9 @@ mod lz_releases {
     fn big_deflate() -> (Vec<u8>, Vec<u8>) {
         let zlib = read("data/lazy/big.zlib");
         let raw = zlib[2..zlib.len() - 4].to_vec();
-        let expected: Vec<u8> = (0..64u64 << 20).map(|i| ((i * 7) + (i >> 12)) as u8).collect();
+        let expected: Vec<u8> = (0..64u64 << 20)
+            .map(|i| ((i * 7) + (i >> 12)) as u8)
+            .collect();
         (raw, expected)
     }
 
@@ -606,7 +831,11 @@ mod lz_releases {
     }
 
     fn deflate_after(cipher: Codec) -> Codec {
-        Codec::chain("decrypt+deflate", "decrypt+deflate (lazy)", vec![cipher, Codec::Deflate])
+        Codec::chain(
+            "decrypt+deflate",
+            "decrypt+deflate (lazy)",
+            vec![cipher, Codec::Deflate],
+        )
     }
 
     #[test]
@@ -626,7 +855,12 @@ mod lz_releases {
         assert_releases(&codec, member, &expected, max);
         // 64 MiB through the chain.
         let (raw, expected) = big_deflate();
-        assert_releases(&codec, &zipcrypto_encrypt(b"fillyfoal", &raw), &expected, max);
+        assert_releases(
+            &codec,
+            &zipcrypto_encrypt(b"fillyfoal", &raw),
+            &expected,
+            max,
+        );
     }
 
     #[test]
@@ -635,9 +869,19 @@ mod lz_releases {
         let (raw, expected) = big_deflate();
         // Both are their own inverse.
         let aes = Codec::AesCtrLe(Key::new((0..32u8).collect::<Vec<u8>>()));
-        assert_releases(&deflate_after(aes.clone()), &eager(&aes, &raw), &expected, max);
+        assert_releases(
+            &deflate_after(aes.clone()),
+            &eager(&aes, &raw),
+            &expected,
+            max,
+        );
         let rc4 = Codec::Rc4(Key::new(b"fillyfoal".to_vec()));
-        assert_releases(&deflate_after(rc4.clone()), &eager(&rc4, &raw), &expected, max);
+        assert_releases(
+            &deflate_after(rc4.clone()),
+            &eager(&rc4, &raw),
+            &expected,
+            max,
+        );
         // On their own, with the last AES block partial.
         let odd = &lines()[..100_001];
         assert_releases(&aes, &eager(&aes, odd), odd, STEPS + 16);
@@ -652,13 +896,33 @@ fn zstd_releases() {
     let lines = zstd_bzip2_lines();
     // A 512 KiB window: held output is the window, a step and a 128 KiB block.
     let one = zstd_bzip2_data("zstd", "lines-1.zst");
-    assert_releases(&Codec::Zstd, &one, &lines, 512 * 1024 + 2 * 16 * 1024 + 128 * 1024);
-    assert_releases(&Codec::ZstdFrame, &one, &lines, 512 * 1024 + 2 * 16 * 1024 + 128 * 1024);
+    assert_releases(
+        &Codec::Zstd,
+        &one,
+        &lines,
+        512 * 1024 + 2 * 16 * 1024 + 128 * 1024,
+    );
+    assert_releases(
+        &Codec::ZstdFrame,
+        &one,
+        &lines,
+        512 * 1024 + 2 * 16 * 1024 + 128 * 1024,
+    );
     // Single-segment frames (of 150,000 and 700,250 bytes), released between
     // frames.
     let frames = zstd_bzip2_data("zstd", "lines-frames.zst");
-    assert_releases(&Codec::Zstd, &frames, &lines, 700_250 + 2 * 16 * 1024 + 128 * 1024);
-    assert_releases(&Codec::ZstdFrame, &frames, &lines[..150_000], 150_000 + 2 * 16 * 1024 + 128 * 1024);
+    assert_releases(
+        &Codec::Zstd,
+        &frames,
+        &lines,
+        700_250 + 2 * 16 * 1024 + 128 * 1024,
+    );
+    assert_releases(
+        &Codec::ZstdFrame,
+        &frames,
+        &lines[..150_000],
+        150_000 + 2 * 16 * 1024 + 128 * 1024,
+    );
     // The content checksum is checked as output is released.
     let mut bad = one.clone();
     let n = bad.len();
@@ -684,9 +948,19 @@ fn zstd_releases() {
 fn bzip2_releases() {
     let lines = zstd_bzip2_lines();
     // 100k blocks (-1): a step's worth plus a block.
-    assert_releases(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-1.bz2"), &lines, 2 * 16 * 1024 + 100_000);
+    assert_releases(
+        &Codec::Bzip2,
+        &zstd_bzip2_data("bzip2", "lines-1.bz2"),
+        &lines,
+        2 * 16 * 1024 + 100_000,
+    );
     // Two streams (-9 and -3).
-    assert_releases(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "lines-streams.bz2"), &lines, 2 * 16 * 1024 + 900_000);
+    assert_releases(
+        &Codec::Bzip2,
+        &zstd_bzip2_data("bzip2", "lines-streams.bz2"),
+        &lines,
+        2 * 16 * 1024 + 900_000,
+    );
     let (out, _, _) = released(&Codec::Bzip2, &zstd_bzip2_data("bzip2", "mixed-1.bz2"));
     assert!(out == zstd_bzip2_mixed());
 }
@@ -696,7 +970,8 @@ fn data_file(path: &str) -> Vec<u8> {
 }
 
 fn eager_decode(codec: &Codec, input: &[u8]) -> Vec<u8> {
-    fillyfoal::codec::pipeline::decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).unwrap()
+    fillyfoal::codec::pipeline::decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30)
+        .unwrap()
 }
 
 /// Brotli: output before the window (`2^WBITS - 16`) goes; longer
@@ -706,18 +981,39 @@ fn brotli_releases() {
     // 300,000 bytes in several meta-blocks with a 2^18 window.
     let words = data_file("brotli/words.q1.br");
     let expected = eager_decode(&Codec::Brotli, &words);
-    assert_eq!((expected.len(), fillyfoal::codec::crc32(&expected)), (300_000, 0xe11b_b7a0));
-    assert_releases(&Codec::Brotli, &words, &expected, 262_144 + 2 * 16 * 1024 + 65_536);
+    assert_eq!(
+        (expected.len(), fillyfoal::codec::crc32(&expected)),
+        (300_000, 0xe11b_b7a0)
+    );
+    assert_releases(
+        &Codec::Brotli,
+        &words,
+        &expected,
+        262_144 + 2 * 16 * 1024 + 65_536,
+    );
     // The other streams (dictionary words and transforms, a 2^10 window,
     // uncompressed meta-blocks), released and fed in pieces: each is a
     // single meta-block or fits its window, so only consumed input goes.
-    for name in ["prose.w10.br", "prose.q11.br", "dict.q11.br", "transforms.br", "struct.q11.br", "noise.br", "text.w16.br", "zeros.br", "empty.br"] {
+    for name in [
+        "prose.w10.br",
+        "prose.q11.br",
+        "dict.q11.br",
+        "transforms.br",
+        "struct.q11.br",
+        "noise.br",
+        "text.w16.br",
+        "zeros.br",
+        "empty.br",
+    ] {
         let input = data_file(&format!("brotli/{name}"));
         let expected = eager_decode(&Codec::Brotli, &input);
         let (out, _, _) = released(&Codec::Brotli, &input);
         assert!(out == expected, "{name}");
         // (Byte-at-a-time feeding retries a whole meta-block per byte.)
-        assert!(chunked(&Codec::Brotli, &input, 4096, 16 * 1024) == expected, "{name}");
+        assert!(
+            chunked(&Codec::Brotli, &input, 4096, 16 * 1024) == expected,
+            "{name}"
+        );
     }
     let text = data_file("brotli/text.w16.br");
     assert_on_demand(&Codec::Brotli, &text, &eager_decode(&Codec::Brotli, &text));
@@ -749,7 +1045,10 @@ fn cab_and_lzx_release() {
     for name in ["mszip.cab", "lzx16.cab", "lzx21.cab", "quantum.cab"] {
         let cab = data_file(&format!("cab/{name}"));
         for (kind, range) in cab_folders(&cab) {
-            let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+            let codec = Codec::CabFolder(Folder {
+                kind,
+                data_reserve: 0,
+            });
             let data = &cab[range];
             let expected = eager_decode(&codec, data);
             assert_releases(&codec, data, &expected, 2 * 16 * 1024 + 32 * 1024);
@@ -765,7 +1064,10 @@ fn cab_and_lzx_release() {
                 raw.extend_from_slice(&data[at + 8..at + 8 + packed]);
                 at += 8 + packed;
             }
-            let codec = Codec::Lzx(lzx::Params { len: Some(len), ..lzx::Params::cab((kind >> 8 & 0x1f) as u8) });
+            let codec = Codec::Lzx(lzx::Params {
+                len: Some(len),
+                ..lzx::Params::cab((kind >> 8 & 0x1f) as u8)
+            });
             assert!(eager_decode(&codec, &raw) == expected, "{name}: raw LZX");
             assert_releases(&codec, &raw, &expected, 2 * 16 * 1024 + 32 * 1024);
         }
@@ -780,14 +1082,29 @@ fn lzma_family_releases() {
     // A 4 KiB dictionary (`xz --lzma2=dict=4KiB`, `--format=lzma
     // --lzma1=dict=4KiB`): the window slides, holding the dictionary plus
     // a step and at most one match.
-    assert_releases(&Codec::Xz, &lzma_file("big-dict4k.xz"), &big, 4096 + step + 512);
-    assert_releases(&Codec::LzmaAlone, &lzma_file("big-dict4k.lzma"), &big, 4096 + step + 512);
+    assert_releases(
+        &Codec::Xz,
+        &lzma_file("big-dict4k.xz"),
+        &big,
+        4096 + step + 512,
+    );
+    assert_releases(
+        &Codec::LzmaAlone,
+        &lzma_file("big-dict4k.lzma"),
+        &big,
+        4096 + step + 512,
+    );
     // 64 KiB blocks: a block's output goes once it ends (its 8 MiB
     // dictionary holds all of it until then).
     assert_releases(&Codec::Xz, &lzma_file("big-blocks.xz"), &big, 65_536 + step);
     // Filtered blocks decode into a private window: `out` holds a step.
     assert_releases(&Codec::Xz, &lzma_file("big-x86.xz"), &big, step + 1024);
-    for name in ["small-delta.xz", "small-x86-delta.xz", "small-x86-dict4k.xz", "small-arm64.xz"] {
+    for name in [
+        "small-delta.xz",
+        "small-x86-delta.xz",
+        "small-x86-dict4k.xz",
+        "small-arm64.xz",
+    ] {
         assert_releases(&Codec::Xz, &lzma_file(name), &small, step + 1024);
     }
     // Two streams with padding, and single blocks whose dictionary is
@@ -802,10 +1119,33 @@ fn lzma_family_releases() {
     // Raw LZMA and LZMA2 are not told their dictionary size: they release
     // input as they go, and output only before a dictionary reset or at
     // the end.
-    assert_releases(&Codec::Lzma2 { dict: None }, &lzma_file("big.lzma2"), &big, big.len());
+    assert_releases(
+        &Codec::Lzma2 { dict: None },
+        &lzma_file("big.lzma2"),
+        &big,
+        big.len(),
+    );
     let props = fillyfoal::codec::lzma::Props::from_byte(0x5d).unwrap();
-    assert_releases(&Codec::LzmaRaw { props, size: None, dict: None }, &lzma_file("big.lzma1"), &big, big.len());
-    assert_releases(&Codec::LzmaRaw { props, size: Some(1000), dict: None }, &lzma_file("big.lzma1"), &big[..1000], 1000);
+    assert_releases(
+        &Codec::LzmaRaw {
+            props,
+            size: None,
+            dict: None,
+        },
+        &lzma_file("big.lzma1"),
+        &big,
+        big.len(),
+    );
+    assert_releases(
+        &Codec::LzmaRaw {
+            props,
+            size: Some(1000),
+            dict: None,
+        },
+        &lzma_file("big.lzma1"),
+        &big[..1000],
+        1000,
+    );
 }
 
 /// Raw LZMA given its dictionary size (as zip, 7z, SWF and lzip containers
@@ -814,11 +1154,20 @@ fn lzma_family_releases() {
 #[test]
 fn raw_lzma_with_a_known_dictionary_releases() {
     let file = lzma_file("big-dict4k.lzma");
-    let expected = fillyfoal::codec::pipeline::decode_all(Codec::LzmaAlone.decoder().unwrap().as_mut(), &file, 1 << 30).unwrap();
+    let expected = fillyfoal::codec::pipeline::decode_all(
+        Codec::LzmaAlone.decoder().unwrap().as_mut(),
+        &file,
+        1 << 30,
+    )
+    .unwrap();
     let props = fillyfoal::codec::lzma::Props::from_byte(file[0]).unwrap();
     let dict = u32::from_le_bytes(file[1..5].try_into().unwrap());
     assert_eq!(dict, 4096);
-    let codec = Codec::LzmaRaw { props, size: Some(expected.len()), dict: Some(dict) };
+    let codec = Codec::LzmaRaw {
+        props,
+        size: Some(expected.len()),
+        dict: Some(dict),
+    };
     assert_releases(&codec, &file[13..], &expected, 4096 + 2 * 16 * 1024 + 512);
     // The LZMA2 property byte: (2 | (p & 1)) << (p / 2 + 11), 40 = 4 GiB - 1.
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(0), Some(4096));

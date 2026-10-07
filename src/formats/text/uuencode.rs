@@ -93,7 +93,11 @@ fn decode_lines(data: &[u8], xx: bool) -> Decoded {
         if line.is_empty() {
             continue;
         }
-        let last = if xx { matches!(line, b"+") } else { matches!(line, b"`" | b" ") };
+        let last = if xx {
+            matches!(line, b"+")
+        } else {
+            matches!(line, b"`" | b" ")
+        };
         if last {
             break;
         }
@@ -205,9 +209,10 @@ async fn block_fields(
             .value(Value::Text(mode))
             .desc("Unix permissions, octal"),
     );
-    cx.emit(Node::new("Content").span(body).lazy(
-        content,
-        Block { input, body, kind },
-    ));
+    cx.emit(
+        Node::new("Content")
+            .span(body)
+            .lazy(content, Block { input, body, kind }),
+    );
     Ok(())
 }

@@ -42,7 +42,14 @@ pub trait Decode: Clone + Send + 'static {
     /// more bytes have been produced or the stream ends. Producing more
     /// than `limit` bytes in total is an error. Running out of input is an
     /// error too: the caller rolls back and retries with more.
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step>;
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step>;
 
     /// Input bytes consumed so far.
     fn consumed(&self) -> usize;
@@ -93,7 +100,14 @@ pub enum Status {
 
 /// A resumable decoder over growing buffers (object safe, chainable).
 pub trait Decoder: Send {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status>;
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status>;
     fn consumed(&self) -> usize;
     fn warning(&self, out: &[u8]) -> Option<Diagnostic>;
 
@@ -128,7 +142,14 @@ pub trait Decoder: Send {
 pub struct Streaming<D>(pub D);
 
 impl<D: Decode> Decoder for Streaming<D> {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         let saved = self.0.clone();
         let mark = out.len();
         match self.0.step(input, eof, out, step, limit) {
@@ -199,7 +220,14 @@ impl Chain {
 
     /// Runs stage `i` (not the last) for one step, feeding it from the
     /// previous stage or the external input.
-    fn pump(&mut self, i: usize, input: &[u8], eof: bool, step: usize, limit: usize) -> Result<Status> {
+    fn pump(
+        &mut self,
+        i: usize,
+        input: &[u8],
+        eof: bool,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         let (before, rest) = self.stages.split_at_mut(i);
         let Some(stage) = rest.first_mut() else {
             return Ok(Status::Done);
@@ -211,7 +239,9 @@ impl Chain {
             Some(prev) => (prev.out.as_slice(), prev.done),
             None => (input, eof),
         };
-        let status = stage.decoder.decode(src, src_eof, &mut stage.out, step, limit)?;
+        let status = stage
+            .decoder
+            .decode(src, src_eof, &mut stage.out, step, limit)?;
         if status == Status::Done {
             stage.done = true;
         }
@@ -228,7 +258,14 @@ impl Chain {
 }
 
 impl Decoder for Chain {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         let Some(last) = self.stages.len().checked_sub(1) else {
             // An empty chain copies its input.
             let from = out.len().min(input.len());
@@ -247,7 +284,9 @@ impl Decoder for Chain {
             };
             match stage.decoder.decode(src, src_eof, out, step, limit)? {
                 Status::NeedInput if last > 0 => {
-                    if self.pump(last.saturating_sub(1), input, eof, step, limit)? == Status::NeedInput {
+                    if self.pump(last.saturating_sub(1), input, eof, step, limit)?
+                        == Status::NeedInput
+                    {
                         return Ok(Status::NeedInput);
                     }
                 }
@@ -269,7 +308,9 @@ impl Decoder for Chain {
     }
 
     fn releasable_input(&self) -> usize {
-        self.stages.first().map_or(0, |s| s.decoder.releasable_input())
+        self.stages
+            .first()
+            .map_or(0, |s| s.decoder.releasable_input())
     }
 
     fn release_input(&mut self, n: usize) {
@@ -279,7 +320,9 @@ impl Decoder for Chain {
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        self.stages.last().map_or(0, |s| s.decoder.releasable_output(out_len))
+        self.stages
+            .last()
+            .map_or(0, |s| s.decoder.releasable_output(out_len))
     }
 
     fn release_output(&mut self, n: usize) {

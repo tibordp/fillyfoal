@@ -1956,6 +1956,8 @@ async fn dissect_as(cx: Cx, (input, name): (Input, &'static str)) -> Result<()> 
         by_name(name).ok_or_else(|| Diagnostic::internal(format!("unknown format {name}")))?;
     match settle(&cx, &input, Some(given)).await? {
         (Some(format), _) => (format.dissect)(cx, input).await,
-        (None, _) => Err(Diagnostic::internal(format!("format {name} was not settled"))),
+        (None, _) => Err(Diagnostic::internal(format!(
+            "format {name} was not settled"
+        ))),
     }
 }

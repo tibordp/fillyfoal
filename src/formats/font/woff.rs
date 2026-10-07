@@ -12,8 +12,8 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::util::datakit::{fourcc, size};
 use crate::formats::font::tables;
+use crate::formats::util::datakit::{fourcc, size};
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
@@ -310,7 +310,10 @@ type Woff2Entry = (Span, String, u8, u32, Option<u32>);
 
 /// Decompresses the table data and lists the tables in it, in directory
 /// order and without padding (each is its transformed length, if any).
-async fn woff2_tables(cx: Cx, (stream, entries, total): (Span, Vec<Woff2Entry>, u64)) -> Result<()> {
+async fn woff2_tables(
+    cx: Cx,
+    (stream, entries, total): (Span, Vec<Woff2Entry>, u64),
+) -> Result<()> {
     let decoded = crate::codec::decode_span(&cx, stream, &Codec::Brotli, Some(total)).await?;
     cx.annotate(format!("{:#x} bytes decompressed", decoded.span.len));
     if let Some(e) = decoded.error {

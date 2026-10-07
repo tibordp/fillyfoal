@@ -45,9 +45,8 @@ fn parse_args() -> Result<Options, Box<dyn Error>> {
             "--chunk" => options.chunk = value()?.parse()?,
             "--as" => {
                 let name = value()?;
-                options.format = Some(
-                    formats::by_name(&name).ok_or_else(|| format!("unknown format {name}"))?,
-                );
+                options.format =
+                    Some(formats::by_name(&name).ok_or_else(|| format!("unknown format {name}"))?);
             }
             "--path" => {
                 options.path = value()?

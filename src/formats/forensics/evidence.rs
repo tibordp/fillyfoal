@@ -447,7 +447,10 @@ async fn aff_segment(
             AFF_ALG_ZERO => Node::new("Data").span(data).summary("count of zero bytes"),
             _ => Node::new("Data")
                 .span(data)
-                .diag(Diagnostic::unsupported(format!("compression algorithm {:#x}", arg & 0xf0))),
+                .diag(Diagnostic::unsupported(format!(
+                    "compression algorithm {:#x}",
+                    arg & 0xf0
+                ))),
         });
     } else if page {
         cx.emit(embedded("Data", input.nested(data)));

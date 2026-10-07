@@ -193,7 +193,11 @@ impl Block {
         if self.part.is_some() {
             let size = end.and_then(|y| y.num("size")).or_else(|| {
                 let p = &self.part.as_ref()?.1;
-                Some(p.num("end")?.saturating_sub(p.num("begin")?).saturating_add(1))
+                Some(
+                    p.num("end")?
+                        .saturating_sub(p.num("begin")?)
+                        .saturating_add(1),
+                )
             });
             Expect {
                 size,
@@ -300,9 +304,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let (Some(a), Some(z)) = (parts.first(), parts.last()) else {
             continue;
         };
-        let whole = Span::new(span.source, a.span.offset, z.span.end().saturating_sub(a.span.offset));
-        let mut summary = format!("{} of {}", plural(crate::bytes::to_u64(parts.len()), "part", "parts"),
-            total.map_or_else(|| "?".to_owned(), |t| t.to_string()));
+        let whole = Span::new(
+            span.source,
+            a.span.offset,
+            z.span.end().saturating_sub(a.span.offset),
+        );
+        let mut summary = format!(
+            "{} of {}",
+            plural(crate::bytes::to_u64(parts.len()), "part", "parts"),
+            total.map_or_else(|| "?".to_owned(), |t| t.to_string())
+        );
         if let Some(s) = size {
             summary = format!("{summary}, {s} bytes");
         }
@@ -491,12 +502,18 @@ mod tests {
 
     #[test]
     fn parses_lines_and_decodes() {
-        let y = parse(b"=ybegin part=1 total=2 line=128 size=500 name=my file.bin\r", b"=ybegin ")
-            .unwrap_or_default();
+        let y = parse(
+            b"=ybegin part=1 total=2 line=128 size=500 name=my file.bin\r",
+            b"=ybegin ",
+        )
+        .unwrap_or_default();
         assert_eq!(y.num("part"), Some(1));
         assert_eq!(y.num("size"), Some(500));
         assert_eq!(y.name.map(|n| n.value).as_deref(), Some("my file.bin"));
-        assert!(parse(b"=yend size=3 crc32=abcdef12", b"=yend").is_some_and(|y| y.crc("crc32") == Some(0xabcd_ef12)));
+        assert!(
+            parse(b"=yend size=3 crc32=abcdef12", b"=yend")
+                .is_some_and(|y| y.crc("crc32") == Some(0xabcd_ef12))
+        );
         // 0x00 -> '*', 0xd6 -> NUL (escaped as "=@"), 0xe0 -> LF ("=J").
         assert_eq!(ydecode(b"*=@\r\n=J"), [0x00, 0xd6, 0xe0]);
     }

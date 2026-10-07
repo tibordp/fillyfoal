@@ -51,7 +51,11 @@ pub enum Pointer {
     List { offset: i32, elem: u8, count: u32 },
     /// A far pointer: to a landing pad in another segment, which is a
     /// single pointer or (`double`) a far pointer and a tag.
-    Far { double: bool, offset: u32, segment: u32 },
+    Far {
+        double: bool,
+        offset: u32,
+        segment: u32,
+    },
     /// A capability: an index into the message's capability table.
     Capability { index: u32 },
     /// Type 3 with a nonzero reserved part.
@@ -116,9 +120,9 @@ pub struct SegmentTable {
 impl SegmentTable {
     /// The size of the whole message in bytes.
     pub fn message_len(&self) -> u64 {
-        self.segments
-            .last()
-            .map_or(self.len, |&(start, words)| start.saturating_add(words.saturating_mul(WORD)))
+        self.segments.last().map_or(self.len, |&(start, words)| {
+            start.saturating_add(words.saturating_mul(WORD))
+        })
     }
 }
 

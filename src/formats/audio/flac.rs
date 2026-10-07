@@ -6,6 +6,7 @@
 //! The metadata block decoders are shared with FLAC-in-Ogg.
 
 use crate::bytes::{to_u64, to_usize, u32_be};
+use crate::codec::crc::crc8;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -13,12 +14,11 @@ use crate::fields::{Endian, Fields};
 use crate::formats::util::sound::{
     Bits, bits_node, channels, duration_of, enumerated, hex, leaf, parse_bits, table, text, uint,
 };
-use crate::formats::{Format, Input, Probe, embedded, audio::id3, audio::vorbis};
+use crate::formats::{Format, Input, Probe, audio::id3, audio::vorbis, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::EnumTable;
-use crate::codec::crc::crc8;
 
 const BE: Endian = Endian::Big;
 

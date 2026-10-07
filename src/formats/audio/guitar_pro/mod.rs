@@ -61,7 +61,9 @@ declare_format!(pub FORMAT = "guitar-pro", "Guitar Pro tablature", ["gp3", "gp4"
 // ---------------------------------------------------------------------------
 // Shared helpers (also used by the GPX/GPIF summaries)
 
-const NOTE_NAMES: [&str; 12] = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+const NOTE_NAMES: [&str; 12] = [
+    "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
+];
 
 /// A MIDI note number as a name with octave (60 is C4).
 pub(crate) fn pitch_name(midi: i64) -> String {
@@ -78,21 +80,54 @@ pub(crate) fn pitch_name(midi: i64) -> String {
 
 /// A General MIDI program name.
 pub(crate) fn program_name(program: i64) -> Option<&'static str> {
-    usize::try_from(program).ok().and_then(|p| GM_PROGRAMS.get(p)).copied()
+    usize::try_from(program)
+        .ok()
+        .and_then(|p| GM_PROGRAMS.get(p))
+        .copied()
 }
 
 /// Key signature names by number of sharps (negative: flats), -7..=7.
 fn key_name(root: i64, minor: bool) -> Option<&'static str> {
     const MAJOR: [&str; 15] = [
-        "C♭ major", "G♭ major", "D♭ major", "A♭ major", "E♭ major", "B♭ major", "F major", "C major", "G major",
-        "D major", "A major", "E major", "B major", "F♯ major", "C♯ major",
+        "C♭ major",
+        "G♭ major",
+        "D♭ major",
+        "A♭ major",
+        "E♭ major",
+        "B♭ major",
+        "F major",
+        "C major",
+        "G major",
+        "D major",
+        "A major",
+        "E major",
+        "B major",
+        "F♯ major",
+        "C♯ major",
     ];
     const MINOR: [&str; 15] = [
-        "A♭ minor", "E♭ minor", "B♭ minor", "F minor", "C minor", "G minor", "D minor", "A minor", "E minor",
-        "B minor", "F♯ minor", "C♯ minor", "G♯ minor", "D♯ minor", "A♯ minor",
+        "A♭ minor",
+        "E♭ minor",
+        "B♭ minor",
+        "F minor",
+        "C minor",
+        "G minor",
+        "D minor",
+        "A minor",
+        "E minor",
+        "B minor",
+        "F♯ minor",
+        "C♯ minor",
+        "G♯ minor",
+        "D♯ minor",
+        "A♯ minor",
     ];
     let i = usize::try_from(root.checked_add(7)?).ok()?;
-    if minor { MINOR.get(i).copied() } else { MAJOR.get(i).copied() }
+    if minor {
+        MINOR.get(i).copied()
+    } else {
+        MAJOR.get(i).copied()
+    }
 }
 
 fn text(bytes: &[u8]) -> String {
@@ -110,7 +145,11 @@ fn since(f: &Fields<'_>, start: u64) -> Span {
 }
 
 fn emit_text(f: &Fields<'_>, name: impl Into<Cow<'static, str>>, start: u64, value: &str) {
-    f.node(Node::new(name).span(since(f, start)).value(Value::Text(value.to_owned())));
+    f.node(
+        Node::new(name)
+            .span(since(f, start))
+            .value(Value::Text(value.to_owned())),
+    );
 }
 
 /// An `i32` size, a byte length, then `size - 1` bytes of which the first
@@ -124,7 +163,11 @@ fn ibstr(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
         _ => u64::from(len),
     };
     let bytes = f.bytes(name, n).get()?;
-    let value = text(bytes.get(..usize::from(len).min(bytes.len())).unwrap_or_default());
+    let value = text(
+        bytes
+            .get(..usize::from(len).min(bytes.len()))
+            .unwrap_or_default(),
+    );
     emit_text(f, name, start, &value);
     Ok(value)
 }
@@ -134,7 +177,11 @@ fn bstr(f: &mut Fields<'_>, name: &'static str, size: u64) -> Result<String> {
     let start = f.pos();
     let len = f.u8(name).get()?;
     let bytes = f.bytes(name, size).get()?;
-    let value = text(bytes.get(..usize::from(len).min(bytes.len())).unwrap_or_default());
+    let value = text(
+        bytes
+            .get(..usize::from(len).min(bytes.len()))
+            .unwrap_or_default(),
+    );
     emit_text(f, name, start, &value);
     Ok(value)
 }
@@ -356,7 +403,11 @@ const BEAT_EFFECTS1: FlagTable = &[
     flag(0x40, "STROKE"),
 ];
 
-const BEAT_EFFECTS2: FlagTable = &[flag(0x01, "RASGUEADO"), flag(0x02, "PICK_STROKE"), flag(0x04, "TREMOLO_BAR")];
+const BEAT_EFFECTS2: FlagTable = &[
+    flag(0x01, "RASGUEADO"),
+    flag(0x02, "PICK_STROKE"),
+    flag(0x04, "TREMOLO_BAR"),
+];
 
 const SLAP: EnumTable = &[(0, "none"), (1, "tapping"), (2, "slapping"), (3, "popping")];
 
@@ -455,7 +506,9 @@ const DIRECTIONS: [&str; 19] = [
     "Da double coda",
 ];
 
-const STRING_NAMES: [&str; 7] = ["String 1", "String 2", "String 3", "String 4", "String 5", "String 6", "String 7"];
+const STRING_NAMES: [&str; 7] = [
+    "String 1", "String 2", "String 3", "String 4", "String 5", "String 6", "String 7",
+];
 
 fn duration_name(d: i8) -> &'static str {
     match d {
@@ -514,7 +567,9 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let block = cx.block(file.sub(0, file.len.min(MAX_FILE))).await?;
     if file.len > MAX_FILE {
-        cx.diag(Diagnostic::limit(format!("only the first {MAX_FILE:#x} bytes are dissected")));
+        cx.diag(Diagnostic::limit(format!(
+            "only the first {MAX_FILE:#x} bytes are dissected"
+        )));
     }
     let mut f = Fields::emitting(&cx, &block, LE);
     let version = bstr(&mut f, "Version", 30)?;
@@ -522,14 +577,25 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Song data")
                 .span(file.tail(f.pos()))
-                .diag(Diagnostic::unsupported(format!("{version} files are not dissected"))),
+                .diag(Diagnostic::unsupported(format!(
+                    "{version} files are not dissected"
+                ))),
         );
         cx.annotate(version);
         return Ok(());
     };
-    let info = group(&mut f, "Song information", &ver, info, |i: &Info| Some(i.summary()))?;
+    let info = group(&mut f, "Song information", &ver, info, |i: &Info| {
+        Some(i.summary())
+    })?;
     let summary = |sizes: Option<Sizes>| {
-        let mut s = format!("Guitar Pro {}", version.rsplit(' ').next().unwrap_or_default().trim_start_matches(['v', 'L']));
+        let mut s = format!(
+            "Guitar Pro {}",
+            version
+                .rsplit(' ')
+                .next()
+                .unwrap_or_default()
+                .trim_start_matches(['v', 'L'])
+        );
         if !info.title.is_empty() {
             s.push_str(&format!(": {:?}", info.title));
         }
@@ -537,7 +603,10 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
             s.push_str(&format!(" by {}", info.artist));
         }
         if let Some(z) = sizes {
-            s.push_str(&format!(", {} tracks, {} measures, {} BPM", z.tracks, z.measures, z.tempo));
+            s.push_str(&format!(
+                ", {} tracks, {} measures, {} BPM",
+                z.tracks, z.measures, z.tempo
+            ));
         }
         s
     };
@@ -613,7 +682,8 @@ fn lyric_line(f: &mut Fields<'_>, _: &()) -> Result<(i32, String)> {
 
 fn equalizer(f: &mut Fields<'_>, bands: &usize) -> Result<()> {
     const NAMES: [&str; 10] = [
-        "Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7", "Band 8", "Band 9", "Band 10",
+        "Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7", "Band 8", "Band 9",
+        "Band 10",
     ];
     for name in NAMES.iter().take(*bands) {
         f.int::<i8>(name).desc("Gain in -0.1 dB steps").emit()?;
@@ -677,7 +747,11 @@ async fn midi_channels(cx: Cx, span: Span) -> Result<()> {
         let start = f.pos();
         let program = midi_channel(&mut f, &())?;
         let at = since(&f, start);
-        let name = format!("Port {} channel {}", (i / 16).saturating_add(1), (i % 16).saturating_add(1));
+        let name = format!(
+            "Port {} channel {}",
+            (i / 16).saturating_add(1),
+            (i % 16).saturating_add(1)
+        );
         let mut node = struct_node(name, at, LE, (), midi_channel);
         if i % 16 == 9 {
             node = node.summary("percussion");
@@ -703,16 +777,22 @@ fn directions(f: &mut Fields<'_>, _: &()) -> Result<usize> {
 /// Everything after the song information, at the top level.
 fn song_body(f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
     if ver.major < 5 {
-        f.u8("Triplet feel").enumeration(&[(0, "none"), (1, "eighth")]).emit()?;
+        f.u8("Triplet feel")
+            .enumeration(&[(0, "none"), (1, "eighth")])
+            .emit()?;
     }
     if ver.major >= 4 {
-        group(f, "Lyrics", &(), lyrics, |n| Some(format!("{n} non-empty lines")))?;
+        group(f, "Lyrics", &(), lyrics, |n| {
+            Some(format!("{n} non-empty lines"))
+        })?;
     }
     if ver.major >= 5 {
         if ver.v510 {
             group(f, "RSE master effect", &(), master_effect, |_| None)?;
         }
-        group(f, "Page setup", &(), page_setup, |(w, h)| Some(format!("{w}×{h} mm")))?;
+        group(f, "Page setup", &(), page_setup, |(w, h)| {
+            Some(format!("{w}×{h} mm"))
+        })?;
         ibstr(f, "Tempo name")?;
     }
     let tempo = f.int::<i32>("Tempo").summary("BPM").emit()?;
@@ -747,7 +827,9 @@ fn song_body(f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
     );
     f.skip(64 * 12);
     if ver.major >= 5 {
-        group(f, "Directions", &(), directions, |n| Some(format!("{n} used")))?;
+        group(f, "Directions", &(), directions, |n| {
+            Some(format!("{n} used"))
+        })?;
         i32f(f, "Master reverb")?;
     }
     let measures = i32f(f, "Measure count")?;
@@ -862,7 +944,11 @@ fn header(f: &mut Fields<'_>, &(ver, first): &(Ver, bool)) -> Result<Header> {
         let gp5 = ver.major >= 5;
         let raw = f
             .int::<i8>("Repeat count")
-            .desc(if gp5 { "Number of repeats plus one" } else { "Number of repeats" })
+            .desc(if gp5 {
+                "Number of repeats plus one"
+            } else {
+                "Number of repeats"
+            })
             .emit()?;
         h.repeat_close = Some(if gp5 { raw.saturating_sub(1) } else { raw });
     }
@@ -878,7 +964,10 @@ fn header(f: &mut Fields<'_>, &(ver, first): &(Ver, bool)) -> Result<Header> {
             .int::<i8>("Key")
             .desc("Sharps (positive) or flats (negative)")
             .emit()?;
-        let kind = f.int::<i8>("Key type").enumeration(&[(0, "major"), (1, "minor")]).emit()?;
+        let kind = f
+            .int::<i8>("Key type")
+            .enumeration(&[(0, "major"), (1, "minor")])
+            .emit()?;
         h.key = Some((root, kind));
     }
     if ver.major >= 5 {
@@ -886,7 +975,9 @@ fn header(f: &mut Fields<'_>, &(ver, first): &(Ver, bool)) -> Result<Header> {
             h.alternative = Some(alternative(f)?);
         }
         if flags & 0x03 != 0 {
-            f.bytes("Beam groups", 4).desc("Eighth notes per beam group").emit()?;
+            f.bytes("Beam groups", 4)
+                .desc("Eighth notes per beam group")
+                .emit()?;
         }
         if flags & 0x10 == 0 {
             f.u8("Padding").emit()?;
@@ -908,7 +999,10 @@ fn time_signatures(headers: &[Header]) -> Vec<(i8, i8)> {
     headers
         .iter()
         .map(|h| {
-            time = (h.numerator.unwrap_or(time.0), h.denominator.unwrap_or(time.1));
+            time = (
+                h.numerator.unwrap_or(time.0),
+                h.denominator.unwrap_or(time.1),
+            );
             time
         })
         .collect()
@@ -939,7 +1033,10 @@ fn header_summary(h: &Header, time: (i8, i8)) -> String {
     parts.join(", ")
 }
 
-async fn measure_headers(cx: Cx, (span, ver, headers): (Span, Ver, Arc<Vec<Header>>)) -> Result<()> {
+async fn measure_headers(
+    cx: Cx,
+    (span, ver, headers): (Span, Ver, Arc<Vec<Header>>),
+) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::new(&block, LE);
     let times = time_signatures(&headers);
@@ -947,8 +1044,14 @@ async fn measure_headers(cx: Cx, (span, ver, headers): (Span, Ver, Arc<Vec<Heade
         let start = f.pos();
         let ctx = (ver, i == 0);
         header(&mut f, &ctx)?;
-        let node = struct_node(format!("Measure {}", i.saturating_add(1)), since(&f, start), LE, ctx, header)
-            .summary(header_summary(h, time));
+        let node = struct_node(
+            format!("Measure {}", i.saturating_add(1)),
+            since(&f, start),
+            LE,
+            ctx,
+            header,
+        )
+        .summary(header_summary(h, time));
         cx.push(node).await;
     }
     Ok(())
@@ -983,8 +1086,13 @@ fn track(f: &mut Fields<'_>, &(ver, first): &(Ver, bool)) -> Result<Track> {
         }
     }
     i32f(f, "MIDI port")?;
-    let channel = f.int::<i32>("MIDI channel").desc("Index into the channel table, from 1").emit()?;
-    f.int::<i32>("Effect channel").desc("Index into the channel table, from 1").emit()?;
+    let channel = f
+        .int::<i32>("MIDI channel")
+        .desc("Index into the channel table, from 1")
+        .emit()?;
+    f.int::<i32>("Effect channel")
+        .desc("Index into the channel table, from 1")
+        .emit()?;
     let frets = i32f(f, "Frets")?;
     let capo = i32f(f, "Capo")?;
     color(f, "Colour")?;
@@ -1033,7 +1141,12 @@ fn track_summary(t: &Track) -> String {
     if t.drums {
         s.push_str(", percussion");
     } else {
-        let tuning: Vec<String> = t.tuning.iter().rev().map(|&p| pitch_name(i64::from(p))).collect();
+        let tuning: Vec<String> = t
+            .tuning
+            .iter()
+            .rev()
+            .map(|&p| pitch_name(i64::from(p)))
+            .collect();
         s.push_str(&format!(", {} strings ({})", t.strings, tuning.join(" ")));
         s.push_str(&format!(", {} frets", t.frets));
         if t.capo > 0 {
@@ -1053,7 +1166,11 @@ async fn track_headers(cx: Cx, (span, ver): (Span, Ver)) -> Result<()> {
         let ctx = (ver, i == 0);
         let t = track(&mut f, &ctx)?;
         i = i.saturating_add(1);
-        cx.push(struct_node(format!("Track {i}"), since(&f, start), LE, ctx, track).summary(track_summary(&t))).await;
+        cx.push(
+            struct_node(format!("Track {i}"), since(&f, start), LE, ctx, track)
+                .summary(track_summary(&t)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -1080,11 +1197,16 @@ impl Tally {
 
 /// One measure across all tracks.
 fn measure(f: &mut Fields<'_>, song: &Arc<Song>) -> Result<Tally> {
-    let ver = song.ver.unwrap_or(Ver { major: 5, v510: true });
+    let ver = song.ver.unwrap_or(Ver {
+        major: 5,
+        v510: true,
+    });
     let mut total = Tally::default();
     for (i, t) in song.tracks.iter().enumerate() {
         let name = format!("Track {}", i.saturating_add(1));
-        let tally = group(f, name, &(ver, t.strings), track_measure, |t| Some(t.summary()))?;
+        let tally = group(f, name, &(ver, t.strings), track_measure, |t| {
+            Some(t.summary())
+        })?;
         total.add(tally);
     }
     Ok(total)
@@ -1101,7 +1223,9 @@ fn track_measure(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
     // Writers may leave out the last measure's line break at the end of
     // the file (PyGuitarPro reads it as 0 then).
     if ctx.0.major >= 5 && f.remaining() > 0 {
-        f.u8("Line break").enumeration(&[(0, "none"), (1, "break"), (2, "protect")]).emit()?;
+        f.u8("Line break")
+            .enumeration(&[(0, "none"), (1, "break"), (2, "protect")])
+            .emit()?;
     }
     Ok(total)
 }
@@ -1110,9 +1234,13 @@ fn voice(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
     let count = i32f(f, "Beat count")?;
     let mut tally = Tally::default();
     for i in 0..count.max(0) {
-        let b = group(f, format!("Beat {}", i.saturating_add(1)), ctx, beat, |b| Some(b.summary()))?;
+        let b = group(f, format!("Beat {}", i.saturating_add(1)), ctx, beat, |b| {
+            Some(b.summary())
+        })?;
         tally.beats = tally.beats.saturating_add(1);
-        tally.notes = tally.notes.saturating_add(crate::bytes::to_u64(b.notes.len()));
+        tally.notes = tally
+            .notes
+            .saturating_add(crate::bytes::to_u64(b.notes.len()));
     }
     Ok(tally)
 }
@@ -1142,7 +1270,11 @@ impl Beat {
             _ => {}
         }
         if !self.notes.is_empty() {
-            let notes: Vec<String> = self.notes.iter().map(|(string, n)| n.summary(*string)).collect();
+            let notes: Vec<String> = self
+                .notes
+                .iter()
+                .map(|(string, n)| n.summary(*string))
+                .collect();
             s.push_str(&format!(", {}", notes.join(" ")));
         }
         if let Some(t) = &self.text {
@@ -1184,10 +1316,16 @@ fn beat(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Beat> {
         .with(|&d, n| n.summary(duration_name(d)))
         .emit()?;
     if flags & 0x20 != 0 {
-        b.tuplet = Some(f.int::<i32>("Tuplet").desc("Notes played in the time of the next lower power of two").emit()?);
+        b.tuplet = Some(
+            f.int::<i32>("Tuplet")
+                .desc("Notes played in the time of the next lower power of two")
+                .emit()?,
+        );
     }
     if flags & 0x02 != 0 {
-        group(f, "Chord diagram", &ver, chord, |name| Some(format!("{name:?}")))?;
+        group(f, "Chord diagram", &ver, chord, |name| {
+            Some(format!("{name:?}"))
+        })?;
     }
     if flags & 0x04 != 0 {
         b.text = Some(ibstr(f, "Text")?);
@@ -1303,7 +1441,9 @@ fn beat_effects(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
         i8f(f, "Stroke up")?;
     }
     if flags2 & 0x02 != 0 {
-        f.int::<i8>("Pick stroke").enumeration(&[(0, "none"), (1, "up"), (2, "down")]).emit()?;
+        f.int::<i8>("Pick stroke")
+            .enumeration(&[(0, "none"), (1, "up"), (2, "down")])
+            .emit()?;
     }
     Ok(())
 }
@@ -1313,15 +1453,22 @@ fn bend(f: &mut Fields<'_>, _: &()) -> Result<i32> {
     f.int::<i32>("Value").desc("In 1/100 semitones").emit()?;
     let count = i32f(f, "Point count")?;
     for i in 0..count.max(0) {
-        group(f, format!("Point {}", i.saturating_add(1)), &(), bend_point, |(p, v)| {
-            Some(format!("position {p}/60, {v}/100 semitone"))
-        })?;
+        group(
+            f,
+            format!("Point {}", i.saturating_add(1)),
+            &(),
+            bend_point,
+            |(p, v)| Some(format!("position {p}/60, {v}/100 semitone")),
+        )?;
     }
     Ok(count)
 }
 
 fn bend_point(f: &mut Fields<'_>, _: &()) -> Result<(i32, i32)> {
-    let p = f.int::<i32>("Position").desc("In 1/60 of the note").emit()?;
+    let p = f
+        .int::<i32>("Position")
+        .desc("In 1/60 of the note")
+        .emit()?;
     let v = f.int::<i32>("Value").desc("In 1/100 semitones").emit()?;
     f.u8("Vibrato").emit()?;
     Ok((p, v))
@@ -1341,14 +1488,29 @@ fn mix_table(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
         }
     }
     let mut set = [false; 6];
-    for (slot, name) in set.iter_mut().zip(["Volume", "Balance", "Chorus", "Reverb", "Phaser", "Tremolo"]) {
-        let v = f.int::<i8>(name).with(|&v, n| if v < 0 { n.summary("unchanged") } else { n }).emit()?;
+    for (slot, name) in set
+        .iter_mut()
+        .zip(["Volume", "Balance", "Chorus", "Reverb", "Phaser", "Tremolo"])
+    {
+        let v = f
+            .int::<i8>(name)
+            .with(|&v, n| if v < 0 { n.summary("unchanged") } else { n })
+            .emit()?;
         *slot = v >= 0;
     }
     if ver.major >= 5 {
         ibstr(f, "Tempo name")?;
     }
-    let tempo = f.int::<i32>("Tempo").with(|&v, n| if v < 0 { n.summary("unchanged") } else { n.summary("BPM") }).emit()?;
+    let tempo = f
+        .int::<i32>("Tempo")
+        .with(|&v, n| {
+            if v < 0 {
+                n.summary("unchanged")
+            } else {
+                n.summary("BPM")
+            }
+        })
+        .emit()?;
     for (on, name) in set.iter().zip([
         "Volume duration",
         "Balance duration",
@@ -1387,14 +1549,20 @@ fn note(f: &mut Fields<'_>, ver: &Ver) -> Result<NoteInfo> {
         n.kind = Some(f.u8("Type").enumeration(NOTE_TYPE).emit()?);
     }
     if ver.major < 5 && flags & 0x01 != 0 {
-        f.int::<i8>("Duration").with(|&d, n| n.summary(duration_name(d))).emit()?;
+        f.int::<i8>("Duration")
+            .with(|&d, n| n.summary(duration_name(d)))
+            .emit()?;
         i8f(f, "Tuplet")?;
     }
     if flags & 0x10 != 0 {
         f.int::<i8>("Dynamic")
             .with(|&d, n| {
                 const DYN: [&str; 8] = ["ppp", "pp", "p", "mp", "mf", "f", "ff", "fff"];
-                match usize::try_from(d).ok().and_then(|i| i.checked_sub(1)).and_then(|i| DYN.get(i)) {
+                match usize::try_from(d)
+                    .ok()
+                    .and_then(|i| i.checked_sub(1))
+                    .and_then(|i| DYN.get(i))
+                {
                     Some(name) => n.summary(*name),
                     None => n,
                 }
@@ -1457,7 +1625,9 @@ fn note_effects(f: &mut Fields<'_>, ver: &Ver) -> Result<()> {
             if kind == 2 {
                 f.u8("Semitone").emit()?;
                 i8f(f, "Accidental")?;
-                f.u8("Octave").enumeration(&[(0, "loco"), (1, "8va"), (2, "15ma")]).emit()?;
+                f.u8("Octave")
+                    .enumeration(&[(0, "loco"), (1, "8va"), (2, "15ma")])
+                    .emit()?;
             } else if kind == 3 {
                 f.u8("Fret").emit()?;
             }
@@ -1502,7 +1672,13 @@ async fn measures_walk(cx: Cx, (span, song): (Span, Arc<Song>)) -> Result<()> {
         cx.mark(move || (start, i));
         let tally = measure(&mut f, &song);
         let at = since(&f, start);
-        let mut node = struct_node(format!("Measure {}", i.saturating_add(1)), at, LE, song.clone(), measure);
+        let mut node = struct_node(
+            format!("Measure {}", i.saturating_add(1)),
+            at,
+            LE,
+            song.clone(),
+            measure,
+        );
         let time = times.get(i).copied().unwrap_or((4, 4));
         let mut summary = format!("{}/{}", time.0, time.1);
         if let Some(m) = &h.marker {
@@ -1521,7 +1697,8 @@ async fn measures_walk(cx: Cx, (span, song): (Span, Arc<Song>)) -> Result<()> {
         }
     }
     if f.remaining() > 0 {
-        cx.push(Node::new("Trailing data").span(span.tail(f.pos()))).await;
+        cx.push(Node::new("Trailing data").span(span.tail(f.pos())))
+            .await;
     }
     Ok(())
 }

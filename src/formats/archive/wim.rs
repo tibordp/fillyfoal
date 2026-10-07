@@ -9,12 +9,12 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
+use crate::codec::{Codec, wim};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, uint, unsupported};
-use crate::codec::{Codec, wim};
 use crate::formats::{Format, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -172,7 +172,10 @@ impl Scheme {
 }
 
 /// A compressed lookup table: decompressed, then listed.
-async fn compressed_lookup(cx: Cx, (input, data, name, scheme, codec): (Input, Span, &'static str, Scheme, Codec)) -> Result<()> {
+async fn compressed_lookup(
+    cx: Cx,
+    (input, data, name, scheme, codec): (Input, Span, &'static str, Scheme, Codec),
+) -> Result<()> {
     let decoded = crate::codec::decode_span(&cx, data, &codec, None).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
@@ -185,7 +188,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let h = crate::fields::parse(&cx, file.sub(0, Header::SIZE), LE, &(), Header::layout).await?;
     let raw = cx.read(file.sub(0, 208)).await?;
     let codec = compression(h.flags);
-    let scheme = Scheme { flags: h.flags, chunk: h.chunk };
+    let scheme = Scheme {
+        flags: h.flags,
+        chunk: h.chunk,
+    };
     cx.emit(
         Header::node("Header", file.sub(0, 208), LE)
             .summary(format!("version {:#x}, {codec}", h.version)),
@@ -258,7 +264,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn lookup_table(cx: Cx, (input, span, codec, scheme): (Input, Span, &'static str, Scheme)) -> Result<()> {
+async fn lookup_table(
+    cx: Cx,
+    (input, span, codec, scheme): (Input, Span, &'static str, Scheme),
+) -> Result<()> {
     let n = span.len / LOOKUP_ENTRY;
     cx.set_count(Count::Exact(n));
     let data = cx.read(span.sub(0, n.saturating_mul(LOOKUP_ENTRY))).await?;

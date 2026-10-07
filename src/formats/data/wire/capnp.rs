@@ -32,7 +32,9 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Value, lookup};
 
-use super::{hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen};
+use super::{
+    hex, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen,
+};
 
 declare_format!(pub FORMAT = "capnp", "Cap'n Proto message",
     ["bin", "capnp-bin"], "application/x-capnp", Probe::Custom(probe), dissect);
@@ -61,7 +63,10 @@ fn probe(h: &Head<'_>) -> bool {
     let Some(&(start, words)) = table.segments.first() else {
         return false;
     };
-    let Some(word) = usize::try_from(start).ok().and_then(|at| u64_le(h.data, at)) else {
+    let Some(word) = usize::try_from(start)
+        .ok()
+        .and_then(|at| u64_le(h.data, at))
+    else {
         return false;
     };
     match pointer(word) {
@@ -102,16 +107,17 @@ impl Msg {
         if loc.word.checked_add(words)? > size {
             return None;
         }
-        Some(
-            self.span
-                .sub(start.checked_add(loc.word.checked_mul(WORD)?)?, words.checked_mul(WORD)?),
-        )
+        Some(self.span.sub(
+            start.checked_add(loc.word.checked_mul(WORD)?)?,
+            words.checked_mul(WORD)?,
+        ))
     }
 
     /// The span of `bytes` bytes at `loc`, if inside its segment.
     fn bytes(&self, loc: Loc, bytes: u64) -> Option<Span> {
         let words = bytes.div_ceil(WORD);
-        self.words(loc, words).map(|s| Span::new(s.source, s.offset, bytes))
+        self.words(loc, words)
+            .map(|s| Span::new(s.source, s.offset, bytes))
     }
 
     fn id(loc: Loc) -> u64 {
@@ -171,7 +177,9 @@ async fn resolve(cx: &Cx, msg: &Msg, loc: Loc) -> Result<(Object, Option<String>
                 segment: content_seg,
             } = pointer(far)
             else {
-                return Err(Diagnostic::malformed("double landing pad without a far pointer"));
+                return Err(Diagnostic::malformed(
+                    "double landing pad without a far pointer",
+                ));
             };
             let start = Loc {
                 seg: content_seg,
@@ -232,9 +240,8 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let max = 4u64.saturating_add(u64::from(MAX_SEGMENTS).saturating_mul(4));
     let head = cx.read_avail(file.sub(0, max)).await?;
-    let table = segment_table(&head).ok_or_else(|| {
-        Diagnostic::malformed("invalid segment table").at(file.sub(0, 8))
-    })?;
+    let table = segment_table(&head)
+        .ok_or_else(|| Diagnostic::malformed("invalid segment table").at(file.sub(0, 8)))?;
     let count = to_u64(table.segments.len());
     cx.emit(
         Node::new("Segment table")
@@ -287,7 +294,13 @@ async fn segment_table_node(cx: Cx, (file, segments): (Span, Vec<(u64, u64)>)) -
 }
 
 /// A node for the pointer at `loc`, expanding into what it refers to.
-async fn pointer_node(cx: &Cx, msg: &M, name: impl Into<std::borrow::Cow<'static, str>>, loc: Loc, path: &Path) -> Result<Node> {
+async fn pointer_node(
+    cx: &Cx,
+    msg: &M,
+    name: impl Into<std::borrow::Cow<'static, str>>,
+    loc: Loc,
+    path: &Path,
+) -> Result<Node> {
     let span = msg.words(loc, 1).unwrap_or(msg.span.sub(0, 0));
     let node = Node::new(name).span(span);
     let (obj, hop) = match resolve(cx, msg, loc).await {
@@ -369,27 +382,43 @@ fn word_node(name: String, span: Span, w: u64) -> Node {
     if plausible_f64(w) {
         summary.push_str(&format!(" · double {}", f64::from_bits(w)));
     }
-    Node::new(name).span(span).value(hex(w, 64)).summary(summary)
+    Node::new(name)
+        .span(span)
+        .value(hex(w, 64))
+        .summary(summary)
 }
 
 async fn data_words(cx: Cx, (span, words): (Span, u64)) -> Result<()> {
     let data = cx.read(span).await?;
-    for (i, chunk) in data.as_chunks::<8>().0.iter().enumerate().take(crate::bytes::to_usize(words)) {
+    for (i, chunk) in data
+        .as_chunks::<8>()
+        .0
+        .iter()
+        .enumerate()
+        .take(crate::bytes::to_usize(words))
+    {
         let w = u64::from_le_bytes(*chunk);
         let at = to_u64(i).saturating_mul(WORD);
-        cx.push(word_node(format!("word {i}"), span.sub(at, WORD), w)).await;
+        cx.push(word_node(format!("word {i}"), span.sub(at, WORD), w))
+            .await;
     }
     Ok(())
 }
 
 /// The size in bytes of a non-composite list's elements.
 fn list_bytes(elem: u8, count: u32) -> u64 {
-    element_bits(elem)
-        .saturating_mul(count.into())
-        .div_ceil(8)
+    element_bits(elem).saturating_mul(count.into()).div_ceil(8)
 }
 
-async fn list_node(cx: &Cx, msg: &M, node: Node, at: Loc, elem: u8, count: u32, path: &Path) -> Result<Node> {
+async fn list_node(
+    cx: &Cx,
+    msg: &M,
+    node: Node,
+    at: Loc,
+    elem: u8,
+    count: u32,
+    path: &Path,
+) -> Result<Node> {
     let elem_name = lookup(ELEMENT_SIZES, elem.into()).unwrap_or("?");
     if elem == 7 {
         // Composite: a tag word (struct pointer layout, offset = element
@@ -420,7 +449,9 @@ async fn list_node(cx: &Cx, msg: &M, node: Node, at: Loc, elem: u8, count: u32, 
             ))
             .target(span);
         if per.saturating_mul(n.into()) > count.into() {
-            return Ok(node.diag(Diagnostic::malformed("composite list elements exceed its size")));
+            return Ok(node.diag(Diagnostic::malformed(
+                "composite list elements exceed its size",
+            )));
         }
         return Ok(match path.enter(Msg::id(at), MAX_DEPTH) {
             Ok(child) => node.lazy(
@@ -507,15 +538,21 @@ async fn elements(cx: Cx, (msg, at, elem, count, (data, ptrs), path): ListState)
             }
             1 => {
                 let byte_at = u64::from(i / 8);
-                let span = msg.bytes(at, byte_at.saturating_add(1)).unwrap_or(msg.span.sub(0, 0));
+                let span = msg
+                    .bytes(at, byte_at.saturating_add(1))
+                    .unwrap_or(msg.span.sub(0, 0));
                 let b = cx.read(span.sub(byte_at, 1)).await?;
                 let bit = b.first().is_some_and(|&b| b & (1 << (i % 8)) != 0);
-                Node::new(name).span(span.sub(byte_at, 1)).value(Value::Bool(bit))
+                Node::new(name)
+                    .span(span.sub(byte_at, 1))
+                    .value(Value::Bool(bit))
             }
             _ => {
                 let size = element_bits(elem) / 8;
                 let start = u64::from(i).saturating_mul(size);
-                let list = msg.bytes(at, list_bytes(elem, count)).unwrap_or(msg.span.sub(0, 0));
+                let list = msg
+                    .bytes(at, list_bytes(elem, count))
+                    .unwrap_or(msg.span.sub(0, 0));
                 let span = list.sub(start, size);
                 let raw = cx.read(span).await?;
                 scalar_node(Node::new(name).span(span), &raw)

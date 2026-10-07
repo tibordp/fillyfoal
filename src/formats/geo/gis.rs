@@ -1197,8 +1197,7 @@ async fn ov2(cx: Cx, input: Input) -> Result<()> {
                 } else {
                     strings.first().cloned().unwrap_or_default()
                 };
-                cx.push(
-                    Node::new(name).span(cur.since(start)).summary(format!(
+                cx.push(Node::new(name).span(cur.since(start)).summary(format!(
                         "{}, {}{}",
                         deg5(lat),
                         deg5(lon),
@@ -1207,8 +1206,7 @@ async fn ov2(cx: Cx, input: Input) -> Result<()> {
                             .filter(|s| !s.is_empty())
                             .map(|s| format!(" ({})", s.join("; ")))
                             .unwrap_or_default()
-                    )),
-                )
+                    )))
                 .await;
                 n = n.saturating_add(1);
             }

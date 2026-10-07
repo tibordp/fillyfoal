@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use super::{enumv, hex, leaf, text, time, uint};
 use crate::bytes::{to_u64, u16_le};
+use crate::codec::crc::crc16_arc as crc16;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
@@ -21,7 +22,6 @@ use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
-use crate::codec::crc::crc16_arc as crc16;
 
 const LE: Endian = Endian::Little;
 

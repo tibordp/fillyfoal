@@ -17,7 +17,11 @@ struct Bits<'a> {
 
 impl Bits<'_> {
     fn bit(&mut self) -> Result<u32> {
-        let byte = self.data.get(self.bit / 8).copied().ok_or_else(|| bad("unexpected end of data"))?;
+        let byte = self
+            .data
+            .get(self.bit / 8)
+            .copied()
+            .ok_or_else(|| bad("unexpected end of data"))?;
         let v = (byte << (self.bit & 7)) >> 7;
         self.bit = self.bit.saturating_add(1);
         Ok(u32::from(v))
@@ -72,8 +76,13 @@ impl Huffman {
         for &(first, index, count) in &self.limits {
             code = code << 1 | bits.bit()?;
             if count > 0 && code >= first && code < first.saturating_add(count) {
-                let i = index.saturating_add(usize::try_from(code.saturating_sub(first)).unwrap_or(0));
-                return self.symbols.get(i).copied().ok_or_else(|| bad("bad Huffman code"));
+                let i =
+                    index.saturating_add(usize::try_from(code.saturating_sub(first)).unwrap_or(0));
+                return self
+                    .symbols
+                    .get(i)
+                    .copied()
+                    .ok_or_else(|| bad("bad Huffman code"));
             }
         }
         Err(bad("bad Huffman code"))
@@ -138,7 +147,11 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
                 if bits.bit()? == 0 {
                     break;
                 }
-                len = if bits.bit()? == 0 { len.saturating_add(1) } else { len.saturating_sub(1) };
+                len = if bits.bit()? == 0 {
+                    len.saturating_add(1)
+                } else {
+                    len.saturating_sub(1)
+                };
             }
             lengths.push(u8::try_from(len).unwrap_or(0));
         }
@@ -152,8 +165,13 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
     let mut run_weight = 1usize;
     let mut decoded = 0usize;
     loop {
-        let selector = selectors.get(decoded / 50).copied().ok_or_else(|| bad("ran out of selectors"))?;
-        let table = tables.get(usize::from(selector)).ok_or_else(|| bad("bad selector"))?;
+        let selector = selectors
+            .get(decoded / 50)
+            .copied()
+            .ok_or_else(|| bad("ran out of selectors"))?;
+        let table = tables
+            .get(usize::from(selector))
+            .ok_or_else(|| bad("bad selector"))?;
         let sym = table.decode(bits)?;
         decoded = decoded.saturating_add(1);
         if sym <= 1 {
@@ -227,7 +245,9 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
             same = 0;
             last = None;
             if out.len() > limit {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                return Err(Diagnostic::limit(format!(
+                    "decompressed data exceeds {limit:#x} bytes"
+                )));
             }
             continue;
         }
@@ -241,7 +261,9 @@ fn block(bits: &mut Bits<'_>, max: usize, out: &mut Vec<u8>, limit: usize) -> Re
         crc = crc_update(crc, b);
     }
     if out.len() > limit {
-        return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+        return Err(Diagnostic::limit(format!(
+            "decompressed data exceeds {limit:#x} bytes"
+        )));
     }
     if !crc != stored_crc {
         return Err(bad("block CRC mismatch"));
@@ -319,7 +341,10 @@ impl Bzip2 {
         let Some(stream) = self.stream.as_mut() else {
             return Ok(());
         };
-        let mut bits = Bits { data: input, bit: self.bit };
+        let mut bits = Bits {
+            data: input,
+            bit: self.bit,
+        };
         let magic = u64::from(bits.bits(24)?) << 24 | u64::from(bits.bits(24)?);
         match magic {
             BLOCK_MAGIC if !eof && !next_magic(input, self.bit) => {
@@ -347,7 +372,14 @@ impl Bzip2 {
 }
 
 impl Decode for Bzip2 {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let target = out.len().saturating_add(step.max(1));
         loop {
             if self.done {
@@ -393,13 +425,17 @@ mod tests {
     fn decodes_python_bz2_output() {
         // bz2.compress(b"hello hello hello hello, bzip2!\n" * 3)
         let data = [
-            0x42, 0x5a, 0x68, 0x39, 0x31, 0x41, 0x59, 0x26, 0x53, 0x59, 0x20, 0x8a, 0xda, 0xa8, 0x00, 0x00,
-            0x14, 0xd9, 0x80, 0x00, 0x10, 0x60, 0x04, 0x10, 0x00, 0x12, 0x64, 0xc0, 0x10, 0x20, 0x00, 0x31,
-            0x00, 0xd0, 0x00, 0x8a, 0x9a, 0x01, 0xa6, 0x90, 0xdd, 0x94, 0x32, 0xd9, 0xf3, 0xa7, 0xa0, 0xed,
-            0x84, 0x29, 0x90, 0x68, 0x06, 0x9a, 0x7e, 0x2e, 0xe4, 0x8a, 0x70, 0xa1, 0x20, 0x41, 0x15, 0xb5,
-            0x50,
+            0x42, 0x5a, 0x68, 0x39, 0x31, 0x41, 0x59, 0x26, 0x53, 0x59, 0x20, 0x8a, 0xda, 0xa8,
+            0x00, 0x00, 0x14, 0xd9, 0x80, 0x00, 0x10, 0x60, 0x04, 0x10, 0x00, 0x12, 0x64, 0xc0,
+            0x10, 0x20, 0x00, 0x31, 0x00, 0xd0, 0x00, 0x8a, 0x9a, 0x01, 0xa6, 0x90, 0xdd, 0x94,
+            0x32, 0xd9, 0xf3, 0xa7, 0xa0, 0xed, 0x84, 0x29, 0x90, 0x68, 0x06, 0x9a, 0x7e, 0x2e,
+            0xe4, 0x8a, 0x70, 0xa1, 0x20, 0x41, 0x15, 0xb5, 0x50,
         ];
-        let out = crate::codec::pipeline::decode_all(&mut crate::codec::pipeline::Streaming(Bzip2::default()), &data, 1 << 20);
+        let out = crate::codec::pipeline::decode_all(
+            &mut crate::codec::pipeline::Streaming(Bzip2::default()),
+            &data,
+            1 << 20,
+        );
         assert_eq!(out.unwrap(), b"hello hello hello hello, bzip2!\n".repeat(3));
     }
 }

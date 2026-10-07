@@ -617,7 +617,11 @@ async fn rdb_string(cur: &mut Cursor<'_>) -> Result<String> {
                 }
                 let data = cur.bytes(packed).await?;
                 let mut out = Vec::new();
-                crate::codec::legacy::lzf(&data, &mut out, usize::try_from(size.min(1 << 20)).unwrap_or(0))?;
+                crate::codec::legacy::lzf(
+                    &data,
+                    &mut out,
+                    usize::try_from(size.min(1 << 20)).unwrap_or(0),
+                )?;
                 String::from_utf8_lossy(&out).into_owned()
             }
             _ => return Err(Diagnostic::malformed("unknown string encoding")),

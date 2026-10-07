@@ -22,12 +22,23 @@ pub struct Whole<F> {
 
 impl<F> Whole<F> {
     pub fn new(filter: F) -> Self {
-        Whole { filter, consumed: 0, done: false }
+        Whole {
+            filter,
+            consumed: 0,
+            done: false,
+        }
     }
 }
 
 impl<F: Filter> Decode for Whole<F> {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, _step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        _step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         if !eof {
             return Err(Diagnostic::malformed("waiting for the whole input"));
         }
@@ -47,7 +58,9 @@ impl<F: Filter> Decode for Whole<F> {
 
 fn check_limit(out: &[u8], limit: usize) -> Result<()> {
     if out.len() > limit {
-        Err(Diagnostic::limit(format!("decoded data exceeds {limit:#x} bytes")))
+        Err(Diagnostic::limit(format!(
+            "decoded data exceeds {limit:#x} bytes"
+        )))
     } else {
         Ok(())
     }
@@ -76,7 +89,9 @@ impl Filter for AsciiHex {
             let v = char::from(b)
                 .to_digit(16)
                 .and_then(|d| u8::try_from(d).ok())
-                .ok_or_else(|| Diagnostic::malformed(format!("invalid hex digit {:?}", char::from(b))))?;
+                .ok_or_else(|| {
+                    Diagnostic::malformed(format!("invalid hex digit {:?}", char::from(b)))
+                })?;
             match high.take() {
                 Some(h) => out.push(h << 4 | v),
                 None => high = Some(v),
@@ -106,7 +121,9 @@ impl Filter for Ascii85 {
             for slot in padded.iter_mut().skip(n) {
                 *slot = 84;
             }
-            let v = padded.iter().fold(0u64, |acc, &d| acc.wrapping_mul(85).wrapping_add(u64::from(d)));
+            let v = padded.iter().fold(0u64, |acc, &d| {
+                acc.wrapping_mul(85).wrapping_add(u64::from(d))
+            });
             let bytes = u32::try_from(v & 0xffff_ffff).unwrap_or(0).to_be_bytes();
             out.extend_from_slice(bytes.get(..n.saturating_sub(1)).unwrap_or_default());
         };
@@ -125,12 +142,19 @@ impl Filter for Ascii85 {
                     }
                 }
                 _ if is_white(b) => {}
-                _ => return Err(Diagnostic::malformed(format!("invalid ASCII85 character {:?}", char::from(b)))),
+                _ => {
+                    return Err(Diagnostic::malformed(format!(
+                        "invalid ASCII85 character {:?}",
+                        char::from(b)
+                    )));
+                }
             }
             check_limit(&out, limit)?;
         }
         if n == 1 {
-            return Err(Diagnostic::malformed("ASCII85 data ends with a single character"));
+            return Err(Diagnostic::malformed(
+                "ASCII85 data ends with a single character",
+            ));
         }
         if n > 1 {
             flush(&group, n, &mut out);
@@ -153,11 +177,16 @@ impl Filter for RunLength {
                 128 => break,
                 0..=127 => {
                     for _ in 0..=n {
-                        out.push(it.next().ok_or_else(|| Diagnostic::malformed("truncated literal run"))?);
+                        out.push(
+                            it.next()
+                                .ok_or_else(|| Diagnostic::malformed("truncated literal run"))?,
+                        );
                     }
                 }
                 _ => {
-                    let b = it.next().ok_or_else(|| Diagnostic::malformed("truncated repeat run"))?;
+                    let b = it
+                        .next()
+                        .ok_or_else(|| Diagnostic::malformed("truncated repeat run"))?;
                     let count = 257usize.saturating_sub(usize::from(n));
                     out.resize(out.len().saturating_add(count), b);
                 }
@@ -181,11 +210,16 @@ impl Filter for PackBits {
                 128 => {}
                 0..=127 => {
                     for _ in 0..=n {
-                        out.push(it.next().ok_or_else(|| Diagnostic::malformed("truncated literal run"))?);
+                        out.push(
+                            it.next()
+                                .ok_or_else(|| Diagnostic::malformed("truncated literal run"))?,
+                        );
                     }
                 }
                 _ => {
-                    let b = it.next().ok_or_else(|| Diagnostic::malformed("truncated repeat run"))?;
+                    let b = it
+                        .next()
+                        .ok_or_else(|| Diagnostic::malformed("truncated repeat run"))?;
                     let count = 257usize.saturating_sub(usize::from(n));
                     out.resize(out.len().saturating_add(count), b);
                 }
@@ -238,7 +272,8 @@ impl Filter for Lzw {
             bits = bits.saturating_add(8);
             while bits >= width {
                 let shift = bits.saturating_sub(width);
-                let code = u16::try_from((acc >> shift) & (1u32 << width).wrapping_sub(1)).unwrap_or(0);
+                let code =
+                    u16::try_from((acc >> shift) & (1u32 << width).wrapping_sub(1)).unwrap_or(0);
                 bits = shift;
                 acc &= (1u32 << bits).wrapping_sub(1);
                 match code {
@@ -254,28 +289,43 @@ impl Filter for Lzw {
                 let next = u16::try_from(table.len()).unwrap_or(u16::MAX);
                 match prev {
                     None => {
-                        string(&table, code, &mut out).ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?;
+                        string(&table, code, &mut out)
+                            .ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?;
                     }
                     Some(p) => {
                         let first = if code < next {
-                            string(&table, code, &mut out).ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?
+                            string(&table, code, &mut out)
+                                .ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?
                         } else if code == next {
                             // KwKwK: the previous string plus its first byte.
-                            let f = string(&table, p, &mut out).ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?;
+                            let f = string(&table, p, &mut out)
+                                .ok_or_else(|| Diagnostic::malformed("invalid LZW code"))?;
                             out.push(f);
                             f
                         } else {
                             return Err(Diagnostic::malformed("LZW code beyond the table"));
                         };
                         if table.len() < 4096 {
-                            let len = table.get(usize::from(p)).map_or(1, |e| e.2.saturating_add(1));
+                            let len = table
+                                .get(usize::from(p))
+                                .map_or(1, |e| e.2.saturating_add(1));
                             table.push((p, first, len));
                         }
                     }
                 }
                 prev = Some(code);
-                let size = u32::try_from(table.len()).unwrap_or(4096).saturating_add(early);
-                width = if size >= 2048 { 12 } else if size >= 1024 { 11 } else if size >= 512 { 10 } else { 9 };
+                let size = u32::try_from(table.len())
+                    .unwrap_or(4096)
+                    .saturating_add(early);
+                width = if size >= 2048 {
+                    12
+                } else if size >= 1024 {
+                    11
+                } else if size >= 512 {
+                    10
+                } else {
+                    9
+                };
                 check_limit(&out, limit)?;
             }
         }
@@ -298,16 +348,29 @@ impl Filter for PngPredictor {
         let mut out = Vec::with_capacity(input.len());
         let mut prev = vec![0u8; row];
         for chunk in input.chunks(row.saturating_add(1)) {
-            let Some((&kind, body)) = chunk.split_first() else { break };
+            let Some((&kind, body)) = chunk.split_first() else {
+                break;
+            };
             let mut cur = vec![0u8; row];
             for (i, &b) in body.iter().enumerate() {
-                let left = i.checked_sub(bpp).and_then(|j| cur.get(j)).copied().unwrap_or(0);
+                let left = i
+                    .checked_sub(bpp)
+                    .and_then(|j| cur.get(j))
+                    .copied()
+                    .unwrap_or(0);
                 let up = prev.get(i).copied().unwrap_or(0);
-                let up_left = i.checked_sub(bpp).and_then(|j| prev.get(j)).copied().unwrap_or(0);
+                let up_left = i
+                    .checked_sub(bpp)
+                    .and_then(|j| prev.get(j))
+                    .copied()
+                    .unwrap_or(0);
                 let value = match kind {
                     1 => b.wrapping_add(left),
                     2 => b.wrapping_add(up),
-                    3 => b.wrapping_add(u8::try_from((u16::from(left).saturating_add(u16::from(up))) / 2).unwrap_or(0)),
+                    3 => b.wrapping_add(
+                        u8::try_from((u16::from(left).saturating_add(u16::from(up))) / 2)
+                            .unwrap_or(0),
+                    ),
                     4 => b.wrapping_add(paeth(left, up, up_left)),
                     _ => b,
                 };
@@ -326,7 +389,11 @@ impl Filter for PngPredictor {
 fn paeth(a: u8, b: u8, c: u8) -> u8 {
     let (ia, ib, ic) = (i16::from(a), i16::from(b), i16::from(c));
     let p = ia.saturating_add(ib).saturating_sub(ic);
-    let (pa, pb, pc) = (p.saturating_sub(ia).abs(), p.saturating_sub(ib).abs(), p.saturating_sub(ic).abs());
+    let (pa, pb, pc) = (
+        p.saturating_sub(ia).abs(),
+        p.saturating_sub(ib).abs(),
+        p.saturating_sub(ic).abs(),
+    );
     if pa <= pb && pa <= pc {
         a
     } else if pb <= pc {
@@ -373,7 +440,10 @@ pub fn type1_decrypt(data: &[u8], mut r: u16, skip: usize) -> Vec<u8> {
         .iter()
         .map(|&c| {
             let p = c ^ r.to_be_bytes()[0];
-            r = u16::from(c).wrapping_add(r).wrapping_mul(52845).wrapping_add(22719);
+            r = u16::from(c)
+                .wrapping_add(r)
+                .wrapping_mul(52845)
+                .wrapping_add(22719);
             p
         })
         .collect();
@@ -390,7 +460,12 @@ impl Filter for Eexec {
                 if is_white(b) {
                     continue;
                 }
-                let Some(v) = char::from(b).to_digit(16).and_then(|d| u8::try_from(d).ok()) else { break };
+                let Some(v) = char::from(b)
+                    .to_digit(16)
+                    .and_then(|d| u8::try_from(d).ok())
+                else {
+                    break;
+                };
                 match high.take() {
                     Some(h) => bytes.push(h << 4 | v),
                     None => high = Some(v),
@@ -416,7 +491,10 @@ mod tests {
     fn ascii_filters() {
         assert_eq!(AsciiHex.apply(b"48 65 6C6c6F 2>", 100).unwrap(), b"Hello ");
         assert_eq!(AsciiHex.apply(b"4>", 100).unwrap(), b"@");
-        assert_eq!(Ascii85.apply(b"87cURD]i,\"Ebo80~>", 100).unwrap(), b"Hello World!");
+        assert_eq!(
+            Ascii85.apply(b"87cURD]i,\"Ebo80~>", 100).unwrap(),
+            b"Hello World!"
+        );
         assert_eq!(Ascii85.apply(b"<~z~>", 100).unwrap(), [0, 0, 0, 0]);
         assert_eq!(Ascii85.apply(b"9jqo^~>", 100).unwrap(), b"Man ");
         assert_eq!(Ascii85.apply(b"9jqo~>", 100).unwrap(), b"Man");
@@ -424,15 +502,26 @@ mod tests {
 
     #[test]
     fn run_length() {
-        assert_eq!(RunLength.apply(&[2, b'a', b'b', b'c', 254, b'x', 128, b'?'], 100).unwrap(), b"abcxxx");
-        assert_eq!(PackBits.apply(&[128, 0, b'q', 255, b'z'], 100).unwrap(), b"qzz");
+        assert_eq!(
+            RunLength
+                .apply(&[2, b'a', b'b', b'c', 254, b'x', 128, b'?'], 100)
+                .unwrap(),
+            b"abcxxx"
+        );
+        assert_eq!(
+            PackBits.apply(&[128, 0, b'q', 255, b'z'], 100).unwrap(),
+            b"qzz"
+        );
     }
 
     #[test]
     fn lzw_pdf_reference_example() {
         // PDF 1.7 reference, 7.4.4.2: "-----A---B" encoded with early change.
         let input = [0x80, 0x0b, 0x60, 0x50, 0x22, 0x0c, 0x0c, 0x85, 0x01];
-        assert_eq!(Lzw { early_change: true }.apply(&input, 100).unwrap(), b"-----A---B");
+        assert_eq!(
+            Lzw { early_change: true }.apply(&input, 100).unwrap(),
+            b"-----A---B"
+        );
     }
 
     #[test]
@@ -444,20 +533,37 @@ mod tests {
             .iter()
             .map(|&p| {
                 let c = p ^ r.to_be_bytes()[0];
-                r = u16::from(c).wrapping_add(r).wrapping_mul(52845).wrapping_add(22719);
+                r = u16::from(c)
+                    .wrapping_add(r)
+                    .wrapping_mul(52845)
+                    .wrapping_add(22719);
                 c
             })
             .collect();
-        assert_eq!(Eexec { hex: false }.apply(&enc, 100).unwrap(), b"dup /Private 8 dict");
+        assert_eq!(
+            Eexec { hex: false }.apply(&enc, 100).unwrap(),
+            b"dup /Private 8 dict"
+        );
         let hex: String = enc.iter().map(|b| format!("{b:02X}")).collect();
-        assert_eq!(Eexec { hex: true }.apply(hex.as_bytes(), 100).unwrap(), b"dup /Private 8 dict");
+        assert_eq!(
+            Eexec { hex: true }.apply(hex.as_bytes(), 100).unwrap(),
+            b"dup /Private 8 dict"
+        );
     }
 
     #[test]
     fn predictors() {
         // Two rows of 3 one-byte pixels: Sub and Up.
         let data = [1, 1, 1, 1, 2, 5, 5, 5];
-        assert_eq!(PngPredictor { bpp: 1, row: 3 }.apply(&data, 100).unwrap(), [1, 2, 3, 6, 7, 8]);
-        assert_eq!(TiffPredictor { bpp: 1, row: 3 }.apply(&[1, 1, 1, 5, 0, 0], 100).unwrap(), [1, 2, 3, 5, 5, 5]);
+        assert_eq!(
+            PngPredictor { bpp: 1, row: 3 }.apply(&data, 100).unwrap(),
+            [1, 2, 3, 6, 7, 8]
+        );
+        assert_eq!(
+            TiffPredictor { bpp: 1, row: 3 }
+                .apply(&[1, 1, 1, 5, 0, 0], 100)
+                .unwrap(),
+            [1, 2, 3, 5, 5, 5]
+        );
     }
 }

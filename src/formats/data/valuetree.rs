@@ -60,7 +60,10 @@ pub fn text(node: Node, data: &[u8], total: u64) -> Node {
     };
     let node = node.value(Value::Text(String::from_utf8_lossy(data).into_owned()));
     let node = if cut {
-        node.summary(format!("text, {} (truncated)", plural(total, "byte", "bytes")))
+        node.summary(format!(
+            "text, {} (truncated)",
+            plural(total, "byte", "bytes")
+        ))
     } else {
         node
     };
@@ -228,6 +231,9 @@ mod tests {
     #[test]
     fn fractions() {
         assert_eq!(datetime(0, 250_000_000), "1970-01-01 00:00:00.250 UTC");
-        assert_eq!(datetime(0, 123_456_789), "1970-01-01 00:00:00.123456789 UTC");
+        assert_eq!(
+            datetime(0, 123_456_789),
+            "1970-01-01 00:00:00.123456789 UTC"
+        );
     }
 }

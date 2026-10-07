@@ -63,10 +63,14 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "File system (BCFS)",
             input,
             body,
-            Codec::Bcfz { size: u64::from(size) },
+            Codec::Bcfz {
+                size: u64::from(size),
+            },
             Some(u64::from(size)),
         ));
-        cx.annotate(format!("Guitar Pro 6 score, compressed ({size:#x} bytes decoded)"));
+        cx.annotate(format!(
+            "Guitar Pro 6 score, compressed ({size:#x} bytes decoded)"
+        ));
         return Ok(());
     }
     bcfs(&cx, input).await
@@ -119,13 +123,21 @@ fn sector_list(sectors: &[u32]) -> String {
         return "no data sectors".to_owned();
     }
     let shown: Vec<String> = sectors.iter().take(16).map(u32::to_string).collect();
-    let more = if sectors.len() > shown.len() { ", ..." } else { "" };
+    let more = if sectors.len() > shown.len() {
+        ", ..."
+    } else {
+        ""
+    };
     format!("{} sectors: {}{more}", sectors.len(), shown.join(", "))
 }
 
 async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(Value::Text("BCFS".to_owned())));
+    cx.emit(
+        Node::new("Magic")
+            .span(file.sub(0, 4))
+            .value(Value::Text("BCFS".to_owned())),
+    );
     let image = file.tail(4);
     cx.emit(
         Node::new("Sector 0")
@@ -151,7 +163,8 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
         }
         let e = crate::fields::parse(cx, sector, LE, &(), entry).await?;
         claimed.extend(e.sectors.iter().copied());
-        let len = 0x94u64.saturating_add(to_u64(e.sectors.len()).saturating_add(1).saturating_mul(4));
+        let len =
+            0x94u64.saturating_add(to_u64(e.sectors.len()).saturating_add(1).saturating_mul(4));
         let entry_span = sector.sub(0, len);
         if e.kind == 1 {
             cx.push(
@@ -177,7 +190,9 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
             .summary(format!("{} bytes, {}", e.size, sector_list(&e.sectors)))
             .lazy(file_node, (input, entry_span, pieces, e.name.clone()));
         if left > 0 {
-            node = node.diag(Diagnostic::malformed("fewer data sectors than the size needs"));
+            node = node.diag(Diagnostic::malformed(
+                "fewer data sectors than the size needs",
+            ));
         }
         cx.push(node).await;
     }
@@ -185,7 +200,10 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn file_node(cx: Cx, (input, entry_span, pieces, name): (Input, Span, Vec<Span>, String)) -> Result<()> {
+async fn file_node(
+    cx: Cx,
+    (input, entry_span, pieces, name): (Input, Span, Vec<Span>, String),
+) -> Result<()> {
     cx.emit(struct_node("Entry", entry_span, LE, (), entry));
     let data = cx.add_pieces(
         Origin {
@@ -202,7 +220,9 @@ async fn file_node(cx: Cx, (input, entry_span, pieces, name): (Input, Span, Vec<
     cx.emit(if name.ends_with(".gpif") {
         embedded_as("Content", inner, &super::gpif::FORMAT)
     } else {
-        Node::new("Content").span(data).lazy(crate::formats::dissect_or_data, inner)
+        Node::new("Content")
+            .span(data)
+            .lazy(crate::formats::dissect_or_data, inner)
     });
     Ok(())
 }

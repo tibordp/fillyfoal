@@ -85,10 +85,21 @@ impl ZipCrypto {
 }
 
 impl Decode for ZipCrypto {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let available = input.get(self.pos..).unwrap_or_default();
         if available.is_empty() {
-            return if eof { Ok(Step::Done) } else { Err(Diagnostic::malformed("out of input")) };
+            return if eof {
+                Ok(Step::Done)
+            } else {
+                Err(Diagnostic::malformed("out of input"))
+            };
         }
         let take = available.len().min(step.max(1));
         for &c in available.get(..take).unwrap_or_default() {
@@ -144,14 +155,33 @@ impl AesCtrLe {
 }
 
 impl Decode for AesCtrLe {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let available = input.get(self.pos..).unwrap_or_default();
         // Whole blocks, or the final partial block at the end.
-        let usable = if eof { available.len() } else { available.len() & !15 };
+        let usable = if eof {
+            available.len()
+        } else {
+            available.len() & !15
+        };
         if usable == 0 {
-            return if eof { Ok(Step::Done) } else { Err(Diagnostic::malformed("out of input")) };
+            return if eof {
+                Ok(Step::Done)
+            } else {
+                Err(Diagnostic::malformed("out of input"))
+            };
         }
-        let take = usable.min(step.max(16).checked_next_multiple_of(16).unwrap_or(usize::MAX));
+        let take = usable.min(
+            step.max(16)
+                .checked_next_multiple_of(16)
+                .unwrap_or(usize::MAX),
+        );
         if out.len().saturating_add(take) > limit {
             return Err(Diagnostic::limit("decrypted data exceeds the limit"));
         }
@@ -200,20 +230,41 @@ impl Rc4 {
         if !key.is_empty() {
             let mut j = 0u8;
             for i in 0..256usize {
-                let k = key.get(i.checked_rem(key.len()).unwrap_or(0)).copied().unwrap_or(0);
-                j = j.wrapping_add(s.get(i).copied().unwrap_or(0)).wrapping_add(k);
+                let k = key
+                    .get(i.checked_rem(key.len()).unwrap_or(0))
+                    .copied()
+                    .unwrap_or(0);
+                j = j
+                    .wrapping_add(s.get(i).copied().unwrap_or(0))
+                    .wrapping_add(k);
                 s.swap(i, usize::from(j));
             }
         }
-        Rc4 { s, i: 0, j: 0, pos: 0 }
+        Rc4 {
+            s,
+            i: 0,
+            j: 0,
+            pos: 0,
+        }
     }
 }
 
 impl Decode for Rc4 {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let available = input.get(self.pos..).unwrap_or_default();
         if available.is_empty() {
-            return if eof { Ok(Step::Done) } else { Err(Diagnostic::malformed("out of input")) };
+            return if eof {
+                Ok(Step::Done)
+            } else {
+                Err(Diagnostic::malformed("out of input"))
+            };
         }
         let take = available.len().min(step.max(1));
         if out.len().saturating_add(take) > limit {
@@ -254,8 +305,11 @@ pub struct AesCbcIvPrefixed(pub Key);
 
 impl crate::codec::filters::Filter for AesCbcIvPrefixed {
     fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let out = aes_cbc_iv_prefixed(self.0.expose(), input)
-            .ok_or_else(|| Diagnostic::malformed("AES-CBC data is not a whole number of blocks, or its padding is bad"))?;
+        let out = aes_cbc_iv_prefixed(self.0.expose(), input).ok_or_else(|| {
+            Diagnostic::malformed(
+                "AES-CBC data is not a whole number of blocks, or its padding is bad",
+            )
+        })?;
         if out.len() > limit {
             return Err(Diagnostic::limit("decrypted data exceeds the limit"));
         }

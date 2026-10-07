@@ -99,6 +99,10 @@ pub(crate) fn prefix(bytes: &[u8]) -> Value {
 /// Formats a few values: `[1, 2, 3, …]`.
 pub(crate) fn list<T: std::fmt::Display>(values: &[T], more: bool) -> String {
     let shown: Vec<String> = values.iter().take(8).map(T::to_string).collect();
-    let more = if more || values.len() > 8 { ", …" } else { "" };
+    let more = if more || values.len() > 8 {
+        ", …"
+    } else {
+        ""
+    };
     format!("[{}{more}]", shown.join(", "))
 }

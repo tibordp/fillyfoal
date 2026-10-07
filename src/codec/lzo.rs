@@ -24,7 +24,11 @@ struct In<'a> {
 
 impl In<'_> {
     fn byte(&mut self) -> Result<usize> {
-        let b = self.data.get(self.pos).copied().ok_or_else(|| bad("input overrun"))?;
+        let b = self
+            .data
+            .get(self.pos)
+            .copied()
+            .ok_or_else(|| bad("input overrun"))?;
         self.pos = self.pos.saturating_add(1);
         Ok(usize::from(b))
     }
@@ -43,7 +47,10 @@ impl In<'_> {
 
     fn literals(&mut self, n: usize, out: &mut Vec<u8>, base: usize, limit: usize) -> Result<()> {
         let end = self.pos.saturating_add(n);
-        let lit = self.data.get(self.pos..end).ok_or_else(|| bad("input overrun in literals"))?;
+        let lit = self
+            .data
+            .get(self.pos..end)
+            .ok_or_else(|| bad("input overrun in literals"))?;
         if out.len().saturating_sub(base).saturating_add(n) > limit {
             return Err(too_big(limit));
         }
@@ -86,7 +93,10 @@ pub fn lzo1x(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
         AfterShortRun,
     }
     let base = out.len();
-    let mut ip = In { data: input, pos: 0 };
+    let mut ip = In {
+        data: input,
+        pos: 0,
+    };
     let mut state = State::Top;
     if let Some(&first) = input.first()
         && first > 17
@@ -94,7 +104,11 @@ pub fn lzo1x(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
         ip.pos = 1;
         let t = usize::from(first).saturating_sub(17);
         ip.literals(t, out, base, limit)?;
-        state = if t < 4 { State::AfterShortRun } else { State::AfterLongRun };
+        state = if t < 4 {
+            State::AfterShortRun
+        } else {
+            State::AfterLongRun
+        };
     }
     loop {
         let t = ip.byte()?;
@@ -126,7 +140,11 @@ pub fn lzo1x(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
             copy_match(out, base, dist, len, limit)?;
             t & 3
         } else if t >= 32 {
-            let len = if t & 31 == 0 { ip.extended(31)? } else { t & 31 };
+            let len = if t & 31 == 0 {
+                ip.extended(31)?
+            } else {
+                t & 31
+            };
             let lo = ip.byte()?;
             let hi = ip.byte()?;
             let dist = (lo >> 2).saturating_add(hi << 6).saturating_add(1);
@@ -136,11 +154,19 @@ pub fn lzo1x(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
             let len = if t & 7 == 0 { ip.extended(7)? } else { t & 7 };
             let lo = ip.byte()?;
             let hi = ip.byte()?;
-            let dist = ((t & 8) << 11).saturating_add(lo >> 2).saturating_add(hi << 6);
+            let dist = ((t & 8) << 11)
+                .saturating_add(lo >> 2)
+                .saturating_add(hi << 6);
             if dist == 0 {
                 return Ok(ip.pos); // end of stream
             }
-            copy_match(out, base, dist.saturating_add(0x4000), len.saturating_add(2), limit)?;
+            copy_match(
+                out,
+                base,
+                dist.saturating_add(0x4000),
+                len.saturating_add(2),
+                limit,
+            )?;
             lo & 3
         };
         if state_bits == 0 {
@@ -227,8 +253,14 @@ pub fn lzop_header(data: &[u8]) -> Result<LzopHeader> {
     pos = pos.saturating_add(1).saturating_add(usize::from(name_len));
     let checksum_at = pos;
     let stored = be32(data, checksum_at)?;
-    let covered = data.get(9..checksum_at).ok_or_else(|| bad("truncated lzop header"))?;
-    let computed = if flags & F_H_CRC32 != 0 { crc32(covered) } else { adler32(covered) };
+    let covered = data
+        .get(9..checksum_at)
+        .ok_or_else(|| bad("truncated lzop header"))?;
+    let computed = if flags & F_H_CRC32 != 0 {
+        crc32(covered)
+    } else {
+        adler32(covered)
+    };
     pos = checksum_at.saturating_add(4);
     if flags & F_H_EXTRA_FIELD != 0 {
         let len = be32(data, pos)?;
@@ -250,7 +282,12 @@ pub fn lzop_header(data: &[u8]) -> Result<LzopHeader> {
 /// whether the block is compressed.
 pub fn lzop_block_header_len(flags: u32, compressed: bool) -> usize {
     let mut len = 8usize;
-    for (flag, data_check) in [(F_ADLER32_D, true), (F_CRC32_D, true), (F_ADLER32_C, false), (F_CRC32_C, false)] {
+    for (flag, data_check) in [
+        (F_ADLER32_D, true),
+        (F_CRC32_D, true),
+        (F_ADLER32_C, false),
+        (F_CRC32_C, false),
+    ] {
         if flags & flag != 0 && (data_check || compressed) {
             len = len.saturating_add(4);
         }
@@ -279,7 +316,10 @@ impl Lzop {
             return Err(bad("lzop header checksum mismatch"));
         }
         if !matches!(header.method, 1..=3) {
-            return Err(Diagnostic::unsupported(format!("lzop method {}", header.method)));
+            return Err(Diagnostic::unsupported(format!(
+                "lzop method {}",
+                header.method
+            )));
         }
         if header.flags & F_H_FILTER != 0 {
             return Err(Diagnostic::unsupported("lzop filters"));
@@ -319,8 +359,13 @@ impl Lzop {
             check(F_ADLER32_C, false)?,
             check(F_CRC32_C, false)?,
         ];
-        let (raw, packed) = (usize::try_from(raw).unwrap_or(usize::MAX), usize::try_from(packed).unwrap_or(usize::MAX));
-        let data = input.get(at..at.saturating_add(packed)).ok_or_else(|| bad("truncated lzop block"))?;
+        let (raw, packed) = (
+            usize::try_from(raw).unwrap_or(usize::MAX),
+            usize::try_from(packed).unwrap_or(usize::MAX),
+        );
+        let data = input
+            .get(at..at.saturating_add(packed))
+            .ok_or_else(|| bad("truncated lzop block"))?;
         if out.len().saturating_add(raw) > limit {
             return Err(too_big(limit));
         }
@@ -339,7 +384,11 @@ impl Lzop {
         }
         for (stored, data_check, crc) in checks.into_iter().flatten() {
             let subject = if data_check { block } else { data };
-            let computed = if crc { crc32(subject) } else { adler32(subject) };
+            let computed = if crc {
+                crc32(subject)
+            } else {
+                adler32(subject)
+            };
             if computed != stored {
                 return Err(bad("lzop block checksum mismatch"));
             }
@@ -350,7 +399,14 @@ impl Lzop {
 }
 
 impl Decode for Lzop {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let mark = out.len();
         while !self.done {
             match self.member {

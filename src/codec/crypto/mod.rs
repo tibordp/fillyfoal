@@ -9,14 +9,22 @@ pub mod hash;
 pub mod mpq;
 pub mod stream;
 
-pub use cipher::{Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7};
-pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
+pub use cipher::{
+    Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7,
+};
 pub use hash::{Hash, Hmac, Md5, Sha1, Sha256, Sha384, Sha512, hmac, pbkdf2};
+pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
 
 /// The PKCS#12 key derivation (RFC 7292 appendix B) with hash `H`. `id` is
 /// 1 for keys, 2 for IVs and 3 for MAC keys; `password` is the raw
 /// BMPString (UTF-16BE with a terminating NUL), see [`bmp_password`].
-pub fn pkcs12_kdf<H: Hash>(password: &[u8], salt: &[u8], iterations: u32, id: u8, len: usize) -> Vec<u8> {
+pub fn pkcs12_kdf<H: Hash>(
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    id: u8,
+    len: usize,
+) -> Vec<u8> {
     let v = H::BLOCK;
     let fill = |src: &[u8]| -> Vec<u8> {
         if src.is_empty() {
@@ -46,7 +54,9 @@ pub fn pkcs12_kdf<H: Hash>(password: &[u8], salt: &[u8], iterations: u32, id: u8
         for chunk in i_block.chunks_mut(v) {
             let mut carry = 1u16;
             for (x, y) in chunk.iter_mut().rev().zip(b.iter().rev()) {
-                let sum = u16::from(*x).wrapping_add(u16::from(*y)).wrapping_add(carry);
+                let sum = u16::from(*x)
+                    .wrapping_add(u16::from(*y))
+                    .wrapping_add(carry);
                 *x = sum.to_le_bytes()[0];
                 carry = sum >> 8;
             }
@@ -66,7 +76,11 @@ pub fn bmp_password(password: &[u8]) -> Vec<u8> {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
 
@@ -75,14 +89,23 @@ mod tests {
     }
 
     fn unhex(s: &str) -> Vec<u8> {
-        (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect()
+        (0..s.len())
+            .step_by(2)
+            .map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap())
+            .collect()
     }
 
     #[test]
     fn hashes() {
         assert_eq!(hex(&Md5::digest(b"")), "d41d8cd98f00b204e9800998ecf8427e");
-        assert_eq!(hex(&Md5::digest(b"abc")), "900150983cd24fb0d6963f7d28e17f72");
-        assert_eq!(hex(&Sha1::digest(b"abc")), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(
+            hex(&Md5::digest(b"abc")),
+            "900150983cd24fb0d6963f7d28e17f72"
+        );
+        assert_eq!(
+            hex(&Sha1::digest(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
         assert_eq!(
             hex(&Sha256::digest(b"abc")),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
@@ -97,7 +120,10 @@ mod tests {
         );
         // Multi-block input exercises buffering and padding.
         let long = vec![b'a'; 1_000_000];
-        assert_eq!(hex(&Sha1::digest(&long)), "34aa973cd4c4daa4f61eeb2bdbad27316534016f");
+        assert_eq!(
+            hex(&Sha1::digest(&long)),
+            "34aa973cd4c4daa4f61eeb2bdbad27316534016f"
+        );
         assert_eq!(
             hex(&Sha256::digest(&long)),
             "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
@@ -117,18 +143,35 @@ mod tests {
             "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
         );
         // RFC 6070.
-        assert_eq!(hex(&pbkdf2::<Sha1>(b"password", b"salt", 2, 20)), "ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957");
-        assert_eq!(hex(&pbkdf2::<Sha1>(b"password", b"salt", 4096, 20)), "4b007901b765489abead49d926f721d065a429c1");
+        assert_eq!(
+            hex(&pbkdf2::<Sha1>(b"password", b"salt", 2, 20)),
+            "ea6c014dc72d6f8ccd1ed92ace1d41f0d8de8957"
+        );
+        assert_eq!(
+            hex(&pbkdf2::<Sha1>(b"password", b"salt", 4096, 20)),
+            "4b007901b765489abead49d926f721d065a429c1"
+        );
     }
 
     #[test]
     fn aes_vectors() {
         // FIPS 197 appendix C.
-        let pt: [u8; 16] = unhex("00112233445566778899aabbccddeeff").try_into().unwrap();
+        let pt: [u8; 16] = unhex("00112233445566778899aabbccddeeff")
+            .try_into()
+            .unwrap();
         for (key, ct) in [
-            ("000102030405060708090a0b0c0d0e0f", "69c4e0d86a7b0430d8cdb78070b4c55a"),
-            ("000102030405060708090a0b0c0d0e0f1011121314151617", "dda97ca4864cdfe06eaf70a0ec0d7191"),
-            ("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f", "8ea2b7ca516745bfeafc49904b496089"),
+            (
+                "000102030405060708090a0b0c0d0e0f",
+                "69c4e0d86a7b0430d8cdb78070b4c55a",
+            ),
+            (
+                "000102030405060708090a0b0c0d0e0f1011121314151617",
+                "dda97ca4864cdfe06eaf70a0ec0d7191",
+            ),
+            (
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+                "8ea2b7ca516745bfeafc49904b496089",
+            ),
         ] {
             let aes = Aes::new(&unhex(key)).unwrap();
             let mut b = pt;
@@ -148,7 +191,8 @@ mod tests {
         des.decrypt(&mut b);
         assert_eq!(hex(&b), "0123456789abcdef");
         // 3DES with K1 = K2 = K3 is single DES.
-        let tdes = TripleDes::new(&unhex("133457799bbcdff1133457799bbcdff1133457799bbcdff1")).unwrap();
+        let tdes =
+            TripleDes::new(&unhex("133457799bbcdff1133457799bbcdff1133457799bbcdff1")).unwrap();
         let mut b = unhex("85e813540f0ab405");
         tdes.decrypt(&mut b);
         assert_eq!(hex(&b), "0123456789abcdef");
@@ -167,6 +211,9 @@ mod tests {
     fn pkcs12_kdf_vector() {
         // OpenSSL test vector: password "smeg", SHA-1, 1 iteration, ID 1.
         let key = pkcs12_kdf::<Sha1>(&bmp_password(b"smeg"), &unhex("0a58cf64530d823f"), 1, 1, 24);
-        assert_eq!(hex(&key), "8aaae6297b6cb04642ab5b077851284eb7128f1a2a7fbca3");
+        assert_eq!(
+            hex(&key),
+            "8aaae6297b6cb04642ab5b077851284eb7128f1a2a7fbca3"
+        );
     }
 }

@@ -129,7 +129,11 @@ fn show(m: u8) -> String {
 fn decode(b: &[u8], typed: Option<u8>) -> std::result::Result<Item, Bad> {
     let (m, rest, mut head) = match typed {
         Some(t) => (t, b, 0u64),
-        None => (*b.first().ok_or(Bad::Short)?, b.get(1..).unwrap_or_default(), 1),
+        None => (
+            *b.first().ok_or(Bad::Short)?,
+            b.get(1..).unwrap_or_default(),
+            1,
+        ),
     };
     let item = |kind, head, arg| Item {
         kind,
@@ -155,12 +159,28 @@ fn decode(b: &[u8], typed: Option<u8>) -> std::result::Result<Item, Bad> {
         b'I' => int(2, true)?,
         b'l' => int(4, true)?,
         b'L' => int(8, true)?,
-        b'd' => item(Kind::Float32, head.saturating_add(4), be_uint(rest.get(..4).ok_or(Bad::Short)?)),
-        b'D' => item(Kind::Float64, head.saturating_add(8), be_uint(rest.get(..8).ok_or(Bad::Short)?)),
-        b'C' => item(Kind::Char, head.saturating_add(1), u64::from(*rest.first().ok_or(Bad::Short)?)),
+        b'd' => item(
+            Kind::Float32,
+            head.saturating_add(4),
+            be_uint(rest.get(..4).ok_or(Bad::Short)?),
+        ),
+        b'D' => item(
+            Kind::Float64,
+            head.saturating_add(8),
+            be_uint(rest.get(..8).ok_or(Bad::Short)?),
+        ),
+        b'C' => item(
+            Kind::Char,
+            head.saturating_add(1),
+            u64::from(*rest.first().ok_or(Bad::Short)?),
+        ),
         b'S' | b'H' => {
             let (len, n) = length(rest)?;
-            let kind = if m == b'S' { Kind::Str } else { Kind::HighPrecision };
+            let kind = if m == b'S' {
+                Kind::Str
+            } else {
+                Kind::HighPrecision
+            };
             item(kind, head.saturating_add(n), len)
         }
         b'[' | b'{' => {
@@ -179,7 +199,9 @@ fn decode(b: &[u8], typed: Option<u8>) -> std::result::Result<Item, Bad> {
                     return Err(Bad::Short);
                 }
                 if p.first() != Some(&b'#') {
-                    return Err(Bad::Malformed("element type ('$') without a count ('#')".to_owned()));
+                    return Err(Bad::Malformed(
+                        "element type ('$') without a count ('#')".to_owned(),
+                    ));
                 }
             }
             if p.first() == Some(&b'#') {
@@ -213,7 +235,9 @@ async fn key_head(r: &mut ByteReader<'_>, at: u64) -> Result<(u64, u64)> {
     match length(&b) {
         Ok(v) => Ok(v),
         Err(Bad::Short) => Err(Diagnostic::truncated(r.span(at, 9), avail)),
-        Err(Bad::Malformed(m)) => Err(Diagnostic::malformed(format!("object key: {m}")).at(r.span(at, 1))),
+        Err(Bad::Malformed(m)) => {
+            Err(Diagnostic::malformed(format!("object key: {m}")).at(r.span(at, 1)))
+        }
     }
 }
 
@@ -269,7 +293,10 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64, typed: Option<u8>) -> Result<u6
         let body = pos.saturating_add(h.head);
         pos = body.saturating_add(h.payload());
         if pos > len {
-            return Err(Diagnostic::truncated(r.span(body, h.payload()), len.saturating_sub(body)));
+            return Err(Diagnostic::truncated(
+                r.span(body, h.payload()),
+                len.saturating_sub(body),
+            ));
         }
         if let Some(n) = h.count
             && let Some(w) = h.elem.and_then(fixed_width)
@@ -278,7 +305,10 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64, typed: Option<u8>) -> Result<u6
             // Fixed-size elements: skip them all at once.
             let size = n.saturating_mul(w);
             if size > len.saturating_sub(pos) {
-                return Err(Diagnostic::truncated(r.span(pos, size), len.saturating_sub(pos)));
+                return Err(Diagnostic::truncated(
+                    r.span(pos, size),
+                    len.saturating_sub(pos),
+                ));
             }
             pos = pos.saturating_add(size);
         } else if matches!(h.kind, Kind::Array | Kind::Object) {
@@ -291,8 +321,11 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64, typed: Option<u8>) -> Result<u6
                 .at(r.span(pos, 1)));
             }
             if stack.len() >= vt::MAX_DEPTH {
-                return Err(Diagnostic::limit(format!("values nested deeper than {}", vt::MAX_DEPTH))
-                    .at(r.span(pos, 1)));
+                return Err(Diagnostic::limit(format!(
+                    "values nested deeper than {}",
+                    vt::MAX_DEPTH
+                ))
+                .at(r.span(pos, 1)));
             }
             stack.push(Frame {
                 left: h.count,
@@ -372,7 +405,10 @@ fn describe(h: &Item) -> String {
     };
     match h.kind {
         Kind::Array => format!("{}{typed}", vt::array_summary("array", h.count)),
-        Kind::Object => format!("{}{typed}", vt::map_summary("object", h.count, "member", "members")),
+        Kind::Object => format!(
+            "{}{typed}",
+            vt::map_summary("object", h.count, "member", "members")
+        ),
         _ => type_name_of(h.kind).to_owned(),
     }
 }
@@ -446,7 +482,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let end = match end_of(&mut r, pos, None).await {
             Ok(end) => end,
             Err(d) => {
-                cx.push(Node::new(format!("[{index}]")).span(r.span(pos, input.span.len.saturating_sub(pos))).diag(d)).await;
+                cx.push(
+                    Node::new(format!("[{index}]"))
+                        .span(r.span(pos, input.span.len.saturating_sub(pos)))
+                        .diag(d),
+                )
+                .await;
                 break;
             }
         };
@@ -479,17 +520,23 @@ async fn item_node(
             let bits = n.saturating_mul(8);
             if signed {
                 let shift = 64u32.saturating_sub(u32::from(bits));
-                let v = (h.arg.checked_shl(shift).unwrap_or(0) as i64).checked_shr(shift).unwrap_or(0);
+                let v = (h.arg.checked_shl(shift).unwrap_or(0) as i64)
+                    .checked_shr(shift)
+                    .unwrap_or(0);
                 node.value(vt::int(v, bits))
             } else {
                 node.value(vt::uint(h.arg, bits))
             }
         }
-        Kind::Float32 => node.value(Value::Float(f64::from(f32::from_bits(u32::try_from(h.arg).unwrap_or(0))))),
+        Kind::Float32 => node.value(Value::Float(f64::from(f32::from_bits(
+            u32::try_from(h.arg).unwrap_or(0),
+        )))),
         Kind::Float64 => node.value(Value::Float(f64::from_bits(h.arg))),
         Kind::Char => {
             let c = u8::try_from(h.arg).unwrap_or(0);
-            let node = node.value(Value::Text(char::from(c).to_string())).summary("char");
+            let node = node
+                .value(Value::Text(char::from(c).to_string()))
+                .summary("char");
             if c.is_ascii() {
                 node
             } else {
@@ -504,7 +551,9 @@ async fn item_node(
             let data = r.bytes(body, h.arg.min(vt::MAX_TEXT)).await?;
             let node = vt::text(node, &data, h.arg);
             let number = std::str::from_utf8(&data).is_ok_and(|s| {
-                !s.is_empty() && s.bytes().all(|c| c.is_ascii_digit() || b"+-.eE".contains(&c))
+                !s.is_empty()
+                    && s.bytes()
+                        .all(|c| c.is_ascii_digit() || b"+-.eE".contains(&c))
             });
             let node = node.summary("high-precision number");
             if number {
@@ -522,7 +571,9 @@ async fn item_node(
                 return Ok(lazy_members(node, r.region(), start, typed, path));
             }
             let node = node.summary(describe(&h));
-            if h.count == Some(0) || end.saturating_sub(start) <= h.head.saturating_add(1) && h.count.is_none() {
+            if h.count == Some(0)
+                || end.saturating_sub(start) <= h.head.saturating_add(1) && h.count.is_none()
+            {
                 node
             } else {
                 lazy_members(node, r.region(), start, typed, path)
@@ -541,7 +592,10 @@ fn lazy_members(node: Node, region: Span, start: u64, typed: Option<u8>, path: &
     }
 }
 
-async fn members(cx: Cx, (region, start, typed, path): (Span, u64, Option<u8>, Path)) -> Result<()> {
+async fn members(
+    cx: Cx,
+    (region, start, typed, path): (Span, u64, Option<u8>, Path),
+) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let h = head(&mut r, start, typed).await?;
     let object = h.kind == Kind::Object;
@@ -549,12 +603,15 @@ async fn members(cx: Cx, (region, start, typed, path): (Span, u64, Option<u8>, P
         cx.set_count(Count::Exact(n));
     }
     let empty_elements = h.elem.and_then(fixed_width) == Some(0);
-    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((start.saturating_add(h.head), 0));
+    let (mut pos, mut index) = cx
+        .resume::<(u64, u64)>()
+        .unwrap_or((start.saturating_add(h.head), 0));
     loop {
         match h.count {
             Some(n) if index >= n => break,
             Some(n) if empty_elements && index >= MAX_EMPTY_ELEMENTS => {
-                cx.push(Node::new("…").summary(format!("{} more", n.saturating_sub(index)))).await;
+                cx.push(Node::new("…").summary(format!("{} more", n.saturating_sub(index))))
+                    .await;
                 break;
             }
             Some(_) => {}

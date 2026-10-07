@@ -26,7 +26,10 @@ const TABLE: [u32; 0x500] = {
 };
 
 fn table(i: u32) -> u32 {
-    TABLE.get(usize::try_from(i).unwrap_or(0)).copied().unwrap_or(0)
+    TABLE
+        .get(usize::try_from(i).unwrap_or(0))
+        .copied()
+        .unwrap_or(0)
 }
 
 /// Hash kinds for [`hash_string`].
@@ -39,9 +42,17 @@ pub const HASH_FILE_KEY: u32 = 3;
 pub fn hash_string(s: &str, kind: u32) -> u32 {
     let (mut seed1, mut seed2) = (0x7fed_7fedu32, 0xeeee_eeeeu32);
     for b in s.bytes() {
-        let c = u32::from(if b == b'/' { b'\\' } else { b.to_ascii_uppercase() });
+        let c = u32::from(if b == b'/' {
+            b'\\'
+        } else {
+            b.to_ascii_uppercase()
+        });
         seed1 = table(kind.wrapping_mul(0x100).wrapping_add(c)) ^ seed1.wrapping_add(seed2);
-        seed2 = c.wrapping_add(seed1).wrapping_add(seed2).wrapping_add(seed2 << 5).wrapping_add(3);
+        seed2 = c
+            .wrapping_add(seed1)
+            .wrapping_add(seed2)
+            .wrapping_add(seed2 << 5)
+            .wrapping_add(3);
     }
     seed1
 }
@@ -54,7 +65,10 @@ pub fn decrypt(data: &mut [u8], mut key: u32) {
         seed = seed.wrapping_add(table(0x400u32.wrapping_add(key & 0xff)));
         let ch = u32::from_le_bytes(*word) ^ key.wrapping_add(seed);
         key = (!key << 0x15).wrapping_add(0x1111_1111) | (key >> 0x0b);
-        seed = ch.wrapping_add(seed).wrapping_add(seed << 5).wrapping_add(3);
+        seed = ch
+            .wrapping_add(seed)
+            .wrapping_add(seed << 5)
+            .wrapping_add(3);
         *word = ch.to_le_bytes();
     }
 }
@@ -64,7 +78,11 @@ pub fn decrypt(data: &mut [u8], mut key: u32) {
 pub fn file_key(name: &str, offset: u32, size: u32, adjusted: bool) -> u32 {
     let base = name.rsplit(['\\', '/']).next().unwrap_or(name);
     let key = hash_string(base, HASH_FILE_KEY);
-    if adjusted { key.wrapping_add(offset) ^ size } else { key }
+    if adjusted {
+        key.wrapping_add(offset) ^ size
+    } else {
+        key
+    }
 }
 
 #[cfg(test)]

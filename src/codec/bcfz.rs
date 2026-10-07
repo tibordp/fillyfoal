@@ -90,9 +90,18 @@ impl Bits<'_> {
 }
 
 impl Decode for Bcfz {
-    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         if self.size > crate::bytes::to_u64(limit) {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         let goal = out.len().saturating_add(step);
         let mut bits = Bits {
@@ -104,7 +113,8 @@ impl Decode for Bcfz {
                 self.bit = bits.bit;
                 return Ok(Step::More);
             }
-            let left = usize::try_from(self.size.saturating_sub(self.produced)).unwrap_or(usize::MAX);
+            let left =
+                usize::try_from(self.size.saturating_sub(self.produced)).unwrap_or(usize::MAX);
             let before = out.len();
             if bits.one()? == 1 {
                 let n = bits.msb(4)?;
@@ -116,7 +126,10 @@ impl Decode for Bcfz {
                     .ok_or_else(|| bad("back-reference before the start of the output"))?;
                 let count = offset.min(len).min(left);
                 let end = start.saturating_add(count);
-                let copy = out.get(start..end).ok_or_else(|| bad("bad back-reference"))?.to_vec();
+                let copy = out
+                    .get(start..end)
+                    .ok_or_else(|| bad("bad back-reference"))?
+                    .to_vec();
                 out.extend_from_slice(&copy);
             } else {
                 let count = usize::try_from(bits.lsb(2)?).unwrap_or(0);
@@ -151,7 +164,11 @@ impl Decode for Bcfz {
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::arithmetic_side_effects)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects
+)]
 mod tests {
     use super::*;
     use crate::codec::pipeline::{Streaming, decode_all};
@@ -215,7 +232,16 @@ mod tests {
         let mut out = Vec::new();
         let mut input = w.bytes.clone();
         loop {
-            match crate::codec::pipeline::Decoder::decode(&mut tiny, &input, true, &mut out, 1, 1 << 20).unwrap() {
+            match crate::codec::pipeline::Decoder::decode(
+                &mut tiny,
+                &input,
+                true,
+                &mut out,
+                1,
+                1 << 20,
+            )
+            .unwrap()
+            {
                 crate::codec::pipeline::Status::Done => break,
                 _ => {
                     let n = crate::codec::pipeline::Decoder::releasable_input(&tiny);

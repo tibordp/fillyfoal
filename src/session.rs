@@ -382,7 +382,11 @@ impl Session {
     ) -> NodeId {
         let source = self.add_source(len);
         let span = Span::new(source, 0, len);
-        self.add_root(formats::embedded_as(name, formats::Input::root(span), format))
+        self.add_root(formats::embedded_as(
+            name,
+            formats::Input::root(span),
+            format,
+        ))
     }
 
     pub fn node(&self, id: NodeId) -> Option<&Node> {
@@ -516,12 +520,18 @@ impl Session {
         dropped.extend(entry.children.drain(..keep_from));
         let restart = start < first
             || (entry.state == ChildState::NotRequested)
-            || (end > have && matches!(entry.state, ChildState::More | ChildState::Running(_)) && {
-                // Jump ahead from a mark if one lies beyond where the
-                // running expansion has got to.
-                let emitted = entry.run.as_ref().map_or(0, |r| lock(&r.out).emitted);
-                entry.marks.range(..=start).next_back().is_some_and(|(&i, _)| i > emitted)
-            });
+            || (end > have
+                && matches!(entry.state, ChildState::More | ChildState::Running(_))
+                && {
+                    // Jump ahead from a mark if one lies beyond where the
+                    // running expansion has got to.
+                    let emitted = entry.run.as_ref().map_or(0, |r| lock(&r.out).emitted);
+                    entry
+                        .marks
+                        .range(..=start)
+                        .next_back()
+                        .is_some_and(|(&i, _)| i > emitted)
+                });
         if restart {
             dropped.append(&mut entry.children);
         }

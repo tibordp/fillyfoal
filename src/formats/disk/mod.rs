@@ -49,13 +49,13 @@ pub mod zfs;
 use std::borrow::Cow;
 use std::sync::Arc;
 
+pub use crate::codec::crc::{crc32_update, crc32c, crc32c_update};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Codec, Input, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::Value;
-pub use crate::codec::crc::{crc32_update, crc32c, crc32c_update};
 
 /// Human-readable size: `512 bytes`, `64 KiB`, `1.5 GiB`.
 pub fn size(n: u64) -> String {
@@ -398,4 +398,3 @@ pub fn guid_le(b: &[u8]) -> crate::value::Guid {
 pub fn align(v: u64, a: u64) -> u64 {
     v.checked_next_multiple_of(a).unwrap_or(u64::MAX)
 }
-

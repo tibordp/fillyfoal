@@ -4,9 +4,9 @@
 //! size, data). Each chunk is an independent stream in the algorithm the
 //! magic names, or stored when both sizes are equal.
 
+use crate::codec::Codec;
 use crate::codec::lz::lz4_block;
 use crate::codec::pipeline::{self, Decode, Step};
-use crate::codec::Codec;
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -14,11 +14,15 @@ fn bad(what: &str) -> Diagnostic {
 }
 
 fn u64_be(data: &[u8], at: usize) -> Option<u64> {
-    data.get(at..at.checked_add(8)?).and_then(|s| s.try_into().ok()).map(u64::from_be_bytes)
+    data.get(at..at.checked_add(8)?)
+        .and_then(|s| s.try_into().ok())
+        .map(u64::from_be_bytes)
 }
 
 fn u32_le(data: &[u8], at: usize) -> Option<u32> {
-    data.get(at..at.checked_add(4)?).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes)
+    data.get(at..at.checked_add(4)?)
+        .and_then(|s| s.try_into().ok())
+        .map(u32::from_le_bytes)
 }
 
 /// Apple's LZ4 framing: `bv41` (raw size, compressed size, LZ4 block),
@@ -27,9 +31,12 @@ fn u32_le(data: &[u8], at: usize) -> Option<u32> {
 pub fn lz4_bv4(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
     let mut pos = 0usize;
     loop {
-        let magic = input.get(pos..pos.saturating_add(4)).ok_or_else(|| bad("truncated LZ4 block header"))?;
+        let magic = input
+            .get(pos..pos.saturating_add(4))
+            .ok_or_else(|| bad("truncated LZ4 block header"))?;
         let field = |i: usize| -> Result<usize> {
-            let v = u32_le(input, pos.saturating_add(i)).ok_or_else(|| bad("truncated LZ4 block header"))?;
+            let v = u32_le(input, pos.saturating_add(i))
+                .ok_or_else(|| bad("truncated LZ4 block header"))?;
             usize::try_from(v).map_err(|_| bad("LZ4 block too large"))
         };
         match magic {
@@ -38,7 +45,9 @@ pub fn lz4_bv4(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
                 let raw = field(4)?;
                 let packed = field(8)?;
                 let start = pos.saturating_add(12);
-                let data = input.get(start..start.saturating_add(packed)).ok_or_else(|| bad("truncated LZ4 block"))?;
+                let data = input
+                    .get(start..start.saturating_add(packed))
+                    .ok_or_else(|| bad("truncated LZ4 block"))?;
                 let before = out.len();
                 lz4_block(data, out, limit)?;
                 if out.len().saturating_sub(before) != raw {
@@ -49,9 +58,13 @@ pub fn lz4_bv4(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
             b"bv4-" => {
                 let raw = field(4)?;
                 let start = pos.saturating_add(8);
-                let data = input.get(start..start.saturating_add(raw)).ok_or_else(|| bad("truncated stored block"))?;
+                let data = input
+                    .get(start..start.saturating_add(raw))
+                    .ok_or_else(|| bad("truncated stored block"))?;
                 if out.len().saturating_add(raw) > limit {
-                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                    return Err(Diagnostic::limit(format!(
+                        "decompressed data exceeds {limit:#x} bytes"
+                    )));
                 }
                 out.extend_from_slice(data);
                 pos = start.saturating_add(raw);
@@ -95,12 +108,21 @@ fn chunk(algorithm: u8, data: &[u8], room: usize) -> Result<Vec<u8>> {
             return Ok(v);
         }
     };
-    let mut decoder = codec.decoder().ok_or_else(|| Diagnostic::internal("no chunk decoder"))?;
+    let mut decoder = codec
+        .decoder()
+        .ok_or_else(|| Diagnostic::internal("no chunk decoder"))?;
     pipeline::decode_all(decoder.as_mut(), data, room)
 }
 
 impl Decode for Pbz {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let algorithm = match self.algorithm {
             Some(a) => a,
             None => {
@@ -125,16 +147,21 @@ impl Decode for Pbz {
                 break;
             }
             let raw = u64_be(input, pos).ok_or_else(|| bad("truncated chunk header"))?;
-            let packed = u64_be(input, pos.saturating_add(8)).ok_or_else(|| bad("truncated chunk header"))?;
+            let packed = u64_be(input, pos.saturating_add(8))
+                .ok_or_else(|| bad("truncated chunk header"))?;
             let raw = usize::try_from(raw).map_err(|_| bad("chunk too large"))?;
             let packed = usize::try_from(packed).map_err(|_| bad("chunk too large"))?;
             let start = pos.saturating_add(16);
-            let data = input.get(start..start.saturating_add(packed)).ok_or_else(|| bad("truncated chunk"))?;
+            let data = input
+                .get(start..start.saturating_add(packed))
+                .ok_or_else(|| bad("truncated chunk"))?;
             let room = limit.saturating_sub(out.len());
             let compressed = looks_compressed(algorithm, data);
             if raw == packed || !compressed {
                 if data.len() > room {
-                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                    return Err(Diagnostic::limit(format!(
+                        "decompressed data exceeds {limit:#x} bytes"
+                    )));
                 }
                 out.extend_from_slice(data);
             } else {
@@ -143,7 +170,9 @@ impl Decode for Pbz {
                     return Err(bad("chunk size mismatch"));
                 }
                 if decoded.len() > room {
-                    return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                    return Err(Diagnostic::limit(format!(
+                        "decompressed data exceeds {limit:#x} bytes"
+                    )));
                 }
                 out.extend_from_slice(&decoded);
             }

@@ -4,6 +4,7 @@
 
 use super::util::{clean, dec, hex, size, text};
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
+use crate::codec::crc::crc16_xmodem;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
@@ -14,7 +15,6 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, flag, lookup};
-use crate::codec::crc::crc16_xmodem;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;

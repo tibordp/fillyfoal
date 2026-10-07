@@ -38,7 +38,9 @@ pub static FORMAT: Format = Format {
     extensions: &["sml", "smile"],
     mime: "application/x-jackson-smile",
     // Version 0 in the high nibble; bit 3 is reserved.
-    probe: Probe::Custom(|h| h.starts_with(b":)\n") && h.data.get(3).is_some_and(|&b| b & 0xf8 == 0)),
+    probe: Probe::Custom(|h| {
+        h.starts_with(b":)\n") && h.data.get(3).is_some_and(|&b| b & 0xf8 == 0)
+    }),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -65,7 +67,9 @@ enum Tok {
     Float64(u64),
     BigDecimal(i64, u64),
     /// A string: ASCII or not, terminated by `0xFC` (long) or not.
-    Text { long: bool },
+    Text {
+        long: bool,
+    },
     Binary7(u64),
     RawBinary,
     StartArray,
@@ -76,7 +80,9 @@ enum Tok {
     Header,
     /// Key-mode tokens.
     SharedName(u64),
-    Name { long: bool },
+    Name {
+        long: bool,
+    },
 }
 
 /// A decoded token: `head` bytes before its payload of `payload` bytes,
@@ -111,13 +117,19 @@ async fn vint(r: &mut ByteReader<'_>, at: u64) -> Result<(u64, u64)> {
 
 fn zigzag(v: u64) -> i64 {
     let half = i64::try_from(v >> 1).unwrap_or(i64::MAX);
-    if v & 1 == 0 { half } else { half.saturating_neg().saturating_sub(1) }
+    if v & 1 == 0 {
+        half
+    } else {
+        half.saturating_neg().saturating_sub(1)
+    }
 }
 
 /// Encoded size of `raw` bytes in 7-bit form.
 fn seven_bit_len(raw: u64) -> u64 {
     let rem = raw % 7;
-    (raw / 7).saturating_mul(8).saturating_add(if rem == 0 { 0 } else { rem.saturating_add(1) })
+    (raw / 7)
+        .saturating_mul(8)
+        .saturating_add(if rem == 0 { 0 } else { rem.saturating_add(1) })
 }
 
 /// Unpacks 7-bit encoded bytes (whole groups of 8, then a final group of
@@ -133,17 +145,31 @@ fn unpack7(enc: &[u8], raw: usize) -> Vec<u8> {
         let (body, last_bits) = if group.len() == 8 && n == 7 {
             (group, 7u32)
         } else {
-            (group.get(..n.saturating_add(1)).unwrap_or(group), u32::try_from(n).unwrap_or(0))
+            (
+                group.get(..n.saturating_add(1)).unwrap_or(group),
+                u32::try_from(n).unwrap_or(0),
+            )
         };
         let mut acc: u64 = 0;
         let count = body.len();
         for (i, &b) in body.iter().enumerate() {
-            let bits = if i.saturating_add(1) == count { last_bits } else { 7 };
+            let bits = if i.saturating_add(1) == count {
+                last_bits
+            } else {
+                7
+            };
             acc = (acc << bits) | (u64::from(b) & ((1u64 << bits).saturating_sub(1)));
         }
         let total_bytes = body.len().saturating_sub(1);
         for i in (0..total_bytes).rev() {
-            out.push(u8::try_from(acc.checked_shr(u32::try_from(i.saturating_mul(8)).unwrap_or(64)).unwrap_or(0) & 0xff).unwrap_or(0));
+            out.push(
+                u8::try_from(
+                    acc.checked_shr(u32::try_from(i.saturating_mul(8)).unwrap_or(64))
+                        .unwrap_or(0)
+                        & 0xff,
+                )
+                .unwrap_or(0),
+            );
         }
     }
     out.truncate(raw);
@@ -152,7 +178,8 @@ fn unpack7(enc: &[u8], raw: usize) -> Vec<u8> {
 
 /// Folds 7-bit groups into an integer (floats).
 fn fold7(b: &[u8]) -> u64 {
-    b.iter().fold(0u64, |acc, &x| (acc << 7) | u64::from(x & 0x7f))
+    b.iter()
+        .fold(0u64, |acc, &x| (acc << 7) | u64::from(x & 0x7f))
 }
 
 /// The offset of the `0xFC` ending a long string that starts at `at`.
@@ -167,7 +194,10 @@ async fn find_end_marker(r: &mut ByteReader<'_>, at: u64) -> Result<u64> {
         pos = pos.saturating_add(vt_len(window.len()));
         r.cx().checkpoint().await;
     }
-    Err(Diagnostic::truncated(r.span(at, len.saturating_sub(at).saturating_add(1)), len.saturating_sub(at)))
+    Err(Diagnostic::truncated(
+        r.span(at, len.saturating_sub(at).saturating_add(1)),
+        len.saturating_sub(at),
+    ))
 }
 
 fn vt_len(n: usize) -> u64 {
@@ -175,7 +205,12 @@ fn vt_len(n: usize) -> u64 {
 }
 
 fn token(tok: Tok, head: u64, payload: u64) -> Token {
-    Token { tok, head, payload, len: head.saturating_add(payload) }
+    Token {
+        tok,
+        head,
+        payload,
+        len: head.saturating_add(payload),
+    }
 }
 
 /// The value-mode token at `at`.
@@ -199,7 +234,11 @@ async fn value_token(r: &mut ByteReader<'_>, at: u64) -> Result<Token> {
         }
         0x28 => {
             let b = r.bytes(next, 5).await?;
-            token(Tok::Float32(u32::try_from(fold7(&b) & 0xffff_ffff).unwrap_or(0)), 6, 0)
+            token(
+                Tok::Float32(u32::try_from(fold7(&b) & 0xffff_ffff).unwrap_or(0)),
+                6,
+                0,
+            )
         }
         0x29 => {
             let b = r.bytes(next, 10).await?;
@@ -209,18 +248,43 @@ async fn value_token(r: &mut ByteReader<'_>, at: u64) -> Result<Token> {
             let (scale, n1) = vint(r, next).await?;
             let (raw, n2) = vint(r, next.saturating_add(n1)).await?;
             let scale = zigzag(scale);
-            token(Tok::BigDecimal(scale, raw), n1.saturating_add(n2).saturating_add(1), seven_bit_len(raw))
+            token(
+                Tok::BigDecimal(scale, raw),
+                n1.saturating_add(n2).saturating_add(1),
+                seven_bit_len(raw),
+            )
         }
         0x3a => token(Tok::Header, 4, 0),
-        0x40..=0x5f => token(Tok::Text { long: false }, 1, u64::from(t & 0x1f).saturating_add(1)),
-        0x60..=0x7f => token(Tok::Text { long: false }, 1, u64::from(t & 0x1f).saturating_add(33)),
-        0x80..=0x9f => token(Tok::Text { long: false }, 1, u64::from(t & 0x1f).saturating_add(2)),
-        0xa0..=0xbf => token(Tok::Text { long: false }, 1, u64::from(t & 0x1f).saturating_add(34)),
+        0x40..=0x5f => token(
+            Tok::Text { long: false },
+            1,
+            u64::from(t & 0x1f).saturating_add(1),
+        ),
+        0x60..=0x7f => token(
+            Tok::Text { long: false },
+            1,
+            u64::from(t & 0x1f).saturating_add(33),
+        ),
+        0x80..=0x9f => token(
+            Tok::Text { long: false },
+            1,
+            u64::from(t & 0x1f).saturating_add(2),
+        ),
+        0xa0..=0xbf => token(
+            Tok::Text { long: false },
+            1,
+            u64::from(t & 0x1f).saturating_add(34),
+        ),
         0xc0..=0xdf => token(Tok::Int(zigzag(u64::from(t & 0x1f)), 5), 1, 0),
         0xe0 | 0xe4 => {
             let end = find_end_marker(r, next).await?;
             let payload = end.saturating_sub(next);
-            Token { tok: Tok::Text { long: true }, head: 1, payload, len: payload.saturating_add(2) }
+            Token {
+                tok: Tok::Text { long: true },
+                head: 1,
+                payload,
+                len: payload.saturating_add(2),
+            }
         }
         0xe8 => {
             let (raw, n) = vint(r, next).await?;
@@ -228,7 +292,11 @@ async fn value_token(r: &mut ByteReader<'_>, at: u64) -> Result<Token> {
         }
         0xec..=0xef => {
             let low = r.byte(next).await?;
-            token(Tok::SharedValue((u64::from(t & 3) << 8) | u64::from(low)), 2, 0)
+            token(
+                Tok::SharedValue((u64::from(t & 3) << 8) | u64::from(low)),
+                2,
+                0,
+            )
         }
         0xf8 => token(Tok::StartArray, 1, 0),
         0xf9 => token(Tok::EndArray, 1, 0),
@@ -251,16 +319,33 @@ async fn key_token(r: &mut ByteReader<'_>, at: u64) -> Result<Token> {
         0x20 => token(Tok::Empty, 1, 0),
         0x30..=0x33 => {
             let low = r.byte(next).await?;
-            token(Tok::SharedName((u64::from(t & 3) << 8) | u64::from(low)), 2, 0)
+            token(
+                Tok::SharedName((u64::from(t & 3) << 8) | u64::from(low)),
+                2,
+                0,
+            )
         }
         0x34 => {
             let end = find_end_marker(r, next).await?;
             let payload = end.saturating_sub(next);
-            Token { tok: Tok::Name { long: true }, head: 1, payload, len: payload.saturating_add(2) }
+            Token {
+                tok: Tok::Name { long: true },
+                head: 1,
+                payload,
+                len: payload.saturating_add(2),
+            }
         }
         0x40..=0x7f => token(Tok::SharedName(u64::from(t & 0x3f)), 1, 0),
-        0x80..=0xbf => token(Tok::Name { long: false }, 1, u64::from(t & 0x3f).saturating_add(1)),
-        0xc0..=0xf7 => token(Tok::Name { long: false }, 1, u64::from(t & 0x3f).saturating_add(2)),
+        0x80..=0xbf => token(
+            Tok::Name { long: false },
+            1,
+            u64::from(t & 0x3f).saturating_add(1),
+        ),
+        0xc0..=0xf7 => token(
+            Tok::Name { long: false },
+            1,
+            u64::from(t & 0x3f).saturating_add(2),
+        ),
         0xfb => token(Tok::EndObject, 1, 0),
         _ => return Err(bad(r, at, format!("invalid key token {t:#04x}"))),
     })
@@ -300,7 +385,8 @@ impl Table {
         if self.slots.len() >= MAX_SHARED {
             self.slots.clear();
         }
-        self.slots.push(u32::try_from(shared.entries.len()).unwrap_or(u32::MAX));
+        self.slots
+            .push(u32::try_from(shared.entries.len()).unwrap_or(u32::MAX));
         shared.entries.push((at, len));
     }
     fn reference(&self, shared: &mut Shared, at: u64, index: u64) {
@@ -322,8 +408,14 @@ async fn scan_shared(r: &mut ByteReader<'_>) -> Shared {
 /// references.
 async fn scan(r: &mut ByteReader<'_>, shared: &mut Shared) -> Result<()> {
     let len = r.region().len;
-    let mut names = Table { enabled: false, slots: Vec::new() };
-    let mut values = Table { enabled: false, slots: Vec::new() };
+    let mut names = Table {
+        enabled: false,
+        slots: Vec::new(),
+    };
+    let mut values = Table {
+        enabled: false,
+        slots: Vec::new(),
+    };
     // Containers open: true for objects.
     let mut stack: Vec<bool> = Vec::new();
     let mut expect_key = false;
@@ -354,13 +446,22 @@ async fn scan(r: &mut ByteReader<'_>, shared: &mut Shared) -> Result<()> {
         match v.tok {
             Tok::Header if stack.is_empty() => {
                 let flags = r.bytes(pos, 4).await?.get(3).copied().unwrap_or(0);
-                names = Table { enabled: flags & 1 != 0, slots: Vec::new() };
-                values = Table { enabled: flags & 2 != 0, slots: Vec::new() };
+                names = Table {
+                    enabled: flags & 1 != 0,
+                    slots: Vec::new(),
+                };
+                values = Table {
+                    enabled: flags & 2 != 0,
+                    slots: Vec::new(),
+                };
             }
             Tok::EndOfContent if stack.is_empty() => {}
             Tok::StartArray | Tok::StartObject => {
                 if stack.len() >= vt::MAX_DEPTH {
-                    return Err(Diagnostic::limit(format!("nested deeper than {}", vt::MAX_DEPTH)).at(r.span(pos, 1)));
+                    return Err(
+                        Diagnostic::limit(format!("nested deeper than {}", vt::MAX_DEPTH))
+                            .at(r.span(pos, 1)),
+                    );
                 }
                 stack.push(v.tok == Tok::StartObject);
             }
@@ -418,7 +519,10 @@ async fn end_of(r: &mut ByteReader<'_>, at: u64) -> Result<u64> {
         match v.tok {
             Tok::StartArray | Tok::StartObject => {
                 if stack.len() >= vt::MAX_DEPTH {
-                    return Err(Diagnostic::limit(format!("nested deeper than {}", vt::MAX_DEPTH)).at(r.span(pos, 1)));
+                    return Err(
+                        Diagnostic::limit(format!("nested deeper than {}", vt::MAX_DEPTH))
+                            .at(r.span(pos, 1)),
+                    );
                 }
                 stack.push(v.tok == Tok::StartObject);
             }
@@ -448,12 +552,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 let flags = h.get(3).copied().unwrap_or(0);
                 if documents == 0 {
                     let mut set = Vec::new();
-                    for &(f, name) in &[(1u8, "shared names"), (2, "shared values"), (4, "raw binary")] {
+                    for &(f, name) in &[
+                        (1u8, "shared names"),
+                        (2, "shared values"),
+                        (4, "raw binary"),
+                    ] {
                         if flags & f != 0 {
                             set.push(name);
                         }
                     }
-                    let extra = if set.is_empty() { String::new() } else { format!(" ({})", set.join(", ")) };
+                    let extra = if set.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" ({})", set.join(", "))
+                    };
                     cx.annotate(format!("Smile version {}{extra}", flags >> 4));
                 }
                 documents = documents.saturating_add(1);
@@ -461,15 +573,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 pos = pos.saturating_add(4);
             }
             Tok::EndOfContent => {
-                cx.push(Node::new("End of content").span(r.span(pos, 1)).value(vt::uint(0xff, 8))).await;
+                cx.push(
+                    Node::new("End of content")
+                        .span(r.span(pos, 1))
+                        .value(vt::uint(0xff, 8)),
+                )
+                .await;
                 pos = pos.saturating_add(1);
             }
             _ => {
-                let name = if index == 0 { "Value".to_owned() } else { format!("Value {index}") };
+                let name = if index == 0 {
+                    "Value".to_owned()
+                } else {
+                    format!("Value {index}")
+                };
                 let end = match end_of(&mut r, pos).await {
                     Ok(end) => end,
                     Err(d) => {
-                        cx.push(Node::new(name).span(r.span(pos, region.len.saturating_sub(pos))).diag(d)).await;
+                        cx.push(
+                            Node::new(name)
+                                .span(r.span(pos, region.len.saturating_sub(pos)))
+                                .diag(d),
+                        )
+                        .await;
                         break;
                     }
                 };
@@ -487,30 +613,56 @@ fn header_node(span: Span, h: &[u8]) -> Node {
     let flags = h.get(3).copied().unwrap_or(0);
     Node::new("Header")
         .span(span)
-        .value(Value::Text(String::from_utf8_lossy(h.get(..2).unwrap_or_default()).into_owned()))
+        .value(Value::Text(
+            String::from_utf8_lossy(h.get(..2).unwrap_or_default()).into_owned(),
+        ))
         .summary(format!("version {}", flags >> 4))
-        .lazy(crate::expander!(self::header_fields: (Span, u8)), (span, flags))
+        .lazy(
+            crate::expander!(self::header_fields: (Span, u8)),
+            (span, flags),
+        )
 }
 
 async fn header_fields(cx: Cx, (span, flags): (Span, u8)) -> Result<()> {
-    cx.emit(Node::new("Signature").span(span.sub(0, 3)).value(Value::Text(":)\\n".into())));
-    cx.emit(Node::new("Version").span(span.sub(3, 1)).value(vt::uint(u64::from(flags >> 4), 4)));
+    cx.emit(
+        Node::new("Signature")
+            .span(span.sub(0, 3))
+            .value(Value::Text(":)\\n".into())),
+    );
+    cx.emit(
+        Node::new("Version")
+            .span(span.sub(3, 1))
+            .value(vt::uint(u64::from(flags >> 4), 4)),
+    );
     let raw = u64::from(flags & 0x0f);
     let (set, unknown) = crate::value::decode_flags(FLAGS, raw);
-    cx.emit(Node::new("Flags").span(span.sub(3, 1)).value(Value::Flags { raw, bits: 4, set, unknown }));
+    cx.emit(Node::new("Flags").span(span.sub(3, 1)).value(Value::Flags {
+        raw,
+        bits: 4,
+        set,
+        unknown,
+    }));
     Ok(())
 }
 
 /// The text of a shared-table entry.
 async fn entry_text(r: &mut ByteReader<'_>, entry: Option<(u64, u64)>) -> Result<Option<String>> {
     match entry {
-        Some((at, len)) => Ok(Some(String::from_utf8_lossy(&r.bytes(at, len).await?).into_owned())),
+        Some((at, len)) => Ok(Some(
+            String::from_utf8_lossy(&r.bytes(at, len).await?).into_owned(),
+        )),
         None => Ok(None),
     }
 }
 
 /// A node for the value at `start..end`.
-async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String, path: &Path) -> Result<Node> {
+async fn item_node(
+    r: &mut ByteReader<'_>,
+    start: u64,
+    end: u64,
+    name: String,
+    path: &Path,
+) -> Result<Node> {
     let v = value_token(r, start).await?;
     let node = Node::new(name).span(r.span(start, end.saturating_sub(start)));
     let body = start.saturating_add(v.head);
@@ -518,10 +670,14 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String, p
         Tok::SharedValue(i) => {
             let table = shared(r.cx(), r.region()).await;
             match entry_text(r, table.lookup(start)).await? {
-                Some(text) => node.value(Value::Text(text)).summary(format!("shared value #{i}")),
+                Some(text) => node
+                    .value(Value::Text(text))
+                    .summary(format!("shared value #{i}")),
                 None => node
                     .summary(format!("shared value #{i}"))
-                    .diag(Diagnostic::malformed("back-reference to a string not (yet) in the table")),
+                    .diag(Diagnostic::malformed(
+                        "back-reference to a string not (yet) in the table",
+                    )),
             }
         }
         Tok::Empty => node.value(Value::Text(String::new())),
@@ -531,7 +687,11 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String, p
         Tok::BigInt(raw) => {
             let enc = r.bytes(body, v.payload.min(seven_bit_len(256))).await?;
             let bytes = unpack7(&enc, usize::try_from(raw.min(256)).unwrap_or(0));
-            let text = if raw > 256 { format!("<{raw}-byte integer>") } else { vt::signed_digits(&bytes) };
+            let text = if raw > 256 {
+                format!("<{raw}-byte integer>")
+            } else {
+                vt::signed_digits(&bytes)
+            };
             node.value(Value::Text(text)).summary("BigInteger")
         }
         Tok::Float32(bits) => node.value(Value::Float(f64::from(f32::from_bits(bits)))),
@@ -544,13 +704,21 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String, p
                 Some(d) => (true, d.to_owned()),
                 None => (false, digits),
             };
-            node.value(Value::Text(vt::decimal_string(negative, &digits, scale.saturating_neg())))
-                .summary(format!("BigDecimal, scale {scale}"))
+            node.value(Value::Text(vt::decimal_string(
+                negative,
+                &digits,
+                scale.saturating_neg(),
+            )))
+            .summary(format!("BigDecimal, scale {scale}"))
         }
         Tok::Text { long } => {
             let data = r.bytes(body, v.payload.min(vt::MAX_TEXT)).await?;
             let node = vt::text(node, &data, v.payload);
-            if long && v.payload <= vt::MAX_TEXT { node.summary("long text") } else { node }
+            if long && v.payload <= vt::MAX_TEXT {
+                node.summary("long text")
+            } else {
+                node
+            }
         }
         Tok::Binary7(raw) => {
             let shown = raw.min(vt::MAX_BYTES);
@@ -566,10 +734,17 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String, p
             let object = v.tok == Tok::StartObject;
             let node = node.summary(if object { "object" } else { "array" });
             if end.saturating_sub(start) <= 2 {
-                node.summary(if object { "object, empty" } else { "array, empty" })
+                node.summary(if object {
+                    "object, empty"
+                } else {
+                    "array, empty"
+                })
             } else {
                 match vt::enter(path, start) {
-                    Ok(p) => node.lazy(crate::expander!(self::members: (Span, u64, Path)), (r.region(), start, p)),
+                    Ok(p) => node.lazy(
+                        crate::expander!(self::members: (Span, u64, Path)),
+                        (r.region(), start, p),
+                    ),
                     Err(d) => node.diag(d),
                 }
             }
@@ -590,7 +765,9 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, k: &Token, index: u64) -> Res
             }
         }
         _ => {
-            let data = r.bytes(at.saturating_add(k.head), k.payload.min(0x200)).await?;
+            let data = r
+                .bytes(at.saturating_add(k.head), k.payload.min(0x200))
+                .await?;
             vt::key_name(&String::from_utf8_lossy(&data), index)
         }
     })
@@ -600,7 +777,9 @@ async fn members(cx: Cx, (region, start, path): (Span, u64, Path)) -> Result<()>
     let mut r = ByteReader::new(&cx, region);
     let first = value_token(&mut r, start).await?;
     let object = first.tok == Tok::StartObject;
-    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((start.saturating_add(1), 0));
+    let (mut pos, mut index) = cx
+        .resume::<(u64, u64)>()
+        .unwrap_or((start.saturating_add(1), 0));
     loop {
         let at = (pos, index);
         cx.mark(move || at);
@@ -634,7 +813,9 @@ mod tests {
     #[test]
     fn seven_bit() {
         // From smile-js: 00 01 02 'binary' ff.
-        let enc = [0x00, 0x00, 0x20, 0x26, 0x13, 0x25, 0x5c, 0x61, 0x39, 0x1e, 0x3f, 0x07];
+        let enc = [
+            0x00, 0x00, 0x20, 0x26, 0x13, 0x25, 0x5c, 0x61, 0x39, 0x1e, 0x3f, 0x07,
+        ];
         assert_eq!(seven_bit_len(10), 12);
         assert_eq!(unpack7(&enc, 10), b"\x00\x01\x02binary\xff");
     }

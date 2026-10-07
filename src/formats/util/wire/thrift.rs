@@ -330,10 +330,7 @@ impl Protocol {
     /// A string/binary at `at`: its bytes' range.
     fn binary(self, data: &[u8], at: usize) -> Option<(usize, usize)> {
         let (len, start) = match self {
-            Protocol::Binary => (
-                usize::try_from(i32_be(data, at)?).ok()?,
-                at.checked_add(4)?,
-            ),
+            Protocol::Binary => (usize::try_from(i32_be(data, at)?).ok()?, at.checked_add(4)?),
             Protocol::Compact => {
                 let (len, start) = compact::varint(data, at)?;
                 (usize::try_from(len).ok()?, start)
@@ -357,7 +354,9 @@ impl Protocol {
                 Scalar::Int(i64::from(crate::bytes::u16_be(data, at)?.cast_signed()), 16),
                 fixed(2)?,
             ),
-            (Protocol::Binary, Type::I32) => (Scalar::Int(i64::from(i32_be(data, at)?), 32), fixed(4)?),
+            (Protocol::Binary, Type::I32) => {
+                (Scalar::Int(i64::from(i32_be(data, at)?), 32), fixed(4)?)
+            }
             (Protocol::Binary, Type::I64) => (
                 Scalar::Int(crate::bytes::u64_be(data, at)?.cast_signed(), 64),
                 fixed(8)?,

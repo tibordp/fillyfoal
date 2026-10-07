@@ -945,7 +945,8 @@ async fn central_directory(
     while !cur.at_end() {
         let start = cur.pos();
         if index >= entries {
-            if cur.remaining() < CentralHeader::SIZE || cur.peek(4).await? != CENTRAL.to_le_bytes() {
+            if cur.remaining() < CentralHeader::SIZE || cur.peek(4).await? != CENTRAL.to_le_bytes()
+            {
                 break;
             }
             if index == entries {
@@ -991,7 +992,11 @@ async fn central_directory(
     if index > entries {
         cx.diag(Diagnostic::warning(format!(
             "the end record says {entries} entries, the central directory holds {index}{}",
-            if index % 65536 == entries % 65536 { " (the count was stored modulo 65536)" } else { "" }
+            if index % 65536 == entries % 65536 {
+                " (the count was stored modulo 65536)"
+            } else {
+                ""
+            }
         )));
         cx.annotate(format!("{index} entries"));
     }
@@ -1149,13 +1154,15 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
     }
     if header.flags & 0x0001 != 0 {
         let is_dir = name_is_dir(&cx, name_span).await;
-        let node = encrypted_content(&cx, input, file, data, extra, &header, sizes.uncompressed).await?;
+        let node =
+            encrypted_content(&cx, input, file, data, extra, &header, sizes.uncompressed).await?;
         if !is_dir {
             cx.emit(node);
         }
         return Ok(());
     }
-    let codec = match method_codec(&cx, header.method, header.flags, data, sizes.uncompressed).await {
+    let codec = match method_codec(&cx, header.method, header.flags, data, sizes.uncompressed).await
+    {
         Ok(codec) => codec,
         Err(e) => {
             cx.emit(Node::new("Compressed data").span(data).diag(e));
@@ -1165,7 +1172,10 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
     match codec {
         Some((codec, stream)) if !(name_is_dir(&cx, name_span).await) => {
             if stream.offset != data.offset {
-                cx.emit(lzma_header(data.sub(0, stream.offset.saturating_sub(data.offset)), &codec));
+                cx.emit(lzma_header(
+                    data.sub(0, stream.offset.saturating_sub(data.offset)),
+                    &codec,
+                ));
             }
             cx.emit(
                 content("Content", input, stream, codec, Some(sizes.uncompressed))
@@ -1190,7 +1200,13 @@ async fn entry(cx: Cx, (input, span, prefix): (Input, Span, u64)) -> Result<()> 
 /// The codec for compression `method` and the span of its stream (which
 /// for LZMA follows a properties header); `None` for a method we do not
 /// decode.
-async fn method_codec(cx: &Cx, method: u16, flags: u16, data: Span, size: u64) -> Result<Option<(Codec, Span)>> {
+async fn method_codec(
+    cx: &Cx,
+    method: u16,
+    flags: u16,
+    data: Span,
+    size: u64,
+) -> Result<Option<(Codec, Span)>> {
     let codec = match method {
         0 => Codec::Stored,
         8 => Codec::Deflate,
@@ -1222,8 +1238,15 @@ fn implode(flags: u16, size: u64) -> Codec {
 /// ZIP method 14: a 2-byte LZMA SDK version, a 2-byte properties size, the
 /// properties (lc/lp/pb byte, 4-byte dictionary size), then raw LZMA; flag
 /// bit 1 says an end marker terminates the stream.
-async fn lzma_stream(cx: &Cx, head: &[u8], data: Span, flags: u16, size: u64) -> Result<(Span, Codec)> {
-    let props_len = u16_le(head, 2).ok_or_else(|| Diagnostic::malformed("truncated LZMA header").at(data))?;
+async fn lzma_stream(
+    cx: &Cx,
+    head: &[u8],
+    data: Span,
+    flags: u16,
+    size: u64,
+) -> Result<(Span, Codec)> {
+    let props_len =
+        u16_le(head, 2).ok_or_else(|| Diagnostic::malformed("truncated LZMA header").at(data))?;
     if props_len < 5 {
         return Err(Diagnostic::malformed("LZMA properties shorter than 5 bytes").at(data));
     }
@@ -1265,15 +1288,19 @@ async fn encrypted_content(
 ) -> Result<Node> {
     use crate::codec::crypto::{Key, Sha1, ZipCryptoKeys, pbkdf2};
     const PROMPT: &str = "Password for the encrypted ZIP entries";
-    let locked = |why: &str| Node::new("Encrypted data").span(data).diag(Diagnostic::unsupported(why.to_owned()));
+    let locked = |why: &str| {
+        Node::new("Encrypted data")
+            .span(data)
+            .diag(Diagnostic::unsupported(why.to_owned()))
+    };
     if header.flags & 0x0040 != 0 {
         return Ok(locked("PKWARE strong encryption"));
     }
     let (decrypt, payload, method) = if header.method == 99 {
         // WinZip AES: salt, 2-byte password verifier, data, 10-byte MAC.
         let fields = cx.read_avail(extra).await?;
-        let Some((strength, method)) = extra_field(&fields, 0x9901)
-            .and_then(|f| Some((*f.get(4)?, u16_le(f, 5)?)))
+        let Some((strength, method)) =
+            extra_field(&fields, 0x9901).and_then(|f| Some((*f.get(4)?, u16_le(f, 5)?)))
         else {
             return Ok(locked("AES-encrypted entry without its 0x9901 extra field"));
         };
@@ -1282,16 +1309,32 @@ async fn encrypted_content(
         }
         let key_len = 8usize.saturating_add(8usize.saturating_mul(strength.into()));
         let salt_len = key_len / 2;
-        let head = cx.read(data.sub_exact(0, to_u64(salt_len.saturating_add(2)))?).await?;
+        let head = cx
+            .read(data.sub_exact(0, to_u64(salt_len.saturating_add(2)))?)
+            .await?;
         let (salt, verifier) = head.split_at(salt_len);
-        let derive = |password: &[u8]| pbkdf2::<Sha1>(password, salt, 1000, key_len.saturating_mul(2).saturating_add(2));
-        let Some(secret) = cx.unlock(archive, PROMPT, |s| derive(s.expose()).ends_with(verifier)).await else {
+        let derive = |password: &[u8]| {
+            pbkdf2::<Sha1>(
+                password,
+                salt,
+                1000,
+                key_len.saturating_mul(2).saturating_add(2),
+            )
+        };
+        let Some(secret) = cx
+            .unlock(archive, PROMPT, |s| derive(s.expose()).ends_with(verifier))
+            .await
+        else {
             return Ok(locked("encrypted entry (no password, or a wrong one)"));
         };
         let key = derive(secret.expose());
         let body = to_u64(salt_len.saturating_add(2));
         let payload = data.sub(body, data.len.saturating_sub(body).saturating_sub(10));
-        (Codec::AesCtrLe(Key::new(key.get(..key_len).unwrap_or_default())), payload, method)
+        (
+            Codec::AesCtrLe(Key::new(key.get(..key_len).unwrap_or_default())),
+            payload,
+            method,
+        )
     } else {
         // ZipCrypto: a 12-byte header whose last byte checks the password.
         let head = cx.read(data.sub_exact(0, 12)?).await?;
@@ -1307,39 +1350,94 @@ async fn encrypted_content(
         let Some(secret) = cx.unlock(archive, PROMPT, |s| verify(s.expose())).await else {
             return Ok(locked("encrypted entry (no password, or a wrong one)"));
         };
-        (Codec::ZipCrypto(Key::new(secret.expose())), data, header.method)
+        (
+            Codec::ZipCrypto(Key::new(secret.expose())),
+            data,
+            header.method,
+        )
     };
     let zipcrypto = matches!(decrypt, Codec::ZipCrypto(_));
     let codec = match (method, zipcrypto) {
         (0, _) => decrypt,
-        (8, true) => Codec::chain("zipcrypto+deflate", "zipcrypto+deflate (lazy)", vec![decrypt, Codec::Deflate]),
-        (8, false) => Codec::chain("aes-ctr+deflate", "aes-ctr+deflate (lazy)", vec![decrypt, Codec::Deflate]),
-        (12, true) => Codec::chain("zipcrypto+bzip2", "zipcrypto+bzip2 (lazy)", vec![decrypt, Codec::Bzip2]),
-        (12, false) => Codec::chain("aes-ctr+bzip2", "aes-ctr+bzip2 (lazy)", vec![decrypt, Codec::Bzip2]),
-        (20 | 93, true) => Codec::chain("zipcrypto+zstd", "zipcrypto+zstd (lazy)", vec![decrypt, Codec::Zstd]),
-        (20 | 93, false) => Codec::chain("aes-ctr+zstd", "aes-ctr+zstd (lazy)", vec![decrypt, Codec::Zstd]),
-        (95, true) => Codec::chain("zipcrypto+xz", "zipcrypto+xz (lazy)", vec![decrypt, Codec::Xz]),
+        (8, true) => Codec::chain(
+            "zipcrypto+deflate",
+            "zipcrypto+deflate (lazy)",
+            vec![decrypt, Codec::Deflate],
+        ),
+        (8, false) => Codec::chain(
+            "aes-ctr+deflate",
+            "aes-ctr+deflate (lazy)",
+            vec![decrypt, Codec::Deflate],
+        ),
+        (12, true) => Codec::chain(
+            "zipcrypto+bzip2",
+            "zipcrypto+bzip2 (lazy)",
+            vec![decrypt, Codec::Bzip2],
+        ),
+        (12, false) => Codec::chain(
+            "aes-ctr+bzip2",
+            "aes-ctr+bzip2 (lazy)",
+            vec![decrypt, Codec::Bzip2],
+        ),
+        (20 | 93, true) => Codec::chain(
+            "zipcrypto+zstd",
+            "zipcrypto+zstd (lazy)",
+            vec![decrypt, Codec::Zstd],
+        ),
+        (20 | 93, false) => Codec::chain(
+            "aes-ctr+zstd",
+            "aes-ctr+zstd (lazy)",
+            vec![decrypt, Codec::Zstd],
+        ),
+        (95, true) => Codec::chain(
+            "zipcrypto+xz",
+            "zipcrypto+xz (lazy)",
+            vec![decrypt, Codec::Xz],
+        ),
         (95, false) => Codec::chain("aes-ctr+xz", "aes-ctr+xz (lazy)", vec![decrypt, Codec::Xz]),
-        (6, true) => Codec::chain("zipcrypto+implode", "zipcrypto+implode (lazy)", vec![decrypt, implode(header.flags, uncompressed)]),
-        (6, false) => Codec::chain("aes-ctr+implode", "aes-ctr+implode (lazy)", vec![decrypt, implode(header.flags, uncompressed)]),
-        (10, true) => Codec::chain("zipcrypto+dcl-implode", "zipcrypto+dcl-implode (lazy)", vec![decrypt, Codec::DclImplode]),
-        (10, false) => Codec::chain("aes-ctr+dcl-implode", "aes-ctr+dcl-implode (lazy)", vec![decrypt, Codec::DclImplode]),
+        (6, true) => Codec::chain(
+            "zipcrypto+implode",
+            "zipcrypto+implode (lazy)",
+            vec![decrypt, implode(header.flags, uncompressed)],
+        ),
+        (6, false) => Codec::chain(
+            "aes-ctr+implode",
+            "aes-ctr+implode (lazy)",
+            vec![decrypt, implode(header.flags, uncompressed)],
+        ),
+        (10, true) => Codec::chain(
+            "zipcrypto+dcl-implode",
+            "zipcrypto+dcl-implode (lazy)",
+            vec![decrypt, Codec::DclImplode],
+        ),
+        (10, false) => Codec::chain(
+            "aes-ctr+dcl-implode",
+            "aes-ctr+dcl-implode (lazy)",
+            vec![decrypt, Codec::DclImplode],
+        ),
         // The LZMA properties are encrypted too: decrypt first, then read them.
         (14, _) => {
             return Ok(Node::new("Content")
                 .span(payload)
                 .summary(format!("encrypted, {uncompressed:#x} bytes"))
-                .lazy(encrypted_lzma, (input, payload, decrypt, header.flags, uncompressed)));
+                .lazy(
+                    encrypted_lzma,
+                    (input, payload, decrypt, header.flags, uncompressed),
+                ));
         }
         _ => {
             let name = crate::value::lookup(METHOD, method.into()).unwrap_or("unknown");
             return Ok(Node::new("Decrypted data")
                 .span(payload)
-                .diag(Diagnostic::unsupported(format!("compression method {name}"))));
+                .diag(Diagnostic::unsupported(format!(
+                    "compression method {name}"
+                ))));
         }
     };
-    Ok(content("Content", input, payload, codec, Some(uncompressed))
-        .summary(format!("encrypted, {uncompressed:#x} bytes")))
+    Ok(
+        content("Content", input, payload, codec, Some(uncompressed))
+            .summary(format!("encrypted, {uncompressed:#x} bytes")),
+    )
 }
 
 /// An encrypted LZMA entry: decrypts it, then decompresses the LZMA stream
@@ -1354,8 +1452,19 @@ async fn encrypted_lzma(
     }
     let head = cx.read(plain.span.sub_exact(0, 4)?).await?;
     let (stream, codec) = lzma_stream(&cx, &head, plain.span, flags, uncompressed).await?;
-    cx.emit(lzma_header(plain.span.sub(0, stream.offset.saturating_sub(plain.span.offset)), &codec));
-    cx.emit(content("Decompressed", input, stream, codec, Some(uncompressed)));
+    cx.emit(lzma_header(
+        plain
+            .span
+            .sub(0, stream.offset.saturating_sub(plain.span.offset)),
+        &codec,
+    ));
+    cx.emit(content(
+        "Decompressed",
+        input,
+        stream,
+        codec,
+        Some(uncompressed),
+    ));
     Ok(())
 }
 
@@ -1445,7 +1554,15 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
             cx.push(node).await;
             break;
         }
-        let (codec, data) = match method_codec(cx, header.method, header.flags, data, header.uncompressed.into()).await {
+        let (codec, data) = match method_codec(
+            cx,
+            header.method,
+            header.flags,
+            data,
+            header.uncompressed.into(),
+        )
+        .await
+        {
             Ok(Some(found)) => found,
             Ok(None) => {
                 cx.push(node.diag(Diagnostic::unsupported("compression method")))
@@ -1471,7 +1588,10 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
     }
     if !found {
         // Only reachable when the format was chosen by hand ("inspect as").
-        return Err(Diagnostic::malformed("no ZIP end record or local file header").at(input.span.sub(0, 4)));
+        return Err(
+            Diagnostic::malformed("no ZIP end record or local file header")
+                .at(input.span.sub(0, 4)),
+        );
     }
     Ok(())
 }

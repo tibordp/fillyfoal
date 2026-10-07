@@ -37,6 +37,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let window = crate::codec::brotli::window_bits_of(&first)
         .map(|w| format!(", {} window", human_size((1u64 << w).saturating_sub(16))))
         .unwrap_or_default();
-    cx.annotate(format!("Brotli{window}, {} compressed", human_size(file.len)));
+    cx.annotate(format!(
+        "Brotli{window}, {} compressed",
+        human_size(file.len)
+    ));
     Ok(())
 }

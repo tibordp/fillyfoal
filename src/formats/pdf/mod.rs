@@ -108,11 +108,15 @@ async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
 /// the key is known without asking (the empty password, or one entered
 /// earlier). Spans still cover the encrypted bytes.
 async fn decrypt_strings(cx: &Cx, doc: &Doc, located: &mut Located) {
-    let (Some(security), Some(id)) = (&doc.security, located.id) else { return };
+    let (Some(security), Some(id)) = (&doc.security, located.id) else {
+        return;
+    };
     if security.strings == crypt::Method::Identity {
         return;
     }
-    let Some(key) = crypt::file_key(cx, security, false).await else { return };
+    let Some(key) = crypt::file_key(cx, security, false).await else {
+        return;
+    };
     fn walk(item: &mut Item, f: &dyn Fn(&[u8]) -> Vec<u8>, depth: u32) {
         if depth > 64 {
             return;
@@ -132,7 +136,11 @@ async fn decrypt_strings(cx: &Cx, doc: &Doc, located: &mut Located) {
             _ => {}
         }
     }
-    walk(&mut located.item, &|b| security.decrypt_string(&key, id, b), 0);
+    walk(
+        &mut located.item,
+        &|b| security.decrypt_string(&key, id, b),
+        0,
+    );
 }
 
 /// Resolves `item` if it is a reference; otherwise returns it as is.
@@ -272,7 +280,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 &path,
             ));
         }
-
     }
     cx.emit(
         Node::new("Pages")
@@ -355,7 +362,11 @@ async fn annotation(cx: &Cx, doc: &Doc, version: &str) -> String {
         }
     }
     if trailer.item.get("Encrypt").is_some() {
-        out.push_str(if locked { ", encrypted (password required)" } else { ", encrypted" });
+        out.push_str(if locked {
+            ", encrypted (password required)"
+        } else {
+            ", encrypted"
+        });
     }
     out
 }

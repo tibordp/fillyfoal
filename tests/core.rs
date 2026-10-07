@@ -11,7 +11,7 @@
 mod common;
 
 use common::Host;
-use fillyfoal::{formats, Cx, Limits, Node, Origin, Result, Span, Value};
+use fillyfoal::{Cx, Limits, Node, Origin, Result, Span, Value, formats};
 
 /// Reassembles "fragments" of the input in a scrambled order and emits the
 /// reassembled text, plus a piecewise source built on top of the first one.
@@ -141,7 +141,11 @@ fn large_members_are_decompressed_lazily() {
 }
 
 fn large_member_is_decompressed_lazily(path: &str, node: &str) {
-    let data = std::fs::read(format!("{}/tests/fixtures/external/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!(
+        "{}/tests/fixtures/external/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     let mut host = Host::with_chunk(data, 4096);
     host.session.expand(host.root, 100);
     host.run();
@@ -307,7 +311,10 @@ fn lazy_decode_errors_are_reported() {
     host.run();
     let content = host.child(host.root, "Content").expect("content node");
     host.explore(content, 4, 100);
-    let messages: Vec<String> = common::diagnostics(&host).iter().map(|d| d.message.clone()).collect();
+    let messages: Vec<String> = common::diagnostics(&host)
+        .iter()
+        .map(|d| d.message.clone())
+        .collect();
     assert!(
         messages.iter().any(|m| m.starts_with("decoding stopped")),
         "{messages:?}"
@@ -318,7 +325,11 @@ fn lazy_decode_errors_are_reported() {
 /// realm: the host is asked once per attempt, not once per entry.
 async fn locked(cx: Cx, file: Span) -> Result<()> {
     for name in ["first", "second"] {
-        let secret = cx.unlock(file, "Password for the test container", |s| s.expose() == b"fillyfoal").await;
+        let secret = cx
+            .unlock(file, "Password for the test container", |s| {
+                s.expose() == b"fillyfoal"
+            })
+            .await;
         let value = match secret {
             Some(_) => Value::Text(format!("{name}: unlocked")),
             None => Value::Text(format!("{name}: locked")),
@@ -337,25 +348,44 @@ fn run_locked(passwords: &[&str]) -> (Vec<Value>, Vec<fillyfoal::SecretRequest>)
     host.session.expand(root, 10);
     host.run();
     let children = host.session.children(root).unwrap();
-    let values = children.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
+    let values = children
+        .ids
+        .iter()
+        .map(|&id| host.session.node(id).unwrap().value.clone().unwrap())
+        .collect();
     (values, host.secret_requests)
 }
 
 #[test]
 fn secrets_are_requested_once_per_realm_and_attempt() {
     let (values, requests) = run_locked(&["fillyfoal"]);
-    assert_eq!(values, vec![Value::Text("first: unlocked".into()), Value::Text("second: unlocked".into())]);
+    assert_eq!(
+        values,
+        vec![
+            Value::Text("first: unlocked".into()),
+            Value::Text("second: unlocked".into())
+        ]
+    );
     assert_eq!(requests.len(), 1);
     assert_eq!(requests[0].attempt, 0);
 
     // A wrong password leads to a second request, then success.
     let (values, requests) = run_locked(&["wrong", "fillyfoal"]);
     assert_eq!(values[1], Value::Text("second: unlocked".into()));
-    assert_eq!(requests.iter().map(|r| r.attempt).collect::<Vec<_>>(), vec![0, 1]);
+    assert_eq!(
+        requests.iter().map(|r| r.attempt).collect::<Vec<_>>(),
+        vec![0, 1]
+    );
 
     // Declining keeps the content locked, without asking again.
     let (values, requests) = run_locked(&[]);
-    assert_eq!(values, vec![Value::Text("first: locked".into()), Value::Text("second: locked".into())]);
+    assert_eq!(
+        values,
+        vec![
+            Value::Text("first: locked".into()),
+            Value::Text("second: locked".into())
+        ]
+    );
     assert_eq!(requests.len(), 1);
 
     // Wrong every time: bounded attempts.
@@ -382,7 +412,10 @@ fn trickle(codec: &fillyfoal::codec::Codec, input: &[u8]) -> Vec<u8> {
     let mut fed = 0;
     loop {
         let eof = fed == input.len();
-        match decoder.decode(&input[..fed], eof, &mut out, 3, 1 << 20).unwrap() {
+        match decoder
+            .decode(&input[..fed], eof, &mut out, 3, 1 << 20)
+            .unwrap()
+        {
             Status::Done => return out,
             Status::More => {}
             Status::NeedInput => {
@@ -400,7 +433,11 @@ fn decoders_resume_across_input_shortages_and_chain() {
     assert_eq!(trickle(&Codec::Zlib, &inner), b"hello, pipeline");
     // zlib inside zlib: a two-stage chain.
     let outer = zlib_stored(&inner);
-    let chain = Codec::chain("zlib+zlib", "zlib+zlib (lazy)", vec![Codec::Zlib, Codec::Zlib]);
+    let chain = Codec::chain(
+        "zlib+zlib",
+        "zlib+zlib (lazy)",
+        vec![Codec::Zlib, Codec::Zlib],
+    );
     assert_eq!(trickle(&chain, &outer), b"hello, pipeline");
     // A corrupted checksum is a warning, not an error.
     let mut bad = inner.clone();
@@ -411,7 +448,10 @@ fn decoders_resume_across_input_shortages_and_chain() {
 }
 
 fn render_zip(name: &str, passwords: &[&str]) -> (String, usize) {
-    let path = format!("{}/tests/fixtures/external/zip/{name}", env!("CARGO_MANIFEST_DIR"));
+    let path = format!(
+        "{}/tests/fixtures/external/zip/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let data = std::fs::read(path).unwrap();
     let mut host = Host::named(name, data, Limits::default());
     host.passwords = passwords.iter().map(|p| p.to_string()).collect();
@@ -439,20 +479,38 @@ fn encrypted_zip_entries_unlock_once_and_stay_locked_on_wrong_passwords() {
 
 #[test]
 fn encrypted_pdfs_ask_only_when_needed() {
-    let read = |name: &str| std::fs::read(format!("{}/tests/fixtures/external/pdf/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/fixtures/external/pdf/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     // Empty user password: decrypted without asking.
-    let mut host = Host::named("a.pdf", read("encrypted-empty-aes-256.pdf"), Limits::default());
+    let mut host = Host::named(
+        "a.pdf",
+        read("encrypted-empty-aes-256.pdf"),
+        Limits::default(),
+    );
     host.passwords.clear();
     host.explore_all();
     assert!(host.render().contains("Hello encrypted world"));
     assert!(host.secret_requests.is_empty());
     // A user password: asked once, then everything decrypts.
-    let mut host = Host::named("b.pdf", read("encrypted-password-rc4-128.pdf"), Limits::default());
+    let mut host = Host::named(
+        "b.pdf",
+        read("encrypted-password-rc4-128.pdf"),
+        Limits::default(),
+    );
     host.explore_all();
     assert!(host.render().contains("Hello encrypted world"));
     assert_eq!(host.secret_requests.len(), 1);
     // Declined: streams stay encrypted, and the user is not asked again.
-    let mut host = Host::named("c.pdf", read("encrypted-password-aes-256.pdf"), Limits::default());
+    let mut host = Host::named(
+        "c.pdf",
+        read("encrypted-password-aes-256.pdf"),
+        Limits::default(),
+    );
     host.passwords.clear();
     host.explore_all();
     let text = host.render();
@@ -463,7 +521,11 @@ fn encrypted_pdfs_ask_only_when_needed() {
 
 #[test]
 fn pkcs12_without_the_password_lists_nothing_secret() {
-    let data = std::fs::read(format!("{}/tests/fixtures/external/pkcs12/modern-aes.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!(
+        "{}/tests/fixtures/external/pkcs12/modern-aes.p12",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     let mut host = Host::named("k.p12", data.clone(), Limits::default());
     host.passwords.clear();
     host.explore_all();
@@ -471,7 +533,11 @@ fn pkcs12_without_the_password_lists_nothing_secret() {
     assert!(text.contains("no password, or a wrong one"));
     assert!(!text.contains("CN=fillyfoal p12 test"));
     // The empty-password store needs no prompt at all.
-    let data = std::fs::read(format!("{}/tests/fixtures/external/pkcs12/empty-password.p12", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let data = std::fs::read(format!(
+        "{}/tests/fixtures/external/pkcs12/empty-password.p12",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
     let mut host = Host::named("e.p12", data, Limits::default());
     host.passwords.clear();
     host.explore_all();
@@ -480,7 +546,10 @@ fn pkcs12_without_the_password_lists_nothing_secret() {
 }
 
 fn lzma_text() -> Vec<u8> {
-    (0..2000).map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000)).collect::<String>().into_bytes()
+    (0..2000)
+        .map(|i: u32| format!("line {i}: the quick brown fox {}\n", i * 7919 % 1000))
+        .collect::<String>()
+        .into_bytes()
 }
 
 fn lzma_code() -> Vec<u8> {
@@ -497,40 +566,74 @@ fn lzma_code() -> Vec<u8> {
 #[test]
 fn lzma_family_decodes_python_output() {
     use fillyfoal::codec::Codec;
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/lzma/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/lzma/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |codec: Codec, data: &[u8]| {
         let mut d = codec.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
     };
     let text = lzma_text();
-    for name in ["text.xz", "text-crc32.xz", "text-sha256.xz", "text-two-streams.xz"] {
+    for name in [
+        "text.xz",
+        "text-crc32.xz",
+        "text-sha256.xz",
+        "text-two-streams.xz",
+    ] {
         assert!(decode(Codec::Xz, &read(name)) == text, "{name}");
     }
     for name in ["text.lzma", "text-pb0lc0.lzma"] {
         assert!(decode(Codec::LzmaAlone, &read(name)) == text, "{name}");
     }
     let code = lzma_code();
-    for name in ["code-x86.xz", "code-delta.xz", "code-arm.xz", "code-arm64.xz", "code-x86-delta.xz"] {
+    for name in [
+        "code-x86.xz",
+        "code-delta.xz",
+        "code-arm.xz",
+        "code-arm64.xz",
+        "code-x86-delta.xz",
+    ] {
         assert!(decode(Codec::Xz, &read(name)) == code, "{name}");
     }
-    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let random: Vec<u8> = (0..70000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     assert!(decode(Codec::Xz, &read("random.xz")) == random);
 }
 
 #[test]
 fn zstd_decodes_python_output() {
     use fillyfoal::codec::Codec;
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/zstd/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/zstd/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |data: &[u8]| {
         let mut d = Codec::Zstd.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26)
     };
     let text = lzma_text();
-    for name in ["text-1.zst", "text-3.zst", "text-9.zst", "text-19.zst", "text-checksum.zst", "text-two-frames.zst"] {
+    for name in [
+        "text-1.zst",
+        "text-3.zst",
+        "text-9.zst",
+        "text-19.zst",
+        "text-checksum.zst",
+        "text-two-frames.zst",
+    ] {
         assert!(decode(&read(name)).unwrap() == text, "{name}");
     }
     assert!(decode(&read("code-19.zst")).unwrap() == lzma_code());
-    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let random: Vec<u8> = (0..70000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     assert!(decode(&read("random.zst")).unwrap() == random);
     assert!(decode(&read("zeros.zst")).unwrap() == vec![0u8; 300000]);
     assert!(decode(&read("big-text.zst")).unwrap() == text.repeat(40));
@@ -539,14 +642,22 @@ fn zstd_decodes_python_output() {
 #[test]
 fn unix_compress_decodes_real_output() {
     use fillyfoal::codec::Codec;
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/compress/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/compress/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |data: &[u8]| {
         let mut d = Codec::UnixCompress.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
     };
     assert!(decode(&read("text.Z")) == lzma_text());
     assert!(decode(&read("text12.Z")) == lzma_text());
-    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let random: Vec<u8> = (0..70000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     assert!(decode(&read("rnd.Z")) == random);
     let words = decode(&read("words.Z"));
     assert_eq!(words.len(), 2_493_885);
@@ -556,15 +667,26 @@ fn unix_compress_decodes_real_output() {
 #[test]
 fn lzfse_decodes_apple_output() {
     use fillyfoal::codec::Codec;
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/lzfse/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/lzfse/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |data: &[u8]| {
         let mut d = Codec::Lzfse.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
     };
     assert!(decode(&read("text.lzfse")) == lzma_text());
-    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let random: Vec<u8> = (0..70000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     assert!(decode(&read("rnd.lzfse")) == random);
-    assert_eq!(decode(&read("small.lzfse")), b"hello lzvn hello lzvn hello lzvn small input\n");
+    assert_eq!(
+        decode(&read("small.lzfse")),
+        b"hello lzvn hello lzvn hello lzvn small input\n"
+    );
     let words = decode(&read("words.lzfse"));
     assert_eq!(words.len(), 2_493_885);
     assert!(words.starts_with(b"A\na\naa\naal\n"));
@@ -576,16 +698,31 @@ fn lzfse_decodes_apple_output() {
 #[test]
 fn brotli_decodes_reference_output() {
     use fillyfoal::codec::{Codec, crc32};
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/brotli/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/brotli/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |name: &str| {
         let mut d = Codec::Brotli.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), &read(name), 1 << 26).unwrap()
     };
     // Qualities 0-11 and window sizes 2^16 and the default 2^22.
-    for name in ["text.q0.br", "text.q1.br", "text.q5.br", "text.q9.br", "text.q11.br", "text.w16.br"] {
+    for name in [
+        "text.q0.br",
+        "text.q1.br",
+        "text.q5.br",
+        "text.q9.br",
+        "text.q11.br",
+        "text.w16.br",
+    ] {
         assert!(decode(name) == lzma_text(), "{name}");
     }
-    let random: Vec<u8> = (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let random: Vec<u8> = (0..70000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     assert!(decode("rnd.br") == random);
     assert!(decode("zeros.br") == vec![0u8; 100_000]);
     assert!(decode("empty.br").is_empty());
@@ -631,7 +768,13 @@ fn xca_codecs_decode_reference_output() {
     // encoders written to [MS-XCA] 2.3.4 / 2.1 (no packaged encoder exists),
     // all checked against dissect.util's decompressors when generated.
     use fillyfoal::codec::Codec;
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/xca/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/xca/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let decode = |codec: Codec, data: &[u8]| {
         let mut d = codec.decoder().unwrap();
         fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, 1 << 26).unwrap()
@@ -647,16 +790,42 @@ fn xca_codecs_decode_reference_output() {
     };
     let inputs = [
         ("text", lzma_text()),
-        ("rnd", (0..70000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect()),
+        (
+            "rnd",
+            (0..70000u32)
+                .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+                .collect(),
+        ),
         ("zeros", vec![0u8; 150_000]),
         ("noise", lcg(9000)),
     ];
     for (name, data) in inputs {
         let size = data.len() as u64;
-        assert!(decode(Codec::Lznt1 { size: None }, &read(&format!("{name}.lznt1"))) == data, "{name}.lznt1");
-        assert!(decode(Codec::Xpress { size: None }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
-        assert!(decode(Codec::Xpress { size: Some(size) }, &read(&format!("{name}.xpress"))) == data, "{name}.xpress");
-        assert!(decode(Codec::XpressHuffman { size }, &read(&format!("{name}.xpressh"))) == data, "{name}.xpressh");
+        assert!(
+            decode(Codec::Lznt1 { size: None }, &read(&format!("{name}.lznt1"))) == data,
+            "{name}.lznt1"
+        );
+        assert!(
+            decode(
+                Codec::Xpress { size: None },
+                &read(&format!("{name}.xpress"))
+            ) == data,
+            "{name}.xpress"
+        );
+        assert!(
+            decode(
+                Codec::Xpress { size: Some(size) },
+                &read(&format!("{name}.xpress"))
+            ) == data,
+            "{name}.xpress"
+        );
+        assert!(
+            decode(
+                Codec::XpressHuffman { size },
+                &read(&format!("{name}.xpressh"))
+            ) == data,
+            "{name}.xpressh"
+        );
     }
     // Corrupt and truncated input fails cleanly (no panics, bounded output).
     let mut rng = common::Rng(0x8ca);
@@ -672,7 +841,11 @@ fn xca_codecs_decode_reference_output() {
                     bad[at] = rng.next() as u8;
                 }
             }
-            for codec in [Codec::Lznt1 { size: None }, Codec::Xpress { size: None }, Codec::XpressHuffman { size: 68670 }] {
+            for codec in [
+                Codec::Lznt1 { size: None },
+                Codec::Xpress { size: None },
+                Codec::XpressHuffman { size: 68670 },
+            ] {
                 let mut d = codec.decoder().unwrap();
                 if let Ok(out) = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bad, 1 << 20) {
                     assert!(out.len() <= 1 << 20);
@@ -699,10 +872,18 @@ fn legacy_mixed() -> Vec<u8> {
 }
 
 fn legacy_read(dir: &str, name: &str) -> Vec<u8> {
-    std::fs::read(format!("{}/tests/data/{dir}/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    std::fs::read(format!(
+        "{}/tests/data/{dir}/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
 }
 
-fn legacy_decode_bytes(codec: &fillyfoal::codec::Codec, data: &[u8], limit: usize) -> fillyfoal::error::Result<Vec<u8>> {
+fn legacy_decode_bytes(
+    codec: &fillyfoal::codec::Codec,
+    data: &[u8],
+    limit: usize,
+) -> fillyfoal::error::Result<Vec<u8>> {
     let mut d = codec.decoder().unwrap();
     fillyfoal::codec::pipeline::decode_all(d.as_mut(), data, limit)
 }
@@ -774,12 +955,29 @@ fn implode_decodes_method_6() {
     ];
     for (name, large_window, literal_tree, expected) in cases {
         let file = format!("{name}.imploded");
-        let params = Implode { large_window, literal_tree, size: Some(expected.len() as u64) };
-        assert!(legacy_decode(Codec::Implode(params), "implode", &file) == expected, "{name}");
+        let params = Implode {
+            large_window,
+            literal_tree,
+            size: Some(expected.len() as u64),
+        };
+        assert!(
+            legacy_decode(Codec::Implode(params), "implode", &file) == expected,
+            "{name}"
+        );
         // Without a size, decoding runs to the end of the input (padding
         // bits may decode as one more literal).
-        let out = legacy_decode(Codec::Implode(Implode { size: None, ..params }), "implode", &file);
-        assert!(out.starts_with(expected) && out.len() <= expected.len() + 1, "{name}");
+        let out = legacy_decode(
+            Codec::Implode(Implode {
+                size: None,
+                ..params
+            }),
+            "implode",
+            &file,
+        );
+        assert!(
+            out.starts_with(expected) && out.len() <= expected.len() + 1,
+            "{name}"
+        );
     }
 }
 
@@ -787,7 +985,11 @@ fn implode_decodes_method_6() {
 fn legacy_codecs_survive_corruption() {
     use fillyfoal::codec::Codec;
     use fillyfoal::codec::implode::Implode;
-    let implode = Codec::Implode(Implode { large_window: false, literal_tree: true, size: Some(19000) });
+    let implode = Codec::Implode(Implode {
+        large_window: false,
+        literal_tree: true,
+        size: Some(19000),
+    });
     let cases = [
         (Codec::Lzo1x, "lzo", "text.lzo1x_999"),
         (Codec::Lzop, "lzo", "mixed.lzo"),
@@ -807,7 +1009,10 @@ fn legacy_codecs_survive_corruption() {
             bad[i] ^= 0xa5;
             let _ = legacy_decode_bytes(&codec, &bad, 1 << 22);
         }
-        assert!(legacy_decode_bytes(&codec, &data, 100).is_err(), "{name}: limit");
+        assert!(
+            legacy_decode_bytes(&codec, &data, 100).is_err(),
+            "{name}: limit"
+        );
     }
 }
 
@@ -845,25 +1050,45 @@ fn cab_folders(cab: &[u8]) -> Vec<(u16, std::ops::Range<usize>)> {
 #[test]
 fn cab_folders_decode_7zip_checked_cabinets() {
     use fillyfoal::codec::{Codec, cab::Folder};
-    let read = |name: &str| std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    let read = |name: &str| {
+        std::fs::read(format!(
+            "{}/tests/data/cab/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap()
+    };
     let (text, code) = (lzma_text(), lzma_code());
     let small = b"hello cabinet ".repeat(40);
     let cases = [
         ("mszip.cab", vec![[text.as_slice(), &small].concat()]),
-        ("lzx16.cab", vec![[code.as_slice(), &text[..40000]].concat()]),
+        (
+            "lzx16.cab",
+            vec![[code.as_slice(), &text[..40000]].concat()],
+        ),
         ("lzx21.cab", vec![text.clone(), small.clone()]),
-        ("quantum.cab", vec![[text.as_slice(), &code[..20000]].concat()]),
+        (
+            "quantum.cab",
+            vec![[text.as_slice(), &code[..20000]].concat()],
+        ),
     ];
     for (name, expected) in cases {
         let cab = read(name);
         let folders = cab_folders(&cab);
         assert_eq!(folders.len(), expected.len());
         for ((kind, range), expected) in folders.into_iter().zip(expected) {
-            let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+            let codec = Codec::CabFolder(Folder {
+                kind,
+                data_reserve: 0,
+            });
             let mut d = codec.decoder().unwrap();
-            let out = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &cab[range.clone()], 1 << 26).unwrap();
+            let out =
+                fillyfoal::codec::pipeline::decode_all(d.as_mut(), &cab[range.clone()], 1 << 26)
+                    .unwrap();
             assert!(out == expected, "{name}: folder {kind:#x}");
-            assert!(trickle(&codec, &cab[range]) == expected, "{name}: folder {kind:#x}, trickled");
+            assert!(
+                trickle(&codec, &cab[range]) == expected,
+                "{name}: folder {kind:#x}, trickled"
+            );
         }
     }
 }
@@ -899,16 +1124,27 @@ fn chm_section1(chm: &[u8]) -> Section1 {
         if section == 1 {
             files.push((name, offset, length));
         } else {
-            sec0.insert(name, &chm[content_at + offset as usize..content_at + (offset + length) as usize]);
+            sec0.insert(
+                name,
+                &chm[content_at + offset as usize..content_at + (offset + length) as usize],
+            );
         }
     }
     let base = "::DataSpace/Storage/MSCompressed/";
     let control = sec0[&format!("{base}ControlData")];
     assert_eq!(&control[4..8], b"LZXC");
     let window_bits = (u32le(control, 16) * 32768).trailing_zeros() as u8;
-    let reset = sec0[&format!("{base}Transform/{{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}}/InstanceData/ResetTable")];
+    let reset = sec0[&format!(
+        "{base}Transform/{{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}}/InstanceData/ResetTable"
+    )];
     let content = sec0[&format!("{base}Content")].to_vec();
-    (content, window_bits, u32le(control, 12), u64le(reset, 16), files)
+    (
+        content,
+        window_bits,
+        u32le(control, 12),
+        u64le(reset, 16),
+        files,
+    )
 }
 
 /// The CHM's LZX section resets every two frames and uses E8 translation;
@@ -932,7 +1168,12 @@ fn lzx_decodes_chm_sections_and_wim_chunks() {
     assert_eq!(out.len() as u64, len);
     assert!(trickle(&codec, &content) == out);
     let (text, code) = (lzma_text(), lzma_code());
-    let small = [b"<html>".as_slice(), &b"hello cabinet ".repeat(40), b"</html>"].concat();
+    let small = [
+        b"<html>".as_slice(),
+        &b"hello cabinet ".repeat(40),
+        b"</html>",
+    ]
+    .concat();
     for (name, offset, length) in files {
         let expected = match name.as_str() {
             "/text.txt" => text.clone(),
@@ -940,7 +1181,10 @@ fn lzx_decodes_chm_sections_and_wim_chunks() {
             "/small.html" => small.clone(),
             _ => panic!("{name}"),
         };
-        assert!(out[offset as usize..(offset + length) as usize] == expected, "{name}");
+        assert!(
+            out[offset as usize..(offset + length) as usize] == expected,
+            "{name}"
+        );
     }
 
     let chunk = std::fs::read(format!("{dir}/wim-chunk.lzx")).unwrap();
@@ -953,20 +1197,39 @@ fn lzx_decodes_chm_sections_and_wim_chunks() {
 /// dissected like stored ones.
 #[test]
 fn cab_and_chm_show_compressed_files() {
-    for name in ["mszip.cab", "lzx16.cab", "lzx21.cab", "quantum.cab", "lzx.chm"] {
-        let data = std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+    for name in [
+        "mszip.cab",
+        "lzx16.cab",
+        "lzx21.cab",
+        "quantum.cab",
+        "lzx.chm",
+    ] {
+        let data = std::fs::read(format!(
+            "{}/tests/data/cab/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
         let mut host = Host::named(name, data, Limits::default());
         host.explore(host.root, 6, 40);
         let tree = host.render();
         // (The text sniffs as YAML, which has complaints of its own.)
-        for line in tree.lines().filter(|l| !l.contains("expected `key: value`")) {
+        for line in tree
+            .lines()
+            .filter(|l| !l.contains("expected `key: value`"))
+        {
             for bad in ["! malformed", "! truncated", "! limit", "! internal"] {
                 assert!(!line.contains(bad), "{name}: {line}");
             }
         }
-        assert!(tree.contains("\"the quick brown fox 919\""), "{name}\n{tree}");
+        assert!(
+            tree.contains("\"the quick brown fox 919\""),
+            "{name}\n{tree}"
+        );
         if !["lzx16.cab", "quantum.cab"].contains(&name) {
-            assert!(tree.contains("hello cabinet hello cabinet"), "{name}\n{tree}");
+            assert!(
+                tree.contains("hello cabinet hello cabinet"),
+                "{name}\n{tree}"
+            );
         }
     }
 }
@@ -977,9 +1240,16 @@ fn cab_and_chm_show_compressed_files() {
 fn cab_folder_decoders_survive_corruption() {
     use fillyfoal::codec::{Codec, cab::Folder};
     for name in ["mszip.cab", "lzx16.cab", "quantum.cab"] {
-        let cab = std::fs::read(format!("{}/tests/data/cab/{name}", env!("CARGO_MANIFEST_DIR"))).unwrap();
+        let cab = std::fs::read(format!(
+            "{}/tests/data/cab/{name}",
+            env!("CARGO_MANIFEST_DIR")
+        ))
+        .unwrap();
         let (kind, range) = cab_folders(&cab).remove(0);
-        let codec = Codec::CabFolder(Folder { kind, data_reserve: 0 });
+        let codec = Codec::CabFolder(Folder {
+            kind,
+            data_reserve: 0,
+        });
         let data = &cab[range];
         for i in 0..64usize {
             let at = 8 + (i * 7919) % (data.len() - 8);
@@ -1001,7 +1271,11 @@ fn charsets_match_python() {
     use fillyfoal::codec::charset::Charset;
     let all: Vec<u8> = (0..=255u8).collect();
     for &cs in Charset::ALL {
-        let path = format!("{}/tests/data/charset/{}.txt", env!("CARGO_MANIFEST_DIR"), cs.name().replace(' ', "_"));
+        let path = format!(
+            "{}/tests/data/charset/{}.txt",
+            env!("CARGO_MANIFEST_DIR"),
+            cs.name().replace(' ', "_")
+        );
         let python: Vec<char> = std::fs::read_to_string(&path).unwrap().chars().collect();
         let ours: Vec<char> = cs.decode(&all).chars().collect();
         assert_eq!(python.len(), 256, "{path}");
@@ -1026,7 +1300,11 @@ fn explore_decoded(name: &str, data: Vec<u8>) -> (Vec<String>, Vec<(&'static str
     let mut stack = vec![host.root];
     while let Some(id) = stack.pop() {
         let node = host.session.node(id).unwrap();
-        texts.push(format!("{}: {}", node.name, node.summary.clone().unwrap_or_default()));
+        texts.push(format!(
+            "{}: {}",
+            node.name,
+            node.summary.clone().unwrap_or_default()
+        ));
         for d in &node.diagnostics {
             texts.push(format!("diag {:?}: {}", d.kind, d.message));
         }
@@ -1041,7 +1319,12 @@ fn explore_decoded(name: &str, data: Vec<u8>) -> (Vec<String>, Vec<(&'static str
     }
     let derived = sources
         .into_iter()
-        .filter_map(|s| Some((host.session.origin(s)?.transform, host.session.derived_data(s)?.to_vec())))
+        .filter_map(|s| {
+            Some((
+                host.session.origin(s)?.transform,
+                host.session.derived_data(s)?.to_vec(),
+            ))
+        })
         .collect();
     (texts, derived)
 }
@@ -1055,7 +1338,9 @@ fn uuencode_and_xxencode_decode_real_output() {
     // `uu/*.uue` come from /usr/bin/uuencode; `uu/*.xxe` are the same
     // output re-spelled in the xxencode alphabet.
     let text = lzma_text()[..16000].to_vec();
-    let rnd: Vec<u8> = (0..5000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let rnd: Vec<u8> = (0..5000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     for (file, transform, want) in [
         ("uu/text.uue", "uudecode", &text),
         ("uu/rnd.uue", "uudecode", &rnd),
@@ -1066,26 +1351,53 @@ fn uuencode_and_xxencode_decode_real_output() {
         let got: Vec<_> = derived.iter().filter(|(t, _)| *t == transform).collect();
         assert_eq!(got.len(), 1, "{file}: {texts:?}");
         assert!(got[0].1 == *want, "{file}");
-        assert!(!texts.iter().any(|t| t.starts_with("diag")), "{file}: {texts:?}");
+        assert!(
+            !texts.iter().any(|t| t.starts_with("diag")),
+            "{file}: {texts:?}"
+        );
     }
 }
 
 #[test]
 fn yenc_decodes_real_encoder_output() {
     // Bodies from sabyenc3 (a real yEnc encoder); headers per yEnc 1.3.
-    let rnd: Vec<u8> = (0..20000u32).map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8).collect();
+    let rnd: Vec<u8> = (0..20000u32)
+        .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+        .collect();
     let (texts, derived) = explore_decoded("rnd.yenc", test_data("yenc/rnd.yenc"));
-    assert!(derived.iter().any(|(t, d)| *t == "ydecode" && *d == rnd), "{texts:?}");
-    assert!(texts.iter().any(|t| t == "CRC-32: matches the trailer"), "{texts:?}");
+    assert!(
+        derived.iter().any(|(t, d)| *t == "ydecode" && *d == rnd),
+        "{texts:?}"
+    );
+    assert!(
+        texts.iter().any(|t| t == "CRC-32: matches the trailer"),
+        "{texts:?}"
+    );
     assert!(!texts.iter().any(|t| t.starts_with("diag")), "{texts:?}");
 
     // Three parts, joined: the joined file's size and CRC-32 are checked.
     let text = lzma_text();
     let (texts, derived) = explore_decoded("text.yenc", test_data("yenc/text.yenc"));
-    let parts: Vec<u8> = derived.iter().filter(|(t, _)| *t == "ydecode").flat_map(|(_, d)| d.clone()).collect();
+    let parts: Vec<u8> = derived
+        .iter()
+        .filter(|(t, _)| *t == "ydecode")
+        .flat_map(|(_, d)| d.clone())
+        .collect();
     assert_eq!(parts.len(), text.len());
-    assert!(texts.iter().any(|t| t.starts_with("Joined: lzma text.txt") && t.contains("3 parts of 3")), "{texts:?}");
-    assert_eq!(texts.iter().filter(|t| *t == "CRC-32: matches the trailer").count(), 4, "{texts:?}");
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.starts_with("Joined: lzma text.txt") && t.contains("3 parts of 3")),
+        "{texts:?}"
+    );
+    assert_eq!(
+        texts
+            .iter()
+            .filter(|t| *t == "CRC-32: matches the trailer")
+            .count(),
+        4,
+        "{texts:?}"
+    );
     assert!(!texts.iter().any(|t| t.starts_with("diag")), "{texts:?}");
 
     // A corrupted byte fails the CRC.
@@ -1093,7 +1405,12 @@ fn yenc_decodes_real_encoder_output() {
     let at = bad.len() / 2;
     bad[at] = bad[at].wrapping_add(if bad[at] == b'=' - 1 { 2 } else { 1 });
     let (texts, _) = explore_decoded("bad.yenc", bad);
-    assert!(texts.iter().any(|t| t.starts_with("diag Malformed: CRC-32")), "{texts:?}");
+    assert!(
+        texts
+            .iter()
+            .any(|t| t.starts_with("diag Malformed: CRC-32")),
+        "{texts:?}"
+    );
 }
 
 /// A collection of `n` numbered children; with `marks`, the walker records
@@ -1108,7 +1425,8 @@ async fn numbers(cx: Cx, (n, marks): (u64, bool)) -> Result<()> {
             let at = i;
             cx.mark(move || at);
         }
-        cx.push(Node::new(format!("n{i}")).value(Value::Text(i.to_string()))).await;
+        cx.push(Node::new(format!("n{i}")).value(Value::Text(i.to_string())))
+            .await;
         i += 1;
     }
     Ok(())
@@ -1116,18 +1434,32 @@ async fn numbers(cx: Cx, (n, marks): (u64, bool)) -> Result<()> {
 
 fn window(host: &Host, id: fillyfoal::NodeId) -> (u64, Vec<String>) {
     let c = host.session.children(id).unwrap();
-    (c.first, c.ids.iter().map(|&i| host.session.node(i).unwrap().name.to_string()).collect())
+    (
+        c.first,
+        c.ids
+            .iter()
+            .map(|&i| host.session.node(i).unwrap().name.to_string())
+            .collect(),
+    )
 }
 
 fn started(host: &Host, id: fillyfoal::NodeId) -> Vec<String> {
-    host.session.node(id).unwrap().diagnostics.iter().map(|d| d.message.clone()).collect()
+    host.session
+        .node(id)
+        .unwrap()
+        .diagnostics
+        .iter()
+        .map(|d| d.message.clone())
+        .collect()
 }
 
 #[test]
 fn windows_seek_and_resume_from_marks() {
     for marks in [true, false] {
         let mut host = Host::with_chunk(Vec::new(), 4);
-        let root = host.session.add_root(Node::new("numbers").lazy(numbers, (10_000u64, marks)));
+        let root = host
+            .session
+            .add_root(Node::new("numbers").lazy(numbers, (10_000u64, marks)));
         // Page through the start.
         host.session.expand(root, 50);
         host.run();
@@ -1137,16 +1469,30 @@ fn windows_seek_and_resume_from_marks() {
         host.run();
         let (first, names) = window(&host, root);
         assert_eq!(first, 5_000);
-        assert_eq!(names, (5_000..5_020).map(|i| format!("n{i}")).collect::<Vec<_>>());
-        assert!(host.session.live_nodes() < 100, "{} live nodes", host.session.live_nodes());
+        assert_eq!(
+            names,
+            (5_000..5_020).map(|i| format!("n{i}")).collect::<Vec<_>>()
+        );
+        assert!(
+            host.session.live_nodes() < 100,
+            "{} live nodes",
+            host.session.live_nodes()
+        );
         // Back to the middle: a restart, from a mark when there are marks.
         host.session.seek(root, 1_000, 10);
         host.run();
         let (first, names) = window(&host, root);
         assert_eq!(first, 1_000);
-        assert_eq!(names, (1_000..1_010).map(|i| format!("n{i}")).collect::<Vec<_>>());
+        assert_eq!(
+            names,
+            (1_000..1_010).map(|i| format!("n{i}")).collect::<Vec<_>>()
+        );
         let notes = started(&host, root);
-        assert_eq!(notes.len(), 1, "diagnostics of the restarted run only: {notes:?}");
+        assert_eq!(
+            notes.len(),
+            1,
+            "diagnostics of the restarted run only: {notes:?}"
+        );
         if marks {
             assert_ne!(notes[0], "started at 0", "restart did not use a mark");
         } else {
@@ -1157,13 +1503,22 @@ fn windows_seek_and_resume_from_marks() {
         host.run();
         let (first, names) = window(&host, root);
         assert_eq!((first, names.len()), (9_990, 10));
-        assert_eq!(host.session.children(root).unwrap().state, fillyfoal::ChildState::Complete);
-        assert_eq!(host.session.children(root).unwrap().count, fillyfoal::Count::Exact(10_000));
+        assert_eq!(
+            host.session.children(root).unwrap().state,
+            fillyfoal::ChildState::Complete
+        );
+        assert_eq!(
+            host.session.children(root).unwrap().count,
+            fillyfoal::Count::Exact(10_000)
+        );
         // Collapsing and expanding again starts from scratch with one note.
         host.session.collapse(root);
         host.session.expand(root, 5);
         host.run();
-        assert_eq!(window(&host, root), (0, (0..5).map(|i| format!("n{i}")).collect()));
+        assert_eq!(
+            window(&host, root),
+            (0, (0..5).map(|i| format!("n{i}")).collect())
+        );
         assert_eq!(started(&host, root), vec!["started at 0".to_owned()]);
     }
 }
@@ -1188,7 +1543,9 @@ fn zlib_stored_big(data: &[u8]) -> Vec<u8> {
 async fn decode_streams(cx: Cx, streams: Vec<Span>) -> Result<()> {
     let order: Vec<usize> = (0..streams.len()).chain([0]).collect();
     for i in order {
-        let decoded = fillyfoal::codec::decode_span(&cx, streams[i], &fillyfoal::codec::Codec::Zlib, None).await?;
+        let decoded =
+            fillyfoal::codec::decode_span(&cx, streams[i], &fillyfoal::codec::Codec::Zlib, None)
+                .await?;
         let tail = cx.read(decoded.span.tail(decoded.span.len - 8)).await?;
         cx.emit(Node::new(format!("stream {i}")).value(Value::Bytes(tail)));
     }
@@ -1197,30 +1554,53 @@ async fn decode_streams(cx: Cx, streams: Vec<Span>) -> Result<()> {
 
 #[test]
 fn decoded_sources_are_evicted_and_decoded_again() {
-    let parts: Vec<Vec<u8>> = (0..3u8).map(|k| (0..400_000u32).map(|i| (i as u8) ^ k.wrapping_mul(37)).collect()).collect();
+    let parts: Vec<Vec<u8>> = (0..3u8)
+        .map(|k| {
+            (0..400_000u32)
+                .map(|i| (i as u8) ^ k.wrapping_mul(37))
+                .collect()
+        })
+        .collect();
     let mut file = Vec::new();
     let mut spans = Vec::new();
     for p in &parts {
         let z = zlib_stored_big(p);
-        spans.push(Span::new(fillyfoal::SourceId::default_host(), file.len() as u64, z.len() as u64));
+        spans.push(Span::new(
+            fillyfoal::SourceId::default_host(),
+            file.len() as u64,
+            z.len() as u64,
+        ));
         file.extend_from_slice(&z);
     }
     let run = |max_derived: u64| {
-        let limits = fillyfoal::Limits { max_derived, chunk_size: 4096, ..fillyfoal::Limits::default() };
+        let limits = fillyfoal::Limits {
+            max_derived,
+            chunk_size: 4096,
+            ..fillyfoal::Limits::default()
+        };
         let mut host = Host::new(file.clone(), limits);
-        let root = host.session.add_root(Node::new("streams").lazy(decode_streams, spans.clone()));
+        let root = host
+            .session
+            .add_root(Node::new("streams").lazy(decode_streams, spans.clone()));
         host.session.expand(root, 10);
         host.run();
         let c = host.session.children(root).unwrap();
         assert!(c.error.is_none(), "{:?}", c.error);
-        let values: Vec<_> = c.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
+        let values: Vec<_> = c
+            .ids
+            .iter()
+            .map(|&id| host.session.node(id).unwrap().value.clone().unwrap())
+            .collect();
         (values, host.session.derived_bytes())
     };
     let (roomy, _) = run(1 << 30);
     let (tight, held) = run(1 << 20);
     assert_eq!(roomy, tight);
     assert_eq!(tight.len(), 4);
-    assert_eq!(tight[0], Value::Bytes(parts[0][parts[0].len() - 8..].to_vec()));
+    assert_eq!(
+        tight[0],
+        Value::Bytes(parts[0][parts[0].len() - 8..].to_vec())
+    );
     assert!(held <= 1 << 20, "{held} derived bytes held");
 }
 
@@ -1241,9 +1621,16 @@ async fn read_far(cx: Cx, file: Span) -> Result<()> {
 /// reads behind it.
 #[test]
 fn lazy_sources_slide_over_streams_larger_than_the_budget() {
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/lazy/big.zlib")).unwrap();
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/lazy/big.zlib"
+    ))
+    .unwrap();
     let file = Span::new(fillyfoal::SourceId::default_host(), 0, data.len() as u64);
-    let limits = fillyfoal::Limits { max_derived: 4 << 20, ..fillyfoal::Limits::default() };
+    let limits = fillyfoal::Limits {
+        max_derived: 4 << 20,
+        ..fillyfoal::Limits::default()
+    };
     let mut host = Host::new(data, limits);
     host.max_polls = 10_000_000;
     let root = host.session.add_root(Node::new("far").lazy(read_far, file));
@@ -1253,10 +1640,21 @@ fn lazy_sources_slide_over_streams_larger_than_the_budget() {
     assert!(c.error.is_none(), "{:?}", c.error);
     let expect = |i: u64| -> Vec<u8> { (i..i + 16).map(|i| ((i * 7) + (i >> 12)) as u8).collect() };
     let len = 64u64 << 20;
-    let got: Vec<Value> = c.ids.iter().map(|&id| host.session.node(id).unwrap().value.clone().unwrap()).collect();
-    let want: Vec<Value> = [len - 16, 0, len / 2, len - 16].iter().map(|&at| Value::Bytes(expect(at))).collect();
+    let got: Vec<Value> = c
+        .ids
+        .iter()
+        .map(|&id| host.session.node(id).unwrap().value.clone().unwrap())
+        .collect();
+    let want: Vec<Value> = [len - 16, 0, len / 2, len - 16]
+        .iter()
+        .map(|&at| Value::Bytes(expect(at)))
+        .collect();
     assert_eq!(got, want);
-    assert!(host.session.derived_bytes() <= 4 << 20, "{} bytes held", host.session.derived_bytes());
+    assert!(
+        host.session.derived_bytes() <= 4 << 20,
+        "{} bytes held",
+        host.session.derived_bytes()
+    );
 }
 
 /// Seeking around the lines of a large text file, forward and back (the
@@ -1269,7 +1667,11 @@ fn text_lines_seek() {
     host.session.expand(host.root, 10);
     host.run();
     let lines = host.child(host.root, "Lines").expect("lines node");
-    for (start, first_name, first_text) in [(90_000, "Line 90001", "row 90001"), (50_000, "Line 50001", "row 50001"), (99_998, "Line 99999", "row 99999")] {
+    for (start, first_name, first_text) in [
+        (90_000, "Line 90001", "row 90001"),
+        (50_000, "Line 50001", "row 50001"),
+        (99_998, "Line 99999", "row 99999"),
+    ] {
         host.session.seek(lines, start, 5);
         host.run();
         let c = host.session.children(lines).unwrap();
@@ -1278,7 +1680,11 @@ fn text_lines_seek() {
         assert_eq!(node.name, first_name);
         assert_eq!(node.value, Some(Value::Text(first_text.into())));
     }
-    assert!(host.session.live_nodes() < 50, "{} live nodes", host.session.live_nodes());
+    assert!(
+        host.session.live_nodes() < 50,
+        "{} live nodes",
+        host.session.live_nodes()
+    );
 }
 
 /// "Inspect as": formats by extension, and dissecting bytes as a chosen
@@ -1286,23 +1692,40 @@ fn text_lines_seek() {
 #[test]
 fn open_as_a_chosen_format() {
     use fillyfoal::formats;
-    let names = |ext: &str| formats::by_extension(ext).iter().map(|f| f.name).collect::<Vec<_>>();
+    let names = |ext: &str| {
+        formats::by_extension(ext)
+            .iter()
+            .map(|f| f.name)
+            .collect::<Vec<_>>()
+    };
     assert!(names("BR").contains(&"brotli"));
     // Probe order: ZIP-based formats that also use `.zip` come first.
     assert!(names(".zip").contains(&"zip"));
     assert!(names("no-such-extension").is_empty());
 
-    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/external/brotli/page.html.br")).unwrap();
+    let data = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/external/brotli/page.html.br"
+    ))
+    .unwrap();
     let len = data.len() as u64;
     let mut host = Host::with_chunk(data, 4096);
     // As Brotli: decoded and dissected.
-    let br = host.session.open_as("page.html.br", len, formats::by_name("brotli").unwrap());
+    let br = host
+        .session
+        .open_as("page.html.br", len, formats::by_name("brotli").unwrap());
     host.explore(br, 2, 100);
     let children = host.session.children(br).unwrap();
-    let names: Vec<String> = children.ids.iter().map(|&id| host.session.node(id).unwrap().name.to_string()).collect();
+    let names: Vec<String> = children
+        .ids
+        .iter()
+        .map(|&id| host.session.node(id).unwrap().name.to_string())
+        .collect();
     assert!(names.iter().any(|n| n == "Decompressed"), "{names:?}");
     // As ZIP: not a ZIP, so the dissector reports why, without panicking.
-    let zip = host.session.open_as("page.html.br", len, formats::by_name("zip").unwrap());
+    let zip = host
+        .session
+        .open_as("page.html.br", len, formats::by_name("zip").unwrap());
     host.explore(zip, 2, 100);
     let c = host.session.children(zip).unwrap();
     assert!(c.error.is_some() || !host.session.node(zip).unwrap().diagnostics.is_empty());
@@ -1316,46 +1739,83 @@ fn open_as_a_chosen_format() {
 fn bgcode_gcode_blocks_match_libbgcode() {
     use fillyfoal::codec::Codec;
     let root = env!("CARGO_MANIFEST_DIR");
-    for name in ["plain", "deflate", "heatshrink-11", "heatshrink-12", "meatpack"] {
-        let data = std::fs::read(format!("{root}/tests/fixtures/external/bgcode/{name}.bgcode")).unwrap();
-        let reference = std::fs::read(format!("{root}/tests/data/bgcode/{name}.ref.gcode")).unwrap();
+    for name in [
+        "plain",
+        "deflate",
+        "heatshrink-11",
+        "heatshrink-12",
+        "meatpack",
+    ] {
+        let data = std::fs::read(format!(
+            "{root}/tests/fixtures/external/bgcode/{name}.bgcode"
+        ))
+        .unwrap();
+        let reference =
+            std::fs::read(format!("{root}/tests/data/bgcode/{name}.ref.gcode")).unwrap();
         let checksum = u16::from_le_bytes([data[8], data[9]]) as usize * 4;
         let mut pos = 10;
         let mut gcode = Vec::new();
         let mut blocks = 0;
         while pos < data.len() {
             let u16_at = |at: usize| u16::from_le_bytes([data[at], data[at + 1]]);
-            let u32_at = |at: usize| u32::from_le_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+            let u32_at =
+                |at: usize| u32::from_le_bytes(data[at..at + 4].try_into().unwrap()) as usize;
             let (kind, compression, size) = (u16_at(pos), u16_at(pos + 2), u32_at(pos + 4));
-            let (header, stored) = if compression == 0 { (8, size) } else { (12, u32_at(pos + 8)) };
+            let (header, stored) = if compression == 0 {
+                (8, size)
+            } else {
+                (12, u32_at(pos + 8))
+            };
             let params = if kind == 5 { 6 } else { 2 };
             let body = &data[pos + header + params..pos + header + params + stored];
             if kind == 1 {
                 let base = match compression {
                     0 => None,
                     1 => Some(Codec::Zlib),
-                    2 => Some(Codec::Heatshrink { window: 11, lookahead: 4 }),
-                    _ => Some(Codec::Heatshrink { window: 12, lookahead: 4 }),
+                    2 => Some(Codec::Heatshrink {
+                        window: 11,
+                        lookahead: 4,
+                    }),
+                    _ => Some(Codec::Heatshrink {
+                        window: 12,
+                        lookahead: 4,
+                    }),
                 };
                 let mut bytes = match base {
-                    Some(c) => fillyfoal::codec::pipeline::decode_all(c.decoder().unwrap().as_mut(), body, 1 << 24).unwrap(),
+                    Some(c) => fillyfoal::codec::pipeline::decode_all(
+                        c.decoder().unwrap().as_mut(),
+                        body,
+                        1 << 24,
+                    )
+                    .unwrap(),
                     None => body.to_vec(),
                 };
                 assert_eq!(bytes.len(), size, "{name}: decoded size");
                 if u16_at(pos + header) != 0 {
                     let mut d = Codec::MeatPack.decoder().unwrap();
-                    bytes = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bytes, 1 << 24).unwrap();
+                    bytes = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bytes, 1 << 24)
+                        .unwrap();
                 }
                 // `from_binary_to_ascii` drops blank and empty-comment lines
                 // of each block (`remove_empty_lines` in convert.cpp).
                 let trim = |l: &[u8]| -> Vec<u8> {
-                    let s = l.iter().position(|b| *b != b' ' && *b != b'\t').unwrap_or(l.len());
-                    let e = l.iter().rposition(|b| *b != b' ' && *b != b'\t').map_or(s, |e| e + 1);
+                    let s = l
+                        .iter()
+                        .position(|b| *b != b' ' && *b != b'\t')
+                        .unwrap_or(l.len());
+                    let e = l
+                        .iter()
+                        .rposition(|b| *b != b' ' && *b != b'\t')
+                        .map_or(s, |e| e + 1);
                     l[s..e.max(s)].to_vec()
                 };
                 for line in bytes.split(|&b| b == b'\n') {
                     let t = trim(line);
-                    let reduced = if t.first() == Some(&b';') { trim(&t[1..]) } else { t };
+                    let reduced = if t.first() == Some(&b';') {
+                        trim(&t[1..])
+                    } else {
+                        t
+                    };
                     if !reduced.is_empty() {
                         gcode.extend_from_slice(line);
                         gcode.push(b'\n');
@@ -1366,7 +1826,9 @@ fn bgcode_gcode_blocks_match_libbgcode() {
             pos += header + params + stored + checksum;
         }
         assert!(blocks > 0, "{name}");
-        let found = reference.windows(gcode.len()).any(|w| w == gcode.as_slice());
+        let found = reference
+            .windows(gcode.len())
+            .any(|w| w == gcode.as_slice());
         assert!(found, "{name}: decoded G-code differs from libbgcode's");
     }
 }
@@ -1376,15 +1838,35 @@ fn bgcode_gcode_blocks_match_libbgcode() {
 #[test]
 fn wire_encodings_are_offered_by_extension() {
     use fillyfoal::formats::{self, Probe};
-    let names = |ext: &str| formats::by_extension(ext).iter().map(|f| f.name).collect::<Vec<_>>();
+    let names = |ext: &str| {
+        formats::by_extension(ext)
+            .iter()
+            .map(|f| f.name)
+            .collect::<Vec<_>>()
+    };
     assert!(names("pb").contains(&"protobuf"));
     assert!(names("binpb").contains(&"protobuf"));
     assert!(names("fb").contains(&"flatbuffers"));
     let bin = names("bin");
-    for name in ["flatbuffers", "thrift-binary", "thrift-compact", "capnp", "capnp-packed"] {
+    for name in [
+        "flatbuffers",
+        "thrift-binary",
+        "thrift-compact",
+        "capnp",
+        "capnp-packed",
+    ] {
         assert!(bin.contains(&name), "{name} missing from {bin:?}");
     }
-    for name in ["protobuf", "flatbuffers", "thrift-binary", "thrift-compact", "capnp-packed"] {
-        assert!(matches!(formats::by_name(name).unwrap().probe, Probe::Never), "{name}");
+    for name in [
+        "protobuf",
+        "flatbuffers",
+        "thrift-binary",
+        "thrift-compact",
+        "capnp-packed",
+    ] {
+        assert!(
+            matches!(formats::by_name(name).unwrap().probe, Probe::Never),
+            "{name}"
+        );
     }
 }

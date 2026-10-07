@@ -5,13 +5,13 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
+pub use crate::codec::crc::{crc16_arc, crc32c};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
-pub use crate::codec::crc::{crc16_arc, crc32c};
 
 pub fn uint(value: u64) -> Value {
     Value::UInt {

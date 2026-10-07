@@ -18,7 +18,9 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value};
 
-use crate::formats::util::wire::protobuf::{self as proto, Elem, Msg, Ty, f, fields_in, string_in, varint_in};
+use crate::formats::util::wire::protobuf::{
+    self as proto, Elem, Msg, Ty, f, fields_in, string_in, varint_in,
+};
 
 // ---------------------------------------------------------------------------
 // Probe helpers

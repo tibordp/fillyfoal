@@ -179,7 +179,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut total = Some(0u64);
     let mut legacy = false;
     cx.annotate("LZ4");
-    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Lz4Frame, None));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        file,
+        crate::codec::Codec::Lz4Frame,
+        None,
+    ));
     while !cur.at_end() {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
@@ -431,7 +437,13 @@ pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, LE);
     let mut data_chunks = 0u64;
     cx.annotate("Snappy framed");
-    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::SnappyFramed, None));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        file,
+        crate::codec::Codec::SnappyFramed,
+        None,
+    ));
     while cur.remaining() >= 4 {
         let start = cur.pos();
         let header = cur.bytes(4).await?;
@@ -537,11 +549,9 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
         }
         0xff => {
             let id = cx.read_avail(body).await?;
-            cx.emit(
-                Node::new("Stream identifier")
-                    .span(body)
-                    .value(crate::formats::util::arcutil::text(String::from_utf8_lossy(&id))),
-            );
+            cx.emit(Node::new("Stream identifier").span(body).value(
+                crate::formats::util::arcutil::text(String::from_utf8_lossy(&id)),
+            ));
         }
         _ => cx.emit(Node::new("Data").span(body)),
     }

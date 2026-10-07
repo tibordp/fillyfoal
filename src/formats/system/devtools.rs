@@ -153,14 +153,8 @@ async fn win_res(cx: Cx, input: Input) -> Result<()> {
                 kind,
                 name,
             };
-            let content = resource::content(
-                &cx,
-                input,
-                data,
-                kind.map(u32::from),
-                name.map(u32::from),
-            )
-            .await;
+            let content =
+                resource::content(&cx, input, data, kind.map(u32::from), name.map(u32::from)).await;
             let kind_label = kind
                 .and_then(|id| lookup(RES_TYPES, id.into()))
                 .map_or(kind_label, str::to_owned);
@@ -188,7 +182,11 @@ async fn win_res(cx: Cx, input: Input) -> Result<()> {
 
 async fn res_entry(cx: Cx, e: ResEntry) -> Result<()> {
     use crate::formats::executable::pe::resource;
-    cx.emit(Node::new("Header").span(e.header).lazy(res_header, e.header));
+    cx.emit(
+        Node::new("Header")
+            .span(e.header)
+            .lazy(res_header, e.header),
+    );
     let mut content = resource::content(
         &cx,
         e.input,
@@ -235,7 +233,9 @@ async fn res_header(cx: Cx, span: Span) -> Result<()> {
             Some(id) => node
                 .value(crate::formats::util::lines::uint(id.into()))
                 .desc("0xFFFF, then an ordinal"),
-            None => node.value(text(name_text)).desc("NUL-terminated UTF-16 name"),
+            None => node
+                .value(text(name_text))
+                .desc("NUL-terminated UTF-16 name"),
         };
         f.node(node);
         f.skip(len);
@@ -247,10 +247,12 @@ async fn res_header(cx: Cx, span: Span) -> Result<()> {
     f.u32("DataVersion").emit()?;
     f.u16("MemoryFlags").flags(RES_MEMORY_FLAGS).emit()?;
     f.u16("LanguageId")
-        .with(|&v, node| match crate::formats::util::lcid::name(v.into()) {
-            Some(n) => node.summary(n),
-            None => node,
-        })
+        .with(
+            |&v, node| match crate::formats::util::lcid::name(v.into()) {
+                Some(n) => node.summary(n),
+                None => node,
+            },
+        )
         .hex()
         .emit()?;
     f.u32("Version").emit()?;

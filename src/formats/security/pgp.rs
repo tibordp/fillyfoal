@@ -9,13 +9,13 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
+use crate::codec::crc::crc24;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
-use crate::codec::crc::crc24;
 
 /// Compressed packets nested inside each other.
 const MAX_DEPTH: u32 = 8;
@@ -1159,7 +1159,8 @@ async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
     let labels: Vec<&str> = blocks.iter().map(|b| b.label.as_str()).collect();
     let mut summary = format!("OpenPGP armor: {}", labels.join(", "));
     if let Some(block) = blocks.first()
-        && let Ok(decoded) = crate::formats::security::pem::decode_block(&cx, &text, input.span, block).await
+        && let Ok(decoded) =
+            crate::formats::security::pem::decode_block(&cx, &text, input.span, block).await
     {
         let head = cx.read_avail(decoded.sub(0, 4096)).await?;
         summary = format!("{} (armored)", self::summary(&head, decoded.len));
@@ -1177,7 +1178,10 @@ async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn armor_block(cx: Cx, (input, block): (Input, crate::formats::security::pem::Block)) -> Result<()> {
+async fn armor_block(
+    cx: Cx,
+    (input, block): (Input, crate::formats::security::pem::Block),
+) -> Result<()> {
     use crate::formats::security::pem;
     let text = cx.read(pem::sub(input.span, &(0..block.whole.end))).await?;
     for (key, value, range) in &block.headers {

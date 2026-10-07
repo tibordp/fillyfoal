@@ -107,8 +107,7 @@ fn snapshot_name(path: &Path) -> String {
 /// (`Probe::Never`; such formats are chosen by extension or by hand).
 fn chosen_format(path: &Path) -> Option<&'static fillyfoal::formats::Format> {
     let dir = path.parent()?.file_name()?.to_str()?;
-    fillyfoal::formats::by_name(dir)
-        .filter(|f| matches!(f.probe, fillyfoal::formats::Probe::Never))
+    fillyfoal::formats::by_name(dir).filter(|f| matches!(f.probe, fillyfoal::formats::Probe::Never))
 }
 
 #[test]
@@ -313,6 +312,9 @@ fn no_fixture_is_a_cargo_manifest() {
         }
     }
     let mut found = Vec::new();
-    walk(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests")), &mut found);
+    walk(
+        std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests")),
+        &mut found,
+    );
     assert!(found.is_empty(), "rename these fixtures: {found:?}");
 }

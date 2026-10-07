@@ -72,7 +72,14 @@ impl Packed {
 }
 
 impl Decode for Packed {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let target = out.len().saturating_add(step.max(1));
         while out.len() < target {
             if self.pos >= input.len() && eof {

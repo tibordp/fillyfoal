@@ -690,7 +690,12 @@ type UnitRun = (u64, u64, &'static str, Vec<Span>);
 /// stored as is, a wholly sparse one is zeros, and one whose allocated
 /// clusters are followed by sparse ones holds LZNT1 data in those clusters,
 /// decoded on demand (zero-filled to the unit).
-async fn compressed_content(cx: &Cx, fs: &Vol, a: &Attr, runs: &[(u64, Option<u64>)]) -> Result<Node> {
+async fn compressed_content(
+    cx: &Cx,
+    fs: &Vol,
+    a: &Attr,
+    runs: &[(u64, Option<u64>)],
+) -> Result<Node> {
     if a.compression_unit > 16 {
         return Err(Diagnostic::malformed(format!(
             "compression unit of 2^{} clusters",
@@ -730,7 +735,10 @@ async fn compressed_content(cx: &Cx, fs: &Vol, a: &Attr, runs: &[(u64, Option<u6
             }
             index = index.saturating_add(n);
             if let Some(front) = queue.front_mut() {
-                *front = (count.saturating_sub(clusters), start.map(|l| l.saturating_add(clusters)));
+                *front = (
+                    count.saturating_sub(clusters),
+                    start.map(|l| l.saturating_add(clusters)),
+                );
                 if front.0 == 0 {
                     queue.pop_front();
                 }
@@ -750,7 +758,10 @@ async fn compressed_content(cx: &Cx, fs: &Vol, a: &Attr, runs: &[(u64, Option<u6
                 Some(lcn) => pieces.push(fs.cluster_span(lcn, take)),
                 None => sparse = sparse.saturating_add(take),
             }
-            *front = (front.0.saturating_sub(take), front.1.map(|l| l.saturating_add(take)));
+            *front = (
+                front.0.saturating_sub(take),
+                front.1.map(|l| l.saturating_add(take)),
+            );
             if front.0 == 0 {
                 queue.pop_front();
             }
@@ -793,7 +804,10 @@ async fn unit_list(cx: Cx, units: Arc<Vec<UnitRun>>) -> Result<()> {
         let name = if *count == 1 {
             format!("Unit {first}")
         } else {
-            format!("Units {first}-{}", first.saturating_add(*count).saturating_sub(1))
+            format!(
+                "Units {first}-{}",
+                first.saturating_add(*count).saturating_sub(1)
+            )
         };
         let stored = clusters.iter().map(|c| c.len).fold(0, u64::saturating_add);
         let mut node = Node::new(name).summary(if clusters.is_empty() {
@@ -813,7 +827,12 @@ async fn unit_list(cx: Cx, units: Arc<Vec<UnitRun>>) -> Result<()> {
 
 async fn list_pieces(cx: Cx, pieces: Arc<Vec<Span>>) -> Result<()> {
     for (i, p) in pieces.iter().enumerate() {
-        cx.push(Node::new(format!("Fragment {i}")).span(*p).summary(size(p.len))).await;
+        cx.push(
+            Node::new(format!("Fragment {i}"))
+                .span(*p)
+                .summary(size(p.len)),
+        )
+        .await;
     }
     Ok(())
 }

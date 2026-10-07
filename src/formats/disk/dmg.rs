@@ -312,7 +312,9 @@ async fn partition(cx: Cx, (input, mish, data_fork): (Input, Span, Span)) -> Res
             0x8000_0005 => fields.push(content("Data", input, data, Codec::Zlib, Some(size))),
             // bzip2 streams and (ULMO) libcompression's LZMA, which is an
             // .xz stream: their dissectors show the structure and content.
-            0x0000_0001 | 0x8000_0006 | 0x8000_0008 => fields.push(embedded("Data", input.nested(data))),
+            0x0000_0001 | 0x8000_0006 | 0x8000_0008 => {
+                fields.push(embedded("Data", input.nested(data)))
+            }
             0x8000_0004 => fields.push(content("Data", input, data, Codec::Adc, Some(size))),
             0x8000_0007 => fields.push(content("Data", input, data, Codec::Lzfse, Some(size))),
             _ => {}

@@ -7,34 +7,34 @@
 //! reach ([`Cx::decode_lazy`](crate::Cx::decode_lazy)); either way decoded
 //! bytes count against [`crate::Limits::max_derived`].
 
-pub mod inflate;
+pub mod bcfz;
 pub mod brotli;
 pub mod bzip2;
+pub mod cab;
+pub mod capnp;
 pub mod charset;
 pub mod crc;
 pub mod crypto;
 pub mod filters;
+pub mod heatshrink;
+pub mod implode;
+pub mod inflate;
+pub mod legacy;
 pub mod lz;
 pub mod lzfse;
-pub mod pbz;
-pub mod wim;
-pub mod lznt1;
 pub mod lzma;
+pub mod lznt1;
+pub mod lzo;
+pub mod lzx;
+pub mod meatpack;
+pub mod pbz;
+pub mod pipeline;
+pub mod quantum;
+pub mod unixz;
+pub mod wim;
+pub mod xpress;
 pub mod xz;
 pub mod zstd;
-pub mod pipeline;
-pub mod unixz;
-pub mod xpress;
-pub mod lzo;
-pub mod legacy;
-pub mod implode;
-pub mod cab;
-pub mod lzx;
-pub mod quantum;
-pub mod bcfz;
-pub mod heatshrink;
-pub mod meatpack;
-pub mod capnp;
 
 use std::sync::Arc;
 
@@ -77,11 +77,19 @@ pub enum Codec {
     /// PackBits (TIFF, Mac).
     PackBits,
     /// LZW with MSB-first codes (PDF `LZWDecode`, TIFF).
-    Lzw { early_change: bool },
+    Lzw {
+        early_change: bool,
+    },
     /// PNG row predictors; `bpp` bytes per pixel, `row` bytes per row.
-    PngPredictor { bpp: usize, row: usize },
+    PngPredictor {
+        bpp: usize,
+        row: usize,
+    },
     /// TIFF horizontal differencing (8-bit components).
-    TiffPredictor { bpp: usize, row: usize },
+    TiffPredictor {
+        bpp: usize,
+        row: usize,
+    },
     /// Brotli streams (RFC 7932).
     Brotli,
     /// Apple LZFSE (with LZVN blocks).
@@ -94,12 +102,18 @@ pub enum Codec {
     UnixCompress,
     /// LZNT1 ([MS-XCA] 2.5); with a `size` (an NTFS compression unit) the
     /// output is cut or zero-filled to it.
-    Lznt1 { size: Option<u64> },
+    Lznt1 {
+        size: Option<u64>,
+    },
     /// Xpress Plain LZ77 ([MS-XCA] 2.4), up to `size` bytes if known.
-    Xpress { size: Option<u64> },
+    Xpress {
+        size: Option<u64>,
+    },
     /// Xpress LZ77+Huffman ([MS-XCA] 2.2), `size` bytes (the stream does not
     /// record it).
-    XpressHuffman { size: u64 },
+    XpressHuffman {
+        size: u64,
+    },
     /// A raw LZX stream (CHM content, WIM chunks); see [`lzx::Params`] for
     /// the window size, reset interval and E8 translation variant.
     Lzx(lzx::Params),
@@ -110,10 +124,15 @@ pub enum Codec {
     Zstd,
     /// The bit-level LZ77 of Guitar Pro 6 `BCFZ` files (after their 8-byte
     /// header), decoding to `size` bytes (see [`bcfz`]).
-    Bcfz { size: u64 },
+    Bcfz {
+        size: u64,
+    },
     /// Heatshrink LZSS with `window` and `lookahead` bits (Prusa binary
     /// G-code).
-    Heatshrink { window: u8, lookahead: u8 },
+    Heatshrink {
+        window: u8,
+        lookahead: u8,
+    },
     /// MeatPack-packed G-code text (Prusa binary G-code).
     MeatPack,
     /// Exactly one Zstandard frame (after any skippable frames); what
@@ -139,10 +158,16 @@ pub enum Codec {
     LzmaAlone,
     /// Raw LZMA2 chunks; `dict` is the dictionary size if known (it lets a
     /// long stream release output before its dictionary).
-    Lzma2 { dict: Option<u32> },
+    Lzma2 {
+        dict: Option<u32>,
+    },
     /// Raw LZMA with known properties and (if known) decoded and
     /// dictionary sizes.
-    LzmaRaw { props: lzma::Props, size: Option<usize>, dict: Option<u32> },
+    LzmaRaw {
+        props: lzma::Props,
+        size: Option<usize>,
+        dict: Option<u32>,
+    },
     /// bzip2 streams.
     Bzip2,
     /// LZ4 frames (also legacy and skippable frames).
@@ -156,7 +181,9 @@ pub enum Codec {
     /// Cap'n Proto's packed encoding (see [`capnp`]).
     CapnpPacked,
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
-    Eexec { hex: bool },
+    Eexec {
+        hex: bool,
+    },
     /// Traditional PKWARE encryption with this password (the 12-byte
     /// encryption header is consumed, not output).
     ZipCrypto(crypto::Key),
@@ -178,7 +205,11 @@ pub enum Codec {
 }
 
 impl Codec {
-    pub fn chain(name: &'static str, lazy_name: &'static str, stages: impl Into<Arc<[Codec]>>) -> Self {
+    pub fn chain(
+        name: &'static str,
+        lazy_name: &'static str,
+        stages: impl Into<Arc<[Codec]>>,
+    ) -> Self {
         Codec::Chain {
             name,
             lazy_name,
@@ -299,9 +330,11 @@ impl Codec {
         match self {
             Codec::Stored => "stored",
             Codec::Deflate | Codec::Zlib => "decompressed",
-            Codec::ZipCrypto(_) | Codec::AesCtrLe(_) | Codec::Rc4(_) | Codec::AesCbc(_) | Codec::Eexec { .. } => {
-                "decrypted"
-            }
+            Codec::ZipCrypto(_)
+            | Codec::AesCtrLe(_)
+            | Codec::Rc4(_)
+            | Codec::AesCbc(_)
+            | Codec::Eexec { .. } => "decrypted",
             Codec::Lzw { .. }
             | Codec::RunLength
             | Codec::PackBits
@@ -418,22 +451,36 @@ impl Codec {
             Codec::Ascii85 => Box::new(Streaming(filters::Whole::new(filters::Ascii85))),
             Codec::RunLength => Box::new(Streaming(filters::Whole::new(filters::RunLength))),
             Codec::PackBits => Box::new(Streaming(filters::Whole::new(filters::PackBits))),
-            Codec::Lzw { early_change } => Box::new(Streaming(filters::Whole::new(filters::Lzw { early_change: *early_change }))),
+            Codec::Lzw { early_change } => Box::new(Streaming(filters::Whole::new(filters::Lzw {
+                early_change: *early_change,
+            }))),
             Codec::PngPredictor { bpp, row } => {
-                Box::new(Streaming(filters::Whole::new(filters::PngPredictor { bpp: *bpp, row: *row })))
+                Box::new(Streaming(filters::Whole::new(filters::PngPredictor {
+                    bpp: *bpp,
+                    row: *row,
+                })))
             }
             Codec::TiffPredictor { bpp, row } => {
-                Box::new(Streaming(filters::Whole::new(filters::TiffPredictor { bpp: *bpp, row: *row })))
+                Box::new(Streaming(filters::Whole::new(filters::TiffPredictor {
+                    bpp: *bpp,
+                    row: *row,
+                })))
             }
             Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
             Codec::Pbz => Box::new(Streaming(pbz::Pbz::default())),
             Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
-            Codec::Lznt1 { size } => Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size }))),
-            Codec::Xpress { size } => Box::new(Streaming(filters::Whole::new(xpress::Xpress { size: *size }))),
+            Codec::Lznt1 { size } => {
+                Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size })))
+            }
+            Codec::Xpress { size } => Box::new(Streaming(filters::Whole::new(xpress::Xpress {
+                size: *size,
+            }))),
             Codec::XpressHuffman { size } => {
-                Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman { size: *size })))
+                Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman {
+                    size: *size,
+                })))
             }
             Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
             Codec::Bcfz { size } => Box::new(Streaming(bcfz::Bcfz::new(*size))),
@@ -456,14 +503,20 @@ impl Codec {
             Codec::Xz => Box::new(xz::XzStream::default()),
             Codec::LzmaAlone => Box::new(lzma::LzmaStream::alone()),
             Codec::Lzma2 { dict } => Box::new(lzma::Lzma2Stream::new(*dict)),
-            Codec::LzmaRaw { props, size, dict } => Box::new(lzma::LzmaStream::raw(*props, *size, *dict)),
+            Codec::LzmaRaw { props, size, dict } => {
+                Box::new(lzma::LzmaStream::raw(*props, *size, *dict))
+            }
             Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
-            Codec::Eexec { hex } => Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex }))),
+            Codec::Eexec { hex } => {
+                Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
+            }
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
-            Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(crypto::stream::AesCbcIvPrefixed(key.clone())))),
+            Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(
+                crypto::stream::AesCbcIvPrefixed(key.clone()),
+            ))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
                 Some(d) => Box::new(Streaming(d)),
@@ -477,7 +530,14 @@ impl Codec {
 }
 
 impl Decode for inflate::Inflate {
-    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         inflate::Inflate::step(self, input, out, step, limit)
     }
 
@@ -524,7 +584,14 @@ impl Default for Zlib {
 }
 
 impl Decode for Zlib {
-    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         if !self.checked {
             let (Some(&cmf), Some(&flg)) = (input.first(), input.get(1)) else {
                 return Err(Diagnostic::malformed("truncated zlib header"));
@@ -544,7 +611,8 @@ impl Decode for Zlib {
         if result == Step::Done {
             let at = self.header.saturating_add(self.inflate.consumed());
             self.trailer = Some(
-                crate::bytes::u32_be(input, at).ok_or_else(|| Diagnostic::malformed("truncated zlib checksum"))?,
+                crate::bytes::u32_be(input, at)
+                    .ok_or_else(|| Diagnostic::malformed("truncated zlib checksum"))?,
             );
         }
         Ok(result)
@@ -552,7 +620,11 @@ impl Decode for Zlib {
 
     fn consumed(&self) -> usize {
         let base = self.header.saturating_add(self.inflate.consumed());
-        if self.trailer.is_some() { base.saturating_add(4) } else { base }
+        if self.trailer.is_some() {
+            base.saturating_add(4)
+        } else {
+            base
+        }
     }
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
@@ -582,7 +654,12 @@ impl Decode for Zlib {
 
 /// Decodes `span` with `codec` into a derived source (memoized). `expected`
 /// is the decoded size, if the container records it.
-pub async fn decode_span(cx: &Cx, span: Span, codec: &Codec, expected: Option<u64>) -> Result<Decoded> {
+pub async fn decode_span(
+    cx: &Cx,
+    span: Span,
+    codec: &Codec,
+    expected: Option<u64>,
+) -> Result<Decoded> {
     let origin = Origin {
         parent: span,
         transform: codec.name(),
@@ -603,7 +680,9 @@ pub async fn decode_span(cx: &Cx, span: Span, codec: &Codec, expected: Option<u6
             Ok(Status::Done) => break,
             Ok(Status::More) => cx.checkpoint().await,
             Ok(Status::NeedInput) => {
-                error = Some(Diagnostic::malformed(format!("{} stream ended early", codec.name())).at(span));
+                error = Some(
+                    Diagnostic::malformed(format!("{} stream ended early", codec.name())).at(span),
+                );
                 break;
             }
             Err(e) => {
@@ -657,7 +736,12 @@ pub async fn read_all(cx: &Cx, span: Span) -> Result<Vec<u8>> {
 }
 
 /// [`decode_span`] for raw DEFLATE or zlib-wrapped data.
-pub async fn inflate_span(cx: &Cx, span: Span, zlib: bool, expected: Option<u64>) -> Result<Decoded> {
+pub async fn inflate_span(
+    cx: &Cx,
+    span: Span,
+    zlib: bool,
+    expected: Option<u64>,
+) -> Result<Decoded> {
     let codec = if zlib { Codec::Zlib } else { Codec::Deflate };
     decode_span(cx, span, &codec, expected).await
 }

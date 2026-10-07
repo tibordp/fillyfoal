@@ -164,9 +164,12 @@ async fn read_page(cx: &Cx, file: Span, pos: u64) -> Result<Page> {
 /// the CRC field zeroed.
 fn crc32(data: &[u8]) -> u32 {
     use crate::codec::crc::CRC32_OGG;
-    let crc = data.iter().enumerate().fold(CRC32_OGG.init(), |crc, (i, &b)| {
-        CRC32_OGG.update_byte(crc, if (22..26).contains(&i) { 0 } else { b })
-    });
+    let crc = data
+        .iter()
+        .enumerate()
+        .fold(CRC32_OGG.init(), |crc, (i, &b)| {
+            CRC32_OGG.update_byte(crc, if (22..26).contains(&i) { 0 } else { b })
+        });
     u32::try_from(CRC32_OGG.finish(crc)).unwrap_or(0)
 }
 

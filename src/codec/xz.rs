@@ -21,13 +21,13 @@
 //! [`PostState`]). Memory for such blocks is up to twice the dictionary
 //! size on top of the output.
 
+pub use crate::codec::crc::crc64;
 use crate::codec::crc::{CRC32, CRC64_XZ};
 use crate::codec::crypto::{Hash, Sha256};
 use crate::codec::filters::Filter;
 use crate::codec::lzma::{Chunk, Lzma2, Post, PostState, View};
 use crate::codec::pipeline::{Decoder, Status};
 use crate::error::{Diagnostic, Result};
-pub use crate::codec::crc::crc64;
 
 fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("xz: {what}"))
@@ -102,7 +102,13 @@ impl Check {
     fn matches(&self, stored: &[u8]) -> bool {
         match self {
             Check::None => true,
-            Check::Crc32(c) => u32::try_from(CRC32.finish(*c)).unwrap_or(0).to_le_bytes().as_slice() == stored,
+            Check::Crc32(c) => {
+                u32::try_from(CRC32.finish(*c))
+                    .unwrap_or(0)
+                    .to_le_bytes()
+                    .as_slice()
+                    == stored
+            }
             Check::Crc64(c) => CRC64_XZ.finish(*c).to_le_bytes().as_slice() == stored,
             Check::Sha256(h) => h.clone().finish().as_slice() == stored,
         }
@@ -173,7 +179,15 @@ enum BlockStep {
 }
 
 impl Block {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, stop: usize, limit: usize, phase: usize) -> Result<BlockStep> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        stop: usize,
+        limit: usize,
+        phase: usize,
+    ) -> Result<BlockStep> {
         let data_end = self.packed.map(|n| self.data_start.saturating_add(n));
         if !self.lzma2.done() {
             let avail = data_end.map_or(input.len(), |e| e.min(input.len()));
@@ -182,18 +196,28 @@ impl Block {
             let chunk = match self.filtered.as_mut() {
                 None => {
                     let mark = out.len();
-                    let chunk = self.lzma2.step(data, data_eof, out, self.view, stop, limit)?;
+                    let chunk = self
+                        .lzma2
+                        .step(data, data_eof, out, self.view, stop, limit)?;
                     self.check.update(out.get(mark..).unwrap_or_default());
                     chunk
                 }
                 Some(f) => {
                     let mark = f.window.len();
-                    let view = View { start: 0, dropped: f.dropped };
+                    let view = View {
+                        start: 0,
+                        dropped: f.dropped,
+                    };
                     // `limit` bounds `out`, which has released
                     // `view.dropped` bytes of this block.
-                    let room = limit.saturating_add(self.view.dropped).saturating_sub(self.view.start).saturating_sub(f.dropped);
+                    let room = limit
+                        .saturating_add(self.view.dropped)
+                        .saturating_sub(self.view.start)
+                        .saturating_sub(f.dropped);
                     let wstop = mark.saturating_add(stop.saturating_sub(out.len()));
-                    let chunk = self.lzma2.step(data, data_eof, &mut f.window, view, wstop, room)?;
+                    let chunk =
+                        self.lzma2
+                            .step(data, data_eof, &mut f.window, view, wstop, room)?;
                     let fresh = f.window.get(mark..).unwrap_or_default().to_vec();
                     let filtered = f.feed(fresh, chunk == Chunk::End);
                     self.check.update(&filtered);
@@ -202,7 +226,11 @@ impl Block {
                     chunk
                 }
             };
-            return Ok(if chunk == Chunk::NeedInput { BlockStep::NeedInput } else { BlockStep::Progress });
+            return Ok(if chunk == Chunk::NeedInput {
+                BlockStep::NeedInput
+            } else {
+                BlockStep::Progress
+            });
         }
         // Block padding to a multiple of four, then the check.
         let end = data_end.unwrap_or(self.data_start.saturating_add(self.lzma2.consumed()));
@@ -240,7 +268,14 @@ pub struct XzStream {
 }
 
 impl XzStream {
-    fn unit(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, stop: usize, limit: usize) -> Result<Unit> {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        stop: usize,
+        limit: usize,
+    ) -> Result<Unit> {
         if self.done {
             return Ok(Unit::Done);
         }
@@ -248,15 +283,17 @@ impl XzStream {
             return self.stream_header(input, eof);
         }
         if let Some(block) = self.block.as_mut() {
-            return Ok(match block.step(input, eof, out, stop, limit, self.phase)? {
-                BlockStep::Progress => Unit::Progress,
-                BlockStep::NeedInput => Unit::NeedInput,
-                BlockStep::End(end) => {
-                    self.pos = end;
-                    self.block = None;
-                    Unit::Progress
-                }
-            });
+            return Ok(
+                match block.step(input, eof, out, stop, limit, self.phase)? {
+                    BlockStep::Progress => Unit::Progress,
+                    BlockStep::NeedInput => Unit::NeedInput,
+                    BlockStep::End(end) => {
+                        self.pos = end;
+                        self.block = None;
+                        Unit::Progress
+                    }
+                },
+            );
         }
         let Some(&size_byte) = input.get(self.pos) else {
             return wait(eof, "truncated block", Unit::NeedInput);
@@ -270,7 +307,11 @@ impl XzStream {
         };
         let flags = header.get(1).copied().unwrap_or(0);
         let mut hp = 2usize;
-        let packed = if flags & 0x40 != 0 { Some(varint(header, &mut hp)?) } else { None };
+        let packed = if flags & 0x40 != 0 {
+            Some(varint(header, &mut hp)?)
+        } else {
+            None
+        };
         if flags & 0x80 != 0 {
             varint(header, &mut hp)?;
         }
@@ -280,11 +321,15 @@ impl XzStream {
         for _ in 0..filters {
             let id = varint(header, &mut hp)?;
             let props_len = usize::try_from(varint(header, &mut hp)?).unwrap_or(usize::MAX);
-            let props = header.get(hp..hp.saturating_add(props_len)).ok_or_else(|| bad("truncated filter properties"))?;
+            let props = header
+                .get(hp..hp.saturating_add(props_len))
+                .ok_or_else(|| bad("truncated filter properties"))?;
             hp = hp.saturating_add(props_len);
             match id {
                 0x21 => dict = Some(dict_size(props.first().copied().unwrap_or(0))),
-                0x03 => posts.push(Post::Delta(usize::from(props.first().copied().unwrap_or(0)).saturating_add(1))),
+                0x03 => posts.push(Post::Delta(
+                    usize::from(props.first().copied().unwrap_or(0)).saturating_add(1),
+                )),
                 0x04 => posts.push(Post::X86),
                 0x07 => posts.push(Post::Arm),
                 0x0a => posts.push(Post::Arm64),
@@ -300,7 +345,11 @@ impl XzStream {
                 window: Vec::new(),
                 dropped: 0,
                 keep: dict.max(4096),
-                stages: posts.iter().rev().map(|&p| (PostState::new(p), Vec::new())).collect(),
+                stages: posts
+                    .iter()
+                    .rev()
+                    .map(|&p| (PostState::new(p), Vec::new()))
+                    .collect(),
             })
         });
         self.pos = self.pos.saturating_add(header_len);
@@ -308,7 +357,10 @@ impl XzStream {
             data_start: self.pos,
             packed: packed.map(|n| usize::try_from(n).unwrap_or(usize::MAX)),
             lzma2: Lzma2::default(),
-            view: View { start: out.len(), dropped: 0 },
+            view: View {
+                start: out.len(),
+                dropped: 0,
+            },
             dict,
             check: Check::new(self.check_id),
             check_len: self.check_len,
@@ -387,7 +439,14 @@ impl XzStream {
 }
 
 impl Decoder for XzStream {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         self.seen = input.len();
         let mark = out.len();
         let target = mark.saturating_add(step.max(1));
@@ -440,9 +499,10 @@ impl Decoder for XzStream {
     /// window, so everything else can go.
     fn releasable_output(&self, out_len: usize) -> usize {
         match self.block.as_deref() {
-            Some(b) if b.filtered.is_none() && !b.lzma2.done() => {
-                out_len.saturating_sub(b.dict).max(b.lzma2.dict_start(b.view)).min(out_len)
-            }
+            Some(b) if b.filtered.is_none() && !b.lzma2.done() => out_len
+                .saturating_sub(b.dict)
+                .max(b.lzma2.dict_start(b.view))
+                .min(out_len),
             _ => out_len,
         }
     }

@@ -388,7 +388,9 @@ pub fn coding_cookie(head: &[u8]) -> Option<String> {
         let lower = line.to_ascii_lowercase();
         let at = lower.windows(6).position(|w| w == b"coding")?;
         let rest = line.get(at.saturating_add(6)..)?;
-        let rest = rest.strip_prefix(b":").or_else(|| rest.strip_prefix(b"="))?;
+        let rest = rest
+            .strip_prefix(b":")
+            .or_else(|| rest.strip_prefix(b"="))?;
         let rest = super::probe::trim_start(rest);
         let end = rest
             .iter()

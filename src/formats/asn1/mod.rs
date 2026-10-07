@@ -233,9 +233,12 @@ fn probe_pkcs12(h: &Head<'_>) -> bool {
 /// EncryptedPrivateKeyInfo: SEQUENCE { AlgorithmIdentifier (a PBE scheme),
 /// OCTET STRING }, filling the input.
 fn probe_pkcs8_encrypted(h: &Head<'_>) -> bool {
-    let Some(content) = outer(h) else { return false };
+    let Some(content) = outer(h) else {
+        return false;
+    };
     let mut it = der::elements(content);
-    let (Some((alg, alg_content)), Some((data, _)), None) = (it.next(), it.next(), it.next()) else {
+    let (Some((alg, alg_content)), Some((data, _)), None) = (it.next(), it.next(), it.next())
+    else {
         return false;
     };
     alg.tag == 16
@@ -243,7 +246,9 @@ fn probe_pkcs8_encrypted(h: &Head<'_>) -> bool {
         && der::first(alg_content)
             .filter(|(t, _)| t.tag == 6)
             .and_then(|(_, oid)| der::oid(oid))
-            .is_some_and(|o| o == "1.2.840.113549.1.5.13" || o.starts_with("1.2.840.113549.1.12.1."))
+            .is_some_and(|o| {
+                o == "1.2.840.113549.1.5.13" || o.starts_with("1.2.840.113549.1.12.1.")
+            })
 }
 
 fn probe_der(h: &Head<'_>) -> bool {
@@ -614,7 +619,9 @@ fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
         Kind::Csr => csr_summary(content),
         Kind::Pkcs7 => pkcs7_summary(content),
         Kind::Pkcs12 => pkcs12_summary(content),
-        Kind::EncryptedKey => der::first(content).map(|(_, alg)| format!("encrypted with {}", pbe::describe(alg))),
+        Kind::EncryptedKey => {
+            der::first(content).map(|(_, alg)| format!("encrypted with {}", pbe::describe(alg)))
+        }
     });
     let title = match kind {
         Kind::Generic => "ASN.1 DER",

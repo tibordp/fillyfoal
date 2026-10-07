@@ -283,7 +283,8 @@ fn property_node(p: &Property, line: &[u8], span: Span, input: Input) -> Node {
     // Percent-encoded `data:` URIs (vCard 4 allows any URI).
     if !p.value.contains('\\')
         && line.ends_with(p.value.as_bytes())
-        && let Some(node) = super::decode::data_url_node(p.name.clone(), input, value_span, &p.value)
+        && let Some(node) =
+            super::decode::data_url_node(p.name.clone(), input, value_span, &p.value)
     {
         return node;
     }

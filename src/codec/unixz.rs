@@ -52,7 +52,9 @@ impl Lzw {
             max_code: (1usize << 9).saturating_sub(1),
             free: if block_mode { 257 } else { 256 },
             prefix: vec![0u16; max_max_code],
-            suffix: (0..max_max_code).map(|i| u8::try_from(i & 0xff).unwrap_or(0)).collect(),
+            suffix: (0..max_max_code)
+                .map(|i| u8::try_from(i & 0xff).unwrap_or(0))
+                .collect(),
             old: None,
             fin: 0,
             mark: 0,
@@ -64,7 +66,12 @@ impl Lzw {
     /// where the codes of this width began.
     fn align(&mut self) {
         let group = usize::try_from(self.bits).unwrap_or(9).saturating_mul(8);
-        self.pos = self.mark.saturating_add(self.pos.saturating_sub(self.mark).div_ceil(group).saturating_mul(group));
+        self.pos = self.mark.saturating_add(
+            self.pos
+                .saturating_sub(self.mark)
+                .div_ceil(group)
+                .saturating_mul(group),
+        );
         self.mark = self.pos;
     }
 
@@ -120,8 +127,18 @@ impl Lzw {
                 code = prev;
             }
             while code >= 256 {
-                self.stack.push(self.suffix.get(code).copied().ok_or_else(|| bad("code beyond the table"))?);
-                code = usize::from(self.prefix.get(code).copied().ok_or_else(|| bad("code beyond the table"))?);
+                self.stack.push(
+                    self.suffix
+                        .get(code)
+                        .copied()
+                        .ok_or_else(|| bad("code beyond the table"))?,
+                );
+                code = usize::from(
+                    self.prefix
+                        .get(code)
+                        .copied()
+                        .ok_or_else(|| bad("code beyond the table"))?,
+                );
                 if self.stack.len() > self.max_max_code {
                     return Err(bad("string loop"));
                 }
@@ -130,7 +147,9 @@ impl Lzw {
             self.stack.push(self.fin);
             out.extend(self.stack.iter().rev());
             if out.len() > limit {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                return Err(Diagnostic::limit(format!(
+                    "decompressed data exceeds {limit:#x} bytes"
+                )));
             }
             if self.free < self.max_max_code {
                 if let Some(p) = self.prefix.get_mut(self.free) {
@@ -155,7 +174,11 @@ impl Lzw {
     /// count from instead of `mark`.
     fn releasable_bits(&self) -> usize {
         let group = usize::try_from(self.bits).unwrap_or(9).saturating_mul(8);
-        let into_group = self.pos.saturating_sub(self.mark).checked_rem(group).unwrap_or(0);
+        let into_group = self
+            .pos
+            .saturating_sub(self.mark)
+            .checked_rem(group)
+            .unwrap_or(0);
         self.pos.saturating_sub(into_group)
     }
 
@@ -163,7 +186,11 @@ impl Lzw {
     /// the front of the code data.
     fn release(&mut self, n: usize) {
         let group = usize::try_from(self.bits).unwrap_or(9).saturating_mul(8);
-        let into_group = self.pos.saturating_sub(self.mark).checked_rem(group).unwrap_or(0);
+        let into_group = self
+            .pos
+            .saturating_sub(self.mark)
+            .checked_rem(group)
+            .unwrap_or(0);
         // A group boundary as good as `mark` for aligning, kept in range.
         self.mark = self.pos.saturating_sub(into_group).saturating_sub(n);
         self.pos = self.pos.saturating_sub(n);
@@ -193,7 +220,14 @@ impl Default for UnixCompress {
 }
 
 impl Decoder for UnixCompress {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         if self.done {
             return Ok(Status::Done);
         }
@@ -224,7 +258,11 @@ impl Decoder for UnixCompress {
             return Ok(Status::Done);
         }
         self.consumed = (lzw.pos / 8).saturating_add(self.header);
-        Ok(if out.len() > mark { Status::More } else { Status::NeedInput })
+        Ok(if out.len() > mark {
+            Status::More
+        } else {
+            Status::NeedInput
+        })
     }
 
     fn consumed(&self) -> usize {

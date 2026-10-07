@@ -170,7 +170,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .summary(format!("zlib, {} bytes", body.len))
                     .lazy(
                         compressed,
-                        (input, body, u64::from(length).saturating_sub(8), Codec::Zlib),
+                        (
+                            input,
+                            body,
+                            u64::from(length).saturating_sub(8),
+                            Codec::Zlib,
+                        ),
                     ),
             );
         }
@@ -186,24 +191,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let stream = body.tail(9);
             let expected = u64::from(length).saturating_sub(8);
             let node = Node::new("Compressed body").span(stream);
-            cx.emit(match crate::codec::lzma::Props::from_byte(props.first().copied().unwrap_or(0xff)) {
-                Ok(props) => {
-                    let codec = Codec::LzmaRaw {
-                        props,
-                        size: Some(crate::bytes::to_usize(expected)),
-                        dict,
-                    };
-                    node.summary(format!("LZMA, {} bytes", stream.len))
-                        .lazy(compressed, (input, stream, expected, codec))
-                }
-                Err(e) => node.diag(e.at(body.sub(4, 1))),
-            });
+            cx.emit(
+                match crate::codec::lzma::Props::from_byte(props.first().copied().unwrap_or(0xff)) {
+                    Ok(props) => {
+                        let codec = Codec::LzmaRaw {
+                            props,
+                            size: Some(crate::bytes::to_usize(expected)),
+                            dict,
+                        };
+                        node.summary(format!("LZMA, {} bytes", stream.len))
+                            .lazy(compressed, (input, stream, expected, codec))
+                    }
+                    Err(e) => node.diag(e.at(body.sub(4, 1))),
+                },
+            );
         }
     }
     Ok(())
 }
 
-async fn compressed(cx: Cx, (input, body, expected, codec): (Input, Span, u64, Codec)) -> Result<()> {
+async fn compressed(
+    cx: Cx,
+    (input, body, expected, codec): (Input, Span, u64, Codec),
+) -> Result<()> {
     let decoded = decode_span(&cx, body, &codec, Some(expected)).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);

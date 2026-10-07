@@ -69,8 +69,22 @@ const SYSTEM: [&str; 9] = [
 ];
 
 const TYPES: [&str; 16] = [
-    "null", "bool", "int", "int", "float", "decimal", "timestamp", "symbol", "string", "clob", "blob", "list",
-    "sexp", "struct", "annotation", "reserved",
+    "null",
+    "bool",
+    "int",
+    "int",
+    "float",
+    "decimal",
+    "timestamp",
+    "symbol",
+    "string",
+    "clob",
+    "blob",
+    "list",
+    "sexp",
+    "struct",
+    "annotation",
+    "reserved",
 ];
 
 /// Symbols after the system table: runs of known texts and of symbols
@@ -92,7 +106,10 @@ impl Symbols {
         if sid == 0 {
             return None;
         }
-        if let Some(s) = usize::try_from(sid).ok().and_then(|i| SYSTEM.get(i.wrapping_sub(1))) {
+        if let Some(s) = usize::try_from(sid)
+            .ok()
+            .and_then(|i| SYSTEM.get(i.wrapping_sub(1)))
+        {
             return Some(s);
         }
         let mut i = sid.saturating_sub(10);
@@ -117,7 +134,8 @@ impl Symbols {
     }
 
     fn name(&self, sid: u64) -> String {
-        self.text(sid).map_or_else(|| format!("${sid}"), str::to_owned)
+        self.text(sid)
+            .map_or_else(|| format!("${sid}"), str::to_owned)
     }
 
     fn count(&self) -> u64 {
@@ -200,10 +218,18 @@ fn signed(negative: bool, magnitude: u64) -> i64 {
 async fn header(r: &mut ByteReader<'_>, at: u64, limit: u64) -> Result<Hdr> {
     let td = r.byte(at).await?;
     let (t, l) = (td >> 4, td & 0x0f);
-    let mut h = Hdr { t, l, head: 1, len: 0, null: false };
+    let mut h = Hdr {
+        t,
+        l,
+        head: 1,
+        len: 0,
+        null: false,
+    };
     match (t, l) {
         (15, _) => return Err(bad(r, at, "reserved type 15")),
-        (14, 0..=2 | 15) => return Err(bad(r, at, format!("invalid annotation wrapper {td:#04x}"))),
+        (14, 0..=2 | 15) => {
+            return Err(bad(r, at, format!("invalid annotation wrapper {td:#04x}")));
+        }
         (1, 2..=14) => return Err(bad(r, at, format!("invalid boolean {td:#04x}"))),
         (4, 1..=3 | 5..=7 | 9..=14) => return Err(bad(r, at, format!("invalid float length {l}"))),
         (_, 15) => h.null = true,
@@ -216,7 +242,10 @@ async fn header(r: &mut ByteReader<'_>, at: u64, limit: u64) -> Result<Hdr> {
         _ => h.len = u64::from(l),
     }
     if h.end(at) > limit {
-        return Err(Diagnostic::truncated(r.span(at, h.head.saturating_add(h.len)), limit.saturating_sub(at)));
+        return Err(Diagnostic::truncated(
+            r.span(at, h.head.saturating_add(h.len)),
+            limit.saturating_sub(at),
+        ));
     }
     Ok(h)
 }
@@ -233,7 +262,12 @@ async fn int_field(r: &mut ByteReader<'_>, at: u64, len: u64) -> Result<(bool, V
 
 /// The local symbol table defined by the struct at `at` (body
 /// `body..end`), given the table in effect.
-async fn symbol_table(r: &mut ByteReader<'_>, body: u64, end: u64, current: &Symbols) -> Result<Symbols> {
+async fn symbol_table(
+    r: &mut ByteReader<'_>,
+    body: u64,
+    end: u64,
+    current: &Symbols,
+) -> Result<Symbols> {
     let mut imports: Option<Vec<Segment>> = None;
     let mut symbols: Vec<Option<String>> = Vec::new();
     let mut pos = body;
@@ -255,7 +289,8 @@ async fn symbol_table(r: &mut ByteReader<'_>, body: u64, end: u64, current: &Sym
                 while p < vend {
                     let ih = header(r, p, vend).await?;
                     if ih.t == 13 && !ih.null {
-                        let (name, max_id) = import_entry(r, p.saturating_add(ih.head), ih.end(p)).await?;
+                        let (name, max_id) =
+                            import_entry(r, p.saturating_add(ih.head), ih.end(p)).await?;
                         if name.as_deref() != Some("$ion") {
                             segs.push(Segment::Unknown(max_id));
                         }
@@ -270,7 +305,9 @@ async fn symbol_table(r: &mut ByteReader<'_>, body: u64, end: u64, current: &Sym
                     r.cx().checkpoint().await;
                     let sh = header(r, p, vend).await?;
                     if sh.t == 8 && !sh.null {
-                        let data = r.bytes(p.saturating_add(sh.head), sh.len.min(vt::MAX_TEXT)).await?;
+                        let data = r
+                            .bytes(p.saturating_add(sh.head), sh.len.min(vt::MAX_TEXT))
+                            .await?;
                         symbols.push(Some(String::from_utf8_lossy(&data).into_owned()));
                     } else if sh.t != 0 || sh.null {
                         symbols.push(None);
@@ -288,7 +325,11 @@ async fn symbol_table(r: &mut ByteReader<'_>, body: u64, end: u64, current: &Sym
 }
 
 /// `name` and `max_id` of an import struct.
-async fn import_entry(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Option<String>, u64)> {
+async fn import_entry(
+    r: &mut ByteReader<'_>,
+    body: u64,
+    end: u64,
+) -> Result<(Option<String>, u64)> {
     let (mut name, mut max_id) = (None, 0u64);
     let mut pos = body;
     while pos < end {
@@ -297,7 +338,11 @@ async fn import_entry(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Op
         let h = header(r, at, end).await?;
         let vbody = at.saturating_add(h.head);
         match (field, h.t) {
-            (4, 8) => name = Some(String::from_utf8_lossy(&r.bytes(vbody, h.len.min(0x200)).await?).into_owned()),
+            (4, 8) => {
+                name = Some(
+                    String::from_utf8_lossy(&r.bytes(vbody, h.len.min(0x200)).await?).into_owned(),
+                )
+            }
             (8, 2) => max_id = be_uint(&r.bytes(vbody, h.len.min(8)).await?),
             _ => {}
         }
@@ -328,7 +373,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut r = ByteReader::new(&cx, input.span);
     let len = input.span.len;
     let (mut pos, mut index, mut symbols) =
-        cx.resume::<(u64, u64, Arc<Symbols>)>().unwrap_or((0, 0, Arc::new(Symbols::default())));
+        cx.resume::<(u64, u64, Arc<Symbols>)>()
+            .unwrap_or((0, 0, Arc::new(Symbols::default())));
     if pos == 0 {
         cx.annotate("Amazon Ion 1.0 (binary)");
     }
@@ -350,7 +396,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let h = header(&mut r, pos, len).await?;
         let end = h.end(pos);
         if h.t == 0 && !h.null {
-            cx.push(Node::new("Padding").span(r.span(pos, end.saturating_sub(pos))).summary("NOP padding")).await;
+            cx.push(
+                Node::new("Padding")
+                    .span(r.span(pos, end.saturating_sub(pos)))
+                    .summary("NOP padding"),
+            )
+            .await;
             pos = end;
             continue;
         }
@@ -361,7 +412,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let (sids, inner) = annotations(&mut r, pos, &h).await?;
             let ih = header(&mut r, inner, end).await?;
             if sids.first() == Some(&3) && ih.t == 13 && !ih.null {
-                symbols = Arc::new(symbol_table(&mut r, inner.saturating_add(ih.head), ih.end(inner), &symbols).await?);
+                symbols = Arc::new(
+                    symbol_table(
+                        &mut r,
+                        inner.saturating_add(ih.head),
+                        ih.end(inner),
+                        &symbols,
+                    )
+                    .await?,
+                );
                 node = node.summary(format!(
                     "local symbol table, symbols up to ${}",
                     symbols.count()
@@ -418,11 +477,18 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
     let Some(days) = days.filter(|_| hour < 24 && minute < 60 && second < 60) else {
         return Ok((format!("invalid timestamp {year}-{month}-{day}"), None));
     };
-    let utc = days
-        .saturating_mul(86_400)
-        .saturating_add(i64::try_from(hour.saturating_mul(3600).saturating_add(minute.saturating_mul(60)).saturating_add(second)).unwrap_or(0));
+    let utc = days.saturating_mul(86_400).saturating_add(
+        i64::try_from(
+            hour.saturating_mul(3600)
+                .saturating_add(minute.saturating_mul(60))
+                .saturating_add(second),
+        )
+        .unwrap_or(0),
+    );
     // Fields are UTC; the text form shows local time and the offset.
-    let local = crate::render::value(&Value::Timestamp { unix_seconds: utc.saturating_add(offset.saturating_mul(60)) });
+    let local = crate::render::value(&Value::Timestamp {
+        unix_seconds: utc.saturating_add(offset.saturating_mul(60)),
+    });
     let date = local.get(..10).unwrap_or_default();
     let time = local.get(11..19).unwrap_or_default();
     let off = if unknown_offset {
@@ -431,7 +497,12 @@ async fn timestamp(r: &mut ByteReader<'_>, body: u64, end: u64) -> Result<(Strin
         "Z".to_owned()
     } else {
         let a = offset.unsigned_abs();
-        format!("{}{:02}:{:02}", if offset < 0 { '-' } else { '+' }, a / 60, a % 60)
+        format!(
+            "{}{:02}:{:02}",
+            if offset < 0 { '-' } else { '+' },
+            a / 60,
+            a % 60
+        )
     };
     let text = match count {
         0 | 1 => format!("{year:04}T"),
@@ -492,7 +563,14 @@ async fn plain_value(
     let body = at.saturating_add(h.head);
     let kind = TYPES.get(usize::from(h.t)).copied().unwrap_or("?");
     if h.null {
-        return Ok((node, Some(if h.t == 0 { "null".to_owned() } else { format!("null.{kind}") })));
+        return Ok((
+            node,
+            Some(if h.t == 0 {
+                "null".to_owned()
+            } else {
+                format!("null.{kind}")
+            }),
+        ));
     }
     Ok(match h.t {
         0 => (node, Some("NOP padding".to_owned())),
@@ -513,10 +591,17 @@ async fn plain_value(
                 }
             } else {
                 let digits = vt::magnitude_digits(&b);
-                node.value(Value::Text(if negative { format!("-{digits}") } else { digits }))
+                node.value(Value::Text(if negative {
+                    format!("-{digits}")
+                } else {
+                    digits
+                }))
             };
             if negative && b.iter().all(|&x| x == 0) {
-                (node.diag(Diagnostic::malformed("negative zero integer")), None)
+                (
+                    node.diag(Diagnostic::malformed("negative zero integer")),
+                    None,
+                )
             } else {
                 (node, None)
             }
@@ -532,7 +617,10 @@ async fn plain_value(
         }
         5 => {
             if h.len == 0 {
-                return Ok((node.value(Value::Text("0".into())), Some("decimal".to_owned())));
+                return Ok((
+                    node.value(Value::Text("0".into())),
+                    Some("decimal".to_owned()),
+                ));
             }
             let (eneg, emag, n) = varint(r, body).await?;
             let cpos = body.saturating_add(n);
@@ -543,8 +631,14 @@ async fn plain_value(
         6 => {
             let (text, utc) = timestamp(r, body, end).await?;
             match utc {
-                Some(s) => (node.value(Value::Timestamp { unix_seconds: s }), Some(format!("timestamp {text}"))),
-                None => (node.diag(Diagnostic::malformed(text)), Some("timestamp".to_owned())),
+                Some(s) => (
+                    node.value(Value::Timestamp { unix_seconds: s }),
+                    Some(format!("timestamp {text}")),
+                ),
+                None => (
+                    node.diag(Diagnostic::malformed(text)),
+                    Some("timestamp".to_owned()),
+                ),
             }
         }
         7 => {
@@ -559,7 +653,13 @@ async fn plain_value(
         9 => {
             let data = r.bytes(body, h.len.min(vt::MAX_TEXT)).await?;
             let node = node.value(Value::Text(String::from_utf8_lossy(&data).into_owned()));
-            (node, Some(format!("clob, {}", crate::formats::text::plural(h.len, "byte", "bytes"))))
+            (
+                node,
+                Some(format!(
+                    "clob, {}",
+                    crate::formats::text::plural(h.len, "byte", "bytes")
+                )),
+            )
         }
         10 => {
             let data = r.bytes(body, h.len.min(vt::MAX_BYTES)).await?;
@@ -577,25 +677,37 @@ async fn plain_value(
                     Err(d) => node.diag(d),
                 }
             };
-            let summary = if h.len == 0 { format!("{kind}, empty") } else { kind.to_owned() };
+            let summary = if h.len == 0 {
+                format!("{kind}, empty")
+            } else {
+                kind.to_owned()
+            };
             (node, Some(summary))
         }
         _ => (node.diag(bad(r, at, "unexpected type")), None),
     })
 }
 
-async fn members(cx: Cx, (region, at, symbols, path): (Span, u64, Arc<Symbols>, Path)) -> Result<()> {
+async fn members(
+    cx: Cx,
+    (region, at, symbols, path): (Span, u64, Arc<Symbols>, Path),
+) -> Result<()> {
     let mut r = ByteReader::new(&cx, region);
     let h = header(&mut r, at, region.len).await?;
     let end = h.end(at);
     let is_struct = h.t == 13;
-    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((at.saturating_add(h.head), 0));
+    let (mut pos, mut index) = cx
+        .resume::<(u64, u64)>()
+        .unwrap_or((at.saturating_add(h.head), 0));
     while pos < end {
         let mark = (pos, index);
         cx.mark(move || mark);
         let (name, vat) = if is_struct {
             let (sid, n) = varuint(&mut r, pos).await?;
-            (vt::key_name(&symbols.name(sid), index), pos.saturating_add(n))
+            (
+                vt::key_name(&symbols.name(sid), index),
+                pos.saturating_add(n),
+            )
         } else {
             (format!("[{index}]"), pos)
         };
@@ -625,7 +737,10 @@ fn is_ident(b: u8) -> bool {
 
 fn probe_text(h: &Head<'_>) -> bool {
     let data = h.data.strip_prefix(b"\xef\xbb\xbf").unwrap_or(h.data);
-    let start = data.iter().position(|b| !b.is_ascii_whitespace()).unwrap_or(data.len());
+    let start = data
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(data.len());
     let rest = data.get(start..).unwrap_or_default();
     rest.starts_with(MARKER) && rest.get(MARKER.len()).is_none_or(|&b| !is_ident(b))
 }
@@ -651,7 +766,10 @@ async fn skip_space(sc: &mut Scanner<'_>, mut pos: u64) -> Result<u64> {
             Some(b) if b.is_ascii_whitespace() => pos = pos.saturating_add(1),
             Some(b'/') => match sc.byte(pos.saturating_add(1)).await? {
                 Some(b'/') => {
-                    pos = sc.find(pos, |b| b == b'\n').await?.map_or(sc.len(), |p| p.saturating_add(1));
+                    pos = sc
+                        .find(pos, |b| b == b'\n')
+                        .await?
+                        .map_or(sc.len(), |p| p.saturating_add(1));
                 }
                 Some(b'*') => {
                     pos = match sc.find_seq(pos.saturating_add(2), b"*/").await? {
@@ -708,7 +826,9 @@ async fn container_end(sc: &mut Scanner<'_>, pos: u64) -> Result<u64> {
             b'"' => p = quoted(sc, p, b'"').await?,
             b'\'' if sc.matches(p, b"'''").await? => p = long_string(sc, p).await?,
             b'\'' => p = quoted(sc, p, b'\'').await?,
-            b'/' if matches!(sc.byte(p.saturating_add(1)).await?, Some(b'/' | b'*')) => p = skip_space(sc, p).await?,
+            b'/' if matches!(sc.byte(p.saturating_add(1)).await?, Some(b'/' | b'*')) => {
+                p = skip_space(sc, p).await?
+            }
             b'{' if sc.byte(p.saturating_add(1)).await? == Some(b'{') => {
                 p = lob_end(sc, p).await?;
             }
@@ -737,7 +857,9 @@ async fn lob_end(sc: &mut Scanner<'_>, pos: u64) -> Result<u64> {
             None => return Ok(p),
             Some(b'"') => p = quoted(sc, p, b'"').await?,
             Some(b'\'') if sc.matches(p, b"'''").await? => p = long_string(sc, p).await?,
-            Some(b'}') if sc.byte(p.saturating_add(1)).await? == Some(b'}') => return Ok(p.saturating_add(2)),
+            Some(b'}') if sc.byte(p.saturating_add(1)).await? == Some(b'}') => {
+                return Ok(p.saturating_add(2));
+            }
             Some(_) => p = p.saturating_add(1),
         }
     }
@@ -750,7 +872,9 @@ async fn token_end(sc: &mut Scanner<'_>, pos: u64) -> Result<u64> {
         sc.tick().await;
         match sc.byte(p).await? {
             Some(b) if b.is_ascii_whitespace() || b",{}[]()\"'".contains(&b) => return Ok(p),
-            Some(b'/') if matches!(sc.byte(p.saturating_add(1)).await?, Some(b'/' | b'*')) => return Ok(p),
+            Some(b'/') if matches!(sc.byte(p.saturating_add(1)).await?, Some(b'/' | b'*')) => {
+                return Ok(p);
+            }
             Some(b':') if sc.byte(p.saturating_add(1)).await? == Some(b':') => return Ok(p),
             None => return Ok(p),
             Some(_) => p = p.saturating_add(1),
@@ -777,14 +901,23 @@ async fn datum(sc: &mut Scanner<'_>, pos: u64) -> Result<(TextKind, u64)> {
             (TextKind::LongString, end)
         }
         b'\'' => (TextKind::QuotedSymbol, quoted(sc, pos, b'\'').await?),
-        b'{' if sc.byte(pos.saturating_add(1)).await? == Some(b'{') => (TextKind::Lob, lob_end(sc, pos).await?),
+        b'{' if sc.byte(pos.saturating_add(1)).await? == Some(b'{') => {
+            (TextKind::Lob, lob_end(sc, pos).await?)
+        }
         b'{' => (TextKind::Struct, container_end(sc, pos).await?),
         b'[' => (TextKind::List, container_end(sc, pos).await?),
         b'(' => (TextKind::Sexp, container_end(sc, pos).await?),
         _ => {
             let end = token_end(sc, pos).await?;
             // A stray delimiter: consume it so the walk progresses.
-            (TextKind::Token, if end == pos { pos.saturating_add(1) } else { end })
+            (
+                TextKind::Token,
+                if end == pos {
+                    pos.saturating_add(1)
+                } else {
+                    end
+                },
+            )
         }
     })
 }
@@ -811,7 +944,9 @@ pub async fn dissect_text(cx: Cx, input: Input) -> Result<()> {
         let (mut kind, mut end) = datum(&mut sc, pos).await?;
         loop {
             let after = skip_space(&mut sc, end).await?;
-            if matches!(kind, TextKind::Token | TextKind::QuotedSymbol) && sc.matches(after, b"::").await? {
+            if matches!(kind, TextKind::Token | TextKind::QuotedSymbol)
+                && sc.matches(after, b"::").await?
+            {
                 let text = sc.bytes(pos, end, 0x200).await?;
                 annotations.push(String::from_utf8_lossy(&text).into_owned());
                 pos = skip_space(&mut sc, after.saturating_add(2)).await?;
@@ -848,7 +983,11 @@ async fn text_value(
     let mut node = Node::new(format!("Value {index}")).span(span);
     let what: String = match kind {
         TextKind::String => {
-            node = node.value(Value::Text(text.get(1..text.len().saturating_sub(1)).unwrap_or_default().to_owned()));
+            node = node.value(Value::Text(
+                text.get(1..text.len().saturating_sub(1))
+                    .unwrap_or_default()
+                    .to_owned(),
+            ));
             "string".into()
         }
         TextKind::LongString => {
@@ -856,13 +995,24 @@ async fn text_value(
             "long string".into()
         }
         TextKind::QuotedSymbol => {
-            node = node.value(Value::Text(text.get(1..text.len().saturating_sub(1)).unwrap_or_default().to_owned()));
+            node = node.value(Value::Text(
+                text.get(1..text.len().saturating_sub(1))
+                    .unwrap_or_default()
+                    .to_owned(),
+            ));
             "symbol".into()
         }
         TextKind::Lob => {
-            let inner = text.get(2..text.len().saturating_sub(2)).unwrap_or_default().trim();
+            let inner = text
+                .get(2..text.len().saturating_sub(2))
+                .unwrap_or_default()
+                .trim();
             node = node.value(Value::Text(clip(inner, 200)));
-            if inner.starts_with('"') || inner.starts_with('\'') { "clob".into() } else { "blob (base64)".into() }
+            if inner.starts_with('"') || inner.starts_with('\'') {
+                "clob".into()
+            } else {
+                "blob (base64)".into()
+            }
         }
         TextKind::Struct | TextKind::List | TextKind::Sexp => {
             let preview: String = text.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -875,7 +1025,9 @@ async fn text_value(
         }
         TextKind::Token => {
             if text == "$ion_1_0" && annotations.is_empty() {
-                return Ok(Node::new("Ion version marker").span(span).value(Value::Text("1.0".into())));
+                return Ok(Node::new("Ion version marker")
+                    .span(span)
+                    .value(Value::Text("1.0".into())));
             }
             match text.as_str() {
                 "true" | "false" => {
@@ -905,7 +1057,11 @@ async fn text_value(
             }
         }
     };
-    let prefix = if annotations.is_empty() { String::new() } else { format!("{}:: ", annotations.join("::")) };
+    let prefix = if annotations.is_empty() {
+        String::new()
+    } else {
+        format!("{}:: ", annotations.join("::"))
+    };
     let mut node = node.summary(format!("{prefix}{what}"));
     if !complete && !matches!(kind, TextKind::Struct | TextKind::List | TextKind::Sexp) {
         node = node.diag(Diagnostic::note(format!("first {} bytes shown", raw.len())));
@@ -920,9 +1076,13 @@ async fn text_value(
         TextKind::Token => b"",
     };
     let closed = end.saturating_sub(pos) > vt_len(closer.len())
-        && sc.matches(end.saturating_sub(vt_len(closer.len())), closer).await?;
+        && sc
+            .matches(end.saturating_sub(vt_len(closer.len())), closer)
+            .await?;
     if !closer.is_empty() && !closed {
-        node = node.diag(Diagnostic::malformed("not closed before the end of the file"));
+        node = node.diag(Diagnostic::malformed(
+            "not closed before the end of the file",
+        ));
     }
     Ok(node)
 }

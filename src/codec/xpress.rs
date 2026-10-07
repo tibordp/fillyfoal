@@ -71,7 +71,10 @@ impl Filter for Xpress {
         let mut flag_count = 0u32;
         let mut half_byte: Option<usize> = None;
         let byte = |pos: &mut usize| -> Result<usize> {
-            let b = input.get(*pos).copied().ok_or_else(|| bad("truncated match length"))?;
+            let b = input
+                .get(*pos)
+                .copied()
+                .ok_or_else(|| bad("truncated match length"))?;
             *pos = pos.saturating_add(1);
             Ok(usize::from(b))
         };
@@ -117,11 +120,15 @@ impl Filter for Xpress {
                         len = u16_at(input, pos).ok_or_else(|| bad("truncated match length"))?;
                         pos = pos.saturating_add(2);
                         if len == 0 {
-                            len = usize::try_from(u32_at(input, pos).ok_or_else(|| bad("truncated match length"))?)
-                                .unwrap_or(usize::MAX);
+                            len = usize::try_from(
+                                u32_at(input, pos).ok_or_else(|| bad("truncated match length"))?,
+                            )
+                            .unwrap_or(usize::MAX);
                             pos = pos.saturating_add(4);
                         }
-                        len = len.checked_sub(15 + 7).ok_or_else(|| bad("bad match length"))?;
+                        len = len
+                            .checked_sub(15 + 7)
+                            .ok_or_else(|| bad("bad match length"))?;
                     }
                     len = len.saturating_add(15);
                 }
@@ -186,7 +193,11 @@ impl Bits<'_> {
     }
 
     fn peek(&self, n: u32) -> u32 {
-        if n == 0 { 0 } else { self.next >> (32u32.saturating_sub(n)) }
+        if n == 0 {
+            0
+        } else {
+            self.next >> (32u32.saturating_sub(n))
+        }
     }
 
     fn skip(&mut self, n: u32) -> Result<()> {
@@ -205,7 +216,11 @@ impl Bits<'_> {
     }
 
     fn byte(&mut self) -> Result<usize> {
-        let b = self.data.get(self.pos).copied().ok_or_else(|| bad("truncated match length"))?;
+        let b = self
+            .data
+            .get(self.pos)
+            .copied()
+            .ok_or_else(|| bad("truncated match length"))?;
         self.pos = self.pos.saturating_add(1);
         Ok(usize::from(b))
     }
@@ -227,7 +242,9 @@ fn decoding_table(lengths: &[u8; 512], table: &mut [u16]) -> Result<()> {
         let count = 1usize << (TABLE_BITS.saturating_sub(len));
         for (symbol, &l) in lengths.iter().enumerate() {
             if u32::from(l) == len {
-                let slots = table.get_mut(at..at.saturating_add(count)).ok_or_else(|| bad("oversubscribed Huffman code"))?;
+                let slots = table
+                    .get_mut(at..at.saturating_add(count))
+                    .ok_or_else(|| bad("oversubscribed Huffman code"))?;
                 slots.fill(u16::try_from(symbol).unwrap_or(0));
                 at = at.saturating_add(count);
             }
@@ -272,7 +289,12 @@ impl Filter for XpressHuffman {
             bits.start()?;
             let block_end = out.len().saturating_add(1 << 16).min(end);
             while out.len() < block_end {
-                let symbol = usize::from(table.get(usize::try_from(bits.peek(TABLE_BITS)).unwrap_or(0)).copied().unwrap_or(0));
+                let symbol = usize::from(
+                    table
+                        .get(usize::try_from(bits.peek(TABLE_BITS)).unwrap_or(0))
+                        .copied()
+                        .unwrap_or(0),
+                );
                 bits.skip(u32::from(lengths.get(symbol).copied().unwrap_or(0)))?;
                 if let Ok(literal) = u8::try_from(symbol) {
                     out.push(literal);
@@ -286,8 +308,11 @@ impl Filter for XpressHuffman {
                     if len == 255 {
                         len = bits.u16()?;
                         if len == 0 {
-                            len = usize::try_from(u32_at(input, bits.pos).ok_or_else(|| bad("truncated match length"))?)
-                                .unwrap_or(usize::MAX);
+                            len = usize::try_from(
+                                u32_at(input, bits.pos)
+                                    .ok_or_else(|| bad("truncated match length"))?,
+                            )
+                            .unwrap_or(usize::MAX);
                             bits.pos = bits.pos.saturating_add(4);
                         }
                         len = len.checked_sub(15).ok_or_else(|| bad("bad match length"))?;
@@ -295,7 +320,9 @@ impl Filter for XpressHuffman {
                     len = len.saturating_add(15);
                 }
                 len = len.saturating_add(3);
-                let offset = usize::try_from(bits.peek(offset_bits)).unwrap_or(0).saturating_add(1usize << offset_bits);
+                let offset = usize::try_from(bits.peek(offset_bits))
+                    .unwrap_or(0)
+                    .saturating_add(1usize << offset_bits);
                 bits.skip(offset_bits)?;
                 copy_back(&mut out, offset, len, end)?;
             }
@@ -311,7 +338,9 @@ mod tests {
     use super::*;
 
     fn hex(s: &str) -> Vec<u8> {
-        s.split_whitespace().map(|h| u8::from_str_radix(h, 16).unwrap()).collect()
+        s.split_whitespace()
+            .map(|h| u8::from_str_radix(h, 16).unwrap())
+            .collect()
     }
 
     fn abc300() -> Vec<u8> {
@@ -321,14 +350,32 @@ mod tests {
     /// [MS-XCA] section 3.1 (Plain LZ77 examples).
     #[test]
     fn plain_spec_examples() {
-        let alphabet = hex("3f 00 00 00 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77 78 79 7a");
-        assert_eq!(Xpress { size: None }.apply(&alphabet, 1 << 20).unwrap(), b"abcdefghijklmnopqrstuvwxyz");
+        let alphabet = hex(
+            "3f 00 00 00 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77 78 79 7a",
+        );
+        assert_eq!(
+            Xpress { size: None }.apply(&alphabet, 1 << 20).unwrap(),
+            b"abcdefghijklmnopqrstuvwxyz"
+        );
         let abc = hex("ff ff ff 1f 61 62 63 17 00 0f ff 26 01");
-        assert_eq!(Xpress { size: None }.apply(&abc, 1 << 20).unwrap(), abc300());
-        assert_eq!(Xpress { size: Some(300) }.apply(&abc, 1 << 20).unwrap(), abc300());
-        assert_eq!(Xpress { size: Some(10) }.apply(&abc, 1 << 20).unwrap(), &abc300()[..10]);
+        assert_eq!(
+            Xpress { size: None }.apply(&abc, 1 << 20).unwrap(),
+            abc300()
+        );
+        assert_eq!(
+            Xpress { size: Some(300) }.apply(&abc, 1 << 20).unwrap(),
+            abc300()
+        );
+        assert_eq!(
+            Xpress { size: Some(10) }.apply(&abc, 1 << 20).unwrap(),
+            &abc300()[..10]
+        );
         assert!(Xpress { size: None }.apply(&abc, 100).is_err());
-        assert!(Xpress { size: Some(300) }.apply(&abc[..9], 1 << 20).is_err());
+        assert!(
+            Xpress { size: Some(300) }
+                .apply(&abc[..9], 1 << 20)
+                .is_err()
+        );
     }
 
     /// The 256-byte length table of [MS-XCA] section 3.2's examples, as
@@ -361,16 +408,27 @@ mod tests {
             (0x3d, 0x04),
             (0x80, 0x04),
         ]);
-        alphabet.extend(hex("d8 52 3e d7 94 11 5b e9 19 5f f9 d6 7c df 8d 04 00 00 00 00"));
+        alphabet.extend(hex(
+            "d8 52 3e d7 94 11 5b e9 19 5f f9 d6 7c df 8d 04 00 00 00 00",
+        ));
         assert_eq!(
-            XpressHuffman { size: 26 }.apply(&alphabet, 1 << 20).unwrap(),
+            XpressHuffman { size: 26 }
+                .apply(&alphabet, 1 << 20)
+                .unwrap(),
             b"abcdefghijklmnopqrstuvwxyz"
         );
         let mut abc = table(&[(0x30, 0x30), (0x31, 0x23), (0x80, 0x02), (0x8f, 0x20)]);
         abc.extend(hex("a8 dc 00 00 ff 26 01"));
-        assert_eq!(XpressHuffman { size: 300 }.apply(&abc, 1 << 20).unwrap(), abc300());
+        assert_eq!(
+            XpressHuffman { size: 300 }.apply(&abc, 1 << 20).unwrap(),
+            abc300()
+        );
         assert!(XpressHuffman { size: 300 }.apply(&abc, 299).is_err());
-        assert!(XpressHuffman { size: 300 }.apply(&abc[..260], 1 << 20).is_err());
+        assert!(
+            XpressHuffman { size: 300 }
+                .apply(&abc[..260], 1 << 20)
+                .is_err()
+        );
         // An incomplete code is rejected.
         let mut broken = abc.clone();
         broken[0x30] = 0x31;

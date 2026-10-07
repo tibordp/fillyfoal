@@ -11,9 +11,18 @@ fn too_big(limit: usize) -> Diagnostic {
 
 /// Copies `len` bytes from `dist` back (overlap allowed); the window starts
 /// at `base`.
-fn copy_back(out: &mut Vec<u8>, base: usize, dist: usize, len: usize, limit: usize, what: &str) -> Result<()> {
+fn copy_back(
+    out: &mut Vec<u8>,
+    base: usize,
+    dist: usize,
+    len: usize,
+    limit: usize,
+    what: &str,
+) -> Result<()> {
     if dist == 0 || dist > out.len().saturating_sub(base) {
-        return Err(Diagnostic::malformed(format!("{what}: match distance before the start of the output")));
+        return Err(Diagnostic::malformed(format!(
+            "{what}: match distance before the start of the output"
+        )));
     }
     if out.len().saturating_sub(base).saturating_add(len) > limit {
         return Err(too_big(limit));
@@ -26,7 +35,15 @@ fn copy_back(out: &mut Vec<u8>, base: usize, dist: usize, len: usize, limit: usi
     Ok(())
 }
 
-fn literals(input: &[u8], pos: usize, n: usize, out: &mut Vec<u8>, base: usize, limit: usize, what: &str) -> Result<usize> {
+fn literals(
+    input: &[u8],
+    pos: usize,
+    n: usize,
+    out: &mut Vec<u8>,
+    base: usize,
+    limit: usize,
+    what: &str,
+) -> Result<usize> {
     let end = pos.saturating_add(n);
     let lit = input
         .get(pos..end)
@@ -60,7 +77,9 @@ pub fn lzf(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
             len = len.saturating_add(byte(pos)?);
             pos = pos.saturating_add(1);
         }
-        let dist = ((ctrl & 0x1f) << 8).saturating_add(byte(pos)?).saturating_add(1);
+        let dist = ((ctrl & 0x1f) << 8)
+            .saturating_add(byte(pos)?)
+            .saturating_add(1);
         pos = pos.saturating_add(1);
         copy_back(out, base, dist, len.saturating_add(2), limit, "LZF")?;
     }
@@ -123,7 +142,9 @@ impl Filter for LzfFramed {
                 out.extend_from_slice(data);
             }
             if out.len().saturating_sub(before) != ulen {
-                return Err(Diagnostic::malformed("LZF: ZV block decoded to the wrong size"));
+                return Err(Diagnostic::malformed(
+                    "LZF: ZV block decoded to the wrong size",
+                ));
             }
             pos = start.saturating_add(clen);
         }
@@ -147,10 +168,19 @@ pub fn adc(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
     while pos < input.len() {
         let b = byte(pos)?;
         if b & 0x80 != 0 {
-            pos = literals(input, pos.saturating_add(1), (b & 0x7f).saturating_add(1), out, base, limit, "ADC")?;
+            pos = literals(
+                input,
+                pos.saturating_add(1),
+                (b & 0x7f).saturating_add(1),
+                out,
+                base,
+                limit,
+                "ADC",
+            )?;
         } else if b & 0x40 != 0 {
             let len = (b & 0x3f).saturating_add(4);
-            let dist = (byte(pos.saturating_add(1))? << 8 | byte(pos.saturating_add(2))?).saturating_add(1);
+            let dist = (byte(pos.saturating_add(1))? << 8 | byte(pos.saturating_add(2))?)
+                .saturating_add(1);
             pos = pos.saturating_add(3);
             copy_back(out, base, dist, len, limit, "ADC")?;
         } else {

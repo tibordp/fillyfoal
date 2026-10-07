@@ -259,7 +259,10 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
             Some(total),
         ));
     }
-    cx.annotate(format!("{}, {algorithm}, {chunks} chunk(s), {total} bytes uncompressed", String::from_utf8_lossy(&magic)));
+    cx.annotate(format!(
+        "{}, {algorithm}, {chunks} chunk(s), {total} bytes uncompressed",
+        String::from_utf8_lossy(&magic)
+    ));
     Ok(())
 }
 
@@ -322,8 +325,16 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
     let name_span = f.peek_span(name_len.into());
     let name = f.bytes("Original name", name_len.into()).get()?;
     let name = String::from_utf8_lossy(&name).into_owned();
-    f.node(Node::new("Original name").span(name_span).value(Value::Text(name.clone())));
-    let kind = if flags & lzo::F_H_CRC32 != 0 { "CRC-32" } else { "Adler-32" };
+    f.node(
+        Node::new("Original name")
+            .span(name_span)
+            .value(Value::Text(name.clone())),
+    );
+    let kind = if flags & lzo::F_H_CRC32 != 0 {
+        "CRC-32"
+    } else {
+        "Adler-32"
+    };
     let ok = parsed.checksum_ok;
     f.u32("Header checksum")
         .hex()
@@ -344,14 +355,19 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
         let start = cur.pos();
         let raw_len = cur.u32().await?;
         if raw_len == 0 {
-            cx.push(Node::new("End of stream").span(cur.since(start))).await;
+            cx.push(Node::new("End of stream").span(cur.since(start)))
+                .await;
             ended = true;
             break;
         }
         let packed = cur.u32().await?;
         let compressed = packed < raw_len;
         let checks = lzo::lzop_block_header_len(flags, compressed).saturating_sub(8);
-        cur.skip(u64::try_from(checks).unwrap_or(0).saturating_add(packed.into()));
+        cur.skip(
+            u64::try_from(checks)
+                .unwrap_or(0)
+                .saturating_add(packed.into()),
+        );
         blocks = blocks.saturating_add(1);
         total = total.saturating_add(raw_len.into());
         let summary = if compressed {
@@ -359,9 +375,12 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{raw_len} bytes, stored")
         };
-        let node = Node::new(format!("Block {blocks}")).span(cur.since(start)).summary(summary);
+        let node = Node::new(format!("Block {blocks}"))
+            .span(cur.since(start))
+            .summary(summary);
         if packed > raw_len || raw_len > lzo::LZOP_MAX_BLOCK {
-            cx.push(node.diag(Diagnostic::malformed("bad block size"))).await;
+            cx.push(node.diag(Diagnostic::malformed("bad block size")))
+                .await;
             break;
         }
         cx.push(node).await;
@@ -370,11 +389,28 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
         cx.diag(Diagnostic::malformed("lzop stream has no end marker").at(file));
     }
     if !matches!(parsed.method, 1..=3) {
-        cx.emit(Node::new("Decompressed").span(file).diag(Diagnostic::unsupported(format!("lzop method {}", parsed.method))));
+        cx.emit(
+            Node::new("Decompressed")
+                .span(file)
+                .diag(Diagnostic::unsupported(format!(
+                    "lzop method {}",
+                    parsed.method
+                ))),
+        );
     } else if flags & lzo::F_H_FILTER != 0 {
-        cx.emit(Node::new("Decompressed").span(file).diag(Diagnostic::unsupported("lzop filters")));
+        cx.emit(
+            Node::new("Decompressed")
+                .span(file)
+                .diag(Diagnostic::unsupported("lzop filters")),
+        );
     } else {
-        cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::Lzop, Some(total)));
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            file,
+            crate::codec::Codec::Lzop,
+            Some(total),
+        ));
     }
     cx.annotate(format!(
         "lzop, originally {name:?} ({}), {blocks} block(s), {total} bytes uncompressed",
@@ -417,10 +453,23 @@ async fn lzf(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{ulen} bytes, stored")
         };
-        cx.push(Node::new(format!("Block {blocks}")).span(cur.since(start)).summary(summary)).await;
+        cx.push(
+            Node::new(format!("Block {blocks}"))
+                .span(cur.since(start))
+                .summary(summary),
+        )
+        .await;
     }
-    cx.emit(crate::formats::content("Decompressed", input, file, crate::codec::Codec::LzfFramed, Some(total)));
-    cx.annotate(format!("LZF, {blocks} block(s), {total} bytes uncompressed"));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        file,
+        crate::codec::Codec::LzfFramed,
+        Some(total),
+    ));
+    cx.annotate(format!(
+        "LZF, {blocks} block(s), {total} bytes uncompressed"
+    ));
     Ok(())
 }
 

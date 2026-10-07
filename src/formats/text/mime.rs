@@ -756,11 +756,20 @@ mod tests {
             "Zoë Żółć <zoe@example>"
         );
         assert_eq!(decode_words("=?koi8-r?b?6dfBziDwxdTSz9c=?="), "Иван Петров");
-        assert_eq!(decode_words("a =?ISO-8859-1?Q?a?= =?ISO-8859-1?Q?b?= c"), "a ab c");
-        assert_eq!(decode_words("=?windows-1250?B?jmx1nW916Gv9IGv58g==?="), "Žluťoučký kůň");
+        assert_eq!(
+            decode_words("a =?ISO-8859-1?Q?a?= =?ISO-8859-1?Q?b?= c"),
+            "a ab c"
+        );
+        assert_eq!(
+            decode_words("=?windows-1250?B?jmx1nW916Gv9IGv58g==?="),
+            "Žluťoučký kůň"
+        );
         // RFC 2231 language suffix; a character split between words.
         assert_eq!(decode_words("=?utf-8*en?q?caf=C3=A9?="), "café");
-        assert_eq!(decode_words("=?UTF-8?B?xb1sdcU=?= =?UTF-8?B?pW91xI0=?="), "Žluťouč");
+        assert_eq!(
+            decode_words("=?UTF-8?B?xb1sdcU=?= =?UTF-8?B?pW91xI0=?="),
+            "Žluťouč"
+        );
         // Not encoded words.
         assert_eq!(decode_words("=?broken"), "=?broken");
         assert_eq!(decode_words("x =?utf-8?x?y?= z"), "x =?utf-8?x?y?= z");
@@ -768,7 +777,9 @@ mod tests {
 
     #[test]
     fn rfc2231_parameters() {
-        let p = Params::parse("attachment; filename*0*=iso-8859-1''%A3%20rates; filename*1=\" for 2026.txt\"");
+        let p = Params::parse(
+            "attachment; filename*0*=iso-8859-1''%A3%20rates; filename*1=\" for 2026.txt\"",
+        );
         assert_eq!(p.get("filename"), Some("£ rates for 2026.txt"));
         let p = Params::parse("text/plain; name=\"plain.txt\"; name*=utf-8''%E2%82%AC.txt");
         assert_eq!(p.get("name"), Some("€.txt"));

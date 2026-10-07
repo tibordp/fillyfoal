@@ -23,7 +23,9 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::{hex, plural, list, plausible_f32, plausible_f64, prefix, printable, short_text, uint, widen};
+use super::{
+    hex, list, plausible_f32, plausible_f64, plural, prefix, printable, short_text, uint, widen,
+};
 
 declare_format!(pub FORMAT = "protobuf", "Protocol Buffers message (no schema)",
     ["pb", "protobuf", "binpb"], "application/x-protobuf", Probe::Never, dissect);

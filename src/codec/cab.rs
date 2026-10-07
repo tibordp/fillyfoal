@@ -84,7 +84,9 @@ impl FolderDecoder {
                 stream: Vec::new(),
                 frames: std::collections::VecDeque::new(),
             }),
-            m => Err(Diagnostic::unsupported(format!("cabinet compression method {m}"))),
+            m => Err(Diagnostic::unsupported(format!(
+                "cabinet compression method {m}"
+            ))),
         };
         FolderDecoder {
             folder,
@@ -96,13 +98,22 @@ impl FolderDecoder {
 
     /// The next block, if all of it is in `input`: `(data, unpacked size,
     /// end)`.
-    fn block(at: usize, reserve: u8, input: &[u8], eof: bool) -> Result<Option<(&[u8], usize, usize)>> {
+    fn block(
+        at: usize,
+        reserve: u8,
+        input: &[u8],
+        eof: bool,
+    ) -> Result<Option<(&[u8], usize, usize)>> {
         let head = 8usize.saturating_add(usize::from(reserve));
         let (Some(packed), Some(unpacked)) = (
             crate::bytes::u16_le(input, at.saturating_add(4)),
             crate::bytes::u16_le(input, at.saturating_add(6)),
         ) else {
-            return if eof { Err(bad("truncated data block header")) } else { Ok(None) };
+            return if eof {
+                Err(bad("truncated data block header"))
+            } else {
+                Ok(None)
+            };
         };
         let start = at.saturating_add(head);
         let end = start.saturating_add(usize::from(packed));
@@ -116,21 +127,35 @@ impl FolderDecoder {
 
 fn check_limit(len: usize, limit: usize) -> Result<()> {
     if len > limit {
-        Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")))
+        Err(Diagnostic::limit(format!(
+            "decompressed data exceeds {limit:#x} bytes"
+        )))
     } else {
         Ok(())
     }
 }
 
 impl Decoder for FolderDecoder {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         let target = out.len().saturating_add(step);
         let start_len = out.len();
         let method = self.method.as_mut().map_err(|e| e.clone())?;
         loop {
             // LZX: decode the frames whose data is all in (a frame may read
             // a pad byte from the next block).
-            if let Method::Lzx { core, stream, frames } = method {
+            if let Method::Lzx {
+                core,
+                stream,
+                frames,
+            } = method
+            {
                 let ended = eof && self.at >= input.len();
                 while let Some(&len) = frames.front() {
                     if frames.len() < 2 && !ended || out.len() >= target {
@@ -150,7 +175,11 @@ impl Decoder for FolderDecoder {
             }
             if self.at >= input.len() {
                 if !eof {
-                    return Ok(if out.len() > start_len { Status::More } else { Status::NeedInput });
+                    return Ok(if out.len() > start_len {
+                        Status::More
+                    } else {
+                        Status::NeedInput
+                    });
                 }
                 if let Method::Lzx { frames, .. } = method
                     && !frames.is_empty()
@@ -159,8 +188,14 @@ impl Decoder for FolderDecoder {
                 }
                 return Ok(Status::Done);
             }
-            let Some((data, unpacked, end)) = Self::block(self.at, self.folder.data_reserve, input, eof)? else {
-                return Ok(if out.len() > start_len { Status::More } else { Status::NeedInput });
+            let Some((data, unpacked, end)) =
+                Self::block(self.at, self.folder.data_reserve, input, eof)?
+            else {
+                return Ok(if out.len() > start_len {
+                    Status::More
+                } else {
+                    Status::NeedInput
+                });
             };
             self.at = end;
             match method {
@@ -176,9 +211,12 @@ impl Decoder for FolderDecoder {
                         return Err(bad("MSZIP block without 'CK' signature"));
                     };
                     check_limit(out.len().saturating_add(unpacked), limit)?;
-                    let (block, _) = inflate::inflate_with_dictionary(body, &self.dict, unpacked).map_err(|e| {
+                    let (block, _) = inflate::inflate_with_dictionary(body, &self.dict, unpacked)
+                        .map_err(|e| {
                         if e.kind == DiagKind::Limit {
-                            bad(format!("MSZIP block decodes to more than {unpacked:#x} bytes"))
+                            bad(format!(
+                                "MSZIP block decodes to more than {unpacked:#x} bytes"
+                            ))
                         } else {
                             e
                         }

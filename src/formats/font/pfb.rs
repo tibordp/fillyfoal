@@ -87,8 +87,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             node = node.lazy(ascii_segment, body);
         } else if kind == 2 {
             node = node
-                .desc("Private dictionary and CharStrings, eexec-encrypted (decrypted on expansion)")
-                .lazy(crate::formats::font::type1::expand_private, (input, body, false));
+                .desc(
+                    "Private dictionary and CharStrings, eexec-encrypted (decrypted on expansion)",
+                )
+                .lazy(
+                    crate::formats::font::type1::expand_private,
+                    (input, body, false),
+                );
         }
         cx.push(node).await;
         index = index.saturating_add(1);

@@ -14,7 +14,11 @@ pub struct Crc {
 }
 
 const fn mask(width: u32) -> u64 {
-    if width >= 64 { u64::MAX } else { (1u64 << width).wrapping_sub(1) }
+    if width >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << width).wrapping_sub(1)
+    }
 }
 
 impl Crc {
@@ -36,7 +40,11 @@ impl Crc {
         let mut table = [0u64; 256];
         let mut n = 0;
         while n < 256 {
-            let mut c = if reflected { n as u64 } else { (n as u64) << (width - 8) };
+            let mut c = if reflected {
+                n as u64
+            } else {
+                (n as u64) << (width - 8)
+            };
             let mut k = 0;
             while k < 8 {
                 c = if reflected {
@@ -51,7 +59,13 @@ impl Crc {
             table[n] = c;
             n += 1;
         }
-        Crc { table, width, reflected, init: init & m, xorout: xorout & m }
+        Crc {
+            table,
+            width,
+            reflected,
+            init: init & m,
+            xorout: xorout & m,
+        }
     }
 
     /// The initial register value.
@@ -203,7 +217,13 @@ mod tests {
     #[test]
     fn raw_updates_compose() {
         let (a, b) = b"1234567890abcdef".split_at(7);
-        assert_eq!(!crc32_update(crc32_update(!0, a), b), crc32(b"1234567890abcdef"));
-        assert_eq!(!crc32c_update(crc32c_update(!0, a), b), crc32c(b"1234567890abcdef"));
+        assert_eq!(
+            !crc32_update(crc32_update(!0, a), b),
+            crc32(b"1234567890abcdef")
+        );
+        assert_eq!(
+            !crc32c_update(crc32c_update(!0, a), b),
+            crc32c(b"1234567890abcdef")
+        );
     }
 }

@@ -72,21 +72,42 @@ impl<'a> Range<'a> {
         if data.first() != Some(&0) {
             return Err(bad("range coder does not start with 0"));
         }
-        let code = data.get(1..5).ok_or_else(|| bad("truncated range coder"))?.iter().fold(0u32, |a, &b| a << 8 | u32::from(b));
-        Ok(Range { data, pos: 5, range: 0xffff_ffff, code })
+        let code = data
+            .get(1..5)
+            .ok_or_else(|| bad("truncated range coder"))?
+            .iter()
+            .fold(0u32, |a, &b| a << 8 | u32::from(b));
+        Ok(Range {
+            data,
+            pos: 5,
+            range: 0xffff_ffff,
+            code,
+        })
     }
 
     fn resume(data: &'a [u8], r: Registers) -> Self {
-        Range { data, pos: r.pos, range: r.range, code: r.code }
+        Range {
+            data,
+            pos: r.pos,
+            range: r.range,
+            code: r.code,
+        }
     }
 
     fn registers(&self) -> Registers {
-        Registers { pos: self.pos, range: self.range, code: self.code }
+        Registers {
+            pos: self.pos,
+            range: self.range,
+            code: self.code,
+        }
     }
 
     fn normalize(&mut self) -> Result<()> {
         if self.range < 1 << 24 {
-            let b = *self.data.get(self.pos).ok_or_else(|| bad("unexpected end of data"))?;
+            let b = *self
+                .data
+                .get(self.pos)
+                .ok_or_else(|| bad("unexpected end of data"))?;
             self.pos = self.pos.saturating_add(1);
             self.range <<= 8;
             self.code = self.code << 8 | u32::from(b);
@@ -157,16 +178,28 @@ struct Len {
 
 impl Len {
     fn new() -> Self {
-        Len { choice: PROB_INIT, choice2: PROB_INIT, low: vec![[PROB_INIT; 8]; 16], mid: vec![[PROB_INIT; 8]; 16], high: [PROB_INIT; 256] }
+        Len {
+            choice: PROB_INIT,
+            choice2: PROB_INIT,
+            low: vec![[PROB_INIT; 8]; 16],
+            mid: vec![[PROB_INIT; 8]; 16],
+            high: [PROB_INIT; 256],
+        }
     }
 
     fn decode(&mut self, rc: &mut Range<'_>, pos_state: usize) -> Result<u32> {
         if rc.bit(&mut self.choice)? == 0 {
-            let t = self.low.get_mut(pos_state).ok_or_else(|| bad("position state"))?;
+            let t = self
+                .low
+                .get_mut(pos_state)
+                .ok_or_else(|| bad("position state"))?;
             return rc.tree(t, 3);
         }
         if rc.bit(&mut self.choice2)? == 0 {
-            let t = self.mid.get_mut(pos_state).ok_or_else(|| bad("position state"))?;
+            let t = self
+                .mid
+                .get_mut(pos_state)
+                .ok_or_else(|| bad("position state"))?;
             return Ok(8u32.wrapping_add(rc.tree(t, 3)?));
         }
         Ok(16u32.wrapping_add(rc.tree(&mut self.high, 8)?))
@@ -187,10 +220,13 @@ impl Props {
             return Err(bad("invalid properties byte"));
         }
         let b = u32::from(b);
-        Ok(Props { lc: b % 9, lp: (b / 9) % 5, pb: b / 45 })
+        Ok(Props {
+            lc: b % 9,
+            lp: (b / 9) % 5,
+            pb: b / 45,
+        })
     }
 }
-
 
 /// Where a stream's output lives in a buffer: stream position `p` is at
 /// index `p + start - dropped` (`start` when the buffer is shared `out`
@@ -275,7 +311,12 @@ impl State {
     /// A match distance (minus one), for a match of length `len` (minus 2).
     fn distance(&mut self, rc: &mut Range<'_>, len: u32) -> Result<u32> {
         let len_state = usize::try_from(len.min(3)).unwrap_or(3);
-        let slot = rc.tree(self.pos_slot.get_mut(len_state).ok_or_else(|| bad("length state"))?, 6)?;
+        let slot = rc.tree(
+            self.pos_slot
+                .get_mut(len_state)
+                .ok_or_else(|| bad("length state"))?,
+            6,
+        )?;
         if slot < 4 {
             return Ok(slot);
         }
@@ -283,11 +324,15 @@ impl State {
         let base = (2 | (slot & 1)) << direct;
         Ok(if slot < 14 {
             let start = usize::try_from(base.wrapping_sub(slot)).unwrap_or(0);
-            let probs = self.special.get_mut(start..).ok_or_else(|| bad("distance"))?;
+            let probs = self
+                .special
+                .get_mut(start..)
+                .ok_or_else(|| bad("distance"))?;
             base.wrapping_add(rc.reverse(probs, direct)?)
         } else {
             let high = rc.direct(direct.wrapping_sub(4))? << 4;
-            base.wrapping_add(high).wrapping_add(rc.reverse(&mut self.align, 4)?)
+            base.wrapping_add(high)
+                .wrapping_add(rc.reverse(&mut self.align, 4)?)
         })
     }
 
@@ -301,7 +346,12 @@ impl State {
             if rc.bit(is_match)? == 0 {
                 return Ok(false);
             }
-            if rc.bit(self.is_rep.get_mut(self.state).ok_or_else(|| bad("state"))?)? == 1 {
+            if rc.bit(
+                self.is_rep
+                    .get_mut(self.state)
+                    .ok_or_else(|| bad("state"))?,
+            )? == 1
+            {
                 return Ok(false);
             }
             let len = self.len.decode(rc, pos_state)?;
@@ -336,18 +386,37 @@ impl State {
             let mut bit = rc.bit(self.is_match.get_mut(idx).ok_or_else(|| bad("state"))?)?;
             if bit == 0 {
                 // Literal.
-                let prev = if out.len() > first { out.last().copied().unwrap_or(0) } else { 0 };
-                let base = 0x300usize.wrapping_mul(((position & lp_mask) << lc).wrapping_add(usize::from(prev) >> (8u32.saturating_sub(lc))));
-                let probs = self.literal.get_mut(base..base.wrapping_add(0x300)).ok_or_else(|| bad("literal state"))?;
+                let prev = if out.len() > first {
+                    out.last().copied().unwrap_or(0)
+                } else {
+                    0
+                };
+                let base = 0x300usize.wrapping_mul(
+                    ((position & lp_mask) << lc)
+                        .wrapping_add(usize::from(prev) >> (8u32.saturating_sub(lc))),
+                );
+                let probs = self
+                    .literal
+                    .get_mut(base..base.wrapping_add(0x300))
+                    .ok_or_else(|| bad("literal state"))?;
                 let mut sym = 1usize;
                 if s >= 7 {
                     let dist = usize::try_from(self.reps[0]).unwrap_or(0).wrapping_add(1);
-                    let mut match_byte = out.len().checked_sub(dist).filter(|&i| i >= first).and_then(|i| out.get(i)).copied().ok_or_else(|| bad("match distance"))?;
+                    let mut match_byte = out
+                        .len()
+                        .checked_sub(dist)
+                        .filter(|&i| i >= first)
+                        .and_then(|i| out.get(i))
+                        .copied()
+                        .ok_or_else(|| bad("match distance"))?;
                     loop {
                         let match_bit = usize::from(match_byte >> 7 & 1);
                         match_byte <<= 1;
                         let i = 0x100usize.wrapping_add(match_bit << 8).wrapping_add(sym);
-                        let b = usize::try_from(rc.bit(probs.get_mut(i).ok_or_else(|| bad("literal"))?)?).unwrap_or(0);
+                        let b = usize::try_from(
+                            rc.bit(probs.get_mut(i).ok_or_else(|| bad("literal"))?)?,
+                        )
+                        .unwrap_or(0);
                         sym = sym << 1 | b;
                         if match_bit != b || sym >= 0x100 {
                             break;
@@ -355,11 +424,19 @@ impl State {
                     }
                 }
                 while sym < 0x100 {
-                    let b = usize::try_from(rc.bit(probs.get_mut(sym).ok_or_else(|| bad("literal"))?)?).unwrap_or(0);
+                    let b =
+                        usize::try_from(rc.bit(probs.get_mut(sym).ok_or_else(|| bad("literal"))?)?)
+                            .unwrap_or(0);
                     sym = sym << 1 | b;
                 }
                 out.push(u8::try_from(sym & 0xff).unwrap_or(0));
-                self.state = if s < 4 { 0 } else if s < 10 { s.wrapping_sub(3) } else { s.wrapping_sub(6) };
+                self.state = if s < 4 {
+                    0
+                } else if s < 10 {
+                    s.wrapping_sub(3)
+                } else {
+                    s.wrapping_sub(6)
+                };
                 continue;
             }
             let len;
@@ -373,7 +450,13 @@ impl State {
                         // Short rep: one byte at rep0.
                         self.state = if s < 7 { 9 } else { 11 };
                         let dist = usize::try_from(self.reps[0]).unwrap_or(0).wrapping_add(1);
-                        let b = out.len().checked_sub(dist).filter(|&i| i >= first).and_then(|i| out.get(i)).copied().ok_or_else(|| bad("match distance"))?;
+                        let b = out
+                            .len()
+                            .checked_sub(dist)
+                            .filter(|&i| i >= first)
+                            .and_then(|i| out.get(i))
+                            .copied()
+                            .ok_or_else(|| bad("match distance"))?;
                         out.push(b);
                         continue;
                     }
@@ -408,7 +491,9 @@ impl State {
                 self.reps[0] = dist;
             }
             let len = usize::try_from(len).unwrap_or(0).wrapping_add(2);
-            let dist = usize::try_from(self.reps[0]).unwrap_or(usize::MAX).wrapping_add(1);
+            let dist = usize::try_from(self.reps[0])
+                .unwrap_or(usize::MAX)
+                .wrapping_add(1);
             if dist > out.len().saturating_sub(b.dict) {
                 return Err(bad("match distance beyond the dictionary"));
             }
@@ -457,7 +542,20 @@ pub struct LzmaStream {
 impl LzmaStream {
     /// A `.lzma` stream.
     pub fn alone() -> Self {
-        LzmaStream { header: 13, data_at: 13, props: Props { lc: 0, lp: 0, pb: 0 }, size: None, dict: None, running: None, consumed: 0, done: false }
+        LzmaStream {
+            header: 13,
+            data_at: 13,
+            props: Props {
+                lc: 0,
+                lp: 0,
+                pb: 0,
+            },
+            size: None,
+            dict: None,
+            running: None,
+            consumed: 0,
+            done: false,
+        }
     }
 
     /// Raw LZMA with known properties; `size` is the decoded size and
@@ -465,30 +563,67 @@ impl LzmaStream {
     /// dictionary can be released).
     pub fn raw(props: Props, size: Option<usize>, dict: Option<u32>) -> Self {
         let dict = dict.map(|d| usize::try_from(d).unwrap_or(usize::MAX).max(4096));
-        LzmaStream { header: 0, data_at: 0, props, size, dict, running: None, consumed: 0, done: false }
+        LzmaStream {
+            header: 0,
+            data_at: 0,
+            props,
+            size,
+            dict,
+            running: None,
+            consumed: 0,
+            done: false,
+        }
     }
 
     fn start(&mut self, input: &[u8], out: &[u8], limit: usize) -> Result<Running> {
         if self.header > 0 {
             self.props = Props::from_byte(*input.first().ok_or_else(|| bad("truncated header"))?)?;
-            let size = input.get(5..13).and_then(|s| s.try_into().ok()).map(u64::from_le_bytes).ok_or_else(|| bad("truncated header"))?;
+            let size = input
+                .get(5..13)
+                .and_then(|s| s.try_into().ok())
+                .map(u64::from_le_bytes)
+                .ok_or_else(|| bad("truncated header"))?;
             self.size = (size != u64::MAX).then(|| usize::try_from(size).unwrap_or(usize::MAX));
-            let dict = input.get(1..5).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes).ok_or_else(|| bad("truncated header"))?;
+            let dict = input
+                .get(1..5)
+                .and_then(|s| s.try_into().ok())
+                .map(u32::from_le_bytes)
+                .ok_or_else(|| bad("truncated header"))?;
             // Smaller dictionaries decode as 4 KiB ones (as in xz).
             self.dict = Some(usize::try_from(dict).unwrap_or(usize::MAX).max(4096));
-            if self.size.is_some_and(|e| e > limit.saturating_sub(out.len())) {
-                return Err(Diagnostic::limit(format!("LZMA data claims {size:#x} bytes")));
+            if self
+                .size
+                .is_some_and(|e| e > limit.saturating_sub(out.len()))
+            {
+                return Err(Diagnostic::limit(format!(
+                    "LZMA data claims {size:#x} bytes"
+                )));
             }
         }
         let rc = Range::new(input.get(self.header..).unwrap_or_default())?.registers();
-        let view = View { start: out.len(), dropped: 0 };
+        let view = View {
+            start: out.len(),
+            dropped: 0,
+        };
         let end = self.size.map(|s| s.saturating_add(out.len()));
-        Ok(Running { state: State::new(self.props), rc, view, end })
+        Ok(Running {
+            state: State::new(self.props),
+            rc,
+            view,
+            end,
+        })
     }
 }
 
 impl Decoder for LzmaStream {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         if self.done {
             return Ok(Status::Done);
         }
@@ -508,7 +643,11 @@ impl Decoder for LzmaStream {
             dict: r.view.index(0),
             end: r.end,
             stop: out.len().saturating_add(step.max(1)),
-            avail: if eof { usize::MAX } else { data.len().saturating_sub(MARGIN) },
+            avail: if eof {
+                usize::MAX
+            } else {
+                data.len().saturating_sub(MARGIN)
+            },
             limit,
         };
         let mut rc = Range::resume(data, r.rc);
@@ -519,7 +658,11 @@ impl Decoder for LzmaStream {
             // The known size reached: an end marker may follow (the
             // encoder's choice). Consume it if so.
             if !eof && data.len() < r.rc.pos.saturating_add(MARGIN) {
-                return Ok(if out.len() > mark { Status::More } else { Status::NeedInput });
+                return Ok(if out.len() > mark {
+                    Status::More
+                } else {
+                    Status::NeedInput
+                });
             }
             if r.state.end_marker(&mut rc, r.view.position(out.len())) {
                 self.consumed = self.data_at.saturating_add(rc.pos);
@@ -547,7 +690,11 @@ impl Decoder for LzmaStream {
     /// Everything consumed, once decoding has started (the header is read
     /// once, when it does).
     fn releasable_input(&self) -> usize {
-        if self.running.is_some() || self.done { self.consumed } else { 0 }
+        if self.running.is_some() || self.done {
+            self.consumed
+        } else {
+            0
+        }
     }
 
     fn release_input(&mut self, n: usize) {
@@ -566,7 +713,10 @@ impl Decoder for LzmaStream {
             return out_len;
         }
         match (self.running.as_ref(), self.dict) {
-            (Some(r), Some(dict)) => out_len.saturating_sub(dict).max(r.view.index(0)).min(out_len),
+            (Some(r), Some(dict)) => out_len
+                .saturating_sub(dict)
+                .max(r.view.index(0))
+                .min(out_len),
             _ => 0,
         }
     }
@@ -618,13 +768,18 @@ pub struct Lzma2 {
 
 /// `Ok(NeedInput)` before the end of the input, else the error.
 fn short(eof: bool, what: &str) -> Result<Chunk> {
-    if eof { Err(bad(what)) } else { Ok(Chunk::NeedInput) }
+    if eof {
+        Err(bad(what))
+    } else {
+        Ok(Chunk::NeedInput)
+    }
 }
 
 impl Lzma2 {
     /// Input bytes consumed so far.
     pub fn consumed(&self) -> usize {
-        self.open.map_or(self.pos, |o| o.data_at.saturating_add(o.rc.pos))
+        self.open
+            .map_or(self.pos, |o| o.data_at.saturating_add(o.rc.pos))
     }
 
     /// Whether the end marker has been decoded.
@@ -654,7 +809,15 @@ impl Lzma2 {
     /// Decodes more of `input` (the LZMA2 data so far) into `out`, pausing
     /// between symbols once `out` reaches `stop` bytes. `view` locates this
     /// stream in `out`; `limit` bounds `out`'s length.
-    pub fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, view: View, stop: usize, limit: usize) -> Result<Chunk> {
+    pub fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        view: View,
+        stop: usize,
+        limit: usize,
+    ) -> Result<Chunk> {
         if self.done {
             return Ok(Chunk::End);
         }
@@ -672,14 +835,23 @@ impl Lzma2 {
         if !complete && eof {
             return Err(bad("truncated chunk"));
         }
-        let data = input.get(open.data_at..chunk_end.min(input.len())).unwrap_or_default();
-        let st = self.state.as_mut().ok_or_else(|| bad("LZMA chunk before properties"))?;
+        let data = input
+            .get(open.data_at..chunk_end.min(input.len()))
+            .unwrap_or_default();
+        let st = self
+            .state
+            .as_mut()
+            .ok_or_else(|| bad("LZMA chunk before properties"))?;
         let bounds = Bounds {
             view,
             dict: view.index(self.dict),
             end: Some(view.index(open.end)),
             stop,
-            avail: if complete { usize::MAX } else { data.len().saturating_sub(MARGIN) },
+            avail: if complete {
+                usize::MAX
+            } else {
+                data.len().saturating_sub(MARGIN)
+            },
             limit,
         };
         let mark = out.len();
@@ -689,14 +861,28 @@ impl Lzma2 {
             self.open = None;
             return Ok(Chunk::Decoded);
         }
-        self.open = Some(Open { rc: rc.registers(), ..open });
-        Ok(if out.len() > mark { Chunk::Decoded } else { Chunk::NeedInput })
+        self.open = Some(Open {
+            rc: rc.registers(),
+            ..open
+        });
+        Ok(if out.len() > mark {
+            Chunk::Decoded
+        } else {
+            Chunk::NeedInput
+        })
     }
 
     /// Starts the next chunk once its header (and, for an LZMA chunk, the
     /// range coder's first bytes) has arrived: copies an uncompressed chunk
     /// whole, or opens an LZMA chunk for [`step`](Self::step) to decode.
-    fn begin(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, view: View, limit: usize) -> Result<Chunk> {
+    fn begin(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        view: View,
+        limit: usize,
+    ) -> Result<Chunk> {
         let pos = self.pos;
         let Some(&control) = input.get(pos) else {
             return short(eof, "truncated LZMA2 data");
@@ -713,7 +899,9 @@ impl Lzma2 {
                     return short(eof, "truncated chunk");
                 }
                 let size = (at(1) << 8 | at(2)).saturating_add(1);
-                let Some(data) = input.get(pos.saturating_add(3)..pos.saturating_add(3).saturating_add(size)) else {
+                let Some(data) =
+                    input.get(pos.saturating_add(3)..pos.saturating_add(3).saturating_add(size))
+                else {
                     return short(eof, "truncated chunk");
                 };
                 if control == 0x01 {
@@ -730,15 +918,20 @@ impl Lzma2 {
                 if input.len() < pos.saturating_add(5) {
                     return short(eof, "truncated chunk header");
                 }
-                let unpacked = (usize::from(control & 0x1f) << 16 | at(1) << 8 | at(2)).saturating_add(1);
+                let unpacked =
+                    (usize::from(control & 0x1f) << 16 | at(1) << 8 | at(2)).saturating_add(1);
                 let packed = (at(3) << 8 | at(4)).saturating_add(1);
                 let reset = (control >> 5) & 3;
-                let data_at = pos.saturating_add(5).saturating_add(usize::from(reset >= 2));
+                let data_at = pos
+                    .saturating_add(5)
+                    .saturating_add(usize::from(reset >= 2));
                 if input.len() < data_at {
                     return short(eof, "truncated properties");
                 }
                 let chunk_end = data_at.saturating_add(packed);
-                if input.len() < chunk_end && (eof || input.len() < data_at.saturating_add(packed.min(5))) {
+                if input.len() < chunk_end
+                    && (eof || input.len() < data_at.saturating_add(packed.min(5)))
+                {
                     return short(eof, "truncated chunk");
                 }
                 if reset == 3 {
@@ -751,18 +944,32 @@ impl Lzma2 {
                     }
                     self.state = Some(State::new(props));
                 } else if reset == 1 {
-                    let props = self.state.as_ref().map(|s| s.props).ok_or_else(|| bad("state reset before properties"))?;
+                    let props = self
+                        .state
+                        .as_ref()
+                        .map(|s| s.props)
+                        .ok_or_else(|| bad("state reset before properties"))?;
                     self.state = Some(State::new(props));
                 }
                 if self.state.is_none() {
                     return Err(bad("LZMA chunk before properties"));
                 }
-                let rc = Range::new(input.get(data_at..chunk_end.min(input.len())).unwrap_or_default())?.registers();
+                let rc = Range::new(
+                    input
+                        .get(data_at..chunk_end.min(input.len()))
+                        .unwrap_or_default(),
+                )?
+                .registers();
                 if out.len().saturating_add(unpacked) > limit {
                     return Err(too_large(limit));
                 }
                 let end = view.position(out.len()).saturating_add(unpacked);
-                self.open = Some(Open { data_at, packed, end, rc });
+                self.open = Some(Open {
+                    data_at,
+                    packed,
+                    end,
+                    rc,
+                });
                 Ok(Chunk::Decoded)
             }
             _ => Err(bad("invalid LZMA2 control byte")),
@@ -799,8 +1006,18 @@ pub fn lzma2_dict(prop: u8) -> Option<u32> {
 }
 
 impl Decoder for Lzma2Stream {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
-        let view = *self.view.get_or_insert(View { start: out.len(), dropped: 0 });
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        let view = *self.view.get_or_insert(View {
+            start: out.len(),
+            dropped: 0,
+        });
         let mark = out.len();
         let target = mark.saturating_add(step.max(1));
         loop {
@@ -892,7 +1109,13 @@ pub struct PostState {
 
 impl PostState {
     pub fn new(kind: Post) -> Self {
-        PostState { kind, pos: 0, prev_pos: u64::MAX, prev_mask: 0, history: [0; 256] }
+        PostState {
+            kind,
+            pos: 0,
+            prev_pos: u64::MAX,
+            prev_mask: 0,
+            history: [0; 256],
+        }
     }
 
     /// Filters `buf`, the stream from this filter's position on, in place,
@@ -941,7 +1164,12 @@ impl PostState {
                 self.prev_mask = (self.prev_mask << (gap.wrapping_sub(1) & 31)) & 7;
                 if self.prev_mask != 0 {
                     let m = usize::try_from(self.prev_mask).unwrap_or(0);
-                    let b = byte(buf, i.wrapping_add(4).wrapping_sub(usize::try_from(BIT_NUM.get(m).copied().unwrap_or(0)).unwrap_or(0)));
+                    let b = byte(
+                        buf,
+                        i.wrapping_add(4).wrapping_sub(
+                            usize::try_from(BIT_NUM.get(m).copied().unwrap_or(0)).unwrap_or(0),
+                        ),
+                    );
                     if !ALLOWED.get(m).copied().unwrap_or(false) || test_ms(b) {
                         self.prev_pos = at(i);
                         self.prev_mask = self.prev_mask << 1 | 1;
@@ -952,18 +1180,28 @@ impl PostState {
             }
             self.prev_pos = at(i);
             if test_ms(byte(buf, i.saturating_add(4))) {
-                let src_bytes: [u8; 4] = buf.get(i.saturating_add(1)..i.saturating_add(5)).and_then(|s| s.try_into().ok()).unwrap_or([0; 4]);
+                let src_bytes: [u8; 4] = buf
+                    .get(i.saturating_add(1)..i.saturating_add(5))
+                    .and_then(|s| s.try_into().ok())
+                    .unwrap_or([0; 4]);
                 let mut src = u32::from_le_bytes(src_bytes);
                 // The position after the instruction, modulo 2^32.
-                let pos = u32::try_from(at(i) & 0xffff_ffff).unwrap_or(0).wrapping_add(5);
+                let pos = u32::try_from(at(i) & 0xffff_ffff)
+                    .unwrap_or(0)
+                    .wrapping_add(5);
                 let mut dest;
                 loop {
                     dest = src.wrapping_sub(pos);
                     if self.prev_mask == 0 {
                         break;
                     }
-                    let j = BIT_NUM.get(usize::try_from(self.prev_mask).unwrap_or(0)).copied().unwrap_or(0).wrapping_mul(8);
-                    let b = u8::try_from((dest >> (24u32.wrapping_sub(j) & 31)) & 0xff).unwrap_or(0);
+                    let j = BIT_NUM
+                        .get(usize::try_from(self.prev_mask).unwrap_or(0))
+                        .copied()
+                        .unwrap_or(0)
+                        .wrapping_mul(8);
+                    let b =
+                        u8::try_from((dest >> (24u32.wrapping_sub(j) & 31)) & 0xff).unwrap_or(0);
                     if !test_ms(b) {
                         break;
                     }
@@ -990,7 +1228,12 @@ impl PostState {
         let mut p = self.pos;
         for b in buf.iter_mut() {
             if p >= d {
-                *b = b.wrapping_add(self.history.get(slot(p.wrapping_sub(d))).copied().unwrap_or(0));
+                *b = b.wrapping_add(
+                    self.history
+                        .get(slot(p.wrapping_sub(d)))
+                        .copied()
+                        .unwrap_or(0),
+                );
             }
             if let Some(h) = self.history.get_mut(slot(p)) {
                 *h = *b;
@@ -1003,7 +1246,9 @@ impl PostState {
 /// The program counter (modulo 2^32) of the word at index `i` of a buffer
 /// starting at stream position `pos`.
 fn pc(pos: u64, i: usize) -> u32 {
-    u32::try_from(pos & 0xffff_ffff).unwrap_or(0).wrapping_add(u32::try_from(i).unwrap_or(0).wrapping_mul(4))
+    u32::try_from(pos & 0xffff_ffff)
+        .unwrap_or(0)
+        .wrapping_add(u32::try_from(i).unwrap_or(0).wrapping_mul(4))
 }
 
 /// ARM (32-bit) BCJ: BL instructions, over the whole words of `buf`.

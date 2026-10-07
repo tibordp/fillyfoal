@@ -10,10 +10,10 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::wire::flatbuffers::mem::{Table, deref, table};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::formats::util::wire::flatbuffers::mem::{Table, deref, table};
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 const MAGIC: &[u8] = b"ARROW1";
@@ -117,7 +117,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .and_then(|p| table(data, p))
         .ok_or_else(|| Diagnostic::malformed("invalid footer table").at(span))?;
     let schema = footer.table(data, 1);
-    let fields = schema.and_then(|s| s.vector(data, 1, 4)).map_or(0, |(n, _)| n);
+    let fields = schema
+        .and_then(|s| s.vector(data, 1, 4))
+        .map_or(0, |(n, _)| n);
     let batches = footer.vector(data, 3, 24).map_or(0, |(n, _)| n);
     let version = footer.i16(data, 0).unwrap_or(0);
     cx.annotate(format!(

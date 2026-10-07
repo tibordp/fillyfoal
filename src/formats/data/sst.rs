@@ -10,13 +10,13 @@
 //! and XXH3 checksums are not handled.
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
+use crate::codec::crc::crc32c;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
-use crate::codec::crc::crc32c;
 
 const LEVELDB_MAGIC: u64 = 0xdb47_7524_8b80_fb57;
 const ROCKSDB_MAGIC: u64 = 0x88e2_41b7_85f4_cff7;
@@ -118,7 +118,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let at = usize::from(rocks);
     let flavor = Flavor {
         rocks,
-        version: if rocks { u32_le(footer, 41).unwrap_or(0) } else { 0 },
+        version: if rocks {
+            u32_le(footer, 41).unwrap_or(0)
+        } else {
+            0
+        },
     };
     let (meta_off, meta_size, e) = handle(footer, at)
         .ok_or_else(|| Diagnostic::malformed("invalid meta-index handle").at(footer_span))?;
@@ -135,7 +139,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Index block")
             .span(file.sub(index_off, index_size.saturating_add(5)))
             .summary(format!("{blocks} entries"))
-            .lazy(block, (input, index_off, index_size, BlockKind::Index, flavor)),
+            .lazy(
+                block,
+                (input, index_off, index_size, BlockKind::Index, flavor),
+            ),
     );
     cx.emit(
         Node::new("Meta-index block")
@@ -285,7 +292,13 @@ async fn read_block(
     Ok((data, kind, diag))
 }
 
-async fn block_entries(cx: &Cx, file: Span, offset: u64, size: u64, flavor: Flavor) -> Result<Vec<Entry>> {
+async fn block_entries(
+    cx: &Cx,
+    file: Span,
+    offset: u64,
+    size: u64,
+    flavor: Flavor,
+) -> Result<Vec<Entry>> {
     let (data, kind, _) = read_block(cx, file, offset, size).await?;
     let (data, _) = decompress(cx, file.sub(offset, size), data, kind, flavor).await?;
     entries(&data)
@@ -293,7 +306,13 @@ async fn block_entries(cx: &Cx, file: Span, offset: u64, size: u64, flavor: Flav
 
 /// The plain bytes of a block and their span (in a derived source when the
 /// block is compressed).
-async fn decompress(cx: &Cx, span: Span, data: Vec<u8>, kind: u8, flavor: Flavor) -> Result<(Vec<u8>, Span)> {
+async fn decompress(
+    cx: &Cx,
+    span: Span,
+    data: Vec<u8>,
+    kind: u8,
+    flavor: Flavor,
+) -> Result<(Vec<u8>, Span)> {
     use crate::codec::Codec;
     let codec = match (kind, flavor.rocks) {
         (0, _) => return Ok((data, span)),
@@ -315,19 +334,28 @@ async fn decompress(cx: &Cx, span: Span, data: Vec<u8>, kind: u8, flavor: Flavor
     // decoded size as a varint32; version 1 gave LZ4 an 8-byte size.
     let (skip, expected) = match (kind, flavor.rocks) {
         (2 | 3 | 4 | 5 | 7, true) if flavor.version >= 2 => {
-            let (size, end) = varint(&data, 0).ok_or_else(|| Diagnostic::malformed("bad size prefix").at(span))?;
+            let (size, end) = varint(&data, 0)
+                .ok_or_else(|| Diagnostic::malformed("bad size prefix").at(span))?;
             (end, Some(size))
         }
         (4 | 5, true) => (8, u64_le(&data, 0)),
         _ => (0, None),
     };
     let skip = to_u64(skip);
-    let decoded =
-        crate::codec::decode_span(cx, span.sub(skip, span.len.saturating_sub(skip)), &codec, expected).await?;
+    let decoded = crate::codec::decode_span(
+        cx,
+        span.sub(skip, span.len.saturating_sub(skip)),
+        &codec,
+        expected,
+    )
+    .await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
     }
-    Ok((crate::codec::read_all(cx, decoded.span).await?, decoded.span))
+    Ok((
+        crate::codec::read_all(cx, decoded.span).await?,
+        decoded.span,
+    ))
 }
 
 fn text(bytes: &[u8]) -> Value {
@@ -356,7 +384,10 @@ fn internal_key(key: &[u8]) -> (Value, String) {
     (text(user), format!("seq {}, {kind}", t >> 8))
 }
 
-async fn block(cx: Cx, (input, offset, size, kind, flavor): (Input, u64, u64, BlockKind, Flavor)) -> Result<()> {
+async fn block(
+    cx: Cx,
+    (input, offset, size, kind, flavor): (Input, u64, u64, BlockKind, Flavor),
+) -> Result<()> {
     let file = input.span;
     let (data, compression, diag) = read_block(&cx, file, offset, size).await?;
     if let Some(d) = diag {
@@ -422,9 +453,11 @@ async fn block(cx: Cx, (input, offset, size, kind, flavor): (Input, u64, u64, Bl
                             .value(text(value))
                             .summary(detail)
                     }
-                    BlockKind::Properties => Node::new(String::from_utf8_lossy(&e.key).into_owned())
-                        .span(range)
-                        .value(property(value)),
+                    BlockKind::Properties => {
+                        Node::new(String::from_utf8_lossy(&e.key).into_owned())
+                            .span(range)
+                            .value(property(value))
+                    }
                 };
                 cx.push(node).await;
             }

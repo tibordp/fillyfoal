@@ -20,7 +20,9 @@ fn bad(what: &str) -> Diagnostic {
 static DICTIONARY: &[u8; 122_784] = include_bytes!("brotli_dictionary.bin");
 
 /// log2 of the number of dictionary words of each length (4 to 24).
-const NDBITS: [u32; 25] = [0, 0, 0, 0, 10, 10, 11, 11, 10, 10, 10, 10, 10, 9, 9, 8, 7, 7, 8, 7, 7, 6, 6, 5, 5];
+const NDBITS: [u32; 25] = [
+    0, 0, 0, 0, 10, 10, 11, 11, 10, 10, 10, 10, 10, 9, 9, 8, 7, 7, 8, 7, 7, 6, 6, 5, 5,
+];
 
 /// Offset of the words of each length in the dictionary.
 #[allow(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
@@ -55,7 +57,10 @@ impl Stream {
     /// Decodes the stream header, or the next meta-block (setting `done`
     /// after the last one).
     fn next(&mut self, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
-        let mut b = Bits { data: input, pos: self.bit };
+        let mut b = Bits {
+            data: input,
+            pos: self.bit,
+        };
         let Some(window) = self.window else {
             self.window = Some((1usize << window_bits(&mut b)?).saturating_sub(16));
             self.bit = b.pos;
@@ -107,7 +112,9 @@ impl Stream {
         }
         let mlen = mlen.saturating_add(1);
         if out.len().saturating_add(mlen) > limit {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         if !last && b.bit()? {
             b.align()?;
@@ -131,7 +138,14 @@ impl Stream {
 }
 
 impl Decode for Stream {
-    fn step(&mut self, input: &[u8], _eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        _eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         if self.start.is_none() {
             self.start = Some(out.len());
         }
@@ -266,19 +280,35 @@ impl Huff {
                 *c = c.saturating_add(1);
             }
         }
-        let mut used = (0u16..).zip(lengths).filter(|&(_, &l)| l != 0).map(|(s, _)| s);
+        let mut used = (0u16..)
+            .zip(lengths)
+            .filter(|&(_, &l)| l != 0)
+            .map(|(s, _)| s);
         if let (Some(only), None) = (used.next(), used.next()) {
-            return Huff { single: Some(only), count, sorted: Vec::new(), fast: Vec::new() };
+            return Huff {
+                single: Some(only),
+                count,
+                sorted: Vec::new(),
+                fast: Vec::new(),
+            };
         }
         let mut sorted = Vec::new();
         for len in 1..16u8 {
-            sorted.extend((0u16..).zip(lengths).filter(|&(_, &l)| l == len).map(|(s, _)| s));
+            sorted.extend(
+                (0u16..)
+                    .zip(lengths)
+                    .filter(|&(_, &l)| l == len)
+                    .map(|(s, _)| s),
+            );
         }
         let mut fast = vec![0u16; 256];
         let mut next = 0u32;
         let mut it = sorted.iter();
         for len in 1..=8u32 {
-            let n = count.get(usize::try_from(len).unwrap_or(0)).copied().unwrap_or(0);
+            let n = count
+                .get(usize::try_from(len).unwrap_or(0))
+                .copied()
+                .unwrap_or(0);
             for _ in 0..n {
                 let Some(&sym) = it.next() else { break };
                 let rev = next.reverse_bits() >> 32u32.saturating_sub(len);
@@ -292,14 +322,23 @@ impl Huff {
             }
             next <<= 1;
         }
-        Huff { single: None, count, sorted, fast }
+        Huff {
+            single: None,
+            count,
+            sorted,
+            fast,
+        }
     }
 
     fn decode(&self, b: &mut Bits<'_>) -> Result<u16> {
         if let Some(s) = self.single {
             return Ok(s);
         }
-        let e = self.fast.get(usize::try_from(b.peek(8)).unwrap_or(0)).copied().unwrap_or(0);
+        let e = self
+            .fast
+            .get(usize::try_from(b.peek(8)).unwrap_or(0))
+            .copied()
+            .unwrap_or(0);
         if e != 0 {
             b.skip(usize::from(e >> 10))?;
             return Ok(e & 0x3ff);
@@ -309,8 +348,13 @@ impl Huff {
             code |= b.read(1)?;
             let n = u32::from(n);
             if code.wrapping_sub(first) < n {
-                let i = usize::try_from(index.saturating_add(code.wrapping_sub(first))).unwrap_or(usize::MAX);
-                return self.sorted.get(i).copied().ok_or_else(|| bad("invalid prefix code"));
+                let i = usize::try_from(index.saturating_add(code.wrapping_sub(first)))
+                    .unwrap_or(usize::MAX);
+                return self
+                    .sorted
+                    .get(i)
+                    .copied()
+                    .ok_or_else(|| bad("invalid prefix code"));
             }
             index = index.saturating_add(n);
             first = first.saturating_add(n) << 1;
@@ -320,7 +364,8 @@ impl Huff {
     }
 }
 
-const CODE_LENGTH_ORDER: [usize; 18] = [1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const CODE_LENGTH_ORDER: [usize; 18] =
+    [1, 2, 3, 4, 0, 5, 17, 6, 16, 7, 8, 9, 10, 11, 12, 13, 14, 15];
 /// The fixed code for code length code lengths, indexed by the next 4
 /// bits: bits used and value.
 const CL_PREFIX_LEN: [usize; 16] = [2, 2, 2, 3, 2, 2, 2, 4, 2, 2, 2, 3, 2, 2, 2, 4];
@@ -397,7 +442,9 @@ fn read_prefix_code(b: &mut Bits<'_>, alphabet: usize) -> Result<Huff> {
             }
             if c != 0 {
                 prev = c;
-                space = space.checked_sub(32768 >> c).ok_or_else(|| bad("oversubscribed prefix code"))?;
+                space = space
+                    .checked_sub(32768 >> c)
+                    .ok_or_else(|| bad("oversubscribed prefix code"))?;
             }
             sym = sym.saturating_add(1);
         } else {
@@ -410,12 +457,17 @@ fn read_prefix_code(b: &mut Bits<'_>, alphabet: usize) -> Result<Huff> {
             if repeat > 0 {
                 repeat = repeat.saturating_sub(2) << extra;
             }
-            repeat = repeat.saturating_add(b.read_usize(extra)?).saturating_add(3);
+            repeat = repeat
+                .saturating_add(b.read_usize(extra)?)
+                .saturating_add(3);
             let delta = repeat.saturating_sub(old);
             if sym.saturating_add(delta) > alphabet {
                 return Err(bad("code length run past the alphabet"));
             }
-            for x in lengths.get_mut(sym..sym.saturating_add(delta)).unwrap_or_default() {
+            for x in lengths
+                .get_mut(sym..sym.saturating_add(delta))
+                .unwrap_or_default()
+            {
                 *x = repeat_len;
             }
             sym = sym.saturating_add(delta);
@@ -445,14 +497,39 @@ fn var_u8(b: &mut Bits<'_>) -> Result<usize> {
 }
 
 const BLOCK_LEN: [(usize, u32); 26] = [
-    (1, 2), (5, 2), (9, 2), (13, 2), (17, 3), (25, 3), (33, 3), (41, 3), (49, 4), (65, 4), (81, 4), (97, 4), (113, 5),
-    (145, 5), (177, 5), (209, 5), (241, 6), (305, 6), (369, 7), (497, 8), (753, 9), (1265, 10), (2289, 11), (4337, 12),
-    (8433, 13), (16625, 24),
+    (1, 2),
+    (5, 2),
+    (9, 2),
+    (13, 2),
+    (17, 3),
+    (25, 3),
+    (33, 3),
+    (41, 3),
+    (49, 4),
+    (65, 4),
+    (81, 4),
+    (97, 4),
+    (113, 5),
+    (145, 5),
+    (177, 5),
+    (209, 5),
+    (241, 6),
+    (305, 6),
+    (369, 7),
+    (497, 8),
+    (753, 9),
+    (1265, 10),
+    (2289, 11),
+    (4337, 12),
+    (8433, 13),
+    (16625, 24),
 ];
 
 fn block_len(b: &mut Bits<'_>, code: &Huff) -> Result<usize> {
     let s = code.decode(b)?;
-    let &(base, extra) = BLOCK_LEN.get(usize::from(s)).ok_or_else(|| bad("bad block length code"))?;
+    let &(base, extra) = BLOCK_LEN
+        .get(usize::from(s))
+        .ok_or_else(|| bad("bad block length code"))?;
     Ok(base.saturating_add(b.read_usize(extra)?))
 }
 
@@ -469,7 +546,13 @@ struct Blocks {
 impl Blocks {
     fn read(b: &mut Bits<'_>) -> Result<Blocks> {
         let ntypes = var_u8(b)?.saturating_add(1);
-        let mut blocks = Blocks { ntypes, codes: None, current: 0, previous: 1, left: 1 << 24 };
+        let mut blocks = Blocks {
+            ntypes,
+            codes: None,
+            current: 0,
+            previous: 1,
+            left: 1 << 24,
+        };
         if ntypes >= 2 {
             let types = read_prefix_code(b, ntypes.saturating_add(2))?;
             let lens = read_prefix_code(b, 26)?;
@@ -488,7 +571,11 @@ impl Blocks {
             };
             let t = match types.decode(b)? {
                 0 => self.previous,
-                1 => self.current.saturating_add(1).checked_rem(self.ntypes).unwrap_or(0),
+                1 => self
+                    .current
+                    .saturating_add(1)
+                    .checked_rem(self.ntypes)
+                    .unwrap_or(0),
                 s => usize::from(s).saturating_sub(2),
             };
             self.previous = self.current;
@@ -505,7 +592,11 @@ fn read_context_map(b: &mut Bits<'_>, size: usize, ntrees: usize) -> Result<Vec<
     if ntrees < 2 {
         return Ok(map);
     }
-    let rlemax = if b.bit()? { b.read_usize(4)?.saturating_add(1) } else { 0 };
+    let rlemax = if b.bit()? {
+        b.read_usize(4)?.saturating_add(1)
+    } else {
+        0
+    };
     let code = read_prefix_code(b, ntrees.saturating_add(rlemax))?;
     let mut i = 0usize;
     while i < size {
@@ -520,7 +611,8 @@ fn read_context_map(b: &mut Bits<'_>, size: usize, ntrees: usize) -> Result<Vec<
             }
         } else {
             if let Some(x) = map.get_mut(i) {
-                *x = u8::try_from(s.saturating_sub(rlemax)).map_err(|_| bad("bad context map entry"))?;
+                *x = u8::try_from(s.saturating_sub(rlemax))
+                    .map_err(|_| bad("bad context map entry"))?;
             }
             i = i.saturating_add(1);
         }
@@ -547,9 +639,10 @@ fn read_context_map(b: &mut Bits<'_>, size: usize, ntrees: usize) -> Result<Vec<
 /// second-to-last byte.
 const UTF8_P1: [u8; 256] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 4, 0, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    8, 12, 16, 12, 12, 20, 12, 16, 24, 28, 12, 12, 32, 12, 36, 12, 44, 44, 44, 44, 44, 44, 44, 44, 44, 44, 32, 32, 24, 40, 28, 12,
-    12, 48, 52, 52, 52, 48, 52, 52, 52, 48, 52, 52, 52, 52, 52, 48, 52, 52, 52, 52, 52, 48, 52, 52, 52, 52, 52, 24, 12, 28, 12, 12,
-    12, 56, 60, 60, 60, 56, 60, 60, 60, 56, 60, 60, 60, 60, 60, 56, 60, 60, 60, 60, 60, 56, 60, 60, 60, 60, 60, 24, 12, 28, 12, 0,
+    8, 12, 16, 12, 12, 20, 12, 16, 24, 28, 12, 12, 32, 12, 36, 12, 44, 44, 44, 44, 44, 44, 44, 44,
+    44, 44, 32, 32, 24, 40, 28, 12, 12, 48, 52, 52, 52, 48, 52, 52, 52, 48, 52, 52, 52, 52, 52, 48,
+    52, 52, 52, 52, 52, 48, 52, 52, 52, 52, 52, 24, 12, 28, 12, 12, 12, 56, 60, 60, 60, 56, 60, 60,
+    60, 56, 60, 60, 60, 60, 60, 56, 60, 60, 60, 60, 60, 56, 60, 60, 60, 60, 60, 24, 12, 28, 12, 0,
     0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
     0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1,
     2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3, 2, 3,
@@ -584,69 +677,208 @@ fn literal_context(mode: u8, p1: u8, p2: u8) -> usize {
     usize::from(match mode {
         0 => p1 & 0x3f,
         1 => p1 >> 2,
-        2 => UTF8_P1.get(usize::from(p1)).copied().unwrap_or(0) | UTF8_P2.get(usize::from(p2)).copied().unwrap_or(0),
+        2 => {
+            UTF8_P1.get(usize::from(p1)).copied().unwrap_or(0)
+                | UTF8_P2.get(usize::from(p2)).copied().unwrap_or(0)
+        }
         _ => signed_class(p1) << 3 | signed_class(p2),
     })
 }
 
 /// Insert length codes: base and extra bits.
 const INSERT: [(usize, u32); 24] = [
-    (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 1), (8, 1), (10, 2), (14, 2), (18, 3), (26, 3), (34, 4), (50, 4),
-    (66, 5), (98, 5), (130, 6), (194, 7), (322, 8), (578, 9), (1090, 10), (2114, 12), (6210, 14), (22594, 24),
+    (0, 0),
+    (1, 0),
+    (2, 0),
+    (3, 0),
+    (4, 0),
+    (5, 0),
+    (6, 1),
+    (8, 1),
+    (10, 2),
+    (14, 2),
+    (18, 3),
+    (26, 3),
+    (34, 4),
+    (50, 4),
+    (66, 5),
+    (98, 5),
+    (130, 6),
+    (194, 7),
+    (322, 8),
+    (578, 9),
+    (1090, 10),
+    (2114, 12),
+    (6210, 14),
+    (22594, 24),
 ];
 /// Copy length codes: base and extra bits.
 const COPY: [(usize, u32); 24] = [
-    (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), (10, 1), (12, 1), (14, 2), (18, 2), (22, 3), (30, 3),
-    (38, 4), (54, 4), (70, 5), (102, 5), (134, 6), (198, 7), (326, 8), (582, 9), (1094, 10), (2118, 24),
+    (2, 0),
+    (3, 0),
+    (4, 0),
+    (5, 0),
+    (6, 0),
+    (7, 0),
+    (8, 0),
+    (9, 0),
+    (10, 1),
+    (12, 1),
+    (14, 2),
+    (18, 2),
+    (22, 3),
+    (30, 3),
+    (38, 4),
+    (54, 4),
+    (70, 5),
+    (102, 5),
+    (134, 6),
+    (198, 7),
+    (326, 8),
+    (582, 9),
+    (1094, 10),
+    (2118, 24),
 ];
 /// Insert and copy length code bases of each 64-symbol cell of the
 /// command alphabet (cells 0 and 1 imply distance code 0).
-const CELLS: [(usize, usize); 11] = [(0, 0), (0, 8), (0, 0), (0, 8), (8, 0), (8, 8), (0, 16), (16, 0), (8, 16), (16, 8), (16, 16)];
+const CELLS: [(usize, usize); 11] = [
+    (0, 0),
+    (0, 8),
+    (0, 0),
+    (0, 8),
+    (8, 0),
+    (8, 8),
+    (0, 16),
+    (16, 0),
+    (8, 16),
+    (16, 8),
+    (16, 16),
+];
 
 /// The word transforms (RFC 7932 Appendix B): prefix, type, suffix. Types:
 /// 0 identity, 1-9 omit the last 1-9 bytes, 10 uppercase the first
 /// character, 11 uppercase all, 12-20 omit the first 1-9 bytes.
 const TRANSFORMS: [(&[u8], u8, &[u8]); 121] = [
-    (b"", 0, b""), (b"", 0, b" "), (b" ", 0, b" "),
-    (b"", 12, b""), (b"", 10, b" "), (b"", 0, b" the "),
-    (b" ", 0, b""), (b"s ", 0, b" "), (b"", 0, b" of "),
-    (b"", 10, b""), (b"", 0, b" and "), (b"", 13, b""),
-    (b"", 1, b""), (b", ", 0, b" "), (b"", 0, b", "),
-    (b" ", 10, b" "), (b"", 0, b" in "), (b"", 0, b" to "),
-    (b"e ", 0, b" "), (b"", 0, b"\""), (b"", 0, b"."),
-    (b"", 0, b"\">"), (b"", 0, b"\n"), (b"", 3, b""),
-    (b"", 0, b"]"), (b"", 0, b" for "), (b"", 14, b""),
-    (b"", 2, b""), (b"", 0, b" a "), (b"", 0, b" that "),
-    (b" ", 10, b""), (b"", 0, b". "), (b".", 0, b""),
-    (b" ", 0, b", "), (b"", 15, b""), (b"", 0, b" with "),
-    (b"", 0, b"'"), (b"", 0, b" from "), (b"", 0, b" by "),
-    (b"", 16, b""), (b"", 17, b""), (b" the ", 0, b""),
-    (b"", 4, b""), (b"", 0, b". The "), (b"", 11, b""),
-    (b"", 0, b" on "), (b"", 0, b" as "), (b"", 0, b" is "),
-    (b"", 7, b""), (b"", 1, b"ing "), (b"", 0, b"\n\t"),
-    (b"", 0, b":"), (b" ", 0, b". "), (b"", 0, b"ed "),
-    (b"", 20, b""), (b"", 18, b""), (b"", 6, b""),
-    (b"", 0, b"("), (b"", 10, b", "), (b"", 8, b""),
-    (b"", 0, b" at "), (b"", 0, b"ly "), (b" the ", 0, b" of "),
-    (b"", 5, b""), (b"", 9, b""), (b" ", 10, b", "),
-    (b"", 10, b"\""), (b".", 0, b"("), (b"", 11, b" "),
-    (b"", 10, b"\">"), (b"", 0, b"=\""), (b" ", 0, b"."),
-    (b".com/", 0, b""), (b" the ", 0, b" of the "), (b"", 10, b"'"),
-    (b"", 0, b". This "), (b"", 0, b","), (b".", 0, b" "),
-    (b"", 10, b"("), (b"", 10, b"."), (b"", 0, b" not "),
-    (b" ", 0, b"=\""), (b"", 0, b"er "), (b" ", 11, b" "),
-    (b"", 0, b"al "), (b" ", 11, b""), (b"", 0, b"='"),
-    (b"", 11, b"\""), (b"", 10, b". "), (b" ", 0, b"("),
-    (b"", 0, b"ful "), (b" ", 10, b". "), (b"", 0, b"ive "),
-    (b"", 0, b"less "), (b"", 11, b"'"), (b"", 0, b"est "),
-    (b" ", 10, b"."), (b"", 11, b"\">"), (b" ", 0, b"='"),
-    (b"", 10, b","), (b"", 0, b"ize "), (b"", 11, b"."),
-    (b"\xc2\xa0", 0, b""), (b" ", 0, b","), (b"", 10, b"=\""),
-    (b"", 11, b"=\""), (b"", 0, b"ous "), (b"", 11, b", "),
-    (b"", 10, b"='"), (b" ", 10, b","), (b" ", 11, b"=\""),
-    (b" ", 11, b", "), (b"", 11, b","), (b"", 11, b"("),
-    (b"", 11, b". "), (b" ", 11, b"."), (b"", 11, b"='"),
-    (b" ", 11, b". "), (b" ", 10, b"=\""), (b" ", 11, b"='"),
+    (b"", 0, b""),
+    (b"", 0, b" "),
+    (b" ", 0, b" "),
+    (b"", 12, b""),
+    (b"", 10, b" "),
+    (b"", 0, b" the "),
+    (b" ", 0, b""),
+    (b"s ", 0, b" "),
+    (b"", 0, b" of "),
+    (b"", 10, b""),
+    (b"", 0, b" and "),
+    (b"", 13, b""),
+    (b"", 1, b""),
+    (b", ", 0, b" "),
+    (b"", 0, b", "),
+    (b" ", 10, b" "),
+    (b"", 0, b" in "),
+    (b"", 0, b" to "),
+    (b"e ", 0, b" "),
+    (b"", 0, b"\""),
+    (b"", 0, b"."),
+    (b"", 0, b"\">"),
+    (b"", 0, b"\n"),
+    (b"", 3, b""),
+    (b"", 0, b"]"),
+    (b"", 0, b" for "),
+    (b"", 14, b""),
+    (b"", 2, b""),
+    (b"", 0, b" a "),
+    (b"", 0, b" that "),
+    (b" ", 10, b""),
+    (b"", 0, b". "),
+    (b".", 0, b""),
+    (b" ", 0, b", "),
+    (b"", 15, b""),
+    (b"", 0, b" with "),
+    (b"", 0, b"'"),
+    (b"", 0, b" from "),
+    (b"", 0, b" by "),
+    (b"", 16, b""),
+    (b"", 17, b""),
+    (b" the ", 0, b""),
+    (b"", 4, b""),
+    (b"", 0, b". The "),
+    (b"", 11, b""),
+    (b"", 0, b" on "),
+    (b"", 0, b" as "),
+    (b"", 0, b" is "),
+    (b"", 7, b""),
+    (b"", 1, b"ing "),
+    (b"", 0, b"\n\t"),
+    (b"", 0, b":"),
+    (b" ", 0, b". "),
+    (b"", 0, b"ed "),
+    (b"", 20, b""),
+    (b"", 18, b""),
+    (b"", 6, b""),
+    (b"", 0, b"("),
+    (b"", 10, b", "),
+    (b"", 8, b""),
+    (b"", 0, b" at "),
+    (b"", 0, b"ly "),
+    (b" the ", 0, b" of "),
+    (b"", 5, b""),
+    (b"", 9, b""),
+    (b" ", 10, b", "),
+    (b"", 10, b"\""),
+    (b".", 0, b"("),
+    (b"", 11, b" "),
+    (b"", 10, b"\">"),
+    (b"", 0, b"=\""),
+    (b" ", 0, b"."),
+    (b".com/", 0, b""),
+    (b" the ", 0, b" of the "),
+    (b"", 10, b"'"),
+    (b"", 0, b". This "),
+    (b"", 0, b","),
+    (b".", 0, b" "),
+    (b"", 10, b"("),
+    (b"", 10, b"."),
+    (b"", 0, b" not "),
+    (b" ", 0, b"=\""),
+    (b"", 0, b"er "),
+    (b" ", 11, b" "),
+    (b"", 0, b"al "),
+    (b" ", 11, b""),
+    (b"", 0, b"='"),
+    (b"", 11, b"\""),
+    (b"", 10, b". "),
+    (b" ", 0, b"("),
+    (b"", 0, b"ful "),
+    (b" ", 10, b". "),
+    (b"", 0, b"ive "),
+    (b"", 0, b"less "),
+    (b"", 11, b"'"),
+    (b"", 0, b"est "),
+    (b" ", 10, b"."),
+    (b"", 11, b"\">"),
+    (b" ", 0, b"='"),
+    (b"", 10, b","),
+    (b"", 0, b"ize "),
+    (b"", 11, b"."),
+    (b"\xc2\xa0", 0, b""),
+    (b" ", 0, b","),
+    (b"", 10, b"=\""),
+    (b"", 11, b"=\""),
+    (b"", 0, b"ous "),
+    (b"", 11, b", "),
+    (b"", 10, b"='"),
+    (b" ", 10, b","),
+    (b" ", 11, b"=\""),
+    (b" ", 11, b", "),
+    (b"", 11, b","),
+    (b"", 11, b"("),
+    (b"", 11, b". "),
+    (b" ", 11, b"."),
+    (b"", 11, b"='"),
+    (b" ", 11, b". "),
+    (b" ", 10, b"=\""),
+    (b" ", 11, b"='"),
     (b" ", 10, b"='"),
 ];
 
@@ -696,11 +928,18 @@ fn dictionary(out: &mut Vec<u8>, id: usize, len: usize, end: usize) -> Result<()
         .get(start..start.saturating_add(len))
         .ok_or_else(|| bad("distance beyond the dictionary"))?;
     let word = match kind {
-        1..=9 => word.get(..len.saturating_sub(usize::from(kind))).unwrap_or_default(),
-        12..=20 => word.get(usize::from(kind.saturating_sub(11))..).unwrap_or_default(),
+        1..=9 => word
+            .get(..len.saturating_sub(usize::from(kind)))
+            .unwrap_or_default(),
+        12..=20 => word
+            .get(usize::from(kind.saturating_sub(11))..)
+            .unwrap_or_default(),
         _ => word,
     };
-    let total = prefix.len().saturating_add(word.len()).saturating_add(suffix.len());
+    let total = prefix
+        .len()
+        .saturating_add(word.len())
+        .saturating_add(suffix.len());
     if out.len().saturating_add(total) > end {
         return Err(bad("dictionary word past the end of the meta-block"));
     }
@@ -733,7 +972,13 @@ fn copy_back(out: &mut Vec<u8>, dist: usize, len: usize) {
 type Ring = [usize; 4];
 
 /// Decodes a distance code: the distance and whether it enters the ring.
-fn distance(b: &mut Bits<'_>, code: usize, ndirect: usize, npostfix: u32, ring: &Ring) -> Result<(usize, bool)> {
+fn distance(
+    b: &mut Bits<'_>,
+    code: usize,
+    ndirect: usize,
+    npostfix: u32,
+    ring: &Ring,
+) -> Result<(usize, bool)> {
     const DELTA: [i64; 6] = [-1, 1, -2, 2, -3, 3];
     if code < 16 {
         let (slot, delta) = match code {
@@ -752,7 +997,9 @@ fn distance(b: &mut Bits<'_>, code: usize, ndirect: usize, npostfix: u32, ring: 
         return Ok((code.saturating_sub(15), true));
     }
     let x = code.saturating_sub(ndirect).saturating_sub(16);
-    let nbits = u32::try_from(x >> npostfix.saturating_add(1)).unwrap_or(0).saturating_add(1);
+    let nbits = u32::try_from(x >> npostfix.saturating_add(1))
+        .unwrap_or(0)
+        .saturating_add(1);
     let extra = b.read_usize(nbits)?;
     let hcode = x >> npostfix;
     let lcode = x & ((1usize << npostfix).saturating_sub(1));
@@ -793,18 +1040,37 @@ fn meta_block(
     let cmap_l = read_context_map(b, lit.ntypes.saturating_mul(64), ntrees_l)?;
     let ntrees_d = var_u8(b)?.saturating_add(1);
     let cmap_d = read_context_map(b, dst.ntypes.saturating_mul(4), ntrees_d)?;
-    let lit_codes = (0..ntrees_l).map(|_| read_prefix_code(b, 256)).collect::<Result<Vec<_>>>()?;
-    let cmd_codes = (0..cmd.ntypes).map(|_| read_prefix_code(b, 704)).collect::<Result<Vec<_>>>()?;
-    let dist_alphabet = 16usize.saturating_add(ndirect).saturating_add(48 << npostfix);
-    let dist_codes = (0..ntrees_d).map(|_| read_prefix_code(b, dist_alphabet)).collect::<Result<Vec<_>>>()?;
+    let lit_codes = (0..ntrees_l)
+        .map(|_| read_prefix_code(b, 256))
+        .collect::<Result<Vec<_>>>()?;
+    let cmd_codes = (0..cmd.ntypes)
+        .map(|_| read_prefix_code(b, 704))
+        .collect::<Result<Vec<_>>>()?;
+    let dist_alphabet = 16usize
+        .saturating_add(ndirect)
+        .saturating_add(48 << npostfix);
+    let dist_codes = (0..ntrees_d)
+        .map(|_| read_prefix_code(b, dist_alphabet))
+        .collect::<Result<Vec<_>>>()?;
 
     let end = out.len().saturating_add(mlen);
     while out.len() < end {
         cmd.next(b)?;
-        let code = usize::from(cmd_codes.get(cmd.current).ok_or_else(|| bad("bad block type"))?.decode(b)?);
-        let &(ibase, cbase) = CELLS.get(code >> 6).ok_or_else(|| bad("bad command code"))?;
-        let &(ilen, ibits) = INSERT.get(ibase.saturating_add(code >> 3 & 7)).ok_or_else(|| bad("bad insert code"))?;
-        let &(clen, cbits) = COPY.get(cbase.saturating_add(code & 7)).ok_or_else(|| bad("bad copy code"))?;
+        let code = usize::from(
+            cmd_codes
+                .get(cmd.current)
+                .ok_or_else(|| bad("bad block type"))?
+                .decode(b)?,
+        );
+        let &(ibase, cbase) = CELLS
+            .get(code >> 6)
+            .ok_or_else(|| bad("bad command code"))?;
+        let &(ilen, ibits) = INSERT
+            .get(ibase.saturating_add(code >> 3 & 7))
+            .ok_or_else(|| bad("bad insert code"))?;
+        let &(clen, cbits) = COPY
+            .get(cbase.saturating_add(code & 7))
+            .ok_or_else(|| bad("bad copy code"))?;
         let ilen = ilen.saturating_add(b.read_usize(ibits)?);
         let clen = clen.saturating_add(b.read_usize(cbits)?);
         if out.len().saturating_add(ilen) > end {
@@ -814,10 +1080,27 @@ fn meta_block(
             lit.next(b)?;
             let n = out.len();
             let h = history(n);
-            let p1 = if h >= 1 { n.checked_sub(1).and_then(|i| out.get(i)).copied().unwrap_or(0) } else { 0 };
-            let p2 = if h >= 2 { n.checked_sub(2).and_then(|i| out.get(i)).copied().unwrap_or(0) } else { 0 };
+            let p1 = if h >= 1 {
+                n.checked_sub(1)
+                    .and_then(|i| out.get(i))
+                    .copied()
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            let p2 = if h >= 2 {
+                n.checked_sub(2)
+                    .and_then(|i| out.get(i))
+                    .copied()
+                    .unwrap_or(0)
+            } else {
+                0
+            };
             let mode = modes.get(lit.current).copied().unwrap_or(0);
-            let ctx = lit.current.saturating_mul(64).saturating_add(literal_context(mode, p1, p2));
+            let ctx = lit
+                .current
+                .saturating_mul(64)
+                .saturating_add(literal_context(mode, p1, p2));
             let byte = tree(&lit_codes, &cmap_l, ctx)?.decode(b)?;
             out.push(u8::try_from(byte).unwrap_or(0));
         }
@@ -828,13 +1111,21 @@ fn meta_block(
             (ring[0], false)
         } else {
             dst.next(b)?;
-            let ctx = dst.current.saturating_mul(4).saturating_add(clen.min(5).saturating_sub(2));
+            let ctx = dst
+                .current
+                .saturating_mul(4)
+                .saturating_add(clen.min(5).saturating_sub(2));
             let dcode = usize::from(tree(&dist_codes, &cmap_d, ctx)?.decode(b)?);
             distance(b, dcode, ndirect, npostfix, ring)?
         };
         let max_distance = window.min(history(out.len()));
         if dist > max_distance {
-            dictionary(out, dist.saturating_sub(max_distance).saturating_sub(1), clen, end)?;
+            dictionary(
+                out,
+                dist.saturating_sub(max_distance).saturating_sub(1),
+                clen,
+                end,
+            )?;
             continue;
         }
         if push {

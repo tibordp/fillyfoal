@@ -221,7 +221,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut frames = 0u64;
     let mut total = Some(0u64);
     cx.annotate("Zstandard");
-    cx.emit(Node::new("Decompressed").span(file).lazy(decompressed, input));
+    cx.emit(
+        Node::new("Decompressed")
+            .span(file)
+            .lazy(decompressed, input),
+    );
     while !cur.at_end() {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
@@ -316,7 +320,9 @@ async fn decompressed(cx: Cx, input: Input) -> Result<()> {
         };
         if magic == FRAME_MAGIC {
             total = match walk_frame(&cx, &mut cur).await {
-                Ok(info) => total.zip(info.header.content_size).map(|(t, s)| t.saturating_add(s)),
+                Ok(info) => total
+                    .zip(info.header.content_size)
+                    .map(|(t, s)| t.saturating_add(s)),
                 Err(_) => None,
             };
         } else if magic & 0xffff_fff0 == 0x184d_2a50 {
@@ -470,7 +476,11 @@ async fn block(cx: Cx, span: Span) -> Result<()> {
                     .value(Value::Bytes(byte)),
             );
         }
-        2 => cx.emit(Node::new("Compressed data").span(body).desc("Decoded as part of the whole stream (see Decompressed)")),
+        2 => cx.emit(
+            Node::new("Compressed data")
+                .span(body)
+                .desc("Decoded as part of the whole stream (see Decompressed)"),
+        ),
         _ => cx.diag(Diagnostic::malformed("reserved block type")),
     }
     Ok(())

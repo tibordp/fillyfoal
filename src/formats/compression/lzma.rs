@@ -92,7 +92,13 @@ pub async fn dissect_lzma(cx: Cx, input: Input) -> Result<()> {
     cx.emit(LzmaHeader::node("Header", span, LE));
     let body = input.span.tail(LzmaHeader::SIZE);
     let expected = (header.size != u64::MAX).then_some(header.size);
-    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::LzmaAlone, expected));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        input.span,
+        crate::codec::Codec::LzmaAlone,
+        expected,
+    ));
     cx.emit(Node::new("Compressed data").span(body));
     let size = if header.size == u64::MAX {
         "unknown size".to_owned()
@@ -224,11 +230,27 @@ async fn emit_member(cx: &Cx, input: Input, span: Span, size: u64) -> Result<()>
         .saturating_sub(LzipHeader::SIZE)
         .saturating_sub(LzipTrailer::SIZE);
     // lzip members are raw LZMA with lc=3, lp=0, pb=2 and an end marker.
-    let props = crate::codec::lzma::Props { lc: 3, lp: 0, pb: 2 };
+    let props = crate::codec::lzma::Props {
+        lc: 3,
+        lp: 0,
+        pb: 2,
+    };
     let coded = cx.read(span.sub(5, 1)).await?;
-    let dict = coded.first().map(|&b| u32::try_from(lzip_dict(b)).unwrap_or(u32::MAX));
-    let codec = crate::codec::Codec::LzmaRaw { props, size: usize::try_from(size).ok(), dict };
-    cx.emit(crate::formats::content("Decompressed", input, span.sub(LzipHeader::SIZE, body_len), codec, Some(size)));
+    let dict = coded
+        .first()
+        .map(|&b| u32::try_from(lzip_dict(b)).unwrap_or(u32::MAX));
+    let codec = crate::codec::Codec::LzmaRaw {
+        props,
+        size: usize::try_from(size).ok(),
+        dict,
+    };
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        span.sub(LzipHeader::SIZE, body_len),
+        codec,
+        Some(size),
+    ));
     cx.emit(LzipTrailer::node(
         "Trailer",
         span.tail(span.len.saturating_sub(LzipTrailer::SIZE)),

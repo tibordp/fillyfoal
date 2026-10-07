@@ -37,7 +37,8 @@ fn chunk(data: &[u8], out: &mut Vec<u8>) -> Result<()> {
                 out.push(data.get(pos).copied().unwrap_or(0));
                 pos = pos.saturating_add(1);
             } else {
-                let (Some(&lo), Some(&hi)) = (data.get(pos), data.get(pos.saturating_add(1))) else {
+                let (Some(&lo), Some(&hi)) = (data.get(pos), data.get(pos.saturating_add(1)))
+                else {
                     return Err(bad("chunk ends inside a compressed word"));
                 };
                 pos = pos.saturating_add(2);
@@ -70,10 +71,13 @@ impl Filter for Lznt1 {
     fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
         let size = self.size.map(|s| usize::try_from(s).unwrap_or(usize::MAX));
         if size.is_some_and(|s| s > limit) {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         let end = size.unwrap_or(usize::MAX);
-        let mut out = Vec::with_capacity(size.unwrap_or(input.len().saturating_mul(2)).min(1 << 24));
+        let mut out =
+            Vec::with_capacity(size.unwrap_or(input.len().saturating_mul(2)).min(1 << 24));
         let mut pos = 0usize;
         while out.len() < end {
             let (Some(&lo), Some(&hi)) = (input.get(pos), input.get(pos.saturating_add(1))) else {
@@ -103,7 +107,9 @@ impl Filter for Lznt1 {
                 out.extend_from_slice(data);
             }
             if out.len() > limit {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                return Err(Diagnostic::limit(format!(
+                    "decompressed data exceeds {limit:#x} bytes"
+                )));
             }
         }
         if let Some(size) = size {
@@ -123,23 +129,33 @@ mod tests {
     #[test]
     fn spec_example() {
         let compressed = [
-            0x38, 0xb0, 0x88, 0x46, 0x23, 0x20, 0x00, 0x20, 0x47, 0x20, 0x41, 0x00, 0x10, 0xa2, 0x47, 0x01, 0xa0, 0x45, 0x20,
-            0x44, 0x00, 0x08, 0x45, 0x01, 0x50, 0x79, 0x00, 0xc0, 0x45, 0x20, 0x05, 0x24, 0x13, 0x88, 0x05, 0xb4, 0x02, 0x4a,
-            0x44, 0xef, 0x03, 0x58, 0x02, 0x8c, 0x09, 0x16, 0x01, 0x48, 0x45, 0x00, 0xbe, 0x00, 0x9e, 0x00, 0x04, 0x01, 0x18,
-            0x90, 0x00,
+            0x38, 0xb0, 0x88, 0x46, 0x23, 0x20, 0x00, 0x20, 0x47, 0x20, 0x41, 0x00, 0x10, 0xa2,
+            0x47, 0x01, 0xa0, 0x45, 0x20, 0x44, 0x00, 0x08, 0x45, 0x01, 0x50, 0x79, 0x00, 0xc0,
+            0x45, 0x20, 0x05, 0x24, 0x13, 0x88, 0x05, 0xb4, 0x02, 0x4a, 0x44, 0xef, 0x03, 0x58,
+            0x02, 0x8c, 0x09, 0x16, 0x01, 0x48, 0x45, 0x00, 0xbe, 0x00, 0x9e, 0x00, 0x04, 0x01,
+            0x18, 0x90, 0x00,
         ];
         let mut expected = b"F# F# G A A G F# E D D E F# F# E E F# F# G A A G F# E D D E F# E D D E E F# D E F# G F# D E \
 F# G F# E D E A F# F# G A A G F# E D D E F# E D D"
             .to_vec();
         expected.push(0);
         assert_eq!(expected.len(), 142);
-        assert_eq!(Lznt1 { size: None }.apply(&compressed, 1 << 20).unwrap(), expected);
+        assert_eq!(
+            Lznt1 { size: None }.apply(&compressed, 1 << 20).unwrap(),
+            expected
+        );
         // A compression unit: zero-filled to its size.
-        let unit = Lznt1 { size: Some(8192) }.apply(&compressed, 1 << 20).unwrap();
+        let unit = Lznt1 { size: Some(8192) }
+            .apply(&compressed, 1 << 20)
+            .unwrap();
         assert_eq!(unit.len(), 8192);
         assert_eq!(&unit[..142], &expected[..]);
         assert!(unit[142..].iter().all(|&b| b == 0));
-        assert!(Lznt1 { size: None }.apply(&compressed[..30], 1 << 20).is_err());
+        assert!(
+            Lznt1 { size: None }
+                .apply(&compressed[..30], 1 << 20)
+                .is_err()
+        );
         assert!(Lznt1 { size: None }.apply(&compressed, 100).is_err());
     }
 }

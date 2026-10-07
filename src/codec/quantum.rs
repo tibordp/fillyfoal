@@ -18,18 +18,21 @@ fn bad(what: &str) -> Diagnostic {
 }
 
 const POSITION_BASE: [u32; 42] = [
-    0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536, 2048, 3072, 4096,
-    6144, 8192, 12288, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608, 262144, 393216, 524288, 786432,
-    1048576, 1572864,
+    0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024, 1536,
+    2048, 3072, 4096, 6144, 8192, 12288, 16384, 24576, 32768, 49152, 65536, 98304, 131072, 196608,
+    262144, 393216, 524288, 786432, 1048576, 1572864,
 ];
 const EXTRA_BITS: [u8; 42] = [
-    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13, 14, 14, 15, 15,
-    16, 16, 17, 17, 18, 18, 19, 19,
+    0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13,
+    13, 14, 14, 15, 15, 16, 16, 17, 17, 18, 18, 19, 19,
 ];
 const LENGTH_BASE: [u8; 27] = [
-    0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 18, 22, 26, 30, 38, 46, 54, 62, 78, 94, 110, 126, 158, 190, 222, 254,
+    0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 14, 18, 22, 26, 30, 38, 46, 54, 62, 78, 94, 110, 126, 158, 190,
+    222, 254,
 ];
-const LENGTH_EXTRA: [u8; 27] = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0];
+const LENGTH_EXTRA: [u8; 27] = [
+    0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0,
+];
 
 /// An adaptive frequency model: symbols sorted by decreasing frequency,
 /// with cumulative frequencies (`cum[entries]` is 0).
@@ -45,7 +48,9 @@ impl Model {
         Model {
             shifts_left: 4,
             syms: (0..=len).map(|i| start.saturating_add(i)).collect(),
-            cum: (0..=len).map(|i| u32::from(len.saturating_sub(i))).collect(),
+            cum: (0..=len)
+                .map(|i| u32::from(len.saturating_sub(i)))
+                .collect(),
         }
     }
 
@@ -94,7 +99,10 @@ impl Model {
         // stability matters).
         for i in 0..n.saturating_sub(1) {
             for j in i.saturating_add(1)..n {
-                let (a, b) = (self.cum.get(i).copied().unwrap_or(0), self.cum.get(j).copied().unwrap_or(0));
+                let (a, b) = (
+                    self.cum.get(i).copied().unwrap_or(0),
+                    self.cum.get(j).copied().unwrap_or(0),
+                );
                 if a < b {
                     self.cum.swap(i, j);
                     self.syms.swap(i, j);
@@ -127,7 +135,12 @@ impl Models {
         let slots = u16::from(window_bits).saturating_mul(2);
         Models {
             selector: Model::new(0, 7),
-            literal: [Model::new(0, 64), Model::new(64, 64), Model::new(128, 64), Model::new(192, 64)],
+            literal: [
+                Model::new(0, 64),
+                Model::new(64, 64),
+                Model::new(128, 64),
+                Model::new(192, 64),
+            ],
             pos3: Model::new(0, slots.min(24)),
             pos4: Model::new(0, slots.min(36)),
             pos: Model::new(0, slots),
@@ -177,7 +190,9 @@ impl Coder {
     fn symbol(&mut self, bits: &mut Bits<'_>, model: &mut Model) -> Result<u16> {
         let total = model.total();
         let range = (self.h.wrapping_sub(self.l) & 0xffff).saturating_add(1);
-        let offset = i64::from(self.c).saturating_sub(i64::from(self.l)).saturating_add(1);
+        let offset = i64::from(self.c)
+            .saturating_sub(i64::from(self.l))
+            .saturating_add(1);
         let symf = offset
             .saturating_mul(i64::from(total))
             .saturating_sub(1)
@@ -193,14 +208,26 @@ impl Coder {
             i = i.saturating_add(1);
         }
         let index = i.saturating_sub(1);
-        let sym = model.syms.get(index).copied().ok_or_else(|| bad("bad model"))?;
+        let sym = model
+            .syms
+            .get(index)
+            .copied()
+            .ok_or_else(|| bad("bad model"))?;
         let range = u64::from(self.h.wrapping_sub(self.l).wrapping_add(1));
         let total = u64::from(total.max(1));
         let hi = u64::from(model.cum.get(index).copied().unwrap_or(0));
         let lo = u64::from(model.cum.get(i).copied().unwrap_or(0));
         let l = u64::from(self.l);
-        self.h = u32::try_from(l.saturating_add(hi.saturating_mul(range).checked_div(total).unwrap_or(0)).wrapping_sub(1) & 0xffff).unwrap_or(0);
-        self.l = u32::try_from(l.saturating_add(lo.saturating_mul(range).checked_div(total).unwrap_or(0)) & 0xffff).unwrap_or(0);
+        self.h = u32::try_from(
+            l.saturating_add(hi.saturating_mul(range).checked_div(total).unwrap_or(0))
+                .wrapping_sub(1)
+                & 0xffff,
+        )
+        .unwrap_or(0);
+        self.l = u32::try_from(
+            l.saturating_add(lo.saturating_mul(range).checked_div(total).unwrap_or(0)) & 0xffff,
+        )
+        .unwrap_or(0);
         model.bump(index);
         loop {
             if self.l & 0x8000 != self.h & 0x8000 {
@@ -245,9 +272,17 @@ impl Quantum {
 
     /// Decodes one frame of `frame_len` bytes from `data` (one CAB data
     /// block) and appends it to `out`.
-    pub fn frame(&mut self, data: &[u8], frame_len: usize, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+    pub fn frame(
+        &mut self,
+        data: &[u8],
+        frame_len: usize,
+        out: &mut Vec<u8>,
+        limit: usize,
+    ) -> Result<()> {
         if out.len().saturating_add(frame_len) > limit {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         let window = 1usize << self.window_bits;
         if self.hist.len() > window.saturating_mul(2) {
@@ -278,7 +313,9 @@ impl Quantum {
                     let ls = usize::from(coder.symbol(&mut bits, &mut m.len)?);
                     let extra = bits.read(LENGTH_EXTRA.get(ls).copied().unwrap_or(0))?;
                     let base = usize::from(LENGTH_BASE.get(ls).copied().unwrap_or(0));
-                    let len = base.saturating_add(usize::try_from(extra).unwrap_or(0)).saturating_add(5);
+                    let len = base
+                        .saturating_add(usize::try_from(extra).unwrap_or(0))
+                        .saturating_add(5);
                     (coder.symbol(&mut bits, &mut m.pos)?, len)
                 }
                 _ => return Err(bad("invalid selector")),
@@ -294,7 +331,9 @@ impl Quantum {
                     .saturating_add(1),
             )
             .unwrap_or(usize::MAX);
-            let available = usize::try_from(self.offset).unwrap_or(usize::MAX).saturating_add(produced);
+            let available = usize::try_from(self.offset)
+                .unwrap_or(usize::MAX)
+                .saturating_add(produced);
             if distance > available || distance > window || distance > self.hist.len() {
                 return Err(bad("match offset reaches before the start of the window"));
             }

@@ -10,12 +10,12 @@
 //! demand, and its files are ranges of it.
 
 use crate::bytes::{to_u64, to_usize, u32_le};
+use crate::codec::lzx;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::util::datakit::{clip, size};
-use crate::codec::lzx;
 use crate::formats::{Codec, Format, Input, Probe, content, dissect_or_data};
 use crate::node::Node;
 use crate::record;
@@ -104,21 +104,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let hspan = file.sub(0, Header::SIZE);
     let h = parse(&cx, hspan, LE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", hspan, LE));
-    let content_offset = if h.version >= 3 {
-        let span = file.sub(Header::SIZE, 8);
-        let b = cx.read(span).await?;
-        cx.emit(
-            Node::new("Content offset")
-                .span(span)
-                .value(crate::formats::util::datakit::hex(
-                    crate::bytes::u64_le(&b, 0).unwrap_or(0),
-                    64,
-                )),
-        );
-        crate::bytes::u64_le(&b, 0).unwrap_or(0)
-    } else {
-        h.dir_offset.saturating_add(h.dir_len)
-    };
+    let content_offset =
+        if h.version >= 3 {
+            let span = file.sub(Header::SIZE, 8);
+            let b = cx.read(span).await?;
+            cx.emit(Node::new("Content offset").span(span).value(
+                crate::formats::util::datakit::hex(crate::bytes::u64_le(&b, 0).unwrap_or(0), 64),
+            ));
+            crate::bytes::u64_le(&b, 0).unwrap_or(0)
+        } else {
+            h.dir_offset.saturating_add(h.dir_len)
+        };
     cx.emit(Node::new("Section 0 (file size)").span(file.sub(h.section0_offset, h.section0_len)));
     let dir = file.sub(h.dir_offset, h.dir_len);
     let d = parse(&cx, dir.sub(0, Directory::SIZE), LE, &(), Directory::layout).await?;
@@ -183,9 +179,11 @@ fn listing(data: &[u8]) -> (Vec<Entry>, u32) {
         let name_end = at.saturating_add(to_usize(len));
         let name = String::from_utf8_lossy(data.get(at..name_end).unwrap_or_default()).into_owned();
         at = name_end;
-        let (Some(section), Some(offset), Some(length)) =
-            (encint(data, &mut at), encint(data, &mut at), encint(data, &mut at))
-        else {
+        let (Some(section), Some(offset), Some(length)) = (
+            encint(data, &mut at),
+            encint(data, &mut at),
+            encint(data, &mut at),
+        ) else {
             break;
         };
         if name_end > end {
@@ -225,7 +223,10 @@ struct Chain {
 
 impl Chain {
     fn new(chm: &Chm) -> Self {
-        Chain { index: chm.first, seen: 0 }
+        Chain {
+            index: chm.first,
+            seen: 0,
+        }
     }
 
     async fn next(&mut self, cx: &Cx, chm: &Chm) -> Result<Option<(Span, Vec<Entry>)>> {
@@ -243,7 +244,8 @@ const FRAME: u32 = 32 * 1024;
 const STORAGE: &str = "::DataSpace/Storage/MSCompressed/";
 const CONTROL: &str = "ControlData";
 const CONTENT: &str = "Content";
-const RESET_TABLE: &str = "Transform/{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}/InstanceData/ResetTable";
+const RESET_TABLE: &str =
+    "Transform/{7FC28940-9D31-11D0-9B27-00A0C91E9C7C}/InstanceData/ResetTable";
 
 /// The decoded LZX section (section 1), decoded on demand.
 async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
@@ -254,7 +256,9 @@ async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
             let Some(rest) = e.name.strip_prefix(STORAGE) else {
                 continue;
             };
-            let slot = [CONTROL, CONTENT, RESET_TABLE].iter().position(|&n| n == rest);
+            let slot = [CONTROL, CONTENT, RESET_TABLE]
+                .iter()
+                .position(|&n| n == rest);
             if let Some(slot) = slot.and_then(|i| found.get_mut(i))
                 && e.section == 0
             {
@@ -265,12 +269,16 @@ async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
     let file = chm.input.span;
     let at = |(offset, length): (u64, u64)| file.sub(chm.content.saturating_add(offset), length);
     let [Some(control), Some(content), Some(reset)] = found else {
-        return Err(Diagnostic::malformed("no LZX control data, content or reset table"));
+        return Err(Diagnostic::malformed(
+            "no LZX control data, content or reset table",
+        ));
     };
     let control_span = at(control);
     let c = cx.read(control_span.sub(0, 28)).await?;
     if c.get(4..8) != Some(b"LZXC".as_slice()) {
-        return Err(Diagnostic::unsupported("section 1 is not LZX (no LZXC control data)").at(control_span));
+        return Err(
+            Diagnostic::unsupported("section 1 is not LZX (no LZXC control data)").at(control_span),
+        );
     }
     let version = u32_le(&c, 8).unwrap_or(0);
     let (mut interval, mut window) = (u32_le(&c, 12).unwrap_or(0), u32_le(&c, 16).unwrap_or(0));
@@ -280,13 +288,20 @@ async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
             interval = interval.saturating_mul(FRAME);
             window = window.saturating_mul(FRAME);
         }
-        _ => return Err(Diagnostic::unsupported(format!("LZXC control data version {version}")).at(control_span)),
+        _ => {
+            return Err(
+                Diagnostic::unsupported(format!("LZXC control data version {version}"))
+                    .at(control_span),
+            );
+        }
     }
-    let window_bits = (15..=21u8)
-        .find(|&b| window == 1u32 << b)
-        .ok_or_else(|| Diagnostic::malformed(format!("LZX window size {window:#x}")).at(control_span))?;
+    let window_bits = (15..=21u8).find(|&b| window == 1u32 << b).ok_or_else(|| {
+        Diagnostic::malformed(format!("LZX window size {window:#x}")).at(control_span)
+    })?;
     if interval == 0 || !interval.is_multiple_of(FRAME) {
-        return Err(Diagnostic::malformed(format!("LZX reset interval {interval:#x}")).at(control_span));
+        return Err(
+            Diagnostic::malformed(format!("LZX reset interval {interval:#x}")).at(control_span),
+        );
     }
     let r = cx.read(at(reset).sub(0, 40)).await?;
     let len = crate::bytes::u64_le(&r, 16).unwrap_or(0);
@@ -310,7 +325,9 @@ async fn section1_content(cx: Cx, chm: Chm) -> Result<()> {
 async fn section1_file(cx: Cx, (chm, offset, length): (Chm, u64, u64)) -> Result<()> {
     let stream = section1(&cx, &chm).await?;
     if offset.saturating_add(length) > stream.len {
-        return Err(Diagnostic::malformed("file lies beyond the compressed section"));
+        return Err(Diagnostic::malformed(
+            "file lies beyond the compressed section",
+        ));
     }
     dissect_or_data(cx, chm.input.nested(stream.sub(offset, length))).await
 }
@@ -327,7 +344,10 @@ async fn files(cx: Cx, chm: Chm) -> Result<()> {
             };
             let name = clip(&e.name, 200);
             let node = if e.section == 0 && e.length > 0 {
-                let data_span = chm.input.span.sub(chm.content.saturating_add(e.offset), e.length);
+                let data_span = chm
+                    .input
+                    .span
+                    .sub(chm.content.saturating_add(e.offset), e.length);
                 content(name, chm.input, data_span, Codec::Stored, None)
                     .value(value)
                     .summary(format!("section 0, offset {:#x}", e.offset))

@@ -82,7 +82,9 @@ impl Params {
         Params {
             window_bits: 15,
             reset_interval: 0,
-            variant: Variant::Wim { e8_size: 12_000_000 },
+            variant: Variant::Wim {
+                e8_size: 12_000_000,
+            },
             len: Some(len),
         }
     }
@@ -196,7 +198,9 @@ impl Bits {
         while self.left < n {
             let word = match (input.get(self.pos), input.get(self.pos.saturating_add(1))) {
                 (Some(&lo), Some(&hi)) => u16::from_le_bytes([lo, hi]),
-                (lo, _) if eof && self.pos < input.len().saturating_add(2) => u16::from(lo.copied().unwrap_or(0)),
+                (lo, _) if eof && self.pos < input.len().saturating_add(2) => {
+                    u16::from(lo.copied().unwrap_or(0))
+                }
                 _ => return Err(bad("input ends unexpectedly")),
             };
             self.buf |= u64::from(word) << 48u32.saturating_sub(self.left);
@@ -306,7 +310,8 @@ pub struct Lzx {
 
 impl Lzx {
     pub fn new(params: Params) -> Result<Self> {
-        let slots = position_slots(params.window_bits).ok_or_else(|| bad("window size out of range"))?;
+        let slots =
+            position_slots(params.window_bits).ok_or_else(|| bad("window size out of range"))?;
         let main_symbols = 256usize.saturating_add(slots.saturating_mul(8));
         Ok(Lzx {
             params,
@@ -392,17 +397,32 @@ impl Lzx {
 
     /// Reads tree lengths `first..last` of `lens` as deltas, through a
     /// pretree.
-    fn read_lengths(st: &mut State, input: &[u8], eof: bool, which: bool, first: usize, last: usize) -> Result<()> {
+    fn read_lengths(
+        st: &mut State,
+        input: &[u8],
+        eof: bool,
+        which: bool,
+        first: usize,
+        last: usize,
+    ) -> Result<()> {
         let mut pre = [0u8; PRETREE];
         for p in &mut pre {
             *p = u8::try_from(st.bits.read(input, eof, 4)?).unwrap_or(0);
         }
         let pretree = Huffman::new(&pre)?;
-        let lens = if which { &mut st.main_len } else { &mut st.length_len };
+        let lens = if which {
+            &mut st.main_len
+        } else {
+            &mut st.length_len
+        };
         let mut x = first;
         let delta = |old: u8, z: usize| -> u8 {
             let z = u8::try_from(z).unwrap_or(0);
-            if old >= z { old.saturating_sub(z) } else { old.saturating_add(17).saturating_sub(z) }
+            if old >= z {
+                old.saturating_sub(z)
+            } else {
+                old.saturating_add(17).saturating_sub(z)
+            }
         };
         while x < last {
             let z = st.bits.decode(input, eof, &pretree)?;
@@ -486,7 +506,8 @@ impl Lzx {
                 }
                 st.bits.align();
                 for r in &mut st.r {
-                    *r = crate::bytes::u32_le(input, st.bits.pos).ok_or_else(|| bad("input ends unexpectedly"))?;
+                    *r = crate::bytes::u32_le(input, st.bits.pos)
+                        .ok_or_else(|| bad("input ends unexpectedly"))?;
                     st.bits.pos = st.bits.pos.saturating_add(4);
                 }
             }
@@ -561,7 +582,11 @@ impl Lzx {
             let available = usize::try_from(start_offset)
                 .unwrap_or(usize::MAX)
                 .saturating_add(produced);
-            if distance == 0 || distance > available || distance > window || distance > self.hist.len() {
+            if distance == 0
+                || distance > available
+                || distance > window
+                || distance > self.hist.len()
+            {
                 return Err(bad("match offset reaches before the start of the window"));
             }
             let from = self.hist.len().saturating_sub(distance);
@@ -579,7 +604,15 @@ impl Lzx {
     /// to `out`. On error, the state is unspecified (callers snapshot).
     /// `may_end`: the stream may end (at a block boundary) where the input
     /// does.
-    pub fn frame(&mut self, input: &[u8], eof: bool, may_end: bool, frame_len: usize, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+    pub fn frame(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        may_end: bool,
+        frame_len: usize,
+        out: &mut Vec<u8>,
+        limit: usize,
+    ) -> Result<()> {
         let interval = u64::from(self.params.reset_interval);
         if interval != 0 && self.st.frame.is_multiple_of(interval) {
             self.reset()?;
@@ -615,11 +648,16 @@ impl Lzx {
                 .unwrap_or(usize::MAX)
                 .min(frame_len.saturating_sub(produced));
             if out.len().saturating_add(produced).saturating_add(todo) > limit {
-                return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+                return Err(Diagnostic::limit(format!(
+                    "decompressed data exceeds {limit:#x} bytes"
+                )));
             }
             self.run(input, eof, todo, start)?;
             produced = produced.saturating_add(todo);
-            self.st.block_remaining = self.st.block_remaining.saturating_sub(u32::try_from(todo).unwrap_or(u32::MAX));
+            self.st.block_remaining = self
+                .st
+                .block_remaining
+                .saturating_sub(u32::try_from(todo).unwrap_or(u32::MAX));
         }
         // Frames end on a word boundary (not inside uncompressed blocks,
         // which are byte-aligned already).
@@ -629,10 +667,17 @@ impl Lzx {
         out.extend_from_slice(data);
         let position = self.st.offset.saturating_sub(self.st.reset_offset);
         if self.st.e8_size != 0 && position < E8_LIMIT && produced > 10 {
-            translate(out.get_mut(at..).unwrap_or_default(), position, self.st.e8_size);
+            translate(
+                out.get_mut(at..).unwrap_or_default(),
+                position,
+                self.st.e8_size,
+            );
         }
         self.st.frame = self.st.frame.saturating_add(1);
-        self.st.offset = self.st.offset.saturating_add(crate::bytes::to_u64(produced));
+        self.st.offset = self
+            .st
+            .offset
+            .saturating_add(crate::bytes::to_u64(produced));
         Ok(())
     }
 }
@@ -655,7 +700,11 @@ pub fn translate(frame: &mut [u8], offset: u64, size: u32) {
         if let Some(abs) = crate::bytes::i32_le(frame, at) {
             let abs = i64::from(abs);
             if abs >= pos.saturating_neg() && abs < size {
-                let rel = if abs >= 0 { abs.saturating_sub(pos) } else { abs.saturating_add(size) };
+                let rel = if abs >= 0 {
+                    abs.saturating_sub(pos)
+                } else {
+                    abs.saturating_add(size)
+                };
                 let rel = (rel as i32).to_le_bytes();
                 if let Some(slot) = frame.get_mut(at..at.saturating_add(4)) {
                     slot.copy_from_slice(&rel);
@@ -683,7 +732,14 @@ impl LzxStream {
 }
 
 impl Decoder for LzxStream {
-    fn decode(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Status> {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
         let core = self.core.as_mut().map_err(|e| e.clone())?;
         let target = out.len().saturating_add(step);
         let mut decoded = 0u64;
@@ -699,7 +755,8 @@ impl Decoder for LzxStream {
             if out.len() >= target {
                 return Ok(Status::More);
             }
-            let frame_len = usize::try_from(remaining.min(crate::bytes::to_u64(FRAME))).unwrap_or(FRAME);
+            let frame_len =
+                usize::try_from(remaining.min(crate::bytes::to_u64(FRAME))).unwrap_or(FRAME);
             let saved = core.snapshot();
             let out_mark = out.len();
             match core.frame(input, eof, self.params.len.is_none(), frame_len, out, limit) {
@@ -707,7 +764,11 @@ impl Decoder for LzxStream {
                 Err(_) if !eof => {
                     core.restore(saved);
                     out.truncate(out_mark);
-                    return Ok(if decoded > 0 { Status::More } else { Status::NeedInput });
+                    return Ok(if decoded > 0 {
+                        Status::More
+                    } else {
+                        Status::NeedInput
+                    });
                 }
                 Err(e) => return Err(e),
             }

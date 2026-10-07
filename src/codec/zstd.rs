@@ -25,7 +25,10 @@ struct Forward<'a> {
 impl Forward<'_> {
     fn peek(&self, n: u32) -> u32 {
         let byte = self.bit / 8;
-        let window = le(self.data.get(byte..byte.saturating_add(8).min(self.data.len())).unwrap_or_default());
+        let window = le(self
+            .data
+            .get(byte..byte.saturating_add(8).min(self.data.len()))
+            .unwrap_or_default());
         u32::try_from((window >> (self.bit % 8)) & (1u64 << n).wrapping_sub(1)).unwrap_or(0)
     }
 
@@ -49,7 +52,10 @@ impl<'a> Backward<'a> {
             return Err(bad("bitstream without its end marker"));
         }
         let len = i64::try_from(data.len()).unwrap_or(i64::MAX);
-        let pos = len.saturating_mul(8).saturating_sub(i64::from(last.leading_zeros())).saturating_sub(1);
+        let pos = len
+            .saturating_mul(8)
+            .saturating_sub(i64::from(last.leading_zeros()))
+            .saturating_sub(1);
         Ok(Backward { data, pos })
     }
 
@@ -106,7 +112,10 @@ impl Fse {
         let mut next = vec![0u32; counts.len()];
         for (s, (&c, slot)) in counts.iter().zip(next.iter_mut()).enumerate() {
             if c == -1 {
-                cells.get_mut(high).ok_or_else(|| bad("FSE table overflow"))?.symbol = u8::try_from(s).unwrap_or(0);
+                cells
+                    .get_mut(high)
+                    .ok_or_else(|| bad("FSE table overflow"))?
+                    .symbol = u8::try_from(s).unwrap_or(0);
                 high = high.saturating_sub(1);
                 *slot = 1;
             } else {
@@ -118,7 +127,10 @@ impl Fse {
         let mut position = 0usize;
         for (s, &c) in counts.iter().enumerate() {
             for _ in 0..c.max(0) {
-                cells.get_mut(position).ok_or_else(|| bad("FSE table overflow"))?.symbol = u8::try_from(s).unwrap_or(0);
+                cells
+                    .get_mut(position)
+                    .ok_or_else(|| bad("FSE table overflow"))?
+                    .symbol = u8::try_from(s).unwrap_or(0);
                 loop {
                     position = position.wrapping_add(step) & mask;
                     if position <= high {
@@ -131,19 +143,30 @@ impl Fse {
             return Err(bad("FSE table not filled"));
         }
         for cell in &mut cells {
-            let n = next.get_mut(usize::from(cell.symbol)).ok_or_else(|| bad("FSE symbol"))?;
+            let n = next
+                .get_mut(usize::from(cell.symbol))
+                .ok_or_else(|| bad("FSE symbol"))?;
             let state = *n;
             *n = n.saturating_add(1);
             let high_bit = 31u32.saturating_sub(state.max(1).leading_zeros());
             let bits = log.saturating_sub(high_bit);
             cell.bits = u8::try_from(bits).unwrap_or(0);
-            cell.base = u16::try_from((state << bits).saturating_sub(u32::try_from(size).unwrap_or(0))).unwrap_or(0);
+            cell.base =
+                u16::try_from((state << bits).saturating_sub(u32::try_from(size).unwrap_or(0)))
+                    .unwrap_or(0);
         }
         Ok(Fse { log, cells })
     }
 
     fn rle(symbol: u8) -> Self {
-        Fse { log: 0, cells: vec![Cell { symbol, bits: 0, base: 0 }] }
+        Fse {
+            log: 0,
+            cells: vec![Cell {
+                symbol,
+                bits: 0,
+                base: 0,
+            }],
+        }
     }
 
     /// Reads a table description; returns the table and bytes consumed.
@@ -159,7 +182,10 @@ impl Fse {
         let mut bits = log.saturating_add(1);
         let mut counts: Vec<i16> = Vec::new();
         while remaining > 1 && counts.len() <= max_symbol {
-            let max = threshold.saturating_mul(2).saturating_sub(1).saturating_sub(remaining);
+            let max = threshold
+                .saturating_mul(2)
+                .saturating_sub(1)
+                .saturating_sub(remaining);
             let low = i32::try_from(r.peek(bits.saturating_sub(1))).unwrap_or(0);
             let mut count;
             if low < max {
@@ -180,7 +206,12 @@ impl Fse {
                 loop {
                     let repeat = r.peek(2);
                     r.skip(2);
-                    counts.resize(counts.len().saturating_add(usize::try_from(repeat).unwrap_or(0)), 0);
+                    counts.resize(
+                        counts
+                            .len()
+                            .saturating_add(usize::try_from(repeat).unwrap_or(0)),
+                        0,
+                    );
                     if repeat != 3 || counts.len() > max_symbol {
                         break;
                     }
@@ -207,27 +238,115 @@ impl Fse {
 
     fn update(&self, state: &mut usize, r: &mut Backward<'_>) {
         let cell = self.cells.get(*state).copied().unwrap_or_default();
-        *state = usize::from(cell.base).wrapping_add(usize::try_from(r.read(cell.bits.into())).unwrap_or(0));
+        *state = usize::from(cell.base)
+            .wrapping_add(usize::try_from(r.read(cell.bits.into())).unwrap_or(0));
     }
 }
 
-const LL_DEFAULT: [i16; 36] = [4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 1, 1, 1, 1, 1, -1, -1, -1, -1];
-const ML_DEFAULT: [i16; 53] = [
-    1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1,
+const LL_DEFAULT: [i16; 36] = [
+    4, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 2, 1, 1, 1, 1, 1,
+    -1, -1, -1, -1,
 ];
-const OF_DEFAULT: [i16; 29] = [1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1];
+const ML_DEFAULT: [i16; 53] = [
+    1, 4, 3, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1, -1, -1,
+];
+const OF_DEFAULT: [i16; 29] = [
+    1, 1, 1, 1, 1, 1, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, -1, -1, -1, -1, -1,
+];
 
 const LL_BASE: [(u32, u32); 36] = [
-    (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), (10, 0), (11, 0), (12, 0), (13, 0), (14, 0), (15, 0),
-    (16, 1), (18, 1), (20, 1), (22, 1), (24, 2), (28, 2), (32, 3), (40, 3), (48, 4), (64, 6), (128, 7), (256, 8), (512, 9),
-    (1024, 10), (2048, 11), (4096, 12), (8192, 13), (16384, 14), (32768, 15), (65536, 16),
+    (0, 0),
+    (1, 0),
+    (2, 0),
+    (3, 0),
+    (4, 0),
+    (5, 0),
+    (6, 0),
+    (7, 0),
+    (8, 0),
+    (9, 0),
+    (10, 0),
+    (11, 0),
+    (12, 0),
+    (13, 0),
+    (14, 0),
+    (15, 0),
+    (16, 1),
+    (18, 1),
+    (20, 1),
+    (22, 1),
+    (24, 2),
+    (28, 2),
+    (32, 3),
+    (40, 3),
+    (48, 4),
+    (64, 6),
+    (128, 7),
+    (256, 8),
+    (512, 9),
+    (1024, 10),
+    (2048, 11),
+    (4096, 12),
+    (8192, 13),
+    (16384, 14),
+    (32768, 15),
+    (65536, 16),
 ];
 const ML_BASE: [(u32, u32); 53] = [
-    (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), (10, 0), (11, 0), (12, 0), (13, 0), (14, 0), (15, 0), (16, 0), (17, 0),
-    (18, 0), (19, 0), (20, 0), (21, 0), (22, 0), (23, 0), (24, 0), (25, 0), (26, 0), (27, 0), (28, 0), (29, 0), (30, 0), (31, 0),
-    (32, 0), (33, 0), (34, 0), (35, 1), (37, 1), (39, 1), (41, 1), (43, 2), (47, 2), (51, 3), (59, 3), (67, 4), (83, 4), (99, 5),
-    (131, 7), (259, 8), (515, 9), (1027, 10), (2051, 11), (4099, 12), (8195, 13), (16387, 14), (32771, 15), (65539, 16),
+    (3, 0),
+    (4, 0),
+    (5, 0),
+    (6, 0),
+    (7, 0),
+    (8, 0),
+    (9, 0),
+    (10, 0),
+    (11, 0),
+    (12, 0),
+    (13, 0),
+    (14, 0),
+    (15, 0),
+    (16, 0),
+    (17, 0),
+    (18, 0),
+    (19, 0),
+    (20, 0),
+    (21, 0),
+    (22, 0),
+    (23, 0),
+    (24, 0),
+    (25, 0),
+    (26, 0),
+    (27, 0),
+    (28, 0),
+    (29, 0),
+    (30, 0),
+    (31, 0),
+    (32, 0),
+    (33, 0),
+    (34, 0),
+    (35, 1),
+    (37, 1),
+    (39, 1),
+    (41, 1),
+    (43, 2),
+    (47, 2),
+    (51, 3),
+    (59, 3),
+    (67, 4),
+    (83, 4),
+    (99, 5),
+    (131, 7),
+    (259, 8),
+    (515, 9),
+    (1027, 10),
+    (2051, 11),
+    (4099, 12),
+    (8195, 13),
+    (16387, 14),
+    (32771, 15),
+    (65539, 16),
 ];
 
 // ---------------------------------------------------------------------------
@@ -242,7 +361,11 @@ struct Huffman {
 
 impl Huffman {
     fn from_weights(mut weights: Vec<u8>) -> Result<Self> {
-        let total: u32 = weights.iter().filter(|&&w| w > 0).map(|&w| 1u32 << (w.saturating_sub(1))).sum();
+        let total: u32 = weights
+            .iter()
+            .filter(|&&w| w > 0)
+            .map(|&w| 1u32 << (w.saturating_sub(1)))
+            .sum();
         if total == 0 {
             return Err(bad("empty Huffman weights"));
         }
@@ -265,8 +388,12 @@ impl Huffman {
                     continue;
                 }
                 let len = 1usize << (w.saturating_sub(1));
-                let bits = u8::try_from(max_bits.saturating_add(1).saturating_sub(u32::from(w))).unwrap_or(0);
-                for slot in table.get_mut(next..next.saturating_add(len)).ok_or_else(|| bad("Huffman table overflow"))? {
+                let bits = u8::try_from(max_bits.saturating_add(1).saturating_sub(u32::from(w)))
+                    .unwrap_or(0);
+                for slot in table
+                    .get_mut(next..next.saturating_add(len))
+                    .ok_or_else(|| bad("Huffman table overflow"))?
+                {
                     *slot = (u8::try_from(s).unwrap_or(0), bits);
                 }
                 next = next.saturating_add(len);
@@ -280,11 +407,22 @@ impl Huffman {
         let header = usize::from(*data.first().ok_or_else(|| bad("missing Huffman tree"))?);
         if header >= 128 {
             let n = header.saturating_sub(127);
-            let bytes = data.get(1..1usize.saturating_add(n.div_ceil(2))).ok_or_else(|| bad("truncated Huffman weights"))?;
-            let weights: Vec<u8> = bytes.iter().flat_map(|&b| [b >> 4, b & 0x0f]).take(n).collect();
-            return Ok((Huffman::from_weights(weights)?, 1usize.saturating_add(n.div_ceil(2))));
+            let bytes = data
+                .get(1..1usize.saturating_add(n.div_ceil(2)))
+                .ok_or_else(|| bad("truncated Huffman weights"))?;
+            let weights: Vec<u8> = bytes
+                .iter()
+                .flat_map(|&b| [b >> 4, b & 0x0f])
+                .take(n)
+                .collect();
+            return Ok((
+                Huffman::from_weights(weights)?,
+                1usize.saturating_add(n.div_ceil(2)),
+            ));
         }
-        let body = data.get(1..1usize.saturating_add(header)).ok_or_else(|| bad("truncated Huffman weights"))?;
+        let body = data
+            .get(1..1usize.saturating_add(header))
+            .ok_or_else(|| bad("truncated Huffman weights"))?;
         let (fse, used) = Fse::read(body, 255, 6)?;
         let mut r = Backward::new(body.get(used..).unwrap_or_default())?;
         let mut s1 = fse.init(&mut r);
@@ -307,7 +445,10 @@ impl Huffman {
                 break;
             }
         }
-        Ok((Huffman::from_weights(weights)?, 1usize.saturating_add(header)))
+        Ok((
+            Huffman::from_weights(weights)?,
+            1usize.saturating_add(header),
+        ))
     }
 
     fn decode_stream(&self, data: &[u8], count: usize, out: &mut Vec<u8>) -> Result<()> {
@@ -350,7 +491,9 @@ fn literals(block: &[u8], st: &mut FrameState) -> Result<(Vec<u8>, usize)> {
             _ => (usize::from(b0 >> 4) | byte(1) << 4 | byte(2) << 12, 3),
         };
         if kind == 0 {
-            let lit = block.get(header..header.saturating_add(size)).ok_or_else(|| bad("truncated literals"))?;
+            let lit = block
+                .get(header..header.saturating_add(size))
+                .ok_or_else(|| bad("truncated literals"))?;
             return Ok((lit.to_vec(), header.saturating_add(size)));
         }
         let b = *block.get(header).ok_or_else(|| bad("truncated literals"))?;
@@ -359,7 +502,12 @@ fn literals(block: &[u8], st: &mut FrameState) -> Result<(Vec<u8>, usize)> {
     let (header, regen, compressed, streams) = match format {
         0 | 1 => {
             let h = le(block.get(..3).unwrap_or_default());
-            (3usize, (h >> 4) & 0x3ff, (h >> 14) & 0x3ff, if format == 0 { 1 } else { 4 })
+            (
+                3usize,
+                (h >> 4) & 0x3ff,
+                (h >> 14) & 0x3ff,
+                if format == 0 { 1 } else { 4 },
+            )
         }
         2 => {
             let h = le(block.get(..4).unwrap_or_default());
@@ -372,24 +520,35 @@ fn literals(block: &[u8], st: &mut FrameState) -> Result<(Vec<u8>, usize)> {
     };
     let regen = usize::try_from(regen).unwrap_or(0);
     let compressed = usize::try_from(compressed).unwrap_or(0);
-    let mut data = block.get(header..header.saturating_add(compressed)).ok_or_else(|| bad("truncated literals"))?;
+    let mut data = block
+        .get(header..header.saturating_add(compressed))
+        .ok_or_else(|| bad("truncated literals"))?;
     if kind == 2 {
         let (tree, used) = Huffman::read(data)?;
         st.huffman = Some(tree);
         data = data.get(used..).unwrap_or_default();
     }
-    let tree = st.huffman.as_ref().ok_or_else(|| bad("treeless literals without a previous tree"))?;
+    let tree = st
+        .huffman
+        .as_ref()
+        .ok_or_else(|| bad("treeless literals without a previous tree"))?;
     let mut out = Vec::with_capacity(regen);
     if streams == 1 {
         tree.decode_stream(data, regen, &mut out)?;
     } else {
         let jump = data.get(..6).ok_or_else(|| bad("truncated jump table"))?;
-        let sizes = [le(jump.get(0..2).unwrap_or_default()), le(jump.get(2..4).unwrap_or_default()), le(jump.get(4..6).unwrap_or_default())];
+        let sizes = [
+            le(jump.get(0..2).unwrap_or_default()),
+            le(jump.get(2..4).unwrap_or_default()),
+            le(jump.get(4..6).unwrap_or_default()),
+        ];
         let each = regen.div_ceil(4);
         let mut pos = 6usize;
         for (i, &size) in sizes.iter().enumerate() {
             let size = usize::try_from(size).unwrap_or(0);
-            let s = data.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated literal stream"))?;
+            let s = data
+                .get(pos..pos.saturating_add(size))
+                .ok_or_else(|| bad("truncated literal stream"))?;
             tree.decode_stream(s, each, &mut out)?;
             pos = pos.saturating_add(size);
             let _ = i;
@@ -401,18 +560,43 @@ fn literals(block: &[u8], st: &mut FrameState) -> Result<(Vec<u8>, usize)> {
 }
 
 /// A sequence table per its compression mode.
-fn table(mode: u8, data: &[u8], prev: Option<Fse>, default: &[i16], default_log: u32, max_symbol: usize, max_log: u32) -> Result<(Fse, usize)> {
+fn table(
+    mode: u8,
+    data: &[u8],
+    prev: Option<Fse>,
+    default: &[i16],
+    default_log: u32,
+    max_symbol: usize,
+    max_log: u32,
+) -> Result<(Fse, usize)> {
     match mode {
         0 => Ok((Fse::build(default, default_log)?, 0)),
-        1 => Ok((Fse::rle(*data.first().ok_or_else(|| bad("missing RLE symbol"))?), 1)),
+        1 => Ok((
+            Fse::rle(*data.first().ok_or_else(|| bad("missing RLE symbol"))?),
+            1,
+        )),
         2 => Fse::read(data, max_symbol, max_log),
-        _ => Ok((prev.ok_or_else(|| bad("repeat mode without a previous table"))?, 0)),
+        _ => Ok((
+            prev.ok_or_else(|| bad("repeat mode without a previous table"))?,
+            0,
+        )),
     }
 }
 
-fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_start: usize, window: usize, limit: usize) -> Result<()> {
+fn compressed_block(
+    block: &[u8],
+    st: &mut FrameState,
+    out: &mut Vec<u8>,
+    frame_start: usize,
+    window: usize,
+    limit: usize,
+) -> Result<()> {
     let (lits, mut pos) = literals(block, st)?;
-    let b0 = usize::from(*block.get(pos).ok_or_else(|| bad("missing sequence count"))?);
+    let b0 = usize::from(
+        *block
+            .get(pos)
+            .ok_or_else(|| bad("missing sequence count"))?,
+    );
     let byte = |i: usize| usize::from(block.get(i).copied().unwrap_or(0));
     let count = match b0 {
         0 => {
@@ -436,11 +620,35 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
     };
     let modes = *block.get(pos).ok_or_else(|| bad("missing modes"))?;
     pos = pos.saturating_add(1);
-    let (ll, used) = table(modes >> 6, block.get(pos..).unwrap_or_default(), st.ll.take(), &LL_DEFAULT, 6, 35, 9)?;
+    let (ll, used) = table(
+        modes >> 6,
+        block.get(pos..).unwrap_or_default(),
+        st.ll.take(),
+        &LL_DEFAULT,
+        6,
+        35,
+        9,
+    )?;
     pos = pos.saturating_add(used);
-    let (of, used) = table(modes >> 4 & 3, block.get(pos..).unwrap_or_default(), st.of.take(), &OF_DEFAULT, 5, 31, 8)?;
+    let (of, used) = table(
+        modes >> 4 & 3,
+        block.get(pos..).unwrap_or_default(),
+        st.of.take(),
+        &OF_DEFAULT,
+        5,
+        31,
+        8,
+    )?;
     pos = pos.saturating_add(used);
-    let (ml, used) = table(modes >> 2 & 3, block.get(pos..).unwrap_or_default(), st.ml.take(), &ML_DEFAULT, 6, 52, 9)?;
+    let (ml, used) = table(
+        modes >> 2 & 3,
+        block.get(pos..).unwrap_or_default(),
+        st.ml.take(),
+        &ML_DEFAULT,
+        6,
+        52,
+        9,
+    )?;
     pos = pos.saturating_add(used);
     let mut r = Backward::new(block.get(pos..).unwrap_or_default())?;
     let mut ll_state = ll.init(&mut r);
@@ -454,11 +662,18 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
         if of_code > 31 {
             return Err(bad("offset code too large"));
         }
-        let offset_value = usize::try_from((1u64 << of_code).wrapping_add(r.read(of_code))).unwrap_or(usize::MAX);
-        let &(ml_base, ml_bits) = ML_BASE.get(ml_code).ok_or_else(|| bad("match length code"))?;
-        let match_len = usize::try_from(u64::from(ml_base).wrapping_add(r.read(ml_bits))).unwrap_or(0);
-        let &(ll_base, ll_bits) = LL_BASE.get(ll_code).ok_or_else(|| bad("literal length code"))?;
-        let lit_len = usize::try_from(u64::from(ll_base).wrapping_add(r.read(ll_bits))).unwrap_or(0);
+        let offset_value =
+            usize::try_from((1u64 << of_code).wrapping_add(r.read(of_code))).unwrap_or(usize::MAX);
+        let &(ml_base, ml_bits) = ML_BASE
+            .get(ml_code)
+            .ok_or_else(|| bad("match length code"))?;
+        let match_len =
+            usize::try_from(u64::from(ml_base).wrapping_add(r.read(ml_bits))).unwrap_or(0);
+        let &(ll_base, ll_bits) = LL_BASE
+            .get(ll_code)
+            .ok_or_else(|| bad("literal length code"))?;
+        let lit_len =
+            usize::try_from(u64::from(ll_base).wrapping_add(r.read(ll_bits))).unwrap_or(0);
         if i.saturating_add(1) < count {
             ll.update(&mut ll_state, &mut r);
             ml.update(&mut ml_state, &mut r);
@@ -471,7 +686,11 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
             st.reps = [o, r1, r2];
             o
         } else {
-            let index = if lit_len == 0 { offset_value.saturating_add(1) } else { offset_value };
+            let index = if lit_len == 0 {
+                offset_value.saturating_add(1)
+            } else {
+                offset_value
+            };
             match index {
                 1 => r1,
                 2 => {
@@ -489,14 +708,18 @@ fn compressed_block(block: &[u8], st: &mut FrameState, out: &mut Vec<u8>, frame_
                 }
             }
         };
-        let lit = lits.get(lit_pos..lit_pos.saturating_add(lit_len)).ok_or_else(|| bad("literals overrun"))?;
+        let lit = lits
+            .get(lit_pos..lit_pos.saturating_add(lit_len))
+            .ok_or_else(|| bad("literals overrun"))?;
         out.extend_from_slice(lit);
         lit_pos = lit_pos.saturating_add(lit_len);
         if offset == 0 || offset > out.len().saturating_sub(frame_start) || offset > window {
             return Err(bad("match offset beyond the window"));
         }
         if out.len().saturating_add(match_len) > limit {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         let from = out.len().saturating_sub(offset);
         for k in 0..match_len {
@@ -518,7 +741,9 @@ const P4: u64 = 0x85eb_ca77_c2b2_ae63;
 const P5: u64 = 0x27d4_eb2f_1656_67c5;
 
 fn xxh_round(acc: u64, v: u64) -> u64 {
-    acc.wrapping_add(v.wrapping_mul(P2)).rotate_left(31).wrapping_mul(P1)
+    acc.wrapping_add(v.wrapping_mul(P2))
+        .rotate_left(31)
+        .wrapping_mul(P1)
 }
 
 /// Incremental XXH64 (for content checksums).
@@ -536,7 +761,12 @@ impl Xxh64 {
     pub fn new(seed: u64) -> Self {
         Xxh64 {
             seed,
-            lanes: [seed.wrapping_add(P1).wrapping_add(P2), seed.wrapping_add(P2), seed, seed.wrapping_sub(P1)],
+            lanes: [
+                seed.wrapping_add(P1).wrapping_add(P2),
+                seed.wrapping_add(P2),
+                seed,
+                seed.wrapping_sub(P1),
+            ],
             buf: [0; 32],
             buffered: 0,
             total: 0,
@@ -550,10 +780,16 @@ impl Xxh64 {
     }
 
     pub fn update(&mut self, mut data: &[u8]) {
-        self.total = self.total.wrapping_add(u64::try_from(data.len()).unwrap_or(0));
+        self.total = self
+            .total
+            .wrapping_add(u64::try_from(data.len()).unwrap_or(0));
         if self.buffered > 0 {
             let take = 32usize.saturating_sub(self.buffered).min(data.len());
-            if let (Some(dst), Some(src)) = (self.buf.get_mut(self.buffered..self.buffered.saturating_add(take)), data.get(..take)) {
+            if let (Some(dst), Some(src)) = (
+                self.buf
+                    .get_mut(self.buffered..self.buffered.saturating_add(take)),
+                data.get(..take),
+            ) {
                 dst.copy_from_slice(src);
             }
             self.buffered = self.buffered.saturating_add(take);
@@ -580,7 +816,11 @@ impl Xxh64 {
         let mut h;
         if self.total >= 32 {
             let [a, b, c, d] = self.lanes;
-            h = a.rotate_left(1).wrapping_add(b.rotate_left(7)).wrapping_add(c.rotate_left(12)).wrapping_add(d.rotate_left(18));
+            h = a
+                .rotate_left(1)
+                .wrapping_add(b.rotate_left(7))
+                .wrapping_add(c.rotate_left(12))
+                .wrapping_add(d.rotate_left(18));
             for lane in self.lanes {
                 h = merge(h, lane);
             }
@@ -591,14 +831,22 @@ impl Xxh64 {
         let rest = self.buf.get(..self.buffered).unwrap_or_default();
         let (words, rest) = rest.as_chunks::<8>();
         for w in words {
-            h = (h ^ xxh_round(0, u64::from_le_bytes(*w))).rotate_left(27).wrapping_mul(P1).wrapping_add(P4);
+            h = (h ^ xxh_round(0, u64::from_le_bytes(*w)))
+                .rotate_left(27)
+                .wrapping_mul(P1)
+                .wrapping_add(P4);
         }
         let (quads, bytes) = rest.as_chunks::<4>();
         for q in quads {
-            h = (h ^ u64::from(u32::from_le_bytes(*q)).wrapping_mul(P1)).rotate_left(23).wrapping_mul(P2).wrapping_add(P3);
+            h = (h ^ u64::from(u32::from_le_bytes(*q)).wrapping_mul(P1))
+                .rotate_left(23)
+                .wrapping_mul(P2)
+                .wrapping_add(P3);
         }
         for &b in bytes {
-            h = (h ^ u64::from(b).wrapping_mul(P5)).rotate_left(11).wrapping_mul(P1);
+            h = (h ^ u64::from(b).wrapping_mul(P5))
+                .rotate_left(11)
+                .wrapping_mul(P1);
         }
         h ^= h >> 33;
         h = h.wrapping_mul(P2);
@@ -653,12 +901,21 @@ pub struct Zstd {
 impl Zstd {
     /// Concatenated frames, until the input ends or something else follows.
     pub fn new() -> Self {
-        Zstd { pos: 0, frames: 0, frame: None, single: false, done: false }
+        Zstd {
+            pos: 0,
+            frames: 0,
+            frame: None,
+            single: false,
+            done: false,
+        }
     }
 
     /// One frame; whatever follows it is left unconsumed.
     pub fn single_frame() -> Self {
-        Zstd { single: true, ..Zstd::new() }
+        Zstd {
+            single: true,
+            ..Zstd::new()
+        }
     }
 
     /// Starts a frame (or skips a skippable one) at `self.pos`.
@@ -676,8 +933,13 @@ impl Zstd {
             return Ok(());
         };
         if magic & 0xffff_fff0 == 0x184d_2a50 {
-            let len = input.get(pos.saturating_add(4)..pos.saturating_add(8)).map(le);
-            let end = len.map(|len| pos.saturating_add(8).saturating_add(usize::try_from(len).unwrap_or(usize::MAX)));
+            let len = input
+                .get(pos.saturating_add(4)..pos.saturating_add(8))
+                .map(le);
+            let end = len.map(|len| {
+                pos.saturating_add(8)
+                    .saturating_add(usize::try_from(len).unwrap_or(usize::MAX))
+            });
             match end {
                 Some(end) if end <= input.len() => self.pos = end,
                 _ if !eof => return Err(bad("truncated skippable frame")),
@@ -722,12 +984,16 @@ impl Zstd {
             window = Some(base.saturating_add(add));
             at = at.saturating_add(1);
         }
-        let dict = le(input.get(at..at.saturating_add(dict_len)).ok_or_else(|| bad("truncated frame header"))?);
+        let dict = le(input
+            .get(at..at.saturating_add(dict_len))
+            .ok_or_else(|| bad("truncated frame header"))?);
         if dict != 0 {
             return Err(Diagnostic::unsupported("zstd frame using a dictionary"));
         }
         at = at.saturating_add(dict_len);
-        let fcs = le(input.get(at..at.saturating_add(fcs_len)).ok_or_else(|| bad("truncated frame header"))?);
+        let fcs = le(input
+            .get(at..at.saturating_add(fcs_len))
+            .ok_or_else(|| bad("truncated frame header"))?);
         at = at.saturating_add(fcs_len);
         let size = match fcs_len {
             0 => None,
@@ -735,7 +1001,9 @@ impl Zstd {
             _ => Some(fcs),
         };
         // A single-segment frame's window is its content size.
-        let window = window.or(size).map_or(usize::MAX, |w| usize::try_from(w).unwrap_or(usize::MAX));
+        let window = window
+            .or(size)
+            .map_or(usize::MAX, |w| usize::try_from(w).unwrap_or(usize::MAX));
         self.frames = self.frames.saturating_add(1);
         self.pos = at;
         self.frame = Some(Frame {
@@ -744,7 +1012,13 @@ impl Zstd {
             produced: 0,
             hash: (fhd & 0x04 != 0).then(|| Xxh64::new(0)),
             size,
-            st: FrameState { huffman: None, ll: None, of: None, ml: None, reps: [1, 4, 8] },
+            st: FrameState {
+                huffman: None,
+                ll: None,
+                of: None,
+                ml: None,
+                reps: [1, 4, 8],
+            },
         });
         Ok(())
     }
@@ -755,7 +1029,9 @@ impl Zstd {
             return Ok(());
         };
         let mut pos = self.pos;
-        let h = le(input.get(pos..pos.saturating_add(3)).ok_or_else(|| bad("truncated block header"))?);
+        let h = le(input
+            .get(pos..pos.saturating_add(3))
+            .ok_or_else(|| bad("truncated block header"))?);
         pos = pos.saturating_add(3);
         let last = h & 1 != 0;
         let kind = (h >> 1) & 3;
@@ -763,7 +1039,9 @@ impl Zstd {
         let before = out.len();
         match kind {
             0 => {
-                let body = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated raw block"))?;
+                let body = input
+                    .get(pos..pos.saturating_add(size))
+                    .ok_or_else(|| bad("truncated raw block"))?;
                 if before.saturating_add(size) > limit {
                     return Err(limit_error(limit));
                 }
@@ -777,7 +1055,9 @@ impl Zstd {
                 out.resize(before.saturating_add(size), b);
             }
             2 => {
-                let block = input.get(pos..pos.saturating_add(size)).ok_or_else(|| bad("truncated compressed block"))?;
+                let block = input
+                    .get(pos..pos.saturating_add(size))
+                    .ok_or_else(|| bad("truncated compressed block"))?;
                 compressed_block(block, &mut frame.st, out, frame.start, frame.window, limit)?;
             }
             _ => return Err(bad("reserved block type")),
@@ -786,7 +1066,9 @@ impl Zstd {
             return Err(limit_error(limit));
         }
         let block_out = out.get(before..).unwrap_or_default();
-        frame.produced = frame.produced.saturating_add(u64::try_from(block_out.len()).unwrap_or(u64::MAX));
+        frame.produced = frame
+            .produced
+            .saturating_add(u64::try_from(block_out.len()).unwrap_or(u64::MAX));
         if let Some(hash) = frame.hash.as_mut() {
             hash.update(block_out);
         }
@@ -796,7 +1078,9 @@ impl Zstd {
                 return Err(bad("frame content size mismatch"));
             }
             if let Some(hash) = &frame.hash {
-                let stored = le(input.get(pos..pos.saturating_add(4)).ok_or_else(|| bad("truncated checksum"))?);
+                let stored = le(input
+                    .get(pos..pos.saturating_add(4))
+                    .ok_or_else(|| bad("truncated checksum"))?);
                 if hash.finish() & 0xffff_ffff != stored {
                     return Err(bad("content checksum mismatch"));
                 }
@@ -819,7 +1103,14 @@ impl Default for Zstd {
 }
 
 impl Decode for Zstd {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let target = out.len().saturating_add(step.max(1));
         loop {
             if self.done {
@@ -854,7 +1145,10 @@ impl Decode for Zstd {
         // most its window.
         match &self.frame {
             None => out_len,
-            Some(frame) => out_len.saturating_sub(frame.window).max(frame.start).min(out_len),
+            Some(frame) => out_len
+                .saturating_sub(frame.window)
+                .max(frame.start)
+                .min(out_len),
         }
     }
 

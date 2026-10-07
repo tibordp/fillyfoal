@@ -233,7 +233,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         l1: file.sub_exact(h.l1_offset, u64::from(h.l1_size).saturating_mul(8))?,
         size: h.size,
         backing: backing.is_some(),
-        codec: if compression == 1 { Codec::Zstd } else { Codec::Deflate },
+        codec: if compression == 1 {
+            Codec::Zstd
+        } else {
+            Codec::Deflate
+        },
     });
     cx.emit(
         Node::new("L1 table")
@@ -255,7 +259,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     if compression > 1 {
-        cx.emit(Node::new("Virtual disk").diag(Diagnostic::unsupported(format!("compression type {compression}"))));
+        cx.emit(
+            Node::new("Virtual disk").diag(Diagnostic::unsupported(format!(
+                "compression type {compression}"
+            ))),
+        );
         return Ok(());
     }
     cx.emit(virtual_disk_node(image, h.crypt));

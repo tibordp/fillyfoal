@@ -254,13 +254,20 @@ mod tests {
             ),
             ("ihqwcrb4cv8a8dqg056pqjye", "他们为什么不说中文"),
             ("3B-ww4c5e180e575a65lsy2b", "3年B組金八先生"),
-            ("-with-SUPER-MONKEYS-pc58ag80a8qai00g7n9n", "安室奈美恵-with-SUPER-MONKEYS"),
+            (
+                "-with-SUPER-MONKEYS-pc58ag80a8qai00g7n9n",
+                "安室奈美恵-with-SUPER-MONKEYS",
+            ),
             ("-> $1.00 <--", "-> $1.00 <-"),
             ("bcher-kva", "bücher"),
             ("mnchen-3ya", "münchen"),
         ];
         for (encoded, decoded) in cases {
-            assert_eq!(punycode_decode(encoded).as_deref(), Some(*decoded), "{encoded}");
+            assert_eq!(
+                punycode_decode(encoded).as_deref(),
+                Some(*decoded),
+                "{encoded}"
+            );
         }
         assert_eq!(punycode_decode("99999999999999"), None);
         assert_eq!(punycode_decode("a-é"), None);
@@ -268,7 +275,10 @@ mod tests {
 
     #[test]
     fn hosts_and_urls() {
-        assert_eq!(host_to_unicode("www.XN--bcher-kva.example").as_deref(), Some("www.bücher.example"));
+        assert_eq!(
+            host_to_unicode("www.XN--bcher-kva.example").as_deref(),
+            Some("www.bücher.example")
+        );
         assert_eq!(host_to_unicode("example.com"), None);
         assert_eq!(
             hosts_to_unicode("Jane <jane@xn--mnchen-3ya.de>").as_deref(),
@@ -287,11 +297,19 @@ mod tests {
     fn data_urls() {
         assert_eq!(
             data_url("data:image/png;base64,iVBOR"),
-            Some(DataUrl { media_type: "image/png".to_owned(), base64: true, payload: 22 })
+            Some(DataUrl {
+                media_type: "image/png".to_owned(),
+                base64: true,
+                payload: 22
+            })
         );
         assert_eq!(
             data_url("DATA:,Hello%2C%20World"),
-            Some(DataUrl { media_type: String::new(), base64: false, payload: 6 })
+            Some(DataUrl {
+                media_type: String::new(),
+                base64: false,
+                payload: 6
+            })
         );
         assert_eq!(data_url("https://x/,"), None);
     }

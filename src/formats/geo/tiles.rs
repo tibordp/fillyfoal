@@ -2,15 +2,15 @@
 //! tiles (protobuf) and OpenStreetMap o5m/o5c streams.
 
 use super::{enumv, hex, leaf, text, uint};
-use crate::formats::util::wire::flatbuffers::mem::{self as fb, Table as FbTable};
-use crate::formats::util::wire::protobuf::{self as pb, varint, zigzag};
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::codec::Codec;
+use crate::formats::util::wire::flatbuffers::mem::{self as fb, Table as FbTable};
+use crate::formats::util::wire::protobuf::{self as pb, varint, zigzag};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -210,7 +210,9 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
                 2 => {
                     let head = cx.read(dir.sub(0, 10)).await?;
                     if head.get(..4) != Some(&[0x1f, 0x8b, 8, 0][..]) {
-                        return Err(Diagnostic::unsupported("gzip directory with header fields").at(dir));
+                        return Err(
+                            Diagnostic::unsupported("gzip directory with header fields").at(dir)
+                        );
                     }
                     (dir.sub(10, dir.len.saturating_sub(18)), Codec::Deflate)
                 }
@@ -789,7 +791,8 @@ fn geometry_summary(cmds: &[u64]) -> String {
 
 async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     let data = cx.read(body).await?;
-    let fields = pb::all_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
+    let fields =
+        pb::all_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
     let keys: Vec<String> = fields
         .iter()
         .filter(|f| f.number == 3)

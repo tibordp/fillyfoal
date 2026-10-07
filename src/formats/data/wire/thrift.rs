@@ -86,10 +86,18 @@ async fn dissect(cx: Cx, input: Input, proto: Protocol) -> Result<()> {
     let one = proto.message(&buf.data).is_none() && buf.skip(0, Type::Struct, 0) == Some(len);
     if one {
         let fields = fields(&cx, &buf, 0, 0).await?;
-        cx.annotate(format!("{}, struct with {}", protocol_name(proto), plural(fields, "field")));
+        cx.annotate(format!(
+            "{}, struct with {}",
+            protocol_name(proto),
+            plural(fields, "field")
+        ));
     } else {
         let records = records(&cx, &buf).await?;
-        cx.annotate(format!("{}, {}", protocol_name(proto), plural(records, "record")));
+        cx.annotate(format!(
+            "{}, {}",
+            protocol_name(proto),
+            plural(records, "record")
+        ));
     }
     Ok(())
 }
@@ -132,7 +140,10 @@ async fn records(cx: &Cx, buf: &Buf) -> Result<u64> {
 
 type MessageHeader = (usize, usize, String, u8, i32);
 
-async fn message(cx: Cx, (buf, (_start, args, name, kind, seqid)): (Buf, MessageHeader)) -> Result<()> {
+async fn message(
+    cx: Cx,
+    (buf, (_start, args, name, kind, seqid)): (Buf, MessageHeader),
+) -> Result<()> {
     cx.emit(Node::new("Name").value(Value::Text(name)));
     cx.emit(Node::new("Type").value(Value::Enum {
         raw: kind.into(),
@@ -167,7 +178,12 @@ fn count_fields(buf: &Buf, at: usize, depth: u32) -> Option<u64> {
 
 type StructState = (Buf, usize, u32);
 
-fn struct_node(name: impl Into<std::borrow::Cow<'static, str>>, buf: &Buf, at: usize, depth: u32) -> Node {
+fn struct_node(
+    name: impl Into<std::borrow::Cow<'static, str>>,
+    buf: &Buf,
+    at: usize,
+    depth: u32,
+) -> Node {
     let node = Node::new(name);
     let summary = match count_fields(buf, at, depth) {
         Some(n) => format!("struct, {}", plural(n, "field")),
@@ -279,7 +295,12 @@ type ContainerState = (Buf, usize, u64, Option<Type>, Type, u32);
 fn container_node(node: Node, buf: &Buf, c: Container, t: Type, depth: u32) -> Node {
     let summary = match (t, c.key, c.elem) {
         (Type::Map, Some(k), Some(v)) => {
-            format!("map<{}, {}>, {}", k.name(), v.name(), plural(c.count, "entry"))
+            format!(
+                "map<{}, {}>, {}",
+                k.name(),
+                v.name(),
+                plural(c.count, "entry")
+            )
         }
         (Type::Map, _, _) => format!("map, {}", plural(c.count, "entry")),
         (_, _, Some(e)) => format!("{}<{}>, {}", t.name(), e.name(), plural(c.count, "element")),
@@ -294,7 +315,14 @@ fn container_node(node: Node, buf: &Buf, c: Container, t: Type, depth: u32) -> N
     }
     node.lazy(
         elements,
-        (buf.clone(), c.start, c.count, c.key, elem, depth.saturating_add(1)),
+        (
+            buf.clone(),
+            c.start,
+            c.count,
+            c.key,
+            elem,
+            depth.saturating_add(1),
+        ),
     )
 }
 

@@ -17,8 +17,8 @@ use std::sync::Arc;
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::text::xml::{self, Mode};
 use crate::formats::text::probe;
+use crate::formats::text::xml::{self, Mode};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -175,11 +175,18 @@ fn attributes(tag: &[u8]) -> Vec<(String, String)> {
         };
         let quote = rest.get(q).copied().unwrap_or(b'"');
         let vstart = eq.saturating_add(1).saturating_add(q).saturating_add(1);
-        let Some(len) = tag.get(vstart..).and_then(|r| r.iter().position(|&b| b == quote)) else {
+        let Some(len) = tag
+            .get(vstart..)
+            .and_then(|r| r.iter().position(|&b| b == quote))
+        else {
             break;
         };
-        let name = String::from_utf8_lossy(tag.get(name_start..name_end).unwrap_or_default()).into_owned();
-        let value = String::from_utf8_lossy(tag.get(vstart..vstart.saturating_add(len)).unwrap_or_default());
+        let name =
+            String::from_utf8_lossy(tag.get(name_start..name_end).unwrap_or_default()).into_owned();
+        let value = String::from_utf8_lossy(
+            tag.get(vstart..vstart.saturating_add(len))
+                .unwrap_or_default(),
+        );
         out.push((name, xml::decode_entities(&value, false)));
         i = vstart.saturating_add(len).saturating_add(1);
     }
@@ -187,7 +194,10 @@ fn attributes(tag: &[u8]) -> Vec<(String, String)> {
 }
 
 fn attr<'a>(attrs: &'a [(String, String)], name: &str) -> Option<&'a str> {
-    attrs.iter().find(|(n, _)| n == name).map(|(_, v)| v.as_str())
+    attrs
+        .iter()
+        .find(|(n, _)| n == name)
+        .map(|(_, v)| v.as_str())
 }
 
 fn to64(i: usize) -> u64 {
@@ -208,20 +218,29 @@ fn scan(data: &[u8]) -> Summary {
     let mut pos = 0usize;
     while pos < data.len() {
         let Some(lt) = find(data, pos, b"<") else {
-            text.push_str(&xml::decode_entities(&String::from_utf8_lossy(data.get(pos..).unwrap_or_default()), false));
+            text.push_str(&xml::decode_entities(
+                &String::from_utf8_lossy(data.get(pos..).unwrap_or_default()),
+                false,
+            ));
             break;
         };
-        text.push_str(&xml::decode_entities(&String::from_utf8_lossy(data.get(pos..lt).unwrap_or_default()), false));
+        text.push_str(&xml::decode_entities(
+            &String::from_utf8_lossy(data.get(pos..lt).unwrap_or_default()),
+            false,
+        ));
         let rest = data.get(lt..).unwrap_or_default();
         if rest.starts_with(b"<![CDATA[") {
             let from = lt.saturating_add(9);
             let end = find(data, from, b"]]>").unwrap_or(data.len());
-            text.push_str(&String::from_utf8_lossy(data.get(from..end).unwrap_or_default()));
+            text.push_str(&String::from_utf8_lossy(
+                data.get(from..end).unwrap_or_default(),
+            ));
             pos = end.saturating_add(3);
             continue;
         }
         if rest.starts_with(b"<!--") {
-            pos = find(data, lt.saturating_add(4), b"-->").map_or(data.len(), |e| e.saturating_add(3));
+            pos = find(data, lt.saturating_add(4), b"-->")
+                .map_or(data.len(), |e| e.saturating_add(3));
             continue;
         }
         if rest.starts_with(b"<?") || rest.starts_with(b"<!") {
@@ -232,7 +251,9 @@ fn scan(data: &[u8]) -> Summary {
             break;
         };
         pos = end;
-        let tag = data.get(lt.saturating_add(1)..end.saturating_sub(1)).unwrap_or_default();
+        let tag = data
+            .get(lt.saturating_add(1)..end.saturating_sub(1))
+            .unwrap_or_default();
         if let Some(name) = tag.strip_prefix(b"/") {
             let name = String::from_utf8_lossy(name.trim_ascii()).into_owned();
             // Close up to the matching element (tolerating bad nesting).
@@ -242,13 +263,31 @@ fn scan(data: &[u8]) -> Summary {
             stack.truncate(depth.saturating_add(1));
             if let Some(open) = stack.pop() {
                 let value = std::mem::take(&mut text).trim().to_owned();
-                close(&mut s, &stack, &open, value, to64(end), &mut track, &mut bar, &mut property, &mut automation, &mut section);
+                close(
+                    &mut s,
+                    &stack,
+                    &open,
+                    value,
+                    to64(end),
+                    &mut track,
+                    &mut bar,
+                    &mut property,
+                    &mut automation,
+                    &mut section,
+                );
             }
             continue;
         }
         let self_closing = tag.ends_with(b"/");
-        let tag = if self_closing { tag.get(..tag.len().saturating_sub(1)).unwrap_or_default() } else { tag };
-        let name_len = tag.iter().position(|b| b.is_ascii_whitespace()).unwrap_or(tag.len());
+        let tag = if self_closing {
+            tag.get(..tag.len().saturating_sub(1)).unwrap_or_default()
+        } else {
+            tag
+        };
+        let name_len = tag
+            .iter()
+            .position(|b| b.is_ascii_whitespace())
+            .unwrap_or(tag.len());
         let name = String::from_utf8_lossy(tag.get(..name_len).unwrap_or_default()).into_owned();
         let attrs = attributes(tag.get(name_len..).unwrap_or_default());
         text.clear();
@@ -259,7 +298,18 @@ fn scan(data: &[u8]) -> Summary {
         };
         opened(&stack, &open, &mut track, &mut bar, &mut property);
         if self_closing {
-            close(&mut s, &stack, &open, String::new(), to64(end), &mut track, &mut bar, &mut property, &mut automation, &mut section);
+            close(
+                &mut s,
+                &stack,
+                &open,
+                String::new(),
+                to64(end),
+                &mut track,
+                &mut bar,
+                &mut property,
+                &mut automation,
+                &mut section,
+            );
         } else {
             stack.push(open);
         }
@@ -373,7 +423,9 @@ fn close(
     // Children of the flat collections: count them.
     if stack.len() == 2
         && stack.first().is_some_and(|o| o.name == "GPIF")
-        && let Some(i) = COLLECTIONS.iter().position(|(c, one)| *c == parent && *one == open.name)
+        && let Some(i) = COLLECTIONS
+            .iter()
+            .position(|(c, one)| *c == parent && *one == open.name)
         && let Some(n) = s.counts.get_mut(i)
     {
         *n = n.saturating_add(1);
@@ -403,11 +455,17 @@ fn close(
             }
             "Name" if stack.len() == 3 && t.name.text.is_empty() => t.name = item(),
             // Guitar Pro 7: <InstrumentSet><Name>.
-            "Name" if parent == "InstrumentSet" && t.instrument.text.is_empty() => t.instrument = item(),
+            "Name" if parent == "InstrumentSet" && t.instrument.text.is_empty() => {
+                t.instrument = item()
+            }
             "Instrument" if t.instrument.at.0 == open.start => t.instrument.at = at,
             "Program" if t.program.text.is_empty() => t.program = item(),
-            "Pitches" if property.as_deref() == Some("Tuning") && t.tuning.text.is_empty() => t.tuning = item(),
-            "Fret" if property.as_deref() == Some("CapoFret") && t.capo.text.is_empty() => t.capo = item(),
+            "Pitches" if property.as_deref() == Some("Tuning") && t.tuning.text.is_empty() => {
+                t.tuning = item()
+            }
+            "Fret" if property.as_deref() == Some("CapoFret") && t.capo.text.is_empty() => {
+                t.capo = item()
+            }
             "Property" => *property = None,
             _ => {}
         }
@@ -443,7 +501,9 @@ async fn load(cx: &Cx, span: Span) -> Result<Arc<Summary>> {
         return Ok(s);
     }
     if span.len > MAX_SUMMARY {
-        return Err(Diagnostic::limit(format!("score larger than {MAX_SUMMARY:#x} bytes")).at(span));
+        return Err(
+            Diagnostic::limit(format!("score larger than {MAX_SUMMARY:#x} bytes")).at(span),
+        );
     }
     let data = crate::codec::read_all(cx, span).await?;
     let s = Arc::new(scan(&data));
@@ -513,7 +573,11 @@ async fn summary(cx: Cx, span: Span) -> Result<()> {
             .span(sub(span, *at))
             .value(Value::Text(format!("{bpm} BPM")));
         if s.tempos.len() > 1 {
-            node = node.summary(format!("from bar {}, {} tempo changes", bar.parse::<u64>().unwrap_or(0).saturating_add(1), s.tempos.len().saturating_sub(1)));
+            node = node.summary(format!(
+                "from bar {}, {} tempo changes",
+                bar.parse::<u64>().unwrap_or(0).saturating_add(1),
+                s.tempos.len().saturating_sub(1)
+            ));
         }
         cx.emit(node);
     }
@@ -551,18 +615,33 @@ fn bars_summary(bars: &[MasterBar]) -> String {
         }
     }
     let sections = bars.iter().filter(|b| b.section.is_some()).count();
-    let list: Vec<String> = times.iter().take(4).map(|(t, n)| format!("{t} ×{n}")).collect();
-    format!("{} bars ({}), {sections} sections", bars.len(), list.join(", "))
+    let list: Vec<String> = times
+        .iter()
+        .take(4)
+        .map(|(t, n)| format!("{t} ×{n}"))
+        .collect();
+    format!(
+        "{} bars ({}), {sections} sections",
+        bars.len(),
+        list.join(", ")
+    )
 }
 
 async fn tracks(cx: Cx, span: Span) -> Result<()> {
     let s = load(&cx, span).await?;
     for (i, t) in s.tracks.iter().enumerate() {
         cx.push(
-            Node::new(format!("Track {}", if t.id.is_empty() { i.to_string() } else { t.id.clone() }))
-                .span(sub(span, t.at))
-                .summary(track_summary(t))
-                .lazy(track, (span, i)),
+            Node::new(format!(
+                "Track {}",
+                if t.id.is_empty() {
+                    i.to_string()
+                } else {
+                    t.id.clone()
+                }
+            ))
+            .span(sub(span, t.at))
+            .summary(track_summary(t))
+            .lazy(track, (span, i)),
         )
         .await;
     }

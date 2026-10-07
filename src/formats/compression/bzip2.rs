@@ -106,7 +106,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ))
             .lazy(blocks, body),
     );
-    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::Bzip2, None));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        input.span,
+        crate::codec::Codec::Bzip2,
+        None,
+    ));
     let mut summary = format!("bzip2, {}k blocks", block_size / 1000);
     match eos {
         Some((bit, crc)) => {

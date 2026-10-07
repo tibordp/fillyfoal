@@ -1483,8 +1483,12 @@ pub async fn element(cx: Cx, e: Elem) -> Result<()> {
             let text = decode_entities(&raw, e.mode == Mode::Html);
             node = text_node(format!("@{}", a.name.text()), v.span(), &text);
             if raw == text
-                && let Some(data) =
-                    super::decode::data_url_node(format!("@{}", a.name.text()), e.input, v.span(), &text)
+                && let Some(data) = super::decode::data_url_node(
+                    format!("@{}", a.name.text()),
+                    e.input,
+                    v.span(),
+                    &text,
+                )
             {
                 // `src="data:image/png;base64,..."`: the payload decodes.
                 node = data;

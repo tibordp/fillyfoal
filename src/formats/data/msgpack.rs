@@ -87,9 +87,20 @@ impl Item {
 fn decode(b: &[u8]) -> Option<Item> {
     let t = *b.first()?;
     let arg = |n: usize| -> Option<u64> { b.get(1..n.checked_add(1)?).map(be_uint) };
-    let item = |kind, head, arg, bits| Some(Item { kind, head, arg, bits });
+    let item = |kind, head, arg, bits| {
+        Some(Item {
+            kind,
+            head,
+            arg,
+            bits,
+        })
+    };
     // Widths of the 1/2/4/8-byte variants, by distance from the first.
-    let width = |base: u8| -> Option<usize> { [1usize, 2, 4, 8].get(usize::from(t.wrapping_sub(base))).copied() };
+    let width = |base: u8| -> Option<usize> {
+        [1usize, 2, 4, 8]
+            .get(usize::from(t.wrapping_sub(base)))
+            .copied()
+    };
     let plus = |n: usize, k: u64| (n as u64).saturating_add(k);
     let bits = |n: usize| u8::try_from(n.saturating_mul(8)).unwrap_or(64);
     match t {
@@ -121,7 +132,14 @@ fn decode(b: &[u8]) -> Option<Item> {
         }
         0xd4..=0xd8 => {
             let ty = i8::from_le_bytes([*b.get(1)?]);
-            item(Kind::Ext(ty), 2, [1u64, 2, 4, 8, 16].get(usize::from(t.wrapping_sub(0xd4))).copied()?, 0)
+            item(
+                Kind::Ext(ty),
+                2,
+                [1u64, 2, 4, 8, 16]
+                    .get(usize::from(t.wrapping_sub(0xd4)))
+                    .copied()?,
+                0,
+            )
         }
         0xd9..=0xdb => {
             let n = width(0xd9)?;
@@ -263,7 +281,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut r = ByteReader::new(&cx, input.span);
     let first = head(&mut r, 0).await?;
     // One container filling the file: show its members at the top.
-    if matches!(first.kind, Kind::Map | Kind::Array) && end_of(&mut r, 0).await.ok() == Some(input.span.len) {
+    if matches!(first.kind, Kind::Map | Kind::Array)
+        && end_of(&mut r, 0).await.ok() == Some(input.span.len)
+    {
         cx.annotate(format!("MessagePack {}", describe(&first)));
         return members(cx, (input.span, 0, Path::new())).await;
     }
@@ -275,7 +295,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let end = match end_of(&mut r, pos).await {
             Ok(end) => end,
             Err(d) => {
-                cx.push(Node::new(format!("[{index}]")).span(r.span(pos, input.span.len.saturating_sub(pos))).diag(d)).await;
+                cx.push(
+                    Node::new(format!("[{index}]"))
+                        .span(r.span(pos, input.span.len.saturating_sub(pos)))
+                        .diag(d),
+                )
+                .await;
                 break;
             }
         };
@@ -293,7 +318,10 @@ fn timestamp(data: &[u8]) -> Option<(i64, u32)> {
         4 => Some((i64::try_from(be_uint(data)).ok()?, 0)),
         8 => {
             let v = be_uint(data);
-            Some((i64::try_from(v & 0x3_ffff_ffff).ok()?, u32::try_from(v >> 34).ok()?))
+            Some((
+                i64::try_from(v & 0x3_ffff_ffff).ok()?,
+                u32::try_from(v >> 34).ok()?,
+            ))
         }
         12 => {
             let nanos = u32::try_from(be_uint(data.get(..4)?)).ok()?;
@@ -320,7 +348,9 @@ async fn item_node(
         Kind::NegFix => node.value(vt::int(i64::from(i8::from_le_bytes([h.arg as u8])), 8)),
         Kind::Int => {
             let shift = 64u32.saturating_sub(u32::from(h.bits));
-            let v = (h.arg.checked_shl(shift).unwrap_or(0) as i64).checked_shr(shift).unwrap_or(0);
+            let v = (h.arg.checked_shl(shift).unwrap_or(0) as i64)
+                .checked_shr(shift)
+                .unwrap_or(0);
             node.value(vt::int(v, h.bits))
         }
         Kind::Nil => node.summary("nil"),
@@ -345,7 +375,11 @@ async fn item_node(
                     .summary(if nanos == 0 {
                         format!("timestamp extension, {} bytes", h.arg)
                     } else {
-                        format!("timestamp extension, {} bytes: {}", h.arg, vt::datetime(secs, nanos))
+                        format!(
+                            "timestamp extension, {} bytes: {}",
+                            h.arg,
+                            vt::datetime(secs, nanos)
+                        )
                     }),
                 _ => vt::bytes(node, "timestamp extension", data, h.arg)
                     .diag(Diagnostic::malformed("invalid timestamp extension")),
@@ -385,7 +419,10 @@ async fn key_name(r: &mut ByteReader<'_>, at: u64, index: u64) -> Result<String>
         Kind::NegFix => i8::from_le_bytes([h.arg as u8]).to_string(),
         Kind::Int => {
             let shift = 64u32.saturating_sub(u32::from(h.bits));
-            ((h.arg.checked_shl(shift).unwrap_or(0) as i64).checked_shr(shift).unwrap_or(0)).to_string()
+            ((h.arg.checked_shl(shift).unwrap_or(0) as i64)
+                .checked_shr(shift)
+                .unwrap_or(0))
+            .to_string()
         }
         Kind::Nil => "nil".to_owned(),
         Kind::Bool(b) => b.to_string(),

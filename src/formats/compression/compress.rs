@@ -68,7 +68,13 @@ pub async fn dissect_compress(cx: Cx, input: Input) -> Result<()> {
     let (header, span) = cur.record::<CompressHeader>().await?;
     cx.emit(CompressHeader::node("Header", span, Endian::Little));
     let body = input.span.tail(CompressHeader::SIZE);
-    cx.emit(crate::formats::content("Decompressed", input, input.span, crate::codec::Codec::UnixCompress, None));
+    cx.emit(crate::formats::content(
+        "Decompressed",
+        input,
+        input.span,
+        crate::codec::Codec::UnixCompress,
+        None,
+    ));
     cx.emit(Node::new("Compressed data").span(body));
     let mode = if header.flags & 0x80 != 0 {
         ", block mode"

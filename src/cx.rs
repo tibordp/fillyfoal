@@ -147,7 +147,9 @@ impl LazyDecode {
                 .decoder
                 .releasable_output(len)
                 .min(len.saturating_sub(keep))
-                .min(crate::bytes::to_usize(keep_from.saturating_sub(self.out_base)));
+                .min(crate::bytes::to_usize(
+                    keep_from.saturating_sub(self.out_base),
+                ));
             if n > 0 {
                 self.decoder.release_output(n);
                 self.out.drain(..n);
@@ -211,7 +213,11 @@ impl Shared {
         let max = self.limits.max_derived;
         let mut chain = vec![protect];
         let mut cursor = protect;
-        while let Some(parent) = self.source(cursor).and_then(|e| e.origin).map(|o| o.parent.source) {
+        while let Some(parent) = self
+            .source(cursor)
+            .and_then(|e| e.origin)
+            .map(|o| o.parent.source)
+        {
             if chain.contains(&parent) || chain.len() > 64 {
                 break;
             }
@@ -226,7 +232,9 @@ impl Shared {
                 .filter(|(i, e)| {
                     e.recipe.is_some()
                         && e.held() > 0
-                        && !chain.iter().any(|c| crate::bytes::to_usize(c.0.into()) == *i)
+                        && !chain
+                            .iter()
+                            .any(|c| crate::bytes::to_usize(c.0.into()) == *i)
                 })
                 .min_by_key(|(_, e)| e.used)
                 .map(|(i, _)| i);
@@ -239,7 +247,10 @@ impl Shared {
             };
             let held = entry.held();
             entry.data = None;
-            let Some(fresh) = LazyDecode::new(origin.parent, entry.recipe.as_ref().unwrap_or(&Codec::Stored)) else {
+            let Some(fresh) = LazyDecode::new(
+                origin.parent,
+                entry.recipe.as_ref().unwrap_or(&Codec::Stored),
+            ) else {
                 entry.recipe = None;
                 continue;
             };
@@ -267,7 +278,10 @@ impl Shared {
         let start = start.min(end);
         self.tick = self.tick.wrapping_add(1);
         let tick = self.tick;
-        if let Some(entry) = self.sources.get_mut(crate::bytes::to_usize(source.0.into())) {
+        if let Some(entry) = self
+            .sources
+            .get_mut(crate::bytes::to_usize(source.0.into()))
+        {
             entry.used = tick;
         }
         if source == SourceId::ZEROS {
@@ -367,9 +381,15 @@ impl Shared {
         let keep = LAZY_KEEP.min(crate::bytes::to_usize(self.limits.max_derived / 4));
         let front = st.out_base.saturating_add(to_u64(st.out.len()));
         let fed_before = st.in_base.saturating_add(to_u64(st.input.len()));
-        let more_out = end.saturating_sub(front).min(to_u64(keep.saturating_mul(2)));
+        let more_out = end
+            .saturating_sub(front)
+            .min(to_u64(keep.saturating_mul(2)));
         let more_in = more_out
-            .min(st.parent.len.saturating_sub(st.in_base.saturating_add(to_u64(st.input.len()))))
+            .min(
+                st.parent
+                    .len
+                    .saturating_sub(st.in_base.saturating_add(to_u64(st.input.len()))),
+            )
             .saturating_add(to_u64(LOOKAHEAD));
         let need = more_out.saturating_add(more_in);
         self.make_room(need, source);
@@ -378,7 +398,8 @@ impl Shared {
         let mut failure = None;
         let result = loop {
             if st.out_base.saturating_add(to_u64(st.out.len())) >= end || st.done {
-                let from = crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
+                let from =
+                    crate::bytes::to_usize(start.saturating_sub(st.out_base)).min(st.out.len());
                 let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
                 break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
             }
@@ -434,7 +455,9 @@ impl Shared {
             st.release(start, keep);
         };
         // Once the stream has ended, its real length is known.
-        let finished_len = st.done.then(|| st.out_base.saturating_add(to_u64(st.out.len())));
+        let finished_len = st
+            .done
+            .then(|| st.out_base.saturating_add(to_u64(st.out.len())));
         let after = st.out.len().saturating_add(st.input.len());
         self.derived_bytes = self
             .derived_bytes
@@ -445,7 +468,11 @@ impl Shared {
             .out_base
             .saturating_add(to_u64(st.out.len()))
             .saturating_sub(front)
-            .saturating_add(st.in_base.saturating_add(to_u64(st.input.len())).saturating_sub(fed_before));
+            .saturating_add(
+                st.in_base
+                    .saturating_add(to_u64(st.input.len()))
+                    .saturating_sub(fed_before),
+            );
         self.charge(work >> 12);
         if let Some(entry) = self.sources.get_mut(index) {
             let declared = entry.len;
@@ -621,7 +648,11 @@ impl Cx {
                         .filter(|e| e.on_demand)
                         .and_then(|e| e.error.clone());
                     Poll::Ready(match failed {
-                        Some(e) => Err(Diagnostic::new(e.kind, format!("decoding stopped: {}", e.message)).at(span)),
+                        Some(e) => Err(Diagnostic::new(
+                            e.kind,
+                            format!("decoding stopped: {}", e.message),
+                        )
+                        .at(span)),
                         None => Ok(data),
                     })
                 }

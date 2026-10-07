@@ -51,15 +51,24 @@ fn int_after(data: &[u8], key: &[u8]) -> Option<i64> {
 pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)) -> Result<()> {
     let decoded = crate::codec::decode_span(&cx, encrypted, &Codec::Eexec { hex }, None).await?;
     let data = crate::codec::read_all(&cx, decoded.span).await?;
-    let len_iv = int_after(&data, b"/lenIV").and_then(|n| usize::try_from(n).ok()).unwrap_or(4);
+    let len_iv = int_after(&data, b"/lenIV")
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(4);
     // Cleartext entries of the private dictionary (before the binary parts).
-    let head_end = find(&data, b"/Subrs", 0).or_else(|| find(&data, b"/CharStrings", 0)).unwrap_or(data.len().min(4096));
+    let head_end = find(&data, b"/Subrs", 0)
+        .or_else(|| find(&data, b"/CharStrings", 0))
+        .unwrap_or(data.len().min(4096));
     let head = String::from_utf8_lossy(data.get(..head_end).unwrap_or_default()).into_owned();
     for line in head.lines() {
         let t = line.trim();
         if let Some(rest) = t.strip_prefix('/') {
             let (key, value) = rest.split_once(' ').unwrap_or((rest, ""));
-            let value = value.trim().trim_end_matches(" def").trim_end_matches(" ND").trim_end_matches(" |-").trim();
+            let value = value
+                .trim()
+                .trim_end_matches(" def")
+                .trim_end_matches(" ND")
+                .trim_end_matches(" |-")
+                .trim();
             if !value.is_empty() && value.len() < 120 && !key.is_empty() {
                 cx.emit(Node::new(key.to_owned()).value(Value::Text(value.to_owned())));
             }
@@ -77,7 +86,11 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
                 .lazy(charstrings, (decoded.span, at, len_iv)),
         );
     }
-    cx.emit(Node::new("Decrypted program").span(decoded.span).summary(format!("{} bytes", decoded.span.len)));
+    cx.emit(
+        Node::new("Decrypted program")
+            .span(decoded.span)
+            .summary(format!("{} bytes", decoded.span.len)),
+    );
     let _ = input;
     cx.annotate(format!("{} bytes decrypted", decoded.span.len));
     Ok(())
@@ -97,19 +110,35 @@ async fn charstrings(cx: Cx, (program, start, len_iv): (Span, usize, usize)) -> 
             break;
         }
         let name_start = pos.saturating_add(1);
-        let name_end = data.get(name_start..).and_then(|r| r.iter().position(|&b| is_space(b))).map_or(data.len(), |p| p.saturating_add(name_start));
-        let name = String::from_utf8_lossy(data.get(name_start..name_end).unwrap_or_default()).into_owned();
+        let name_end = data
+            .get(name_start..)
+            .and_then(|r| r.iter().position(|&b| is_space(b)))
+            .map_or(data.len(), |p| p.saturating_add(name_start));
+        let name = String::from_utf8_lossy(data.get(name_start..name_end).unwrap_or_default())
+            .into_owned();
         let rest = data.get(name_end..).unwrap_or_default();
-        let digits: Vec<u8> = rest.iter().copied().skip_while(|&b| is_space(b)).take_while(u8::is_ascii_digit).collect();
-        let Ok(len) = String::from_utf8_lossy(&digits).parse::<usize>() else { break };
+        let digits: Vec<u8> = rest
+            .iter()
+            .copied()
+            .skip_while(|&b| is_space(b))
+            .take_while(u8::is_ascii_digit)
+            .collect();
+        let Ok(len) = String::from_utf8_lossy(&digits).parse::<usize>() else {
+            break;
+        };
         // Skip the length, one space, the RD token and one space.
         let after_len = name_end
             .saturating_add(rest.iter().take_while(|&&b| is_space(b)).count())
             .saturating_add(digits.len());
         let token_start = after_len.saturating_add(1);
-        let token_end = data.get(token_start..).and_then(|r| r.iter().position(|&b| is_space(b))).map_or(data.len(), |p| p.saturating_add(token_start));
+        let token_end = data
+            .get(token_start..)
+            .and_then(|r| r.iter().position(|&b| is_space(b)))
+            .map_or(data.len(), |p| p.saturating_add(token_start));
         let body = token_end.saturating_add(1);
-        let Some(bytes) = data.get(body..body.saturating_add(len)) else { break };
+        let Some(bytes) = data.get(body..body.saturating_add(len)) else {
+            break;
+        };
         let decrypted = type1_decrypt(bytes, 4330, len_iv);
         cx.push(
             Node::new(name)

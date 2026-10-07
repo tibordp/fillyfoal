@@ -318,7 +318,9 @@ async fn expand_decoded(
         cx.annotate(format!("{:#x} bytes decoded", decoded.len));
     }
     if let Some(label @ Label::Single(_)) = charset {
-        let head = cx.read_avail(decoded.sub(0, crate::formats::HEAD_LEN)).await?;
+        let head = cx
+            .read_avail(decoded.sub(0, crate::formats::HEAD_LEN))
+            .await?;
         if let Some(c) = super::encoding::declared_charset_label(&head, label) {
             let origin = Origin {
                 parent: decoded,
@@ -333,7 +335,11 @@ async fn expand_decoded(
                     cx.add_derived(origin, text, consumed, None)?.span
                 }
             };
-            cx.annotate(format!("{:#x} bytes of text from {}", decoded.len, c.name()));
+            cx.annotate(format!(
+                "{:#x} bytes of text from {}",
+                decoded.len,
+                c.name()
+            ));
         }
     }
     crate::formats::dissect_or_data(cx, input.nested(decoded)).await

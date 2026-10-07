@@ -732,7 +732,10 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
     let codec = match last.id.as_slice() {
         [0x00] => Codec::Stored,
         [0x21] => Codec::Lzma2 {
-            dict: last.props.first().and_then(|&p| crate::codec::lzma::lzma2_dict(p)),
+            dict: last
+                .props
+                .first()
+                .and_then(|&p| crate::codec::lzma::lzma2_dict(p)),
         },
         [0x03, 0x01, 0x01] => {
             let props = last
@@ -759,7 +762,9 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
             [0x04] | [0x03, 0x03, 0x01, 0x03] if c.props.is_empty() => Post::X86,
             [0x07] | [0x03, 0x03, 0x05, 0x01] if c.props.is_empty() => Post::Arm,
             [0x0a] if c.props.iter().all(|&b| b == 0) => Post::Arm64,
-            [0x03] => Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1)),
+            [0x03] => {
+                Post::Delta(usize::from(c.props.first().copied().unwrap_or(0)).saturating_add(1))
+            }
             id => return Err(method_name(id)),
         });
     }
@@ -776,7 +781,9 @@ async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option
         if plan.codec == Codec::Stored {
             return Ok((span, None));
         }
-        if plan.size > LAZY_THRESHOLD && plan.size <= span.len.saturating_mul(plan.codec.max_ratio()) {
+        if plan.size > LAZY_THRESHOLD
+            && plan.size <= span.len.saturating_mul(plan.codec.max_ratio())
+        {
             let decoded = cx.decode_lazy(span, &plan.codec, plan.size)?;
             return Ok((decoded, None));
         }
@@ -871,7 +878,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut archive = Arc::new(archive);
     let mut pack_base = SIGNATURE_HEADER.saturating_add(archive.streams.pack_pos);
     // Where packed streams end and the (outer) next header starts.
-    let data_end = next.offset.saturating_sub(file.offset.saturating_add(SIGNATURE_HEADER));
+    let data_end = next
+        .offset
+        .saturating_sub(file.offset.saturating_add(SIGNATURE_HEADER));
     let mut header = next;
 
     if archive.encoded {
@@ -917,7 +926,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                             .summary(human_size(data_len)),
                     );
                 }
-                cx.emit(Node::new("Encoded header").span(header_span).summary(summary).diag(e));
+                cx.emit(
+                    Node::new("Encoded header")
+                        .span(header_span)
+                        .summary(summary)
+                        .diag(e),
+                );
                 cx.emit(
                     next_node
                         .summary("kEncodedHeader")
@@ -951,9 +965,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     cx.emit(
         Node::new("Folders")
-            .span(
-                file.sub(SIGNATURE_HEADER, data_end),
-            )
+            .span(file.sub(SIGNATURE_HEADER, data_end))
             .summary(count(
                 to_u64(archive.streams.folders.len()),
                 "folder",
@@ -977,7 +989,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 /// Decodes an encoded header (its first folder) and parses the plain header
 /// inside: returns the decoded span and the archive it describes.
-async fn decode_header(cx: &Cx, outer: &Archive, file: Span, pack_base: u64) -> Result<(Span, Archive)> {
+async fn decode_header(
+    cx: &Cx,
+    outer: &Archive,
+    file: Span,
+    pack_base: u64,
+) -> Result<(Span, Archive)> {
     let folder = outer
         .streams
         .folders
@@ -987,13 +1004,19 @@ async fn decode_header(cx: &Cx, outer: &Archive, file: Span, pack_base: u64) -> 
         .first()
         .copied()
         .ok_or_else(|| Diagnostic::malformed("encoded header without a packed stream"))?;
-    let p = plan(folder).map_err(|why| Diagnostic::unsupported(format!("{why} compression")).at(span))?;
+    let p = plan(folder)
+        .map_err(|why| Diagnostic::unsupported(format!("{why} compression")).at(span))?;
     let (out, error) = folder_output(cx, span, &p).await?;
     if let Some(e) = error {
         return Err(e);
     }
     let bytes = read_all(cx, out).await?;
-    match (Parser { data: &bytes, at: 0 }).header() {
+    match (Parser {
+        data: &bytes,
+        at: 0,
+    })
+    .header()
+    {
         Ok(a) if !a.encoded => Ok((out, a)),
         Ok(_) => Err(Diagnostic::malformed("encoded header inside an encoded header").at(out)),
         Err(e) => Err(Diagnostic::malformed(e).at(out)),
@@ -1050,7 +1073,9 @@ async fn list_folders(
         );
         children.push(Node::new("Streams").value(uint(f.streams)));
         children.push(match plan(f) {
-            Ok(p) if p.codec == Codec::Stored && p.post.is_empty() => embedded("Data", input.nested(span)),
+            Ok(p) if p.codec == Codec::Stored && p.post.is_empty() => {
+                embedded("Data", input.nested(span))
+            }
             Ok(p) => {
                 let size = f.unpack_size();
                 Node::new("Data")
@@ -1130,9 +1155,10 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                 }
                 Some(Ok(p)) => {
                     node = node.span(span);
-                    let mut c = Node::new("Content")
-                        .span(span)
-                        .lazy(folder_part, (input, span, Arc::new(p), offset_in_folder, size));
+                    let mut c = Node::new("Content").span(span).lazy(
+                        folder_part,
+                        (input, span, Arc::new(p), offset_in_folder, size),
+                    );
                     if fo.is_some_and(|f| f.streams > 1) {
                         c = c.summary(format!(
                             "{methods}, in a {} solid block",

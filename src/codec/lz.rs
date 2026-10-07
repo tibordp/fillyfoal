@@ -11,7 +11,9 @@ fn bad(what: &str) -> Diagnostic {
 
 fn limit_check(out: &[u8], limit: usize) -> Result<()> {
     if out.len() > limit {
-        Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")))
+        Err(Diagnostic::limit(format!(
+            "decompressed data exceeds {limit:#x} bytes"
+        )))
     } else {
         Ok(())
     }
@@ -23,7 +25,9 @@ fn copy_back(out: &mut Vec<u8>, offset: usize, len: usize, limit: usize) -> Resu
         return Err(bad("match offset outside the output"));
     }
     if out.len().saturating_add(len) > limit {
-        return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+        return Err(Diagnostic::limit(format!(
+            "decompressed data exceeds {limit:#x} bytes"
+        )));
     }
     let start = out.len().saturating_sub(offset);
     for i in 0..len {
@@ -43,15 +47,27 @@ pub fn lz4_block(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
 /// `zero_padding`, zeros from the end of a sequence's literals to the end
 /// of `input` end the block when the sequence's match length nibble is 0,
 /// as in a final sequence (the zeros could only be an invalid offset).
-fn lz4_block_from(input: &[u8], out: &mut Vec<u8>, base: usize, zero_padding: bool, limit: usize) -> Result<()> {
+fn lz4_block_from(
+    input: &[u8],
+    out: &mut Vec<u8>,
+    base: usize,
+    zero_padding: bool,
+    limit: usize,
+) -> Result<()> {
     let padding = if zero_padding {
-        input.iter().rposition(|&b| b != 0).map_or(0, |i| i.saturating_add(1))
+        input
+            .iter()
+            .rposition(|&b| b != 0)
+            .map_or(0, |i| i.saturating_add(1))
     } else {
         input.len()
     };
     let mut pos = 0usize;
     let byte = |pos: &mut usize| -> Result<u8> {
-        let b = input.get(*pos).copied().ok_or_else(|| bad("truncated LZ4 block"))?;
+        let b = input
+            .get(*pos)
+            .copied()
+            .ok_or_else(|| bad("truncated LZ4 block"))?;
         *pos = pos.saturating_add(1);
         Ok(b)
     };
@@ -72,7 +88,9 @@ fn lz4_block_from(input: &[u8], out: &mut Vec<u8>, base: usize, zero_padding: bo
         let token = byte(&mut pos)?;
         let literals = length(&mut pos, usize::from(token >> 4))?;
         let end = pos.saturating_add(literals);
-        let lit = input.get(pos..end).ok_or_else(|| bad("truncated LZ4 literals"))?;
+        let lit = input
+            .get(pos..end)
+            .ok_or_else(|| bad("truncated LZ4 literals"))?;
         out.extend_from_slice(lit);
         limit_check(out, limit)?;
         pos = end;
@@ -92,7 +110,9 @@ fn lz4_block_from(input: &[u8], out: &mut Vec<u8>, base: usize, zero_padding: bo
 }
 
 fn u32_at(data: &[u8], at: usize) -> Option<u32> {
-    data.get(at..at.checked_add(4)?).and_then(|s| s.try_into().ok()).map(u32::from_le_bytes)
+    data.get(at..at.checked_add(4)?)
+        .and_then(|s| s.try_into().ok())
+        .map(u32::from_le_bytes)
 }
 
 /// Where an [`Lz4Frame`] decoder is.
@@ -102,7 +122,12 @@ enum Lz4At {
     Magic,
     /// Inside a frame whose output starts at `start` (the window of its
     /// linked blocks; independent blocks see only their own output).
-    Frame { start: usize, independent: bool, block_checksum: bool, content_checksum: bool },
+    Frame {
+        start: usize,
+        independent: bool,
+        block_checksum: bool,
+        content_checksum: bool,
+    },
     /// Inside a legacy frame.
     Legacy,
     Done,
@@ -121,7 +146,10 @@ pub struct Lz4Frame {
 
 impl Default for Lz4Frame {
     fn default() -> Self {
-        Lz4Frame { pos: 0, at: Lz4At::Magic }
+        Lz4Frame {
+            pos: 0,
+            at: Lz4At::Magic,
+        }
     }
 }
 
@@ -144,13 +172,20 @@ impl Lz4Frame {
                 let pos = pos.saturating_add(4);
                 match magic {
                     0x184d_2204 => {
-                        let flg = *input.get(pos).ok_or_else(|| bad("truncated frame descriptor"))?;
+                        let flg = *input
+                            .get(pos)
+                            .ok_or_else(|| bad("truncated frame descriptor"))?;
                         let content_size = flg & 0x08 != 0;
                         if flg & 0x01 != 0 {
-                            return Err(Diagnostic::unsupported("LZ4 frame with an external dictionary"));
+                            return Err(Diagnostic::unsupported(
+                                "LZ4 frame with an external dictionary",
+                            ));
                         }
                         // FLG, BD, optional content size and dictionary ID, HC.
-                        self.pos = pos.saturating_add(2).saturating_add(if content_size { 8 } else { 0 }).saturating_add(1);
+                        self.pos = pos
+                            .saturating_add(2)
+                            .saturating_add(if content_size { 8 } else { 0 })
+                            .saturating_add(1);
                         self.at = Lz4At::Frame {
                             start: out.len(),
                             independent: flg & 0x20 != 0,
@@ -163,13 +198,21 @@ impl Lz4Frame {
                         self.at = Lz4At::Legacy;
                     }
                     m if m & 0xffff_fff0 == 0x184d_2a50 => {
-                        let len = u32_at(input, pos).ok_or_else(|| bad("truncated skippable frame"))?;
-                        self.pos = pos.saturating_add(4).saturating_add(crate::bytes::to_usize(len.into()));
+                        let len =
+                            u32_at(input, pos).ok_or_else(|| bad("truncated skippable frame"))?;
+                        self.pos = pos
+                            .saturating_add(4)
+                            .saturating_add(crate::bytes::to_usize(len.into()));
                     }
                     _ => self.at = Lz4At::Done,
                 }
             }
-            Lz4At::Frame { start, independent, block_checksum, content_checksum } => {
+            Lz4At::Frame {
+                start,
+                independent,
+                block_checksum,
+                content_checksum,
+            } => {
                 let size = u32_at(input, pos).ok_or_else(|| bad("truncated LZ4 block size"))?;
                 let pos = pos.saturating_add(4);
                 if size == 0 {
@@ -179,7 +222,9 @@ impl Lz4Frame {
                 }
                 let raw = size & 0x8000_0000 != 0;
                 let len = crate::bytes::to_usize((size & 0x7fff_ffff).into());
-                let block = input.get(pos..pos.saturating_add(len)).ok_or_else(|| bad("truncated LZ4 block"))?;
+                let block = input
+                    .get(pos..pos.saturating_add(len))
+                    .ok_or_else(|| bad("truncated LZ4 block"))?;
                 if raw {
                     out.extend_from_slice(block);
                     limit_check(out, limit)?;
@@ -189,7 +234,9 @@ impl Lz4Frame {
                     let base = if independent { out.len() } else { start };
                     lz4_block_from(block, out, base, false, limit)?;
                 }
-                self.pos = pos.saturating_add(len).saturating_add(if block_checksum { 4 } else { 0 });
+                self.pos =
+                    pos.saturating_add(len)
+                        .saturating_add(if block_checksum { 4 } else { 0 });
                 if self.pos > input.len() && !eof {
                     return Err(bad("truncated LZ4 block checksum"));
                 }
@@ -210,7 +257,9 @@ impl Lz4Frame {
                 }
                 let len = crate::bytes::to_usize(len.into());
                 let from = pos.saturating_add(4);
-                let block = input.get(from..from.saturating_add(len)).ok_or_else(|| bad("truncated legacy LZ4 block"))?;
+                let block = input
+                    .get(from..from.saturating_add(len))
+                    .ok_or_else(|| bad("truncated legacy LZ4 block"))?;
                 lz4_block_from(block, out, out.len(), false, limit)?;
                 self.pos = from.saturating_add(len);
             }
@@ -220,7 +269,14 @@ impl Lz4Frame {
 }
 
 impl Decode for Lz4Frame {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let mark = out.len();
         loop {
             if matches!(self.at, Lz4At::Done) {
@@ -249,7 +305,11 @@ impl Decode for Lz4Frame {
     fn releasable_output(&self, out_len: usize) -> usize {
         match self.at {
             // Linked blocks see the frame's last 64 KiB.
-            Lz4At::Frame { start, independent: false, .. } => out_len.saturating_sub(LZ4_WINDOW).max(start).min(out_len),
+            Lz4At::Frame {
+                start,
+                independent: false,
+                ..
+            } => out_len.saturating_sub(LZ4_WINDOW).max(start).min(out_len),
             // Independent blocks (and legacy ones) see only their own output.
             _ => out_len,
         }
@@ -280,7 +340,9 @@ pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
     let mut pos = 0usize;
     let mut expected = 0u64;
     for shift in (0..35).step_by(7) {
-        let b = *input.get(pos).ok_or_else(|| bad("truncated Snappy length"))?;
+        let b = *input
+            .get(pos)
+            .ok_or_else(|| bad("truncated Snappy length"))?;
         pos = pos.saturating_add(1);
         expected |= u64::from(b & 0x7f) << shift;
         if b & 0x80 == 0 {
@@ -289,10 +351,17 @@ pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
     }
     let expected = crate::bytes::to_usize(expected);
     if expected > limit {
-        return Err(Diagnostic::limit(format!("Snappy data claims {expected:#x} bytes")));
+        return Err(Diagnostic::limit(format!(
+            "Snappy data claims {expected:#x} bytes"
+        )));
     }
     let mut out = Vec::with_capacity(expected.min(1 << 24));
-    let le = |bytes: &[u8]| bytes.iter().rev().fold(0usize, |a, &b| a.wrapping_shl(8) | usize::from(b));
+    let le = |bytes: &[u8]| {
+        bytes
+            .iter()
+            .rev()
+            .fold(0usize, |a, &b| a.wrapping_shl(8) | usize::from(b))
+    };
     while pos < input.len() {
         let tag = *input.get(pos).unwrap_or(&0);
         pos = pos.saturating_add(1);
@@ -301,11 +370,15 @@ pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
                 let mut len = usize::from(tag >> 2);
                 if len >= 60 {
                     let n = len.saturating_sub(59);
-                    len = le(input.get(pos..pos.saturating_add(n)).ok_or_else(|| bad("truncated literal length"))?);
+                    len = le(input
+                        .get(pos..pos.saturating_add(n))
+                        .ok_or_else(|| bad("truncated literal length"))?);
                     pos = pos.saturating_add(n);
                 }
                 let len = len.saturating_add(1);
-                let lit = input.get(pos..pos.saturating_add(len)).ok_or_else(|| bad("truncated literal"))?;
+                let lit = input
+                    .get(pos..pos.saturating_add(len))
+                    .ok_or_else(|| bad("truncated literal"))?;
                 out.extend_from_slice(lit);
                 pos = pos.saturating_add(len);
             }
@@ -317,13 +390,17 @@ pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
             }
             2 => {
                 let len = usize::from(tag >> 2).saturating_add(1);
-                let off = le(input.get(pos..pos.saturating_add(2)).ok_or_else(|| bad("truncated copy"))?);
+                let off = le(input
+                    .get(pos..pos.saturating_add(2))
+                    .ok_or_else(|| bad("truncated copy"))?);
                 pos = pos.saturating_add(2);
                 copy_back(&mut out, off, len, limit)?;
             }
             _ => {
                 let len = usize::from(tag >> 2).saturating_add(1);
-                let off = le(input.get(pos..pos.saturating_add(4)).ok_or_else(|| bad("truncated copy"))?);
+                let off = le(input
+                    .get(pos..pos.saturating_add(4))
+                    .ok_or_else(|| bad("truncated copy"))?);
                 pos = pos.saturating_add(4);
                 copy_back(&mut out, off, len, limit)?;
             }
@@ -356,23 +433,45 @@ pub struct SnappyFramed {
 }
 
 impl Decode for SnappyFramed {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let mark = out.len();
         while !self.done {
             let pos = self.pos;
-            let (Some(&kind), Some(len)) = (input.get(pos), input.get(pos.saturating_add(1)..pos.saturating_add(4))) else {
+            let (Some(&kind), Some(len)) = (
+                input.get(pos),
+                input.get(pos.saturating_add(1)..pos.saturating_add(4)),
+            ) else {
                 if !eof {
                     return Err(bad("truncated Snappy chunk header"));
                 }
                 self.done = true;
                 break;
             };
-            let len = len.iter().rev().fold(0usize, |a, &b| a << 8 | usize::from(b));
-            let body = input.get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len)).ok_or_else(|| bad("truncated Snappy chunk"))?;
+            let len = len
+                .iter()
+                .rev()
+                .fold(0usize, |a, &b| a << 8 | usize::from(b));
+            let body = input
+                .get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len))
+                .ok_or_else(|| bad("truncated Snappy chunk"))?;
             match kind {
-                0x00 => out.extend(snappy_raw(body.get(4..).unwrap_or_default(), limit.saturating_sub(out.len()))?),
+                0x00 => out.extend(snappy_raw(
+                    body.get(4..).unwrap_or_default(),
+                    limit.saturating_sub(out.len()),
+                )?),
                 0x01 => out.extend_from_slice(body.get(4..).unwrap_or_default()),
-                0x02..=0x7f => return Err(Diagnostic::unsupported(format!("reserved Snappy chunk {kind:#04x}"))),
+                0x02..=0x7f => {
+                    return Err(Diagnostic::unsupported(format!(
+                        "reserved Snappy chunk {kind:#04x}"
+                    )));
+                }
                 _ => {}
             }
             limit_check(out, limit)?;

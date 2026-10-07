@@ -1,6 +1,7 @@
 //! Console ROM and executable headers.
 
 use crate::bytes::{to_u64, u16_le, u32_le};
+use crate::codec::crc::crc16_modbus as crc16;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
@@ -11,7 +12,6 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
-use crate::codec::crc::crc16_modbus as crc16;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -1075,7 +1075,13 @@ async fn nso(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(offset.into(), size.into());
         cx.emit(if h.flags & (1u32 << i) != 0 {
             // A raw LZ4 block decoding to the segment's memory size.
-            crate::formats::content(name, input, span, crate::codec::Codec::Lz4Block, Some(memory.into()))
+            crate::formats::content(
+                name,
+                input,
+                span,
+                crate::codec::Codec::Lz4Block,
+                Some(memory.into()),
+            )
         } else {
             Node::new(name).span(span)
         });

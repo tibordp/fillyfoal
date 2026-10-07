@@ -10,12 +10,12 @@
 use std::sync::Arc;
 
 use crate::bytes::{u16_le, u32_le};
+use crate::codec::cab::Folder;
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, uint, unsupported};
-use crate::codec::cab::Folder;
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -138,7 +138,8 @@ async fn folder_data(cx: &Cx, l: &Layout, f: &FolderInfo) -> Result<(Span, u64)>
 /// shows up as short reads), so the result does not depend on what was
 /// decoded before.
 async fn folder_stream(cx: &Cx, l: &Layout, f: &FolderInfo) -> Result<Span> {
-    let codec = folder_codec(l, f).ok_or_else(|| Diagnostic::unsupported(compression_name(f.kind)))?;
+    let codec =
+        folder_codec(l, f).ok_or_else(|| Diagnostic::unsupported(compression_name(f.kind)))?;
     let (data, total) = folder_data(cx, l, f).await?;
     let stream = cx.decode_lazy(data, &codec, total)?;
     Ok(Span::new(stream.source, 0, total))
@@ -269,7 +270,11 @@ async fn folders(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
                 Some(_) => Node::new("Uncompressed stream")
                     .span(l.file.tail(f.data_at))
                     .lazy(folder_content, (input, l, f)),
-                None => unsupported("Uncompressed stream", l.file.tail(f.data_at), &compression_name(f.kind)),
+                None => unsupported(
+                    "Uncompressed stream",
+                    l.file.tail(f.data_at),
+                    &compression_name(f.kind),
+                ),
             });
         }
         cx.push(
@@ -321,16 +326,19 @@ async fn data_blocks(cx: Cx, (input, l, f): (Input, Layout, FolderInfo)) -> Resu
             1 => {
                 let magic = cx.read_avail(data.sub(0, 2)).await?;
                 if magic == b"CK" {
-                    Node::new("Data").span(data).summary("MSZIP: 'CK' + deflate")
+                    Node::new("Data")
+                        .span(data)
+                        .summary("MSZIP: 'CK' + deflate")
                 } else {
                     Node::new("Data")
                         .span(data)
                         .diag(Diagnostic::malformed("MSZIP block without 'CK' signature"))
                 }
             }
-            2 | 3 => Node::new("Data")
-                .span(data)
-                .summary(format!("{}, decoded with the folder", compression_name(f.kind))),
+            2 | 3 => Node::new("Data").span(data).summary(format!(
+                "{}, decoded with the folder",
+                compression_name(f.kind)
+            )),
             _ => unsupported("Data", data, &compression_name(f.kind)),
         });
         cx.push(crate::formats::util::arcutil::check_len(
@@ -446,8 +454,11 @@ async fn file_entry(
         return Ok(());
     }
     cx.emit(
-        embedded("Content", input.nested(stream.sub(want_start, size.into())))
-            .summary(format!("{}, {}", compression_name(fo.kind), human_size(size.into()))),
+        embedded("Content", input.nested(stream.sub(want_start, size.into()))).summary(format!(
+            "{}, {}",
+            compression_name(fo.kind),
+            human_size(size.into())
+        )),
     );
     Ok(())
 }

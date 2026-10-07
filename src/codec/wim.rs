@@ -72,21 +72,36 @@ fn entry_value(e: &[u8]) -> u64 {
 }
 
 impl Decode for Decoder {
-    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, step: usize, limit: usize) -> Result<Step> {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
         let r = self.resource;
         let chunk = u64::from(r.chunk);
         if !chunk.is_power_of_two() || !(1 << 15..=1 << 21).contains(&chunk) {
-            return Err(Diagnostic::unsupported(format!("WIM chunk size {chunk:#x}")));
+            return Err(Diagnostic::unsupported(format!(
+                "WIM chunk size {chunk:#x}"
+            )));
         }
         let original = usize::try_from(r.original).map_err(|_| bad("too large"))?;
         if original > limit.saturating_add(self.released_out) {
-            return Err(Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes")));
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
         }
         let chunks = r.original.div_ceil(chunk);
         // The table has one entry per chunk after the first (and the empty
         // resource is one empty chunk).
         let entries = chunks.saturating_sub(1);
-        let entry: usize = if r.original > u64::from(u32::MAX) { 8 } else { 4 };
+        let entry: usize = if r.original > u64::from(u32::MAX) {
+            8
+        } else {
+            4
+        };
         let table = match &self.table {
             Some(table) => Arc::clone(table),
             None => {
@@ -114,8 +129,13 @@ impl Decode for Decoder {
             let offset = match i.checked_sub(1) {
                 None => 0,
                 Some(i) => {
-                    let at = usize::try_from(i).ok().and_then(|i| i.checked_mul(entry)).unwrap_or(usize::MAX);
-                    let e = table.get(at..at.saturating_add(entry)).ok_or_else(|| bad("truncated chunk table"))?;
+                    let at = usize::try_from(i)
+                        .ok()
+                        .and_then(|i| i.checked_mul(entry))
+                        .unwrap_or(usize::MAX);
+                    let e = table
+                        .get(at..at.saturating_add(entry))
+                        .ok_or_else(|| bad("truncated chunk table"))?;
                     usize::try_from(entry_value(e)).map_err(|_| bad("bad chunk offset"))?
                 }
             };
@@ -133,8 +153,14 @@ impl Decode for Decoder {
                 return Err(bad("waiting for the last chunk"));
             }
             let from = start_of(i)?;
-            let to = if last { input.len() } else { start_of(i.saturating_add(1))? };
-            let data = input.get(from..to).ok_or_else(|| bad("chunk outside the resource"))?;
+            let to = if last {
+                input.len()
+            } else {
+                start_of(i.saturating_add(1))?
+            };
+            let data = input
+                .get(from..to)
+                .ok_or_else(|| bad("chunk outside the resource"))?;
             let len = chunk.min(r.original.saturating_sub(i.saturating_mul(chunk)));
             let ulen = usize::try_from(len).unwrap_or(usize::MAX);
             if data.len() >= ulen {
@@ -147,7 +173,9 @@ impl Decode for Decoder {
                         ..lzx::Params::wim_chunk(len)
                     }),
                 };
-                let mut decoder = codec.decoder().ok_or_else(|| Diagnostic::internal("no decoder"))?;
+                let mut decoder = codec
+                    .decoder()
+                    .ok_or_else(|| Diagnostic::internal("no decoder"))?;
                 let decoded = pipeline::decode_all(decoder.as_mut(), data, ulen)?;
                 if decoded.len() != ulen {
                     return Err(bad("chunk decoded to the wrong size"));

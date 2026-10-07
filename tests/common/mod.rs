@@ -2,7 +2,9 @@
 
 #![allow(dead_code)]
 
-use fillyfoal::{ChildState, Limits, NodeId, Progress, Secret, SecretRequest, Session, Span, formats, render};
+use fillyfoal::{
+    ChildState, Limits, NodeId, Progress, Secret, SecretRequest, Session, Span, formats, render,
+};
 
 // ---------------------------------------------------------------------------
 // Byte-level image writer

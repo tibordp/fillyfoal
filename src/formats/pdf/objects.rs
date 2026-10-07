@@ -232,9 +232,17 @@ fn predictor(parms: Option<&Item>) -> std::result::Result<Option<Codec>, String>
     if predictor <= 1 {
         return Ok(None);
     }
-    let (colors, bits, columns) = (get("Colors", 1), get("BitsPerComponent", 8), get("Columns", 1));
-    let bits_per_pixel = colors.checked_mul(bits).filter(|&b| b > 0).ok_or("bad predictor parameters")?;
-    let bpp = usize::try_from(bits_per_pixel.saturating_add(7) / 8).map_err(|_| "bad predictor parameters")?;
+    let (colors, bits, columns) = (
+        get("Colors", 1),
+        get("BitsPerComponent", 8),
+        get("Columns", 1),
+    );
+    let bits_per_pixel = colors
+        .checked_mul(bits)
+        .filter(|&b| b > 0)
+        .ok_or("bad predictor parameters")?;
+    let bpp = usize::try_from(bits_per_pixel.saturating_add(7) / 8)
+        .map_err(|_| "bad predictor parameters")?;
     let row = columns
         .checked_mul(bits_per_pixel)
         .and_then(|b| usize::try_from(b.saturating_add(7) / 8).ok())
@@ -262,15 +270,21 @@ pub fn codec(dict: &Item) -> std::result::Result<(Codec, Vec<String>), String> {
                 stages.extend(predictor(parms(dict, i))?);
             }
             "LZWDecode" | "LZW" => {
-                let early = parms(dict, i).and_then(|p| p.get("EarlyChange")).and_then(Item::int).unwrap_or(1);
-                stages.push(Codec::Lzw { early_change: early != 0 });
+                let early = parms(dict, i)
+                    .and_then(|p| p.get("EarlyChange"))
+                    .and_then(Item::int)
+                    .unwrap_or(1);
+                stages.push(Codec::Lzw {
+                    early_change: early != 0,
+                });
                 stages.extend(predictor(parms(dict, i))?);
             }
             "ASCIIHexDecode" | "AHx" => stages.push(Codec::AsciiHex),
             "ASCII85Decode" | "A85" => stages.push(Codec::Ascii85),
             "RunLengthDecode" | "RL" => stages.push(Codec::RunLength),
             "Crypt" => {}
-            "DCTDecode" | "DCT" | "JPXDecode" | "JBIG2Decode" | "CCITTFaxDecode" | "CCF" if last => {}
+            "DCTDecode" | "DCT" | "JPXDecode" | "JBIG2Decode" | "CCITTFaxDecode" | "CCF"
+                if last => {}
             other => return Err(format!("stream filter /{other}")),
         }
     }
@@ -284,7 +298,9 @@ pub fn codec(dict: &Item) -> std::result::Result<(Codec, Vec<String>), String> {
 
 /// Whether the stream of `located` is encrypted under `security`.
 pub fn is_encrypted(located: &Located, security: Option<&Arc<Security>>) -> bool {
-    let Some(security) = security else { return false };
+    let Some(security) = security else {
+        return false;
+    };
     let kind = located.item.get("Type").and_then(Item::name);
     let own_crypt = filters(&located.item).iter().any(|f| f == "Crypt");
     located.id.is_some()
@@ -297,13 +313,22 @@ pub fn is_encrypted(located: &Located, security: Option<&Arc<Security>>) -> bool
 
 /// The decryption stage for the stream of `located` (asking for the
 /// password if needed); `None` if it is not encrypted.
-pub async fn decryption(cx: &Cx, located: &Located, security: Option<&Arc<Security>>) -> Result<Option<Codec>> {
-    let (Some(security), Some(id)) = (security, located.id) else { return Ok(None) };
+pub async fn decryption(
+    cx: &Cx,
+    located: &Located,
+    security: Option<&Arc<Security>>,
+) -> Result<Option<Codec>> {
+    let (Some(security), Some(id)) = (security, located.id) else {
+        return Ok(None);
+    };
     if !is_encrypted(located, Some(security)) {
         return Ok(None);
     }
     let Some(key) = super::crypt::file_key(cx, security, true).await else {
-        return Err(Diagnostic::unsupported("encrypted stream (no password, or a wrong one)").at(located.data.unwrap_or(located.whole)));
+        return Err(
+            Diagnostic::unsupported("encrypted stream (no password, or a wrong one)")
+                .at(located.data.unwrap_or(located.whole)),
+        );
     };
     Ok(security.stream_codec(&key, id))
 }
@@ -318,10 +343,18 @@ pub async fn decode(cx: &Cx, located: &Located, security: Option<&Arc<Security>>
     let codec = match decryption(cx, located, security).await? {
         Some(decrypt) => match codec {
             Codec::Stored => decrypt,
-            Codec::Chain { stages, .. } => {
-                Codec::chain("pdf-decrypt+filters", "pdf-decrypt+filters (lazy)", std::iter::once(decrypt).chain(stages.iter().cloned()).collect::<Vec<_>>())
-            }
-            single => Codec::chain("pdf-decrypt+filters", "pdf-decrypt+filters (lazy)", vec![decrypt, single]),
+            Codec::Chain { stages, .. } => Codec::chain(
+                "pdf-decrypt+filters",
+                "pdf-decrypt+filters (lazy)",
+                std::iter::once(decrypt)
+                    .chain(stages.iter().cloned())
+                    .collect::<Vec<_>>(),
+            ),
+            single => Codec::chain(
+                "pdf-decrypt+filters",
+                "pdf-decrypt+filters (lazy)",
+                vec![decrypt, single],
+            ),
         },
         None => codec,
     };

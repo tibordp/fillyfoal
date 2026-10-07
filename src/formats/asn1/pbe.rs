@@ -3,8 +3,8 @@
 
 use super::der;
 use crate::codec::crypto::{
-    Aes, Des, Hash, Rc2, Sha1, Sha256, Sha384, Sha512, TripleDes, bmp_password, cbc_decrypt, pbkdf2,
-    pkcs12_kdf, rc4, unpad_pkcs7,
+    Aes, Des, Hash, Rc2, Sha1, Sha256, Sha384, Sha512, TripleDes, bmp_password, cbc_decrypt,
+    pbkdf2, pkcs12_kdf, rc4, unpad_pkcs7,
 };
 
 /// Key derivations beyond this many iterations are refused (hostile input
@@ -38,16 +38,25 @@ fn algorithm(content: &[u8]) -> Option<(String, &[u8])> {
 
 /// The name of an encryption algorithm, for display.
 pub fn describe(alg: &[u8]) -> String {
-    let Some((oid, params)) = algorithm(alg) else { return "unknown algorithm".into() };
+    let Some((oid, params)) = algorithm(alg) else {
+        return "unknown algorithm".into();
+    };
     if oid == "1.2.840.113549.1.5.13" {
         let mut it = der::elements(params);
         let kdf = it.next().and_then(|(_, k)| algorithm(k));
         let enc = it.next().and_then(|(_, e)| oid_of(e));
         let prf = kdf
             .as_ref()
-            .and_then(|(_, p)| der::elements(p).find(|(t, _)| t.tag == 16).and_then(|(_, a)| oid_of(a)))
+            .and_then(|(_, p)| {
+                der::elements(p)
+                    .find(|(t, _)| t.tag == 16)
+                    .and_then(|(_, a)| oid_of(a))
+            })
             .map_or("HMAC-SHA1", |o| prf_name(&o));
-        return format!("PBES2 (PBKDF2 {prf}, {})", enc.map_or("unknown cipher", |e| cipher_name(&e)));
+        return format!(
+            "PBES2 (PBKDF2 {prf}, {})",
+            enc.map_or("unknown cipher", |e| cipher_name(&e))
+        );
     }
     pkcs12_pbe(&oid).map_or_else(|| format!("algorithm {oid}"), |(name, ..)| name.to_owned())
 }
@@ -85,8 +94,18 @@ fn pkcs12_pbe(oid: &str) -> Option<(&'static str, Pkcs12Cipher, usize, usize)> {
     Some(match oid {
         "1.2.840.113549.1.12.1.1" => ("pbeWithSHAAnd128BitRC4", Pkcs12Cipher::Rc4, 16, 0),
         "1.2.840.113549.1.12.1.2" => ("pbeWithSHAAnd40BitRC4", Pkcs12Cipher::Rc4, 5, 0),
-        "1.2.840.113549.1.12.1.3" => ("pbeWithSHAAnd3-KeyTripleDES-CBC", Pkcs12Cipher::TripleDes, 24, 8),
-        "1.2.840.113549.1.12.1.4" => ("pbeWithSHAAnd2-KeyTripleDES-CBC", Pkcs12Cipher::TripleDes, 16, 8),
+        "1.2.840.113549.1.12.1.3" => (
+            "pbeWithSHAAnd3-KeyTripleDES-CBC",
+            Pkcs12Cipher::TripleDes,
+            24,
+            8,
+        ),
+        "1.2.840.113549.1.12.1.4" => (
+            "pbeWithSHAAnd2-KeyTripleDES-CBC",
+            Pkcs12Cipher::TripleDes,
+            16,
+            8,
+        ),
         "1.2.840.113549.1.12.1.5" => ("pbeWithSHAAnd128BitRC2-CBC", Pkcs12Cipher::Rc2, 16, 8),
         "1.2.840.113549.1.12.1.6" => ("pbeWithSHAAnd40BitRC2-CBC", Pkcs12Cipher::Rc2, 5, 8),
         _ => return None,
@@ -102,7 +121,9 @@ fn salt_and_iterations(params: &[u8]) -> Option<(&[u8], u64)> {
 
 fn check_iterations(n: u64) -> Result<u32, Failure> {
     if n == 0 || n > MAX_ITERATIONS {
-        return Err(Failure::Unsupported(format!("{n} key-derivation iterations")));
+        return Err(Failure::Unsupported(format!(
+            "{n} key-derivation iterations"
+        )));
     }
     u32::try_from(n).map_err(|_| Failure::Unsupported("iteration count".into()))
 }
@@ -117,10 +138,23 @@ pub struct Password<'a> {
 
 impl Password<'_> {
     /// The candidates tried before asking: absent, then empty.
-    pub const FREE: [Password<'static>; 2] = [Password { text: b"", null: true }, Password { text: b"", null: false }];
+    pub const FREE: [Password<'static>; 2] = [
+        Password {
+            text: b"",
+            null: true,
+        },
+        Password {
+            text: b"",
+            null: false,
+        },
+    ];
 
     fn bmp(&self) -> Vec<u8> {
-        if self.null { Vec::new() } else { bmp_password(self.text) }
+        if self.null {
+            Vec::new()
+        } else {
+            bmp_password(self.text)
+        }
     }
 }
 
@@ -128,10 +162,11 @@ impl Password<'_> {
 /// AlgorithmIdentifier's content) under `password`. The result is unpadded
 /// and checked to start like DER.
 pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<Vec<u8>, Failure> {
-    let (oid, params) = algorithm(alg).ok_or_else(|| Failure::Unsupported("malformed algorithm".into()))?;
+    let (oid, params) =
+        algorithm(alg).ok_or_else(|| Failure::Unsupported("malformed algorithm".into()))?;
     let plain = if let Some((_, cipher, key_len, iv_len)) = pkcs12_pbe(&oid) {
-        let (salt, iterations) =
-            salt_and_iterations(params).ok_or_else(|| Failure::Unsupported("malformed PBE parameters".into()))?;
+        let (salt, iterations) = salt_and_iterations(params)
+            .ok_or_else(|| Failure::Unsupported("malformed PBE parameters".into()))?;
         let iterations = check_iterations(iterations)?;
         let pw = password.bmp();
         let key = pkcs12_kdf::<Sha1>(&pw, salt, iterations, 1, key_len);
@@ -139,7 +174,8 @@ pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<
         match cipher {
             Pkcs12Cipher::Rc4 => return Ok(rc4(&key, ciphertext)),
             Pkcs12Cipher::TripleDes => {
-                let c = TripleDes::new(&key).ok_or_else(|| Failure::Unsupported("3DES key".into()))?;
+                let c =
+                    TripleDes::new(&key).ok_or_else(|| Failure::Unsupported("3DES key".into()))?;
                 unpad(cbc_decrypt(&c, &iv, ciphertext), 8)?
             }
             Pkcs12Cipher::Rc2 => {
@@ -159,7 +195,9 @@ pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<
 }
 
 fn unpad(data: Vec<u8>, block: usize) -> Result<Vec<u8>, Failure> {
-    unpad_pkcs7(&data, block).map(<[u8]>::to_vec).ok_or(Failure::Wrong)
+    unpad_pkcs7(&data, block)
+        .map(<[u8]>::to_vec)
+        .ok_or(Failure::Wrong)
 }
 
 fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Failure> {
@@ -174,7 +212,11 @@ fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, F
     let mut k = der::elements(kdf_params);
     let (_, salt) = k.next().ok_or_else(bad)?;
     let (_, iter) = k.next().ok_or_else(bad)?;
-    let iterations = check_iterations(der::integer(iter).and_then(|i| u64::try_from(i).ok()).ok_or_else(bad)?)?;
+    let iterations = check_iterations(
+        der::integer(iter)
+            .and_then(|i| u64::try_from(i).ok())
+            .ok_or_else(bad)?,
+    )?;
     let mut key_len = None;
     let mut prf = "1.2.840.113549.2.7".to_owned();
     for (tlv, c) in k {
@@ -207,7 +249,10 @@ fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, F
             unpad(cbc_decrypt(&c, iv, ciphertext), 8)
         }
         "1.3.14.3.2.7" => {
-            let k: [u8; 8] = key.get(..8).and_then(|s| s.try_into().ok()).ok_or_else(bad)?;
+            let k: [u8; 8] = key
+                .get(..8)
+                .and_then(|s| s.try_into().ok())
+                .ok_or_else(bad)?;
             unpad(cbc_decrypt(&Des::new(&k), iv, ciphertext), 8)
         }
         _ => {
@@ -251,7 +296,9 @@ mod tests {
     #[test]
     fn describes() {
         // AlgorithmIdentifier content for pbeWithSHAAnd3-KeyTripleDES-CBC.
-        let alg = [0x06, 0x0a, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x0c, 0x01, 0x03, 0x30, 0x00];
+        let alg = [
+            0x06, 0x0a, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x0c, 0x01, 0x03, 0x30, 0x00,
+        ];
         assert_eq!(super::describe(&alg), "pbeWithSHAAnd3-KeyTripleDES-CBC");
     }
 }

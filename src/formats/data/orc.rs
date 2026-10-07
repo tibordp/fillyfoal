@@ -10,10 +10,10 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::wire::protobuf as pb;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::formats::util::wire::protobuf as pb;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 /// Nested messages followed.

@@ -39,7 +39,12 @@ fn fixtures() -> Vec<PathBuf> {
     for tree in ["external", "synthetic"] {
         for dir in std::fs::read_dir(root.join(tree)).unwrap().flatten() {
             if dir.path().is_dir() {
-                out.extend(std::fs::read_dir(dir.path()).unwrap().flatten().map(|e| e.path()));
+                out.extend(
+                    std::fs::read_dir(dir.path())
+                        .unwrap()
+                        .flatten()
+                        .map(|e| e.path()),
+                );
             }
         }
     }
@@ -55,10 +60,20 @@ fn magicless_probes_claim_only_their_own_fixtures() {
     let mut wrong = Vec::new();
     for path in fixtures() {
         let data = std::fs::read(&path).unwrap();
-        let dir = path.parent().unwrap().file_name().unwrap().to_string_lossy().into_owned();
+        let dir = path
+            .parent()
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         for name in MAGICLESS {
             if probe(name, &data) != (dir == name) {
-                wrong.push(format!("{}: {name} probe says {}", path.display(), dir != name));
+                wrong.push(format!(
+                    "{}: {name} probe says {}",
+                    path.display(),
+                    dir != name
+                ));
             }
         }
     }
@@ -81,21 +96,37 @@ fn magicless_probes_reject_lookalikes() {
         }
     }
     // A sequence of MessagePack values or a top-level array: by extension only.
-    let stream = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/msgpack/stream.msgpack")).unwrap();
+    let stream = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/msgpack/stream.msgpack"
+    ))
+    .unwrap();
     assert!(!probe("msgpack", &stream));
-    let array = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/ubjson/array.ubj")).unwrap();
+    let array = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/data/ubjson/array.ubj"
+    ))
+    .unwrap();
     assert!(!probe("ubjson", &array));
 }
 
 /// Opens `file` (under tests/data) as the format its extension names and
 /// renders the whole tree.
 fn open_as(file: &str, extension: &str, format: &str) -> String {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data").join(file);
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/data")
+        .join(file);
     let data = std::fs::read(path).unwrap();
-    assert!(formats::by_extension(extension).iter().any(|f| f.name == format));
+    assert!(
+        formats::by_extension(extension)
+            .iter()
+            .any(|f| f.name == format)
+    );
     let len = data.len() as u64;
     let mut host = Host::with_chunk(data, 64);
-    let root = host.session.open_as(file.to_owned(), len, formats::by_name(format).unwrap());
+    let root = host
+        .session
+        .open_as(file.to_owned(), len, formats::by_name(format).unwrap());
     host.explore(root, 8, 100);
     fillyfoal::render::tree(&host.session, root)
 }
@@ -118,7 +149,12 @@ fn msgpack_stream_by_extension() {
 #[test]
 fn ubjson_array_by_extension() {
     let tree = open_as("ubjson/array.ubj", "ubj", "ubjson");
-    for line in ["UBJSON array, 4 elements", "[1]: \"two\"", "three: 3", "uint8 array, 1 byte"] {
+    for line in [
+        "UBJSON array, 4 elements",
+        "[1]: \"two\"",
+        "three: 3",
+        "uint8 array, 1 byte",
+    ] {
         assert!(tree.contains(line), "{line:?} missing from\n{tree}");
     }
     assert!(!tree.contains("! "), "diagnostics in\n{tree}");
@@ -130,15 +166,36 @@ fn ubjson_array_by_extension() {
 #[test]
 fn pathological_inputs_settle() {
     let mut cases: Vec<(&str, Vec<u8>)> = vec![
-        ("msgpack", [&b"\x81\xa1a"[..], &[0x91; 100_000], b"\x01"].concat()),
-        ("msgpack", b"\x82\xa1a\xdd\xff\xff\xff\xff\x01\xa1b\x02".to_vec()),
-        ("ubjson", [&b"{U\x01a[$Z#L"[..], &(1u64 << 62).to_be_bytes(), b"}"].concat()),
-        ("ubjson", [vec![b'['; 100_000], vec![b']'; 100_000]].concat()),
+        (
+            "msgpack",
+            [&b"\x81\xa1a"[..], &[0x91; 100_000], b"\x01"].concat(),
+        ),
+        (
+            "msgpack",
+            b"\x82\xa1a\xdd\xff\xff\xff\xff\x01\xa1b\x02".to_vec(),
+        ),
+        (
+            "ubjson",
+            [&b"{U\x01a[$Z#L"[..], &(1u64 << 62).to_be_bytes(), b"}"].concat(),
+        ),
+        (
+            "ubjson",
+            [vec![b'['; 100_000], vec![b']'; 100_000]].concat(),
+        ),
         ("smile", [&b":)\n\x03"[..], &[0xf8; 100_000]].concat()),
         ("smile", [&b":)\n\x03\xfa"[..], &[0x40; 1000]].concat()),
         ("ion-text", [&b"$ion_1_0 "[..], &[b'['; 100_000]].concat()),
         // Annotation wrappers nested in each other.
-        ("ion", [&b"\xe0\x01\x00\xea"[..], &[0xbe, 0x8f, 0xbe, 0x8c, 0xbe, 0x89, 0xbe, 0x86, 0xbe, 0x83, 0xbe, 0x80]].concat()),
+        (
+            "ion",
+            [
+                &b"\xe0\x01\x00\xea"[..],
+                &[
+                    0xbe, 0x8f, 0xbe, 0x8c, 0xbe, 0x89, 0xbe, 0x86, 0xbe, 0x83, 0xbe, 0x80,
+                ],
+            ]
+            .concat(),
+        ),
     ];
     // BSON documents nested 1,000 deep.
     let mut doc = b"\x05\x00\x00\x00\x00".to_vec();
@@ -163,7 +220,9 @@ fn pathological_inputs_settle() {
         );
         host.max_polls = 200_000;
         host.max_nodes = 20_000;
-        let root = host.session.open_as("case", len, formats::by_name(format).unwrap());
+        let root = host
+            .session
+            .open_as("case", len, formats::by_name(format).unwrap());
         host.explore(root, 300, 1000);
         let tree = fillyfoal::render::tree(&host.session, root);
         assert!(!tree.contains("internal"), "{format}: {tree}");
