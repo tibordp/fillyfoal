@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ed25519-aes256-gcm.bin — OpenSSH private key, ssh-ed25519, 256 bits, encrypted (aes256-gcm@openssh.com, 4 bcrypt rounds)  [0x0+0x12e]
+    Magic: "openssh-key-v1"  [0x0+0xf]
+    Cipher: "aes256-gcm@openssh.com"  [0xf+0x1a]
+    KDF: "bcrypt"  [0x29+0xa]
+  ▾ KDF options — 16-byte salt, 4 rounds  [0x33+0x1c]
+      Salt: 2d 0b 17 ce 41 85 3f 71 90 7d f4 85 b3 f4 35 fb  |-...A.?q.}....5.| — 16 bytes  [0x37+0x14]
+      Rounds: 4  [0x4b+0x4]
+    Number of keys: 1  [0x4f+0x4]
+  ▾ Public key 1 — ssh-ed25519, 256 bits  [0x57+0x33]
+      Key type: "ssh-ed25519"  [0x57+0xf]
+      Public key: 05 bd 6e 9d 0b 25 1f 13 c4 c9 23 6f f7 fa d3 f5 …  |..n..%....#o....| — 32 bytes  [0x66+0x24]
+  ▾ Private section (encrypted) — 144 bytes, aes256-gcm@openssh.com  [0x8a+0xa4]
+      Authentication tag — verified  [0x11e+0x10]
+      Check 1: 0x4e8a4602  [#1:0x0+0x4]
+      Check 2: 0x4e8a4602  [#1:0x4+0x4]
+    ▾ gcm@fillyfoal — ssh-ed25519  [#1:0x8+0x88]
+        Key type: "ssh-ed25519"  [#1:0x8+0xf]
+        Public key: 05 bd 6e 9d 0b 25 1f 13 c4 c9 23 6f f7 fa d3 f5 …  |..n..%....#o....| — 32 bytes  [#1:0x17+0x24]
+        Private key (seed ‖ public key) — present, 64 bytes  [#1:0x3b+0x44]
+        Comment: "gcm@fillyfoal"  [#1:0x7f+0x11]

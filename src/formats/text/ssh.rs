@@ -1,6 +1,6 @@
 //! OpenSSH keys: `authorized_keys`, `known_hosts` and `.pub` files (one key
-//! per line), the binary public key blob inside them, and the binary
-//! `openssh-key-v1` private key format (found inside its PEM armor).
+//! per line) and the binary public key blob inside them (also used by
+//! certificates and by `openssh-key-v1` private keys, `security::openssh`).
 
 use crate::bytes::to_u64;
 use crate::cx::Cx;
@@ -12,7 +12,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
 
-use super::decode::{Transform, decoded_node, preview};
+use super::decode::{Transform, decoded_node};
 use super::encoding::prepare;
 use super::piece::Piece;
 use super::scan::Lines;
@@ -34,17 +34,6 @@ pub static BLOB: Format = Format {
     mime: "application/octet-stream",
     probe: Probe::Custom(probe_blob),
     dissect: crate::expander!(dissect_blob: Input),
-};
-
-/// Not registered: `security::OPENSSH_KEY` claims the same magic. This one
-/// goes deeper (decodes unencrypted private sections); either can be kept.
-pub static PRIVATE: Format = Format {
-    name: "openssh-private-key",
-    title: "OpenSSH private key",
-    extensions: &[],
-    mime: "application/octet-stream",
-    probe: Probe::Magic(&[(0, b"openssh-key-v1\0")]),
-    dissect: crate::expander!(dissect_private: Input),
 };
 
 const BE: Endian = Endian::Big;
@@ -247,7 +236,7 @@ fn probe_blob(h: &Head<'_>) -> bool {
 }
 
 /// Key size in bits, from a decoded blob.
-fn key_bits(kind: &[u8], blob: &[u8]) -> Option<u64> {
+pub fn key_bits(kind: &[u8], blob: &[u8]) -> Option<u64> {
     let base = kind.strip_suffix(b"-cert-v01@openssh.com").unwrap_or(kind);
     match base {
         b"ssh-ed25519" | b"sk-ssh-ed25519@openssh.com" => Some(256),
@@ -274,7 +263,7 @@ fn key_bits(kind: &[u8], blob: &[u8]) -> Option<u64> {
     }
 }
 
-fn mpint_bits(n: &[u8]) -> u64 {
+pub fn mpint_bits(n: &[u8]) -> u64 {
     let n: Vec<u8> = n.iter().copied().skip_while(|&b| b == 0).collect();
     let lead = n.first().map_or(0, |b| b.leading_zeros());
     to_u64(n.len())
@@ -283,7 +272,7 @@ fn mpint_bits(n: &[u8]) -> u64 {
 }
 
 /// Reads an SSH `string`: returns its data and the span of length + data.
-async fn string(cur: &mut Cursor<'_>) -> Result<(Vec<u8>, Span)> {
+pub async fn ssh_string(cur: &mut Cursor<'_>) -> Result<(Vec<u8>, Span)> {
     let start = cur.pos();
     let len = cur.u32().await?;
     let data = cur.bytes(len.into()).await?;
@@ -291,7 +280,7 @@ async fn string(cur: &mut Cursor<'_>) -> Result<(Vec<u8>, Span)> {
 }
 
 /// Emits a string field: text if printable, else bytes.
-fn string_node(name: &'static str, data: &[u8], span: Span) -> Node {
+pub fn string_node(name: &'static str, data: &[u8], span: Span) -> Node {
     let printable = !data.is_empty() && data.iter().all(|b| b.is_ascii_graphic() || *b == b' ');
     if printable {
         text_node(name, span, &String::from_utf8_lossy(data))
@@ -305,7 +294,7 @@ fn string_node(name: &'static str, data: &[u8], span: Span) -> Node {
     }
 }
 
-fn mpint_node(name: &'static str, data: &[u8], span: Span) -> Node {
+pub fn mpint_node(name: &'static str, data: &[u8], span: Span) -> Node {
     let bits = mpint_bits(data);
     let node = string_node(name, data, span).summary(format!("{bits}-bit integer"));
     if data.len() <= 8 {
@@ -339,7 +328,7 @@ fn public_fields(base: &[u8]) -> &'static [(&'static str, bool)] {
 
 pub async fn dissect_blob(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, input.span, BE);
-    let (kind, span) = string(&mut cur).await?;
+    let (kind, span) = ssh_string(&mut cur).await?;
     cx.emit(string_node("Key type", &kind, span));
     let cert = kind.ends_with(b"-cert-v01@openssh.com");
     let base = kind
@@ -348,11 +337,11 @@ pub async fn dissect_blob(cx: Cx, input: Input) -> Result<()> {
         .to_vec();
     let mut summary = String::from_utf8_lossy(&kind).into_owned();
     if cert {
-        let (nonce, span) = string(&mut cur).await?;
+        let (nonce, span) = ssh_string(&mut cur).await?;
         cx.emit(string_node("Nonce", &nonce, span));
     }
     for &(name, mpint) in public_fields(&base) {
-        let (data, span) = string(&mut cur).await?;
+        let (data, span) = ssh_string(&mut cur).await?;
         if name == "Modulus (n)" || (name == "p" && base == b"ssh-dss") {
             summary = format!("{summary}, {} bits", mpint_bits(&data));
         }
@@ -403,9 +392,9 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> 
                 },
             }),
     );
-    let (id, span) = string(cur).await?;
+    let (id, span) = ssh_string(cur).await?;
     cx.emit(string_node("Key ID", &id, span));
-    let (principals, span) = string(cur).await?;
+    let (principals, span) = ssh_string(cur).await?;
     let names = ssh_strings(&principals);
     cx.emit(text_node("Valid principals", span, &names.join(", ")));
     for name in ["Valid after", "Valid before"] {
@@ -421,18 +410,18 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> 
         });
     }
     for name in ["Critical options", "Extensions"] {
-        let (data, span) = string(cur).await?;
+        let (data, span) = ssh_string(cur).await?;
         let items = ssh_strings(&data);
         // Name/value pairs: show the names.
         let keys: Vec<String> = items.iter().step_by(2).cloned().collect();
         cx.emit(text_node(name, span, &keys.join(", ")));
     }
-    let (_, span) = string(cur).await?;
+    let (_, span) = ssh_string(cur).await?;
     cx.emit(Node::new("Reserved").span(span));
-    let (_, span) = string(cur).await?;
+    let (_, span) = ssh_string(cur).await?;
     let key = span.sub(4, span.len.saturating_sub(4));
     cx.emit(embedded_as("Signature key", input.nested(key), &BLOB));
-    let (_, span) = string(cur).await?;
+    let (_, span) = ssh_string(cur).await?;
     cx.emit(Node::new("Signature").span(span));
     Ok(())
 }
@@ -454,176 +443,4 @@ fn ssh_strings(data: &[u8]) -> Vec<String> {
         }
     }
     out
-}
-
-// ---------------------------------------------------------------------------
-// openssh-key-v1 private keys
-
-/// Private fields by algorithm (after the type string), as in OpenSSH's
-/// `sshkey_private_serialize`.
-fn private_fields(base: &[u8]) -> &'static [&'static str] {
-    match base {
-        b"ssh-rsa" => &[
-            "Modulus (n)",
-            "Public exponent (e)",
-            "Private exponent (d)",
-            "iqmp",
-            "p",
-            "q",
-        ],
-        b"ssh-dss" => &["p", "q", "g", "y", "x"],
-        b"ssh-ed25519" => &["Public key", "Private key"],
-        b"sk-ssh-ed25519@openssh.com" => &[
-            "Public key",
-            "Application",
-            "Flags",
-            "Key handle",
-            "Reserved",
-        ],
-        _ if base.starts_with(b"ecdsa-sha2-") => {
-            &["Curve", "Public point (Q)", "Private scalar (d)"]
-        }
-        _ => &[],
-    }
-}
-
-pub async fn dissect_private(cx: Cx, input: Input) -> Result<()> {
-    let mut cur = Cursor::new(&cx, input.span, BE);
-    cx.emit(
-        Node::new("Magic")
-            .span(cur.span(15))
-            .value(Value::Text("openssh-key-v1".to_owned())),
-    );
-    cur.skip(15);
-    let (cipher, span) = string(&mut cur).await?;
-    cx.emit(string_node("Cipher", &cipher, span));
-    let (kdf, span) = string(&mut cur).await?;
-    cx.emit(string_node("KDF", &kdf, span));
-    let (options, span) = string(&mut cur).await?;
-    let mut node = Node::new("KDF options").span(span);
-    if kdf == b"bcrypt" && options.len() >= 8 {
-        let salt_len = crate::bytes::u32_be(&options, 0).unwrap_or(0);
-        let rounds = crate::bytes::u32_be(
-            &options,
-            4usize.saturating_add(crate::bytes::to_usize(salt_len.into())),
-        );
-        if let Some(r) = rounds {
-            node = node.summary(format!("{salt_len}-byte salt, {r} rounds"));
-        }
-    }
-    cx.emit(node);
-    let start = cur.pos();
-    let count = cur.u32().await?;
-    cx.emit(
-        Node::new("Number of keys")
-            .span(cur.since(start))
-            .value(Value::UInt {
-                value: count.into(),
-                bits: 32,
-                radix: Radix::Dec,
-            }),
-    );
-    let encrypted = cipher != b"none";
-    let mut summary = String::from("OpenSSH private key");
-    for i in 0..count.min(64) {
-        let (blob, span) = string(&mut cur).await?;
-        let key = span.sub(4, span.len.saturating_sub(4));
-        let kind_len = crate::bytes::u32_be(&blob, 0).unwrap_or(0);
-        let kind = blob
-            .get(4..4usize.saturating_add(crate::bytes::to_usize(kind_len.into())))
-            .unwrap_or_default();
-        if i == 0 {
-            summary = format!("{summary}, {}", String::from_utf8_lossy(kind));
-            if let Some(bits) = key_bits(kind, &blob) {
-                summary = format!("{summary} {bits}-bit");
-            }
-        }
-        cx.emit(embedded_as(
-            format!("Public key {}", i.saturating_add(1)),
-            input.nested(key),
-            &BLOB,
-        ));
-    }
-    if encrypted {
-        summary = format!(
-            "{summary}, encrypted ({})",
-            String::from_utf8_lossy(&cipher)
-        );
-    }
-    cx.annotate(summary);
-    let (_, span) = string(&mut cur).await?;
-    let section = span.sub(4, span.len.saturating_sub(4));
-    if encrypted {
-        cx.emit(
-            Node::new("Encrypted private keys")
-                .span(section)
-                .diag(Diagnostic::unsupported("encrypted with a passphrase")),
-        );
-    } else {
-        cx.emit(
-            Node::new("Private keys")
-                .span(section)
-                .summary(plural(count.into(), "key", "keys"))
-                .lazy(private_section, (section, count)),
-        );
-    }
-    Ok(())
-}
-
-async fn private_section(cx: Cx, (span, count): (Span, u32)) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, BE);
-    for name in ["Check 1", "Check 2"] {
-        let start = cur.pos();
-        let v = cur.u32().await?;
-        cx.emit(Node::new(name).span(cur.since(start)).value(Value::UInt {
-            value: v.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        }));
-    }
-    for _ in 0..count.min(64) {
-        let start = cur.pos();
-        let (kind, _) = string(&mut cur).await?;
-        for _ in private_fields(&kind) {
-            string(&mut cur).await?;
-        }
-        let (comment, _) = string(&mut cur).await?;
-        let kind_text = String::from_utf8_lossy(&kind).into_owned();
-        cx.emit(
-            Node::new(if comment.is_empty() {
-                kind_text.clone()
-            } else {
-                String::from_utf8_lossy(&comment).into_owned()
-            })
-            .span(cur.since(start))
-            .summary(kind_text)
-            .lazy(private_key, cur.since(start)),
-        );
-    }
-    if !cur.at_end() {
-        cx.emit(Node::new("Padding").span(cur.span(cur.remaining())));
-    }
-    Ok(())
-}
-
-async fn private_key(cx: Cx, span: Span) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, BE);
-    let (kind, s) = string(&mut cur).await?;
-    cx.emit(string_node("Key type", &kind, s));
-    for &name in private_fields(&kind) {
-        let (data, s) = string(&mut cur).await?;
-        // Secrets are shown by size only.
-        cx.emit(
-            Node::new(name)
-                .span(s)
-                .summary(format!("{} bytes", data.len())),
-        );
-    }
-    let (comment, s) = string(&mut cur).await?;
-    cx.emit(text_node(
-        "Comment",
-        s,
-        &preview(&String::from_utf8_lossy(&comment), 200),
-    ));
-    Ok(())
 }

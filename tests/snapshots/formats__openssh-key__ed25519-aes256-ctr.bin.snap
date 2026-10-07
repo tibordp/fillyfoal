@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ed25519-aes256-ctr.bin — OpenSSH private key, ssh-ed25519, 256 bits, encrypted (aes256-ctr, 4 bcrypt rounds)  [0x0+0x112]
+    Magic: "openssh-key-v1"  [0x0+0xf]
+    Cipher: "aes256-ctr"  [0xf+0xe]
+    KDF: "bcrypt"  [0x1d+0xa]
+  ▾ KDF options — 16-byte salt, 4 rounds  [0x27+0x1c]
+      Salt: 9e 59 73 8e 20 2b ea 8f 1e 68 91 36 7b 81 33 d6  |.Ys. +...h.6{.3.| — 16 bytes  [0x2b+0x14]
+      Rounds: 4  [0x3f+0x4]
+    Number of keys: 1  [0x43+0x4]
+  ▾ Public key 1 — ssh-ed25519, 256 bits  [0x4b+0x33]
+      Key type: "ssh-ed25519"  [0x4b+0xf]
+      Public key: 2a 35 ac 48 cd a6 48 fe 2d a9 1e 86 e8 f3 c7 4e …  |*5.H..H.-......N| — 32 bytes  [0x5a+0x24]
+  ▾ Private section (encrypted) — 144 bytes, aes256-ctr  [0x7e+0x94]
+      Check 1: 0xa8f0d0c9  [#1:0x0+0x4]
+      Check 2: 0xa8f0d0c9  [#1:0x4+0x4]
+    ▾ ctr@fillyfoal — ssh-ed25519  [#1:0x8+0x88]
+        Key type: "ssh-ed25519"  [#1:0x8+0xf]
+        Public key: 2a 35 ac 48 cd a6 48 fe 2d a9 1e 86 e8 f3 c7 4e …  |*5.H..H.-......N| — 32 bytes  [#1:0x17+0x24]
+        Private key (seed ‖ public key) — present, 64 bytes  [#1:0x3b+0x44]
+        Comment: "ctr@fillyfoal"  [#1:0x7f+0x11]

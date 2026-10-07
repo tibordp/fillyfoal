@@ -9,7 +9,6 @@ use crate::fields::Endian;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
-use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value, lookup};
 
 const LE: Endian = Endian::Little;
@@ -136,75 +135,6 @@ async fn kdb(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "KeePass 1, {} groups, {} entries",
         h.groups, h.entries
-    ));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// OpenSSH private keys (the binary inside the PEM armour)
-
-declare_format!(pub OPENSSH_KEY = "openssh-key", "OpenSSH private key (binary)", [], "application/octet-stream",
-    Probe::Magic(&[(0, b"openssh-key-v1\0")]), openssh_key);
-
-/// Reads an SSH wire-format string (u32 BE length + bytes).
-async fn ssh_string(cur: &mut Cursor<'_>) -> Result<(Vec<u8>, Span)> {
-    let start = cur.pos();
-    let len = cur.u32().await?;
-    if u64::from(len) > cur.remaining() {
-        return Err(Diagnostic::malformed("string length exceeds the data").at(cur.since(start)));
-    }
-    let bytes = cur.bytes(len.into()).await?;
-    Ok((bytes, cur.since(start)))
-}
-
-async fn openssh_key(cx: Cx, input: Input) -> Result<()> {
-    let mut cur = Cursor::new(&cx, input.span, BE);
-    cx.emit(Node::new("Magic").span(cur.span(15)));
-    cur.skip(15);
-    let text = |name: &'static str, bytes: &[u8], span: Span| {
-        Node::new(name)
-            .span(span)
-            .value(Value::Text(String::from_utf8_lossy(bytes).into_owned()))
-    };
-    let (cipher, span) = ssh_string(&mut cur).await?;
-    cx.emit(text("Cipher", &cipher, span));
-    let (kdf, span) = ssh_string(&mut cur).await?;
-    cx.emit(text("KDF", &kdf, span));
-    let (_, span) = ssh_string(&mut cur).await?;
-    cx.emit(Node::new("KDF options").span(span));
-    let count = cur.u32().await?;
-    let mut algorithms = Vec::new();
-    for i in 0..count.min(16) {
-        let (blob, span) = ssh_string(&mut cur).await?;
-        let algo_len = usize::try_from(u32_be(&blob, 0).unwrap_or(0)).unwrap_or(0);
-        let algo = String::from_utf8_lossy(
-            blob.get(4..4usize.saturating_add(algo_len))
-                .unwrap_or_default(),
-        )
-        .into_owned();
-        algorithms.push(algo.clone());
-        cx.emit(
-            Node::new(format!("Public key {i}"))
-                .span(span)
-                .value(Value::Text(algo)),
-        );
-    }
-    let (_, span) = ssh_string(&mut cur).await?;
-    let encrypted = cipher != b"none";
-    let mut private = Node::new("Private section").span(span);
-    if encrypted {
-        private = private.diag(Diagnostic::note("encrypted with a passphrase"));
-    }
-    cx.emit(private);
-    cx.annotate(format!(
-        "{} key(s): {}{}",
-        count,
-        algorithms.join(", "),
-        if encrypted {
-            ", passphrase-protected"
-        } else {
-            ", unencrypted"
-        }
     ));
     Ok(())
 }

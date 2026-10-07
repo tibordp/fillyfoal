@@ -1,0 +1,25 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ ed25519-chacha20-poly1305.bin — OpenSSH private key, ssh-ed25519, 256 bits, encrypted (chacha20-poly1305@openssh.com, 4 bcrypt rounds)  [0x0+0x13d]
+    Magic: "openssh-key-v1"  [0x0+0xf]
+    Cipher: "chacha20-poly1305@openssh.com"  [0xf+0x21]
+    KDF: "bcrypt"  [0x30+0xa]
+  ▾ KDF options — 16-byte salt, 4 rounds  [0x3a+0x1c]
+      Salt: d3 07 47 50 1f 91 d6 44 bc ad bd 85 9c 5f fe 38  |..GP...D....._.8| — 16 bytes  [0x3e+0x14]
+      Rounds: 4  [0x52+0x4]
+    Number of keys: 1  [0x56+0x4]
+  ▾ Public key 1 — ssh-ed25519, 256 bits  [0x5e+0x33]
+      Key type: "ssh-ed25519"  [0x5e+0xf]
+      Public key: 35 8f 73 84 7d 45 52 89 4c ee 71 ec d0 d2 55 51 …  |5.s.}ER.L.q...UQ| — 32 bytes  [0x6d+0x24]
+  ▾ Private section (encrypted) — 152 bytes, chacha20-poly1305@openssh.com  [0x91+0xac]
+      Authentication tag — verified  [0x12d+0x10]
+      Check 1: 0x489fc19a  [#1:0x0+0x4]
+      Check 2: 0x489fc19a  [#1:0x4+0x4]
+    ▾ chacha@fillyfoal — ssh-ed25519  [#1:0x8+0x8b]
+        Key type: "ssh-ed25519"  [#1:0x8+0xf]
+        Public key: 35 8f 73 84 7d 45 52 89 4c ee 71 ec d0 d2 55 51 …  |5.s.}ER.L.q...UQ| — 32 bytes  [#1:0x17+0x24]
+        Private key (seed ‖ public key) — present, 64 bytes  [#1:0x3b+0x44]
+        Comment: "chacha@fillyfoal"  [#1:0x7f+0x14]
+      Padding — 5 bytes  [#1:0x93+0x5]

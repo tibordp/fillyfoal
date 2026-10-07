@@ -4,7 +4,10 @@
 //! codecs; correct, but not hardened against side channels (they decrypt
 //! local files for display, not secrets in transit).
 
+pub mod bcrypt;
+pub mod chacha;
 pub mod cipher;
+pub mod gcm;
 pub mod hash;
 pub mod mpq;
 pub mod stream;

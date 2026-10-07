@@ -1064,7 +1064,7 @@ pub static FORMATS: &[&Format] = &[
     &documents::ebooks::LIT,
     &security::credentials::KDBX,
     &security::credentials::KDB,
-    &security::credentials::OPENSSH_KEY,
+    &security::openssh::OPENSSH_KEY,
     &security::credentials::KEYBOX,
     &security::credentials::KEYCHAIN,
     &security::credentials::ANDROID_BACKUP,

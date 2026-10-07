@@ -337,3 +337,11 @@ and reproduce every file byte for byte.
 | `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
 | `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
 | `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |
+
+## Credential tools
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `openssh-key/` | ssh-keygen (OpenSSH_10.2p1, macOS) | `sh tests/data/openssh-key/make.sh` (keys are random: same structure, new bytes); passphrase `fillyfoal`, `-a 4`, `-Z aes256-ctr` / `aes256-cbc` / `aes256-gcm@openssh.com` / `chacha20-poly1305@openssh.com`; edit: the PEM armor removed (`base64 -d` of the body) to get the binary format; every encrypted key decrypts with matching check values (and AEAD tag) |
+| `openssh-keys/ssh-keygen.pub` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `.pub` files of the keys above and an ed25519 user certificate (`ssh-keygen -s ca -I fillyfoal-user -n alice,bob`), concatenated |
+| `pem/openssh-rsa.key` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -t rsa -b 1024 -N ''`, unedited |

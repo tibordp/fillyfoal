@@ -9,6 +9,7 @@ pub mod credentials;
 pub mod encryption;
 pub mod kerberos;
 pub mod keyrings;
+pub mod openssh;
 pub mod pem;
 pub mod pgp;
 pub mod putty;
