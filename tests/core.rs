@@ -1152,3 +1152,30 @@ fn text_lines_seek() {
     }
     assert!(host.session.live_nodes() < 50, "{} live nodes", host.session.live_nodes());
 }
+
+/// "Inspect as": formats by extension, and dissecting bytes as a chosen
+/// format whatever identification says.
+#[test]
+fn open_as_a_chosen_format() {
+    use fillyfoal::formats;
+    let names = |ext: &str| formats::by_extension(ext).iter().map(|f| f.name).collect::<Vec<_>>();
+    assert!(names("BR").contains(&"brotli"));
+    // Probe order: ZIP-based formats that also use `.zip` come first.
+    assert!(names(".zip").contains(&"zip"));
+    assert!(names("no-such-extension").is_empty());
+
+    let data = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/external/brotli/page.html.br")).unwrap();
+    let len = data.len() as u64;
+    let mut host = Host::with_chunk(data, 4096);
+    // As Brotli: decoded and dissected.
+    let br = host.session.open_as("page.html.br", len, formats::by_name("brotli").unwrap());
+    host.explore(br, 2, 100);
+    let children = host.session.children(br).unwrap();
+    let names: Vec<String> = children.ids.iter().map(|&id| host.session.node(id).unwrap().name.to_string()).collect();
+    assert!(names.iter().any(|n| n == "Decompressed"), "{names:?}");
+    // As ZIP: not a ZIP, so the dissector reports why, without panicking.
+    let zip = host.session.open_as("page.html.br", len, formats::by_name("zip").unwrap());
+    host.explore(zip, 2, 100);
+    let c = host.session.children(zip).unwrap();
+    assert!(c.error.is_some() || !host.session.node(zip).unwrap().diagnostics.is_empty());
+}

@@ -345,6 +345,22 @@ impl Session {
         self.add_root(formats::root(name, Span::new(source, 0, len)))
     }
 
+    /// Registers a source and adds a root node that dissects it as `format`,
+    /// skipping identification ("inspect as"). Use [`formats::by_name`] or
+    /// [`formats::by_extension`] to pick the format. On data that does not
+    /// match, the dissector shows what it could parse and reports where it
+    /// stopped.
+    pub fn open_as(
+        &mut self,
+        name: impl Into<Cow<'static, str>>,
+        len: u64,
+        format: &'static formats::Format,
+    ) -> NodeId {
+        let source = self.add_source(len);
+        let span = Span::new(source, 0, len);
+        self.add_root(formats::embedded_as(name, formats::Input::root(span), format))
+    }
+
     pub fn node(&self, id: NodeId) -> Option<&Node> {
         self.entry(id).map(|e| &e.node)
     }

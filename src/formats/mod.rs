@@ -1734,6 +1734,18 @@ pub fn by_name(name: &str) -> Option<&'static Format> {
     FORMATS.iter().copied().find(|f| f.name == name)
 }
 
+/// The formats that list `extension` (without the dot, any case), in probe
+/// order: candidates for a file whose content was not recognised, or for
+/// an "inspect as" menu. Identification itself never uses extensions.
+pub fn by_extension(extension: &str) -> Vec<&'static Format> {
+    let ext = extension.trim_start_matches('.');
+    FORMATS
+        .iter()
+        .copied()
+        .filter(|f| f.extensions.iter().any(|e| e.eq_ignore_ascii_case(ext)))
+        .collect()
+}
+
 /// Picks the first format whose probe matches.
 pub fn identify(head: &Head<'_>) -> Option<&'static Format> {
     FORMATS.iter().copied().find(|f| f.probe.matches(head))

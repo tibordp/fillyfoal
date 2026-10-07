@@ -1420,12 +1420,18 @@ async fn extra_fields(cx: Cx, span: Span) -> Result<()> {
 /// walk local headers from the start.
 async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(cx, input.span, LE);
+    // A split archive's first part starts with a spanning marker.
+    if cur.remaining() >= 4 && cur.peek(4).await? == b"PK\x07\x08" {
+        cur.skip(4);
+    }
+    let mut found = false;
     while cur.remaining() >= LocalHeader::SIZE {
         let start = cur.pos();
         let magic = cur.peek(4).await?;
         if magic != LOCAL {
             break;
         }
+        found = true;
         let (header, header_span) = cur.record::<LocalHeader>().await?;
         let name = decode_name(&cur.bytes(header.name_len.into()).await?, header.flags);
         cur.skip(header.extra_len.into());
@@ -1462,6 +1468,10 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
             ),
         ))
         .await;
+    }
+    if !found {
+        // Only reachable when the format was chosen by hand ("inspect as").
+        return Err(Diagnostic::malformed("no ZIP end record or local file header").at(input.span.sub(0, 4)));
     }
     Ok(())
 }
