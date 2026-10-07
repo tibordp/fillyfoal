@@ -1179,3 +1179,66 @@ fn open_as_a_chosen_format() {
     let c = host.session.children(zip).unwrap();
     assert!(c.error.is_some() || !host.session.node(zip).unwrap().diagnostics.is_empty());
 }
+
+/// The G-code blocks of libbgcode's binary fixtures, decoded with our
+/// codecs (zlib, Heatshrink 11/4 and 12/4, MeatPack), are exactly the
+/// G-code libbgcode's `from_binary_to_ascii` writes for them (see
+/// `tests/data/bgcode/make_bgcode.py`).
+#[test]
+fn bgcode_gcode_blocks_match_libbgcode() {
+    use fillyfoal::codec::Codec;
+    let root = env!("CARGO_MANIFEST_DIR");
+    for name in ["plain", "deflate", "heatshrink-11", "heatshrink-12", "meatpack"] {
+        let data = std::fs::read(format!("{root}/tests/fixtures/external/bgcode/{name}.bgcode")).unwrap();
+        let reference = std::fs::read(format!("{root}/tests/data/bgcode/{name}.ref.gcode")).unwrap();
+        let checksum = u16::from_le_bytes([data[8], data[9]]) as usize * 4;
+        let mut pos = 10;
+        let mut gcode = Vec::new();
+        let mut blocks = 0;
+        while pos < data.len() {
+            let u16_at = |at: usize| u16::from_le_bytes([data[at], data[at + 1]]);
+            let u32_at = |at: usize| u32::from_le_bytes(data[at..at + 4].try_into().unwrap()) as usize;
+            let (kind, compression, size) = (u16_at(pos), u16_at(pos + 2), u32_at(pos + 4));
+            let (header, stored) = if compression == 0 { (8, size) } else { (12, u32_at(pos + 8)) };
+            let params = if kind == 5 { 6 } else { 2 };
+            let body = &data[pos + header + params..pos + header + params + stored];
+            if kind == 1 {
+                let base = match compression {
+                    0 => None,
+                    1 => Some(Codec::Zlib),
+                    2 => Some(Codec::Heatshrink { window: 11, lookahead: 4 }),
+                    _ => Some(Codec::Heatshrink { window: 12, lookahead: 4 }),
+                };
+                let mut bytes = match base {
+                    Some(c) => fillyfoal::codec::pipeline::decode_all(c.decoder().unwrap().as_mut(), body, 1 << 24).unwrap(),
+                    None => body.to_vec(),
+                };
+                assert_eq!(bytes.len(), size, "{name}: decoded size");
+                if u16_at(pos + header) != 0 {
+                    let mut d = Codec::MeatPack.decoder().unwrap();
+                    bytes = fillyfoal::codec::pipeline::decode_all(d.as_mut(), &bytes, 1 << 24).unwrap();
+                }
+                // `from_binary_to_ascii` drops blank and empty-comment lines
+                // of each block (`remove_empty_lines` in convert.cpp).
+                let trim = |l: &[u8]| -> Vec<u8> {
+                    let s = l.iter().position(|b| *b != b' ' && *b != b'\t').unwrap_or(l.len());
+                    let e = l.iter().rposition(|b| *b != b' ' && *b != b'\t').map_or(s, |e| e + 1);
+                    l[s..e.max(s)].to_vec()
+                };
+                for line in bytes.split(|&b| b == b'\n') {
+                    let t = trim(line);
+                    let reduced = if t.first() == Some(&b';') { trim(&t[1..]) } else { t };
+                    if !reduced.is_empty() {
+                        gcode.extend_from_slice(line);
+                        gcode.push(b'\n');
+                    }
+                }
+                blocks += 1;
+            }
+            pos += header + params + stored + checksum;
+        }
+        assert!(blocks > 0, "{name}");
+        let found = reference.windows(gcode.len()).any(|w| w == gcode.as_slice());
+        assert!(found, "{name}: decoded G-code differs from libbgcode's");
+    }
+}

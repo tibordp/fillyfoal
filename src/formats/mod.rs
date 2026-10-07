@@ -402,6 +402,7 @@ pub static FORMATS: &[&Format] = &[
     &forensics::regf::FORMAT,
     &forensics::evtx::FORMAT,
     &forensics::evt::FORMAT,
+    &forensics::etl::FORMAT,
     &forensics::prefetch::FORMAT,
     &forensics::recyclebin::FORMAT,
     &forensics::thumbcache::FORMAT,
@@ -1253,6 +1254,9 @@ pub static FORMATS: &[&Format] = &[
     &engineering::eda::EXCELLON,
     &engineering::eda::GERBER,
     &engineering::eda::TOUCHSTONE,
+    &engineering::fabrication::BGCODE,
+    // G-code has no magic: a strict content probe, after Gerber/Excellon.
+    &engineering::fabrication::GCODE,
     &forensics::browser::IE_INDEX,
     &forensics::browser::BINARYCOOKIES,
     &forensics::browser::CHROME_CACHE_INDEX,
