@@ -365,3 +365,14 @@ and reproduce every file byte for byte.
 | `dxf/` | ezdxf 1.4.4 (`saveas`, ASCII R12 and R2018, binary R2018) | reproduced byte-for-byte: `PYTHONHASHSEED=0 uv run --with ezdxf==1.4.4 python tests/data/dxf/make.py tests/fixtures/external/dxf` (ezdxf's `write_fixed_meta_data_for_testing` pins dates and GUIDs; the hash seed pins the CLASSES order); the drawing is ours |
 | `duckdb/` | DuckDB 1.5.6 (Python package) | `uv run --with duckdb==1.5.6 python tests/data/duckdb/make_fixture.py OUT` then `gzip -9 -n` (stored compressed: whole 256 KiB / 16 KiB blocks of zeros); `shop.duckdb` reproduced byte-for-byte, `types.duckdb` (16 KiB blocks, `STORAGE_VERSION 'v1.5.0'`) is not byte-reproducible (differs between runs) |
 | `realm/` | Realm JS 20.2.0 (npm `realm`, prebuilt Realm Core, file format 24) | `node tests/data/realm/make_fixture.mjs OUT` from a scratch directory with `npm install realm@20.2.0` (`REALM_DISABLE_ANALYTICS=1`); compacted; not byte-reproducible (per-run identifiers) |
+
+## Game engines
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `unityfs/lz4hc.bundle` | UnityPy 1.25.4 (`BundleFile.save(packer="lz4hc")`, `SerializedFile.save`, type-tree writer; LZ4HC from python-lz4) | reproduced byte-for-byte: `uv run --with UnityPy==1.25.4 python tests/data/unityfs/make.py`. UnityPy cannot create files from nothing: the script hands it a seed with empty tables (bytes written by the script), then adds types (UnityPy's type-tree database for Unity 2022.3), objects (two TextAssets, one a JSON document; a Texture2D with pixels in a `.resS` node, GameObject, MonoBehaviour, MonoScript, AssetBundle), a script type and an external through UnityPy's object model; UnityFS 8, SerializedFile 22 |
+| `unityfs/lzma.bundle` | UnityPy 1.25.4 (`packer="lzma"`) | same script; Unity 2018.4, UnityFS 6, SerializedFile 17 |
+| `unityfs/plain.bundle` | UnityPy 1.25.4 (`packer="none"`) | same script; Unity 2020.3, UnityFS 7, SerializedFile 21 |
+| `unityfs/raw.unity3d` | UnityPy 1.25.4 (`save_web_raw`) | same script; UnityRaw 3, Unity 5.2, SerializedFile 15 |
+| `unityfs/web.unity3d` | UnityPy 1.25.4 (`save_web_raw`, LZMA) | same script; UnityWeb 3 |
+| `unity-serialized/sharedassets0.assets` | UnityPy 1.25.4 (`SerializedFile.save`) | same script; standalone SerializedFile 19, Unity 2019.4 |

@@ -18,3 +18,4 @@ pub mod models;
 pub mod nw4;
 pub mod packages;
 pub mod packfiles;
+pub mod unity;
