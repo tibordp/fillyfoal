@@ -12,5 +12,6 @@ pub mod ebooks;
 pub mod help;
 pub mod lrf;
 pub mod office_legacy;
+pub mod onenote;
 pub mod winhelp;
 pub mod wordprocessing;

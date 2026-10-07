@@ -1,5 +1,5 @@
-//! Word-processor and authoring documents: WordPerfect, Windows Write,
-//! OneNote and FrameMaker.
+//! Word-processor and authoring documents: WordPerfect, Windows Write and
+//! FrameMaker (OneNote is in [`super::onenote`]).
 
 use crate::bytes::to_u64;
 use crate::cx::Cx;
@@ -17,7 +17,7 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 // ---------------------------------------------------------------------------
-// WordPerfect, Windows Write, OneNote, FrameMaker
+// WordPerfect, Windows Write, FrameMaker
 
 declare_format!(pub WORDPERFECT = "wordperfect", "WordPerfect document", ["wpd", "wp", "wp5", "wp6"], "application/vnd.wordperfect",
     Probe::Magic(&[(0, b"\xffWPC")]), wordperfect);
@@ -76,30 +76,6 @@ async fn mswrite(cx: Cx, input: Input) -> Result<()> {
             .summary(String::from_utf8_lossy(&sample).replace(['\r', '\n'], " ")),
     );
     cx.annotate(format!("Write document, {} characters", text_span.len));
-    Ok(())
-}
-
-declare_format!(pub ONENOTE = "onenote", "Microsoft OneNote section", ["one", "onetoc2"], "application/onenote",
-    Probe::Magic(&[(0, b"\xe4\x52\x5c\x7b\x8c\xd8\xa7\x4d\xae\xb1\x53\x78\xd0\x29\x96\xd3"), (0, b"\xa1\x2f\xff\x43\xd9\xef\x76\x4c\x9e\xe2\x10\xea\x57\x22\x76\x5f")]), onenote);
-
-async fn onenote(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 0x100)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    let kind = f.guid("File type").emit()?;
-    f.guid("File").emit()?;
-    f.guid("Legacy file version").emit()?;
-    f.guid("File format").emit()?;
-    let last_code = f.u32("Last code that accessed").hex().emit()?;
-    f.u32("Oldest code that accessed").hex().emit()?;
-    f.u32("Newest code that wrote").hex().emit()?;
-    f.u32("Oldest code required").hex().emit()?;
-    let toc = kind.data1 == 0x43ff_2fa1;
-    cx.emit(Node::new("File data").span(file.tail(0x400)));
-    cx.annotate(format!(
-        "OneNote {} (last accessed by code {last_code:#x})",
-        if toc { "table of contents" } else { "section" }
-    ));
     Ok(())
 }
 
