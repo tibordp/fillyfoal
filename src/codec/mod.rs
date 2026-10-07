@@ -32,6 +32,8 @@ pub mod cab;
 pub mod lzx;
 pub mod quantum;
 pub mod bcfz;
+pub mod heatshrink;
+pub mod meatpack;
 
 use std::sync::Arc;
 
@@ -108,6 +110,11 @@ pub enum Codec {
     /// The bit-level LZ77 of Guitar Pro 6 `BCFZ` files (after their 8-byte
     /// header), decoding to `size` bytes (see [`bcfz`]).
     Bcfz { size: u64 },
+    /// Heatshrink LZSS with `window` and `lookahead` bits (Prusa binary
+    /// G-code).
+    Heatshrink { window: u8, lookahead: u8 },
+    /// MeatPack-packed G-code text (Prusa binary G-code).
+    MeatPack,
     /// Exactly one Zstandard frame (after any skippable frames); what
     /// follows it is left unconsumed.
     ZstdFrame,
@@ -203,6 +210,8 @@ impl Codec {
             Codec::XpressHuffman { .. } => "xpress-huffman",
             Codec::Lzo1x => "lzo1x",
             Codec::Bcfz { .. } => "bcfz",
+            Codec::Heatshrink { .. } => "heatshrink",
+            Codec::MeatPack => "meatpack",
             Codec::Lzop => "lzop",
             Codec::Lzf => "lzf",
             Codec::LzfFramed => "lzf-framed",
@@ -254,6 +263,8 @@ impl Codec {
             Codec::XpressHuffman { .. } => "xpress-huffman (lazy)",
             Codec::Lzo1x => "lzo1x (lazy)",
             Codec::Bcfz { .. } => "bcfz (lazy)",
+            Codec::Heatshrink { .. } => "heatshrink (lazy)",
+            Codec::MeatPack => "meatpack (lazy)",
             Codec::Lzop => "lzop (lazy)",
             Codec::Lzf => "lzf (lazy)",
             Codec::LzfFramed => "lzf-framed (lazy)",
@@ -303,6 +314,7 @@ impl Codec {
             | Codec::XpressHuffman { .. }
             | Codec::Lzo1x
             | Codec::Bcfz { .. }
+            | Codec::Heatshrink { .. }
             | Codec::Lzop
             | Codec::Lzf
             | Codec::LzfFramed
@@ -318,9 +330,11 @@ impl Codec {
             | Codec::LzmaAlone
             | Codec::Lzma2 { .. }
             | Codec::LzmaRaw { .. } => "decompressed",
-            Codec::AsciiHex | Codec::Ascii85 | Codec::PngPredictor { .. } | Codec::TiffPredictor { .. } => {
-                "decoded"
-            }
+            Codec::AsciiHex
+            | Codec::Ascii85
+            | Codec::PngPredictor { .. }
+            | Codec::TiffPredictor { .. }
+            | Codec::MeatPack => "decoded",
             Codec::Chain { .. } => "decoded",
         }
     }
@@ -350,6 +364,11 @@ impl Codec {
             Codec::UnixCompress => 8_000,
             // A 32 KiB copy costs 35 bits.
             Codec::Bcfz { .. } => 8_000,
+            // At most 2^lookahead bytes per back-reference of 1 + window +
+            // lookahead bits.
+            Codec::Heatshrink { .. } => 16,
+            // Two characters per byte, each possibly with a space.
+            Codec::MeatPack => 4,
             // A 3-byte chunk stands for 4 KiB of zeros when another follows.
             Codec::Lznt1 { .. } => 1_400,
             // Each 64 KiB block costs at least its 256-byte table.
@@ -410,6 +429,10 @@ impl Codec {
             }
             Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
             Codec::Bcfz { size } => Box::new(Streaming(bcfz::Bcfz::new(*size))),
+            Codec::Heatshrink { window, lookahead } => {
+                Box::new(Streaming(heatshrink::Heatshrink::new(*window, *lookahead)))
+            }
+            Codec::MeatPack => Box::new(Streaming(meatpack::MeatPack::default())),
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
             Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
