@@ -14,6 +14,7 @@ pub mod devtools;
 pub mod firmware;
 pub mod git;
 pub mod hexfile;
+pub mod kvstore;
 pub mod mo;
 pub mod ota;
 pub mod platform;
