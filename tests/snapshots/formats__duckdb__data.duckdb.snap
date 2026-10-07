@@ -2,10 +2,40 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ data.duckdb — DuckDB database, storage version 64  [0x0+0x3040]
-    Checksum: 0x0  [0x0+0x8]
-    Magic: "DUCK"  [0x8+0x4]
-    Storage version: 64  [0xc+0x8]
-    Flags: 0x0  [0x14+0x8]
-    Database headers  [0x1000+0x2000]
-    Blocks  [0x3000+0x40]
+▾ data.duckdb — DuckDB database, storage version 64, 0 blocks of 256 KiB  [0x0+0x3040]
+  ▾ Main header — storage version 64  [0x0+0x1000]
+      Checksum: 0x0  [0x0+0x8]
+        ! warning: checksum mismatch (computed 0x05694108ff7e6721)
+      Magic: "DUCK"  [0x8+0x4]
+      Storage version: 64 — DuckDB 0.9 – 1.1  [0xc+0x8]
+      Flags 0: 0x0  [0x14+0x8]
+      Flags 1: 0x0  [0x1c+0x8]
+      Flags 2: 0x0  [0x24+0x8]
+      Flags 3: 0x0  [0x2c+0x8]
+      Library version: ""  [0x34+0x20]
+      Source id: ""  [0x54+0x20]
+  ▾ Database header 1 — current, iteration 0  [0x1000+0x1000]
+      Checksum: 0x0  [0x1000+0x8]
+        ! warning: checksum mismatch (computed 0x0000000000001505)
+      Iteration: 0  [0x1008+0x8]
+      Metadata: 0x0 — block 0, sub-block 0  [0x1010+0x8]
+      Free list: 0x0 — block 0, sub-block 0  [0x1018+0x8]
+      Block count: 0  [0x1020+0x8]
+      Block size: 0  [0x1028+0x8]
+      Vector size: 0  [0x1030+0x8]
+      Serialization compatibility: 0 — unknown  [0x1038+0x8]
+  ▾ Database header 2 — previous, iteration 0  [0x2000+0x1000]
+      Checksum: 0x0  [0x2000+0x8]
+        ! warning: checksum mismatch (computed 0x0000000000001505)
+      Iteration: 0  [0x2008+0x8]
+      Metadata: 0x0 — block 0, sub-block 0  [0x2010+0x8]
+      Free list: 0x0 — block 0, sub-block 0  [0x2018+0x8]
+      Block count: 0  [0x2020+0x8]
+      Block size: 0  [0x2028+0x8]
+      Vector size: 0  [0x2030+0x8]
+      Serialization compatibility: 0 — unknown  [0x2038+0x8]
+    Catalog
+      ! malformed: metadata pointer (block 0, sub-block 0) is outside the file
+    Free list
+      ! malformed: metadata pointer (block 0, sub-block 0) is outside the file
+  ▾ Blocks — 0 blocks of 256 KiB  [0x3000+0x40]

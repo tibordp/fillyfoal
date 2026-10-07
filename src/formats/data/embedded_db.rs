@@ -267,20 +267,5 @@ declare_format!(pub REALM = "realm", "Realm database", ["realm"], "application/x
     Probe::Custom(realm_probe), realm);
 
 async fn realm(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 24)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.u64("Top ref 0").hex().emit()?;
-    f.u64("Top ref 1").hex().emit()?;
-    f.ascii("Signature", 4).emit()?;
-    let v0 = f.u8("File format 0").emit()?;
-    let v1 = f.u8("File format 1").emit()?;
-    f.u8("Reserved").emit()?;
-    let flags = f.u8("Flags").hex().emit()?;
-    cx.emit(Node::new("Arrays").span(file.tail(24)));
-    cx.annotate(format!(
-        "Realm database, format {}",
-        if flags & 1 != 0 { v1 } else { v0 }
-    ));
-    Ok(())
+    crate::formats::data::realm::dissect(cx, input).await
 }

@@ -1,0 +1,6 @@
+WiredTiger version string
+WiredTiger 11.2.0: (December  1, 2023)
+WiredTiger version
+major=11,minor=2,patch=0
+file:WiredTiger.wt
+access_pattern_hint=none,allocation_size=4KB,app_metadata=,block_allocation=best,block_compressor=,checksum=uncompressed,id=0,key_format=S,value_format=S,checkpoint=(WiredTigerCheckpoint.5=(addr="018081e4b3a2c1d0",order=5,time=1700000001,size=8192,newest_txn=12,write_gen=9)),checkpoint_backup_info=,checkpoint_lsn=(1,24448),version=(major=1,minor=1)

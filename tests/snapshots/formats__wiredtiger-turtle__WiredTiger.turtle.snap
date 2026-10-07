@@ -1,0 +1,39 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ WiredTiger.turtle — WiredTiger turtle file (WiredTiger 11.2.0: (December  1, 2023))  [0x0+0x1df]
+    WiredTiger version string: "WiredTiger 11.2.0: (December  1, 2023)"  [0x0+0x40]
+  ▾ WiredTiger version: "major=11,minor=2,patch=0"  [0x41+0x2b]
+      major: "11"  [0x54+0x8]
+      minor: "2"  [0x5d+0x7]
+      patch: "0"  [0x65+0x7]
+  ▾ file:WiredTiger.wt: "access_pattern_hint=none,allocation_size=4KB,app_metadata=,block_allocation=best,block_compressor=,checksum=uncompressed,id=0,key_format=S,value_format=S,checkpoint=(WiredTigerCheckpoint.5=(addr=\"018081e4b3a2c1d0\",order=5,time=1700000001,size=8192,newest_txn=12,write_gen=9)),checkpoint_backup_info=,checkpoint_lsn=(1,24448),version=(major=1,minor=1)"  [0x6d+0x171]
+      access_pattern_hint: "none"  [0x80+0x18]
+      allocation_size: "4KB"  [0x99+0x13]
+      app_metadata: ""  [0xad+0xd]
+      block_allocation: "best"  [0xbb+0x15]
+      block_compressor: ""  [0xd1+0x11]
+      checksum: "uncompressed"  [0xe3+0x15]
+      id: "0"  [0xf9+0x4]
+      key_format: "S"  [0xfe+0xc]
+      value_format: "S"  [0x10b+0xe]
+    ▾ checkpoint — 1 item  [0x11a+0x79]
+      ▾ WiredTigerCheckpoint.5 — 6 items  [0x126+0x6c]
+        ▾ addr: "018081e4b3a2c1d0" — checkpoint cookie v1, 3 integers  [0x13e+0x17]
+            Version: 1
+            Integer 0: 0
+            Integer 1: 1
+            Integer 2: 3013796368
+          order: "5"  [0x156+0x7]
+          time: "1700000001"  [0x15e+0xf]
+          size: "8192"  [0x16e+0x9]
+          newest_txn: "12"  [0x178+0xd]
+          write_gen: "9"  [0x186+0xb]
+      checkpoint_backup_info: ""  [0x194+0x17]
+    ▾ checkpoint_lsn — 2 items  [0x1ac+0x18]
+        1  [0x1bc+0x1]
+        24448  [0x1be+0x5]
+    ▾ version — 2 items  [0x1c5+0x19]
+        major: "1"  [0x1ce+0x7]
+        minor: "1"  [0x1d6+0x7]

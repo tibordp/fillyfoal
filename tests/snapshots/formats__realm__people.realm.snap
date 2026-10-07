@@ -1,0 +1,1410 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ people.realm — Realm database, file format 24, 3 classes  [0x0+0x1a68]
+  ▾ Header  [0x0+0x18]
+      Top ref 0: 0xffffffffffffffff  [0x0+0x8]
+      Top ref 1: 0x1a38 — current  [0x8+0x8]
+      Mnemonic: "T-DB"  [0x10+0x4]
+      File format 0: 24  [0x14+0x1]
+      File format 1: 24  [0x15+0x1]
+      Reserved  [0x16+0x1]
+      Flags: 0x1 — slot 1 selected  [0x17+0x1]
+  ▾ Group — 11 elements, 16-bit (refs)  [0x1a38+0x1e]
+      Table names: 0x18 — ref  [0x1a40+0x2]
+      Tables: 0x16b0 — ref  [0x1a42+0x2]
+      Logical file size: 6744 — integer  [0x1a44+0x2]
+      Free positions: 0x1a20 — ref  [0x1a46+0x2]
+      Free sizes: 0x1a28 — ref  [0x1a48+0x2]
+      Free versions: 0x1a30 — ref  [0x1a4a+0x2]
+      Version: 4 — integer  [0x1a4c+0x2]
+      History type: 2 — integer  [0x1a4e+0x2]
+      History: 0x1a10 — ref  [0x1a50+0x2]
+      History schema version: 1 — integer  [0x1a52+0x2]
+      Sync file id: 0 — integer  [0x1a54+0x2]
+  ▾ Tables — 4 tables  [0x16b0+0x10]
+    ▾ metadata — 1 column, 1 object  [0xe8+0x24]
+      ▾ Top array — 14 elements, 16-bit (refs)  [0xe8+0x24]
+          Spec: 0x88 — ref  [0xf0+0x2]
+          Columns (unused): 0x0 — none  [0xf2+0x2]
+          Cluster tree: 0xb0 — ref  [0xf4+0x2]
+          Table key: 0 — integer  [0xf6+0x2]
+          Search indexes: 0xc0 — ref  [0xf8+0x2]
+          Next column key tag: 0 — integer  [0xfa+0x2]
+          Version: 1 — integer  [0xfc+0x2]
+          Link target tables: 0xc8 — ref  [0xfe+0x2]
+          Link target columns: 0xd8 — ref  [0x100+0x2]
+          Sequence number: 1 — integer  [0x102+0x2]
+          Collision map: 0x0 — none  [0x104+0x2]
+          Primary key column: 0x0 — none  [0x106+0x2]
+          Flags: 0 — integer  [0x108+0x2]
+          Tombstones: 0x0 — none  [0x10a+0x2]
+        Table key: 0  [0xf6+0x2]
+      ▾ Columns — 1 column
+        ▾ version: "int"
+            Type: int (0x0)
+            Attributes: 0x0 []
+            Column key: 0x0 — index 0, tag 0
+      ▾ Objects — 2 elements, 16-bit (refs)  [0xb0+0xc]
+        ▾ #0 — version=3
+            version: 3  [0xa8+0x1]
+    ▾ Dog — 2 columns, 2 objects  [0x200+0x24]
+      ▾ Top array — 14 elements, 16-bit (refs)  [0x200+0x24]
+          Spec: 0x158 — ref  [0x208+0x2]
+          Columns (unused): 0x0 — none  [0x20a+0x2]
+          Cluster tree: 0x1b0 — ref  [0x20c+0x2]
+          Table key: 1 — integer  [0x20e+0x2]
+          Search indexes: 0x1c0 — ref  [0x210+0x2]
+          Next column key tag: 0 — integer  [0x212+0x2]
+          Version: 2 — integer  [0x214+0x2]
+          Link target tables: 0x1c8 — ref  [0x216+0x2]
+          Link target columns: 0x1e0 — ref  [0x218+0x2]
+          Sequence number: 2 — integer  [0x21a+0x2]
+          Collision map: 0x0 — none  [0x21c+0x2]
+          Primary key column: 0x0 — none  [0x21e+0x2]
+          Flags: 0 — integer  [0x220+0x2]
+          Tombstones: 0x0 — none  [0x222+0x2]
+        Table key: 1  [0x20e+0x2]
+      ▾ Columns — 3 columns
+        ▾ name: "string"
+            Type: string (0x2)
+            Attributes: 0x0 []
+            Column key: 0x40020000 — index 0, tag 1
+        ▾ weight: "double"
+            Type: double (0xa)
+            Attributes: 0x0 []
+            Column key: 0x400a0001 — index 1, tag 1
+        ▾ (backlink from Person): "backlink"
+            Type: backlink (0xe)
+            Attributes: 0x0 []
+            Column key: 0x400e0002 — index 2, tag 1
+      ▾ Objects — 4 elements, 16-bit (refs)  [0x1b0+0x10]
+        ▾ #0 — name="Rex", weight=12.5
+            name: "Rex"  [0x178+0x8]
+            weight: 12.5  [0x190+0x8]
+        ▾ #1 — name="Fido", weight=30
+            name: "Fido"  [0x180+0x8]
+            weight: 30  [0x198+0x8]
+    ▾ Person — 9 columns, 3 objects  [0x520+0x78]
+      ▾ Top array — 14 elements, 64-bit (refs)  [0x520+0x78]
+          Spec: 0x2f0 — ref  [0x528+0x8]
+          Columns (unused): 0x0 — none  [0x530+0x8]
+          Cluster tree: 0x438 — ref  [0x538+0x8]
+          Table key: 2 — integer  [0x540+0x8]
+          Search indexes: 0x480 — ref  [0x548+0x8]
+          Next column key tag: 0 — integer  [0x550+0x8]
+          Version: 2 — integer  [0x558+0x8]
+          Link target tables: 0x4a0 — ref  [0x560+0x8]
+          Link target columns: 0x4d0 — ref  [0x568+0x8]
+          Sequence number: 3 — integer  [0x570+0x8]
+          Collision map: 0x0 — none  [0x578+0x8]
+          Primary key column: 2147483648 — integer  [0x580+0x8]
+          Flags: 0 — integer  [0x588+0x8]
+          Tombstones: 0x0 — none  [0x590+0x8]
+        Table key: 2  [0x540+0x8]
+      ▾ Columns — 9 columns
+        ▾ _id: "int" — primary key
+            Type: int (0x0)
+            Attributes: 0x0 []
+            Column key: 0x80000000 — index 0, tag 2
+            Primary key: true
+        ▾ name: "string"
+            Type: string (0x2)
+            Attributes: 0x0 []
+            Column key: 0x80020001 — index 1, tag 2
+        ▾ age: "int?"
+            Type: int (0x0)
+            Attributes: 0x10 [nullable]
+            Column key: 0x84000002 — index 2, tag 2
+        ▾ active: "bool"
+            Type: bool (0x1)
+            Attributes: 0x0 []
+            Column key: 0x80010003 — index 3, tag 2
+        ▾ score: "float"
+            Type: float (0x9)
+            Attributes: 0x0 []
+            Column key: 0x80090004 — index 4, tag 2
+        ▾ born: "timestamp"
+            Type: timestamp (0x8)
+            Attributes: 0x0 []
+            Column key: 0x80080005 — index 5, tag 2
+        ▾ photo: "binary?"
+            Type: binary (0x4)
+            Attributes: 0x10 [nullable]
+            Column key: 0x84040006 — index 6, tag 2
+        ▾ tags: "list of string"
+            Type: string (0x2)
+            Attributes: 0x20 [list]
+            Column key: 0x88020007 — index 7, tag 2
+        ▾ dog: "link → Dog?"
+            Type: link (0xc)
+            Attributes: 0x10 [nullable]
+            Column key: 0x840c0008 — index 8, tag 2
+      ▾ Objects — 10 elements, 16-bit (refs)  [0x438+0x1c]
+        ▾ #0 — _id=1, name="Ada", age=36, active=true
+            _id: 1  [0x310+0x1]
+            name: "Ada"  [0x320+0x8]
+            age: 36  [0x341+0x1]
+            active: true  [0x350+0x1]
+            score: 9.5  [0x360+0x4]
+            born: 1815-12-10 00:00:00 UTC  [0x380+0x8]
+            photo: de ad be ef  |....| — 4 bytes  [0x3c8+0x4]
+          ▾ tags: "[\"math\", \"engines\"]" — 2 elements  [0x420+0x2]
+              [0]: "math"  [0x3f8+0x8]
+              [1]: "engines"  [0x400+0x8]
+            dog: "Dog #0"  [0x430+0x1]
+        ▾ #1 — _id=2, name="Grace", active=false, score=7.25
+            _id: 2  [0x310+0x1]
+            name: "Grace"  [0x328+0x8]
+            age — null  [0x342+0x1]
+            active: false  [0x350+0x1]
+            score: 7.25  [0x364+0x4]
+            born: 1906-12-09 00:00:00 UTC  [0x388+0x8]
+            photo — null  [0x3cc+0x0]
+            tags: "[]" — empty list  [0x422+0x2]
+            dog — null  [0x430+0x1]
+        ▾ #2 — _id=3, name="Linus", age=21, active=true
+            _id: 3  [0x310+0x1]
+            name: "Linus"  [0x330+0x8]
+            age: 21  [0x343+0x1]
+            active: true  [0x350+0x1]
+            score: 1  [0x368+0x4]
+            born: 1969-12-28 00:00:00 UTC  [0x390+0x8]
+            photo — null  [0x3cc+0x0]
+          ▾ tags: "[\"kernel\"]" — 1 element  [0x424+0x2]
+              [0]: "kernel"  [0x410+0x8]
+            dog — null  [0x430+0x1]
+    ▾ Reading — 3 columns, 300 objects  [0x1688+0x24]
+      ▾ Top array — 14 elements, 16-bit (refs)  [0x1688+0x24]
+          Spec: 0x5f8 — ref  [0x1690+0x2]
+          Columns (unused): 0x0 — none  [0x1692+0x2]
+          Cluster tree: 0x1630 — ref  [0x1694+0x2]
+          Table key: 3 — integer  [0x1696+0x2]
+          Search indexes: 0x1648 — ref  [0x1698+0x2]
+          Next column key tag: 0 — integer  [0x169a+0x2]
+          Version: 2 — integer  [0x169c+0x2]
+          Link target tables: 0x1650 — ref  [0x169e+0x2]
+          Link target columns: 0x1668 — ref  [0x16a0+0x2]
+          Sequence number: 300 — integer  [0x16a2+0x2]
+          Collision map: 0x0 — none  [0x16a4+0x2]
+          Primary key column: 0x0 — none  [0x16a6+0x2]
+          Flags: 0 — integer  [0x16a8+0x2]
+          Tombstones: 0x0 — none  [0x16aa+0x2]
+        Table key: 3  [0x1696+0x2]
+      ▾ Columns — 3 columns
+        ▾ n: "int"
+            Type: int (0x0)
+            Attributes: 0x0 []
+            Column key: 0xc0000000 — index 0, tag 3
+        ▾ v: "double"
+            Type: double (0xa)
+            Attributes: 0x0 []
+            Column key: 0xc00a0001 — index 1, tag 3
+        ▾ note: "string?"
+            Type: string (0x2)
+            Attributes: 0x10 [nullable]
+            Column key: 0xc4020002 — index 2, tag 3
+      ▾ Objects — 5 elements, 16-bit (inner B+tree node, refs)  [0x1630+0x12]
+        ▾ Cluster 0 — keys 0–255, 256 objects  [0x163e+0x2]
+          ▾ #0 — n=0, v=0, note="a longer note for readi…
+              n: 0  [0x618+0x2]
+              v: 0  [0x820+0x8]
+              note: "a longer note for reading number 0"  [0x1230+0x23]
+          ▾ #1 — n=1, v=0.25
+              n: 1  [0x61a+0x2]
+              v: 0.25  [0x828+0x8]
+              note — null  [0x1253+0x1]
+          ▾ #2 — n=2, v=0.5
+              n: 2  [0x61c+0x2]
+              v: 0.5  [0x830+0x8]
+              note — null  [0x1254+0x1]
+          ▾ #3 — n=3, v=0.75
+              n: 3  [0x61e+0x2]
+              v: 0.75  [0x838+0x8]
+              note — null  [0x1255+0x1]
+          ▾ #4 — n=4, v=1
+              n: 4  [0x620+0x2]
+              v: 1  [0x840+0x8]
+              note — null  [0x1256+0x1]
+          ▾ #5 — n=5, v=1.25
+              n: 5  [0x622+0x2]
+              v: 1.25  [0x848+0x8]
+              note — null  [0x1257+0x1]
+          ▾ #6 — n=6, v=1.5
+              n: 6  [0x624+0x2]
+              v: 1.5  [0x850+0x8]
+              note — null  [0x1258+0x1]
+          ▾ #7 — n=7, v=1.75
+              n: 7  [0x626+0x2]
+              v: 1.75  [0x858+0x8]
+              note — null  [0x1259+0x1]
+          ▾ #8 — n=8, v=2
+              n: 8  [0x628+0x2]
+              v: 2  [0x860+0x8]
+              note — null  [0x125a+0x1]
+          ▾ #9 — n=9, v=2.25
+              n: 9  [0x62a+0x2]
+              v: 2.25  [0x868+0x8]
+              note — null  [0x125b+0x1]
+          ▾ #10 — n=10, v=2.5
+              n: 10  [0x62c+0x2]
+              v: 2.5  [0x870+0x8]
+              note — null  [0x125c+0x1]
+          ▾ #11 — n=11, v=2.75
+              n: 11  [0x62e+0x2]
+              v: 2.75  [0x878+0x8]
+              note — null  [0x125d+0x1]
+          ▾ #12 — n=12, v=3
+              n: 12  [0x630+0x2]
+              v: 3  [0x880+0x8]
+              note — null  [0x125e+0x1]
+          ▾ #13 — n=13, v=3.25
+              n: 13  [0x632+0x2]
+              v: 3.25  [0x888+0x8]
+              note — null  [0x125f+0x1]
+          ▾ #14 — n=14, v=3.5
+              n: 14  [0x634+0x2]
+              v: 3.5  [0x890+0x8]
+              note — null  [0x1260+0x1]
+          ▾ #15 — n=15, v=3.75
+              n: 15  [0x636+0x2]
+              v: 3.75  [0x898+0x8]
+              note — null  [0x1261+0x1]
+          ▾ #16 — n=16, v=4
+              n: 16  [0x638+0x2]
+              v: 4  [0x8a0+0x8]
+              note — null  [0x1262+0x1]
+          ▾ #17 — n=17, v=4.25
+              n: 17  [0x63a+0x2]
+              v: 4.25  [0x8a8+0x8]
+              note — null  [0x1263+0x1]
+          ▾ #18 — n=18, v=4.5
+              n: 18  [0x63c+0x2]
+              v: 4.5  [0x8b0+0x8]
+              note — null  [0x1264+0x1]
+          ▾ #19 — n=19, v=4.75
+              n: 19  [0x63e+0x2]
+              v: 4.75  [0x8b8+0x8]
+              note — null  [0x1265+0x1]
+          ▾ #20 — n=20, v=5
+              n: 20  [0x640+0x2]
+              v: 5  [0x8c0+0x8]
+              note — null  [0x1266+0x1]
+          ▾ #21 — n=21, v=5.25
+              n: 21  [0x642+0x2]
+              v: 5.25  [0x8c8+0x8]
+              note — null  [0x1267+0x1]
+          ▾ #22 — n=22, v=5.5
+              n: 22  [0x644+0x2]
+              v: 5.5  [0x8d0+0x8]
+              note — null  [0x1268+0x1]
+          ▾ #23 — n=23, v=5.75
+              n: 23  [0x646+0x2]
+              v: 5.75  [0x8d8+0x8]
+              note — null  [0x1269+0x1]
+          ▾ #24 — n=24, v=6
+              n: 24  [0x648+0x2]
+              v: 6  [0x8e0+0x8]
+              note — null  [0x126a+0x1]
+          ▾ #25 — n=25, v=6.25
+              n: 25  [0x64a+0x2]
+              v: 6.25  [0x8e8+0x8]
+              note — null  [0x126b+0x1]
+          ▾ #26 — n=26, v=6.5
+              n: 26  [0x64c+0x2]
+              v: 6.5  [0x8f0+0x8]
+              note — null  [0x126c+0x1]
+          ▾ #27 — n=27, v=6.75
+              n: 27  [0x64e+0x2]
+              v: 6.75  [0x8f8+0x8]
+              note — null  [0x126d+0x1]
+          ▾ #28 — n=28, v=7
+              n: 28  [0x650+0x2]
+              v: 7  [0x900+0x8]
+              note — null  [0x126e+0x1]
+          ▾ #29 — n=29, v=7.25
+              n: 29  [0x652+0x2]
+              v: 7.25  [0x908+0x8]
+              note — null  [0x126f+0x1]
+          ▾ #30 — n=30, v=7.5
+              n: 30  [0x654+0x2]
+              v: 7.5  [0x910+0x8]
+              note — null  [0x1270+0x1]
+          ▾ #31 — n=31, v=7.75
+              n: 31  [0x656+0x2]
+              v: 7.75  [0x918+0x8]
+              note — null  [0x1271+0x1]
+          ▾ #32 — n=32, v=8
+              n: 32  [0x658+0x2]
+              v: 8  [0x920+0x8]
+              note — null  [0x1272+0x1]
+          ▾ #33 — n=33, v=8.25
+              n: 33  [0x65a+0x2]
+              v: 8.25  [0x928+0x8]
+              note — null  [0x1273+0x1]
+          ▾ #34 — n=34, v=8.5
+              n: 34  [0x65c+0x2]
+              v: 8.5  [0x930+0x8]
+              note — null  [0x1274+0x1]
+          ▾ #35 — n=35, v=8.75
+              n: 35  [0x65e+0x2]
+              v: 8.75  [0x938+0x8]
+              note — null  [0x1275+0x1]
+          ▾ #36 — n=36, v=9
+              n: 36  [0x660+0x2]
+              v: 9  [0x940+0x8]
+              note — null  [0x1276+0x1]
+          ▾ #37 — n=37, v=9.25
+              n: 37  [0x662+0x2]
+              v: 9.25  [0x948+0x8]
+              note — null  [0x1277+0x1]
+          ▾ #38 — n=38, v=9.5
+              n: 38  [0x664+0x2]
+              v: 9.5  [0x950+0x8]
+              note — null  [0x1278+0x1]
+          ▾ #39 — n=39, v=9.75
+              n: 39  [0x666+0x2]
+              v: 9.75  [0x958+0x8]
+              note — null  [0x1279+0x1]
+          ▾ #40 — n=40, v=10
+              n: 40  [0x668+0x2]
+              v: 10  [0x960+0x8]
+              note — null  [0x127a+0x1]
+          ▾ #41 — n=41, v=10.25
+              n: 41  [0x66a+0x2]
+              v: 10.25  [0x968+0x8]
+              note — null  [0x127b+0x1]
+          ▾ #42 — n=42, v=10.5
+              n: 42  [0x66c+0x2]
+              v: 10.5  [0x970+0x8]
+              note — null  [0x127c+0x1]
+          ▾ #43 — n=43, v=10.75
+              n: 43  [0x66e+0x2]
+              v: 10.75  [0x978+0x8]
+              note — null  [0x127d+0x1]
+          ▾ #44 — n=44, v=11
+              n: 44  [0x670+0x2]
+              v: 11  [0x980+0x8]
+              note — null  [0x127e+0x1]
+          ▾ #45 — n=45, v=11.25
+              n: 45  [0x672+0x2]
+              v: 11.25  [0x988+0x8]
+              note — null  [0x127f+0x1]
+          ▾ #46 — n=46, v=11.5
+              n: 46  [0x674+0x2]
+              v: 11.5  [0x990+0x8]
+              note — null  [0x1280+0x1]
+          ▾ #47 — n=47, v=11.75
+              n: 47  [0x676+0x2]
+              v: 11.75  [0x998+0x8]
+              note — null  [0x1281+0x1]
+          ▾ #48 — n=48, v=12
+              n: 48  [0x678+0x2]
+              v: 12  [0x9a0+0x8]
+              note — null  [0x1282+0x1]
+          ▾ #49 — n=49, v=12.25
+              n: 49  [0x67a+0x2]
+              v: 12.25  [0x9a8+0x8]
+              note — null  [0x1283+0x1]
+          ▾ #50 — n=50, v=12.5, note="a longer note for readi…
+              n: 50  [0x67c+0x2]
+              v: 12.5  [0x9b0+0x8]
+              note: "a longer note for reading number 50"  [0x1284+0x24]
+          ▾ #51 — n=51, v=12.75
+              n: 51  [0x67e+0x2]
+              v: 12.75  [0x9b8+0x8]
+              note — null  [0x12a8+0x1]
+          ▾ #52 — n=52, v=13
+              n: 52  [0x680+0x2]
+              v: 13  [0x9c0+0x8]
+              note — null  [0x12a9+0x1]
+          ▾ #53 — n=53, v=13.25
+              n: 53  [0x682+0x2]
+              v: 13.25  [0x9c8+0x8]
+              note — null  [0x12aa+0x1]
+          ▾ #54 — n=54, v=13.5
+              n: 54  [0x684+0x2]
+              v: 13.5  [0x9d0+0x8]
+              note — null  [0x12ab+0x1]
+          ▾ #55 — n=55, v=13.75
+              n: 55  [0x686+0x2]
+              v: 13.75  [0x9d8+0x8]
+              note — null  [0x12ac+0x1]
+          ▾ #56 — n=56, v=14
+              n: 56  [0x688+0x2]
+              v: 14  [0x9e0+0x8]
+              note — null  [0x12ad+0x1]
+          ▾ #57 — n=57, v=14.25
+              n: 57  [0x68a+0x2]
+              v: 14.25  [0x9e8+0x8]
+              note — null  [0x12ae+0x1]
+          ▾ #58 — n=58, v=14.5
+              n: 58  [0x68c+0x2]
+              v: 14.5  [0x9f0+0x8]
+              note — null  [0x12af+0x1]
+          ▾ #59 — n=59, v=14.75
+              n: 59  [0x68e+0x2]
+              v: 14.75  [0x9f8+0x8]
+              note — null  [0x12b0+0x1]
+          ▾ #60 — n=60, v=15
+              n: 60  [0x690+0x2]
+              v: 15  [0xa00+0x8]
+              note — null  [0x12b1+0x1]
+          ▾ #61 — n=61, v=15.25
+              n: 61  [0x692+0x2]
+              v: 15.25  [0xa08+0x8]
+              note — null  [0x12b2+0x1]
+          ▾ #62 — n=62, v=15.5
+              n: 62  [0x694+0x2]
+              v: 15.5  [0xa10+0x8]
+              note — null  [0x12b3+0x1]
+          ▾ #63 — n=63, v=15.75
+              n: 63  [0x696+0x2]
+              v: 15.75  [0xa18+0x8]
+              note — null  [0x12b4+0x1]
+          ▾ #64 — n=64, v=16
+              n: 64  [0x698+0x2]
+              v: 16  [0xa20+0x8]
+              note — null  [0x12b5+0x1]
+          ▾ #65 — n=65, v=16.25
+              n: 65  [0x69a+0x2]
+              v: 16.25  [0xa28+0x8]
+              note — null  [0x12b6+0x1]
+          ▾ #66 — n=66, v=16.5
+              n: 66  [0x69c+0x2]
+              v: 16.5  [0xa30+0x8]
+              note — null  [0x12b7+0x1]
+          ▾ #67 — n=67, v=16.75
+              n: 67  [0x69e+0x2]
+              v: 16.75  [0xa38+0x8]
+              note — null  [0x12b8+0x1]
+          ▾ #68 — n=68, v=17
+              n: 68  [0x6a0+0x2]
+              v: 17  [0xa40+0x8]
+              note — null  [0x12b9+0x1]
+          ▾ #69 — n=69, v=17.25
+              n: 69  [0x6a2+0x2]
+              v: 17.25  [0xa48+0x8]
+              note — null  [0x12ba+0x1]
+          ▾ #70 — n=70, v=17.5
+              n: 70  [0x6a4+0x2]
+              v: 17.5  [0xa50+0x8]
+              note — null  [0x12bb+0x1]
+          ▾ #71 — n=71, v=17.75
+              n: 71  [0x6a6+0x2]
+              v: 17.75  [0xa58+0x8]
+              note — null  [0x12bc+0x1]
+          ▾ #72 — n=72, v=18
+              n: 72  [0x6a8+0x2]
+              v: 18  [0xa60+0x8]
+              note — null  [0x12bd+0x1]
+          ▾ #73 — n=73, v=18.25
+              n: 73  [0x6aa+0x2]
+              v: 18.25  [0xa68+0x8]
+              note — null  [0x12be+0x1]
+          ▾ #74 — n=74, v=18.5
+              n: 74  [0x6ac+0x2]
+              v: 18.5  [0xa70+0x8]
+              note — null  [0x12bf+0x1]
+          ▾ #75 — n=75, v=18.75
+              n: 75  [0x6ae+0x2]
+              v: 18.75  [0xa78+0x8]
+              note — null  [0x12c0+0x1]
+          ▾ #76 — n=76, v=19
+              n: 76  [0x6b0+0x2]
+              v: 19  [0xa80+0x8]
+              note — null  [0x12c1+0x1]
+          ▾ #77 — n=77, v=19.25
+              n: 77  [0x6b2+0x2]
+              v: 19.25  [0xa88+0x8]
+              note — null  [0x12c2+0x1]
+          ▾ #78 — n=78, v=19.5
+              n: 78  [0x6b4+0x2]
+              v: 19.5  [0xa90+0x8]
+              note — null  [0x12c3+0x1]
+          ▾ #79 — n=79, v=19.75
+              n: 79  [0x6b6+0x2]
+              v: 19.75  [0xa98+0x8]
+              note — null  [0x12c4+0x1]
+          ▾ #80 — n=80, v=20
+              n: 80  [0x6b8+0x2]
+              v: 20  [0xaa0+0x8]
+              note — null  [0x12c5+0x1]
+          ▾ #81 — n=81, v=20.25
+              n: 81  [0x6ba+0x2]
+              v: 20.25  [0xaa8+0x8]
+              note — null  [0x12c6+0x1]
+          ▾ #82 — n=82, v=20.5
+              n: 82  [0x6bc+0x2]
+              v: 20.5  [0xab0+0x8]
+              note — null  [0x12c7+0x1]
+          ▾ #83 — n=83, v=20.75
+              n: 83  [0x6be+0x2]
+              v: 20.75  [0xab8+0x8]
+              note — null  [0x12c8+0x1]
+          ▾ #84 — n=84, v=21
+              n: 84  [0x6c0+0x2]
+              v: 21  [0xac0+0x8]
+              note — null  [0x12c9+0x1]
+          ▾ #85 — n=85, v=21.25
+              n: 85  [0x6c2+0x2]
+              v: 21.25  [0xac8+0x8]
+              note — null  [0x12ca+0x1]
+          ▾ #86 — n=86, v=21.5
+              n: 86  [0x6c4+0x2]
+              v: 21.5  [0xad0+0x8]
+              note — null  [0x12cb+0x1]
+          ▾ #87 — n=87, v=21.75
+              n: 87  [0x6c6+0x2]
+              v: 21.75  [0xad8+0x8]
+              note — null  [0x12cc+0x1]
+          ▾ #88 — n=88, v=22
+              n: 88  [0x6c8+0x2]
+              v: 22  [0xae0+0x8]
+              note — null  [0x12cd+0x1]
+          ▾ #89 — n=89, v=22.25
+              n: 89  [0x6ca+0x2]
+              v: 22.25  [0xae8+0x8]
+              note — null  [0x12ce+0x1]
+          ▾ #90 — n=90, v=22.5
+              n: 90  [0x6cc+0x2]
+              v: 22.5  [0xaf0+0x8]
+              note — null  [0x12cf+0x1]
+          ▾ #91 — n=91, v=22.75
+              n: 91  [0x6ce+0x2]
+              v: 22.75  [0xaf8+0x8]
+              note — null  [0x12d0+0x1]
+          ▾ #92 — n=92, v=23
+              n: 92  [0x6d0+0x2]
+              v: 23  [0xb00+0x8]
+              note — null  [0x12d1+0x1]
+          ▾ #93 — n=93, v=23.25
+              n: 93  [0x6d2+0x2]
+              v: 23.25  [0xb08+0x8]
+              note — null  [0x12d2+0x1]
+          ▾ #94 — n=94, v=23.5
+              n: 94  [0x6d4+0x2]
+              v: 23.5  [0xb10+0x8]
+              note — null  [0x12d3+0x1]
+          ▾ #95 — n=95, v=23.75
+              n: 95  [0x6d6+0x2]
+              v: 23.75  [0xb18+0x8]
+              note — null  [0x12d4+0x1]
+          ▾ #96 — n=96, v=24
+              n: 96  [0x6d8+0x2]
+              v: 24  [0xb20+0x8]
+              note — null  [0x12d5+0x1]
+          ▾ #97 — n=97, v=24.25
+              n: 97  [0x6da+0x2]
+              v: 24.25  [0xb28+0x8]
+              note — null  [0x12d6+0x1]
+          ▾ #98 — n=98, v=24.5
+              n: 98  [0x6dc+0x2]
+              v: 24.5  [0xb30+0x8]
+              note — null  [0x12d7+0x1]
+          ▾ #99 — n=99, v=24.75
+              n: 99  [0x6de+0x2]
+              v: 24.75  [0xb38+0x8]
+              note — null  [0x12d8+0x1]
+          ▾ #100 — n=100, v=25, note="a longer note for readi…
+              n: 100  [0x6e0+0x2]
+              v: 25  [0xb40+0x8]
+              note: "a longer note for reading number 100"  [0x12d9+0x25]
+          ▾ #101 — n=101, v=25.25
+              n: 101  [0x6e2+0x2]
+              v: 25.25  [0xb48+0x8]
+              note — null  [0x12fe+0x1]
+          ▾ #102 — n=102, v=25.5
+              n: 102  [0x6e4+0x2]
+              v: 25.5  [0xb50+0x8]
+              note — null  [0x12ff+0x1]
+          ▾ #103 — n=103, v=25.75
+              n: 103  [0x6e6+0x2]
+              v: 25.75  [0xb58+0x8]
+              note — null  [0x1300+0x1]
+          ▾ #104 — n=104, v=26
+              n: 104  [0x6e8+0x2]
+              v: 26  [0xb60+0x8]
+              note — null  [0x1301+0x1]
+          ▾ #105 — n=105, v=26.25
+              n: 105  [0x6ea+0x2]
+              v: 26.25  [0xb68+0x8]
+              note — null  [0x1302+0x1]
+          ▾ #106 — n=106, v=26.5
+              n: 106  [0x6ec+0x2]
+              v: 26.5  [0xb70+0x8]
+              note — null  [0x1303+0x1]
+          ▾ #107 — n=107, v=26.75
+              n: 107  [0x6ee+0x2]
+              v: 26.75  [0xb78+0x8]
+              note — null  [0x1304+0x1]
+          ▾ #108 — n=108, v=27
+              n: 108  [0x6f0+0x2]
+              v: 27  [0xb80+0x8]
+              note — null  [0x1305+0x1]
+          ▾ #109 — n=109, v=27.25
+              n: 109  [0x6f2+0x2]
+              v: 27.25  [0xb88+0x8]
+              note — null  [0x1306+0x1]
+          ▾ #110 — n=110, v=27.5
+              n: 110  [0x6f4+0x2]
+              v: 27.5  [0xb90+0x8]
+              note — null  [0x1307+0x1]
+          ▾ #111 — n=111, v=27.75
+              n: 111  [0x6f6+0x2]
+              v: 27.75  [0xb98+0x8]
+              note — null  [0x1308+0x1]
+          ▾ #112 — n=112, v=28
+              n: 112  [0x6f8+0x2]
+              v: 28  [0xba0+0x8]
+              note — null  [0x1309+0x1]
+          ▾ #113 — n=113, v=28.25
+              n: 113  [0x6fa+0x2]
+              v: 28.25  [0xba8+0x8]
+              note — null  [0x130a+0x1]
+          ▾ #114 — n=114, v=28.5
+              n: 114  [0x6fc+0x2]
+              v: 28.5  [0xbb0+0x8]
+              note — null  [0x130b+0x1]
+          ▾ #115 — n=115, v=28.75
+              n: 115  [0x6fe+0x2]
+              v: 28.75  [0xbb8+0x8]
+              note — null  [0x130c+0x1]
+          ▾ #116 — n=116, v=29
+              n: 116  [0x700+0x2]
+              v: 29  [0xbc0+0x8]
+              note — null  [0x130d+0x1]
+          ▾ #117 — n=117, v=29.25
+              n: 117  [0x702+0x2]
+              v: 29.25  [0xbc8+0x8]
+              note — null  [0x130e+0x1]
+          ▾ #118 — n=118, v=29.5
+              n: 118  [0x704+0x2]
+              v: 29.5  [0xbd0+0x8]
+              note — null  [0x130f+0x1]
+          ▾ #119 — n=119, v=29.75
+              n: 119  [0x706+0x2]
+              v: 29.75  [0xbd8+0x8]
+              note — null  [0x1310+0x1]
+          ▾ #120 — n=120, v=30
+              n: 120  [0x708+0x2]
+              v: 30  [0xbe0+0x8]
+              note — null  [0x1311+0x1]
+          ▾ #121 — n=121, v=30.25
+              n: 121  [0x70a+0x2]
+              v: 30.25  [0xbe8+0x8]
+              note — null  [0x1312+0x1]
+          ▾ #122 — n=122, v=30.5
+              n: 122  [0x70c+0x2]
+              v: 30.5  [0xbf0+0x8]
+              note — null  [0x1313+0x1]
+          ▾ #123 — n=123, v=30.75
+              n: 123  [0x70e+0x2]
+              v: 30.75  [0xbf8+0x8]
+              note — null  [0x1314+0x1]
+          ▾ #124 — n=124, v=31
+              n: 124  [0x710+0x2]
+              v: 31  [0xc00+0x8]
+              note — null  [0x1315+0x1]
+          ▾ #125 — n=125, v=31.25
+              n: 125  [0x712+0x2]
+              v: 31.25  [0xc08+0x8]
+              note — null  [0x1316+0x1]
+          ▾ #126 — n=126, v=31.5
+              n: 126  [0x714+0x2]
+              v: 31.5  [0xc10+0x8]
+              note — null  [0x1317+0x1]
+          ▾ #127 — n=127, v=31.75
+              n: 127  [0x716+0x2]
+              v: 31.75  [0xc18+0x8]
+              note — null  [0x1318+0x1]
+          ▾ #128 — n=128, v=32
+              n: 128  [0x718+0x2]
+              v: 32  [0xc20+0x8]
+              note — null  [0x1319+0x1]
+          ▾ #129 — n=129, v=32.25
+              n: 129  [0x71a+0x2]
+              v: 32.25  [0xc28+0x8]
+              note — null  [0x131a+0x1]
+          ▾ #130 — n=130, v=32.5
+              n: 130  [0x71c+0x2]
+              v: 32.5  [0xc30+0x8]
+              note — null  [0x131b+0x1]
+          ▾ #131 — n=131, v=32.75
+              n: 131  [0x71e+0x2]
+              v: 32.75  [0xc38+0x8]
+              note — null  [0x131c+0x1]
+          ▾ #132 — n=132, v=33
+              n: 132  [0x720+0x2]
+              v: 33  [0xc40+0x8]
+              note — null  [0x131d+0x1]
+          ▾ #133 — n=133, v=33.25
+              n: 133  [0x722+0x2]
+              v: 33.25  [0xc48+0x8]
+              note — null  [0x131e+0x1]
+          ▾ #134 — n=134, v=33.5
+              n: 134  [0x724+0x2]
+              v: 33.5  [0xc50+0x8]
+              note — null  [0x131f+0x1]
+          ▾ #135 — n=135, v=33.75
+              n: 135  [0x726+0x2]
+              v: 33.75  [0xc58+0x8]
+              note — null  [0x1320+0x1]
+          ▾ #136 — n=136, v=34
+              n: 136  [0x728+0x2]
+              v: 34  [0xc60+0x8]
+              note — null  [0x1321+0x1]
+          ▾ #137 — n=137, v=34.25
+              n: 137  [0x72a+0x2]
+              v: 34.25  [0xc68+0x8]
+              note — null  [0x1322+0x1]
+          ▾ #138 — n=138, v=34.5
+              n: 138  [0x72c+0x2]
+              v: 34.5  [0xc70+0x8]
+              note — null  [0x1323+0x1]
+          ▾ #139 — n=139, v=34.75
+              n: 139  [0x72e+0x2]
+              v: 34.75  [0xc78+0x8]
+              note — null  [0x1324+0x1]
+          ▾ #140 — n=140, v=35
+              n: 140  [0x730+0x2]
+              v: 35  [0xc80+0x8]
+              note — null  [0x1325+0x1]
+          ▾ #141 — n=141, v=35.25
+              n: 141  [0x732+0x2]
+              v: 35.25  [0xc88+0x8]
+              note — null  [0x1326+0x1]
+          ▾ #142 — n=142, v=35.5
+              n: 142  [0x734+0x2]
+              v: 35.5  [0xc90+0x8]
+              note — null  [0x1327+0x1]
+          ▾ #143 — n=143, v=35.75
+              n: 143  [0x736+0x2]
+              v: 35.75  [0xc98+0x8]
+              note — null  [0x1328+0x1]
+          ▾ #144 — n=144, v=36
+              n: 144  [0x738+0x2]
+              v: 36  [0xca0+0x8]
+              note — null  [0x1329+0x1]
+          ▾ #145 — n=145, v=36.25
+              n: 145  [0x73a+0x2]
+              v: 36.25  [0xca8+0x8]
+              note — null  [0x132a+0x1]
+          ▾ #146 — n=146, v=36.5
+              n: 146  [0x73c+0x2]
+              v: 36.5  [0xcb0+0x8]
+              note — null  [0x132b+0x1]
+          ▾ #147 — n=147, v=36.75
+              n: 147  [0x73e+0x2]
+              v: 36.75  [0xcb8+0x8]
+              note — null  [0x132c+0x1]
+          ▾ #148 — n=148, v=37
+              n: 148  [0x740+0x2]
+              v: 37  [0xcc0+0x8]
+              note — null  [0x132d+0x1]
+          ▾ #149 — n=149, v=37.25
+              n: 149  [0x742+0x2]
+              v: 37.25  [0xcc8+0x8]
+              note — null  [0x132e+0x1]
+          ▾ #150 — n=150, v=37.5, note="a longer note for readi…
+              n: 150  [0x744+0x2]
+              v: 37.5  [0xcd0+0x8]
+              note: "a longer note for reading number 150"  [0x132f+0x25]
+          ▾ #151 — n=151, v=37.75
+              n: 151  [0x746+0x2]
+              v: 37.75  [0xcd8+0x8]
+              note — null  [0x1354+0x1]
+          ▾ #152 — n=152, v=38
+              n: 152  [0x748+0x2]
+              v: 38  [0xce0+0x8]
+              note — null  [0x1355+0x1]
+          ▾ #153 — n=153, v=38.25
+              n: 153  [0x74a+0x2]
+              v: 38.25  [0xce8+0x8]
+              note — null  [0x1356+0x1]
+          ▾ #154 — n=154, v=38.5
+              n: 154  [0x74c+0x2]
+              v: 38.5  [0xcf0+0x8]
+              note — null  [0x1357+0x1]
+          ▾ #155 — n=155, v=38.75
+              n: 155  [0x74e+0x2]
+              v: 38.75  [0xcf8+0x8]
+              note — null  [0x1358+0x1]
+          ▾ #156 — n=156, v=39
+              n: 156  [0x750+0x2]
+              v: 39  [0xd00+0x8]
+              note — null  [0x1359+0x1]
+          ▾ #157 — n=157, v=39.25
+              n: 157  [0x752+0x2]
+              v: 39.25  [0xd08+0x8]
+              note — null  [0x135a+0x1]
+          ▾ #158 — n=158, v=39.5
+              n: 158  [0x754+0x2]
+              v: 39.5  [0xd10+0x8]
+              note — null  [0x135b+0x1]
+          ▾ #159 — n=159, v=39.75
+              n: 159  [0x756+0x2]
+              v: 39.75  [0xd18+0x8]
+              note — null  [0x135c+0x1]
+          ▾ #160 — n=160, v=40
+              n: 160  [0x758+0x2]
+              v: 40  [0xd20+0x8]
+              note — null  [0x135d+0x1]
+          ▾ #161 — n=161, v=40.25
+              n: 161  [0x75a+0x2]
+              v: 40.25  [0xd28+0x8]
+              note — null  [0x135e+0x1]
+          ▾ #162 — n=162, v=40.5
+              n: 162  [0x75c+0x2]
+              v: 40.5  [0xd30+0x8]
+              note — null  [0x135f+0x1]
+          ▾ #163 — n=163, v=40.75
+              n: 163  [0x75e+0x2]
+              v: 40.75  [0xd38+0x8]
+              note — null  [0x1360+0x1]
+          ▾ #164 — n=164, v=41
+              n: 164  [0x760+0x2]
+              v: 41  [0xd40+0x8]
+              note — null  [0x1361+0x1]
+          ▾ #165 — n=165, v=41.25
+              n: 165  [0x762+0x2]
+              v: 41.25  [0xd48+0x8]
+              note — null  [0x1362+0x1]
+          ▾ #166 — n=166, v=41.5
+              n: 166  [0x764+0x2]
+              v: 41.5  [0xd50+0x8]
+              note — null  [0x1363+0x1]
+          ▾ #167 — n=167, v=41.75
+              n: 167  [0x766+0x2]
+              v: 41.75  [0xd58+0x8]
+              note — null  [0x1364+0x1]
+          ▾ #168 — n=168, v=42
+              n: 168  [0x768+0x2]
+              v: 42  [0xd60+0x8]
+              note — null  [0x1365+0x1]
+          ▾ #169 — n=169, v=42.25
+              n: 169  [0x76a+0x2]
+              v: 42.25  [0xd68+0x8]
+              note — null  [0x1366+0x1]
+          ▾ #170 — n=170, v=42.5
+              n: 170  [0x76c+0x2]
+              v: 42.5  [0xd70+0x8]
+              note — null  [0x1367+0x1]
+          ▾ #171 — n=171, v=42.75
+              n: 171  [0x76e+0x2]
+              v: 42.75  [0xd78+0x8]
+              note — null  [0x1368+0x1]
+          ▾ #172 — n=172, v=43
+              n: 172  [0x770+0x2]
+              v: 43  [0xd80+0x8]
+              note — null  [0x1369+0x1]
+          ▾ #173 — n=173, v=43.25
+              n: 173  [0x772+0x2]
+              v: 43.25  [0xd88+0x8]
+              note — null  [0x136a+0x1]
+          ▾ #174 — n=174, v=43.5
+              n: 174  [0x774+0x2]
+              v: 43.5  [0xd90+0x8]
+              note — null  [0x136b+0x1]
+          ▾ #175 — n=175, v=43.75
+              n: 175  [0x776+0x2]
+              v: 43.75  [0xd98+0x8]
+              note — null  [0x136c+0x1]
+          ▾ #176 — n=176, v=44
+              n: 176  [0x778+0x2]
+              v: 44  [0xda0+0x8]
+              note — null  [0x136d+0x1]
+          ▾ #177 — n=177, v=44.25
+              n: 177  [0x77a+0x2]
+              v: 44.25  [0xda8+0x8]
+              note — null  [0x136e+0x1]
+          ▾ #178 — n=178, v=44.5
+              n: 178  [0x77c+0x2]
+              v: 44.5  [0xdb0+0x8]
+              note — null  [0x136f+0x1]
+          ▾ #179 — n=179, v=44.75
+              n: 179  [0x77e+0x2]
+              v: 44.75  [0xdb8+0x8]
+              note — null  [0x1370+0x1]
+          ▾ #180 — n=180, v=45
+              n: 180  [0x780+0x2]
+              v: 45  [0xdc0+0x8]
+              note — null  [0x1371+0x1]
+          ▾ #181 — n=181, v=45.25
+              n: 181  [0x782+0x2]
+              v: 45.25  [0xdc8+0x8]
+              note — null  [0x1372+0x1]
+          ▾ #182 — n=182, v=45.5
+              n: 182  [0x784+0x2]
+              v: 45.5  [0xdd0+0x8]
+              note — null  [0x1373+0x1]
+          ▾ #183 — n=183, v=45.75
+              n: 183  [0x786+0x2]
+              v: 45.75  [0xdd8+0x8]
+              note — null  [0x1374+0x1]
+          ▾ #184 — n=184, v=46
+              n: 184  [0x788+0x2]
+              v: 46  [0xde0+0x8]
+              note — null  [0x1375+0x1]
+          ▾ #185 — n=185, v=46.25
+              n: 185  [0x78a+0x2]
+              v: 46.25  [0xde8+0x8]
+              note — null  [0x1376+0x1]
+          ▾ #186 — n=186, v=46.5
+              n: 186  [0x78c+0x2]
+              v: 46.5  [0xdf0+0x8]
+              note — null  [0x1377+0x1]
+          ▾ #187 — n=187, v=46.75
+              n: 187  [0x78e+0x2]
+              v: 46.75  [0xdf8+0x8]
+              note — null  [0x1378+0x1]
+          ▾ #188 — n=188, v=47
+              n: 188  [0x790+0x2]
+              v: 47  [0xe00+0x8]
+              note — null  [0x1379+0x1]
+          ▾ #189 — n=189, v=47.25
+              n: 189  [0x792+0x2]
+              v: 47.25  [0xe08+0x8]
+              note — null  [0x137a+0x1]
+          ▾ #190 — n=190, v=47.5
+              n: 190  [0x794+0x2]
+              v: 47.5  [0xe10+0x8]
+              note — null  [0x137b+0x1]
+          ▾ #191 — n=191, v=47.75
+              n: 191  [0x796+0x2]
+              v: 47.75  [0xe18+0x8]
+              note — null  [0x137c+0x1]
+          ▾ #192 — n=192, v=48
+              n: 192  [0x798+0x2]
+              v: 48  [0xe20+0x8]
+              note — null  [0x137d+0x1]
+          ▾ #193 — n=193, v=48.25
+              n: 193  [0x79a+0x2]
+              v: 48.25  [0xe28+0x8]
+              note — null  [0x137e+0x1]
+          ▾ #194 — n=194, v=48.5
+              n: 194  [0x79c+0x2]
+              v: 48.5  [0xe30+0x8]
+              note — null  [0x137f+0x1]
+          ▾ #195 — n=195, v=48.75
+              n: 195  [0x79e+0x2]
+              v: 48.75  [0xe38+0x8]
+              note — null  [0x1380+0x1]
+          ▾ #196 — n=196, v=49
+              n: 196  [0x7a0+0x2]
+              v: 49  [0xe40+0x8]
+              note — null  [0x1381+0x1]
+          ▾ #197 — n=197, v=49.25
+              n: 197  [0x7a2+0x2]
+              v: 49.25  [0xe48+0x8]
+              note — null  [0x1382+0x1]
+          ▾ #198 — n=198, v=49.5
+              n: 198  [0x7a4+0x2]
+              v: 49.5  [0xe50+0x8]
+              note — null  [0x1383+0x1]
+          ▾ #199 — n=199, v=49.75
+              n: 199  [0x7a6+0x2]
+              v: 49.75  [0xe58+0x8]
+              note — null  [0x1384+0x1]
+          ▾ #200 — n=200, v=50, note="a longer note for readi…
+              n: 200  [0x7a8+0x2]
+              v: 50  [0xe60+0x8]
+              note: "a longer note for reading number 200"  [0x1385+0x25]
+          ▾ #201 — n=201, v=50.25
+              n: 201  [0x7aa+0x2]
+              v: 50.25  [0xe68+0x8]
+              note — null  [0x13aa+0x1]
+          ▾ #202 — n=202, v=50.5
+              n: 202  [0x7ac+0x2]
+              v: 50.5  [0xe70+0x8]
+              note — null  [0x13ab+0x1]
+          ▾ #203 — n=203, v=50.75
+              n: 203  [0x7ae+0x2]
+              v: 50.75  [0xe78+0x8]
+              note — null  [0x13ac+0x1]
+          ▾ #204 — n=204, v=51
+              n: 204  [0x7b0+0x2]
+              v: 51  [0xe80+0x8]
+              note — null  [0x13ad+0x1]
+          ▾ #205 — n=205, v=51.25
+              n: 205  [0x7b2+0x2]
+              v: 51.25  [0xe88+0x8]
+              note — null  [0x13ae+0x1]
+          ▾ #206 — n=206, v=51.5
+              n: 206  [0x7b4+0x2]
+              v: 51.5  [0xe90+0x8]
+              note — null  [0x13af+0x1]
+          ▾ #207 — n=207, v=51.75
+              n: 207  [0x7b6+0x2]
+              v: 51.75  [0xe98+0x8]
+              note — null  [0x13b0+0x1]
+          ▾ #208 — n=208, v=52
+              n: 208  [0x7b8+0x2]
+              v: 52  [0xea0+0x8]
+              note — null  [0x13b1+0x1]
+          ▾ #209 — n=209, v=52.25
+              n: 209  [0x7ba+0x2]
+              v: 52.25  [0xea8+0x8]
+              note — null  [0x13b2+0x1]
+          ▾ #210 — n=210, v=52.5
+              n: 210  [0x7bc+0x2]
+              v: 52.5  [0xeb0+0x8]
+              note — null  [0x13b3+0x1]
+          ▾ #211 — n=211, v=52.75
+              n: 211  [0x7be+0x2]
+              v: 52.75  [0xeb8+0x8]
+              note — null  [0x13b4+0x1]
+          ▾ #212 — n=212, v=53
+              n: 212  [0x7c0+0x2]
+              v: 53  [0xec0+0x8]
+              note — null  [0x13b5+0x1]
+          ▾ #213 — n=213, v=53.25
+              n: 213  [0x7c2+0x2]
+              v: 53.25  [0xec8+0x8]
+              note — null  [0x13b6+0x1]
+          ▾ #214 — n=214, v=53.5
+              n: 214  [0x7c4+0x2]
+              v: 53.5  [0xed0+0x8]
+              note — null  [0x13b7+0x1]
+          ▾ #215 — n=215, v=53.75
+              n: 215  [0x7c6+0x2]
+              v: 53.75  [0xed8+0x8]
+              note — null  [0x13b8+0x1]
+          ▾ #216 — n=216, v=54
+              n: 216  [0x7c8+0x2]
+              v: 54  [0xee0+0x8]
+              note — null  [0x13b9+0x1]
+          ▾ #217 — n=217, v=54.25
+              n: 217  [0x7ca+0x2]
+              v: 54.25  [0xee8+0x8]
+              note — null  [0x13ba+0x1]
+          ▾ #218 — n=218, v=54.5
+              n: 218  [0x7cc+0x2]
+              v: 54.5  [0xef0+0x8]
+              note — null  [0x13bb+0x1]
+          ▾ #219 — n=219, v=54.75
+              n: 219  [0x7ce+0x2]
+              v: 54.75  [0xef8+0x8]
+              note — null  [0x13bc+0x1]
+          ▾ #220 — n=220, v=55
+              n: 220  [0x7d0+0x2]
+              v: 55  [0xf00+0x8]
+              note — null  [0x13bd+0x1]
+          ▾ #221 — n=221, v=55.25
+              n: 221  [0x7d2+0x2]
+              v: 55.25  [0xf08+0x8]
+              note — null  [0x13be+0x1]
+          ▾ #222 — n=222, v=55.5
+              n: 222  [0x7d4+0x2]
+              v: 55.5  [0xf10+0x8]
+              note — null  [0x13bf+0x1]
+          ▾ #223 — n=223, v=55.75
+              n: 223  [0x7d6+0x2]
+              v: 55.75  [0xf18+0x8]
+              note — null  [0x13c0+0x1]
+          ▾ #224 — n=224, v=56
+              n: 224  [0x7d8+0x2]
+              v: 56  [0xf20+0x8]
+              note — null  [0x13c1+0x1]
+          ▾ #225 — n=225, v=56.25
+              n: 225  [0x7da+0x2]
+              v: 56.25  [0xf28+0x8]
+              note — null  [0x13c2+0x1]
+          ▾ #226 — n=226, v=56.5
+              n: 226  [0x7dc+0x2]
+              v: 56.5  [0xf30+0x8]
+              note — null  [0x13c3+0x1]
+          ▾ #227 — n=227, v=56.75
+              n: 227  [0x7de+0x2]
+              v: 56.75  [0xf38+0x8]
+              note — null  [0x13c4+0x1]
+          ▾ #228 — n=228, v=57
+              n: 228  [0x7e0+0x2]
+              v: 57  [0xf40+0x8]
+              note — null  [0x13c5+0x1]
+          ▾ #229 — n=229, v=57.25
+              n: 229  [0x7e2+0x2]
+              v: 57.25  [0xf48+0x8]
+              note — null  [0x13c6+0x1]
+          ▾ #230 — n=230, v=57.5
+              n: 230  [0x7e4+0x2]
+              v: 57.5  [0xf50+0x8]
+              note — null  [0x13c7+0x1]
+          ▾ #231 — n=231, v=57.75
+              n: 231  [0x7e6+0x2]
+              v: 57.75  [0xf58+0x8]
+              note — null  [0x13c8+0x1]
+          ▾ #232 — n=232, v=58
+              n: 232  [0x7e8+0x2]
+              v: 58  [0xf60+0x8]
+              note — null  [0x13c9+0x1]
+          ▾ #233 — n=233, v=58.25
+              n: 233  [0x7ea+0x2]
+              v: 58.25  [0xf68+0x8]
+              note — null  [0x13ca+0x1]
+          ▾ #234 — n=234, v=58.5
+              n: 234  [0x7ec+0x2]
+              v: 58.5  [0xf70+0x8]
+              note — null  [0x13cb+0x1]
+          ▾ #235 — n=235, v=58.75
+              n: 235  [0x7ee+0x2]
+              v: 58.75  [0xf78+0x8]
+              note — null  [0x13cc+0x1]
+          ▾ #236 — n=236, v=59
+              n: 236  [0x7f0+0x2]
+              v: 59  [0xf80+0x8]
+              note — null  [0x13cd+0x1]
+          ▾ #237 — n=237, v=59.25
+              n: 237  [0x7f2+0x2]
+              v: 59.25  [0xf88+0x8]
+              note — null  [0x13ce+0x1]
+          ▾ #238 — n=238, v=59.5
+              n: 238  [0x7f4+0x2]
+              v: 59.5  [0xf90+0x8]
+              note — null  [0x13cf+0x1]
+          ▾ #239 — n=239, v=59.75
+              n: 239  [0x7f6+0x2]
+              v: 59.75  [0xf98+0x8]
+              note — null  [0x13d0+0x1]
+          ▾ #240 — n=240, v=60
+              n: 240  [0x7f8+0x2]
+              v: 60  [0xfa0+0x8]
+              note — null  [0x13d1+0x1]
+          ▾ #241 — n=241, v=60.25
+              n: 241  [0x7fa+0x2]
+              v: 60.25  [0xfa8+0x8]
+              note — null  [0x13d2+0x1]
+          ▾ #242 — n=242, v=60.5
+              n: 242  [0x7fc+0x2]
+              v: 60.5  [0xfb0+0x8]
+              note — null  [0x13d3+0x1]
+          ▾ #243 — n=243, v=60.75
+              n: 243  [0x7fe+0x2]
+              v: 60.75  [0xfb8+0x8]
+              note — null  [0x13d4+0x1]
+          ▾ #244 — n=244, v=61
+              n: 244  [0x800+0x2]
+              v: 61  [0xfc0+0x8]
+              note — null  [0x13d5+0x1]
+          ▾ #245 — n=245, v=61.25
+              n: 245  [0x802+0x2]
+              v: 61.25  [0xfc8+0x8]
+              note — null  [0x13d6+0x1]
+          ▾ #246 — n=246, v=61.5
+              n: 246  [0x804+0x2]
+              v: 61.5  [0xfd0+0x8]
+              note — null  [0x13d7+0x1]
+          ▾ #247 — n=247, v=61.75
+              n: 247  [0x806+0x2]
+              v: 61.75  [0xfd8+0x8]
+              note — null  [0x13d8+0x1]
+          ▾ #248 — n=248, v=62
+              n: 248  [0x808+0x2]
+              v: 62  [0xfe0+0x8]
+              note — null  [0x13d9+0x1]
+          ▾ #249 — n=249, v=62.25
+              n: 249  [0x80a+0x2]
+              v: 62.25  [0xfe8+0x8]
+              note — null  [0x13da+0x1]
+          ▾ #250 — n=250, v=62.5, note="a longer note for readi…
+              n: 250  [0x80c+0x2]
+              v: 62.5  [0xff0+0x8]
+              note: "a longer note for reading number 250"  [0x13db+0x25]
+          ▾ #251 — n=251, v=62.75
+              n: 251  [0x80e+0x2]
+              v: 62.75  [0xff8+0x8]
+              note — null  [0x1400+0x1]
+          ▾ #252 — n=252, v=63
+              n: 252  [0x810+0x2]
+              v: 63  [0x1000+0x8]
+              note — null  [0x1401+0x1]
+          ▾ #253 — n=253, v=63.25
+              n: 253  [0x812+0x2]
+              v: 63.25  [0x1008+0x8]
+              note — null  [0x1402+0x1]
+          ▾ #254 — n=254, v=63.5
+              n: 254  [0x814+0x2]
+              v: 63.5  [0x1010+0x8]
+              note — null  [0x1403+0x1]
+          ▾ #255 — n=255, v=63.75
+              n: 255  [0x816+0x2]
+              v: 63.75  [0x1018+0x8]
+              note — null  [0x1404+0x1]
+        ▾ Cluster 1 — keys 256–299, 44 objects  [0x1640+0x2]
+          ▾ #256 — n=256, v=64
+              n: 256  [0x1458+0x2]
+              v: 64  [0x14b8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #257 — n=257, v=64.25
+              n: 257  [0x145a+0x2]
+              v: 64.25  [0x14c0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #258 — n=258, v=64.5
+              n: 258  [0x145c+0x2]
+              v: 64.5  [0x14c8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #259 — n=259, v=64.75
+              n: 259  [0x145e+0x2]
+              v: 64.75  [0x14d0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #260 — n=260, v=65
+              n: 260  [0x1460+0x2]
+              v: 65  [0x14d8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #261 — n=261, v=65.25
+              n: 261  [0x1462+0x2]
+              v: 65.25  [0x14e0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #262 — n=262, v=65.5
+              n: 262  [0x1464+0x2]
+              v: 65.5  [0x14e8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #263 — n=263, v=65.75
+              n: 263  [0x1466+0x2]
+              v: 65.75  [0x14f0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #264 — n=264, v=66
+              n: 264  [0x1468+0x2]
+              v: 66  [0x14f8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #265 — n=265, v=66.25
+              n: 265  [0x146a+0x2]
+              v: 66.25  [0x1500+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #266 — n=266, v=66.5
+              n: 266  [0x146c+0x2]
+              v: 66.5  [0x1508+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #267 — n=267, v=66.75
+              n: 267  [0x146e+0x2]
+              v: 66.75  [0x1510+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #268 — n=268, v=67
+              n: 268  [0x1470+0x2]
+              v: 67  [0x1518+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #269 — n=269, v=67.25
+              n: 269  [0x1472+0x2]
+              v: 67.25  [0x1520+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #270 — n=270, v=67.5
+              n: 270  [0x1474+0x2]
+              v: 67.5  [0x1528+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #271 — n=271, v=67.75
+              n: 271  [0x1476+0x2]
+              v: 67.75  [0x1530+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #272 — n=272, v=68
+              n: 272  [0x1478+0x2]
+              v: 68  [0x1538+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #273 — n=273, v=68.25
+              n: 273  [0x147a+0x2]
+              v: 68.25  [0x1540+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #274 — n=274, v=68.5
+              n: 274  [0x147c+0x2]
+              v: 68.5  [0x1548+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #275 — n=275, v=68.75
+              n: 275  [0x147e+0x2]
+              v: 68.75  [0x1550+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #276 — n=276, v=69
+              n: 276  [0x1480+0x2]
+              v: 69  [0x1558+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #277 — n=277, v=69.25
+              n: 277  [0x1482+0x2]
+              v: 69.25  [0x1560+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #278 — n=278, v=69.5
+              n: 278  [0x1484+0x2]
+              v: 69.5  [0x1568+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #279 — n=279, v=69.75
+              n: 279  [0x1486+0x2]
+              v: 69.75  [0x1570+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #280 — n=280, v=70
+              n: 280  [0x1488+0x2]
+              v: 70  [0x1578+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #281 — n=281, v=70.25
+              n: 281  [0x148a+0x2]
+              v: 70.25  [0x1580+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #282 — n=282, v=70.5
+              n: 282  [0x148c+0x2]
+              v: 70.5  [0x1588+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #283 — n=283, v=70.75
+              n: 283  [0x148e+0x2]
+              v: 70.75  [0x1590+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #284 — n=284, v=71
+              n: 284  [0x1490+0x2]
+              v: 71  [0x1598+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #285 — n=285, v=71.25
+              n: 285  [0x1492+0x2]
+              v: 71.25  [0x15a0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #286 — n=286, v=71.5
+              n: 286  [0x1494+0x2]
+              v: 71.5  [0x15a8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #287 — n=287, v=71.75
+              n: 287  [0x1496+0x2]
+              v: 71.75  [0x15b0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #288 — n=288, v=72
+              n: 288  [0x1498+0x2]
+              v: 72  [0x15b8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #289 — n=289, v=72.25
+              n: 289  [0x149a+0x2]
+              v: 72.25  [0x15c0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #290 — n=290, v=72.5
+              n: 290  [0x149c+0x2]
+              v: 72.5  [0x15c8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #291 — n=291, v=72.75
+              n: 291  [0x149e+0x2]
+              v: 72.75  [0x15d0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #292 — n=292, v=73
+              n: 292  [0x14a0+0x2]
+              v: 73  [0x15d8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #293 — n=293, v=73.25
+              n: 293  [0x14a2+0x2]
+              v: 73.25  [0x15e0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #294 — n=294, v=73.5
+              n: 294  [0x14a4+0x2]
+              v: 73.5  [0x15e8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #295 — n=295, v=73.75
+              n: 295  [0x14a6+0x2]
+              v: 73.75  [0x15f0+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #296 — n=296, v=74
+              n: 296  [0x14a8+0x2]
+              v: 74  [0x15f8+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #297 — n=297, v=74.25
+              n: 297  [0x14aa+0x2]
+              v: 74.25  [0x1600+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #298 — n=298, v=74.5
+              n: 298  [0x14ac+0x2]
+              v: 74.5  [0x1608+0x8]
+              note — null  [0x1620+0x0]
+          ▾ #299 — n=299, v=74.75
+              n: 299  [0x14ae+0x2]
+              v: 74.75  [0x1610+0x8]
+              note — null  [0x1620+0x0]

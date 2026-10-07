@@ -1522,6 +1522,8 @@ pub static FORMATS: &[&Format] = &[
     &data::embedded_db::GDBM,
     &data::embedded_db::RRD,
     &data::embedded_db::WIREDTIGER,
+    &data::wiredtiger::BTREE,
+    &data::wiredtiger::TURTLE,
     &data::embedded_db::REALM,
     &security::kerberos::KEYTAB,
     &security::kerberos::CCACHE,
