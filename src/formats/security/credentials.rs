@@ -1,9 +1,9 @@
 //! Credential stores, key files and backups.
 
-use crate::bytes::{u32_be, u32_le};
+use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Cursor, Record, emit_record, read_record};
+use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::{Codec, Input, Probe, content};
@@ -178,41 +178,6 @@ async fn keybox(cx: Cx, input: Input) -> Result<()> {
         "{} OpenPGP and {} X.509 blob(s)",
         counts[2], counts[3]
     ));
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// macOS keychain (legacy .keychain)
-
-declare_format!(pub KEYCHAIN = "keychain", "macOS keychain", ["keychain", "keychain-db"], "application/x-apple-keychain",
-    Probe::Magic(&[(0, b"kych")]), keychain);
-
-record! {
-    pub struct KeychainHeader {
-        magic: ascii[4] "Magic",
-        version: u32 "Version" .hex(),
-        auth_offset: u32 "Auth offset" .hex(),
-        schema_offset: u32 "Schema offset" .hex(),
-    }
-}
-
-async fn keychain(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let h: KeychainHeader = read_record(&cx, file.sub(0, KeychainHeader::SIZE), BE).await?;
-    cx.emit(KeychainHeader::node(
-        "Header",
-        file.sub(0, KeychainHeader::SIZE),
-        BE,
-    ));
-    let schema = file.tail(h.schema_offset.into());
-    let head = cx.read_avail(schema.sub(0, 8)).await?;
-    let tables = u32_be(&head, 4).unwrap_or(0);
-    cx.emit(
-        Node::new("Schema")
-            .span(schema)
-            .summary(format!("{tables} tables")),
-    );
-    cx.annotate(format!("keychain, {tables} tables"));
     Ok(())
 }
 

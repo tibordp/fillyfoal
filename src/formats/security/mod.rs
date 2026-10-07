@@ -8,6 +8,7 @@ pub mod age;
 pub mod credentials;
 pub mod encryption;
 pub mod kerberos;
+pub mod keychain;
 pub mod keyrings;
 pub mod openssh;
 pub mod pem;

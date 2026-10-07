@@ -71,7 +71,8 @@ exploration pays for additional work only as needed.
   LZO1X/lzop, LZF, ADC, Guitar Pro 6 BCFZ, Heatshrink and MeatPack (Prusa binary G-code), PKWARE implode and DCL implode, MSZIP/LZX/Quantum
   (CAB, CHM, WIM), XPRESS (plain, Huffman) and LZNT1, Cap'n Proto packing, the PDF/PostScript
   filters and predictors, and the ciphers that unlock content (ZipCrypto,
-  AES, RC4, Type 1 eexec, MPQ). Each is checked byte-exact against a real
+  AES, RC4, Type 1 eexec, MPQ, AES-GCM, ChaCha20-Poly1305, and OpenSSH's
+  bcrypt_pbkdf over Blowfish). Each is checked byte-exact against a real
   encoder where one was available (CLI tools, Python packages via `uv`,
   `hdiutil`, `compression_tool`, liblzo2, 7-Zip as an extraction oracle),
   otherwise against spec vectors and spec-derived encoders; the test names

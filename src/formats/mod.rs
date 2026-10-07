@@ -1066,7 +1066,7 @@ pub static FORMATS: &[&Format] = &[
     &security::credentials::KDB,
     &security::openssh::OPENSSH_KEY,
     &security::credentials::KEYBOX,
-    &security::credentials::KEYCHAIN,
+    &security::keychain::KEYCHAIN,
     &security::credentials::ANDROID_BACKUP,
     &system::artifacts::DTB,
     &system::artifacts::BZIMAGE,
