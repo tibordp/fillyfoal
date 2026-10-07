@@ -15,6 +15,7 @@ pub mod capnp;
 pub mod charset;
 pub mod crc;
 pub mod crypto;
+pub mod dwg;
 pub mod filters;
 pub mod heatshrink;
 pub mod implode;
@@ -180,6 +181,11 @@ pub enum Codec {
     SnappyFramed,
     /// Cap'n Proto's packed encoding (see [`capnp`]).
     CapnpPacked,
+    /// One page of an AutoCAD R2004+ DWG file, decompressing to at most
+    /// `size` bytes (see [`dwg`]).
+    DwgLz77 {
+        size: u64,
+    },
     /// Adobe Type 1 `eexec` decryption (binary, or hex text).
     Eexec {
         hex: bool,
@@ -267,6 +273,7 @@ impl Codec {
             Codec::Snappy => "snappy",
             Codec::SnappyFramed => "snappy-framed",
             Codec::CapnpPacked => "capnp-packed",
+            Codec::DwgLz77 { .. } => "dwg-lz77",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -321,6 +328,7 @@ impl Codec {
             Codec::Snappy => "snappy (lazy)",
             Codec::SnappyFramed => "snappy-framed (lazy)",
             Codec::CapnpPacked => "capnp-packed (lazy)",
+            Codec::DwgLz77 { .. } => "dwg-lz77 (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -367,7 +375,8 @@ impl Codec {
             | Codec::Brotli
             | Codec::LzmaAlone
             | Codec::Lzma2 { .. }
-            | Codec::LzmaRaw { .. } => "decompressed",
+            | Codec::LzmaRaw { .. }
+            | Codec::DwgLz77 { .. } => "decompressed",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -396,6 +405,8 @@ impl Codec {
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
             // A zero tag and a count stand for 256 zero words.
             Codec::CapnpPacked => 1024,
+            // Each zero byte of a long length adds 255 bytes.
+            Codec::DwgLz77 { .. } => 256,
             // A block of up to 900 kB can encode runs of 255-byte repeats.
             Codec::Bzip2 => 50_000,
             // LZMA's longest match (273 bytes) costs a handful of bits.
@@ -510,6 +521,7 @@ impl Codec {
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
+            Codec::DwgLz77 { size } => Box::new(Streaming(dwg::Lz77::new(*size))),
             Codec::Eexec { hex } => {
                 Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
             }

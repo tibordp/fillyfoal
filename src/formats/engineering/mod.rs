@@ -5,6 +5,7 @@
 //! for 3D printers and CNC machines (`fabrication`: G-code, Prusa binary
 //! G-code).
 
+pub mod autocad;
 pub mod brep;
 pub mod cad;
 pub mod dcc;
