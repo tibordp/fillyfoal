@@ -1,144 +1,21 @@
 //! Credential stores, key files and backups.
 
-use crate::bytes::{u32_be, u32_le};
+use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Cursor, Record, emit_record, read_record};
+use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
-const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
-// ---------------------------------------------------------------------------
-// KeePass
-
-declare_format!(pub KDBX = "kdbx", "KeePass 2 database", ["kdbx"], "application/x-keepass2",
-    Probe::Magic(&[(0, b"\x03\xd9\xa2\x9a\x67\xfb\x4b\xb5")]), kdbx);
-declare_format!(pub KDB = "kdb", "KeePass 1 database", ["kdb"], "application/x-keepass",
-    Probe::Magic(&[(0, b"\x03\xd9\xa2\x9a\x65\xfb\x4b\xb5")]), kdb);
-
-const KDBX_FIELDS: EnumTable = &[
-    (0, "End of header"),
-    (1, "Comment"),
-    (2, "Cipher ID"),
-    (3, "Compression flags"),
-    (4, "Master seed"),
-    (5, "Transform seed"),
-    (6, "Transform rounds"),
-    (7, "Encryption IV"),
-    (8, "Protected stream key"),
-    (9, "Stream start bytes"),
-    (10, "Inner random stream ID"),
-    (11, "KDF parameters"),
-    (12, "Public custom data"),
-];
-
-const KDBX_CIPHERS: &[(&str, &str)] = &[
-    ("31c1f2e6bf714350be5805216afc5aff", "AES-256-CBC"),
-    ("d6038a2b8b6f4cb5a524339a31dbb59a", "ChaCha20"),
-    ("ad68f29f576f4bb9a36ad47af965346c", "Twofish-CBC"),
-];
-
-async fn kdbx(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 12)).await?;
-    let mut f = crate::fields::Fields::emitting(&cx, &head, LE);
-    f.u32("Signature 1").hex().emit()?;
-    f.u32("Signature 2").hex().emit()?;
-    let minor = f.u16("Minor version").emit()?;
-    let major = f.u16("Major version").emit()?;
-    let mut cur = Cursor::new(&cx, file, LE);
-    cur.seek(12);
-    let mut cipher = "unknown cipher".to_owned();
-    loop {
-        let start = cur.pos();
-        let id = cur.u8().await?;
-        let len = if major >= 4 {
-            cur.u32().await?
-        } else {
-            u32::from(cur.u16().await?)
-        };
-        let data = cur.span(len.into());
-        let bytes = cur.bytes(len.into()).await?;
-        let name =
-            lookup(KDBX_FIELDS, id.into()).map_or_else(|| format!("Field {id}"), str::to_owned);
-        let mut node = Node::new(name).span(cur.since(start)).target(data);
-        match id {
-            2 => {
-                let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-                cipher = KDBX_CIPHERS
-                    .iter()
-                    .find(|(g, _)| *g == hex)
-                    .map_or(hex, |(_, n)| (*n).to_owned());
-                node = node.value(Value::Text(cipher.clone()));
-            }
-            3 => {
-                let v = u32_le(&bytes, 0).unwrap_or(0);
-                node = node.value(Value::Enum {
-                    raw: v.into(),
-                    bits: 32,
-                    name: lookup(&[(0, "none"), (1, "gzip")], v.into()),
-                });
-            }
-            6 => {
-                node = node.value(Value::UInt {
-                    value: crate::bytes::u64_le(&bytes, 0).unwrap_or(0),
-                    bits: 64,
-                    radix: Radix::Dec,
-                })
-            }
-            _ => node = node.summary(format!("{len} bytes")),
-        }
-        cx.push(node).await;
-        if id == 0 {
-            break;
-        }
-    }
-    if major >= 4 {
-        cx.emit(Node::new("Header SHA-256").span(cur.span(32)));
-        cx.emit(Node::new("Header HMAC-SHA-256").span(file.sub(cur.pos().saturating_add(32), 32)));
-        cur.skip(64);
-    }
-    cx.emit(
-        Node::new("Encrypted payload")
-            .span(file.tail(cur.pos()))
-            .diag(Diagnostic::note("encrypted; requires the master key")),
-    );
-    cx.annotate(format!("KeePass KDBX {major}.{minor}, {cipher}"));
-    Ok(())
-}
-
-record! {
-    pub struct KdbHeader {
-        signature1: u32 "Signature 1" .hex(),
-        signature2: u32 "Signature 2" .hex(),
-        flags: u32 "Flags" .hex(),
-        version: u32 "Version" .hex(),
-        master_seed: bytes[16] "Master seed",
-        iv: bytes[16] "Encryption IV",
-        groups: u32 "Groups",
-        entries: u32 "Entries",
-        contents_hash: bytes[32] "Contents hash",
-        transform_seed: bytes[32] "Transform seed",
-        rounds: u32 "Key transform rounds",
-    }
-}
-
-async fn kdb(cx: Cx, input: Input) -> Result<()> {
-    let h: KdbHeader = emit_record(&cx, input.span.sub(0, KdbHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Encrypted payload").span(input.span.tail(KdbHeader::SIZE)));
-    cx.annotate(format!(
-        "KeePass 1, {} groups, {} entries",
-        h.groups, h.entries
-    ));
-    Ok(())
-}
+// KeePass lives in its own module; re-exported for the format table.
+pub use super::keepass::{KDB, KDBX};
 
 // ---------------------------------------------------------------------------
 // OpenSSH private keys (the binary inside the PEM armour)

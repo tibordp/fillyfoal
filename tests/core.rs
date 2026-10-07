@@ -1870,3 +1870,48 @@ fn wire_encodings_are_offered_by_extension() {
         );
     }
 }
+
+#[test]
+fn keepass_retries_the_password_and_hides_secrets() {
+    let read = |p: &str| {
+        std::fs::read(format!("{}/tests/fixtures/{p}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    };
+    for (name, path) in [
+        ("a.kdbx", "external/kdbx/argon2d-chacha20.kdbx"),
+        ("b.kdbx", "external/kdbx/kdbx3.kdbx"),
+        ("c.kdb", "synthetic/kdb/twofish.kdb"),
+    ] {
+        let mut host = Host::named(name, read(path), Limits::default());
+        host.passwords = vec!["wrong".into(), "fillyfoal".into()];
+        host.explore_all();
+        let text = host.render();
+        assert_eq!(host.secret_requests.len(), 2, "{name}");
+        assert!(text.contains("Router"), "{name}: not unlocked\n{text}");
+        for secret in ["hunter2", "correct horse", "s3cret"] {
+            assert!(!text.contains(secret), "{name}: {secret} leaked");
+        }
+        // Without a password, nothing beyond the header.
+        let mut host = Host::named(name, read(path), Limits::default());
+        host.passwords.clear();
+        host.explore_all();
+        let text = host.render();
+        assert!(text.contains("no password, or a wrong one"), "{name}");
+        assert!(!text.contains("Router"), "{name}");
+    }
+}
+
+#[test]
+fn keepass_refuses_runaway_key_derivations() {
+    // AES-KDF rounds patched to 2^40 in the KDBX 3.1 fixture: refused up
+    // front instead of running into the work limit.
+    let mut data = std::fs::read(format!(
+        "{}/tests/fixtures/external/kdbx/kdbx3.kdbx",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    data[0x6f..0x77].copy_from_slice(&(1u64 << 40).to_le_bytes());
+    let mut host = Host::named("x.kdbx", data, Limits::default());
+    host.explore_all();
+    let text = host.render();
+    assert!(text.contains("key derivation too expensive"), "{text}");
+}

@@ -337,3 +337,9 @@ and reproduce every file byte for byte.
 | `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
 | `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
 | `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |
+
+## Password managers
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `kdbx/` | pykeepass 4.2.0 (with argon2-cffi, pycryptodomex) | reproduced byte-for-byte: `uv run --with pykeepass==4.2.0 python tests/data/kdbx/make.py tests/fixtures/external/kdbx` (password `fillyfoal`; seeded randomness and fixed clock; cheap KDF parameters; `kdbx3.kdbx` is pykeepass writing a KDBX 3.1 header we swapped into its object model) |
