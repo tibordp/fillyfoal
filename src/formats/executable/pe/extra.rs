@@ -540,6 +540,20 @@ pub(super) async fn clr(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
                 (root, streams_at.saturating_add(4), streams),
             ),
     );
+    let fields = cx.read(header.sub(24, 8)).await?;
+    let (res_rva, res_size) = (
+        u32_le(&fields, 0).unwrap_or(0),
+        u32_le(&fields, 4).unwrap_or(0),
+    );
+    if res_rva != 0 && res_size != 0 {
+        let res = pe.rva_span(res_rva, res_size.into())?;
+        cx.emit(
+            Node::new("Managed resources")
+                .span(res)
+                .summary(format!("{res_size} bytes"))
+                .lazy(super::managed::resources, (pe.clone(), root, res)),
+        );
+    }
     cx.annotate(format!(".NET {version} (CLR header {major}.{minor})"));
     Ok(())
 }

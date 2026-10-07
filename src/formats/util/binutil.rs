@@ -161,6 +161,11 @@ impl Tree {
         index
     }
 
+    /// The index the next [`Tree::add`] returns.
+    pub fn next_index(&self) -> usize {
+        self.nodes.len()
+    }
+
     /// Changes a node already added (e.g. to fill in its span or summary once
     /// its end is known).
     pub fn update(&mut self, index: usize, f: impl FnOnce(Node) -> Node) {
