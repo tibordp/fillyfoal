@@ -1,0 +1,66 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ survey.por — SPSS portable file, 4 variables, 2026-10-07 11:00:00, ReadStat  [0x0+0x334]
+  ▾ Header — 2026-10-07 11:00:00, ReadStat  [0x0+0x2bb]
+      Splash strings: "0000000000000000000000000000000000000000ASCII SPSS PORT FILEfillyfoal survey    000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"  [0x0+0xcc]
+      Character table — identity (ASCII)  [0xcc+0x106]
+      Tag: "SPSSPORT"  [0x1d2+0x8]
+      Version: "A"
+      Created: "2026-10-07 11:00:00"
+      Product: "ReadStat"  [0x1ef+0xb]
+      Subproduct: "https://github.com/WizardMac/ReadStat"  [0x1fa+0x29]
+      Variable count: 4  [0x223+0x3]
+      Precision: 50  [0x226+0x4]
+  ▾ Variables — 4 variables
+    ▾ ID — numeric, F8.2, "Respondent"  [0x22a+0x22]
+        Name: "ID"
+        Label: "Respondent"
+        Type: "numeric"
+        Print format: "F8.2"
+        Write format: "F8.2"
+    ▾ NAME — string(22), A22, "Full name"  [0x24c+0x21]
+        Name: "NAME"
+        Label: "Full name"
+        Type: "string(22)"
+        Print format: "A22"
+        Write format: "A22"
+    ▾ SCORE — numeric, F8.2, "Test score"  [0x26d+0x25]
+        Name: "SCORE"
+        Label: "Test score"
+        Type: "numeric"
+        Print format: "F8.2"
+        Write format: "F8.2"
+    ▾ BORN — numeric, DATE11, "Date of birth"  [0x292+0x25]
+        Name: "BORN"
+        Label: "Date of birth"
+        Type: "numeric"
+        Print format: "DATE11"
+        Write format: "DATE11"
+  ▾ Cases  [0x2bb+0x79]
+    ▾ Case 1 — ID=1, NAME="Alice", SCORE=12.5, BORN=1980-01-15  [0x2bb+0x15]
+        ID: 1  [0x2bb+0x2]
+        NAME: "Alice"  [0x2bd+0x7]
+        SCORE: 12.5  [0x2c4+0x4]
+        BORN: 1980-01-15 00:00:00 UTC — 1980-01-15  [0x2c8+0x8]
+    ▾ Case 2 — ID=2, NAME="Bob", SCORE=-99, BORN=1999-12-31  [0x2d0+0x15]
+        ID: 2  [0x2d0+0x2]
+        NAME: "Bob"  [0x2d2+0x5]
+        SCORE: -99  [0x2d7+0x4]
+        BORN: 1999-12-31 00:00:00 UTC — 1999-12-31  [0x2db+0xa]
+    ▾ Case 3 — ID=3, NAME="Cedomir", SCORE=sysmis, BORN=sysmis  [0x2e5+0xf]
+        ID: 3  [0x2e5+0x2]
+        NAME: "Cedomir"  [0x2e7+0x9]
+        SCORE: "sysmis" — missing  [0x2f0+0x2]
+        BORN: "sysmis" — missing  [0x2f2+0x2]
+    ▾ Case 4 — ID=4, NAME="", SCORE=7.25, BORN=1960-01-01  [0x2f4+0x10]
+        ID: 4  [0x2f4+0x2]
+        NAME: ""  [0x2f6+0x3]
+        SCORE: 7.25  [0x2f9+0x5]
+        BORN: 1960-01-01 00:00:00 UTC — 1960-01-01  [0x2fe+0x6]
+    ▾ Case 5 — ID=5, NAME="Eve with a longer name", SCORE=10000000000, BORN=2024-02-29  [0x304+0x29]
+        ID: 5  [0x304+0x2]
+        NAME: "Eve with a longer name"  [0x306+0x18]
+        SCORE: 10000000000  [0x31e+0x8]
+        BORN: 2024-02-29 00:00:00 UTC — 2024-02-29  [0x326+0x7]

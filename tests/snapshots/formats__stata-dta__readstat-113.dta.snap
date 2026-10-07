@@ -1,0 +1,115 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ readstat-113.dta — Stata release 113, 7 variables × 5 observations, "fillyfoal survey", 07 Oct 2026 11:00, little-endian  [0x0+0x64e]
+  ▾ Header  [0x0+0x6d]
+      Release: 113  [0x0+0x1]
+      Byte order: "LOHI (little-endian)"  [0x1+0x1]
+      File type: 1  [0x2+0x1]
+      Variables: 7  [0x4+0x2]
+      Observations: 5  [0x6+0x4]
+      Data label: "fillyfoal survey"  [0xa+0x51]
+      Time stamp: "07 Oct 2026 11:00"  [0x5b+0x12]
+    Variable types  [0x6d+0x7]
+    Variable names  [0x74+0xe7]
+    Sort order  [0x15b+0x10]
+    Display formats  [0x16b+0x54]
+    Value label names  [0x1bf+0xe7]
+    Variable labels  [0x2a6+0x237]
+    Expansion fields — 0 fields  [0x4dd+0x5]
+  ▾ Variables — 7 variables
+    ▾ id — long, %12.0g, "Respondent"
+        Name: "id"
+        Label: "Respondent"
+        Type: "long"
+        Display format: "%12.0g"
+        Value labels: ""
+        Offset in row: 0
+    ▾ small — long, %12.0g, "An int8", labels small0
+        Name: "small"
+        Label: "An int8"
+        Type: "long"
+        Display format: "%12.0g"
+        Value labels: "small0"
+        Offset in row: 4
+    ▾ mid — long, %12.0g, "An int16"
+        Name: "mid"
+        Label: "An int16"
+        Type: "long"
+        Display format: "%12.0g"
+        Value labels: ""
+        Offset in row: 8
+    ▾ ratio — double, %10.0g, "A float"
+        Name: "ratio"
+        Label: "A float"
+        Type: "double"
+        Display format: "%10.0g"
+        Value labels: ""
+        Offset in row: 12
+    ▾ score — double, %10.0g, "Test score"
+        Name: "score"
+        Label: "Test score"
+        Type: "double"
+        Display format: "%10.0g"
+        Value labels: ""
+        Offset in row: 20
+    ▾ name — str22, %-9s, "Full name"
+        Name: "name"
+        Label: "Full name"
+        Type: "str22"
+        Display format: "%-9s"
+        Value labels: ""
+        Offset in row: 28
+    ▾ born — double, %td, "Date of birth"
+        Name: "born"
+        Label: "Date of birth"
+        Type: "double"
+        Display format: "%td"
+        Value labels: ""
+        Offset in row: 50
+  ▾ Observations — 5 rows × 58 bytes  [0x4e2+0x122]
+    ▾ Observation 1 — id=1, small=1 (one), mid=300, ratio=0.5, score=12.5, name="Alice", born=1980-01-15  [0x4e2+0x3a]
+        id: 1  [0x4e2+0x4]
+        small: 1 — one  [0x4e6+0x4]
+        mid: 300  [0x4ea+0x4]
+        ratio: 0.5  [0x4ee+0x8]
+        score: 12.5  [0x4f6+0x8]
+        name: "Alice"  [0x4fe+0x16]
+        born: 1980-01-15 00:00:00 UTC — 1980-01-15  [0x514+0x8]
+    ▾ Observation 2 — id=2, small=-2, mid=-300, ratio=-1.25, score=99, name="Bob", born=1999-12-31  [0x51c+0x3a]
+        id: 2  [0x51c+0x4]
+        small: -2  [0x520+0x4]
+        mid: -300  [0x524+0x4]
+        ratio: -1.25  [0x528+0x8]
+        score: 99  [0x530+0x8]
+        name: "Bob"  [0x538+0x16]
+        born: 1999-12-31 00:00:00 UTC — 1999-12-31  [0x54e+0x8]
+    ▾ Observation 3 — id=3, small=100, mid=0, ratio=., score=., name="Cedomir", born=.  [0x556+0x3a]
+        id: 3  [0x556+0x4]
+        small: 100  [0x55a+0x4]
+        mid: 0  [0x55e+0x4]
+        ratio: "." — missing  [0x562+0x8]
+        score: "." — missing  [0x56a+0x8]
+        name: "Cedomir"  [0x572+0x16]
+        born: "." — missing  [0x588+0x8]
+    ▾ Observation 4 — id=4, small=0, mid=32000, ratio=3, score=7.25, name="", born=1960-01-01  [0x590+0x3a]
+        id: 4  [0x590+0x4]
+        small: 0  [0x594+0x4]
+        mid: 32000  [0x598+0x4]
+        ratio: 3  [0x59c+0x8]
+        score: 7.25  [0x5a4+0x8]
+        name: ""  [0x5ac+0x16]
+        born: 1960-01-01 00:00:00 UTC — 1960-01-01  [0x5c2+0x8]
+    ▾ Observation 5 — id=5, small=7 (seven), mid=1, ratio=0.0010000000474974513, score=10000000000, name="Eve with a longer name", born=2024-02-29  [0x5ca+0x3a]
+        id: 5  [0x5ca+0x4]
+        small: 7 — seven  [0x5ce+0x4]
+        mid: 1  [0x5d2+0x4]
+        ratio: 0.0010000000474974513  [0x5d6+0x8]
+        score: 10000000000  [0x5de+0x8]
+        name: "Eve with a longer name"  [0x5e6+0x16]
+        born: 2024-02-29 00:00:00 UTC — 2024-02-29  [0x5fc+0x8]
+  ▾ Value labels — 1 tables
+    ▾ small0 — 1 = "one", 7 = "seven"  [0x604+0x4a]
+        1: "one"
+        7: "seven"

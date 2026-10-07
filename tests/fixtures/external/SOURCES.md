@@ -337,3 +337,18 @@ and reproduce every file byte for byte.
 | `flatbuffers/` | FlatBuffers Python library 25.12.19 (`Builder`) | reproduced byte-for-byte: `uv run --with flatbuffers==25.12.19 python tests/data/flatbuffers/make.py` (tutorial `Monster` layout, a size-prefixed copy, a long vector of strings) |
 | `capnp/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte: `uv run --with pycapnp==2.2.4 python tests/data/capnp/make.py` (`to_bytes`; `book-segments.bin` with an 8-word first segment, so later objects sit in other segments behind far pointers) |
 | `capnp-packed/` | pycapnp 2.2.4 (Cap'n Proto C++ library) | reproduced byte-for-byte by the same script (`to_bytes_packed`) |
+
+## Statistics packages
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `spss-sav/` | pyreadstat 1.3.6 (ReadStat), pandas 3.0.6 | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/spss-sav/make.py` (`write_sav`: uncompressed, `row_compress` bytecode, `compress` zsav); edit: the creation date and time in the header are overwritten with a fixed value |
+| `spss-por/` | pyreadstat 1.3.6 (ReadStat) | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/spss-por/make.py` (`write_por`); edit: the creation date and time digits are overwritten with a fixed value |
+| `sas-xport/` | pyreadstat 1.3.6 (ReadStat) | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/sas-xport/make.py` (`write_xport`, versions 5 and 8); edit: the `ddMMMyy:hh:mm:ss` time stamps are overwritten with a fixed value |
+| `stata-dta/readstat-113.dta` | pyreadstat 1.3.6 (ReadStat) | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/stata-dta/make.py` (`write_dta` version 8); edit: the time stamp is overwritten with a fixed value of the same length |
+| `stata-dta/readstat-115.dta` | pyreadstat 1.3.6 (ReadStat) | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/stata-dta/make.py` (`write_dta` version 12); edit: the time stamp is overwritten with a fixed value of the same length |
+| `stata-dta/readstat-118.dta` | pyreadstat 1.3.6 (ReadStat) | reproduced byte-for-byte: `uv run --with pyreadstat==1.3.6 --with pandas==3.0.6 python -I tests/data/stata-dta/make.py` (`write_dta` version 14); edit: the time stamp is overwritten with a fixed value of the same length |
+| `stata-dta/pandas-114.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=114`, fixed `time_stamp`), no edits |
+| `stata-dta/pandas-117.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=117`, a strL, fixed `time_stamp`), no edits |
+| `stata-dta/pandas-118.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=118`, fixed `time_stamp`), no edits |
+| `stata-dta/pandas-119.dta` | pandas 3.0.6 (`DataFrame.to_stata`) | reproduced byte-for-byte by the same script (`version=119`, fixed `time_stamp`), no edits |

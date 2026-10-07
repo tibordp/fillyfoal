@@ -1,18 +1,15 @@
-//! Statistics and scientific datasets: SPSS, SAS, Stata, CERN ROOT, NIfTI,
-//! NRRD, HDF4 and legacy VTK.
+//! Scientific datasets: CERN ROOT, NIfTI, NRRD, HDF4 and legacy VTK
+//! (statistics packages live in `stats`).
 
 use crate::bytes::{to_u64, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Record, emit_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
-use crate::record;
 use crate::value::{EnumTable, Value, lookup};
 
-const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 fn text(s: impl Into<String>) -> Value {
@@ -20,139 +17,7 @@ fn text(s: impl Into<String>) -> Value {
 }
 
 // ---------------------------------------------------------------------------
-// Statistics and science: SPSS, SAS, Stata, ROOT, NIfTI, NRRD, HDF4, VTK
-
-declare_format!(pub SPSS = "spss-sav", "SPSS data file", ["sav", "zsav"], "application/x-spss-sav",
-    Probe::Magic(&[(0, b"$FL2"), (0, b"$FL3")]), spss);
-
-record! {
-    pub struct SpssHeader {
-        magic: ascii[4] "Record type",
-        product: ascii[60] "Product name",
-        layout: i32 "Layout code",
-        nominal_case_size: i32 "Nominal case size",
-        compression: i32 "Compression" .enumeration(&[(0, "none"), (1, "bytecode"), (2, "zlib")]),
-        weight: i32 "Weight variable index",
-        cases: i32 "Number of cases",
-        bias: f64 "Compression bias",
-        date: ascii[9] "Creation date",
-        time: ascii[8] "Creation time",
-        label: ascii[64] "File label",
-        _padding: bytes[3] "Padding",
-    }
-}
-
-async fn spss(cx: Cx, input: Input) -> Result<()> {
-    let h: SpssHeader = emit_record(&cx, input.span.sub(0, SpssHeader::SIZE), LE).await?;
-    cx.emit(Node::new("Dictionary and data").span(input.span.tail(SpssHeader::SIZE)));
-    cx.annotate(format!(
-        "SPSS, {} cases, {} ({} {})",
-        h.cases,
-        h.product.trim().trim_start_matches("@(#) "),
-        h.date,
-        h.time
-    ));
-    Ok(())
-}
-
-const SAS_MAGIC: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\xc2\xea\x81\x60\xb3\x14\x11\xcf\xbd\x92\x08\0\x09\xc7\x31\x8c\x18\x1f\x10\x11";
-
-declare_format!(pub SAS7BDAT = "sas7bdat", "SAS data set", ["sas7bdat", "sas7bcat"], "application/x-sas-data",
-    Probe::Magic(&[(0, SAS_MAGIC)]), sas7bdat);
-
-async fn sas7bdat(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 0x120)).await?;
-    let align = if head.get(32) == Some(&0x33) { 4u64 } else { 0 };
-    let little = head.get(37) == Some(&0x01);
-    let name = crate::text::until_nul(head.get(92..156).unwrap_or_default());
-    let kind = crate::text::until_nul(head.get(156..164).unwrap_or_default());
-    cx.emit(Node::new("Magic").span(file.sub(0, 32)));
-    cx.emit(
-        Node::new("Dataset name")
-            .span(file.sub(92, 64))
-            .value(text(name.trim())),
-    );
-    cx.emit(
-        Node::new("File type")
-            .span(file.sub(156, 8))
-            .value(text(kind.trim())),
-    );
-    let version_at = 216u64
-        .saturating_add(align.saturating_mul(2))
-        .saturating_add(64);
-    let version = crate::text::until_nul(&cx.read_avail(file.sub(version_at, 8)).await?);
-    cx.emit(
-        Node::new("SAS release")
-            .span(file.sub(version_at, 8))
-            .value(text(version.trim())),
-    );
-    cx.annotate(format!(
-        "SAS {} {:?}, release {}, {}-bit {}",
-        kind.trim(),
-        name.trim(),
-        version.trim(),
-        if align == 4 { 64 } else { 32 },
-        if little {
-            "little-endian"
-        } else {
-            "big-endian"
-        }
-    ));
-    Ok(())
-}
-
-declare_format!(pub STATA = "stata-dta", "Stata data file", ["dta"], "application/x-stata-dta",
-    Probe::Magic(&[(0, b"<stata_dta>")]), stata);
-
-async fn stata(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read_avail(file.sub(0, 512)).await?;
-    let text_head = String::from_utf8_lossy(&head).into_owned();
-    let tag = |name: &str| {
-        let open = format!("<{name}>");
-        let start = text_head.find(&open)?.saturating_add(open.len());
-        let end = text_head.get(start..)?.find(&format!("</{name}>"))?;
-        Some((
-            start,
-            text_head.get(start..start.saturating_add(end))?.to_owned(),
-        ))
-    };
-    let release = tag("release").map(|(_, r)| r).unwrap_or_default();
-    let order = tag("byteorder").map(|(_, r)| r).unwrap_or_default();
-    cx.emit(Node::new("Release").value(text(release.clone())));
-    cx.emit(Node::new("Byte order").value(text(order.clone())));
-    let little = order == "LSF";
-    let mut vars = 0u64;
-    let mut obs = 0u64;
-    if let Some((k_at, _)) = tag("K") {
-        let at = crate::bytes::to_u64(k_at);
-        let raw = cx.read_avail(file.sub(at, 2)).await?;
-        vars = u64::from(
-            if little {
-                u16_le(&raw, 0)
-            } else {
-                crate::bytes::u16_be(&raw, 0)
-            }
-            .unwrap_or(0),
-        );
-        let n_at = text_head.find("<N>").map_or(0, |p| p.saturating_add(3));
-        let raw = cx
-            .read_avail(file.sub(crate::bytes::to_u64(n_at), 8))
-            .await?;
-        obs = if little {
-            crate::bytes::u64_le(&raw, 0)
-        } else {
-            crate::bytes::u64_be(&raw, 0)
-        }
-        .unwrap_or(0);
-    }
-    cx.emit(Node::new("Data").span(file));
-    cx.annotate(format!(
-        "Stata release {release}, {vars} variables, {obs} observations"
-    ));
-    Ok(())
-}
+// Science: ROOT, NIfTI, NRRD, HDF4, VTK
 
 declare_format!(pub ROOT = "cern-root", "CERN ROOT file", ["root"], "application/x-root",
     Probe::Magic(&[(0, b"root\0")]), cern_root);

@@ -1,7 +1,8 @@
 //! Scientific and lab data: bioinformatics ([`bio`]), instrument recordings
 //! (`instruments`, `waveforms`), spectroscopy, microscopy and lab images
 //! (`microscopy`, `lab_images`), FITS and DICOM (`imaging`), molecular
-//! simulation, and statistics and science datasets (`datasets`).
+//! simulation, statistics package data files (`stats`: SPSS, SAS, Stata)
+//! and other science datasets (`datasets`).
 //!
 //! Geoscience lives in [`super::geo`].
 
@@ -13,4 +14,5 @@ pub mod lab_images;
 pub mod microscopy;
 pub mod molecular;
 pub mod spectroscopy;
+pub mod stats;
 pub mod waveforms;
