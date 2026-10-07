@@ -274,3 +274,23 @@ fn format_names_are_unique() {
     names.dedup();
     assert_eq!(before, names.len(), "duplicate format names");
 }
+
+/// Cargo reads every `Cargo.toml` in the repository when a dependent crate
+/// looks for this package, and warns about malformed ones on every command
+/// in that crate: fixtures must not use the name.
+#[test]
+fn no_fixture_is_a_cargo_manifest() {
+    fn walk(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
+        for entry in std::fs::read_dir(dir).unwrap().flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, found);
+            } else if path.file_name().is_some_and(|n| n == "Cargo.toml") {
+                found.push(path);
+            }
+        }
+    }
+    let mut found = Vec::new();
+    walk(std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/tests")), &mut found);
+    assert!(found.is_empty(), "rename these fixtures: {found:?}");
+}

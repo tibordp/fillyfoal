@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Cargo.toml — TOML document: [package] demo, 4 tables  [0x0+0x23c]
+▾ manifest.toml — TOML document: [package] demo, 4 tables  [0x0+0x23c]
     title: "TOML \"example\" é"  [0x15+0x19]
     literal: "C:\\Users\\nobody"  [0x39+0x11]
     quoted key: 1000  [0x5a+0x5]
