@@ -705,17 +705,7 @@ declare_format!(pub DUCKDB = "duckdb", "DuckDB database", ["duckdb", "db"], "app
     Probe::Custom(duckdb_probe), duckdb);
 
 async fn duckdb(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.block(file.sub(0, 4096)).await?;
-    let mut f = Fields::emitting(&cx, &head, LE);
-    f.u64("Checksum").hex().emit()?;
-    f.ascii("Magic", 4).emit()?;
-    let version = f.u64("Storage version").emit()?;
-    f.u64("Flags").hex().emit()?;
-    cx.emit(Node::new("Database headers").span(file.sub(4096, 8192)));
-    cx.emit(Node::new("Blocks").span(file.tail(12288)));
-    cx.annotate(format!("DuckDB database, storage version {version}"));
-    Ok(())
+    crate::formats::data::duckdb::dissect(cx, input).await
 }
 
 fn lmdb_probe(h: &Head<'_>) -> bool {
