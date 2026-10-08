@@ -14,7 +14,9 @@
 //! Mark Adler's `blast` (zlib `contrib/blast`, zlib license; see
 //! `THIRD-PARTY.md`).
 
-use crate::codec::filters::Filter;
+use std::sync::Arc;
+
+use crate::codec::pipeline::{Decode, Step, Streaming, decode_all};
 use crate::error::{Diagnostic, Result};
 
 fn too_big(limit: usize) -> Diagnostic {
@@ -29,10 +31,6 @@ struct Bits<'a> {
 }
 
 impl Bits<'_> {
-    fn available(&self) -> usize {
-        self.data.len().saturating_mul(8).saturating_sub(self.pos)
-    }
-
     fn bit(&mut self) -> Result<u32> {
         let b = self
             .data
@@ -49,10 +47,6 @@ impl Bits<'_> {
             v |= self.bit()? << i;
         }
         Ok(v)
-    }
-
-    fn bytes_used(&self) -> usize {
-        self.pos.div_ceil(8)
     }
 }
 
@@ -163,8 +157,57 @@ pub struct Implode {
     pub size: Option<u64>,
 }
 
-impl Filter for Implode {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+/// Ends a step that ran out of input: keep what it produced, or ask for
+/// more (the caller rolls the step back).
+fn need(progress: bool, what: &str) -> Result<Step> {
+    if progress {
+        Ok(Step::More)
+    } else {
+        Err(Diagnostic::malformed(format!("{what}: needs more input")))
+    }
+}
+
+/// The trees of a method-6 stream.
+struct Trees {
+    literals: Option<Code>,
+    lengths: Code,
+    distances: Code,
+}
+
+/// An incremental ZIP method-6 decoder: a symbol at a time, a step of
+/// output per call, keeping its window (4 or 8 KiB) of output. Positions
+/// are relative to the buffers as they are now (see "Releasing" in the
+/// pipeline docs).
+#[derive(Clone)]
+pub struct Explode {
+    params: Implode,
+    trees: Option<Arc<Trees>>,
+    /// Bit position in the input (after the trees).
+    bit: usize,
+    /// Output produced so far, released bytes included.
+    produced: usize,
+    /// Once done, the input consumed: all of it, as before.
+    finished: Option<usize>,
+}
+
+impl Explode {
+    pub fn new(params: Implode) -> Self {
+        Explode {
+            params,
+            trees: None,
+            bit: 0,
+            produced: 0,
+            finished: None,
+        }
+    }
+
+    fn window(&self) -> usize {
+        if self.params.large_window { 8192 } else { 4096 }
+    }
+
+    /// Reads the trees at the start of the input; returns them and the
+    /// bytes they take.
+    fn read_trees(&self, input: &[u8]) -> Result<(Trees, usize)> {
         const WHAT: &str = "implode";
         let mut pos = 0usize;
         let mut tree = |n: usize| -> Result<Code> {
@@ -178,68 +221,139 @@ impl Filter for Implode {
             pos = pos.saturating_add(1).saturating_add(count);
             Code::new(&expand_lengths(packed, 1, n, WHAT)?, WHAT)
         };
-        let literals = if self.literal_tree {
+        let literals = if self.params.literal_tree {
             Some(tree(256)?)
         } else {
             None
         };
         let lengths = tree(64)?;
         let distances = tree(64)?;
-        let mut bits = Bits {
-            data: input.get(pos..).unwrap_or_default(),
-            pos: 0,
-            what: WHAT,
-        };
-        let size = match self.size {
-            Some(s) => {
-                let s = usize::try_from(s).unwrap_or(usize::MAX);
-                if s > limit {
-                    return Err(too_big(limit));
-                }
-                Some(s)
+        Ok((
+            Trees {
+                literals,
+                lengths,
+                distances,
+            },
+            pos,
+        ))
+    }
+}
+
+impl Decode for Explode {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        const WHAT: &str = "implode";
+        let trees = match &self.trees {
+            Some(trees) => Arc::clone(trees),
+            None => {
+                let (trees, pos) = self.read_trees(input)?;
+                let trees = Arc::new(trees);
+                self.trees = Some(Arc::clone(&trees));
+                self.bit = pos.saturating_mul(8);
+                trees
             }
-            None => None,
         };
+        let size = self
+            .params
+            .size
+            .map(|s| usize::try_from(s).unwrap_or(usize::MAX));
+        if let Some(s) = size
+            && s.saturating_sub(self.produced) > limit.saturating_sub(out.len())
+        {
+            return Err(too_big(limit));
+        }
         let (low_bits, min_len) = (
-            if self.large_window { 7 } else { 6 },
-            if self.literal_tree { 3 } else { 2 },
+            if self.params.large_window { 7 } else { 6 },
+            if self.params.literal_tree { 3 } else { 2 },
         );
-        let mut out = Vec::with_capacity(size.unwrap_or(0).min(1 << 24));
+        let goal = out.len().saturating_add(step);
+        let first = out.len();
         loop {
-            match size {
-                Some(s) if out.len() >= s => break,
+            let progress = out.len() > first;
+            let available = input.len().saturating_mul(8).saturating_sub(self.bit);
+            let end = match size {
+                Some(s) => self.produced >= s,
                 // Without a size, stop when no complete symbol can follow.
-                None if bits.available() < 8 => break,
-                _ => {}
+                None => available < 8,
+            };
+            if end {
+                if !eof {
+                    return need(progress, WHAT);
+                }
+                self.finished = Some(input.len());
+                return Ok(Step::Done);
             }
+            if out.len() >= goal {
+                return Ok(Step::More);
+            }
+            // A shortage of input inside a symbol fails the step (rolled
+            // back until more input arrives).
+            let mut bits = Bits {
+                data: input,
+                pos: self.bit,
+                what: WHAT,
+            };
+            let before = out.len();
             if bits.bit()? == 1 {
-                let b = match &literals {
+                let b = match &trees.literals {
                     Some(code) => code.decode(&mut bits)?,
                     None => usize::try_from(bits.bits(8)?).unwrap_or(0),
                 };
                 out.push(u8::try_from(b).unwrap_or(0));
             } else {
                 let low = usize::try_from(bits.bits(low_bits)?).unwrap_or(0);
-                let high = distances.decode(&mut bits)?;
+                let high = trees.distances.decode(&mut bits)?;
                 let dist = (high << low_bits | low).saturating_add(1);
-                let mut len = lengths.decode(&mut bits)?;
+                let mut len = trees.lengths.decode(&mut bits)?;
                 if len == 63 {
                     len = len.saturating_add(usize::try_from(bits.bits(8)?).unwrap_or(0));
                 }
                 len = len.saturating_add(min_len);
                 if let Some(s) = size {
-                    len = len.min(s.saturating_sub(out.len()));
+                    len = len.min(s.saturating_sub(self.produced));
                 }
                 if out.len().saturating_add(len) > limit {
                     return Err(too_big(limit));
                 }
-                copy_back(&mut out, dist, len);
+                copy_back(out, dist, len);
             }
             if out.len() > limit {
                 return Err(too_big(limit));
             }
+            self.bit = bits.pos;
+            self.produced = self
+                .produced
+                .saturating_add(out.len().saturating_sub(before));
         }
-        Ok(out)
+    }
+
+    fn consumed(&self) -> usize {
+        self.finished.unwrap_or_else(|| self.bit.div_ceil(8))
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.bit / 8
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.bit = self.bit.saturating_sub(n.saturating_mul(8));
+        self.finished = self.finished.map(|f| f.saturating_sub(n));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        // Distances reach a window back; before a full window, references
+        // before the start read zeros, so keep everything.
+        if self.produced < self.window() {
+            0
+        } else {
+            out_len.saturating_sub(self.window())
+        }
     }
 }
 
@@ -256,74 +370,171 @@ const DCL_DISTANCES: [u8; 7] = [2, 20, 53, 230, 247, 151, 248];
 const DCL_BASE: [u16; 16] = [3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264];
 const DCL_EXTRA: [u8; 16] = [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8];
 
-/// Decodes a DCL implode stream; returns the output and the bytes used.
-pub fn blast(input: &[u8], limit: usize) -> Result<(Vec<u8>, usize)> {
-    const WHAT: &str = "DCL implode";
-    let bad = |what: &str| Diagnostic::malformed(format!("DCL implode: {what}"));
-    let coded = match input.first() {
-        Some(0) => false,
-        Some(1) => true,
-        Some(_) => return Err(bad("bad literal mode")),
-        None => return Err(bad("truncated header")),
-    };
-    let dict_bits = match input.get(1) {
-        Some(&b @ 4..=6) => u32::from(b),
-        Some(_) => return Err(bad("bad dictionary size")),
-        None => return Err(bad("truncated header")),
-    };
-    let literals = Code::new(&expand_lengths(&DCL_LITERALS, 0, 256, WHAT)?, WHAT)?;
-    let lengths = Code::new(&expand_lengths(&DCL_LENGTHS, 0, 16, WHAT)?, WHAT)?;
-    let distances = Code::new(&expand_lengths(&DCL_DISTANCES, 0, 64, WHAT)?, WHAT)?;
-    let mut bits = Bits {
-        data: input.get(2..).unwrap_or_default(),
-        pos: 0,
-        what: WHAT,
-    };
-    let mut out = Vec::new();
-    loop {
-        if bits.bit()? == 1 {
-            let sym = lengths.decode(&mut bits)?;
-            let base = DCL_BASE.get(sym).copied().unwrap_or(0);
-            let extra = DCL_EXTRA.get(sym).copied().unwrap_or(0);
-            let len = usize::from(base)
-                .saturating_add(usize::try_from(bits.bits(u32::from(extra))?).unwrap_or(0));
-            if len == 519 {
-                break; // end code
-            }
-            let low_bits = if len == 2 { 2 } else { dict_bits };
-            let high = distances.decode(&mut bits)?;
-            let low = usize::try_from(bits.bits(low_bits)?).unwrap_or(0);
-            let dist = (high << low_bits | low).saturating_add(1);
-            if dist > out.len() {
-                return Err(bad("distance before the start of the output"));
-            }
-            if out.len().saturating_add(len) > limit {
-                return Err(too_big(limit));
-            }
-            copy_back(&mut out, dist, len);
-        } else {
-            let b = if coded {
-                literals.decode(&mut bits)?
-            } else {
-                usize::try_from(bits.bits(8)?).unwrap_or(0)
-            };
-            out.push(u8::try_from(b).unwrap_or(0));
-            if out.len() > limit {
-                return Err(too_big(limit));
-            }
-        }
-    }
-    Ok((out, bits.bytes_used().saturating_add(2)))
+/// The header and codes of a DCL stream.
+struct DclSetup {
+    coded: bool,
+    dict_bits: u32,
+    literals: Code,
+    lengths: Code,
+    distances: Code,
 }
 
-/// A DCL implode stream.
-#[derive(Clone, Copy)]
-pub struct DclImplode;
+/// DCL distances reach at most 4 KiB back.
+const DCL_WINDOW: usize = 4096;
 
-impl Filter for DclImplode {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        blast(input, limit).map(|(out, _)| out)
+/// An incremental DCL implode decoder: a symbol at a time, a step of
+/// output per call, keeping its window of output. Positions are relative
+/// to the buffers as they are now (see "Releasing" in the pipeline docs).
+#[derive(Clone, Default)]
+pub struct DclExplode {
+    setup: Option<Arc<DclSetup>>,
+    /// Bit position in the input (from the start of the header).
+    bit: usize,
+    /// Output produced so far, released bytes included.
+    produced: usize,
+    /// Bytes used, once the end code has been read.
+    end: Option<usize>,
+    /// Once done, the input consumed: all of it, as before.
+    finished: Option<usize>,
+}
+
+impl DclExplode {
+    /// The bytes the stream used up to its end code (header included),
+    /// once it has been read.
+    pub fn used(&self) -> Option<usize> {
+        self.end
     }
+
+    fn read_setup(input: &[u8]) -> Result<DclSetup> {
+        const WHAT: &str = "DCL implode";
+        let bad = |what: &str| Diagnostic::malformed(format!("DCL implode: {what}"));
+        let coded = match input.first() {
+            Some(0) => false,
+            Some(1) => true,
+            Some(_) => return Err(bad("bad literal mode")),
+            None => return Err(bad("truncated header")),
+        };
+        let dict_bits = match input.get(1) {
+            Some(&b @ 4..=6) => u32::from(b),
+            Some(_) => return Err(bad("bad dictionary size")),
+            None => return Err(bad("truncated header")),
+        };
+        Ok(DclSetup {
+            coded,
+            dict_bits,
+            literals: Code::new(&expand_lengths(&DCL_LITERALS, 0, 256, WHAT)?, WHAT)?,
+            lengths: Code::new(&expand_lengths(&DCL_LENGTHS, 0, 16, WHAT)?, WHAT)?,
+            distances: Code::new(&expand_lengths(&DCL_DISTANCES, 0, 64, WHAT)?, WHAT)?,
+        })
+    }
+}
+
+impl Decode for DclExplode {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        const WHAT: &str = "DCL implode";
+        let bad = |what: &str| Diagnostic::malformed(format!("DCL implode: {what}"));
+        let setup = match &self.setup {
+            Some(setup) => Arc::clone(setup),
+            None => {
+                let setup = Arc::new(Self::read_setup(input)?);
+                self.setup = Some(Arc::clone(&setup));
+                self.bit = 16;
+                setup
+            }
+        };
+        let goal = out.len().saturating_add(step);
+        let first = out.len();
+        loop {
+            if self.end.is_some() {
+                if !eof {
+                    return need(out.len() > first, WHAT);
+                }
+                self.finished = Some(input.len());
+                return Ok(Step::Done);
+            }
+            if out.len() >= goal {
+                return Ok(Step::More);
+            }
+            // A shortage of input inside a symbol fails the step (rolled
+            // back until more input arrives).
+            let mut bits = Bits {
+                data: input,
+                pos: self.bit,
+                what: WHAT,
+            };
+            let before = out.len();
+            if bits.bit()? == 1 {
+                let sym = setup.lengths.decode(&mut bits)?;
+                let base = DCL_BASE.get(sym).copied().unwrap_or(0);
+                let extra = DCL_EXTRA.get(sym).copied().unwrap_or(0);
+                let len = usize::from(base)
+                    .saturating_add(usize::try_from(bits.bits(u32::from(extra))?).unwrap_or(0));
+                if len == 519 {
+                    // The end code.
+                    self.bit = bits.pos;
+                    self.end = Some(bits.pos.div_ceil(8));
+                    continue;
+                }
+                let low_bits = if len == 2 { 2 } else { setup.dict_bits };
+                let high = setup.distances.decode(&mut bits)?;
+                let low = usize::try_from(bits.bits(low_bits)?).unwrap_or(0);
+                let dist = (high << low_bits | low).saturating_add(1);
+                if dist > self.produced {
+                    return Err(bad("distance before the start of the output"));
+                }
+                if out.len().saturating_add(len) > limit {
+                    return Err(too_big(limit));
+                }
+                copy_back(out, dist, len);
+            } else {
+                let b = if setup.coded {
+                    setup.literals.decode(&mut bits)?
+                } else {
+                    usize::try_from(bits.bits(8)?).unwrap_or(0)
+                };
+                out.push(u8::try_from(b).unwrap_or(0));
+                if out.len() > limit {
+                    return Err(too_big(limit));
+                }
+            }
+            self.bit = bits.pos;
+            self.produced = self
+                .produced
+                .saturating_add(out.len().saturating_sub(before));
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.finished.unwrap_or_else(|| self.bit.div_ceil(8))
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.bit / 8
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.bit = self.bit.saturating_sub(n.saturating_mul(8));
+        self.end = self.end.map(|e| e.saturating_sub(n));
+        self.finished = self.finished.map(|f| f.saturating_sub(n));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(DCL_WINDOW)
+    }
+}
+
+/// Decodes a DCL implode stream; returns the output and the bytes used.
+pub fn blast(input: &[u8], limit: usize) -> Result<(Vec<u8>, usize)> {
+    let mut decoder = Streaming(DclExplode::default());
+    let out = decode_all(&mut decoder, input, limit)?;
+    Ok((out, decoder.0.used().unwrap_or(input.len())))
 }
 
 #[cfg(test)]
