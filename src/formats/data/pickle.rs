@@ -248,6 +248,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
         node = node.desc(format!("opcode {index} at {pos:#x}"));
+        cx.progress(end, file.len);
         cx.push(node).await;
         index = index.saturating_add(1);
         pos = end;

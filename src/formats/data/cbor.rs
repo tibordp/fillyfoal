@@ -170,6 +170,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.annotate(format!("CBOR, top-level {}", describe(&h)));
             node = node.desc("First item of the CBOR sequence");
         }
+        cx.progress(end, input.span.len);
         cx.push(node).await;
         pos = end;
         index = index.saturating_add(1);

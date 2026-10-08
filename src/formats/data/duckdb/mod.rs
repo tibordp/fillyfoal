@@ -631,7 +631,10 @@ async fn free_list(cx: &Cx, geo: Geo, word: u64) -> Result<(Span, Usage, Vec<Nod
     let count = u64_le(&cx.read(rd(pos, 8)?).await?, 0).unwrap_or(0);
     let list = rd(pos.saturating_add(8), count.saturating_mul(8))?;
     let data = cx.read(list).await?;
-    for c in data.as_chunks::<8>().0 {
+    for (i, c) in data.as_chunks::<8>().0.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         usage.free.insert(u64_le(c, 0).unwrap_or(0));
     }
     kids.push(
@@ -645,7 +648,10 @@ async fn free_list(cx: &Cx, geo: Geo, word: u64) -> Result<(Span, Usage, Vec<Nod
     let count = u64_le(&cx.read(rd(pos, 8)?).await?, 0).unwrap_or(0);
     let list = rd(pos.saturating_add(8), count.saturating_mul(12))?;
     let data = cx.read(list).await?;
-    for c in data.as_chunks::<12>().0 {
+    for (i, c) in data.as_chunks::<12>().0.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let id = u64_le(c, 0).unwrap_or(0);
         let uses = crate::bytes::u32_le(c, 8).unwrap_or(0);
         usage.shared.insert(id, uses);
@@ -670,7 +676,10 @@ async fn free_list(cx: &Cx, geo: Geo, word: u64) -> Result<(Span, Usage, Vec<Nod
     let count = u64_le(&cx.read(rd(pos, 8)?).await?, 0).unwrap_or(0);
     let list = rd(pos.saturating_add(8), count.saturating_mul(16))?;
     let data = cx.read(list).await?;
-    for c in data.as_chunks::<16>().0 {
+    for (i, c) in data.as_chunks::<16>().0.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         usage
             .metadata
             .insert(u64_le(c, 0).unwrap_or(0), u64_le(c, 8).unwrap_or(0));

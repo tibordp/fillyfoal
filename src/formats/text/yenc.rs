@@ -5,6 +5,9 @@
 //!
 //! Reference: yEnc 1.3 (<http://www.yenc.org/yenc-draft.1.3.txt>).
 
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use crate::cx::Cx;
 use crate::error::{DiagKind, Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
@@ -114,22 +117,58 @@ fn parse(line: &[u8], keyword: &[u8]) -> Option<YLine> {
 /// bytes are escaped as `=` and the value plus 106. Line breaks are not
 /// data.
 pub fn ydecode(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
-    let mut escape = false;
-    for &b in data {
-        match b {
-            b'\r' | b'\n' => continue,
-            b'=' if !escape => {
-                escape = true;
-                continue;
-            }
-            _ => {}
+    let mut y = YDecoder::new(Expect::default(), data.len());
+    decode::Step::step(&mut y, data, usize::MAX);
+    y.out
+}
+
+/// [`ydecode`] a bounded number of bytes at a time, with the decoded size
+/// checked against the promise at the end.
+struct YDecoder {
+    expect: Expect,
+    pos: usize,
+    escape: bool,
+    out: Vec<u8>,
+}
+
+impl YDecoder {
+    fn new(expect: Expect, len: usize) -> Self {
+        YDecoder {
+            expect,
+            pos: 0,
+            escape: false,
+            out: Vec::with_capacity(len),
         }
-        let v = if escape { b.wrapping_sub(64) } else { b };
-        escape = false;
-        out.push(v.wrapping_sub(42));
     }
-    out
+}
+
+impl decode::Step for YDecoder {
+    fn step(&mut self, data: &[u8], limit: usize) -> bool {
+        let end = self.pos.saturating_add(limit).min(data.len());
+        for &b in data.get(self.pos..end).unwrap_or_default() {
+            match b {
+                b'\r' | b'\n' => continue,
+                b'=' if !self.escape => {
+                    self.escape = true;
+                    continue;
+                }
+                _ => {}
+            }
+            let v = if self.escape { b.wrapping_sub(64) } else { b };
+            self.escape = false;
+            self.out.push(v.wrapping_sub(42));
+        }
+        self.pos = end;
+        self.pos >= data.len()
+    }
+
+    fn finish(self) -> Decoded {
+        let error = self.expect.check(&self.out);
+        Decoded {
+            bytes: self.out,
+            error,
+        }
+    }
 }
 
 /// What a block's trailer and headers promise about its decoded bytes.
@@ -279,23 +318,33 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             end,
         };
         count = count.saturating_add(1);
+        lines.progress();
         cx.push(block_node(&block)).await;
         if blocks.len() < MAX_BLOCKS {
             blocks.push(block);
         }
     }
-    // Parts of the same file, joined.
+    // Parts of the same file, joined (names in order of appearance; a map
+    // keeps this linear in the number of blocks).
     let mut names: Vec<String> = Vec::new();
-    for b in &blocks {
-        let name = b.name();
-        if b.part.is_some() && !names.contains(&name) {
-            names.push(name);
+    let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+    for (i, b) in blocks.iter().enumerate() {
+        if b.part.is_none() {
+            continue;
+        }
+        match groups.entry(b.name()) {
+            Entry::Occupied(e) => e.into_mut().push(i),
+            Entry::Vacant(e) => {
+                names.push(e.key().clone());
+                e.insert(vec![i]);
+            }
         }
     }
     for name in names {
-        let mut parts: Vec<Block> = blocks
+        let indexes = groups.remove(&name).unwrap_or_default();
+        let mut parts: Vec<Block> = indexes
             .iter()
-            .filter(|b| b.part.is_some() && b.name() == name)
+            .filter_map(|&i| blocks.get(i))
             .cloned()
             .collect();
         parts.sort_by_key(Block::offset);
@@ -413,18 +462,25 @@ async fn block_fields(cx: Cx, b: Block) -> Result<()> {
 /// checked.
 async fn decode_block(cx: &Cx, b: &Block) -> Result<(Span, Option<Diagnostic>)> {
     let expect = b.expect();
-    decode::derive(cx, b.body, "ydecode", move |d| {
-        let bytes = ydecode(d);
-        let error = expect.check(&bytes);
-        Decoded { bytes, error }
-    })
-    .await
+    decode::derive_stepped(cx, b.body, "ydecode", |len| YDecoder::new(expect, len)).await
 }
 
 /// The CRC-32 of the bytes of `span`, checked against the trailer.
 async fn crc_node(cx: &Cx, span: Span, want: Option<u32>) -> Result<Node> {
-    let data = crate::codec::read_all(cx, span).await?;
-    let got = crate::codec::crc32(&data);
+    // In pieces: each read is a suspension point, so a large body is
+    // checksummed over several steps.
+    const PIECE: u64 = 256 * 1024;
+    let mut crc = !0u32;
+    let mut pos = 0u64;
+    while pos < span.len {
+        let data = cx.read(span.sub(pos, PIECE)).await?;
+        if data.is_empty() {
+            break;
+        }
+        crc = crate::codec::crc::crc32_update(crc, &data);
+        pos = pos.saturating_add(crate::bytes::to_u64(data.len()));
+    }
+    let got = !crc;
     let node = Node::new("CRC-32").value(Value::UInt {
         value: u64::from(got),
         bits: 32,

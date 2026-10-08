@@ -97,6 +97,7 @@ async fn fields(cx: &Cx, span: Span, depth: u32) -> Result<u64> {
             node = node.diag(Diagnostic::malformed("field number above 2^29 - 1"));
         }
         count = count.saturating_add(1);
+        cx.progress(cur.pos(), span.len);
         cx.push(node.span(cur.since(start))).await;
     }
     Ok(count)

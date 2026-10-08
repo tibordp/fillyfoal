@@ -325,7 +325,7 @@ async fn transcode(
         Some(found) => found,
         None => {
             let data = crate::codec::read_all(cx, body).await?;
-            let text = encoding.decode(&data);
+            let text = decode_stepped(cx, encoding, &data).await;
             let consumed = to_u64(data.len());
             cx.add_derived(origin, text.into_bytes(), consumed, None)?
         }
@@ -335,6 +335,36 @@ async fn transcode(
         encoding,
         bom,
     })
+}
+
+/// [`Encoding::decode`] of a whole (up to `max_derived`-sized) body, a
+/// chunk at a time with a checkpoint in between. Chunks end on code unit
+/// boundaries and never between the halves of a UTF-16 surrogate pair, so
+/// the result is the same as decoding everything at once.
+pub(super) async fn decode_stepped(cx: &Cx, encoding: Encoding, data: &[u8]) -> String {
+    const CHUNK: usize = 64 * 1024; // a multiple of every code unit size
+    if encoding == Encoding::Utf8 {
+        // Not chunked: a cut could fall inside a multi-byte sequence (and
+        // UTF-8 bodies are never transcoded, see `prepare_declared`).
+        return encoding.decode(data);
+    }
+    let mut out = String::with_capacity(data.len());
+    let mut rest = data;
+    while !rest.is_empty() {
+        let mut n = CHUNK.min(rest.len());
+        if n < rest.len() {
+            let last = encoding.code_unit(rest.get(n.saturating_sub(2)..n).unwrap_or_default());
+            let utf16 = matches!(encoding, Encoding::Utf16Le | Encoding::Utf16Be);
+            if utf16 && last.is_some_and(|u| (0xd800..0xdc00).contains(&u)) {
+                n = n.saturating_sub(2);
+            }
+        }
+        let (chunk, tail) = rest.split_at_checked(n).unwrap_or((rest, &[]));
+        out.push_str(&encoding.decode(chunk));
+        rest = tail;
+        cx.checkpoint().await;
+    }
+    out
 }
 
 /// The value of `name="..."` (or `'...'`, or unquoted) in `text`, matched

@@ -133,6 +133,7 @@ async fn asdf(cx: Cx, input: Input) -> Result<()> {
     let mut pos = tree_end;
     let mut blocks = 0u32;
     while pos.saturating_add(6) <= file.len {
+        cx.progress(pos, file.len);
         let h = cx.read(file.sub(pos, 6)).await?;
         if !h.starts_with(b"\xd3BLK") {
             break;

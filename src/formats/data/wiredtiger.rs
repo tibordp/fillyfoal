@@ -35,7 +35,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
-use crate::codec::{Codec, crc::crc32c};
+use crate::codec::{Codec, crc::crc32c_update};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::plural;
@@ -56,6 +56,8 @@ const COMPRESS_SKIP: u64 = 64;
 const EXTLIST_MAGIC: u64 = 71_002;
 /// Nesting of configuration strings.
 const MAX_CONFIG_DEPTH: usize = 16;
+/// The longest configuration string shown as a tree.
+const MAX_CONFIG_LEN: usize = 64 * 1024;
 
 pub static BTREE: Format = Format {
     name: "wiredtiger-btree",
@@ -168,7 +170,7 @@ fn vint(data: &[u8], pos: usize) -> Option<(i64, usize)> {
     }
 }
 
-fn crc_with_zeroed(block: &[u8], at: usize, len: usize) -> u32 {
+async fn crc_with_zeroed(cx: &Cx, block: &[u8], at: usize, len: usize) -> u32 {
     let mut copy = block
         .get(..len.min(block.len()))
         .unwrap_or_default()
@@ -176,7 +178,13 @@ fn crc_with_zeroed(block: &[u8], at: usize, len: usize) -> u32 {
     if let Some(f) = copy.get_mut(at..at.saturating_add(4)) {
         f.fill(0);
     }
-    crc32c(&copy)
+    // Pages can be large: a piece at a time.
+    let mut crc = !0u32;
+    for piece in copy.chunks(64 * 1024) {
+        crc = crc32c_update(crc, piece);
+        cx.checkpoint().await;
+    }
+    !crc
 }
 
 pub async fn btree(cx: Cx, input: Input) -> Result<()> {
@@ -188,9 +196,9 @@ pub async fn btree(cx: Cx, input: Input) -> Result<()> {
     let mut sum = Node::new("Checksum")
         .span(file.sub(8, 4))
         .value(hex(stored.into(), 32));
-    if crc_with_zeroed(&desc, 8, desc.len()) == stored {
+    if crc_with_zeroed(&cx, &desc, 8, desc.len()).await == stored {
         sum = sum.summary("valid (CRC-32C)");
-    } else if crc_with_zeroed(&desc, 8, 512) == stored {
+    } else if crc_with_zeroed(&cx, &desc, 8, 512).await == stored {
         sum = sum.summary("valid (CRC-32C over 512 bytes)");
     } else {
         sum = sum.diag(Diagnostic::warning("checksum mismatch"));
@@ -303,6 +311,7 @@ async fn blocks(cx: Cx, (input, file): (Input, Span)) -> Result<()> {
         let at = (pos, index);
         cx.mark(move || at);
         let size = u64::from(h.disk_size);
+        cx.progress(pos.saturating_add(size), file.len);
         cx.push(
             Node::new(format!("Page {pos:#x}"))
                 .span(file.sub(pos, size))
@@ -381,7 +390,7 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
     let mut sum = Node::new("Checksum")
         .span(span.sub(32, 4))
         .value(hex(stored.into(), 32));
-    sum = if crc_with_zeroed(&block, 32, covered) == stored {
+    sum = if crc_with_zeroed(&cx, &block, 32, covered).await == stored {
         sum.summary(if bflags & 1 != 0 {
             "valid (CRC-32C of the block)"
         } else {
@@ -664,7 +673,9 @@ fn item_node(name: &str, input: Input, span: Span, d: &[u8], key: bool) -> Node 
             .all(|&b| (0x20..0x7f).contains(&b) || b == b'\n')
     {
         let s = String::from_utf8_lossy(body).into_owned();
-        if s.contains('=') {
+        // Configuration strings are short; a page-sized one is not parsed
+        // into a tree while its page's cells are listed.
+        if s.contains('=') && body.len() <= MAX_CONFIG_LEN {
             let items = config(body, 0, 0, span).0;
             if !items.is_empty() {
                 return node.value(text(s)).lazy(emit_all, Arc::new(items));

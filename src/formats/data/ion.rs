@@ -287,6 +287,7 @@ async fn symbol_table(
                 let mut segs = Vec::new();
                 let mut p = vbody;
                 while p < vend {
+                    r.cx().checkpoint().await;
                     let ih = header(r, p, vend).await?;
                     if ih.t == 13 && !ih.null {
                         let (name, max_id) =
@@ -333,6 +334,7 @@ async fn import_entry(
     let (mut name, mut max_id) = (None, 0u64);
     let mut pos = body;
     while pos < end {
+        r.cx().checkpoint().await;
         let (field, n) = varuint(r, pos).await?;
         let at = pos.saturating_add(n);
         let h = header(r, at, end).await?;
@@ -362,6 +364,9 @@ async fn annotations(r: &mut ByteReader<'_>, at: u64, h: &Hdr) -> Result<(Vec<u6
     }
     let mut sids = Vec::new();
     while pos < end {
+        if sids.len().is_multiple_of(256) {
+            r.cx().checkpoint().await;
+        }
         let (sid, n) = varuint(r, pos).await?;
         sids.push(sid);
         pos = pos.saturating_add(n);
@@ -427,6 +432,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 ));
             }
         }
+        cx.progress(end, len);
         cx.push(node).await;
         pos = end;
         index = index.saturating_add(1);
@@ -957,6 +963,7 @@ pub async fn dissect_text(cx: Cx, input: Input) -> Result<()> {
         }
         let node = text_value(&mut sc, start, pos, end, kind, &annotations, index).await?;
         let marker = node.name == "Ion version marker";
+        cx.progress(end, sc.len());
         cx.push(node).await;
         pos = end;
         if !marker {

@@ -131,6 +131,7 @@ async fn records(cx: &Cx, buf: &Buf) -> Result<u64> {
             cx.push(node.span(buf.sub(pos, len))).await;
             return Err(Diagnostic::malformed("invalid or truncated value").at(buf.sub(pos, len)));
         };
+        cx.progress(to_u64(end), to_u64(len));
         cx.push(node.span(buf.sub(pos, end))).await;
         i = i.saturating_add(1);
         pos = end;

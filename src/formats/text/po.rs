@@ -221,6 +221,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if !summary.is_empty() {
             node = node.summary(summary.join(", "));
         }
+        lines.progress();
         cx.push(node).await;
     }
     let mut summary = String::from("gettext catalog");

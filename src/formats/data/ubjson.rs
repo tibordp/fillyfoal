@@ -452,8 +452,12 @@ fn type_name(m: u8) -> &'static str {
 
 /// Skips no-op markers between values.
 async fn skip_noops(r: &mut ByteReader<'_>, mut pos: u64) -> Result<u64> {
+    let start = pos;
     while pos < r.region().len && r.byte(pos).await? == b'N' {
         pos = pos.saturating_add(1);
+        if pos.saturating_sub(start).is_multiple_of(256) {
+            r.cx().checkpoint().await;
+        }
     }
     Ok(pos)
 }
@@ -492,6 +496,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         };
         let node = item_node(&mut r, pos, end, None, format!("[{index}]"), &Path::new()).await?;
+        cx.progress(end, input.span.len);
         cx.push(node).await;
         pos = skip_noops(&mut r, end).await?;
         index = index.saturating_add(1);

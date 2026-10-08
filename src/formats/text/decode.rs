@@ -9,6 +9,8 @@ use crate::formats::Input;
 use crate::node::Node;
 use crate::span::{Origin, Span};
 
+use super::encoding::Encoding;
+
 /// The result of decoding: bytes, and the first problem, if any.
 pub struct Decoded {
     pub bytes: Vec<u8>,
@@ -26,35 +28,92 @@ fn base64_value(b: u8) -> Option<u32> {
     }
 }
 
+/// A decoder that works through an in-memory buffer a bounded step at a
+/// time, so that a large body can be decoded between checkpoints.
+pub(super) trait Step: Send {
+    /// Decodes about `limit` more input bytes of `data` (always the same
+    /// buffer); returns whether the decoder is done.
+    fn step(&mut self, data: &[u8], limit: usize) -> bool;
+    fn finish(self) -> Decoded;
+}
+
+/// Runs `s` over all of `data` at once.
+fn run<S: Step>(mut s: S, data: &[u8]) -> Decoded {
+    while !s.step(data, usize::MAX) {}
+    s.finish()
+}
+
+/// Runs `s` over `data` in bounded steps with a checkpoint in between.
+async fn run_stepped<S: Step>(cx: &Cx, mut s: S, data: &[u8]) -> Decoded {
+    const STEP: usize = 64 * 1024;
+    while !s.step(data, STEP) {
+        cx.checkpoint().await;
+    }
+    s.finish()
+}
+
+struct Base64 {
+    pos: usize,
+    acc: u32,
+    bits: u32,
+    bytes: Vec<u8>,
+    error: Option<String>,
+}
+
+impl Base64 {
+    fn new(len: usize) -> Self {
+        Base64 {
+            pos: 0,
+            acc: 0,
+            bits: 0,
+            bytes: Vec::with_capacity((len / 4).saturating_mul(3)),
+            error: None,
+        }
+    }
+}
+
+impl Step for Base64 {
+    fn step(&mut self, data: &[u8], limit: usize) -> bool {
+        let end = self.pos.saturating_add(limit).min(data.len());
+        while self.pos < end {
+            let i = self.pos;
+            let Some(&b) = data.get(i) else { break };
+            self.pos = i.saturating_add(1);
+            if b.is_ascii_whitespace() {
+                continue;
+            }
+            if b == b'=' {
+                return true;
+            }
+            let Some(v) = base64_value(b) else {
+                self.error = Some(format!(
+                    "invalid base64 character {:?} at {i}",
+                    char::from(b)
+                ));
+                return true;
+            };
+            self.acc = (self.acc << 6 | v) & 0x00ff_ffff;
+            self.bits = self.bits.saturating_add(6);
+            if self.bits >= 8 {
+                self.bits = self.bits.saturating_sub(8);
+                self.bytes.push(((self.acc >> self.bits) & 0xff) as u8);
+            }
+        }
+        self.pos >= data.len()
+    }
+
+    fn finish(self) -> Decoded {
+        Decoded {
+            bytes: self.bytes,
+            error: self.error,
+        }
+    }
+}
+
 /// Base64 (standard or URL-safe alphabet), ignoring whitespace. Stops at
 /// padding or at the first invalid character.
 pub fn base64(data: &[u8]) -> Decoded {
-    let mut bytes = Vec::with_capacity((data.len() / 4).saturating_mul(3));
-    let mut acc = 0u32;
-    let mut bits = 0u32;
-    let mut error = None;
-    for (i, &b) in data.iter().enumerate() {
-        if b.is_ascii_whitespace() {
-            continue;
-        }
-        if b == b'=' {
-            break;
-        }
-        let Some(v) = base64_value(b) else {
-            error = Some(format!(
-                "invalid base64 character {:?} at {i}",
-                char::from(b)
-            ));
-            break;
-        };
-        acc = (acc << 6 | v) & 0x00ff_ffff;
-        bits = bits.saturating_add(6);
-        if bits >= 8 {
-            bits = bits.saturating_sub(8);
-            bytes.push(((acc >> bits) & 0xff) as u8);
-        }
-    }
-    Decoded { bytes, error }
+    run(Base64::new(data.len()), data)
 }
 
 fn hex_value(b: u8) -> Option<u8> {
@@ -66,54 +125,116 @@ fn hex_value(b: u8) -> Option<u8> {
     }
 }
 
+struct Hex {
+    pos: usize,
+    high: Option<u8>,
+    bytes: Vec<u8>,
+    error: Option<String>,
+}
+
+impl Hex {
+    fn new(len: usize) -> Self {
+        Hex {
+            pos: 0,
+            high: None,
+            bytes: Vec::with_capacity(len / 2),
+            error: None,
+        }
+    }
+}
+
+impl Step for Hex {
+    fn step(&mut self, data: &[u8], limit: usize) -> bool {
+        let end = self.pos.saturating_add(limit).min(data.len());
+        while self.pos < end {
+            let i = self.pos;
+            let Some(&b) = data.get(i) else { break };
+            self.pos = i.saturating_add(1);
+            if b.is_ascii_whitespace() || b == b',' || b == b'\\' {
+                continue;
+            }
+            let Some(v) = hex_value(b) else {
+                self.error = Some(format!("invalid hex digit {:?} at {i}", char::from(b)));
+                return true;
+            };
+            match self.high.take() {
+                Some(h) => self.bytes.push(h << 4 | v),
+                None => self.high = Some(v),
+            }
+        }
+        self.pos >= data.len()
+    }
+
+    fn finish(mut self) -> Decoded {
+        if self.high.is_some() && self.error.is_none() {
+            self.error = Some("odd number of hex digits".to_owned());
+        }
+        Decoded {
+            bytes: self.bytes,
+            error: self.error,
+        }
+    }
+}
+
 /// Hex digit pairs, ignoring whitespace and (optionally) commas.
 pub fn hex(data: &[u8]) -> Decoded {
-    let mut bytes = Vec::with_capacity(data.len() / 2);
-    let mut high: Option<u8> = None;
-    let mut error = None;
-    for (i, &b) in data.iter().enumerate() {
-        if b.is_ascii_whitespace() || b == b',' || b == b'\\' {
-            continue;
-        }
-        let Some(v) = hex_value(b) else {
-            error = Some(format!("invalid hex digit {:?} at {i}", char::from(b)));
-            break;
-        };
-        match high.take() {
-            Some(h) => bytes.push(h << 4 | v),
-            None => high = Some(v),
+    run(Hex::new(data.len()), data)
+}
+
+struct QuotedPrintable {
+    pos: usize,
+    bytes: Vec<u8>,
+}
+
+impl QuotedPrintable {
+    fn new(len: usize) -> Self {
+        QuotedPrintable {
+            pos: 0,
+            bytes: Vec::with_capacity(len),
         }
     }
-    if high.is_some() && error.is_none() {
-        error = Some("odd number of hex digits".to_owned());
+}
+
+impl Step for QuotedPrintable {
+    fn step(&mut self, data: &[u8], limit: usize) -> bool {
+        let end = self.pos.saturating_add(limit).min(data.len());
+        // Escapes look ahead past `end`: `data` is the whole buffer.
+        let mut i = self.pos;
+        while i < end {
+            let Some(&b) = data.get(i) else { break };
+            i = i.saturating_add(1);
+            if b != b'=' {
+                self.bytes.push(b);
+                continue;
+            }
+            match (data.get(i).copied(), data.get(i.saturating_add(1)).copied()) {
+                (Some(b'\r'), Some(b'\n')) => i = i.saturating_add(2),
+                (Some(b'\n'), _) => i = i.saturating_add(1),
+                (Some(h), Some(l)) => match (hex_value(h), hex_value(l)) {
+                    (Some(h), Some(l)) => {
+                        self.bytes.push(h << 4 | l);
+                        i = i.saturating_add(2);
+                    }
+                    _ => self.bytes.push(b'='),
+                },
+                _ => self.bytes.push(b'='),
+            }
+        }
+        self.pos = i;
+        self.pos >= data.len()
     }
-    Decoded { bytes, error }
+
+    fn finish(self) -> Decoded {
+        Decoded {
+            bytes: self.bytes,
+            error: None,
+        }
+    }
 }
 
 /// Quoted-printable (RFC 2045): `=XX` escapes and `=` soft line breaks.
 pub fn quoted_printable(data: &[u8]) -> Decoded {
-    let mut bytes = Vec::with_capacity(data.len());
-    let mut i = 0usize;
-    while let Some(&b) = data.get(i) {
-        i = i.saturating_add(1);
-        if b != b'=' {
-            bytes.push(b);
-            continue;
-        }
-        match (data.get(i).copied(), data.get(i.saturating_add(1)).copied()) {
-            (Some(b'\r'), Some(b'\n')) => i = i.saturating_add(2),
-            (Some(b'\n'), _) => i = i.saturating_add(1),
-            (Some(h), Some(l)) => match (hex_value(h), hex_value(l)) {
-                (Some(h), Some(l)) => {
-                    bytes.push(h << 4 | l);
-                    i = i.saturating_add(2);
-                }
-                _ => bytes.push(b'='),
-            },
-            _ => bytes.push(b'='),
-        }
-    }
-    Decoded { bytes, error: None }
+    run(QuotedPrintable::new(data.len()), data)
 }
 
 /// One line of uuencoded data (the first character encodes the length).
@@ -184,9 +305,20 @@ pub async fn derive(
     }
     let data = crate::codec::read_all(cx, span).await?;
     let decoded = decode(&data);
+    store(cx, origin, &data, decoded)
+}
+
+/// Keeps `decoded` (from `data`) as the derived source for `origin`.
+fn store(
+    cx: &Cx,
+    origin: Origin,
+    data: &[u8],
+    decoded: Decoded,
+) -> Result<(Span, Option<Diagnostic>)> {
+    let transform = origin.transform;
     let error = decoded
         .error
-        .map(|e| Diagnostic::malformed(format!("{transform}: {e}")).at(span));
+        .map(|e| Diagnostic::malformed(format!("{transform}: {e}")).at(origin.parent));
     let consumed = crate::bytes::to_u64(data.len());
     let out = cx.add_derived(origin, decoded.bytes, consumed, error.clone())?;
     Ok((out.span, error))
@@ -300,10 +432,34 @@ pub async fn derive_with(
     span: Span,
     transform: Transform,
 ) -> Result<(Span, Option<Diagnostic>)> {
-    if transform == Transform::Identity {
-        return Ok((span, None));
+    let name = transform.name();
+    match transform {
+        Transform::Identity => Ok((span, None)),
+        Transform::Base64 => derive_stepped(cx, span, name, Base64::new).await,
+        Transform::QuotedPrintable => derive_stepped(cx, span, name, QuotedPrintable::new).await,
+        Transform::Hex => derive_stepped(cx, span, name, Hex::new).await,
+        Transform::Percent => derive(cx, span, name, |d| transform.decode(d)).await,
     }
-    derive(cx, span, transform.name(), |d| transform.decode(d)).await
+}
+
+/// Like [`derive`], decoding with the [`Step`] decoder `make` returns (given
+/// the encoded length) in bounded steps.
+pub(super) async fn derive_stepped<S: Step>(
+    cx: &Cx,
+    span: Span,
+    transform: &'static str,
+    make: impl FnOnce(usize) -> S,
+) -> Result<(Span, Option<Diagnostic>)> {
+    let origin = Origin {
+        parent: span,
+        transform,
+    };
+    if let Some(found) = cx.derived(origin) {
+        return Ok((found.span, found.error));
+    }
+    let data = crate::codec::read_all(cx, span).await?;
+    let decoded = run_stepped(cx, make(data.len()), &data).await;
+    store(cx, origin, &data, decoded)
 }
 
 async fn expand_decoded(
@@ -330,7 +486,9 @@ async fn expand_decoded(
                 Some(found) => found.span,
                 None => {
                     let data = crate::codec::read_all(&cx, decoded).await?;
-                    let text = c.decode(&data).into_bytes();
+                    let text = super::encoding::decode_stepped(&cx, Encoding::Single(c), &data)
+                        .await
+                        .into_bytes();
                     let consumed = crate::bytes::to_u64(data.len());
                     cx.add_derived(origin, text, consumed, None)?.span
                 }

@@ -243,6 +243,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let len = doc_len(&mut r, pos, total).await?;
         let span = r.span(pos, len);
         let summary = document_summary(&mut r, pos, len).await;
+        cx.progress(pos.saturating_add(len), total);
         cx.push(
             Node::new(format!("Document {index}"))
                 .span(span)
@@ -353,6 +354,7 @@ async fn elements(cx: Cx, (doc, array, path): (Span, bool, Path)) -> Result<()> 
         if std::str::from_utf8(name_bytes).is_err() {
             node = node.diag(Diagnostic::warning("element name is not valid UTF-8"));
         }
+        cx.progress(end, last);
         cx.push(node).await;
         pos = end;
         index = index.saturating_add(1);

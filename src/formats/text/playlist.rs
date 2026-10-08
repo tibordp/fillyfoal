@@ -278,6 +278,7 @@ pub async fn dissect_m3u(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{kind}: {uri}")
         };
+        lines.progress();
         cx.push(
             Node::new(name)
                 .span(entry)

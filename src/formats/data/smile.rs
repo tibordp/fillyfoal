@@ -600,6 +600,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     }
                 };
                 let node = item_node(&mut r, pos, end, name, &Path::new()).await?;
+                cx.progress(end, region.len);
                 cx.push(node).await;
                 pos = end;
                 index = index.saturating_add(1);

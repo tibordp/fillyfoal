@@ -65,6 +65,7 @@ async fn mtf(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut counts: Vec<(String, u32)> = Vec::new();
     while pos.saturating_add(4) <= file.len {
+        cx.progress(pos, file.len);
         let id = cx.read(file.sub(pos, 4)).await?;
         let id_arr: [u8; 4] = id
             .get(..4)

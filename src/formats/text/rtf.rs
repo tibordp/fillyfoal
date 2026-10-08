@@ -383,6 +383,7 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
     let mut data: Option<(u64, u64)> = None;
     let mut first = true;
     loop {
+        lex.scan.tick().await;
         let t = lex.next().await?;
         let textual = matches!(t.kind, Kind::Text | Kind::Hex)
             || (t.kind == Kind::Symbol && !matches!(dest.as_str(), "pict" | "objdata"));
@@ -604,6 +605,7 @@ async fn paragraphs(cx: Cx, d: Doc) -> Result<()> {
     let mut just_opened = false;
     let mut star = false;
     loop {
+        lex.scan.tick().await;
         let t = lex.next().await?;
         let (skipping, uc) = stack.last().copied().unwrap_or((false, 1));
         let mut emit = |ch: &str, t: &Tok, text: &mut String| {

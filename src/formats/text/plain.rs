@@ -207,6 +207,7 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
             let Some(line) = lines.next().await? else {
                 break;
             };
+            lines.progress();
             cx.push(line_node(
                 line.number,
                 line.span,
@@ -244,6 +245,7 @@ pub async fn lines(cx: Cx, (span, encoding, first): (Span, Encoding, u64)) -> Re
             }
         };
         number = number.saturating_add(1);
+        cx.progress_in(span, span.offset.saturating_add(next));
         let content = scan.bytes(start, end, LINE_CAP).await?;
         cx.push(line_node(
             number,

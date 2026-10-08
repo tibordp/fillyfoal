@@ -182,6 +182,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             None => preview(&classes.join(", "), 80),
         };
         entries = entries.saturating_add(1);
+        lines.progress();
         cx.push(Node::new(dn).span(s).summary(summary).lazy(
             entry,
             Entry {
