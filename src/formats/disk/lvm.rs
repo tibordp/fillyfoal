@@ -13,7 +13,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::disk::{assemble, coalesce, size};
+use crate::formats::disk::{assemble, coalesce_stepped, size};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -179,7 +179,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let loc = parse(&cx, loc_span, LE, &(), RawLocation::layout).await?;
         let text_span = area.sub(loc.offset, loc.len.min(MAX_TEXT));
         let text = crate::text::until_nul(&cx.read_avail(text_span).await?);
-        let config = Arc::new(parse_config(&text));
+        let config = Arc::new(parse_config(&cx, &text).await);
         let vg_name = config.first().map(|(k, _)| k.clone()).unwrap_or_default();
         cx.emit(
             Node::new(name)
@@ -230,14 +230,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .unwrap_or_default();
     for (lv_name, lv) in lvs {
         cx.checkpoint().await;
-        let node = logical_volume(&cx, &input, lv_name, lv, pv_name, pe_start, extent);
+        let node = logical_volume(&cx, &input, lv_name, lv, pv_name, pe_start, extent).await;
         cx.emit(node);
     }
     Ok(())
 }
 
 /// Assembles a logical volume from its segments on this PV.
-fn logical_volume(
+async fn logical_volume(
     cx: &Cx,
     input: &Input,
     name: &str,
@@ -250,7 +250,10 @@ fn logical_volume(
     let extent_bytes = extent.saturating_mul(SECTOR);
     let pv = input.span;
     let mut segments: Vec<(u64, u64, u64)> = Vec::new();
-    for (key, seg) in lv.items() {
+    for (i, (key, seg)) in lv.items().iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         if !key.starts_with("segment") || !matches!(seg, Val::Section(_)) {
             continue;
         }
@@ -275,10 +278,14 @@ fn logical_volume(
             }
         }
     }
+    // At most the parser's item budget (100k): one bounded sort.
     segments.sort_unstable();
     let mut pieces = Vec::new();
     let mut next = 0u64;
-    for (start, count, pe) in segments {
+    for (i, (start, count, pe)) in segments.into_iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         if start != next {
             return Node::new(title).diag(Diagnostic::malformed("segments leave a gap"));
         }
@@ -288,12 +295,12 @@ fn logical_volume(
         pieces.push(pv.sub(at, count.saturating_mul(extent_bytes)));
         next = start.saturating_add(count);
     }
-    let pieces = coalesce(pieces, u64::MAX);
+    let pieces = coalesce_stepped(cx, pieces, u64::MAX).await;
     let count = pieces.len();
     let Some(&anchor) = pieces.first() else {
         return Node::new(title).diag(Diagnostic::note("no segments on this PV"));
     };
-    match assemble(cx, anchor, "lvm-segments", pieces) {
+    match assemble(cx, anchor, "lvm-segments", &pieces).await {
         Ok(span) if count == 1 => embedded(title, input.nested(span)).summary(size(span.len)),
         Ok(span) => embedded(title, input.nested(span))
             .summary(format!("{}, {count} segments", size(span.len))),
@@ -361,23 +368,55 @@ fn get<'a>(items: &'a [(String, Val)], key: &str) -> Option<&'a Val> {
 }
 
 /// Parses metadata text into its top-level items. Malformed input yields
-/// whatever parsed before the problem.
-pub fn parse_config(text: &str) -> Vec<(String, Val)> {
+/// whatever parsed before the problem. Charged per [`PARSE_STEP`] bytes
+/// scanned and per few dozen items.
+pub async fn parse_config(cx: &Cx, text: &str) -> Vec<(String, Val)> {
     let mut p = Parser {
+        cx,
         s: text.as_bytes(),
         at: 0,
         budget: 100_000,
+        charged_at: 0,
+        calls: 0,
     };
-    p.section(0)
+    let items = p.section(0).await;
+    // Charge for whatever the last items scanned.
+    p.calls = u32::MAX;
+    p.charge().await;
+    items
 }
 
+/// Bytes of metadata text scanned per checkpoint.
+const PARSE_STEP: usize = 1024;
+
+type Boxed<'f, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'f>>;
+
 struct Parser<'a> {
+    cx: &'a Cx,
     s: &'a [u8],
     at: usize,
     budget: u32,
+    /// Where the text was last charged for.
+    charged_at: usize,
+    /// Items parsed since the last checkpoint.
+    calls: u32,
 }
 
 impl Parser<'_> {
+    /// Yields for the text scanned and the items parsed since last time.
+    async fn charge(&mut self) {
+        self.calls = self.calls.saturating_add(1);
+        let scanned = self.at.saturating_sub(self.charged_at);
+        if scanned < PARSE_STEP && self.calls < 64 {
+            return;
+        }
+        for _ in 0..scanned.div_ceil(PARSE_STEP).max(1) {
+            self.cx.checkpoint().await;
+        }
+        self.charged_at = self.at;
+        self.calls = 0;
+    }
+
     fn peek(&self) -> Option<u8> {
         self.s.get(self.at).copied()
     }
@@ -411,78 +450,86 @@ impl Parser<'_> {
         String::from_utf8_lossy(self.s.get(start..self.at).unwrap_or_default()).into_owned()
     }
 
-    fn section(&mut self, depth: u32) -> Vec<(String, Val)> {
-        let mut items = Vec::new();
-        loop {
-            self.budget = self.budget.saturating_sub(1);
-            self.skip_space();
-            if self.budget == 0 || self.peek().is_none_or(|c| c == b'}') {
-                break;
-            }
-            let key = self.word();
-            if key.is_empty() {
-                break;
-            }
-            self.skip_space();
-            match self.peek() {
-                Some(b'{') if depth < 32 => {
-                    self.bump();
-                    let inner = self.section(depth.saturating_add(1));
-                    self.skip_space();
-                    if self.peek() == Some(b'}') {
+    fn section(&mut self, depth: u32) -> Boxed<'_, Vec<(String, Val)>> {
+        Box::pin(async move {
+            let mut items = Vec::new();
+            loop {
+                self.charge().await;
+                self.budget = self.budget.saturating_sub(1);
+                self.skip_space();
+                if self.budget == 0 || self.peek().is_none_or(|c| c == b'}') {
+                    break;
+                }
+                let key = self.word();
+                if key.is_empty() {
+                    break;
+                }
+                self.skip_space();
+                match self.peek() {
+                    Some(b'{') if depth < 32 => {
                         self.bump();
+                        let inner = self.section(depth.saturating_add(1)).await;
+                        self.skip_space();
+                        if self.peek() == Some(b'}') {
+                            self.bump();
+                        }
+                        items.push((key, Val::Section(inner)));
                     }
-                    items.push((key, Val::Section(inner)));
-                }
-                Some(b'=') => {
-                    self.bump();
-                    match self.value(depth) {
-                        Some(v) => items.push((key, v)),
-                        None => break,
+                    Some(b'=') => {
+                        self.bump();
+                        match self.value(depth).await {
+                            Some(v) => items.push((key, v)),
+                            None => break,
+                        }
                     }
+                    _ => break,
                 }
-                _ => break,
             }
-        }
-        items
+            items
+        })
     }
 
-    fn value(&mut self, depth: u32) -> Option<Val> {
-        self.budget = self.budget.saturating_sub(1);
-        self.skip_space();
-        match self.peek()? {
-            b'"' => {
-                self.bump();
-                let start = self.at;
-                while self.peek().is_some_and(|c| c != b'"') {
-                    if self.peek() == Some(b'\\') {
+    fn value(&mut self, depth: u32) -> Boxed<'_, Option<Val>> {
+        Box::pin(async move {
+            self.charge().await;
+            self.budget = self.budget.saturating_sub(1);
+            self.skip_space();
+            match self.peek()? {
+                b'"' => {
+                    self.bump();
+                    let start = self.at;
+                    while self.peek().is_some_and(|c| c != b'"') {
+                        if self.peek() == Some(b'\\') {
+                            self.bump();
+                        }
                         self.bump();
                     }
+                    let text =
+                        String::from_utf8_lossy(self.s.get(start..self.at).unwrap_or_default())
+                            .into_owned();
                     self.bump();
+                    Some(Val::Str(text))
                 }
-                let text = String::from_utf8_lossy(self.s.get(start..self.at).unwrap_or_default())
-                    .into_owned();
-                self.bump();
-                Some(Val::Str(text))
-            }
-            b'[' if depth < 32 && self.budget > 0 => {
-                self.bump();
-                let mut list = Vec::new();
-                loop {
-                    self.skip_space();
-                    match self.peek()? {
-                        b']' => {
-                            self.bump();
-                            break;
+                b'[' if depth < 32 && self.budget > 0 => {
+                    self.bump();
+                    let mut list = Vec::new();
+                    loop {
+                        self.charge().await;
+                        self.skip_space();
+                        match self.peek()? {
+                            b']' => {
+                                self.bump();
+                                break;
+                            }
+                            b',' => self.bump(),
+                            _ => list.push(self.value(depth.saturating_add(1)).await?),
                         }
-                        b',' => self.bump(),
-                        _ => list.push(self.value(depth.saturating_add(1))?),
                     }
+                    Some(Val::List(list))
                 }
-                Some(Val::List(list))
+                c if c.is_ascii_digit() => self.word().parse().ok().map(Val::Int),
+                _ => None,
             }
-            c if c.is_ascii_digit() => self.word().parse().ok().map(Val::Int),
-            _ => None,
-        }
+        })
     }
 }

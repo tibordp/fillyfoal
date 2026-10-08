@@ -15,7 +15,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::disk::{assemble, coalesce, content_node, dos_stamp, fragments_node, size};
+use crate::formats::disk::{
+    assemble, coalesce_stepped, content_node, dos_stamp, fragments_node, size,
+};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -425,7 +427,7 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
                 let first = u32_le(&e, 20).unwrap_or(0);
                 let len = u64_le(&e, 24).unwrap_or(0);
                 let (pieces, _) = fs.chain(&cx, first, false, len).await?;
-                let data = coalesce(pieces, len);
+                let data = coalesce_stepped(&cx, pieces, len).await;
                 let mut node = TableEntry::node(name, span, LE).summary(size(len));
                 if let Some(first) = data.first() {
                     node = node.target(*first);
@@ -623,9 +625,9 @@ async fn file(cx: Cx, (fs, set): (Vol, Arc<FileSet>)) -> Result<()> {
     if let Some(d) = problem {
         cx.diag(d);
     }
-    let pieces = coalesce(pieces, len);
-    cx.emit(fragments_node("Clusters", pieces.clone()));
-    let content = assemble(&cx, set.span, "exfat-chain", pieces)?;
+    let pieces = Arc::new(coalesce_stepped(&cx, pieces, len).await);
+    cx.emit(fragments_node(&cx, "Clusters", pieces.clone()).await);
+    let content = assemble(&cx, set.span, "exfat-chain", &pieces).await?;
     cx.emit(content_node(&fs.input, content));
     Ok(())
 }

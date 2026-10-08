@@ -663,8 +663,8 @@ async fn file(cx: Cx, (vol, record, forks): (Vol, Span, Arc<(Fork, Fork)>)) -> R
             )));
         }
         let pieces = fork.pieces(&vol);
-        cx.emit(fragments_node("Extents", pieces.clone()));
-        let span = assemble(&cx, fork_span, transform, pieces)?;
+        let span = assemble(&cx, fork_span, transform, &pieces).await?;
+        cx.emit(fragments_node(&cx, "Extents", pieces).await);
         let node = content_node(&vol.input, span);
         cx.emit(if name == "Data fork" {
             node

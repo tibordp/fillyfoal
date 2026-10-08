@@ -143,6 +143,6 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
             break;
         }
     }
-    let span = list.finish(&cx, "parallels-clusters")?;
+    let span = list.finish(&cx, "parallels-clusters").await?;
     dissect_or_data(cx, image.input.nested(span)).await
 }

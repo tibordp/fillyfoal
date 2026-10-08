@@ -228,8 +228,8 @@ impl Fs {
                 list.data(self.vol.sub(z.saturating_mul(zone), len));
             }
         }
-        let pieces = list.pieces().to_vec();
-        Ok((list.finish(cx, "minix-zones")?, pieces))
+        let span = list.finish(cx, "minix-zones").await?;
+        Ok((span, list.into_pieces()))
     }
 
     /// The pointers in indirect zone `z` (zeros for an absent zone).
@@ -430,7 +430,7 @@ async fn file(cx: Cx, (fs, ino): (FsRef, u32)) -> Result<()> {
     let raw = cx.read(span).await?;
     cx.emit(inode_node(&fs, format!("Inode {ino}"), span));
     let (data, pieces) = fs.content(&cx, span, &raw).await?;
-    cx.emit(fragments_node("Zones", pieces));
+    cx.emit(fragments_node(&cx, "Zones", pieces).await);
     cx.emit(content_node(&fs.input, data));
     Ok(())
 }

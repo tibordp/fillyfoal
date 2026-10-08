@@ -686,9 +686,8 @@ async fn stream_content(cx: &Cx, fs: &Vol, a: &Attr) -> Result<Node> {
         return compressed_content(cx, fs, a, &runs).await;
     }
     let list = fs.runs_list(cx, a.span, &runs, a.data_size)?;
-    let pieces = list.pieces().to_vec();
-    let span = list.finish(cx, "ntfs-runs")?;
-    cx.emit(fragments_node("Clusters", pieces));
+    let span = list.finish(cx, "ntfs-runs").await?;
+    cx.emit(fragments_node(cx, "Clusters", list.into_pieces()).await);
     Ok(content_node(&fs.input, span))
 }
 
@@ -792,7 +791,7 @@ async fn compressed_content(
             units.push((index, 1, "stored", pieces));
         } else {
             let anchor = pieces.first().copied().unwrap_or(a.span);
-            let packed = crate::formats::disk::assemble(cx, anchor, "ntfs-unit", pieces.clone())?;
+            let packed = crate::formats::disk::assemble(cx, anchor, "ntfs-unit", &pieces).await?;
             let decoded = cx.decode_lazy(packed, &Codec::Lznt1 { size: Some(unit) }, unit)?;
             list.data(decoded.sub(0, len));
             units.push((index, 1, "LZNT1", pieces));
@@ -800,7 +799,7 @@ async fn compressed_content(
         index = index.saturating_add(1);
         cx.checkpoint().await;
     }
-    let span = list.finish(cx, "ntfs-compressed")?;
+    let span = list.finish(cx, "ntfs-compressed").await?;
     cx.emit(
         Node::new("Compression units")
             .summary(format!("{index} of {}", size(unit)))
@@ -909,7 +908,8 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
         }
         let stream = fs
             .runs_list(&cx, alloc.span, &runs, alloc.data_size.min(MAX_INDEX_BYTES))?
-            .finish(&cx, "ntfs-runs")?;
+            .finish(&cx, "ntfs-runs")
+            .await?;
         let block = match index_block_size(&attrs) {
             Some(v) => u64::from(u32_le(&cx.read_avail(v).await?, 8).unwrap_or(4096)),
             None => 4096,
