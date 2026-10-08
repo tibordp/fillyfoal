@@ -339,6 +339,7 @@ async fn fs_bundle(
     let mut total = 0u64;
     let mut problem = None;
     for b in &blocks {
+        cx.checkpoint().await;
         let cspan = file.sub(pos, b.compressed.into());
         pos = pos.saturating_add(b.compressed.into());
         total = total.saturating_add(b.size.into());
@@ -368,13 +369,16 @@ async fn fs_bundle(
         node = node.diag(e);
     }
     cx.emit(node);
-    let stream = cx.add_pieces(
-        Origin {
-            parent: data,
-            transform: "unityfs-blocks",
-        },
-        pieces,
-    )?;
+    let stream = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: data,
+                transform: "unityfs-blocks",
+            },
+            &pieces,
+        )
+        .await?;
+
     let count = entries.len();
     cx.set_count(Count::AtLeast(to_u64(count)));
     for e in entries {
@@ -427,16 +431,19 @@ async fn read_blocks_info(cx: &Cx, info: Span) -> Result<(Vec<Block>, Vec<DirEnt
     let n = u64::from(cur.u32().await?);
     let table = info.sub_exact(cur.pos(), n.saturating_mul(10))?;
     let bytes = cx.read(table).await?;
-    let blocks = bytes
-        .as_chunks::<10>()
-        .0
-        .iter()
-        .map(|c| Block {
+    let chunks = bytes.as_chunks::<10>().0;
+    let mut blocks = Vec::with_capacity(chunks.len());
+    for (i, c) in chunks.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        blocks.push(Block {
             size: u32_be(c, 0).unwrap_or(0),
             compressed: u32_be(c, 4).unwrap_or(0),
             flags: crate::bytes::u16_be(c, 8).unwrap_or(0),
-        })
-        .collect();
+        });
+    }
+
     cur.skip(table.len);
     let n = cur.u32().await?;
     let mut entries = Vec::new();

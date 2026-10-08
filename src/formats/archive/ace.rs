@@ -331,17 +331,20 @@ async fn ace_solid(cx: &Cx, file: Span) -> Result<Arc<AceSolid>> {
     let data = match pieces.as_slice() {
         [] => return Err(Diagnostic::malformed("no files in the solid stream")),
         [one] => *one,
-        [first, .., last] => cx.add_pieces(
-            Origin {
-                parent: Span::new(
-                    first.source,
-                    first.offset,
-                    last.end().saturating_sub(first.offset),
-                ),
-                transform: "ace-solid",
-            },
-            pieces.clone(),
-        )?,
+        [first, .., last] => {
+            cx.add_pieces_stepped(
+                Origin {
+                    parent: Span::new(
+                        first.source,
+                        first.offset,
+                        last.end().saturating_sub(first.offset),
+                    ),
+                    transform: "ace-solid",
+                },
+                &pieces,
+            )
+            .await?
+        }
     };
     let codec = Codec::Ace(crate::codec::ace::Params {
         members: members.into(),

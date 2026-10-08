@@ -399,13 +399,16 @@ async fn item_value(
         to_u64(item.range.0),
         to_u64(item.range.1.saturating_sub(item.range.0)),
     );
-    let span = cx.add_pieces(
-        Origin {
-            parent: item_span,
-            transform: "bdb-overflow",
-        },
-        pieces,
-    )?;
+    let span = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: item_span,
+                transform: "bdb-overflow",
+            },
+            &pieces,
+        )
+        .await?;
+
     Ok((span, diag))
 }
 

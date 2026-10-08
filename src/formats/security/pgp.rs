@@ -460,13 +460,16 @@ async fn partial_body(cx: &Cx, span: Span, pos: u64, first: &Header) -> Result<(
             break;
         }
     }
-    let body = cx.add_pieces(
-        Origin {
-            parent: span.sub(pos, first.header_len),
-            transform: "pgp-partial",
-        },
-        pieces,
-    )?;
+    let body = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: span.sub(pos, first.header_len),
+                transform: "pgp-partial",
+            },
+            &pieces,
+        )
+        .await?;
+
     Ok((body, at))
 }
 

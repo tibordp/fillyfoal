@@ -470,13 +470,14 @@ async fn meta_stream(cx: &Cx, geo: Geo, ptr: MetaPtr) -> Result<Span> {
         pieces.push(sb.tail(8));
         at = sb;
     }
-    cx.add_pieces(
+    cx.add_pieces_stepped(
         Origin {
             parent: head,
             transform: "duckdb-metadata",
         },
-        pieces,
+        &pieces,
     )
+    .await
 }
 
 /// The result of parsing a stream into a tree: the top nodes, and the

@@ -461,6 +461,15 @@ pub async fn stream(cx: &Cx, pst: &Pst, bid: u64) -> Result<Span> {
     if bid == 0 {
         return Ok(Span::zeros(0));
     }
+    let root = block(cx, pst, bid).await?;
+    let origin = Origin {
+        parent: root.raw,
+        transform: "pst-data-tree",
+    };
+    // Already pieced together: skip walking the tree again.
+    if let Some(found) = cx.derived(origin) {
+        return Ok(found.span);
+    }
     let blocks = data_tree(cx, pst, bid).await?;
     let mut pieces = Vec::with_capacity(blocks.len());
     for b in &blocks {
@@ -469,16 +478,7 @@ pub async fn stream(cx: &Cx, pst: &Pst, bid: u64) -> Result<Span> {
     }
     match pieces.as_slice() {
         [one] => Ok(*one),
-        _ => {
-            let root = block(cx, pst, bid).await?;
-            cx.add_pieces(
-                Origin {
-                    parent: root.raw,
-                    transform: "pst-data-tree",
-                },
-                pieces,
-            )
-        }
+        _ => cx.add_pieces_stepped(origin, &pieces).await,
     }
 }
 

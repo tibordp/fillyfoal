@@ -347,15 +347,25 @@ pub async fn payload_span(cx: &Cx, db: &Db, cell: &Cell) -> Result<(Span, Option
         return Ok((local, None));
     }
     let (chain, diag) = overflow_chain(cx, db, &payload).await;
-    let mut pieces = vec![local];
-    pieces.extend(chain.into_iter().map(|(_, span)| span));
-    let span = cx.add_pieces(
-        Origin {
-            parent: cell.span(),
-            transform: "sqlite-overflow",
-        },
-        pieces,
-    )?;
+    // The chain can be as long as the file has pages.
+    let mut pieces = Vec::with_capacity(chain.len().saturating_add(1));
+    pieces.push(local);
+    for (i, (_, span)) in chain.into_iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        pieces.push(span);
+    }
+    let span = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: cell.span(),
+                transform: "sqlite-overflow",
+            },
+            &pieces,
+        )
+        .await?;
+
     Ok((span, diag))
 }
 

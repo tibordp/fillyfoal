@@ -1377,7 +1377,12 @@ async fn e57(cx: Cx, input: Input) -> Result<()> {
     let mut pieces = Vec::new();
     let mut physical = h.xml_offset;
     let mut left = h.xml_length;
+    let mut steps = 0u32;
     while left > 0 && pieces.len() < 100_000 && physical < file.len {
+        if steps.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        steps = steps.wrapping_add(1);
         let in_page = physical.checked_rem(page).unwrap_or(0);
         let take = payload.saturating_sub(in_page).min(left);
         if take == 0 {
@@ -1388,13 +1393,16 @@ async fn e57(cx: Cx, input: Input) -> Result<()> {
         left = left.saturating_sub(take);
         physical = physical.saturating_add(take).saturating_add(4);
     }
-    let xml = cx.add_pieces(
-        Origin {
-            parent: file,
-            transform: "e57-pages",
-        },
-        pieces,
-    )?;
+    let xml = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: file,
+                transform: "e57-pages",
+            },
+            &pieces,
+        )
+        .await?;
+
     let head = cx.read_avail(xml.sub(0, 4096)).await?;
     let head = String::from_utf8_lossy(&head).into_owned();
     cx.emit(

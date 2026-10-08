@@ -49,7 +49,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::disk::{
-    align, assemble, civil_to_unix, coalesce, coalesce_stepped, content_node, fragments_node,
+    align, assemble, civil_to_unix, coalesce_stepped, content_node, fragments_node,
 };
 use crate::formats::util::arcutil::{count, human_size, text, uint};
 use crate::node::Node;
@@ -63,6 +63,8 @@ const MAX_HOPS: usize = 16;
 /// Allocation extent descriptors followed per file.
 const MAX_AED: usize = 1024;
 const MAX_DEPTH: usize = 64;
+/// Items per checkpoint in loops over mapping tables and piece lists.
+const STEP: usize = 4096;
 const MAX_MAPS: usize = 64;
 /// Largest virtual allocation table read.
 const MAX_VAT: u64 = 4 << 20;
@@ -1266,7 +1268,9 @@ impl Vol {
     }
 
     /// The bytes of `len` bytes at `lbn` of partition reference `part`.
-    fn extent(&self, part: u16, lbn: u32, len: u64) -> Option<Vec<Span>> {
+    /// Sparable and virtual partitions map an extent table entry or block at
+    /// a time, so this yields every few thousand of them.
+    async fn extent(&self, cx: &Cx, part: u16, lbn: u32, len: u64) -> Option<Vec<Span>> {
         let lbn = u64::from(lbn);
         let blocks = len.div_ceil(self.bs.max(1));
         match self.maps.get(usize::from(part))? {
@@ -1287,7 +1291,12 @@ impl Vol {
                 // and stop at the first one past the extent.
                 let first =
                     spared.partition_point(|&(o, _)| u64::from(o).saturating_add(*packet) <= lbn);
-                for &(orig, mapped) in spared.get(first..).unwrap_or_default() {
+                for (i, &(orig, mapped)) in
+                    spared.get(first..).unwrap_or_default().iter().enumerate()
+                {
+                    if i.is_multiple_of(STEP) {
+                        cx.checkpoint().await;
+                    }
                     let o = u64::from(orig);
                     let pe = o.saturating_add(*packet);
                     if o >= end {
@@ -1310,7 +1319,7 @@ impl Vol {
                 if cur < end {
                     out.push(self.phys(start.saturating_add(cur), end.saturating_sub(cur)));
                 }
-                Some(coalesce(out, len))
+                Some(coalesce_stepped(cx, out, len).await)
             }
             Map::Metadata { data: Some(d), .. } => {
                 Some(vec![d.sub(lbn.saturating_mul(self.bs), len)])
@@ -1322,6 +1331,9 @@ impl Vol {
             } => {
                 let mut out: Vec<Span> = Vec::new();
                 for i in 0..blocks {
+                    if i.is_multiple_of(STEP as u64) {
+                        cx.checkpoint().await;
+                    }
                     let Some(&p) = usize::try_from(lbn.saturating_add(i))
                         .ok()
                         .and_then(|j| t.get(j))
@@ -1330,15 +1342,16 @@ impl Vol {
                     };
                     out.push(self.phys(start.saturating_add(p.into()), 1));
                 }
-                Some(coalesce(out, len))
+                Some(coalesce_stepped(cx, out, len).await)
             }
             _ => None,
         }
     }
 
     /// The span of the block at `lbn` of partition reference `part`.
-    fn block(&self, part: u16, lbn: u32) -> Result<Span> {
-        self.extent(part, lbn, self.bs)
+    async fn block(&self, cx: &Cx, part: u16, lbn: u32) -> Result<Span> {
+        self.extent(cx, part, lbn, self.bs)
+            .await
             .and_then(|p| p.first().copied())
             .ok_or_else(|| {
                 Diagnostic::malformed(format!(
@@ -1778,7 +1791,7 @@ impl Icb {
 
 async fn read_icb(cx: &Cx, vol: &Vol, mut addr: LongAd) -> Result<Icb> {
     for _ in 0..8 {
-        let span = vol.block(addr.part, addr.lbn)?;
+        let span = vol.block(cx, addr.part, addr.lbn).await?;
         let data = cx.read_avail(span).await?;
         let id = u16_le(&data, 0).unwrap_or(0);
         if id == 259 {
@@ -1868,7 +1881,7 @@ async fn file_pieces(cx: &Cx, vol: &Vol, icb: &Icb) -> Result<(Vec<Span>, Vec<Sp
                 break 'chain;
             }
             match ad.kind() {
-                0 => match vol.extent(ad.part, ad.lbn, ad.size()) {
+                0 => match vol.extent(cx, ad.part, ad.lbn, ad.size()).await {
                     Some(p) => pieces.extend(p),
                     None => {
                         return Err(Diagnostic::malformed(format!(
@@ -1894,7 +1907,7 @@ async fn file_pieces(cx: &Cx, vol: &Vol, icb: &Icb) -> Result<(Vec<Span>, Vec<Sp
         if aeds.len() >= MAX_AED {
             return Err(Diagnostic::limit("too many allocation extent descriptors"));
         }
-        let span = vol.block(n.part, n.lbn)?.sub(0, n.size().max(24));
+        let span = vol.block(cx, n.part, n.lbn).await?.sub(0, n.size().max(24));
         let data = cx.read_avail(span).await?;
         if u16_le(&data, 0) != Some(258) {
             return Err(Diagnostic::malformed("expected an allocation extent descriptor").at(span));
@@ -1909,6 +1922,18 @@ async fn file_pieces(cx: &Cx, vol: &Vol, icb: &Icb) -> Result<(Vec<Span>, Vec<Sp
         cx.checkpoint().await;
     }
     Ok((coalesce_stepped(cx, pieces, icb.size).await, aeds))
+}
+
+/// The total length of `pieces` (input-sized: checkpointed).
+async fn covered(cx: &Cx, pieces: &[Span]) -> u64 {
+    let mut total = 0u64;
+    for (i, p) in pieces.iter().enumerate() {
+        if i.is_multiple_of(STEP) {
+            cx.checkpoint().await;
+        }
+        total = total.saturating_add(p.len);
+    }
+    total
 }
 
 fn fe_node(icb: &Icb) -> Node {
@@ -2021,7 +2046,7 @@ async fn directory(cx: Cx, e: Entry) -> Result<()> {
     let resumed = cx.resume::<u64>();
     if resumed.is_none() {
         describe(&cx, &e, &icb, &aeds).await;
-        if pieces.iter().map(|p| p.len).fold(0, u64::saturating_add) < icb.size {
+        if covered(&cx, &pieces).await < icb.size {
             cx.diag(Diagnostic::warning(
                 "allocation descriptors cover less than the directory's length",
             ));
@@ -2096,7 +2121,7 @@ async fn file(cx: Cx, e: Entry) -> Result<()> {
     let icb = read_icb(&cx, &e.vol, e.addr).await?;
     let (pieces, aeds) = file_pieces(&cx, &e.vol, &icb).await?;
     describe(&cx, &e, &icb, &aeds).await;
-    let have = pieces.iter().map(|p| p.len).fold(0, u64::saturating_add);
+    let have = covered(&cx, &pieces).await;
     if have < icb.size {
         cx.diag(Diagnostic::warning(format!(
             "allocation descriptors cover {have} of {} bytes",
@@ -2313,7 +2338,7 @@ pub async fn emit(cx: &Cx, vol: &Arc<Vol>) -> Result<()> {
     let Some(fsd_ad) = vol.fsd else {
         return Ok(());
     };
-    let fsd_span = match vol.block(fsd_ad.part, fsd_ad.lbn) {
+    let fsd_span = match vol.block(cx, fsd_ad.part, fsd_ad.lbn).await {
         Ok(s) => s.sub(0, 512),
         Err(d) => {
             cx.diag(d);

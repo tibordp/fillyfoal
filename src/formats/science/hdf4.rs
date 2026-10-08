@@ -562,7 +562,15 @@ async fn resolve(cx: &Cx, file: Span, m: &Model, dd: &Dd) -> Result<Resolved> {
                 let t = cx.read_avail(table).await?;
                 let mut r = Reader { data: &t, pos: 0 };
                 let next = r.u16().unwrap_or(0);
-                for block in r.u16s(per_table.min(t.len() / 2)).unwrap_or_default() {
+                for (i, block) in r
+                    .u16s(per_table.min(t.len() / 2))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .enumerate()
+                {
+                    if i.is_multiple_of(1024) {
+                        cx.checkpoint().await;
+                    }
                     if block == 0 || remaining == 0 {
                         continue;
                     }
@@ -574,13 +582,16 @@ async fn resolve(cx: &Cx, file: Span, m: &Model, dd: &Dd) -> Result<Resolved> {
                 }
                 link = next;
             }
-            let joined = cx.add_pieces(
-                Origin {
-                    parent: span,
-                    transform: "hdf4-linked-blocks",
-                },
-                pieces,
-            )?;
+            let joined = cx
+                .add_pieces_stepped(
+                    Origin {
+                        parent: span,
+                        transform: "hdf4-linked-blocks",
+                    },
+                    &pieces,
+                )
+                .await?;
+
             Ok(Resolved::Plain(joined))
         }
         _ => Ok(Resolved::Unsupported(format!(
