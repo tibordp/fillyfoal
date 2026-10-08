@@ -21,6 +21,7 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
+use crate::formats::util::binutil::RangeIndex;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -137,11 +138,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
 
+    let rva_index = RangeIndex::new(
+        sections
+            .iter()
+            .map(|s| (s.virtual_address.into(), s.mapped_size().into())),
+    );
     let pe: Pe = Arc::new(PeInfo {
         input,
         wide: optional.wide,
         size_of_headers: optional.size_of_headers,
         sections,
+        rva_index,
     });
     cx.emit(
         Node::new("Section Table")
@@ -267,6 +274,8 @@ struct PeInfo {
     wide: bool,
     size_of_headers: u32,
     sections: Vec<Section>,
+    /// The sections' RVA ranges, for [`PeInfo::rva_offset`].
+    rva_index: RangeIndex,
 }
 
 #[derive(Clone, Debug)]
@@ -281,6 +290,16 @@ struct Section {
 }
 
 impl Section {
+    /// The size of the section in memory (the raw size if the virtual size
+    /// is zero).
+    fn mapped_size(&self) -> u32 {
+        if self.virtual_size == 0 {
+            self.raw_size
+        } else {
+            self.virtual_size
+        }
+    }
+
     fn summary(&self) -> String {
         let flag = |bit: u32, c: char| {
             if self.characteristics & bit != 0 {
@@ -309,23 +328,20 @@ impl PeInfo {
 
     /// Translates an RVA to an offset in the file.
     fn rva_offset(&self, rva: u32) -> Result<u64> {
-        for s in &self.sections {
-            let size = if s.virtual_size == 0 {
-                s.raw_size
-            } else {
-                s.virtual_size
-            };
-            if let Some(delta) = rva.checked_sub(s.virtual_address)
-                && delta < size
-            {
-                if delta < s.raw_size {
-                    return Ok(u64::from(s.raw_pointer).saturating_add(delta.into()));
-                }
-                return Err(Diagnostic::malformed(format!(
-                    "RVA {rva:#x} lies in the zero-filled part of section {:?}",
-                    s.name
-                )));
+        // The first section containing the RVA wins.
+        if let Some(s) = self
+            .rva_index
+            .find(rva.into())
+            .and_then(|i| self.sections.get(i))
+        {
+            let delta = rva.saturating_sub(s.virtual_address);
+            if delta < s.raw_size {
+                return Ok(u64::from(s.raw_pointer).saturating_add(delta.into()));
             }
+            return Err(Diagnostic::malformed(format!(
+                "RVA {rva:#x} lies in the zero-filled part of section {:?}",
+                s.name
+            )));
         }
         if rva < self.size_of_headers {
             return Ok(rva.into());

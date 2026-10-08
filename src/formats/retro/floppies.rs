@@ -369,7 +369,7 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
         if let Some(c) = raw.get_mut(8..12) {
             c.fill(0);
         }
-        let computed = crate::codec::crc32(&raw);
+        let computed = crate::formats::util::datakit::crc32_paced(&cx, &raw).await;
         let mut extra = None;
         if kind == "DATA" {
             let size = u64::from(u32_be(&raw, 12).unwrap_or(0));

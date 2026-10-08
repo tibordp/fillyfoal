@@ -585,6 +585,7 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
         .span(span.sub(crc_at, 4))
         .value(hex(stored.into()));
     let covered = data.get(..to_usize(crc_at)).unwrap_or_default();
-    cx.emit(verify(node, crc32(covered), stored));
+    let computed = crate::formats::util::datakit::crc32_paced(&cx, covered).await;
+    cx.emit(verify(node, computed, stored));
     Ok(())
 }

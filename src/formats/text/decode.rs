@@ -43,9 +43,11 @@ fn run<S: Step>(mut s: S, data: &[u8]) -> Decoded {
     s.finish()
 }
 
+/// Input bytes a stepped decoder works through between checkpoints.
+const STEP: usize = 64 * 1024;
+
 /// Runs `s` over `data` in bounded steps with a checkpoint in between.
 async fn run_stepped<S: Step>(cx: &Cx, mut s: S, data: &[u8]) -> Decoded {
-    const STEP: usize = 64 * 1024;
     while !s.step(data, STEP) {
         cx.checkpoint().await;
     }
@@ -58,6 +60,8 @@ struct Base64 {
     bits: u32,
     bytes: Vec<u8>,
     error: Option<String>,
+    /// Where the first invalid character is.
+    bad: Option<usize>,
 }
 
 impl Base64 {
@@ -68,6 +72,7 @@ impl Base64 {
             bits: 0,
             bytes: Vec::with_capacity((len / 4).saturating_mul(3)),
             error: None,
+            bad: None,
         }
     }
 }
@@ -90,6 +95,7 @@ impl Step for Base64 {
                     "invalid base64 character {:?} at {i}",
                     char::from(b)
                 ));
+                self.bad = Some(i);
                 return true;
             };
             self.acc = (self.acc << 6 | v) & 0x00ff_ffff;
@@ -114,6 +120,19 @@ impl Step for Base64 {
 /// padding or at the first invalid character.
 pub fn base64(data: &[u8]) -> Decoded {
     run(Base64::new(data.len()), data)
+}
+
+/// Like [`base64`], in bounded steps with checkpoints in between, failing
+/// with the offset of the first invalid character.
+pub async fn base64_strict(cx: &Cx, data: &[u8]) -> std::result::Result<Vec<u8>, usize> {
+    let mut s = Base64::new(data.len());
+    while !s.step(data, STEP) {
+        cx.checkpoint().await;
+    }
+    match s.bad {
+        Some(at) => Err(at),
+        None => Ok(s.bytes),
+    }
 }
 
 fn hex_value(b: u8) -> Option<u8> {

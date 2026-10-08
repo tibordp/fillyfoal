@@ -893,7 +893,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let data = cx.read(next).await?;
     let mut next_node = Node::new("Next header").span(next);
-    if crc32(&data) != sh.next_crc {
+    if crate::formats::util::datakit::crc32_paced(&cx, &data).await != sh.next_crc {
         next_node = next_node.diag(Diagnostic::warning("next header CRC mismatch"));
     }
     let parsed = Parser {

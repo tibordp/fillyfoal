@@ -807,9 +807,9 @@ async fn file_content(
         )));
     }
     if out.len <= 16 << 20 && md5.iter().any(|&b| b != 0) {
-        use crate::codec::crypto::hash::{Hash, Md5};
+        use crate::codec::crypto::hash::Md5;
         let bytes = read_all(&cx, out).await?;
-        if Md5::digest(&bytes) == md5 {
+        if crate::formats::util::datakit::digest_paced::<Md5>(&cx, &bytes).await == md5 {
             cx.emit(Node::new("MD5 check").span(out).summary("valid"));
         } else {
             cx.diag(Diagnostic::warning("MD5 mismatch"));

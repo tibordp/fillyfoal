@@ -22,7 +22,8 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::{
-    NodeExt, cstrings, data_node, ellipsize, get_at, hex, name_or, perms, string_at, text,
+    NodeExt, RangeIndex, cstrings, data_node, ellipsize, get_at, hex, name_or, perms, string_at,
+    text,
 };
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -131,6 +132,8 @@ struct MachInfo {
     symtab: Option<Symtab>,
     dysymtab: Option<Dysymtab>,
     code_signature: Option<(u32, u32)>,
+    /// The segments' address ranges, for [`MachInfo::vm_span`].
+    vm_index: RangeIndex,
 }
 
 impl MachInfo {
@@ -167,16 +170,14 @@ impl MachInfo {
     }
 
     /// Translates a virtual address to a file span through the segments.
+    /// The first segment containing the address wins.
     fn vm_span(&self, addr: u64, len: u64) -> Option<Span> {
-        self.segments.iter().find_map(|s| {
-            let delta = addr.checked_sub(s.vmaddr)?;
-            (delta < s.filesize).then(|| {
-                self.file().sub(
-                    s.fileoff.saturating_add(delta),
-                    len.min(s.filesize.saturating_sub(delta)),
-                )
-            })
-        })
+        let s = self.segments.get(self.vm_index.find(addr)?)?;
+        let delta = addr.saturating_sub(s.vmaddr);
+        Some(self.file().sub(
+            s.fileoff.saturating_add(delta),
+            len.min(s.filesize.saturating_sub(delta)),
+        ))
     }
 
     fn text_vmaddr(&self) -> u64 {
@@ -254,6 +255,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         symtab: None,
         dysymtab: None,
         code_signature: None,
+        vm_index: RangeIndex::default(),
     };
     let block = crate::cx::Block {
         span: region,
@@ -285,6 +287,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         offset = offset.saturating_add(size.into());
     }
+    info.vm_index = RangeIndex::new(info.segments.iter().map(|s| (s.vmaddr, s.filesize)));
     let m: Macho = Arc::new(info);
 
     let signature = m.code_signature.map(|(o, s)| m.linkedit(o, s));

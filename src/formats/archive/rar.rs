@@ -1249,7 +1249,10 @@ async fn crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
         if data.is_empty() {
             break;
         }
-        crc = crate::codec::crc::crc32_update(crc, &data);
+        crate::formats::util::datakit::feed_paced(cx, &data, |piece| {
+            crc = crate::codec::crc::crc32_update(crc, piece);
+        })
+        .await;
         pos = pos.saturating_add(to_u64(data.len()));
     }
     Ok((crc ^ 0xffff_ffff, pos))

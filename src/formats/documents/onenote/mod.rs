@@ -640,7 +640,9 @@ async fn file_node_view(cx: Cx, st: NodeState) -> Result<()> {
             .get(block.data.len().saturating_sub(16)..)
             .unwrap_or_default();
         let data = cx.read(file.sub_exact(fcr.stp, fcr.cb)?).await?;
-        let digest = <crate::codec::crypto::Md5 as crate::codec::crypto::Hash>::digest(&data);
+        let digest =
+            crate::formats::util::datakit::digest_paced::<crate::codec::crypto::Md5>(&cx, &data)
+                .await;
         let mut node = Node::new("MD5 of the referenced data")
             .span(st.span.sub(st.span.len.saturating_sub(16), 16))
             .value(Value::Bool(digest == stored));

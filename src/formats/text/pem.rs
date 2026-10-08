@@ -20,7 +20,6 @@ use super::decode::{Transform, derive_with, preview};
 use super::encoding::prepare;
 use super::scan::Lines;
 use super::{probe, text_node};
-use crate::codec::crc::crc24;
 
 pub static SSH2: Format = Format {
     name: "ssh2-public-key",
@@ -315,7 +314,7 @@ async fn expand(cx: Cx, b: Block) -> Result<()> {
         });
         if decoded.len <= cx.limits().max_read {
             let bytes = cx.read(decoded).await?;
-            let computed = crc24(&bytes);
+            let computed = crate::formats::util::datakit::crc24_paced(&cx, &bytes).await;
             node = if computed == stored {
                 node.summary("CRC-24, valid")
             } else {

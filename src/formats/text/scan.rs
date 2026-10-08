@@ -395,11 +395,26 @@ impl<'a> Lines<'a> {
 /// The lines of the first `max` bytes of `region` as text, with the spans of
 /// their content: the simple way to read a small text header (`KEY=value`
 /// labels, `Name: value` preambles) inside binary or text formats.
+///
+/// Lines served from the scanner's cached window are charged here, a unit
+/// per [`HEAD_LINES_UNIT`] bytes of line content (each line counting at
+/// least [`HEAD_LINES_OVERHEAD`]), for copying and decoding them.
 pub async fn head_lines(cx: &Cx, region: Span, max: u64) -> Result<Vec<(String, Span)>> {
     let mut lines = Lines::new(cx, region.sub(0, max));
     let mut out = Vec::new();
+    let mut cost = 0usize;
     while let Some(line) = lines.next().await? {
+        cost = cost.saturating_add(line.bytes.len().max(HEAD_LINES_OVERHEAD));
+        while cost >= HEAD_LINES_UNIT {
+            cost = cost.saturating_sub(HEAD_LINES_UNIT);
+            cx.checkpoint().await;
+        }
         out.push((line.text(), line.span));
     }
     Ok(out)
 }
+
+/// Bytes of line content per unit of work in [`head_lines`].
+const HEAD_LINES_UNIT: usize = 4096;
+/// The least a line counts in [`head_lines`], for its allocations.
+const HEAD_LINES_OVERHEAD: usize = 64;

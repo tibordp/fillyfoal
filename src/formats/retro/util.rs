@@ -131,10 +131,8 @@ pub async fn crc32_of(cx: &Cx, span: Span) -> Option<u32> {
     if span.len > cx.limits().max_read {
         return None;
     }
-    cx.read(span)
-        .await
-        .ok()
-        .map(|data| crate::codec::crc32(&data))
+    let data = cx.read(span).await.ok()?;
+    Some(crate::formats::util::datakit::crc32_paced(cx, &data).await)
 }
 
 /// A node for a stored CRC-32, marked valid or mismatched against `computed`.

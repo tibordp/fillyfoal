@@ -9,9 +9,9 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
-use crate::codec::crc::crc24;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::datakit::sha1;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::{Origin, Span};
@@ -1206,10 +1206,10 @@ async fn armor_block(
                 radix: Radix::Hex,
             });
             let data = crate::codec::read_all(&cx, decoded).await?;
-            if crc24(&data) != stored {
+            let computed = crate::formats::util::datakit::crc24_paced(&cx, &data).await;
+            if computed != stored {
                 node = node.diag(Diagnostic::warning(format!(
-                    "CRC-24 mismatch (computed {:#08x})",
-                    crc24(&data)
+                    "CRC-24 mismatch (computed {computed:#08x})"
                 )));
             }
         }
@@ -1231,15 +1231,6 @@ async fn armor_block(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// SHA-1, for v4 fingerprints.
-
-#[allow(clippy::arithmetic_side_effects)] // wrapping arithmetic is spelled out
-fn sha1(data: &[u8]) -> [u8; 20] {
-    use crate::codec::crypto::{Hash, Sha1};
-    Sha1::digest(data).try_into().unwrap_or([0; 20])
-}
-
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {
@@ -1255,7 +1246,7 @@ mod tests {
             hex(&sha1(&[0x61; 1000])),
             "291E9A6C66994949B57BA5E650361E98FC36B1BA"
         );
-        assert_eq!(crc24(b""), 0xb704ce);
+        assert_eq!(crate::codec::crc::crc24(b""), 0xb704ce);
         let h = header(&[0x99, 0x01, 0x0d]).unwrap();
         assert_eq!((h.tag, h.len, h.header_len), (6, Some(269), 3));
         let h = header(&[0xc6, 0xc1, 0x00]).unwrap();

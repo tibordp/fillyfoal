@@ -40,7 +40,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
-use crate::codec::crypto::hash::{Hash, Sha1};
 use crate::codec::lzma::Props;
 use crate::codec::{Codec, crc32, decode_span, read_all};
 use crate::cx::Cx;
@@ -1690,7 +1689,7 @@ async fn chunk_part(
     let file = out.sub(sub, len);
     if len <= CHECK_LIMIT {
         let bytes = read_all(&cx, file).await?;
-        if Sha1::digest(&bytes) == sha1 {
+        if crate::formats::util::datakit::sha1_paced(&cx, &bytes).await == sha1 {
             cx.emit(Node::new("SHA-1 check").span(file).summary("valid"));
         } else {
             cx.diag(Diagnostic::warning("SHA-1 mismatch"));

@@ -41,7 +41,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_le, u32_le};
-use crate::codec::{Codec, crc32, decode_span};
+use crate::codec::{Codec, decode_span};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
@@ -1681,7 +1681,7 @@ async fn block(cx: Cx, (input, pos, checksummed): (Input, u64, bool)) -> Result<
         match u32_le(&stored, 0) {
             Some(v) => {
                 node = node.value(hex(v, 32));
-                let computed = crc32(&covered);
+                let computed = crate::formats::util::datakit::crc32_paced(&cx, &covered).await;
                 node = if to_u64(covered.len()) < b.span.len.saturating_sub(4) {
                     node.summary("CRC-32 (block truncated)")
                 } else if computed == v {

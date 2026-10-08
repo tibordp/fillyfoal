@@ -259,12 +259,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .sub(info.start, info.end.saturating_sub(info.start));
         if span.len <= cx.limits().max_read {
             let bytes = cx.read(span).await?;
+            let hash = crate::formats::util::datakit::sha1_paced(&cx, &bytes).await;
             cx.emit(
                 Node::new("Info hash")
                     .span(span)
-                    .value(Value::Text(hex_string(
-                        &crate::formats::util::datakit::sha1(&bytes),
-                    )))
+                    .value(Value::Text(hex_string(&hash)))
                     .desc("SHA-1 of the bencoded info dictionary (BitTorrent v1)"),
             );
         }

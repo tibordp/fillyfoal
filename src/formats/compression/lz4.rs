@@ -16,9 +16,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::arcutil::{
-    check_len, count, crc32c, emit_nodes, hex, human_size, uint, xxh32,
-};
+use crate::formats::util::arcutil::{check_len, count, emit_nodes, hex, human_size, uint, xxh32};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -430,8 +428,7 @@ const SNAPPY_CHUNK: EnumTable = &[
 ];
 
 /// Snappy's masked CRC-32C.
-fn masked_crc(data: &[u8]) -> u32 {
-    let crc = crc32c(data);
+fn mask_crc(crc: u32) -> u32 {
     (crc.rotate_right(15)).wrapping_add(0xa282_ead8)
 }
 
@@ -522,7 +519,8 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
             if kind == 0x01 {
                 if data.len <= cx.limits().max_read {
                     let bytes = cx.read(data).await?;
-                    let computed = masked_crc(&bytes);
+                    let computed =
+                        mask_crc(crate::formats::util::datakit::crc32c_paced(&cx, &bytes).await);
                     crc_node = if computed == stored {
                         crc_node.summary("valid")
                     } else {

@@ -221,7 +221,8 @@ pub async fn decode_block(cx: &Cx, text: &[u8], span: Span, block: &Block) -> Re
         return Ok(found.span);
     }
     let bytes = text.get(block.body.clone()).unwrap_or_default();
-    let decoded = base64(bytes)
+    let decoded = crate::formats::text::decode::base64_strict(cx, bytes)
+        .await
         .map_err(|at| Diagnostic::malformed("invalid base64").at(body.sub(to_u64(at), 1)))?;
     Ok(cx.add_derived(origin, decoded, body.len, None)?.span)
 }

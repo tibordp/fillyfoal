@@ -148,15 +148,22 @@ pub fn len64(n: usize) -> u64 {
 /// Buffered random access to small pieces of a region, for formats that are
 /// decoded a byte at a time (CBOR, pickle, ...). Offsets are relative to the
 /// region.
+///
+/// Reads served from the buffered window cost nothing by themselves, so
+/// every [`ByteReader::CALLS`] calls charge a checkpoint: a parser driven by
+/// this reader pays for its byte-at-a-time work, not just for the windows.
 pub struct ByteReader<'a> {
     cx: &'a Cx,
     region: Span,
     buf: Vec<u8>,
     buf_start: u64,
+    calls: u32,
 }
 
 impl<'a> ByteReader<'a> {
     const WINDOW: u64 = 0x1000;
+    /// Calls between checkpoints.
+    pub const CALLS: u32 = 256;
 
     pub fn new(cx: &'a Cx, region: Span) -> Self {
         ByteReader {
@@ -164,6 +171,7 @@ impl<'a> ByteReader<'a> {
             region,
             buf: Vec::new(),
             buf_start: 0,
+            calls: 0,
         }
     }
 
@@ -177,6 +185,10 @@ impl<'a> ByteReader<'a> {
 
     /// `len` bytes at `at`, which must all exist.
     pub async fn bytes(&mut self, at: u64, len: u64) -> Result<Vec<u8>> {
+        self.calls = self.calls.wrapping_add(1);
+        if self.calls.is_multiple_of(Self::CALLS) {
+            self.cx.checkpoint().await;
+        }
         let end = at.saturating_add(len);
         let buf_end = self.buf_start.saturating_add(to_u64(self.buf.len()));
         if at < self.buf_start || end > buf_end {
@@ -228,10 +240,66 @@ impl<'a> ByteReader<'a> {
 }
 
 /// SHA-1 (for verifying Git checksums and computing torrent info hashes;
-/// not for security).
+/// not for security). Of a small buffer; hash input-sized data with
+/// [`sha1_paced`].
 pub fn sha1(data: &[u8]) -> [u8; 20] {
     use crate::codec::crypto::{Hash, Sha1};
     Sha1::digest(data).try_into().unwrap_or([0; 20])
+}
+
+/// Bytes hashed (or checksummed) per unit of work by the paced helpers: on
+/// the order of a microsecond of hashing.
+pub const HASH_UNIT: usize = 1024;
+
+/// Feeds `data` to `feed` [`HASH_UNIT`] bytes at a time with a checkpoint
+/// after each piece, so hashing an input-sized buffer is charged in
+/// proportion and yields between pieces.
+pub async fn feed_paced(cx: &Cx, data: &[u8], mut feed: impl FnMut(&[u8])) {
+    for piece in data.chunks(HASH_UNIT) {
+        feed(piece);
+        cx.checkpoint().await;
+    }
+}
+
+/// The digest of `data` with hash `H`, computed in paced pieces.
+pub async fn digest_paced<H: crate::codec::crypto::Hash>(cx: &Cx, data: &[u8]) -> Vec<u8> {
+    let mut h = H::new();
+    feed_paced(cx, data, |piece| h.update(piece)).await;
+    h.finish()
+}
+
+/// [`sha1`] of an input-sized buffer, in paced pieces.
+pub async fn sha1_paced(cx: &Cx, data: &[u8]) -> [u8; 20] {
+    digest_paced::<crate::codec::crypto::Sha1>(cx, data)
+        .await
+        .try_into()
+        .unwrap_or([0; 20])
+}
+
+/// `crc.checksum(data)` of an input-sized buffer, in paced pieces.
+pub async fn crc_paced(cx: &Cx, crc: &crate::codec::crc::Crc, data: &[u8]) -> u64 {
+    let mut reg = crc.init();
+    feed_paced(cx, data, |piece| reg = crc.update(reg, piece)).await;
+    crc.finish(reg)
+}
+
+/// [`crate::codec::crc::crc32`] of an input-sized buffer, in paced pieces.
+pub async fn crc32_paced(cx: &Cx, data: &[u8]) -> u32 {
+    low32(crc_paced(cx, &crate::codec::crc::CRC32, data).await)
+}
+
+/// [`crate::codec::crc::crc32c`] of an input-sized buffer, in paced pieces.
+pub async fn crc32c_paced(cx: &Cx, data: &[u8]) -> u32 {
+    low32(crc_paced(cx, &crate::codec::crc::CRC32C, data).await)
+}
+
+/// [`crate::codec::crc::crc24`] of an input-sized buffer, in paced pieces.
+pub async fn crc24_paced(cx: &Cx, data: &[u8]) -> u32 {
+    low32(crc_paced(cx, &crate::codec::crc::CRC24_OPENPGP, data).await)
+}
+
+fn low32(v: u64) -> u32 {
+    u32::try_from(v & 0xffff_ffff).unwrap_or(0)
 }
 
 /// Big-endian unsigned integer from up to 8 bytes.

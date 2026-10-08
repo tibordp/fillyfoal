@@ -161,11 +161,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let data = cx.read_avail(array).await?;
         if to_u64(data.len()) < entries.saturating_mul(entry_size) {
             list = list.diag(Diagnostic::truncated(array, to_u64(data.len())));
-        } else if crc32(&data) != header.entries_crc {
-            list = list.diag(Diagnostic::warning(format!(
-                "partition array CRC mismatch: computed {:#010x}",
-                crc32(&data)
-            )));
+        } else {
+            let computed = crate::formats::util::datakit::crc32_paced(&cx, &data).await;
+            if computed != header.entries_crc {
+                list = list.diag(Diagnostic::warning(format!(
+                    "partition array CRC mismatch: computed {computed:#010x}"
+                )));
+            }
         }
         let count = data
             .chunks(to_usize(entry_size))

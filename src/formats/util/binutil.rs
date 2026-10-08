@@ -309,6 +309,70 @@ pub async fn string_at(cx: &Cx, table: Span, offset: u64) -> Result<(String, Spa
     cx.cstr(table.tail(offset).sub(0, 4096)).await
 }
 
+/// Address translation tables (sections, segments) indexed for lookup: for
+/// a list of half-open ranges `start..start + len` in priority order, the
+/// first range containing an address, found by binary search instead of a
+/// scan of the list per lookup.
+///
+/// Building it sorts the ranges once (its cost is covered by the per-entry
+/// checkpoints of the table parse that produced them).
+#[derive(Clone, Debug, Default)]
+pub struct RangeIndex {
+    /// Starts of elementary segments, ascending; each segment runs to the
+    /// next start (the last one to the end of the address space).
+    starts: Vec<u128>,
+    /// The first range (by position in the input) covering each segment.
+    first: Vec<Option<usize>>,
+}
+
+impl RangeIndex {
+    /// Indexes `ranges` (`(start, len)`); empty ranges never match, but keep
+    /// their position, so the index returned by [`RangeIndex::find`] is the
+    /// position in `ranges`.
+    pub fn new(ranges: impl IntoIterator<Item = (u64, u64)>) -> Self {
+        // (coordinate, is_start, position): ends sort before starts at the
+        // same coordinate, but every event at a coordinate is applied before
+        // the segment beginning there is recorded, so the order within a
+        // coordinate does not matter.
+        let mut events: Vec<(u128, bool, usize)> = Vec::new();
+        for (i, (start, len)) in ranges.into_iter().enumerate() {
+            if len == 0 {
+                continue;
+            }
+            let start = u128::from(start);
+            events.push((start, true, i));
+            events.push((start.saturating_add(u128::from(len)), false, i));
+        }
+        events.sort_unstable();
+        let mut active = std::collections::BTreeSet::new();
+        let mut index = RangeIndex::default();
+        let mut events = events.into_iter().peekable();
+        while let Some((at, starts, i)) = events.next() {
+            if starts {
+                active.insert(i);
+            } else {
+                active.remove(&i);
+            }
+            if events.peek().is_some_and(|e| e.0 == at) {
+                continue;
+            }
+            let winner = active.first().copied();
+            if index.first.last() != Some(&winner) {
+                index.starts.push(at);
+                index.first.push(winner);
+            }
+        }
+        index
+    }
+
+    /// The position of the first range containing `addr`.
+    pub fn find(&self, addr: u64) -> Option<usize> {
+        let addr = u128::from(addr);
+        let k = self.starts.partition_point(|&s| s <= addr);
+        self.first.get(k.checked_sub(1)?).copied().flatten()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -319,5 +383,40 @@ mod tests {
         assert_eq!(mutf8(b"\xed\xa0\xbd\xed\xb8\x80"), "\u{1f600}");
         assert_eq!(hex_string(&[0xde, 0xad]), "dead");
         assert_eq!(ellipsize("abcdef", 3), "abc…");
+    }
+
+    /// The index agrees with a linear first-match scan.
+    #[test]
+    fn range_index_matches_scan() {
+        let ranges: &[(u64, u64)] = &[
+            (10, 10),
+            (5, 10),
+            (0, 0),
+            (15, 20),
+            (12, 2),
+            (u64::MAX - 3, 10),
+            (40, 1),
+            (41, 5),
+            (100, u64::MAX),
+        ];
+        let index = RangeIndex::new(ranges.iter().copied());
+        let scan = |a: u64| {
+            ranges
+                .iter()
+                .position(|&(s, l)| a.checked_sub(s).is_some_and(|d| d < l))
+        };
+        let probes = (0..60).chain([
+            99,
+            100,
+            101,
+            u64::MAX - 4,
+            u64::MAX - 3,
+            u64::MAX - 1,
+            u64::MAX,
+        ]);
+        for a in probes {
+            assert_eq!(index.find(a), scan(a), "address {a}");
+        }
+        assert_eq!(RangeIndex::new([]).find(0), None);
     }
 }

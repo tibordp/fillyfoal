@@ -19,7 +19,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{data_node, get_at, name_or, perms, text};
+use crate::formats::util::binutil::{RangeIndex, data_node, get_at, name_or, perms, text};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -189,6 +189,10 @@ pub(crate) struct ElfInfo {
     sections: Vec<Section>,
     segments: Vec<Segment>,
     shstrtab: Vec<u8>,
+    /// The address ranges [`ElfInfo::vaddr_offset`] translates through:
+    /// the loadable segments, or (in files without segments) the allocated
+    /// sections with data, indexed by position in `segments`/`sections`.
+    vaddr_index: RangeIndex,
 }
 
 impl ElfInfo {
@@ -226,29 +230,17 @@ impl ElfInfo {
 
     /// Translates a virtual address to a file offset through the loadable
     /// segments (or, in relocatable files, the allocated sections).
+    /// The first range containing the address wins.
     fn vaddr_offset(&self, vaddr: u64) -> Option<u64> {
-        let loads = self.segments.iter().filter(|s| s.kind == PT_LOAD);
-        for s in loads {
-            if let Some(delta) = vaddr.checked_sub(s.vaddr)
-                && delta < s.filesz
-            {
-                return s.offset.checked_add(delta);
-            }
-        }
-        if self.segments.is_empty() {
-            for s in self
-                .sections
-                .iter()
-                .filter(|s| s.has_data() && s.flags & 2 != 0)
-            {
-                if let Some(delta) = vaddr.checked_sub(s.addr)
-                    && delta < s.size
-                {
-                    return s.offset.checked_add(delta);
-                }
-            }
-        }
-        None
+        let i = self.vaddr_index.find(vaddr)?;
+        let (start, offset) = if self.segments.is_empty() {
+            let s = self.sections.get(i)?;
+            (s.addr, s.offset)
+        } else {
+            let s = self.segments.get(i)?;
+            (s.vaddr, s.offset)
+        };
+        offset.checked_add(vaddr.checked_sub(start)?)
     }
 
     fn vaddr_span(&self, vaddr: u64, len: u64) -> Option<Span> {
@@ -320,6 +312,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     };
 
+    let vaddr_index = if segments.is_empty() {
+        RangeIndex::new(sections.iter().map(|s| {
+            if s.has_data() && s.flags & 2 != 0 {
+                (s.addr, s.size)
+            } else {
+                (0, 0)
+            }
+        }))
+    } else {
+        RangeIndex::new(segments.iter().map(|s| {
+            if s.kind == PT_LOAD {
+                (s.vaddr, s.filesz)
+            } else {
+                (0, 0)
+            }
+        }))
+    };
     let elf: Elf = Arc::new(ElfInfo {
         input,
         class,
@@ -327,6 +336,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sections,
         segments,
         shstrtab,
+        vaddr_index,
     });
 
     let facts = gather_facts(&cx, &elf).await;

@@ -477,7 +477,10 @@ async fn crc_node(cx: &Cx, span: Span, want: Option<u32>) -> Result<Node> {
         if data.is_empty() {
             break;
         }
-        crc = crate::codec::crc::crc32_update(crc, &data);
+        crate::formats::util::datakit::feed_paced(cx, &data, |piece| {
+            crc = crate::codec::crc::crc32_update(crc, piece);
+        })
+        .await;
         pos = pos.saturating_add(crate::bytes::to_u64(data.len()));
     }
     let got = !crc;

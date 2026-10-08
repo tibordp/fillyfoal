@@ -1052,7 +1052,11 @@ static TF_EVENT: Msg = Msg {
 };
 
 fn masked_crc(data: &[u8]) -> u32 {
-    crc32c(data).rotate_right(15).wrapping_add(0xa282_ead8)
+    mask_crc(crc32c(data))
+}
+
+fn mask_crc(crc: u32) -> u32 {
+    crc.rotate_right(15).wrapping_add(0xa282_ead8)
 }
 
 fn tfrecord_probe(h: &Head<'_>) -> bool {
@@ -1100,7 +1104,8 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
         }
         if len <= CRC_MAX {
             let data = cx.read(body).await?;
-            if masked_crc(&data) != data_crc {
+            let crc = crate::formats::util::datakit::crc32c_paced(&cx, &data).await;
+            if mask_crc(crc) != data_crc {
                 node =
                     node.diag(Diagnostic::malformed("data CRC mismatch").at(file.sub(crc_at, 4)));
             }

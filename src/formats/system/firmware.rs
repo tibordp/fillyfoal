@@ -451,7 +451,10 @@ pub async fn dissect_uimage(cx: Cx, input: Input) -> Result<()> {
         while done < data.len {
             let n = data.len.saturating_sub(done).min(CHUNK);
             let bytes = cx.read(data.sub(done, n)).await?;
-            crc = crate::codec::crc::crc32_update(crc, &bytes);
+            crate::formats::util::datakit::feed_paced(&cx, &bytes, |piece| {
+                crc = crate::codec::crc::crc32_update(crc, piece);
+            })
+            .await;
             done = done.saturating_add(n);
         }
         let computed = !crc;
