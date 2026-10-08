@@ -5,14 +5,16 @@
 //! structures; column chunks list their pages (page headers are Thrift
 //! too) on demand.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use crate::bytes::{to_u64, to_usize, u32_le};
-use crate::cx::Cx;
+use crate::cx::{Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::wire::thrift::compact::{
     field_header, list_header, skip, varint, zigzag,
 };
+use crate::formats::util::wire::thrift::{Memo, Skip};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -24,6 +26,8 @@ const MAX_DEPTH: u32 = 32;
 const MAX_FOOTER: u64 = 64 << 20;
 /// Pages listed per column chunk before giving up on a broken chain.
 const MAX_PAGES: u64 = 1 << 20;
+/// Thrift values skipped per unit of work.
+const SKIP_STEP: u32 = 256;
 
 pub static FORMAT: Format = Format {
     name: "parquet",
@@ -73,12 +77,39 @@ const P: Kind = Kind::Plain;
 struct Buf {
     data: Arc<Vec<u8>>,
     span: Span,
+    /// Ends of large values already skipped, shared by all nodes.
+    memo: Arc<Mutex<Memo>>,
 }
 
 impl Buf {
+    fn new(data: Arc<Vec<u8>>, span: Span) -> Buf {
+        Buf {
+            data,
+            span,
+            memo: Arc::default(),
+        }
+    }
+
     fn sub(&self, start: usize, end: usize) -> Span {
         self.span
             .sub(to_u64(start), to_u64(end.saturating_sub(start)))
+    }
+
+    /// [`skip`] in bounded steps, remembering large values.
+    async fn skip(&self, cx: &Cx, at: usize, t: u8) -> Option<usize> {
+        skip_async(cx, &self.data, &self.memo, at, t).await
+    }
+}
+
+/// [`skip`] of the value of compact type `t` at `at`, in bounded steps.
+async fn skip_async(cx: &Cx, data: &[u8], memo: &Mutex<Memo>, at: usize, t: u8) -> Option<usize> {
+    let mut skip = Skip::compact(at, t, 0);
+    loop {
+        let step = skip.step(data, Some(&mut lock(memo)), SKIP_STEP);
+        match step {
+            Poll::Ready(r) => return r.map(|(end, _)| end),
+            Poll::Pending => cx.checkpoint().await,
+        }
     }
 }
 
@@ -125,9 +156,16 @@ fn scalar(data: &[u8], at: usize, t: u8, kind: Kind) -> Option<Value> {
 }
 
 /// The node for one value: scalars decoded, structs and lists expandable.
-fn value_node(name: String, state: &ThriftState, at: usize, t: u8, kind: Kind) -> Node {
+async fn value_node(
+    cx: &Cx,
+    name: String,
+    state: &ThriftState,
+    at: usize,
+    t: u8,
+    kind: Kind,
+) -> Node {
     let data = &state.buf.data;
-    let end = skip(data, at, t, 0).unwrap_or(data.len());
+    let end = state.buf.skip(cx, at, t).await.unwrap_or(data.len());
     let mut node = Node::new(name).span(state.buf.sub(at, end));
     match (t, kind) {
         (12, _) => {
@@ -204,7 +242,7 @@ async fn thrift_struct(cx: Cx, state: ThriftState) -> Result<()> {
         let def = state.def.fields.iter().find(|d| d.id == field);
         let name = def.map_or_else(|| format!("Field {field}"), |d| d.name.to_owned());
         let kind = def.map_or(Kind::Plain, |d| d.kind);
-        let mut node = value_node(name, &state, next, t, kind);
+        let mut node = value_node(&cx, name, &state, next, t, kind).await;
         // Spans include the field header.
         if let Some(span) = node.span {
             let start = state.buf.sub(pos, next).offset;
@@ -220,7 +258,7 @@ async fn thrift_struct(cx: Cx, state: ThriftState) -> Result<()> {
             ints.push((field, zigzag(v)));
         }
         cx.emit(node);
-        let Some(end) = skip(&data, next, t, 0) else {
+        let Some(end) = state.buf.skip(&cx, next, t).await else {
             return Err(Diagnostic::malformed("invalid value")
                 .at(state.buf.sub(next, next.saturating_add(1))));
         };
@@ -252,8 +290,11 @@ async fn thrift_list(cx: Cx, (state, elem): (ThriftState, Kind)) -> Result<()> {
             pos = pos.saturating_add(1);
             node
         } else {
-            let node = value_node(format!("[{i}]"), &state, pos, t, elem);
-            pos = skip(&data, pos, t, 0)
+            let node = value_node(&cx, format!("[{i}]"), &state, pos, t, elem).await;
+            pos = state
+                .buf
+                .skip(&cx, pos, t)
+                .await
                 .ok_or_else(|| Diagnostic::malformed("invalid list element"))?;
             node
         };
@@ -543,11 +584,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let meta_span = file.sub(meta_start, len);
     let data = Arc::new(cx.read(meta_span).await?);
-    let buf = Buf {
-        data: data.clone(),
-        span: meta_span,
-    };
-    cx.annotate(summary(&data));
+    let buf = Buf::new(data.clone(), meta_span);
+    cx.annotate(summary(&cx, &buf).await);
     cx.emit(
         Node::new("Column chunks")
             .span(file.sub(4, meta_start.saturating_sub(4)))
@@ -560,13 +598,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         depth: 0,
         file: input,
     };
-    cx.emit(value_node(
-        "FileMetaData".to_owned(),
-        &state,
-        0,
-        12,
-        Kind::Struct(&FILE_META_DATA),
-    ));
+    cx.emit(
+        value_node(
+            &cx,
+            "FileMetaData".to_owned(),
+            &state,
+            0,
+            12,
+            Kind::Struct(&FILE_META_DATA),
+        )
+        .await,
+    );
     cx.emit(
         Node::new("Metadata length")
             .span(tail_span.sub(0, 4))
@@ -585,11 +627,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// Rows, row groups, columns and writer from the top-level metadata fields.
-fn summary(data: &[u8]) -> String {
+async fn summary(cx: &Cx, buf: &Buf) -> String {
+    let data = &buf.data;
     let mut pos = 0usize;
     let mut id = 0i16;
     let (mut rows, mut groups, mut columns, mut writer) = (None, None, None, None);
     while let Some((field, t, next)) = field_header(data, pos, id) {
+        cx.checkpoint().await;
         if t == 0 {
             break;
         }
@@ -605,7 +649,7 @@ fn summary(data: &[u8]) -> String {
             }
             _ => {}
         }
-        let Some(end) = skip(data, next, t, 0) else {
+        let Some(end) = buf.skip(cx, next, t).await else {
             break;
         };
         pos = end;
@@ -682,10 +726,7 @@ async fn pages(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             .and_then(|k| lookup(PAGE_TYPES, k.cast_unsigned()))
             .unwrap_or("Page");
         let state = ThriftState {
-            buf: Buf {
-                data: data.clone(),
-                span: window,
-            },
+            buf: Buf::new(data.clone(), window),
             at: 0,
             def: &PAGE_HEADER,
             depth: 0,
@@ -711,12 +752,14 @@ async fn pages(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
 async fn page(cx: Cx, (state, header, body): (ThriftState, Span, Span)) -> Result<()> {
     cx.emit(
         value_node(
+            &cx,
             "PageHeader".to_owned(),
             &state,
             0,
             12,
             Kind::Struct(&PAGE_HEADER),
         )
+        .await
         .span(header),
     );
     cx.emit(

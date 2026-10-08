@@ -36,7 +36,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use catalog::{Links, MetaPtr};
-use serial::{Bs, Ty};
+use serial::{Stream, Ty};
 
 use crate::bytes::{to_u64, u64_le};
 use crate::cx::Cx;
@@ -486,35 +486,12 @@ struct Parsed {
     error: Option<Diagnostic>,
 }
 
-/// Parses `stream` with `f`, reading a longer prefix whenever the parse
-/// runs out of bytes before the stream ends.
-async fn parse_stream<R>(
-    cx: &Cx,
-    stream: Span,
-    mut f: impl FnMut(&mut Bs<'_>, &mut Tree) -> Result<R>,
-) -> Result<(Parsed, Option<R>)> {
-    let max = cx.limits().max_read;
-    let mut len = stream.len.min(FIRST_READ);
-    loop {
-        let data = cx.read_avail(stream.sub(0, len)).await?;
-        let mut bs = Bs::new(&data, stream);
-        let mut tree = Tree::default();
-        let r = f(&mut bs, &mut tree);
-        if r.is_err() && bs.short && len < stream.len && len < max {
-            len = len.saturating_mul(4).min(stream.len).min(max);
-            continue;
+impl Parsed {
+    fn new(tree: Tree, r: Result<()>) -> Parsed {
+        Parsed {
+            tree: Arc::new(tree),
+            error: r.err(),
         }
-        let (r, error) = match r {
-            Ok(r) => (Some(r), None),
-            Err(e) => (None, Some(e)),
-        };
-        return Ok((
-            Parsed {
-                tree: Arc::new(tree),
-                error,
-            },
-            r,
-        ));
     }
 }
 
@@ -552,12 +529,10 @@ async fn catalog_tree(cx: &Cx, geo: Geo, ptr: MetaPtr) -> Result<CatalogTree> {
     let links = LinksImpl { geo };
     let mut roots = Vec::new();
     let mut counts = catalog::Counts::default();
-    let (parsed, _) = parse_stream(cx, stream, |bs, t| {
-        roots.clear();
-        counts = catalog::Counts::default();
-        catalog::catalog(bs, t, &links, &mut roots, &mut counts)
-    })
-    .await?;
+    let mut s = Stream::open(cx, stream, FIRST_READ).await?;
+    let mut tree = Tree::default();
+    let r = catalog::catalog(cx, &mut s, &mut tree, &links, &mut roots, &mut counts).await;
+    let parsed = Parsed::new(tree, r);
     let counts = (counts.tables, counts.views);
     Ok(CatalogTree {
         stream,
@@ -575,11 +550,10 @@ async fn table_data(
     let stream = meta_stream(&cx, geo, ptr).await?;
     let links = LinksImpl { geo };
     let mut roots = Vec::new();
-    let (parsed, _) = parse_stream(&cx, stream, |bs, t| {
-        roots.clear();
-        catalog::table_data(bs, t, &columns, &links, &mut roots)
-    })
-    .await?;
+    let mut s = Stream::open(&cx, stream, FIRST_READ).await?;
+    let mut tree = Tree::default();
+    let r = catalog::table_data(&cx, &mut s, &mut tree, &columns, &links, &mut roots).await;
+    let parsed = Parsed::new(tree, r);
     emit_parsed(&cx, &parsed.tree, &roots, parsed.error).await
 }
 
@@ -587,11 +561,16 @@ async fn column_data(cx: Cx, (geo, ptr, ty): (Geo, MetaPtr, Arc<Ty>)) -> Result<
     let stream = meta_stream(&cx, geo, ptr).await?;
     let links = LinksImpl { geo };
     let mut roots = Vec::new();
-    let (parsed, _) = parse_stream(&cx, stream, |bs, t| {
-        roots.clear();
-        catalog::column_data(bs, t, None, &ty, &links, 0, &mut roots)
-    })
-    .await?;
+    let mut s = Stream::open(&cx, stream, FIRST_READ).await?;
+    let mut tree = Tree::default();
+    // A column's segments in one row group: a handful, parsed in one piece.
+    let r = s
+        .piece(&cx, &mut tree, |bs, t| {
+            roots.clear();
+            catalog::column_data(bs, t, None, &ty, &links, 0, &mut roots)
+        })
+        .await;
+    let parsed = Parsed::new(tree, r);
     emit_parsed(&cx, &parsed.tree, &roots, parsed.error).await
 }
 

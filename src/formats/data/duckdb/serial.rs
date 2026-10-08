@@ -18,6 +18,7 @@
 use std::fmt::Write as _;
 
 use crate::bytes::{sleb128, to_u64, uleb128};
+use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::data::valuetree::datetime;
 use crate::formats::util::binutil::Tree;
@@ -43,6 +44,9 @@ pub struct Bs<'a> {
     /// Set when a read ran past `data` while the stream goes on: reading a
     /// longer prefix may succeed.
     pub short: bool,
+    /// Whether a longer prefix can be read (the stream goes on and the
+    /// read limit allows more).
+    pub can_grow: bool,
 }
 
 impl<'a> Bs<'a> {
@@ -54,6 +58,7 @@ impl<'a> Bs<'a> {
             base,
             more,
             short: false,
+            can_grow: more,
         }
     }
 
@@ -236,6 +241,76 @@ impl<'a> Bs<'a> {
             item(self, i)?;
         }
         Ok(n)
+    }
+}
+
+/// A metadata stream parsed a piece (a catalog entry, a row group) per
+/// step, over a prefix that grows (by 4×, from what was read so far) only
+/// when a piece runs out of bytes before the stream ends: that piece is
+/// then parsed again, and nothing before it.
+pub struct Stream {
+    span: Span,
+    data: Vec<u8>,
+    /// The prefix length asked for (the source may hold less).
+    want: u64,
+    max: u64,
+    /// Where the next piece starts.
+    pos: usize,
+}
+
+impl Stream {
+    pub async fn open(cx: &Cx, span: Span, first: u64) -> Result<Stream> {
+        let want = span.len.min(first);
+        let data = cx.read_avail(span.sub(0, want)).await?;
+        Ok(Stream {
+            span,
+            data,
+            want,
+            max: cx.limits().max_read,
+            pos: 0,
+        })
+    }
+
+    /// Where the next piece starts.
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+
+    /// Parses one piece with `f` from where the last one ended, charging
+    /// for the bytes it covered. Nodes `f` added to `t` before running
+    /// short are dropped before it runs again, so `f` must add nothing
+    /// under nodes that existed before (and must reset its own outputs).
+    pub async fn piece<R>(
+        &mut self,
+        cx: &Cx,
+        t: &mut Tree,
+        mut f: impl FnMut(&mut Bs<'_>, &mut Tree) -> Result<R>,
+    ) -> Result<R> {
+        let mark = t.next_index();
+        loop {
+            let mut bs = Bs::new(&self.data, self.span);
+            bs.seek(self.pos);
+            bs.can_grow = self.want < self.span.len && self.want < self.max;
+            let r = f(&mut bs, t);
+            let (end, short) = (bs.pos(), bs.short);
+            // A unit per KiB covered.
+            for _ in 0..=end.abs_diff(self.pos) >> 10 {
+                cx.checkpoint().await;
+            }
+            if r.is_err() && short && self.want < self.span.len && self.want < self.max {
+                let want = self.want.saturating_mul(4).min(self.span.len).min(self.max);
+                let have = to_u64(self.data.len());
+                let more = cx
+                    .read_avail(self.span.sub(have, want.saturating_sub(have)))
+                    .await?;
+                self.data.extend_from_slice(&more);
+                self.want = want;
+                t.truncate(mark);
+                continue;
+            }
+            self.pos = end;
+            return r;
+        }
     }
 }
 

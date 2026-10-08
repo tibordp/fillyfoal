@@ -144,6 +144,7 @@ pub struct Tree {
 #[derive(Clone)]
 struct TreeNode {
     node: Node,
+    parent: Option<usize>,
     children: Vec<usize>,
 }
 
@@ -153,6 +154,7 @@ impl Tree {
         let index = self.nodes.len();
         self.nodes.push(TreeNode {
             node,
+            parent: parent.filter(|&p| p < index),
             children: Vec::new(),
         });
         if let Some(p) = parent.and_then(|p| self.nodes.get_mut(p)) {
@@ -164,6 +166,17 @@ impl Tree {
     /// The index the next [`Tree::add`] returns.
     pub fn next_index(&self) -> usize {
         self.nodes.len()
+    }
+
+    /// Drops the nodes added since [`Tree::next_index`] returned `len`
+    /// (e.g. to parse a piece again).
+    pub fn truncate(&mut self, len: usize) {
+        while self.nodes.len() > len {
+            let parent = self.nodes.pop().and_then(|t| t.parent);
+            if let Some(p) = parent.and_then(|p| self.nodes.get_mut(p)) {
+                p.children.pop();
+            }
+        }
     }
 
     /// Changes a node already added (e.g. to fill in its span or summary once

@@ -163,8 +163,30 @@ async fn derive(cx: &Cx, kdf: &Kdf, key: &[u8], at: Span) -> Result<Vec<u8>> {
     }
 }
 
-/// Asks for the password until `check` accepts the key derived from it.
-/// `None` if the host declined or every attempt failed.
+/// Asks for password number `attempt` and derives the transformed key from
+/// it; `None` if the host declined.
+async fn attempt_key(
+    cx: &Cx,
+    realm: Span,
+    prompt: &str,
+    attempt: u32,
+    composite: impl Fn(&[u8]) -> Vec<u8>,
+    kdf: &Kdf,
+) -> Result<Option<Vec<u8>>> {
+    let Some(secret) = cx
+        .secret(SecretRequest::password(realm, prompt, attempt))
+        .await
+    else {
+        return Ok(None);
+    };
+    Ok(Some(
+        derive(cx, kdf, &composite(secret.expose()), realm).await?,
+    ))
+}
+
+/// Asks for the password until `check` (cheap: a few blocks) accepts the
+/// key derived from it. `None` if the host declined or every attempt
+/// failed.
 async fn unlock<T>(
     cx: &Cx,
     realm: Span,
@@ -174,18 +196,42 @@ async fn unlock<T>(
     check: impl Fn(&[u8]) -> Option<T>,
 ) -> Result<Option<T>> {
     for attempt in 0..MAX_ATTEMPTS {
-        let Some(secret) = cx
-            .secret(SecretRequest::password(realm, prompt, attempt))
-            .await
+        let Some(transformed) = attempt_key(cx, realm, prompt, attempt, &composite, kdf).await?
         else {
             return Ok(None);
         };
-        let transformed = derive(cx, kdf, &composite(secret.expose()), realm).await?;
         if let Some(keys) = check(&transformed) {
             return Ok(Some(keys));
         }
     }
     Ok(None)
+}
+
+/// Bytes decrypted or hashed per unit of work.
+const CRYPT_UNIT: usize = 256;
+/// Bytes decrypted or hashed between checkpoints (whole cipher blocks and
+/// ChaCha20 blocks).
+const CRYPT_CHUNK: usize = 16 << 10;
+
+async fn charge(cx: &Cx, bytes: usize) {
+    for _ in 0..bytes.div_ceil(CRYPT_UNIT) {
+        cx.checkpoint().await;
+    }
+}
+
+/// Feeds `data` to `update` a chunk at a time, charging for it.
+async fn feed(cx: &Cx, data: &[u8], mut update: impl FnMut(&[u8])) {
+    for chunk in data.chunks(CRYPT_CHUNK) {
+        update(chunk);
+        charge(cx, chunk.len()).await;
+    }
+}
+
+/// [`sha256`] of `data`, in budgeted steps.
+async fn sha256_stepped(cx: &Cx, data: &[u8]) -> Vec<u8> {
+    let mut h = Sha256::new();
+    feed(cx, data, |c| h.update(c)).await;
+    h.finish()
 }
 
 fn sha256(parts: &[&[u8]]) -> Vec<u8> {
@@ -220,21 +266,6 @@ impl Cipher {
         }
     }
 
-    /// Decrypts `data`; `None` for a bad key size or padding.
-    fn decrypt(self, key: &[u8], iv: &[u8], data: &[u8]) -> Option<Vec<u8>> {
-        match self {
-            Cipher::Aes | Cipher::Twofish => {
-                let plain = if self == Cipher::Aes {
-                    cbc_decrypt(&Aes::new(key)?, iv, data)
-                } else {
-                    cbc_decrypt(&Twofish::new(key)?, iv, data)
-                };
-                unpad_pkcs7(&plain, 16).map(<[u8]>::to_vec)
-            }
-            Cipher::ChaCha20 => chacha20(key, iv, 0, data),
-        }
-    }
-
     /// Decrypts the first bytes of `data` (whole blocks), for checking a
     /// password without decrypting everything.
     fn decrypt_head(self, key: &[u8], iv: &[u8], data: &[u8]) -> Option<Vec<u8>> {
@@ -242,6 +273,53 @@ impl Cipher {
             Cipher::Aes => Some(cbc_decrypt(&Aes::new(key)?, iv, data)),
             Cipher::Twofish => Some(cbc_decrypt(&Twofish::new(key)?, iv, data)),
             Cipher::ChaCha20 => chacha20(key, iv, 0, data),
+        }
+    }
+
+    /// Decrypts `data` (and removes CBC padding); `None` for a bad key size
+    /// or padding. In budgeted steps: CBC a chunk at a time, carrying the
+    /// IV (the chunk's last cipher block); ChaCha20 carrying the block
+    /// counter.
+    async fn decrypt_stepped(self, cx: &Cx, key: &[u8], iv: &[u8], data: &[u8]) -> Option<Vec<u8>> {
+        enum Keyed {
+            Aes(Aes),
+            Twofish(Twofish),
+            ChaCha20,
+        }
+        /// ChaCha20 blocks in a chunk.
+        const CHACHA_BLOCKS: u32 = 1 << 8;
+        const _: () = assert!(CRYPT_CHUNK == 64 << 8);
+        let keyed = match self {
+            Cipher::Aes => Keyed::Aes(Aes::new(key)?),
+            Cipher::Twofish => Keyed::Twofish(Twofish::new(key)?),
+            Cipher::ChaCha20 => Keyed::ChaCha20,
+        };
+        let mut out = Vec::with_capacity(data.len());
+        let mut prev = iv;
+        let mut counter = 0u32;
+        for chunk in data.chunks(CRYPT_CHUNK) {
+            match &keyed {
+                Keyed::Aes(c) => out.extend(cbc_decrypt(c, prev, chunk)),
+                Keyed::Twofish(c) => out.extend(cbc_decrypt(c, prev, chunk)),
+                Keyed::ChaCha20 => out.extend(chacha20(key, iv, counter, chunk)?),
+            }
+            prev = chunk
+                .get(chunk.len().saturating_sub(16)..)
+                .unwrap_or_default();
+            counter = counter.wrapping_add(CHACHA_BLOCKS);
+            charge(cx, chunk.len()).await;
+        }
+        match keyed {
+            Keyed::ChaCha20 => {
+                // Wrong key or nonce sizes fail even with no data.
+                chacha20(key, iv, 0, &[])?;
+                Some(out)
+            }
+            _ => {
+                let n = unpad_pkcs7(&out, 16)?.len();
+                out.truncate(n);
+                Some(out)
+            }
         }
     }
 }
@@ -675,12 +753,15 @@ impl KdbxKeys {
         }
     }
 
-    fn block_mac(&self, index: u64, parts: &[&[u8]]) -> Vec<u8> {
+    /// The HMAC of block `index` over `head` then `data`, in budgeted
+    /// steps.
+    async fn block_mac_stepped(&self, cx: &Cx, index: u64, head: &[&[u8]], data: &[u8]) -> Vec<u8> {
         let key = sha512(&[&index.to_le_bytes(), &self.hmac_base]);
         let mut mac = Hmac::<Sha256>::new(&key);
-        for p in parts {
+        for p in head {
             mac.update(p);
         }
+        feed(cx, data, |c| mac.update(c)).await;
         mac.finish()
     }
 }
@@ -708,14 +789,22 @@ async fn kdbx_payload(cx: Cx, (input, h): (Input, Arc<Header>)) -> Result<()> {
         let stored = cx
             .read(file.sub_exact(h.end.saturating_add(32), 32)?)
             .await?;
-        let check = |t: &[u8]| {
-            let keys = KdbxKeys::new(&h.master_seed, t);
-            (keys.block_mac(u64::MAX, &[&header]) == stored).then_some(keys)
-        };
         let keys = match cx.cached::<KdbxKeys>(file, "kdbx-keys") {
             Some(k) => k,
             None => {
-                let Some(keys) = unlock(&cx, file, PROMPT, composite2, kdf, check).await? else {
+                let mut found = None;
+                for attempt in 0..MAX_ATTEMPTS {
+                    let Some(t) = attempt_key(&cx, file, PROMPT, attempt, composite2, kdf).await?
+                    else {
+                        break;
+                    };
+                    let keys = KdbxKeys::new(&h.master_seed, &t);
+                    if keys.block_mac_stepped(&cx, u64::MAX, &[], &header).await == stored {
+                        found = Some(keys);
+                        break;
+                    }
+                }
+                let Some(keys) = found else {
                     return Err(locked("encrypted (no password, or a wrong one)"));
                 };
                 let keys = Arc::new(keys);
@@ -763,7 +852,8 @@ async fn decrypt(cx: &Cx, cipher: Cipher, keys: &KdbxKeys, iv: &[u8], span: Span
     }
     let data = read_all(cx, span).await?;
     let plain = cipher
-        .decrypt(&keys.cipher, iv, &data)
+        .decrypt_stepped(cx, &keys.cipher, iv, &data)
+        .await
         .ok_or_else(|| Diagnostic::malformed("decryption failed (bad padding)").at(span))?;
     Ok(cx.add_derived(origin, plain, span.len, None)?.span)
 }
@@ -893,7 +983,7 @@ async fn kdbx3_payload(
         let ok = if size == 0 {
             hash.iter().all(|&b| b == 0)
         } else {
-            sha256(&[body]) == hash
+            sha256_stepped(cx, body).await == hash
         };
         blocks.push(BlockInfo {
             span,
@@ -948,7 +1038,14 @@ async fn kdbx4_payload(
         let size = u32_le(&head, 32).unwrap_or(0);
         let data_span = payload.sub_exact(pos.saturating_add(36), size.into())?;
         let data = cx.read(data_span).await?;
-        let mac = keys.block_mac(index, &[&index.to_le_bytes(), &size.to_le_bytes(), &data]);
+        let mac = keys
+            .block_mac_stepped(
+                cx,
+                index,
+                &[&index.to_le_bytes(), &size.to_le_bytes()],
+                &data,
+            )
+            .await;
         blocks.push(BlockInfo {
             span: payload.sub(pos, u64::from(size).saturating_add(36)),
             data: data_span,
@@ -1795,13 +1892,25 @@ async fn kdb_payload(cx: Cx, (input, h): (Input, Arc<KdbHeader>)) -> Result<()> 
                 seed: h.transform_seed.to_vec(),
                 rounds: h.rounds.into(),
             };
-            let check = |t: &[u8]| {
-                let key = sha256(&[&h.master_seed, t]);
-                let plain = cipher.decrypt(&key, &h.iv, &data)?;
-                (sha256(&[&plain]) == h.contents_hash).then_some(plain)
-            };
             let composite = |p: &[u8]| sha256(&[p]);
-            let Some(plain) = unlock(&cx, file, PROMPT_KDB, composite, &kdf, check).await? else {
+            // Each attempt decrypts and hashes the whole payload, in
+            // budgeted steps.
+            let mut found = None;
+            for attempt in 0..MAX_ATTEMPTS {
+                let Some(t) = attempt_key(&cx, file, PROMPT_KDB, attempt, composite, &kdf).await?
+                else {
+                    break;
+                };
+                let key = sha256(&[&h.master_seed, &t]);
+                let Some(plain) = cipher.decrypt_stepped(&cx, &key, &h.iv, &data).await else {
+                    continue;
+                };
+                if sha256_stepped(&cx, &plain).await == h.contents_hash {
+                    found = Some(plain);
+                    break;
+                }
+            }
+            let Some(plain) = found else {
                 return Err(locked("encrypted (no password, or a wrong one)"));
             };
             cx.add_derived(origin, plain, payload.len, None)?.span

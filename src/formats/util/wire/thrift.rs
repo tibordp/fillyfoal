@@ -10,7 +10,10 @@
 //! checked against the Python `thrift` package's `TBinaryProtocol` and
 //! `TCompactProtocol`.
 
-use crate::bytes::{to_u64, to_usize};
+use std::collections::BTreeMap;
+use std::task::Poll;
+
+use crate::bytes::to_u64;
 
 /// Nesting of containers and structures followed when skipping values.
 pub const MAX_DEPTH: u32 = 64;
@@ -32,64 +35,12 @@ pub mod compact {
     }
 
     /// Skips a value of compact type `t` at `at`; returns where it ends.
+    /// One synchronous step over the whole value: only for data bounded by
+    /// a small constant; use [`Skip::compact`] for anything larger.
     pub fn skip(data: &[u8], at: usize, t: u8, depth: u32) -> Option<usize> {
-        if depth > MAX_DEPTH {
-            return None;
-        }
-        match t {
-            1 | 2 => Some(at),
-            3 => at.checked_add(1).filter(|&e| e <= data.len()),
-            4..=6 => varint(data, at).map(|(_, e)| e),
-            7 => at.checked_add(8).filter(|&e| e <= data.len()),
-            8 => {
-                let (len, e) = varint(data, at)?;
-                e.checked_add(to_usize(len))
-                    .filter(|&end| end <= data.len())
-            }
-            9 | 10 => {
-                let (n, elem, mut pos) = list_header(data, at)?;
-                if n > to_u64(data.len()) {
-                    return None;
-                }
-                for _ in 0..n {
-                    pos = skip_element(data, pos, elem, depth.saturating_add(1))?;
-                }
-                Some(pos)
-            }
-            11 => {
-                let (n, kv, mut pos) = map_header(data, at)?;
-                if n > to_u64(data.len()) {
-                    return None;
-                }
-                for _ in 0..n {
-                    pos = skip_element(data, pos, kv >> 4, depth.saturating_add(1))?;
-                    pos = skip_element(data, pos, kv & 0x0f, depth.saturating_add(1))?;
-                }
-                Some(pos)
-            }
-            12 => {
-                let mut pos = at;
-                let mut id = 0i16;
-                loop {
-                    let (field, t, next) = field_header(data, pos, id)?;
-                    if t == 0 {
-                        return Some(next);
-                    }
-                    id = field;
-                    pos = skip(data, next, t, depth.saturating_add(1))?;
-                }
-            }
-            13 => at.checked_add(16).filter(|&e| e <= data.len()),
-            _ => None,
-        }
-    }
-
-    /// Inside lists and maps, booleans take a byte of their own.
-    pub fn skip_element(data: &[u8], at: usize, t: u8, depth: u32) -> Option<usize> {
-        match t {
-            1 | 2 => at.checked_add(1).filter(|&e| e <= data.len()),
-            _ => skip(data, at, t, depth),
-        }
+        Skip::compact(at, t, depth)
+            .run(data, None)
+            .map(|(end, _)| end)
     }
 
     /// A list/set header: element count, element type, position after.
@@ -392,42 +343,330 @@ impl Protocol {
 
     /// Skips a value of type `t` at `at`; returns where it ends. Bounded by
     /// `depth` (structures and containers nest at most [`MAX_DEPTH`] deep).
+    /// One synchronous step over the whole value: only for data bounded by
+    /// a small constant; use [`Skip`] for anything larger.
     pub fn skip(self, data: &[u8], at: usize, t: Type, depth: u32) -> Option<usize> {
+        Skip::new(self, at, t, depth)
+            .run(data, None)
+            .map(|(end, _)| end)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Skipping values in bounded steps
+
+/// Values at least this long (in bytes) are remembered by a [`Memo`].
+pub const MEMO_MIN: usize = 4096;
+
+/// Where structures and containers end (and how many fields or elements
+/// they have), remembered across skips over the same bytes so that a value
+/// skipped once (to count its fields, say) is not walked again when it is
+/// skipped from its parent. Only values of at least [`MEMO_MIN`] bytes are
+/// kept: at most `len / MEMO_MIN` per nesting level. With each, how deep
+/// its contents nest (relative to it), so that a value remembered at one
+/// depth fails at a deeper one exactly as walking it again would.
+#[derive(Debug, Default)]
+pub struct Memo(BTreeMap<(usize, u8), Remembered>);
+
+#[derive(Clone, Copy, Debug)]
+struct Remembered {
+    end: usize,
+    count: u64,
+    nesting: u32,
+}
+
+/// The memo key of a composite type.
+fn memo_kind(t: Type) -> u8 {
+    match t {
+        Type::Struct => 0,
+        Type::List => 1,
+        Type::Set => 2,
+        _ => 3,
+    }
+}
+
+#[derive(Debug)]
+enum Frame {
+    Struct {
+        start: usize,
+        last: i16,
+        count: u64,
+        depth: u32,
+        deepest: u32,
+    },
+    Container {
+        start: usize,
+        t: Type,
+        count: u64,
+        remaining: u64,
+        key: Option<Type>,
+        elem: Option<Type>,
+        key_next: bool,
+        depth: u32,
+        deepest: u32,
+    },
+}
+
+impl Frame {
+    fn deepest(&mut self) -> &mut u32 {
+        match self {
+            Frame::Struct { deepest, .. } | Frame::Container { deepest, .. } => deepest,
+        }
+    }
+}
+
+/// Skips one value with an explicit stack, a bounded number of values per
+/// [`Skip::step`], so that callers can suspend between steps. Yields where
+/// the value ends and, for a structure, its number of fields (for a
+/// container, its element count; 0 for a scalar).
+#[derive(Debug)]
+pub struct Skip {
+    proto: Protocol,
+    /// Parquet's compact reader: an empty list's element type is not
+    /// checked.
+    lenient: bool,
+    stack: Vec<Frame>,
+    /// The value to start next: position, type, depth.
+    value: Option<(usize, Option<Type>, u32)>,
+    pos: usize,
+    done: bool,
+}
+
+impl Skip {
+    pub fn new(proto: Protocol, at: usize, t: Type, depth: u32) -> Skip {
+        Skip {
+            proto,
+            lenient: false,
+            stack: Vec::new(),
+            value: Some((at, Some(t), depth)),
+            pos: at,
+            done: false,
+        }
+    }
+
+    /// A value of compact type code `t` (as in a field header), the way
+    /// [`compact::skip`] reads it.
+    pub fn compact(at: usize, t: u8, depth: u32) -> Skip {
+        Skip {
+            proto: Protocol::Compact,
+            lenient: true,
+            stack: Vec::new(),
+            value: Some((at, Protocol::Compact.type_of(t, false), depth)),
+            pos: at,
+            done: false,
+        }
+    }
+
+    /// Runs to the end in one step: only for data bounded by a small
+    /// constant.
+    pub fn run(mut self, data: &[u8], mut memo: Option<&mut Memo>) -> Option<(usize, u64)> {
+        loop {
+            if let Poll::Ready(r) = self.step(data, memo.as_deref_mut(), u32::MAX) {
+                return r;
+            }
+        }
+    }
+
+    /// Advances over at most `budget` values (each a constant amount of
+    /// work). `Pending` means call again.
+    pub fn step(
+        &mut self,
+        data: &[u8],
+        mut memo: Option<&mut Memo>,
+        budget: u32,
+    ) -> Poll<Option<(usize, u64)>> {
+        if self.done {
+            return Poll::Ready(None);
+        }
+        for _ in 0..budget {
+            let r = match self.value.take() {
+                Some((at, t, depth)) => self.start(data, memo.as_deref_mut(), at, t, depth),
+                None => self.resume(data, memo.as_deref_mut()),
+            };
+            match r {
+                None => {
+                    self.done = true;
+                    return Poll::Ready(None);
+                }
+                Some(Some(found)) => {
+                    self.done = true;
+                    return Poll::Ready(Some(found));
+                }
+                Some(None) => {}
+            }
+        }
+        Poll::Pending
+    }
+
+    /// Starts the value at `at`. `None`: invalid; `Some(Some(_))`: the
+    /// outermost value ended; `Some(None)`: carry on.
+    #[allow(clippy::option_option)]
+    fn start(
+        &mut self,
+        data: &[u8],
+        memo: Option<&mut Memo>,
+        at: usize,
+        t: Option<Type>,
+        depth: u32,
+    ) -> Option<Option<(usize, u64)>> {
         if depth > MAX_DEPTH {
             return None;
         }
+        let t = t?;
+        self.note(depth);
+        if matches!(t, Type::Struct | Type::List | Type::Set | Type::Map)
+            && let Some(&r) = memo.as_deref().and_then(|m| m.0.get(&(at, memo_kind(t))))
+        {
+            let deepest = depth.saturating_add(r.nesting);
+            if deepest > MAX_DEPTH {
+                return None;
+            }
+            self.note(deepest);
+            return Some(self.finish(r.end, r.count));
+        }
         match t {
             Type::Struct => {
-                let mut pos = at;
-                let mut last = 0i16;
-                loop {
-                    match self.field_header(data, pos, last)? {
-                        (Header::Stop, next) => return Some(next),
-                        (Header::Field(id, t), next) => {
-                            last = id;
-                            pos = self.skip(data, next, t, depth.saturating_add(1))?;
-                        }
-                    }
-                }
+                self.stack.push(Frame::Struct {
+                    start: at,
+                    last: 0,
+                    count: 0,
+                    depth,
+                    deepest: depth,
+                });
+                self.pos = at;
+                Some(None)
             }
             Type::List | Type::Set | Type::Map => {
-                let c = self.container(data, at, t)?;
+                let c = if self.lenient
+                    && matches!(t, Type::List | Type::Set)
+                    && let Some((0, _, start)) = compact::list_header(data, at)
+                {
+                    Container {
+                        count: 0,
+                        key: None,
+                        elem: None,
+                        start,
+                    }
+                } else {
+                    self.proto.container(data, at, t)?
+                };
                 // Every element takes at least a byte (except compact
                 // booleans in field headers, which are not elements).
                 if c.count > to_u64(data.len()) {
                     return None;
                 }
-                let mut pos = c.start;
-                for _ in 0..c.count {
-                    if let Some(k) = c.key {
-                        pos = self.skip(data, pos, k, depth.saturating_add(1))?;
-                    }
-                    pos = self.skip(data, pos, c.elem?, depth.saturating_add(1))?;
-                }
-                Some(pos)
+                self.stack.push(Frame::Container {
+                    start: at,
+                    t,
+                    count: c.count,
+                    remaining: c.count,
+                    key: c.key,
+                    elem: c.elem,
+                    key_next: true,
+                    depth,
+                    deepest: depth,
+                });
+                self.pos = c.start;
+                Some(None)
             }
-            _ => self.scalar(data, at, t).map(|(_, end)| end),
+            _ => {
+                let (_, end) = self.proto.scalar(data, at, t)?;
+                Some(self.finish(end, 0))
+            }
         }
+    }
+
+    /// Continues the innermost structure or container at `self.pos`.
+    #[allow(clippy::option_option)]
+    fn resume(&mut self, data: &[u8], memo: Option<&mut Memo>) -> Option<Option<(usize, u64)>> {
+        let pos = self.pos;
+        let proto = self.proto;
+        match self.stack.last_mut()? {
+            Frame::Struct {
+                last, count, depth, ..
+            } => match proto.field_header(data, pos, *last)? {
+                (Header::Stop, next) => Some(self.end_frame(memo, Type::Struct, next)),
+                (Header::Field(id, t), next) => {
+                    *last = id;
+                    *count = count.saturating_add(1);
+                    self.value = Some((next, Some(t), depth.saturating_add(1)));
+                    Some(None)
+                }
+            },
+            Frame::Container {
+                t,
+                remaining,
+                key,
+                elem,
+                key_next,
+                depth,
+                ..
+            } => {
+                if *remaining == 0 {
+                    let t = *t;
+                    return Some(self.end_frame(memo, t, pos));
+                }
+                let d = depth.saturating_add(1);
+                if let Some(k) = key.filter(|_| *key_next) {
+                    *key_next = false;
+                    self.value = Some((pos, Some(k), d));
+                } else {
+                    let e = (*elem)?;
+                    *key_next = true;
+                    *remaining = remaining.saturating_sub(1);
+                    self.value = Some((pos, Some(e), d));
+                }
+                Some(None)
+            }
+        }
+    }
+
+    /// Notes that a value at `depth` was reached inside the innermost
+    /// frame.
+    fn note(&mut self, depth: u32) {
+        if let Some(f) = self.stack.last_mut() {
+            let d = f.deepest();
+            *d = (*d).max(depth);
+        }
+    }
+
+    /// The innermost structure or container (of type `t`) ended at `end`:
+    /// pop it, and remember it if large.
+    fn end_frame(&mut self, memo: Option<&mut Memo>, t: Type, end: usize) -> Option<(usize, u64)> {
+        let (start, count, depth, deepest) = match self.stack.pop()? {
+            Frame::Struct {
+                start,
+                count,
+                depth,
+                deepest,
+                ..
+            }
+            | Frame::Container {
+                start,
+                count,
+                depth,
+                deepest,
+                ..
+            } => (start, count, depth, deepest),
+        };
+        if let Some(m) = memo
+            && end.saturating_sub(start) >= MEMO_MIN
+        {
+            let r = Remembered {
+                end,
+                count,
+                nesting: deepest.saturating_sub(depth),
+            };
+            m.0.insert((start, memo_kind(t)), r);
+        }
+        self.note(deepest);
+        self.finish(end, count)
+    }
+
+    /// A value ended at `end`: the result if it was the outermost one.
+    fn finish(&mut self, end: usize, count: u64) -> Option<(usize, u64)> {
+        self.pos = end;
+        self.stack.is_empty().then_some((end, count))
     }
 }
 
@@ -502,5 +741,65 @@ mod tests {
             Protocol::Binary.field_header(&data, 0, 0),
             Some((Header::Field(1, Type::Binary), 3))
         );
+    }
+
+    /// Compact: a struct with field 1 = list<i32> of `n` zeros, then stop.
+    fn big_struct(n: usize) -> Vec<u8> {
+        let mut data = vec![0x19, 0xf5];
+        let mut len = n;
+        loop {
+            let b = u8::try_from(len & 0x7f).unwrap_or(0);
+            len >>= 7;
+            if len == 0 {
+                data.push(b);
+                break;
+            }
+            data.push(b | 0x80);
+        }
+        data.extend(std::iter::repeat_n(0u8, n));
+        data.push(0);
+        data
+    }
+
+    #[test]
+    fn skips_in_bounded_steps() {
+        let data = big_struct(10_000);
+        let mut skip = Skip::new(Protocol::Compact, 0, Type::Struct, 0);
+        let mut memo = Memo::default();
+        let mut steps = 0u32;
+        let r = loop {
+            match skip.step(&data, Some(&mut memo), 100) {
+                Poll::Ready(r) => break r,
+                Poll::Pending => steps = steps.saturating_add(1),
+            }
+        };
+        assert_eq!(r, Some((data.len(), 1)));
+        assert!(steps >= 100, "{steps}");
+        // Remembered: skipping again is a single step, from the parent too.
+        let mut again = Skip::new(Protocol::Compact, 0, Type::Struct, 0);
+        assert_eq!(
+            again.step(&data, Some(&mut memo), 1),
+            Poll::Ready(Some((data.len(), 1)))
+        );
+        // The list's elements nest two levels below the struct: from
+        // MAX_DEPTH - 1 it fails, remembered or not.
+        let deep = Protocol::Compact.skip(&data, 0, Type::Struct, MAX_DEPTH - 1);
+        let remembered = Skip::new(Protocol::Compact, 0, Type::Struct, MAX_DEPTH - 1)
+            .run(&data, Some(&mut memo));
+        assert_eq!((deep, remembered), (None, None));
+        assert_eq!(
+            Skip::new(Protocol::Compact, 0, Type::Struct, MAX_DEPTH - 2)
+                .run(&data, Some(&mut memo)),
+            Some((data.len(), 1))
+        );
+    }
+
+    #[test]
+    fn compact_codes_accept_empty_lists_of_any_type() {
+        // An empty list whose element type (0) is not a type.
+        let data = [0x00];
+        assert_eq!(compact::skip(&data, 0, 9, 0), Some(1));
+        assert_eq!(Protocol::Compact.skip(&data, 0, Type::List, 0), None);
+        assert_eq!(compact::skip(&data, 0, 14, 0), None);
     }
 }

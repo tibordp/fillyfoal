@@ -9,14 +9,15 @@
 //! as" only. Up to [`MAX_READ`] bytes are read into memory. Checked against
 //! the Python `thrift` package (`tests/data/thrift`).
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::task::Poll;
 
 use crate::bytes::to_u64;
-use crate::cx::Cx;
+use crate::cx::{Cx, lock};
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::wire::thrift::{
-    Container, Header, MAX_DEPTH, MESSAGE_TYPES, Protocol, Scalar, Type,
+    Container, Header, MAX_DEPTH, MESSAGE_TYPES, Memo, Protocol, Scalar, Skip, Type,
 };
 use crate::formats::{Input, Probe};
 use crate::node::Node;
@@ -34,6 +35,8 @@ declare_format!(pub COMPACT = "thrift-compact", "Thrift compact protocol data",
 pub const MAX_READ: u64 = 16 << 20;
 /// Characters of a string shown.
 const TEXT_MAX: usize = 256;
+/// Values skipped per unit of work.
+const SKIP_STEP: u32 = 256;
 
 /// Bytes held in memory, with the span they came from.
 #[derive(Clone)]
@@ -41,6 +44,8 @@ struct Buf {
     data: Arc<Vec<u8>>,
     span: Span,
     proto: Protocol,
+    /// Ends of large values already skipped, shared by all nodes.
+    memo: Arc<Mutex<Memo>>,
 }
 
 impl Buf {
@@ -49,8 +54,23 @@ impl Buf {
             .sub(to_u64(start), to_u64(end.saturating_sub(start)))
     }
 
-    fn skip(&self, at: usize, t: Type, depth: u32) -> Option<usize> {
-        self.proto.skip(&self.data, at, t, depth)
+    /// Skips the value of type `t` at `at`, in bounded steps: where it
+    /// ends and how many fields (or elements) it has.
+    async fn skip_counted(&self, cx: &Cx, at: usize, t: Type, depth: u32) -> Option<(usize, u64)> {
+        let mut skip = Skip::new(self.proto, at, t, depth);
+        loop {
+            let step = skip.step(&self.data, Some(&mut lock(&self.memo)), SKIP_STEP);
+            match step {
+                Poll::Ready(r) => return r,
+                Poll::Pending => cx.checkpoint().await,
+            }
+        }
+    }
+
+    async fn skip(&self, cx: &Cx, at: usize, t: Type, depth: u32) -> Option<usize> {
+        self.skip_counted(cx, at, t, depth)
+            .await
+            .map(|(end, _)| end)
     }
 }
 
@@ -81,9 +101,11 @@ async fn dissect(cx: Cx, input: Input, proto: Protocol) -> Result<()> {
         data: Arc::new(data),
         span: file,
         proto,
+        memo: Arc::default(),
     };
     let len = buf.data.len();
-    let one = proto.message(&buf.data).is_none() && buf.skip(0, Type::Struct, 0) == Some(len);
+    let one =
+        proto.message(&buf.data).is_none() && buf.skip(&cx, 0, Type::Struct, 0).await == Some(len);
     if one {
         let fields = fields(&cx, &buf, 0, 0).await?;
         cx.annotate(format!(
@@ -112,7 +134,7 @@ async fn records(cx: &Cx, buf: &Buf) -> Result<u64> {
         let (node, end) = match buf.proto.message(buf.data.get(pos..).unwrap_or_default()) {
             Some(m) => {
                 let args = pos.saturating_add(m.start);
-                let end = buf.skip(args, Type::Struct, 0);
+                let end = buf.skip(cx, args, Type::Struct, 0).await;
                 let kind = lookup(MESSAGE_TYPES, m.kind.into()).unwrap_or("message");
                 let name = String::from_utf8_lossy(m.name).into_owned();
                 let header = (pos, args, name.clone(), m.kind, m.seqid);
@@ -122,8 +144,8 @@ async fn records(cx: &Cx, buf: &Buf) -> Result<u64> {
                 (node, end)
             }
             None => {
-                let end = buf.skip(pos, Type::Struct, 0);
-                let node = struct_node(format!("Struct {i}"), buf, pos, 0);
+                let end = buf.skip(cx, pos, Type::Struct, 0).await;
+                let node = struct_node(cx, format!("Struct {i}"), buf, pos, 0).await;
                 (node, end)
             }
         };
@@ -155,38 +177,37 @@ async fn message(
         value: seqid.into(),
         bits: 32,
     }));
-    let end = buf.skip(args, Type::Struct, 0).unwrap_or(buf.data.len());
-    cx.emit(struct_node("Arguments", &buf, args, 0).span(buf.sub(args, end)));
+    let end = buf
+        .skip(&cx, args, Type::Struct, 0)
+        .await
+        .unwrap_or(buf.data.len());
+    cx.emit(
+        struct_node(&cx, "Arguments", &buf, args, 0)
+            .await
+            .span(buf.sub(args, end)),
+    );
     Ok(())
 }
 
-/// The number of fields of the struct at `at`, if it parses.
-fn count_fields(buf: &Buf, at: usize, depth: u32) -> Option<u64> {
-    let mut pos = at;
-    let mut last = 0i16;
-    let mut n = 0u64;
-    loop {
-        match buf.proto.field_header(&buf.data, pos, last)? {
-            (Header::Stop, _) => return Some(n),
-            (Header::Field(id, t), next) => {
-                last = id;
-                n = n.saturating_add(1);
-                pos = buf.skip(next, t, depth.saturating_add(1))?;
-            }
-        }
-    }
+/// The number of fields of the struct at `at`, if it parses (`depth` is at
+/// most [`MAX_DEPTH`], so the struct itself is never too deep).
+async fn count_fields(cx: &Cx, buf: &Buf, at: usize, depth: u32) -> Option<u64> {
+    buf.skip_counted(cx, at, Type::Struct, depth)
+        .await
+        .map(|(_, n)| n)
 }
 
 type StructState = (Buf, usize, u32);
 
-fn struct_node(
+async fn struct_node(
+    cx: &Cx,
     name: impl Into<std::borrow::Cow<'static, str>>,
     buf: &Buf,
     at: usize,
     depth: u32,
 ) -> Node {
     let node = Node::new(name);
-    let summary = match count_fields(buf, at, depth) {
+    let summary = match count_fields(cx, buf, at, depth).await {
         Some(n) => format!("struct, {}", plural(n, "field")),
         None => "struct".to_owned(),
     };
@@ -220,7 +241,7 @@ async fn fields(cx: &Cx, buf: &Buf, at: usize, depth: u32) -> Result<u64> {
             Header::Field(id, t) => (id, t),
         };
         last = id;
-        let (node, end) = value_node(format!("field {id}"), buf, next, t, depth);
+        let (node, end) = value_node(cx, format!("field {id}"), buf, next, t, depth).await;
         n = n.saturating_add(1);
         match end {
             Some(end) => {
@@ -251,10 +272,17 @@ fn uuid(bytes: &[u8]) -> String {
 
 /// The node for a value of type `t` at `at` (without its span), and where
 /// the value ends (`None` if it does not parse).
-fn value_node(name: String, buf: &Buf, at: usize, t: Type, depth: u32) -> (Node, Option<usize>) {
-    let end = buf.skip(at, t, depth);
+async fn value_node(
+    cx: &Cx,
+    name: String,
+    buf: &Buf,
+    at: usize,
+    t: Type,
+    depth: u32,
+) -> (Node, Option<usize>) {
+    let end = buf.skip(cx, at, t, depth).await;
     if t == Type::Struct {
-        return (struct_node(name, buf, at, depth), end);
+        return (struct_node(cx, name, buf, at, depth).await, end);
     }
     let node = Node::new(name);
     let node = match t {
@@ -334,10 +362,13 @@ async fn elements(cx: Cx, (buf, start, count, key, elem, depth): ContainerState)
         let at = (pos, i);
         cx.mark(move || at);
         let (node, end) = match key {
-            None => value_node(format!("[{i}]"), &buf, pos, elem, depth),
+            None => value_node(&cx, format!("[{i}]"), &buf, pos, elem, depth).await,
             Some(k) => {
-                let key_end = buf.skip(pos, k, depth);
-                let value_end = key_end.and_then(|e| buf.skip(e, elem, depth));
+                let key_end = buf.skip(&cx, pos, k, depth).await;
+                let value_end = match key_end {
+                    Some(e) => buf.skip(&cx, e, elem, depth).await,
+                    None => None,
+                };
                 let entry = (buf.clone(), pos, k, elem, depth);
                 let node = Node::new(format!("[{i}]"))
                     .summary(entry_summary(&buf, pos, k, key_end, elem))
@@ -376,13 +407,13 @@ fn entry_summary(buf: &Buf, at: usize, k: Type, key_end: Option<usize>, v: Type)
 }
 
 async fn map_entry(cx: Cx, (buf, at, k, v, depth): (Buf, usize, Type, Type, u32)) -> Result<()> {
-    let (key, key_end) = value_node("key".to_owned(), &buf, at, k, depth);
+    let (key, key_end) = value_node(&cx, "key".to_owned(), &buf, at, k, depth).await;
     let Some(key_end) = key_end else {
         cx.emit(key);
         return Err(Diagnostic::malformed("invalid map key"));
     };
     cx.emit(key.span(buf.sub(at, key_end)));
-    let (value, end) = value_node("value".to_owned(), &buf, key_end, v, depth);
+    let (value, end) = value_node(&cx, "value".to_owned(), &buf, key_end, v, depth).await;
     let end = end.unwrap_or(buf.data.len());
     cx.emit(value.span(buf.sub(key_end, end)));
     Ok(())
