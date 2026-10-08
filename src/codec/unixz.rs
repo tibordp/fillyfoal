@@ -197,16 +197,6 @@ impl Lzw {
     }
 }
 
-/// Decodes headerless `compress` code data with the given flags byte
-/// (`0x80` block mode, low bits the maximum code width), as StuffIt's
-/// method 2 stores it, up to the end of `data`.
-pub fn decode_raw(flags: u8, data: &[u8], limit: usize) -> Result<Vec<u8>> {
-    let mut lzw = Lzw::new(flags)?;
-    let mut out = Vec::new();
-    lzw.run(data, &mut out, usize::MAX, limit)?;
-    Ok(out)
-}
-
 /// A `.Z` stream, decoded as far as the input reaches. Output is never
 /// read back (the string table holds the strings), so all of it can be
 /// released, and input up to the current code.
@@ -226,6 +216,20 @@ impl Default for UnixCompress {
             consumed: 0,
             done: false,
         }
+    }
+}
+
+impl UnixCompress {
+    /// Headerless `compress` code data with the given flags byte (`0x80`
+    /// block mode, low bits the maximum code width), as StuffIt's method 2
+    /// stores it, up to the end of the input.
+    pub fn raw(flags: u8) -> Result<Self> {
+        Ok(UnixCompress {
+            lzw: Some(Lzw::new(flags)?),
+            header: 0,
+            consumed: 0,
+            done: false,
+        })
     }
 }
 

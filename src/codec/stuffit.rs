@@ -25,10 +25,15 @@
 //!   Randomized blocks are not supported.
 //!
 //! Outputs are cut at the fork's recorded length; the fork's CRC-16 (ARC)
-//! is checked where the archive gives one.
+//! is checked where the archive gives one. [`Decoder`] works a bounded run
+//! at a time (about `step` bytes of output, or a slice of a block's
+//! symbols or transform) and releases its input as it goes.
+
+use std::sync::Arc;
 
 use crate::bytes::to_usize;
-use crate::codec::pipeline::{Decode, Step};
+use crate::codec::pipeline::{self, Decode, Decoder as _, Status, Step, Streaming};
+use crate::codec::unixz::UnixCompress;
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -50,45 +55,9 @@ pub struct Params {
     pub crc: Option<u16>,
 }
 
-/// Whether [`decode`] handles `method`.
+/// Whether [`Decoder`] handles `method`.
 pub fn supported(method: u8) -> bool {
     matches!(method, 0 | 1 | 2 | 3 | 5 | 13 | 15)
-}
-
-/// Decodes a whole fork; the warning is a failed internal check (Arsenic's
-/// CRC-32).
-pub fn decode(
-    method: u8,
-    input: &[u8],
-    size: usize,
-    limit: usize,
-) -> Result<(Vec<u8>, Option<Diagnostic>)> {
-    let want = size.min(limit);
-    let mut warning = None;
-    let mut out = match method {
-        0 => input
-            .get(..size.min(input.len()))
-            .unwrap_or_default()
-            .to_vec(),
-        1 => rle90(input, want)?,
-        2 => crate::codec::unixz::decode_raw(0x8e, input, limit)?,
-        3 => huffman(input, want)?,
-        5 => lzah(input, want)?,
-        13 => sit13(input, want)?,
-        15 => {
-            let (out, ok) = arsenic(input, limit)?;
-            if !ok {
-                warning = Some(Diagnostic::warning("Arsenic CRC-32 mismatch"));
-            }
-            out
-        }
-        _ => return Err(Diagnostic::unsupported(format!("StuffIt method {method}"))),
-    };
-    if size > limit && out.len() >= limit {
-        return Err(too_big(limit));
-    }
-    out.truncate(size);
-    Ok((out, warning))
 }
 
 // ---------------------------------------------------------------------------
@@ -102,10 +71,6 @@ struct MsbBits<'a> {
 }
 
 impl<'a> MsbBits<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        MsbBits { data, pos: 0 }
-    }
-
     fn bit(&mut self) -> Result<u32> {
         let byte = self
             .data
@@ -139,10 +104,6 @@ struct LsbBits<'a> {
 }
 
 impl<'a> LsbBits<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        LsbBits { data, pos: 0 }
-    }
-
     fn bit(&mut self) -> Result<u32> {
         let byte = self
             .data
@@ -164,36 +125,9 @@ impl<'a> LsbBits<'a> {
 }
 
 // ---------------------------------------------------------------------------
-// 1: RLE90
-
-fn rle90(input: &[u8], want: usize) -> Result<Vec<u8>> {
-    let mut out = Vec::new();
-    let mut last = 0u8;
-    let mut i = 0usize;
-    while out.len() < want {
-        let Some(&b) = input.get(i) else { break };
-        i = i.saturating_add(1);
-        if b != 0x90 {
-            last = b;
-            out.push(b);
-            continue;
-        }
-        let n = *input.get(i).ok_or_else(|| bad("RLE escape at the end"))?;
-        i = i.saturating_add(1);
-        if n == 0 {
-            last = 0x90;
-            out.push(0x90);
-        } else {
-            let more = usize::from(n.saturating_sub(1)).min(want.saturating_sub(out.len()));
-            out.extend(std::iter::repeat_n(last, more));
-        }
-    }
-    Ok(out)
-}
-
-// ---------------------------------------------------------------------------
 // 3: Huffman
 
+#[derive(Clone)]
 enum HuffNode {
     Leaf(u8),
     Branch(usize, usize),
@@ -219,27 +153,6 @@ fn parse_tree(bs: &mut MsbBits<'_>, nodes: &mut Vec<HuffNode>, depth: usize) -> 
         *n = HuffNode::Branch(zero, one);
     }
     Ok(index)
-}
-
-fn huffman(input: &[u8], want: usize) -> Result<Vec<u8>> {
-    let mut bs = MsbBits::new(input);
-    let mut nodes = Vec::new();
-    parse_tree(&mut bs, &mut nodes, 0)?;
-    let mut out = Vec::new();
-    while out.len() < want {
-        let mut at = 0usize;
-        loop {
-            match nodes.get(at) {
-                Some(HuffNode::Leaf(v)) => {
-                    out.push(*v);
-                    break;
-                }
-                Some(HuffNode::Branch(z, o)) => at = if bs.bit()? == 0 { *z } else { *o },
-                None => return Err(bad("bad Huffman tree")),
-            }
-        }
-    }
-    Ok(out)
 }
 
 // ---------------------------------------------------------------------------
@@ -482,49 +395,12 @@ fn lzah_position(bs: &mut MsbBits<'_>) -> Result<usize> {
     Ok(to_usize(u64::from(upper << 6 | (low & 0x3f))))
 }
 
-fn lzah(input: &[u8], want: usize) -> Result<Vec<u8>> {
-    let mut bs = MsbBits::new(input);
-    let mut tree = Adaptive::new();
-    let mut window = vec![b' '; LZAH_N];
-    let mut r = LZAH_N.saturating_sub(LZAH_F);
-    let mut out = Vec::new();
-    while out.len() < want {
-        let c = tree.decode_char(&mut bs)?;
-        if c < 256 {
-            let b = u8::try_from(c).unwrap_or(0);
-            out.push(b);
-            if let Some(slot) = window.get_mut(r) {
-                *slot = b;
-            }
-            r = r.saturating_add(1) & (LZAH_N - 1);
-        } else {
-            let pos = lzah_position(&mut bs)?;
-            let start = r.wrapping_sub(pos).wrapping_sub(1) & (LZAH_N - 1);
-            let len = c.saturating_sub(255).saturating_add(LZAH_THRESHOLD);
-            for k in 0..len {
-                if out.len() >= want {
-                    break;
-                }
-                let b = window
-                    .get(start.saturating_add(k) & (LZAH_N - 1))
-                    .copied()
-                    .unwrap_or(0);
-                out.push(b);
-                if let Some(slot) = window.get_mut(r) {
-                    *slot = b;
-                }
-                r = r.saturating_add(1) & (LZAH_N - 1);
-            }
-        }
-    }
-    Ok(out)
-}
-
 // ---------------------------------------------------------------------------
 // 13
 
 /// A canonical prefix code (shortest codes are all zeros), decoded a bit at
 /// a time with the first bit read as the code's most significant.
+#[derive(Clone)]
 struct Canonical {
     /// Symbols ordered by (length, symbol).
     symbols: Vec<u16>,
@@ -677,65 +553,6 @@ fn sit13_code(bs: &mut LsbBits<'_>, num: usize) -> Result<Canonical> {
 
 const SIT13_WINDOW: usize = 1 << 16;
 
-fn sit13(input: &[u8], want: usize) -> Result<Vec<u8>> {
-    let first_byte = *input.first().ok_or_else(|| bad("empty method 13 stream"))?;
-    let mut bs = LsbBits::new(input.get(1..).unwrap_or_default());
-    if first_byte >> 4 != 0 {
-        return Err(Diagnostic::unsupported(format!(
-            "StuffIt method 13 built-in code set {}",
-            first_byte >> 4
-        )));
-    }
-    let first = sit13_code(&mut bs, 321)?;
-    let second = if first_byte & 0x08 != 0 {
-        None
-    } else {
-        Some(sit13_code(&mut bs, 321)?)
-    };
-    let offsets = sit13_code(&mut bs, usize::from(first_byte & 7).saturating_add(10))?;
-    let mut out: Vec<u8> = Vec::new();
-    let mut use_second = false;
-    while out.len() < want {
-        let code = match (&second, use_second) {
-            (Some(s), true) => s,
-            _ => &first,
-        };
-        let val = code.read(&mut bs)?;
-        if val < 0x100 {
-            use_second = false;
-            out.push(u8::try_from(val).unwrap_or(0));
-            continue;
-        }
-        use_second = true;
-        let len = match val {
-            0x100..=0x13d => usize::from(val).saturating_sub(0x100).saturating_add(3),
-            0x13e => to_usize(u64::from(bs.bits(10)?)).saturating_add(65),
-            0x13f => to_usize(u64::from(bs.bits(15)?)).saturating_add(65),
-            _ => break,
-        };
-        let bitlength = u32::from(offsets.read(&mut bs)?);
-        let offset = match bitlength {
-            0 => 1usize,
-            1 => 2,
-            b => {
-                let b = b.saturating_sub(1);
-                (1usize << b)
-                    .saturating_add(to_usize(u64::from(bs.bits(b)?)))
-                    .saturating_add(1)
-            }
-        };
-        if offset > out.len() || offset > SIT13_WINDOW {
-            return Err(bad("match distance before the start of the data"));
-        }
-        let start = out.len().saturating_sub(offset);
-        for k in 0..len.min(want.saturating_sub(out.len())) {
-            let b = out.get(start.saturating_add(k)).copied().unwrap_or(0);
-            out.push(b);
-        }
-    }
-    Ok(out)
-}
-
 // ---------------------------------------------------------------------------
 // 15: Arsenic
 
@@ -793,19 +610,6 @@ struct Arith<'a> {
 }
 
 impl<'a> Arith<'a> {
-    fn new(data: &'a [u8]) -> Self {
-        let mut bs = MsbBits::new(data);
-        let mut code = 0u32;
-        for _ in 0..ARITH_BITS {
-            code = code << 1 | bs.bit_or_zero();
-        }
-        Arith {
-            bs,
-            range: ARITH_ONE,
-            code,
-        }
-    }
-
     fn symbol(&mut self, model: &mut Model) -> Result<u32> {
         let factor = self.range.checked_div(model.total).unwrap_or(0);
         if factor == 0 {
@@ -869,197 +673,858 @@ fn mtf_take(mtf: &mut [u8], i: usize) -> u8 {
     b
 }
 
-/// Decodes an Arsenic stream; the flag says whether its CRC-32 matched.
-fn arsenic(input: &[u8], limit: usize) -> Result<(Vec<u8>, bool)> {
-    let mut ac = Arith::new(input);
-    let mut initial = Model::new(0, 1, 1, 256);
-    let mut selector = Model::new(0, 10, 8, 1024);
-    let mut mtf_models = [
-        Model::new(2, 3, 8, 1024),
-        Model::new(4, 7, 4, 1024),
-        Model::new(8, 15, 4, 1024),
-        Model::new(16, 31, 4, 1024),
-        Model::new(32, 63, 2, 1024),
-        Model::new(64, 127, 2, 1024),
-        Model::new(128, 255, 1, 1024),
-    ];
-    if ac.bit_string(&mut initial, 8)? != u32::from(b'A')
-        || ac.bit_string(&mut initial, 8)? != u32::from(b's')
-    {
-        return Err(bad("not an Arsenic stream"));
-    }
-    let block_bits = ac.bit_string(&mut initial, 4)?.saturating_add(9);
-    let block_size = 1usize << block_bits;
-    let mut end = ac.symbol(&mut initial)? != 0;
-    let mut out: Vec<u8> = Vec::new();
-    let mut stored_crc = None;
-    while !end {
-        // One block.
-        let mut mtf: Vec<u8> = (0..=255u8).collect();
-        let randomized = ac.symbol(&mut initial)? != 0;
-        let primary = to_usize(u64::from(ac.bit_string(&mut initial, block_bits)?));
-        let mut block: Vec<u8> = Vec::new();
-        loop {
-            let mut sel = ac.symbol(&mut selector)?;
-            if sel < 2 {
-                let mut state = 1usize;
-                let mut zeros = 0usize;
-                while sel < 2 {
-                    zeros = zeros.saturating_add(if sel == 0 { state } else { state << 1 });
-                    if zeros > block_size {
-                        return Err(bad("zero run beyond the block"));
-                    }
-                    state = state.saturating_mul(2);
-                    sel = ac.symbol(&mut selector)?;
-                }
-                if block.len().saturating_add(zeros) > block_size {
-                    return Err(bad("zero run beyond the block"));
-                }
-                let b = mtf_take(&mut mtf, 0);
-                block.extend(std::iter::repeat_n(b, zeros));
-            }
-            let symbol = match sel {
-                10 => break,
-                2 => 1,
-                s => {
-                    let model = mtf_models
-                        .get_mut(to_usize(u64::from(s.saturating_sub(3))))
-                        .ok_or_else(|| bad("bad selector"))?;
-                    ac.symbol(model)?
-                }
-            };
-            if block.len() >= block_size {
-                return Err(bad("block overflow"));
-            }
-            let b = mtf_take(&mut mtf, to_usize(u64::from(symbol)));
-            block.push(b);
-        }
-        if primary >= block.len() {
-            return Err(bad("BWT index out of range"));
-        }
-        selector.reset();
-        for m in &mut mtf_models {
-            m.reset();
-        }
-        if ac.symbol(&mut initial)? != 0 {
-            stored_crc = Some(ac.bit_string(&mut initial, 32)?);
-            end = true;
-        }
-        if randomized {
-            return Err(Diagnostic::unsupported("randomized Arsenic blocks"));
-        }
-        // Inverse BWT.
-        let mut counts = [0usize; 256];
-        for &b in &block {
-            if let Some(c) = counts.get_mut(usize::from(b)) {
-                *c = c.saturating_add(1);
-            }
-        }
-        let mut cumulative = [0usize; 256];
-        let mut total = 0usize;
-        for (c, n) in cumulative.iter_mut().zip(counts.iter_mut()) {
-            *c = total;
-            total = total.saturating_add(*n);
-            *n = 0;
-        }
-        let mut transform = vec![0usize; block.len()];
-        for (i, &b) in block.iter().enumerate() {
-            let k = usize::from(b);
-            let at = cumulative
-                .get(k)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(counts.get(k).copied().unwrap_or(0));
-            if let Some(slot) = transform.get_mut(at) {
-                *slot = i;
-            }
-            if let Some(c) = counts.get_mut(k) {
-                *c = c.saturating_add(1);
-            }
-        }
-        // Walk it, undoing the final run-length stage.
-        let mut index = primary;
-        let mut count = 0u32;
-        let mut last = 0u8;
-        let mut repeat_next = false;
-        for _ in 0..block.len() {
-            index = transform.get(index).copied().unwrap_or(0);
-            let b = block.get(index).copied().unwrap_or(0);
-            if repeat_next {
-                repeat_next = false;
-                count = 0;
-                out.extend(std::iter::repeat_n(last, usize::from(b)));
-            } else {
-                if count > 0 && b == last {
-                    count = count.saturating_add(1);
-                } else {
-                    count = 1;
-                    last = b;
-                }
-                out.push(b);
-                if count == 4 {
-                    repeat_next = true;
-                }
-            }
-            if out.len() > limit {
-                return Err(too_big(limit));
-            }
-        }
-    }
-    let ok = stored_crc.is_none_or(|crc| crc == crate::codec::crc32(&out));
-    Ok((out, ok))
-}
+// ---------------------------------------------------------------------------
+// The small-state methods (rolled back by `Streaming`)
 
-/// The decoder for [`Params`] (decodes once all input is in).
+/// Decoder state of a method whose state is cheap to copy (all but LZW and
+/// Arsenic).
 #[derive(Clone)]
-pub struct Decoder {
-    params: Params,
-    consumed: usize,
-    done: bool,
-    warning: Option<Diagnostic>,
+enum Kind {
+    Stored {
+        pos: usize,
+    },
+    Rle90 {
+        pos: usize,
+        last: u8,
+    },
+    Huffman {
+        /// Bits read.
+        pos: usize,
+        nodes: Option<Arc<[HuffNode]>>,
+    },
+    Lzah(Box<Lzah>),
+    Sit13(Box<Sit13>),
 }
 
-impl Decoder {
-    pub fn new(params: Params) -> Self {
-        Decoder {
-            params,
-            consumed: 0,
+#[derive(Clone)]
+struct Lzah {
+    pos: usize,
+    tree: Adaptive,
+    window: Vec<u8>,
+    r: usize,
+}
+
+#[derive(Clone)]
+struct Codes {
+    first: Canonical,
+    second: Option<Canonical>,
+    offsets: Canonical,
+}
+
+#[derive(Clone)]
+struct Sit13 {
+    /// Bits read, counting the first byte.
+    pos: usize,
+    codes: Option<Arc<Codes>>,
+    use_second: bool,
+}
+
+/// Methods 0, 1, 3, 5 and 13: decode until `size` bytes are out, a bounded
+/// run at a time, straight into the output (method 13 reads its window
+/// back from there).
+#[derive(Clone)]
+struct Simple {
+    kind: Kind,
+    size: usize,
+    produced: usize,
+    done: bool,
+}
+
+impl Simple {
+    fn new(method: u8, size: usize) -> Option<Simple> {
+        let kind = match method {
+            0 => Kind::Stored { pos: 0 },
+            1 => Kind::Rle90 { pos: 0, last: 0 },
+            3 => Kind::Huffman {
+                pos: 0,
+                nodes: None,
+            },
+            5 => Kind::Lzah(Box::new(Lzah {
+                pos: 0,
+                tree: Adaptive::new(),
+                window: vec![b' '; LZAH_N],
+                r: LZAH_N.saturating_sub(LZAH_F),
+            })),
+            13 => Kind::Sit13(Box::new(Sit13 {
+                pos: 8,
+                codes: None,
+                use_second: false,
+            })),
+            _ => return None,
+        };
+        Some(Simple {
+            kind,
+            size,
+            produced: 0,
             done: false,
-            warning: None,
+        })
+    }
+
+    fn push(&mut self, out: &mut Vec<u8>, b: u8) {
+        out.push(b);
+        self.produced = self.produced.saturating_add(1);
+    }
+
+    /// Decodes one symbol (or run, or match); true once the stream has
+    /// ended before `size`.
+    fn unit(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>) -> Result<bool> {
+        let want = self.size;
+        let left = want.saturating_sub(self.produced);
+        match &mut self.kind {
+            Kind::Stored { pos } => {
+                let data = input.get(*pos..).unwrap_or_default();
+                let n = left.min(data.len()).min(1 << 16);
+                if n == 0 {
+                    return if eof {
+                        Ok(true)
+                    } else {
+                        Err(bad("compressed data ends early"))
+                    };
+                }
+                out.extend_from_slice(data.get(..n).unwrap_or_default());
+                *pos = pos.saturating_add(n);
+                self.produced = self.produced.saturating_add(n);
+            }
+            Kind::Rle90 { pos, last } => {
+                let Some(&b) = input.get(*pos) else {
+                    return if eof {
+                        Ok(true)
+                    } else {
+                        Err(bad("compressed data ends early"))
+                    };
+                };
+                *pos = pos.saturating_add(1);
+                if b != 0x90 {
+                    *last = b;
+                    self.push(out, b);
+                    return Ok(false);
+                }
+                let n = *input
+                    .get(*pos)
+                    .ok_or_else(|| bad("RLE escape at the end"))?;
+                *pos = pos.saturating_add(1);
+                if n == 0 {
+                    *last = 0x90;
+                    self.push(out, 0x90);
+                } else {
+                    let more = usize::from(n.saturating_sub(1)).min(left);
+                    out.extend(std::iter::repeat_n(*last, more));
+                    self.produced = self.produced.saturating_add(more);
+                }
+            }
+            Kind::Huffman { pos, nodes } => {
+                let mut bs = MsbBits {
+                    data: input,
+                    pos: *pos,
+                };
+                let tree = match nodes {
+                    Some(tree) => tree.clone(),
+                    None => {
+                        let mut parsed = Vec::new();
+                        parse_tree(&mut bs, &mut parsed, 0)?;
+                        let tree: Arc<[HuffNode]> = parsed.into();
+                        *nodes = Some(tree.clone());
+                        *pos = bs.pos;
+                        return Ok(false);
+                    }
+                };
+                let mut at = 0usize;
+                let b = loop {
+                    match tree.get(at) {
+                        Some(HuffNode::Leaf(v)) => break *v,
+                        Some(HuffNode::Branch(z, o)) => at = if bs.bit()? == 0 { *z } else { *o },
+                        None => return Err(bad("bad Huffman tree")),
+                    }
+                };
+                *pos = bs.pos;
+                self.push(out, b);
+            }
+            Kind::Lzah(st) => {
+                let mut bs = MsbBits {
+                    data: input,
+                    pos: st.pos,
+                };
+                let c = st.tree.decode_char(&mut bs)?;
+                if c < 256 {
+                    let b = u8::try_from(c).unwrap_or(0);
+                    out.push(b);
+                    self.produced = self.produced.saturating_add(1);
+                    if let Some(slot) = st.window.get_mut(st.r) {
+                        *slot = b;
+                    }
+                    st.r = st.r.saturating_add(1) & (LZAH_N - 1);
+                } else {
+                    let pos = lzah_position(&mut bs)?;
+                    let start = st.r.wrapping_sub(pos).wrapping_sub(1) & (LZAH_N - 1);
+                    let len = c.saturating_sub(255).saturating_add(LZAH_THRESHOLD);
+                    for k in 0..len.min(left) {
+                        let b = st
+                            .window
+                            .get(start.saturating_add(k) & (LZAH_N - 1))
+                            .copied()
+                            .unwrap_or(0);
+                        out.push(b);
+                        if let Some(slot) = st.window.get_mut(st.r) {
+                            *slot = b;
+                        }
+                        st.r = st.r.saturating_add(1) & (LZAH_N - 1);
+                    }
+                    self.produced = self.produced.saturating_add(len.min(left));
+                }
+                st.pos = bs.pos;
+            }
+            Kind::Sit13(st) => {
+                let mut bs = LsbBits {
+                    data: input,
+                    pos: st.pos,
+                };
+                let codes = match &st.codes {
+                    Some(codes) => codes.clone(),
+                    None => {
+                        st.codes = Some(Arc::new(sit13_codes(input, &mut bs)?));
+                        st.pos = bs.pos;
+                        return Ok(false);
+                    }
+                };
+                let code = match (&codes.second, st.use_second) {
+                    (Some(s), true) => s,
+                    _ => &codes.first,
+                };
+                let val = code.read(&mut bs)?;
+                if val < 0x100 {
+                    st.use_second = false;
+                    st.pos = bs.pos;
+                    self.push(out, u8::try_from(val).unwrap_or(0));
+                    return Ok(false);
+                }
+                st.use_second = true;
+                let len = match val {
+                    0x100..=0x13d => usize::from(val).saturating_sub(0x100).saturating_add(3),
+                    0x13e => to_usize(u64::from(bs.bits(10)?)).saturating_add(65),
+                    0x13f => to_usize(u64::from(bs.bits(15)?)).saturating_add(65),
+                    _ => {
+                        st.pos = bs.pos;
+                        return Ok(true);
+                    }
+                };
+                let bitlength = u32::from(codes.offsets.read(&mut bs)?);
+                let offset = match bitlength {
+                    0 => 1usize,
+                    1 => 2,
+                    b => {
+                        let b = b.saturating_sub(1);
+                        (1usize << b)
+                            .saturating_add(to_usize(u64::from(bs.bits(b)?)))
+                            .saturating_add(1)
+                    }
+                };
+                if offset > self.produced || offset > SIT13_WINDOW || offset > out.len() {
+                    return Err(bad("match distance before the start of the data"));
+                }
+                let start = out.len().saturating_sub(offset);
+                let n = len.min(left);
+                for k in 0..n {
+                    let b = out.get(start.saturating_add(k)).copied().unwrap_or(0);
+                    out.push(b);
+                }
+                self.produced = self.produced.saturating_add(n);
+                st.pos = bs.pos;
+            }
+        }
+        Ok(false)
+    }
+
+    /// Bits read so far.
+    fn bit_pos(&self) -> usize {
+        match &self.kind {
+            Kind::Stored { pos } | Kind::Rle90 { pos, .. } => pos.saturating_mul(8),
+            Kind::Huffman { pos, .. } => *pos,
+            Kind::Lzah(st) => st.pos,
+            Kind::Sit13(st) => st.pos,
         }
     }
 }
 
-impl Decode for Decoder {
+/// Method 13's header: the code set byte and the codes.
+fn sit13_codes(input: &[u8], bs: &mut LsbBits<'_>) -> Result<Codes> {
+    let first_byte = *input.first().ok_or_else(|| bad("empty method 13 stream"))?;
+    if first_byte >> 4 != 0 {
+        return Err(Diagnostic::unsupported(format!(
+            "StuffIt method 13 built-in code set {}",
+            first_byte >> 4
+        )));
+    }
+    let first = sit13_code(bs, 321)?;
+    let second = if first_byte & 0x08 != 0 {
+        None
+    } else {
+        Some(sit13_code(bs, 321)?)
+    };
+    let offsets = sit13_code(bs, usize::from(first_byte & 7).saturating_add(10))?;
+    Ok(Codes {
+        first,
+        second,
+        offsets,
+    })
+}
+
+impl Decode for Simple {
     fn step(
         &mut self,
         input: &[u8],
         eof: bool,
         out: &mut Vec<u8>,
-        _step: usize,
-        limit: usize,
+        step: usize,
+        _limit: usize,
     ) -> Result<Step> {
-        if !eof {
-            return Err(Diagnostic::malformed("waiting for the whole input"));
-        }
-        if !self.done {
-            let (data, warning) = decode(
-                self.params.method,
-                input,
-                to_usize(self.params.size),
-                limit.saturating_sub(out.len()),
-            )?;
-            self.warning = warning;
-            if let Some(crc) = self.params.crc
-                && crate::codec::crc::crc16_arc(&data) != crc
-            {
-                self.warning = Some(Diagnostic::warning("StuffIt fork CRC-16 mismatch"));
+        let start = self.produced;
+        // Units that produce nothing (a tree, a code set) are bounded too.
+        let mut units = 0usize;
+        loop {
+            if self.done || self.produced >= self.size {
+                self.done = true;
+                return Ok(Step::Done);
             }
-            out.extend_from_slice(&data);
-            self.consumed = input.len();
-            self.done = true;
+            if self.produced.saturating_sub(start) >= step || units >= STEP_UNITS {
+                return Ok(Step::More);
+            }
+            units = units.saturating_add(1);
+            if self.unit(input, eof, out)? {
+                self.done = true;
+                return Ok(Step::Done);
+            }
         }
-        Ok(Step::Done)
+    }
+
+    fn consumed(&self) -> usize {
+        self.bit_pos() / 8
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.bit_pos() / 8
+    }
+
+    fn release_input(&mut self, n: usize) {
+        let bits = n.saturating_mul(8);
+        match &mut self.kind {
+            Kind::Stored { pos } | Kind::Rle90 { pos, .. } => *pos = pos.saturating_sub(n),
+            Kind::Huffman { pos, .. } => *pos = pos.saturating_sub(bits),
+            Kind::Lzah(st) => st.pos = st.pos.saturating_sub(bits),
+            Kind::Sit13(st) => st.pos = st.pos.saturating_sub(bits),
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        match self.kind {
+            Kind::Sit13(_) => out_len.saturating_sub(SIT13_WINDOW),
+            _ => out_len,
+        }
+    }
+}
+
+/// Units (symbols, runs, matches) per step at most, for steps that
+/// produce little.
+const STEP_UNITS: usize = 1 << 16;
+
+// ---------------------------------------------------------------------------
+// Arsenic, resumable
+
+/// Input an Arsenic unit (a block's start or end, one selector with its
+/// zero run and symbol) may read at most: 61 symbols of at most 64 bits.
+const ARSENIC_UNIT_BITS: usize = 8192;
+
+enum Phase {
+    /// The code register and the stream header.
+    Start,
+    /// A block's flags and BWT index.
+    Block,
+    /// The block's symbols (and, after the last, the block's end).
+    Symbols,
+    /// Counting the block's bytes, from this index.
+    Count(usize),
+    /// Building the inverse transform, from this index.
+    Transform(usize),
+    /// Walking the transform, this many bytes done.
+    Walk(usize),
+    Finished,
+}
+
+/// What an Arsenic step ended with.
+enum Progress {
+    More,
+    NeedInput,
+    Done,
+}
+
+/// Arsenic, decoded a bounded amount at a time with its blocks (up to
+/// 16 MiB, and their transform) kept, never copied: before reading, a unit
+/// waits until [`ARSENIC_UNIT_BITS`] are buffered (or the input has ended),
+/// so it never runs out of input midway and nothing is rolled back.
+struct Arsenic {
+    pos: usize,
+    range: u32,
+    code: u32,
+    initial: Model,
+    selector: Model,
+    mtf_models: [Model; 7],
+    phase: Phase,
+    block_bits: u32,
+    block_size: usize,
+    end: bool,
+    mtf: Vec<u8>,
+    randomized: bool,
+    primary: usize,
+    block: Vec<u8>,
+    counts: [usize; 256],
+    cumulative: [usize; 256],
+    transform: Vec<u32>,
+    index: usize,
+    run: u32,
+    last: u8,
+    repeat_next: bool,
+    stored_crc: Option<u32>,
+    /// Running CRC-32 register of all the output.
+    crc: u32,
+    crc_ok: bool,
+    /// Bytes written to the output (at most the fork's size; the rest is
+    /// decoded and checked, not kept).
+    written: usize,
+    size: usize,
+}
+
+impl Arsenic {
+    fn new(size: usize) -> Arsenic {
+        Arsenic {
+            pos: 0,
+            range: ARITH_ONE,
+            code: 0,
+            initial: Model::new(0, 1, 1, 256),
+            selector: Model::new(0, 10, 8, 1024),
+            mtf_models: [
+                Model::new(2, 3, 8, 1024),
+                Model::new(4, 7, 4, 1024),
+                Model::new(8, 15, 4, 1024),
+                Model::new(16, 31, 4, 1024),
+                Model::new(32, 63, 2, 1024),
+                Model::new(64, 127, 2, 1024),
+                Model::new(128, 255, 1, 1024),
+            ],
+            phase: Phase::Start,
+            block_bits: 0,
+            block_size: 0,
+            end: false,
+            mtf: Vec::new(),
+            randomized: false,
+            primary: 0,
+            block: Vec::new(),
+            counts: [0; 256],
+            cumulative: [0; 256],
+            transform: Vec::new(),
+            index: 0,
+            run: 0,
+            last: 0,
+            repeat_next: false,
+            stored_crc: None,
+            crc: 0xffff_ffff,
+            crc_ok: true,
+            written: 0,
+            size,
+        }
+    }
+
+    fn emit(&mut self, out: &mut Vec<u8>, b: u8, n: usize) {
+        let keep = n.min(self.size.saturating_sub(self.written));
+        out.extend(std::iter::repeat_n(b, keep));
+        self.written = self.written.saturating_add(keep);
+        let run = [b; 256];
+        let mut left = n;
+        while left > 0 {
+            let k = left.min(run.len());
+            self.crc = crate::codec::crc::crc32_update(self.crc, run.get(..k).unwrap_or_default());
+            left = left.saturating_sub(k);
+        }
+    }
+
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+    ) -> Result<Progress> {
+        let mut ac = Arith {
+            bs: MsbBits {
+                data: input,
+                pos: self.pos,
+            },
+            range: self.range,
+            code: self.code,
+        };
+        let result = self.run(&mut ac, eof, out, step);
+        self.pos = ac.bs.pos;
+        self.range = ac.range;
+        self.code = ac.code;
+        result
+    }
+
+    fn run(
+        &mut self,
+        ac: &mut Arith<'_>,
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+    ) -> Result<Progress> {
+        // Work units: an output byte or a transform entry 1, a symbol 16.
+        let budget = step.max(256).saturating_mul(4);
+        let mut work = 0usize;
+        loop {
+            if work >= budget {
+                return Ok(Progress::More);
+            }
+            let reads = matches!(self.phase, Phase::Start | Phase::Block | Phase::Symbols);
+            if reads
+                && !eof
+                && ac.bs.data.len().saturating_mul(8) < ac.bs.pos.saturating_add(ARSENIC_UNIT_BITS)
+            {
+                return Ok(Progress::NeedInput);
+            }
+            match self.phase {
+                Phase::Start => {
+                    for _ in 0..ARITH_BITS {
+                        ac.code = ac.code << 1 | ac.bs.bit_or_zero();
+                    }
+                    if ac.bit_string(&mut self.initial, 8)? != u32::from(b'A')
+                        || ac.bit_string(&mut self.initial, 8)? != u32::from(b's')
+                    {
+                        return Err(bad("not an Arsenic stream"));
+                    }
+                    self.block_bits = ac.bit_string(&mut self.initial, 4)?.saturating_add(9);
+                    self.block_size = 1usize << self.block_bits;
+                    self.end = ac.symbol(&mut self.initial)? != 0;
+                    self.phase = if self.end {
+                        Phase::Finished
+                    } else {
+                        Phase::Block
+                    };
+                    work = work.saturating_add(64);
+                }
+                Phase::Block => {
+                    self.mtf = (0..=255u8).collect();
+                    self.randomized = ac.symbol(&mut self.initial)? != 0;
+                    self.primary = to_usize(u64::from(
+                        ac.bit_string(&mut self.initial, self.block_bits)?,
+                    ));
+                    self.block.clear();
+                    self.phase = Phase::Symbols;
+                    work = work.saturating_add(64);
+                }
+                Phase::Symbols => {
+                    work = work.saturating_add(16);
+                    let mut sel = ac.symbol(&mut self.selector)?;
+                    if sel < 2 {
+                        let mut state = 1usize;
+                        let mut zeros = 0usize;
+                        while sel < 2 {
+                            zeros = zeros.saturating_add(if sel == 0 { state } else { state << 1 });
+                            if zeros > self.block_size {
+                                return Err(bad("zero run beyond the block"));
+                            }
+                            state = state.saturating_mul(2);
+                            sel = ac.symbol(&mut self.selector)?;
+                        }
+                        if self.block.len().saturating_add(zeros) > self.block_size {
+                            return Err(bad("zero run beyond the block"));
+                        }
+                        let b = mtf_take(&mut self.mtf, 0);
+                        self.block.extend(std::iter::repeat_n(b, zeros));
+                        work = work.saturating_add(zeros / 64);
+                    }
+                    let symbol = match sel {
+                        10 => {
+                            self.end_block(ac)?;
+                            continue;
+                        }
+                        2 => 1,
+                        s => {
+                            let model = self
+                                .mtf_models
+                                .get_mut(to_usize(u64::from(s.saturating_sub(3))))
+                                .ok_or_else(|| bad("bad selector"))?;
+                            ac.symbol(model)?
+                        }
+                    };
+                    if self.block.len() >= self.block_size {
+                        return Err(bad("block overflow"));
+                    }
+                    let b = mtf_take(&mut self.mtf, to_usize(u64::from(symbol)));
+                    self.block.push(b);
+                }
+                Phase::Count(from) => {
+                    let to = from
+                        .saturating_add(budget.saturating_sub(work))
+                        .min(self.block.len());
+                    for &b in self.block.get(from..to).unwrap_or_default() {
+                        if let Some(c) = self.counts.get_mut(usize::from(b)) {
+                            *c = c.saturating_add(1);
+                        }
+                    }
+                    work = work
+                        .saturating_add(to.saturating_sub(from))
+                        .saturating_add(1);
+                    if to < self.block.len() {
+                        self.phase = Phase::Count(to);
+                        continue;
+                    }
+                    let mut total = 0usize;
+                    for (c, n) in self.cumulative.iter_mut().zip(self.counts.iter_mut()) {
+                        *c = total;
+                        total = total.saturating_add(*n);
+                        *n = 0;
+                    }
+                    self.transform.clear();
+                    self.transform.resize(self.block.len(), 0);
+                    self.phase = Phase::Transform(0);
+                }
+                Phase::Transform(from) => {
+                    let to = from
+                        .saturating_add(budget.saturating_sub(work))
+                        .min(self.block.len());
+                    for i in from..to {
+                        let k = usize::from(self.block.get(i).copied().unwrap_or(0));
+                        let at = self
+                            .cumulative
+                            .get(k)
+                            .copied()
+                            .unwrap_or(0)
+                            .saturating_add(self.counts.get(k).copied().unwrap_or(0));
+                        if let Some(slot) = self.transform.get_mut(at) {
+                            *slot = u32::try_from(i).unwrap_or(u32::MAX);
+                        }
+                        if let Some(c) = self.counts.get_mut(k) {
+                            *c = c.saturating_add(1);
+                        }
+                    }
+                    work = work
+                        .saturating_add(to.saturating_sub(from))
+                        .saturating_add(1);
+                    self.phase = if to < self.block.len() {
+                        Phase::Transform(to)
+                    } else {
+                        self.index = self.primary;
+                        self.run = 0;
+                        self.last = 0;
+                        self.repeat_next = false;
+                        Phase::Walk(0)
+                    };
+                }
+                Phase::Walk(from) => {
+                    // Walk it, undoing the final run-length stage.
+                    let mut i = from;
+                    while i < self.block.len() && work < budget {
+                        self.index = self
+                            .transform
+                            .get(self.index)
+                            .map_or(0, |&i| to_usize(u64::from(i)));
+                        let b = self.block.get(self.index).copied().unwrap_or(0);
+                        let n = if self.repeat_next {
+                            self.repeat_next = false;
+                            self.run = 0;
+                            self.emit(out, self.last, usize::from(b));
+                            usize::from(b)
+                        } else {
+                            if self.run > 0 && b == self.last {
+                                self.run = self.run.saturating_add(1);
+                            } else {
+                                self.run = 1;
+                                self.last = b;
+                            }
+                            self.emit(out, b, 1);
+                            if self.run == 4 {
+                                self.repeat_next = true;
+                            }
+                            1
+                        };
+                        work = work.saturating_add(n).saturating_add(2);
+                        i = i.saturating_add(1);
+                    }
+                    let to = i;
+                    self.phase = if to < self.block.len() {
+                        Phase::Walk(to)
+                    } else if self.end {
+                        self.crc_ok = self.stored_crc.is_none_or(|crc| crc == !self.crc);
+                        Phase::Finished
+                    } else {
+                        Phase::Block
+                    };
+                }
+                Phase::Finished => return Ok(Progress::Done),
+            }
+        }
+    }
+
+    /// The end of a block's symbols: checks, model resets, the end flag
+    /// and CRC.
+    fn end_block(&mut self, ac: &mut Arith<'_>) -> Result<()> {
+        if self.primary >= self.block.len() {
+            return Err(bad("BWT index out of range"));
+        }
+        self.selector.reset();
+        for m in &mut self.mtf_models {
+            m.reset();
+        }
+        if ac.symbol(&mut self.initial)? != 0 {
+            self.stored_crc = Some(ac.bit_string(&mut self.initial, 32)?);
+            self.end = true;
+        }
+        if self.randomized {
+            return Err(Diagnostic::unsupported("randomized Arsenic blocks"));
+        }
+        self.counts = [0; 256];
+        self.phase = Phase::Count(0);
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The decoder
+
+enum Method {
+    Simple(Streaming<Simple>),
+    /// LZW decodes to the end of its input, past the fork's length: its
+    /// output goes through `scratch`, cut at the length.
+    Lzw {
+        lzw: UnixCompress,
+        scratch: Vec<u8>,
+        written: usize,
+    },
+    Arsenic(Box<Arsenic>),
+    Unsupported,
+}
+
+/// The decoder for [`Params`]: the fork, a bounded run at a time, input
+/// released as it is read.
+pub struct Decoder {
+    params: Params,
+    method: Method,
+    /// Running CRC-16 (ARC) of the output.
+    crc16: u64,
+    warning: Option<Diagnostic>,
+    consumed: usize,
+    done: bool,
+}
+
+impl Decoder {
+    pub fn new(params: Params) -> Self {
+        let size = to_usize(params.size);
+        let method = match params.method {
+            2 => match UnixCompress::raw(0x8e) {
+                Ok(lzw) => Method::Lzw {
+                    lzw,
+                    scratch: Vec::new(),
+                    written: 0,
+                },
+                Err(_) => Method::Unsupported,
+            },
+            15 => Method::Arsenic(Box::new(Arsenic::new(size))),
+            m => Simple::new(m, size).map_or(Method::Unsupported, |s| Method::Simple(Streaming(s))),
+        };
+        Decoder {
+            params,
+            method,
+            crc16: 0,
+            warning: None,
+            consumed: 0,
+            done: false,
+        }
+    }
+
+    /// One step of the method; `Done` once its stream has ended.
+    fn inner(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        let size = to_usize(self.params.size);
+        match &mut self.method {
+            Method::Simple(s) => {
+                let status = s.decode(input, eof, out, step, limit)?;
+                self.consumed = s.consumed();
+                Ok(status)
+            }
+            Method::Lzw {
+                lzw,
+                scratch,
+                written,
+            } => {
+                let status = lzw.decode(input, eof, scratch, step, usize::MAX)?;
+                let keep = scratch.len().min(size.saturating_sub(*written));
+                out.extend_from_slice(scratch.get(..keep).unwrap_or_default());
+                *written = written.saturating_add(keep);
+                scratch.clear();
+                self.consumed = lzw.consumed();
+                Ok(status)
+            }
+            Method::Arsenic(a) => {
+                let progress = a.decode(input, eof, out, step)?;
+                self.consumed = a.pos / 8;
+                Ok(match progress {
+                    Progress::More => Status::More,
+                    Progress::NeedInput => Status::NeedInput,
+                    Progress::Done => {
+                        if !a.crc_ok {
+                            self.warning = Some(Diagnostic::warning("Arsenic CRC-32 mismatch"));
+                        }
+                        Status::Done
+                    }
+                })
+            }
+            Method::Unsupported => Err(Diagnostic::unsupported(format!(
+                "StuffIt method {}",
+                self.params.method
+            ))),
+        }
+    }
+}
+
+impl pipeline::Decoder for Decoder {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        if self.done {
+            return Ok(Status::Done);
+        }
+        let mark = out.len();
+        let status = self.inner(input, eof, out, step, limit)?;
+        let fresh = out.get(mark..).unwrap_or_default();
+        self.crc16 = crate::codec::crc::CRC16_ARC.update(self.crc16, fresh);
+        if out.len() > limit {
+            return Err(too_big(limit));
+        }
+        match status {
+            // The stream has ended; the rest of the input is padding,
+            // consumed with it once it is all in.
+            Status::Done if eof => {
+                self.consumed = input.len();
+                self.done = true;
+                if let Some(crc) = self.params.crc
+                    && u64::from(crc) != self.crc16
+                {
+                    self.warning = Some(Diagnostic::warning("StuffIt fork CRC-16 mismatch"));
+                }
+                Ok(Status::Done)
+            }
+            Status::Done if out.len() > mark => Ok(Status::More),
+            Status::Done => Ok(Status::NeedInput),
+            status => Ok(status),
+        }
     }
 
     fn consumed(&self) -> usize {
@@ -1068,6 +1533,36 @@ impl Decode for Decoder {
 
     fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
         self.warning.clone()
+    }
+
+    fn releasable_input(&self) -> usize {
+        match &self.method {
+            _ if self.done => self.consumed,
+            Method::Simple(s) => s.releasable_input(),
+            Method::Lzw { lzw, .. } => lzw.releasable_input(),
+            Method::Arsenic(a) => a.pos / 8,
+            Method::Unsupported => 0,
+        }
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.consumed = self.consumed.saturating_sub(n);
+        if self.done {
+            return;
+        }
+        match &mut self.method {
+            Method::Simple(s) => s.release_input(n),
+            Method::Lzw { lzw, .. } => lzw.release_input(n),
+            Method::Arsenic(a) => a.pos = a.pos.saturating_sub(n.saturating_mul(8)),
+            Method::Unsupported => {}
+        }
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        match &self.method {
+            Method::Simple(s) => s.releasable_output(out_len),
+            _ => out_len,
+        }
     }
 }
 
@@ -1081,6 +1576,24 @@ mod tests {
     use super::*;
     use crate::bytes::{u16_be, u32_be};
     use crate::codec::crc::crc16_arc;
+
+    /// Decodes a whole fork; the warning is a failed internal check
+    /// (Arsenic's CRC-32).
+    fn decode(
+        method: u8,
+        input: &[u8],
+        size: usize,
+        limit: usize,
+    ) -> Result<(Vec<u8>, Option<Diagnostic>)> {
+        let mut d = Decoder::new(Params {
+            method,
+            size: size as u64,
+            crc: None,
+        });
+        let out = pipeline::decode_all(&mut d, input, limit)?;
+        let warning = pipeline::Decoder::warning(&d, &out);
+        Ok((out, warning))
+    }
 
     // The fixtures were written by tests/data/stuffit/make_sit.py, whose
     // encoders share this module's understanding of the formats (except

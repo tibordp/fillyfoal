@@ -4,8 +4,9 @@
 //! the `**ACE**` signature, file headers carry sizes, attributes, CRC-32 and
 //! the compression type, followed by the packed data. ACE 1.0 LZ77 and ACE
 //! 2.0 "blocked" data (with its EXE, DELTA, SOUND and PIC modes) are
-//! decompressed by [`crate::codec::ace`], solid archives by decoding the
-//! files before the wanted one; comments are decoded. The layout and the
+//! decompressed by [`crate::codec::ace`]; a solid archive is decoded once,
+//! lazily, as one stream whose spans are its files' contents; comments are
+//! decoded. The layout and the
 //! codecs follow `acefile` (a reimplementation of `unace`); there is no
 //! published specification. Blowfish-encrypted files are not decrypted.
 //!
@@ -15,15 +16,17 @@
 //! Stored members are dissected in place; the ARC RLE/Huffman/LZW methods
 //! are unsupported leaves.
 
+use std::sync::Arc;
+
 use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
-use crate::codec::crc32;
+use crate::codec::{Codec, crc32};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::{ByteReader, count, emit_nodes, hex, human_size, unsupported};
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
-use crate::span::Span;
+use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
@@ -275,14 +278,33 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// The members of a solid stream up to and including the file whose data
-/// is `data`: their packed data spans and parameters.
-async fn ace_solid_chain(
-    cx: &Cx,
-    file: Span,
-    data: Span,
-) -> Result<Vec<(Span, crate::codec::ace::Member)>> {
-    let mut chain = Vec::new();
+/// Members up to this size are read whole on expansion, so that their
+/// CRC-32 is checked (as `expand_content` decodes them eagerly); larger
+/// ones are left to be decoded as far as reads reach.
+const SOLID_CHECK_LIMIT: u64 = 1024 * 1024;
+
+/// A solid archive's files decoded as one stream, once: each file's
+/// content is a span of it.
+struct AceSolid {
+    stream: Span,
+    /// Each file in the stream: the offset of its packed data (in the
+    /// archive's source) and of its output (in `stream`), by data offset.
+    files: Vec<(u64, u64)>,
+    /// The data offset of the first file that cannot be decoded (encrypted
+    /// or split); the stream ends before it.
+    broken: Option<u64>,
+}
+
+/// The solid stream of the archive `file` (walked once, then cached).
+async fn ace_solid(cx: &Cx, file: Span) -> Result<Arc<AceSolid>> {
+    if let Some(solid) = cx.cached::<AceSolid>(file, "ace solid") {
+        return Ok(solid);
+    }
+    let mut pieces = Vec::new();
+    let mut members = Vec::new();
+    let mut files = Vec::new();
+    let mut total = 0u64;
+    let mut broken = None;
     let mut at = 0u64;
     let mut seen = 0u64;
     while at.saturating_add(7) <= file.len && seen < MAX_ENTRIES {
@@ -290,53 +312,102 @@ async fn ace_solid_chain(
         let block = ace_block_at(cx, file, at).await?;
         if block.kind == 1 || block.kind == 3 {
             let header = cx.read(block.header_span).await?;
-            if block.flags & (ACE_FLAG_PASSWORD | ACE_FLAG_SPLIT) != 0 {
-                return Err(Diagnostic::unsupported(
-                    "solid stream with an encrypted or split file before this one",
-                ));
-            }
             let d = block.span.tail(block.header_span.len);
-            chain.push((d, ace_member(&header, &block)));
-            if d.offset == data.offset {
-                return Ok(chain);
+            if block.flags & (ACE_FLAG_PASSWORD | ACE_FLAG_SPLIT) != 0 {
+                broken = Some(d.offset);
+                break;
             }
+            let member = ace_member(&header, &block);
+            files.push((d.offset, total));
+            total = total.saturating_add(member.size);
+            pieces.push(d);
+            members.push(member);
         }
         if block.header_span.len <= 4 {
             break;
         }
         at = at.saturating_add(block.span.len);
     }
-    Err(Diagnostic::malformed("file not found in the solid stream"))
+    let data = match pieces.as_slice() {
+        [] => return Err(Diagnostic::malformed("no files in the solid stream")),
+        [one] => *one,
+        [first, .., last] => cx.add_pieces(
+            Origin {
+                parent: Span::new(
+                    first.source,
+                    first.offset,
+                    last.end().saturating_sub(first.offset),
+                ),
+                transform: "ace-solid",
+            },
+            pieces.clone(),
+        )?,
+    };
+    let codec = Codec::Ace(crate::codec::ace::Params {
+        members: members.into(),
+    });
+    let stream = cx.decode_lazy(data, &codec, total)?;
+    let solid = Arc::new(AceSolid {
+        stream: Span::new(stream.source, 0, total),
+        files,
+        broken,
+    });
+    cx.cache(file, "ace solid", solid.clone());
+    Ok(solid)
 }
 
-/// The packed data of a file, decoded on expansion (with the files before
-/// it in a solid archive).
+/// The ACE CRC-32 of `span` (read in pieces) and how much of it was read.
+async fn ace_crc_of(cx: &Cx, span: Span) -> Result<(u32, u64)> {
+    let mut crc = 0xffff_ffffu32;
+    let mut pos = 0u64;
+    while pos < span.len {
+        let data = cx.read(span.sub(pos, 1 << 16)).await?;
+        if data.is_empty() {
+            break;
+        }
+        crc = crate::codec::crc::crc32_update(crc, &data);
+        pos = pos.saturating_add(to_u64(data.len()));
+    }
+    Ok((crc, pos))
+}
+
+/// The packed data of a file, decoded on expansion (in a solid archive, as
+/// a span of the archive's decoded stream).
 async fn ace_content(
     cx: Cx,
     (input, data, member, solid): (Input, Span, crate::codec::ace::Member, bool),
 ) -> Result<()> {
-    let (span, members) = if solid {
-        let chain = ace_solid_chain(&cx, input.span, data).await?;
-        let members: Vec<crate::codec::ace::Member> = chain.iter().map(|(_, m)| *m).collect();
-        let span = if chain.len() > 1 {
-            cx.add_pieces(
-                crate::span::Origin {
-                    parent: data,
-                    transform: "ace-solid",
-                },
-                chain.iter().map(|(s, _)| *s).collect(),
-            )?
+    if !solid {
+        let codec = Codec::Ace(crate::codec::ace::Params {
+            members: vec![member].into(),
+        });
+        return crate::formats::expand_content(cx, (input, data, codec, Some(member.size))).await;
+    }
+    let run = ace_solid(&cx, input.span).await?;
+    let i = run.files.partition_point(|&(o, _)| o < data.offset);
+    let Some(&(_, offset)) = run.files.get(i).filter(|&&(o, _)| o == data.offset) else {
+        return Err(if run.broken.is_some_and(|b| b < data.offset) {
+            Diagnostic::unsupported("solid stream with an encrypted or split file before this one")
         } else {
-            data
-        };
-        (span, members)
-    } else {
-        (data, vec![member])
+            Diagnostic::malformed("file not found in the solid stream")
+        });
     };
-    let codec = crate::codec::Codec::Ace(crate::codec::ace::Params {
-        members: members.into(),
-    });
-    crate::formats::expand_content(cx, (input, span, codec, Some(member.size))).await
+    let span = run.stream.sub(offset, member.size);
+    if member.size <= SOLID_CHECK_LIMIT {
+        let (crc, len) = ace_crc_of(&cx, span).await?;
+        cx.annotate(format!("{len:#x} bytes decompressed"));
+        if len < member.size {
+            cx.diag(
+                Diagnostic::malformed(format!("decoded {len:#x} of {:#x} bytes", member.size))
+                    .at(data),
+            );
+        } else if crc != member.crc {
+            cx.diag(Diagnostic::warning("ACE CRC-32 mismatch").at(data));
+        }
+    } else {
+        cx.annotate(format!("{:#x} bytes, decoded on demand", member.size));
+    }
+    crate::formats::dissect_or_data(cx, input.nested(span)).await
 }
 
 async fn ace_block(

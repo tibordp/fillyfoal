@@ -22,14 +22,19 @@
 //!   predictor with Golomb-Rice residuals for pictures (`PIC`).
 //!
 //! In solid archives the LZ77 dictionary carries over from one file to the
-//! next; [`Params`] lists the files from the first one, and only the last
-//! one's output is kept. The stored CRC-32 (the standard polynomial without
-//! the final inversion) is checked.
+//! next; [`Params`] lists the files from the first one, and the output is
+//! theirs, one after another (a solid archive is decoded once, its files
+//! being spans of the output). Each file's stored CRC-32 (the standard
+//! polynomial without the final inversion) is checked.
+//!
+//! [`Decoder`] works a bounded run at a time (about `step` bytes, cut
+//! between LZ77 matches, SOUND samples or PIC rows) and releases its input
+//! as it goes.
 
 use std::sync::Arc;
 
 use crate::bytes::to_usize;
-use crate::codec::pipeline::{Decode, Step};
+use crate::codec::pipeline::{self, Status};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -54,8 +59,8 @@ pub struct Member {
 }
 
 /// What to decode: the packed data of `members`, one after another; the
-/// output is the last member's. Earlier members (a solid archive's files
-/// before the one wanted) only fill the dictionary.
+/// output is all of theirs, in order (a solid archive's files share the
+/// dictionary).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Params {
     pub members: Arc<[Member]>,
@@ -232,8 +237,10 @@ fn sort_range(keys: &mut [u8], values: &mut [u16], left: isize, right: isize) {
 /// A Huffman code as a lookup table indexed by the next `max` bits.
 #[derive(Clone)]
 struct Tree {
-    codes: Vec<u16>,
-    widths: Vec<u8>,
+    // Shared: trees never change once built, and decoder states that hold
+    // them are cloned before every step.
+    codes: Arc<[u16]>,
+    widths: Arc<[u8]>,
     max: u32,
 }
 
@@ -267,7 +274,11 @@ impl Tree {
             }
             codes.extend(std::iter::repeat_n(sym, repeat));
         }
-        Ok(Tree { codes, widths, max })
+        Ok(Tree {
+            codes: codes.into(),
+            widths: widths.into(),
+            max,
+        })
     }
 
     fn read(&self, bs: &mut Bits<'_>) -> Result<u16> {
@@ -376,8 +387,9 @@ const LZ_MAX_WIDTH: u32 = 11;
 const DICT_KEEP: usize = 1 << MAX_DIC_BITS;
 
 /// The LZ77 dictionary: everything LZ77 (or a non-LZ mode) produced,
-/// trimmed to the last 4 MiB now and then. With filters (DELTA, EXE) it
-/// holds the bytes before filtering.
+/// trimmed to the last 4 MiB now and then (only between decoder steps, so
+/// that a step can be undone by truncating it). With filters (DELTA, EXE)
+/// it holds the bytes before filtering.
 #[derive(Clone, Default)]
 struct Dict {
     data: Vec<u8>,
@@ -393,7 +405,6 @@ impl Dict {
 
     fn register(&mut self, bytes: &[u8]) {
         self.data.extend_from_slice(bytes);
-        self.trim();
     }
 }
 
@@ -423,16 +434,18 @@ impl Lz77 {
         ))
     }
 
-    /// Decodes until `want` bytes have been added to `dict` or a type code
-    /// announces another mode; returns the number of bytes added.
+    /// Decodes until at least `soft` bytes have been added to `dict` or a
+    /// type code announces another mode; returns the number of bytes added.
+    /// A match may run past `soft`, but not past `want`.
     fn read(
         &mut self,
         bs: &mut Bits<'_>,
         dict: &mut Dict,
+        soft: usize,
         want: usize,
     ) -> Result<(usize, Option<Mode>)> {
         let mut have = 0usize;
-        while have < want {
+        while have < soft.min(want) {
             let sym = self.main_symbol(bs)?;
             if sym <= 255 {
                 dict.data.push(u8::try_from(sym).unwrap_or(0));
@@ -738,6 +751,8 @@ impl Sound {
 
 const PIC_CONTEXTS: usize = 365;
 const PIC_MAX_WIDTH: i64 = 1 << 20;
+/// Input bits after which [`Pic::read`] ends early (between rows).
+const PIC_STEP_BITS: usize = 1 << 19;
 
 #[derive(Clone, Copy)]
 struct ErrContext {
@@ -891,7 +906,8 @@ struct Pic {
     planes: usize,
     plane0: Vec<ErrContext>,
     planes1: Vec<ErrContext>,
-    prev: Vec<i32>,
+    /// The previous row (shared: replaced, never changed, per row).
+    prev: Arc<[i32]>,
 }
 
 impl Pic {
@@ -905,7 +921,7 @@ impl Pic {
         self.planes = to_usize(u64::try_from(planes).unwrap_or(0));
         self.plane0 = vec![ErrContext::default(); PIC_CONTEXTS];
         self.planes1 = vec![ErrContext::default(); PIC_CONTEXTS];
-        self.prev = vec![0; self.width.saturating_add(self.planes)];
+        self.prev = vec![0; self.width.saturating_add(self.planes)].into();
         Ok(())
     }
 
@@ -963,14 +979,26 @@ impl Pic {
                 col = col.saturating_add(self.planes);
             }
         }
-        self.prev.clone_from(&row);
-        row.truncate(self.width);
+        let full: Arc<[i32]> = row.into();
+        let row = full.get(..self.width).unwrap_or_default().to_vec();
+        self.prev = full;
         Ok(row)
     }
 
-    fn read(&mut self, bs: &mut Bits<'_>, want: usize, out: &mut Vec<u8>) -> Result<Option<Mode>> {
+    /// Decodes rows until at least `soft` bytes are out (rows are never
+    /// cut short of `want`), a type code announces another mode, or the
+    /// rows read so far took more than [`PIC_STEP_BITS`] (rows can be
+    /// empty).
+    fn read(
+        &mut self,
+        bs: &mut Bits<'_>,
+        soft: usize,
+        want: usize,
+        out: &mut Vec<u8>,
+    ) -> Result<Option<Mode>> {
         let mut have = 0usize;
-        while have < want {
+        let start = bs.pos;
+        while have < soft.min(want) && bs.pos.saturating_sub(start) <= PIC_STEP_BITS {
             if !bs.bit()? {
                 return Ok(Some(Mode::read(bs)?));
             }
@@ -987,149 +1015,429 @@ impl Pic {
 // ---------------------------------------------------------------------------
 // Members
 
-/// State carried across the files of a solid archive.
-#[derive(Clone, Default)]
-struct Engine {
-    dict: Dict,
-    sound: Sound,
-    pic: Pic,
+/// Output an LZ77 or SOUND run produces before the decoder looks at its
+/// budget again (a match may run a little past it; a PIC row and a DELTA
+/// block are never cut).
+const CHUNK: usize = 4096;
+/// With less buffered input than this ahead, a step that has produced
+/// output ends at the next clean point rather than risk running out (and
+/// being undone).
+const MARGIN: usize = 16 * 1024;
+/// Iterations (runs between mode switches) per step: switches can
+/// produce nothing.
+const MAX_ITERATIONS: usize = 256;
+
+/// The member being decoded.
+#[derive(Clone)]
+struct Cur {
+    /// Input index the bit position counts from: the member's start, moved
+    /// on by whole 32-bit words (stored members: by bytes) as it is read.
+    in_pos: usize,
+    /// Input index of the member's end.
+    end: usize,
+    /// Bits read since `in_pos`.
+    bit: usize,
+    size: usize,
+    produced: usize,
+    method: u8,
+    lz: Lz77,
+    exe_leftover: Vec<u8>,
+    last_delta: u8,
+    mode: Mode,
+    next: Option<Mode>,
+    /// Running ACE CRC-32 of the output.
+    crc: u32,
 }
 
-impl Engine {
-    fn stored(&mut self, data: &[u8], size: usize, out: &mut Vec<u8>) -> Result<()> {
-        let bytes = data
-            .get(..size)
-            .ok_or_else(|| bad("stored data ends early"))?;
-        out.extend_from_slice(bytes);
-        self.dict.register(bytes);
-        Ok(())
+/// What a member's step works with besides its own state.
+struct Shared<'a> {
+    dict: &'a mut Dict,
+    sound: &'a mut Sound,
+    pic: &'a mut Pic,
+    out: &'a mut Vec<u8>,
+}
+
+impl Cur {
+    fn new(start: usize, m: &Member) -> Cur {
+        let packed = to_usize(m.packed);
+        Cur {
+            in_pos: start,
+            end: start.saturating_add(packed),
+            bit: 0,
+            size: to_usize(m.size),
+            produced: 0,
+            method: m.method,
+            lz: Lz77::default(),
+            exe_leftover: Vec::new(),
+            last_delta: 0,
+            mode: Mode::plain(MODE_LZ77),
+            next: None,
+            crc: 0xffff_ffff,
+        }
     }
 
-    fn lz77(&mut self, data: &[u8], size: usize, out: &mut Vec<u8>) -> Result<()> {
-        let mut bs = Bits::new(data);
-        let mut lz = Lz77::default();
-        let (n, mode) = lz.read(&mut bs, &mut self.dict, size)?;
+    fn emit(&mut self, out: &mut Vec<u8>, bytes: &[u8]) {
+        out.extend_from_slice(bytes);
+        self.crc = crate::codec::crc::crc32_update(self.crc, bytes);
+        self.produced = self.produced.saturating_add(bytes.len());
+    }
+
+    /// Decodes about `budget` more bytes of this member; true once it is
+    /// complete.
+    fn run(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        sh: &mut Shared<'_>,
+        budget: usize,
+        iterations: &mut usize,
+    ) -> Result<bool> {
+        let data = input
+            .get(self.in_pos..self.end.min(input.len()))
+            .unwrap_or_default();
+        // Everything of the member there is to have (with less, only whole
+        // words count as read, so that no zero padding is consumed).
+        let complete = eof || input.len() >= self.end;
+        if self.method == 0 {
+            return self.stored(data, complete, sh, budget);
+        }
+        let end = if complete {
+            data.len().div_ceil(4).saturating_mul(32)
+        } else {
+            (data.len() / 4).saturating_mul(32)
+        };
+        let mut bs = Bits {
+            data,
+            pos: self.bit,
+            end,
+        };
+        let mut here = 0usize;
+        let finished = loop {
+            if self.produced >= self.size {
+                break true;
+            }
+            if here >= budget || *iterations >= MAX_ITERATIONS {
+                break false;
+            }
+            if !complete && here > 0 && data.len().saturating_sub(bs.pos / 8) < MARGIN {
+                break false;
+            }
+            *iterations = iterations.saturating_add(1);
+            let before = self.produced;
+            match self.method {
+                1 => self.lz77(&mut bs, sh)?,
+                2 => self.blocked(&mut bs, sh)?,
+                _ => return Err(Diagnostic::unsupported("ACE compression method")),
+            }
+            here = here.saturating_add(self.produced.saturating_sub(before));
+        };
+        let words = (bs.pos / 32).min(data.len() / 4);
+        self.in_pos = self.in_pos.saturating_add(words.saturating_mul(4));
+        self.bit = bs.pos.saturating_sub(words.saturating_mul(32));
+        Ok(finished)
+    }
+
+    fn stored(
+        &mut self,
+        data: &[u8],
+        complete: bool,
+        sh: &mut Shared<'_>,
+        budget: usize,
+    ) -> Result<bool> {
+        let left = self.size.saturating_sub(self.produced);
+        if complete && data.len() < left {
+            return Err(bad("stored data ends early"));
+        }
+        let n = left.min(data.len()).min(budget.max(1));
+        if n == 0 && left > 0 {
+            return Err(bad("stored data ends early"));
+        }
+        let bytes = data.get(..n).unwrap_or_default();
+        self.emit(sh.out, bytes);
+        sh.dict.register(bytes);
+        self.in_pos = self.in_pos.saturating_add(n);
+        Ok(self.produced >= self.size)
+    }
+
+    /// One run of ACE 1.0 LZ77.
+    fn lz77(&mut self, bs: &mut Bits<'_>, sh: &mut Shared<'_>) -> Result<()> {
+        let want = self.size.saturating_sub(self.produced);
+        let (n, mode) = self.lz.read(bs, sh.dict, CHUNK, want)?;
         if mode.is_some() {
             return Err(bad("type code in an ACE 1.0 LZ77 stream"));
         }
-        let start = self.dict.data.len().saturating_sub(n);
-        out.extend_from_slice(self.dict.data.get(start..).unwrap_or_default());
-        self.dict.trim();
+        let start = sh.dict.data.len().saturating_sub(n);
+        let bytes = sh.dict.data.get(start..).unwrap_or_default();
+        sh.out.extend_from_slice(bytes);
+        self.crc = crate::codec::crc::crc32_update(self.crc, bytes);
+        self.produced = self.produced.saturating_add(n);
         Ok(())
     }
 
-    fn blocked(&mut self, data: &[u8], size: usize, out: &mut Vec<u8>) -> Result<()> {
-        let mut bs = Bits::new(data);
-        let mut lz = Lz77::default();
-        let mut exe_leftover: Vec<u8> = Vec::new();
-        let mut last_delta = 0u8;
-        let mut mode = Mode::plain(MODE_LZ77);
-        let mut next: Option<Mode> = None;
-        let base = out.len();
-        let produced = |out: &Vec<u8>| out.len().saturating_sub(base);
-        while produced(out) < size {
-            if let Some(n) = next.take() {
-                if n.mode != mode.mode {
-                    if (MODE_SOUND_8..=MODE_SOUND_32B).contains(&n.mode) {
-                        self.sound.reinit(n.mode);
-                    } else if n.mode == MODE_PIC {
-                        self.pic.reinit(&mut bs)?;
-                    }
+    /// One run of blocked data: up to a mode switch, or about [`CHUNK`]
+    /// bytes.
+    fn blocked(&mut self, bs: &mut Bits<'_>, sh: &mut Shared<'_>) -> Result<()> {
+        let size = self.size;
+        if let Some(n) = self.next.take() {
+            if n.mode != self.mode.mode {
+                if (MODE_SOUND_8..=MODE_SOUND_32B).contains(&n.mode) {
+                    sh.sound.reinit(n.mode);
+                } else if n.mode == MODE_PIC {
+                    sh.pic.reinit(bs)?;
                 }
-                mode = n;
             }
-            let before = (produced(out), bs.pos);
-            match mode.mode {
-                MODE_DELTA => {
-                    let delta_len = to_usize(u64::from(mode.delta_len));
-                    let mut delta: Vec<u8> = Vec::new();
-                    while delta.len() < delta_len {
-                        let (n, nm) = lz.read(
-                            &mut bs,
-                            &mut self.dict,
-                            delta_len.saturating_sub(delta.len()),
-                        )?;
-                        let start = self.dict.data.len().saturating_sub(n);
-                        delta.extend_from_slice(self.dict.data.get(start..).unwrap_or_default());
-                        self.dict.trim();
-                        if let Some(nm) = nm {
-                            if next.is_some() {
-                                return Err(bad("DELTA block interrupted twice"));
-                            }
-                            next = Some(nm);
-                            if delta.is_empty() {
-                                break;
-                            }
-                        }
-                    }
-                    if delta.is_empty() && next.is_some() {
-                        continue;
-                    }
-                    for b in &mut delta {
-                        *b = b.wrapping_add(last_delta);
-                        last_delta = *b;
-                    }
-                    let dist = to_usize(u64::from(mode.delta_dist));
-                    let plane_size = delta_len
-                        .checked_div(dist)
-                        .ok_or_else(|| bad("DELTA distance 0"))?;
-                    let room = size.saturating_sub(produced(out));
-                    let mut emitted = 0usize;
-                    'planes: for pos in 0..plane_size {
-                        let mut plane = 0usize;
-                        while plane < delta_len {
-                            let b = delta
-                                .get(plane.saturating_add(pos))
-                                .copied()
-                                .ok_or_else(|| bad("DELTA block ends early"))?;
-                            if emitted >= room {
-                                break 'planes;
-                            }
-                            out.push(b);
-                            emitted = emitted.saturating_add(1);
-                            plane = plane.saturating_add(plane_size);
-                        }
-                    }
-                }
-                MODE_LZ77 | MODE_EXE => {
-                    let mut chunk = std::mem::take(&mut exe_leftover);
-                    let want = size
-                        .saturating_sub(produced(out))
-                        .saturating_sub(chunk.len());
-                    let (n, nm) = lz.read(&mut bs, &mut self.dict, want)?;
-                    let start = self.dict.data.len().saturating_sub(n);
-                    chunk.extend_from_slice(self.dict.data.get(start..).unwrap_or_default());
-                    self.dict.trim();
-                    next = nm;
-                    if mode.mode == MODE_EXE {
-                        let at = produced(out);
-                        let last = at.saturating_add(chunk.len()) >= size;
-                        exe_leftover = exe_filter(&mut chunk, at, mode.exe_mode, last);
-                    }
-                    out.extend_from_slice(&chunk);
-                }
-                MODE_SOUND_8..=MODE_SOUND_32B => {
-                    let mark = out.len();
-                    next = self
-                        .sound
-                        .read(&mut bs, size.saturating_sub(produced(out)), out)?;
-                    self.dict.register(out.get(mark..).unwrap_or_default());
-                }
-                MODE_PIC => {
-                    let mark = out.len();
-                    next = self
-                        .pic
-                        .read(&mut bs, size.saturating_sub(produced(out)), out)?;
-                    self.dict.register(out.get(mark..).unwrap_or_default());
-                }
-                _ => return Err(bad("unknown compression mode")),
-            }
-            if (produced(out), bs.pos) == before && next.is_none() {
-                return Err(bad("no progress"));
-            }
+            self.mode = n;
         }
-        out.truncate(base.saturating_add(size));
+        let before = (self.produced, bs.pos);
+        let left = size.saturating_sub(self.produced);
+        match self.mode.mode {
+            MODE_DELTA => {
+                let delta_len = to_usize(u64::from(self.mode.delta_len));
+                let mut delta: Vec<u8> = Vec::new();
+                while delta.len() < delta_len {
+                    let more = delta_len.saturating_sub(delta.len());
+                    let (n, nm) = self.lz.read(bs, sh.dict, more, more)?;
+                    let start = sh.dict.data.len().saturating_sub(n);
+                    delta.extend_from_slice(sh.dict.data.get(start..).unwrap_or_default());
+                    if let Some(nm) = nm {
+                        if self.next.is_some() {
+                            return Err(bad("DELTA block interrupted twice"));
+                        }
+                        self.next = Some(nm);
+                        if delta.is_empty() {
+                            break;
+                        }
+                    }
+                }
+                if delta.is_empty() && self.next.is_some() {
+                    return Ok(());
+                }
+                for b in &mut delta {
+                    *b = b.wrapping_add(self.last_delta);
+                    self.last_delta = *b;
+                }
+                let dist = to_usize(u64::from(self.mode.delta_dist));
+                let plane_size = delta_len
+                    .checked_div(dist)
+                    .ok_or_else(|| bad("DELTA distance 0"))?;
+                let mut planes = Vec::with_capacity(left.min(delta.len()));
+                'planes: for pos in 0..plane_size {
+                    let mut plane = 0usize;
+                    while plane < delta_len {
+                        let b = delta
+                            .get(plane.saturating_add(pos))
+                            .copied()
+                            .ok_or_else(|| bad("DELTA block ends early"))?;
+                        if planes.len() >= left {
+                            break 'planes;
+                        }
+                        planes.push(b);
+                        plane = plane.saturating_add(plane_size);
+                    }
+                }
+                self.emit(sh.out, &planes);
+            }
+            MODE_LZ77 | MODE_EXE => {
+                let mut chunk = std::mem::take(&mut self.exe_leftover);
+                let want = left.saturating_sub(chunk.len());
+                let (n, nm) = self.lz.read(bs, sh.dict, CHUNK, want)?;
+                let start = sh.dict.data.len().saturating_sub(n);
+                chunk.extend_from_slice(sh.dict.data.get(start..).unwrap_or_default());
+                self.next = nm;
+                if self.mode.mode == MODE_EXE {
+                    let at = self.produced;
+                    let last = at.saturating_add(chunk.len()) >= size;
+                    self.exe_leftover = exe_filter(&mut chunk, at, self.mode.exe_mode, last);
+                }
+                self.emit(sh.out, &chunk);
+            }
+            MODE_SOUND_8..=MODE_SOUND_32B => {
+                // Runs stay multiples of four (the channel pattern restarts
+                // with each).
+                let mut buf = Vec::new();
+                self.next = sh.sound.read(bs, left.min(CHUNK), &mut buf)?;
+                sh.dict.register(&buf);
+                self.emit(sh.out, &buf);
+            }
+            MODE_PIC => {
+                let mut buf = Vec::new();
+                self.next = sh.pic.read(bs, CHUNK, left, &mut buf)?;
+                sh.dict.register(&buf);
+                self.emit(sh.out, &buf);
+            }
+            _ => return Err(bad("unknown compression mode")),
+        }
+        if (self.produced, bs.pos) == before && self.next.is_none() {
+            return Err(bad("no progress"));
+        }
         Ok(())
+    }
+}
+
+/// Decoder state, apart from the dictionary (cloned before each step).
+#[derive(Clone, Default)]
+struct State {
+    /// The member being decoded or next.
+    k: usize,
+    /// Input index of member `k`'s packed data.
+    start: usize,
+    cur: Option<Cur>,
+    /// SOUND and PIC models carry over from one member to the next.
+    sound: Sound,
+    pic: Pic,
+    /// The first member whose CRC did not match.
+    bad_crc: Option<usize>,
+    consumed: usize,
+    done: bool,
+}
+
+/// The decoder for [`Params`]: the members' outputs one after another, a
+/// bounded run at a time, input released as it is read.
+///
+/// The 4 MiB dictionary is too large to copy before every step, so this is
+/// a [`pipeline::Decoder`] of its own: a step that runs out of input is
+/// undone by restoring the small state and truncating the dictionary and
+/// the output (the dictionary is only trimmed between steps).
+pub struct Decoder {
+    params: Params,
+    st: State,
+    dict: Dict,
+}
+
+impl Decoder {
+    pub fn new(params: Params) -> Self {
+        Decoder {
+            params,
+            st: State::default(),
+            dict: Dict::default(),
+        }
+    }
+
+    fn run(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        let first = out.len();
+        let mut iterations = 0usize;
+        loop {
+            let here = out.len().saturating_sub(first);
+            if here >= step || iterations >= MAX_ITERATIONS {
+                return Ok(Status::More);
+            }
+            let st = &mut self.st;
+            let Some(cur) = st.cur.as_mut() else {
+                let Some(m) = self.params.members.get(st.k) else {
+                    if eof {
+                        st.consumed = input.len();
+                        st.done = true;
+                        return Ok(Status::Done);
+                    }
+                    st.consumed = st.start.min(input.len());
+                    return Ok(if here > 0 {
+                        Status::More
+                    } else {
+                        Status::NeedInput
+                    });
+                };
+                let size = to_usize(m.size);
+                if size > limit.saturating_sub(out.len()) {
+                    return Err(too_big(limit));
+                }
+                if size > 0 && m.method > 2 {
+                    return Err(Diagnostic::unsupported("ACE compression method"));
+                }
+                st.cur = Some(Cur::new(st.start, m));
+                continue;
+            };
+            let mut sh = Shared {
+                dict: &mut self.dict,
+                sound: &mut st.sound,
+                pic: &mut st.pic,
+                out,
+            };
+            let budget = step.saturating_sub(here);
+            if !cur.run(input, eof, &mut sh, budget, &mut iterations)? {
+                st.consumed = cur.in_pos.min(input.len());
+                return Ok(Status::More);
+            }
+            let (crc, next) = (cur.crc, cur.end);
+            if self.params.members.get(st.k).is_some_and(|m| m.crc != crc) && st.bad_crc.is_none() {
+                st.bad_crc = Some(st.k);
+            }
+            st.cur = None;
+            st.k = st.k.saturating_add(1);
+            st.start = next;
+            st.consumed = next.min(input.len());
+        }
+    }
+}
+
+impl pipeline::Decoder for Decoder {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        if self.st.done {
+            return Ok(Status::Done);
+        }
+        self.dict.trim();
+        let saved = self.st.clone();
+        let dict_mark = self.dict.data.len();
+        let mark = out.len();
+        match self.run(input, eof, out, step, limit) {
+            Err(_) if !eof => {
+                // Most likely a shortage of input; retry once more arrives.
+                // A genuine error recurs at the end of the input.
+                self.st = saved;
+                self.dict.data.truncate(dict_mark);
+                out.truncate(mark);
+                Ok(Status::NeedInput)
+            }
+            result => result,
+        }
+    }
+
+    fn consumed(&self) -> usize {
+        self.st.consumed
+    }
+
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
+        let k = self.st.bad_crc?;
+        Some(Diagnostic::warning(if self.params.members.len() > 1 {
+            format!(
+                "ACE CRC-32 mismatch (file {} of the solid stream)",
+                k.saturating_add(1)
+            )
+        } else {
+            "ACE CRC-32 mismatch".to_owned()
+        }))
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.st.consumed
+    }
+
+    fn release_input(&mut self, n: usize) {
+        let st = &mut self.st;
+        st.consumed = st.consumed.saturating_sub(n);
+        st.start = st.start.saturating_sub(n);
+        if let Some(cur) = &mut st.cur {
+            cur.in_pos = cur.in_pos.saturating_sub(n);
+            cur.end = cur.end.saturating_sub(n);
+        }
+    }
+
+    /// The dictionary is kept apart, so no output is read again.
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
     }
 }
 
@@ -1177,91 +1485,6 @@ fn exe_filter(chunk: &mut Vec<u8>, at: usize, exe_mode: u32, last: bool) -> Vec<
     match hold {
         Some(j) => chunk.split_off(j),
         None => Vec::new(),
-    }
-}
-
-/// Decodes the members' packed data (concatenated in `input`) and returns
-/// the last member's output and whether its CRC matched.
-pub fn decode(params: &Params, input: &[u8], limit: usize) -> Result<(Vec<u8>, bool)> {
-    let mut engine = Engine::default();
-    let mut at = 0usize;
-    let count = params.members.len();
-    let mut result = (Vec::new(), true);
-    for (k, m) in params.members.iter().enumerate() {
-        let packed = to_usize(m.packed);
-        let data = input
-            .get(at..at.saturating_add(packed).min(input.len()))
-            .unwrap_or_default();
-        at = at.saturating_add(packed);
-        let size = to_usize(m.size);
-        if size > limit {
-            return Err(too_big(limit));
-        }
-        let mut out = Vec::new();
-        if size > 0 {
-            match m.method {
-                0 => engine.stored(data, size, &mut out)?,
-                1 => engine.lz77(data, size, &mut out)?,
-                2 => engine.blocked(data, size, &mut out)?,
-                _ => return Err(Diagnostic::unsupported("ACE compression method")),
-            }
-        }
-        if k.saturating_add(1) == count {
-            let ok = ace_crc32(&out) == m.crc;
-            result = (out, ok);
-        }
-    }
-    Ok(result)
-}
-
-/// The decoder for [`Params`] (decodes once all input is in).
-#[derive(Clone)]
-pub struct Decoder {
-    params: Params,
-    consumed: usize,
-    done: bool,
-    crc_ok: bool,
-}
-
-impl Decoder {
-    pub fn new(params: Params) -> Self {
-        Decoder {
-            params,
-            consumed: 0,
-            done: false,
-            crc_ok: true,
-        }
-    }
-}
-
-impl Decode for Decoder {
-    fn step(
-        &mut self,
-        input: &[u8],
-        eof: bool,
-        out: &mut Vec<u8>,
-        _step: usize,
-        limit: usize,
-    ) -> Result<Step> {
-        if !eof {
-            return Err(Diagnostic::malformed("waiting for the whole input"));
-        }
-        if !self.done {
-            let (data, ok) = decode(&self.params, input, limit.saturating_sub(out.len()))?;
-            out.extend_from_slice(&data);
-            self.crc_ok = ok;
-            self.consumed = input.len();
-            self.done = true;
-        }
-        Ok(Step::Done)
-    }
-
-    fn consumed(&self) -> usize {
-        self.consumed
-    }
-
-    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
-        (!self.crc_ok).then(|| Diagnostic::warning("ACE CRC-32 mismatch"))
     }
 }
 
@@ -1345,27 +1568,45 @@ mod tests {
         (solid, out)
     }
 
+    /// Decodes `members` from `input` in one go.
+    fn decode(members: Vec<Member>, input: &[u8], limit: usize) -> Result<(Vec<u8>, bool)> {
+        let mut d = Decoder::new(Params {
+            members: members.into(),
+        });
+        let out = pipeline::decode_all(&mut d, input, limit)?;
+        let ok = pipeline::Decoder::warning(&d, &out).is_none();
+        Ok((out, ok))
+    }
+
     fn check(archive: &[u8], count: usize) {
         let (solid, files) = members(archive);
         assert_eq!(files.len(), count);
-        for (i, (m, range)) in files.iter().enumerate() {
-            let (members, input): (Vec<Member>, Vec<u8>) = if solid {
-                let upto = &files[..=i];
-                (
-                    upto.iter().map(|(m, _)| *m).collect(),
-                    upto.iter()
-                        .flat_map(|(_, r)| archive[r.clone()].to_vec())
-                        .collect(),
-                )
-            } else {
-                (vec![*m], archive[range.clone()].to_vec())
-            };
-            let params = Params {
-                members: members.into(),
-            };
-            let (out, ok) = decode(&params, &input, 1 << 20).unwrap();
-            assert_eq!(out.len() as u64, m.size, "member {i}");
-            assert!(ok, "member {i}: CRC mismatch");
+        if solid {
+            // The whole stream at once, and every prefix of it.
+            let all: Vec<Member> = files.iter().map(|(m, _)| *m).collect();
+            let input: Vec<u8> = files
+                .iter()
+                .flat_map(|(_, r)| archive[r.clone()].to_vec())
+                .collect();
+            let (out, ok) = decode(all.clone(), &input, 1 << 20).unwrap();
+            assert!(ok, "CRC mismatch");
+            let mut at = 0usize;
+            for (i, (m, _)) in files.iter().enumerate() {
+                let size = m.size as usize;
+                assert_eq!(ace_crc32(&out[at..at + size]), m.crc, "member {i}");
+                at += size;
+                let packed: usize = files[..=i].iter().map(|(_, r)| r.len()).sum();
+                let (prefix, ok) = decode(all[..=i].to_vec(), &input[..packed], 1 << 20).unwrap();
+                assert!(ok);
+                assert_eq!(prefix, out[..at]);
+            }
+            assert_eq!(at, out.len());
+        } else {
+            for (i, (m, range)) in files.iter().enumerate() {
+                let (out, ok) = decode(vec![*m], &archive[range.clone()], 1 << 20).unwrap();
+                assert_eq!(out.len() as u64, m.size, "member {i}");
+                assert!(ok, "member {i}: CRC mismatch");
+            }
         }
     }
 
@@ -1420,7 +1661,8 @@ mod tests {
                 let data: Vec<u8> = (0..64u8)
                     .map(|i| i.wrapping_mul(seed).wrapping_add(seed))
                     .collect();
-                let _ = decode(&params, &data, 1 << 16);
+                let mut d = Decoder::new(params.clone());
+                let _ = pipeline::decode_all(&mut d, &data, 1 << 16);
             }
         }
     }
