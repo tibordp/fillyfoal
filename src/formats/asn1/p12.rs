@@ -22,33 +22,58 @@ struct El<'a> {
     content: &'a [u8],
 }
 
-/// The elements of `data` (relative offsets of their contents).
-fn children(data: &[u8]) -> Vec<El<'_>> {
-    let mut out = Vec::new();
-    let mut pos = 0usize;
-    while let Some(rest) = data.get(pos..).filter(|r| !r.is_empty()) {
-        let Some(tlv) = der::header(rest) else { break };
-        let Some(len) = tlv.len.map(to_usize) else {
-            break;
-        };
-        let at = pos.saturating_add(to_usize(tlv.header));
-        let Some(content) = data.get(at..at.saturating_add(len)) else {
-            break;
-        };
-        out.push(El { tlv, at, content });
-        pos = at.saturating_add(len);
-    }
-    out
+/// The elements of a buffer, read one at a time (so taking the first few
+/// of a long list costs nothing for the rest). Offsets are relative to
+/// `base`.
+struct Children<'a> {
+    data: &'a [u8],
+    pos: usize,
+    base: usize,
 }
 
-fn sub_el<'a>(parent: &El<'a>) -> Vec<El<'a>> {
-    children(parent.content)
-        .into_iter()
-        .map(|e| El {
-            at: parent.at.saturating_add(e.at),
-            ..e
+impl<'a> Iterator for Children<'a> {
+    type Item = El<'a>;
+
+    fn next(&mut self) -> Option<El<'a>> {
+        let el = self.element();
+        if el.is_none() {
+            self.pos = self.data.len();
+        }
+        el
+    }
+}
+
+impl<'a> Children<'a> {
+    fn element(&mut self) -> Option<El<'a>> {
+        let rest = self.data.get(self.pos..).filter(|r| !r.is_empty())?;
+        let tlv = der::header(rest)?;
+        let len = tlv.len.map(to_usize)?;
+        let at = self.pos.saturating_add(to_usize(tlv.header));
+        let content = self.data.get(at..at.saturating_add(len))?;
+        self.pos = at.saturating_add(len);
+        Some(El {
+            tlv,
+            at: self.base.saturating_add(at),
+            content,
         })
-        .collect()
+    }
+}
+
+/// The elements of `data` (relative offsets of their contents).
+fn children(data: &[u8]) -> Children<'_> {
+    Children {
+        data,
+        pos: 0,
+        base: 0,
+    }
+}
+
+fn sub_el<'a>(parent: &El<'a>) -> Children<'a> {
+    Children {
+        data: parent.content,
+        pos: 0,
+        base: parent.at,
+    }
 }
 
 fn oid(el: &El<'_>) -> Option<String> {
@@ -57,12 +82,12 @@ fn oid(el: &El<'_>) -> Option<String> {
 
 /// A content type and its `[0]` content element.
 fn content_info<'a>(el: &El<'a>) -> Option<(String, El<'a>)> {
-    let parts = sub_el(el);
-    let kind = oid(parts.first()?)?;
+    let mut parts = sub_el(el);
+    let kind = oid(&parts.next()?)?;
     let explicit = parts
-        .get(1)
+        .next()
         .filter(|e| e.tlv.class == 2 && e.tlv.tag == 0)?;
-    let inner = sub_el(explicit).into_iter().next()?;
+    let inner = sub_el(&explicit).next()?;
     Some((kind, inner))
 }
 
@@ -75,8 +100,8 @@ struct Encrypted<'a> {
 
 /// EncryptedData's EncryptedContentInfo.
 fn encrypted_data<'a>(el: &El<'a>) -> Option<Encrypted<'a>> {
-    let info = sub_el(el).into_iter().nth(1)?;
-    let parts = sub_el(&info);
+    let info = sub_el(el).nth(1)?;
+    let parts: Vec<El<'_>> = sub_el(&info).take(3).collect();
     let alg = parts.get(1)?;
     let body = parts.get(2)?;
     if body.tlv.class != 2 || body.tlv.constructed {
@@ -148,10 +173,9 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let bytes = crate::codec::read_all(&cx, file).await?;
     let pfx = children(&bytes)
-        .into_iter()
         .next()
         .ok_or_else(|| Diagnostic::malformed("not a PFX").at(file))?;
-    let fields = sub_el(&pfx);
+    let fields: Vec<El<'_>> = sub_el(&pfx).take(3).collect();
     let auth = fields
         .get(1)
         .ok_or_else(|| Diagnostic::malformed("PFX without authSafe").at(file))?;
@@ -163,31 +187,35 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
         );
     }
     let mac = fields.get(2).map(|m| m.content);
-    let safes: Vec<El<'_>> = children(octets.content)
-        .into_iter()
-        .next()
-        .map(|seq| {
-            sub_el(&El {
-                at: octets.at.saturating_add(seq.at),
-                ..seq
-            })
-        })
-        .unwrap_or_default();
+    let safe_list = children(octets.content).next().map(|seq| El {
+        at: octets.at.saturating_add(seq.at),
+        ..seq
+    });
+    let safes = || safe_list.as_ref().map(sub_el).into_iter().flatten();
 
     // The first encrypted thing, for checking passwords without a MAC.
-    let probe: Option<(Vec<u8>, Vec<u8>)> = safes.iter().find_map(|ci| {
-        let (kind, inner) = content_info(ci)?;
-        (kind == ENCRYPTED_DATA)
-            .then(|| encrypted_data(&inner))
-            .flatten()
-            .map(|e| (e.alg.to_vec(), e.data.to_vec()))
-    });
+    let mut probe: Option<Encrypted<'_>> = None;
+    if mac.is_none() {
+        for ci in safes() {
+            cx.checkpoint().await;
+            if let Some((kind, inner)) = content_info(&ci)
+                && kind == ENCRYPTED_DATA
+                && let Some(e) = encrypted_data(&inner)
+            {
+                probe = Some(e);
+                break;
+            }
+        }
+    }
     let check = match (mac, &probe) {
         (Some(mac), _) => Check::Mac {
             mac,
             data: octets.content,
         },
-        (None, Some((alg, data))) => Check::Decrypt { alg, data },
+        (None, Some(e)) => Check::Decrypt {
+            alg: e.alg,
+            data: e.data,
+        },
         (None, None) => Check::Nothing,
     };
     let unlocked = password(&cx, file, "Password for the PKCS#12 key store", &check).await;
@@ -198,19 +226,19 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
         cx.annotate("MAC verified");
     }
 
-    for ci in &safes {
+    for ci in safes() {
         cx.checkpoint().await;
-        let Some((kind, inner)) = content_info(ci) else {
+        let Some((kind, inner)) = content_info(&ci) else {
             continue;
         };
         if kind == DATA {
-            let seq = children(inner.content).into_iter().next();
+            let seq = children(inner.content).next();
             if let Some(seq) = seq {
                 let seq = El {
                     at: inner.at.saturating_add(seq.at),
                     ..seq
                 };
-                bags(&cx, input, file, &sub_el(&seq), pw).await?;
+                bags(&cx, input, file, sub_el(&seq), pw).await?;
             }
         } else if kind == ENCRYPTED_DATA {
             let Some(enc) = encrypted_data(&inner) else {
@@ -236,8 +264,8 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
                         None,
                     )?;
                     let data = crate::codec::read_all(&cx, decoded.span).await?;
-                    if let Some(seq) = children(&data).into_iter().next() {
-                        bags(&cx, input, decoded.span, &sub_el(&seq), pw).await?;
+                    if let Some(seq) = children(&data).next() {
+                        bags(&cx, input, decoded.span, sub_el(&seq), pw).await?;
                     }
                 }
                 Err(Failure::Unsupported(why)) => cx.emit(
@@ -262,33 +290,31 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// A bag's friendly name or local key ID, from its attributes.
-fn bag_name(attributes: Option<&El<'_>>) -> Option<String> {
+async fn bag_name(cx: &Cx, attributes: Option<&El<'_>>) -> Option<String> {
     let attributes = attributes?;
     let mut key_id = None;
-    for attr in sub_el(attributes) {
-        let parts = sub_el(&attr);
-        let Some(kind) = parts.first().and_then(oid) else {
+    for (i, attr) in sub_el(attributes).enumerate() {
+        if i % 64 == 63 {
+            cx.checkpoint().await;
+        }
+        let mut parts = sub_el(&attr);
+        let Some(kind) = parts.next().as_ref().and_then(oid) else {
             continue;
         };
-        let Some(value) = parts.get(1).and_then(|set| sub_el(set).into_iter().next()) else {
+        let Some(value) = parts.next().and_then(|set| sub_el(&set).next()) else {
             continue;
         };
         match kind.as_str() {
-            "1.2.840.113549.1.9.20" => {
-                return Some(crate::text::utf16(
-                    value.content,
-                    crate::fields::Endian::Big,
-                ));
-            }
+            "1.2.840.113549.1.9.20" => return Some(utf16_be_paced(cx, value.content).await),
             "1.2.840.113549.1.9.21" => {
-                key_id = Some(format!(
-                    "key ID {}",
-                    value
-                        .content
-                        .iter()
-                        .map(|b| format!("{b:02x}"))
-                        .collect::<String>()
-                ))
+                let mut hex = String::from("key ID ");
+                for piece in value.content.chunks(TEXT_PIECE) {
+                    for b in piece {
+                        hex.push_str(&format!("{b:02x}"));
+                    }
+                    cx.checkpoint().await;
+                }
+                key_id = Some(hex);
             }
             _ => {}
         }
@@ -296,24 +322,54 @@ fn bag_name(attributes: Option<&El<'_>>) -> Option<String> {
     key_id
 }
 
+/// Bytes of an attribute decoded per unit of work.
+const TEXT_PIECE: usize = 1024;
+
+/// UTF-16BE text, decoded a piece at a time (never splitting a surrogate
+/// pair, so the result is that of decoding it whole).
+async fn utf16_be_paced(cx: &Cx, data: &[u8]) -> String {
+    let mut out = String::new();
+    let mut pos = 0usize;
+    while pos < data.len() {
+        let mut end = data.len();
+        if end.saturating_sub(pos) > TEXT_PIECE {
+            end = pos.saturating_add(TEXT_PIECE);
+            // Keep a high surrogate with its partner.
+            if data
+                .get(end.saturating_sub(2))
+                .is_some_and(|&b| b & 0xfc == 0xd8)
+            {
+                end = end.saturating_sub(2);
+            }
+            cx.checkpoint().await;
+        }
+        out.push_str(&crate::text::utf16(
+            data.get(pos..end).unwrap_or_default(),
+            crate::fields::Endian::Big,
+        ));
+        pos = end;
+    }
+    out
+}
+
 /// Lists SafeBags (whose contents lie in `base`).
 async fn bags(
     cx: &Cx,
     input: Input,
     base: Span,
-    list: &[El<'_>],
+    list: Children<'_>,
     pw: Option<Password<'_>>,
 ) -> Result<()> {
     for bag in list {
         cx.checkpoint().await;
-        let parts = sub_el(bag);
+        let parts: Vec<El<'_>> = sub_el(&bag).take(3).collect();
         let Some(kind) = parts.first().and_then(oid) else {
             continue;
         };
-        let Some(value) = parts.get(1).and_then(|v| sub_el(v).into_iter().next()) else {
+        let Some(value) = parts.get(1).and_then(|v| sub_el(v).next()) else {
             continue;
         };
-        let name = bag_name(parts.get(2));
+        let name = bag_name(cx, parts.get(2)).await;
         let titled = |what: &str| match &name {
             Some(n) => format!("{what}: {n}"),
             None => what.to_owned(),
@@ -325,8 +381,8 @@ async fn bags(
         match kind.as_str() {
             "1.2.840.113549.1.12.10.1.3" => {
                 // CertBag: certId, [0] { OCTET STRING cert }.
-                let inner = sub_el(&value);
-                let cert = inner.get(1).and_then(|e| sub_el(e).into_iter().next());
+                let inner: Vec<El<'_>> = sub_el(&value).take(2).collect();
+                let cert = inner.get(1).and_then(|e| sub_el(e).next());
                 match cert {
                     Some(cert) => {
                         cx.push(embedded_as(
@@ -345,7 +401,7 @@ async fn bags(
             }
             "1.2.840.113549.1.12.10.1.2" => {
                 // EncryptedPrivateKeyInfo: AlgorithmIdentifier, OCTET STRING.
-                let inner = sub_el(&value);
+                let inner: Vec<El<'_>> = sub_el(&value).take(2).collect();
                 let (Some(alg), Some(data)) = (inner.first(), inner.get(1)) else {
                     continue;
                 };
@@ -397,8 +453,8 @@ async fn bags(
                 }
             }
             "1.2.840.113549.1.12.10.1.6" => {
-                let nested: Vec<El<'_>> = sub_el(&value);
-                bags_boxed(cx, input, base, &nested, pw).await?;
+                let nested = sub_el(&value);
+                bags_boxed(cx, input, base, nested, pw).await?;
             }
             other => {
                 let what = match other {
@@ -419,7 +475,7 @@ fn bags_boxed<'a>(
     cx: &'a Cx,
     input: Input,
     base: Span,
-    list: &'a [El<'a>],
+    list: Children<'a>,
     pw: Option<Password<'a>>,
 ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
     Box::pin(bags(cx, input, base, list, pw))
@@ -434,10 +490,9 @@ async fn decrypted_key(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let bytes = crate::codec::read_all(&cx, file).await?;
     let top = children(&bytes)
-        .into_iter()
         .next()
         .ok_or_else(|| Diagnostic::malformed("not DER").at(file))?;
-    let parts = sub_el(&top);
+    let parts: Vec<El<'_>> = sub_el(&top).take(2).collect();
     let (Some(alg), Some(data)) = (parts.first(), parts.get(1)) else {
         return Err(Diagnostic::malformed("not an EncryptedPrivateKeyInfo").at(file));
     };

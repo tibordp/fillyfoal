@@ -2,11 +2,43 @@
 //! PBE algorithms (RFC 7292 appendix C) and PBES2 with PBKDF2 (RFC 8018).
 
 use super::der;
+use crate::codec::crypto::stream::Rc4;
 use crate::codec::crypto::{
-    self, Aes, Des, Hash, Pbkdf2, Pkcs12Kdf, Rc2, Sha1, Sha256, Sha384, Sha512, TripleDes,
-    bmp_password, cbc_decrypt, rc4, unpad_pkcs7,
+    self, Aes, BlockCipher, Des, Hash, Hmac, Key, Pbkdf2, Pkcs12Kdf, Rc2, Sha1, Sha256, Sha384,
+    Sha512, TripleDes, bmp_password, cbc_decrypt, unpad_pkcs7,
 };
+use crate::codec::pipeline::{Decode, Step};
 use crate::cx::Cx;
+use crate::formats::util::datakit::feed_paced;
+
+/// Bytes deciphered per unit of work (a multiple of every block size).
+const PIECE: usize = 256;
+
+/// CBC decryption of whole blocks, a piece at a time with a checkpoint
+/// after each (the same result as [`cbc_decrypt`]).
+async fn cbc_paced<C: BlockCipher + Sync>(cx: &Cx, c: &C, iv: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(data.len());
+    let mut prev = iv;
+    for piece in data.chunks(PIECE) {
+        out.extend_from_slice(&cbc_decrypt(c, prev, piece));
+        // The next piece chains from this one's last ciphertext block.
+        prev = piece
+            .get(piece.len().saturating_sub(C::BLOCK)..)
+            .unwrap_or_default();
+        cx.checkpoint().await;
+    }
+    out
+}
+
+/// RC4, a piece at a time with a checkpoint after each.
+async fn rc4_paced(cx: &Cx, key: &[u8], data: &[u8]) -> Vec<u8> {
+    let mut rc4 = Rc4::new(&Key::new(key));
+    let mut out = Vec::with_capacity(data.len());
+    while let Ok(Step::More) = rc4.step(data, true, &mut out, PIECE, usize::MAX) {
+        cx.checkpoint().await;
+    }
+    out
+}
 
 /// Key derivations beyond this many iterations are refused (hostile input
 /// could otherwise make one expansion run for hours). The derivations run
@@ -210,15 +242,15 @@ pub async fn decrypt(
         let key = pkcs12_kdf::<Sha1>(cx, &pw, salt, iterations, 1, key_len).await;
         let iv = pkcs12_kdf::<Sha1>(cx, &pw, salt, iterations, 2, iv_len).await;
         match cipher {
-            Pkcs12Cipher::Rc4 => return Ok(rc4(&key, ciphertext)),
+            Pkcs12Cipher::Rc4 => return Ok(rc4_paced(cx, &key, ciphertext).await),
             Pkcs12Cipher::TripleDes => {
                 let c =
                     TripleDes::new(&key).ok_or_else(|| Failure::Unsupported("3DES key".into()))?;
-                unpad(cbc_decrypt(&c, &iv, ciphertext), 8)?
+                unpad(cbc_paced(cx, &c, &iv, ciphertext).await, 8)?
             }
             Pkcs12Cipher::Rc2 => {
                 let c = Rc2::new(&key, key_len.saturating_mul(8));
-                unpad(cbc_decrypt(&c, &iv, ciphertext), 8)?
+                unpad(cbc_paced(cx, &c, &iv, ciphertext).await, 8)?
             }
         }
     } else if oid == "1.2.840.113549.1.5.13" {
@@ -232,10 +264,10 @@ pub async fn decrypt(
     Ok(plain)
 }
 
-fn unpad(data: Vec<u8>, block: usize) -> Result<Vec<u8>, Failure> {
-    unpad_pkcs7(&data, block)
-        .map(<[u8]>::to_vec)
-        .ok_or(Failure::Wrong)
+fn unpad(mut data: Vec<u8>, block: usize) -> Result<Vec<u8>, Failure> {
+    let len = unpad_pkcs7(&data, block).ok_or(Failure::Wrong)?.len();
+    data.truncate(len);
+    Ok(data)
 }
 
 async fn pbes2(
@@ -292,18 +324,18 @@ async fn pbes2(
     match enc_oid.as_str() {
         "1.2.840.113549.3.7" => {
             let c = TripleDes::new(&key).ok_or_else(bad)?;
-            unpad(cbc_decrypt(&c, iv, ciphertext), 8)
+            unpad(cbc_paced(cx, &c, iv, ciphertext).await, 8)
         }
         "1.3.14.3.2.7" => {
             let k: [u8; 8] = key
                 .get(..8)
                 .and_then(|s| s.try_into().ok())
                 .ok_or_else(bad)?;
-            unpad(cbc_decrypt(&Des::new(&k), iv, ciphertext), 8)
+            unpad(cbc_paced(cx, &Des::new(&k), iv, ciphertext).await, 8)
         }
         _ => {
             let c = Aes::new(&key).ok_or_else(bad)?;
-            unpad(cbc_decrypt(&c, iv, ciphertext), 16)
+            unpad(cbc_paced(cx, &c, iv, ciphertext).await, 16)
         }
     }
 }
@@ -344,7 +376,9 @@ async fn mac<H: Hash>(
     data: &[u8],
 ) -> Vec<u8> {
     let key = pkcs12_kdf::<H>(cx, password, salt, iterations, 3, H::OUT).await;
-    crypto::hmac::<H>(&key, data)
+    let mut h = Hmac::<H>::new(&key);
+    feed_paced(cx, data, |piece| h.update(piece)).await;
+    h.finish()
 }
 
 #[cfg(test)]
