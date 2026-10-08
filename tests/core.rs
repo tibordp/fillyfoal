@@ -1732,9 +1732,11 @@ fn open_as_a_chosen_format() {
 }
 
 /// The G-code blocks of libbgcode's binary fixtures, decoded with our
-/// codecs (zlib, Heatshrink 11/4 and 12/4, MeatPack), are exactly the
-/// G-code libbgcode's `from_binary_to_ascii` writes for them (see
-/// `tests/data/bgcode/make_bgcode.py`).
+/// codecs (zlib, Heatshrink 11/4 and 12/4, MeatPack), are the G-code
+/// libbgcode's `from_binary_to_ascii` writes for them (see
+/// `tests/data/bgcode/make_bgcode.py`): exactly, except that the spaces
+/// MeatPack removes are restored by our own convention (see
+/// `codec::meatpack`), so MeatPack blocks are compared ignoring spaces.
 #[test]
 fn bgcode_gcode_blocks_match_libbgcode() {
     use fillyfoal::codec::Codec;
@@ -1826,10 +1828,110 @@ fn bgcode_gcode_blocks_match_libbgcode() {
             pos += header + params + stored + checksum;
         }
         assert!(blocks > 0, "{name}");
+        let (gcode, reference) = if name == "meatpack" {
+            (squash_spaces(&gcode), squash_spaces(&reference))
+        } else {
+            (gcode, reference)
+        };
         let found = reference
             .windows(gcode.len())
             .any(|w| w == gcode.as_slice());
         assert!(found, "{name}: decoded G-code differs from libbgcode's");
+    }
+}
+
+/// `text` without spaces, tabs or empty lines: the G-code tokens, line by
+/// line.
+fn squash_spaces(text: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for line in text.split(|&b| b == b'\n') {
+        let kept: Vec<u8> = line
+            .iter()
+            .copied()
+            .filter(|b| !matches!(b, b' ' | b'\t' | b'\r'))
+            .collect();
+        if !kept.is_empty() {
+            out.extend_from_slice(&kept);
+            out.push(b'\n');
+        }
+    }
+    out
+}
+
+/// MeatPack round trips: G-code packed by Scott Mudge's packer
+/// (OctoPrint-MeatPack's `meatpack.py`, see
+/// `tests/data/meatpack/make_meatpack.py`), with and without no-spaces
+/// mode, decodes to the text the packer packed, up to the spaces it
+/// removed. Where those were single spaces between words, as in
+/// PrusaSlicer output, our re-spacing rule restores them exactly.
+#[test]
+fn meatpack_round_trips_mudges_packer() {
+    use fillyfoal::codec::Codec;
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/meatpack");
+    let decode = |name: &str| {
+        let packed = std::fs::read(format!("{dir}/{name}.mp")).unwrap();
+        let mut d = Codec::MeatPack.decoder().unwrap();
+        fillyfoal::codec::pipeline::decode_all(d.as_mut(), &packed, 1 << 20).unwrap()
+    };
+    for input in ["edge", "prusaslicer"] {
+        for mode in ["spaces", "nospaces"] {
+            let name = format!("{input}.{mode}");
+            let packed_text = std::fs::read(format!("{dir}/{name}.txt")).unwrap();
+            let decoded = decode(&name);
+            assert_eq!(
+                squash_spaces(&decoded),
+                squash_spaces(&packed_text),
+                "{name}"
+            );
+            // Spaces are only ever added.
+            assert!(decoded.len() >= packed_text.len(), "{name}");
+        }
+    }
+    // PrusaSlicer's lines, comments stripped as the packer does, come back
+    // exactly.
+    let source = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/synthetic/gcode/prusaslicer.gcode"
+    ))
+    .unwrap();
+    let mut expected = String::new();
+    for line in source.lines() {
+        let code = line.split(';').next().unwrap().trim_end();
+        if !code.is_empty() {
+            expected.push_str(code);
+            expected.push('\n');
+        }
+    }
+    for mode in ["spaces", "nospaces"] {
+        let decoded = decode(&format!("prusaslicer.{mode}"));
+        assert_eq!(String::from_utf8(decoded).unwrap(), expected, "{mode}");
+    }
+    // The edge cases, as this decoder writes them.
+    let edge = "\
+G1 X113.214 Y91.45 E1.3154
+G1 X-5.5 Y-3 E-.8 F2100
+G1 Z.2
+G0 X1 Y2
+g1 x5 y6 e7
+G1 X5y6 E7
+M117 Hello World 42%
+M862.3 P \"MK4S\"
+T0
+G28 W
+G28 XY
+N3 G1 X5 Y5*10
+M104 S215
+G4 P500
+M73 P50 R1
+G1 X0.123456789 Y98765.4321 E0
+@pause
+G1 E#$%&
+";
+    // (The packer upper-cases a G line's `e` only when `E` is packable.)
+    let edge_spaces = edge.replace("X5y6 E7", "X5y6e7");
+    for (mode, expected) in [("spaces", edge_spaces.as_str()), ("nospaces", edge)] {
+        let decoded = decode(&format!("edge.{mode}"));
+        assert_eq!(String::from_utf8(decoded).unwrap(), expected, "{mode}");
     }
 }
 

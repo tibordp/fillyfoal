@@ -17,8 +17,9 @@ Still to resolve, because these licenses cannot be unified under GPLv3:
 - **unRAR** (freeware, GPL-incompatible): the RAR LZ/filter decoders are a
   transliteration of unRAR and are being rewritten from RARLAB's technote with
   libarchive (BSD-2-Clause) as the reference implementation.
-- **AGPL-3.0** (libbgcode): the MeatPack decoder is being rewritten from Scott
-  Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the format description.
+- ~~**AGPL-3.0** (libbgcode)~~: resolved — the MeatPack decoder was rewritten
+  from Scott Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the bgcode
+  specification (see the MeatPack row below).
 - A sweep of the rest of the library for material from GPL-incompatible
   sources and for credits owed: done, see "Library-wide sweep" below.
 
@@ -40,7 +41,7 @@ a free choice. Verdicts: **A** format-determined / independent expression;
 | DjVu BZZ (`src/codec/bzz.rs`) | **B, near C** | GPL-2.0+ (DjVuLibre) | ZP decode routines (names, fence shortcut, `delay = 25`), inverse BWT (`posn` packing, fill loop — not forced), MTF/frequency update; ZP table identical (forced, needs attribution) | Rewrite decode routines from the DjVu spec / ZP paper; keep the table with attribution |
 | `tests/data/djvu/bzz.py` (test encoder) | B | GPL-2.0+ | Carries DjVuLibre's per-row table comments (state counts) on 168 rows | Strip the annotations; review the encoder |
 | DjVu dissector (`documents/djvu.rs`) | A | — | Format formulas; `HAS_NAME`/`HAS_TITLE` names | Optional rename |
-| MeatPack (`src/codec/meatpack.rs`) | **B, near C** | AGPL-3.0 (libbgcode; itself adapted from Scott Mudge's MeatPack, partly GPL) | `receive`, signal/command loop, libbgcode's output post-processing (`put`), `G_PARAMETERS` order | Rewrite from the MeatPack description + specifications.md, deciding independently how to format output |
+| MeatPack (`src/codec/meatpack.rs`) | **B, near C** → rewritten (2026-10-08) | was AGPL-3.0 (libbgcode); now BSD-3-Clause (OctoPrint-MeatPack, credited in `THIRD-PARTY.md`) | The libbgcode-derived version was deleted unread and replaced by a decoder derived as the inverse of Mudge's packer (`meatpack.py`) and its README, plus the bgcode specification for how blocks use it; libbgcode's sources were not consulted. Output formatting (re-spacing, dropping empty lines) is our own rule, so text differs from libbgcode's only in spacing. The implementer (an AI) had seen libbgcode's decoder in this project and possibly in training. Tested by round trips through Mudge's packer (`tests/data/meatpack/make_meatpack.py`) and a whitespace-insensitive comparison with libbgcode's converter output | Done |
 | Heatshrink (`src/codec/heatshrink.rs`) | A | ISC | — | — |
 | bgcode layout (`engineering/fabrication.rs`) | A | spec (specifications.md) | Enum tables from the published spec | Keep the attribution |
 | Quantum (`src/codec/quantum.rs`) | **B, near C** | LGPL-2.1 (libmspack) | `Coder::symbol` = `GET_SYMBOL` step by step; `Model::{new,bump,update}` = `qtmd_*`; tables in libmspack's names/layout | Rewrite from Russotto's notes |
@@ -104,7 +105,7 @@ incompatibility.
 |---|---|---|---|---|---|
 | DjVu ZP-coder adaptation table (256 entries) | `src/codec/bzz.rs` (DjVu branch, merging) | Agent's memory of DjVuLibre's `ZPCodec.cpp` table | GPL-2.0+ | Highest: a non-trivial data table reproduced from GPL source | Regenerate from the procedure in Bottou et al.'s Z-coder papers, or verify against the table in LizardTech's DjVu specification and cite that; or gate BZZ |
 | BZZ / DjVu layouts generally | `src/codec/bzz.rs`, `src/formats/documents/djvu.rs` | Memory of DjVuLibre | GPL-2.0+ | Algorithm and layouts are facts; check the code isn't a transliteration | Review against the DjVu spec |
-| MeatPack decoder | `src/codec/meatpack.rs` | Agent read libbgcode's sources; docs say it "reproduces `MeatPack::unbinarize` exactly" | AGPL-3.0 (libbgcode) | Medium: behaviour matched by reading AGPL code | Rewrite from Prusa's public `specifications.md` (MeatPack is small and fully specified there) and the original MeatPack description |
+| MeatPack decoder | `src/codec/meatpack.rs` | Agent read libbgcode's sources; docs say it "reproduces `MeatPack::unbinarize` exactly" | AGPL-3.0 (libbgcode) | Medium: behaviour matched by reading AGPL code | Done: rewritten from OctoPrint-MeatPack (BSD-3-Clause) and `specifications.md` (see the comparison table) |
 | Prusa bgcode block layout | `src/formats/engineering/fabrication.rs` | libbgcode `doc/specifications.md` + sources | AGPL-3.0 | Low: the spec document describes the format; check no code was transliterated | Note the spec as the source |
 | libbgcode reference outputs | `tests/data/bgcode/*.ref.gcode` | Output of libbgcode's converter on our own G-code | (program output) | Low; test data only, not in the published crate | — |
 | LZX decoder | `src/codec/lzx.rs` | "Modelled on libmspack's `lzxd.c`" (and wimlib) | LGPL-2.1 (libmspack), LGPL-3 / GPL (wimlib) | Medium: structure modelled on LGPL code; tables are derived from the format (position slots) | Re-check against the MS-PATCH/LZX specification ([MS-PATCH] / CAB LZX docs), rewrite comments citing the spec |
