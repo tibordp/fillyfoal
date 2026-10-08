@@ -21,6 +21,7 @@
 //! pieces of the decoded image; `score.gpif` is dissected as GPIF.
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::bytes::{to_u64, u32_le};
 use crate::codec::Codec;
@@ -177,9 +178,12 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
         files = files.saturating_add(1);
         let mut pieces = Vec::with_capacity(e.sectors.len());
         let mut left = u64::from(e.size);
-        for &s in &e.sectors {
+        for (i, &s) in e.sectors.iter().enumerate() {
             if left == 0 {
                 break;
+            }
+            if i % 4096 == 4095 {
+                cx.checkpoint().await;
             }
             let take = left.min(SECTOR);
             pieces.push(image.sub(u64::from(s).saturating_mul(SECTOR), take));
@@ -188,7 +192,10 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
         let mut node = Node::new(e.name.clone())
             .span(entry_span)
             .summary(format!("{} bytes, {}", e.size, sector_list(&e.sectors)))
-            .lazy(file_node, (input, entry_span, pieces, e.name.clone()));
+            .lazy(
+                file_node,
+                (input, entry_span, Arc::new(pieces), e.name.clone()),
+            );
         if left > 0 {
             node = node.diag(Diagnostic::malformed(
                 "fewer data sectors than the size needs",
@@ -202,16 +209,18 @@ async fn bcfs(cx: &Cx, input: Input) -> Result<()> {
 
 async fn file_node(
     cx: Cx,
-    (input, entry_span, pieces, name): (Input, Span, Vec<Span>, String),
+    (input, entry_span, pieces, name): (Input, Span, Arc<Vec<Span>>, String),
 ) -> Result<()> {
     cx.emit(struct_node("Entry", entry_span, LE, (), entry));
-    let data = cx.add_pieces(
-        Origin {
-            parent: entry_span,
-            transform: "bcfs-file",
-        },
-        pieces,
-    )?;
+    let data = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: entry_span,
+                transform: "bcfs-file",
+            },
+            &pieces,
+        )
+        .await?;
     if data.len == 0 {
         cx.emit(Node::new("Content").span(data).summary("empty"));
         return Ok(());
