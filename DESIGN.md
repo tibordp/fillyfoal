@@ -88,12 +88,14 @@ exploration pays for additional work only as needed.
   liblzo2, 7-Zip or libarchive as extraction oracles), otherwise against spec
   vectors and spec-derived encoders; the test names and comments say which.
   CRCs share one table-driven engine (`codec::crc`).
+  Where a decoder was written from a reference implementation rather than
+  a specification, its module documentation says so and `THIRD-PARTY.md`
+  carries the notice.
 - Every codec does bounded work per call (about `step` bytes of output, or
   a bounded slice of input) and returns to be called again, so decoding can
-  be budgeted and interrupted like everything else; whole-buffer decoders
-  (`filters::Whole`) are reserved for inputs bounded by a small constant. Where a decoder was
-  written from a reference implementation rather than a specification, its
-  module documentation says so and `THIRD-PARTY.md` carries the notice.
+  be budgeted and interrupted like everything else. No codec uses
+  `filters::Whole` (decode once all input is in) any more; it is reserved
+  for inputs bounded by a small constant.
 - CI tests both the hermetic and the feature-enabled build.
 
 ## Architecture (current)
@@ -349,12 +351,11 @@ unioning `mod.rs` sections. What they reported, consolidated:
 Five agents wrote codecs in parallel, a sixth wired existing ones into
 containers. Consolidated:
 
-- **`filters::Whole` is not incremental.** Most codecs are whole-input
-  filters wrapped in `Streaming`; they report all input as consumed (so the
-  "bytes follow the stream" note never fires) and `decode_lazy` decodes
-  everything on the first read. Only inflate, LZX and Brotli are truly
-  incremental. Worth converting the large-member codecs (bzip2, xz, zstd)
-  to real `Decode` state machines.
+- **`filters::Whole` is not incremental.** Most codecs were whole-input
+  filters wrapped in `Streaming`; they reported all input as consumed (so the
+  "bytes follow the stream" note never fired) and `decode_lazy` decoded
+  everything on the first read. *Resolved:* every codec is now incremental
+  with bounded work per call (see the codec policy).
 - **Expected-size and single-frame modes are missing** for some codecs:
   `Lz4Block` fails on trailing padding (ZSO with alignment), Zstd decodes
   every frame it finds (qcow2 has to walk the frame header itself). A
