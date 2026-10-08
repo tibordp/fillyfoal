@@ -299,21 +299,85 @@ impl Decode for Rc4 {
 }
 
 /// AES-CBC with the IV in the first 16 bytes and PKCS#7 padding (PDF
-/// AESV2/AESV3).
+/// AESV2/AESV3), decrypted block by block. The last block is held back
+/// until the input ends, when its padding is checked and removed.
 #[derive(Clone)]
-pub struct AesCbcIvPrefixed(pub Key);
+pub struct AesCbcIvPrefixed {
+    /// `None` for a key of the wrong length (an error unless the data is
+    /// empty).
+    aes: Option<Aes>,
+    /// The previous ciphertext block (the IV at first).
+    iv: [u8; 16],
+    have_iv: bool,
+    /// A partial block.
+    buf: [u8; 16],
+    filled: usize,
+    /// The last decrypted block, held for its padding.
+    held: Option<[u8; 16]>,
+    seen: bool,
+}
 
-impl crate::codec::filters::Filter for AesCbcIvPrefixed {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let out = aes_cbc_iv_prefixed(self.0.expose(), input).ok_or_else(|| {
-            Diagnostic::malformed(
-                "AES-CBC data is not a whole number of blocks, or its padding is bad",
-            )
-        })?;
-        if out.len() > limit {
-            return Err(Diagnostic::limit("decrypted data exceeds the limit"));
+impl AesCbcIvPrefixed {
+    pub fn new(key: &Key) -> Self {
+        AesCbcIvPrefixed {
+            aes: Aes::new(key.expose()),
+            iv: [0; 16],
+            have_iv: false,
+            buf: [0; 16],
+            filled: 0,
+            held: None,
+            seen: false,
         }
-        Ok(out)
+    }
+}
+
+fn bad_aes_cbc() -> Diagnostic {
+    Diagnostic::malformed("AES-CBC data is not a whole number of blocks, or its padding is bad")
+}
+
+impl crate::codec::filters::ByteFilter for AesCbcIvPrefixed {
+    fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        self.seen = true;
+        let Some(aes) = &self.aes else {
+            return Err(bad_aes_cbc());
+        };
+        if let Some(slot) = self.buf.get_mut(self.filled) {
+            *slot = b;
+        }
+        self.filled = self.filled.saturating_add(1);
+        if self.filled < 16 {
+            return Ok(true);
+        }
+        self.filled = 0;
+        let cipher = self.buf;
+        if !self.have_iv {
+            self.iv = cipher;
+            self.have_iv = true;
+            return Ok(true);
+        }
+        let mut block = cipher;
+        aes.decrypt_block(&mut block);
+        for (p, v) in block.iter_mut().zip(&self.iv) {
+            *p ^= v;
+        }
+        self.iv = cipher;
+        if let Some(prev) = self.held.replace(block) {
+            out.extend_from_slice(&prev);
+        }
+        Ok(true)
+    }
+
+    fn finish(&mut self, out: &mut Vec<u8>) -> Result<()> {
+        if !self.seen {
+            return Ok(());
+        }
+        let last = match self.held.take() {
+            Some(last) if self.filled == 0 => last,
+            _ => return Err(bad_aes_cbc()),
+        };
+        let body = super::cipher::unpad_pkcs7(&last, 16).ok_or_else(bad_aes_cbc)?;
+        out.extend_from_slice(body);
+        Ok(())
     }
 }
 

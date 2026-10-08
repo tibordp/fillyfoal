@@ -547,25 +547,25 @@ impl Codec {
             Codec::Stored => return None,
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),
-            Codec::AsciiHex => Box::new(Streaming(filters::Whole::new(filters::AsciiHex))),
-            Codec::Ascii85 => Box::new(Streaming(filters::Whole::new(filters::Ascii85))),
-            Codec::RunLength => Box::new(Streaming(filters::Whole::new(filters::RunLength))),
-            Codec::PackBits => Box::new(Streaming(filters::Whole::new(filters::PackBits))),
-            Codec::Lzw { early_change } => Box::new(Streaming(filters::Whole::new(filters::Lzw {
-                early_change: *early_change,
-            }))),
-            Codec::PngPredictor { bpp, row } => {
-                Box::new(Streaming(filters::Whole::new(filters::PngPredictor {
-                    bpp: *bpp,
-                    row: *row,
-                })))
+            Codec::AsciiHex => {
+                Box::new(Streaming(filters::Bytes::new(filters::AsciiHex::default())))
             }
-            Codec::TiffPredictor { bpp, row } => {
-                Box::new(Streaming(filters::Whole::new(filters::TiffPredictor {
-                    bpp: *bpp,
-                    row: *row,
-                })))
+            Codec::Ascii85 => Box::new(Streaming(filters::Bytes::new(filters::Ascii85::default()))),
+            Codec::RunLength => Box::new(Streaming(filters::Bytes::new(
+                filters::RunLength::default(),
+            ))),
+            Codec::PackBits => {
+                Box::new(Streaming(filters::Bytes::new(filters::PackBits::default())))
             }
+            Codec::Lzw { early_change } => Box::new(Streaming(filters::Bytes::new(
+                filters::Lzw::new(*early_change),
+            ))),
+            Codec::PngPredictor { bpp, row } => Box::new(Streaming(filters::Bytes::new(
+                filters::PngPredictor::new(*bpp, *row),
+            ))),
+            Codec::TiffPredictor { bpp, row } => Box::new(Streaming(filters::Bytes::new(
+                filters::TiffPredictor::new(*bpp, *row),
+            ))),
             Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
             Codec::Pbz => Box::new(Streaming(pbz::Pbz::default())),
             Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
@@ -623,11 +623,11 @@ impl Codec {
             Codec::SasRdc => Box::new(Streaming(filters::Whole::new(statdata::SasRdc))),
             Codec::DwgLz77 { size } => Box::new(Streaming(dwg::Lz77::new(*size))),
             Codec::Eexec { hex } => {
-                Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))
+                Box::new(Streaming(filters::Bytes::new(filters::Eexec::new(*hex))))
             }
             Codec::Rc4(key) => Box::new(Streaming(crypto::stream::Rc4::new(key))),
-            Codec::AesCbc(key) => Box::new(Streaming(filters::Whole::new(
-                crypto::stream::AesCbcIvPrefixed(key.clone()),
+            Codec::AesCbc(key) => Box::new(Streaming(filters::Bytes::new(
+                crypto::stream::AesCbcIvPrefixed::new(key),
             ))),
             Codec::ZipCrypto(key) => Box::new(Streaming(crypto::stream::ZipCrypto::new(key))),
             Codec::AesCtrLe(key) => match crypto::stream::AesCtrLe::new(key) {
