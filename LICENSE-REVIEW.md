@@ -29,7 +29,42 @@ Options the owner is considering (no decision yet):
    published papers (or independent clean-room notes), document provenance
    per module, and keep everything MIT/Apache.
 
-## Items to review
+## Findings of the source comparison (2026-10-08)
+
+Each flagged item was compared against the actual reference source (fetched
+for the comparison only, not committed): shared numeric runs, shared
+distinctive identifiers, shared comment wording, and a side-by-side reading of
+the corresponding functions, separating what the format forces from what was
+a free choice. Verdicts: **A** format-determined / independent expression;
+**B** some borrowed expression; **C** substantially a transliteration.
+
+| Item | Verdict | Reference license | What carries over | Remedy options |
+|---|---|---|---|---|
+| RAR LZ + filters (`src/codec/rar/bits.rs`, `v3.rs`, `v5.rs`, `filters.rs`) | **C** | unRAR license (freeware; derivatives must carry its §2 paragraph incl. the no-compressor clause; not open source) | Function-by-function: `MakeDecodeTables`/`DecodeNumber`, `Unpack29`, `ReadTables30`, `AddVMCode`, `Unpack5`, `ReadBlockHeader`, `ReadFilter`, standard filters incl. unRAR's guard limits and quirks; quick-bits 10/7 matches older unRAR | Rewrite from the RAR 5 technote + an independent permissive implementation (libarchive, BSD) as reference, or carry the unRAR terms (incompatible with MIT/Apache and with GPL) |
+| RAR streaming driver (`rar/mod.rs`), dissector (`archive/rar.rs`) | A | — | Format facts only | — |
+| PPMd var. H (`rar/ppmd.rs`) | A w.r.t. unRAR | Shkarin / 7-Zip Ppmd7: public domain | Organised like 7-Zip's Ppmd7 (not verified against its source) | Credit PPMd var. H (Shkarin) and 7-Zip Ppmd7 (Pavlov) |
+| `tests/data/rar/rarenc.py` (test encoder) | not examined | — | Re-creates RAR compression; matters under unRAR §2 only if derived from unRAR | Examine before deciding |
+| DjVu BZZ (`src/codec/bzz.rs`) | **B, near C** | GPL-2.0+ (DjVuLibre) | ZP decode routines (names, fence shortcut, `delay = 25`), inverse BWT (`posn` packing, fill loop — not forced), MTF/frequency update; ZP table identical (forced, needs attribution) | Rewrite decode routines from the DjVu spec / ZP paper; keep the table with attribution |
+| `tests/data/djvu/bzz.py` (test encoder) | B | GPL-2.0+ | Carries DjVuLibre's per-row table comments (state counts) on 168 rows | Strip the annotations; review the encoder |
+| DjVu dissector (`documents/djvu.rs`) | A | — | Format formulas; `HAS_NAME`/`HAS_TITLE` names | Optional rename |
+| MeatPack (`src/codec/meatpack.rs`) | **B, near C** | AGPL-3.0 (libbgcode; itself adapted from Scott Mudge's MeatPack, partly GPL) | `receive`, signal/command loop, libbgcode's output post-processing (`put`), `G_PARAMETERS` order | Rewrite from the MeatPack description + specifications.md, deciding independently how to format output |
+| Heatshrink (`src/codec/heatshrink.rs`) | A | ISC | — | — |
+| bgcode layout (`engineering/fabrication.rs`) | A | spec (specifications.md) | Enum tables from the published spec | Keep the attribution |
+| Quantum (`src/codec/quantum.rs`) | **B, near C** | LGPL-2.1 (libmspack) | `Coder::symbol` = `GET_SYMBOL` step by step; `Model::{new,bump,update}` = `qtmd_*`; tables in libmspack's names/layout | Rewrite from Russotto's notes |
+| LZX (`src/codec/lzx.rs`) | B (minor) | LGPL-2.1 (libmspack) | `slot_tables()` loop shape; field names `block_remaining`, `header_read`; block-header step order | Literal tables cited to the spec; rename fields |
+| CAB/MSZIP (`codec/cab.rs`), SZDD/KWAJ (`codec/lzh.rs`) | A | — | — | — |
+| StuffIt 13 + Arsenic (`src/codec/stuffit.rs`) | **B/C** | LGPL-2.1 (XADMaster) | Arsenic: constants, model functions, block reader nearly line by line; method 13 code-length parser + loop; `META_CODES` table (forced, attribute) | Rewrite, or license compatibly |
+| StuffIt LZAH (method 5) | B | Okumura's `lzhuf.c` (freely redistributable) | lzhuf's names and 4 comments verbatim | Credit Okumura |
+| StuffIt 5 parser (`archive/stuffit.rs`) | A | — | Reverse-engineered layout known via XADMaster | Acknowledge |
+| ACE (`src/codec/ace.rs`) | **C** | BSD-2-Clause (acefile) | Huffman quicksort/tree, sound channels, blocked driver — throughout | Attribution: acefile's copyright + license notice |
+| Delphi DCU (`executable/dcu.rs`) | A | zlib-style (DCU32INT) | Packed-index encoding, magics (facts) | Optional credit |
+| Guitar Pro (`audio/guitar_pro/`) | A (thin vocabulary) | LGPL-3.0 (PyGuitarPro) | Flag/enum label names (mod.rs:276–512) | Credit, or rename labels |
+
+Not compared (no reference fetched): NSIS, Inno Setup, the LHA/ARJ/ZOO LZH
+decoder, DWG, OneNote, PST, statistics codecs — their sources are specs or
+permissive projects, or the agents reported no specific implementation.
+
+## Initial list (before the comparison)
 
 | Item | Where | Written from | License of the reference | Concern | Cheapest clean-up |
 |---|---|---|---|---|---|
