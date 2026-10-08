@@ -163,3 +163,81 @@ fn kdb_decrypts_and_hashes_in_steps() {
     let rendered = host.render();
     assert!(rendered.contains("contents hash verified"), "{rendered}");
 }
+
+#[test]
+fn toml_parses_a_large_array_in_steps() {
+    // `a = [1,1,...]`: one value of 2Mi elements.
+    let n = 2usize << 20;
+    let mut data = b"a = [".to_vec();
+    for _ in 0..n {
+        data.extend_from_slice(b"1,");
+    }
+    data.extend_from_slice(b"]\n");
+    let format = formats::by_name("toml").unwrap();
+    let mut host = Host::open("big.toml", data, Limits::default(), Some(format));
+    host.session.expand(host.root, 10);
+    let root = host.root;
+    let yields = poll_stepped(&mut host, root);
+    // Reading the 4 MiB costs about 1k units; the elements about 8k.
+    assert!(yields >= 3, "{yields} yields");
+    let rendered = host.render();
+    assert!(rendered.contains("2,097,152 elements"), "{rendered}");
+}
+
+/// LLVM bitcode bits, least significant first.
+struct Bits {
+    data: Vec<u8>,
+    len: usize,
+}
+
+impl Bits {
+    fn put(&mut self, value: u64, width: u32) {
+        for i in 0..width {
+            if self.len.is_multiple_of(8) {
+                self.data.push(0);
+            }
+            if (value >> i) & 1 != 0 {
+                *self.data.last_mut().unwrap() |= 1 << (self.len % 8);
+            }
+            self.len += 1;
+        }
+    }
+
+    fn vbr(&mut self, mut value: u64, width: u32) {
+        let payload = width - 1;
+        loop {
+            let chunk = value & ((1 << payload) - 1);
+            value >>= payload;
+            if value == 0 {
+                self.put(chunk, width);
+                return;
+            }
+            self.put(chunk | (1 << payload), width);
+        }
+    }
+}
+
+#[test]
+fn bitcode_reads_a_long_record_in_steps() {
+    // One unabbreviated record of 16Mi operands (12 MiB) at the top level.
+    let n = 16u64 << 20;
+    let mut b = Bits {
+        data: Vec::new(),
+        len: 0,
+    };
+    b.put(u64::from(u32::from_le_bytes(*b"BC\xc0\xde")), 32);
+    b.put(3, 2);
+    b.vbr(1, 6);
+    b.vbr(n, 6);
+    for _ in 0..n {
+        b.put(0, 6);
+    }
+    b.put(0, 2);
+    let format = formats::by_name("llvm-bitcode").unwrap();
+    let mut host = Host::open("big.bc", b.data, Limits::default(), Some(format));
+    host.session.expand(host.root, 10);
+    let root = host.root;
+    let yields = poll_stepped(&mut host, root);
+    // Reading 12 MiB costs about 3k units; the operands about 4k more.
+    assert!(yields >= 3, "{yields} yields");
+}

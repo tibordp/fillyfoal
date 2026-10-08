@@ -2,6 +2,7 @@
 //! tables, document information, embedded pictures (hex-encoded `\pict`
 //! data decoded and dissected), and the document's plain text.
 
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{DiagKind, Diagnostic, Result};
 use crate::formats::{Format, Input, Probe};
@@ -375,8 +376,10 @@ async fn group(cx: Cx, g: Group) -> Result<()> {
 
 /// Pushes tokens until the group's closing brace (or the end).
 async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
-    // Text runs (with \'hh escapes) merge into one node.
-    let mut run: Option<(u64, u64, Vec<u8>)> = None;
+    // Text runs (with \'hh escapes) merge into one node. Only the first
+    // RUN_CAP bytes are kept (the rest are counted), and none where the
+    // text is not shown.
+    let mut run: Option<(u64, u64, Run)> = None;
     let mut dest = String::new();
     let mut colors = 0u64;
     let mut color = (None, None, None);
@@ -387,8 +390,8 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
         let t = lex.next().await?;
         let textual = matches!(t.kind, Kind::Text | Kind::Hex)
             || (t.kind == Kind::Symbol && !matches!(dest.as_str(), "pict" | "objdata"));
-        if !textual && let Some((a, b, bytes)) = run.take() {
-            flush(cx, lex, (a, b), &bytes, &dest, &mut data).await;
+        if !textual && let Some((a, b, text)) = run.take() {
+            flush(cx, lex, (a, b), &text, &dest, &mut data).await;
         }
         match t.kind {
             Kind::Eof | Kind::Close => break,
@@ -398,25 +401,33 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
                 cx.push(group_node(&info, span, input)).await;
             }
             Kind::Text | Kind::Hex | Kind::Symbol if textual => {
-                let r = run.get_or_insert((t.start, t.end, Vec::new()));
+                let r = run.get_or_insert((t.start, t.end, Run::default()));
                 r.1 = t.end;
-                match t.kind {
-                    Kind::Text => {
-                        let bytes = lex.scan.bytes(t.start, t.end, super::VALUE_CAP).await?;
-                        r.2.extend_from_slice(&bytes);
-                    }
-                    Kind::Hex => r.2.extend(t.param.and_then(|p| u8::try_from(p).ok())),
-                    _ => {
-                        let sym = lex
-                            .scan
-                            .byte(t.start.saturating_add(1))
-                            .await?
-                            .unwrap_or(b' ');
-                        r.2.push(match sym {
-                            b'~' => b' ',
-                            b'-' | b'*' => continue,
-                            other => other,
-                        });
+                if matches!(dest.as_str(), "pict" | "objdata" | "colortbl") {
+                    // `flush` keeps only the range.
+                } else {
+                    match t.kind {
+                        Kind::Text => {
+                            let bytes = lex.scan.bytes(t.start, t.end, super::VALUE_CAP).await?;
+                            r.2.extend(&bytes);
+                        }
+                        Kind::Hex => {
+                            if let Some(b) = t.param.and_then(|p| u8::try_from(p).ok()) {
+                                r.2.extend(&[b]);
+                            }
+                        }
+                        _ => {
+                            let sym = lex
+                                .scan
+                                .byte(t.start.saturating_add(1))
+                                .await?
+                                .unwrap_or(b' ');
+                            r.2.extend(&[match sym {
+                                b'~' => b' ',
+                                b'-' | b'*' => continue,
+                                other => other,
+                            }]);
+                        }
                     }
                 }
             }
@@ -482,8 +493,8 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
             color = (None, None, None);
         }
     }
-    if let Some((a, b, bytes)) = run.take() {
-        flush(cx, lex, (a, b), &bytes, &dest, &mut data).await;
+    if let Some((a, b, text)) = run.take() {
+        flush(cx, lex, (a, b), &text, &dest, &mut data).await;
     }
     if let Some((a, b)) = data {
         let span = lex.scan.span(a, b);
@@ -501,13 +512,36 @@ async fn content(cx: &Cx, lex: &mut Lexer<'_>, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// The most of one text run kept in memory; the node shows less.
+const RUN_CAP: usize = super::VALUE_CAP.saturating_mul(4);
+
+/// The bytes of a text run: the first [`RUN_CAP`], then a count.
+#[derive(Default)]
+struct Run {
+    bytes: Vec<u8>,
+    /// Bytes past the cap.
+    more: u64,
+    /// Whether any of those is not whitespace.
+    more_text: bool,
+}
+
+impl Run {
+    fn extend(&mut self, bytes: &[u8]) {
+        let room = RUN_CAP.saturating_sub(self.bytes.len());
+        let (keep, rest) = bytes.split_at(room.min(bytes.len()));
+        self.bytes.extend_from_slice(keep);
+        self.more = self.more.saturating_add(to_u64(rest.len()));
+        self.more_text |= windows_1252(rest).chars().any(|c| !c.is_whitespace());
+    }
+}
+
 /// Pushes a text run (relative `start..end`), or, in `\pict` and
 /// `\objdata`, extends the range of hex data instead.
 async fn flush(
     cx: &Cx,
     lex: &Lexer<'_>,
     (start, end): (u64, u64),
-    bytes: &[u8],
+    run: &Run,
     dest: &str,
     data: &mut Option<(u64, u64)>,
 ) {
@@ -520,12 +554,17 @@ async fn flush(
         d.1 = d.1.max(end);
         return;
     }
-    let text = windows_1252(bytes);
-    if text.trim().is_empty() {
+    let text = windows_1252(&run.bytes);
+    if text.trim().is_empty() && !run.more_text {
         return;
     }
-    cx.push(text_node("Text", lex.scan.span(start, end), &text))
-        .await;
+    let mut node = text_node("Text", lex.scan.span(start, end), &text);
+    if run.more > 0 {
+        // One character per Windows-1252 byte.
+        let chars = to_u64(text.chars().count()).saturating_add(run.more);
+        node = node.summary(format!("{chars} characters, truncated"));
+    }
+    cx.push(node).await;
 }
 
 /// The picture format named by a `\pict` control word.

@@ -150,16 +150,28 @@ impl Entry {
     }
 }
 
+/// The most of an entry's lines kept in memory; once past it, each further
+/// line keeps only its first [`LINE_KEEP`] bytes (its keyword and the
+/// start of its string).
+const BLOCK_CAP: usize = 1 << 20;
+const LINE_KEEP: usize = 256;
+
 /// Reads the next entry's lines (up to a blank line).
 async fn block(lines: &mut Lines<'_>) -> Result<Vec<LineBuf>> {
     let mut out = Vec::new();
-    while let Some(line) = lines.next().await? {
+    let mut kept = 0usize;
+    while let Some(mut line) = lines.next().await? {
         if line.is_blank() {
             if out.is_empty() {
                 continue;
             }
             break;
         }
+        if kept > BLOCK_CAP {
+            line.bytes.truncate(LINE_KEEP);
+            line.bytes.shrink_to_fit();
+        }
+        kept = kept.saturating_add(line.bytes.len());
         out.push(line);
         if out.len() > 10_000 {
             break;

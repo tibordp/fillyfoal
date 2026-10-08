@@ -365,13 +365,13 @@ impl Summary {
                     .map(String::as_str)
                     .filter(|s| !s.is_empty())
                     .collect();
-                self.title = Some(name.join(" "));
+                self.title = Some(preview(&name.join(" "), 60));
             }
             "ACTION" if self.title.is_none() => self.title = Some(text()),
             "DTSTART" => {
                 self.when = Some(match parse_datetime(&p.value) {
                     Some(t) => crate::render::value(&Value::Timestamp { unix_seconds: t }),
-                    None => p.value.clone(),
+                    None => preview(&p.value, 60),
                 });
             }
             _ => {}

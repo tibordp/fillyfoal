@@ -340,18 +340,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(table)
             .summary(format!("{count} streams")),
     );
+    // The streams are a collection: pushed, so a large directory pages.
     for (entry, d) in streams {
-        cx.checkpoint().await;
         let span = file.sub(d.rva.into(), d.size.into());
         let name = crate::value::lookup(STREAM_TYPE, d.kind.into())
             .map_or_else(|| format!("Stream {:#x}", d.kind), str::to_owned);
-        cx.emit(
+        cx.push(
             Node::new(name)
                 .span(span)
                 .summary(format!("{:#x} bytes", d.size))
                 .target(entry)
                 .lazy(stream, (input, entry, d.kind, span)),
-        );
+        )
+        .await;
     }
     Ok(())
 }

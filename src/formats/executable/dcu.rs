@@ -606,8 +606,9 @@ async fn read_record(
 struct Names {
     /// Names of the imported types, numbered from 1.
     types: Vec<String>,
-    /// Type numbers named by the unit's own `*` records.
-    local_types: Vec<(i64, String)>,
+    /// Type numbers named by the unit's own `*` records (the first name
+    /// given to a number).
+    local_types: std::collections::BTreeMap<i64, String>,
     /// Declaration names, numbered from 2 (index 0 is declaration 2).
     decls: Vec<String>,
     /// Declaration numbers of the imported-type records, in order.
@@ -623,10 +624,7 @@ impl Names {
         if let Some(s) = imported {
             return Some(s.clone());
         }
-        self.local_types
-            .iter()
-            .find(|(k, _)| *k == n)
-            .map(|(_, s)| s.clone())
+        self.local_types.get(&n).cloned()
     }
 
     /// The type number of the imported-type record with declaration
@@ -665,7 +663,7 @@ impl Names {
         if rec.tag == b'*'
             && let Some(n) = rec.num("Definition")
         {
-            self.local_types.push((n, name.clone()));
+            self.local_types.entry(n).or_insert_with(|| name.clone());
         }
         if rec.numbered {
             self.decls.push(name);

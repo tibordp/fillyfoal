@@ -309,20 +309,16 @@ impl<'a> Parser<'a> {
         Some((parts.join("."), start, self.i))
     }
 
-    fn value(&mut self, depth: u32) -> (Val, usize, usize) {
-        let start = self.i;
-        let val = self.value_inner(depth);
-        (val, start, self.i)
-    }
-
-    fn value_inner(&mut self, depth: u32) -> Val {
+    /// Starts a value: scalars and strings are parsed whole; an array or an
+    /// inline table is opened (its bracket consumed) for [`value`] to walk.
+    fn begin(&mut self, depth: u32) -> Begin {
         if depth > MAX_DEPTH {
             self.line_end();
-            return Val::Invalid("nested too deeply".to_owned());
+            return Begin::Done(Val::Invalid("nested too deeply".to_owned()));
         }
         match self.peek() {
-            Some(b'"') if self.at(b"\"\"\"") => self.multiline(b"\"\"\"", true),
-            Some(b'\'') if self.at(b"'''") => self.multiline(b"'''", false),
+            Some(b'"') if self.at(b"\"\"\"") => Begin::Done(self.multiline(b"\"\"\"", true)),
+            Some(b'\'') if self.at(b"'''") => Begin::Done(self.multiline(b"'''", false)),
             Some(q @ (b'"' | b'\'')) => {
                 let len = string_len(self.s.get(self.i..).unwrap_or_default());
                 let raw = self
@@ -330,68 +326,74 @@ impl<'a> Parser<'a> {
                     .get(self.i.saturating_add(1)..self.i.saturating_add(len).saturating_sub(1))
                     .unwrap_or_default();
                 self.bump(len.max(1));
-                Val::Str(if q == b'"' {
+                Begin::Done(Val::Str(if q == b'"' {
                     unescape(raw)
                 } else {
                     super::encoding::decode_8bit(raw)
+                }))
+            }
+            Some(b @ (b'[' | b'{')) => {
+                self.bump(1);
+                Begin::Open(Frame {
+                    table: b == b'{',
+                    n: 0,
+                    before: 0,
                 })
             }
-            Some(b'[') => {
-                self.bump(1);
-                let mut n = 0u64;
-                loop {
-                    self.blank();
-                    match self.peek() {
-                        None => return Val::Invalid("array not closed".to_owned()),
-                        Some(b']') => {
+            _ => Begin::Done(self.scalar()),
+        }
+    }
+
+    /// One step inside the open array or inline table `frame`.
+    fn advance(&mut self, frame: &mut Frame) -> Step {
+        if frame.table {
+            self.ws();
+            match self.peek() {
+                None | Some(b'\n') => {
+                    Step::Close(Val::Invalid("inline table not closed".to_owned()))
+                }
+                Some(b'}') => {
+                    self.bump(1);
+                    Step::Close(Val::Table(frame.n))
+                }
+                Some(b',') => {
+                    self.bump(1);
+                    Step::Continue
+                }
+                _ => {
+                    frame.before = self.i;
+                    if self.key().is_some() {
+                        self.ws();
+                        if self.peek() == Some(b'=') {
                             self.bump(1);
-                            return Val::Array(n);
+                            self.ws();
+                            return Step::Child;
                         }
-                        Some(b',') => self.bump(1),
-                        _ => {
-                            let before = self.i;
-                            self.value(depth.saturating_add(1));
-                            n = n.saturating_add(1);
-                            if self.i == before {
-                                self.bump(1);
-                            }
-                        }
+                        frame.n = frame.n.saturating_add(1);
                     }
+                    if self.i == frame.before {
+                        self.bump(1);
+                    }
+                    Step::Continue
                 }
             }
-            Some(b'{') => {
-                self.bump(1);
-                let mut n = 0u64;
-                loop {
-                    self.ws();
-                    match self.peek() {
-                        None | Some(b'\n') => {
-                            return Val::Invalid("inline table not closed".to_owned());
-                        }
-                        Some(b'}') => {
-                            self.bump(1);
-                            return Val::Table(n);
-                        }
-                        Some(b',') => self.bump(1),
-                        _ => {
-                            let before = self.i;
-                            if self.key().is_some() {
-                                self.ws();
-                                if self.peek() == Some(b'=') {
-                                    self.bump(1);
-                                    self.ws();
-                                    self.value(depth.saturating_add(1));
-                                }
-                                n = n.saturating_add(1);
-                            }
-                            if self.i == before {
-                                self.bump(1);
-                            }
-                        }
-                    }
+        } else {
+            self.blank();
+            match self.peek() {
+                None => Step::Close(Val::Invalid("array not closed".to_owned())),
+                Some(b']') => {
+                    self.bump(1);
+                    Step::Close(Val::Array(frame.n))
+                }
+                Some(b',') => {
+                    self.bump(1);
+                    Step::Continue
+                }
+                _ => {
+                    frame.before = self.i;
+                    Step::Child
                 }
             }
-            _ => self.scalar(),
         }
     }
 
@@ -428,6 +430,79 @@ impl<'a> Parser<'a> {
         self.bump(raw.len().max(1).min(n.max(1)));
         let text = String::from_utf8_lossy(raw).into_owned();
         scalar(&text)
+    }
+}
+
+/// An array or inline table being walked by [`value`].
+struct Frame {
+    table: bool,
+    /// Elements (or keys) so far.
+    n: u64,
+    /// Where the current element started.
+    before: usize,
+}
+
+enum Begin {
+    Done(Val),
+    Open(Frame),
+}
+
+enum Step {
+    Continue,
+    /// A value starts here (an element, or after `key =`).
+    Child,
+    Close(Val),
+}
+
+/// Parses the value at `p` with an explicit stack, charging one unit per
+/// few hundred elements or few KiB consumed.
+async fn value(cx: &Cx, p: &mut Parser<'_>) -> (Val, usize, usize) {
+    let start = p.i;
+    let mut stack: Vec<Frame> = Vec::new();
+    let mut done = match p.begin(0) {
+        Begin::Done(v) => Some(v),
+        Begin::Open(f) => {
+            stack.push(f);
+            None
+        }
+    };
+    let mut steps = 0u32;
+    let mut mark = p.i;
+    loop {
+        if let Some(val) = done.take() {
+            let Some(parent) = stack.last_mut() else {
+                return (val, start, p.i);
+            };
+            parent.n = parent.n.saturating_add(1);
+            if p.i == parent.before {
+                p.bump(1);
+            }
+            continue;
+        }
+        steps = steps.saturating_add(1);
+        let scanned = p.i.saturating_sub(mark);
+        if steps >= 256 || scanned >= 4096 {
+            for _ in 0..(scanned / 4096).max(1) {
+                cx.checkpoint().await;
+            }
+            steps = 0;
+            mark = p.i;
+        }
+        let depth = u32::try_from(stack.len()).unwrap_or(u32::MAX);
+        let Some(top) = stack.last_mut() else {
+            return (Val::Invalid(String::new()), start, p.i);
+        };
+        match p.advance(top) {
+            Step::Continue => {}
+            Step::Close(val) => {
+                stack.pop();
+                done = Some(val);
+            }
+            Step::Child => match p.begin(depth) {
+                Begin::Done(v) => done = Some(v),
+                Begin::Open(f) => stack.push(f),
+            },
+        }
     }
 }
 
@@ -601,7 +676,7 @@ async fn entries(cx: Cx, span: Span) -> Result<()> {
         }
         p.bump(1);
         p.ws();
-        let (val, a, b) = p.value(0);
+        let (val, a, b) = value(&cx, &mut p).await;
         cx.push(value_node(key, val, sub(span, a, b))).await;
         p.ws();
         if p.peek() == Some(b'#') || matches!(p.peek(), Some(b'\r' | b'\n')) {
@@ -628,7 +703,7 @@ async fn array(cx: Cx, span: Span) -> Result<()> {
             Some(b',') => p.bump(1),
             _ => {
                 let before = p.i;
-                let (val, a, b) = p.value(0);
+                let (val, a, b) = value(&cx, &mut p).await;
                 cx.push(value_node(format!("[{index}]"), val, sub(span, a, b)))
                     .await;
                 index = index.saturating_add(1);
@@ -656,7 +731,7 @@ async fn inline_table(cx: Cx, span: Span) -> Result<()> {
                     if p.peek() == Some(b'=') {
                         p.bump(1);
                         p.ws();
-                        let (val, a, b) = p.value(0);
+                        let (val, a, b) = value(&cx, &mut p).await;
                         cx.push(value_node(key, val, sub(span, a, b))).await;
                     }
                 }

@@ -181,8 +181,37 @@ enum Op {
 
 type Abbrev = Vec<Op>;
 
-/// Abbreviations defined in BLOCKINFO, per block ID.
-type BlockInfo = Arc<BTreeMap<u64, Vec<Abbrev>>>;
+/// Abbreviations defined in BLOCKINFO, per block ID; shared by the blocks
+/// that follow until BLOCKINFO changes again.
+type BlockInfo = Arc<Infos>;
+
+/// The most BLOCKINFO abbreviations kept (LLVM defines a few dozen).
+const MAX_INFO_ABBREVS: usize = 1 << 16;
+
+#[derive(Clone, Default)]
+struct Infos {
+    by_block: BTreeMap<u64, Vec<Abbrev>>,
+    total: usize,
+}
+
+/// Adds an abbreviation for `block`, copying `info` first if it is shared
+/// (charged by its size).
+async fn add_info(cx: &Cx, info: &mut BlockInfo, block: u64, abbrev: Abbrev) {
+    if info.total >= MAX_INFO_ABBREVS {
+        return;
+    }
+    if Arc::strong_count(info) > 1 {
+        for _ in 0..info.total >> 8 {
+            cx.checkpoint().await;
+        }
+    }
+    let info = Arc::make_mut(info);
+    info.total = info.total.saturating_add(1);
+    info.by_block.entry(block).or_default().push(abbrev);
+}
+
+/// Operands read between checkpoints.
+const OPERAND_STEP: u64 = 4096;
 
 fn read_abbrev(b: &mut Bits<'_>) -> Option<Abbrev> {
     let n = b.vbr(5)?;
@@ -237,14 +266,17 @@ fn push_operand(ops: &mut Vec<u64>, v: u64) {
     }
 }
 
-fn unabbreviated(b: &mut Bits<'_>) -> Option<Record> {
+async fn unabbreviated(cx: &Cx, b: &mut Bits<'_>) -> Option<Record> {
     let code = b.vbr(6)?;
     let n = b.vbr(6)?;
     if n > b.remaining() {
         return None;
     }
     let mut operands = Vec::new();
-    for _ in 0..n {
+    for k in 0..n {
+        if k > 0 && k.is_multiple_of(OPERAND_STEP) {
+            cx.checkpoint().await;
+        }
         push_operand(&mut operands, b.vbr(6)?);
     }
     Some(Record {
@@ -254,7 +286,7 @@ fn unabbreviated(b: &mut Bits<'_>) -> Option<Record> {
     })
 }
 
-fn abbreviated(b: &mut Bits<'_>, abbrev: &Abbrev) -> Option<Record> {
+async fn abbreviated(cx: &Cx, b: &mut Bits<'_>, abbrev: &Abbrev) -> Option<Record> {
     let mut values = Vec::new();
     let mut blob = None;
     let mut i = 0usize;
@@ -269,7 +301,10 @@ fn abbreviated(b: &mut Bits<'_>, abbrev: &Abbrev) -> Option<Record> {
                 {
                     return None;
                 }
-                for _ in 0..n {
+                for k in 0..n {
+                    if k > 0 && k.is_multiple_of(OPERAND_STEP) {
+                        cx.checkpoint().await;
+                    }
                     push_operand(&mut values, scalar(b, element)?);
                 }
                 i = i.checked_add(2)?;
@@ -342,7 +377,7 @@ async fn read_blockinfo(
     start: u64,
     end: u64,
     width: u32,
-    info: &mut BTreeMap<u64, Vec<Abbrev>>,
+    info: &mut BlockInfo,
 ) -> Option<()> {
     let mut b = Bits { data, pos: start };
     let mut current = None;
@@ -352,10 +387,10 @@ async fn read_blockinfo(
             0 => return Some(()),
             2 => {
                 let abbrev = read_abbrev(&mut b)?;
-                info.entry(current?).or_default().push(abbrev);
+                add_info(cx, info, current?, abbrev).await;
             }
             3 => {
-                let r = unabbreviated(&mut b)?;
+                let r = unabbreviated(cx, &mut b).await?;
                 if r.code == 1 {
                     current = r.operands.first().copied();
                 }
@@ -397,9 +432,9 @@ async fn walk(
         data: &s.stream.data,
         pos: s.start,
     };
-    let mut abbrevs: Vec<Abbrev> = s.info.get(&s.id).cloned().unwrap_or_default();
+    let mut abbrevs: Vec<Abbrev> = s.info.by_block.get(&s.id).cloned().unwrap_or_default();
     // BLOCKINFO contents are attributed to the block named by SETBID.
-    let mut info = (*s.info).clone();
+    let mut info = s.info.clone();
     let mut current: Option<u64> = None;
     let bad =
         |pos: u64| Diagnostic::malformed("malformed bitstream").at(s.stream.span.sub(pos >> 3, 1));
@@ -433,7 +468,7 @@ async fn walk(
                         start,
                         end,
                         width,
-                        info: Arc::new(info.clone()),
+                        info: info.clone(),
                         depth: s.depth.saturating_add(1),
                     };
                     let mut node = Node::new(block_label(child))
@@ -451,7 +486,7 @@ async fn walk(
                 let abbrev = read_abbrev(&mut b).ok_or_else(|| bad(at))?;
                 if s.id == 0 {
                     if let Some(target) = current {
-                        info.entry(target).or_default().push(abbrev);
+                        add_info(cx, &mut info, target, abbrev).await;
                     }
                 } else {
                     abbrevs.push(abbrev);
@@ -463,13 +498,15 @@ async fn walk(
             }
             _ => {
                 let record = if id == 3 {
-                    unabbreviated(&mut b)
+                    unabbreviated(cx, &mut b).await
                 } else {
-                    usize::try_from(id.saturating_sub(4))
+                    match usize::try_from(id.saturating_sub(4))
                         .ok()
                         .and_then(|i| abbrevs.get(i))
-                        .cloned()
-                        .and_then(|a| abbreviated(&mut b, &a))
+                    {
+                        Some(a) => abbreviated(cx, &mut b, a).await,
+                        None => None,
+                    }
                 }
                 .ok_or_else(|| bad(at))?;
                 if s.id == 0 && record.code == 1 {
@@ -569,7 +606,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         start: 32,
         end: stream_span.len.saturating_mul(8),
         width: 2,
-        info: Arc::new(BTreeMap::new()),
+        info: Arc::new(Infos::default()),
         depth: 0,
     };
     // A quick pass over the identification and module records for the

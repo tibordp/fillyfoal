@@ -1034,10 +1034,28 @@ enum MorkKind {
     GroupEnd,
 }
 
+/// Charges a unit per 4 KiB a scan has advanced.
+struct MorkPace {
+    mark: usize,
+}
+
+impl MorkPace {
+    async fn at(&mut self, cx: &Cx, i: usize) {
+        let done = i.saturating_sub(self.mark);
+        if done >= 4096 {
+            for _ in 0..done / 4096 {
+                cx.checkpoint().await;
+            }
+            self.mark = i;
+        }
+    }
+}
+
 /// The index after the cell `( … )` opening at `at` (escapes honoured).
-fn mork_skip_cell(data: &[u8], at: usize) -> usize {
+async fn mork_skip_cell(cx: &Cx, pace: &mut MorkPace, data: &[u8], at: usize) -> usize {
     let mut i = at.saturating_add(1);
     while let Some(&d) = data.get(i) {
+        pace.at(cx, i).await;
         match d {
             b'\\' => i = i.saturating_add(2),
             b')' => return i.saturating_add(1),
@@ -1059,13 +1077,14 @@ fn mork_is_comment(data: &[u8], at: usize) -> bool {
 }
 
 /// The index after the bracketed item opening at `at`.
-fn mork_item_end(data: &[u8], at: usize) -> usize {
+async fn mork_item_end(cx: &Cx, pace: &mut MorkPace, data: &[u8], at: usize) -> usize {
     let mut depth = 0u32;
     let mut i = at;
     while let Some(&c) = data.get(i) {
+        pace.at(cx, i).await;
         match c {
             b'(' => {
-                i = mork_skip_cell(data, i);
+                i = mork_skip_cell(cx, pace, data, i).await;
                 continue;
             }
             b'/' if mork_is_comment(data, i) => {
@@ -1101,11 +1120,13 @@ async fn mork_scan(cx: &Cx, data: &[u8], from: usize, to: usize) -> Vec<(MorkKin
     let mut out = Vec::new();
     let mut i = from;
     let mut steps = 0u32;
+    let mut pace = MorkPace { mark: from };
     while i < to {
         steps = steps.wrapping_add(1);
         if steps.is_multiple_of(256) {
             cx.checkpoint().await;
         }
+        pace.at(cx, i).await;
         let Some(&c) = data.get(i) else { break };
         let rest = data.get(i..to).unwrap_or_default();
         let (kind, end) = if rest.starts_with(b"//") {
@@ -1124,9 +1145,9 @@ async fn mork_scan(cx: &Cx, data: &[u8], from: usize, to: usize) -> Vec<(MorkKin
                 .map_or(to, |p| i.saturating_add(p).saturating_add(6));
             (kind, end)
         } else if c == b'(' {
-            (MorkKind::Cell, mork_skip_cell(data, i))
+            (MorkKind::Cell, mork_skip_cell(cx, &mut pace, data, i).await)
         } else if matches!(c, b'<' | b'{' | b'[') {
-            (mork_kind(c), mork_item_end(data, i))
+            (mork_kind(c), mork_item_end(cx, &mut pace, data, i).await)
         } else {
             i = i.saturating_add(1);
             continue;

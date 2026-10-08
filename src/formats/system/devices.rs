@@ -59,12 +59,12 @@ async fn romfs_dir(cx: Cx, (input, mut offset, depth): (Input, u64, u32)) -> Res
         return Err(Diagnostic::limit("directories nested too deeply"));
     }
     let file = input.span;
-    let mut seen = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
     while offset != 0 && offset < file.len {
         if seen.contains(&offset) || seen.len() > 100_000 {
             return Err(Diagnostic::malformed("file header chain loops"));
         }
-        seen.push(offset);
+        seen.insert(offset);
         let head = cx.read(file.sub(offset, 16)).await?;
         let next = u32_be(&head, 0).unwrap_or(0);
         let spec = u32_be(&head, 4).unwrap_or(0);

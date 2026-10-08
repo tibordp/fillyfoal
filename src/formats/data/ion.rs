@@ -88,10 +88,12 @@ const TYPES: [&str; 16] = [
 ];
 
 /// Symbols after the system table: runs of known texts and of symbols
-/// imported from shared tables we do not have.
+/// imported from shared tables we do not have. A persistent list (newest
+/// run first) with skip links, so a table that imports the current one
+/// shares it, and a lookup takes logarithmic time in the number of runs.
 #[derive(Clone, Debug, Default)]
 struct Symbols {
-    segments: Vec<Segment>,
+    top: Option<Arc<Run>>,
 }
 
 #[derive(Clone, Debug)]
@@ -100,7 +102,62 @@ enum Segment {
     Unknown(u64),
 }
 
+/// One run: symbols `start..end` (counted from SID 10).
+#[derive(Debug)]
+struct Run {
+    segment: Segment,
+    start: u64,
+    end: u64,
+    depth: u64,
+    parent: Option<Arc<Run>>,
+    /// An ancestor further back (skew-binary jump pointers).
+    jump: Option<Arc<Run>>,
+}
+
+impl Drop for Run {
+    /// Unlinks a long chain iteratively rather than recursively.
+    fn drop(&mut self) {
+        let mut next = self.parent.take();
+        while let Some(run) = next {
+            match Arc::try_unwrap(run) {
+                Ok(mut run) => next = run.parent.take(),
+                Err(_) => break,
+            }
+        }
+    }
+}
+
 impl Symbols {
+    /// These symbols followed by `segment`.
+    fn with(&self, segment: Segment) -> Symbols {
+        let parent = self.top.clone();
+        let start = parent.as_ref().map_or(0, |p| p.end);
+        let n = match &segment {
+            Segment::Known(v) => vt_len(v.len()),
+            Segment::Unknown(n) => *n,
+        };
+        let jump = parent.as_ref().map(|p| match &p.jump {
+            Some(j)
+                if j.jump.as_ref().is_some_and(|jj| {
+                    p.depth.saturating_sub(j.depth) == j.depth.saturating_sub(jj.depth)
+                }) =>
+            {
+                j.jump.clone().unwrap_or_else(|| p.clone())
+            }
+            _ => p.clone(),
+        });
+        Symbols {
+            top: Some(Arc::new(Run {
+                segment,
+                start,
+                end: start.saturating_add(n),
+                depth: parent.as_ref().map_or(0, |p| p.depth.saturating_add(1)),
+                parent,
+                jump,
+            })),
+        }
+    }
+
     /// The text of symbol `sid`, if known.
     fn text(&self, sid: u64) -> Option<&str> {
         if sid == 0 {
@@ -112,25 +169,25 @@ impl Symbols {
         {
             return Some(s);
         }
-        let mut i = sid.saturating_sub(10);
-        for seg in &self.segments {
-            match seg {
-                Segment::Known(v) => {
-                    let n = vt_len(v.len());
-                    if i < n {
-                        return v.get(usize::try_from(i).ok()?)?.as_deref();
-                    }
-                    i = i.saturating_sub(n);
-                }
-                Segment::Unknown(n) => {
-                    if i < *n {
-                        return None;
-                    }
-                    i = i.saturating_sub(*n);
-                }
-            }
+        let i = sid.saturating_sub(10);
+        let mut run = self.top.as_deref()?;
+        if i >= run.end {
+            return None;
         }
-        None
+        // Starts decrease towards the oldest run: find the newest run
+        // starting at or before `i`.
+        while run.start > i {
+            run = match &run.jump {
+                Some(j) if j.start > i => j,
+                _ => run.parent.as_deref()?,
+            };
+        }
+        match &run.segment {
+            Segment::Known(v) => v
+                .get(usize::try_from(i.saturating_sub(run.start)).ok()?)?
+                .as_deref(),
+            Segment::Unknown(_) => None,
+        }
     }
 
     fn name(&self, sid: u64) -> String {
@@ -139,12 +196,7 @@ impl Symbols {
     }
 
     fn count(&self) -> u64 {
-        self.segments.iter().fold(9, |acc, s| {
-            acc.saturating_add(match s {
-                Segment::Known(v) => vt_len(v.len()),
-                Segment::Unknown(n) => *n,
-            })
-        })
+        9u64.saturating_add(self.top.as_ref().map_or(0, |t| t.end))
     }
 }
 
@@ -268,7 +320,7 @@ async fn symbol_table(
     end: u64,
     current: &Symbols,
 ) -> Result<Symbols> {
-    let mut imports: Option<Vec<Segment>> = None;
+    let mut imports: Option<Symbols> = None;
     let mut symbols: Vec<Option<String>> = Vec::new();
     let mut pos = body;
     while pos < end {
@@ -281,10 +333,10 @@ async fn symbol_table(
         match (field, h.t, h.null) {
             // `imports: $ion_symbol_table`: append to the current table.
             (6, 7, false) if be_uint(&r.bytes(vbody, h.len.min(8)).await?) == 3 => {
-                imports = Some(current.segments.clone());
+                imports = Some(current.clone());
             }
             (6, 11, false) => {
-                let mut segs = Vec::new();
+                let mut segs = Symbols::default();
                 let mut p = vbody;
                 while p < vend {
                     r.cx().checkpoint().await;
@@ -293,7 +345,7 @@ async fn symbol_table(
                         let (name, max_id) =
                             import_entry(r, p.saturating_add(ih.head), ih.end(p)).await?;
                         if name.as_deref() != Some("$ion") {
-                            segs.push(Segment::Unknown(max_id));
+                            segs = segs.with(Segment::Unknown(max_id));
                         }
                     }
                     p = ih.end(p);
@@ -320,9 +372,9 @@ async fn symbol_table(
         }
         pos = vend;
     }
-    let mut segments = imports.unwrap_or_default();
-    segments.push(Segment::Known(Arc::new(symbols)));
-    Ok(Symbols { segments })
+    Ok(imports
+        .unwrap_or_default()
+        .with(Segment::Known(Arc::new(symbols))))
 }
 
 /// `name` and `max_id` of an import struct.

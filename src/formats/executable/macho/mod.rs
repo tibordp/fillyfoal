@@ -735,7 +735,7 @@ async fn command_node(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             ));
         }
         LC_THREAD | LC_UNIXTHREAD => {
-            thread_command(&mut f, &ctx, c.span.len)?;
+            thread_command(&cx, &mut f, c.span.len).await?;
         }
         _ => {
             simple_command(&mut f, &ctx, c.cmd)?;
@@ -942,9 +942,16 @@ fn note_command(f: &mut Fields<'_>, _: &Ctx) -> Result<(u64, u64)> {
     Ok((offset, size))
 }
 
-fn thread_command(f: &mut Fields<'_>, _: &Ctx, len: u64) -> Result<()> {
+/// Thread states (a flavor, a count and the words), a checkpoint per few
+/// hundred: a large command holds many.
+async fn thread_command(cx: &Cx, f: &mut Fields<'_>, len: u64) -> Result<()> {
     command_head(f)?;
+    let mut states = 0u32;
     while f.pos().saturating_add(8) <= len {
+        states = states.wrapping_add(1);
+        if states.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         f.u32("flavor").emit()?;
         let count = f
             .u32("count")

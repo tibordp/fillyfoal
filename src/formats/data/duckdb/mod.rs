@@ -563,13 +563,7 @@ async fn column_data(cx: Cx, (geo, ptr, ty): (Geo, MetaPtr, Arc<Ty>)) -> Result<
     let mut roots = Vec::new();
     let mut s = Stream::open(&cx, stream, FIRST_READ).await?;
     let mut tree = Tree::default();
-    // A column's segments in one row group: a handful, parsed in one piece.
-    let r = s
-        .piece(&cx, &mut tree, |bs, t| {
-            roots.clear();
-            catalog::column_data(bs, t, None, &ty, &links, 0, &mut roots)
-        })
-        .await;
+    let r = catalog::column_data(&cx, &mut s, &mut tree, None, &ty, &links, 0, &mut roots).await;
     let parsed = Parsed::new(tree, r);
     emit_parsed(&cx, &parsed.tree, &roots, parsed.error).await
 }

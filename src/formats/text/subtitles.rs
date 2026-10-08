@@ -121,10 +121,16 @@ fn time_node(name: &'static str, piece: Piece<'_>) -> Node {
     }
 }
 
+/// The most of a block's lines kept in memory; once past it, each further
+/// line keeps only its first [`LINE_KEEP`] bytes.
+const BLOCK_CAP: usize = 1 << 20;
+const LINE_KEEP: usize = 256;
+
 /// Reads a block of non-blank lines (skipping leading blank lines).
 async fn block(lines: &mut Lines<'_>) -> Result<Vec<LineBuf>> {
     let mut out = Vec::new();
-    while let Some(line) = lines.peek().await? {
+    let mut kept = 0usize;
+    while let Some(mut line) = lines.peek().await? {
         if line.is_blank() {
             lines.next().await?;
             if !out.is_empty() {
@@ -133,6 +139,11 @@ async fn block(lines: &mut Lines<'_>) -> Result<Vec<LineBuf>> {
             continue;
         }
         lines.next().await?;
+        if kept > BLOCK_CAP {
+            line.bytes.truncate(LINE_KEEP);
+            line.bytes.shrink_to_fit();
+        }
+        kept = kept.saturating_add(line.bytes.len());
         out.push(line);
         if out.len() > 1000 {
             break;

@@ -8,6 +8,8 @@
 //! window functions in defaults, table macros) stop the entry; the walk
 //! then resumes at the next entry, found by its fixed opening bytes.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use super::serial::{
@@ -1154,26 +1156,7 @@ pub async fn table_data(
         })
         .await?;
     for k in 0..count {
-        let r0 = roots.len();
-        let stop = s
-            .piece(cx, t, |bs, t| {
-                roots.truncate(r0);
-                let at = bs.pos();
-                let node = group(t, None, format!("Row group {k}"));
-                roots.push(node);
-                let r = row_group(bs, t, node, columns, links);
-                close(t, node, bs, at);
-                if let Err(e) = r {
-                    if bs.short {
-                        return Err(e);
-                    }
-                    t.update(node, |n| n.diag(e));
-                    return Ok(true);
-                }
-                Ok(false)
-            })
-            .await?;
-        if stop {
+        if row_group(cx, s, t, k, columns, links, roots).await? {
             break;
         }
     }
@@ -1378,99 +1361,237 @@ fn type_stats(bs: &mut Bs<'_>, t: &mut Tree, p: usize, ty: &Ty, depth: usize) ->
     Ok(shown.join(", "))
 }
 
-fn row_group(
+/// Elements of a list parsed in one piece.
+const BATCH: u64 = 256;
+
+/// What a piece of a row group or of column data found.
+enum Step {
+    /// A field, read whole.
+    Field,
+    /// The end marker.
+    End,
+    /// A malformed field (noted on the node): nothing more follows.
+    Stop,
+    /// A list field `id` (started at `at`, its group `g`) of `n` elements,
+    /// which follow.
+    List {
+        id: u16,
+        at: usize,
+        g: usize,
+        n: u64,
+    },
+}
+
+/// The outcome of a piece of the object `node` (started at `at`): a
+/// failure closes it, and, unless more bytes may help, is noted on it.
+fn settle(bs: &Bs<'_>, t: &mut Tree, node: usize, at: usize, r: Result<Step>) -> Result<Step> {
+    match r {
+        Ok(step) => Ok(step),
+        Err(e) => {
+            close(t, node, bs, at);
+            if bs.short {
+                return Err(e);
+            }
+            t.update(node, |n| n.diag(e));
+            Ok(Step::Stop)
+        }
+    }
+}
+
+/// Row group `k`: a field per piece, and list elements a batch per piece.
+/// Returns whether it ended the table data (it was malformed).
+async fn row_group(
+    cx: &Cx,
+    s: &mut Stream,
+    t: &mut Tree,
+    k: u64,
+    columns: &[(String, Ty)],
+    links: &dyn Links,
+    roots: &mut Vec<usize>,
+) -> Result<bool> {
+    let r0 = roots.len();
+    let (node, at) = s
+        .piece(cx, t, |bs, t| {
+            roots.truncate(r0);
+            let node = group(t, None, format!("Row group {k}"));
+            roots.push(node);
+            Ok((node, bs.pos()))
+        })
+        .await?;
+    let (mut start, mut count) = (0u64, 0u64);
+    loop {
+        let step = s
+            .piece(cx, t, |bs, t| {
+                let r = row_group_field(bs, t, node, at, &mut start, &mut count);
+                settle(bs, t, node, at, r)
+            })
+            .await?;
+        let (id, fat, g, n) = match step {
+            Step::Field => continue,
+            Step::End => return Ok(false),
+            Step::Stop => return Ok(true),
+            Step::List { id, at, g, n } => (id, at, g, n),
+        };
+        let mut words = Vec::new();
+        let mut i = 0u64;
+        while i < n {
+            let (w0, upto) = (words.len(), i.saturating_add(BATCH).min(n));
+            let step = s
+                .piece(cx, t, |bs, t| {
+                    words.truncate(w0);
+                    let r = (i..upto).try_for_each(|j| {
+                        row_group_item(bs, t, id, g, j, &mut words, columns, links)
+                    });
+                    settle(bs, t, node, at, r.map(|()| Step::Field))
+                })
+                .await?;
+            if matches!(step, Step::Stop) {
+                return Ok(true);
+            }
+            i = upto;
+        }
+        s.piece(cx, t, |bs, t| {
+            match id {
+                105 => {
+                    let i = leaf(
+                        t,
+                        node,
+                        bs,
+                        fat,
+                        "Extra metadata blocks",
+                        text(words.join(", ")),
+                    );
+                    t.update(i, |n| {
+                        n.desc("Metadata sub-blocks (block/sub-block) the row group also uses")
+                    });
+                }
+                102 => {
+                    close(t, g, bs, fat);
+                    summarize(t, g, plural(n, "column", "columns"));
+                }
+                _ => {
+                    close(t, g, bs, fat);
+                    summarize(t, g, plural(n, "pointer", "pointers"));
+                }
+            }
+            Ok(())
+        })
+        .await?;
+    }
+}
+
+/// A field of the row group `node` (started at `at`); a list field only
+/// up to its count.
+fn row_group_field(
     bs: &mut Bs<'_>,
     t: &mut Tree,
     node: usize,
+    at: usize,
+    start: &mut u64,
+    count: &mut u64,
+) -> Result<Step> {
+    let fat = bs.pos();
+    let id = bs.id()?;
+    match id {
+        END => {
+            summarize(
+                t,
+                node,
+                format!(
+                    "rows {start}–{}",
+                    start.saturating_add(*count).saturating_sub(1)
+                ),
+            );
+            close(t, node, bs, at);
+            return Ok(Step::End);
+        }
+        100 => {
+            *start = bs.uvar()?;
+            leaf(t, node, bs, fat, "Row start", uint(*start));
+        }
+        101 => {
+            *count = bs.uvar()?;
+            leaf(t, node, bs, fat, "Tuple count", uint(*count));
+        }
+        102 | 103 => {
+            let name = if id == 102 {
+                "Columns"
+            } else {
+                "Delete pointers"
+            };
+            let g = group(t, Some(node), name);
+            let n = bs.count()?;
+            return Ok(Step::List { id, at: fat, g, n });
+        }
+        104 => {
+            let v = bs.bool()?;
+            leaf(t, node, bs, fat, "Has metadata blocks", Value::Bool(v));
+        }
+        105 => {
+            let n = bs.count()?;
+            return Ok(Step::List {
+                id,
+                at: fat,
+                g: node,
+                n,
+            });
+        }
+        _ => {
+            bs.seek(fat);
+            return Err(bs.unknown(id, fat, "a row group"));
+        }
+    }
+    Ok(Step::Field)
+}
+
+/// Element `i` of the row group list field `id` (group `g`).
+#[allow(clippy::too_many_arguments)]
+fn row_group_item(
+    bs: &mut Bs<'_>,
+    t: &mut Tree,
+    id: u16,
+    g: usize,
+    i: u64,
+    words: &mut Vec<String>,
     columns: &[(String, Ty)],
     links: &dyn Links,
 ) -> Result<()> {
-    let (mut start, mut count) = (0u64, 0u64);
-    bs.object("a row group", |bs, id, at| {
-        match id {
-            100 => {
-                start = bs.uvar()?;
-                leaf(t, node, bs, at, "Row start", uint(start));
-            }
-            101 => {
-                count = bs.uvar()?;
-                leaf(t, node, bs, at, "Tuple count", uint(count));
-            }
-            102 => {
-                let g = group(t, Some(node), "Columns");
-                let n = bs.list(|bs, i| {
-                    let at = bs.pos();
-                    let p = meta_ptr(bs)?;
-                    let (name, ty) = usize::try_from(i)
-                        .ok()
-                        .and_then(|i| columns.get(i))
-                        .cloned()
-                        .unwrap_or_else(|| (format!("column {i}"), Ty::default()));
-                    let n = links
-                        .column_data(p, name.clone(), ty.clone())
-                        .span(bs.span(at))
-                        .value(text(ty.sql()));
-                    t.add(Some(g), n);
-                    Ok(())
-                })?;
-                close(t, g, bs, at);
-                summarize(t, g, plural(n, "column", "columns"));
-            }
-            104 => {
-                let v = bs.bool()?;
-                leaf(t, node, bs, at, "Has metadata blocks", Value::Bool(v));
-            }
-            105 => {
-                let mut words = Vec::new();
-                bs.list(|bs, _| {
-                    let w = bs.uvar()?;
-                    if words.len() < 16 {
-                        words.push(format!("{}/{}", w & super::BLOCK_MASK, w >> 56));
-                    }
-                    Ok(())
-                })?;
-                let i = leaf(
-                    t,
-                    node,
-                    bs,
-                    at,
-                    "Extra metadata blocks",
-                    text(words.join(", ")),
-                );
-                t.update(i, |n| {
-                    n.desc("Metadata sub-blocks (block/sub-block) the row group also uses")
-                });
-            }
-            103 => {
-                let g = group(t, Some(node), "Delete pointers");
-                let n = bs.list(|bs, _| {
-                    let at = bs.pos();
-                    let p = meta_ptr(bs)?;
-                    leaf(t, g, bs, at, "Deletes", text(p.describe()));
-                    Ok(())
-                })?;
-                close(t, g, bs, at);
-                summarize(t, g, plural(n, "pointer", "pointers"));
-            }
-            _ => return Ok(false),
+    let at = bs.pos();
+    match id {
+        102 => {
+            let p = meta_ptr(bs)?;
+            let (name, ty) = usize::try_from(i)
+                .ok()
+                .and_then(|i| columns.get(i))
+                .cloned()
+                .unwrap_or_else(|| (format!("column {i}"), Ty::default()));
+            let n = links
+                .column_data(p, name.clone(), ty.clone())
+                .span(bs.span(at))
+                .value(text(ty.sql()));
+            t.add(Some(g), n);
         }
-        Ok(true)
-    })?;
-    summarize(
-        t,
-        node,
-        format!(
-            "rows {start}–{}",
-            start.saturating_add(count).saturating_sub(1)
-        ),
-    );
+        105 => {
+            let w = bs.uvar()?;
+            if words.len() < 16 {
+                words.push(format!("{}/{}", w & super::BLOCK_MASK, w >> 56));
+            }
+        }
+        _ => {
+            let p = meta_ptr(bs)?;
+            leaf(t, g, bs, at, "Deletes", text(p.describe()));
+        }
+    }
     Ok(())
 }
 
 /// One column's persistent data in a row group: segments (data
-/// pointers), then the validity column and child columns, recursively.
-pub fn column_data(
-    bs: &mut Bs<'_>,
+/// pointers), then the validity column and child columns, recursively. A
+/// field per piece, and list elements a batch per piece.
+#[allow(clippy::too_many_arguments)]
+pub async fn column_data(
+    cx: &Cx,
+    s: &mut Stream,
     t: &mut Tree,
     p: Option<usize>,
     ty: &Ty,
@@ -1481,81 +1602,187 @@ pub fn column_data(
     if depth > 32 {
         return Err(Diagnostic::limit("columns nested too deeply"));
     }
-    let validity = Ty {
-        id: 53,
-        ..Ty::default()
-    };
-    bs.object("column data", |bs, id, at| {
-        match id {
-            100 => {
-                let g = group(t, p, "Segments");
-                out.push(g);
-                let n = bs.list(|bs, i| data_pointer(bs, t, g, ty, i, links))?;
-                close(t, g, bs, at);
-                summarize(t, g, plural(n, "segment", "segments"));
-            }
-            101 => {
-                let g = group(t, p, "Validity");
-                out.push(g);
-                column_data(
-                    bs,
+    loop {
+        let o0 = out.len();
+        let field = s
+            .piece(cx, t, |bs, t| {
+                out.truncate(o0);
+                column_field(bs, t, p, ty, out)
+            })
+            .await?;
+        match field {
+            Column::End => return Ok(()),
+            Column::Child { at, g, ty: child } => {
+                column_data_boxed(
+                    cx,
+                    s,
                     t,
                     Some(g),
-                    &validity,
+                    &child,
                     links,
                     depth.saturating_add(1),
                     &mut Vec::new(),
-                )?;
-                close(t, g, bs, at);
+                )
+                .await?;
+                s.piece(cx, t, |bs, t| {
+                    close(t, g, bs, at);
+                    Ok(())
+                })
+                .await?;
             }
-            102 => match (phys(ty), &ty.info) {
-                (Phys::List | Phys::Array, Info::Child(c) | Info::Array(c, _)) => {
-                    let g = group(t, p, "Child");
-                    out.push(g);
-                    t.update(g, |n| n.value(text(c.sql())));
-                    column_data(
-                        bs,
+            Column::Segments { at, g, n } => {
+                let mut i = 0u64;
+                while i < n {
+                    let upto = i.saturating_add(BATCH).min(n);
+                    s.piece(cx, t, |bs, t| {
+                        (i..upto).try_for_each(|j| data_pointer(bs, t, g, ty, j, links))
+                    })
+                    .await?;
+                    i = upto;
+                }
+                s.piece(cx, t, |bs, t| {
+                    close(t, g, bs, at);
+                    summarize(t, g, plural(n, "segment", "segments"));
+                    Ok(())
+                })
+                .await?;
+            }
+            Column::Members { at, g, n } => {
+                for i in 0..n {
+                    let (c, mat, child) = s
+                        .piece(cx, t, |bs, t| {
+                            let (name, child) = match &ty.info {
+                                Info::Members(m) => usize::try_from(i).ok().and_then(|i| m.get(i)),
+                                _ => None,
+                            }
+                            .cloned()
+                            .unwrap_or_else(|| (format!("member {i}"), Ty::default()));
+                            let c = group(t, Some(g), name);
+                            t.update(c, |n| n.value(text(child.sql())));
+                            Ok((c, bs.pos(), child))
+                        })
+                        .await?;
+                    column_data_boxed(
+                        cx,
+                        s,
                         t,
-                        Some(g),
-                        c,
+                        Some(c),
+                        &child,
                         links,
                         depth.saturating_add(1),
                         &mut Vec::new(),
-                    )?;
-                    close(t, g, bs, at);
-                }
-                (Phys::Struct, Info::Members(m)) => {
-                    let g = group(t, p, "Members");
-                    out.push(g);
-                    bs.list(|bs, i| {
-                        let at = bs.pos();
-                        let (name, child) = usize::try_from(i)
-                            .ok()
-                            .and_then(|i| m.get(i))
-                            .cloned()
-                            .unwrap_or_else(|| (format!("member {i}"), Ty::default()));
-                        let c = group(t, Some(g), name);
-                        t.update(c, |n| n.value(text(child.sql())));
-                        column_data(
-                            bs,
-                            t,
-                            Some(c),
-                            &child,
-                            links,
-                            depth.saturating_add(1),
-                            &mut Vec::new(),
-                        )?;
-                        close(t, c, bs, at);
+                    )
+                    .await?;
+                    s.piece(cx, t, |bs, t| {
+                        close(t, c, bs, mat);
                         Ok(())
-                    })?;
-                    close(t, g, bs, at);
+                    })
+                    .await?;
                 }
-                _ => return Ok(false),
-            },
-            _ => return Ok(false),
+                s.piece(cx, t, |bs, t| {
+                    close(t, g, bs, at);
+                    Ok(())
+                })
+                .await?;
+            }
         }
-        Ok(true)
-    })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn column_data_boxed<'a>(
+    cx: &'a Cx,
+    s: &'a mut Stream,
+    t: &'a mut Tree,
+    p: Option<usize>,
+    ty: &'a Ty,
+    links: &'a dyn Links,
+    depth: usize,
+    out: &'a mut Vec<usize>,
+) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+    Box::pin(column_data(cx, s, t, p, ty, links, depth, out))
+}
+
+/// A field of column data: what follows it.
+enum Column {
+    End,
+    /// A nested column (validity, or a list's child) in group `g`.
+    Child {
+        at: usize,
+        g: usize,
+        ty: Ty,
+    },
+    /// `n` data pointers in group `g`.
+    Segments {
+        at: usize,
+        g: usize,
+        n: u64,
+    },
+    /// `n` struct members in group `g`.
+    Members {
+        at: usize,
+        g: usize,
+        n: u64,
+    },
+}
+
+/// A field of column data, its groups added under `p` (and to `out`).
+fn column_field(
+    bs: &mut Bs<'_>,
+    t: &mut Tree,
+    p: Option<usize>,
+    ty: &Ty,
+    out: &mut Vec<usize>,
+) -> Result<Column> {
+    let at = bs.pos();
+    let id = bs.id()?;
+    match id {
+        END => Ok(Column::End),
+        100 => {
+            let g = group(t, p, "Segments");
+            out.push(g);
+            let n = bs.count()?;
+            Ok(Column::Segments { at, g, n })
+        }
+        101 => {
+            let g = group(t, p, "Validity");
+            out.push(g);
+            Ok(Column::Child {
+                at,
+                g,
+                ty: Ty {
+                    id: 53,
+                    ..Ty::default()
+                },
+            })
+        }
+        102 => match (phys(ty), &ty.info) {
+            (Phys::List | Phys::Array, Info::Child(c) | Info::Array(c, _)) => {
+                let g = group(t, p, "Child");
+                out.push(g);
+                t.update(g, |n| n.value(text(c.sql())));
+                Ok(Column::Child {
+                    at,
+                    g,
+                    ty: (**c).clone(),
+                })
+            }
+            (Phys::Struct, Info::Members(_)) => {
+                let g = group(t, p, "Members");
+                out.push(g);
+                let n = bs.count()?;
+                Ok(Column::Members { at, g, n })
+            }
+            _ => {
+                bs.seek(at);
+                Err(bs.unknown(id, at, "column data"))
+            }
+        },
+        _ => {
+            bs.seek(at);
+            Err(bs.unknown(id, at, "column data"))
+        }
+    }
 }
 
 fn data_pointer(

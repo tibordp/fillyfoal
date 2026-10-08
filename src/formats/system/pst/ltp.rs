@@ -345,6 +345,8 @@ pub struct Tc {
     /// End offsets of the 4-, 2- and 1-byte groups, and the row size.
     pub groups: [u16; 4],
     pub rows: Rows,
+    /// For [`Rows::Blocks`]: the row index just past each block's rows.
+    row_ends: Vec<u64>,
 }
 
 impl Tc {
@@ -385,19 +387,18 @@ impl Tc {
             Rows::None => Err(Diagnostic::malformed("table has no rows")),
             Rows::Heap(span) => span.sub_exact(index.saturating_mul(size), size),
             Rows::Blocks(blocks) => {
+                // The first block whose rows end past `index`.
+                let i = self.row_ends.partition_point(|&end| end <= index);
+                let (Some(b), Some(&end)) = (blocks.get(i), self.row_ends.get(i)) else {
+                    return Err(Diagnostic::malformed(format!(
+                        "row {index} past the end of the table"
+                    )));
+                };
                 let per = self.per_block(pst).max(1);
-                let mut remaining = index;
-                for b in blocks {
-                    let here = b.raw.len.checked_div(size).unwrap_or(0).min(per);
-                    if remaining < here {
-                        let plain = ndb::plain(cx, pst, b).await?;
-                        return plain.sub_exact(remaining.saturating_mul(size), size);
-                    }
-                    remaining = remaining.saturating_sub(here);
-                }
-                Err(Diagnostic::malformed(format!(
-                    "row {index} past the end of the table"
-                )))
+                let here = b.raw.len.checked_div(size).unwrap_or(0).min(per);
+                let remaining = index.saturating_sub(end.saturating_sub(here));
+                let plain = ndb::plain(cx, pst, b).await?;
+                plain.sub_exact(remaining.saturating_mul(size), size)
             }
         }
     }
@@ -447,13 +448,27 @@ pub async fn tc(cx: &Cx, pst: &Pst, node: NodeRef) -> Result<Tc> {
         let sub = find_sub(cx, pst, node.sub, rows_hnid).await?;
         Rows::Blocks(ndb::data_tree(cx, pst, sub.data).await?)
     };
-    Ok(Tc {
+    let mut tc = Tc {
         heap,
         info,
         columns,
         groups,
         rows,
-    })
+        row_ends: Vec::new(),
+    };
+    if let Rows::Blocks(blocks) = &tc.rows {
+        let size = tc.row_size();
+        let per = tc.per_block(pst).max(1);
+        let mut end = 0u64;
+        tc.row_ends = blocks
+            .iter()
+            .map(|b| {
+                end = end.saturating_add(b.raw.len.checked_div(size).unwrap_or(0).min(per));
+                end
+            })
+            .collect();
+    }
+    Ok(tc)
 }
 
 /// A cell of a row: absent, fixed bytes in the row, or an HNID's data.

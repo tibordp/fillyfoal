@@ -500,7 +500,10 @@ async fn first_content(cx: &Cx, span: Span) -> Result<Option<bool>> {
 async fn folded_lines(cx: &Cx, span: Span) -> Result<String> {
     let mut lines = Lines::new(cx, span);
     let mut out = String::new();
-    while let Some(line) = lines.next().await? {
+    // Checked before every line, blank ones included.
+    while out.len() <= VALUE_CAP.saturating_mul(4)
+        && let Some(line) = lines.next().await?
+    {
         let t = line.piece().trim();
         if t.is_empty() {
             out.push('\n');
@@ -510,9 +513,6 @@ async fn folded_lines(cx: &Cx, span: Span) -> Result<String> {
             out.push(' ');
         }
         out.push_str(&t.text());
-        if out.len() > VALUE_CAP.saturating_mul(4) {
-            break;
-        }
     }
     Ok(out.trim().to_owned())
 }
@@ -522,7 +522,10 @@ async fn block_scalar(cx: &Cx, span: Span, folded: bool, header: &[u8]) -> Resul
     let mut lines = Lines::new(cx, span);
     let mut strip: Option<u64> = None;
     let mut out = String::new();
-    while let Some(line) = lines.next().await? {
+    // Checked before every line, blank ones included.
+    while out.len() <= VALUE_CAP.saturating_mul(4)
+        && let Some(line) = lines.next().await?
+    {
         if line.piece().trim().is_empty() {
             out.push('\n');
             continue;
@@ -541,9 +544,6 @@ async fn block_scalar(cx: &Cx, span: Span, folded: bool, header: &[u8]) -> Resul
         out.push_str(&content);
         if !folded {
             out.push('\n');
-        }
-        if out.len() > VALUE_CAP.saturating_mul(4) {
-            break;
         }
     }
     // Chomping: `-` strips the final newlines, `+` keeps them, default clips
