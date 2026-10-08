@@ -73,7 +73,8 @@ async fn ha(cx: Cx, input: Input) -> Result<()> {
     );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(4);
-    for _ in 0..count {
+    for i in 0..count {
+        cx.progress(i.into(), count.into());
         let start = cur.pos();
         let kind = cur.u8().await?;
         let packed = u64::from(cur.u32().await?);
@@ -254,6 +255,7 @@ async fn amiga_lzx(cx: Cx, input: Input) -> Result<()> {
         } else {
             Node::new(name).span(data)
         };
+        cx.progress_in(file, data.end());
         let how = match mode {
             0 => "stored",
             2 => "LZX",
@@ -319,6 +321,7 @@ async fn packit(cx: Cx, input: Input) -> Result<()> {
                 .saturating_add(rsrc_len)
                 .saturating_add(2),
         );
+        cx.progress_in(file, entry.end());
         cx.push(
             Node::new(name)
                 .span(entry)

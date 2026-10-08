@@ -467,6 +467,7 @@ async fn rows(cx: Cx, (db, root, columns): (DbRef, u32, Columns)) -> Result<()> 
             columns: columns.clone(),
             path: path.clone(),
         };
+        cx.progress(walker.progress(), 1_000_000);
         cx.push(btree::row_node(state, label, &local)).await;
         index = index.saturating_add(1);
     }

@@ -164,10 +164,14 @@ async fn block_map(cx: Cx, image: Arc<Image>) -> Result<()> {
 async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
     let map = cx.read(image.map).await?;
     let mut list = PieceList::new(image.map);
-    for raw in map.as_chunks::<4>().0 {
+    for (i, raw) in map.as_chunks::<4>().0.iter().enumerate() {
         let want = image.block.min(image.size.saturating_sub(list.len()));
         if want == 0 {
             break;
+        }
+        if i.is_multiple_of(4096) {
+            cx.progress(list.len(), image.size);
+            cx.checkpoint().await;
         }
         let step = match u32::from_le_bytes(*raw) {
             FREE | ZERO => list.hole(&cx, want),

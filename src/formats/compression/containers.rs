@@ -106,6 +106,7 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
         } else {
             Node::new(name)
         };
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(
             node.summary(format!("{data_len} bytes"))
                 .target(cur.since(start)),
@@ -189,6 +190,7 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
         if magic == b"bvx1" {
             node = node.diag(Diagnostic::unsupported("LZFSE v1 blocks"));
         }
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(node).await;
     }
     cx.emit(crate::formats::content(
@@ -243,6 +245,7 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{len} bytes, {raw} uncompressed")
         };
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(
             crate::formats::embedded(format!("Chunk {chunks}"), input.nested(data))
                 .summary(summary)
@@ -378,6 +381,7 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
         let node = Node::new(format!("Block {blocks}"))
             .span(cur.since(start))
             .summary(summary);
+        cx.progress_in(file, file.offset.saturating_add(start));
         if packed > raw_len || raw_len > lzo::LZOP_MAX_BLOCK {
             cx.push(node.diag(Diagnostic::malformed("bad block size")))
                 .await;
@@ -453,6 +457,7 @@ async fn lzf(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{ulen} bytes, stored")
         };
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(
             Node::new(format!("Block {blocks}"))
                 .span(cur.since(start))

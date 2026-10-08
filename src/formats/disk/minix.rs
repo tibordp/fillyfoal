@@ -213,10 +213,14 @@ impl Fs {
             }
         }
         let mut list = PieceList::new(inode_span);
-        for &z in zones
+        for (i, &z) in zones
             .iter()
             .take(usize::try_from(needed).unwrap_or(usize::MAX))
+            .enumerate()
         {
+            if i.is_multiple_of(4096) {
+                cx.checkpoint().await;
+            }
             let len = zone.min(size.saturating_sub(list.len()));
             if z == 0 {
                 list.hole(cx, len)?;
@@ -383,7 +387,9 @@ async fn directory(cx: Cx, (fs, ino, ancestors): (FsRef, u32, Arc<Vec<u32>>)) ->
     ancestors.push(ino);
     let ancestors = Arc::new(ancestors);
     let bytes = cx.read_avail(data).await?;
+    let total = to_u64(bytes.len());
     for (i, e) in bytes.chunks(crate::bytes::to_usize(entry)).enumerate() {
+        cx.progress(to_u64(i).saturating_mul(entry), total);
         let child = if ptr == 4 {
             u32_le(e, 0).unwrap_or(0)
         } else {

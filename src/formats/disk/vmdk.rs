@@ -164,9 +164,13 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
     let file = s.input.span;
     let directory = cx.read(s.gd).await?;
     let mut list = PieceList::new(s.gd);
-    'outer: for gde in directory.as_chunks::<4>().0 {
+    'outer: for (i, gde) in directory.as_chunks::<4>().0.iter().enumerate() {
         let table_sector = u64::from(u32::from_le_bytes(*gde));
         let covered = s.gtes.saturating_mul(s.grain);
+        cx.progress(list.len(), s.capacity);
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         if table_sector == 0 {
             let want = covered.min(s.capacity.saturating_sub(list.len()));
             if let Err(e) = list.hole(&cx, want) {
@@ -181,10 +185,13 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
                 s.gtes.saturating_mul(4),
             ))
             .await?;
-        for gte in table.as_chunks::<4>().0 {
+        for (j, gte) in table.as_chunks::<4>().0.iter().enumerate() {
             let want = s.grain.min(s.capacity.saturating_sub(list.len()));
             if want == 0 {
                 break 'outer;
+            }
+            if j.is_multiple_of(4096) {
+                cx.checkpoint().await;
             }
             let sector = u64::from(u32::from_le_bytes(*gte));
             let step = match sector {

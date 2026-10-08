@@ -19,6 +19,10 @@ use crate::span::Span;
 
 const HEADER: u64 = 60;
 const MAX_NAMES: u64 = 16 << 20;
+/// The longest name looked up in a name table or symbol string table (as
+/// for BSD `#1/` names): an unterminated table must not be scanned to its
+/// end once per member or symbol.
+const MAX_NAME: usize = 4096;
 
 pub static FORMAT: Format = Format {
     name: "ar",
@@ -99,6 +103,7 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>, names: Option<&[u8]>) -> Res
     {
         match names.and_then(|n| n.get(offset..)) {
             Some(rest) => {
+                let rest = rest.get(..MAX_NAME).unwrap_or(rest);
                 let end = rest
                     .iter()
                     .position(|&b| b == b'\n' || b == 0)
@@ -164,6 +169,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 node.summary(human_size(m.data.len))
             }
         };
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
     }
     if !cur.at_end() {
@@ -260,7 +266,14 @@ async fn member(cx: Cx, (input, span, name): (Input, Span, String)) -> Result<()
 async fn long_names(cx: Cx, span: Span) -> Result<()> {
     let data = cx.read(span.sub(0, MAX_NAMES)).await?;
     let mut at = 0usize;
+    let mut lines = 0u32;
     while at < data.len() {
+        // Empty names are not pushed, so a table of them needs its own
+        // suspension points.
+        lines = lines.wrapping_add(1);
+        if lines.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let rest = data.get(at..).unwrap_or_default();
         let len = rest
             .iter()
@@ -315,7 +328,8 @@ async fn symbol_table(cx: Cx, (span, wide, bsd, file): (Span, bool, bool, Span))
             let at = word.saturating_add(i.saturating_mul(word).saturating_mul(2));
             let strx = to_usize(get(at).ok_or_else(bad)?);
             let offset = get(at.saturating_add(word)).ok_or_else(bad)?;
-            let name = crate::text::until_nul(strtab.get(strx..).unwrap_or_default());
+            let rest = strtab.get(strx..).unwrap_or_default();
+            let name = crate::text::until_nul(rest.get(..MAX_NAME).unwrap_or(rest));
             cx.push(symbol(
                 name,
                 span.sub(to_u64(at), to_u64(word.saturating_mul(2))),

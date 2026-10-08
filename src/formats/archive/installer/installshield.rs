@@ -751,11 +751,18 @@ fn content(input: Input, cab: &Cab, f: &IsFile, index: u32) -> Node {
     node
 }
 
-/// Undoes the obfuscation: `ror8(b ^ 0xd5, 2) - (i % 0x47)`.
-fn deobfuscate(data: &mut [u8]) {
-    for (i, b) in data.iter_mut().enumerate() {
-        let x = (*b ^ 0xd5).rotate_right(2);
-        *b = x.wrapping_sub(u8::try_from(i % 0x47).unwrap_or(0));
+/// Undoes the obfuscation: `ror8(b ^ 0xd5, 2) - (i % 0x47)`, in 4 KiB
+/// chunks with a checkpoint after each (the file may be large).
+async fn deobfuscate(cx: &Cx, data: &mut [u8]) {
+    const CHUNK: usize = 4096;
+    for (n, chunk) in data.chunks_mut(CHUNK).enumerate() {
+        let base = n.wrapping_mul(CHUNK);
+        for (i, b) in chunk.iter_mut().enumerate() {
+            let x = (*b ^ 0xd5).rotate_right(2);
+            let i = base.wrapping_add(i);
+            *b = x.wrapping_sub(u8::try_from(i % 0x47).unwrap_or(0));
+        }
+        cx.checkpoint().await;
     }
 }
 
@@ -773,7 +780,7 @@ async fn file_content(
             Some(d) => d.span,
             None => {
                 let mut bytes = read_all(&cx, span).await?;
-                deobfuscate(&mut bytes);
+                deobfuscate(&cx, &mut bytes).await;
                 cx.add_derived(origin, bytes, span.len, None)?.span
             }
         };

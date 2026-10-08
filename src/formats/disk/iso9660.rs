@@ -624,7 +624,10 @@ async fn list_directory(cx: &Cx, e: &Entry, extent: Span, path: Arc<Vec<u32>>) -
                 joliet: e.joliet,
                 path: path.clone(),
             };
+            cx.progress(to_u64(at), to_u64(data.len()));
             cx.push(entry_node(r.display_name(), &r, state)).await;
+        } else {
+            cx.checkpoint().await;
         }
         at = at.saturating_add(len);
     }
@@ -655,6 +658,7 @@ async fn path_table(cx: Cx, span: Span) -> Result<()> {
             String::from_utf8_lossy(raw).into_owned()
         };
         let total = 8usize.saturating_add(len).saturating_add(len % 2);
+        cx.progress(to_u64(at), to_u64(data.len()));
         cx.push(
             Node::new(format!("{index}: {name}"))
                 .span(span.sub(to_u64(at), to_u64(total)))

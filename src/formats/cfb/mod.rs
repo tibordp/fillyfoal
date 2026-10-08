@@ -403,10 +403,14 @@ async fn fat_chain(
     follow(cx, Table::Fat { fat, sector, input }, start, limit).await
 }
 
-/// Joins sector spans into as few pieces as possible.
-fn coalesce(spans: impl IntoIterator<Item = Span>) -> Vec<Span> {
+/// Joins sector spans into as few pieces as possible (a chain can run to
+/// millions of sectors).
+async fn coalesce(cx: &Cx, spans: impl IntoIterator<Item = Span>) -> Vec<Span> {
     let mut out: Vec<Span> = Vec::new();
-    for span in spans {
+    for (i, span) in spans.into_iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         match out.last_mut() {
             Some(last) if last.source == span.source && last.end() == span.offset => {
                 last.len = last.len.saturating_add(span.len);
@@ -475,12 +479,13 @@ pub async fn stream(
 ) -> Result<(Span, Option<Diagnostic>)> {
     let size = stream_size(cfb, entry);
     let (_, sectors, diag) = sectors_of(cx, cfb, entry).await?;
+    let pieces = coalesce(cx, sectors.into_iter().map(|(_, span)| span)).await;
     let all = cx.add_pieces(
         Origin {
             parent: cfb.entry_span(id),
             transform: "cfb-chain",
         },
-        coalesce(sectors.into_iter().map(|(_, span)| span)),
+        pieces,
     )?;
     let span = all.sub(0, size);
     let diag = diag.or_else(|| {
@@ -577,12 +582,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     // The directory chain.
     let (dir_chain, dir_diag) = fat_chain(&cx, &fat, sector, file, header.first_dir, sectors).await;
-    let mut dir_spans = coalesce(dir_chain.iter().map(|&s| {
-        file.sub(
-            u64::from(s).saturating_add(1).saturating_mul(sector),
-            sector,
-        )
-    }));
+    let mut dir_spans = coalesce(
+        &cx,
+        dir_chain.iter().copied().map(|s| {
+            file.sub(
+                u64::from(s).saturating_add(1).saturating_mul(sector),
+                sector,
+            )
+        }),
+    )
+    .await;
     if dir_spans.is_empty() {
         dir_spans.push(file.sub(0, 0));
     }
@@ -614,12 +623,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let limit = u64::from(header.minifat_sectors).min(sectors);
         let (chain, diag) =
             fat_chain(&cx, &cfb.fat, sector, file, header.first_minifat, limit).await;
+        let pieces = coalesce(&cx, chain.iter().copied().map(|s| cfb.sector_span(s))).await;
         cfb.minifat = Some(cx.add_pieces(
             Origin {
                 parent: header_span.sub(60, 4),
                 transform: "cfb-minifat",
             },
-            coalesce(chain.iter().map(|&s| cfb.sector_span(s))),
+            pieces,
         )?);
         if let Some(d) = diag {
             cx.diag(d.at(header_span.sub(60, 4)));

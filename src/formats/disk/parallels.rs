@@ -122,10 +122,14 @@ async fn bat(cx: Cx, image: Arc<Image>) -> Result<()> {
 async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
     let table = cx.read(image.bat).await?;
     let mut list = PieceList::new(image.bat);
-    for raw in table.as_chunks::<4>().0 {
+    for (i, raw) in table.as_chunks::<4>().0.iter().enumerate() {
         let want = image.cluster.min(image.size.saturating_sub(list.len()));
         if want == 0 {
             break;
+        }
+        if i.is_multiple_of(4096) {
+            cx.progress(list.len(), image.size);
+            cx.checkpoint().await;
         }
         let step = match u32::from_le_bytes(*raw) {
             0 => list.hole(&cx, want),

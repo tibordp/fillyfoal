@@ -173,6 +173,9 @@ fn find(hay: &[u8], needle: &[u8], from: usize) -> Option<usize> {
 /// The text of the `<tag>` element following `<key>key</key>` within
 /// `range` of `xml`, with its offsets.
 fn keyed(xml: &[u8], range: (usize, usize), key: &[u8], tag: &[u8]) -> Option<(usize, usize)> {
+    // Searching only up to the end of the range keeps a walk over many
+    // dicts linear (a missing key would otherwise scan to the end of the XML).
+    let xml = xml.get(..range.1)?;
     let mut k = b"<key>".to_vec();
     k.extend_from_slice(key);
     k.extend_from_slice(b"</key>");
@@ -194,7 +197,7 @@ struct Blkx {
     data: (usize, usize),
 }
 
-fn blkx_entries(xml: &[u8]) -> Vec<Blkx> {
+async fn blkx_entries(cx: &Cx, xml: &[u8]) -> Vec<Blkx> {
     let mut out = Vec::new();
     let Some(key) = find(xml, b"<key>blkx</key>", 0) else {
         return out;
@@ -204,6 +207,7 @@ fn blkx_entries(xml: &[u8]) -> Vec<Blkx> {
     };
     let mut at = key;
     while let Some(start) = find(xml, b"<dict>", at).filter(|&s| s < array_end) {
+        cx.checkpoint().await;
         let Some(end) = find(xml, b"</dict>", start) else {
             break;
         };
@@ -223,7 +227,7 @@ fn blkx_entries(xml: &[u8]) -> Vec<Blkx> {
 
 async fn partitions(cx: Cx, (input, xml_span, data_fork): (Input, Span, Span)) -> Result<()> {
     let xml = cx.read(xml_span).await?;
-    let entries = blkx_entries(&xml);
+    let entries = blkx_entries(&cx, &xml).await;
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for (i, e) in entries.into_iter().enumerate() {
         let b64_span = xml_span.sub(to_u64(e.data.0), to_u64(e.data.1.saturating_sub(e.data.0)));

@@ -281,6 +281,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             variant.align(),
         )
         .saturating_add(m.header.filesize);
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(check_len(node, m.span, wanted)).await;
         if trailer {
             ended = true;

@@ -489,6 +489,7 @@ async fn fat_entries(cx: Cx, fs: Vol) -> Result<()> {
         Node::new(name).summary("free")
     };
     for c in 2..end {
+        cx.progress(c.into(), end.into());
         let next = fs.next(&cx, c).await?;
         if next == 0 {
             free_from.get_or_insert(c);

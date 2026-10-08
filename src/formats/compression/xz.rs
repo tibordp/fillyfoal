@@ -103,14 +103,8 @@ struct Stream {
     index: Span,
     /// (unpadded size, uncompressed size) of each block.
     records: Arc<Vec<(u64, u64)>>,
-}
-
-impl Stream {
-    fn uncompressed(&self) -> u64 {
-        self.records
-            .iter()
-            .fold(0u64, |a, &(_, u)| a.saturating_add(u))
-    }
+    /// Total uncompressed size of the records.
+    uncompressed: u64,
 }
 
 /// A multibyte integer (7 bits per byte, little-endian, at most 9 bytes).
@@ -125,7 +119,7 @@ fn padded4(n: u64) -> u64 {
 }
 
 /// Parses an index: indicator, record count, records, padding, CRC32.
-fn parse_index(data: &[u8]) -> std::result::Result<Vec<(u64, u64)>, &'static str> {
+async fn parse_index(cx: &Cx, data: &[u8]) -> std::result::Result<Vec<(u64, u64)>, &'static str> {
     if data.first() != Some(&0) {
         return Err("index indicator is not zero");
     }
@@ -136,7 +130,10 @@ fn parse_index(data: &[u8]) -> std::result::Result<Vec<(u64, u64)>, &'static str
         return Err("record count exceeds the index size");
     }
     let mut records = Vec::new();
-    for _ in 0..n {
+    for i in 0..n {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let (unpadded, l1) = varint(data, at).ok_or("bad record")?;
         at = at.saturating_add(l1);
         let (uncompressed, l2) = varint(data, at).ok_or("bad record")?;
@@ -178,10 +175,18 @@ async fn find_streams(cx: &Cx, file: Span) -> Result<Vec<Stream>> {
             .ok_or_else(|| Diagnostic::malformed("index larger than the file").at(footer_span))?;
         let index = file.sub(index_at, index_len);
         let data = cx.read(index).await?;
-        let records = parse_index(&data).map_err(|e| Diagnostic::malformed(e).at(index))?;
-        let blocks = records
-            .iter()
-            .fold(0u64, |a, &(u, _)| a.saturating_add(padded4(u)));
+        let records = parse_index(cx, &data)
+            .await
+            .map_err(|e| Diagnostic::malformed(e).at(index))?;
+        let mut blocks = 0u64;
+        let mut uncompressed = 0u64;
+        for (i, &(u, size)) in records.iter().enumerate() {
+            if i.is_multiple_of(4096) {
+                cx.checkpoint().await;
+            }
+            blocks = blocks.saturating_add(padded4(u));
+            uncompressed = uncompressed.saturating_add(size);
+        }
         let start = index_at
             .checked_sub(blocks)
             .and_then(|s| s.checked_sub(12))
@@ -191,6 +196,7 @@ async fn find_streams(cx: &Cx, file: Span) -> Result<Vec<Stream>> {
             check: footer.check,
             index,
             records: Arc::new(records),
+            uncompressed,
         });
         end = start;
         cx.checkpoint().await;
@@ -220,7 +226,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .fold(0u64, |a, s| a.saturating_add(to_u64(s.records.len())));
     let size = streams
         .iter()
-        .fold(0u64, |a, s| a.saturating_add(s.uncompressed()));
+        .fold(0u64, |a, s| a.saturating_add(s.uncompressed));
     // The index records the decoded size, so large streams decode lazily.
     cx.emit(crate::formats::content(
         "Decompressed",
@@ -260,7 +266,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 .summary(format!(
                     "{}, {} uncompressed",
                     count(to_u64(stream.records.len()), "block", "blocks"),
-                    human_size(stream.uncompressed())
+                    human_size(stream.uncompressed)
                 ))
                 .lazy(stream_node, (input, stream.clone())),
         )
@@ -557,6 +563,7 @@ async fn index(cx: Cx, span: Span) -> Result<()> {
         let from = r.at;
         let (unpadded, a) = r.varint("Unpadded size").ok_or_else(bad)?;
         let (uncompressed, b) = r.varint("Uncompressed size").ok_or_else(bad)?;
+        cx.progress(i, n);
         cx.push(
             Node::new(format!("Record {i}"))
                 .span(r.span(from))

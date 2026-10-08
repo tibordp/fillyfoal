@@ -1283,10 +1283,17 @@ impl Vol {
                 let mut out = Vec::new();
                 let mut cur = lbn;
                 let end = lbn.saturating_add(blocks);
-                for &(orig, mapped) in spared {
+                // The table is sorted: skip the packets wholly before `lbn`
+                // and stop at the first one past the extent.
+                let first =
+                    spared.partition_point(|&(o, _)| u64::from(o).saturating_add(*packet) <= lbn);
+                for &(orig, mapped) in spared.get(first..).unwrap_or_default() {
                     let o = u64::from(orig);
                     let pe = o.saturating_add(*packet);
-                    if pe <= cur || o >= end {
+                    if o >= end {
+                        break;
+                    }
+                    if pe <= cur {
                         continue;
                     }
                     if o > cur {
@@ -1851,6 +1858,9 @@ async fn file_pieces(cx: &Cx, vol: &Vol, icb: &Icb) -> Result<(Vec<Span>, Vec<Sp
     'chain: loop {
         let mut next = None;
         for raw in area.chunks_exact(size) {
+            // An AED holds up to max_read bytes of descriptors, and a virtual
+            // partition's extent maps block by block.
+            cx.checkpoint().await;
             let Some(ad) = parse_ad(raw, ad_type, icb.addr.part) else {
                 break;
             };
@@ -2051,6 +2061,7 @@ async fn directory(cx: Cx, e: Entry) -> Result<()> {
             fid: Some(fid),
             path: e.path.clone(),
         };
+        cx.progress(pos, span.len);
         if cx.skipping() {
             cx.push(Node::new("")).await;
             continue;

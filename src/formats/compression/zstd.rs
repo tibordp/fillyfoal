@@ -228,6 +228,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     while !cur.at_end() {
         let start = cur.pos();
+        cx.progress_in(file, cur.span(0).offset);
         let magic = cur.peek(4).await?;
         let Some(magic) = u32_le(&magic, 0) else {
             cx.emit(Node::new("Trailing data").span(file.tail(start)));
@@ -413,6 +414,7 @@ async fn blocks(cx: Cx, span: Span) -> Result<()> {
         if last {
             summary.push_str(", last");
         }
+        cx.progress_in(span, block_span.offset);
         cx.push(crate::formats::util::arcutil::check_len(
             Node::new(format!("Block {index}"))
                 .span(block_span)
@@ -540,6 +542,7 @@ async fn seek_table(cx: &Cx, data: Span) -> Result<()> {
                     .value(hex(c.into())),
             );
         }
+        cx.progress(i.into(), frames.into());
         cx.push(
             Node::new(format!("Entry {i}"))
                 .span(cur.since(start))

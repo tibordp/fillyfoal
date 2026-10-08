@@ -188,6 +188,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     ));
     while !cur.at_end() {
         let start = cur.pos();
+        cx.progress_in(file, cur.span(0).offset);
         let magic = cur.peek(4).await?;
         let Some(magic) = u32_le(&magic, 0) else {
             cx.emit(Node::new("Trailing data").span(file.tail(start)));
@@ -310,6 +311,7 @@ async fn legacy_frame(cx: Cx, span: Span) -> Result<()> {
         let data = cur.span(size.into());
         cur.skip(size.into());
         let block_span = cur.since(start);
+        cx.progress_in(span, block_span.offset);
         cx.push(check_len(
             Node::new(format!("Block {index}"))
                 .span(block_span)
@@ -391,6 +393,7 @@ async fn frame(cx: Cx, span: Span) -> Result<()> {
             );
         }
         let block_span = cur.since(start);
+        cx.progress_in(span, block_span.offset);
         cx.push(check_len(
             Node::new(format!("Block {index}"))
                 .span(block_span)
@@ -471,6 +474,7 @@ pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
         if kind <= 1 {
             data_chunks = data_chunks.saturating_add(1);
         }
+        cx.progress_in(file, span.offset);
         cx.push(node).await;
     }
     if !cur.at_end() {

@@ -258,6 +258,7 @@ pub async fn dissect_ace(cx: Cx, input: Input) -> Result<()> {
         if !block.crc_ok {
             node = node.diag(Diagnostic::warning("header CRC mismatch"));
         }
+        cx.progress_in(file, block.span.end());
         cx.push(node).await;
         if block.header_span.len <= 4 {
             break;
@@ -633,6 +634,7 @@ pub async fn dissect_arc(cx: Cx, input: Input) -> Result<()> {
         files = files.saturating_add(1);
         total = total.saturating_add(original);
         let m = crate::value::lookup(ARC_METHOD, method.into()).unwrap_or("unknown method");
+        cx.progress_in(file, span.end());
         cx.push(
             Node::new(name)
                 .span(span)

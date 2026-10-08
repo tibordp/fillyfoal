@@ -176,6 +176,8 @@ struct Volume {
     record: u64,
     /// The $MFT's own data runs (record → location).
     mft: Vec<Span>,
+    /// The MFT offset where each of `mft` ends, for binary search.
+    mft_ends: Vec<u64>,
 }
 
 type Vol = Arc<Volume>;
@@ -269,15 +271,16 @@ impl Volume {
 
     /// The span of MFT record `n`, located through the $MFT's runs.
     fn record_span(&self, n: u64) -> Option<Span> {
-        let mut want = n.checked_mul(self.record)?;
-        for piece in &self.mft {
-            if want < piece.len {
-                let span = piece.sub(want, self.record);
-                return (span.len == self.record).then_some(span);
-            }
-            want = want.saturating_sub(piece.len);
-        }
-        None
+        let want = n.checked_mul(self.record)?;
+        let i = self.mft_ends.partition_point(|&end| end <= want);
+        let piece = self.mft.get(i)?;
+        let start = i
+            .checked_sub(1)
+            .and_then(|j| self.mft_ends.get(j))
+            .copied()
+            .unwrap_or(0);
+        let span = piece.sub(want.saturating_sub(start), self.record);
+        (span.len == self.record).then_some(span)
     }
 
     /// The bytes of a non-resident attribute, as pieces (holes as zeros).
@@ -457,12 +460,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .collect();
         mft = crate::formats::disk::coalesce(mft, runs.1);
     }
+    let mft_ends = mft
+        .iter()
+        .scan(0u64, |end, p| {
+            *end = end.saturating_add(p.len);
+            Some(*end)
+        })
+        .collect();
     let fs: Vol = Arc::new(Volume {
         input,
         vol,
         cluster,
         record,
         mft,
+        mft_ends,
     });
     let mft_records = fs
         .mft
@@ -910,6 +921,7 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
         };
         let mut at = 0u64;
         while at < stream.len {
+            cx.progress(at, stream.len);
             let indx = stream.sub(at, block);
             at = at.saturating_add(block);
             if cx.read_avail(indx.sub(0, 4)).await? != b"INDX" {

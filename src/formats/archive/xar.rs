@@ -115,14 +115,16 @@ fn attribute(tag: &str, name: &str) -> Option<String> {
     Some(unescape(rest.get(..end)?))
 }
 
-/// A minimal scan of the TOC: elements, their nesting and leaf text.
-fn scan(xml: &str) -> Vec<Entry> {
+/// A minimal scan of the TOC: elements, their nesting and leaf text. The
+/// TOC is input-sized: yields once per tag.
+async fn scan(cx: &Cx, xml: &str) -> Vec<Entry> {
     let mut entries: Vec<Entry> = Vec::new();
     let mut open: Vec<usize> = Vec::new(); // indices of open <file> elements
     let mut path: Vec<String> = Vec::new(); // element names
     let mut rest = xml;
     let mut text_start: Option<&str> = None;
     while let Some(lt) = rest.find('<') {
+        cx.checkpoint().await;
         let before = rest.get(..lt).unwrap_or_default();
         let Some(gt) = rest.get(lt..).and_then(|r| r.find('>')) else {
             break;
@@ -215,7 +217,7 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
     }
     let xml = cx.read(decoded.span).await?;
     let xml = String::from_utf8_lossy(&xml);
-    let entries = scan(&xml);
+    let entries = scan(&cx, &xml).await;
     cx.set_count(Count::Exact(to_u64(entries.len())));
     cx.annotate(count(to_u64(entries.len()), "entry", "entries"));
     for (i, e) in entries.iter().enumerate() {

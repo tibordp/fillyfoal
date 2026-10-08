@@ -42,6 +42,10 @@ const BE: Endian = Endian::Big;
 const ENTRY: u64 = 112;
 const SIT5_MAGIC: u32 = 0xa5a5_a5a5;
 const MAX_ENTRIES: u64 = 1 << 20;
+/// Folder nesting a classic archive may have.
+const MAX_DEPTH: usize = 256;
+/// The longest StuffIt 5 folder path that children are named under.
+const MAX_PATH: usize = 4096;
 
 pub static FORMAT: Format = Format {
     name: "stuffit",
@@ -215,6 +219,12 @@ pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
             let closed = path.pop().unwrap_or_default();
             (format!("End of folder {closed}"), String::new())
         } else if e.rsrc_method == 32 || e.data_method == 32 {
+            // The path is cloned for every entry (and resume mark): keep
+            // its cost per entry bounded.
+            if path.len() >= MAX_DEPTH {
+                cx.diag(Diagnostic::limit("folders nested too deeply").at(header_span));
+                break;
+            }
             path.push(e.name.clone());
             (format!("{}/", path.join("/")), "folder".to_owned())
         } else {
@@ -242,6 +252,7 @@ pub async fn dissect_classic(cx: Cx, input: Input) -> Result<()> {
         if !e.crc_ok {
             node = node.diag(Diagnostic::warning("header CRC mismatch"));
         }
+        cx.progress_in(file, span.end());
         cx.push(node).await;
         at = at.saturating_add(span.len);
     }
@@ -517,7 +528,12 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(at, e.end().saturating_sub(at).max(e.header.len));
         let summary = if e.directory() {
             remaining = remaining.saturating_add(e.children.into());
-            dirs.insert(at, path.clone());
+            // Paths grow with nesting: past a bound, children are named on
+            // their own (a deep chain must not cost quadratic time and
+            // memory).
+            if path.len() <= MAX_PATH {
+                dirs.insert(at, path.clone());
+            }
             format!("folder, {}", count(e.children.into(), "entry", "entries"))
         } else {
             files = files.saturating_add(1);
@@ -548,6 +564,7 @@ pub async fn dissect_sit5(cx: Cx, input: Input) -> Result<()> {
             path
         };
         let next = e.end();
+        cx.progress_in(file, span.end());
         cx.push(
             Node::new(name)
                 .span(span)

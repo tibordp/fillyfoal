@@ -251,6 +251,7 @@ async fn list_files(cx: Cx, (input, area, erase): (Input, Span, u8)) -> Result<(
         }
         let file = area.sub(at, len);
         let kind = lookup(FILE_TYPES, h.kind.into()).unwrap_or("unknown type");
+        cx.progress_in(area, area.offset.saturating_add(at));
         cx.push(
             Node::new(h.name.to_string())
                 .span(file)

@@ -258,6 +258,7 @@ pub async fn biff(cx: &Cx, span: Span) -> Result<()> {
         if data_span.len < u64::from(len) {
             node = node.diag(Diagnostic::truncated(cur.since(start), data_span.len));
         }
+        cx.progress_in(span, cur.since(start).offset);
         cx.push(node.lazy(record_fields, (cur.since(start), 4u64)))
             .await;
     }
@@ -392,6 +393,7 @@ async fn ppt_level(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
             };
             node = node.lazy(record_fields, (whole, 8u64));
         }
+        cx.progress_in(span, whole.offset);
         cx.push(node).await;
     }
     Ok(())

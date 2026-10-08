@@ -36,6 +36,7 @@
 //! tail is shown raw. Only our synthetic fixtures (no Inno Setup compiler
 //! here) were checked.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
@@ -489,7 +490,8 @@ fn candidates(expected: usize) -> impl Iterator<Item = (usize, bool)> {
 
 /// Parses `n` entries of `kind` at `pos`, with the fixed-part size that
 /// lets the next record (`next`) parse after them.
-fn read_table(
+async fn read_table(
+    cx: &Cx,
     buf: &[u8],
     pos: usize,
     n: u32,
@@ -502,7 +504,11 @@ fn read_table(
         let mut entries = Vec::new();
         let mut p = pos;
         let mut ok = true;
-        for _ in 0..n {
+        for i in 0..n {
+            // `n` is bounded only by the (decoded) header's size.
+            if i.is_multiple_of(256) {
+                cx.checkpoint().await;
+            }
             match read_entry(buf, p, kind, unicode, tail) {
                 Some(e) => {
                     p = e.end;
@@ -744,6 +750,9 @@ struct Setup {
     /// The decoded location block.
     loc_span: Option<Span>,
     locations: Vec<Location>,
+    /// Per chunk (first slice, start offset): the end of its last file in
+    /// the decoded chunk, and how many locations it holds.
+    chunks: BTreeMap<(u32, u32), (u64, usize)>,
 }
 
 impl Setup {
@@ -784,7 +793,8 @@ impl Setup {
 }
 
 /// Parses the decoded header block (and the location block).
-fn parse(
+async fn parse(
+    cx: &Cx,
     ver: Version,
     unicode: bool,
     span: Span,
@@ -805,12 +815,21 @@ fn parse(
         stopped: None,
         loc_span: None,
         locations: Vec::new(),
+        chunks: BTreeMap::new(),
     };
     if let Some((span, data)) = loc {
         s.loc_span = Some(span);
         let mut at = 0usize;
+        let mut n = 0u32;
         while at.saturating_add(LOCATION) <= data.len() {
+            n = n.wrapping_add(1);
+            if n.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
             if let Some(l) = read_location(&data, at) {
+                let chunk = s.chunks.entry((l.first_slice, l.start)).or_insert((0, 0));
+                chunk.0 = chunk.0.max(l.sub.saturating_add(l.size));
+                chunk.1 = chunk.1.saturating_add(1);
                 s.locations.push(l);
             }
             at = at.saturating_add(LOCATION);
@@ -899,7 +918,7 @@ fn parse(
             .find(|(_, j)| s.counts.get(*j).copied().unwrap_or(0) > 0)
             .map(|(k, _)| *k)
             .or_else(|| (s.counts.get(ICON_COUNT).copied().unwrap_or(0) > 0).then_some(&ICONS));
-        match read_table(&buf, pos, n, kind, unicode, next) {
+        match read_table(cx, &buf, pos, n, kind, unicode, next).await {
             Some((t, end)) => {
                 s.tables.push(t);
                 pos = end;
@@ -1093,7 +1112,7 @@ async fn setup(cx: &Cx, l: &Layout, ver: Version, unicode: bool) -> Result<Arc<S
         },
         Err(_) => None,
     };
-    let s = Arc::new(parse(ver, unicode, header, data, loc));
+    let s = Arc::new(parse(cx, ver, unicode, header, data, loc).await);
     cx.cache(l.data, "inno setup", s.clone());
     Ok(s)
 }
@@ -1522,12 +1541,9 @@ struct ChunkInfo {
 
 fn chunk_info(s: &Setup, files: Span, loc: &Location) -> ChunkInfo {
     let total = s
-        .locations
-        .iter()
-        .filter(|o| o.first_slice == loc.first_slice && o.start == loc.start)
-        .map(|o| o.sub.saturating_add(o.size))
-        .max()
-        .unwrap_or(0);
+        .chunks
+        .get(&(loc.first_slice, loc.start))
+        .map_or(0, |&(end, _)| end);
     let span = files.sub(u64::from(loc.start).saturating_add(4), loc.packed);
     let (codec, why) = if loc.flags & ENCRYPTED != 0 {
         (None, "encrypted".to_owned())
@@ -1688,21 +1704,16 @@ async fn chunks(cx: Cx, (l, ver, unicode): (Layout, Version, bool)) -> Result<()
     let Some(files) = l.files else {
         return Ok(());
     };
-    let mut seen: Vec<(u32, u32)> = Vec::new();
+    let mut seen: BTreeSet<(u32, u32)> = BTreeSet::new();
     for loc in &s.locations {
+        cx.checkpoint().await;
         let key = (loc.first_slice, loc.start);
-        if seen.contains(&key) {
+        if !seen.insert(key) {
             continue;
         }
-        seen.push(key);
-        cx.checkpoint().await;
         let c = chunk_info(&s, files, loc);
         let whole = files.sub(loc.start.into(), loc.packed.saturating_add(4));
-        let n = s
-            .locations
-            .iter()
-            .filter(|o| (o.first_slice, o.start) == key)
-            .count();
+        let n = s.chunks.get(&key).map_or(0, |&(_, n)| n);
         cx.push(
             Node::new(format!("Chunk at {:#x}", loc.start))
                 .span(whole)
