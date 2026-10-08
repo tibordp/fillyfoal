@@ -47,13 +47,45 @@ pub enum Obj {
     Name(String),
     Ref(u32, u16),
     Array(Arc<Vec<Item>>),
-    Dict(Arc<Vec<Entry>>),
+    Dict(Arc<Dict>),
+}
+
+/// A dictionary's entries in file order, indexed by key (the first entry
+/// with a key wins), so lookups in large dictionaries stay cheap.
+#[derive(Clone, Debug, Default)]
+pub struct Dict {
+    entries: Vec<Entry>,
+    index: std::collections::BTreeMap<String, usize>,
+}
+
+impl Dict {
+    pub fn push(&mut self, entry: Entry) {
+        let at = self.entries.len();
+        self.index.entry(entry.key.clone()).or_insert(at);
+        self.entries.push(entry);
+    }
+
+    pub fn get(&self, key: &str) -> Option<&Entry> {
+        self.entries.get(*self.index.get(key)?)
+    }
+
+    /// The values, for changing them in place (the keys stay as they are).
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Item> {
+        self.entries.iter_mut().map(|e| &mut e.value)
+    }
+}
+
+impl std::ops::Deref for Dict {
+    type Target = [Entry];
+    fn deref(&self) -> &[Entry] {
+        &self.entries
+    }
 }
 
 impl Item {
     pub fn get(&self, key: &str) -> Option<&Item> {
         match &self.obj {
-            Obj::Dict(entries) => entries.iter().find(|e| e.key == key).map(|e| &e.value),
+            Obj::Dict(dict) => dict.get(key).map(|e| &e.value),
             _ => None,
         }
     }
@@ -502,7 +534,7 @@ impl<'c> Reader<'c> {
         enum Frame {
             Array(usize, Vec<Item>),
             /// The entries, and the key whose value comes next.
-            Dict(usize, Vec<Entry>, Option<(String, usize)>),
+            Dict(usize, Dict, Option<(String, usize)>),
         }
         let mut stack: Vec<Frame> = Vec::new();
         loop {
@@ -566,7 +598,7 @@ impl<'c> Reader<'c> {
                             return Err(self.malformed("dictionaries nested too deeply"));
                         }
                         self.pos = start.saturating_add(2);
-                        stack.push(Frame::Dict(start, Vec::new(), None));
+                        stack.push(Frame::Dict(start, Dict::default(), None));
                         continue;
                     }
                     b'<' => Obj::Str {

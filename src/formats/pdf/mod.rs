@@ -41,6 +41,8 @@ use crate::value::{Radix, Value};
 const MAX_DEPTH: usize = 48;
 /// Where `%PDF-` may start (some files have junk before it).
 const HEADER_WINDOW: u64 = 1024;
+/// Bytes of a string shown as its value.
+const MAX_SHOWN_TEXT: usize = 64 << 10;
 
 pub static FORMAT: Format = Format {
     name: "pdf",
@@ -150,16 +152,8 @@ fn decrypt_walk<'a>(
                 }
             }
             Obj::Dict(entries) => {
-                for e in Arc::make_mut(entries) {
-                    decrypt_walk(
-                        cx,
-                        security,
-                        key,
-                        &mut e.value,
-                        depth.saturating_add(1),
-                        visited,
-                    )
-                    .await;
+                for value in Arc::make_mut(entries).values_mut() {
+                    decrypt_walk(cx, security, key, value, depth.saturating_add(1), visited).await;
                 }
             }
             _ => {}
@@ -483,7 +477,16 @@ fn item_node(
         Obj::Real(v) => node.value(Value::Float(*v)),
         Obj::Name(n) => node.value(Value::Text(format!("/{n}"))),
         Obj::Str { bytes, hex } => {
-            let node = if syntax::is_text(bytes) {
+            // Only a prefix of a huge string is examined and shown, so the
+            // node costs a bounded amount of work.
+            let shown = bytes.get(..MAX_SHOWN_TEXT).unwrap_or(bytes);
+            let node = if shown.len() < bytes.len() && syntax::is_text(shown) {
+                node.value(Value::Text(format!("{}…", syntax::text(shown))))
+                    .summary(format!(
+                        "{} bytes, the first {MAX_SHOWN_TEXT} shown",
+                        bytes.len()
+                    ))
+            } else if syntax::is_text(bytes) {
                 node.value(Value::Text(syntax::text(bytes)))
             } else {
                 node.value(Value::Bytes(bytes.iter().take(64).copied().collect()))
