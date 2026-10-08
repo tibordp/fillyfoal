@@ -166,15 +166,21 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
     let table = |d: TableDesc| tables.sub(d.0.into(), u64::from(d.1).saturating_mul(d.2.into()));
     // Block devices and groups (small).
     let devices = cx.read(table(h.devices)).await?;
-    let device_names: Vec<String> = devices
-        .chunks(chunk_size(h.devices.2))
-        .map(|d| zstr(d.get(24..60).unwrap_or_default()))
-        .collect();
+    let mut device_names = Vec::new();
+    for (i, d) in devices.chunks(chunk_size(h.devices.2)).enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        device_names.push(zstr(d.get(24..60).unwrap_or_default()));
+    }
     let groups = cx.read(table(h.groups)).await?;
-    let group_names: Vec<String> = groups
-        .chunks(chunk_size(h.groups.2))
-        .map(|g| zstr(g.get(..36).unwrap_or_default()))
-        .collect();
+    let mut group_names = Vec::new();
+    for (i, g) in groups.chunks(chunk_size(h.groups.2)).enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        group_names.push(zstr(g.get(..36).unwrap_or_default()));
+    }
     cx.emit(
         Node::new("Block devices")
             .span(table(h.devices))
@@ -522,6 +528,7 @@ async fn mtk(cx: Cx, input: Input) -> Result<()> {
         let header = file.sub(at, 512);
         let data = file.sub(at.saturating_add(512), len);
         names.push(name.clone());
+        cx.progress_in(file, file.offset.saturating_add(at));
         cx.push(
             Node::new(name)
                 .span(file.sub(at, len.saturating_add(512)))
@@ -958,6 +965,7 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
         let c = counts.entry(tag).or_default();
         *c = c.saturating_add(1);
         n = n.saturating_add(1);
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
     }
     let strings = counts.get(&1).copied().unwrap_or(0);
@@ -986,6 +994,7 @@ async fn method_trace(cx: Cx, input: Input) -> Result<()> {
     let mut threads = 0u64;
     let mut binary = None;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         let t = line.text();
         if let Some(name) = t.strip_prefix('*') {
             if !section.is_empty() {
@@ -1212,6 +1221,7 @@ async fn logcat(cx: Cx, input: Input) -> Result<()> {
         };
         let c = buffers.entry(lid).or_default();
         *c = c.saturating_add(1);
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(
             node.span(cur.since(start))
                 .lazy(logcat_entry, (cur.since(start), hdr)),

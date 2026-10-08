@@ -282,6 +282,8 @@ async fn strings(cx: Cx, (file, l): (Span, Layout)) -> Result<()> {
     let table_span = file.sub_exact(l.table_at(), l.table)?;
     let table = cx.read(table_span).await?;
     for i in 0..to_usize(l.strs) {
+        // Each value is a scan of up to the whole table.
+        cx.checkpoint().await;
         let Some(off) = crate::bytes::i16_le(&offsets, i.saturating_mul(2)) else {
             break;
         };
@@ -336,6 +338,8 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
     // String values come first in the table; names follow them.
     let mut values_end = 0usize;
     for i in 0..strs {
+        // Each lookup below is a scan of up to the whole table.
+        cx.checkpoint().await;
         if let Some(Ok(o)) = get_off(i).map(usize::try_from) {
             values_end = values_end.max(o.saturating_add(text_at(o).len()).saturating_add(1));
         }
@@ -349,6 +353,7 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
         }
     };
     for i in 0..bools {
+        cx.checkpoint().await;
         if bool_data.get(to_usize(i)) == Some(&1) {
             cx.emit(
                 Node::new(name_of(i))
@@ -358,6 +363,7 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
         }
     }
     for i in 0..nums {
+        cx.checkpoint().await;
         if let Some(v) = number(&num_data, wide, to_usize(i))
             && v >= 0
         {
@@ -372,6 +378,7 @@ async fn extended(cx: Cx, (span, wide): (Span, bool)) -> Result<()> {
         }
     }
     for i in 0..strs {
+        cx.checkpoint().await;
         let name = name_of(bools.saturating_add(nums).saturating_add(i));
         match get_off(i).map(usize::try_from) {
             Some(Ok(o)) => {

@@ -444,8 +444,17 @@ pub async fn dissect_uimage(cx: Cx, input: Input) -> Result<()> {
         human_size(h.size.into())
     ));
     if data.len <= cx.limits().max_read && data.len == u64::from(h.size) {
-        let bytes = cx.read(data).await?;
-        let computed = crc32(&bytes);
+        // Checked a chunk per read, so each step stays bounded.
+        const CHUNK: u64 = 1 << 20;
+        let mut crc = u32::MAX;
+        let mut done = 0u64;
+        while done < data.len {
+            let n = data.len.saturating_sub(done).min(CHUNK);
+            let bytes = cx.read(data.sub(done, n)).await?;
+            crc = crate::codec::crc::crc32_update(crc, &bytes);
+            done = done.saturating_add(n);
+        }
+        let computed = !crc;
         if computed != h.data_crc {
             node = node.diag(Diagnostic::warning(format!(
                 "data CRC mismatch: computed {computed:#010x}"

@@ -265,6 +265,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if kind == 0xf1 {
             break;
         }
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.checkpoint().await;
     }
     cx.annotate(format!(

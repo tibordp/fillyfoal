@@ -484,6 +484,9 @@ async fn plan9_symbols(cx: Cx, (table, wide): (Span, bool)) -> Result<()> {
                 if i == 0 {
                     break;
                 }
+                if parts.len().is_multiple_of(4096) {
+                    cx.checkpoint().await;
+                }
                 parts.push(i.to_string());
             }
             format!("path [{}]", parts.join(" "))
@@ -509,6 +512,7 @@ async fn plan9_symbols(cx: Cx, (table, wide): (Span, bool)) -> Result<()> {
             b'm' => "frame size",
             _ => "symbol",
         };
+        cx.progress_in(table, table.offset.saturating_add(to_u64(pos)));
         cx.push(
             Node::new(name)
                 .span(table.sub(to_u64(start), to_u64(pos.saturating_sub(start))))

@@ -70,26 +70,32 @@ async fn atoms(cx: &Cx, m: &Module) -> Vec<String> {
     let Ok(data) = cx.read(c.data.sub(0, 4 << 20)).await else {
         return Vec::new();
     };
-    parse_atoms(&data, &c.id == b"AtU8").unwrap_or_default()
+    parse_atoms(cx, &data, &c.id == b"AtU8")
+        .await
+        .unwrap_or_default()
 }
 
 /// `(atoms, byte ranges)`; a negative count (OTP 28) means lengths use the
 /// compact term encoding.
-fn parse_atoms(data: &[u8], utf8: bool) -> Option<Vec<String>> {
+async fn parse_atoms(cx: &Cx, data: &[u8], utf8: bool) -> Option<Vec<String>> {
     Some(
-        atom_entries(data, utf8)?
+        atom_entries(cx, data, utf8)
+            .await?
             .into_iter()
             .map(|(s, _, _)| s)
             .collect(),
     )
 }
 
-fn atom_entries(data: &[u8], utf8: bool) -> Option<Vec<(String, usize, usize)>> {
+async fn atom_entries(cx: &Cx, data: &[u8], utf8: bool) -> Option<Vec<(String, usize, usize)>> {
     let mut r = Reader::new(data);
     let count = r.int::<i32>(BE)?;
     let compact = count < 0;
     let mut out = vec![("".to_owned(), 0, 0)];
-    for _ in 0..count.unsigned_abs().min(1 << 20) {
+    for i in 0..count.unsigned_abs().min(1 << 20) {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let start = r.pos();
         let len = if compact {
             let b = r.u8()?;
@@ -183,7 +189,8 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
     match &c.id {
         b"AtU8" | b"Atom" => {
             let data = cx.read(c.data.sub(0, 4 << 20)).await?;
-            let entries = atom_entries(&data, &c.id == b"AtU8")
+            let entries = atom_entries(&cx, &data, &c.id == b"AtU8")
+                .await
                 .ok_or_else(|| Diagnostic::malformed("bad atom table").at(c.data))?;
             for (i, (s, start, end)) in entries.into_iter().enumerate().skip(1) {
                 cx.push(

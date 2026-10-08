@@ -135,7 +135,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         )?;
         if seen == 1 {
             let table = cx.read(entries).await?;
-            for e in table.as_chunks::<12>().0 {
+            for (i, e) in table.as_chunks::<12>().0.iter().enumerate() {
+                if i.is_multiple_of(256) {
+                    cx.checkpoint().await;
+                }
                 let key = u32_le(e, 0).unwrap_or(0);
                 let off = u32_le(e, 4).unwrap_or(0);
                 match key {

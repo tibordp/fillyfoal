@@ -384,6 +384,7 @@ async fn entries(cx: Cx, span: Span) -> Result<()> {
         if count == 0 {
             break;
         }
+        cx.checkpoint().await;
         let indicator = data.get(at.saturating_add(1)).copied().unwrap_or(0);
         at = at.saturating_add(2);
         for _ in 0..count {

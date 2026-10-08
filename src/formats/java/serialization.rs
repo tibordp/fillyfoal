@@ -83,7 +83,11 @@ enum Handle {
 
 type Step<T> = std::result::Result<T, Diagnostic>;
 
+type StepFuture<'f, T> = std::pin::Pin<Box<dyn std::future::Future<Output = Step<T>> + Send + 'f>>;
+
 struct Parser<'a> {
+    /// For yielding while decoding (none when measuring a stream).
+    cx: Option<&'a Cx>,
     r: Reader<'a>,
     file: Span,
     tree: Tree,
@@ -194,11 +198,14 @@ impl Parser<'_> {
     }
 
     /// One `content` item: an object or block data.
-    fn content(&mut self, parent: usize, label: &str, depth: u32) -> Step<Option<u32>> {
+    async fn content(&mut self, parent: usize, label: &str, depth: u32) -> Step<Option<u32>> {
+        if let Some(cx) = self.cx {
+            cx.checkpoint().await;
+        }
         let start = self.r.pos();
         let tc = self.peek()?;
         if tc != TC_BLOCKDATA && tc != TC_BLOCKDATALONG {
-            return self.object(parent, label, depth);
+            return self.object(parent, label, depth).await;
         }
         self.u8()?;
         let len = if tc == TC_BLOCKDATA {
@@ -218,13 +225,14 @@ impl Parser<'_> {
     }
 
     /// Contents up to and including `TC_ENDBLOCKDATA`.
-    fn annotation(&mut self, parent: usize, depth: u32) -> Step<()> {
+    async fn annotation(&mut self, parent: usize, depth: u32) -> Step<()> {
         loop {
             if self.peek()? == TC_ENDBLOCKDATA {
                 self.u8()?;
                 return Ok(());
             }
-            self.content(parent, "annotation", depth.saturating_add(1))?;
+            self.content(parent, "annotation", depth.saturating_add(1))
+                .await?;
         }
     }
 
@@ -236,115 +244,128 @@ impl Parser<'_> {
     }
 
     /// A class descriptor (or null or a reference to one).
-    fn class_desc(&mut self, parent: usize, label: &str, depth: u32) -> Step<Option<u32>> {
-        if depth > MAX_DEPTH {
-            return Err(Diagnostic::limit("class descriptors nested too deeply"));
-        }
-        let start = self.r.pos();
-        match self.u8()? {
-            TC_NULL => {
-                self.leaf(parent, label, start, text("null"));
-                Ok(None)
+    fn class_desc<'f>(
+        &'f mut self,
+        parent: usize,
+        label: &'f str,
+        depth: u32,
+    ) -> StepFuture<'f, Option<u32>> {
+        Box::pin(async move {
+            if let Some(cx) = self.cx {
+                cx.checkpoint().await;
             }
-            TC_REFERENCE => {
-                let h = self.int::<u32>()?;
-                let desc = self.describe(h);
-                self.leaf(parent, label, start, text(format!("→ {desc}")));
-                Ok(Some(h))
+            if depth > MAX_DEPTH {
+                return Err(Diagnostic::limit("class descriptors nested too deeply"));
             }
-            TC_CLASSDESC => {
-                let name = self.utf(false)?;
-                let uid = self.int::<i64>()?;
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let handle = self.new_handle(Handle::Class(ClassDesc {
-                    name: name.clone(),
-                    ..ClassDesc::default()
-                }));
-                let flags = self.u8()?;
-                let count = self.int::<u16>()?;
-                let mut fields = Vec::new();
-                for _ in 0..count {
-                    let at = self.r.pos();
-                    let code = self.u8()?;
-                    let field = self.utf(false)?;
-                    let mut kind = type_name(code).to_owned();
-                    if code == b'L' || code == b'[' {
-                        // The field's type is a string object (or a reference).
-                        let tc = self.peek()?;
-                        let h = if tc == TC_STRING || tc == TC_LONGSTRING || tc == TC_REFERENCE {
-                            self.object_quiet(depth)?
-                        } else {
-                            return Err(self.fail("field type"));
-                        };
-                        if let Some(Handle::Text(s)) = h.and_then(|h| self.handle(h)) {
-                            kind = s.clone();
-                        }
-                    }
-                    self.leaf(node, &field, at, text(kind));
-                    fields.push(Field { code, name: field });
+            let start = self.r.pos();
+            match self.u8()? {
+                TC_NULL => {
+                    self.leaf(parent, label, start, text("null"));
+                    Ok(None)
                 }
-                self.annotation(node, depth)?;
-                let parent_desc =
-                    self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
-                let (set, _) = decode_flags(CLASS_FLAGS, flags.into());
-                self.set_handle(
-                    handle,
-                    Handle::Class(ClassDesc {
-                        name: name.clone(),
-                        flags,
-                        fields,
-                        parent: parent_desc,
-                    }),
-                );
-                let span = self.span(start);
-                self.tree.update(node, |n| {
-                    n.span(span).value(text(name)).summary(format!(
-                        "serialVersionUID {uid:#x}, {count} fields, {}",
-                        set.join(" ")
-                    ))
-                });
-                Ok(Some(handle))
-            }
-            TC_PROXYCLASSDESC => {
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let handle = self.new_handle(Handle::Class(ClassDesc {
-                    name: "proxy".to_owned(),
-                    flags: SC_SERIALIZABLE,
-                    ..ClassDesc::default()
-                }));
-                let count = self.int::<u32>()?;
-                let mut names = Vec::new();
-                for _ in 0..count {
-                    let at = self.r.pos();
+                TC_REFERENCE => {
+                    let h = self.int::<u32>()?;
+                    let desc = self.describe(h);
+                    self.leaf(parent, label, start, text(format!("→ {desc}")));
+                    Ok(Some(h))
+                }
+                TC_CLASSDESC => {
                     let name = self.utf(false)?;
-                    self.leaf(node, "interface", at, text(name.clone()));
-                    names.push(name);
+                    let uid = self.int::<i64>()?;
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let handle = self.new_handle(Handle::Class(ClassDesc {
+                        name: name.clone(),
+                        ..ClassDesc::default()
+                    }));
+                    let flags = self.u8()?;
+                    let count = self.int::<u16>()?;
+                    let mut fields = Vec::new();
+                    for _ in 0..count {
+                        let at = self.r.pos();
+                        let code = self.u8()?;
+                        let field = self.utf(false)?;
+                        let mut kind = type_name(code).to_owned();
+                        if code == b'L' || code == b'[' {
+                            // The field's type is a string object (or a reference).
+                            let tc = self.peek()?;
+                            let h = if tc == TC_STRING || tc == TC_LONGSTRING || tc == TC_REFERENCE
+                            {
+                                self.object_quiet(depth)?
+                            } else {
+                                return Err(self.fail("field type"));
+                            };
+                            if let Some(Handle::Text(s)) = h.and_then(|h| self.handle(h)) {
+                                kind = s.clone();
+                            }
+                        }
+                        self.leaf(node, &field, at, text(kind));
+                        fields.push(Field { code, name: field });
+                    }
+                    self.annotation(node, depth).await?;
+                    let parent_desc = self
+                        .class_desc(node, "superClassDesc", depth.saturating_add(1))
+                        .await?;
+                    let (set, _) = decode_flags(CLASS_FLAGS, flags.into());
+                    self.set_handle(
+                        handle,
+                        Handle::Class(ClassDesc {
+                            name: name.clone(),
+                            flags,
+                            fields,
+                            parent: parent_desc,
+                        }),
+                    );
+                    let span = self.span(start);
+                    self.tree.update(node, |n| {
+                        n.span(span).value(text(name)).summary(format!(
+                            "serialVersionUID {uid:#x}, {count} fields, {}",
+                            set.join(" ")
+                        ))
+                    });
+                    Ok(Some(handle))
                 }
-                self.annotation(node, depth)?;
-                let parent_desc =
-                    self.class_desc(node, "superClassDesc", depth.saturating_add(1))?;
-                self.set_handle(
-                    handle,
-                    Handle::Class(ClassDesc {
+                TC_PROXYCLASSDESC => {
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let handle = self.new_handle(Handle::Class(ClassDesc {
                         name: "proxy".to_owned(),
                         flags: SC_SERIALIZABLE,
-                        fields: Vec::new(),
-                        parent: parent_desc,
-                    }),
-                );
-                let span = self.span(start);
-                self.tree.update(node, |n| {
-                    n.span(span)
-                        .value(text("proxy"))
-                        .summary(ellipsize(&names.join(", "), 120))
-                });
-                Ok(Some(handle))
+                        ..ClassDesc::default()
+                    }));
+                    let count = self.int::<u32>()?;
+                    let mut names = Vec::new();
+                    for _ in 0..count {
+                        let at = self.r.pos();
+                        let name = self.utf(false)?;
+                        self.leaf(node, "interface", at, text(name.clone()));
+                        names.push(name);
+                    }
+                    self.annotation(node, depth).await?;
+                    let parent_desc = self
+                        .class_desc(node, "superClassDesc", depth.saturating_add(1))
+                        .await?;
+                    self.set_handle(
+                        handle,
+                        Handle::Class(ClassDesc {
+                            name: "proxy".to_owned(),
+                            flags: SC_SERIALIZABLE,
+                            fields: Vec::new(),
+                            parent: parent_desc,
+                        }),
+                    );
+                    let span = self.span(start);
+                    self.tree.update(node, |n| {
+                        n.span(span)
+                            .value(text("proxy"))
+                            .summary(ellipsize(&names.join(", "), 120))
+                    });
+                    Ok(Some(handle))
+                }
+                tc => Err(Diagnostic::malformed(format!(
+                    "expected a class descriptor, found {tc:#04x}"
+                ))
+                .at(self.file.sub(to_u64(start), 1))),
             }
-            tc => Err(Diagnostic::malformed(format!(
-                "expected a class descriptor, found {tc:#04x}"
-            ))
-            .at(self.file.sub(to_u64(start), 1))),
-        }
+        })
     }
 
     /// Reads a string or reference without adding a node.
@@ -410,157 +431,169 @@ impl Parser<'_> {
         Ok(())
     }
 
-    fn object(&mut self, parent: usize, label: &str, depth: u32) -> Step<Option<u32>> {
-        if depth > MAX_DEPTH {
-            return Err(Diagnostic::limit("objects nested too deeply")
-                .at(self.file.sub(to_u64(self.r.pos()), 1)));
-        }
-        let start = self.r.pos();
-        let tc = self.peek()?;
-        match tc {
-            TC_CLASSDESC | TC_PROXYCLASSDESC => return self.class_desc(parent, label, depth),
-            _ => {
-                self.u8()?;
+    fn object<'f>(
+        &'f mut self,
+        parent: usize,
+        label: &'f str,
+        depth: u32,
+    ) -> StepFuture<'f, Option<u32>> {
+        Box::pin(async move {
+            if let Some(cx) = self.cx {
+                cx.checkpoint().await;
             }
-        }
-        let deeper = depth.saturating_add(1);
-        match tc {
-            TC_NULL => {
-                self.leaf(parent, label, start, text("null"));
-                Ok(None)
+            if depth > MAX_DEPTH {
+                return Err(Diagnostic::limit("objects nested too deeply")
+                    .at(self.file.sub(to_u64(self.r.pos()), 1)));
             }
-            TC_REFERENCE => {
-                let h = self.int::<u32>()?;
-                let desc = self.describe(h);
-                self.leaf(parent, label, start, text(format!("→ {desc}")));
-                Ok(Some(h))
-            }
-            TC_STRING | TC_LONGSTRING => {
-                let s = self.utf(tc == TC_LONGSTRING)?;
-                let h = self.new_handle(Handle::Text(s.clone()));
-                self.leaf(parent, label, start, text(s));
-                Ok(Some(h))
-            }
-            TC_RESET => {
-                self.handles.clear();
-                self.leaf(parent, label, start, text("reset"));
-                Ok(None)
-            }
-            TC_EXCEPTION => {
-                self.handles.clear();
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let h = self.object(node, "exception", deeper)?;
-                self.handles.clear();
-                let span = self.span(start);
-                self.tree
-                    .update(node, |n| n.span(span).value(text("exception")));
-                Ok(h)
-            }
-            TC_CLASS => {
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let desc = self.class_desc(node, "classDesc", deeper)?;
-                let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
-                let h = self.new_handle(Handle::Object("java.lang.Class".to_owned()));
-                let span = self.span(start);
-                self.tree
-                    .update(node, |n| n.span(span).value(text(format!("class {name}"))));
-                Ok(Some(h))
-            }
-            TC_ENUM => {
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let desc = self.class_desc(node, "classDesc", deeper)?;
-                let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
-                let h = self.new_handle(Handle::Object(name.clone()));
-                let constant = self.object(node, "constant", deeper)?;
-                let constant = match constant.and_then(|c| self.handle(c)) {
-                    Some(Handle::Text(s)) => s.clone(),
-                    _ => "?".to_owned(),
-                };
-                let span = self.span(start);
-                self.tree.update(node, |n| {
-                    n.span(span).value(text(format!("{name}.{constant}")))
-                });
-                Ok(Some(h))
-            }
-            TC_ARRAY => {
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let desc = self.class_desc(node, "classDesc", deeper)?;
-                let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
-                let h = self.new_handle(Handle::Object(name.clone()));
-                let size = self.int::<i32>()?;
-                let size = u64::try_from(size).map_err(|_| self.fail("array size"))?;
-                let code = name.as_bytes().get(1).copied().unwrap_or(b'L');
-                if let Some(width) = element_size(code) {
-                    let at = self.r.pos();
-                    let bytes = self.bytes(size.saturating_mul(to_u64(width)), "array")?;
-                    let preview = bytes.get(..64).unwrap_or(bytes).to_vec();
-                    let node_span = self.span(at);
-                    self.tree.add(
-                        Some(node),
-                        Node::new("elements")
-                            .span(node_span)
-                            .value(Value::Bytes(preview))
-                            .summary(format!("{size} × {}", type_name(code))),
-                    );
-                } else {
-                    for i in 0..size {
-                        self.object(node, &format!("[{i}]"), deeper)?;
-                    }
+            let start = self.r.pos();
+            let tc = self.peek()?;
+            match tc {
+                TC_CLASSDESC | TC_PROXYCLASSDESC => {
+                    return self.class_desc(parent, label, depth).await;
                 }
-                let span = self.span(start);
-                self.tree.update(node, |n| {
-                    n.span(span)
-                        .value(text(name))
-                        .summary(format!("{size} elements"))
-                });
-                Ok(Some(h))
+                _ => {
+                    self.u8()?;
+                }
             }
-            TC_OBJECT => {
-                let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
-                let desc = self.class_desc(node, "classDesc", deeper)?;
-                let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
-                let h = self.new_handle(Handle::Object(name.clone()));
-                for class in self.hierarchy(desc) {
-                    let data = self
-                        .tree
-                        .add(Some(node), Node::new(format!("{} data", class.name)));
-                    let at = self.r.pos();
-                    if class.flags & SC_SERIALIZABLE != 0 {
-                        for field in &class.fields {
-                            if field.code == b'L' || field.code == b'[' {
-                                self.object(data, &field.name, deeper)?;
-                            } else {
-                                self.primitive(data, &field.name, field.code)?;
+            let deeper = depth.saturating_add(1);
+            match tc {
+                TC_NULL => {
+                    self.leaf(parent, label, start, text("null"));
+                    Ok(None)
+                }
+                TC_REFERENCE => {
+                    let h = self.int::<u32>()?;
+                    let desc = self.describe(h);
+                    self.leaf(parent, label, start, text(format!("→ {desc}")));
+                    Ok(Some(h))
+                }
+                TC_STRING | TC_LONGSTRING => {
+                    let s = self.utf(tc == TC_LONGSTRING)?;
+                    let h = self.new_handle(Handle::Text(s.clone()));
+                    self.leaf(parent, label, start, text(s));
+                    Ok(Some(h))
+                }
+                TC_RESET => {
+                    self.handles.clear();
+                    self.leaf(parent, label, start, text("reset"));
+                    Ok(None)
+                }
+                TC_EXCEPTION => {
+                    self.handles.clear();
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let h = self.object(node, "exception", deeper).await?;
+                    self.handles.clear();
+                    let span = self.span(start);
+                    self.tree
+                        .update(node, |n| n.span(span).value(text("exception")));
+                    Ok(h)
+                }
+                TC_CLASS => {
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let desc = self.class_desc(node, "classDesc", deeper).await?;
+                    let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
+                    let h = self.new_handle(Handle::Object("java.lang.Class".to_owned()));
+                    let span = self.span(start);
+                    self.tree
+                        .update(node, |n| n.span(span).value(text(format!("class {name}"))));
+                    Ok(Some(h))
+                }
+                TC_ENUM => {
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let desc = self.class_desc(node, "classDesc", deeper).await?;
+                    let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
+                    let h = self.new_handle(Handle::Object(name.clone()));
+                    let constant = self.object(node, "constant", deeper).await?;
+                    let constant = match constant.and_then(|c| self.handle(c)) {
+                        Some(Handle::Text(s)) => s.clone(),
+                        _ => "?".to_owned(),
+                    };
+                    let span = self.span(start);
+                    self.tree.update(node, |n| {
+                        n.span(span).value(text(format!("{name}.{constant}")))
+                    });
+                    Ok(Some(h))
+                }
+                TC_ARRAY => {
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let desc = self.class_desc(node, "classDesc", deeper).await?;
+                    let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
+                    let h = self.new_handle(Handle::Object(name.clone()));
+                    let size = self.int::<i32>()?;
+                    let size = u64::try_from(size).map_err(|_| self.fail("array size"))?;
+                    let code = name.as_bytes().get(1).copied().unwrap_or(b'L');
+                    if let Some(width) = element_size(code) {
+                        let at = self.r.pos();
+                        let bytes = self.bytes(size.saturating_mul(to_u64(width)), "array")?;
+                        let preview = bytes.get(..64).unwrap_or(bytes).to_vec();
+                        let node_span = self.span(at);
+                        self.tree.add(
+                            Some(node),
+                            Node::new("elements")
+                                .span(node_span)
+                                .value(Value::Bytes(preview))
+                                .summary(format!("{size} × {}", type_name(code))),
+                        );
+                    } else {
+                        for i in 0..size {
+                            self.object(node, &format!("[{i}]"), deeper).await?;
+                        }
+                    }
+                    let span = self.span(start);
+                    self.tree.update(node, |n| {
+                        n.span(span)
+                            .value(text(name))
+                            .summary(format!("{size} elements"))
+                    });
+                    Ok(Some(h))
+                }
+                TC_OBJECT => {
+                    let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
+                    let desc = self.class_desc(node, "classDesc", deeper).await?;
+                    let name = self.class(desc).map(|c| c.name.clone()).unwrap_or_default();
+                    let h = self.new_handle(Handle::Object(name.clone()));
+                    for class in self.hierarchy(desc) {
+                        let data = self
+                            .tree
+                            .add(Some(node), Node::new(format!("{} data", class.name)));
+                        let at = self.r.pos();
+                        if class.flags & SC_SERIALIZABLE != 0 {
+                            for field in &class.fields {
+                                if field.code == b'L' || field.code == b'[' {
+                                    self.object(data, &field.name, deeper).await?;
+                                } else {
+                                    self.primitive(data, &field.name, field.code)?;
+                                }
                             }
+                            if class.flags & SC_WRITE_METHOD != 0 {
+                                self.annotation(data, deeper).await?;
+                            }
+                        } else if class.flags & SC_EXTERNALIZABLE != 0 {
+                            if class.flags & SC_BLOCK_DATA == 0 {
+                                return Err(Diagnostic::unsupported(
+                                    "externalizable data in protocol version 1",
+                                )
+                                .at(self.file.sub(to_u64(at), 1)));
+                            }
+                            self.annotation(data, deeper).await?;
                         }
-                        if class.flags & SC_WRITE_METHOD != 0 {
-                            self.annotation(data, deeper)?;
-                        }
-                    } else if class.flags & SC_EXTERNALIZABLE != 0 {
-                        if class.flags & SC_BLOCK_DATA == 0 {
-                            return Err(Diagnostic::unsupported(
-                                "externalizable data in protocol version 1",
-                            )
-                            .at(self.file.sub(to_u64(at), 1)));
-                        }
-                        self.annotation(data, deeper)?;
+                        let span = self.span(at);
+                        self.tree.update(data, |n| n.span(span));
                     }
-                    let span = self.span(at);
-                    self.tree.update(data, |n| n.span(span));
+                    let span = self.span(start);
+                    self.tree
+                        .update(node, |n| n.span(span).value(text(name.clone())));
+                    if depth == 0 {
+                        self.top.push(name);
+                    }
+                    Ok(Some(h))
                 }
-                let span = self.span(start);
-                self.tree
-                    .update(node, |n| n.span(span).value(text(name.clone())));
-                if depth == 0 {
-                    self.top.push(name);
-                }
-                Ok(Some(h))
+                other => Err(
+                    Diagnostic::malformed(format!("unexpected type code {other:#04x}"))
+                        .at(self.file.sub(to_u64(start), 1)),
+                ),
             }
-            other => Err(
-                Diagnostic::malformed(format!("unexpected type code {other:#04x}"))
-                    .at(self.file.sub(to_u64(start), 1)),
-            ),
-        }
+        })
     }
 }
 
@@ -573,6 +606,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let data = cx.read_avail(file.sub(0, MAX_STREAM)).await?;
     let mut p = Parser {
+        cx: Some(&cx),
         r: Reader::new(&data),
         file,
         tree: Tree::default(),
@@ -592,7 +626,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut items = 0u32;
     while !p.r.at_end() {
         let at = p.r.pos();
-        if let Err(e) = p.content(root, "content", 0) {
+        if let Err(e) = p.content(root, "content", 0).await {
             p.tree.add(
                 Some(root),
                 Node::new("Undecoded").span(file.tail(to_u64(at))).diag(e),
@@ -618,6 +652,7 @@ pub fn stream_len(data: &[u8]) -> Option<usize> {
         return None;
     }
     let mut p = Parser {
+        cx: None,
         r: Reader::at(data, 4),
         file: Span::new(crate::span::SourceId(0), 0, to_u64(data.len())),
         tree: Tree::default(),
@@ -625,6 +660,17 @@ pub fn stream_len(data: &[u8]) -> Option<usize> {
         top: Vec::new(),
     };
     let root = p.tree.add(None, Node::new("stream"));
-    p.content(root, "content", 0).ok()?;
+    // Without a `Cx` the decoder never suspends: one poll completes it.
+    let done = {
+        let mut fut = std::pin::pin!(p.content(root, "content", 0));
+        let mut ctx = std::task::Context::from_waker(std::task::Waker::noop());
+        std::future::Future::poll(fut.as_mut(), &mut ctx)
+    };
+    match done {
+        std::task::Poll::Ready(r) => {
+            r.ok()?;
+        }
+        std::task::Poll::Pending => return None,
+    }
     Some(p.r.pos())
 }

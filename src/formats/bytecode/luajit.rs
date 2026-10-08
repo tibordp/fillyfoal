@@ -90,6 +90,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut total = 0usize;
     let mut scan = Reader::at(&data, r.pos());
     while let Some(size) = scan.uleb() {
+        if total.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         if size == 0
             || scan
                 .bytes(usize::try_from(size).unwrap_or(usize::MAX))

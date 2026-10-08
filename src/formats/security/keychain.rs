@@ -372,7 +372,13 @@ async fn schema(cx: &Cx, file: Span, h: &Header) -> Result<Arc<Schema>> {
             _ => continue,
         };
         let (_, slots) = table_records(cx, table).await?;
-        for off in slots.into_iter().filter(|&o| live(o)) {
+        for (n, off) in slots.into_iter().enumerate() {
+            if n.is_multiple_of(256) {
+                cx.checkpoint().await;
+            }
+            if !live(off) {
+                continue;
+            }
             let Ok(rec) = record_span(cx, table, off).await else {
                 continue;
             };

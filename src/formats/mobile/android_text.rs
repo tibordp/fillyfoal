@@ -59,6 +59,7 @@ async fn build_prop(cx: Cx, input: Input) -> Result<()> {
         })
     };
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         let t = line.text();
         let trimmed = t.trim();
         if let Some(name) = trimmed.strip_prefix("# begin ") {
@@ -160,6 +161,7 @@ async fn tombstone(cx: Cx, input: Input) -> Result<()> {
             .await;
         }
         let Some(line) = line else { break };
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         if starts {
             section = Some((line.start, t.trim().trim_end_matches(':').to_owned(), 0));
             continue;
@@ -214,6 +216,7 @@ async fn anr(cx: Cx, input: Input) -> Result<()> {
     let mut processes = 0u64;
     let mut first = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         let t = line.text();
         if let Some(rest) = t.strip_prefix("----- pid ") {
             let pid = rest.split(' ').next().unwrap_or_default().to_owned();

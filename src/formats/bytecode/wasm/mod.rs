@@ -8,6 +8,7 @@
 
 mod ops;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::to_u64;
@@ -279,7 +280,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary);
     cx.set_count(Count::Exact(to_u64(m.sections.len()).saturating_add(1)));
     for (index, s) in m.sections.iter().enumerate() {
-        let label = match m.custom_names.iter().find(|(i, _)| *i == index) {
+        // `custom_names` is in section order.
+        let custom = m
+            .custom_names
+            .binary_search_by_key(&index, |(i, _)| *i)
+            .ok()
+            .and_then(|k| m.custom_names.get(k));
+        let label = match custom {
             Some((_, n)) => format!("Custom \"{n}\""),
             None => name_or(SECTION, s.id.into(), "Section"),
         };
@@ -730,11 +737,15 @@ fn element(b: &mut Body<'_>, i: u64) -> Option<(String, Value, String)> {
     let n = b.r.uleb()?;
     let mut items = Vec::new();
     for _ in 0..n {
-        items.push(if expressions {
+        let item = if expressions {
             const_expr(&mut b.r)?
         } else {
             format!("func {}", b.r.uleb()?)
-        });
+        };
+        // 128 items join to more than the 120 characters shown.
+        if items.len() < 128 {
+            items.push(item);
+        }
     }
     Some((
         format!("segment {i}"),
@@ -746,16 +757,18 @@ fn element(b: &mut Body<'_>, i: u64) -> Option<(String, Value, String)> {
 // ---------------------------------------------------------------------------
 // Code
 
-async fn function_names(cx: &Cx, m: &ModuleInfo) -> Vec<(u64, String)> {
+/// Function names by index (the first name given for an index wins).
+async fn function_names(cx: &Cx, m: &ModuleInfo) -> BTreeMap<u64, String> {
     let Some(s) = m.custom("name") else {
-        return Vec::new();
+        return BTreeMap::new();
     };
     let Ok(data) = cx.read(s.body.sub(0, MAX_SECTION)).await else {
-        return Vec::new();
+        return BTreeMap::new();
     };
     let mut r = Reader::new(&data);
     let _ = name(&mut r);
     while !r.at_end() {
+        cx.checkpoint().await;
         let Some(id) = r.u8() else { break };
         let Some(size) = r.uleb() else { break };
         let Some(sub) = r.bytes(usize::try_from(size).unwrap_or(usize::MAX)) else {
@@ -764,17 +777,20 @@ async fn function_names(cx: &Cx, m: &ModuleInfo) -> Vec<(u64, String)> {
         if id == 1 {
             let mut s = Reader::new(sub);
             let n = s.uleb().unwrap_or(0);
-            let mut out = Vec::new();
-            for _ in 0..n {
+            let mut out = BTreeMap::new();
+            for k in 0..n {
+                if k.is_multiple_of(256) {
+                    cx.checkpoint().await;
+                }
                 let (Some(index), Some(n)) = (s.uleb(), name(&mut s)) else {
                     break;
                 };
-                out.push((index, n));
+                out.entry(index).or_insert(n);
             }
             return out;
         }
     }
-    Vec::new()
+    BTreeMap::new()
 }
 
 async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
@@ -796,9 +812,8 @@ async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
         };
         let index = imported.saturating_add(i);
         let label = names
-            .iter()
-            .find(|(n, _)| *n == index)
-            .map_or_else(|| format!("func {index}"), |(_, s)| s.clone());
+            .get(&index)
+            .map_or_else(|| format!("func {index}"), Clone::clone);
         // Locals: groups of (count, type).
         let mut r = Reader::new(body);
         let mut locals = Vec::new();
@@ -833,7 +848,7 @@ async fn code(cx: &Cx, m: &ModuleInfo, b: &mut Body<'_>) -> Result<()> {
     Ok(())
 }
 
-type Names = Arc<Vec<(u64, String)>>;
+type Names = Arc<BTreeMap<u64, String>>;
 
 async fn function_body(
     cx: Cx,
@@ -856,7 +871,7 @@ async fn function_body(
 async fn instructions(cx: Cx, (span, names): (Span, Names)) -> Result<()> {
     let data = cx.read(span).await?;
     let mut r = Reader::new(&data);
-    let name = |f: u64| names.iter().find(|(i, _)| *i == f).map(|(_, n)| n.clone());
+    let name = |f: u64| names.get(&f).cloned();
     let mut depth = 0usize;
     while !r.at_end() {
         let start = r.pos();
@@ -908,6 +923,7 @@ async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
     match section.as_str() {
         "name" => {
             while !b.r.at_end() {
+                cx.checkpoint().await;
                 let start = b.r.pos();
                 let id = b.r.u8().ok_or_else(|| b.malformed("name subsection"))?;
                 let size = b.r.uleb().ok_or_else(|| b.malformed("name subsection"))?;
@@ -929,11 +945,15 @@ async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
         "producers" => {
             let n = b.r.uleb().ok_or_else(|| b.malformed("producers"))?;
             for _ in 0..n {
+                cx.checkpoint().await;
                 let start = b.r.pos();
                 let field = name(&mut b.r).ok_or_else(|| b.malformed("producers"))?;
                 let count = b.r.uleb().ok_or_else(|| b.malformed("producers"))?;
                 let mut values = Vec::new();
-                for _ in 0..count {
+                for k in 0..count {
+                    if k.is_multiple_of(256) {
+                        cx.checkpoint().await;
+                    }
                     let (Some(n), Some(v)) = (name(&mut b.r), name(&mut b.r)) else {
                         return Err(b.malformed("producers"));
                     };
@@ -949,6 +969,7 @@ async fn custom(cx: &Cx, b: &mut Body<'_>) -> Result<()> {
         "target_features" => {
             let n = b.r.uleb().ok_or_else(|| b.malformed("target features"))?;
             for _ in 0..n {
+                cx.checkpoint().await;
                 let start = b.r.pos();
                 let prefix = b.r.u8().ok_or_else(|| b.malformed("target features"))?;
                 let feature = name(&mut b.r).ok_or_else(|| b.malformed("target features"))?;
@@ -998,7 +1019,11 @@ async fn name_subsection(cx: Cx, (id, span, data): (u8, Span, Vec<u8>)) -> Resul
                 let mut names = Vec::new();
                 for _ in 0..n {
                     let i = b.r.uleb()?;
-                    names.push(format!("{i}: {}", name(&mut b.r)?));
+                    let entry = format!("{i}: {}", name(&mut b.r)?);
+                    // 128 entries join to more than the 120 characters shown.
+                    if names.len() < 128 {
+                        names.push(entry);
+                    }
                 }
                 Some((
                     format!("[{outer}]"),

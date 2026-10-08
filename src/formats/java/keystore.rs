@@ -173,7 +173,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
     }
-    let aliases: Vec<&str> = entries.iter().map(|(_, e)| e.alias.as_str()).collect();
+    // 64 aliases join to more than the 100 characters shown.
+    let aliases: Vec<&str> = entries
+        .iter()
+        .take(64)
+        .map(|(_, e)| e.alias.as_str())
+        .collect();
     cx.annotate(format!(
         "Java KeyStore ({kind} v{version}), {count} entries: {}",
         ellipsize(&aliases.join(", "), 100)

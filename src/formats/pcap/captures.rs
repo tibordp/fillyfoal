@@ -48,6 +48,7 @@ async fn btsnoop(cx: Cx, input: Input) -> Result<()> {
         // 0x00dcddb30f2f8000.
         let unix =
             i64::try_from(micros.saturating_sub(0x00dc_ddb3_0f2f_8000) / 1_000_000).unwrap_or(0);
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(
             Node::new(format!("Packet {packets}"))
                 .span(cur.since(start))

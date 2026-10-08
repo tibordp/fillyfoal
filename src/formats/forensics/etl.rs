@@ -591,6 +591,7 @@ async fn walk_buffers(cx: Cx, (input, clock): (Input, Clock)) -> Result<()> {
     while pos < file.len {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let head = cx.read(file.sub(pos, BUFFER_HEADER)).await?;
         let size = u64::from(u32_le(&head, 0).unwrap_or(0));
         let mut node = Node::new(format!("Buffer {index}"));
@@ -754,6 +755,7 @@ async fn walk_buffer(cx: Cx, (input, pos, clock, first): (Input, u64, Clock, boo
     while at.saturating_add(8) <= saved {
         let mark = (at, index);
         cx.mark(move || mark);
+        cx.progress_in(span, span.offset.saturating_add(at));
         let d = cx.read(span.sub(at, 0x18)).await?;
         if d.len() < 8 || u32_le(&d, 0) == Some(0xffff_ffff) || u32_le(&d, 0) == Some(0) {
             break;
@@ -1294,6 +1296,7 @@ async fn tl_values(cx: Cx, (span, fields, pointer): (Span, Vec<TlField>, u8)) ->
     let node_at =
         |start: usize, end: usize| span.sub(to_u64(start), to_u64(end.saturating_sub(start)));
     for f in &fields {
+        cx.checkpoint().await;
         if f.in_type == 24 {
             cx.emit(Node::new(f.name.clone()).summary(tl_type(f)));
             continue;

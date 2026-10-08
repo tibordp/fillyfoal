@@ -81,6 +81,10 @@ async fn strings(cx: Cx, input: Input) -> Result<()> {
     let mut comment = String::new();
     let mut count = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(
+            prepared.span,
+            prepared.span.offset.saturating_add(line.start),
+        );
         let t = line.text();
         let trimmed = t.trim();
         if in_comment || trimmed.starts_with("/*") {
@@ -201,6 +205,7 @@ async fn pbxproj(cx: Cx, input: Input) -> Result<()> {
     let mut objects = 0u64;
     let mut archive = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         let t = line.text();
         let trimmed = t.trim();
         if let Some(name) = trimmed
@@ -379,6 +384,7 @@ async fn crash(cx: Cx, input: Input) -> Result<()> {
             .await;
         }
         let Some(line) = line else { break };
+        cx.progress_in(file, file.offset.saturating_add(line.start));
         if blank {
             continue;
         }
@@ -442,6 +448,7 @@ async fn bcsymbolmap(cx: Cx, input: Input) -> Result<()> {
     let mut version = String::new();
     let mut n = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(input.span, input.span.offset.saturating_add(line.start));
         let t = line.text();
         let node = if line.number == 1 {
             version = t

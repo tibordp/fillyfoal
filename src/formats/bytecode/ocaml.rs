@@ -69,17 +69,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         u64::from(count).saturating_mul(8),
     )?;
     let entries = cx.read(table).await?;
-    let lengths: Vec<([u8; 4], u64)> = (0..crate::bytes::to_usize(count.into()))
-        .map(|i| {
-            let at = i.saturating_mul(8);
-            let mut id = [0u8; 4];
-            id.copy_from_slice(entries.get(at..at.saturating_add(4)).unwrap_or(&[0; 4]));
-            (
-                id,
-                u32_be(&entries, at.saturating_add(4)).unwrap_or(0).into(),
-            )
-        })
-        .collect();
+    let mut lengths: Vec<([u8; 4], u64)> = Vec::new();
+    for i in 0..crate::bytes::to_usize(count.into()) {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let at = i.saturating_mul(8);
+        let mut id = [0u8; 4];
+        id.copy_from_slice(entries.get(at..at.saturating_add(4)).unwrap_or(&[0; 4]));
+        lengths.push((
+            id,
+            u32_be(&entries, at.saturating_add(4)).unwrap_or(0).into(),
+        ));
+    }
     let total: u64 = lengths.iter().fold(0u64, |a, (_, l)| a.saturating_add(*l));
     let table_start = table.offset.saturating_sub(file.offset);
     let Some(mut offset) = table_start.checked_sub(total) else {
@@ -99,6 +101,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut prims = 0usize;
     let mut nodes = Vec::new();
     for (id, len) in &lengths {
+        cx.checkpoint().await;
         let span = file.sub(offset, *len);
         let name = String::from_utf8_lossy(id).into_owned();
         let what =
@@ -124,8 +127,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         nodes.push(node);
         offset = offset.saturating_add(*len);
     }
+    // The summary shows at most 80 characters, and each ID takes at least
+    // two (with its separator): 41 IDs are always enough.
     let ids: Vec<String> = lengths
         .iter()
+        .take(41)
         .map(|(id, _)| String::from_utf8_lossy(id).into_owned())
         .collect();
     cx.annotate(format!(
@@ -133,6 +139,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ellipsize(&ids.join(" "), 80)
     ));
     for n in nodes {
+        cx.checkpoint().await;
         cx.emit(n);
     }
     cx.emit(

@@ -204,6 +204,7 @@ async fn manifest_rows(cx: &Cx, root: Span) -> Result<Vec<Row>> {
     let impl_size = col_size(IMPLEMENTATION, &rows, heaps);
     let mut out = Vec::new();
     for r in 0..count {
+        cx.checkpoint().await;
         let base = to_usize(r.saturating_mul(row_width));
         let name_index = read_col(&table, base.saturating_add(8), str_size);
         let implementation = read_col(
@@ -276,6 +277,7 @@ pub(super) async fn resources(cx: Cx, (pe, root, res): (Pe, Span, Span)) -> Resu
             let mut i = 0u32;
             while at.saturating_add(4) <= res.len {
                 let span = blob(&cx, res, at).await?;
+                cx.progress_in(res, span.end());
                 cx.push(
                     embedded(format!("Resource {i}"), pe.input.nested(span))
                         .summary(format!("{} bytes", span.len)),

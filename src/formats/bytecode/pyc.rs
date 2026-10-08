@@ -143,6 +143,8 @@ fn header(f: &mut Fields<'_>, v: &(u8, u8)) -> Result<()> {
 
 type Step<T> = std::result::Result<T, Diagnostic>;
 
+type ObjFuture<'f> = std::pin::Pin<Box<dyn std::future::Future<Output = Step<Obj>> + Send + 'f>>;
+
 struct Unmarshal<'a> {
     r: Reader<'a>,
     span: Span,
@@ -208,28 +210,39 @@ impl Unmarshal<'_> {
     }
 
     /// One marshalled object, added under `parent` as `label`.
-    fn object(&mut self, parent: usize, label: &str, depth: u32) -> Step<Obj> {
-        if depth > MAX_DEPTH {
-            return Err(Diagnostic::limit("objects nested too deeply")
-                .at(self.span.sub(to_u64(self.r.pos()), 1)));
-        }
-        let start = self.r.pos();
-        let byte = self.r.u8().ok_or_else(|| self.fail("object"))?;
-        let flagged = byte & 0x80 != 0;
-        // Reserve the reference slot before decoding children, as CPython does.
-        let slot = if flagged {
-            self.refs.push(String::new());
-            Some(self.refs.len().saturating_sub(1))
-        } else {
-            None
-        };
-        let obj = self.body(parent, label, depth, start, byte & 0x7f)?;
-        if let Some(slot) = slot
-            && let Some(r) = self.refs.get_mut(slot)
-        {
-            r.clone_from(&obj.short);
-        }
-        Ok(obj)
+    fn object<'f>(
+        &'f mut self,
+        cx: &'f Cx,
+        parent: usize,
+        label: &'f str,
+        depth: u32,
+    ) -> ObjFuture<'f> {
+        Box::pin(async move {
+            cx.checkpoint().await;
+            if depth > MAX_DEPTH {
+                return Err(Diagnostic::limit("objects nested too deeply")
+                    .at(self.span.sub(to_u64(self.r.pos()), 1)));
+            }
+            let start = self.r.pos();
+            let byte = self.r.u8().ok_or_else(|| self.fail("object"))?;
+            let flagged = byte & 0x80 != 0;
+            // Reserve the reference slot before decoding children, as CPython does.
+            let slot = if flagged {
+                self.refs.push(String::new());
+                Some(self.refs.len().saturating_sub(1))
+            } else {
+                None
+            };
+            let obj = self
+                .body(cx, parent, label, depth, start, byte & 0x7f)
+                .await?;
+            if let Some(slot) = slot
+                && let Some(r) = self.refs.get_mut(slot)
+            {
+                r.clone_from(&obj.short);
+            }
+            Ok(obj)
+        })
     }
 
     fn string(
@@ -270,8 +283,10 @@ impl Unmarshal<'_> {
         }
     }
 
-    fn sequence(
+    #[allow(clippy::too_many_arguments)]
+    async fn sequence(
         &mut self,
+        cx: &Cx,
         parent: usize,
         label: &str,
         start: usize,
@@ -282,7 +297,9 @@ impl Unmarshal<'_> {
         let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
         let mut items = Vec::new();
         for i in 0..n {
-            let obj = self.object(node, &format!("[{i}]"), depth.saturating_add(1))?;
+            let obj = self
+                .object(cx, node, &format!("[{i}]"), depth.saturating_add(1))
+                .await?;
             if items.len() < 8 {
                 items.push(obj.short);
             }
@@ -301,8 +318,9 @@ impl Unmarshal<'_> {
         })
     }
 
-    fn body(
+    async fn body(
         &mut self,
+        cx: &Cx,
         parent: usize,
         label: &str,
         depth: u32,
@@ -375,7 +393,8 @@ impl Unmarshal<'_> {
                 // Base 2^15 digits, least significant first.
                 let mut value: i128 = 0;
                 let mut fits = digits <= 8;
-                for (i, d) in data.chunks(2).enumerate() {
+                // Only up to 8 digits are ever summed (more never fit).
+                for (i, d) in data.chunks(2).take(8).enumerate() {
                     let d = i128::from(u16_le(d, 0).unwrap_or(0));
                     let shift = u32::try_from(i.saturating_mul(15)).unwrap_or(u32::MAX);
                     match d.checked_shl(shift) {
@@ -435,11 +454,13 @@ impl Unmarshal<'_> {
                     b'<' => "set",
                     _ => "frozenset",
                 };
-                self.sequence(parent, label, start, n.into(), kind, depth)
+                self.sequence(cx, parent, label, start, n.into(), kind, depth)
+                    .await
             }
             b')' => {
                 let n = self.r.u8().ok_or_else(|| self.fail("tuple"))?;
-                self.sequence(parent, label, start, n.into(), "tuple", depth)
+                self.sequence(cx, parent, label, start, n.into(), "tuple", depth)
+                    .await
             }
             b'{' => {
                 let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
@@ -449,8 +470,9 @@ impl Unmarshal<'_> {
                         self.r.u8();
                         break;
                     }
-                    let key = self.object(node, "key", deeper)?;
-                    self.object(node, &format!("[{}]", key.short), deeper)?;
+                    let key = self.object(cx, node, "key", deeper).await?;
+                    self.object(cx, node, &format!("[{}]", key.short), deeper)
+                        .await?;
                     n = n.saturating_add(1);
                 }
                 let span = self.at(start);
@@ -465,7 +487,7 @@ impl Unmarshal<'_> {
             b':' => {
                 let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
                 for part in ["start", "stop", "step"] {
-                    self.object(node, part, deeper)?;
+                    self.object(cx, node, part, deeper).await?;
                 }
                 let span = self.at(start);
                 self.tree
@@ -476,7 +498,7 @@ impl Unmarshal<'_> {
                     text: None,
                 })
             }
-            b'c' => self.code(parent, label, start, depth),
+            b'c' => self.code(cx, parent, label, start, depth).await,
             other => Err(
                 Diagnostic::unsupported(format!("marshal type {:?}", char::from(other)))
                     .at(self.span.sub(to_u64(start), 1)),
@@ -506,7 +528,14 @@ impl Unmarshal<'_> {
         Ok(v)
     }
 
-    fn code(&mut self, parent: usize, label: &str, start: usize, depth: u32) -> Step<Obj> {
+    async fn code(
+        &mut self,
+        cx: &Cx,
+        parent: usize,
+        label: &str,
+        start: usize,
+        depth: u32,
+    ) -> Step<Obj> {
         let node = self.tree.add(Some(parent), Node::new(label.to_owned()));
         let v = self.version;
         let deeper = depth.saturating_add(1);
@@ -525,24 +554,25 @@ impl Unmarshal<'_> {
         for name in ints {
             self.int_field(node, name)?;
         }
-        let code = self.object(node, "co_code", deeper)?;
-        let consts = self.object(node, "co_consts", deeper)?;
-        self.object(node, "co_names", deeper)?;
+        let code = self.object(cx, node, "co_code", deeper).await?;
+        let consts = self.object(cx, node, "co_consts", deeper).await?;
+        self.object(cx, node, "co_names", deeper).await?;
         if v >= (3, 11) {
-            self.object(node, "co_localsplusnames", deeper)?;
-            self.object(node, "co_localspluskinds", deeper)?;
+            self.object(cx, node, "co_localsplusnames", deeper).await?;
+            self.object(cx, node, "co_localspluskinds", deeper).await?;
         } else {
-            self.object(node, "co_varnames", deeper)?;
-            self.object(node, "co_freevars", deeper)?;
-            self.object(node, "co_cellvars", deeper)?;
+            self.object(cx, node, "co_varnames", deeper).await?;
+            self.object(cx, node, "co_freevars", deeper).await?;
+            self.object(cx, node, "co_cellvars", deeper).await?;
         }
-        let filename = self.object(node, "co_filename", deeper)?;
-        let name = self.object(node, "co_name", deeper)?;
+        let filename = self.object(cx, node, "co_filename", deeper).await?;
+        let name = self.object(cx, node, "co_name", deeper).await?;
         if v >= (3, 11) {
-            self.object(node, "co_qualname", deeper)?;
+            self.object(cx, node, "co_qualname", deeper).await?;
         }
         let line = self.int_field(node, "co_firstlineno")?;
         self.object(
+            cx,
             node,
             if v >= (3, 10) {
                 "co_linetable"
@@ -550,9 +580,10 @@ impl Unmarshal<'_> {
                 "co_lnotab"
             },
             deeper,
-        )?;
+        )
+        .await?;
         if v >= (3, 11) {
-            self.object(node, "co_exceptiontable", deeper)?;
+            self.object(cx, node, "co_exceptiontable", deeper).await?;
         }
         let name = name.text.unwrap_or_else(|| name.short.clone());
         let filename = filename.text.unwrap_or_else(|| filename.short.clone());
@@ -606,7 +637,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if v >= (3, 7) && u32_le(&head, 4).is_some_and(|f| f & 1 != 0) {
         summary.push_str(" (hash-based)");
     }
-    match u.object(root, "Code", 0) {
+    match u.object(&cx, root, "Code", 0).await {
         Ok(obj) => {
             if let Some(t) = obj.text
                 && let Some((_, filename)) = t.split_once('\0')

@@ -420,6 +420,7 @@ async fn symbol_list(cx: Cx, x: Xcoff) -> Result<()> {
             u64::from(index).saturating_mul(18),
             u64::from(aux).saturating_add(1).saturating_mul(18),
         );
+        cx.progress(index.into(), x.nsyms.into());
         cx.push(
             Node::new(if name.is_empty() {
                 format!("#{index}")

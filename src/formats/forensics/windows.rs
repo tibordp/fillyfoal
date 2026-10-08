@@ -393,6 +393,7 @@ async fn usn_journal(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     let mut first = None;
     while at.saturating_add(8) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let head = cx.read_avail(file.sub(at, 8)).await?;
         let len = u64::from(u32_le(&head, 0).unwrap_or(0));
         if len == 0 {
@@ -1694,6 +1695,7 @@ async fn rdp_cache(cx: Cx, input: Input) -> Result<()> {
     let mut tiles = 0u64;
     while cur.remaining() >= 12 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let key = cur.u64().await?;
         let w = cur.u16().await?;
         let h = cur.u16().await?;
@@ -2610,6 +2612,7 @@ async fn odl(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     while cur.remaining() >= header_len {
         let start = cur.pos();
+        cx.progress_in(body, body.offset.saturating_add(start));
         let sig = cur.u64().await?;
         if sig != ODL_BLOCK {
             cx.diag(Diagnostic::malformed("expected a record signature").at(cur.since(start)));

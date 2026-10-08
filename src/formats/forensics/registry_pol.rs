@@ -45,6 +45,10 @@ async fn registry_pol(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let start = at;
+        cx.progress_in(
+            file,
+            file.offset.saturating_add(8).saturating_add(to_u64(at)),
+        );
         let mut fields: Vec<String> = Vec::new();
         let mut cursor = at.saturating_add(2);
         for _ in 0..2 {

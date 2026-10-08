@@ -266,8 +266,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if count == 0 {
             break;
         }
+        // The summary is ellipsized: 128 of each is more than it shows.
         match op {
-            15 => {
+            15 if entries.len() < 128 => {
                 let model = word(i.saturating_add(1)).unwrap_or(0);
                 let at = i.saturating_add(3).saturating_mul(4);
                 let (name, _) = literal(data.get(at..).unwrap_or_default());
@@ -276,7 +277,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     name_or(EXECUTION_MODEL, model.into(), "model")
                 ));
             }
-            17 => caps.push(name_or(
+            17 if caps.len() < 128 => caps.push(name_or(
                 CAPABILITY,
                 word(i.saturating_add(1)).unwrap_or(0).into(),
                 "capability",

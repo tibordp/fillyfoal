@@ -280,7 +280,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         info.commands.push(Command { span, cmd });
         let mut f = Fields::new(&block, endian);
         f.seek(offset);
-        if let Err(e) = learn(&mut info, &mut f, &ctx, cmd) {
+        if let Err(e) = learn(&mut info, &mut f, &ctx, cmd, size) {
             cx.diag(e);
         }
         offset = offset.saturating_add(size.into());
@@ -345,12 +345,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// Records what later expansions need from a load command.
-fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32) -> Result<()> {
+fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32, size: u32) -> Result<()> {
     let start = f.pos();
     match cmd {
         LC_SEGMENT | LC_SEGMENT_64 => {
             let segment = segment_command(f, ctx)?;
-            for _ in 0..segment.nsects {
+            // Only the section headers inside the command: a bogus `nsects`
+            // in a run of tiny commands would otherwise re-read the rest of
+            // the load commands once per command.
+            let room = u64::from(size)
+                .saturating_sub(f.pos().saturating_sub(start))
+                .checked_div(if ctx.wide { 80 } else { 68 })
+                .unwrap_or(0);
+            for _ in 0..u64::from(segment.nsects).min(room) {
                 info.sections.push(section_header(f, ctx)?);
             }
             info.segments.push(segment);

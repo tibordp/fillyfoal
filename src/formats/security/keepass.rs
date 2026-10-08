@@ -18,6 +18,7 @@
 //! The KDB 1.x layout (field types, packed times) is from memory of
 //! KeePass 1.x `PwManager` and checked only against our own generator.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
@@ -428,6 +429,7 @@ async fn variant_dict_node(cx: Cx, span: Span) -> Result<()> {
             }),
     );
     for item in &items {
+        cx.checkpoint().await;
         let at = span.sub(to_u64(item.start), to_u64(item.len));
         let desc = match item.key.as_str() {
             "$UUID" => "KDF algorithm",
@@ -874,6 +876,7 @@ async fn kdbx3_payload(
         data.get(pos.saturating_add(4)..pos.saturating_add(36)),
         u32_le(&data, pos.saturating_add(36)),
     ) {
+        cx.checkpoint().await;
         let at = pos.saturating_add(40);
         let size = to_usize(size.into());
         let Some(body) = data.get(at..at.saturating_add(size)) else {
@@ -1303,84 +1306,97 @@ fn attr(attrs: &[u8], name: &[u8]) -> Option<String> {
     None
 }
 
-fn parse_doc(data: &[u8]) -> Doc {
-    let mut doc = Doc::default();
-    let mut stack: Vec<Vec<u8>> = Vec::new();
-    let mut groups: Vec<(usize, usize)> = Vec::new(); // (group index, depth)
-    let mut entries: Vec<(usize, usize)> = Vec::new(); // (entry index, depth)
-    let mut text = String::new();
-    let mut protected = false;
-    let mut reference = String::new();
-    let mut pending_key = String::new();
-    let mut leaf_start = 0usize;
-    let mut pos = 0usize;
-    while let Some((tok, start, next)) = next_token(data, pos) {
-        pos = next.max(pos.saturating_add(1));
+/// A KeePass document parser's state, fed one token at a time.
+#[derive(Default)]
+struct DocParser {
+    doc: Doc,
+    stack: Vec<Vec<u8>>,
+    groups: Vec<(usize, usize)>,  // (group index, depth)
+    entries: Vec<(usize, usize)>, // (entry index, depth)
+    text: String,
+    protected: bool,
+    reference: String,
+    pending_key: String,
+    leaf_start: usize,
+    pos: usize,
+}
+
+impl DocParser {
+    /// Handles the next token; `false` at the end or on an error.
+    fn step(&mut self, data: &[u8]) -> bool {
+        let Some((tok, start, next)) = next_token(data, self.pos) else {
+            return false;
+        };
+        self.pos = next.max(self.pos.saturating_add(1));
         match tok {
             Tok::Start { name, attrs, empty } => {
-                let parent = stack.last().map(Vec::as_slice);
-                let depth = stack.len();
-                text.clear();
-                leaf_start = start;
+                let parent = self.stack.last().map(Vec::as_slice);
+                let depth = self.stack.len();
+                self.text.clear();
+                self.leaf_start = start;
                 match name {
                     b"Group" if matches!(parent, Some(b"Root" | b"Group")) => {
-                        let id = doc.groups.len();
-                        doc.groups.push(Group {
+                        let id = self.doc.groups.len();
+                        self.doc.groups.push(Group {
                             span: (start, start),
                             ..Group::default()
                         });
-                        match groups.last() {
+                        match self.groups.last() {
                             Some(&(g, _)) => {
-                                if let Some(p) = doc.groups.get_mut(g) {
+                                if let Some(p) = self.doc.groups.get_mut(g) {
                                     p.groups.push(id);
                                 }
                             }
-                            None => doc.roots.push(id),
+                            None => self.doc.roots.push(id),
                         }
                         if !empty {
-                            groups.push((id, depth));
+                            self.groups.push((id, depth));
                         }
                     }
                     b"Entry" if matches!(parent, Some(b"Group" | b"History")) => {
-                        let id = doc.entries.len();
-                        doc.entries.push(Entry {
+                        let id = self.doc.entries.len();
+                        self.doc.entries.push(Entry {
                             span: (start, start),
                             ..Entry::default()
                         });
                         if parent == Some(b"History") {
-                            if let Some(e) =
-                                entries.last().and_then(|&(e, _)| doc.entries.get_mut(e))
+                            if let Some(e) = self
+                                .entries
+                                .last()
+                                .and_then(|&(e, _)| self.doc.entries.get_mut(e))
                             {
                                 e.history.push(id);
                             }
-                        } else if let Some(g) =
-                            groups.last().and_then(|&(g, _)| doc.groups.get_mut(g))
+                        } else if let Some(g) = self
+                            .groups
+                            .last()
+                            .and_then(|&(g, _)| self.doc.groups.get_mut(g))
                         {
                             g.entries.push(id);
                         }
                         if !empty {
-                            entries.push((id, depth));
+                            self.entries.push((id, depth));
                         }
                     }
-                    b"Meta" if depth == 1 => doc.meta_span = Some((start, start)),
-                    b"DeletedObject" => doc.deleted = doc.deleted.saturating_add(1),
+                    b"Meta" if depth == 1 => self.doc.meta_span = Some((start, start)),
+                    b"DeletedObject" => self.doc.deleted = self.doc.deleted.saturating_add(1),
                     b"String" | b"Binary" if parent == Some(b"Entry") => {
-                        pending_key.clear();
-                        reference.clear();
+                        self.pending_key.clear();
+                        self.reference.clear();
                     }
                     b"Value" => {
-                        protected = attr(attrs, b"Protected")
+                        self.protected = attr(attrs, b"Protected")
                             .is_some_and(|v| v.eq_ignore_ascii_case("true"));
-                        reference = attr(attrs, b"Ref").unwrap_or_default();
+                        self.reference = attr(attrs, b"Ref").unwrap_or_default();
                         if empty {
                             close_value(
-                                &mut doc,
-                                &entries,
-                                &stack,
-                                &pending_key,
+                                &mut self.doc,
+                                &self.entries,
+                                &self.stack,
+                                &self.pending_key,
                                 "",
-                                protected,
-                                &reference,
+                                self.protected,
+                                &self.reference,
                                 (start, next),
                             );
                         }
@@ -1388,96 +1404,120 @@ fn parse_doc(data: &[u8]) -> Doc {
                     _ => {}
                 }
                 if !empty {
-                    if stack.len() >= MAX_DEPTH {
-                        doc.error = Some("elements nested too deeply".to_owned());
-                        break;
+                    if self.stack.len() >= MAX_DEPTH {
+                        self.doc.error = Some("elements nested too deeply".to_owned());
+                        return false;
                     }
-                    stack.push(name.to_vec());
+                    self.stack.push(name.to_vec());
                 }
             }
             Tok::Text(t, cdata) => {
-                if text.len() < MAX_TEXT {
+                if self.text.len() < MAX_TEXT {
                     let s = String::from_utf8_lossy(t);
                     if cdata {
-                        text.push_str(&s);
+                        self.text.push_str(&s);
                     } else {
-                        text.push_str(&crate::formats::text::xml::decode_entities(&s, false));
+                        self.text
+                            .push_str(&crate::formats::text::xml::decode_entities(&s, false));
                     }
                 }
             }
             Tok::End { name } => {
-                if stack.last().map(Vec::as_slice) != Some(name) {
-                    doc.error = Some(format!(
+                if self.stack.last().map(Vec::as_slice) != Some(name) {
+                    self.doc.error = Some(format!(
                         "mismatched end tag </{}>",
                         String::from_utf8_lossy(name)
                     ));
-                    break;
+                    return false;
                 }
-                stack.pop();
-                let parent = stack.last().map(Vec::as_slice);
-                let depth = stack.len();
-                let value: String = text.chars().take(MAX_TEXT).collect();
+                self.stack.pop();
+                let parent = self.stack.last().map(Vec::as_slice);
+                let depth = self.stack.len();
+                let value: String = self.text.chars().take(MAX_TEXT).collect();
                 match name {
                     b"Group" => {
-                        if let Some(&(g, d)) = groups.last()
+                        if let Some(&(g, d)) = self.groups.last()
                             && d == depth
                         {
-                            if let Some(group) = doc.groups.get_mut(g) {
+                            if let Some(group) = self.doc.groups.get_mut(g) {
                                 group.span.1 = next;
                             }
-                            groups.pop();
+                            self.groups.pop();
                         }
                     }
                     b"Entry" => {
-                        if let Some(&(e, d)) = entries.last()
+                        if let Some(&(e, d)) = self.entries.last()
                             && d == depth
                         {
-                            if let Some(entry) = doc.entries.get_mut(e) {
+                            if let Some(entry) = self.doc.entries.get_mut(e) {
                                 entry.span.1 = next;
                             }
-                            entries.pop();
+                            self.entries.pop();
                         }
                     }
                     b"Name" if parent == Some(b"Group") => {
-                        if let Some(g) = groups
+                        if let Some(g) = self
+                            .groups
                             .last()
                             .and_then(|&(g, d)| (d.saturating_add(1) == depth).then_some(g))
-                            .and_then(|g| doc.groups.get_mut(g))
+                            .and_then(|g| self.doc.groups.get_mut(g))
                         {
                             g.name = value;
                         }
                     }
-                    b"Key" if matches!(parent, Some(b"String" | b"Binary")) => pending_key = value,
+                    b"Key" if matches!(parent, Some(b"String" | b"Binary")) => {
+                        self.pending_key = value
+                    }
                     b"Value" if matches!(parent, Some(b"String" | b"Binary")) => {
                         close_value(
-                            &mut doc,
-                            &entries,
-                            &stack,
-                            &pending_key,
+                            &mut self.doc,
+                            &self.entries,
+                            &self.stack,
+                            &self.pending_key,
                             &value,
-                            protected,
-                            &reference,
-                            (leaf_start, next),
+                            self.protected,
+                            &self.reference,
+                            (self.leaf_start, next),
                         );
                     }
                     b"Meta" if depth == 1 => {
-                        if let Some(m) = doc.meta_span.as_mut() {
+                        if let Some(m) = self.doc.meta_span.as_mut() {
                             m.1 = next;
                         }
                     }
                     _ if parent == Some(b"Meta") => {
                         let key = String::from_utf8_lossy(name).into_owned();
                         if META_KEYS.contains(&key.as_str()) {
-                            doc.meta.push((key, value, (leaf_start, next)));
+                            self.doc.meta.push((key, value, (self.leaf_start, next)));
                         }
                     }
                     _ => {}
                 }
-                text.clear();
+                self.text.clear();
             }
         }
+        true
     }
-    doc
+}
+
+#[cfg(test)]
+fn parse_doc(data: &[u8]) -> Doc {
+    let mut p = DocParser::default();
+    while p.step(data) {}
+    p.doc
+}
+
+/// Parses the document, checkpointing between tokens.
+async fn parse_doc_stepped(cx: &Cx, data: &[u8]) -> Doc {
+    let mut p = DocParser::default();
+    let mut n = 0u32;
+    while p.step(data) {
+        n = n.wrapping_add(1);
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    p.doc
 }
 
 /// Records a `<Value>` of an entry's `<String>` or `<Binary>`.
@@ -1526,7 +1566,7 @@ async fn database(cx: Cx, (_input, xml): (Input, Span)) -> Result<()> {
         Some(d) => d,
         None => {
             let data = read_all(&cx, xml).await?;
-            let d = Arc::new(parse_doc(&data));
+            let d = Arc::new(parse_doc_stepped(&cx, &data).await);
             cx.cache(xml, "keepass-doc", d.clone());
             d
         }
@@ -1542,6 +1582,7 @@ async fn database(cx: Cx, (_input, xml): (Input, Span)) -> Result<()> {
         );
     }
     for &g in &doc.roots {
+        cx.checkpoint().await;
         cx.emit(group_node(&doc, xml, g, 0));
     }
     if doc.deleted > 0 {
@@ -1566,6 +1607,7 @@ async fn database(cx: Cx, (_input, xml): (Input, Span)) -> Result<()> {
 
 async fn meta(cx: Cx, (doc, xml, _): DocState) -> Result<()> {
     for (key, value, span) in &doc.meta {
+        cx.checkpoint().await;
         cx.emit(
             Node::new(key.clone())
                 .span(sub(xml, *span))
@@ -1643,6 +1685,7 @@ async fn entry_children(cx: Cx, (doc, xml, e): DocState) -> Result<()> {
         return Ok(());
     };
     for f in &entry.fields {
+        cx.checkpoint().await;
         let mut node = Node::new(f.key.clone()).span(sub(xml, f.span));
         node = match &f.value {
             Some(v) => node.value(Value::Text(v.clone())),
@@ -1651,6 +1694,7 @@ async fn entry_children(cx: Cx, (doc, xml, e): DocState) -> Result<()> {
         cx.emit(node);
     }
     for a in &entry.attachments {
+        cx.checkpoint().await;
         cx.emit(
             Node::new(format!("Attachment {}", a.name))
                 .span(sub(xml, a.span))
@@ -1770,7 +1814,7 @@ async fn kdb_payload(cx: Cx, (input, h): (Input, Arc<KdbHeader>)) -> Result<()> 
         plain.len
     )));
     let data = read_all(&cx, plain).await?;
-    let doc = Arc::new(kdb_parse(&data, h.groups, h.entries));
+    let doc = Arc::new(kdb_parse(&cx, &data, h.groups, h.entries).await);
     if let Some(e) = &doc.error {
         cx.diag(Diagnostic::malformed(e.clone()).at(plain));
     }
@@ -1804,11 +1848,12 @@ struct KdbDoc {
     error: Option<String>,
 }
 
-fn kdb_parse(data: &[u8], groups: u32, entries: u32) -> KdbDoc {
+async fn kdb_parse(cx: &Cx, data: &[u8], groups: u32, entries: u32) -> KdbDoc {
     let mut doc = KdbDoc::default();
     let mut pos = 0usize;
     for (count, is_group) in [(groups, true), (entries, false)] {
         for _ in 0..count {
+            cx.checkpoint().await;
             if pos >= data.len() {
                 doc.error = Some("fewer records than the header says".to_owned());
                 return doc;
@@ -1832,6 +1877,9 @@ fn kdb_parse(data: &[u8], groups: u32, entries: u32) -> KdbDoc {
                 pos = at.saturating_add(len);
                 if kind == 0xffff {
                     break;
+                }
+                if rec.fields.len().is_multiple_of(256) {
+                    cx.checkpoint().await;
                 }
             }
             rec.span = (start, pos);
@@ -1945,15 +1993,16 @@ async fn kdb_records(
             .map(kdb_text)
             .unwrap_or_default()
     };
-    // Group names by ID, for the entries.
-    let names: Vec<(u32, String)> = doc
-        .groups
-        .iter()
-        .filter_map(|g| {
-            let &(_, at, _) = g.fields.iter().find(|f| f.0 == 1)?;
-            Some((u32_le(&data, at)?, field(g, 2)))
-        })
-        .collect();
+    // Group names by ID (the first group with an ID wins), for the entries.
+    let mut names: HashMap<u32, String> = HashMap::new();
+    for g in &doc.groups {
+        cx.checkpoint().await;
+        if let Some(&(_, at, _)) = g.fields.iter().find(|f| f.0 == 1)
+            && let Some(id) = u32_le(&data, at)
+        {
+            names.entry(id).or_insert_with(|| field(g, 2));
+        }
+    }
     for (i, rec) in records.iter().enumerate() {
         let span = sub(plain, rec.span);
         let node = if groups {
@@ -1973,8 +2022,8 @@ async fn kdb_records(
                 .iter()
                 .find(|f| f.0 == 2)
                 .and_then(|&(_, at, _)| u32_le(&data, at))
-                .and_then(|id| names.iter().find(|(g, _)| *g == id))
-                .map(|(_, n)| n.clone())
+                .and_then(|id| names.get(&id))
+                .cloned()
                 .unwrap_or_default();
             let summary = if title == "Meta-Info" && user == "SYSTEM" && url == "$" {
                 format!("meta stream: {}", field(rec, 8))

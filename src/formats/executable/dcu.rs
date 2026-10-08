@@ -1070,6 +1070,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 }),
             }
             pos = pos.saturating_add(item.span.len);
+            cx.progress_in(body, body.offset.saturating_add(pos));
         }
     } else {
         stop = Some(format!("the record layout of {product} is not decoded"));
@@ -1080,6 +1081,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut sources = 0u64;
     let mut decls = 0u64;
     for run in &runs {
+        cx.checkpoint().await;
         let (label, unit) = match run.section {
             Section::Flags => ("Unit flags", ("record", "records")),
             Section::Sources => {

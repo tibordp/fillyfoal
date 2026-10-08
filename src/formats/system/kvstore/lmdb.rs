@@ -909,6 +909,7 @@ async fn pages(cx: Cx, env: EnvRef) -> Result<()> {
     let mut pgno = cx.resume::<u64>().unwrap_or(0);
     while pgno < env.pages {
         cx.mark(move || pgno);
+        cx.progress(pgno, env.pages);
         let off = pgno.saturating_mul(env.page_size);
         let head = cx.read(env.input.span.sub_exact(off, HEADER)?).await?;
         let flags = u16_le(&head, 10).unwrap_or(0);

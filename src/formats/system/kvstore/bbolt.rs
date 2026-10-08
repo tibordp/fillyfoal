@@ -771,6 +771,7 @@ async fn pages(cx: Cx, db: DbRef) -> Result<()> {
     let mut pgid = cx.resume::<u64>().unwrap_or(0);
     while pgid < db.pages {
         cx.mark(move || pgid);
+        cx.progress(pgid, db.pages);
         let off = pgid.saturating_mul(db.page_size);
         let head = cx.read(db.input.span.sub_exact(off, HEADER)?).await?;
         let flags = u16_le(&head, 8).unwrap_or(0);

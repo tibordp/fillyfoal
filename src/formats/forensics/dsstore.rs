@@ -103,6 +103,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let count = u32_be(&data, 0).unwrap_or(0).min(MAX_BLOCKS);
     let mut blocks = Vec::new();
     for i in 0..crate::bytes::to_usize(count.into()) {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         match u32_be(&data, 8usize.saturating_add(i.saturating_mul(4))) {
             Some(a) => blocks.push(a),
             None => break,

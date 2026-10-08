@@ -671,6 +671,7 @@ async fn symbol_list(cx: Cx, c: Coff) -> Result<()> {
         if aux > 0 {
             summary.push_str(&format!(", {aux} aux"));
         }
+        cx.progress(index.into(), c.nsyms.into());
         cx.push(
             Node::new(name)
                 .span(whole)
