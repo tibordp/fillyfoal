@@ -9,11 +9,18 @@
 //! the archive's codec, but packers store incompressible blocks raw).
 //! Written from memory of the format as documented by the community
 //! tools; see `formats::games::archives`.
+//!
+//! [`Decoder`] waits for a whole block (its input) and then decodes it a
+//! step at a time: a stored block is copied `step` bytes per call, a
+//! compressed one runs through its own decoder a step per call. The block
+//! size comes from the file (usually 64 KiB, but up to 4 GiB), so nothing
+//! is decoded in one piece.
 
 use std::sync::Arc;
 
 use crate::codec::Codec;
-use crate::codec::pipeline::{Decode, Step, decode_all};
+use crate::codec::pbz::Nested;
+use crate::codec::pipeline::Status;
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: impl std::fmt::Display) -> Diagnostic {
@@ -32,14 +39,32 @@ pub struct Entry {
     pub blocks: Arc<[u32]>,
 }
 
-/// Decodes an [`Entry`] a block per step.
-#[derive(Clone, Debug)]
+/// How the current block decodes.
+enum Kind {
+    /// Copied as is; `copied` bytes so far.
+    Stored {
+        copied: usize,
+    },
+    Nested(Nested),
+}
+
+/// The block being decoded: its kind, where its input ends, and its
+/// decoded size.
+struct Block {
+    kind: Kind,
+    end: usize,
+    want: usize,
+}
+
+/// Decodes an [`Entry`] a step at a time (see the module docs).
 pub struct Decoder {
     entry: Entry,
-    /// The next block's index and input position.
+    /// The next block's index and input position (the current block's,
+    /// while one is being decoded).
     block: usize,
     at: usize,
     produced: u64,
+    current: Option<Block>,
 }
 
 impl Decoder {
@@ -49,94 +74,130 @@ impl Decoder {
             block: 0,
             at: 0,
             produced: 0,
+            current: None,
         }
+    }
+
+    /// Starts the next block once all of it has arrived, or says why not
+    /// (the end of the entry, or more input needed).
+    fn start(&mut self, input: &[u8], eof: bool, limit: usize) -> Result<Option<Status>> {
+        let left = self.entry.size.saturating_sub(self.produced);
+        if left == 0 {
+            return Ok(Some(Status::Done));
+        }
+        let Some(&stored) = self.entry.blocks.get(self.block) else {
+            return Err(bad(format!(
+                "{:#x} bytes missing after the last block",
+                left
+            )));
+        };
+        let block_size = u64::from(self.entry.block_size.max(1));
+        let want = left.min(block_size);
+        let len = if stored == 0 {
+            block_size
+        } else {
+            u64::from(stored)
+        };
+        let len = usize::try_from(len).unwrap_or(usize::MAX);
+        let end = self.at.saturating_add(len);
+        let Some(data) = input.get(self.at..end) else {
+            return if eof {
+                Err(bad(format!("block {} truncated", self.block)))
+            } else {
+                Ok(Some(Status::NeedInput))
+            };
+        };
+        if self.produced.saturating_add(want) > crate::bytes::to_u64(limit) {
+            return Err(Diagnostic::limit(format!(
+                "decompressed data exceeds {limit:#x} bytes"
+            )));
+        }
+        let want = usize::try_from(want).unwrap_or(usize::MAX);
+        let kind = if stored == 0 || u64::from(stored) == crate::bytes::to_u64(want) {
+            Kind::Stored { copied: 0 }
+        } else {
+            let codec = match data {
+                [0x78, ..] => Codec::Zlib,
+                [0x5d, 0, 0, ..] => Codec::LzmaAlone,
+                _ => {
+                    return Err(bad(format!(
+                        "block {} is neither zlib nor LZMA",
+                        self.block
+                    )));
+                }
+            };
+            Kind::Nested(Nested::new(&codec)?)
+        };
+        self.current = Some(Block { kind, end, want });
+        Ok(None)
     }
 }
 
-impl Decode for Decoder {
-    fn step(
+impl crate::codec::pipeline::Decoder for Decoder {
+    fn decode(
         &mut self,
         input: &[u8],
-        _eof: bool,
+        eof: bool,
         out: &mut Vec<u8>,
         step: usize,
         limit: usize,
-    ) -> Result<Step> {
-        let goal = out.len().saturating_add(step);
-        let block_size = u64::from(self.entry.block_size.max(1));
-        loop {
-            let left = self.entry.size.saturating_sub(self.produced);
-            if left == 0 {
-                return Ok(Step::Done);
+    ) -> Result<Status> {
+        if self.current.is_none()
+            && let Some(status) = self.start(input, eof, limit)?
+        {
+            return Ok(status);
+        }
+        let Some(cur) = self.current.as_mut() else {
+            return Ok(Status::More);
+        };
+        let data = input.get(self.at..cur.end).unwrap_or_default();
+        let mark = out.len();
+        let finished = match &mut cur.kind {
+            Kind::Stored { copied } => {
+                let take = cur.want.min(data.len());
+                let n = step.max(1).min(take.saturating_sub(*copied));
+                out.extend_from_slice(
+                    data.get(*copied..copied.saturating_add(n))
+                        .unwrap_or_default(),
+                );
+                *copied = copied.saturating_add(n);
+                *copied >= take
             }
-            if out.len() >= goal {
-                return Ok(Step::More);
-            }
-            let Some(&stored) = self.entry.blocks.get(self.block) else {
-                return Err(bad(format!(
-                    "{:#x} bytes missing after the last block",
-                    left
-                )));
-            };
-            let want = left.min(block_size);
-            let len = if stored == 0 {
-                block_size
-            } else {
-                u64::from(stored)
-            };
-            let len = usize::try_from(len).unwrap_or(usize::MAX);
-            let end = self.at.saturating_add(len);
-            let data = input
-                .get(self.at..end)
-                .ok_or_else(|| bad(format!("block {} truncated", self.block)))?;
-            let want_us = usize::try_from(want).unwrap_or(usize::MAX);
-            let decoded = if stored == 0 || u64::from(stored) == want {
-                data.get(..want_us).unwrap_or(data).to_vec()
-            } else {
-                let codec = match data {
-                    [0x78, ..] => Codec::Zlib,
-                    [0x5d, 0, 0, ..] => Codec::LzmaAlone,
-                    _ => {
+            Kind::Nested(nested) => {
+                let ended = nested.pump(data, out, step, cur.want)?;
+                if ended {
+                    if let Some(w) = nested.warning() {
+                        return Err(w);
+                    }
+                    if nested.produced() != cur.want {
                         return Err(bad(format!(
-                            "block {} is neither zlib nor LZMA",
-                            self.block
+                            "block {} decoded to {:#x} bytes, expected {:#x}",
+                            self.block,
+                            nested.produced(),
+                            cur.want
                         )));
                     }
-                };
-                let mut d = codec.decoder().ok_or_else(|| bad("no decoder"))?;
-                let block = decode_all(d.as_mut(), data, want_us)?;
-                if let Some(w) = d.warning(&block) {
-                    return Err(w);
                 }
-                if block.len() != want_us {
-                    return Err(bad(format!(
-                        "block {} decoded to {:#x} bytes, expected {want:#x}",
-                        self.block,
-                        block.len()
-                    )));
-                }
-                block
-            };
-            if self
-                .produced
-                .saturating_add(crate::bytes::to_u64(decoded.len()))
-                > crate::bytes::to_u64(limit)
-            {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                ended
             }
-            self.produced = self
-                .produced
-                .saturating_add(crate::bytes::to_u64(decoded.len()));
-            out.extend_from_slice(&decoded);
-            self.at = end;
+        };
+        self.produced = self
+            .produced
+            .saturating_add(crate::bytes::to_u64(out.len().saturating_sub(mark)));
+        if finished {
+            self.at = cur.end;
             self.block = self.block.saturating_add(1);
+            self.current = None;
         }
+        Ok(Status::More)
     }
 
     fn consumed(&self) -> usize {
         self.at
+    }
+
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
+        None
     }
 
     fn releasable_input(&self) -> usize {
@@ -145,9 +206,13 @@ impl Decode for Decoder {
 
     fn release_input(&mut self, n: usize) {
         self.at = self.at.saturating_sub(n);
+        if let Some(cur) = self.current.as_mut() {
+            cur.end = cur.end.saturating_sub(n);
+        }
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
+        // Blocks are independent streams, and keep their own history.
         out_len
     }
 }

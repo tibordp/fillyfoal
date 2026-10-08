@@ -9,6 +9,7 @@
 
 pub mod ace;
 pub mod bcfz;
+pub mod binhex;
 pub mod brotli;
 pub mod bzip2;
 pub mod bzz;
@@ -43,6 +44,7 @@ pub mod unixz;
 pub mod wim;
 pub mod xpress;
 pub mod xz;
+pub mod yaz0;
 pub mod zstd;
 
 use std::sync::Arc;
@@ -238,6 +240,17 @@ pub enum Codec {
     /// A RAR 2.9/5.0 group of files (one, or a solid run) decoded as one
     /// stream (see [`rar`]).
     Rar(rar::Params),
+    /// A BCJ (x86, ARM, ARM64) or Delta filter, decoding direction, on its
+    /// own (7-Zip folders chain it after their decompressor).
+    PostFilter(lzma::Post),
+    /// Nintendo Yaz0 LZ77 (the body after the 16-byte header), decoding to
+    /// `size` bytes.
+    Yaz0 {
+        size: u64,
+    },
+    /// BinHex 4.0's 6-bit text and 0x90 run-length encoding (the text
+    /// between the colons).
+    BinHex,
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see [`Origin`]); they must be distinct.
     Chain {
@@ -322,6 +335,12 @@ impl Codec {
             Codec::Lzh(_) => "lzh",
             Codec::Psarc(_) => "psarc",
             Codec::Rar(_) => "rar",
+            Codec::PostFilter(lzma::Post::X86) => "bcj-x86",
+            Codec::PostFilter(lzma::Post::Arm) => "bcj-arm",
+            Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64",
+            Codec::PostFilter(lzma::Post::Delta(_)) => "delta",
+            Codec::Yaz0 { .. } => "yaz0",
+            Codec::BinHex => "binhex",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -388,6 +407,12 @@ impl Codec {
             Codec::Lzh(_) => "lzh (lazy)",
             Codec::Psarc(_) => "psarc (lazy)",
             Codec::Rar(_) => "rar (lazy)",
+            Codec::PostFilter(lzma::Post::X86) => "bcj-x86 (lazy)",
+            Codec::PostFilter(lzma::Post::Arm) => "bcj-arm (lazy)",
+            Codec::PostFilter(lzma::Post::Arm64) => "bcj-arm64 (lazy)",
+            Codec::PostFilter(lzma::Post::Delta(_)) => "delta (lazy)",
+            Codec::Yaz0 { .. } => "yaz0 (lazy)",
+            Codec::BinHex => "binhex (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -443,7 +468,8 @@ impl Codec {
             Codec::SpssBytecode { .. } | Codec::SasRle | Codec::SasRdc => "decompressed",
             Codec::DwgLz77 { .. } => "decompressed",
             Codec::Lzh(_) | Codec::Psarc(_) => "decompressed",
-            Codec::Rar(_) => "decompressed",
+            Codec::Rar(_) | Codec::Yaz0 { .. } => "decompressed",
+            Codec::PostFilter(_) | Codec::BinHex => "decoded",
             Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
@@ -534,6 +560,13 @@ impl Codec {
             Codec::Lzh(p) => p.max_ratio(),
             // zlib or LZMA blocks, or stored ones.
             Codec::Psarc(_) => 7_000,
+            Codec::PostFilter(_) => 1,
+            // A 3-byte back-reference (and a ninth of a group byte) copies
+            // up to 273 bytes.
+            Codec::Yaz0 { .. } => 128,
+            // Two 6-bit characters per byte; a 0x90 run of up to 255 bytes
+            // costs two bytes, 2.7 characters.
+            Codec::BinHex => 128,
             Codec::Chain { stages, .. } => stages
                 .iter()
                 .map(Codec::max_ratio)
@@ -567,7 +600,7 @@ impl Codec {
                 filters::TiffPredictor::new(*bpp, *row),
             ))),
             Codec::Lzfse => Box::new(Streaming(lzfse::Lzfse::default())),
-            Codec::Pbz => Box::new(Streaming(pbz::Pbz::default())),
+            Codec::Pbz => Box::new(pbz::Pbz::default()),
             Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
@@ -627,7 +660,10 @@ impl Codec {
                 None => Box::new(Streaming(pipeline::Failing("invalid AES key length"))),
             },
             Codec::Lzh(params) => Box::new(Streaming(lzh::Lzh::new(*params))),
-            Codec::Psarc(entry) => Box::new(Streaming(psarc::Decoder::new(entry.clone()))),
+            Codec::Psarc(entry) => Box::new(psarc::Decoder::new(entry.clone())),
+            Codec::PostFilter(post) => Box::new(lzma::PostFilter::new(*post)),
+            Codec::Yaz0 { size } => Box::new(Streaming(yaz0::Yaz0::new(*size))),
+            Codec::BinHex => Box::new(Streaming(binhex::BinHex::default())),
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),

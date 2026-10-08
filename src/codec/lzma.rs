@@ -1243,6 +1243,92 @@ impl PostState {
     }
 }
 
+/// A [`Post`] filter as a stand-alone [`Decoder`] (7-Zip folders whose
+/// coders filter the decompressor's output): filters up to `step` bytes
+/// of input per call, holding back only what [`PostState`] cannot settle
+/// yet. It never reads its output, and keeps no input it has passed.
+#[derive(Clone)]
+pub struct PostFilter {
+    state: PostState,
+    /// Input bytes filtered and emitted so far.
+    at: usize,
+    /// Scratch: the piece being filtered.
+    buf: Vec<u8>,
+}
+
+impl PostFilter {
+    pub fn new(kind: Post) -> Self {
+        PostFilter {
+            state: PostState::new(kind),
+            at: 0,
+            buf: Vec::new(),
+        }
+    }
+}
+
+impl Decoder for PostFilter {
+    fn decode(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Status> {
+        let avail = input.get(self.at..).unwrap_or_default();
+        if avail.is_empty() {
+            return Ok(if eof { Status::Done } else { Status::NeedInput });
+        }
+        // At least a few words, so a piece always settles some bytes.
+        let n = avail.len().min(step.max(64));
+        let last = eof && n == avail.len();
+        self.buf.clear();
+        self.buf
+            .extend_from_slice(avail.get(..n).unwrap_or_default());
+        let done = self.state.run(&mut self.buf, last).min(self.buf.len());
+        if done == 0 {
+            // Fewer bytes than the filter looks ahead, and more to come.
+            return Ok(if last {
+                Status::Done
+            } else {
+                Status::NeedInput
+            });
+        }
+        if out.len().saturating_add(done) > limit {
+            return Err(Diagnostic::limit(format!(
+                "decoded data exceeds {limit:#x} bytes"
+            )));
+        }
+        out.extend_from_slice(self.buf.get(..done).unwrap_or_default());
+        self.at = self.at.saturating_add(done);
+        Ok(if last && self.at >= input.len() {
+            Status::Done
+        } else {
+            Status::More
+        })
+    }
+
+    fn consumed(&self) -> usize {
+        self.at
+    }
+
+    fn warning(&self, _out: &[u8]) -> Option<Diagnostic> {
+        None
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.at
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.at = self.at.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+    }
+}
+
 /// The program counter (modulo 2^32) of the word at index `i` of a buffer
 /// starting at stream position `pos`.
 fn pc(pos: u64, i: usize) -> u32 {

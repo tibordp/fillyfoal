@@ -18,7 +18,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 2800 — 2.7 KiB
         Folder: 0
       ▾ Content — 0xaf0 bytes decompressed  [0x20+0x403]
-          Data  [#2:0x0+0xaf0]
+          Data  [#1:0x0+0xaf0]
   ▾ Folders — 1 folder  [0x20+0x403]
     ▾ Folder 0 — LZMA2 + BCJ ARM64, 1.0 KiB → 2.7 KiB, 1 stream  [0x20+0x403]
         Coder 0: "LZMA2" — 1 in, 1 out
@@ -26,7 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Unpacked size: 2800 — 2.7 KiB
         Streams: 1
       ▾ Data — 0xaf0 bytes decompressed  [0x20+0x403]
-          Data  [#2:0x0+0xaf0]
+          Data  [#1:0x0+0xaf0]
   ▾ Next header — kHeader  [0x423+0x6a]
     ▾ kMainStreamsInfo  [0x424+0x24]
       ▾ kPackInfo — 1 packed stream, at 0x0  [0x425+0x7]

@@ -2013,3 +2013,234 @@ mod lz_units {
         assert_releases(&Codec::SasRdc, &rdc, &expected, 4098 + 2 * 16_384 + 4114);
     }
 }
+
+/// Codecs that used to decode a whole chunk, block or stream per call: BCJ
+/// and Delta filters (7z), pbz chunks, PSARC blocks, Yaz0 and BinHex.
+mod bounded_steps {
+    use super::assert_on_demand;
+    use fillyfoal::codec::lzma::Post;
+    use fillyfoal::codec::pipeline::{Status, decode_all};
+    use fillyfoal::codec::psarc::Entry;
+    use fillyfoal::codec::{Codec, adler32};
+
+    const STEP: usize = 16 * 1024;
+
+    fn read(path: &str) -> Vec<u8> {
+        std::fs::read(format!("{}/tests/{path}", env!("CARGO_MANIFEST_DIR"))).unwrap()
+    }
+
+    fn eager(codec: &Codec, input: &[u8]) -> Vec<u8> {
+        decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).unwrap()
+    }
+
+    /// Decodes the whole of `input` `STEP` bytes at a time, checking that
+    /// no call produces more than a few steps' worth; returns the output
+    /// and the number of calls.
+    fn stepped(codec: &Codec, input: &[u8]) -> (Vec<u8>, usize) {
+        let mut decoder = codec.decoder().unwrap();
+        let mut out = Vec::new();
+        for calls in 1.. {
+            let before = out.len();
+            let status = decoder
+                .decode(input, true, &mut out, STEP, 1 << 30)
+                .unwrap();
+            assert!(
+                out.len() - before <= 4 * STEP,
+                "{codec:?}: one call produced {} bytes",
+                out.len() - before
+            );
+            match status {
+                Status::Done => return (out, calls),
+                Status::More => {}
+                Status::NeedInput => unreachable!("{codec:?}: wants input after the end"),
+            }
+        }
+        unreachable!()
+    }
+
+    /// Pseudo-random bytes with plenty of x86 CALL/JMP opcodes and ARM BL
+    /// words.
+    fn code(n: usize) -> Vec<u8> {
+        let mut x: u32 = 7;
+        (0..n)
+            .map(|i| {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345) & 0x7fff_ffff;
+                match (x >> 16) % 7 {
+                    0 => 0xe8,
+                    1 => 0xeb,
+                    2 => 0,
+                    3 => 0xff,
+                    _ => (x >> 8) as u8 ^ i as u8,
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn post_filters_are_on_demand() {
+        let input = code(300_000);
+        for post in [
+            Post::X86,
+            Post::Arm,
+            Post::Arm64,
+            Post::Delta(1),
+            Post::Delta(4),
+        ] {
+            let mut expected = input.clone();
+            post.apply(&mut expected);
+            let codec = Codec::PostFilter(post);
+            assert_on_demand(&codec, &input, &expected);
+            let (out, calls) = stepped(&codec, &input);
+            assert!(out == expected && calls > 10, "{post:?}: {calls} calls");
+        }
+        // Small inputs, chunked byte by byte too.
+        let input = code(5000);
+        for post in [Post::X86, Post::Arm, Post::Delta(3)] {
+            let mut expected = input.clone();
+            post.apply(&mut expected);
+            assert_on_demand(&Codec::PostFilter(post), &input, &expected);
+        }
+    }
+
+    /// A stored-block zlib stream of `data`.
+    fn zlib_stored(data: &[u8]) -> Vec<u8> {
+        let mut z = vec![0x78, 0x01];
+        let blocks: Vec<&[u8]> = data.chunks(65_535).collect();
+        for (i, block) in blocks.iter().enumerate() {
+            z.push(u8::from(i + 1 == blocks.len()));
+            let len = block.len() as u16;
+            z.extend_from_slice(&len.to_le_bytes());
+            z.extend_from_slice(&(!len).to_le_bytes());
+            z.extend_from_slice(block);
+        }
+        z.extend_from_slice(&adler32(data).to_be_bytes());
+        z
+    }
+
+    #[test]
+    fn large_pbz_chunks_take_many_steps() {
+        let data = code(1 << 20);
+        // One stored chunk, then one zlib chunk, of 1 MiB each.
+        let mut pbz = b"pbzz".to_vec();
+        pbz.extend_from_slice(&(1u64 << 20).to_be_bytes());
+        for body in [data.clone(), zlib_stored(&data)] {
+            pbz.extend_from_slice(&(data.len() as u64).to_be_bytes());
+            pbz.extend_from_slice(&(body.len() as u64).to_be_bytes());
+            pbz.extend_from_slice(&body);
+        }
+        let expected = [data.clone(), data.clone()].concat();
+        let (out, calls) = stepped(&Codec::Pbz, &pbz);
+        assert!(out == expected && calls > 64, "{calls} calls");
+        assert_on_demand(&Codec::Pbz, &pbz, &expected);
+    }
+
+    #[test]
+    fn large_psarc_blocks_take_many_steps() {
+        let data = code(3 << 20);
+        // 1 MiB blocks: stored whole (0), zlib, and stored by length.
+        let block = 1 << 20;
+        let z = zlib_stored(&data[block..2 * block]);
+        let input = [&data[..block], &z, &data[2 * block..]].concat();
+        let codec = Codec::Psarc(Entry {
+            block_size: block as u32,
+            size: data.len() as u64,
+            blocks: vec![0, z.len() as u32, block as u32].into(),
+        });
+        let (out, calls) = stepped(&codec, &input);
+        assert!(out == data && calls > 3 * 64, "{calls} calls");
+        assert_on_demand(&codec, &input, &data);
+    }
+
+    /// Yaz0 of `data` (a multiple of 8 bytes) as literals, then a run of
+    /// its last byte as copies.
+    fn yaz0(data: &[u8], run: usize) -> (Vec<u8>, Vec<u8>) {
+        assert!(data.len().is_multiple_of(8));
+        let mut out = Vec::new();
+        for group in data.chunks(8) {
+            out.push(0xff);
+            out.extend_from_slice(group);
+        }
+        let mut expected = data.to_vec();
+        let last = *data.last().unwrap();
+        let mut copies = Vec::new();
+        let mut left = run;
+        while left > 0 {
+            let n = left.min(0x111);
+            copies.push([0x00, 0x00, (n - 0x12) as u8]);
+            expected.extend(std::iter::repeat_n(last, n));
+            left -= n;
+        }
+        for group in copies.chunks(8) {
+            out.push(0);
+            out.extend(group.iter().flatten());
+        }
+        (out, expected)
+    }
+
+    #[test]
+    fn yaz0_is_on_demand() {
+        let file = read("fixtures/synthetic/yaz0/icon.szs");
+        let size = u32::from_be_bytes(file[4..8].try_into().unwrap()) as u64;
+        let codec = Codec::Yaz0 { size };
+        let expected = eager(&codec, &file[16..]);
+        assert_eq!(expected.len() as u64, size);
+        assert_on_demand(&codec, &file[16..], &expected);
+
+        let (input, expected) = yaz0(&code(600_000), 0x111 * 2000);
+        let codec = Codec::Yaz0 {
+            size: expected.len() as u64,
+        };
+        assert_on_demand(&codec, &input, &expected);
+        let (out, calls) = stepped(&codec, &input);
+        assert!(out == expected && calls > 64, "{calls} calls");
+    }
+
+    /// BinHex 6-bit text of `data` (already run-length encoded), in lines
+    /// of 64 characters.
+    fn binhex(data: &[u8]) -> Vec<u8> {
+        const ALPHABET: &[u8] =
+            b"!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr";
+        let mut out = Vec::new();
+        for chunk in data.chunks(3) {
+            let mut w = [0u8; 3];
+            w[..chunk.len()].copy_from_slice(chunk);
+            let v = u32::from(w[0]) << 16 | u32::from(w[1]) << 8 | u32::from(w[2]);
+            for i in 0..=chunk.len() {
+                out.push(ALPHABET[(v >> (18 - 6 * i) & 63) as usize]);
+                if out.len() % 65 == 64 {
+                    out.push(b'\n');
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn binhex_is_on_demand() {
+        for path in ["ReadMe.hqx", "tiny.hqx"] {
+            let file = read(&format!("fixtures/synthetic/binhex/{path}"));
+            let start = file.iter().position(|&b| b == b':').unwrap() + 1;
+            let end = start + file[start..].iter().position(|&b| b == b':').unwrap();
+            let input = &file[start..end];
+            let expected = eager(&Codec::BinHex, input);
+            assert!(!expected.is_empty());
+            assert_on_demand(&Codec::BinHex, input, &expected);
+        }
+        // Text with runs: each 0x90 0xff repeats the byte before 254 times.
+        let mut raw = Vec::new();
+        let mut expected = Vec::new();
+        for (i, b) in code(200_000).into_iter().enumerate() {
+            let b = if b == 0x90 { 0x91 } else { b };
+            raw.push(b);
+            expected.push(b);
+            if i % 50 == 0 {
+                raw.extend_from_slice(&[0x90, 0xff]);
+                expected.extend(std::iter::repeat_n(b, 254));
+            }
+        }
+        let input = binhex(&raw);
+        assert_on_demand(&Codec::BinHex, &input, &expected);
+        let (out, calls) = stepped(&Codec::BinHex, &input);
+        assert!(out == expected && calls > 64, "{calls} calls");
+    }
+}
