@@ -157,6 +157,7 @@ async fn ztr(cx: Cx, input: Input) -> Result<()> {
     let mut bases = None;
     let mut chunks = 0u32;
     while cur.remaining() >= 12 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let kind = String::from_utf8_lossy(&cur.bytes(4).await?).into_owned();
         let mlen = cur.u32().await?;
@@ -359,6 +360,7 @@ async fn blow5(cx: Cx, input: Input) -> Result<()> {
     cur.seek(68u64.saturating_add(hlen.into()));
     let mut records = 0u64;
     while cur.remaining() >= 8 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         if cx.read_avail(file.sub(start, 5)).await? == b"5WOLB" {
             cx.emit(Node::new("End of file marker").span(file.sub(start, 5)));

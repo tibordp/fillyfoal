@@ -305,8 +305,26 @@ impl<'a> Reader<'a> {
     }
 }
 
+/// A counted list of NUL-terminated strings after `tag` (NAME, TYPE).
+async fn sdna_strings(cx: &Cx, r: &mut Reader<'_>, tag: &[u8; 4]) -> Option<Vec<(String, u64)>> {
+    if !r.tag(tag) {
+        return None;
+    }
+    let count = r.u32()?;
+    let mut out = Vec::new();
+    for i in 0..count {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        let at = r.at();
+        out.push((r.cstr()?, at));
+    }
+    r.align();
+    Some(out)
+}
+
 impl Sdna {
-    fn parse(data: &[u8], span: Span, endian: Endian, pointer: u64) -> Option<Sdna> {
+    async fn parse(cx: &Cx, data: &[u8], span: Span, endian: Endian, pointer: u64) -> Option<Sdna> {
         let mut r = Reader {
             data,
             pos: 0,
@@ -316,24 +334,11 @@ impl Sdna {
         if !r.tag(b"SDNA") {
             return None;
         }
-        let strings = |r: &mut Reader<'_>, tag: &[u8; 4]| -> Option<Vec<(String, u64)>> {
-            if !r.tag(tag) {
-                return None;
-            }
-            let count = r.u32()?;
-            let mut out = Vec::new();
-            for _ in 0..count {
-                let at = r.at();
-                out.push((r.cstr()?, at));
-            }
-            r.align();
-            Some(out)
-        };
         let start = r.at();
-        let names = strings(&mut r, b"NAME")?;
+        let names = sdna_strings(cx, &mut r, b"NAME").await?;
         sections.push(("Names", start, r.at().saturating_sub(start)));
         let start = r.at();
-        let types = strings(&mut r, b"TYPE")?;
+        let types = sdna_strings(cx, &mut r, b"TYPE").await?;
         sections.push(("Types", start, r.at().saturating_sub(start)));
         let start = r.at();
         if !r.tag(b"TLEN") {
@@ -354,6 +359,7 @@ impl Sdna {
         let mut structs = Vec::new();
         let mut struct_of = vec![None; types.len()];
         for index in 0..count {
+            cx.checkpoint().await;
             let at = r.at();
             let ty = r.u16()?;
             let n = r.u16()?;
@@ -603,7 +609,7 @@ async fn load(cx: &Cx, file: Span, layout: Layout) -> Result<Shared> {
         }
         Some(span) => {
             let data = cx.read_avail(span).await?;
-            let sdna = Sdna::parse(&data, span, layout.endian, layout.pointer);
+            let sdna = Sdna::parse(cx, &data, span, layout.endian, layout.pointer).await;
             if sdna.is_none() {
                 problems.push(Diagnostic::malformed("unreadable SDNA in the DNA1 block").at(span));
             }
@@ -613,7 +619,16 @@ async fn load(cx: &Cx, file: Span, layout: Layout) -> Result<Shared> {
 
     let id_name = sdna.as_ref().and_then(Sdna::id_name);
     let mut names = Vec::new();
-    for b in &blocks {
+    // Blocks by old address, sorted as they are added (a sort of up to
+    // MAX_BLOCKS entries in one go would not be bounded between yields).
+    let mut addrs = std::collections::BTreeSet::new();
+    for (i, b) in blocks.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        if b.old != 0 {
+            addrs.insert((b.old, i));
+        }
         let name = match id_name {
             Some((offset, len)) if is_id(&b.code) => {
                 let raw = cx.read_avail(b.data.sub(offset, len)).await?;
@@ -630,13 +645,13 @@ async fn load(cx: &Cx, file: Span, layout: Layout) -> Result<Shared> {
         names.push(name);
     }
 
-    let mut by_addr: Vec<(u64, usize)> = blocks
-        .iter()
-        .enumerate()
-        .filter(|(_, b)| b.old != 0)
-        .map(|(i, b)| (b.old, i))
-        .collect();
-    by_addr.sort_unstable();
+    let mut by_addr: Vec<(u64, usize)> = Vec::with_capacity(addrs.len());
+    for entry in addrs {
+        if by_addr.len().is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        by_addr.push(entry);
+    }
 
     let blend = Arc::new(Blend {
         layout,
@@ -835,14 +850,23 @@ async fn file_blocks(cx: Cx, blend: Shared) -> Result<()> {
 
 /// ID blocks grouped by type, in order of first appearance.
 async fn datablocks(cx: Cx, blend: Shared) -> Result<()> {
+    // Codes in order of first appearance, and how many blocks have each.
     let mut seen: Vec<[u8; 4]> = Vec::new();
-    for b in &blend.blocks {
-        if is_id(&b.code) && !seen.contains(&b.code) {
-            seen.push(b.code);
+    let mut counts: std::collections::BTreeMap<[u8; 4], usize> = std::collections::BTreeMap::new();
+    for (i, b) in blend.blocks.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        if is_id(&b.code) {
+            let n = counts.entry(b.code).or_insert_with(|| {
+                seen.push(b.code);
+                0
+            });
+            *n = n.saturating_add(1);
         }
     }
     for code in seen {
-        let n = blend.blocks.iter().filter(|b| b.code == code).count();
+        let n = counts.get(&code).copied().unwrap_or(0);
         let title = match id_type(&code) {
             Some((_, many)) => {
                 let mut t = many.to_owned();
@@ -868,6 +892,8 @@ async fn datablocks_of(cx: Cx, (blend, code): (Shared, [u8; 4])) -> Result<()> {
     for (i, b) in blend.blocks.iter().enumerate() {
         if b.code == code {
             cx.push(block_node(&blend, i)).await;
+        } else if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
         }
     }
     Ok(())

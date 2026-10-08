@@ -181,6 +181,7 @@ async fn dlis(cx: Cx, input: Input) -> Result<()> {
     let mut visible = 0u64;
     let mut kinds: Vec<(String, u64)> = Vec::new();
     while cur.remaining() >= 4 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let len = u64::from(cur.u16().await?);
         let marker = cur.u16().await?;

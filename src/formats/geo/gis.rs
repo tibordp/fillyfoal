@@ -268,6 +268,7 @@ async fn iso8211(cx: Cx, input: Input) -> Result<()> {
     let mut ddr: Ddr = Arc::new(Vec::new());
     let mut n = 0u64;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let rec = file.tail(pos);
         let leader = read_leader(&cx, rec).await?;
         let span = file.sub(pos, leader.len);
@@ -1055,6 +1056,7 @@ async fn garmin_gdb(cx: Cx, input: Input) -> Result<()> {
     let mut version = 0u8;
     let (mut w, mut t, mut r) = (0u32, 0u32, 0u32);
     while cur.remaining() >= 5 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let len = u64::from(cur.u32().await?);
         let kind = cur.u8().await?;
@@ -1165,6 +1167,7 @@ async fn ov2(cx: Cx, input: Input) -> Result<()> {
     let mut cur = Cursor::new(&cx, file, LE);
     let mut n = 0u64;
     while !cur.at_end() {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let kind = cur.u8().await?;
         let size = u64::from(cur.u32().await?);

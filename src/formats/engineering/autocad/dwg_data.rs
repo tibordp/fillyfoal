@@ -115,6 +115,8 @@ pub struct Class {
 #[derive(Debug, Default)]
 pub struct Classes {
     pub list: Vec<Class>,
+    /// Class number to its first index in `list`.
+    pub index: BTreeMap<u16, usize>,
     pub header: Vec<BitField>,
     /// Byte offset of the CRC.
     pub end: u64,
@@ -124,13 +126,12 @@ pub struct Classes {
 impl Classes {
     pub fn name(&self, number: u16) -> Option<&str> {
         self.list
-            .iter()
-            .find(|c| c.number == number)
+            .get(*self.index.get(&number)?)
             .map(|c| c.dxf.as_str())
     }
 }
 
-fn parse_classes(data: &[u8], ver: Ver, high: bool) -> Classes {
+async fn parse_classes(cx: &Cx, data: &[u8], ver: Ver, high: bool) -> Classes {
     let mut out = Classes::default();
     let size = u64::from(u32_le(data, 16).unwrap_or(0));
     let area = if high { 24u64 } else { 20 };
@@ -169,6 +170,7 @@ fn parse_classes(data: &[u8], ver: Ver, high: bool) -> Classes {
         count = Some(usize::from(max.saturating_sub(499)));
     }
     loop {
+        cx.checkpoint().await;
         match count {
             Some(n) if out.list.len() >= n => break,
             // Without a count: until fewer bits than the smallest class
@@ -191,6 +193,7 @@ fn parse_classes(data: &[u8], ver: Ver, high: bool) -> Classes {
             out.error = Some(Diagnostic::malformed("classes overrun their section"));
             break;
         }
+        out.index.entry(number).or_insert(out.list.len());
         out.list.push(Class {
             number,
             dxf,
@@ -310,7 +313,7 @@ async fn load_classes(cx: &Cx, d: &Drawing) -> Option<Arc<Classes>> {
     }
     let max = cx.limits().max_read;
     let data = cx.read_avail(s.data.sub(0, max)).await.ok()?;
-    let classes = Arc::new(parse_classes(&data, d.ver, has_high_size(d)));
+    let classes = Arc::new(parse_classes(cx, &data, d.ver, has_high_size(d)).await);
     cx.cache(s.data, "dwg-classes", classes.clone());
     Some(classes)
 }
@@ -344,6 +347,7 @@ pub async fn classes_node(cx: &Cx, d: &Drawing, data: Span) -> Result<()> {
         cx.emit(node);
     }
     for (i, class) in classes.list.iter().enumerate() {
+        cx.checkpoint().await;
         let kind = match class.item {
             0x1f2 => "entity",
             0x1f3 => "object",
@@ -396,10 +400,11 @@ pub struct ObjectMap {
     pub error: Option<Diagnostic>,
 }
 
-fn parse_map(data: &[u8], span: Span) -> ObjectMap {
+async fn parse_map(cx: &Cx, data: &[u8], span: Span) -> ObjectMap {
     let mut out = ObjectMap::default();
     let mut pos = 0usize;
     loop {
+        cx.checkpoint().await;
         let Some(size) = u16_be(data, pos) else {
             out.error = Some(Diagnostic::malformed(
                 "object map ends without its final block",
@@ -450,7 +455,7 @@ async fn load_map(cx: &Cx, data: Span) -> Result<Arc<ObjectMap>> {
     }
     let max = cx.limits().max_read;
     let bytes = cx.read_avail(data.sub(0, max)).await?;
-    let mut map = parse_map(&bytes, data);
+    let mut map = parse_map(cx, &bytes, data).await;
     if to_u64(bytes.len()) < data.len && map.error.is_some() {
         map.error = Some(Diagnostic::limit(
             "only the beginning of the object map was read",

@@ -615,6 +615,9 @@ async fn metadata(cx: &Cx, sas: &mut Sas) -> Result<()> {
     }
     let n = names.len().max(attrs.len());
     for k in 0..n {
+        if k.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let mut col = Column {
             name: names
                 .get(k)
@@ -901,7 +904,10 @@ async fn decode_row(
         (span, cx.read(span).await?)
     };
     let mut items = Vec::new();
-    for col in &sas.columns {
+    for (i, col) in sas.columns.iter().enumerate() {
+        if i > 0 && i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let start = to_usize(col.offset);
         let bytes = raw
             .get(start..start.saturating_add(to_usize(col.width)))
@@ -916,8 +922,39 @@ async fn decode_row(
     Ok(Some(row_node(name, span, items)))
 }
 
-/// Where rows are on a page: (span, compressed) in order.
-fn page_rows(sas: &Sas, span: Span, page: &Page, remaining: u64) -> Vec<(Span, bool)> {
+/// Where rows are on a page: the rows that subheader pointers locate
+/// ((span, compressed) in order), then `regular` uncompressed rows from
+/// `page.rows_at`.
+struct PageRows {
+    pointed: Vec<(Span, bool)>,
+    regular: u64,
+}
+
+impl PageRows {
+    fn len(&self) -> u64 {
+        to_u64(self.pointed.len()).saturating_add(self.regular)
+    }
+
+    /// The `k`th row on the page.
+    fn get(&self, sas: &Sas, span: Span, page: &Page, k: u64) -> Option<(Span, bool)> {
+        match k.checked_sub(to_u64(self.pointed.len())) {
+            None => self.pointed.get(to_usize(k)).copied(),
+            Some(r) if r < self.regular => Some((
+                span.sub(
+                    page.rows_at
+                        .saturating_add(r.saturating_mul(sas.row_length)),
+                    sas.row_length,
+                ),
+                false,
+            )),
+            Some(_) => None,
+        }
+    }
+}
+
+/// Where rows are on a page (at most `remaining`), without listing the
+/// regular rows, which may be many.
+fn page_rows(sas: &Sas, span: Span, page: &Page, remaining: u64) -> PageRows {
     let mut out = Vec::new();
     for p in &page.pointers {
         if let Kind::Row { compressed } = p.kind {
@@ -935,18 +972,14 @@ fn page_rows(sas: &Sas, span: Span, page: &Page, remaining: u64) -> Vec<(Span, b
         .saturating_sub(page.rows_at)
         .checked_div(sas.row_length)
         .unwrap_or(0);
-    for k in 0..on_page.min(fit) {
-        out.push((
-            span.sub(
-                page.rows_at
-                    .saturating_add(k.saturating_mul(sas.row_length)),
-                sas.row_length,
-            ),
-            false,
-        ));
-    }
     out.truncate(to_usize(remaining));
-    out
+    let regular = on_page
+        .min(fit)
+        .min(remaining.saturating_sub(to_u64(out.len())));
+    PageRows {
+        pointed: out,
+        regular,
+    }
 }
 
 async fn rows(cx: Cx, sas: Arc<Sas>) -> Result<()> {
@@ -964,7 +997,11 @@ async fn rows(cx: Cx, sas: Arc<Sas>) -> Result<()> {
             .await?;
         let page = parse_page(sas.lay, span, &raw, sas.codec.is_some());
         let found = page_rows(&sas, span, &page, sas.row_count.saturating_sub(row));
-        for (k, (rspan, compressed)) in found.into_iter().enumerate().skip(first) {
+        for k in to_u64(first)..found.len() {
+            let Some((rspan, compressed)) = found.get(&sas, span, &page, k) else {
+                break;
+            };
+            let k = to_usize(k);
             let state = (page_index, k, row);
             cx.mark(move || state);
             let name = format!("Row {}", row.saturating_add(1));

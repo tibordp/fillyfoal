@@ -488,6 +488,7 @@ async fn fgb_features(cx: Cx, (data, columns): (Span, Columns)) -> Result<()> {
     let mut cur = Cursor::new(&cx, data, LE);
     let mut i = 0u64;
     while cur.remaining() >= 4 {
+        cx.progress_in(data, data.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let size = u64::from(cur.u32().await?);
         let body = cur.span(size);
@@ -907,6 +908,7 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
     let (mut nodes, mut ways, mut relations) = (0u64, 0u64, 0u64);
     let mut ids = [0i64; 3];
     while !cur.at_end() {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let kind = cur.u8().await?;
         if kind >= 0xf0 {

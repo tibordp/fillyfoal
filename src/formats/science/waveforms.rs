@@ -226,6 +226,7 @@ async fn igor_itx(cx: Cx, input: Input) -> Result<()> {
     let mut waves = Vec::new();
     let mut commands = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         if let Some((decl, start, n)) = block.as_mut() {
@@ -277,6 +278,7 @@ async fn labview_lvm(cx: Cx, input: Input) -> Result<()> {
     let mut seg_start = None;
     let mut rows = 0u64;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let ends = next
             .as_ref()
@@ -669,6 +671,7 @@ async fn fst(cx: Cx, input: Input) -> Result<()> {
     let mut blocks = 0u32;
     let mut summary = String::new();
     while cur.remaining() >= 9 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let kind = cur.u8().await?;
         let len = cur.u64().await?;

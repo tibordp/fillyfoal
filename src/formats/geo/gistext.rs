@@ -8,6 +8,7 @@
 use std::borrow::Cow;
 
 use super::{leaf, text};
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, read_record};
@@ -35,6 +36,7 @@ fn line_leaf(line: &LineBuf) -> Node {
 async fn region_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         cx.push(line_leaf(&line)).await;
     }
     Ok(())
@@ -92,6 +94,7 @@ async fn igc(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut fixes = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -234,6 +237,7 @@ async fn ozi_walk(
     let mut lines = Lines::new(cx, file);
     let mut n = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let index = usize::try_from(line.number.saturating_sub(1)).unwrap_or(usize::MAX);
         if let Some(name) = header.get(index) {
             cx.push(leaf(*name, line.span, text(line.text().trim())))
@@ -419,6 +423,7 @@ async fn mif(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<(u64, String)> = None;
     let mut n = 0u64;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let Some(line) = lines.peek().await? else {
             break;
         };
@@ -544,6 +549,7 @@ async fn grass_ascii(cx: Cx, input: Input) -> Result<()> {
     let (mut rows, mut cols) = (String::new(), String::new());
     let mut row = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -580,6 +586,7 @@ async fn grass_vector(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut body = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.bytes.starts_with(b"VERTI:") {
             body = line.next;
             cx.push(leaf("VERTI", line.span, text(""))).await;
@@ -712,9 +719,32 @@ declare_format!(pub WKT = "wkt-crs", "WKT coordinate reference system", ["prj", 
 /// The longest WKT read whole.
 const WKT_MAX: u64 = 1 << 20;
 
+/// Work allowed for parsing one WKT text (bytes scanned and items tried).
+/// A child element that runs to the end unbalanced is re-read by its parent
+/// as a bare word, so without a bound nested unbalanced input would be
+/// retried combinatorially.
+const WKT_WORK: u64 = 1 << 24;
+
+/// Takes `n` from the WKT work budget; `None` (and an empty budget) when
+/// it does not cover them.
+fn spend(work: &mut u64, n: u64) -> Option<()> {
+    match work.checked_sub(n) {
+        Some(left) => {
+            *work = left;
+            Some(())
+        }
+        None => {
+            *work = 0;
+            None
+        }
+    }
+}
+
 /// Parses one element `KEYWORD[params]` at `*at`, returning its node.
-fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
+/// `work` is the budget left (see [`WKT_WORK`]); at zero, parsing fails.
+fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32, work: &mut u64) -> Option<Node> {
     let b = p.bytes();
+    spend(work, 1)?;
     while b.get(*at).is_some_and(u8::is_ascii_whitespace) {
         *at = at.saturating_add(1);
     }
@@ -734,6 +764,8 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
     let mut children = Vec::new();
     let mut params = Vec::new();
     loop {
+        let item = *at;
+        spend(work, 1)?;
         while b
             .get(*at)
             .is_some_and(|c| c.is_ascii_whitespace() || *c == b',')
@@ -776,9 +808,12 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
                 if depth >= 32 {
                     return None;
                 }
-                if let Some(child) = wkt_element(p, at, depth.saturating_add(1)) {
+                if let Some(child) = wkt_element(p, at, depth.saturating_add(1), work) {
                     children.push(child);
                 } else {
+                    if *work == 0 {
+                        return None;
+                    }
                     // A bare word (an enumeration such as `NORTH`).
                     *at = save;
                     while b.get(*at).is_some_and(|c| !matches!(c, b',' | b']' | b')')) {
@@ -801,6 +836,7 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32) -> Option<Node> {
                 params.push(super::field_node("Value", w));
             }
         }
+        spend(work, to_u64(at.saturating_sub(item)))?;
     }
     let span = p.slice(start, *at).span();
     let mut nodes = params;
@@ -824,8 +860,14 @@ async fn wkt(cx: Cx, input: Input) -> Result<()> {
     let data = cx.read(file).await?;
     let piece = Piece::new(&data, file);
     let mut at = 0usize;
-    let root = wkt_element(piece, &mut at, 0)
-        .ok_or_else(|| Diagnostic::malformed("unbalanced WKT").at(file))?;
+    let mut work = WKT_WORK;
+    let root = wkt_element(piece, &mut at, 0, &mut work).ok_or_else(|| {
+        if work == 0 {
+            Diagnostic::limit("WKT text too complex").at(file)
+        } else {
+            Diagnostic::malformed("unbalanced WKT").at(file)
+        }
+    })?;
     let summary = format!(
         "{}{}",
         root.name,
@@ -942,6 +984,7 @@ async fn section_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let mut row = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if line.number == 1 || line.is_blank() {
             continue;
         }
@@ -1057,4 +1100,39 @@ async fn srm(cx: Cx, input: Input) -> Result<()> {
         h.magic, h.blocks, h.markers, h.recint1, h.recint2
     ));
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Piece, Span, WKT_WORK, wkt_element};
+
+    fn parse(text: &[u8]) -> (Option<String>, u64) {
+        let len = crate::bytes::to_u64(text.len());
+        let span = Span::new(crate::span::SourceId(0), 0, len);
+        let mut at = 0usize;
+        let mut work = WKT_WORK;
+        let node = wkt_element(Piece::new(text, span), &mut at, 0, &mut work);
+        (node.map(|n| n.name.into_owned()), work)
+    }
+
+    #[test]
+    fn wkt_parses() {
+        let (name, work) =
+            parse(br#"GEOGCS["WGS 84",DATUM["D",SPHEROID["S",6378137,298.25]],UNIT["deg",0.01]]"#);
+        assert_eq!(name.as_deref(), Some("GEOGCS"));
+        assert!(work > 0);
+    }
+
+    #[test]
+    fn unbalanced_nesting_is_bounded() {
+        // Each `B[` is retried as a child at every enclosing level: without
+        // a work bound this does not finish.
+        let mut text = b"A[".to_vec();
+        for _ in 0..2000 {
+            text.extend_from_slice(b"B[,");
+        }
+        let (name, work) = parse(&text);
+        assert_eq!(name, None);
+        assert_eq!(work, 0);
+    }
 }

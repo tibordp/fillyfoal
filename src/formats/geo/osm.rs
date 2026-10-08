@@ -22,6 +22,7 @@ async fn osm_pbf(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut blocks = 0u32;
     while pos.saturating_add(4) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let len = u64::from(u32_be(&cx.read(file.sub(pos, 4)).await?, 0).unwrap_or(0));
         if len == 0 || len > 64 * 1024 {
             return Err(Diagnostic::malformed("implausible BlobHeader length").at(file.sub(pos, 4)));

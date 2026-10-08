@@ -1076,6 +1076,7 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
     let mut n = 0u64;
     let mut kinds = (0u64, 0u64);
     while !cur.at_end() {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let head = cur.bytes(12).await?;
         let len = u64_le(&head, 0).unwrap_or(0);

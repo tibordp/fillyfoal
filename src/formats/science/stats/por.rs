@@ -455,10 +455,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                         cx.checkpoint().await;
                         vars.push(r.string().await?);
                     }
-                    let numeric = vars
-                        .first()
-                        .and_then(|name| por.vars.iter().find(|v| &v.name == name))
-                        .is_none_or(|v| v.width == 0);
+                    let mut first = None;
+                    if let Some(name) = vars.first() {
+                        for (i, v) in por.vars.iter().enumerate() {
+                            if i > 0 && i.is_multiple_of(4096) {
+                                cx.checkpoint().await;
+                            }
+                            if &v.name == name {
+                                first = Some(v);
+                                break;
+                            }
+                        }
+                    }
+                    let numeric = first.is_none_or(|v| v.width == 0);
                     let count = r.integer().await?;
                     let mut entries = Vec::new();
                     for _ in 0..count {
@@ -608,6 +617,22 @@ async fn cases(cx: Cx, por: Arc<Por>) -> Result<()> {
         return Ok(());
     }
     cx.set_count(Count::Unknown);
+    // The label sets that name each variable, in order.
+    let mut sets_of: std::collections::BTreeMap<&str, Vec<usize>> =
+        std::collections::BTreeMap::new();
+    let mut work = 0u64;
+    for (i, set) in por.labels.iter().enumerate() {
+        for name in &set.vars {
+            work = work.saturating_add(1);
+            if work.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
+            let list = sets_of.entry(name.as_str()).or_default();
+            if list.last() != Some(&i) {
+                list.push(i);
+            }
+        }
+    }
     let mut r = Reader::new(&cx, por.file, por.xlat.clone());
     let (m, mut index) = cx.resume::<(Mark, u64)>().unwrap_or((start, 0));
     r.restore(m);
@@ -618,9 +643,17 @@ async fn cases(cx: Cx, por: Arc<Por>) -> Result<()> {
             _ => {}
         }
         cx.mark(move || here);
+        cx.progress_in(por.file, por.file.offset.saturating_add(r.pos));
         let case_start = r.pos;
         let mut items = Vec::new();
+        // One unit of work per 4096 variables or labels compared.
+        let mut work = 0u64;
         for var in &por.vars {
+            work = work.saturating_add(1);
+            while work >= 4096 {
+                cx.checkpoint().await;
+                work = work.saturating_sub(4096);
+            }
             let at = r.pos;
             let (v, text) = value(&mut r, var.width == 0).await?;
             let span = por.file.sub(at, r.pos.saturating_sub(at));
@@ -638,11 +671,13 @@ async fn cases(cx: Cx, por: Arc<Por>) -> Result<()> {
                     },
                 }
             };
-            let label = por
-                .labels
-                .iter()
-                .filter(|s| s.vars.contains(&var.name))
+            let label = sets_of
+                .get(var.name.as_str())
+                .into_iter()
+                .flatten()
+                .filter_map(|&i| por.labels.get(i))
                 .flat_map(|s| s.entries.iter())
+                .inspect(|_| work = work.saturating_add(1))
                 .find(|(n, t, _)| {
                     if var.width == 0 {
                         v.is_some() && *n == v

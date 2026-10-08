@@ -82,11 +82,22 @@ fn fcs_pairs(data: &[u8], span: Span) -> Vec<(String, String, Span)> {
         .collect()
 }
 
-fn fcs_get<'a>(pairs: &'a [(String, String, Span)], key: &str) -> Option<&'a str> {
-    pairs
-        .iter()
-        .find(|(k, _, _)| k.eq_ignore_ascii_case(key))
-        .map(|(_, v, _)| v.trim())
+/// TEXT keywords (in upper case) to the first value given for them.
+type FcsKeys<'a> = std::collections::BTreeMap<String, &'a str>;
+
+async fn fcs_keys<'a>(cx: &Cx, pairs: &'a [(String, String, Span)]) -> FcsKeys<'a> {
+    let mut keys = FcsKeys::new();
+    for (i, (k, v, _)) in pairs.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        keys.entry(k.to_ascii_uppercase()).or_insert(v.as_str());
+    }
+    keys
+}
+
+fn fcs_get<'a>(keys: &FcsKeys<'a>, key: &str) -> Option<&'a str> {
+    keys.get(&key.to_ascii_uppercase()).map(|v| v.trim())
 }
 
 async fn fcs(cx: Cx, input: Input) -> Result<()> {
@@ -130,34 +141,31 @@ async fn fcs(cx: Cx, input: Input) -> Result<()> {
         .read_avail(text_span.sub(0, cx.limits().max_read))
         .await?;
     let pairs = fcs_pairs(&data, text_span);
+    let keys = fcs_keys(&cx, &pairs).await;
     // Large files record the DATA offsets only in TEXT.
     if data_begin == 0 && data_end == 0 {
-        data_begin = fcs_get(&pairs, "$BEGINDATA")
+        data_begin = fcs_get(&keys, "$BEGINDATA")
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        data_end = fcs_get(&pairs, "$ENDDATA")
+        data_end = fcs_get(&keys, "$ENDDATA")
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
     }
-    let params: u64 = fcs_get(&pairs, "$PAR")
+    let params: u64 = fcs_get(&keys, "$PAR")
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    let events: u64 = fcs_get(&pairs, "$TOT")
+    let events: u64 = fcs_get(&keys, "$TOT")
         .and_then(|v| v.parse().ok())
         .unwrap_or(0);
-    let datatype = fcs_get(&pairs, "$DATATYPE").unwrap_or("?").to_owned();
-    let byteord = fcs_get(&pairs, "$BYTEORD").unwrap_or("").to_owned();
-    let cytometer = fcs_get(&pairs, "$CYT").unwrap_or("").to_owned();
+    let datatype = fcs_get(&keys, "$DATATYPE").unwrap_or("?").to_owned();
+    let byteord = fcs_get(&keys, "$BYTEORD").unwrap_or("").to_owned();
+    let cytometer = fcs_get(&keys, "$CYT").unwrap_or("").to_owned();
     let channels: Vec<String> = (1..=params.min(1000))
-        .map(|i| {
-            fcs_get(&pairs, &format!("$P{i}N"))
-                .unwrap_or("?")
-                .to_owned()
-        })
+        .map(|i| fcs_get(&keys, &format!("$P{i}N")).unwrap_or("?").to_owned())
         .collect();
     let bits: Vec<u64> = (1..=params.min(1000))
         .map(|i| {
-            fcs_get(&pairs, &format!("$P{i}B"))
+            fcs_get(&keys, &format!("$P{i}B"))
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(0)
         })
@@ -231,6 +239,7 @@ async fn fcs_events(
     let mut at = 0u64;
     let mut index = 0u64;
     while at.saturating_add(size) <= span.len {
+        cx.progress_in(span, span.offset.saturating_add(at));
         let event = span.sub(at, size);
         let b = cx.read(event).await?;
         let mut values = Vec::new();
@@ -1398,6 +1407,7 @@ async fn tdms(cx: Cx, input: Input) -> Result<()> {
     let mut objects = Vec::new();
     let mut version = 0u32;
     while pos.saturating_add(TdmsLeadIn::SIZE) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         // The lead-in itself is always little endian.
         let lead: TdmsLeadIn = read_record(&cx, file.sub(pos, TdmsLeadIn::SIZE), LE).await?;
         if !lead.tag.starts_with("TDS") {
@@ -2020,6 +2030,7 @@ async fn nsx_packets(cx: Cx, (data, channels, major): (Span, u64, u8)) -> Result
     let mut cur = Cursor::new(&cx, data, LE);
     let mut i = 0u32;
     while cur.remaining() >= 9 {
+        cx.progress_in(data, data.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let header = cur.u8().await?;
         if header != 1 {
@@ -2146,6 +2157,7 @@ const PLX_BLOCKS: EnumTable = &[(1, "spike"), (4, "event"), (5, "continuous")];
 async fn plx_blocks(cx: Cx, data: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, data, LE);
     while cur.remaining() >= 16 {
+        cx.progress_in(data, data.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let kind = cur.u16().await?;
         let upper = cur.u16().await?;
@@ -2190,6 +2202,7 @@ async fn brainvision(cx: Cx, input: Input) -> Result<()> {
     let mut first = String::new();
     let mut summary: Vec<(String, String)> = Vec::new();
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"["));
         if starts && let Some((name, start, entries)) = section.take() {

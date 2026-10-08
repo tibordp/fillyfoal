@@ -37,6 +37,7 @@ use crate::formats::Input;
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, Radix, Value, lookup};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 const BE: Endian = Endian::Big;
@@ -265,13 +266,16 @@ struct Model {
     vgroups: Vec<Vgroup>,
     vdatas: Vec<Vdata>,
     diagnostics: Vec<Diagnostic>,
+    /// (tag, reference) to the first descriptor with them.
+    index: BTreeMap<(u16, u16), usize>,
+    /// Reference to the first vgroup and vdata with it.
+    vgroup_index: BTreeMap<u16, usize>,
+    vdata_index: BTreeMap<u16, usize>,
 }
 
 impl Model {
     fn find(&self, tag: u16, reference: u16) -> Option<&Dd> {
-        self.dds
-            .iter()
-            .find(|d| d.tag == tag && d.reference == reference)
+        self.dds.get(*self.index.get(&(tag, reference))?)
     }
 
     /// The data of (tag, ref), also looking for the special variant.
@@ -281,11 +285,11 @@ impl Model {
     }
 
     fn vgroup(&self, reference: u16) -> Option<&Vgroup> {
-        self.vgroups.iter().find(|v| v.reference == reference)
+        self.vgroups.get(*self.vgroup_index.get(&reference)?)
     }
 
     fn vdata(&self, reference: u16) -> Option<&Vdata> {
-        self.vdatas.iter().find(|v| v.reference == reference)
+        self.vdatas.get(*self.vdata_index.get(&reference)?)
     }
 
     fn count(&self, tag: u16) -> usize {
@@ -406,6 +410,9 @@ async fn build(cx: &Cx, file: Span) -> Result<Arc<Model>> {
         };
         let bytes = cx.read(table).await?;
         for (i, dd) in bytes.as_chunks::<12>().0.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
             m.dds.push(Dd {
                 tag: u16_be(dd, 0).unwrap_or(0),
                 reference: u16_be(dd, 2).unwrap_or(0),
@@ -427,7 +434,16 @@ async fn build(cx: &Cx, file: Span) -> Result<Arc<Model>> {
         }
         at = next;
     }
-    for dd in m.dds.clone() {
+    for (i, dd) in m.dds.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        m.index.entry((dd.tag, dd.reference)).or_insert(i);
+    }
+    for (i, dd) in m.dds.clone().into_iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         if m.vgroups.len().saturating_add(m.vdatas.len()) >= MAX_OBJECTS {
             m.diagnostics.push(Diagnostic::limit(format!(
                 "more than {MAX_OBJECTS} vgroups and vdatas"
@@ -441,7 +457,10 @@ async fn build(cx: &Cx, file: Span) -> Result<Arc<Model>> {
             1965 => {
                 let data = cx.read_avail(span).await?;
                 match parse_vgroup(&data, dd.reference, span) {
-                    Some(v) => m.vgroups.push(v),
+                    Some(v) => {
+                        m.vgroup_index.entry(v.reference).or_insert(m.vgroups.len());
+                        m.vgroups.push(v);
+                    }
                     None => m.diagnostics.push(
                         Diagnostic::malformed(format!("vgroup {} is malformed", dd.reference))
                             .at(span),
@@ -451,7 +470,10 @@ async fn build(cx: &Cx, file: Span) -> Result<Arc<Model>> {
             1962 => {
                 let data = cx.read_avail(span).await?;
                 match parse_vdata(&data, dd.reference, span) {
-                    Some(v) => m.vdatas.push(v),
+                    Some(v) => {
+                        m.vdata_index.entry(v.reference).or_insert(m.vdatas.len());
+                        m.vdatas.push(v);
+                    }
                     None => m.diagnostics.push(
                         Diagnostic::malformed(format!(
                             "vdata header {} is malformed",
@@ -530,10 +552,10 @@ async fn resolve(cx: &Cx, file: Span, m: &Model, dd: &Dd) -> Result<Resolved> {
             let per_table = usize::try_from(u32_be(&head, 10).unwrap_or(0)).unwrap_or(0);
             let mut link = u16_be(&head, 14).unwrap_or(0);
             let mut pieces = Vec::new();
-            let mut seen = Vec::new();
+            let mut seen = std::collections::BTreeSet::new();
             let mut remaining = total;
             while link != 0 && !seen.contains(&link) && pieces.len() < MAX_LINKED {
-                seen.push(link);
+                seen.insert(link);
                 let table = m.find(20, link).and_then(|d| d.data(file)).ok_or_else(|| {
                     Diagnostic::malformed(format!("link table {link} is missing"))
                 })?;
@@ -1118,7 +1140,14 @@ async fn sds(cx: Cx, (file, reference, with_dims): (Span, u16, bool)) -> Result<
     cx.emit(vgroup_node(file, v, "Variable vgroup"));
     // Dimensions: names from the Dim0.0 vgroups, sizes from the SDD.
     let mut dim_index = 0usize;
+    // One unit of work per 4096 members looked at.
+    let mut work = 0u64;
     for &(t, r) in &v.members {
+        work = work.saturating_add(1);
+        while work >= 4096 {
+            cx.checkpoint().await;
+            work = work.saturating_sub(4096);
+        }
         if t != 1965 || !with_dims {
             continue;
         }
@@ -1138,13 +1167,24 @@ async fn sds(cx: Cx, (file, reference, with_dims): (Span, u16, bool)) -> Result<
             node = node.value(uint(size, 32));
         }
         // A coordinate variable with the same name holds the scale.
-        let scale = m.vgroups.iter().find(|c| {
-            c.class == "Var0.0"
-                && c.name == d.name
-                && c.members
+        let mut scale = None;
+        for c in &m.vgroups {
+            work = work.saturating_add(1);
+            while work >= 4096 {
+                cx.checkpoint().await;
+                work = work.saturating_sub(4096);
+            }
+            if c.class == "Var0.0" && c.name == d.name {
+                work = work.saturating_add(to_u64(c.members.len()));
+                if c.members
                     .iter()
                     .any(|&(t, r)| t == 1962 && m.vdata(r).is_some_and(|x| x.class == "CoordVar"))
-        });
+                {
+                    scale = Some(c);
+                    break;
+                }
+            }
+        }
         if let Some(c) = scale {
             node = node
                 .summary("with a coordinate variable (dimension scale)")
@@ -1813,7 +1853,13 @@ const INTERLACES: EnumTable = &[(0, "pixel"), (1, "line"), (2, "component")];
 
 async fn raster_list(cx: Cx, file: Span) -> Result<()> {
     let m = build(&cx, file).await?;
-    for dd in m.dds.iter().filter(|d| d.tag == 306 || d.tag == 202) {
+    for (i, dd) in m.dds.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        if dd.tag != 306 && dd.tag != 202 {
+            continue;
+        }
         let Some(span) = dd.data(file) else { continue };
         if dd.tag == 202 {
             // 8-bit raster: dimensions in ID8, palette in IP8, same ref.

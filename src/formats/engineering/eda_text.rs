@@ -37,6 +37,27 @@ async fn command_lines(
     Ok((counts, all))
 }
 
+/// What `f` picks out of the lines' text, up to `limit` values, yielding
+/// between lines (there may be many).
+async fn pick(
+    cx: &Cx,
+    lines: &[Line],
+    limit: usize,
+    f: impl Fn(&str) -> Option<String>,
+) -> Vec<String> {
+    let mut out = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        if out.len() >= limit {
+            break;
+        }
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        out.extend(f(&l.text()));
+    }
+    out
+}
+
 fn count(counts: &[(String, u64)], key: &str) -> u64 {
     counts.iter().find(|(k, _)| k == key).map_or(0, |(_, n)| *n)
 }
@@ -68,7 +89,10 @@ async fn emit_blocks(
     let mut blocks = 0u64;
     let mut current: Option<(String, Vec<Line>)> = None;
     let mut loose: Vec<Line> = Vec::new();
-    for l in lines {
+    for (i, l) in lines.into_iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let t = l.text();
         if let Some(name) = start(t.trim()) {
             if let Some((n, body)) = current.take() {
@@ -131,17 +155,16 @@ declare_format!(pub LTSPICE_ASY = "ltspice-asy", "LTspice symbol", ["asy"], "tex
 async fn ltspice_asc(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (counts, lines) = command_lines(&cx, file, 0).await?;
-    let directives: Vec<String> = lines
-        .iter()
-        .map(Line::text)
-        .filter(|t| t.starts_with("TEXT") && t.contains('!'))
-        .filter_map(|t| t.split_once('!').map(|(_, d)| d.to_owned()))
-        .collect();
-    let instances: Vec<String> = lines
-        .iter()
-        .map(Line::text)
-        .filter_map(|t| t.strip_prefix("SYMATTR InstName ").map(str::to_owned))
-        .collect();
+    let directives = pick(&cx, &lines, usize::MAX, |t| {
+        t.starts_with("TEXT")
+            .then(|| t.split_once('!').map(|(_, d)| d.to_owned()))
+            .flatten()
+    })
+    .await;
+    let instances = pick(&cx, &lines, usize::MAX, |t| {
+        t.strip_prefix("SYMATTR InstName ").map(str::to_owned)
+    })
+    .await;
     emit_blocks(&cx, file, lines, |t| {
         t.strip_prefix("SYMBOL ")
             .map(|s| format!("SYMBOL {}", s.split_whitespace().next().unwrap_or_default()))
@@ -165,16 +188,20 @@ async fn ltspice_asc(cx: Cx, input: Input) -> Result<()> {
 async fn ltspice_asy(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (counts, lines) = command_lines(&cx, file, 0).await?;
-    let kind = lines
-        .iter()
-        .map(Line::text)
-        .find_map(|t| t.strip_prefix("SymbolType ").map(str::to_owned))
-        .unwrap_or_default();
-    let prefix = lines
-        .iter()
-        .map(Line::text)
-        .find_map(|t| t.strip_prefix("SYMATTR Prefix ").map(str::to_owned))
-        .unwrap_or_default();
+    let kind = pick(&cx, &lines, 1, |t| {
+        t.strip_prefix("SymbolType ").map(str::to_owned)
+    })
+    .await
+    .into_iter()
+    .next()
+    .unwrap_or_default();
+    let prefix = pick(&cx, &lines, 1, |t| {
+        t.strip_prefix("SYMATTR Prefix ").map(str::to_owned)
+    })
+    .await
+    .into_iter()
+    .next()
+    .unwrap_or_default();
     emit_blocks(&cx, file, lines, |t| {
         if t.starts_with("PIN ") {
             Some("PIN".to_owned())
@@ -212,12 +239,12 @@ async fn kicad_legacy_sch(cx: Cx, input: Input) -> Result<()> {
                 .to_owned()
         })
         .unwrap_or_default();
-    let refs: Vec<String> = lines
-        .iter()
-        .map(Line::text)
-        .filter(|t| t.starts_with("L "))
-        .filter_map(|t| t.split_whitespace().nth(2).map(str::to_owned))
-        .collect();
+    let refs = pick(&cx, &lines, usize::MAX, |t| {
+        t.starts_with("L ")
+            .then(|| t.split_whitespace().nth(2).map(str::to_owned))
+            .flatten()
+    })
+    .await;
     emit_blocks(&cx, file, lines, |t| {
         if t.starts_with("$Comp") {
             Some("Component".to_owned())
@@ -242,18 +269,15 @@ async fn kicad_legacy_sch(cx: Cx, input: Input) -> Result<()> {
 async fn kicad_legacy_lib(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (_, lines) = command_lines(&cx, file, 0).await?;
-    let mut names = Vec::new();
-    for l in &lines {
-        let t = l.text();
-        if let Some(rest) = t.strip_prefix("DEF ") {
-            names.push(
-                rest.split_whitespace()
-                    .next()
-                    .unwrap_or_default()
-                    .to_owned(),
-            );
-        }
-    }
+    let names = pick(&cx, &lines, usize::MAX, |t| {
+        t.strip_prefix("DEF ").map(|rest| {
+            rest.split_whitespace()
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        })
+    })
+    .await;
     emit_blocks(&cx, file, lines, |t| {
         t.strip_prefix("DEF ")
             .map(|r| format!("DEF {}", r.split_whitespace().next().unwrap_or_default()))
@@ -315,17 +339,16 @@ declare_format!(pub GEDA_SCH = "geda-sch", "gEDA/Lepton schematic or symbol", ["
 async fn geda_sch(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (counts, lines) = command_lines(&cx, file, 1).await?;
-    let comps: Vec<String> = lines
-        .iter()
-        .map(Line::text)
-        .filter(|t| t.starts_with("C "))
-        .filter_map(|t| t.split_whitespace().nth(6).map(str::to_owned))
-        .collect();
-    let refdes: Vec<String> = lines
-        .iter()
-        .map(Line::text)
-        .filter_map(|t| t.strip_prefix("refdes=").map(str::to_owned))
-        .collect();
+    let comps = pick(&cx, &lines, usize::MAX, |t| {
+        t.starts_with("C ")
+            .then(|| t.split_whitespace().nth(6).map(str::to_owned))
+            .flatten()
+    })
+    .await;
+    let refdes = pick(&cx, &lines, usize::MAX, |t| {
+        t.strip_prefix("refdes=").map(str::to_owned)
+    })
+    .await;
     emit_blocks(&cx, file, lines, |t| match t.chars().next() {
         Some('C') if t.starts_with("C ") => Some(format!(
             "Component {}",
@@ -363,14 +386,12 @@ async fn pads_ascii(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (_, lines) = command_lines(&cx, file, 0).await?;
     let header = lines.first().map(Line::text).unwrap_or_default();
-    let mut sections = Vec::new();
-    for l in &lines {
-        let t = l.text();
+    let sections = pick(&cx, &lines, usize::MAX, |t| {
         let word = t.split_whitespace().next().unwrap_or_default();
-        if word.len() > 2 && word.starts_with('*') && word.ends_with('*') && word != "*REMARK*" {
-            sections.push(word.trim_matches('*').to_owned());
-        }
-    }
+        (word.len() > 2 && word.starts_with('*') && word.ends_with('*') && word != "*REMARK*")
+            .then(|| word.trim_matches('*').to_owned())
+    })
+    .await;
     emit_blocks(&cx, file, lines, |t| {
         let t = t.trim();
         let word = t.split_whitespace().next().unwrap_or_default();
@@ -406,7 +427,10 @@ async fn def(cx: Cx, input: Input) -> Result<()> {
     let (_, lines) = command_lines(&cx, file, 0).await?;
     let mut design = String::new();
     let mut sizes: Vec<(String, String)> = Vec::new();
-    for l in &lines {
+    for (i, l) in lines.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let t = l.text();
         let w: Vec<&str> = t.split_whitespace().collect();
         if w.first() == Some(&"DESIGN") {
@@ -457,7 +481,10 @@ async fn lef(cx: Cx, input: Input) -> Result<()> {
     let (_, lines) = command_lines(&cx, file, 0).await?;
     let mut macros = Vec::new();
     let mut layers = 0u32;
-    for l in &lines {
+    for (i, l) in lines.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let t = l.text();
         let t = t.trim();
         if let Some(m) = t.strip_prefix("MACRO ") {

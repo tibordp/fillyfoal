@@ -66,6 +66,7 @@ async fn fasta(cx: Cx, input: Input) -> Result<()> {
     let (mut records, mut residues) = (0u64, 0u64);
     let mut nucleotide = true;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let is_header = next.as_ref().is_none_or(|l| l.bytes.starts_with(b">"));
         if is_header && let Some((header, len, sample)) = current.take() {
@@ -158,6 +159,7 @@ async fn fastq(cx: Cx, input: Input) -> Result<()> {
     let (mut reads, mut bases) = (0u64, 0u64);
     let mut lengths = (u64::MAX, 0u64);
     while let Some(header) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if header.bytes.is_empty() {
             continue;
         }
@@ -295,6 +297,7 @@ async fn sam(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     let mut next = first;
     while let Some(line) = next {
+        cx.progress_in(file, file.offset.saturating_add(line.pos));
         if !line.bytes.is_empty() {
             let fields = line.split(b'\t');
             let get = |i: usize| fields.get(i).map_or("", |(s, _)| s.as_str());
@@ -447,6 +450,7 @@ async fn vcf(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(summary.clone());
     let mut count = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.bytes.is_empty() || line.bytes.starts_with(b"#") {
             continue;
         }
@@ -597,6 +601,7 @@ async fn gff3(cx: Cx, input: Input) -> Result<()> {
     let (mut features, mut directives) = (0u64, 0u64);
     let mut types: Vec<(String, u64)> = Vec::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t == "##FASTA" {
             let rest = file.tail(lines.pos());
@@ -767,6 +772,7 @@ async fn bed(cx: Cx, input: Input) -> Result<()> {
     let (mut features, mut tracks) = (0u64, 0u64);
     let mut columns = 0usize;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.bytes.is_empty() {
             continue;
         }
@@ -867,6 +873,7 @@ async fn wig(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<(Line, u64)> = None;
     let mut total = 0u64;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts_section = next.as_ref().is_none_or(|l| {
             l.bytes.starts_with(b"variableStep")
@@ -930,6 +937,7 @@ async fn genbank(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     let mut first = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t.starts_with("LOCUS") {
             start = Some(line.pos);
@@ -1087,16 +1095,20 @@ declare_format!(pub STOCKHOLM = "stockholm", "Stockholm multiple alignment", ["s
     Probe::Magic(&[(0, b"# STOCKHOLM 1.")]), stockholm);
 
 /// Sequences of an interleaved alignment: name, first span, aligned length.
+#[derive(Default)]
 struct Alignment {
     rows: Vec<(String, Span, u64)>,
+    /// Name to row.
+    index: std::collections::BTreeMap<String, usize>,
 }
 
 impl Alignment {
     fn add(&mut self, name: &str, seq: &str, span: Span) {
         let len = to_u64(seq.len());
-        if let Some(row) = self.rows.iter_mut().find(|(n, _, _)| n == name) {
+        if let Some(row) = self.index.get(name).and_then(|&i| self.rows.get_mut(i)) {
             row.2 = row.2.saturating_add(len);
         } else if self.rows.len() < 100_000 {
+            self.index.insert(name.to_owned(), self.rows.len());
             self.rows.push((name.to_owned(), span, len));
         }
     }
@@ -1115,14 +1127,19 @@ impl Alignment {
 }
 
 async fn alignment_rows(cx: Cx, rows: Vec<(String, Span, u64)>) -> Result<()> {
-    Alignment { rows }.emit(&cx).await;
+    Alignment {
+        rows,
+        ..Alignment::default()
+    }
+    .emit(&cx)
+    .await;
     Ok(())
 }
 
 async fn stockholm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
-    let mut aln = Alignment { rows: Vec::new() };
+    let mut aln = Alignment::default();
     let mut id = String::new();
     let mut alignments = 0u32;
     while let Some(line) = lines.next().await? {
@@ -1174,7 +1191,7 @@ declare_format!(pub CLUSTAL = "clustal", "Clustal multiple alignment", ["aln", "
 async fn clustal(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut lines = Lines::new(&cx, file);
-    let mut aln = Alignment { rows: Vec::new() };
+    let mut aln = Alignment::default();
     let mut header = String::new();
     let mut blocks = 0u32;
     let mut in_block = false;
@@ -1223,6 +1240,7 @@ async fn maf(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<(Line, Vec<Line>)> = None;
     let mut blocks = 0u64;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let ends = next
             .as_ref()
@@ -1309,6 +1327,7 @@ async fn nexus(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<Block> = None;
     let mut names = Vec::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let upper = t.trim().to_ascii_uppercase();
         if let Some(rest) = upper.strip_prefix("BEGIN ") {
@@ -1384,6 +1403,7 @@ async fn gfa(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut counts: Vec<(String, u64)> = Vec::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.bytes.is_empty() {
             continue;
         }
@@ -1595,6 +1615,7 @@ async fn pdb_structure(cx: Cx, input: Input) -> Result<()> {
 async fn pdb_section(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let record = line.column(0, 6);
         if record.is_empty() {
             continue;
@@ -2181,6 +2202,7 @@ async fn sdf(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     let mut mol_end = None;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.bytes.starts_with(b"M  END") {
             mol_end = Some(lines.pos());
         }
@@ -2283,6 +2305,7 @@ async fn jcamp(cx: Cx, input: Input) -> Result<()> {
     let mut blocks = 0u32;
     let mut depth = 0u32;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"##"));
         if starts && let Some((label, s, value, extra)) = current.take() {

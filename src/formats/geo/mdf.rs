@@ -428,7 +428,7 @@ async fn block(cx: Cx, (m, offset, path): (Mdf, u64, Path)) -> Result<()> {
 
 /// Lists a chain of blocks joined by their first (`next`) link.
 async fn chain(cx: Cx, (m, first, path): (Mdf, u64, Path)) -> Result<()> {
-    let mut seen = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
     let mut offset = first;
     while offset != 0 && seen.len() < MAX_CHAIN {
         if seen.contains(&offset) {
@@ -437,7 +437,7 @@ async fn chain(cx: Cx, (m, first, path): (Mdf, u64, Path)) -> Result<()> {
             )));
             break;
         }
-        seen.push(offset);
+        seen.insert(offset);
         let next = match read_block(&cx, m, offset).await {
             Ok(b) => b.links.first().copied().unwrap_or(0),
             Err(e) => {

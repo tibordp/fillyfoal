@@ -466,6 +466,7 @@ async fn rigaku_ras(cx: Cx, input: Input) -> Result<()> {
     let mut scans = 0u32;
     let (mut first, mut last) = (String::new(), String::new());
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         match t {

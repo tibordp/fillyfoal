@@ -71,8 +71,22 @@ async fn fits_header(cx: &Cx, file: Span, start: u64) -> Result<FitsHeader> {
     }
 }
 
-fn fits_value(cards: &[(String, String, Span)], key: &str) -> Option<String> {
-    cards.iter().find(|(k, _, _)| k == key).map(|(_, v, _)| {
+/// Card keywords to the first value given for them.
+type FitsKeys<'a> = std::collections::BTreeMap<&'a str, &'a str>;
+
+async fn fits_keys<'a>(cx: &Cx, cards: &'a [(String, String, Span)]) -> FitsKeys<'a> {
+    let mut keys = FitsKeys::new();
+    for (i, (k, v, _)) in cards.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        keys.entry(k.as_str()).or_insert(v.as_str());
+    }
+    keys
+}
+
+fn fits_value(cards: &FitsKeys<'_>, key: &str) -> Option<String> {
+    cards.get(key).map(|v| {
         v.split('/')
             .next()
             .unwrap_or_default()
@@ -83,7 +97,7 @@ fn fits_value(cards: &[(String, String, Span)], key: &str) -> Option<String> {
     })
 }
 
-fn fits_int(cards: &[(String, String, Span)], key: &str) -> Option<i64> {
+fn fits_int(cards: &FitsKeys<'_>, key: &str) -> Option<i64> {
     fits_value(cards, key)?.parse().ok()
 }
 
@@ -93,8 +107,9 @@ async fn fits(cx: Cx, input: Input) -> Result<()> {
     let mut index = 0u32;
     let mut first = None;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let header = fits_header(&cx, file, pos).await?;
-        let cards = &header.cards;
+        let cards = &fits_keys(&cx, &header.cards).await;
         let bitpix = fits_int(cards, "BITPIX").unwrap_or(8).unsigned_abs() / 8;
         let naxis = fits_int(cards, "NAXIS").unwrap_or(0);
         let mut size: u64 = if naxis > 0 { 1 } else { 0 };
@@ -400,6 +415,7 @@ async fn dicom_elements(cx: Cx, (span, enc, depth): (Span, Encoding, u32)) -> Re
     }
     let mut cur = Cursor::new(&cx, span, enc.endian);
     while cur.remaining() >= 8 {
+        cx.progress_in(span, span.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let group = cur.u16().await?;
         let element = cur.u16().await?;

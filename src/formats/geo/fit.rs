@@ -433,6 +433,7 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
     let mut defs: [Option<Arc<Def>>; 16] = Default::default();
     let mut n = 0u64;
     while !cur.at_end() {
+        cx.progress_in(data, data.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let rh = cur.u8().await?;
         if rh & 0xc0 == 0x40 {

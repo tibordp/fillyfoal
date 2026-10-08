@@ -120,6 +120,7 @@ async fn nastran(cx: Cx, input: Input) -> Result<()> {
 async fn deck_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t.trim().is_empty() || t.starts_with('$') {
             continue;
@@ -161,6 +162,7 @@ async fn ansys_cdb(cx: Cx, input: Input) -> Result<()> {
     let (mut nodes, mut elements) = (0u64, 0u64);
     let mut release = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if let Some((name, start, n)) = block.as_mut() {
             let end_block = t.trim_start().starts_with("N,R5")
@@ -452,6 +454,7 @@ async fn ensight_gold(cx: Cx, input: Input) -> Result<()> {
     let given = |s: &str| s.contains("given") || s.contains("ignore");
     let mut parts = 0u32;
     while cur.remaining() >= 84 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let s = cur.pos();
         let word = line80(cur.bytes(80).await?);
         if !word.starts_with("part") {

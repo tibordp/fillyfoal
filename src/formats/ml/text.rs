@@ -99,6 +99,7 @@ async fn ncnn(cx: Cx, input: Input) -> Result<()> {
     let mut layers = 0u64;
     let mut kinds = std::collections::BTreeMap::<String, u64>::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(input.span, input.span.offset.saturating_add(lines.pos()));
         let t = line.text();
         let node = match line.number {
             1 => Node::new("Magic").value(text(t.trim())),
@@ -184,6 +185,7 @@ async fn caffe(cx: Cx, input: Input) -> Result<()> {
     let mut layer: Option<(u64, String, String)> = None;
     let mut count = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(input.span, input.span.offset.saturating_add(lines.pos()));
         let t = line.text();
         let code = t.split('#').next().unwrap_or_default();
         let trimmed = code.trim();
@@ -232,6 +234,7 @@ async fn caffe(cx: Cx, input: Input) -> Result<()> {
 pub async fn block_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -268,6 +271,7 @@ async fn darknet(cx: Cx, input: Input) -> Result<()> {
     let mut kinds = std::collections::BTreeMap::<String, u64>::new();
     let mut end = 0u64;
     loop {
+        cx.progress_in(input.span, input.span.offset.saturating_add(lines.pos()));
         let line = lines.next().await?;
         let header = line.as_ref().and_then(|l| {
             let t = l.text();
@@ -487,6 +491,7 @@ async fn lightgbm(cx: Cx, input: Input) -> Result<()> {
     let mut trees = 0u64;
     let mut section: Option<(u64, String)> = None;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim().to_owned();
         let starts_tree = t.starts_with("Tree=");
@@ -781,7 +786,7 @@ async fn safetensors_index(cx: Cx, input: Input) -> Result<()> {
                 .collect();
             n.parse::<u64>().unwrap_or(0)
         });
-    let mut shards: Vec<String> = Vec::new();
+    let mut shards = std::collections::BTreeSet::new();
     let mut rest: &[u8] = &head;
     while let Some(at) = find(rest, b".safetensors\"") {
         let before = rest.get(..at).unwrap_or_default();
@@ -791,9 +796,7 @@ async fn safetensors_index(cx: Cx, input: Input) -> Result<()> {
             .map_or(0, |i| i.saturating_add(1));
         let name = String::from_utf8_lossy(before.get(start..).unwrap_or_default()).into_owned()
             + ".safetensors";
-        if !shards.contains(&name) {
-            shards.push(name);
-        }
+        shards.insert(name);
         rest = rest.get(at.saturating_add(13)..).unwrap_or_default();
     }
     json::dissect(cx.clone(), input).await?;

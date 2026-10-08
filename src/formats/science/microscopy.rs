@@ -288,6 +288,7 @@ async fn czi(cx: Cx, input: Input) -> Result<()> {
     let mut counts: Vec<(String, u64)> = Vec::new();
     let mut i = 0u64;
     while pos.saturating_add(CziSegment::SIZE) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let seg: CziSegment = read_record(&cx, file.sub(pos, CziSegment::SIZE), LE).await?;
         let id = seg.id.trim_end_matches('\0').to_owned();
         if id.is_empty() {
@@ -478,6 +479,7 @@ async fn nd2(cx: Cx, input: Input) -> Result<()> {
     let mut images = 0u64;
     let mut version = String::new();
     while cur.remaining() >= 16 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let magic = cur.u32().await?;
         if magic != 0x0abe_ceda {
@@ -678,6 +680,7 @@ async fn lif(cx: Cx, input: Input) -> Result<()> {
         .collect();
     let mut blocks = 0u64;
     while cur.remaining() >= 9 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let bstart = cur.pos();
         let magic = cur.u32().await?;
         if magic != 0x70 {

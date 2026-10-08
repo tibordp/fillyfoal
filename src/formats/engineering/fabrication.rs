@@ -1069,6 +1069,7 @@ async fn layers(cx: Cx, span: Span) -> Result<()> {
             let node = segment_node(span, &seg, end, index, seg_z, last);
             let at = mark;
             cx.mark(move || at);
+            cx.progress_in(span, span.offset.saturating_add(lines.pos()));
             cx.push(node).await;
             pushed = pushed.saturating_add(1);
             z = seg.move_z.or(seg.marker_z).or(z);
@@ -1173,6 +1174,7 @@ async fn lines(cx: Cx, (span, first): (Span, u64)) -> Result<()> {
     loop {
         let at = (lines.pos(), lines.number());
         cx.mark(move || at);
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let Some(line) = lines.next().await? else {
             break;
         };
@@ -1622,6 +1624,7 @@ async fn blocks(cx: Cx, (input, checksummed): (Input, bool)) -> Result<()> {
     while pos < file.len {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let b = read_block(&cx, file, pos, checksummed).await?;
         let mut node = Node::new(block_name(&b))
             .span(b.span)

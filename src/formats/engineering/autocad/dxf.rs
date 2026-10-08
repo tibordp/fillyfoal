@@ -470,6 +470,7 @@ async fn dxf(cx: Cx, input: Input) -> Result<()> {
     let mut eof = false;
     let mut expect_name = false;
     while let Some(tag) = tags.next().await? {
+        cx.progress_in(region, region.offset.saturating_add(tags.pos()));
         if expect_name {
             expect_name = false;
             if let Some(s) = current.as_mut()
@@ -627,6 +628,7 @@ async fn pairs(cx: Cx, (doc, region): (Doc, Span)) -> Result<()> {
     loop {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let Some(tag) = tags.next().await? else {
             break;
         };
@@ -825,6 +827,7 @@ async fn records(cx: Cx, (doc, region): (Doc, Span)) -> Result<()> {
     loop {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let Some(rec) = record(&mut tags).await? else {
             break;
         };
@@ -843,6 +846,7 @@ async fn header(cx: Cx, (doc, region): (Doc, Span)) -> Result<()> {
     loop {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let Some(first) = tags.next().await? else {
             break;
         };
@@ -903,6 +907,7 @@ async fn grouped(cx: &Cx, doc: Doc, region: Span, open: &str, close: &str) -> Re
     loop {
         let at = (pos, index);
         cx.mark(move || at);
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let Some(first) = record(&mut tags).await? else {
             break;
         };

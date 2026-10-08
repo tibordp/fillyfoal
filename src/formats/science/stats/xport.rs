@@ -139,6 +139,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 240u64;
     let mut names = Vec::new();
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.checkpoint().await;
         let r = cx.read(file.sub(pos, 80)).await?;
         if !matches!(header_name(&r), Some(b"MEMBER  " | b"MEMBV8  ")) {

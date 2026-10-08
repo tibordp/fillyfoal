@@ -105,7 +105,10 @@ declare_format!(pub MD5MESH = "md5mesh", "id Tech 4 MD5 model", ["md5mesh", "md5
 async fn md5mesh(cx: Cx, input: Input) -> Result<()> {
     let all = lines(&cx, input.span, 1 << 20).await?;
     let mut kv = Vec::new();
-    for (line, span) in &all {
+    for (i, (line, span)) in all.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let mut it = line.split_whitespace();
         if let (Some(k), Some(v)) = (it.next(), it.next())
             && (k.starts_with("num") || k == "MD5Version" || k == "commandline" || k == "frameRate")
