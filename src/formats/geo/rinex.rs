@@ -185,6 +185,7 @@ async fn header_lines(cx: Cx, span: Span) -> Result<()> {
 async fn record_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         cx.push(leaf(
             format!("Line {}", line.number),
             line.span,

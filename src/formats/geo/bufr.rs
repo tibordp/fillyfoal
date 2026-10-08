@@ -193,6 +193,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut w = cx.resume::<Walk>().unwrap_or_default();
     while w.pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(w.pos));
         let head = cx.read_avail(file.sub(w.pos, 8)).await?;
         if !head.starts_with(b"BUFR") {
             let window = cx.read_avail(file.sub(w.pos, SEARCH_WINDOW)).await?;

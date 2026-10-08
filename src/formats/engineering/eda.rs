@@ -1252,6 +1252,7 @@ async fn drill_hits(cx: Cx, list: Vec<Line>) -> Result<()> {
 async fn text_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let t = line.text();
         if !t.trim().is_empty() {
             cx.push(
@@ -1732,6 +1733,7 @@ async fn vcd_changes(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let mut current: Option<(String, u64, u64)> = None;
     loop {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"#"));
         if starts && let Some((time, start, n)) = current.take() {
@@ -1914,6 +1916,7 @@ async fn touchstone_options(cx: Cx, (options, span): (String, Span)) -> Result<(
 async fn touchstone_points(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let t = line.text();
         let body = t.split('!').next().unwrap_or_default().trim().to_owned();
         if body.is_empty() || body.starts_with('[') || body.starts_with('#') {
@@ -1942,6 +1945,7 @@ async fn citi(cx: Cx, input: Input) -> Result<()> {
     let (mut name, mut vars, mut datas) = (String::new(), Vec::new(), Vec::new());
     let mut blocks = 0usize;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         if let Some((kind, start, n)) = block.as_mut() {
@@ -2039,7 +2043,15 @@ async fn spice_raw(cx: Cx, input: Input) -> Result<()> {
     };
     let mut variables = Vec::new();
     let mut in_vars = false;
-    for l in header_text.lines() {
+    // Lines with their offsets in the header text (as `str::lines` splits).
+    let mut offset = 0usize;
+    for piece in header_text.split_inclusive('\n') {
+        let line_at = offset;
+        offset = offset.saturating_add(piece.len());
+        let l = match piece.strip_suffix('\n') {
+            Some(l) => l.strip_suffix('\r').unwrap_or(l),
+            None => piece,
+        };
         if l.starts_with("Variables:") {
             in_vars = true;
             continue;
@@ -2062,7 +2074,7 @@ async fn spice_raw(cx: Cx, input: Input) -> Result<()> {
         {
             let node = Node::new(k.trim().to_owned()).value(number(v.trim()));
             // Header lines are ASCII (or UTF-16) text; locate them for the span.
-            let at = header_text.find(l).map(to_u64).unwrap_or(0);
+            let at = to_u64(line_at);
             let (at, len) = if utf16 {
                 (at.saturating_mul(2), to_u64(l.len()).saturating_mul(2))
             } else {
@@ -2189,6 +2201,7 @@ async fn ibis(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<(String, String, u64, u64)> = None;
     let (mut version, mut components, mut models) = (String::new(), Vec::new(), 0u64);
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"["));
         if starts && let Some((key, value, start, n)) = current.take() {
@@ -2245,6 +2258,7 @@ async fn spef(cx: Cx, input: Input) -> Result<()> {
     let (mut design, mut nets, mut names) = (String::new(), 0u64, 0u64);
     let mut section = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         if let Some((name, cap, start, sections)) = net.as_mut() {

@@ -178,6 +178,7 @@ async fn ubx(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut n = 0u64;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let head = cx.read_avail(file.sub(pos, 6)).await?;
         let len = u64::from(u16_le(&head, 4).unwrap_or(0));
         let total = len.saturating_add(8);
@@ -360,6 +361,7 @@ async fn rtcm3(cx: Cx, input: Input) -> Result<()> {
     let mut n = 0u64;
     let mut station = None;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let frame = cx.read_avail(file.sub(pos, 1029)).await?;
         let Some(total) = rtcm_at(&frame, 0) else {
             match skip_gap(&cx, file, pos, b"\xd3").await? {
@@ -514,6 +516,7 @@ async fn sbf(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut n = 0u64;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let head = cx.read_avail(file.sub(pos, 8)).await?;
         let len = u64::from(u16_le(&head, 6).unwrap_or(0));
         let block = cx.read_avail(file.sub(pos, len.min(MAX_PACKET))).await?;
@@ -726,6 +729,7 @@ async fn novatel(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut n = 0u64;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let head = cx.read_avail(file.sub(pos, 28)).await?;
         let hlen = u64::from(head.get(3).copied().unwrap_or(0));
         let mlen = u64::from(u16_le(&head, 8).unwrap_or(0));
@@ -999,6 +1003,7 @@ async fn nmea(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut annotated = false;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }

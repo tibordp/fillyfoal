@@ -292,6 +292,7 @@ async fn segy_traces(cx: Cx, (span, format, samples): (Span, u16, u16)) -> Resul
     let mut at = 0u64;
     let mut i = 0u64;
     while at.saturating_add(240) <= span.len {
+        cx.progress_in(span, span.offset.saturating_add(at));
         let head = cx.read(span.sub(at, 240)).await?;
         // Per-trace sample counts take precedence when set.
         let n = match u16_be(&head, 114) {
@@ -649,6 +650,7 @@ async fn mseed2(cx: Cx, input: Input) -> Result<()> {
     let mut ids: Vec<String> = Vec::new();
     let mut samples = 0u64;
     while at.saturating_add(48) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let h: MseedHeader = read_record(&cx, file.sub(at, MseedHeader::SIZE), endian).await?;
         // Blockette 1000 gives the record length; walk the blockette chain.
         let mut len = 0u64;
@@ -818,6 +820,7 @@ async fn mseed3(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     let mut ids: Vec<String> = Vec::new();
     while at.saturating_add(Mseed3Header::SIZE) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let hs = file.sub(at, Mseed3Header::SIZE);
         let h: Mseed3Header = read_record(&cx, hs, LE).await?;
         if h.magic != "MS" {
@@ -1460,6 +1463,7 @@ async fn e57_pages(cx: Cx, (file, page): (Span, u64)) -> Result<()> {
 async fn xml_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         let t = line.text();
         if !t.trim().is_empty() {
             cx.push(
@@ -1601,6 +1605,7 @@ async fn pcd_ascii(cx: Cx, (data, names): (Span, Vec<String>)) -> Result<()> {
     let mut lines = Lines::new(&cx, data);
     let mut i = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(data, data.offset.saturating_add(lines.pos()));
         if line.bytes.is_empty() {
             continue;
         }
@@ -1686,6 +1691,7 @@ async fn las_log(cx: Cx, input: Input) -> Result<()> {
     let (mut version, mut well, mut curves, mut rows) =
         (String::new(), String::new(), Vec::new(), 0u64);
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"~"));
         if starts && let Some((name, start, body)) = section.take() {
@@ -1950,6 +1956,7 @@ async fn grid_rows(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let mut i = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if line.bytes.iter().all(u8::is_ascii_whitespace) {
             continue;
         }
@@ -2088,15 +2095,19 @@ async fn pds3(cx: Cx, input: Input) -> Result<()> {
         span: file,
         children: Vec::new(),
     }];
-    let mut pending: Option<(String, String, u64)> = None;
+    let mut pending: Option<(String, String, u64, OdlBalance)> = None;
     let mut label_end = 0u64;
     while let Some(line) = lines.next().await? {
         let t = line.text();
         let t = t.split("/*").next().unwrap_or_default().trim().to_owned();
-        if let Some((k, v, start)) = pending.as_mut() {
+        if let Some((k, v, start, balance)) = pending.as_mut() {
             v.push(' ');
             v.push_str(&t);
-            if odl_complete(v) {
+            // Counted per line: rescanning the whole value would make long
+            // unbalanced values quadratic.
+            balance.add(" ");
+            balance.add(&t);
+            if balance.complete() {
                 let item = OdlItem {
                     key: std::mem::take(k),
                     value: std::mem::take(v),
@@ -2138,7 +2149,11 @@ async fn pds3(cx: Cx, input: Input) -> Result<()> {
                     }
                 }
             }
-            _ if !odl_complete(&v) => pending = Some((k, v, line.pos)),
+            _ if !odl_complete(&v) => {
+                let mut balance = OdlBalance::new();
+                balance.add(&v);
+                pending = Some((k, v, line.pos, balance));
+            }
             _ => {
                 if let Some(top) = stack.last_mut()
                     && top.children.len() < 100_000
@@ -2220,12 +2235,43 @@ async fn pds3(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// Counts of a value's quotes, parentheses and braces, added to as the
+/// value grows.
+struct OdlBalance {
+    quotes: usize,
+    open: usize,
+    close: usize,
+    empty: bool,
+}
+
+impl OdlBalance {
+    fn new() -> Self {
+        OdlBalance {
+            quotes: 0,
+            open: 0,
+            close: 0,
+            empty: true,
+        }
+    }
+
+    fn add(&mut self, s: &str) {
+        self.quotes = self.quotes.saturating_add(s.matches('"').count());
+        self.open = self.open.saturating_add(s.matches(['(', '{']).count());
+        self.close = self.close.saturating_add(s.matches([')', '}']).count());
+        self.empty = self.empty && s.is_empty();
+    }
+
+    /// Whether the quotes, parentheses and braces are balanced.
+    fn complete(&self) -> bool {
+        self.quotes.is_multiple_of(2) && self.close >= self.open && !self.empty
+    }
+}
+
 /// Whether a value's quotes, parentheses and braces are balanced.
 fn odl_complete(v: &str) -> bool {
-    let quotes = v.matches('"').count().is_multiple_of(2);
-    let open = v.matches(['(', '{']).count();
-    let close = v.matches([')', '}']).count();
-    quotes && close >= open && !v.is_empty()
+    let mut b = OdlBalance::new();
+    b.add(v);
+    b.complete()
 }
 
 async fn odl_items(cx: Cx, items: Vec<OdlItem>) -> Result<()> {

@@ -49,15 +49,24 @@ impl<'a> Statements<'a> {
         const CHUNK: u64 = 0x4000;
         const MAX: usize = 0x10_0000;
         self.cx.checkpoint().await;
+        // Scan for a terminating ';' outside strings and comments. The scan
+        // resumes where it stopped when more bytes are read, so a long
+        // statement is scanned once, not once per chunk.
+        let mut i = 0usize;
+        let mut in_str = false;
+        let mut in_comment = false;
         loop {
             let off = to_usize(self.pos.saturating_sub(self.buf_at));
             let avail = self.buf.get(off..).unwrap_or_default();
-            // Scan for a terminating ';' outside strings and comments.
-            let mut i = 0usize;
-            let mut in_str = false;
-            let mut in_comment = false;
+            let buf_end = self.buf_at.saturating_add(to_u64(self.buf.len()));
+            let more = buf_end < self.region.len;
             let mut end = None;
             while let Some(&c) = avail.get(i) {
+                // A '/' or '*' that may start or end a comment waits for
+                // the next byte.
+                if more && matches!(c, b'/' | b'*') && avail.get(i.saturating_add(1)).is_none() {
+                    break;
+                }
                 if in_comment {
                     if c == b'*' && avail.get(i.saturating_add(1)) == Some(&b'/') {
                         in_comment = false;
@@ -77,7 +86,6 @@ impl<'a> Statements<'a> {
                 }
                 i = i.saturating_add(1);
             }
-            let buf_end = self.buf_at.saturating_add(to_u64(self.buf.len()));
             let found = match end {
                 Some(e) => Some(e.saturating_add(1)),
                 None if buf_end >= self.region.len || avail.len() >= MAX => {
@@ -554,6 +562,7 @@ async fn iges(cx: Cx, input: Input) -> Result<()> {
     let params = iges_params(&global, delim, record);
     let mut directory = Vec::new();
     for (letter, start, end, list) in sections {
+        cx.checkpoint().await;
         let span = file.sub(start, end.saturating_sub(start));
         let name = match letter {
             'S' => "Start section",
@@ -586,7 +595,10 @@ async fn iges(cx: Cx, input: Input) -> Result<()> {
         }
     }
     let mut kinds: Vec<(String, u64)> = Vec::new();
-    for pair in directory.chunks(2) {
+    for (i, pair) in directory.chunks(2).enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let t: u64 = pair
             .first()
             .map(|l| l.column(0, 8))
@@ -857,6 +869,7 @@ async fn gmsh(cx: Cx, input: Input) -> Result<()> {
         (String::new(), false, String::new(), String::new());
     let mut names = Vec::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         if let Some(end) = t.strip_prefix("$End") {
@@ -1156,6 +1169,7 @@ async fn keyword_deck(cx: Cx, input: Input) -> Result<()> {
     let mut title = String::new();
     let mut lsdyna = false;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next
             .as_ref()

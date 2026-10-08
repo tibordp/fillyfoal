@@ -259,6 +259,7 @@ async fn r13(cx: Cx, input: Input, ver: Ver) -> Result<()> {
     );
     let mut sections = Vec::new();
     for rec in records.as_chunks::<9>().0 {
+        cx.checkpoint().await;
         let number = rec.first().copied().unwrap_or(0);
         let seeker = u64::from(u32_le(rec, 1).unwrap_or(0));
         let size = u64::from(u32_le(rec, 5).unwrap_or(0));
@@ -288,6 +289,7 @@ async fn r13(cx: Cx, input: Input, ver: Ver) -> Result<()> {
         sections,
     });
     for (i, s) in drawing.sections.iter().enumerate() {
+        cx.checkpoint().await;
         let mut node = Node::new(s.name.clone())
             .span(s.data)
             .summary(format!("{:#x} bytes", s.size));
@@ -333,6 +335,7 @@ async fn file_header_r13(cx: Cx, file: Span) -> Result<()> {
     common_header(&mut f)?;
     f.u32("Section locator records").emit()?;
     for _ in 0..count {
+        cx.checkpoint().await;
         let at = f.pos();
         let rec = Fields::new(&block, LE);
         let mut rec = rec;
@@ -503,12 +506,15 @@ async fn system_page(cx: &Cx, file: Span, address: u64) -> Result<(Span, Span)> 
 /// The section page map: (page number, address, size, entry span).
 type PageMap = Vec<(i32, u64, u64, Span)>;
 
-fn parse_page_map(data: &[u8], span: Span) -> PageMap {
-    let mut out = Vec::new();
+async fn parse_page_map(cx: &Cx, data: &[u8], span: Span) -> PageMap {
+    let mut out: PageMap = Vec::new();
     let mut address = PAGES_START;
     let mut pos = 0usize;
     while let (Some(number), Some(size)) = (u32_le(data, pos), u32_le(data, pos.saturating_add(4)))
     {
+        if out.len().is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let number = i32::from_le_bytes(number.to_le_bytes());
         let len = if number < 0 { 24 } else { 8 };
         out.push((number, address, u64::from(size), span.sub(to_u64(pos), len)));
@@ -557,7 +563,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
     let section_map_id = u32_le(&eh, 0x5c).unwrap_or(0);
     let (map_header, map_data) = system_page(&cx, file, map_address).await?;
     let map_bytes = cx.read(map_data).await?;
-    let page_map = parse_page_map(&map_bytes, map_data);
+    let page_map = parse_page_map(&cx, &map_bytes, map_data).await;
     cx.emit(
         Node::new("Section page map")
             .span(map_header.sub(0, 0x14))
@@ -581,9 +587,21 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
             .summary(format!("{count} sections"))
             .lazy(section_map_node, (sm_header, sm_data)),
     );
+    // Page number to address, the first entry winning (as a linear search
+    // would), so that resolving every page is not quadratic.
+    let mut addresses = std::collections::BTreeMap::new();
+    for (i, &(n, a, _, _)) in page_map.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        if let Ok(n) = u32::try_from(n) {
+            addresses.entry(n).or_insert(a);
+        }
+    }
     let mut sections = Vec::new();
     let mut pos = 20usize;
     for _ in 0..count {
+        cx.checkpoint().await;
         let Some(desc) = sm.get(pos..pos.saturating_add(DESC_LEN)) else {
             cx.diag(Diagnostic::truncated(
                 sm_data.sub(to_u64(pos), to_u64(DESC_LEN)),
@@ -600,17 +618,17 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
         let desc_span = sm_data.sub(to_u64(pos), to_u64(DESC_LEN));
         pos = pos.saturating_add(DESC_LEN);
         let mut pages = Vec::new();
-        for _ in 0..page_count {
+        for k in 0..page_count {
+            if k > 0 && k.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
             let Some(p) = sm.get(pos..pos.saturating_add(16)) else {
                 break;
             };
             let number = u32_le(p, 0).unwrap_or(0);
             pages.push(Page {
                 number,
-                address: page_map
-                    .iter()
-                    .find(|(n, ..)| u32::try_from(*n).ok() == Some(number))
-                    .map(|&(_, a, _, _)| a),
+                address: addresses.get(&number).copied(),
                 data_size: u64::from(u32_le(p, 4).unwrap_or(0)),
                 start: u64_le(p, 8).unwrap_or(0),
                 entry: sm_data.sub(to_u64(pos), 16),
@@ -636,6 +654,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
         sections,
     });
     for (i, s) in drawing.sections.iter().enumerate() {
+        cx.checkpoint().await;
         if s.name.is_empty() && s.size == 0 {
             continue;
         }
@@ -764,7 +783,7 @@ async fn page_map_node(cx: Cx, (file, header, data): (Span, Span, Span)) -> Resu
     let mut f = Fields::emitting(&cx, &block, LE);
     system_page_header(&mut f)?;
     let bytes = cx.read(data).await?;
-    let map = parse_page_map(&bytes, data);
+    let map = parse_page_map(&cx, &bytes, data).await;
     cx.set_count(Count::Exact(to_u64(map.len()).saturating_add(5)));
     for (number, address, size, entry) in map {
         let (name, summary) = if number < 0 {
@@ -866,6 +885,7 @@ async fn section_desc(cx: Cx, span: Span) -> Result<()> {
         if f.remaining() < 16 {
             break;
         }
+        cx.checkpoint().await;
         let entry = f.peek_span(16);
         f.node(Node::new("Page").span(entry).lazy(page_entry, entry));
         f.skip(16);

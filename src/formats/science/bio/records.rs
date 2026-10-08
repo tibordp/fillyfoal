@@ -28,6 +28,7 @@ async fn hmmer3(cx: Cx, input: Input) -> Result<()> {
     let mut first = String::new();
     let mut version = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t.starts_with("HMMER3/") {
             start = line.pos;
@@ -136,6 +137,7 @@ async fn embl(cx: Cx, input: Input) -> Result<()> {
     let mut records = 0u64;
     let mut first = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t.starts_with("ID ") {
             start = Some((line.pos, t.get(5..).unwrap_or_default().trim().to_owned()));
@@ -312,6 +314,7 @@ async fn gtf(cx: Cx, input: Input) -> Result<()> {
     let mut genes: Vec<(String, u64)> = Vec::new();
     let mut features = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if t.is_empty() {
             continue;
@@ -445,6 +448,7 @@ async fn psl(cx: Cx, input: Input) -> Result<()> {
     let mut rows = 0u64;
     let mut version = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         if line.pos == 0 {
             version = t.trim().to_owned();
@@ -522,6 +526,7 @@ async fn mztab(cx: Cx, input: Input) -> Result<()> {
     let mut counts: Vec<(String, u64)> = Vec::new();
     let mut version = String::new();
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let prefix = next
             .as_ref()
@@ -617,6 +622,7 @@ async fn amber_prmtop(cx: Cx, input: Input) -> Result<()> {
     let (mut title, mut pointers) = (String::new(), Vec::<u64>::new());
     let mut sections = 0u32;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| l.bytes.starts_with(b"%FLAG"));
         if starts && let Some((name, start, format, data)) = section.take() {

@@ -177,6 +177,7 @@ async fn xtc(cx: Cx, input: Input) -> Result<()> {
     let mut frames = 0u64;
     let (mut natoms, mut first, mut last) = (0u32, 0.0f32, 0.0f32);
     while cur.remaining() >= 56 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let magic = cur.u32().await?;
         if magic != 1995 {
@@ -283,6 +284,7 @@ async fn trr(cx: Cx, input: Input) -> Result<()> {
     let mut natoms = 0u32;
     let mut double = false;
     while cur.remaining() >= 24 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         if cur.u32().await? != 1993 {
             cx.diag(Diagnostic::malformed("frame magic is not 1993").at(file.sub(start, 4)));
@@ -364,6 +366,7 @@ async fn mol2(cx: Cx, input: Input) -> Result<()> {
     let mut first = String::new();
     let (mut atoms, mut bonds) = (0u64, 0u64);
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next
             .as_ref()
@@ -476,6 +479,7 @@ async fn charmm_psf(cx: Cx, input: Input) -> Result<()> {
     let mut counts: Vec<(String, u64)> = Vec::new();
     let mut flags = String::new();
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let header = next.as_ref().is_some_and(|l| l.text().contains(" !N"));
         if (header || next.is_none())
@@ -542,6 +546,7 @@ async fn psf_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let mut first = true;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if first {
             first = false;
             continue;
@@ -614,6 +619,7 @@ async fn mgf(cx: Cx, input: Input) -> Result<()> {
     let mut spectra = 0u64;
     let mut peaks_total = 0u64;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let t = line.text();
         let t = t.trim();
         if t == "BEGIN IONS" {
@@ -729,6 +735,7 @@ async fn msp(cx: Cx, input: Input) -> Result<()> {
     let mut current: Option<(String, u64, String, u64)> = None;
     let mut spectra = 0u64;
     loop {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         let next = lines.next().await?;
         let starts = next.as_ref().is_none_or(|l| {
             l.bytes

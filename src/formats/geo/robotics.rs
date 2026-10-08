@@ -108,6 +108,7 @@ async fn ulog(cx: Cx, input: Input) -> Result<()> {
     cur.seek(16);
     let mut topics: BTreeMap<u16, String> = BTreeMap::new();
     while cur.remaining() >= 3 {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let size = u64::from(cur.u16().await?);
         let kind = cur.u8().await?;
@@ -341,6 +342,7 @@ async fn dataflash(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut n = 0u64;
     while pos.saturating_add(3) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let h = cx.read(file.sub(pos, 3)).await?;
         let fmt = if h.starts_with(b"\xa3\x95") {
             h.get(2).and_then(|t| formats.get(t)).cloned()
@@ -455,6 +457,7 @@ async fn ardupilot_log(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut columns: BTreeMap<String, Arc<Vec<String>>> = BTreeMap::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -577,6 +580,7 @@ async fn tlog(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut n = 0u64;
     while pos.saturating_add(10) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let h = cx.read(file.sub(pos, 20)).await?;
         let Some(len) = mavlink_at(&h, 8) else {
             return Err(Diagnostic::malformed("expected a MAVLink packet")
@@ -916,6 +920,7 @@ async fn gpmf(cx: Cx, input: Input) -> Result<()> {
 async fn gpmf_klv(cx: Cx, (region, depth): (Span, u32)) -> Result<()> {
     let mut cur = Cursor::new(&cx, region, Endian::Big);
     while cur.remaining() >= 8 {
+        cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let h = cur.bytes(8).await?;
         let key = lossy(h.get(..4).unwrap_or_default());
@@ -1034,6 +1039,7 @@ async fn rosbag(cx: Cx, input: Input) -> Result<()> {
 async fn ros_records(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
     let mut cur = Cursor::new(&cx, region, LE);
     while cur.remaining() >= 8 {
+        cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let hlen = u64::from(cur.u32().await?);
         if hlen > MAX_RECORD {
@@ -1197,6 +1203,7 @@ async fn mcap(cx: Cx, input: Input) -> Result<()> {
 async fn mcap_records(cx: Cx, (region, path): (Span, Path)) -> Result<()> {
     let mut cur = Cursor::new(&cx, region, LE);
     while cur.remaining() >= 9 {
+        cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let peek = cur.peek(8).await?;
         if peek.as_slice() == b"\x89MCAP0\r\n" {
@@ -1327,6 +1334,7 @@ async fn blackbox_log(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     let mut end = 0u64;
     while let Some(line) = lines.peek().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if !line.bytes.starts_with(b"H ") {
             break;
         }

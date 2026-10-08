@@ -107,6 +107,7 @@ async fn shp(cx: Cx, input: Input) -> Result<()> {
 async fn shp_records(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     while cur.remaining() >= 12 {
+        cx.progress_in(span, span.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let number = cur.u32().await?;
         let words = cur.u32().await?;

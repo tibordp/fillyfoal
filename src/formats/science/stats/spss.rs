@@ -232,9 +232,12 @@ impl Dict {
         decode_text(self.encoding.as_deref(), bytes)
     }
 
-    fn label_for(&self, var: &Var, raw: &[u8]) -> Option<String> {
+    /// The label of `raw` among `var`'s value labels; `work` counts the
+    /// entries compared.
+    fn label_for(&self, var: &Var, raw: &[u8], work: &mut u64) -> Option<String> {
         for &set in &var.sets {
             for (value, label, _) in &self.sets.get(set)?.entries {
+                *work = work.saturating_add(1);
                 let hit = if var.width == 0 {
                     raw.get(..8) == Some(value.as_slice())
                         || self.f64(*value) == self.f64(eight(raw))
@@ -402,9 +405,13 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
                         )
                     })
                     .collect();
-                for index in indexes {
+                for (i, index) in indexes.into_iter().enumerate() {
+                    if i.is_multiple_of(1024) {
+                        cx.checkpoint().await;
+                    }
                     let slot = u64::try_from(index.saturating_sub(1)).unwrap_or(u64::MAX);
-                    if let Some(v) = dict.vars.iter().position(|v| v.slot == slot) {
+                    // Slots increase with each variable.
+                    if let Ok(v) = dict.vars.binary_search_by_key(&slot, |v| v.slot) {
                         if let Some(s) = dict.sets.get_mut(set) {
                             s.vars.push(v);
                         }
@@ -488,9 +495,20 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
     }
     if let Some(raw) = long_names {
         let text = dict.text(&raw);
-        for pair in text.split('\t') {
+        // Short name to the first variable that has it.
+        let mut by_short = std::collections::BTreeMap::new();
+        for (i, v) in dict.vars.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
+            by_short.entry(v.short.clone()).or_insert(i);
+        }
+        for (i, pair) in text.split('\t').enumerate() {
+            if i.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
             if let Some((short, long)) = pair.split_once('=')
-                && let Some(var) = dict.vars.iter_mut().find(|v| v.short == short)
+                && let Some(var) = by_short.get(short).and_then(|&v| dict.vars.get_mut(v))
             {
                 long.clone_into(&mut var.name);
             }
@@ -586,14 +604,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
     if !dict.documents.is_empty() {
-        let lines: Vec<Node> = dict
-            .documents
-            .iter()
-            .enumerate()
-            .map(|(i, l)| {
-                Node::new(format!("Line {}", i.saturating_add(1))).value(Value::Text(l.clone()))
-            })
-            .collect();
+        let mut lines = Vec::with_capacity(dict.documents.len());
+        for (i, l) in dict.documents.iter().enumerate() {
+            if i.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
+            lines.push(
+                Node::new(format!("Line {}", i.saturating_add(1))).value(Value::Text(l.clone())),
+            );
+        }
         cx.emit(
             Node::new("Documents")
                 .summary(format!("{} lines", lines.len()))
@@ -690,6 +709,7 @@ async fn zsav(cx: &Cx, file: Span, data: Span, dict: &Dict, _: &Codec) -> Result
         if raw.len() < at.saturating_add(24) {
             break;
         }
+        cx.checkpoint().await;
         let uncompressed_at = get64(at);
         let compressed_at = get64(at.saturating_add(8));
         let size = u64::from(get32(at.saturating_add(16)) as u32);
@@ -1182,11 +1202,19 @@ async fn label_entries(cx: Cx, (dict, i): (Arc<Dict>, usize)) -> Result<()> {
     Ok(())
 }
 
-/// Decodes one case into items.
-fn decode_case(dict: &Dict, span: Span, bytes: &[u8]) -> Vec<Item> {
+/// Decodes one case into items (yielding between variables when there are
+/// many, or many value labels to compare).
+async fn decode_case(cx: &Cx, dict: &Dict, span: Span, bytes: &[u8]) -> Vec<Item> {
+    let mut work = 0u64;
     let sysmis = dict.sysmis.unwrap_or(SYSMIS);
     let mut items = Vec::new();
     for var in &dict.vars {
+        // One unit of work per 4096 variables or labels compared.
+        work = work.saturating_add(1);
+        while work >= 4096 {
+            cx.checkpoint().await;
+            work = work.saturating_sub(4096);
+        }
         let at = var.slot.saturating_mul(8);
         let start = crate::bytes::to_usize(at);
         if var.width == 0 {
@@ -1221,7 +1249,7 @@ fn decode_case(dict: &Dict, span: Span, bytes: &[u8]) -> Vec<Item> {
             let label = if bits == sysmis {
                 None
             } else {
-                dict.label_for(var, &raw)
+                dict.label_for(var, &raw, &mut work)
             };
             items.push(Item {
                 name: var.name.clone(),
@@ -1237,7 +1265,7 @@ fn decode_case(dict: &Dict, span: Span, bytes: &[u8]) -> Vec<Item> {
             items.push(Item {
                 name: var.name.clone(),
                 cell: Cell::Text(dict.text(trim_end(raw))),
-                label: dict.label_for(var, raw),
+                label: dict.label_for(var, raw, &mut work),
                 span: span.sub(at, crate::bytes::to_u64(width)),
             });
         }
@@ -1275,8 +1303,8 @@ async fn cases(cx: Cx, (dict, data): (Arc<Dict>, Span)) -> Result<()> {
             }
             break;
         }
-        cx.push(row_node(name, span, decode_case(&dict, span, &bytes)))
-            .await;
+        let items = decode_case(&cx, &dict, span, &bytes).await;
+        cx.push(row_node(name, span, items)).await;
         i = i.saturating_add(1);
     }
     Ok(())

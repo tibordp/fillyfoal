@@ -312,6 +312,10 @@ async fn ggml_walk(cx: &Cx, file: Span, layout: GgmlLayout, emit: bool) -> Resul
     let base = layout.tensors.offset.saturating_sub(file.offset);
     let (mut count, mut bytes) = (0u64, 0u64);
     while !cur.at_end() {
+        cx.progress_in(
+            layout.tensors,
+            layout.tensors.offset.saturating_add(cur.pos()),
+        );
         let start = cur.pos();
         let n_dims = cur.u32().await?;
         let name_len = cur.u32().await?;
@@ -1052,6 +1056,7 @@ async fn mlir(cx: Cx, input: Input) -> Result<()> {
     );
     let mut sections = Vec::new();
     while !cur.at_end() {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let id = cur.u8().await?;
         let len = mlir_varint(&mut cur).await?;

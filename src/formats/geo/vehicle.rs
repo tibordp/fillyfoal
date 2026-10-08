@@ -101,6 +101,7 @@ async fn blf(cx: Cx, input: Input) -> Result<()> {
 async fn blf_objects(cx: &Cx, region: Span, path: Path) -> Result<()> {
     let mut cur = Cursor::new(cx, region, LE);
     while cur.remaining() >= 16 {
+        cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         let start = cur.pos();
         let base = cur.bytes(16).await?;
         if base.get(..4) != Some(b"LOBJ") {
@@ -307,6 +308,7 @@ async fn asc(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut first = true;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -391,6 +393,7 @@ async fn candump(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut first = true;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -523,6 +526,7 @@ async fn trc(cx: Cx, input: Input) -> Result<()> {
     let mut lines = Lines::new(&cx, file);
     let mut version = String::new();
     while let Some(line) = lines.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -621,6 +625,7 @@ async fn push_statement(
 async fn statement_lines(cx: Cx, span: Span) -> Result<()> {
     let mut lines = Lines::new(&cx, span);
     while let Some(line) = lines.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }
@@ -802,6 +807,7 @@ async fn a2l_blocks(cx: Cx, (region, depth_limit): (Span, u32)) -> Result<()> {
     let mut depth = 0i64;
     let mut start: Option<(u64, String)> = None;
     while let Some(line) = lines.next().await? {
+        cx.progress_in(region, region.offset.saturating_add(lines.pos()));
         if line.is_blank() {
             continue;
         }

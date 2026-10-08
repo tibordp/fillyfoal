@@ -9,6 +9,7 @@
 //! Layout per Stata's `dta` documentation, as remembered; checked against
 //! files written by ReadStat (pyreadstat) and by pandas' own writer.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use super::{Cell, Item, date_cell, row_node, trim_end, until_nul};
@@ -128,9 +129,30 @@ struct Dta {
     data: Span,
     sets: Vec<LabelSet>,
     strls: Vec<Strl>,
+    /// Label set name, and strL (v, o), to the first with them.
+    set_index: BTreeMap<String, usize>,
+    strl_index: BTreeMap<(u64, u64), usize>,
 }
 
 impl Dta {
+    fn add_set(&mut self, set: LabelSet) {
+        self.set_index
+            .entry(set.name.clone())
+            .or_insert(self.sets.len());
+        self.sets.push(set);
+    }
+
+    fn add_strl(&mut self, strl: Strl) {
+        self.strl_index
+            .entry((strl.v, strl.o))
+            .or_insert(self.strls.len());
+        self.strls.push(strl);
+    }
+
+    fn strl(&self, v: u64, o: u64) -> Option<&Strl> {
+        self.strls.get(*self.strl_index.get(&(v, o))?)
+    }
+
     fn utf8(&self) -> bool {
         self.release >= 118
     }
@@ -160,7 +182,7 @@ impl Dta {
         if name.is_empty() {
             return None;
         }
-        self.sets.iter().find(|s| s.name == name)
+        self.sets.get(*self.set_index.get(name)?)
     }
 }
 
@@ -247,6 +269,8 @@ async fn binary(cx: Cx, file: Span) -> Result<()> {
         data: file.sub(0, 0),
         sets: Vec::new(),
         strls: Vec::new(),
+        set_index: BTreeMap::new(),
+        strl_index: BTreeMap::new(),
     };
     let nvar = dta.uint(&head, 4, 2);
     let nobs = dta.uint(&head, 6, 4);
@@ -302,6 +326,9 @@ async fn binary(cx: Cx, file: Span) -> Result<()> {
     let labels_v = strings(&cx, &dta, labels.1, n, 81).await?;
     let mut offset = 0u64;
     for i in 0..n {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let code = raw_types.get(i).copied().unwrap_or(0);
         let kind = kind_old(code).ok_or_else(|| {
             Diagnostic::malformed(format!("unknown variable type {code}"))
@@ -351,7 +378,7 @@ async fn binary(cx: Cx, file: Span) -> Result<()> {
         cx.checkpoint().await;
         match label_table(&cx, &dta, file, pos, 33).await {
             Ok((set, next)) => {
-                dta.sets.push(set);
+                dta.add_set(set);
                 pos = next;
             }
             Err(e) => {
@@ -445,6 +472,8 @@ async fn tagged(cx: Cx, file: Span) -> Result<()> {
         data: file.sub(0, 0),
         sets: Vec::new(),
         strls: Vec::new(),
+        set_index: BTreeMap::new(),
+        strl_index: BTreeMap::new(),
     };
     let span_of = |r: (usize, usize)| file.sub(to_u64(r.0), to_u64(r.1.saturating_sub(r.0)));
     let k_at =
@@ -557,6 +586,9 @@ async fn tagged(cx: Cx, file: Span) -> Result<()> {
     let labels = strings(&cx, &dta, body(7, "<variable_labels>"), kn, vlabel_len).await?;
     let mut offset = 0u64;
     for i in 0..kn {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let code = dta.uint(&types_raw, i.saturating_mul(2), 2);
         let kind = kind_117(code).ok_or_else(|| {
             Diagnostic::malformed(format!("unknown variable type {code}")).at(body(
@@ -612,7 +644,7 @@ async fn tagged(cx: Cx, file: Span) -> Result<()> {
                 break;
             }
         };
-        dta.strls.push(Strl {
+        dta.add_strl(Strl {
             v,
             o,
             binary: t == 129,
@@ -635,7 +667,7 @@ async fn tagged(cx: Cx, file: Span) -> Result<()> {
             .saturating_add(5);
         match label_table(&cx, &dta, file, rel, name_len).await {
             Ok((set, next)) => {
-                dta.sets.push(set);
+                dta.add_set(set);
                 pos = next
                     .saturating_add(6)
                     .saturating_sub(tables.offset.saturating_sub(file.offset));
@@ -805,7 +837,14 @@ fn number_cell(var: &Var, v: f64) -> Cell {
 
 async fn decode_row(cx: &Cx, dta: &Dta, span: Span, raw: &[u8]) -> Result<Vec<Item>> {
     let mut items = Vec::new();
+    // One unit of work per 4096 variables or labels compared.
+    let mut work = 0u64;
     for var in &dta.vars {
+        work = work.saturating_add(1);
+        while work >= 4096 {
+            cx.checkpoint().await;
+            work = work.saturating_sub(4096);
+        }
         let at = to_usize(var.offset);
         let width = var.kind.width();
         let cell_span = span.sub(var.offset, width);
@@ -878,7 +917,7 @@ async fn decode_row(cx: &Cx, dta: &Dta, span: Span, raw: &[u8]) -> Result<Vec<It
                 if v == 0 && o == 0 {
                     Cell::Text(String::new())
                 } else {
-                    match dta.strls.iter().find(|s| s.v == v && s.o == o) {
+                    match dta.strl(v, o) {
                         Some(s) if !s.binary => {
                             let bytes = cx.read_avail(s.data.sub(0, 4096)).await?;
                             Cell::Text(dta.text(&bytes))
@@ -893,6 +932,7 @@ async fn decode_row(cx: &Cx, dta: &Dta, span: Span, raw: &[u8]) -> Result<Vec<It
             (Cell::Number(v), Some(set)) => set
                 .entries
                 .iter()
+                .inspect(|_| work = work.saturating_add(1))
                 .find(|(k, _)| f64::from(*k) == *v)
                 .map(|(_, l)| l.clone()),
             _ => None,

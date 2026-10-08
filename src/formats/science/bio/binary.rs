@@ -141,6 +141,7 @@ async fn bgzf_blocks(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 0u64;
     let mut index = 0u64;
     while let Some(block) = bgzf_block(&cx, file, pos).await? {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let eof = block.isize == 0 && block.span.len == 28;
         let summary = if eof {
             "end-of-file marker".to_owned()
@@ -469,6 +470,7 @@ async fn bam_alignments(cx: Cx, (input, start, refs): (Input, u64, References)) 
     cur.seek(start);
     let mut count = 0u64;
     while cur.remaining() >= 4 {
+        cx.progress_in(stream, stream.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let size = cur.u32().await?;
         let span = stream.sub(at, u64::from(size).saturating_add(4));
@@ -777,6 +779,7 @@ async fn bcf_records(cx: Cx, (input, start, contigs): (Input, u64, References)) 
     let mut cur = Cursor::new(&cx, stream, LE);
     cur.seek(start);
     while cur.remaining() >= 8 {
+        cx.progress_in(stream, stream.offset.saturating_add(cur.pos()));
         let at = cur.pos();
         let l_shared = cur.u32().await?;
         let l_indiv = cur.u32().await?;
@@ -1356,6 +1359,7 @@ async fn cram_containers(cx: Cx, (input, major): (Input, u8)) -> Result<()> {
     let mut pos = 26u64;
     let mut index = 0u32;
     while pos < file.len {
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let c = cram_container(&cx, file, pos, major).await?;
         let eof = c.ref_id == -1 && c.start == 4_542_278;
         let name = if index == 0 {
@@ -1901,7 +1905,8 @@ async fn bbi_extension(cx: Cx, (span, endian): (Span, Endian)) -> Result<()> {
 /// Chromosome names and sizes from the B+ tree, by chromosome ID.
 async fn bbi_chroms(cx: &Cx, file: Span, at: u64, endian: Endian) -> Result<References> {
     let h: BptHeader = read_record(cx, file.sub(at, BptHeader::SIZE), endian).await?;
-    let mut out = Vec::new();
+    // By (ID, order found): sorted as it is built, rather than in one go.
+    let mut out = std::collections::BTreeMap::new();
     let mut stack = vec![(at.saturating_add(BptHeader::SIZE), 0u32)];
     let mut visited = 0u32;
     while let Some((node, depth)) = stack.pop() {
@@ -1921,17 +1926,22 @@ async fn bbi_chroms(cx: &Cx, file: Span, at: u64, endian: Endian) -> Result<Refe
                 let id = cur.u32().await?;
                 let size = cur.u32().await?;
                 cur.skip(u64::from(h.val_size).saturating_sub(8));
-                out.push((id, crate::text::until_nul(&key), size));
+                let order = out.len();
+                out.insert((id, order), (crate::text::until_nul(&key), size));
             } else {
                 children.push((cur.u64().await?, depth.saturating_add(1)));
             }
         }
         stack.extend(children.into_iter().rev());
     }
-    out.sort_by_key(|(id, _, _)| *id);
-    Ok(References(
-        out.into_iter().map(|(_, n, s)| (n, s)).collect(),
-    ))
+    let mut list = Vec::with_capacity(out.len());
+    for (i, (_, chrom)) in out.into_iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        list.push(chrom);
+    }
+    Ok(References(list))
 }
 
 async fn bbi_tree(cx: Cx, (file, at, endian): (Span, u64, Endian)) -> Result<()> {
@@ -2027,6 +2037,7 @@ async fn bbi_block(
     let mut cur = Cursor::new(&cx, body, endian);
     if bed {
         while cur.remaining() >= 12 {
+            cx.progress_in(body, body.offset.saturating_add(cur.pos()));
             let start = cur.pos();
             let chrom = cur.u32().await?;
             let s = cur.u32().await?;
