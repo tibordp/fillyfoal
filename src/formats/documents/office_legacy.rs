@@ -336,6 +336,7 @@ async fn lotus(cx: Cx, input: Input) -> Result<()> {
                 _ => node = node.summary(format!("{len} bytes")),
             }
         }
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if kind == 0x01 {
             break;
@@ -577,6 +578,7 @@ async fn biff(cx: Cx, input: Input) -> Result<()> {
                 _ => node.summary(format!("{len} bytes")),
             };
         }
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if kind == 0x000a {
             break;
@@ -668,7 +670,10 @@ async fn sylk(cx: Cx, input: Input) -> Result<()> {
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
     let (mut x, mut y) = (1u32, 1u32);
     let (mut cells, mut program, mut bounds) = (0u64, String::new(), String::new());
-    for (at, len, line) in lines(&data) {
+    for (n, (at, len, line)) in lines(&data).enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         if line.is_empty() {
             continue;
         }
@@ -730,6 +735,7 @@ async fn sylk(cx: Cx, input: Input) -> Result<()> {
             }
             _ => {}
         }
+        cx.progress_in(file, file.offset.saturating_add(at));
         cx.push(node).await;
         if kind == "E" {
             break;
@@ -767,8 +773,14 @@ struct DifItem {
     string: String,
 }
 
-fn dif_items(data: &[u8]) -> Vec<DifItem> {
-    let all: Vec<(u64, u64, &[u8])> = lines(data).collect();
+async fn dif_items(cx: &Cx, data: &[u8]) -> Vec<DifItem> {
+    let mut all: Vec<(u64, u64, &[u8])> = Vec::new();
+    for line in lines(data) {
+        if all.len() % 4096 == 4095 {
+            cx.checkpoint().await;
+        }
+        all.push(line);
+    }
     let mut out = Vec::new();
     let mut i = 0usize;
     let mut in_data = false;
@@ -806,6 +818,9 @@ fn dif_items(data: &[u8]) -> Vec<DifItem> {
             in_data = true;
         }
         let end_of_data = in_data && item.string == "EOD";
+        if out.len() % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         out.push(item);
         i = i.saturating_add(take);
         if end_of_data || out.len() > 1_000_000 {
@@ -818,7 +833,7 @@ fn dif_items(data: &[u8]) -> Vec<DifItem> {
 async fn dif(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let items = Arc::new(dif_items(&data));
+    let items = Arc::new(dif_items(&cx, &data).await);
     let header_end = items
         .iter()
         .position(|it| it.topic == "DATA")
@@ -844,6 +859,9 @@ async fn dif(cx: Cx, input: Input) -> Result<()> {
     // Rows start at a BOT marker ("-1,0" then "BOT").
     let mut rows = Vec::new();
     for (i, it) in items.iter().enumerate().skip(header_end) {
+        if i % 4096 == 4095 {
+            cx.checkpoint().await;
+        }
         if it.number.starts_with("-1") && it.string == "BOT" {
             rows.push(i);
         }
@@ -874,6 +892,7 @@ async fn dif_row(
 ) -> Result<()> {
     let mut col = 0u32;
     for it in items.iter().take(last).skip(first.saturating_add(1)) {
+        cx.checkpoint().await;
         let (kind, number) = it.number.split_once(',').unwrap_or((&it.number, ""));
         let value = match kind {
             "0" if it.string == "V" => number.parse::<f64>().map_or_else(|_| text(number), float),
@@ -935,7 +954,10 @@ async fn qif(cx: Cx, input: Input) -> Result<()> {
     let mut entry: Vec<(u64, u64)> = Vec::new();
     let mut summary = (String::new(), String::new(), String::new());
     let (mut entries, mut sections) = (0u64, Vec::new());
-    for (at, len, line) in lines(&data) {
+    for (n, (at, len, line)) in lines(&data).enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         if let Some(header) = line.strip_prefix(b"!") {
             let name = lossy(header);
             cx.push(
@@ -966,6 +988,7 @@ async fn qif(cx: Cx, input: Input) -> Result<()> {
             if !date.is_empty() {
                 node = node.summary(date);
             }
+            cx.progress_in(file, file.offset.saturating_add(at));
             cx.push(node).await;
             entries = entries.saturating_add(1);
             continue;
@@ -1043,13 +1066,19 @@ struct MarkupElement {
 struct Markup {
     elements: Vec<MarkupElement>,
     roots: Vec<usize>,
+    /// Where the body starts (`<OFX>`).
+    body: usize,
 }
 
 /// Parses SGML-style markup where leaf elements may lack end tags.
-fn markup_parse(data: &[u8], from: usize) -> Markup {
-    let mut doc = Markup::default();
+async fn markup_parse(cx: &Cx, data: &[u8], from: usize) -> Markup {
+    let mut doc = Markup {
+        body: from,
+        ..Markup::default()
+    };
     let mut stack: Vec<usize> = Vec::new();
     let mut i = from;
+    let mut steps = 0u32;
     while let Some(lt) = data
         .get(i..)
         .and_then(|r| r.iter().position(|&b| b == b'<'))
@@ -1064,6 +1093,10 @@ fn markup_parse(data: &[u8], from: usize) -> Markup {
         let close = open.saturating_add(gt);
         let tag = data.get(open.saturating_add(1)..close).unwrap_or_default();
         i = close.saturating_add(1);
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         if tag.starts_with(b"?") || tag.starts_with(b"!") {
             continue;
         }
@@ -1130,32 +1163,28 @@ fn markup_child<'a>(doc: &'a Markup, e: &MarkupElement, name: &str) -> Option<&'
         .and_then(|c| c.value.as_deref())
 }
 
-fn markup_nodes(file: Span, doc: &Markup, list: &[usize]) -> Vec<Node> {
-    list.iter()
-        .filter_map(|&i| doc.elements.get(i).map(|e| (i, e)))
-        .map(|(i, e)| {
-            let node =
-                Node::new(e.name.clone()).span(file.sub(e.start, e.end.saturating_sub(e.start)));
-            if e.children.is_empty() {
-                return node.value(text(e.value.clone().unwrap_or_default()));
-            }
-            let mut node = node.lazy(ofx_element, (file, i));
-            if e.name == "STMTTRN" {
-                let get = |k: &str| markup_child(doc, e, k).unwrap_or_default();
-                node = node.value(text(get("TRNAMT"))).summary(
-                    format!(
-                        "{} {} {}",
-                        ofx_date(get("DTPOSTED")),
-                        get("TRNTYPE"),
-                        get("NAME")
-                    )
-                    .trim()
-                    .to_owned(),
-                );
-            }
-            node
-        })
-        .collect()
+/// The node of element `i`.
+fn markup_node(file: Span, doc: &Markup, i: usize) -> Option<Node> {
+    let e = doc.elements.get(i)?;
+    let node = Node::new(e.name.clone()).span(file.sub(e.start, e.end.saturating_sub(e.start)));
+    if e.children.is_empty() {
+        return Some(node.value(text(e.value.clone().unwrap_or_default())));
+    }
+    let mut node = node.lazy(ofx_element, (file, i));
+    if e.name == "STMTTRN" {
+        let get = |k: &str| markup_child(doc, e, k).unwrap_or_default();
+        node = node.value(text(get("TRNAMT"))).summary(
+            format!(
+                "{} {} {}",
+                ofx_date(get("DTPOSTED")),
+                get("TRNTYPE"),
+                get("NAME")
+            )
+            .trim()
+            .to_owned(),
+        );
+    }
+    Some(node)
 }
 
 /// OFX dates: YYYYMMDD[HHMMSS[.XXX]][[tz]].
@@ -1172,13 +1201,14 @@ fn ofx_date(s: &str) -> String {
 }
 
 async fn ofx_doc(cx: &Cx, file: Span) -> Result<(Arc<Markup>, usize)> {
+    if let Some(d) = cx.cached::<Markup>(file, "ofx") {
+        let body = d.body;
+        return Ok((d, body));
+    }
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
     // The body starts at <OFX> (after the SGML header or XML prolog).
     let body = data.windows(5).position(|w| w == b"<OFX>").unwrap_or(0);
-    if let Some(d) = cx.cached::<Markup>(file, "ofx") {
-        return Ok((d, body));
-    }
-    let doc = Arc::new(markup_parse(&data, body));
+    let doc = Arc::new(markup_parse(cx, &data, body).await);
     cx.cache(file, "ofx", doc.clone());
     Ok((doc, body))
 }
@@ -1216,8 +1246,11 @@ async fn ofx(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{} keys", keys.len()))
             .lazy(ofx_header, keys),
     );
-    for node in markup_nodes(file, &doc, &doc.roots) {
-        cx.push(node).await;
+    for &i in &doc.roots {
+        match markup_node(file, &doc, i) {
+            Some(node) => cx.push(node).await,
+            None => cx.checkpoint().await,
+        }
     }
     let transactions = markup_find(&doc, "STMTTRN").count();
     let account = markup_find(&doc, "ACCTID")
@@ -1257,8 +1290,11 @@ async fn ofx_element(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
     let Some(e) = doc.elements.get(index) else {
         return Ok(());
     };
-    for node in markup_nodes(file, &doc, &e.children) {
-        cx.push(node).await;
+    for &i in &e.children {
+        match markup_node(file, &doc, i) {
+            Some(node) => cx.push(node).await,
+            None => cx.checkpoint().await,
+        }
     }
     Ok(())
 }
@@ -1352,6 +1388,9 @@ async fn mpx(cx: Cx, input: Input) -> Result<()> {
     let (mut tasks, mut resources, mut program, mut title) =
         (0u64, 0u64, String::new(), String::new());
     for (i, (at, len, line)) in lines(&data).enumerate() {
+        if i % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         if line.is_empty() {
             continue;
         }
@@ -1412,6 +1451,7 @@ async fn mpx(cx: Cx, input: Input) -> Result<()> {
             }
             _ => node = node.value(text(fields.get(1..).unwrap_or_default().join(", "))),
         }
+        cx.progress_in(file, file.offset.saturating_add(at));
         cx.push(node).await;
     }
     cx.annotate(format!(
@@ -1473,7 +1513,10 @@ async fn ami_pro(cx: Cx, input: Input) -> Result<()> {
     let mut sections: Vec<AmiSection> = Vec::new();
     let mut version = String::new();
     let mut body_lines = 0u64;
-    for (at, len, line) in lines(&data) {
+    for (n, (at, len, line)) in lines(&data).enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let s = crate::text::latin1(line);
         if let Some(name) = s.strip_prefix('[').and_then(|r| r.strip_suffix(']'))
             && !name.is_empty()

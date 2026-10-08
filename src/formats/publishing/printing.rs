@@ -51,6 +51,7 @@ async fn pjl(cx: Cx, input: Input) -> Result<()> {
     let mut job = String::new();
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         if scan.matches(pos, UEL).await? {
             let end = pos.saturating_add(to_u64(UEL.len()));
             cx.push(Node::new("Universal Exit Language").span(scan.span(pos, end)))
@@ -337,6 +338,7 @@ async fn pcl(cx: Cx, input: Input) -> Result<()> {
     let (mut pages, mut commands) = (0u32, 0u32);
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let Some(b) = scan.byte(pos).await? else {
             break;
         };
@@ -548,6 +550,7 @@ async fn pclxl(cx: Cx, input: Input) -> Result<()> {
     let short = |at: u64| Diagnostic::malformed("element runs past the end").at(file.tail(at));
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let Some(tag) = scan.byte(pos).await? else {
             break;
         };
@@ -749,6 +752,7 @@ async fn hpgl(cx: Cx, input: Input) -> Result<()> {
     let (mut count, mut pens, mut pages) = (0u32, 0u32, 1u32);
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let Some(b) = scan.byte(pos).await? else {
             break;
         };
@@ -913,6 +917,7 @@ async fn escp(cx: Cx, input: Input) -> Result<()> {
     let (mut commands, mut graphics) = (0u32, 0u32);
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let Some(b) = scan.byte(pos).await? else {
             break;
         };
@@ -1134,6 +1139,7 @@ async fn zpl(cx: Cx, input: Input) -> Result<()> {
     let mut labels = 0u32;
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let Some(start) = scan.find(pos, |b| b == b'^' || b == b'~').await? else {
             break;
         };
@@ -1208,6 +1214,7 @@ async fn zpl_commands(cx: Cx, span: Span) -> Result<()> {
         .unwrap_or(scan.len());
     while pos < scan.len() {
         scan.tick().await;
+        cx.progress_in(scan.region(), scan.region().offset.saturating_add(pos));
         let end = zpl_command_end(&mut scan, pos).await?;
         cx.push(zpl_node(&mut scan, pos, end).await?).await;
         pos = end;

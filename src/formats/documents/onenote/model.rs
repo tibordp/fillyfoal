@@ -93,19 +93,25 @@ pub struct View {
 
 impl Space {
     /// Revision index by rid (the first declaration wins).
-    fn rids(&self) -> BTreeMap<ExGuid, usize> {
+    async fn rids(&self, cx: &Cx) -> BTreeMap<ExGuid, usize> {
         let mut map = BTreeMap::new();
         for (i, r) in self.revisions.iter().enumerate() {
+            if i % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             map.entry(r.rid).or_insert(i);
         }
         map
     }
 
     /// The revision currently holding `role` in the default context.
-    pub fn current(&self, role: u32) -> Option<usize> {
-        let rids = self.rids();
+    pub async fn current(&self, cx: &Cx, role: u32) -> Option<usize> {
+        let rids = self.rids(cx).await;
         let mut best = None;
-        for event in &self.events {
+        for (n, event) in self.events.iter().enumerate() {
+            if n % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             match event {
                 Event::Revision(i) => {
                     if let Some(r) = self.revisions.get(*i)
@@ -131,13 +137,16 @@ impl Space {
 
     /// The objects and roots of revision `index`, layered over the
     /// revisions it depends on.
-    pub fn view(&self, index: Option<usize>) -> View {
+    pub async fn view(&self, cx: &Cx, index: Option<usize>) -> View {
         let mut view = View::default();
-        let rids = self.rids();
+        let rids = self.rids(cx).await;
         let mut chain = Vec::new();
         let mut on_chain = BTreeSet::new();
         let mut next = index;
         while let Some(i) = next {
+            if chain.len() % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             if !on_chain.insert(i) {
                 break;
             }
@@ -154,10 +163,17 @@ impl Space {
             let Some(r) = self.revisions.get(i) else {
                 continue;
             };
+            cx.checkpoint().await;
             for (k, o) in r.objects.iter().enumerate() {
+                if k % 1024 == 1023 {
+                    cx.checkpoint().await;
+                }
                 view.objects.insert(o.oid, (i, k));
             }
-            for (role, oid) in &r.roots {
+            for (k, (role, oid)) in r.roots.iter().enumerate() {
+                if k % 1024 == 1023 {
+                    cx.checkpoint().await;
+                }
                 view.roots.insert(*role, *oid);
             }
         }
@@ -165,11 +181,12 @@ impl Space {
     }
 
     /// The content view (revision role 1).
-    pub fn content(&self) -> View {
+    pub async fn content(&self, cx: &Cx) -> View {
         let current = self
-            .current(1)
+            .current(cx, 1)
+            .await
             .or_else(|| self.revisions.len().checked_sub(1));
-        self.view(current)
+        self.view(cx, current).await
     }
 
     pub fn object(&self, at: (usize, usize)) -> Option<&Object> {
@@ -178,13 +195,13 @@ impl Space {
 
     /// A root object of the given root role, looked up in the content
     /// revision and then in the revision holding that role.
-    pub fn root(&self, role: u32) -> Option<(&Object, View)> {
-        let content = self.content();
+    pub async fn root(&self, cx: &Cx, role: u32) -> Option<(&Object, View)> {
+        let content = self.content(cx).await;
         let found = content.roots.get(&role).copied();
         let (view, oid) = match found {
             Some(oid) => (content, oid),
             None => {
-                let v = self.view(self.current(role));
+                let v = self.view(cx, self.current(cx, role).await).await;
                 let oid = *v.roots.get(&role)?;
                 (v, oid)
             }
@@ -256,7 +273,10 @@ impl Builder<'_> {
         let file = self.store.file;
         let mut table: Arc<IdTable> = Arc::default();
         let mut building = IdTable::new();
-        for node in &list.nodes {
+        for (n, node) in list.nodes.iter().enumerate() {
+            if n % 256 == 255 {
+                self.cx.checkpoint().await;
+            }
             let Ok(b) = node.body(file, Some(&table)) else {
                 continue;
             };
@@ -286,7 +306,10 @@ impl Builder<'_> {
         let mut cur: Option<Revision> = None;
         let mut table: Arc<IdTable> = Arc::default();
         let mut building = IdTable::new();
-        for node in &list.nodes {
+        for (n, node) in list.nodes.iter().enumerate() {
+            if n % 256 == 255 {
+                self.cx.checkpoint().await;
+            }
             let Ok(b) = node.body(file, Some(&table)) else {
                 continue;
             };
@@ -377,7 +400,10 @@ pub async fn build(cx: &Cx, store: &Store) -> Model {
         model.diags = b.diags;
         return model;
     };
-    for node in &root.nodes {
+    for (n, node) in root.nodes.iter().enumerate() {
+        if n % 256 == 255 {
+            cx.checkpoint().await;
+        }
         let Ok(body) = node.body(file, None) else {
             continue;
         };
@@ -404,7 +430,13 @@ pub async fn build(cx: &Cx, store: &Store) -> Model {
         b.revisions(space).await;
     }
     if let Some(list) = b.list(model.file_store).await {
-        for node in list.nodes.iter().filter(|n| n.hdr.id == 0x094) {
+        for (n, node) in list.nodes.iter().enumerate() {
+            if n % 256 == 255 {
+                cx.checkpoint().await;
+            }
+            if node.hdr.id != 0x094 {
+                continue;
+            }
             if let Ok(body) = node.body(file, None)
                 && let (Some(fcr), Some(guid)) = (body.fcr, body.guid)
             {
@@ -525,23 +557,35 @@ pub async fn pages(cx: &Cx, file: Span, model: &Model) -> (Vec<Page>, Vec<Diagno
     let mut diags = Vec::new();
     let section = model.root.and_then(|r| model.space(&r));
     let mut order: Vec<usize> = Vec::new();
+    let mut ordered = BTreeSet::new();
     if let Some(si) = section
         && let Some(space) = model.spaces.get(si)
     {
-        let view = space.content();
+        let view = space.content(cx).await;
         if let Some(root) = view.roots.get(&1).copied() {
             let (visits, d) = walk(cx, file, space, &view, root).await;
             diags.extend(d);
+            let mut spaces = BTreeMap::new();
+            for (i, s) in model.spaces.iter().enumerate() {
+                if i % 1024 == 1023 {
+                    cx.checkpoint().await;
+                }
+                spaces.entry(s.gosid).or_insert(i);
+            }
             for v in &visits {
+                cx.checkpoint().await;
                 let (Some((_, ps, _)), Some(obj)) = (&v.data, space.object(v.at)) else {
                     continue;
                 };
                 if let Some(p) = ps.body.get(CHILD_GRAPH_SPACE_ELEMENT_NODES)
                     && let PValue::Ids { ids, .. } = &p.value
                 {
-                    for c in ids.iter().flatten() {
-                        if let Some(i) = c.resolve(&obj.table).and_then(|g| model.space(&g))
-                            && !order.contains(&i)
+                    for (n, c) in ids.iter().flatten().enumerate() {
+                        if n % 1024 == 1023 {
+                            cx.checkpoint().await;
+                        }
+                        if let Some(&i) = c.resolve(&obj.table).and_then(|g| spaces.get(&g))
+                            && ordered.insert(i)
                         {
                             order.push(i);
                         }
@@ -557,6 +601,7 @@ pub async fn pages(cx: &Cx, file: Span, model: &Model) -> (Vec<Page>, Vec<Diagno
     }
     let mut pages = Vec::new();
     for i in order {
+        cx.checkpoint().await;
         let Some(space) = model.spaces.get(i) else {
             continue;
         };
@@ -566,7 +611,7 @@ pub async fn pages(cx: &Cx, file: Span, model: &Model) -> (Vec<Page>, Vec<Diagno
             level: None,
         };
         if !space.encrypted {
-            if let Some((meta, _)) = space.root(2)
+            if let Some((meta, _)) = space.root(cx, 2).await
                 && let Some(fcr) = meta.data
             {
                 match property_set(cx, file, fcr).await {
@@ -595,7 +640,7 @@ pub async fn pages(cx: &Cx, file: Span, model: &Model) -> (Vec<Page>, Vec<Diagno
 
 /// The text of the page's title node, if it has one.
 async fn title_from_content(cx: &Cx, file: Span, space: &Space) -> Option<String> {
-    let view = space.content();
+    let view = space.content(cx).await;
     let root = *view.roots.get(&1)?;
     let (visits, _) = walk(cx, file, space, &view, root).await;
     let mut in_title: Option<u32> = None;

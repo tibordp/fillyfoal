@@ -41,6 +41,7 @@ mod props;
 mod store;
 mod tables;
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u32_le, u64_le};
@@ -433,8 +434,7 @@ async fn list_view(cx: Cx, st: ListState) -> Result<()> {
         }
     };
     for (i, node) in list.nodes.iter().enumerate().skip(start) {
-        let at = (i, tables.clone());
-        cx.mark(move || at);
+        cx.mark(|| (i, tables.clone()));
         let body = node.body(file, Some(&tables.frozen));
         let summary = body
             .as_ref()
@@ -928,11 +928,18 @@ fn looks_like_utf16(b: &[u8]) -> bool {
 // ---------------------------------------------------------------------------
 // Object spaces, revisions, objects
 
-fn space_label(model: &Model, pages: Option<&Pages>, i: usize, space: &Space) -> String {
+/// `pages`: the first page of each object space (`None` in a table of
+/// contents).
+fn space_label(
+    model: &Model,
+    pages: Option<&BTreeMap<usize, &Page>>,
+    i: usize,
+    space: &Space,
+) -> String {
     if model.root == Some(space.gosid) {
         return if pages.is_some() { "section" } else { "root" }.to_owned();
     }
-    if let Some(p) = pages.and_then(|p| p.0.iter().find(|p| p.space == i)) {
+    if let Some(p) = pages.and_then(|p| p.get(&i)) {
         return format!("page “{}”", page_title(p));
     }
     String::new()
@@ -945,8 +952,16 @@ async fn spaces_view(cx: Cx, input: Input) -> Result<()> {
     } else {
         Some(load_pages(&cx, &store, &model).await)
     };
+    let mut by_space = BTreeMap::new();
+    for (k, p) in pages.iter().flat_map(|p| p.0.iter()).enumerate() {
+        if k % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
+        by_space.entry(p.space).or_insert(p);
+    }
+    let by_space = pages.is_some().then_some(&by_space);
     for (i, space) in model.spaces.iter().enumerate() {
-        let mut parts = vec![space_label(&model, pages.as_deref(), i, space)];
+        let mut parts = vec![space_label(&model, by_space, i, space)];
         parts.push(format!("{} revisions", space.revisions.len()));
         if space.encrypted {
             parts.push("encrypted".to_owned());
@@ -992,7 +1007,7 @@ async fn space_view(cx: Cx, (input, si): (Input, usize)) -> Result<()> {
             &Path::new(),
         ));
     }
-    let current = space.current(1);
+    let current = space.current(&cx, 1).await;
     for (ri, r) in space.revisions.iter().enumerate() {
         let mut parts = vec![format!("role {}", r.role)];
         if !r.context.is_nil() {
@@ -1030,7 +1045,7 @@ async fn revision_view(cx: Cx, (input, si, ri): (Input, usize, usize)) -> Result
     if !r.context.is_nil() {
         cx.emit(Node::new("gctxid").value(text(r.context.label())));
     }
-    let view = space.view(Some(ri));
+    let view = space.view(&cx, Some(ri)).await;
     for (role, oid) in &r.roots {
         let name = match lookup(tables::ROOT_ROLES, (*role).into()) {
             Some(n) => format!("Root ({n})"),
@@ -1182,7 +1197,7 @@ async fn page_view(cx: Cx, (input, k): (Input, usize)) -> Result<()> {
     }
     // Timestamps from the metadata and content roots.
     for role in [2u32, 1] {
-        let Some((obj, _)) = space.root(role) else {
+        let Some((obj, _)) = space.root(&cx, role).await else {
             continue;
         };
         let Some(fcr) = obj.data else { continue };
@@ -1202,7 +1217,7 @@ async fn page_view(cx: Cx, (input, k): (Input, usize)) -> Result<()> {
             }
         }
     }
-    let view = space.content();
+    let view = space.content(&cx).await;
     let Some(root) = view.roots.get(&1).copied() else {
         return Err(Diagnostic::malformed("the page has no content root"));
     };
@@ -1212,6 +1227,7 @@ async fn page_view(cx: Cx, (input, k): (Input, usize)) -> Result<()> {
     }
     let mut title_depth: Option<u32> = None;
     for v in &visits {
+        cx.checkpoint().await;
         if title_depth.is_some_and(|d| v.depth <= d) {
             title_depth = None;
         }
@@ -1296,12 +1312,16 @@ async fn files_view(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (_, model) = context(&cx, file).await?;
     let mut extensions = std::collections::BTreeMap::new();
-    for o in model
+    for (n, o) in model
         .spaces
         .iter()
         .flat_map(|s| s.revisions.iter())
         .flat_map(|r| r.objects.iter())
+        .enumerate()
     {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         if let (Some(r), Some(e)) = (&o.file_ref, &o.extension)
             && let Some(guid) = r.strip_prefix("<ifndf>").and_then(store::parse_guid)
         {
@@ -1379,9 +1399,12 @@ async fn txlog_view(cx: Cx, input: Input) -> Result<()> {
         let Some(t) = entries.first().map(|e| e.transaction) else {
             continue;
         };
+        // Enough entries to fill the clipped summary (each is at least
+        // seven characters plus a separator).
         let lists: Vec<String> = entries
             .iter()
             .filter(|e| e.src > 1)
+            .take(16)
             .map(|e| format!("{:#x} → {}", e.src, e.switch))
             .collect();
         let span = match (entries.first(), entries.last()) {
@@ -1409,7 +1432,13 @@ async fn txlog_view(cx: Cx, input: Input) -> Result<()> {
 
 async fn tx_view(cx: Cx, (input, t): (Input, u32)) -> Result<()> {
     let store = load_store(&cx, input.span).await?;
-    for e in store.log.entries.iter().filter(|e| e.transaction == t) {
+    for (n, e) in store.log.entries.iter().enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
+        if e.transaction != t {
+            continue;
+        }
         let node = if e.src == 1 {
             Node::new("End of transaction")
                 .value(hex(e.switch.into(), 32))

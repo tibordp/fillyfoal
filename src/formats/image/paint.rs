@@ -124,7 +124,10 @@ async fn gimp_palette(cx: Cx, input: Input) -> Result<()> {
     let all = lines(&cx, input.span, 1 << 20).await?;
     let mut name = String::new();
     let mut colours = 0u32;
-    for (line, span) in all.iter().skip(1) {
+    for (n, (line, span)) in all.iter().skip(1).enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let t = line.trim();
         if t.is_empty() || t.starts_with('#') {
             continue;

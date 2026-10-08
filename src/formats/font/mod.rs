@@ -202,7 +202,7 @@ async fn table(cx: Cx, entry: TableEntry) -> Result<()> {
     let whole = Span::new(entry.span.source, entry.span.offset, padded);
     if padded <= cx.limits().max_read {
         let data = cx.read_avail(whole).await?;
-        let computed = tables::checksum(&data, entry.tag == "head");
+        let computed = tables::table_checksum(&cx, &data, entry.tag == "head").await;
         let node =
             Node::new("Checksum").value(crate::formats::util::datakit::hex(entry.checksum, 32));
         cx.emit(if computed == entry.checksum {
@@ -233,7 +233,10 @@ pub async fn collection(cx: Cx, input: Input) -> Result<()> {
         f.u32("Version").hex().emit()?;
         f.u32("Number of fonts").emit()?;
         let n = crate::bytes::to_usize(header_span.len.saturating_sub(12) / 4);
-        for _ in 0..count.min(u32::try_from(n).unwrap_or(u32::MAX)) {
+        for i in 0..count.min(u32::try_from(n).unwrap_or(u32::MAX)) {
+            if i % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             offsets.push(f.u32("Offset table offset").hex().emit()?);
         }
         if dsig {

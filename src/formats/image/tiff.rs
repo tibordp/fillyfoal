@@ -334,6 +334,9 @@ async fn read_ifd(cx: &Cx, t: Tiff, offset: u64) -> Result<Ifd> {
     let data = cx.read(table).await?;
     let mut entries = Vec::new();
     for (i, bytes) in data.chunks_exact(if t.big { 20 } else { 12 }).enumerate() {
+        if i % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let span = table.sub(to_u64(i).saturating_mul(t.entry_len()), t.entry_len());
         if let Some(e) = Entry::decode(t, bytes, span) {
             entries.push(e);

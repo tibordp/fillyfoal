@@ -639,10 +639,12 @@ async fn cgm(cx: Cx, input: Input) -> Result<()> {
                 if (c, i) == (0, 5) {
                     break;
                 }
+                cx.progress_in(file, file.offset.saturating_add(cur.pos()));
                 cx.checkpoint().await;
             }
             pictures = pictures.saturating_add(1);
             let whole = cur.since(start);
+            cx.progress_in(file, file.offset.saturating_add(cur.pos()));
             cx.push(
                 Node::new(format!("Picture {pictures}"))
                     .span(whole)
@@ -656,6 +658,7 @@ async fn cgm(cx: Cx, input: Input) -> Result<()> {
         if (class, id) == (0, 1) {
             name = cgm_string(&cx, params).await?.unwrap_or_default();
         }
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if (class, id) == (0, 2) {
             if !cur.at_end() {
@@ -908,6 +911,7 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
         } else {
             node
         };
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         if op == 0x00ff {
             break;

@@ -23,7 +23,10 @@ async fn afm(cx: Cx, input: Input) -> Result<()> {
     let all = lines(&cx, input.span, 1 << 20).await?;
     let mut name = String::new();
     let mut chars = 0u32;
-    for (line, span) in &all {
+    for (n, (line, span)) in all.iter().enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let (k, v) = line.split_once(' ').unwrap_or((line.as_str(), ""));
         match k {
             "FontName" | "FullName" | "FamilyName" | "Weight" | "Version" | "Notice"

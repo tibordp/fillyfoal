@@ -354,6 +354,9 @@ pub async fn read_log(cx: &Cx, file: Span, first: Fcr, transactions: u32) -> TxL
             else {
                 break;
             };
+            if log.entries.len() % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             log.entries.push(TxEntry {
                 span: span.sub(to_u64(at), 8),
                 src,
@@ -467,6 +470,9 @@ pub async fn read_list(cx: &Cx, store: &Store, first: Fcr) -> NodeList {
                 .get(pos..pos.saturating_add(size))
                 .unwrap_or_default()
                 .to_vec();
+            if list.nodes.len() % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             list.nodes.push(FileNode {
                 hdr,
                 span: span.sub(to_u64(pos), to_u64(size)),

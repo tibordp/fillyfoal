@@ -115,7 +115,10 @@ async fn amigaguide(cx: Cx, input: Input) -> Result<()> {
     let all = lines(&cx, input.span, 1 << 20).await?;
     let mut nodes = 0u32;
     let mut open: Option<(String, String, Span)> = None;
-    for (line, span) in &all {
+    for (n, (line, span)) in all.iter().enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let lower = line.to_ascii_lowercase();
         if let Some(rest) = lower.strip_prefix("@node") {
             let rest = line.get(5..).unwrap_or(rest).trim();

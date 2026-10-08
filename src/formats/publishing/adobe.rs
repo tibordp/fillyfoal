@@ -173,48 +173,113 @@ fn reference_item(r: &mut Rd<'_>, t: &[u8; 4]) -> Option<String> {
     })
 }
 
-/// Skips a descriptor; returns its class and item count.
-fn descriptor(r: &mut Rd<'_>, depth: u32) -> Option<(String, u32)> {
+/// A container being skipped: its kind, the items left, and the depth its
+/// values are read at.
+struct Open {
+    kind: Kind,
+    left: u32,
+    depth: u32,
+}
+
+/// The start of a descriptor (at `depth`): its class and item count.
+fn descriptor_head(r: &mut Rd<'_>, depth: u32) -> Option<(String, u32)> {
     if depth > MAX_DEPTH {
         return None;
     }
     r.unicode()?;
     let class = key(r)?;
     let n = r.u32()?;
-    for _ in 0..n {
-        key(r)?;
-        let t = r.fourcc()?;
-        value(r, &t, depth)?;
+    Some((class, n))
+}
+
+/// Reads the head of container value `t` (read at `depth`): the container
+/// to skip and its summary. `None` for other types.
+fn open(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<(Open, Val)> {
+    if depth > MAX_DEPTH {
+        return None;
     }
+    let (kind, left, depth, summary) = match t {
+        b"Objc" | b"GlbO" => {
+            let inner = depth.saturating_add(1);
+            let (class, n) = descriptor_head(r, inner)?;
+            (Kind::Descriptor, n, inner, format!("{class}, {n} items"))
+        }
+        b"VlLs" => {
+            let n = r.u32()?;
+            (Kind::List, n, depth.saturating_add(1), format!("{n} items"))
+        }
+        b"obj " => {
+            let n = r.u32()?;
+            (Kind::Reference, n, depth, format!("{n} items"))
+        }
+        _ => return None,
+    };
+    Some((Open { kind, left, depth }, Val::Nested(kind, summary)))
+}
+
+fn is_container(t: &[u8; 4]) -> bool {
+    matches!(t, b"Objc" | b"GlbO" | b"VlLs" | b"obj ")
+}
+
+/// Skips the items left in `container` and everything nested in them, in
+/// budgeted steps (a container can hold the whole input).
+async fn skip(cx: &Cx, r: &mut Rd<'_>, container: Open) -> Option<()> {
+    let mut stack = vec![container];
+    let mut steps = 0u32;
+    while let Some(top) = stack.last_mut() {
+        if top.left == 0 {
+            stack.pop();
+            continue;
+        }
+        top.left = top.left.saturating_sub(1);
+        let (kind, depth) = (top.kind, top.depth);
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        if kind == Kind::Descriptor {
+            key(r)?;
+        }
+        let t = r.fourcc()?;
+        if kind == Kind::Reference {
+            reference_item(r, &t)?;
+        } else if is_container(&t) {
+            stack.push(open(r, &t, depth)?.0);
+        } else {
+            leaf(r, &t, depth)?;
+        }
+    }
+    Some(())
+}
+
+/// Skips a descriptor; returns its class and item count.
+async fn descriptor(cx: &Cx, r: &mut Rd<'_>, depth: u32) -> Option<(String, u32)> {
+    let (class, n) = descriptor_head(r, depth)?;
+    let container = Open {
+        kind: Kind::Descriptor,
+        left: n,
+        depth,
+    };
+    skip(cx, r, container).await?;
     Some((class, n))
 }
 
 /// Reads (or, for containers, skips) one value of type `t`.
-fn value(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
+async fn value(cx: &Cx, r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
+    if !is_container(t) {
+        return leaf(r, t, depth);
+    }
+    let (container, val) = open(r, t, depth)?;
+    skip(cx, r, container).await?;
+    Some(val)
+}
+
+/// Reads one value of a type other than a container.
+fn leaf(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
     if depth > MAX_DEPTH {
         return None;
     }
     Some(match t {
-        b"Objc" | b"GlbO" => {
-            let (class, n) = descriptor(r, depth.saturating_add(1))?;
-            Val::Nested(Kind::Descriptor, format!("{class}, {n} items"))
-        }
-        b"VlLs" => {
-            let n = r.u32()?;
-            for _ in 0..n {
-                let t = r.fourcc()?;
-                value(r, &t, depth.saturating_add(1))?;
-            }
-            Val::Nested(Kind::List, format!("{n} items"))
-        }
-        b"obj " => {
-            let n = r.u32()?;
-            for _ in 0..n {
-                let t = r.fourcc()?;
-                reference_item(r, &t)?;
-            }
-            Val::Nested(Kind::Reference, format!("{n} items"))
-        }
         b"doub" => Val::Leaf(Value::Float(r.f64()?), None),
         b"UntF" => {
             let u = r.fourcc()?;
@@ -249,9 +314,9 @@ fn value(r: &mut Rd<'_>, t: &[u8; 4], depth: u32) -> Option<Val> {
 }
 
 /// The length of the descriptor at the start of `data`.
-pub(crate) fn measure_descriptor(data: &[u8]) -> Option<usize> {
+pub(crate) async fn measure_descriptor(cx: &Cx, data: &[u8]) -> Option<usize> {
     let mut r = Rd::new(data, BE);
-    descriptor(&mut r, 0)?;
+    descriptor(cx, &mut r, 0).await?;
     Some(r.pos)
 }
 
@@ -344,7 +409,7 @@ async fn items(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
             }
             continue;
         }
-        let val = value(&mut r, &t, depth);
+        let val = value(&cx, &mut r, &t, depth).await;
         let ok = val.is_some();
         let end = if ok { r.pos } else { data.len() };
         cx.push(item_node(name, &t, val, sub(at, end), sub(vat, end), depth))
@@ -358,7 +423,8 @@ async fn items(cx: Cx, (span, kind, depth): (Span, Kind, u32)) -> Result<()> {
 
 /// A versioned descriptor (u32 16, then the descriptor) at `pos` of `data`
 /// (which starts at `base` of `region`): its node and end offset.
-fn versioned_descriptor(
+async fn versioned_descriptor(
+    cx: &Cx,
     name: &'static str,
     region: Span,
     data: &[u8],
@@ -367,7 +433,11 @@ fn versioned_descriptor(
     let mut r = Rd::at(data, pos, BE);
     let version = r.u32();
     let start = r.pos;
-    match (version, data.get(start..).and_then(measure_descriptor)) {
+    let len = match data.get(start..) {
+        Some(rest) => measure_descriptor(cx, rest).await,
+        None => None,
+    };
+    match (version, len) {
         (Some(16), Some(len)) => {
             let span = region.sub(to_u64(start), to_u64(len));
             (
@@ -746,7 +816,7 @@ async fn abr_desc(cx: Cx, body: Span) -> Result<()> {
         return Err(Diagnostic::limit("descriptor larger than 16 MiB").at(body));
     }
     let data = cx.read(body).await?;
-    let (node, _) = versioned_descriptor("Descriptor", body, &data, 0);
+    let (node, _) = versioned_descriptor(&cx, "Descriptor", body, &data, 0).await;
     cx.emit(node);
     Ok(())
 }
@@ -783,7 +853,7 @@ async fn grd(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::limit("gradient file larger than 16 MiB").at(rest));
     }
     let data = cx.read(rest).await?;
-    let (node, end) = versioned_descriptor("Gradients", rest, &data, 0);
+    let (node, end) = versioned_descriptor(&cx, "Gradients", rest, &data, 0).await;
     cx.emit(node);
     if let Some(end) = end.filter(|&e| e < data.len()) {
         cx.emit(Node::new("Trailing data").span(rest.tail(to_u64(end))));
@@ -869,7 +939,7 @@ async fn asl(cx: Cx, input: Input) -> Result<()> {
 async fn style_name(cx: &Cx, body: Span) -> Result<Option<String>> {
     let data = cx.read(body).await?;
     let mut r = Rd::at(&data, 4, BE);
-    Ok((|| {
+    Ok(async {
         r.unicode()?;
         key(&mut r)?;
         let n = r.u32()?;
@@ -879,10 +949,11 @@ async fn style_name(cx: &Cx, body: Span) -> Result<Option<String>> {
             if k == "Nm" && t == *b"TEXT" {
                 return r.unicode();
             }
-            value(&mut r, &t, 0)?;
+            value(cx, &mut r, &t, 0).await?;
         }
         None
-    })())
+    }
+    .await)
 }
 
 async fn asl_style(cx: Cx, body: Span) -> Result<()> {
@@ -890,10 +961,10 @@ async fn asl_style(cx: Cx, body: Span) -> Result<()> {
         return Err(Diagnostic::limit("style larger than 16 MiB").at(body));
     }
     let data = cx.read(body).await?;
-    let (node, end) = versioned_descriptor("Identity", body, &data, 0);
+    let (node, end) = versioned_descriptor(&cx, "Identity", body, &data, 0).await;
     cx.emit(node);
     if let Some(end) = end {
-        let (node, _) = versioned_descriptor("Effects", body, &data, end);
+        let (node, _) = versioned_descriptor(&cx, "Effects", body, &data, end).await;
         cx.emit(node);
     }
     Ok(())
@@ -926,7 +997,7 @@ declare_format!(pub ATN = "photoshop-actions", "Adobe Photoshop actions", ["atn"
 
 /// Skips one action event; returns its event name and the byte range of
 /// its descriptor, if any.
-fn atn_event(r: &mut Rd<'_>) -> Option<(String, Option<(usize, usize)>)> {
+async fn atn_event(cx: &Cx, r: &mut Rd<'_>) -> Option<(String, Option<(usize, usize)>)> {
     r.skip(4)?; // expanded, enabled, with dialog, dialog options
     let id_type = r.fourcc()?;
     let name = match &id_type {
@@ -943,18 +1014,21 @@ fn atn_event(r: &mut Rd<'_>) -> Option<(String, Option<(usize, usize)>)> {
         return Some((name, None));
     }
     let start = r.pos;
-    descriptor(r, 0)?;
+    descriptor(cx, r, 0).await?;
     Some((name, Some((start, r.pos))))
 }
 
 /// Skips one action; returns its name and event count.
-fn atn_action(r: &mut Rd<'_>) -> Option<(String, u32)> {
+async fn atn_action(cx: &Cx, r: &mut Rd<'_>) -> Option<(String, u32)> {
     r.skip(6)?; // function key, shift, command, colour
     let name = r.unicode()?;
     r.skip(1)?;
     let n = r.u32()?;
-    for _ in 0..n {
-        atn_event(r)?;
+    for i in 0..n {
+        if i % 256 == 255 {
+            cx.checkpoint().await;
+        }
+        atn_event(cx, r).await?;
     }
     Some((name, n))
 }
@@ -992,7 +1066,7 @@ async fn atn(cx: Cx, input: Input) -> Result<()> {
     );
     for i in 0..count {
         let at = r.pos;
-        let Some((name, events)) = atn_action(&mut r) else {
+        let Some((name, events)) = atn_action(&cx, &mut r).await else {
             cx.emit(
                 Node::new(format!("Action {i}"))
                     .span(sub(at, data.len()))
@@ -1048,7 +1122,7 @@ async fn atn_steps(cx: Cx, span: Span) -> Result<()> {
     let count = r.u32().ok_or_else(err)?;
     for i in 0..count {
         let at = r.pos;
-        let Some((event, desc)) = atn_event(&mut r) else {
+        let Some((event, desc)) = atn_event(&cx, &mut r).await else {
             cx.emit(
                 Node::new(format!("Step {i}"))
                     .span(sub(at, data.len()))

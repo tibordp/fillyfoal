@@ -445,6 +445,7 @@ async fn bdf_glyphs(cx: Cx, region: Span) -> Result<()> {
                     if let Some(ch) = code.and_then(char::from_u32).filter(|c| !c.is_control()) {
                         summary = format!("{summary} ({ch:?})");
                     }
+                    cx.progress_in(region, region.offset.saturating_add(pos));
                     cx.push(
                         Node::new(name)
                             .span(span)

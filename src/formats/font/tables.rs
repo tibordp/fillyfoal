@@ -213,6 +213,21 @@ pub fn checksum(data: &[u8], head: bool) -> u32 {
     sum
 }
 
+/// [`checksum`] over a whole table, in budgeted pieces (a table can be as
+/// large as a read).
+pub async fn table_checksum(cx: &Cx, data: &[u8], head: bool) -> u32 {
+    // A multiple of 4, so the words of each piece are the table's words.
+    const PIECE: usize = 1 << 16;
+    let mut sum = 0u32;
+    for (i, piece) in data.chunks(PIECE).enumerate() {
+        if i > 0 {
+            cx.checkpoint().await;
+        }
+        sum = sum.wrapping_add(checksum(piece, head && i == 0));
+    }
+    sum
+}
+
 const HEAD_FLAGS: FlagTable = &[
     flag(0x0001, "Baseline at y=0"),
     flag(0x0002, "Left sidebearing at x=0"),

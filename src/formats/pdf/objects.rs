@@ -407,6 +407,9 @@ pub async fn in_object_stream(
     let mut p = Parser::new(&header, true);
     let mut found = None;
     for i in 0..=index {
+        if i % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let num = p
             .uint()
             .map_err(|e| parse_error(e, decoded.sub(0, first)))?;
@@ -463,6 +466,9 @@ pub async fn object_stream_index(
         let (Ok(num), Ok(off)) = (p.uint(), p.uint()) else {
             break;
         };
+        if out.len() % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         out.push((num, first.saturating_add(off)));
     }
     Ok(out)
@@ -723,9 +729,15 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>)> {
         let span = region.sub(pos.saturating_sub(32), PIECE.saturating_add(32));
         let base = span.offset.saturating_sub(region.offset);
         let data = cx.read_avail(span).await?;
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let mut from = 0usize;
+        let mut hits = 0u32;
         while let Some(at) = syntax::find(&data, b"obj", from) {
             from = at.saturating_add(3);
+            hits = hits.wrapping_add(1);
+            if hits.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
             if let Some((num, start)) = object_header_before(&data, at) {
                 let offset = base.saturating_add(to_u64(start));
                 xref.insert(

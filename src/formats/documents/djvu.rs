@@ -40,6 +40,8 @@ declare_format!(pub DJVU = "djvu", "DjVu document", ["djvu", "djv"], "image/vnd.
 const MAX_FORM_DEPTH: u32 = 8;
 /// Nesting limit for text zones, bookmarks and annotation lists.
 const MAX_TREE_DEPTH: usize = 32;
+/// Input bytes a parser scans between checkpoints.
+const CHECK_BYTES: usize = 4096;
 
 fn uint(value: impl Into<u64>, bits: u8) -> Value {
     Value::UInt {
@@ -155,6 +157,7 @@ async fn chunks(cx: Cx, (input, span, dir, depth): Walk) -> Result<()> {
         if absolute % 2 == 1 && next < span.len {
             next = next.saturating_add(1);
         }
+        cx.progress_in(span, span.offset.saturating_add(next));
         cx.push(node).await;
         pos = next.max(pos.saturating_add(8));
     }
@@ -950,7 +953,10 @@ async fn outline(cx: Cx, body: Span) -> Result<()> {
     let mut stack: Vec<(usize, u8)> = Vec::new();
     let mut pos = 2usize;
     let mut problem = None;
-    for _ in 0..count {
+    for i in 0..count {
+        if i % 256 == 255 {
+            cx.checkpoint().await;
+        }
         let start = pos;
         let Some(&children) = data.get(pos) else {
             problem = Some(Diagnostic::truncated(d.sub(to_u64(pos), 1), 0));
@@ -1133,7 +1139,7 @@ fn read_zone(
 
 /// Parses the zone tree at `at` (depth-first, children after their
 /// parent's record) into a flat list; the root is zone 0.
-fn parse_zones(data: &[u8], at: usize, d: Span) -> (Vec<Zone>, Option<Diagnostic>) {
+async fn parse_zones(cx: &Cx, data: &[u8], at: usize, d: Span) -> (Vec<Zone>, Option<Diagnostic>) {
     let mut zones: Vec<Zone> = Vec::new();
     let Some((root, n)) = read_zone(data, at, None, None, d) else {
         return (zones, Some(Diagnostic::truncated(d.sub(to_u64(at), 17), 0)));
@@ -1165,6 +1171,9 @@ fn parse_zones(data: &[u8], at: usize, d: Span) -> (Vec<Zone>, Option<Diagnostic
         };
         pos = pos.saturating_add(ZONE_LEN);
         let idx = zones.len();
+        if idx % 256 == 255 {
+            cx.checkpoint().await;
+        }
         zones.push(zone);
         if let Some(p) = zones.get_mut(parent) {
             p.children.push(idx);
@@ -1228,7 +1237,7 @@ async fn text_layer(cx: Cx, (body, compressed): (Span, bool)) -> Result<()> {
             .span(d.sub(to_u64(at), 1))
             .value(uint(version, 8)),
     );
-    let (zones, diag) = parse_zones(&data, at.saturating_add(1), d);
+    let (zones, diag) = parse_zones(&cx, &data, at.saturating_add(1), d).await;
     if let Some(e) = diag {
         cx.diag(e);
     }
@@ -1301,7 +1310,7 @@ struct Sexprs {
 
 /// Parses the annotation s-expressions: lists, quoted strings (C escapes)
 /// and atoms.
-fn parse_sexprs(data: &[u8], source: Span) -> (Sexprs, Option<Diagnostic>) {
+async fn parse_sexprs(cx: &Cx, data: &[u8], source: Span) -> (Sexprs, Option<Diagnostic>) {
     let mut out = Sexprs {
         items: Vec::new(),
         roots: Vec::new(),
@@ -1318,7 +1327,13 @@ fn parse_sexprs(data: &[u8], source: Span) -> (Sexprs, Option<Diagnostic>) {
             out.roots.push(idx);
         }
     };
+    // Input offset of the next checkpoint.
+    let mut check = 0usize;
     while let Some(&c) = data.get(pos) {
+        if pos >= check {
+            check = pos.saturating_add(CHECK_BYTES);
+            cx.checkpoint().await;
+        }
         match c {
             b'(' => {
                 if stack.len() >= MAX_TREE_DEPTH {
@@ -1364,6 +1379,10 @@ fn parse_sexprs(data: &[u8], source: Span) -> (Sexprs, Option<Diagnostic>) {
                 let mut s = Vec::new();
                 let mut closed = false;
                 while let Some(&b) = data.get(pos) {
+                    if pos >= check {
+                        check = pos.saturating_add(CHECK_BYTES);
+                        cx.checkpoint().await;
+                    }
                     pos = pos.saturating_add(1);
                     match b {
                         b'"' => {
@@ -1558,7 +1577,7 @@ async fn annotations(cx: Cx, (body, compressed): (Span, bool)) -> Result<()> {
         body
     };
     let data = cx.read(d).await?;
-    let (sx, diag) = parse_sexprs(&data, d);
+    let (sx, diag) = parse_sexprs(&cx, &data, d).await;
     if let Some(e) = diag {
         cx.diag(e);
     }

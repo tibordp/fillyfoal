@@ -170,6 +170,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut images = 0u64;
     while !cur.at_end() {
         let start = cur.pos();
+        cx.progress_in(input.span, input.span.offset.saturating_add(start));
         let kind = cur.u8().await?;
         match kind {
             0x3b => {

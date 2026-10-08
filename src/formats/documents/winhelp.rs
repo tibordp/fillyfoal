@@ -275,6 +275,7 @@ async fn system(cx: &Cx, body: Span) -> Result<()> {
         return Ok(());
     }
     let mut at = 12usize;
+    let mut records = 0u32;
     while let (Some(kind), Some(len)) = (u16_le(&data, at), u16_le(&data, at.saturating_add(2))) {
         let start = at.saturating_add(4);
         let end = start.saturating_add(usize::from(len));
@@ -294,6 +295,10 @@ async fn system(cx: &Cx, body: Span) -> Result<()> {
             _ => node.summary(format!("{len} bytes")),
         };
         cx.emit(node);
+        records = records.wrapping_add(1);
+        if records.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         at = end;
         if to_usize(to_u64(at)) >= data.len() {
             break;

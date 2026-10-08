@@ -132,12 +132,17 @@ impl Index {
 }
 
 /// Decoded DICT entries: operator, operands, byte range.
-fn dict_entries(data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)> {
+async fn dict_entries(cx: &Cx, data: &[u8]) -> Vec<(u16, Vec<f64>, usize, usize)> {
     let mut out = Vec::new();
     let mut ops = Vec::new();
     let mut start = 0usize;
     let mut i = 0usize;
+    let mut steps = 0u32;
     while let Some(&b0) = data.get(i) {
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let b1 = data.get(i.saturating_add(1)).copied().unwrap_or(0);
         let (v, n): (Option<f64>, usize) = match b0 {
             32..=246 => (Some(f64::from(i16::from(b0).saturating_sub(139))), 1),
@@ -346,7 +351,7 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
         cx.emit(Node::new("Top DICT").span(top).lazy(dict, (cff, top)));
         let gsubrs = read_index(&cx, region, hdr.saturating_add(len), true).await?;
         cx.emit(index_node("Global Subrs INDEX", gsubrs));
-        let entries = dict_entries(&cx.read(top).await?);
+        let entries = dict_entries(&cx, &cx.read(top).await?).await;
         let glyphs = charstrings(&cx, region, &entries, true).await?;
         cx.annotate(format!("CFF2 font, {glyphs} glyphs"));
         return Ok(());
@@ -380,7 +385,7 @@ async fn cff(cx: Cx, input: Input) -> Result<()> {
     let mut glyphs = 0;
     if top.count > 0 {
         let span = top.entry(&cx, region, 0).await?;
-        let entries = dict_entries(&cx.read(span).await?);
+        let entries = dict_entries(&cx, &cx.read(span).await?).await;
         glyphs = charstrings(&cx, region, &entries, false).await?;
     }
     cx.annotate(format!(
@@ -399,7 +404,10 @@ async fn charstrings(
     cff2: bool,
 ) -> Result<u32> {
     let mut glyphs = 0;
-    for (op, args, _, _) in entries {
+    for (n, (op, args, _, _)) in entries.iter().enumerate() {
+        if n % 256 == 255 {
+            cx.checkpoint().await;
+        }
         match (op, args.as_slice()) {
             (17, [at]) => {
                 let idx = read_index(cx, region, *at as u64, cff2).await?;
@@ -458,7 +466,7 @@ async fn top_dicts(cx: Cx, (cff, idx): (Cff, Index)) -> Result<()> {
 
 async fn dict(cx: Cx, (cff, span): (Cff, Span)) -> Result<()> {
     let data = cx.read(span).await?;
-    for (op, args, a, b) in dict_entries(&data) {
+    for (op, args, a, b) in dict_entries(&cx, &data).await {
         let node = Node::new(op_name(op)).span(span.sub(to_u64(a), to_u64(b.saturating_sub(a))));
         let node = match args.as_slice() {
             [v] if SID_OPS.contains(&op) => node.value(text(sid(&cx, &cff, *v).await?)),
@@ -1040,6 +1048,7 @@ async fn vf(cx: Cx, input: Input) -> Result<()> {
                 file.len.saturating_sub(start),
             ));
         }
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(node.span(cur.since(start))).await;
     }
     cx.annotate(format!(

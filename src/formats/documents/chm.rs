@@ -165,13 +165,17 @@ struct Entry {
 }
 
 /// The entries of one `PMGL` chunk (`data`), and the next chunk's index.
-fn listing(data: &[u8]) -> (Vec<Entry>, u32) {
+async fn listing(cx: &Cx, data: &[u8]) -> (Vec<Entry>, u32) {
     let free = to_usize(u32_le(data, 4).unwrap_or(0).into());
     let next = u32_le(data, 16).unwrap_or(u32::MAX);
     let end = data.len().saturating_sub(free);
     let mut at = 20usize;
     let mut out = Vec::new();
     while at < end {
+        // The chunk size is the file's to choose (up to the read limit).
+        if out.len() % 256 == 255 {
+            cx.checkpoint().await;
+        }
         let start = at;
         let Some(len) = encint(data, &mut at) else {
             break;
@@ -211,7 +215,7 @@ async fn chunk(cx: &Cx, chm: &Chm, chunk: u32) -> Result<(Span, Vec<Entry>, u32)
     if data.get(..4) != Some(b"PMGL".as_slice()) {
         return Err(Diagnostic::malformed("expected a PMGL listing chunk").at(span.sub(0, 4)));
     }
-    let (entries, next) = listing(&data);
+    let (entries, next) = listing(cx, &data).await;
     Ok((span, entries, next))
 }
 
@@ -252,7 +256,10 @@ async fn section1(cx: &Cx, chm: &Chm) -> Result<Span> {
     let mut found: [Option<(u64, u64)>; 3] = [None; 3];
     let mut chain = Chain::new(chm);
     while let Some((_, entries)) = chain.next(cx, chm).await? {
-        for e in entries {
+        for (i, e) in entries.into_iter().enumerate() {
+            if i % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             let Some(rest) = e.name.strip_prefix(STORAGE) else {
                 continue;
             };

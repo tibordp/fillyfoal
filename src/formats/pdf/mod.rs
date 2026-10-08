@@ -203,7 +203,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     };
     let mut xref = Xref::new();
     for section in &sections {
-        for &(num, loc) in &section.entries {
+        for (i, &(num, loc)) in section.entries.iter().enumerate() {
+            if i % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             xref.entry(num).or_insert(loc);
         }
     }
@@ -214,7 +217,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     if sections.is_empty() || trailer.as_ref().and_then(|t| t.item.get("Root")).is_none() {
         let (found, scanned_trailer) = objects::scan(&cx, region).await?;
-        for (num, loc) in found {
+        for (i, (num, loc)) in found.into_iter().enumerate() {
+            if i % 1024 == 1023 {
+                cx.checkpoint().await;
+            }
             xref.entry(num).or_insert(loc);
         }
         if trailer.as_ref().and_then(|t| t.item.get("Root")).is_none() {
@@ -587,7 +593,10 @@ async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, path: &Arc<Vec<u3
     let item = &located.item;
     match &item.obj {
         Obj::Dict(entries) => {
-            for entry in entries.iter() {
+            for (i, entry) in entries.iter().enumerate() {
+                if i % 256 == 255 {
+                    cx.checkpoint().await;
+                }
                 let span = located.base.sub(
                     to_u64(entry.key_start),
                     to_u64(entry.value.end.saturating_sub(entry.key_start)),
@@ -606,6 +615,9 @@ async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, path: &Arc<Vec<u3
         }
         Obj::Array(items) => {
             for (i, it) in items.iter().enumerate() {
+                if i % 256 == 255 {
+                    cx.checkpoint().await;
+                }
                 cx.emit(item_node(
                     doc,
                     format!("[{i}]").into(),

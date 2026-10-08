@@ -178,7 +178,7 @@ async fn woff_table(
     };
     if table.len <= cx.limits().max_read {
         let data = cx.read_avail(table).await?;
-        let computed = tables::checksum(&data, tag == "head");
+        let computed = tables::table_checksum(&cx, &data, tag == "head").await;
         let node = Node::new("Checksum").value(crate::formats::util::datakit::hex(checksum, 32));
         cx.emit(if computed == checksum {
             node.summary("valid")

@@ -5,7 +5,8 @@
 //! its CRC.
 
 use crate::bytes::u32_be;
-use crate::codec::{crc32, inflate_span};
+use crate::codec::crc::crc32_update;
+use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
@@ -168,6 +169,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.diag(Diagnostic::note("animated (APNG)"));
         }
         first = false;
+        cx.progress_in(input.span, span.end());
         cx.push(node.lazy(chunk, (input, span, kind.clone()))).await;
         cur.seek(start.saturating_add(total));
         if kind == "IEND" || kind == "MEND" {
@@ -280,7 +282,15 @@ async fn chunk(cx: Cx, (input, span, kind): (Input, Span, String)) -> Result<()>
     let covered = span.sub(4, span.len.saturating_sub(8));
     if covered.len <= cx.limits().max_read {
         let bytes = cx.read(covered).await?;
-        let computed = crc32(&bytes);
+        // In budgeted pieces: a chunk can be as large as a read.
+        let mut register = u32::MAX;
+        for (i, piece) in bytes.chunks(1 << 16).enumerate() {
+            if i > 0 {
+                cx.checkpoint().await;
+            }
+            register = crc32_update(register, piece);
+        }
+        let computed = !register;
         node = if computed == stored {
             node.summary("valid")
         } else {

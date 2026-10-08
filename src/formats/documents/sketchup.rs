@@ -278,7 +278,9 @@ async fn classes(cx: Cx, span: Span) -> Result<()> {
             .read_avail(span.sub(pos, WINDOW.saturating_add(overlap)))
             .await?;
         let limit = to_usize(WINDOW).min(data.len());
+        cx.progress_in(span, span.offset.saturating_add(pos));
         let mut i = 0usize;
+        let mut steps = 0u32;
         while i < limit {
             let Some(hit) = find(&data, b"\xff\xff", i).filter(|&h| h < limit) else {
                 break;
@@ -296,6 +298,10 @@ async fn classes(cx: Cx, span: Span) -> Result<()> {
                     i = hit.saturating_add(n);
                 }
                 None => i = hit.saturating_add(1),
+            }
+            steps = steps.wrapping_add(1);
+            if steps.is_multiple_of(1024) {
+                cx.checkpoint().await;
             }
         }
         // A tag found in the overlap was already passed: continue after it.

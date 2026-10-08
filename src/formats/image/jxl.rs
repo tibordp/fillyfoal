@@ -188,8 +188,13 @@ async fn jxl_box(
             let mut f = Fields::emitting(&cx, &block, BE);
             f.ascii("Major brand", 4).emit()?;
             f.u32("Minor version").emit()?;
+            let mut brands = 0u32;
             while f.remaining() >= 4 {
                 f.ascii("Compatible brand", 4).emit()?;
+                brands = brands.wrapping_add(1);
+                if brands.is_multiple_of(1024) {
+                    cx.checkpoint().await;
+                }
             }
         }
         b"jxll" => {

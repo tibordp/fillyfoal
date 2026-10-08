@@ -593,7 +593,9 @@ async fn application(cx: &Cx, input: Input, seg: &Segment) -> Result<()> {
 
 /// Joins the APP2 ICC_PROFILE chunks of the file into one derived source.
 async fn icc_profile(cx: &Cx, file: Span, count: u8) -> Result<Span> {
-    let mut chunks: Vec<(u8, Span)> = Vec::new();
+    // Chunks by sequence number, in file order (a stable sort by number,
+    // without sorting a list as long as the input).
+    let mut chunks: Vec<Vec<Span>> = vec![Vec::new(); 256];
     let mut cur = Cursor::new(cx, file, BE);
     cur.skip(2);
     while let Some(seg) = next_segment(&mut cur).await? {
@@ -604,23 +606,27 @@ async fn icc_profile(cx: &Cx, file: Span, count: u8) -> Result<Span> {
             let head = cx.read_avail(seg.payload().sub(0, 14)).await?;
             if head.starts_with(ICC)
                 && let Some(&seq) = head.get(12)
+                && let Some(list) = chunks.get_mut(usize::from(seq))
             {
-                chunks.push((seq, seg.payload().tail(14)));
+                list.push(seg.payload().tail(14));
             }
         }
     }
-    chunks.sort_by_key(|&(seq, _)| seq);
+    let parent = chunks.iter().flatten().next().copied().unwrap_or(file);
     let mut data = Vec::new();
-    for (index, (seq, span)) in chunks.iter().enumerate() {
-        if to_u64(index).saturating_add(1) != u64::from(*seq) {
-            return Err(Diagnostic::malformed(format!(
-                "ICC profile chunk {} of {count} is missing",
-                index.saturating_add(1)
-            )));
+    let mut index = 0usize;
+    for (seq, list) in chunks.iter().enumerate() {
+        for &span in list {
+            if index.saturating_add(1) != seq {
+                return Err(Diagnostic::malformed(format!(
+                    "ICC profile chunk {} of {count} is missing",
+                    index.saturating_add(1)
+                )));
+            }
+            data.extend(cx.read(span).await?);
+            index = index.saturating_add(1);
         }
-        data.extend(cx.read(*span).await?);
     }
-    let parent = chunks.first().map_or(file, |&(_, s)| s);
     super::reassembled(cx, parent, "jpeg-icc-chunks", data)
 }
 

@@ -73,7 +73,10 @@ pub async fn dissect_xbm(cx: Cx, input: Input) -> Result<()> {
     let data = whole(&cx, file).await?;
     let (mut width, mut height) = (0u64, 0u64);
     let mut name = String::new();
-    for (start, line) in lines(&data) {
+    for (n, (start, line)) in lines(&data).enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let text_line = crate::text::latin1(line);
         let mut words = text_line.split_whitespace();
         if words.next() != Some("#define") {
@@ -127,11 +130,17 @@ pub async fn dissect_xbm(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// The C string literals in `data`: `(start of the quote, contents)`.
-fn strings(data: &[u8]) -> Vec<(usize, &[u8])> {
+async fn strings<'a>(cx: &Cx, data: &'a [u8]) -> Vec<(usize, &'a [u8])> {
     let mut out = Vec::new();
     let mut pos = 0usize;
     let mut in_comment = false;
+    // Input offset of the next checkpoint.
+    let mut check = 0usize;
     while let Some(&b) = data.get(pos) {
+        if pos >= check {
+            check = pos.saturating_add(4096);
+            cx.checkpoint().await;
+        }
         let next = data.get(pos.saturating_add(1)).copied();
         if in_comment {
             if b == b'*' && next == Some(b'/') {
@@ -157,7 +166,7 @@ fn strings(data: &[u8]) -> Vec<(usize, &[u8])> {
 pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = whole(&cx, file).await?;
-    let all = strings(&data);
+    let all = strings(&cx, &data).await;
     let span_of =
         |(start, s): (usize, &[u8])| file.sub(to_u64(start), to_u64(s.len()).saturating_add(2));
     let Some(&first) = all.first() else {
@@ -180,36 +189,43 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
             )),
     );
     cx.annotate(format!("{}, {colors} colors", dims(width, height)));
-    let color_lines: Vec<Span> = all
-        .iter()
-        .skip(1)
-        .take(usize::try_from(*colors).unwrap_or(usize::MAX))
-        .map(|&s| span_of(s))
-        .collect();
-    if let (Some(a), Some(b)) = (color_lines.first(), color_lines.last()) {
+    // The strings after the values: `colors` color lines, then `height` rows
+    // (the first, last and count of each are all that is needed).
+    let colors_len = all
+        .len()
+        .saturating_sub(1)
+        .min(usize::try_from(*colors).unwrap_or(usize::MAX));
+    let first_last = |from: usize, len: usize| {
+        let a = all.get(from).copied().map(span_of)?;
+        let b = all
+            .get(from.saturating_add(len).saturating_sub(1))
+            .copied()
+            .map(span_of)?;
+        (len > 0).then_some((a, b))
+    };
+    if let Some((a, b)) = first_last(1, colors_len) {
         let span = Span::new(a.source, a.offset, b.end().saturating_sub(a.offset));
         cx.emit(
             Node::new("Colors")
                 .span(span)
-                .summary(format!("{} entries", color_lines.len()))
+                .summary(format!("{colors_len} entries"))
                 .lazy(xpm_colors, (span, *cpp)),
         );
     }
-    let rows: Vec<Span> = all
-        .iter()
-        .skip(color_lines.len().saturating_add(1))
-        .take(usize::try_from(*height).unwrap_or(usize::MAX))
-        .map(|&s| span_of(s))
-        .collect();
-    if let (Some(a), Some(b)) = (rows.first(), rows.last()) {
+    let rows_at = colors_len.saturating_add(1);
+    let rows_len = all
+        .len()
+        .saturating_sub(rows_at)
+        .min(usize::try_from(*height).unwrap_or(usize::MAX));
+    if let Some((a, b)) = first_last(rows_at, rows_len) {
         let mut node = Node::new("Pixels")
             .span(Span::new(
                 a.source,
                 a.offset,
                 b.end().saturating_sub(a.offset),
             ))
-            .summary(format!("{} rows", rows.len()));
-        if to_u64(rows.len()) != *height {
+            .summary(format!("{rows_len} rows"));
+        if to_u64(rows_len) != *height {
             node = node.diag(Diagnostic::warning(format!("expected {height} rows")));
         }
         cx.emit(node);
@@ -219,7 +235,7 @@ pub async fn dissect_xpm(cx: Cx, input: Input) -> Result<()> {
 
 async fn xpm_colors(cx: Cx, (span, cpp): (Span, u64)) -> Result<()> {
     let data = cx.read(span).await?;
-    let entries = strings(&data);
+    let entries = strings(&cx, &data).await;
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for (start, s) in entries {
         let chars = usize::try_from(cpp).unwrap_or(0).min(s.len());

@@ -59,7 +59,10 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
         .or_else(|| find(&data, b"/CharStrings", 0))
         .unwrap_or(data.len().min(4096));
     let head = String::from_utf8_lossy(data.get(..head_end).unwrap_or_default()).into_owned();
-    for line in head.lines() {
+    for (n, line) in head.lines().enumerate() {
+        if n % 1024 == 1023 {
+            cx.checkpoint().await;
+        }
         let t = line.trim();
         if let Some(rest) = t.strip_prefix('/') {
             let (key, value) = rest.split_once(' ').unwrap_or((rest, ""));
@@ -139,11 +142,16 @@ async fn charstrings(cx: Cx, (program, start, len_iv): (Span, usize, usize)) -> 
         let Some(bytes) = data.get(body..body.saturating_add(len)) else {
             break;
         };
-        let decrypted = type1_decrypt(bytes, 4330, len_iv);
+        // Only the first bytes are shown: decrypt just those.
+        let prefix = bytes.get(..len_iv.saturating_add(32)).unwrap_or(bytes);
+        let decrypted = type1_decrypt(prefix, 4330, len_iv);
         cx.push(
             Node::new(name)
                 .span(program.sub(to_u64(body), to_u64(len)))
-                .summary(format!("{} bytes of Type 1 charstring", decrypted.len()))
+                .summary(format!(
+                    "{} bytes of Type 1 charstring",
+                    len.saturating_sub(len_iv)
+                ))
                 .value(Value::Bytes(decrypted.into_iter().take(32).collect())),
         )
         .await;

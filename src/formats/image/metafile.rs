@@ -323,6 +323,7 @@ async fn wmf_records(cx: Cx, span: Span) -> Result<()> {
             );
         }
         let record = span.sub(pos, len);
+        cx.progress_in(span, record.end());
         let name = lookup(WMF_RECORDS, function.into())
             .map_or_else(|| format!("Record {function:#06x}"), str::to_owned);
         cx.push(Node::new(name).span(record).summary(format!("{len} bytes")))
@@ -428,6 +429,7 @@ async fn emf_records(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             );
         }
         let record = span.sub(pos, len);
+        cx.progress_in(span, record.end());
         let name = lookup(EMF_RECORDS, kind.into())
             .map_or_else(|| format!("Record {kind}"), str::to_owned);
         let mut node = Node::new(name).span(record).summary(format!("{len} bytes"));
