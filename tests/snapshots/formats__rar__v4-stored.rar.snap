@@ -108,7 +108,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Attributes: 0x20  [0xf8+0x4]
         Name: "packed.bin"  [0xfc+0xa]
     ▾ Content — RAR 2.9, 100 bytes  [0x106+0x28]
-        ! malformed: decoding stopped: RAR: invalid Huffman tables [#1:0x0+0x64]
+        ! malformed: decoding stopped: RAR: over-subscribed prefix code [#1:0x0+0x64]
   ▾ End of archive  [0x12e+0x7]
     ▾ Header  [0x12e+0x7]
         Header CRC: 0x3dc4 — valid  [0x12e+0x2]

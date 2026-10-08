@@ -1,35 +1,60 @@
-//! RAR decompression: the LZ + Huffman scheme of RAR 2.9/3.x (unrar's
-//! `Unpack29`, with PPMd variant H blocks and the standard RarVM filters)
-//! and of RAR 5.0/7.0 (`Unpack5`, with its DELTA, E8, E8E9 and ARM
-//! filters).
+//! RAR decompression: the LZ + Huffman and PPMd variant H scheme of RAR
+//! 2.9/3.x (unpack version 29, with the standard RarVM filters) and the LZ
+//! + Huffman scheme of RAR 5.0 (with its DELTA, E8, E8E9 and ARM filters).
 //!
-//! Written from knowledge of the unrar sources (no public specification
-//! exists, and no RAR compressor was available). Verification:
+//! # Provenance
+//!
+//! The decoders (`bits.rs`, `huffman.rs`, `v3.rs`, `v5.rs`, `filters.rs`)
+//! were written from libarchive's RAR readers, which are under the
+//! BSD-2-Clause license: `archive_read_support_format_rar.c` (Copyright (c)
+//! 2003-2007 Tim Kientzle, Copyright (c) 2011 Andres Mejia) for RAR 2.9/3.x
+//! and `archive_read_support_format_rar5.c` (Copyright (c) 2018 Grzegorz
+//! Antoniak) for RAR 5.0, plus RARLAB's RAR 5.0 archive format technote for
+//! the header fields. The structure is our own; the behaviour, the constant
+//! tables and the limits follow libarchive, which is credited where it is
+//! followed closely (see `THIRD-PARTY.md` for its notice).
+//!
+//! They replace an earlier version of these files that had been
+//! transliterated from unRAR's source, whose license is incompatible with
+//! the GPL. This version was written by an AI model (Claude) that has
+//! likely seen unRAR's source during training; while writing it, it
+//! consulted libarchive, the technote and the files kept from before (the
+//! streaming driver in this file, the PPMd model `ppmd.rs`, the tests and
+//! the test encoder), and saw nothing of unRAR's source or of the earlier
+//! decoder files, which were deleted unread.
+//!
+//! What libarchive does not do is not done here either: RAR 3 ITANIUM
+//! filters and filters declared inside PPMd blocks are errors, and RAR 7.0
+//! streams (algorithm version 1) are refused. Solid groups (which neither
+//! libarchive reader decodes for RAR 3) carry the dictionary, tables,
+//! repeated distances and filter programs from one file to the next.
+//!
+//! # Verification
 //!
 //! - The PPMd model decodes 7-Zip's own PPMd encoder output byte for byte
 //!   (pyppmd, with the 7z range coder; including runs that exhaust the
 //!   model's memory).
-//! - Everything else is checked on streams written by our test encoder
-//!   (`tests/data/rar/rarenc.py`), which libarchive (`bsdtar`, an
-//!   independent RAR decoder) also decodes to the same bytes: RAR 5 LZ with
-//!   all four filters and solid runs; RAR 2.9 LZ (all symbol kinds,
-//!   repeated and delta-coded tables), PPMd blocks and the E8, E8E9,
+//! - The fixtures are written by our test encoder (`tests/data/rar/`),
+//!   whose output libarchive (`bsdtar`) also decodes to the same bytes:
+//!   RAR 5 LZ with all four filters and solid runs; RAR 2.9 LZ (all symbol
+//!   kinds, repeated and delta-coded tables), PPMd blocks and the E8, E8E9,
 //!   DELTA, RGB and AUDIO filters (their byte code forged to the standard
-//!   programs' length and CRC32, which is all decoders look at).
-//! - Not checked against another decoder: RAR 2.9 solid runs and
-//!   low-distance repeats across table changes (libarchive supports
-//!   neither the way unrar does), the ITANIUM filter, RAR 7.0's larger
-//!   distance table. These follow unrar as remembered.
+//!   programs' length and CRC32, which is all either decoder looks at).
+//!   RAR 2.9 solid runs are checked by this decoder only.
+//! - libarchive's own test archives (made by RAR itself; used locally, not
+//!   committed) decode with valid CRC32s where libarchive's reader succeeds,
+//!   including RAR 3 streams of many LZ blocks and of PPMd/LZ switches
+//!   (20 MB and 240 MB of output, byte-exact against `bsdtar`), RAR 3 x86
+//!   filters, and RAR 5 solid, ARM and multi-file archives.
 //!
 //! A solid group of files is one [`Codec::Rar`](crate::codec::Codec::Rar)
 //! stream: its input is the files' packed data concatenated (each file's
 //! bit stream starts on its own), its output the files' contents
-//! concatenated, each cut to the size its header records. The dictionary,
-//! the tables and the repeated distances carry over between files, as in
-//! unrar.
+//! concatenated, each cut to the size its header records.
 
 mod bits;
 mod filters;
+mod huffman;
 mod ppmd;
 mod v3;
 mod v5;
@@ -97,7 +122,7 @@ impl Window {
     }
 
     /// Copies `len` bytes from `dist` back. Distances before the start of
-    /// the stream read zeros (unrar's fresh window); before what is kept
+    /// the stream read zeros (a fresh, zeroed window); before what is kept
     /// (beyond the dictionary) they are errors.
     pub fn copy(&mut self, dist: u64, len: u64) -> Result<()> {
         let pos = self.pos();
@@ -153,8 +178,9 @@ impl Window {
     fn trim(&mut self, keep_from: u64) {
         let n = keep_from.saturating_sub(self.base);
         if n >= (1 << 20) && n >= to_u64(self.data.len()) / 4 {
-            self.data.drain(..to_usize(n).min(self.data.len()));
-            self.base = keep_from.min(self.pos());
+            let drop = to_usize(n).min(self.data.len());
+            self.data.drain(..drop);
+            self.base = self.base.saturating_add(to_u64(drop));
         }
     }
 }
@@ -391,7 +417,7 @@ impl Decoder for Stream {
             let stop = batch_end.saturating_sub(self.member_in);
             let unit = match m.algorithm {
                 Algorithm::V50 | Algorithm::V70 => self.run5(data, m, stop)?,
-                Algorithm::V29 => self.run3(data, stop)?,
+                Algorithm::V29 => self.run3(data, m, stop)?,
             };
             match unit {
                 Unit::End => {

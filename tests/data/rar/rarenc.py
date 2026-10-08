@@ -1,27 +1,43 @@
-"""A small RAR compressor (test encoder) for the RAR 2.9 (`Unpack29`) and
-RAR 5.0 (`Unpack5`) LZ schemes, and writers for the RAR 4 and RAR 5
-containers around them.
+"""A small RAR compressor for tests: RAR 2.9/3.x and RAR 5.0 LZ streams,
+and the RAR 4 and RAR 5 containers around them.
 
-No RAR compressor is available (the `rar` tool is proprietary and not
-installed), so the fixtures are written by this encoder and checked with
-7-Zip (`7zz t` / `7zz x`), whose decoder is independent of ours. The
-encoder deliberately exercises the stream features: literals, matches of
-every distance class, repeated distances, "repeat last match", RAR 3 short
-distances and low-distance repeats, table reuse and deltas, several blocks,
-filters (RAR 5), solid groups, and PPMd blocks (RAR 3, re-encoded from a
-symbol trace: see `ppmd_trace` in the tests).
+No RAR compressor is available (RARLAB's `rar` is proprietary), so the
+fixtures are written by this encoder. It produces what libarchive's RAR
+readers decode (`archive_read_support_format_rar.c`: `parse_codes`,
+`expand`, `read_filter`, `parse_filter`, `execute_filter_*`;
+`archive_read_support_format_rar5.c`: `parse_block_header`,
+`parse_tables`, `do_uncompress_block`, `parse_filter`, `run_*_filter`), and
+`make.py` checks the archives with libarchive's `bsdtar`. Container
+headers follow RARLAB's RAR 5.0 technote and libarchive's `read_header`.
+
+The encoder deliberately exercises the stream features: literals,
+matches of every distance class, repeated distances, "repeat the last
+match", RAR 3 two-byte short matches and low-offset repeats, table reuse
+and delta-coded tables, several blocks, filters, solid groups. (PPMd
+blocks are built in `make.py`.)
+
+This file replaces an earlier version of the encoder, written from memory
+of the RAR format, whose comments named unRAR functions (`Unpack29`,
+`Unpack5`, `MakeDecodeTables`, RarVM `ReadData`) and borrowed unRAR's
+identifiers for its tables. It was rewritten against libarchive's readers
+by an AI model (Claude), keeping the earlier encoder's choices of what to
+emit so that the stream it writes is unchanged byte for byte (the fixtures
+regenerate identically); the model looked at neither unRAR's source nor
+the earlier RAR decoder while doing so.
 """
 
 import heapq
 import struct
 import zlib
 
-# Stream features the encoder may use (switches for narrowing down
-# disagreements with other decoders).
+# Stream features the RAR 3 encoder may use (switches for narrowing down
+# disagreements between decoders).
 FEATURES = {"lowrep": True, "short": True, "last": True, "rep": True, "keep_old": True}
 
 
 class BitWriter:
+    """Most significant bit first, as libarchive's bit readers take them."""
+
     def __init__(self):
         self.out = bytearray()
         self.acc = 0
@@ -44,6 +60,7 @@ class BitWriter:
         return len(self.out) * 8 + self.n
 
     def getvalue(self):
+        """The bytes written, the last one padded with zero bits."""
         w = BitWriter()
         w.out = bytearray(self.out)
         w.acc, w.n = self.acc, self.n
@@ -52,67 +69,63 @@ class BitWriter:
 
 
 # ---------------------------------------------------------------------------
-# Huffman codes (canonical, MSB first, as unrar's MakeDecodeTables)
+# Prefix codes
 
 
 def code_lengths(freqs, limit=15):
-    """Huffman code lengths (at most `limit`) for `freqs`; at least two
-    symbols get codes so every code has at least one bit."""
+    """Huffman code lengths (at most `limit`) for `freqs`. At least two
+    symbols get a code, so that the code is complete (libarchive rejects
+    reading an unassigned code)."""
     freqs = list(freqs)
     used = [i for i, f in enumerate(freqs) if f > 0]
-    if len(used) == 0:
+    if not used:
         return [0] * len(freqs)
     if len(used) == 1:
-        other = 0 if used[0] != 0 else 1
-        freqs[other] = 1
+        freqs[1 if used[0] == 0 else 0] = 1
     while True:
         heap = [(f, i, (i,)) for i, f in enumerate(freqs) if f > 0]
         heapq.heapify(heap)
         depth = [0] * len(freqs)
-        tick = len(freqs)
+        order = len(freqs)
         while len(heap) > 1:
-            f1, _, s1 = heapq.heappop(heap)
-            f2, _, s2 = heapq.heappop(heap)
-            for s in s1 + s2:
+            fa, _, a = heapq.heappop(heap)
+            fb, _, b = heapq.heappop(heap)
+            for s in a + b:
                 depth[s] += 1
-            heapq.heappush(heap, (f1 + f2, tick, s1 + s2))
-            tick += 1
+            heapq.heappush(heap, (fa + fb, order, a + b))
+            order += 1
         if max(depth) <= limit:
             return depth
+        # Too deep: flatten the distribution and retry.
         freqs = [(f + 1) // 2 if f > 0 else 0 for f in freqs]
 
 
-def canonical(lengths):
-    """Code values for `lengths`, ordered by (length, symbol)."""
-    codes = [0] * len(lengths)
-    code = 0
-    for bits in range(1, 16):
-        for sym, l in enumerate(lengths):
-            if l == bits:
-                codes[sym] = code
-                code += 1
-        code <<= 1
-    return codes
+class Code:
+    """A canonical code: codes handed out in order of (length, symbol), as
+    libarchive's `create_code` and `create_decode_tables` assign them."""
 
-
-class Huff:
     def __init__(self, lengths):
         self.lengths = lengths
-        self.codes = canonical(lengths)
+        self.codes = [0] * len(lengths)
+        next_code = 0
+        for length in range(1, 16):
+            for sym, l in enumerate(lengths):
+                if l == length:
+                    self.codes[sym] = next_code
+                    next_code += 1
+            next_code <<= 1
 
     def put(self, w, sym):
-        l = self.lengths[sym]
-        assert l > 0, f"symbol {sym} has no code"
-        w.bits(self.codes[sym], l)
+        assert self.lengths[sym] > 0, f"symbol {sym} has no code"
+        w.bits(self.codes[sym], self.lengths[sym])
 
 
-def write_bit_lengths(w, lengths):
-    """The 20 pre-code lengths, 4 bits each (15 escaped as 15, 0), with a
-    run of zeros coded as 15, n when possible."""
+def put_precode_lengths(w, lengths):
+    """The 20 pre-code lengths, 4 bits each; 15 is an escape: 15, 0 is a
+    length of 15 and 15, n a run of n + 2 zeros (used for 3+ zeros)."""
     i = 0
     while i < len(lengths):
-        l = lengths[i]
-        if l == 0:
+        if lengths[i] == 0:
             run = 0
             while i + run < len(lengths) and lengths[i + run] == 0:
                 run += 1
@@ -122,64 +135,59 @@ def write_bit_lengths(w, lengths):
                 w.bits(run - 2, 4)
                 i += run
                 continue
-        if l == 15:
+        if lengths[i] == 15:
             w.bits(15, 4)
             w.bits(0, 4)
         else:
-            w.bits(l, 4)
+            w.bits(lengths[i], 4)
         i += 1
 
 
-def table_symbols(table, old=None):
-    """Pre-code symbols (with extra bits) coding `table`: 0-15 literal (as
-    a delta against `old` for RAR 3), 16/17 repeat the previous length,
-    18/19 runs of zeros."""
+def length_table_symbols(lengths, previous=None):
+    """The pre-code symbols, as (symbol, extra value, extra bits), for a
+    table of code lengths: 0-15 a length (RAR 3: the difference to
+    `previous` modulo 16), 16/17 repeat the length before 3-10 / 11-138
+    times, 18/19 as many zeros."""
     out = []
     i = 0
-    n = len(table)
+    n = len(lengths)
     while i < n:
-        l = table[i]
+        value = lengths[i]
         run = 1
-        while i + run < n and table[i + run] == l:
+        while i + run < n and lengths[i + run] == value:
             run += 1
-        if l == 0 and run >= 3:
+        if value == 0 and run >= 3:
             run = min(run, 138)
-            if run <= 10:
-                out.append((18, run - 3, 3))
-            else:
-                out.append((19, run - 11, 7))
+            out.append((18, run - 3, 3) if run <= 10 else (19, run - 11, 7))
             i += run
             continue
-        if i > 0 and table[i - 1] == l and run >= 3:
+        if i > 0 and lengths[i - 1] == value and run >= 3:
             run = min(run, 138)
-            if run <= 10:
-                out.append((16, run - 3, 3))
-            else:
-                out.append((17, run - 11, 7))
+            out.append((16, run - 3, 3) if run <= 10 else (17, run - 11, 7))
             i += run
             continue
-        base = old[i] if old is not None else 0
-        out.append(((l - base) & 15, 0, 0))
+        base = previous[i] if previous is not None else 0
+        out.append(((value - base) & 15, 0, 0))
         i += 1
     return out
 
 
-def write_tables(w, table, old=None):
-    syms = table_symbols(table, old)
+def put_length_table(w, lengths, previous=None):
+    syms = length_table_symbols(lengths, previous)
     freqs = [0] * 20
     for s, _, _ in syms:
         freqs[s] += 1
-    bl = code_lengths(freqs)
-    write_bit_lengths(w, bl)
-    bc = Huff(bl)
-    for s, extra, nbits in syms:
-        bc.put(w, s)
+    pre_lengths = code_lengths(freqs)
+    put_precode_lengths(w, pre_lengths)
+    pre = Code(pre_lengths)
+    for s, value, nbits in syms:
+        pre.put(w, s)
         if nbits:
-            w.bits(extra, nbits)
+            w.bits(value, nbits)
 
 
 # ---------------------------------------------------------------------------
-# LZ77 parsing
+# LZ77 match finding
 
 
 class Matcher:
@@ -202,32 +210,30 @@ class Matcher:
             self.heads[key] = pos
 
     def find(self, pos, end, accept=None):
-        """The longest match at `pos` (in `hist`, data up to `end`) as
-        (length, distance), or None; `accept(length, distance)` may veto
-        candidates."""
+        """The longest match at `pos` within hist[:end] as (length,
+        distance), or None; `accept(length, distance)` may veto one."""
         if pos + 3 > end:
             return None
-        key = bytes(self.hist[pos : pos + 3])
-        cand = self.heads.get(key)
+        cand = self.heads.get(bytes(self.hist[pos : pos + 3]))
         best = None
         tries = 0
         while cand is not None and tries < self.chain:
             dist = pos - cand
             if dist > self.window:
                 break
-            l = 0
+            n = 0
             limit = min(self.max_len, end - pos)
-            while l < limit and self.hist[cand + l] == self.hist[pos + l]:
-                l += 1
-            if l >= self.min_len and (best is None or l > best[0]):
-                if accept is None or accept(l, dist):
-                    best = (l, dist)
+            while n < limit and self.hist[cand + n] == self.hist[pos + n]:
+                n += 1
+            if n >= self.min_len and (best is None or n > best[0]):
+                if accept is None or accept(n, dist):
+                    best = (n, dist)
             cand = self.prev.get(cand)
             tries += 1
         return best
 
     def feed(self, data):
-        """Appends `data` and returns its start in `hist`."""
+        """Appends `data`; returns where it starts in `hist`."""
         start = len(self.hist)
         self.hist += data
         return start
@@ -237,157 +243,174 @@ class Matcher:
             self._insert(p)
 
 
-# ---------------------------------------------------------------------------
-# RAR 5 streams
-
-
-def slot5_length(length):
-    """(slot, extra bits, extra value) for a RAR 5 length (>= 2)."""
-    v = length - 2
-    if v < 8:
-        return v, 0, 0
-    for slot in range(8, 44):
-        lbits = slot // 4 - 1
-        base = (4 | (slot & 3)) << lbits
-        if base <= v < base + (1 << lbits):
-            return slot, lbits, v - base
-    raise ValueError(length)
-
-
-def slot5_dist(dist):
-    v = dist - 1
-    if v < 4:
-        return v, 0, 0
-    dbits = v.bit_length() - 2
-    b = (v >> dbits) & 1
-    return 2 * (dbits + 1) + b, dbits, v & ((1 << dbits) - 1)
-
-
-def adjust5(dist):
-    return (dist > 0x100) + (dist > 0x2000) + (dist > 0x40000)
-
-
-class Rar5Encoder:
-    """Turns tokens into RAR 5 blocks. Tokens: ('lit', b), ('match', len,
-    dist), ('rep', k, len), ('last',), ('filter', start, len, type,
-    channels)."""
-
-    def __init__(self, extra_dist=False):
-        self.dc = 80 if extra_dist else 64
-        self.tables = None
-
-    def symbols(self, tokens):
-        """(main, dist, lowdist, replen) symbol lists with extra bits."""
-        out = []
-        for t in tokens:
-            if t[0] == "lit":
-                out.append(("ld", t[1], []))
-            elif t[0] == "match":
-                _, length, dist = t
-                ls, lb, lv = slot5_length(length - adjust5(dist))
-                ds, db, dv = slot5_dist(dist)
-                extra = [("bits", lv, lb)]
-                dsyms = [("dd", ds)]
-                if db >= 4:
-                    if db > 4:
-                        dsyms.append(("bits", dv >> 4, db - 4))
-                    dsyms.append(("ldd", dv & 15))
-                elif db > 0:
-                    dsyms.append(("bits", dv, db))
-                out.append(("ld", 262 + ls, extra + dsyms))
-            elif t[0] == "rep":
-                _, k, length = t
-                ls, lb, lv = slot5_length(length)
-                out.append(("ld", 258 + k, [("rd", ls), ("bits", lv, lb)]))
-            elif t[0] == "last":
-                out.append(("ld", 257, []))
-            elif t[0] == "filter":
-                _, start, length, ftype, channels = t
-                out.append(("ld", 256, [("filter", start, length, ftype, channels)]))
-        return out
-
-    def block(self, w, tokens, last, new_tables=True):
-        syms = self.symbols(tokens)
-        if not new_tables and self.tables is not None:
-            # Reuse only if the old tables code every symbol.
-            for kind, s, extra in syms:
-                if self.tables[kind].lengths[s] == 0 or any(
-                    e[0] in self.tables and self.tables[e[0]].lengths[e[1]] == 0 for e in extra
-                ):
-                    new_tables = True
-                    break
-        if new_tables or self.tables is None:
-            freqs = {"ld": [0] * 306, "dd": [0] * self.dc, "ldd": [0] * 16, "rd": [0] * 44}
-            for kind, s, extra in syms:
-                freqs[kind][s] += 1
-                for e in extra:
-                    if e[0] in freqs:
-                        freqs[e[0]][e[1]] += 1
-            self.tables = {k: Huff(code_lengths(v)) for k, v in freqs.items()}
-            tables = True
-        else:
-            tables = False
-        body = BitWriter()
-        if tables:
-            table = (
-                self.tables["ld"].lengths
-                + self.tables["dd"].lengths
-                + self.tables["ldd"].lengths
-                + self.tables["rd"].lengths
-            )
-            write_tables(body, table)
-        for kind, s, extra in syms:
-            self.tables[kind].put(body, s)
-            for e in extra:
-                if e[0] == "bits":
-                    if e[2]:
-                        body.bits(e[1], e[2])
-                elif e[0] == "filter":
-                    _, start, length, ftype, channels = e
-                    for v in (start, length):
-                        n = max(1, (v.bit_length() + 7) // 8)
-                        body.bits(n - 1, 2)
-                        for i in range(n):
-                            body.bits((v >> (8 * i)) & 0xFF, 8)
-                    body.bits(ftype, 3)
-                    if ftype == 0:
-                        body.bits(channels - 1, 5)
-                else:
-                    self.tables[e[0]].put(body, e[1])
-        nbits = body.bitpos()
-        data = body.getvalue()
-        size = len(data)
-        bit_size = nbits - (size - 1) * 8 if size else 8
-        count = 1 if size < 0x100 else 2 if size < 0x10000 else 3
-        flags = (count - 1) << 3 | (bit_size - 1) | (0x40 if last else 0) | (0x80 if tables else 0)
-        check = (0x5A ^ flags ^ size ^ (size >> 8) ^ (size >> 16)) & 0xFF
-        w.align()
-        w.bits(flags, 8)
-        w.bits(check, 8)
-        for i in range(count):
-            w.bits((size >> (8 * i)) & 0xFF, 8)
-        for b in data:
-            w.bits(b, 8)
-        # The decoder counts the block's bits exactly; the padding of the
-        # last byte belongs to it.
-
-
-class LzState:
-    """The repeated-distance state both encoder and decoder keep."""
+class Distances:
+    """The four most recent distances and the last length, which encoder
+    and decoder both keep (`oldoffset`/`lastlength` in libarchive's RAR 3
+    reader, `dist_cache`/`last_len` in its RAR 5 reader)."""
 
     def __init__(self):
         self.old = [0, 0, 0, 0]
         self.last_len = 0
 
-    def insert(self, dist):
+    def push(self, dist):
         self.old = [dist] + self.old[:3]
 
+    def touch(self, idx):
+        dist = self.old.pop(idx)
+        self.old.insert(0, dist)
 
-def tokens5(m, start, end, state, rng, file_start, filters=()):
-    """Greedy tokens for hist[start:end] (RAR 5), using every symbol kind.
-    `filters` lists (offset in file, length, type, channels) to declare:
-    the first at the start of the file, the others when (or shortly
-    before) their block starts."""
+
+# ---------------------------------------------------------------------------
+# RAR 5 (libarchive's archive_read_support_format_rar5.c)
+
+RAR5_MAIN, RAR5_DIST, RAR5_LOW, RAR5_REP = 306, 64, 16, 44
+
+
+def rar5_length_slot(length):
+    """(slot, extra bits, extra value) for a length, inverting
+    `decode_code_length`: slots 0-7 are 2-9, slot s >= 8 is
+    2 + ((4 | s & 3) << (s / 4 - 1)) plus that many extra bits."""
+    v = length - 2
+    if v < 8:
+        return v, 0, 0
+    for slot in range(8, RAR5_REP):
+        nbits = slot // 4 - 1
+        base = (4 | (slot & 3)) << nbits
+        if base <= v < base + (1 << nbits):
+            return slot, nbits, v - base
+    raise ValueError(length)
+
+
+def rar5_dist_slot(dist):
+    """(slot, extra bits, extra value) for a distance, inverting
+    `do_uncompress_block`: slots 0-3 are 1-4, slot s >= 4 is
+    1 + ((2 | s & 1) << (s / 2 - 1)) plus that many extra bits."""
+    v = dist - 1
+    if v < 4:
+        return v, 0, 0
+    nbits = v.bit_length() - 2
+    return 2 * (nbits + 1) + ((v >> nbits) & 1), nbits, v & ((1 << nbits) - 1)
+
+
+def rar5_length_bonus(dist):
+    """What the decoder adds to the length of a match at `dist`."""
+    return (dist > 0x100) + (dist > 0x2000) + (dist > 0x40000)
+
+
+def put_filter_number(w, v):
+    """A RAR 5 filter parameter: 2 bits of byte count - 1, then the bytes,
+    least significant first (`parse_filter_data`)."""
+    n = max(1, (v.bit_length() + 7) // 8)
+    w.bits(n - 1, 2)
+    for i in range(n):
+        w.bits((v >> (8 * i)) & 0xFF, 8)
+
+
+class Rar5Encoder:
+    """Writes tokens as RAR 5 blocks. Tokens: ('lit', byte), ('match',
+    length, dist), ('rep', index, length), ('last',), ('filter', start,
+    length, type, channels)."""
+
+    def __init__(self):
+        self.codes = None
+
+    def symbols(self, tokens):
+        """Per token: (alphabet, symbol, [extras]); an extra is another
+        (alphabet, symbol), ('bits', value, count) or a filter."""
+        out = []
+        for t in tokens:
+            kind = t[0]
+            if kind == "lit":
+                out.append(("main", t[1], []))
+            elif kind == "match":
+                _, length, dist = t
+                ls, lb, lv = rar5_length_slot(length - rar5_length_bonus(dist))
+                ds, db, dv = rar5_dist_slot(dist)
+                extras = [("bits", lv, lb), ("dist", ds)]
+                if db >= 4:
+                    # High bits as such, the low four through their code.
+                    if db > 4:
+                        extras.append(("bits", dv >> 4, db - 4))
+                    extras.append(("low", dv & 15))
+                elif db > 0:
+                    extras.append(("bits", dv, db))
+                out.append(("main", 262 + ls, extras))
+            elif kind == "rep":
+                _, idx, length = t
+                ls, lb, lv = rar5_length_slot(length)
+                out.append(("main", 258 + idx, [("rep", ls), ("bits", lv, lb)]))
+            elif kind == "last":
+                out.append(("main", 257, []))
+            elif kind == "filter":
+                out.append(("main", 256, [t]))
+        return out
+
+    def block(self, w, tokens, last, new_tables=True):
+        syms = self.symbols(tokens)
+        if not new_tables and self.codes is not None:
+            # Reuse the codes only if they cover every symbol.
+            for alphabet, s, extras in syms:
+                if self.codes[alphabet].lengths[s] == 0 or any(
+                    e[0] in self.codes and self.codes[e[0]].lengths[e[1]] == 0 for e in extras
+                ):
+                    new_tables = True
+                    break
+        tables = new_tables or self.codes is None
+        if tables:
+            freqs = {"main": [0] * RAR5_MAIN, "dist": [0] * RAR5_DIST, "low": [0] * RAR5_LOW, "rep": [0] * RAR5_REP}
+            for alphabet, s, extras in syms:
+                freqs[alphabet][s] += 1
+                for e in extras:
+                    if e[0] in freqs:
+                        freqs[e[0]][e[1]] += 1
+            self.codes = {k: Code(code_lengths(v)) for k, v in freqs.items()}
+        body = BitWriter()
+        if tables:
+            put_length_table(
+                body,
+                self.codes["main"].lengths
+                + self.codes["dist"].lengths
+                + self.codes["low"].lengths
+                + self.codes["rep"].lengths,
+            )
+        for alphabet, s, extras in syms:
+            self.codes[alphabet].put(body, s)
+            for e in extras:
+                if e[0] == "bits":
+                    if e[2]:
+                        body.bits(e[1], e[2])
+                elif e[0] == "filter":
+                    _, start, length, ftype, channels = e
+                    put_filter_number(body, start)
+                    put_filter_number(body, length)
+                    body.bits(ftype, 3)
+                    if ftype == 0:
+                        body.bits(channels - 1, 5)
+                else:
+                    self.codes[e[0]].put(body, e[1])
+        # Block header (`parse_block_header`): flags = table present (0x80),
+        # last block (0x40), size bytes - 1 (bits 3-5), bits used in the
+        # last byte - 1 (bits 0-2); a check byte; the size, little-endian.
+        nbits = body.bitpos()
+        data = body.getvalue()
+        size = len(data)
+        last_bits = nbits - (size - 1) * 8 if size else 8
+        size_bytes = 1 if size < 0x100 else 2 if size < 0x10000 else 3
+        flags = (size_bytes - 1) << 3 | (last_bits - 1) | (0x40 if last else 0) | (0x80 if tables else 0)
+        check = (0x5A ^ flags ^ size ^ (size >> 8) ^ (size >> 16)) & 0xFF
+        w.align()
+        w.bits(flags, 8)
+        w.bits(check, 8)
+        for i in range(size_bytes):
+            w.bits((size >> (8 * i)) & 0xFF, 8)
+        for b in data:
+            w.bits(b, 8)
+
+
+def rar5_tokens(m, start, end, dists, rng, file_start, filters=()):
+    """Greedy tokens for hist[start:end]. `filters` lists (offset in the
+    file, length, type, channels): the first is declared at the start of
+    the file, the others when (or shortly before) their block starts."""
     toks = []
     pos = start
     pending = sorted(filters)
@@ -400,24 +423,22 @@ def tokens5(m, start, end, state, rng, file_start, filters=()):
             if at - pos <= 0 or (at - pos < 64 and rng.random() < 0.2):
                 off, length, ftype, ch = pending.pop(0)
                 toks.append(("filter", at - pos, length, ftype, ch))
-        cap = end
-        if pending:
-            cap = min(end, file_start + pending[0][0])
-        found = m.find(pos, cap, lambda l, d: l - adjust5(d) >= 2) if cap > pos else None
+        # Matches stop at the next filter's block start.
+        cap = min(end, file_start + pending[0][0]) if pending else end
+        found = m.find(pos, cap, lambda n, d: n - rar5_length_bonus(d) >= 2) if cap > pos else None
         if found:
             length, dist = found
-            if dist == state.old[0] and length == state.last_len:
+            if dist == dists.old[0] and length == dists.last_len:
                 toks.append(("last",))
-            elif dist in state.old:
-                k = state.old.index(dist)
-                toks.append(("rep", k, length))
-                state.old.pop(k)
-                state.old.insert(0, dist)
-                state.last_len = length
+            elif dist in dists.old:
+                idx = dists.old.index(dist)
+                toks.append(("rep", idx, length))
+                dists.touch(idx)
+                dists.last_len = length
             else:
                 toks.append(("match", length, dist))
-                state.insert(dist)
-                state.last_len = length
+                dists.push(dist)
+                dists.last_len = length
             m.advance(pos, length)
             pos += length
         else:
@@ -427,98 +448,96 @@ def tokens5(m, start, end, state, rng, file_start, filters=()):
     return toks
 
 
-def compress5(files, solid, rng, block_tokens=3000, filters=None, extra_dist=False):
-    """Packed streams for RAR 5 `files` (bytes, as transformed for their
-    filters); one solid group if `solid`."""
+def compress5(files, solid, rng, block_tokens=3000, filters=None):
+    """Packed RAR 5 streams for `files` (bytes, already transformed for
+    their filters); one solid group if `solid`. Every other block reuses
+    the tables of the block before when they cover it."""
     filters = filters or {}
     out = []
     m = Matcher(min_len=3, max_len=4000)
-    enc = Rar5Encoder(extra_dist)
-    state = LzState()
+    enc = Rar5Encoder()
+    dists = Distances()
     for i, data in enumerate(files):
         if not solid:
             m = Matcher(min_len=3, max_len=4000)
-            enc = Rar5Encoder(extra_dist)
-            state = LzState()
+            enc = Rar5Encoder()
+            dists = Distances()
         start = m.feed(data)
-        toks = tokens5(m, start, start + len(data), state, rng, start, filters.get(i, ()))
+        toks = rar5_tokens(m, start, start + len(data), dists, rng, start, filters.get(i, ()))
         w = BitWriter()
-        chunks = [toks[j : j + block_tokens] for j in range(0, len(toks), block_tokens)] or [[]]
-        for j, chunk in enumerate(chunks):
-            reuse = j % 2 == 1 and enc.tables is not None
-            enc.block(w, chunk, last=j == len(chunks) - 1, new_tables=not reuse)
+        blocks = [toks[j : j + block_tokens] for j in range(0, len(toks), block_tokens)] or [[]]
+        for j, block in enumerate(blocks):
+            reuse = j % 2 == 1 and enc.codes is not None
+            enc.block(w, block, last=j == len(blocks) - 1, new_tables=not reuse)
         out.append(w.getvalue())
     return out
 
 
 # ---------------------------------------------------------------------------
-# RAR 3 streams
+# RAR 2.9/3.x (libarchive's archive_read_support_format_rar.c)
 
-LDECODE = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224]
-LBITS = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5]
-SDDECODE = [0, 4, 8, 16, 32, 64, 128, 192]
-SDBITS = [2, 2, 3, 4, 5, 6, 6, 6]
+RAR3_MAIN, RAR3_OFFSET, RAR3_LOWOFFSET, RAR3_LENGTH = 299, 60, 17, 28
 
-
-def dist_tables():
-    counts = [4, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 14, 0, 12]
-    base, bits = [], []
-    d = 0
-    for i, c in enumerate(counts):
-        for _ in range(c):
-            base.append(d)
-            bits.append(i)
-            d += 1 << i
-    return base, bits
+# The tables of libarchive's `expand`.
+LENGTH_BASES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 14, 16, 20, 24, 28, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224]
+LENGTH_BITS = [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5]
+OFFSET_BITS = [0, 0, 0, 0] + [b for b in range(1, 16) for _ in (0, 1)] + [16] * 14 + [18] * 12
+OFFSET_BASES = [sum(1 << b for b in OFFSET_BITS[:i]) for i in range(len(OFFSET_BITS))]
+SHORT_BASES = [0, 4, 8, 16, 32, 64, 128, 192]
+SHORT_BITS = [2, 2, 3, 4, 5, 6, 6, 6]
 
 
-DDECODE, DBITS = dist_tables()
-
-
-def slot3(value, table, bits):
-    for s in range(len(table)):
-        if table[s] <= value < table[s] + (1 << bits[s]):
-            return s, bits[s], value - table[s]
+def slot_of(value, bases, bits):
+    """(slot, extra bits, extra value) for `value` in a base/bits table."""
+    for s, (base, n) in enumerate(zip(bases, bits)):
+        if base <= value < base + (1 << n):
+            return s, n, value - base
     raise ValueError(value)
 
 
-def adjust3(dist):
+def rar3_length_bonus(dist):
+    """What `expand` adds to the length of a match at `dist`."""
     return (dist >= 0x2000) + (dist >= 0x40000)
 
 
-class Rar3State(LzState):
+class Rar3Distances(Distances):
+    """Adds the low-offset repeat state of `expand` (`lastlowoffset`,
+    `numlowoffsetrepeats`), which `parse_codes` clears with every table."""
+
     def __init__(self):
         super().__init__()
-        self.defs = []
-        self.prev_low = 0
-        self.low_rep = 0
+        self.programs = []
+        self.last_low = 0
+        self.low_repeats = 0
+
+    def new_table(self):
+        self.last_low = 0
+        self.low_repeats = 0
 
 
-def tokens3(m, start, end, st, rng, block_tokens, tables_at_start, filters=()):
-    """Greedy RAR 3 tokens: ('lit', b), ('match', len, dist), ('rep', k,
-    len), ('last',), ('short', dist). A table is read every `block_tokens`
-    tokens (and at the start if `tables_at_start`), which resets the
-    low-distance repeat state."""
+def rar3_tokens(m, start, end, st, rng, block_tokens, tables_at_start, filters=()):
+    """Greedy tokens: ('lit', b), ('match', length, dist, low symbol or
+    None), ('rep', index, length), ('last',), ('short', dist), ('vm', ...).
+    Tables are read every `block_tokens` tokens (and at the start if
+    `tables_at_start`)."""
     toks = []
     pos = start
     if tables_at_start:
-        st.prev_low = 0
-        st.low_rep = 0
+        st.new_table()
     for off, length, kind, regs in sorted(filters):
-        toks.append(vm_token(st.defs, kind, off, length, regs))
+        toks.append(filter_token(st.programs, kind, off, length, regs))
     while pos < end:
         if toks and len(toks) % block_tokens == 0:
-            st.prev_low = 0
-            st.low_rep = 0
+            st.new_table()
 
         def accept(length, dist):
             if dist in st.old and FEATURES["rep"]:
                 return length >= 2
-            if length - adjust3(dist) < 3:
+            if length - rar3_length_bonus(dist) < 3:
                 return False
-            ds, db, dv = slot3(dist - 1, DDECODE, DBITS)
-            # While low distances repeat, long distances must share them.
-            if st.low_rep > 0 and ds > 9 and (dv & 15) != st.prev_low:
+            slot, _, extra = slot_of(dist - 1, OFFSET_BASES, OFFSET_BITS)
+            # While the low offset repeats, far matches must share it.
+            if st.low_repeats > 0 and slot > 9 and (extra & 15) != st.last_low:
                 return False
             return True
 
@@ -528,27 +547,26 @@ def tokens3(m, start, end, st, rng, block_tokens, tables_at_start, filters=()):
             if dist == st.old[0] and length == st.last_len and FEATURES["last"]:
                 toks.append(("last",))
             else:
-                k = st.old.index(dist)
+                idx = st.old.index(dist)
                 length = min(length, 255)
-                toks.append(("rep", k, length))
-                st.old.pop(k)
-                st.old.insert(0, dist)
+                toks.append(("rep", idx, length))
+                st.touch(idx)
                 st.last_len = length
         elif found:
             length, dist = found
-            ds, db, dv = slot3(dist - 1, DDECODE, DBITS)
+            slot, _, extra = slot_of(dist - 1, OFFSET_BASES, OFFSET_BITS)
             low = None
-            if ds > 9:
-                if st.low_rep > 0:
-                    st.low_rep -= 1
-                elif FEATURES["lowrep"] and (dv & 15) == st.prev_low and rng.random() < 0.5:
+            if slot > 9:
+                if st.low_repeats > 0:
+                    st.low_repeats -= 1
+                elif FEATURES["lowrep"] and (extra & 15) == st.last_low and rng.random() < 0.5:
                     low = 16
-                    st.low_rep = 15
+                    st.low_repeats = 15
                 else:
-                    low = dv & 15
-                    st.prev_low = low
+                    low = extra & 15
+                    st.last_low = low
             toks.append(("match", length, dist, low))
-            st.insert(dist)
+            st.push(dist)
             st.last_len = length
         else:
             short = None
@@ -559,7 +577,7 @@ def tokens3(m, start, end, st, rng, block_tokens, tables_at_start, filters=()):
                         break
             if FEATURES["short"] and short is not None and rng.random() < 0.3:
                 toks.append(("short", short))
-                st.insert(short)
+                st.push(short)
                 st.last_len = 2
                 m.advance(pos, 2)
                 pos += 2
@@ -575,153 +593,157 @@ def tokens3(m, start, end, st, rng, block_tokens, tables_at_start, filters=()):
 
 class Rar3Encoder:
     def __init__(self):
-        self.old = [0] * 404
-        self.tables = None
+        self.lengths = [0] * (RAR3_MAIN + RAR3_OFFSET + RAR3_LOWOFFSET + RAR3_LENGTH)
+        self.codes = None
 
     def symbols(self, tokens):
         out = []
         for t in tokens:
-            if t[0] == "lit":
-                out.append(("ld", t[1], []))
-            elif t[0] == "match":
+            kind = t[0]
+            if kind == "lit":
+                out.append(("main", t[1], []))
+            elif kind == "match":
                 _, length, dist, low = t
-                ls = length - adjust3(dist) - 3
-                li = max(i for i in range(28) if LDECODE[i] <= ls)
-                extra = [("bits", ls - LDECODE[li], LBITS[li])]
-                ds, db, dv = slot3(dist - 1, DDECODE, DBITS)
-                extra.append(("dd", ds))
-                if db > 0:
-                    if ds > 9:
-                        if db > 4:
-                            extra.append(("bits", dv >> 4, db - 4))
+                ls, lb, lv = slot_of(length - rar3_length_bonus(dist) - 3, LENGTH_BASES, LENGTH_BITS)
+                os_, ob, ov = slot_of(dist - 1, OFFSET_BASES, OFFSET_BITS)
+                extras = [("bits", lv, lb), ("offset", os_)]
+                if ob > 0:
+                    if os_ > 9:
+                        # High bits as such; the low four through their
+                        # code, unless they repeat.
+                        if ob > 4:
+                            extras.append(("bits", ov >> 4, ob - 4))
                         if low is not None:
-                            extra.append(("ldd", low))
+                            extras.append(("lowoffset", low))
                     else:
-                        extra.append(("bits", dv, db))
-                out.append(("ld", 271 + li, extra))
-            elif t[0] == "rep":
-                _, k, length = t
-                ls = length - 2
-                li = max(i for i in range(28) if LDECODE[i] <= ls)
-                out.append(("ld", 259 + k, [("rd", li), ("bits", ls - LDECODE[li], LBITS[li])]))
-            elif t[0] == "last":
-                out.append(("ld", 258, []))
-            elif t[0] == "short":
-                v = t[1] - 1
-                k = max(i for i in range(8) if SDDECODE[i] <= v)
-                out.append(("ld", 263 + k, [("bits", v - SDDECODE[k], SDBITS[k])]))
-            elif t[0] == "eob":
-                out.append(("ld", 256, []))
-            elif t[0] == "vm":
-                out.append(("ld", 257, [("vm", t[1], t[2])]))
+                        extras.append(("bits", ov, ob))
+                out.append(("main", 271 + ls, extras))
+            elif kind == "rep":
+                _, idx, length = t
+                ls, lb, lv = slot_of(length - 2, LENGTH_BASES, LENGTH_BITS)
+                out.append(("main", 259 + idx, [("length", ls), ("bits", lv, lb)]))
+            elif kind == "last":
+                out.append(("main", 258, []))
+            elif kind == "short":
+                k, kb, kv = slot_of(t[1] - 1, SHORT_BASES, SHORT_BITS)
+                out.append(("main", 263 + k, [("bits", kv, kb)]))
+            elif kind == "end":
+                out.append(("main", 256, []))
+            elif kind == "vm":
+                out.append(("main", 257, [t]))
         return out
 
-    def write_tables(self, w, tokens, keep_old):
-        syms = self.symbols(tokens + [("eob",)])
-        freqs = {"ld": [0] * 299, "dd": [0] * 60, "ldd": [0] * 17, "rd": [0] * 28}
-        for kind, s, extra in syms:
-            freqs[kind][s] += 1
-            for e in extra:
+    def put_tables(self, w, tokens, keep_old):
+        """A table read (`parse_codes`): byte-aligned; 0 (not PPMd); 1 to
+        add the lengths to the previous ones, 0 to start from zeros; the
+        length table."""
+        syms = self.symbols(tokens + [("end",)])
+        freqs = {
+            "main": [0] * RAR3_MAIN,
+            "offset": [0] * RAR3_OFFSET,
+            "lowoffset": [0] * RAR3_LOWOFFSET,
+            "length": [0] * RAR3_LENGTH,
+        }
+        for alphabet, s, extras in syms:
+            freqs[alphabet][s] += 1
+            for e in extras:
                 if e[0] in freqs:
                     freqs[e[0]][e[1]] += 1
-        self.tables = {k: Huff(code_lengths(v)) for k, v in freqs.items()}
-        table = (
-            self.tables["ld"].lengths
-            + self.tables["dd"].lengths
-            + self.tables["ldd"].lengths
-            + self.tables["rd"].lengths
+        self.codes = {k: Code(code_lengths(v)) for k, v in freqs.items()}
+        lengths = (
+            self.codes["main"].lengths
+            + self.codes["offset"].lengths
+            + self.codes["lowoffset"].lengths
+            + self.codes["length"].lengths
         )
         w.align()
-        w.bits(0, 1)  # LZ, not PPMd
+        w.bits(0, 1)
         w.bits(1 if keep_old else 0, 1)
         if not keep_old:
-            self.old = [0] * 404
-        write_tables(w, table, self.old)
-        self.old = list(table)
+            self.lengths = [0] * len(lengths)
+        put_length_table(w, lengths, self.lengths)
+        self.lengths = list(lengths)
 
-    def write_tokens(self, w, tokens):
-        for kind, s, extra in self.symbols(tokens):
-            self.tables[kind].put(w, s)
-            for e in extra:
+    def put_tokens(self, w, tokens):
+        for alphabet, s, extras in self.symbols(tokens):
+            self.codes[alphabet].put(w, s)
+            for e in extras:
                 if e[0] == "bits":
                     if e[2]:
                         w.bits(e[1], e[2])
                 elif e[0] == "vm":
-                    _, first, record = e
-                    n = len(record)
-                    if n <= 6:
-                        w.bits(first | (n - 1), 8)
-                    elif n < 7 + 256:
-                        w.bits(first | 6, 8)
-                        w.bits(n - 7, 8)
-                    else:
-                        w.bits(first | 7, 8)
-                        w.bits(n, 16)
-                    for b in record:
-                        w.bits(b, 8)
+                    put_filter_record(w, e[1], e[2])
                 else:
-                    self.tables[e[0]].put(w, e[1])
+                    self.codes[e[0]].put(w, e[1])
 
 
-# RarVM filters. Decoders recognise the standard filter programs by their
-# length and CRC32 (and unrar by a XOR check byte), not by running them. The
-# real programs are not available here, so the byte code is forged to those
-# lengths and checksums: right for every checksum-based decoder (unrar 5+,
-# 7-Zip, libarchive, ours), meaningless to a real RarVM.
-STANDARD = {"e8": (53, 0xAD576887), "e8e9": (57, 0x3CD7E57E), "itanium": (120, 0x3769893F),
-            "delta": (29, 0x0E06077D), "rgb": (149, 0x1C2C5DC8), "audio": (216, 0xBC85E701)}
+# RarVM filters. libarchive (`compile_program`, `execute_filter`) checks
+# that a program's first byte is the XOR of the others and then knows the
+# standard programs by length and CRC32; it does not run them. The real
+# programs are not available here, so the byte code is forged to those
+# lengths and checksums: valid for checksum-based decoders, meaningless to
+# a real RarVM.
+STANDARD = {
+    "e8": (53, 0xAD576887),
+    "e8e9": (57, 0x3CD7E57E),
+    "itanium": (120, 0x3769893F),
+    "delta": (29, 0x0E06077D),
+    "rgb": (149, 0x1C2C5DC8),
+    "audio": (216, 0xBC85E701),
+}
 
 
-def forge_code(length, crc, seed=0):
-    """`length` bytes with CRC32 `crc` whose first byte is the XOR of the
-    others: free bits in bytes 1-5 solved over GF(2)."""
-    import random as _r
+def forge_program(length, crc, seed=0):
+    """`length` pseudo-random bytes with CRC32 `crc` and the first byte the
+    XOR of the rest: 40 free bits (bytes 1-5) solved over GF(2)."""
+    import random as _random
 
-    rnd = _r.Random(seed)
-    base = bytearray(rnd.randrange(256) for _ in range(length))
+    rnd = _random.Random(seed)
+    code = bytearray(rnd.randrange(256) for _ in range(length))
     free = [(i, b) for i in range(1, 6) for b in range(8)]
 
-    def residual(buf):
+    def syndrome(buf):
+        # CRC32 in the low 32 bits, the XOR check in the next 8.
         x = 0
         for v in buf[1:]:
             x ^= v
         return zlib.crc32(bytes(buf)) | ((x ^ buf[0]) << 32)
 
     for i in range(1, 6):
-        base[i] = 0
-    r0 = residual(base)
-    cols = []
+        code[i] = 0
+    s0 = syndrome(code)
+    effects = []
     for i, b in free:
-        t = bytearray(base)
+        t = bytearray(code)
         t[i] ^= 1 << b
-        cols.append(residual(t) ^ r0)
-    target = r0 ^ crc  # want residual == crc (and xor part 0)
-    # Gaussian elimination: find a subset of cols XORing to target.
-    rows = [(c, 1 << k) for k, c in enumerate(cols)]
+        effects.append(syndrome(t) ^ s0)
+    # Find free bits whose effects XOR to the needed change.
     basis = []
-    for c, m in rows:
-        for bc, bm in basis:
-            if c ^ bc < c:
-                c ^= bc
-                m ^= bm
-        if c:
-            basis.append((c, m))
+    for k, e in enumerate(effects):
+        mask = 1 << k
+        for be, bm in basis:
+            if e ^ be < e:
+                e ^= be
+                mask ^= bm
+        if e:
+            basis.append((e, mask))
             basis.sort(reverse=True)
-    t, m = target, 0
-    for bc, bm in basis:
-        if t ^ bc < t:
-            t ^= bc
-            m ^= bm
-    assert t == 0, "no solution"
+    want, chosen = s0 ^ crc, 0
+    for be, bm in basis:
+        if want ^ be < want:
+            want ^= be
+            chosen ^= bm
+    assert want == 0, "no solution"
     for k, (i, b) in enumerate(free):
-        if m >> k & 1:
-            base[i] ^= 1 << b
-    assert zlib.crc32(bytes(base)) == crc
-    return bytes(base)
+        if chosen >> k & 1:
+            code[i] ^= 1 << b
+    assert zlib.crc32(bytes(code)) == crc
+    return bytes(code)
 
 
-def read_data_bits(w, v):
-    """RarVM `ReadData` encoding."""
+def put_vm_number(w, v):
+    """A RarVM number as `membr_next_rarvm_number` reads it: 2 bits
+    selecting 4, 8, 16 or 32 more bits (the 8-bit form only for 16-255)."""
     v &= 0xFFFFFFFF
     if v < 16:
         w.bits(0, 2)
@@ -737,81 +759,94 @@ def read_data_bits(w, v):
         w.bits(v, 32)
 
 
-def vm_token(defs, kind, start, length, regs):
-    """A filter declaration: ('vm', first byte, record). `defs` lists the
-    filter kinds declared so far in the stream."""
+def filter_token(programs, kind, start, length, regs):
+    """A filter declaration ('vm', flags, record) for `parse_filter`: flags
+    0x80 (program number follows) | 0x20 (block length follows), 0x10 if
+    registers follow. The program number is 1 + its index, the index one
+    past the end declaring a new program (whose byte code then follows).
+    `programs` lists the kinds declared so far in the stream."""
     w = BitWriter()
-    first = 0x80 | 0x20
-    if kind in defs:
-        read_data_bits(w, defs.index(kind) + 1)
-        new = False
-    else:
-        read_data_bits(w, len(defs) + 1)
-        defs.append(kind)
-        new = True
-    read_data_bits(w, start)
-    read_data_bits(w, length)
+    flags = 0x80 | 0x20
+    new = kind not in programs
+    if new:
+        programs.append(kind)
+    put_vm_number(w, programs.index(kind) + 1)
+    put_vm_number(w, start)
+    put_vm_number(w, length)
     if regs:
-        first |= 0x10
+        flags |= 0x10
         mask = 0
         for r in regs:
             mask |= 1 << r
         w.bits(mask, 7)
         for r in sorted(regs):
-            read_data_bits(w, regs[r])
+            put_vm_number(w, regs[r])
     if new:
-        code = forge_code(*STANDARD[kind])
-        read_data_bits(w, len(code))
+        code = forge_program(*STANDARD[kind])
+        put_vm_number(w, len(code))
         for b in code:
             w.bits(b, 8)
-    return ("vm", first, w.getvalue())
+    return ("vm", flags, w.getvalue())
+
+
+def put_filter_record(w, flags, record):
+    """Symbol 257's operand (`read_filter`): the flags byte with the record
+    length in its low 3 bits (n - 1 for 1-6, 6: a byte n - 7 follows, 7:
+    16 bits n follow), then the record."""
+    n = len(record)
+    if n <= 6:
+        w.bits(flags | (n - 1), 8)
+    elif n < 7 + 256:
+        w.bits(flags | 6, 8)
+        w.bits(n - 7, 8)
+    else:
+        w.bits(flags | 7, 8)
+        w.bits(n, 16)
+    for b in record:
+        w.bits(b, 8)
 
 
 def compress3(files, solid, rng, block_tokens=2500, filters=None):
-    """Packed RAR 3 LZ streams for `files`. In a solid group, every other
-    file starts without tables (the previous one ends with "new table"
-    clear), reusing the tables of the file before, which are then built to
-    cover both."""
-    # Plan: which files start with tables, then tokens (the low-distance
-    # repeat state resets wherever a table is read).
+    """Packed RAR 3 LZ streams for `files`. In a solid group every other
+    file starts without tables (the file before ends with "no new table"),
+    reusing the tables of the file before, which are built to cover both.
+    Each file ends with symbol 256, 0 (end of file), then 1 if the next
+    file starts with tables."""
     reads = [(not solid) or i == 0 or i % 2 == 0 for i in range(len(files))]
-    chunked = []
+    blocked = []
     m = st = None
     for i, data in enumerate(files):
         if not solid or i == 0:
             m = Matcher(min_len=2, max_len=255)
-            st = Rar3State()
+            st = Rar3Distances()
         start = m.feed(data)
-        toks = tokens3(m, start, start + len(data), st, rng, block_tokens, reads[i], (filters or {}).get(i, ()))
-        chunked.append([toks[j : j + block_tokens] for j in range(0, len(toks), block_tokens)] or [[]])
+        toks = rar3_tokens(m, start, start + len(data), st, rng, block_tokens, reads[i], (filters or {}).get(i, ()))
+        blocked.append([toks[j : j + block_tokens] for j in range(0, len(toks), block_tokens)] or [[]])
     out = []
     enc = None
-    for i, chunks in enumerate(chunked):
+    for i, blocks in enumerate(blocked):
         if not solid or i == 0:
             enc = Rar3Encoder()
         w = BitWriter()
-        for j, chunk in enumerate(chunks):
-            cover = chunk
-            # The last chunk's tables also serve the next file if it reads
+        for j, block in enumerate(blocks):
+            cover = block
+            # The last block's tables also serve the next file if it reads
             # none.
-            if j == len(chunks) - 1 and i + 1 < len(chunked) and not reads[i + 1]:
-                cover = chunk + chunked[i + 1][0]
+            if j == len(blocks) - 1 and i + 1 < len(blocked) and not reads[i + 1]:
+                cover = block + blocked[i + 1][0]
             keep = FEATURES["keep_old"] and (i + j) % 2 == 1
             if j == 0:
                 if reads[i]:
-                    enc.write_tables(w, cover, keep_old=keep)
+                    enc.put_tables(w, cover, keep_old=keep)
             else:
-                # End of block, new tables follow.
-                enc.tables["ld"].put(w, 256)
+                # Symbol 256, 1: new tables follow.
+                enc.codes["main"].put(w, 256)
                 w.bits(1, 1)
-                enc.write_tables(w, cover, keep_old=keep)
-            if len(chunks) == 1 and j == 0 and not reads[i]:
-                pass
-            enc.write_tokens(w, chunk)
-        # End of file, with "new table" for the next file if it reads one.
-        enc.tables["ld"].put(w, 256)
+                enc.put_tables(w, cover, keep_old=keep)
+            enc.put_tokens(w, block)
+        enc.codes["main"].put(w, 256)
         w.bits(0, 1)
-        w.bits(1 if i + 1 < len(chunked) and reads[i + 1] else 0, 1)
+        w.bits(1 if i + 1 < len(blocked) and reads[i + 1] else 0, 1)
         out.append(w.getvalue())
     return out
 
@@ -821,62 +856,61 @@ def compress3(files, solid, rng, block_tokens=2500, filters=None):
 
 
 def rar4(entries, solid=False):
-    """A RAR 4 archive. `entries`: (name, packed, data, method, dict_bits,
-    file_solid, unp_ver)."""
+    """A RAR 4 archive (the header layout of libarchive's `read_header`).
+    `entries`: (name, packed, data, method, dictionary bits, solid file,
+    unpack version)."""
     out = bytearray(b"Rar!\x1a\x07\x00")
 
     def block(kind, flags, body, add=b""):
         head = struct.pack("<BHH", kind, flags, 7 + len(body)) + body
-        crc = zlib.crc32(head) & 0xFFFF
-        return struct.pack("<H", crc) + head + add
+        return struct.pack("<H", zlib.crc32(head) & 0xFFFF) + head + add
 
     out += block(0x73, 0x0008 if solid else 0, struct.pack("<HI", 0, 0))
-    for name, packed, data, method, dict_bits, fsolid, ver in entries:
-        nb = name.encode()
-        flags = 0x8000 | (dict_bits << 5) | (0x10 if fsolid else 0)
+    for name, packed, data, method, dict_bits, file_solid, version in entries:
+        raw = name.encode()
+        # Data follows (0x8000), dictionary size, solid (0x10).
+        flags = 0x8000 | (dict_bits << 5) | (0x10 if file_solid else 0)
+        # Packed and unpacked size, host OS (3: Unix), CRC32, DOS time,
+        # unpack version, method, name length, attributes.
         body = struct.pack(
-            "<IIBIIBBHI",
-            len(packed),
-            len(data),
-            3,
-            zlib.crc32(data),
-            0x5A6B_4C21,
-            ver,
-            method,
-            len(nb),
-            0x81A4,
+            "<IIBIIBBHI", len(packed), len(data), 3, zlib.crc32(data), 0x5A6B_4C21, version, method, len(raw), 0x81A4
         )
-        out += block(0x74, flags, body + nb, packed)
+        out += block(0x74, flags, body + raw, packed)
     out += block(0x7B, 0x4000, b"")
     return bytes(out)
 
 
 def vint(v):
+    """A RAR 5 variable-length integer: 7 bits per byte, low first, the
+    top bit set on all but the last byte."""
     out = bytearray()
     while True:
         b = v & 0x7F
         v >>= 7
-        if v:
-            out.append(b | 0x80)
-        else:
+        if not v:
             out.append(b)
             return bytes(out)
+        out.append(b | 0x80)
 
 
 def rar5(entries, solid=False):
-    """A RAR 5 archive. `entries`: (name, packed, data, method, dict_n,
-    file_solid, version)."""
+    """A RAR 5 archive (technote layout). `entries`: (name, packed, data,
+    method, dictionary exponent, solid file, algorithm version)."""
     out = bytearray(b"Rar!\x1a\x07\x01\x00")
 
     def header(body, data=b""):
         size = vint(len(body))
-        crc = zlib.crc32(size + body)
-        return struct.pack("<I", crc) + size + body + data
+        return struct.pack("<I", zlib.crc32(size + body)) + size + body + data
 
+    # Main header: type 1, no header flags, archive flags (0x04 solid).
     out += header(vint(1) + vint(0) + vint(0x04 if solid else 0))
-    for name, packed, data, method, dict_n, fsolid, version in entries:
-        nb = name.encode()
-        info = version | (0x40 if fsolid else 0) | (method << 7) | (dict_n << 10)
+    for name, packed, data, method, dict_n, file_solid, version in entries:
+        raw = name.encode()
+        info = version | (0x40 if file_solid else 0) | (method << 7) | (dict_n << 10)
+        # File header: type 2, header flags 0x02 (data size follows), data
+        # size, file flags 0x04 (CRC32) | 0x02 (mtime), unpacked size,
+        # attributes, mtime, CRC32, compression info, host OS (1: Unix),
+        # name.
         body = (
             vint(2)
             + vint(0x02)
@@ -888,43 +922,48 @@ def rar5(entries, solid=False):
             + struct.pack("<I", zlib.crc32(data))
             + vint(info)
             + vint(1)
-            + vint(len(nb))
-            + nb
+            + vint(len(raw))
+            + raw
         )
         out += header(body, packed)
+    # End of archive: type 5.
     out += header(vint(5) + vint(0) + vint(0))
     return bytes(out)
 
 
 # ---------------------------------------------------------------------------
-# Forward filter transforms (the decoders apply the inverses)
+# Forward filter transforms: the inverses of what the decoders apply
 
 
 def e8_encode(data, file_offset, e9, rar5):
-    """x86 CALL/JMP relative -> absolute, as the RAR E8/E8E9 filters undo."""
+    """x86 CALL (and JMP) operands relative -> absolute: the inverse of
+    `execute_filter_e8` (RAR 3) and `run_e8e9_filter` (RAR 5, positions
+    modulo 16 MiB)."""
     data = bytearray(data)
     size = 0x1000000
-    cur = 0
-    while cur + 4 < len(data):
-        b = data[cur]
-        cur += 1
+    i = 0
+    while i + 4 < len(data):
+        b = data[i]
+        i += 1
         if b == 0xE8 or (e9 and b == 0xE9):
-            off = (cur + file_offset) & 0xFFFFFFFF
+            pos = (i + file_offset) & 0xFFFFFFFF
             if rar5:
-                off %= size
-            r = int.from_bytes(data[cur : cur + 4], "little", signed=True)
-            if -off <= r < size - off:
-                a = r + off
-            elif size - off <= r < size:
-                a = r - size
+                pos %= size
+            rel = int.from_bytes(data[i : i + 4], "little", signed=True)
+            if -pos <= rel < size - pos:
+                absolute = rel + pos
+            elif size - pos <= rel < size:
+                absolute = rel - size
             else:
-                a = r
-            data[cur : cur + 4] = (a & 0xFFFFFFFF).to_bytes(4, "little")
-            cur += 4
+                absolute = rel
+            data[i : i + 4] = (absolute & 0xFFFFFFFF).to_bytes(4, "little")
+            i += 4
     return bytes(data)
 
 
 def delta_encode(data, channels):
+    """The inverse of the DELTA filters: channel by channel, each byte
+    stored as the previous one minus it."""
     out = bytearray()
     for ch in range(channels):
         prev = 0
@@ -935,40 +974,47 @@ def delta_encode(data, channels):
 
 
 def arm_encode(data, file_offset):
+    """The inverse of `run_arm_filter`: BL word offsets made absolute."""
     data = bytearray(data)
-    cur = 0
-    while cur + 3 < len(data):
-        if data[cur + 3] == 0xEB:
-            v = data[cur] | data[cur + 1] << 8 | data[cur + 2] << 16
-            v = (v + (file_offset + cur) // 4) & 0xFFFFFF
-            data[cur : cur + 3] = v.to_bytes(3, "little")
-        cur += 4
+    i = 0
+    while i + 3 < len(data):
+        if data[i + 3] == 0xEB:
+            v = data[i] | data[i + 1] << 8 | data[i + 2] << 16
+            v = (v + (file_offset + i) // 4) & 0xFFFFFF
+            data[i : i + 3] = v.to_bytes(3, "little")
+        i += 4
     return bytes(data)
 
 
-def rgb_encode(data, width, pos_r):
-    """Inverse of the RAR 3 RGB filter (`width` bytes per row)."""
+def rgb_encode(data, width, byte_offset):
+    """The inverse of `execute_filter_rgb` with stride `width` + 3: red and
+    blue made relative to green, then each byte stored as its prediction
+    (the left neighbour, or for later rows the closest of left, up and
+    up-left to left + up - up-left) minus it, plane by plane."""
     n = len(data)
     d = bytearray(data)
-    i = pos_r
+    i = byte_offset
     while i < n - 2:
         g = data[i + 1]
         d[i] = (data[i] - g) & 0xFF
         d[i + 2] = (data[i + 2] - g) & 0xFF
         i += 3
+
+    def signed(v):
+        return v - (1 << 32) if v & 0x80000000 else v
+
     src = bytearray()
     for ch in range(3):
         prev = 0
         for i in range(ch, n, 3):
             if i >= width + 3:
                 up = d[i - width]
-                ul = d[i - width - 3]
-                p = (prev + up - ul) & 0xFFFFFFFF
-                sp = lambda v: v - (1 << 32) if v & 0x80000000 else v
-                pa = abs(sp((p - prev) & 0xFFFFFFFF))
-                pb = abs(sp((p - up) & 0xFFFFFFFF))
-                pc = abs(sp((p - ul) & 0xFFFFFFFF))
-                pred = prev if pa <= pb and pa <= pc else up if pb <= pc else ul
+                up_left = d[i - width - 3]
+                p = (prev + up - up_left) & 0xFFFFFFFF
+                pa = abs(signed((p - prev) & 0xFFFFFFFF))
+                pb = abs(signed((p - up) & 0xFFFFFFFF))
+                pc = abs(signed((p - up_left) & 0xFFFFFFFF))
+                pred = prev if pa <= pb and pa <= pc else up if pb <= pc else up_left
             else:
                 pred = prev
             src.append((pred - d[i]) & 0xFF)
@@ -977,49 +1023,47 @@ def rgb_encode(data, width, pos_r):
 
 
 def audio_encode(data, channels):
-    """Inverse of the RAR 3 AUDIO filter."""
+    """The inverse of `execute_filter_audio`: per channel, each byte stored
+    as an adaptive linear prediction minus it, the predictor's three
+    weights nudged every 32 bytes towards the smallest accumulated error."""
     n = len(data)
     src = bytearray()
-    s8 = lambda v: (v & 0xFF) - 256 if v & 0x80 else v & 0xFF
+
+    def s8(v):
+        return (v & 0xFF) - 256 if v & 0x80 else v & 0xFF
+
     for ch in range(channels):
-        prev_byte = 0
-        prev_delta = 0
-        dif = [0] * 7
+        last_byte = 0
+        last_delta = 0
+        error = [0] * 7
         d1 = d2 = 0
-        k1 = k2 = k3 = 0
+        weights = [0, 0, 0]
         count = 0
         for i in range(ch, n, channels):
             d3 = d2
-            d2 = prev_delta - d1
-            d1 = prev_delta
-            pred = (8 * prev_byte + k1 * d1 + k2 * d2 + k3 * d3) & 0xFFFFFFFF
+            d2 = last_delta - d1
+            d1 = last_delta
+            pred = (8 * last_byte + weights[0] * d1 + weights[1] * d2 + weights[2] * d3) & 0xFFFFFFFF
             pred = (pred >> 3) & 0xFF
-            cur = (pred - data[i]) & 0xFF
-            src.append(cur)
-            out = (pred - cur) & 0xFFFFFFFF
-            prev_delta = s8(out - prev_byte)
-            prev_byte = out
-            d = s8(cur) * 8
-            for j, t in enumerate((d, d - d1, d + d1, d - d2, d + d2, d - d3, d + d3)):
-                dif[j] += abs(t)
+            stored = (pred - data[i]) & 0xFF
+            src.append(stored)
+            byte = (pred - stored) & 0xFFFFFFFF
+            last_delta = s8(byte - last_byte)
+            last_byte = byte
+            e = s8(stored) * 8
+            for k, t in enumerate((e, e - d1, e + d1, e - d2, e + d2, e - d3, e + d3)):
+                error[k] += abs(t)
             if count & 0x1F == 0:
-                mn, which = dif[0], 0
-                dif[0] = 0
-                for j in range(1, 7):
-                    if dif[j] < mn:
-                        mn, which = dif[j], j
-                    dif[j] = 0
-                if which == 1 and k1 >= -16:
-                    k1 -= 1
-                elif which == 2 and k1 < 16:
-                    k1 += 1
-                elif which == 3 and k2 >= -16:
-                    k2 -= 1
-                elif which == 4 and k2 < 16:
-                    k2 += 1
-                elif which == 5 and k3 >= -16:
-                    k3 -= 1
-                elif which == 6 and k3 < 16:
-                    k3 += 1
+                best = 0
+                for k in range(1, 7):
+                    if error[k] < error[best]:
+                        best = k
+                error = [0] * 7
+                if best:
+                    w = (best - 1) // 2
+                    if best % 2 == 1 and weights[w] >= -16:
+                        weights[w] -= 1
+                    elif best % 2 == 0 and weights[w] < 16:
+                        weights[w] += 1
             count += 1
     return bytes(src)
