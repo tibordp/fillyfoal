@@ -1,0 +1,19 @@
+; a full-line comment
+G1 X113.214 Y91.45 E1.3154
+G1 X-5.5 Y-3 E-.8 F2100 ; trailing comment
+G1 Z.2
+G0 X1 Y2
+g1 x5 y6 e7
+G1 x5 y6 e7
+M117 Hello World 42%
+M862.3 P "MK4S"
+T0
+G28 W
+G28 X Y
+N3 G1 X5 Y5*99
+M104 S215
+G4 P500
+M73 P50 R1
+G1 X0.123456789 Y98765.4321 E0
+@pause
+G1 E#$%&
