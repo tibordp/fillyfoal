@@ -1,6 +1,6 @@
 //! Content streams: the drawing operators of a page, form or pattern.
 
-use super::syntax::{self, Parser};
+use super::syntax::{self, Reader};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -10,6 +10,8 @@ use crate::value::Value;
 
 /// Operands kept per operator (more are counted, not shown).
 const MAX_OPERANDS: usize = 32;
+/// Bytes of a string operand shown.
+const MAX_SHOWN: usize = 1 << 16;
 
 const OPERATORS: &[(&str, &str)] = &[
     ("b", "close, fill and stroke"),
@@ -89,62 +91,72 @@ fn describe(op: &str) -> Option<&'static str> {
     OPERATORS.iter().find(|(o, _)| *o == op).map(|(_, d)| *d)
 }
 
-/// Lists the operators of the content stream decoded into `span`.
+/// Lists the operators of the content stream decoded into `span`, reading
+/// it as it goes: each operand and operator is a bounded step.
 pub async fn operators(cx: &Cx, span: Span) -> Result<()> {
-    let data = cx.read(span).await?;
-    let mut p = Parser::new(&data, true);
+    // A parse error ends the listing (reported); a read error fails it.
+    macro_rules! attempt {
+        ($e:expr) => {
+            match $e {
+                Ok(v) => v,
+                Err(syntax::Error::Malformed(msg, at)) => {
+                    cx.diag(Diagnostic::malformed(msg).at(span.sub(to_u64(at), 1)));
+                    return Ok(());
+                }
+                Err(syntax::Error::Stop(e)) => return Err(e),
+            }
+        };
+    }
+    let mut p = Reader::pieces(cx, span);
     let mut operands: Vec<String> = Vec::new();
     let mut extra = 0usize;
     let mut start: Option<usize> = None;
+    let mut steps = 0u32;
     loop {
         cx.checkpoint().await;
-        p.skip_ws();
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.progress_in(span, span.offset.saturating_add(to_u64(p.pos)));
+        }
+        p.release(p.pos);
+        attempt!(p.skip_ws().await);
         let at = p.pos;
-        if at >= data.len() {
+        if !attempt!(p.ensure(at).await) {
             break;
         }
-        let word = p.peek_word();
+        let word_end = attempt!(p.word_end(at).await);
+        let word = p.slice(at, word_end);
         let is_operator = !word.is_empty()
             && !matches!(word.first(), Some(b'+' | b'-' | b'.' | b'0'..=b'9'))
             && !matches!(word, b"true" | b"false" | b"null");
         if !is_operator {
-            match p.object() {
-                Ok(item) => {
-                    start.get_or_insert(at);
-                    if operands.len() < MAX_OPERANDS {
-                        operands.push(short(&item));
-                    } else {
-                        extra = extra.saturating_add(1);
-                    }
-                }
-                Err(syntax::Error::Malformed(msg, at)) => {
-                    cx.diag(Diagnostic::malformed(msg).at(span.sub(to_u64(at), 1)));
-                    break;
-                }
-                Err(syntax::Error::Incomplete) => break,
+            let item = attempt!(p.object().await);
+            start.get_or_insert(at);
+            if operands.len() < MAX_OPERANDS {
+                operands.push(short(&item));
+            } else {
+                extra = extra.saturating_add(1);
             }
             continue;
         }
-        let op = String::from_utf8_lossy(p.word()).into_owned();
+        let op = String::from_utf8_lossy(word).into_owned();
+        p.pos = word_end;
         let from = start.take().unwrap_or(at);
         let mut end = p.pos;
         if op == "BI" {
             // Inline image: key/value pairs, ID, data, EI.
-            match syntax::find(&data, b"ID", end) {
+            match attempt!(p.find(b"ID", end).await) {
                 Some(id) => {
                     let data_start = id.saturating_add(3);
-                    let ei = (data_start..data.len())
-                        .find(|&i| {
-                            data.get(i..i.saturating_add(2)) == Some(b"EI")
-                                && i.checked_sub(1)
-                                    .and_then(|j| data.get(j))
-                                    .is_some_and(|&b| syntax::is_white(b))
-                                && data
-                                    .get(i.saturating_add(2))
-                                    .is_none_or(|&b| syntax::is_white(b))
+                    let ei = attempt!(
+                        p.scan(data_start, 2, |before, w, after| {
+                            w == b"EI"
+                                && before.is_some_and(syntax::is_white)
+                                && after.is_none_or(syntax::is_white)
                         })
-                        .unwrap_or(data.len());
-                    end = ei.saturating_add(2).min(data.len());
+                        .await
+                    );
+                    end = ei.saturating_add(2).min(p.end());
                     p.pos = end;
                     cx.push(
                         Node::new("BI … ID … EI")
@@ -191,7 +203,11 @@ pub async fn operators(cx: &Cx, span: Span) -> Result<()> {
 fn short(item: &syntax::Item) -> String {
     use syntax::Obj;
     match &item.obj {
-        Obj::Str { bytes, .. } => format!("({})", syntax::text(bytes)),
+        Obj::Str { bytes, .. } => match bytes.get(..MAX_SHOWN) {
+            // Very long strings are shown in part.
+            Some(shown) if bytes.len() > MAX_SHOWN => format!("({} …)", syntax::text(shown)),
+            _ => format!("({})", syntax::text(bytes)),
+        },
         Obj::Array(items) => {
             let inner: Vec<String> = items.iter().take(16).map(short).collect();
             let more = if items.len() > 16 { " …" } else { "" };
