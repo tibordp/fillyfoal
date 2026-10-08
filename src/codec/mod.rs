@@ -614,8 +614,8 @@ impl Codec {
             Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
-            Codec::Ace(params) => Box::new(Streaming(ace::Decoder::new(params.clone()))),
-            Codec::StuffIt(params) => Box::new(Streaming(stuffit::Decoder::new(*params))),
+            Codec::Ace(params) => Box::new(ace::Decoder::new(params.clone())),
+            Codec::StuffIt(params) => Box::new(stuffit::Decoder::new(*params)),
             Codec::SpssBytecode { bias, big_endian } => {
                 Box::new(Streaming(statdata::SpssBytecode::new(*bias, *big_endian)))
             }

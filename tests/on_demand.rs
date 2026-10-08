@@ -1175,3 +1175,265 @@ fn raw_lzma_with_a_known_dictionary_releases() {
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(19), Some(3 << 20));
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(40), Some(u32::MAX));
 }
+
+// ---------------------------------------------------------------------------
+// ACE and StuffIt
+
+fn fixture(path: &str) -> Vec<u8> {
+    std::fs::read(format!(
+        "{}/tests/fixtures/{path}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+/// Decodes all of `input` `step` bytes at a time: the output, and how much
+/// each call produced.
+fn per_call(codec: &Codec, input: &[u8], step: usize) -> (Vec<u8>, Vec<usize>) {
+    let mut decoder = codec.decoder().unwrap();
+    let mut out = Vec::new();
+    let mut sizes = Vec::new();
+    loop {
+        let before = out.len();
+        let status = decoder
+            .decode(input, true, &mut out, step, 1 << 30)
+            .unwrap();
+        sizes.push(out.len() - before);
+        assert_ne!(
+            status,
+            Status::NeedInput,
+            "{codec:?}: wants input after the end"
+        );
+        if status == Status::Done {
+            return (out, sizes);
+        }
+    }
+}
+
+type AceFile = (fillyfoal::codec::ace::Member, std::ops::Range<usize>);
+
+/// The files of an ACE archive: header fields and packed data.
+fn ace_files(archive: &[u8]) -> Vec<AceFile> {
+    let u32_at = |at: usize| u32::from_le_bytes(archive[at..at + 4].try_into().unwrap());
+    let mut at = 0;
+    let mut out = Vec::new();
+    while at + 7 <= archive.len() {
+        let size = usize::from(u16::from_le_bytes([archive[at + 2], archive[at + 3]]));
+        let end = at + 4 + size;
+        if archive[at + 4] == 0 {
+            at = end;
+            continue;
+        }
+        let packed = u32_at(at + 7) as usize;
+        let member = fillyfoal::codec::ace::Member {
+            packed: packed as u64,
+            size: u32_at(at + 11).into(),
+            crc: u32_at(at + 23),
+            method: archive[at + 27],
+        };
+        out.push((member, end..end + packed));
+        at = end + packed;
+    }
+    out
+}
+
+/// The codec and input for `files` decoded as one (solid) stream.
+fn ace_stream(archive: &[u8], files: &[AceFile]) -> (Codec, Vec<u8>) {
+    let members: Vec<_> = files.iter().map(|(m, _)| *m).collect();
+    let input = files
+        .iter()
+        .flat_map(|(_, r)| archive[r.clone()].to_vec())
+        .collect();
+    let codec = Codec::Ace(fillyfoal::codec::ace::Params {
+        members: members.into(),
+    });
+    (codec, input)
+}
+
+/// ACE (LZ77, and blocked with its DELTA, EXE, SOUND and PIC modes):
+/// chunking, releasing, and a large solid stream decoded once, a bounded
+/// run per call.
+#[test]
+fn ace_is_on_demand() {
+    for (name, solid) in [
+        ("lz77.ace", false),
+        ("blocked.ace", false),
+        ("solid.ace", true),
+    ] {
+        let archive = fixture(&format!("synthetic/ace/{name}"));
+        let files = ace_files(&archive);
+        let groups: Vec<Vec<_>> = if solid {
+            vec![files]
+        } else {
+            files.into_iter().map(|f| vec![f]).collect()
+        };
+        for group in groups {
+            let (codec, input) = ace_stream(&archive, &group);
+            let expected = eager_decode(&codec, &input);
+            let mut at = 0;
+            for (m, _) in &group {
+                let size = m.size as usize;
+                let data = &expected[at..at + size];
+                assert_eq!(fillyfoal::codec::ace::ace_crc32(data), m.crc, "{name}");
+                at += size;
+            }
+            assert_eq!(at, expected.len());
+            assert_on_demand(&codec, &input, &expected);
+            assert_releases(&codec, &input, &expected, 64 * 1024);
+        }
+    }
+
+    // blocked.ace's files over and over as one solid stream (a file never
+    // refers to the files before it, so each round decodes the same).
+    let archive = fixture("synthetic/ace/blocked.ace");
+    let files = ace_files(&archive);
+    let (codec, one) = ace_stream(&archive, &files);
+    let round = eager_decode(&codec, &one);
+    let many: Vec<_> = (0..400).flat_map(|_| files.clone()).collect();
+    let (codec, input) = ace_stream(&archive, &many);
+    let expected = round.repeat(400);
+    assert!(expected.len() > 512 * 1024);
+    assert_on_demand(&codec, &input, &expected);
+    assert_releases(&codec, &input, &expected, 64 * 1024);
+    let step = 16 * 1024;
+    let (out, sizes) = per_call(&codec, &input, step);
+    assert!(out == expected);
+    assert!(
+        sizes.len() >= expected.len() / (2 * step),
+        "{} calls",
+        sizes.len()
+    );
+    let most = sizes.iter().max().unwrap();
+    assert!(*most <= 2 * step, "{most} bytes in one call");
+}
+
+/// The forks of a classic StuffIt archive: method, packed data, size, CRC.
+fn sit_forks(archive: &[u8]) -> Vec<(u8, std::ops::Range<usize>, usize, u16)> {
+    let u32_at = |h: &[u8], o: usize| u32::from_be_bytes(h[o..o + 4].try_into().unwrap()) as usize;
+    let u16_at = |h: &[u8], o: usize| u16::from_be_bytes([h[o], h[o + 1]]);
+    let mut at = 22;
+    let mut out = Vec::new();
+    while at + 112 <= archive.len() {
+        let h = &archive[at..at + 112];
+        at += 112;
+        if h[0] >= 32 {
+            continue;
+        }
+        for (method, size, packed, crc) in [
+            (h[0], u32_at(h, 84), u32_at(h, 92), u16_at(h, 100)),
+            (h[1], u32_at(h, 88), u32_at(h, 96), u16_at(h, 102)),
+        ] {
+            if packed > 0 {
+                out.push((method & 0x0f, at..at + packed, size, crc));
+            }
+            at += packed;
+        }
+    }
+    out
+}
+
+fn sit_codec(method: u8, size: usize, crc: Option<u16>) -> Codec {
+    Codec::StuffIt(fillyfoal::codec::stuffit::Params {
+        method,
+        size: size as u64,
+        crc,
+    })
+}
+
+/// StuffIt forks of every method: chunking, releasing, and small steps.
+#[test]
+fn stuffit_is_on_demand() {
+    let mut methods = Vec::new();
+    let archive = fixture("synthetic/stuffit/methods.sit");
+    for (method, range, size, crc) in sit_forks(&archive) {
+        let codec = sit_codec(method, size, (method != 15).then_some(crc));
+        let input = &archive[range];
+        let expected = eager_decode(&codec, input);
+        assert_eq!(expected.len(), size, "method {method}");
+        assert_eq!(fillyfoal::codec::crc::crc16_arc(&expected), crc);
+        assert_on_demand(&codec, input, &expected);
+        assert_releases(&codec, input, &expected, 3 * 64 * 1024);
+        // Small steps: many calls, each a bounded run (Arsenic's
+        // block symbols and transform count as work too).
+        let step = 256;
+        let (out, sizes) = per_call(&codec, input, step);
+        assert!(out == expected, "method {method}");
+        assert!(sizes.len() > size / (8 * step), "method {method}");
+        let most = sizes.iter().max().unwrap();
+        assert!(
+            *most <= 8 * step,
+            "method {method}: {most} bytes in one call"
+        );
+        methods.push(method);
+    }
+    methods.sort_unstable();
+    methods.dedup();
+    assert_eq!(methods, [0, 1, 2, 3, 5, 13, 15]);
+}
+
+/// Large RLE90 and Huffman forks (built here), decoded from half their
+/// input and a bounded run per call.
+#[test]
+fn stuffit_large_forks() {
+    let mut x: u32 = 7;
+    let mut next = || {
+        x = x.wrapping_mul(1_103_515_245).wrapping_add(12345) & 0x7fff_ffff;
+        x >> 16
+    };
+    // RLE90: literals, escaped 0x90s and runs.
+    let (mut rle, mut plain) = (Vec::new(), Vec::new());
+    while plain.len() < 700_000 {
+        let r = next();
+        if r % 7 == 0 && !plain.is_empty() {
+            let n = (r % 250 + 2) as u8;
+            rle.extend([0x90, n]);
+            let last = *plain.last().unwrap();
+            plain.extend(std::iter::repeat_n(last, usize::from(n) - 1));
+        } else {
+            let b = (r % 256) as u8;
+            if b == 0x90 {
+                rle.extend([0x90, 0]);
+            } else {
+                rle.push(b);
+            }
+            plain.push(b);
+        }
+    }
+    // Huffman: a = 0, b = 10, c = 11 after the tree 0 1a 0 1b 1c.
+    let mut bits: Vec<bool> = Vec::new();
+    let byte = |bits: &mut Vec<bool>, v: u8| bits.extend((0..8).rev().map(|i| v >> i & 1 == 1));
+    bits.extend([false, true]);
+    byte(&mut bits, b'a');
+    bits.extend([false, true]);
+    byte(&mut bits, b'b');
+    bits.push(true);
+    byte(&mut bits, b'c');
+    let mut text = Vec::new();
+    for _ in 0..600_000 {
+        let (sym, code): (u8, &[bool]) = match next() % 4 {
+            0 | 1 => (b'a', &[false]),
+            2 => (b'b', &[true, false]),
+            _ => (b'c', &[true, true]),
+        };
+        text.push(sym);
+        bits.extend_from_slice(code);
+    }
+    let huff: Vec<u8> = bits
+        .chunks(8)
+        .map(|c| {
+            c.iter()
+                .enumerate()
+                .fold(0u8, |v, (i, &b)| v | u8::from(b) << (7 - i))
+        })
+        .collect();
+    for (method, input, expected) in [(1u8, rle, plain), (3, huff, text)] {
+        let codec = sit_codec(method, expected.len(), None);
+        assert!(eager_decode(&codec, &input) == expected, "method {method}");
+        assert_on_demand(&codec, &input, &expected);
+        assert_releases(&codec, &input, &expected, 3 * 16 * 1024);
+        let step = 16 * 1024;
+        let (_, sizes) = per_call(&codec, &input, step);
+        assert!(sizes.len() > expected.len() / step);
+        assert!(*sizes.iter().max().unwrap() <= step + 256);
+    }
+}
