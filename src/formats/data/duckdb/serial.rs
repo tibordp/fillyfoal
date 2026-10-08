@@ -44,6 +44,9 @@ pub struct Bs<'a> {
     /// Set when a read ran past `data` while the stream goes on: reading a
     /// longer prefix may succeed.
     pub short: bool,
+    /// Whether a longer prefix can be read (the stream goes on and the
+    /// read limit allows more).
+    pub can_grow: bool,
 }
 
 impl<'a> Bs<'a> {
@@ -55,6 +58,7 @@ impl<'a> Bs<'a> {
             base,
             more,
             short: false,
+            can_grow: more,
         }
     }
 
@@ -286,6 +290,7 @@ impl Stream {
         loop {
             let mut bs = Bs::new(&self.data, self.span);
             bs.seek(self.pos);
+            bs.can_grow = self.want < self.span.len && self.want < self.max;
             let r = f(&mut bs, t);
             let (end, short) = (bs.pos(), bs.short);
             // A unit per KiB covered.

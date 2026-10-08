@@ -401,12 +401,17 @@ pub async fn plain(cx: &Cx, pst: &Pst, block: &Block) -> Result<Span> {
 }
 
 /// The data blocks of a node, in order, following XBLOCKs and XXBLOCKs.
+/// Their sizes may not add up to more than the root's total (`lcbTotal`),
+/// which also bounds how many there are when blocks are repeated.
 pub async fn data_tree(cx: &Cx, pst: &Pst, bid: u64) -> Result<Vec<Block>> {
     let root = block(cx, pst, bid).await?;
     if !root.internal() {
         return Ok(vec![root]);
     }
+    let root_span = root.raw;
     let mut out = Vec::new();
+    let mut total = None;
+    let mut used = 0u64;
     let mut pending = vec![(root, 2u8)];
     while let Some((b, allowed)) = pending.pop() {
         let data = cx.read(b.raw).await?;
@@ -419,6 +424,7 @@ pub async fn data_tree(cx: &Cx, pst: &Pst, bid: u64) -> Result<Vec<Block>> {
             .at(b.raw));
         }
         let count = u16_le(&data, 2).unwrap_or(0);
+        let total = *total.get_or_insert_with(|| u64::from(u32_le(&data, 4).unwrap_or(0)));
         let id = to_usize(pst.id());
         let mut children = Vec::new();
         for i in 0..usize::from(count) {
@@ -434,6 +440,13 @@ pub async fn data_tree(cx: &Cx, pst: &Pst, bid: u64) -> Result<Vec<Block>> {
                     Diagnostic::malformed("XBLOCK refers to an internal block").at(child.raw)
                 );
             } else {
+                used = used.saturating_add(child.raw.len.max(1));
+                if used > total {
+                    return Err(Diagnostic::malformed(format!(
+                        "data blocks hold more than the {total} bytes the data tree declares"
+                    ))
+                    .at(root_span));
+                }
                 out.push(child);
             }
         }

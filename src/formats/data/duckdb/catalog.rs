@@ -216,6 +216,11 @@ fn catalog_entry(
         close(t, node, bs, start);
         return Ok(false);
     }
+    if bs.can_grow {
+        // The next entry may be beyond the bytes read so far.
+        bs.short = true;
+        return Err(Diagnostic::truncated(bs.span(start), 0));
+    }
     // Not found: this was the last entry (or the rest is lost). The
     // catalog ends with the entry's and the catalog's end markers.
     let data = bs.data();

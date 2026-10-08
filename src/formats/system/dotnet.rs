@@ -28,6 +28,8 @@
 //! PNG), member references point at the object they refer to.
 
 use std::collections::BTreeMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u32_le};
@@ -1097,6 +1099,9 @@ enum Got {
 }
 
 struct Nrbf<'a> {
+    cx: &'a Cx,
+    /// Values read since the last checkpoint.
+    work: u32,
     r: Reader<'a>,
     base: Span,
     input: Input,
@@ -1112,7 +1117,20 @@ struct Nrbf<'a> {
 
 type Pr<T> = std::result::Result<T, Diagnostic>;
 
+/// Values (records, member names and types, array elements) parsed per
+/// unit of work.
+const VALUES_PER_UNIT: u32 = 64;
+
 impl<'a> Nrbf<'a> {
+    /// Counts a value, charging a unit of work every [`VALUES_PER_UNIT`].
+    async fn tick(&mut self) {
+        self.work = self.work.saturating_add(1);
+        if self.work >= VALUES_PER_UNIT {
+            self.work = 0;
+            self.cx.checkpoint().await;
+        }
+    }
+
     fn span(&self, from: usize) -> Span {
         self.base
             .sub(to_u64(from), to_u64(self.r.pos().saturating_sub(from)))
@@ -1269,7 +1287,22 @@ impl<'a> Nrbf<'a> {
 
     /// One record, added under `parent` and labelled `label` (a member
     /// name or an index) when given.
-    fn record(&mut self, parent: Option<usize>, label: Option<String>, depth: u32) -> Pr<Got> {
+    fn record_boxed<'s>(
+        &'s mut self,
+        parent: Option<usize>,
+        label: Option<String>,
+        depth: u32,
+    ) -> Pin<Box<dyn Future<Output = Pr<Got>> + Send + 's>> {
+        Box::pin(self.record(parent, label, depth))
+    }
+
+    async fn record(
+        &mut self,
+        parent: Option<usize>,
+        label: Option<String>,
+        depth: u32,
+    ) -> Pr<Got> {
+        self.tick().await;
         if depth > MAX_DEPTH {
             return Err(
                 Diagnostic::limit(format!("values nested deeper than {MAX_DEPTH}"))
@@ -1359,6 +1392,7 @@ impl<'a> Nrbf<'a> {
                     let names_node = self.tree.add(Some(group), Node::new("Member names"));
                     let mut members = Vec::new();
                     for _ in 0..count.max(0) {
+                        self.tick().await;
                         let at = self.r.pos();
                         let m = self.string()?;
                         let span = self.span(at);
@@ -1377,6 +1411,7 @@ impl<'a> Nrbf<'a> {
                         let tnode = self.tree.add(Some(group), Node::new("Member types"));
                         let mut kinds = Vec::new();
                         for m in &members {
+                            self.tick().await;
                             let at = self.r.pos();
                             let t = self.u8()?;
                             let span = self.span(at);
@@ -1392,6 +1427,7 @@ impl<'a> Nrbf<'a> {
                         }
                         let mut types = Vec::new();
                         for t in kinds {
+                            self.tick().await;
                             types.push(self.additional(tnode, t)?);
                         }
                         let span = self.span(types_at);
@@ -1436,6 +1472,7 @@ impl<'a> Nrbf<'a> {
                     let ty = meta.types.as_ref().and_then(|t| t.get(i)).cloned();
                     match ty {
                         Some(BType::Primitive(p)) => {
+                            self.tick().await;
                             let at = self.r.pos();
                             let (v, _) = self.primitive(p)?;
                             let span = self.span(at);
@@ -1443,7 +1480,7 @@ impl<'a> Nrbf<'a> {
                                 .add(Some(node), Node::new(member.clone()).span(span).value(v));
                         }
                         _ => {
-                            self.value(node, member.clone(), depth)?;
+                            self.value(node, member.clone(), depth).await?;
                         }
                     }
                 }
@@ -1490,7 +1527,8 @@ impl<'a> Nrbf<'a> {
             }
             7 | 15..=17 => {
                 info(self, start);
-                self.array(node, kind, start, label.is_none(), depth)?;
+                self.array(node, kind, start, label.is_none(), depth)
+                    .await?;
                 Got::Node
             }
             8 => {
@@ -1564,9 +1602,12 @@ impl<'a> Nrbf<'a> {
 
     /// A member value written as a record (skipping library records, which
     /// may precede any record).
-    fn value(&mut self, parent: usize, label: String, depth: u32) -> Pr<u64> {
+    async fn value(&mut self, parent: usize, label: String, depth: u32) -> Pr<u64> {
         loop {
-            match self.record(Some(parent), Some(label.clone()), depth.saturating_add(1))? {
+            match self
+                .record_boxed(Some(parent), Some(label.clone()), depth.saturating_add(1))
+                .await?
+            {
                 Got::Library => continue,
                 Got::Node => return Ok(1),
                 Got::Nulls(n) => return Ok(n),
@@ -1578,7 +1619,14 @@ impl<'a> Nrbf<'a> {
         }
     }
 
-    fn array(&mut self, node: usize, kind: u8, start: usize, rename: bool, depth: u32) -> Pr<()> {
+    async fn array(
+        &mut self,
+        node: usize,
+        kind: u8,
+        start: usize,
+        rename: bool,
+        depth: u32,
+    ) -> Pr<()> {
         let id = self.int_field(node, "Object ID")?;
         let (count, elem, desc) = if kind == 7 {
             let atype = self.enum_field(node, "Array type", ARRAY_TYPES)?;
@@ -1680,6 +1728,7 @@ impl<'a> Nrbf<'a> {
                             );
                             break;
                         }
+                        self.tick().await;
                         let at = self.r.pos();
                         let (v, _) = self.primitive(p)?;
                         let span = self.span(at);
@@ -1694,7 +1743,7 @@ impl<'a> Nrbf<'a> {
             _ => {
                 let mut i = 0u64;
                 while i < count {
-                    let n = self.value(values, format!("[{i}]"), depth)?;
+                    let n = self.value(values, format!("[{i}]"), depth).await?;
                     i = i.saturating_add(n.max(1));
                 }
             }
@@ -1720,8 +1769,10 @@ impl<'a> Nrbf<'a> {
     }
 }
 
-fn parse_nrbf(data: &[u8], input: Input) -> Parsed {
+async fn parse_nrbf(cx: &Cx, data: &[u8], input: Input) -> Parsed {
     let mut p = Nrbf {
+        cx,
+        work: 0,
         r: Reader::new(data),
         base: input.span,
         input,
@@ -1748,7 +1799,7 @@ fn parse_nrbf(data: &[u8], input: Input) -> Parsed {
             break;
         }
         first = false;
-        let res = p.record(None, None, 0);
+        let res = p.record(None, None, 0).await;
         if p.tree.next_index() > before {
             roots.push(before);
         }
@@ -1809,7 +1860,7 @@ async fn nrbf(cx: Cx, input: Input) -> Result<()> {
                 return Err(Diagnostic::limit("BinaryFormatter stream over 16 MiB").at(span));
             }
             let data = cx.read_avail(span).await?;
-            let parsed = Arc::new(parse_nrbf(&data, input));
+            let parsed = Arc::new(parse_nrbf(&cx, &data, input).await);
             cx.cache(span, "nrbf", parsed.clone());
             parsed
         }

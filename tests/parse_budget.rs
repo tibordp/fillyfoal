@@ -82,6 +82,30 @@ fn thrift_skips_a_large_list_in_steps() {
     poll_stepped(&mut host, field);
 }
 
+#[test]
+fn nrbf_parses_a_large_array_in_steps() {
+    // Header (root #1, version 1.0), an ArraySingleObject of `n` nulls,
+    // MessageEnd.
+    let n = 400_000u32;
+    let mut data = vec![0];
+    for word in [1i32, -1, 1, 0] {
+        data.extend_from_slice(&word.to_le_bytes());
+    }
+    data.push(16);
+    data.extend_from_slice(&1i32.to_le_bytes());
+    data.extend_from_slice(&n.to_le_bytes());
+    data.extend(std::iter::repeat_n(10u8, n as usize));
+    data.push(11);
+    let mut host = Host::named("big.nrbf", data, Limits::default());
+    host.session.expand(host.root, 10);
+    let root = host.root;
+    let yields = poll_stepped(&mut host, root);
+    assert!(yields >= 2, "{yields} yields");
+    let rendered = host.render();
+    // The header, the array, its nulls and MessageEnd.
+    assert!(rendered.contains("400003 records"), "{rendered}");
+}
+
 /// A KeePass 1 database (AES) holding `plain` (no groups or entries),
 /// with the password "fillyfoal".
 fn kdb(plain: &[u8]) -> Vec<u8> {

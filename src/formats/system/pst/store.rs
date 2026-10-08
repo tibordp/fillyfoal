@@ -481,8 +481,26 @@ async fn utf16_text(cx: &Cx, span: Span) -> Result<Span> {
     if let Some(found) = cx.derived(origin) {
         return Ok(found.span);
     }
+    /// Bytes decoded per unit of work.
+    const CHUNK: usize = 4096;
     let data = cx.read(span).await?;
-    let text = crate::text::utf16(&data, Endian::Little);
+    // A chunk at a time, never splitting a surrogate pair.
+    let mut text = String::with_capacity(data.len() / 2);
+    let mut rest = data.as_slice();
+    while !rest.is_empty() {
+        let mut n = rest.len().min(CHUNK);
+        let high = |at: usize| {
+            rest.get(at.saturating_sub(1))
+                .is_some_and(|&b| (0xd8..=0xdb).contains(&b))
+        };
+        if n < rest.len() && high(n) {
+            n = n.saturating_sub(2);
+        }
+        let (chunk, tail) = rest.split_at(n);
+        text.push_str(&crate::text::utf16(chunk, Endian::Little));
+        rest = tail;
+        cx.checkpoint().await;
+    }
     let text = text.trim_end_matches('\0').as_bytes().to_vec();
     Ok(cx.add_derived(origin, text, span.len, None)?.span)
 }
