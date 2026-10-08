@@ -11,9 +11,10 @@
 use std::sync::Arc;
 
 use super::serial::{
-    Bs, END, Info, Phys, Ty, close, enumv, expression, group, leaf, logical_type, pair, phys,
-    scalar, summarize, text, uint, value,
+    Bs, END, Info, Phys, Stream, Ty, close, enumv, expression, group, leaf, logical_type, pair,
+    phys, scalar, summarize, text, uint, value,
 };
+use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::plural;
 use crate::formats::util::binutil::Tree;
@@ -81,7 +82,7 @@ impl MetaPtr {
 }
 
 /// Makes the lazy node for table data or for one column's data.
-pub trait Links {
+pub trait Links: Sync {
     fn table_data(&self, ptr: MetaPtr, columns: Arc<Vec<(String, Ty)>>) -> Node;
     fn column_data(&self, ptr: MetaPtr, name: String, ty: Ty) -> Node;
     /// The bytes a data block's `offset` points at.
@@ -131,7 +132,7 @@ fn resync(data: &[u8], from: usize) -> Option<usize> {
     None
 }
 
-#[derive(Default)]
+#[derive(Clone, Copy, Default)]
 pub struct Counts {
     pub tables: u64,
     pub views: u64,
@@ -139,67 +140,99 @@ pub struct Counts {
 }
 
 /// Parses the whole catalog stream into `t`, adding the entry nodes to
-/// `roots`.
-pub fn catalog(
-    bs: &mut Bs<'_>,
+/// `roots`, an entry per step.
+pub async fn catalog(
+    cx: &Cx,
+    s: &mut Stream,
     t: &mut Tree,
     links: &dyn Links,
     roots: &mut Vec<usize>,
     counts: &mut Counts,
 ) -> Result<()> {
-    let at = bs.pos();
-    let id = bs.id()?;
-    if id != 100 {
-        return Err(bs.unknown(id, at, "the catalog"));
-    }
-    let n = bs.count()?;
+    let n = s
+        .piece(cx, t, |bs, _| {
+            let at = bs.pos();
+            let id = bs.id()?;
+            if id != 100 {
+                return Err(bs.unknown(id, at, "the catalog"));
+            }
+            bs.count()
+        })
+        .await?;
     for i in 0..n {
-        let start = bs.pos();
-        let node = group(t, None, "Entry");
-        roots.push(node);
-        let (kind, r) = entry(bs, t, node, links);
-        match kind {
-            1 => counts.tables = counts.tables.saturating_add(1),
-            3 => counts.views = counts.views.saturating_add(1),
-            _ => counts.other = counts.other.saturating_add(1),
+        let (r0, c0) = (roots.len(), *counts);
+        let last = s
+            .piece(cx, t, |bs, t| {
+                roots.truncate(r0);
+                *counts = c0;
+                catalog_entry(bs, t, links, roots, counts, i, n)
+            })
+            .await?;
+        if last {
+            return Ok(());
         }
-        let Err(e) = r else {
-            close(t, node, bs, start);
-            continue;
-        };
-        if bs.short {
-            return Err(e);
+    }
+    s.piece(cx, t, |bs, _| {
+        let at = bs.pos();
+        let id = bs.id()?;
+        if id != END {
+            return Err(bs.unknown(id, at, "the catalog"));
         }
-        t.update(node, |n| n.diag(e));
-        if let Some(next) = resync(bs.data(), start.saturating_add(1)) {
-            bs.seek(next);
-            close(t, node, bs, start);
-            continue;
-        }
-        // Not found: this was the last entry (or the rest is lost). The
-        // catalog ends with the entry's and the catalog's end markers.
-        let data = bs.data();
-        let end = (start..data.len().saturating_sub(1))
-            .rev()
-            .find(|&k| data.get(k..k.saturating_add(2)) == Some(&[0xff, 0xff][..]))
-            .unwrap_or(data.len());
-        bs.seek(end.max(start));
+        Ok(())
+    })
+    .await
+}
+
+/// Entry `i` of `n`: whether it ended the catalog (the next entry could
+/// not be located after a failure).
+fn catalog_entry(
+    bs: &mut Bs<'_>,
+    t: &mut Tree,
+    links: &dyn Links,
+    roots: &mut Vec<usize>,
+    counts: &mut Counts,
+    i: u64,
+    n: u64,
+) -> Result<bool> {
+    let start = bs.pos();
+    let node = group(t, None, "Entry");
+    roots.push(node);
+    let (kind, r) = entry(bs, t, node, links);
+    match kind {
+        1 => counts.tables = counts.tables.saturating_add(1),
+        3 => counts.views = counts.views.saturating_add(1),
+        _ => counts.other = counts.other.saturating_add(1),
+    }
+    let Err(e) = r else {
         close(t, node, bs, start);
-        if i.saturating_add(1) < n {
-            t.update(node, |n| {
-                n.diag(Diagnostic::unsupported(
-                    "the rest of the catalog could not be located",
-                ))
-            });
-        }
-        return Ok(());
+        return Ok(false);
+    };
+    if bs.short {
+        return Err(e);
     }
-    let at = bs.pos();
-    let id = bs.id()?;
-    if id != END {
-        return Err(bs.unknown(id, at, "the catalog"));
+    t.update(node, |n| n.diag(e));
+    if let Some(next) = resync(bs.data(), start.saturating_add(1)) {
+        bs.seek(next);
+        close(t, node, bs, start);
+        return Ok(false);
     }
-    Ok(())
+    // Not found: this was the last entry (or the rest is lost). The
+    // catalog ends with the entry's and the catalog's end markers.
+    let data = bs.data();
+    let end = (start..data.len().saturating_sub(1))
+        .rev()
+        .find(|&k| data.get(k..k.saturating_add(2)) == Some(&[0xff, 0xff][..]))
+        .unwrap_or(data.len());
+    bs.seek(end.max(start));
+    close(t, node, bs, start);
+    if i.saturating_add(1) < n {
+        t.update(node, |n| {
+            n.diag(Diagnostic::unsupported(
+                "the rest of the catalog could not be located",
+            ))
+        });
+    }
+    Ok(true)
 }
 
 /// One entry: its catalog type, and how the parse went.
@@ -1025,72 +1058,117 @@ fn allocator(bs: &mut Bs<'_>, t: &mut Tree, p: usize) -> Result<()> {
 // Table data
 
 /// The table data stream: statistics, then a raw `u64` row group count and
-/// the row groups. Returns the top-level nodes.
-pub fn table_data(
-    bs: &mut Bs<'_>,
+/// the row groups (a column's statistics or a row group per step). Returns
+/// the top-level nodes.
+pub async fn table_data(
+    cx: &Cx,
+    s: &mut Stream,
     t: &mut Tree,
     columns: &[(String, Ty)],
     links: &dyn Links,
     roots: &mut Vec<usize>,
 ) -> Result<()> {
-    let start = bs.pos();
+    let start = s.pos();
     let stats = group(t, None, "Statistics");
     roots.push(stats);
-    bs.object("table statistics", |bs, id, at| {
+    // The statistics object, a field at a time.
+    loop {
+        let (at, id) = s
+            .piece(cx, t, |bs, _| {
+                let at = bs.pos();
+                Ok((at, bs.id()?))
+            })
+            .await?;
+        if id == END {
+            break;
+        }
         match id {
             100 => {
-                bs.list(|bs, i| {
-                    let at = bs.pos();
-                    let (name, ty) = usize::try_from(i)
-                        .ok()
-                        .and_then(|i| columns.get(i))
-                        .cloned()
-                        .unwrap_or_else(|| (format!("column {i}"), Ty::default()));
-                    let node = group(t, Some(stats), name);
-                    if bs.present()? {
-                        column_statistics(bs, t, node, &ty)?;
-                    }
-                    close(t, node, bs, at);
-                    Ok(())
-                })?;
-            }
-            101 => {
-                if bs.present()? {
-                    let g = group(t, None, "Sample");
-                    roots.push(g);
-                    let r = sample(bs, t, g);
-                    close(t, g, bs, at);
-                    r?;
+                let n = s.piece(cx, t, |bs, _| bs.count()).await?;
+                for i in 0..n {
+                    s.piece(cx, t, |bs, t| {
+                        let at = bs.pos();
+                        let (name, ty) = usize::try_from(i)
+                            .ok()
+                            .and_then(|i| columns.get(i))
+                            .cloned()
+                            .unwrap_or_else(|| (format!("column {i}"), Ty::default()));
+                        let node = group(t, Some(stats), name);
+                        if bs.present()? {
+                            column_statistics(bs, t, node, &ty)?;
+                        }
+                        close(t, node, bs, at);
+                        Ok(())
+                    })
+                    .await?;
                 }
             }
-            _ => return Ok(false),
-        }
-        Ok(true)
-    })?;
-    close(t, stats, bs, start);
-    let at = bs.pos();
-    let count = bs.raw_u64()?;
-    let n = t.add(
-        None,
-        Node::new("Row group count")
-            .span(bs.span(at))
-            .value(uint(count)),
-    );
-    roots.push(n);
-    if count > crate::bytes::to_u64(bs.data().len()) && bs.short {
-        return Err(Diagnostic::malformed("implausible row group count"));
-    }
-    for k in 0..count {
-        let at = bs.pos();
-        let node = group(t, None, format!("Row group {k}"));
-        roots.push(node);
-        let r = row_group(bs, t, node, columns, links);
-        close(t, node, bs, at);
-        if let Err(e) = r {
-            if bs.short {
-                return Err(e);
+            101 => {
+                let r0 = roots.len();
+                s.piece(cx, t, |bs, t| {
+                    roots.truncate(r0);
+                    if bs.present()? {
+                        let g = group(t, None, "Sample");
+                        roots.push(g);
+                        let r = sample(bs, t, g);
+                        close(t, g, bs, at);
+                        r?;
+                    }
+                    Ok(())
+                })
+                .await?;
             }
-            t.update(node, |n| n.diag(e));
+            _ => {
+                return s
+                    .piece(cx, t, |bs, _| {
+                        bs.seek(at);
+                        Err(bs.unknown(id, at, "table statistics"))
+                    })
+                    .await;
+            }
+        }
+    }
+    let r0 = roots.len();
+    let count = s
+        .piece(cx, t, |bs, t| {
+            roots.truncate(r0);
+            close(t, stats, bs, start);
+            let at = bs.pos();
+            let count = bs.raw_u64()?;
+            let n = t.add(
+                None,
+                Node::new("Row group count")
+                    .span(bs.span(at))
+                    .value(uint(count)),
+            );
+            roots.push(n);
+            if count > crate::bytes::to_u64(bs.data().len()) && bs.short {
+                return Err(Diagnostic::malformed("implausible row group count"));
+            }
+            Ok(count)
+        })
+        .await?;
+    for k in 0..count {
+        let r0 = roots.len();
+        let stop = s
+            .piece(cx, t, |bs, t| {
+                roots.truncate(r0);
+                let at = bs.pos();
+                let node = group(t, None, format!("Row group {k}"));
+                roots.push(node);
+                let r = row_group(bs, t, node, columns, links);
+                close(t, node, bs, at);
+                if let Err(e) = r {
+                    if bs.short {
+                        return Err(e);
+                    }
+                    t.update(node, |n| n.diag(e));
+                    return Ok(true);
+                }
+                Ok(false)
+            })
+            .await?;
+        if stop {
             break;
         }
     }
