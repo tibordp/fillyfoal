@@ -22,6 +22,8 @@ mod syntax;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use objects::{Loc, Located, Section, SectionKind, Xref};
@@ -117,30 +119,52 @@ async fn decrypt_strings(cx: &Cx, doc: &Doc, located: &mut Located) {
     let Some(key) = crypt::file_key(cx, security, false).await else {
         return;
     };
-    fn walk(item: &mut Item, f: &dyn Fn(&[u8]) -> Vec<u8>, depth: u32) {
+    let key = security.string_key(&key, id);
+    let mut visited = 0u32;
+    decrypt_walk(cx, security, &key, &mut located.item, 0, &mut visited).await;
+}
+
+/// Decrypts the strings in `item`, suspending every few hundred items (and
+/// within long strings).
+fn decrypt_walk<'a>(
+    cx: &'a Cx,
+    security: &'a crypt::Security,
+    key: &'a [u8],
+    item: &'a mut Item,
+    depth: u32,
+    visited: &'a mut u32,
+) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+    Box::pin(async move {
         if depth > 64 {
             return;
         }
+        *visited = visited.wrapping_add(1);
+        if visited.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         match &mut item.obj {
-            Obj::Str { bytes, .. } => *bytes = f(bytes),
+            Obj::Str { bytes, .. } => *bytes = security.decrypt_string(cx, key, bytes).await,
             Obj::Array(items) => {
                 for it in Arc::make_mut(items) {
-                    walk(it, f, depth.saturating_add(1));
+                    decrypt_walk(cx, security, key, it, depth.saturating_add(1), visited).await;
                 }
             }
             Obj::Dict(entries) => {
                 for e in Arc::make_mut(entries) {
-                    walk(&mut e.value, f, depth.saturating_add(1));
+                    decrypt_walk(
+                        cx,
+                        security,
+                        key,
+                        &mut e.value,
+                        depth.saturating_add(1),
+                        visited,
+                    )
+                    .await;
                 }
             }
             _ => {}
         }
-    }
-    walk(
-        &mut located.item,
-        &|b| security.decrypt_string(&key, id, b),
-        0,
-    );
+    })
 }
 
 /// Resolves `item` if it is a reference; otherwise returns it as is.
@@ -190,10 +214,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let tail_at = region.len.saturating_sub(tail_len);
     let tail = cx.read_avail(region.sub(tail_at, tail_len)).await?;
     let startxref = syntax::rfind(&tail, b"startxref").and_then(|at| {
-        let mut p = syntax::Parser::at(&tail, at.saturating_add(9), true);
-        p.uint()
-            .ok()
-            .map(|v| (tail_at.saturating_add(to_u64(at)), v))
+        let mut p = syntax::Parser::at(&tail, at.saturating_add(9));
+        p.uint().map(|v| (tail_at.saturating_add(to_u64(at)), v))
     });
 
     let mut diags = Vec::new();
@@ -405,7 +427,9 @@ fn short(item: &Item) -> String {
         Obj::Name(n) => format!("/{n}"),
         Obj::Ref(n, g) => format!("{n} {g} R"),
         Obj::Str { bytes, .. } => {
-            let text: String = syntax::text(bytes).chars().take(24).collect();
+            // 24 characters take at most 4 bytes each (and a byte order mark).
+            let prefix = bytes.get(..128).unwrap_or(bytes);
+            let text: String = syntax::text(prefix).chars().take(24).collect();
             format!("({text})")
         }
         Obj::Array(items) => format!("[{} items]", items.len()),
@@ -726,8 +750,8 @@ async fn contained_objects(
 ) -> Result<()> {
     let decoded = objects::decode(&cx, &objstm, doc.security.as_ref()).await?;
     let index = objects::object_stream_index(&cx, &objstm, decoded).await?;
-    cx.set_count(Count::Exact(to_u64(index.len())));
-    for (num, offset) in index {
+    cx.set_count(Count::Exact(to_u64(index.entries.len())));
+    for &(num, offset) in &index.entries {
         let num = u32::try_from(num).unwrap_or(u32::MAX);
         let node = Node::new(format!("Object {num}")).span(decoded.sub(offset, 0));
         cx.push(

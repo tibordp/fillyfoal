@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::syntax::{self, Error as ParseError, Item, Obj, Parser};
+use super::syntax::{self, Error as ParseError, Item, Obj, Parser, Reader};
 use crate::bytes::{to_u64, to_usize};
 use std::sync::Arc;
 
@@ -15,8 +15,6 @@ use crate::span::Span;
 
 /// Largest object (dictionary part) we are prepared to read.
 const MAX_OBJECT: u64 = 16 << 20;
-/// First read when parsing an object; doubled as needed.
-const FIRST_WINDOW: u64 = 4096;
 /// Cross-reference sections followed through /Prev.
 pub const MAX_SECTIONS: usize = 256;
 
@@ -44,39 +42,24 @@ pub struct Located {
 
 fn parse_error(e: ParseError, window: Span) -> Diagnostic {
     match e {
-        ParseError::Incomplete => Diagnostic::truncated(window, window.len),
+        ParseError::Stop(d) => d,
         ParseError::Malformed(msg, at) => Diagnostic::malformed(msg).at(window.sub(to_u64(at), 1)),
     }
 }
 
-/// Parses something at `offset` in `region` with `f`, reading a larger
-/// window while the parser runs out of bytes.
-pub async fn parse_at<T>(
-    cx: &Cx,
-    region: Span,
-    offset: u64,
-    mut f: impl FnMut(&mut Parser<'_>) -> syntax::PResult<T>,
-) -> Result<(T, Span, Vec<u8>)> {
-    let mut window = FIRST_WINDOW;
-    loop {
-        let span = region.sub(offset, window);
-        let data = cx.read_avail(span).await?;
-        let complete = span.end() >= region.end();
-        let mut parser = Parser::new(&data, complete);
-        match f(&mut parser) {
-            Ok(v) => return Ok((v, span, data)),
-            Err(ParseError::Incomplete) if window < MAX_OBJECT && !complete => {
-                window = window.saturating_mul(4);
-            }
-            Err(ParseError::Incomplete) => {
-                return Err(Diagnostic::limit(format!(
-                    "object at {offset:#x} is larger than {MAX_OBJECT:#x} bytes"
-                ))
-                .at(span));
-            }
-            Err(e) => return Err(parse_error(e, span)),
+/// Parses something at `offset` in `region` with `body`, an async block
+/// using the reader `p`, which reads as much as it needs (an object of at
+/// most [`MAX_OBJECT`] bytes). Evaluates to the value and the span read,
+/// which positions are relative to.
+macro_rules! parse_at {
+    ($cx:expr, $region:expr, $offset:expr, |$p:ident| $body:block) => {{
+        let mut $p = Reader::for_object($cx, $region, $offset, MAX_OBJECT);
+        let result: syntax::PResult<_> = async { $body }.await;
+        match result {
+            Ok(v) => Ok((v, $p.window())),
+            Err(e) => Err(parse_error(e, $p.window())),
         }
-    }
+    }};
 }
 
 /// An indirect object at `offset`: header, object, and stream data.
@@ -87,17 +70,16 @@ pub async fn object_at(
     offset: u64,
     xref: Option<&Xref>,
 ) -> Result<(u32, u16, Located)> {
-    let ((num, generation, item, stream), span, _) = parse_at(cx, region, offset, |p| {
-        let (num, generation) = p.object_header()?;
-        let item = p.object()?;
+    let ((num, generation, item, stream), span) = parse_at!(cx, region, offset, |p| {
+        let (num, generation) = p.object_header().await?;
+        let item = p.object().await?;
         let stream = if item.is_dict() {
-            p.stream_start()?
+            p.stream_start().await?
         } else {
             None
         };
         Ok((num, generation, item, stream))
-    })
-    .await?;
+    })?;
     let base = span;
     let mut end = to_u64(item.end);
     let mut stream_data = None;
@@ -123,12 +105,12 @@ pub async fn object_at(
     let tail = cx
         .read_avail(region.sub(offset.saturating_add(end), 64))
         .await?;
-    let mut p = Parser::new(&tail, true);
+    let mut p = Parser::new(&tail);
     let mut consumed = 0usize;
-    if stream_data.is_some() && p.keyword(b"endstream").unwrap_or(false) {
+    if stream_data.is_some() && p.keyword(b"endstream") {
         consumed = p.pos;
     }
-    if p.keyword(b"endobj").unwrap_or(false) {
+    if p.keyword(b"endobj") {
         consumed = p.pos;
     }
     end = end.saturating_add(to_u64(consumed));
@@ -147,11 +129,10 @@ pub async fn object_at(
 
 /// The integer object a `/Length` reference points to.
 async fn length_object(cx: &Cx, region: Span, offset: u64) -> Option<u64> {
-    let ((_, item), _, _) = parse_at(cx, region, offset, |p| {
-        let header = p.object_header()?;
-        Ok((header, p.object()?))
+    let ((_, item), _) = parse_at!(cx, region, offset, |p| {
+        let header = p.object_header().await?;
+        Ok((header, p.object().await?))
     })
-    .await
     .ok()?;
     item.int().and_then(|n| u64::try_from(n).ok())
 }
@@ -161,8 +142,7 @@ async fn ends_stream(cx: &Cx, region: Span, at: u64) -> bool {
     let Ok(data) = cx.read_avail(region.sub(at, 32)).await else {
         return false;
     };
-    let mut p = Parser::new(&data, true);
-    p.keyword(b"endstream").unwrap_or(false)
+    Parser::new(&data).keyword(b"endstream")
 }
 
 /// The data length of a stream whose `/Length` is missing or wrong: up to
@@ -401,30 +381,15 @@ pub async fn in_object_stream(
             "object stream {stream} has only {n} objects"
         )));
     }
-    let header = cx
-        .read(decoded.sub_exact(0, first.min(MAX_OBJECT))?)
-        .await?;
-    let mut p = Parser::new(&header, true);
-    let mut found = None;
-    for i in 0..=index {
-        if i % 1024 == 1023 {
-            cx.checkpoint().await;
-        }
-        let num = p
-            .uint()
-            .map_err(|e| parse_error(e, decoded.sub(0, first)))?;
-        let off = p
-            .uint()
-            .map_err(|e| parse_error(e, decoded.sub(0, first)))?;
-        if i == index {
-            found = Some((num, off));
-        }
-    }
-    let Some((num, off)) = found else {
-        return Err(Diagnostic::malformed("object not found in object stream"));
+    let index_of = object_stream_index_of(cx, decoded, first).await?;
+    let Some(&(num, at)) = index_of.entries.get(to_usize(u64::from(index))) else {
+        let (msg, at) = index_of.stop.clone();
+        return Err(parse_error(
+            ParseError::Malformed(msg, at),
+            decoded.sub(0, first),
+        ));
     };
-    let at = first.saturating_add(off);
-    let (item, span, _) = parse_at(cx, decoded, at, |p| p.object()).await?;
+    let (item, span) = parse_at!(cx, decoded, at, |p| { p.object().await })?;
     let whole = span.sub(
         to_u64(item.start),
         to_u64(item.end.saturating_sub(item.start)),
@@ -441,37 +406,55 @@ pub async fn in_object_stream(
     ))
 }
 
+/// The header of an object stream: where its objects are.
+#[derive(Debug)]
+pub struct ObjStmIndex {
+    /// Object numbers and offsets in the decoded stream (after `/First`).
+    pub entries: Vec<(u64, u64)>,
+    /// Why the header ends there: the error reading the next entry.
+    stop: (String, usize),
+}
+
+/// The header of the object stream decoded into `decoded`, parsed once per
+/// stream (resolving each of its objects needs it).
+async fn object_stream_index_of(cx: &Cx, decoded: Span, first: u64) -> Result<Arc<ObjStmIndex>> {
+    const KIND: &str = "pdf-objstm-index";
+    if let Some(found) = cx.cached::<ObjStmIndex>(decoded, KIND) {
+        return Ok(found);
+    }
+    let header = decoded.sub_exact(0, first.min(MAX_OBJECT))?;
+    let mut p = Reader::pieces(cx, header);
+    let mut entries = Vec::new();
+    let stop = loop {
+        let num = p.uint().await;
+        let off = p.uint().await;
+        match (num, off) {
+            (Ok(num), Ok(off)) => entries.push((num, first.saturating_add(off))),
+            (Err(ParseError::Stop(e)), _) | (_, Err(ParseError::Stop(e))) => return Err(e),
+            (Err(ParseError::Malformed(msg, at)), _) | (_, Err(ParseError::Malformed(msg, at))) => {
+                break (msg, at);
+            }
+        }
+        p.release(p.pos);
+    };
+    let index = Arc::new(ObjStmIndex { entries, stop });
+    cx.cache(decoded, KIND, index.clone());
+    Ok(index)
+}
+
 /// The objects contained in an object stream: `(number, offset)` pairs.
 pub async fn object_stream_index(
     cx: &Cx,
     objstm: &Located,
     decoded: Span,
-) -> Result<Vec<(u64, u64)>> {
+) -> Result<Arc<ObjStmIndex>> {
     let first = objstm
         .item
         .get("First")
         .and_then(Item::int)
         .and_then(|n| u64::try_from(n).ok())
         .unwrap_or(0);
-    let header = cx
-        .read(decoded.sub_exact(0, first.min(MAX_OBJECT))?)
-        .await?;
-    let mut p = Parser::new(&header, true);
-    let mut out = Vec::new();
-    loop {
-        p.skip_ws();
-        if p.pos >= header.len() {
-            break;
-        }
-        let (Ok(num), Ok(off)) = (p.uint(), p.uint()) else {
-            break;
-        };
-        if out.len() % 1024 == 1023 {
-            cx.checkpoint().await;
-        }
-        out.push((num, first.saturating_add(off)));
-    }
-    Ok(out)
+    object_stream_index_of(cx, decoded, first).await
 }
 
 // ---------------------------------------------------------------------------
@@ -528,31 +511,40 @@ async fn table(cx: &Cx, region: Span, offset: u64) -> Result<Section> {
     let mut pos = offset.saturating_add(4);
     loop {
         // A subsection header (`start count`), or the trailer keyword.
-        let (header, _, _) = parse_at(cx, region, pos, |p| {
-            if p.keyword(b"trailer")? {
+        let (header, _) = parse_at!(cx, region, pos, |p| {
+            if p.keyword(b"trailer").await? {
                 return Ok(None);
             }
-            let start = p.uint()?;
-            let count = p.uint()?;
+            let start = p.uint().await?;
+            let count = p.uint().await?;
             Ok(Some((start, count, p.pos)))
-        })
-        .await?;
+        })?;
         let Some((start, count, used)) = header else {
             break;
         };
         pos = pos.saturating_add(to_u64(used));
         let bytes = count.saturating_mul(20);
         let body = region.sub_exact(pos, bytes)?;
-        let data = cx.read(body.sub(0, bytes.saturating_add(4))).await?;
-        let mut p = Parser::new(&data, true);
+        let mut p = Reader::pieces(cx, body);
         for i in 0..count {
             cx.checkpoint().await;
-            let (Ok(off), Ok(generation)) = (p.uint(), p.uint()) else {
-                return Err(Diagnostic::malformed("invalid cross-reference entry")
-                    .at(body.sub(i.saturating_mul(20), 20)));
+            p.release(p.pos);
+            let off = p.uint().await;
+            let generation = p.uint().await;
+            let (off, generation) = match (off, generation) {
+                (Ok(off), Ok(generation)) => (off, generation),
+                (Err(ParseError::Stop(e)), _) | (_, Err(ParseError::Stop(e))) => return Err(e),
+                _ => {
+                    return Err(Diagnostic::malformed("invalid cross-reference entry")
+                        .at(body.sub(i.saturating_mul(20), 20)));
+                }
             };
-            p.skip_ws();
-            let kind = p.word();
+            p.skip_ws().await.map_err(|e| parse_error(e, body))?;
+            let at = p.pos;
+            let kind = match p.word().await {
+                Ok(_) => p.slice(at, p.pos),
+                Err(_) => b"",
+            };
             let num = u32::try_from(start.saturating_add(i)).unwrap_or(u32::MAX);
             let loc = match kind {
                 b"n" => Loc::Offset {
@@ -572,18 +564,17 @@ async fn table(cx: &Cx, region: Span, offset: u64) -> Result<Section> {
         pos = pos.saturating_add(to_u64(p.pos));
     }
     // The trailer dictionary.
-    let ((trailer_at, item), span, _) = parse_at(cx, region, pos, |p| {
-        if !p.keyword(b"trailer")? {
+    let ((trailer_at, item), span) = parse_at!(cx, region, pos, |p| {
+        if !p.keyword(b"trailer").await? {
             return Err(ParseError::Malformed(
                 "expected 'trailer'".to_owned(),
                 p.pos,
             ));
         }
-        p.skip_ws();
+        p.skip_ws().await?;
         let at = p.pos;
-        Ok((at, p.object()?))
-    })
-    .await?;
+        Ok((at, p.object().await?))
+    })?;
     let base = span;
     let whole = base.sub(
         to_u64(trailer_at),
@@ -612,25 +603,32 @@ async fn stream_section(cx: &Cx, region: Span, offset: u64) -> Result<Section> {
                 .at(region.sub(offset, 4)),
         );
     }
-    let widths: Vec<usize> = located
+    let width = |w: &Item| w.int().and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+    let [w0, w1, w2] = located
         .item
         .get("W")
         .and_then(Item::array)
         .unwrap_or_default()
-        .iter()
-        .map(|w| w.int().and_then(|n| usize::try_from(n).ok()).unwrap_or(0))
-        .collect();
-    let [w0, w1, w2] = widths.as_slice() else {
+    else {
         return Err(Diagnostic::malformed("/W must have three entries").at(located.whole));
     };
-    let (w0, w1, w2) = (*w0, *w1, *w2);
+    let (w0, w1, w2) = (width(w0), width(w1), width(w2));
     let row = w0.saturating_add(w1).saturating_add(w2);
     if row == 0 || w0 > 8 || w1 > 8 || w2 > 8 {
         return Err(Diagnostic::malformed("invalid /W field widths").at(located.whole));
     }
     let size = located.item.get("Size").and_then(Item::int).unwrap_or(0);
     let index: Vec<i64> = match located.item.get("Index").and_then(Item::array) {
-        Some(items) => items.iter().filter_map(Item::int).collect(),
+        Some(items) => {
+            let mut index = Vec::with_capacity(items.len());
+            for (i, item) in items.iter().enumerate() {
+                if i % 1024 == 1023 {
+                    cx.checkpoint().await;
+                }
+                index.extend(item.int());
+            }
+            index
+        }
         None => vec![0, size],
     };
     let decoded = decode(cx, &located, None).await?;
@@ -755,15 +753,14 @@ pub async fn scan(cx: &Cx, region: Span) -> Result<(Xref, Option<Located>)> {
         pos = pos.saturating_add(PIECE);
     }
     let trailer = match trailer {
-        Some(at) => parse_at(cx, region, at, |p| {
-            p.keyword(b"trailer")?;
-            p.skip_ws();
+        Some(at) => parse_at!(cx, region, at, |p| {
+            p.keyword(b"trailer").await?;
+            p.skip_ws().await?;
             let start = p.pos;
-            Ok((start, p.object()?))
+            Ok((start, p.object().await?))
         })
-        .await
         .ok()
-        .map(|((start, item), base, _)| {
+        .map(|((start, item), base)| {
             let whole = base.sub(to_u64(start), to_u64(item.end.saturating_sub(start)));
             Located {
                 id: None,

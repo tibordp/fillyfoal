@@ -8,7 +8,10 @@ use std::sync::Arc;
 
 use super::syntax::{Item, Obj};
 use crate::codec::Codec;
+use crate::codec::crypto::cipher::{cbc_decrypt, unpad_pkcs7};
+use crate::codec::crypto::stream::Rc4;
 use crate::codec::crypto::{Aes, Hash, Key, Md5, Sha256, Sha384, Sha512, rc4};
+use crate::codec::pipeline::{Decode, Step};
 use crate::cx::Cx;
 use crate::span::Span;
 
@@ -266,23 +269,55 @@ impl Security {
         }
     }
 
-    /// Decrypts a string of object `id`.
-    pub fn decrypt_string(
-        &self,
-        file_key: &[u8],
-        (num, generation): (u32, u16),
-        data: &[u8],
-    ) -> Vec<u8> {
-        let key = self.object_key(file_key, num, generation, self.strings);
+    /// The key for the strings of object `id`.
+    pub fn string_key(&self, file_key: &[u8], (num, generation): (u32, u16)) -> Vec<u8> {
+        self.object_key(file_key, num, generation, self.strings)
+    }
+
+    /// Decrypts a string with `key` (from [`Security::string_key`]),
+    /// [`STRING_PIECE`] bytes per step. A string that does not decrypt
+    /// (bad AES padding) becomes empty.
+    pub async fn decrypt_string(&self, cx: &Cx, key: &[u8], data: &[u8]) -> Vec<u8> {
         match self.strings {
             Method::Identity => data.to_vec(),
-            Method::Rc4 => rc4(&key, data),
+            Method::Rc4 => {
+                let mut cipher = Rc4::new(&Key::new(key));
+                let mut out = Vec::with_capacity(data.len());
+                while let Ok(Step::More) =
+                    cipher.step(data, true, &mut out, STRING_PIECE, usize::MAX)
+                {
+                    cx.checkpoint().await;
+                }
+                out
+            }
             Method::AesV2 | Method::AesV3 => {
-                crate::codec::crypto::aes_cbc_iv_prefixed(&key, data).unwrap_or_default()
+                let (Some(aes), Some(iv), Some(body)) =
+                    (Aes::new(key), data.get(..16), data.get(16..))
+                else {
+                    return Vec::new();
+                };
+                if body.len() % 16 != 0 {
+                    return Vec::new();
+                }
+                let mut plain = Vec::with_capacity(body.len());
+                let mut iv = iv;
+                for piece in body.chunks(STRING_PIECE) {
+                    plain.extend(cbc_decrypt(&aes, iv, piece));
+                    iv = piece
+                        .get(piece.len().saturating_sub(16)..)
+                        .unwrap_or_default();
+                    cx.checkpoint().await;
+                }
+                unpad_pkcs7(&plain, 16)
+                    .map(<[u8]>::to_vec)
+                    .unwrap_or_default()
             }
         }
     }
 }
+
+/// Bytes of a string decrypted per step (a multiple of the AES block).
+const STRING_PIECE: usize = 4096;
 
 /// The file key: the empty password if it works, otherwise (when `ask`)
 /// the password from the host. Both outcomes are cached per document, so
