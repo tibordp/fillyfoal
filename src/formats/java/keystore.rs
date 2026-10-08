@@ -81,7 +81,9 @@ fn certificate(f: &mut Fields<'_>, c: &Ctx, label: &'static str) -> Result<()> {
     Ok(())
 }
 
-fn entry(f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
+/// An entry, decoded (and emitted, if `f` is emitting). Async because a
+/// sealed key's length is only known by decoding its serialized object.
+async fn entry(cx: &Cx, f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
     let tag = f.u32("tag").enumeration(TAG).emit()?;
     let alias = utf(f, "alias")?;
     f.u64("timestamp")
@@ -118,7 +120,8 @@ fn entry(f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
                 .data
                 .get(crate::bytes::to_usize(f.pos())..)
                 .unwrap_or_default();
-            let len = serialization::stream_len(rest)
+            let len = serialization::stream_len(cx, rest)
+                .await
                 .ok_or_else(|| Diagnostic::malformed("unreadable sealed key").at(f.peek_span(1)))?;
             let span = f.peek_span(to_u64(len));
             f.node(
@@ -161,7 +164,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let region = file.sub(offset, MAX_ENTRY);
         let block = cx.block(region).await?;
         let mut f = Fields::new(&block, BE);
-        match entry(&mut f, &ctx) {
+        match entry(&cx, &mut f, &ctx).await {
             Ok(info) => {
                 let span = file.sub(offset, f.pos());
                 entries.push((span, info));
@@ -214,13 +217,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn entry_list(cx: Cx, (ctx, spans): (Ctx, Vec<Span>)) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(spans.len())));
     for span in spans {
-        let info = parse(&cx, span, BE, &ctx, entry).await?;
+        let block = cx.block(span).await?;
+        let info = entry(&cx, &mut Fields::new(&block, BE), &ctx).await?;
         let mut summary = name_or(TAG, info.tag.into(), "tag");
         if info.tag == 1 {
             summary.push_str(&format!(", chain of {}", info.certificates));
         }
-        cx.push(struct_node(info.alias, span, BE, ctx, entry).summary(summary))
-            .await;
+        let node = Node::new(info.alias)
+            .span(span)
+            .lazy(entry_view, (ctx, span))
+            .summary(summary);
+        cx.push(node).await;
     }
+    Ok(())
+}
+
+/// An entry's fields.
+async fn entry_view(cx: Cx, (ctx, span): (Ctx, Span)) -> Result<()> {
+    let block = cx.block(span).await?;
+    entry(&cx, &mut Fields::emitting(&cx, &block, BE), &ctx).await?;
     Ok(())
 }

@@ -86,8 +86,8 @@ type Step<T> = std::result::Result<T, Diagnostic>;
 type StepFuture<'f, T> = std::pin::Pin<Box<dyn std::future::Future<Output = Step<T>> + Send + 'f>>;
 
 struct Parser<'a> {
-    /// For yielding while decoding (none when measuring a stream).
-    cx: Option<&'a Cx>,
+    /// For yielding while decoding.
+    cx: &'a Cx,
     r: Reader<'a>,
     file: Span,
     tree: Tree,
@@ -199,9 +199,7 @@ impl Parser<'_> {
 
     /// One `content` item: an object or block data.
     async fn content(&mut self, parent: usize, label: &str, depth: u32) -> Step<Option<u32>> {
-        if let Some(cx) = self.cx {
-            cx.checkpoint().await;
-        }
+        self.cx.checkpoint().await;
         let start = self.r.pos();
         let tc = self.peek()?;
         if tc != TC_BLOCKDATA && tc != TC_BLOCKDATALONG {
@@ -251,9 +249,7 @@ impl Parser<'_> {
         depth: u32,
     ) -> StepFuture<'f, Option<u32>> {
         Box::pin(async move {
-            if let Some(cx) = self.cx {
-                cx.checkpoint().await;
-            }
+            self.cx.checkpoint().await;
             if depth > MAX_DEPTH {
                 return Err(Diagnostic::limit("class descriptors nested too deeply"));
             }
@@ -280,7 +276,10 @@ impl Parser<'_> {
                     let flags = self.u8()?;
                     let count = self.int::<u16>()?;
                     let mut fields = Vec::new();
-                    for _ in 0..count {
+                    for i in 0..count {
+                        if i % 256 == 255 {
+                            self.cx.checkpoint().await;
+                        }
                         let at = self.r.pos();
                         let code = self.u8()?;
                         let field = self.utf(false)?;
@@ -333,7 +332,10 @@ impl Parser<'_> {
                     }));
                     let count = self.int::<u32>()?;
                     let mut names = Vec::new();
-                    for _ in 0..count {
+                    for i in 0..count {
+                        if i % 256 == 255 {
+                            self.cx.checkpoint().await;
+                        }
                         let at = self.r.pos();
                         let name = self.utf(false)?;
                         self.leaf(node, "interface", at, text(name.clone()));
@@ -438,9 +440,7 @@ impl Parser<'_> {
         depth: u32,
     ) -> StepFuture<'f, Option<u32>> {
         Box::pin(async move {
-            if let Some(cx) = self.cx {
-                cx.checkpoint().await;
-            }
+            self.cx.checkpoint().await;
             if depth > MAX_DEPTH {
                 return Err(Diagnostic::limit("objects nested too deeply")
                     .at(self.file.sub(to_u64(self.r.pos()), 1)));
@@ -606,7 +606,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     let data = cx.read_avail(file.sub(0, MAX_STREAM)).await?;
     let mut p = Parser {
-        cx: Some(&cx),
+        cx: &cx,
         r: Reader::new(&data),
         file,
         tree: Tree::default(),
@@ -646,13 +646,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// The length of a serialization stream holding one object at the start
-/// of `data` (header included), if it decodes.
-pub fn stream_len(data: &[u8]) -> Option<usize> {
+/// of `data` (header included), if it decodes. The decode is charged like
+/// any other (one checkpoint per item).
+pub async fn stream_len(cx: &Cx, data: &[u8]) -> Option<usize> {
     if !data.starts_with(b"\xac\xed\x00\x05") {
         return None;
     }
     let mut p = Parser {
-        cx: None,
+        cx,
         r: Reader::at(data, 4),
         file: Span::new(crate::span::SourceId(0), 0, to_u64(data.len())),
         tree: Tree::default(),
@@ -660,17 +661,6 @@ pub fn stream_len(data: &[u8]) -> Option<usize> {
         top: Vec::new(),
     };
     let root = p.tree.add(None, Node::new("stream"));
-    // Without a `Cx` the decoder never suspends: one poll completes it.
-    let done = {
-        let mut fut = std::pin::pin!(p.content(root, "content", 0));
-        let mut ctx = std::task::Context::from_waker(std::task::Waker::noop());
-        std::future::Future::poll(fut.as_mut(), &mut ctx)
-    };
-    match done {
-        std::task::Poll::Ready(r) => {
-            r.ok()?;
-        }
-        std::task::Poll::Pending => return None,
-    }
+    p.content(root, "content", 0).await.ok()?;
     Some(p.r.pos())
 }
