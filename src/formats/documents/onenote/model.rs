@@ -462,7 +462,14 @@ pub async fn property_set(
         return Ok((data, ps, span));
     }
     let data = Arc::new(cx.read(span).await?);
-    let ps = Arc::new(props::parse(&data).map_err(|e| e.at(span))?);
+    let mut parser = props::Parser::new(&data);
+    let ps = loop {
+        match parser.step() {
+            Ok(Some(ps)) => break Arc::new(ps),
+            Ok(None) => cx.checkpoint().await,
+            Err(e) => return Err(e.at(span)),
+        }
+    };
     cx.cache(span, "onenote-propset-bytes", data.clone());
     cx.cache(span, "onenote-propset", ps.clone());
     Ok((data, ps, span))

@@ -2,10 +2,10 @@
 //! node lists (chained fragments), the transaction log and file node bodies.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
-use crate::cx::{Block, Cx};
+use crate::cx::{Block, Cx, lock};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::disk::guid_le;
@@ -66,11 +66,11 @@ impl CompactId {
     }
 
     pub fn resolve(self, table: &IdTable) -> Option<ExGuid> {
-        if self.n == 0 && self.index == 0 && !table.contains_key(&0) {
+        if self.n == 0 && self.index == 0 && !table.contains_key(0) {
             return Some(ExGuid::default());
         }
-        table.get(&self.index).map(|guid| ExGuid {
-            guid: *guid,
+        table.get(self.index).map(|guid| ExGuid {
+            guid,
             n: self.n.into(),
         })
     }
@@ -84,7 +84,76 @@ impl CompactId {
 }
 
 /// The global identification table in effect: index → GUID.
-pub type IdTable = BTreeMap<u32, [u8; 16]>;
+///
+/// Tables are versions of an append-only log shared between clones, so
+/// freezing the table being built (a clone) costs O(1) whatever its size: a
+/// list that alternates entries and table ends stays linear. A clone sees
+/// the entries inserted before it was made; inserting into a version that is
+/// not the newest of its log first copies what that version sees.
+#[derive(Clone, Default)]
+pub struct IdTable {
+    log: Arc<Mutex<IdLog>>,
+    /// Entries of the log this version sees.
+    len: usize,
+}
+
+#[derive(Default)]
+struct IdLog {
+    /// index → (log position, GUID), in log order.
+    entries: BTreeMap<u32, Vec<(usize, [u8; 16])>>,
+    len: usize,
+}
+
+impl IdTable {
+    pub fn new() -> Self {
+        IdTable::default()
+    }
+
+    /// Starts a new, empty table (versions cloned earlier keep theirs).
+    pub fn clear(&mut self) {
+        *self = IdTable::default();
+    }
+
+    pub fn insert(&mut self, index: u32, guid: [u8; 16]) {
+        let mut log = lock(&self.log);
+        if log.len != self.len {
+            // A newer version exists: fork, keeping what this one sees.
+            let len = self.len;
+            let entries = log
+                .entries
+                .iter()
+                .filter_map(|(&i, v)| {
+                    let seen: Vec<_> = v.iter().copied().filter(|e| e.0 < len).collect();
+                    (!seen.is_empty()).then_some((i, seen))
+                })
+                .collect();
+            drop(log);
+            self.log = Arc::new(Mutex::new(IdLog { entries, len }));
+            log = lock(&self.log);
+        }
+        let at = log.len;
+        log.entries.entry(index).or_default().push((at, guid));
+        log.len = at.saturating_add(1);
+        self.len = log.len;
+    }
+
+    pub fn get(&self, index: u32) -> Option<[u8; 16]> {
+        let log = lock(&self.log);
+        let v = log.entries.get(&index)?;
+        let n = v.partition_point(|e| e.0 < self.len);
+        v.get(n.checked_sub(1)?).map(|e| e.1)
+    }
+
+    pub fn contains_key(&self, index: u32) -> bool {
+        self.get(index).is_some()
+    }
+}
+
+impl std::fmt::Debug for IdTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IdTable").field("len", &self.len).finish()
+    }
+}
 
 /// A reference to a chunk of the file.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -925,6 +994,29 @@ pub fn parse_guid(text: &str) -> Option<[u8; 16]> {
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn id_table_versions_are_independent() {
+        let mut building = IdTable::new();
+        building.insert(1, [1; 16]);
+        let frozen = building.clone();
+        building.insert(1, [2; 16]);
+        building.insert(2, [3; 16]);
+        assert_eq!(frozen.get(1), Some([1; 16]));
+        assert_eq!(frozen.get(2), None);
+        assert_eq!(building.get(1), Some([2; 16]));
+        // Inserting into an older version forks it.
+        let mut old = frozen.clone();
+        old.insert(3, [4; 16]);
+        assert_eq!(old.get(1), Some([1; 16]));
+        assert_eq!(old.get(2), None);
+        assert_eq!(old.get(3), Some([4; 16]));
+        assert_eq!(building.get(3), None);
+        assert_eq!(building.get(2), Some([3; 16]));
+        building.clear();
+        assert!(!building.contains_key(1));
+        assert_eq!(frozen.get(1), Some([1; 16]));
+    }
 
     #[test]
     fn guid_strings_round_trip() {
