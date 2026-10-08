@@ -1,7 +1,7 @@
 //! LZ77-family decompressors without entropy coding: LZ4 (blocks, frames
-//! and the legacy format) and Snappy (raw and framed).
+//! and the legacy format) and Snappy (raw and framed), and the step
+//! machinery the byte-oriented LZ77 decoders share ([`Units`]).
 
-use crate::codec::filters::Filter;
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
@@ -11,28 +11,216 @@ fn bad(what: &str) -> Diagnostic {
 
 fn limit_check(out: &[u8], limit: usize) -> Result<()> {
     if out.len() > limit {
-        Err(Diagnostic::limit(format!(
-            "decompressed data exceeds {limit:#x} bytes"
-        )))
+        Err(too_big(limit))
     } else {
         Ok(())
     }
 }
 
-/// Copies `len` bytes from `offset` back in `out` (overlap allowed).
-fn copy_back(out: &mut Vec<u8>, offset: usize, len: usize, limit: usize) -> Result<()> {
-    if offset == 0 || offset > out.len() {
+pub(crate) fn too_big(limit: usize) -> Diagnostic {
+    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
+}
+
+/// Most input bytes one unit scans without producing output (a length
+/// continuation, zero padding) before it suspends.
+pub(crate) const SCAN: usize = 64 * 1024;
+
+/// A decoder that advances a unit at a time: a whole token, or a bounded
+/// piece of a long literal run or match. Its window is its own output.
+pub(crate) trait Units {
+    /// Decodes one unit, producing at most about `room` bytes, and returns
+    /// the work done (bytes produced or scanned). An error leaves the
+    /// decoder as it was, apart from memoized progress (see `progress`).
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        room: usize,
+        limit: usize,
+    ) -> Result<usize>;
+
+    /// The stream has ended (and all input has been seen).
+    fn finished(&self) -> bool;
+
+    /// A value that grows whenever the decoder consumes input or memoizes
+    /// a scan, so a step that runs out of input after some progress keeps
+    /// it instead of rolling back.
+    fn progress(&self) -> usize;
+}
+
+/// Runs units until about `step` bytes of work are done or the stream
+/// ends. Running out of input after some progress ends the step early
+/// (the caller calls again, and the shortage then rolls back an empty
+/// step and asks for more input).
+pub(crate) fn run_units<U: Units>(
+    u: &mut U,
+    input: &[u8],
+    eof: bool,
+    out: &mut Vec<u8>,
+    step: usize,
+    limit: usize,
+) -> Result<Step> {
+    let mark = out.len();
+    let before = u.progress();
+    let target = step.max(1);
+    let mut work = 0usize;
+    while !u.finished() {
+        if work >= target {
+            return Ok(Step::More);
+        }
+        match u.unit(input, eof, out, target.saturating_sub(work), limit) {
+            Ok(w) => work = work.saturating_add(w.max(1)),
+            Err(e) => {
+                return if !eof && (out.len() > mark || u.progress() != before) {
+                    Ok(Step::More)
+                } else {
+                    Err(e)
+                };
+            }
+        }
+    }
+    Ok(Step::Done)
+}
+
+/// How far a length continuation run (bytes that each add 255 and go on,
+/// then a final byte that adds its value) has been read, so a run cut
+/// short by the end of the input, or suspended, is not rescanned.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct RunMemo {
+    at: usize,
+    end: usize,
+    sum: usize,
+}
+
+impl RunMemo {
+    /// Rebases the memo after the first `n` input bytes are dropped (a memo
+    /// of a run among them is stale and is forgotten).
+    pub(crate) fn rebase(&mut self, n: usize) {
+        *self = match (self.at.checked_sub(n), self.end.checked_sub(n)) {
+            (Some(at), Some(end)) => RunMemo {
+                at,
+                end,
+                sum: self.sum,
+            },
+            _ => RunMemo::default(),
+        };
+    }
+
+    /// Grows with every byte memoized (for [`Units::progress`]).
+    pub(crate) fn mark(&self) -> usize {
+        self.end
+    }
+}
+
+/// The outcome of [`read_run`].
+pub(crate) enum Run {
+    /// The run's value (255 per continuation byte plus the final byte) and
+    /// the position after it.
+    Done(usize, usize),
+    /// [`SCAN`] bytes were read; call again.
+    Suspended,
+    /// The input ended inside the run.
+    Short,
+}
+
+/// Reads a length continuation run at `at` whose continuation byte is
+/// `cont`, resuming from `memo`.
+pub(crate) fn read_run(input: &[u8], at: usize, cont: u8, memo: &mut RunMemo) -> Run {
+    let (mut p, mut sum) = if memo.at == at && memo.end > at {
+        (memo.end, memo.sum)
+    } else {
+        (at, 0)
+    };
+    let stop = p.saturating_add(SCAN);
+    loop {
+        let Some(&b) = input.get(p) else {
+            *memo = RunMemo { at, end: p, sum };
+            return Run::Short;
+        };
+        if p >= stop {
+            *memo = RunMemo { at, end: p, sum };
+            return Run::Suspended;
+        }
+        p = p.saturating_add(1);
+        if b != cont {
+            return Run::Done(sum.saturating_add(usize::from(b)), p);
+        }
+        sum = sum.saturating_add(255);
+    }
+}
+
+/// Copies up to `room` of the `*left` literal bytes at `input[*pos..]`,
+/// with at most `budget` more bytes allowed before `limit`; returns the
+/// number copied. At the end of the input a run cut short fails (`trunc`)
+/// before anything is copied; before it, what is there is copied.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn literal_chunk(
+    input: &[u8],
+    eof: bool,
+    pos: &mut usize,
+    left: &mut usize,
+    out: &mut Vec<u8>,
+    room: usize,
+    budget: usize,
+    limit: usize,
+    trunc: &dyn Fn() -> Diagnostic,
+) -> Result<usize> {
+    let avail = input.len().saturating_sub(*pos);
+    if eof && avail < *left {
+        return Err(trunc());
+    }
+    let n = (*left).min(room.max(1)).min(avail);
+    if n == 0 {
+        return Err(trunc());
+    }
+    if n > budget {
+        return Err(too_big(limit));
+    }
+    let end = pos.saturating_add(n);
+    out.extend_from_slice(input.get(*pos..end).unwrap_or_default());
+    *pos = end;
+    *left = left.saturating_sub(n);
+    Ok(n)
+}
+
+/// Copies up to `room` of the `*left` bytes of a match `dist` back in
+/// `out` (overlap allowed; `dist` already checked against the window),
+/// with at most `budget` more bytes allowed before `limit`.
+pub(crate) fn match_chunk(
+    out: &mut Vec<u8>,
+    dist: usize,
+    left: &mut usize,
+    room: usize,
+    budget: usize,
+    limit: usize,
+) -> Result<usize> {
+    let n = (*left).min(room.max(1));
+    if n > budget {
+        return Err(too_big(limit));
+    }
+    copy_back(out, dist, n)?;
+    *left = left.saturating_sub(n);
+    Ok(n)
+}
+
+/// Appends `len` bytes from `dist` back in `out` (overlap allowed).
+pub(crate) fn copy_back(out: &mut Vec<u8>, dist: usize, len: usize) -> Result<()> {
+    if dist == 0 || dist > out.len() {
         return Err(bad("match offset outside the output"));
     }
-    if out.len().saturating_add(len) > limit {
-        return Err(Diagnostic::limit(format!(
-            "decompressed data exceeds {limit:#x} bytes"
-        )));
-    }
-    let start = out.len().saturating_sub(offset);
-    for i in 0..len {
-        let b = out.get(start.saturating_add(i)).copied().unwrap_or(0);
-        out.push(b);
+    let mut from = out.len().saturating_sub(dist);
+    let mut left = len;
+    while left > 0 {
+        // Each piece lies within what is already there.
+        let k = left.min(dist);
+        let to = from.saturating_add(k);
+        if to > out.len() {
+            return Err(bad("match offset outside the output"));
+        }
+        out.extend_from_within(from..to);
+        from = to;
+        left = left.saturating_sub(k);
     }
     Ok(())
 }
@@ -43,10 +231,8 @@ pub fn lz4_block(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
     lz4_block_from(input, out, 0, false, limit)
 }
 
-/// [`lz4_block`] with the dictionary starting at `out[base..]`. With
-/// `zero_padding`, zeros from the end of a sequence's literals to the end
-/// of `input` end the block when the sequence's match length nibble is 0,
-/// as in a final sequence (the zeros could only be an invalid offset).
+/// [`lz4_block`] with the dictionary starting at `out[base..]`; see
+/// [`Lz4Block`] for `zero_padding`.
 fn lz4_block_from(
     input: &[u8],
     out: &mut Vec<u8>,
@@ -54,59 +240,236 @@ fn lz4_block_from(
     zero_padding: bool,
     limit: usize,
 ) -> Result<()> {
-    let padding = if zero_padding {
-        input
-            .iter()
-            .rposition(|&b| b != 0)
-            .map_or(0, |i| i.saturating_add(1))
-    } else {
-        input.len()
+    let mut d = Lz4Block {
+        base,
+        zero_padding,
+        ..Lz4Block::default()
     };
-    let mut pos = 0usize;
-    let byte = |pos: &mut usize| -> Result<u8> {
-        let b = input
-            .get(*pos)
-            .copied()
-            .ok_or_else(|| bad("truncated LZ4 block"))?;
-        *pos = pos.saturating_add(1);
-        Ok(b)
-    };
-    let length = |pos: &mut usize, base: usize| -> Result<usize> {
-        let mut len = base;
-        if base == 15 {
-            loop {
-                let b = byte(pos)?;
-                len = len.saturating_add(usize::from(b));
-                if b != 255 {
-                    break;
+    while d.step(input, true, out, usize::MAX, limit)? == Step::More {}
+    Ok(())
+}
+
+/// Where an [`Lz4Block`] is within a sequence.
+#[derive(Clone, Copy, Default)]
+enum Lz4Seq {
+    /// At a token.
+    #[default]
+    Token,
+    /// Copying literals; `nibble` is the token's match length nibble.
+    Literals { left: usize, nibble: u8 },
+    /// Copying a match.
+    Match { dist: usize, left: usize },
+}
+
+/// The farthest an LZ4 match reaches back (16-bit offsets).
+const LZ4_WINDOW: usize = 1 << 16;
+
+/// One raw LZ4 block (as embedded in other containers), decoded a sequence
+/// (or a bounded piece of a long one) at a time. With `zero_padding`,
+/// zeros from the end of a sequence's literals to the end of the input end
+/// the block when the sequence's match length nibble is 0, as in a final
+/// sequence (the zeros could only be an invalid offset): zero padding
+/// after the block is ignored.
+#[derive(Clone, Default)]
+pub struct Lz4Block {
+    pos: usize,
+    /// Where the window starts in `out`.
+    base: usize,
+    zero_padding: bool,
+    seq: Lz4Seq,
+    memo: RunMemo,
+    /// At the end of the input, `input[pos..zeros]` are known to be zeros.
+    zeros: usize,
+    done: bool,
+}
+
+impl Lz4Block {
+    /// A block that may be followed by zero padding.
+    pub fn new() -> Self {
+        Lz4Block {
+            zero_padding: true,
+            ..Lz4Block::default()
+        }
+    }
+
+    fn finish(&mut self, input: &[u8]) -> usize {
+        self.pos = input.len();
+        self.done = true;
+        1
+    }
+
+    /// A length: `nibble`, continued by bytes at `at` when it is 15.
+    /// `None` when the read was suspended.
+    fn length(&mut self, input: &[u8], at: usize, nibble: u8) -> Result<Option<(usize, usize)>> {
+        if nibble != 15 {
+            return Ok(Some((usize::from(nibble), at)));
+        }
+        match read_run(input, at, 255, &mut self.memo) {
+            Run::Done(extra, next) => Ok(Some((extra.saturating_add(15), next))),
+            Run::Suspended => Ok(None),
+            Run::Short => Err(bad("truncated LZ4 block")),
+        }
+    }
+}
+
+impl Units for Lz4Block {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let pos = self.pos;
+        match self.seq {
+            Lz4Seq::Token => {
+                let Some(&token) = input.get(pos) else {
+                    if !eof {
+                        return Err(bad("truncated LZ4 block"));
+                    }
+                    return Ok(self.finish(input));
+                };
+                let Some((left, next)) = self.length(input, pos.saturating_add(1), token >> 4)?
+                else {
+                    return Ok(SCAN);
+                };
+                self.pos = next;
+                self.seq = Lz4Seq::Literals {
+                    left,
+                    nibble: token & 0x0f,
+                };
+                Ok(1)
+            }
+            Lz4Seq::Literals { left, nibble } if left > 0 => {
+                let mut left = left;
+                let n = literal_chunk(
+                    input,
+                    eof,
+                    &mut self.pos,
+                    &mut left,
+                    out,
+                    room,
+                    limit.saturating_sub(out.len()),
+                    limit,
+                    &|| bad("truncated LZ4 literals"),
+                )?;
+                self.seq = Lz4Seq::Literals { left, nibble };
+                Ok(n)
+            }
+            Lz4Seq::Literals { nibble, .. } => {
+                if pos >= input.len() {
+                    // The last sequence has literals only.
+                    if !eof {
+                        return Err(bad("truncated LZ4 block"));
+                    }
+                    return Ok(self.finish(input));
                 }
+                let head = input
+                    .get(pos..pos.saturating_add(2).min(input.len()))
+                    .unwrap_or_default();
+                if self.zero_padding && nibble == 0 && head.iter().all(|&b| b == 0) {
+                    // Padding if only zeros follow, else an invalid offset.
+                    if !eof {
+                        return Err(bad("truncated LZ4 block"));
+                    }
+                    let from = self.zeros.max(pos);
+                    let to = from.saturating_add(SCAN).min(input.len());
+                    let rest = input.get(from..to).unwrap_or_default();
+                    if rest.iter().any(|&b| b != 0) {
+                        return Err(bad("match offset outside the output"));
+                    }
+                    self.zeros = to;
+                    if to >= input.len() {
+                        self.finish(input);
+                    }
+                    return Ok(rest.len());
+                }
+                let (Some(&lo), Some(&hi)) = (input.get(pos), input.get(pos.saturating_add(1)))
+                else {
+                    return Err(bad("truncated LZ4 block"));
+                };
+                let dist = usize::from(u16::from_le_bytes([lo, hi]));
+                let Some((len, next)) = self.length(input, pos.saturating_add(2), nibble)? else {
+                    return Ok(SCAN);
+                };
+                if dist == 0 || dist > out.len().saturating_sub(self.base) {
+                    return Err(bad("match offset outside the output"));
+                }
+                self.pos = next;
+                self.seq = Lz4Seq::Match {
+                    dist,
+                    left: len.saturating_add(4),
+                };
+                Ok(1)
+            }
+            Lz4Seq::Match { dist, left } => {
+                let mut left = left;
+                let n = match_chunk(
+                    out,
+                    dist,
+                    &mut left,
+                    room,
+                    limit.saturating_sub(out.len()),
+                    limit,
+                )?;
+                self.seq = if left == 0 {
+                    Lz4Seq::Token
+                } else {
+                    Lz4Seq::Match { dist, left }
+                };
+                Ok(n)
             }
         }
-        Ok(len)
-    };
-    while pos < input.len() {
-        let token = byte(&mut pos)?;
-        let literals = length(&mut pos, usize::from(token >> 4))?;
-        let end = pos.saturating_add(literals);
-        let lit = input
-            .get(pos..end)
-            .ok_or_else(|| bad("truncated LZ4 literals"))?;
-        out.extend_from_slice(lit);
-        limit_check(out, limit)?;
-        pos = end;
-        if pos >= input.len() || (pos >= padding && token & 0x0f == 0) {
-            break; // the last sequence has literals only
-        }
-        let lo = byte(&mut pos)?;
-        let hi = byte(&mut pos)?;
-        let offset = usize::from(u16::from_le_bytes([lo, hi]));
-        let len = length(&mut pos, usize::from(token & 0x0f))?.saturating_add(4);
-        if offset > out.len().saturating_sub(base) {
-            return Err(bad("match offset outside the output"));
-        }
-        copy_back(out, offset, len, limit)?;
     }
-    Ok(())
+
+    fn finished(&self) -> bool {
+        self.done
+    }
+
+    fn progress(&self) -> usize {
+        self.pos
+            .wrapping_add(self.memo.mark())
+            .wrapping_add(self.zeros)
+    }
+}
+
+impl Decode for Lz4Block {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        run_units(self, input, eof, out, step, limit)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        self.zeros = self.zeros.saturating_sub(n);
+        self.memo.rebase(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+            .saturating_sub(LZ4_WINDOW)
+            .max(self.base)
+            .min(out_len)
+    }
+
+    fn release_output(&mut self, n: usize) {
+        self.base = self.base.saturating_sub(n);
+    }
 }
 
 fn u32_at(data: &[u8], at: usize) -> Option<u32> {
@@ -132,9 +495,6 @@ enum Lz4At {
     Legacy,
     Done,
 }
-
-/// The farthest an LZ4 match reaches back (16-bit offsets).
-const LZ4_WINDOW: usize = 1 << 16;
 
 /// LZ4 frames (and legacy frames, and skippable frames), concatenated;
 /// decoded a block at a time. The content checksum is not verified.
@@ -322,50 +682,95 @@ impl Decode for Lz4Frame {
     }
 }
 
-/// One raw LZ4 block (as embedded in other containers). Zero padding after
-/// the block is ignored.
-#[derive(Clone, Copy)]
-pub struct Lz4Block;
-
-impl Filter for Lz4Block {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        lz4_block_from(input, &mut out, 0, true, limit)?;
-        Ok(out)
-    }
-}
-
 /// Raw Snappy: a varint length, then literals and copies.
 pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
-    let mut pos = 0usize;
-    let mut expected = 0u64;
-    for shift in (0..35).step_by(7) {
-        let b = *input
-            .get(pos)
-            .ok_or_else(|| bad("truncated Snappy length"))?;
-        pos = pos.saturating_add(1);
-        expected |= u64::from(b & 0x7f) << shift;
-        if b & 0x80 == 0 {
-            break;
+    let mut out = Vec::new();
+    let mut d = Snappy::default();
+    while d.step(input, true, &mut out, usize::MAX, limit)? == Step::More {}
+    Ok(out)
+}
+
+/// The farthest a Snappy copy reaches back (32-bit offsets).
+const SNAPPY_WINDOW: u64 = 0x1_0000_0000;
+
+/// Raw Snappy, decoded an element (or a bounded piece of a long literal)
+/// at a time.
+#[derive(Clone, Default)]
+pub struct Snappy {
+    pos: usize,
+    /// The length from the header, once read.
+    expected: Option<usize>,
+    /// Literal bytes still to copy.
+    literal: usize,
+    /// Output bytes released so far.
+    released: usize,
+    done: bool,
+}
+
+impl Units for Snappy {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let Some(expected) = self.expected else {
+            let mut pos = 0usize;
+            let mut expected = 0u64;
+            for shift in (0..35).step_by(7) {
+                let b = *input
+                    .get(pos)
+                    .ok_or_else(|| bad("truncated Snappy length"))?;
+                pos = pos.saturating_add(1);
+                expected |= u64::from(b & 0x7f) << shift;
+                if b & 0x80 == 0 {
+                    break;
+                }
+            }
+            let expected = crate::bytes::to_usize(expected);
+            if expected > limit {
+                return Err(Diagnostic::limit(format!(
+                    "Snappy data claims {expected:#x} bytes"
+                )));
+            }
+            self.pos = pos;
+            self.expected = Some(expected);
+            return Ok(pos);
+        };
+        if self.literal > 0 {
+            return literal_chunk(
+                input,
+                eof,
+                &mut self.pos,
+                &mut self.literal,
+                out,
+                room,
+                limit.saturating_sub(out.len()),
+                limit,
+                &|| bad("truncated literal"),
+            );
         }
-    }
-    let expected = crate::bytes::to_usize(expected);
-    if expected > limit {
-        return Err(Diagnostic::limit(format!(
-            "Snappy data claims {expected:#x} bytes"
-        )));
-    }
-    let mut out = Vec::with_capacity(expected.min(1 << 24));
-    let le = |bytes: &[u8]| {
-        bytes
-            .iter()
-            .rev()
-            .fold(0usize, |a, &b| a.wrapping_shl(8) | usize::from(b))
-    };
-    while pos < input.len() {
-        let tag = *input.get(pos).unwrap_or(&0);
+        let mut pos = self.pos;
+        let Some(&tag) = input.get(pos) else {
+            if !eof {
+                return Err(bad("truncated Snappy data"));
+            }
+            if self.released.saturating_add(out.len()) != expected {
+                return Err(bad("Snappy output length differs from the header"));
+            }
+            self.done = true;
+            return Ok(1);
+        };
         pos = pos.saturating_add(1);
-        match tag & 3 {
+        let le = |bytes: &[u8]| {
+            bytes
+                .iter()
+                .rev()
+                .fold(0usize, |a, &b| a.wrapping_shl(8) | usize::from(b))
+        };
+        let (dist, len) = match tag & 3 {
             0 => {
                 let mut len = usize::from(tag >> 2);
                 if len >= 60 {
@@ -375,51 +780,77 @@ pub fn snappy_raw(input: &[u8], limit: usize) -> Result<Vec<u8>> {
                         .ok_or_else(|| bad("truncated literal length"))?);
                     pos = pos.saturating_add(n);
                 }
-                let len = len.saturating_add(1);
-                let lit = input
-                    .get(pos..pos.saturating_add(len))
-                    .ok_or_else(|| bad("truncated literal"))?;
-                out.extend_from_slice(lit);
-                pos = pos.saturating_add(len);
+                self.pos = pos;
+                self.literal = len.saturating_add(1);
+                return Ok(1);
             }
             1 => {
-                let len = usize::from((tag >> 2) & 7).saturating_add(4);
                 let lo = usize::from(*input.get(pos).ok_or_else(|| bad("truncated copy"))?);
                 pos = pos.saturating_add(1);
-                copy_back(&mut out, usize::from(tag >> 5) << 8 | lo, len, limit)?;
+                (
+                    usize::from(tag >> 5) << 8 | lo,
+                    usize::from((tag >> 2) & 7).saturating_add(4),
+                )
             }
-            2 => {
-                let len = usize::from(tag >> 2).saturating_add(1);
-                let off = le(input
-                    .get(pos..pos.saturating_add(2))
+            kind => {
+                let n = if kind == 2 { 2 } else { 4 };
+                let dist = le(input
+                    .get(pos..pos.saturating_add(n))
                     .ok_or_else(|| bad("truncated copy"))?);
-                pos = pos.saturating_add(2);
-                copy_back(&mut out, off, len, limit)?;
+                pos = pos.saturating_add(n);
+                (dist, usize::from(tag >> 2).saturating_add(1))
             }
-            _ => {
-                let len = usize::from(tag >> 2).saturating_add(1);
-                let off = le(input
-                    .get(pos..pos.saturating_add(4))
-                    .ok_or_else(|| bad("truncated copy"))?);
-                pos = pos.saturating_add(4);
-                copy_back(&mut out, off, len, limit)?;
-            }
+        };
+        if dist == 0 || dist > out.len() {
+            return Err(bad("match offset outside the output"));
         }
-        limit_check(&out, limit)?;
+        if out.len().saturating_add(len) > limit {
+            return Err(too_big(limit));
+        }
+        copy_back(out, dist, len)?;
+        self.pos = pos;
+        Ok(len)
     }
-    if out.len() != expected {
-        return Err(bad("Snappy output length differs from the header"));
+
+    fn finished(&self) -> bool {
+        self.done
     }
-    Ok(out)
+
+    fn progress(&self) -> usize {
+        self.pos
+    }
 }
 
-/// Raw Snappy as a filter.
-#[derive(Clone, Copy)]
-pub struct Snappy;
+impl Decode for Snappy {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        run_units(self, input, eof, out, step, limit)
+    }
 
-impl Filter for Snappy {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        snappy_raw(input, limit)
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(usize::try_from(SNAPPY_WINDOW).unwrap_or(usize::MAX))
+    }
+
+    fn release_output(&mut self, n: usize) {
+        self.released = self.released.saturating_add(n);
     }
 }
 
@@ -520,5 +951,24 @@ mod tests {
         // Length 10: literal "ab", copy1 len 8 offset 2.
         let data = [10, 0x04, b'a', b'b', 0x11, 2];
         assert_eq!(snappy_raw(&data, 100).unwrap(), b"ababababab");
+    }
+
+    #[test]
+    fn long_runs_are_read_in_pieces() {
+        // A literal length continued by 200,000 bytes of 255: the run is
+        // scanned in suspended pieces, then fails at the end of the input.
+        let mut block = vec![0xf0];
+        block.resize(200_001, 255);
+        let mut d = Lz4Block::new();
+        let mut out = Vec::new();
+        let mut calls = 0;
+        let result = loop {
+            calls += 1;
+            match d.step(&block, true, &mut out, 1024, 1 << 30) {
+                Ok(Step::More) => {}
+                other => break other,
+            }
+        };
+        assert!(result.is_err() && calls > 3 && out.is_empty());
     }
 }

@@ -3,7 +3,9 @@
 //! then independently compressed blocks with optional Adler-32/CRC-32 checks
 //! of the compressed and uncompressed bytes.
 
-use crate::codec::filters::Filter;
+use crate::codec::lz::{
+    Run, RunMemo, SCAN, Units, literal_chunk, match_chunk, read_run, run_units,
+};
 use crate::codec::pipeline::{Decode, Step};
 use crate::codec::{adler32, crc32};
 use crate::error::{Diagnostic, Result};
@@ -16,177 +18,337 @@ fn too_big(limit: usize) -> Diagnostic {
     Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
 }
 
-/// The LZO1X input cursor.
-struct In<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl In<'_> {
-    fn byte(&mut self) -> Result<usize> {
-        let b = self
-            .data
-            .get(self.pos)
-            .copied()
-            .ok_or_else(|| bad("input overrun"))?;
-        self.pos = self.pos.saturating_add(1);
-        Ok(usize::from(b))
-    }
-
-    /// A length continued by zero bytes (each worth 255) and a final byte.
-    fn extended(&mut self, base: usize) -> Result<usize> {
-        let mut t = 0usize;
-        loop {
-            let b = self.byte()?;
-            if b != 0 {
-                return Ok(t.saturating_add(base).saturating_add(b));
-            }
-            t = t.saturating_add(255);
-        }
-    }
-
-    fn literals(&mut self, n: usize, out: &mut Vec<u8>, base: usize, limit: usize) -> Result<()> {
-        let end = self.pos.saturating_add(n);
-        let lit = self
-            .data
-            .get(self.pos..end)
-            .ok_or_else(|| bad("input overrun in literals"))?;
-        if out.len().saturating_sub(base).saturating_add(n) > limit {
-            return Err(too_big(limit));
-        }
-        out.extend_from_slice(lit);
-        self.pos = end;
-        Ok(())
-    }
-}
-
-/// Copies `len` bytes from `dist` back (overlap allowed); the window starts
-/// at `base`.
-fn copy_match(out: &mut Vec<u8>, base: usize, dist: usize, len: usize, limit: usize) -> Result<()> {
-    if dist == 0 || dist > out.len().saturating_sub(base) {
-        return Err(bad("match distance before the start of the output"));
-    }
-    if out.len().saturating_sub(base).saturating_add(len) > limit {
-        return Err(too_big(limit));
-    }
-    let start = out.len().saturating_sub(dist);
-    for i in 0..len {
-        let b = out.get(start.saturating_add(i)).copied().unwrap_or(0);
-        out.push(b);
-    }
-    Ok(())
-}
-
 /// Decodes one LZO1X stream (up to and including its end marker) onto `out`;
 /// returns the number of input bytes consumed. At most `limit` bytes are
 /// produced.
 pub fn lzo1x(input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<usize> {
-    #[derive(Clone, Copy)]
-    enum State {
-        /// Expecting an instruction after a literal run of 0 (a match) or of
-        /// 4+ bytes: a byte below 16 is then a 3-byte match ("M1" far).
-        AfterLongRun,
-        /// Expecting an instruction after a match: a byte below 16 starts a
-        /// literal run.
-        Top,
-        /// After 1-3 literals: a byte below 16 is a 2-byte match.
-        AfterShortRun,
-    }
-    let base = out.len();
-    let mut ip = In {
-        data: input,
-        pos: 0,
+    let mut d = Lzo1x {
+        base: out.len(),
+        ..Lzo1x::default()
     };
-    let mut state = State::Top;
-    if let Some(&first) = input.first()
-        && first > 17
-    {
-        ip.pos = 1;
-        let t = usize::from(first).saturating_sub(17);
-        ip.literals(t, out, base, limit)?;
-        state = if t < 4 {
-            State::AfterShortRun
-        } else {
-            State::AfterLongRun
-        };
+    while !matches!(d.at, LzoAt::End) {
+        d.unit(input, true, out, usize::MAX, limit)?;
     }
-    loop {
-        let t = ip.byte()?;
-        // `state_bits` is the 2-bit trailing literal count of a match.
-        let state_bits = if t < 16 {
-            match state {
-                State::Top => {
-                    let n = if t == 0 { ip.extended(15)? } else { t };
-                    ip.literals(n.saturating_add(3), out, base, limit)?;
-                    state = State::AfterLongRun;
-                    continue;
+    Ok(d.pos)
+}
+
+/// The farthest an LZO1X match reaches back (an M4 match: 0xbfff).
+const LZO_WINDOW: usize = 0xc000;
+
+/// What the instruction after a literal run or a match may be.
+#[derive(Clone, Copy, Default)]
+enum LzoState {
+    /// After a literal run of 0 (a match) or of 4+ bytes: a byte below 16
+    /// is then a 3-byte match ("M1" far).
+    AfterLongRun,
+    /// After a match: a byte below 16 starts a literal run.
+    #[default]
+    Top,
+    /// After 1-3 literals: a byte below 16 is a 2-byte match.
+    AfterShortRun,
+}
+
+/// Where an [`Lzo1x`] decoder is.
+#[derive(Clone, Copy, Default)]
+enum LzoAt {
+    /// Before the first byte (which may start with a literal run).
+    #[default]
+    Start,
+    /// At an instruction.
+    Instruction,
+    /// Copying a match, then `trailing` (0-3) literals.
+    Match {
+        dist: usize,
+        left: usize,
+        trailing: usize,
+    },
+    /// Copying literals, then expecting an instruction in state `then`.
+    Literals { left: usize, then: LzoState },
+    /// After the end marker.
+    End,
+}
+
+/// One raw LZO1X stream, decoded an instruction (or a bounded piece of a
+/// long literal run or match) at a time. Input after the end marker is
+/// ignored.
+#[derive(Clone, Default)]
+pub struct Lzo1x {
+    pos: usize,
+    /// Where the window starts in `out` (the limit counts from there too).
+    base: usize,
+    at: LzoAt,
+    state: LzoState,
+    memo: RunMemo,
+    done: bool,
+}
+
+impl Lzo1x {
+    /// A length: `low` if nonzero, else `base` continued by zero bytes (each
+    /// worth 255) and a final byte at `at`. `None` when suspended.
+    fn length(
+        &mut self,
+        input: &[u8],
+        at: usize,
+        low: usize,
+        base: usize,
+    ) -> Result<Option<(usize, usize)>> {
+        if low != 0 {
+            return Ok(Some((low, at)));
+        }
+        match read_run(input, at, 0, &mut self.memo) {
+            Run::Done(extra, next) => Ok(Some((extra.saturating_add(base), next))),
+            Run::Suspended => Ok(None),
+            Run::Short => Err(bad("input overrun")),
+        }
+    }
+
+    /// Starts a match after checking it against the window and the limit.
+    fn start_match(
+        &mut self,
+        out: &[u8],
+        dist: usize,
+        len: usize,
+        trailing: usize,
+        next: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let held = out.len().saturating_sub(self.base);
+        if dist == 0 || dist > held {
+            return Err(bad("match distance before the start of the output"));
+        }
+        if held.saturating_add(len) > limit {
+            return Err(too_big(limit));
+        }
+        self.pos = next;
+        self.at = LzoAt::Match {
+            dist,
+            left: len,
+            trailing,
+        };
+        Ok(1)
+    }
+
+    /// Decodes the instruction at `pos`.
+    fn instruction(&mut self, input: &[u8], out: &[u8], limit: usize) -> Result<usize> {
+        let byte = |at: usize| -> Result<usize> {
+            input
+                .get(at)
+                .map(|&b| usize::from(b))
+                .ok_or_else(|| bad("input overrun"))
+        };
+        let t = byte(self.pos)?;
+        let p = self.pos.saturating_add(1);
+        if t < 16 {
+            return match self.state {
+                LzoState::Top => {
+                    let Some((n, next)) = self.length(input, p, t, 15)? else {
+                        return Ok(SCAN);
+                    };
+                    self.pos = next;
+                    self.at = LzoAt::Literals {
+                        left: n.saturating_add(3),
+                        then: LzoState::AfterLongRun,
+                    };
+                    Ok(1)
                 }
-                State::AfterLongRun => {
-                    let b = ip.byte()?;
+                LzoState::AfterLongRun => {
+                    let b = byte(p)?;
                     let dist = (t >> 2).saturating_add(b << 2).saturating_add(0x801);
-                    copy_match(out, base, dist, 3, limit)?;
+                    self.start_match(out, dist, 3, t & 3, p.saturating_add(1), limit)
                 }
-                State::AfterShortRun => {
-                    let b = ip.byte()?;
+                LzoState::AfterShortRun => {
+                    let b = byte(p)?;
                     let dist = (t >> 2).saturating_add(b << 2).saturating_add(1);
-                    copy_match(out, base, dist, 2, limit)?;
+                    self.start_match(out, dist, 2, t & 3, p.saturating_add(1), limit)
                 }
-            }
-            t & 3
-        } else if t >= 64 {
-            let b = ip.byte()?;
+            };
+        }
+        if t >= 64 {
+            let b = byte(p)?;
             let dist = (t >> 2 & 7).saturating_add(b << 3).saturating_add(1);
             let len = (t >> 5).saturating_add(1);
-            copy_match(out, base, dist, len, limit)?;
-            t & 3
-        } else if t >= 32 {
-            let len = if t & 31 == 0 {
-                ip.extended(31)?
-            } else {
-                t & 31
-            };
-            let lo = ip.byte()?;
-            let hi = ip.byte()?;
-            let dist = (lo >> 2).saturating_add(hi << 6).saturating_add(1);
-            copy_match(out, base, dist, len.saturating_add(2), limit)?;
-            lo & 3
-        } else {
-            let len = if t & 7 == 0 { ip.extended(7)? } else { t & 7 };
-            let lo = ip.byte()?;
-            let hi = ip.byte()?;
-            let dist = ((t & 8) << 11)
-                .saturating_add(lo >> 2)
-                .saturating_add(hi << 6);
-            if dist == 0 {
-                return Ok(ip.pos); // end of stream
-            }
-            copy_match(
-                out,
-                base,
-                dist.saturating_add(0x4000),
-                len.saturating_add(2),
-                limit,
-            )?;
-            lo & 3
-        };
-        if state_bits == 0 {
-            state = State::Top;
-        } else {
-            ip.literals(state_bits, out, base, limit)?;
-            state = State::AfterShortRun;
+            return self.start_match(out, dist, len, t & 3, p.saturating_add(1), limit);
         }
+        if t >= 32 {
+            let Some((len, at)) = self.length(input, p, t & 31, 31)? else {
+                return Ok(SCAN);
+            };
+            let lo = byte(at)?;
+            let hi = byte(at.saturating_add(1))?;
+            let dist = (lo >> 2).saturating_add(hi << 6).saturating_add(1);
+            let next = at.saturating_add(2);
+            return self.start_match(out, dist, len.saturating_add(2), lo & 3, next, limit);
+        }
+        let Some((len, at)) = self.length(input, p, t & 7, 7)? else {
+            return Ok(SCAN);
+        };
+        let lo = byte(at)?;
+        let hi = byte(at.saturating_add(1))?;
+        let next = at.saturating_add(2);
+        let dist = ((t & 8) << 11)
+            .saturating_add(lo >> 2)
+            .saturating_add(hi << 6);
+        if dist == 0 {
+            self.pos = next;
+            self.at = LzoAt::End;
+            return Ok(1);
+        }
+        self.start_match(
+            out,
+            dist.saturating_add(0x4000),
+            len.saturating_add(2),
+            lo & 3,
+            next,
+            limit,
+        )
     }
 }
 
-/// One raw LZO1X stream.
-#[derive(Clone, Copy)]
-pub struct Lzo1x;
+impl Units for Lzo1x {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let budget = limit.saturating_sub(out.len().saturating_sub(self.base));
+        match self.at {
+            LzoAt::Start => {
+                let Some(&first) = input.first() else {
+                    if !eof {
+                        return Err(bad("input overrun"));
+                    }
+                    self.at = LzoAt::Instruction;
+                    return Ok(1);
+                };
+                if first > 17 {
+                    let t = usize::from(first).saturating_sub(17);
+                    self.pos = 1;
+                    self.at = LzoAt::Literals {
+                        left: t,
+                        then: if t < 4 {
+                            LzoState::AfterShortRun
+                        } else {
+                            LzoState::AfterLongRun
+                        },
+                    };
+                } else {
+                    self.at = LzoAt::Instruction;
+                }
+                Ok(1)
+            }
+            LzoAt::Instruction => self.instruction(input, out, limit),
+            LzoAt::Literals { left, then } => {
+                let mut left = left;
+                let n = if left > 0 {
+                    literal_chunk(
+                        input,
+                        eof,
+                        &mut self.pos,
+                        &mut left,
+                        out,
+                        room,
+                        budget,
+                        limit,
+                        &|| bad("input overrun in literals"),
+                    )?
+                } else {
+                    0
+                };
+                if left == 0 {
+                    self.state = then;
+                    self.at = LzoAt::Instruction;
+                } else {
+                    self.at = LzoAt::Literals { left, then };
+                }
+                Ok(n)
+            }
+            LzoAt::Match {
+                dist,
+                left,
+                trailing,
+            } => {
+                let mut left = left;
+                let n = match_chunk(out, dist, &mut left, room, budget, limit)?;
+                self.at = match (left, trailing) {
+                    (0, 0) => {
+                        self.state = LzoState::Top;
+                        LzoAt::Instruction
+                    }
+                    (0, t) => LzoAt::Literals {
+                        left: t,
+                        then: LzoState::AfterShortRun,
+                    },
+                    _ => LzoAt::Match {
+                        dist,
+                        left,
+                        trailing,
+                    },
+                };
+                Ok(n)
+            }
+            LzoAt::End => {
+                // Input after the end marker is ignored, once it has all
+                // been seen.
+                if eof {
+                    self.pos = input.len().max(self.pos);
+                    self.done = true;
+                    return Ok(1);
+                }
+                if self.pos < input.len() {
+                    self.pos = input.len();
+                    return Ok(1);
+                }
+                Err(bad("waiting for the end of the input"))
+            }
+        }
+    }
 
-impl Filter for Lzo1x {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        lzo1x(input, &mut out, limit)?;
-        Ok(out)
+    fn finished(&self) -> bool {
+        self.done
+    }
+
+    fn progress(&self) -> usize {
+        self.pos.wrapping_add(self.memo.mark())
+    }
+}
+
+impl Decode for Lzo1x {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        run_units(self, input, eof, out, step, limit)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        self.memo.rebase(n);
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len
+            .saturating_sub(LZO_WINDOW)
+            .max(self.base)
+            .min(out_len)
+    }
+
+    fn release_output(&mut self, n: usize) {
+        self.base = self.base.saturating_sub(n);
     }
 }
 

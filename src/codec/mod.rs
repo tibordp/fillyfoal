@@ -582,7 +582,7 @@ impl Codec {
                     size: *size,
                 })))
             }
-            Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
+            Codec::Lzo1x => Box::new(Streaming(lzo::Lzo1x::default())),
             Codec::Bcfz { size } => Box::new(Streaming(bcfz::Bcfz::new(*size))),
             Codec::Heatshrink { window, lookahead } => {
                 Box::new(Streaming(heatshrink::Heatshrink::new(*window, *lookahead)))
@@ -590,10 +590,10 @@ impl Codec {
             Codec::MeatPack => Box::new(Streaming(meatpack::MeatPack::default())),
             Codec::Bzz => Box::new(Streaming(bzz::Bzz::default())),
             Codec::Lzop => Box::new(Streaming(lzo::Lzop::default())),
-            Codec::Lzf => Box::new(Streaming(filters::Whole::new(legacy::Lzf))),
-            Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
-            Codec::Lzfu => Box::new(Streaming(filters::Whole::new(lzfu::Lzfu))),
-            Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
+            Codec::Lzf => Box::new(Streaming(legacy::Lzf::default())),
+            Codec::LzfFramed => Box::new(Streaming(legacy::LzfFramed::default())),
+            Codec::Lzfu => Box::new(Streaming(lzfu::Lzfu::default())),
+            Codec::Adc => Box::new(Streaming(legacy::Adc::default())),
             Codec::Implode(params) => Box::new(Streaming(filters::Whole::new(*params))),
             Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
@@ -610,8 +610,8 @@ impl Codec {
             Codec::LzmaRaw { props, size, dict } => {
                 Box::new(lzma::LzmaStream::raw(*props, *size, *dict))
             }
-            Codec::Lz4Block => Box::new(Streaming(filters::Whole::new(lz::Lz4Block))),
-            Codec::Snappy => Box::new(Streaming(filters::Whole::new(lz::Snappy))),
+            Codec::Lz4Block => Box::new(Streaming(lz::Lz4Block::new())),
+            Codec::Snappy => Box::new(Streaming(lz::Snappy::default())),
             Codec::SnappyFramed => Box::new(Streaming(lz::SnappyFramed::default())),
             Codec::CapnpPacked => Box::new(Streaming(capnp::Packed::default())),
             Codec::Ace(params) => Box::new(Streaming(ace::Decoder::new(params.clone()))),
@@ -619,8 +619,8 @@ impl Codec {
             Codec::SpssBytecode { bias, big_endian } => {
                 Box::new(Streaming(statdata::SpssBytecode::new(*bias, *big_endian)))
             }
-            Codec::SasRle => Box::new(Streaming(filters::Whole::new(statdata::SasRle))),
-            Codec::SasRdc => Box::new(Streaming(filters::Whole::new(statdata::SasRdc))),
+            Codec::SasRle => Box::new(Streaming(statdata::SasRle::default())),
+            Codec::SasRdc => Box::new(Streaming(statdata::SasRdc::default())),
             Codec::DwgLz77 { size } => Box::new(Streaming(dwg::Lz77::new(*size))),
             Codec::Eexec { hex } => {
                 Box::new(Streaming(filters::Whole::new(filters::Eexec { hex: *hex })))

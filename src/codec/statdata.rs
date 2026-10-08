@@ -11,7 +11,7 @@
 //! `tests/data/sas7bdat/make.py` and decode to the same rows in pandas and
 //! ReadStat.
 
-use crate::codec::filters::Filter;
+use crate::codec::lz::{Units, run_units};
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
@@ -181,105 +181,185 @@ fn copy(out: &mut Vec<u8>, input: &[u8], at: &mut usize, n: usize, limit: usize)
 
 /// `SASYZCRL`: a command nibble and a length nibble per control byte,
 /// copying literals or inserting runs of a byte, a blank, `@` or zero.
-#[derive(Clone, Copy)]
-pub struct SasRle;
+/// Decoded a command at a time; keeps no history.
+#[derive(Clone, Default)]
+pub struct SasRle {
+    pos: usize,
+    done: bool,
+}
 
-impl Filter for SasRle {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out = Vec::new();
-        let mut at = 0usize;
-        while at < input.len() {
-            let control = take(input, &mut at)?;
-            let low = usize::from(control & 0x0f);
-            match control >> 4 {
-                0x0 => {
-                    let n = long(take(input, &mut at)?, 64, low);
-                    copy(&mut out, input, &mut at, n, limit)?;
-                }
-                0x1 => {
-                    let n = long(take(input, &mut at)?, 64 + 4096, low);
-                    copy(&mut out, input, &mut at, n, limit)?;
-                }
-                0x2 => copy(&mut out, input, &mut at, low.saturating_add(96), limit)?,
-                0x4 => {
-                    let n = long(take(input, &mut at)?, 18, low);
-                    let byte = take(input, &mut at)?;
-                    fill(&mut out, byte, n, limit)?;
-                }
-                0x5 => {
-                    let n = long(take(input, &mut at)?, 17, low);
-                    fill(&mut out, b'@', n, limit)?;
-                }
-                0x6 => {
-                    let n = long(take(input, &mut at)?, 17, low);
-                    fill(&mut out, b' ', n, limit)?;
-                }
-                0x7 => {
-                    let n = long(take(input, &mut at)?, 17, low);
-                    fill(&mut out, 0, n, limit)?;
-                }
-                0x8 => copy(&mut out, input, &mut at, low.saturating_add(1), limit)?,
-                0x9 => copy(&mut out, input, &mut at, low.saturating_add(17), limit)?,
-                0xa => copy(&mut out, input, &mut at, low.saturating_add(33), limit)?,
-                0xb => copy(&mut out, input, &mut at, low.saturating_add(49), limit)?,
-                0xc => {
-                    let byte = take(input, &mut at)?;
-                    fill(&mut out, byte, low.saturating_add(3), limit)?;
-                }
-                0xd => fill(&mut out, b'@', low.saturating_add(2), limit)?,
-                0xe => fill(&mut out, b' ', low.saturating_add(2), limit)?,
-                0xf => fill(&mut out, 0, low.saturating_add(2), limit)?,
-                _ => {
-                    return Err(Diagnostic::malformed(format!(
-                        "unknown RLE command {control:#04x}"
-                    )));
-                }
+impl Units for SasRle {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        _room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let mut at = self.pos;
+        if at >= input.len() {
+            if !eof {
+                return Err(Diagnostic::malformed("compressed row truncated"));
+            }
+            self.done = true;
+            return Ok(1);
+        }
+        let mark = out.len();
+        let control = take(input, &mut at)?;
+        let low = usize::from(control & 0x0f);
+        match control >> 4 {
+            0x0 => {
+                let n = long(take(input, &mut at)?, 64, low);
+                copy(out, input, &mut at, n, limit)?;
+            }
+            0x1 => {
+                let n = long(take(input, &mut at)?, 64 + 4096, low);
+                copy(out, input, &mut at, n, limit)?;
+            }
+            0x2 => copy(out, input, &mut at, low.saturating_add(96), limit)?,
+            0x4 => {
+                let n = long(take(input, &mut at)?, 18, low);
+                let byte = take(input, &mut at)?;
+                fill(out, byte, n, limit)?;
+            }
+            0x5 => {
+                let n = long(take(input, &mut at)?, 17, low);
+                fill(out, b'@', n, limit)?;
+            }
+            0x6 => {
+                let n = long(take(input, &mut at)?, 17, low);
+                fill(out, b' ', n, limit)?;
+            }
+            0x7 => {
+                let n = long(take(input, &mut at)?, 17, low);
+                fill(out, 0, n, limit)?;
+            }
+            0x8 => copy(out, input, &mut at, low.saturating_add(1), limit)?,
+            0x9 => copy(out, input, &mut at, low.saturating_add(17), limit)?,
+            0xa => copy(out, input, &mut at, low.saturating_add(33), limit)?,
+            0xb => copy(out, input, &mut at, low.saturating_add(49), limit)?,
+            0xc => {
+                let byte = take(input, &mut at)?;
+                fill(out, byte, low.saturating_add(3), limit)?;
+            }
+            0xd => fill(out, b'@', low.saturating_add(2), limit)?,
+            0xe => fill(out, b' ', low.saturating_add(2), limit)?,
+            0xf => fill(out, 0, low.saturating_add(2), limit)?,
+            _ => {
+                return Err(Diagnostic::malformed(format!(
+                    "unknown RLE command {control:#04x}"
+                )));
             }
         }
-        Ok(out)
+        self.pos = at;
+        Ok(out.len().saturating_sub(mark))
+    }
+
+    fn finished(&self) -> bool {
+        self.done
+    }
+
+    fn progress(&self) -> usize {
+        self.pos
     }
 }
 
+impl Decode for SasRle {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        run_units(self, input, eof, out, step, limit)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, outlen: usize) -> usize {
+        outlen
+    }
+}
+
+/// The farthest an RDC back-reference reaches (a 12-bit offset plus 3).
+const RDC_WINDOW: usize = 4098;
+
 /// `SASYZCR2`, Ross Data Compression: a big-endian 16-bit control word
 /// before every 16 items says which are literals (0) and which commands
-/// (1): short and long runs, and short and long back-references.
-#[derive(Clone, Copy)]
-pub struct SasRdc;
+/// (1): short and long runs, and short and long back-references. Decoded
+/// an item at a time.
+#[derive(Clone, Default)]
+pub struct SasRdc {
+    pos: usize,
+    bits: u16,
+    mask: u16,
+    done: bool,
+}
 
-impl Filter for SasRdc {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let mut out: Vec<u8> = Vec::new();
-        let mut at = 0usize;
-        let mut bits = 0u16;
-        let mut mask = 0u16;
-        while at < input.len() {
-            mask >>= 1;
-            if mask == 0 {
-                let hi = take(input, &mut at)?;
-                let lo = take(input, &mut at)?;
-                bits = u16::from_be_bytes([hi, lo]);
-                mask = 0x8000;
-                if at >= input.len() {
-                    break;
+impl Units for SasRdc {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        _room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        let mut at = self.pos;
+        let truncated = || Diagnostic::malformed("compressed row truncated");
+        if at >= input.len() {
+            if !eof {
+                return Err(truncated());
+            }
+            self.done = true;
+            return Ok(1);
+        }
+        let (mut bits, mut mask) = (self.bits, self.mask >> 1);
+        if mask == 0 {
+            let hi = take(input, &mut at)?;
+            let lo = take(input, &mut at)?;
+            bits = u16::from_be_bytes([hi, lo]);
+            mask = 0x8000;
+            if at >= input.len() {
+                // A control word at the very end.
+                if !eof {
+                    return Err(truncated());
                 }
+                self.done = true;
+                self.pos = at;
+                return Ok(1);
             }
-            if bits & mask == 0 {
-                let b = take(input, &mut at)?;
-                fill(&mut out, b, 1, limit)?;
-                continue;
-            }
+        }
+        let mark = out.len();
+        if bits & mask == 0 {
+            let b = take(input, &mut at)?;
+            fill(out, b, 1, limit)?;
+        } else {
             let control = take(input, &mut at)?;
             let cmd = control >> 4;
             let low = usize::from(control & 0x0f);
             match cmd {
                 0 => {
                     let byte = take(input, &mut at)?;
-                    fill(&mut out, byte, low.saturating_add(3), limit)?;
+                    fill(out, byte, low.saturating_add(3), limit)?;
                 }
                 1 => {
                     let n = nibbles(take(input, &mut at)?, low).saturating_add(19);
                     let byte = take(input, &mut at)?;
-                    fill(&mut out, byte, n, limit)?;
+                    fill(out, byte, n, limit)?;
                 }
                 _ => {
                     let offset = nibbles(take(input, &mut at)?, low).saturating_add(3);
@@ -301,7 +381,47 @@ impl Filter for SasRdc {
                 }
             }
         }
-        Ok(out)
+        self.pos = at;
+        self.bits = bits;
+        self.mask = mask;
+        Ok(out.len().saturating_sub(mark))
+    }
+
+    fn finished(&self) -> bool {
+        self.done
+    }
+
+    fn progress(&self) -> usize {
+        self.pos
+    }
+}
+
+impl Decode for SasRdc {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        run_units(self, input, eof, out, step, limit)
+    }
+
+    fn consumed(&self) -> usize {
+        self.pos
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.pos
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+    }
+
+    fn releasable_output(&self, outlen: usize) -> usize {
+        outlen.saturating_sub(RDC_WINDOW)
     }
 }
 
@@ -309,6 +429,11 @@ impl Filter for SasRdc {
 #[allow(clippy::arithmetic_side_effects, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+
+    fn run<D: Decode>(d: D, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+        let mut d = crate::codec::pipeline::Streaming(d);
+        crate::codec::pipeline::decode_all(&mut d, input, limit)
+    }
 
     fn hex(s: &str) -> Vec<u8> {
         (0..s.len())
@@ -379,7 +504,10 @@ mod tests {
             ("f58640c5a06b6f6461e4f283c08dd240f2868088cc40001840", ROW_2),
             ("f4810840eaf382fefffff682beffff", ROW_3),
         ] {
-            assert_eq!(SasRle.apply(&hex(packed), 1 << 16).ok(), Some(hex(row)));
+            assert_eq!(
+                run(SasRle::default(), &hex(packed), 1 << 16).ok(),
+                Some(hex(row))
+            );
         }
     }
 
@@ -392,7 +520,10 @@ mod tests {
             ),
             ("98800300084009200200feffff0500beffff", ROW_3),
         ] {
-            assert_eq!(SasRdc.apply(&hex(packed), 1 << 16).ok(), Some(hex(row)));
+            assert_eq!(
+                run(SasRdc::default(), &hex(packed), 1 << 16).ok(),
+                Some(hex(row))
+            );
         }
     }
 
@@ -411,13 +542,19 @@ mod tests {
     #[test]
     fn sas_long_vectors() {
         let rle = "af4142434445464748414243444546474841424344454647484142434445464748414243444546474841424344454647486017705400050102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445400c78";
-        assert_eq!(SasRle.apply(&hex(rle), 1 << 16).ok(), Some(long()));
+        assert_eq!(
+            run(SasRle::default(), &hex(rle), 1 << 16).ok(),
+            Some(long())
+        );
         let rdc = "00e741424344454647488500fd00fd0047480f200f200120fc000f000f000f000f000f0008000102030405060708090a00000b0c0d0e0f101112131415161718191a00001b1c1d1e1f202122232425262728292a00002b2c2d2e2f303132333435363738393a03803b3c3d3e3f40520d0f780978";
-        assert_eq!(SasRdc.apply(&hex(rdc), 1 << 16).ok(), Some(long()));
+        assert_eq!(
+            run(SasRdc::default(), &hex(rdc), 1 << 16).ok(),
+            Some(long())
+        );
         // Limits and truncation.
-        assert!(SasRle.apply(&hex(rle), 100).is_err());
-        assert!(SasRdc.apply(&hex(rdc), 100).is_err());
-        assert!(SasRle.apply(&[0x00], 1 << 16).is_err());
-        assert!(SasRdc.apply(&[0x80, 0x00, 0x30], 1 << 16).is_err());
+        assert!(run(SasRle::default(), &hex(rle), 100).is_err());
+        assert!(run(SasRdc::default(), &hex(rdc), 100).is_err());
+        assert!(run(SasRle::default(), &[0x00], 1 << 16).is_err());
+        assert!(run(SasRdc::default(), &[0x80, 0x00, 0x30], 1 << 16).is_err());
     }
 }

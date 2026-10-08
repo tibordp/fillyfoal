@@ -1175,3 +1175,304 @@ fn raw_lzma_with_a_known_dictionary_releases() {
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(19), Some(3 << 20));
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(40), Some(u32::MAX));
 }
+
+/// The token-at-a-time LZ77 decoders (LZ4 and Snappy blocks, LZF, ADC,
+/// LZO1X, compressed RTF, SAS row compression): chunk independence on
+/// real-encoder data, and large synthetic streams decoded in bounded steps
+/// with the window released behind them.
+mod lz_units {
+    use super::lz::{eager, lines, mixed, read, text};
+    use super::{assert_on_demand, assert_releases};
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::pipeline::Status;
+
+    /// Decodes all of `input` 4 KiB at a time, checking that no call
+    /// produces more than `max_per_call` bytes.
+    fn assert_steps(codec: &Codec, input: &[u8], expected: &[u8], max_per_call: usize) {
+        let mut decoder = codec.decoder().unwrap();
+        let mut out = Vec::new();
+        let mut calls = 0usize;
+        loop {
+            let before = out.len();
+            let status = decoder
+                .decode(input, true, &mut out, 4096, 1 << 30)
+                .unwrap();
+            calls += 1;
+            assert!(
+                out.len() - before <= max_per_call,
+                "{codec:?}: one call produced {} bytes",
+                out.len() - before
+            );
+            if status == Status::Done {
+                break;
+            }
+            assert_eq!(status, Status::More);
+        }
+        assert!(out == expected, "{codec:?}: output differs");
+        assert!(
+            calls >= expected.len() / max_per_call,
+            "{codec:?}: {calls} calls"
+        );
+        assert_eq!(decoder.consumed(), input.len(), "{codec:?}: consumed");
+    }
+
+    /// Appends a match of `len` bytes `dist` back.
+    fn repeat(out: &mut Vec<u8>, dist: usize, len: usize) {
+        for _ in 0..len {
+            out.push(out[out.len() - dist]);
+        }
+    }
+
+    fn lz4_len(v: &mut Vec<u8>, mut n: usize) {
+        while n >= 255 {
+            v.push(255);
+            n -= 255;
+        }
+        v.push(n as u8);
+    }
+
+    /// An LZ4 sequence: literals, then a match (`len` >= 4) unless last.
+    fn lz4_seq(v: &mut Vec<u8>, lit: &[u8], m: Option<(usize, usize)>) {
+        let ml = m.map_or(0, |(_, len)| len - 4);
+        v.push(((lit.len().min(15) as u8) << 4) | ml.min(15) as u8);
+        if lit.len() >= 15 {
+            lz4_len(v, lit.len() - 15);
+        }
+        v.extend_from_slice(lit);
+        if let Some((dist, _)) = m {
+            v.extend_from_slice(&(dist as u16).to_le_bytes());
+            if ml >= 15 {
+                lz4_len(v, ml - 15);
+            }
+        }
+    }
+
+    #[test]
+    fn lz4_blocks() {
+        // The first block of an `lz4` CLI frame (after FLG, BD, the content
+        // size and HC).
+        let frame = read("data/lz4/lines.lz4");
+        let size = u32::from_le_bytes(frame[15..19].try_into().unwrap()) as usize;
+        let block = &frame[19..19 + size];
+        assert_on_demand(&Codec::Lz4Block, block, &lines()[..65536]);
+        let padded = [block, &[0; 300]].concat();
+        assert_on_demand(&Codec::Lz4Block, &padded, &lines()[..65536]);
+        // Long literals, a 3 MB match from a few KiB of input, more matches.
+        let mut input = Vec::new();
+        let mut expected = text();
+        lz4_seq(&mut input, &expected.clone(), Some((1000, 3_000_000)));
+        repeat(&mut expected, 1000, 3_000_000);
+        for i in 0..2000 {
+            lz4_seq(&mut input, b"0123456789", Some((65_535 - i, 300 + i)));
+            expected.extend_from_slice(b"0123456789");
+            repeat(&mut expected, 65_535 - i, 300 + i);
+        }
+        lz4_seq(&mut input, b"end", None);
+        expected.extend_from_slice(b"end");
+        assert_on_demand(&Codec::Lz4Block, &input, &expected);
+        assert_steps(&Codec::Lz4Block, &input, &expected, 4096);
+        assert_releases(&Codec::Lz4Block, &input, &expected, 65_536 + 2 * 16_384);
+        // Long zero padding is scanned in pieces too.
+        input.extend_from_slice(&[0; 300_000]);
+        assert_steps(&Codec::Lz4Block, &input, &expected, 4096);
+    }
+
+    #[test]
+    fn snappy_raw() {
+        // The first chunk of a framed stream (type, length, CRC, data).
+        let framed = read("data/snappy/lines.sz");
+        assert_eq!(framed[10], 0);
+        let len = u32::from_le_bytes([framed[11], framed[12], framed[13], 0]) as usize;
+        let raw = &framed[18..14 + len];
+        let out = eager(&Codec::Snappy, raw);
+        assert!(lines().starts_with(&out) && out.len() > 30_000);
+        assert_on_demand(&Codec::Snappy, raw, &out);
+        // A long literal, then 20,000 copies.
+        let mut expected = text();
+        let mut body = vec![62 << 2];
+        body.extend_from_slice(&(expected.len() as u32 - 1).to_le_bytes()[..3]);
+        body.extend_from_slice(&expected);
+        for i in 0..20_000usize {
+            let (dist, len) = (1000 + i % 3000, 1 + i % 64);
+            body.push((((len - 1) as u8) << 2) | 2);
+            body.extend_from_slice(&(dist as u16).to_le_bytes());
+            repeat(&mut expected, dist, len);
+        }
+        let mut input = Vec::new();
+        let mut n = expected.len();
+        while n >= 0x80 {
+            input.push(n as u8 | 0x80);
+            n >>= 7;
+        }
+        input.push(n as u8);
+        input.extend_from_slice(&body);
+        assert_on_demand(&Codec::Snappy, &input, &expected);
+        assert_steps(&Codec::Snappy, &input, &expected, 4096 + 64);
+    }
+
+    #[test]
+    fn lzf_and_adc() {
+        assert_on_demand(&Codec::Lzf, &read("data/lzf/text.lzf"), &text());
+        let zv = read("data/lzf/mixed.zv");
+        let zv_out = [mixed(), text()].concat();
+        assert_on_demand(&Codec::LzfFramed, &zv, &zv_out);
+        let gpt = read("data/adc/gpt.adc");
+        assert_on_demand(&Codec::Adc, &gpt, &read("data/adc/gpt.bin"));
+        let adc = read("data/adc/text.adc");
+        assert_on_demand(&Codec::Adc, &adc, &eager(&Codec::Adc, &adc));
+
+        // Concatenated ZV files.
+        let input = zv.repeat(10);
+        let expected = zv_out.repeat(10);
+        assert_on_demand(&Codec::LzfFramed, &input, &expected);
+        assert_steps(&Codec::LzfFramed, &input, &expected, 4096 + 65_535);
+        assert_releases(&Codec::LzfFramed, &input, &expected, 2 * 16_384 + 65_535);
+
+        // Raw LZF: literals, then 5,000 long matches.
+        let mut expected = text();
+        let mut input = Vec::new();
+        for lit in expected.chunks(32) {
+            input.push(lit.len() as u8 - 1);
+            input.extend_from_slice(lit);
+        }
+        for i in 0..5000usize {
+            let dist = 8192 - i % 7000;
+            input.extend_from_slice(&[(7 << 5) | ((dist - 1) >> 8) as u8, 255, (dist - 1) as u8]);
+            repeat(&mut expected, dist, 264);
+        }
+        assert_on_demand(&Codec::Lzf, &input, &expected);
+        assert_steps(&Codec::Lzf, &input, &expected, 4096 + 264);
+        assert_releases(&Codec::Lzf, &input, &expected, 8192 + 2 * 16_384);
+
+        // ADC: literals, then 20,000 long matches.
+        let mut expected = text();
+        let mut input = Vec::new();
+        for lit in expected.chunks(128) {
+            input.push(0x80 | (lit.len() as u8 - 1));
+            input.extend_from_slice(lit);
+        }
+        for i in 0..20_000usize {
+            let dist = 65_536 - i;
+            input.push(0x40 | 63);
+            input.extend_from_slice(&((dist - 1) as u16).to_be_bytes());
+            repeat(&mut expected, dist, 67);
+        }
+        assert_on_demand(&Codec::Adc, &input, &expected);
+        assert_steps(&Codec::Adc, &input, &expected, 4096 + 128);
+        assert_releases(&Codec::Adc, &input, &expected, 65_536 + 2 * 16_384);
+    }
+
+    /// An LZO1X extended length: zeros worth 255 each, then a final byte.
+    fn lzo_len(v: &mut Vec<u8>, n: usize) {
+        let k = (n - 1) / 255;
+        v.extend(std::iter::repeat_n(0, k));
+        v.push((n - 255 * k) as u8);
+    }
+
+    #[test]
+    fn lzo1x() {
+        for (name, expected) in [
+            ("text.lzo1x_1", text()),
+            ("text.lzo1x_999", text()),
+            ("mixed.lzo1x_1_15", mixed()),
+        ] {
+            let input = read(&format!("data/lzo/{name}"));
+            assert_on_demand(&Codec::Lzo1x, &input, &expected);
+            // Input after the end marker is ignored.
+            let trailing = [&input[..], b"trailing"].concat();
+            assert_on_demand(&Codec::Lzo1x, &trailing, &expected);
+        }
+        // A long literal run, a 3 MB match, the end marker.
+        let mut expected = lines();
+        let mut input = vec![0];
+        lzo_len(&mut input, expected.len() - 3 - 15);
+        input.extend_from_slice(&expected);
+        let (dist, len) = (10_000usize, 3_000_000usize);
+        input.push(32);
+        lzo_len(&mut input, len - 2 - 31);
+        input.extend_from_slice(&[(((dist - 1) & 63) << 2) as u8, ((dist - 1) >> 6) as u8]);
+        input.extend_from_slice(&[0x11, 0, 0]);
+        repeat(&mut expected, dist, len);
+        assert_on_demand(&Codec::Lzo1x, &input, &expected);
+        assert_steps(&Codec::Lzo1x, &input, &expected, 4096);
+        assert_releases(&Codec::Lzo1x, &input, &expected, 0xc000 + 2 * 16_384);
+    }
+
+    fn rtf(kind: &[u8; 4], raw: usize, body: &[u8]) -> Vec<u8> {
+        let mut v = ((body.len() + 12) as u32).to_le_bytes().to_vec();
+        v.extend_from_slice(&(raw as u32).to_le_bytes());
+        v.extend_from_slice(kind);
+        v.extend_from_slice(&[0; 4]);
+        v.extend_from_slice(body);
+        v
+    }
+
+    #[test]
+    fn compressed_rtf() {
+        let data = lines();
+        let data = &data[..data.len() / 8 * 8];
+        // LZFu literals (control bytes of 0), a reference to 100 bytes
+        // back, and the end marker (a reference to the write position).
+        let mut body = Vec::new();
+        for group in data.chunks(8) {
+            body.push(0);
+            body.extend_from_slice(group);
+        }
+        let back = ((207 + data.len() - 100) & 0xfff) as u16;
+        let write = ((207 + data.len() + 11) & 0xfff) as u16;
+        body.push(0b11);
+        body.extend_from_slice(&((back << 4) | 9).to_be_bytes());
+        body.extend_from_slice(&(write << 4).to_be_bytes());
+        let lzfu = rtf(b"LZFu", data.len() + 11, &body);
+        let tail = data.len() - 100;
+        let expected = [data, &data[tail..tail + 11]].concat();
+        assert_on_demand(&Codec::Lzfu, &lzfu, &expected);
+        assert_steps(&Codec::Lzfu, &lzfu, &expected, 4096 + 17);
+        assert_releases(&Codec::Lzfu, &lzfu, &expected, 2 * 16_384);
+        // The raw size cuts the output short.
+        let short = rtf(b"LZFu", 1000, &body);
+        assert_on_demand(&Codec::Lzfu, &short, &data[..1000]);
+        // Uncompressed (MELA).
+        let mela = rtf(b"MELA", data.len(), data);
+        assert_on_demand(&Codec::Lzfu, &mela, data);
+        assert_steps(&Codec::Lzfu, &mela, data, 4096);
+    }
+
+    #[test]
+    fn sas_rows() {
+        let data = lines();
+        // RLE: long literal copies and long zero runs.
+        let mut rle = Vec::new();
+        let mut expected = Vec::new();
+        for (i, chunk) in data.chunks(4160).enumerate() {
+            if chunk.len() == 4160 {
+                rle.extend_from_slice(&[0x10, 0]);
+                rle.extend_from_slice(chunk);
+                expected.extend_from_slice(chunk);
+            }
+            rle.extend_from_slice(&[0x7f, (i % 256) as u8]);
+            expected.resize(expected.len() + 17 + 15 * 256 + i % 256, 0);
+        }
+        assert_on_demand(&Codec::SasRle, &rle, &expected);
+        assert_steps(&Codec::SasRle, &rle, &expected, 4096 + 8500);
+        assert_releases(&Codec::SasRle, &rle, &expected, 2 * 16_384 + 8500);
+
+        // RDC: 16 literals, then groups of long runs and back-references.
+        let mut rdc = vec![0, 0];
+        let mut expected = b"ABCDEFGHIJKLMNOP".to_vec();
+        rdc.extend_from_slice(&expected);
+        for g in 0..400usize {
+            rdc.extend_from_slice(&[0xff, 0xff]);
+            for i in 0..8usize {
+                // A run of 4,114 bytes, then 271 bytes from 4,098 back.
+                rdc.extend_from_slice(&[0x1f, 0xff, (g + i) as u8]);
+                expected.resize(expected.len() + 4114, (g + i) as u8);
+                rdc.extend_from_slice(&[0x2f, 0xff, 255]);
+                repeat(&mut expected, 4098, 271);
+            }
+        }
+        assert_on_demand(&Codec::SasRdc, &rdc, &expected);
+        assert_steps(&Codec::SasRdc, &rdc, &expected, 4096 + 4114);
+        assert_releases(&Codec::SasRdc, &rdc, &expected, 4098 + 2 * 16_384 + 4114);
+    }
+}
