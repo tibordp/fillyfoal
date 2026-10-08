@@ -1925,6 +1925,35 @@ pub fn content(
 
 /// Expands a content node in place: what [`content`] does on expansion, for
 /// expanders that work out the decoded size themselves first.
+/// A node for content whose decoded size is not recorded, but which a
+/// container gives a hint of (gzip's ISIZE: one member's size, modulo
+/// 2^32): a large hint, or a large encoded span, decodes on demand with the
+/// size found at the end; otherwise the content is decoded eagerly, which
+/// finds its exact size. The hint is never taken as the length.
+pub fn content_hinted(
+    name: impl Into<Cow<'static, str>>,
+    input: Input,
+    span: Span,
+    codec: Codec,
+    hint: u64,
+) -> Node {
+    Node::new(name)
+        .span(span)
+        .lazy(expand_content_hinted, (input, span, codec, hint))
+}
+
+async fn expand_content_hinted(
+    cx: Cx,
+    (input, span, codec, hint): (Input, Span, Codec, u64),
+) -> Result<()> {
+    if hint > LAZY_THRESHOLD && span.len <= UNSIZED_LAZY_THRESHOLD {
+        let decoded = cx.decode_lazy_unsized(span, &codec)?;
+        cx.annotate("size unknown, decoded on demand");
+        return dissect_or_data(cx, input.nested(decoded)).await;
+    }
+    expand_content(cx, (input, span, codec, None)).await
+}
+
 pub async fn expand_content(
     cx: Cx,
     (input, span, codec, expected): (Input, Span, Codec, Option<u64>),

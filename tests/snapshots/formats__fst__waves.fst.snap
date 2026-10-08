@@ -30,6 +30,6 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Trailer  [0x17d+0x8]
           CRC32: 0xf1289b3  [0x17d+0x4]
           ISIZE: 22  [0x181+0x4]
-      ▾ Content — 0x16 bytes decompressed  [0x165+0x18]
+      ▾ Content — 0x16 bytes decompressed  [0x165+0x20]
           Data  [#1:0x0+0x16]
     GEOM: 26  [0x185+0x1b]

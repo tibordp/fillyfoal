@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Trailer  [0x1056+0x8]
           CRC32: 0x95967339  [0x1056+0x4]
           ISIZE: 256  [0x105a+0x4]
-      ▾ Content — cpio archive (SVR4 newc), 1 entry, 8 bytes  [0x100a+0x4c]
+      ▾ Content — cpio archive (SVR4 newc), 1 entry, 8 bytes  [0x100a+0x54]
         ▾ init.tiny.rc — 8 bytes  [#1:0x0+0x84]
           ▾ Header  [#1:0x0+0x6e]
               Magic: "070701"  [#1:0x0+0x6]

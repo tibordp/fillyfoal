@@ -509,10 +509,14 @@ impl Shared {
             st.release(start, keep);
             self.charge((to_u64(produced) >> 12).max(1));
         };
-        // Once the stream has ended, its real length is known.
+        // Once the stream has ended, its real length is known, and so is any
+        // problem that did not stop it (a checksum mismatch).
         let finished_len = st
             .done
             .then(|| st.out_base.saturating_add(to_u64(st.out.len())));
+        if st.done && failure.is_none() {
+            failure = st.decoder.warning(&st.out);
+        }
         let after = st.out.len().saturating_add(st.input.len());
         self.derived_bytes = self
             .derived_bytes

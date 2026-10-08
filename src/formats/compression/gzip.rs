@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::{Codec, Format, Input, Probe, content};
+use crate::formats::{Codec, Format, Input, Probe, content_hinted};
 use crate::node::Node;
 use crate::record;
 use crate::value::{EnumTable, FlagTable, Value, flag};
@@ -116,8 +116,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         );
     }
 
-    // Assume a single member: the trailer is the last 8 bytes. Concatenated
-    // members are reported when the content is decompressed.
+    // The trailer of a single-member file is its last 8 bytes; further
+    // members, if any, are found by decoding (nothing indexes them).
     let body_len = file.len.saturating_sub(cur.pos()).saturating_sub(8);
     let body = file.sub(cur.pos(), body_len);
     let trailer_span = file.tail(file.len.saturating_sub(8));
@@ -136,17 +136,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, {size} bytes uncompressed");
     }
     cx.annotate(summary);
-    // ISIZE is the size modulo 2^32 (and only the last member's, if
-    // several are concatenated). A body that could decode to 4 GiB or more
-    // (DEFLATE expands at most 1032:1) may have wrapped it, so then the
-    // content is decoded on demand and its size found at the end, rather
-    // than cut off at a wrong length.
-    let expected = size
-        .map(u64::from)
-        .filter(|_| body.len.saturating_mul(Codec::Deflate.max_ratio()) < 1 << 32);
+    // The content is every member, decoded one after another. Nothing
+    // records the total: ISIZE is one member's size modulo 2^32, so it only
+    // hints whether to decode on demand; the size is found by decoding.
     cx.emit(
-        content("Content", input, body, Codec::Deflate, expected)
-            .summary(format!("{:#x} compressed bytes", body.len)),
+        content_hinted(
+            "Content",
+            input,
+            file.tail(cur.pos()),
+            Codec::Gzip,
+            size.map_or(0, u64::from),
+        )
+        .summary(format!("{:#x} compressed bytes", body.len)),
     );
     Ok(())
 }

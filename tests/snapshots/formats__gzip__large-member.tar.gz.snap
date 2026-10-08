@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Trailer  [0x8d3+0x8]
       CRC32: 0x4e6d4322  [0x8d3+0x4]
       ISIZE: 2100736  [0x8d7+0x4]
-  ▾ Content — tar archive (ustar), 3 entries, 2.0 MiB  [0xa+0x8c9]
+  ▾ Content — tar archive (ustar), 3 entries, 2.0 MiB  [0xa+0x8d1]
     ▾ a.txt — 6 bytes, -rw-r--r--  [#1:0x0+0x400]
       ▾ Header — ustar  [#1:0x0+0x200]
           Name: "a.txt"  [#1:0x0+0x64]
@@ -81,3 +81,4 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Lines — 1 line  [#1:0x200800+0x6]
             Line 1: "world"  [#1:0x200800+0x5]
       End of archive — 2 zero blocks  [#1:0x200a00+0x400]
+      Padding — 223.1 KiB  [#1:0x200e00+0x37c88]

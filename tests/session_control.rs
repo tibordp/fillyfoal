@@ -422,3 +422,58 @@ fn gzip_size_is_trusted_only_when_it_cannot_have_wrapped() {
     assert_eq!(data, payload[payload.len() - 16..]);
     assert_eq!(host.session.source_len(source), payload.len() as u64);
 }
+
+/// A gzip member with stored DEFLATE blocks.
+fn gzip_member(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff];
+    for (i, chunk) in data.chunks(65_535).enumerate() {
+        out.push(u8::from((i + 1) * 65_535 >= data.len()));
+        out.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(!(chunk.len() as u16)).to_le_bytes());
+        out.extend_from_slice(chunk);
+    }
+    out.extend_from_slice(&fillyfoal::codec::crc32(data).to_le_bytes());
+    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    out
+}
+
+/// Concatenated gzip members (`cat a.gz b.gz`, `gzip -c a b`) decode as one
+/// stream, in a small file and in a large one decoded on demand.
+#[test]
+fn concatenated_gzip_members_are_one_stream() {
+    for size in [3_000usize, 3 << 20] {
+        let a: Vec<u8> = b"first part\n".iter().copied().cycle().take(size).collect();
+        let b: Vec<u8> = b"second part\n"
+            .iter()
+            .copied()
+            .cycle()
+            .take(size)
+            .collect();
+        let mut gz = gzip_member(&a);
+        gz.extend(gzip_member(&b));
+        let mut host = Host::named("parts.txt.gz", gz, Limits::default());
+        host.explore(host.root, 1, 100);
+        let content = host.child(host.root, "Content").unwrap();
+        host.session.expand(content, 1);
+        host.run();
+        let source = host
+            .session
+            .children(content)
+            .unwrap()
+            .ids
+            .iter()
+            .find_map(|&id| host.session.node(id).unwrap().span)
+            .unwrap()
+            .source;
+        let all = Span::new(source, 0, (a.len() + b.len()) as u64 + 100);
+        let data = loop {
+            match host.session.read_step(all, 100_000) {
+                ReadProgress::Done(data) => break data,
+                ReadProgress::NeedBytes(r) => supply(&mut host, r),
+                ReadProgress::Yielded => {}
+            }
+        };
+        assert_eq!(data, [a, b].concat(), "size {size}");
+        assert!(host.session.source_len_known(source));
+    }
+}

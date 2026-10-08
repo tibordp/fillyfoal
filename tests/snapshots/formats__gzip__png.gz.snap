@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ png.gz — gzip, originally c.png, 429 bytes uncompressed  [0x0+0x1c0]
   ▾ Header  [0x0+0xa]
@@ -14,7 +14,7 @@ expression: "common::explore(&name, &data)"
   ▾ Trailer  [0x1b8+0x8]
       CRC32: 0xfaac591a  [0x1b8+0x4]
       ISIZE: 429  [0x1bc+0x4]
-  ▾ Content — 32×24, 8-bit RGB  [0x10+0x1a8]
+  ▾ Content — 32×24, 8-bit RGB  [0x10+0x1b0]
       Signature  [#1:0x0+0x8]
     ▾ IHDR — 32×24, 8-bit RGB  [#1:0x8+0x19]
         Length: 13  [#1:0x8+0x4]

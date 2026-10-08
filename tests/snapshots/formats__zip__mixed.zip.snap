@@ -431,7 +431,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Trailer  [0x62b+0x8]
             CRC32: 0xebc3e2d9  [0x62b+0x4]
             ISIZE: 7168  [0x62f+0x4]
-        ▾ Content — tar archive (ustar), 4 entries, 761 bytes  [0x2f5+0x336]
+        ▾ Content — tar archive (ustar), 4 entries, 761 bytes  [0x2f5+0x33e]
           ▾ ._a.png — 163 bytes, -rw-r--r--  [#4:0x0+0x400]
             ▾ Header — ustar  [#4:0x0+0x200]
                 Name: "._a.png"  [#4:0x0+0x64]

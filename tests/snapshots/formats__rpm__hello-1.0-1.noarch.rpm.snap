@@ -147,7 +147,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Trailer  [0x2e7+0x8]
         CRC32: 0xf5eec738  [0x2e7+0x4]
         ISIZE: 280  [0x2eb+0x4]
-    ▾ Content — cpio archive (SVR4 newc), 1 entry, 15 bytes  [0x277+0x70]
+    ▾ Content — cpio archive (SVR4 newc), 1 entry, 15 bytes  [0x277+0x78]
       ▾ ./usr/share/doc/hello/README — 15 bytes  [#1:0x0+0x9c]
         ▾ Header  [#1:0x0+0x6e]
             Magic: "070701"  [#1:0x0+0x6]

@@ -20,6 +20,7 @@ pub mod crc;
 pub mod crypto;
 pub mod dwg;
 pub mod filters;
+pub mod gzip;
 pub mod heatshrink;
 pub mod implode;
 pub mod inflate;
@@ -79,6 +80,10 @@ pub enum Codec {
     Deflate,
     /// zlib-wrapped DEFLATE (RFC 1950), with its Adler-32 checked.
     Zlib,
+    /// gzip members (RFC 1952) from the first member's DEFLATE data on (its
+    /// header already read), then any further members; each member's CRC-32
+    /// and size are checked (see [`gzip`]).
+    Gzip,
     /// Hex digit pairs (PDF `ASCIIHexDecode`).
     AsciiHex,
     /// Base-85 (PDF/PostScript `ASCII85Decode`).
@@ -279,6 +284,7 @@ impl Codec {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate",
             Codec::Zlib => "zlib",
+            Codec::Gzip => "gzip",
             Codec::ZipCrypto(_) => "zipcrypto",
             Codec::AesCtrLe(_) => "aes-ctr",
             Codec::Rc4(_) => "rc4",
@@ -351,6 +357,7 @@ impl Codec {
             Codec::Stored => "stored",
             Codec::Deflate => "deflate (lazy)",
             Codec::Zlib => "zlib (lazy)",
+            Codec::Gzip => "gzip (lazy)",
             Codec::ZipCrypto(_) => "zipcrypto (lazy)",
             Codec::AesCtrLe(_) => "aes-ctr (lazy)",
             Codec::Rc4(_) => "rc4 (lazy)",
@@ -421,7 +428,7 @@ impl Codec {
     pub fn verb(&self) -> &'static str {
         match self {
             Codec::Stored => "stored",
-            Codec::Deflate | Codec::Zlib => "decompressed",
+            Codec::Deflate | Codec::Zlib | Codec::Gzip => "decompressed",
             Codec::ZipCrypto(_)
             | Codec::AesCtrLe(_)
             | Codec::Rc4(_)
@@ -549,7 +556,7 @@ impl Codec {
             // A copy of 16 MiB costs a few bits.
             Codec::Brotli => 1 << 20,
             Codec::Lzw { .. } => 4096,
-            Codec::Deflate | Codec::Zlib => 1032,
+            Codec::Deflate | Codec::Zlib | Codec::Gzip => 1032,
             // A 259-byte match costs a handful of bits; a solid member's
             // output is unrelated to the bytes before it, so no bound.
             Codec::Ace(p) if p.members.len() > 1 => u64::MAX,
@@ -580,6 +587,7 @@ impl Codec {
             Codec::Stored => return None,
             Codec::Deflate => Box::new(Streaming(inflate::Inflate::new())),
             Codec::Zlib => Box::new(Streaming(Zlib::default())),
+            Codec::Gzip => Box::new(Streaming(gzip::Gzip::default())),
             Codec::AsciiHex => {
                 Box::new(Streaming(filters::Bytes::new(filters::AsciiHex::default())))
             }

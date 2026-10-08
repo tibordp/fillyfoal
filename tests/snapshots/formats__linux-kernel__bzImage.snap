@@ -52,5 +52,5 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Trailer  [0xa28+0x8]
         CRC32: 0x0  [0xa28+0x4]
         ISIZE: 0  [0xa2c+0x4]
-    ▾ Content — 0xe compressed bytes  [0xa1a+0xe]
-        ! malformed: deflate: stored block length check failed [0xa1a+0xe]
+    ▾ Content — 0xe compressed bytes  [0xa1a+0x16]
+        ! malformed: deflate: stored block length check failed [0xa1a+0x16]

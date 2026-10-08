@@ -66,8 +66,8 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Trailer  [#1:0x1f8+0x8]
         CRC32: 0x0  [#1:0x1f8+0x4]
         ISIZE: 0  [#1:0x1fc+0x4]
-    ▾ Content — UTF-8 text, LF line endings, 4 lines  [#1:0xa+0x1ee]
-        ! warning: decoded 0x50 bytes, expected 0x0
+    ▾ Content — UTF-8 text, LF line endings, 4 lines  [#1:0xa+0x1f6]
+        ! note: 0x1d5 bytes follow the encoded stream
         Encoding: "UTF-8"
         Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
       ▾ Lines — 4 lines  [#2:0x0+0x50]

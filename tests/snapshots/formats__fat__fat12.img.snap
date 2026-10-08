@@ -242,7 +242,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Trailer  [#1:0x739+0x8]
             CRC32: 0x36f8c423  [#1:0x739+0x4]
             ISIZE: 1824  [#1:0x73d+0x4]
-        ▾ Content — 0x720 bytes decompressed  [#1:0x14+0x725]
+        ▾ Content — 0x720 bytes decompressed  [#1:0x14+0x72d]
             Data  [#2:0x0+0x720]
     ▾ (deleted) ?ONE.TXT — deleted entry  [0x740+0x20]
         Short name: "åONE.TXT"  [0x740+0xb]

@@ -159,7 +159,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Trailer  [0x395+0x8]
               CRC32: 0xd5e9b72  [0x395+0x4]
               ISIZE: 400  [0x399+0x4]
-          ▾ Content — 0x190 bytes decompressed  [0x38d+0x8]
+          ▾ Content — 0x190 bytes decompressed  [0x38d+0x10]
               Data  [#3:0x0+0x190]
           CRC32: 0x7184ca28  [0x39d+0x4]
       ▾ Block 6 — EXTERNAL_DATA (content 37), bzip2, 68 → 16000 bytes  [0x3a1+0x4e]
@@ -206,7 +206,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Trailer  [0x406+0x8]
               CRC32: 0x5e7ae326  [0x406+0x4]
               ISIZE: 400  [0x40a+0x4]
-          ▾ Content — UTF-8 text, 1 line  [0x3ff+0x7]
+          ▾ Content — UTF-8 text, 1 line  [0x3ff+0xf]
               Encoding: "UTF-8"
               Line endings: "none" — 0 LF, 0 CRLF, 0 CR
             ▾ Lines — 1 line  [#5:0x0+0x190]

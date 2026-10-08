@@ -27,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Trailer  [0x5e+0x8]
         CRC32: 0xbcf2d464  [0x5e+0x4]
         ISIZE: 150  [0x62+0x4]
-    ▾ Content — UTF-8 text, LF line endings, 10 lines  [0x4a+0x14]
+    ▾ Content — UTF-8 text, LF line endings, 10 lines  [0x4a+0x1c]
         Encoding: "UTF-8"
         Line endings: "LF" — 10 LF, 0 CRLF, 0 CR
       ▾ Lines — 10 lines  [#1:0x0+0x96]
