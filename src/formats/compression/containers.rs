@@ -120,8 +120,32 @@ async fn apple_archive(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub LZFSE = "lzfse", "LZFSE compressed data", ["lzfse"], "application/x-lzfse",
     Probe::Magic(&[(0, b"bvx2"), (0, b"bvx1"), (0, b"bvxn"), (0, b"bvx-")]), lzfse);
 
+/// Block-framed files up to this size are walked to total their blocks
+/// before the "Decompressed" node, which then records the exact size. In a
+/// larger file that walk would read all of it (and page through every
+/// block node) before the content could be opened, so the node comes first
+/// and decodes on demand, its size found at the end.
+const WALK_LIMIT: u64 = 1024 * 1024;
+
+/// The "Decompressed" node of a large block-framed file, emitted before its
+/// blocks are walked (see [`WALK_LIMIT`]).
+fn early_content(cx: &Cx, input: Input, codec: crate::codec::Codec) -> bool {
+    let early = input.span.len > WALK_LIMIT;
+    if early {
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            input.span,
+            codec,
+            None,
+        ));
+    }
+    early
+}
+
 async fn lzfse(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    let early = early_content(&cx, input, crate::codec::Codec::Lzfse);
     let mut cur = Cursor::new(&cx, file, LE);
     let mut blocks = 0u32;
     let mut total = 0u64;
@@ -193,13 +217,15 @@ async fn lzfse(cx: Cx, input: Input) -> Result<()> {
         cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(node).await;
     }
-    cx.emit(crate::formats::content(
-        "Decompressed",
-        input,
-        file,
-        crate::codec::Codec::Lzfse,
-        Some(total),
-    ));
+    if !early {
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            file,
+            crate::codec::Codec::Lzfse,
+            Some(total),
+        ));
+    }
     cx.annotate(format!(
         "LZFSE, {blocks} block(s), {total} bytes uncompressed"
     ));
@@ -225,6 +251,7 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(0, 12))
             .summary(format!("{algorithm}, chunk size {chunk_size:#x}")),
     );
+    let early = early_content(&cx, input, crate::codec::Codec::Pbz);
     let mut chunks = 0u32;
     let mut total = 0u64;
     let mut any_compressed = false;
@@ -253,7 +280,7 @@ async fn pbzx(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    if any_compressed {
+    if any_compressed && !early {
         cx.emit(crate::formats::content(
             "Decompressed",
             input,
@@ -349,6 +376,9 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
         f.bytes("Extra field", len.into()).emit()?;
         f.u32("Extra field checksum").hex().emit()?;
     }
+    let early = matches!(parsed.method, 1..=3)
+        && flags & lzo::F_H_FILTER == 0
+        && early_content(&cx, input, crate::codec::Codec::Lzop);
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(u64::try_from(parsed.len).unwrap_or(u64::MAX));
     let mut blocks = 0u32;
@@ -407,7 +437,7 @@ async fn lzop(cx: Cx, input: Input) -> Result<()> {
                 .span(file)
                 .diag(Diagnostic::unsupported("lzop filters")),
         );
-    } else {
+    } else if !early {
         cx.emit(crate::formats::content(
             "Decompressed",
             input,
@@ -439,6 +469,7 @@ declare_format!(pub LZF = "lzf", "LZF compressed data", ["lzf"], "application/x-
 /// alone or stored.
 async fn lzf(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    let early = early_content(&cx, input, crate::codec::Codec::LzfFramed);
     let mut cur = Cursor::new(&cx, file, BE);
     let mut blocks = 0u32;
     let mut total = 0u64;
@@ -465,13 +496,15 @@ async fn lzf(cx: Cx, input: Input) -> Result<()> {
         )
         .await;
     }
-    cx.emit(crate::formats::content(
-        "Decompressed",
-        input,
-        file,
-        crate::codec::Codec::LzfFramed,
-        Some(total),
-    ));
+    if !early {
+        cx.emit(crate::formats::content(
+            "Decompressed",
+            input,
+            file,
+            crate::codec::Codec::LzfFramed,
+            Some(total),
+        ));
+    }
     cx.annotate(format!(
         "LZF, {blocks} block(s), {total} bytes uncompressed"
     ));

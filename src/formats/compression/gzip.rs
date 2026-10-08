@@ -136,8 +136,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         summary = format!("{summary}, {size} bytes uncompressed");
     }
     cx.annotate(summary);
+    // ISIZE is the size modulo 2^32 (and only the last member's, if
+    // several are concatenated). A body that could decode to 4 GiB or more
+    // (DEFLATE expands at most 1032:1) may have wrapped it, so then the
+    // content is decoded on demand and its size found at the end, rather
+    // than cut off at a wrong length.
+    let expected = size
+        .map(u64::from)
+        .filter(|_| body.len.saturating_mul(Codec::Deflate.max_ratio()) < 1 << 32);
     cx.emit(
-        content("Content", input, body, Codec::Deflate, size.map(u64::from))
+        content("Content", input, body, Codec::Deflate, expected)
             .summary(format!("{:#x} compressed bytes", body.len)),
     );
     Ok(())

@@ -383,3 +383,42 @@ fn unsized_streams_are_decoded_on_demand() {
     assert!(host.session.source_len_known(source));
     assert_eq!(host.session.source_len(source), tar.len() as u64);
 }
+
+/// gzip's ISIZE is the size modulo 2^32: a body that could decode to 4 GiB
+/// or more is decoded on demand with its size found at the end, not cut off
+/// at a length that may have wrapped.
+#[test]
+fn gzip_size_is_trusted_only_when_it_cannot_have_wrapped() {
+    let payload: Vec<u8> = (0..(5u32 << 20))
+        .map(|i| (i * 7 + (i >> 9)) as u8)
+        .collect();
+    // Stored DEFLATE blocks.
+    let mut gz = vec![0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 0xff];
+    let chunks: Vec<&[u8]> = payload.chunks(65_535).collect();
+    for (i, chunk) in chunks.iter().enumerate() {
+        gz.push(u8::from(i + 1 == chunks.len()));
+        gz.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
+        gz.extend_from_slice(&(!(chunk.len() as u16)).to_le_bytes());
+        gz.extend_from_slice(chunk);
+    }
+    gz.extend_from_slice(&0u32.to_le_bytes()); // CRC (not checked here)
+    gz.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    let mut host = Host::named("big.gz", gz, Limits::default());
+    host.explore(host.root, 1, 100);
+    let content = host.child(host.root, "Content").unwrap();
+    host.session.expand(content, 1);
+    host.run();
+    let first = host.session.children(content).unwrap().ids[0];
+    let source = host.session.node(first).unwrap().span.unwrap().source;
+    assert!(!host.session.source_len_known(source));
+    let tail = Span::new(source, payload.len() as u64 - 16, 1 << 20);
+    let data = loop {
+        match host.session.read_step(tail, 100_000) {
+            ReadProgress::Done(data) => break data,
+            ReadProgress::NeedBytes(r) => supply(&mut host, r),
+            ReadProgress::Yielded => {}
+        }
+    };
+    assert_eq!(data, payload[payload.len() - 16..]);
+    assert_eq!(host.session.source_len(source), payload.len() as u64);
+}
