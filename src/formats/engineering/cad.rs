@@ -11,6 +11,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
+use crate::formats::util::pace::{Resumable, position_paced, run_paced};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -42,6 +43,11 @@ impl<'a> Statements<'a> {
             buf: Vec::new(),
             buf_at: 0,
         }
+    }
+
+    /// Where the next statement starts, relative to the region.
+    fn pos(&self) -> u64 {
+        self.pos
     }
 
     /// The next statement (trimmed text, span without leading whitespace).
@@ -213,6 +219,7 @@ async fn step(cx: Cx, input: Input) -> Result<()> {
     let mut kinds: Vec<(String, u64)> = Vec::new();
     let mut products: Vec<String> = Vec::new();
     while let Some((t, span)) = st.next().await? {
+        cx.progress_in(file, file.offset.saturating_add(st.pos()));
         let upper = t.to_ascii_uppercase();
         match upper.as_str() {
             "ISO-10303-21;" | "END-ISO-10303-21;" => {
@@ -346,6 +353,7 @@ async fn step_kinds(cx: Cx, kinds: Vec<(String, u64)>) -> Result<()> {
 async fn step_entities(cx: Cx, span: Span) -> Result<()> {
     let mut st = Statements::new(&cx, span);
     while let Some((t, s)) = st.next().await? {
+        cx.progress_in(span, span.offset.saturating_add(st.pos()));
         if t.eq_ignore_ascii_case("ENDSEC;") {
             break;
         }
@@ -976,116 +984,217 @@ fn openfoam_probe(h: &Head<'_>) -> bool {
 declare_format!(pub OPENFOAM = "openfoam", "OpenFOAM dictionary/field file", ["foam"], "text/x-openfoam",
     Probe::Custom(openfoam_probe), openfoam);
 
-/// Removes // and /* */ comments, keeping offsets (comments become spaces).
-fn strip_comments(data: &[u8]) -> Vec<u8> {
-    let mut out = data.to_vec();
-    let mut i = 0usize;
-    let mut in_str = false;
-    while i < out.len() {
-        let c = out.get(i).copied().unwrap_or(0);
-        let n = out.get(i.saturating_add(1)).copied().unwrap_or(0);
-        if c == b'"' {
-            in_str = !in_str;
-        } else if !in_str && c == b'/' && n == b'/' {
-            while out.get(i).is_some_and(|&b| b != b'\n') {
-                if let Some(b) = out.get_mut(i) {
-                    *b = b' ';
-                }
-                i = i.saturating_add(1);
-            }
-            continue;
-        } else if !in_str && c == b'/' && n == b'*' {
-            while i < out.len()
-                && !(out.get(i) == Some(&b'*') && out.get(i.saturating_add(1)) == Some(&b'/'))
-            {
-                if let Some(b) = out.get_mut(i)
-                    && *b != b'\n'
-                {
-                    *b = b' ';
-                }
-                i = i.saturating_add(1);
-            }
-            for _ in 0..2 {
-                if let Some(b) = out.get_mut(i) {
-                    *b = b' ';
-                }
-                i = i.saturating_add(1);
-            }
-            continue;
-        }
-        i = i.saturating_add(1);
-    }
-    out
+/// Where [`StripComments`] is: in code (or a string), or in a comment.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum CommentMode {
+    Code,
+    Line,
+    Block,
 }
 
-/// Top-level entries of a dictionary body: (keyword, value or None for a sub-dictionary, start, end).
-fn foam_entries(data: &[u8]) -> Vec<(String, Option<String>, usize, usize)> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    while i < data.len() && out.len() < 100_000 {
-        while data.get(i).is_some_and(u8::is_ascii_whitespace) {
-            i = i.saturating_add(1);
-        }
-        if i >= data.len() {
-            break;
-        }
-        let start = i;
-        while data
-            .get(i)
-            .is_some_and(|b| !b.is_ascii_whitespace() && *b != b'{' && *b != b';')
-        {
-            i = i.saturating_add(1);
-        }
-        let key = String::from_utf8_lossy(data.get(start..i).unwrap_or_default()).into_owned();
-        while data.get(i).is_some_and(u8::is_ascii_whitespace) {
-            i = i.saturating_add(1);
-        }
-        if data.get(i) == Some(&b'{') {
-            let mut depth = 0u32;
-            while let Some(&c) = data.get(i) {
-                if c == b'{' {
-                    depth = depth.saturating_add(1);
-                } else if c == b'}' {
-                    depth = depth.saturating_sub(1);
-                    if depth == 0 {
-                        break;
-                    }
-                }
-                i = i.saturating_add(1);
-            }
-            i = i.saturating_add(1).min(data.len());
-            out.push((key, None, start, i));
-        } else {
-            // A value runs to ';' outside parentheses (lists may be long).
-            let vstart = i;
-            let mut depth = 0u32;
-            while let Some(&c) = data.get(i) {
-                match c {
-                    b'(' => depth = depth.saturating_add(1),
-                    b')' => depth = depth.saturating_sub(1),
-                    b';' if depth == 0 => break,
-                    _ => {}
-                }
-                i = i.saturating_add(1);
-            }
-            let value = String::from_utf8_lossy(data.get(vstart..i).unwrap_or_default())
-                .trim()
-                .to_owned();
-            i = i.saturating_add(1).min(data.len());
-            if key.is_empty() {
-                break;
-            }
-            out.push((key, Some(value), start, i));
+/// Removes // and /* */ comments, keeping offsets (comments become spaces).
+struct StripComments {
+    out: Vec<u8>,
+    i: usize,
+    in_str: bool,
+    mode: CommentMode,
+}
+
+impl StripComments {
+    fn new(data: &[u8]) -> Self {
+        StripComments {
+            out: data.to_vec(),
+            i: 0,
+            in_str: false,
+            mode: CommentMode::Code,
         }
     }
-    out
+}
+
+impl Resumable for StripComments {
+    type Output = Vec<u8>;
+
+    fn step(&mut self, budget: u64) -> bool {
+        let mut left = budget;
+        while left > 0 {
+            left = left.saturating_sub(1);
+            let i = self.i;
+            let Some(c) = self.out.get(i).copied() else {
+                return true;
+            };
+            match self.mode {
+                CommentMode::Code => {
+                    let n = self.out.get(i.saturating_add(1)).copied().unwrap_or(0);
+                    if c == b'"' {
+                        self.in_str = !self.in_str;
+                    } else if !self.in_str && c == b'/' && n == b'/' {
+                        self.mode = CommentMode::Line;
+                        continue;
+                    } else if !self.in_str && c == b'/' && n == b'*' {
+                        self.mode = CommentMode::Block;
+                        continue;
+                    }
+                    self.i = i.saturating_add(1);
+                }
+                CommentMode::Line => {
+                    if c == b'\n' {
+                        self.mode = CommentMode::Code;
+                        continue;
+                    }
+                    if let Some(b) = self.out.get_mut(i) {
+                        *b = b' ';
+                    }
+                    self.i = i.saturating_add(1);
+                }
+                CommentMode::Block => {
+                    if c == b'*' && self.out.get(i.saturating_add(1)) == Some(&b'/') {
+                        for b in self.out.get_mut(i..i.saturating_add(2)).unwrap_or_default() {
+                            *b = b' ';
+                        }
+                        self.i = i.saturating_add(2);
+                        self.mode = CommentMode::Code;
+                        continue;
+                    }
+                    if c != b'\n'
+                        && let Some(b) = self.out.get_mut(i)
+                    {
+                        *b = b' ';
+                    }
+                    self.i = i.saturating_add(1);
+                }
+            }
+        }
+        self.i >= self.out.len()
+    }
+
+    fn finish(self) -> Vec<u8> {
+        self.out
+    }
+}
+
+/// One top-level dictionary entry: keyword, value (None for a
+/// sub-dictionary), start and end offsets.
+type FoamEntry = (String, Option<String>, usize, usize);
+
+/// Where [`FoamEntries`] is within an entry. Offsets: entry start, keyword
+/// end, value start; then the depth of braces or parentheses.
+#[derive(Clone, Copy)]
+enum FoamState {
+    Gap,
+    Key(usize),
+    AfterKey(usize, usize),
+    Dict(usize, usize, u32),
+    Value(usize, usize, usize, u32),
+    Done,
+}
+
+/// Top-level entries of a dictionary body, split in bounded steps.
+struct FoamEntries<'a> {
+    data: &'a [u8],
+    i: usize,
+    state: FoamState,
+    out: Vec<FoamEntry>,
+}
+
+impl<'a> FoamEntries<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        FoamEntries {
+            data,
+            i: 0,
+            state: FoamState::Gap,
+            out: Vec::new(),
+        }
+    }
+
+    fn key(&self, start: usize, end: usize) -> String {
+        String::from_utf8_lossy(self.data.get(start..end).unwrap_or_default()).into_owned()
+    }
+}
+
+impl Resumable for FoamEntries<'_> {
+    type Output = Vec<FoamEntry>;
+
+    fn step(&mut self, budget: u64) -> bool {
+        let data = self.data;
+        let mut left = budget;
+        while left > 0 {
+            left = left.saturating_sub(1);
+            let i = self.i;
+            let c = data.get(i).copied();
+            match self.state {
+                FoamState::Done => return true,
+                FoamState::Gap => match c {
+                    None => self.state = FoamState::Done,
+                    Some(_) if self.out.len() >= 100_000 => self.state = FoamState::Done,
+                    Some(c) if c.is_ascii_whitespace() => self.i = i.saturating_add(1),
+                    Some(_) => self.state = FoamState::Key(i),
+                },
+                FoamState::Key(start) => match c {
+                    Some(c) if !c.is_ascii_whitespace() && c != b'{' && c != b';' => {
+                        self.i = i.saturating_add(1);
+                    }
+                    _ => self.state = FoamState::AfterKey(start, i),
+                },
+                FoamState::AfterKey(start, key_end) => match c {
+                    Some(c) if c.is_ascii_whitespace() => self.i = i.saturating_add(1),
+                    Some(b'{') => self.state = FoamState::Dict(start, key_end, 0),
+                    _ => self.state = FoamState::Value(start, key_end, i, 0),
+                },
+                FoamState::Dict(start, key_end, depth) => {
+                    let depth = match c {
+                        Some(b'{') => depth.saturating_add(1),
+                        Some(b'}') => depth.saturating_sub(1),
+                        _ => depth,
+                    };
+                    if c.is_none() || (c == Some(b'}') && depth == 0) {
+                        self.i = i.saturating_add(1).min(data.len());
+                        let key = self.key(start, key_end);
+                        self.out.push((key, None, start, self.i));
+                        self.state = FoamState::Gap;
+                    } else {
+                        self.i = i.saturating_add(1);
+                        self.state = FoamState::Dict(start, key_end, depth);
+                    }
+                }
+                FoamState::Value(start, key_end, vstart, depth) => {
+                    // A value runs to ';' outside parentheses (lists may be long).
+                    let depth = match c {
+                        Some(b'(') => depth.saturating_add(1),
+                        Some(b')') => depth.saturating_sub(1),
+                        _ => depth,
+                    };
+                    if c.is_none() || (c == Some(b';') && depth == 0) {
+                        let raw = data.get(vstart..i).unwrap_or_default();
+                        left = left.saturating_sub(to_u64(raw.len()));
+                        self.i = i.saturating_add(1).min(data.len());
+                        if key_end == start {
+                            self.state = FoamState::Done;
+                        } else {
+                            let value = String::from_utf8_lossy(raw).trim().to_owned();
+                            let key = self.key(start, key_end);
+                            self.out.push((key, Some(value), start, self.i));
+                            self.state = FoamState::Gap;
+                        }
+                    } else {
+                        self.i = i.saturating_add(1);
+                        self.state = FoamState::Value(start, key_end, vstart, depth);
+                    }
+                }
+            }
+        }
+        matches!(self.state, FoamState::Done)
+    }
+
+    fn finish(self) -> Vec<FoamEntry> {
+        self.out
+    }
 }
 
 async fn openfoam(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let raw = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let data = strip_comments(&raw);
-    let entries = foam_entries(&data);
+    let data = run_paced(&cx, StripComments::new(&raw)).await;
+    let entries = run_paced(&cx, FoamEntries::new(&data)).await;
     let mut class = String::new();
     let mut object = String::new();
     let mut format = String::new();
@@ -1093,12 +1202,13 @@ async fn openfoam(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(to_u64(*start), to_u64(end.saturating_sub(*start)));
         if key == "FoamFile" {
             let inner = data.get(start.saturating_add(8)..*end).unwrap_or_default();
-            let body = inner.iter().position(|&b| b == b'{').map_or(inner, |p| {
-                inner
+            let body = match position_paced(&cx, inner, 0, |b| b == b'{').await {
+                Some(p) => inner
                     .get(p.saturating_add(1)..inner.len().saturating_sub(1))
-                    .unwrap_or_default()
-            });
-            for (k, v, _, _) in foam_entries(body) {
+                    .unwrap_or_default(),
+                None => inner,
+            };
+            for (k, v, _, _) in run_paced(&cx, FoamEntries::new(body)).await {
                 match k.as_str() {
                     "class" => class = v.clone().unwrap_or_default(),
                     "object" => object = v.clone().unwrap_or_default(),
@@ -1126,16 +1236,15 @@ async fn foam_dict(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
         return Err(Diagnostic::limit("dictionaries nested too deeply"));
     }
     let raw = cx.read_avail(span.sub(0, cx.limits().max_read)).await?;
-    let data = strip_comments(&raw);
-    let open = data
-        .iter()
-        .position(|&b| b == b'{')
+    let data = run_paced(&cx, StripComments::new(&raw)).await;
+    let open = position_paced(&cx, &data, 0, |b| b == b'{')
+        .await
         .unwrap_or(0)
         .saturating_add(1);
     let body = data
         .get(open..data.len().saturating_sub(1))
         .unwrap_or_default();
-    for (key, value, start, end) in foam_entries(body) {
+    for (key, value, start, end) in run_paced(&cx, FoamEntries::new(body)).await {
         let s = span.sub(
             to_u64(open.saturating_add(start)),
             to_u64(end.saturating_sub(start)),
@@ -1241,6 +1350,7 @@ async fn keyword_deck(cx: Cx, input: Input) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::formats::util::pace::run_all;
 
     #[test]
     fn step_strings_decode() {
@@ -1259,14 +1369,14 @@ mod tests {
 
     #[test]
     fn foam_entries_split() {
-        let e = foam_entries(b"a 1; b { c 2; } d (1 2 3);");
+        let e = run_all(FoamEntries::new(b"a 1; b { c 2; } d (1 2 3);"));
         assert_eq!(
             e.iter().map(|x| x.0.as_str()).collect::<Vec<_>>(),
             vec!["a", "b", "d"]
         );
         assert!(e.get(1).is_some_and(|x| x.1.is_none()));
         assert_eq!(
-            strip_comments(b"a // x\nb /* y */ c"),
+            run_all(StripComments::new(b"a // x\nb /* y */ c")),
             b"a     \nb         c".to_vec()
         );
     }

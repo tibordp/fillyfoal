@@ -9,6 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::pace::Pace;
 use crate::formats::util::wire::flatbuffers::mem::{self as fb, Table as FbTable};
 use crate::formats::util::wire::protobuf::{self as pb, varint, zigzag};
 use crate::formats::{Head, Input, Probe, embedded};
@@ -16,6 +17,7 @@ use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
+use std::sync::Arc;
 
 const LE: Endian = Endian::Little;
 
@@ -159,8 +161,14 @@ async fn pmtiles(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// Decodes a directory: entries of (tile ID, offset, length, run length).
-fn decode_directory(data: &[u8]) -> Option<Vec<(u64, u64, u64, u64)>> {
+/// Varints (and other small items) decoded per unit of work.
+const ITEMS_PER_UNIT: u64 = 256;
+
+/// A directory entry: tile ID, offset, length, run length.
+type DirEntry = (u64, u64, u64, u64);
+
+/// Decodes a directory, charging its varints to `pace`.
+async fn decode_directory(pace: &mut Pace<'_>, data: &[u8]) -> Option<Vec<DirEntry>> {
     let mut at = 0usize;
     let n = to_usize(varint(data, &mut at)?);
     // Every entry takes at least four bytes.
@@ -172,18 +180,22 @@ fn decode_directory(data: &[u8]) -> Option<Vec<(u64, u64, u64, u64)>> {
     for _ in 0..n {
         last = last.checked_add(varint(data, &mut at)?)?;
         ids.push(last);
+        pace.step().await;
     }
     let mut runs = Vec::with_capacity(n);
     for _ in 0..n {
         runs.push(varint(data, &mut at)?);
+        pace.step().await;
     }
     let mut lens = Vec::with_capacity(n);
     for _ in 0..n {
         lens.push(varint(data, &mut at)?);
+        pace.step().await;
     }
     let mut out = Vec::with_capacity(n);
     let (mut prev_off, mut prev_len) = (0u64, 0u64);
     for i in 0..n {
+        pace.step().await;
         let v = varint(data, &mut at)?;
         let len = *lens.get(i)?;
         let off = if v == 0 && i > 0 {
@@ -197,7 +209,8 @@ fn decode_directory(data: &[u8]) -> Option<Vec<(u64, u64, u64, u64)>> {
     Some(out)
 }
 
-async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<()> {
+/// Reads, decompresses and decodes a directory.
+async fn directory_entries(cx: &Cx, state: &PmState, dir: Span) -> Result<Vec<DirEntry>> {
     if dir.len > MAX_BLOB {
         return Err(Diagnostic::limit("directory too large").at(dir));
     }
@@ -220,7 +233,7 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
                 4 => (dir, Codec::Zstd),
                 _ => return Err(Diagnostic::unsupported("directory compression").at(dir)),
             };
-            let decoded = crate::codec::decode_span(&cx, span, &codec, None).await?;
+            let decoded = crate::codec::decode_span(cx, span, &codec, None).await?;
             if let Some(e) = decoded.error {
                 return Err(e);
             }
@@ -230,10 +243,23 @@ async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<
             cx.read(decoded.span).await?
         }
     };
-    let entries = decode_directory(&data)
-        .ok_or_else(|| Diagnostic::malformed("malformed directory").at(dir))?;
+    decode_directory(&mut Pace::new(cx, ITEMS_PER_UNIT), &data)
+        .await
+        .ok_or_else(|| Diagnostic::malformed("malformed directory").at(dir))
+}
+
+async fn directory(cx: Cx, (state, dir, path): (PmState, Span, Path)) -> Result<()> {
+    // Decoded once: paging through a large directory re-runs this expansion.
+    let entries = match cx.cached::<Vec<DirEntry>>(dir, "pmtiles-directory") {
+        Some(entries) => entries,
+        None => {
+            let entries = Arc::new(directory_entries(&cx, &state, dir).await?);
+            cx.cache(dir, "pmtiles-directory", entries.clone());
+            entries
+        }
+    };
     cx.set_count(crate::node::Count::Exact(to_u64(entries.len())));
-    for (i, (id, off, len, run)) in entries.into_iter().enumerate() {
+    for (i, &(id, off, len, run)) in entries.iter().enumerate() {
         if run == 0 {
             let span = state.leaves.sub(off, len);
             let node = match path.enter(to_u64(i).saturating_add(dir.offset), 4) {
@@ -697,6 +723,7 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::limit("tile too large").at(file));
     }
     let data = cx.read(file).await?;
+    let mut pace = Pace::new(&cx, ITEMS_PER_UNIT);
     let mut at = 0usize;
     let mut names = Vec::new();
     while at < data.len() {
@@ -710,7 +737,9 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
                 .await;
             continue;
         }
-        let layer = pb::all_fields(f.payload(&data)).unwrap_or_default();
+        let layer = all_fields_paced(&mut pace, f.payload(&data))
+            .await
+            .unwrap_or_default();
         let payload = f.payload(&data);
         let name = layer
             .iter()
@@ -735,9 +764,29 @@ async fn mvt(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// [`pb::all_fields`], charging the fields to `pace`.
+async fn all_fields_paced(pace: &mut Pace<'_>, data: &[u8]) -> Option<Vec<pb::Field>> {
+    let mut at = 0usize;
+    let mut out = Vec::new();
+    while at < data.len() {
+        out.push(pb::field(data, &mut at)?);
+        pace.step().await;
+    }
+    Some(out)
+}
+
+/// Charges copying or converting `n` bytes: one item per 16 bytes.
+async fn charge_bytes(pace: &mut Pace<'_>, n: usize) {
+    pace.add(to_u64(n) / 16).await;
+}
+
 /// A tile value message as a value.
-fn mvt_value(v: &[u8]) -> Value {
-    let Some(f) = pb::all_fields(v).and_then(|f| f.into_iter().next()) else {
+async fn mvt_value(pace: &mut Pace<'_>, v: &[u8]) -> Value {
+    charge_bytes(pace, v.len()).await;
+    let Some(f) = all_fields_paced(pace, v)
+        .await
+        .and_then(|f| f.into_iter().next())
+    else {
         return Value::Bytes(v.to_vec());
     };
     match (f.number, f.wire) {
@@ -758,23 +807,25 @@ fn mvt_value(v: &[u8]) -> Value {
     }
 }
 
-/// Packed varints.
-fn packed(data: &[u8]) -> Vec<u64> {
+/// Packed varints (at most `max`), charged to `pace`.
+async fn packed(pace: &mut Pace<'_>, data: &[u8], max: usize) -> Vec<u64> {
     let mut at = 0usize;
     let mut out = Vec::new();
-    while at < data.len() {
+    while at < data.len() && out.len() < max {
         let Some(v) = varint(data, &mut at) else {
             break;
         };
         out.push(v);
+        pace.step().await;
     }
     out
 }
 
 /// Summarises geometry commands: command count and points.
-fn geometry_summary(cmds: &[u64]) -> String {
+async fn geometry_summary(pace: &mut Pace<'_>, cmds: &[u64]) -> String {
     let (mut i, mut ops, mut points) = (0usize, 0u64, 0u64);
     while let Some(&c) = cmds.get(i) {
+        pace.step().await;
         let (id, count) = (c & 7, c >> 3);
         ops = ops.saturating_add(1);
         let params = if matches!(id, 1 | 2) {
@@ -790,26 +841,61 @@ fn geometry_summary(cmds: &[u64]) -> String {
     format!("{ops} commands, {points} points")
 }
 
+/// A layer's fields and its tables of keys and values.
+struct MvtLayer {
+    fields: Vec<pb::Field>,
+    keys: Vec<String>,
+    values: Vec<Value>,
+}
+
+async fn parse_layer(pace: &mut Pace<'_>, data: &[u8], body: Span) -> Result<MvtLayer> {
+    let fields = all_fields_paced(pace, data)
+        .await
+        .ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
+    let mut keys = Vec::new();
+    let mut values = Vec::new();
+    for f in &fields {
+        match f.number {
+            3 => {
+                charge_bytes(pace, f.value_len()).await;
+                keys.push(String::from_utf8_lossy(f.payload(data)).into_owned());
+            }
+            4 => values.push(mvt_value(pace, f.payload(data)).await),
+            _ => {}
+        }
+    }
+    Ok(MvtLayer {
+        fields,
+        keys,
+        values,
+    })
+}
+
 async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
     let data = cx.read(body).await?;
-    let fields =
-        pb::all_fields(&data).ok_or_else(|| Diagnostic::malformed("bad layer").at(body))?;
-    let keys: Vec<String> = fields
-        .iter()
-        .filter(|f| f.number == 3)
-        .map(|f| String::from_utf8_lossy(f.payload(&data)).into_owned())
-        .collect();
-    let values: Vec<Value> = fields
-        .iter()
-        .filter(|f| f.number == 4)
-        .map(|f| mvt_value(f.payload(&data)))
-        .collect();
+    let mut pace = Pace::new(&cx, ITEMS_PER_UNIT);
+    // Parsed once: paging through a large layer re-runs this expansion.
+    let layer = match cx.cached::<MvtLayer>(body, "mvt-layer") {
+        Some(layer) => layer,
+        None => {
+            let layer = Arc::new(parse_layer(&mut pace, &data, body).await?);
+            cx.cache(body, "mvt-layer", layer.clone());
+            layer
+        }
+    };
+    let MvtLayer {
+        fields,
+        keys,
+        values,
+    } = &*layer;
     let mut index = 0u64;
-    for f in &fields {
+    let (mut key, mut value) = (0usize, 0usize);
+    for f in fields {
         let span = body.sub(to_u64(f.start), to_u64(f.end.saturating_sub(f.start)));
         match f.number {
             15 => cx.push(leaf("Version", span, uint(f.value, 32))).await,
             1 => {
+                charge_bytes(&mut pace, f.value_len()).await;
                 cx.push(leaf(
                     "Name",
                     span,
@@ -819,20 +905,23 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
             }
             5 => cx.push(leaf("Extent", span, uint(f.value, 32))).await,
             3 => {
-                cx.push(leaf(
-                    "Key",
-                    span,
-                    text(String::from_utf8_lossy(f.payload(&data))),
-                ))
-                .await
+                let k = keys.get(key).cloned().unwrap_or_default();
+                key = key.saturating_add(1);
+                cx.push(leaf("Key", span, text(k))).await
             }
             4 => {
-                cx.push(leaf("Value", span, mvt_value(f.payload(&data))))
-                    .await
+                let v = values
+                    .get(value)
+                    .cloned()
+                    .unwrap_or(Value::Bytes(Vec::new()));
+                value = value.saturating_add(1);
+                cx.push(leaf("Value", span, v)).await
             }
             2 => {
-                let feat = pb::all_fields(f.payload(&data)).unwrap_or_default();
                 let payload = f.payload(&data);
+                let feat = all_fields_paced(&mut pace, payload)
+                    .await
+                    .unwrap_or_default();
                 let mut node = Node::new(format!("Feature {index}")).span(span);
                 let mut parts = Vec::new();
                 for g in &feat {
@@ -844,7 +933,8 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                         1 => parts.push(leaf("Id", gspan, uint(g.value, 64))),
                         3 => parts.push(leaf("Type", gspan, enumv(GEOM_TYPES, g.value, 8))),
                         2 => {
-                            let tags = packed(g.payload(payload));
+                            // Only the first 32 pairs are shown.
+                            let tags = packed(&mut pace, g.payload(payload), 64).await;
                             let pairs: Vec<String> = tags
                                 .chunks(2)
                                 .take(32)
@@ -862,11 +952,11 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                                 .collect();
                             parts.push(Node::new("Tags").span(gspan).summary(pairs.join(", ")));
                         }
-                        4 => parts.push(
-                            Node::new("Geometry")
-                                .span(gspan)
-                                .summary(geometry_summary(&packed(g.payload(payload)))),
-                        ),
+                        4 => {
+                            let cmds = packed(&mut pace, g.payload(payload), usize::MAX).await;
+                            let summary = geometry_summary(&mut pace, &cmds).await;
+                            parts.push(Node::new("Geometry").span(gspan).summary(summary));
+                        }
                         _ => parts.push(Node::new(format!("Field {}", g.number)).span(gspan)),
                     }
                 }

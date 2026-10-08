@@ -12,6 +12,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::util::lines::{
     Lines, contains, float, float32, hex, int, number, preview, summarize, text, uint,
 };
+use crate::formats::util::pace::{Resumable, run_paced};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -41,45 +42,94 @@ fn fcs_probe(h: &Head<'_>) -> bool {
 declare_format!(pub FCS = "fcs", "Flow Cytometry Standard (FCS)", ["fcs", "lmd"], "application/vnd.isac.fcs",
     Probe::Custom(fcs_probe), fcs);
 
-/// Splits an FCS TEXT segment into (key, value, span) using its delimiter.
-fn fcs_pairs(data: &[u8], span: Span) -> Vec<(String, String, Span)> {
-    let Some(&delim) = data.first() else {
-        return Vec::new();
-    };
-    // Fields are separated by single delimiters; doubled ones are escapes.
-    let mut fields: Vec<(Vec<u8>, usize, usize)> = Vec::new();
-    let mut cur = Vec::new();
-    let mut start = 1usize;
-    let mut i = 1usize;
-    while let Some(&b) = data.get(i) {
-        if b == delim {
-            if data.get(i.saturating_add(1)) == Some(&delim) {
-                cur.push(delim);
-                i = i.saturating_add(2);
-                continue;
-            }
-            fields.push((std::mem::take(&mut cur), start, i));
-            start = i.saturating_add(1);
-        } else {
-            cur.push(b);
-        }
-        i = i.saturating_add(1);
-        if fields.len() > 200_000 {
-            break;
+/// One TEXT keyword: key, value, and the span from key to value.
+type FcsPair = (String, String, Span);
+
+/// Splits an FCS TEXT segment into (key, value, span) using its delimiter,
+/// in bounded steps.
+struct FcsPairs<'a> {
+    data: &'a [u8],
+    span: Span,
+    i: usize,
+    /// The field being read (delimiter escapes resolved) and where it starts.
+    cur: Vec<u8>,
+    start: usize,
+    /// Fields seen, and a key still waiting for its value.
+    fields: usize,
+    key: Option<(Vec<u8>, usize)>,
+    out: Vec<FcsPair>,
+}
+
+impl<'a> FcsPairs<'a> {
+    fn new(data: &'a [u8], span: Span) -> Self {
+        FcsPairs {
+            data,
+            span,
+            i: 1,
+            cur: Vec::new(),
+            start: 1,
+            fields: 0,
+            key: None,
+            out: Vec::new(),
         }
     }
-    fields
-        .chunks(2)
-        .filter_map(|kv| {
-            let (k, ks, _) = kv.first()?;
-            let (v, _, ve) = kv.get(1)?;
-            Some((
-                String::from_utf8_lossy(k).trim().to_owned(),
-                String::from_utf8_lossy(v).into_owned(),
-                span.sub(to_u64(*ks), to_u64(ve.saturating_sub(*ks))),
-            ))
-        })
-        .collect()
+
+    /// A field ends at `end`: it is a key, or the value completing a pair.
+    fn field(&mut self, end: usize) -> u64 {
+        let field = std::mem::take(&mut self.cur);
+        self.fields = self.fields.saturating_add(1);
+        let Some((k, ks)) = self.key.take() else {
+            self.key = Some((field, self.start));
+            return 0;
+        };
+        let work = to_u64(k.len().saturating_add(field.len()));
+        self.out.push((
+            String::from_utf8_lossy(&k).trim().to_owned(),
+            String::from_utf8_lossy(&field).into_owned(),
+            self.span.sub(to_u64(ks), to_u64(end.saturating_sub(ks))),
+        ));
+        work
+    }
+}
+
+impl Resumable for FcsPairs<'_> {
+    type Output = Vec<FcsPair>;
+
+    fn step(&mut self, budget: u64) -> bool {
+        let data = self.data;
+        let Some(&delim) = data.first() else {
+            return true;
+        };
+        let mut left = budget;
+        while left > 0 {
+            left = left.saturating_sub(1);
+            let i = self.i;
+            let Some(&b) = data.get(i) else {
+                return true;
+            };
+            // Fields are separated by single delimiters; doubled ones are escapes.
+            if b == delim {
+                if data.get(i.saturating_add(1)) == Some(&delim) {
+                    self.cur.push(delim);
+                    self.i = i.saturating_add(2);
+                    continue;
+                }
+                left = left.saturating_sub(self.field(i));
+                self.start = i.saturating_add(1);
+            } else {
+                self.cur.push(b);
+            }
+            self.i = i.saturating_add(1);
+            if self.fields > 200_000 {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn finish(self) -> Vec<FcsPair> {
+        self.out
+    }
 }
 
 /// TEXT keywords (in upper case) to the first value given for them.
@@ -140,7 +190,7 @@ async fn fcs(cx: Cx, input: Input) -> Result<()> {
     let data = cx
         .read_avail(text_span.sub(0, cx.limits().max_read))
         .await?;
-    let pairs = fcs_pairs(&data, text_span);
+    let pairs = run_paced(&cx, FcsPairs::new(&data, text_span)).await;
     let keys = fcs_keys(&cx, &pairs).await;
     // Large files record the DATA offsets only in TEXT.
     if data_begin == 0 && data_end == 0 {
@@ -2421,11 +2471,12 @@ async fn ncs_record(cx: Cx, s: Span) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::formats::util::pace::run_all;
 
     #[test]
     fn fcs_pairs_handle_escaped_delimiters() {
         let span = Span::new(crate::span::SourceId(0), 0, 100);
-        let pairs = fcs_pairs(b"/$PAR/2/$P1N/FS//C/", span);
+        let pairs = run_all(FcsPairs::new(b"/$PAR/2/$P1N/FS//C/", span));
         let kv: Vec<(&str, &str)> = pairs
             .iter()
             .map(|(k, v, _)| (k.as_str(), v.as_str()))

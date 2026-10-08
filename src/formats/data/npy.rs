@@ -199,7 +199,10 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
     }
     let header_span = file.sub_exact(8, len)?;
     let bytes = cx.read(header_span).await?;
-    let header = json::parse(&bytes)
+    // Real headers are small, but the reference implementation accepts up
+    // to 100 MB; the parse is charged by the byte and yields as it goes.
+    let header = json::parse(&cx, &bytes)
+        .await
         .map_err(|e| Diagnostic::malformed(format!("header JSON: {e}")).at(header_span))?;
     let Json::Obj(members) = header else {
         return Err(Diagnostic::malformed("header is not a JSON object").at(header_span));
@@ -207,7 +210,10 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
     let data = file.tail(8u64.saturating_add(len));
     let mut tensors = Vec::new();
     let mut metadata = Vec::new();
-    for (name, value) in members {
+    for (i, (name, value)) in members.into_iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         if name == "__metadata__" {
             if let Json::Obj(m) = value {
                 metadata = m;

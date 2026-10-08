@@ -27,6 +27,8 @@ use crate::formats::science::numarray::num;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 
 const BE: Endian = Endian::Big;
@@ -582,6 +584,7 @@ const MAX_SLOTS: usize = 100_000;
 const MAX_DEPTH: u8 = 16;
 
 struct Decoder<'a> {
+    cx: &'a Cx,
     data: &'a [u8],
     bit: u64,
     compressed: bool,
@@ -593,7 +596,17 @@ struct Decoder<'a> {
     /// of (nested, possibly empty) replications.
     steps: u64,
     values: u64,
+    /// Work (descriptors, bits read, values copied) since the last
+    /// checkpoint, and the furthest bit any element ends at.
+    work: u64,
+    used: u64,
 }
+
+/// Work counted per unit charged: a descriptor or a value counts one, as
+/// does each bit read.
+const WORK_PER_UNIT: u64 = 1024;
+
+type RunFuture<'s> = Pin<Box<dyn Future<Output = Result<()>> + Send + 's>>;
 
 const MAX_STEPS: u64 = 1_000_000;
 const MAX_VALUES: u64 = 2_000_000;
@@ -616,7 +629,16 @@ fn all_ones(v: u64, width: u16) -> bool {
     width > 0 && width <= 64 && v == u64::MAX >> 64u16.saturating_sub(width)
 }
 
-impl Decoder<'_> {
+impl<'a> Decoder<'a> {
+    /// Counts `n` of work, charging a unit every [`WORK_PER_UNIT`].
+    async fn tick(&mut self, n: u64) {
+        self.work = self.work.saturating_add(n);
+        while self.work >= WORK_PER_UNIT {
+            self.work = self.work.saturating_sub(WORK_PER_UNIT);
+            self.cx.checkpoint().await;
+        }
+    }
+
     fn bits(&mut self, n: u16) -> Result<u64> {
         let v = take(self.data, self.bit, n).ok_or_else(|| {
             Diagnostic::malformed(format!("data ends inside an element at bit {}", self.bit))
@@ -680,10 +702,18 @@ impl Decoder<'_> {
             bits: (start, self.bit),
             values,
         });
+        self.used = self.used.max(self.bit);
         Ok(())
     }
 
-    fn run(&mut self, descs: &[u16], depth: u8) -> Result<()> {
+    fn run_boxed<'s>(&'s mut self, descs: &'s [u16], depth: u8) -> RunFuture<'s>
+    where
+        'a: 's,
+    {
+        Box::pin(self.run(descs, depth))
+    }
+
+    async fn run(&mut self, descs: &[u16], depth: u8) -> Result<()> {
         if depth > MAX_DEPTH {
             return Err(Diagnostic::limit("descriptors nested too deeply"));
         }
@@ -693,6 +723,9 @@ impl Decoder<'_> {
             if self.steps > MAX_STEPS {
                 return Err(Diagnostic::limit("descriptor expansion too long"));
             }
+            let before = self.bit;
+            let values = self.values;
+            self.tick(1).await;
             let (f, x, y) = (d >> 14, (d >> 8) & 0x3f, d & 0xff);
             match f {
                 0 => {
@@ -720,7 +753,7 @@ impl Decoder<'_> {
                         .ok_or_else(|| Diagnostic::malformed("replication past the end"))?;
                     if !group.is_empty() {
                         for _ in 0..factor {
-                            self.run(group, depth.saturating_add(1))?;
+                            self.run_boxed(group, depth.saturating_add(1)).await?;
                         }
                     }
                     i = group_at.saturating_add(count);
@@ -750,9 +783,14 @@ impl Decoder<'_> {
                             fxy_text(d)
                         ))
                     })?;
-                    self.run(seq, depth.saturating_add(1))?;
+                    self.run_boxed(seq, depth.saturating_add(1)).await?;
                     i = i.saturating_add(1);
                 }
+            }
+            if f == 0 || (f == 1 && y == 0) {
+                let read = self.bit.saturating_sub(before);
+                let stored = self.values.saturating_sub(values);
+                self.tick(read.saturating_add(stored)).await;
             }
         }
         Ok(())
@@ -762,8 +800,16 @@ impl Decoder<'_> {
 /// Decoded subsets: per subset, its elements (descriptor, bit range, value).
 type Subset = Vec<(u16, (u64, u64), Option<f64>)>;
 
-fn decode(data: &[u8], descs: &[u16], subsets: u64, compressed: bool) -> Result<Vec<Subset>> {
+/// Decodes the subsets, and the furthest bit any element ends at.
+async fn decode(
+    cx: &Cx,
+    data: &[u8],
+    descs: &[u16],
+    subsets: u64,
+    compressed: bool,
+) -> Result<(Vec<Subset>, u64)> {
     let mut d = Decoder {
+        cx,
         data,
         bit: 0,
         compressed,
@@ -773,11 +819,14 @@ fn decode(data: &[u8], descs: &[u16], subsets: u64, compressed: bool) -> Result<
         slots: Vec::new(),
         steps: 0,
         values: 0,
+        work: 0,
+        used: 0,
     };
     if compressed {
-        d.run(descs, 0)?;
+        d.run(descs, 0).await?;
         let mut out = Vec::new();
         for s in 0..usize::try_from(subsets).unwrap_or(0) {
+            d.tick(to_u64(d.slots.len())).await;
             out.push(
                 d.slots
                     .iter()
@@ -785,14 +834,16 @@ fn decode(data: &[u8], descs: &[u16], subsets: u64, compressed: bool) -> Result<
                     .collect(),
             );
         }
-        return Ok(out);
+        let used = if out.is_empty() { 0 } else { d.used };
+        return Ok((out, used));
     }
     let mut out = Vec::new();
     for _ in 0..subsets {
         d.slots.clear();
         d.width_delta = 0;
         d.scale_delta = 0;
-        d.run(descs, 0)?;
+        d.run(descs, 0).await?;
+        d.tick(to_u64(d.slots.len())).await;
         out.push(
             d.slots
                 .iter()
@@ -803,7 +854,8 @@ fn decode(data: &[u8], descs: &[u16], subsets: u64, compressed: bool) -> Result<
             return Err(Diagnostic::limit(format!("more than {MAX_SLOTS} elements")));
         }
     }
-    Ok(out)
+    let used = if out.is_empty() { 0 } else { d.used };
+    Ok((out, used))
 }
 
 type DataState = (Span, Span, Arc<Vec<u16>>, u64, bool);
@@ -814,13 +866,8 @@ async fn data_section(cx: Cx, (sec, data, descs, subsets, compressed): DataState
     u24(&mut f, "Section length")?;
     f.u8("Reserved").emit()?;
     let bytes = cx.read(data).await?;
-    match decode(&bytes, &descs, subsets, compressed) {
-        Ok(decoded) => {
-            let used = decoded
-                .iter()
-                .flat_map(|s| s.iter().map(|e| e.1.1))
-                .max()
-                .unwrap_or(0);
+    match decode(&cx, &bytes, &descs, subsets, compressed).await {
+        Ok((decoded, used)) => {
             cx.emit(
                 Node::new("Subsets")
                     .span(data)

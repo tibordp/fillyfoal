@@ -510,7 +510,15 @@ struct Blend {
     by_addr: Vec<(u64, usize)>,
     sdna: Option<Sdna>,
     problems: Vec<Diagnostic>,
+    /// Totals for the summary, counted while the blocks are indexed: ID
+    /// blocks, those of [`SUMMARY_CODES`], and the first TEST block.
+    ids: usize,
+    summary_counts: [usize; 4],
+    thumbnail: Option<usize>,
 }
+
+/// The ID codes counted in the file's summary.
+const SUMMARY_CODES: [&[u8; 2]; 4] = [b"OB", b"ME", b"MA", b"SC"];
 
 type Shared = Arc<Blend>;
 
@@ -622,12 +630,24 @@ async fn load(cx: &Cx, file: Span, layout: Layout) -> Result<Shared> {
     // Blocks by old address, sorted as they are added (a sort of up to
     // MAX_BLOCKS entries in one go would not be bounded between yields).
     let mut addrs = std::collections::BTreeSet::new();
+    let (mut ids, mut summary_counts, mut thumbnail) = (0usize, [0usize; 4], None);
     for (i, b) in blocks.iter().enumerate() {
         if i.is_multiple_of(1024) {
             cx.checkpoint().await;
         }
         if b.old != 0 {
             addrs.insert((b.old, i));
+        }
+        if is_id(&b.code) {
+            ids = ids.saturating_add(1);
+            for (code, n) in SUMMARY_CODES.iter().zip(summary_counts.iter_mut()) {
+                if b.code[..2] == code[..] {
+                    *n = n.saturating_add(1);
+                }
+            }
+        }
+        if thumbnail.is_none() && &b.code == b"TEST" {
+            thumbnail = Some(i);
         }
         let name = match id_name {
             Some((offset, len)) if is_id(&b.code) => {
@@ -660,6 +680,9 @@ async fn load(cx: &Cx, file: Span, layout: Layout) -> Result<Shared> {
         by_addr,
         sdna,
         problems,
+        ids,
+        summary_counts,
+        thumbnail,
     });
     cx.cache(file, "blend", blend.clone());
     Ok(blend)
@@ -716,15 +739,8 @@ impl Blend {
         code
     }
 
-    fn count(&self, code: &[u8; 2]) -> usize {
-        self.blocks
-            .iter()
-            .filter(|b| b.code[..2] == code[..] && is_id(&b.code))
-            .count()
-    }
-
     fn thumbnail(&self) -> Option<&BHead> {
-        self.blocks.iter().find(|b| &b.code == b"TEST")
+        self.blocks.get(self.thumbnail?)
     }
 }
 
@@ -772,7 +788,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for problem in &blend.problems {
         cx.diag(problem.clone());
     }
-    let ids = blend.blocks.iter().filter(|b| is_id(&b.code)).count();
+    let ids = blend.ids;
     cx.emit(
         Node::new("File blocks")
             .span(file.tail(layout.header))
@@ -801,8 +817,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let mut parts = Vec::new();
-    for code in [b"OB", b"ME", b"MA", b"SC"] {
-        let n = blend.count(code);
+    for (code, &n) in SUMMARY_CODES.iter().zip(&blend.summary_counts) {
         if let (true, Some((one, many))) = (n > 0, id_type(&[code[0], code[1], 0, 0])) {
             parts.push(format!("{n} {}", if n == 1 { one } else { many }));
         }

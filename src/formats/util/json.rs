@@ -1,7 +1,13 @@
 //! A small JSON reader for headers embedded in binary formats (safetensors,
 //! ...). It keeps object members in file order and is bounded in depth.
+//! Parsing is charged by the byte and yields in bounded steps, so headers
+//! of any size can be read.
 
+use crate::cx::Cx;
+use crate::formats::util::pace::{Pace, STEPS_PER_UNIT};
 use std::fmt::Write;
+use std::future::Future;
+use std::pin::Pin;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Json {
@@ -88,20 +94,27 @@ impl Json {
 struct Parser<'a> {
     data: &'a [u8],
     pos: usize,
+    pace: Pace<'a>,
 }
 
+type ValueFuture<'s> = Pin<Box<dyn Future<Output = Result<Json, String>> + Send + 's>>;
+
 /// Parses one JSON value (trailing whitespace is allowed, nothing else).
-pub fn parse(data: &[u8]) -> Result<Json, String> {
-    let mut p = Parser { data, pos: 0 };
-    let value = p.value(0)?;
-    p.ws();
+pub async fn parse(cx: &Cx, data: &[u8]) -> Result<Json, String> {
+    let mut p = Parser {
+        data,
+        pos: 0,
+        pace: Pace::new(cx, STEPS_PER_UNIT),
+    };
+    let value = p.value(0).await?;
+    p.ws().await;
     if p.pos < data.len() {
         return Err(format!("unexpected data at offset {}", p.pos));
     }
     Ok(value)
 }
 
-impl Parser<'_> {
+impl<'a> Parser<'a> {
     fn peek(&self) -> Option<u8> {
         self.data.get(self.pos).copied()
     }
@@ -112,14 +125,15 @@ impl Parser<'_> {
         Some(b)
     }
 
-    fn ws(&mut self) {
+    async fn ws(&mut self) {
         while matches!(self.peek(), Some(b' ' | b'\t' | b'\n' | b'\r')) {
             self.pos = self.pos.saturating_add(1);
+            self.pace.step().await;
         }
     }
 
-    fn expect(&mut self, b: u8) -> Result<(), String> {
-        self.ws();
+    async fn expect(&mut self, b: u8) -> Result<(), String> {
+        self.ws().await;
         match self.bump() {
             Some(c) if c == b => Ok(()),
             _ => Err(format!(
@@ -140,27 +154,35 @@ impl Parser<'_> {
         }
     }
 
-    fn value(&mut self, depth: usize) -> Result<Json, String> {
+    fn value_boxed<'s>(&'s mut self, depth: usize) -> ValueFuture<'s>
+    where
+        'a: 's,
+    {
+        Box::pin(self.value(depth))
+    }
+
+    async fn value(&mut self, depth: usize) -> Result<Json, String> {
         if depth > MAX_DEPTH {
             return Err("nested too deeply".into());
         }
-        self.ws();
+        self.pace.step().await;
+        self.ws().await;
         match self.peek() {
             Some(b'{') => {
                 self.pos = self.pos.saturating_add(1);
                 let mut members = Vec::new();
-                self.ws();
+                self.ws().await;
                 if self.peek() == Some(b'}') {
                     self.pos = self.pos.saturating_add(1);
                     return Ok(Json::Obj(members));
                 }
                 loop {
-                    self.ws();
-                    let key = self.string()?;
-                    self.expect(b':')?;
-                    let value = self.value(depth.saturating_add(1))?;
+                    self.ws().await;
+                    let key = self.string().await?;
+                    self.expect(b':').await?;
+                    let value = self.value_boxed(depth.saturating_add(1)).await?;
                     members.push((key, value));
-                    self.ws();
+                    self.ws().await;
                     match self.bump() {
                         Some(b',') => {}
                         Some(b'}') => return Ok(Json::Obj(members)),
@@ -171,14 +193,14 @@ impl Parser<'_> {
             Some(b'[') => {
                 self.pos = self.pos.saturating_add(1);
                 let mut items = Vec::new();
-                self.ws();
+                self.ws().await;
                 if self.peek() == Some(b']') {
                     self.pos = self.pos.saturating_add(1);
                     return Ok(Json::Arr(items));
                 }
                 loop {
-                    items.push(self.value(depth.saturating_add(1))?);
-                    self.ws();
+                    items.push(self.value_boxed(depth.saturating_add(1)).await?);
+                    self.ws().await;
                     match self.bump() {
                         Some(b',') => {}
                         Some(b']') => return Ok(Json::Arr(items)),
@@ -186,7 +208,7 @@ impl Parser<'_> {
                     }
                 }
             }
-            Some(b'"') => Ok(Json::Str(self.string()?)),
+            Some(b'"') => Ok(Json::Str(self.string().await?)),
             Some(b't') => self.literal(b"true", Json::Bool(true)),
             Some(b'f') => self.literal(b"false", Json::Bool(false)),
             Some(b'n') => self.literal(b"null", Json::Null),
@@ -197,6 +219,7 @@ impl Parser<'_> {
                     Some(b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
                 ) {
                     self.pos = self.pos.saturating_add(1);
+                    self.pace.step().await;
                 }
                 let text = self.data.get(start..self.pos).unwrap_or_default();
                 Ok(Json::Num(String::from_utf8_lossy(text).into_owned()))
@@ -217,12 +240,13 @@ impl Parser<'_> {
         Ok(digits)
     }
 
-    fn string(&mut self) -> Result<String, String> {
+    async fn string(&mut self) -> Result<String, String> {
         if self.bump() != Some(b'"') {
             return Err(format!("expected a string at offset {}", self.pos));
         }
         let mut out = Vec::new();
         loop {
+            self.pace.step().await;
             match self.bump() {
                 None => return Err("unterminated string".into()),
                 Some(b'"') => break,
