@@ -15,6 +15,9 @@ const SYNC_POINTS: u32 = 4;
 /// What deriving one of a lane's first two blocks (`H'` to 1 KiB, about 30
 /// BLAKE2b compressions) costs, in block compressions.
 const SEED_COST: u32 = 8;
+/// Blocks zeroed (when the memory is set up) for the cost of one
+/// compression.
+const ZEROED_PER_UNIT: usize = 16;
 
 type Block = [u64; WORDS];
 
@@ -179,7 +182,9 @@ fn block_from(bytes: &[u8]) -> Block {
 /// An Argon2 computation in progress.
 pub struct Argon2 {
     params: Params,
+    /// The memory, grown (zeroed) to `blocks` by the first steps.
     memory: Vec<Block>,
+    blocks: usize,
     lane_len: u32,
     segment_len: u32,
     // Position of the next block.
@@ -219,9 +224,10 @@ impl Argon2 {
         let blocks = usize::try_from(params.blocks()).ok()?;
         let lane_len = u32::try_from(params.blocks().checked_div(params.lanes.into())?).ok()?;
         let segment_len = lane_len / SYNC_POINTS;
+        // Reserved now (so an impossible size fails here), zeroed by the
+        // first steps.
         let mut memory: Vec<Block> = Vec::new();
         memory.try_reserve_exact(blocks).ok()?;
-        memory.resize(blocks, [0; WORDS]);
 
         let le = |x: u32| x.to_le_bytes();
         let len = |b: &[u8]| u32::try_from(b.len()).unwrap_or(u32::MAX).to_le_bytes();
@@ -244,6 +250,7 @@ impl Argon2 {
         let mut a = Argon2 {
             params,
             memory,
+            blocks,
             h0,
             seeded: 0,
             lane_len,
@@ -284,7 +291,7 @@ impl Argon2 {
             self.input[0] = self.pass.into();
             self.input[1] = self.lane.into();
             self.input[2] = self.slice.into();
-            self.input[3] = to_u64(self.memory.len());
+            self.input[3] = to_u64(self.blocks);
             self.input[4] = self.params.iterations.into();
             self.input[5] = self.params.variant as u64;
             if self.pass == 0 && self.slice == 0 {
@@ -397,13 +404,28 @@ impl Argon2 {
         self.seeded = self.seeded.saturating_add(1);
     }
 
-    /// Fills up to `blocks` more blocks (seeding a lane's first two blocks
-    /// counts as [`SEED_COST`] each); true once all passes are done.
+    /// Fills up to `blocks` more blocks (zeroing [`ZEROED_PER_UNIT`] blocks
+    /// of the memory first counts as one, seeding a lane's first two blocks
+    /// as [`SEED_COST`] each); true once all passes are done.
     pub fn step(&mut self, blocks: u32) -> bool {
         let mut used = 0u32;
         while used < blocks {
             if self.done {
                 break;
+            }
+            if self.memory.len() < self.blocks {
+                let room = usize::try_from(blocks.saturating_sub(used))
+                    .unwrap_or(usize::MAX)
+                    .saturating_mul(ZEROED_PER_UNIT);
+                let n = self
+                    .blocks
+                    .saturating_sub(self.memory.len())
+                    .min(room.max(1));
+                self.memory
+                    .resize(self.memory.len().saturating_add(n), [0; WORDS]);
+                let cost = n.div_ceil(ZEROED_PER_UNIT);
+                used = used.saturating_add(u32::try_from(cost).unwrap_or(u32::MAX));
+                continue;
             }
             if self.seeded < self.params.lanes {
                 self.seed_lane();
@@ -502,9 +524,33 @@ mod tests {
             lanes: 4,
             out_len: 32,
         };
-        let mut a = Argon2::new(params, &[1; 32], &[2; 16], &[3; 8], &[4; 12]).unwrap();
+        let new = || Argon2::new(params.clone(), &[1; 32], &[2; 16], &[3; 8], &[4; 12]).unwrap();
+        let mut a = new();
         while !a.step(7) {}
+        // The smallest steps give the same tag.
+        let mut b = new();
+        while !b.step(1) {}
+        assert_eq!(a.finish(), b.finish());
         hex(&a.finish())
+    }
+
+    #[test]
+    fn memory_is_zeroed_in_steps() {
+        // 256 MiB: reserved up front, zeroed a bounded piece per step.
+        let params = Params {
+            variant: Variant::Id,
+            version: 0x13,
+            memory_kib: 256 * 1024,
+            iterations: 1,
+            lanes: 4,
+            out_len: 32,
+        };
+        let mut a = Argon2::new(params, b"password", b"saltsalt", b"", b"").unwrap();
+        assert!(a.memory.is_empty());
+        a.step(256);
+        assert_eq!(a.memory.len(), 256 * ZEROED_PER_UNIT);
+        a.step(256);
+        assert_eq!(a.memory.len(), 512 * ZEROED_PER_UNIT);
     }
 
     #[test]

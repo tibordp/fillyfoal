@@ -5,9 +5,9 @@
 //! hashes (an eksblowfish key schedule over the SHA-512 of the password and
 //! of the salt, then 64 encryptions of "OxychromaticBlowfishSwatDynamite"),
 //! and the blocks are interleaved into the key. One bcrypt hash costs about
-//! 130 Blowfish key expansions, so [`BcryptPbkdf`] runs one hash per
-//! [`BcryptPbkdf::step`] and callers budget between steps
-//! ([`super::run`]). Checked byte-exact against the Python `bcrypt`
+//! 130 Blowfish key expansions, so [`BcryptPbkdf`] runs a hash in pieces of
+//! one or two expansions per [`BcryptPbkdf::step`] and callers budget
+//! between steps ([`super::run`]). Checked byte-exact against the Python `bcrypt`
 //! package's `kdf` (tests below) and end to end against `ssh-keygen` keys
 //! (the `openssh-key` fixtures).
 //!
@@ -110,14 +110,43 @@ impl Blowfish {
     }
 }
 
-/// One bcrypt hash of the SHA-512 digests of password and salt.
-fn bcrypt_hash(sha2pass: &[u8], sha2salt: &[u8]) -> [u8; 32] {
-    let mut bf = Blowfish::new();
-    bf.expand(Some(sha2salt), sha2pass);
-    for _ in 0..64 {
-        bf.expand(None, sha2salt);
-        bf.expand(None, sha2pass);
+/// The key expansion rounds of a bcrypt hash (each re-keys with the salt,
+/// then the password).
+const EXPAND_ROUNDS: u32 = 64;
+
+/// A bcrypt hash of the SHA-512 digests of password and salt in progress:
+/// the key schedule after `round` of its [`EXPAND_ROUNDS`].
+#[derive(Clone)]
+struct HashState {
+    bf: Blowfish,
+    sha2salt: Vec<u8>,
+    round: u32,
+}
+
+impl HashState {
+    /// The salted key expansion that starts the hash.
+    fn new(sha2pass: &[u8], sha2salt: Vec<u8>) -> Self {
+        let mut bf = Blowfish::new();
+        bf.expand(Some(&sha2salt), sha2pass);
+        HashState {
+            bf,
+            sha2salt,
+            round: 0,
+        }
     }
+
+    /// Runs the next expansion round; true once all have run.
+    fn round(&mut self, sha2pass: &[u8]) -> bool {
+        self.bf.expand(None, &self.sha2salt);
+        self.bf.expand(None, sha2pass);
+        self.round = self.round.saturating_add(1);
+        self.round >= EXPAND_ROUNDS
+    }
+}
+
+/// The hash's output: 64 encryptions of the magic text under the final key
+/// schedule.
+fn bcrypt_output(bf: &Blowfish) -> [u8; 32] {
     let text = b"OxychromaticBlowfishSwatDynamite";
     let mut j = 0usize;
     let mut cdata = [0u32; 8];
@@ -136,9 +165,12 @@ fn bcrypt_hash(sha2pass: &[u8], sha2salt: &[u8]) -> [u8; 32] {
     out
 }
 
-/// An incremental `bcrypt_pbkdf`: one bcrypt hash per [`step`](Self::step).
+/// An incremental `bcrypt_pbkdf`: a bcrypt hash takes [`PIECES_PER_HASH`]
+/// [`step`](Self::step)s.
 #[derive(Clone)]
 pub struct BcryptPbkdf {
+    /// The bcrypt hash in progress, if any.
+    hash: Option<HashState>,
     sha2pass: Vec<u8>,
     salt: Vec<u8>,
     rounds: u32,
@@ -165,6 +197,7 @@ impl BcryptPbkdf {
             return None;
         }
         Some(BcryptPbkdf {
+            hash: None,
             sha2pass: Sha512::digest(password),
             salt: salt.to_vec(),
             rounds,
@@ -177,7 +210,7 @@ impl BcryptPbkdf {
         })
     }
 
-    /// Total number of bcrypt hashes (steps) the derivation takes.
+    /// Total number of bcrypt hashes the derivation takes.
     pub fn cost(&self) -> u64 {
         u64::from(self.rounds).saturating_mul(u64::try_from(self.stride).unwrap_or(u64::MAX))
     }
@@ -187,20 +220,30 @@ impl BcryptPbkdf {
         self.block > self.stride
     }
 
-    /// Runs one bcrypt hash.
+    /// Runs one piece of a bcrypt hash: its start (the salted key
+    /// expansion), or one of its expansion rounds (the last one also
+    /// computing its output).
     pub fn step(&mut self) {
         if self.done() {
             return;
         }
-        let sha2salt = if self.round == 0 {
-            let mut h = Sha512::new();
-            h.update(&self.salt);
-            h.update(&u32::try_from(self.block).unwrap_or(0).to_be_bytes());
-            h.finish()
-        } else {
-            Sha512::digest(&self.last)
+        let Some(mut hash) = self.hash.take() else {
+            let sha2salt = if self.round == 0 {
+                let mut h = Sha512::new();
+                h.update(&self.salt);
+                h.update(&u32::try_from(self.block).unwrap_or(0).to_be_bytes());
+                h.finish()
+            } else {
+                Sha512::digest(&self.last)
+            };
+            self.hash = Some(HashState::new(&self.sha2pass, sha2salt));
+            return;
         };
-        self.last = bcrypt_hash(&self.sha2pass, &sha2salt);
+        if !hash.round(&self.sha2pass) {
+            self.hash = Some(hash);
+            return;
+        }
+        self.last = bcrypt_output(&hash.bf);
         if self.round == 0 {
             self.out = self.last;
         } else {
@@ -231,21 +274,29 @@ impl BcryptPbkdf {
     }
 }
 
-/// Units of work (see [`super::Stepped`]) one bcrypt hash costs: about 130
-/// Blowfish key expansions, some 2.5 ms.
-pub const UNITS_PER_HASH: u32 = 5000;
+/// The [`BcryptPbkdf::step`]s one bcrypt hash takes: its start and its
+/// [`EXPAND_ROUNDS`] rounds.
+pub const PIECES_PER_HASH: u32 = 65;
+
+/// Units of work (see [`super::Stepped`]) one step costs: one or two
+/// Blowfish key expansions, some 40 µs.
+pub const UNITS_PER_STEP: u32 = 77;
+
+/// Units of work one bcrypt hash costs (`PIECES_PER_HASH * UNITS_PER_STEP`):
+/// about 130 Blowfish key expansions, some 2.5 ms.
+pub const UNITS_PER_HASH: u32 = 5005;
 
 impl super::Stepped for BcryptPbkdf {
     fn done(&self) -> bool {
         BcryptPbkdf::done(self)
     }
 
-    /// Runs one bcrypt hash per [`UNITS_PER_HASH`] units (at least one).
+    /// Runs one step per [`UNITS_PER_STEP`] units (at least one).
     fn advance(&mut self, units: u32) -> u32 {
         let mut used = 0u32;
-        while !self.done() && (used == 0 || used.saturating_add(UNITS_PER_HASH) <= units) {
+        while !self.done() && (used == 0 || used.saturating_add(UNITS_PER_STEP) <= units) {
             self.step();
-            used = used.saturating_add(UNITS_PER_HASH);
+            used = used.saturating_add(UNITS_PER_STEP);
         }
         used
     }
@@ -466,5 +517,28 @@ mod tests {
         );
         assert!(bcrypt_pbkdf(b"", b"salt", 4, 32).is_none());
         assert!(bcrypt_pbkdf(b"pw", b"salt", 0, 32).is_none());
+    }
+
+    #[test]
+    #[allow(clippy::arithmetic_side_effects)]
+    fn a_hash_takes_many_steps() {
+        assert_eq!(UNITS_PER_HASH, PIECES_PER_HASH * UNITS_PER_STEP);
+        let mut kdf = BcryptPbkdf::new(b"password", b"salt", 4, 32).unwrap();
+        let mut steps = 0;
+        while !kdf.done() {
+            kdf.step();
+            steps += 1;
+        }
+        assert_eq!(steps, 4 * PIECES_PER_HASH);
+        assert_eq!(
+            hex(&kdf.finish()),
+            "5bbf0cc293587f1c3635555c27796598d47e579071bf427e9d8fbe842aba34d9"
+        );
+        // Charged per step.
+        let mut kdf = BcryptPbkdf::new(b"password", b"salt", 4, 32).unwrap();
+        assert_eq!(
+            super::super::Stepped::advance(&mut kdf, 256),
+            3 * UNITS_PER_STEP
+        );
     }
 }

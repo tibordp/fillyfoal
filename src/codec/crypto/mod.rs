@@ -29,8 +29,8 @@ pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
 /// budget checkpoints, and `Limits::max_work` stops it.
 ///
 /// A unit of work is roughly half a microsecond: one HMAC for PBKDF2, one
-/// hash for the PKCS#12 derivation, one block for Argon2, 1/5000 of a
-/// bcrypt hash (see each type).
+/// hash for the PKCS#12 derivation, one block for Argon2, 1/77 of a
+/// bcrypt hash piece (see each type).
 pub trait Stepped {
     /// Runs about `units` units of work (at least one indivisible piece,
     /// which may cost more); returns the units used, 0 once complete.

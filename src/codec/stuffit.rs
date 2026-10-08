@@ -1040,6 +1040,15 @@ enum Phase {
     Block,
     /// The block's symbols (and, after the last, the block's end).
     Symbols,
+    /// A zero run: `left` more `byte`s, then the symbol that ended it
+    /// (`None`: the block's end).
+    Fill {
+        byte: u8,
+        left: usize,
+        then: Option<u32>,
+    },
+    /// The block's end, after a zero run.
+    EndBlock,
     /// Counting the block's bytes, from this index.
     Count(usize),
     /// Building the inverse transform, from this index.
@@ -1181,7 +1190,10 @@ impl Arsenic {
             if work >= budget {
                 return Ok(Progress::More);
             }
-            let reads = matches!(self.phase, Phase::Start | Phase::Block | Phase::Symbols);
+            let reads = matches!(
+                self.phase,
+                Phase::Start | Phase::Block | Phase::Symbols | Phase::EndBlock
+            );
             if reads
                 && !eof
                 && ac.bs.data.len().saturating_mul(8) < ac.bs.pos.saturating_add(ARSENIC_UNIT_BITS)
@@ -1221,9 +1233,9 @@ impl Arsenic {
                 Phase::Symbols => {
                     work = work.saturating_add(16);
                     let mut sel = ac.symbol(&mut self.selector)?;
+                    let mut zeros = 0usize;
                     if sel < 2 {
                         let mut state = 1usize;
-                        let mut zeros = 0usize;
                         while sel < 2 {
                             zeros = zeros.saturating_add(if sel == 0 { state } else { state << 1 });
                             if zeros > self.block_size {
@@ -1235,30 +1247,51 @@ impl Arsenic {
                         if self.block.len().saturating_add(zeros) > self.block_size {
                             return Err(bad("zero run beyond the block"));
                         }
-                        let b = mtf_take(&mut self.mtf, 0);
-                        self.block.extend(std::iter::repeat_n(b, zeros));
-                        work = work.saturating_add(zeros / 64);
                     }
+                    // The symbol that ends the run, read now so the run can
+                    // be filled across steps without reading.
                     let symbol = match sel {
-                        10 => {
-                            self.end_block(ac)?;
-                            continue;
-                        }
-                        2 => 1,
+                        10 => None,
+                        2 => Some(1),
                         s => {
                             let model = self
                                 .mtf_models
                                 .get_mut(to_usize(u64::from(s.saturating_sub(3))))
                                 .ok_or_else(|| bad("bad selector"))?;
-                            ac.symbol(model)?
+                            Some(ac.symbol(model)?)
                         }
                     };
-                    if self.block.len() >= self.block_size {
-                        return Err(bad("block overflow"));
+                    if zeros > 0 {
+                        let byte = mtf_take(&mut self.mtf, 0);
+                        self.phase = Phase::Fill {
+                            byte,
+                            left: zeros,
+                            then: symbol,
+                        };
+                        continue;
                     }
-                    let b = mtf_take(&mut self.mtf, to_usize(u64::from(symbol)));
-                    self.block.push(b);
+                    match symbol {
+                        None => self.end_block(ac)?,
+                        Some(s) => self.push_symbol(s)?,
+                    }
                 }
+                Phase::Fill { byte, left, then } => {
+                    // A byte filled is an eighth of a unit.
+                    let room = budget.saturating_sub(work).saturating_mul(8).max(1);
+                    let n = left.min(room);
+                    self.block.extend(std::iter::repeat_n(byte, n));
+                    work = work.saturating_add(n / 8).saturating_add(1);
+                    let left = left.saturating_sub(n);
+                    if left > 0 {
+                        self.phase = Phase::Fill { byte, left, then };
+                    } else if let Some(s) = then {
+                        self.phase = Phase::Symbols;
+                        self.push_symbol(s)?;
+                    } else {
+                        self.phase = Phase::EndBlock;
+                    }
+                }
+                Phase::EndBlock => self.end_block(ac)?,
                 Phase::Count(from) => {
                     let to = from
                         .saturating_add(budget.saturating_sub(work))
@@ -1268,8 +1301,11 @@ impl Arsenic {
                             *c = c.saturating_add(1);
                         }
                     }
+                    // The transform grows alongside (zeroed a piece at a
+                    // time; every entry is set when it is built).
+                    self.transform.resize(to, 0);
                     work = work
-                        .saturating_add(to.saturating_sub(from))
+                        .saturating_add(to.saturating_sub(from).saturating_mul(2))
                         .saturating_add(1);
                     if to < self.block.len() {
                         self.phase = Phase::Count(to);
@@ -1281,8 +1317,6 @@ impl Arsenic {
                         total = total.saturating_add(*n);
                         *n = 0;
                     }
-                    self.transform.clear();
-                    self.transform.resize(self.block.len(), 0);
                     self.phase = Phase::Transform(0);
                 }
                 Phase::Transform(from) => {
@@ -1380,7 +1414,18 @@ impl Arsenic {
             return Err(Diagnostic::unsupported("randomized Arsenic blocks"));
         }
         self.counts = [0; 256];
+        self.transform.clear();
         self.phase = Phase::Count(0);
+        Ok(())
+    }
+
+    /// Appends the byte of move-to-front `symbol` to the block.
+    fn push_symbol(&mut self, symbol: u32) -> Result<()> {
+        if self.block.len() >= self.block_size {
+            return Err(bad("block overflow"));
+        }
+        let b = mtf_take(&mut self.mtf, to_usize(u64::from(symbol)));
+        self.block.push(b);
         Ok(())
     }
 }
