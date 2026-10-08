@@ -221,7 +221,7 @@ async fn next_member(cx: &Cx, cur: &mut Cursor<'_>) -> Result<Option<Member>> {
                     b'L' => long_name = Some(crate::text::until_nul(&bytes)),
                     b'K' => long_link = Some(crate::text::until_nul(&bytes)),
                     _ => {
-                        for record in pax_records(&bytes) {
+                        for record in pax_records(cx, &bytes).await {
                             match record.key.as_str() {
                                 "path" => pax_path = Some(record.value),
                                 "linkpath" => pax_link = Some(record.value),
@@ -285,45 +285,52 @@ struct PaxRecord {
 }
 
 /// Parses `"<len> <key>=<value>\n"` records, stopping at the first malformed
-/// one.
-fn pax_records(data: &[u8]) -> Vec<PaxRecord> {
+/// one. Charged per record and per 4 KiB of record (a header of up to
+/// [`MAX_META`] can hold a hundred thousand records).
+async fn pax_records(cx: &Cx, data: &[u8]) -> Vec<PaxRecord> {
+    const STEP: usize = 4096;
     let mut out = Vec::new();
     let mut at = 0usize;
     while at < data.len() {
         let rest = data.get(at..).unwrap_or_default();
-        let Some(space) = rest.iter().position(|&b| b == b' ') else {
-            break;
-        };
-        let Some(len) = std::str::from_utf8(rest.get(..space).unwrap_or_default())
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-        else {
-            break;
-        };
-        let Some(record) = rest.get(..len) else {
-            break;
-        };
-        if len <= space {
-            break;
+        let record = pax_record(rest, at);
+        // A record costs its length; a malformed one at most the rest.
+        let work = record.as_ref().map_or(rest.len(), |r| r.len);
+        for _ in 0..=work / STEP {
+            cx.checkpoint().await;
         }
-        let body = record
-            .get(space.saturating_add(1)..)
-            .unwrap_or_default()
-            .strip_suffix(b"\n")
-            .unwrap_or_default();
-        let Some(eq) = body.iter().position(|&b| b == b'=') else {
+        let Some(record) = record else {
             break;
         };
-        out.push(PaxRecord {
-            key: String::from_utf8_lossy(body.get(..eq).unwrap_or_default()).into_owned(),
-            value: String::from_utf8_lossy(body.get(eq.saturating_add(1)..).unwrap_or_default())
-                .into_owned(),
-            at,
-            len,
-        });
-        at = at.saturating_add(len);
+        at = at.saturating_add(record.len);
+        out.push(record);
     }
     out
+}
+
+/// The record at the start of `rest` (at offset `at` of the header data).
+fn pax_record(rest: &[u8], at: usize) -> Option<PaxRecord> {
+    let space = rest.iter().position(|&b| b == b' ')?;
+    let len = std::str::from_utf8(rest.get(..space).unwrap_or_default())
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())?;
+    let record = rest.get(..len)?;
+    if len <= space {
+        return None;
+    }
+    let body = record
+        .get(space.saturating_add(1)..)
+        .unwrap_or_default()
+        .strip_suffix(b"\n")
+        .unwrap_or_default();
+    let eq = body.iter().position(|&b| b == b'=')?;
+    Some(PaxRecord {
+        key: String::from_utf8_lossy(body.get(..eq).unwrap_or_default()).into_owned(),
+        value: String::from_utf8_lossy(body.get(eq.saturating_add(1)..).unwrap_or_default())
+            .into_owned(),
+        at,
+        len,
+    })
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -545,7 +552,11 @@ async fn pax_size(cx: &Cx, member: Span, main: u64) -> Result<Option<u64>> {
         cur.skip(padded(raw.size));
         if raw.typeflag == b'x' && raw.size <= MAX_META {
             let bytes = cx.read_avail(data).await?;
-            if let Some(r) = pax_records(&bytes).into_iter().find(|r| r.key == "size") {
+            if let Some(r) = pax_records(cx, &bytes)
+                .await
+                .into_iter()
+                .find(|r| r.key == "size")
+            {
                 size = r.value.parse().ok();
             }
         }
@@ -555,7 +566,7 @@ async fn pax_size(cx: &Cx, member: Span, main: u64) -> Result<Option<u64>> {
 
 async fn pax_header(cx: Cx, span: Span) -> Result<()> {
     let bytes = cx.read(span.sub(0, MAX_META)).await?;
-    let records = pax_records(&bytes);
+    let records = pax_records(&cx, &bytes).await;
     let mut end = 0usize;
     for r in records {
         end = r.at.saturating_add(r.len);

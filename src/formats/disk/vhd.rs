@@ -280,6 +280,6 @@ async fn virtual_disk(cx: Cx, d: Arc<Dynamic>) -> Result<()> {
     if let Some(e) = problem {
         cx.diag(e);
     }
-    let span = list.finish(&cx, "vhd-blocks")?;
+    let span = list.finish(&cx, "vhd-blocks").await?;
     dissect_or_data(cx, d.input.nested(span)).await
 }

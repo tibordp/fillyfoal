@@ -391,6 +391,17 @@ impl Disk {
         i.saturating_add(i.checked_div(self.chunk_ratio).unwrap_or(0))
     }
 
+    /// Payload blocks whose 8-byte entry lies wholly in the BAT: every
+    /// chunk of `chunk_ratio + 1` entries holds `chunk_ratio` of them.
+    fn listed(&self) -> u64 {
+        let entries = self.bat.len / 8;
+        let chunk = self.chunk_ratio.saturating_add(1);
+        let full = entries.checked_div(chunk).unwrap_or(0);
+        let rest = entries.checked_rem(chunk).unwrap_or(0);
+        full.saturating_mul(self.chunk_ratio)
+            .saturating_add(rest.min(self.chunk_ratio))
+    }
+
     async fn entry(&self, cx: &Cx, i: u64) -> Result<(Span, u64)> {
         let span = self.bat.sub(self.index(i).saturating_mul(8), 8);
         let raw = cx.read(span).await?;
@@ -427,7 +438,11 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
 async fn virtual_disk(cx: Cx, d: Arc<Disk>) -> Result<()> {
     let mut list = PieceList::new(d.bat);
     let blocks = d.blocks();
-    for i in 0..blocks {
+    // Blocks whose entry lies (wholly) in the BAT; a missing entry reads as
+    // 0 (not present), so the rest of the disk is one run of zeros. The
+    // declared size can imply far more blocks than the file has entries.
+    let listed = blocks.min(d.listed());
+    for i in 0..listed {
         cx.progress(i, blocks);
         let want = d.block.min(d.size.saturating_sub(list.len()));
         let (_, entry) = d.entry(&cx, i).await?;
@@ -443,6 +458,13 @@ async fn virtual_disk(cx: Cx, d: Arc<Disk>) -> Result<()> {
             break;
         }
     }
-    let span = list.finish(&cx, "vhdx-blocks")?;
+    // What the unlisted blocks would add one by one: a block each, up to
+    // the disk size.
+    let unlisted = blocks.saturating_sub(listed).saturating_mul(d.block);
+    let rest = unlisted.min(d.size.saturating_sub(list.len()));
+    if let Err(e) = list.hole(&cx, rest) {
+        cx.diag(e);
+    }
+    let span = list.finish(&cx, "vhdx-blocks").await?;
     dissect_or_data(cx, d.input.nested(span)).await
 }

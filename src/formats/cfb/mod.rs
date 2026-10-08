@@ -450,23 +450,30 @@ async fn sectors_of(
         };
         let limit = size.div_ceil(cfb.mini.max(1));
         let (chain, diag) = follow(cx, Table::Mini(minifat), entry.start, limit).await;
-        let spans = chain
-            .into_iter()
-            .map(|m| {
-                (
-                    m,
-                    mini_stream.sub(u64::from(m).saturating_mul(cfb.mini), cfb.mini),
-                )
-            })
-            .collect();
+        let spans = with_spans(cx, chain, |m| {
+            mini_stream.sub(u64::from(m).saturating_mul(cfb.mini), cfb.mini)
+        })
+        .await;
         Ok((true, spans, diag))
     } else {
         let limit = size.div_ceil(cfb.sector.max(1));
         let (chain, diag) =
             fat_chain(cx, &cfb.fat, cfb.sector, cfb.input.span, entry.start, limit).await;
-        let spans = chain.into_iter().map(|s| (s, cfb.sector_span(s))).collect();
+        let spans = with_spans(cx, chain, |s| cfb.sector_span(s)).await;
         Ok((false, spans, diag))
     }
+}
+
+/// Pairs each sector of a chain with its span, yielding every few thousand.
+async fn with_spans(cx: &Cx, chain: Vec<u32>, span: impl Fn(u32) -> Span) -> Vec<(u32, Span)> {
+    let mut out = Vec::with_capacity(chain.len());
+    for (i, s) in chain.into_iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        out.push((s, span(s)));
+    }
+    out
 }
 
 /// A stream's content as a piecewise source, cut to its size. Returns the
@@ -480,13 +487,15 @@ pub async fn stream(
     let size = stream_size(cfb, entry);
     let (_, sectors, diag) = sectors_of(cx, cfb, entry).await?;
     let pieces = coalesce(cx, sectors.into_iter().map(|(_, span)| span)).await;
-    let all = cx.add_pieces(
-        Origin {
-            parent: cfb.entry_span(id),
-            transform: "cfb-chain",
-        },
-        pieces,
-    )?;
+    let all = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: cfb.entry_span(id),
+                transform: "cfb-chain",
+            },
+            &pieces,
+        )
+        .await?;
     let span = all.sub(0, size);
     let diag = diag.or_else(|| {
         (span.len < size).then(|| Diagnostic::truncated(Span::new(span.source, 0, size), span.len))
@@ -595,13 +604,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if dir_spans.is_empty() {
         dir_spans.push(file.sub(0, 0));
     }
-    let dir = cx.add_pieces(
-        Origin {
-            parent: header_span.sub(48, 4),
-            transform: "cfb-directory",
-        },
-        dir_spans,
-    )?;
+    let dir = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: header_span.sub(48, 4),
+                transform: "cfb-directory",
+            },
+            &dir_spans,
+        )
+        .await?;
     if let Some(d) = dir_diag {
         cx.diag(d.at(header_span.sub(48, 4)));
     }
@@ -624,13 +635,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let (chain, diag) =
             fat_chain(&cx, &cfb.fat, sector, file, header.first_minifat, limit).await;
         let pieces = coalesce(&cx, chain.iter().copied().map(|s| cfb.sector_span(s))).await;
-        cfb.minifat = Some(cx.add_pieces(
-            Origin {
-                parent: header_span.sub(60, 4),
-                transform: "cfb-minifat",
-            },
-            pieces,
-        )?);
+        cfb.minifat = Some(
+            cx.add_pieces_stepped(
+                Origin {
+                    parent: header_span.sub(60, 4),
+                    transform: "cfb-minifat",
+                },
+                &pieces,
+            )
+            .await?,
+        );
         if let Some(d) = diag {
             cx.diag(d.at(header_span.sub(60, 4)));
         }

@@ -227,7 +227,7 @@ async fn virtual_disk(cx: Cx, s: Arc<Sparse>) -> Result<()> {
             }
         }
     }
-    let span = list.finish(&cx, "vmdk-grains")?;
+    let span = list.finish(&cx, "vmdk-grains").await?;
     dissect_or_data(cx, s.input.nested(span)).await
 }
 

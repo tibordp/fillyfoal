@@ -259,8 +259,15 @@ enum Decoded {
 /// entry may point at the whole (MiBs large) store.
 const STEP: usize = 4096;
 
-/// A copy of `bytes`, yielding every [`STEP`] bytes.
+/// Bytes of a value copied into its node: every entry may point at the
+/// whole store, so a node holds a bounded display copy (the node's target
+/// spans the whole value).
+const MAX_SHOWN: usize = 64 << 10;
+
+/// A display copy of `bytes` (at most [`MAX_SHOWN`]), yielding every
+/// [`STEP`] bytes.
 async fn copy(cx: &Cx, bytes: &[u8]) -> Vec<u8> {
+    let bytes = bytes.get(..MAX_SHOWN).unwrap_or(bytes);
     let mut out = Vec::with_capacity(bytes.len());
     for chunk in bytes.chunks(STEP) {
         cx.checkpoint().await;
@@ -269,21 +276,88 @@ async fn copy(cx: &Cx, bytes: &[u8]) -> Vec<u8> {
     out
 }
 
-/// The position of the first NUL in `bytes`, yielding every [`STEP`] bytes.
-async fn nul(cx: &Cx, bytes: &[u8]) -> Option<usize> {
-    let mut at = 0usize;
-    for chunk in bytes.chunks(STEP) {
-        cx.checkpoint().await;
-        if let Some(p) = chunk.iter().position(|&b| b == 0) {
+/// A display copy of a string value: at most [`MAX_SHOWN`] bytes, marked
+/// with `…` when cut.
+fn shown_text(bytes: &[u8]) -> String {
+    match bytes.get(..MAX_SHOWN) {
+        Some(head) if head.len() < bytes.len() => {
+            let mut s = String::from_utf8_lossy(head).into_owned();
+            s.push('…');
+            s
+        }
+        _ => String::from_utf8_lossy(bytes).into_owned(),
+    }
+}
+
+/// Where the next NUL is from the start of every [`STEP`]-byte block of a
+/// store, so that finding a string's end scans at most one block (entries
+/// can all point at one long unterminated run).
+struct Nuls {
+    from_block: Vec<Option<usize>>,
+}
+
+impl Nuls {
+    /// Indexes `store` (read from `span`), or reuses the index built for it.
+    async fn of(cx: &Cx, span: Span, store: &[u8]) -> Arc<Nuls> {
+        if let Some(found) = cx.cached::<Nuls>(span, "rpm-nuls") {
+            return found;
+        }
+        let blocks = store.len().div_ceil(STEP);
+        let mut from_block = vec![None; blocks];
+        let mut next = None;
+        for (b, slot) in from_block.iter_mut().enumerate().rev() {
+            cx.checkpoint().await;
+            let start = b.saturating_mul(STEP);
+            let chunk = store
+                .get(start..start.saturating_add(STEP).min(store.len()))
+                .unwrap_or_default();
+            if let Some(p) = chunk.iter().position(|&c| c == 0) {
+                next = start.checked_add(p);
+            }
+            *slot = next;
+        }
+        let nuls = Arc::new(Nuls { from_block });
+        cx.cache(span, "rpm-nuls", nuls.clone());
+        nuls
+    }
+
+    /// The position of the first NUL at or after `at`.
+    fn find(&self, store: &[u8], at: usize) -> Option<usize> {
+        let block = at / STEP;
+        let end = block
+            .saturating_add(1)
+            .saturating_mul(STEP)
+            .min(store.len());
+        if let Some(p) = store
+            .get(at..end)
+            .and_then(|c| c.iter().position(|&b| b == 0))
+        {
             return at.checked_add(p);
         }
-        at = at.saturating_add(chunk.len());
+        self.from_block
+            .get(block.saturating_add(1))
+            .copied()
+            .flatten()
     }
-    None
+}
+
+/// Reads a header's data store (up to the read limit) and indexes it.
+async fn load_store(cx: &Cx, store: Span) -> Result<(Vec<u8>, Arc<Nuls>)> {
+    let span = store.sub(0, cx.limits().max_read);
+    let bytes = cx.read(span).await?;
+    let nuls = Nuls::of(cx, span, &bytes).await;
+    Ok((bytes, nuls))
+}
+
+/// A header's data store and its NUL index.
+struct Store<'a> {
+    bytes: &'a [u8],
+    nuls: &'a Nuls,
 }
 
 /// Decodes up to `limit` items of an entry from the store.
-async fn decode(cx: &Cx, e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
+async fn decode(cx: &Cx, e: &Entry, s: &Store<'_>, base: Span, limit: u32) -> Option<Decoded> {
+    let store = s.bytes;
     let start = to_usize(e.offset.into());
     let n = e.count.min(limit);
     let mut items = Vec::new();
@@ -330,10 +404,14 @@ async fn decode(cx: &Cx, e: &Entry, store: &[u8], base: Span, limit: u32) -> Opt
         6 | 8 | 9 => {
             let n = if e.kind == 6 { 1 } else { n };
             for _ in 0..n {
-                let rest = store.get(at..)?;
-                let len = nul(cx, rest).await?;
-                let s = String::from_utf8_lossy(rest.get(..len)?).into_owned();
-                items.push((text(s), span(at, len.saturating_add(1))));
+                store.get(at..)?;
+                let len = s.nuls.find(store, at)?.checked_sub(at)?;
+                // One block scanned, plus the display copy.
+                for _ in 0..=len.min(MAX_SHOWN) / STEP {
+                    cx.checkpoint().await;
+                }
+                let shown = shown_text(store.get(at..at.checked_add(len)?)?);
+                items.push((text(shown), span(at, len.saturating_add(1))));
                 at = at.checked_add(len)?.checked_add(1)?;
             }
         }
@@ -347,7 +425,7 @@ async fn decode(cx: &Cx, e: &Entry, store: &[u8], base: Span, limit: u32) -> Opt
 }
 
 /// A string or number tag's first value, for summaries.
-async fn first_text(cx: &Cx, e: &Entry, store: &[u8], base: Span) -> Option<String> {
+async fn first_text(cx: &Cx, e: &Entry, store: &Store<'_>, base: Span) -> Option<String> {
     match decode(cx, e, store, base, 1).await? {
         Decoded::One(Value::Text(s), _) => Some(s),
         Decoded::Items(items) => match items.into_iter().next()?.0 {
@@ -377,7 +455,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     // Package identity and payload description from the main header.
     let index = cx.read(main.index).await?;
-    let store = cx.read(main.store.sub(0, cx.limits().max_read)).await?;
+    let (bytes, nuls) = load_store(&cx, main.store).await?;
+    let store = Store {
+        bytes: &bytes,
+        nuls: &nuls,
+    };
     let mut tags = std::collections::BTreeMap::new();
     for i in 0..to_usize(main.entries.into()) {
         if i.is_multiple_of(1024) {
@@ -430,7 +512,11 @@ async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
         BE,
     ));
     let index = cx.read(h.index).await?;
-    let store = cx.read(h.store.sub(0, cx.limits().max_read)).await?;
+    let (bytes, nuls) = load_store(&cx, h.store).await?;
+    let store = Store {
+        bytes: &bytes,
+        nuls: &nuls,
+    };
     let table = if signature { SIGNATURE_TAGS } else { TAGS };
     for i in 0..to_usize(h.entries.into()) {
         let Some(e) = entry_at(&index, i) else {
@@ -505,7 +591,11 @@ fn present(tag: u32, v: Value, signature: bool) -> Value {
 async fn items(cx: Cx, (store, e, fields): (Span, Entry, Arc<Vec<Node>>)) -> Result<()> {
     emit_nodes(cx.clone(), fields).await?;
     // Read only the part of the store this entry can use.
-    let data = cx.read(store.sub(0, cx.limits().max_read)).await?;
+    let (bytes, nuls) = load_store(&cx, store).await?;
+    let data = Store {
+        bytes: &bytes,
+        nuls: &nuls,
+    };
     let Some(Decoded::Items(values)) = decode(&cx, &e, &data, store, e.count).await else {
         return Ok(());
     };

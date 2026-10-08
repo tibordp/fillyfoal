@@ -7,7 +7,7 @@
 //! Directories, read through that same mapping, are lazy, paged trees
 //! (hashed directories are read linearly).
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, u16_le, u32_le};
@@ -503,23 +503,49 @@ async fn group_descriptors(cx: Cx, (fs, per_group): (FsRef, u64)) -> Result<()> 
 /// What an inode maps: (logical block, physical block, count, initialized).
 type Mapping = (u64, u64, u64, bool);
 
+/// Mappings kept sorted by logical block as they are found (the walks are
+/// charged per tree block; sorting a million entries afterwards would be one
+/// long step). Equal logical blocks keep the order they were found in.
+#[derive(Default)]
+struct Mappings {
+    /// (logical block, arrival) -> (physical block, count, initialized).
+    sorted: BTreeMap<(u64, usize), (u64, u64, bool)>,
+}
+
+impl Mappings {
+    fn push(&mut self, (logical, physical, count, init): Mapping) {
+        let arrival = self.sorted.len();
+        self.sorted
+            .insert((logical, arrival), (physical, count, init));
+    }
+
+    fn len(&self) -> usize {
+        self.sorted.len()
+    }
+
+    fn into_sorted(self) -> impl Iterator<Item = Mapping> {
+        self.sorted
+            .into_iter()
+            .map(|((logical, _), (physical, count, init))| (logical, physical, count, init))
+    }
+}
+
 /// Collects an inode's block mappings, sorted by logical block.
 async fn mappings(
     cx: &Cx,
     fs: &Fs,
     inode: &[u8],
     size: u64,
-) -> Result<(Vec<Mapping>, Option<Diagnostic>)> {
+) -> Result<(Mappings, Option<Diagnostic>)> {
     let flags = u32_le(inode, 32).unwrap_or(0);
     let i_block = inode.get(40..100).unwrap_or_default();
-    let mut out = Vec::new();
+    let mut out = Mappings::default();
     let problem = if flags & 0x80000 != 0 {
         let mut seen = HashSet::new();
         extents(cx, fs, i_block, MAX_EXTENT_DEPTH, &mut seen, &mut out).await?
     } else {
         block_map(cx, fs, i_block, size, &mut out).await?
     };
-    out.sort_unstable_by_key(|m| m.0);
     Ok((out, problem))
 }
 
@@ -530,7 +556,7 @@ async fn extents(
     node: &[u8],
     depth_limit: u16,
     seen: &mut HashSet<u64>,
-    out: &mut Vec<Mapping>,
+    out: &mut Mappings,
 ) -> Result<Option<Diagnostic>> {
     // Iterative depth-first walk to keep the future small.
     let mut stack: Vec<(Vec<u8>, u16)> = vec![(node.to_vec(), depth_limit)];
@@ -588,7 +614,7 @@ async fn block_map(
     fs: &Fs,
     i_block: &[u8],
     size: u64,
-    out: &mut Vec<Mapping>,
+    out: &mut Mappings,
 ) -> Result<Option<Diagnostic>> {
     let per = fs.block / 4;
     let needed = size.div_ceil(fs.block);
@@ -665,7 +691,7 @@ async fn content(
         cx.diag(d);
     }
     let mut list = PieceList::new(inode_span);
-    for (i, (logical, physical, count, init)) in maps.into_iter().enumerate() {
+    for (i, (logical, physical, count, init)) in maps.into_sorted().enumerate() {
         if i.is_multiple_of(4096) {
             cx.checkpoint().await;
         }
@@ -691,13 +717,13 @@ async fn content(
     if list.len() < size {
         list.hole(cx, size.saturating_sub(list.len()))?;
     }
-    let pieces = list.pieces().to_vec();
     let transform = if flags & 0x80000 != 0 {
         "ext4-extents"
     } else {
         "ext2-blocks"
     };
-    Ok((list.finish(cx, transform)?, pieces))
+    let span = list.finish(cx, transform).await?;
+    Ok((span, list.into_pieces()))
 }
 
 fn inode_size_of(inode: &[u8]) -> u64 {
@@ -711,7 +737,7 @@ async fn inode_node(cx: Cx, (fs, ino): (FsRef, u32)) -> Result<()> {
     let size = inode_size_of(&raw);
     cx.emit(Inode::node(format!("Inode {ino}"), span, LE));
     let (data, pieces) = content(&cx, &fs, span, &raw, size).await?;
-    cx.emit(fragments_node("Blocks", pieces));
+    cx.emit(fragments_node(&cx, "Blocks", pieces).await);
     if u16_le(&raw, 0).unwrap_or(0) & 0xf000 == 0xa000 {
         let target = crate::text::until_nul(&cx.read_avail(data.sub(0, 4096)).await?);
         cx.emit(

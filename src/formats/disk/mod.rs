@@ -135,41 +135,95 @@ pub fn volume(name: impl Into<Cow<'static, str>>, input: &Input, span: Span) -> 
     embedded(name, input.nested(span))
 }
 
-/// Merges physically adjacent pieces and clips the total to `size`.
+/// Pieces handled per checkpoint by the passes over piece lists here.
+const PIECES_PER_STEP: usize = 4096;
+
+/// Merges physically adjacent pieces and clips the total to `size`. One
+/// synchronous pass: for short lists only (a fork's eight extents, one
+/// extent's spared packets); input-sized lists go through
+/// [`coalesce_stepped`].
 pub fn coalesce(pieces: impl IntoIterator<Item = Span>, size: u64) -> Vec<Span> {
-    let mut left = size;
-    let mut out: Vec<Span> = Vec::new();
+    let mut c = Coalesce::new(size);
     for piece in pieces {
-        if left == 0 {
+        if !c.push(piece) {
             break;
         }
-        let take = piece.len.min(left);
-        left = left.saturating_sub(take);
-        match out.last_mut() {
+    }
+    c.out
+}
+
+/// [`coalesce`] for input-sized lists (cluster chains, run lists), yielding
+/// every few thousand pieces.
+pub async fn coalesce_stepped(
+    cx: &Cx,
+    pieces: impl IntoIterator<Item = Span>,
+    size: u64,
+) -> Vec<Span> {
+    let mut c = Coalesce::new(size);
+    for (i, piece) in pieces.into_iter().enumerate() {
+        if i.is_multiple_of(PIECES_PER_STEP) {
+            cx.checkpoint().await;
+        }
+        if !c.push(piece) {
+            break;
+        }
+    }
+    c.out
+}
+
+struct Coalesce {
+    left: u64,
+    out: Vec<Span>,
+}
+
+impl Coalesce {
+    fn new(size: u64) -> Self {
+        Coalesce {
+            left: size,
+            out: Vec::new(),
+        }
+    }
+
+    /// Adds a piece; false once `size` bytes are collected.
+    fn push(&mut self, piece: Span) -> bool {
+        if self.left == 0 {
+            return false;
+        }
+        let take = piece.len.min(self.left);
+        self.left = self.left.saturating_sub(take);
+        match self.out.last_mut() {
             Some(prev) if prev.source == piece.source && prev.end() == piece.offset => {
                 prev.len = prev.len.saturating_add(take);
             }
-            _ => out.push(Span::new(piece.source, piece.offset, take)),
+            _ => self.out.push(Span::new(piece.source, piece.offset, take)),
         }
+        true
     }
-    out
 }
 
 /// The bytes of a file stored in `pieces` (already in file order and clipped
 /// to the file size). Contiguous content is a plain sub-span; fragmented
 /// content becomes a piecewise source keyed by `anchor` (a span identifying
 /// the file, e.g. its directory entry or inode) and `transform`.
-pub fn assemble(cx: &Cx, anchor: Span, transform: &'static str, pieces: Vec<Span>) -> Result<Span> {
-    match pieces.as_slice() {
+pub async fn assemble(
+    cx: &Cx,
+    anchor: Span,
+    transform: &'static str,
+    pieces: &[Span],
+) -> Result<Span> {
+    match pieces {
         [] => Ok(Span::new(anchor.source, anchor.offset, 0)),
         [one] => Ok(*one),
-        _ => cx.add_pieces(
-            Origin {
-                parent: anchor,
-                transform,
-            },
-            pieces,
-        ),
+        _ => {
+            cx.add_pieces_stepped(
+                Origin {
+                    parent: anchor,
+                    transform,
+                },
+                pieces,
+            )
+            .await
+        }
     }
 }
 
@@ -231,9 +285,14 @@ impl PieceList {
         &self.pieces
     }
 
+    /// The pieces collected, without copying them.
+    pub fn into_pieces(self) -> Vec<Span> {
+        self.pieces
+    }
+
     /// Registers the stream as a source (or returns its single piece).
-    pub fn finish(self, cx: &Cx, transform: &'static str) -> Result<Span> {
-        assemble(cx, self.anchor, transform, self.pieces)
+    pub async fn finish(&self, cx: &Cx, transform: &'static str) -> Result<Span> {
+        assemble(cx, self.anchor, transform, &self.pieces).await
     }
 }
 
@@ -243,8 +302,17 @@ pub fn content_node(input: &Input, span: Span) -> Node {
 }
 
 /// Lists the fragments of a file, each spanning its bytes.
-pub fn fragments_node(name: &'static str, pieces: Vec<Span>) -> Node {
-    let total = pieces.iter().map(|p| p.len).fold(0, u64::saturating_add);
+pub async fn fragments_node(
+    cx: &Cx,
+    name: &'static str,
+    pieces: impl Into<Arc<Vec<Span>>>,
+) -> Node {
+    let pieces = pieces.into();
+    let mut total = 0u64;
+    for chunk in pieces.chunks(PIECES_PER_STEP) {
+        cx.checkpoint().await;
+        total = chunk.iter().map(|p| p.len).fold(total, u64::saturating_add);
+    }
     let count = pieces.len();
     Node::new(name)
         .summary(if count == 1 {
@@ -252,7 +320,7 @@ pub fn fragments_node(name: &'static str, pieces: Vec<Span>) -> Node {
         } else {
             format!("{count} fragments, {}", size(total))
         })
-        .lazy(list_fragments, Arc::new(pieces))
+        .lazy(list_fragments, pieces)
 }
 
 async fn list_fragments(cx: Cx, pieces: Arc<Vec<Span>>) -> Result<()> {

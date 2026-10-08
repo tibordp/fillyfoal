@@ -12,6 +12,7 @@
 //! folders are split into their files by the substream sizes. Multi-stream
 //! coders (BCJ2), PPMd, Deflate64 and encryption are unsupported leaves.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
@@ -185,11 +186,57 @@ struct File {
     attributes: Option<u32>,
 }
 
+/// The files of an archive, as their properties were read.
+#[derive(Clone, Debug, Default)]
+struct Files {
+    count: u64,
+    /// Names of the first files (the rest have none).
+    names: Vec<String>,
+    /// One per file, if the archive marks empty streams.
+    empty_stream: Vec<bool>,
+    /// One per empty stream: an empty file rather than a directory.
+    empty_file: Vec<bool>,
+    mtimes: BTreeMap<u64, u64>,
+    attributes: BTreeMap<u64, u32>,
+}
+
+impl Files {
+    /// The files in order.
+    fn iter(&self) -> impl Iterator<Item = File> + '_ {
+        let mut empties = 0usize;
+        (0..self.count).map(move |i| {
+            let at = to_usize(i);
+            let empty = self.empty_stream.get(at).copied().unwrap_or(false);
+            let attributes = self.attributes.get(&i).copied();
+            let mut is_dir = false;
+            if empty {
+                is_dir = !self.empty_file.get(empties).copied().unwrap_or(false);
+                empties = empties.saturating_add(1);
+            }
+            if attributes.is_some_and(|a| a & 0x10 != 0) {
+                is_dir = true;
+            }
+            File {
+                name: self.names.get(at).cloned().unwrap_or_default(),
+                has_stream: !empty,
+                is_dir,
+                mtime: self.mtimes.get(&i).copied(),
+                attributes,
+            }
+        })
+    }
+}
+
+/// Whether item `i` is defined: all are (`None`), or its bit is set.
+fn is_defined(defined: Option<&[bool]>, i: u64) -> bool {
+    defined.is_none_or(|d| d.get(to_usize(i)).copied().unwrap_or(false))
+}
+
 #[derive(Clone, Debug, Default)]
 struct Archive {
     encoded: bool,
     streams: Streams,
-    files: Vec<File>,
+    files: Files,
     outline: Vec<Item>,
 }
 
@@ -273,6 +320,16 @@ impl Parser<'_> {
                     .is_some_and(|b| b & (0x80 >> (i % 8)) != 0)
             })
             .collect())
+    }
+
+    /// AllAreDefined byte, then a bit vector if not all are (`None` if all
+    /// are: nothing to allocate for a count alone).
+    fn defined_bits(&mut self, n: u64) -> P<Option<Vec<bool>>> {
+        if self.byte()? != 0 {
+            Ok(None)
+        } else {
+            self.bits(n).map(Some)
+        }
     }
 
     /// AllAreDefined byte, then a bit vector if not all are.
@@ -531,9 +588,13 @@ impl Parser<'_> {
     async fn files_info(&mut self, a: &mut Archive) -> P<Item> {
         let start = self.at.saturating_sub(1);
         let n = self.count(1)?;
-        let mut files: Vec<File> = (0..n).map(|_| File::default()).collect();
-        let mut empty_stream = vec![false; to_usize(n)];
-        let mut empty_file = Vec::new();
+        // Properties are kept as read (a bit per file at most 8 per byte, a
+        // name at least 2 bytes, a time 8); `Files::iter` puts the files
+        // together. Nothing is allocated per file for the count alone.
+        let mut files = Files {
+            count: n,
+            ..Files::default()
+        };
         let mut children = Vec::new();
         loop {
             self.cx.checkpoint().await;
@@ -552,50 +613,59 @@ impl Parser<'_> {
             let mut summary = None;
             match kind {
                 0x0e => {
-                    empty_stream = sub.bits(n)?;
-                    let empties = empty_stream.iter().filter(|&&e| e).count();
+                    files.empty_stream = sub.bits(n)?;
+                    let empties = files.empty_stream.iter().filter(|&&e| e).count();
                     summary = Some(count(to_u64(empties), "empty stream", "empty streams"));
                 }
                 0x0f => {
-                    let empties = to_u64(empty_stream.iter().filter(|&&e| e).count());
-                    empty_file = sub.bits(empties)?;
+                    let empties = to_u64(files.empty_stream.iter().filter(|&&e| e).count());
+                    files.empty_file = sub.bits(empties)?;
                 }
                 0x11 => {
                     if sub.byte()? != 0 {
                         return Err("external names are not supported");
                     }
-                    for f in &mut files {
-                        self.cx.checkpoint().await;
+                    // Once the data runs out (nothing left to decode), the
+                    // remaining names are empty.
+                    let mut names = Vec::new();
+                    while to_u64(names.len()) < n {
                         let rest = body.get(sub.at..).unwrap_or_default();
                         let (name, len, _) = crate::text::utf16z(rest, Endian::Little);
-                        f.name = name;
+                        if len == 0 {
+                            break;
+                        }
+                        for _ in 0..len.div_ceil(4096) {
+                            self.cx.checkpoint().await;
+                        }
+                        names.push(name);
                         sub.at = sub.at.saturating_add(len);
                     }
+                    files.names = names;
                 }
                 0x12..=0x14 => {
-                    let defined = sub.defined(n)?;
+                    let defined = sub.defined_bits(n)?;
                     if sub.byte()? != 0 {
                         return Err("external times are not supported");
                     }
-                    for (f, d) in files.iter_mut().zip(defined) {
+                    for i in 0..n {
                         self.cx.checkpoint().await;
-                        if d {
+                        if is_defined(defined.as_deref(), i) {
                             let t = sub.u64()?;
                             if kind == 0x14 {
-                                f.mtime = Some(t);
+                                files.mtimes.insert(i, t);
                             }
                         }
                     }
                 }
                 0x15 => {
-                    let defined = sub.defined(n)?;
+                    let defined = sub.defined_bits(n)?;
                     if sub.byte()? != 0 {
                         return Err("external attributes are not supported");
                     }
-                    for (f, d) in files.iter_mut().zip(defined) {
+                    for i in 0..n {
                         self.cx.checkpoint().await;
-                        if d {
-                            f.attributes = Some(sub.u32()?);
+                        if is_defined(defined.as_deref(), i) {
+                            files.attributes.insert(i, sub.u32()?);
                         }
                     }
                 }
@@ -606,17 +676,6 @@ impl Parser<'_> {
             let mut item = self.item(name, at);
             item.summary = summary.or_else(|| Some(human_size(size)));
             children.push(item);
-        }
-        let mut empty = empty_file.into_iter();
-        for (f, e) in files.iter_mut().zip(&empty_stream) {
-            self.cx.checkpoint().await;
-            f.has_stream = !e;
-            if *e {
-                f.is_dir = !empty.next().unwrap_or(false);
-            }
-            if f.attributes.is_some_and(|a| a & 0x10 != 0) {
-                f.is_dir = true;
-            }
         }
         a.files = files;
         let mut item = self
@@ -986,7 +1045,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     }
 
-    let files = to_u64(archive.files.len());
+    let files = archive.files.count;
     let mut methods: Vec<String> = Vec::new();
     for f in &archive.streams.folders {
         cx.checkpoint().await;
@@ -1144,7 +1203,7 @@ async fn list_folders(
 
 async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u64)) -> Result<()> {
     let file = input.span;
-    cx.set_count(Count::Exact(to_u64(archive.files.len())));
+    cx.set_count(Count::Exact(archive.files.count));
     let spans = folder_spans(&cx, &archive, file, pack_base).await;
     // Walk files and substreams together.
     let mut folder = 0usize;

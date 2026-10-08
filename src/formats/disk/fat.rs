@@ -615,16 +615,16 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
     if let Some(entry) = dir.entry {
         cx.emit(DirEntry::node("Directory entry", entry, LE));
     }
-    let pieces = dir_pieces(&cx, &dir).await?;
+    let pieces = Arc::new(dir_pieces(&cx, &dir).await?);
     if dir.first != 0 {
-        cx.emit(fragments_node("Clusters", pieces.clone()));
+        cx.emit(fragments_node(&cx, "Clusters", pieces.clone()).await);
     }
     let mut ancestors = (*dir.ancestors).clone();
     ancestors.push(dir.first);
     let ancestors = Arc::new(ancestors);
 
     let mut long = LongName::default();
-    for piece in pieces {
+    for &piece in pieces.iter() {
         let data = cx.read_avail(piece).await?;
         for (i, raw) in data.as_chunks::<32>().0.iter().enumerate() {
             let span = piece.sub(to_u64(i).saturating_mul(ENTRY), ENTRY);
@@ -756,9 +756,9 @@ async fn file(cx: Cx, (fs, entry, long): (Vol, Span, Option<Span>)) -> Result<()
             "cluster chain has {found} clusters, the file size needs {needed}"
         )));
     }
-    let pieces = crate::formats::disk::coalesce(pieces, size);
-    cx.emit(fragments_node("Clusters", pieces.clone()));
-    let content = assemble(&cx, entry, "fat-chain", pieces)?;
+    let pieces = Arc::new(crate::formats::disk::coalesce_stepped(&cx, pieces, size).await);
+    cx.emit(fragments_node(&cx, "Clusters", pieces.clone()).await);
+    let content = assemble(&cx, entry, "fat-chain", &pieces).await?;
     cx.emit(content_node(&fs.input, content));
     Ok(())
 }

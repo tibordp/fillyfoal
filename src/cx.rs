@@ -50,6 +50,34 @@ pub(crate) struct Pieces {
     pub starts: Vec<u64>,
 }
 
+/// [`Pieces`] being built: pieces clamped to their sources, empty ones
+/// dropped.
+#[derive(Default)]
+struct PieceIndex {
+    spans: Vec<Span>,
+    starts: Vec<u64>,
+    len: u64,
+}
+
+impl PieceIndex {
+    fn extend(&mut self, sh: &Shared, pieces: &[Span]) {
+        self.spans.reserve(pieces.len());
+        self.starts.reserve(pieces.len());
+        for piece in pieces {
+            let source_len = sh.source_len(piece.source);
+            let end = piece.end().min(source_len);
+            let start = piece.offset.min(end);
+            let clamped = Span::new(piece.source, start, end.saturating_sub(start));
+            if clamped.len == 0 {
+                continue;
+            }
+            self.starts.push(self.len);
+            self.len = self.len.saturating_add(clamped.len);
+            self.spans.push(clamped);
+        }
+    }
+}
+
 pub(crate) struct SourceEntry {
     pub len: u64,
     /// Bytes of a derived (in-memory) source.
@@ -881,26 +909,44 @@ impl Cx {
     /// to the pieces, and provenance stays exact. Pieces are clamped to their
     /// sources; [`Span::zeros`] pieces are holes that read as zeros. Memoized
     /// by `origin`.
+    ///
+    /// This is one synchronous pass over `pieces` (a few nanoseconds each),
+    /// fine for lists a caller built in a charged loop up to a few thousand
+    /// pieces. For input-sized lists (a fragmented file, a sparse disk) use
+    /// [`Cx::add_pieces_stepped`], which yields while it indexes them.
     pub fn add_pieces(&self, origin: Origin, pieces: Vec<Span>) -> Result<Span> {
         if let Some(found) = self.derived(origin) {
             return Ok(found.span);
         }
-        let mut sh = lock(&self.shared);
-        let mut spans = Vec::with_capacity(pieces.len());
-        let mut starts = Vec::with_capacity(pieces.len());
-        let mut len = 0u64;
-        for piece in pieces {
-            let source_len = sh.source_len(piece.source);
-            let end = piece.end().min(source_len);
-            let start = piece.offset.min(end);
-            let clamped = Span::new(piece.source, start, end.saturating_sub(start));
-            if clamped.len == 0 {
-                continue;
-            }
-            starts.push(len);
-            len = len.saturating_add(clamped.len);
-            spans.push(clamped);
+        let mut index = PieceIndex::default();
+        index.extend(&lock(&self.shared), &pieces);
+        Ok(self.register_pieces(origin, index))
+    }
+
+    /// [`Cx::add_pieces`] for input-sized lists: indexes `pieces` a bounded
+    /// batch at a time, charging one unit per batch.
+    pub async fn add_pieces_stepped(&self, origin: Origin, pieces: &[Span]) -> Result<Span> {
+        const BATCH: usize = 1024;
+        if let Some(found) = self.derived(origin) {
+            return Ok(found.span);
         }
+        let mut index = PieceIndex::default();
+        for batch in pieces.chunks(BATCH) {
+            self.checkpoint().await;
+            index.extend(&lock(&self.shared), batch);
+        }
+        Ok(self.register_pieces(origin, index))
+    }
+
+    fn register_pieces(&self, origin: Origin, index: PieceIndex) -> Span {
+        let mut sh = lock(&self.shared);
+        // Another expansion may have registered it while this one yielded.
+        if let Some(&id) = sh.derived.get(&origin)
+            && let Some(entry) = sh.source(id)
+        {
+            return Span::new(id, 0, entry.len);
+        }
+        let PieceIndex { spans, starts, len } = index;
         let id = SourceId(u32::try_from(sh.sources.len()).unwrap_or(u32::MAX));
         let tick = sh.tick;
         sh.sources.push(SourceEntry {
@@ -916,7 +962,7 @@ impl Cx {
             on_demand: false,
         });
         sh.derived.insert(origin, id);
-        Ok(Span::new(id, 0, len))
+        Span::new(id, 0, len)
     }
 
     /// A value previously stored with [`Cx::cache`] for `(span, kind)`.

@@ -49,7 +49,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::disk::{
-    align, assemble, civil_to_unix, coalesce, content_node, fragments_node,
+    align, assemble, civil_to_unix, coalesce, coalesce_stepped, content_node, fragments_node,
 };
 use crate::formats::util::arcutil::{count, human_size, text, uint};
 use crate::node::Node;
@@ -1688,7 +1688,7 @@ async fn metadata_file(cx: &Cx, vol: &Vol, base: u16, lbn: u32) -> Result<Span> 
         return Err(Diagnostic::malformed("not a metadata file").at(icb.span));
     }
     let (pieces, _) = file_pieces(cx, vol, &icb).await?;
-    assemble(cx, icb.span, "udf-metadata", pieces)
+    assemble(cx, icb.span, "udf-metadata", &pieces).await
 }
 
 /// The virtual allocation table: the file entry in the last block of the
@@ -1718,7 +1718,7 @@ async fn vat(cx: &Cx, vol: &Vol, base: u16, start: u64) -> Result<Option<(Vec<u3
         return Ok(None);
     };
     let (pieces, _) = file_pieces(cx, vol, &icb).await?;
-    let span = assemble(cx, icb.span, "udf-vat", pieces)?;
+    let span = assemble(cx, icb.span, "udf-vat", &pieces).await?;
     let data = cx.read_avail(span.sub(0, MAX_VAT)).await?;
     let entries = match icb.file_type {
         248 => {
@@ -1908,7 +1908,7 @@ async fn file_pieces(cx: &Cx, vol: &Vol, icb: &Icb) -> Result<(Vec<Span>, Vec<Sp
         );
         cx.checkpoint().await;
     }
-    Ok((coalesce(pieces, icb.size), aeds))
+    Ok((coalesce_stepped(cx, pieces, icb.size).await, aeds))
 }
 
 fn fe_node(icb: &Icb) -> Node {
@@ -2027,7 +2027,7 @@ async fn directory(cx: Cx, e: Entry) -> Result<()> {
             ));
         }
     }
-    let span = assemble(&cx, icb.span, "udf-directory", pieces)?;
+    let span = assemble(&cx, icb.span, "udf-directory", &pieces).await?;
     let mut pos = resumed.unwrap_or(0);
     while pos.saturating_add(FID_HEAD) <= span.len {
         let head_span = span.sub(pos, FID_HEAD);
@@ -2106,10 +2106,11 @@ async fn file(cx: Cx, e: Entry) -> Result<()> {
     if icb.size == 0 {
         return Ok(());
     }
+    let pieces = Arc::new(pieces);
     if icb.flags & 7 != 3 {
-        cx.emit(fragments_node("Extents", pieces.clone()));
+        cx.emit(fragments_node(&cx, "Extents", pieces.clone()).await);
     }
-    let content = assemble(&cx, icb.span, "udf-extents", pieces)?;
+    let content = assemble(&cx, icb.span, "udf-extents", &pieces).await?;
     if icb.file_type == 12 {
         let data = cx.read(content.sub(0, 4096)).await?;
         cx.emit(
