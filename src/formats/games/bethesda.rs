@@ -117,6 +117,7 @@ async fn tes(cx: Cx, input: Input) -> Result<()> {
         } else {
             node = node.summary(format!("{size} bytes"));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         n = n.saturating_add(1);
         pos = pos.saturating_add(total);

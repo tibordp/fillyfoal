@@ -4,6 +4,8 @@
 //! segments and essence elements are named; partition packs and metadata
 //! sets are decoded. KLVs are listed in pages.
 
+use std::collections::HashMap;
+
 use crate::bytes::{to_u64, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::Record;
@@ -274,6 +276,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node.lazy(expand_klv, klv)).await;
         pos = pos.saturating_add(total);
     }
@@ -692,15 +695,19 @@ async fn local_set(cx: &Cx, value: Span, primer: Option<Span>) -> Result<()> {
         Some(p) => vidutil::read_small(cx, p, 0x100000).await?,
         None => Vec::new(),
     };
+    let uls = dynamic_uls(&primer);
     let mut at = 0usize;
-    for (tag, v) in local_items(&d) {
+    for (i, (tag, v)) in local_items(&d).enumerate() {
+        if i & 0xff == 0xff {
+            cx.checkpoint().await;
+        }
         let total = v.len().saturating_add(4);
         let span = vidutil::at(value, at, total);
         let vspan = span.tail(4);
         at = at.saturating_add(total);
         let name = local_tag_name(tag).map_or_else(
-            || match dynamic_ul(&primer, tag) {
-                Some(ul) => format!("Tag {tag:#06x} ({})", ul_text(&ul)),
+            || match uls.get(&tag).copied().flatten() {
+                Some(ul) => format!("Tag {tag:#06x} ({})", ul_text(ul)),
                 None => format!("Tag {tag:#06x}"),
             },
             str::to_owned,
@@ -714,19 +721,21 @@ async fn local_set(cx: &Cx, value: Span, primer: Option<Span>) -> Result<()> {
     Ok(())
 }
 
-/// The UL a dynamic local tag stands for, from the primer pack.
-fn dynamic_ul(primer: &[u8], tag: u16) -> Option<Vec<u8>> {
-    let n = u32_be(primer, 0)?;
+/// The ULs dynamic local tags stand for, from the primer pack (the first
+/// entry for a tag wins). A map, so a set with many items is not quadratic.
+fn dynamic_uls(primer: &[u8]) -> HashMap<u16, Option<&[u8]>> {
+    let mut out = HashMap::new();
+    let n = u32_be(primer, 0).unwrap_or(0);
     let mut at = 8usize;
     for _ in 0..n.min(65536) {
-        if u16_be(primer, at)? == tag {
-            return primer
-                .get(at.saturating_add(2)..at.saturating_add(18))
-                .map(<[u8]>::to_vec);
-        }
+        let Some(tag) = u16_be(primer, at) else {
+            break;
+        };
+        out.entry(tag)
+            .or_insert_with(|| primer.get(at.saturating_add(2)..at.saturating_add(18)));
         at = at.saturating_add(18);
     }
-    None
+    out
 }
 
 fn item_node(name: String, tag: u16, span: Span, vspan: Span, v: &[u8]) -> Node {

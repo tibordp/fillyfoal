@@ -473,6 +473,7 @@ pub async fn children(cx: &Cx, input: Input, region: Span, ctx: Ctx) -> Result<(
         if top {
             annotation.observe(cx, &st).await;
         }
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node.lazy(crate::expander!(self::expand_box: BoxState), st))
             .await;
         if header.to_end {

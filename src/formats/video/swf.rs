@@ -316,6 +316,7 @@ async fn tag_list(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()
                 (input, body, code, depth),
             );
         }
+        cx.progress_in(span, span.offset.saturating_add(start));
         cx.push(node).await;
         if code == 0 {
             break;

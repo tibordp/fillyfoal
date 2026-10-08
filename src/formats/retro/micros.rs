@@ -1039,11 +1039,15 @@ fn binhex_probe(h: &Head<'_>) -> bool {
 declare_format!(pub BINHEX = "binhex", "BinHex 4.0 encoded Mac file", ["hqx"],
     "application/mac-binhex40", Probe::Custom(binhex_probe), binhex);
 
-/// Decodes the 6-bit text and the 0x90 run-length encoding.
-fn binhex_decode(encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) {
+/// Decodes the 6-bit text and the 0x90 run-length encoding (in budgeted
+/// steps: the input can be as large as a read).
+async fn binhex_decode(cx: &Cx, encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) {
     let mut bits = Vec::new();
     let (mut acc, mut n) = (0u32, 0u32);
-    for &c in encoded {
+    for (i, &c) in encoded.iter().enumerate() {
+        if i & 0xffff == 0xffff {
+            cx.checkpoint().await;
+        }
         if c == b':' {
             break;
         }
@@ -1059,7 +1063,12 @@ fn binhex_decode(encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) 
     }
     let mut out: Vec<u8> = Vec::with_capacity(bits.len());
     let mut it = bits.iter().copied();
+    let mut steps = 0u32;
     while let Some(b) = it.next() {
+        steps = steps.wrapping_add(1);
+        if steps & 0xffff == 0 {
+            cx.checkpoint().await;
+        }
         if b == 0x90 {
             match it.next() {
                 Some(0) => out.push(0x90),
@@ -1118,9 +1127,11 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
         .map_or(raw.len(), |p| start.saturating_add(p));
     let encoded = file.sub(to_u64(start), to_u64(end.saturating_sub(start)));
     let (decoded, error) = binhex_decode(
+        &cx,
         raw.get(start..end).unwrap_or_default(),
         usize::try_from(cx.limits().max_derived / 4).unwrap_or(usize::MAX),
-    );
+    )
+    .await;
     let derived = cx.add_derived(
         Origin {
             parent: encoded,

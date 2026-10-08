@@ -556,6 +556,7 @@ async fn elements(cx: &Cx, input: Input, region: Span, depth: u32, scale: u64) -
         if h.size.is_none() {
             node = node.desc("Unknown size: ends at the next element of the same level");
         }
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(total.max(1));
     }

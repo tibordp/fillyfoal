@@ -217,6 +217,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if matches!(code, 0x00 | 0xb3 | 0xb5 | 0xb8) {
             node = node.lazy(expand_unit, (span, code));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = end.max(pos.saturating_add(4));
     }

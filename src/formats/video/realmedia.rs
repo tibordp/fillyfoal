@@ -99,6 +99,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 chunk.span.len,
             ));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(size);
     }
@@ -395,6 +396,7 @@ async fn expand_packets(cx: Cx, (span, declared): (Span, u32)) -> Result<()> {
         let stream = u16_be(&d, 4).unwrap_or(0);
         let ts = u32_be(&d, 6).unwrap_or(0);
         let key = version == 0 && d.get(11).is_some_and(|f| f & 2 != 0);
+        cx.progress_in(span, span.offset.saturating_add(pos));
         cx.push(
             Node::new(format!("Packet {index}"))
                 .span(pspan)

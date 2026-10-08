@@ -522,6 +522,7 @@ async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> 
             ));
         }
         let header = span.sub(0, (syntax.header)(&head));
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node.lazy(frame, (span, header, syntax))).await;
         pos = pos.saturating_add(len);
         index = index.saturating_add(1);

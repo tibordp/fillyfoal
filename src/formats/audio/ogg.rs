@@ -488,6 +488,7 @@ async fn list_pages(cx: Cx, (input, streams): (Input, Streams)) -> Result<()> {
             pos,
             streams: streams.clone(),
         };
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node.lazy(expand_page, state)).await;
         pos = pos.saturating_add(page.span.len.max(1));
         index = index.saturating_add(1);

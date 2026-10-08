@@ -56,6 +56,7 @@ async fn smush(cx: Cx, input: Input) -> Result<()> {
         } else if chunk.id == b"FRME" {
             frames = frames.saturating_add(1);
         }
+        cx.progress_in(cur.region(), cur.region().offset.saturating_add(cur.pos()));
         cx.push(chunk.node()).await;
     }
     cx.annotate(format!(

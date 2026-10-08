@@ -103,6 +103,7 @@ pub async fn dissect_roq(cx: Cx, input: Input) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(total);
     }
@@ -372,6 +373,7 @@ pub async fn dissect_smjpeg(cx: Cx, input: Input) -> Result<()> {
         if in_header {
             cx.emit(node);
         } else {
+            cx.progress_in(file, file.offset.saturating_add(pos));
             cx.push(node).await;
             index = index.saturating_add(1);
         }
@@ -551,6 +553,7 @@ async fn flic_chunks(cx: &Cx, region: Span, depth: u32) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(size);
     }
@@ -645,6 +648,7 @@ pub async fn dissect_mve(cx: Cx, input: Input) -> Result<()> {
                 at = at.saturating_add(4).saturating_add(usize::from(l));
             }
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(
             Node::new(vidutil::lookup_or(MVE_CHUNKS, kind.into()))
                 .span(span)
@@ -835,6 +839,7 @@ async fn thp_frames(cx: Cx, f: ThpFrames) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(f.file, f.file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(size);
         size = next;

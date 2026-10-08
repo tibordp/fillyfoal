@@ -26,6 +26,7 @@ async fn chunks(cx: &Cx, region: Span, start: u64, layout: ChunkLayout) -> Resul
     cur.seek(start);
     let mut out = Vec::new();
     while let Some(chunk) = cur.chunk(layout).await? {
+        cx.progress_in(region, region.offset.saturating_add(cur.pos()));
         cx.push(chunk.node()).await;
         out.push(chunk);
     }

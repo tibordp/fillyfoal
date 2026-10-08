@@ -50,10 +50,15 @@ enum Token {
 
 /// Splits clrmamepro syntax into words, quoted strings and parentheses,
 /// each with its byte range.
-fn tokenize(data: &[u8]) -> Vec<(Token, usize, usize)> {
+async fn tokenize(cx: &Cx, data: &[u8]) -> Vec<(Token, usize, usize)> {
     let mut out = Vec::new();
     let mut i = 0usize;
+    let mut steps = 0u32;
     while let Some(&b) = data.get(i) {
+        steps = steps.wrapping_add(1);
+        if steps & 0xfff == 0 {
+            cx.checkpoint().await;
+        }
         match b {
             b'(' => {
                 out.push((Token::Open, i, i.saturating_add(1)));
@@ -112,10 +117,15 @@ struct Block {
     children: Vec<(String, Vec<(String, String)>)>,
 }
 
-fn blocks(tokens: &[(Token, usize, usize)]) -> Vec<Block> {
+async fn blocks(cx: &Cx, tokens: &[(Token, usize, usize)]) -> Vec<Block> {
     let mut out = Vec::new();
     let mut i = 0usize;
+    let mut steps = 0u32;
     while let Some((tok, start, _)) = tokens.get(i) {
+        steps = steps.wrapping_add(1);
+        if steps & 0xff == 0 {
+            cx.checkpoint().await;
+        }
         let Token::Word(kind) = tok else {
             i = i.saturating_add(1);
             continue;
@@ -181,8 +191,8 @@ fn get<'a>(pairs: &'a [(String, String)], key: &str) -> Option<&'a str> {
 async fn clrmamepro(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let (data, cut) = read_text(&cx, file).await?;
-    let tokens = tokenize(&data);
-    let all = blocks(&tokens);
+    let tokens = tokenize(&cx, &data).await;
+    let all = blocks(&cx, &tokens).await;
     let mut header = String::new();
     let mut games = Vec::new();
     let mut roms = 0usize;
@@ -371,17 +381,29 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
     let mut entries: Vec<XmlEntry> = Vec::new();
     let mut roms = 0usize;
     let mut pos = 0usize;
-    while let Some(found) = tags
-        .iter()
-        .filter_map(|t| {
-            s.get(pos..).and_then(|r| {
-                r.find(&format!("<{t} "))
-                    .map(|p| (pos.saturating_add(p), *t))
-            })
-        })
-        .min()
-    {
-        let (start, tag) = found;
+    // The next occurrence of each tag at or after `pos` (`None`: no more),
+    // kept between entries so a tag the file does not use is searched for
+    // once, not once per entry.
+    let mut next: Vec<Option<usize>> = tags.iter().map(|t| s.find(&format!("<{t} "))).collect();
+    loop {
+        if entries.len() & 0xff == 0xff {
+            cx.checkpoint().await;
+        }
+        for (t, n) in tags.iter().zip(next.iter_mut()) {
+            if n.is_some_and(|p| p < pos) {
+                *n = s
+                    .get(pos..)
+                    .and_then(|r| r.find(&format!("<{t} ")).map(|p| pos.saturating_add(p)));
+            }
+        }
+        let Some((start, tag)) = tags
+            .iter()
+            .zip(&next)
+            .filter_map(|(t, n)| n.map(|p| (p, *t)))
+            .min()
+        else {
+            break;
+        };
         let close = format!("</{tag}>");
         let end = s
             .get(start..)
@@ -489,7 +511,10 @@ async fn cdrdao_toc(cx: Cx, input: Input) -> Result<()> {
     let mut disc = String::new();
     let mut tracks: Vec<(String, Span, Statements)> = Vec::new();
     let mut files = 0u32;
-    for (line, span) in lines(&data, file) {
+    for (i, (line, span)) in lines(&data, file).into_iter().enumerate() {
+        if i & 0x3ff == 0x3ff {
+            cx.checkpoint().await;
+        }
         let t = line.trim();
         if t.is_empty() || t.starts_with("//") {
             continue;
@@ -573,7 +598,10 @@ async fn cht(cx: Cx, input: Input) -> Result<()> {
     let (data, _) = read_text(&cx, file).await?;
     let mut declared = 0u64;
     let mut cheats: Vec<(u64, Span, CheatFields)> = Vec::new();
-    for (line, span) in lines(&data, file) {
+    for (i, (line, span)) in lines(&data, file).into_iter().enumerate() {
+        if i & 0x3ff == 0x3ff {
+            cx.checkpoint().await;
+        }
         let Some((k, v)) = line.split_once('=') else {
             continue;
         };

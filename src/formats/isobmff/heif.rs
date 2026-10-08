@@ -507,9 +507,12 @@ async fn ipma(cx: &Cx, body: Span) -> Result<()> {
     let (v, flags) = full_box(&mut f)?;
     let n = f.u32("Entry count").emit()?;
     let mut silent = Fields::new(&block, BE);
-    for _ in 0..n {
+    for i in 0..n {
         if f.remaining() == 0 {
             break;
+        }
+        if i & 0xff == 0xff {
+            cx.checkpoint().await;
         }
         let start = f.pos();
         silent.seek(start);

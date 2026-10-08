@@ -225,6 +225,7 @@ async fn track(cx: Cx, data: Span) -> Result<()> {
         if let Some(v) = value {
             node = node.value(text(v));
         }
+        cx.progress_in(data, data.offset.saturating_add(start));
         cx.push(node).await;
         if let Event::Meta { kind: 0x2f, .. } = ev.event {
             if !cur.at_end() {

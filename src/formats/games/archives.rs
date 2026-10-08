@@ -87,11 +87,17 @@ async fn sarc(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub YAZ0 = "yaz0", "Nintendo Yaz0 compressed data", ["szs", "yaz0"], "application/x-yaz0",
     Probe::Magic(&[(0, b"Yaz0"), (0, b"Yaz1")]), yaz0);
 
-/// Yaz0 is a simple LZ77 variant: decode it into a derived source.
-fn decode_yaz0(src: &[u8], size: usize, limit: usize) -> Result<Vec<u8>> {
+/// Yaz0 is a simple LZ77 variant: decode it into a derived source, in
+/// budgeted steps (every group produces at least one byte).
+async fn decode_yaz0(cx: &Cx, src: &[u8], size: usize, limit: usize) -> Result<Vec<u8>> {
     let mut out = Vec::with_capacity(size.min(limit));
     let mut at = 0usize;
+    let mut next_yield = 0usize;
     while out.len() < size {
+        if out.len() >= next_yield {
+            next_yield = out.len().saturating_add(0x10000);
+            cx.checkpoint().await;
+        }
         let group = *src
             .get(at)
             .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?;
@@ -172,7 +178,7 @@ async fn yaz0_content(cx: Cx, (input, body, size): (Input, Span, u32)) -> Result
         None => {
             let src = crate::codec::read_all(&cx, body).await?;
             let limit = crate::bytes::to_usize(cx.limits().max_derived);
-            let out = decode_yaz0(&src, usize::try_from(size).unwrap_or(0), limit)?;
+            let out = decode_yaz0(&cx, &src, usize::try_from(size).unwrap_or(0), limit).await?;
             cx.add_derived(origin, out, body.len, None)?
         }
     };
@@ -728,8 +734,9 @@ struct MpqState {
 }
 
 impl MpqState {
-    /// The block index of `name`, through the hash table.
-    fn lookup(&self, name: &str) -> Option<usize> {
+    /// The block index of `name`, through the hash table. A full table
+    /// can take a probe of every entry, so this yields as it goes.
+    async fn lookup(&self, cx: &Cx, name: &str) -> Option<usize> {
         use crate::codec::crypto::mpq::{HASH_NAME_A, HASH_NAME_B, HASH_OFFSET, hash_string};
         let entries = self.hashes.len() / 16;
         if entries == 0 {
@@ -744,6 +751,9 @@ impl MpqState {
             .checked_rem(entries)
             .unwrap_or(0);
         for i in 0..entries {
+            if i & 0xfff == 0xfff {
+                cx.checkpoint().await;
+            }
             let at = start.wrapping_add(i).checked_rem(entries).unwrap_or(0);
             let e = self
                 .hashes
@@ -881,11 +891,18 @@ async fn mpq_files(cx: Cx, state: MpqState) -> Result<()> {
     // Names come from the (listfile), when there is one.
     let mut names: Vec<Option<String>> = vec![None; state.blocks.len()];
     for special in ["(listfile)", "(attributes)", "(signature)"] {
-        if let Some(slot) = state.lookup(special).and_then(|i| names.get_mut(i)) {
+        if let Some(slot) = state
+            .lookup(&cx, special)
+            .await
+            .and_then(|i| names.get_mut(i))
+        {
             *slot = Some(special.to_owned());
         }
     }
-    if let Some(block) = state.lookup("(listfile)").and_then(|i| state.blocks.get(i))
+    if let Some(block) = state
+        .lookup(&cx, "(listfile)")
+        .await
+        .and_then(|i| state.blocks.get(i))
         && let Ok(list) = state.read_file(&cx, block, Some("(listfile)")).await
     {
         {
@@ -893,7 +910,7 @@ async fn mpq_files(cx: Cx, state: MpqState) -> Result<()> {
                 .split([';', '\r', '\n'])
                 .filter(|n| !n.is_empty())
             {
-                if let Some(i) = state.lookup(name)
+                if let Some(i) = state.lookup(&cx, name).await
                     && let Some(slot) = names.get_mut(i)
                 {
                     *slot = Some(name.to_owned());

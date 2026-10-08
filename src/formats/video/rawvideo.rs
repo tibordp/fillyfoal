@@ -135,6 +135,7 @@ pub async fn dissect_dirac(cx: Cx, input: Input) -> Result<()> {
             let body = cx.read_avail(span.sub(13, 4)).await?;
             summary = format!("picture {}, {summary}", u32_be(&body, 0).unwrap_or(0));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(
             Node::new(parse_code_name(code))
                 .span(span)
@@ -269,6 +270,7 @@ pub async fn dissect_dnxhd(cx: Cx, input: Input) -> Result<()> {
             .unwrap_or(file.len);
         let span = file.sub(pos, next.saturating_sub(pos));
         let d = cx.read_avail(span.sub(0, 0x30)).await?;
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(
             Node::new(format!("Frame {index}"))
                 .span(span)
@@ -439,6 +441,7 @@ pub async fn dissect_h263(cx: Cx, input: Input) -> Result<()> {
                 .lazy(h263_picture, span),
             None => node.diag(Diagnostic::malformed("invalid picture header")),
         };
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = next;
         index = index.saturating_add(1);

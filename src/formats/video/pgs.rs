@@ -66,6 +66,7 @@ async fn pgs(cx: Cx, input: Input) -> Result<()> {
         last = h.pts;
         let seconds = h.pts / 90_000;
         let name = lookup(PGS_SEGMENTS, h.kind.into()).unwrap_or("Unknown segment");
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         cx.push(
             PgsHeader::node(
                 name,

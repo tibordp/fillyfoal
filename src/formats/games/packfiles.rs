@@ -72,6 +72,7 @@ async fn hog(cx: Cx, input: Input) -> Result<()> {
         let name = zstr(h.get(..13).unwrap_or_default());
         let size = u64::from(u32_le(&h, 13).unwrap_or(0));
         let data = file.sub_exact(pos.saturating_add(17), size)?;
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(embedded(name, input.nested(data)).target(file.sub(pos, 17)))
             .await;
         n = n.saturating_add(1);

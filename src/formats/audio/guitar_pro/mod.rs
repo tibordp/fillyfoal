@@ -610,7 +610,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         s
     };
-    match song_body(&mut f, ver, file) {
+    match song_body(&cx, &mut f, ver, file).await {
         Ok(sizes) => cx.annotate(summary(Some(sizes))),
         Err(e) => {
             cx.annotate(summary(None));
@@ -775,7 +775,7 @@ fn directions(f: &mut Fields<'_>, _: &()) -> Result<usize> {
 }
 
 /// Everything after the song information, at the top level.
-fn song_body(f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
+async fn song_body(cx: &Cx, f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
     if ver.major < 5 {
         f.u8("Triplet feel")
             .enumeration(&[(0, "none"), (1, "eighth")])
@@ -849,6 +849,9 @@ fn song_body(f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
     parse.seek(start);
     let mut failed = None;
     for i in 0..measures.max(0) {
+        if i & 0x3ff == 0 {
+            cx.checkpoint().await;
+        }
         match header(&mut parse, &(ver, i == 0)) {
             Ok(h) => song.headers.push(h),
             Err(e) => {
@@ -874,6 +877,9 @@ fn song_body(f: &mut Fields<'_>, ver: Ver, file: Span) -> Result<Sizes> {
     let mut parse = Fields::new(f.block(), LE);
     parse.seek(start);
     for i in 0..tracks.max(0) {
+        if i & 0x3ff == 0 {
+            cx.checkpoint().await;
+        }
         match track(&mut parse, &(ver, i == 0)) {
             Ok(t) => song.tracks.push(t),
             Err(e) => {

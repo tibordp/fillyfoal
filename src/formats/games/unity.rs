@@ -1331,6 +1331,9 @@ async fn blob_tree(cx: &Cx, span: Span, endian: Endian, version: u32) -> Result<
         let Some(rec) = data.get(at..at.saturating_add(size)) else {
             break;
         };
+        if i & 0xff == 0xff {
+            cx.checkpoint().await;
+        }
         let u16v = match endian {
             Endian::Little => u16::from_le_bytes([
                 rec.first().copied().unwrap_or(0),

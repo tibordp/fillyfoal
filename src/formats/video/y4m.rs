@@ -237,6 +237,7 @@ async fn frames(cx: Cx, f: Frames) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(f.file, f.file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(total.max(1));
         index = index.saturating_add(1);

@@ -221,6 +221,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             Some(s) => format!("{s}, {} bytes", unit.nal().len),
             None => format!("{} bytes", unit.nal().len),
         });
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = end.max(pos.saturating_add(prefix));
         index = index.saturating_add(1);

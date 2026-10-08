@@ -65,6 +65,7 @@ async fn ips_walk(cx: Cx, input: Input, width: u64, eof: &'static [u8]) -> Resul
     let mut terminated = false;
     while cur.remaining() >= width {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let raw = cur.bytes(width).await?;
         if raw == eof {
             cx.emit(
@@ -182,6 +183,7 @@ async fn ups(cx: Cx, input: Input) -> Result<()> {
     let (mut hunks, mut offset, mut changed) = (0u64, 0u64, 0u64);
     while cur.pos() < body_end {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let skip = varint(&mut cur, Varint::Beat).await?;
         offset = offset.saturating_add(skip);
         let data = cur.pos();
@@ -262,6 +264,7 @@ async fn bps(cx: Cx, input: Input) -> Result<()> {
     let mut counts = [0u64; 4];
     while cur.pos() < body_end {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let data = varint(&mut cur, Varint::Beat).await?;
         let kind = usize::try_from(data & 3).unwrap_or(0);
         let len = (data >> 2).saturating_add(1);
@@ -739,6 +742,7 @@ async fn ppf(cx: Cx, input: Input) -> Result<()> {
     let (mut records, mut bytes) = (0u64, 0u64);
     while cur.remaining() > offset_size {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let offset = if version == 3 {
             cur.u64().await?
         } else {
@@ -809,6 +813,7 @@ async fn aps_n64(cx: Cx, input: Input) -> Result<()> {
     let mut records = 0u64;
     while cur.remaining() >= 5 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let offset = cur.u32().await?;
         let len = cur.u8().await?;
         let summary = if len == 0 {

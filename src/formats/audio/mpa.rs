@@ -597,6 +597,7 @@ async fn list_frames(cx: Cx, region: Span) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node.lazy(frame, (span, h))).await;
         pos = pos.saturating_add(len);
         index = index.saturating_add(1);

@@ -190,6 +190,7 @@ async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
             ));
         }
         let header = if kind.wide { toc_wb } else { toc_nb };
+        cx.progress_in(region, region.offset.saturating_add(pos));
         node = node.lazy(frame, (span, header));
         cx.push(node).await;
         pos = pos.saturating_add(len);

@@ -490,6 +490,7 @@ async fn list_frames(cx: Cx, (region, info): (Span, StreamInfo)) -> Result<()> {
         .await?
         .unwrap_or(region.len);
         let span = region.sub(pos, next.saturating_sub(pos));
+        cx.progress_in(region, region.offset.saturating_add(pos));
         let chans = crate::value::lookup(CHANNELS, h.channels.into()).unwrap_or("?");
         cx.push(
             Node::new(format!("Frame {index}"))

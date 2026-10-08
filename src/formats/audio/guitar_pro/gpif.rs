@@ -13,6 +13,7 @@
 //! the summary finds as well since it looks for the properties anywhere in
 //! the track.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::cx::Cx;
@@ -45,7 +46,7 @@ pub static FORMAT: Format = Format {
 async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // The score texts come first; the head is enough for the annotation.
     let head = cx.read_avail(input.span.sub(0, 64 * 1024)).await?;
-    let s = scan(&head);
+    let s = scan(&cx, &head).await;
     let mut note = "Guitar Pro score".to_owned();
     if !s.title.text.is_empty() {
         note.push_str(&format!(": {:?}", s.title.text));
@@ -205,7 +206,7 @@ fn to64(i: usize) -> u64 {
 }
 
 /// Scans a GPIF document (or a prefix of one).
-fn scan(data: &[u8]) -> Summary {
+async fn scan(cx: &Cx, data: &[u8]) -> Summary {
     let mut s = Summary::default();
     let mut stack: Vec<Open> = Vec::new();
     let mut text = String::new();
@@ -216,7 +217,12 @@ fn scan(data: &[u8]) -> Summary {
     let mut automation: (String, String, String) = Default::default();
     let mut section: (String, String) = Default::default();
     let mut pos = 0usize;
+    let mut steps = 0u32;
     while pos < data.len() {
+        steps = steps.wrapping_add(1);
+        if steps & 0xff == 0 {
+            cx.checkpoint().await;
+        }
         let Some(lt) = find(data, pos, b"<") else {
             text.push_str(&xml::decode_entities(
                 &String::from_utf8_lossy(data.get(pos..).unwrap_or_default()),
@@ -506,7 +512,7 @@ async fn load(cx: &Cx, span: Span) -> Result<Arc<Summary>> {
         );
     }
     let data = crate::codec::read_all(cx, span).await?;
-    let s = Arc::new(scan(&data));
+    let s = Arc::new(scan(cx, &data).await);
     cx.cache(span, "gpif-summary", s.clone());
     Ok(s)
 }
@@ -607,11 +613,21 @@ async fn summary(cx: Cx, span: Span) -> Result<()> {
 }
 
 fn bars_summary(bars: &[MasterBar]) -> String {
-    let mut times: Vec<(String, usize)> = Vec::new();
+    // Time signatures in order of first use, with their counts (a map, so
+    // a score with many distinct signatures is not quadratic).
+    let mut times: Vec<(&str, usize)> = Vec::new();
+    let mut index: HashMap<&str, usize> = HashMap::new();
     for b in bars {
-        match times.iter_mut().find(|(t, _)| *t == b.time) {
-            Some(t) => t.1 = t.1.saturating_add(1),
-            None => times.push((b.time.clone(), 1)),
+        match index.get(b.time.as_str()) {
+            Some(&i) => {
+                if let Some(t) = times.get_mut(i) {
+                    t.1 = t.1.saturating_add(1);
+                }
+            }
+            None => {
+                index.insert(&b.time, times.len());
+                times.push((&b.time, 1));
+            }
         }
     }
     let sections = bars.iter().filter(|b| b.section.is_some()).count();

@@ -230,7 +230,7 @@ async fn metronome(cx: Cx, (input, span, wide): (Input, Span, bool)) -> Result<(
     f.f64("Tempo (BPM, inferred)").emit()?;
     let rest = span.tail(16);
     let data = cx.read_avail(rest).await?;
-    let items = scan(&data, 0, data.len(), wide, !wide);
+    let items = scan(&cx, &data, 0, data.len(), wide, !wide).await;
     emit_items(&cx, input, rest, &data, &items, 0).await;
     Ok(())
 }
@@ -323,7 +323,7 @@ async fn track_list(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             if let Some(id) = id {
                 summary.push(format!("ID {id}"));
             }
-            let params = params(&data, 0, data.len(), 0);
+            let params = params(&cx, &data, 0, data.len(), 0).await;
             for wanted in ["Fader Volume", "Output Pan", "[NOUI]Muting"] {
                 if let Some((_, v)) = params.iter().find(|(n, _)| n == wanted) {
                     summary.push(format!("{} {v}", wanted.trim_start_matches("[NOUI]")));
@@ -353,7 +353,7 @@ async fn track_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         .emit()?;
     let object = span.tail(4);
     let data = cx.read(object).await?;
-    let items = scan(&data, 0, data.len(), true, false);
+    let items = scan(&cx, &data, 0, data.len(), true, false).await;
     emit_items(&cx, input, object, &data, &items, 0).await;
     Ok(())
 }
@@ -506,12 +506,18 @@ enum Item {
 /// Splits `data[from..to]` into objects, length-prefixed strings (UTF-16
 /// when `wide`, else ANSI), optionally plain NUL-terminated text runs, and
 /// raw bytes between them.
-fn scan(data: &[u8], from: usize, to: usize, wide: bool, runs: bool) -> Vec<Item> {
+async fn scan(cx: &Cx, data: &[u8], from: usize, to: usize, wide: bool, runs: bool) -> Vec<Item> {
     let to = to.min(data.len());
     let mut items = Vec::new();
     let mut raw = from;
     let mut at = from;
+    let mut steps = 0u32;
     while at < to {
+        // Each step may look ahead up to a few KiB (a string or text run).
+        steps = steps.wrapping_add(1);
+        if steps & 0x3ff == 0 {
+            cx.checkpoint().await;
+        }
         let found = if let Some((class, body, end)) = object_at(data, at, to) {
             Some((
                 Item::Object {
@@ -558,12 +564,12 @@ fn scan(data: &[u8], from: usize, to: usize, wide: bool, runs: bool) -> Vec<Item
 }
 
 /// `AudioParam0` values (parameter name, value) anywhere in `data[from..to]`.
-fn params(data: &[u8], from: usize, to: usize, depth: u32) -> Vec<(String, String)> {
+async fn params(cx: &Cx, data: &[u8], from: usize, to: usize, depth: u32) -> Vec<(String, String)> {
     let mut out = Vec::new();
     if depth > MAX_DEPTH {
         return out;
     }
-    for item in scan(data, from, to, true, false) {
+    for item in scan(cx, data, from, to, true, false).await {
         if let Item::Object {
             class, body, end, ..
         } = item
@@ -573,7 +579,7 @@ fn params(data: &[u8], from: usize, to: usize, depth: u32) -> Vec<(String, Strin
                     out.push((p.0, format_value(p.1)));
                 }
             } else {
-                out.extend(params(data, body, end, depth.saturating_add(1)));
+                out.extend(Box::pin(params(cx, data, body, end, depth.saturating_add(1))).await);
             }
         }
     }
@@ -791,7 +797,7 @@ async fn expand_object(
         }
         _ => {}
     }
-    let items = scan(&data, from, end, true, false);
+    let items = scan(&cx, &data, from, end, true, false).await;
     emit_items(&cx, input, span, &data, &items, depth.saturating_add(1)).await;
     Ok(())
 }
@@ -799,7 +805,7 @@ async fn expand_object(
 /// Undecoded bytes with objects, strings and text runs picked out.
 async fn scanned(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()> {
     let data = cx.read(span).await?;
-    let items = scan(&data, 0, data.len(), true, true);
+    let items = scan(&cx, &data, 0, data.len(), true, true).await;
     emit_items(&cx, input, span, &data, &items, depth).await;
     Ok(())
 }
