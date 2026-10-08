@@ -1,33 +1,28 @@
-# License review (temporary, undecided)
+# License review
 
-Notes for a later decision about fillyfoal's license. Nothing here is
-resolved; this file is not part of the published crate (it is outside the
-`include` list in `Cargo.toml`). Not legal advice.
+Notes on fillyfoal's licensing and on modules whose provenance needed review.
+This file is not part of the published crate (it is outside the `include`
+list in `Cargo.toml`). Not legal advice.
 
-## The question
+## Decision (2026-10-08)
 
-fillyfoal is licensed MIT OR Apache-2.0. Code (or protected expression)
-taken from GPL/LGPL/AGPL projects cannot be included under those terms.
-Most of the library was written from public specifications, real files, and
-general knowledge, but some decoders were written by agents working from
-memory of — or by reading — copyleft reference implementations. Facts about a
-file format (layouts, field meanings, the algorithm) are not protected; the
-concern is copied expression: code structure, comments, and non-trivial
-tables lifted verbatim.
+fillyfoal is relicensed from MIT OR Apache-2.0 to **GPL-3.0-or-later**, so
+that it can be distributed under one license. That makes code derived from
+GPL-2.0-or-later, GPL-3.0, LGPL-2.1 and LGPL-3.0 sources (DjVuLibre,
+libmspack, XADMaster, PyGuitarPro) acceptable, with credit in
+`THIRD-PARTY.md`.
 
-Options the owner is considering (no decision yet):
+Still to resolve, because these licenses cannot be unified under GPLv3:
 
-1. Relicense fillyfoal as GPL (the main consumer, Newt, is GPL). Simplest;
-   limits adoption.
-2. Keep MIT/Apache and move doubtful pieces behind an opt-in `gpl` Cargo
-   feature. Whether that is legally sound needs checking: a feature only
-   helps if the default build truly excludes the code and the crate as
-   published says clearly which license applies with the feature on.
-3. Keep MIT/Apache and split GPL-only formats/codecs into a separate crate
-   (e.g. `fillyfoal-gpl`) that registers extra codecs/formats.
-4. Clean up instead: re-derive doubtful parts from public specifications or
-   published papers (or independent clean-room notes), document provenance
-   per module, and keep everything MIT/Apache.
+- **unRAR** (freeware, GPL-incompatible): the RAR LZ/filter decoders are a
+  transliteration of unRAR and are being rewritten from RARLAB's technote with
+  libarchive (BSD-2-Clause) as the reference implementation.
+- **AGPL-3.0** (libbgcode): the MeatPack decoder is being rewritten from Scott
+  Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the format description.
+- A sweep of the rest of the library for material from GPL-incompatible
+  sources (4-clause BSD, GPL-2.0-only such as the Linux kernel, CDDL, CPL/IPL,
+  APSL, EPL, proprietary) and for credits owed (codec reference
+  implementations, curated name tables).
 
 ## Findings of the source comparison (2026-10-08)
 
