@@ -858,8 +858,9 @@ async fn decrypt(cx: &Cx, cipher: Cipher, keys: &KdbxKeys, iv: &[u8], span: Span
     Ok(cx.add_derived(origin, plain, span.len, None)?.span)
 }
 
-fn blocks_node(name: &'static str, blocks: Vec<BlockInfo>, what: &'static str) -> Node {
-    let bad = blocks.iter().filter(|b| !b.ok).count();
+/// `bad` is the number of `blocks` that fail their check (counted as they
+/// were built: the list is input-sized).
+fn blocks_node(name: &'static str, blocks: Vec<BlockInfo>, bad: usize, what: &'static str) -> Node {
     let mut node = Node::new(name).summary(format!(
         "{} blocks{}",
         blocks.len(),
@@ -958,6 +959,7 @@ async fn kdbx3_payload(
     // block with a zero hash ends it.
     let data = read_all(cx, plain.tail(32)).await?;
     let mut blocks = Vec::new();
+    let mut bad = 0usize;
     let mut pieces = Vec::new();
     let mut pos = 0usize;
     while let (Some(_), Some(hash), Some(size)) = (
@@ -985,6 +987,7 @@ async fn kdbx3_payload(
         } else {
             sha256_stepped(cx, body).await == hash
         };
+        bad = bad.saturating_add(usize::from(!ok));
         blocks.push(BlockInfo {
             span,
             data: data_span,
@@ -996,14 +999,16 @@ async fn kdbx3_payload(
         pieces.push(data_span);
         pos = at.saturating_add(size);
     }
-    cx.emit(blocks_node("Hashed block stream", blocks, "SHA-256"));
-    let content = cx.add_pieces(
-        Origin {
-            parent: plain,
-            transform: "kdbx-hashed-blocks",
-        },
-        pieces,
-    )?;
+    cx.emit(blocks_node("Hashed block stream", blocks, bad, "SHA-256"));
+    let content = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: plain,
+                transform: "kdbx-hashed-blocks",
+            },
+            &pieces,
+        )
+        .await?;
     let xml = if h.compressed {
         let out = gunzip(cx, content).await?;
         cx.emit(
@@ -1030,6 +1035,7 @@ async fn kdbx4_payload(
     // The HMAC block stream: HMAC-SHA-256, size, data; ends with an empty
     // block. The MAC covers the block index, size and data.
     let mut blocks = Vec::new();
+    let mut bad = 0usize;
     let mut pieces = Vec::new();
     let mut pos = 0u64;
     let mut index = 0u64;
@@ -1046,10 +1052,12 @@ async fn kdbx4_payload(
                 &data,
             )
             .await;
+        let ok = head.get(..32) == Some(mac.as_slice());
+        bad = bad.saturating_add(usize::from(!ok));
         blocks.push(BlockInfo {
             span: payload.sub(pos, u64::from(size).saturating_add(36)),
             data: data_span,
-            ok: head.get(..32) == Some(mac.as_slice()),
+            ok,
         });
         pos = pos.saturating_add(36).saturating_add(size.into());
         index = index.saturating_add(1);
@@ -1058,14 +1066,18 @@ async fn kdbx4_payload(
         }
         pieces.push(data_span);
     }
-    cx.emit(blocks_node("HMAC block stream", blocks, "HMAC"));
-    let cipher_text = cx.add_pieces(
-        Origin {
-            parent: payload,
-            transform: "kdbx-hmac-blocks",
-        },
-        pieces,
-    )?;
+    cx.emit(blocks_node("HMAC block stream", blocks, bad, "HMAC"));
+
+    let cipher_text = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: payload,
+                transform: "kdbx-hmac-blocks",
+            },
+            &pieces,
+        )
+        .await?;
+
     let plain = decrypt(cx, cipher, keys, &h.iv, cipher_text).await?;
     cx.emit(Node::new("Decrypted").span(plain).summary(format!(
         "{}, {} bytes",

@@ -14,6 +14,7 @@
 //! and multi-volume members remain unsupported leaves; RAR 5 BLAKE2sp
 //! hashes are shown but not checked.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
@@ -1069,6 +1070,8 @@ fn content_node(name: &'static str, input: Input, part: Part) -> Node {
 /// and the solid files after it.
 struct Groups {
     groups: Vec<Vec<Part>>,
+    /// Each compressed file's run and index in it, by `Part::block`.
+    at: BTreeMap<u64, (usize, usize)>,
 }
 
 /// Walks all headers of the archive for its file parts.
@@ -1110,15 +1113,23 @@ async fn groups(cx: &Cx, input: Input, rar5: bool) -> Result<Arc<Groups>> {
         return Ok(g);
     }
     let mut groups: Vec<Vec<Part>> = Vec::new();
+    let mut at = BTreeMap::new();
     let mut open = false;
     for p in walk_parts(cx, input, rar5).await? {
         cx.checkpoint().await;
         match p.how {
             How::Stored => {}
             How::Lz(_) => {
+                let last = groups.len().saturating_sub(1);
                 match groups.last_mut() {
-                    Some(g) if open && p.solid => g.push(p),
-                    _ => groups.push(vec![p]),
+                    Some(g) if open && p.solid => {
+                        at.entry(p.block).or_insert((last, g.len()));
+                        g.push(p);
+                    }
+                    _ => {
+                        at.entry(p.block).or_insert((groups.len(), 0));
+                        groups.push(vec![p]);
+                    }
                 }
                 open = true;
             }
@@ -1126,9 +1137,15 @@ async fn groups(cx: &Cx, input: Input, rar5: bool) -> Result<Arc<Groups>> {
             How::Unsupported(_) => open = false,
         }
     }
-    let g = Arc::new(Groups { groups });
+    let g = Arc::new(Groups { groups, at });
     cx.cache(input.span, "rar groups", g.clone());
     Ok(g)
+}
+
+/// A run's decoded stream and where each of its files starts in it.
+struct RunStream {
+    stream: Span,
+    offsets: Vec<u64>,
 }
 
 /// The decoded output of a run of files, and where file `index` starts in it.
@@ -1136,19 +1153,38 @@ async fn group_stream(cx: &Cx, parts: &[Part], index: usize) -> Result<(Span, u6
     let (Some(first), Some(last)) = (parts.first(), parts.last()) else {
         return Err(Diagnostic::malformed("empty solid run"));
     };
+    let parent = Span::new(
+        first.data.source,
+        first.data.offset,
+        last.data.end().saturating_sub(first.data.offset),
+    );
+    // Built once per run, not once per file of it.
+    let run = match cx.cached::<RunStream>(parent, "rar run stream") {
+        Some(run) => run,
+        None => {
+            let run = Arc::new(run_stream(cx, parts, parent).await?);
+            cx.cache(parent, "rar run stream", run.clone());
+            run
+        }
+    };
+    Ok((run.stream, run.offsets.get(index).copied().unwrap_or(0)))
+}
+
+async fn run_stream(cx: &Cx, parts: &[Part], parent: Span) -> Result<RunStream> {
+    let Some(first) = parts.first() else {
+        return Err(Diagnostic::malformed("empty solid run"));
+    };
     // A solid run can hold millions of files: build its tables with yields.
     let mut pieces = Vec::with_capacity(parts.len());
     let mut members = Vec::with_capacity(parts.len());
+    let mut offsets = Vec::with_capacity(parts.len());
     let mut total = 0u64;
     let mut dict = 0;
-    let mut offset = 0u64;
     for (i, p) in parts.iter().enumerate() {
         if i.is_multiple_of(4096) {
             cx.checkpoint().await;
         }
-        if i == index {
-            offset = total;
-        }
+        offsets.push(total);
         pieces.push(p.data);
         members.push(Member {
             packed: p.data.len,
@@ -1164,25 +1200,24 @@ async fn group_stream(cx: &Cx, parts: &[Part], index: usize) -> Result<(Span, u6
     let data = if parts.len() == 1 {
         first.data
     } else {
-        let parent = Span::new(
-            first.data.source,
-            first.data.offset,
-            last.data.end().saturating_sub(first.data.offset),
-        );
-        cx.add_pieces(
+        cx.add_pieces_stepped(
             Origin {
                 parent,
                 transform: "rar-solid",
             },
-            pieces,
-        )?
+            &pieces,
+        )
+        .await?
     };
     let codec = Codec::Rar(Params {
         dict,
         members: members.into(),
     });
     let stream = cx.decode_lazy(data, &codec, total)?;
-    Ok((Span::new(stream.source, 0, total), offset))
+    Ok(RunStream {
+        stream: Span::new(stream.source, 0, total),
+        offsets,
+    })
 }
 
 /// Expander: a file's content (decoded with the files of its solid run),
@@ -1191,21 +1226,18 @@ async fn content(cx: Cx, (input, part): (Input, Part)) -> Result<()> {
     let span = match part.how {
         How::Stored => part.data,
         How::Lz(_) => {
-            let (run, index) = if part.solid {
-                let g = groups(&cx, input, part.rar5).await?;
-                let mut found = None;
-                for run in &g.groups {
-                    cx.checkpoint().await;
-                    if let Some(i) = run.iter().position(|p| p.block == part.block) {
-                        found = Some((run.clone(), i));
-                        break;
-                    }
-                }
-                found.ok_or_else(|| Diagnostic::malformed("file not found in its solid run"))?
+            let g;
+            let single = [part];
+            let (run, index): (&[Part], usize) = if part.solid {
+                g = groups(&cx, input, part.rar5).await?;
+                g.at.get(&part.block)
+                    .and_then(|&(r, i)| Some((g.groups.get(r)?.as_slice(), i)))
+                    .ok_or_else(|| Diagnostic::malformed("file not found in its solid run"))?
             } else {
-                (vec![part], 0)
+                (&single, 0)
             };
-            let (stream, offset) = group_stream(&cx, &run, index).await?;
+            let (stream, offset) = group_stream(&cx, run, index).await?;
+
             if run.len() > 1 {
                 cx.emit(Node::new("Solid run").span(stream).summary(format!(
                     "file {} of {}, at {offset:#x}",

@@ -927,6 +927,8 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
     // The FAT: 512-byte entries from 0x600 (or 0x400) on, listing each
     // sub-file's blocks.
     let mut files: Vec<(String, u64, Vec<u16>, Span)> = Vec::new();
+    // The last file of each name, which continuation entries extend.
+    let mut by_name: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
     let mut pos = 0x400u64;
     let mut first_data = u64::MAX;
     while pos.saturating_add(512) <= file.len.min(first_data) && files.len() < 4096 {
@@ -959,8 +961,9 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
                     .saturating_mul(block)
                     .max(pos.saturating_add(512));
             } else if part == 0 {
+                by_name.insert(name.clone(), files.len());
                 files.push((name, size, blocks, file.sub(pos, 512)));
-            } else if let Some(last) = files.iter_mut().rev().find(|f| f.0 == name) {
+            } else if let Some(last) = by_name.get(&name).and_then(|&i| files.get_mut(i)) {
                 last.2.extend(blocks);
             }
         } else if pos >= 0x600 && flag != 0 && flag != 1 {
@@ -974,21 +977,27 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
     for (name, size, blocks, fat) in files {
         let mut pieces = Vec::new();
         let mut left = size;
-        for b in blocks {
+        for (i, b) in blocks.into_iter().enumerate() {
             if left == 0 {
                 break;
+            }
+            if i.is_multiple_of(4096) {
+                cx.checkpoint().await;
             }
             let take = left.min(block);
             pieces.push(file.sub(u64::from(b).saturating_mul(block), take));
             left = left.saturating_sub(take);
         }
-        let node = match cx.add_pieces(
-            Origin {
-                parent: fat,
-                transform: "garmin-img blocks",
-            },
-            pieces,
-        ) {
+        let joined = cx
+            .add_pieces_stepped(
+                Origin {
+                    parent: fat,
+                    transform: "garmin-img blocks",
+                },
+                &pieces,
+            )
+            .await;
+        let node = match joined {
             Ok(span) if x == 0 => Node::new(name)
                 .span(span)
                 .summary(format!("{size} bytes"))

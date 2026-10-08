@@ -6,6 +6,8 @@
 //! streams read as contiguous bytes while spans still resolve to file
 //! offsets.
 
+use std::sync::Arc;
+
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -68,17 +70,40 @@ const STREAM_NAMES: [&str; 5] = [
     "ID info (IPI)",
 ];
 
-/// The blocks of a stream as file spans.
-fn stream_pieces(file: Span, block_size: u64, blocks: &[u32], len: u64) -> Vec<Span> {
+/// The blocks of a stream as file spans (input-sized: checkpointed).
+async fn stream_pieces(
+    cx: &Cx,
+    file: Span,
+    block_size: u64,
+    blocks: &[u32],
+    len: u64,
+) -> Vec<Span> {
     let mut remaining = len;
-    blocks
-        .iter()
-        .map(|&b| {
-            let take = remaining.min(block_size);
-            remaining = remaining.saturating_sub(take);
-            file.sub(u64::from(b).saturating_mul(block_size), take)
-        })
-        .collect()
+    let mut pieces = Vec::with_capacity(blocks.len());
+    for (i, &b) in blocks.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        let take = remaining.min(block_size);
+        remaining = remaining.saturating_sub(take);
+        pieces.push(file.sub(u64::from(b).saturating_mul(block_size), take));
+    }
+    pieces
+}
+
+/// Up to `n` little-endian `u32`s of `data` from `at` (input-sized: checkpointed).
+async fn u32s(cx: &Cx, data: &[u8], at: usize, n: usize) -> Vec<u32> {
+    let mut out = Vec::new();
+    for j in 0..n {
+        if j.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        match u32_le(data, at.saturating_add(j.saturating_mul(4))) {
+            Some(v) => out.push(v),
+            None => break,
+        }
+    }
+    out
 }
 
 async fn pdb(cx: Cx, input: Input) -> Result<()> {
@@ -103,25 +128,24 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
             directory_blocks.saturating_mul(4),
         )?)
         .await?;
-    let map: Vec<u32> = (0..to_usize(directory_blocks))
-        .filter_map(|i| u32_le(&map, i.saturating_mul(4)))
-        .collect();
-    let directory = cx.add_pieces(
-        Origin {
-            parent: file,
-            transform: "msf-directory",
-        },
-        stream_pieces(file, block_size, &map, sb.directory_bytes.into()),
-    )?;
+    let map = u32s(&cx, &map, 0, to_usize(directory_blocks)).await;
+    let pieces = stream_pieces(&cx, file, block_size, &map, sb.directory_bytes.into()).await;
+    let directory = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: file,
+                transform: "msf-directory",
+            },
+            &pieces,
+        )
+        .await?;
     let dir = cx.read(directory).await?;
     let count = u32_le(&dir, 0).unwrap_or(0);
     let count_usize = to_usize(count.into());
     if to_u64(count_usize).saturating_mul(4) > directory.len {
         return Err(Diagnostic::malformed("stream count exceeds the directory"));
     }
-    let sizes: Vec<u32> = (0..count_usize)
-        .filter_map(|i| u32_le(&dir, 4usize.saturating_add(i.saturating_mul(4))))
-        .collect();
+    let sizes = u32s(&cx, &dir, 4, count_usize).await;
     let mut at = 4usize.saturating_add(count_usize.saturating_mul(4));
     let mut streams = Vec::new();
     for (i, &size) in sizes.iter().enumerate() {
@@ -132,20 +156,21 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
         // Only the block numbers the directory holds: a bogus size must not
         // cost a pass over millions of missing ones.
         let have = n.min(dir.len().saturating_sub(at) / 4);
-        let blocks: Vec<u32> = (0..have)
-            .filter_map(|j| u32_le(&dir, at.saturating_add(j.saturating_mul(4))))
-            .collect();
+        let blocks = u32s(&cx, &dir, at, have).await;
         at = at.saturating_add(n.saturating_mul(4));
         // Each stream needs its own memo key: use the directory source with
         // the stream number as the (empty) parent offset.
         let key = Span::new(directory.source, u64::try_from(i).unwrap_or(0), 0);
-        let span = cx.add_pieces(
-            Origin {
-                parent: key,
-                transform: "msf-stream",
-            },
-            stream_pieces(file, block_size, &blocks, len),
-        )?;
+        let pieces = stream_pieces(&cx, file, block_size, &blocks, len).await;
+        let span = cx
+            .add_pieces_stepped(
+                Origin {
+                    parent: key,
+                    transform: "msf-stream",
+                },
+                &pieces,
+            )
+            .await?;
         streams.push((size, span));
     }
     cx.emit(
@@ -179,15 +204,15 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Streams")
             .summary(format!("{count} streams"))
-            .lazy(pdb_streams, (input, streams)),
+            .lazy(pdb_streams, (input, Arc::new(streams))),
     );
     cx.annotate(summary);
     Ok(())
 }
 
-async fn pdb_streams(cx: Cx, (input, streams): (Input, Vec<(u32, Span)>)) -> Result<()> {
+async fn pdb_streams(cx: Cx, (input, streams): (Input, Arc<Vec<(u32, Span)>>)) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(streams.len())));
-    for (i, (size, span)) in streams.into_iter().enumerate() {
+    for (i, &(size, span)) in streams.iter().enumerate() {
         let name = STREAM_NAMES
             .get(i)
             .map_or_else(|| format!("Stream {i}"), |n| format!("Stream {i}: {n}"));

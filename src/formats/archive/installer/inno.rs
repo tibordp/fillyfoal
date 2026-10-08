@@ -154,6 +154,9 @@ async fn block(cx: &Cx, data: Span, at: u64, ver: Version) -> Result<BlockInfo> 
     let mut pieces = Vec::new();
     let mut pos = 0u64;
     while pos < region.len {
+        if pieces.len().is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let piece = region.sub(pos.saturating_add(4), CHUNK);
         if piece.len == 0 {
             break;
@@ -164,13 +167,16 @@ async fn block(cx: &Cx, data: Span, at: u64, ver: Version) -> Result<BlockInfo> 
             return Err(Diagnostic::limit("too many chunks"));
         }
     }
-    let payload = cx.add_pieces(
-        Origin {
-            parent: region,
-            transform: "inno-block-chunks",
-        },
-        pieces,
-    )?;
+    let payload = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: region,
+                transform: "inno-block-chunks",
+            },
+            &pieces,
+        )
+        .await?;
+
     let decoded = if !compressed {
         Ok(payload)
     } else {

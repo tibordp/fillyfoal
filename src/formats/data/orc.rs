@@ -440,13 +440,14 @@ async fn section(cx: &Cx, span: Span, compression: u64) -> Result<Span> {
         }
         pos = pos.saturating_add(3).saturating_add(len);
     }
-    cx.add_pieces(
+    cx.add_pieces_stepped(
         Origin {
             parent: span,
             transform: "orc-chunks",
         },
-        pieces,
+        &pieces,
     )
+    .await
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {

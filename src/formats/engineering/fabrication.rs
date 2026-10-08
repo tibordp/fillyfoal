@@ -1830,13 +1830,16 @@ async fn gcode(cx: Cx, (input, checksummed): (Input, bool)) -> Result<()> {
     if pieces.is_empty() {
         return Err(Diagnostic::note("no G-code blocks").at(file));
     }
-    let joined = cx.add_pieces(
-        Origin {
-            parent: file,
-            transform: "bgcode-gcode",
-        },
-        pieces,
-    )?;
+    let joined = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: file,
+                transform: "bgcode-gcode",
+            },
+            &pieces,
+        )
+        .await?;
+
     cx.annotate(format!(
         "{:#x} bytes of G-code from {blocks} block{}",
         joined.len,

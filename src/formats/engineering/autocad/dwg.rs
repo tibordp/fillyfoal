@@ -635,7 +635,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
             });
             pos = pos.saturating_add(16);
         }
-        let data = assemble(&cx, file, desc_span, size, max_size, compressed, &pages)?;
+        let data = assemble(&cx, file, desc_span, size, max_size, compressed, &pages).await?;
         sections.push(Section {
             kind: kind_of_name(&name),
             name,
@@ -680,7 +680,7 @@ async fn r2004(cx: Cx, input: Input, ver: Ver) -> Result<()> {
 }
 
 /// The section's contents as a piece list over its (lazily decoded) pages.
-fn assemble(
+async fn assemble(
     cx: &Cx,
     file: Span,
     desc: Span,
@@ -691,7 +691,10 @@ fn assemble(
 ) -> Result<Span> {
     let mut pieces = Vec::new();
     let mut at = 0u64;
-    for page in pages {
+    for (i, page) in pages.iter().enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let Some(address) = page.address else {
             continue;
         };
@@ -711,13 +714,14 @@ fn assemble(
         pieces.push(decoded);
         at = page.start.saturating_add(len);
     }
-    cx.add_pieces(
+    cx.add_pieces_stepped(
         Origin {
             parent: desc,
             transform: "dwg-section",
         },
-        pieces,
+        &pieces,
     )
+    .await
 }
 
 async fn file_header_r2004(cx: Cx, (file, full): (Span, bool)) -> Result<()> {

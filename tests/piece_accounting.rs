@@ -90,3 +90,100 @@ fn vhdx_huge_declared_size_settles() {
     assert!(!kinds.contains(&fillyfoal::DiagKind::Limit), "{kinds:?}");
     assert!(!kinds.contains(&fillyfoal::DiagKind::Internal), "{kinds:?}");
 }
+
+/// Polls `host` to idle in steps of `budget` units, answering byte requests;
+/// returns how many steps ran out of budget.
+fn run_counting_yields(host: &mut Host, budget: u64) -> u64 {
+    let mut yields = 0;
+    for _ in 0..1_000_000 {
+        match host.session.poll(budget) {
+            Progress::Idle => return yields,
+            Progress::Yielded => yields += 1,
+            Progress::NeedBytes(requests) => {
+                for r in requests {
+                    let start = r.offset as usize;
+                    let end = (start + r.len as usize).min(host.data.len());
+                    host.session
+                        .supply(r.source, r.offset, &host.data[start..end]);
+                }
+            }
+            Progress::NeedSecret(_) => panic!("no secrets here"),
+        }
+    }
+    panic!("session did not settle");
+}
+
+/// An MSF (PDB) file whose stream 1 is `blocks` blocks of 4 KiB, all
+/// the same block: a small file with a huge piece list.
+fn fragmented_pdb(blocks: u32) -> Vec<u8> {
+    const BS: usize = 4096;
+    let dir_bytes = 4 + 2 * 4 + blocks as usize * 4;
+    let dir_blocks = dir_bytes.div_ceil(BS);
+    let map_blocks = (dir_blocks * 4).div_ceil(BS);
+    // Block 0: superblock; 1: the stream's data; then the block map, then
+    // the directory.
+    let map_at = 2;
+    let dir_at = map_at + map_blocks;
+    let total = dir_at + dir_blocks;
+    let mut w = common::Image::new(total * BS);
+    w.bytes(0, b"Microsoft C/C++ MSF 7.00\r\n\x1aDS\0\0\0")
+        .u32(32, BS as u32)
+        .u32(36, 1)
+        .u32(40, total as u32)
+        .u32(44, dir_bytes as u32)
+        .u32(52, map_at as u32);
+    for i in 0..BS {
+        w.bytes(BS + i, &[(i % 251) as u8]);
+    }
+    for i in 0..dir_blocks {
+        w.u32(map_at * BS + i * 4, (dir_at + i) as u32);
+    }
+    let dir = dir_at * BS;
+    w.u32(dir, 2)
+        .u32(dir + 4, 0)
+        .u32(dir + 8, blocks * BS as u32);
+    for i in 0..blocks as usize {
+        w.u32(dir + 12 + i * 4, 1);
+    }
+    w.finish()
+}
+
+/// 256Ki pieces in one stream: listing, indexing and reading them back
+/// happen over many bounded steps, and the stream reads as the block
+/// repeated.
+#[test]
+fn fragmented_pdb_stream_yields() {
+    let blocks = 1u32 << 18;
+    let data = fragmented_pdb(blocks);
+    let mut host = Host::named("big.pdb", data, Limits::default());
+    host.session.expand(host.root, 100);
+    let yields = run_counting_yields(&mut host, 16);
+    // 256Ki entries: ~64 units to parse them, 64 to list the pieces and
+    // 256 to index them, on top of the reads (about 2 steps of 16 units
+    // when the pieces were built and indexed in one go).
+    assert!(yields >= 16, "{yields}");
+    let streams = host.child(host.root, "Streams").unwrap_or_else(|| {
+        panic!("{}", host.render());
+    });
+    host.session.expand(streams, 100);
+    run_counting_yields(&mut host, 1_000_000);
+    let info = host.child(streams, "Stream 1: PDB info").unwrap();
+    let span = host.session.node(info).unwrap().span.unwrap();
+    assert_eq!(span.len, u64::from(blocks) * 4096);
+    let tail = span.sub(span.len - 8192, 8192);
+    let bytes = loop {
+        match host.session.read(tail) {
+            Ok(bytes) => break bytes,
+            Err(requests) => {
+                for r in requests {
+                    let start = r.offset as usize;
+                    let end = (start + r.len as usize).min(host.data.len());
+                    host.session
+                        .supply(r.source, r.offset, &host.data[start..end]);
+                }
+            }
+        }
+    };
+    let block: Vec<u8> = (0..4096).map(|i| (i % 251) as u8).collect();
+    assert_eq!(bytes, [block.clone(), block].concat());
+}

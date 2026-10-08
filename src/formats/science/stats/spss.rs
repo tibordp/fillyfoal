@@ -702,7 +702,29 @@ async fn zsav(cx: &Cx, file: Span, data: Span, dict: &Dict, _: &Codec) -> Result
     };
     let blocks = u32::try_from(get32(20)).unwrap_or(0);
     let mut pieces = Vec::new();
-    let mut nodes = Vec::new();
+    // The trailer's fields, then one node per block.
+    let mut nodes = vec![
+        Node::new("Bias").span(trailer.sub(0, 8)).value(Value::Int {
+            value: get64(0) as i64,
+            bits: 64,
+        }),
+        Node::new("Zero").span(trailer.sub(8, 8)).value(Value::Int {
+            value: get64(8) as i64,
+            bits: 64,
+        }),
+        Node::new("Block size")
+            .span(trailer.sub(16, 4))
+            .value(Value::Int {
+                value: get32(16).into(),
+                bits: 32,
+            }),
+        Node::new("Blocks")
+            .span(trailer.sub(20, 4))
+            .value(Value::Int {
+                value: get32(20).into(),
+                bits: 32,
+            }),
+    ];
     let mut total = 0u64;
     for i in 0..blocks {
         let at = crate::bytes::to_usize(u64::from(i).saturating_mul(24).saturating_add(24));
@@ -725,43 +747,22 @@ async fn zsav(cx: &Cx, file: Span, data: Span, dict: &Dict, _: &Codec) -> Result
         pieces.push(cx.decode_lazy(span, &Codec::Zlib, size)?);
         total = total.saturating_add(size);
     }
-    let fields = vec![
-        Node::new("Bias").span(trailer.sub(0, 8)).value(Value::Int {
-            value: get64(0) as i64,
-            bits: 64,
-        }),
-        Node::new("Zero").span(trailer.sub(8, 8)).value(Value::Int {
-            value: get64(8) as i64,
-            bits: 64,
-        }),
-        Node::new("Block size")
-            .span(trailer.sub(16, 4))
-            .value(Value::Int {
-                value: get32(16).into(),
-                bits: 32,
-            }),
-        Node::new("Blocks")
-            .span(trailer.sub(20, 4))
-            .value(Value::Int {
-                value: get32(20).into(),
-                bits: 32,
-            }),
-    ];
-    let mut all = fields;
-    all.extend(nodes);
     cx.emit(
         Node::new("zlib trailer")
             .span(trailer)
             .summary(format!("{blocks} blocks, {total} bytes uncompressed"))
-            .lazy(emit_nodes, Arc::new(all)),
+            .lazy(emit_nodes, Arc::new(nodes)),
     );
-    let span = cx.add_pieces(
-        Origin {
-            parent: data,
-            transform: "zsav blocks",
-        },
-        pieces,
-    )?;
+    let span = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: data,
+                transform: "zsav blocks",
+            },
+            &pieces,
+        )
+        .await?;
+
     Ok((total, span))
 }
 

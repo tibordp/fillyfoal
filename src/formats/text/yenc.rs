@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::sync::Arc;
 
 use crate::cx::Cx;
 use crate::error::{DiagKind, Diagnostic, Result};
@@ -329,6 +330,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut names: Vec<String> = Vec::new();
     let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, b) in blocks.iter().enumerate() {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         if b.part.is_none() {
             continue;
         }
@@ -342,12 +346,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
     for name in names {
         let indexes = groups.remove(&name).unwrap_or_default();
-        let mut parts: Vec<Block> = indexes
-            .iter()
-            .filter_map(|&i| blocks.get(i))
-            .cloned()
-            .collect();
+        let mut parts: Vec<Block> = Vec::with_capacity(indexes.len());
+        for (n, &i) in indexes.iter().enumerate() {
+            if n.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
+            parts.extend(blocks.get(i).cloned());
+        }
+        // At most `MAX_BLOCKS` parts: a bounded sort.
         parts.sort_by_key(Block::offset);
+        let parts = Arc::new(parts);
         let total = parts.first().and_then(|b| b.begin.1.num("total"));
         let size = parts.first().and_then(|b| b.begin.1.num("size"));
         let (Some(a), Some(z)) = (parts.first(), parts.last()) else {
@@ -503,10 +511,10 @@ async fn dissect_decoded(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
 }
 
 /// The parts of one file, decoded and concatenated in `begin=` order.
-async fn joined(cx: Cx, (input, whole, parts): (Input, Span, Vec<Block>)) -> Result<()> {
+async fn joined(cx: Cx, (input, whole, parts): (Input, Span, Arc<Vec<Block>>)) -> Result<()> {
     let mut pieces = Vec::with_capacity(parts.len());
     let mut next = 0u64;
-    for b in &parts {
+    for b in parts.iter() {
         cx.checkpoint().await;
         let (span, error) = decode_block(&cx, b).await?;
         if let Some(e) = error {
@@ -525,13 +533,16 @@ async fn joined(cx: Cx, (input, whole, parts): (Input, Span, Vec<Block>)) -> Res
         next = offset.saturating_add(span.len);
         pieces.push(span);
     }
-    let joined = cx.add_pieces(
-        Origin {
-            parent: whole,
-            transform: "yenc-join",
-        },
-        pieces,
-    )?;
+    let joined = cx
+        .add_pieces_stepped(
+            Origin {
+                parent: whole,
+                transform: "yenc-join",
+            },
+            &pieces,
+        )
+        .await?;
+
     let size = parts.first().and_then(|b| b.begin.1.num("size"));
     let mut content = Node::new("Content")
         .span(whole)
