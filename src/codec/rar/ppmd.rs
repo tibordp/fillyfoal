@@ -1,10 +1,13 @@
 //! PPMd variant H (Dmitry Shkarin's PPMd, as in RAR 2.9 and 7-Zip's
 //! `Ppmd7`) with RAR's carry-less range decoder.
 //!
-//! Written from knowledge of the 7-Zip/unrar sources. The model is checked
-//! byte for byte against 7-Zip's PPMd encoder (through `pyppmd`, with the
-//! 7z range coder: see the tests); RAR PPMd blocks re-encoded from such
-//! streams with RAR's coder decode the same in libarchive.
+//! Organised like 7-Zip's `Ppmd7` (public domain; Dmitry Shkarin's PPMd
+//! var. H). `Ppm::init`, the block header reader, was rewritten on
+//! 2026-10-08 from the PPMd branch of libarchive's `parse_codes` (BSD-2)
+//! after a provenance review found it followed unRAR's code. The model is
+//! checked byte for byte against 7-Zip's PPMd encoder (through `pyppmd`,
+//! with the 7z range coder: see the tests); RAR PPMd blocks re-encoded
+//! from such streams with RAR's coder decode the same in libarchive.
 //!
 //! The model lives in a heap of 12-byte units addressed by 32-bit offsets.
 //! The heap (up to 256 MiB) is allocated in pages as the model touches it,
@@ -942,40 +945,51 @@ impl Ppm {
 
     // --- Decoding -------------------------------------------------------
 
-    /// Reads a PPMd block header (unrar's `ModelPPM::DecodeInit`): flags
-    /// (order, reset, new escape character), memory size, and the range
-    /// coder's first bytes.
+    /// Reads the parameters of a PPMd block and starts its range decoder,
+    /// following the PPMd branch of libarchive's `parse_codes`.
+    ///
+    /// The flags byte (its top bit is the PPMd marker the caller peeked)
+    /// says whether a memory size follows (0x20, which also restarts the
+    /// model with a fresh allocator) and whether a new escape symbol
+    /// follows (0x40); its low five bits give the model order. A block
+    /// without 0x20 continues the current model, and is rejected when no
+    /// model has been started ("Invalid PPMd sequence" in libarchive).
+    /// Like libarchive, an order of 1 is rejected, leaving any earlier
+    /// model as it was, and the range decoder's first four bytes must not
+    /// all be 0xff (the code has to lie below the initial range).
     pub fn init(&mut self, bits: &mut Bits<'_>, esc: &mut u8) -> Result<()> {
         let flags = bits.get_byte();
-        let reset = flags & 0x20 != 0;
-        let mb = if reset {
-            u32::from(bits.get_byte())
-        } else if !self.allocated {
-            return Err(corrupt());
+        let restart = flags & 0x20 != 0;
+        // Memory is given in MiB, less one; it is never zero.
+        let size = if restart {
+            u32::from(bits.get_byte()).wrapping_add(1) << 20
         } else {
             0
         };
         if flags & 0x40 != 0 {
             *esc = bits.get_byte();
         }
+        if restart {
+            let mut order = u32::from(flags & 0x1f).wrapping_add(1);
+            if order > 16 {
+                order = order.wrapping_sub(16).wrapping_mul(3).wrapping_add(16);
+            }
+            if order == 1 {
+                return Err(corrupt());
+            }
+            // 7-Zip's `Ppmd7_Alloc` + `Ppmd7_Init`.
+            self.start(order, size);
+        } else if !self.allocated {
+            return Err(corrupt());
+        }
+        // The range decoder (libarchive's `PpmdRAR_RangeDec_Init`).
         self.low = 0;
-        self.code = 0;
         self.range = u32::MAX;
+        self.code = 0;
         for _ in 0..4 {
             self.code = self.code << 8 | u32::from(bits.get_byte());
         }
-        if reset {
-            let mut order = u32::from(flags & 0x1f).saturating_add(1);
-            if order > 16 {
-                order = order.wrapping_mul(3).wrapping_sub(32);
-            }
-            if order == 1 {
-                self.allocated = false;
-                return Err(corrupt());
-            }
-            self.start(order, mb.saturating_add(1) << 20);
-        }
-        if self.min_context == 0 {
+        if self.code == u32::MAX {
             return Err(corrupt());
         }
         Ok(())

@@ -128,7 +128,7 @@ def v4_normal():
     enc_b = rarenc.e8_encode(b[:700], 0, False, False) + rarenc.e8_encode(b[700:], 700, True, False)
     enc_c = (
         rarenc.delta_encode(c[:600], 2)
-        + rarenc.rgb_encode(c[600:1200], 30, 1)
+        + rarenc.rgb_encode(c[600:1200], 33, 1)
         + rarenc.audio_encode(c[1200:], 2)
     )
     filters = {

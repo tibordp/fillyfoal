@@ -684,10 +684,11 @@ class Rar3Encoder:
 # lengths and checksums: valid for checksum-based decoders, meaningless to
 # a real RarVM.
 STANDARD = {
+    # As libarchive's `execute_filter` checks the fingerprints (CRC32 |
+    # length << 32): delta, e8, e8 with e9, rgb, audio.
+    "delta": (29, 0x0E06077D),
     "e8": (53, 0xAD576887),
     "e8e9": (57, 0x3CD7E57E),
-    "itanium": (120, 0x3769893F),
-    "delta": (29, 0x0E06077D),
     "rgb": (149, 0x1C2C5DC8),
     "audio": (216, 0xBC85E701),
 }
@@ -986,84 +987,87 @@ def arm_encode(data, file_offset):
     return bytes(data)
 
 
-def rgb_encode(data, width, byte_offset):
-    """The inverse of `execute_filter_rgb` with stride `width` + 3: red and
-    blue made relative to green, then each byte stored as its prediction
-    (the left neighbour, or for later rows the closest of left, up and
-    up-left to left + up - up-left) minus it, plane by plane."""
+def rgb_encode(data, stride, byte_offset):
+    """The inverse of `execute_filter_rgb`. The decoder rebuilds each of
+    the three planes from its bytes, each the prediction minus the stored
+    byte, predicting from the previous byte of the plane and, from offset
+    `stride` on, the bytes at -`stride` + 3 ("up") and -`stride`
+    ("up-left") in the output; it then adds green to red and blue. So:
+    red and blue are first made relative to green, then each plane is
+    stored as prediction minus value."""
     n = len(data)
-    d = bytearray(data)
-    i = byte_offset
-    while i < n - 2:
-        g = data[i + 1]
-        d[i] = (data[i] - g) & 0xFF
-        d[i + 2] = (data[i + 2] - g) & 0xFF
-        i += 3
-
-    def signed(v):
-        return v - (1 << 32) if v & 0x80000000 else v
+    dst = bytearray(data)
+    for i in range(byte_offset, n - 2, 3):
+        dst[i] = (dst[i] - dst[i + 1]) & 0xFF
+        dst[i + 2] = (dst[i + 2] - dst[i + 1]) & 0xFF
 
     src = bytearray()
-    for ch in range(3):
-        prev = 0
-        for i in range(ch, n, 3):
-            if i >= width + 3:
-                up = d[i - width]
-                up_left = d[i - width - 3]
-                p = (prev + up - up_left) & 0xFFFFFFFF
-                pa = abs(signed((p - prev) & 0xFFFFFFFF))
-                pb = abs(signed((p - up) & 0xFFFFFFFF))
-                pc = abs(signed((p - up_left) & 0xFFFFFFFF))
-                pred = prev if pa <= pb and pa <= pc else up if pb <= pc else up_left
-            else:
-                pred = prev
-            src.append((pred - d[i]) & 0xFF)
-            prev = d[i]
+    for i in range(3):
+        byte = 0
+        for j in range(i, n, 3):
+            if j >= stride:
+                up = dst[j - stride + 3]
+                up_left = dst[j - stride]
+                delta1 = abs(up - up_left)
+                delta2 = abs(byte - up_left)
+                delta3 = abs(up - up_left + byte - up_left)
+                if delta1 > delta2 or delta1 > delta3:
+                    byte = up if delta2 <= delta3 else up_left
+            src.append((byte - dst[j]) & 0xFF)
+            byte = dst[j]
     return bytes(src)
 
 
 def audio_encode(data, channels):
     """The inverse of `execute_filter_audio`: per channel, each byte stored
-    as an adaptive linear prediction minus it, the predictor's three
-    weights nudged every 32 bytes towards the smallest accumulated error."""
+    as an adaptive linear prediction minus it (a signed `delta`), the
+    predictor's three weights nudged every 32 bytes towards the smallest
+    accumulated error."""
     n = len(data)
     src = bytearray()
 
     def s8(v):
         return (v & 0xFF) - 256 if v & 0x80 else v & 0xFF
 
-    for ch in range(channels):
-        last_byte = 0
-        last_delta = 0
+    for i in range(channels):
+        lastbyte = 0
+        lastdelta = 0
+        deltas = [0, 0, 0]
+        weight = [0, 0, 0]
         error = [0] * 7
-        d1 = d2 = 0
-        weights = [0, 0, 0]
         count = 0
-        for i in range(ch, n, channels):
-            d3 = d2
-            d2 = last_delta - d1
-            d1 = last_delta
-            pred = (8 * last_byte + weights[0] * d1 + weights[1] * d2 + weights[2] * d3) & 0xFFFFFFFF
-            pred = (pred >> 3) & 0xFF
-            stored = (pred - data[i]) & 0xFF
-            src.append(stored)
-            byte = (pred - stored) & 0xFFFFFFFF
-            last_delta = s8(byte - last_byte)
-            last_byte = byte
-            e = s8(stored) * 8
-            for k, t in enumerate((e, e - d1, e + d1, e - d2, e + d2, e - d3, e + d3)):
-                error[k] += abs(t)
+        for j in range(i, n, channels):
+            deltas[2] = deltas[1]
+            deltas[1] = lastdelta - deltas[0]
+            deltas[0] = lastdelta
+            predbyte = (
+                8 * lastbyte
+                + weight[0] * deltas[0]
+                + weight[1] * deltas[1]
+                + weight[2] * deltas[2]
+            ) >> 3 & 0xFF
+            delta = s8(predbyte - data[j])
+            src.append(delta & 0xFF)
+            byte = (predbyte - delta) & 0xFF
+            prederror = delta * 8
+            error[0] += abs(prederror)
+            for k in range(3):
+                error[1 + 2 * k] += abs(prederror - deltas[k])
+                error[2 + 2 * k] += abs(prederror + deltas[k])
+            lastdelta = s8(byte - lastbyte)
+            lastbyte = byte
             if count & 0x1F == 0:
-                best = 0
+                idx = 0
                 for k in range(1, 7):
-                    if error[k] < error[best]:
-                        best = k
+                    if error[k] < error[idx]:
+                        idx = k
                 error = [0] * 7
-                if best:
-                    w = (best - 1) // 2
-                    if best % 2 == 1 and weights[w] >= -16:
-                        weights[w] -= 1
-                    elif best % 2 == 0 and weights[w] < 16:
-                        weights[w] += 1
+                if idx:
+                    w = (idx - 1) // 2
+                    if idx % 2 == 1:
+                        if weight[w] >= -16:
+                            weight[w] -= 1
+                    elif weight[w] < 16:
+                        weight[w] += 1
             count += 1
     return bytes(src)
