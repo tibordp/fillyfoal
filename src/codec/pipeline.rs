@@ -273,25 +273,25 @@ impl Decoder for Chain {
             return Ok(if eof { Status::Done } else { Status::NeedInput });
         };
         self.trim();
-        loop {
-            let (before, rest) = self.stages.split_at_mut(last);
-            let Some(stage) = rest.first_mut() else {
-                return Ok(Status::Done);
-            };
-            let (src, src_eof) = match before.last() {
-                Some(prev) => (prev.out.as_slice(), prev.done),
-                None => (input, eof),
-            };
-            match stage.decoder.decode(src, src_eof, out, step, limit)? {
-                Status::NeedInput if last > 0 => {
-                    if self.pump(last.saturating_sub(1), input, eof, step, limit)?
-                        == Status::NeedInput
-                    {
-                        return Ok(Status::NeedInput);
-                    }
+        let (before, rest) = self.stages.split_at_mut(last);
+        let Some(stage) = rest.first_mut() else {
+            return Ok(Status::Done);
+        };
+        let (src, src_eof) = match before.last() {
+            Some(prev) => (prev.out.as_slice(), prev.done),
+            None => (input, eof),
+        };
+        match stage.decoder.decode(src, src_eof, out, step, limit)? {
+            // One step upstream per call, so a call stays bounded even when
+            // the last stage waits for all of its input (a whole-buffer
+            // filter): the caller calls again, and can yield in between.
+            Status::NeedInput if last > 0 => {
+                match self.pump(last.saturating_sub(1), input, eof, step, limit)? {
+                    Status::NeedInput => Ok(Status::NeedInput),
+                    _ => Ok(Status::More),
                 }
-                status => return Ok(status),
             }
+            status => Ok(status),
         }
     }
 
