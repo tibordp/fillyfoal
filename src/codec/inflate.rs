@@ -1,7 +1,8 @@
 //! DEFLATE (RFC 1951) decoder.
 //!
-//! Modelled on zlib's `puff` reference decoder: canonical Huffman decoding one
-//! bit at a time. Slow, small and easy to audit. The decoder works on input
+//! An altered Rust version of Mark Adler's `puff` (zlib `contrib/puff`, zlib
+//! license; see `THIRD-PARTY.md`): canonical Huffman decoding one bit at a
+//! time. Slow, small and easy to audit. The decoder works on input
 //! that is fully in memory and can stop at any symbol boundary, so callers
 //! decode in bounded steps and yield to the budget in between.
 

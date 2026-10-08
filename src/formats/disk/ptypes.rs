@@ -243,10 +243,6 @@ const GPT_TYPES: &[(&str, &str)] = &[
     ("d4e6e2cd-4469-46f3-b5cb-1bff57afc149", "ONIE config"),
     ("9e1a2d38-c612-4316-aa26-8b49521e5a8b", "PowerPC PReP boot"),
     (
-        "bc13c2ff-59e6-4262-a352-b275fd6f7172",
-        "Freedesktop shared boot loader config",
-    ),
-    (
         "734e5afe-f61a-11e6-bc64-92361f002671",
         "Atari TOS basic data",
     ),
@@ -254,7 +250,6 @@ const GPT_TYPES: &[(&str, &str)] = &[
         "8c8f8eff-ac95-4770-814a-21994f2dbc8f",
         "VeraCrypt encrypted data",
     ),
-    ("90b6ff38-b98f-4358-a21f-48f35b4a8ad3", "OS/2 ArcaOS"),
     ("7c5222bd-8f5d-4087-9c00-bf9843c7b58c", "SPDK block device"),
     ("4778ed65-bf42-45fa-9c5b-287a1dc4aab1", "barebox state"),
     ("3de21764-95bd-54bd-a5c3-4abe786f38a8", "U-Boot environment"),

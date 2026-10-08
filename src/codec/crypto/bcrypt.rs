@@ -9,6 +9,10 @@
 //! [`BcryptPbkdf::step`] and the caller budgets between steps. Checked
 //! byte-exact against the Python `bcrypt` package's `kdf` (tests below) and
 //! end to end against `ssh-keygen` keys (the `openssh-key` fixtures).
+//!
+//! `bcrypt_hash` and the key interleave follow OpenBSD's `bcrypt_pbkdf.c`
+//! (Ted Unangst, ISC) and the Blowfish key schedule its `blowfish.c` (Niels
+//! Provos, BSD-3-Clause); see `THIRD-PARTY.md`.
 
 use super::hash::{Hash, Sha512};
 

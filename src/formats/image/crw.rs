@@ -25,7 +25,7 @@ pub static FORMAT: Format = Format {
 };
 
 const TAGS: EnumTable = &[
-    (0x0032, "Color space"),
+    (0x0032, "Color info"),
     (0x0805, "User comment"),
     (0x080a, "Make and model"),
     (0x080b, "Firmware version"),

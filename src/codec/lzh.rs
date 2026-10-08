@@ -4,7 +4,10 @@
 //!
 //! Written from memory of the reference decoders (LHa for UNIX's
 //! `slide.c`/`huf.c`/`dhuf.c`/`larc.c`, Okumura's `lzhuf.c`, `unarj`'s
-//! `decode.c`, ZOO's `lzd.c`, libmspack's `lzss.c` and `mszipd.c`); the
+//! `decode.c`, ZOO's `lzd.c`, libmspack's `lzss.c` and `mszipd.c`). A license
+//! review found no code from LHa for UNIX, unarj or ZOO (none of which is
+//! GPL-compatible) except ARJ method 4's number coding, since rewritten from
+//! the format description; `-lh1-` follows `LZHUF.C` (see `THIRD-PARTY.md`). The
 //! tests and `tests/data/lzh/make.py` say which methods 7-Zip, libarchive
 //! and `lhafile` decode to the same bytes and which are only checked
 //! against our own test encoders.
@@ -728,22 +731,18 @@ impl Lzh {
         self.copy(out, (upper << 6 | lower).saturating_add(1), len)
     }
 
-    /// ARJ's unary-width numbers: up to `stop - start` one bits, each
-    /// adding the next power of two from 2^`start`, then `width` bits.
-    fn arj_number(bits: &mut Bits<'_>, start: u32, stop: u32) -> Result<u32> {
-        let mut plus = 0u32;
-        let mut pwr = 1u32 << start;
-        let mut width = start;
-        while width < stop {
-            if bits.bit()? == 0 {
-                break;
-            }
-            plus = plus.saturating_add(pwr);
-            pwr <<= 1;
-            width = width.saturating_add(1);
+    /// An ARJ method-4 number with widths `lo..=hi`: a run of `k` one bits
+    /// (ended by a zero, or implied once `lo + k` reaches `hi`) selects the
+    /// field width `lo + k`; the field is offset by the 2^`lo` + … +
+    /// 2^(`lo + k - 1`) values the narrower widths cover.
+    fn arj_number(bits: &mut Bits<'_>, lo: u32, hi: u32) -> Result<u32> {
+        let mut n = lo;
+        while n < hi && bits.bit()? == 1 {
+            n = n.saturating_add(1);
         }
-        let v = if width != 0 { bits.bits(width)? } else { 0 };
-        Ok(v.saturating_add(plus))
+        let skipped = (1u32 << n).saturating_sub(1u32 << lo);
+        let field = if n == 0 { 0 } else { bits.bits(n)? };
+        Ok(skipped.saturating_add(field))
     }
 
     fn fastest_token(&mut self, bits: &mut Bits<'_>, out: &mut Vec<u8>) -> Result<()> {

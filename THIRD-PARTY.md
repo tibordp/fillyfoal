@@ -11,11 +11,13 @@ Much of fillyfoal was written with AI assistance. Where a module was written
 from knowledge of a particular implementation, its documentation says so;
 `LICENSE-REVIEW.md` in the repository records how such modules were checked.
 
-## Brotli static dictionary
+## Brotli static dictionary and decoder parts
 
 `src/codec/brotli_dictionary.bin` is the static dictionary of RFC 7932
 (Appendix A), as distributed with the reference implementation
-(<https://github.com/google/brotli>) under the MIT license:
+(<https://github.com/google/brotli>) under the MIT license; the
+code-length prefix lookup in `src/codec/brotli.rs` also follows its
+`decode.c`:
 
 ```text
 Copyright (c) 2009, 2010, 2013-2016 by the Brotli Authors.
@@ -37,6 +39,134 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
+```
+
+## DEFLATE and DCL implode — puff and blast
+
+`src/codec/inflate.rs` (Huffman table construction and decoding) is an
+altered Rust version of Mark Adler's `puff`, and the DCL implode decoder and
+its packed code tables in `src/codec/implode.rs` an altered Rust version of
+his `blast`; `src/codec/brotli.rs` uses the same decoding technique. Both
+are in zlib's `contrib/` (<https://github.com/madler/zlib>):
+
+```text
+Copyright (C) 2002-2013 Mark Adler, all rights reserved
+version 2.3, 21 Jan 2013
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the author be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+```
+
+```text
+Copyright (C) 2003, 2012, 2013 Mark Adler
+version 1.3, 24 Aug 2013
+
+This software is provided 'as-is', without any express or implied
+warranty.  In no event will the author be held liable for any damages
+arising from the use of this software.
+
+Permission is granted to anyone to use this software for any purpose,
+including commercial applications, and to alter it and redistribute it
+freely, subject to the following restrictions:
+
+1. The origin of this software must not be misrepresented; you must not
+   claim that you wrote the original software. If you use this software
+   in a product, an acknowledgment in the product documentation would be
+   appreciated but is not required.
+2. Altered source versions must be plainly marked as such, and must not be
+   misrepresented as being the original software.
+3. This notice may not be removed or altered from any source distribution.
+```
+
+## LZFSE — Apple's reference implementation
+
+The FSE decoding-table construction and the frequency and L/M/D code tables
+in `src/codec/lzfse.rs` follow Apple's reference implementation
+(<https://github.com/lzfse/lzfse>):
+
+```text
+Copyright (c) 2015-2016, Apple Inc. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+
+1.  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+
+2.  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer
+    in the documentation and/or other materials provided with the distribution.
+
+3.  Neither the name of the copyright holder(s) nor the names of any contributors may be used to endorse or promote products derived
+    from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+## bcrypt_pbkdf and Blowfish — OpenBSD
+
+`bcrypt_hash`, the key interleave and the Blowfish key schedule in
+`src/codec/crypto/bcrypt.rs` follow OpenBSD's `bcrypt_pbkdf.c` and
+`blowfish.c` (as in <https://github.com/openssh/openssh-portable>):
+
+```text
+Copyright (c) 2013 Ted Unangst <tedu@openbsd.org>
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+```
+
+```text
+Copyright 1997 Niels Provos <provos@physnet.uni-hamburg.de>
+All rights reserved.
+
+Implementation advice by David Mazieres <dm@lcs.mit.edu>.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of the author may not be used to endorse or promote products
+   derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ```
 
 ## ACE decompression — acefile
@@ -82,11 +212,12 @@ decoder) are derived from XADMaster (The Unarchiver), Copyright (c)
 Lesser General Public License version 2.1 or later, used here under the GNU
 GPL version 3 as LGPL-2.1 section 3 permits.
 
-## StuffIt method 5 (LZAH) — LZHUF
+## StuffIt method 5 (LZAH) and LHA `-lh1-` — LZHUF
 
-The adaptive-Huffman LZ decoder for StuffIt method 5 in
-`src/codec/stuffit.rs` follows Haruhiko Okumura's `LZHUF.C` (1988),
-distributed by its author for free use, distribution and modification.
+The adaptive-Huffman LZ decoders for StuffIt method 5 in
+`src/codec/stuffit.rs` and LHA's `-lh1-` in `src/codec/lzh.rs` follow
+Haruhiko Okumura's `LZHUF.C` (1988), distributed by its author for free use,
+distribution and modification.
 
 ## Quantum and parts of LZX — libmspack
 
@@ -136,3 +267,25 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source
    distribution.
 ```
+
+## Acknowledgements
+
+No notice is required for the following, but parts of fillyfoal follow them
+closely enough to credit:
+
+- LZO1X decoding (`src/codec/lzo.rs`): the LZO format by Markus F.X.J.
+  Oberhumer (LZO is GPL-2.0-or-later).
+- LZMA, LZMA2 and the BCJ filters (`src/codec/lzma.rs`, `src/codec/xz.rs`):
+  Igor Pavlov's LZMA SDK and XZ Utils (public domain / 0BSD).
+- Poly1305 (`src/codec/crypto/poly1305.rs`): Andrew Moon's poly1305-donna
+  (public domain / MIT).
+- The static-Huffman LHA/ARJ layout (`src/codec/lzh.rs`): Haruhiko Okumura's
+  ar002 (free).
+- MBR and GPT partition-type names (`src/formats/disk/ptypes.rs`): util-linux
+  `include/pt-mbr-partnames.h` and `pt-gpt-partnames.h` (public domain).
+- macOS keychain field naming (`src/formats/security/keychain.rs`):
+  chainbreaker (GPL-2.0-or-later).
+- SAS and SPSS decompression (`src/codec/statdata.rs`): ReadStat (MIT) and
+  pandas' SAS reader (BSD-3-Clause).
+- Installer layouts (`src/formats/archive/installer/`): NSIS (zlib),
+  innoextract (zlib), unshield (MIT) and 7-Zip's NSIS handler (LGPL-2.1+).

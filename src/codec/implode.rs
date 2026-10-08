@@ -9,6 +9,10 @@
 //!
 //! Both read bits LSB-first and store codes bit-inverted relative to
 //! canonical Huffman codes, most significant bit first.
+//!
+//! The method-10 decoder and its code tables are an altered Rust version of
+//! Mark Adler's `blast` (zlib `contrib/blast`, zlib license; see
+//! `THIRD-PARTY.md`).
 
 use crate::codec::filters::Filter;
 use crate::error::{Diagnostic, Result};

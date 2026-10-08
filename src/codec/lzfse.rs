@@ -1,6 +1,10 @@
 //! Apple LZFSE: blocks of `bvx2` (FSE-coded literals and L/M/D triples),
 //! `bvxn` (LZVN), `bvx-` (stored) up to `bvx$`. Version-1 (`bvx1`) blocks
 //! are not supported.
+//!
+//! The FSE table construction and the code tables follow Apple's reference
+//! implementation (<https://github.com/lzfse/lzfse>, BSD-3-Clause; see
+//! `THIRD-PARTY.md`), the format's only specification.
 
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};

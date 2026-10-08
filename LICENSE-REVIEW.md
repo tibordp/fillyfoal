@@ -20,9 +20,7 @@ Still to resolve, because these licenses cannot be unified under GPLv3:
 - **AGPL-3.0** (libbgcode): the MeatPack decoder is being rewritten from Scott
   Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the format description.
 - A sweep of the rest of the library for material from GPL-incompatible
-  sources (4-clause BSD, GPL-2.0-only such as the Linux kernel, CDDL, CPL/IPL,
-  APSL, EPL, proprietary) and for credits owed (codec reference
-  implementations, curated name tables).
+  sources and for credits owed: done, see "Library-wide sweep" below.
 
 ## Findings of the source comparison (2026-10-08)
 
@@ -58,6 +56,47 @@ a free choice. Verdicts: **A** format-determined / independent expression;
 Not compared (no reference fetched): NSIS, Inno Setup, the LHA/ARJ/ZOO LZH
 decoder, DWG, OneNote, PST, statistics codecs — their sources are specs or
 permissive projects, or the agents reported no specific implementation.
+
+## Library-wide sweep (2026-10-08)
+
+Three read-only sweeps, each against fetched reference sources with the same
+method as above: codecs and crypto; curated name tables; and mentions of other
+implementations plus the GPL-incompatible lineages (Linux kernel, OpenZFS,
+Apple/APSL, The Sleuth Kit, Volatility 3, VirtualBox, Ghostscript, LHa for
+UNIX, unarj, zoo).
+
+**No 4-clause BSD material.** The only BSD-lineage code (ncompress for
+`unixz.rs`, OpenBSD `blowfish.c`) is public domain or 3-clause.
+
+| Item | Reference (license) | Verdict | Action |
+|---|---|---|---|
+| ARJ method 4 numbers (`lzh.rs` `arj_number`) | unarj `decode.c` (non-free; field-of-use restriction) | B (thin) | **Rewritten** from the format description |
+| `lzh.rs` static Huffman, `-lzs-`/`-lz5-`, ZOO LZW | LHa for UNIX, zoo `lzd.c` (both GPL-incompatible); Okumura ar002 | A for LHa/zoo; ar002 names only | Acknowledged (ar002) |
+| `lzh.rs` `-lh1-` | Okumura `LZHUF.C` (free) | B | THIRD-PARTY (LZHUF entry widened) |
+| `inflate.rs` Huffman construction/decoding | zlib `contrib/puff` (zlib) | B, near C | THIRD-PARTY notice; marked altered |
+| `implode.rs` DCL decoder and packed tables | zlib `contrib/blast` (zlib) | B | THIRD-PARTY notice; marked altered |
+| `brotli.rs` code-length prefix lookup | brotli `decode.c` (MIT) | B (minor) | Brotli entry widened |
+| `lzfse.rs` FSE table builder and tables | Apple lzfse (BSD-3-Clause) | B, near C | THIRD-PARTY notice |
+| `crypto/bcrypt.rs` | OpenBSD `bcrypt_pbkdf.c` (ISC), `blowfish.c` (BSD-3) | B | THIRD-PARTY notices |
+| `crypto/poly1305.rs` | poly1305-donna (PD/MIT) | B | Acknowledged |
+| `lzo.rs` | LZO (GPL-2.0+); Linux `lzo1x_decompress_safe.c` (GPL-2.0-only) | A/B against upstream LZO, A against Linux | Acknowledged |
+| `lzma.rs`, `xz.rs` | LZMA SDK, XZ Utils (PD/0BSD) | A/B | Acknowledged |
+| `zstd.rs`, `lz.rs`, `bzip2.rs`, `legacy.rs`, `unixz.rs`, `filters.rs`, `xpress.rs`, `lznt1.rs`, `statdata.rs`, `dwg.rs`, `capnp.rs`, `pbz.rs`, `wim.rs`, `psarc.rs`, `lzfu.rs`, `bcfz.rs`, `crc.rs` and the remaining crypto | specs, RFCs; references permissive | A | — |
+| Filesystem dissectors (ext, btrfs, xfs, f2fs, squashfs, erofs, …) | Linux `fs/` (GPL-2.0-only) | A | — |
+| `disk/udf.rs` sparing/VAT/metadata partition | Linux `fs/udf` (GPL-2.0-only) | A (different control flow; rules from UDF 2.50/2.60) | — |
+| `disk/zfs.rs` | OpenZFS (CDDL) | A | — |
+| `security/keychain.rs` | Apple `AppleDatabase.cpp` (APSL) | A (different record logic) | chainbreaker acknowledged |
+| `disk/hfs.rs`, `disk/apfs.rs` | Apple `hfs_format.h` (APSL), APFS Reference | A | — |
+| Disk/filesystem parsers vs The Sleuth Kit | CPL/IPL | A | — |
+| `forensics/evidence.rs` vmss, VirtualBox `.sav`, `disk/vdi.rs` | Volatility 3 (VSL), VirtualBox (GPL-3.0-only) | A | — |
+| PostScript, PDF, filters | Ghostscript (AGPL) | A | — |
+| `disk/ptypes.rs` names | util-linux (public domain) | B | Acknowledged |
+| Other curated tables (EXIF/maker notes, Unity class IDs, file-type and machine names, …) | ExifTool, UnityPy (MIT), specs | A or facts | — |
+
+Not compared: PuTTY `sshpubk.c` (MIT; fetch failed), QEMU qcow2, browser
+artifacts, ETL against public parsers, DuckDB/Realm/WiredTiger sources. All
+are under GPL-compatible licenses, so they cannot introduce an
+incompatibility.
 
 ## Initial list (before the comparison)
 
