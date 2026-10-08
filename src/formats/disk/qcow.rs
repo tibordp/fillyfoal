@@ -425,6 +425,7 @@ async fn l1_table(cx: Cx, image: Arc<Image>) -> Result<()> {
     let covered = image.l2_entries.saturating_mul(image.cluster());
     for i in 0..count {
         let span = image.l1.sub(i.saturating_mul(8), 8);
+        cx.progress(i, count);
         let entry = u64_be(&cx.read(span).await?, 0).unwrap_or(0);
         let l2 = if image.version == 1 {
             entry
@@ -551,6 +552,7 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
         if list.len() >= image.size {
             break;
         }
+        cx.progress(list.len(), image.size);
         let entry = u64_be(&cx.read(image.l1.sub(i.saturating_mul(8), 8)).await?, 0).unwrap_or(0);
         let l2 = if image.version == 1 {
             entry
@@ -573,10 +575,17 @@ async fn virtual_disk(cx: Cx, image: Arc<Image>) -> Result<()> {
                     .sub(l2, image.l2_entries.saturating_mul(image.l2_entry_size)),
             )
             .await?;
-        for raw in table.chunks(crate::bytes::to_usize(image.l2_entry_size)) {
+        // An L2 table holds up to 256Ki entries (2 MiB clusters).
+        for (j, raw) in table
+            .chunks(crate::bytes::to_usize(image.l2_entry_size))
+            .enumerate()
+        {
             let want = cluster.min(image.size.saturating_sub(list.len()));
             if want == 0 {
                 break 'outer;
+            }
+            if j.is_multiple_of(4096) {
+                cx.checkpoint().await;
             }
             let entry = u64_be(raw, 0).unwrap_or(0);
             let step = match image.map(entry) {

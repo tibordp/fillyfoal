@@ -395,6 +395,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
 async fn checkpoint_area(cx: Cx, (c, base, count): (Arc<Container>, u64, u64)) -> Result<()> {
     for i in 0..count {
+        cx.progress(i, count);
         let n = base.saturating_add(i);
         let (data, ok) = c.object(&cx, n).await?;
         let kind = u32_le(&data, 24).unwrap_or(0);

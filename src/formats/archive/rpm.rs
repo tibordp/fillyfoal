@@ -255,8 +255,35 @@ enum Decoded {
     Items(Vec<(Value, Span)>),
 }
 
+/// Bytes scanned or copied per checkpoint while decoding values: every
+/// entry may point at the whole (MiBs large) store.
+const STEP: usize = 4096;
+
+/// A copy of `bytes`, yielding every [`STEP`] bytes.
+async fn copy(cx: &Cx, bytes: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(bytes.len());
+    for chunk in bytes.chunks(STEP) {
+        cx.checkpoint().await;
+        out.extend_from_slice(chunk);
+    }
+    out
+}
+
+/// The position of the first NUL in `bytes`, yielding every [`STEP`] bytes.
+async fn nul(cx: &Cx, bytes: &[u8]) -> Option<usize> {
+    let mut at = 0usize;
+    for chunk in bytes.chunks(STEP) {
+        cx.checkpoint().await;
+        if let Some(p) = chunk.iter().position(|&b| b == 0) {
+            return at.checked_add(p);
+        }
+        at = at.saturating_add(chunk.len());
+    }
+    None
+}
+
 /// Decodes up to `limit` items of an entry from the store.
-fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
+async fn decode(cx: &Cx, e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
     let start = to_usize(e.offset.into());
     let n = e.count.min(limit);
     let mut items = Vec::new();
@@ -267,7 +294,7 @@ fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
             let bytes = store.get(start..start.checked_add(to_usize(e.count.into()))?)?;
             if e.count != 1 {
                 return Some(Decoded::One(
-                    Value::Bytes(bytes.to_vec()),
+                    Value::Bytes(copy(cx, bytes).await),
                     span(start, bytes.len()),
                 ));
             }
@@ -277,7 +304,7 @@ fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
         7 => {
             let bytes = store.get(start..start.checked_add(to_usize(e.count.into()))?)?;
             return Some(Decoded::One(
-                Value::Bytes(bytes.to_vec()),
+                Value::Bytes(copy(cx, bytes).await),
                 span(start, bytes.len()),
             ));
         }
@@ -287,7 +314,10 @@ fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
                 4 => 4,
                 _ => 8,
             };
-            for _ in 0..n {
+            for i in 0..n {
+                if i.is_multiple_of(1024) {
+                    cx.checkpoint().await;
+                }
                 let v = match width {
                     2 => u64::from(u16_be(store, at)?),
                     4 => u64::from(u32_be(store, at)?),
@@ -301,7 +331,7 @@ fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
             let n = if e.kind == 6 { 1 } else { n };
             for _ in 0..n {
                 let rest = store.get(at..)?;
-                let len = rest.iter().position(|&b| b == 0)?;
+                let len = nul(cx, rest).await?;
                 let s = String::from_utf8_lossy(rest.get(..len)?).into_owned();
                 items.push((text(s), span(at, len.saturating_add(1))));
                 at = at.checked_add(len)?.checked_add(1)?;
@@ -317,8 +347,8 @@ fn decode(e: &Entry, store: &[u8], base: Span, limit: u32) -> Option<Decoded> {
 }
 
 /// A string or number tag's first value, for summaries.
-fn first_text(e: &Entry, store: &[u8], base: Span) -> Option<String> {
-    match decode(e, store, base, 1)? {
+async fn first_text(cx: &Cx, e: &Entry, store: &[u8], base: Span) -> Option<String> {
+    match decode(cx, e, store, base, 1).await? {
         Decoded::One(Value::Text(s), _) => Some(s),
         Decoded::Items(items) => match items.into_iter().next()?.0 {
             Value::Text(s) => Some(s),
@@ -350,11 +380,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let store = cx.read(main.store.sub(0, cx.limits().max_read)).await?;
     let mut tags = std::collections::BTreeMap::new();
     for i in 0..to_usize(main.entries.into()) {
+        if i.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
         let Some(e) = entry_at(&index, i) else {
             break;
         };
         if matches!(e.tag, 1000..=1002 | 1022 | 1124 | 1125)
-            && let Some(v) = first_text(&e, &store, main.store)
+            && let Some(v) = first_text(&cx, &e, &store, main.store).await
         {
             tags.insert(e.tag, v);
         }
@@ -431,7 +464,7 @@ async fn header(cx: Cx, (h, signature): (Header, bool)) -> Result<()> {
                 .value(uint(e.count.into())),
         ]);
         let mut node = Node::new(name).span(entry_span);
-        match decode(&e, &store, h.store, INLINE_ITEMS) {
+        match decode(&cx, &e, &store, h.store, INLINE_ITEMS).await {
             Some(Decoded::One(v, s)) => {
                 node = node.value(present(e.tag, v, signature)).target(s);
                 node = node.lazy(emit_nodes, fields);
@@ -473,7 +506,7 @@ async fn items(cx: Cx, (store, e, fields): (Span, Entry, Arc<Vec<Node>>)) -> Res
     emit_nodes(cx.clone(), fields).await?;
     // Read only the part of the store this entry can use.
     let data = cx.read(store.sub(0, cx.limits().max_read)).await?;
-    let Some(Decoded::Items(values)) = decode(&e, &data, store, e.count) else {
+    let Some(Decoded::Items(values)) = decode(&cx, &e, &data, store, e.count).await else {
         return Ok(());
     };
     for (i, (v, s)) in values.into_iter().enumerate() {

@@ -278,6 +278,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             format!("{}, {}", m.method, human_size(m.original))
         };
+        cx.progress_in(file, m.span.end());
         cx.push(
             Node::new(m.name)
                 .span(m.span)

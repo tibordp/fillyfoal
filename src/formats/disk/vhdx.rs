@@ -426,7 +426,9 @@ async fn bat_entries(cx: Cx, d: Arc<Disk>) -> Result<()> {
 
 async fn virtual_disk(cx: Cx, d: Arc<Disk>) -> Result<()> {
     let mut list = PieceList::new(d.bat);
-    for i in 0..d.blocks() {
+    let blocks = d.blocks();
+    for i in 0..blocks {
+        cx.progress(i, blocks);
         let want = d.block.min(d.size.saturating_sub(list.len()));
         let (_, entry) = d.entry(&cx, i).await?;
         let step = match entry & 7 {

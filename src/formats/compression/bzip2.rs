@@ -247,5 +247,6 @@ async fn push_block(cx: &Cx, body: Span, index: u64, start: u64, end: u64) {
     if let Some(crc) = crc {
         node = node.value(hex(crc));
     }
+    cx.progress_in(body, body.offset.saturating_add(first));
     cx.push(node).await;
 }

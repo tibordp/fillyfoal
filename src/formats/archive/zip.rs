@@ -1546,6 +1546,7 @@ async fn local_entries(cx: &Cx, input: Input) -> Result<()> {
         cur.skip(header.extra_len.into());
         let data = cur.span(header.compressed.into());
         cur.skip(header.compressed.into());
+        cx.progress_in(input.span, input.span.offset.saturating_add(cur.pos()));
         let mut node = Node::new(name).span(cur.since(start));
         if header.flags & 0x08 != 0 {
             node = node.diag(Diagnostic::unsupported(

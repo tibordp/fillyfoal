@@ -129,7 +129,7 @@ struct Item {
     end: usize,
     value: Option<Value>,
     summary: Option<String>,
-    children: Vec<Item>,
+    children: Arc<Vec<Item>>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -196,9 +196,14 @@ struct Archive {
 struct Parser<'a> {
     data: &'a [u8],
     at: usize,
+    /// Yields to the host in loops over the header's (input-sized) lists.
+    cx: &'a Cx,
 }
 
 type P<T> = std::result::Result<T, &'static str>;
+
+/// The most coders, and coder inputs or outputs, in one folder.
+const MAX_CODERS: u64 = 64;
 
 impl Parser<'_> {
     fn byte(&mut self) -> P<u8> {
@@ -296,10 +301,11 @@ impl Parser<'_> {
         }
     }
 
-    fn digests(&mut self, n: u64) -> P<Item> {
+    async fn digests(&mut self, n: u64) -> P<Item> {
         let start = self.at.saturating_sub(1);
         let defined = self.defined(n)?;
         for d in &defined {
+            self.cx.checkpoint().await;
             if *d {
                 self.u32()?;
             }
@@ -310,7 +316,7 @@ impl Parser<'_> {
             .with_summary(count(to_u64(crcs), "CRC", "CRCs")))
     }
 
-    fn pack_info(&mut self, s: &mut Streams) -> P<Item> {
+    async fn pack_info(&mut self, s: &mut Streams) -> P<Item> {
         let start = self.at.saturating_sub(1);
         s.pack_pos = self.number()?;
         let n = self.count(1)?;
@@ -321,6 +327,7 @@ impl Parser<'_> {
                 0x00 => break,
                 0x09 => {
                     for _ in 0..n {
+                        self.cx.checkpoint().await;
                         s.pack_sizes.push(self.number()?);
                     }
                     children.push(
@@ -328,7 +335,7 @@ impl Parser<'_> {
                             .with_summary(count(n, "size", "sizes")),
                     );
                 }
-                0x0a => children.push(self.digests(n)?),
+                0x0a => children.push(self.digests(n).await?),
                 _ => return Err("unexpected property in pack info"),
             }
         }
@@ -337,12 +344,17 @@ impl Parser<'_> {
             count(n, "packed stream", "packed streams"),
             s.pack_pos
         ));
-        item.children = children;
+        item.children = Arc::new(children);
         Ok(item)
     }
 
     fn folder(&mut self) -> P<Folder> {
         let coders = self.count(2)?;
+        // 7-Zip's own limits (k_Scan_NumCoders_MAX, k_Scan_NumCodersStreams_in_Folder_MAX):
+        // they also bound the quadratic bind-pair searches over a folder.
+        if coders > MAX_CODERS {
+            return Err("too many coders in a folder");
+        }
         let mut f = Folder::default();
         let mut ins = 0u64;
         let mut outs = 0u64;
@@ -369,10 +381,10 @@ impl Parser<'_> {
                 props,
             });
         }
-        let bind_pairs = outs.saturating_sub(1);
-        if bind_pairs > to_u64(self.data.len()) {
-            return Err("too many bind pairs");
+        if ins > MAX_CODERS || outs > MAX_CODERS {
+            return Err("too many coder streams in a folder");
         }
+        let bind_pairs = outs.saturating_sub(1);
         for _ in 0..bind_pairs {
             let bind = (self.number()?, self.number()?);
             f.binds.push(bind);
@@ -390,7 +402,7 @@ impl Parser<'_> {
         Ok(f)
     }
 
-    fn unpack_info(&mut self, s: &mut Streams) -> P<Item> {
+    async fn unpack_info(&mut self, s: &mut Streams) -> P<Item> {
         let start = self.at.saturating_sub(1);
         self.expect(0x0b)?;
         let n = self.count(2)?;
@@ -399,6 +411,7 @@ impl Parser<'_> {
         }
         let mut children = Vec::new();
         for i in 0..n {
+            self.cx.checkpoint().await;
             let at = self.at;
             let f = self.folder()?;
             children.push(
@@ -410,6 +423,7 @@ impl Parser<'_> {
         let at = self.at;
         self.expect(0x0c)?;
         for f in &mut s.folders {
+            self.cx.checkpoint().await;
             let outs = f.coders.iter().fold(0u64, |a, c| a.saturating_add(c.outs));
             for _ in 0..outs {
                 f.unpack_sizes.push(self.number()?);
@@ -419,24 +433,25 @@ impl Parser<'_> {
         loop {
             match self.byte()? {
                 0x00 => break,
-                0x0a => children.push(self.digests(n)?),
+                0x0a => children.push(self.digests(n).await?),
                 _ => return Err("unexpected property in unpack info"),
             }
         }
         let mut item = self
             .item("kUnPackInfo", start)
             .with_summary(count(n, "folder", "folders"));
-        item.children = children;
+        item.children = Arc::new(children);
         Ok(item)
     }
 
-    fn substreams(&mut self, s: &mut Streams) -> P<Item> {
+    async fn substreams(&mut self, s: &mut Streams) -> P<Item> {
         let start = self.at.saturating_sub(1);
         let mut children = Vec::new();
         let mut kind = self.byte()?;
         if kind == 0x0d {
             let at = self.at.saturating_sub(1);
             for f in &mut s.folders {
+                self.cx.checkpoint().await;
                 f.streams = self.number()?;
             }
             children.push(self.item("kNumUnPackStream", at));
@@ -454,6 +469,7 @@ impl Parser<'_> {
         for f in &s.folders {
             let mut sum = 0u64;
             for i in 0..f.streams {
+                self.cx.checkpoint().await;
                 let size = if sizes_present && i.saturating_add(1) < f.streams {
                     self.number()?
                 } else {
@@ -475,7 +491,7 @@ impl Parser<'_> {
                         .folders
                         .iter()
                         .fold(0u64, |a, f| a.saturating_add(f.streams));
-                    children.push(self.digests(n)?);
+                    children.push(self.digests(n).await?);
                 }
                 _ => return Err("unexpected property in substreams info"),
             }
@@ -484,32 +500,35 @@ impl Parser<'_> {
         let mut item = self
             .item("kSubStreamsInfo", start)
             .with_summary(count(total, "stream", "streams"));
-        item.children = children;
+        item.children = Arc::new(children);
         Ok(item)
     }
 
-    fn streams_info(&mut self, s: &mut Streams) -> P<Vec<Item>> {
+    async fn streams_info(&mut self, s: &mut Streams) -> P<Vec<Item>> {
         let mut items = Vec::new();
         let mut saw_substreams = false;
         loop {
             match self.byte()? {
                 0x00 => break,
-                0x06 => items.push(self.pack_info(s)?),
-                0x07 => items.push(self.unpack_info(s)?),
+                0x06 => items.push(self.pack_info(s).await?),
+                0x07 => items.push(self.unpack_info(s).await?),
                 0x08 => {
                     saw_substreams = true;
-                    items.push(self.substreams(s)?);
+                    items.push(self.substreams(s).await?);
                 }
                 _ => return Err("unexpected property in streams info"),
             }
         }
         if !saw_substreams {
-            s.sizes = s.folders.iter().map(Folder::unpack_size).collect();
+            for f in &s.folders {
+                self.cx.checkpoint().await;
+                s.sizes.push(f.unpack_size());
+            }
         }
         Ok(items)
     }
 
-    fn files_info(&mut self, a: &mut Archive) -> P<Item> {
+    async fn files_info(&mut self, a: &mut Archive) -> P<Item> {
         let start = self.at.saturating_sub(1);
         let n = self.count(1)?;
         let mut files: Vec<File> = (0..n).map(|_| File::default()).collect();
@@ -517,6 +536,7 @@ impl Parser<'_> {
         let mut empty_file = Vec::new();
         let mut children = Vec::new();
         loop {
+            self.cx.checkpoint().await;
             let at = self.at;
             let kind = self.byte()?;
             if kind == 0 {
@@ -524,7 +544,11 @@ impl Parser<'_> {
             }
             let size = self.number()?;
             let body = self.bytes(size)?.to_vec();
-            let mut sub = Parser { data: &body, at: 0 };
+            let mut sub = Parser {
+                data: &body,
+                at: 0,
+                cx: self.cx,
+            };
             let mut summary = None;
             match kind {
                 0x0e => {
@@ -541,6 +565,7 @@ impl Parser<'_> {
                         return Err("external names are not supported");
                     }
                     for f in &mut files {
+                        self.cx.checkpoint().await;
                         let rest = body.get(sub.at..).unwrap_or_default();
                         let (name, len, _) = crate::text::utf16z(rest, Endian::Little);
                         f.name = name;
@@ -553,6 +578,7 @@ impl Parser<'_> {
                         return Err("external times are not supported");
                     }
                     for (f, d) in files.iter_mut().zip(defined) {
+                        self.cx.checkpoint().await;
                         if d {
                             let t = sub.u64()?;
                             if kind == 0x14 {
@@ -567,6 +593,7 @@ impl Parser<'_> {
                         return Err("external attributes are not supported");
                     }
                     for (f, d) in files.iter_mut().zip(defined) {
+                        self.cx.checkpoint().await;
                         if d {
                             f.attributes = Some(sub.u32()?);
                         }
@@ -582,6 +609,7 @@ impl Parser<'_> {
         }
         let mut empty = empty_file.into_iter();
         for (f, e) in files.iter_mut().zip(&empty_stream) {
+            self.cx.checkpoint().await;
             f.has_stream = !e;
             if *e {
                 f.is_dir = !empty.next().unwrap_or(false);
@@ -594,11 +622,11 @@ impl Parser<'_> {
         let mut item = self
             .item("kFilesInfo", start)
             .with_summary(count(n, "file", "files"));
-        item.children = children;
+        item.children = Arc::new(children);
         Ok(item)
     }
 
-    fn header(&mut self) -> P<Archive> {
+    async fn header(&mut self) -> P<Archive> {
         let mut a = Archive::default();
         match self.byte()? {
             0x01 => {
@@ -609,6 +637,7 @@ impl Parser<'_> {
                         0x02 => {
                             // Archive properties: (type, size, data) until 0.
                             loop {
+                                self.cx.checkpoint().await;
                                 let t = self.byte()?;
                                 if t == 0 {
                                     break;
@@ -620,21 +649,21 @@ impl Parser<'_> {
                         }
                         0x03 => {
                             let mut extra = Streams::default();
-                            let children = self.streams_info(&mut extra)?;
+                            let children = self.streams_info(&mut extra).await?;
                             let mut item = self.item("kAdditionalStreamsInfo", at);
-                            item.children = children;
+                            item.children = Arc::new(children);
                             a.outline.push(item);
                         }
                         0x04 => {
                             let mut streams = Streams::default();
-                            let children = self.streams_info(&mut streams)?;
+                            let children = self.streams_info(&mut streams).await?;
                             a.streams = streams;
                             let mut item = self.item("kMainStreamsInfo", at);
-                            item.children = children;
+                            item.children = Arc::new(children);
                             a.outline.push(item);
                         }
                         0x05 => {
-                            let item = self.files_info(&mut a)?;
+                            let item = self.files_info(&mut a).await?;
                             a.outline.push(item);
                         }
                         _ => return Err("unexpected property in header"),
@@ -644,10 +673,10 @@ impl Parser<'_> {
             0x17 => {
                 a.encoded = true;
                 let mut streams = Streams::default();
-                let children = self.streams_info(&mut streams)?;
+                let children = self.streams_info(&mut streams).await?;
                 a.streams = streams;
                 let mut item = self.item("kEncodedHeader", 0);
-                item.children = children;
+                item.children = Arc::new(children);
                 a.outline.push(item);
             }
             _ => return Err("next header is neither kHeader nor kEncodedHeader"),
@@ -674,11 +703,20 @@ impl Item {
             node = node.summary(s.clone());
         }
         if !self.children.is_empty() {
-            let children: Vec<Node> = self.children.iter().map(|c| c.node(base)).collect();
-            node = node.lazy(emit_nodes, Arc::new(children));
+            node = node.lazy(emit_items, (self.children.clone(), base));
         }
         node
     }
+}
+
+/// Expander: the nodes of header outline items (a folder list can be
+/// input-sized), converted as they are emitted.
+async fn emit_items(cx: Cx, (items, base): (Arc<Vec<Item>>, Span)) -> Result<()> {
+    for item in items.iter() {
+        cx.checkpoint().await;
+        cx.emit(item.node(base));
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -858,8 +896,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if crc32(&data) != sh.next_crc {
         next_node = next_node.diag(Diagnostic::warning("next header CRC mismatch"));
     }
-    let parsed = Parser { data: &data, at: 0 }.header();
-    let archive = match parsed {
+    let parsed = Parser {
+        data: &data,
+        at: 0,
+        cx: &cx,
+    }
+    .header()
+    .await;
+    let mut archive = match parsed {
         Ok(a) => a,
         Err(e) => {
             cx.emit(
@@ -875,6 +919,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             return Ok(());
         }
     };
+    let mut outline = Arc::new(std::mem::take(&mut archive.outline));
     let mut archive = Arc::new(archive);
     let mut pack_base = SIGNATURE_HEADER.saturating_add(archive.streams.pack_pos);
     // Where packed streams end and the (outer) next header starts.
@@ -884,18 +929,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut header = next;
 
     if archive.encoded {
-        let methods: Vec<String> = archive
-            .streams
-            .folders
-            .iter()
-            .map(Folder::methods)
-            .collect();
+        let mut methods: Vec<String> = Vec::new();
+        for f in &archive.streams.folders {
+            cx.checkpoint().await;
+            methods.push(f.methods());
+        }
         let methods = methods.join(", ");
-        let packed: u64 = archive
-            .streams
-            .pack_sizes
-            .iter()
-            .fold(0u64, |a, &s| a.saturating_add(s));
+        let mut packed = 0u64;
+        for &s in &archive.streams.pack_sizes {
+            cx.checkpoint().await;
+            packed = packed.saturating_add(s);
+        }
         let header_span = file.sub(pack_base, packed);
         let size = archive
             .streams
@@ -903,16 +947,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .first()
             .map_or(0, Folder::unpack_size);
         let summary = format!("{methods}, {} → {}", human_size(packed), human_size(size));
-        let outline: Vec<Node> = archive.outline.iter().map(|i| i.node(next)).collect();
         match decode_header(&cx, &archive, file, pack_base).await {
-            Ok((span, inner)) => {
+            Ok((span, mut inner)) => {
                 cx.emit(
                     Node::new("Encoded header")
                         .span(header_span)
                         .summary(summary)
-                        .lazy(emit_nodes, Arc::new(outline)),
+                        .lazy(emit_items, (outline, next)),
                 );
                 pack_base = SIGNATURE_HEADER.saturating_add(inner.streams.pack_pos);
+                outline = Arc::new(std::mem::take(&mut inner.outline));
                 archive = Arc::new(inner);
                 header = span;
                 next_node = Node::new("Decoded header").span(span);
@@ -935,7 +979,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 cx.emit(
                     next_node
                         .summary("kEncodedHeader")
-                        .lazy(emit_nodes, Arc::new(outline)),
+                        .lazy(emit_items, (outline, next)),
                 );
                 cx.annotate(format!(
                     "7-Zip archive, header compressed ({methods}), {} packed",
@@ -947,16 +991,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     let files = to_u64(archive.files.len());
-    let methods: Vec<String> = {
-        let mut m: Vec<String> = archive
-            .streams
-            .folders
-            .iter()
-            .map(Folder::methods)
-            .collect();
-        m.dedup();
-        m
-    };
+    let mut methods: Vec<String> = Vec::new();
+    for f in &archive.streams.folders {
+        cx.checkpoint().await;
+        let m = f.methods();
+        if methods.last() != Some(&m) {
+            methods.push(m);
+        }
+    }
     cx.emit(
         Node::new("Files")
             .span(header)
@@ -973,11 +1015,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ))
             .lazy(list_folders, (input, archive.clone(), pack_base)),
     );
-    let outline: Vec<Node> = archive.outline.iter().map(|i| i.node(header)).collect();
     cx.emit(
         next_node
             .summary("kHeader")
-            .lazy(emit_nodes, Arc::new(outline)),
+            .lazy(emit_items, (outline, header)),
     );
     let mut summary = format!("7-Zip archive, {}", count(files, "file", "files"));
     if !methods.is_empty() {
@@ -1000,7 +1041,8 @@ async fn decode_header(
         .folders
         .first()
         .ok_or_else(|| Diagnostic::malformed("encoded header without a folder"))?;
-    let span = folder_spans(outer, file, pack_base)
+    let span = folder_spans(cx, outer, file, pack_base)
+        .await
         .first()
         .copied()
         .ok_or_else(|| Diagnostic::malformed("encoded header without a packed stream"))?;
@@ -1014,8 +1056,10 @@ async fn decode_header(
     match (Parser {
         data: &bytes,
         at: 0,
+        cx,
     })
     .header()
+    .await
     {
         Ok(a) if !a.encoded => Ok((out, a)),
         Ok(_) => Err(Diagnostic::malformed("encoded header inside an encoded header").at(out)),
@@ -1024,16 +1068,18 @@ async fn decode_header(
 }
 
 /// Spans of each folder's first packed stream.
-fn folder_spans(archive: &Archive, file: Span, pack_base: u64) -> Vec<Span> {
+async fn folder_spans(cx: &Cx, archive: &Archive, file: Span, pack_base: u64) -> Vec<Span> {
     let mut out = Vec::new();
     let mut pack_index = 0usize;
     let mut offsets = Vec::new();
     let mut at = pack_base;
     for &s in &archive.streams.pack_sizes {
+        cx.checkpoint().await;
         offsets.push((at, s));
         at = at.saturating_add(s);
     }
     for f in &archive.streams.folders {
+        cx.checkpoint().await;
         let (start, len) = offsets.get(pack_index).copied().unwrap_or((at, 0));
         // Folders with several packed streams (BCJ2) span all of them.
         let mut total = len;
@@ -1052,7 +1098,7 @@ async fn list_folders(
     cx: Cx,
     (input, archive, pack_base): (Input, Arc<Archive>, u64),
 ) -> Result<()> {
-    let spans = folder_spans(&archive, input.span, pack_base);
+    let spans = folder_spans(&cx, &archive, input.span, pack_base).await;
     cx.set_count(Count::Exact(to_u64(archive.streams.folders.len())));
     for (i, (f, span)) in archive.streams.folders.iter().zip(spans).enumerate() {
         let methods = f.methods();
@@ -1103,7 +1149,7 @@ async fn list_folders(
 async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u64)) -> Result<()> {
     let file = input.span;
     cx.set_count(Count::Exact(to_u64(archive.files.len())));
-    let spans = folder_spans(&archive, file, pack_base);
+    let spans = folder_spans(&cx, &archive, file, pack_base).await;
     // Walk files and substreams together.
     let mut folder = 0usize;
     let mut in_folder = 0u64;
@@ -1133,6 +1179,7 @@ async fn list_files(cx: Cx, (input, archive, pack_base): (Input, Arc<Archive>, u
                 .get(folder)
                 .is_some_and(|fo| in_folder >= fo.streams)
             {
+                cx.checkpoint().await;
                 folder = folder.saturating_add(1);
                 in_folder = 0;
                 offset_in_folder = 0;

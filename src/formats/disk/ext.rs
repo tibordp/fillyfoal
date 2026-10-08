@@ -665,7 +665,10 @@ async fn content(
         cx.diag(d);
     }
     let mut list = PieceList::new(inode_span);
-    for (logical, physical, count, init) in maps {
+    for (i, (logical, physical, count, init)) in maps.into_iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let at = logical.saturating_mul(fs.block);
         if at >= size {
             break;
@@ -761,6 +764,7 @@ async fn directory(cx: Cx, dir: Dir) -> Result<()> {
     let ancestors = Arc::new(ancestors);
     let mut offset = 0u64;
     while offset < data.len {
+        cx.progress(offset, data.len);
         let block = data.sub(offset, fs.block);
         let bytes = cx.read_avail(block).await?;
         let mut at = 0usize;

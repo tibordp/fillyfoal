@@ -419,6 +419,28 @@ impl Walker {
         }
     }
 
+    /// How far the walk has got, in millionths of the tree, estimated from
+    /// the position within each page on the stack (for progress reports).
+    pub fn progress(&self) -> u64 {
+        let mut done = 0.0f64;
+        let mut width = 1.0f64;
+        for frame in &self.stack {
+            let n = f64::from(frame.page.cells);
+            let slots = if frame.page.kind.is_leaf() {
+                n
+            } else {
+                2.0 * n + 1.0
+            };
+            if slots <= 0.0 {
+                break;
+            }
+            let at = f64::from(frame.step.saturating_sub(1)).min(slots);
+            done += width * at / slots;
+            width /= slots;
+        }
+        (done.clamp(0.0, 1.0) * 1e6) as u64
+    }
+
     /// The locally stored payload of a cell just yielded (for summaries).
     pub fn local(&self, cell: &Cell) -> &[u8] {
         self.stack

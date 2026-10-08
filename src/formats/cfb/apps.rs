@@ -466,6 +466,7 @@ async fn msg_properties(cx: &Cx, span: Span, top: bool) -> Result<()> {
             Some(d) => format!("{type_name}, {d}"),
             None => type_name.to_owned(),
         };
+        cx.progress_in(span, record.offset);
         cx.push(Node::new(name).span(record).value(value).summary(summary))
             .await;
         at = at.saturating_add(16);

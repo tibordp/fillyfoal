@@ -261,6 +261,7 @@ async fn metadata_blocks(
         } else {
             unsupported("Data", payload, compressor)
         };
+        cx.progress_in(span, span.offset.saturating_add(at));
         cx.push(
             Node::new(format!("Metadata block {index}"))
                 .span(block)

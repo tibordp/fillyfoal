@@ -342,6 +342,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         members = members.saturating_add(1);
         total = total.saturating_add(member.size);
+        cx.progress_in(input.span, input.span.offset.saturating_add(cur.pos()));
         cx.push(member_node(input, &member)).await;
     }
     cx.annotate(format!(
@@ -588,15 +589,11 @@ async fn pax_header(cx: Cx, span: Span) -> Result<()> {
 
 /// GNU sparse map: (offset, size) pairs in the header and extension blocks.
 async fn sparse_map(cx: Cx, (header, ext): (Span, Option<Span>)) -> Result<()> {
-    let mut regions = vec![header.sub(386, 96)];
-    if let Some(ext) = ext {
-        let mut at = 0u64;
-        while at < ext.len {
-            regions.push(ext.sub(at, 504));
-            at = at.saturating_add(BLOCK);
-        }
-    }
-    for region in regions {
+    // The header's map, then one per extension block (generated lazily: an
+    // input-sized run of extension blocks must not be collected up front).
+    let ext = ext.unwrap_or(Span { len: 0, ..header });
+    let blocks = (0..ext.len.div_ceil(BLOCK)).map(|i| ext.sub(i.saturating_mul(BLOCK), 504));
+    for region in std::iter::once(header.sub(386, 96)).chain(blocks) {
         let block = cx.block(region).await?;
         let mut f = Fields::new(&block, Endian::Little);
         while f.remaining() >= 24 {

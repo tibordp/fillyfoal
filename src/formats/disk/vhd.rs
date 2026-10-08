@@ -235,6 +235,7 @@ impl Dynamic {
 async fn bat_entries(cx: Cx, d: Arc<Dynamic>) -> Result<()> {
     let count = d.bat.len / 4;
     for i in 0..count {
+        cx.progress(i, count);
         let raw = cx.read(d.bat.sub(i.saturating_mul(4), 4)).await?;
         let entry = u32_be(&raw, 0).unwrap_or(u32::MAX);
         if entry == u32::MAX {
@@ -255,11 +256,15 @@ async fn virtual_disk(cx: Cx, d: Arc<Dynamic>) -> Result<()> {
     let table = cx.read(d.bat).await?;
     let mut list = PieceList::new(d.bat);
     let mut problem = None;
-    for raw in table.as_chunks::<4>().0 {
+    for (i, raw) in table.as_chunks::<4>().0.iter().enumerate() {
         if list.len() >= d.size {
             break;
         }
         let want = d.block.min(d.size.saturating_sub(list.len()));
+        if i.is_multiple_of(4096) {
+            cx.progress(list.len(), d.size);
+            cx.checkpoint().await;
+        }
         let entry = u32::from_be_bytes(*raw);
         let step = if entry == u32::MAX {
             list.hole(&cx, want)

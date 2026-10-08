@@ -429,6 +429,7 @@ pub async fn walk(cx: &Cx, ctx: &Ctx, region: Span, list: FourCc) -> Result<()> 
             parent: region,
         };
         let node = chunk_node(cx, chunk).await;
+        cx.progress_in(region, span.offset);
         cx.push(node).await;
         pos = pos.saturating_add(total);
     }
@@ -728,6 +729,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// Entries of the `ds64` size table that are used.
+const MAX_DS64_ENTRIES: u32 = 1024;
+
 /// The RF64/BW64 `ds64` chunk: 64-bit sizes for the RIFF and data chunks,
 /// plus a table for any other oversized chunk.
 async fn ds64(cx: &Cx, file: Span) -> Result<(u64, Vec<(FourCc, u64)>)> {
@@ -738,7 +742,15 @@ async fn ds64(cx: &Cx, file: Span) -> Result<(u64, Vec<(FourCc, u64)>)> {
     let riff = u64_le(&head, 8).unwrap_or(0);
     let data = u64_le(&head, 16).unwrap_or(0);
     let mut table = vec![(*b"data", data)];
+    // Real files list a handful of oversized chunks; every chunk header
+    // with a 0xffffffff size searches this table, so keep it small.
     let count = u32_le(&head, 32).unwrap_or(0);
+    if count > MAX_DS64_ENTRIES {
+        cx.diag(Diagnostic::limit(format!(
+            "ds64 table of {count} entries; only the first {MAX_DS64_ENTRIES} are used"
+        )));
+    }
+    let count = count.min(MAX_DS64_ENTRIES);
     let entries = file.sub(48, u64::from(count).saturating_mul(12));
     let raw = cx.read_avail(entries).await?;
     for entry in raw.as_chunks::<12>().0 {

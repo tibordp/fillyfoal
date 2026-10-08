@@ -753,7 +753,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     match script(&cx, &l).await {
         Ok(s) => {
             summary.push_str(if s.unicode { ", Unicode" } else { ", ANSI" });
-            emit_script(&cx, input, &l, &s, &mut summary);
+            emit_script(&cx, input, &l, &s, &mut summary).await;
         }
         Err(e) => cx.emit(Node::new("Script header").diag(e)),
     }
@@ -788,7 +788,7 @@ fn first_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
     Ok(())
 }
 
-fn emit_script(cx: &Cx, input: Input, l: &Layout, s: &Arc<Script>, summary: &mut String) {
+async fn emit_script(cx: &Cx, input: Input, l: &Layout, s: &Arc<Script>, summary: &mut String) {
     let header = Node::new("Script header")
         .span(s.span)
         .summary(size(s.span.len))
@@ -818,7 +818,7 @@ fn emit_script(cx: &Cx, input: Input, l: &Layout, s: &Arc<Script>, summary: &mut
     cx.emit(
         group(NB_LANGTABLES, ("language table", "language tables")).lazy(language_tables, state),
     );
-    let files = files_of(s);
+    let files = files_of(cx, s).await;
     cx.emit(
         Node::new("Files")
             .summary(count(to_u64(files.len()), "file", "files"))
@@ -1233,6 +1233,10 @@ async fn language_tables(cx: Cx, (_input, l): (Input, Layout)) -> Result<()> {
         ];
         let mut list = Vec::new();
         for k in 0..strings.min(4096) {
+            // Up to 4096 strings of up to MAX_STRING characters each.
+            if k.is_multiple_of(16) {
+                cx.checkpoint().await;
+            }
             let off = at.saturating_add(10).saturating_add(k.saturating_mul(4));
             let v = s.word(off);
             list.push(
@@ -1269,10 +1273,14 @@ struct FileEntry {
 /// The `File` entries, with their paths joined to the `SetOutPath` before
 /// them (in entry order, which is how the script runs them unless it
 /// jumps around).
-fn files_of(s: &Script) -> Vec<FileEntry> {
+async fn files_of(cx: &Cx, s: &Script) -> Vec<FileEntry> {
     let mut out = Vec::new();
     let mut outdir = String::new();
     for i in 0..entry_count(s) {
+        // Each entry may decode a string of up to MAX_STRING characters.
+        if i.is_multiple_of(64) {
+            cx.checkpoint().await;
+        }
         let (op, p) = entry(s, i);
         match op {
             EW_CREATEDIR if p.get(1).is_some_and(|&v| v != 0) => {
@@ -1304,7 +1312,7 @@ fn files_of(s: &Script) -> Vec<FileEntry> {
 
 async fn files(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
     let s = script(&cx, &l).await?;
-    let list = files_of(&s);
+    let list = files_of(&cx, &s).await;
     cx.set_count(Count::Exact(to_u64(list.len())));
     let start = s.block(NB_ENTRIES).0;
     for f in list {
@@ -1417,6 +1425,10 @@ async fn data_blocks(cx: Cx, (input, l): (Input, Layout)) -> Result<()> {
             break;
         };
         cx.mark(move || at);
+        cx.progress_in(
+            s.region,
+            s.region.offset.saturating_add(pos).saturating_add(total),
+        );
         cx.push(node.desc(format!("At {pos:#x} of the data"))).await;
         pos = pos.saturating_add(total);
         index = index.saturating_add(1);

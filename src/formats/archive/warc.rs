@@ -46,6 +46,7 @@ async fn warc(cx: Cx, input: Input) -> Result<()> {
         let block = file.sub(pos.saturating_add(header_len), length);
         let total = header_len.saturating_add(length).saturating_add(4);
         records = records.saturating_add(1);
+        cx.progress_in(file, file.offset.saturating_add(pos).saturating_add(total));
         cx.push(
             Node::new(format!("{kind} {target}").trim().to_owned())
                 .span(file.sub(pos, total))

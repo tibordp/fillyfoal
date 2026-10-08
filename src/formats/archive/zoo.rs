@@ -113,6 +113,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if deleted {
             node = node.summary(format!("{}, deleted", human_size(original)));
         }
+        cx.progress_in(file, entry_span.end());
         cx.push(node).await;
         if next <= at {
             cx.diag(Diagnostic::malformed("directory entries do not move forward").at(span));
