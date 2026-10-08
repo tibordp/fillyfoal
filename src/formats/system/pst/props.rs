@@ -366,6 +366,8 @@ async fn load_name_map(cx: &Cx, pst: &Pst) -> Result<NameMap> {
     };
     let mut map: NameMap = Vec::new();
     for e in entries.as_chunks::<8>().0 {
+        // Each entry may decode a string of up to the whole string stream.
+        cx.checkpoint().await;
         let value = u32_le(e, 0).unwrap_or(0);
         let flags = u16_le(e, 4).unwrap_or(0);
         let index = usize::from(u16_le(e, 6).unwrap_or(0));

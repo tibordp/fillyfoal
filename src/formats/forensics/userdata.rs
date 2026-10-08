@@ -9,7 +9,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
-use crate::formats::forensics::logs::{Lines, line_group, strip_bom, text_lines};
+use crate::formats::forensics::logs::{Lines, line_group, strip_bom, text_lines, tick};
 use crate::formats::util::datakit::{clip, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -90,7 +90,8 @@ async fn zsh_history(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut times = Vec::new();
     let mut current: Option<(i64, i64, String, Lines)> = None;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         if let Some((start, elapsed, command)) = zsh_entry(&l.2) {
             if let Some((t, e, c, lines)) = current.take() {
                 cx.push(history_node(
@@ -158,7 +159,8 @@ async fn bash_history(cx: Cx, input: Input) -> Result<()> {
     let mut times = Vec::new();
     let mut stamp: Option<(i64, crate::formats::forensics::logs::Line)> = None;
     let mut count = 0u64;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         if let Some(t) = bash_stamp(l.2.trim_end()) {
             stamp = Some((t, l));
             continue;
@@ -207,7 +209,8 @@ async fn fish_history(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut times = Vec::new();
     let mut current: Option<(String, Option<i64>, Lines)> = None;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         if let Some(cmd) = l.2.strip_prefix("- cmd: ") {
             if let Some((c, t, lines)) = current.take() {
                 cx.push(history_node(file, lines, t, &c, None)).await;
@@ -272,7 +275,8 @@ async fn libedit_history(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let all = text_lines(&cx, file).await?;
     let mut count = 0u64;
-    for l in all.into_iter().skip(1) {
+    for (i, l) in all.into_iter().enumerate().skip(1) {
+        tick(&cx, file, i, &l).await;
         if l.2.is_empty() {
             continue;
         }
@@ -300,7 +304,8 @@ async fn less_history(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut section: Option<(String, Lines)> = None;
     let mut searches = 0u64;
-    for l in all.into_iter().skip(1) {
+    for (i, l) in all.into_iter().enumerate().skip(1) {
+        tick(&cx, file, i, &l).await;
         if let Some(name) = l.2.strip_prefix('.') {
             if let Some((n, lines)) = section.take() {
                 let count = lines.len();
@@ -338,7 +343,8 @@ async fn wget_hsts(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let all = text_lines(&cx, file).await?;
     let mut hosts = 0u64;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         let span = file.sub(l.0, l.1);
         if l.2.starts_with('#') || l.2.trim().is_empty() {
             continue;
@@ -391,7 +397,8 @@ async fn netscape_cookies(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut domains = std::collections::BTreeSet::new();
     let mut count = 0u64;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         let line = l.2.strip_prefix("#HttpOnly_").unwrap_or(&l.2);
         let http_only = line.len() != l.2.len();
         if line.starts_with('#') || line.trim().is_empty() {
@@ -485,13 +492,18 @@ fn unescape_html(s: &str) -> String {
         .replace("&#39;", "'")
 }
 
-fn parse_bookmarks(data: &str) -> BookmarkTree {
+async fn parse_bookmarks(cx: &Cx, data: &str) -> BookmarkTree {
     let mut tree = BookmarkTree::default();
     let mut stack: Vec<usize> = Vec::new();
     let mut pending_folder: Option<usize> = None;
     let mut i = 0usize;
     let lower = data.to_ascii_lowercase();
+    let mut tags = 0u32;
     while let Some(p) = lower.get(i..).and_then(|r| r.find('<')) {
+        tags = tags.wrapping_add(1);
+        if tags.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let open = i.saturating_add(p);
         let Some(close) = lower
             .get(open..)
@@ -563,39 +575,37 @@ async fn bookmark_tree(cx: &Cx, file: Span) -> Result<Arc<BookmarkTree>> {
         return Ok(t);
     }
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let tree = Arc::new(parse_bookmarks(&String::from_utf8_lossy(&data)));
+    let tree = Arc::new(parse_bookmarks(cx, &String::from_utf8_lossy(&data)).await);
     cx.cache(file, "netscape-bookmarks", tree.clone());
     Ok(tree)
 }
 
-fn bookmark_nodes(file: Span, tree: &BookmarkTree, list: &[usize]) -> Vec<Node> {
-    list.iter()
-        .filter_map(|&i| tree.items.get(i).map(|b| (i, b)))
-        .map(|(i, b)| {
-            let mut node = Node::new(if b.title.is_empty() {
-                "(untitled)".to_owned()
-            } else {
-                b.title.clone()
-            })
-            .span(file.sub(b.start, b.end.saturating_sub(b.start)));
-            if let Some(t) = b.added {
-                node = node.value(unix_time(t));
-            }
-            match &b.href {
-                Some(h) => node.summary(clip(h, 160)),
-                None => node
-                    .summary(format!("folder, {} items", b.children.len()))
-                    .lazy(bookmark_folder, (file, i)),
-            }
-        })
-        .collect()
+fn bookmark_node(file: Span, tree: &BookmarkTree, i: usize) -> Option<Node> {
+    let b = tree.items.get(i)?;
+    let mut node = Node::new(if b.title.is_empty() {
+        "(untitled)".to_owned()
+    } else {
+        b.title.clone()
+    })
+    .span(file.sub(b.start, b.end.saturating_sub(b.start)));
+    if let Some(t) = b.added {
+        node = node.value(unix_time(t));
+    }
+    Some(match &b.href {
+        Some(h) => node.summary(clip(h, 160)),
+        None => node
+            .summary(format!("folder, {} items", b.children.len()))
+            .lazy(bookmark_folder, (file, i)),
+    })
 }
 
 async fn netscape_bookmarks(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let tree = bookmark_tree(&cx, file).await?;
-    for node in bookmark_nodes(file, &tree, &tree.roots) {
-        cx.push(node).await;
+    for &i in &tree.roots {
+        if let Some(node) = bookmark_node(file, &tree, i) {
+            cx.push(node).await;
+        }
     }
     let links = tree.items.iter().filter(|b| b.href.is_some()).count();
     let folders = tree.items.len().saturating_sub(links);
@@ -611,8 +621,10 @@ async fn bookmark_folder(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
         return Ok(());
     };
     cx.set_count(Count::Exact(to_u64(folder.children.len())));
-    for node in bookmark_nodes(file, &tree, &folder.children) {
-        cx.push(node).await;
+    for &i in &folder.children {
+        if let Some(node) = bookmark_node(file, &tree, i) {
+            cx.push(node).await;
+        }
     }
     Ok(())
 }
@@ -660,7 +672,8 @@ async fn opera_hotlist(cx: Cx, input: Input) -> Result<()> {
         };
         Some((node.summary(clip(&summary, 160)), name))
     };
-    for l in all.into_iter().skip(1) {
+    for (i, l) in all.into_iter().enumerate().skip(1) {
+        tick(&cx, file, i, &l).await;
         let t = l.2.trim();
         if t.starts_with('#') || t == "-" {
             // A record ends at the next one; a folder's contents follow it
@@ -744,7 +757,8 @@ async fn firefox_prefs(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut count = 0u64;
     let mut notable = Vec::new();
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         let Some((name, value)) = pref_line(&l.2) else {
             continue;
         };
@@ -798,7 +812,8 @@ async fn cert_override(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let all = text_lines(&cx, file).await?;
     let mut count = 0u64;
-    for l in all {
+    for (i, l) in all.into_iter().enumerate() {
+        tick(&cx, file, i, &l).await;
         if l.2.starts_with('#') || l.2.trim().is_empty() {
             continue;
         }

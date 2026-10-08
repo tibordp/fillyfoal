@@ -108,6 +108,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cur.seek(Header::SIZE);
     while cur.remaining() >= 8 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let head = cur.peek(0x38).await?;
         let length = crate::bytes::u32_le(&head, 0).unwrap_or(0);
         if head.get(4..20) == Some(EOF_MAGIC.as_slice()) {
@@ -223,6 +224,7 @@ async fn strings_list(cx: Cx, (span, count): (Span, u16)) -> Result<()> {
     let block = cx.block(span).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     for _ in 0..count {
+        cx.checkpoint().await;
         if f.remaining() == 0 {
             break;
         }

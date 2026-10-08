@@ -150,6 +150,7 @@ async fn jffs2(cx: Cx, input: Input) -> Result<()> {
         } else if kind == 0xe002 {
             inodes = inodes.saturating_add(1);
         }
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(node).await;
         cur.seek(start.saturating_add(len).next_multiple_of(4));
     }
@@ -792,6 +793,7 @@ async fn xpress_blocks(cx: Cx, input: Input) -> Result<()> {
             }
         };
         let total = size.saturating_add(7) & !7;
+        cx.progress_in(file, file.offset.saturating_add(at));
         cx.push(
             Node::new(format!("Xpress block {index}"))
                 .span(file.sub(at, total.saturating_add(0x20)))
@@ -948,6 +950,7 @@ async fn btrfs_send(cx: Cx, input: Input) -> Result<()> {
                 .into_owned(),
             );
         }
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(node).await;
         if cmd == 21 {
             break;

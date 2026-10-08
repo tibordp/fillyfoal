@@ -116,6 +116,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut count = 0u64;
     while cur.remaining() >= hsize {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let head = cur.peek(hsize).await?;
         if !head.starts_with(b"CMMM") {
             break;

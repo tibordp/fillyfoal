@@ -301,13 +301,19 @@ fn read_attributes(r: &mut Reader<'_>, file: Span) -> Result<Vec<Attribute>> {
     Ok(out)
 }
 
-fn read_members(r: &mut Reader<'_>, file: Span) -> Result<(usize, usize, Vec<Member>)> {
+async fn read_members(
+    cx: &Cx,
+    r: &mut Reader<'_>,
+    file: Span,
+) -> Result<(usize, usize, Vec<Member>)> {
     let start = r.pos();
     let count = r
         .int::<u16>(BE)
         .ok_or_else(|| malformed("member count", start, file))?;
     let mut out = Vec::new();
     for _ in 0..count {
+        // Each member may have up to 65535 attributes.
+        cx.checkpoint().await;
         let offset = r.pos();
         let bad = || malformed("field or method", offset, file);
         let access = r.int::<u16>(BE).ok_or_else(bad)?;
@@ -416,9 +422,9 @@ async fn load(cx: &Cx, file: Span) -> Result<ClassInfo> {
         );
     }
     cx.checkpoint().await;
-    let fields = read_members(&mut r, file)?;
+    let fields = read_members(cx, &mut r, file).await?;
     cx.checkpoint().await;
-    let methods = read_members(&mut r, file)?;
+    let methods = read_members(cx, &mut r, file).await?;
     let attributes_at = r.pos();
     let attributes = read_attributes(&mut r, file)?;
     let attributes = (
@@ -917,7 +923,10 @@ fn attribute_summary(c: &ClassInfo, name: &str, a: &Attribute) -> String {
             annotation_types(c, b).join(", ")
         }
         "MethodParameters" => format!("{} entries", b.first().copied().unwrap_or(0)),
-        "SourceDebugExtension" => ellipsize(&String::from_utf8_lossy(b), 80),
+        // 1 KiB holds well over the 80 characters shown.
+        "SourceDebugExtension" => {
+            ellipsize(&String::from_utf8_lossy(b.get(..1024).unwrap_or(b)), 80)
+        }
         _ => format!("{} bytes", b.len()),
     }
 }
@@ -1114,12 +1123,17 @@ async fn attribute(cx: Cx, (c, owner, depth, index): (Class, Owner, u32, usize))
         "BootstrapMethods" => {
             let n = f.u16("num_bootstrap_methods").emit()?;
             for i in 0..n {
+                cx.checkpoint().await;
                 let start = f.pos();
                 let method = f.u16("bootstrap_method_ref").get()?;
                 let args = f.u16("num_bootstrap_arguments").get()?;
                 let mut values = Vec::new();
                 for _ in 0..args {
-                    values.push(c.resolve(f.u16("argument").get()?));
+                    let arg = f.u16("argument").get()?;
+                    // 128 values join to more than the 120 characters shown.
+                    if values.len() < 128 {
+                        values.push(c.resolve(arg));
+                    }
                 }
                 f.node(
                     Node::new(format!("[{i}]"))

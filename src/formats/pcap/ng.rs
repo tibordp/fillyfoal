@@ -252,6 +252,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 span.len,
             ));
         }
+        cx.progress_in(input.span, input.span.offset.saturating_add(cur.pos()));
         cx.push(node).await;
     }
     Ok(())
@@ -356,7 +357,7 @@ async fn block(cx: Cx, b: Block) -> Result<()> {
         4 => {
             let start = f.pos();
             let records = b.span.sub(start, body_end.saturating_sub(start));
-            let end = name_records_end(&data, start, body_end, b.endian);
+            let end = name_records_end(&cx, &data, start, body_end, b.endian).await;
             cx.emit(
                 Node::new("Records")
                     .span(b.span.sub(start, end.saturating_sub(start)))
@@ -434,9 +435,20 @@ async fn packet_layers(cx: Cx, (packet, link): (Span, u32)) -> Result<()> {
 }
 
 /// The end of the Name Resolution records (after the end record).
-fn name_records_end(data: &crate::cx::Block, start: u64, end: u64, endian: Endian) -> u64 {
+async fn name_records_end(
+    cx: &Cx,
+    data: &crate::cx::Block,
+    start: u64,
+    end: u64,
+    endian: Endian,
+) -> u64 {
     let mut at = start;
+    let mut n = 0u32;
     while at.saturating_add(4) <= end {
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        n = n.wrapping_add(1);
         let i = crate::bytes::to_usize(at);
         let kind = rd16(endian, &data.data, i).unwrap_or(0);
         let len = u64::from(rd16(endian, &data.data, i.saturating_add(2)).unwrap_or(0));

@@ -29,6 +29,7 @@ pub(super) async fn function_starts(cx: Cx, (span, base, file): (Span, u64, Span
         }
         addr = addr.saturating_add(delta);
         let at = span.sub(to_u64(start), to_u64(r.pos().saturating_sub(start)));
+        cx.progress_in(span, at.end());
         cx.push(
             Node::new(format!("[{index}]"))
                 .span(at)
@@ -473,6 +474,7 @@ pub(super) async fn bind_opcodes(
             }
         }
         let at = span.sub(to_u64(start), to_u64(r.pos().saturating_sub(start)));
+        cx.progress_in(span, at.end());
         for _ in 0..repeat {
             if emitted >= budget {
                 cx.diag(Diagnostic::limit(

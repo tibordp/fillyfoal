@@ -121,10 +121,13 @@ fn chunk_at(data: &[u8], offset: usize, limit: usize) -> Option<Chunk> {
 }
 
 /// The chunks laid out consecutively in `start..end`.
-fn children(data: &[u8], start: usize, end: usize) -> Vec<Chunk> {
+async fn children(cx: &Cx, data: &[u8], start: usize, end: usize) -> Vec<Chunk> {
     let mut out = Vec::new();
     let mut at = start;
     while at.saturating_add(8) <= end {
+        if out.len().is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let Some(c) = chunk_at(data, at, end) else {
             break;
         };
@@ -135,7 +138,7 @@ fn children(data: &[u8], start: usize, end: usize) -> Vec<Chunk> {
 }
 
 /// Decodes all strings of a string pool chunk.
-fn pool_strings(data: &[u8], c: &Chunk) -> Vec<String> {
+async fn pool_strings(cx: &Cx, data: &[u8], c: &Chunk) -> Vec<String> {
     let base = c.offset;
     let count = u32_le(data, base.saturating_add(8)).unwrap_or(0);
     let flags = u32_le(data, base.saturating_add(16)).unwrap_or(0);
@@ -146,6 +149,9 @@ fn pool_strings(data: &[u8], c: &Chunk) -> Vec<String> {
     let chunk = data.get(..end).unwrap_or_default();
     let mut out = Vec::new();
     for i in 0..to_usize(count.into()) {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let Some(off) = u32_le(chunk, offsets.saturating_add(i.saturating_mul(4))) else {
             break;
         };
@@ -275,7 +281,7 @@ async fn string_pool(cx: Cx, (doc, c): (Doc, Chunk)) -> Result<()> {
         (),
         pool_header,
     ));
-    let strings = pool_strings(&doc.data, &c);
+    let strings = pool_strings(&cx, &doc.data, &c).await;
     for (i, s) in strings.into_iter().enumerate() {
         cx.push(Node::new(format!("{i}")).value(text(s))).await;
     }
@@ -394,12 +400,11 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
         (),
         chunk_header,
     ));
-    let chunks = children(&data, root.header, root.size);
-    let pool = chunks
-        .iter()
-        .find(|c| c.kind == 0x0001)
-        .map(|c| pool_strings(&data, c))
-        .unwrap_or_default();
+    let chunks = children(&cx, &data, root.header, root.size).await;
+    let pool = match chunks.iter().find(|c| c.kind == 0x0001) {
+        Some(c) => pool_strings(&cx, &data, c).await,
+        None => Vec::new(),
+    };
     let ids: Vec<u32> = chunks
         .iter()
         .find(|c| c.kind == 0x0180)
@@ -499,16 +504,14 @@ pub async fn dissect_table(cx: Cx, input: Input) -> Result<()> {
         (),
         table_header,
     ));
-    let chunks = children(&data, root.header, root.size);
-    let pool: Arc<Vec<String>> = Arc::new(
-        chunks
-            .iter()
-            .find(|c| c.kind == 0x0001)
-            .map(|c| pool_strings(&data, c))
-            .unwrap_or_default(),
-    );
+    let chunks = children(&cx, &data, root.header, root.size).await;
+    let pool: Arc<Vec<String>> = Arc::new(match chunks.iter().find(|c| c.kind == 0x0001) {
+        Some(c) => pool_strings(&cx, &data, c).await,
+        None => Vec::new(),
+    });
     let mut packages = Vec::new();
     for c in &chunks {
+        cx.checkpoint().await;
         match c.kind {
             0x0001 => cx.emit(pool_node(&doc, c, "Global String Pool")),
             0x0200 => {
@@ -589,19 +592,21 @@ async fn package(cx: Cx, (doc, c, pool): (Doc, Chunk, Arc<Vec<String>>)) -> Resu
     let end = c.offset.saturating_add(c.size);
     let pool_at =
         |rel: usize| chunk_at(&data, c.offset.saturating_add(rel), end).filter(|p| p.kind == 1);
-    let types = pool_at(type_strings)
-        .map(|p| pool_strings(&data, &p))
-        .unwrap_or_default();
-    let keys = pool_at(key_strings)
-        .map(|p| pool_strings(&data, &p))
-        .unwrap_or_default();
+    let types = match pool_at(type_strings) {
+        Some(p) => pool_strings(&cx, &data, &p).await,
+        None => Vec::new(),
+    };
+    let keys = match pool_at(key_strings) {
+        Some(p) => pool_strings(&cx, &data, &p).await,
+        None => Vec::new(),
+    };
     let pkg = Package {
         doc: doc.clone(),
         pool,
         types: Arc::new(types),
         keys: Arc::new(keys),
     };
-    for child in children(&data, c.offset.saturating_add(c.header), end) {
+    for child in children(&cx, &data, c.offset.saturating_add(c.header), end).await {
         cx.checkpoint().await;
         let span = doc.at(child.offset, child.size);
         let type_name = |id: u8| {
@@ -724,6 +729,9 @@ async fn type_chunk(cx: Cx, (pkg, c): (Package, Chunk)) -> Result<()> {
     let offset16 = flags & 2 != 0;
     cx.set_count(Count::AtLeast(5));
     for i in 0..to_usize(count.into()).min(c.size) {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let (index, offset) = if sparse {
             let at = offsets.saturating_add(i.saturating_mul(4));
             (

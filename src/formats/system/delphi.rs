@@ -283,6 +283,8 @@ struct Component {
     name: (usize, String),
     properties: Vec<(usize, usize)>,
     children: Vec<(usize, usize)>,
+    /// This component and all its descendants.
+    components: usize,
     end: usize,
 }
 
@@ -309,6 +311,7 @@ fn component(r: &mut Reader<'_>, depth: u32) -> Result<Component> {
     let name = r.short_string()?;
     let properties = properties(r, depth)?;
     let mut children = Vec::new();
+    let mut components = 1usize;
     loop {
         match r.peek() {
             Some(0) => {
@@ -318,7 +321,8 @@ fn component(r: &mut Reader<'_>, depth: u32) -> Result<Component> {
             None => return Err(malformed("unterminated child list", r.pos)),
             _ => {
                 let start = r.pos;
-                component(r, depth.saturating_add(1))?;
+                let child = component(r, depth.saturating_add(1))?;
+                components = components.saturating_add(child.components);
                 children.push((start, r.pos));
             }
         }
@@ -330,6 +334,7 @@ fn component(r: &mut Reader<'_>, depth: u32) -> Result<Component> {
         name: (name_at, name),
         properties,
         children,
+        components,
         end: r.pos,
     })
 }
@@ -404,7 +409,7 @@ async fn dfm(cx: Cx, input: Input) -> Result<()> {
                 "Delphi form {}: {}, {} components",
                 display_name(&c.name.1),
                 c.class.1,
-                count_components(body.get(..c.end).unwrap_or_default())
+                c.components
             ));
             let rest = file.tail(to_u64(c.end).saturating_add(4));
             if rest.len > 0 {
@@ -417,20 +422,6 @@ async fn dfm(cx: Cx, input: Input) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// Components in a well-formed tree (the root included).
-fn count_components(data: &[u8]) -> usize {
-    fn walk(data: &[u8], at: usize, depth: u32) -> usize {
-        let mut r = Reader { data, pos: at };
-        match component(&mut r, depth) {
-            Ok(c) => c.children.iter().fold(1usize, |n, &(s, _)| {
-                n.saturating_add(walk(data, s, depth.saturating_add(1)))
-            }),
-            Err(_) => 0,
-        }
-    }
-    walk(data, 0, 0)
 }
 
 async fn expand_component(cx: Cx, (input, span, depth): (Input, Span, u32)) -> Result<()> {

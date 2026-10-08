@@ -288,6 +288,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     // Summary: architecture and OS, thread and module counts, exception.
     let mut parts = vec!["Windows minidump".to_owned()];
     for (_, d) in &streams {
+        cx.checkpoint().await;
         let span = file.sub(d.rva.into(), d.size.into());
         match d.kind {
             7 => {
@@ -340,6 +341,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{count} streams")),
     );
     for (entry, d) in streams {
+        cx.checkpoint().await;
         let span = file.sub(d.rva.into(), d.size.into());
         let name = crate::value::lookup(STREAM_TYPE, d.kind.into())
             .map_or_else(|| format!("Stream {:#x}", d.kind), str::to_owned);
@@ -503,7 +505,7 @@ async fn stream(cx: Cx, (input, entry, kind, span): (Input, Span, u32, Span)) ->
 
 /// Emits the 32-bit count of a list stream and returns the entries' spans
 /// (bounded by the stream size).
-async fn list(cx: &Cx, span: Span, size: u64) -> Result<Vec<Span>> {
+async fn list(cx: &Cx, span: Span, size: u64) -> Result<impl Iterator<Item = Span>> {
     let head = cx.block(span.sub(0, 4)).await?;
     let n = Fields::emitting(cx, &head, LE).u32("Count").emit()?;
     let table = span.tail(4);
@@ -511,9 +513,7 @@ async fn list(cx: &Cx, span: Span, size: u64) -> Result<Vec<Span>> {
     if count < n.into() {
         cx.diag(Diagnostic::truncated(table, table.len));
     }
-    Ok((0..count)
-        .map(|i| table.sub(i.saturating_mul(size), size))
-        .collect())
+    Ok((0..count).map(move |i| table.sub(i.saturating_mul(size), size)))
 }
 
 fn misc_info(f: &mut Fields<'_>, _: &()) -> Result<()> {

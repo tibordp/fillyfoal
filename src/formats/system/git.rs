@@ -8,11 +8,12 @@
 //! deltas as copy/insert instructions, and blobs are dissected as content.
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
+use crate::codec::crypto::{Hash, Sha1};
 use crate::codec::inflate_span;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::datakit::{clip, hex_string, sha1, size};
+use crate::formats::util::datakit::{clip, hex_string, size};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -70,8 +71,16 @@ async fn checksum_node(cx: &Cx, file: Span, name: &'static str) -> Result<Node> 
         .span(span)
         .value(Value::Text(hex_string(&stored)));
     if at <= cx.limits().max_read {
-        let body = cx.read(file.sub(0, at)).await?;
-        node = if sha1(&body).as_slice() == stored.as_slice() {
+        // Hashed a chunk per read, so each step stays bounded.
+        const CHUNK: u64 = 1 << 20;
+        let mut hash = Sha1::new();
+        let mut done = 0u64;
+        while done < at {
+            let n = at.saturating_sub(done).min(CHUNK);
+            hash.update(&cx.read(file.sub(done, n)).await?);
+            done = done.saturating_add(n);
+        }
+        node = if hash.finish().as_slice() == stored.as_slice() {
             node.summary("valid")
         } else {
             node.diag(Diagnostic::warning("SHA-1 mismatch"))

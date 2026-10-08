@@ -151,7 +151,10 @@ async fn ie_record_offsets(cx: &Cx, file: Span, first: u32) -> Result<Vec<u64>> 
         let table = cx
             .read_avail(file.sub(at.saturating_add(16), len.saturating_sub(16)))
             .await?;
-        for e in table.as_chunks::<8>().0.iter() {
+        for (i, e) in table.as_chunks::<8>().0.iter().enumerate() {
+            if i.is_multiple_of(4096) {
+                cx.checkpoint().await;
+            }
             let (hash, offset) = (u32_le(e, 0).unwrap_or(0), u32_le(e, 4).unwrap_or(0));
             if !ie_free(hash, offset) && u64::from(offset) < file.len {
                 out.push(u64::from(offset));
@@ -185,6 +188,9 @@ async fn ie_hash_table(cx: Cx, span: Span) -> Result<()> {
     for (i, e) in data.as_chunks::<8>().0.iter().enumerate() {
         let (hash, offset) = (u32_le(e, 0).unwrap_or(0), u32_le(e, 4).unwrap_or(0));
         if ie_free(hash, offset) {
+            if i.is_multiple_of(256) {
+                cx.checkpoint().await;
+            }
             continue;
         }
         let at = to_u64(i).saturating_mul(8).saturating_add(16);
@@ -948,6 +954,7 @@ async fn snss(cx: Cx, input: Input) -> Result<()> {
     let (mut count, mut urls) = (0u32, 0u32);
     while cur.remaining() >= 3 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let len = u64::from(cur.u16().await?);
         if len == 0 || len > cur.remaining() {
             cx.diag(
@@ -1090,10 +1097,15 @@ fn mork_kind(c: u8) -> MorkKind {
 
 /// The items in `data[from..to]`: cells, nested items and, at the top
 /// level, transaction group markers.
-fn mork_scan(data: &[u8], from: usize, to: usize) -> Vec<(MorkKind, usize, usize)> {
+async fn mork_scan(cx: &Cx, data: &[u8], from: usize, to: usize) -> Vec<(MorkKind, usize, usize)> {
     let mut out = Vec::new();
     let mut i = from;
+    let mut steps = 0u32;
     while i < to {
+        steps = steps.wrapping_add(1);
+        if steps.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let Some(&c) = data.get(i) else { break };
         let rest = data.get(i..to).unwrap_or_default();
         let (kind, end) = if rest.starts_with(b"//") {
@@ -1196,14 +1208,18 @@ struct MorkAliases {
 }
 
 impl MorkAliases {
-    fn build(data: &[u8]) -> Self {
+    async fn build(cx: &Cx, data: &[u8]) -> Self {
         let mut a = MorkAliases::default();
-        for (kind, start, end) in mork_scan(data, 0, data.len()) {
+        for (kind, start, end) in mork_scan(cx, data, 0, data.len()).await {
             if kind != MorkKind::Dict {
                 continue;
             }
             let mut columns = false;
-            for (kind, s, e) in mork_scan(data, start.saturating_add(1), end.saturating_sub(1)) {
+            let cells = mork_scan(cx, data, start.saturating_add(1), end.saturating_sub(1)).await;
+            for (n, (kind, s, e)) in cells.into_iter().enumerate() {
+                if n.is_multiple_of(256) {
+                    cx.checkpoint().await;
+                }
                 let slice = data.get(s..e).unwrap_or_default();
                 match kind {
                     // A meta-dictionary `<(a=c)>` switches to the column scope.
@@ -1253,7 +1269,7 @@ async fn mork_aliases(cx: &Cx, file: Span) -> Result<Arc<MorkAliases>> {
         return Ok(a);
     }
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let a = Arc::new(MorkAliases::build(&data));
+    let a = Arc::new(MorkAliases::build(cx, &data).await);
     cx.cache(file, "mork-aliases", a.clone());
     Ok(a)
 }
@@ -1270,7 +1286,7 @@ async fn mork(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(0, to_u64(first_line)))
             .value(text(magic.clone())),
     );
-    let items = mork_scan(&data, first_line, data.len());
+    let items = mork_scan(&cx, &data, first_line, data.len()).await;
     let count = |k: MorkKind| items.iter().filter(|(kind, _, _)| *kind == k).count();
     let (dicts, tables, rows, groups) = (
         count(MorkKind::Dict),
@@ -1296,7 +1312,10 @@ async fn mork(cx: Cx, input: Input) -> Result<()> {
             MorkKind::Cell => Node::new("Cell")
                 .span(span)
                 .value(text(String::from_utf8_lossy(slice).into_owned())),
-            _ => mork_node(kind, file, span, slice, false),
+            _ => {
+                let children = mork_scan(&cx, slice, 1, slice.len().saturating_sub(1)).await;
+                mork_node(kind, file, span, slice, false, &children)
+            }
         };
         cx.push(node).await;
     }
@@ -1322,8 +1341,16 @@ fn mork_id(slice: &[u8]) -> String {
         .to_owned()
 }
 
-fn mork_node(kind: MorkKind, file: Span, span: Span, slice: &[u8], meta: bool) -> Node {
-    let children = mork_scan(slice, 1, slice.len().saturating_sub(1));
+/// A node for a dictionary, table or row, given its items (`mork_scan` of
+/// its inside).
+fn mork_node(
+    kind: MorkKind,
+    file: Span,
+    span: Span,
+    slice: &[u8],
+    meta: bool,
+    children: &[(MorkKind, usize, usize)],
+) -> Node {
     let cells = children
         .iter()
         .filter(|(k, _, _)| *k == MorkKind::Cell)
@@ -1348,7 +1375,7 @@ fn mork_node(kind: MorkKind, file: Span, span: Span, slice: &[u8], meta: bool) -
 async fn mork_expand(cx: Cx, (file, span, kind): (Span, Span, MorkKind)) -> Result<()> {
     let data = cx.read(span).await?;
     let aliases = mork_aliases(&cx, file).await?;
-    for (child, start, end) in mork_scan(&data, 1, data.len().saturating_sub(1)) {
+    for (child, start, end) in mork_scan(&cx, &data, 1, data.len().saturating_sub(1)).await {
         let sub = span.sub(to_u64(start), to_u64(end.saturating_sub(start)));
         let slice = data.get(start..end).unwrap_or_default();
         let node = match child {
@@ -1365,7 +1392,10 @@ async fn mork_expand(cx: Cx, (file, span, kind): (Span, Span, MorkKind)) -> Resu
                     .value(text(aliases.value(value, atom)))
             }
             // Dictionaries and tables nested directly are meta-objects.
-            _ => mork_node(child, file, sub, slice, child != MorkKind::Row),
+            _ => {
+                let children = mork_scan(&cx, slice, 1, slice.len().saturating_sub(1)).await;
+                mork_node(child, file, sub, slice, child != MorkKind::Row, &children)
+            }
         };
         cx.push(node).await;
     }
@@ -1493,6 +1523,9 @@ async fn firefox_cache2(cx: Cx, input: Input) -> Result<()> {
     while let (Some(name), Some(value)) = (parts.next(), parts.next()) {
         if name.is_empty() {
             break;
+        }
+        if list.len().is_multiple_of(256) {
+            cx.checkpoint().await;
         }
         let len = to_u64(name.len())
             .saturating_add(to_u64(value.len()))

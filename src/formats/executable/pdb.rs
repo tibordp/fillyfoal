@@ -125,10 +125,14 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
     let mut at = 4usize.saturating_add(count_usize.saturating_mul(4));
     let mut streams = Vec::new();
     for (i, &size) in sizes.iter().enumerate() {
+        cx.checkpoint().await;
         // Deleted streams have size 0xffffffff and no blocks.
         let len = if size == u32::MAX { 0 } else { u64::from(size) };
         let n = to_usize(len.div_ceil(block_size));
-        let blocks: Vec<u32> = (0..n)
+        // Only the block numbers the directory holds: a bogus size must not
+        // cost a pass over millions of missing ones.
+        let have = n.min(dir.len().saturating_sub(at) / 4);
+        let blocks: Vec<u32> = (0..have)
             .filter_map(|j| u32_le(&dir, at.saturating_add(j.saturating_mul(4))))
             .collect();
         at = at.saturating_add(n.saturating_mul(4));

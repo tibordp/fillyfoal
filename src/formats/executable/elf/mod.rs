@@ -375,6 +375,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 
     for section in &elf.sections {
+        cx.checkpoint().await;
         if matches!(section.kind, SHT_SYMTAB | SHT_DYNSYM) {
             cx.emit(symbols::table_node(&elf, section));
         }
@@ -973,6 +974,7 @@ async fn load_sections(
     }
     // Section names are resolved once the name table is known.
     for section in &mut sections {
+        cx.checkpoint().await;
         if let Some(name) = shstrtab.get(to_usize(section.name_offset.into())..) {
             section.name = crate::text::until_nul(name);
         }

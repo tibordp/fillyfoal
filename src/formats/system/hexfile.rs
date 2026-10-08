@@ -194,6 +194,7 @@ async fn dissect(cx: &Cx, input: Input, flavor: Flavor) -> Result<()> {
             cx.checkpoint().await;
             continue;
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         let parsed = match flavor {
             Flavor::Intel => parse_ihex(text),
             Flavor::Motorola => parse_srec(text),

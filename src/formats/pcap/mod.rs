@@ -146,6 +146,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 data.len,
             ));
         }
+        cx.progress_in(input.span, input.span.offset.saturating_add(cur.pos()));
         cx.push(node).await;
         index = index.saturating_add(1);
     }

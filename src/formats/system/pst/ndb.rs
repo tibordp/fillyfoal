@@ -422,6 +422,7 @@ pub async fn data_tree(cx: &Cx, pst: &Pst, bid: u64) -> Result<Vec<Block>> {
         let id = to_usize(pst.id());
         let mut children = Vec::new();
         for i in 0..usize::from(count) {
+            cx.checkpoint().await;
             let Some(child) = pst.word(&data, i.saturating_mul(id).saturating_add(8)) else {
                 break;
             };
@@ -450,6 +451,7 @@ pub async fn stream(cx: &Cx, pst: &Pst, bid: u64) -> Result<Span> {
     let blocks = data_tree(cx, pst, bid).await?;
     let mut pieces = Vec::with_capacity(blocks.len());
     for b in &blocks {
+        cx.checkpoint().await;
         pieces.push(plain(cx, pst, b).await?);
     }
     match pieces.as_slice() {
@@ -503,6 +505,7 @@ pub async fn subnodes(cx: &Cx, pst: &Pst, bid: u64) -> Result<Arc<Vec<SubEntry>>
         let size = id.saturating_mul(if level == 0 { 3 } else { 2 });
         let mut children = Vec::new();
         for i in 0..u64::from(count) {
+            cx.checkpoint().await;
             let at = start.saturating_add(i.saturating_mul(size));
             let Some(e) = data.get(to_usize(at)..to_usize(at.saturating_add(size))) else {
                 break;

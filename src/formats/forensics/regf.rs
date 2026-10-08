@@ -509,6 +509,7 @@ async fn bins(cx: Cx, hive: H) -> Result<()> {
     let mut cur = Cursor::new(&cx, hive.bins, LE);
     while !cur.at_end() {
         let start = cur.pos();
+        cx.progress_in(hive.bins, hive.bins.offset.saturating_add(start));
         let (h, _) = cur.record::<BinHeader>().await?;
         if h.signature != "hbin" {
             return Err(Diagnostic::malformed("expected a hive bin").at(cur.since(start)));

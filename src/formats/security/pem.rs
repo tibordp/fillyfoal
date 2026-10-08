@@ -85,97 +85,102 @@ pub struct Block {
 }
 
 /// Splits armored text into blocks.
-pub fn blocks(text: &[u8]) -> Vec<Block> {
+pub async fn blocks(cx: &Cx, text: &[u8]) -> Vec<Block> {
     let mut out = Vec::new();
     let mut from = 0usize;
     while out.len() < MAX_BLOCKS {
-        let Some(begin) = find_begin(text, from) else {
+        cx.checkpoint().await;
+        let Some(block) = next_block(text, from) else {
             break;
         };
-        let line_end = text
-            .get(begin..)
-            .and_then(|t| t.iter().position(|&b| b == b'\n'))
-            .map_or(text.len(), |e| begin.saturating_add(e).saturating_add(1));
-        let line = text
-            .get(begin..line_end)
-            .unwrap_or_default()
-            .trim_ascii_end();
-        let label = line
-            .get(11..line.len().saturating_sub(5))
-            .map(|l| String::from_utf8_lossy(l).into_owned())
-            .unwrap_or_default();
-        let end_marker = format!("-----END {label}-----");
-        let end = find(text, end_marker.as_bytes(), line_end);
-        let content_end = end.unwrap_or(text.len());
-        // Headers ("Key: value") until a blank line, if any line has a colon.
-        let mut headers = Vec::new();
-        let mut pos = line_end;
-        let lines = |start: usize| -> Option<(usize, usize)> {
-            if start >= content_end {
-                return None;
-            }
-            let e = text
-                .get(start..content_end)?
-                .iter()
-                .position(|&b| b == b'\n')
-                .map_or(content_end, |e| start.saturating_add(e).saturating_add(1));
-            Some((start, e))
-        };
-        if let Some((s, e)) = lines(pos)
-            && text.get(s..e).is_some_and(|l| l.contains(&b':'))
-        {
-            while let Some((s, e)) = lines(pos) {
-                let l = text.get(s..e).unwrap_or_default().trim_ascii();
-                pos = e;
-                if l.is_empty() {
-                    break;
-                }
-                if let Some(colon) = l.iter().position(|&b| b == b':') {
-                    let key =
-                        String::from_utf8_lossy(l.get(..colon).unwrap_or_default()).into_owned();
-                    let value = String::from_utf8_lossy(
-                        l.get(colon.saturating_add(1)..).unwrap_or_default(),
-                    )
-                    .trim()
-                    .to_owned();
-                    headers.push((key, value, s..e));
-                }
-            }
-        }
-        let body_start = pos;
-        let mut body_end = content_end;
-        let mut checksum = None;
-        // OpenPGP: a final line "=XXXX" is a CRC-24, not base64 data.
-        let mut scan = body_start;
-        while let Some((s, e)) = lines(scan) {
-            if text.get(s) == Some(&b'=') {
-                body_end = s;
-                checksum = Some(s..e);
-                break;
-            }
-            scan = e;
-        }
-        let whole_end = end.map_or(text.len(), |e| {
-            let after = e.saturating_add(end_marker.len());
-            match text.get(after) {
-                Some(b'\r') if text.get(after.saturating_add(1)) == Some(&b'\n') => {
-                    after.saturating_add(2)
-                }
-                Some(b'\n') => after.saturating_add(1),
-                _ => after,
-            }
-        });
-        out.push(Block {
-            label,
-            whole: begin..whole_end,
-            headers,
-            body: body_start..body_end,
-            checksum,
-            complete: end.is_some(),
-        });
-        from = whole_end.max(begin.saturating_add(1));
+        from = block.whole.end.max(block.whole.start.saturating_add(1));
+        out.push(block);
     }
     out
+}
+
+/// The next armored block of `text`, from `from`.
+fn next_block(text: &[u8], from: usize) -> Option<Block> {
+    let begin = find_begin(text, from)?;
+    let line_end = text
+        .get(begin..)
+        .and_then(|t| t.iter().position(|&b| b == b'\n'))
+        .map_or(text.len(), |e| begin.saturating_add(e).saturating_add(1));
+    let line = text
+        .get(begin..line_end)
+        .unwrap_or_default()
+        .trim_ascii_end();
+    let label = line
+        .get(11..line.len().saturating_sub(5))
+        .map(|l| String::from_utf8_lossy(l).into_owned())
+        .unwrap_or_default();
+    let end_marker = format!("-----END {label}-----");
+    let end = find(text, end_marker.as_bytes(), line_end);
+    let content_end = end.unwrap_or(text.len());
+    // Headers ("Key: value") until a blank line, if any line has a colon.
+    let mut headers = Vec::new();
+    let mut pos = line_end;
+    let lines = |start: usize| -> Option<(usize, usize)> {
+        if start >= content_end {
+            return None;
+        }
+        let e = text
+            .get(start..content_end)?
+            .iter()
+            .position(|&b| b == b'\n')
+            .map_or(content_end, |e| start.saturating_add(e).saturating_add(1));
+        Some((start, e))
+    };
+    if let Some((s, e)) = lines(pos)
+        && text.get(s..e).is_some_and(|l| l.contains(&b':'))
+    {
+        while let Some((s, e)) = lines(pos) {
+            let l = text.get(s..e).unwrap_or_default().trim_ascii();
+            pos = e;
+            if l.is_empty() {
+                break;
+            }
+            if let Some(colon) = l.iter().position(|&b| b == b':') {
+                let key = String::from_utf8_lossy(l.get(..colon).unwrap_or_default()).into_owned();
+                let value =
+                    String::from_utf8_lossy(l.get(colon.saturating_add(1)..).unwrap_or_default())
+                        .trim()
+                        .to_owned();
+                headers.push((key, value, s..e));
+            }
+        }
+    }
+    let body_start = pos;
+    let mut body_end = content_end;
+    let mut checksum = None;
+    // OpenPGP: a final line "=XXXX" is a CRC-24, not base64 data.
+    let mut scan = body_start;
+    while let Some((s, e)) = lines(scan) {
+        if text.get(s) == Some(&b'=') {
+            body_end = s;
+            checksum = Some(s..e);
+            break;
+        }
+        scan = e;
+    }
+    let whole_end = end.map_or(text.len(), |e| {
+        let after = e.saturating_add(end_marker.len());
+        match text.get(after) {
+            Some(b'\r') if text.get(after.saturating_add(1)) == Some(&b'\n') => {
+                after.saturating_add(2)
+            }
+            Some(b'\n') => after.saturating_add(1),
+            _ => after,
+        }
+    });
+    Some(Block {
+        label,
+        whole: begin..whole_end,
+        headers,
+        body: body_start..body_end,
+        checksum,
+        complete: end.is_some(),
+    })
 }
 
 /// Decodes base64, ignoring whitespace and stopping at padding. Returns the
@@ -240,7 +245,7 @@ pub fn sub(span: Span, range: &Range<usize>) -> Span {
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let text = read_text(&cx, input.span).await?;
-    let blocks = blocks(&text);
+    let blocks = blocks(&cx, &text).await;
     let mut labels: Vec<(String, usize)> = Vec::new();
     for b in &blocks {
         match labels.iter_mut().find(|(l, _)| *l == b.label) {
@@ -328,8 +333,9 @@ mod tests {
         assert_eq!(base64(b"aGVsbA").unwrap(), b"hell");
         assert_eq!(base64(b"a*").unwrap_err(), 1);
         let text = b"junk\n-----BEGIN A B-----\nK: v\n\nAAAA\n=abcd\n-----END A B-----\n";
-        let b = blocks(text);
+        let b: Vec<Block> = next_block(text, 0).into_iter().collect();
         assert_eq!(b.len(), 1);
+        assert!(next_block(text, b[0].whole.end).is_none());
         assert_eq!(b[0].label, "A B");
         assert_eq!(b[0].headers.len(), 1);
         assert_eq!(&text[b[0].body.clone()], b"AAAA\n");

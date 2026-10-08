@@ -334,6 +334,7 @@ async fn elements(cx: Cx, level: Level) -> Result<()> {
                 whole.len,
             ));
         }
+        cx.progress_in(region, region.offset.saturating_add(pos));
         cx.push(node).await;
         pos = pos.saturating_add(total.max(1));
     }

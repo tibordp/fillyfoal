@@ -42,6 +42,7 @@ async fn keybox(cx: Cx, input: Input) -> Result<()> {
             *c = c.saturating_add(1);
         }
         let name = lookup(KEYBOX_TYPES, kind.into()).unwrap_or("unknown");
+        cx.progress_in(input.span, input.span.offset.saturating_add(start));
         cx.push(
             Node::new(format!("{name} blob"))
                 .span(cur.since(start))

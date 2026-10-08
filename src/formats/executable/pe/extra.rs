@@ -228,6 +228,7 @@ pub(super) async fn base_relocations(cx: Cx, (_pe, dir): (Pe, Directory)) -> Res
         }
         let span = dir.span.sub(pos, size);
         blocks = blocks.saturating_add(1);
+        cx.progress_in(dir.span, span.end());
         cx.push(
             Node::new(format!("Page {page:#x}"))
                 .span(span)

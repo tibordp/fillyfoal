@@ -539,6 +539,8 @@ async fn entries(cx: &Cx, file: Span, h: &Headers) -> Result<Arc<Vec<Entry>>> {
     order.sort_unstable();
     let mut out = Vec::with_capacity(order.len());
     for (pos, index) in order {
+        // A name may be up to the whole section long.
+        cx.checkpoint().await;
         let mut r = Reader::at(&names, to_usize(pos.into()));
         let Some(len) = read7(&mut r) else {
             break;
@@ -568,11 +570,13 @@ async fn entries(cx: &Cx, file: Span, h: &Headers) -> Result<Arc<Vec<Entry>>> {
     let mut offsets: Vec<u32> = out.iter().map(|e| e.data_offset).collect();
     offsets.sort_unstable();
     offsets.dedup();
-    for e in &mut out {
+    for (i, e) in out.iter_mut().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let start = u64::from(e.data_offset);
         let end = offsets
-            .iter()
-            .find(|&&o| o > e.data_offset)
+            .get(offsets.partition_point(|&o| o <= e.data_offset))
             .map_or(h.data.len, |&o| u64::from(o));
         e.data = h.data.sub(start, end.saturating_sub(start));
     }

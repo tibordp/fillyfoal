@@ -261,8 +261,17 @@ async fn acpi(cx: Cx, input: Input) -> Result<()> {
     let h: AcpiHeader = read_record(&cx, span, LE).await?;
     let mut node = AcpiHeader::node("Header", span, LE);
     if u64::from(h.length) <= cx.limits().max_read {
-        let all = cx.read(file.sub(0, h.length.into())).await?;
-        let sum = all.iter().fold(0u8, |a, &b| a.wrapping_add(b));
+        // Summed a chunk per read, so each step stays bounded.
+        const CHUNK: u64 = 1 << 20;
+        let len = u64::from(h.length);
+        let mut sum = 0u8;
+        let mut done = 0u64;
+        while done < len {
+            let n = len.saturating_sub(done).min(CHUNK);
+            let data = cx.read(file.sub(done, n)).await?;
+            sum = data.iter().fold(sum, |a, &b| a.wrapping_add(b));
+            done = done.saturating_add(n);
+        }
         node = if sum == 0 {
             node.summary("checksum valid")
         } else {
@@ -512,6 +521,7 @@ async fn journal_objects(cx: Cx, arena: Span) -> Result<()> {
         } else {
             node = node.summary(format!("{size} bytes"));
         }
+        cx.progress_in(arena, arena.offset.saturating_add(start));
         cx.push(node).await;
         cur.seek(start.saturating_add(size).next_multiple_of(8));
     }
@@ -674,6 +684,7 @@ async fn snoop(cx: Cx, input: Input) -> Result<()> {
         }
         cur.seek(start.saturating_add(record.into()));
         packets = packets.saturating_add(1);
+        cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(
             Node::new(format!("Packet {packets}"))
                 .span(cur.since(start))

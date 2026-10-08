@@ -784,18 +784,24 @@ async fn export_functions(cx: Cx, (pe, dir, ed): (Pe, Directory, ExportDirectory
     // Allocation is bounded by bytes actually read, not by declared counts.
     let mut named = vec![false; addresses.len().checked_div(4).unwrap_or(0)];
     for i in 0..ordinals.len().checked_div(2).unwrap_or(0) {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         if let Some(o) = u16_le(&ordinals, i.saturating_mul(2))
             && let Some(slot) = named.get_mut(usize::from(o))
         {
             *slot = true;
         }
     }
-    let unnamed: Vec<usize> = named
-        .iter()
-        .enumerate()
-        .filter(|&(i, &n)| !n && u32_le(&addresses, i.saturating_mul(4)).is_some_and(|a| a != 0))
-        .map(|(i, _)| i)
-        .collect();
+    let mut unnamed = Vec::new();
+    for (i, &n) in named.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        if !n && u32_le(&addresses, i.saturating_mul(4)).is_some_and(|a| a != 0) {
+            unnamed.push(i);
+        }
+    }
     cx.set_count(Count::Exact(
         u64::from(ed.names).saturating_add(to_u64(unnamed.len())),
     ));

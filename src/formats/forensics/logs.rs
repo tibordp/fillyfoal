@@ -25,21 +25,24 @@ type AuditEvent = (String, i64, Vec<String>, Lines);
 
 /// Text lines with their offsets: `(offset, length including the line
 /// break, text without it)`.
-fn lines(data: &[u8]) -> Lines {
+async fn lines(cx: &Cx, data: &[u8]) -> Lines {
     let mut at = 0u64;
-    data.split_inclusive(|&b| b == b'\n')
-        .map(|line| {
-            let start = at;
-            at = at.saturating_add(to_u64(line.len()));
-            let body = line.strip_suffix(b"\n").unwrap_or(line);
-            let body = body.strip_suffix(b"\r").unwrap_or(body);
-            (
-                start,
-                to_u64(line.len()),
-                String::from_utf8_lossy(body).into_owned(),
-            )
-        })
-        .collect()
+    let mut out = Vec::new();
+    for (i, line) in data.split_inclusive(|&b| b == b'\n').enumerate() {
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+        let start = at;
+        at = at.saturating_add(to_u64(line.len()));
+        let body = line.strip_suffix(b"\n").unwrap_or(line);
+        let body = body.strip_suffix(b"\r").unwrap_or(body);
+        out.push((
+            start,
+            to_u64(line.len()),
+            String::from_utf8_lossy(body).into_owned(),
+        ));
+    }
+    out
 }
 
 pub(crate) fn strip_bom(data: &[u8]) -> &[u8] {
@@ -49,11 +52,20 @@ pub(crate) fn strip_bom(data: &[u8]) -> &[u8] {
 /// The text of a file, read up to the session limit, with its lines.
 pub(crate) async fn text_lines(cx: &Cx, file: Span) -> Result<Lines> {
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let mut all = lines(&data);
+    let mut all = lines(cx, &data).await;
     if let Some(first) = all.first_mut() {
         first.2 = first.2.trim_start_matches('\u{feff}').to_owned();
     }
     Ok(all)
+}
+
+/// Charges work every 256 lines of a walk over the lines of `file`, and
+/// reports how far the walk has got.
+pub(crate) async fn tick(cx: &Cx, file: Span, i: usize, line: &Line) {
+    if i.is_multiple_of(256) {
+        cx.checkpoint().await;
+        cx.progress_in(file, file.offset.saturating_add(line.0));
+    }
 }
 
 /// A group node over a run of lines, expanding to one node per line.
@@ -95,6 +107,7 @@ async fn setupapi(cx: Cx, input: Input) -> Result<()> {
     let mut i = 0usize;
     // Header lines until [BeginLog].
     while let Some(l) = all.get(i) {
+        tick(&cx, file, i, l).await;
         if l.2.starts_with("[BeginLog]") {
             break;
         }
@@ -108,7 +121,8 @@ async fn setupapi(cx: Cx, input: Input) -> Result<()> {
     cx.emit(line_group("Header".to_owned(), file, header));
     let (mut sections, mut usb, mut boots) = (0u32, 0u32, 0u32);
     let mut current: Option<(String, Lines)> = None;
-    for l in all.iter().skip(i) {
+    for (j, l) in all.iter().enumerate().skip(i) {
+        tick(&cx, file, j, l).await;
         let t = l.2.trim_start();
         if let Some(title) = t.strip_prefix(">>>  [").and_then(|r| r.strip_suffix(']')) {
             if let Some((name, list)) = current.take() {
@@ -202,7 +216,9 @@ async fn w3c(cx: Cx, input: Input) -> Result<()> {
     let all = text_lines(&cx, file).await?;
     let mut fields: Arc<Vec<String>> = Arc::new(Vec::new());
     let (mut software, mut entries) = (String::new(), 0u64);
-    for (at, len, line) in &all {
+    for (i, l) in all.iter().enumerate() {
+        tick(&cx, file, i, l).await;
+        let (at, len, line) = l;
         let span = file.sub(*at, *len);
         if let Some(directive) = line.strip_prefix('#') {
             let (k, v) = directive.split_once(':').unwrap_or((directive, ""));
@@ -337,7 +353,8 @@ async fn transcript(cx: Cx, input: Input) -> Result<()> {
     let mut command: Option<(String, Lines)> = None;
     let mut in_header = false;
     let mut header = Vec::new();
-    for l in &all {
+    for (i, l) in all.iter().enumerate() {
+        tick(&cx, file, i, l).await;
         let t = l.2.as_str();
         if t.starts_with("**********************") {
             if let Some((cmd, list)) = command.take() {
@@ -469,7 +486,8 @@ async fn audit(cx: Cx, input: Input) -> Result<()> {
     let mut events = 0u64;
     let mut kinds: std::collections::BTreeMap<String, u64> = std::collections::BTreeMap::new();
     let mut current: Option<AuditEvent> = None;
-    for l in &all {
+    for (i, l) in all.iter().enumerate() {
+        tick(&cx, file, i, l).await;
         let Some((kind, seconds, serial)) = audit_stamp(&l.2) else {
             continue;
         };
@@ -723,7 +741,8 @@ async fn viminfo(cx: Cx, input: Input) -> Result<()> {
     let mut section: Option<(String, Lines)> = None;
     let mut commands = 0u64;
     let mut files = std::collections::BTreeSet::new();
-    for l in &all {
+    for (i, l) in all.iter().enumerate() {
+        tick(&cx, file, i, l).await;
         let t = l.2.as_str();
         // Every comment line titles the entries that follow it.
         if let Some(title) = t.strip_prefix("# ") {

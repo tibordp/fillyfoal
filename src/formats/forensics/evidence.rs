@@ -137,6 +137,7 @@ async fn ewf(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         seen.push(at);
+        cx.progress_in(file, file.offset.saturating_add(at));
         let desc_span = file.sub(at, EwfSection::SIZE);
         let s: EwfSection = read_record(&cx, desc_span, LE).await?;
         let data = file.sub(
@@ -355,6 +356,7 @@ async fn aff(cx: Cx, input: Input) -> Result<()> {
     let (mut pages, mut image, mut segments) = (0u64, None, 0u64);
     while cur.remaining() >= 16 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let magic = cur.bytes(4).await?;
         if magic != b"AFF\0" {
             cx.diag(
@@ -491,6 +493,7 @@ async fn lime(cx: Cx, input: Input) -> Result<()> {
     let mut at = 0u64;
     let (mut ranges, mut total) = (0u64, 0u64);
     while at.saturating_add(LimeHeader::SIZE) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let hspan = file.sub(at, LimeHeader::SIZE);
         let h: LimeHeader = read_record(&cx, hspan, LE).await?;
         if h.magic != 0x4c69_4d45 {
@@ -709,6 +712,7 @@ async fn vmss_tags(cx: Cx, group: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, group, LE);
     while cur.remaining() >= 2 {
         let start = cur.pos();
+        cx.progress_in(group, group.offset.saturating_add(start));
         let flags = cur.u8().await?;
         let name_len = cur.u8().await?;
         if flags == 0 && name_len == 0 {
@@ -818,6 +822,7 @@ async fn vbox_sav(cx: Cx, input: Input) -> Result<()> {
     let mut names = Vec::new();
     const WINDOW: u64 = 0x10000;
     while at < file.len && names.len() < 4096 {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let window = cx
             .read_avail(file.sub(at, WINDOW.saturating_add(64)))
             .await?;

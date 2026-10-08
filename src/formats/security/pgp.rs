@@ -417,6 +417,7 @@ async fn packets(cx: Cx, stream: Stream) -> Result<()> {
                 body.len,
             ));
         }
+        cx.progress_in(span, span.offset.saturating_add(pos));
         cx.push(node.lazy(
             crate::expander!(self::packet: PacketState),
             PacketState {
@@ -1155,7 +1156,7 @@ async fn inflate_packets(cx: Cx, (stream, zlib): (Stream, bool)) -> Result<()> {
 
 async fn dissect_armor(cx: Cx, input: Input) -> Result<()> {
     let text = crate::formats::security::pem::read_text(&cx, input.span).await?;
-    let blocks = crate::formats::security::pem::blocks(&text);
+    let blocks = crate::formats::security::pem::blocks(&cx, &text).await;
     let labels: Vec<&str> = blocks.iter().map(|b| b.label.as_str()).collect();
     let mut summary = format!("OpenPGP armor: {}", labels.join(", "));
     if let Some(block) = blocks.first()

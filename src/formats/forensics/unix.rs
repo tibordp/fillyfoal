@@ -76,6 +76,7 @@ async fn fsevents(cx: Cx, input: Input) -> Result<()> {
     let (mut pages, mut records) = (0u32, 0u64);
     let mut version = 0u8;
     while at.saturating_add(12) <= file.len {
+        cx.progress_in(file, file.offset.saturating_add(at));
         let head = cx.read(file.sub(at, 12)).await?;
         let magic = head.get(..4).unwrap_or_default();
         if !matches!(magic, b"1SLD" | b"2SLD" | b"3SLD") {
@@ -128,6 +129,9 @@ async fn fsevents_count(cx: &Cx, page: Span, version: u8) -> Result<u64> {
             break;
         }
         n = n.saturating_add(1);
+        if n.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
     }
     Ok(n)
 }
@@ -220,6 +224,7 @@ async fn timesync(cx: Cx, input: Input) -> Result<()> {
     let (mut boots, mut syncs) = (0u32, 0u32);
     while cur.remaining() >= 4 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let sig = cur.peek(4).await?;
         if sig.starts_with(b"\xb0\xbb") {
             let len = u64::from(u16_le(&sig, 2).unwrap_or(48)).max(48);
@@ -321,6 +326,7 @@ async fn tracev3(cx: Cx, input: Input) -> Result<()> {
     let mut summary = String::new();
     while cur.remaining() >= 16 {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let tag = cur.u32().await?;
         let sub = cur.u32().await?;
         let len = cur.u64().await?;
@@ -606,6 +612,7 @@ async fn mbdb(cx: Cx, input: Input) -> Result<()> {
     let (mut files, mut dirs, mut bytes) = (0u64, 0u64, 0u64);
     while !cur.at_end() {
         let start = cur.pos();
+        cx.progress_in(file, file.offset.saturating_add(start));
         let (domain, _) = mbdb_string(&mut cur).await?;
         let (path, _) = mbdb_string(&mut cur).await?;
         for _ in 0..3 {
@@ -966,7 +973,7 @@ impl AbxReader<'_> {
     }
 }
 
-fn abx_parse(data: &[u8]) -> AbxDoc {
+async fn abx_parse(cx: &Cx, data: &[u8]) -> AbxDoc {
     let mut doc = AbxDoc::default();
     let mut r = AbxReader {
         data,
@@ -974,7 +981,12 @@ fn abx_parse(data: &[u8]) -> AbxDoc {
         strings: Vec::new(),
     };
     let mut stack: Vec<usize> = Vec::new();
+    let mut tokens = 0u32;
     while r.at < data.len() {
+        tokens = tokens.wrapping_add(1);
+        if tokens.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let start = to_u64(r.at);
         let Some(token) = r.take(1).and_then(|b| b.first().copied()) else {
             break;
@@ -1046,7 +1058,7 @@ async fn abx_doc(cx: &Cx, file: Span) -> Result<Arc<AbxDoc>> {
         return Ok(d);
     }
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let doc = Arc::new(abx_parse(&data));
+    let doc = Arc::new(abx_parse(cx, &data).await);
     cx.cache(file, "abx", doc.clone());
     Ok(doc)
 }
@@ -1063,40 +1075,37 @@ fn abx_value_text(v: &Value) -> String {
     }
 }
 
-fn abx_children(file: Span, doc: &AbxDoc, children: &[AbxChild]) -> Vec<Node> {
-    children
-        .iter()
-        .map(|c| match c {
-            AbxChild::Element(i) => {
-                let e = doc.elements.get(*i).cloned().unwrap_or_default();
-                let attrs: Vec<String> = e
-                    .attrs
-                    .iter()
-                    .take(3)
-                    .map(|(k, v, _, _)| format!("{k}={}", abx_value_text(v)))
-                    .collect();
-                let node = Node::new(format!("<{}>", e.name))
-                    .span(file.sub(e.start, e.end.saturating_sub(e.start)))
-                    .lazy(abx_element, (file, *i));
-                if attrs.is_empty() {
-                    node
-                } else {
-                    node.summary(clip(&attrs.join(" "), 100))
-                }
+fn abx_child(file: Span, doc: &AbxDoc, c: &AbxChild) -> Node {
+    match c {
+        AbxChild::Element(i) => {
+            let e = doc.elements.get(*i).cloned().unwrap_or_default();
+            let attrs: Vec<String> = e
+                .attrs
+                .iter()
+                .take(3)
+                .map(|(k, v, _, _)| format!("{k}={}", abx_value_text(v)))
+                .collect();
+            let node = Node::new(format!("<{}>", e.name))
+                .span(file.sub(e.start, e.end.saturating_sub(e.start)))
+                .lazy(abx_element, (file, *i));
+            if attrs.is_empty() {
+                node
+            } else {
+                node.summary(clip(&attrs.join(" "), 100))
             }
-            AbxChild::Text(s, start, end) => Node::new("Text")
-                .span(file.sub(*start, end.saturating_sub(*start)))
-                .value(text(s.clone())),
-        })
-        .collect()
+        }
+        AbxChild::Text(s, start, end) => Node::new("Text")
+            .span(file.sub(*start, end.saturating_sub(*start)))
+            .value(text(s.clone())),
+    }
 }
 
 async fn abx(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(Node::new("Magic").span(file.sub(0, 4)).value(text("ABX")));
     let doc = abx_doc(&cx, file).await?;
-    for node in abx_children(file, &doc, &doc.roots) {
-        cx.push(node).await;
+    for c in &doc.roots {
+        cx.push(abx_child(file, &doc, c)).await;
     }
     if let Some((msg, at)) = &doc.error {
         cx.diag(Diagnostic::malformed(msg.clone()).at(file.sub(*at, 1)));
@@ -1126,8 +1135,8 @@ async fn abx_element(cx: Cx, (file, index): (Span, usize)) -> Result<()> {
         )
         .await;
     }
-    for node in abx_children(file, &doc, &e.children) {
-        cx.push(node).await;
+    for c in &e.children {
+        cx.push(abx_child(file, &doc, c)).await;
     }
     Ok(())
 }
@@ -1242,6 +1251,9 @@ async fn uuidtext(cx: Cx, input: Input) -> Result<()> {
     let mut at = table.end().saturating_sub(file.offset);
     let mut ranges = Vec::new();
     for (i, e) in raw.as_chunks::<8>().0.iter().enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
         let start = u32_le(e, 0).unwrap_or(0);
         let len = u64::from(u32_le(e, 4).unwrap_or(0));
         ranges.push((

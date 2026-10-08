@@ -199,6 +199,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
     }
 
     for ci in &safes {
+        cx.checkpoint().await;
         let Some((kind, inner)) = content_info(ci) else {
             continue;
         };
@@ -304,6 +305,7 @@ async fn bags(
     pw: Option<Password<'_>>,
 ) -> Result<()> {
     for bag in list {
+        cx.checkpoint().await;
         let parts = sub_el(bag);
         let Some(kind) = parts.first().and_then(oid) else {
             continue;

@@ -336,7 +336,8 @@ fn enter(b: &mut Bits<'_>) -> Option<(u64, u32, u64)> {
 }
 
 /// Collects the abbreviations a BLOCKINFO block defines.
-fn read_blockinfo(
+async fn read_blockinfo(
+    cx: &Cx,
     data: &[u8],
     start: u64,
     end: u64,
@@ -346,6 +347,7 @@ fn read_blockinfo(
     let mut b = Bits { data, pos: start };
     let mut current = None;
     while b.pos < end {
+        cx.checkpoint().await;
         match b.read(width)? {
             0 => return Some(()),
             2 => {
@@ -421,7 +423,7 @@ async fn walk(
                 }
                 if child == 0 {
                     // Abbreviations defined here apply to the blocks after it.
-                    read_blockinfo(&s.stream.data, start, end, width, &mut info);
+                    read_blockinfo(cx, &s.stream.data, start, end, width, &mut info).await;
                 }
                 b.pos = end;
                 if emit {

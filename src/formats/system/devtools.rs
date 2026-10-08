@@ -137,6 +137,7 @@ async fn win_res(cx: Cx, input: Input) -> Result<()> {
         let data = file.sub(pos.saturating_add(header_size), data_size);
         let at = (pos, count);
         cx.mark(move || at);
+        cx.progress_in(file, file.offset.saturating_add(pos));
         if data_size == 0 && pos == 0 && kind == Some(0) && name == Some(0) {
             cx.push(
                 Node::new("Empty entry")
@@ -580,6 +581,7 @@ async fn hg_bundle(cx: Cx, input: Input) -> Result<()> {
                     cur.skip(n.unsigned_abs().into());
                 }
                 parts = parts.saturating_add(1);
+                cx.progress_in(file, file.offset.saturating_add(start));
                 cx.push(Node::new(kind).span(cur.since(start))).await;
             }
         } else {
@@ -684,6 +686,7 @@ async fn svn_dump(cx: Cx, input: Input) -> Result<()> {
         } else {
             Node::new("Record")
         };
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node.span(record)).await;
         if after <= pos {
             break;
