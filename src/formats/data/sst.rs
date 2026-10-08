@@ -10,7 +10,7 @@
 //! and XXH3 checksums are not handled.
 
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
-use crate::codec::crc::crc32c;
+use crate::codec::crc::crc32c_update;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Format, Head, Input, Probe};
@@ -129,7 +129,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let (index_off, index_size, _) = handle(footer, e)
         .ok_or_else(|| Diagnostic::malformed("invalid index handle").at(footer_span))?;
     let index = block_entries(&cx, file, index_off, index_size, flavor).await;
-    let blocks = index.as_ref().map_or(0, Vec::len);
+    let blocks = index.as_ref().map_or(0, |n| *n);
     cx.annotate(format!(
         "{} table, {blocks} data block{}",
         if rocks { "RocksDB" } else { "LevelDB" },
@@ -221,52 +221,88 @@ async fn footer_fields(cx: Cx, (input, rocks): (Input, bool)) -> Result<()> {
 }
 
 /// One decoded entry: key, value, and the entry's range in the block.
-struct Entry {
-    key: Vec<u8>,
+struct Entry<'a> {
+    key: &'a [u8],
     value: (usize, usize),
     range: (usize, usize),
 }
 
-/// Decodes the entries of a block (without its restart array).
-fn entries(data: &[u8]) -> Result<Vec<Entry>> {
-    let restarts = to_usize(u64::from(
-        u32_le(data, data.len().saturating_sub(4)).unwrap_or(0),
-    ));
-    let end = data
-        .len()
-        .checked_sub(4)
-        .and_then(|e| e.checked_sub(restarts.checked_mul(4)?))
-        .ok_or_else(|| Diagnostic::malformed("restart array does not fit"))?;
-    let mut out = Vec::new();
-    let mut key: Vec<u8> = Vec::new();
-    let mut at = 0usize;
-    while at < end {
-        let bad = || Diagnostic::malformed(format!("invalid entry at {at:#x}"));
-        let (shared, e) = varint(data, at).ok_or_else(bad)?;
-        let (unshared, e) = varint(data, e).ok_or_else(bad)?;
-        let (value_len, e) = varint(data, e).ok_or_else(bad)?;
-        let shared = to_usize(shared);
-        if shared > key.len() {
-            return Err(bad());
-        }
-        key.truncate(shared);
-        let k_end = e
-            .checked_add(to_usize(unshared))
-            .filter(|&k| k <= end)
-            .ok_or_else(bad)?;
-        key.extend_from_slice(data.get(e..k_end).unwrap_or_default());
-        let v_end = k_end
-            .checked_add(to_usize(value_len))
-            .filter(|&v| v <= end)
-            .ok_or_else(bad)?;
-        out.push(Entry {
-            key: key.clone(),
-            value: (k_end, v_end),
-            range: (at, v_end),
-        });
-        at = v_end;
+/// A byte range in a block.
+type Range = (usize, usize);
+
+/// Walks the entries of a block (without its restart array), keeping only
+/// the current key: keys share prefixes, so copying each one could take
+/// memory quadratic in the block's size.
+struct Entries {
+    /// Where the restart array starts.
+    end: usize,
+    at: usize,
+    /// The current entry's key.
+    key: Vec<u8>,
+}
+
+impl Entries {
+    fn new(data: &[u8]) -> Result<Entries> {
+        let restarts = to_usize(u64::from(
+            u32_le(data, data.len().saturating_sub(4)).unwrap_or(0),
+        ));
+        let end = data
+            .len()
+            .checked_sub(4)
+            .and_then(|e| e.checked_sub(restarts.checked_mul(4)?))
+            .ok_or_else(|| Diagnostic::malformed("restart array does not fit"))?;
+        Ok(Entries {
+            end,
+            at: 0,
+            key: Vec::new(),
+        })
     }
-    Ok(out)
+
+    /// The next entry: its value's and its own range in the block (the key
+    /// is in `self.key`).
+    fn next(&mut self, data: &[u8]) -> Option<Result<(Range, Range)>> {
+        let (at, end) = (self.at, self.end);
+        if at >= end {
+            return None;
+        }
+        let bad = || Diagnostic::malformed(format!("invalid entry at {at:#x}"));
+        let step = || {
+            let (shared, e) = varint(data, at)?;
+            let (unshared, e) = varint(data, e)?;
+            let (value_len, e) = varint(data, e)?;
+            let shared = to_usize(shared);
+            let k_end = e.checked_add(to_usize(unshared)).filter(|&k| k <= end)?;
+            let v_end = k_end
+                .checked_add(to_usize(value_len))
+                .filter(|&v| v <= end)?;
+            Some((shared, e, k_end, v_end))
+        };
+        let Some((shared, e, k_end, v_end)) =
+            step().filter(|&(shared, ..)| shared <= self.key.len())
+        else {
+            self.at = end;
+            return Some(Err(bad()));
+        };
+        self.key.truncate(shared);
+        self.key
+            .extend_from_slice(data.get(e..k_end).unwrap_or_default());
+        self.at = v_end;
+        Some(Ok(((k_end, v_end), (at, v_end))))
+    }
+}
+
+/// The number of entries in a block, or why it does not decode.
+async fn count_entries(cx: &Cx, data: &[u8]) -> Result<usize> {
+    let mut walk = Entries::new(data)?;
+    let mut n = 0usize;
+    while let Some(entry) = walk.next(data) {
+        entry?;
+        n = n.saturating_add(1);
+        if n.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+    }
+    Ok(n)
 }
 
 /// Reads a block's contents (uncompressed only) and checks its trailer.
@@ -285,23 +321,29 @@ async fn read_block(
         .await?;
     let kind = trailer.first().copied().unwrap_or(0);
     let stored = u32_le(&trailer, 1).unwrap_or(0);
-    let mut whole = data.clone();
-    whole.push(kind);
-    let diag = (mask(crc32c(&whole)) != stored)
-        .then(|| Diagnostic::warning("block checksum mismatch (CRC-32C)"));
+    // The CRC-32C of the contents and the type byte, a piece at a time.
+    let mut crc = !0u32;
+    for piece in data.chunks(64 * 1024) {
+        crc = crc32c_update(crc, piece);
+        cx.checkpoint().await;
+    }
+    let crc = !crc32c_update(crc, &[kind]);
+    let diag =
+        (mask(crc) != stored).then(|| Diagnostic::warning("block checksum mismatch (CRC-32C)"));
     Ok((data, kind, diag))
 }
 
+/// The number of entries in a block.
 async fn block_entries(
     cx: &Cx,
     file: Span,
     offset: u64,
     size: u64,
     flavor: Flavor,
-) -> Result<Vec<Entry>> {
+) -> Result<usize> {
     let (data, kind, _) = read_block(cx, file, offset, size).await?;
     let (data, _) = decompress(cx, file.sub(offset, size), data, kind, flavor).await?;
-    entries(&data)
+    count_entries(cx, &data).await
 }
 
 /// The plain bytes of a block and their span (in a derived source when the
@@ -397,9 +439,17 @@ async fn block(
     match decompress(&cx, span, data, compression, flavor).await {
         Err(e) => cx.emit(Node::new("Contents").span(span).diag(e)),
         Ok((data, span)) => {
-            let list = entries(&data)?;
-            cx.set_count(Count::AtLeast(to_u64(list.len())));
-            for (i, e) in list.iter().enumerate() {
+            let n = count_entries(&cx, &data).await?;
+            cx.set_count(Count::AtLeast(to_u64(n)));
+            let mut walk = Entries::new(&data)?;
+            let mut i = 0usize;
+            while let Some(entry) = walk.next(&data) {
+                let (value, range) = entry?;
+                let e = Entry {
+                    key: &walk.key,
+                    value,
+                    range,
+                };
                 let range = span.sub(
                     to_u64(e.range.0),
                     to_u64(e.range.1.saturating_sub(e.range.0)),
@@ -408,7 +458,7 @@ async fn block(
                 let node = match kind {
                     BlockKind::Index | BlockKind::Meta => {
                         let (off, len, _) = handle(value, 0).unwrap_or((0, 0, 0));
-                        let name = String::from_utf8_lossy(&e.key).into_owned();
+                        let name = String::from_utf8_lossy(e.key).into_owned();
                         let sub = match kind {
                             BlockKind::Meta if name == "rocksdb.properties" => {
                                 Some(BlockKind::Properties)
@@ -431,7 +481,7 @@ async fn block(
                             .summary(if matches!(kind, BlockKind::Index) {
                                 format!(
                                     "{len} bytes, keys up to {}",
-                                    crate::render::value(&internal_key(&e.key).0)
+                                    crate::render::value(&internal_key(e.key).0)
                                 )
                             } else {
                                 format!("{len} bytes")
@@ -446,20 +496,19 @@ async fn block(
                         node
                     }
                     BlockKind::Data => {
-                        let (key, detail) = internal_key(&e.key);
+                        let (key, detail) = internal_key(e.key);
                         let label = crate::render::value(&key);
                         Node::new(label)
                             .span(range)
                             .value(text(value))
                             .summary(detail)
                     }
-                    BlockKind::Properties => {
-                        Node::new(String::from_utf8_lossy(&e.key).into_owned())
-                            .span(range)
-                            .value(property(value))
-                    }
+                    BlockKind::Properties => Node::new(String::from_utf8_lossy(e.key).into_owned())
+                        .span(range)
+                        .value(property(value)),
                 };
                 cx.push(node).await;
+                i = i.saturating_add(1);
             }
         }
     }

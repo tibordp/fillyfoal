@@ -195,12 +195,34 @@ fn ints(data: &[u8]) -> Vec<(u64, u64)> {
         .collect()
 }
 
-/// Embedded messages with field number `id`: their (start, end).
-fn messages(data: &[u8], id: u64) -> Vec<(usize, usize)> {
-    pb::fields_in(data)
-        .filter(|f| f.number == id && f.wire == pb::LEN)
-        .map(|f| (f.body, f.end))
-        .collect()
+/// [`ints`] for a footer, which may be large: a checkpoint every few
+/// thousand fields.
+async fn ints_stepped(cx: &Cx, data: &[u8]) -> Vec<(u64, u64)> {
+    let mut out = Vec::new();
+    for (i, f) in pb::fields_in(data).enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        if f.wire == pb::VARINT {
+            out.push((f.number, f.value));
+        }
+    }
+    out
+}
+
+/// Embedded messages with field number `id`: their (start, end), with a
+/// checkpoint every few thousand fields.
+async fn messages_stepped(cx: &Cx, data: &[u8], id: u64) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for (i, f) in pb::fields_in(data).enumerate() {
+        if i.is_multiple_of(4096) {
+            cx.checkpoint().await;
+        }
+        if f.number == id && f.wire == pb::LEN {
+            out.push((f.body, f.end));
+        }
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -480,18 +502,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
     };
     if let Some((span, data)) = &footer {
-        let fi = ints(data);
+        let fi = ints_stepped(&cx, data).await;
         if let Some(rows) = get(&fi, 6) {
             summary = format!("{summary}, {rows} rows");
         }
+        let stripe_count = messages_stepped(&cx, data, 3).await.len();
         summary = format!(
-            "{summary}, {} stripes, {} types",
-            messages(data, 3).len(),
-            messages(data, 4).len()
+            "{summary}, {stripe_count} stripes, {} types",
+            messages_stepped(&cx, data, 4).await.len()
         );
         cx.emit(
             Node::new("Stripes")
-                .summary(format!("{}", messages(data, 3).len()))
+                .summary(format!("{stripe_count}"))
                 .lazy(
                     stripes,
                     (
@@ -543,7 +565,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn stripes(cx: Cx, (input, footer, compression): (Input, Buf, u64)) -> Result<()> {
-    let list = messages(&footer.data, 3);
+    let list = messages_stepped(&cx, &footer.data, 3).await;
     cx.set_count(Count::Exact(to_u64(list.len())));
     for (i, (s, e)) in list.into_iter().enumerate() {
         let info = ints(footer.data.get(s..e).unwrap_or_default());
@@ -580,7 +602,10 @@ async fn stripe(
     // Streams are laid out in order after the stripe's start.
     let mut pos = 0u64;
     let mut stream_nodes = Vec::new();
-    for (s, e) in messages(&bytes, 1) {
+    for (s, e) in messages_stepped(&cx, &bytes, 1).await {
+        if stream_nodes.len().is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
         let fields = ints(bytes.get(s..e).unwrap_or_default());
         let get = |id: u64| fields.iter().find(|(f, _)| *f == id).map_or(0, |(_, v)| *v);
         let (kind, column, len) = (get(1), get(2), get(3));

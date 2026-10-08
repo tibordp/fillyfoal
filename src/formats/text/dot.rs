@@ -293,6 +293,8 @@ async fn body(cx: Cx, b: Body) -> Result<()> {
 async fn statements(cx: &Cx, lex: &mut Lexer<'_>) -> Result<Stats> {
     let mut stats = Stats::default();
     loop {
+        let region = lex.scan.region();
+        cx.progress_in(region, region.offset.saturating_add(lex.pos));
         let t = lex.next().await?;
         match t.kind {
             Kind::Eof => {

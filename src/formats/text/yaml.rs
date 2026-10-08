@@ -360,6 +360,7 @@ async fn entry(
                 .diag(Diagnostic::malformed("expected `key: value`")),
         }
     };
+    cx.progress_in(b.span, b.span.offset.saturating_add(end));
     cx.push(node).await;
     Ok(())
 }

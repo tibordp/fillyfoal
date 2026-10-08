@@ -539,6 +539,7 @@ async fn parts(cx: &Cx, e: &Entity, body: Span, boundary: &[u8]) -> Result<()> {
         match part.take() {
             Some(start) => {
                 index = index.saturating_add(1);
+                lines.progress();
                 push_part(
                     cx,
                     e,
@@ -729,6 +730,7 @@ pub async fn dissect_mbox(cx: Cx, input: Input) -> Result<()> {
             if let Some(t) = get(&fields, "Date").and_then(|f| mail_date(&f.value)) {
                 node = node.value(Value::Timestamp { unix_seconds: t });
             }
+            lines.progress();
             cx.push(node).await;
         }
         let Some(l) = line else {

@@ -174,6 +174,7 @@ pub async fn dissect_keys(cx: Cx, input: Input) -> Result<()> {
         if let Some(bits) = bits {
             summary = format!("{summary}, {bits} bits");
         }
+        lines.progress();
         cx.push(
             Node::new(name)
                 .span(line.span)

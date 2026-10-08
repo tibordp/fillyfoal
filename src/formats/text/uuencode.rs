@@ -84,41 +84,66 @@ fn is_xx(line: &[u8]) -> bool {
     xx_ok && !uu_ok
 }
 
-/// Decodes uu/xxencoded lines up to the terminating empty line.
-fn decode_lines(data: &[u8], xx: bool) -> Decoded {
-    let mut bytes = Vec::with_capacity((data.len() / 4).saturating_mul(3));
-    let mut error = None;
-    for line in data.split(|&b| b == b'\n') {
-        let line = line.strip_suffix(b"\r").unwrap_or(line);
-        if line.is_empty() {
-            continue;
-        }
-        let last = if xx {
-            matches!(line, b"+")
-        } else {
-            matches!(line, b"`" | b" ")
-        };
-        if last {
-            break;
-        }
-        let ok = if xx {
-            decode::xx_line(line, &mut bytes)
-        } else {
-            decode::uu_line(line, &mut bytes)
-        };
-        if !ok && error.is_none() {
-            error = Some("line shorter than its length character says".to_owned());
+/// Decodes uu/xxencoded lines up to the terminating empty line, a bounded
+/// number of bytes at a time.
+struct LineDecoder {
+    xx: bool,
+    pos: usize,
+    bytes: Vec<u8>,
+    error: Option<String>,
+}
+
+impl LineDecoder {
+    fn new(xx: bool, len: usize) -> Self {
+        LineDecoder {
+            xx,
+            pos: 0,
+            bytes: Vec::with_capacity((len / 4).saturating_mul(3)),
+            error: None,
         }
     }
-    Decoded { bytes, error }
 }
 
-fn uudecode(data: &[u8]) -> Decoded {
-    decode_lines(data, false)
-}
+impl decode::Step for LineDecoder {
+    fn step(&mut self, data: &[u8], limit: usize) -> bool {
+        let stop = self.pos.saturating_add(limit);
+        while self.pos < data.len() && self.pos < stop {
+            let rest = data.get(self.pos..).unwrap_or_default();
+            let (line, used) = match rest.iter().position(|&b| b == b'\n') {
+                Some(n) => (rest.get(..n).unwrap_or_default(), n.saturating_add(1)),
+                None => (rest, rest.len()),
+            };
+            self.pos = self.pos.saturating_add(used);
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            if line.is_empty() {
+                continue;
+            }
+            let last = if self.xx {
+                matches!(line, b"+")
+            } else {
+                matches!(line, b"`" | b" ")
+            };
+            if last {
+                return true;
+            }
+            let ok = if self.xx {
+                decode::xx_line(line, &mut self.bytes)
+            } else {
+                decode::uu_line(line, &mut self.bytes)
+            };
+            if !ok && self.error.is_none() {
+                self.error = Some("line shorter than its length character says".to_owned());
+            }
+        }
+        self.pos >= data.len()
+    }
 
-fn xxdecode(data: &[u8]) -> Decoded {
-    decode_lines(data, true)
+    fn finish(self) -> Decoded {
+        Decoded {
+            bytes: self.bytes,
+            error: self.error,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -131,8 +156,14 @@ struct Block {
 async fn content(cx: Cx, b: Block) -> Result<()> {
     let (span, error) = match b.kind {
         Kind::Base64 => decode::derive_with(&cx, b.body, Transform::Base64).await?,
-        Kind::Uu => decode::derive(&cx, b.body, "uudecode", uudecode).await?,
-        Kind::Xx => decode::derive(&cx, b.body, "xxdecode", xxdecode).await?,
+        Kind::Uu => {
+            let make = |len| LineDecoder::new(false, len);
+            decode::derive_stepped(&cx, b.body, "uudecode", make).await?
+        }
+        Kind::Xx => {
+            let make = |len| LineDecoder::new(true, len);
+            decode::derive_stepped(&cx, b.body, "xxdecode", make).await?
+        }
     };
     if let Some(e) = error {
         cx.diag(e);
@@ -187,6 +218,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if end_line.is_none() {
             node = node.diag(Diagnostic::new(DiagKind::Truncated, "end line missing"));
         }
+        lines.progress();
         cx.push(node).await;
     }
     let what = if files > 0 && xx_files == files {

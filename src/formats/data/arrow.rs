@@ -308,6 +308,7 @@ async fn messages(cx: Cx, (input, start, end): (Input, u64, u64)) -> Result<()> 
             .await
             .unwrap_or(0);
         let total = prefix.saturating_add(meta.into()).saturating_add(body);
+        cx.progress(pos.saturating_sub(start), end.saturating_sub(start));
         cx.push(
             Node::new(format!("Message {i}"))
                 .span(input.span.sub(pos, total))

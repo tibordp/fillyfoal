@@ -138,6 +138,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if e.binary {
             summary.push_str(", binary mode");
         }
+        lines.progress();
         cx.push(
             text_node(
                 e.file.text(),

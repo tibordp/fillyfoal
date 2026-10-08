@@ -142,6 +142,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             node = node.diag(Diagnostic::new(DiagKind::Truncated, "END line missing"));
         }
         labels.push(label);
+        lines.progress();
         cx.push(node).await;
     }
     if let Some((s, e)) = text.take() {

@@ -179,6 +179,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let same_file =
             starts_unified && current.as_ref().is_some_and(|f| f.hunks == 0 && !f.unified);
         if starts_header || (starts_unified && !same_file) {
+            lines.progress();
             match current.take() {
                 Some(f) => push_file(&cx, span, f, before).await,
                 None => preamble_end = Some(before),

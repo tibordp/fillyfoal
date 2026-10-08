@@ -172,6 +172,7 @@ async fn blocks(cx: Cx, (input, start, sync, codec): (Input, u64, Vec<u8>, Strin
                 data.len,
             ));
         }
+        cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         index = index.saturating_add(1);
         if marker != sync {

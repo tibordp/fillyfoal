@@ -203,11 +203,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         if !special {
             count = count.saturating_add(1);
+            // Only the first few types are shown: tracking a bounded number
+            // keeps this lookup cheap however many types there are.
+            let full = types.len() >= 64;
             match types.iter_mut().find(|(t, _)| *t == ty) {
                 Some((_, n)) => *n = n.saturating_add(1),
-                None => types.push((ty, 1)),
+                None if !full => types.push((ty, 1)),
+                None => {}
             }
         }
+        cx.progress_in(span, span.offset.saturating_add(end));
         cx.push(node).await;
     }
     let kinds: Vec<String> = types

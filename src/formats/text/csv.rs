@@ -334,6 +334,7 @@ async fn dissect(cx: Cx, input: Input, candidates: &[u8]) -> Result<()> {
     while let Some(rec) = record(&mut scan, pos, delim).await? {
         cx.checkpoint().await;
         pos = rec.next.max(pos.saturating_add(1));
+        cx.progress_in(span, span.offset.saturating_add(pos));
         if rec.start == rec.end {
             continue; // blank line
         }

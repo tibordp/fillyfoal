@@ -691,6 +691,7 @@ async fn pages(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             depth: 0,
             file: input,
         };
+        cx.progress(pos, span.len);
         cx.push(
             Node::new(format!("{name} {index}"))
                 .span(span.sub(pos, to_u64(end).saturating_add(compressed)))

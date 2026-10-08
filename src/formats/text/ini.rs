@@ -305,6 +305,7 @@ pub async fn dissect(cx: Cx, input: Input, flavor: Flavor) -> Result<()> {
             match current.take() {
                 Some((start, name, n)) => {
                     let section = span.sub(start, before.saturating_sub(start));
+                    lines.progress();
                     push_section(&cx, section, &name, n, flavor, reg_version).await;
                 }
                 None if globals > 0 => {
@@ -432,6 +433,7 @@ async fn entries(cx: Cx, s: Section) -> Result<()> {
                 }
             }
         };
+        lines.progress();
         cx.push(node).await;
     }
     Ok(())

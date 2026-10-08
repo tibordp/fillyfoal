@@ -711,6 +711,7 @@ async fn walk_members(cx: &Cx, w: &Walk) -> Result<Walked> {
         if let Some(s) = summary {
             node = node.summary(s);
         }
+        cx.progress_in(w.span, w.span.offset.saturating_add(lex.pos));
         cx.push(node).await;
         walked.members = walked.members.saturating_add(1);
     }
@@ -1107,6 +1108,7 @@ pub async fn dissect_lines(cx: Cx, input: Input) -> Result<()> {
         if lex.next().await?.kind != Kind::Eof {
             node = node.diag(Diagnostic::warning("more than one value on this line"));
         }
+        lines.progress();
         cx.push(node).await;
     }
     cx.annotate(format!(

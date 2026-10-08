@@ -30,6 +30,10 @@ pub struct Scanner<'a> {
     end: u64,
     /// Calls to [`Scanner::tick`] since the last checkpoint.
     ticks: u32,
+    /// Calls to [`Scanner::byte`], which byte-at-a-time loops (CSV records,
+    /// tags, quoted strings) make over a cached window: reads alone would
+    /// charge them too little.
+    touched: u32,
 }
 
 impl<'a> Scanner<'a> {
@@ -41,6 +45,7 @@ impl<'a> Scanner<'a> {
             start: 0,
             end: region.len,
             ticks: 0,
+            touched: 0,
         }
     }
 
@@ -101,6 +106,10 @@ impl<'a> Scanner<'a> {
 
     /// The byte at `pos`, or `None` past the end.
     pub async fn byte(&mut self, pos: u64) -> Result<Option<u8>> {
+        self.touched = self.touched.wrapping_add(1);
+        if self.touched.is_multiple_of(256) {
+            self.cx.checkpoint().await;
+        }
         if let Some(b) = self.cached(pos) {
             return Ok(Some(b));
         }
@@ -320,6 +329,15 @@ impl<'a> Lines<'a> {
     /// Number of lines returned so far.
     pub fn number(&self) -> u64 {
         self.number
+    }
+
+    /// Reports the walk's position in its region as progress (for walkers
+    /// over records whose count is not known up front).
+    pub fn progress(&self) {
+        let region = self.scan.region;
+        self.scan
+            .cx
+            .progress_in(region, region.offset.saturating_add(self.pos));
     }
 
     pub fn scanner(&mut self) -> &mut Scanner<'a> {

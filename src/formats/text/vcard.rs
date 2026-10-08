@@ -468,6 +468,7 @@ async fn walk(cx: &Cx, c: &Component, skip_begin: bool) -> Result<u64> {
                 node = node.diag(Diagnostic::new(DiagKind::Truncated, "END line missing"));
             }
             count = count.saturating_add(1);
+            lines.progress();
             cx.push(node).await;
             continue;
         }

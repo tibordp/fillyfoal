@@ -166,6 +166,9 @@ pub async fn dissect_obj(cx: Cx, input: Input) -> Result<()> {
             .await;
             break;
         };
+        // Groups are pushed as they end: a file without any is one long
+        // scan before the first child.
+        lines.progress();
         let t = line.piece().trim();
         let (word, rest) = t.split_word();
         if matches!(word.bytes(), b"o" | b"g") {
@@ -243,6 +246,7 @@ async fn group(cx: Cx, g: Group) -> Result<()> {
                 }
                 _ => text_node(word.text(), rest.span(), &rest.text()),
             };
+        lines.progress();
         cx.push(node).await;
     }
     Ok(())

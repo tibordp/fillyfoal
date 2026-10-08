@@ -455,6 +455,8 @@ async fn records(cx: Cx, (db, root): (DbRef, Option<u32>)) -> Result<()> {
                     )));
                     continue;
                 }
+                // Pages visited, out of all pages (an upper bound).
+                cx.progress(to_u64(seen.len()), u64::from(db.last).saturating_add(1));
                 let page = load(&cx, &db, no).await?;
                 let list = items(&db, &page);
                 match page.kind {
@@ -478,6 +480,7 @@ async fn records(cx: Cx, (db, root): (DbRef, Option<u32>)) -> Result<()> {
         }
         None => {
             for no in 1..=db.last {
+                cx.progress(u64::from(no), u64::from(db.last));
                 let page = load(&cx, &db, no).await?;
                 if !matches!(page.kind, 2 | 13) {
                     continue;

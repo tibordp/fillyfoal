@@ -222,6 +222,7 @@ async fn elements(cx: Cx, level: Level) -> Result<()> {
             ));
         }
         node = element(&cx, &level, node, kind, data).await?;
+        cx.progress_in(level.span, whole.end());
         cx.push(node).await;
         pos = pos
             .saturating_add(header.saturating_add(padded))

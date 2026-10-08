@@ -242,6 +242,7 @@ pub async fn dissect_srt(cx: Cx, input: Input) -> Result<()> {
             }
             None => node = node.diag(Diagnostic::malformed("no timing line")),
         }
+        lines.progress();
         cx.push(node).await;
     }
     let mut summary = format!(
@@ -300,6 +301,7 @@ pub async fn dissect_vtt(cx: Cx, input: Input) -> Result<()> {
                 }
             }
         };
+        lines.progress();
         cx.push(node).await;
     }
     cx.annotate(format!(
@@ -381,6 +383,7 @@ pub async fn dissect_microdvd(cx: Cx, input: Input) -> Result<()> {
             let at = a as f64 / rate;
             summary = format!("{summary} ({at:.3} s)");
         }
+        lines.progress();
         cx.push(text_node(format!("Cue {cues}"), line.span, &shown).summary(summary))
             .await;
     }
@@ -450,6 +453,7 @@ pub async fn dissect_lrc(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let text = rest.trim();
+        lines.progress();
         for (s, stamp) in times {
             count = count.saturating_add(1);
             cx.push(

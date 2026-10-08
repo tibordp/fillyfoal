@@ -150,6 +150,7 @@ async fn push(cx: &Cx, span: Span, open: Open, end: u64) {
         first_line: open.first_line,
         header: open.kind == Kind::Header,
     };
+    cx.progress_in(span, span.offset.saturating_add(end));
     cx.push(node.lazy(section, state)).await;
 }
 

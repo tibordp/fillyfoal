@@ -1586,6 +1586,11 @@ async fn content(
                 "markup not terminated",
             ))
         };
+        if own.is_some() {
+            // An element's children (the top level walks one token here).
+            let region = lex.scan.region();
+            cx.progress_in(region, region.offset.saturating_add(lex.pos));
+        }
         cx.push(node).await;
     }
 }

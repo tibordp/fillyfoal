@@ -127,6 +127,9 @@ struct Section {
     states: Vec<u32>,
 }
 
+/// The most shift states kept (a layout's columns).
+const MAX_STATES: usize = 64;
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let prepared = prepare(&cx, input).await?;
     let span = prepared.span;
@@ -185,7 +188,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             if !content.is_empty() {
                 rows = rows.saturating_add(1);
             }
+            // Real layouts have a handful of shift states; the list is
+            // copied into every section, so a bogus file must not grow it.
             if let Some((_, "SHIFTSTATE", _)) = &open
+                && states.len() < MAX_STATES
                 && let Some(v) = content.words().next().and_then(|w| w.text().parse().ok())
             {
                 states.push(v);

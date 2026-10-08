@@ -45,6 +45,7 @@ async fn bitcoin_blocks(cx: Cx, input: Input) -> Result<()> {
         cur.seek(start.saturating_add(8).saturating_add(size.into()));
         blocks = blocks.saturating_add(1);
         first.get_or_insert(header.time);
+        cx.progress(cur.pos(), file.len);
         cx.push(
             BlockHeader::node(format!("Block {blocks}"), header_span, LE)
                 .value(Value::Timestamp {
