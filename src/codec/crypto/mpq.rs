@@ -59,17 +59,41 @@ pub fn hash_string(s: &str, kind: u32) -> u32 {
 
 /// Decrypts little-endian 32-bit words in place (a trailing partial word is
 /// left as is).
-pub fn decrypt(data: &mut [u8], mut key: u32) {
-    let mut seed = 0xeeee_eeeeu32;
-    for word in data.as_chunks_mut::<4>().0 {
-        seed = seed.wrapping_add(table(0x400u32.wrapping_add(key & 0xff)));
-        let ch = u32::from_le_bytes(*word) ^ key.wrapping_add(seed);
-        key = (!key << 0x15).wrapping_add(0x1111_1111) | (key >> 0x0b);
-        seed = ch
-            .wrapping_add(seed)
-            .wrapping_add(seed << 5)
-            .wrapping_add(3);
-        *word = ch.to_le_bytes();
+pub fn decrypt(data: &mut [u8], key: u32) {
+    Decrypt::new(key).apply(data);
+}
+
+/// [`decrypt`] a piece at a time: the cipher state between pieces.
+#[derive(Clone, Copy, Debug)]
+pub struct Decrypt {
+    key: u32,
+    seed: u32,
+}
+
+impl Decrypt {
+    pub fn new(key: u32) -> Self {
+        Decrypt {
+            key,
+            seed: 0xeeee_eeee,
+        }
+    }
+
+    /// Decrypts the next piece of the data in place; every piece but the
+    /// last must be a whole number of words.
+    pub fn apply(&mut self, data: &mut [u8]) {
+        for word in data.as_chunks_mut::<4>().0 {
+            let key = self.key;
+            let seed = self
+                .seed
+                .wrapping_add(table(0x400u32.wrapping_add(key & 0xff)));
+            let ch = u32::from_le_bytes(*word) ^ key.wrapping_add(seed);
+            self.key = (!key << 0x15).wrapping_add(0x1111_1111) | (key >> 0x0b);
+            self.seed = ch
+                .wrapping_add(seed)
+                .wrapping_add(seed << 5)
+                .wrapping_add(3);
+            *word = ch.to_le_bytes();
+        }
     }
 }
 

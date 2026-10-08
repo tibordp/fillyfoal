@@ -25,7 +25,7 @@ use crate::formats::util::arcutil::{count, emit_nodes, hex, human_size, text, ui
 use crate::formats::{Codec, Format, Input, Probe, dissect_or_data, embedded};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
@@ -812,36 +812,32 @@ fn plan(f: &Folder) -> std::result::Result<Plan, String> {
 /// Folders larger than this are decoded on demand.
 const LAZY_THRESHOLD: u64 = 1024 * 1024;
 
+impl Plan {
+    /// The whole folder as one codec: the decompressor, then the filters
+    /// (each a streaming stage of a chain).
+    fn codec(&self) -> Codec {
+        if self.post.is_empty() {
+            return self.codec.clone();
+        }
+        let mut stages = vec![self.codec.clone()];
+        stages.extend(self.post.iter().map(|&p| Codec::PostFilter(p)));
+        Codec::chain("7z coders", "7z coders (lazy)", stages)
+    }
+}
+
 /// The decoded output of the folder packed at `span`: lazily decoded when
-/// large and without post-filters, else decoded in full.
+/// large, else decoded in full.
 async fn folder_output(cx: &Cx, span: Span, plan: &Plan) -> Result<(Span, Option<Diagnostic>)> {
-    if plan.post.is_empty() {
-        if plan.codec == Codec::Stored {
-            return Ok((span, None));
-        }
-        if plan.size > LAZY_THRESHOLD
-            && plan.size <= span.len.saturating_mul(plan.codec.max_ratio())
-        {
-            let decoded = cx.decode_lazy(span, &plan.codec, plan.size)?;
-            return Ok((decoded, None));
-        }
-        let decoded = decode_span(cx, span, &plan.codec, Some(plan.size)).await?;
-        return Ok((decoded.span, decoded.error));
+    let codec = plan.codec();
+    if codec == Codec::Stored {
+        return Ok((span, None));
     }
-    let origin = Origin {
-        parent: span,
-        transform: "7z coders",
-    };
-    if let Some(found) = cx.derived(origin) {
-        return Ok((found.span, found.error));
+    if plan.size > LAZY_THRESHOLD && plan.size <= span.len.saturating_mul(codec.max_ratio()) {
+        let decoded = cx.decode_lazy(span, &codec, plan.size)?;
+        return Ok((decoded, None));
     }
-    let decoded = decode_span(cx, span, &plan.codec, Some(plan.size)).await?;
-    let mut bytes = read_all(cx, decoded.span).await?;
-    for post in &plan.post {
-        post.apply(&mut bytes);
-    }
-    let out = cx.add_derived(origin, bytes, decoded.consumed, decoded.error)?;
-    Ok((out.span, out.error))
+    let decoded = decode_span(cx, span, &codec, Some(plan.size)).await?;
+    Ok((decoded.span, decoded.error))
 }
 
 /// Expander: decodes a folder and dissects `len` bytes at `offset` of its

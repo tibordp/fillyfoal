@@ -87,70 +87,6 @@ async fn sarc(cx: Cx, input: Input) -> Result<()> {
 declare_format!(pub YAZ0 = "yaz0", "Nintendo Yaz0 compressed data", ["szs", "yaz0"], "application/x-yaz0",
     Probe::Magic(&[(0, b"Yaz0"), (0, b"Yaz1")]), yaz0);
 
-/// Yaz0 is a simple LZ77 variant: decode it into a derived source, in
-/// budgeted steps (every group produces at least one byte).
-async fn decode_yaz0(cx: &Cx, src: &[u8], size: usize, limit: usize) -> Result<Vec<u8>> {
-    let mut out = Vec::with_capacity(size.min(limit));
-    let mut at = 0usize;
-    let mut next_yield = 0usize;
-    while out.len() < size {
-        if out.len() >= next_yield {
-            next_yield = out.len().saturating_add(0x10000);
-            cx.checkpoint().await;
-        }
-        let group = *src
-            .get(at)
-            .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?;
-        at = at.saturating_add(1);
-        for bit in (0..8).rev() {
-            if out.len() >= size {
-                break;
-            }
-            if out.len() >= limit {
-                return Err(Diagnostic::limit("Yaz0 output exceeds the limit"));
-            }
-            if group >> bit & 1 == 1 {
-                out.push(
-                    *src.get(at)
-                        .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?,
-                );
-                at = at.saturating_add(1);
-            } else {
-                let b1 = usize::from(
-                    *src.get(at)
-                        .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?,
-                );
-                let b2 = usize::from(
-                    *src.get(at.saturating_add(1))
-                        .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?,
-                );
-                at = at.saturating_add(2);
-                let distance = ((b1 & 0x0f) << 8 | b2).saturating_add(1);
-                let len = if b1 >> 4 == 0 {
-                    let b3 = usize::from(
-                        *src.get(at)
-                            .ok_or_else(|| Diagnostic::malformed("Yaz0 stream ends early"))?,
-                    );
-                    at = at.saturating_add(1);
-                    b3.saturating_add(0x12)
-                } else {
-                    (b1 >> 4).saturating_add(2)
-                };
-                let from = out
-                    .len()
-                    .checked_sub(distance)
-                    .ok_or_else(|| Diagnostic::malformed("Yaz0 back-reference before start"))?;
-                for i in 0..len {
-                    let byte = out.get(from.saturating_add(i)).copied().unwrap_or(0);
-                    out.push(byte);
-                }
-            }
-        }
-    }
-    out.truncate(size);
-    Ok(out)
-}
-
 async fn yaz0(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 16)).await?;
@@ -169,19 +105,13 @@ async fn yaz0(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn yaz0_content(cx: Cx, (input, body, size): (Input, Span, u32)) -> Result<()> {
-    let origin = crate::span::Origin {
-        parent: body,
-        transform: "yaz0",
+    let codec = crate::codec::Codec::Yaz0 {
+        size: u64::from(size),
     };
-    let decoded = match cx.derived(origin) {
-        Some(found) => found,
-        None => {
-            let src = crate::codec::read_all(&cx, body).await?;
-            let limit = crate::bytes::to_usize(cx.limits().max_derived);
-            let out = decode_yaz0(&cx, &src, usize::try_from(size).unwrap_or(0), limit).await?;
-            cx.add_derived(origin, out, body.len, None)?
-        }
-    };
+    let decoded = crate::codec::decode_span(&cx, body, &codec, Some(u64::from(size))).await?;
+    if let Some(e) = decoded.error {
+        cx.diag(e);
+    }
     crate::formats::dissect_or_data(cx, input.nested(decoded.span)).await
 }
 
@@ -723,6 +653,8 @@ const MPQ_ENCRYPTED: u32 = 0x1_0000;
 const MPQ_FIX_KEY: u32 = 0x2_0000;
 const MPQ_SINGLE_UNIT: u32 = 0x100_0000;
 const MPQ_EXISTS: u32 = 0x8000_0000;
+/// Single-unit files decoding to more than this are decoded on demand.
+const MPQ_LAZY: u64 = 1024 * 1024;
 
 #[derive(Clone)]
 struct MpqState {
@@ -769,22 +701,116 @@ impl MpqState {
         None
     }
 
-    /// Reads a file's contents: decrypted and decompressed sector by sector.
-    async fn read_file(&self, cx: &Cx, block: &MpqBlock, name: Option<&str>) -> Result<Vec<u8>> {
-        use crate::codec::crypto::mpq::{decrypt, file_key};
+    /// The decryption key of an encrypted file, from its name.
+    fn key(&self, block: &MpqBlock, name: Option<&str>) -> Result<u32> {
         let data = self.archive.sub(block.offset.into(), block.packed.into());
-        let encrypted = block.flags & MPQ_ENCRYPTED != 0;
-        let key = match (encrypted, name) {
-            (false, _) => 0,
-            (true, Some(n)) => {
-                file_key(n, block.offset, block.size, block.flags & MPQ_FIX_KEY != 0)
-            }
+        match (block.flags & MPQ_ENCRYPTED != 0, name) {
+            (false, _) => Ok(0),
+            (true, Some(n)) => Ok(crate::codec::crypto::mpq::file_key(
+                n,
+                block.offset,
+                block.size,
+                block.flags & MPQ_FIX_KEY != 0,
+            )),
             (true, None) => {
-                return Err(
-                    Diagnostic::unsupported("encrypted file whose name is unknown").at(data),
-                );
+                Err(Diagnostic::unsupported("encrypted file whose name is unknown").at(data))
+            }
+        }
+    }
+
+    /// A single-unit file's contents as a source: decrypted (a piece at a
+    /// time) into a derived source if encrypted, then decoded with the
+    /// codec its mask byte names, eagerly or (when large) lazily. Decoding
+    /// problems come back with the (possibly partial) output.
+    async fn single_unit(
+        &self,
+        cx: &Cx,
+        block: &MpqBlock,
+        name: Option<&str>,
+    ) -> Result<(Span, Option<Diagnostic>)> {
+        use crate::codec::Codec;
+        let key = self.key(block, name)?;
+        let data = self.archive.sub(block.offset.into(), block.packed.into());
+        let span = if block.flags & MPQ_ENCRYPTED == 0 {
+            data
+        } else {
+            let origin = crate::span::Origin {
+                parent: data,
+                transform: "mpq-decrypt",
+            };
+            match cx.derived(origin) {
+                Some(found) => found.span,
+                None => {
+                    let mut raw = crate::codec::read_all(cx, data).await?;
+                    let mut cipher = crate::codec::crypto::mpq::Decrypt::new(key);
+                    for piece in raw.chunks_mut(0x1_0000) {
+                        cipher.apply(piece);
+                        cx.checkpoint().await;
+                    }
+                    cx.add_derived(origin, raw, data.len, None)?.span
+                }
             }
         };
+        let expected = u64::from(block.size);
+        let imploded = block.flags & MPQ_IMPLODE != 0;
+        if !imploded && block.flags & MPQ_COMPRESS == 0 || span.len >= expected {
+            return Ok((span, None));
+        }
+        // Imploded files (an older flag) hold a bare DCL stream; compressed
+        // ones a mask byte naming the codec.
+        let (codec, body) = if imploded {
+            (Codec::DclImplode, span)
+        } else {
+            let head = cx.read(span.sub(0, 15)).await?;
+            let Some(&mask) = head.first() else {
+                return Err(Diagnostic::malformed("empty compressed sector"));
+            };
+            match mask {
+                0x02 => (Codec::Zlib, span.tail(1)),
+                0x08 => (Codec::DclImplode, span.tail(1)),
+                0x10 => (Codec::Bzip2, span.tail(1)),
+                // StormLib: a 0 (no filter) byte, the 5 LZMA properties
+                // bytes and the 8-byte decoded size, then raw LZMA.
+                0x12 => {
+                    let props = match head.get(1) {
+                        Some(0) => crate::codec::lzma::Props::from_byte(
+                            head.get(2).copied().unwrap_or(0xff),
+                        )?,
+                        _ => {
+                            return Err(Diagnostic::unsupported("LZMA sector with a filter"));
+                        }
+                    };
+                    let codec = Codec::LzmaRaw {
+                        props,
+                        size: Some(crate::bytes::to_usize(expected)),
+                        dict: crate::bytes::u32_le(&head, 3),
+                    };
+                    (codec, span.tail(15))
+                }
+                m => {
+                    return Err(Diagnostic::unsupported(format!(
+                        "compression mask {m:#04x}"
+                    )));
+                }
+            }
+        };
+        if expected > MPQ_LAZY && expected <= body.len.saturating_mul(codec.max_ratio()) {
+            return Ok((cx.decode_lazy(body, &codec, expected)?, None));
+        }
+        let decoded = crate::codec::decode_span(cx, body, &codec, Some(expected)).await?;
+        Ok((decoded.span, decoded.error))
+    }
+
+    /// Reads a file's contents: decrypted and decompressed sector by sector.
+    async fn read_file(&self, cx: &Cx, block: &MpqBlock, name: Option<&str>) -> Result<Vec<u8>> {
+        use crate::codec::crypto::mpq::decrypt;
+        if block.flags & MPQ_SINGLE_UNIT != 0 {
+            let (span, _) = self.single_unit(cx, block, name).await?;
+            return crate::codec::read_all(cx, span).await;
+        }
+        let data = self.archive.sub(block.offset.into(), block.packed.into());
+        let encrypted = block.flags & MPQ_ENCRYPTED != 0;
+        let key = self.key(block, name)?;
         // Imploded files (an older flag) hold bare DCL streams; compressed
         // ones a mask byte naming the codec.
         let imploded = block.flags & MPQ_IMPLODE != 0;
@@ -836,9 +862,6 @@ impl MpqState {
                 ))),
             }
         };
-        if block.flags & MPQ_SINGLE_UNIT != 0 {
-            return unit(&raw, 0, crate::bytes::to_usize(block.size.into()));
-        }
         let sector = crate::bytes::to_usize(self.sector.into()).max(1);
         let size = crate::bytes::to_usize(block.size.into());
         let count = size.div_ceil(sector);
@@ -976,6 +999,12 @@ async fn mpq_file(
     let plain = block.flags & (MPQ_COMPRESS | MPQ_IMPLODE | MPQ_ENCRYPTED) == 0;
     let content = if plain {
         span
+    } else if block.flags & MPQ_SINGLE_UNIT != 0 {
+        let (content, error) = state.single_unit(&cx, &block, name.as_deref()).await?;
+        if let Some(e) = error {
+            cx.diag(e);
+        }
+        content
     } else {
         let data = state.read_file(&cx, &block, name.as_deref()).await?;
         cx.add_derived(

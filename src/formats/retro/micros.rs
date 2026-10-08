@@ -13,7 +13,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -1028,7 +1028,6 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
 // BinHex 4.0
 
 const BINHEX_BANNER: &[u8] = b"(This file must be converted with BinHex";
-const BINHEX_ALPHABET: &[u8] = b"!\"#$%&'()*+,-012345689@ABCDEFGHIJKLMNPQRSTUVXYZ[`abcdefhijklmpqr";
 
 fn binhex_probe(h: &Head<'_>) -> bool {
     h.data
@@ -1039,58 +1038,30 @@ fn binhex_probe(h: &Head<'_>) -> bool {
 declare_format!(pub BINHEX = "binhex", "BinHex 4.0 encoded Mac file", ["hqx"],
     "application/mac-binhex40", Probe::Custom(binhex_probe), binhex);
 
-/// Decodes the 6-bit text and the 0x90 run-length encoding (in budgeted
-/// steps: the input can be as large as a read).
-async fn binhex_decode(cx: &Cx, encoded: &[u8], limit: usize) -> (Vec<u8>, Option<Diagnostic>) {
-    let mut bits = Vec::new();
-    let (mut acc, mut n) = (0u32, 0u32);
-    for (i, &c) in encoded.iter().enumerate() {
-        if i & 0xffff == 0xffff {
-            cx.checkpoint().await;
-        }
-        if c == b':' {
+/// Whether the BinHex CRC of `section` (CRC-16/XMODEM over it followed by
+/// two zero bytes) is `stored`, read a piece at a time.
+async fn binhex_crc_ok(cx: &Cx, section: Span, stored: u16) -> Result<bool> {
+    use crate::codec::crc::CRC16_XMODEM;
+    let mut crc = CRC16_XMODEM.init();
+    let mut pos = 0u64;
+    while pos < section.len {
+        let piece = cx.read(section.sub(pos, 0x1_0000)).await?;
+        if piece.is_empty() {
             break;
         }
-        let Some(v) = BINHEX_ALPHABET.iter().position(|&a| a == c) else {
-            continue;
-        };
-        acc = (acc << 6 | u32::try_from(v).unwrap_or(0)) & 0x00ff_ffff;
-        n = n.saturating_add(6);
-        if n >= 8 {
-            n = n.saturating_sub(8);
-            bits.push(u8::try_from(acc >> n & 0xff).unwrap_or(0));
-        }
+        crc = CRC16_XMODEM.update(crc, &piece);
+        pos = pos.saturating_add(to_u64(piece.len()));
     }
-    let mut out: Vec<u8> = Vec::with_capacity(bits.len());
-    let mut it = bits.iter().copied();
-    let mut steps = 0u32;
-    while let Some(b) = it.next() {
-        steps = steps.wrapping_add(1);
-        if steps & 0xffff == 0 {
-            cx.checkpoint().await;
-        }
-        if b == 0x90 {
-            match it.next() {
-                Some(0) => out.push(0x90),
-                Some(count) => {
-                    let last = out.last().copied().unwrap_or(0);
-                    for _ in 1..count {
-                        out.push(last);
-                    }
-                }
-                None => break,
-            }
-        } else {
-            out.push(b);
-        }
-        if out.len() > limit {
-            return (
-                out,
-                Some(Diagnostic::limit("decoded BinHex data too large")),
-            );
-        }
+    crc = CRC16_XMODEM.update(crc, &[0, 0]);
+    Ok(CRC16_XMODEM.finish(crc) == u64::from(stored))
+}
+
+/// The big-endian CRC at `at` of `body`, if it is all there.
+async fn binhex_crc_at(cx: &Cx, body: Span, at: u64) -> Result<Option<u16>> {
+    if at.saturating_add(2) > body.len {
+        return Ok(None);
     }
-    (out, None)
+    Ok(u16_be(&cx.read(body.sub(at, 2)).await?, 0))
 }
 
 async fn binhex(cx: Cx, input: Input) -> Result<()> {
@@ -1126,28 +1097,16 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
         .and_then(|r| r.iter().position(|&b| b == b':'))
         .map_or(raw.len(), |p| start.saturating_add(p));
     let encoded = file.sub(to_u64(start), to_u64(end.saturating_sub(start)));
-    let (decoded, error) = binhex_decode(
-        &cx,
-        raw.get(start..end).unwrap_or_default(),
-        usize::try_from(cx.limits().max_derived / 4).unwrap_or(usize::MAX),
-    )
-    .await;
-    let derived = cx.add_derived(
-        Origin {
-            parent: encoded,
-            transform: "binhex",
-        },
-        decoded.clone(),
-        encoded.len,
-        error,
-    )?;
-    let body = derived.span;
+    // A decoding problem stays with the derived source, as for any codec.
+    let body = crate::codec::decode_span(&cx, encoded, &Codec::BinHex, None)
+        .await?
+        .span;
     cx.emit(Node::new("Encoded data").span(encoded).summary(format!(
         "{} → {}",
         size(encoded.len),
         size(body.len)
     )));
-    let name_len = u64::from(decoded.first().copied().unwrap_or(0));
+    let name_len = u64::from(cx.read(body.sub(0, 1)).await?.first().copied().unwrap_or(0));
     let hlen = name_len.saturating_add(22);
     let hspan = body.sub(0, hlen);
     let head = cx.block(hspan).await?;
@@ -1162,18 +1121,10 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
     let rsrc_len = u64::from(f.u32("Resource fork length").emit()?);
     let stored = f.u16("Header CRC").hex().emit()?;
     let mut status = Vec::new();
-    // BinHex CRC: CRC-16/XMODEM over the section followed by two zero bytes.
-    let check = |data: &[u8], stored: u16| {
-        let mut v = data.to_vec();
-        v.extend_from_slice(&[0, 0]);
-        crc16_xmodem(&v) == stored
-    };
-    if !check(
-        decoded
-            .get(..usize::try_from(hlen.saturating_sub(2)).unwrap_or(0))
-            .unwrap_or_default(),
-        stored,
-    ) {
+    // The header CRC covers the header before it (nothing if truncated).
+    let covered = hlen.saturating_sub(2);
+    let covered = body.sub(0, if body.len >= covered { covered } else { 0 });
+    if !binhex_crc_ok(&cx, covered, stored).await? {
         status.push("header CRC mismatch");
     }
     let data = body.sub(hlen, data_len);
@@ -1189,20 +1140,13 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
             .summary(size(rsrc_len)),
         );
     }
-    let crc_at = |at: u64| u16_be(&decoded, usize::try_from(at).unwrap_or(usize::MAX));
-    let section = |from: u64, len: u64| {
-        decoded
-            .get(
-                usize::try_from(from).unwrap_or(0)
-                    ..usize::try_from(from.saturating_add(len)).unwrap_or(0),
-            )
-            .unwrap_or_default()
-    };
-    if crc_at(hlen.saturating_add(data_len)).is_some_and(|c| !check(section(hlen, data_len), c)) {
+    if let Some(c) = binhex_crc_at(&cx, body, hlen.saturating_add(data_len)).await?
+        && !binhex_crc_ok(&cx, body.sub(hlen, data_len), c).await?
+    {
         status.push("data CRC mismatch");
     }
-    if crc_at(rsrc_at.saturating_add(rsrc_len))
-        .is_some_and(|c| !check(section(rsrc_at, rsrc_len), c))
+    if let Some(c) = binhex_crc_at(&cx, body, rsrc_at.saturating_add(rsrc_len)).await?
+        && !binhex_crc_ok(&cx, body.sub(rsrc_at, rsrc_len), c).await?
     {
         status.push("resource CRC mismatch");
     }
