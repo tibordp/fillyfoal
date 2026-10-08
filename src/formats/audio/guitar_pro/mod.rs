@@ -1201,54 +1201,143 @@ impl Tally {
     }
 }
 
-/// One measure across all tracks.
-fn measure(f: &mut Fields<'_>, song: &Arc<Song>) -> Result<Tally> {
-    let ver = song.ver.unwrap_or(Ver {
+/// Beats read between two checkpoints.
+const BEATS_PER_STEP: i32 = 64;
+
+/// The version measures are read as.
+fn song_ver(song: &Song) -> Ver {
+    song.ver.unwrap_or(Ver {
         major: 5,
         v510: true,
-    });
+    })
+}
+
+/// Skips one measure across all tracks, charging per track and per beat.
+async fn measure(cx: &Cx, f: &mut Fields<'_>, song: &Song) -> Result<Tally> {
+    let ver = song_ver(song);
     let mut total = Tally::default();
-    for (i, t) in song.tracks.iter().enumerate() {
-        let name = format!("Track {}", i.saturating_add(1));
-        let tally = group(f, name, &(ver, t.strings), track_measure, |t| {
-            Some(t.summary())
-        })?;
-        total.add(tally);
+    for t in &song.tracks {
+        cx.checkpoint().await;
+        total.add(track_measure(cx, f, &(ver, t.strings)).await?);
     }
     Ok(total)
 }
 
-/// One track's part of a measure: its voices.
-fn track_measure(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
-    let voices = if ctx.0.major >= 5 { 2 } else { 1 };
+/// The voices of a measure in this version.
+fn voices(ver: Ver) -> usize {
+    if ver.major >= 5 { 2 } else { 1 }
+}
+
+/// Skips one track's part of a measure: its voices.
+async fn track_measure(cx: &Cx, f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
     let mut total = Tally::default();
-    for name in ["Voice 1", "Voice 2"].into_iter().take(voices) {
-        let tally = group(f, name, ctx, voice, |t| Some(t.summary()))?;
-        total.add(tally);
+    for _ in 0..voices(ctx.0) {
+        total.add(voice(cx, f, ctx).await?);
     }
-    // Writers may leave out the last measure's line break at the end of
-    // the file (PyGuitarPro reads it as 0 then).
+    line_break(f, ctx)?;
+    Ok(total)
+}
+
+/// Writers may leave out the last measure's line break at the end of the
+/// file (PyGuitarPro reads it as 0 then).
+fn line_break(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<()> {
     if ctx.0.major >= 5 && f.remaining() > 0 {
         f.u8("Line break")
             .enumeration(&[(0, "none"), (1, "break"), (2, "protect")])
             .emit()?;
     }
-    Ok(total)
+    Ok(())
 }
 
-fn voice(f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
+/// Skips a voice: its beat count and beats.
+async fn voice(cx: &Cx, f: &mut Fields<'_>, ctx: &(Ver, u8)) -> Result<Tally> {
     let count = i32f(f, "Beat count")?;
     let mut tally = Tally::default();
     for i in 0..count.max(0) {
-        let b = group(f, format!("Beat {}", i.saturating_add(1)), ctx, beat, |b| {
-            Some(b.summary())
-        })?;
+        if i % BEATS_PER_STEP == BEATS_PER_STEP.saturating_sub(1) {
+            cx.checkpoint().await;
+        }
+        let b = beat(f, ctx)?;
         tally.beats = tally.beats.saturating_add(1);
         tally.notes = tally
             .notes
             .saturating_add(crate::bytes::to_u64(b.notes.len()));
     }
     Ok(tally)
+}
+
+/// A measure: one node per track.
+async fn measure_view(cx: Cx, (span, song): (Span, Arc<Song>)) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::new(&block, LE);
+    let ver = song_ver(&song);
+    for (i, t) in song.tracks.iter().enumerate() {
+        let ctx = (ver, t.strings);
+        let start = f.pos();
+        let tally = track_measure(&cx, &mut f, &ctx).await;
+        let at = since(&f, start);
+        let node = Node::new(format!("Track {}", i.saturating_add(1)))
+            .span(at)
+            .lazy(track_view, (at, ctx));
+        match tally {
+            Ok(t) => cx.push(node.summary(t.summary())).await,
+            Err(e) => {
+                cx.push(node).await;
+                return Err(e);
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One track's part of a measure: its voices and line break.
+async fn track_view(cx: Cx, (span, ctx): (Span, (Ver, u8))) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::new(&block, LE);
+    for name in ["Voice 1", "Voice 2"].into_iter().take(voices(ctx.0)) {
+        let start = f.pos();
+        let tally = voice(&cx, &mut f, &ctx).await;
+        let at = since(&f, start);
+        let node = Node::new(name).span(at).lazy(voice_view, (at, ctx));
+        match tally {
+            Ok(t) => cx.emit(node.summary(t.summary())),
+            Err(e) => {
+                cx.emit(node);
+                return Err(e);
+            }
+        }
+    }
+    let mut f2 = Fields::emitting(&cx, &block, LE);
+    f2.seek(f.pos());
+    line_break(&mut f2, &ctx)
+}
+
+/// A voice: its beat count and one node per beat.
+async fn voice_view(cx: Cx, (span, ctx): (Span, (Ver, u8))) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    let count = i32f(&mut f, "Beat count")?;
+    for i in 0..count.max(0) {
+        let start = f.pos();
+        let mut probe = Fields::new(&block, LE);
+        probe.seek(start);
+        let result = beat(&mut probe, &ctx);
+        let len = probe.pos().saturating_sub(start);
+        let mut node = struct_node(
+            format!("Beat {}", i.saturating_add(1)),
+            f.peek_span(len),
+            LE,
+            ctx,
+            beat,
+        );
+        if let Ok(b) = &result {
+            node = node.summary(b.summary());
+        }
+        cx.push(node).await;
+        f.seek(start.saturating_add(len));
+        result?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Default)]
@@ -1676,15 +1765,11 @@ async fn measures_walk(cx: Cx, (span, song): (Span, Arc<Song>)) -> Result<()> {
     for (i, h) in song.headers.iter().enumerate().skip(first) {
         let start = f.pos();
         cx.mark(move || (start, i));
-        let tally = measure(&mut f, &song);
+        let tally = measure(&cx, &mut f, &song).await;
         let at = since(&f, start);
-        let mut node = struct_node(
-            format!("Measure {}", i.saturating_add(1)),
-            at,
-            LE,
-            song.clone(),
-            measure,
-        );
+        let mut node = Node::new(format!("Measure {}", i.saturating_add(1)))
+            .span(at)
+            .lazy(measure_view, (at, song.clone()));
         let time = times.get(i).copied().unwrap_or((4, 4));
         let mut summary = format!("{}/{}", time.0, time.1);
         if let Some(m) = &h.marker {
