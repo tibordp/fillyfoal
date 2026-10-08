@@ -327,6 +327,17 @@ impl Session {
         lock(&self.shared).source_len(source)
     }
 
+    /// Whether [`Session::source_len`] is the real length. It is not for a
+    /// lazily decoded stream whose size nothing records (a `.tar.bz2`, or a
+    /// zstd stream written to a pipe) until it has been decoded to its end:
+    /// until then the length is an upper bound, and reads past the real end
+    /// come back short.
+    pub fn source_len_known(&self, source: SourceId) -> bool {
+        lock(&self.shared)
+            .source(source)
+            .is_none_or(|s| s.len_known)
+    }
+
     /// Shrinks a source, e.g. when the host finds the file shorter than
     /// announced. Pending reads beyond the new end become truncations.
     pub fn set_source_len(&mut self, source: SourceId, len: u64) {

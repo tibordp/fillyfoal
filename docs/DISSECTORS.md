@@ -273,6 +273,15 @@ an input a thousand times larger than the fixture.
   decoded bytes yourself (e.g. a compressed text chunk); `cx.decode_lazy`
   for a lazily decoded source. Never read the *end* of a large lazily
   decoded member unless the user asked for it.
+- Where the decoded size is not recorded (bzip2, zstd or LZ4 written to a
+  pipe, Brotli), `expand_content(.., None)` decodes small streams eagerly
+  and large ones with `cx.decode_lazy_unsized`: the source's length is then
+  an upper bound until the stream has been read to its end
+  (`Cx::len_known` / `Session::source_len_known`). Do not compute a total
+  by walking the whole encoded stream first (e.g. summing per-frame sizes
+  over every zstd block): that reads the entire file before the first
+  decoded byte, which is exactly what lazy decoding avoids. Dissectors over
+  such content should walk from the start rather than look at the tail.
 - **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
   sector chains, SQLite overflow pages): describe it as pieces instead of
   copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },

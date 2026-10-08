@@ -309,11 +309,16 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 /// The decompressed content. When every frame records its content size,
-/// the total is known up front and a large stream decodes lazily.
+/// the total is known up front. Adding it up means walking every block of
+/// every frame (frames do not record their encoded size), which for a large
+/// file is a read of all of it before the first decoded byte; so it is only
+/// done for small files, and a large stream decodes lazily with its size
+/// found at the end.
 async fn decompressed(cx: Cx, input: Input) -> Result<()> {
+    const WALK_LIMIT: u64 = 1024 * 1024;
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
-    let mut total = Some(0u64);
+    let mut total = (file.len <= WALK_LIMIT).then_some(0u64);
     while !cur.at_end() && total.is_some() {
         let start = cur.pos();
         let Some(magic) = u32_le(&cur.peek(4).await?, 0) else {

@@ -101,6 +101,10 @@ pub(crate) struct SourceEntry {
     /// lazily too, but is not "on demand" to dissectors: what they see must
     /// not depend on eviction).
     pub on_demand: bool,
+    /// Whether `len` is the real length. A lazily decoded stream whose size
+    /// nothing records gets an upper bound (see [`Cx::decode_lazy_unsized`])
+    /// that shrinks to the real length once the stream has been decoded.
+    pub len_known: bool,
 }
 
 impl SourceEntry {
@@ -116,6 +120,7 @@ impl SourceEntry {
             recipe: None,
             used: 0,
             on_demand: false,
+            len_known: true,
         }
     }
 
@@ -520,9 +525,14 @@ impl Shared {
             if let Some(len) = finished_len {
                 entry.len = entry.len.min(len);
             }
+            let declared_known = entry.len_known;
+            if finished_len.is_some() {
+                entry.len_known = true;
+            }
             // A stream that ended short of the size its container
             // declared is reported like a decoding error.
             if failure.is_none()
+                && declared_known
                 && let Some(len) = finished_len.filter(|&l| l < declared)
             {
                 failure = Some(Diagnostic::warning(format!(
@@ -809,6 +819,15 @@ impl Cx {
         .at(span))
     }
 
+    /// Whether `source`'s length is known; `false` for a lazily decoded
+    /// stream of unrecorded size that has not been decoded to its end yet,
+    /// whose length is an upper bound (see [`Cx::decode_lazy_unsized`]).
+    pub fn len_known(&self, source: SourceId) -> bool {
+        lock(&self.shared)
+            .source(source)
+            .is_none_or(|s| s.len_known)
+    }
+
     /// Whether `source` is decoded on demand (reading its end decodes it all).
     pub fn is_lazy(&self, source: SourceId) -> bool {
         lock(&self.shared)
@@ -894,6 +913,7 @@ impl Cx {
             recipe,
             used: tick,
             on_demand: false,
+            len_known: true,
         });
         sh.derived.insert(origin, id);
         Ok(crate::codec::Decoded {
@@ -960,6 +980,7 @@ impl Cx {
             recipe: None,
             used: tick,
             on_demand: false,
+            len_known: true,
         });
         sh.derived.insert(origin, id);
         Span::new(id, 0, len)
@@ -1010,6 +1031,23 @@ impl Cx {
     /// actually produces come back short. Memoized like other derived
     /// sources; decoded bytes count against `Limits::max_derived`.
     pub fn decode_lazy(&self, span: Span, codec: &Codec, len: u64) -> Result<Span> {
+        self.register_lazy(span, codec, len, true)
+    }
+
+    /// [`Cx::decode_lazy`] for a stream whose decoded size nothing records
+    /// (bzip2, zstd or LZ4 written to a pipe, ...). The source's length is an
+    /// upper bound, the encoded size times the codec's maximum ratio, until
+    /// the stream has been decoded to its end; then it shrinks to the real
+    /// length. Reads past the real end come back short, and reading the end
+    /// of the span decodes the whole stream, so dissectors over such a
+    /// source should walk it from the start (as tar does) rather than look
+    /// at its tail.
+    pub fn decode_lazy_unsized(&self, span: Span, codec: &Codec) -> Result<Span> {
+        let bound = span.len.saturating_mul(codec.max_ratio()).max(span.len);
+        self.register_lazy(span, codec, bound, false)
+    }
+
+    fn register_lazy(&self, span: Span, codec: &Codec, len: u64, len_known: bool) -> Result<Span> {
         let Some(fresh) = LazyDecode::new(span, codec) else {
             return Ok(span);
         };
@@ -1034,6 +1072,7 @@ impl Cx {
             recipe: Some(codec.clone()),
             used: tick,
             on_demand: true,
+            len_known,
         });
         sh.derived.insert(origin, id);
         Ok(Span::new(id, 0, len))

@@ -281,3 +281,105 @@ fn addresses_carry_reinterpretation_across_sessions() {
     let i = second.session.interpretation(id).unwrap();
     assert_eq!((i.format.map(|f| f.name), i.forced), (Some("der"), true));
 }
+
+/// A ustar archive of `files` members of `size` bytes each.
+fn ustar(files: usize, size: usize) -> Vec<u8> {
+    let mut out = Vec::new();
+    for i in 0..files {
+        let mut h = [0u8; 512];
+        let name = format!("member{i}.bin");
+        h[..name.len()].copy_from_slice(name.as_bytes());
+        h[100..108].copy_from_slice(b"0000644\0");
+        h[108..116].copy_from_slice(b"0000000\0");
+        h[116..124].copy_from_slice(b"0000000\0");
+        h[124..136].copy_from_slice(format!("{size:011o}\0").as_bytes());
+        h[136..148].copy_from_slice(b"00000000000\0");
+        h[156] = b'0';
+        h[257..263].copy_from_slice(b"ustar\0");
+        h[263..265].copy_from_slice(b"00");
+        h[148..156].copy_from_slice(b"        ");
+        let sum: u32 = h.iter().map(|&b| u32::from(b)).sum();
+        h[148..156].copy_from_slice(format!("{sum:06o}\0 ").as_bytes());
+        out.extend_from_slice(&h);
+        out.extend((0..size).map(|j| (i * 31 + j * 7) as u8));
+        out.resize(out.len().next_multiple_of(512), 0);
+    }
+    out.resize(out.len() + 1024, 0);
+    out
+}
+
+/// A zstd frame of raw blocks with no content size, as `zstd` writes when
+/// compressing a pipe.
+fn zstd_unsized(data: &[u8]) -> Vec<u8> {
+    let mut out = vec![0x28, 0xb5, 0x2f, 0xfd, 0x00, 0x58]; // no FCS; 8 MiB window
+    let chunks: Vec<&[u8]> = data.chunks(128 * 1024).collect();
+    for (i, chunk) in chunks.iter().enumerate() {
+        let last = u32::from(i + 1 == chunks.len());
+        let header = last | ((chunk.len() as u32) << 3); // raw block
+        out.extend_from_slice(&header.to_le_bytes()[..3]);
+        out.extend_from_slice(chunk);
+    }
+    out
+}
+
+/// A large compressed stream whose decoded size nothing records is decoded
+/// on demand: its first member is listed after reading a small part of the
+/// file (not after decoding all of it), with a provisional length that
+/// becomes the real one once the stream has been read to its end.
+#[test]
+fn unsized_streams_are_decoded_on_demand() {
+    let tar = ustar(6, 1 << 20);
+    let file = zstd_unsized(&tar);
+    let mut host = Host::named("big.tar.zst", file.clone(), Limits::default());
+    host.session.expand(host.root, 1);
+    let root = host.root;
+    while host.child(root, "Decompressed").is_none() {
+        match host.session.poll_node(root, 10_000) {
+            Progress::NeedBytes(r) => supply(&mut host, r),
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let content = host.child(root, "Decompressed").unwrap();
+    host.bytes_supplied = 0;
+    host.session.expand(content, 1);
+    let mut first = None;
+    while first.is_none() {
+        match host.session.poll_node(content, 10_000) {
+            Progress::NeedBytes(r) => {
+                host.bytes_supplied += r.iter().map(|r| r.len).sum::<u64>();
+                supply(&mut host, r);
+            }
+            Progress::Idle => panic!("no members"),
+            _ => {}
+        }
+        first = host.session.children(content).unwrap().ids.first().copied();
+    }
+    let member = host.session.node(first.unwrap()).unwrap();
+    assert_eq!(member.name, "member0.bin");
+    assert!(
+        host.bytes_supplied < file.len() as u64 / 3,
+        "read {} of {} bytes before the first member",
+        host.bytes_supplied,
+        file.len()
+    );
+    let source = member.span.unwrap().source;
+    assert!(!host.session.source_len_known(source));
+    assert!(host.session.source_len(source) >= tar.len() as u64);
+
+    // Reading to the end finds the real length.
+    let all = Span::new(source, 0, host.session.source_len(source));
+    let data = loop {
+        match host
+            .session
+            .read_step(all.sub(tar.len() as u64 - 16, 1 << 20), 10_000)
+        {
+            ReadProgress::Done(data) => break data,
+            ReadProgress::NeedBytes(r) => supply(&mut host, r),
+            ReadProgress::Yielded => {}
+        }
+    };
+    assert_eq!(data, tar[tar.len() - 16..]);
+    assert!(host.session.source_len_known(source));
+    assert_eq!(host.session.source_len(source), tar.len() as u64);
+}

@@ -1901,6 +1901,10 @@ pub async fn dissect_or_data(cx: Cx, input: Input) -> Result<()> {
 
 /// Members larger than this are decompressed lazily rather than up front.
 const LAZY_THRESHOLD: u64 = 1024 * 1024;
+/// Encoded streams of unrecorded decoded size above this many bytes are
+/// decoded on demand (their output could be any size up to the codec's
+/// maximum ratio).
+const UNSIZED_LAZY_THRESHOLD: u64 = 64 * 1024;
 
 pub use crate::codec::Codec;
 
@@ -1939,6 +1943,15 @@ pub async fn expand_content(
             let len = expected.unwrap_or(0);
             let decoded = cx.decode_lazy(span, &codec, len)?;
             cx.annotate(format!("{len:#x} bytes, decoded on demand"));
+            input.nested(decoded)
+        }
+        // Nothing records the decoded size: rather than decode the whole
+        // stream before its first bytes can be dissected, decode on demand
+        // with a provisional length (see `Cx::decode_lazy_unsized`). Small
+        // streams are decoded eagerly, which reports their exact size.
+        codec if expected.is_none() && span.len > UNSIZED_LAZY_THRESHOLD => {
+            let decoded = cx.decode_lazy_unsized(span, &codec)?;
+            cx.annotate("size unknown, decoded on demand");
             input.nested(decoded)
         }
         codec => {
