@@ -3,13 +3,46 @@
 
 use super::der;
 use crate::codec::crypto::{
-    Aes, Des, Hash, Rc2, Sha1, Sha256, Sha384, Sha512, TripleDes, bmp_password, cbc_decrypt,
-    pbkdf2, pkcs12_kdf, rc4, unpad_pkcs7,
+    self, Aes, Des, Hash, Pbkdf2, Pkcs12Kdf, Rc2, Sha1, Sha256, Sha384, Sha512, TripleDes,
+    bmp_password, cbc_decrypt, rc4, unpad_pkcs7,
 };
+use crate::cx::Cx;
 
 /// Key derivations beyond this many iterations are refused (hostile input
-/// could otherwise make one expansion run for hours).
+/// could otherwise make one expansion run for hours). The derivations run
+/// in budgeted steps either way.
 pub const MAX_ITERATIONS: u64 = 10_000_000;
+
+/// The longest PBES2 key we derive (the ciphers take at most 32 bytes; the
+/// length comes from the file and multiplies the work).
+const MAX_KEY_LEN: usize = 64;
+
+/// PBKDF2 with HMAC-`H`, run in budgeted steps.
+async fn pbkdf2<H: Hash>(
+    cx: &Cx,
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    len: usize,
+) -> Vec<u8> {
+    let mut kdf = Pbkdf2::<H>::new(password, salt, iterations, len);
+    crypto::run(cx, &mut kdf).await;
+    kdf.finish()
+}
+
+/// The PKCS#12 key derivation with hash `H`, run in budgeted steps.
+async fn pkcs12_kdf<H: Hash>(
+    cx: &Cx,
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    id: u8,
+    len: usize,
+) -> Vec<u8> {
+    let mut kdf = Pkcs12Kdf::<H>::new(password, salt, iterations, id, len);
+    crypto::run(cx, &mut kdf).await;
+    kdf.finish()
+}
 
 /// Why decryption did not happen.
 #[derive(Debug, PartialEq, Eq)]
@@ -160,8 +193,13 @@ impl Password<'_> {
 
 /// Decrypts `ciphertext` encrypted with algorithm `alg` (an
 /// AlgorithmIdentifier's content) under `password`. The result is unpadded
-/// and checked to start like DER.
-pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<Vec<u8>, Failure> {
+/// and checked to start like DER. The key derivation runs in budgeted steps.
+pub async fn decrypt(
+    cx: &Cx,
+    alg: &[u8],
+    password: Password<'_>,
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, Failure> {
     let (oid, params) =
         algorithm(alg).ok_or_else(|| Failure::Unsupported("malformed algorithm".into()))?;
     let plain = if let Some((_, cipher, key_len, iv_len)) = pkcs12_pbe(&oid) {
@@ -169,8 +207,8 @@ pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<
             .ok_or_else(|| Failure::Unsupported("malformed PBE parameters".into()))?;
         let iterations = check_iterations(iterations)?;
         let pw = password.bmp();
-        let key = pkcs12_kdf::<Sha1>(&pw, salt, iterations, 1, key_len);
-        let iv = pkcs12_kdf::<Sha1>(&pw, salt, iterations, 2, iv_len);
+        let key = pkcs12_kdf::<Sha1>(cx, &pw, salt, iterations, 1, key_len).await;
+        let iv = pkcs12_kdf::<Sha1>(cx, &pw, salt, iterations, 2, iv_len).await;
         match cipher {
             Pkcs12Cipher::Rc4 => return Ok(rc4(&key, ciphertext)),
             Pkcs12Cipher::TripleDes => {
@@ -184,7 +222,7 @@ pub fn decrypt(alg: &[u8], password: Password<'_>, ciphertext: &[u8]) -> Result<
             }
         }
     } else if oid == "1.2.840.113549.1.5.13" {
-        pbes2(params, password.text, ciphertext)?
+        pbes2(cx, params, password.text, ciphertext).await?
     } else {
         return Err(Failure::Unsupported(format!("encryption algorithm {oid}")));
     };
@@ -200,7 +238,12 @@ fn unpad(data: Vec<u8>, block: usize) -> Result<Vec<u8>, Failure> {
         .ok_or(Failure::Wrong)
 }
 
-fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, Failure> {
+async fn pbes2(
+    cx: &Cx,
+    params: &[u8],
+    password: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, Failure> {
     let bad = || Failure::Unsupported("malformed PBES2 parameters".into());
     let mut it = der::elements(params);
     let (_, kdf) = it.next().ok_or_else(bad)?;
@@ -236,11 +279,14 @@ fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, F
         other => return Err(Failure::Unsupported(format!("cipher {other}"))),
     };
     let len = key_len.unwrap_or(len);
+    if len > MAX_KEY_LEN {
+        return Err(Failure::Unsupported(format!("{len}-byte key")));
+    }
     let key = match prf.as_str() {
-        "1.2.840.113549.2.7" => pbkdf2::<Sha1>(password, salt, iterations, len),
-        "1.2.840.113549.2.9" => pbkdf2::<Sha256>(password, salt, iterations, len),
-        "1.2.840.113549.2.10" => pbkdf2::<Sha384>(password, salt, iterations, len),
-        "1.2.840.113549.2.11" => pbkdf2::<Sha512>(password, salt, iterations, len),
+        "1.2.840.113549.2.7" => pbkdf2::<Sha1>(cx, password, salt, iterations, len).await,
+        "1.2.840.113549.2.9" => pbkdf2::<Sha256>(cx, password, salt, iterations, len).await,
+        "1.2.840.113549.2.10" => pbkdf2::<Sha384>(cx, password, salt, iterations, len).await,
+        "1.2.840.113549.2.11" => pbkdf2::<Sha512>(cx, password, salt, iterations, len).await,
         other => return Err(Failure::Unsupported(format!("PRF {other}"))),
     };
     match enc_oid.as_str() {
@@ -264,7 +310,12 @@ fn pbes2(params: &[u8], password: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, F
 
 /// Checks a PKCS#12 MAC (`mac_data` is MacData's content) over
 /// `auth_safe` (the bytes of the authenticated safe) with `password`.
-pub fn verify_mac(mac_data: &[u8], password: Password<'_>, auth_safe: &[u8]) -> Option<bool> {
+pub async fn verify_mac(
+    cx: &Cx,
+    mac_data: &[u8],
+    password: Password<'_>,
+    auth_safe: &[u8],
+) -> Option<bool> {
     let mut it = der::elements(mac_data);
     let (_, digest_info) = it.next()?;
     let (_, salt) = it.next()?;
@@ -276,18 +327,24 @@ pub fn verify_mac(mac_data: &[u8], password: Password<'_>, auth_safe: &[u8]) -> 
     let (oid, _) = algorithm(alg)?;
     let pw = password.bmp();
     let mac = match oid.as_str() {
-        "1.3.14.3.2.26" => mac::<Sha1>(&pw, salt, iterations, auth_safe),
-        "2.16.840.1.101.3.4.2.1" => mac::<Sha256>(&pw, salt, iterations, auth_safe),
-        "2.16.840.1.101.3.4.2.2" => mac::<Sha384>(&pw, salt, iterations, auth_safe),
-        "2.16.840.1.101.3.4.2.3" => mac::<Sha512>(&pw, salt, iterations, auth_safe),
+        "1.3.14.3.2.26" => mac::<Sha1>(cx, &pw, salt, iterations, auth_safe).await,
+        "2.16.840.1.101.3.4.2.1" => mac::<Sha256>(cx, &pw, salt, iterations, auth_safe).await,
+        "2.16.840.1.101.3.4.2.2" => mac::<Sha384>(cx, &pw, salt, iterations, auth_safe).await,
+        "2.16.840.1.101.3.4.2.3" => mac::<Sha512>(cx, &pw, salt, iterations, auth_safe).await,
         _ => return None,
     };
     Some(mac == digest)
 }
 
-fn mac<H: Hash>(password: &[u8], salt: &[u8], iterations: u32, data: &[u8]) -> Vec<u8> {
-    let key = pkcs12_kdf::<H>(password, salt, iterations, 3, H::OUT);
-    crate::codec::crypto::hmac::<H>(&key, data)
+async fn mac<H: Hash>(
+    cx: &Cx,
+    password: &[u8],
+    salt: &[u8],
+    iterations: u32,
+    data: &[u8],
+) -> Vec<u8> {
+    let key = pkcs12_kdf::<H>(cx, password, salt, iterations, 3, H::OUT).await;
+    crypto::hmac::<H>(&key, data)
 }
 
 #[cfg(test)]

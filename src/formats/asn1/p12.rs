@@ -89,16 +89,37 @@ fn encrypted_data<'a>(el: &El<'a>) -> Option<Encrypted<'a>> {
     })
 }
 
+/// How a password candidate is checked (the key derivation is expensive,
+/// so checks run in budgeted steps).
+enum Check<'a> {
+    /// Against the PKCS#12 MAC (MacData's content) over the authSafe bytes.
+    Mac { mac: &'a [u8], data: &'a [u8] },
+    /// By a trial decryption with this algorithm.
+    Decrypt { alg: &'a [u8], data: &'a [u8] },
+    /// Nothing to check against: anything goes.
+    Nothing,
+}
+
+impl Check<'_> {
+    async fn accepts(&self, cx: &Cx, p: Password<'_>) -> bool {
+        match *self {
+            Check::Mac { mac, data } => pbe::verify_mac(cx, mac, p, data).await == Some(true),
+            Check::Decrypt { alg, data } => pbe::decrypt(cx, alg, p, data).await.is_ok(),
+            Check::Nothing => true,
+        }
+    }
+}
+
 /// The password, if one works: free candidates first (checked with the MAC
 /// or by a trial decryption), then the host.
 async fn password(
     cx: &Cx,
     realm: Span,
     prompt: &str,
-    check: &(dyn Fn(Password<'_>) -> bool + Sync),
+    check: &Check<'_>,
 ) -> Option<(Vec<u8>, bool)> {
     for p in Password::FREE {
-        if check(p) {
+        if check.accepts(cx, p).await {
             return Some((Vec::new(), p.null));
         }
     }
@@ -109,7 +130,7 @@ async fn password(
             text: secret.expose(),
             null: false,
         };
-        if check(candidate) {
+        if check.accepts(cx, candidate).await {
             return Some((secret.expose().to_vec(), false));
         }
     }
@@ -161,10 +182,13 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
             .flatten()
             .map(|e| (e.alg.to_vec(), e.data.to_vec()))
     });
-    let check = |p: Password<'_>| match (mac, &probe) {
-        (Some(mac), _) => pbe::verify_mac(mac, p, octets.content) == Some(true),
-        (None, Some((alg, data))) => pbe::decrypt(alg, p, data).is_ok(),
-        (None, None) => true,
+    let check = match (mac, &probe) {
+        (Some(mac), _) => Check::Mac {
+            mac,
+            data: octets.content,
+        },
+        (None, Some((alg, data))) => Check::Decrypt { alg, data },
+        (None, None) => Check::Nothing,
     };
     let unlocked = password(&cx, file, "Password for the PKCS#12 key store", &check).await;
     let pw = unlocked
@@ -199,7 +223,7 @@ async fn contents(cx: Cx, input: Input) -> Result<()> {
                 )));
                 continue;
             };
-            match pbe::decrypt(enc.alg, p, enc.data) {
+            match pbe::decrypt(&cx, enc.alg, p, enc.data).await {
                 Ok(plain) => {
                     let decoded = cx.add_derived(
                         Origin {
@@ -325,7 +349,10 @@ async fn bags(
                 };
                 let span = base.sub(to_u64(data.at), to_u64(data.content.len()));
                 let label = titled("Private key");
-                let decrypted = pw.map(|p| pbe::decrypt(alg.content, p, data.content));
+                let decrypted = match pw {
+                    Some(p) => Some(pbe::decrypt(cx, alg.content, p, data.content).await),
+                    None => None,
+                };
                 match decrypted {
                     Some(Ok(plain)) => {
                         let decoded = cx.add_derived(
@@ -413,19 +440,27 @@ async fn decrypted_key(cx: Cx, input: Input) -> Result<()> {
         return Err(Diagnostic::malformed("not an EncryptedPrivateKeyInfo").at(file));
     };
     let span = file.sub(to_u64(data.at), to_u64(data.content.len()));
-    let check = |p: Password<'_>| pbe::decrypt(alg.content, p, data.content).is_ok();
+    let check = Check::Decrypt {
+        alg: alg.content,
+        data: data.content,
+    };
     let Some((text, null)) = password(&cx, file, "Password for the private key", &check).await
     else {
         return Err(
             Diagnostic::unsupported("encrypted private key (no password, or a wrong one)").at(span),
         );
     };
-    let plain = pbe::decrypt(alg.content, Password { text: &text, null }, data.content).map_err(
-        |e| match e {
-            Failure::Unsupported(why) => Diagnostic::unsupported(why).at(span),
-            Failure::Wrong => Diagnostic::malformed("decryption failed").at(span),
-        },
-    )?;
+    let plain = pbe::decrypt(
+        &cx,
+        alg.content,
+        Password { text: &text, null },
+        data.content,
+    )
+    .await
+    .map_err(|e| match e {
+        Failure::Unsupported(why) => Diagnostic::unsupported(why).at(span),
+        Failure::Wrong => Diagnostic::malformed("decryption failed").at(span),
+    })?;
     let decoded = cx.add_derived(
         Origin {
             parent: span,

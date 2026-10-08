@@ -19,12 +19,47 @@ pub mod twofish;
 pub use cipher::{
     Aes, BlockCipher, Des, Rc2, TripleDes, aes_ctr_le, cbc_decrypt, rc4, unpad_pkcs7,
 };
-pub use hash::{Hash, Hmac, Md5, Sha1, Sha256, Sha384, Sha512, hmac, pbkdf2};
+pub use hash::{Hash, Hmac, Md5, Pbkdf2, Sha1, Sha256, Sha384, Sha512, hmac, pbkdf2};
+
+use crate::cx::Cx;
 pub use stream::{Key, ZipCryptoKeys, aes_cbc_iv_prefixed};
 
-/// The PKCS#12 key derivation (RFC 7292 appendix B) with hash `H`. `id` is
-/// 1 for keys, 2 for IVs and 3 for MAC keys; `password` is the raw
-/// BMPString (UTF-16BE with a terminating NUL), see [`bmp_password`].
+/// A key derivation that runs in resumable steps, so that a file asking for
+/// billions of iterations cannot stall one poll: [`run`] drives it between
+/// budget checkpoints, and `Limits::max_work` stops it.
+///
+/// A unit of work is roughly half a microsecond: one HMAC for PBKDF2, one
+/// hash for the PKCS#12 derivation, one block for Argon2, 1/5000 of a
+/// bcrypt hash (see each type).
+pub trait Stepped {
+    /// Runs about `units` units of work (at least one indivisible piece,
+    /// which may cost more); returns the units used, 0 once complete.
+    fn advance(&mut self, units: u32) -> u32;
+
+    /// Whether the derivation is complete.
+    fn done(&self) -> bool;
+}
+
+/// Units of work [`run`] does between checkpoints (about a tenth of a
+/// millisecond).
+pub const CHUNK: u32 = 256;
+
+/// Runs `kdf` to completion in chunks of [`CHUNK`] units, charging the work
+/// budget one unit per unit of work (a checkpoint charges one), so the poll
+/// yields between chunks once its budget is spent.
+pub async fn run(cx: &Cx, kdf: &mut impl Stepped) {
+    while !kdf.done() {
+        let used = kdf.advance(CHUNK);
+        for _ in 0..used {
+            cx.checkpoint().await;
+        }
+    }
+}
+
+/// The PKCS#12 key derivation (RFC 7292 appendix B) with hash `H` in one
+/// go; dissectors run [`Pkcs12Kdf`] through [`run`]. `id` is 1 for keys, 2
+/// for IVs and 3 for MAC keys; `password` is the raw BMPString (UTF-16BE
+/// with a terminating NUL), see [`bmp_password`].
 pub fn pkcs12_kdf<H: Hash>(
     password: &[u8],
     salt: &[u8],
@@ -32,33 +67,67 @@ pub fn pkcs12_kdf<H: Hash>(
     id: u8,
     len: usize,
 ) -> Vec<u8> {
-    let v = H::BLOCK;
-    let fill = |src: &[u8]| -> Vec<u8> {
-        if src.is_empty() {
-            return Vec::new();
+    let mut kdf = Pkcs12Kdf::<H>::new(password, salt, iterations, id, len);
+    while kdf.advance(u32::MAX) > 0 {}
+    kdf.finish()
+}
+
+/// An incremental PKCS#12 key derivation: one unit of work is one hash.
+#[derive(Clone)]
+pub struct Pkcs12Kdf<H: Hash> {
+    /// `I`: the salt and password, each filled to whole blocks.
+    i_block: Vec<u8>,
+    /// `D`: the diversifier, `id` repeated for a block.
+    d: Vec<u8>,
+    iterations: u32,
+    len: usize,
+    out: Vec<u8>,
+    /// The current block's hash `A` and how many iterations have run.
+    a: Vec<u8>,
+    round: u32,
+    hash: std::marker::PhantomData<H>,
+}
+
+impl<H: Hash> Pkcs12Kdf<H> {
+    pub fn new(password: &[u8], salt: &[u8], iterations: u32, id: u8, len: usize) -> Self {
+        let v = H::BLOCK;
+        let fill = |src: &[u8]| -> Vec<u8> {
+            if src.is_empty() {
+                return Vec::new();
+            }
+            let n = v.saturating_mul(src.len().div_ceil(v));
+            src.iter().copied().cycle().take(n).collect()
+        };
+        let mut i_block = fill(salt);
+        i_block.extend(fill(password));
+        Pkcs12Kdf {
+            i_block,
+            d: vec![id; v],
+            iterations: iterations.max(1),
+            len,
+            out: Vec::with_capacity(len),
+            a: Vec::new(),
+            round: 0,
+            hash: std::marker::PhantomData,
         }
-        let n = v.saturating_mul(src.len().div_ceil(v));
-        src.iter().copied().cycle().take(n).collect()
-    };
-    let mut i_block = fill(salt);
-    i_block.extend(fill(password));
-    let d = vec![id; v];
-    let mut out = Vec::with_capacity(len);
-    while out.len() < len {
-        let mut h = H::new();
-        h.update(&d);
-        h.update(&i_block);
-        let mut a = h.finish();
-        for _ in 1..iterations {
-            a = H::digest(&a);
-        }
-        out.extend_from_slice(&a);
-        if out.len() >= len {
-            break;
+    }
+
+    /// The derived key (shorter where steps were not run).
+    pub fn finish(mut self) -> Vec<u8> {
+        self.out.truncate(self.len);
+        self.out
+    }
+
+    /// Appends the finished block `A` and moves `I` on to the next block.
+    fn next_block(&mut self) {
+        let v = H::BLOCK;
+        self.out.extend_from_slice(&self.a);
+        if self.out.len() >= self.len {
+            return;
         }
         // I_j = (I_j + B + 1) mod 2^(8v) for each v-byte block of I.
-        let b: Vec<u8> = a.iter().copied().cycle().take(v).collect();
-        for chunk in i_block.chunks_mut(v) {
+        let b: Vec<u8> = self.a.iter().copied().cycle().take(v).collect();
+        for chunk in self.i_block.chunks_mut(v) {
             let mut carry = 1u16;
             for (x, y) in chunk.iter_mut().rev().zip(b.iter().rev()) {
                 let sum = u16::from(*x)
@@ -69,8 +138,33 @@ pub fn pkcs12_kdf<H: Hash>(
             }
         }
     }
-    out.truncate(len);
-    out
+}
+
+impl<H: Hash> Stepped for Pkcs12Kdf<H> {
+    fn done(&self) -> bool {
+        self.out.len() >= self.len
+    }
+
+    fn advance(&mut self, units: u32) -> u32 {
+        let mut used = 0u32;
+        while used < units.max(1) && !self.done() {
+            if self.round == 0 {
+                let mut h = H::new();
+                h.update(&self.d);
+                h.update(&self.i_block);
+                self.a = h.finish();
+            } else {
+                self.a = H::digest(&self.a);
+            }
+            used = used.saturating_add(1);
+            self.round = self.round.saturating_add(1);
+            if self.round >= self.iterations {
+                self.next_block();
+                self.round = 0;
+            }
+        }
+        used
+    }
 }
 
 /// A password as a PKCS#12 BMPString: UTF-16BE plus a 2-byte NUL (empty

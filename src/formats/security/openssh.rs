@@ -21,7 +21,8 @@
 //! of OpenSSH's sources, not checked against real keys. Key material is
 //! never shown: secret fields show only their size.
 
-use crate::codec::crypto::bcrypt::BcryptPbkdf;
+use crate::codec::crypto;
+use crate::codec::crypto::bcrypt::{self, BcryptPbkdf};
 use crate::codec::crypto::gcm::aes_gcm_open;
 use crate::codec::crypto::poly1305::openssh_chachapoly_open;
 use crate::codec::crypto::{Aes, TripleDes, cbc_decrypt};
@@ -589,24 +590,30 @@ async fn decrypt(cx: Cx, e: Encrypted) -> Result<()> {
         ))
         .at(section.data));
     }
+    let key_len = cipher.key.saturating_add(cipher.iv);
+    let cost = u64::from(rounds)
+        .saturating_mul(crate::bytes::to_u64(key_len.div_ceil(32)))
+        .saturating_mul(bcrypt::UNITS_PER_HASH.into());
+    if cost > cx.limits().max_work / 2 {
+        cx.emit(
+            Node::new("Encrypted data")
+                .span(section.data)
+                .diag(Diagnostic::limit(format!(
+                    "bcrypt_pbkdf with {rounds} rounds is too expensive for the work limit"
+                ))),
+        );
+        return Ok(());
+    }
     let mut plain = None;
     for attempt in 0..MAX_ATTEMPTS {
         let request = SecretRequest::password(section.input.span, PROMPT, attempt);
         let Some(secret) = cx.secret(request).await else {
             break;
         };
-        let Some(mut kdf) = BcryptPbkdf::new(
-            secret.expose(),
-            &salt,
-            rounds,
-            cipher.key.saturating_add(cipher.iv),
-        ) else {
+        let Some(mut kdf) = BcryptPbkdf::new(secret.expose(), &salt, rounds, key_len) else {
             continue;
         };
-        while !kdf.done() {
-            kdf.step();
-            cx.checkpoint().await;
-        }
+        crypto::run(&cx, &mut kdf).await;
         let material = kdf.finish();
         let Some((out, tag_ok)) = decrypt_with(cipher, &material, &data, &tag_bytes) else {
             continue;

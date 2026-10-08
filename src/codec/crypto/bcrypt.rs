@@ -6,9 +6,10 @@
 //! of the salt, then 64 encryptions of "OxychromaticBlowfishSwatDynamite"),
 //! and the blocks are interleaved into the key. One bcrypt hash costs about
 //! 130 Blowfish key expansions, so [`BcryptPbkdf`] runs one hash per
-//! [`BcryptPbkdf::step`] and the caller budgets between steps. Checked
-//! byte-exact against the Python `bcrypt` package's `kdf` (tests below) and
-//! end to end against `ssh-keygen` keys (the `openssh-key` fixtures).
+//! [`BcryptPbkdf::step`] and callers budget between steps
+//! ([`super::run`]). Checked byte-exact against the Python `bcrypt`
+//! package's `kdf` (tests below) and end to end against `ssh-keygen` keys
+//! (the `openssh-key` fixtures).
 //!
 //! `bcrypt_hash` and the key interleave follow OpenBSD's `bcrypt_pbkdf.c`
 //! (Ted Unangst, ISC) and the Blowfish key schedule its `blowfish.c` (Niels
@@ -227,6 +228,26 @@ impl BcryptPbkdf {
     /// The derived key (all zeros where steps were not run).
     pub fn finish(self) -> Vec<u8> {
         self.key
+    }
+}
+
+/// Units of work (see [`super::Stepped`]) one bcrypt hash costs: about 130
+/// Blowfish key expansions, some 2.5 ms.
+pub const UNITS_PER_HASH: u32 = 5000;
+
+impl super::Stepped for BcryptPbkdf {
+    fn done(&self) -> bool {
+        BcryptPbkdf::done(self)
+    }
+
+    /// Runs one bcrypt hash per [`UNITS_PER_HASH`] units (at least one).
+    fn advance(&mut self, units: u32) -> u32 {
+        let mut used = 0u32;
+        while !self.done() && (used == 0 || used.saturating_add(UNITS_PER_HASH) <= units) {
+            self.step();
+            used = used.saturating_add(UNITS_PER_HASH);
+        }
+        used
     }
 }
 

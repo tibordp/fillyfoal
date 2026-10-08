@@ -4,6 +4,8 @@
 //! straightforward implementations, not hardened against side channels.
 
 /// An incremental hash function.
+use super::Stepped;
+
 pub trait Hash: Clone {
     /// Input block size in bytes (for HMAC).
     const BLOCK: usize;
@@ -705,29 +707,82 @@ impl<H: Hash> Hmac<H> {
     }
 }
 
-/// PBKDF2 (RFC 8018) with HMAC-`H`, producing `len` bytes. Cost grows with
-/// `iterations`; callers in dissectors should cap or budget it.
+/// PBKDF2 (RFC 8018) with HMAC-`H`, producing `len` bytes, in one go. Cost
+/// grows with `iterations`; dissectors run [`Pbkdf2`] in budgeted steps
+/// instead (see [`super::run`]) unless the count is a small constant.
 pub fn pbkdf2<H: Hash>(password: &[u8], salt: &[u8], iterations: u32, len: usize) -> Vec<u8> {
-    let prf = Hmac::<H>::new(password);
-    let mut out = Vec::with_capacity(len);
-    let mut block = 1u32;
-    while out.len() < len {
-        let mut mac = prf.clone();
-        mac.update(salt);
-        mac.update(&block.to_be_bytes());
-        let mut u = mac.finish();
-        let mut t = u.clone();
-        for _ in 1..iterations {
-            let mut mac = prf.clone();
-            mac.update(&u);
-            u = mac.finish();
-            for (x, y) in t.iter_mut().zip(&u) {
-                *x ^= y;
+    let mut kdf = Pbkdf2::<H>::new(password, salt, iterations, len);
+    while kdf.advance(u32::MAX) > 0 {}
+    kdf.finish()
+}
+
+/// An incremental PBKDF2 with HMAC-`H`: one unit of work is one HMAC.
+#[derive(Clone)]
+pub struct Pbkdf2<H: Hash> {
+    prf: Hmac<H>,
+    salt: Vec<u8>,
+    iterations: u32,
+    len: usize,
+    out: Vec<u8>,
+    /// The current output block (1-based), its running XOR `t`, the last
+    /// HMAC `u`, and how many of its iterations have run.
+    block: u32,
+    t: Vec<u8>,
+    u: Vec<u8>,
+    round: u32,
+}
+
+impl<H: Hash> Pbkdf2<H> {
+    pub fn new(password: &[u8], salt: &[u8], iterations: u32, len: usize) -> Self {
+        Pbkdf2 {
+            prf: Hmac::<H>::new(password),
+            salt: salt.to_vec(),
+            iterations: iterations.max(1),
+            len,
+            out: Vec::new(),
+            block: 1,
+            t: Vec::new(),
+            u: Vec::new(),
+            round: 0,
+        }
+    }
+
+    /// The derived key (shorter where steps were not run).
+    pub fn finish(mut self) -> Vec<u8> {
+        self.out.truncate(self.len);
+        self.out
+    }
+}
+
+impl<H: Hash> Stepped for Pbkdf2<H> {
+    fn done(&self) -> bool {
+        self.out.len() >= self.len
+    }
+
+    fn advance(&mut self, units: u32) -> u32 {
+        let mut used = 0u32;
+        while used < units.max(1) && !self.done() {
+            let mut mac = self.prf.clone();
+            if self.round == 0 {
+                mac.update(&self.salt);
+                mac.update(&self.block.to_be_bytes());
+                self.u = mac.finish();
+                self.t.clone_from(&self.u);
+            } else {
+                mac.update(&self.u);
+                self.u = mac.finish();
+                for (x, y) in self.t.iter_mut().zip(&self.u) {
+                    *x ^= y;
+                }
+            }
+            used = used.saturating_add(1);
+            self.round = self.round.saturating_add(1);
+            if self.round >= self.iterations {
+                self.out.extend_from_slice(&self.t);
+                self.block = self.block.wrapping_add(1);
+                self.round = 0;
             }
         }
-        out.extend_from_slice(&t);
-        block = block.wrapping_add(1);
+        used
     }
-    out.truncate(len);
-    out
 }

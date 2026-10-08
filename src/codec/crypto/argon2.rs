@@ -12,6 +12,9 @@ use crate::bytes::to_u64;
 /// Words in a 1 KiB block.
 const WORDS: usize = 128;
 const SYNC_POINTS: u32 = 4;
+/// What deriving one of a lane's first two blocks (`H'` to 1 KiB, about 30
+/// BLAKE2b compressions) costs, in block compressions.
+const SEED_COST: u32 = 8;
 
 type Block = [u64; WORDS];
 
@@ -184,6 +187,10 @@ pub struct Argon2 {
     slice: u32,
     lane: u32,
     index: u32,
+    /// `H0`, and how many lanes have their first two blocks (derived from
+    /// it in [`Argon2::step`], as there may be many lanes).
+    h0: Vec<u8>,
+    seeded: u32,
     // Data-independent addressing state for the current segment.
     input: Block,
     address: Block,
@@ -191,8 +198,9 @@ pub struct Argon2 {
 }
 
 impl Argon2 {
-    /// Sets up the memory and its first blocks. `None` if the parameters are
-    /// unusable or the memory cannot be allocated.
+    /// Sets up the memory (its first blocks are filled by the first steps).
+    /// `None` if the parameters are unusable or the memory cannot be
+    /// allocated.
     pub fn new(
         params: Params,
         password: &[u8],
@@ -233,21 +241,11 @@ impl Argon2 {
             h.update(field);
         }
         let h0 = h.finish();
-        for lane in 0..params.lanes {
-            for i in 0..2u32 {
-                let b = h_prime(1024, &[&h0, &le(i), &le(lane)]);
-                let at = usize::try_from(
-                    u64::from(lane)
-                        .saturating_mul(u64::from(lane_len))
-                        .saturating_add(u64::from(i)),
-                )
-                .ok()?;
-                *memory.get_mut(at)? = block_from(&b);
-            }
-        }
         let mut a = Argon2 {
             params,
             memory,
+            h0,
+            seeded: 0,
             lane_len,
             segment_len,
             pass: 0,
@@ -385,12 +383,34 @@ impl Argon2 {
         }
     }
 
-    /// Fills up to `blocks` more blocks; true once all passes are done.
+    /// Fills the first two blocks of the next lane (each costs about as much
+    /// as [`SEED_COST`] compressions).
+    fn seed_lane(&mut self) {
+        let lane = self.seeded;
+        for i in 0..2u32 {
+            let b = h_prime(1024, &[&self.h0, &i.to_le_bytes(), &lane.to_le_bytes()]);
+            let at = self.at(lane, i);
+            if let Some(m) = self.memory.get_mut(at) {
+                *m = block_from(&b);
+            }
+        }
+        self.seeded = self.seeded.saturating_add(1);
+    }
+
+    /// Fills up to `blocks` more blocks (seeding a lane's first two blocks
+    /// counts as [`SEED_COST`] each); true once all passes are done.
     pub fn step(&mut self, blocks: u32) -> bool {
-        for _ in 0..blocks {
+        let mut used = 0u32;
+        while used < blocks {
             if self.done {
                 break;
             }
+            if self.seeded < self.params.lanes {
+                self.seed_lane();
+                used = used.saturating_add(SEED_COST.saturating_mul(2));
+                continue;
+            }
+            used = used.saturating_add(1);
             if self.index >= self.segment_len {
                 self.lane = self.lane.saturating_add(1);
                 if self.lane >= self.params.lanes {
@@ -419,6 +439,11 @@ impl Argon2 {
         self.done
     }
 
+    /// Whether all passes are done.
+    pub fn done(&self) -> bool {
+        self.done
+    }
+
     /// The tag, once [`Argon2::step`] has returned true.
     pub fn finish(&self) -> Vec<u8> {
         let mut c = [0u64; WORDS];
@@ -435,6 +460,22 @@ impl Argon2 {
             usize::try_from(self.params.out_len).unwrap_or(32),
             &[&bytes],
         )
+    }
+}
+
+/// One unit of work is one block compression.
+impl super::Stepped for Argon2 {
+    fn done(&self) -> bool {
+        self.done
+    }
+
+    fn advance(&mut self, units: u32) -> u32 {
+        if self.done {
+            return 0;
+        }
+        let units = units.max(1);
+        self.step(units);
+        units
     }
 }
 
