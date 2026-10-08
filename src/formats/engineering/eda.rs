@@ -13,6 +13,7 @@ use crate::fields::Endian;
 use crate::formats::util::lines::{
     Line, Lines, contains, head_lines, hex, is_text, number, preview, summarize, tally, text, uint,
 };
+use crate::formats::util::pace::{Pace, Resumable, STEPS_PER_UNIT, run_paced};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -257,6 +258,7 @@ async fn gdsii(cx: Cx, input: Input) -> Result<()> {
     let (mut lib, mut version, mut units) = (String::new(), 0i64, String::new());
     let mut structures = 0u32;
     while let Some(r) = gds_next(&mut cur).await? {
+        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
         match r.kind {
             0x05 => {
                 // A structure runs to its ENDSTR.
@@ -264,6 +266,7 @@ async fn gdsii(cx: Cx, input: Input) -> Result<()> {
                 let mut name = String::new();
                 let mut elements = 0u32;
                 while let Some(e) = gds_next(&mut cur).await? {
+                    cx.progress_in(file, file.offset.saturating_add(cur.pos()));
                     if e.kind == 0x06 {
                         name = crate::text::until_nul(&cx.read_avail(e.span.tail(4)).await?);
                     }
@@ -320,6 +323,7 @@ async fn gdsii(cx: Cx, input: Input) -> Result<()> {
 async fn gds_structure(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     while let Some(r) = gds_next(&mut cur).await? {
+        cx.progress_in(span, span.offset.saturating_add(cur.pos()));
         if matches!(r.kind, 0x08..=0x0c | 0x15 | 0x2d) {
             // An element runs to its ENDEL.
             let start = r.span.offset.saturating_sub(span.offset);
@@ -366,6 +370,7 @@ async fn gds_structure(cx: Cx, span: Span) -> Result<()> {
 async fn gds_records(cx: Cx, span: Span) -> Result<()> {
     let mut cur = Cursor::new(&cx, span, BE);
     while let Some(r) = gds_next(&mut cur).await? {
+        cx.progress_in(span, span.offset.saturating_add(cur.pos()));
         cx.push(gds_record_node(&cx, r).await?).await;
     }
     Ok(())
@@ -463,7 +468,8 @@ impl Oasis<'_> {
         }
     }
 
-    fn repetition(&mut self) -> Result<String> {
+    /// A repetition; its lists of displacements are charged to `pace`.
+    async fn repetition(&mut self, pace: &mut Pace<'_>) -> Result<String> {
         let t = self.uint()?;
         let s = |v: u64| v.saturating_add(2);
         Ok(match t {
@@ -484,6 +490,7 @@ impl Oasis<'_> {
                 let n = self.uint()?;
                 for _ in 0..n.saturating_add(1).min(1 << 20) {
                     self.uint()?;
+                    pace.step().await;
                 }
                 format!(
                     "{} irregular along {}",
@@ -496,6 +503,7 @@ impl Oasis<'_> {
                 self.uint()?;
                 for _ in 0..n.saturating_add(1).min(1 << 20) {
                     self.uint()?;
+                    pace.step().await;
                 }
                 format!(
                     "{} irregular along {} (gridded)",
@@ -521,6 +529,7 @@ impl Oasis<'_> {
                 }
                 for _ in 0..n.saturating_add(1).min(1 << 20) {
                     self.gdelta()?;
+                    pace.step().await;
                 }
                 format!("{} arbitrary", s(n))
             }
@@ -528,10 +537,12 @@ impl Oasis<'_> {
         })
     }
 
-    fn point_list(&mut self) -> Result<u64> {
+    /// A point list (its points are charged to `pace`); returns its length.
+    async fn point_list(&mut self, pace: &mut Pace<'_>) -> Result<u64> {
         let t = self.uint()?;
         let n = self.uint()?;
         for _ in 0..n.min(1 << 24) {
+            pace.step().await;
             match t {
                 0 | 1 => {
                     self.sint()?;
@@ -607,26 +618,36 @@ const OASIS_RECORDS: [&str; 35] = [
 /// A CBLOCK payload: offset, compressed and uncompressed sizes.
 type CBlock = (u64, u64, u64);
 
-fn oasis_record(
+/// Geometry records' optional position and repetition, guarded by an info byte.
+async fn oasis_xy(
     p: &mut Oasis<'_>,
+    pace: &mut Pace<'_>,
+    info: u8,
+    parts: &mut Vec<String>,
+) -> Result<()> {
+    if info & 0x10 != 0 {
+        parts.push(format!("x={}", p.sint()?));
+    }
+    if info & 0x08 != 0 {
+        parts.push(format!("y={}", p.sint()?));
+    }
+    if info & 0x04 != 0 {
+        parts.push(format!("repetition: {}", p.repetition(pace).await?));
+    }
+    Ok(())
+}
+
+/// Varints and other small items parsed per unit of work.
+const OASIS_ITEMS_PER_UNIT: u64 = 256;
+
+async fn oasis_record(
+    p: &mut Oasis<'_>,
+    pace: &mut Pace<'_>,
     id: u64,
     offset_flag: &mut u64,
 ) -> Result<(String, Option<CBlock>)> {
     let mut parts: Vec<String> = Vec::new();
     let mut cblock = None;
-    // Geometry records: optional fields guarded by an info byte.
-    let xy = |p: &mut Oasis<'_>, info: u8, parts: &mut Vec<String>| -> Result<()> {
-        if info & 0x10 != 0 {
-            parts.push(format!("x={}", p.sint()?));
-        }
-        if info & 0x08 != 0 {
-            parts.push(format!("y={}", p.sint()?));
-        }
-        if info & 0x04 != 0 {
-            parts.push(format!("repetition: {}", p.repetition()?));
-        }
-        Ok(())
-    };
     let layer = |p: &mut Oasis<'_>, info: u8, parts: &mut Vec<String>| -> Result<()> {
         if info & 0x01 != 0 {
             parts.push(format!("layer {}", p.uint()?));
@@ -726,7 +747,7 @@ fn oasis_record(
                 parts.push(format!("y={}", p.sint()?));
             }
             if info & 0x08 != 0 {
-                parts.push(format!("repetition: {}", p.repetition()?));
+                parts.push(format!("repetition: {}", p.repetition(pace).await?));
             }
         }
         19 => {
@@ -744,7 +765,7 @@ fn oasis_record(
             if info & 0x02 != 0 {
                 parts.push(format!("texttype {}", p.uint()?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         20 => {
             let info = p.byte()?;
@@ -758,15 +779,15 @@ fn oasis_record(
             if info & 0x80 != 0 {
                 parts.push("square".to_owned());
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         21 => {
             let info = p.byte()?;
             layer(p, info, &mut parts)?;
             if info & 0x20 != 0 {
-                parts.push(format!("{} point(s)", p.point_list()?));
+                parts.push(format!("{} point(s)", p.point_list(pace).await?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         22 => {
             let info = p.byte()?;
@@ -784,9 +805,9 @@ fn oasis_record(
                 }
             }
             if info & 0x20 != 0 {
-                parts.push(format!("{} point(s)", p.point_list()?));
+                parts.push(format!("{} point(s)", p.point_list(pace).await?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         23..=25 => {
             let info = p.byte()?;
@@ -803,7 +824,7 @@ fn oasis_record(
             if id == 23 || id == 25 {
                 parts.push(format!("Δb={}", p.sint()?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         26 => {
             let info = p.byte()?;
@@ -817,7 +838,7 @@ fn oasis_record(
             if info & 0x20 != 0 {
                 parts.push(format!("h={}", p.uint()?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         27 => {
             let info = p.byte()?;
@@ -825,7 +846,7 @@ fn oasis_record(
             if info & 0x20 != 0 {
                 parts.push(format!("r={}", p.uint()?));
             }
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         28 => {
             let info = p.byte()?;
@@ -844,6 +865,7 @@ fn oasis_record(
                 let mut values = Vec::new();
                 for _ in 0..count.min(4096) {
                     values.push(p.property_value()?);
+                    pace.step().await;
                 }
                 parts.push(format!("= {}", values.join(", ")));
             }
@@ -866,7 +888,7 @@ fn oasis_record(
             let attr = p.uint()?;
             layer(p, info, &mut parts)?;
             parts.push(format!("attribute {attr}: {} bytes", p.string()?.len()));
-            xy(p, info, &mut parts)?;
+            oasis_xy(p, pace, info, &mut parts).await?;
         }
         34 => {
             let method = p.uint()?;
@@ -918,11 +940,15 @@ async fn oasis_list(cx: &Cx, input: Input, span: Span, data: Vec<u8>) -> Result<
     let mut counts: Vec<(String, u64)> = Vec::new();
     let mut version = String::new();
     let mut cells = 0u64;
+    let mut pace = Pace::new(cx, OASIS_ITEMS_PER_UNIT);
     while p.pos < data.len() {
         let start = p.pos;
         let id = p.uint()?;
         let name = OASIS_RECORDS.get(to_usize(id)).copied().unwrap_or("?");
-        match oasis_record(&mut p, id, &mut offset_flag) {
+        let record = oasis_record(&mut p, &mut pace, id, &mut offset_flag).await;
+        // Strings and skipped bytes, about a byte per 16 items.
+        pace.add(to_u64(p.pos.saturating_sub(start)) / 16).await;
+        match record {
             Ok((desc, cblock)) => {
                 let s = span.sub(to_u64(start), to_u64(p.pos.saturating_sub(start)));
                 if id == 1 {
@@ -1002,40 +1028,88 @@ fn gerber_probe(h: &Head<'_>) -> bool {
 declare_format!(pub GERBER = "gerber", "Gerber RS-274X PCB image", ["gbr", "ger", "gtl", "gbl", "gts", "gbs", "gto", "gbo", "gko", "gm1"], "application/vnd.gerber",
     Probe::Custom(gerber_probe), gerber);
 
-/// Splits Gerber text into statements: `%...%` extended blocks and `*`-terminated words.
-fn gerber_statements(data: &[u8]) -> Vec<(usize, usize, bool)> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    while i < data.len() && out.len() < 1_000_000 {
-        let Some(&c) = data.get(i) else { break };
-        if c.is_ascii_whitespace() {
-            i = i.saturating_add(1);
-            continue;
-        }
-        if c == b'%' {
-            let end = data
-                .get(i.saturating_add(1)..)
-                .and_then(|r| r.iter().position(|&b| b == b'%'))
-                .map_or(data.len(), |p| {
-                    i.saturating_add(1).saturating_add(p).saturating_add(1)
-                });
-            out.push((i, end, true));
-            i = end;
-        } else {
-            let end = data
-                .get(i..)
-                .and_then(|r| r.iter().position(|&b| b == b'*' || b == b'%'))
-                .map_or(data.len(), |p| i.saturating_add(p));
-            let end = if data.get(end) == Some(&b'*') {
-                end.saturating_add(1)
-            } else {
-                end
-            };
-            out.push((i, end.max(i.saturating_add(1)), false));
-            i = end.max(i.saturating_add(1));
+/// Splits Gerber text into statements: `%...%` extended blocks and
+/// `*`-terminated words, as `(start, end, extended)`, in bounded steps.
+struct GerberStatements<'a> {
+    data: &'a [u8],
+    i: usize,
+    /// The statement being scanned: its start, how far the search for its
+    /// end has got, and whether it is an extended block.
+    scan: Option<(usize, usize, bool)>,
+    out: Vec<(usize, usize, bool)>,
+}
+
+impl<'a> GerberStatements<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        GerberStatements {
+            data,
+            i: 0,
+            scan: None,
+            out: Vec::new(),
         }
     }
-    out
+}
+
+impl Resumable for GerberStatements<'_> {
+    type Output = Vec<(usize, usize, bool)>;
+
+    fn step(&mut self, budget: u64) -> bool {
+        let data = self.data;
+        let mut left = budget;
+        while left > 0 {
+            let Some((start, from, extended)) = self.scan else {
+                left = left.saturating_sub(1);
+                if self.i >= data.len() || self.out.len() >= 1_000_000 {
+                    return true;
+                }
+                let Some(&c) = data.get(self.i) else {
+                    return true;
+                };
+                if c.is_ascii_whitespace() {
+                    self.i = self.i.saturating_add(1);
+                } else if c == b'%' {
+                    self.scan = Some((self.i, self.i.saturating_add(1), true));
+                } else {
+                    self.scan = Some((self.i, self.i, false));
+                }
+                continue;
+            };
+            let to = from.saturating_add(to_usize(left)).min(data.len());
+            let hay = data.get(from..to).unwrap_or_default();
+            left = left.saturating_sub(to_u64(hay.len()).max(1));
+            let found = if extended {
+                hay.iter().position(|&b| b == b'%')
+            } else {
+                hay.iter().position(|&b| b == b'*' || b == b'%')
+            }
+            .map(|p| from.saturating_add(p));
+            if found.is_none() && to < data.len() {
+                self.scan = Some((start, to, extended));
+                continue;
+            }
+            self.scan = None;
+            if extended {
+                let end = found.map_or(data.len(), |p| p.saturating_add(1));
+                self.out.push((start, end, true));
+                self.i = end;
+            } else {
+                let end = found.unwrap_or(data.len());
+                let end = if data.get(end) == Some(&b'*') {
+                    end.saturating_add(1)
+                } else {
+                    end
+                };
+                let end = end.max(start.saturating_add(1));
+                self.out.push((start, end, false));
+                self.i = end;
+            }
+        }
+        false
+    }
+
+    fn finish(self) -> Vec<(usize, usize, bool)> {
+        self.out
+    }
 }
 
 const GERBER_EXTENDED: &[(&str, &str)] = &[
@@ -1061,11 +1135,14 @@ const GERBER_EXTENDED: &[(&str, &str)] = &[
 async fn gerber(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = cx.read_avail(file.sub(0, cx.limits().max_read)).await?;
-    let statements = gerber_statements(&data);
+    let statements = run_paced(&cx, GerberStatements::new(&data)).await;
     let (mut apertures, mut draws, mut moves, mut flashes, mut regions) =
         (0u32, 0u64, 0u64, 0u64, 0u64);
     let (mut unit, mut function) = (String::new(), String::new());
+    let mut pace = Pace::new(&cx, STEPS_PER_UNIT);
     for &(s, e, extended) in &statements {
+        // Each push is a unit; long statements are charged for their text.
+        pace.add(to_u64(e.saturating_sub(s))).await;
         let raw = String::from_utf8_lossy(data.get(s..e).unwrap_or_default()).into_owned();
         let body = raw.trim_matches(['%', '*']).trim().to_owned();
         let span = file.sub(to_u64(s), to_u64(e.saturating_sub(s)));
@@ -1299,22 +1376,89 @@ declare_format!(pub SPECCTRA_DSN = "specctra-dsn", "Specctra design (DSN)", ["ds
 declare_format!(pub SPECCTRA_SES = "specctra-ses", "Specctra session (SES)", ["ses"], "application/x-specctra-ses",
     Probe::Custom(|h| sexpr_probe(h, &[b"(session", b"(SESSION"])), sexpr);
 
+/// One element of a list: `start`, `end` offsets and whether it is a list.
+type SexprElement = (usize, usize, bool);
+
+/// The element [`SexprElements`] is scanning: a nested list (start, position,
+/// depth, inside a string), a string or an atom (start, position).
+#[derive(Clone, Copy)]
+enum SexprScan {
+    Gap,
+    List(usize, usize, u32, bool),
+    Str(usize, usize),
+    Atom(usize, usize),
+}
+
 /// The elements of one list: atoms and nested lists (`start`, `end` offsets
-/// in `data`, exclusive of the list's parentheses).
-fn sexpr_elements(data: &[u8]) -> Vec<(usize, usize, bool)> {
-    let mut out = Vec::new();
-    let mut i = 0usize;
-    while let Some(&c) = data.get(i) {
-        if out.len() > 1_000_000 {
-            break;
+/// in `data`, exclusive of the list's parentheses), split in bounded steps.
+struct SexprElements<'a> {
+    data: &'a [u8],
+    i: usize,
+    scan: SexprScan,
+    out: Vec<SexprElement>,
+    /// Stop after this many elements.
+    max: usize,
+}
+
+impl<'a> SexprElements<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        SexprElements {
+            data,
+            i: 0,
+            scan: SexprScan::Gap,
+            out: Vec::new(),
+            max: 1_000_001,
         }
-        match c {
-            b' ' | b'\t' | b'\r' | b'\n' => i = i.saturating_add(1),
-            b'(' => {
-                let mut depth = 0u32;
-                let mut j = i;
-                let mut in_str = false;
-                while let Some(&d) = data.get(j) {
+    }
+
+    /// Only the first `max` elements.
+    fn first(data: &'a [u8], max: usize) -> Self {
+        SexprElements {
+            max,
+            ..Self::new(data)
+        }
+    }
+
+    fn close(&mut self, start: usize, end: usize, list: bool) {
+        self.out.push((start, end, list));
+        self.i = end;
+        self.scan = SexprScan::Gap;
+    }
+}
+
+impl Resumable for SexprElements<'_> {
+    type Output = Vec<SexprElement>;
+
+    fn step(&mut self, budget: u64) -> bool {
+        let data = self.data;
+        let len = data.len();
+        let mut left = budget;
+        while left > 0 {
+            left = left.saturating_sub(1);
+            match self.scan {
+                SexprScan::Gap => {
+                    let i = self.i;
+                    let Some(&c) = data.get(i) else {
+                        return true;
+                    };
+                    if self.out.len() >= self.max {
+                        return true;
+                    }
+                    match c {
+                        b' ' | b'\t' | b'\r' | b'\n' | b')' => self.i = i.saturating_add(1),
+                        b'(' => self.scan = SexprScan::List(i, i, 0, false),
+                        b'"' if data.get(i.saturating_add(1)) != Some(&b')') => {
+                            self.scan = SexprScan::Str(i, i.saturating_add(1));
+                        }
+                        _ => self.scan = SexprScan::Atom(i, i),
+                    }
+                }
+                SexprScan::List(start, j, depth, in_str) => {
+                    let Some(&d) = data.get(j) else {
+                        self.close(start, j.saturating_add(1).min(len), true);
+                        continue;
+                    };
+                    let (mut j, mut depth, mut in_str) = (j, depth, in_str);
                     match d {
                         b'\\' if in_str => j = j.saturating_add(1),
                         // A lone `"` before `)` is an atom (Specctra's string_quote), not a string.
@@ -1324,48 +1468,34 @@ fn sexpr_elements(data: &[u8]) -> Vec<(usize, usize, bool)> {
                         b')' if !in_str => {
                             depth = depth.saturating_sub(1);
                             if depth == 0 {
-                                break;
+                                self.close(start, j.saturating_add(1).min(len), true);
+                                continue;
                             }
                         }
                         _ => {}
                     }
                     j = j.saturating_add(1);
+                    self.scan = SexprScan::List(start, j, depth, in_str);
                 }
-                let end = j.saturating_add(1).min(data.len());
-                out.push((i, end, true));
-                i = end;
-            }
-            b')' => i = i.saturating_add(1),
-            b'"' if data.get(i.saturating_add(1)) != Some(&b')') => {
-                let mut j = i.saturating_add(1);
-                while let Some(&d) = data.get(j) {
-                    if d == b'\\' {
-                        j = j.saturating_add(2);
-                        continue;
+                SexprScan::Str(start, j) => match data.get(j) {
+                    Some(b'\\') => self.scan = SexprScan::Str(start, j.saturating_add(2)),
+                    Some(b'"') | None => self.close(start, j.saturating_add(1).min(len), false),
+                    Some(_) => self.scan = SexprScan::Str(start, j.saturating_add(1)),
+                },
+                SexprScan::Atom(start, j) => match data.get(j) {
+                    Some(d) if !d.is_ascii_whitespace() && *d != b'(' && *d != b')' => {
+                        self.scan = SexprScan::Atom(start, j.saturating_add(1));
                     }
-                    if d == b'"' {
-                        break;
-                    }
-                    j = j.saturating_add(1);
-                }
-                let end = j.saturating_add(1).min(data.len());
-                out.push((i, end, false));
-                i = end;
-            }
-            _ => {
-                let mut j = i;
-                while data
-                    .get(j)
-                    .is_some_and(|d| !d.is_ascii_whitespace() && *d != b'(' && *d != b')')
-                {
-                    j = j.saturating_add(1);
-                }
-                out.push((i, j.max(i.saturating_add(1)), false));
-                i = j.max(i.saturating_add(1));
+                    _ => self.close(start, j.max(start.saturating_add(1)), false),
+                },
             }
         }
+        false
     }
-    out
+
+    fn finish(self) -> Vec<SexprElement> {
+        self.out
+    }
 }
 
 fn atom(b: &[u8]) -> String {
@@ -1383,7 +1513,7 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
             "only the beginning of the file was parsed",
         ));
     }
-    let top = sexpr_elements(&data);
+    let top = run_paced(&cx, SexprElements::first(&data, 1)).await;
     let Some(&(s, e, true)) = top.first() else {
         return Err(Diagnostic::malformed("expected a list"));
     };
@@ -1391,7 +1521,7 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
     let inner = data
         .get(s.saturating_add(1)..e.saturating_sub(1))
         .unwrap_or_default();
-    let elements = sexpr_elements(inner);
+    let elements = run_paced(&cx, SexprElements::new(inner)).await;
     let head = elements
         .first()
         .map(|&(a, b, _)| atom(inner.get(a..b).unwrap_or_default()))
@@ -1404,11 +1534,17 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
         if !list {
             continue;
         }
-        let kids = sexpr_elements(
-            child
-                .get(1..child.len().saturating_sub(1))
-                .unwrap_or_default(),
-        );
+        // Only the head and the first value are needed.
+        let kids = run_paced(
+            &cx,
+            SexprElements::first(
+                child
+                    .get(1..child.len().saturating_sub(1))
+                    .unwrap_or_default(),
+                2,
+            ),
+        )
+        .await;
         let name = kids
             .first()
             .map(|&(x, y, _)| atom(child.get(1..).and_then(|c| c.get(x..y)).unwrap_or_default()))
@@ -1434,7 +1570,6 @@ async fn sexpr(cx: Cx, input: Input) -> Result<()> {
             facts.push(format!("{name} {first_value}"));
         }
         tally(&mut counts, &name, 256);
-        cx.checkpoint().await;
     }
     cx.emit(
         Node::new(format!("({head}"))
@@ -1480,7 +1615,8 @@ async fn sexpr_list(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
         .get(1..data.len().saturating_sub(1))
         .unwrap_or_default();
     let mut atoms = 0usize;
-    for (i, &(a, b, list)) in sexpr_elements(inner).iter().enumerate() {
+    let elements = run_paced(&cx, SexprElements::new(inner)).await;
+    for (i, &(a, b, list)) in elements.iter().enumerate() {
         let s = span.sub(to_u64(a).saturating_add(1), to_u64(b.saturating_sub(a)));
         let child = inner.get(a..b).unwrap_or_default();
         if i == 0 && !list {
@@ -1494,11 +1630,15 @@ async fn sexpr_list(cx: Cx, (span, depth): (Span, u32)) -> Result<()> {
             }
         }
         if list {
-            let kids = sexpr_elements(
-                child
-                    .get(1..child.len().saturating_sub(1))
-                    .unwrap_or_default(),
-            );
+            let kids = run_paced(
+                &cx,
+                SexprElements::new(
+                    child
+                        .get(1..child.len().saturating_sub(1))
+                        .unwrap_or_default(),
+                ),
+            )
+            .await;
             let body = child.get(1..).unwrap_or_default();
             let name = kids
                 .first()
@@ -2637,6 +2777,7 @@ async fn jedec(cx: Cx, input: Input) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::formats::util::pace::run_all;
 
     #[test]
     fn gds_reals() {
@@ -2663,7 +2804,7 @@ mod tests {
 
     #[test]
     fn sexpr_split() {
-        let e = sexpr_elements(b"kicad_pcb (version 2021) \"a (b\" x");
+        let e = run_all(SexprElements::new(b"kicad_pcb (version 2021) \"a (b\" x"));
         assert_eq!(e.len(), 4);
         assert_eq!(atom(b"\"q\""), "q");
         assert!(touchstone_option(b"# GHz S MA R 50"));
@@ -2672,7 +2813,9 @@ mod tests {
 
     #[test]
     fn gerber_split() {
-        let s = gerber_statements(b"%FSLAX26Y26*%\n%MOMM*%\nD10*\nX0Y0D02*\nM02*\n");
+        let s = run_all(GerberStatements::new(
+            b"%FSLAX26Y26*%\n%MOMM*%\nD10*\nX0Y0D02*\nM02*\n",
+        ));
         assert_eq!(s.len(), 5);
     }
 }
