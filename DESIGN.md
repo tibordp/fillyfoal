@@ -104,17 +104,30 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
 
 - **Session** owns the node arena, a bounded byte cache, and one in-flight
   expansion per expanded node. The host calls `expand`, `poll` and `supply`,
-  and reads nodes and child state.
+  and reads nodes and child state. `poll_node(id, budget)` runs one
+  expansion only; the others stay parked with their children and resume
+  state until polled. Expansions never wait on each other (lazily decoded
+  sources belong to the session and are advanced by whichever read reaches
+  them), so polling one node is always enough to finish it. A host cancels
+  by not polling; `collapse` discards the work. `progress(id)` reports how
+  far a running expansion has got (from `Cx::progress`, or children out of
+  an exact count). `address(id)` names a node by its path of child indices,
+  stable across collapses and sessions over the same bytes;
+  `reinterpret_at` applies an "inspect as" choice by address.
 - **Dissectors are ordinary `async fn`s.** The session polls their futures
   with a no-op waker. A future suspends only through the context (`Cx`):
   - `cx.read(span).await` suspends while bytes are missing (**waiting for
     bytes**) and records which chunks it needs;
   - `cx.checkpoint().await` and every read/push charge a work budget, and
-    suspend when it is exhausted (**yielded**);
+    suspend when it is exhausted (**yielded**). Decoding a lazy source
+    charges as it goes, so a read far into a large stream yields partway
+    and continues on the next poll; `Session::read_step` gives hosts the
+    same bounded reads (`Session::read` decodes in one call);
   - `cx.push(node).await` suspends once the requested page is full.
   A node that was never expanded has no future at all (**not requested**).
   Suspending on any other future is reported as an internal error.
-  Cancellation is dropping the future (`collapse`).
+  Cancellation is not polling (the future stays parked) or dropping it
+  (`collapse`).
 - **Nodes** carry a name, an optional typed `Value`, summary, description,
   `span`, optional `target` (what the field points to), diagnostics, and an
   optional *expander*: a plain-data state plus an `async fn` that emits the

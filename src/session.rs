@@ -7,7 +7,7 @@ use std::task::{Context, Poll, Waker};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::cache::ByteCache;
-use crate::cx::{Cx, Key, Output, Shared, Stop, lock};
+use crate::cx::{Cx, Key, Output, Pending, Shared, Stop, lock};
 use crate::error::Diagnostic;
 use crate::formats;
 use crate::node::{Count, Expansion, Node};
@@ -107,8 +107,9 @@ pub struct Interpretation {
 
 /// Where a node sits: its root, then its index among its parent's children
 /// at each level down. Expansion is deterministic, so this names the same
-/// node after the subtree holding it is collapsed and expanded again.
-type Address = (NodeId, Vec<u64>);
+/// node after the subtree holding it is collapsed and expanded again (and,
+/// with another root over the same bytes, in another session).
+pub type Address = (NodeId, Vec<u64>);
 
 /// A range of source bytes the host should read and [`Session::supply`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,7 +119,19 @@ pub struct ByteRequest {
     pub len: u64,
 }
 
-/// Outcome of [`Session::poll`].
+/// Outcome of [`Session::read_step`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ReadProgress {
+    /// The bytes of the span that exist (fewer than asked if the source
+    /// ends first).
+    Done(Vec<u8>),
+    /// Supply these bytes and call again.
+    NeedBytes(Vec<ByteRequest>),
+    /// The budget ran out while decoding; call again to continue.
+    Yielded,
+}
+
+/// Outcome of [`Session::poll`] and [`Session::poll_node`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Progress {
     /// Nothing to do until the host requests more.
@@ -253,7 +266,8 @@ impl Session {
 
     /// Bounds memory by collapsing the least recently expanded subtrees until
     /// at most `max_nodes` nodes remain (or nothing more can be collapsed).
-    /// Nodes in `keep`, and their ancestors, are not collapsed. Collapsed
+    /// Nodes in `keep`, and their ancestors, are not collapsed, nor are nodes
+    /// whose expansion is still running. Collapsed
     /// nodes can be expanded again and produce the same children; handles to
     /// their former descendants become stale.
     pub fn trim(&mut self, max_nodes: usize, keep: &[NodeId]) {
@@ -281,7 +295,10 @@ impl Session {
                     generation: slot.generation,
                 };
                 let expanded = !entry.children.is_empty() || entry.run.is_some();
-                (expanded && entry.parent.is_some() && !protected.contains(&id))
+                // A parked expansion (see [`Session::poll_node`]) is kept:
+                // collapsing it would throw away its work.
+                let running = matches!(entry.state, ChildState::Running(_));
+                (expanded && !running && entry.parent.is_some() && !protected.contains(&id))
                     .then_some((entry.touched, id))
             })
             .collect();
@@ -343,11 +360,38 @@ impl Session {
 
     /// Reads the bytes of any span (host, decoded, lazily decoded, evicted or
     /// piecewise), e.g. for a hex view. Decoded sources are decoded as far
-    /// as needed. If host bytes are missing, returns the requests to
-    /// [`Session::supply`] first.
+    /// as needed, in one call however long that takes; see
+    /// [`Session::read_step`] for a read in bounded steps. If host bytes are
+    /// missing, returns the requests to [`Session::supply`] first.
     pub fn read(&mut self, span: Span) -> Result<Vec<u8>, Vec<ByteRequest>> {
-        let result = lock(&self.shared).read_range(span.source, span.offset, span.end(), 0);
-        result.map_err(|missing| self.requests(missing))
+        loop {
+            match self.read_step(span, u64::MAX) {
+                ReadProgress::Done(data) => return Ok(data),
+                ReadProgress::NeedBytes(requests) => return Err(requests),
+                ReadProgress::Yielded => {}
+            }
+        }
+    }
+
+    /// Like [`Session::read`], but decodes for at most `budget` units of work
+    /// (the units of [`Session::poll`]) before returning
+    /// [`ReadProgress::Yielded`]. Decoding progress is kept: calling again
+    /// continues where it stopped, so a far read into a large compressed
+    /// stream can be spread over several calls, or abandoned. Expansions
+    /// share the decoders, so their reads profit from the work too.
+    pub fn read_step(&mut self, span: Span, budget: u64) -> ReadProgress {
+        let result = {
+            let mut sh = lock(&self.shared);
+            let saved = std::mem::replace(&mut sh.budget, budget.max(1));
+            let result = sh.read_range(span.source, span.offset, span.end(), 0);
+            sh.budget = saved;
+            result
+        };
+        match result {
+            Ok(data) => ReadProgress::Done(data),
+            Err(Pending::Budget) => ReadProgress::Yielded,
+            Err(Pending::Bytes(missing)) => ReadProgress::NeedBytes(self.requests(missing)),
+        }
     }
 
     /// The bytes of a derived source held in memory, if they are (see
@@ -417,28 +461,61 @@ impl Session {
     /// [`Session::trim`] and collapsing an ancestor. Returns `false` if the
     /// node is stale or has no children to produce.
     pub fn reinterpret(&mut self, id: NodeId, format: Option<&'static formats::Format>) -> bool {
-        let Some(address) = self.address(id) else {
-            return false;
-        };
-        let Some(entry) = self.entry_mut(id) else {
+        let Some(entry) = self.entry(id) else {
             return false;
         };
         if !entry.node.has_children() {
             return false;
         }
-        entry.interpretation = None;
-        let (root, path) = &address;
+        let Some((root, path)) = self.address(id) else {
+            return false;
+        };
+        self.reinterpret_at(root, &path, format);
+        true
+    }
+
+    /// [`Session::reinterpret`] by address: forces `format` (or, with
+    /// `None`, identification) for the node at `path` below `root`, whether
+    /// or not it is materialised now. It takes effect when that node is
+    /// expanded. Hosts use this to restore choices made earlier, e.g. in
+    /// another session over the same file (see [`Session::address`]).
+    pub fn reinterpret_at(
+        &mut self,
+        root: NodeId,
+        path: &[u64],
+        format: Option<&'static formats::Format>,
+    ) {
         self.overrides
-            .retain(|(r, p), _| !(r == root && p.len() > path.len() && p.starts_with(path)));
+            .retain(|(r, p), _| !(*r == root && p.len() > path.len() && p.starts_with(path)));
+        let address = (root, path.to_vec());
         match format {
             Some(format) => self.overrides.insert(address, format),
             None => self.overrides.remove(&address),
         };
-        self.collapse(id);
-        true
+        if let Some(id) = self.node_at(root, path)
+            && let Some(entry) = self.entry_mut(id)
+        {
+            entry.interpretation = None;
+            self.collapse(id);
+        }
     }
 
-    fn address(&self, id: NodeId) -> Option<Address> {
+    /// The formats forced with [`Session::reinterpret`] below `root`: each
+    /// node's path and format.
+    pub fn reinterpretations(&self, root: NodeId) -> Vec<(Vec<u64>, &'static formats::Format)> {
+        let mut out: Vec<_> = self
+            .overrides
+            .iter()
+            .filter(|((r, _), _)| *r == root)
+            .map(|((_, path), &format)| (path.clone(), format))
+            .collect();
+        out.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    /// Where `id` sits: its root and its index among its parent's children
+    /// at each level down (see [`Address`]). `None` for a stale handle.
+    pub fn address(&self, id: NodeId) -> Option<Address> {
         let mut path = Vec::new();
         let mut cursor = id;
         loop {
@@ -454,6 +531,18 @@ impl Session {
                 }
             }
         }
+    }
+
+    /// The node at `path` below `root`, if it is materialised. To reach one
+    /// that is not, expand (or [`Session::seek`]) each level and poll.
+    pub fn node_at(&self, root: NodeId, path: &[u64]) -> Option<NodeId> {
+        let mut id = root;
+        for &index in path {
+            let entry = self.entry(id)?;
+            let at = to_usize(index.checked_sub(entry.first)?);
+            id = *entry.children.get(at)?;
+        }
+        self.entry(id).map(|_| id)
     }
 
     pub fn children(&self, id: NodeId) -> Option<Children<'_>> {
@@ -666,10 +755,16 @@ impl Session {
                 .is_some_and(|e| matches!(e.state, ChildState::Running(_)))
         });
 
+        let active = self.active.clone();
+        self.report(&active)
+    }
+
+    /// What the expansions of `ids` are waiting for.
+    fn report(&self, ids: &[NodeId]) -> Progress {
         let mut wanted: Vec<(SourceId, u64)> = Vec::new();
         let mut secrets: Vec<SecretRequest> = Vec::new();
         let mut runnable = false;
-        for &id in &self.active {
+        for &id in ids {
             if self.is_runnable(id) {
                 runnable = true;
             } else if let Some(run) = self.entry(id).and_then(|e| e.run.as_ref()) {
@@ -691,6 +786,45 @@ impl Session {
         } else {
             Progress::Idle
         }
+    }
+
+    /// Runs only the expansion of `id` until it finishes, blocks, fills its
+    /// page, or the budget runs out. Nothing else runs: other expansions,
+    /// and an expansion nobody polls, stay parked where they stopped, with
+    /// their children and resume state, and continue when polled again. So
+    /// a host cancels work by not polling it (rather than with
+    /// [`Session::collapse`], which discards it).
+    ///
+    /// Expansions never wait on each other: lazily decoded sources are
+    /// decoded by whichever read reaches them first, and the progress is
+    /// shared. The result describes `id` alone; [`Progress::Idle`] means it
+    /// has nothing to do (complete, failed, page full, or not expanded).
+    pub fn poll_node(&mut self, id: NodeId, budget: u64) -> Progress {
+        lock(&self.shared).budget = budget.max(1);
+        if self.is_runnable(id) {
+            self.step(id);
+        }
+        if self
+            .entry(id)
+            .is_some_and(|e| !matches!(e.state, ChildState::Running(_)))
+        {
+            self.active.retain(|&a| a != id);
+        }
+        self.report(&[id])
+    }
+
+    /// How far the running expansion of `id` has got, as `(done, total)`:
+    /// what the dissector reported (see [`crate::Cx::progress`]), or else
+    /// children produced out of an exact announced count. `None` if the
+    /// node is not being expanded or there is nothing to go by.
+    pub fn progress(&self, id: NodeId) -> Option<(u64, u64)> {
+        let entry = self.entry(id)?;
+        let run = entry.run.as_ref()?;
+        let out = lock(&run.out);
+        out.progress.or(match entry.count {
+            Count::Exact(n) if n > 0 => Some((out.emitted.min(n), n)),
+            _ => None,
+        })
     }
 
     /// Answers a secret request (`None` declines it). The answer is kept for

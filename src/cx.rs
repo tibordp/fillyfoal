@@ -33,6 +33,16 @@ pub(crate) enum Stop {
     Secret,
 }
 
+/// Why a read of a source could not complete yet.
+#[derive(Debug)]
+pub(crate) enum Pending {
+    /// These host chunks must be supplied first.
+    Bytes(Vec<(SourceId, u64)>),
+    /// Decoding a lazy source used up the work budget; reading again
+    /// continues where it stopped.
+    Budget,
+}
+
 /// A source assembled from pieces of other sources, in order.
 pub(crate) struct Pieces {
     pub spans: Vec<Span>,
@@ -264,16 +274,17 @@ impl Shared {
         self.budget = self.budget.saturating_sub(units);
     }
 
-    /// Bytes `start..end` of `source` (clamped to its length), or the host
-    /// chunks that must be supplied first. Piecewise sources are resolved
-    /// through their parents.
+    /// Bytes `start..end` of `source` (clamped to its length), or why they
+    /// are not available yet: host chunks to supply first, or a work budget
+    /// used up decoding a lazy source (see [`Pending`]). Piecewise sources
+    /// are resolved through their parents.
     pub fn read_range(
         &mut self,
         source: SourceId,
         start: u64,
         end: u64,
         depth: u32,
-    ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
+    ) -> std::result::Result<Vec<u8>, Pending> {
         let end = end.min(self.source_len(source));
         let start = start.min(end);
         self.tick = self.tick.wrapping_add(1);
@@ -300,10 +311,9 @@ impl Shared {
             return self.read_lazy(source, start, end, depth);
         }
         let Some(pieces) = entry.pieces.clone() else {
-            return self
-                .cache
-                .read(source, start, end)
-                .map_err(|missing| missing.into_iter().map(|i| (source, i)).collect());
+            return self.cache.read(source, start, end).map_err(|missing| {
+                Pending::Bytes(missing.into_iter().map(|i| (source, i)).collect())
+            });
         };
         if depth > 32 {
             return Ok(Vec::new());
@@ -345,7 +355,8 @@ impl Shared {
                         break;
                     }
                 }
-                Err(m) => missing.extend(m),
+                Err(Pending::Bytes(m)) => missing.extend(m),
+                Err(Pending::Budget) => return Err(Pending::Budget),
             }
             pos = pos.saturating_add(take);
             index = index.saturating_add(1);
@@ -353,18 +364,22 @@ impl Shared {
         if missing.is_empty() {
             Ok(out)
         } else {
-            Err(missing)
+            Err(Pending::Bytes(missing))
         }
     }
 
-    /// Reads from a lazily inflated source, decoding as far as `end`.
+    /// Reads from a lazily inflated source, decoding as far as `end`. Work
+    /// is charged as the decoder goes; once the budget is used up the read
+    /// stops with [`Pending::Budget`], keeping what was decoded, so that no
+    /// single read decodes without bound. A read entered with budget left
+    /// always makes progress.
     fn read_lazy(
         &mut self,
         source: SourceId,
         start: u64,
         end: u64,
         depth: u32,
-    ) -> std::result::Result<Vec<u8>, Vec<(SourceId, u64)>> {
+    ) -> std::result::Result<Vec<u8>, Pending> {
         let index = crate::bytes::to_usize(source.0.into());
         let Some(mut st) = self.sources.get_mut(index).and_then(|e| e.lazy.take()) else {
             return Ok(Vec::new());
@@ -380,7 +395,6 @@ impl Shared {
         // takes (kept alongside; rarely more than the output it produces).
         let keep = LAZY_KEEP.min(crate::bytes::to_usize(self.limits.max_derived / 4));
         let front = st.out_base.saturating_add(to_u64(st.out.len()));
-        let fed_before = st.in_base.saturating_add(to_u64(st.input.len()));
         let more_out = end
             .saturating_sub(front)
             .min(to_u64(keep.saturating_mul(2)));
@@ -403,6 +417,9 @@ impl Shared {
                 let to = crate::bytes::to_usize(end.saturating_sub(st.out_base)).min(st.out.len());
                 break Ok(st.out.get(from..to).unwrap_or_default().to_vec());
             }
+            if self.budget == 0 {
+                break Err(Pending::Budget);
+            }
             let pending = st.input.len().saturating_sub(st.decoder.consumed());
             if !st.input_eof && (st.starved || pending < LOOKAHEAD) {
                 let fed = st.in_base.saturating_add(to_u64(st.input.len()));
@@ -422,10 +439,11 @@ impl Shared {
                         if to_u64(bytes.len()) < want {
                             st.input_eof = true;
                         }
+                        self.charge(to_u64(bytes.len()) >> 12);
                         st.input.extend_from_slice(&bytes);
                         st.starved = false;
                     }
-                    Err(missing) => break Err(missing),
+                    Err(pending) => break Err(pending),
                 }
                 continue;
             }
@@ -439,7 +457,10 @@ impl Shared {
                 ..
             } = &mut *st;
             let cap = out.len().saturating_add(limit);
-            match decoder.decode(input, *input_eof, out, LAZY_STEP, cap) {
+            let produced_before = out.len();
+            let status = decoder.decode(input, *input_eof, out, LAZY_STEP, cap);
+            let produced = out.len().saturating_sub(produced_before);
+            match status {
                 Ok(crate::codec::pipeline::Status::More) => {}
                 Ok(crate::codec::pipeline::Status::NeedInput) if !*input_eof => *starved = true,
                 Ok(crate::codec::pipeline::Status::NeedInput) => {
@@ -453,6 +474,7 @@ impl Shared {
                 }
             }
             st.release(start, keep);
+            self.charge((to_u64(produced) >> 12).max(1));
         };
         // Once the stream has ended, its real length is known.
         let finished_len = st
@@ -463,20 +485,9 @@ impl Shared {
             .derived_bytes
             .saturating_add(to_u64(after))
             .saturating_sub(to_u64(before));
-        // Work: bytes decoded and read.
-        let work = st
-            .out_base
-            .saturating_add(to_u64(st.out.len()))
-            .saturating_sub(front)
-            .saturating_add(
-                st.in_base
-                    .saturating_add(to_u64(st.input.len()))
-                    .saturating_sub(fed_before),
-            );
-        self.charge(work >> 12);
         if let Some(entry) = self.sources.get_mut(index) {
             let declared = entry.len;
-            entry.consumed = to_u64(st.decoder.consumed());
+            entry.consumed = st.in_base.saturating_add(to_u64(st.decoder.consumed()));
             entry.lazy = Some(st);
             if let Some(len) = finished_len {
                 entry.len = entry.len.min(len);
@@ -565,6 +576,8 @@ pub(crate) struct Output {
     pub claimed: bool,
     /// What the node's own detection step settled on.
     pub interpretation: Option<Interpretation>,
+    /// Progress the dissector reported: (done, total).
+    pub progress: Option<(u64, u64)>,
 }
 
 pub(crate) fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -656,7 +669,12 @@ impl Cx {
                         None => Ok(data),
                     })
                 }
-                Err(missing) => {
+                Err(Pending::Budget) => {
+                    // Decoding continues on the next poll, where it stopped.
+                    sh.stop = Some(Stop::Budget);
+                    Poll::Pending
+                }
+                Err(Pending::Bytes(missing)) => {
                     // Scattered pieces could need more chunks than the cache
                     // holds at once; refuse rather than thrash forever.
                     let needed = to_u64(missing.len()).saturating_mul(sh.cache.chunk_size());
@@ -1060,6 +1078,32 @@ impl Cx {
         })
         .await;
         self.emit(node);
+    }
+
+    /// Reports how far this expansion has got, as `done` out of `total`
+    /// (in any unit), for the host's progress display (see
+    /// [`crate::Session::progress`]). Walkers whose count is not known
+    /// up front call this as they go; with an exact count announced
+    /// ([`Cx::set_count`]) the session reports children produced instead.
+    pub fn progress(&self, done: u64, total: u64) {
+        lock(&self.out).progress = Some((done.min(total), total));
+    }
+
+    /// Reports progress as a position `pos` within `span` (a walker over
+    /// the records of its input). For a lazily decoded source, whose length
+    /// may not be known until it has been decoded, this reports the encoded
+    /// bytes consumed out of the encoded stream instead.
+    pub fn progress_in(&self, span: Span, pos: u64) {
+        let lazy = {
+            let sh = lock(&self.shared);
+            sh.source(span.source)
+                .filter(|e| e.on_demand)
+                .and_then(|e| Some((e.consumed, e.lazy.as_ref()?.parent.len)))
+        };
+        match lazy {
+            Some((consumed, total)) => self.progress(consumed, total),
+            None => self.progress(pos.saturating_sub(span.offset), span.len),
+        }
     }
 
     /// Announces how many children this expansion will produce.

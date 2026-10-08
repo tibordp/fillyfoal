@@ -169,6 +169,13 @@ are all pushed in the loop (see `tar.rs`, `zip.rs`, `text/plain.rs`).
 `cx.skipping()` tells a walker that the next child lies before the host's
 window and will be dropped, if building it is expensive.
 
+A walker that does not know its count up front (tar, a scan over records)
+should report progress for the host's display: `cx.progress(done, total)`,
+or `cx.progress_in(input.span, pos)` with its position in its input (over a
+lazily decoded source that reports encoded bytes consumed, since the
+decoded length may not be known yet). With an exact count from
+`cx.set_count`, the session reports children produced instead.
+
 Loops whose length depends on the input must make progress every iteration
 and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
 If an element has size zero, stop (or advance by a minimum) rather than
