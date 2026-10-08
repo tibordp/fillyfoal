@@ -2208,68 +2208,69 @@ fn lzh_codecs_trickle_and_survive_corruption() {
     }
 }
 
+// MPQ encryption, through the decryptor's key stream: each word's
+// key-stream value is what decrypting a zero word gives, and the state
+// then advances by decrypting the encrypted word.
+fn mpq_encrypt(data: &mut [u8], key: u32) {
+    let mut d = fillyfoal::codec::crypto::mpq::Decrypt::new(key);
+    for w in data.as_chunks_mut::<4>().0 {
+        let mut ks = [0u8; 4];
+        let mut probe = d;
+        probe.apply(&mut ks);
+        for (b, k) in w.iter_mut().zip(ks) {
+            *b ^= k;
+        }
+        let mut copy = *w;
+        d.apply(&mut copy);
+    }
+}
+/// zlib (fixed Huffman) of `unit` followed by `copies` 258-byte copies
+/// of it (`unit` is 9 to 12 bytes long); returns it and the data.
+fn zlib_periodic(unit: &[u8], copies: usize) -> (Vec<u8>, Vec<u8>) {
+    let mut bits: Vec<bool> = Vec::new();
+    let mut put = |v: u32, n: u32, msb_first: bool| {
+        for i in 0..n {
+            let bit = if msb_first { n - 1 - i } else { i };
+            bits.push(v >> bit & 1 == 1);
+        }
+    };
+    put(1, 1, false); // BFINAL
+    put(1, 2, false); // fixed Huffman
+    for &b in unit {
+        assert!(b < 144);
+        put(0x30 + u32::from(b), 8, true);
+    }
+    assert!((9..=12).contains(&unit.len()));
+    for _ in 0..copies {
+        put(0xc5, 8, true); // length 258
+        put(6, 5, true); // distance 9-12
+        put(unit.len() as u32 - 9, 2, false);
+    }
+    put(0, 7, true); // end of block
+    let mut z = vec![0x78, 0x01];
+    z.extend(bits.chunks(8).map(|c| {
+        c.iter()
+            .enumerate()
+            .fold(0u8, |a, (i, &b)| a | u8::from(b) << i)
+    }));
+    let data: Vec<u8> = unit
+        .iter()
+        .copied()
+        .cycle()
+        .take(unit.len() + 258 * copies)
+        .collect();
+    z.extend_from_slice(&fillyfoal::codec::adler32(&data).to_be_bytes());
+    (z, data)
+}
+
 /// MPQ single-unit files go through the codec their mask byte names: a
 /// large zlib one (decoded on demand), and an encrypted one (decrypted into
 /// a source of its own first), named by a stored single-unit listfile.
 #[test]
 fn mpq_single_unit_files() {
     use fillyfoal::codec::crypto::mpq::{
-        Decrypt, HASH_FILE_KEY, HASH_NAME_A, HASH_NAME_B, HASH_OFFSET, hash_string,
+        HASH_FILE_KEY, HASH_NAME_A, HASH_NAME_B, HASH_OFFSET, hash_string,
     };
-    // MPQ encryption, through the decryptor's key stream: each word's
-    // key-stream value is what decrypting a zero word gives, and the state
-    // then advances by decrypting the encrypted word.
-    fn encrypt(data: &mut [u8], key: u32) {
-        let mut d = Decrypt::new(key);
-        for w in data.as_chunks_mut::<4>().0 {
-            let mut ks = [0u8; 4];
-            let mut probe = d;
-            probe.apply(&mut ks);
-            for (b, k) in w.iter_mut().zip(ks) {
-                *b ^= k;
-            }
-            let mut copy = *w;
-            d.apply(&mut copy);
-        }
-    }
-    /// zlib (fixed Huffman) of `unit` followed by `copies` 258-byte copies
-    /// of it (`unit` is 9 to 12 bytes long); returns it and the data.
-    fn zlib_periodic(unit: &[u8], copies: usize) -> (Vec<u8>, Vec<u8>) {
-        let mut bits: Vec<bool> = Vec::new();
-        let mut put = |v: u32, n: u32, msb_first: bool| {
-            for i in 0..n {
-                let bit = if msb_first { n - 1 - i } else { i };
-                bits.push(v >> bit & 1 == 1);
-            }
-        };
-        put(1, 1, false); // BFINAL
-        put(1, 2, false); // fixed Huffman
-        for &b in unit {
-            assert!(b < 144);
-            put(0x30 + u32::from(b), 8, true);
-        }
-        assert!((9..=12).contains(&unit.len()));
-        for _ in 0..copies {
-            put(0xc5, 8, true); // length 258
-            put(6, 5, true); // distance 9-12
-            put(unit.len() as u32 - 9, 2, false);
-        }
-        put(0, 7, true); // end of block
-        let mut z = vec![0x78, 0x01];
-        z.extend(bits.chunks(8).map(|c| {
-            c.iter()
-                .enumerate()
-                .fold(0u8, |a, (i, &b)| a | u8::from(b) << i)
-        }));
-        let data: Vec<u8> = unit
-            .iter()
-            .copied()
-            .cycle()
-            .take(unit.len() + 258 * copies)
-            .collect();
-        z.extend_from_slice(&fillyfoal::codec::adler32(&data).to_be_bytes());
-        (z, data)
-    }
     const EXISTS: u32 = 0x8000_0000;
     const SINGLE: u32 = 0x100_0000;
     const COMPRESS: u32 = 0x200;
@@ -2289,7 +2290,7 @@ fn mpq_single_unit_files() {
     let body = [&[0x02][..], &big_z].concat();
     add(&mut data, body, big.len(), EXISTS | SINGLE | COMPRESS);
     let mut body = [&[0x02][..], &small_z].concat();
-    encrypt(&mut body, hash_string("secret.txt", HASH_FILE_KEY));
+    mpq_encrypt(&mut body, hash_string("secret.txt", HASH_FILE_KEY));
     add(
         &mut data,
         body,
@@ -2309,14 +2310,14 @@ fn mpq_single_unit_files() {
         e[8..12].copy_from_slice(&[0; 4]);
         e[12..16].copy_from_slice(&(i as u32).to_le_bytes());
     }
-    encrypt(&mut hashes, hash_string("(hash table)", HASH_FILE_KEY));
+    mpq_encrypt(&mut hashes, hash_string("(hash table)", HASH_FILE_KEY));
     let hash_at = data.len() as u32;
     data.extend_from_slice(&hashes);
     let mut table: Vec<u8> = blocks
         .iter()
         .flat_map(|b| b.iter().flat_map(|v| v.to_le_bytes()))
         .collect();
-    encrypt(&mut table, hash_string("(block table)", HASH_FILE_KEY));
+    mpq_encrypt(&mut table, hash_string("(block table)", HASH_FILE_KEY));
     let block_at = data.len() as u32;
     data.extend_from_slice(&table);
     let len = data.len() as u32;
@@ -2342,4 +2343,103 @@ fn mpq_single_unit_files() {
         !tree.contains("mismatch") && !tree.contains("expected"),
         "{tree}"
     );
+}
+
+/// An MPQ archive (sector size shift `shift`) of one stored single-unit
+/// listfile naming `big.bin`, and `big.bin`: a 3 MiB encrypted file of one
+/// zlib sector (a sector offset table, then the sector).
+fn mpq_one_big_sector(shift: u16) -> Vec<u8> {
+    use fillyfoal::codec::crypto::mpq::{
+        HASH_FILE_KEY, HASH_NAME_A, HASH_NAME_B, HASH_OFFSET, file_key, hash_string,
+    };
+    const EXISTS: u32 = 0x8000_0000;
+    const SINGLE: u32 = 0x100_0000;
+    const COMPRESS: u32 = 0x200;
+    const ENCRYPTED: u32 = 0x1_0000;
+    let (big_z, big) = zlib_periodic(b"bigbigbig", 12_000);
+    let mut data = vec![0u8; 32];
+    let mut blocks = Vec::new();
+    let list = b"big.bin\r\n".to_vec();
+    blocks.push([32, list.len() as u32, list.len() as u32, EXISTS | SINGLE]);
+    data.extend_from_slice(&list);
+    let offset = data.len() as u32;
+    let key = file_key("big.bin", offset, big.len() as u32, false);
+    let sector = [&[0x02][..], &big_z].concat();
+    let mut table = [8u32, 8 + sector.len() as u32]
+        .iter()
+        .flat_map(|v| v.to_le_bytes())
+        .collect::<Vec<u8>>();
+    mpq_encrypt(&mut table, key.wrapping_sub(1));
+    let mut body = sector;
+    mpq_encrypt(&mut body, key);
+    let file = [table, body].concat();
+    blocks.push([
+        offset,
+        file.len() as u32,
+        big.len() as u32,
+        EXISTS | COMPRESS | ENCRYPTED,
+    ]);
+    data.extend_from_slice(&file);
+    let mut hashes = [0xffu8; 4 * 16];
+    for (i, name) in ["(listfile)", "big.bin"].iter().enumerate() {
+        let mut slot = hash_string(name, HASH_OFFSET) as usize % 4;
+        while hashes[slot * 16 + 12..slot * 16 + 16] != [0xff; 4] {
+            slot = (slot + 1) % 4;
+        }
+        let e = &mut hashes[slot * 16..slot * 16 + 16];
+        e[0..4].copy_from_slice(&hash_string(name, HASH_NAME_A).to_le_bytes());
+        e[4..8].copy_from_slice(&hash_string(name, HASH_NAME_B).to_le_bytes());
+        e[8..12].copy_from_slice(&[0; 4]);
+        e[12..16].copy_from_slice(&(i as u32).to_le_bytes());
+    }
+    mpq_encrypt(&mut hashes, hash_string("(hash table)", HASH_FILE_KEY));
+    let hash_at = data.len() as u32;
+    data.extend_from_slice(&hashes);
+    let mut table: Vec<u8> = blocks
+        .iter()
+        .flat_map(|b| b.iter().flat_map(|v| v.to_le_bytes()))
+        .collect();
+    mpq_encrypt(&mut table, hash_string("(block table)", HASH_FILE_KEY));
+    let block_at = data.len() as u32;
+    data.extend_from_slice(&table);
+    let len = data.len() as u32;
+    data[0..4].copy_from_slice(b"MPQ\x1a");
+    data[4..8].copy_from_slice(&32u32.to_le_bytes());
+    data[8..12].copy_from_slice(&len.to_le_bytes());
+    data[12..14].copy_from_slice(&0u16.to_le_bytes());
+    data[14..16].copy_from_slice(&shift.to_le_bytes());
+    data[16..20].copy_from_slice(&hash_at.to_le_bytes());
+    data[20..24].copy_from_slice(&block_at.to_le_bytes());
+    data[24..28].copy_from_slice(&4u32.to_le_bytes());
+    data[28..32].copy_from_slice(&2u32.to_le_bytes());
+    data
+}
+
+/// A large sector of a multi-sector MPQ file is decrypted and decoded in
+/// bounded steps; a sector size shift that would make sectors of
+/// gigabytes is reported, and 4 KiB sectors assumed.
+#[test]
+fn mpq_large_sectors_and_bad_shifts() {
+    // 4 MiB sectors: the file is one sector.
+    let mut host = Host::named("sectors.mpq", mpq_one_big_sector(13), Limits::default());
+    host.max_nodes = 2000;
+    host.explore(host.root, 6, 50);
+    let tree = host.render();
+    assert!(tree.contains("big.bin"), "{tree}");
+    assert!(tree.contains("+0x2f3dc9]"), "{tree}");
+    assert!(
+        !tree.contains("too large") && !tree.contains("sector outside"),
+        "{tree}"
+    );
+    for shift in [16, 22, 0xffff] {
+        let mut host = Host::named("bad.mpq", mpq_one_big_sector(shift), Limits::default());
+        host.max_nodes = 2000;
+        host.explore(host.root, 6, 50);
+        let tree = host.render();
+        assert!(
+            tree.contains(&format!("sector size shift {shift} is too large")),
+            "{tree}"
+        );
+        assert!(tree.contains("4096-byte sectors"), "{tree}");
+    }
 }

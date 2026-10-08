@@ -2506,3 +2506,230 @@ fn stuffit_large_forks() {
         assert!(*sizes.iter().max().unwrap() <= step + 256);
     }
 }
+
+/// Containers whose blocks used to be decoded whole per call (LZ4 frame
+/// and legacy blocks, framed Snappy chunks, lzop blocks and pbz `bv4`
+/// blocks): one large block is decoded across many bounded calls, with its
+/// checks intact.
+mod large_blocks {
+    use super::{assert_on_demand, assert_releases};
+    use fillyfoal::codec::pipeline::{Status, decode_all};
+    use fillyfoal::codec::{Codec, adler32, crc32};
+
+    const STEP: usize = 16 * 1024;
+
+    /// Decodes all of `input` `STEP` bytes at a time, checking each call
+    /// produces at most a few steps' worth; returns the output and calls.
+    fn stepped(codec: &Codec, input: &[u8]) -> (Vec<u8>, usize) {
+        let mut decoder = codec.decoder().unwrap();
+        let mut out = Vec::new();
+        for calls in 1.. {
+            let before = out.len();
+            let status = decoder
+                .decode(input, true, &mut out, STEP, 1 << 30)
+                .unwrap();
+            assert!(
+                out.len() - before <= 4 * STEP,
+                "{codec:?}: one call produced {} bytes",
+                out.len() - before
+            );
+            match status {
+                Status::Done => return (out, calls),
+                Status::More => {}
+                Status::NeedInput => unreachable!("{codec:?}: wants input after the end"),
+            }
+        }
+        unreachable!()
+    }
+
+    fn decode(codec: &Codec, input: &[u8]) -> Result<Vec<u8>, String> {
+        decode_all(codec.decoder().unwrap().as_mut(), input, 1 << 30).map_err(|e| e.message)
+    }
+
+    fn noise(n: usize) -> Vec<u8> {
+        let mut x: u32 = 99;
+        (0..n)
+            .map(|_| {
+                x = x.wrapping_mul(1_103_515_245).wrapping_add(12345) & 0x7fff_ffff;
+                (x >> 16) as u8
+            })
+            .collect()
+    }
+
+    /// An LZ4 block of `n` bytes: `a`, a long match of it, then `bbbbb`.
+    fn lz4_run(n: usize) -> (Vec<u8>, Vec<u8>) {
+        let mut block = vec![0x1f, b'a', 1, 0];
+        let mut extra = n - 6 - 4 - 15;
+        while extra >= 255 {
+            block.push(255);
+            extra -= 255;
+        }
+        block.push(extra as u8);
+        block.extend_from_slice(&[0x50, b'b', b'b', b'b', b'b', b'b']);
+        let expected = [vec![b'a'; n - 5], vec![b'b'; 5]].concat();
+        (block, expected)
+    }
+
+    #[test]
+    fn lz4_blocks() {
+        let (block, run) = lz4_run(4 << 20);
+        let data = noise(1 << 20);
+        // A frame with independent blocks and block checksums: one
+        // compressed and one stored block.
+        let mut input = vec![0x04, 0x22, 0x4d, 0x18, 0x70, 0x70, 0];
+        input.extend_from_slice(&(block.len() as u32).to_le_bytes());
+        input.extend_from_slice(&block);
+        input.extend_from_slice(&[0; 4]);
+        input.extend_from_slice(&(data.len() as u32 | 0x8000_0000).to_le_bytes());
+        input.extend_from_slice(&data);
+        input.extend_from_slice(&[0; 4]);
+        input.extend_from_slice(&[0; 4]);
+        // A legacy frame with the same block.
+        input.extend_from_slice(&[0x02, 0x21, 0x4c, 0x18]);
+        input.extend_from_slice(&(block.len() as u32).to_le_bytes());
+        input.extend_from_slice(&block);
+        let expected = [&run[..], &data, &run].concat();
+        let (out, calls) = stepped(&Codec::Lz4Frame, &input);
+        assert!(out == expected && calls > 256, "{calls} calls");
+        assert_on_demand(&Codec::Lz4Frame, &input, &expected);
+        assert_releases(&Codec::Lz4Frame, &input, &expected, 2 * STEP + 65_536);
+        // A block cut short is still an error.
+        assert_eq!(
+            decode(&Codec::Lz4Frame, &input[..input.len() - 10]).unwrap_err(),
+            "truncated legacy LZ4 block"
+        );
+    }
+
+    #[test]
+    fn snappy_chunks() {
+        let n = 1 + 64 * 65_536;
+        let mut raw = Vec::new();
+        let mut v = n;
+        while v >= 0x80 {
+            raw.push(v as u8 | 0x80);
+            v >>= 7;
+        }
+        raw.push(v as u8);
+        raw.extend_from_slice(&[0x00, b'a']);
+        for _ in 0..65_536 {
+            raw.extend_from_slice(&[(63 << 2) | 2, 1, 0]);
+        }
+        let data = noise(1 << 20);
+        let mut input = vec![0xff, 6, 0, 0];
+        input.extend_from_slice(b"sNaPpY");
+        for (kind, body) in [(0u8, &raw), (1, &data)] {
+            let len = (body.len() + 4) as u32;
+            input.push(kind);
+            input.extend_from_slice(&len.to_le_bytes()[..3]);
+            input.extend_from_slice(&[0; 4]);
+            input.extend_from_slice(body);
+        }
+        let expected = [vec![b'a'; n], data].concat();
+        let (out, calls) = stepped(&Codec::SnappyFramed, &input);
+        assert!(out == expected && calls > 256, "{calls} calls");
+        assert_on_demand(&Codec::SnappyFramed, &input, &expected);
+        // A compressed chunk's window is its own output, which is held.
+        assert_releases(&Codec::SnappyFramed, &input, &expected, n + 2 * STEP);
+        assert_eq!(
+            decode(&Codec::SnappyFramed, &input[..input.len() - 10]).unwrap_err(),
+            "truncated Snappy chunk"
+        );
+    }
+
+    /// An LZO1X stream of `n` bytes of `a`: a literal, then one long match.
+    fn lzo_run(n: usize) -> Vec<u8> {
+        let mut s = vec![18, b'a', 32];
+        let extra = n - 34;
+        let k = (extra - 1) / 255;
+        s.extend(std::iter::repeat_n(0, k));
+        s.push((extra - 255 * k) as u8);
+        s.extend_from_slice(&[0, 0, 0x11, 0, 0]);
+        s
+    }
+
+    /// An lzop member (38-byte header) of `(raw, packed)` blocks, with
+    /// Adler-32 and CRC-32 checks of both the data and the compressed bytes.
+    fn lzop(blocks: &[(&[u8], &[u8])]) -> Vec<u8> {
+        let flags = 0x1u32 | 0x2 | 0x100 | 0x200;
+        let mut h = b"\x89LZO\0\r\n\x1a\n".to_vec();
+        h.extend_from_slice(&[0x10, 0x30, 0x20, 0x80, 0x09, 0x40, 1, 5]);
+        h.extend_from_slice(&flags.to_be_bytes());
+        h.extend_from_slice(&[0; 12]);
+        h.push(0);
+        let check = adler32(&h[9..]);
+        h.extend_from_slice(&check.to_be_bytes());
+        for (raw, packed) in blocks {
+            h.extend_from_slice(&(raw.len() as u32).to_be_bytes());
+            h.extend_from_slice(&(packed.len() as u32).to_be_bytes());
+            h.extend_from_slice(&adler32(raw).to_be_bytes());
+            h.extend_from_slice(&crc32(raw).to_be_bytes());
+            if packed.len() < raw.len() {
+                h.extend_from_slice(&adler32(packed).to_be_bytes());
+                h.extend_from_slice(&crc32(packed).to_be_bytes());
+            }
+            h.extend_from_slice(packed);
+        }
+        h.extend_from_slice(&[0; 4]);
+        h
+    }
+
+    #[test]
+    fn lzop_blocks() {
+        let run = vec![b'a'; 8 << 20];
+        let data = noise(1 << 20);
+        let packed = lzo_run(run.len());
+        let input = lzop(&[(&run, &packed), (&data, &data)]);
+        let expected = [&run[..], &data].concat();
+        let (out, calls) = stepped(&Codec::Lzop, &input);
+        assert!(out == expected && calls > 512, "{calls} calls");
+        assert_on_demand(&Codec::Lzop, &input, &expected);
+        assert_releases(&Codec::Lzop, &input, &expected, 2 * STEP + 0xc000);
+        // Each check (Adler-32 and CRC-32 of the data, then of the
+        // compressed bytes) is still verified.
+        for at in [46, 50, 54, 58] {
+            let mut bad = input.clone();
+            bad[at] ^= 1;
+            assert_eq!(
+                decode(&Codec::Lzop, &bad).unwrap_err(),
+                "LZO: lzop block checksum mismatch",
+                "check at {at}"
+            );
+        }
+        // So are the stored block's.
+        let mut bad = input.clone();
+        let stored_check = 62 + packed.len() + 8;
+        bad[stored_check] ^= 1;
+        assert_eq!(
+            decode(&Codec::Lzop, &bad).unwrap_err(),
+            "LZO: lzop block checksum mismatch"
+        );
+        assert_eq!(
+            decode(&Codec::Lzop, &input[..input.len() - 10]).unwrap_err(),
+            "LZO: truncated lzop block"
+        );
+    }
+
+    #[test]
+    fn pbz_lz4_blocks() {
+        let (block, run) = lz4_run(4 << 20);
+        let data = noise(1 << 20);
+        let mut chunk = b"bv41".to_vec();
+        chunk.extend_from_slice(&(run.len() as u32).to_le_bytes());
+        chunk.extend_from_slice(&(block.len() as u32).to_le_bytes());
+        chunk.extend_from_slice(&block);
+        chunk.extend_from_slice(b"bv4-");
+        chunk.extend_from_slice(&(data.len() as u32).to_le_bytes());
+        chunk.extend_from_slice(&data);
+        chunk.extend_from_slice(b"bv4$");
+        let expected = [&run[..], &data].concat();
+        let mut input = b"pbz4".to_vec();
+        input.extend_from_slice(&(16u64 << 20).to_be_bytes());
+        input.extend_from_slice(&(expected.len() as u64).to_be_bytes());
+        input.extend_from_slice(&(chunk.len() as u64).to_be_bytes());
+        input.extend_from_slice(&chunk);
+        let (out, calls) = stepped(&Codec::Pbz, &input);
+        assert!(out == expected && calls > 256, "{calls} calls");
+        // pbz waits for a whole chunk's input: only chunking is checked.
+        assert!(super::chunked(&Codec::Pbz, &input, 65_536, STEP) == expected);
+    }
+}

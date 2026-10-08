@@ -478,6 +478,60 @@ fn u32_at(data: &[u8], at: usize) -> Option<u32> {
         .map(u32::from_le_bytes)
 }
 
+/// A stretch `[from, end)` of the input (a block, a chunk) that a
+/// container decodes a step at a time, through an inner decoder whose
+/// input positions are relative to `from`, or by copying (advancing
+/// `from`). Positions are kept in the caller's current input buffer, so
+/// releasing input rebases them.
+#[derive(Clone, Copy)]
+pub(crate) struct Sub {
+    pub(crate) from: usize,
+    pub(crate) end: usize,
+}
+
+impl Sub {
+    pub(crate) fn new(from: usize, len: usize) -> Self {
+        Sub {
+            from,
+            end: from.saturating_add(len),
+        }
+    }
+
+    /// The part of the stretch present in `input`, and whether all of it is.
+    pub(crate) fn slice<'a>(&self, input: &'a [u8]) -> (&'a [u8], bool) {
+        let to = self.end.min(input.len());
+        (
+            input.get(self.from.min(to)..to).unwrap_or_default(),
+            input.len() >= self.end,
+        )
+    }
+
+    /// Copies up to `room` (at least 1) of the bytes present onto `out`,
+    /// advancing `from`; returns the number copied.
+    pub(crate) fn copy(&mut self, input: &[u8], out: &mut Vec<u8>, room: usize) -> usize {
+        let (slice, _) = self.slice(input);
+        let n = slice.len().min(room.max(1));
+        out.extend_from_slice(slice.get(..n).unwrap_or_default());
+        self.from = self.from.saturating_add(n);
+        n
+    }
+
+    /// Whether `from` has reached the end (all of it copied).
+    pub(crate) fn copied(&self) -> bool {
+        self.from >= self.end
+    }
+
+    /// Rebases after the caller drops the first `n` input bytes; returns
+    /// how many of them lay inside the stretch (to release from the inner
+    /// decoder).
+    pub(crate) fn release(&mut self, n: usize) -> usize {
+        let k = n.min(self.from);
+        self.from = self.from.saturating_sub(k);
+        self.end = self.end.saturating_sub(n);
+        n.saturating_sub(k)
+    }
+}
+
 /// Where an [`Lz4Frame`] decoder is.
 #[derive(Clone, Copy)]
 enum Lz4At {
@@ -496,12 +550,59 @@ enum Lz4At {
     Done,
 }
 
+/// The block an [`Lz4Frame`] is decoding: stored (copied a step at a
+/// time) or compressed (an [`Lz4Block`] over the block's bytes).
+#[derive(Clone)]
+struct Lz4Body {
+    sub: Sub,
+    block: Option<Lz4Block>,
+    /// Bytes after the block (its checksum).
+    trailer: usize,
+    legacy: bool,
+}
+
+impl Lz4Body {
+    /// Runs one step of the block; returns whether it has ended.
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<bool> {
+        let (slice, whole) = self.sub.slice(input);
+        if !whole && eof {
+            return Err(bad(if self.legacy {
+                "truncated legacy LZ4 block"
+            } else {
+                "truncated LZ4 block"
+            }));
+        }
+        match &mut self.block {
+            Some(d) => Ok(d.step(slice, whole, out, step, limit)? == Step::Done),
+            None => {
+                let n = self.sub.copy(input, out, step);
+                limit_check(out, limit)?;
+                if n == 0 && !self.sub.copied() {
+                    return Err(bad("truncated LZ4 block"));
+                }
+                Ok(self.sub.copied())
+            }
+        }
+    }
+}
+
 /// LZ4 frames (and legacy frames, and skippable frames), concatenated;
-/// decoded a block at a time. The content checksum is not verified.
+/// decoded a header at a time, and blocks a bounded step at a time. The
+/// content checksum is not verified.
 #[derive(Clone)]
 pub struct Lz4Frame {
+    /// The next header's position (the current block's header, while one
+    /// is being decoded).
     pos: usize,
     at: Lz4At,
+    body: Option<Lz4Body>,
 }
 
 impl Default for Lz4Frame {
@@ -509,13 +610,15 @@ impl Default for Lz4Frame {
         Lz4Frame {
             pos: 0,
             at: Lz4At::Magic,
+            body: None,
         }
     }
 }
 
 impl Lz4Frame {
-    /// Decodes one unit: a frame header, a block, or an end mark.
-    fn unit(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, limit: usize) -> Result<()> {
+    /// Reads one header: a frame header, a block header (starting the
+    /// block's body), or an end mark.
+    fn header(&mut self, input: &[u8], eof: bool, out: &[u8]) -> Result<()> {
         let pos = self.pos;
         match self.at {
             Lz4At::Done => {}
@@ -582,24 +685,18 @@ impl Lz4Frame {
                 }
                 let raw = size & 0x8000_0000 != 0;
                 let len = crate::bytes::to_usize((size & 0x7fff_ffff).into());
-                let block = input
-                    .get(pos..pos.saturating_add(len))
-                    .ok_or_else(|| bad("truncated LZ4 block"))?;
-                if raw {
-                    out.extend_from_slice(block);
-                    limit_check(out, limit)?;
-                } else {
-                    // Linked blocks refer back into earlier output of the
-                    // same frame; earlier frames are not part of the window.
-                    let base = if independent { out.len() } else { start };
-                    lz4_block_from(block, out, base, false, limit)?;
-                }
-                self.pos =
-                    pos.saturating_add(len)
-                        .saturating_add(if block_checksum { 4 } else { 0 });
-                if self.pos > input.len() && !eof {
-                    return Err(bad("truncated LZ4 block checksum"));
-                }
+                // Linked blocks refer back into earlier output of the
+                // same frame; earlier frames are not part of the window.
+                let base = if independent { out.len() } else { start };
+                self.body = Some(Lz4Body {
+                    sub: Sub::new(pos, len),
+                    block: (!raw).then(|| Lz4Block {
+                        base,
+                        ..Lz4Block::default()
+                    }),
+                    trailer: if block_checksum { 4 } else { 0 },
+                    legacy: false,
+                });
             }
             Lz4At::Legacy => {
                 // Independent blocks of up to 8 MiB until the next magic
@@ -616,12 +713,15 @@ impl Lz4Frame {
                     return Ok(());
                 }
                 let len = crate::bytes::to_usize(len.into());
-                let from = pos.saturating_add(4);
-                let block = input
-                    .get(from..from.saturating_add(len))
-                    .ok_or_else(|| bad("truncated legacy LZ4 block"))?;
-                lz4_block_from(block, out, out.len(), false, limit)?;
-                self.pos = from.saturating_add(len);
+                self.body = Some(Lz4Body {
+                    sub: Sub::new(pos.saturating_add(4), len),
+                    block: Some(Lz4Block {
+                        base: out.len(),
+                        ..Lz4Block::default()
+                    }),
+                    trailer: 0,
+                    legacy: true,
+                });
             }
         }
         Ok(())
@@ -638,14 +738,33 @@ impl Decode for Lz4Frame {
         limit: usize,
     ) -> Result<Step> {
         let mark = out.len();
+        // Header bytes read count as work alongside output.
+        let mut read = 0usize;
         loop {
+            let work = out.len().saturating_sub(mark).saturating_add(read);
+            if work >= step.max(1) {
+                return Ok(Step::More);
+            }
+            if let Some(body) = self.body.as_mut() {
+                let room = step.saturating_sub(work);
+                if !body.step(input, eof, out, room, limit)? {
+                    return Ok(Step::More);
+                }
+                self.pos = body.sub.end.saturating_add(body.trailer);
+                self.body = None;
+                if self.pos > input.len() && !eof {
+                    return Err(bad("truncated LZ4 block checksum"));
+                }
+                continue;
+            }
             if matches!(self.at, Lz4At::Done) {
                 return Ok(Step::Done);
             }
-            self.unit(input, eof, out, limit)?;
-            if out.len().saturating_sub(mark) >= step {
-                return Ok(Step::More);
-            }
+            let before = self.pos;
+            self.header(input, eof, out)?;
+            read = read
+                .saturating_add(self.pos.saturating_sub(before).min(SCAN))
+                .saturating_add(1);
         }
     }
 
@@ -654,15 +773,30 @@ impl Decode for Lz4Frame {
     }
 
     fn releasable_input(&self) -> usize {
-        // Units are read whole from `pos`.
-        self.pos
+        match &self.body {
+            Some(body) => body
+                .sub
+                .from
+                .saturating_add(body.block.as_ref().map_or(0, |d| d.releasable_input())),
+            // Headers are read whole from `pos`.
+            None => self.pos,
+        }
     }
 
     fn release_input(&mut self, n: usize) {
         self.pos = self.pos.saturating_sub(n);
+        if let Some(body) = self.body.as_mut() {
+            let inner = body.sub.release(n);
+            if let Some(d) = body.block.as_mut() {
+                d.release_input(inner);
+            }
+        }
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
+        if let Some(d) = self.body.as_ref().and_then(|b| b.block.as_ref()) {
+            return d.releasable_output(out_len);
+        }
         match self.at {
             // Linked blocks see the frame's last 64 KiB.
             Lz4At::Frame {
@@ -678,6 +812,9 @@ impl Decode for Lz4Frame {
     fn release_output(&mut self, n: usize) {
         if let Lz4At::Frame { start, .. } = &mut self.at {
             *start = start.saturating_sub(n);
+        }
+        if let Some(d) = self.body.as_mut().and_then(|b| b.block.as_mut()) {
+            d.release_output(n);
         }
     }
 }
@@ -702,9 +839,19 @@ pub struct Snappy {
     expected: Option<usize>,
     /// Literal bytes still to copy.
     literal: usize,
-    /// Output bytes released so far.
+    /// Where the stream's output starts in `out` (its window).
+    base: usize,
+    /// Output bytes of the stream released so far.
     released: usize,
     done: bool,
+}
+
+impl Snappy {
+    /// Bytes of the stream produced so far, given `out_len` bytes held.
+    fn produced(&self, out_len: usize) -> usize {
+        self.released
+            .saturating_add(out_len.saturating_sub(self.base))
+    }
 }
 
 impl Units for Snappy {
@@ -730,7 +877,7 @@ impl Units for Snappy {
                 }
             }
             let expected = crate::bytes::to_usize(expected);
-            if expected > limit {
+            if expected > limit.saturating_sub(out.len()) {
                 return Err(Diagnostic::limit(format!(
                     "Snappy data claims {expected:#x} bytes"
                 )));
@@ -757,7 +904,7 @@ impl Units for Snappy {
             if !eof {
                 return Err(bad("truncated Snappy data"));
             }
-            if self.released.saturating_add(out.len()) != expected {
+            if self.produced(out.len()) != expected {
                 return Err(bad("Snappy output length differs from the header"));
             }
             self.done = true;
@@ -801,7 +948,7 @@ impl Units for Snappy {
                 (dist, usize::from(tag >> 2).saturating_add(1))
             }
         };
-        if dist == 0 || dist > out.len() {
+        if dist == 0 || dist > out.len().saturating_sub(self.base) {
             return Err(bad("match offset outside the output"));
         }
         if out.len().saturating_add(len) > limit {
@@ -846,20 +993,40 @@ impl Decode for Snappy {
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        out_len.saturating_sub(usize::try_from(SNAPPY_WINDOW).unwrap_or(usize::MAX))
+        out_len
+            .saturating_sub(usize::try_from(SNAPPY_WINDOW).unwrap_or(usize::MAX))
+            .max(self.base)
+            .min(out_len)
     }
 
     fn release_output(&mut self, n: usize) {
-        self.released = self.released.saturating_add(n);
+        let before = n.min(self.base);
+        self.base = self.base.saturating_sub(before);
+        self.released = self.released.saturating_add(n.saturating_sub(before));
     }
 }
 
+/// What a Snappy framing chunk's body is decoded as.
+#[derive(Clone)]
+enum SnappyBody {
+    /// Compressed: raw Snappy after the CRC.
+    Compressed(Snappy),
+    /// Uncompressed: copied after the CRC.
+    Stored,
+    /// Padding or a skippable chunk: skipped.
+    Skipped,
+}
+
 /// The Snappy framing format: chunks of compressed or uncompressed data
-/// (each with a masked CRC-32C, not checked here).
-/// Decoded a chunk at a time.
+/// (each with a masked CRC-32C, not checked here). Decoded a chunk header
+/// at a time, and chunk bodies a bounded step at a time.
 #[derive(Clone, Default)]
 pub struct SnappyFramed {
+    /// The next chunk header's position (the current chunk's, while one is
+    /// being decoded).
     pos: usize,
+    /// The chunk being decoded: its body (after the CRC, for data chunks).
+    chunk: Option<(Sub, SnappyBody)>,
     done: bool,
 }
 
@@ -873,7 +1040,54 @@ impl Decode for SnappyFramed {
         limit: usize,
     ) -> Result<Step> {
         let mark = out.len();
-        while !self.done {
+        // Chunk headers count as work alongside output.
+        let mut headers = 0usize;
+        loop {
+            let work = out
+                .len()
+                .saturating_sub(mark)
+                .saturating_add(headers.saturating_mul(4));
+            if work >= step.max(1) {
+                return Ok(Step::More);
+            }
+            if let Some((sub, body)) = self.chunk.as_mut() {
+                let (slice, whole) = sub.slice(input);
+                if !whole && eof {
+                    return Err(bad("truncated Snappy chunk"));
+                }
+                let room = step.saturating_sub(work);
+                let ended = match body {
+                    SnappyBody::Compressed(d) => {
+                        d.step(slice, whole, out, room, limit)? == Step::Done
+                    }
+                    SnappyBody::Stored => {
+                        let n = sub.copy(input, out, room);
+                        limit_check(out, limit)?;
+                        if n == 0 && !sub.copied() {
+                            return Err(bad("truncated Snappy chunk"));
+                        }
+                        sub.copied()
+                    }
+                    SnappyBody::Skipped => {
+                        let n = slice.len().min(SCAN);
+                        sub.from = sub.from.saturating_add(n);
+                        headers = headers.saturating_add(n / 4);
+                        if n == 0 && !sub.copied() {
+                            return Err(bad("truncated Snappy chunk"));
+                        }
+                        sub.copied()
+                    }
+                };
+                if !ended {
+                    return Ok(Step::More);
+                }
+                self.pos = sub.end;
+                self.chunk = None;
+                continue;
+            }
+            if self.done {
+                return Ok(Step::Done);
+            }
             let pos = self.pos;
             let (Some(&kind), Some(len)) = (
                 input.get(pos),
@@ -883,35 +1097,42 @@ impl Decode for SnappyFramed {
                     return Err(bad("truncated Snappy chunk header"));
                 }
                 self.done = true;
-                break;
+                continue;
             };
             let len = len
                 .iter()
                 .rev()
                 .fold(0usize, |a, &b| a << 8 | usize::from(b));
-            let body = input
-                .get(pos.saturating_add(4)..pos.saturating_add(4).saturating_add(len))
-                .ok_or_else(|| bad("truncated Snappy chunk"))?;
-            match kind {
-                0x00 => out.extend(snappy_raw(
-                    body.get(4..).unwrap_or_default(),
-                    limit.saturating_sub(out.len()),
-                )?),
-                0x01 => out.extend_from_slice(body.get(4..).unwrap_or_default()),
+            let chunk = Sub::new(pos.saturating_add(4), len);
+            // Data chunks start with a CRC.
+            let data = Sub {
+                from: chunk.from.saturating_add(4).min(chunk.end),
+                end: chunk.end,
+            };
+            let body = match kind {
+                0x00 => SnappyBody::Compressed(Snappy {
+                    base: out.len(),
+                    ..Snappy::default()
+                }),
+                0x01 => SnappyBody::Stored,
                 0x02..=0x7f => {
+                    if eof && input.len() < chunk.end {
+                        return Err(bad("truncated Snappy chunk"));
+                    }
                     return Err(Diagnostic::unsupported(format!(
                         "reserved Snappy chunk {kind:#04x}"
                     )));
                 }
-                _ => {}
-            }
-            limit_check(out, limit)?;
-            self.pos = pos.saturating_add(4).saturating_add(len);
-            if out.len().saturating_sub(mark) >= step {
-                return Ok(Step::More);
-            }
+                _ => SnappyBody::Skipped,
+            };
+            let sub = if matches!(body, SnappyBody::Skipped) {
+                chunk
+            } else {
+                data
+            };
+            self.chunk = Some((sub, body));
+            headers = headers.saturating_add(1);
         }
-        Ok(Step::Done)
     }
 
     fn consumed(&self) -> usize {
@@ -919,16 +1140,36 @@ impl Decode for SnappyFramed {
     }
 
     fn releasable_input(&self) -> usize {
-        self.pos
+        match &self.chunk {
+            Some((sub, SnappyBody::Compressed(d))) => sub.from.saturating_add(d.releasable_input()),
+            Some((sub, _)) => sub.from,
+            None => self.pos,
+        }
     }
 
     fn release_input(&mut self, n: usize) {
         self.pos = self.pos.saturating_sub(n);
+        if let Some((sub, body)) = self.chunk.as_mut() {
+            let inner = sub.release(n);
+            if let SnappyBody::Compressed(d) = body {
+                d.release_input(inner);
+            }
+        }
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        // Chunks are independent: output is never read back.
-        out_len
+        match &self.chunk {
+            // A compressed chunk refers back into its own output.
+            Some((_, SnappyBody::Compressed(d))) => d.releasable_output(out_len),
+            // Chunks are independent: other output is never read back.
+            _ => out_len,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some((_, SnappyBody::Compressed(d))) = self.chunk.as_mut() {
+            d.release_output(n);
+        }
     }
 }
 

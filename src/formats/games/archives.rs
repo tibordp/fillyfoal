@@ -587,7 +587,19 @@ async fn mpq(cx: Cx, input: Input) -> Result<()> {
         LE,
     ));
     let archive = file.tail(base);
-    let sector = 512u32.checked_shl(h.block_size.into()).unwrap_or(4096);
+    let sector = if h.block_size <= MPQ_MAX_SECTOR_SHIFT {
+        512u32 << h.block_size
+    } else {
+        cx.diag(
+            Diagnostic::malformed(format!(
+                "sector size shift {} is too large (at most {MPQ_MAX_SECTOR_SHIFT}); \
+                 assuming 4096-byte sectors",
+                h.block_size
+            ))
+            .at(file.sub(base.saturating_add(14), 2)),
+        );
+        4096
+    };
     let table = |offset: u32, entries: u32| {
         archive.sub(offset.into(), u64::from(entries).saturating_mul(16))
     };
@@ -655,6 +667,97 @@ const MPQ_SINGLE_UNIT: u32 = 0x100_0000;
 const MPQ_EXISTS: u32 = 0x8000_0000;
 /// Single-unit files decoding to more than this are decoded on demand.
 const MPQ_LAZY: u64 = 1024 * 1024;
+/// The largest sector size shift accepted (16 MiB sectors; archives use
+/// 3, 4 KiB, or a little more).
+const MPQ_MAX_SECTOR_SHIFT: u16 = 15;
+/// Output bytes per decoding step of a sector.
+const MPQ_STEP: usize = 64 * 1024;
+
+/// Decodes one sector's `body` with `codec`, a bounded step per checkpoint.
+async fn mpq_sector(
+    cx: &Cx,
+    codec: &crate::codec::Codec,
+    body: &[u8],
+    limit: usize,
+) -> Result<Vec<u8>> {
+    use crate::codec::pipeline::Status;
+    let mut decoder = codec
+        .decoder()
+        .ok_or_else(|| Diagnostic::internal("no decoder"))?;
+    let mut out = Vec::new();
+    loop {
+        match decoder.decode(body, true, &mut out, MPQ_STEP, limit)? {
+            Status::Done => return Ok(out),
+            Status::More => cx.checkpoint().await,
+            Status::NeedInput => return Err(Diagnostic::malformed("stream ended early")),
+        }
+    }
+}
+
+/// How a multi-sector file's sectors are stored.
+#[derive(Clone, Copy)]
+struct MpqSectors {
+    /// The file key, if the sectors are encrypted.
+    key: Option<u32>,
+    /// Imploded (bare DCL streams).
+    imploded: bool,
+    /// Imploded or compressed (a mask byte naming the codec).
+    packed: bool,
+    limit: usize,
+}
+
+impl MpqSectors {
+    /// Decrypts (a piece per checkpoint) and decodes (a bounded step per
+    /// checkpoint) sector `index`, which decodes to `expected` bytes.
+    async fn sector(&self, cx: &Cx, bytes: &[u8], index: u32, expected: usize) -> Result<Vec<u8>> {
+        use crate::codec::Codec;
+        let mut bytes = bytes.to_vec();
+        if let Some(key) = self.key {
+            let mut cipher = crate::codec::crypto::mpq::Decrypt::new(key.wrapping_add(index));
+            for piece in bytes.chunks_mut(MPQ_STEP) {
+                cipher.apply(piece);
+                cx.checkpoint().await;
+            }
+        }
+        if !self.packed || bytes.len() >= expected {
+            return Ok(bytes);
+        }
+        let (codec, at) = if self.imploded {
+            (Codec::DclImplode, 0)
+        } else {
+            let Some(&mask) = bytes.first() else {
+                return Err(Diagnostic::malformed("empty compressed sector"));
+            };
+            match mask {
+                0x02 => (Codec::Zlib, 1),
+                0x08 => (Codec::DclImplode, 1),
+                0x10 => (Codec::Bzip2, 1),
+                // StormLib: a 0 (no filter) byte, the 5 LZMA properties
+                // bytes and the 8-byte decoded size, then raw LZMA.
+                0x12 => {
+                    let props = match bytes.get(1) {
+                        Some(0) => crate::codec::lzma::Props::from_byte(
+                            bytes.get(2).copied().unwrap_or(0xff),
+                        )?,
+                        _ => return Err(Diagnostic::unsupported("LZMA sector with a filter")),
+                    };
+                    let codec = Codec::LzmaRaw {
+                        props,
+                        size: Some(expected),
+                        dict: crate::bytes::u32_le(&bytes, 3),
+                    };
+                    (codec, 15)
+                }
+                m => {
+                    return Err(Diagnostic::unsupported(format!(
+                        "compression mask {m:#04x}"
+                    )));
+                }
+            }
+        };
+        mpq_sector(cx, &codec, bytes.get(at..).unwrap_or_default(), self.limit).await
+    }
+}
 
 #[derive(Clone)]
 struct MpqState {
@@ -803,7 +906,6 @@ impl MpqState {
 
     /// Reads a file's contents: decrypted and decompressed sector by sector.
     async fn read_file(&self, cx: &Cx, block: &MpqBlock, name: Option<&str>) -> Result<Vec<u8>> {
-        use crate::codec::crypto::mpq::decrypt;
         if block.flags & MPQ_SINGLE_UNIT != 0 {
             let (span, _) = self.single_unit(cx, block, name).await?;
             return crate::codec::read_all(cx, span).await;
@@ -817,59 +919,22 @@ impl MpqState {
         let packed = imploded || block.flags & MPQ_COMPRESS != 0;
         let raw = crate::codec::read_all(cx, data).await?;
         let limit = crate::bytes::to_usize(cx.limits().max_derived);
-        let unit = |bytes: &[u8], index: u32, expected: usize| -> Result<Vec<u8>> {
-            let mut bytes = bytes.to_vec();
-            if encrypted {
-                decrypt(&mut bytes, key.wrapping_add(index));
-            }
-            if !packed || bytes.len() >= expected {
-                return Ok(bytes);
-            }
-            let decode = |codec: crate::codec::Codec, body: &[u8]| {
-                let mut decoder = codec
-                    .decoder()
-                    .ok_or_else(|| Diagnostic::internal("no decoder"))?;
-                crate::codec::pipeline::decode_all(decoder.as_mut(), body, limit)
-            };
-            if imploded {
-                return decode(crate::codec::Codec::DclImplode, &bytes);
-            }
-            let (&mask, body) = bytes
-                .split_first()
-                .ok_or_else(|| Diagnostic::malformed("empty compressed sector"))?;
-            match mask {
-                0x02 => decode(crate::codec::Codec::Zlib, body),
-                0x08 => decode(crate::codec::Codec::DclImplode, body),
-                0x10 => decode(crate::codec::Codec::Bzip2, body),
-                // StormLib: a 0 (no filter) byte, the 5 LZMA properties
-                // bytes and the 8-byte decoded size, then raw LZMA.
-                0x12 => {
-                    let props = match body.first() {
-                        Some(0) => crate::codec::lzma::Props::from_byte(
-                            body.get(1).copied().unwrap_or(0xff),
-                        )?,
-                        _ => return Err(Diagnostic::unsupported("LZMA sector with a filter")),
-                    };
-                    let codec = crate::codec::Codec::LzmaRaw {
-                        props,
-                        size: Some(expected),
-                        dict: crate::bytes::u32_le(body, 2),
-                    };
-                    decode(codec, body.get(14..).unwrap_or_default())
-                }
-                m => Err(Diagnostic::unsupported(format!(
-                    "compression mask {m:#04x}"
-                ))),
-            }
-        };
         let sector = crate::bytes::to_usize(self.sector.into()).max(1);
         let size = crate::bytes::to_usize(block.size.into());
         let count = size.div_ceil(sector);
+        let sectors = MpqSectors {
+            key: encrypted.then_some(key),
+            imploded,
+            packed,
+            limit,
+        };
+        // The recorded size is not trusted for preallocation.
+        let mut out = Vec::with_capacity(size.min(1 << 24));
         if !packed {
             // Uncompressed sectors: decrypt each in turn.
-            let mut out = Vec::with_capacity(size);
             for (i, chunk) in raw.chunks(sector).enumerate() {
-                out.extend(unit(chunk, u32::try_from(i).unwrap_or(0), sector)?);
+                let index = u32::try_from(i).unwrap_or(0);
+                out.extend(sectors.sector(cx, chunk, index, sector).await?);
                 cx.checkpoint().await;
             }
             out.truncate(size);
@@ -881,26 +946,25 @@ impl MpqState {
             .ok_or_else(|| Diagnostic::truncated(data.sub(0, 4), 0))?
             .to_vec();
         if encrypted {
-            decrypt(&mut table, key.wrapping_sub(1));
+            let mut cipher = crate::codec::crypto::mpq::Decrypt::new(key.wrapping_sub(1));
+            for piece in table.chunks_mut(MPQ_STEP) {
+                cipher.apply(piece);
+                cx.checkpoint().await;
+            }
         }
-        let offsets: Vec<usize> = table
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|w| crate::bytes::to_usize(u32::from_le_bytes(*w).into()))
-            .collect();
-        let mut out = Vec::with_capacity(size);
-        for (i, pair) in offsets.windows(2).enumerate() {
-            let (&[from, to], expected) = (
-                pair,
-                sector.min(size.saturating_sub(i.saturating_mul(sector))),
-            ) else {
+        let offset = |i: usize| {
+            u32_le(&table, i.saturating_mul(4)).map(|v| crate::bytes::to_usize(v.into()))
+        };
+        for i in 0..count {
+            let (Some(from), Some(to)) = (offset(i), offset(i.saturating_add(1))) else {
                 break;
             };
+            let expected = sector.min(size.saturating_sub(i.saturating_mul(sector)));
             let bytes = raw
                 .get(from..to)
                 .ok_or_else(|| Diagnostic::malformed("sector outside the file").at(data))?;
-            out.extend(unit(bytes, u32::try_from(i).unwrap_or(0), expected)?);
+            let index = u32::try_from(i).unwrap_or(0);
+            out.extend(sectors.sector(cx, bytes, index, expected).await?);
             if out.len() > limit {
                 return Err(Diagnostic::limit("file exceeds the decoded-data limit"));
             }

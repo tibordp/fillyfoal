@@ -7,13 +7,12 @@
 //! [`Pbz`] waits for a whole chunk (its input) and then decodes it a step
 //! at a time: a stored chunk is copied `step` bytes per call, a compressed
 //! one runs through its own decoder ([`Nested`]) a step per call, and
-//! Apple's LZ4 framing a `bv4` block per call (an LZ4 block is decoded
-//! whole: the framing does not bound its size, but `aa` writes blocks of
-//! 64 KiB or less).
+//! Apple's LZ4 framing a `bv4` block header or a bounded step of a block
+//! per call.
 
 use crate::codec::Codec;
-use crate::codec::lz::lz4_block;
-use crate::codec::pipeline::{Decoder, Status};
+use crate::codec::lz::{Lz4Block, Sub};
+use crate::codec::pipeline::{Decode, Decoder, Status, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -112,8 +111,13 @@ enum Chunk {
     Nested(Nested),
     /// Apple's LZ4 framing (`bv41` LZ4 blocks, `bv4-` stored blocks, ended
     /// by `bv4$`); blocks may refer back into earlier blocks' output, which
-    /// `buf` keeps. `at` is the next block's offset in the chunk.
-    Bv4 { at: usize, buf: Vec<u8> },
+    /// `buf` keeps. `at` is the next block's offset in the chunk, and
+    /// `block` the block being decoded.
+    Bv4 {
+        at: usize,
+        buf: Vec<u8>,
+        block: Option<Bv4Block>,
+    },
 }
 
 /// The current chunk, with its data's input position and length, and its
@@ -137,9 +141,41 @@ pub struct Pbz {
     done: bool,
 }
 
-/// Decodes the `bv4` block at `at` of `data` into `buf`; returns the next
-/// block's offset, or `None` at the end marker.
-fn bv4_block(data: &[u8], at: usize, buf: &mut Vec<u8>, limit: usize) -> Result<Option<usize>> {
+/// A `bv4` block being decoded into the chunk's buffer: an LZ4 block (a
+/// bounded step at a time) or a stored one (copied a step at a time).
+struct Bv4Block {
+    /// The block's data within the chunk.
+    sub: Sub,
+    lz4: Option<Lz4Block>,
+    /// Its decoded size, and the buffer's length at its start.
+    raw: usize,
+    before: usize,
+}
+
+impl Bv4Block {
+    /// Runs one step over the chunk's `data`, producing about `step`
+    /// bytes into `buf` (at most `limit` in all); returns whether the
+    /// block has ended.
+    fn step(&mut self, data: &[u8], buf: &mut Vec<u8>, step: usize, limit: usize) -> Result<bool> {
+        let Some(d) = self.lz4.as_mut() else {
+            self.sub.copy(data, buf, step);
+            return Ok(self.sub.copied());
+        };
+        let (block, _) = self.sub.slice(data);
+        if d.step(block, true, buf, step, limit)? == Step::More {
+            return Ok(false);
+        }
+        if buf.len().saturating_sub(self.before) != self.raw {
+            return Err(bad("LZ4 block size mismatch"));
+        }
+        Ok(true)
+    }
+}
+
+/// Reads the `bv4` block header at `at` of `data` (the whole chunk), with
+/// `held` bytes of the chunk decoded; returns the block, or `None` at the
+/// end marker.
+fn bv4_header(data: &[u8], at: usize, held: usize, limit: usize) -> Result<Option<Bv4Block>> {
     let magic = data
         .get(at..at.saturating_add(4))
         .ok_or_else(|| bad("truncated LZ4 block header"))?;
@@ -153,28 +189,33 @@ fn bv4_block(data: &[u8], at: usize, buf: &mut Vec<u8>, limit: usize) -> Result<
         b"bv41" => {
             let raw = field(4)?;
             let packed = field(8)?;
-            let start = at.saturating_add(12);
-            let block = data
-                .get(start..start.saturating_add(packed))
-                .ok_or_else(|| bad("truncated LZ4 block"))?;
-            let before = buf.len();
-            lz4_block(block, buf, limit)?;
-            if buf.len().saturating_sub(before) != raw {
-                return Err(bad("LZ4 block size mismatch"));
+            let sub = Sub::new(at.saturating_add(12), packed);
+            if data.len() < sub.end {
+                return Err(bad("truncated LZ4 block"));
             }
-            Ok(Some(start.saturating_add(packed)))
+            Ok(Some(Bv4Block {
+                sub,
+                // Blocks may refer back into earlier blocks of the chunk.
+                lz4: Some(Lz4Block::default()),
+                raw,
+                before: held,
+            }))
         }
         b"bv4-" => {
             let raw = field(4)?;
-            let start = at.saturating_add(8);
-            let block = data
-                .get(start..start.saturating_add(raw))
-                .ok_or_else(|| bad("truncated stored block"))?;
-            if buf.len().saturating_add(raw) > limit {
+            let sub = Sub::new(at.saturating_add(8), raw);
+            if data.len() < sub.end {
+                return Err(bad("truncated stored block"));
+            }
+            if held.saturating_add(raw) > limit {
                 return Err(too_large(limit));
             }
-            buf.extend_from_slice(block);
-            Ok(Some(start.saturating_add(raw)))
+            Ok(Some(Bv4Block {
+                sub,
+                lz4: None,
+                raw,
+                before: held,
+            }))
         }
         _ => Err(bad("unknown LZ4 block magic")),
     }
@@ -231,6 +272,7 @@ impl Pbz {
                 _ => Chunk::Bv4 {
                     at: 0,
                     buf: Vec::new(),
+                    block: None,
                 },
             }
         };
@@ -303,19 +345,27 @@ impl Decoder for Pbz {
                 }
                 ended
             }
-            Chunk::Bv4 { at, buf } => {
+            Chunk::Bv4 { at, buf, block } => {
                 let room = limit.saturating_sub(out.len()).saturating_add(buf.len());
-                let mark = buf.len();
-                let next = bv4_block(data, *at, buf, room)?;
-                out.extend_from_slice(buf.get(mark..).unwrap_or_default());
-                match next {
-                    _ if buf.len() > cur.raw => return Err(bad("chunk size mismatch")),
-                    Some(n) => {
-                        *at = n;
-                        false
-                    }
+                if block.is_none() {
+                    *block = bv4_header(data, *at, buf.len(), room)?;
+                }
+                match block.as_mut() {
                     None if buf.len() != cur.raw => return Err(bad("chunk size mismatch")),
                     None => true,
+                    Some(b) => {
+                        let mark = buf.len();
+                        let ended = b.step(data, buf, step, room)?;
+                        out.extend_from_slice(buf.get(mark..).unwrap_or_default());
+                        if ended {
+                            if buf.len() > cur.raw {
+                                return Err(bad("chunk size mismatch"));
+                            }
+                            *at = b.sub.end;
+                            *block = None;
+                        }
+                        false
+                    }
                 }
             }
         };

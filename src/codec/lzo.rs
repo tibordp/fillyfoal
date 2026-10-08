@@ -3,11 +3,12 @@
 //! then independently compressed blocks with optional Adler-32/CRC-32 checks
 //! of the compressed and uncompressed bytes.
 
+use crate::codec::crc::crc32_update;
 use crate::codec::lz::{
-    Run, RunMemo, SCAN, Units, literal_chunk, match_chunk, read_run, run_units,
+    Run, RunMemo, SCAN, Sub, Units, literal_chunk, match_chunk, read_run, run_units,
 };
 use crate::codec::pipeline::{Decode, Step};
-use crate::codec::{adler32, crc32};
+use crate::codec::{Adler32, adler32, crc32};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -457,15 +458,144 @@ pub fn lzop_block_header_len(flags: u32, compressed: bool) -> usize {
     len
 }
 
-/// The lzop container: one or more concatenated members, decoded a block
-/// (with its checks) at a time.
+/// An [`Lzo1x`] run up to its end marker (input after it is the caller's).
+struct ToEnd<'a>(&'a mut Lzo1x);
+
+impl Units for ToEnd<'_> {
+    fn unit(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        room: usize,
+        limit: usize,
+    ) -> Result<usize> {
+        self.0.unit(input, eof, out, room, limit)
+    }
+
+    fn finished(&self) -> bool {
+        matches!(self.0.at, LzoAt::End)
+    }
+
+    fn progress(&self) -> usize {
+        self.0.progress()
+    }
+}
+
+/// Running Adler-32 and CRC-32 of a block's bytes (those asked for).
+#[derive(Clone, Copy)]
+struct Sums {
+    adler: Option<Adler32>,
+    /// The CRC-32 register (before the final inversion).
+    crc: Option<u32>,
+}
+
+impl Sums {
+    fn new(adler: bool, crc: bool) -> Self {
+        Sums {
+            adler: adler.then(Adler32::new),
+            crc: crc.then_some(u32::MAX),
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        if let Some(a) = self.adler.as_mut() {
+            a.update(data);
+        }
+        if let Some(c) = self.crc.as_mut() {
+            *c = crc32_update(*c, data);
+        }
+    }
+
+    fn value(&self, crc: bool) -> u32 {
+        if crc {
+            !self.crc.unwrap_or(u32::MAX)
+        } else {
+            self.adler.unwrap_or_default().value()
+        }
+    }
+}
+
+/// A stored check: its value, whether it covers the decoded bytes (else
+/// the compressed ones), and whether it is a CRC-32 (else an Adler-32).
+type Check = (u32, bool, bool);
+
+/// The lzop block being decoded: copied (stored) or run through an
+/// [`Lzo1x`] a bounded step at a time, its checks computed as it goes.
+#[derive(Clone)]
+struct LzopBlock {
+    sub: Sub,
+    raw: usize,
+    produced: usize,
+    lzo: Option<Lzo1x>,
+    checks: [Option<Check>; 4],
+    /// Of the decoded bytes.
+    data: Sums,
+    /// Of the compressed bytes.
+    packed: Sums,
+}
+
+impl LzopBlock {
+    /// Runs one step of the block, producing about `room` bytes; returns
+    /// whether it has ended (and passed its checks).
+    fn step(&mut self, input: &[u8], eof: bool, out: &mut Vec<u8>, room: usize) -> Result<bool> {
+        let (slice, whole) = self.sub.slice(input);
+        if !whole && eof {
+            return Err(bad("truncated lzop block"));
+        }
+        let mark = out.len();
+        match self.lzo.as_mut() {
+            Some(d) => {
+                let before = d.pos;
+                let status = run_units(&mut ToEnd(d), slice, whole, out, room, self.raw)?;
+                self.packed
+                    .update(slice.get(before..d.pos).unwrap_or_default());
+                self.data.update(out.get(mark..).unwrap_or_default());
+                self.produced = self.produced.saturating_add(out.len().saturating_sub(mark));
+                if status == Step::More {
+                    return Ok(false);
+                }
+                if d.pos != self.sub.end.saturating_sub(self.sub.from) {
+                    return Err(bad("lzop block has trailing bytes"));
+                }
+            }
+            None => {
+                let n = self.sub.copy(input, out, room);
+                self.data.update(out.get(mark..).unwrap_or_default());
+                self.produced = self.produced.saturating_add(n);
+                if !self.sub.copied() {
+                    if n == 0 {
+                        return Err(bad("truncated lzop block"));
+                    }
+                    return Ok(false);
+                }
+            }
+        }
+        if self.produced != self.raw {
+            return Err(bad("lzop block decoded to the wrong size"));
+        }
+        for (stored, data_check, crc) in self.checks.into_iter().flatten() {
+            let sums = if data_check { self.data } else { self.packed };
+            if sums.value(crc) != stored {
+                return Err(bad("lzop block checksum mismatch"));
+            }
+        }
+        Ok(true)
+    }
+}
+
+/// The lzop container: one or more concatenated members, decoded a header
+/// at a time and blocks (with their checks) a bounded step at a time.
 #[derive(Clone, Default)]
 pub struct Lzop {
+    /// The next header's position (the current block's, while one is being
+    /// decoded).
     pos: usize,
     /// The current member's flags, once its header has been read.
     member: Option<u32>,
     /// A member has ended: another may follow.
     between: bool,
+    block: Option<LzopBlock>,
     done: bool,
 }
 
@@ -491,8 +621,16 @@ impl Lzop {
         Ok(())
     }
 
-    /// Decodes the block at `self.pos` of a member with `flags`.
-    fn block(&mut self, flags: u32, input: &[u8], out: &mut Vec<u8>, limit: usize) -> Result<()> {
+    /// Reads the block header at `self.pos` of a member with `flags`, and
+    /// starts the block.
+    fn block_header(
+        &mut self,
+        flags: u32,
+        input: &[u8],
+        eof: bool,
+        out: &[u8],
+        limit: usize,
+    ) -> Result<()> {
         let pos = self.pos;
         let raw = be32(input, pos)?;
         if raw == 0 {
@@ -507,7 +645,7 @@ impl Lzop {
         }
         let compressed = packed < raw;
         let mut at = pos.saturating_add(8);
-        let mut check = |flag: u32, data_check: bool| -> Result<Option<(u32, bool, bool)>> {
+        let mut check = |flag: u32, data_check: bool| -> Result<Option<Check>> {
             if flags & flag == 0 || !(data_check || compressed) {
                 return Ok(None);
             }
@@ -525,37 +663,29 @@ impl Lzop {
             usize::try_from(raw).unwrap_or(usize::MAX),
             usize::try_from(packed).unwrap_or(usize::MAX),
         );
-        let data = input
-            .get(at..at.saturating_add(packed))
-            .ok_or_else(|| bad("truncated lzop block"))?;
+        let sub = Sub::new(at, packed);
+        if eof && input.len() < sub.end {
+            return Err(bad("truncated lzop block"));
+        }
         if out.len().saturating_add(raw) > limit {
             return Err(too_big(limit));
         }
-        let start = out.len();
-        if compressed {
-            let used = lzo1x(data, out, raw)?;
-            if used != packed {
-                return Err(bad("lzop block has trailing bytes"));
-            }
-        } else {
-            out.extend_from_slice(data);
-        }
-        let block = out.get(start..).unwrap_or_default();
-        if block.len() != raw {
-            return Err(bad("lzop block decoded to the wrong size"));
-        }
-        for (stored, data_check, crc) in checks.into_iter().flatten() {
-            let subject = if data_check { block } else { data };
-            let computed = if crc {
-                crc32(subject)
-            } else {
-                adler32(subject)
-            };
-            if computed != stored {
-                return Err(bad("lzop block checksum mismatch"));
-            }
-        }
-        self.pos = at.saturating_add(packed);
+        let wants = |flag: u32| flags & flag != 0;
+        self.block = Some(LzopBlock {
+            sub,
+            raw,
+            produced: 0,
+            lzo: compressed.then(|| Lzo1x {
+                base: out.len(),
+                ..Lzo1x::default()
+            }),
+            checks,
+            data: Sums::new(wants(F_ADLER32_D), wants(F_CRC32_D)),
+            packed: Sums::new(
+                compressed && wants(F_ADLER32_C),
+                compressed && wants(F_CRC32_C),
+            ),
+        });
         Ok(())
     }
 }
@@ -570,9 +700,30 @@ impl Decode for Lzop {
         limit: usize,
     ) -> Result<Step> {
         let mark = out.len();
-        while !self.done {
+        // Headers (each a bounded read) count as work alongside output.
+        let mut headers = 0usize;
+        loop {
+            let work = out
+                .len()
+                .saturating_sub(mark)
+                .saturating_add(headers.saturating_mul(64));
+            if work >= step.max(1) {
+                return Ok(Step::More);
+            }
+            if let Some(block) = self.block.as_mut() {
+                if !block.step(input, eof, out, step.saturating_sub(work))? {
+                    return Ok(Step::More);
+                }
+                self.pos = block.sub.end;
+                self.block = None;
+                continue;
+            }
+            if self.done {
+                return Ok(Step::Done);
+            }
+            headers = headers.saturating_add(1);
             match self.member {
-                Some(flags) => self.block(flags, input, out, limit)?,
+                Some(flags) => self.block_header(flags, input, eof, out, limit)?,
                 None if self.between => {
                     // Another member follows if the magic does.
                     let rest = input.get(self.pos..).unwrap_or_default();
@@ -590,11 +741,7 @@ impl Decode for Lzop {
                 }
                 None => self.header(input)?,
             }
-            if out.len().saturating_sub(mark) >= step {
-                return Ok(Step::More);
-            }
         }
-        Ok(Step::Done)
     }
 
     fn consumed(&self) -> usize {
@@ -602,16 +749,39 @@ impl Decode for Lzop {
     }
 
     fn releasable_input(&self) -> usize {
-        // Headers and blocks (with their checks) are read whole from `pos`.
-        self.pos
+        match &self.block {
+            // Checked as it is consumed.
+            Some(b) => b
+                .sub
+                .from
+                .saturating_add(b.lzo.as_ref().map_or(0, |d| d.releasable_input())),
+            // Headers are read whole from `pos`.
+            None => self.pos,
+        }
     }
 
     fn release_input(&mut self, n: usize) {
         self.pos = self.pos.saturating_sub(n);
+        if let Some(b) = self.block.as_mut() {
+            let inner = b.sub.release(n);
+            if let Some(d) = b.lzo.as_mut() {
+                d.release_input(inner);
+            }
+        }
     }
 
     fn releasable_output(&self, out_len: usize) -> usize {
-        // Blocks are independent, and checked as they are decoded.
-        out_len
+        match self.block.as_ref().and_then(|b| b.lzo.as_ref()) {
+            // A compressed block refers back into its own output.
+            Some(d) => d.releasable_output(out_len),
+            // Blocks are independent, and checked as they are decoded.
+            None => out_len,
+        }
+    }
+
+    fn release_output(&mut self, n: usize) {
+        if let Some(d) = self.block.as_mut().and_then(|b| b.lzo.as_mut()) {
+            d.release_output(n);
+        }
     }
 }
