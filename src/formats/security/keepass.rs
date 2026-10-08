@@ -21,6 +21,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::codec::crypto;
 use crate::codec::crypto::argon2::{self, Argon2};
 use crate::codec::crypto::chacha20::chacha20;
 use crate::codec::crypto::twofish::Twofish;
@@ -155,9 +156,7 @@ async fn derive(cx: &Cx, kdf: &Kdf, key: &[u8], at: Span) -> Result<Vec<u8>> {
             }
             let mut state = Argon2::new(params.clone(), key, salt, secret, associated)
                 .ok_or_else(|| Diagnostic::malformed("unusable Argon2 parameters").at(at))?;
-            while !state.step(1) {
-                cx.checkpoint().await;
-            }
+            crypto::run(cx, &mut state).await;
             Ok(state.finish())
         }
     }

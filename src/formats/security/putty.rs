@@ -22,6 +22,7 @@
 //! Argon2 over the passphrase and `Argon2-Salt`. Private key material is
 //! shown by size only.
 
+use crate::codec::crypto;
 use crate::codec::crypto::argon2::{Argon2, Params, Variant};
 use crate::codec::crypto::{Aes, Hash, Hmac, Sha1, Sha256, cbc_decrypt};
 use crate::cx::Cx;
@@ -395,9 +396,7 @@ async fn private_key(cx: Cx, p: Private) -> Result<()> {
                 else {
                     break;
                 };
-                while !state.step(1) {
-                    cx.checkpoint().await;
-                }
+                crypto::run(&cx, &mut state).await;
                 let keys = state.finish();
                 let (Some(key), Some(iv), Some(mac_key)) =
                     (keys.get(..32), keys.get(32..48), keys.get(48..80))
