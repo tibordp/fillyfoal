@@ -662,6 +662,13 @@ impl Cx {
         Some(out.forced)
     }
 
+    /// The format the host forced for this node, if its detection step has
+    /// not run yet (without claiming it; see [`Cx::claim_detection`]).
+    pub(crate) fn forced_format(&self) -> Option<&'static Format> {
+        let out = lock(&self.out);
+        if out.claimed { None } else { out.forced }
+    }
+
     /// Records what the node's own detection step settled on.
     pub(crate) fn interpreted(&self, interpretation: Interpretation) {
         lock(&self.out).interpretation = Some(interpretation);

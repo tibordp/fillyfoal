@@ -78,6 +78,7 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &tail,
         len: file.len,
+        len_known: true,
     };
     let at = to_u64(tmr_at(&probe).unwrap_or(0x7ff0));
     let span = file.sub(at, 16);

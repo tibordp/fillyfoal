@@ -109,8 +109,12 @@ pub struct Head<'a> {
     pub data: &'a [u8],
     /// The last [`TAIL_LEN`] bytes (may overlap `data`).
     pub tail: &'a [u8],
-    /// Length of the whole input.
+    /// Length of the whole input. When `len_known` is false this is only an
+    /// upper bound (content decoded on demand whose size nothing records; see
+    /// `Cx::decode_lazy_unsized`): a declared size that "fits" proves nothing
+    /// then, and a probe must not accept on that evidence alone.
     pub len: u64,
+    pub len_known: bool,
 }
 
 impl Head<'_> {
@@ -163,6 +167,24 @@ impl std::fmt::Debug for Format {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_tuple("Format").field(&self.name).finish()
     }
+}
+
+/// Formats that dissect their input from the front without needing its
+/// length: content decoded on demand whose size nothing records (a
+/// `.tar.zst` written to a pipe, a `.log.gz`) is dissected as soon as it is
+/// identified as one of these. Any other format first has the stream decoded
+/// to its end, in budgeted steps, so that it sees its real length (see
+/// [`dissect_unsized`]). A format joins this list only if it gives the same
+/// tree with its length unknown (`tests/unsized.rs`).
+pub static STREAMING: &[&Format] = &[
+    &archive::tar::FORMAT,
+    &archive::cpio::FORMAT,
+    &text::plain::FORMAT,
+];
+
+/// Whether `format` is in [`STREAMING`].
+pub fn streams(format: &Format) -> bool {
+    STREAMING.iter().any(|f| std::ptr::eq(*f, format))
 }
 
 /// All formats, in probing order: specific before generic.
@@ -1865,6 +1887,7 @@ async fn settle(
                 data: &data,
                 tail: &tail,
                 len: input.span.len,
+                len_known: cx.len_known(input.span.source),
             };
             (identify(&probe), data.is_empty())
         }
@@ -1885,6 +1908,57 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         (None, true) => Err(Diagnostic::note("empty").at(input.span)),
         (None, false) => Err(Diagnostic::unsupported("unrecognized format").at(input.span)),
     }
+}
+
+/// Dissects content decoded on demand whose length nothing records (see
+/// `Cx::decode_lazy_unsized`; `input.span`'s length is an upper bound). A
+/// format in [`STREAMING`] dissects it at once; any other first has the
+/// stream decoded to its end, in budgeted steps, and sees the real length.
+/// Unrecognized content stays a data leaf of unknown length (nothing needs
+/// its length; hosts check `Session::source_len_known`).
+pub async fn dissect_unsized(cx: Cx, input: Input) -> Result<()> {
+    let span = input.span;
+    let format = match cx.forced_format() {
+        Some(format) => Some(format),
+        None if cx.len_known(span.source) => None,
+        None => {
+            let (data, tail) = head(&cx, span).await?;
+            identify(&Head {
+                data: &data,
+                tail: &tail,
+                len: span.len,
+                len_known: false,
+            })
+        }
+    };
+    if format.is_some_and(|f| !streams(f)) && !cx.len_known(span.source) {
+        // Decoding up to the provisional end finds the real one.
+        let last = span.sub(span.len.saturating_sub(1), 1);
+        if let Err(e) = cx.read_avail(last).await {
+            cx.diag(e);
+        }
+    }
+    // Once the length is known (also when identification read a short
+    // stream to its end), the content gets it.
+    let input = if cx.len_known(span.source) {
+        let len = cx
+            .source_len(span.source)
+            .saturating_sub(span.offset)
+            .min(span.len);
+        let known = Span::new(span.source, span.offset, len);
+        Input {
+            span: known,
+            outer: if input.outer == span {
+                known
+            } else {
+                input.outer
+            },
+            ..input
+        }
+    } else {
+        input
+    };
+    dissect_or_data(cx, input).await
 }
 
 /// Dissects `input`, or, if its format is not recognised, shows it as a
@@ -1949,7 +2023,7 @@ async fn expand_content_hinted(
     if hint > LAZY_THRESHOLD && span.len <= UNSIZED_LAZY_THRESHOLD {
         let decoded = cx.decode_lazy_unsized(span, &codec)?;
         cx.annotate("size unknown, decoded on demand");
-        return dissect_or_data(cx, input.nested(decoded)).await;
+        return dissect_unsized(cx, input.nested(decoded)).await;
     }
     expand_content(cx, (input, span, codec, None)).await
 }
@@ -1981,7 +2055,7 @@ pub async fn expand_content(
         codec if expected.is_none() && span.len > UNSIZED_LAZY_THRESHOLD => {
             let decoded = cx.decode_lazy_unsized(span, &codec)?;
             cx.annotate("size unknown, decoded on demand");
-            input.nested(decoded)
+            return dissect_unsized(cx, input.nested(decoded)).await;
         }
         codec => {
             let decoded = crate::codec::decode_span(&cx, span, &codec, expected).await?;

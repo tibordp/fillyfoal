@@ -1795,6 +1795,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &[],
         len: input.span.len,
+        len_known: true,
     };
     let summary = match root(&h) {
         Some(r) => format!("XML document, root <{}>", String::from_utf8_lossy(&r.name)),
@@ -1812,6 +1813,7 @@ async fn dissect_variant(cx: Cx, input: Input, variant: &'static Variant) -> Res
         data: &head,
         tail: &[],
         len: input.span.len,
+        len_known: true,
     };
     let text = probe::head(&h);
     let detail = root(&h).and_then(|r| (variant.detail)(&r, &text));

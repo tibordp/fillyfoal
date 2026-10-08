@@ -243,6 +243,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &head,
         len: input.span.len,
+        len_known: true,
     };
     let layout = layout(&probe).unwrap_or(Layout {
         stride: 188,

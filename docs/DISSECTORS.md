@@ -280,8 +280,16 @@ an input a thousand times larger than the fixture.
   (`Cx::len_known` / `Session::source_len_known`). Do not compute a total
   by walking the whole encoded stream first (e.g. summing per-frame sizes
   over every zstd block): that reads the entire file before the first
-  decoded byte, which is exactly what lazy decoding avoids. Dissectors over
-  such content should walk from the start rather than look at the tail.
+  decoded byte, which is exactly what lazy decoding avoids.
+- Content of unknown length reaches only the formats in `formats::STREAMING`
+  (tar, cpio, plain text) with its length unknown; every other format gets
+  the stream decoded to its end first and sees the real length, so ordinary
+  dissectors can rely on `input.span.len`. A streaming format must not
+  count, estimate, size spans or look for trailers from the length while
+  `cx.len_known(input.span.source)` is false. To add one, make
+  `tests/unsized.rs` and a large unsized test pass. Probes see
+  `Head::len_known`: with the length unknown, `len` is only an upper bound,
+  so a declared size that "fits" is no evidence (see the BSON probe).
 - **Fragmented data** (FAT cluster chains, ext4 extents, NTFS runs, CFB
   sector chains, SQLite overflow pages): describe it as pieces instead of
   copying it: `cx.add_pieces(Origin { parent, transform: "fat-chain" },

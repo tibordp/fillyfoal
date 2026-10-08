@@ -708,12 +708,14 @@ mod tests {
             data: b"ID   X; SV 1\nXX\n",
             tail: b"",
             len: 16,
+            len_known: true,
         };
         assert!(embl_probe(&h));
         let g = Head {
             data: b"chr1\tsrc\texon\t1\t10\t.\t+\t.\tgene_id \"g\"; transcript_id \"t\";\n",
             tail: b"",
             len: 60,
+            len_known: true,
         };
         assert!(gtf_probe(&g));
     }

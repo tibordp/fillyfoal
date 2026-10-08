@@ -141,6 +141,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &[],
         len: file.len,
+        len_known: true,
     };
     let sb = to_u64(
         superblock_offset(&probe)

@@ -236,6 +236,7 @@ async fn probe_codec_is_hevc(cx: &Cx, file: Span) -> Result<bool> {
         data: &d,
         tail: &d,
         len: file.len,
+        len_known: true,
     };
     Ok(probe_hevc_first(&probe))
 }

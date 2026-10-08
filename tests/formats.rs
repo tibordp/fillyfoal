@@ -171,6 +171,7 @@ fn fixtures_are_identified_correctly() {
             data: head,
             tail,
             len: data.len() as u64,
+            len_known: true,
         };
         let found = identify(&probe).map(|f| f.name);
         let wanted = match chosen_format(&path) {

@@ -674,6 +674,7 @@ async fn snes(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &tail,
         len: file.len,
+        len_known: true,
     };
     let base = to_u64(snes_header_at(&probe).unwrap_or(0x7fc0));
     if base == 0x81c0 {

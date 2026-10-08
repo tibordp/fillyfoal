@@ -97,9 +97,12 @@ struct Overview {
     encoding: Encoding,
     bom: u64,
     endings: Endings,
-    /// Exact line count if the sample covers everything, else an estimate.
+    /// Exact line count if the sample covers everything, else an estimate
+    /// (or, with the length unknown, the count in the sample).
     lines: u64,
     exact: bool,
+    /// The input's length is unknown (only an upper bound).
+    unbounded: bool,
 }
 
 async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
@@ -118,6 +121,9 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
     let body = head.get(to_usize(bom)..).unwrap_or_default();
     let endings = Endings::count(units(body, encoding));
     let exact = to_u64(head.len()) >= span.len;
+    // Content decoded on demand whose size nothing records: its length is
+    // only an upper bound, so there is nothing to extrapolate to.
+    let unbounded = !exact && !cx.len_known(span.source);
     let ends_with_eol = units(body, encoding)
         .last()
         .is_some_and(|u| u == 0x0a || u == 0x0d);
@@ -126,7 +132,7 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
         if !body.is_empty() && !ends_with_eol {
             lines = lines.saturating_add(1);
         }
-    } else if !body.is_empty() {
+    } else if !body.is_empty() && !unbounded {
         // Extrapolate from the sample's density.
         let per = to_u64(body.len())
             .checked_div(lines.max(1))
@@ -140,6 +146,7 @@ async fn overview(cx: &Cx, span: Span) -> Result<Overview> {
         endings,
         lines,
         exact,
+        unbounded,
     })
 }
 
@@ -157,6 +164,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 fn line_count(o: &Overview) -> String {
     if o.exact {
         plural(o.lines, "line", "lines")
+    } else if o.unbounded {
+        format!("at least {}", plural(o.lines, "line", "lines"))
     } else {
         format!("~{} lines", count(o.lines))
     }
@@ -179,6 +188,11 @@ fn emit_overview(cx: &Cx, span: Span, o: &Overview) {
     let body = span.tail(o.bom);
     let summary = if o.exact {
         line_count(o)
+    } else if o.unbounded {
+        format!(
+            "{} (in the first {HEAD_LEN:#x} bytes; length unknown)",
+            line_count(o)
+        )
     } else {
         format!(
             "{} (estimated from the first {HEAD_LEN:#x} bytes)",

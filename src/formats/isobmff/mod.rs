@@ -606,6 +606,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &head,
         len: input.span.len,
+        len_known: true,
     };
     let brand = classify(&probe).unwrap_or(Brand::Mp4);
     cx.annotate(brand.label());

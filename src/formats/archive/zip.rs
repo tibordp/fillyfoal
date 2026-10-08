@@ -926,6 +926,7 @@ impl<'a> From<&'a OwnedHead> for Head<'a> {
             data: &h.data,
             tail: &h.tail,
             len: h.len,
+            len_known: true,
         }
     }
 }

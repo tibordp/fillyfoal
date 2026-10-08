@@ -1901,6 +1901,7 @@ mod tests {
             data,
             tail: data,
             len: to_u64(data.len()),
+            len_known: true,
         })
     }
 

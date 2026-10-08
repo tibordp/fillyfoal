@@ -594,6 +594,7 @@ fn root_tag(data: &[u8], len: u64) -> Option<Vec<u8>> {
         data,
         tail: &[],
         len,
+        len_known: true,
     })
     .map(|r| r.tag)
 }

@@ -477,3 +477,112 @@ fn concatenated_gzip_members_are_one_stream() {
         assert!(host.session.source_len_known(source));
     }
 }
+
+/// Opens `data` as the content of an unsized zstd stream and expands the
+/// content's first `page` children: (host, content node, compressed bytes
+/// read for them).
+fn open_unsized(data: &[u8], page: u64) -> (Host, NodeId, u64) {
+    let file = zstd_unsized(data);
+    let mut host = Host::named("big.zst", file, Limits::default());
+    host.session.expand(host.root, 1);
+    let root = host.root;
+    while host.child(root, "Decompressed").is_none() {
+        match host.session.poll_node(root, 10_000) {
+            Progress::NeedBytes(r) => supply(&mut host, r),
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let content = host.child(root, "Decompressed").unwrap();
+    host.bytes_supplied = 0;
+    host.session.expand(content, page);
+    loop {
+        match host.session.poll_node(content, 10_000) {
+            Progress::NeedBytes(r) => {
+                host.bytes_supplied += r.iter().map(|r| r.len).sum::<u64>();
+                supply(&mut host, r);
+            }
+            Progress::Idle => break,
+            _ => {}
+        }
+    }
+    let read = host.bytes_supplied;
+    (host, content, read)
+}
+
+/// Text whose first bytes would read as a BSON document length that fits
+/// under the provisional bound is still text, identified and summarised
+/// without decoding the stream to its end or extrapolating to the bound.
+#[test]
+fn unsized_text_is_identified_and_summarised_from_its_head() {
+    let text: Vec<u8> = b"hello from a long log file\n"
+        .iter()
+        .copied()
+        .cycle()
+        .take(8 << 20)
+        .collect();
+    let (host, content, read) = open_unsized(&text, 4);
+    let i = host.session.interpretation(content).unwrap();
+    assert_eq!(i.format.map(|f| f.name), Some("text"));
+    assert!(read < (text.len() / 4) as u64, "read {read} bytes");
+    let summary = host.session.node(content).unwrap().summary.clone().unwrap();
+    assert!(summary.contains("at least"), "{summary}");
+    assert!(!summary.contains('~'), "{summary}");
+}
+
+/// A large cpio archive streams like tar: its first members are listed
+/// after reading a small part of the stream.
+#[test]
+fn unsized_cpio_streams() {
+    let mut cpio = Vec::new();
+    let mut entry = |name: &str, data: &[u8]| {
+        let namez = format!("{name}\0");
+        let fields = [
+            1u32,
+            0o100_644,
+            0,
+            0,
+            1,
+            0,
+            data.len() as u32,
+            0,
+            0,
+            0,
+            0,
+            namez.len() as u32,
+            0,
+        ];
+        cpio.extend_from_slice(b"070701");
+        for f in fields {
+            cpio.extend_from_slice(format!("{f:08X}").as_bytes());
+        }
+        cpio.extend_from_slice(namez.as_bytes());
+        cpio.resize(cpio.len().next_multiple_of(4), 0);
+        cpio.extend_from_slice(data);
+        cpio.resize(cpio.len().next_multiple_of(4), 0);
+    };
+    let blob: Vec<u8> = (0..(2u32 << 20))
+        .map(|i| (i * 13 + (i >> 8)) as u8)
+        .collect();
+    for i in 0..4 {
+        entry(&format!("file{i}"), &blob);
+    }
+    entry("TRAILER!!!", &[]);
+    let (host, content, read) = open_unsized(&cpio, 1);
+    let i = host.session.interpretation(content).unwrap();
+    assert_eq!(i.format.map(|f| f.name), Some("cpio"));
+    let names: Vec<String> = host
+        .session
+        .children(content)
+        .unwrap()
+        .ids
+        .iter()
+        .map(|&id| host.session.node(id).unwrap().name.to_string())
+        .collect();
+    assert!(names.iter().any(|n| n == "file0"), "{names:?}");
+    assert!(
+        read < (cpio.len() / 2) as u64,
+        "read {read} of {}",
+        cpio.len()
+    );
+}

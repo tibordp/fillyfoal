@@ -26,6 +26,7 @@ fn probe(name: &str, data: &[u8]) -> bool {
         data: &data[..data.len().min(HEAD_LEN as usize)],
         tail: &data[data.len().saturating_sub(TAIL_LEN as usize)..],
         len: data.len() as u64,
+        len_known: true,
     };
     match &format.probe {
         Probe::Custom(f) => f(&head),

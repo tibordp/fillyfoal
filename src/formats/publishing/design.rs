@@ -761,6 +761,7 @@ async fn pict(cx: Cx, input: Input) -> Result<()> {
         data: &head,
         tail: &[],
         len: file.len,
+        len_known: true,
     };
     let (at, v2) = pict_start(&probe_head)
         .ok_or_else(|| Diagnostic::malformed("no PICT version opcode").at(file.sub(0, 0x220)))?;

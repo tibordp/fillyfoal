@@ -2496,7 +2496,8 @@ mod tests {
                 &Head {
                     data: b"a\nb",
                     tail: b"",
-                    len: 3
+                    len: 3,
+                    len_known: true,
                 },
                 2
             )

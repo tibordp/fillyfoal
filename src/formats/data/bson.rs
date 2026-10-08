@@ -181,6 +181,12 @@ fn probe(h: &Head<'_>) -> bool {
     if first_len < 8 || u64::try_from(first_len).is_ok_and(|l| l > h.len) {
         return false;
     }
+    // With the input's length unknown, a first document reaching past what
+    // the probe sees is unverifiable: any text starts with a "length" that
+    // fits under the bound.
+    if !h.len_known && usize::try_from(first_len).is_ok_and(|l| l > h.data.len()) {
+        return false;
+    }
     let mut pos = 0usize;
     let mut docs = 0u32;
     loop {
