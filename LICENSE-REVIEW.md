@@ -12,11 +12,8 @@ GPL-2.0-or-later, GPL-3.0, LGPL-2.1 and LGPL-3.0 sources (DjVuLibre,
 libmspack, XADMaster, PyGuitarPro) acceptable, with credit in
 `THIRD-PARTY.md`.
 
-Still to resolve, because these licenses cannot be unified under GPLv3:
+Items that could not be unified under GPLv3, and how they were resolved:
 
-- **unRAR** (freeware, GPL-incompatible): the RAR LZ/filter decoders are a
-  transliteration of unRAR and are being rewritten from RARLAB's technote with
-  libarchive (BSD-2-Clause) as the reference implementation.
 - ~~**AGPL-3.0** (libbgcode)~~: resolved — the MeatPack decoder was rewritten
   from Scott Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the bgcode
   specification (see the MeatPack row below).
@@ -24,8 +21,6 @@ Still to resolve, because these licenses cannot be unified under GPLv3:
   transliteration of unRAR; they have been rewritten from libarchive's RAR
   readers (BSD-2-Clause) and RARLAB's technote (see the RAR rows below; verdict
   pending review of the rewrite).
-- **AGPL-3.0** (libbgcode): the MeatPack decoder is being rewritten from Scott
-  Mudge's BSD-3-Clause packer (OctoPrint-MeatPack) and the format description.
 - A sweep of the rest of the library for material from GPL-incompatible
   sources and for credits owed: done, see "Library-wide sweep" below.
 
