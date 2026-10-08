@@ -1,0 +1,504 @@
+/* The landing page: one real file, taken apart, in the manner of a printed
+   file-format poster. Paper and ink, with colour only where it means
+   something: which structure a byte belongs to. */
+
+.lp {
+  --paper: var(--bg);
+  --ink: var(--fg);
+  --ink-2: var(--fg-muted);
+  --ink-3: var(--fg-faint);
+  --rule: var(--border);
+
+  min-height: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 32px 40px;
+  color: var(--ink);
+}
+
+.lp-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 64px;
+  border-bottom: 1px solid var(--ink);
+}
+
+.lp-mark {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.lp-mark::before {
+  content: "▾ ";
+  color: var(--ink-3);
+}
+
+.lp-top-links {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.lp-link {
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.lp-link:hover {
+  text-decoration-thickness: 2px;
+}
+.lp-link:disabled {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.lp-button {
+  height: 34px;
+  padding: 0 16px;
+  border: 1px solid var(--ink);
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 600;
+  cursor: pointer;
+}
+.lp-button:hover {
+  background: transparent;
+  color: var(--ink);
+}
+
+/* --- The headline and the file it's about --- */
+
+.lp-hero {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 48px;
+  align-items: end;
+  padding: 72px 0 40px;
+}
+
+.lp-hero h1 {
+  margin: 0 0 22px;
+  font-family: var(--serif);
+  font-size: clamp(44px, 7.2vw, 88px);
+  font-weight: 400;
+  line-height: 0.98;
+  letter-spacing: -0.025em;
+}
+
+.lp-hero p {
+  max-width: 36em;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+
+.lp-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+.lp-figure img {
+  width: 192px;
+  height: 168px;
+  image-rendering: pixelated;
+}
+.lp-figure figcaption {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: right;
+  color: var(--ink-3);
+}
+
+/* --- The poster --- */
+
+.lp-poster {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    "hex readout"
+    "legend legend";
+  gap: 0 48px;
+  padding: 32px 0;
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--ink);
+}
+
+.lp-hex {
+  grid-area: hex;
+  font-family: var(--mono);
+  font-size: 16px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lp-row {
+  display: flex;
+  height: 36px;
+  align-items: stretch;
+}
+
+.lp-off {
+  width: 5ch;
+  margin-right: 14px;
+  align-self: center;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.lp-byte {
+  --h: 0;
+  width: 2.75ch;
+  display: grid;
+  place-items: center;
+  margin: 3px 0;
+  background: oklch(var(--cell-l) var(--cell-c) var(--h));
+  cursor: pointer;
+  transition:
+    background-color 0.25s,
+    color 0.25s;
+}
+/* Fields read as runs: each starts and ends with a little room. */
+.lp-byte[data-first] {
+  margin-left: 3px;
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+}
+.lp-byte[data-last] {
+  margin-right: 3px;
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+}
+.lp-byte[data-alt] {
+  background: oklch(var(--cell-alt-l) var(--cell-alt-c) var(--h));
+}
+.lp-byte[data-on] {
+  background: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
+  color: var(--cell-on-fg);
+}
+/* Before the dissector has said what anything is. */
+.lp-byte:not([style]) {
+  background: transparent;
+  color: var(--ink-2);
+}
+.lp-ascii {
+  display: flex;
+  align-items: center;
+  margin-left: 18px;
+  white-space: pre;
+}
+.lp-ascii span {
+  --h: 0;
+  width: 1ch;
+  line-height: 26px;
+  text-align: center;
+  color: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
+  font-weight: 600;
+  transition:
+    background-color 0.25s,
+    color 0.25s;
+}
+.lp-ascii span:not([style]) {
+  color: var(--ink-3);
+}
+.lp-ascii span[data-np] {
+  font-weight: 400;
+  opacity: 0.55;
+}
+.lp-ascii span[data-on] {
+  background: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
+  color: var(--cell-on-fg);
+  opacity: 1;
+}
+.lp-empty {
+  background: none;
+  cursor: default;
+}
+
+.lp-readout {
+  grid-area: readout;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding-top: 4px;
+}
+
+.lp-path {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.lp-path span + span::before {
+  content: "›";
+  margin: 0 8px;
+  color: var(--ink-3);
+}
+.lp-path span:last-child {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lp-value {
+  --h: 0;
+  margin: 14px 0 10px;
+  padding-left: 14px;
+  border-left: 4px solid oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
+  font-family: var(--serif);
+  font-size: 40px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+  transition: border-color 0.25s;
+}
+
+.lp-value-bytes {
+  font-family: var(--mono);
+  font-size: 30px;
+  letter-spacing: -0.02em;
+}
+
+.lp-summary,
+.lp-where,
+.lp-desc {
+  margin: 0 0 6px;
+}
+.lp-summary {
+  font-size: 16px;
+}
+.lp-where {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.lp-desc {
+  margin-top: 8px;
+  max-width: 34em;
+  color: var(--ink-2);
+}
+.lp-waiting {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 26px;
+  color: var(--ink-2);
+}
+
+.lp-explore {
+  margin-top: auto;
+  align-self: flex-start;
+  padding-top: 16px;
+  font-weight: 600;
+}
+.lp-explore::after {
+  content: " →";
+}
+
+.lp-legend {
+  grid-area: legend;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 24px 0 0;
+  padding: 18px 0 0;
+  border-top: 1px dashed var(--rule);
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.lp-legend li {
+  --h: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  cursor: default;
+}
+.lp-legend li[data-on] {
+  font-weight: 700;
+}
+.lp-swatch {
+  width: 10px;
+  height: 10px;
+  align-self: center;
+  border-radius: 2px;
+  background: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
+}
+.lp-legend-sub {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* --- The call to try one's own --- */
+
+.lp-drop {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 48px;
+  align-items: baseline;
+  padding: 56px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.lp-drop h2 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: clamp(32px, 4.4vw, 52px);
+  font-weight: 400;
+  font-style: italic;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.lp-drop p {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.lp-drop .lp-link {
+  color: var(--ink);
+  font-weight: 600;
+}
+.lp-error {
+  grid-column: 2;
+  color: #c2412d;
+}
+
+.lp-foot {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 48px;
+  padding-top: 28px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.lp-foot p {
+  margin: 0;
+  text-wrap: pretty;
+}
+.lp-foot strong {
+  color: var(--ink);
+}
+.lp-status {
+  color: var(--ink-3);
+}
+.lp-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: #d39a2a;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.lp-dot[data-ready] {
+  background: #4f9a5a;
+  animation: none;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Dragging a file over any page. */
+.drop-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--bg) 80%, transparent);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+}
+.drop-veil-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 26px 34px;
+  border: 1px solid var(--fg);
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  box-shadow: 8px 8px 0 var(--fg);
+}
+
+@media (max-width: 900px) {
+  .lp {
+    padding: 0 16px 32px;
+  }
+  .lp-hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 44px 0 32px;
+  }
+  .lp-figure {
+    align-items: flex-start;
+    flex-direction: row;
+  }
+  .lp-figure img {
+    width: 96px;
+    height: 84px;
+  }
+  .lp-figure figcaption {
+    text-align: left;
+    align-self: center;
+  }
+  .lp-poster {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "hex" "readout" "legend";
+    gap: 24px;
+  }
+  .lp-hex {
+    overflow-x: auto;
+  }
+  /* The tour changes what's in it; what follows shouldn't jump. */
+  .lp-readout {
+    min-height: 200px;
+  }
+  .lp-drop,
+  .lp-foot {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .lp-error {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  .lp-top-links .lp-link {
+    display: none;
+  }
+  .lp-hex {
+    font-size: 11.5px;
+  }
+  .lp-off,
+  .lp-ascii {
+    display: none;
+  }
+  .lp-row {
+    height: 26px;
+  }
+  .lp-byte {
+    width: 2.45ch;
+  }
+  .lp-value {
+    font-size: 30px;
+  }
+}

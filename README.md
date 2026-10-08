@@ -40,6 +40,10 @@ A few things it tries to do well:
 
 ## Trying it
 
+The quickest way is in the browser, at
+[tibordp.github.io/fillyfoal](https://tibordp.github.io/fillyfoal/): fillyfoal
+compiled to WebAssembly, running entirely on your machine (see `web/`).
+
 fillyfoal would rather trot around interactively: it is designed to sit under a 
 UI, doing just enough work when you expand a node to show what is inside. For a
 quick look without one, `examples/inspect.rs` expands the tree to a given depth
