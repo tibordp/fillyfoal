@@ -1175,3 +1175,188 @@ fn raw_lzma_with_a_known_dictionary_releases() {
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(19), Some(3 << 20));
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(40), Some(u32::MAX));
 }
+
+/// LZNT1, Xpress (plain and Huffman), PKWARE implode (method 6) and DCL
+/// implode: the fixtures of `tests/core.rs` (`tests/data/{xca,implode,dcl}`)
+/// decoded on demand, with release, and in bounded steps.
+mod xca_implode {
+    use super::lz::{eager, mixed, read, text};
+    use super::{assert_on_demand, assert_releases, produced_from_prefix};
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::implode::Implode;
+    use fillyfoal::codec::pipeline::Status;
+
+    fn noise(n: usize) -> Vec<u8> {
+        let mut x: u32 = 12345;
+        (0..n)
+            .map(|_| {
+                x = x.wrapping_mul(1103515245).wrapping_add(12345) & 0x7fff_ffff;
+                ((x >> 16) & 0xff) as u8
+            })
+            .collect()
+    }
+
+    /// The XCA fixtures' names and decoded data.
+    fn xca() -> Vec<(&'static str, Vec<u8>)> {
+        vec![
+            ("text", text()),
+            (
+                "rnd",
+                (0..70000u32)
+                    .map(|i| ((i * 131 + (i >> 3)) & 0xff) as u8)
+                    .collect(),
+            ),
+            ("zeros", vec![0u8; 150_000]),
+            ("noise", noise(9000)),
+        ]
+    }
+
+    /// Every case: codec, encoded input, decoded output.
+    fn cases() -> Vec<(Codec, Vec<u8>, Vec<u8>)> {
+        let mut cases = Vec::new();
+        for (name, data) in xca() {
+            let size = data.len() as u64;
+            let lznt1 = read(&format!("data/xca/{name}.lznt1"));
+            let xpress = read(&format!("data/xca/{name}.xpress"));
+            let xpressh = read(&format!("data/xca/{name}.xpressh"));
+            cases.push((Codec::Lznt1 { size: None }, lznt1.clone(), data.clone()));
+            let mut unit = data.clone();
+            unit.resize(unit.len().next_multiple_of(65536), 0);
+            cases.push((
+                Codec::Lznt1 {
+                    size: Some(unit.len() as u64),
+                },
+                lznt1,
+                unit,
+            ));
+            cases.push((Codec::Xpress { size: None }, xpress.clone(), data.clone()));
+            cases.push((Codec::Xpress { size: Some(size) }, xpress, data.clone()));
+            cases.push((Codec::XpressHuffman { size }, xpressh, data));
+        }
+        let text = text();
+        let mixed = mixed();
+        let runs = [vec![b'A'; 5000], text[..3000].repeat(4), vec![0; 2000]].concat();
+        let implode: [(&str, bool, bool, &[u8]); 5] = [
+            ("text_8k_lit", true, true, &text),
+            ("text_4k", false, false, &text),
+            ("mixed_8k", true, false, &mixed),
+            ("mixed_4k_lit", false, true, &mixed[..30000]),
+            ("runs_4k_lit", false, true, &runs),
+        ];
+        for (name, large_window, literal_tree, expected) in implode {
+            let params = Implode {
+                large_window,
+                literal_tree,
+                size: Some(expected.len() as u64),
+            };
+            let input = read(&format!("data/implode/{name}.imploded"));
+            cases.push((Codec::Implode(params), input.clone(), expected.to_vec()));
+            // Without a size, padding bits may decode as one more literal.
+            let unsized_codec = Codec::Implode(Implode {
+                size: None,
+                ..params
+            });
+            let out = eager(&unsized_codec, &input);
+            assert!(out.starts_with(expected) && out.len() <= expected.len() + 1);
+            cases.push((unsized_codec, input, out));
+        }
+        for (name, expected) in [
+            ("text_ascii4k", &text[..]),
+            ("text_binary2k", &text[..5000]),
+            ("mixed_binary1k", &mixed[..]),
+        ] {
+            let input = read(&format!("data/dcl/{name}.pk"));
+            cases.push((Codec::DclImplode, input, expected.to_vec()));
+        }
+        cases
+    }
+
+    #[test]
+    fn decode_on_demand() {
+        for (codec, input, expected) in cases() {
+            assert_on_demand(&codec, &input, &expected);
+            // (Highly compressed inputs may need more than half for a step.)
+            if input.len() > 4096 && expected.len() >= 64 * 1024 {
+                assert!(
+                    produced_from_prefix(&codec, &input, input.len() / 2) > 0,
+                    "{codec:?}: nothing decoded from the first half of the input"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn release() {
+        let step = 16 * 1024;
+        for (codec, input, expected) in cases() {
+            // The window, a step, and a chunk or symbol of slack.
+            let window = match codec {
+                Codec::XpressHuffman { .. } => 65536,
+                Codec::Lznt1 { .. } | Codec::Xpress { .. } | Codec::Implode(_) => 8192,
+                _ => 4096,
+            };
+            assert_releases(&codec, &input, &expected, window + step + 1024);
+        }
+    }
+
+    /// Decodes all of `input` `step` bytes at a time; returns the output,
+    /// the number of calls and the most output a call produced.
+    fn stepped(codec: &Codec, input: &[u8], step: usize) -> (Vec<u8>, usize, usize) {
+        let mut decoder = codec.decoder().unwrap();
+        let mut out = Vec::new();
+        let (mut calls, mut most) = (0, 0);
+        loop {
+            let before = out.len();
+            let status = decoder
+                .decode(input, true, &mut out, step, 1 << 30)
+                .unwrap();
+            calls += 1;
+            most = most.max(out.len() - before);
+            assert!(
+                status != Status::NeedInput,
+                "{codec:?}: wants input after the end"
+            );
+            if status == Status::Done {
+                return (out, calls, most);
+            }
+        }
+    }
+
+    #[test]
+    fn bounded_steps() {
+        let step = 4096;
+        for (codec, input, expected) in cases() {
+            let (out, calls, most) = stepped(&codec, &input, step);
+            assert!(out == expected, "{codec:?}: output differs");
+            assert!(
+                calls >= expected.len() / (3 * step),
+                "{codec:?}: {calls} calls"
+            );
+            // A chunk (and its padding) or a symbol past the step at most.
+            assert!(most <= 3 * step, "{codec:?}: {most} bytes in one call");
+        }
+        // A large NTFS compression unit is zero-filled a step at a time.
+        let lznt1 = read("data/xca/text.lznt1");
+        let unit = Codec::Lznt1 {
+            size: Some(16 << 20),
+        };
+        let (out, calls, most) = stepped(&unit, &lznt1, step);
+        assert_eq!(out.len(), 16 << 20);
+        assert!(out[..text().len()] == text()[..]);
+        assert!(calls >= (16 << 20) / step && most <= 3 * step);
+        // One 16 MiB plain Xpress match is copied across calls: a literal
+        // `a`, then offset 1 with a 32-bit length (16 MiB + 3).
+        let mut big = vec![0, 0, 0, 0x40, b'a', 7, 0, 0x0f, 0xff, 0, 0];
+        big.extend_from_slice(&(16u32 << 20).to_le_bytes());
+        let (out, calls, most) = stepped(&Codec::Xpress { size: None }, &big, step);
+        assert_eq!(out.len(), (16 << 20) + 4);
+        assert!(out.iter().all(|&b| b == b'a'));
+        assert!(calls >= (16 << 20) / step && most <= step);
+        // Concatenated LZNT1 streams: output from half the input.
+        let many = lznt1.repeat(8);
+        let codec = Codec::Lznt1 { size: None };
+        let all = eager(&codec, &many);
+        assert!(all.len() > 256 * 1024);
+        assert_on_demand(&codec, &many, &all);
+    }
+}

@@ -9,8 +9,15 @@
 //! long match lengths interleaved where the decoder reads its next word.
 //! The stream carries no size, so it is decoded up to a size the container
 //! records (the end-of-data symbol 256 is also an ordinary match symbol).
+//!
+//! Both decoders work a step of output at a time (long matches are copied
+//! across steps), keep only their window of output (8 KiB and 64 KiB) and
+//! release the input they have passed. Positions are relative to the
+//! buffers as they are now (see "Releasing" in the pipeline docs).
 
-use crate::codec::filters::Filter;
+use std::sync::Arc;
+
+use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
 fn bad(what: &str) -> Diagnostic {
@@ -21,6 +28,16 @@ fn too_big(limit: usize) -> Diagnostic {
     Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
 }
 
+/// Ends a step that ran out of input: keep what it produced, or ask for
+/// more (the caller rolls the step back).
+fn need(progress: bool) -> Result<Step> {
+    if progress {
+        Ok(Step::More)
+    } else {
+        Err(bad("needs more input"))
+    }
+}
+
 /// Copies `len` bytes from `offset` back in `out`, byte by byte (the source
 /// may overlap what is being written), stopping at `end` bytes of output.
 pub(crate) fn copy_back(out: &mut Vec<u8>, offset: usize, len: usize, end: usize) -> Result<()> {
@@ -28,12 +45,34 @@ pub(crate) fn copy_back(out: &mut Vec<u8>, offset: usize, len: usize, end: usize
         return Err(Diagnostic::malformed("match offset outside the output"));
     }
     let len = len.min(end.saturating_sub(out.len()));
+    copy_match(out, offset, len);
+    Ok(())
+}
+
+/// Copies `len` bytes from `offset` (checked by the caller) back in `out`.
+fn copy_match(out: &mut Vec<u8>, offset: usize, len: usize) {
     let start = out.len().saturating_sub(offset);
     for i in 0..len {
         let b = out.get(start.saturating_add(i)).copied().unwrap_or(0);
         out.push(b);
     }
-    Ok(())
+}
+
+/// Continues a pending match by up to `goal - out.len()` bytes; returns
+/// what is left of it.
+fn continue_match(
+    pending: &mut Option<(usize, usize)>,
+    out: &mut Vec<u8>,
+    produced: &mut usize,
+    goal: usize,
+) -> Option<(usize, usize)> {
+    let (offset, left) = (*pending)?;
+    let n = left.min(goal.saturating_sub(out.len()));
+    copy_match(out, offset, n);
+    *produced = produced.saturating_add(n);
+    let left = left.saturating_sub(n);
+    *pending = (left > 0).then_some((offset, left));
+    *pending
 }
 
 fn u16_at(data: &[u8], at: usize) -> Option<usize> {
@@ -48,28 +87,66 @@ fn u32_at(data: &[u8], at: usize) -> Option<u32> {
 }
 
 /// Plain LZ77, decoded to the end of the input or `size` bytes.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Xpress {
-    pub size: Option<u64>,
+    size: Option<usize>,
+    /// Input position.
+    pos: usize,
+    flags: u32,
+    flag_count: u32,
+    /// Input position of the shared length nibble, if one is half used.
+    half_byte: Option<usize>,
+    /// Output produced so far, released bytes included.
+    produced: usize,
+    /// A match being copied: its offset and the bytes left.
+    pending: Option<(usize, usize)>,
+    /// Once done, the input consumed: all of it, as before.
+    finished: Option<usize>,
 }
 
-impl Filter for Xpress {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let end = match self.size {
-            Some(s) => {
-                let s = usize::try_from(s).unwrap_or(usize::MAX);
-                if s > limit {
-                    return Err(too_big(limit));
-                }
-                s
-            }
-            None => limit.saturating_add(1),
-        };
-        let mut out = Vec::with_capacity(end.min(input.len().saturating_mul(4)).min(1 << 24));
-        let mut pos = 0usize;
-        let mut flags = 0u32;
-        let mut flag_count = 0u32;
-        let mut half_byte: Option<usize> = None;
+/// Plain LZ77 offsets reach 8 KiB back.
+const PLAIN_WINDOW: usize = 1 << 13;
+
+impl Xpress {
+    pub fn new(size: Option<u64>) -> Self {
+        Xpress {
+            size: size.map(|s| usize::try_from(s).unwrap_or(usize::MAX)),
+            pos: 0,
+            flags: 0,
+            flag_count: 0,
+            half_byte: None,
+            produced: 0,
+            pending: None,
+            finished: None,
+        }
+    }
+
+    /// The end of the stream: done once all input is in.
+    fn finish(&mut self, input: &[u8], eof: bool, progress: bool) -> Result<Step> {
+        if !eof {
+            return need(progress);
+        }
+        self.finished = Some(input.len());
+        Ok(Step::Done)
+    }
+}
+
+impl Decode for Xpress {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        if let Some(size) = self.size
+            && size.saturating_sub(self.produced) > limit.saturating_sub(out.len())
+        {
+            return Err(too_big(limit));
+        }
+        let goal = out.len().saturating_add(step);
+        let first = out.len();
         let byte = |pos: &mut usize| -> Result<usize> {
             let b = input
                 .get(*pos)
@@ -78,38 +155,65 @@ impl Filter for Xpress {
             *pos = pos.saturating_add(1);
             Ok(usize::from(b))
         };
-        while out.len() < end {
-            if flag_count == 0 {
-                if pos >= input.len() {
-                    break;
-                }
-                flags = u32_at(input, pos).ok_or_else(|| bad("truncated flags"))?;
-                pos = pos.saturating_add(4);
-                flag_count = 32;
+        loop {
+            if continue_match(&mut self.pending, out, &mut self.produced, goal).is_some() {
+                return Ok(Step::More);
             }
-            flag_count = flag_count.saturating_sub(1);
-            if flags >> flag_count & 1 == 0 {
-                let Some(&b) = input.get(pos) else {
+            let progress = out.len() > first;
+            match self.size {
+                Some(s) if self.produced >= s => return self.finish(input, eof, progress),
+                None if out.len() > limit => return Err(too_big(limit)),
+                _ => {}
+            }
+            if out.len() >= goal {
+                return Ok(Step::More);
+            }
+            if self.flag_count == 0 {
+                if self.pos >= input.len() {
+                    return self.finish(input, eof, progress);
+                }
+                let Some(flags) = u32_at(input, self.pos) else {
+                    if eof {
+                        return Err(bad("truncated flags"));
+                    }
+                    return need(progress);
+                };
+                self.flags = flags;
+                self.pos = self.pos.saturating_add(4);
+                self.flag_count = 32;
+            }
+            let bit = self.flag_count.saturating_sub(1);
+            if self.flags >> bit & 1 == 0 {
+                let Some(&b) = input.get(self.pos) else {
+                    if !eof {
+                        return need(progress);
+                    }
                     if self.size.is_some() {
                         return Err(bad("truncated literal"));
                     }
-                    break;
+                    return self.finish(input, eof, progress);
                 };
+                self.flag_count = bit;
                 out.push(b);
-                pos = pos.saturating_add(1);
+                self.pos = self.pos.saturating_add(1);
+                self.produced = self.produced.saturating_add(1);
                 continue;
             }
-            if pos == input.len() {
-                break;
+            if self.pos == input.len() {
+                return self.finish(input, eof, progress);
             }
+            self.flag_count = bit;
+            // From here on a shortage of input fails the step (rolled back
+            // until more input arrives).
+            let mut pos = self.pos;
             let word = u16_at(input, pos).ok_or_else(|| bad("truncated match"))?;
             pos = pos.saturating_add(2);
             let offset = (word >> 3).saturating_add(1);
             let mut len = word & 7;
             if len == 7 {
-                len = match half_byte.take() {
+                len = match self.half_byte.take() {
                     None => {
-                        half_byte = Some(pos);
+                        self.half_byte = Some(pos);
                         byte(&mut pos)? & 0x0f
                     }
                     Some(at) => usize::from(input.get(at).copied().unwrap_or(0) >> 4),
@@ -134,28 +238,79 @@ impl Filter for Xpress {
                 }
                 len = len.saturating_add(7);
             }
+            self.pos = pos;
             len = len.saturating_add(3);
             if self.size.is_none() && out.len().saturating_add(len) > limit {
                 return Err(too_big(limit));
             }
-            copy_back(&mut out, offset, len, end)?;
+            if offset > self.produced {
+                return Err(Diagnostic::malformed("match offset outside the output"));
+            }
+            if let Some(size) = self.size {
+                len = len.min(size.saturating_sub(self.produced));
+            }
+            self.pending = (len > 0).then_some((offset, len));
         }
-        if out.len() > limit {
-            return Err(too_big(limit));
-        }
-        Ok(out)
+    }
+
+    fn consumed(&self) -> usize {
+        self.finished.unwrap_or(self.pos)
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.half_byte.map_or(self.pos, |at| at.min(self.pos))
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        self.half_byte = self.half_byte.map(|at| at.saturating_sub(n));
+        self.finished = self.finished.map(|f| f.saturating_sub(n));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(PLAIN_WINDOW)
     }
 }
 
+/// LZ77+Huffman offsets reach 64 KiB back.
+const HUFFMAN_WINDOW: usize = 1 << 16;
+
 /// LZ77+Huffman, decoded to exactly `size` bytes.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct XpressHuffman {
-    pub size: u64,
+    size: usize,
+    /// Input position of the next block (outside a block).
+    pos: usize,
+    block: Option<Block>,
+    /// Output produced so far, released bytes included.
+    produced: usize,
+    /// A match being copied: its offset and the bytes left.
+    pending: Option<(usize, usize)>,
+    /// Input held at the last step (bounds what can be released).
+    held: usize,
+    /// Once done, the input consumed: all of it, as before.
+    finished: Option<usize>,
+}
+
+/// The block being decoded.
+#[derive(Clone, Debug)]
+struct Block {
+    code: Arc<Code>,
+    bits: Bits,
+    /// Where the block's output ends (counted like `produced`).
+    end: usize,
+}
+
+/// A block's code lengths and decoding table.
+#[derive(Debug)]
+struct Code {
+    lengths: [u8; 512],
+    table: Vec<u16>,
 }
 
 /// The 16-bit-word bit reader of section 2.2.4.
-struct Bits<'a> {
-    data: &'a [u8],
+#[derive(Clone, Copy, Debug)]
+struct Bits {
     pos: usize,
     next: u32,
     extra: i32,
@@ -163,17 +318,18 @@ struct Bits<'a> {
     overrun: u32,
 }
 
-impl Bits<'_> {
-    fn word(&mut self) -> Result<u32> {
-        match u16_at(self.data, self.pos) {
+impl Bits {
+    fn word(&mut self, data: &[u8], eof: bool) -> Result<u32> {
+        match u16_at(data, self.pos) {
             Some(w) => {
                 self.pos = self.pos.saturating_add(2);
                 Ok(u32::try_from(w).unwrap_or(0))
             }
+            None if !eof => Err(bad("truncated bit stream")),
             None => {
                 // The last word may be a lone byte; beyond that, the
                 // register only prefetches.
-                let w = self.data.get(self.pos).copied().map_or(0, u32::from);
+                let w = data.get(self.pos).copied().map_or(0, u32::from);
                 self.pos = self.pos.saturating_add(2);
                 self.overrun = self.overrun.saturating_add(1);
                 if self.overrun > 2 {
@@ -184,12 +340,18 @@ impl Bits<'_> {
         }
     }
 
-    fn start(&mut self) -> Result<()> {
-        let hi = self.word()?;
-        let lo = self.word()?;
-        self.next = hi << 16 | lo;
-        self.extra = 16;
-        Ok(())
+    fn start(data: &[u8], eof: bool, pos: usize) -> Result<Self> {
+        let mut bits = Bits {
+            pos,
+            next: 0,
+            extra: 0,
+            overrun: 0,
+        };
+        let hi = bits.word(data, eof)?;
+        let lo = bits.word(data, eof)?;
+        bits.next = hi << 16 | lo;
+        bits.extra = 16;
+        Ok(bits)
     }
 
     fn peek(&self, n: u32) -> u32 {
@@ -200,14 +362,14 @@ impl Bits<'_> {
         }
     }
 
-    fn skip(&mut self, n: u32) -> Result<()> {
+    fn skip(&mut self, n: u32, data: &[u8], eof: bool) -> Result<()> {
         if n == 0 {
             return Ok(());
         }
         self.next = self.next.checked_shl(n).unwrap_or(0);
         self.extra = self.extra.saturating_sub(i32::try_from(n).unwrap_or(32));
         if self.extra < 0 {
-            let w = self.word()?;
+            let w = self.word(data, eof)?;
             let shift = u32::try_from(self.extra.saturating_neg()).unwrap_or(0);
             self.next |= w.checked_shl(shift).unwrap_or(0);
             self.extra = self.extra.saturating_add(16);
@@ -215,9 +377,8 @@ impl Bits<'_> {
         Ok(())
     }
 
-    fn byte(&mut self) -> Result<usize> {
-        let b = self
-            .data
+    fn byte(&mut self, data: &[u8]) -> Result<usize> {
+        let b = data
             .get(self.pos)
             .copied()
             .ok_or_else(|| bad("truncated match length"))?;
@@ -225,10 +386,16 @@ impl Bits<'_> {
         Ok(usize::from(b))
     }
 
-    fn u16(&mut self) -> Result<usize> {
-        let v = u16_at(self.data, self.pos).ok_or_else(|| bad("truncated match length"))?;
+    fn u16(&mut self, data: &[u8]) -> Result<usize> {
+        let v = u16_at(data, self.pos).ok_or_else(|| bad("truncated match length"))?;
         self.pos = self.pos.saturating_add(2);
         Ok(v)
+    }
+
+    fn u32(&mut self, data: &[u8]) -> Result<usize> {
+        let v = u32_at(data, self.pos).ok_or_else(|| bad("truncated match length"))?;
+        self.pos = self.pos.saturating_add(4);
+        Ok(usize::try_from(v).unwrap_or(usize::MAX))
     }
 }
 
@@ -256,79 +423,158 @@ fn decoding_table(lengths: &[u8; 512], table: &mut [u16]) -> Result<()> {
     Ok(())
 }
 
-impl Filter for XpressHuffman {
-    fn apply(&self, input: &[u8], limit: usize) -> Result<Vec<u8>> {
-        let end = usize::try_from(self.size).unwrap_or(usize::MAX);
-        if end > limit {
+impl XpressHuffman {
+    pub fn new(size: u64) -> Self {
+        XpressHuffman {
+            size: usize::try_from(size).unwrap_or(usize::MAX),
+            pos: 0,
+            block: None,
+            produced: 0,
+            pending: None,
+            held: 0,
+            finished: None,
+        }
+    }
+
+    /// The input position the decoder has reached.
+    fn at(&self) -> usize {
+        self.block.as_ref().map_or(self.pos, |b| b.bits.pos)
+    }
+
+    /// Reads the next block's table and starts its bit stream.
+    fn open_block(&mut self, input: &[u8], eof: bool) -> Result<Block> {
+        let raw = input
+            .get(self.pos..self.pos.saturating_add(256))
+            .ok_or_else(|| bad("truncated: no Huffman table for the next block"))?;
+        let mut lengths = [0u8; 512];
+        for (i, &b) in raw.iter().enumerate() {
+            if let Some(slot) = lengths.get_mut(i.saturating_mul(2)) {
+                *slot = b & 0x0f;
+            }
+            if let Some(slot) = lengths.get_mut(i.saturating_mul(2).saturating_add(1)) {
+                *slot = b >> 4;
+            }
+        }
+        let mut table = vec![0u16; 1 << TABLE_BITS];
+        decoding_table(&lengths, &mut table)?;
+        let bits = Bits::start(input, eof, self.pos.saturating_add(256))?;
+        Ok(Block {
+            code: Arc::new(Code { lengths, table }),
+            bits,
+            end: self.produced.saturating_add(1 << 16).min(self.size),
+        })
+    }
+}
+
+impl Decode for XpressHuffman {
+    fn step(
+        &mut self,
+        input: &[u8],
+        eof: bool,
+        out: &mut Vec<u8>,
+        step: usize,
+        limit: usize,
+    ) -> Result<Step> {
+        if self.size.saturating_sub(self.produced) > limit.saturating_sub(out.len()) {
             return Err(too_big(limit));
         }
-        let mut out = Vec::with_capacity(end.min(input.len().saturating_mul(16)).min(1 << 24));
-        let mut table = vec![0u16; 1 << TABLE_BITS];
-        let mut lengths = [0u8; 512];
-        let mut pos = 0usize;
-        while out.len() < end {
-            let raw = input
-                .get(pos..pos.saturating_add(256))
-                .ok_or_else(|| bad("truncated: no Huffman table for the next block"))?;
-            for (i, &b) in raw.iter().enumerate() {
-                if let Some(slot) = lengths.get_mut(i.saturating_mul(2)) {
-                    *slot = b & 0x0f;
-                }
-                if let Some(slot) = lengths.get_mut(i.saturating_mul(2).saturating_add(1)) {
-                    *slot = b >> 4;
-                }
+        self.held = input.len();
+        let goal = out.len().saturating_add(step);
+        let first = out.len();
+        loop {
+            if continue_match(&mut self.pending, out, &mut self.produced, goal).is_some() {
+                return Ok(Step::More);
             }
-            decoding_table(&lengths, &mut table)?;
-            let mut bits = Bits {
-                data: input,
-                pos: pos.saturating_add(256),
-                next: 0,
-                extra: 0,
-                overrun: 0,
+            let progress = out.len() > first;
+            if let Some(block) = &self.block
+                && self.produced >= block.end
+            {
+                self.pos = block.bits.pos;
+                self.block = None;
+            }
+            if self.produced >= self.size {
+                if !eof {
+                    return need(progress);
+                }
+                self.finished = Some(input.len());
+                return Ok(Step::Done);
+            }
+            if out.len() >= goal {
+                return Ok(Step::More);
+            }
+            let Some(block) = &mut self.block else {
+                if !eof && input.len() < self.pos.saturating_add(260) {
+                    return need(progress);
+                }
+                self.block = Some(self.open_block(input, eof)?);
+                continue;
             };
-            bits.start()?;
-            let block_end = out.len().saturating_add(1 << 16).min(end);
-            while out.len() < block_end {
-                let symbol = usize::from(
-                    table
-                        .get(usize::try_from(bits.peek(TABLE_BITS)).unwrap_or(0))
-                        .copied()
-                        .unwrap_or(0),
-                );
-                bits.skip(u32::from(lengths.get(symbol).copied().unwrap_or(0)))?;
-                if let Ok(literal) = u8::try_from(symbol) {
-                    out.push(literal);
-                    continue;
-                }
-                let symbol = symbol.saturating_sub(256);
-                let mut len = symbol & 15;
-                let offset_bits = u32::try_from(symbol >> 4).unwrap_or(0);
-                if len == 15 {
-                    len = bits.byte()?;
-                    if len == 255 {
-                        len = bits.u16()?;
-                        if len == 0 {
-                            len = usize::try_from(
-                                u32_at(input, bits.pos)
-                                    .ok_or_else(|| bad("truncated match length"))?,
-                            )
-                            .unwrap_or(usize::MAX);
-                            bits.pos = bits.pos.saturating_add(4);
-                        }
-                        len = len.checked_sub(15).ok_or_else(|| bad("bad match length"))?;
-                    }
-                    len = len.saturating_add(15);
-                }
-                len = len.saturating_add(3);
-                let offset = usize::try_from(bits.peek(offset_bits))
-                    .unwrap_or(0)
-                    .saturating_add(1usize << offset_bits);
-                bits.skip(offset_bits)?;
-                copy_back(&mut out, offset, len, end)?;
+            // A shortage of input inside a symbol fails the step (rolled
+            // back until more input arrives).
+            let bits = &mut block.bits;
+            let code = &block.code;
+            let symbol = usize::from(
+                code.table
+                    .get(usize::try_from(bits.peek(TABLE_BITS)).unwrap_or(0))
+                    .copied()
+                    .unwrap_or(0),
+            );
+            bits.skip(
+                u32::from(code.lengths.get(symbol).copied().unwrap_or(0)),
+                input,
+                eof,
+            )?;
+            if let Ok(literal) = u8::try_from(symbol) {
+                out.push(literal);
+                self.produced = self.produced.saturating_add(1);
+                continue;
             }
-            pos = bits.pos;
+            let symbol = symbol.saturating_sub(256);
+            let mut len = symbol & 15;
+            let offset_bits = u32::try_from(symbol >> 4).unwrap_or(0);
+            if len == 15 {
+                len = bits.byte(input)?;
+                if len == 255 {
+                    len = bits.u16(input)?;
+                    if len == 0 {
+                        len = bits.u32(input)?;
+                    }
+                    len = len.checked_sub(15).ok_or_else(|| bad("bad match length"))?;
+                }
+                len = len.saturating_add(15);
+            }
+            len = len.saturating_add(3);
+            let offset = usize::try_from(bits.peek(offset_bits))
+                .unwrap_or(0)
+                .saturating_add(1usize << offset_bits);
+            bits.skip(offset_bits, input, eof)?;
+            if offset > self.produced {
+                return Err(Diagnostic::malformed("match offset outside the output"));
+            }
+            let len = len.min(self.size.saturating_sub(self.produced));
+            self.pending = (len > 0).then_some((offset, len));
         }
-        Ok(out)
+    }
+
+    fn consumed(&self) -> usize {
+        self.finished.unwrap_or_else(|| self.at())
+    }
+
+    fn releasable_input(&self) -> usize {
+        self.at().min(self.held)
+    }
+
+    fn release_input(&mut self, n: usize) {
+        self.pos = self.pos.saturating_sub(n);
+        if let Some(block) = &mut self.block {
+            block.bits.pos = block.bits.pos.saturating_sub(n);
+        }
+        self.held = self.held.saturating_sub(n);
+        self.finished = self.finished.map(|f| f.saturating_sub(n));
+    }
+
+    fn releasable_output(&self, out_len: usize) -> usize {
+        out_len.saturating_sub(HUFFMAN_WINDOW)
     }
 }
 
@@ -336,6 +582,15 @@ impl Filter for XpressHuffman {
 #[allow(clippy::unwrap_used, clippy::indexing_slicing)]
 mod tests {
     use super::*;
+    use crate::codec::pipeline::{Streaming, decode_all};
+
+    fn plain(size: Option<u64>, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+        decode_all(&mut Streaming(Xpress::new(size)), input, limit)
+    }
+
+    fn huffman(size: u64, input: &[u8], limit: usize) -> Result<Vec<u8>> {
+        decode_all(&mut Streaming(XpressHuffman::new(size)), input, limit)
+    }
 
     fn hex(s: &str) -> Vec<u8> {
         s.split_whitespace()
@@ -354,28 +609,15 @@ mod tests {
             "3f 00 00 00 61 62 63 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76 77 78 79 7a",
         );
         assert_eq!(
-            Xpress { size: None }.apply(&alphabet, 1 << 20).unwrap(),
+            plain(None, &alphabet, 1 << 20).unwrap(),
             b"abcdefghijklmnopqrstuvwxyz"
         );
         let abc = hex("ff ff ff 1f 61 62 63 17 00 0f ff 26 01");
-        assert_eq!(
-            Xpress { size: None }.apply(&abc, 1 << 20).unwrap(),
-            abc300()
-        );
-        assert_eq!(
-            Xpress { size: Some(300) }.apply(&abc, 1 << 20).unwrap(),
-            abc300()
-        );
-        assert_eq!(
-            Xpress { size: Some(10) }.apply(&abc, 1 << 20).unwrap(),
-            &abc300()[..10]
-        );
-        assert!(Xpress { size: None }.apply(&abc, 100).is_err());
-        assert!(
-            Xpress { size: Some(300) }
-                .apply(&abc[..9], 1 << 20)
-                .is_err()
-        );
+        assert_eq!(plain(None, &abc, 1 << 20).unwrap(), abc300());
+        assert_eq!(plain(Some(300), &abc, 1 << 20).unwrap(), abc300());
+        assert_eq!(plain(Some(10), &abc, 1 << 20).unwrap(), &abc300()[..10]);
+        assert!(plain(None, &abc, 100).is_err());
+        assert!(plain(Some(300), &abc[..9], 1 << 20).is_err());
     }
 
     /// The 256-byte length table of [MS-XCA] section 3.2's examples, as
@@ -412,26 +654,17 @@ mod tests {
             "d8 52 3e d7 94 11 5b e9 19 5f f9 d6 7c df 8d 04 00 00 00 00",
         ));
         assert_eq!(
-            XpressHuffman { size: 26 }
-                .apply(&alphabet, 1 << 20)
-                .unwrap(),
+            huffman(26, &alphabet, 1 << 20).unwrap(),
             b"abcdefghijklmnopqrstuvwxyz"
         );
         let mut abc = table(&[(0x30, 0x30), (0x31, 0x23), (0x80, 0x02), (0x8f, 0x20)]);
         abc.extend(hex("a8 dc 00 00 ff 26 01"));
-        assert_eq!(
-            XpressHuffman { size: 300 }.apply(&abc, 1 << 20).unwrap(),
-            abc300()
-        );
-        assert!(XpressHuffman { size: 300 }.apply(&abc, 299).is_err());
-        assert!(
-            XpressHuffman { size: 300 }
-                .apply(&abc[..260], 1 << 20)
-                .is_err()
-        );
+        assert_eq!(huffman(300, &abc, 1 << 20).unwrap(), abc300());
+        assert!(huffman(300, &abc, 299).is_err());
+        assert!(huffman(300, &abc[..260], 1 << 20).is_err());
         // An incomplete code is rejected.
         let mut broken = abc.clone();
         broken[0x30] = 0x31;
-        assert!(XpressHuffman { size: 300 }.apply(&broken, 1 << 20).is_err());
+        assert!(huffman(300, &broken, 1 << 20).is_err());
     }
 }

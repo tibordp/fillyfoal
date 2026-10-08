@@ -571,17 +571,9 @@ impl Codec {
             Codec::WimResource(r) => Box::new(Streaming(wim::Decoder::new(*r))),
             Codec::Brotli => Box::new(Streaming(brotli::Stream::default())),
             Codec::UnixCompress => Box::new(unixz::UnixCompress::default()),
-            Codec::Lznt1 { size } => {
-                Box::new(Streaming(filters::Whole::new(lznt1::Lznt1 { size: *size })))
-            }
-            Codec::Xpress { size } => Box::new(Streaming(filters::Whole::new(xpress::Xpress {
-                size: *size,
-            }))),
-            Codec::XpressHuffman { size } => {
-                Box::new(Streaming(filters::Whole::new(xpress::XpressHuffman {
-                    size: *size,
-                })))
-            }
+            Codec::Lznt1 { size } => Box::new(Streaming(lznt1::Lznt1::new(*size))),
+            Codec::Xpress { size } => Box::new(Streaming(xpress::Xpress::new(*size))),
+            Codec::XpressHuffman { size } => Box::new(Streaming(xpress::XpressHuffman::new(*size))),
             Codec::Lzo1x => Box::new(Streaming(filters::Whole::new(lzo::Lzo1x))),
             Codec::Bcfz { size } => Box::new(Streaming(bcfz::Bcfz::new(*size))),
             Codec::Heatshrink { window, lookahead } => {
@@ -594,8 +586,8 @@ impl Codec {
             Codec::LzfFramed => Box::new(Streaming(filters::Whole::new(legacy::LzfFramed))),
             Codec::Lzfu => Box::new(Streaming(filters::Whole::new(lzfu::Lzfu))),
             Codec::Adc => Box::new(Streaming(filters::Whole::new(legacy::Adc))),
-            Codec::Implode(params) => Box::new(Streaming(filters::Whole::new(*params))),
-            Codec::DclImplode => Box::new(Streaming(filters::Whole::new(implode::DclImplode))),
+            Codec::Implode(params) => Box::new(Streaming(implode::Explode::new(*params))),
+            Codec::DclImplode => Box::new(Streaming(implode::DclExplode::default())),
             Codec::Lzx(params) => Box::new(lzx::LzxStream::new(*params)),
             Codec::CabFolder(folder) => Box::new(cab::FolderDecoder::new(*folder)),
             Codec::Rar(params) => Box::new(rar::Stream::new(params.clone())),
