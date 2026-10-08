@@ -465,7 +465,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Value size: 36  [0x607c+0x4]
           Key  [0x6214+0x12]
           Value  [0x6226+0x24]
-      Page 7 — unused  [0x7000+0x1000]
+      Page 7 — no page header (free, or part of an old overflow run)  [0x7000+0x1000]
     ▾ Page 8 — leaf, 2 elements, 1 overflow page  [0x8000+0x2000]
       ▾ Page header  [0x8000+0x10]
           Page ID: 8  [0x8000+0x8]

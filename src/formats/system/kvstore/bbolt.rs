@@ -776,15 +776,37 @@ async fn pages(cx: Cx, db: DbRef) -> Result<()> {
         let flags = u16_le(&head, 8).unwrap_or(0);
         let count = u16_le(&head, 10).unwrap_or(0);
         let overflow = u64::from(u32_le(&head, 12).unwrap_or(0));
-        let extent = overflow
-            .saturating_add(1)
-            .min(db.pages.saturating_sub(pgid));
+        let left = db.pages.saturating_sub(pgid);
+        // Pages bbolt has freed are not cleared, so without a synced
+        // freelist the walk meets stale bytes: the middle of an old overflow
+        // run, say. Only a header that names this page, one page type and an
+        // extent inside the file is believed; anything else is one page of
+        // leftovers.
+        let id = u64_le(&head, 0).unwrap_or(0);
+        let known = matches!(flags, BRANCH | LEAF | META | FREELIST);
+        if flags != 0 && !(known && id == pgid && overflow < left) {
+            let span = db.input.span.sub(off, db.page_size);
+            cx.push(
+                Node::new(format!("Page {pgid}"))
+                    .span(span)
+                    .summary("no page header (free, or part of an old overflow run)"),
+            )
+            .await;
+            pgid = pgid.saturating_add(1);
+            continue;
+        }
+        // An unused (zeroed) page never spans more than itself.
+        let extent = if flags == 0 {
+            1
+        } else {
+            overflow.saturating_add(1)
+        };
         let span = db.input.span.sub(off, extent.saturating_mul(db.page_size));
         let mut summary = type_name(flags).to_owned();
         if flags & (BRANCH | LEAF | FREELIST) != 0 {
             summary.push_str(&format!(", {}", plural(count.into(), "element")));
         }
-        if overflow > 0 {
+        if extent > 1 {
             summary.push_str(&format!(", {}", plural(overflow, "overflow page")));
         }
         let mut node = Node::new(format!("Page {pgid}"))

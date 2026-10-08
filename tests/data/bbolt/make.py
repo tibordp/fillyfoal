@@ -10,7 +10,9 @@
 #   3     root bucket leaf: buckets "blobs", "key", "meta" (inline)
 #   4     branch page of bucket "key" -> pages 5, 6
 #   5, 6  leaf pages of "key": etcd-style revision keys -> mvccpb.KeyValue
-#   7     free page
+#   7     free page holding stale bytes, as bbolt leaves freed pages (e.g.
+#         the middle of an old overflow run): its "header" names another
+#         page and claims far more overflow pages than the file has
 #   8, 9  leaf page of "blobs" with one overflow page: a PNG and the
 #         nested inline bucket "thumbs"
 import random
@@ -137,7 +139,8 @@ pages = {
     4: branch(4, [(revs[0][0], 5), (revs[6][0], 6)]),
     5: leaf(5, [(0, k, v) for k, v in revs[:6]]),
     6: leaf(6, [(0, k, v) for k, v in revs[6:]]),
-    7: b"",
+    7: (lambda junk: struct.pack("<QHHI", 0x5D2C1F0E3B4A6978, 0x3A61, 0x2E47, 0x6A00F15C) + junk)(
+        random.Random(7).randbytes(PAGE - 16)),
     8: leaf(8, [
         (0, b"image.png", png(40, 40, 2)),
         (BUCKET_LEAF, b"thumbs", bucket(0, 7, thumbs)),
