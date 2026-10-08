@@ -159,21 +159,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 512)).await?;
     if let Some(seq) = head.get(4..12).and_then(SequenceHeader::parse) {
-        let mut s = format!("MPEG video, {}", seq.describe());
-        if let Some(at) = vidutil::find(&head, b"\x00\x00\x01\xb5")
+        let s = if let Some(at) = vidutil::find(&head, b"\x00\x00\x01\xb5")
             && let Some(&b) = head.get(at.saturating_add(4))
             && b >> 4 == 1
         {
             let pl2 = head.get(at.saturating_add(5)).copied().unwrap_or(0) >> 4;
-            s = format!(
+            format!(
                 "MPEG-2 video, {}@{}, {}",
                 vidutil::lookup_or(PROFILES, (b & 7).into()),
                 vidutil::lookup_or(LEVELS, pl2.into()),
                 seq.describe()
-            );
+            )
         } else {
-            s = format!("MPEG-1 video, {}", seq.describe());
-        }
+            format!("MPEG-1 video, {}", seq.describe())
+        };
         cx.annotate(s);
     }
     let mut pos = match vidutil::next_start_code(&cx, file, 0).await? {
