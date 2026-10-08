@@ -88,8 +88,8 @@ exploration pays for additional work only as needed.
   liblzo2, 7-Zip or libarchive as extraction oracles), otherwise against spec
   vectors and spec-derived encoders; the test names and comments say which.
   CRCs share one table-driven engine (`codec::crc`). Where a decoder was
-  written from a reference implementation rather than a specification, see
-  `LICENSE-REVIEW.md`.
+  written from a reference implementation rather than a specification, its
+  module documentation says so and `THIRD-PARTY.md` carries the notice.
 - CI tests both the hermetic and the feature-enabled build.
 
 ## Architecture (current)

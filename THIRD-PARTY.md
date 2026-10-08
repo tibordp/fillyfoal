@@ -8,8 +8,10 @@ consulted (Microsoft Open Specifications, RFCs, vendor technotes) are cited
 in the module documentation of the code that implements them.
 
 Much of fillyfoal was written with AI assistance. Where a module was written
-from knowledge of a particular implementation, its documentation says so;
-`LICENSE-REVIEW.md` in the repository records how such modules were checked.
+from knowledge of a particular implementation, its documentation says so.
+In October 2026 the library was compared against the reference sources of
+its decoders and against GPL-incompatible codebases; the notices below are
+the result, and code that followed an incompatible source was rewritten.
 
 ## Brotli static dictionary and decoder parts
 
