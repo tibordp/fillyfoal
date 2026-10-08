@@ -625,7 +625,7 @@ mod tests {
         // 200k OIDs, then an array of 100k sets each taking one of them.
         let n = 100_000u32;
         let mut d = Vec::new();
-        d.extend(le(2 * n | 0x8000_0000));
+        d.extend(le((2 * n) | 0x8000_0000));
         for i in 0..2 * n {
             d.extend(le(i << 8));
         }
