@@ -176,15 +176,58 @@ lazily decoded source that reports encoded bytes consumed, since the
 decoded length may not be known yet). With an exact count from
 `cx.set_count`, the session reports children produced instead.
 
-Loops whose length depends on the input must make progress every iteration
-and must hit a suspension point (`push`, a read, or `cx.checkpoint().await`).
-If an element has size zero, stop (or advance by a minimum) rather than
-looping forever. Beware `cx.read(region.sub(pos, n))` past the end: `sub`
-clamps, so the read succeeds with *fewer* (or zero) bytes; a loop that only
-stops at a terminator then never stops. Bound such loops by the region
-(`while pos < region.len`) or use `sub_exact`. As a safety net the session
-stops any expansion after `Limits::max_work` units, and the robustness
-tests fail if that ever happens on a fixture.
+### Accounting for work
+
+This is the rule most easily broken and most expensive to get wrong. The
+host drives expansions in budgeted steps (`Session::poll`/`poll_node`, a
+few thousand units each) from a UI thread pool, releasing its lock between
+steps so the hex view, other nodes and cancellation stay responsive. That
+only works if **every stretch of work between two suspension points is
+bounded by a constant, whatever the input**. One unbounded step freezes the
+viewer on a large or hostile file, and nothing the host does can interrupt
+it: the core has no clock and no preemption, by design. Budget units are
+the only signal, so work that is not charged is invisible.
+
+- Suspension points: a read (`cx.read`, `read_avail`, `block`, `cstr`),
+  `cx.push`, and `cx.checkpoint().await` (1 unit). Reads charge for their
+  size, and reads of lazily decoded sources charge as they decode.
+- Any loop whose iteration count depends on the input must reach one every
+  iteration or every few hundred to few thousand cheap iterations. A single
+  read does not pay for a loop over what it returned: reading 16 MiB costs
+  about 4k units, but a byte-at-a-time parse of it is millions of
+  operations. Charge the parse, not just the read.
+- Charge in proportion to the work, not per call: if one iteration can be
+  expensive (a KDF round, a hash of a large buffer, a nested scan), call
+  `checkpoint` per chunk of that work (see `codec::crypto::run`). Aim for
+  a unit to be on the order of a microsecond.
+- Synchronous helpers count too. A pure function that parses, decodes,
+  hashes, sorts or searches an input-sized buffer is an unbounded step
+  however fast it looks on small fixtures. Make it async with checkpoints,
+  make it resumable (a state struct with a `step`), or bound its input by a
+  small constant. Recursive parsers become async with boxed recursion, or
+  iterative with an explicit stack.
+- Watch for hidden quadratics: a linear lookup (`iter().find`, `contains`,
+  `position`) inside a loop over the input, re-parsing a prefix for each
+  element, cloning an accumulated buffer per element. Each step may be
+  charged, but the total explodes; index once (`BTreeMap`, `partition_point`,
+  a cached table via `cx.cache`) instead.
+- Codecs: a `Decode`/`Decoder` must do bounded work per call (about `step`
+  bytes of output, or a bounded amount of input) and return `More` to be
+  called again. A decoder that waits for all its input and decodes it in
+  one call (`filters::Whole`) is only acceptable for inputs bounded by a
+  small constant.
+- Loops must also make progress every iteration: if an element has size
+  zero, stop (or advance by a minimum) rather than looping forever. Beware
+  `cx.read(region.sub(pos, n))` past the end: `sub` clamps, so the read
+  succeeds with *fewer* (or zero) bytes; a loop that only stops at a
+  terminator then never stops. Bound such loops by the region
+  (`while pos < region.len`) or use `sub_exact`.
+
+As a safety net the session stops any expansion after `Limits::max_work`
+units, and the robustness tests fail if that ever happens on a fixture. The
+net only catches work that is charged; uncharged work is caught by review.
+Small fixtures hide all of this, so when writing a loop, ask what it does on
+an input a thousand times larger than the fixture.
 
 ## 5. Spans: `sub` versus `sub_exact`
 
@@ -295,6 +338,8 @@ label).
   panic (`.get(..)`), no unchecked arithmetic (`saturating_*`, `checked_*`).
 - Allocate only in proportion to bytes actually read, never from a count
   field alone. Use `sub_exact` + `cx.read` for tables.
+- Bounded work between suspension points, charged in proportion to the
+  work done (see "Accounting for work" in section 4).
 - Deterministic output: no hash-map iteration order, no clocks.
 - Recursion: an expander that refers to itself (directly or mutually) must
   use `node.lazy(crate::expander!(self::walk: State), state)`. If a local

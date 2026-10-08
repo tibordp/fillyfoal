@@ -87,7 +87,11 @@ exploration pays for additional work only as needed.
   (CLI tools, Python packages via `uv`, `hdiutil`, `compression_tool`,
   liblzo2, 7-Zip or libarchive as extraction oracles), otherwise against spec
   vectors and spec-derived encoders; the test names and comments say which.
-  CRCs share one table-driven engine (`codec::crc`). Where a decoder was
+  CRCs share one table-driven engine (`codec::crc`).
+- Every codec does bounded work per call (about `step` bytes of output, or
+  a bounded slice of input) and returns to be called again, so decoding can
+  be budgeted and interrupted like everything else; whole-buffer decoders
+  (`filters::Whole`) are reserved for inputs bounded by a small constant. Where a decoder was
   written from a reference implementation rather than a specification, its
   module documentation says so and `THIRD-PARTY.md` carries the notice.
 - CI tests both the hermetic and the feature-enabled build.
@@ -119,7 +123,10 @@ host ──expand(node, n)──▶ Session ──poll(budget)──▶ Progress
   - `cx.read(span).await` suspends while bytes are missing (**waiting for
     bytes**) and records which chunks it needs;
   - `cx.checkpoint().await` and every read/push charge a work budget, and
-    suspend when it is exhausted (**yielded**). Decoding a lazy source
+    suspend when it is exhausted (**yielded**). The core has no clock and no
+    preemption, so the work between two suspension points must be bounded
+    independently of the input (see "Accounting for work" in
+    `docs/DISSECTORS.md`). Decoding a lazy source
     charges as it goes, so a read far into a large stream yields partway
     and continues on the next poll; `Session::read_step` gives hosts the
     same bounded reads (`Session::read` decodes in one call);
