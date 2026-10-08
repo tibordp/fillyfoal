@@ -5,10 +5,11 @@ libarchive supports what it holds:
 
     uv run --with pyppmd==1.3.1 python tests/data/rar/make.py
 
-libarchive 3.7 does not decode RAR 4 solid files ("RAR solid archive
-support unavailable"), and does not reset the RAR 3 low-distance repeat
-state when it reads new tables (unrar and 7-Zip do), so `v4-solid.rar`
-and the multi-table low-distance repeats are checked by our decoder only.
+libarchive does not decode RAR 4 solid files ("RAR solid archive support
+unavailable"), and libarchive 3.7 does not yet reset the RAR 3 low-distance
+repeat state when it reads new tables (its current `parse_codes`, which our
+decoder follows, does), so `v4-solid.rar` and the multi-table low-distance
+repeats are checked by our decoder only.
 
 The PPMd fixture encodes its symbols with 7-Zip's PPMd encoder (pyppmd)
 and re-encodes the range coder's operations with RAR's coder; that step
