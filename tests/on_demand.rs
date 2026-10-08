@@ -1175,3 +1175,355 @@ fn raw_lzma_with_a_known_dictionary_releases() {
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(19), Some(3 << 20));
     assert_eq!(fillyfoal::codec::lzma::lzma2_dict(40), Some(u32::MAX));
 }
+
+/// PDF, PostScript, TIFF and Type 1 filters, and AES-CBC: incremental, a
+/// bounded step per call. No encoders for these are at hand, so the data is
+/// `lz::lines` and `lz::mixed` encoded here from the specs (cross-checked
+/// against the PDF reference's LZW example and the decoders' unit tests),
+/// plus the eexec section of the Type 1 fixtures.
+mod filters {
+    use super::assert_on_demand;
+    use super::lz::{eager, lines, mixed, read};
+    use fillyfoal::codec::Codec;
+    use fillyfoal::codec::crypto::cipher::Aes;
+    use fillyfoal::codec::crypto::stream::Key;
+    use fillyfoal::codec::pipeline::Status;
+    use std::collections::HashMap;
+
+    /// Text, a run of zeros, then text with noise.
+    fn data() -> Vec<u8> {
+        [lines(), vec![0; 5000], mixed()].concat()
+    }
+
+    fn with_newlines(text: &[u8], every: usize) -> Vec<u8> {
+        text.chunks(every)
+            .flat_map(|c| [c, b"\n"].concat())
+            .collect()
+    }
+
+    fn hex(data: &[u8]) -> Vec<u8> {
+        let digits: String = data.iter().map(|b| format!("{b:02x}")).collect();
+        [with_newlines(digits.as_bytes(), 64), b">trailing".to_vec()].concat()
+    }
+
+    fn ascii85(data: &[u8]) -> Vec<u8> {
+        let mut text = Vec::new();
+        for group in data.chunks(4) {
+            if group == [0; 4] {
+                text.push(b'z');
+                continue;
+            }
+            let mut padded = [0u8; 4];
+            padded[..group.len()].copy_from_slice(group);
+            let mut v = u32::from_be_bytes(padded);
+            let mut digits = [0u8; 5];
+            for d in digits.iter_mut().rev() {
+                *d = (v % 85) as u8 + b'!';
+                v /= 85;
+            }
+            text.extend_from_slice(&digits[..group.len() + 1]);
+        }
+        [b"<~".to_vec(), with_newlines(&text, 70), b"~>".to_vec()].concat()
+    }
+
+    /// RunLength (`end`: with the 128 end marker) or PackBits (no-ops
+    /// sprinkled in instead).
+    fn runs(data: &[u8], end: bool) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < data.len() {
+            let run = data[i..]
+                .iter()
+                .take(128)
+                .take_while(|&&b| b == data[i])
+                .count();
+            if run >= 3 {
+                out.extend([(257 - run) as u8, data[i]]);
+                i += run;
+            } else {
+                let n = (data.len() - i).min(100);
+                if !end && i % 7 == 0 {
+                    out.push(128);
+                }
+                out.push((n - 1) as u8);
+                out.extend_from_slice(&data[i..i + n]);
+                i += n;
+            }
+        }
+        if end {
+            out.push(128);
+        }
+        out
+    }
+
+    /// MSB-first LZW with a clear code first and every 4000 entries.
+    fn lzw(data: &[u8], early: bool) -> Vec<u8> {
+        let e = usize::from(early);
+        let width = |next: usize| match next - 1 + e {
+            0..512 => 9,
+            512..1024 => 10,
+            1024..2048 => 11,
+            _ => 12,
+        };
+        let (mut out, mut acc, mut bits) = (Vec::new(), 0u64, 0u32);
+        let mut emit = |code: usize, w: u32| {
+            acc = (acc << w) | code as u64;
+            bits += w;
+            while bits >= 8 {
+                bits -= 8;
+                out.push((acc >> bits) as u8);
+            }
+        };
+        let mut dict: HashMap<(usize, u8), usize> = HashMap::new();
+        let mut next = 258;
+        emit(256, 9);
+        let mut w: Option<usize> = None;
+        for &c in data {
+            let Some(p) = w else {
+                w = Some(usize::from(c));
+                continue;
+            };
+            if let Some(&code) = dict.get(&(p, c)) {
+                w = Some(code);
+                continue;
+            }
+            emit(p, width(next));
+            dict.insert((p, c), next);
+            next += 1;
+            w = Some(usize::from(c));
+            if next == 4000 {
+                emit(256, width(next));
+                dict.clear();
+                next = 258;
+            }
+        }
+        if let Some(p) = w {
+            emit(p, width(next));
+            next += 1;
+        }
+        emit(257, width(next));
+        emit(0, 7);
+        out
+    }
+
+    fn paeth(a: u8, b: u8, c: u8) -> u8 {
+        let p = i16::from(a) + i16::from(b) - i16::from(c);
+        let (pa, pb, pc) = (
+            (p - i16::from(a)).abs(),
+            (p - i16::from(b)).abs(),
+            (p - i16::from(c)).abs(),
+        );
+        if pa <= pb && pa <= pc {
+            a
+        } else if pb <= pc {
+            b
+        } else {
+            c
+        }
+    }
+
+    /// PNG-predicted rows, cycling through the five filter types.
+    fn png(data: &[u8], bpp: usize, row: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut prev = vec![0u8; row];
+        for (r, raw) in data.chunks(row).enumerate() {
+            let kind = (r % 5) as u8;
+            out.push(kind);
+            for i in 0..raw.len() {
+                let left = if i >= bpp { raw[i - bpp] } else { 0 };
+                let up = prev[i];
+                let up_left = if i >= bpp { prev[i - bpp] } else { 0 };
+                let pred = match kind {
+                    1 => left,
+                    2 => up,
+                    3 => ((u16::from(left) + u16::from(up)) / 2) as u8,
+                    4 => paeth(left, up, up_left),
+                    _ => 0,
+                };
+                out.push(raw[i].wrapping_sub(pred));
+            }
+            prev[..raw.len()].copy_from_slice(raw);
+        }
+        out
+    }
+
+    fn tiff(data: &[u8], bpp: usize, row: usize) -> Vec<u8> {
+        data.chunks(row)
+            .flat_map(|raw| {
+                (0..raw.len()).map(move |i| {
+                    if i >= bpp {
+                        raw[i].wrapping_sub(raw[i - bpp])
+                    } else {
+                        raw[i]
+                    }
+                })
+            })
+            .collect()
+    }
+
+    fn eexec(data: &[u8]) -> Vec<u8> {
+        let mut r = 55665u16;
+        [b"rand".as_slice(), data]
+            .concat()
+            .iter()
+            .map(|&p| {
+                let c = p ^ (r >> 8) as u8;
+                r = (u16::from(c).wrapping_add(r))
+                    .wrapping_mul(52845)
+                    .wrapping_add(22719);
+                c
+            })
+            .collect()
+    }
+
+    fn aes_cbc(key: &[u8], data: &[u8]) -> Vec<u8> {
+        let aes = Aes::new(key).unwrap();
+        let n = 16 - data.len() % 16;
+        let padded = [data, &vec![n as u8; n]].concat();
+        let mut prev: [u8; 16] = std::array::from_fn(|i| (i * 37 + 5) as u8);
+        let mut out = prev.to_vec();
+        for chunk in padded.chunks(16) {
+            let mut block: [u8; 16] = chunk.try_into().unwrap();
+            for (b, p) in block.iter_mut().zip(prev) {
+                *b ^= p;
+            }
+            aes.encrypt_block(&mut block);
+            out.extend_from_slice(&block);
+            prev = block;
+        }
+        out
+    }
+
+    /// Every case: (codec, encoded, decoded).
+    fn cases(data: &[u8]) -> Vec<(Codec, Vec<u8>)> {
+        let key = b"0123456789abcdef";
+        let mut cases = vec![
+            (Codec::AsciiHex, hex(data)),
+            (Codec::Ascii85, ascii85(data)),
+            (Codec::RunLength, runs(data, true)),
+            (Codec::PackBits, runs(data, false)),
+            (Codec::Lzw { early_change: true }, lzw(data, true)),
+            (
+                Codec::Lzw {
+                    early_change: false,
+                },
+                lzw(data, false),
+            ),
+            (Codec::Eexec { hex: false }, eexec(data)),
+            (
+                Codec::Eexec { hex: true },
+                [&hex(&eexec(data))[..], b"%end"].concat(),
+            ),
+            (Codec::AesCbc(Key::new(key.to_vec())), aes_cbc(key, data)),
+        ];
+        for (bpp, row) in [(1, 7), (3, 300), (4, 4096)] {
+            cases.push((Codec::PngPredictor { bpp, row }, png(data, bpp, row)));
+            cases.push((Codec::TiffPredictor { bpp, row }, tiff(data, bpp, row)));
+        }
+        cases
+    }
+
+    #[test]
+    fn filters_are_on_demand() {
+        let data = data();
+        // Large (output from half the input), and small (byte at a time).
+        for sample in [&data[..], &data[..30_000]] {
+            for (codec, input) in cases(sample) {
+                assert!(eager(&codec, &input) == sample, "{codec:?}");
+                assert_on_demand(&codec, &input, sample);
+            }
+        }
+    }
+
+    /// Each call decodes a bounded step, and the whole input is consumed
+    /// (data after an end-of-data marker too, as before).
+    #[test]
+    fn filters_decode_in_bounded_steps() {
+        const STEP: usize = 4096;
+        let data = data();
+        for (codec, input) in cases(&data) {
+            let mut decoder = codec.decoder().unwrap();
+            let mut out = Vec::new();
+            let mut calls = 0;
+            loop {
+                let before = out.len();
+                let status = decoder
+                    .decode(&input, true, &mut out, STEP, 1 << 30)
+                    .unwrap();
+                calls += 1;
+                assert!(
+                    out.len() - before <= 2 * STEP,
+                    "{codec:?}: {} bytes in one call",
+                    out.len() - before
+                );
+                assert!(
+                    status != Status::NeedInput,
+                    "{codec:?} wants input after the end"
+                );
+                if status == Status::Done {
+                    break;
+                }
+            }
+            assert!(out == data, "{codec:?}: output differs");
+            assert!(calls >= data.len() / (2 * STEP), "{codec:?}: {calls} calls");
+            assert_eq!(decoder.consumed(), input.len(), "{codec:?}");
+        }
+    }
+
+    /// Releasing as they go: the filters keep nothing but their state
+    /// (the predictors two rows of output).
+    #[test]
+    fn filters_release() {
+        let data = data();
+        for (codec, input) in cases(&data) {
+            super::assert_releases(&codec, &input, &data, 2 * 16 * 1024 + 4096 + 2 * 4096);
+        }
+    }
+
+    /// The eexec sections of the Type 1 fixtures, against their eager
+    /// decoding.
+    #[test]
+    fn eexec_fixtures_are_on_demand() {
+        for path in [
+            "fixtures/synthetic/pfa/tiny.pfa",
+            "fixtures/synthetic/pfa/fillytest.pfa",
+        ] {
+            let file = read(path);
+            let at = file.windows(5).position(|w| w == b"eexec").unwrap() + 5;
+            let codec = Codec::Eexec { hex: true };
+            let expected = eager(&codec, &file[at..]);
+            assert!(!expected.is_empty(), "{path}");
+            assert_on_demand(&codec, &file[at..], &expected);
+        }
+    }
+
+    /// Malformed data fails, at the end of the input.
+    #[test]
+    fn filter_errors() {
+        let fails = |codec: &Codec, input: &[u8]| {
+            let mut decoder = codec.decoder().unwrap();
+            let mut out = Vec::new();
+            loop {
+                match decoder.decode(input, true, &mut out, 16, 1 << 20) {
+                    Ok(Status::Done) => return false,
+                    Ok(_) => {}
+                    Err(_) => return true,
+                }
+            }
+        };
+        let key = Key::new(b"0123456789abcdef".to_vec());
+        let good = aes_cbc(b"0123456789abcdef", b"some text");
+        assert!(!fails(&Codec::AesCbc(key.clone()), &good));
+        assert!(fails(&Codec::AesCbc(key.clone()), &good[..good.len() - 1]));
+        assert!(fails(&Codec::AesCbc(key.clone()), &good[..16]));
+        assert!(!fails(&Codec::AesCbc(key), b""));
+        assert!(fails(&Codec::AesCbc(Key::new(vec![1, 2, 3])), b"x"));
+        assert!(fails(&Codec::AsciiHex, b"41 42 4x>"));
+        assert!(fails(&Codec::Ascii85, b"9jqo^9~>"));
+        assert!(fails(&Codec::RunLength, &[5, b'a']));
+        assert!(fails(
+            &Codec::Lzw { early_change: true },
+            &[0xff, 0xff, 0xff]
+        ));
+    }
+}
