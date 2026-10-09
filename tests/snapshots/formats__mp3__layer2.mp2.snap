@@ -1,9 +1,9 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ layer2.mp2 — MPEG-2 Layer II, 32 kbps, 16000 Hz, mono, 144 ms  [0x0+0x240]
-  ▾ Frames — 576 bytes  [0x0+0x240]
+  ▾ Frames — 2 frames  [0x0+0x240]
     ▾ Frame 0 — MPEG-2 Layer II, 32 kbps, 16000 Hz, mono, 288 bytes  [0x0+0x120]
       ▾ Header  [0x0+0x4]
           Frame sync: 0x7ff  [0x0+0x2]
@@ -17,9 +17,9 @@ expression: "common::explore(&name, &data)"
           Channel mode: mono (0x3)  [0x3+0x1]
           Mode extension: 0  [0x3+0x1]
           Copyright: false  [0x3+0x1]
-          Original: true  [0x3+0x1]
+          Original: true — original  [0x3+0x1]
           Emphasis: none (0x0)  [0x3+0x1]
-        Audio data  [0x4+0x11c]
+        Audio data — 284 bytes  [0x4+0x11c]
     ▾ Frame 1 — MPEG-2 Layer II, 32 kbps, 16000 Hz, mono, 288 bytes  [0x120+0x120]
       ▾ Header  [0x120+0x4]
           Frame sync: 0x7ff  [0x120+0x2]
@@ -33,6 +33,6 @@ expression: "common::explore(&name, &data)"
           Channel mode: mono (0x3)  [0x123+0x1]
           Mode extension: 0  [0x123+0x1]
           Copyright: false  [0x123+0x1]
-          Original: true  [0x123+0x1]
+          Original: true — original  [0x123+0x1]
           Emphasis: none (0x0)  [0x123+0x1]
-        Audio data  [0x124+0x11c]
+        Audio data — 284 bytes  [0x124+0x11c]

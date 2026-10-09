@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tone.wv — WavPack 8000 Hz, 16-bit, mono, lossless, 100 ms  [0x0+0x30a]
   ▾ Blocks — 696 bytes  [0x0+0x2b8]
@@ -36,10 +36,10 @@ expression: "common::explore(&name, &data)"
           ID: 0x8a — function 0x0a, large  [0x36+0x1]
           Size (words): 319  [0x37+0x3]
           Data  [0x3a+0x27e]
-  ▾ APE tag — APEv2, 1 items: Tone  [0x2b8+0x52]
+  ▾ APE tag — APEv2, 1 item, 82 bytes: Tone  [0x2b8+0x52]
     ▾ Header  [0x2b8+0x20]
         Preamble: "APETAGEX"  [0x2b8+0x8]
-        Version: 2000  [0x2c0+0x4]
+        Version: 2000 — APEv2  [0x2c0+0x4]
         Tag size: 50  [0x2c4+0x4]
         Items: 1  [0x2c8+0x4]
         Flags: 0xa0000000 [HAS_HEADER | IS_HEADER]  [0x2cc+0x4]
@@ -52,7 +52,7 @@ expression: "common::explore(&name, &data)"
           Value: "Tone"  [0x2e6+0x4]
     ▾ Footer  [0x2ea+0x20]
         Preamble: "APETAGEX"  [0x2ea+0x8]
-        Version: 2000  [0x2f2+0x4]
+        Version: 2000 — APEv2  [0x2f2+0x4]
         Tag size: 50  [0x2f6+0x4]
         Items: 1  [0x2fa+0x4]
         Flags: 0x80000000 [HAS_HEADER]  [0x2fe+0x4]

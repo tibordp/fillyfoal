@@ -1,17 +1,19 @@
 //! Helpers shared by the audio dissectors: value constructors, durations,
-//! 80-bit floats, 24-bit fields, MSB-first bit fields and paged record
-//! tables.
+//! 80-bit floats, 24-bit fields, MSB-first bit fields, paged record tables,
+//! a walker for elementary streams of self-delimiting frames (with
+//! resynchronisation after junk) and cover-art dimensions.
 
 use std::borrow::Cow;
 
-use crate::bytes::{to_u64, to_usize};
+use crate::bytes::{to_u64, to_usize, u16_be, u16_le, u32_be};
+use crate::codec::crc::Crc;
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, FlagTable, Radix, Value, lookup};
 
 /// An unsigned decimal value.
 pub fn uint(value: impl Into<u64>, bits: u8) -> Value {
@@ -228,6 +230,23 @@ impl<'a> Bits<'a> {
         self.pos
     }
 
+    /// The span the reader's bits come from.
+    pub fn span(&self) -> Span {
+        self.span
+    }
+
+    /// A reader over the same bits at the same position that emits
+    /// nothing: for decoding a structure ahead before rendering it.
+    pub fn silent(&self) -> Bits<'a> {
+        Bits {
+            cx: None,
+            data: self.data,
+            span: self.span,
+            pos: self.pos,
+            lsb_first: self.lsb_first,
+        }
+    }
+
     pub fn skip(&mut self, bits: u64) {
         self.pos = self.pos.saturating_add(bits);
     }
@@ -350,6 +369,30 @@ impl BitField<'_> {
         self
     }
 
+    pub fn flags(mut self, table: FlagTable) -> Self {
+        if let Ok(v) = self.value {
+            let (set, unknown) = crate::value::decode_flags(table, v);
+            self.node.value = Some(Value::Flags {
+                raw: v,
+                bits: self.bits,
+                set,
+                unknown,
+            });
+        }
+        self
+    }
+
+    /// A signed value in two's complement.
+    pub fn signed(mut self) -> Self {
+        if let Ok(v) = self.value {
+            self.node.value = Some(Value::Int {
+                value: sign_extend(v, self.bits),
+                bits: self.bits,
+            });
+        }
+        self
+    }
+
     pub fn hex(mut self) -> Self {
         if let Ok(v) = self.value {
             self.node.value = Some(hex(v, self.bits));
@@ -379,6 +422,13 @@ impl BitField<'_> {
         }
         self.value
     }
+}
+
+/// `v`, an `bits`-bit two's complement number, as a signed integer.
+pub fn sign_extend(v: u64, bits: u8) -> i64 {
+    let bits = u32::from(bits.clamp(1, 64));
+    let shift = 64u32.saturating_sub(bits);
+    i64::from_ne_bytes(v.wrapping_shl(shift).to_ne_bytes()).wrapping_shr(shift)
 }
 
 /// A bit-field layout function, the [`Bits`] analogue of a [`Fields`]
@@ -462,18 +512,42 @@ async fn expand_table<R: Record>(
 }
 
 // ---------------------------------------------------------------------------
-// Elementary streams of self-delimiting frames (ADTS, AC-3, DTS, ...)
+// ---------------------------------------------------------------------------
+// Elementary streams of self-delimiting frames (MPEG audio, ADTS, AC-3, DTS)
+
+/// CRC-16 of MPEG audio and ADTS frames (polynomial 0x8005, initial value
+/// 0xffff, not reflected).
+pub const CRC16_MPEG: Crc = Crc::new(16, 0x8005, 0xffff, false, 0);
+/// CRC-16 of FLAC frames and AC-3 sync frames (polynomial 0x8005, initial
+/// value 0, not reflected).
+pub const CRC16_BUYPASS: Crc = Crc::new(16, 0x8005, 0, false, 0);
 
 /// How to recognise and render the frames of an elementary stream.
 pub struct FrameSyntax {
     /// Bytes `parse` needs to see.
     pub peek: u64,
+    /// The bytes a frame can start with: candidates for resynchronising
+    /// after junk are only tried at these.
+    pub sync: &'static [u8],
     /// Frame length and a one-line description, if `data` starts with a
     /// valid frame header.
     pub parse: fn(&[u8]) -> Option<(u64, String)>,
-    /// Header bytes rendered by `layout`.
+    /// Header bytes rendered by `layout` (given the first `peek` bytes).
     pub header: fn(&[u8]) -> u64,
     pub layout: BitLayout<()>,
+    /// Renders a frame's children; `None` shows the header with `layout`
+    /// and the rest as the payload.
+    pub expand: Option<fn(Cx, FrameRef) -> crate::node::Expansion>,
+}
+
+/// One frame of an elementary stream, located.
+#[derive(Clone, Copy)]
+pub struct FrameRef {
+    /// The whole frame.
+    pub span: Span,
+    /// The bytes `layout` renders.
+    pub header: Span,
+    pub syntax: &'static FrameSyntax,
 }
 
 /// Counts the frames at the start of `data` and the bytes they cover.
@@ -490,26 +564,126 @@ pub fn count_frames(data: &[u8], syntax: &FrameSyntax) -> (u64, u64) {
     (count, at)
 }
 
+/// Estimates the number of frames in a `total`-byte stream from the frames
+/// found at the start of `window` (its first bytes): exact if the window
+/// holds the whole stream.
+pub fn estimate_frames(window: &[u8], total: u64, syntax: &FrameSyntax) -> f64 {
+    let (count, covered) = count_frames(window, syntax);
+    if covered == 0 || to_u64(window.len()) >= total {
+        count as f64
+    } else {
+        count as f64 * total as f64 / covered as f64
+    }
+}
+
 /// A lazy node listing the frames of `region`, paged.
 pub fn frames_node(region: Span, syntax: &'static FrameSyntax) -> Node {
     Node::new("Frames")
         .span(region)
-        .summary(format!("{} bytes", region.len))
+        .summary(crate::formats::util::arcutil::human_size(region.len))
         .lazy(list_frames, (region, syntax))
 }
 
-async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> Result<()> {
-    let mut pos = 0u64;
-    let mut index = 0u64;
+/// How far one step of [`resync`] reads ahead.
+const RESYNC_WINDOW: u64 = 0x10000;
+
+/// The offset (relative to `region`) of the first frame at or after `from`
+/// that is followed by another frame (or by the end of `region`): where the
+/// stream picks up again after junk. `None` if there is none.
+pub async fn resync(cx: &Cx, region: Span, from: u64, syntax: &FrameSyntax) -> Result<Option<u64>> {
+    let mut pos = from;
     while pos < region.len {
+        let window = cx
+            .read_avail(region.sub(pos, RESYNC_WINDOW.saturating_add(syntax.peek)))
+            .await?;
+        let scan = window.len().min(to_usize(RESYNC_WINDOW));
+        for i in 0..scan {
+            if i % 4096 == 0 {
+                cx.checkpoint().await;
+            }
+            if !window.get(i).is_some_and(|b| syntax.sync.contains(b)) {
+                continue;
+            }
+            let Some((len, _)) = window
+                .get(i..)
+                .and_then(syntax.parse)
+                .filter(|(l, _)| *l > 0)
+            else {
+                continue;
+            };
+            let at = pos.saturating_add(to_u64(i));
+            let next = at.saturating_add(len);
+            if next >= region.len {
+                return Ok(Some(at));
+            }
+            let following = match window.get(i.saturating_add(to_usize(len))..) {
+                Some(rest) if to_u64(rest.len()) >= syntax.peek => rest.to_vec(),
+                _ => cx.read_avail(region.sub(next, syntax.peek)).await?,
+            };
+            if (syntax.parse)(&following).is_some() {
+                return Ok(Some(at));
+            }
+        }
+        if to_u64(window.len()) <= syntax.peek {
+            break;
+        }
+        pos = pos.saturating_add(to_u64(scan).max(1));
+    }
+    Ok(None)
+}
+
+/// A node for the bytes after the last frame of a stream: padding if they
+/// are zeros, otherwise data that is not a frame.
+pub async fn tail_node(cx: &Cx, span: Span) -> Result<Node> {
+    let head = cx.read_avail(span.sub(0, 4096)).await?;
+    let size = crate::formats::util::arcutil::human_size(span.len);
+    Ok(if head.iter().all(|&b| b == 0) {
+        Node::new("Padding").span(span).summary(size)
+    } else {
+        Node::new("Unparsed data")
+            .span(span)
+            .summary(size)
+            .diag(Diagnostic::malformed(
+                "no frame header found in the rest of the stream",
+            ))
+    })
+}
+
+/// A node for junk between two frames.
+pub fn junk_node(span: Span) -> Node {
+    Node::new("Junk")
+        .span(span)
+        .summary(format!(
+            "{}, frame sync lost",
+            crate::formats::util::arcutil::human_size(span.len)
+        ))
+        .diag(Diagnostic::warning(format!(
+            "{} bytes between frames that are not a frame",
+            span.len
+        )))
+}
+
+async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> Result<()> {
+    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    while pos < region.len {
+        let mark = (pos, index);
         let head = cx.read_avail(region.sub(pos, syntax.peek)).await?;
         let Some((len, summary)) = (syntax.parse)(&head).filter(|(l, _)| *l > 0) else {
-            let mut node = Node::new("Unparsed data").span(region.tail(pos));
-            if !head.iter().all(|&b| b == 0) {
-                node = node.diag(Diagnostic::malformed("lost frame sync"));
+            match resync(&cx, region, pos.saturating_add(1), syntax).await? {
+                Some(next) => {
+                    cx.mark(move || mark);
+                    cx.push(junk_node(region.sub(pos, next.saturating_sub(pos))))
+                        .await;
+                    pos = next;
+                    continue;
+                }
+                None => {
+                    let node = tail_node(&cx, region.tail(pos)).await?;
+                    cx.mark(move || mark);
+                    cx.push(node).await;
+                    return Ok(());
+                }
             }
-            cx.emit(node);
-            return Ok(());
         };
         let span = region.sub(pos, len);
         let mut node = Node::new(format!("Frame {index}"))
@@ -522,16 +696,102 @@ async fn list_frames(cx: Cx, (region, syntax): (Span, &'static FrameSyntax)) -> 
             ));
         }
         let header = span.sub(0, (syntax.header)(&head));
+        let frame_ref = FrameRef {
+            span,
+            header,
+            syntax,
+        };
+        node = match syntax.expand {
+            Some(expand) => node.lazy(expand, frame_ref),
+            None => node.lazy(frame, frame_ref),
+        };
         cx.progress_in(region, region.offset.saturating_add(pos));
-        cx.push(node.lazy(frame, (span, header, syntax))).await;
+        cx.mark(move || mark);
+        cx.push(node).await;
         pos = pos.saturating_add(len);
         index = index.saturating_add(1);
     }
     Ok(())
 }
 
-async fn frame(cx: Cx, (span, header, syntax): (Span, Span, &'static FrameSyntax)) -> Result<()> {
-    cx.emit(bits_node("Header", header, syntax.layout, false));
-    cx.emit(Node::new("Payload").span(span.tail(header.len)));
+async fn frame(cx: Cx, f: FrameRef) -> Result<()> {
+    cx.emit(bits_node("Header", f.header, f.syntax.layout, false));
+    let payload = f.span.tail(f.header.len);
+    if !payload.is_empty() {
+        cx.emit(Node::new("Payload").span(payload));
+    }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Embedded pictures
+
+/// Dimensions and type of the image whose first bytes are `d` (cover art in
+/// tags): `"600×600 JPEG"`, or just `"JPEG"` when the dimensions are not in
+/// the bytes given.
+pub fn image_info(d: &[u8]) -> Option<String> {
+    let (kind, dims) = if d.starts_with(b"\x89PNG\r\n\x1a\n") {
+        let dims = match (u32_be(d, 16), u32_be(d, 20)) {
+            (Some(w), Some(h)) if d.get(12..16) == Some(b"IHDR") => Some((w, h)),
+            _ => None,
+        };
+        ("PNG", dims)
+    } else if d.starts_with(&[0xff, 0xd8, 0xff]) {
+        ("JPEG", jpeg_dims(d))
+    } else if d.starts_with(b"GIF87a") || d.starts_with(b"GIF89a") {
+        let dims = u16_le(d, 6).zip(u16_le(d, 8));
+        ("GIF", dims.map(|(w, h)| (u32::from(w), u32::from(h))))
+    } else if d.starts_with(b"BM") && d.len() >= 26 {
+        let w = crate::bytes::i32_le(d, 18).map(i32::unsigned_abs);
+        let h = crate::bytes::i32_le(d, 22).map(i32::unsigned_abs);
+        ("BMP", w.zip(h))
+    } else if d.starts_with(b"RIFF") && d.get(8..12) == Some(b"WEBP") {
+        let dims = match d.get(12..16) {
+            Some(b"VP8X") => crate::bytes::u24_le(d, 24)
+                .zip(crate::bytes::u24_le(d, 27))
+                .map(|(w, h)| (w.saturating_add(1), h.saturating_add(1))),
+            Some(b"VP8 ") => u16_le(d, 26)
+                .zip(u16_le(d, 28))
+                .map(|(w, h)| (u32::from(w & 0x3fff), u32::from(h & 0x3fff))),
+            Some(b"VP8L") => crate::bytes::u32_le(d, 21).map(|v| {
+                (
+                    (v & 0x3fff).saturating_add(1),
+                    ((v >> 14) & 0x3fff).saturating_add(1),
+                )
+            }),
+            _ => None,
+        };
+        ("WebP", dims)
+    } else {
+        return None;
+    };
+    Some(match dims {
+        Some((w, h)) => format!("{w}×{h} {kind}"),
+        None => kind.to_owned(),
+    })
+}
+
+/// The frame size from the first SOF marker of a JPEG, if `d` reaches it.
+fn jpeg_dims(d: &[u8]) -> Option<(u32, u32)> {
+    let mut at = 2usize;
+    loop {
+        if *d.get(at)? != 0xff {
+            return None;
+        }
+        let marker = *d.get(at.saturating_add(1))?;
+        match marker {
+            0xff => at = at.saturating_add(1),
+            0x01 | 0xd0..=0xd8 => at = at.saturating_add(2),
+            0xc0..=0xcf if !matches!(marker, 0xc4 | 0xc8 | 0xcc) => {
+                let h = u16_be(d, at.saturating_add(5))?;
+                let w = u16_be(d, at.saturating_add(7))?;
+                return Some((w.into(), h.into()));
+            }
+            0xd9 | 0xda => return None,
+            _ => {
+                let len = u16_be(d, at.saturating_add(2))?;
+                at = at.saturating_add(2).saturating_add(len.into());
+            }
+        }
+    }
 }

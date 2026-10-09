@@ -1,7 +1,9 @@
 //! FLAC: the `fLaC` signature, metadata blocks (STREAMINFO, PADDING,
 //! APPLICATION, SEEKTABLE, VORBIS_COMMENT, CUESHEET, PICTURE), then audio
-//! frames. Frames have no length field: they are found by scanning for the
-//! next frame header whose CRC-8 checks out.
+//! frames. Frames have no length field: a frame ends where the next frame
+//! header starts, which is found by scanning for a header whose CRC-8
+//! checks out at a position where the CRC-16 of the bytes before it does
+//! too.
 //!
 //! The metadata block decoders are shared with FLAC-in-Ogg.
 
@@ -11,14 +13,16 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
-    Bits, bits_node, channels, duration_of, enumerated, hex, leaf, parse_bits, table, text, uint,
+    Bits, CRC16_BUYPASS, bits_node, channels, duration_of, enumerated, hex, image_info, leaf,
+    parse_bits, table, text, uint,
 };
 use crate::formats::{Format, Input, Probe, audio::id3, audio::vorbis, embedded};
-use crate::node::Node;
+use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::EnumTable;
+use crate::value::{EnumTable, lookup};
 
 const BE: Endian = Endian::Big;
 
@@ -47,6 +51,41 @@ pub const BLOCK_TYPE: EnumTable = &[
     (127, "invalid"),
 ];
 
+/// Registered APPLICATION block IDs.
+const APPLICATIONS: &[(&[u8; 4], &str)] = &[
+    (b"ATCH", "FlacFile"),
+    (b"BSOL", "beSolo"),
+    (b"BUGS", "Bugs Player"),
+    (b"Cues", "GoldWave cue points"),
+    (b"Fica", "CUE Splitter"),
+    (b"Ftol", "flac-tools"),
+    (b"MOTB", "MOTB MetaCzar"),
+    (b"MPSE", "MP3 Stream Editor"),
+    (b"MuML", "MusicML"),
+    (b"RIFF", "Sound Devices RIFF chunk storage"),
+    (b"SFFL", "Sound Font FLAC"),
+    (b"SONY", "Sony Creative Software"),
+    (b"SQEZ", "flacsqueeze"),
+    (b"TtWv", "TwistedWave"),
+    (b"UITS", "UITS embedding tools"),
+    (b"aiff", "FLAC AIFF chunk storage"),
+    (b"imag", "flac-image"),
+    (b"peem", "Parseable Embedded Extensible Metadata"),
+    (b"qfst", "QFLAC Studio"),
+    (b"riff", "FLAC RIFF chunk storage"),
+    (b"tune", "TagTuner"),
+    (b"w64 ", "FLAC Wave64 chunk storage"),
+    (b"xbat", "XBAT"),
+    (b"xmcd", "xmcd"),
+];
+
+fn application(id: &[u8]) -> Option<&'static str> {
+    APPLICATIONS
+        .iter()
+        .find(|(k, _)| k.as_slice() == id)
+        .map(|(_, v)| *v)
+}
+
 /// STREAMINFO, the values the file summary needs.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct StreamInfo {
@@ -54,6 +93,8 @@ pub struct StreamInfo {
     pub channels: u64,
     pub bits: u64,
     pub samples: u64,
+    pub min_frame: u64,
+    pub max_frame: u64,
 }
 
 impl StreamInfo {
@@ -65,7 +106,9 @@ impl StreamInfo {
             channels(self.channels),
             self.bits
         );
-        if let Some(d) = duration_of(self.samples, self.rate) {
+        if self.samples > 0
+            && let Some(d) = duration_of(self.samples, self.rate)
+        {
             s.push_str(&format!(", {d}"));
         }
         s
@@ -73,11 +116,28 @@ impl StreamInfo {
 }
 
 pub fn streaminfo(b: &mut Bits<'_>) -> Result<StreamInfo> {
-    b.field("Minimum block size", 16).emit()?;
-    b.field("Maximum block size", 16).emit()?;
-    b.field("Minimum frame size", 24).emit()?;
-    b.field("Maximum frame size", 24).emit()?;
-    let rate = b.field("Sample rate", 20).emit()?;
+    let min_block = b.field("Minimum block size", 16).emit()?;
+    b.field("Maximum block size", 16)
+        .with(|v, n| {
+            if v == min_block {
+                n.summary("fixed block size")
+            } else {
+                n
+            }
+        })
+        .emit()?;
+    let min_frame = b
+        .field("Minimum frame size", 24)
+        .with(|v, n| if v == 0 { n.summary("unknown") } else { n })
+        .emit()?;
+    let max_frame = b
+        .field("Maximum frame size", 24)
+        .with(|v, n| if v == 0 { n.summary("unknown") } else { n })
+        .emit()?;
+    let rate = b
+        .field("Sample rate", 20)
+        .with(|v, n| n.summary(format!("{v} Hz")))
+        .emit()?;
     let channels = b
         .field("Channels − 1", 3)
         .with(|v, n| n.summary(channels(v.saturating_add(1))))
@@ -91,18 +151,20 @@ pub fn streaminfo(b: &mut Bits<'_>) -> Result<StreamInfo> {
     let samples = b
         .field("Total samples", 36)
         .with(|v, n| match duration_of(v, rate) {
-            Some(d) => n.summary(d),
-            None => n,
+            Some(d) if v > 0 => n.summary(d),
+            _ => n.summary("unknown"),
         })
         .emit()?;
     b.bytes("MD5 signature", 16)
-        .desc("MD5 of the unencoded audio")
+        .desc("MD5 of the unencoded audio samples; all zeros if not computed")
         .emit()?;
     Ok(StreamInfo {
         rate,
         channels,
         bits,
         samples,
+        min_frame,
+        max_frame,
     })
 }
 
@@ -127,30 +189,57 @@ pub struct Block {
 pub async fn block_node(cx: &Cx, input: Input, span: Span) -> Result<Node> {
     let head = cx.read(span.sub(0, 4)).await?;
     let kind = head.first().copied().unwrap_or(0) & 0x7f;
-    let name = crate::value::lookup(BLOCK_TYPE, kind.into())
-        .map_or_else(|| format!("Block type {kind}"), str::to_owned);
+    let name =
+        lookup(BLOCK_TYPE, kind.into()).map_or_else(|| format!("Block type {kind}"), str::to_owned);
     let data = span.tail(4);
     let summary = match kind {
         0 => parse_bits(cx, data.sub(0, 34), streaminfo, false)
             .await
             .map(|s| s.summary())
             .ok(),
+        1 => Some(format!("{} of padding", human_size(data.len))),
         3 => Some(format!("{} seek points", data.len / SeekPoint::SIZE)),
-        4 => vorbis::title(cx, data).await,
+        4 => {
+            let vendor = vendor(cx, data).await;
+            match (vorbis::title(cx, data).await, vendor) {
+                (Some(t), _) => Some(t),
+                (None, Some(v)) => Some(format!("vendor {v}")),
+                _ => None,
+            }
+        }
+        5 => cuesheet_summary(cx, data).await.ok(),
         6 => picture_summary(cx, data).await.ok(),
         2 => {
             let id = cx.read_avail(data.sub(0, 4)).await?;
-            Some(crate::formats::util::sound::fourcc(&id))
+            let fourcc = crate::formats::util::sound::fourcc(&id);
+            Some(match application(&id) {
+                Some(name) => format!(
+                    "{fourcc} ({name}), {}",
+                    human_size(data.len.saturating_sub(4))
+                ),
+                None => format!("{fourcc}, {}", human_size(data.len.saturating_sub(4))),
+            })
         }
         _ => None,
     };
     let node = Node::new(name)
         .span(span)
-        .summary(summary.unwrap_or_else(|| format!("{} bytes", data.len)));
+        .summary(summary.unwrap_or_else(|| human_size(data.len)));
     Ok(node.lazy(
         crate::expander!(self::block: Block),
         Block { input, kind, span },
     ))
+}
+
+/// The vendor string of a comment block.
+async fn vendor(cx: &Cx, data: Span) -> Option<String> {
+    let head = cx.read_avail(data.sub(0, 4)).await.ok()?;
+    let len = crate::bytes::u32_le(&head, 0)?;
+    let v = cx
+        .read_avail(data.sub(4, u64::from(len).min(256)))
+        .await
+        .ok()?;
+    Some(String::from_utf8_lossy(&v).into_owned())
 }
 
 pub async fn block(cx: Cx, b: Block) -> Result<()> {
@@ -175,13 +264,47 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
             |b| streaminfo(b).map(|_| ()),
             false,
         )),
-        1 => cx.emit(Node::new("Padding").span(data)),
+        1 => {
+            let head = cx.read_avail(data.sub(0, 4096)).await?;
+            let mut node = Node::new("Padding")
+                .span(data)
+                .summary(human_size(data.len));
+            if head.iter().any(|&b| b != 0) {
+                node = node.diag(Diagnostic::warning("padding is not all zeros"));
+            }
+            cx.emit(node);
+        }
         2 => {
-            let block = cx.block(data.sub(0, 4)).await?;
-            Fields::emitting(&cx, &block, BE)
-                .ascii("Application ID", 4)
-                .emit()?;
-            cx.emit(Node::new("Data").span(data.tail(4)));
+            let id = cx.read_avail(data.sub(0, 4)).await?;
+            let mut node = leaf(
+                "Application ID",
+                data.sub(0, 4),
+                text(crate::formats::util::sound::fourcc(&id)),
+            );
+            if let Some(name) = application(&id) {
+                node = node.summary(name);
+            }
+            cx.emit(node);
+            let rest = data.tail(4);
+            if matches!(id.as_slice(), b"riff" | b"aiff" | b"w64 ") {
+                // flac --keep-foreign-metadata: one chunk of the original
+                // file per block.
+                let chunk = cx.read_avail(rest.sub(0, 4)).await?;
+                cx.emit(
+                    Node::new("Foreign chunk")
+                        .span(rest)
+                        .summary(format!(
+                            "{}, {}",
+                            crate::formats::util::sound::fourcc(&chunk),
+                            human_size(rest.len)
+                        ))
+                        .desc(
+                            "A chunk of the original WAV/AIFF/Wave64 file, kept for restoring it",
+                        ),
+                );
+            } else if !rest.is_empty() {
+                cx.emit(Node::new("Data").span(rest).summary(human_size(rest.len)));
+            }
         }
         3 => cx.emit(table::<SeekPoint>(
             "Seek points",
@@ -192,12 +315,15 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
                 if p.sample == u64::MAX {
                     "placeholder".to_owned()
                 } else {
-                    format!("sample {} at {:#x}", p.sample, p.offset)
+                    format!(
+                        "sample {} at byte {} ({} samples)",
+                        p.sample, p.offset, p.samples
+                    )
                 }
             }),
         )),
         4 => {
-            vorbis::emit(&cx, data).await?;
+            vorbis::emit(&cx, b.input, data).await?;
         }
         5 => cuesheet(&cx, data).await?,
         6 => picture(&cx, b.input, data).await?,
@@ -206,23 +332,154 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// CUESHEET
+
+async fn cuesheet_summary(cx: &Cx, data: Span) -> Result<String> {
+    let head = cx.read(data.sub(0, 396)).await?;
+    let catalog = crate::formats::util::sound::latin1_z(head.get(..128).unwrap_or_default());
+    let cd = head.get(136).is_some_and(|b| b & 0x80 != 0);
+    let tracks = head.get(395).copied().unwrap_or(0);
+    let mut s = format!("{tracks} tracks");
+    if cd {
+        s.push_str(", CD-DA");
+    }
+    if !catalog.is_empty() {
+        s.push_str(&format!(", catalog {catalog}"));
+    }
+    Ok(s)
+}
+
 async fn cuesheet(cx: &Cx, data: Span) -> Result<()> {
     let block = cx.block(data.sub(0, 396)).await?;
     let mut f = Fields::emitting(cx, &block, BE);
-    f.ascii("Media catalog number", 128).emit()?;
-    f.u64("Lead-in samples").emit()?;
-    f.u8("Flags")
-        .with(|&v, n| n.summary(if v & 0x80 != 0 { "CD-DA" } else { "not CD-DA" }))
+    crate::formats::util::sound::latin1_field(&mut f, "Media catalog number", 128).emit()?;
+    f.u64("Lead-in samples")
+        .desc("CD-DA: samples before the first track (at least two seconds)")
         .emit()?;
+    let cd = f
+        .u8("Flags")
+        .with(|&v, n| n.summary(if v & 0x80 != 0 { "CD-DA" } else { "not CD-DA" }))
+        .emit()?
+        & 0x80
+        != 0;
     f.bytes("Reserved", 258).emit()?;
     let tracks = f.u8("Tracks").emit()?;
+    let region = data.tail(396);
     cx.emit(
-        Node::new("Track data")
-            .span(data.tail(396))
-            .summary(format!("{tracks} tracks")),
+        Node::new("Tracks")
+            .span(region)
+            .summary(format!("{tracks} tracks"))
+            .lazy(expand_tracks, (region, tracks, cd)),
     );
     Ok(())
 }
+
+/// A sample offset as a CD position (75 sectors per second at 44.1 kHz).
+fn cd_time(samples: u64) -> String {
+    let frames = samples / 588;
+    format!(
+        "{:02}:{:02}:{:02}",
+        frames / 4500,
+        frames / 75 % 60,
+        frames % 75
+    )
+}
+
+async fn expand_tracks(cx: Cx, (region, tracks, cd): (Span, u8, bool)) -> Result<()> {
+    cx.set_count(Count::Exact(tracks.into()));
+    let mut at = 0u64;
+    for _ in 0..tracks {
+        let head = cx.read(region.sub(at, 36)).await?;
+        let offset = crate::bytes::u64_be(&head, 0).unwrap_or(0);
+        let number = head.get(8).copied().unwrap_or(0);
+        let isrc = crate::formats::util::sound::latin1_z(head.get(9..21).unwrap_or_default());
+        let flags = head.get(21).copied().unwrap_or(0);
+        let indices = head.get(35).copied().unwrap_or(0);
+        let len = 36u64.saturating_add(u64::from(indices).saturating_mul(12));
+        let span = region.sub(at, len);
+        let name = if number == 170 || (number == 255 && !cd) {
+            "Lead-out".to_owned()
+        } else {
+            format!("Track {number}")
+        };
+        let mut summary = format!("at sample {offset}");
+        if cd {
+            summary.push_str(&format!(" ({})", cd_time(offset)));
+        }
+        if flags & 0x80 != 0 {
+            summary.push_str(", data");
+        }
+        if !isrc.is_empty() {
+            summary.push_str(&format!(", ISRC {isrc}"));
+        }
+        if indices > 0 {
+            summary.push_str(&format!(
+                ", {}",
+                crate::formats::util::arcutil::count(indices.into(), "index", "indices")
+            ));
+        }
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(summary)
+                .lazy(expand_track, (span, cd)),
+        )
+        .await;
+        at = at.saturating_add(len);
+    }
+    Ok(())
+}
+
+async fn expand_track(cx: Cx, (span, cd): (Span, bool)) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, BE);
+    f.u64("Offset")
+        .desc("In samples, from the start of the audio")
+        .with(|&v, n| if cd { n.summary(cd_time(v)) } else { n })
+        .emit()?;
+    f.u8("Number")
+        .with(|&v, n| {
+            if v == 170 {
+                n.summary("lead-out (CD-DA)")
+            } else {
+                n
+            }
+        })
+        .emit()?;
+    crate::formats::util::sound::latin1_field(&mut f, "ISRC", 12).emit()?;
+    f.u8("Flags")
+        .with(|&v, n| {
+            let mut parts = vec![if v & 0x80 != 0 { "non-audio" } else { "audio" }];
+            if v & 0x40 != 0 {
+                parts.push("pre-emphasis");
+            }
+            n.summary(parts.join(", "))
+        })
+        .emit()?;
+    f.bytes("Reserved", 13).emit()?;
+    let count = f.u8("Index points").emit()?;
+    for _ in 0..count {
+        let span = f.peek_span(12);
+        let offset = f.u64("Offset").get()?;
+        let number = f.u8("Number").get()?;
+        f.skip(3);
+        let mut summary = format!("at sample {offset} relative to the track");
+        if cd {
+            summary.push_str(&format!(" ({})", cd_time(offset)));
+        }
+        f.node(
+            Node::new(format!("Index {number}"))
+                .span(span)
+                .value(uint(offset, 64))
+                .summary(summary),
+        );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// PICTURE
 
 /// The fields of a PICTURE block (also used inside Ogg comments).
 pub async fn picture(cx: &Cx, input: Input, data: Span) -> Result<()> {
@@ -239,26 +496,48 @@ pub async fn picture(cx: &Cx, input: Input, data: Span) -> Result<()> {
         .emit()?;
     f.u32("Width").emit()?;
     f.u32("Height").emit()?;
-    f.u32("Color depth").emit()?;
+    f.u32("Color depth")
+        .with(|&v, n| n.summary(format!("{v} bits per pixel")))
+        .emit()?;
     f.u32("Colors used")
         .desc("For indexed images; 0 otherwise")
         .emit()?;
     let len = f.u32("Data length").emit()?;
     let image = data.sub(f.pos(), len.into());
-    cx.emit(embedded("Picture data", input.nested(image)).summary(format!("{} bytes", image.len)));
+    let info = block.data.get(to_usize(f.pos())..).and_then(image_info);
+    let summary = match info {
+        Some(i) => format!("{i}, {}", human_size(image.len)),
+        None => human_size(image.len),
+    };
+    cx.emit(embedded("Picture data", input.nested(image)).summary(summary));
     Ok(())
 }
 
 async fn picture_summary(cx: &Cx, data: Span) -> Result<String> {
-    let head = cx.read_avail(data.sub(0, 512)).await?;
+    let head = cx.read_avail(data.sub(0, 4096)).await?;
     let kind = u32_be(&head, 0).unwrap_or(0);
     let mime_len = to_usize(u32_be(&head, 4).unwrap_or(0).into());
     let mime = head
         .get(8..8usize.saturating_add(mime_len))
         .map(crate::text::latin1)
         .unwrap_or_default();
-    let kind = crate::value::lookup(id3::PICTURE_TYPE, kind.into()).unwrap_or("picture");
-    Ok(format!("{kind}, {mime}"))
+    let at = 8usize.saturating_add(mime_len);
+    let desc_len = to_usize(u32_be(&head, at).unwrap_or(0).into());
+    let fields = at.saturating_add(4).saturating_add(desc_len);
+    let (w, h) = (
+        u32_be(&head, fields).unwrap_or(0),
+        u32_be(&head, fields.saturating_add(4)).unwrap_or(0),
+    );
+    let image = head.get(fields.saturating_add(20)..).unwrap_or_default();
+    let kind = lookup(id3::PICTURE_TYPE, kind.into()).unwrap_or("picture");
+    let what = image_info(image).unwrap_or_else(|| {
+        if w > 0 && h > 0 {
+            format!("{w}×{h} {mime}")
+        } else {
+            mime
+        }
+    });
+    Ok(format!("{kind}, {what}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -268,14 +547,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 10)).await?;
     let mut pos = 0u64;
+    let mut titles = Vec::new();
     if let Some(len) = id3::v2_len(&head) {
-        cx.emit(id3::tag_node(&cx, input, file.sub(0, len)).await);
+        let span = file.sub(0, len);
+        cx.emit(id3::tag_node(&cx, input, span).await);
+        titles.extend(id3::title(&cx, span).await);
         pos = len;
     }
-    cx.emit(Node::new("Signature").span(file.sub(pos, 4)));
+    cx.emit(
+        Node::new("Signature")
+            .span(file.sub(pos, 4))
+            .value(text("fLaC")),
+    );
     pos = pos.saturating_add(4);
     let mut info = None;
-    let mut title = None;
+    let mut cover = None;
     loop {
         let head = cx.read(file.sub(pos, 4)).await?;
         let flags = head.first().copied().unwrap_or(0);
@@ -288,7 +574,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     .await
                     .ok();
             }
-            4 if title.is_none() => title = vorbis::title(&cx, data).await,
+            4 => titles.extend(vorbis::title(&cx, data).await),
+            6 if cover.is_none() => cover = picture_summary(&cx, data).await.ok(),
             _ => {}
         }
         let mut node = block_node(&cx, input, span).await?;
@@ -304,22 +591,41 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             break;
         }
     }
+    let trailing = id3::trailing_tags(&cx, input, file, pos).await?;
+    titles.extend(trailing.titles.iter().cloned());
+    let frames = file.sub(pos, trailing.end.saturating_sub(pos));
     let mut line = match &info {
-        Some(i) => format!("FLAC, {}", i.summary()),
+        Some(i) => {
+            let mut s = format!("FLAC, {}", i.summary());
+            if i.samples > 0 && i.rate > 0 {
+                let seconds = i.samples as f64 / i.rate as f64;
+                s.push_str(&format!(
+                    ", {:.0} kbps",
+                    frames.len as f64 * 8.0 / seconds / 1000.0
+                ));
+            }
+            s
+        }
         None => "FLAC".to_owned(),
     };
-    if let Some(t) = title {
+    if let Some(c) = cover.and_then(|c| c.split_once(", ").map(|(_, w)| w.to_owned())) {
+        line.push_str(&format!(", cover {c}"));
+    }
+    if let Some(t) = titles.first() {
         line.push_str(&format!(" — {t}"));
     }
     cx.annotate(line);
-    let frames = file.tail(pos);
     if !frames.is_empty() {
-        cx.emit(
+        cx.push(
             Node::new("Frames")
                 .span(frames)
-                .summary(format!("{} bytes", frames.len))
+                .summary(human_size(frames.len))
                 .lazy(list_frames, (frames, info.unwrap_or_default())),
-        );
+        )
+        .await;
+    }
+    for node in trailing.nodes {
+        cx.push(node).await;
     }
     Ok(())
 }
@@ -330,7 +636,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 const CHANNELS: EnumTable = &[
     (0, "mono"),
     (1, "left, right"),
-    (2, "left, right, center"),
+    (2, "left, right, centre"),
     (3, "front L/R, back L/R"),
     (4, "5 channels"),
     (5, "5.1"),
@@ -345,6 +651,7 @@ const SAMPLE_SIZE: EnumTable = &[
     (0, "from STREAMINFO"),
     (1, "8-bit"),
     (2, "12-bit"),
+    (3, "reserved"),
     (4, "16-bit"),
     (5, "20-bit"),
     (6, "24-bit"),
@@ -367,12 +674,14 @@ const RATE_CODE: EnumTable = &[
     (12, "8-bit kHz follows"),
     (13, "16-bit Hz follows"),
     (14, "16-bit tens of Hz follows"),
+    (15, "invalid"),
 ];
 
 /// A decoded frame header.
 #[derive(Clone, Copy, Debug)]
 struct FrameHeader {
     len: usize,
+    variable: bool,
     number: u64,
     block_size: u64,
     channels: u8,
@@ -434,72 +743,138 @@ fn frame_header(d: &[u8]) -> Option<FrameHeader> {
     }
     Some(FrameHeader {
         len: at.saturating_add(1),
+        variable: d.get(1)? & 1 != 0,
         number,
         block_size,
         channels: chan,
     })
 }
 
+/// "frame 12, 4096 samples, mid/side stereo" for the frame header at the
+/// start of `d` (FLAC-in-Ogg audio packets).
+pub fn frame_summary(d: &[u8]) -> Option<String> {
+    let h = frame_header(d)?;
+    Some(format!(
+        "{} {}, {} samples, {}",
+        if h.variable { "sample" } else { "frame" },
+        h.number,
+        h.block_size,
+        lookup(CHANNELS, h.channels.into()).unwrap_or("?")
+    ))
+}
+
+/// A lazy node for the FLAC frame in `span` (whose first bytes are `d`):
+/// FLAC-in-Ogg audio packets.
+pub fn frame_node(d: &[u8], span: Span) -> Option<Node> {
+    let h = frame_header(d)?;
+    Some(
+        Node::new("FLAC frame")
+            .span(span)
+            .summary(frame_summary(d).unwrap_or_default())
+            .lazy(frame, (span, h.len)),
+    )
+}
+
 /// How far ahead to look for the next frame in one read.
 const WINDOW: u64 = 0x10000;
 
-/// The offset (relative to `region`) of the next frame header after `from`.
-async fn next_frame(cx: &Cx, region: Span, from: u64, number: u64) -> Result<Option<u64>> {
-    let mut pos = from;
-    while pos < region.len {
+/// Where the frame starting at `pos` (relative to `region`) ends: the next
+/// frame header after at least `min_len` bytes, numbered at least `number`,
+/// where the CRC-16 of the frame so far checks out. If no such header turns
+/// up within `limit` bytes (a damaged frame), the first header with a valid
+/// CRC-8 is taken instead.
+async fn next_frame(
+    cx: &Cx,
+    region: Span,
+    pos: u64,
+    min_len: u64,
+    number: u64,
+    limit: u64,
+) -> Result<Option<u64>> {
+    let mut at = pos;
+    let mut crc = CRC16_BUYPASS.init();
+    let mut fallback = None;
+    while at < region.len {
         let window = cx
-            .read_avail(region.sub(pos, WINDOW.saturating_add(16)))
+            .read_avail(region.sub(at, WINDOW.saturating_add(16)))
             .await?;
-        let limit = window.len().saturating_sub(16).max(1);
-        for i in 0..limit {
-            if window.get(i) == Some(&0xff)
+        let scan = window.len().min(to_usize(WINDOW));
+        for (i, &b) in window.iter().take(scan).enumerate() {
+            if i % 4096 == 0 {
+                cx.checkpoint().await;
+            }
+            let abs = at.saturating_add(to_u64(i));
+            if abs.saturating_sub(pos) >= min_len
+                && b == 0xff
                 && let Some(h) = window.get(i..).and_then(frame_header)
                 && h.number >= number
             {
-                return Ok(Some(pos.saturating_add(to_u64(i))));
+                if crc == 0 {
+                    return Ok(Some(abs));
+                }
+                if fallback.is_none() {
+                    fallback = Some(abs);
+                }
             }
+            if abs.saturating_sub(pos) > limit && fallback.is_some() {
+                return Ok(fallback);
+            }
+            crc = CRC16_BUYPASS.update_byte(crc, b);
         }
         if to_u64(window.len()) <= 16 {
             break;
         }
-        pos = pos.saturating_add(to_u64(limit));
-        cx.checkpoint().await;
+        at = at.saturating_add(to_u64(scan).max(1));
     }
-    Ok(None)
+    Ok(fallback)
 }
 
 async fn list_frames(cx: Cx, (region, info): (Span, StreamInfo)) -> Result<()> {
-    let mut pos = 0u64;
-    let mut index = 0u64;
+    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
+    let limit = if info.max_frame > 0 {
+        info.max_frame.saturating_mul(2)
+    } else {
+        1 << 20
+    };
     while pos < region.len {
+        let mark = (pos, index);
         let head = cx.read_avail(region.sub(pos, 16)).await?;
         let Some(h) = frame_header(&head) else {
-            cx.emit(
+            let rest = region.tail(pos);
+            cx.mark(move || mark);
+            cx.push(
                 Node::new("Unparsed data")
-                    .span(region.tail(pos))
+                    .span(rest)
+                    .summary(human_size(rest.len))
                     .diag(Diagnostic::malformed("no valid frame header")),
-            );
+            )
+            .await;
             return Ok(());
         };
-        let next = next_frame(
-            &cx,
-            region,
-            pos.saturating_add(to_u64(h.len)),
-            h.number.saturating_add(1),
-        )
-        .await?
-        .unwrap_or(region.len);
+        let min = to_u64(h.len).saturating_add(2).max(info.min_frame);
+        let next_number = if h.variable {
+            h.number.saturating_add(h.block_size)
+        } else {
+            h.number.saturating_add(1)
+        };
+        let next = next_frame(&cx, region, pos, min, next_number, limit)
+            .await?
+            .unwrap_or(region.len);
         let span = region.sub(pos, next.saturating_sub(pos));
         cx.progress_in(region, region.offset.saturating_add(pos));
-        let chans = crate::value::lookup(CHANNELS, h.channels.into()).unwrap_or("?");
+        let chans = lookup(CHANNELS, h.channels.into()).unwrap_or("?");
+        let what = if h.variable { "sample" } else { "frame" };
+        cx.mark(move || mark);
         cx.push(
             Node::new(format!("Frame {index}"))
                 .span(span)
                 .summary(format!(
-                    "#{}, {} samples, {chans}, {} bytes",
-                    h.number, h.block_size, span.len
+                    "{what} {}, {} samples, {chans}, {}",
+                    h.number,
+                    h.block_size,
+                    human_size(span.len)
                 ))
-                .lazy(frame, (span, h.len, info)),
+                .lazy(frame, (span, h.len)),
         )
         .await;
         pos = next;
@@ -508,42 +883,95 @@ async fn list_frames(cx: Cx, (region, info): (Span, StreamInfo)) -> Result<()> {
     Ok(())
 }
 
-async fn frame(cx: Cx, (span, header_len, _info): (Span, usize, StreamInfo)) -> Result<()> {
+/// "LPC, order 8".
+fn subframe_type(t: u64) -> String {
+    match t {
+        0 => "constant".to_owned(),
+        1 => "verbatim".to_owned(),
+        8..=12 => format!("fixed predictor, order {}", t.saturating_sub(8)),
+        32..=63 => format!("LPC, order {}", t.saturating_sub(31)),
+        _ => "reserved".to_owned(),
+    }
+}
+
+async fn frame(cx: Cx, (span, header_len): (Span, usize)) -> Result<()> {
     let header = span.sub(0, to_u64(header_len));
     cx.emit(bits_node("Header", header, frame_fields, false));
     let crc_at = span.len.saturating_sub(2);
-    cx.emit(
-        Node::new("Subframes")
-            .span(span.sub(
-                to_u64(header_len),
-                crc_at.saturating_sub(to_u64(header_len)),
-            ))
-            .desc("One encoded subframe per channel"),
+    let subframes = span.sub(
+        to_u64(header_len),
+        crc_at.saturating_sub(to_u64(header_len)),
     );
+    let first = cx.read_avail(subframes.sub(0, 1)).await?;
+    let mut node = Node::new("Subframes").span(subframes).desc(
+        "One encoded subframe per channel; only the first one's start is known without decoding",
+    );
+    if let Some(&b) = first.first() {
+        let kind = u64::from((b >> 1) & 0x3f);
+        node = node
+            .summary(format!(
+                "first: {}{}",
+                subframe_type(kind),
+                if b & 1 != 0 { ", wasted bits" } else { "" }
+            ))
+            .lazy(expand_subframe, subframes.sub(0, 1));
+    }
+    cx.emit(node);
+    // The CRC-16 covers the whole frame; with the CRC itself the remainder
+    // is zero.
     let crc = cx.read(span.sub(crc_at, 2)).await?;
-    cx.emit(leaf(
+    let mut crc_node = leaf(
         "CRC-16",
         span.sub(crc_at, 2),
         hex(crate::bytes::u16_be(&crc, 0).unwrap_or(0), 16),
-    ));
+    );
+    if span.len <= cx.limits().max_read {
+        let data = cx.read_avail(span).await?;
+        if to_u64(data.len()) == span.len {
+            let mut reg = CRC16_BUYPASS.init();
+            for chunk in data.chunks(0x10000) {
+                reg = CRC16_BUYPASS.update(reg, chunk);
+                cx.checkpoint().await;
+            }
+            crc_node = if reg == 0 {
+                crc_node.summary("valid")
+            } else {
+                crc_node.diag(Diagnostic::warning("CRC mismatch"))
+            };
+        }
+    }
+    cx.emit(crc_node);
+    Ok(())
+}
+
+async fn expand_subframe(cx: Cx, span: Span) -> Result<()> {
+    let data = cx.read_avail(span).await?;
+    let mut b = Bits::emitting(&cx, &data, span);
+    b.field("Zero bit", 1).emit()?;
+    b.field("Subframe type", 6)
+        .hex()
+        .with(|v, n| n.summary(subframe_type(v)))
+        .emit()?;
+    b.field("Wasted bits flag", 1).flag().emit()?;
     Ok(())
 }
 
 fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
     b.field("Sync code", 14).hex().emit()?;
     b.field("Reserved", 1).emit()?;
-    b.field("Blocking strategy", 1)
+    let variable = b
+        .field("Blocking strategy", 1)
         .with(|v, n| n.summary(if v == 0 { "fixed" } else { "variable" }))
         .emit()?;
     let size_code = b
         .field("Block size code", 4)
         .with(|v, n| match v {
-            1 => n.summary("192"),
-            2..=5 => n.summary(format!("{}", 576u64 << v.saturating_sub(2))),
+            1 => n.summary("192 samples"),
+            2..=5 => n.summary(format!("{} samples", 576u64 << v.saturating_sub(2))),
             6 => n.summary("8-bit value follows"),
             7 => n.summary("16-bit value follows"),
-            8..=15 => n.summary(format!("{}", 256u64 << v.saturating_sub(8))),
-            _ => n,
+            8..=15 => n.summary(format!("{} samples", 256u64 << v.saturating_sub(8))),
+            _ => n.diag(Diagnostic::malformed("reserved block size code")),
         })
         .emit()?;
     let rate_code = b
@@ -569,17 +997,25 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
         number = (number << 6) | (b.read(8).unwrap_or(0) & 0x3f);
     }
     b.node(
-        Node::new("Frame/sample number")
-            .span(b.span_of(start, b.pos()))
-            .value(uint(number, 64))
-            .desc("Frame number (fixed blocking) or first sample number (variable)"),
+        Node::new(if variable == 0 {
+            "Frame number"
+        } else {
+            "Sample number"
+        })
+        .span(b.span_of(start, b.pos()))
+        .value(uint(number, 64))
+        .desc("Coded like UTF-8: frame number (fixed blocking) or first sample number (variable)"),
     );
     match size_code {
         6 => {
-            b.field("Block size − 1", 8).emit()?;
+            b.field("Block size − 1", 8)
+                .with(|v, n| n.summary(format!("{} samples", v.saturating_add(1))))
+                .emit()?;
         }
         7 => {
-            b.field("Block size − 1", 16).emit()?;
+            b.field("Block size − 1", 16)
+                .with(|v, n| n.summary(format!("{} samples", v.saturating_add(1))))
+                .emit()?;
         }
         _ => {}
     }
@@ -595,6 +1031,9 @@ fn frame_fields(b: &mut Bits<'_>) -> Result<()> {
         }
         _ => {}
     }
-    b.field("CRC-8", 8).hex().emit()?;
+    b.field("CRC-8", 8)
+        .hex()
+        .with(|_, n| n.summary("valid"))
+        .emit()?;
     Ok(())
 }
