@@ -4,8 +4,8 @@
 //! - [`adobe`]: Photoshop presets (brushes, patterns, gradients, styles,
 //!   actions, curves, colour books, colour tables, custom shapes) and the
 //!   action descriptor structure most of them share.
-//! - [`dtp`]: page-layout documents (InDesign, QuarkXPress, Xara, Scribus)
-//!   and XMP sidecars.
+//! - [`dtp`]: page-layout documents (InDesign, QuarkXPress, Xara,
+//!   Scribus).
 //! - [`authoring`]: Director/Shockwave movies, HyperCard stacks, After
 //!   Effects projects, Corel CMX, Figma, Rive, Live2D.
 //! - [`design`]: pixel-art and paint-program images, palettes, gradients,

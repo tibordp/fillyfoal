@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.raf — Fujifilm X-T99, format 0201  [0x0+0x1d4]
+▾ tiny.raf — Fujifilm X-T99, RAF 0201, 12×16 raw  [0x0+0x1d4]
   ▾ Header  [0x0+0x6c]
       Magic: "FUJIFILMCCD-RAW "  [0x0+0x10]
       Format version: "0201"  [0x10+0x4]
@@ -89,8 +89,8 @@ expression: "common::explore(&name, &data)"
       EOI  [0x172+0x2]
   ▾ CFA header  [0x174+0x12]
       Record count: 2  [0x174+0x4]
-      Raw image full size — 16, 12  [0x178+0x8]
-      Fuji layout — 2 bytes  [0x180+0x6]
+      Raw image full size: "12×16" — 4 bytes  [0x178+0x8]
+      Fuji layout: 258 — 2 bytes  [0x180+0x6]
   ▾ CFA (TIFF) — TIFF BE, 4×2  [0x186+0x4e]
     ▾ Header  [0x186+0x8]
         Byte order: "MM" — big-endian  [0x186+0x2]
@@ -119,5 +119,5 @@ expression: "common::explore(&name, &data)"
           Count: 1  [0x1b8+0x4]
           Value: 00 00 00 10  |....|  [0x1bc+0x4]
         Next IFD offset: 0x0  [0x1c0+0x4]
-      ▾ Strips — 1 strips
-          [0] — 0x10 bytes at 0x3e  [0x1c4+0x10]
+      ▾ Strips — 1 strip
+          Strip 0 — 16 bytes at 0x3e  [0x1c4+0x10]

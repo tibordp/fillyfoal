@@ -1,6 +1,6 @@
 //! Page-layout documents: Adobe InDesign (master pages and contiguous
 //! objects, with the embedded XMP packet), QuarkXPress, Xara (record
-//! stream), Scribus (XML), and standalone XMP metadata.
+//! stream) and Scribus (XML). (Standalone XMP lives in `image::xmp`.)
 
 use crate::bytes::{u16_be, u32_le, u64_le};
 use crate::cx::Cx;
@@ -298,7 +298,7 @@ async fn xara(cx: Cx, input: Input) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Scribus and XMP (XML vocabularies)
+// Scribus (an XML vocabulary)
 
 fn scribus_probe(h: &Head<'_>) -> bool {
     probe::is_text(h)
@@ -308,14 +308,6 @@ fn scribus_probe(h: &Head<'_>) -> bool {
 
 declare_format!(pub SCRIBUS = "scribus", "Scribus document", ["sla", "scd"], "application/vnd.scribus",
     Probe::Custom(scribus_probe), scribus);
-
-fn xmp_probe(h: &Head<'_>) -> bool {
-    probe::is_text(h)
-        && xml::root(h).is_some_and(|r| r.local() == b"xmpmeta" || r.local() == b"xapmeta")
-}
-
-declare_format!(pub XMP = "xmp", "XMP metadata", ["xmp"], "application/rdf+xml",
-    Probe::Custom(xmp_probe), xmp);
 
 /// The value of attribute `name` in the start tag `tag` of `head`.
 fn attr(head: &[u8], tag: &[u8], name: &str) -> Option<String> {
@@ -340,17 +332,6 @@ async fn scribus(cx: Cx, input: Input) -> Result<()> {
         "Scribus document {version}{}{}",
         title.map(|t| format!(", {t:?}")).unwrap_or_default(),
         pages.map(|p| format!(", {p} pages")).unwrap_or_default()
-    ));
-    Ok(())
-}
-
-async fn xmp(cx: Cx, input: Input) -> Result<()> {
-    let head = cx.read_avail(input.span.sub(0, 4096)).await?;
-    let toolkit = attr(&head, b"xmpmeta", "x:xmptk");
-    xml::dissect(cx.clone(), input).await?;
-    cx.annotate(format!(
-        "XMP metadata{}",
-        toolkit.map(|t| format!(", {t}")).unwrap_or_default()
     ));
     Ok(())
 }

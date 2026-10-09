@@ -1,0 +1,61 @@
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Hand-written fixture">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    xmlns:exif="http://ns.adobe.com/exif/1.0/"
+    xmlns:photoshop="http://ns.adobe.com/photoshop/1.0/"
+    xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"
+    xmlns:stEvt="http://ns.adobe.com/xap/1.0/sType/ResourceEvent#"
+    xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/"
+    tiff:Make="Canon"
+    tiff:Model="Canon EOS R5"
+    xmp:Rating="3"
+    xmp:CreatorTool="Adobe Lightroom Classic 13.2 (Macintosh)"
+    xmp:CreateDate="2024-05-01T12:00:00.25+02:00"
+    exif:DateTimeOriginal="2024-05-01T12:00:00.25+02:00"
+    exif:FNumber="4/1"
+    exif:ExposureTime="1/250"
+    photoshop:City="Paris">
+   <dc:title>
+    <rdf:Alt>
+     <rdf:li xml:lang="x-default">Tower at noon</rdf:li>
+     <rdf:li xml:lang="fr-FR">La tour &#224; midi</rdf:li>
+    </rdf:Alt>
+   </dc:title>
+   <dc:creator>
+    <rdf:Seq>
+     <rdf:li>A. Photographer</rdf:li>
+    </rdf:Seq>
+   </dc:creator>
+   <dc:subject>
+    <rdf:Bag>
+     <rdf:li>Paris</rdf:li>
+     <rdf:li>tower</rdf:li>
+     <rdf:li>noon &amp; sun</rdf:li>
+    </rdf:Bag>
+   </dc:subject>
+   <exif:Flash rdf:parseType="Resource">
+    <exif:Fired>False</exif:Fired>
+    <exif:Return>0</exif:Return>
+    <exif:Mode>2</exif:Mode>
+   </exif:Flash>
+   <Iptc4xmpCore:CreatorContactInfo
+     Iptc4xmpCore:CiAdrCity="Paris"
+     Iptc4xmpCore:CiEmailWork="photographer@example.org"/>
+   <xmpMM:History>
+    <rdf:Seq>
+     <rdf:li>
+      <rdf:Description stEvt:action="saved" stEvt:when="2024-05-02T09:30:00+02:00">
+       <stEvt:softwareAgent>Adobe Lightroom Classic 13.2</stEvt:softwareAgent>
+      </rdf:Description>
+     </rdf:li>
+    </rdf:Seq>
+   </xmpMM:History>
+   <xmpMM:DerivedFrom rdf:resource="urn:uuid:0e3f5c2a-1b2c-4d5e-8f90-a1b2c3d4e5f6"/>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>

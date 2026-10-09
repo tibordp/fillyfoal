@@ -19,7 +19,6 @@ pub mod fits;
 pub mod gif;
 pub mod graphics;
 pub mod hdr;
-pub mod icc;
 pub mod icc_profile;
 pub mod icns;
 pub mod ico;
@@ -48,6 +47,7 @@ pub mod toolkits;
 pub mod wbmp;
 pub mod xbm;
 pub mod xcf;
+pub mod xmp;
 pub mod xwd;
 
 use std::borrow::Cow;
