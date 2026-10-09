@@ -1,12 +1,15 @@
 //! MPEG-1 and MPEG-2 video elementary streams (ISO 11172-2, 13818-2).
 //!
 //! The stream is cut at start codes into units: sequence headers and
-//! extensions, GOP headers, pictures, user data. Consecutive slices are
-//! grouped into one node. Units are listed in pages.
+//! extensions (sequence, display, quant matrix, copyright, picture
+//! coding, picture display), GOP headers, pictures, user data.
+//! Consecutive slices are grouped into one node. Units are listed in pages
+//! and decode field by field on expansion.
 
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::util::vidutil::{self, Bits, enumerated, flag_node, hex, uint};
+use crate::formats::util::vidutil::bitwalk::Walker;
+use crate::formats::util::vidutil::{self, Bits};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -57,16 +60,33 @@ const ASPECT: EnumTable = &[
     (3, "16:9"),
     (4, "2.21:1"),
 ];
-const FRAME_RATES: [&str; 9] = [
-    "forbidden",
-    "23.976",
-    "24",
-    "25",
-    "29.97",
-    "30",
-    "50",
-    "59.94",
-    "60",
+/// MPEG-1 pel aspect ratios (height/width).
+const ASPECT_MPEG1: EnumTable = &[
+    (1, "1.0 (square)"),
+    (2, "0.6735"),
+    (3, "0.7031 (16:9, 625 lines)"),
+    (4, "0.7615"),
+    (5, "0.8055"),
+    (6, "0.8437 (16:9, 525 lines)"),
+    (7, "0.8935"),
+    (8, "0.9157 (CCIR 601, 625 lines)"),
+    (9, "0.9815"),
+    (10, "1.0255"),
+    (11, "1.0695"),
+    (12, "1.0950 (CCIR 601, 525 lines)"),
+    (13, "1.1575"),
+    (14, "1.2015"),
+];
+const FRAME_RATES: [(u64, u64); 9] = [
+    (0, 1),
+    (24000, 1001),
+    (24, 1),
+    (25, 1),
+    (30000, 1001),
+    (30, 1),
+    (50, 1),
+    (60000, 1001),
+    (60, 1),
 ];
 const PICTURE_TYPES: EnumTable = &[(1, "I"), (2, "P"), (3, "B"), (4, "D")];
 const EXTENSIONS: EnumTable = &[
@@ -88,7 +108,36 @@ const PROFILES: EnumTable = &[
     (5, "Simple"),
 ];
 const LEVELS: EnumTable = &[(4, "High"), (6, "High 1440"), (8, "Main"), (10, "Low")];
+/// Profile and level values with the escape bit set.
+const ESCAPED: EnumTable = &[
+    (0x82, "4:2:2@High"),
+    (0x85, "4:2:2@Main"),
+    (0x8a, "Multi-view@High"),
+    (0x8b, "Multi-view@High 1440"),
+    (0x8d, "Multi-view@Main"),
+    (0x8e, "Multi-view@Low"),
+];
 const CHROMA: EnumTable = &[(1, "4:2:0"), (2, "4:2:2"), (3, "4:4:4")];
+const STRUCTURES: EnumTable = &[(1, "top field"), (2, "bottom field"), (3, "frame")];
+const VIDEO_FORMATS: EnumTable = &[
+    (0, "component"),
+    (1, "PAL"),
+    (2, "NTSC"),
+    (3, "SECAM"),
+    (4, "MAC"),
+    (5, "unspecified"),
+];
+
+fn profile_level(v: u64) -> String {
+    if v & 0x80 != 0 {
+        return vidutil::lookup_or(ESCAPED, v);
+    }
+    format!(
+        "{}@{}",
+        vidutil::lookup_or(PROFILES, (v >> 4) & 7),
+        vidutil::lookup_or(LEVELS, v & 15)
+    )
+}
 
 #[derive(Clone, Copy, Debug)]
 struct SequenceHeader {
@@ -97,6 +146,8 @@ struct SequenceHeader {
     aspect: u64,
     rate: u64,
     bitrate: u64,
+    /// MPEG-2 `frame_rate_extension_n`, `frame_rate_extension_d`.
+    rate_ext: (u64, u64),
 }
 
 impl SequenceHeader {
@@ -114,19 +165,36 @@ impl SequenceHeader {
             aspect,
             rate,
             bitrate,
+            rate_ext: (0, 0),
         })
     }
 
-    fn describe(&self) -> String {
+    fn fps(&self) -> String {
+        let (n, d) = FRAME_RATES
+            .get(vidutil::us(self.rate))
+            .copied()
+            .unwrap_or((0, 1));
+        let (en, ed) = self.rate_ext;
+        vidutil::tables::rate(
+            n.saturating_mul(en.saturating_add(1)),
+            d.saturating_mul(ed.saturating_add(1)),
+        )
+    }
+
+    fn describe(&self, mpeg2: bool) -> String {
         format!(
             "{}×{}, {}, {} fps, {}",
             self.width,
             self.height,
-            vidutil::lookup_or(ASPECT, self.aspect),
-            FRAME_RATES
-                .get(vidutil::us(self.rate))
-                .copied()
-                .unwrap_or("?"),
+            if mpeg2 {
+                vidutil::lookup_or(ASPECT, self.aspect)
+            } else {
+                format!(
+                    "pel aspect {}",
+                    vidutil::lookup_or(ASPECT_MPEG1, self.aspect)
+                )
+            },
+            self.fps(),
             bitrate(self.bitrate)
         )
     }
@@ -138,6 +206,43 @@ fn bitrate(v: u64) -> String {
     } else {
         format!("{} kb/s", v.saturating_mul(400) / 1000)
     }
+}
+
+/// "MPEG-2 video, Main@Main, 720×576, 4:3, 25 fps, ..." from the start of
+/// an elementary stream (a PES payload or a file).
+pub fn es_summary(d: &[u8]) -> Option<String> {
+    let at = vidutil::find(d, b"\x00\x00\x01\xb3")?;
+    let seq = SequenceHeader::parse(d.get(at.saturating_add(4)..)?)?;
+    let rest = d.get(at..)?;
+    let window = rest.get(..rest.len().min(512))?;
+    if let Some(e) = vidutil::find(window, b"\x00\x00\x01\xb5")
+        && let Some(&b) = window.get(e.saturating_add(4))
+        && b >> 4 == 1
+    {
+        let b5 = window.get(e.saturating_add(5)).copied().unwrap_or(0);
+        let b6 = window.get(e.saturating_add(6)).copied().unwrap_or(0);
+        let b9 = window.get(e.saturating_add(9)).copied().unwrap_or(0);
+        let pl = u64::from(b & 15) << 4 | u64::from(b5 >> 4);
+        let progressive = b5 & 0x08 != 0;
+        let chroma = (b5 >> 1) & 3;
+        let width = seq.width | u64::from(((b5 & 1) << 1) | (b6 >> 7)) << 12;
+        let height = seq.height | u64::from((b6 >> 5) & 3) << 12;
+        let mut s = SequenceHeader {
+            width,
+            height,
+            rate_ext: (u64::from((b9 >> 5) & 3), u64::from(b9 & 31)),
+            ..seq
+        }
+        .describe(true);
+        s = format!(
+            "MPEG-2 video, {}, {s}, {}{}",
+            profile_level(pl),
+            vidutil::lookup_or(CHROMA, chroma.into()),
+            if progressive { "" } else { ", interlaced" }
+        );
+        return Some(s);
+    }
+    Some(format!("MPEG-1 video, {}", seq.describe(false)))
 }
 
 /// The name of a start code's unit.
@@ -158,30 +263,22 @@ fn unit_name(code: u8) -> String {
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, 512)).await?;
-    if let Some(seq) = head.get(4..12).and_then(SequenceHeader::parse) {
-        let s = if let Some(at) = vidutil::find(&head, b"\x00\x00\x01\xb5")
-            && let Some(&b) = head.get(at.saturating_add(4))
-            && b >> 4 == 1
-        {
-            let pl2 = head.get(at.saturating_add(5)).copied().unwrap_or(0) >> 4;
-            format!(
-                "MPEG-2 video, {}@{}, {}",
-                vidutil::lookup_or(PROFILES, (b & 7).into()),
-                vidutil::lookup_or(LEVELS, pl2.into()),
-                seq.describe()
-            )
-        } else {
-            format!("MPEG-1 video, {}", seq.describe())
-        };
+    if let Some(s) = es_summary(&head) {
         cx.annotate(s);
     }
-    let mut pos = match vidutil::next_start_code(&cx, file, 0).await? {
+    let mut pos = match cx.resume::<u64>() {
         Some(p) => p,
-        None => return Ok(()),
+        None => {
+            let Some(p) = vidutil::next_start_code(&cx, file, 0).await? else {
+                cx.emit(Node::new("Data").span(file));
+                return Ok(());
+            };
+            if p > 0 {
+                cx.emit(Node::new("Leading data").span(file.sub(0, p)));
+            }
+            p
+        }
     };
-    if pos > 0 {
-        cx.emit(Node::new("Leading data").span(file.sub(0, pos)));
-    }
     while pos < file.len {
         let code = cx
             .read_avail(file.sub(pos.saturating_add(3), 1))
@@ -207,15 +304,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
         let span = file.sub(pos, end.saturating_sub(pos));
-        let d = cx.read_avail(span.sub(0, 16)).await?;
+        let d = cx.read_avail(span.sub(0, 256)).await?;
         let summary = summary(code, &d, slices);
         let mut node = Node::new(unit_name(code)).span(span);
         if !summary.is_empty() {
             node = node.summary(summary);
         }
-        if matches!(code, 0x00 | 0xb3 | 0xb5 | 0xb8) {
+        if matches!(code, 0x00 | 0xb2 | 0xb3 | 0xb5 | 0xb8) {
             node = node.lazy(expand_unit, (span, code));
         }
+        let at = pos;
+        cx.mark(move || at);
         cx.progress_in(file, file.offset.saturating_add(pos));
         cx.push(node).await;
         pos = end.max(pos.saturating_add(4));
@@ -236,10 +335,28 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
             )
         }
         0x01..=0xaf => vidutil::plural(slices, "slice"),
+        0xb2 => user_data_text(body)
+            .map_or_else(|| format!("{} bytes", body.len()), |t| format!("“{t}”")),
         0xb3 => SequenceHeader::parse(body)
-            .map(|s| s.describe())
+            .map(|s| s.describe(true))
             .unwrap_or_default(),
-        0xb5 => vidutil::lookup_or(EXTENSIONS, (body.first().copied().unwrap_or(0) >> 4).into()),
+        0xb5 => {
+            let id = body.first().copied().unwrap_or(0) >> 4;
+            let mut s = vidutil::lookup_or(EXTENSIONS, id.into());
+            match id {
+                1 => {
+                    let pl = u64::from(body.first().copied().unwrap_or(0) & 15) << 4
+                        | u64::from(body.get(1).copied().unwrap_or(0) >> 4);
+                    s = format!("{s}, {}", profile_level(pl));
+                }
+                8 => {
+                    let st = body.get(2).copied().unwrap_or(0) & 3;
+                    s = format!("{s}, {}", vidutil::lookup_or(STRUCTURES, st.into()));
+                }
+                _ => {}
+            }
+            s
+        }
         0xb8 => {
             let mut b = Bits::new(body);
             let drop = b.bit().unwrap_or(0);
@@ -259,9 +376,18 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
     }
 }
 
+/// User data as text, if it is printable.
+fn user_data_text(d: &[u8]) -> Option<String> {
+    let t = crate::text::until_nul(d);
+    let ok = !t.is_empty()
+        && t.len() >= d.len().min(4)
+        && t.chars().all(|c| !c.is_control() || c == '\n');
+    ok.then(|| t.chars().take(80).collect())
+}
+
 async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
-    let d = cx.read_avail(span.sub(0, 256)).await?;
-    cx.emit(hex(
+    let d = cx.read_avail(span.sub(0, 512)).await?;
+    cx.emit(vidutil::hex(
         "Start code",
         span.sub(0, 4),
         0x100u64 | u64::from(code),
@@ -269,158 +395,234 @@ async fn expand_unit(cx: Cx, (span, code): (Span, u8)) -> Result<()> {
     ));
     let body = span.tail(4);
     let data = d.get(4..).unwrap_or_default();
-    let mut b = Bits::new(data);
-    // A field of `n` bits: its value and the span of the bytes it touches.
-    let mut field = |name: &'static str, n: u32| -> Option<(Node, u64)> {
-        let start = b.pos();
-        let v = b.bits(n)?;
-        let first = vidutil::at(body, start >> 3, 0).offset;
-        let last = vidutil::at(body, b.pos().saturating_sub(1) >> 3, 1).end();
-        let span = Span::new(body.source, first, last.saturating_sub(first));
-        Some((uint(name, span, v, u8::try_from(n).unwrap_or(64)), v))
-    };
-    match code {
-        0xb3 => {
-            for (name, bits) in [("Horizontal size", 12), ("Vertical size", 12)] {
-                if let Some((n, _)) = field(name, bits) {
-                    cx.emit(n);
-                }
+    let mut w = Walker::new(data, body, false, true);
+    let ok = match code {
+        0xb3 => sequence(&mut w),
+        0xb5 => extension(&mut w),
+        0xb8 => gop(&mut w),
+        0x00 => picture(&mut w),
+        0xb2 => {
+            let start = w.pos();
+            if let Some(t) = user_data_text(data) {
+                w.seek(w.len_bits());
+                w.text("user_data", start, t);
             }
-            if let Some((n, v)) = field("Aspect ratio", 4) {
-                cx.emit(n.summary(vidutil::lookup_or(ASPECT, v)));
-            }
-            if let Some((n, v)) = field("Frame rate code", 4) {
-                cx.emit(n.summary(format!(
-                    "{} fps",
-                    FRAME_RATES.get(vidutil::us(v)).copied().unwrap_or("?")
-                )));
-            }
-            if let Some((n, v)) = field("Bit rate", 18) {
-                cx.emit(n.summary(bitrate(v)));
-            }
-            let _ = field("Marker", 1);
-            if let Some((n, v)) = field("VBV buffer size", 10) {
-                cx.emit(n.summary(format!("{} bytes", v.saturating_mul(2048))));
-            }
-            if let Some((n, v)) = field("Constrained parameters", 1) {
-                cx.emit(n.summary(if v == 1 { "yes" } else { "no" }));
-            }
-            if let Some((n, v)) = field("Load intra quantiser matrix", 1) {
-                cx.emit(n);
-                if v == 1 {
-                    for _ in 0..64 {
-                        let _ = field("q", 8);
-                    }
-                }
-            }
-            if let Some((n, _)) = field("Load non-intra quantiser matrix", 1) {
-                cx.emit(n);
-            }
+            Some(())
         }
-        0xb5 => {
-            let Some((n, id)) = field("Extension ID", 4) else {
-                return Ok(());
-            };
-            cx.emit(n.summary(vidutil::lookup_or(EXTENSIONS, id)));
-            match id {
-                1 => {
-                    if let Some((n, v)) = field("Profile and level", 8) {
-                        cx.emit(n.summary(format!(
-                            "{}@{}",
-                            vidutil::lookup_or(PROFILES, (v >> 4) & 7),
-                            vidutil::lookup_or(LEVELS, v & 15)
-                        )));
-                    }
-                    if let Some((n, v)) = field("Progressive sequence", 1) {
-                        cx.emit(flag_node(
-                            "Progressive sequence",
-                            n.span.unwrap_or(body),
-                            v == 1,
-                        ));
-                    }
-                    if let Some((n, v)) = field("Chroma format", 2) {
-                        cx.emit(enumerated(
-                            "Chroma format",
-                            n.span.unwrap_or(body),
-                            v,
-                            2,
-                            CHROMA,
-                        ));
-                    }
-                    for (name, bits) in [
-                        ("Horizontal size extension", 2),
-                        ("Vertical size extension", 2),
-                        ("Bit rate extension", 12),
-                    ] {
-                        if let Some((n, _)) = field(name, bits) {
-                            cx.emit(n);
-                        }
-                    }
-                }
-                8 => {
-                    for (name, bits) in [
-                        ("Forward horizontal f-code", 4),
-                        ("Forward vertical f-code", 4),
-                        ("Backward horizontal f-code", 4),
-                        ("Backward vertical f-code", 4),
-                        ("Intra DC precision", 2),
-                        ("Picture structure", 2),
-                        ("Top field first", 1),
-                        ("Frame pred frame DCT", 1),
-                        ("Concealment motion vectors", 1),
-                        ("Q scale type", 1),
-                        ("Intra VLC format", 1),
-                        ("Alternate scan", 1),
-                        ("Repeat first field", 1),
-                        ("Chroma 4:2:0 type", 1),
-                        ("Progressive frame", 1),
-                    ] {
-                        if let Some((n, _)) = field(name, bits) {
-                            cx.emit(n);
-                        }
-                    }
-                }
-                _ => cx.emit(Node::new("Extension data").span(body)),
-            }
-        }
-        0xb8 => {
-            for (name, bits) in [
-                ("Drop frame", 1),
-                ("Hours", 5),
-                ("Minutes", 6),
-                ("Marker", 1),
-                ("Seconds", 6),
-                ("Pictures", 6),
-                ("Closed GOP", 1),
-                ("Broken link", 1),
-            ] {
-                if let Some((n, _)) = field(name, bits) {
-                    cx.emit(n);
-                }
-            }
-        }
-        0x00 => {
-            if let Some((n, _)) = field("Temporal reference", 10) {
-                cx.emit(n);
-            }
-            if let Some((n, v)) = field("Picture coding type", 3) {
-                cx.emit(enumerated(
-                    "Picture coding type",
-                    n.span.unwrap_or(body),
-                    v,
-                    3,
-                    PICTURE_TYPES,
-                ));
-            }
-            if let Some((n, _)) = field("VBV delay", 16) {
-                cx.emit(n);
-            }
-            let rest = body.tail(4);
-            if !rest.is_empty() {
-                cx.emit(Node::new("Picture data").span(rest));
-            }
-        }
-        _ => {}
+        _ => Some(()),
+    }
+    .is_some();
+    for node in w.finish(ok) {
+        cx.emit(node);
+    }
+    if code == 0x00 && body.len > 4 {
+        cx.emit(
+            Node::new("Picture data")
+                .span(body.tail(4))
+                .summary("extra information and slices follow"),
+        );
+    } else if code == 0xb2 && user_data_text(data).is_none() {
+        cx.emit(
+            Node::new("User data")
+                .span(body)
+                .summary(format!("{} bytes", body.len)),
+        );
     }
     Ok(())
+}
+
+fn quant_matrix(w: &mut Walker, flag: &'static str, name: &'static str) -> Option<()> {
+    if w.flag(flag)? {
+        let start = w.pos();
+        let mut values = Vec::with_capacity(64);
+        for _ in 0..64 {
+            values.push(w.read(8)?.to_string());
+        }
+        w.text(name, start, values.join(" "));
+    }
+    Some(())
+}
+
+/// `sequence_header()`.
+fn sequence(w: &mut Walker) -> Option<()> {
+    let width = w.u("horizontal_size_value", 12)?;
+    w.summary(|| format!("{width} pixels"));
+    let height = w.u("vertical_size_value", 12)?;
+    w.summary(|| format!("{height} pixels"));
+    let aspect = w.u("aspect_ratio_information", 4)?;
+    w.summary(|| {
+        format!(
+            "{} (MPEG-2) / pel aspect {} (MPEG-1)",
+            vidutil::lookup_or(ASPECT, aspect),
+            vidutil::lookup_or(ASPECT_MPEG1, aspect)
+        )
+    });
+    let rate = w.u("frame_rate_code", 4)?;
+    w.summary(|| {
+        let (n, d) = FRAME_RATES
+            .get(vidutil::us(rate))
+            .copied()
+            .unwrap_or((0, 1));
+        format!("{} fps", vidutil::tables::rate(n, d))
+    });
+    let br = w.u("bit_rate_value", 18)?;
+    w.summary(|| bitrate(br));
+    w.u("marker_bit", 1)?;
+    let vbv = w.u("vbv_buffer_size_value", 10)?;
+    w.summary(|| format!("{} bytes", vbv.saturating_mul(2048)));
+    w.flag("constrained_parameters_flag")?;
+    quant_matrix(w, "load_intra_quantiser_matrix", "intra_quantiser_matrix")?;
+    quant_matrix(
+        w,
+        "load_non_intra_quantiser_matrix",
+        "non_intra_quantiser_matrix",
+    )?;
+    Some(())
+}
+
+/// The extensions (`extension_start_code_identifier` first).
+fn extension(w: &mut Walker) -> Option<()> {
+    let id = w.en("extension_start_code_identifier", 4, EXTENSIONS)?;
+    match id {
+        1 => {
+            let pl = w.x("profile_and_level_indication", 8)?;
+            w.summary(|| profile_level(pl));
+            w.flag("progressive_sequence")?;
+            w.en("chroma_format", 2, CHROMA)?;
+            w.u("horizontal_size_extension", 2)?;
+            w.u("vertical_size_extension", 2)?;
+            w.u("bit_rate_extension", 12)?;
+            w.u("marker_bit", 1)?;
+            w.u("vbv_buffer_size_extension", 8)?;
+            w.flag("low_delay")?;
+            w.u("frame_rate_extension_n", 2)?;
+            w.u("frame_rate_extension_d", 5)?;
+        }
+        2 => {
+            w.en("video_format", 3, VIDEO_FORMATS)?;
+            if w.flag("colour_description")? {
+                w.en("colour_primaries", 8, vidutil::COLOUR_PRIMARIES)?;
+                w.en(
+                    "transfer_characteristics",
+                    8,
+                    vidutil::TRANSFER_CHARACTERISTICS,
+                )?;
+                w.en("matrix_coefficients", 8, vidutil::MATRIX_COEFFICIENTS)?;
+            }
+            w.u("display_horizontal_size", 14)?;
+            w.u("marker_bit", 1)?;
+            w.u("display_vertical_size", 14)?;
+        }
+        3 => {
+            quant_matrix(w, "load_intra_quantiser_matrix", "intra_quantiser_matrix")?;
+            quant_matrix(
+                w,
+                "load_non_intra_quantiser_matrix",
+                "non_intra_quantiser_matrix",
+            )?;
+            quant_matrix(
+                w,
+                "load_chroma_intra_quantiser_matrix",
+                "chroma_intra_quantiser_matrix",
+            )?;
+            quant_matrix(
+                w,
+                "load_chroma_non_intra_quantiser_matrix",
+                "chroma_non_intra_quantiser_matrix",
+            )?;
+        }
+        4 => {
+            w.flag("copyright_flag")?;
+            w.u("copyright_identifier", 8)?;
+            w.flag("original_or_copy")?;
+            w.u("reserved", 7)?;
+            w.u("marker_bit", 1)?;
+            w.u("copyright_number_1", 20)?;
+            w.u("marker_bit", 1)?;
+            w.u("copyright_number_2", 22)?;
+            w.u("marker_bit", 1)?;
+            w.u("copyright_number_3", 22)?;
+        }
+        7 => {
+            // The number of offsets depends on the picture; show the first.
+            w.su("frame_centre_horizontal_offset", 16)?;
+            w.u("marker_bit", 1)?;
+            w.su("frame_centre_vertical_offset", 16)?;
+            w.u("marker_bit", 1)?;
+        }
+        8 => {
+            for name in [
+                "f_code[0][0] (forward horizontal)",
+                "f_code[0][1] (forward vertical)",
+                "f_code[1][0] (backward horizontal)",
+                "f_code[1][1] (backward vertical)",
+            ] {
+                w.u(name, 4)?;
+            }
+            let dc = w.u("intra_dc_precision", 2)?;
+            w.summary(|| format!("{} bits", dc.saturating_add(8)));
+            w.en("picture_structure", 2, STRUCTURES)?;
+            for name in [
+                "top_field_first",
+                "frame_pred_frame_dct",
+                "concealment_motion_vectors",
+                "q_scale_type",
+                "intra_vlc_format",
+                "alternate_scan",
+                "repeat_first_field",
+                "chroma_420_type",
+                "progressive_frame",
+            ] {
+                w.flag(name)?;
+            }
+            if w.flag("composite_display_flag")? {
+                w.flag("v_axis")?;
+                w.u("field_sequence", 3)?;
+                w.flag("sub_carrier")?;
+                w.u("burst_amplitude", 7)?;
+                w.u("sub_carrier_phase", 8)?;
+            }
+        }
+        _ => {
+            let n = w.bits_left();
+            w.skip_as("Extension data", n)?;
+        }
+    }
+    Some(())
+}
+
+/// `group_of_pictures_header()`.
+fn gop(w: &mut Walker) -> Option<()> {
+    w.flag("drop_frame_flag")?;
+    w.u("time_code_hours", 5)?;
+    w.u("time_code_minutes", 6)?;
+    w.u("marker_bit", 1)?;
+    w.u("time_code_seconds", 6)?;
+    w.u("time_code_pictures", 6)?;
+    w.flag("closed_gop")?;
+    w.flag("broken_link")?;
+    Some(())
+}
+
+/// `picture_header()`.
+fn picture(w: &mut Walker) -> Option<()> {
+    w.u("temporal_reference", 10)?;
+    let t = w.en("picture_coding_type", 3, PICTURE_TYPES)?;
+    let vbv = w.u("vbv_delay", 16)?;
+    w.summary(|| {
+        if vbv == 0xffff {
+            "variable bit rate".to_owned()
+        } else {
+            format!("{:.3} ms", vbv as f64 / 90.0)
+        }
+    });
+    if t == 2 || t == 3 {
+        w.flag("full_pel_forward_vector")?;
+        w.u("forward_f_code", 3)?;
+    }
+    if t == 3 {
+        w.flag("full_pel_backward_vector")?;
+        w.u("backward_f_code", 3)?;
+    }
+    Some(())
 }

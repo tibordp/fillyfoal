@@ -3471,7 +3471,7 @@ fn xiph_kind(head: &[u8]) -> u8 {
     }
 }
 
-async fn xiph_packet(cx: Cx, (_input, span, kind): (Input, Span, u8)) -> Result<()> {
+async fn xiph_packet(cx: Cx, (input, span, kind): (Input, Span, u8)) -> Result<()> {
     match kind {
         1 => {
             let block = cx.block(span.sub(0, 30)).await?;
@@ -3542,7 +3542,7 @@ async fn xiph_packet(cx: Cx, (_input, span, kind): (Input, Span, u8)) -> Result<
                         .to_owned(),
                     )),
             );
-            let used = vorbis::emit(&cx, span.tail(7)).await?;
+            let used = vorbis::emit(&cx, input, span.tail(7)).await?;
             let rest = span.tail(7u64.saturating_add(used));
             if !rest.is_empty() {
                 cx.emit(Node::new("Framing bit").span(rest));

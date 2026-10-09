@@ -1,16 +1,16 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ two-frames-422.y4m — YUV4MPEG2, 8×8 422, 5 fps, ~2 frames  [0x0+0x139]
+▾ two-frames-422.y4m — YUV4MPEG2, 8×8, 4:2:2 8-bit, 5 fps, 2 frames, 00:00:00.400  [0x0+0x139]
   ▾ Stream header  [0x0+0x2d]
       Signature: "YUV4MPEG2"  [0x0+0x9]
       Width: 8  [0xa+0x2]
       Height: 8  [0xd+0x2]
-      Frame rate: "5:1"  [0x10+0x4]
+      Frame rate: "5:1" — 5 fps  [0x10+0x4]
       Interlacing: "p" — progressive  [0x15+0x2]
-      Pixel aspect ratio: "1:1"  [0x18+0x4]
-      Colour space: "422"  [0x1d+0x4]
+      Pixel aspect ratio: "1:1" — square pixels  [0x18+0x4]
+      Colour space: "422" — 4:2:2 8-bit  [0x1d+0x4]
       Extension: "YSCSS=422"  [0x22+0xa]
   ▾ Frames — 128 bytes per frame  [0x2d+0x10c]
     ▾ Frame 0  [0x2d+0x86]

@@ -1,6 +1,17 @@
 //! Helpers shared by the video and container dissectors: durations and
-//! FourCCs, a bit reader with Exp-Golomb codes, H.264/HEVC parameter-set
-//! parsing, start-code scanning and paged fixed-stride tables.
+//! FourCCs, a bit reader with Exp-Golomb codes, start-code scanning and
+//! paged fixed-stride tables, and codec syntax in submodules:
+//!
+//! - `bitwalk`: a bit reader that records a node per syntax element, with
+//!   spans mapped through emulation-prevention bytes;
+//! - `h264`, `hevc`, `sei`: parameter sets (with VUI, HRD, scaling lists),
+//!   slice headers and SEI messages;
+//! - `av1`, `vp9`: AV1 OBUs and sequence headers, VP8/VP9 frame headers;
+//! - `audio`: the MPEG-4 AudioSpecificConfig and audio elementary stream
+//!   frame headers;
+//! - `nal`: entry points over whole NAL units and the `avcC`, `hvcC`,
+//!   `av1C` and `vpcC` configuration records;
+//! - `params`, `tables`: what parameter sets say, and shared code points.
 
 use std::borrow::Cow;
 
@@ -12,6 +23,25 @@ use crate::fields::{Endian, Fields};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Radix, Value};
+
+pub mod audio;
+pub mod av1;
+pub mod bitwalk;
+pub mod h264;
+pub mod hevc;
+pub mod nal;
+pub mod params;
+pub mod sei;
+pub mod tables;
+pub mod vp9;
+
+pub use audio::{AAC_SAMPLE_RATES, AUDIO_OBJECT_TYPES};
+pub use nal::{NalCodec, NalInfo, parse_nal};
+pub use params::{ParamSets, PpsInfo, SliceInfo, SpsInfo, h264_level, hevc_level};
+pub use tables::{
+    COLOUR_PRIMARIES, H264_NAL_TYPES, H264_PROFILES, HEVC_NAL_TYPES, HEVC_PROFILES,
+    MATRIX_COEFFICIENTS, TRANSFER_CHARACTERISTICS, VVC_NAL_TYPES, lookup_or,
+};
 
 // ---------------------------------------------------------------------------
 // Presentation helpers
@@ -236,298 +266,35 @@ pub fn unescape_rbsp(data: &[u8]) -> Vec<u8> {
 // ---------------------------------------------------------------------------
 // H.264 / HEVC parameter sets
 
-pub const H264_NAL_TYPES: EnumTable = &[
-    (1, "Coded slice (non-IDR)"),
-    (2, "Slice data partition A"),
-    (3, "Slice data partition B"),
-    (4, "Slice data partition C"),
-    (5, "Coded slice (IDR)"),
-    (6, "SEI"),
-    (7, "Sequence parameter set"),
-    (8, "Picture parameter set"),
-    (9, "Access unit delimiter"),
-    (10, "End of sequence"),
-    (11, "End of stream"),
-    (12, "Filler data"),
-    (13, "SPS extension"),
-    (14, "Prefix NAL unit"),
-    (15, "Subset SPS"),
-    (16, "Depth parameter set"),
-    (19, "Auxiliary slice"),
-    (20, "Coded slice extension"),
-    (21, "Depth/3D-AVC slice extension"),
-];
-
-pub const HEVC_NAL_TYPES: EnumTable = &[
-    (0, "TRAIL_N"),
-    (1, "TRAIL_R"),
-    (2, "TSA_N"),
-    (3, "TSA_R"),
-    (4, "STSA_N"),
-    (5, "STSA_R"),
-    (6, "RADL_N"),
-    (7, "RADL_R"),
-    (8, "RASL_N"),
-    (9, "RASL_R"),
-    (16, "BLA_W_LP"),
-    (17, "BLA_W_RADL"),
-    (18, "BLA_N_LP"),
-    (19, "IDR_W_RADL"),
-    (20, "IDR_N_LP"),
-    (21, "CRA_NUT"),
-    (32, "Video parameter set"),
-    (33, "Sequence parameter set"),
-    (34, "Picture parameter set"),
-    (35, "Access unit delimiter"),
-    (36, "End of sequence"),
-    (37, "End of bitstream"),
-    (38, "Filler data"),
-    (39, "SEI (prefix)"),
-    (40, "SEI (suffix)"),
-];
-
-pub const H264_PROFILES: EnumTable = &[
-    (44, "CAVLC 4:4:4 Intra"),
-    (66, "Baseline"),
-    (77, "Main"),
-    (83, "Scalable Baseline"),
-    (86, "Scalable High"),
-    (88, "Extended"),
-    (100, "High"),
-    (110, "High 10"),
-    (118, "Multiview High"),
-    (122, "High 4:2:2"),
-    (128, "Stereo High"),
-    (244, "High 4:4:4 Predictive"),
-];
-
-pub const HEVC_PROFILES: EnumTable = &[
-    (1, "Main"),
-    (2, "Main 10"),
-    (3, "Main Still Picture"),
-    (4, "Range extensions"),
-    (5, "High throughput"),
-    (6, "Multiview Main"),
-    (7, "Scalable Main"),
-    (8, "3D Main"),
-    (9, "Screen content coding"),
-    (10, "Scalable range extensions"),
-    (11, "High throughput SCC"),
-];
-
-/// What an H.264 or HEVC SPS tells about the picture.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SpsInfo {
-    pub profile: u8,
-    pub level: u8,
-    /// HEVC tier (0 = Main, 1 = High); H.264 constraint flags.
-    pub tier_or_constraints: u8,
-    pub chroma_format: u64,
-    pub bit_depth: u64,
-    pub width: u64,
-    pub height: u64,
-}
-
-impl SpsInfo {
-    pub fn h264_summary(&self) -> String {
-        let profile = crate::value::lookup(H264_PROFILES, self.profile.into())
-            .map_or_else(|| format!("profile {}", self.profile), str::to_owned);
-        format!(
-            "{profile}@L{}, {}×{}",
-            h264_level(self.level),
-            self.width,
-            self.height
-        )
-    }
-
-    pub fn hevc_summary(&self) -> String {
-        let profile = crate::value::lookup(HEVC_PROFILES, self.profile.into())
-            .map_or_else(|| format!("profile {}", self.profile), str::to_owned);
-        let tier = if self.tier_or_constraints != 0 {
-            "High"
-        } else {
-            "Main"
-        };
-        format!(
-            "{profile}@L{} {tier} tier, {}×{}",
-            hevc_level(self.level),
-            self.width,
-            self.height
-        )
-    }
-}
-
-pub fn h264_level(level: u8) -> String {
-    format!("{}.{}", level / 10, level % 10)
-}
-
-pub fn hevc_level(level: u8) -> String {
-    let tenth = level / 3;
-    format!("{}.{}", tenth / 10, tenth % 10)
-}
-
-fn chroma_units(chroma: u64) -> (u64, u64) {
-    match chroma {
-        1 => (2, 2),
-        2 => (2, 1),
-        _ => (1, 1),
-    }
+/// A span for parsing bytes that are not shown (summaries only).
+fn detached(len: usize) -> Span {
+    Span::new(crate::span::SourceId::default_host(), 0, to_u64(len))
 }
 
 /// Parses an H.264 sequence parameter set (NAL unit including its header,
 /// emulation prevention still present).
 pub fn h264_sps(nal: &[u8]) -> Option<SpsInfo> {
-    let rbsp = unescape_rbsp(nal.get(1..)?);
-    let mut b = Bits::new(&rbsp);
-    let profile = u8::try_from(b.bits(8)?).ok()?;
-    let constraints = u8::try_from(b.bits(8)?).ok()?;
-    let level = u8::try_from(b.bits(8)?).ok()?;
-    b.ue()?;
-    let mut chroma = 1;
-    let mut bit_depth = 8;
-    if matches!(
-        profile,
-        100 | 110 | 122 | 244 | 44 | 83 | 86 | 118 | 128 | 138 | 139 | 134 | 135
-    ) {
-        chroma = b.ue()?;
-        if chroma == 3 {
-            b.bit()?;
-        }
-        bit_depth = b.ue()?.checked_add(8)?;
-        b.ue()?;
-        b.bit()?;
-        if b.flag()? {
-            let lists = if chroma == 3 { 12 } else { 8 };
-            for i in 0..lists {
-                if b.flag()? {
-                    let size = if i < 6 { 16 } else { 64 };
-                    let (mut last, mut next) = (8i64, 8i64);
-                    for _ in 0..size {
-                        if next != 0 {
-                            let delta = b.se()?;
-                            next = last.checked_add(delta)?.checked_add(256)?.rem_euclid(256);
-                        }
-                        if next != 0 {
-                            last = next;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    b.ue()?;
-    match b.ue()? {
-        0 => {
-            b.ue()?;
-        }
-        1 => {
-            b.bit()?;
-            b.se()?;
-            b.se()?;
-            let cycle = b.ue()?;
-            if cycle > 255 {
-                return None;
-            }
-            for _ in 0..cycle {
-                b.se()?;
-            }
-        }
-        _ => {}
-    }
-    b.ue()?;
-    b.bit()?;
-    let width_mbs = b.ue()?.checked_add(1)?;
-    let height_units = b.ue()?.checked_add(1)?;
-    let frame_mbs_only = b.bit()?;
-    if frame_mbs_only == 0 {
-        b.bit()?;
-    }
-    b.bit()?;
-    let (mut cl, mut cr, mut ct, mut cb) = (0, 0, 0, 0);
-    if b.flag()? {
-        cl = b.ue()?;
-        cr = b.ue()?;
-        ct = b.ue()?;
-        cb = b.ue()?;
-    }
-    let (sub_w, sub_h) = chroma_units(chroma);
-    let fields = 2u64.checked_sub(frame_mbs_only)?;
-    let crop_x = if chroma == 0 { 1 } else { sub_w };
-    let crop_y = if chroma == 0 { 1 } else { sub_h }.checked_mul(fields)?;
-    let width = width_mbs
-        .checked_mul(16)?
-        .saturating_sub(cl.saturating_add(cr).saturating_mul(crop_x));
-    let height = height_units
-        .checked_mul(16)?
-        .checked_mul(fields)?
-        .saturating_sub(ct.saturating_add(cb).saturating_mul(crop_y));
-    Some(SpsInfo {
-        profile,
-        level,
-        tier_or_constraints: constraints,
-        chroma_format: chroma,
-        bit_depth,
-        width,
-        height,
-    })
+    let (info, _) = parse_nal(
+        NalCodec::Avc,
+        nal,
+        detached(nal.len()),
+        &ParamSets::default(),
+        false,
+    );
+    info.sps.filter(|_| info.nal_type == 7)
 }
 
 /// Parses an HEVC sequence parameter set (NAL unit including its two-byte
 /// header).
 pub fn hevc_sps(nal: &[u8]) -> Option<SpsInfo> {
-    let rbsp = unescape_rbsp(nal.get(2..)?);
-    let mut b = Bits::new(&rbsp);
-    b.bits(4)?;
-    let sub_layers = b.bits(3)?;
-    b.bit()?;
-    b.bits(2)?;
-    let tier = u8::try_from(b.bits(1)?).ok()?;
-    let profile = u8::try_from(b.bits(5)?).ok()?;
-    b.skip(32 + 48)?;
-    let level = u8::try_from(b.bits(8)?).ok()?;
-    let mut present = Vec::new();
-    for _ in 0..sub_layers {
-        present.push((b.flag()?, b.flag()?));
-    }
-    if sub_layers > 0 {
-        for _ in sub_layers..8 {
-            b.bits(2)?;
-        }
-    }
-    for (profile_present, level_present) in present {
-        if profile_present {
-            b.skip(88)?;
-        }
-        if level_present {
-            b.skip(8)?;
-        }
-    }
-    b.ue()?;
-    let chroma = b.ue()?;
-    if chroma == 3 {
-        b.bit()?;
-    }
-    let mut width = b.ue()?;
-    let mut height = b.ue()?;
-    if b.flag()? {
-        let (sub_w, sub_h) = chroma_units(chroma);
-        let l = b.ue()?;
-        let r = b.ue()?;
-        let t = b.ue()?;
-        let bo = b.ue()?;
-        width = width.saturating_sub(l.saturating_add(r).saturating_mul(sub_w));
-        height = height.saturating_sub(t.saturating_add(bo).saturating_mul(sub_h));
-    }
-    let bit_depth = b.ue()?.checked_add(8)?;
-    Some(SpsInfo {
-        profile,
-        level,
-        tier_or_constraints: tier,
-        chroma_format: chroma,
-        bit_depth,
-        width,
-        height,
-    })
+    let (info, _) = parse_nal(
+        NalCodec::Hevc,
+        nal,
+        detached(nal.len()),
+        &ParamSets::default(),
+        false,
+    );
+    info.sps.filter(|_| info.nal_type == 33)
 }
 
 /// Codec summary from an AVC decoder configuration record (`avcC`).
@@ -714,93 +481,7 @@ pub fn us(n: u64) -> usize {
 }
 
 // ---------------------------------------------------------------------------
-// Colour description (ITU-T H.273 code points)
-
-pub const COLOUR_PRIMARIES: EnumTable = &[
-    (1, "BT.709"),
-    (2, "unspecified"),
-    (4, "BT.470 M"),
-    (5, "BT.470 BG"),
-    (6, "SMPTE 170M"),
-    (7, "SMPTE 240M"),
-    (8, "generic film"),
-    (9, "BT.2020"),
-    (10, "SMPTE ST 428-1"),
-    (11, "DCI-P3"),
-    (12, "Display P3"),
-    (22, "EBU Tech. 3213-E"),
-];
-
-pub const TRANSFER_CHARACTERISTICS: EnumTable = &[
-    (1, "BT.709"),
-    (2, "unspecified"),
-    (4, "gamma 2.2"),
-    (5, "gamma 2.8"),
-    (6, "SMPTE 170M"),
-    (7, "SMPTE 240M"),
-    (8, "linear"),
-    (9, "log 100:1"),
-    (10, "log 316:1"),
-    (11, "IEC 61966-2-4"),
-    (12, "BT.1361"),
-    (13, "sRGB"),
-    (14, "BT.2020 10-bit"),
-    (15, "BT.2020 12-bit"),
-    (16, "PQ (SMPTE ST 2084)"),
-    (17, "SMPTE ST 428-1"),
-    (18, "HLG (ARIB STD-B67)"),
-];
-
-pub const MATRIX_COEFFICIENTS: EnumTable = &[
-    (0, "identity (RGB)"),
-    (1, "BT.709"),
-    (2, "unspecified"),
-    (4, "FCC"),
-    (5, "BT.470 BG"),
-    (6, "SMPTE 170M"),
-    (7, "SMPTE 240M"),
-    (8, "YCgCo"),
-    (9, "BT.2020 non-constant"),
-    (10, "BT.2020 constant"),
-    (11, "SMPTE ST 2085"),
-    (12, "chromaticity non-constant"),
-    (13, "chromaticity constant"),
-    (14, "ICtCp"),
-];
-
-pub fn lookup_or(table: EnumTable, raw: u64) -> String {
-    crate::value::lookup(table, raw).map_or_else(|| format!("{raw}"), str::to_owned)
-}
-
-// ---------------------------------------------------------------------------
 // MPEG-4 audio
-
-pub const AAC_SAMPLE_RATES: [u32; 13] = [
-    96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350,
-];
-
-pub const AUDIO_OBJECT_TYPES: EnumTable = &[
-    (1, "AAC Main"),
-    (2, "AAC LC"),
-    (3, "AAC SSR"),
-    (4, "AAC LTP"),
-    (5, "HE-AAC (SBR)"),
-    (6, "AAC Scalable"),
-    (7, "TwinVQ"),
-    (8, "CELP"),
-    (9, "HVXC"),
-    (17, "ER AAC LC"),
-    (19, "ER AAC LTP"),
-    (20, "ER AAC Scalable"),
-    (23, "ER AAC LD"),
-    (29, "HE-AACv2 (PS)"),
-    (32, "MPEG-1 Layer 1"),
-    (33, "MPEG-1 Layer 2"),
-    (34, "MPEG-1 Layer 3"),
-    (36, "ALS"),
-    (39, "ER AAC ELD"),
-    (42, "USAC"),
-];
 
 /// An MPEG-4 AudioSpecificConfig: (object type, sample rate, channel
 /// configuration).

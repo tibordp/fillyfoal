@@ -1,26 +1,29 @@
 //! H.264/AVC and H.265/HEVC elementary streams in Annex B byte-stream
-//! format: NAL units separated by `00 00 01` start codes. Units are listed
-//! in pages with their type names; parameter sets, SEI messages and slice
-//! headers are summarised.
+//! format: NAL units separated by `00 00 01` start codes.
+//!
+//! Units are grouped into access units (one coded picture with the
+//! parameter sets and SEI messages before it), listed in pages. Each unit
+//! decodes on expansion: the NAL unit header, parameter sets (profile,
+//! level, picture size and cropping, VUI with aspect ratio, colour and
+//! timing, HRD), SEI messages, and slice headers, which are interpreted
+//! with the parameter sets seen before them.
+
+use std::sync::Arc;
 
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::util::vidutil::{
-    self, Bits, H264_NAL_TYPES, HEVC_NAL_TYPES, SpsInfo, enumerated, flag_node, h264_sps, hevc_sps,
-    text, uint, unescape_rbsp,
-};
+use crate::formats::util::vidutil::{self, NalCodec, ParamSets, parse_nal};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::EnumTable;
 
 pub static H264: Format = Format {
     name: "h264",
     title: "H.264/AVC elementary stream",
     extensions: &["h264", "264", "avc", "jsv", "26l"],
     mime: "video/h264",
-    probe: Probe::Custom(|h| probe(h, Codec::Avc)),
+    probe: Probe::Custom(|h| probe(h, NalCodec::Avc)),
     dissect: crate::expander!(dissect: Input),
 };
 
@@ -29,76 +32,47 @@ pub static HEVC: Format = Format {
     title: "H.265/HEVC elementary stream",
     extensions: &["hevc", "h265", "265", "bit"],
     mime: "video/h265",
-    probe: Probe::Custom(|h| probe(h, Codec::Hevc)),
+    probe: Probe::Custom(|h| probe(h, NalCodec::Hevc)),
     dissect: crate::expander!(dissect: Input),
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Codec {
-    Avc,
-    Hevc,
-}
-
-impl Codec {
-    fn nal_type(self, d: &[u8]) -> Option<u8> {
-        let b0 = *d.first()?;
-        if b0 & 0x80 != 0 {
-            return None;
-        }
-        Some(match self {
-            Codec::Avc => b0 & 0x1f,
-            Codec::Hevc => (b0 >> 1) & 0x3f,
-        })
+/// Whether `d` (a NAL unit) looks like a plausible unit of this codec.
+fn plausible(codec: NalCodec, d: &[u8], first: bool) -> bool {
+    let Some(&b0) = d.first() else {
+        return false;
+    };
+    if b0 & 0x80 != 0 {
+        return false;
     }
-
-    fn header_len(self) -> u64 {
-        match self {
-            Codec::Avc => 1,
-            Codec::Hevc => 2,
-        }
-    }
-
-    fn types(self) -> EnumTable {
-        match self {
-            Codec::Avc => H264_NAL_TYPES,
-            Codec::Hevc => HEVC_NAL_TYPES,
-        }
-    }
-
-    /// Whether `d` (a NAL unit) looks like a plausible unit of this codec.
-    fn plausible(self, d: &[u8], first: bool) -> bool {
-        let Some(t) = self.nal_type(d) else {
-            return false;
-        };
-        match self {
-            Codec::Avc => {
-                let ref_idc = d.first().copied().unwrap_or(0) >> 5;
-                match t {
-                    1 | 5 => !first,
-                    6 | 9 => ref_idc == 0,
-                    7 => {
-                        ref_idc != 0
-                            && d.get(1).is_some_and(|p| {
-                                crate::value::lookup(vidutil::H264_PROFILES, (*p).into()).is_some()
-                            })
-                    }
-                    8 => ref_idc != 0,
-                    10..=12 => !first,
-                    _ => false,
+    let t = codec.nal_type(b0);
+    match codec {
+        NalCodec::Avc => {
+            let ref_idc = b0 >> 5;
+            match t {
+                1 | 5 => !first,
+                6 | 9 => ref_idc == 0,
+                7 => {
+                    ref_idc != 0
+                        && d.get(1).is_some_and(|p| {
+                            crate::value::lookup(vidutil::H264_PROFILES, (*p).into()).is_some()
+                        })
                 }
+                8 => ref_idc != 0,
+                10..=12 => !first,
+                _ => false,
             }
-            Codec::Hevc => {
-                let b1 = d.get(1).copied().unwrap_or(0);
-                let layer = ((d.first().copied().unwrap_or(0) & 1) << 5) | (b1 >> 3);
-                let tid = b1 & 7;
-                if layer != 0 || tid == 0 {
-                    return false;
-                }
-                if first {
-                    (32..=40).contains(&t)
-                } else {
-                    t <= 21 || (32..=40).contains(&t)
-                }
+        }
+        NalCodec::Hevc => {
+            let b1 = d.get(1).copied().unwrap_or(0);
+            let layer = ((b0 & 1) << 5) | (b1 >> 3);
+            let tid = b1 & 7;
+            if layer != 0 || tid == 0 {
+                return false;
+            }
+            if first {
+                (32..=40).contains(&t)
+            } else {
+                t <= 21 || (32..=40).contains(&t)
             }
         }
     }
@@ -116,12 +90,12 @@ fn start_code(d: &[u8], at: usize) -> Option<usize> {
     }
 }
 
-fn probe(h: &Head<'_>, codec: Codec) -> bool {
+fn probe(h: &Head<'_>, codec: NalCodec) -> bool {
     let Some(sc) = start_code(h.data, 0) else {
         return false;
     };
     let rest = h.data.get(sc..).unwrap_or_default();
-    if !codec.plausible(rest, true) {
+    if !plausible(codec, rest, true) {
         return false;
     }
     // The next unit (if within the probe window) must be plausible too.
@@ -129,18 +103,27 @@ fn probe(h: &Head<'_>, codec: Codec) -> bool {
     match window.windows(3).skip(1).position(|w| w == [0, 0, 1]) {
         Some(i) => window
             .get(i.saturating_add(4)..)
-            .is_some_and(|next| codec.plausible(next, false)),
+            .is_some_and(|next| plausible(codec, next, false)),
         None => to_u64(h.data.len()) == h.len,
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+/// Bytes of a NAL unit read for its summary (headers and parameter sets).
+const HEAD_BYTES: u64 = 4096;
+/// Bytes of a NAL unit read when it is expanded.
+const EXPAND_BYTES: u64 = 0x10000;
+/// NAL units in one access unit at most (more start another group).
+const MAX_AU_UNITS: u32 = 4096;
+
+/// A NAL unit: where it is and the parameter sets in force before it.
+#[derive(Clone, Debug)]
 struct Unit {
-    codec: Codec,
+    codec: NalCodec,
     /// The whole unit, start code included.
     span: Span,
     /// Length of the start code.
     prefix: u64,
+    ps: Arc<ParamSets>,
 }
 
 impl Unit {
@@ -149,342 +132,334 @@ impl Unit {
     }
 }
 
+/// An access unit: its span and the parameter sets before it.
+#[derive(Clone, Debug)]
+struct Au {
+    codec: NalCodec,
+    file: Span,
+    span: Span,
+    ps: Arc<ParamSets>,
+}
+
+/// Where the walk is: resumable state.
+#[derive(Clone, Debug)]
+struct Walk {
+    pos: u64,
+    index: u64,
+    ps: Arc<ParamSets>,
+}
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let codec = if probe_codec_is_hevc(&cx, input.span).await? {
-        Codec::Hevc
+        NalCodec::Hevc
     } else {
-        Codec::Avc
+        NalCodec::Avc
     };
     let file = input.span;
-    let name = match codec {
-        Codec::Avc => "H.264",
-        Codec::Hevc => "HEVC",
-    };
-    cx.annotate(format!("{name} elementary stream"));
-    let Some(mut pos) = vidutil::next_start_code(&cx, file, 0).await? else {
-        cx.emit(Node::new("Data").span(file));
-        return Ok(());
-    };
-    // A 4-byte start code begins with an extra zero byte.
-    if pos > 0 && cx.read_avail(file.sub(pos.saturating_sub(1), 1)).await? == [0] {
-        pos = pos.saturating_sub(1);
-    }
-    if pos > 0 {
-        cx.emit(Node::new("Leading data").span(file.sub(0, pos)));
-    }
-    let mut annotated = false;
-    let mut index = 0u32;
-    while pos < file.len {
-        let head = cx.read_avail(file.sub(pos, 4)).await?;
-        let prefix = to_u64(start_code(&head, 0).unwrap_or(3));
-        let next = vidutil::next_start_code(&cx, file, pos.saturating_add(prefix))
-            .await?
-            .unwrap_or(file.len);
-        let mut end = next;
-        if end < file.len
-            && end > pos
-            && cx.read_avail(file.sub(end.saturating_sub(1), 1)).await? == [0]
-        {
-            end = end.saturating_sub(1);
-        }
-        let unit = Unit {
-            codec,
-            span: file.sub(pos, end.saturating_sub(pos).max(prefix)),
-            prefix,
-        };
-        let d = vidutil::read_small(&cx, unit.nal(), 4096).await?;
-        let t = codec.nal_type(&d);
-        let name = match t {
-            Some(t) => vidutil::lookup_or(codec.types(), t.into()),
-            None => "Invalid NAL unit".to_owned(),
-        };
-        let summary = unit_summary(codec, t, &d);
-        if !annotated
-            && index < 64
-            && let Some(sps) = sps_info(codec, t, &d)
-        {
-            annotated = true;
-            let detail = match codec {
-                Codec::Avc => sps.h264_summary(),
-                Codec::Hevc => sps.hevc_summary(),
+    cx.annotate(stream_summary(&cx, file, codec).await?);
+    let mut walk = match cx.resume::<Walk>() {
+        Some(w) => w,
+        None => {
+            let Some(mut pos) = vidutil::next_start_code(&cx, file, 0).await? else {
+                cx.emit(Node::new("Data").span(file));
+                return Ok(());
             };
-            cx.annotate(format!(
-                "{name} elementary stream, {detail}",
-                name = match codec {
-                    Codec::Avc => "H.264",
-                    Codec::Hevc => "HEVC",
-                }
-            ));
+            // A 4-byte start code begins with an extra zero byte.
+            if pos > 0 && cx.read_avail(file.sub(pos.saturating_sub(1), 1)).await? == [0] {
+                pos = pos.saturating_sub(1);
+            }
+            if pos > 0 {
+                cx.emit(Node::new("Leading data").span(file.sub(0, pos)));
+            }
+            Walk {
+                pos,
+                index: 0,
+                ps: Arc::new(ParamSets::default()),
+            }
         }
-        let mut node = Node::new(name).span(unit.span).lazy(expand_unit, unit);
-        node = node.summary(match summary {
-            Some(s) => format!("{s}, {} bytes", unit.nal().len),
-            None => format!("{} bytes", unit.nal().len),
-        });
-        cx.progress_in(file, file.offset.saturating_add(pos));
-        cx.push(node).await;
-        pos = end.max(pos.saturating_add(prefix));
-        index = index.saturating_add(1);
+    };
+    while walk.pos < file.len {
+        let state = walk.clone();
+        cx.mark(move || state);
+        let start = walk.pos;
+        let ps_before = walk.ps.clone();
+        let mut stats = AuStats::default();
+        let mut units = 0u32;
+        while walk.pos < file.len && units < MAX_AU_UNITS {
+            let (unit_span, prefix, end) = next_unit(&cx, file, walk.pos).await?;
+            let nal = unit_span.tail(prefix);
+            let d = vidutil::read_small(&cx, nal, HEAD_BYTES).await?;
+            if units > 0 && stats.slices > 0 && starts_au(codec, &d) {
+                break;
+            }
+            let (info, _) = parse_nal(codec, &d, nal, &walk.ps, false);
+            advance(&mut walk.ps, &info);
+            stats.add(codec, &info);
+            units = units.saturating_add(1);
+            walk.pos = end.max(walk.pos.saturating_add(prefix));
+            cx.checkpoint().await;
+        }
+        let au = Au {
+            codec,
+            file,
+            span: file.sub(start, walk.pos.saturating_sub(start)),
+            ps: ps_before,
+        };
+        cx.progress_in(file, file.offset.saturating_add(start));
+        cx.push(
+            Node::new(format!("Access unit {}", walk.index))
+                .span(au.span)
+                .summary(stats.describe(units, au.span.len))
+                .lazy(expand_au, au),
+        )
+        .await;
+        walk.index = walk.index.saturating_add(1);
     }
     Ok(())
+}
+
+/// Records the parameter set a unit carried (copying the shared set only
+/// when it changes).
+fn advance(ps: &mut Arc<ParamSets>, info: &vidutil::NalInfo) {
+    if info.sps.is_none() && info.pps.is_none() {
+        return;
+    }
+    let mut next = (**ps).clone();
+    if next.update(info.sps.as_ref(), info.pps.as_ref()) {
+        *ps = Arc::new(next);
+    }
+}
+
+/// The unit at `pos`: its span (start code included), start code length,
+/// and where the next one begins.
+async fn next_unit(cx: &Cx, file: Span, pos: u64) -> Result<(Span, u64, u64)> {
+    let head = cx.read_avail(file.sub(pos, 4)).await?;
+    let prefix = to_u64(start_code(&head, 0).unwrap_or(3));
+    let next = vidutil::next_start_code(cx, file, pos.saturating_add(prefix))
+        .await?
+        .unwrap_or(file.len);
+    let mut end = next;
+    // A zero byte before the next start code belongs to it (4-byte form).
+    if end < file.len
+        && end > pos
+        && cx.read_avail(file.sub(end.saturating_sub(1), 1)).await? == [0]
+    {
+        end = end.saturating_sub(1);
+    }
+    let len = end.saturating_sub(pos).max(prefix);
+    Ok((file.sub(pos, len), prefix, end))
+}
+
+/// Whether a NAL unit (seen after a slice of the current access unit)
+/// begins the next access unit (H.264 7.4.1.2.3, H.265 7.4.2.4.4).
+fn starts_au(codec: NalCodec, d: &[u8]) -> bool {
+    let Some(&b0) = d.first() else {
+        return false;
+    };
+    let t = codec.nal_type(b0);
+    match codec {
+        NalCodec::Avc => match t {
+            6..=9 | 14..=18 => true,
+            // first_mb_in_slice == 0: its ue(v) code is a single 1 bit.
+            1 | 5 => d.get(1).is_some_and(|b| b & 0x80 != 0),
+            _ => false,
+        },
+        NalCodec::Hevc => match t {
+            32..=35 | 39 | 41..=44 | 48..=55 => true,
+            // first_slice_segment_in_pic_flag.
+            0..=9 | 16..=21 => d.get(2).is_some_and(|b| b & 0x80 != 0),
+            _ => false,
+        },
+    }
+}
+
+/// What an access unit holds, for its summary.
+#[derive(Default)]
+struct AuStats {
+    slices: u32,
+    kinds: Vec<&'static str>,
+    others: Vec<&'static str>,
+    irap: Option<&'static str>,
+    frame_num: Option<u64>,
+    poc: Option<u64>,
+    field: Option<bool>,
+}
+
+impl AuStats {
+    fn add(&mut self, codec: NalCodec, info: &vidutil::NalInfo) {
+        let t = info.nal_type;
+        if codec.is_slice(t) {
+            self.slices = self.slices.saturating_add(1);
+            if let Some(s) = &info.slice {
+                let k = s.kind();
+                if !self.kinds.contains(&k) {
+                    self.kinds.push(k);
+                }
+                if self.slices == 1 {
+                    self.frame_num = s.frame_num;
+                    self.poc = s.poc_lsb;
+                    self.field = s.field;
+                }
+            }
+            let irap = match (codec, t) {
+                (NalCodec::Avc, 5) | (NalCodec::Hevc, 19 | 20) => Some("IDR"),
+                (NalCodec::Hevc, 21) => Some("CRA"),
+                (NalCodec::Hevc, 16..=18) => Some("BLA"),
+                _ => None,
+            };
+            if irap.is_some() {
+                self.irap = irap;
+            }
+            return;
+        }
+        let name = match (codec, t) {
+            (NalCodec::Avc, 7) | (NalCodec::Hevc, 33) => "SPS",
+            (NalCodec::Avc, 8) | (NalCodec::Hevc, 34) => "PPS",
+            (NalCodec::Hevc, 32) => "VPS",
+            (NalCodec::Avc, 6) | (NalCodec::Hevc, 39 | 40) => "SEI",
+            (NalCodec::Avc, 9) | (NalCodec::Hevc, 35) => "AUD",
+            (NalCodec::Avc, 10) | (NalCodec::Hevc, 36) => "end of sequence",
+            (NalCodec::Avc, 11) | (NalCodec::Hevc, 37) => "end of stream",
+            (NalCodec::Avc, 12) | (NalCodec::Hevc, 38) => "filler",
+            _ => "other",
+        };
+        if !self.others.contains(&name) {
+            self.others.push(name);
+        }
+    }
+
+    fn describe(&self, units: u32, bytes: u64) -> String {
+        let mut parts = Vec::new();
+        if !self.kinds.is_empty() {
+            let mut pic = format!(
+                "{} {}",
+                self.kinds.join("/"),
+                match self.field {
+                    Some(false) => "top field",
+                    Some(true) => "bottom field",
+                    None => "frame",
+                }
+            );
+            if let Some(i) = self.irap {
+                pic = format!("{pic} ({i})");
+            }
+            parts.push(pic);
+        } else if self.slices > 0 {
+            parts.push(vidutil::plural(self.slices, "slice"));
+        }
+        if let Some(f) = self.frame_num {
+            parts.push(format!("frame_num {f}"));
+        }
+        if let Some(p) = self.poc {
+            parts.push(format!("POC lsb {p}"));
+        }
+        if !self.others.is_empty() {
+            parts.push(format!("with {}", self.others.join(", ")));
+        }
+        parts.push(format!(
+            "{}, {bytes} bytes",
+            vidutil::plural(units, "NAL unit")
+        ));
+        parts.join(", ")
+    }
+}
+
+/// "H.264 elementary stream, High@L3.1, 1280×720, ..." from the units in
+/// the first 64 KiB.
+async fn stream_summary(cx: &Cx, file: Span, codec: NalCodec) -> Result<String> {
+    let head = cx.read_avail(file.sub(0, 0x10000)).await?;
+    let mut ps = ParamSets::default();
+    let mut sps = None;
+    let mut encoder = None;
+    let mut at = 0usize;
+    let mut units = 0u32;
+    while units < 256 && (sps.is_none() || encoder.is_none()) {
+        let Some(i) = vidutil::find(head.get(at..).unwrap_or_default(), &[0, 0, 1]) else {
+            break;
+        };
+        let start = at.saturating_add(i).saturating_add(3);
+        let rest = head.get(start..).unwrap_or_default();
+        let len = vidutil::find(rest, &[0, 0, 1]).unwrap_or(rest.len());
+        let nal = rest.get(..len.min(4096)).unwrap_or_default();
+        let span = vidutil::at(file, start, len);
+        let (info, _) = parse_nal(codec, nal, span, &ps, false);
+        ps.update(info.sps.as_ref(), info.pps.as_ref());
+        if sps.is_none() {
+            sps = info.sps;
+        }
+        if encoder.is_none() {
+            encoder = info.encoder;
+        }
+        at = start;
+        units = units.saturating_add(1);
+    }
+    let mut s = format!("{} elementary stream", codec.name());
+    if let Some(sps) = sps {
+        s = format!("{s}, {}", sps.describe());
+    }
+    if let Some(e) = encoder {
+        s = format!("{s} ({e})");
+    }
+    Ok(s)
 }
 
 /// Decides between H.264 and HEVC from the first unit.
 async fn probe_codec_is_hevc(cx: &Cx, file: Span) -> Result<bool> {
     let d = cx.read_avail(file.sub(0, 4096)).await?;
-    let probe = Head {
-        data: &d,
-        tail: &d,
-        len: file.len,
-        len_known: true,
-    };
-    Ok(probe_hevc_first(&probe))
+    Ok(start_code(&d, 0)
+        .is_some_and(|sc| plausible(NalCodec::Hevc, d.get(sc..).unwrap_or_default(), true)))
 }
 
-fn probe_hevc_first(h: &Head<'_>) -> bool {
-    let Some(sc) = start_code(h.data, 0) else {
-        return false;
-    };
-    Codec::Hevc.plausible(h.data.get(sc..).unwrap_or_default(), true)
-}
-
-fn sps_info(codec: Codec, t: Option<u8>, d: &[u8]) -> Option<SpsInfo> {
-    match (codec, t?) {
-        (Codec::Avc, 7) => h264_sps(d),
-        (Codec::Hevc, 33) => hevc_sps(d),
-        _ => None,
-    }
-}
-
-const SLICE_TYPES: [&str; 5] = ["P", "B", "I", "SP", "SI"];
-const PRIMARY_PIC: [&str; 8] = [
-    "I",
-    "I, P",
-    "I, P, B",
-    "SI",
-    "SI, SP",
-    "I, SI",
-    "I, SI, P, SP",
-    "I, SI, P, SP, B",
-];
-
-fn unit_summary(codec: Codec, t: Option<u8>, d: &[u8]) -> Option<String> {
-    let t = t?;
-    if let Some(sps) = sps_info(codec, Some(t), d) {
-        return Some(match codec {
-            Codec::Avc => sps.h264_summary(),
-            Codec::Hevc => sps.hevc_summary(),
-        });
-    }
-    let rbsp = unescape_rbsp(d.get(vidutil::us(codec.header_len())..).unwrap_or_default());
-    match (codec, t) {
-        (Codec::Avc, 1 | 5) => {
-            let mut b = Bits::new(&rbsp);
-            b.ue()?;
-            let st = b.ue()?;
-            Some(format!(
-                "{} slice",
-                SLICE_TYPES.get(vidutil::us(st % 5)).copied().unwrap_or("?")
-            ))
-        }
-        (Codec::Avc, 9) => {
-            let p = rbsp.first().copied()? >> 5;
-            Some(format!(
-                "primary picture types {}",
-                PRIMARY_PIC.get(usize::from(p)).copied().unwrap_or("?")
-            ))
-        }
-        (Codec::Avc, 6) | (Codec::Hevc, 39 | 40) => {
-            let msgs: Vec<String> = sei_messages(&rbsp)
-                .map(|(kind, payload)| sei_name(kind, payload))
-                .collect();
-            (!msgs.is_empty()).then(|| msgs.join("; "))
-        }
-        _ => None,
-    }
-}
-
-/// SEI messages in an RBSP: (payload type, payload).
-fn sei_messages(rbsp: &[u8]) -> impl Iterator<Item = (u64, &[u8])> {
-    let mut at = 0usize;
-    std::iter::from_fn(move || {
-        // Stop at the RBSP trailing bits.
-        if rbsp.get(at..).is_none_or(|r| r.is_empty() || r == [0x80]) {
-            return None;
-        }
-        let mut read = || {
-            let mut v = 0u64;
-            loop {
-                let b = *rbsp.get(at)?;
-                at = at.checked_add(1)?;
-                v = v.checked_add(b.into())?;
-                if b != 0xff {
-                    return Some(v);
-                }
+async fn expand_au(cx: Cx, au: Au) -> Result<()> {
+    let mut ps = au.ps.clone();
+    let mut pos = au.span.offset.saturating_sub(au.file.offset);
+    let end = au.span.end().saturating_sub(au.file.offset);
+    while pos < end {
+        let (span, prefix, next) = next_unit(&cx, au.file, pos).await?;
+        let span = span.sub(0, end.saturating_sub(pos));
+        let nal = span.tail(prefix);
+        let d = vidutil::read_small(&cx, nal, HEAD_BYTES).await?;
+        let (info, _) = parse_nal(au.codec, &d, nal, &ps, false);
+        let name = match d.first() {
+            Some(&b) if b & 0x80 == 0 => {
+                vidutil::lookup_or(au.codec.types(), au.codec.nal_type(b).into())
             }
+            _ => "Invalid NAL unit".to_owned(),
         };
-        let kind = read()?;
-        let size = usize::try_from(read()?).ok()?;
-        let payload = rbsp.get(at..at.checked_add(size)?)?;
-        at = at.checked_add(size)?;
-        Some((kind, payload))
-    })
-}
-
-fn sei_name(kind: u64, payload: &[u8]) -> String {
-    match kind {
-        0 => "buffering period".to_owned(),
-        1 => "picture timing".to_owned(),
-        3 => "filler payload".to_owned(),
-        4 => "user data (ITU-T T.35)".to_owned(),
-        5 => {
-            let text = payload
-                .get(16..)
-                .map(crate::text::until_nul)
-                .unwrap_or_default();
-            let short: String = text.chars().take(48).collect();
-            if short.is_empty() {
-                "user data unregistered".to_owned()
-            } else {
-                format!("user data unregistered: {short}")
-            }
-        }
-        6 => "recovery point".to_owned(),
-        129 => "active parameter sets".to_owned(),
-        132 => "decoded picture hash".to_owned(),
-        137 => "mastering display colour volume".to_owned(),
-        144 => "content light level".to_owned(),
-        147 => "alternative transfer characteristics".to_owned(),
-        _ => format!("SEI type {kind}"),
+        let unit = Unit {
+            codec: au.codec,
+            span,
+            prefix,
+            ps: ps.clone(),
+        };
+        let summary = match &info.summary {
+            Some(s) => format!("{s}, {} bytes", nal.len),
+            None => format!("{} bytes", nal.len),
+        };
+        cx.push(
+            Node::new(name)
+                .span(span)
+                .summary(summary)
+                .lazy(expand_unit, unit),
+        )
+        .await;
+        advance(&mut ps, &info);
+        pos = next.max(pos.saturating_add(prefix));
     }
-}
-
-async fn expand_unit(cx: Cx, unit: Unit) -> Result<()> {
-    let span = unit.span;
-    cx.emit(Node::new("Start code").span(span.sub(0, unit.prefix)));
-    let nal = unit.nal();
-    let d = vidutil::read_small(&cx, nal, 0x10000).await?;
-    let b0 = d.first().copied().unwrap_or(0);
-    let h0 = nal.sub(0, 1);
-    cx.emit(flag_node("Forbidden zero bit", h0, b0 & 0x80 != 0));
-    match unit.codec {
-        Codec::Avc => {
-            cx.emit(uint("NAL ref idc", h0, ((b0 >> 5) & 3).into(), 2));
-            cx.emit(enumerated(
-                "NAL unit type",
-                h0,
-                (b0 & 0x1f).into(),
-                5,
-                H264_NAL_TYPES,
-            ));
-        }
-        Codec::Hevc => {
-            let b1 = d.get(1).copied().unwrap_or(0);
-            let h01 = nal.sub(0, 2);
-            cx.emit(enumerated(
-                "NAL unit type",
-                h0,
-                ((b0 >> 1) & 0x3f).into(),
-                6,
-                HEVC_NAL_TYPES,
-            ));
-            cx.emit(uint(
-                "Layer ID",
-                h01,
-                (u64::from(b0 & 1) << 5) | u64::from(b1 >> 3),
-                6,
-            ));
-            cx.emit(uint(
-                "Temporal ID plus 1",
-                nal.sub(1, 1),
-                (b1 & 7).into(),
-                3,
-            ));
-        }
-    }
-    let payload = nal.tail(unit.codec.header_len());
-    let t = unit.codec.nal_type(&d);
-    if let Some(sps) = sps_info(unit.codec, t, &d) {
-        sps_fields(&cx, unit.codec, payload, &sps);
-    } else if matches!(
-        (unit.codec, t),
-        (Codec::Avc, Some(6)) | (Codec::Hevc, Some(39 | 40))
-    ) {
-        let rbsp = unescape_rbsp(
-            d.get(vidutil::us(unit.codec.header_len())..)
-                .unwrap_or_default(),
-        );
-        for (kind, body) in sei_messages(&rbsp) {
-            // Spans are approximate when emulation prevention bytes occur.
-            let node = Node::new("SEI message")
-                .span(payload)
-                .summary(sei_name(kind, body));
-            cx.emit(node);
-        }
-    }
-    cx.emit(
-        Node::new("Payload")
-            .span(payload)
-            .summary(format!("{} bytes", payload.len)),
-    );
     Ok(())
 }
 
-fn sps_fields(cx: &Cx, codec: Codec, payload: Span, sps: &SpsInfo) {
-    let (profiles, level) = match codec {
-        Codec::Avc => (vidutil::H264_PROFILES, vidutil::h264_level(sps.level)),
-        Codec::Hevc => (vidutil::HEVC_PROFILES, vidutil::hevc_level(sps.level)),
-    };
-    let at = |o: u64, n: u64| payload.sub(o, n);
-    match codec {
-        Codec::Avc => {
-            cx.emit(enumerated(
-                "Profile",
-                at(0, 1),
-                sps.profile.into(),
-                8,
-                profiles,
-            ));
-            cx.emit(vidutil::hex(
-                "Constraint flags",
-                at(1, 1),
-                sps.tier_or_constraints.into(),
-                8,
-            ));
-            cx.emit(uint("Level", at(2, 1), sps.level.into(), 8).summary(level));
-        }
-        Codec::Hevc => {
-            cx.emit(enumerated(
-                "Profile",
-                at(1, 1),
-                sps.profile.into(),
-                5,
-                profiles,
-            ));
-            cx.emit(text(
-                "Tier",
-                at(1, 1),
-                if sps.tier_or_constraints != 0 {
-                    "High"
-                } else {
-                    "Main"
-                },
-            ));
-            cx.emit(uint("Level", at(12, 1), sps.level.into(), 8).summary(level));
-        }
-    }
-    let rest = payload.tail(3);
+async fn expand_unit(cx: Cx, unit: Unit) -> Result<()> {
     cx.emit(
-        enumerated(
-            "Chroma format",
-            rest,
-            sps.chroma_format,
-            2,
-            &[(0, "monochrome"), (1, "4:2:0"), (2, "4:2:2"), (3, "4:4:4")],
-        )
-        .desc("Decoded from the Exp-Golomb coded remainder"),
+        Node::new("Start code")
+            .span(unit.span.sub(0, unit.prefix))
+            .summary(format!("{} bytes", unit.prefix)),
     );
-    cx.emit(uint("Bit depth", rest, sps.bit_depth, 8));
-    cx.emit(uint("Width", rest, sps.width, 32));
-    cx.emit(uint("Height", rest, sps.height, 32));
+    let nal = unit.nal();
+    let d = vidutil::read_small(&cx, nal, EXPAND_BYTES).await?;
+    let (_, nodes) = parse_nal(unit.codec, &d, nal, &unit.ps, true);
+    for node in nodes {
+        cx.emit(node);
+    }
+    Ok(())
 }
