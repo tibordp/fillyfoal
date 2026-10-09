@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tone.mpc — Musepack SV8, 44100 Hz, 2 ch, 0:01  [0x0+0xca]
     Magic  [0x0+0x4]
@@ -48,10 +48,10 @@ expression: "common::explore(&name, &data)"
       Key: "SE"  [0x75+0x2]
       Size: 3  [0x77+0x1]
       Data  [0x78+0x0]
-  ▾ APE tag — APEv2, 1 items: Tone  [0x78+0x52]
+  ▾ APE tag — APEv2, 1 item, 82 bytes: Tone  [0x78+0x52]
     ▾ Header  [0x78+0x20]
         Preamble: "APETAGEX"  [0x78+0x8]
-        Version: 2000  [0x80+0x4]
+        Version: 2000 — APEv2  [0x80+0x4]
         Tag size: 50  [0x84+0x4]
         Items: 1  [0x88+0x4]
         Flags: 0xa0000000 [HAS_HEADER | IS_HEADER]  [0x8c+0x4]
@@ -64,7 +64,7 @@ expression: "common::explore(&name, &data)"
           Value: "Tone"  [0xa6+0x4]
     ▾ Footer  [0xaa+0x20]
         Preamble: "APETAGEX"  [0xaa+0x8]
-        Version: 2000  [0xb2+0x4]
+        Version: 2000 — APEv2  [0xb2+0x4]
         Tag size: 50  [0xb6+0x4]
         Items: 1  [0xba+0x4]
         Flags: 0x80000000 [HAS_HEADER]  [0xbe+0x4]

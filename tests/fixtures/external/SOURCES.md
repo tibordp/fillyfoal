@@ -290,6 +290,15 @@ and reproduce every file byte for byte.
 | `flac/tone.flac` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | vendor string `ffmpeg` (what FFmpeg writes with `-fflags +bitexact`), attached PNG picture; not byte-reproduced |
 | `ogg/vorbis.ogg` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `encoder=Lavc vorbis` comment, `ffmpeg` vendor string |
 | `opus/tone.opus` | FFmpeg 8 with libopus | `encoder=Lavc libopus` comment |
+| `mp3/lame-vbr-tags.mp3` | LAME 4.0, then mutagen 1.48.1 | written by `tests/data/mp3/make.py`: `lame -V 6 -m m` (VBR, Xing + LAME tag), then mutagen's ID3v2.4 (pictures, chapters, SYLT, ETCO, RVA2, POPM, PRIV, UFID, GEOB, ...) and ID3v1.1, then mutagen's APEv2 with cover art; pictures drawn by FFmpeg's `testsrc` |
+| `mp3/lame-crc-v23.mp3` | LAME 4.0, then mutagen 1.48.1 | written by `tests/data/mp3/make.py`: `lame -p -b 32 -m m` (CRC-protected frames, Info + LAME tag), then mutagen's ID3v2.3 with chapters and a PNG picture |
+| `mp3/freeformat.mp3` | LAME 4.0 | written by `tests/data/mp3/make.py`: `lame --freeformat -b 400 -t` (free-format bitstream, no Xing frame) |
+| `flac/cuesheet.flac` | FFmpeg 8.1.2, then mutagen 1.48.1 | written by `tests/data/mp3/make.py`: FFmpeg FLAC with an attached PNG picture, then mutagen adds a CUESHEET, a SEEKTABLE (with a placeholder), an APPLICATION block and padding |
+| `opus/picture.opus` | FFmpeg 8.1.2 with libopus, then mutagen 1.48.1 | written by `tests/data/mp3/make.py`: mutagen adds a METADATA_BLOCK_PICTURE comment |
+| `aac/tone.loas` | FFmpeg 8.1.2 | written by `tests/data/mp3/make.py`: `-c:a aac -b:a 16k -smc-interval 4 -f latm` (bitexact) |
+| `ac3/surround.ac3` | FFmpeg 8.1.2 | written by `tests/data/mp3/make.py`: 5.1 at 192 kbps with dialnorm, mixing level, room type and the alternate bit stream syntax options (`-dmix_mode ltrt`, `-dsurex_mode on`, `-ad_conv_type hdcd`, ...) |
+| `ac3/surround.eac3` | FFmpeg 8.1.2 | written by `tests/data/mp3/make.py`: E-AC-3 5.1 at 192 kbps with mixing metadata (`-dmix_mode loro`, mix levels, room type) |
+| `dts/surround.dts` | FFmpeg 8.1.2 (experimental `dca` encoder) | written by `tests/data/mp3/make.py`: 5.1(side) at 768 kbps, `-f dts` |
 
 ## FFmpeg: video and containers
 

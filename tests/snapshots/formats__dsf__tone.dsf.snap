@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tone.dsf — DSF, DSD64 (2.8224 MHz), 2 ch, 1 ms  [0x0+0x27a]
   ▾ DSD chunk  [0x0+0x1c]
@@ -24,17 +24,17 @@ expression: "common::explore(&name, &data)"
       Chunk ID: "data"  [0x50+0x4]
       Chunk size: 524  [0x54+0x8]
       Samples  [0x5c+0x200]
-  ▾ ID3v2 tag — ID3v2.3, 1 frames: Tone  [0x25c+0x1e]
+  ▾ ID3v2 tag — ID3v2.3, 1 frame, 30 bytes: Tone  [0x25c+0x1e]
     ▾ Header  [0x25c+0xa]
         Identifier: "ID3"  [0x25c+0x3]
-        Major version: 3  [0x25f+0x1]
+        Major version: 3 — ID3v2.3  [0x25f+0x1]
         Revision: 0  [0x260+0x1]
         Flags: 0x0 []  [0x261+0x1]
-        Size: 20  [0x262+0x4]
+        Size: 20 — 20 bytes  [0x262+0x4]
     ▾ TIT2 — Title: Tone  [0x266+0x10]
         Frame ID: "TIT2"  [0x266+0x4]
         Size: 6  [0x26a+0x4]
         Flags: 0x0 []  [0x26e+0x2]
         Encoding: ISO-8859-1 (0x0)  [0x270+0x1]
         Text: "Tone"  [0x271+0x5]
-      Padding  [0x276+0x4]
+      Padding — 4 bytes  [0x276+0x4]
