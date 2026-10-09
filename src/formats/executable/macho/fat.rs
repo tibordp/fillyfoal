@@ -5,11 +5,12 @@
 //! word is the class version (major version 45 or more), here it is a small
 //! architecture count.
 
-use super::tables::{CPU_TYPE, arch_name};
+use super::tables::{CPU_TYPE, arch_name, subtype_summary};
 use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::arcutil::human_size;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -63,7 +64,7 @@ fn fat_arch(f: &mut Fields<'_>, (wide, file): &(bool, Span)) -> Result<Arch> {
     let cpusubtype = f
         .u32("cpusubtype")
         .hex()
-        .with(|&v, n| n.summary(arch_name(cputype, v)))
+        .with(|&v, n| n.summary(subtype_summary(cputype, v)))
         .emit()?;
     let size = {
         let here = f.pos();
@@ -124,11 +125,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{count} entries"))
             .lazy(arch_table, (table, wide, file)),
     );
-    for ((_, arch), name) in archs.iter().zip(names) {
+    // The slices in file order, with the alignment padding before each.
+    let mut slices: Vec<(Arch, String)> = archs.iter().map(|(_, a)| *a).zip(names).collect();
+    slices.sort_by_key(|(a, _)| a.offset);
+    let mut cursor = table.end().saturating_sub(file.offset);
+    for (arch, name) in slices {
+        if arch.offset > cursor && arch.offset <= file.len {
+            let gap = file.sub(cursor, arch.offset.saturating_sub(cursor));
+            let data = cx.read_avail(gap.sub(0, 0x1_0000)).await?;
+            let zeros = data.iter().all(|&b| b == 0);
+            cx.emit(
+                Node::new(if zeros {
+                    "Padding"
+                } else {
+                    "Unreferenced Data"
+                })
+                .span(gap)
+                .summary(human_size(gap.len)),
+            );
+        }
         let slice = file.sub(arch.offset, arch.size);
         let mut node = embedded(name, input.nested(slice)).summary(format!(
-            "{:#x} bytes at {:#x}, aligned to {:#x}",
-            arch.size,
+            "{} at {:#x}, aligned to {:#x}",
+            human_size(arch.size),
             arch.offset,
             1u64 << arch.align.min(63)
         ));
@@ -139,6 +158,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             ));
         }
         cx.emit(node);
+        cursor = cursor.max(arch.offset.saturating_add(arch.size));
+    }
+    if cursor < file.len {
+        let rest = file.tail(cursor);
+        cx.emit(
+            Node::new("Trailing Data")
+                .span(rest)
+                .summary(human_size(rest.len)),
+        );
     }
     Ok(())
 }
@@ -158,7 +186,7 @@ async fn arch_table(cx: Cx, (table, wide, file): (Span, bool, Span)) -> Result<(
                 (wide, file),
                 fat_arch,
             )
-            .summary(format!("{:#x} bytes at {:#x}", arch.size, arch.offset)),
+            .summary(format!("{} at {:#x}", human_size(arch.size), arch.offset)),
         )
         .await;
     }
