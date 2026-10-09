@@ -2,53 +2,17 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ encrypted-empty-rc4-128.pdf — PDF 1.3, 1 page, title "Secret title", producer "pypdf", encrypted  [0x0+0x404]
+▾ encrypted-empty-rc4-128.pdf — PDF 1.3, 1 page, encrypted (RC4-128, R3), title "Secret title", producer "pypdf"  [0x0+0x404]
     Header: "1.3"  [0x0+0x8]
-  ▾ Trailer — 5 entries  [0x32d+0xc2]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
+  ▾ Trailer — 5 entries  [0x325+0xca]
       /Size: 7  [0x330+0x7]
-    ▾ /Root: "3 0 R" — /Catalog, 2 entries  [0x338+0xb] → 0xb5+0x0
-        /Type: "/Catalog"  [0xc0+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0xcf+0xc] → 0x7a+0x0
-          /Type: "/Pages"  [0x85+0xc]
-          /Count: 1  [0x92+0x8]
-        ▾ /Kids — [4 0 R]  [0x9b+0xf]
-          ▾ [0]: "4 0 R" — /Page, 5 entries  [0xa3+0x5] → 0xe6+0x0
-              /Type: "/Page"  [0xf1+0xb]
-            ▾ /Resources — 0 entries  [0xfd+0x10]
-            ▾ /MediaBox — [0 0 200 100]  [0x10e+0x1d]
-                [0]: 0  [0x11a+0x3]
-                [1]: 0  [0x11e+0x3]
-                [2]: 200  [0x122+0x3]
-                [3]: 100  [0x126+0x3]
-              /Parent: "2 0 R" — already open above  [0x12c+0xd] → 0x7a+0x0
-            ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
-                /Length: 51  [0x15f+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x33]
-                    Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 12" — set font  [#1:0x3+0x9]
-                  Td: "20 50" — move text position  [#1:0xd+0x8]
-                  Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-                  ET — end text  [#1:0x31+0x2]
-    ▾ /Info: "1 0 R" — 3 entries  [0x344+0xb] → 0xf+0x0
-        /Producer: "pypdf" — hex string  [0x1a+0x16]
-        /Title: "Secret title" — hex string  [0x31+0x21]
-        /Author: "fillyfoal" — hex string  [0x53+0x1c]
+      /Root: "3 0 R"  [0x338+0xb] → 0xb5+0x0
+      /Info: "1 0 R"  [0x344+0xb] → 0xf+0x0
     ▾ /ID — [(c04008fb3b416e41127aa54a) (c04008fb3b416e41127aa54a)]  [0x350+0x8d]
         [0]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x356+0x42]
         [1]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x399+0x42]
-    ▾ /Encrypt: "6 0 R" — 7 entries  [0x3de+0xe] → 0x1b9+0x0
-        /V: 2  [0x1c4+0x4]
-        /R: 3  [0x1c9+0x4]
-        /Length: 128  [0x1ce+0xb]
-        /P: 4294967292  [0x1da+0xd]
-        /Filter: "/Standard"  [0x1e8+0x11]
-        /O: 6f a9 c3 c4 b6 86 68 86 f0 e6 54 71 ab d3 58 ef …  |o.....h...Tq..X.| — 32 bytes  [0x1fa+0x45]
-        /U: 38 2c 0a 67 80 0b a7 3b 8e 9d 6f 42 fd 7d e2 83 …  |8,.g...;..oB.}..| — 32 bytes  [0x240+0x45]
+      /Encrypt: "6 0 R"  [0x3de+0xe] → 0x1b9+0x0
   ▾ Document Catalog: "3 0 R" — /Catalog, 2 entries  [0x33e+0x5] → 0xb5+0x0
       /Type: "/Catalog"  [0xc0+0xe]
     ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0xcf+0xc] → 0x7a+0x0
@@ -63,7 +27,7 @@ expression: "common::explore(&display_name(&path), &data)"
               [1]: 0  [0x11e+0x3]
               [2]: 200  [0x122+0x3]
               [3]: 100  [0x126+0x3]
-            /Parent: "2 0 R" — already open above  [0x12c+0xd] → 0x7a+0x0
+            /Parent: "2 0 R"  [0x12c+0xd] → 0x7a+0x0
           ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
               /Length: 51  [0x15f+0xa]
             ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
@@ -71,7 +35,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "none" — 0 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [#1:0x0+0x33]
                   Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-            ▾ Content operators
+            ▾ Operators
                 BT — begin text  [#1:0x0+0x2]
                 Tf: "/F1 12" — set font  [#1:0x3+0x9]
                 Td: "20 50" — move text position  [#1:0xd+0x8]
@@ -81,7 +45,17 @@ expression: "common::explore(&display_name(&path), &data)"
       /Producer: "pypdf" — hex string  [0x1a+0x16]
       /Title: "Secret title" — hex string  [0x31+0x21]
       /Author: "fillyfoal" — hex string  [0x53+0x1c]
-  ▾ Pages
+  ▾ Encryption — RC4-128, R3
+      Object header: "6 0 obj"  [0x1b9+0x8]
+      /V: RC4, key longer than 40 bits (0x2)  [0x1c4+0x4]
+      /R: RC4, up to 128-bit key (0x3)  [0x1c9+0x4]
+      /Length: 128 — 128-bit key  [0x1ce+0xb]
+      /P: 0xfffffffc [print | modify | copy | annotate | fill forms | extract for accessibility | assemble | print high quality | (reserved bits)] — everything allowed  [0x1da+0xd]
+      /Filter: "/Standard"  [0x1e8+0x11]
+      /O: "Vo¨sî3Ç\u{97}Í;\u{90}OÚß\u{81}Jú4ß\u{9a}8öíA¹\u{84}âÆÚ*¦õ" — hex string  [0x1fa+0x45]
+      /U: 01 ea 61 d0 d8 be 08 2a b3 40 ab 7c 8c 71 3b 26 …  |..a....*.@.|.q;&| — 32 bytes  [0x240+0x45]
+      Status: "unlocked: the empty user password (or the one entered) opens it" — RC4-128, R3
+  ▾ Pages — 1 page
     ▾ Page 1 — /Page, 5 entries  [0xe6+0x6d]
         /Type: "/Page"  [0xf1+0xb]
       ▾ /Resources — 0 entries  [0xfd+0x10]
@@ -90,11 +64,7 @@ expression: "common::explore(&display_name(&path), &data)"
           [1]: 0  [0x11e+0x3]
           [2]: 200  [0x122+0x3]
           [3]: 100  [0x126+0x3]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0x12c+0xd] → 0x7a+0x0
-          /Type: "/Pages"  [0x85+0xc]
-          /Count: 1  [0x92+0x8]
-        ▾ /Kids — [4 0 R]  [0x9b+0xf]
-            [0]: "4 0 R" — already open above  [0xa3+0x5] → 0xe6+0x0
+        /Parent: "2 0 R"  [0x12c+0xd] → 0x7a+0x0
       ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
           /Length: 51  [0x15f+0xa]
         ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
@@ -102,23 +72,43 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "none" — 0 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [#1:0x0+0x33]
               Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-        ▾ Content operators
+        ▾ Operators
             BT — begin text  [#1:0x0+0x2]
             Tf: "/F1 12" — set font  [#1:0x3+0x9]
             Td: "20 50" — move text position  [#1:0xd+0x8]
             Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
             ET — end text  [#1:0x31+0x2]
   ▾ Objects — 7 entries
-      Object 0 — free
-    ▾ Object 1 0 — 3 entries  [0xf+0x6a]
-        /Producer: "pypdf" — hex string  [0x1a+0x16]
-        /Title: "Secret title" — hex string  [0x31+0x21]
-        /Author: "fillyfoal" — hex string  [0x53+0x1c]
-    ▾ Object 2 0 — /Pages, 3 entries  [0x7a+0x3a]
-        /Type: "/Pages"  [0x85+0xc]
-        /Count: 1  [0x92+0x8]
-      ▾ /Kids — [4 0 R]  [0x9b+0xf]
-        ▾ [0]: "4 0 R" — /Page, 5 entries  [0xa3+0x5] → 0xe6+0x0
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — 3 entries (in use, generation 0) → 0xf+0x6a
+      Object 2 0: 0x7a — /Pages, 3 entries (in use, generation 0) → 0x7a+0x3a
+      Object 3 0: 0xb5 — /Catalog, 2 entries (in use, generation 0) → 0xb5+0x30
+      Object 4 0: 0xe6 — /Page, 5 entries (in use, generation 0) → 0xe6+0x6d
+      Object 5 0: 0x154 — stream, 1 entries, 51 bytes (in use, generation 0) → 0x154+0x64
+      Object 6 0: 0x1b9 — 7 entries (in use, generation 0) → 0x1b9+0xd6
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 6 objects, cross-reference table at 0x290 with 7 entries  [0x0+0x404]
+      ▾ Body — 6 objects  [0x0+0x290]
+        ▾ Object 1 0 — 3 entries  [0xf+0x6a]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Producer: "pypdf" — hex string  [0x1a+0x16]
+            /Title: "Secret title" — hex string  [0x31+0x21]
+            /Author: "fillyfoal" — hex string  [0x53+0x1c]
+            End keywords: "endobj"  [0x72+0x7]
+        ▾ Object 2 0 — /Pages, 3 entries  [0x7a+0x3a]
+            Object header: "2 0 obj"  [0x7a+0x8]
+            /Type: "/Pages"  [0x85+0xc]
+            /Count: 1  [0x92+0x8]
+          ▾ /Kids — [4 0 R]  [0x9b+0xf]
+              [0]: "4 0 R"  [0xa3+0x5] → 0xe6+0x0
+            End keywords: "endobj"  [0xad+0x7]
+        ▾ Object 3 0 — /Catalog, 2 entries  [0xb5+0x30]
+            Object header: "3 0 obj"  [0xb5+0x8]
+            /Type: "/Catalog"  [0xc0+0xe]
+            /Pages: "2 0 R"  [0xcf+0xc] → 0x7a+0x0
+            End keywords: "endobj"  [0xde+0x7]
+        ▾ Object 4 0 — /Page, 5 entries  [0xe6+0x6d]
+            Object header: "4 0 obj"  [0xe6+0x8]
             /Type: "/Page"  [0xf1+0xb]
           ▾ /Resources — 0 entries  [0xfd+0x10]
           ▾ /MediaBox — [0 0 200 100]  [0x10e+0x1d]
@@ -126,148 +116,53 @@ expression: "common::explore(&display_name(&path), &data)"
               [1]: 0  [0x11e+0x3]
               [2]: 200  [0x122+0x3]
               [3]: 100  [0x126+0x3]
-            /Parent: "2 0 R" — already open above  [0x12c+0xd] → 0x7a+0x0
-          ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
-              /Length: 51  [0x15f+0xa]
-            ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-                Encoding: "UTF-8"
-                Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-              ▾ Lines — 1 line  [#1:0x0+0x33]
-                  Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-            ▾ Content operators
-                BT — begin text  [#1:0x0+0x2]
-                Tf: "/F1 12" — set font  [#1:0x3+0x9]
-                Td: "20 50" — move text position  [#1:0xd+0x8]
-                Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-                ET — end text  [#1:0x31+0x2]
-    ▾ Object 3 0 — /Catalog, 2 entries  [0xb5+0x30]
-        /Type: "/Catalog"  [0xc0+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0xcf+0xc] → 0x7a+0x0
-          /Type: "/Pages"  [0x85+0xc]
-          /Count: 1  [0x92+0x8]
-        ▾ /Kids — [4 0 R]  [0x9b+0xf]
-          ▾ [0]: "4 0 R" — /Page, 5 entries  [0xa3+0x5] → 0xe6+0x0
-              /Type: "/Page"  [0xf1+0xb]
-            ▾ /Resources — 0 entries  [0xfd+0x10]
-            ▾ /MediaBox — [0 0 200 100]  [0x10e+0x1d]
-                [0]: 0  [0x11a+0x3]
-                [1]: 0  [0x11e+0x3]
-                [2]: 200  [0x122+0x3]
-                [3]: 100  [0x126+0x3]
-              /Parent: "2 0 R" — already open above  [0x12c+0xd] → 0x7a+0x0
-            ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
-                /Length: 51  [0x15f+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x33]
-                    Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 12" — set font  [#1:0x3+0x9]
-                  Td: "20 50" — move text position  [#1:0xd+0x8]
-                  Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-                  ET — end text  [#1:0x31+0x2]
-    ▾ Object 4 0 — /Page, 5 entries  [0xe6+0x6d]
-        /Type: "/Page"  [0xf1+0xb]
-      ▾ /Resources — 0 entries  [0xfd+0x10]
-      ▾ /MediaBox — [0 0 200 100]  [0x10e+0x1d]
-          [0]: 0  [0x11a+0x3]
-          [1]: 0  [0x11e+0x3]
-          [2]: 200  [0x122+0x3]
-          [3]: 100  [0x126+0x3]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0x12c+0xd] → 0x7a+0x0
-          /Type: "/Pages"  [0x85+0xc]
-          /Count: 1  [0x92+0x8]
-        ▾ /Kids — [4 0 R]  [0x9b+0xf]
-            [0]: "4 0 R" — already open above  [0xa3+0x5] → 0xe6+0x0
-      ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
-          /Length: 51  [0x15f+0xa]
-        ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-            Encoding: "UTF-8"
-            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [#1:0x0+0x33]
-              Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-        ▾ Content operators
-            BT — begin text  [#1:0x0+0x2]
-            Tf: "/F1 12" — set font  [#1:0x3+0x9]
-            Td: "20 50" — move text position  [#1:0xd+0x8]
-            Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-            ET — end text  [#1:0x31+0x2]
-    ▾ Object 5 0 — stream, 1 entries, 51 bytes  [0x154+0x64]
-        /Length: 51  [0x15f+0xa]
-      ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-          Encoding: "UTF-8"
-          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [#1:0x0+0x33]
-            Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-      ▾ Content operators
-          BT — begin text  [#1:0x0+0x2]
-          Tf: "/F1 12" — set font  [#1:0x3+0x9]
-          Td: "20 50" — move text position  [#1:0xd+0x8]
-          Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-          ET — end text  [#1:0x31+0x2]
-    ▾ Object 6 0 — 7 entries  [0x1b9+0xd6]
-        /V: 2  [0x1c4+0x4]
-        /R: 3  [0x1c9+0x4]
-        /Length: 128  [0x1ce+0xb]
-        /P: 4294967292  [0x1da+0xd]
-        /Filter: "/Standard"  [0x1e8+0x11]
-        /O: 6f a9 c3 c4 b6 86 68 86 f0 e6 54 71 ab d3 58 ef …  |o.....h...Tq..X.| — 32 bytes  [0x1fa+0x45]
-        /U: 38 2c 0a 67 80 0b a7 3b 8e 9d 6f 42 fd 7d e2 83 …  |8,.g...;..oB.}..| — 32 bytes  [0x240+0x45]
-  ▾ Revisions — 1 cross-reference section
-    ▾ Revision 1 — original: cross-reference table at 0x290, 7 entries  [0x290+0x93]
-      ▾ Entries — 7 objects  [0x290+0x93]
-          Object 0 — free
-          Object 1: 0xf — in use, generation 0 → 0xf+0x0
-          Object 2: 0x7a — in use, generation 0 → 0x7a+0x0
-          Object 3: 0xb5 — in use, generation 0 → 0xb5+0x0
-          Object 4: 0xe6 — in use, generation 0 → 0xe6+0x0
-          Object 5: 0x154 — in use, generation 0 → 0x154+0x0
-          Object 6: 0x1b9 — in use, generation 0 → 0x1b9+0x0
-      ▾ Trailer — 5 entries  [0x32d+0xc2]
-          /Size: 7  [0x330+0x7]
-        ▾ /Root: "3 0 R" — /Catalog, 2 entries  [0x338+0xb] → 0xb5+0x0
-            /Type: "/Catalog"  [0xc0+0xe]
-          ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0xcf+0xc] → 0x7a+0x0
-              /Type: "/Pages"  [0x85+0xc]
-              /Count: 1  [0x92+0x8]
-            ▾ /Kids — [4 0 R]  [0x9b+0xf]
-              ▾ [0]: "4 0 R" — /Page, 5 entries  [0xa3+0x5] → 0xe6+0x0
-                  /Type: "/Page"  [0xf1+0xb]
-                ▾ /Resources — 0 entries  [0xfd+0x10]
-                ▾ /MediaBox — [0 0 200 100]  [0x10e+0x1d]
-                    [0]: 0  [0x11a+0x3]
-                    [1]: 0  [0x11e+0x3]
-                    [2]: 200  [0x122+0x3]
-                    [3]: 100  [0x126+0x3]
-                  /Parent: "2 0 R" — already open above  [0x12c+0xd] → 0x7a+0x0
-                ▾ /Contents: "5 0 R" — stream, 1 entries, 51 bytes  [0x13a+0xf] → 0x154+0x0
-                    /Length: 51  [0x15f+0xa]
-                  ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
-                      Encoding: "UTF-8"
-                      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [#1:0x0+0x33]
-                        Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
-                  ▾ Content operators
-                      BT — begin text  [#1:0x0+0x2]
-                      Tf: "/F1 12" — set font  [#1:0x3+0x9]
-                      Td: "20 50" — move text position  [#1:0xd+0x8]
-                      Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
-                      ET — end text  [#1:0x31+0x2]
-        ▾ /Info: "1 0 R" — 3 entries  [0x344+0xb] → 0xf+0x0
-            /Producer: "pypdf" — hex string  [0x1a+0x16]
-            /Title: "Secret title" — hex string  [0x31+0x21]
-            /Author: "fillyfoal" — hex string  [0x53+0x1c]
-        ▾ /ID — [(c04008fb3b416e41127aa54a) (c04008fb3b416e41127aa54a)]  [0x350+0x8d]
-            [0]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x356+0x42]
-            [1]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x399+0x42]
-        ▾ /Encrypt: "6 0 R" — 7 entries  [0x3de+0xe] → 0x1b9+0x0
+            /Parent: "2 0 R"  [0x12c+0xd] → 0x7a+0x0
+            /Contents: "5 0 R"  [0x13a+0xf] → 0x154+0x0
+            End keywords: "endobj"  [0x14c+0x7]
+        ▾ Object 5 0 — stream, 1 entries, 51 bytes  [0x154+0x64]
+            Object header: "5 0 obj"  [0x154+0x8]
+            /Length: 51  [0x15f+0xa]
+            Stream keyword: "stream"  [0x16c+0x8]
+          ▾ Stream data — UTF-8 text, 1 line  [0x174+0x33]
+              Encoding: "UTF-8"
+              Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#1:0x0+0x33]
+                Line 1: "BT /F1 12 Tf 20 50 Td (Hello encrypted world) Tj ET"  [#1:0x0+0x33]
+          ▾ Operators
+              BT — begin text  [#1:0x0+0x2]
+              Tf: "/F1 12" — set font  [#1:0x3+0x9]
+              Td: "20 50" — move text position  [#1:0xd+0x8]
+              Tj: "(Hello encrypted world)" — show text  [#1:0x16+0x1a]
+              ET — end text  [#1:0x31+0x2]
+            End keywords: "endstream endobj"  [0x1a7+0x11]
+        ▾ Object 6 0 — 7 entries  [0x1b9+0xd6]
+            Object header: "6 0 obj"  [0x1b9+0x8]
             /V: 2  [0x1c4+0x4]
             /R: 3  [0x1c9+0x4]
             /Length: 128  [0x1ce+0xb]
             /P: 4294967292  [0x1da+0xd]
             /Filter: "/Standard"  [0x1e8+0x11]
-            /O: 6f a9 c3 c4 b6 86 68 86 f0 e6 54 71 ab d3 58 ef …  |o.....h...Tq..X.| — 32 bytes  [0x1fa+0x45]
-            /U: 38 2c 0a 67 80 0b a7 3b 8e 9d 6f 42 fd 7d e2 83 …  |8,.g...;..oB.}..| — 32 bytes  [0x240+0x45]
-    startxref: 0x290  [0x3f0+0x14] → 0x290+0x4
+            /O: "Vo¨sî3Ç\u{97}Í;\u{90}OÚß\u{81}Jú4ß\u{9a}8öíA¹\u{84}âÆÚ*¦õ" — hex string  [0x1fa+0x45]
+            /U: 01 ea 61 d0 d8 be 08 2a b3 40 ab 7c 8c 71 3b 26 …  |..a....*.@.|.q;&| — 32 bytes  [0x240+0x45]
+            End keywords: "endobj"  [0x288+0x7]
+      ▾ Cross-reference table — 7 entries in 1 subsection  [0x290+0x95]
+          Keyword: "xref"  [0x290+0x4]
+        ▾ Objects 0–6 — 7 entries  [0x295+0x90]
+            Header: "0 7"  [0x295+0x3]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x299+0x14]
+            Object 1: 0xf — in use, generation 0  [0x2ad+0x14] → 0xf+0x0
+            Object 2: 0x7a — in use, generation 0  [0x2c1+0x14] → 0x7a+0x0
+            Object 3: 0xb5 — in use, generation 0  [0x2d5+0x14] → 0xb5+0x0
+            Object 4: 0xe6 — in use, generation 0  [0x2e9+0x14] → 0xe6+0x0
+            Object 5: 0x154 — in use, generation 0  [0x2fd+0x14] → 0x154+0x0
+            Object 6: 0x1b9 — in use, generation 0  [0x311+0x14] → 0x1b9+0x0
+      ▾ Trailer — 5 entries  [0x325+0xca]
+          /Size: 7  [0x330+0x7]
+          /Root: "3 0 R"  [0x338+0xb] → 0xb5+0x0
+          /Info: "1 0 R"  [0x344+0xb] → 0xf+0x0
+        ▾ /ID — [(c04008fb3b416e41127aa54a) (c04008fb3b416e41127aa54a)]  [0x350+0x8d]
+            [0]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x356+0x42]
+            [1]: "c04008fb3b416e41127aa54ac330279c" — hex string  [0x399+0x42]
+          /Encrypt: "6 0 R"  [0x3de+0xe] → 0x1b9+0x0
+        startxref: 0x290  [0x3f0+0xd] → 0x290+0x4
+        End-of-file marker: "%%EOF"  [0x3fe+0x5]

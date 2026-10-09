@@ -1,0 +1,34 @@
+%!PS-Adobe-3.0
+%%Title: fillyfoal
+%%Creator: fillyfoal
+%%Pages: 2
+%%EndComments
+% Source for the Ghostscript pdfwrite fixtures (see make.sh).
+[ /Title (fillyfoal) /Author (fillyfoal) /Creator (fillyfoal) /DOCINFO pdfmark
+%%Page: 1 1
+<< /PageSize [300 200] >> setpagedevice
+/Helvetica findfont 18 scalefont setfont
+20 160 moveto (Hello, PDF) show
+/Times-Italic findfont 12 scalefont setfont
+20 140 moveto (fillyfoal fixture) show
+gsave
+20 20 translate 64 64 scale
+8 8 8 [8 0 0 -8 0 8]
+<ff0000 ff4000 ff8000 ffc000 ffff00 c0ff00 80ff00 40ff00
+ ff0020 ff4020 ff8020 ffc020 ffff20 c0ff20 80ff20 40ff20
+ ff0040 ff4040 ff8040 ffc040 ffff40 c0ff40 80ff40 40ff40
+ ff0060 ff4060 ff8060 ffc060 ffff60 c0ff60 80ff60 40ff60
+ ff0080 ff4080 ff8080 ffc080 ffff80 c0ff80 80ff80 40ff80
+ ff00a0 ff40a0 ff80a0 ffc0a0 ffffa0 c0ffa0 80ffa0 40ffa0
+ ff00c0 ff40c0 ff80c0 ffc0c0 ffffc0 c0ffc0 80ffc0 40ffc0
+ ff00e0 ff40e0 ff80e0 ffc0e0 ffffe0 c0ffe0 80ffe0 40ffe0>
+false 3 colorimage
+grestore
+120 40 moveto 280 100 lineto stroke
+showpage
+%%Page: 2 2
+<< /PageSize [200 300] >> setpagedevice
+/Courier findfont 10 scalefont setfont
+20 270 moveto (Second page) show
+showpage
+%%EOF

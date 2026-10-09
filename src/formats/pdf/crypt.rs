@@ -37,6 +37,7 @@ pub struct Security {
     o: Vec<u8>,
     u: Vec<u8>,
     ue: Vec<u8>,
+    perms: Vec<u8>,
     p: i32,
     id0: Vec<u8>,
     pub encrypt_metadata: bool,
@@ -108,6 +109,7 @@ impl Security {
             o: string(dict, "O"),
             u: string(dict, "U"),
             ue: string(dict, "UE"),
+            perms: string(dict, "Perms"),
             p,
             id0,
             encrypt_metadata: !matches!(
@@ -118,6 +120,35 @@ impl Security {
             strings: method(dict, "StrF", v),
             realm,
         })
+    }
+
+    /// The cipher and revision, e.g. "AES-256, R6".
+    pub fn describe(&self) -> String {
+        let method = if self.streams == Method::Identity {
+            self.strings
+        } else {
+            self.streams
+        };
+        let cipher = match method {
+            Method::Identity => "no cipher".to_owned(),
+            Method::Rc4 => format!("RC4-{}", self.key_len.saturating_mul(8)),
+            Method::AesV2 => "AES-128".to_owned(),
+            Method::AesV3 => "AES-256".to_owned(),
+        };
+        format!("{cipher}, R{}", self.revision)
+    }
+
+    /// Revisions 5 and 6: whether `/Perms`, decrypted with the file key,
+    /// carries the marker `adb` and repeats `/P` (`None` if there is no
+    /// `/Perms` to check).
+    pub fn perms_match(&self, file_key: &[u8]) -> Option<bool> {
+        if self.revision < 5 {
+            return None;
+        }
+        let mut block: [u8; 16] = self.perms.get(..16)?.try_into().ok()?;
+        Aes::new(file_key)?.decrypt_block(&mut block);
+        let p = self.p.to_le_bytes();
+        Some(block.get(9..12) == Some(b"adb".as_slice()) && block.get(..4) == Some(p.as_slice()))
     }
 
     /// The file key for user password `password`, if it is the right one.

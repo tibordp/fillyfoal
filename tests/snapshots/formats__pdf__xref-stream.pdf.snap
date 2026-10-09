@@ -4,6 +4,7 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ xref-stream.pdf — PDF 1.5, 1 page, title "Object streams", producer "pdf_gen.py"  [0x0+0x261]
     Header: "1.5"  [0x0+0x8]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
   ▾ Trailer — /XRef, 8 entries  [0x17e+0xce]
       /Type: "/XRef"  [0x189+0xb]
       /Size: 8  [0x195+0x7]
@@ -11,35 +12,8 @@ expression: "common::explore(&display_name(&path), &data)"
         [0]: 1  [0x1a1+0x1]
         [1]: 2  [0x1a3+0x1]
         [2]: 1  [0x1a5+0x1]
-    ▾ /Root: "1 0 R" — /Catalog, 2 entries  [0x1a8+0xb]
-        /Type: "/Catalog"  [#2:0x17+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [#2:0x26+0xc]
-          /Type: "/Pages"  [#2:0x39+0xc]
-        ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-          ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-              /Type: "/Page"  [#2:0x63+0xb]
-              /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-            ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                [0]: 0  [#2:0x88+0x1]
-                [1]: 0  [#2:0x8a+0x1]
-                [2]: 200  [#2:0x8c+0x3]
-                [3]: 100  [#2:0x90+0x3]
-            ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                /Length: 30  [0x122+0xa]
-                /Filter: "/FlateDecode"  [0x12d+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#3:0x0+0x1b]
-                    Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-              ▾ Content operators
-                  rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                  re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                  f — fill  [#3:0x19+0x1]
-          /Count: 1  [#2:0x54+0x8]
-    ▾ /Info: "4 0 R" — 2 entries  [0x1b4+0xb]
-        /Title: "Object streams"  [#2:0xab+0x17]
-        /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
+      /Root: "1 0 R" — in object stream 5  [0x1a8+0xb]
+      /Info: "4 0 R" — in object stream 5  [0x1b4+0xb]
       /Filter: "/FlateDecode"  [0x1c0+0x14]
     ▾ /DecodeParms — 2 entries  [0x1d5+0x2b]
         /Columns: 4  [0x1e5+0xa]
@@ -52,7 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
         ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
             /Type: "/Page"  [#2:0x63+0xb]
-            /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
+            /Parent: "2 0 R" — in object stream 5  [#2:0x6f+0xd]
           ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
               [0]: 0  [#2:0x88+0x1]
               [1]: 0  [#2:0x8a+0x1]
@@ -66,7 +40,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [#3:0x0+0x1b]
                   Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-            ▾ Content operators
+            ▾ Operators
                 rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
                 re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
                 f — fill  [#3:0x19+0x1]
@@ -74,14 +48,10 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Document Information: "4 0 R" — 2 entries  [0x1ba+0x5]
       /Title: "Object streams"  [#2:0xab+0x17]
       /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
-  ▾ Pages
+  ▾ Pages — 1 page
     ▾ Page 1 — /Page, 4 entries  [#2:0x60+0x47]
         /Type: "/Page"  [#2:0x63+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [#2:0x6f+0xd]
-          /Type: "/Pages"  [#2:0x39+0xc]
-        ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-            [0]: "3 0 R" — already open above  [#2:0x4d+0x5]
-          /Count: 1  [#2:0x54+0x8]
+        /Parent: "2 0 R" — in object stream 5  [#2:0x6f+0xd]
       ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
           [0]: 0  [#2:0x88+0x1]
           [1]: 0  [#2:0x8a+0x1]
@@ -95,288 +65,98 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [#3:0x0+0x1b]
               Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-        ▾ Content operators
+        ▾ Operators
             rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
             re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
             f — fill  [#3:0x19+0x1]
   ▾ Objects — 8 entries
-      Object 0 — free
-    ▾ Object 1 — /Catalog, 2 entries  [#2:0x14+0x21]
-        /Type: "/Catalog"  [#2:0x17+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [#2:0x26+0xc]
-          /Type: "/Pages"  [#2:0x39+0xc]
-        ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-          ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-              /Type: "/Page"  [#2:0x63+0xb]
-              /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-            ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                [0]: 0  [#2:0x88+0x1]
-                [1]: 0  [#2:0x8a+0x1]
-                [2]: 200  [#2:0x8c+0x3]
-                [3]: 100  [#2:0x90+0x3]
-            ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                /Length: 30  [0x122+0xa]
-                /Filter: "/FlateDecode"  [0x12d+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#3:0x0+0x1b]
-                    Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-              ▾ Content operators
-                  rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                  re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                  f — fill  [#3:0x19+0x1]
-          /Count: 1  [#2:0x54+0x8]
-    ▾ Object 2 — /Pages, 3 entries  [#2:0x36+0x29]
-        /Type: "/Pages"  [#2:0x39+0xc]
-      ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-        ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-            /Type: "/Page"  [#2:0x63+0xb]
-            /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-          ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-              [0]: 0  [#2:0x88+0x1]
-              [1]: 0  [#2:0x8a+0x1]
-              [2]: 200  [#2:0x8c+0x3]
-              [3]: 100  [#2:0x90+0x3]
-          ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-              /Length: 30  [0x122+0xa]
-              /Filter: "/FlateDecode"  [0x12d+0x14]
-            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                Encoding: "UTF-8"
-                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-              ▾ Lines — 1 line  [#3:0x0+0x1b]
-                  Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-            ▾ Content operators
-                rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                f — fill  [#3:0x19+0x1]
-        /Count: 1  [#2:0x54+0x8]
-    ▾ Object 3 — /Page, 4 entries  [#2:0x60+0x47]
-        /Type: "/Page"  [#2:0x63+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [#2:0x6f+0xd]
-          /Type: "/Pages"  [#2:0x39+0xc]
-        ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-            [0]: "3 0 R" — already open above  [#2:0x4d+0x5]
-          /Count: 1  [#2:0x54+0x8]
-      ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-          [0]: 0  [#2:0x88+0x1]
-          [1]: 0  [#2:0x8a+0x1]
-          [2]: 200  [#2:0x8c+0x3]
-          [3]: 100  [#2:0x90+0x3]
-      ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-          /Length: 30  [0x122+0xa]
-          /Filter: "/FlateDecode"  [0x12d+0x14]
-        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-            Encoding: "UTF-8"
-            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [#3:0x0+0x1b]
-              Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-        ▾ Content operators
-            rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-            re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-            f — fill  [#3:0x19+0x1]
-    ▾ Object 4 — 2 entries  [#2:0xa8+0x34]
-        /Title: "Object streams"  [#2:0xab+0x17]
-        /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
-    ▾ Object 5 0 — stream, /ObjStm, 5 entries, 161 bytes, /FlateDecode  [0xf+0x107]
-        /Type: "/ObjStm"  [0x1a+0xd]
-        /N: 4  [0x28+0x4]
-        /First: 20  [0x2d+0x9]
-        /Length: 161  [0x37+0xb]
-        /Filter: "/FlateDecode"  [0x43+0x14]
-      ▾ Stream data — UTF-8 text, LF line endings, 4 lines  [0x63+0xa1]
-          Encoding: "UTF-8"
-          Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
-        ▾ Lines — 4 lines  [#2:0x0+0xdd]
-            Line 1: "1 0 2 34 3 76 4 148 << /Type /Catalog /Pages 2 0 R >>"  [#2:0x0+0x35]
-            Line 2: "<< /Type /Pages /Kids [3 0 R] /Count 1 >>"  [#2:0x36+0x29]
-            Line 3: "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 100] /Contents 6 0 R >>"  [#2:0x60+0x47]
-            Line 4: "<< /Title (Object streams) /Producer (pdf_gen.py) >>"  [#2:0xa8+0x34]
-      ▾ Contained objects — 4 objects
-        ▾ Object 1: "1 0 R" — /Catalog, 2 entries  [#2:0x14+0x0]
-            /Type: "/Catalog"  [#2:0x17+0xe]
-          ▾ /Pages: "2 0 R" — /Pages, 3 entries  [#2:0x26+0xc]
-              /Type: "/Pages"  [#2:0x39+0xc]
-            ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-              ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-                  /Type: "/Page"  [#2:0x63+0xb]
-                  /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-                ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                    [0]: 0  [#2:0x88+0x1]
-                    [1]: 0  [#2:0x8a+0x1]
-                    [2]: 200  [#2:0x8c+0x3]
-                    [3]: 100  [#2:0x90+0x3]
-                ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                    /Length: 30  [0x122+0xa]
-                    /Filter: "/FlateDecode"  [0x12d+0x14]
-                  ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                      Encoding: "UTF-8"
-                      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [#3:0x0+0x1b]
-                        Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-                  ▾ Content operators
-                      rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                      re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                      f — fill  [#3:0x19+0x1]
-              /Count: 1  [#2:0x54+0x8]
-        ▾ Object 2: "2 0 R" — /Pages, 3 entries  [#2:0x36+0x0]
-            /Type: "/Pages"  [#2:0x39+0xc]
-          ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-            ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-                /Type: "/Page"  [#2:0x63+0xb]
-                /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-              ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                  [0]: 0  [#2:0x88+0x1]
-                  [1]: 0  [#2:0x8a+0x1]
-                  [2]: 200  [#2:0x8c+0x3]
-                  [3]: 100  [#2:0x90+0x3]
-              ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                  /Length: 30  [0x122+0xa]
-                  /Filter: "/FlateDecode"  [0x12d+0x14]
-                ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                    Encoding: "UTF-8"
-                    Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                  ▾ Lines — 1 line  [#3:0x0+0x1b]
-                      Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-                ▾ Content operators
-                    rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                    re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                    f — fill  [#3:0x19+0x1]
-            /Count: 1  [#2:0x54+0x8]
-        ▾ Object 3: "3 0 R" — /Page, 4 entries  [#2:0x60+0x0]
-            /Type: "/Page"  [#2:0x63+0xb]
-          ▾ /Parent: "2 0 R" — /Pages, 3 entries  [#2:0x6f+0xd]
-              /Type: "/Pages"  [#2:0x39+0xc]
-            ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-                [0]: "3 0 R" — already open above  [#2:0x4d+0x5]
-              /Count: 1  [#2:0x54+0x8]
-          ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-              [0]: 0  [#2:0x88+0x1]
-              [1]: 0  [#2:0x8a+0x1]
-              [2]: 200  [#2:0x8c+0x3]
-              [3]: 100  [#2:0x90+0x3]
-          ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-              /Length: 30  [0x122+0xa]
-              /Filter: "/FlateDecode"  [0x12d+0x14]
-            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                Encoding: "UTF-8"
-                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-              ▾ Lines — 1 line  [#3:0x0+0x1b]
-                  Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-            ▾ Content operators
-                rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                f — fill  [#3:0x19+0x1]
-        ▾ Object 4: "4 0 R" — 2 entries  [#2:0xa8+0x0]
-            /Title: "Object streams"  [#2:0xab+0x17]
-            /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
-    ▾ Object 6 0 — stream, 2 entries, 30 bytes, /FlateDecode  [0x117+0x66]
-        /Length: 30  [0x122+0xa]
-        /Filter: "/FlateDecode"  [0x12d+0x14]
-      ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-          Encoding: "UTF-8"
-          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [#3:0x0+0x1b]
-            Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-      ▾ Content operators
-          rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-          re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-          f — fill  [#3:0x19+0x1]
-    ▾ Object 7 0 — stream, /XRef, 8 entries, 35 bytes, /FlateDecode  [0x17e+0xce]
-        /Type: "/XRef"  [0x189+0xb]
-        /Size: 8  [0x195+0x7]
-      ▾ /W — [1 2 1]  [0x19d+0xa]
-          [0]: 1  [0x1a1+0x1]
-          [1]: 2  [0x1a3+0x1]
-          [2]: 1  [0x1a5+0x1]
-      ▾ /Root: "1 0 R" — /Catalog, 2 entries  [0x1a8+0xb]
-          /Type: "/Catalog"  [#2:0x17+0xe]
-        ▾ /Pages: "2 0 R" — /Pages, 3 entries  [#2:0x26+0xc]
-            /Type: "/Pages"  [#2:0x39+0xc]
-          ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-            ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-                /Type: "/Page"  [#2:0x63+0xb]
-                /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-              ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                  [0]: 0  [#2:0x88+0x1]
-                  [1]: 0  [#2:0x8a+0x1]
-                  [2]: 200  [#2:0x8c+0x3]
-                  [3]: 100  [#2:0x90+0x3]
-              ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                  /Length: 30  [0x122+0xa]
-                  /Filter: "/FlateDecode"  [0x12d+0x14]
-                ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                    Encoding: "UTF-8"
-                    Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                  ▾ Lines — 1 line  [#3:0x0+0x1b]
-                      Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-                ▾ Content operators
-                    rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                    re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                    f — fill  [#3:0x19+0x1]
-            /Count: 1  [#2:0x54+0x8]
-      ▾ /Info: "4 0 R" — 2 entries  [0x1b4+0xb]
-          /Title: "Object streams"  [#2:0xab+0x17]
-          /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
-        /Filter: "/FlateDecode"  [0x1c0+0x14]
-      ▾ /DecodeParms — 2 entries  [0x1d5+0x2b]
-          /Columns: 4  [0x1e5+0xa]
-          /Predictor: 12  [0x1f0+0xd]
-        /Length: 35  [0x201+0xa]
-      ▾ Stream data — 0x20 bytes decoded  [0x217+0x23]
-          Data  [#1:0x0+0x20]
+      Object 0: 0 — free, next free object 0, generation 255
+      Object 1: 5 — /Catalog, 2 entries (in object stream 5, index 0) → #2:0x14+0x21
+      Object 2: 5 — /Pages, 3 entries (in object stream 5, index 1) → #2:0x36+0x29
+      Object 3: 5 — /Page, 4 entries (in object stream 5, index 2) → #2:0x60+0x47
+      Object 4: 5 — 2 entries (in object stream 5, index 3) → #2:0xa8+0x34
+      Object 5 0: 0xf — stream, object stream, 4 objects, /ObjStm, 5 entries, 161 bytes, /FlateDecode (in use, generation 0) → 0xf+0x107
+      Object 6 0: 0x117 — stream, 2 entries, 30 bytes, /FlateDecode (in use, generation 0) → 0x117+0x66
+      Object 7 0: 0x17e — stream, cross-reference stream, /XRef, 8 entries, 35 bytes, /FlateDecode (PNG Up predictor, 4 columns) (in use, generation 0) → 0x17e+0xce
   ▾ Revisions — 1 cross-reference section
-    ▾ Revision 1 — original: cross-reference stream at 0x17e, 8 entries  [0x17e+0xce]
-      ▾ Entries — 8 objects  [0x17e+0xce]
-          Object 0 — free
-          Object 1 — object stream 5, index 0
-          Object 2 — object stream 5, index 1
-          Object 3 — object stream 5, index 2
-          Object 4 — object stream 5, index 3
-          Object 5: 0xf — in use, generation 0 → 0xf+0x0
-          Object 6: 0x117 — in use, generation 0 → 0x117+0x0
-          Object 7: 0x17e — in use, generation 0 → 0x17e+0x0
-      ▾ Stream dictionary — /XRef, 8 entries  [0x17e+0xce]
+    ▾ Revision 1 — original: 2 objects, cross-reference stream at 0x17e with 8 entries  [0x0+0x261]
+      ▾ Body — 2 objects  [0x0+0x17e]
+        ▾ Object 5 0 — stream, object stream, 4 objects, /ObjStm, 5 entries, 161 bytes, /FlateDecode  [0xf+0x107]
+            Object header: "5 0 obj"  [0xf+0x8]
+            /Type: "/ObjStm"  [0x1a+0xd]
+            /N: 4  [0x28+0x4]
+            /First: 20  [0x2d+0x9]
+            /Length: 161  [0x37+0xb]
+            /Filter: "/FlateDecode"  [0x43+0x14]
+            Stream keyword: "stream"  [0x5a+0x9]
+          ▾ Stream data — 4 objects, 0xdd bytes decoded  [0x63+0xa1]
+            ▾ Offsets — 4 pairs of object number and offset  [#2:0x0+0x14]
+                Object 1: 0 — at 0x14 in the decoded stream  [#2:0x0+0x3] → #2:0x14+0x0
+                Object 2: 34 — at 0x36 in the decoded stream  [#2:0x4+0x4] → #2:0x36+0x0
+                Object 3: 76 — at 0x60 in the decoded stream  [#2:0x9+0x4] → #2:0x60+0x0
+                Object 4: 148 — at 0xa8 in the decoded stream  [#2:0xe+0x5] → #2:0xa8+0x0
+            ▾ Object 1 — /Catalog, 2 entries  [#2:0x14+0x21]
+                /Type: "/Catalog"  [#2:0x17+0xe]
+                /Pages: "2 0 R" — in object stream 5  [#2:0x26+0xc]
+            ▾ Object 2 — /Pages, 3 entries  [#2:0x36+0x29]
+                /Type: "/Pages"  [#2:0x39+0xc]
+              ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
+                  [0]: "3 0 R" — in object stream 5  [#2:0x4d+0x5]
+                /Count: 1  [#2:0x54+0x8]
+            ▾ Object 3 — /Page, 4 entries  [#2:0x60+0x47]
+                /Type: "/Page"  [#2:0x63+0xb]
+                /Parent: "2 0 R" — in object stream 5  [#2:0x6f+0xd]
+              ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
+                  [0]: 0  [#2:0x88+0x1]
+                  [1]: 0  [#2:0x8a+0x1]
+                  [2]: 200  [#2:0x8c+0x3]
+                  [3]: 100  [#2:0x90+0x3]
+                /Contents: "6 0 R"  [#2:0x95+0xf] → 0x117+0x0
+            ▾ Object 4 — 2 entries  [#2:0xa8+0x34]
+                /Title: "Object streams"  [#2:0xab+0x17]
+                /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
+            End keywords: "endstream endobj"  [0x104+0x12]
+        ▾ Object 6 0 — stream, 2 entries, 30 bytes, /FlateDecode  [0x117+0x66]
+            Object header: "6 0 obj"  [0x117+0x8]
+            /Length: 30  [0x122+0xa]
+            /Filter: "/FlateDecode"  [0x12d+0x14]
+            Stream keyword: "stream"  [0x144+0x9]
+          ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [#3:0x0+0x1b]
+                Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
+          ▾ Operators
+              rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
+              re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
+              f — fill  [#3:0x19+0x1]
+            End keywords: "endstream endobj"  [0x16b+0x12]
+      ▾ Cross-reference stream — stream, cross-reference stream, /XRef, 8 entries, 35 bytes, /FlateDecode (PNG Up predictor, 4 columns)  [0x17e+0xce]
+          Object header: "7 0 obj"  [0x17e+0x8]
           /Type: "/XRef"  [0x189+0xb]
           /Size: 8  [0x195+0x7]
         ▾ /W — [1 2 1]  [0x19d+0xa]
             [0]: 1  [0x1a1+0x1]
             [1]: 2  [0x1a3+0x1]
             [2]: 1  [0x1a5+0x1]
-        ▾ /Root: "1 0 R" — /Catalog, 2 entries  [0x1a8+0xb]
-            /Type: "/Catalog"  [#2:0x17+0xe]
-          ▾ /Pages: "2 0 R" — /Pages, 3 entries  [#2:0x26+0xc]
-              /Type: "/Pages"  [#2:0x39+0xc]
-            ▾ /Kids — [3 0 R]  [#2:0x46+0xd]
-              ▾ [0]: "3 0 R" — /Page, 4 entries  [#2:0x4d+0x5]
-                  /Type: "/Page"  [#2:0x63+0xb]
-                  /Parent: "2 0 R" — already open above  [#2:0x6f+0xd]
-                ▾ /MediaBox — [0 0 200 100]  [#2:0x7d+0x17]
-                    [0]: 0  [#2:0x88+0x1]
-                    [1]: 0  [#2:0x8a+0x1]
-                    [2]: 200  [#2:0x8c+0x3]
-                    [3]: 100  [#2:0x90+0x3]
-                ▾ /Contents: "6 0 R" — stream, 2 entries, 30 bytes, /FlateDecode  [#2:0x95+0xf] → 0x117+0x0
-                    /Length: 30  [0x122+0xa]
-                    /Filter: "/FlateDecode"  [0x12d+0x14]
-                  ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x14d+0x1e]
-                      Encoding: "UTF-8"
-                      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [#3:0x0+0x1b]
-                        Line 1: "0 0 1 rg 10 10 180 80 re f"  [#3:0x0+0x1a]
-                  ▾ Content operators
-                      rg: "0 0 1" — set non-stroking RGB  [#3:0x0+0x8]
-                      re: "10 10 180 80" — rectangle  [#3:0x9+0xf]
-                      f — fill  [#3:0x19+0x1]
-              /Count: 1  [#2:0x54+0x8]
-        ▾ /Info: "4 0 R" — 2 entries  [0x1b4+0xb]
-            /Title: "Object streams"  [#2:0xab+0x17]
-            /Producer: "pdf_gen.py"  [#2:0xc3+0x16]
+          /Root: "1 0 R" — in object stream 5  [0x1a8+0xb]
+          /Info: "4 0 R" — in object stream 5  [0x1b4+0xb]
           /Filter: "/FlateDecode"  [0x1c0+0x14]
         ▾ /DecodeParms — 2 entries  [0x1d5+0x2b]
             /Columns: 4  [0x1e5+0xa]
             /Predictor: 12  [0x1f0+0xd]
           /Length: 35  [0x201+0xa]
-      ▾ Stream data — 0x20 bytes decoded  [0x217+0x23]
-          Data  [#1:0x0+0x20]
-    startxref: 0x17e  [0x24d+0x14] → 0x17e+0x4
+          Stream keyword: "stream"  [0x20e+0x9]
+        ▾ Stream data — 8 entries, 0x20 bytes decoded in rows of 1+2+1 bytes (type, field 2, field 3)  [0x217+0x23]
+          ▾ Objects 0–7 — 8 entries  [#1:0x0+0x20]
+              Object 0: 0 — free, next free object 0, generation 255  [#1:0x0+0x4]
+              Object 1: 5 — in object stream 5, index 0  [#1:0x4+0x4]
+              Object 2: 5 — in object stream 5, index 1  [#1:0x8+0x4]
+              Object 3: 5 — in object stream 5, index 2  [#1:0xc+0x4]
+              Object 4: 5 — in object stream 5, index 3  [#1:0x10+0x4]
+              Object 5: 0xf — in use, generation 0  [#1:0x14+0x4] → 0xf+0x0
+              Object 6: 0x117 — in use, generation 0  [#1:0x18+0x4] → 0x117+0x0
+              Object 7: 0x17e — in use, generation 0  [#1:0x1c+0x4] → 0x17e+0x0
+          End keywords: "endstream endobj"  [0x23a+0x12]
+        startxref: 0x17e  [0x24d+0xd] → 0x17e+0x4
+        End-of-file marker: "%%EOF"  [0x25b+0x5]

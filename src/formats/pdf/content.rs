@@ -87,13 +87,57 @@ const OPERATORS: &[(&str, &str)] = &[
     ("\"", "set spacing, next line, show text"),
 ];
 
-fn describe(op: &str) -> Option<&'static str> {
-    OPERATORS.iter().find(|(o, _)| *o == op).map(|(_, d)| *d)
+/// The operators of CMaps (ToUnicode and CID maps), PostScript-like
+/// programs that define a code-to-Unicode or code-to-CID mapping.
+const CMAP_OPERATORS: &[(&str, &str)] = &[
+    ("begin", "push dictionary"),
+    ("beginbfchar", "begin character-to-Unicode mappings"),
+    ("beginbfrange", "begin range-to-Unicode mappings"),
+    ("begincidchar", "begin character-to-CID mappings"),
+    ("begincidrange", "begin range-to-CID mappings"),
+    ("begincmap", "begin CMap"),
+    ("begincodespacerange", "begin code space ranges"),
+    ("beginnotdefchar", "begin notdef character mappings"),
+    ("beginnotdefrange", "begin notdef range mappings"),
+    ("currentdict", "push the current dictionary"),
+    ("def", "define"),
+    ("defineresource", "define resource"),
+    ("dict", "create dictionary"),
+    ("end", "pop dictionary"),
+    ("endbfchar", "end character-to-Unicode mappings"),
+    ("endbfrange", "end range-to-Unicode mappings"),
+    ("endcidchar", "end character-to-CID mappings"),
+    ("endcidrange", "end range-to-CID mappings"),
+    ("endcmap", "end CMap"),
+    ("endcodespacerange", "end code space ranges"),
+    ("endnotdefchar", "end notdef character mappings"),
+    ("endnotdefrange", "end notdef range mappings"),
+    ("findresource", "find resource"),
+    ("pop", "discard"),
+    ("usecmap", "use another CMap"),
+    ("usefont", "use font"),
+];
+
+/// The syntax a stream is read as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Syntax {
+    /// A content stream (page, form, pattern, glyph).
+    Content,
+    /// A CMap.
+    CMap,
+}
+
+fn describe(op: &str, syntax: Syntax) -> Option<&'static str> {
+    let table = match syntax {
+        Syntax::Content => OPERATORS,
+        Syntax::CMap => CMAP_OPERATORS,
+    };
+    table.iter().find(|(o, _)| *o == op).map(|(_, d)| *d)
 }
 
 /// Lists the operators of the content stream decoded into `span`, reading
 /// it as it goes: each operand and operator is a bounded step.
-pub async fn operators(cx: &Cx, span: Span) -> Result<()> {
+pub async fn operators(cx: &Cx, span: Span, syntax: Syntax) -> Result<()> {
     // A parse error ends the listing (reported); a read error fails it.
     macro_rules! attempt {
         ($e:expr) => {
@@ -188,9 +232,9 @@ pub async fn operators(cx: &Cx, span: Span) -> Result<()> {
         if !text.is_empty() {
             node = node.value(Value::Text(text));
         }
-        if let Some(d) = describe(&op) {
+        if let Some(d) = describe(&op, syntax) {
             node = node.summary(d);
-        } else {
+        } else if syntax == Syntax::Content {
             node = node.diag(Diagnostic::warning("unknown operator"));
         }
         cx.push(node).await;
@@ -203,6 +247,16 @@ pub async fn operators(cx: &Cx, span: Span) -> Result<()> {
 fn short(item: &syntax::Item) -> String {
     use syntax::Obj;
     match &item.obj {
+        Obj::Str { bytes, hex: true } => {
+            let shown = bytes.get(..MAX_SHOWN / 2).unwrap_or(bytes);
+            let more = if shown.len() < bytes.len() {
+                " …"
+            } else {
+                ""
+            };
+            let digits: String = shown.iter().map(|b| format!("{b:02x}")).collect();
+            format!("<{digits}{more}>")
+        }
         Obj::Str { bytes, .. } => match bytes.get(..MAX_SHOWN) {
             // Very long strings are shown in part.
             Some(shown) if bytes.len() > MAX_SHOWN => format!("({} …)", syntax::text(shown)),
