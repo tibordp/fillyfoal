@@ -8,6 +8,7 @@
 
 mod boxes;
 mod canon;
+mod codec;
 mod heif;
 mod jp2;
 mod meta;
@@ -374,13 +375,22 @@ pub struct Ctx {
     pub depth: u32,
     /// The region of boxes this box is part of (for sibling lookups).
     pub siblings: Span,
+    /// The region of boxes the parent is part of (the parent's siblings).
+    pub outer: Span,
+    /// Timescale of the movie (`mvhd`), inside `moov`; 0 if unknown.
+    pub movie_timescale: u32,
+    /// Timescale of the enclosing track's media (`mdhd`); 0 if unknown.
+    pub media_timescale: u32,
 }
 
 impl Ctx {
-    fn child(self, parent: [u8; 4], siblings: Span) -> Ctx {
+    /// The context of the children of a box of type `parent` whose body is
+    /// `siblings`.
+    pub fn child(self, parent: [u8; 4], siblings: Span) -> Ctx {
         Ctx {
             parent,
             depth: self.depth.saturating_add(1),
+            outer: self.siblings,
             siblings,
             ..self
         }
@@ -408,8 +418,8 @@ const CONTAINERS: &[&[u8; 4]] = &[
     b"moov", b"trak", b"mdia", b"minf", b"stbl", b"dinf", b"edts", b"udta", b"mvex", b"moof",
     b"traf", b"mfra", b"tref", b"sinf", b"schi", b"iprp", b"ipco", b"gmhd", b"tapt", b"clip",
     b"matt", b"rinf", b"strk", b"strd", b"wave", b"meco", b"trgr", b"jp2h", b"res ", b"uinf",
-    b"jpch", b"jplh", b"cgrp", b"ftab", b"ilst", b"grpl", b"hnti", b"hinf", b"tmcd", b"imap",
-    b"rmra", b"rmda", b"cmov", b"fiin", b"paen", b"ludt", b"vttc",
+    b"jpch", b"jplh", b"cgrp", b"ilst", b"grpl", b"hnti", b"hinf", b"tmcd", b"imap", b"rmra",
+    b"rmda", b"cmov", b"fiin", b"paen", b"ludt", b"vttc", b"sv3d", b"proj",
 ];
 
 /// Containers whose children start after a fixed prefix (FullBox header,
@@ -423,7 +433,12 @@ pub fn container_skip(kind: &[u8; 4]) -> u64 {
 }
 
 fn is_container(h: &Header, ctx: &Ctx) -> bool {
-    // Items in an 'ilst' are containers of 'data' boxes.
+    // Track references ('tmcd', 'chap', ...) are lists of track IDs, not
+    // containers, whatever their type; items in an 'ilst' are containers
+    // of 'data' boxes.
+    if &ctx.parent == b"tref" || (&ctx.parent == b"gmhd" && &h.kind == b"text") {
+        return false;
+    }
     CONTAINERS.contains(&&h.kind) || &ctx.parent == b"ilst"
 }
 
@@ -529,10 +544,23 @@ async fn decode(cx: &Cx, st: &BoxState) -> Result<()> {
                 .unwrap_or(ctx.handler),
             _ => ctx.handler,
         };
-        let child = Ctx {
+        let mut child = Ctx {
             handler,
             ..ctx.child(h.kind, body)
         };
+        match &h.kind {
+            b"moov" => {
+                if let Some(ts) = summary::timescale(cx, body, &[b"mvhd"]).await {
+                    child.movie_timescale = ts;
+                }
+            }
+            b"trak" => {
+                if let Some(ts) = summary::timescale(cx, body, &[b"mdia", b"mdhd"]).await {
+                    child.media_timescale = ts;
+                }
+            }
+            _ => {}
+        }
         return children(cx, st.input, body, child).await;
     }
     if boxes::decode(cx, st).await? {
@@ -573,7 +601,7 @@ async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     }
     match &h.kind {
         b"mdat" | b"free" | b"skip" | b"wide" | b"idat" => Some(format!("{} bytes", st.body().len)),
-        b"trak" => summary::track(cx, st.body())
+        b"trak" => summary::track(cx, st.input, st.ctx.brand, st.body())
             .await
             .ok()
             .map(|t| t.describe()),
@@ -616,6 +644,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         handler: [0; 4],
         depth: 0,
         siblings: input.span,
+        outer: input.span,
+        movie_timescale: 0,
+        media_timescale: 0,
     };
     children(&cx, input, input.span, ctx).await
 }
@@ -631,6 +662,27 @@ pub fn full_box(f: &mut Fields<'_>) -> Result<(u8, u32)> {
     let raw = field.get()?;
     let flags = raw.iter().fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
     f.node(hex("Flags", span, flags.into(), 24));
+    Ok((version, flags))
+}
+
+/// Emits a FullBox version and flags decoded with `table`.
+pub fn full_box_flags(f: &mut Fields<'_>, table: crate::value::FlagTable) -> Result<(u8, u32)> {
+    let version = f.u8("Version").emit()?;
+    let field = f.bytes("Flags", 3);
+    let span = field.span();
+    let raw = field.get()?;
+    let flags = raw.iter().fold(0u32, |acc, &b| (acc << 8) | u32::from(b));
+    let (set, unknown) = crate::value::decode_flags(table, flags.into());
+    f.node(
+        Node::new("Flags")
+            .span(span)
+            .value(crate::value::Value::Flags {
+                raw: flags.into(),
+                bits: 24,
+                set,
+                unknown,
+            }),
+    );
     Ok((version, flags))
 }
 
