@@ -199,7 +199,7 @@ public static class FillyNative {
         uint cI64 = Col(s, t, "I64", 15, 0, 0, 0);             // LongLong
         uint cGuid = Col(s, t, "Guid", 16, 0, 0, 0);           // GUID
         uint cU16 = Col(s, t, "U16", 17, 0, 0, 0);             // UnsignedShort
-        uint cTags = Col(s, t, "Tags", 10, 64, 1200, 0x4 | 0x400); // tagged, multi-valued
+        uint cTags = Col(s, t, "Tags", 10, 64, 1200, 0x2 | 0x400); // JET_bitColumnTagged | JET_bitColumnMultiValued
         Check(Index(s, t, "PrimaryKey", 0x1 | 0x2, "+Id\0\0", 90), "JetCreateIndex primary");
         Check(Index(s, t, "ByName", 0, "+Name\0-When\0\0", 80), "JetCreateIndex ByName");
 
