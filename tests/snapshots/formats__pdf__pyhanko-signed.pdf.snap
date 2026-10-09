@@ -1441,7 +1441,6 @@ expression: "common::explore(&display_name(&path), &data)"
                 [1]: "/FlateDecode"  [0x2807+0xc]
               /Length: 205  [0x2816+0xb]
             ▾ Stream data — UTF-8 text, LF line endings, 8 lines  [0x282c+0xcd]
-                ! note: 0x1 bytes follow the encoded stream
                 Encoding: "UTF-8"
                 Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
               ▾ Lines — 8 lines  [#6:0x0+0xee]
@@ -2223,7 +2222,6 @@ expression: "common::explore(&display_name(&path), &data)"
                 [1]: "/FlateDecode"  [0x292f+0xc]
               /Length: 114  [0x293e+0xb]
             ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x2954+0x72]
-                ! note: 0x1 bytes follow the encoded stream
                 Encoding: "UTF-8"
                 Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
               ▾ Lines — 3 lines  [#10:0x0+0x65]
@@ -3421,7 +3419,6 @@ expression: "common::explore(&display_name(&path), &data)"
             [1]: "/FlateDecode"  [0x2807+0xc]
           /Length: 205  [0x2816+0xb]
         ▾ Stream data — UTF-8 text, LF line endings, 8 lines  [0x282c+0xcd]
-            ! note: 0x1 bytes follow the encoded stream
             Encoding: "UTF-8"
             Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
           ▾ Lines — 8 lines  [#6:0x0+0xee]
@@ -4203,7 +4200,6 @@ expression: "common::explore(&display_name(&path), &data)"
             [1]: "/FlateDecode"  [0x292f+0xc]
           /Length: 114  [0x293e+0xb]
         ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x2954+0x72]
-            ! note: 0x1 bytes follow the encoded stream
             Encoding: "UTF-8"
             Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
           ▾ Lines — 3 lines  [#10:0x0+0x65]
@@ -6632,7 +6628,6 @@ expression: "common::explore(&display_name(&path), &data)"
             /Length: 205  [0x2816+0xb]
             Stream keyword: "stream"  [0x2824+0x8]
           ▾ Stream data — UTF-8 text, LF line endings, 8 lines  [0x282c+0xcd]
-              ! note: 0x1 bytes follow the encoded stream
               Encoding: "UTF-8"
               Line endings: "LF" — 8 LF, 0 CRLF, 0 CR
             ▾ Lines — 8 lines  [#6:0x0+0xee]
@@ -6677,7 +6672,6 @@ expression: "common::explore(&display_name(&path), &data)"
             /Length: 114  [0x293e+0xb]
             Stream keyword: "stream"  [0x294c+0x8]
           ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x2954+0x72]
-              ! note: 0x1 bytes follow the encoded stream
               Encoding: "UTF-8"
               Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
             ▾ Lines — 3 lines  [#10:0x0+0x65]

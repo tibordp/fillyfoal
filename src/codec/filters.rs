@@ -243,6 +243,10 @@ pub struct Ascii85 {
     /// A leading `<`, held until the next byte shows whether it starts
     /// the prefix.
     lt: bool,
+    /// The `~` of the `~>` end marker has been read: the data ends at the
+    /// next byte, which is consumed too (so a chain ending after this
+    /// filter does not leave the `>` behind as trailing data).
+    tilde: bool,
 }
 
 impl Ascii85 {
@@ -260,7 +264,19 @@ impl Ascii85 {
 
     fn char(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
         match b {
-            b'~' => return Ok(false),
+            b'~' => {
+                self.tilde = true;
+                // The data is complete: flush now, so that a stage after
+                // this one can end before the `>` arrives.
+                if self.n > 1 {
+                    self.flush(self.n, out);
+                } else if self.n == 1 {
+                    return Err(Diagnostic::malformed(
+                        "ASCII85 data ends with a single character",
+                    ));
+                }
+                self.n = 0;
+            }
             b'z' if self.n == 0 => out.extend_from_slice(&[0; 4]),
             b'!'..=b'u' => {
                 if let Some(slot) = self.group.get_mut(self.n) {
@@ -286,6 +302,9 @@ impl Ascii85 {
 
 impl ByteFilter for Ascii85 {
     fn byte(&mut self, b: u8, out: &mut Vec<u8>) -> Result<bool> {
+        if self.tilde {
+            return Ok(false);
+        }
         let first = self.seen;
         self.seen = self.seen.saturating_add(1).min(2);
         match first {
