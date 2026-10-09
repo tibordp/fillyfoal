@@ -1,5 +1,6 @@
 //! Legacy office and productivity formats: Lotus 1-2-3, Quattro Pro, Works
-//! and Excel 2–4 worksheets (record streams), ClarisWorks/AppleWorks and
+//! and Excel 2–4 worksheets (record streams; Excel's decoded by the BIFF
+//! code in `cfb::biff`), ClarisWorks/AppleWorks and
 //! SketchUp headers, and the text interchange formats of the era: SYLK, DIF,
 //! Quicken QIF, OFX, Microsoft Project MPX and Ami Pro documents.
 
@@ -11,7 +12,7 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::datakit::{clip, hex, text, uint};
+use crate::formats::util::datakit::{clip, hex, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -372,223 +373,10 @@ fn biff_probe(h: &Head<'_>) -> bool {
 declare_format!(pub XLS_BIFF = "xls-biff", "Excel 2.x–4.0 worksheet (BIFF2–4)", ["xls", "xlw", "xlc", "xlm"], "application/vnd.ms-excel",
     Probe::Custom(biff_probe), biff);
 
-const BIFF_RECORDS: EnumTable = &[
-    (0x0000, "DIMENSIONS"),
-    (0x0001, "BLANK"),
-    (0x0002, "INTEGER"),
-    (0x0003, "NUMBER"),
-    (0x0004, "LABEL"),
-    (0x0005, "BOOLERR"),
-    (0x0006, "FORMULA"),
-    (0x0007, "STRING"),
-    (0x0008, "ROW"),
-    (0x0009, "BOF"),
-    (0x000a, "EOF"),
-    (0x000b, "INDEX"),
-    (0x000c, "CALCCOUNT"),
-    (0x000d, "CALCMODE"),
-    (0x000e, "PRECISION"),
-    (0x000f, "REFMODE"),
-    (0x0010, "DELTA"),
-    (0x0011, "ITERATION"),
-    (0x0012, "PROTECT"),
-    (0x0013, "PASSWORD"),
-    (0x0014, "HEADER"),
-    (0x0015, "FOOTER"),
-    (0x0016, "EXTERNCOUNT"),
-    (0x0017, "EXTERNSHEET"),
-    (0x0018, "NAME"),
-    (0x0019, "WINDOWPROTECT"),
-    (0x001a, "VERTICALPAGEBREAKS"),
-    (0x001b, "HORIZONTALPAGEBREAKS"),
-    (0x001c, "NOTE"),
-    (0x001d, "SELECTION"),
-    (0x001e, "FORMAT"),
-    (0x001f, "FORMATCOUNT"),
-    (0x0020, "COLUMNDEFAULT"),
-    (0x0021, "ARRAY"),
-    (0x0022, "DATEMODE"),
-    (0x0023, "EXTERNNAME"),
-    (0x0024, "COLWIDTH"),
-    (0x0025, "DEFAULTROWHEIGHT"),
-    (0x0026, "LEFTMARGIN"),
-    (0x0027, "RIGHTMARGIN"),
-    (0x0028, "TOPMARGIN"),
-    (0x0029, "BOTTOMMARGIN"),
-    (0x002a, "PRINTHEADERS"),
-    (0x002b, "PRINTGRIDLINES"),
-    (0x002f, "FILEPASS"),
-    (0x0031, "FONT"),
-    (0x0032, "FONT2"),
-    (0x003c, "CONTINUE"),
-    (0x003d, "WINDOW1"),
-    (0x003e, "WINDOW2"),
-    (0x0040, "BACKUP"),
-    (0x0041, "PANE"),
-    (0x0042, "CODEPAGE"),
-    (0x0043, "XF"),
-    (0x0044, "IXFE"),
-    (0x0045, "FONTCOLOR"),
-    (0x0055, "DEFCOLWIDTH"),
-    (0x0056, "BUILTINFMTCOUNT"),
-    (0x007d, "COLINFO"),
-    (0x0092, "PALETTE"),
-    (0x0099, "STANDARDWIDTH"),
-    (0x0200, "DIMENSIONS"),
-    (0x0201, "BLANK"),
-    (0x0203, "NUMBER"),
-    (0x0204, "LABEL"),
-    (0x0205, "BOOLERR"),
-    (0x0206, "FORMULA"),
-    (0x0207, "STRING"),
-    (0x0208, "ROW"),
-    (0x0209, "BOF"),
-    (0x020b, "INDEX"),
-    (0x0218, "NAME"),
-    (0x0221, "ARRAY"),
-    (0x0223, "EXTERNNAME"),
-    (0x0225, "DEFAULTROWHEIGHT"),
-    (0x0231, "FONT"),
-    (0x023e, "WINDOW2"),
-    (0x0243, "XF"),
-    (0x027e, "RK"),
-    (0x0293, "STYLE"),
-    (0x0406, "FORMULA"),
-    (0x0409, "BOF"),
-    (0x041e, "FORMAT"),
-    (0x0443, "XF"),
-];
-
-const BIFF_DOC_TYPES: EnumTable = &[
-    (0x10, "worksheet"),
-    (0x20, "chart"),
-    (0x40, "macro sheet"),
-    (0x100, "workbook"),
-];
-
-/// An RK number: a 30-bit integer or the top of an IEEE double, optionally
-/// divided by 100.
-fn rk(raw: u32) -> f64 {
-    let v = if raw & 2 != 0 {
-        f64::from(i32::from_le_bytes(raw.to_le_bytes()) >> 2)
-    } else {
-        f64::from_bits(u64::from(raw & !3) << 32)
-    };
-    if raw & 1 != 0 { v / 100.0 } else { v }
-}
-
-fn biff_cell(kind: u16, data: &[u8]) -> Option<(String, Value)> {
-    let row = u32::from(u16_le(data, 0)?);
-    let col = u32::from(u16_le(data, 2)?);
-    let addr = cell_name(col, row);
-    // BIFF2 cells carry 3 attribute bytes; BIFF3+ a 2-byte XF index.
-    let value = match kind {
-        0x0001 | 0x0201 => text(""),
-        0x0002 => uint(u16_le(data, 7)?, 16),
-        0x0003 | 0x0006 => float(f64::from_bits(u64_le(data, 7)?)),
-        0x0203 | 0x0206 | 0x0406 => float(f64::from_bits(u64_le(data, 6)?)),
-        0x0004 => {
-            let n = usize::from(data.get(7).copied()?);
-            text(crate::text::latin1(data.get(8..8usize.saturating_add(n))?))
-        }
-        0x0204 => {
-            let n = usize::from(u16_le(data, 6)?);
-            text(crate::text::latin1(data.get(8..8usize.saturating_add(n))?))
-        }
-        0x0005 | 0x0205 => {
-            let at = if kind == 0x0005 { 7 } else { 6 };
-            let v = data.get(at).copied()?;
-            if data.get(at.saturating_add(1)) == Some(&0) {
-                Value::Bool(v != 0)
-            } else {
-                hex(v, 8)
-            }
-        }
-        0x027e => float(rk(u32_le(data, 6)?)),
-        _ => return None,
-    };
-    Some((addr, value))
-}
-
+/// The records are named, summarised and decoded by the workbook-stream
+/// code, version by version.
 async fn biff(cx: Cx, input: Input) -> Result<()> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 8)).await?;
-    let biff_version = match u16_le(&head, 0) {
-        Some(0x0009) => 2,
-        Some(0x0209) => 3,
-        _ => 4,
-    };
-    let doc = u16_le(&head, 6).unwrap_or(0);
-    let mut cur = Cursor::new(&cx, file, LE);
-    let (mut records, mut cells) = (0u64, 0u64);
-    let mut fonts = 0u32;
-    while cur.remaining() >= 4 {
-        let start = cur.pos();
-        let kind = cur.u16().await?;
-        let len = u64::from(cur.u16().await?);
-        let body = cur.span(len);
-        let data = cur.bytes(len).await?;
-        records = records.saturating_add(1);
-        let name = lookup(BIFF_RECORDS, kind.into())
-            .map_or_else(|| format!("Record {kind:#06x}"), str::to_owned);
-        let mut node = Node::new(name.clone()).span(cur.since(start)).target(body);
-        if let Some((addr, value)) = biff_cell(kind, &data) {
-            cells = cells.saturating_add(1);
-            node = Node::new(addr)
-                .span(cur.since(start))
-                .target(body)
-                .value(value)
-                .desc(name);
-        } else {
-            node = match kind {
-                0x0009 | 0x0209 | 0x0409 => node.value(Value::Enum {
-                    raw: u16_le(&data, 2).unwrap_or(0).into(),
-                    bits: 16,
-                    name: lookup(BIFF_DOC_TYPES, u16_le(&data, 2).unwrap_or(0).into()),
-                }),
-                0x0000 | 0x0200 => {
-                    let r = |i: usize| u32::from(u16_le(&data, i).unwrap_or(0));
-                    node.value(text(format!(
-                        "{}:{}",
-                        cell_name(r(4), r(0)),
-                        cell_name(r(6).saturating_sub(1), r(2).saturating_sub(1))
-                    )))
-                }
-                0x0031 | 0x0231 => {
-                    fonts = fonts.saturating_add(1);
-                    let at = if kind == 0x0031 { 4 } else { 6 };
-                    let n = usize::from(data.get(at).copied().unwrap_or(0));
-                    node.value(text(crate::text::latin1(
-                        data.get(at.saturating_add(1)..at.saturating_add(1).saturating_add(n))
-                            .unwrap_or_default(),
-                    )))
-                }
-                0x001e | 0x041e => {
-                    let at = if kind == 0x001e { 0 } else { 2 };
-                    let n = usize::from(data.get(at).copied().unwrap_or(0));
-                    node.value(text(crate::text::latin1(
-                        data.get(at.saturating_add(1)..at.saturating_add(1).saturating_add(n))
-                            .unwrap_or_default(),
-                    )))
-                }
-                0x0042 => node.value(uint(u16_le(&data, 0).unwrap_or(0), 16)),
-                0x0022 => node
-                    .value(Value::Bool(u16_le(&data, 0) == Some(1)))
-                    .desc("1904 date system"),
-                _ => node.summary(format!("{len} bytes")),
-            };
-        }
-        cx.progress_in(file, file.offset.saturating_add(cur.pos()));
-        cx.push(node).await;
-        if kind == 0x000a {
-            break;
-        }
-    }
-    cx.annotate(format!(
-        "Excel BIFF{biff_version} {}, {records} records, {cells} cells, {fonts} fonts",
-        lookup(BIFF_DOC_TYPES, doc.into()).unwrap_or("document")
-    ));
-    Ok(())
+    crate::formats::cfb::biff::early_stream(cx, input).await
 }
 
 // ---------------------------------------------------------------------------

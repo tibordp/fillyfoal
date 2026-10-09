@@ -307,6 +307,8 @@ async fn dissect_with(cx: Cx, input: Input, schema: &'static Schema, kind: Kind)
 async fn elements(cx: Cx, level: Level) -> Result<()> {
     let region = level.span;
     let mut matcher = Matcher::new(level.schema);
+    // The last object identifier among the children, for ANY DEFINED BY.
+    let mut last_oid: Option<String> = None;
     let mut pos = 0u64;
     while pos < region.len {
         let peek = cx.read_avail(region.sub(pos, HEADER_MAX)).await?;
@@ -326,7 +328,13 @@ async fn elements(cx: Cx, level: Level) -> Result<()> {
         let total = tlv.header.saturating_add(content_len).saturating_add(eoc);
         let whole = region.sub(pos, total);
         let content = region.sub(content_start, content_len);
-        let (name, schema) = matcher.child(tlv.id);
+        let (mut name, schema) = matcher.child(tlv.id);
+        let (renamed, schema) = schema.resolve(last_oid.as_deref());
+        name = renamed.or(name);
+        if tlv.id == 0x06 && matches!(level.schema, Schema::Seq(_)) {
+            let oid = cx.read_avail(content.sub(0, PREVIEW)).await?;
+            last_oid = der::oid(&oid);
+        }
         let mut node = element(&cx, &level, &tlv, whole, content, name, schema).await?;
         if whole.len < total {
             node = node.diag(Diagnostic::truncated(
@@ -733,7 +741,7 @@ fn pkcs7_summary(info: &[u8]) -> Option<String> {
     let mut content = None;
     for (t, c) in der::elements(signed) {
         match t.id {
-            0x30 => content = der::first(c).map(|(_, oid)| oid_name(oid)),
+            0x30 => content = encapsulated_summary(c),
             0xa0 => certificates = der::elements(c).count(),
             0x31 => signers = der::elements(c).count(),
             _ => {}
@@ -748,6 +756,28 @@ fn pkcs7_summary(info: &[u8]) -> Option<String> {
         plural(certificates),
         plural(signers)
     ))
+}
+
+/// The content type of an EncapsulatedContentInfo, and for Authenticode
+/// (SpcIndirectDataContent) the algorithm of the signed file digest.
+fn encapsulated_summary(info: &[u8]) -> Option<String> {
+    let mut fields = der::elements(info);
+    let (_, oid) = fields.next()?;
+    let kind = oid_name(oid);
+    if der::oid(oid).as_deref() != Some("1.3.6.1.4.1.311.2.1.4") {
+        return Some(kind);
+    }
+    let digest = fields
+        .next()
+        .and_then(|(_, explicit)| der::first(explicit))
+        .filter(|(t, _)| t.id == 0x30)
+        .and_then(|(_, indirect)| der::elements(indirect).nth(1))
+        .and_then(|(_, digest_info)| der::first(digest_info))
+        .and_then(|(_, alg)| algorithm(alg));
+    Some(match digest {
+        Some(alg) => format!("{kind}, {alg} digest"),
+        None => kind,
+    })
 }
 
 fn pkcs12_summary(pfx: &[u8]) -> Option<String> {

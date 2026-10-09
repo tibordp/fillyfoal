@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use super::ptg::{self, Names};
 use super::rec::{
-    self, K, LE, Spec, StrForm, cell_name, column_name, enumv, hex, number, quoted, uint, xl_string,
+    self, K, LE, Spec, StrForm, cell_name, column_name, hex, number, quoted, uint, xl_string,
 };
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
@@ -366,6 +366,48 @@ pub const RECORDS: EnumTable = &[
     (0x1067, "BOPPOPCUSTOM"),
     (0x1068, "FBI2"),
 ];
+
+/// Record types only BIFF2–4 have: BIFF2 numbered the cell, BOF and several
+/// other records below 0x0100; BIFF3 and BIFF4 renumbered some of them
+/// (0x02xx, 0x04xx) as their layouts changed, and BIFF5 again.
+const EARLY_RECORDS: EnumTable = &[
+    (0x0000, "DIMENSIONS"),
+    (0x0001, "BLANK"),
+    (0x0002, "INTEGER"),
+    (0x0003, "NUMBER"),
+    (0x0004, "LABEL"),
+    (0x0005, "BOOLERR"),
+    (0x0007, "STRING"),
+    (0x0008, "ROW"),
+    (0x0009, "BOF"),
+    (0x000b, "INDEX"),
+    (0x001e, "FORMAT"),
+    (0x001f, "FORMATCOUNT"),
+    (0x0020, "COLUMNDEFAULT"),
+    (0x0021, "ARRAY"),
+    (0x0024, "COLWIDTH"),
+    (0x0025, "DEFAULTROWHEIGHT"),
+    (0x0032, "FONT2"),
+    (0x003e, "WINDOW2"),
+    (0x0043, "XF"),
+    (0x0044, "IXFE"),
+    (0x0045, "FONTCOLOR"),
+    (0x0056, "BUILTINFMTCOUNT"),
+    (0x0206, "FORMULA"),
+    (0x0209, "BOF"),
+    (0x0243, "XF"),
+];
+
+/// A record type's name; the BIFF2–4 numbers only in such a stream.
+fn record_name(kind: u16, book: &Book) -> Option<&'static str> {
+    lookup(RECORDS, kind.into()).or_else(|| {
+        if book.early() {
+            lookup(EARLY_RECORDS, kind.into())
+        } else {
+            None
+        }
+    })
+}
 
 const BOF_TYPES: EnumTable = &[
     (0x0005, "workbook globals"),
@@ -804,11 +846,19 @@ fn spec(kind: u16, biff8: bool) -> Option<Spec> {
             ("Flags", K::F16(COLINFO_FLAGS)),
             ("reserved", K::U16),
         ],
-        0x0014 | 0x0015 | 0x0207 | 0x01ba => {
+        0x0014 | 0x0015 | 0x01ba => {
             if biff8 {
                 &[("Text", K::XlStr)]
             } else {
                 &[("Text", K::Str8)]
+            }
+        }
+        // STRING: BIFF3–5 byte strings have a 16-bit count.
+        0x0207 => {
+            if biff8 {
+                &[("Text", K::XlStr)]
+            } else {
+                &[("Text", K::Str16)]
             }
         }
         0x0204 => {
@@ -902,10 +952,31 @@ fn spec(kind: u16, biff8: bool) -> Option<Spec> {
 #[derive(Default)]
 pub struct Book {
     pub biff8: bool,
+    /// 2, 3 or 4 for a standalone Excel 2.x–4.0 stream, 5 or 8 for a
+    /// compound-file workbook; 0 when there was no BOF.
+    pub version: u8,
     pub strings: Vec<String>,
     pub names: Names,
     pub codepage: u16,
     pub date1904: bool,
+}
+
+impl Book {
+    /// A BIFF2–4 stream, whose records have their own layouts.
+    fn early(&self) -> bool {
+        matches!(self.version, 2..=4)
+    }
+
+    /// The version whose formulas [`ptg::tokens_for`] decodes.
+    fn formula_version(&self) -> Option<u8> {
+        if self.biff8 {
+            Some(8)
+        } else if self.early() {
+            Some(self.version)
+        } else {
+            None
+        }
+    }
 }
 
 /// One record header, as walked.
@@ -972,7 +1043,39 @@ async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
     while let Some(r) = next_rec(cx, stream, pos).await? {
         let data = cx.read_avail(r.body().sub(0, 0x2020)).await?;
         match r.kind {
-            0x0809 => book.biff8 = u16_le(&data, 0) == Some(0x0600),
+            0x0809 => {
+                book.biff8 = u16_le(&data, 0) == Some(0x0600);
+                if book.version == 0 {
+                    book.version = if book.biff8 { 8 } else { 5 };
+                }
+            }
+            0x0009 | 0x0209 | 0x0409 if book.version == 0 => {
+                book.version = match r.kind {
+                    0x0009 => 2,
+                    0x0209 => 3,
+                    _ => 4,
+                };
+            }
+            0x0018 | 0x0218 if book.early() => {
+                // BIFF2: five header bytes; BIFF3–4: six, with 16-bit flags.
+                let (flags, cch, at) = if r.kind == 0x0018 {
+                    (0u16, data.get(3).copied().unwrap_or(0), 5usize)
+                } else {
+                    (
+                        u16_le(&data, 0).unwrap_or(0),
+                        data.get(3).copied().unwrap_or(0),
+                        6usize,
+                    )
+                };
+                let name = if flags & 0x20 != 0 {
+                    ptg::builtin_name(data.get(at).copied().unwrap_or(0))
+                } else {
+                    data.get(at..at.saturating_add(cch.into()))
+                        .map(|raw| rec::codepage_text(book.codepage, raw))
+                        .unwrap_or_default()
+                };
+                book.names.defined.push(name);
+            }
             0x0042 => book.codepage = u16_le(&data, 0).unwrap_or(1252),
             0x0022 => book.date1904 = u16_le(&data, 0) == Some(1),
             0x0085 => {
@@ -1315,13 +1418,13 @@ async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result
             continued = r.kind;
         }
         let data = cx.read_avail(r.body().sub(0, PEEK)).await?;
-        let name = lookup(RECORDS, r.kind.into())
+        let name = record_name(r.kind, &book)
             .map_or_else(|| format!("Record {:#06x}", r.kind), str::to_owned);
         let mut node = Node::new(name).span(r.span).value(hex(r.kind, 16));
         let summary = if r.kind == 0x003c {
             Some(format!(
                 "continues {}",
-                lookup(RECORDS, continued.into()).unwrap_or("the previous record")
+                record_name(continued, &book).unwrap_or("the previous record")
             ))
         } else {
             describe(&cx, r.kind, &data, &book, &parts).await
@@ -1359,6 +1462,15 @@ async fn substream(cx: Cx, (input, stream, span): (Input, Span, Span)) -> Result
 
 /// A record's one-line summary.
 async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) -> Option<String> {
+    if book.early() {
+        let len = parts.first().map_or(0, |p| p.len);
+        if let Some(s) = early_describe(kind, data, len, book) {
+            return Some(s);
+        }
+        if !early_shared(kind) {
+            return None;
+        }
+    }
     let cell = |d: &[u8]| -> Option<String> {
         Some(cell_name(u16_le(d, 2)?.into(), u16_le(d, 0)?.into()))
     };
@@ -1608,7 +1720,7 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
             let form = if book.biff8 {
                 StrForm::Wide16
             } else {
-                StrForm::Bytes8
+                StrForm::Bytes16
             };
             quoted(&xl_string(data, 0, form)?.0, 60)
         }
@@ -1646,7 +1758,11 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
 
 /// The cached value of a FORMULA record.
 fn formula_value(data: &[u8]) -> Option<String> {
-    let raw = data.get(6..14)?;
+    formula_result(data.get(6..14)?)
+}
+
+/// A FORMULA record's 8-byte cached result.
+fn formula_result(raw: &[u8]) -> Option<String> {
     if u16_le(raw, 6)? == 0xffff {
         Some(match raw.first()? {
             0 => "string (next record)".to_owned(),
@@ -1690,11 +1806,11 @@ async fn record(
     (stream, span, kind, parts): (Stream, Span, u16, Arc<Vec<Span>>),
 ) -> Result<()> {
     let book = book(&cx, stream).await;
-    cx.emit(
-        Node::new("Type")
-            .span(span.sub(0, 2))
-            .value(enumv(kind, 16, RECORDS)),
-    );
+    cx.emit(Node::new("Type").span(span.sub(0, 2)).value(Value::Enum {
+        raw: kind.into(),
+        bits: 16,
+        name: record_name(kind, &book),
+    }));
     cx.emit(
         Node::new("Length")
             .span(span.sub(2, 2))
@@ -1707,7 +1823,11 @@ async fn record(
     let block = cx.block(body).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     let biff8 = book.biff8;
+    // BIFF2–4 records with layouts of their own (and those without a
+    // decoder) are done here; the rest share the BIFF5 layout.
+    let early_done = book.early() && early_fields(&mut f, kind, &book)?;
     match kind {
+        _ if early_done => {}
         0x0809 | 0x0409 => bof(&mut f)?,
         0x00fc if biff8 => {
             f.u32("cstTotal")
@@ -1977,17 +2097,7 @@ async fn record(
                     .emit()?;
             }
         }
-        0x001a | 0x001b => {
-            let n = f.u16("cbrk").emit()?;
-            for _ in 0..n {
-                if f.remaining() < 6 {
-                    break;
-                }
-                f.bytes("Break", 6)
-                    .desc("Row or column before which the break occurs, then the range it spans")
-                    .emit()?;
-            }
-        }
+        0x001a | 0x001b => page_breaks(&mut f, biff8)?,
         0x00eb | 0x00ec => {
             let n = f.remaining();
             f.node(
@@ -2028,6 +2138,31 @@ async fn record(
             .span(body.tail(f.pos()))
             .summary(format!("{rest} bytes")),
         );
+    }
+    Ok(())
+}
+
+/// HORIZONTALPAGEBREAKS, VERTICALPAGEBREAKS: a count, then the breaks
+/// (BIFF8: the row or column and the range it spans; before: the row or
+/// column only).
+fn page_breaks(f: &mut Fields<'_>, biff8: bool) -> Result<()> {
+    let n = f.u16("cbrk").emit()?;
+    for _ in 0..n {
+        if biff8 {
+            if f.remaining() < 6 {
+                break;
+            }
+            f.bytes("Break", 6)
+                .desc("Row or column before which the break occurs, then the range it spans")
+                .emit()?;
+        } else {
+            if f.remaining() < 2 {
+                break;
+            }
+            f.u16("Break")
+                .desc("Row or column before which the break occurs")
+                .emit()?;
+        }
     }
     Ok(())
 }
@@ -2103,6 +2238,12 @@ fn formula(f: &mut Fields<'_>, book: &Book, cell: bool) -> Result<()> {
 /// CellParsedFormula: a 16-bit size and the tokens.
 fn rgce(f: &mut Fields<'_>, book: &Book) -> Result<()> {
     let cce = f.u16("cce").emit()?;
+    rgce_tokens(f, book, cce, true)
+}
+
+/// The `cce` bytes of tokens, decoded when the version's are; with `extra`,
+/// the bytes after them are the tokens' extra data.
+fn rgce_tokens(f: &mut Fields<'_>, book: &Book, cce: u16, extra: bool) -> Result<()> {
     let at = to_usize(f.pos());
     let span = f.peek_span(cce.into());
     let data = f
@@ -2111,11 +2252,11 @@ fn rgce(f: &mut Fields<'_>, book: &Book) -> Result<()> {
         .get(at..at.saturating_add(usize::from(cce)))
         .unwrap_or_default()
         .to_vec();
-    if !book.biff8 {
+    let Some(version) = book.formula_version() else {
         f.bytes("rgce", cce.into()).emit()?;
         return Ok(());
-    }
-    let (tokens, text) = ptg::tokens(&data, &book.names);
+    };
+    let (tokens, text) = ptg::tokens_for(&data, &book.names, version);
     let mut node = Node::new("rgce").span(span);
     if let Some(t) = &text {
         node = node.value(Value::Text(format!("={t}")));
@@ -2137,7 +2278,7 @@ fn rgce(f: &mut Fields<'_>, book: &Book) -> Result<()> {
     );
     f.skip(cce.into());
     let rest = f.remaining();
-    if rest > 0 {
+    if extra && rest > 0 {
         f.bytes("rgcb", rest)
             .desc("Extra data of the tokens (array constants)")
             .emit()?;
@@ -2372,4 +2513,692 @@ async fn sst_list(cx: Cx, parts: Arc<Vec<Span>>) -> Result<()> {
         .await;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// BIFF2–4: standalone Excel 2.x–4.0 streams
+//
+// Layouts from the OpenOffice.org "Microsoft Excel File Format"
+// documentation, checked against LibreOffice's importer: BIFF2 cell records
+// carry three attribute bytes where later versions have an XF index, BIFF2
+// counts and flags are often 8-bit where BIFF3–4 have 16 bits, and BIFF3–4
+// FORMULA, ARRAY and NAME records lack the fields BIFF5 added.
+
+/// BIFF2–4 font attributes.
+const EARLY_FONT_FLAGS: FlagTable = &[
+    flag(0x0001, "fBold"),
+    flag(0x0002, "fItalic"),
+    flag(0x0004, "fUnderline"),
+    flag(0x0008, "fStrikeOut"),
+    flag(0x0010, "fOutline"),
+    flag(0x0020, "fShadow"),
+];
+
+const USED_ATTRIBUTES: &str =
+    "Attribute groups (bits 2–7: number format, font, alignment, borders, background, protection)";
+
+/// Records whose BIFF2–4 layout is the BIFF5 one, decoded by the shared
+/// code.
+fn early_shared(kind: u16) -> bool {
+    matches!(
+        kind,
+        0x000a
+            | 0x000c..=0x0015
+            | 0x0019
+            | 0x001d
+            | 0x0022
+            | 0x0026..=0x002b
+            | 0x003c
+            | 0x0040
+            | 0x0042
+            | 0x0055
+            | 0x005c
+            | 0x005f
+            | 0x0063
+            | 0x007d
+            | 0x0080..=0x0084
+            | 0x008c
+            | 0x008d
+            | 0x0092
+            | 0x0099
+            | 0x00a0
+            | 0x0200
+            | 0x0201
+            | 0x0203..=0x0205
+            | 0x0208
+            | 0x0225
+            | 0x023e
+            | 0x027e
+            | 0x0293
+    )
+}
+
+/// The value of a BOOLERR cell.
+fn bool_err(value: u8, error: bool) -> String {
+    if error {
+        lookup(ptg::ERRORS, value.into())
+            .unwrap_or("#ERROR")
+            .to_owned()
+    } else if value != 0 {
+        "TRUE".to_owned()
+    } else {
+        "FALSE".to_owned()
+    }
+}
+
+/// "row 3, columns A–D, 12.75 pt" for a ROW record (BIFF2 and BIFF3–4 put
+/// these fields at the same offsets).
+fn row_summary(data: &[u8]) -> Option<String> {
+    let h = u16_le(data, 6)? & 0x7fff;
+    Some(format!(
+        "row {}, columns {}–{}, {}",
+        u32::from(u16_le(data, 0)?).saturating_add(1),
+        column_name(u16_le(data, 2)?.into()),
+        column_name(u16_le(data, 4)?.saturating_sub(1).into()),
+        rec::points(h.into())
+    ))
+}
+
+/// The summary of a BIFF2–4 record laid out differently from BIFF5 (`len`
+/// is the body's full length; `data` may be its start only).
+fn early_describe(kind: u16, data: &[u8], len: u64, book: &Book) -> Option<String> {
+    let cell =
+        || -> Option<String> { Some(cell_name(u16_le(data, 2)?.into(), u16_le(data, 0)?.into())) };
+    let bytes8 = |at: usize| xl_string(data, at, StrForm::Bytes8).map(|(s, _)| s);
+    let s = match kind {
+        0x0009 | 0x0209 | 0x0409 => format!(
+            "BIFF{}, {}",
+            match kind {
+                0x0009 => 2,
+                0x0209 => 3,
+                _ => 4,
+            },
+            lookup(BOF_TYPES, u16_le(data, 2)?.into()).unwrap_or("unknown type")
+        ),
+        0x0000 => format!("cells {}", dimensions(data, false)?),
+        0x0001 => format!("{} (blank)", cell()?),
+        0x0002 => format!("{} = {}", cell()?, u16_le(data, 7)?),
+        0x0003 => format!("{} = {}", cell()?, number(f64::from_bits(u64_le(data, 7)?))),
+        0x0004 => format!("{} = {}", cell()?, quoted(&bytes8(7)?, 60)),
+        0x0005 => format!(
+            "{} = {}",
+            cell()?,
+            bool_err(*data.get(7)?, data.get(8) == Some(&1))
+        ),
+        0x0006 | 0x0206 | 0x0406 => {
+            let (result, cce, at) = if kind == 0x0006 {
+                (data.get(7..15)?, usize::from(*data.get(16)?), 17usize)
+            } else {
+                (data.get(6..14)?, usize::from(u16_le(data, 16)?), 18)
+            };
+            let value = formula_result(result)?;
+            let text = data
+                .get(at..at.saturating_add(cce))
+                .and_then(|rgce| ptg::tokens_for(rgce, &book.names, book.version).1);
+            match text {
+                Some(t) => format!("{} = {t} → {value}", cell()?),
+                None => format!("{} = ({cce}-byte formula) → {value}", cell()?),
+            }
+        }
+        0x0007 => quoted(&bytes8(0)?, 60),
+        0x0207 => quoted(&xl_string(data, 0, StrForm::Bytes16)?.0, 60),
+        0x0008 => row_summary(data)?,
+        0x000b | 0x020b => {
+            let head = if kind == 0x000b { 8 } else { 12 };
+            format!("{} row blocks", len.saturating_sub(head) / 4)
+        }
+        0x0016 => format!("{} external references", u16_le(data, 0)?),
+        0x0017 => quoted(&bytes8(0)?, 60),
+        0x0018 | 0x0218 => {
+            let (flags, cch, cce, at) = if kind == 0x0018 {
+                (
+                    0u16,
+                    usize::from(*data.get(3)?),
+                    usize::from(*data.get(4)?),
+                    5usize,
+                )
+            } else {
+                (
+                    u16_le(data, 0)?,
+                    usize::from(*data.get(3)?),
+                    usize::from(u16_le(data, 4)?),
+                    6,
+                )
+            };
+            let name = if flags & 0x20 != 0 {
+                ptg::builtin_name(*data.get(at)?)
+            } else {
+                rec::codepage_text(book.codepage, data.get(at..at.saturating_add(cch))?)
+            };
+            let start = at.saturating_add(cch);
+            let formula = data
+                .get(start..start.saturating_add(cce))
+                .and_then(|r| ptg::tokens_for(r, &book.names, book.version).1);
+            match formula {
+                Some(f) => format!("{name} = {f}"),
+                None => name,
+            }
+        }
+        0x001a | 0x001b => format!("{} breaks", u16_le(data, 0)?),
+        0x001c => {
+            let text = xl_string(data, 4, StrForm::Bytes16)
+                .map(|(s, _)| s)
+                .unwrap_or_default();
+            if u16_le(data, 0)? == 0xffff {
+                format!("comment continued: {}", quoted(&text, 60))
+            } else {
+                format!("comment at {}: {}", cell()?, quoted(&text, 60))
+            }
+        }
+        0x001e => format!("format {}", quoted(&bytes8(0)?, 60)),
+        0x041e => format!("format {}", quoted(&bytes8(2)?, 60)),
+        0x001f => format!("{} formats", u16_le(data, 0)?),
+        0x0056 => format!("{} built-in formats", u16_le(data, 0)?),
+        0x0020 => format!(
+            "default attributes of columns {}–{}",
+            column_name(u16_le(data, 0)?.into()),
+            column_name(u16_le(data, 2)?.saturating_sub(1).into())
+        ),
+        0x0021 | 0x0221 => format!(
+            "array formula in {}:{}",
+            cell_name((*data.get(4)?).into(), u16_le(data, 0)?.into()),
+            cell_name((*data.get(5)?).into(), u16_le(data, 2)?.into())
+        ),
+        0x0024 => format!(
+            "columns {}–{}, width {}",
+            column_name((*data.first()?).into()),
+            column_name((*data.get(1)?).into()),
+            f64::from(u16_le(data, 2)?) / 256.0
+        ),
+        0x0025 => format!(
+            "default row height {}",
+            rec::points((u16_le(data, 0)? & 0x7fff).into())
+        ),
+        0x0031 | 0x0231 => {
+            let name = bytes8(if kind == 0x0031 { 4 } else { 6 })?;
+            let flags = u16_le(data, 2)?;
+            format!(
+                "{}, {}{}{}",
+                quoted(&name, 40),
+                rec::points(u16_le(data, 0)?.into()),
+                if flags & 1 != 0 { ", bold" } else { "" },
+                if flags & 2 != 0 { ", italic" } else { "" }
+            )
+        }
+        0x003d => format!(
+            "window {}×{} twips{}",
+            u16_le(data, 4)?,
+            u16_le(data, 6)?,
+            if data.get(8).is_some_and(|&h| h != 0) {
+                ", hidden"
+            } else {
+                ""
+            }
+        ),
+        0x003e => "sheet window".to_owned(),
+        0x0041 => format!(
+            "panes from {}",
+            cell_name(u16_le(data, 6)?.into(), u16_le(data, 4)?.into())
+        ),
+        0x0043 => format!("XF, font {}, format {}", data.first()?, data.get(2)? & 0x3f),
+        0x0243 | 0x0443 => format!(
+            "{} XF, font {}, format {}",
+            if data.get(2)? & 4 != 0 {
+                "style"
+            } else {
+                "cell"
+            },
+            data.first()?,
+            data.get(1)?
+        ),
+        0x0044 => format!("XF {}", u16_le(data, 0)?),
+        0x0045 => format!("color {}", u16_le(data, 0)?),
+        0x00a1 => format!(
+            "paper size {}, scale {}%",
+            u16_le(data, 0)?,
+            u16_le(data, 2)?
+        ),
+        _ => return None,
+    };
+    Some(s)
+}
+
+/// The fields of a BIFF2–4 record laid out differently from BIFF5. Returns
+/// false for the records that share the BIFF5 layout; records without a
+/// decoder are left as data.
+fn early_fields(f: &mut Fields<'_>, kind: u16, book: &Book) -> Result<bool> {
+    if early_shared(kind) {
+        return Ok(false);
+    }
+    match kind {
+        0x0009 | 0x0209 | 0x0409 => {
+            f.u16("vers").hex().emit()?;
+            f.u16("dt").enumeration(BOF_TYPES).emit()?;
+            if f.remaining() >= 2 {
+                f.u16("unused").emit()?;
+            }
+        }
+        0x0000 => {
+            let s: Spec = &[
+                ("rwMic", K::Row),
+                ("rwMac", K::Row),
+                ("colMic", K::Col),
+                ("colMac", K::Col),
+            ];
+            rec::layout(f, &s)?;
+        }
+        0x0001..=0x0006 => {
+            early_cell(f, true)?;
+            match kind {
+                0x0002 => {
+                    f.u16("w").emit()?;
+                }
+                0x0003 => {
+                    f.f64("num").emit()?;
+                }
+                0x0004 => rec::field(f, "Text", K::Str8)?,
+                0x0005 => {
+                    f.u8("bBoolErr").emit()?;
+                    rec::field(f, "fError", K::Bool8)?;
+                }
+                0x0006 => early_formula(f, book, true)?,
+                _ => {}
+            }
+        }
+        0x0206 | 0x0406 => {
+            early_cell(f, false)?;
+            early_formula(f, book, false)?;
+        }
+        0x0007 => rec::field(f, "Text", K::Str8)?,
+        0x0207 => rec::field(f, "Text", K::Str16)?,
+        0x0008 => {
+            rec::field(f, "rw", K::Row)?;
+            rec::field(f, "colMic", K::Col)?;
+            rec::field(f, "colMac", K::Col)?;
+            f.u16("miyRw")
+                .with(|&v, n| {
+                    let height = rec::points((v & 0x7fff).into());
+                    n.summary(if v & 0x8000 != 0 {
+                        format!("{height}, default height")
+                    } else {
+                        height
+                    })
+                })
+                .emit()?;
+            f.u16("reserved").emit()?;
+            let attrs = f
+                .u8("fAttr")
+                .with(|&v, n| n.value(Value::Bool(v != 0)))
+                .desc("Default cell attributes follow")
+                .emit()?;
+            f.u16("Offset to the row's cells").emit()?;
+            if attrs != 0 && f.remaining() >= 3 {
+                attributes(f)?;
+            }
+        }
+        0x000b | 0x020b => {
+            f.u32("reserved").emit()?;
+            rec::field(f, "rwMic", K::Row)?;
+            f.u16("rwMac").desc("One past the last row").emit()?;
+            if kind == 0x020b {
+                f.u32("ib").hex().emit()?;
+            }
+            while f.remaining() >= 4 {
+                f.u32("Offset").hex().emit()?;
+            }
+        }
+        0x0016 => {
+            f.u16("cxals")
+                .desc("EXTERNSHEET records that follow")
+                .emit()?;
+        }
+        0x0017 => rec::field(f, "Encoded file name", K::Str8)?,
+        0x0018 | 0x0218 => early_name(f, book, kind == 0x0018)?,
+        0x001a | 0x001b => page_breaks(f, false)?,
+        0x001c => {
+            rec::field(f, "rw", K::Row)?;
+            rec::field(f, "col", K::Col)?;
+            rec::field(f, "Text", K::Str16)?;
+        }
+        0x001e => rec::field(f, "stFormat", K::Str8)?,
+        0x041e => {
+            f.u16("ifmt")
+                .desc("Undefined in BIFF4: formats are numbered in record order")
+                .emit()?;
+            rec::field(f, "stFormat", K::Str8)?;
+        }
+        0x001f => {
+            f.u16("cFormat").emit()?;
+        }
+        0x0056 => {
+            f.u16("cBuiltInFormats").emit()?;
+        }
+        0x0020 => {
+            rec::field(f, "colMic", K::Col)?;
+            rec::field(f, "colMac", K::Col)?;
+            while f.remaining() >= 3 {
+                attributes(f)?;
+            }
+        }
+        0x0021 | 0x0221 => {
+            rec::field(f, "rwFirst", K::Row)?;
+            rec::field(f, "rwLast", K::Row)?;
+            rec::field(f, "colFirst", K::Col8)?;
+            rec::field(f, "colLast", K::Col8)?;
+            let cce = if kind == 0x0021 {
+                f.u8("Flags").hex().emit()?;
+                u16::from(f.u8("cce").emit()?)
+            } else {
+                f.u16("Flags").hex().emit()?;
+                f.u16("cce").emit()?
+            };
+            rgce_tokens(f, book, cce, true)?;
+        }
+        0x0024 => {
+            rec::field(f, "colFirst", K::Col8)?;
+            rec::field(f, "colLast", K::Col8)?;
+            f.u16("coldx (1/256 character)").emit()?;
+        }
+        0x0025 => {
+            f.u16("miyRw")
+                .with(|&v, n| n.summary(rec::points((v & 0x7fff).into())))
+                .emit()?;
+        }
+        0x0031 | 0x0231 => {
+            rec::field(f, "dyHeight", K::Twips)?;
+            f.u16("Flags").flags(EARLY_FONT_FLAGS).emit()?;
+            if kind == 0x0231 {
+                f.u16("icv").emit()?;
+            }
+            rec::field(f, "fontName", K::Str8)?;
+        }
+        0x003d => {
+            let s: Spec = &[
+                ("xWn", K::I16),
+                ("yWn", K::I16),
+                ("dxWn", K::U16),
+                ("dyWn", K::U16),
+                ("fHidden", K::Bool8),
+            ];
+            rec::layout(f, &s)?;
+        }
+        0x003e => {
+            let s: Spec = &[
+                ("fDspFmla", K::Bool8),
+                ("fDspGrid", K::Bool8),
+                ("fDspRwCol", K::Bool8),
+                ("fFrozen", K::Bool8),
+                ("fDspZeros", K::Bool8),
+                ("rwTop", K::Row),
+                ("colLeft", K::Col),
+                ("fDefaultHdr", K::Bool8),
+                ("rgbHdr", K::H32),
+            ];
+            rec::layout(f, &s)?;
+        }
+        0x0041 => {
+            let s: Spec = &[
+                ("x", K::U16),
+                ("y", K::U16),
+                ("rwTop", K::Row),
+                ("colLeft", K::Col),
+                ("pnnAcct", K::U8),
+            ];
+            rec::layout(f, &s)?;
+        }
+        0x0043 => {
+            f.u8("ifnt").emit()?;
+            f.u8("reserved").emit()?;
+            f.u8("Format and protection")
+                .with(|&v, n| {
+                    n.summary(format!(
+                        "format {}{}{}",
+                        v & 0x3f,
+                        if v & 0x40 != 0 { ", locked" } else { "" },
+                        if v & 0x80 != 0 { ", hidden" } else { "" }
+                    ))
+                })
+                .emit()?;
+            f.u8("Alignment and borders")
+                .with(|&v, n| n.summary(early_borders(v)))
+                .emit()?;
+        }
+        0x0243 | 0x0443 => early_xf(f, kind == 0x0443)?,
+        0x0044 => {
+            f.u16("ixfe").emit()?;
+        }
+        0x0045 => {
+            f.u16("icv").emit()?;
+        }
+        0x00a1 => {
+            let s: Spec = &[
+                ("iPaperSize", K::U16),
+                ("iScale", K::U16),
+                ("iPageStart", K::I16),
+                ("iFitWidth", K::U16),
+                ("iFitHeight", K::U16),
+                ("Flags", K::H16),
+            ];
+            rec::layout(f, &s)?;
+        }
+        _ => {}
+    }
+    Ok(true)
+}
+
+/// The cell address, then BIFF2's three attribute bytes or BIFF3–4's XF
+/// index.
+fn early_cell(f: &mut Fields<'_>, v2: bool) -> Result<()> {
+    rec::field(f, "rw", K::Row)?;
+    rec::field(f, "col", K::Col)?;
+    if v2 {
+        attributes(f)
+    } else {
+        f.u16("ixfe").emit()?;
+        Ok(())
+    }
+}
+
+/// BIFF2 cell attributes: XF index and protection, number format and
+/// font, alignment and borders.
+fn attributes(f: &mut Fields<'_>) -> Result<()> {
+    let at = to_usize(f.pos());
+    let d = &f.block().data;
+    let b = |i: usize| d.get(at.saturating_add(i)).copied().unwrap_or(0);
+    let (a, n, s) = (b(0), b(1), b(2));
+    let summary = format!(
+        "XF {}, format {}, font {}, {}{}{}",
+        a & 0x3f,
+        n & 0x3f,
+        n >> 6,
+        early_borders(s),
+        if a & 0x40 != 0 { ", locked" } else { "" },
+        if a & 0x80 != 0 {
+            ", formula hidden"
+        } else {
+            ""
+        }
+    );
+    f.bytes("rgbAttr", 3)
+        .with(|_, node| node.summary(summary))
+        .emit()?;
+    Ok(())
+}
+
+/// BIFF2 alignment, borders and shading (one byte).
+fn early_borders(v: u8) -> String {
+    let mut parts = vec![lookup(HALIGN, (v & 7).into()).unwrap_or("?").to_owned()];
+    for (bit, name) in [
+        (0x08u8, "left border"),
+        (0x10, "right border"),
+        (0x20, "top border"),
+        (0x40, "bottom border"),
+        (0x80, "shaded"),
+    ] {
+        if v & bit != 0 {
+            parts.push(name.to_owned());
+        }
+    }
+    parts.join(", ")
+}
+
+/// A BIFF2–4 FORMULA record after the cell: the cached result, flags and
+/// tokens (BIFF2: 8-bit flags and size).
+fn early_formula(f: &mut Fields<'_>, book: &Book, v2: bool) -> Result<()> {
+    let at = to_usize(f.pos());
+    let summary = f
+        .block()
+        .data
+        .get(at..at.saturating_add(8))
+        .and_then(formula_result);
+    f.bytes("val", 8)
+        .with(|_, n| n.summary(summary.unwrap_or_default()))
+        .desc("Cached result: an IEEE double, or a typed value marked by 0xFFFF in the top bytes")
+        .emit()?;
+    let cce = if v2 {
+        f.u8("Flags").hex().emit()?;
+        u16::from(f.u8("cce").emit()?)
+    } else {
+        f.u16("Flags").hex().emit()?;
+        f.u16("cce").emit()?
+    };
+    rgce_tokens(f, book, cce, true)
+}
+
+/// BIFF2 NAME (five header bytes, as LibreOffice reads them) and BIFF3–4
+/// NAME (six): flags, shortcut, name and formula lengths, the name, the
+/// formula.
+fn early_name(f: &mut Fields<'_>, book: &Book, v2: bool) -> Result<()> {
+    let (flags, cch, cce) = if v2 {
+        f.u8("Flags").hex().emit()?;
+        f.u8("reserved").emit()?;
+        f.u8("chKey").emit()?;
+        let cch = f.u8("cch").emit()?;
+        let cce = f.u8("cce").emit()?;
+        (0u16, cch, u16::from(cce))
+    } else {
+        let flags = f.u16("Flags").flags(NAME_FLAGS).emit()?;
+        f.u8("chKey").emit()?;
+        let cch = f.u8("cch").emit()?;
+        let cce = f.u16("cce").emit()?;
+        (flags, cch, cce)
+    };
+    let at = to_usize(f.pos());
+    let used = usize::from(cch);
+    let data = &f.block().data;
+    let name = if flags & 0x20 != 0 {
+        data.get(at).map(|&c| ptg::builtin_name(c))
+    } else {
+        data.get(at..at.saturating_add(used))
+            .map(|raw| rec::codepage_text(book.codepage, raw))
+    };
+    if let Some(name) = name {
+        f.node(
+            Node::new("Name")
+                .span(f.peek_span(to_u64(used)))
+                .value(Value::Text(name)),
+        );
+        f.skip(to_u64(used));
+    }
+    rgce_tokens(f, book, cce, false)
+}
+
+/// BIFF3 (0x0243) and BIFF4 (0x0443) XF records: twelve bytes, the
+/// alignment and used-attribute bytes swapped between them.
+fn early_xf(f: &mut Fields<'_>, v4: bool) -> Result<()> {
+    f.u8("ifnt").emit()?;
+    f.u8("ifmt")
+        .desc("Index of the FORMAT record, in record order")
+        .emit()?;
+    if v4 {
+        f.u16("Type and protection")
+            .flags(XF_TYPE_PROT)
+            .with(|&v, n| n.summary(format!("parent XF {}", v >> 4)))
+            .emit()?;
+        f.u8("Alignment")
+            .with(|&v, n| {
+                n.summary(format!(
+                    "{}, {}{}",
+                    lookup(HALIGN, (v & 7).into()).unwrap_or("?"),
+                    lookup(VALIGN, ((v >> 4) & 3).into()).unwrap_or("?"),
+                    if v & 8 != 0 { ", wrap" } else { "" }
+                ))
+            })
+            .emit()?;
+        f.u8("Used attributes").hex().desc(USED_ATTRIBUTES).emit()?;
+    } else {
+        f.u8("Type and protection").flags(XF_TYPE_PROT).emit()?;
+        f.u8("Used attributes").hex().desc(USED_ATTRIBUTES).emit()?;
+        f.u16("Alignment and parent")
+            .with(|&v, n| {
+                n.summary(format!(
+                    "{}{}, parent XF {}",
+                    lookup(HALIGN, (v & 7).into()).unwrap_or("?"),
+                    if v & 8 != 0 { ", wrap" } else { "" },
+                    v >> 4
+                ))
+            })
+            .emit()?;
+    }
+    f.u16("Fill")
+        .with(|&v, n| {
+            n.summary(format!(
+                "pattern {}, foreground {}, background {}",
+                v & 0x3f,
+                (v >> 6) & 0x1f,
+                v >> 11
+            ))
+        })
+        .emit()?;
+    f.u32("Borders").hex().emit()?;
+    Ok(())
+}
+
+/// A standalone BIFF2–4 stream (Excel 2.x–4.0): a worksheet, chart or
+/// macro sheet, or a BIFF4 workbook of several; its records are listed like
+/// a BIFF5/8 substream's.
+pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
+    let stream = input.span;
+    let book = book(&cx, stream).await;
+    let head = cx.read_avail(stream.sub(0, 8)).await?;
+    let dt = u16_le(&head, 6).unwrap_or(0);
+    let (mut records, mut cells, mut fonts) = (0u64, 0u64, 0u64);
+    let mut dims = None;
+    let mut pos = 0u64;
+    while let Some(r) = next_rec(&cx, stream, pos).await? {
+        records = records.saturating_add(1);
+        match r.kind {
+            0x0001..=0x0006 | 0x0201 | 0x0203..=0x0206 | 0x027e | 0x0406 => {
+                cells = cells.saturating_add(1);
+            }
+            0x0031 | 0x0231 => fonts = fonts.saturating_add(1),
+            0x0000 | 0x0200 if dims.is_none() => {
+                let data = cx.read_avail(r.body().sub(0, 16)).await?;
+                dims = dimensions(&data, false);
+            }
+            _ => {}
+        }
+        cx.progress_in(stream, r.span.offset);
+        pos = pos.saturating_add(r.span.len.max(4));
+    }
+    let kind = if dt == 0x0100 {
+        "workbook"
+    } else {
+        lookup(BOF_TYPES, dt.into()).unwrap_or("document")
+    };
+    let mut summary = format!(
+        "Excel {} {kind} (BIFF{}), {records} records, {cells} cells, {fonts} font{}",
+        match book.version {
+            2 => "2.x",
+            3 => "3.0",
+            _ => "4.0",
+        },
+        book.version,
+        if fonts == 1 { "" } else { "s" }
+    );
+    if let Some(d) = dims {
+        summary = format!("{summary}, used range {d}");
+    }
+    cx.annotate(summary);
+    substream(cx, (input, stream, stream)).await
 }

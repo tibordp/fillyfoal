@@ -404,9 +404,42 @@ fn relative(row: u16, col: u16) -> String {
     format!("{r}{c}")
 }
 
-/// Splits `rgce` into tokens. Rendering needs every token decoded, so
-/// decoding stops at the first unknown one.
+/// A BIFF2–5 cell reference (a 14-bit row with the relative flags in its
+/// top bits, an 8-bit column) in the BIFF8 form: the flags are at the same
+/// bit positions, moved to the column.
+fn early_ref(row: u16, col: u8) -> (u16, u16) {
+    (row & 0x3fff, u16::from(col) | (row & 0xc000))
+}
+
+/// A BIFF2–5 relative reference of a shared or name formula: a relative
+/// row is a signed 14-bit offset.
+fn early_relative(row: u16, col: u8) -> (u16, u16) {
+    let (r, c) = early_ref(row, col);
+    let r = if row & 0x8000 != 0 && r & 0x2000 != 0 {
+        r | 0xc000
+    } else {
+        r
+    };
+    (r, c)
+}
+
+/// Splits a BIFF8 `rgce` into tokens; see [`tokens_for`].
 pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
+    tokens_for(rgce, names, 8)
+}
+
+/// Splits `rgce` of BIFF version `version` (2, 3, 4 or 8) into tokens.
+/// Rendering needs every token decoded, so decoding stops at the first
+/// unknown one. Before BIFF8 ([MS-XLS] covers BIFF8 only; the earlier forms
+/// follow the OpenOffice.org "Excel File Format" documentation and
+/// LibreOffice's importer): references hold an 8-bit column with the
+/// relative flags in the row, strings are byte strings, names carry unused
+/// bytes, function indices are 8-bit before BIFF4 and tAttr data is 8-bit
+/// in BIFF2.
+pub fn tokens_for(rgce: &[u8], names: &Names, version: u8) -> (Vec<Token>, Option<String>) {
+    let early = version < 8;
+    let v2 = version == 2;
+    let byte = |o: usize| rgce.get(o).copied().unwrap_or(0);
     let mut out = Vec::new();
     let mut stack: Vec<String> = Vec::new();
     let mut ok = true;
@@ -423,13 +456,21 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
         let mut detail = String::new();
         let len: Option<usize> = match base {
             0x01 | 0x02 => {
-                let (r, c) = (u16_at(0), u16_at(2));
+                // BIFF2: an 8-bit column.
+                let (r, c) = if v2 {
+                    (
+                        u16_at(0),
+                        rgce.get(p.saturating_add(2)).map(|&c| u16::from(c)),
+                    )
+                } else {
+                    (u16_at(0), u16_at(2))
+                };
                 detail = format!(
                     "{} at {}",
-                    if base == 0x01 {
-                        "shared formula"
-                    } else {
-                        "data table"
+                    match (base, early) {
+                        (0x01, false) => "shared formula",
+                        (0x01, true) => "array formula",
+                        _ => "data table",
                     },
                     match (r, c) {
                         (Some(r), Some(c)) => super::rec::cell_name(c.into(), r.into()),
@@ -437,7 +478,7 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
                     }
                 );
                 stack.push(format!("{{{detail}}}"));
-                Some(5)
+                Some(if v2 { 4 } else { 5 })
             }
             0x03..=0x11 => {
                 let op = match base {
@@ -479,7 +520,15 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
                 stack.push(String::new());
                 Some(1)
             }
-            0x17 => match super::rec::xl_string(rgce, p, super::rec::StrForm::Wide8) {
+            0x17 => match super::rec::xl_string(
+                rgce,
+                p,
+                if early {
+                    super::rec::StrForm::Bytes8
+                } else {
+                    super::rec::StrForm::Wide8
+                },
+            ) {
                 Some((s, used)) => {
                     detail = format!("{s:?}");
                     stack.push(format!("\"{}\"", s.replace('"', "\"\"")));
@@ -489,14 +538,20 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
             },
             0x19 => {
                 let kind = rgce.get(p).copied().unwrap_or(0);
+                // BIFF2: 8-bit data and jump table entries.
+                let (data, width) = if v2 {
+                    (u16::from(byte(p.saturating_add(1))), 1usize)
+                } else {
+                    (u16_at(1).unwrap_or(0), 2)
+                };
                 let (what, extra) = match kind {
                     0x01 => ("volatile", 0usize),
                     0x02 => ("if (jump)", 0),
                     0x04 => {
-                        let cases = usize::from(u16_at(1).unwrap_or(0));
+                        let cases = usize::from(data);
                         (
                             "choose (jump table)",
-                            cases.saturating_add(1).saturating_mul(2),
+                            cases.saturating_add(1).saturating_mul(width),
                         )
                     }
                     0x08 => ("goto (skip)", 0),
@@ -511,8 +566,25 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
                     0x40 | 0x41 => ("space", 0),
                     _ => ("unknown", 0),
                 };
-                detail = format!("{what}, data {}", u16_at(1).unwrap_or(0));
-                Some(4usize.saturating_add(extra))
+                detail = format!("{what}, data {data}");
+                Some(if v2 { 3usize } else { 4 }.saturating_add(extra))
+            }
+            0x1a | 0x1b if early => {
+                // tSheet / tEndSheet: references between them are on an
+                // external sheet, which is not rendered.
+                ok = false;
+                detail = if base == 0x1a {
+                    "external sheet reference begins"
+                } else {
+                    "external sheet reference ends"
+                }
+                .to_owned();
+                Some(match (base, v2) {
+                    (0x1a, true) => 8,
+                    (0x1a, false) => 11,
+                    (_, true) => 4,
+                    _ => 5,
+                })
             }
             0x1c => {
                 let e = rgce.get(p).copied().unwrap_or(0);
@@ -542,16 +614,27 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
             0x20 => {
                 detail = "constant array (values follow the formula)".to_owned();
                 stack.push("{array}".to_owned());
-                Some(8)
+                Some(if v2 { 7 } else { 8 })
             }
             0x21 | 0x22 => {
+                // Before BIFF4 the function index is 8-bit.
+                let narrow = version <= 3;
                 let (argc, index) = if base == 0x21 {
-                    let index = u16_at(0).unwrap_or(0);
+                    let index = if narrow {
+                        u16::from(byte(p))
+                    } else {
+                        u16_at(0).unwrap_or(0)
+                    };
                     let argc = function(index).map_or(-1, |(_, a)| a);
                     (argc, index)
                 } else {
                     let argc = i8::try_from(rgce.get(p).copied().unwrap_or(0) & 0x7f).unwrap_or(0);
-                    (argc, u16_at(1).unwrap_or(0) & 0x7fff)
+                    let index = if narrow {
+                        u16::from(byte(p.saturating_add(1)))
+                    } else {
+                        u16_at(1).unwrap_or(0) & 0x7fff
+                    };
+                    (argc, index)
                 };
                 let fname = function(index)
                     .map_or_else(|| format!("function {index}"), |(n, _)| n.to_owned());
@@ -571,10 +654,21 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
                     }
                     _ => ok = false,
                 }
-                Some(if base == 0x21 { 3 } else { 4 })
+                Some(match (base, version <= 3) {
+                    (0x21, true) => 2,
+                    (0x21, false) => 3,
+                    (_, true) => 3,
+                    _ => 4,
+                })
             }
             0x23 => {
-                let i = u32_le(rgce, p).unwrap_or(0);
+                // A 1-based index: 32-bit in BIFF8, 16-bit with unused bytes
+                // before.
+                let i = if early {
+                    u32::from(u16_at(0).unwrap_or(0))
+                } else {
+                    u32_le(rgce, p).unwrap_or(0)
+                };
                 let name = usize::try_from(i)
                     .ok()
                     .and_then(|i| i.checked_sub(1))
@@ -583,45 +677,82 @@ pub fn tokens(rgce: &[u8], names: &Names) -> (Vec<Token>, Option<String>) {
                     .unwrap_or_else(|| format!("name {i}"));
                 detail = name.clone();
                 stack.push(name);
-                Some(5)
+                Some(match version {
+                    2 => 8,
+                    3 | 4 => 11,
+                    5 => 15,
+                    _ => 5,
+                })
             }
             0x24 | 0x2c => {
-                let (r, c) = (u16_at(0).unwrap_or(0), u16_at(2).unwrap_or(0));
+                let (r, c) = if early {
+                    let (row, col) = (u16_at(0).unwrap_or(0), byte(p.saturating_add(2)));
+                    if base == 0x24 {
+                        early_ref(row, col)
+                    } else {
+                        early_relative(row, col)
+                    }
+                } else {
+                    (u16_at(0).unwrap_or(0), u16_at(2).unwrap_or(0))
+                };
                 detail = if base == 0x24 {
                     cell(r, c)
                 } else {
                     relative(r, c)
                 };
                 stack.push(detail.clone());
-                Some(5)
+                Some(if early { 4 } else { 5 })
             }
             0x25 | 0x2d => {
-                let (r1, r2) = (u16_at(0).unwrap_or(0), u16_at(2).unwrap_or(0));
-                let (c1, c2) = (u16_at(4).unwrap_or(0), u16_at(6).unwrap_or(0));
+                let ((r1, c1), (r2, c2)) = if early {
+                    let (row1, row2) = (u16_at(0).unwrap_or(0), u16_at(2).unwrap_or(0));
+                    let (col1, col2) = (byte(p.saturating_add(4)), byte(p.saturating_add(5)));
+                    if base == 0x25 {
+                        (early_ref(row1, col1), early_ref(row2, col2))
+                    } else {
+                        (early_relative(row1, col1), early_relative(row2, col2))
+                    }
+                } else {
+                    (
+                        (u16_at(0).unwrap_or(0), u16_at(4).unwrap_or(0)),
+                        (u16_at(2).unwrap_or(0), u16_at(6).unwrap_or(0)),
+                    )
+                };
                 detail = if base == 0x25 {
                     format!("{}:{}", cell(r1, c1), cell(r2, c2))
                 } else {
                     format!("{}:{}", relative(r1, c1), relative(r2, c2))
                 };
                 stack.push(detail.clone());
-                Some(9)
+                Some(if early { 7 } else { 9 })
+            }
+            0x26..=0x28 if v2 => {
+                // BIFF2: four bytes the importers skip.
+                detail = "subexpression".to_owned();
+                Some(5)
             }
             0x26..=0x28 => {
                 detail = format!("subexpression of {} bytes", u16_at(4).unwrap_or(0));
                 Some(7)
             }
             0x29 => {
-                detail = format!("subexpression of {} bytes", u16_at(0).unwrap_or(0));
-                Some(3)
+                if v2 {
+                    detail = format!("subexpression of {} bytes", byte(p));
+                    Some(2)
+                } else {
+                    detail = format!("subexpression of {} bytes", u16_at(0).unwrap_or(0));
+                    Some(3)
+                }
             }
             0x2a => {
                 stack.push("#REF!".to_owned());
-                Some(5)
+                Some(if early { 4 } else { 5 })
             }
             0x2b => {
                 stack.push("#REF!".to_owned());
-                Some(9)
+                Some(if early { 7 } else { 9 })
             }
+            0x39..=0x3d if early => None,
             0x39 => {
                 let i = u32_le(rgce, p.saturating_add(2)).unwrap_or(0);
                 detail = format!("external name {i} (XTI {})", u16_at(0).unwrap_or(0));

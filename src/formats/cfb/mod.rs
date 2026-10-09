@@ -13,7 +13,7 @@
 //! a visited set, and storages carry the path of entries above them.
 
 mod apps;
-mod biff;
+pub(crate) mod biff;
 mod msg;
 mod msi;
 mod officeart;

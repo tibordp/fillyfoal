@@ -160,7 +160,7 @@ expression: "common::explore(&display_name(&path), &data)"
             PidTagSubject: "Grüße from an ANSI file"  [0x5cc+0x17]
             PidTagSentRepresentingName: "Alice"  [0x5e3+0x5]
             PidTagMessageDeliveryTime: 2024-03-04 09:30:00 UTC  [0x550+0x8]
-            PidTagMessageFlags: 0x11 [READ | HASATTACH]  [0x558+0x4]
+            PidTagMessageFlags: 0x11 [mfRead | mfHasAttach]  [0x558+0x4]
             PidTagMessageSize: 600  [0x55c+0x4]
       ▾ Subnode NID 0x3f (ltp 1) — data 0x1c, subnodes 0x0  [0x584+0xc]
         ▾ Data blocks — 1 blocks, 33 bytes
@@ -287,7 +287,7 @@ expression: "common::explore(&display_name(&path), &data)"
               PidTagSentRepresentingEmailAddress: "alice@example.com"  [0x8f0+0x11]
               PidTagDisplayTo: "Bob"  [0x901+0x3]
               PidTagMessageDeliveryTime: 2024-03-04 09:30:00 UTC  [0x904+0x8]
-              PidTagMessageFlags: 0x11 [READ | HASATTACH]  [0x96d+0x4]
+              PidTagMessageFlags: 0x11 [mfRead | mfHasAttach]  [0x96d+0x4]
               PidTagMessageSize: 600  [0x975+0x4]
               PidTagBody: "Hi Bob,\r\nthis message lives in an ANSI PST.\r\n"  [0x90c+0x2d]
             Subject: "Grüße from an ANSI file"  [0x8d4+0x17]
