@@ -35,16 +35,22 @@ impl Params {
     }
 }
 
-fn plane_sizes(width: u64, height: u64, colour: &str) -> [u64; 4] {
-    let depth = if colour.contains("p10")
-        || colour.contains("p12")
-        || colour.contains("p14")
-        || colour.contains("p16")
-    {
-        2
+/// The bit depth of a colour space tag ("420p10" → 10, "mono16" → 16).
+fn bit_depth(colour: &str) -> u64 {
+    let digits = if let Some(rest) = colour.strip_prefix("mono") {
+        rest
     } else {
-        1
+        colour.split_once('p').map_or("", |(_, d)| d)
     };
+    digits
+        .parse::<u64>()
+        .ok()
+        .filter(|d| (8..=16).contains(d))
+        .unwrap_or(8)
+}
+
+fn plane_sizes(width: u64, height: u64, colour: &str) -> [u64; 4] {
+    let depth = if bit_depth(colour) > 8 { 2 } else { 1 };
     let luma = width.saturating_mul(height).saturating_mul(depth);
     let half = |n: u64| n.div_ceil(2);
     let chroma = if colour.starts_with("420") || colour.is_empty() {
@@ -61,6 +67,42 @@ fn plane_sizes(width: u64, height: u64, colour: &str) -> [u64; 4] {
     .saturating_mul(depth);
     let alpha = if colour == "444alpha" { luma } else { 0 };
     [luma, chroma, chroma, alpha]
+}
+
+/// A description of a colour space tag.
+fn colour_text(colour: &str) -> String {
+    let c = if colour.is_empty() { "420jpeg" } else { colour };
+    let sampling = if c.starts_with("mono") {
+        "monochrome"
+    } else if c.starts_with("420") {
+        "4:2:0"
+    } else if c.starts_with("422") {
+        "4:2:2"
+    } else if c.starts_with("411") {
+        "4:1:1"
+    } else if c.starts_with("444") {
+        "4:4:4"
+    } else {
+        return c.to_owned();
+    };
+    let mut s = format!("{sampling} {}-bit", bit_depth(c));
+    match c {
+        "420jpeg" => s.push_str(", JPEG/MPEG-1 chroma siting"),
+        "420mpeg2" => s.push_str(", MPEG-2 chroma siting"),
+        "420paldv" => s.push_str(", PAL-DV chroma siting"),
+        "444alpha" => s.push_str(" with alpha"),
+        _ => {}
+    }
+    if colour.is_empty() {
+        s.push_str(" (default)");
+    }
+    s
+}
+
+/// A ratio parameter ("30000:1001") as a number.
+fn ratio(v: &str) -> Option<(u64, u64)> {
+    let (n, d) = v.split_once(':')?;
+    Some((n.parse().ok()?, d.parse().ok()?))
 }
 
 /// Reads one `\n`-terminated line starting at `pos`.
@@ -91,6 +133,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut colour = String::new();
     let mut rate = None;
     let mut interlace = None;
+    let mut aspect = None;
     for token in header.split(' ').skip(1) {
         let mut chars = token.chars();
         let Some(tag) = chars.next() else { continue };
@@ -101,6 +144,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             'C' => colour = value,
             'F' => rate = Some(value),
             'I' => interlace = Some(value),
+            'A' => aspect = Some(value),
             _ => {}
         }
     }
@@ -113,35 +157,47 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let frame_size = params.frame_size();
     // Frames without parameters are "FRAME\n" + planes.
     let per_frame = frame_size.saturating_add(6);
-    let count = file
-        .len
-        .saturating_sub(len)
-        .checked_div(per_frame)
-        .unwrap_or(0);
+    let body = file.len.saturating_sub(len);
+    let count = body.checked_div(per_frame).unwrap_or(0);
+    let exact = body.checked_rem(per_frame) == Some(0);
     let mut summary = format!(
-        "YUV4MPEG2, {}×{} {}",
+        "YUV4MPEG2, {}×{}, {}",
         params.width,
         params.height,
-        if colour.is_empty() {
-            "420jpeg"
-        } else {
-            &colour
-        }
+        colour_text(&colour)
     );
-    if let Some(r) = rate {
-        let fps = match r.split_once(':') {
-            Some((n, d)) => match (n.parse::<f64>(), d.parse::<f64>()) {
-                (Ok(n), Ok(d)) if d > 0.0 => vidutil::num(n / d),
-                _ => r.clone(),
-            },
-            None => r.clone(),
-        };
-        summary = format!("{summary}, {fps} fps");
+    let fps = rate.as_deref().and_then(ratio).filter(|(_, d)| *d > 0);
+    if let Some((n, d)) = fps {
+        summary = format!("{summary}, {} fps", vidutil::tables::rate(n, d));
     }
-    if interlace.as_deref().is_some_and(|i| i != "p") {
-        summary.push_str(", interlaced");
+    match interlace.as_deref() {
+        Some("t") => summary.push_str(", interlaced (top field first)"),
+        Some("b") => summary.push_str(", interlaced (bottom field first)"),
+        Some("m") => summary.push_str(", mixed interlacing"),
+        _ => {}
     }
-    summary = format!("{summary}, ~{}", vidutil::plural(count, "frame"));
+    if let Some((a, b)) = aspect.as_deref().and_then(ratio)
+        && a != b
+        && a > 0
+        && b > 0
+    {
+        summary = format!("{summary}, PAR {a}:{b}");
+    }
+    summary = format!(
+        "{summary}, {}{}",
+        if exact { "" } else { "~" },
+        vidutil::plural(count, "frame")
+    );
+    if let Some((n, d)) = fps
+        && n > 0
+    {
+        let millis = count
+            .saturating_mul(d)
+            .saturating_mul(1000)
+            .checked_div(n)
+            .unwrap_or(0);
+        summary = format!("{summary}, {}", vidutil::seconds_ms(millis));
+    }
     cx.annotate(summary);
     cx.emit(
         Node::new("Frames")
@@ -191,15 +247,28 @@ async fn header_fields(cx: Cx, span: Span) -> Result<()> {
             (b'W' | b'H', Ok(n)) => vidutil::uint(name, tspan, n, 32),
             _ => text(name, tspan, value.clone()),
         };
-        if tag == b'I' {
-            node = node.summary(match value.as_str() {
+        node = match tag {
+            b'I' => node.summary(match value.as_str() {
                 "p" => "progressive",
                 "t" => "top field first",
                 "b" => "bottom field first",
-                "m" => "mixed",
-                _ => "unknown",
-            });
-        }
+                "m" => "mixed (per frame)",
+                "?" => "unknown",
+                _ => "unknown value",
+            }),
+            b'F' => match ratio(&value).filter(|(_, d)| *d > 0) {
+                Some((n, d)) => node.summary(format!("{} fps", vidutil::tables::rate(n, d))),
+                None => node,
+            },
+            b'A' => match ratio(&value) {
+                Some((0, 0)) => node.summary("unknown"),
+                Some((a, b)) if a == b => node.summary("square pixels"),
+                _ => node,
+            },
+            b'C' => node.summary(colour_text(&value)),
+            b'X' => node.desc("Application-specific extension (e.g. YSCSS, COLORRANGE)"),
+            _ => node,
+        };
         cx.emit(node);
     }
     Ok(())
@@ -250,7 +319,12 @@ async fn frame(cx: Cx, (span, header, params): (Span, u64, Params)) -> Result<()
     let d = cx.read_avail(span.sub(0, header)).await?;
     let line = String::from_utf8_lossy(d.get(..d.len().saturating_sub(1)).unwrap_or_default())
         .into_owned();
-    cx.emit(text("Frame header", span.sub(0, header), line));
+    let mut node = text("Frame header", span.sub(0, header), line.clone());
+    let params_text: Vec<&str> = line.split(' ').skip(1).filter(|t| !t.is_empty()).collect();
+    if !params_text.is_empty() {
+        node = node.summary(format!("parameters: {}", params_text.join(", ")));
+    }
+    cx.emit(node);
     let mut at = header;
     for (name, size) in ["Y plane", "Cb plane", "Cr plane", "Alpha plane"]
         .iter()

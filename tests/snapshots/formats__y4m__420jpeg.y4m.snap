@@ -1,16 +1,16 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ 420jpeg.y4m — YUV4MPEG2, 16×16 420jpeg, 5 fps, ~1 frame  [0x0+0x1bd]
+▾ 420jpeg.y4m — YUV4MPEG2, 16×16, 4:2:0 8-bit, JPEG/MPEG-1 chroma siting, 5 fps, 1 frame, 00:00:00.200  [0x0+0x1bd]
   ▾ Stream header  [0x0+0x37]
       Signature: "YUV4MPEG2"  [0x0+0x9]
       Width: 16  [0xa+0x3]
       Height: 16  [0xe+0x3]
-      Frame rate: "5:1"  [0x12+0x4]
+      Frame rate: "5:1" — 5 fps  [0x12+0x4]
       Interlacing: "p" — progressive  [0x17+0x2]
-      Pixel aspect ratio: "1:1"  [0x1a+0x4]
-      Colour space: "420jpeg"  [0x1f+0x8]
+      Pixel aspect ratio: "1:1" — square pixels  [0x1a+0x4]
+      Colour space: "420jpeg" — 4:2:0 8-bit, JPEG/MPEG-1 chroma siting  [0x1f+0x8]
       Extension: "YSCSS=420JPEG"  [0x28+0xe]
   ▾ Frames — 384 bytes per frame  [0x37+0x186]
     ▾ Frame 0  [0x37+0x186]

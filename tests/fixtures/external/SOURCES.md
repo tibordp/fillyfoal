@@ -309,6 +309,18 @@ and reproduce every file byte for byte.
 | `mxf/op1a-mpeg2-pcm.mxf` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | identification set: company FFmpeg, product `OP1a Muxer`, version 62.12.102 |
 | `rm/rv10-ra.rm` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | inferred: `The Video Stream`/`The Audio Stream` MDPR names as FFmpeg's rmenc writes them, RV10 and RealAudio 1.0 (14.4) encoders only FFmpeg has here; not byte-reproduced |
 | `wmv/wmv1-wma.wmv` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | inferred: ASF header objects in FFmpeg's order, WMV1/WMAv1 encoders only FFmpeg has here; not byte-reproduced |
+| `h264/high-vui-crop.h264` | FFmpeg 8 with libx264 (x264 core 165) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); High profile, cropped 40×30, SAR 4:3, VUI timing and colour, JVT scaling matrices |
+| `h264/high422-10-interlaced-hrd.h264` | FFmpeg 8 with libx264 (x264 core 165) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); High 4:2:2 10-bit, interlaced, NAL HRD with buffering period and picture timing SEI |
+| `hevc/main10-hdr10.hevc` | FFmpeg 8 with libx265 (x265 4.2) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); Main 10, BT.2020/PQ VUI, mastering display and content light level SEI |
+| `ivf/av1-10bit-hdr.ivf` | FFmpeg 8 with libsvtav1 (SVT-AV1 4.1) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); 10-bit, HDR metadata OBUs (content light level, mastering display) |
+| `ivf/vp9-profile2.ivf` | FFmpeg 8 with libvpx-vp9 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); profile 2, 10-bit 4:2:0 |
+| `mpegts/hevc-ac3.ts` | FFmpeg 8 with libx265 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); HEVC + AC-3 with language, service name and provider |
+| `mpegts/h264-mp2-eac3.ts` | FFmpeg 8 with libx264 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); H.264 + MP2 + E-AC-3, two languages |
+| `mpeg-ps/mpeg2-ac3-lpcm.vob` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); MPEG-2 video, AC-3 and LPCM in private stream 1 |
+| `flv/hevc-aac.flv` | FFmpeg 8 with libx265 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); Enhanced FLV `hvc1` + AAC |
+| `flv/av1-opus.flv` | FFmpeg 8 with libsvtav1 and libopus | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); Enhanced FLV `av01` (with colorInfo metadata) + enhanced audio `Opus` (multichannel config) |
+| `flv/vp9.flv` | FFmpeg 8 with libvpx-vp9 | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); Enhanced FLV `vp09` |
+| `y4m/420p10-tff.y4m` | FFmpeg 8 (libavformat 62.12.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `sh tests/data/video/make.sh` (bitexact); 10-bit 4:2:0, top field first, PAR 10:11, 30000/1001 fps |
 
 ## Other image tools
 

@@ -4,6 +4,7 @@
 
 pub mod mpeg4;
 pub mod ps;
+pub mod si;
 pub mod ts;
 pub mod video;
 
@@ -30,7 +31,14 @@ pub fn stream_id_name(id: u8) -> String {
         0xf1 => "EMM stream".to_owned(),
         0xf2 => "DSM-CC stream".to_owned(),
         0xf3 => "ISO/IEC 13522 stream".to_owned(),
-        0xf8 => "H.222.1 type E stream".to_owned(),
+        0xf4..=0xf8 => format!(
+            "H.222.1 type {} stream",
+            char::from(b'A'.saturating_add(id.saturating_sub(0xf4)))
+        ),
+        0xf9 => "Ancillary stream".to_owned(),
+        0xfa => "SL-packetized stream".to_owned(),
+        0xfb => "FlexMux stream".to_owned(),
+        0xfc => "Metadata stream".to_owned(),
         0xfd => "Extended stream ID".to_owned(),
         0xff => "Program stream directory".to_owned(),
         _ => format!("Stream {id:#04x}"),
@@ -163,20 +171,168 @@ pub fn pes_header(cx: &Cx, span: Span, d: &[u8]) -> (u64, u16) {
     if let Some(t) = dts {
         cx.emit(uint("DTS", span.sub(14, 5), t, 33).summary(seconds_90k(t)));
     }
-    let used = if dts.is_some() {
+    let end = 9usize.saturating_add(header_len.into());
+    let mut at = 9usize.saturating_add(if dts.is_some() {
         10
     } else if pts.is_some() {
         5
     } else {
         0
-    };
-    if u64::from(header_len) > used {
-        cx.emit(Node::new("Optional fields / stuffing").span(span.sub(
-            9u64.saturating_add(used),
-            u64::from(header_len).saturating_sub(used),
-        )));
+    });
+    let pos = |a: usize| crate::bytes::to_u64(a);
+    if b7 & 0x20 != 0 && at.saturating_add(6) <= end {
+        if let Some(e) = d.get(at..at.saturating_add(6)) {
+            let b = |i: usize| e.get(i).copied().map_or(0, u64::from);
+            let base = ((b(0) >> 3) & 7) << 30
+                | (b(0) & 3) << 28
+                | b(1) << 20
+                | (b(2) >> 3) << 15
+                | (b(2) & 3) << 13
+                | b(3) << 5
+                | b(4) >> 3;
+            let ext = (b(4) & 3) << 7 | b(5) >> 1;
+            cx.emit(
+                uint("ESCR", span.sub(pos(at), 6), base, 33)
+                    .summary(format!("{}, extension {ext}", seconds_90k(base))),
+            );
+        }
+        at = at.saturating_add(6);
     }
-    (9u64.saturating_add(header_len.into()), len)
+    if b7 & 0x10 != 0 && at.saturating_add(3) <= end {
+        let rate = (crate::bytes::u24_be(d, at).unwrap_or(0) >> 1) & 0x3f_ffff;
+        cx.emit(
+            uint("ES rate", span.sub(pos(at), 3), rate.into(), 22)
+                .summary(format!("{} bytes/s", u64::from(rate).saturating_mul(50))),
+        );
+        at = at.saturating_add(3);
+    }
+    if b7 & 0x08 != 0 && at < end {
+        let t = d.get(at).copied().unwrap_or(0);
+        cx.emit(enumerated(
+            "Trick mode control",
+            span.sub(pos(at), 1),
+            (t >> 5).into(),
+            3,
+            TRICK_MODES,
+        ));
+        at = at.saturating_add(1);
+    }
+    if b7 & 0x04 != 0 && at < end {
+        let c = d.get(at).copied().unwrap_or(0) & 0x7f;
+        cx.emit(hex(
+            "Additional copy info",
+            span.sub(pos(at), 1),
+            c.into(),
+            7,
+        ));
+        at = at.saturating_add(1);
+    }
+    if b7 & 0x02 != 0 && at.saturating_add(2) <= end {
+        let c = u16_be(d, at).unwrap_or(0);
+        cx.emit(hex("Previous PES CRC", span.sub(pos(at), 2), c.into(), 16));
+        at = at.saturating_add(2);
+    }
+    if b7 & 0x01 != 0 && at < end {
+        at = pes_extension(cx, span, d, at, end);
+    }
+    if end > at {
+        cx.emit(
+            Node::new("Stuffing")
+                .span(span.sub(pos(at), pos(end.saturating_sub(at))))
+                .summary(format!("{} bytes", end.saturating_sub(at))),
+        );
+    }
+    (pos(end), len)
+}
+
+const TRICK_MODES: EnumTable = &[
+    (0, "fast forward"),
+    (1, "slow motion"),
+    (2, "freeze frame"),
+    (3, "fast reverse"),
+    (4, "slow reverse"),
+];
+
+/// The PES extension: flags, then the fields they announce. Returns where
+/// it ends.
+fn pes_extension(cx: &Cx, span: Span, d: &[u8], start: usize, end: usize) -> usize {
+    let pos = |a: usize| crate::bytes::to_u64(a);
+    let flags = d.get(start).copied().unwrap_or(0);
+    let mut set = Vec::new();
+    for (bit, name) in [
+        (0x80, "PES_PRIVATE_DATA"),
+        (0x40, "PACK_HEADER"),
+        (0x20, "SEQUENCE_COUNTER"),
+        (0x10, "P_STD_BUFFER"),
+        (0x01, "EXTENSION_2"),
+    ] {
+        if flags & bit != 0 {
+            set.push(name);
+        }
+    }
+    cx.emit(
+        Node::new("PES extension flags")
+            .span(span.sub(pos(start), 1))
+            .value(Value::Flags {
+                raw: flags.into(),
+                bits: 8,
+                set,
+                unknown: 0,
+            }),
+    );
+    let mut at = start.saturating_add(1);
+    if flags & 0x80 != 0 {
+        cx.emit(Node::new("PES private data").span(span.sub(pos(at), 16)));
+        at = at.saturating_add(16);
+    }
+    if flags & 0x40 != 0 {
+        let n = usize::from(d.get(at).copied().unwrap_or(0));
+        cx.emit(
+            Node::new("Pack header field")
+                .span(span.sub(pos(at), pos(n.saturating_add(1))))
+                .summary(format!("{n} bytes")),
+        );
+        at = at.saturating_add(1).saturating_add(n);
+    }
+    if flags & 0x20 != 0 {
+        let c = d.get(at).copied().unwrap_or(0) & 0x7f;
+        cx.emit(uint(
+            "Program packet sequence counter",
+            span.sub(pos(at), 2),
+            c.into(),
+            7,
+        ));
+        at = at.saturating_add(2);
+    }
+    if flags & 0x10 != 0 {
+        let w = u16_be(d, at).unwrap_or(0);
+        let scale = if w & 0x2000 != 0 { 1024u64 } else { 128 };
+        cx.emit(
+            uint(
+                "P-STD buffer size",
+                span.sub(pos(at), 2),
+                (w & 0x1fff).into(),
+                13,
+            )
+            .summary(format!(
+                "{} bytes",
+                u64::from(w & 0x1fff).saturating_mul(scale)
+            )),
+        );
+        at = at.saturating_add(2);
+    }
+    if flags & 0x01 != 0 && at < end {
+        let n = usize::from(d.get(at).copied().unwrap_or(0) & 0x7f);
+        let field = span.sub(pos(at), pos(n.saturating_add(1)));
+        let mut node = Node::new("PES extension 2").span(field);
+        if n > 0 && d.get(at.saturating_add(1)).is_some_and(|b| b & 0x80 == 0) {
+            let id = d.get(at.saturating_add(1)).copied().unwrap_or(0) & 0x7f;
+            node = node.summary(format!("stream ID extension {id:#04x}"));
+        }
+        cx.emit(node);
+        at = at.saturating_add(1).saturating_add(n);
+    }
+    at.min(end)
 }
 
 /// MPEG-1 packet header after the length: stuffing bytes, optional STD
