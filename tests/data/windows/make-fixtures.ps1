@@ -42,6 +42,10 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 Set-Location $OutDir
 
+if ('FillyNative' -as [type]) {
+    # .NET cannot unload or redefine a type within a session.
+    throw 'This session already loaded an earlier version of the helpers; run the script in a new PowerShell window.'
+}
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
