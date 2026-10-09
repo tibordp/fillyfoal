@@ -90,6 +90,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut pos = u64::from(header_size).max(26);
     let mut sum = Summary::default();
     let mut blocks = Vec::new();
+    let mut extended: Option<(u64, u16, u64)> = None;
     while pos < file.len && blocks.len() < 4096 {
         let head = cx.read_avail(file.sub(pos, 16)).await?;
         let kind = head.first().copied().unwrap_or(0);
@@ -101,11 +102,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let len = u64::from(crate::bytes::u24_le(&head, 1).unwrap_or(0));
         let span = file.sub(pos, len.saturating_add(4));
         match kind {
+            // An extended block overrides the rate, codec and channels of
+            // the sound data block that follows it.
+            8 => {
+                let tc = u16_le(&head, 4).unwrap_or(0);
+                let channels = u64::from(head.get(7).copied().unwrap_or(0)).saturating_add(1);
+                let rate = 256_000_000u64
+                    .checked_div(65536u64.saturating_sub(tc.into()))
+                    .unwrap_or(0)
+                    .checked_div(channels)
+                    .unwrap_or(0);
+                extended = Some((rate, u16::from(head.get(6).copied().unwrap_or(0)), channels));
+            }
             1 if sum.rate == 0 => {
-                sum.rate = rate_of(head.get(4).copied().unwrap_or(0));
-                sum.codec = head.get(5).copied().unwrap_or(0).into();
+                (sum.rate, sum.codec, sum.channels) = extended.take().unwrap_or((
+                    rate_of(head.get(4).copied().unwrap_or(0)),
+                    head.get(5).copied().unwrap_or(0).into(),
+                    1,
+                ));
                 sum.bits = if sum.codec == 4 { 16 } else { 8 };
-                sum.channels = 1;
             }
             9 if sum.rate == 0 => {
                 sum.rate = u32_le(&head, 4).unwrap_or(0).into();

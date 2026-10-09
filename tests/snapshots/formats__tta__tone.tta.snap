@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.tta — TTA, 8000 Hz, 1 ch, 16-bit, 100 ms  [0x0+0x2cf]
+▾ tone.tta — TTA 16-bit, 8 kHz, mono, 100 ms  [0x0+0x2cf]
   ▾ Header — CRC valid  [0x0+0x16]
       Signature: "TTA1"  [0x0+0x4]
       Audio format: PCM (0x1)  [0x4+0x2]
@@ -14,5 +14,8 @@ expression: "common::explore(&name, &data)"
   ▾ Seek table — 1 entries  [0x16+0x4]
     ▾ Frame 0 — 689 bytes  [0x16+0x4]
         Size: 689  [0x16+0x4]
-    Seek table CRC: 0x870e228d  [0x1a+0x4]
-    Frames — 1 frames  [0x1e+0x2b1]
+    Seek table CRC: 0x870e228d — valid  [0x1a+0x4]
+  ▾ Frames — 1 frames  [0x1e+0x2b1]
+    ▾ Frame 0 — 689 bytes, samples 0..800  [0x1e+0x2b1]
+        Data  [0x1e+0x2ad]
+        CRC: 0x4cdb6ea1 — valid  [0x2cb+0x4]

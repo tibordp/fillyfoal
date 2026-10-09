@@ -1,17 +1,17 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ alaw.aifc — AIFF-C A-law, 8000 Hz, 1 ch, 8-bit, 20 ms  [0x0+0xe8]
+▾ alaw.aifc — AIFF-C A-law, 8 kHz, mono, 20 ms  [0x0+0xe8]
   ▾ Header  [0x0+0xc]
       Chunk ID: "FORM"  [0x0+0x4]
       Size: 224  [0x4+0x4]
       Form type: "AIFC"  [0x8+0x4]
-  ▾ FVER — 4 bytes  [0xc+0xc]
+  ▾ FVER — AIFF-C version 1  [0xc+0xc]
       Chunk ID: "FVER"  [0xc+0x4]
       Chunk size: 4  [0x10+0x4]
       Timestamp: 1990-05-23 14:40:00 UTC  [0x14+0x4]
-  ▾ COMM — A-law, 8000 Hz, 1 ch, 8-bit, 20 ms  [0x18+0x20]
+  ▾ COMM — A-law, 8 kHz, mono, 20 ms  [0x18+0x20]
       Chunk ID: "COMM"  [0x18+0x4]
       Chunk size: 24  [0x1c+0x4]
       Channels: 1  [0x20+0x2]
@@ -25,4 +25,4 @@ expression: "common::explore(&name, &data)"
       Chunk size: 168  [0x3c+0x4]
       Offset: 0  [0x40+0x4]
       Block size: 0  [0x44+0x4]
-      Samples — A-law, 8000 Hz, 1 ch, 8-bit, 20 ms  [0x48+0xa0]
+      Samples — A-law, 8 kHz, mono, 20 ms  [0x48+0xa0]

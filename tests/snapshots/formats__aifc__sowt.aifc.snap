@@ -1,17 +1,17 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ sowt.aifc — AIFF-C PCM (little-endian), 11025 Hz, 1 ch, 16-bit, 20 ms  [0x0+0x202]
+▾ sowt.aifc — AIFF-C PCM 16-bit little-endian, 11.025 kHz, mono, 20 ms  [0x0+0x202]
   ▾ Header  [0x0+0xc]
       Chunk ID: "FORM"  [0x0+0x4]
       Size: 506  [0x4+0x4]
       Form type: "AIFC"  [0x8+0x4]
-  ▾ FVER — 4 bytes  [0xc+0xc]
+  ▾ FVER — AIFF-C version 1  [0xc+0xc]
       Chunk ID: "FVER"  [0xc+0x4]
       Chunk size: 4  [0x10+0x4]
       Timestamp: 1990-05-23 14:40:00 UTC  [0x14+0x4]
-  ▾ COMM — PCM (little-endian), 11025 Hz, 1 ch, 16-bit, 20 ms  [0x18+0x20]
+  ▾ COMM — PCM 16-bit little-endian, 11.025 kHz, mono, 20 ms  [0x18+0x20]
       Chunk ID: "COMM"  [0x18+0x4]
       Chunk size: 24  [0x1c+0x4]
       Channels: 1  [0x20+0x2]
@@ -25,4 +25,4 @@ expression: "common::explore(&name, &data)"
       Chunk size: 450  [0x3c+0x4]
       Offset: 0  [0x40+0x4]
       Block size: 0  [0x44+0x4]
-      Samples — PCM (little-endian), 11025 Hz, 1 ch, 16-bit, 20 ms  [0x48+0x1ba]
+      Samples — PCM 16-bit little-endian, 11.025 kHz, mono, 20 ms  [0x48+0x1ba]

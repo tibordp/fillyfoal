@@ -1,12 +1,12 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.w64 — Wave64 PCM, 8000 Hz, 1 ch, 16-bit, 50 ms  [0x0+0x388]
+▾ tone.w64 — Wave64 PCM 16-bit, 8 kHz, mono, 50 ms  [0x0+0x388]
     RIFF GUID: {66666972-912e-11cf-a5d6-28db04c10000}  [0x0+0x10]
     Size: 904  [0x10+0x8]
     WAVE GUID: {65766177-acf3-11d3-8cd1-00c04f8edb8a}  [0x18+0x10]
-  ▾ fmt — PCM, 8000 Hz, 1 ch, 16-bit  [0x28+0x28]
+  ▾ fmt — PCM 16-bit, 8 kHz, mono  [0x28+0x28]
       Chunk GUID: {20746d66-acf3-11d3-8cd1-00c04f8edb8a}  [0x28+0x10]
       Size: 40  [0x38+0x8]
       Format tag: PCM (0x1)  [0x40+0x2]
@@ -15,7 +15,7 @@ expression: "common::explore(&name, &data)"
       Average bytes per second: 16000  [0x48+0x4]
       Block align: 2  [0x4c+0x2]
       Bits per sample: 16  [0x4e+0x2]
-  ▾ data — 800 bytes  [0x50+0x338]
+  ▾ data — 800 bytes, 50 ms  [0x50+0x338]
       Chunk GUID: {61746164-acf3-11d3-8cd1-00c04f8edb8a}  [0x50+0x10]
       Size: 824  [0x60+0x8]
-      Samples  [0x68+0x320]
+      Samples — 400 frames, 50 ms  [0x68+0x320]

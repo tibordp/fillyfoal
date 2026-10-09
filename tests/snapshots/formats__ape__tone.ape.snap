@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.ape — Monkey's Audio normal, 8000 Hz, 1 ch, 16-bit, 25 ms  [0x0+0x162]
+▾ tone.ape — Monkey's Audio 16-bit, 8 kHz, mono, 25 ms, normal compression  [0x0+0x162]
   ▾ Descriptor  [0x0+0x34]
       ID: "MAC "  [0x0+0x4]
       Version: 3990 — 3.99  [0x4+0x2]
@@ -25,17 +25,17 @@ expression: "common::explore(&name, &data)"
       Channels: 1  [0x46+0x2]
       Sample rate: 8000  [0x48+0x4]
   ▾ Seek table — 2 entries  [0x4c+0x8]
-    ▾ Frame 0 — 0x0  [0x4c+0x4]
+    ▾ Frame 0 — at 0x0  [0x4c+0x4]
         Offset: 0x0  [0x4c+0x4]
-    ▾ Frame 1 — 0x3c  [0x50+0x4]
+    ▾ Frame 1 — at 0x3c  [0x50+0x4]
         Offset: 0x3c  [0x50+0x4]
-  ▾ WAV header — PCM, 8000 Hz, 1 ch, 16-bit, 25 ms  [0x54+0x2c]
+  ▾ WAV header — WAV PCM 16-bit, 8 kHz, mono, 25 ms  [0x54+0x2c]
       ! truncated: needed 0x1bc bytes at 0x54, only 0x2c available [0x54+0x1bc]
     ▾ Header  [0x54+0xc]
         Chunk ID: "RIFF"  [0x54+0x4]
         Size: 436  [0x58+0x4]
         Form type: "WAVE"  [0x5c+0x4]
-    ▾ fmt — PCM, 8000 Hz, 1 ch, 16-bit  [0x60+0x18]
+    ▾ fmt — PCM 16-bit, 8 kHz, mono  [0x60+0x18]
         Chunk ID: "fmt "  [0x60+0x4]
         Chunk size: 16  [0x64+0x4]
         Format tag: PCM (0x1)  [0x68+0x2]
@@ -48,7 +48,7 @@ expression: "common::explore(&name, &data)"
         ! truncated: needed 0x190 bytes at 0x80, only 0x0 available [0x80+0x190]
         Chunk ID: "data"  [0x78+0x4]
         Chunk size: 400  [0x7c+0x4]
-        Samples — 25 ms  [0x80+0x0]
+        Samples — 200 frames, 25 ms  [0x80+0x0]
     Frame data — 120 bytes  [0x80+0x78]
   ▾ APE tag — APEv2, 2 items: fillyfoal – Tone  [0xf8+0x6a]
     ▾ Header  [0xf8+0x20]

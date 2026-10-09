@@ -76,12 +76,32 @@ impl Kind {
         toc & 0x83 == 0 && (ft <= 9 || ft == 15) && !(ft == 9 && !self.wide)
     }
 
-    /// The whole frame (header and payload) for each channel.
+    /// One channel's frame (header and payload).
     fn frame_len(self, toc: u8) -> u64 {
         let ft = usize::from((toc >> 3) & 0xf);
         self.sizes().get(ft).copied().unwrap_or(0).saturating_add(1)
     }
+
+    /// A frame block (one frame per channel, each with its own header) at
+    /// the start of `data`: its length and the first channel's header, or
+    /// `None` if a header is invalid or missing.
+    fn block(self, data: &[u8]) -> Option<(u64, u8)> {
+        let first = *data.first()?;
+        let mut len = 0u64;
+        for _ in 0..self.channels {
+            let toc = *data.get(to_usize(len))?;
+            if !self.valid(toc) {
+                return None;
+            }
+            len = len.saturating_add(self.frame_len(toc));
+        }
+        Some((len, first))
+    }
 }
+
+/// Bytes enough for the headers of a frame block (61 bytes per channel at
+/// most, up to 15 channels).
+const BLOCK_PEEK: u64 = 61 * 15;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -124,12 +144,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let window = cx.read_avail(frames_span.sub(0, 0x10000)).await?;
     let mut at = 0usize;
     let mut count = 0u64;
-    while let Some(&toc) = window.get(at) {
-        if !kind.valid(toc) {
-            break;
-        }
-        at = at.saturating_add(to_usize(kind.frame_len(toc).saturating_mul(channels)));
+    while let Some((len, _)) = window.get(at..).and_then(|w| kind.block(w)) {
+        at = at.saturating_add(to_usize(len));
         count = count.saturating_add(1);
+        if count.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
     }
     let exact = to_u64(window.len()) == frames_span.len;
     let frames = if exact || at == 0 {
@@ -162,12 +182,15 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 }
 
 async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
-    let mut pos = 0u64;
-    let mut index = 0u64;
+    let (mut pos, mut index) = cx.resume::<(u64, u64)>().unwrap_or((0, 0));
     while pos < region.len {
-        let toc = cx.read(region.sub(pos, 1)).await?;
-        let toc = toc.first().copied().unwrap_or(0);
-        if !kind.valid(toc) {
+        let at = (pos, index);
+        cx.mark(move || at);
+        let peek = cx
+            .read_avail(region.sub(pos, BLOCK_PEEK.min(61u64.saturating_mul(kind.channels))))
+            .await?;
+        let Some((len, toc)) = kind.block(&peek) else {
+            let toc = peek.first().copied().unwrap_or(0);
             cx.emit(
                 Node::new("Unparsed data")
                     .span(region.tail(pos))
@@ -176,8 +199,7 @@ async fn list_frames(cx: Cx, (region, kind): (Span, Kind)) -> Result<()> {
                     ))),
             );
             return Ok(());
-        }
-        let len = kind.frame_len(toc).saturating_mul(kind.channels);
+        };
         let span = region.sub(pos, len);
         let mode = crate::value::lookup(kind.modes(), ((toc >> 3) & 0xf).into()).unwrap_or("?");
         let mut node = Node::new(format!("Frame {index}"))

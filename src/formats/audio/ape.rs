@@ -46,6 +46,7 @@ const FLAGS: FlagTable = &[
     flag(0x100, "SND"),
     flag(0x200, "BIG_ENDIAN"),
     flag(0x400, "CAF"),
+    flag(0x800, "FLOATING_POINT"),
 ];
 
 record! {
@@ -142,9 +143,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let span = file.sub(0, OldHeader::SIZE);
         let h = parse(&cx, span, LE, &(), OldHeader::layout).await?;
         cx.emit(OldHeader::node("Header", span, LE));
+        // As FFmpeg's ape demuxer reads them.
         let blocks: u64 = if version >= 3950 {
             73728 * 4
-        } else if version >= 3900 || (version >= 3800 && h.level == 4000) {
+        } else if version >= 3900 || (version >= 3800 && h.level >= 4000) {
             73728
         } else {
             9216
@@ -154,8 +156,28 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .saturating_add(h.final_frame_blocks.into());
         let mut at = OldHeader::SIZE;
         let mut sections = Vec::new();
-        sections.push(("WAV header", file.sub(at, h.wav_header_bytes.into())));
-        at = at.saturating_add(h.wav_header_bytes.into());
+        if h.flags & 0x4 != 0 {
+            sections.push(("Peak level", file.sub(at, 4)));
+            at = at.saturating_add(4);
+        }
+        let mut seek_entries = u64::from(h.frames);
+        if h.flags & 0x10 != 0 {
+            let n = cx.read_avail(file.sub(at, 4)).await?;
+            seek_entries = crate::bytes::u32_le(&n, 0).map_or(0, u64::from);
+            sections.push(("Seek elements", file.sub(at, 4)));
+            at = at.saturating_add(4);
+        }
+        if h.flags & 0x20 == 0 {
+            sections.push(("WAV header", file.sub(at, h.wav_header_bytes.into())));
+            at = at.saturating_add(h.wav_header_bytes.into());
+        }
+        let seek = seek_entries.saturating_mul(4);
+        sections.push(("Seek table", file.sub(at, seek)));
+        at = at.saturating_add(seek);
+        if version < 3810 {
+            sections.push(("Seek bit table", file.sub(at, h.frames.into())));
+            at = at.saturating_add(h.frames.into());
+        }
         sections.push(("Frame data", file.sub(at, end.saturating_sub(at))));
         let bits = if h.flags & 1 != 0 {
             8
@@ -173,15 +195,21 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         };
         (info, end, sections)
     };
+    let layout = match info.channels {
+        1 => "mono".to_owned(),
+        2 => "stereo".to_owned(),
+        n => channels(n),
+    };
     let mut line = format!(
-        "Monkey's Audio {}, {} Hz, {}, {}-bit",
-        crate::value::lookup(LEVEL, info.level.into()).unwrap_or("?"),
-        info.rate,
-        channels(info.channels),
-        info.bits
+        "Monkey's Audio {}-bit, {}, {layout}",
+        info.bits,
+        crate::formats::iff::wav::khz(info.rate),
     );
     if let Some(d) = duration_of(info.samples, info.rate.into()) {
         line.push_str(&format!(", {d}"));
+    }
+    if let Some(level) = crate::value::lookup(LEVEL, info.level.into()) {
+        line.push_str(&format!(", {level} compression"));
     }
     cx.annotate(line);
     for (name, span) in sections {
@@ -194,8 +222,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 span,
                 LE,
                 "Frame",
-                Some(|e| format!("{:#x}", e.offset)),
+                Some(|e| format!("at {:#x}", e.offset)),
             ),
+            "Peak level" | "Seek elements" => {
+                let v = cx.read_avail(span).await?;
+                crate::formats::util::sound::leaf(
+                    name,
+                    span,
+                    crate::formats::util::sound::uint(crate::bytes::u32_le(&v, 0).unwrap_or(0), 32),
+                )
+            }
+            "Seek bit table" => Node::new(name)
+                .span(span)
+                .desc("Bit offsets within the first byte of each frame (before 3.81)"),
             "WAV header" => crate::formats::embedded(name, input.nested(span)),
             _ => Node::new(name)
                 .span(span)

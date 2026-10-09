@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tone.aiff — AIFF PCM, 8000 Hz, 1 ch, 16-bit, 20 ms  [0x0+0x210]
+▾ tone.aiff — AIFF PCM 16-bit, 8 kHz, mono, 20 ms  [0x0+0x210]
   ▾ Header  [0x0+0xc]
       Chunk ID: "FORM"  [0x0+0x4]
       Size: 520  [0x4+0x4]
@@ -19,7 +19,7 @@ expression: "common::explore(&name, &data)"
       Chunk ID: "ANNO"  [0x24+0x4]
       Chunk size: 10  [0x28+0x4]
       Text: "annotation"  [0x2c+0xa]
-  ▾ COMM — PCM, 8000 Hz, 1 ch, 16-bit, 20 ms  [0x36+0x1a]
+  ▾ COMM — PCM 16-bit, 8 kHz, mono, 20 ms  [0x36+0x1a]
       Chunk ID: "COMM"  [0x36+0x4]
       Chunk size: 18  [0x3a+0x4]
       Channels: 1  [0x3e+0x2]
@@ -31,7 +31,7 @@ expression: "common::explore(&name, &data)"
       Chunk size: 328  [0x54+0x4]
       Offset: 0  [0x58+0x4]
       Block size: 0  [0x5c+0x4]
-      Samples — PCM, 8000 Hz, 1 ch, 16-bit, 20 ms  [0x60+0x140]
+      Samples — PCM 16-bit, 8 kHz, mono, 20 ms  [0x60+0x140]
   ▾ ID3 — 103 bytes  [0x1a0+0x70]
       Chunk ID: "ID3 "  [0x1a0+0x4]
       Chunk size: 103  [0x1a4+0x4]

@@ -124,6 +124,21 @@ async fn dsf_data(cx: Cx, span: Span) -> Result<()> {
 // ---------------------------------------------------------------------------
 // DSDIFF
 
+const DFF_MARK_TYPE: EnumTable = &[
+    (0, "track start"),
+    (1, "track stop"),
+    (2, "program start"),
+    (3, "obsolete"),
+    (4, "index"),
+];
+
+const DFF_COMMENT_TYPE: EnumTable = &[
+    (0, "general comment"),
+    (1, "channel comment"),
+    (2, "sound source"),
+    (3, "file history"),
+];
+
 /// Chunks that hold further chunks after a 4-byte type, or directly.
 fn dff_container(id: &[u8]) -> Option<u64> {
     match id {
@@ -260,7 +275,7 @@ async fn dff_chunk(cx: Cx, (input, id, span): (Input, Vec<u8>, Span)) -> Result<
         }
         return dff_walk(&cx, input, data.tail(skip)).await;
     }
-    let block = cx.block(data.sub(0, data.len.min(256))).await?;
+    let block = cx.block(data.sub(0, data.len.min(1 << 16))).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
     match id.as_slice() {
         b"FVER" => {
@@ -312,6 +327,62 @@ async fn dff_chunk(cx: Cx, (input, id, span): (Input, Vec<u8>, Span)) -> Result<
         b"DIAR" | b"DITI" => {
             let len = f.u32("Length").emit()?;
             crate::formats::util::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
+        }
+        b"EMID" => {
+            let n = f.remaining();
+            crate::formats::util::sound::latin1_field(&mut f, "Edited master ID", n).emit()?;
+        }
+        b"FRTE" => {
+            f.u32("Frames").emit()?;
+            f.u16("Frame rate").desc("DST frames per second").emit()?;
+        }
+        b"MARK" => {
+            f.u16("Hours").emit()?;
+            f.u8("Minutes").emit()?;
+            f.u8("Seconds").emit()?;
+            f.u32("Samples").emit()?;
+            f.i32("Offset")
+                .desc("Samples relative to the time code")
+                .emit()?;
+            f.u16("Marker type").enumeration(DFF_MARK_TYPE).emit()?;
+            f.u16("Channel").desc("0 = all channels").emit()?;
+            f.u16("Track flags").hex().emit()?;
+            let len = f.u32("Length").emit()?;
+            crate::formats::util::sound::latin1_field(&mut f, "Text", len.into()).emit()?;
+        }
+        b"COMT" => {
+            let n = f.u16("Comments").emit()?;
+            for i in 0..n {
+                if f.remaining() < 14 {
+                    break;
+                }
+                let start = f.pos();
+                let mut q = Fields::new(&block, BE);
+                q.seek(start);
+                let year = q.u16("Year").get()?;
+                let month = q.u8("Month").get()?;
+                let day = q.u8("Day").get()?;
+                let hour = q.u8("Hour").get()?;
+                let minute = q.u8("Minutes").get()?;
+                let kind = q.u16("Type").get()?;
+                q.skip(2);
+                let len = q.u32("Count").get()?;
+                let body = q.bytes("Text", len.into()).get().unwrap_or_default();
+                let total = 14u64
+                    .saturating_add(len.into())
+                    .saturating_add(u64::from(len & 1));
+                f.skip(total);
+                f.node(
+                    Node::new(format!("Comment {i}"))
+                        .span(data.sub(start, total))
+                        .value(text(crate::text::latin1(&body)))
+                        .summary(format!(
+                            "{}, {year:04}-{month:02}-{day:02} {hour:02}:{minute:02}",
+                            crate::value::lookup(DFF_COMMENT_TYPE, kind.into())
+                                .unwrap_or("comment")
+                        )),
+                );
+            }
         }
         b"ID3 " => cx.emit(embedded("ID3 tag", input.nested(data))),
         b"DSD " => cx.emit(Node::new("Samples").span(data)),
