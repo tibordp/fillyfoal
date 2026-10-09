@@ -2241,16 +2241,6 @@ pub async fn v1_title(cx: &Cx, span: Span) -> Option<String> {
     parse(cx, span, BE, &(), v1_layout).await.ok()?.title()
 }
 
-/// Looks for an ID3v1 tag in the last 128 bytes of `span`.
-pub async fn find_v1(cx: &Cx, span: Span) -> Result<Option<Span>> {
-    if span.len < 128 {
-        return Ok(None);
-    }
-    let at = span.tail(span.len.saturating_sub(128));
-    let magic = cx.read(at.sub(0, 3)).await?;
-    Ok((magic == b"TAG").then_some(at))
-}
-
 fn plus_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     f.ascii("Identifier", 4).emit()?;
     latin1_field(f, "Title", 60)

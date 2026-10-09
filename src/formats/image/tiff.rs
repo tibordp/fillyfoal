@@ -17,10 +17,11 @@
 
 mod dng;
 mod geo;
-pub mod iptc;
 pub(super) mod maker;
 pub(super) mod render;
 mod summary;
+
+pub use summary::Shot;
 
 use std::collections::BTreeSet;
 
@@ -889,6 +890,14 @@ pub async fn exif_summary(cx: &Cx, input: Input) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// What an Exif block says about how the photo was taken, for files that
+/// show parts of it separately (JPEG: the whole line on the APP1 segment,
+/// camera and date in the file's summary).
+pub async fn exif_shot(cx: &Cx, input: Input) -> Option<Shot> {
+    let (t, ifd) = open(cx, input).await?;
+    Some(summary::shot(cx, t, &ifd).await)
+}
+
 /// A TIFF stream from a Canon CR3 `CMT1`–`CMT4` box, whose IFD0 is IFD0,
 /// the Exif IFD, the Canon maker note or the GPS IFD respectively.
 pub fn cr3_metadata(name: &'static str, input: Input, span: Span, kind: [u8; 4]) -> Node {
@@ -1261,7 +1270,7 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
             return Ok(());
         }
         (Ns::Main, 0x83bb) => {
-            cx.emit(iptc::node("IPTC-NAA records", t.input, e.data));
+            cx.emit(super::iptc::node("IPTC-NAA records", e.data));
             return Ok(());
         }
         (Ns::Main, 0x8649) => {

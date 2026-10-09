@@ -27,8 +27,8 @@ use crate::fields::{Endian, Fields, Layout, Prim, struct_node};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
-use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::span::{Origin, Span};
+use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 use super::{ColorOrder, dims, palette, region, text, uint};
 
@@ -263,83 +263,6 @@ const STD_HUFFMAN: &[(u8, [u8; 16], [u8; 8], &str)] = &[
         [0x00, 0x01, 0x02, 0x03, 0x11, 0x04, 0x05, 0x21],
         "standard chrominance AC",
     ),
-];
-
-const IPTC_ENVELOPE: EnumTable = &[
-    (0, "Model version"),
-    (5, "Destination"),
-    (20, "File format"),
-    (22, "File format version"),
-    (30, "Service identifier"),
-    (40, "Envelope number"),
-    (50, "Product ID"),
-    (60, "Envelope priority"),
-    (70, "Date sent"),
-    (80, "Time sent"),
-    (90, "Coded character set"),
-    (100, "Unique name of object"),
-    (120, "ARM identifier"),
-    (122, "ARM version"),
-];
-
-const IPTC_APPLICATION: EnumTable = &[
-    (0, "Record version"),
-    (3, "Object type reference"),
-    (4, "Object attribute reference"),
-    (5, "Object name"),
-    (7, "Edit status"),
-    (8, "Editorial update"),
-    (10, "Urgency"),
-    (12, "Subject reference"),
-    (15, "Category"),
-    (20, "Supplemental category"),
-    (22, "Fixture identifier"),
-    (25, "Keywords"),
-    (26, "Content location code"),
-    (27, "Content location name"),
-    (30, "Release date"),
-    (35, "Release time"),
-    (37, "Expiration date"),
-    (38, "Expiration time"),
-    (40, "Special instructions"),
-    (42, "Action advised"),
-    (45, "Reference service"),
-    (47, "Reference date"),
-    (50, "Reference number"),
-    (55, "Date created"),
-    (60, "Time created"),
-    (62, "Digital creation date"),
-    (63, "Digital creation time"),
-    (65, "Originating program"),
-    (70, "Program version"),
-    (75, "Object cycle"),
-    (80, "By-line"),
-    (85, "By-line title"),
-    (90, "City"),
-    (92, "Sub-location"),
-    (95, "Province/state"),
-    (100, "Country code"),
-    (101, "Country name"),
-    (103, "Original transmission reference"),
-    (105, "Headline"),
-    (110, "Credit"),
-    (115, "Source"),
-    (116, "Copyright notice"),
-    (118, "Contact"),
-    (120, "Caption/abstract"),
-    (122, "Writer/editor"),
-    (125, "Rasterized caption"),
-    (130, "Image type"),
-    (131, "Image orientation"),
-    (135, "Language identifier"),
-    (150, "Audio type"),
-    (151, "Audio sampling rate"),
-    (152, "Audio sampling resolution"),
-    (153, "Audio duration"),
-    (154, "Audio outcue"),
-    (200, "Object preview file format"),
-    (201, "Object preview file format version"),
-    (202, "Object preview data"),
 ];
 
 const EXIF: &[u8] = b"Exif\0";
@@ -1479,31 +1402,7 @@ fn jpeg_ls_parameters(f: &mut Fields<'_>, _: &()) -> Result<u8> {
 }
 
 // ---------------------------------------------------------------------------
-// Exif summary
-
-#[derive(Clone, Debug, Default)]
-struct ExifInfo {
-    camera: Option<String>,
-    date: Option<String>,
-    exposure: Option<String>,
-    aperture: Option<String>,
-    iso: Option<u64>,
-    focal: Option<String>,
-}
-
-impl ExifInfo {
-    /// "Canon EOS 5D, f/2.8, 1/200 s, ISO 400, 50 mm, 2024-05-01 12:00:00".
-    fn describe(&self) -> String {
-        let mut parts: Vec<String> = Vec::new();
-        parts.extend(self.camera.clone());
-        parts.extend(self.aperture.clone());
-        parts.extend(self.exposure.clone());
-        parts.extend(self.iso.map(|i| format!("ISO {i}")));
-        parts.extend(self.focal.clone());
-        parts.extend(self.date.clone());
-        parts.join(", ")
-    }
-}
+// In-memory TIFF structures (the MPF index)
 
 fn tiff_endian(data: &[u8]) -> Option<Endian> {
     match data.get(..4)? {
@@ -1564,114 +1463,6 @@ fn ifd_entries(data: &[u8], endian: Endian, offset: u32) -> Vec<(u16, u16, usize
         }
     }
     out
-}
-
-fn exif_text(value: &[u8]) -> Option<String> {
-    let text = crate::text::until_nul(value).trim().to_owned();
-    (!text.is_empty()).then_some(text)
-}
-
-fn exif_uint(kind: u16, value: &[u8], endian: Endian) -> Option<u64> {
-    match kind {
-        3 => get::<u16>(value, 0, endian).map(u64::from),
-        4 => get::<u32>(value, 0, endian).map(u64::from),
-        _ => None,
-    }
-}
-
-fn exif_rational(kind: u16, value: &[u8], endian: Endian) -> Option<(u32, u32)> {
-    (kind == 5).then_some(())?;
-    let n = get::<u32>(value, 0, endian)?;
-    let d = get::<u32>(value, 4, endian)?;
-    (d != 0).then_some((n, d))
-}
-
-/// A decimal with at most one digit after the point, without a trailing ".0".
-fn short_decimal(v: f64) -> String {
-    let s = format!("{v:.1}");
-    s.strip_suffix(".0")
-        .map_or_else(|| s.clone(), str::to_owned)
-}
-
-fn exposure_text((n, d): (u32, u32)) -> Option<String> {
-    if n == 0 {
-        return None;
-    }
-    if n >= d {
-        return Some(format!("{} s", short_decimal(f64::from(n) / f64::from(d))));
-    }
-    if n == 1 {
-        return Some(format!("1/{d} s"));
-    }
-    Some(format!("1/{} s", (f64::from(d) / f64::from(n)).round()))
-}
-
-/// "2024:05:01 12:00:00" → "2024-05-01 12:00:00".
-fn exif_date(text: &str) -> Option<String> {
-    if text
-        .trim_matches(|c: char| c == '0' || c == ':' || c == ' ')
-        .is_empty()
-    {
-        return None;
-    }
-    let bytes = text.as_bytes();
-    if bytes.get(4) == Some(&b':') && bytes.get(7) == Some(&b':') {
-        return Some(
-            text.char_indices()
-                .map(|(i, c)| if i == 4 || i == 7 { '-' } else { c })
-                .collect(),
-        );
-    }
-    Some(text.to_owned())
-}
-
-/// The camera, settings and date of an Exif block (a TIFF stream).
-fn exif_info(data: &[u8]) -> Option<ExifInfo> {
-    let endian = tiff_endian(data)?;
-    let ifd0 = get::<u32>(data, 4, endian)?;
-    let mut info = ExifInfo::default();
-    let (mut make, mut model, mut date) = (None, None, None);
-    let mut exif_ifd = None;
-    for (tag, kind, _, value) in ifd_entries(data, endian, ifd0) {
-        match tag {
-            0x010f => make = exif_text(value),
-            0x0110 => model = exif_text(value),
-            0x0132 => date = exif_text(value),
-            0x8769 => exif_ifd = exif_uint(kind, value, endian),
-            _ => {}
-        }
-    }
-    if let Some(offset) = exif_ifd.and_then(|o| u32::try_from(o).ok()) {
-        for (tag, kind, _, value) in ifd_entries(data, endian, offset) {
-            match tag {
-                0x9003 => {
-                    if let Some(t) = exif_text(value) {
-                        date = Some(t);
-                    }
-                }
-                0x829a => {
-                    info.exposure = exif_rational(kind, value, endian).and_then(exposure_text)
-                }
-                0x829d => {
-                    info.aperture = exif_rational(kind, value, endian)
-                        .map(|(n, d)| format!("f/{}", short_decimal(f64::from(n) / f64::from(d))));
-                }
-                0x8827 => info.iso = exif_uint(kind, value, endian),
-                0x920a => {
-                    info.focal = exif_rational(kind, value, endian)
-                        .map(|(n, d)| format!("{} mm", short_decimal(f64::from(n) / f64::from(d))));
-                }
-                _ => {}
-            }
-        }
-    }
-    info.camera = match (make, model) {
-        (Some(make), Some(model)) if model.starts_with(&make) => Some(model),
-        (Some(make), Some(model)) => Some(format!("{make} {model}")),
-        (make, model) => model.or(make),
-    };
-    info.date = date.as_deref().and_then(exif_date);
-    Some(info)
 }
 
 // ---------------------------------------------------------------------------
@@ -2004,39 +1795,223 @@ fn ducky_summary(head: &[u8]) -> String {
     "Ducky".to_owned()
 }
 
-/// The number of Photoshop image resources and where the IPTC record
-/// (resource 1028) is, within an APP13 payload after its identifier.
-fn irb_scan(data: &[u8]) -> (usize, Option<(usize, usize)>) {
-    let mut pos = 0usize;
-    let mut count = 0usize;
-    let mut iptc = None;
-    while let Some(sig) = data.get(pos..pos.saturating_add(4)) {
-        if sig != b"8BIM" {
-            break;
-        }
-        let Some(id) = u16_be(data, pos.saturating_add(4)) else {
-            break;
-        };
-        let Some(&name_len) = data.get(pos.saturating_add(6)) else {
-            break;
-        };
-        // Pascal name, padded to even length with its length byte.
-        let name = usize::from(name_len).saturating_add(1);
-        let size_at = pos
-            .saturating_add(6)
-            .saturating_add(name)
-            .saturating_add(name & 1);
-        let Some(size) = u32_be(data, size_at).and_then(|s| usize::try_from(s).ok()) else {
-            break;
-        };
-        let start = size_at.saturating_add(4);
-        if id == 1028 && iptc.is_none() {
-            iptc = Some((start, size));
-        }
-        count = count.saturating_add(1);
-        pos = start.saturating_add(size).saturating_add(size & 1);
+/// A run of Photoshop APP13 payloads (after the identifier) that hold one
+/// list of image resources: Photoshop splits the list over several
+/// segments when it exceeds one, cutting a resource wherever the segment
+/// ends.
+#[derive(Clone, Debug, Default)]
+struct IrbGroup {
+    parts: Vec<Span>,
+    /// Resources found, and whether one of them is IPTC-IIM (1028).
+    count: usize,
+    iptc: bool,
+}
+
+/// The Photoshop APP13 segments of `file`, grouped so that a resource that
+/// continues into the next segment keeps the two together.
+async fn irb_groups(cx: &Cx, file: Span) -> Arc<Vec<IrbGroup>> {
+    const KIND: &str = "jpeg-photoshop-groups";
+    if let Some(groups) = cx.cached::<Vec<IrbGroup>>(file, KIND) {
+        return groups;
     }
-    (count, iptc)
+    let groups = Arc::new(scan_irb_groups(cx, file).await.unwrap_or_default());
+    cx.cache(file, KIND, Arc::clone(&groups));
+    groups
+}
+
+async fn scan_irb_groups(cx: &Cx, file: Span) -> Result<Vec<IrbGroup>> {
+    let segments = header_segments(cx, file).await;
+    let mut parts = Vec::new();
+    for seg in segments.iter().filter(|s| s.marker == 0xed) {
+        let head = cx.read_avail(seg.payload().sub(0, 80)).await?;
+        if let (App::Photoshop, id_len) = app_kind(seg.marker, &head) {
+            parts.push(seg.payload().tail(id_len));
+        }
+    }
+    group_irb_parts(cx, parts).await
+}
+
+/// Groups Photoshop APP13 payloads by walking the resources across them.
+async fn group_irb_parts(cx: &Cx, parts: Vec<Span>) -> Result<Vec<IrbGroup>> {
+    // Where each part starts in the parts joined end to end.
+    let mut starts = Vec::with_capacity(parts.len());
+    let mut total = 0u64;
+    for p in &parts {
+        starts.push(total);
+        total = total.saturating_add(p.len);
+    }
+    // Whether part i continues part i - 1, and per part the resources that
+    // start in it.
+    let mut joined = vec![false; parts.len()];
+    let mut counts = vec![(0usize, false); parts.len()];
+    let mut pos = 0u64;
+    let mut k = 0usize;
+    while pos < total {
+        cx.checkpoint().await;
+        while starts.get(k.saturating_add(1)).is_some_and(|&s| s <= pos) {
+            k = k.saturating_add(1);
+        }
+        let part_start = starts.get(k).copied().unwrap_or(0);
+        let next_part = starts.get(k.saturating_add(1)).copied().unwrap_or(total);
+        let head = read_joined(
+            cx,
+            parts.get(k..).unwrap_or_default(),
+            pos.saturating_sub(part_start),
+            268,
+        )
+        .await?;
+        let Some(end) = irb_resource_end(&head).map(|n| pos.saturating_add(n)) else {
+            // Not a resource: go on with the next segment.
+            pos = next_part;
+            continue;
+        };
+        if let Some((n, iptc)) = counts.get_mut(k) {
+            *n = n.saturating_add(1);
+            *iptc |= u16_be(&head, 4) == Some(1028);
+        }
+        if end > total {
+            // Cut short at the end of the last segment: joins nothing.
+            break;
+        }
+        // Segments this resource runs into continue the one it starts in.
+        let mut j = k.saturating_add(1);
+        while starts.get(j).is_some_and(|&s| s < end) {
+            if let Some(flag) = joined.get_mut(j) {
+                *flag = true;
+            }
+            j = j.saturating_add(1);
+        }
+        pos = end;
+    }
+    let mut groups: Vec<IrbGroup> = Vec::new();
+    for ((part, join), (n, iptc)) in parts.into_iter().zip(joined).zip(counts) {
+        match groups.last_mut() {
+            Some(g) if join => {
+                g.parts.push(part);
+                g.count = g.count.saturating_add(n);
+                g.iptc |= iptc;
+            }
+            _ => groups.push(IrbGroup {
+                parts: vec![part],
+                count: n,
+                iptc,
+            }),
+        }
+    }
+    Ok(groups)
+}
+
+/// Up to `n` bytes at `pos` in `parts` joined end to end.
+async fn read_joined(cx: &Cx, parts: &[Span], mut pos: u64, n: u64) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    for p in parts {
+        let want = n.saturating_sub(to_u64(out.len()));
+        if want == 0 {
+            break;
+        }
+        if pos >= p.len {
+            pos = pos.saturating_sub(p.len);
+            continue;
+        }
+        out.extend(cx.read_avail(p.sub(pos, want)).await?);
+        pos = 0;
+    }
+    Ok(out)
+}
+
+/// The size of the image resource (signature, id, padded Pascal name, size,
+/// padded data) whose header starts `head`.
+fn irb_resource_end(head: &[u8]) -> Option<u64> {
+    if !matches!(
+        head.get(..4)?,
+        b"8BIM" | b"MeSa" | b"AgHg" | b"PHUT" | b"DCSR"
+    ) {
+        return None;
+    }
+    let name_len = u64::from(*head.get(6)?);
+    // The Pascal name with its length byte, padded to even size.
+    let name = name_len.saturating_add(1);
+    let size_at = 6u64.saturating_add(name).saturating_add(name & 1);
+    let size = u64::from(u32_be(head, to_usize(size_at))?);
+    Some(
+        size_at
+            .saturating_add(4)
+            .saturating_add(size)
+            .saturating_add(size & 1),
+    )
+}
+
+/// The group a Photoshop APP13 payload belongs to, and its place in it.
+async fn irb_group(cx: &Cx, file: Span, rest: Span) -> Option<(IrbGroup, usize)> {
+    let groups = irb_groups(cx, file).await;
+    let found = groups.iter().find_map(|g| {
+        g.parts
+            .iter()
+            .position(|p| p.offset == rest.offset)
+            .map(|i| (g.clone(), i))
+    });
+    if found.is_some() {
+        return found;
+    }
+    // A segment after the first scan: on its own.
+    let alone = group_irb_parts(cx, vec![rest]).await.ok()?;
+    Some((alone.into_iter().next()?, 0))
+}
+
+/// The image resources of a Photoshop APP13 segment (`rest`, after the
+/// identifier), joined with the segments they continue into.
+async fn photoshop_segment(cx: &Cx, input: Input, rest: Span) -> Result<()> {
+    match irb_group(cx, input.span, rest).await {
+        Some((g, 0)) if g.parts.len() > 1 => {
+            let first = g.parts.first().copied().unwrap_or(rest);
+            let last = g.parts.last().copied().unwrap_or(rest);
+            let parent = Span::new(
+                first.source,
+                first.offset,
+                last.end().saturating_sub(first.offset),
+            );
+            let n = g.parts.len();
+            let joined = cx.add_pieces(
+                Origin {
+                    parent,
+                    transform: "jpeg-photoshop-segments",
+                },
+                g.parts,
+            )?;
+            cx.emit(
+                super::psd::resources_node("Image resources", input, joined)
+                    .summary(format!("joined from {n} APP13 segments")),
+            );
+        }
+        Some((g, index)) if index > 0 => {
+            cx.emit(
+                Node::new("Image resources (continued)")
+                    .span(rest)
+                    .summary(format!(
+                        "segment {} of {}; the resources are shown under the first",
+                        index.saturating_add(1),
+                        g.parts.len()
+                    )),
+            );
+        }
+        _ => cx.emit(super::psd::resources_node("Image resources", input, rest)),
+    }
+    Ok(())
+}
+
+fn irb_summary(g: &IrbGroup, index: usize) -> String {
+    if index > 0 {
+        return "Photoshop 3.0, continued".to_owned();
+    }
+    let plural = if g.count == 1 { "" } else { "s" };
+    let mut s = format!("Photoshop 3.0: {} resource{plural}", g.count);
+    if g.iptc {
+        s.push_str(", IPTC");
+    }
+    if g.parts.len() > 1 {
+        s.push_str(&format!(", in {} segments", g.parts.len()));
+    }
+    s
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2195,11 +2170,7 @@ async fn application(cx: &Cx, st: &SegState) -> Result<()> {
         }
         App::Photoshop => {
             cx.emit(ident("Identifier"));
-            cx.emit(super::psd::resources_node("Image resources", input, rest));
-            let data = cx.read_avail(rest).await?;
-            if let (_, Some((at, len))) = irb_scan(&data) {
-                cx.emit(iptc_node("IPTC-IIM", rest.sub(to_u64(at), to_u64(len))));
-            }
+            photoshop_segment(cx, input, rest).await?;
         }
         App::Adobe => {
             cx.emit(struct_node("Adobe", payload, BE, (), adobe).summary("DCT colour transform"));
@@ -2791,116 +2762,6 @@ async fn uuid_box(cx: Cx, (input, body): (Input, Span)) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// IPTC-IIM
-
-fn iptc_name(record: u8, dataset: u8) -> Option<&'static str> {
-    match record {
-        1 => lookup(IPTC_ENVELOPE, dataset.into()),
-        2 => lookup(IPTC_APPLICATION, dataset.into()),
-        _ => None,
-    }
-}
-
-/// A lazy node listing the IPTC-IIM datasets (tag `1C`, record, dataset,
-/// length, data) in `span`, as stored in Photoshop resource 1028 and TIFF
-/// tag 33723.
-pub fn iptc_node(name: &'static str, span: Span) -> Node {
-    Node::new(name)
-        .span(span)
-        .summary("IPTC Information Interchange Model datasets")
-        .lazy(iptc_datasets, span)
-}
-
-async fn iptc_datasets(cx: Cx, span: Span) -> Result<()> {
-    let mut cur = Cursor::new(&cx, span, BE);
-    let mut utf8 = false;
-    while cur.remaining() >= 5 {
-        let start = cur.pos();
-        let h = cur.peek(5).await?;
-        let (Some(&tag), Some(&record), Some(&dataset)) = (h.first(), h.get(1), h.get(2)) else {
-            break;
-        };
-        if tag != 0x1c {
-            let rest = span.tail(start);
-            let mut node = Node::new("Padding").span(rest);
-            if cx
-                .read_avail(rest.sub(0, 256))
-                .await?
-                .iter()
-                .any(|&b| b != 0)
-            {
-                node = Node::new("Data")
-                    .span(rest)
-                    .diag(Diagnostic::malformed("expected an IPTC tag marker (0x1c)").at(rest));
-            }
-            cx.push(node).await;
-            return Ok(());
-        }
-        cur.skip(5);
-        let mut len = u64::from(u16_be(&h, 3).unwrap_or(0));
-        if len & 0x8000 != 0 {
-            // Extended dataset: the low bits give the size of the length.
-            let n = len & 0x7fff;
-            if n > 8 {
-                cx.push(
-                    Node::new("Dataset")
-                        .span(cur.since(start))
-                        .diag(Diagnostic::malformed(format!("{n}-byte dataset length"))),
-                )
-                .await;
-                return Ok(());
-            }
-            let bytes = cur.bytes(n).await?;
-            len = bytes
-                .iter()
-                .fold(0u64, |acc, &b| acc.saturating_mul(256) | u64::from(b));
-        }
-        let data = cur.span(len);
-        cur.skip(len);
-        let bytes = cx.read_avail(data.sub(0, 256)).await?;
-        let binary = matches!(
-            (record, dataset),
-            (1, 0 | 20 | 22 | 90 | 120 | 122) | (2, 0 | 200 | 201 | 202)
-        );
-        let value = if binary && bytes.len() == 2 {
-            uint(u16_be(&bytes, 0).unwrap_or(0))
-        } else if binary {
-            Value::Bytes(
-                bytes
-                    .get(..bytes.len().min(32))
-                    .unwrap_or_default()
-                    .to_vec(),
-            )
-        } else {
-            text(decode_text(&bytes))
-        };
-        if (record, dataset) == (1, 90) {
-            utf8 = bytes == b"\x1b%G";
-        }
-        let name = iptc_name(record, dataset)
-            .map_or_else(|| format!("Dataset {record}:{dataset}"), str::to_owned);
-        let mut summary = format!("{record}:{dataset}");
-        if (record, dataset) == (1, 90) && utf8 {
-            summary.push_str(", UTF-8");
-        } else if data.len > 256 {
-            summary = format!("{summary}, {}", human_size(data.len));
-        }
-        let mut node = Node::new(name)
-            .span(cur.since(start))
-            .value(value)
-            .summary(summary);
-        if data.len < len {
-            node = node.diag(Diagnostic::truncated(
-                Span::new(data.source, data.offset, len),
-                data.len,
-            ));
-        }
-        cx.push(node).await;
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // Segment expansion
 
 /// UTF-8 if the bytes are (possibly cut short in a character), else
@@ -3021,7 +2882,8 @@ struct Info {
     comps: Comps,
     jfif: bool,
     adobe: Option<u8>,
-    exif: Option<ExifInfo>,
+    /// The camera and date of the first Exif block.
+    exif: Option<(Option<String>, Option<String>)>,
     scans: u64,
     dnl: Option<u16>,
     quality: Option<u32>,
@@ -3052,9 +2914,9 @@ impl Info {
         if self.frame.as_ref().is_some_and(|f| progressive(f.marker)) && self.scans > 0 {
             parts.push(format!("{} scans", self.scans));
         }
-        if let Some(e) = &self.exif {
-            parts.extend(e.camera.clone());
-            parts.extend(e.date.clone());
+        if let Some((camera, date)) = &self.exif {
+            parts.extend(camera.clone());
+            parts.extend(date.clone());
         }
         if let Some(mpf) = &self.mpf
             && mpf.len() > 1
@@ -3190,11 +3052,12 @@ async fn observe_app(cx: &Cx, input: Input, seg: &Segment, info: &mut Info) -> O
         ),
         App::Avi1 => "AVI1 (Motion JPEG)".to_owned(),
         App::Exif => {
-            let data = cx.read_avail(rest).await.ok()?;
-            let exif = exif_info(&data);
-            let described = exif.as_ref().map(ExifInfo::describe).unwrap_or_default();
-            if info.exif.is_none() {
-                info.exif = exif;
+            let shot = super::tiff::exif_shot(cx, input.nested(rest)).await;
+            let described = shot.as_ref().map(|s| s.describe(true)).unwrap_or_default();
+            if info.exif.is_none()
+                && let Some(s) = &shot
+            {
+                info.exif = Some((s.camera().map(str::to_owned), s.date().map(str::to_owned)));
             }
             if described.is_empty() {
                 "Exif".to_owned()
@@ -3256,14 +3119,10 @@ async fn observe_app(cx: &Cx, input: Input, seg: &Segment, info: &mut Info) -> O
         }
         App::Ducky => ducky_summary(&head),
         App::PictureInfo => "PictureInfo".to_owned(),
-        App::Photoshop => {
-            let data = cx.read_avail(rest).await.ok()?;
-            let (count, iptc) = irb_scan(&data);
-            format!(
-                "Photoshop 3.0: {count} resources{}",
-                if iptc.is_some() { ", IPTC" } else { "" }
-            )
-        }
+        App::Photoshop => match irb_group(cx, input.span, rest).await {
+            Some((g, index)) => irb_summary(&g, index),
+            None => "Photoshop 3.0".to_owned(),
+        },
         App::Adobe => {
             info.adobe = head.get(11).copied();
             format!(

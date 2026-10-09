@@ -2,8 +2,9 @@
 
     uv run --with pillow python tests/data/jpeg/gen.py tests/fixtures/synthetic/jpeg
 
-The image data in `app-segments.jpg` and `motion-photo.jpg` is real Pillow
-(libjpeg) output; the application segments around it, the appended data and
+The image data in `app-segments.jpg`, `motion-photo.jpg` and
+`photoshop-split.jpg` is real Pillow (libjpeg)
+output; the application segments around it, the appended data and
 the whole of `hierarchical.jpg` and `dnl.jpg` are assembled here from the
 specifications as remembered (JFIF 1.02, Adobe XMP part 3, Exif 2.3 FPXR,
 the StereoGraphics JPS note, Photoshop image resources and IPTC-IIM 4.2,
@@ -124,6 +125,22 @@ def app_segments():
     return bytes(out)
 
 
+def photoshop_split():
+    """Image resources split over two APP13 segments in the middle of the
+    IPTC record (as Photoshop does when they exceed one segment), then a
+    third segment that stands alone."""
+    soi, rest = strip_app0(pillow_jpeg((8, 8), 50))
+    record = (iptc(1, 90, b"\x1b%G") + iptc(2, 0, b"\x00\x04") + iptc(2, 25, b"foal")
+              + iptc(2, 55, b"20240501") + iptc(2, 60, b"120000+0200") + iptc(2, 120, "Grazing — a caption".encode()))
+    resources = irb(1005, struct.pack(">IHHIHH", 72 << 16, 1, 1, 72 << 16, 1, 1)) + irb(1028, record) + irb(1049, struct.pack(">I", 1))
+    cut = 40
+    out = bytearray(soi) + jfif()
+    out += seg(0xED, b"Photoshop 3.0\0" + resources[:cut])
+    out += seg(0xED, b"Photoshop 3.0\0" + resources[cut:])
+    out += seg(0xED, b"Photoshop 3.0\0" + irb(1011, b"\x01\x00\x00\x00\x00\x00\x00\x00\x02", b"flags"))
+    return bytes(out + rest)
+
+
 def mp4():
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, "clip.mp4")
@@ -194,7 +211,8 @@ def main():
     dest = sys.argv[1]
     os.makedirs(dest, exist_ok=True)
     for name, data in (("app-segments.jpg", app_segments()), ("motion-photo.jpg", motion_photo()),
-                       ("hierarchical.jpg", hierarchical()), ("dnl.jpg", dnl())):
+                       ("hierarchical.jpg", hierarchical()), ("dnl.jpg", dnl()),
+                       ("photoshop-split.jpg", photoshop_split())):
         with open(os.path.join(dest, name), "wb") as f:
             f.write(data)
         print(name, len(data))

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ metadata.jpg — 8×8, baseline DCT, YCbCr 4:4:4, FillyCam Model 1, 2026-10-06 12:00:00, 13 bytes after EOI  [0x0+0x6e8]
+▾ metadata.jpg — 8×8, baseline DCT, YCbCr 4:4:4, FillyCam Model 1, 2026-10-06 12:00, 13 bytes after EOI  [0x0+0x6e8]
     SOI  [0x0+0x2]
   ▾ APP0 — JFIF 1.02  [0x2+0x12]
       Marker: 0xffe0 — APP0  [0x2+0x2]
@@ -15,7 +15,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Y density: 1  [0x10+0x2]
       Thumbnail width: 0  [0x12+0x1]
       Thumbnail height: 0  [0x13+0x1]
-  ▾ APP1 — Exif: FillyCam Model 1, f/2.8, 1/125 s, ISO 200, 2026-10-06 12:00:00  [0x14+0x382]
+  ▾ APP1 — Exif: FillyCam Model 1, 24-70mm, f/2.8, 1/125 s, ISO 200, 2026-10-06 12:00, 46.05343° N, 14.50000° E  [0x14+0x382]
       Marker: 0xffe1 — APP1  [0x14+0x2]
       Length: 896  [0x16+0x2]
       Identifier: "Exif"  [0x18+0x6]
@@ -412,7 +412,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Name length: 0  [0x591+0x1]
           Name: ""  [0x592+0x0]
           Data size: 7  [0x593+0x4]
-          Data  [0x597+0x7]
+        ▾ IPTC-IIM — IPTC Information Interchange Model datasets  [0x597+0x7]
+            Record version: 4  [0x597+0x7] → 0x59c+0x2
       ▾ Resolution info: 1005 — "res", 0x10 bytes  [0x59f+0x1e]
           Signature: "8BIM"  [0x59f+0x4]
           Resource ID: 1005 — Resolution info  [0x5a3+0x2]
@@ -426,8 +427,6 @@ expression: "common::explore(&display_name(&path), &data)"
             Vertical resolution: 4718592 — 72.00  [0x5b5+0x4]
             Vertical resolution unit: 1  [0x5b9+0x2]
             Height unit: 1  [0x5bb+0x2]
-    ▾ IPTC-IIM — IPTC Information Interchange Model datasets  [0x597+0x7]
-        Record version: 4 — 2:0  [0x597+0x7]
   ▾ APP14 — Adobe, transform: YCbCr  [0x5bd+0x10]
       Marker: 0xffee — APP14  [0x5bd+0x2]
       Length: 14  [0x5bf+0x2]

@@ -561,6 +561,7 @@ async fn resource(cx: Cx, r: Resource) -> Result<()> {
     let input = r.input;
     match r.id {
         1005 => cx.emit(ResolutionInfo::node("Resolution", data, BE)),
+        1028 => cx.emit(super::iptc::node("IPTC-IIM", data)),
         1039 => cx.emit(embedded("ICC profile", input.nested(data))),
         1058 | 1059 => cx.emit(embedded_as(
             "Exif",

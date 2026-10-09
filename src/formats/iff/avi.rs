@@ -315,6 +315,10 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"strn" => Some(peek_text(cx, chunk.data, 120).await?),
         b"strd" => Some(format!("{} bytes", chunk.size)),
         b"idx1" => Some(entry_count(chunk.size / 16)),
+        b"JUNK" => reserved_kind(cx, chunk).await?.map(|k| match k {
+            Reserved::SuperIndex => "space reserved for an OpenDML super index (unused)".to_owned(),
+            Reserved::Odml => "space reserved for the OpenDML header list (unused)".to_owned(),
+        }),
         b"dmlh" => {
             let d = cx.read_avail(chunk.data.sub(0, 4)).await?;
             u32_le(&d, 0).map(|n| format!("{} in all", vidutil::plural(n, "frame")))
@@ -339,6 +343,75 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
             format!("stream {n} {what}, {} bytes", chunk.size)
         }),
     })
+}
+
+/// What FFmpeg reserves as `JUNK` in the headers, to be renamed `indx` and
+/// `LIST odml` if the file grows into OpenDML (past one RIFF chunk).
+#[derive(Clone, Copy)]
+enum Reserved {
+    /// In `strl`: a super index header (4 longs per entry, index of
+    /// indexes) and room for its entries.
+    SuperIndex,
+    /// In `hdrl`: `odml`, then a `dmlh` chunk header and its zeroed body.
+    Odml,
+}
+
+async fn reserved_kind(cx: &Cx, chunk: &Chunk) -> Result<Option<Reserved>> {
+    let d = cx.read_avail(chunk.data.sub(0, 24)).await?;
+    Ok(match &chunk.list {
+        b"strl"
+            if d.len() == 24
+                && u16_le(&d, 0) == Some(4)
+                && d.get(2) == Some(&0)
+                && d.get(3) == Some(&0) =>
+        {
+            Some(Reserved::SuperIndex)
+        }
+        b"hdrl" if d.starts_with(b"odmldmlh") => Some(Reserved::Odml),
+        _ => None,
+    })
+}
+
+/// A `JUNK` chunk in the headers that holds reserved OpenDML structures.
+async fn reserved(cx: &Cx, chunk: &Chunk) -> Result<bool> {
+    let data = chunk.data;
+    let e = chunk.endian();
+    match reserved_kind(cx, chunk).await? {
+        Some(Reserved::SuperIndex) => {
+            let block = cx.block(data.sub(0, 24)).await?;
+            let mut f = Fields::emitting(cx, &block, e);
+            f.u16("Longs per entry").emit()?;
+            f.u8("Index subtype").emit()?;
+            f.u8("Index type").desc("0: index of indexes").emit()?;
+            f.u32("Entries in use").emit()?;
+            f.bytes("Indexed chunk ID", 4)
+                .with(|b, n| n.value(text(fourcc(b))))
+                .emit()?;
+            f.bytes("Reserved", 12).emit()?;
+            cx.emit(
+                Node::new("Entry space")
+                    .span(data.tail(24))
+                    .summary(format!(
+                        "room for {} entries",
+                        data.len.saturating_sub(24) / 16
+                    )),
+            );
+        }
+        Some(Reserved::Odml) => {
+            let block = cx.block(data.sub(0, 12)).await?;
+            let mut f = Fields::emitting(cx, &block, e);
+            f.bytes("List type", 4)
+                .with(|b, n| n.value(text(fourcc(b))))
+                .emit()?;
+            f.bytes("Inner chunk ID", 4)
+                .with(|b, n| n.value(text(fourcc(b))))
+                .emit()?;
+            f.u32("Inner chunk size").emit()?;
+            cx.emit(Node::new("Reserved").span(data.tail(12)));
+        }
+        None => return Ok(false),
+    }
+    Ok(true)
 }
 
 /// "1 entry", "3 entries".
@@ -435,6 +508,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             vprp(&mut Fields::emitting(cx, &block, e))?;
         }
         b"idx1" => idx1(cx, chunk).await?,
+        b"JUNK" => return reserved(cx, chunk).await,
         b"indx" | [b'i', b'x', _, _] => index(cx, chunk).await?,
         id if stream_chunk(id).is_some() => {
             let head = cx.read_avail(data.sub(0, 4)).await?;
