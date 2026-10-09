@@ -13,8 +13,18 @@
 //! a visited set, and storages carry the path of entries above them.
 
 mod apps;
-mod office;
+mod biff;
+mod msg;
+mod msi;
+mod officeart;
+mod ppt;
 mod propset;
+mod ptg;
+mod rec;
+mod sprm;
+mod thumbs;
+mod vba;
+mod word;
 
 use std::collections::BTreeSet;
 use std::sync::Arc;
@@ -192,21 +202,24 @@ const OBJECT_TYPES: EnumTable = &[
     (5, "root storage"),
 ];
 const COLORS: EnumTable = &[(0, "red"), (1, "black")];
+const VERSIONS: EnumTable = &[(3, "version 3"), (4, "version 4")];
+const BYTE_ORDERS: EnumTable = &[(0xfffe, "little-endian")];
+const STATE_DESC: &str = "User-defined flags of the storage or stream";
 
 record! {
     pub struct Header {
-        signature: bytes[8] "Signature",
-        clsid: guid "CLSID",
-        minor: u16 "Minor version" .hex(),
-        major: u16 "Major version",
-        byte_order: u16 "Byte order" .hex(),
+        signature: bytes[8] "Signature" .desc("D0 CF 11 E0 A1 B1 1A E1"),
+        clsid: guid "CLSID" .desc("Reserved; all zeros"),
+        minor: u16 "Minor version" .hex() .desc("0x003E (some writers use 0x003B)"),
+        major: u16 "Major version" .enumeration(VERSIONS),
+        byte_order: u16 "Byte order" .hex() .enumeration(BYTE_ORDERS),
         sector_shift: u16 "Sector shift" .with(|&s, n| n.summary(format!("{} bytes", 1u64.checked_shl(s.into()).unwrap_or(0)))),
         mini_shift: u16 "Mini sector shift" .with(|&s, n| n.summary(format!("{} bytes", 1u64.checked_shl(s.into()).unwrap_or(0)))),
         _reserved: bytes[6] "Reserved",
-        dir_sectors: u32 "Number of directory sectors",
+        dir_sectors: u32 "Number of directory sectors" .desc("Always 0 in version 3 files"),
         fat_sectors: u32 "Number of FAT sectors",
-        first_dir: u32 "First directory sector",
-        transaction: u32 "Transaction signature",
+        first_dir: u32 "First directory sector" .with(|&s, n| n.summary(sector_name(s))),
+        transaction: u32 "Transaction signature" .desc("Unused (0) unless the file supports transactions"),
         cutoff: u32 "Mini stream cutoff size" .desc("Streams smaller than this live in the mini stream"),
         first_minifat: u32 "First MiniFAT sector" .with(|&s, n| n.summary(sector_name(s))),
         minifat_sectors: u32 "Number of MiniFAT sectors",
@@ -221,15 +234,15 @@ record! {
         name_len: u16 "Name length" .desc("Bytes, including the terminating NUL"),
         kind: u8 "Object type" .enumeration(OBJECT_TYPES),
         color: u8 "Color" .enumeration(COLORS),
-        left: u32 "Left sibling" .with(|&s, n| n.summary(entry_ref(s))),
-        right: u32 "Right sibling" .with(|&s, n| n.summary(entry_ref(s))),
-        child: u32 "Child" .with(|&s, n| n.summary(entry_ref(s))),
+        left: u32 "Left sibling" .with(|&s, n| n.summary(entry_ref(s))) .desc("Red-black tree: the sibling that sorts before this entry (shorter names first, then case-insensitively)"),
+        right: u32 "Right sibling" .with(|&s, n| n.summary(entry_ref(s))) .desc("Red-black tree: the sibling that sorts after this entry"),
+        child: u32 "Child" .with(|&s, n| n.summary(entry_ref(s))) .desc("Root of the red-black tree of a storage's children"),
         clsid: guid "CLSID",
-        state: u32 "State bits" .hex(),
+        state: u32 "State bits" .hex() .desc(STATE_DESC),
         created: u64 "Creation time" .filetime(),
         modified: u64 "Modification time" .filetime(),
-        start: u32 "Starting sector" .with(|&s, n| n.summary(sector_name(s))),
-        size: u64 "Stream size",
+        start: u32 "Starting sector" .with(|&s, n| n.summary(sector_name(s))) .desc("First sector of the stream (a mini sector if the stream is smaller than the cutoff; for the root, the mini stream)"),
+        size: u64 "Stream size" .desc("Version 3 files only use the low 32 bits"),
     }
 }
 
@@ -519,6 +532,32 @@ fn entry_name(entry: &DirEntry) -> String {
     entry.name.chars().take(units).collect()
 }
 
+/// The child of `storage` named `name`.
+pub async fn find_child(cx: &Cx, cfb: &Cfb, storage: u32, name: &str) -> Option<(u32, DirEntry)> {
+    let parent = read_entry(cx, cfb, storage).await.ok()?;
+    let mut walk = TreeWalk::new(parent.child);
+    let mut scanned = 0usize;
+    while let Some((id, entry)) = walk.next(cx, cfb).await {
+        if entry_name(&entry) == name {
+            return Some((id, entry));
+        }
+        scanned = scanned.saturating_add(1);
+        if scanned > MAX_ROOT_SCAN {
+            break;
+        }
+    }
+    None
+}
+
+/// The content of the stream `name` in `storage`.
+pub async fn child_stream(cx: &Cx, cfb: &Cfb, storage: u32, name: &str) -> Option<Span> {
+    let (id, entry) = find_child(cx, cfb, storage, name).await?;
+    if entry.kind != 2 {
+        return None;
+    }
+    stream(cx, cfb, id, &entry).await.ok().map(|(s, _)| s)
+}
+
 // ---------------------------------------------------------------------------
 // Dissection
 
@@ -682,6 +721,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .desc("Sector allocation table: the next sector of each chain")
             .lazy(fat_sectors, cfb.clone()),
     );
+    cx.emit(
+        Node::new("Free sectors")
+            .desc("Sectors the FAT marks unused (FREESECT)")
+            .lazy(free_sectors, cfb.clone()),
+    );
     if let Some(minifat) = cfb.minifat {
         cx.emit(
             Node::new("MiniFAT")
@@ -731,8 +775,20 @@ async fn difat_entries(
             sector,
         );
         difat_list(&cx, span, per, &mut index, sector, input).await?;
-        let data = cx.read(span.sub(to_u64(per).saturating_mul(4), 4)).await?;
+        let link = span.sub(to_u64(per).saturating_mul(4), 4);
+        let data = cx.read(link).await?;
         next = u32_le(&data, 0).unwrap_or(END_OF_CHAIN);
+        cx.push(
+            Node::new("Next DIFAT sector")
+                .span(link)
+                .value(Value::UInt {
+                    value: next.into(),
+                    bits: 32,
+                    radix: Radix::Dec,
+                })
+                .summary(sector_name(next)),
+        )
+        .await;
     }
     Ok(())
 }
@@ -746,9 +802,15 @@ async fn difat_list(
     input: Input,
 ) -> Result<()> {
     let data = cx.read_avail(span).await?;
+    let mut unused: Option<(usize, usize)> = None;
     for (i, c) in data.as_chunks::<4>().0.iter().enumerate().take(count) {
         let s = u32::from_le_bytes(*c);
-        if s != NO_STREAM {
+        if s == NO_STREAM {
+            unused = Some(unused.map_or((i, 1), |(first, n)| (first, n.saturating_add(1))));
+        } else {
+            if let Some(run) = unused.take() {
+                cx.push(unused_entries(span, run)).await;
+            }
             let at = span.sub(to_u64(i).saturating_mul(4), 4);
             cx.push(sector_node(
                 format!("FAT sector {index}"),
@@ -761,7 +823,22 @@ async fn difat_list(
         }
         *index = index.saturating_add(1);
     }
+    if let Some(run) = unused {
+        cx.push(unused_entries(span, run)).await;
+    }
     Ok(())
+}
+
+/// A run of unused (FREESECT) DIFAT entries.
+fn unused_entries(span: Span, (first, n): (usize, usize)) -> Node {
+    Node::new("Unused entries")
+        .span(span.sub(to_u64(first).saturating_mul(4), to_u64(n).saturating_mul(4)))
+        .value(Value::UInt {
+            value: u64::from(NO_STREAM),
+            bits: 32,
+            radix: Radix::Hex,
+        })
+        .summary(format!("{n} × FREESECT"))
 }
 
 fn sector_node(name: String, s: u32, span: Span, sector: u64, input: Input) -> Node {
@@ -934,17 +1011,29 @@ async fn storage(cx: Cx, state: StorageState) -> Result<()> {
             mini.len, cfb.mini
         )));
     }
+    let names = if state.context.is_msg() {
+        Some(msg::name_map(&cx, cfb).await)
+    } else {
+        None
+    };
     let mut walk = TreeWalk::new(this.child);
     while let Some((id, entry)) = walk.next(&cx, cfb).await {
-        cx.push(child_node(cfb, &state, id, &entry)).await;
+        cx.push(child_node(cfb, &state, id, &entry, names.as_deref()))
+            .await;
     }
     Ok(())
 }
 
-fn child_node(cfb: &CfbRef, parent: &StorageState, id: u32, entry: &DirEntry) -> Node {
+fn child_node(
+    cfb: &CfbRef,
+    parent: &StorageState,
+    id: u32,
+    entry: &DirEntry,
+    names: Option<&msg::NameMap>,
+) -> Node {
     let raw = entry_name(entry);
     let context = parent.context;
-    let (label, detail) = apps::label(&raw, context);
+    let (label, detail) = apps::label(&raw, context, names);
     let mut node = Node::new(label).span(cfb.entry_span(id));
     match entry.kind {
         1 | 5 => {
@@ -982,6 +1071,7 @@ fn child_node(cfb: &CfbRef, parent: &StorageState, id: u32, entry: &DirEntry) ->
                 StreamState {
                     cfb: cfb.clone(),
                     id,
+                    parent: parent.id,
                     name: raw,
                     context,
                 },
@@ -995,6 +1085,8 @@ fn child_node(cfb: &CfbRef, parent: &StorageState, id: u32, entry: &DirEntry) ->
 pub struct StreamState {
     pub cfb: CfbRef,
     pub id: u32,
+    /// The storage holding the stream.
+    pub parent: u32,
     pub name: String,
     pub context: apps::Context,
 }
@@ -1030,7 +1122,13 @@ async fn stream_node(cx: Cx, state: StreamState) -> Result<()> {
 async fn chain_sectors(cx: Cx, (cfb, id): (CfbRef, u32)) -> Result<()> {
     let entry = read_entry(&cx, &cfb, id).await?;
     let (mini, sectors, diag) = sectors_of(&cx, &cfb, &entry).await?;
-    cx.set_count(Count::Exact(to_u64(sectors.len())));
+    let unit = if mini { cfb.mini } else { cfb.sector };
+    let total = to_u64(sectors.len()).saturating_mul(unit);
+    let size = stream_size(&cfb, &entry);
+    let slack = sectors
+        .last()
+        .filter(|_| total > size && diag.is_none())
+        .map(|&(_, last)| last.tail(unit.saturating_sub(total.saturating_sub(size))));
     for (i, (s, span)) in sectors.into_iter().enumerate() {
         let kind = if mini { "mini sector" } else { "sector" };
         cx.push(
@@ -1045,8 +1143,58 @@ async fn chain_sectors(cx: Cx, (cfb, id): (CfbRef, u32)) -> Result<()> {
         )
         .await;
     }
+    if let Some(span) = slack.filter(|s| !s.is_empty()) {
+        cx.push(Node::new("Slack").span(span).summary(format!(
+            "{} unused bytes after the end of the stream",
+            span.len
+        )))
+        .await;
+    }
     if let Some(d) = diag {
         cx.diag(d);
+    }
+    Ok(())
+}
+
+/// Runs of sectors the FAT marks free.
+async fn free_sectors(cx: Cx, cfb: CfbRef) -> Result<()> {
+    let per = cfb.sector / 4;
+    let mut run: Option<(u64, u64)> = None;
+    let flush = |run: (u64, u64)| {
+        let (first, n) = run;
+        Node::new(format!(
+            "Sectors {first}–{}",
+            first.saturating_add(n).saturating_sub(1)
+        ))
+        .span(cfb.input.span.sub(
+            first.saturating_add(1).saturating_mul(cfb.sector),
+            n.saturating_mul(cfb.sector),
+        ))
+        .summary(format!("{n} free sectors"))
+    };
+    for (i, &fs) in cfb.fat.iter().enumerate() {
+        let data = cx.read_avail(cfb.sector_span(fs)).await?;
+        for (k, c) in data.as_chunks::<4>().0.iter().enumerate() {
+            let index = to_u64(i).saturating_mul(per).saturating_add(to_u64(k));
+            if index >= cfb.sectors {
+                break;
+            }
+            if u32::from_le_bytes(*c) == NO_STREAM {
+                run = match run {
+                    Some((first, n)) if first.saturating_add(n) == index => {
+                        Some((first, n.saturating_add(1)))
+                    }
+                    Some(r) => {
+                        cx.push(flush(r)).await;
+                        Some((index, 1))
+                    }
+                    None => Some((index, 1)),
+                };
+            }
+        }
+    }
+    if let Some(r) = run {
+        cx.push(flush(r)).await;
     }
     Ok(())
 }

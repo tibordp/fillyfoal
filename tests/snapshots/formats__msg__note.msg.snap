@@ -7,14 +7,14 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: d0 cf 11 e0 a1 b1 1a e1  |........|  [0x0+0x8]
       CLSID: {00000000-0000-0000-0000-000000000000}  [0x8+0x10]
       Minor version: 0x3e  [0x18+0x2]
-      Major version: 3  [0x1a+0x2]
-      Byte order: 0xfffe  [0x1c+0x2]
+      Major version: version 3 (0x3)  [0x1a+0x2]
+      Byte order: little-endian (0xfffe)  [0x1c+0x2]
       Sector shift: 9 — 512 bytes  [0x1e+0x2]
       Mini sector shift: 6 — 64 bytes  [0x20+0x2]
       Reserved: 00 00 00 00 00 00  |......|  [0x22+0x6]
       Number of directory sectors: 0  [0x28+0x4]
       Number of FAT sectors: 1  [0x2c+0x4]
-      First directory sector: 1  [0x30+0x4]
+      First directory sector: 1 — sector 1  [0x30+0x4]
       Transaction signature: 0  [0x34+0x4]
       Mini stream cutoff size: 4096  [0x38+0x4]
       First MiniFAT sector: 6 — sector 6  [0x3c+0x4]
@@ -23,6 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of DIFAT sectors: 0  [0x48+0x4]
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
+      Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
   ▾ FAT — 1 sectors
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
@@ -34,6 +35,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Sector 6: 4294967294 — ENDOFCHAIN  [0x218+0x4]
         Sector 7: 8 — next: 8  [0x21c+0x4]
         Sector 8: 4294967294 — ENDOFCHAIN  [0x220+0x4]
+  ▾ Free sectors
   ▾ MiniFAT — 128 entries  [#2:0x0+0x200]
       Mini sector 0: 4294967294 — ENDOFCHAIN  [#2:0x0+0x4]
       Mini sector 1: 4294967294 — ENDOFCHAIN  [#2:0x4+0x4]
@@ -475,7 +477,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Modification time: 2026-01-01 00:00:00 UTC  [#1:0x36c+0x8]
           Starting sector: 4294967294 — ENDOFCHAIN  [#1:0x374+0x4]
           Stream size: 0  [#1:0x378+0x8]
-      ▾ GUID stream — named property GUIDs, 16 bytes  [#1:0x380+0x80]
+      ▾ GUID stream — named property sets, 16 bytes  [#1:0x380+0x80]
         ▾ Directory entry  [#1:0x380+0x80]
             Name: "__substg1.0_00020102"  [#1:0x380+0x40]
             Name length: 42  [#1:0x3c0+0x2]
@@ -492,8 +494,9 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 16  [#1:0x3f8+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 6 — mini sector → #3:0x180+0x40
-        ▾ Content — 16 bytes  [#5:0x0+0x10]
-            Data  [#5:0x0+0x10]
+            Slack — 48 unused bytes after the end of the stream  [#3:0x190+0x30]
+          Property: "PidTagNameidStreamGuid" — PtypBinary
+          GUID 3: {00000000-0000-0000-0000-000000000000} — {00000000-0000-0000-0000-000000000000}  [#5:0x0+0x10]
       ▾ Entry stream — named property entries, 0 bytes  [#1:0x400+0x80]
         ▾ Directory entry  [#1:0x400+0x80]
             Name: "__substg1.0_00030102"  [#1:0x400+0x40]
@@ -524,7 +527,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Modification time: 1601-01-01 00:00:00 UTC  [#1:0x4ec+0x8]
             Starting sector: 4294967294 — ENDOFCHAIN  [#1:0x4f4+0x4]
             Stream size: 0  [#1:0x4f8+0x8]
-    ▾ PidTagMessageClass — property 0x001a, PT_UNICODE, 16 bytes  [#1:0x80+0x80]
+    ▾ PidTagMessageClass — property 0x001a, PtypString, 16 bytes  [#1:0x80+0x80]
       ▾ Directory entry  [#1:0x80+0x80]
           Name: "__substg1.0_001A001F"  [#1:0x80+0x40]
           Name length: 42  [#1:0xc0+0x2]
@@ -541,8 +544,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 16  [#1:0xf8+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 0 — mini sector → #3:0x0+0x40
+          Slack — 48 unused bytes after the end of the stream  [#3:0x10+0x30]
+        Property: "PidTagMessageClass" — PtypString
         Value: "IPM.Note"  [#8:0x0+0x10]
-    ▾ PidTagSubject — property 0x0037, PT_UNICODE, 24 bytes  [#1:0x100+0x80]
+    ▾ PidTagSubject — property 0x0037, PtypString, 24 bytes  [#1:0x100+0x80]
       ▾ Directory entry  [#1:0x100+0x80]
           Name: "__substg1.0_0037001F"  [#1:0x100+0x40]
           Name length: 42  [#1:0x140+0x2]
@@ -559,8 +564,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 24  [#1:0x178+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 1 — mini sector → #3:0x40+0x40
+          Slack — 40 unused bytes after the end of the stream  [#3:0x58+0x28]
+        Property: "PidTagSubject" — PtypString
         Value: "Test message"  [#4:0x0+0x18]
-    ▾ PidTagSenderName — property 0x0c1a, PT_UNICODE, 26 bytes  [#1:0x180+0x80]
+    ▾ PidTagSenderName — property 0x0c1a, PtypString, 26 bytes  [#1:0x180+0x80]
       ▾ Directory entry  [#1:0x180+0x80]
           Name: "__substg1.0_0C1A001F"  [#1:0x180+0x40]
           Name length: 42  [#1:0x1c0+0x2]
@@ -577,8 +584,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 26  [#1:0x1f8+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 2 — mini sector → #3:0x80+0x40
+          Slack — 38 unused bytes after the end of the stream  [#3:0x9a+0x26]
+        Property: "PidTagSenderName" — PtypString
         Value: "Alice Example"  [#9:0x0+0x1a]
-    ▾ PidTagBody — property 0x1000, PT_UNICODE, 40 bytes  [#1:0x200+0x80]
+    ▾ PidTagBody — property 0x1000, PtypString, 40 bytes  [#1:0x200+0x80]
       ▾ Directory entry  [#1:0x200+0x80]
           Name: "__substg1.0_1000001F"  [#1:0x200+0x40]
           Name length: 42  [#1:0x240+0x2]
@@ -595,6 +604,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 40  [#1:0x278+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 3 — mini sector → #3:0xc0+0x40
+          Slack — 24 unused bytes after the end of the stream  [#3:0xe8+0x18]
+        Property: "PidTagBody" — PtypString
         Value: "Hello from the body."  [#10:0x0+0x28]
     ▾ Properties — fixed-size property values, 80 bytes  [#1:0x280+0x80]
       ▾ Directory entry  [#1:0x280+0x80]
@@ -614,10 +625,30 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Sector chain — mini sectors
           Link 0: 4 — mini sector → #3:0x100+0x40
           Link 1: 5 — mini sector → #3:0x140+0x40
-        Header  [#11:0x0+0x20]
-        PidTagMessageFlags: 1 — PT_LONG  [#11:0x20+0x10]
-        PidTagClientSubmitTime: 2026-01-01 00:00:00 UTC — PT_SYSTIME  [#11:0x30+0x10]
-        PidTagBody: 42 — PT_UNICODE, size of the value stream  [#11:0x40+0x10]
+          Slack — 48 unused bytes after the end of the stream  [#3:0x150+0x30]
+      ▾ Header  [#11:0x0+0x20]
+          Reserved: 00 00 00 00 00 00 00 00  |........|  [#11:0x0+0x8]
+          Next Recipient ID: 1  [#11:0x8+0x4]
+          Next Attachment ID: 1  [#11:0xc+0x4]
+          Recipient Count: 1  [#11:0x10+0x4]
+          Attachment Count: 1  [#11:0x14+0x4]
+          Reserved: 00 00 00 00 00 00 00 00  |........|  [#11:0x18+0x8]
+      ▾ PidTagMessageFlags: 0x1 [mfRead] — PtypInteger32  [#11:0x20+0x10]
+          Property type: PtypInteger32 (0x3)  [#11:0x20+0x2]
+          Property ID: 0xe07  [#11:0x22+0x2]
+          Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#11:0x24+0x4]
+          Value: 01 00 00 00 00 00 00 00  |........|  [#11:0x28+0x8]
+      ▾ PidTagClientSubmitTime: 2026-01-01 00:00:00 UTC — PtypTime  [#11:0x30+0x10]
+          Property type: PtypTime (0x40)  [#11:0x30+0x2]
+          Property ID: 0x39  [#11:0x32+0x2]
+          Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#11:0x34+0x4]
+          Value: 00 00 81 92 b1 7a dc 01  |.....z..|  [#11:0x38+0x8]
+      ▾ PidTagBody: 42 — PtypString: 42-byte value in stream __substg1.0_1000001F  [#11:0x40+0x10]
+          Property type: PtypString (0x1f)  [#11:0x40+0x2]
+          Property ID: 0x1000  [#11:0x42+0x2]
+          Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#11:0x44+0x4]
+          Size: 42  [#11:0x48+0x4]
+          Reserved: 0  [#11:0x4c+0x4]
     ▾ Recipient 0 — recipient storage  [#1:0x500+0x80]
       ▾ Directory entry  [#1:0x500+0x80]
           Name: "__recip_version1.0_#00000000"  [#1:0x500+0x40]
@@ -633,7 +664,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Modification time: 2026-01-01 00:00:00 UTC  [#1:0x56c+0x8]
           Starting sector: 4294967294 — ENDOFCHAIN  [#1:0x574+0x4]
           Stream size: 0  [#1:0x578+0x8]
-      ▾ PidTagDisplayName — property 0x3001, PT_UNICODE, 22 bytes  [#1:0x580+0x80]
+      ▾ PidTagDisplayName — property 0x3001, PtypString, 22 bytes  [#1:0x580+0x80]
         ▾ Directory entry  [#1:0x580+0x80]
             Name: "__substg1.0_3001001F"  [#1:0x580+0x40]
             Name length: 42  [#1:0x5c0+0x2]
@@ -650,8 +681,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 22  [#1:0x5f8+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 7 — mini sector → #3:0x1c0+0x40
+            Slack — 42 unused bytes after the end of the stream  [#3:0x1d6+0x2a]
+          Property: "PidTagDisplayName" — PtypString
           Value: "Bob Example"  [#12:0x0+0x16]
-      ▾ PidTagSmtpAddress — property 0x39fe, PT_UNICODE, 32 bytes  [#1:0x600+0x80]
+      ▾ PidTagSmtpAddress — property 0x39fe, PtypString, 32 bytes  [#1:0x600+0x80]
         ▾ Directory entry  [#1:0x600+0x80]
             Name: "__substg1.0_39FE001F"  [#1:0x600+0x40]
             Name length: 42  [#1:0x640+0x2]
@@ -668,6 +701,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 32  [#1:0x678+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 8 — mini sector → #3:0x200+0x40
+            Slack — 32 unused bytes after the end of the stream  [#3:0x220+0x20]
+          Property: "PidTagSmtpAddress" — PtypString
           Value: "bob@example.test"  [#13:0x0+0x20]
       ▾ Properties — fixed-size property values, 24 bytes  [#1:0x680+0x80]
         ▾ Directory entry  [#1:0x680+0x80]
@@ -686,8 +721,14 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 24  [#1:0x6f8+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 9 — mini sector → #3:0x240+0x40
-          Header  [#14:0x0+0x8]
-          PidTagRecipientType: 1 — PT_LONG  [#14:0x8+0x10]
+            Slack — 40 unused bytes after the end of the stream  [#3:0x258+0x28]
+        ▾ Header  [#14:0x0+0x8]
+            Reserved: 00 00 00 00 00 00 00 00  |........|  [#14:0x0+0x8]
+        ▾ PidTagRecipientType: To (0x1) — PtypInteger32  [#14:0x8+0x10]
+            Property type: PtypInteger32 (0x3)  [#14:0x8+0x2]
+            Property ID: 0xc15  [#14:0xa+0x2]
+            Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#14:0xc+0x4]
+            Value: 01 00 00 00 00 00 00 00  |........|  [#14:0x10+0x8]
     ▾ Attachment 0 — attachment storage  [#1:0x700+0x80]
       ▾ Directory entry  [#1:0x700+0x80]
           Name: "__attach_version1.0_#00000000"  [#1:0x700+0x40]
@@ -703,7 +744,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Modification time: 2026-01-01 00:00:00 UTC  [#1:0x76c+0x8]
           Starting sector: 4294967294 — ENDOFCHAIN  [#1:0x774+0x4]
           Stream size: 0  [#1:0x778+0x8]
-      ▾ PidTagAttachDataBinary — property 0x3701, PT_BINARY, 19 bytes  [#1:0x800+0x80]
+      ▾ PidTagAttachDataBinary — property 0x3701, PtypBinary, 19 bytes  [#1:0x800+0x80]
         ▾ Directory entry  [#1:0x800+0x80]
             Name: "__substg1.0_37010102"  [#1:0x800+0x40]
             Name length: 42  [#1:0x840+0x2]
@@ -720,12 +761,10 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 19  [#1:0x878+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 11 — mini sector → #3:0x2c0+0x40
-        ▾ Content — UTF-8 text, LF line endings, 1 line  [#15:0x0+0x13]
-            Encoding: "UTF-8"
-            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [#15:0x0+0x13]
-              Line 1: "Hello, attachment!"  [#15:0x0+0x12]
-      ▾ PidTagAttachLongFilename — property 0x3707, PT_UNICODE, 18 bytes  [#1:0x780+0x80]
+            Slack — 45 unused bytes after the end of the stream  [#3:0x2d3+0x2d]
+          Property: "PidTagAttachDataBinary" — PtypBinary
+          Value: 48 65 6c 6c 6f 2c 20 61 74 74 61 63 68 6d 65 6e …  |Hello, attachmen|  [#15:0x0+0x13]
+      ▾ PidTagAttachLongFilename — property 0x3707, PtypString, 18 bytes  [#1:0x780+0x80]
         ▾ Directory entry  [#1:0x780+0x80]
             Name: "__substg1.0_3707001F"  [#1:0x780+0x40]
             Name length: 42  [#1:0x7c0+0x2]
@@ -742,6 +781,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 18  [#1:0x7f8+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 10 — mini sector → #3:0x280+0x40
+            Slack — 46 unused bytes after the end of the stream  [#3:0x292+0x2e]
+          Property: "PidTagAttachLongFilename" — PtypString
           Value: "hello.txt"  [#16:0x0+0x12]
       ▾ Properties — fixed-size property values, 24 bytes  [#1:0x880+0x80]
         ▾ Directory entry  [#1:0x880+0x80]
@@ -760,5 +801,11 @@ expression: "common::explore(&display_name(&path), &data)"
             Stream size: 24  [#1:0x8f8+0x8]
         ▾ Sector chain — mini sectors
             Link 0: 12 — mini sector → #3:0x300+0x40
-          Header  [#17:0x0+0x8]
-          PidTagAttachMethod: 1 — PT_LONG  [#17:0x8+0x10]
+            Slack — 40 unused bytes after the end of the stream  [#3:0x318+0x28]
+        ▾ Header  [#17:0x0+0x8]
+            Reserved: 00 00 00 00 00 00 00 00  |........|  [#17:0x0+0x8]
+        ▾ PidTagAttachMethod: By value (0x1) — PtypInteger32  [#17:0x8+0x10]
+            Property type: PtypInteger32 (0x3)  [#17:0x8+0x2]
+            Property ID: 0x3705  [#17:0xa+0x2]
+            Flags: 0x6 [PROPATTR_READABLE | PROPATTR_WRITABLE]  [#17:0xc+0x4]
+            Value: 01 00 00 00 00 00 00 00  |........|  [#17:0x10+0x8]
