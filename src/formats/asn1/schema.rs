@@ -12,6 +12,24 @@ pub enum Schema {
     SeqOf(&'static str, &'static Schema),
     /// An X.500 Name: a sequence of relative distinguished names.
     Name,
+    /// `ANY DEFINED BY`: chosen by the value of the object identifier
+    /// before this field in the same SEQUENCE: `(OID, name, schema)`, where
+    /// the name, if any, replaces the field's.
+    DefinedBy(&'static [(&'static str, Option<&'static str>, &'static Schema)]),
+}
+
+impl Schema {
+    /// This schema with an `ANY DEFINED BY` resolved by `oid`, the object
+    /// identifier before it, and the name that replaces the field's.
+    pub fn resolve(&'static self, oid: Option<&str>) -> (Option<&'static str>, &'static Schema) {
+        match self {
+            Schema::DefinedBy(table) => table
+                .iter()
+                .find(|(o, _, _)| Some(*o) == oid)
+                .map_or((None, &UNKNOWN), |(_, name, schema)| (*name, *schema)),
+            _ => (None, self),
+        }
+    }
 }
 
 /// One field of a [`Schema::Seq`].
@@ -66,7 +84,7 @@ impl Matcher {
 
     pub fn child(&mut self, id: u8) -> (Option<&'static str>, &'static Schema) {
         match self.schema {
-            Schema::Any => (None, &UNKNOWN),
+            Schema::Any | Schema::DefinedBy(_) => (None, &UNKNOWN),
             Schema::SeqOf(name, schema) => (Some(name), schema),
             Schema::Name => (Some("RelativeDistinguishedName"), &RDN),
             Schema::Seq(fields) => {
@@ -101,7 +119,17 @@ pub static NAME: Schema = Schema::Name;
 
 static ATTRIBUTE: Schema = Schema::Seq(&[
     req("attrType", OID, &UNKNOWN),
-    req("attrValues", SET, &UNKNOWN),
+    req("attrValues", SET, &ATTRIBUTE_VALUES),
+]);
+
+/// The values of the signer attributes that have structure of their own.
+static ATTRIBUTE_VALUES: Schema = Schema::DefinedBy(&[
+    ("1.2.840.113549.1.9.6", None, &SIGNER_INFOS),
+    ("1.2.840.113549.1.9.16.2.14", None, &CONTENT_INFOS),
+    ("1.3.6.1.4.1.311.2.1.11", None, &SPC_STATEMENT_TYPES),
+    ("1.3.6.1.4.1.311.2.1.12", None, &SPC_SP_OPUS_INFOS),
+    ("1.3.6.1.4.1.311.2.4.1", None, &CONTENT_INFOS),
+    ("1.3.6.1.4.1.311.3.3.1", None, &CONTENT_INFOS),
 ]);
 static ATTRIBUTES: Schema = Schema::SeqOf("Attribute", &ATTRIBUTE);
 
@@ -210,8 +238,15 @@ static SIGNER_INFOS: Schema = Schema::SeqOf("SignerInfo", &SIGNER_INFO);
 
 static ENCAP_CONTENT_INFO: Schema = Schema::Seq(&[
     req("eContentType", OID, &UNKNOWN),
-    opt("eContent", &[0xa0], &UNKNOWN),
+    opt("eContent", &[0xa0], &ECONTENT),
 ]);
+
+/// `[0] EXPLICIT` content by content type. CMS wraps it in an OCTET
+/// STRING; PKCS #7 v1.5 (Authenticode) has the structure directly.
+static ECONTENT: Schema =
+    Schema::DefinedBy(&[("1.3.6.1.4.1.311.2.1.4", None, &EXPLICIT_SPC_INDIRECT_DATA)]);
+
+static CONTENT_INFOS: Schema = Schema::SeqOf("ContentInfo", &CONTENT_INFO);
 
 static SIGNER_INFO: Schema = Schema::Seq(&[
     req("version", INT, &UNKNOWN),
@@ -227,6 +262,78 @@ static ISSUER_AND_SERIAL: Schema = Schema::Seq(&[
     req("issuer", SEQ, &NAME),
     req("serialNumber", INT, &UNKNOWN),
 ]);
+
+// --- Microsoft Authenticode ------------------------------------------------
+// ("Windows Authenticode Portable Executable Signature Format")
+
+static EXPLICIT_SPC_INDIRECT_DATA: Schema = Schema::Seq(&[req(
+    "SpcIndirectDataContent",
+    SEQ,
+    &SPC_INDIRECT_DATA_CONTENT,
+)]);
+
+static SPC_INDIRECT_DATA_CONTENT: Schema = Schema::Seq(&[
+    req("data", SEQ, &SPC_ATTRIBUTE_TYPE_AND_OPTIONAL_VALUE),
+    req("messageDigest", SEQ, &DIGEST_INFO),
+]);
+
+static SPC_ATTRIBUTE_TYPE_AND_OPTIONAL_VALUE: Schema = Schema::Seq(&[
+    req("type", OID, &UNKNOWN),
+    opt("value", ANY, &SPC_ATTRIBUTE_VALUE),
+]);
+
+static SPC_ATTRIBUTE_VALUE: Schema = Schema::DefinedBy(&[
+    (
+        "1.3.6.1.4.1.311.2.1.15",
+        Some("SpcPeImageData"),
+        &SPC_PE_IMAGE_DATA,
+    ),
+    ("1.3.6.1.4.1.311.2.1.30", Some("SpcSipInfo"), &SPC_SIP_INFO),
+]);
+
+static SPC_PE_IMAGE_DATA: Schema = Schema::Seq(&[
+    opt("flags", BITS, &UNKNOWN),
+    opt("file", &[0xa0], &SPC_LINK),
+]);
+
+/// SpcLink, a CHOICE: one of these.
+static SPC_LINK: Schema = Schema::Seq(&[
+    opt("url", &[0x80], &UNKNOWN),
+    opt("moniker", &[0xa1], &SPC_SERIALIZED_OBJECT),
+    opt("file", &[0xa2], &SPC_STRING),
+]);
+
+static SPC_SERIALIZED_OBJECT: Schema = Schema::Seq(&[
+    req("classId", OCTETS, &UNKNOWN),
+    req("serializedData", OCTETS, &UNKNOWN),
+]);
+
+/// SpcString, a CHOICE: one of these.
+static SPC_STRING: Schema = Schema::Seq(&[
+    opt("unicode", &[0x80], &UNKNOWN),
+    opt("ascii", &[0x81], &UNKNOWN),
+]);
+
+/// Scripts, installers and other files signed through a subject interface
+/// package.
+static SPC_SIP_INFO: Schema = Schema::Seq(&[
+    req("version", INT, &UNKNOWN),
+    req("sipGuid", OCTETS, &UNKNOWN),
+    req("reserved1", INT, &UNKNOWN),
+    req("reserved2", INT, &UNKNOWN),
+    req("reserved3", INT, &UNKNOWN),
+    req("reserved4", INT, &UNKNOWN),
+    req("reserved5", INT, &UNKNOWN),
+]);
+
+static SPC_SP_OPUS_INFOS: Schema = Schema::SeqOf("SpcSpOpusInfo", &SPC_SP_OPUS_INFO);
+static SPC_SP_OPUS_INFO: Schema = Schema::Seq(&[
+    opt("programName", &[0xa0], &SPC_STRING),
+    opt("moreInfo", &[0xa1], &SPC_LINK),
+]);
+
+static SPC_STATEMENT_TYPES: Schema = Schema::SeqOf("SpcStatementType", &SPC_STATEMENT_TYPE);
+static SPC_STATEMENT_TYPE: Schema = Schema::SeqOf("purpose", &UNKNOWN);
 
 // --- PKCS#12 (RFC 7292) ----------------------------------------------------
 

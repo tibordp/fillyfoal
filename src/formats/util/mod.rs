@@ -3,7 +3,8 @@
 //! system-artifact and font dissectors (`datakit`), audio (`sound`) and video
 //! (`vidutil`) helpers, line-oriented reading for text formats (`lines`), a
 //! small JSON reader for headers embedded in binary formats (`json`),
-//! Windows locale identifiers (`lcid`), pacing for synchronous work over
+//! Windows locale identifiers (`lcid`), MAPI property tags shared by Outlook
+//! messages and PST files (`mapi`), pacing for synchronous work over
 //! in-memory buffers (`pace`), and readers for schema-driven binary
 //! encodings (`wire`: protobuf, FlatBuffers, Thrift, Cap'n Proto).
 
@@ -13,6 +14,7 @@ pub mod datakit;
 pub mod json;
 pub mod lcid;
 pub mod lines;
+pub mod mapi;
 pub mod pace;
 pub mod sound;
 pub mod vidutil;
