@@ -61,9 +61,10 @@ fn probe_lzma(h: &Head<'_>) -> bool {
         && ratio_ok
         && dict_ok
         && (size == u64::MAX || size < 1 << 48)
-        // An empty stream is a handful of bytes; a zero size on a longer
-        // input is more likely a structure with a zero field (jump lists).
-        && (size != 0 || h.len <= 64)
+        // A stream declaring 0 bytes is exactly the 13-byte header plus the
+        // range coder's 5-byte flush; a zero size on any other length is a
+        // structure with zero fields (jump lists, CFB `\x01Ole` streams).
+        && (size != 0 || h.len == 18)
         && h.data.get(13) == Some(&0)
         && h.len > 13
 }
