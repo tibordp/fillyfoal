@@ -22,7 +22,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::sound::{fourcc, peek_text, text};
-use crate::formats::{Format, Head, Input, Probe, embedded};
+use crate::formats::{Format, Head, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 
@@ -497,7 +497,7 @@ async fn expand(cx: Cx, chunk: Chunk) -> Result<()> {
             .emit()?;
         let kind = crate::bytes::array::<4>(&kind, 0).unwrap_or_default();
         walk(&cx, &chunk.ctx, chunk.data.tail(4), kind).await?;
-    } else if !common(&cx, &chunk).await? && !body(&cx, &chunk).await? {
+    } else if !handled(&cx, &chunk).await? {
         cx.emit(Node::new("Data").span(chunk.data));
     }
     if chunk.size & 1 == 1 && chunk.span.len > chunk.size.saturating_add(8) {
@@ -531,7 +531,15 @@ async fn common(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         (b"id3 " | b"ID3 " | b"ID32", _) => {
             cx.emit(embedded("ID3 tag", input.nested(chunk.data)));
         }
-        (b"XMP " | b"_PMX" | b"iXML" | b"axml", _) => {
+        // WebP, and WAV and AVI files written by Adobe tools.
+        (b"XMP " | b"_PMX", _) => {
+            cx.emit(embedded_as(
+                "XMP packet",
+                input.nested(chunk.data),
+                &crate::formats::image::xmp::FORMAT,
+            ));
+        }
+        (b"iXML" | b"axml", _) => {
             let text = peek_text(cx, chunk.data, chunk.data.len.min(1 << 20)).await?;
             cx.emit(
                 Node::new("XML")
@@ -542,6 +550,16 @@ async fn common(cx: &Cx, chunk: &Chunk) -> Result<bool> {
         _ => return Ok(false),
     }
     Ok(true)
+}
+
+/// Decodes a chunk's data: the shared decoders first, except for filler,
+/// which a form may know more about (AVI reserves space for OpenDML
+/// structures as `JUNK`).
+async fn handled(cx: &Cx, chunk: &Chunk) -> Result<bool> {
+    if &chunk.id == b"JUNK" && body(cx, chunk).await? {
+        return Ok(true);
+    }
+    Ok(common(cx, chunk).await? || body(cx, chunk).await?)
 }
 
 async fn body(cx: &Cx, chunk: &Chunk) -> Result<bool> {
@@ -716,14 +734,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if next == magic {
             // OpenDML AVI: further RIFF chunks follow the first.
             walk(&cx, &ctx, rest, form).await?;
-        } else if rest.len == 128 && next.starts_with(b"TAG") {
-            // Some taggers append an ID3v1 tag to WAV and AIFF files.
-            cx.emit(crate::formats::audio::id3::v1_node(&cx, rest).await?);
         } else {
-            cx.emit(
-                embedded("Trailing data", input.nested(rest))
-                    .summary(format!("{} bytes after the last chunk", rest.len)),
-            );
+            // Some taggers append ID3v1, APE or ID3v2 tags to WAV and AIFF
+            // files.
+            let tags = crate::formats::audio::id3::trailing_tags(&cx, input, file, end).await?;
+            if tags.end > end {
+                let gap = file.sub(end, tags.end.saturating_sub(end));
+                cx.emit(
+                    embedded("Trailing data", input.nested(gap))
+                        .summary(format!("{} bytes after the last chunk", gap.len)),
+                );
+            }
+            for node in tags.nodes {
+                cx.emit(node);
+            }
         }
     }
     Ok(())

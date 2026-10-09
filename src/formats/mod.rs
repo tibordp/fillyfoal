@@ -290,9 +290,9 @@ pub static FORMATS: &[&Format] = &[
     &image::pcx::FORMAT,
     &image::wbmp::FORMAT,
     // Also implemented in src/formats/image/ but not registered, because main
-    // has its own versions (image/graphics.rs, science/imaging.rs,
-    // image/icc_profile.rs): fits, dpx, cineon, astc, pvr, vtf, emf, wmf, bpg,
-    // flif, jxr, icc. Swap in whichever is deeper.
+    // has its own versions (image/graphics.rs, science/imaging.rs): fits,
+    // dpx, cineon, astc, pvr, vtf, emf, wmf, bpg, flif. Swap in whichever is
+    // deeper.
     // -- end images --
 
     // -- audio & video --

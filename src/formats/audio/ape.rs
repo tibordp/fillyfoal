@@ -7,7 +7,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
 use crate::formats::util::sound::{channels, duration_of};
-use crate::formats::{Format, Input, Probe, audio::apetag, audio::id3};
+use crate::formats::{Format, Input, Probe, audio::id3};
 use crate::node::Node;
 use crate::record;
 use crate::value::{EnumTable, FlagTable, flag};
@@ -260,20 +260,11 @@ record! {
     }
 }
 
-/// The APE and ID3v1 tags at the end of `input` (shared by the APE-tagged
-/// formats): where the audio data ends, and the tag nodes in file order.
+/// The tags at the end of `input` (shared by the APE-tagged formats):
+/// where the audio data ends, and the tag nodes in file order. APE, ID3v1
+/// (with Enhanced TAG+), Lyrics3 and appended ID3v2 tags are found in any
+/// order, as [`id3::trailing_tags`] finds them for MP3 and FLAC.
 pub async fn trailing_tags(cx: &Cx, input: Input) -> Result<(u64, Vec<Node>)> {
-    let file = input.span;
-    let mut end = file.len;
-    let mut nodes = Vec::new();
-    if let Some(v1) = id3::find_v1(cx, file).await? {
-        nodes.push(id3::v1_node(cx, v1).await?);
-        end = end.saturating_sub(128);
-    }
-    if let Some(tag) = apetag::find(cx, file, end).await? {
-        nodes.push(apetag::node(cx, input, tag).await);
-        end = tag.offset.saturating_sub(file.offset);
-    }
-    nodes.reverse();
-    Ok((end, nodes))
+    let t = id3::trailing_tags(cx, input, input.span, 0).await?;
+    Ok((t.end, t.nodes))
 }

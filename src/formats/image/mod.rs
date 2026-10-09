@@ -22,6 +22,7 @@ pub mod hdr;
 pub mod icc_profile;
 pub mod icns;
 pub mod ico;
+pub mod iptc;
 pub mod j2k;
 pub mod jbig2;
 pub mod jpeg;

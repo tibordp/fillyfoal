@@ -318,7 +318,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Name length: 0  [0x7d4+0x1]
           Name: ""  [0x7d5+0x0]
           Data size: 78  [0x7d6+0x4]
-          Data  [0x7da+0x4e]
+        ▾ IPTC-IIM — IPTC Information Interchange Model datasets  [0x7da+0x4e]
+            Coded character set: 1b 25 47  |.%G| — UTF-8  [0x7da+0x8] → 0x7df+0x3
+            Record version: 4  [0x7e2+0x7] → 0x7e7+0x2
+            Object name: "Filly"  [0x7e9+0xa] → 0x7ee+0x5
+            Keywords: "foal"  [0x7f3+0x9] → 0x7f8+0x4
+            Keywords: "horse"  [0x7fc+0xa] → 0x801+0x5
+            Headline: "Café headline"  [0x806+0x13] → 0x80b+0xe
+            Copyright notice: "(c) nobody"  [0x819+0xf] → 0x81e+0xa
       ▾ Resolution info: 1005 — 0x10 bytes  [0x828+0x1c]
           Signature: "8BIM"  [0x828+0x4]
           Resource ID: 1005 — Resolution info  [0x82c+0x2]
@@ -332,14 +339,6 @@ expression: "common::explore(&display_name(&path), &data)"
             Vertical resolution: 4718592 — 72.00  [0x83c+0x4]
             Vertical resolution unit: 1  [0x840+0x2]
             Height unit: 1  [0x842+0x2]
-    ▾ IPTC-IIM — IPTC Information Interchange Model datasets  [0x7da+0x4e]
-        Coded character set: 1b 25 47  |.%G| — 1:90, UTF-8  [0x7da+0x8]
-        Record version: 4 — 2:0  [0x7e2+0x7]
-        Object name: "Filly" — 2:5  [0x7e9+0xa]
-        Keywords: "foal" — 2:25  [0x7f3+0x9]
-        Keywords: "horse" — 2:25  [0x7fc+0xa]
-        Headline: "Café headline" — 2:105  [0x806+0x13]
-        Copyright notice: "(c) nobody" — 2:116  [0x819+0xf]
   ▾ APP14 — Adobe, transform: YCbCr  [0x844+0x10]
       Marker: 0xffee — APP14  [0x844+0x2]
       Length: 14  [0x846+0x2]

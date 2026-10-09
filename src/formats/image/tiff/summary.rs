@@ -21,6 +21,16 @@ pub struct Shot {
 }
 
 impl Shot {
+    /// "Canon EOS R5".
+    pub fn camera(&self) -> Option<&str> {
+        self.camera.as_deref()
+    }
+
+    /// "2024-05-01 12:00".
+    pub fn date(&self) -> Option<&str> {
+        self.date.as_deref()
+    }
+
     /// "Canon EOS R5, 24-105mm at 50mm, f/4, 1/250 s, ISO 200,
     /// 2024-05-01 12:00, 48.85823° N, 2.29450° E".
     pub fn describe(&self, camera: bool) -> String {
