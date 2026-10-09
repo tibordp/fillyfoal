@@ -1,0 +1,91 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ arithmetic-444.jpg — 32×24, extended sequential DCT, arithmetic, YCbCr 4:4:4, quality 50  [0x0+0x252]
+    SOI  [0x0+0x2]
+  ▾ APP0 — JFIF 1.01  [0x2+0x12]
+      Marker: 0xffe0 — APP0  [0x2+0x2]
+      Length: 16  [0x4+0x2]
+      Identifier: "JFIF"  [0x6+0x5]
+      Major version: 1  [0xb+0x1]
+      Minor version: 1 — version 1.01  [0xc+0x1]
+      Density units: aspect ratio only (0x0)  [0xd+0x1]
+      X density: 1  [0xe+0x2]
+      Y density: 1  [0x10+0x2]
+      Thumbnail width: 0  [0x12+0x1]
+      Thumbnail height: 0  [0x13+0x1]
+  ▾ DQT — table 0, IJG quality 50  [0x14+0x45]
+      Marker: 0xffdb — DQT  [0x14+0x2]
+      Length: 67  [0x16+0x2]
+    ▾ Table 0 — 8-bit, IJG quality 50 (luminance scale)  [0x18+0x41]
+        Precision and destination: 0x0 — 8-bit, table 0  [0x18+0x1]
+        Values (zigzag order): 10 0b 0c 0e 0c 0a 10 0e 0d 0e 12 11 10 13 18 28 …  |...............(|  [0x19+0x40]
+      ▾ Matrix — natural order, DC 16  [0x19+0x40]
+          Row 0: " 16  11  10  16  24  40  51  61"
+          Row 1: " 12  12  14  19  26  58  60  55"
+          Row 2: " 14  13  16  24  40  57  69  56"
+          Row 3: " 14  17  22  29  51  87  80  62"
+          Row 4: " 18  22  37  56  68 109 103  77"
+          Row 5: " 24  35  55  64  81 104 113  92"
+          Row 6: " 49  64  78  87 103 121 120 101"
+          Row 7: " 72  92  95  98 112 100 103  99"
+  ▾ DQT — table 1, IJG quality 50  [0x59+0x45]
+      Marker: 0xffdb — DQT  [0x59+0x2]
+      Length: 67  [0x5b+0x2]
+    ▾ Table 1 — 8-bit, IJG quality 50 (chrominance scale)  [0x5d+0x41]
+        Precision and destination: 0x1 — 8-bit, table 1  [0x5d+0x1]
+        Values (zigzag order): 11 12 12 18 15 18 2f 1a 1a 2f 63 42 38 42 63 63 …  |....../../cB8Bcc|  [0x5e+0x40]
+      ▾ Matrix — natural order, DC 17  [0x5e+0x40]
+          Row 0: " 17  18  24  47  99  99  99  99"
+          Row 1: " 18  21  26  66  99  99  99  99"
+          Row 2: " 24  26  56  99  99  99  99  99"
+          Row 3: " 47  66  99  99  99  99  99  99"
+          Row 4: " 99  99  99  99  99  99  99  99"
+          Row 5: " 99  99  99  99  99  99  99  99"
+          Row 6: " 99  99  99  99  99  99  99  99"
+          Row 7: " 99  99  99  99  99  99  99  99"
+  ▾ SOF9 — 32×24, extended sequential DCT, arithmetic, YCbCr 4:4:4  [0x9e+0x13]
+      Marker: 0xffc9 — SOF9  [0x9e+0x2]
+      Length: 17  [0xa0+0x2]
+      Sample precision: 8  [0xa2+0x1]
+      Height: 24  [0xa3+0x2]
+      Width: 32  [0xa5+0x2]
+      Components: 3  [0xa7+0x1]
+    ▾ Component Y — ID 1, sampling 1×1, quantization table 0  [0xa8+0x3]
+        Component ID: 1 — Y  [0xa8+0x1]
+        Sampling factors: 0x11 — 1×1 (horizontal × vertical)  [0xa9+0x1]
+        Quantization table: 0  [0xaa+0x1]
+    ▾ Component Cb — ID 2, sampling 1×1, quantization table 1  [0xab+0x3]
+        Component ID: 2 — Cb  [0xab+0x1]
+        Sampling factors: 0x11 — 1×1 (horizontal × vertical)  [0xac+0x1]
+        Quantization table: 1  [0xad+0x1]
+    ▾ Component Cr — ID 3, sampling 1×1, quantization table 1  [0xae+0x3]
+        Component ID: 3 — Cr  [0xae+0x1]
+        Sampling factors: 0x11 — 1×1 (horizontal × vertical)  [0xaf+0x1]
+        Quantization table: 1  [0xb0+0x1]
+  ▾ DAC — 4 conditioning entries  [0xb1+0xc]
+      Marker: 0xffcc — DAC  [0xb1+0x2]
+      Length: 10  [0xb3+0x2]
+      DC table 0: 16 — L = 0, U = 1  [0xb5+0x2]
+      AC table 0: 5 — Kx = 5  [0xb7+0x2]
+      DC table 1: 16 — L = 0, U = 1  [0xb9+0x2]
+      AC table 1: 5 — Kx = 5  [0xbb+0x2]
+  ▾ SOS — Y, Cb, Cr  [0xbd+0xe]
+      Marker: 0xffda — SOS  [0xbd+0x2]
+      Length: 12  [0xbf+0x2]
+      Components in scan: 3  [0xc1+0x1]
+    ▾ Component Y — ID 1, DC table 0, AC table 0  [0xc2+0x2]
+        Component selector: 1 — Y  [0xc2+0x1]
+        Entropy tables: 0x0 — DC 0, AC 0  [0xc3+0x1]
+    ▾ Component Cb — ID 2, DC table 1, AC table 1  [0xc4+0x2]
+        Component selector: 2 — Cb  [0xc4+0x1]
+        Entropy tables: 0x11 — DC 1, AC 1  [0xc5+0x1]
+    ▾ Component Cr — ID 3, DC table 1, AC table 1  [0xc6+0x2]
+        Component selector: 3 — Cr  [0xc6+0x1]
+        Entropy tables: 0x11 — DC 1, AC 1  [0xc7+0x1]
+      Spectral selection start: 0  [0xc8+0x1]
+      Spectral selection end: 63  [0xc9+0x1]
+      Successive approximation: 0x0 — Ah 0, Al 0  [0xca+0x1]
+    Entropy-coded data — scan 1, 389 bytes  [0xcb+0x185]
+    EOI  [0x250+0x2]

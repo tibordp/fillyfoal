@@ -228,6 +228,8 @@ and reproduce every file byte for byte.
 | `j2k/tiled-gray.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
 | `jp2/ffmpeg.jp2` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | commit b86c5c84 ("fixtures generated with ffmpeg"); `Lavc` marker |
 | `avif/svtav1.avif` | FFmpeg 8 with libsvtav1 | commit b86c5c84 ("fixtures generated with ffmpeg and sips") |
+| `jpeg/ffmpeg-420.jpg` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=32x24:rate=1 -frames:v 1 -pix_fmt yuvj420p` (`Lavc` comment) |
+| `jpeg/ffmpeg-jpegls.jpg` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=32x24:rate=1 -frames:v 1 -c:v jpegls` (JPEG-LS, RGB) |
 
 ## FFmpeg: audio
 
@@ -321,6 +323,13 @@ and reproduce every file byte for byte.
 | `psd/sips.psd` | macOS sips (ImageIO) | named for its producer; ImageIO image resources with an embedded sRGB profile |
 | `webp/lossless.webp` | libwebp cwebp 1.6 | reproduced byte-for-byte: `cwebp -lossless` of a 16x16 ffmpeg testsrc frame |
 | `webp/lossy.webp` | libwebp cwebp 1.6 | reproduced byte-for-byte: `cwebp -q 50` of the same frame |
+| `jpeg/progressive-420.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -progressive -sample 2x2 -quality 75` of a 32x24 ffmpeg testsrc frame (`-f lavfi -i testsrc=size=32x24:rate=1 -frames:v 1`, as PPM; `-pix_fmt gray` as PGM for the grayscale one) |
+| `jpeg/restart-422.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -restart 1 -sample 2x1 -quality 90` of the same frame |
+| `jpeg/arithmetic-444.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -arithmetic -sample 1x1 -quality 50` of the same frame |
+| `jpeg/lossless-gray.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -lossless 1` of the grayscale frame |
+| `jpeg/precision12.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -precision 12 -quality 85` of the same frame |
+| `jpeg/cmyk-adobe.jpg` | Pillow 12.3.0 (libjpeg-turbo) | reproduced byte-for-byte: the PPM frame `.convert("CMYK").save(..., quality=80)` (Adobe APP14) |
+| `jpeg/pillow-pair.mpo` | Pillow 12.3.0 (libjpeg-turbo) | reproduced byte-for-byte: the PPM frame resized to 16x16 and its mirror image, `save("x.mpo", save_all=True, append_images=[mirror], quality=70)` (MPF index, two images) |
 
 ## Version control
 
