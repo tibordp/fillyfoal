@@ -269,16 +269,7 @@ pub fn vpcc(w: &mut Walker) -> Option<String> {
     let level = w.u("level", 8)?;
     w.summary(|| format!("{}.{}", level / 10, level % 10));
     let depth = w.u("bitDepth", 4)?;
-    let sub = w.en(
-        "chromaSubsampling",
-        3,
-        &[
-            (0, "4:2:0 vertical"),
-            (1, "4:2:0 colocated"),
-            (2, "4:2:2"),
-            (3, "4:4:4"),
-        ],
-    )?;
+    let sub = w.en("chromaSubsampling", 3, CHROMA_SUBSAMPLING)?;
     w.flag("videoFullRangeFlag")?;
     let p = w.en("colourPrimaries", 8, super::tables::COLOUR_PRIMARIES)?;
     let t = w.en(
@@ -287,6 +278,22 @@ pub fn vpcc(w: &mut Walker) -> Option<String> {
         super::tables::TRANSFER_CHARACTERISTICS,
     )?;
     let m = w.en("matrixCoefficients", 8, super::tables::MATRIX_COEFFICIENTS)?;
+    init_data(w)?;
+    let mut s = vpcc_summary(profile, level, sub, depth);
+    if let Some(c) = super::params::colour_summary(p, t, m) {
+        s = format!("{s}, {c}");
+    }
+    Some(s)
+}
+
+const CHROMA_SUBSAMPLING: EnumTable = &[
+    (0, "4:2:0 vertical"),
+    (1, "4:2:0 colocated"),
+    (2, "4:2:2"),
+    (3, "4:4:4"),
+];
+
+fn init_data(w: &mut Walker) -> Option<()> {
     let n = w.u("codecIntializationDataSize", 16)?;
     if n > 0 {
         w.skip_as(
@@ -294,20 +301,36 @@ pub fn vpcc(w: &mut Walker) -> Option<String> {
             usize::try_from(n).ok()?.checked_mul(8)?,
         )?;
     }
+    Some(())
+}
+
+fn vpcc_summary(profile: u64, level: u64, sub: u64, depth: u64) -> String {
     let chroma = match sub {
         0 | 1 => "4:2:0",
         2 => "4:2:2",
         _ => "4:4:4",
     };
-    let mut s = format!(
+    format!(
         "profile {profile}, level {}.{}, {chroma} {depth}-bit",
         level / 10,
         level % 10
-    );
-    if let Some(c) = super::params::colour_summary(p, t, m) {
-        s = format!("{s}, {c}");
-    }
-    Some(s)
+    )
+}
+
+/// The draft (version 0) `VPCodecConfigurationRecord`, after its version
+/// and flags: colour space and transfer function in 4-bit VP9 code points.
+pub fn vpcc_v0(w: &mut Walker) -> Option<String> {
+    let profile = w.u("profile", 8)?;
+    let level = w.u("level", 8)?;
+    w.summary(|| format!("{}.{}", level / 10, level % 10));
+    let depth = w.u("bitDepth", 4)?;
+    w.en("colorSpace", 4, VP9_COLOR_SPACES)?;
+    let sub = w.en("chromaSubsampling", 4, CHROMA_SUBSAMPLING)?;
+    w.u("transferFunction", 4)?;
+    w.flag("videoFullRangeFlag")?;
+    w.u("reserved", 7)?;
+    init_data(w)?;
+    Some(vpcc_summary(profile, level, sub, depth))
 }
 
 /// The `vp09` codec string (`vp09.00.10.08`).

@@ -6,6 +6,7 @@ use std::sync::Arc;
 use super::av1::{self, SeqInfo};
 use super::bitwalk::Walker;
 use super::params::{ParamSets, PpsInfo, SliceInfo, SpsInfo};
+use super::tables::lookup_or;
 use super::{audio, h264, hevc, sei, vp9};
 use crate::formats::util::arcutil::emit_nodes;
 use crate::node::Node;
@@ -302,25 +303,141 @@ fn length_prefixed(
     Some(info.sps)
 }
 
-/// `AVCDecoderConfigurationRecord` (`avcC`), decoded into nodes with its
-/// parameter sets. Returns the SPS's description.
-pub fn avcc(d: &[u8], base: Span, emit: bool) -> (Option<SpsInfo>, Vec<Node>) {
-    let mut w = Walker::new(d, base, false, emit);
-    let mut sps = None;
-    let ok = avcc_walk(&mut w, &mut sps).is_some();
-    (sps, w.finish(ok))
+/// Records whatever follows a complete configuration record.
+fn trailing(w: &mut Walker, name: &'static str) {
+    let left = w.bits_left();
+    if left == 0 {
+        return;
+    }
+    if w.skip_as(name, left).is_some() {
+        w.summary(|| {
+            if left.is_multiple_of(8) {
+                super::plural(crate::bytes::to_u64(left / 8), "byte")
+            } else {
+                super::plural(crate::bytes::to_u64(left), "bit")
+            }
+        });
+    }
 }
 
-fn avcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
+/// The fixed fields of an `AVCDecoderConfigurationRecord`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AvccHeader {
+    pub profile: u8,
+    /// `profile_compatibility`: the SPS constraint_set flags.
+    pub compat: u8,
+    pub level: u8,
+    /// Bytes in each NAL unit length prefix.
+    pub length_size: u8,
+    /// From the High-profile extension: chroma format and luma and
+    /// chroma bit depths.
+    pub ext: Option<(u64, u64, u64)>,
+}
+
+impl AvccHeader {
+    /// "High@L4.0", "Constrained Baseline@L3.1".
+    pub fn profile_level(&self) -> String {
+        format!(
+            "{}@L{}",
+            super::tables::h264_profile_name(self.profile, self.compat),
+            super::tables::h264_level_name(self.profile, self.compat, self.level)
+        )
+    }
+
+    /// The profile and level, with the format the High-profile extension
+    /// gives.
+    pub fn describe(&self) -> String {
+        let mut s = self.profile_level();
+        if let Some((chroma, luma, chroma_depth)) = self.ext {
+            let c = lookup_or(super::tables::CHROMA_FORMATS, chroma);
+            if chroma_depth != luma && chroma != 0 {
+                s = format!("{s}, {c} {luma}/{chroma_depth}-bit");
+            } else {
+                s = format!("{s}, {c} {luma}-bit");
+            }
+        }
+        s
+    }
+
+    /// The RFC 6381 codec string (`avc1.640028`).
+    pub fn codec_string(&self, fourcc: &str) -> String {
+        format!(
+            "{fourcc}.{:02x}{:02x}{:02x}",
+            self.profile, self.compat, self.level
+        )
+    }
+}
+
+/// `AVCDecoderConfigurationRecord` (`avcC`), decoded into nodes with its
+/// parameter sets: its fixed fields and the first SPS.
+pub fn avcc_config(
+    d: &[u8],
+    base: Span,
+    emit: bool,
+) -> (Option<AvccHeader>, Option<SpsInfo>, Vec<Node>) {
+    let mut w = Walker::new(d, base, false, emit);
+    let mut header = None;
+    let mut sps = None;
+    let ok = avcc_walk(&mut w, &mut header, &mut sps).is_some();
+    if ok {
+        trailing(&mut w, "Trailing data");
+    }
+    (header, sps, w.finish(ok))
+}
+
+/// `AVCDecoderConfigurationRecord` (`avcC`), decoded into nodes with its
+/// parameter sets. Returns the first SPS.
+pub fn avcc(d: &[u8], base: Span, emit: bool) -> (Option<SpsInfo>, Vec<Node>) {
+    let (_, sps, nodes) = avcc_config(d, base, emit);
+    (sps, nodes)
+}
+
+fn avcc_walk(
+    w: &mut Walker,
+    header: &mut Option<AvccHeader>,
+    sps: &mut Option<SpsInfo>,
+) -> Option<()> {
     let mut ps = ParamSets::default();
-    w.u("configurationVersion", 8)?;
+    let version = w.u("configurationVersion", 8)?;
+    if version != 1 {
+        w.with(|n| {
+            n.diag(crate::error::Diagnostic::malformed(
+                "not an AVC configuration record (version is not 1)",
+            ))
+        });
+        return None;
+    }
     let profile = w.en("AVCProfileIndication", 8, super::tables::H264_PROFILES)?;
-    w.x("profile_compatibility", 8)?;
+    let compat = w.x("profile_compatibility", 8)?;
+    w.summary(|| {
+        let set: Vec<String> = (0..6u32)
+            .filter(|i| compat & (0x80 >> i) != 0)
+            .map(|i| format!("constraint_set{i}"))
+            .collect();
+        if set.is_empty() {
+            "no constraint flags".to_owned()
+        } else {
+            set.join(", ")
+        }
+    });
     let level = w.u("AVCLevelIndication", 8)?;
-    w.summary(|| format!("{}.{}", level / 10, level % 10));
+    let (p, c, l) = (
+        u8::try_from(profile).unwrap_or(0),
+        u8::try_from(compat).unwrap_or(0),
+        u8::try_from(level).unwrap_or(0),
+    );
+    w.summary(|| super::tables::h264_level_name(p, c, l));
     w.u("reserved", 6)?;
     let len = w.u("lengthSizeMinusOne", 2)?;
     w.summary(|| format!("{}-byte NAL unit lengths", len.saturating_add(1)));
+    let mut h = AvccHeader {
+        profile: p,
+        compat: c,
+        level: l,
+        length_size: u8::try_from(len.saturating_add(1)).unwrap_or(4),
+        ext: None,
+    };
+    *header = Some(h);
     w.u("reserved", 3)?;
     let n = w.u("numOfSequenceParameterSets", 5)?;
     for _ in 0..n {
@@ -333,13 +450,22 @@ fn avcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
     for _ in 0..n {
         length_prefixed(w, NalCodec::Avc, "pictureParameterSetLength", &mut ps)?;
     }
-    if matches!(profile, 100 | 110 | 122 | 144) && w.bits_left() >= 32 {
+    // ISO/IEC 14496-15 lists profiles 100, 110, 122 and 144; writers add
+    // the extension for every High profile, so go by its reserved bits.
+    let at = w.pos();
+    let marked = w.read(6) == Some(0x3f);
+    w.seek(at);
+    if !matches!(profile, 66 | 77 | 88) && w.bits_left() >= 32 && marked {
         w.u("reserved", 6)?;
-        w.en("chroma_format", 2, super::tables::CHROMA_FORMATS)?;
+        let chroma = w.en("chroma_format", 2, super::tables::CHROMA_FORMATS)?;
         w.u("reserved", 5)?;
-        w.u("bit_depth_luma_minus8", 3)?;
+        let luma = w.u("bit_depth_luma_minus8", 3)?.saturating_add(8);
+        w.summary(|| format!("{luma}-bit"));
         w.u("reserved", 5)?;
-        w.u("bit_depth_chroma_minus8", 3)?;
+        let depth = w.u("bit_depth_chroma_minus8", 3)?.saturating_add(8);
+        w.summary(|| format!("{depth}-bit"));
+        h.ext = Some((chroma, luma, depth));
+        *header = Some(h);
         let n = w.u("numOfSequenceParameterSetExt", 8)?;
         for _ in 0..n {
             length_prefixed(w, NalCodec::Avc, "sequenceParameterSetExtLength", &mut ps)?;
@@ -348,25 +474,111 @@ fn avcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
     Some(())
 }
 
-/// `HEVCDecoderConfigurationRecord` (`hvcC`), decoded into nodes with its
-/// parameter sets.
-pub fn hvcc(d: &[u8], base: Span, emit: bool) -> (Option<SpsInfo>, Vec<Node>) {
-    let mut w = Walker::new(d, base, false, emit);
-    let mut sps = None;
-    let ok = hvcc_walk(&mut w, &mut sps).is_some();
-    (sps, w.finish(ok))
+/// The fixed fields of an `HEVCDecoderConfigurationRecord`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct HvccHeader {
+    pub profile_space: u8,
+    pub high_tier: bool,
+    pub profile: u8,
+    pub compatibility: u32,
+    /// The 48 general constraint indicator flags.
+    pub constraints: u64,
+    pub level: u8,
+    pub chroma_format: u64,
+    pub bit_depth: u64,
+    pub bit_depth_chroma: u64,
+    /// Frames per 256 seconds; 0 when unspecified.
+    pub avg_frame_rate: u64,
+    pub length_size: u8,
 }
 
-fn hvcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
+impl HvccHeader {
+    /// "Main 10@L5.1" (with the tier when High).
+    pub fn profile_level(&self) -> String {
+        let profile = crate::value::lookup(super::tables::HEVC_PROFILES, self.profile.into())
+            .map_or_else(|| format!("profile {}", self.profile), str::to_owned);
+        format!(
+            "{profile}@L{}{}",
+            super::tables::hevc_level_name(self.level),
+            if self.high_tier { " High tier" } else { "" }
+        )
+    }
+
+    /// "4:2:0 10-bit".
+    pub fn format(&self) -> String {
+        let c = lookup_or(super::tables::CHROMA_FORMATS, self.chroma_format);
+        if self.bit_depth_chroma != self.bit_depth && self.chroma_format != 0 {
+            format!("{c} {}/{}-bit", self.bit_depth, self.bit_depth_chroma)
+        } else {
+            format!("{c} {}-bit", self.bit_depth)
+        }
+    }
+
+    pub fn describe(&self) -> String {
+        format!("{}, {}", self.profile_level(), self.format())
+    }
+
+    /// The codec string of ISO/IEC 14496-15 Annex E (`hvc1.1.6.L93.B0`).
+    pub fn codec_string(&self, fourcc: &str) -> String {
+        super::params::hevc_codec_string(
+            fourcc,
+            self.profile_space,
+            self.profile,
+            self.compatibility,
+            self.high_tier,
+            self.level,
+            self.constraints,
+        )
+    }
+}
+
+/// `HEVCDecoderConfigurationRecord` (`hvcC`), decoded into nodes with its
+/// parameter sets: its fixed fields and the first SPS.
+pub fn hvcc_config(
+    d: &[u8],
+    base: Span,
+    emit: bool,
+) -> (Option<HvccHeader>, Option<SpsInfo>, Vec<Node>) {
+    let mut w = Walker::new(d, base, false, emit);
+    let mut header = None;
+    let mut sps = None;
+    let ok = hvcc_walk(&mut w, &mut header, &mut sps).is_some();
+    if ok {
+        trailing(&mut w, "Trailing data");
+    }
+    (header, sps, w.finish(ok))
+}
+
+/// `HEVCDecoderConfigurationRecord` (`hvcC`), decoded into nodes with its
+/// parameter sets. Returns the first SPS.
+pub fn hvcc(d: &[u8], base: Span, emit: bool) -> (Option<SpsInfo>, Vec<Node>) {
+    let (_, sps, nodes) = hvcc_config(d, base, emit);
+    (sps, nodes)
+}
+
+fn hvcc_walk(
+    w: &mut Walker,
+    header: &mut Option<HvccHeader>,
+    sps: &mut Option<SpsInfo>,
+) -> Option<()> {
     let mut ps = ParamSets::default();
-    w.u("configurationVersion", 8)?;
-    w.u("general_profile_space", 2)?;
-    w.flag("general_tier_flag")?;
-    w.en("general_profile_idc", 5, super::tables::HEVC_PROFILES)?;
-    w.x("general_profile_compatibility_flags", 32)?;
-    w.x("general_constraint_indicator_flags", 48)?;
+    let version = w.u("configurationVersion", 8)?;
+    if version != 1 {
+        w.with(|n| {
+            n.diag(crate::error::Diagnostic::malformed(
+                "not an HEVC configuration record (version is not 1)",
+            ))
+        });
+        return None;
+    }
+    let space = w.u("general_profile_space", 2)?;
+    let tier = w.flag("general_tier_flag")?;
+    w.summary(|| (if tier { "High" } else { "Main" }).to_owned());
+    let profile = w.en("general_profile_idc", 5, super::tables::HEVC_PROFILES)?;
+    let compatibility = w.x("general_profile_compatibility_flags", 32)?;
+    let constraints = w.x("general_constraint_indicator_flags", 48)?;
     let level = u8::try_from(w.u("general_level_idc", 8)?).ok()?;
-    w.summary(|| super::tables::hevc_level_name(level));
+    w.summary(|| format!("level {}", super::tables::hevc_level_name(level)));
     w.u("reserved", 4)?;
     w.u("min_spatial_segmentation_idc", 12)?;
     w.u("reserved", 6)?;
@@ -381,18 +593,48 @@ fn hvcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
         ],
     )?;
     w.u("reserved", 6)?;
-    w.en("chromaFormat", 2, super::tables::CHROMA_FORMATS)?;
+    let chroma = w.en("chromaFormat", 2, super::tables::CHROMA_FORMATS)?;
     w.u("reserved", 5)?;
-    w.u("bitDepthLumaMinus8", 3)?;
+    let luma = w.u("bitDepthLumaMinus8", 3)?.saturating_add(8);
+    w.summary(|| format!("{luma}-bit"));
     w.u("reserved", 5)?;
-    w.u("bitDepthChromaMinus8", 3)?;
+    let depth = w.u("bitDepthChromaMinus8", 3)?.saturating_add(8);
+    w.summary(|| format!("{depth}-bit"));
     let rate = w.u("avgFrameRate", 16)?;
-    w.summary(|| format!("{} fps", super::num(rate as f64 / 256.0)));
-    w.u("constantFrameRate", 2)?;
+    w.summary(|| {
+        if rate == 0 {
+            "unspecified".to_owned()
+        } else {
+            format!("{} fps", super::num(rate as f64 / 256.0))
+        }
+    });
+    w.desc("In frames per 256 seconds");
+    w.en(
+        "constantFrameRate",
+        2,
+        &[
+            (0, "unknown"),
+            (1, "constant"),
+            (2, "constant per temporal layer"),
+        ],
+    )?;
     w.u("numTemporalLayers", 3)?;
     w.flag("temporalIdNested")?;
     let len = w.u("lengthSizeMinusOne", 2)?;
     w.summary(|| format!("{}-byte NAL unit lengths", len.saturating_add(1)));
+    *header = Some(HvccHeader {
+        profile_space: u8::try_from(space).unwrap_or(0),
+        high_tier: tier,
+        profile: u8::try_from(profile).unwrap_or(0),
+        compatibility: u32::try_from(compatibility).unwrap_or(0),
+        constraints,
+        level,
+        chroma_format: chroma,
+        bit_depth: luma,
+        bit_depth_chroma: depth,
+        avg_frame_rate: rate,
+        length_size: u8::try_from(len.saturating_add(1)).unwrap_or(4),
+    });
     let arrays = w.u("numOfArrays", 8)?;
     for i in 0..arrays {
         w.begin(format!("Array {i}"));
@@ -417,17 +659,32 @@ fn hvcc_walk(w: &mut Walker, sps: &mut Option<SpsInfo>) -> Option<()> {
     Some(())
 }
 
-/// `AV1CodecConfigurationRecord` (`av1C`) with its config OBUs.
-pub fn av1c(d: &[u8], base: Span, emit: bool) -> (Option<String>, Vec<Node>) {
+/// `AV1CodecConfigurationRecord` (`av1C`) with its config OBUs: the
+/// record's own fields (as a partial [`SeqInfo`]) and the sequence header
+/// OBU's, if there is one.
+pub fn av1c_config(
+    d: &[u8],
+    base: Span,
+    emit: bool,
+) -> (Option<SeqInfo>, Option<SeqInfo>, Vec<Node>) {
     let mut w = Walker::new(d, base, false, emit);
-    let summary = av1::av1c(&mut w);
-    let mut ok = summary.is_some();
+    let header = av1::av1c(&mut w);
+    let mut ok = header.is_some();
     let mut seq: Option<SeqInfo> = None;
     if ok {
         ok = obus(&mut w, &mut seq).is_some();
     }
-    let summary = seq.map(|s| s.describe()).or(summary);
-    (summary, w.finish(ok))
+    (header, seq, w.finish(ok))
+}
+
+/// `AV1CodecConfigurationRecord` (`av1C`) with its config OBUs, and a
+/// one-line description.
+pub fn av1c(d: &[u8], base: Span, emit: bool) -> (Option<String>, Vec<Node>) {
+    let (header, seq, nodes) = av1c_config(d, base, emit);
+    let summary = seq
+        .map(|s| s.describe())
+        .or_else(|| header.map(|h| format!("{}, {}", h.profile_level(), h.format())));
+    (summary, nodes)
 }
 
 /// The OBUs from the walker's position to its end, each as a node.
@@ -457,15 +714,23 @@ pub fn obus(w: &mut Walker, seq: &mut Option<SeqInfo>) -> Option<Vec<av1::Obu>> 
     Some(out)
 }
 
-/// `VPCodecConfigurationRecord` as in `vpcC` (version and flags first).
+/// `VPCodecConfigurationRecord` as in `vpcC` (version and flags first;
+/// version 0 is the draft layout).
 pub fn vpcc(d: &[u8], base: Span, emit: bool) -> (Option<String>, Vec<Node>) {
     let mut w = Walker::new(d, base, false, emit);
     let summary = (|| {
-        w.u("version", 8)?;
+        let version = w.u("version", 8)?;
         w.x("flags", 24)?;
-        vp9::vpcc(&mut w)
+        if version == 0 {
+            vp9::vpcc_v0(&mut w)
+        } else {
+            vp9::vpcc(&mut w)
+        }
     })();
     let ok = summary.is_some();
+    if ok {
+        trailing(&mut w, "Trailing data");
+    }
     (summary, w.finish(ok))
 }
 
@@ -474,5 +739,21 @@ pub fn asc(d: &[u8], base: Span, emit: bool) -> (Option<audio::AscInfo>, Vec<Nod
     let mut w = Walker::new(d, base, false, emit);
     let a = audio::audio_specific_config(&mut w);
     let ok = a.is_some();
+    if ok {
+        trailing(&mut w, "Remaining bits");
+    }
     (a, w.finish(ok))
+}
+
+/// An Opus identification header, decoded into nodes: `OpusHead`
+/// (little-endian, with its signature) or, with `dops`, the body of an
+/// ISOBMFF `dOps` box.
+pub fn opus(d: &[u8], base: Span, emit: bool, dops: bool) -> (Option<audio::OpusInfo>, Vec<Node>) {
+    let mut w = Walker::new(d, base, false, emit);
+    let o = audio::opus_head(&mut w, dops);
+    let ok = o.is_some();
+    if ok {
+        trailing(&mut w, "Extra data");
+    }
+    (o, w.finish(ok))
 }

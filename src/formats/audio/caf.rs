@@ -13,10 +13,10 @@ use crate::bytes::{to_u64, to_usize, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::{Record, emit_record};
 use crate::error::{Diagnostic, Result};
-use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::fields::{Endian, Fields, parse};
 use crate::formats::iff::wav;
 use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, table, text, uint};
-use crate::formats::util::vidutil::asc_summary;
+use crate::formats::util::vidutil::esds;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -303,7 +303,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             b"kuki" => match description.as_ref().map(|d| d.format.as_slice()) {
                 Some(b"aac " | b"aach" | b"aacp") => {
                     let b = cx.read_avail(span.tail(12).sub(0, 256)).await?;
-                    es_summary(&b).unwrap_or_else(|| format!("{size} bytes"))
+                    esds::esds_summary(&b).unwrap_or_else(|| format!("{size} bytes"))
                 }
                 Some(b"alac") => "ALAC configuration".to_owned(),
                 _ => format!("{size} bytes"),
@@ -406,18 +406,12 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
                 .unwrap_or_default();
             match format.as_slice() {
                 b"aac " | b"aach" | b"aacp" | b"aacl" | b"aace" => {
-                    let total = descriptor_len(&cx.read_avail(data.sub(0, 8)).await?)
-                        .unwrap_or(data.len)
+                    let total = esds::header(&cx.read_avail(data.sub(0, 8)).await?)
+                        .map_or(data.len, |(_, len, head)| len.saturating_add(head))
                         .min(data.len);
-                    cx.emit(
-                        struct_node("ES descriptor", data.sub(0, total), BE, (), descriptor)
-                            .summary(
-                                es_summary(&cx.read_avail(data.sub(0, 256)).await?)
-                                    .unwrap_or_default(),
-                            ),
-                    );
+                    esds::descriptors(&cx, st.input, data.sub(0, total), 0).await?;
                     if data.len > total {
-                        cx.emit(Node::new("Padding").span(data.tail(total)));
+                        cx.push(Node::new("Padding").span(data.tail(total))).await;
                     }
                 }
                 b"alac" => alac_cookie(&cx, data).await?,
@@ -847,132 +841,6 @@ pub async fn channel_layout(cx: &Cx, data: Span, endian: Endian) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Magic cookies
 
-const DESCRIPTOR_TAGS: EnumTable = &[
-    (0x03, "ES_Descriptor"),
-    (0x04, "DecoderConfigDescriptor"),
-    (0x05, "DecoderSpecificInfo"),
-    (0x06, "SLConfigDescriptor"),
-];
-
-const OBJECT_TYPES: EnumTable = &[
-    (0x40, "MPEG-4 audio"),
-    (0x66, "MPEG-2 AAC Main"),
-    (0x67, "MPEG-2 AAC LC"),
-    (0x68, "MPEG-2 AAC SSR"),
-    (0x69, "MPEG-2 audio"),
-    (0x6b, "MPEG-1 audio"),
-];
-
-const SL_PREDEFINED: EnumTable = &[(0, "custom"), (1, "null"), (2, "MP4")];
-
-const ES_FLAGS: FlagTable = &[
-    flag(0x80, "STREAM_DEPENDENCE"),
-    flag(0x40, "URL"),
-    flag(0x20, "OCR_STREAM"),
-];
-
-/// The header of an MPEG-4 descriptor: (tag, body length, header length).
-fn descriptor_header(b: &[u8]) -> Option<(u8, u64, u64)> {
-    let tag = *b.first()?;
-    let mut len = 0u64;
-    for i in 1..5usize {
-        let byte = *b.get(i)?;
-        len = (len << 7) | u64::from(byte & 0x7f);
-        if byte & 0x80 == 0 {
-            return Some((tag, len, to_u64(i).saturating_add(1)));
-        }
-    }
-    None
-}
-
-fn descriptor_len(b: &[u8]) -> Option<u64> {
-    descriptor_header(b).map(|(_, len, head)| len.saturating_add(head))
-}
-
-/// One MPEG-4 descriptor (ISO/IEC 14496-1), nested descriptors lazily.
-fn descriptor(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    let rest = f.block().data.get(to_usize(f.pos())..).unwrap_or_default();
-    let Some((_, len, head)) = descriptor_header(rest) else {
-        f.bytes("Data", f.remaining()).emit()?;
-        return Ok(());
-    };
-    let tag = f.u8("Tag").enumeration(DESCRIPTOR_TAGS).emit()?;
-    f.bytes("Length", head.saturating_sub(1))
-        .with(|_, n| n.value(uint(len, 32)))
-        .emit()?;
-    let end = f.pos().saturating_add(len).min(f.block().span.len);
-    match tag {
-        0x03 => {
-            f.u16("ES ID").emit()?;
-            let flags = f
-                .u8("Flags")
-                .flags(ES_FLAGS)
-                .desc("Stream priority in the low 5 bits")
-                .emit()?;
-            if flags & 0x80 != 0 {
-                f.u16("Depends on ES ID").emit()?;
-            }
-            if flags & 0x40 != 0 {
-                let n = f.u8("URL length").emit()?;
-                f.ascii("URL", n.into()).emit()?;
-            }
-            if flags & 0x20 != 0 {
-                f.u16("OCR ES ID").emit()?;
-            }
-            children(f, end);
-        }
-        0x04 => {
-            f.u8("Object type").enumeration(OBJECT_TYPES).emit()?;
-            f.u8("Stream type")
-                .hex()
-                .with(|&v, n| {
-                    n.summary(match v >> 2 {
-                        5 => "audio",
-                        4 => "visual",
-                        _ => "other",
-                    })
-                })
-                .desc("Stream type in bits 2-7, upstream in bit 1")
-                .emit()?;
-            crate::formats::util::sound::u24(f, "Buffer size", BE).emit()?;
-            f.u32("Maximum bit rate").emit()?;
-            f.u32("Average bit rate").emit()?;
-            children(f, end);
-        }
-        0x05 => {
-            f.bytes("AudioSpecificConfig", len)
-                .with(|b, n| match asc_summary(b) {
-                    Some(s) => n.summary(s),
-                    None => n,
-                })
-                .emit()?;
-        }
-        0x06 if len >= 1 => {
-            f.u8("Predefined").enumeration(SL_PREDEFINED).emit()?;
-        }
-        _ => {}
-    }
-    if f.pos() < end {
-        f.bytes("Data", end.saturating_sub(f.pos())).emit()?;
-    }
-    f.seek(end);
-    Ok(())
-}
-
-/// Nested descriptors up to `end`, as lazy nodes.
-fn children(f: &mut Fields<'_>, end: u64) {
-    while f.pos() < end {
-        let rest = f.block().data.get(to_usize(f.pos())..).unwrap_or_default();
-        let Some((tag, len, head)) = descriptor_header(rest) else {
-            break;
-        };
-        let total = len.saturating_add(head).min(end.saturating_sub(f.pos()));
-        let name = lookup(DESCRIPTOR_TAGS, tag.into()).unwrap_or("Descriptor");
-        f.node(struct_node(name, f.peek_span(total), BE, (), descriptor));
-        f.skip(total);
-    }
-}
-
 record! {
     /// `ALACSpecificConfig` (ALACMagicCookieDescription.txt).
     pub struct AlacConfig {
@@ -1240,38 +1108,4 @@ record! {
         value: f32 "Value",
         frame: u64 "Frame position",
     }
-}
-
-/// The AudioSpecificConfig summary of an ES descriptor: walks
-/// ES_Descriptor → DecoderConfigDescriptor → DecoderSpecificInfo.
-fn es_summary(d: &[u8]) -> Option<String> {
-    let mut at = 0usize;
-    for _ in 0..8 {
-        let (tag, len, head) = descriptor_header(d.get(at..)?)?;
-        let body = at.saturating_add(to_usize(head));
-        match tag {
-            0x03 => {
-                let flags = *d.get(body.saturating_add(2))?;
-                let mut skip = 3usize;
-                if flags & 0x80 != 0 {
-                    skip = skip.saturating_add(2);
-                }
-                if flags & 0x40 != 0 {
-                    let n = *d.get(body.saturating_add(skip))?;
-                    skip = skip.saturating_add(1).saturating_add(n.into());
-                }
-                if flags & 0x20 != 0 {
-                    skip = skip.saturating_add(2);
-                }
-                at = body.saturating_add(skip);
-            }
-            0x04 => at = body.saturating_add(13),
-            0x05 => {
-                let end = body.saturating_add(to_usize(len));
-                return asc_summary(d.get(body..end)?);
-            }
-            _ => return None,
-        }
-    }
-    None
 }

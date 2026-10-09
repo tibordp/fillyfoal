@@ -7,10 +7,12 @@
 //! - `h264`, `hevc`, `sei`: parameter sets (with VUI, HRD, scaling lists),
 //!   slice headers and SEI messages;
 //! - `av1`, `vp9`: AV1 OBUs and sequence headers, VP8/VP9 frame headers;
-//! - `audio`: the MPEG-4 AudioSpecificConfig and audio elementary stream
-//!   frame headers;
+//! - `audio`: the MPEG-4 AudioSpecificConfig, the Opus identification
+//!   header and audio elementary stream frame headers;
+//! - `esds`: MPEG-4 Systems descriptors (`esds`, `iods`, CAF `kuki`);
 //! - `nal`: entry points over whole NAL units and the `avcC`, `hvcC`,
-//!   `av1C` and `vpcC` configuration records;
+//!   `av1C` and `vpcC` configuration records, AudioSpecificConfig and
+//!   Opus headers;
 //! - `params`, `tables`: what parameter sets say, and shared code points.
 
 use std::borrow::Cow;
@@ -27,6 +29,7 @@ use crate::value::{EnumTable, Radix, Value};
 pub mod audio;
 pub mod av1;
 pub mod bitwalk;
+pub mod esds;
 pub mod h264;
 pub mod hevc;
 pub mod nal;
@@ -114,6 +117,35 @@ pub fn sfixed16(v: i32) -> f64 {
 /// 8.8 fixed point.
 pub fn fixed8(v: u16) -> f64 {
     f64::from(v) / 256.0
+}
+
+/// "48 kHz", "44.1 kHz", "22.05 kHz".
+pub fn khz(rate: u64) -> String {
+    if rate == 0 {
+        return "? Hz".to_owned();
+    }
+    if rate < 1000 {
+        return format!("{rate} Hz");
+    }
+    let s = format!("{:.3}", rate as f64 / 1000.0);
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    format!("{s} kHz")
+}
+
+/// "128 kb/s", "12.5 Mb/s".
+pub fn bitrate(bps: u64) -> String {
+    let one_decimal = |v: f64| {
+        let s = format!("{v:.1}");
+        s.strip_suffix(".0")
+            .map_or_else(|| s.clone(), str::to_owned)
+    };
+    if bps >= 10_000_000 {
+        format!("{} Mb/s", one_decimal(bps as f64 / 1_000_000.0))
+    } else if bps >= 1000 {
+        format!("{} kb/s", one_decimal(bps as f64 / 1000.0))
+    } else {
+        format!("{bps} b/s")
+    }
 }
 
 /// Formats a float without a pointless fractional part.
@@ -267,7 +299,7 @@ pub fn unescape_rbsp(data: &[u8]) -> Vec<u8> {
 // H.264 / HEVC parameter sets
 
 /// A span for parsing bytes that are not shown (summaries only).
-fn detached(len: usize) -> Span {
+pub fn detached(len: usize) -> Span {
     Span::new(crate::span::SourceId::default_host(), 0, to_u64(len))
 }
 
@@ -297,25 +329,20 @@ pub fn hevc_sps(nal: &[u8]) -> Option<SpsInfo> {
     info.sps.filter(|_| info.nal_type == 33)
 }
 
-/// Codec summary from an AVC decoder configuration record (`avcC`).
+/// Codec summary from an AVC decoder configuration record (`avcC`): what
+/// its first SPS says, else its profile, level and High-profile extension.
 pub fn avcc_summary(d: &[u8]) -> Option<String> {
-    let len = usize::from(crate::bytes::u16_be(d, 6)?);
-    if let Some(sps) = d.get(8..).and_then(|r| r.get(..len)).and_then(h264_sps) {
-        return Some(sps.h264_summary());
-    }
-    Some(format!(
-        "{}@L{}",
-        lookup_or(H264_PROFILES, d.get(1).copied()?.into()),
-        h264_level(d.get(3).copied()?)
-    ))
+    let (header, sps, _) = nal::avcc_config(d, detached(d.len()), false);
+    sps.map(|s| s.describe())
+        .or_else(|| Some(header?.describe()))
 }
 
-/// Codec summary from an HEVC decoder configuration record (`hvcC`).
+/// Codec summary from an HEVC decoder configuration record (`hvcC`): what
+/// its first SPS says, else its profile, level and format.
 pub fn hvcc_summary(d: &[u8]) -> Option<String> {
-    hvcc_sps(d)
-        .and_then(hevc_sps)
-        .map(|s| s.hevc_summary())
-        .or_else(|| Some(format!("level {}", hevc_level(d.get(12).copied()?))))
+    let (header, sps, _) = nal::hvcc_config(d, detached(d.len()), false);
+    sps.map(|s| s.describe())
+        .or_else(|| Some(header?.describe()))
 }
 
 /// The first SPS NAL unit in an `hvcC` body.
@@ -483,34 +510,76 @@ pub fn us(n: u64) -> usize {
 // ---------------------------------------------------------------------------
 // MPEG-4 audio
 
-/// An MPEG-4 AudioSpecificConfig: (object type, sample rate, channel
-/// configuration).
-pub fn audio_specific_config(data: &[u8]) -> Option<(u64, u64, u64)> {
-    let mut b = Bits::new(data);
-    let mut object = b.bits(5)?;
-    if object == 31 {
-        object = b.bits(6)?.checked_add(32)?;
-    }
-    let index = b.bits(4)?;
-    let rate = if index == 15 {
-        b.bits(24)?
-    } else {
-        u64::from(*AAC_SAMPLE_RATES.get(usize::try_from(index).ok()?)?)
-    };
-    let channels = b.bits(4)?;
-    Some((object, rate, channels))
-}
-
+/// A one-line description of an MPEG-4 AudioSpecificConfig ("AAC-LC,
+/// 48000 Hz, stereo").
 pub fn asc_summary(data: &[u8]) -> Option<String> {
-    let (object, rate, channels) = audio_specific_config(data)?;
-    Some(format!(
-        "{}, {rate} Hz, channel configuration {channels}",
-        lookup_or(AUDIO_OBJECT_TYPES, object)
-    ))
+    let (asc, _) = nal::asc(data, detached(data.len()), false);
+    asc.map(|a| a.describe())
 }
 
-/// Human-readable codec names for FourCCs used by MP4/MOV/AVI/IVF.
+/// Human-readable codec names for FourCCs: the sample entry types of
+/// MP4/MOV/3GP (case-sensitive), then Video for Windows FourCCs of
+/// AVI/ASF/Matroska/IVF (case-insensitive).
 pub fn codec_name(fourcc: &[u8]) -> Option<&'static str> {
+    qt_codec_name(fourcc).or_else(|| {
+        let mut up = [0u8; 4];
+        for (u, c) in up.iter_mut().zip(fourcc) {
+            *u = c.to_ascii_uppercase();
+        }
+        (fourcc.len() == 4).then_some(())?;
+        vfw_codec_name(&up)
+    })
+}
+
+/// Video for Windows FourCCs, upper case.
+fn vfw_codec_name(up: &[u8; 4]) -> Option<&'static str> {
+    Some(match up {
+        b"WMV1" => "Windows Media Video 7",
+        b"WMV2" => "Windows Media Video 8",
+        b"WMV3" => "Windows Media Video 9",
+        b"WMVA" => "Windows Media Video 9 Advanced",
+        b"WVC1" => "VC-1",
+        b"WMVP" | b"WVP2" => "Windows Media Video 9 Image",
+        b"MSS1" | b"MSS2" => "Windows Media Screen",
+        b"MP41" | b"MPG4" => "MS MPEG-4 v1",
+        b"MP42" => "MS MPEG-4 v2",
+        b"MP43" | b"DIV3" | b"DIV4" => "MS MPEG-4 v3",
+        b"XVID" | b"DIVX" | b"DX50" | b"FMP4" | b"MP4V" | b"MP4S" | b"M4S2" => "MPEG-4 Visual",
+        b"H264" | b"X264" | b"AVC1" => "H.264",
+        b"HEVC" | b"H265" | b"HVC1" => "HEVC",
+        b"H263" | b"S263" => "H.263",
+        b"MJPG" | b"AVRN" | b"DMB1" => "Motion JPEG",
+        b"IV31" | b"IV32" => "Indeo 3",
+        b"IV41" => "Indeo 4",
+        b"IV50" => "Indeo 5",
+        b"CVID" => "Cinepak",
+        b"MSVC" | b"CRAM" | b"WHAM" => "Microsoft Video 1",
+        b"MRLE" => "Microsoft RLE",
+        b"VP30" | b"VP31" => "VP3",
+        b"VP50" => "VP5",
+        b"VP60" | b"VP61" | b"VP62" | b"VP6F" => "VP6",
+        b"VP80" => "VP8",
+        b"VP90" => "VP9",
+        b"AV01" => "AV1",
+        b"FFV1" => "FFV1",
+        b"HFYU" | b"FFVH" => "HuffYUV",
+        b"DVSD" | b"DV25" | b"DV50" | b"CDVC" => "DV",
+        b"MPG1" => "MPEG-1 video",
+        b"MPG2" | b"MPEG" => "MPEG-2 video",
+        b"FLV1" => "Sorenson Spark",
+        b"TSCC" => "TechSmith Screen Capture",
+        b"YUY2" | b"UYVY" | b"YV12" | b"I420" | b"IYUV" | b"NV12" | b"Y800" | b"YVYU" => {
+            "uncompressed YUV"
+        }
+        b"THEO" => "Theora",
+        b"DRAC" => "Dirac",
+        b"APCN" | b"APCH" | b"APCS" | b"APCO" | b"AP4H" | b"AP4X" => "Apple ProRes",
+        _ => return None,
+    })
+}
+
+/// MP4/QuickTime sample entry types (case-sensitive).
+fn qt_codec_name(fourcc: &[u8]) -> Option<&'static str> {
     Some(match fourcc {
         b"avc1" | b"avc2" | b"avc3" | b"avc4" | b"H264" | b"h264" | b"X264" | b"x264" => "H.264",
         b"hvc1" | b"hev1" | b"HEVC" | b"H265" | b"h265" => "HEVC",
@@ -550,6 +619,12 @@ pub fn codec_name(fourcc: &[u8]) -> Option<&'static str> {
         b"dtsc" | b"dtsh" | b"dtsl" | b"dtse" => "DTS",
         b"mha1" | b"mhm1" => "MPEG-H 3D Audio",
         b"tx3g" => "3GPP timed text",
+        b"text" => "QuickTime text",
+        b"mebx" => "QuickTime metadata",
+        b"mett" | b"metx" => "timed metadata",
+        b"mp4s" => "MPEG-4 Systems",
+        b"iamf" => "IAMF",
+        b"apv1" => "APV",
         b"wvtt" => "WebVTT",
         b"stpp" => "TTML",
         b"c608" => "CEA-608",

@@ -1,12 +1,14 @@
 //! Audio configuration that video containers carry: the MPEG-4
 //! AudioSpecificConfig (ISO/IEC 14496-3 1.6.2.1) with its SBR/PS
-//! signalling and program config element, and one-line descriptions of
-//! the first frame of an ADTS, MPEG audio, AC-3, E-AC-3 or DTS elementary
+//! signalling and program config element, the Opus identification header
+//! (`OpusHead` and the ISOBMFF `dOps`), and one-line descriptions of the
+//! first frame of an ADTS, MPEG audio, AC-3, E-AC-3 or DTS elementary
 //! stream.
 
 use super::bitwalk::Walker;
 use super::tables::lookup_or;
-use crate::value::EnumTable;
+use crate::error::Diagnostic;
+use crate::value::{EnumTable, Radix, Value};
 
 pub const AAC_SAMPLE_RATES: [u32; 13] = [
     96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350,
@@ -39,6 +41,7 @@ pub const AUDIO_OBJECT_TYPES: EnumTable = &[
     (27, "ER Parametric"),
     (28, "SSC"),
     (29, "HE-AACv2 (PS)"),
+    (30, "MPEG Surround"),
     (32, "MPEG-1 Layer 1"),
     (33, "MPEG-1 Layer 2"),
     (34, "MPEG-1 Layer 3"),
@@ -71,6 +74,10 @@ pub const CHANNEL_CONFIGS: EnumTable = &[
     (14, "7.1 (top)"),
 ];
 
+/// The profile of a program config element and of an ADTS header: the
+/// audio object type minus one.
+pub const AAC_PROFILES: EnumTable = &[(0, "Main"), (1, "LC"), (2, "SSR"), (3, "LTP")];
+
 const SAMPLE_RATE_INDEX: EnumTable = &[
     (0, "96000 Hz"),
     (1, "88200 Hz"),
@@ -88,32 +95,117 @@ const SAMPLE_RATE_INDEX: EnumTable = &[
     (15, "explicit"),
 ];
 
+/// The sample rate a `samplingFrequencyIndex` stands for.
+pub fn aac_rate(index: u64) -> Option<u64> {
+    AAC_SAMPLE_RATES
+        .get(usize::try_from(index).ok()?)
+        .map(|&r| u64::from(r))
+}
+
 /// What an AudioSpecificConfig says.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AscInfo {
+    /// The audio object type as first signalled: 5 or 29 with explicit
+    /// SBR/PS signalling (what RFC 6381 codec strings use).
+    pub signalled_type: u64,
+    /// The core audio object type.
     pub object_type: u64,
+    /// The core sample rate.
     pub sample_rate: u64,
     pub channel_config: u64,
     /// SBR (HE-AAC) and its output rate.
     pub sbr: Option<u64>,
     pub ps: bool,
-    /// Channels counted in a program config element.
-    pub pce_channels: Option<u64>,
+    /// Samples per frame (core rate) for the GA object types; 0 otherwise.
+    pub frame_length: u64,
+    /// The program config element of channel configuration 0.
+    pub pce: Option<PceInfo>,
 }
 
 impl AscInfo {
+    /// "AAC-LC", "HE-AAC", "HE-AACv2", "AAC-LD".
+    pub fn profile(&self) -> String {
+        if self.ps {
+            return "HE-AACv2".to_owned();
+        }
+        if self.sbr.is_some() {
+            return "HE-AAC".to_owned();
+        }
+        match self.object_type {
+            1 => "AAC Main".to_owned(),
+            2 => "AAC-LC".to_owned(),
+            4 => "AAC-LTP".to_owned(),
+            17 => "ER AAC-LC".to_owned(),
+            23 => "AAC-LD".to_owned(),
+            39 => "AAC-ELD".to_owned(),
+            42 => "xHE-AAC (USAC)".to_owned(),
+            o => lookup_or(AUDIO_OBJECT_TYPES, o),
+        }
+    }
+
+    /// The decoded sample rate (the SBR rate for HE-AAC).
+    pub fn output_rate(&self) -> u64 {
+        self.sbr.unwrap_or(self.sample_rate)
+    }
+
+    /// Output channels (parametric stereo makes mono stereo); 0 when
+    /// unknown.
+    pub fn channels(&self) -> u64 {
+        let n = match self.channel_config {
+            0 => self.pce.map_or(0, |p| p.total()),
+            c @ 1..=6 => c,
+            7 | 12 | 14 => 8,
+            11 => 7,
+            13 => 24,
+            _ => 0,
+        };
+        if self.ps && n == 1 { 2 } else { n }
+    }
+
+    /// "mono", "stereo", "5.1", "stereo (parametric)".
+    pub fn layout(&self) -> String {
+        match (self.channel_config, self.pce) {
+            (0, Some(p)) => p.layout(),
+            (0, None) => "custom layout".to_owned(),
+            (1, _) if self.ps => "stereo (parametric)".to_owned(),
+            (c, _) => lookup_or(CHANNEL_CONFIGS, c),
+        }
+    }
+
+    /// "HE-AAC, 44100 Hz (core 22050 Hz), stereo".
     pub fn describe(&self) -> String {
-        let object = match (self.sbr, self.ps) {
-            (Some(_), true) => "HE-AACv2".to_owned(),
-            (Some(_), false) => "HE-AAC".to_owned(),
-            _ => lookup_or(AUDIO_OBJECT_TYPES, self.object_type),
-        };
-        let rate = self.sbr.unwrap_or(self.sample_rate);
-        let channels = match self.pce_channels {
-            Some(n) if self.channel_config == 0 => format!("{n} channels"),
-            _ => lookup_or(CHANNEL_CONFIGS, self.channel_config),
-        };
-        format!("{object}, {rate} Hz, {channels}")
+        let mut s = format!("{}, {} Hz", self.profile(), self.output_rate());
+        if self.sbr.is_some_and(|r| r != self.sample_rate) {
+            s.push_str(&format!(" (core {} Hz)", self.sample_rate));
+        }
+        format!("{s}, {}", self.layout())
+    }
+}
+
+/// What a program config element says.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PceInfo {
+    /// The profile (audio object type minus one).
+    pub profile: u64,
+    pub sample_rate: Option<u64>,
+    /// Full-bandwidth channels (front, side and back).
+    pub channels: u64,
+    pub lfe: u64,
+}
+
+impl PceInfo {
+    pub fn total(&self) -> u64 {
+        self.channels.saturating_add(self.lfe)
+    }
+
+    /// "5.1", "stereo", "3 channels".
+    pub fn layout(&self) -> String {
+        match (self.channels, self.lfe) {
+            (n, l) if l > 0 => format!("{n}.{l}"),
+            (1, _) => "mono".to_owned(),
+            (2, _) => "stereo".to_owned(),
+            (n, _) => format!("{n} channels"),
+        }
     }
 }
 
@@ -126,7 +218,7 @@ fn object_type(w: &mut Walker, name: &'static str) -> Option<u64> {
     w.record(
         name,
         start,
-        crate::value::Value::Enum {
+        Value::Enum {
             raw: t,
             bits: 11,
             name: crate::value::lookup(AUDIO_OBJECT_TYPES, t),
@@ -138,16 +230,26 @@ fn object_type(w: &mut Walker, name: &'static str) -> Option<u64> {
 fn sample_rate(w: &mut Walker, index: &'static str, explicit: &'static str) -> Option<u64> {
     let i = w.en(index, 4, SAMPLE_RATE_INDEX)?;
     if i == 15 {
-        w.u(explicit, 24)
+        let r = w.u(explicit, 24)?;
+        w.summary(|| format!("{r} Hz"));
+        Some(r)
     } else {
-        Some(u64::from(*AAC_SAMPLE_RATES.get(usize::try_from(i).ok()?)?))
+        let r = aac_rate(i);
+        if r.is_none() {
+            w.with(|n| n.diag(Diagnostic::malformed("reserved sampling frequency index")));
+        }
+        r
     }
 }
 
 /// `AudioSpecificConfig()`.
 pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
+    // A program config element aligns to bytes counted from here.
+    let origin = w.pos();
+    let first = object_type(w, "audioObjectType")?;
     let mut a = AscInfo {
-        object_type: object_type(w, "audioObjectType")?,
+        signalled_type: first,
+        object_type: first,
         ..AscInfo::default()
     };
     a.sample_rate = sample_rate(w, "samplingFrequencyIndex", "samplingFrequency")?;
@@ -163,29 +265,27 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
         )?);
         a.object_type = object_type(w, "audioObjectType (core)")?;
         if a.object_type == 22 {
-            w.u("extensionChannelConfiguration", 4)?;
+            w.en("extensionChannelConfiguration", 4, CHANNEL_CONFIGS)?;
         }
     }
     match a.object_type {
         1..=4 | 6 | 7 | 17 | 19..=23 => {
             w.begin("GASpecificConfig");
             let short = w.flag("frameLengthFlag")?;
-            let ld = matches!(a.object_type, 23 | 39);
-            w.summary(|| {
-                match (ld, short) {
-                    (true, true) => "480 samples",
-                    (true, false) => "512 samples",
-                    (false, true) => "960 samples",
-                    (false, false) => "1024 samples",
-                }
-                .to_owned()
-            });
+            a.frame_length = match (a.object_type == 23, short) {
+                (true, true) => 480,
+                (true, false) => 512,
+                (false, true) => 960,
+                (false, false) => 1024,
+            };
+            let samples = a.frame_length;
+            w.summary(|| format!("{samples} samples"));
             if w.flag("dependsOnCoreCoder")? {
                 w.u("coreCoderDelay", 14)?;
             }
             let ext = w.flag("extensionFlag")?;
             if a.channel_config == 0 {
-                a.pce_channels = Some(program_config_element(w)?);
+                a.pce = Some(program_config_element(w, origin)?);
             }
             if a.object_type == 6 || a.object_type == 20 {
                 w.u("layerNr", 3)?;
@@ -202,7 +302,7 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
                 }
                 w.flag("extensionFlag3")?;
             }
-            w.end();
+            w.end_summary(|| format!("{samples} samples per frame"));
         }
         _ => return Some(a),
     }
@@ -233,7 +333,12 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
                     }
                 }
             }
-            w.end();
+            let what = match (a.sbr.is_some(), a.ps) {
+                (_, true) => "SBR and PS",
+                (true, false) => "SBR",
+                _ => "no SBR",
+            };
+            w.end_summary(|| what.to_owned());
         } else {
             w.seek(at);
         }
@@ -241,12 +346,14 @@ pub fn audio_specific_config(w: &mut Walker) -> Option<AscInfo> {
     Some(a)
 }
 
-/// `program_config_element()`: returns the number of channels.
-fn program_config_element(w: &mut Walker) -> Option<u64> {
+/// `program_config_element()` (after its element ID). Byte alignment is
+/// counted from bit `origin` (the start of the enclosing
+/// AudioSpecificConfig, or 0).
+pub fn program_config_element(w: &mut Walker, origin: usize) -> Option<PceInfo> {
     w.begin("program_config_element");
     w.u("element_instance_tag", 4)?;
-    w.u("object_type", 2)?;
-    w.en("sampling_frequency_index", 4, SAMPLE_RATE_INDEX)?;
+    let profile = w.en("object_type", 2, AAC_PROFILES)?;
+    let rate = w.en("sampling_frequency_index", 4, SAMPLE_RATE_INDEX)?;
     let front = w.u("num_front_channel_elements", 4)?;
     let side = w.u("num_side_channel_elements", 4)?;
     let back = w.u("num_back_channel_elements", 4)?;
@@ -263,17 +370,28 @@ fn program_config_element(w: &mut Walker) -> Option<u64> {
         w.u("matrix_mixdown_idx", 2)?;
         w.flag("pseudo_surround_enable")?;
     }
-    let mut channels = 0u64;
+    let mut pce = PceInfo {
+        profile,
+        sample_rate: aac_rate(rate),
+        channels: 0,
+        lfe,
+    };
     for (n, kind) in [(front, "front"), (side, "side"), (back, "back")] {
         for i in 0..n {
             let cpe = w.flag(format!("{kind}_element_is_cpe[{i}]"))?;
+            w.summary(|| {
+                if cpe {
+                    "channel pair".to_owned()
+                } else {
+                    "single channel".to_owned()
+                }
+            });
             w.u(format!("{kind}_element_tag_select[{i}]"), 4)?;
-            channels = channels.saturating_add(if cpe { 2 } else { 1 });
+            pce.channels = pce.channels.saturating_add(if cpe { 2 } else { 1 });
         }
     }
     for i in 0..lfe {
         w.u(format!("lfe_element_tag_select[{i}]"), 4)?;
-        channels = channels.saturating_add(1);
     }
     for i in 0..assoc {
         w.u(format!("assoc_data_element_tag_select[{i}]"), 4)?;
@@ -282,7 +400,8 @@ fn program_config_element(w: &mut Walker) -> Option<u64> {
         w.flag(format!("cc_element_is_ind_sw[{i}]"))?;
         w.u(format!("valid_cc_element_tag_select[{i}]"), 4)?;
     }
-    let pad = (8usize.saturating_sub(w.pos() & 7)) & 7;
+    let used = w.pos().saturating_sub(origin);
+    let pad = (8usize.saturating_sub(used & 7)) & 7;
     if pad > 0 {
         w.skip_as("byte_alignment", pad)?;
     }
@@ -296,8 +415,158 @@ fn program_config_element(w: &mut Walker) -> Option<u64> {
             String::from_utf8_lossy(&text).into_owned(),
         );
     }
-    w.end_summary(|| format!("{channels} channels"));
-    Some(channels)
+    let mut summary = pce.layout();
+    if let Some(r) = pce.sample_rate {
+        summary = format!("{summary}, {r} Hz");
+    }
+    w.end_summary(|| summary);
+    Some(pce)
+}
+
+// ---------------------------------------------------------------------------
+// Opus
+
+pub const OPUS_FAMILIES: EnumTable = &[
+    (0, "mono/stereo"),
+    (1, "Vorbis channel order"),
+    (2, "ambisonics"),
+    (3, "ambisonics with demixing"),
+    (255, "discrete"),
+];
+
+/// What an Opus identification header says.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct OpusInfo {
+    pub channels: u64,
+    /// Samples at 48 kHz to discard from the start.
+    pub pre_skip: u64,
+    pub input_rate: u64,
+    /// Output gain in 1/256 dB.
+    pub gain: i64,
+    pub family: u64,
+}
+
+/// "stereo", "5.1", "ambisonics, 4 ch".
+pub fn opus_layout(channels: u64, family: u64) -> String {
+    match (family, channels) {
+        (0 | 1, 1) => "mono".to_owned(),
+        (0 | 1, 2) => "stereo".to_owned(),
+        (1, 3) => "3.0".to_owned(),
+        (1, 4) => "quad".to_owned(),
+        (1, 5) => "5.0".to_owned(),
+        (1, 6) => "5.1".to_owned(),
+        (1, 7) => "6.1".to_owned(),
+        (1, 8) => "7.1".to_owned(),
+        (2 | 3, n) => format!("ambisonics, {n} ch"),
+        (_, n) => format!("{n} ch"),
+    }
+}
+
+impl OpusInfo {
+    pub fn layout(&self) -> String {
+        opus_layout(self.channels, self.family)
+    }
+
+    /// "stereo, input 44.1 kHz, pre-skip 312 (6.5 ms)".
+    pub fn describe(&self) -> String {
+        format!(
+            "{}, input {}, pre-skip {} ({} ms)",
+            self.layout(),
+            super::khz(self.input_rate),
+            self.pre_skip,
+            super::num(self.pre_skip as f64 / 48.0)
+        )
+    }
+}
+
+/// An unsigned integer of `bytes` bytes in either byte order.
+fn word(w: &mut Walker, name: &'static str, bytes: usize, big: bool) -> Option<u64> {
+    let start = w.pos();
+    let b = w.read_bytes(bytes)?;
+    let fold = |v: u64, &x: &u8| (v << 8) | u64::from(x);
+    let value = if big {
+        b.iter().fold(0, fold)
+    } else {
+        b.iter().rev().fold(0, fold)
+    };
+    w.record(
+        name,
+        start,
+        Value::UInt {
+            value,
+            bits: u8::try_from(bytes.saturating_mul(8)).unwrap_or(64),
+            radix: Radix::Dec,
+        },
+    );
+    Some(value)
+}
+
+/// The Opus identification header: `OpusHead` (RFC 7845 5.1:
+/// little-endian, after its magic signature) when `dops` is false, the
+/// ISOBMFF `dOps` box body (big-endian, no signature) when true.
+pub fn opus_head(w: &mut Walker, dops: bool) -> Option<OpusInfo> {
+    if !dops {
+        let start = w.pos();
+        let magic = w.read_bytes(8)?;
+        w.text(
+            "Magic signature",
+            start,
+            String::from_utf8_lossy(&magic).into_owned(),
+        );
+        if magic != b"OpusHead" {
+            w.with(|n| n.diag(Diagnostic::malformed("expected \"OpusHead\"")));
+        }
+    }
+    w.u("Version", 8)?;
+    let channels = w.u("Output channel count", 8)?;
+    let pre_skip = word(w, "Pre-skip", 2, dops)?;
+    w.summary(|| format!("{} ms at 48 kHz", super::num(pre_skip as f64 / 48.0)));
+    w.desc("Samples to discard from the start of the decoded output");
+    let input_rate = word(w, "Input sample rate", 4, dops)?;
+    w.summary(|| super::khz(input_rate));
+    w.desc("The original rate; Opus always decodes at 48 kHz");
+    let start = w.pos();
+    let g = w.read_bytes(2)?;
+    let pair = [
+        g.first().copied().unwrap_or(0),
+        g.get(1).copied().unwrap_or(0),
+    ];
+    let gain = i64::from(if dops {
+        i16::from_be_bytes(pair)
+    } else {
+        i16::from_le_bytes(pair)
+    });
+    w.record(
+        "Output gain",
+        start,
+        Value::Int {
+            value: gain,
+            bits: 16,
+        },
+    );
+    w.summary(|| format!("{:.2} dB", gain as f64 / 256.0));
+    let family = w.en("Channel mapping family", 8, OPUS_FAMILIES)?;
+    if family != 0 {
+        let streams = w.u("Stream count", 8)?;
+        let coupled = w.u("Coupled count", 8)?;
+        let ch = usize::try_from(channels).ok()?;
+        if family == 3 {
+            let n = usize::try_from(streams.saturating_add(coupled))
+                .ok()?
+                .saturating_mul(ch)
+                .saturating_mul(2);
+            w.bytes("Demixing matrix", n)?;
+        } else {
+            w.bytes("Channel mapping", ch)?;
+        }
+    }
+    Some(OpusInfo {
+        channels,
+        pre_skip,
+        input_rate,
+        gain,
+        family,
+    })
 }
 
 // ---------------------------------------------------------------------------

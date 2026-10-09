@@ -92,7 +92,7 @@ fn handler_node(b: &[u8], n: Node) -> Node {
     let v = u32_le(b, 0).unwrap_or(0);
     if b.iter().all(|&c| c.is_ascii_graphic() || c == b' ') {
         let n = n.value(text(fourcc(b)));
-        match asf::fourcc_codec(b) {
+        match vidutil::codec_name(b) {
             Some(c) => n.summary(c),
             None => n,
         }
