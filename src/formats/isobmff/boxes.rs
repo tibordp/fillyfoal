@@ -674,20 +674,7 @@ fn scheme_name(kind: &[u8]) -> Option<&'static str> {
 }
 
 /// A rate in bits per second, for summaries.
-pub fn bitrate(bps: u64) -> String {
-    let one_decimal = |v: f64| {
-        let s = format!("{v:.1}");
-        s.strip_suffix(".0")
-            .map_or_else(|| s.clone(), str::to_owned)
-    };
-    if bps >= 10_000_000 {
-        format!("{} Mb/s", one_decimal(bps as f64 / 1_000_000.0))
-    } else if bps >= 1000 {
-        format!("{} kb/s", one_decimal(bps as f64 / 1000.0))
-    } else {
-        format!("{bps} b/s")
-    }
-}
+pub use crate::formats::util::vidutil::bitrate;
 
 /// Adds a duration summary to a node holding `units` of `1/timescale` s.
 fn timed(n: Node, units: u64, timescale: u32) -> Node {

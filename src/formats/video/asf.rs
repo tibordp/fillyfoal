@@ -1803,11 +1803,10 @@ pub fn waveformatex(f: &mut Fields<'_>) -> Result<()> {
             let at = f.pos();
             let asc = f.bytes("AudioSpecificConfig", n).get()?;
             let span = f.block().span.sub(at, n);
-            let node = Node::new("AudioSpecificConfig")
-                .span(span)
-                .value(Value::Bytes(asc.clone()));
-            f.node(match vidutil::asc_summary(&asc) {
-                Some(s) => node.summary(s),
+            let (info, nodes) = vidutil::nal::asc(&asc, span, true);
+            let node = vidutil::nal::group("AudioSpecificConfig", span, nodes);
+            f.node(match info {
+                Some(a) => node.summary(a.describe()),
                 None => node,
             });
         }
@@ -1831,54 +1830,6 @@ const BI_COMPRESSION: EnumTable = &[
     (6, "BI_ALPHABITFIELDS"),
 ];
 
-/// Codec names for Video for Windows FourCCs (case-insensitive), beyond
-/// those [`vidutil::codec_name`] knows.
-pub fn fourcc_codec(c: &[u8]) -> Option<&'static str> {
-    let up: Vec<u8> = c.iter().map(u8::to_ascii_uppercase).collect();
-    Some(match up.as_slice() {
-        b"WMV1" => "Windows Media Video 7",
-        b"WMV2" => "Windows Media Video 8",
-        b"WMV3" => "Windows Media Video 9",
-        b"WMVA" => "Windows Media Video 9 Advanced",
-        b"WVC1" => "VC-1",
-        b"WMVP" | b"WVP2" => "Windows Media Video 9 Image",
-        b"MSS1" | b"MSS2" => "Windows Media Screen",
-        b"MP41" | b"MPG4" => "MS MPEG-4 v1",
-        b"MP42" => "MS MPEG-4 v2",
-        b"MP43" | b"DIV3" | b"DIV4" => "MS MPEG-4 v3",
-        b"XVID" | b"DIVX" | b"DX50" | b"FMP4" | b"MP4V" | b"MP4S" | b"M4S2" => "MPEG-4 Visual",
-        b"H264" | b"X264" | b"AVC1" => "H.264",
-        b"HEVC" | b"H265" | b"HVC1" => "HEVC",
-        b"MJPG" | b"AVRN" | b"DMB1" => "Motion JPEG",
-        b"IV31" | b"IV32" => "Indeo 3",
-        b"IV41" => "Indeo 4",
-        b"IV50" => "Indeo 5",
-        b"CVID" => "Cinepak",
-        b"MSVC" | b"CRAM" | b"WHAM" => "Microsoft Video 1",
-        b"MRLE" => "Microsoft RLE",
-        b"VP30" | b"VP31" => "VP3",
-        b"VP50" => "VP5",
-        b"VP60" | b"VP61" | b"VP62" | b"VP6F" => "VP6",
-        b"VP80" => "VP8",
-        b"VP90" => "VP9",
-        b"AV01" => "AV1",
-        b"FFV1" => "FFV1",
-        b"HFYU" | b"FFVH" => "HuffYUV",
-        b"DVSD" | b"DV25" | b"DV50" | b"CDVC" => "DV",
-        b"MPG1" => "MPEG-1 video",
-        b"MPG2" | b"MPEG" => "MPEG-2 video",
-        b"FLV1" => "Sorenson Spark",
-        b"TSCC" => "TechSmith Screen Capture",
-        b"YUY2" | b"UYVY" | b"YV12" | b"I420" | b"IYUV" | b"NV12" | b"Y800" | b"YVYU" => {
-            "uncompressed YUV"
-        }
-        b"THEO" => "Theora",
-        b"DRAC" => "Dirac",
-        b"APCN" | b"APCH" | b"APCS" | b"APCO" | b"AP4H" => "Apple ProRes",
-        _ => return vidutil::codec_name(c),
-    })
-}
-
 /// "Motion JPEG (MJPG)", "BI_RGB".
 pub fn compression_name(c: &[u8]) -> String {
     let v = u32_le(c, 0).unwrap_or(0);
@@ -1889,7 +1840,7 @@ pub fn compression_name(c: &[u8]) -> String {
         };
     }
     let code = vidutil::fourcc(c);
-    match fourcc_codec(c) {
+    match vidutil::codec_name(c) {
         Some(name) => format!("{name} ({})", code.trim_end()),
         None => code,
     }
@@ -1918,7 +1869,7 @@ pub fn bitmapinfoheader(f: &mut Fields<'_>) -> Result<()> {
                 })
             } else {
                 let n = n.value(Value::Text(vidutil::fourcc(c)));
-                match fourcc_codec(c) {
+                match vidutil::codec_name(c) {
                     Some(name) => n.summary(name),
                     None => n,
                 }

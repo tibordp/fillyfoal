@@ -79,6 +79,20 @@ pub fn level_name(idx: u64) -> String {
 }
 
 impl SeqInfo {
+    /// "4:2:0", "4:4:4", "monochrome".
+    pub fn chroma(&self) -> &'static str {
+        if self.mono {
+            "monochrome"
+        } else {
+            match self.subsampling {
+                (1, 1) => "4:2:0",
+                (1, 0) => "4:2:2",
+                (0, 0) => "4:4:4",
+                _ => "?",
+            }
+        }
+    }
+
     pub fn format(&self) -> String {
         let chroma = if self.mono {
             "monochrome"
@@ -435,8 +449,9 @@ pub fn metadata(w: &mut Walker) -> Option<String> {
 }
 
 /// `AV1CodecConfigurationRecord` (`av1C`) up to the config OBUs; returns
-/// a summary and the offset of the config OBUs.
-pub fn av1c(w: &mut Walker) -> Option<String> {
+/// what it says as a partial sequence header (profile, level, tier, bit
+/// depth, subsampling).
+pub fn av1c(w: &mut Walker) -> Option<SeqInfo> {
     w.u("marker", 1)?;
     w.u("version", 7)?;
     let profile = w.en("seq_profile", 3, PROFILES)?;
@@ -448,7 +463,7 @@ pub fn av1c(w: &mut Walker) -> Option<String> {
     let mono = w.flag("monochrome")?;
     let sx = w.u("chroma_subsampling_x", 1)?;
     let sy = w.u("chroma_subsampling_y", 1)?;
-    w.en("chroma_sample_position", 2, CHROMA_POSITIONS)?;
+    let position = w.en("chroma_sample_position", 2, CHROMA_POSITIONS)?;
     w.u("reserved", 3)?;
     if w.flag("initial_presentation_delay_present")? {
         w.u("initial_presentation_delay_minus_one", 4)?;
@@ -459,24 +474,18 @@ pub fn av1c(w: &mut Walker) -> Option<String> {
         profile,
         level,
         tier,
-        bit_depth: if twelve {
-            12
-        } else if high {
-            10
-        } else {
-            8
+        // twelve_bit only counts with high_bitdepth.
+        bit_depth: match (high, twelve) {
+            (true, true) => 12,
+            (true, false) => 10,
+            _ => 8,
         },
         mono,
         subsampling: (sx, sy),
+        chroma_position: position,
         ..SeqInfo::default()
     };
-    Some(format!(
-        "{}@L{}{}, {}",
-        super::tables::lookup_or(PROFILES, profile),
-        level_name(level),
-        if tier { " High tier" } else { "" },
-        s.format()
-    ))
+    Some(s)
 }
 
 /// What [`obu`] found.

@@ -191,7 +191,7 @@ expression: "common::explore(&display_name(&path), &data)"
                     Type: "esds"  [0x3d0+0x4]
                     Version: 0  [0x3d4+0x1]
                     Flags: 0x0  [0x3d5+0x3]
-                  ▾ ES_Descriptor — ES_ID 1  [0x3d8+0x54]
+                  ▾ ES_Descriptor — ES_ID 1: MPEG-4 Visual, 15.2 kb/s  [0x3d8+0x54]
                       Tag: ES_Descriptor (0x3)  [0x3d8+0x1]
                       Size: 79  [0x3d9+0x4]
                       ES_ID: 1  [0x3dd+0x2]

@@ -22,8 +22,8 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::audio::{flac, vorbis};
 use crate::formats::iff::wav;
-use crate::formats::util::sound::{self, Bits};
-use crate::formats::util::vidutil::{self, seconds_f64, uint};
+use crate::formats::util::sound;
+use crate::formats::util::vidutil::{self, detached, nal, seconds_f64, uint};
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -1608,24 +1608,40 @@ impl TrackSummary {
         // Only where the private data says more than the track's own
         // elements (profile, level, the real codec of VfW/ACM).
         let codec = codec_of(&self.codec);
-        let detail = if matches!(
-            codec,
-            Codec::Avc
-                | Codec::Hevc
-                | Codec::Av1
-                | Codec::Vp9
-                | Codec::Aac
-                | Codec::Vfw
-                | Codec::Acm
-        ) {
-            private_summary(codec, &self.private)
-        } else {
-            None
+        let p = &self.private;
+        let detail = match codec {
+            // Profile, level and format: the track gives size and rate.
+            Codec::Avc => {
+                let (h, s, _) = nal::avcc_config(p, detached(p.len()), false);
+                s.map(|s| format!("{}, {}", s.profile_level(), s.format()))
+                    .or_else(|| h.map(|h| h.describe()))
+            }
+            Codec::Hevc => {
+                let (h, s, _) = nal::hvcc_config(p, detached(p.len()), false);
+                s.map(|s| format!("{}, {}", s.profile_level(), s.format()))
+                    .or_else(|| h.map(|h| h.describe()))
+            }
+            Codec::Av1 | Codec::Vp9 | Codec::Aac | Codec::Vfw | Codec::Acm => {
+                private_summary(codec, p)
+            }
+            _ => None,
         };
         match detail {
             Some(d) => format!("{name} ({d})"),
             None => name.to_owned(),
         }
+    }
+
+    /// The frame rate an H.264/HEVC SPS declares in its VUI timing, for
+    /// tracks without a DefaultDuration.
+    fn bitstream_rate(&self) -> Option<(u64, u64)> {
+        let p = &self.private;
+        let sps = match codec_of(&self.codec) {
+            Codec::Avc => nal::avcc(p, detached(p.len()), false).0,
+            Codec::Hevc => nal::hvcc(p, detached(p.len()), false).0,
+            _ => None,
+        };
+        sps?.frame_rate
     }
 
     fn display_note(&self) -> Option<String> {
@@ -1653,8 +1669,15 @@ impl TrackSummary {
                 s.push_str(&format!(" ({d})"));
             }
         }
-        if let Some(fps) = self.fps.filter(|_| self.kind == 1) {
-            s.push_str(&format!(", {} fps", vidutil::num(fps)));
+        if self.kind == 1 {
+            if let Some(fps) = self.fps {
+                s.push_str(&format!(", {} fps", vidutil::num(fps)));
+            } else if let Some((n, d)) = self.bitstream_rate() {
+                s.push_str(&format!(
+                    ", {} fps (from the SPS)",
+                    vidutil::tables::rate(n, d)
+                ));
+            }
         }
         if self.stereo != 0 {
             s.push_str(&format!(", {}", vidutil::lookup_or(STEREO, self.stereo)));
@@ -2548,17 +2571,7 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
     match codec {
         Codec::Avc => vidutil::avcc_summary(d),
         Codec::Hevc => vidutil::hvcc_summary(d),
-        Codec::Av1 => {
-            let b1 = *d.get(1)?;
-            let b2 = *d.get(2)?;
-            Some(format!(
-                "{} profile, level {}, {}-bit{}",
-                vidutil::lookup_or(AV1_PROFILES, (b1 >> 5).into()),
-                av1_level(b1 & 0x1f),
-                av1_bit_depth(b2),
-                if b2 & 0x10 != 0 { ", monochrome" } else { "" }
-            ))
-        }
+        Codec::Av1 => nal::av1c(d, detached(d.len()), false).0,
         Codec::Vp9 => {
             let mut parts = Vec::new();
             for (id, v) in vp9_features(d) {
@@ -2587,13 +2600,9 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
             if !d.starts_with(b"OpusHead") {
                 return None;
             }
-            let pre = u16::from_le_bytes(crate::bytes::array(d, 10)?);
-            Some(format!(
-                "{}, {} Hz input, pre-skip {pre} ({} ms)",
-                channel_word((*d.get(9)?).into()),
-                u32::from_le_bytes(crate::bytes::array(d, 12)?),
-                vidutil::num(f64::from(pre) / 48.0)
-            ))
+            nal::opus(d, detached(d.len()), false, false)
+                .0
+                .map(|o| o.describe())
         }
         Codec::Flac => {
             if !d.starts_with(b"fLaC") {
@@ -2673,23 +2682,6 @@ fn flac_streaminfo(d: &[u8]) -> Option<String> {
         "{rate} Hz, {}, {bits}-bit, {samples} samples",
         channel_word(channels)
     ))
-}
-
-const AV1_PROFILES: EnumTable = &[(0, "Main"), (1, "High"), (2, "Professional")];
-
-fn av1_level(idx: u8) -> String {
-    if idx == 31 {
-        return "max".to_owned();
-    }
-    format!("{}.{}", 2u8.saturating_add(idx >> 2), idx & 3)
-}
-
-fn av1_bit_depth(b2: u8) -> u8 {
-    match (b2 & 0x40 != 0, b2 & 0x20 != 0) {
-        (true, true) => 12,
-        (true, false) => 10,
-        _ => 8,
-    }
 }
 
 const VP9_FEATURES: EnumTable = &[
@@ -2773,15 +2765,21 @@ fn xiph_id_summary(p: &[u8]) -> Option<String> {
     }
 }
 
+fn emit_all(cx: &Cx, nodes: Vec<Node>) {
+    for node in nodes {
+        cx.emit(node);
+    }
+}
+
 async fn codec_private(cx: Cx, el: Element) -> Result<()> {
     let data = el.data();
     let d = vidutil::read_small(&cx, data, 0x10000).await?;
     let span = data.sub(0, to_u64(d.len()));
     match el.ctx.codec {
-        Codec::Avc => avcc(&mut Bits::emitting(&cx, &d, span), &d)?,
-        Codec::Hevc => hvcc(&mut Bits::emitting(&cx, &d, span), &d)?,
-        Codec::Av1 => av1c(&mut Bits::emitting(&cx, &d, span), &d)?,
-        Codec::Aac => audio_specific_config(&mut Bits::emitting(&cx, &d, span), &d)?,
+        Codec::Avc => emit_all(&cx, nal::avcc(&d, span, true).1),
+        Codec::Hevc => emit_all(&cx, nal::hvcc(&d, span, true).1),
+        Codec::Av1 => emit_all(&cx, nal::av1c(&d, span, true).1),
+        Codec::Aac => emit_all(&cx, nal::asc(&d, span, true).1),
         Codec::Vp9 => {
             let block = cx.block(span).await?;
             let mut f = Fields::emitting(&cx, &block, Endian::Big);
@@ -2817,10 +2815,7 @@ async fn codec_private(cx: Cx, el: Element) -> Result<()> {
                 });
             }
         }
-        Codec::Opus => {
-            let block = cx.block(span).await?;
-            opus_head(&mut Fields::emitting(&cx, &block, Endian::Little))?;
-        }
+        Codec::Opus => emit_all(&cx, nal::opus(&d, span, true, false).1),
         Codec::Flac => flac_private(&cx, el.input, data).await?,
         Codec::Xiph => xiph_private(&cx, el.input, data).await?,
         Codec::Vfw => {
@@ -2871,501 +2866,6 @@ async fn codec_private(cx: Cx, el: Element) -> Result<()> {
         Codec::Mjpeg | Codec::Other => {
             cx.emit(Node::new("Data").span(data));
         }
-    }
-    Ok(())
-}
-
-/// Bits left in a reader over `d`.
-fn left(b: &Bits<'_>, d: &[u8]) -> u64 {
-    to_u64(d.len()).saturating_mul(8).saturating_sub(b.pos())
-}
-
-/// The rest of a configuration record, if any.
-fn rest(b: &mut Bits<'_>, d: &[u8], name: &'static str) -> Result<()> {
-    let bits = left(b, d);
-    if bits >= 8 && b.pos().is_multiple_of(8) {
-        b.bytes(name, bits / 8).emit()?;
-    }
-    Ok(())
-}
-
-const CHROMA_FORMATS: EnumTable = &[(0, "monochrome"), (1, "4:2:0"), (2, "4:2:2"), (3, "4:4:4")];
-
-fn length_size(v: u64, n: Node) -> Node {
-    n.summary(format!("{}-byte NAL unit lengths", v.saturating_add(1)))
-}
-
-fn bit_depth(v: u64, n: Node) -> Node {
-    n.summary(format!("{}-bit", v.saturating_add(8)))
-}
-
-/// The bytes of a parameter set at the reader's position.
-fn nal_at<'a>(b: &Bits<'_>, d: &'a [u8], len: u64) -> &'a [u8] {
-    let start = vidutil::us(b.pos() / 8);
-    d.get(start..start.saturating_add(vidutil::us(len)))
-        .unwrap_or_default()
-}
-
-/// AVCDecoderConfigurationRecord (ISO/IEC 14496-15).
-fn avcc(b: &mut Bits<'_>, d: &[u8]) -> Result<()> {
-    if d.first() != Some(&1) {
-        let all = b.span_of(0, to_u64(d.len()).saturating_mul(8));
-        b.node(Node::new("Data").span(all).diag(Diagnostic::malformed(
-            "not an AVC configuration record (version is not 1)",
-        )));
-        return Ok(());
-    }
-    b.field("Configuration version", 8).emit()?;
-    let profile = b
-        .field("Profile", 8)
-        .enumeration(vidutil::H264_PROFILES)
-        .emit()?;
-    b.field("Profile compatibility", 8)
-        .hex()
-        .desc("constraint_set0..5 flags")
-        .emit()?;
-    b.field("Level", 8)
-        .with(|v, n| n.summary(vidutil::h264_level(u8::try_from(v).unwrap_or(0))))
-        .emit()?;
-    b.field("Reserved", 6).hex().emit()?;
-    b.field("Length size minus one", 2)
-        .with(length_size)
-        .emit()?;
-    b.field("Reserved", 3).hex().emit()?;
-    let sps = b.field("SPS count", 5).emit()?;
-    for _ in 0..sps {
-        let len = b.field("SPS length", 16).emit()?;
-        let nal = nal_at(b, d, len);
-        let summary = vidutil::h264_sps(nal).map(|s| s.h264_summary());
-        b.bytes("Sequence parameter set", len)
-            .with(|_, n| match summary {
-                Some(s) => n.summary(s),
-                None => n,
-            })
-            .emit()?;
-    }
-    let pps = b.field("PPS count", 8).emit()?;
-    for _ in 0..pps {
-        let len = b.field("PPS length", 16).emit()?;
-        b.bytes("Picture parameter set", len).emit()?;
-    }
-    // ISO/IEC 14496-15 lists profiles 100, 110, 122 and 144; writers add
-    // it for every High profile, so go by the reserved bits.
-    if !matches!(profile, 66 | 77 | 88) && left(b, d) >= 32 && peek(b, 6) == Some(0x3f) {
-        b.field("Reserved", 6).hex().emit()?;
-        b.field("Chroma format", 2)
-            .enumeration(CHROMA_FORMATS)
-            .emit()?;
-        b.field("Reserved", 5).hex().emit()?;
-        b.field("Luma bit depth minus 8", 3)
-            .with(bit_depth)
-            .emit()?;
-        b.field("Reserved", 5).hex().emit()?;
-        b.field("Chroma bit depth minus 8", 3)
-            .with(bit_depth)
-            .emit()?;
-        let n = b.field("SPS extension count", 8).emit()?;
-        for _ in 0..n {
-            let len = b.field("SPS extension length", 16).emit()?;
-            b.bytes("SPS extension", len).emit()?;
-        }
-    }
-    rest(b, d, "Trailing data")
-}
-
-const HEVC_PARALLELISM: EnumTable = &[
-    (0, "mixed or unknown"),
-    (1, "slice-based"),
-    (2, "tile-based"),
-    (3, "wavefront"),
-];
-
-const CONSTANT_FRAME_RATE: EnumTable = &[
-    (0, "unknown"),
-    (1, "constant"),
-    (2, "constant per temporal layer"),
-];
-
-/// HEVCDecoderConfigurationRecord (ISO/IEC 14496-15).
-fn hvcc(b: &mut Bits<'_>, d: &[u8]) -> Result<()> {
-    if d.first() != Some(&1) {
-        let all = b.span_of(0, to_u64(d.len()).saturating_mul(8));
-        b.node(Node::new("Data").span(all).diag(Diagnostic::malformed(
-            "not an HEVC configuration record (version is not 1)",
-        )));
-        return Ok(());
-    }
-    b.field("Configuration version", 8).emit()?;
-    b.field("General profile space", 2).emit()?;
-    b.field("General tier", 1)
-        .enumeration(&[(0, "Main"), (1, "High")])
-        .emit()?;
-    b.field("General profile", 5)
-        .enumeration(vidutil::HEVC_PROFILES)
-        .emit()?;
-    b.field("General profile compatibility flags", 32)
-        .hex()
-        .emit()?;
-    b.field("General constraint indicator flags", 48)
-        .hex()
-        .emit()?;
-    b.field("General level", 8)
-        .with(|v, n| n.summary(vidutil::hevc_level(u8::try_from(v).unwrap_or(0))))
-        .emit()?;
-    b.field("Reserved", 4).hex().emit()?;
-    b.field("Min spatial segmentation", 12).emit()?;
-    b.field("Reserved", 6).hex().emit()?;
-    b.field("Parallelism type", 2)
-        .enumeration(HEVC_PARALLELISM)
-        .emit()?;
-    b.field("Reserved", 6).hex().emit()?;
-    b.field("Chroma format", 2)
-        .enumeration(CHROMA_FORMATS)
-        .emit()?;
-    b.field("Reserved", 5).hex().emit()?;
-    b.field("Luma bit depth minus 8", 3)
-        .with(bit_depth)
-        .emit()?;
-    b.field("Reserved", 5).hex().emit()?;
-    b.field("Chroma bit depth minus 8", 3)
-        .with(bit_depth)
-        .emit()?;
-    b.field("Average frame rate", 16)
-        .desc("Frames per 256 seconds; 0 = unspecified")
-        .with(|v, n| {
-            if v > 0 {
-                n.summary(format!("{} fps", vidutil::num(v as f64 / 256.0)))
-            } else {
-                n
-            }
-        })
-        .emit()?;
-    b.field("Constant frame rate", 2)
-        .enumeration(CONSTANT_FRAME_RATE)
-        .emit()?;
-    b.field("Temporal layers", 3).emit()?;
-    b.field("Temporal ID nested", 1).flag().emit()?;
-    b.field("Length size minus one", 2)
-        .with(length_size)
-        .emit()?;
-    let arrays = b.field("Array count", 8).emit()?;
-    for _ in 0..arrays {
-        b.field("Array completeness", 1).flag().emit()?;
-        b.field("Reserved", 1).emit()?;
-        let kind = b
-            .field("NAL unit type", 6)
-            .enumeration(vidutil::HEVC_NAL_TYPES)
-            .emit()?;
-        let n = b.field("NAL unit count", 16).emit()?;
-        for _ in 0..n {
-            let len = b.field("NAL unit length", 16).emit()?;
-            let nal = nal_at(b, d, len);
-            let summary = match kind {
-                33 => vidutil::hevc_sps(nal).map(|s| s.hevc_summary()),
-                39 | 40 => sei_summary(nal),
-                _ => None,
-            };
-            let name = match kind {
-                32 => "Video parameter set",
-                33 => "Sequence parameter set",
-                34 => "Picture parameter set",
-                39 | 40 => "SEI",
-                _ => "NAL unit",
-            };
-            b.bytes(name, len)
-                .with(|_, n| match summary {
-                    Some(s) => n.summary(s),
-                    None => n,
-                })
-                .emit()?;
-        }
-    }
-    rest(b, d, "Trailing data")
-}
-
-/// The text of a user-data-unregistered SEI message (encoder settings).
-fn sei_summary(nal: &[u8]) -> Option<String> {
-    // NAL header (2 bytes), payload type 5, size, 16-byte UUID, text.
-    let rbsp = vidutil::unescape_rbsp(nal.get(2..)?);
-    if rbsp.first() != Some(&5) {
-        return None;
-    }
-    let mut at = 1usize;
-    while rbsp.get(at) == Some(&0xff) {
-        at = at.saturating_add(1);
-    }
-    let body = rbsp.get(at.saturating_add(1).saturating_add(16)..)?;
-    let t = crate::text::until_nul(body);
-    (!t.is_empty()).then(|| sound::clip(&t, 80))
-}
-
-/// AV1CodecConfigurationRecord.
-fn av1c(b: &mut Bits<'_>, d: &[u8]) -> Result<()> {
-    b.field("Marker", 1).flag().emit()?;
-    b.field("Version", 7).emit()?;
-    b.field("Sequence profile", 3)
-        .enumeration(AV1_PROFILES)
-        .emit()?;
-    b.field("Sequence level index", 5)
-        .with(|v, n| n.summary(av1_level(u8::try_from(v).unwrap_or(0))))
-        .emit()?;
-    b.field("Sequence tier", 1)
-        .enumeration(&[(0, "Main"), (1, "High")])
-        .emit()?;
-    b.field("High bit depth", 1).flag().emit()?;
-    b.field("Twelve bit", 1).flag().emit()?;
-    b.field("Monochrome", 1).flag().emit()?;
-    b.field("Chroma subsampling x", 1).emit()?;
-    b.field("Chroma subsampling y", 1).emit()?;
-    b.field("Chroma sample position", 2)
-        .enumeration(&[(0, "unknown"), (1, "vertical"), (2, "colocated")])
-        .emit()?;
-    b.field("Reserved", 3).emit()?;
-    let present = b
-        .field("Initial presentation delay present", 1)
-        .flag()
-        .emit()?;
-    if present == 1 {
-        b.field("Initial presentation delay minus one", 4).emit()?;
-    } else {
-        b.field("Reserved", 4).emit()?;
-    }
-    rest(b, d, "Configuration OBUs")
-}
-
-const CHANNEL_CONFIGS: EnumTable = &[
-    (0, "defined in the program config element"),
-    (1, "mono (C)"),
-    (2, "stereo (L R)"),
-    (3, "3.0 (C L R)"),
-    (4, "4.0 (C L R Cs)"),
-    (5, "5.0 (C L R Ls Rs)"),
-    (6, "5.1"),
-    (7, "7.1"),
-    (11, "6.1"),
-    (12, "7.1 (rear surround)"),
-    (13, "22.2"),
-    (14, "7.1 (front height)"),
-];
-
-fn object_type(b: &mut Bits<'_>, name: &'static str) -> Result<u64> {
-    let v = b
-        .field(name, 5)
-        .enumeration(vidutil::AUDIO_OBJECT_TYPES)
-        .emit()?;
-    if v == 31 {
-        let ext = b
-            .field("Audio object type extension", 6)
-            .with(|e, n| {
-                n.summary(vidutil::lookup_or(
-                    vidutil::AUDIO_OBJECT_TYPES,
-                    e.saturating_add(32),
-                ))
-            })
-            .emit()?;
-        return Ok(ext.saturating_add(32));
-    }
-    Ok(v)
-}
-
-fn sampling_frequency(b: &mut Bits<'_>, name: &'static str) -> Result<()> {
-    let index = b
-        .field(name, 4)
-        .with(|i, n| match vidutil::AAC_SAMPLE_RATES.get(vidutil::us(i)) {
-            Some(r) => n.summary(format!("{r} Hz")),
-            None => n,
-        })
-        .emit()?;
-    if index == 15 {
-        b.field("Sampling frequency", 24).emit()?;
-    }
-    Ok(())
-}
-
-/// Peeks `n` bits.
-fn peek(b: &mut Bits<'_>, n: u32) -> Option<u64> {
-    let at = b.pos();
-    let v = b.read(n);
-    b.seek(at);
-    v
-}
-
-/// MPEG-4 AudioSpecificConfig (ISO/IEC 14496-3).
-fn audio_specific_config(b: &mut Bits<'_>, d: &[u8]) -> Result<()> {
-    let mut object = object_type(b, "Audio object type")?;
-    sampling_frequency(b, "Sampling frequency index")?;
-    let channels = b
-        .field("Channel configuration", 4)
-        .enumeration(CHANNEL_CONFIGS)
-        .emit()?;
-    if object == 5 || object == 29 {
-        sampling_frequency(b, "Extension sampling frequency index")?;
-        object = object_type(b, "Core audio object type")?;
-        if object == 22 {
-            b.field("Extension channel configuration", 4)
-                .enumeration(CHANNEL_CONFIGS)
-                .emit()?;
-        }
-    }
-    if !matches!(object, 1..=4 | 6 | 7 | 17 | 19..=23) {
-        return rest_bits(b, d);
-    }
-    // GASpecificConfig
-    b.field("Frame length flag", 1)
-        .with(|v, n| {
-            n.summary(if v == 1 {
-                "960 samples"
-            } else {
-                "1024 samples"
-            })
-        })
-        .emit()?;
-    let core = b.field("Depends on core coder", 1).flag().emit()?;
-    if core == 1 {
-        b.field("Core coder delay", 14).emit()?;
-    }
-    let ext = b.field("Extension flag", 1).flag().emit()?;
-    if channels == 0 {
-        program_config_element(b)?;
-    }
-    if object == 6 || object == 20 {
-        b.field("Layer number", 3).emit()?;
-    }
-    if ext == 1 {
-        if object == 22 {
-            b.field("Number of subframes", 5).emit()?;
-            b.field("Layer length", 11).emit()?;
-        }
-        if matches!(object, 17 | 19 | 20 | 23) {
-            b.field("Section data resilience", 1).flag().emit()?;
-            b.field("Scale factor data resilience", 1).flag().emit()?;
-            b.field("Spectral data resilience", 1).flag().emit()?;
-        }
-        b.field("Extension flag 3", 1).emit()?;
-    }
-    if matches!(object, 17 | 19..=23) {
-        b.field("Error protection configuration", 2).emit()?;
-    }
-    // Backward-compatible SBR / PS signalling.
-    if left(b, d) >= 16 && peek(b, 11) == Some(0x2b7) {
-        b.field("Sync extension type", 11).hex().emit()?;
-        let ext = object_type(b, "Extension audio object type")?;
-        if ext == 5 {
-            let sbr = b.field("SBR present", 1).flag().emit()?;
-            if sbr == 1 {
-                sampling_frequency(b, "Extension sampling frequency index")?;
-                if left(b, d) >= 12 && peek(b, 11) == Some(0x548) {
-                    b.field("Sync extension type", 11).hex().emit()?;
-                    b.field("PS present", 1).flag().emit()?;
-                }
-            }
-        }
-    }
-    rest_bits(b, d)
-}
-
-/// Whatever follows a bit-level structure.
-fn rest_bits(b: &mut Bits<'_>, d: &[u8]) -> Result<()> {
-    let bits = left(b, d);
-    if bits == 0 {
-        return Ok(());
-    }
-    let start = b.pos();
-    let end = to_u64(d.len()).saturating_mul(8);
-    b.node(
-        Node::new("Remaining bits")
-            .span(b.span_of(start, end))
-            .summary(format!("{bits} bits")),
-    );
-    b.seek(end);
-    Ok(())
-}
-
-/// program_config_element (ISO/IEC 14496-3, 4.4.1.1).
-fn program_config_element(b: &mut Bits<'_>) -> Result<()> {
-    b.field("Element instance tag", 4).emit()?;
-    b.field("Object type", 2).emit()?;
-    sampling_frequency(b, "PCE sampling frequency index")?;
-    let front = b.field("Front channel elements", 4).emit()?;
-    let side = b.field("Side channel elements", 4).emit()?;
-    let back = b.field("Back channel elements", 4).emit()?;
-    let lfe = b.field("LFE channel elements", 2).emit()?;
-    let assoc = b.field("Associated data elements", 3).emit()?;
-    let cc = b.field("Coupling channel elements", 4).emit()?;
-    if b.field("Mono mixdown present", 1).flag().emit()? == 1 {
-        b.field("Mono mixdown element", 4).emit()?;
-    }
-    if b.field("Stereo mixdown present", 1).flag().emit()? == 1 {
-        b.field("Stereo mixdown element", 4).emit()?;
-    }
-    if b.field("Matrix mixdown present", 1).flag().emit()? == 1 {
-        b.field("Matrix mixdown index", 2).emit()?;
-        b.field("Pseudo surround enable", 1).flag().emit()?;
-    }
-    for (count, name) in [
-        (front, "Front element"),
-        (side, "Side element"),
-        (back, "Back element"),
-    ] {
-        for _ in 0..count {
-            b.field("Is CPE", 1).flag().emit()?;
-            b.field(name, 4).emit()?;
-        }
-    }
-    for _ in 0..lfe {
-        b.field("LFE element", 4).emit()?;
-    }
-    for _ in 0..assoc {
-        b.field("Associated data element", 4).emit()?;
-    }
-    for _ in 0..cc {
-        b.field("Independently switched", 1).flag().emit()?;
-        b.field("Coupling channel element", 4).emit()?;
-    }
-    let pad = (8u64.saturating_sub(b.pos() % 8)) % 8;
-    if pad > 0 {
-        b.field("Byte alignment", u32::try_from(pad).unwrap_or(0))
-            .emit()?;
-    }
-    let comment = b.field("Comment length", 8).emit()?;
-    if comment > 0 {
-        b.bytes("Comment", comment).emit()?;
-    }
-    Ok(())
-}
-
-fn opus_head(f: &mut Fields<'_>) -> Result<()> {
-    f.ascii("Signature", 8).emit()?;
-    f.u8("Version").emit()?;
-    let channels = f.u8("Channels").emit()?;
-    f.u16("Pre-skip")
-        .desc("Samples (at 48 kHz) to discard from the start")
-        .with(|&v, n| n.summary(format!("{} ms", vidutil::num(f64::from(v) / 48.0))))
-        .emit()?;
-    f.u32("Input sample rate")
-        .desc("Informational only: Opus always decodes at 48 kHz")
-        .emit()?;
-    f.int::<i16>("Output gain")
-        .with(|&g, n| n.summary(format!("{:.2} dB", f64::from(g) / 256.0)))
-        .emit()?;
-    let family = f
-        .u8("Channel mapping family")
-        .enumeration(&[
-            (0, "mono/stereo"),
-            (1, "Vorbis channel order"),
-            (2, "ambisonics"),
-            (3, "ambisonics with demixing"),
-            (255, "discrete"),
-        ])
-        .emit()?;
-    if family != 0 {
-        f.u8("Stream count").emit()?;
-        f.u8("Coupled stream count").emit()?;
-        f.bytes("Channel mapping", channels.into()).emit()?;
-    }
-    let rest = f.remaining();
-    if rest > 0 {
-        f.bytes("Extra data", rest).emit()?;
     }
     Ok(())
 }

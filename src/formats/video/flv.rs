@@ -544,11 +544,10 @@ async fn enhanced_audio(cx: &Cx, data: Span, d: &[u8]) -> Result<()> {
     match (packet, fourcc) {
         (0, b"mp4a") => cx.emit(asc_node(cx, body).await?),
         (0, b"Opus") => {
-            let mut w = Walker::new(bytes, body, false, true);
-            let r = opus_head(&mut w);
-            let mut node = group("Opus ID header", body, w.finish(r.is_some()));
-            if let Some(s) = r {
-                node = node.summary(s);
+            let (o, nodes) = nal::opus(bytes, body, true, false);
+            let mut node = group("Opus ID header", body, nodes);
+            if let Some(o) = o {
+                node = node.summary(o.describe());
             }
             cx.emit(node);
         }
@@ -590,52 +589,6 @@ async fn enhanced_audio(cx: &Cx, data: Span, d: &[u8]) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// The Opus identification header (RFC 7845 5.1).
-fn opus_head(w: &mut Walker) -> Option<String> {
-    let start = w.pos();
-    let magic = w.read_bytes(8)?;
-    w.text(
-        "Magic signature",
-        start,
-        String::from_utf8_lossy(&magic).into_owned(),
-    );
-    w.u("Version", 8)?;
-    let ch = w.u("Output channel count", 8)?;
-    let start = w.pos();
-    let skip = w.read_bytes(2)?;
-    let skip = u64::from(u16::from_le_bytes([
-        skip.first().copied().unwrap_or(0),
-        skip.get(1).copied().unwrap_or(0),
-    ]));
-    w.record(
-        "Pre-skip",
-        start,
-        Value::UInt {
-            value: skip,
-            bits: 16,
-            radix: crate::value::Radix::Dec,
-        },
-    );
-    let start = w.pos();
-    let rate = w.read_bytes(4)?;
-    let rate = u32::from_le_bytes(rate.try_into().ok()?);
-    w.record(
-        "Input sample rate",
-        start,
-        Value::UInt {
-            value: rate.into(),
-            bits: 32,
-            radix: crate::value::Radix::Dec,
-        },
-    );
-    w.bytes("Output gain", 2)?;
-    w.u("Channel mapping family", 8)?;
-    Some(format!(
-        "{}, input {rate} Hz, pre-skip {skip}",
-        vidutil::plural(ch, "channel")
-    ))
 }
 
 fn bytes_node(name: &'static str, span: Span) -> Node {

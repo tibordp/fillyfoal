@@ -9,8 +9,9 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::fields::struct_node;
+use crate::formats::util::vidutil::nal::{NalCodec, group, parse_nal};
 use crate::formats::util::vidutil::{
-    H264_NAL_TYPES, HEVC_NAL_TYPES, fourcc, hex, lookup_or, plural, uint,
+    H264_NAL_TYPES, HEVC_NAL_TYPES, ParamSets, fourcc, hex, lookup_or, plural, uint,
 };
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
@@ -647,8 +648,11 @@ async fn item_obus(cx: Cx, span: Span) -> Result<()> {
     super::codec::obus(&cx, span).await
 }
 
-/// Lists the length-prefixed NAL units of an HEVC/H.264 image item.
+/// Lists the length-prefixed NAL units of an HEVC/H.264 image item,
+/// decoding parameter sets and SEI messages.
 async fn item_nals(cx: Cx, (span, hevc): (Span, bool)) -> Result<()> {
+    let codec = if hevc { NalCodec::Hevc } else { NalCodec::Avc };
+    let mut ps = ParamSets::default();
     let mut pos = 0u64;
     let mut index = 0u64;
     while pos.saturating_add(4) <= span.len {
@@ -671,15 +675,16 @@ async fn item_nals(cx: Cx, (span, hevc): (Span, bool)) -> Result<()> {
             matches!(kind, 6..=8)
         };
         if parameters && len > 0 && len < 0x1000 {
-            let nal = cx.read_avail(unit.tail(4)).await?;
-            let s = if hevc {
-                super::codec::hevc_nal_summary(&nal)
-            } else {
-                super::codec::avc_nal_summary(&nal)
-            };
-            if let Some(s) = s {
-                node = node.summary(format!("{s}, {len} bytes"));
-            }
+            let body = unit.tail(4);
+            let nal = cx.read_avail(body).await?;
+            let (info, nodes) = parse_nal(codec, &nal, body.sub(0, to_u64(nal.len())), &ps, true);
+            ps.update(info.sps.as_ref(), info.pps.as_ref());
+            node = group(format!("NAL unit {}", index.saturating_add(1)), unit, nodes).summary(
+                match &info.summary {
+                    Some(s) => format!("{s}, {len} bytes"),
+                    None => format!("{name}, {len} bytes"),
+                },
+            );
         }
         cx.push(node).await;
         if len == 0 {
