@@ -88,7 +88,7 @@
 .lp-hero h1 {
   margin: 0 0 22px;
   font-family: var(--serif);
-  font-size: clamp(44px, 7.2vw, 88px);
+  font-size: clamp(40px, 6vw, 72px);
   font-weight: 400;
   line-height: 0.98;
   letter-spacing: -0.025em;
@@ -391,27 +391,11 @@
 .lp-foot strong {
   color: var(--ink);
 }
-.lp-status {
+.lp-source {
   color: var(--ink-3);
 }
-.lp-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 8px;
-  border-radius: 50%;
-  vertical-align: 1px;
-  background: #d39a2a;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-.lp-dot[data-ready] {
-  background: #4f9a5a;
-  animation: none;
-}
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
+.lp-source .lp-link {
+  color: var(--ink);
 }
 
 /* Dragging a file over any page. */

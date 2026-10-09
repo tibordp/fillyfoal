@@ -8,6 +8,8 @@ import type { FieldNode, Page } from "./types";
 const FOAL_PNG =
   "iVBORw0KGgoAAAANSUhEUgAAABAAAAAOAgMAAABbQXQZAAAADFBMVEUAAACwajo7JBr07uCH158jAAAAAXRSTlMAQObYZgAAAAp0RVh0VGl0bGUAZm9hbO94DyoAAAA0SURBVHjaY2CAACYQwekAJFQDgMT0EKBQiAhQCMhTDQUSU0GEKIgQYQASggwuUEKJoYMBAM0uBuWeekbaAAAAAElFTkSuQmCC";
 const FOAL = Uint8Array.from(atob(FOAL_PNG), (c) => c.charCodeAt(0));
+const GITHUB = "https://github.com/tibordp/fillyfoal";
+
 export const foalFile = () => new File([FOAL], "foal.png", { type: "image/png" });
 
 type Leaf = {
@@ -118,6 +120,9 @@ export function Landing({
           <button type="button" className="lp-link" onClick={onTrySelf} disabled={!ready}>
             Look inside this page's engine
           </button>
+          <a className="lp-link" href={GITHUB}>
+            GitHub
+          </a>
           <button type="button" className="lp-button" onClick={onOpen}>
             Open a file
           </button>
@@ -126,7 +131,7 @@ export function Landing({
 
       <section className="lp-hero">
         <div className="lp-hero-text">
-          <h1>Every file has a structure.</h1>
+          <h1>A file format dissector, in your browser.</h1>
           <p>
             fillyfoal takes files apart into fields, each one tied to the bytes it came from. Below
             are the 168 bytes of a small PNG, dissected just now in this tab by the same code that
@@ -255,10 +260,12 @@ export function Landing({
           heard of. Compressed and encrypted content is followed all the way down: a PNG in a zip in
           a disk image is just another field.
         </p>
-        <p className="lp-status">
-          <span className="lp-dot" data-ready={ready || undefined} />
-          Status: just horsing around. Something is better than nothing, but some dissectors are
-          incomplete and some are plain wrong.
+        <p className="lp-source">
+          Source, issues and the Rust library on{" "}
+          <a className="lp-link" href={GITHUB}>
+            GitHub
+          </a>
+          . GPL-3.0-or-later.
         </p>
       </footer>
     </main>
@@ -279,7 +286,7 @@ function BytesPreview({ leaf }: { leaf: Leaf }) {
 function DropCall({ onOpen, error }: { onOpen: () => void; error: string | null }) {
   return (
     <section className="lp-drop">
-      <h2>Now one of yours.</h2>
+      <h2>Open your own file</h2>
       <p>
         Drop it anywhere on this page, or{" "}
         <button type="button" className="lp-link" onClick={onOpen}>
