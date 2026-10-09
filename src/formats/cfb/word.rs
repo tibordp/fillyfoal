@@ -3,7 +3,8 @@
 //! in the table stream (`0Table` or `1Table`): the piece table that maps
 //! character positions to text, the stylesheet, the font table, sections,
 //! fields, string tables, and the character and paragraph formatting pages
-//! (FKPs) in the `WordDocument` stream itself.
+//! (FKPs) in the `WordDocument` stream itself. Word 6.0/95 files are in
+//! [`word6`].
 
 use std::sync::Arc;
 
@@ -19,6 +20,8 @@ use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+
+mod word6;
 
 /// Characters of text shown in one value.
 const MAX_TEXT: u64 = 4096;
@@ -403,6 +406,11 @@ pub struct Fib {
     rg_csw_new: (u64, u64),
     pub nfib_new: Option<u16>,
     pub end: u64,
+    /// Word 6.0/95: the code page of the 8-bit text.
+    pub codepage: Option<u16>,
+    /// Word 6.0/95: where the text is when there is no piece table
+    /// (fcMin, fcMac).
+    pub text_fcs: Option<(u32, u32)>,
 }
 
 impl Fib {
@@ -503,14 +511,16 @@ pub async fn word(cx: &Cx, input: Input, wd: Span, tables: [Option<Span>; 2]) ->
     let base_span = wd.sub(0, FibBase::SIZE);
     let head = cx.read_avail(wd.sub(0, 4096)).await?;
     let base = crate::fields::parse(cx, base_span, LE, &(), FibBase::layout).await?;
+    if base.ident == 0xa5dc {
+        return word6::word6(cx, wd, &head).await;
+    }
     if base.ident != 0xa5ec {
-        let mut node = FibBase::node("FibBase", base_span, LE);
-        node = node.diag(if base.ident == 0xa5dc {
-            Diagnostic::unsupported("Word 6.0/95 file information block")
-        } else {
-            Diagnostic::malformed(format!("wIdent is {:#06x}, not 0xA5EC", base.ident))
-        });
-        cx.emit(node);
+        cx.emit(
+            FibBase::node("FibBase", base_span, LE).diag(Diagnostic::malformed(format!(
+                "wIdent is {:#06x}, not 0xA5EC",
+                base.ident
+            ))),
+        );
         return Ok(());
     }
     let Some(fib) = parse_fib(&head) else {
@@ -984,39 +994,58 @@ async fn plc_node(cx: Cx, span: Span) -> Result<()> {
 // ---------------------------------------------------------------------------
 // The piece table and text
 
+/// How a piece stores its characters.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PieceText {
+    /// UTF-16LE at `fc`.
+    Utf16,
+    /// Windows-1252 at `fc / 2` (fCompressed).
+    Compressed,
+    /// Word 6.0/95: 8-bit at `fc`, in this code page.
+    Legacy(u16),
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Piece {
     pub cp: u32,
     pub cp_end: u32,
     pub fc: u32,
-    pub compressed: bool,
+    pub text: PieceText,
 }
 
 impl Piece {
+    /// Bytes per character.
+    fn width(&self) -> u64 {
+        match self.text {
+            PieceText::Utf16 => 2,
+            PieceText::Compressed | PieceText::Legacy(_) => 1,
+        }
+    }
+
+    /// Where the piece's first character is in the WordDocument stream.
+    fn start(&self) -> u64 {
+        match self.text {
+            PieceText::Compressed => u64::from(self.fc / 2),
+            PieceText::Utf16 | PieceText::Legacy(_) => u64::from(self.fc),
+        }
+    }
+
     /// The bytes of characters `from..to` (absolute CPs within the piece).
     fn bytes(&self, wd: Span, from: u32, to: u32) -> Span {
         let skip = u64::from(from.saturating_sub(self.cp));
         let n = u64::from(to.saturating_sub(from));
-        if self.compressed {
-            wd.sub(u64::from(self.fc / 2).saturating_add(skip), n)
-        } else {
-            wd.sub(
-                u64::from(self.fc).saturating_add(skip.saturating_mul(2)),
-                n.saturating_mul(2),
-            )
-        }
+        wd.sub(
+            self.start()
+                .saturating_add(skip.saturating_mul(self.width())),
+            n.saturating_mul(self.width()),
+        )
     }
 
     /// The byte range this piece occupies in the WordDocument stream.
     fn fc_range(&self) -> (u64, u64) {
         let n = u64::from(self.cp_end.saturating_sub(self.cp));
-        if self.compressed {
-            let start = u64::from(self.fc / 2);
-            (start, start.saturating_add(n))
-        } else {
-            let start = u64::from(self.fc);
-            (start, start.saturating_add(n.saturating_mul(2)))
-        }
+        let start = self.start();
+        (start, start.saturating_add(n.saturating_mul(self.width())))
     }
 }
 
@@ -1028,6 +1057,22 @@ pub struct Pieces {
 }
 
 async fn pieces(cx: &Cx, doc: &Doc) -> Result<Arc<Pieces>> {
+    // A Word 6/95 document that was not fast-saved has no piece table: its
+    // text is one run of bytes.
+    if let (Some(codepage), Some((fc_min, fc_mac))) = (doc.fib.codepage, doc.fib.text_fcs)
+        && doc.fib.flags & 0x0004 == 0
+    {
+        return Ok(Arc::new(Pieces {
+            list: vec![Piece {
+                cp: 0,
+                cp_end: fc_mac.saturating_sub(fc_min),
+                fc: fc_min,
+                text: PieceText::Legacy(codepage),
+            }],
+            plc_at: 0,
+            prc_len: 0,
+        }));
+    }
     let Some(clx) = doc.table_span(pair::CLX) else {
         return Err(Diagnostic::malformed("the FIB locates no piece table"));
     };
@@ -1068,11 +1113,23 @@ async fn pieces(cx: &Cx, doc: &Doc) -> Result<Arc<Pieces>> {
         ) else {
             break;
         };
-        list.push(Piece {
-            cp,
-            cp_end,
-            fc: fc & 0x3fff_ffff,
-            compressed: fc & 0x4000_0000 != 0,
+        list.push(match doc.fib.codepage {
+            Some(codepage) => Piece {
+                cp,
+                cp_end,
+                fc,
+                text: PieceText::Legacy(codepage),
+            },
+            None => Piece {
+                cp,
+                cp_end,
+                fc: fc & 0x3fff_ffff,
+                text: if fc & 0x4000_0000 != 0 {
+                    PieceText::Compressed
+                } else {
+                    PieceText::Utf16
+                },
+            },
         });
     }
     let pieces = Arc::new(Pieces {
@@ -1085,10 +1142,10 @@ async fn pieces(cx: &Cx, doc: &Doc) -> Result<Arc<Pieces>> {
 }
 
 fn decode_text(piece: &Piece, data: &[u8]) -> String {
-    if piece.compressed {
-        rec::codepage_text(1252, data)
-    } else {
-        crate::text::utf16(data, LE)
+    match piece.text {
+        PieceText::Utf16 => crate::text::utf16(data, LE),
+        PieceText::Compressed => rec::codepage_text(1252, data),
+        PieceText::Legacy(codepage) => rec::codepage_text(codepage, data),
     }
 }
 
@@ -1129,7 +1186,7 @@ async fn fc_text(cx: &Cx, doc: &Doc, pieces: &Pieces, from: u64, to: u64, max: u
         if a >= b || left == 0 {
             continue;
         }
-        let width = if p.compressed { 1 } else { 2 };
+        let width = p.width();
         let chars = b
             .saturating_sub(a)
             .checked_div(width)
@@ -1170,9 +1227,6 @@ fn story_starts(fib: &Fib) -> Vec<(usize, &'static str, u64, u64)> {
 
 async fn text_node(cx: Cx, doc: Doc) -> Result<()> {
     let pieces = pieces(&cx, &doc).await?;
-    let Some(clx) = doc.table_span(pair::CLX) else {
-        return Ok(());
-    };
     for (_, name, start, n) in story_starts(&doc.fib) {
         if n == 0 {
             continue;
@@ -1185,6 +1239,9 @@ async fn text_node(cx: Cx, doc: Doc) -> Result<()> {
         }
         cx.emit(node);
     }
+    let Some(clx) = doc.table_span(pair::CLX) else {
+        return Ok(());
+    };
     if pieces.prc_len > 0 {
         cx.emit(
             Node::new("Property modifiers (Prc)")
@@ -1262,7 +1319,7 @@ async fn piece_list(cx: Cx, doc: Doc) -> Result<()> {
         let (_, end) = p.fc_range();
         let bytes = p.bytes(doc.wd, p.cp, p.cp_end);
         let text = text_range(&cx, &doc, &pieces, p.cp.into(), p.cp_end.into(), MAX_TEXT).await;
-        let kind = if p.compressed { "8-bit" } else { "UTF-16" };
+        let kind = if p.width() == 1 { "8-bit" } else { "UTF-16" };
         cx.push(
             Node::new(format!("Piece {i}"))
                 .span(pcd)
@@ -1273,7 +1330,7 @@ async fn piece_list(cx: Cx, doc: Doc) -> Result<()> {
                     bytes.offset.saturating_sub(doc.wd.offset),
                     quoted(&text, PREVIEW)
                 ))
-                .lazy(piece_node, (pcd, bytes, text, p.compressed)),
+                .lazy(piece_node, (pcd, bytes, text, p.text)),
         )
         .await;
     }
@@ -1298,11 +1355,26 @@ async fn cp_list(cx: Cx, span: Span) -> Result<()> {
 
 async fn piece_node(
     cx: Cx,
-    (pcd, bytes, text, compressed): (Span, Span, String, bool),
+    (pcd, bytes, text, kind): (Span, Span, String, PieceText),
 ) -> Result<()> {
     let block = cx.block(pcd).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u16("Flags").flags(PCD_FLAGS).emit()?;
+    if let PieceText::Legacy(codepage) = kind {
+        f.u32("fc")
+            .hex()
+            .desc("Offset of the piece's 8-bit text in the WordDocument stream")
+            .emit()?;
+        f.u16("prm").hex().desc("Property modifier").emit()?;
+        cx.emit(
+            Node::new("Text")
+                .span(bytes)
+                .value(Value::Text(text))
+                .summary(format!("{} characters, Windows-{codepage}", bytes.len)),
+        );
+        return Ok(());
+    }
+    let compressed = kind == PieceText::Compressed;
     f.u32("fc")
         .hex()
         .with(|&v, n| {

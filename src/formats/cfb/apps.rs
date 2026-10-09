@@ -114,7 +114,17 @@ pub async fn application(
     }
     let has = |n: &str| names.iter().any(|(name, _)| name == n);
     let (kind, context) = if has("WordDocument") {
-        ("Word 97-2003 document", Context::Plain)
+        // Word 6.0/95 files carry their own class, CLSID_WordDocument6;
+        // Word 97 and later use {00020906-...}.
+        let word6 = root.clsid.data1 == 0x0002_0900
+            && root.clsid.data2 == 0
+            && root.clsid.data3 == 0
+            && root.clsid.data4 == [0xc0, 0, 0, 0, 0, 0, 0, 0x46];
+        if word6 {
+            ("Word 6.0/95 document", Context::Plain)
+        } else {
+            ("Word 97-2003 document", Context::Plain)
+        }
     } else if has("Workbook") {
         ("Excel 97-2003 workbook", Context::Plain)
     } else if has("Book") {
