@@ -7,14 +7,14 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: d0 cf 11 e0 a1 b1 1a e1  |........|  [0x0+0x8]
       CLSID: {00000000-0000-0000-0000-000000000000}  [0x8+0x10]
       Minor version: 0x3e  [0x18+0x2]
-      Major version: 3  [0x1a+0x2]
-      Byte order: 0xfffe  [0x1c+0x2]
+      Major version: version 3 (0x3)  [0x1a+0x2]
+      Byte order: little-endian (0xfffe)  [0x1c+0x2]
       Sector shift: 9 — 512 bytes  [0x1e+0x2]
       Mini sector shift: 6 — 64 bytes  [0x20+0x2]
       Reserved: 00 00 00 00 00 00  |......|  [0x22+0x6]
       Number of directory sectors: 0  [0x28+0x4]
       Number of FAT sectors: 1  [0x2c+0x4]
-      First directory sector: 1  [0x30+0x4]
+      First directory sector: 1 — sector 1  [0x30+0x4]
       Transaction signature: 0  [0x34+0x4]
       Mini stream cutoff size: 4096  [0x38+0x4]
       First MiniFAT sector: 3 — sector 3  [0x3c+0x4]
@@ -23,6 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of DIFAT sectors: 0  [0x48+0x4]
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
+      Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
   ▾ FAT — 1 sectors
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
@@ -31,6 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Sector 3: 4294967294 — ENDOFCHAIN  [0x20c+0x4]
         Sector 4: 5 — next: 5  [0x210+0x4]
         Sector 5: 4294967294 — ENDOFCHAIN  [0x214+0x4]
+  ▾ Free sectors
   ▾ MiniFAT — 128 entries  [#2:0x0+0x200]
       Mini sector 0: 1 — next: 1  [#2:0x0+0x4]
       Mini sector 1: 2 — next: 2  [#2:0x4+0x4]
@@ -289,7 +291,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Starting sector: 4 — sector 4  [#1:0x74+0x4]
         Stream size: 576  [#1:0x78+0x8]
       Mini stream — 0x240 bytes in 64-byte mini sectors  [#3:0x0+0x240]
-    ▾ _Tables — MSI table, 4 bytes  [#1:0x100+0x80]
+    ▾ _Tables — table catalog, 4 bytes  [#1:0x100+0x80]
       ▾ Directory entry  [#1:0x100+0x80]
           Name: "䡀㽿䅤䈯䠶"  [#1:0x100+0x40]
           Name length: 12  [#1:0x140+0x2]
@@ -306,8 +308,13 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 4  [#1:0x178+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 5 — mini sector → #3:0x140+0x40
-      ▾ Content — 4 bytes  [#5:0x0+0x4]
-          Data  [#5:0x0+0x4]
+          Slack — 60 unused bytes after the end of the stream  [#3:0x144+0x3c]
+      ▾ Columns — Name
+          Name: 0x2d40 [MSITYPE_VALID | MSITYPE_STRING | MSITYPE_KEY | 0x440] — column 1: string(64), key, 2 bytes per value
+      ▾ Row 0 — "Property"
+          Name: "Property"  [#7:0x0+0x2]
+      ▾ Row 1 — "?"
+          Name: "?"  [#7:0x2+0x2]
     ▾ Property — MSI table, 2 bytes  [#1:0x280+0x80]
       ▾ Directory entry  [#1:0x280+0x80]
           Name: "䡀䕙䓲䕨䜷"  [#1:0x280+0x40]
@@ -325,9 +332,10 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 2  [#1:0x2f8+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 8 — mini sector → #3:0x200+0x40
-      ▾ Content — 2 bytes  [#6:0x0+0x2]
-          Data  [#6:0x0+0x2]
-    ▾ _StringData — MSI table, 8 bytes  [#1:0x200+0x80]
+          Slack — 62 unused bytes after the end of the stream  [#3:0x202+0x3e]
+        Data  [#8:0x0+0x2]
+          ! malformed: no columns are defined for table Property
+    ▾ _StringData — string pool: characters, 8 bytes  [#1:0x200+0x80]
       ▾ Directory entry  [#1:0x200+0x80]
           Name: "䡀㼿䕷䑬㭪䗤䠤"  [#1:0x200+0x40]
           Name length: 16  [#1:0x240+0x2]
@@ -344,12 +352,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 8  [#1:0x278+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 7 — mini sector → #3:0x1c0+0x40
-      ▾ Content — UTF-8 text, 1 line  [#7:0x0+0x8]
-          Encoding: "UTF-8"
-          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [#7:0x0+0x8]
-            Line 1: "Property"  [#7:0x0+0x8]
-    ▾ _StringPool — MSI table, 8 bytes  [#1:0x180+0x80]
+          Slack — 56 unused bytes after the end of the stream  [#3:0x1c8+0x38]
+        String 1: "Property"  [#5:0x0+0x8]
+    ▾ _StringPool — string pool: lengths and reference counts, 8 bytes  [#1:0x180+0x80]
       ▾ Directory entry  [#1:0x180+0x80]
           Name: "䡀㼿䕷䑬㹪䒲䠯"  [#1:0x180+0x40]
           Name length: 16  [#1:0x1c0+0x2]
@@ -366,8 +371,9 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 8  [#1:0x1f8+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 6 — mini sector → #3:0x180+0x40
-      ▾ Content — 8 bytes  [#8:0x0+0x8]
-          Data  [#8:0x0+0x8]
+          Slack — 56 unused bytes after the end of the stream  [#3:0x188+0x38]
+        Header: 0x0 — code page 0  [#4:0x0+0x4]
+        String 1: "Property" — 8 bytes, 1 references  [#4:0x4+0x4]
     ▾ \x05SummaryInformation — summary information property set, 288 bytes  [#1:0x80+0x80]
       ▾ Directory entry  [#1:0x80+0x80]
           Name: "\u{5}SummaryInformation"  [#1:0x80+0x40]
@@ -389,19 +395,55 @@ expression: "common::explore(&display_name(&path), &data)"
           Link 2: 2 — mini sector → #3:0x80+0x40
           Link 3: 3 — mini sector → #3:0xc0+0x40
           Link 4: 4 — mini sector → #3:0x100+0x40
-      ▾ Header  [#4:0x0+0x1c]
-          Byte order: 0xfffe  [#4:0x0+0x2]
-          Version: 0  [#4:0x2+0x2]
-          System identifier: 0x20006  [#4:0x4+0x4]
-          CLSID: {00000000-0000-0000-0000-000000000000}  [#4:0x8+0x10]
-          Number of property sets: 1  [#4:0x18+0x4]
-      ▾ SummaryInformation: {f29f85e0-4ff9-1068-ab91-08002b27b3d9}  [#4:0x30+0xf0]
-          Size: 240  [#4:0x30+0x4]
-          CodePage: 1252 — VT_I2  [#4:0x78+0x8]
-          Title: "Installation Database" — VT_LPSTR  [#4:0x80+0x1e]
-          Subject: "Fillyfoal Test" — VT_LPSTR  [#4:0xa0+0x17]
-          Author: "fillyfoal" — VT_LPSTR  [#4:0xb8+0x12]
-          Template: "x64;1033" — VT_LPSTR  [#4:0xcc+0x11]
-          RevNumber: "{12345678-1234-1234-1234-123456789ABC}" — VT_LPSTR  [#4:0xe0+0x2f]
-          PageCount: 500 — VT_I4  [#4:0x110+0x8]
-          WordCount: 2 — VT_I4  [#4:0x118+0x8]
+          Slack — 32 unused bytes after the end of the stream  [#3:0x120+0x20]
+      ▾ Header  [#6:0x0+0x1c]
+          ByteOrder: 0xfffe  [#6:0x0+0x2]
+          Version: 0  [#6:0x2+0x2]
+          SystemIdentifier: 0x20006 — Win32 6.0  [#6:0x4+0x4]
+          CLSID: {00000000-0000-0000-0000-000000000000}  [#6:0x8+0x10]
+          NumPropertySets: 1  [#6:0x18+0x4]
+        FMTID/Offset 0: {f29f85e0-4ff9-1068-ab91-08002b27b3d9} — SummaryInformation at 0x30  [#6:0x1c+0x14]
+      ▾ SummaryInformation: {f29f85e0-4ff9-1068-ab91-08002b27b3d9} — 8 properties, code page 1252  [#6:0x30+0xf0]
+          Size: 240  [#6:0x30+0x4]
+          NumProperties: 8  [#6:0x34+0x4]
+        ▾ PropertyIdentifierAndOffset — 8 entries  [#6:0x38+0x40]
+            CodePage: 0x1 — value at 0x48  [#6:0x38+0x8] → #6:0x78+0x4
+            Title: 0x2 — value at 0x50  [#6:0x40+0x8] → #6:0x80+0x4
+            Subject: 0x3 — value at 0x70  [#6:0x48+0x8] → #6:0xa0+0x4
+            Author: 0x4 — value at 0x88  [#6:0x50+0x8] → #6:0xb8+0x4
+            Template: 0x7 — value at 0x9c  [#6:0x58+0x8] → #6:0xcc+0x4
+            RevNumber: 0x9 — value at 0xb0  [#6:0x60+0x8] → #6:0xe0+0x4
+            PageCount: 0xe — value at 0xe0  [#6:0x68+0x8] → #6:0x110+0x4
+            WordCount: 0xf — value at 0xe8  [#6:0x70+0x8] → #6:0x118+0x4
+        ▾ CodePage: 1252 — VT_I2  [#6:0x78+0x8]
+            Type: VT_I2 (0x2)  [#6:0x78+0x2]
+            Padding: 0  [#6:0x7a+0x2]
+            Value  [#6:0x7c+0x4]
+        ▾ Title: "Installation Database" — VT_LPSTR  [#6:0x80+0x20]
+            Type: VT_LPSTR (0x1e)  [#6:0x80+0x2]
+            Padding: 0  [#6:0x82+0x2]
+            Value  [#6:0x84+0x1c]
+        ▾ Subject: "Fillyfoal Test" — VT_LPSTR  [#6:0xa0+0x18]
+            Type: VT_LPSTR (0x1e)  [#6:0xa0+0x2]
+            Padding: 0  [#6:0xa2+0x2]
+            Value  [#6:0xa4+0x14]
+        ▾ Author: "fillyfoal" — VT_LPSTR  [#6:0xb8+0x14]
+            Type: VT_LPSTR (0x1e)  [#6:0xb8+0x2]
+            Padding: 0  [#6:0xba+0x2]
+            Value  [#6:0xbc+0x10]
+        ▾ Template: "x64;1033" — VT_LPSTR  [#6:0xcc+0x14]
+            Type: VT_LPSTR (0x1e)  [#6:0xcc+0x2]
+            Padding: 0  [#6:0xce+0x2]
+            Value  [#6:0xd0+0x10]
+        ▾ RevNumber: "{12345678-1234-1234-1234-123456789ABC}" — VT_LPSTR  [#6:0xe0+0x30]
+            Type: VT_LPSTR (0x1e)  [#6:0xe0+0x2]
+            Padding: 0  [#6:0xe2+0x2]
+            Value  [#6:0xe4+0x2c]
+        ▾ PageCount: 500 — VT_I4  [#6:0x110+0x8]
+            Type: VT_I4 (0x3)  [#6:0x110+0x2]
+            Padding: 0  [#6:0x112+0x2]
+            Value  [#6:0x114+0x4]
+        ▾ WordCount: 2 — VT_I4  [#6:0x118+0x8]
+            Type: VT_I4 (0x3)  [#6:0x118+0x2]
+            Padding: 0  [#6:0x11a+0x2]
+            Value  [#6:0x11c+0x4]

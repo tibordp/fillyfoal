@@ -472,3 +472,21 @@ and reproduce every file byte for byte.
 | `openssh-keys/ssh-keygen.pub` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `.pub` files of the keys above and an ed25519 user certificate (`ssh-keygen -s ca -I fillyfoal-user -n alice,bob`), concatenated |
 | `pem/openssh-rsa.key` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -t rsa -b 1024 -N ''`, unedited |
 | `keychain/items.keychain` | macOS `security` (Security.framework, macOS 26) | `sh tests/data/keychain/make.sh` (random salts and keys: same structure, new bytes): `security create-keychain -p fillyfoal`, a generic and an internet password, an OpenSSL self-signed certificate and its EC private key imported; unedited |
+
+## Office documents and installers (Compound File)
+
+LibreOffice fixtures are converted from flat ODF sources in `tests/data/`
+in a throwaway profile (`tests/data/cfb/lo-profile.py` sets the user name to
+"fillyfoal" and turns off the preview images Impress embeds), with
+`sh tests/data/cfb/lo-convert.sh <format> <source> <outdir>`. LibreOffice
+stamps the conversion time into the summary information, so they are not
+reproducible byte for byte.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `doc/letter.doc` | LibreOffice 26.8.1.1 ("MS Word 97" filter) | `lo-convert.sh doc tests/data/doc/letter.fodt`: heading, bold/coloured runs, PAGE and HYPERLINK fields, a list, a table, a two-column section with a footnote |
+| `doc/note.doc` | macOS 26.5 `textutil` | `textutil -convert doc -output note.doc tests/data/doc/note.html` |
+| `xls/budget.xls` | LibreOffice 26.8.1.1 ("MS Excel 97" filter) | `lo-convert.sh xls tests/data/xls/budget.fods`: shared formulas, IF/SUM/AVERAGE/MAX/ISERROR, a cross-sheet reference, a cell comment and a drawn rectangle (Office Art) |
+| `xls/xlwt.xls` | xlwt 1.3.0 | `uv run --with xlwt==1.3.0 python tests/data/xls/make_xlwt.py xlwt.xls`; reproduced byte-for-byte |
+| `ppt/deck.ppt` | LibreOffice 26.8.1.1 ("MS PowerPoint 97" filter) | `lo-convert.sh ppt tests/data/ppt/deck.fodp`: two slides with titles, bullets, notes, a rectangle and an ellipse |
+| `msi/hello.msi` | msitools 0.106 (`wixl`) | `wixl -o hello.msi tests/data/msi/hello.wxs` next to `tests/data/msi/readme.txt`; the package code and times differ on each run |

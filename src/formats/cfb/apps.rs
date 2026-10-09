@@ -3,16 +3,18 @@
 //! and choosing a decoder for each stream.
 
 use super::{
-    Cfb, DirEntry, StreamState, TreeWalk, display_name, entry_name, office, propset, read_entry,
+    Cfb, DirEntry, StreamState, TreeWalk, display_name, entry_name, msg, propset, read_entry,
 };
-use crate::bytes::{u32_le, u64_le};
+use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::fields::Endian;
+use crate::fields::{Endian, Fields};
 use crate::formats::Input;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Guid, Radix, Value, lookup};
+use crate::value::{EnumTable, Guid, Value};
+
+use super::rec::LE;
 
 /// What kind of storage a stream lives in, which decides how entries are
 /// named and decoded.
@@ -22,17 +24,40 @@ pub enum Context {
     Msi,
     /// The top level of an Outlook message.
     MsgRoot,
-    /// A recipient, attachment or embedded message storage.
+    /// A message embedded in an attachment.
+    MsgEmbedded,
+    /// A recipient or attachment storage.
     Msg,
+    /// The named property mapping storage.
+    MsgNameid,
     Thumbs,
+    /// A VBA project's `VBA` storage.
+    Vba,
 }
 
 impl Context {
-    pub fn child(parent: Context, _name: &str) -> Context {
+    pub fn child(parent: Context, name: &str) -> Context {
         match parent {
-            Context::MsgRoot | Context::Msg => Context::Msg,
+            Context::MsgRoot | Context::Msg | Context::MsgEmbedded | Context::MsgNameid => {
+                if name == "__substg1.0_3701000D" {
+                    Context::MsgEmbedded
+                } else if name == "__nameid_version1.0" {
+                    Context::MsgNameid
+                } else {
+                    Context::Msg
+                }
+            }
+            _ if name == "VBA" => Context::Vba,
+            Context::Vba => Context::Plain,
             other => other,
         }
+    }
+
+    pub fn is_msg(self) -> bool {
+        matches!(
+            self,
+            Context::MsgRoot | Context::Msg | Context::MsgEmbedded | Context::MsgNameid
+        )
     }
 }
 
@@ -67,9 +92,16 @@ fn guid_bytes(g: &Guid) -> [u8; 16] {
 }
 
 /// Recognises the application from the root storage, and finds a title.
-pub async fn application(cx: &Cx, cfb: &Cfb, root: &DirEntry) -> (Option<String>, Context) {
+pub async fn application(
+    cx: &Cx,
+    cfb: &super::CfbRef,
+    root: &DirEntry,
+) -> (Option<String>, Context) {
     if let Some(kind) = installer_kind(&guid_bytes(&root.clsid)) {
-        let title = summary_title(cx, cfb, root).await;
+        let title = match super::msi::product(cx, cfb).await {
+            Some(p) => Some(p),
+            None => summary_title(cx, cfb, root).await,
+        };
         return (Some(with_title(kind, title)), Context::Msi);
     }
     let mut names = Vec::new();
@@ -97,15 +129,19 @@ pub async fn application(cx: &Cx, cfb: &Cfb, root: &DirEntry) -> (Option<String>
         ("Visio drawing", Context::Plain)
     } else if has("Quill") {
         ("Publisher document", Context::Plain)
+    } else if has("VBA") && has("PROJECT") {
+        ("VBA project", Context::Plain)
     } else if has("\u{1}Ole10Native") {
         ("OLE 1.0 embedded object", Context::Plain)
     } else {
         return (None, Context::Plain);
     };
     let title = if context == Context::MsgRoot {
-        let subject = names.iter().find(|(n, _)| n == "__substg1.0_0037001F");
+        let subject = names
+            .iter()
+            .find(|(n, _)| n == "__substg1.0_0037001F" || n == "__substg1.0_0037001E");
         match subject {
-            Some(&(_, id)) => stream_text(cx, cfb, id).await,
+            Some((n, id)) => stream_text(cx, cfb, *id, n.ends_with('F')).await,
             None => None,
         }
     } else {
@@ -138,11 +174,15 @@ async fn summary_title(cx: &Cx, cfb: &Cfb, root: &DirEntry) -> Option<String> {
     None
 }
 
-async fn stream_text(cx: &Cx, cfb: &Cfb, id: u32) -> Option<String> {
+async fn stream_text(cx: &Cx, cfb: &Cfb, id: u32, wide: bool) -> Option<String> {
     let entry = read_entry(cx, cfb, id).await.ok()?;
     let (span, _) = super::stream(cx, cfb, id, &entry).await.ok()?;
     let data = cx.read_avail(span.sub(0, 1024)).await.ok()?;
-    Some(crate::text::utf16z(&data, Endian::Little).0)
+    Some(if wide {
+        crate::text::utf16z(&data, Endian::Little).0
+    } else {
+        crate::text::until_nul(&data)
+    })
 }
 
 /// MSI stream names pack two base-64 characters into one code point
@@ -176,77 +216,40 @@ pub fn msi_name(raw: &str) -> Option<String> {
 }
 
 /// A display label for an entry, and a short description.
-pub fn label(raw: &str, context: Context) -> (String, Option<String>) {
+pub fn label(
+    raw: &str,
+    context: Context,
+    names: Option<&msg::NameMap>,
+) -> (String, Option<String>) {
     if context == Context::Msi
         && let Some(name) = msi_name(raw)
     {
         return match name.strip_prefix('!') {
-            Some(table) => (table.to_owned(), Some("MSI table".to_owned())),
+            Some(table) => {
+                let detail = match table {
+                    "_StringPool" => "string pool: lengths and reference counts",
+                    "_StringData" => "string pool: characters",
+                    "_Tables" => "table catalog",
+                    "_Columns" => "column catalog",
+                    "_Validation" => "validation table",
+                    _ => "MSI table",
+                };
+                (table.to_owned(), Some(detail.to_owned()))
+            }
             None => (name, None),
         };
     }
-    if matches!(context, Context::MsgRoot | Context::Msg) {
-        for (prefix, label) in [
-            ("__recip_version1.0_#", "Recipient"),
-            ("__attach_version1.0_#", "Attachment"),
-        ] {
-            if let Some(n) = raw.strip_prefix(prefix) {
-                let index = u32::from_str_radix(n, 16).unwrap_or(0);
-                return (
-                    format!("{label} {index}"),
-                    Some(format!("{} storage", label.to_lowercase())),
-                );
-            }
-        }
-        match raw {
-            "__substg1.0_00020102" => {
-                return (
-                    "GUID stream".to_owned(),
-                    Some("named property GUIDs".to_owned()),
-                );
-            }
-            "__substg1.0_00030102" => {
-                return (
-                    "Entry stream".to_owned(),
-                    Some("named property entries".to_owned()),
-                );
-            }
-            "__substg1.0_00040102" => {
-                return (
-                    "String stream".to_owned(),
-                    Some("named property names".to_owned()),
-                );
-            }
-            "__nameid_version1.0" => {
-                return (
-                    "Named property mapping".to_owned(),
-                    Some("storage".to_owned()),
-                );
-            }
-            "__properties_version1.0" => {
-                return (
-                    "Properties".to_owned(),
-                    Some("fixed-size property values".to_owned()),
-                );
-            }
-            "__substg1.0_3701000D" => {
-                return ("Embedded message".to_owned(), Some("storage".to_owned()));
-            }
-            _ => {}
-        }
-        if let Some((id, kind)) = msg_tag(raw) {
-            let name = lookup(MSG_PROPERTIES, id.into())
-                .map_or_else(|| format!("Property {id:#06x}"), |n| format!("PidTag{n}"));
-            let kind = lookup(MSG_TYPES, kind.into())
-                .map_or_else(|| format!("type {kind:#06x}"), str::to_owned);
-            return (name, Some(format!("property {id:#06x}, {kind}")));
-        }
+    if context.is_msg()
+        && let Some((name, detail)) = msg::label(raw, names, context == Context::MsgNameid)
+    {
+        return (name, Some(detail));
     }
     let detail = match raw {
         "\u{5}SummaryInformation" => Some("summary information property set"),
         "\u{5}DocumentSummaryInformation" => Some("document summary property set"),
         "WordDocument" => Some("Word document stream"),
         "0Table" | "1Table" => Some("Word table stream"),
+        "Data" => Some("Word data stream (pictures, form fields)"),
         "Workbook" => Some("Excel BIFF8 workbook stream"),
         "Book" => Some("Excel BIFF5 workbook stream"),
         "PowerPoint Document" => Some("PowerPoint document stream"),
@@ -255,119 +258,97 @@ pub fn label(raw: &str, context: Context) -> (String, Option<String>) {
         "\u{1}CompObj" => Some("OLE class information"),
         "\u{1}Ole" => Some("OLE object information"),
         "\u{1}Ole10Native" => Some("OLE 1.0 native data"),
-        "Macros" | "_VBA_PROJECT_CUR" | "VBA" => Some("VBA project"),
+        "Macros" | "_VBA_PROJECT_CUR" => Some("VBA project storage"),
+        "VBA" => Some("VBA modules"),
+        "PROJECT" => Some("VBA project properties"),
+        "PROJECTwm" => Some("VBA module names"),
+        "dir" if context == Context::Vba => Some("VBA project information (compressed)"),
+        "_VBA_PROJECT" => Some("VBA version and performance cache"),
         "ObjectPool" => Some("embedded objects"),
         "Catalog" => Some("thumbnail catalog"),
+        "EscherStm" | "EscherDelayStm" => Some("Office Art drawing records"),
+        "Contents" => Some("Publisher contents"),
         _ => None,
     };
-    (display_name(raw), detail.map(str::to_owned))
-}
-
-/// `__substg1.0_XXXXYYYY`: property id and type.
-fn msg_tag(raw: &str) -> Option<(u16, u16)> {
-    let hex = raw.strip_prefix("__substg1.0_")?;
-    if hex.len() != 8 {
-        return None;
+    if context == Context::Thumbs && !raw.is_empty() && raw.chars().all(|c| c.is_ascii_digit()) {
+        let index: String = raw.chars().rev().collect();
+        return (raw.to_owned(), Some(format!("thumbnail {index}")));
     }
-    let tag = u32::from_str_radix(hex, 16).ok()?;
-    Some(((tag >> 16) as u16, (tag & 0xffff) as u16))
+    let detail = detail.map(str::to_owned).or_else(|| {
+        (context == Context::Vba && !raw.starts_with("__SRP_"))
+            .then(|| "VBA module stream".to_owned())
+    });
+    (display_name(raw), detail)
 }
-
-const MSG_TYPES: EnumTable = &[
-    (0x0002, "PT_SHORT"),
-    (0x0003, "PT_LONG"),
-    (0x0004, "PT_FLOAT"),
-    (0x0005, "PT_DOUBLE"),
-    (0x0006, "PT_CURRENCY"),
-    (0x0007, "PT_APPTIME"),
-    (0x000a, "PT_ERROR"),
-    (0x000b, "PT_BOOLEAN"),
-    (0x000d, "PT_OBJECT"),
-    (0x0014, "PT_I8"),
-    (0x001e, "PT_STRING8"),
-    (0x001f, "PT_UNICODE"),
-    (0x0040, "PT_SYSTIME"),
-    (0x0048, "PT_CLSID"),
-    (0x0102, "PT_BINARY"),
-    (0x1003, "PT_MV_LONG"),
-    (0x101e, "PT_MV_STRING8"),
-    (0x101f, "PT_MV_UNICODE"),
-    (0x1102, "PT_MV_BINARY"),
-];
-
-const MSG_PROPERTIES: EnumTable = &[
-    (0x0017, "Importance"),
-    (0x001a, "MessageClass"),
-    (0x0026, "Priority"),
-    (0x0036, "Sensitivity"),
-    (0x0037, "Subject"),
-    (0x0039, "ClientSubmitTime"),
-    (0x003d, "SubjectPrefix"),
-    (0x0042, "SentRepresentingName"),
-    (0x0064, "SentRepresentingAddressType"),
-    (0x0065, "SentRepresentingEmailAddress"),
-    (0x0070, "ConversationTopic"),
-    (0x0071, "ConversationIndex"),
-    (0x007d, "TransportMessageHeaders"),
-    (0x0c15, "RecipientType"),
-    (0x0c1a, "SenderName"),
-    (0x0c1e, "SenderAddressType"),
-    (0x0c1f, "SenderEmailAddress"),
-    (0x0e02, "DisplayBcc"),
-    (0x0e03, "DisplayCc"),
-    (0x0e04, "DisplayTo"),
-    (0x0e06, "MessageDeliveryTime"),
-    (0x0e07, "MessageFlags"),
-    (0x0e08, "MessageSize"),
-    (0x0e17, "MessageStatus"),
-    (0x0e1b, "HasAttachments"),
-    (0x0e1d, "NormalizedSubject"),
-    (0x0ff9, "RecordKey"),
-    (0x0fff, "EntryId"),
-    (0x1000, "Body"),
-    (0x1009, "RtfCompressed"),
-    (0x1013, "BodyHtml"),
-    (0x1035, "InternetMessageId"),
-    (0x3001, "DisplayName"),
-    (0x3002, "AddressType"),
-    (0x3003, "EmailAddress"),
-    (0x3007, "CreationTime"),
-    (0x3008, "LastModificationTime"),
-    (0x300b, "SearchKey"),
-    (0x3701, "AttachDataBinary"),
-    (0x3703, "AttachExtension"),
-    (0x3704, "AttachFilename"),
-    (0x3705, "AttachMethod"),
-    (0x3707, "AttachLongFilename"),
-    (0x370e, "AttachMimeTag"),
-    (0x3712, "AttachContentId"),
-    (0x39fe, "SmtpAddress"),
-    (0x3a00, "Account"),
-    (0x3fde, "InternetCodepage"),
-    (0x3ff1, "MessageLocaleId"),
-    (0x3ffa, "LastModifierName"),
-    (0x5d01, "SenderSmtpAddress"),
-    (0x5d02, "SentRepresentingSmtpAddress"),
-];
 
 /// Emits the decoded content of a stream.
 pub async fn content(cx: &Cx, state: &StreamState, span: Span) -> Result<()> {
-    let input = state.cfb.input;
+    let cfb = &state.cfb;
+    let input = cfb.input;
     let name = state.name.as_str();
     match (state.context, name) {
         (_, n) if n.starts_with('\u{5}') => propset::emit(cx, span).await,
-        (Context::Plain, "WordDocument") => office::word(cx, span).await,
-        (Context::Plain, "Workbook" | "Book") => office::biff(cx, span).await,
-        (Context::Plain, "PowerPoint Document" | "Current User") => office::ppt(cx, span).await,
-        (Context::MsgRoot | Context::Msg, "__properties_version1.0") => {
-            msg_properties(cx, span, state.context == Context::MsgRoot).await
+        (_, "\u{1}CompObj") => compobj(cx, span).await,
+        (_, "\u{1}Ole") => ole_stream(cx, span).await,
+        (Context::Plain, "WordDocument") => {
+            let t0 = super::child_stream(cx, cfb, state.parent, "0Table").await;
+            let t1 = super::child_stream(cx, cfb, state.parent, "1Table").await;
+            super::word::word(cx, input, span, [t0, t1]).await
         }
-        (Context::MsgRoot | Context::Msg, n) if msg_tag(n).is_some() => {
-            msg_value(cx, input, n, span).await
+        (Context::Plain, "0Table" | "1Table") => {
+            cx.emit(
+                raw_content(input, span)
+                    .desc("The structures in this stream are located and decoded through the FIB, under WordDocument"),
+            );
+            Ok(())
         }
-        (Context::Thumbs, "Catalog") => thumbs_catalog(cx, span).await,
+        (Context::Plain, "Workbook" | "Book") => super::biff::workbook(cx, input, span).await,
+        (Context::Plain, "PowerPoint Document") => {
+            let current = super::child_stream(cx, cfb, state.parent, "Current User").await;
+            super::ppt::document(cx, input, span, current).await
+        }
+        (Context::Plain, "Current User" | "Pictures" | "EscherStm" | "EscherDelayStm") => {
+            super::officeart::walk(cx.clone(), (input, span, 0)).await
+        }
+        (Context::Plain, "PROJECT") => super::vba::project_stream(cx, span).await,
+        (Context::Plain, "PROJECTwm") => super::vba::project_wm(cx, span).await,
+        (Context::Vba, "dir") => super::vba::dir(cx, span).await,
+        (Context::Vba, "_VBA_PROJECT") => super::vba::vba_project(cx, span).await,
+        (Context::Vba, n) => {
+            match super::vba::module(cx, cfb, input, state.parent, n, span).await {
+                Some(r) => r,
+                None => {
+                    cx.emit(raw_content(input, span));
+                    Ok(())
+                }
+            }
+        }
+        (
+            Context::MsgRoot | Context::Msg | Context::MsgEmbedded | Context::MsgNameid,
+            "__properties_version1.0",
+        ) => {
+            let level = match state.context {
+                Context::MsgRoot => msg::Level::Top,
+                Context::MsgEmbedded => msg::Level::Embedded,
+                _ => msg::Level::Child,
+            };
+            msg::properties(cx, cfb, span, level).await
+        }
+        (c, n) if c.is_msg() && msg::tag(n).is_some() => {
+            msg::value_stream(cx, cfb, input, n, span).await
+        }
+        (Context::Msi, n) => match msi_name(n).as_deref().and_then(|d| d.strip_prefix('!')) {
+            Some("_StringPool") => super::msi::string_pool(cx, cfb, span).await,
+            Some("_StringData") => super::msi::string_data(cx, cfb, span).await,
+            Some(table) => super::msi::table(cx, cfb, table, span).await,
+            None => {
+                cx.emit(raw_content(input, span));
+                Ok(())
+            }
+        },
+        (Context::Thumbs, "Catalog") => super::thumbs::catalog(cx, span).await,
         (Context::Thumbs, n) if n.chars().all(|c| c.is_ascii_digit()) => {
-            thumbnail(cx, input, span).await
+            super::thumbs::thumbnail(cx, input, span).await
         }
         _ => {
             cx.emit(raw_content(input, span));
@@ -384,145 +365,123 @@ fn raw_content(input: Input, span: Span) -> Node {
         .lazy(crate::formats::dissect_or_data, input.nested(span))
 }
 
-async fn msg_value(cx: &Cx, input: Input, name: &str, span: Span) -> Result<()> {
-    let Some((_, kind)) = msg_tag(name) else {
-        return Ok(());
-    };
-    match kind {
-        0x001f | 0x001e => {
-            let data = cx.read_avail(span.sub(0, 0x10000)).await?;
-            let text = if kind == 0x001f {
-                crate::text::utf16(&data, Endian::Little)
-            } else {
-                String::from_utf8_lossy(&data).into_owned()
-            };
-            let text = text.trim_end_matches('\0').to_owned();
-            let mut node = Node::new("Value").span(span).value(Value::Text(text));
-            if span.len > 0x10000 {
-                node = node.summary(format!("first 64 KiB of {} bytes", span.len));
-            }
-            cx.emit(node);
-        }
-        _ => cx.emit(raw_content(input, span)),
-    }
-    Ok(())
-}
+const CLIPBOARD_MARKERS: EnumTable = &[
+    (0xffff_ffff, "Windows clipboard format follows"),
+    (0xffff_fffe, "Macintosh clipboard format follows"),
+    (0, "none"),
+];
 
-/// The fixed-size property records of `__properties_version1.0`.
-async fn msg_properties(cx: &Cx, span: Span, top: bool) -> Result<()> {
-    let header = if top { 32 } else { 8 };
-    cx.emit(Node::new("Header").span(span.sub(0, header)));
-    let mut at = header;
-    while at.saturating_add(16) <= span.len {
-        let record = span.sub(at, 16);
-        let data = cx.read(record).await?;
-        let tag = u32_le(&data, 0).unwrap_or(0);
-        let (id, kind) = ((tag >> 16) as u16, (tag & 0xffff) as u16);
-        let raw = u64_le(&data, 8).unwrap_or(0);
-        let name = lookup(MSG_PROPERTIES, id.into())
-            .map_or_else(|| format!("Property {id:#06x}"), |n| format!("PidTag{n}"));
-        let type_name = lookup(MSG_TYPES, kind.into()).unwrap_or("unknown type");
-        let low = raw & 0xffff_ffff;
-        let (value, detail) = match kind {
-            0x0002 => (
-                Value::Int {
-                    value: i64::from(low as u16 as i16),
-                    bits: 16,
-                },
-                None,
-            ),
-            0x0003 => (
-                Value::Int {
-                    value: i64::from(low as u32 as i32),
-                    bits: 32,
-                },
-                None,
-            ),
-            0x000b => (Value::Bool(low & 0xffff != 0), None),
-            0x0014 => (
-                Value::Int {
-                    value: raw.cast_signed(),
-                    bits: 64,
-                },
-                None,
-            ),
-            0x0040 => (
-                Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(raw),
-                },
-                None,
-            ),
-            0x0005 => (Value::Float(f64::from_bits(raw)), None),
-            _ => (
-                Value::UInt {
-                    value: low,
-                    bits: 32,
-                    radix: Radix::Dec,
-                },
-                Some("size of the value stream"),
-            ),
-        };
-        let summary = match detail {
-            Some(d) => format!("{type_name}, {d}"),
-            None => type_name.to_owned(),
-        };
-        cx.progress_in(span, record.offset);
-        cx.push(Node::new(name).span(record).value(value).summary(summary))
-            .await;
-        at = at.saturating_add(16);
-    }
-    Ok(())
-}
-
-async fn thumbs_catalog(cx: &Cx, span: Span) -> Result<()> {
-    let head = cx.read(span.sub(0, 16)).await?;
-    let header_len = u64::from(crate::bytes::u16_le(&head, 0).unwrap_or(16)).max(16);
-    let count = u32_le(&head, 4).unwrap_or(0);
-    let width = u32_le(&head, 8).unwrap_or(0);
-    let height = u32_le(&head, 12).unwrap_or(0);
-    cx.emit(
-        Node::new("Catalog header")
-            .span(span.sub(0, header_len))
-            .summary(format!("{count} thumbnails, {width}×{height}")),
-    );
-    let mut at = header_len;
-    let mut seen = 0u32;
-    while at.saturating_add(16) <= span.len && seen < count {
-        let head = cx.read(span.sub(at, 16)).await?;
-        let len = u64::from(u32_le(&head, 0).unwrap_or(0));
-        if len < 16 {
+/// `\x01CompObj`: the class's user-visible name, clipboard format and
+/// program ID, in ANSI and (optionally) Unicode.
+async fn compobj(cx: &Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(cx, &block, LE);
+    f.u32("Reserved1").hex().desc("0xFFFE0001").emit()?;
+    f.u32("Version").hex().emit()?;
+    f.bytes("Reserved2", 20).emit()?;
+    for step in 0..3 {
+        if f.remaining() < 4 {
             break;
         }
-        let index = u32_le(&head, 4).unwrap_or(0);
-        let time = u64_le(&head, 8).unwrap_or(0);
-        let entry = span.sub(at, len);
-        let name = cx.read_avail(entry.sub(16, len.saturating_sub(16))).await?;
-        let name = crate::text::utf16z(&name, Endian::Little).0;
-        let stream: String = index.to_string().chars().rev().collect();
-        cx.push(
-            Node::new(name)
-                .span(entry)
-                .value(Value::Timestamp {
-                    unix_seconds: crate::text::filetime_to_unix(time),
-                })
-                .summary(format!("thumbnail {index} (stream \"{stream}\")")),
-        )
-        .await;
-        at = at.saturating_add(len);
-        seen = seen.saturating_add(1);
+        match step {
+            0 => ansi(&mut f, "AnsiUserType")?,
+            1 => clipboard(&mut f, false)?,
+            _ => ansi(&mut f, "ProgID")?,
+        }
+    }
+    if f.remaining() >= 4 {
+        let marker = f
+            .u32("UnicodeMarker")
+            .hex()
+            .desc("0x71B239F4 if Unicode strings follow")
+            .emit()?;
+        if marker == 0x71b2_39f4 {
+            wide(&mut f, "UnicodeUserType")?;
+            clipboard(&mut f, true)?;
+            wide(&mut f, "UnicodeProgID")?;
+        }
+    }
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Remaining data", rest).emit()?;
     }
     Ok(())
 }
 
-async fn thumbnail(cx: &Cx, input: Input, span: Span) -> Result<()> {
-    let head = cx.read_avail(span.sub(0, 12)).await?;
-    let header = u64::from(u32_le(&head, 0).unwrap_or(0));
-    if !(12..=64).contains(&header) {
-        cx.emit(raw_content(input, span));
-        return Ok(());
+fn ansi(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
+    let at = crate::bytes::to_usize(f.pos());
+    let len = u64::from(u32_le(&f.block().data, at).unwrap_or(0));
+    f.u32("Length").emit()?;
+    let text = crate::text::until_nul(
+        f.block()
+            .data
+            .get(
+                at.saturating_add(4)
+                    ..at.saturating_add(4)
+                        .saturating_add(crate::bytes::to_usize(len)),
+            )
+            .unwrap_or_default(),
+    );
+    f.node(
+        Node::new(name)
+            .span(f.peek_span(len))
+            .value(Value::Text(text)),
+    );
+    f.skip(len);
+    Ok(())
+}
+
+fn wide(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
+    let at = crate::bytes::to_usize(f.pos());
+    let len = u64::from(u32_le(&f.block().data, at).unwrap_or(0));
+    f.u32("Length (characters)").emit()?;
+    f.utf16(name, len).emit()?;
+    Ok(())
+}
+
+fn clipboard(f: &mut Fields<'_>, unicode: bool) -> Result<()> {
+    let at = crate::bytes::to_usize(f.pos());
+    let marker = u32_le(&f.block().data, at).unwrap_or(0);
+    if marker == 0xffff_ffff || marker == 0xffff_fffe {
+        f.u32("ClipboardFormat marker")
+            .enumeration(CLIPBOARD_MARKERS)
+            .emit()?;
+        f.u32("ClipboardFormat").emit()?;
+    } else if marker == 0 {
+        f.u32("ClipboardFormat")
+            .enumeration(CLIPBOARD_MARKERS)
+            .emit()?;
+    } else if unicode {
+        wide(f, "ClipboardFormat")?;
+    } else {
+        ansi(f, "ClipboardFormat")?;
     }
-    cx.emit(Node::new("Thumbnail header").span(span.sub(0, header)));
-    let image = span.tail(header);
-    cx.emit(raw_content(input, image).summary(format!("image, {} bytes", image.len)));
+    Ok(())
+}
+
+const OLE_FLAGS: crate::value::FlagTable = &[
+    crate::value::flag(0x1, "linked object"),
+    crate::value::flag(0x8, "implementation-specific hint"),
+];
+
+/// `\x01Ole`: the OLE object header (embedded or linked).
+async fn ole_stream(cx: &Cx, span: Span) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(cx, &block, LE);
+    f.u32("Version").hex().desc("0x02000001").emit()?;
+    f.u32("Flags").flags(OLE_FLAGS).emit()?;
+    f.u32("LinkUpdateOption").emit()?;
+    f.u32("Reserved1").emit()?;
+    let moniker = f.u32("ReservedMonikerStreamSize").emit()?;
+    if moniker > 0 && f.remaining() > 0 {
+        let n = u64::from(moniker).saturating_sub(4).min(f.remaining());
+        f.bytes("ReservedMonikerStream", n).emit()?;
+    }
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Remaining data", rest)
+            .desc("Relative and absolute moniker streams, local update time, check times (linked objects)")
+            .emit()?;
+    }
     Ok(())
 }

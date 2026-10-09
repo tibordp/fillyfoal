@@ -7,14 +7,14 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: d0 cf 11 e0 a1 b1 1a e1  |........|  [0x0+0x8]
       CLSID: {00000000-0000-0000-0000-000000000000}  [0x8+0x10]
       Minor version: 0x3e  [0x18+0x2]
-      Major version: 3  [0x1a+0x2]
-      Byte order: 0xfffe  [0x1c+0x2]
+      Major version: version 3 (0x3)  [0x1a+0x2]
+      Byte order: little-endian (0xfffe)  [0x1c+0x2]
       Sector shift: 9 — 512 bytes  [0x1e+0x2]
       Mini sector shift: 6 — 64 bytes  [0x20+0x2]
       Reserved: 00 00 00 00 00 00  |......|  [0x22+0x6]
       Number of directory sectors: 0  [0x28+0x4]
       Number of FAT sectors: 1  [0x2c+0x4]
-      First directory sector: 1  [0x30+0x4]
+      First directory sector: 1 — sector 1  [0x30+0x4]
       Transaction signature: 0  [0x34+0x4]
       Mini stream cutoff size: 4096  [0x38+0x4]
       First MiniFAT sector: 4 — sector 4  [0x3c+0x4]
@@ -23,6 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of DIFAT sectors: 0  [0x48+0x4]
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
+      Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
   ▾ FAT — 1 sectors
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
@@ -41,6 +42,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Sector 13: 14 — next: 14  [0x234+0x4]
         Sector 14: 15 — next: 15  [0x238+0x4]
         Sector 15: 4294967294 — ENDOFCHAIN  [0x23c+0x4]
+  ▾ Free sectors
   ▾ MiniFAT — 128 entries  [#2:0x0+0x200]
       Mini sector 0: 1 — next: 1  [#2:0x0+0x4]
       Mini sector 1: 2 — next: 2  [#2:0x4+0x4]
@@ -387,8 +389,12 @@ expression: "common::explore(&display_name(&path), &data)"
           Stream size: 32  [#1:0x178+0x8]
       ▾ Sector chain — mini sectors
           Link 0: 4 — mini sector → #3:0x100+0x40
-      ▾ Content — 32 bytes  [#5:0x0+0x20]
-          Data  [#5:0x0+0x20]
+          Slack — 32 unused bytes after the end of the stream  [#3:0x120+0x20]
+        Reserved1: 0xfffe0001  [#5:0x0+0x4]
+        Version: 0xa03  [#5:0x4+0x4]
+        Reserved2: ff ff ff ff 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [#5:0x8+0x14]
+        Length: 0  [#5:0x1c+0x4]
+        AnsiUserType: ""  [#5:0x20+0x0]
     ▾ BigStream — stream, 5000 bytes  [#1:0x380+0x80]
       ▾ Directory entry  [#1:0x380+0x80]
           Name: "BigStream"  [#1:0x380+0x40]
@@ -415,6 +421,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Link 7: 13 — sector → 0x1c00+0x200
           Link 8: 14 — sector → 0x1e00+0x200
           Link 9: 15 — sector → 0x2000+0x200
+          Slack — 120 unused bytes after the end of the stream  [0x2188+0x78]
       ▾ Content — 5000 bytes  [#6:0x0+0x1388]
           Data  [#6:0x0+0x1388]
     ▾ Storage A — storage  [#1:0x180+0x80]
@@ -450,6 +457,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Sector chain — mini sectors
             Link 0: 6 — mini sector → #3:0x180+0x40
             Link 1: 7 — mini sector → #3:0x1c0+0x40
+            Slack — 28 unused bytes after the end of the stream  [#3:0x1e4+0x1c]
         ▾ Content — UTF-8 text, 1 line  [#7:0x0+0x64]
             Encoding: "UTF-8"
             Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -487,6 +495,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Stream size: 26  [#1:0x2f8+0x8]
           ▾ Sector chain — mini sectors
               Link 0: 5 — mini sector → #3:0x140+0x40
+              Slack — 38 unused bytes after the end of the stream  [#3:0x15a+0x26]
           ▾ Content — UTF-8 text, 1 line  [#8:0x0+0x1a]
               Encoding: "UTF-8"
               Line endings: "none" — 0 LF, 0 CRLF, 0 CR
@@ -512,18 +521,50 @@ expression: "common::explore(&display_name(&path), &data)"
           Link 1: 1 — mini sector → #3:0x40+0x40
           Link 2: 2 — mini sector → #3:0x80+0x40
           Link 3: 3 — mini sector → #3:0xc0+0x40
+          Slack — 32 unused bytes after the end of the stream  [#3:0xe0+0x20]
       ▾ Header  [#9:0x0+0x1c]
-          Byte order: 0xfffe  [#9:0x0+0x2]
+          ByteOrder: 0xfffe  [#9:0x0+0x2]
           Version: 0  [#9:0x2+0x2]
-          System identifier: 0x20006  [#9:0x4+0x4]
+          SystemIdentifier: 0x20006 — Win32 6.0  [#9:0x4+0x4]
           CLSID: {00000000-0000-0000-0000-000000000000}  [#9:0x8+0x10]
-          Number of property sets: 1  [#9:0x18+0x4]
-      ▾ SummaryInformation: {f29f85e0-4ff9-1068-ab91-08002b27b3d9}  [#9:0x30+0xb0]
+          NumPropertySets: 1  [#9:0x18+0x4]
+        FMTID/Offset 0: {f29f85e0-4ff9-1068-ab91-08002b27b3d9} — SummaryInformation at 0x30  [#9:0x1c+0x14]
+      ▾ SummaryInformation: {f29f85e0-4ff9-1068-ab91-08002b27b3d9} — 7 properties, code page 1252  [#9:0x30+0xb0]
           Size: 176  [#9:0x30+0x4]
-          CodePage: 1252 — VT_I2  [#9:0x70+0x8]
-          Title: "Generic compound file" — VT_LPSTR  [#9:0x78+0x1e]
-          Author: "fillyfoal" — VT_LPSTR  [#9:0x98+0x12]
-          Created: 2026-01-01 00:00:00 UTC — VT_FILETIME  [#9:0xac+0xc]
-          EditTime: 600 — VT_FILETIME, seconds  [#9:0xb8+0xc]
-          PageCount: 3 — VT_I4  [#9:0xc4+0x8]
-          AppName: "cfb_gen.py" — VT_LPSTR  [#9:0xcc+0x13]
+          NumProperties: 7  [#9:0x34+0x4]
+        ▾ PropertyIdentifierAndOffset — 7 entries  [#9:0x38+0x38]
+            CodePage: 0x1 — value at 0x40  [#9:0x38+0x8] → #9:0x70+0x4
+            Title: 0x2 — value at 0x48  [#9:0x40+0x8] → #9:0x78+0x4
+            Author: 0x4 — value at 0x68  [#9:0x48+0x8] → #9:0x98+0x4
+            Created: 0xc — value at 0x7c  [#9:0x50+0x8] → #9:0xac+0x4
+            EditTime: 0xa — value at 0x88  [#9:0x58+0x8] → #9:0xb8+0x4
+            PageCount: 0xe — value at 0x94  [#9:0x60+0x8] → #9:0xc4+0x4
+            AppName: 0x12 — value at 0x9c  [#9:0x68+0x8] → #9:0xcc+0x4
+        ▾ CodePage: 1252 — VT_I2  [#9:0x70+0x8]
+            Type: VT_I2 (0x2)  [#9:0x70+0x2]
+            Padding: 0  [#9:0x72+0x2]
+            Value  [#9:0x74+0x4]
+        ▾ Title: "Generic compound file" — VT_LPSTR  [#9:0x78+0x20]
+            Type: VT_LPSTR (0x1e)  [#9:0x78+0x2]
+            Padding: 0  [#9:0x7a+0x2]
+            Value  [#9:0x7c+0x1c]
+        ▾ Author: "fillyfoal" — VT_LPSTR  [#9:0x98+0x14]
+            Type: VT_LPSTR (0x1e)  [#9:0x98+0x2]
+            Padding: 0  [#9:0x9a+0x2]
+            Value  [#9:0x9c+0x10]
+        ▾ Created: 2026-01-01 00:00:00 UTC — VT_FILETIME  [#9:0xac+0xc]
+            Type: VT_FILETIME (0x40)  [#9:0xac+0x2]
+            Padding: 0  [#9:0xae+0x2]
+            Value  [#9:0xb0+0x8]
+        ▾ EditTime: 600 — VT_FILETIME, seconds  [#9:0xb8+0xc]
+            Type: VT_FILETIME (0x40)  [#9:0xb8+0x2]
+            Padding: 0  [#9:0xba+0x2]
+            Value  [#9:0xbc+0x8]
+        ▾ PageCount: 3 — VT_I4  [#9:0xc4+0x8]
+            Type: VT_I4 (0x3)  [#9:0xc4+0x2]
+            Padding: 0  [#9:0xc6+0x2]
+            Value  [#9:0xc8+0x4]
+        ▾ AppName: "cfb_gen.py" — VT_LPSTR  [#9:0xcc+0x14]
+            Type: VT_LPSTR (0x1e)  [#9:0xcc+0x2]
+            Padding: 0  [#9:0xce+0x2]
+            Value  [#9:0xd0+0x10]

@@ -7,14 +7,14 @@ expression: "common::explore(&display_name(&path), &data)"
       Signature: d0 cf 11 e0 a1 b1 1a e1  |........|  [0x0+0x8]
       CLSID: {00000000-0000-0000-0000-000000000000}  [0x8+0x10]
       Minor version: 0x3e  [0x18+0x2]
-      Major version: 3  [0x1a+0x2]
-      Byte order: 0xfffe  [0x1c+0x2]
+      Major version: version 3 (0x3)  [0x1a+0x2]
+      Byte order: little-endian (0xfffe)  [0x1c+0x2]
       Sector shift: 9 — 512 bytes  [0x1e+0x2]
       Mini sector shift: 6 — 64 bytes  [0x20+0x2]
       Reserved: 00 00 00 00 00 00  |......|  [0x22+0x6]
       Number of directory sectors: 0  [0x28+0x4]
       Number of FAT sectors: 1  [0x2c+0x4]
-      First directory sector: 1  [0x30+0x4]
+      First directory sector: 1 — sector 1  [0x30+0x4]
       Transaction signature: 0  [0x34+0x4]
       Mini stream cutoff size: 4096  [0x38+0x4]
       First MiniFAT sector: 4294967294 — ENDOFCHAIN  [0x3c+0x4]
@@ -23,6 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Number of DIFAT sectors: 0  [0x48+0x4]
   ▾ DIFAT — 1 FAT sectors  [0x4c+0x1b4]
       FAT sector 0: 0  [0x4c+0x4] → 0x200+0x200
+      Unused entries: 0xffffffff — 108 × FREESECT  [0x50+0x1b0]
   ▾ FAT — 1 sectors
     ▾ FAT sector 0 — sector 0: entries for sectors 0..128  [0x200+0x200]
         Sector 0: 4294967293 — FATSECT  [0x200+0x4]
@@ -45,6 +46,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Sector 17: 18 — next: 18  [0x244+0x4]
         Sector 18: 19 — next: 19  [0x248+0x4]
         Sector 19: 4294967294 — ENDOFCHAIN  [0x24c+0x4]
+  ▾ Free sectors
   ▾ Directory — 8 entries  [#1:0x0+0x400]
     ▾ Entry 0 — root storage Root Entry  [#1:0x0+0x80]
         Name: "Root Entry"  [#1:0x0+0x40]
@@ -229,7 +231,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Link 7: 10 — sector → 0x1600+0x200
           ▾ Content — 4096 bytes  [#2:0x0+0x1000]
               Data  [#2:0x0+0x1000]
-    ▾ Contents — stream, 4608 bytes  [#1:0x200+0x80]
+    ▾ Contents — Publisher contents, 4608 bytes  [#1:0x200+0x80]
       ▾ Directory entry  [#1:0x200+0x80]
           Name: "Contents"  [#1:0x200+0x40]
           Name length: 18  [#1:0x240+0x2]
