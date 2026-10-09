@@ -21,6 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ! warning: no EOI marker
         SOI  [#1:0x0+0x2]
       ▾ APP0 — JFIF  [#1:0x2+0x9]
+          ! truncated: needed 0x12 bytes at 0x2, only 0x9 available [#1:0x2+0x12]
           Marker: 0xffe0 — APP0  [#1:0x2+0x2]
           Length: 16  [#1:0x4+0x2]
           Identifier: "JFIF"  [#1:0x6+0x5]
