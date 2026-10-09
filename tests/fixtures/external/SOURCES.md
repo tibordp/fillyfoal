@@ -51,7 +51,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `compress/bottles.txt.Z` | macOS compress(1) | reproduced byte-for-byte: `compress -c` |
 | `zip/zip64-stdin.zip` | Info-ZIP Zip 3.0 (macOS `/usr/bin/zip`) | `printf 'hello zip64\n' \| zip -q zip64-stdin.zip -`: reading stdin, Info-ZIP writes ZIP64 end records and a ZIP64 extra field |
 | `gzip/png.gz` | macOS gzip | deflate body reproduced byte-for-byte with `gzip -6`; header keeps FNAME `c.png` and its MTIME. The PNG inside is hand-made (synthetic) |
-| `gzip/large-member.tar.gz` | macOS gzip + bsdtar 3.5.3 (libarchive 3.7.4) | reproduced byte-for-byte: `gzip -9 -n` of a bsdtar ustar archive (a.txt, a 2 MiB zeros.bin, z.txt) |
+| `gzip/large-member.tar.gz` | macOS gzip + bsdtar 3.5.3 (libarchive 3.7.4) | `gzip -9 -n` of a bsdtar ustar archive (a.txt, a 2 MiB zeros.bin, z.txt). Edited: the tar owner name (uname) of every entry replaced with `fillyfoal` and the header checksums recomputed, then recompressed with the same `gzip -9 -n` (the original recorded the build account's user name) |
 | `lzfse/test.lzfse` | macOS compression_tool | reproduced byte-for-byte: `compression_tool -encode -a lzfse` of `hello` |
 
 ## Archivers
@@ -65,7 +65,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `cpio/odc.cpio` | bsdtar 3.5.3 (libarchive 3.7.4) | reproduced byte-for-byte: `bsdtar --format=odc --uid 1000 --gid 1000` |
 | `cpio/bin-le.cpio` | bsdtar 3.5.3 (libarchive 3.7.4) | reproduced byte-for-byte: `bsdtar --format=bin --uid 1000 --gid 1000` |
 | `7z/` | 7-Zip (7zz) for macOS | all ten: lzma-solid-plain, bzip2-solid, lzma2-arm64, delta-lzma2, lzma-arm and lzma-bcj-x86 reproduced byte-for-byte with 7zz 26.03 (`-m0=...` methods as named, `-mhc=off` for plain headers); the other four match in size and layout |
-| `zip/mixed.zip` | Info-ZIP Zip 3.0 (macOS /usr/bin/zip) | version made by 3.0/Unix, UT and ux extra fields, archive comment (`zip -z`). The entries (PNG, tar.gz, text) are hand-made |
+| `zip/mixed.zip` | Info-ZIP Zip 3.0 (macOS /usr/bin/zip) | version made by 3.0/Unix, UT and ux extra fields, archive comment (`zip -z`). The entries (PNG, tar.gz, text) are hand-made. Rebuilt with `zip -q mixed.zip dir/ dir/notes.txt dir/img.png x.tar.gz b.txt` + `zip -z` from the extracted entries (same timestamps) after replacing the tar owner name inside `x.tar.gz` with `fillyfoal` (header checksums recomputed, `gzip -9 -n`); Info-ZIP now marks `b.txt` as text in the internal attributes |
 | `zip/zipcrypto.zip` | Info-ZIP Zip 3.0 (macOS /usr/bin/zip) | `zip -e` (ZipCrypto), version made by 3.0/Unix, UT and ux extra fields; password `fillyfoal` |
 | `zip/winzip-aes.zip` | bsdtar (libarchive) zip writer | `--options zip:encryption=aes...`; layout (version made by 2.0/Unix, ux before the AES extra, data descriptors) matches a fresh bsdtar run; password `fillyfoal` |
 | `zip/encrypted-lzma-bzip2.zip` | 7-Zip (7zz) | two `7zz a -tzip` runs (AES-256 + BZip2, ZipCrypto + LZMA); NTFS extra fields and versions 51/63 as 7-Zip writes them; password `fillyfoal` |
