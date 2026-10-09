@@ -2,10 +2,10 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ test.emf — EMF, 1000×500 (0.01 mm), Fillyfoal / Test  [0x0+0xa4]
-  ▾ Header  [0x0+0x78]
-      Record type: 1  [0x0+0x4]
-      Record size: 120  [0x4+0x4]
+▾ test.emf — EMF, 10.00×5.00 mm, 3 records, "Fillyfoal / Test"  [0x0+0xa4]
+  ▾ EMR_HEADER — 10.00×5.00 mm, 3 records  [0x0+0x78]
+      Type: 1  [0x0+0x4]
+      Size: 120  [0x4+0x4]
       Bounds left: 0  [0x8+0x4]
       Bounds top: 0  [0xc+0x4]
       Bounds right: 10  [0x10+0x4]
@@ -28,6 +28,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Reference device width (mm): 508  [0x50+0x4]
       Reference device height (mm): 286  [0x54+0x4]
     Description: "Fillyfoal / Test"  [0x58+0x20]
-  ▾ Records — 3 records  [0x78+0x2c]
-      EMR_RECTANGLE  [0x78+0x18]
-      EMR_EOF  [0x90+0x14]
+  ▾ Records — 2 records  [0x78+0x2c]
+      EMR_RECTANGLE — (0, 0)–(10, 10)  [0x78+0x18]
+      EMR_EOF — 0 palette entries  [0x90+0x14]

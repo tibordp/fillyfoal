@@ -2,6 +2,13 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ image.bpg — 64×32, 4:4:4, 8-bit  [0x0+0x19]
-    Header — 4:4:4, 8-bit, alpha: false  [0x0+0x8]
-    HEVC data  [0x8+0x11]
+▾ image.bpg — 64×32, YCbCr 4:4:4, 8-bit  [0x0+0x19]
+    Magic  [0x0+0x4]
+    Pixel format, alpha, bit depth: 0x60 — YCbCr 4:4:4, 8-bit  [0x4+0x1]
+    Color space and flags: 0x0 — YCbCr (BT.601)  [0x5+0x1]
+    Width: 64  [0x6+0x1]
+    Height: 32  [0x7+0x1]
+    Picture data length: 16  [0x8+0x1]
+  ▾ Picture data  [0x9+0x10]
+      HEVC header — 0 bytes  [0x9+0x1]
+      HEVC data  [0xa+0xf]
