@@ -23,7 +23,10 @@ expression: "common::explore(&display_name(&path), &data)"
       e_oeminfo: 0x0  [0x26+0x2]
       e_res2: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x28+0x14]
       e_lfanew: 0x80  [0x3c+0x4] → 0x80+0x4
-    DOS Stub  [0x40+0x40]
+  ▾ DOS Stub — "This program requires Microsoft Windows."  [0x40+0x40]
+      Code: "push cs; pop ds; mov dx, 0x000e; mov ah, 9; int 21h; mov ax, 0x4c01; int 21h" — prints the message, exits with code 1  [0x40+0xe]
+      Message: "This program requires Microsoft Windows.\r\n$"  [0x4e+0x2b]
+      Padding — 7 bytes  [0x79+0x7]
   ▾ NE Executable — NE DLL (Windows 3.10), module FILLY, "Fillyfoal test library", 2 segments  [0x0+0x1d0]
       MZ Header  [0x0+0x40]
       DOS Stub  [0x40+0x40]

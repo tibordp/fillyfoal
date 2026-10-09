@@ -50,7 +50,10 @@ fn top_level_reads_only_headers() {
         host.bytes_supplied
     );
     let summary = host.session.node(host.root).unwrap().summary.clone();
-    assert_eq!(summary.as_deref(), Some("PE32+ DLL, AMD64, WINDOWS_GUI"));
+    assert_eq!(
+        summary.as_deref(),
+        Some("PE32+ x64 DLL (GUI), 3 imports from 2 DLLs, 3 exports, signed")
+    );
 }
 
 #[test]
@@ -111,7 +114,7 @@ fn pages_stop_early_and_resume() {
         host.run();
         host.child(imports, "KERNEL32.dll").unwrap()
     };
-    // Descriptor + first function.
+    // Descriptor, name, two functions and the end of the table.
     host.session.expand(kernel32, 2);
     host.run();
     let children = host.session.children(kernel32).unwrap();
@@ -120,9 +123,9 @@ fn pages_stop_early_and_resume() {
     host.session.expand_more(kernel32, 10);
     host.run();
     let children = host.session.children(kernel32).unwrap();
-    assert_eq!(children.ids.len(), 3);
+    assert_eq!(children.ids.len(), 5);
     assert_eq!(children.state, ChildState::Complete);
-    assert_eq!(children.count, Count::Exact(3));
+    assert_eq!(children.count, Count::Exact(5));
 }
 
 #[test]
@@ -149,10 +152,7 @@ fn resource_cycle_is_reported_not_followed() {
 fn embedded_pe_is_dissected() {
     let mut host = Host::with_chunk(fixture(), 4096);
     host.explore_all();
-    assert!(
-        host.render()
-            .contains("Content — PE32 executable, I386, WINDOWS_CUI")
-    );
+    assert!(host.render().contains("Content — PE32 x86 EXE (console)"));
 }
 
 #[test]
@@ -258,7 +258,7 @@ fn trim_bounds_memory_and_keeps_the_focus() {
         host.session.live_nodes()
     );
     assert!(host.session.node(kernel32).is_some());
-    assert_eq!(host.session.children(kernel32).unwrap().ids.len(), 3);
+    assert_eq!(host.session.children(kernel32).unwrap().ids.len(), 5);
     // Re-expanding restores the same tree.
     host.explore_all();
     assert_eq!(host.render(), full);

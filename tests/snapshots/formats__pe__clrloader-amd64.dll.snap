@@ -1,0 +1,1999 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ clrloader-amd64.dll — PE32+ x64 DLL (console), 1 import from 1 DLL, 5 exports, .NET v4.0.30319  [0x0+0x2a00]
+  ▾ DOS Header  [0x0+0x40]
+      e_magic: "MZ"  [0x0+0x2]
+      e_cblp: 144  [0x2+0x2]
+      e_cp: 3  [0x4+0x2]
+      e_crlc: 0  [0x6+0x2]
+      e_cparhdr: 4  [0x8+0x2]
+      e_minalloc: 0  [0xa+0x2]
+      e_maxalloc: 65535  [0xc+0x2]
+      e_ss: 0x0  [0xe+0x2]
+      e_sp: 0xb8  [0x10+0x2]
+      e_csum: 0x0  [0x12+0x2]
+      e_ip: 0x0  [0x14+0x2]
+      e_cs: 0x0  [0x16+0x2]
+      e_lfarlc: 0x40  [0x18+0x2]
+      e_ovno: 0  [0x1a+0x2]
+      e_res: 00 00 00 00 00 00 00 00  |........|  [0x1c+0x8]
+      e_oemid: 0x0  [0x24+0x2]
+      e_oeminfo: 0x0  [0x26+0x2]
+      e_res2: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x28+0x14]
+      e_lfanew: 0x80  [0x3c+0x4] → 0x80+0x4
+  ▾ DOS Stub — "This program cannot be run in DOS mode."  [0x40+0x40]
+      Code: "push cs; pop ds; mov dx, 0x000e; mov ah, 9; int 21h; mov ax, 0x4c01; int 21h" — prints the message, exits with code 1  [0x40+0xe]
+      Message: "This program cannot be run in DOS mode.\r\r\n$"  [0x4e+0x2b]
+      Padding — 7 bytes  [0x79+0x7]
+  ▾ NT Headers  [0x80+0x108]
+      Signature: 50 45 00 00  |PE..|  [0x80+0x4]
+    ▾ File Header  [0x84+0x14]
+        Machine: AMD64 (0x8664)  [0x84+0x2]
+        NumberOfSections: 4  [0x86+0x2]
+        TimeDateStamp: 2063-10-16 03:14:32 UTC  [0x88+0x4]
+        PointerToSymbolTable: 0x0  [0x8c+0x4]
+        NumberOfSymbols: 0  [0x90+0x4]
+        SizeOfOptionalHeader: 0xf0  [0x94+0x2]
+        Characteristics: 0x2022 [EXECUTABLE_IMAGE | LARGE_ADDRESS_AWARE | DLL]  [0x96+0x2]
+    ▾ Optional Header  [0x98+0xf0]
+        Magic: PE32+ (0x20b)  [0x98+0x2]
+        MajorLinkerVersion: 48  [0x9a+0x1]
+        MinorLinkerVersion: 0  [0x9b+0x1]
+        SizeOfCode: 0x1e00  [0x9c+0x4]
+        SizeOfInitializedData: 0x800  [0xa0+0x4]
+        SizeOfUninitializedData: 0x0  [0xa4+0x4]
+        AddressOfEntryPoint: 0x3cc6 — .text  [0xa8+0x4] → 0x20c6+0x0
+        BaseOfCode: 0x2000  [0xac+0x4]
+        ImageBase: 0x180000000  [0xb0+0x8]
+        SectionAlignment: 0x2000  [0xb8+0x4]
+        FileAlignment: 0x200  [0xbc+0x4]
+        MajorOperatingSystemVersion: 4  [0xc0+0x2]
+        MinorOperatingSystemVersion: 0  [0xc2+0x2]
+        MajorImageVersion: 0  [0xc4+0x2]
+        MinorImageVersion: 0  [0xc6+0x2]
+        MajorSubsystemVersion: 6  [0xc8+0x2]
+        MinorSubsystemVersion: 0  [0xca+0x2]
+        Win32VersionValue: 0  [0xcc+0x4]
+        SizeOfImage: 0xa000  [0xd0+0x4]
+        SizeOfHeaders: 0x400  [0xd4+0x4]
+        CheckSum: 0x0 — not set (computed 0xaa0a)  [0xd8+0x4]
+        Subsystem: WINDOWS_CUI (0x3)  [0xdc+0x2]
+        DllCharacteristics: 0x8560 [HIGH_ENTROPY_VA | DYNAMIC_BASE | NX_COMPAT | NO_SEH | TERMINAL_SERVER_AWARE]  [0xde+0x2]
+        SizeOfStackReserve: 0x400000  [0xe0+0x8]
+        SizeOfStackCommit: 0x4000  [0xe8+0x8]
+        SizeOfHeapReserve: 0x100000  [0xf0+0x8]
+        SizeOfHeapCommit: 0x2000  [0xf8+0x8]
+        LoaderFlags: 0x0  [0x100+0x4]
+        NumberOfRvaAndSizes: 16  [0x104+0x4]
+      ▾ Data Directories — 16 entries  [0x108+0x80]
+        ▾ Export Table — RVA 0x4028 (.sdata), 0x28 bytes  [0x108+0x8]
+            VirtualAddress: 0x4028 — .sdata  [0x108+0x4] → 0x2228+0x0
+            Size: 0x28  [0x10c+0x4]
+        ▾ Import Table — RVA 0x3c68 (.text), 0x5b bytes  [0x110+0x8]
+            VirtualAddress: 0x3c68 — .text  [0x110+0x4] → 0x2068+0x0
+            Size: 0x5b  [0x114+0x4]
+        ▾ Resource Table — RVA 0x6000 (.rsrc), 0x318 bytes  [0x118+0x8]
+            VirtualAddress: 0x6000 — .rsrc  [0x118+0x4] → 0x2400+0x0
+            Size: 0x318  [0x11c+0x4]
+        ▾ Exception Table — empty  [0x120+0x8]
+            VirtualAddress: 0x0  [0x120+0x4]
+            Size: 0x0  [0x124+0x4]
+        ▾ Certificate Table — empty  [0x128+0x8]
+            VirtualAddress: 0x0  [0x128+0x4]
+            Size: 0x0  [0x12c+0x4]
+        ▾ Base Relocation Table — RVA 0x8000 (.reloc), 0x20 bytes  [0x130+0x8]
+            VirtualAddress: 0x8000 — .reloc  [0x130+0x4] → 0x2800+0x0
+            Size: 0x20  [0x134+0x4]
+        ▾ Debug Directory — RVA 0x3b58 (.text), 0x54 bytes  [0x138+0x8]
+            VirtualAddress: 0x3b58 — .text  [0x138+0x4] → 0x1f58+0x0
+            Size: 0x54  [0x13c+0x4]
+        ▾ Architecture — empty  [0x140+0x8]
+            VirtualAddress: 0x0  [0x140+0x4]
+            Size: 0x0  [0x144+0x4]
+        ▾ Global Pointer — empty  [0x148+0x8]
+            VirtualAddress: 0x0  [0x148+0x4]
+            Size: 0x0  [0x14c+0x4]
+        ▾ TLS Table — empty  [0x150+0x8]
+            VirtualAddress: 0x0  [0x150+0x4]
+            Size: 0x0  [0x154+0x4]
+        ▾ Load Config Table — empty  [0x158+0x8]
+            VirtualAddress: 0x0  [0x158+0x4]
+            Size: 0x0  [0x15c+0x4]
+        ▾ Bound Import — empty  [0x160+0x8]
+            VirtualAddress: 0x0  [0x160+0x4]
+            Size: 0x0  [0x164+0x4]
+        ▾ Import Address Table — RVA 0x2000 (.text), 0x10 bytes  [0x168+0x8]
+            VirtualAddress: 0x2000 — .text  [0x168+0x4] → 0x400+0x0
+            Size: 0x10  [0x16c+0x4]
+        ▾ Delay Import Descriptor — empty  [0x170+0x8]
+            VirtualAddress: 0x0  [0x170+0x4]
+            Size: 0x0  [0x174+0x4]
+        ▾ CLR Runtime Header — RVA 0x2010 (.text), 0x48 bytes  [0x178+0x8]
+            VirtualAddress: 0x2010 — .text  [0x178+0x4] → 0x410+0x0
+            Size: 0x48  [0x17c+0x4]
+        ▾ Reserved — empty  [0x180+0x8]
+            VirtualAddress: 0x0  [0x180+0x4]
+            Size: 0x0  [0x184+0x4]
+  ▾ Section Table — 4 sections  [0x188+0xa0]
+    ▾ .text — r-x  VA 0x2000+0x1cd2, file 0x400+0x1e00, code  [0x188+0x28]
+        Name: ".text"  [0x188+0x8]
+        VirtualSize: 0x1cd2  [0x190+0x4]
+        VirtualAddress: 0x2000  [0x194+0x4]
+        SizeOfRawData: 0x1e00  [0x198+0x4]
+        PointerToRawData: 0x400  [0x19c+0x4] → 0x400+0x1e00
+        PointerToRelocations: 0x0  [0x1a0+0x4]
+        PointerToLinenumbers: 0x0  [0x1a4+0x4]
+        NumberOfRelocations: 0  [0x1a8+0x2]
+        NumberOfLinenumbers: 0  [0x1aa+0x2]
+        Characteristics: 0x60000020 [CNT_CODE | MEM_EXECUTE | MEM_READ]  [0x1ac+0x4]
+        Raw Data — holds Import Table, Debug Directory, Import Address Table, CLR Runtime Header  [0x400+0x1cd2]
+        Alignment Padding — 302 bytes  [0x20d2+0x12e]
+    ▾ .sdata — rw-  VA 0x4000+0xf0, file 0x2200+0x200, data  [0x1b0+0x28]
+        Name: ".sdata"  [0x1b0+0x8]
+        VirtualSize: 0xf0  [0x1b8+0x4]
+        VirtualAddress: 0x4000  [0x1bc+0x4]
+        SizeOfRawData: 0x200  [0x1c0+0x4]
+        PointerToRawData: 0x2200  [0x1c4+0x4] → 0x2200+0x200
+        PointerToRelocations: 0x0  [0x1c8+0x4]
+        PointerToLinenumbers: 0x0  [0x1cc+0x4]
+        NumberOfRelocations: 0  [0x1d0+0x2]
+        NumberOfLinenumbers: 0  [0x1d2+0x2]
+        Characteristics: 0xc0000040 [CNT_INITIALIZED_DATA | MEM_READ | MEM_WRITE]  [0x1d4+0x4]
+        Raw Data — holds Export Table  [0x2200+0xf0]
+        Alignment Padding — 272 bytes  [0x22f0+0x110]
+    ▾ .rsrc — r--  VA 0x6000+0x318, file 0x2400+0x400, data  [0x1d8+0x28]
+        Name: ".rsrc"  [0x1d8+0x8]
+        VirtualSize: 0x318  [0x1e0+0x4]
+        VirtualAddress: 0x6000  [0x1e4+0x4]
+        SizeOfRawData: 0x400  [0x1e8+0x4]
+        PointerToRawData: 0x2400  [0x1ec+0x4] → 0x2400+0x400
+        PointerToRelocations: 0x0  [0x1f0+0x4]
+        PointerToLinenumbers: 0x0  [0x1f4+0x4]
+        NumberOfRelocations: 0  [0x1f8+0x2]
+        NumberOfLinenumbers: 0  [0x1fa+0x2]
+        Characteristics: 0x40000040 [CNT_INITIALIZED_DATA | MEM_READ]  [0x1fc+0x4]
+        Raw Data — holds Resource Table  [0x2400+0x318]
+        Alignment Padding — 232 bytes  [0x2718+0xe8]
+    ▾ .reloc — r--  VA 0x8000+0x20, file 0x2800+0x200, data  [0x200+0x28]
+        Name: ".reloc"  [0x200+0x8]
+        VirtualSize: 0x20  [0x208+0x4]
+        VirtualAddress: 0x8000  [0x20c+0x4]
+        SizeOfRawData: 0x200  [0x210+0x4]
+        PointerToRawData: 0x2800  [0x214+0x4] → 0x2800+0x200
+        PointerToRelocations: 0x0  [0x218+0x4]
+        PointerToLinenumbers: 0x0  [0x21c+0x4]
+        NumberOfRelocations: 0  [0x220+0x2]
+        NumberOfLinenumbers: 0  [0x222+0x2]
+        Characteristics: 0x42000040 [CNT_INITIALIZED_DATA | MEM_DISCARDABLE | MEM_READ]  [0x224+0x4]
+        Raw Data — holds Base Relocation Table  [0x2800+0x20]
+        Alignment Padding — 480 bytes  [0x2820+0x1e0]
+    Header Padding  [0x228+0x1d8]
+  ▾ Export Table — ClrLoader.dll, 5 functions  [0x2228+0x28]
+    ▾ Export Directory  [0x2228+0x28]
+        Characteristics: 0x0  [0x2228+0x4]
+        TimeDateStamp: 2063-10-16 03:14:32 UTC  [0x222c+0x4]
+        MajorVersion: 0  [0x2230+0x2]
+        MinorVersion: 0  [0x2232+0x2]
+        Name: 0x40e2 — .sdata  [0x2234+0x4] → 0x22e2+0x0
+        Base: 0  [0x2238+0x4]
+        NumberOfFunctions: 5  [0x223c+0x4]
+        NumberOfNames: 5  [0x2240+0x4]
+        AddressOfFunctions: 0x4050 — .sdata  [0x2244+0x4] → 0x2250+0x0
+        AddressOfNames: 0x4064 — .sdata  [0x2248+0x4] → 0x2264+0x0
+        AddressOfNameOrdinals: 0x4078 — .sdata  [0x224c+0x4] → 0x2278+0x0
+      Name: "ClrLoader.dll"  [0x22e2+0xe]
+    ▾ Functions — 5 functions, 5 by name
+        pyclr_close_appdomain: 0x2092 — ordinal 0, code at 0x2092  [0x2250+0x4] → 0x492+0x0
+        pyclr_create_appdomain: 0x2072 — ordinal 1, code at 0x2072  [0x2254+0x4] → 0x472+0x0
+        pyclr_finalize: 0x20a2 — ordinal 2, code at 0x20a2  [0x2258+0x4] → 0x4a2+0x0
+        pyclr_get_function: 0x2082 — ordinal 3, code at 0x2082  [0x225c+0x4] → 0x482+0x0
+        pyclr_initialize: 0x2062 — ordinal 4, code at 0x2062  [0x2260+0x4] → 0x462+0x0
+    ▾ Export Address Table — 5 entries  [0x2250+0x14]
+        Ordinal 0: 0x2092 — pyclr_close_appdomain, RVA 0x2092 (.text)  [0x2250+0x4] → 0x492+0x0
+        Ordinal 1: 0x2072 — pyclr_create_appdomain, RVA 0x2072 (.text)  [0x2254+0x4] → 0x472+0x0
+        Ordinal 2: 0x20a2 — pyclr_finalize, RVA 0x20a2 (.text)  [0x2258+0x4] → 0x4a2+0x0
+        Ordinal 3: 0x2082 — pyclr_get_function, RVA 0x2082 (.text)  [0x225c+0x4] → 0x482+0x0
+        Ordinal 4: 0x2062 — pyclr_initialize, RVA 0x2062 (.text)  [0x2260+0x4] → 0x462+0x0
+    ▾ Name Pointer Table — 5 names  [0x2264+0x14]
+      ▾ #0: 0x40bd — pyclr_close_appdomain  [0x2264+0x4] → 0x22bd+0x16
+          Name: "pyclr_close_appdomain"  [0x22bd+0x16]
+      ▾ #1: 0x4093 — pyclr_create_appdomain  [0x2268+0x4] → 0x2293+0x17
+          Name: "pyclr_create_appdomain"  [0x2293+0x17]
+      ▾ #2: 0x40d3 — pyclr_finalize  [0x226c+0x4] → 0x22d3+0xf
+          Name: "pyclr_finalize"  [0x22d3+0xf]
+      ▾ #3: 0x40aa — pyclr_get_function  [0x2270+0x4] → 0x22aa+0x13
+          Name: "pyclr_get_function"  [0x22aa+0x13]
+      ▾ #4: 0x4082 — pyclr_initialize  [0x2274+0x4] → 0x2282+0x11
+          Name: "pyclr_initialize"  [0x2282+0x11]
+    ▾ Ordinal Table — 5 entries  [0x2278+0xa]
+        #0: 0 — pyclr_close_appdomain → ordinal 0  [0x2278+0x2]
+        #1: 1 — pyclr_create_appdomain → ordinal 1  [0x227a+0x2]
+        #2: 2 — pyclr_finalize → ordinal 2  [0x227c+0x2]
+        #3: 3 — pyclr_get_function → ordinal 3  [0x227e+0x2]
+        #4: 4 — pyclr_initialize → ordinal 4  [0x2280+0x2]
+  ▾ Import Table — RVA 0x3c68 (.text), 0x5b bytes  [0x2068+0x5b]
+    ▾ mscoree.dll — 1 function  [0x2068+0x14]
+      ▾ Import Descriptor  [0x2068+0x14]
+          OriginalFirstThunk: 0x3c90 — .text  [0x2068+0x4] → 0x2090+0x0
+          TimeDateStamp: 0x0 — not bound  [0x206c+0x4]
+          ForwarderChain: 0x0  [0x2070+0x4]
+          Name: 0x3cb6 — .text  [0x2074+0x4] → 0x20b6+0x0
+          FirstThunk: 0x2000 — .text  [0x2078+0x4] → 0x400+0x0
+        Name: "mscoree.dll"  [0x20b6+0xc]
+      ▾ _CorDllMain: 0x3ca8 — hint 0  [0x2090+0x8] → 0x20a8+0xe
+          Lookup Entry: 0x3ca8 — RVA of the hint/name entry  [0x2090+0x8]
+          Address Entry: 0x3ca8 — same as the lookup entry until the loader binds it  [0x400+0x8]
+          Hint: 0  [0x20a8+0x2]
+          Name: "_CorDllMain"  [0x20aa+0xc]
+      ▾ End of table: 0x0  [0x2098+0x8]
+          Lookup Entry: 0x0  [0x2098+0x8]
+          Address Entry: 0x0  [0x408+0x8]
+    ▾ Terminator — null descriptor, ends the table  [0x207c+0x14]
+        OriginalFirstThunk: 0x0  [0x207c+0x4]
+        TimeDateStamp: 0x0 — not bound  [0x2080+0x4]
+        ForwarderChain: 0x0  [0x2084+0x4]
+        Name: 0x0  [0x2088+0x4]
+        FirstThunk: 0x0  [0x208c+0x4]
+  ▾ Resource Table — 1 resource type: RT_VERSION  [0x2400+0x318]
+    ▾ Directory Header  [0x2400+0x10]
+        Characteristics: 0x0  [0x2400+0x4]
+        TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x2404+0x4]
+        MajorVersion: 0  [0x2408+0x2]
+        MinorVersion: 0  [0x240a+0x2]
+        NumberOfNamedEntries: 0  [0x240c+0x2]
+        NumberOfIdEntries: 1  [0x240e+0x2]
+    ▾ RT_VERSION — 1 resource  [0x2410+0x8] → 0x2418+0x10
+      ▾ Entry  [0x2410+0x8]
+          Name: 0x10 — type RT_VERSION  [0x2410+0x4]
+          OffsetToData: 0x80000018 — subdirectory at 0x18  [0x2414+0x4]
+      ▾ Directory Header  [0x2418+0x10]
+          Characteristics: 0x0  [0x2418+0x4]
+          TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x241c+0x4]
+          MajorVersion: 0  [0x2420+0x2]
+          MinorVersion: 0  [0x2422+0x2]
+          NumberOfNamedEntries: 0  [0x2424+0x2]
+          NumberOfIdEntries: 1  [0x2426+0x2]
+      ▾ #1 — 1 language  [0x2428+0x8] → 0x2430+0x10
+        ▾ Entry  [0x2428+0x8]
+            Name: 0x1 — resource #1  [0x2428+0x4]
+            OffsetToData: 0x80000030 — subdirectory at 0x30  [0x242c+0x4]
+        ▾ Directory Header  [0x2430+0x10]
+            Characteristics: 0x0  [0x2430+0x4]
+            TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x2434+0x4]
+            MajorVersion: 0  [0x2438+0x2]
+            MinorVersion: 0  [0x243a+0x2]
+            NumberOfNamedEntries: 0  [0x243c+0x2]
+            NumberOfIdEntries: 1  [0x243e+0x2]
+        ▾ Language 0x0000 (neutral) — 0x2c0 bytes, code page 0  [0x2440+0x8] → 0x2448+0x10
+          ▾ Entry  [0x2440+0x8]
+              Name: 0x0 — 0x0000 (neutral)  [0x2440+0x4]
+              OffsetToData: 0x48 — data entry at 0x48  [0x2444+0x4]
+          ▾ Data Entry  [0x2448+0x10]
+              OffsetToData: 0x6058 — .rsrc  [0x2448+0x4] → 0x2458+0x0
+              Size: 0x2c0  [0x244c+0x4]
+              CodePage: 0  [0x2450+0x4]
+              Reserved: 0  [0x2454+0x4]
+          ▾ Version Info — file 1.0.0.0, product 1.0.0.0  [0x2458+0x2c0]
+              wLength: 0x2c0  [0x2458+0x2]
+              wValueLength: 52  [0x245a+0x2]
+              wType: 0  [0x245c+0x2]
+              szKey: "VS_VERSION_INFO"  [0x245e+0x20]
+            ▾ VS_FIXEDFILEINFO  [0x2480+0x34]
+                dwSignature: 0xfeef04bd  [0x2480+0x4]
+                dwStrucVersion: 0x10000  [0x2484+0x4]
+                dwFileVersionMS: 0x10000  [0x2488+0x4]
+                dwFileVersionLS: 0x0  [0x248c+0x4]
+                dwProductVersionMS: 0x10000  [0x2490+0x4]
+                dwProductVersionLS: 0x0  [0x2494+0x4]
+                dwFileFlagsMask: 0x3f  [0x2498+0x4]
+                dwFileFlags: 0x0 []  [0x249c+0x4]
+                dwFileOS: WINDOWS32 (0x4)  [0x24a0+0x4]
+                dwFileType: DLL (0x2)  [0x24a4+0x4]
+                dwFileSubtype: 0x0  [0x24a8+0x4]
+                dwFileDateMS: 0x0  [0x24ac+0x4]
+                dwFileDateLS: 0x0  [0x24b0+0x4]
+            ▾ VarFileInfo  [0x24b4+0x44]
+                wLength: 0x44  [0x24b4+0x2]
+                wValueLength: 0  [0x24b6+0x2]
+                wType: 1  [0x24b8+0x2]
+                szKey: "VarFileInfo"  [0x24ba+0x18]
+              ▾ Translation  [0x24d4+0x24]
+                  wLength: 0x24  [0x24d4+0x2]
+                  wValueLength: 4  [0x24d6+0x2]
+                  wType: 0  [0x24d8+0x2]
+                  szKey: "Translation"  [0x24da+0x18]
+                  Value: "000004b0" — language and code page  [0x24f4+0x4]
+            ▾ StringFileInfo  [0x24f8+0x220]
+                wLength: 0x220  [0x24f8+0x2]
+                wValueLength: 0  [0x24fa+0x2]
+                wType: 1  [0x24fc+0x2]
+                szKey: "StringFileInfo"  [0x24fe+0x1e]
+              ▾ 000004b0  [0x251c+0x1fc]
+                  wLength: 0x1fc  [0x251c+0x2]
+                  wValueLength: 0  [0x251e+0x2]
+                  wType: 1  [0x2520+0x2]
+                  szKey: "000004b0"  [0x2522+0x12]
+                ▾ CompanyName — ClrLoader  [0x2534+0x34]
+                    wLength: 0x34  [0x2534+0x2]
+                    wValueLength: 10  [0x2536+0x2]
+                    wType: 1  [0x2538+0x2]
+                    szKey: "CompanyName"  [0x253a+0x18]
+                    Value: "ClrLoader"  [0x2554+0x14]
+                ▾ FileDescription — ClrLoader  [0x2568+0x3c]
+                    wLength: 0x3c  [0x2568+0x2]
+                    wValueLength: 10  [0x256a+0x2]
+                    wType: 1  [0x256c+0x2]
+                    szKey: "FileDescription"  [0x256e+0x20]
+                    Value: "ClrLoader"  [0x2590+0x14]
+                ▾ FileVersion — 1.0.0.0  [0x25a4+0x30]
+                    wLength: 0x30  [0x25a4+0x2]
+                    wValueLength: 8  [0x25a6+0x2]
+                    wType: 1  [0x25a8+0x2]
+                    szKey: "FileVersion"  [0x25aa+0x18]
+                    Value: "1.0.0.0"  [0x25c4+0x10]
+                ▾ InternalName — ClrLoader.dll  [0x25d4+0x3c]
+                    wLength: 0x3c  [0x25d4+0x2]
+                    wValueLength: 14  [0x25d6+0x2]
+                    wType: 1  [0x25d8+0x2]
+                    szKey: "InternalName"  [0x25da+0x1a]
+                    Value: "ClrLoader.dll"  [0x25f4+0x1c]
+                ▾ LegalCopyright —    [0x2610+0x28]
+                    wLength: 0x28  [0x2610+0x2]
+                    wValueLength: 2  [0x2612+0x2]
+                    wType: 1  [0x2614+0x2]
+                    szKey: "LegalCopyright"  [0x2616+0x1e]
+                    Value: " "  [0x2634+0x4]
+                ▾ OriginalFilename — ClrLoader.dll  [0x2638+0x44]
+                    wLength: 0x44  [0x2638+0x2]
+                    wValueLength: 14  [0x263a+0x2]
+                    wType: 1  [0x263c+0x2]
+                    szKey: "OriginalFilename"  [0x263e+0x22]
+                    Value: "ClrLoader.dll"  [0x2660+0x1c]
+                ▾ ProductName — ClrLoader  [0x267c+0x34]
+                    wLength: 0x34  [0x267c+0x2]
+                    wValueLength: 10  [0x267e+0x2]
+                    wType: 1  [0x2680+0x2]
+                    szKey: "ProductName"  [0x2682+0x18]
+                    Value: "ClrLoader"  [0x269c+0x14]
+                ▾ ProductVersion — 1.0.0  [0x26b0+0x30]
+                    wLength: 0x30  [0x26b0+0x2]
+                    wValueLength: 6  [0x26b2+0x2]
+                    wType: 1  [0x26b4+0x2]
+                    szKey: "ProductVersion"  [0x26b6+0x1e]
+                    Value: "1.0.0"  [0x26d4+0xc]
+                ▾ Assembly Version — 1.0.0.0  [0x26e0+0x38]
+                    wLength: 0x38  [0x26e0+0x2]
+                    wValueLength: 8  [0x26e2+0x2]
+                    wType: 1  [0x26e4+0x2]
+                    szKey: "Assembly Version"  [0x26e6+0x22]
+                    Value: "1.0.0.0"  [0x2708+0x10]
+  ▾ Base Relocation Table — 2 pages, 8 entries  [0x2800+0x20]
+    ▾ Page 0x2000 — 6 entries, RVA 0x2000 (.text)  [0x2800+0x14]
+        VirtualAddress: 0x2000 — .text  [0x2800+0x4] → 0x400+0x0
+        SizeOfBlock: 0x14  [0x2804+0x4]
+        0x2064: DIR64 (0xa) — offset 0x64  [0x2808+0x2] → 0x464+0x8
+        0x2074: DIR64 (0xa) — offset 0x74  [0x280a+0x2] → 0x474+0x8
+        0x2084: DIR64 (0xa) — offset 0x84  [0x280c+0x2] → 0x484+0x8
+        0x2094: DIR64 (0xa) — offset 0x94  [0x280e+0x2] → 0x494+0x8
+        0x20a4: DIR64 (0xa) — offset 0xa4  [0x2810+0x2] → 0x4a4+0x8
+        Padding: ABSOLUTE (0x0)  [0x2812+0x2]
+    ▾ Page 0x3000 — 2 entries, RVA 0x3000 (.text)  [0x2814+0xc]
+        VirtualAddress: 0x3000 — .text  [0x2814+0x4] → 0x1400+0x0
+        SizeOfBlock: 0xc  [0x2818+0x4]
+        0x3cc8: DIR64 (0xa) — offset 0xcc8  [0x281c+0x2] → 0x20c8+0x8
+        Padding: ABSOLUTE (0x0)  [0x281e+0x2]
+  ▾ Debug Directory — CODEVIEW, PDBCHECKSUM, REPRO  [0x1f58+0x54]
+    ▾ CODEVIEW — /home/benedikt/.cache/uv/sdists-v9/.tmpWRsggN/clr_loader-0.3.1/netfx_loader/obj/release/net461/win-x64/ClrLoader.pdb  [0x1f58+0x1c]
+        Characteristics: 0x0  [0x1f58+0x4]
+        TimeDateStamp: 2104-01-30 10:23:45 UTC  [0x1f5c+0x4]
+        MajorVersion: 256  [0x1f60+0x2]
+        MinorVersion: 20557  [0x1f62+0x2]
+        Type: CODEVIEW (0x2)  [0x1f64+0x4]
+        SizeOfData: 0x8d  [0x1f68+0x4]
+        AddressOfRawData: 0x3bac — .text  [0x1f6c+0x4] → 0x1fac+0x0
+        PointerToRawData: 0x1fac  [0x1f70+0x4] → 0x1fac+0x8d
+      ▾ CodeView — /home/benedikt/.cache/uv/sdists-v9/.tmpWRsggN/clr_loader-0.3.1/netfx_loader/obj/release/net461/win-x64/ClrLoader.pdb  [0x1fac+0x8d]
+          Signature: "RSDS"  [0x1fac+0x4]
+          Guid: {95f8f6b2-afbc-45e4-884c-b4a5bf5addd2}  [0x1fb0+0x10]
+          Age: 1  [0x1fc0+0x4]
+          PdbFileName: "/home/benedikt/.cache/uv/sdists-v9/.tmpWRsggN/clr_loader-0.3.1/netfx_loader/obj/release/net461/win-x64/ClrLoader.pdb"  [0x1fc4+0x75]
+    ▾ PDBCHECKSUM — 0x27 bytes  [0x1f74+0x1c]
+        Characteristics: 0x0  [0x1f74+0x4]
+        TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x1f78+0x4]
+        MajorVersion: 1  [0x1f7c+0x2]
+        MinorVersion: 0  [0x1f7e+0x2]
+        Type: PDBCHECKSUM (0x13)  [0x1f80+0x4]
+        SizeOfData: 0x27  [0x1f84+0x4]
+        AddressOfRawData: 0x3c3c — .text  [0x1f88+0x4] → 0x203c+0x0
+        PointerToRawData: 0x203c  [0x1f8c+0x4] → 0x203c+0x27
+      ▾ PDB Checksum — SHA256 b2f6f895bcafe4e5084cb4a5bf5addd2b1f2317c3c6c52a3c569a740c8156d99  [0x203c+0x27]
+          AlgorithmName: "SHA256"  [0x203c+0x7]
+          Checksum: b2 f6 f8 95 bc af e4 e5 08 4c b4 a5 bf 5a dd d2 …  |.........L...Z..|  [0x2043+0x20]
+    ▾ REPRO — no data  [0x1f90+0x1c]
+        Characteristics: 0x0  [0x1f90+0x4]
+        TimeDateStamp: 1970-01-01 00:00:00 UTC  [0x1f94+0x4]
+        MajorVersion: 0  [0x1f98+0x2]
+        MinorVersion: 0  [0x1f9a+0x2]
+        Type: REPRO (0x10)  [0x1f9c+0x4]
+        SizeOfData: 0x0  [0x1fa0+0x4]
+        AddressOfRawData: 0x0  [0x1fa4+0x4]
+        PointerToRawData: 0x0  [0x1fa8+0x4]
+  ▾ Import Address Table — RVA 0x2000 (.text), 0x10 bytes  [0x400+0x10]
+      #0: 0x3ca8 — _CorDllMain  [0x400+0x8]
+      #1: 0x0 — end of a DLL's table  [0x408+0x8]
+  ▾ CLR Runtime Header — .NET v4.0.30319, CLR header 2.5  [0x410+0x48]
+    ▾ CLR Header  [0x410+0x48]
+        cb: 72  [0x410+0x4]
+        MajorRuntimeVersion: 2  [0x414+0x2]
+        MinorRuntimeVersion: 5  [0x416+0x2]
+        MetaData.VirtualAddress: 0x26e4 — .text  [0x418+0x4] → 0xae4+0x0
+        MetaData.Size: 0x1474  [0x41c+0x4]
+        Flags: 0x0 []  [0x420+0x4]
+        EntryPointToken: 0x0  [0x424+0x4]
+        Resources.VirtualAddress: 0x0  [0x428+0x4]
+        Resources.Size: 0x0  [0x42c+0x4]
+        StrongNameSignature.VirtualAddress: 0x0  [0x430+0x4]
+        StrongNameSignature.Size: 0x0  [0x434+0x4]
+        CodeManagerTable.VirtualAddress: 0x0  [0x438+0x4]
+        CodeManagerTable.Size: 0x0  [0x43c+0x4]
+        VTableFixups.VirtualAddress: 0x2058 — .text  [0x440+0x4] → 0x458+0x0
+        VTableFixups.Size: 0x8  [0x444+0x4]
+        ExportAddressTableJumps.VirtualAddress: 0x0  [0x448+0x4]
+        ExportAddressTableJumps.Size: 0x0  [0x44c+0x4]
+        ManagedNativeHeader.VirtualAddress: 0x0  [0x450+0x4]
+        ManagedNativeHeader.Size: 0x0  [0x454+0x4]
+    ▾ Metadata — v4.0.30319, 5 streams  [0xae4+0x1474]
+        Signature: "BSJB"  [0xae4+0x4]
+        MajorVersion: 1  [0xae8+0x2]
+        MinorVersion: 1  [0xaea+0x2]
+        Reserved: 0  [0xaec+0x4]
+        Length: 12  [0xaf0+0x4]
+        Version: "v4.0.30319"  [0xaf4+0xc]
+        Flags: 0  [0xb00+0x2]
+        Streams: 5  [0xb02+0x2]
+      ▾ Stream Header #~ — offset 0x6c, 1732 bytes  [0xb04+0xc] → 0xb50+0x6c4
+          Offset: 0x6c  [0xb04+0x4]
+          Size: 0x6c4  [0xb08+0x4] → 0xb50+0x6c4
+          Name: "#~"  [0xb0c+0x4]
+      ▾ Stream Header #Strings — offset 0x730, 2008 bytes  [0xb10+0x14] → 0x1214+0x7d8
+          Offset: 0x730  [0xb10+0x4]
+          Size: 0x7d8  [0xb14+0x4] → 0x1214+0x7d8
+          Name: "#Strings"  [0xb18+0xc]
+      ▾ Stream Header #US — offset 0xf08, 576 bytes  [0xb24+0xc] → 0x19ec+0x240
+          Offset: 0xf08  [0xb24+0x4]
+          Size: 0x240  [0xb28+0x4] → 0x19ec+0x240
+          Name: "#US"  [0xb2c+0x4]
+      ▾ Stream Header #GUID — offset 0x1148, 16 bytes  [0xb30+0x10] → 0x1c2c+0x10
+          Offset: 0x1148  [0xb30+0x4]
+          Size: 0x10  [0xb34+0x4] → 0x1c2c+0x10
+          Name: "#GUID"  [0xb38+0x8]
+      ▾ Stream Header #Blob — offset 0x1158, 796 bytes  [0xb40+0x10] → 0x1c3c+0x31c
+          Offset: 0x1158  [0xb40+0x4]
+          Size: 0x31c  [0xb44+0x4] → 0x1c3c+0x31c
+          Name: "#Blob"  [0xb48+0x8]
+      ▾ #~ — 18 tables, 234 rows  [0xb50+0x6c4]
+          Reserved: 0  [0xb50+0x4]
+          MajorVersion: 2  [0xb54+0x1]
+          MinorVersion: 0  [0xb55+0x1]
+          HeapSizes: 0x0 []  [0xb56+0x1]
+          Reserved: 1  [0xb57+0x1]
+          Valid: 0xa0909a21757 — Module, TypeRef, TypeDef, Field, MethodDef, Param, InterfaceImpl, MemberRef, CustomAttribute, StandAloneSig, PropertyMap, Property, MethodSemantics, TypeSpec, Assembly, AssemblyRef, NestedClass, Metho…  [0xb58+0x8]
+          Sorted: 0x16003325fa00  [0xb60+0x8]
+        ▾ Rows — 18 counts  [0xb68+0x48]
+            Module: 1  [0xb68+0x4]
+            TypeRef: 47  [0xb6c+0x4]
+            TypeDef: 6  [0xb70+0x4]
+            Field: 9  [0xb74+0x4]
+            MethodDef: 23  [0xb78+0x4]
+            Param: 29  [0xb7c+0x4]
+            InterfaceImpl: 1  [0xb80+0x4]
+            MemberRef: 79  [0xb84+0x4]
+            CustomAttribute: 13  [0xb88+0x4]
+            StandAloneSig: 9  [0xb8c+0x4]
+            PropertyMap: 2  [0xb90+0x4]
+            Property: 2  [0xb94+0x4]
+            MethodSemantics: 2  [0xb98+0x4]
+            TypeSpec: 4  [0xb9c+0x4]
+            Assembly: 1  [0xba0+0x4]
+            AssemblyRef: 3  [0xba4+0x4]
+            NestedClass: 2  [0xba8+0x4]
+            MethodSpec: 1  [0xbac+0x4]
+        ▾ Module — 1 row, 10 bytes each  [0xbb0+0xa]
+          ▾ #1 ClrLoader.dll  [0xbb0+0xa]
+              Generation: 0  [0xbb0+0x2]
+              Name: 1179 — "ClrLoader.dll"  [0xbb2+0x2] → 0x16af+0xe
+              Mvid: 1 — {348d3d8c-9fb0-467d-9404-8fd6e4addae8}  [0xbb4+0x2]
+              EncId: 0 — none  [0xbb6+0x2]
+              EncBaseId: 0 — none  [0xbb8+0x2]
+        ▾ TypeRef — 47 rows, 6 bytes each  [0xbba+0x11a]
+          ▾ #1 System.Object  [0xbba+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbba+0x2] → 0x11ca+0x14
+              TypeName: 1786 — "Object"  [0xbbc+0x2] → 0x190e+0x7
+              TypeNamespace: 1211 — "System"  [0xbbe+0x2] → 0x16cf+0x7
+          ▾ #2 System.Collections.Generic.List`1  [0xbc0+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbc0+0x2] → 0x11ca+0x14
+              TypeName: 54 — "List`1"  [0xbc2+0x2] → 0x124a+0x7
+              TypeNamespace: 178 — "System.Collections.Generic"  [0xbc4+0x2] → 0x12c6+0x1b
+          ▾ #3 System.Runtime.CompilerServices.CallConvCdecl  [0xbc6+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbc6+0x2] → 0x11ca+0x14
+              TypeName: 1165 — "CallConvCdecl"  [0xbc8+0x2] → 0x16a1+0xe
+              TypeNamespace: 1655 — "System.Runtime.CompilerServices"  [0xbca+0x2] → 0x188b+0x20
+          ▾ #4 System.Delegate  [0xbcc+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbcc+0x2] → 0x11ca+0x14
+              TypeName: 636 — "Delegate"  [0xbce+0x2] → 0x1490+0x9
+              TypeNamespace: 1211 — "System"  [0xbd0+0x2] → 0x16cf+0x7
+          ▾ #5 System.AppDomain  [0xbd2+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbd2+0x2] → 0x11ca+0x14
+              TypeName: 1272 — "AppDomain"  [0xbd4+0x2] → 0x170c+0xa
+              TypeNamespace: 1211 — "System"  [0xbd6+0x2] → 0x16cf+0x7
+          ▾ #6 System.MulticastDelegate  [0xbd8+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbd8+0x2] → 0x11ca+0x14
+              TypeName: 627 — "MulticastDelegate"  [0xbda+0x2] → 0x1487+0x12
+              TypeNamespace: 1211 — "System"  [0xbdc+0x2] → 0x16cf+0x7
+          ▾ #7 System.IAsyncResult  [0xbde+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbde+0x2] → 0x11ca+0x14
+              TypeName: 1817 — "IAsyncResult"  [0xbe0+0x2] → 0x192d+0xd
+              TypeNamespace: 1211 — "System"  [0xbe2+0x2] → 0x16cf+0x7
+          ▾ #8 System.AsyncCallback  [0xbe4+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbe4+0x2] → 0x11ca+0x14
+              TypeName: 1134 — "AsyncCallback"  [0xbe6+0x2] → 0x1682+0xe
+              TypeNamespace: 1211 — "System"  [0xbe8+0x2] → 0x16cf+0x7
+          ▾ #9 System.IDisposable  [0xbea+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbea+0x2] → 0x11ca+0x14
+              TypeName: 333 — "IDisposable"  [0xbec+0x2] → 0x1361+0xc
+              TypeNamespace: 1211 — "System"  [0xbee+0x2] → 0x16cf+0x7
+          ▾ #10 System.Collections.Generic.Dictionary`2  [0xbf0+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbf0+0x2] → 0x11ca+0x14
+              TypeName: 61 — "Dictionary`2"  [0xbf2+0x2] → 0x1251+0xd
+              TypeNamespace: 178 — "System.Collections.Generic"  [0xbf4+0x2] → 0x12c6+0x1b
+          ▾ #11 System.Tuple`3  [0xbf6+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xbf6+0x2] → 0x11ca+0x14
+              TypeName: 74 — "Tuple`3"  [0xbf8+0x2] → 0x125e+0x8
+              TypeNamespace: 1211 — "System"  [0xbfa+0x2] → 0x16cf+0x7
+          ▾ #12 System.Collections.Generic.HashSet`1  [0xbfc+0x6]
+              ResolutionScope: 10 — AssemblyRef #2 (System.Core 4.0.0.0)  [0xbfc+0x2] → 0x11de+0x14
+              TypeName: 44 — "HashSet`1"  [0xbfe+0x2] → 0x1240+0xa
+              TypeNamespace: 178 — "System.Collections.Generic"  [0xc00+0x2] → 0x12c6+0x1b
+          ▾ #13 System.Reflection.Assembly  [0xc02+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc02+0x2] → 0x11ca+0x14
+              TypeName: 1932 — "Assembly"  [0xc04+0x2] → 0x19a0+0x9
+              TypeNamespace: 1307 — "System.Reflection"  [0xc06+0x2] → 0x172f+0x12
+          ▾ #14 System.ResolveEventArgs  [0xc08+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc08+0x2] → 0x11ca+0x14
+              TypeName: 1722 — "ResolveEventArgs"  [0xc0a+0x2] → 0x18ce+0x11
+              TypeNamespace: 1211 — "System"  [0xc0c+0x2] → 0x16cf+0x7
+          ▾ #15 System.Runtime.CompilerServices.CompilationRelaxationsAttribute  [0xc0e+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc0e+0x2] → 0x11ca+0x14
+              TypeName: 838 — "CompilationRelaxationsAttribute"  [0xc10+0x2] → 0x155a+0x20
+              TypeNamespace: 1655 — "System.Runtime.CompilerServices"  [0xc12+0x2] → 0x188b+0x20
+          ▾ #16 System.Runtime.CompilerServices.RuntimeCompatibilityAttribute  [0xc14+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc14+0x2] → 0x11ca+0x14
+              TypeName: 920 — "RuntimeCompatibilityAttribute"  [0xc16+0x2] → 0x15ac+0x1e
+              TypeNamespace: 1655 — "System.Runtime.CompilerServices"  [0xc18+0x2] → 0x188b+0x20
+          ▾ #17 System.Diagnostics.DebuggableAttribute  [0xc1a+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc1a+0x2] → 0x11ca+0x14
+              TypeName: 672 — "DebuggableAttribute"  [0xc1c+0x2] → 0x14b4+0x14
+              TypeNamespace: 1605 — "System.Diagnostics"  [0xc1e+0x2] → 0x1859+0x13
+          ▾ #18 DebuggingModes  [0xc20+0x6]
+              ResolutionScope: 71 — TypeRef #17 (System.Diagnostics.DebuggableAttribute)  [0xc20+0x2] → 0xc1a+0x6
+              TypeName: 1687 — "DebuggingModes"  [0xc22+0x2] → 0x18ab+0xf
+              TypeNamespace: 0 — ""  [0xc24+0x2] → 0x1214+0x1
+          ▾ #19 System.Runtime.Versioning.TargetFrameworkAttribute  [0xc26+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc26+0x2] → 0x11ca+0x14
+              TypeName: 715 — "TargetFrameworkAttribute"  [0xc28+0x2] → 0x14df+0x19
+              TypeNamespace: 1033 — "System.Runtime.Versioning"  [0xc2a+0x2] → 0x161d+0x1a
+          ▾ #20 System.Reflection.AssemblyCompanyAttribute  [0xc2c+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc2c+0x2] → 0x11ca+0x14
+              TypeName: 895 — "AssemblyCompanyAttribute"  [0xc2e+0x2] → 0x1593+0x19
+              TypeNamespace: 1307 — "System.Reflection"  [0xc30+0x2] → 0x172f+0x12
+          ▾ #21 System.Reflection.AssemblyConfigurationAttribute  [0xc32+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc32+0x2] → 0x11ca+0x14
+              TypeName: 807 — "AssemblyConfigurationAttribute"  [0xc34+0x2] → 0x153b+0x1f
+              TypeNamespace: 1307 — "System.Reflection"  [0xc36+0x2] → 0x172f+0x12
+          ▾ #22 System.Reflection.AssemblyFileVersionAttribute  [0xc38+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc38+0x2] → 0x11ca+0x14
+              TypeName: 740 — "AssemblyFileVersionAttribute"  [0xc3a+0x2] → 0x14f8+0x1d
+              TypeNamespace: 1307 — "System.Reflection"  [0xc3c+0x2] → 0x172f+0x12
+          ▾ #23 System.Reflection.AssemblyInformationalVersionAttribute  [0xc3e+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc3e+0x2] → 0x11ca+0x14
+              TypeName: 769 — "AssemblyInformationalVersionAttribute"  [0xc40+0x2] → 0x1515+0x26
+              TypeNamespace: 1307 — "System.Reflection"  [0xc42+0x2] → 0x172f+0x12
+          ▾ #24 System.Reflection.AssemblyProductAttribute  [0xc44+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc44+0x2] → 0x11ca+0x14
+              TypeName: 870 — "AssemblyProductAttribute"  [0xc46+0x2] → 0x157a+0x19
+              TypeNamespace: 1307 — "System.Reflection"  [0xc48+0x2] → 0x172f+0x12
+          ▾ #25 System.Reflection.AssemblyTitleAttribute  [0xc4a+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc4a+0x2] → 0x11ca+0x14
+              TypeName: 692 — "AssemblyTitleAttribute"  [0xc4c+0x2] → 0x14c8+0x17
+              TypeNamespace: 1307 — "System.Reflection"  [0xc4e+0x2] → 0x172f+0x12
+          ▾ #26 System.Runtime.CompilerServices.CompilerGeneratedAttribute  [0xc50+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc50+0x2] → 0x11ca+0x14
+              TypeName: 645 — "CompilerGeneratedAttribute"  [0xc52+0x2] → 0x1499+0x1b
+              TypeNamespace: 1655 — "System.Runtime.CompilerServices"  [0xc54+0x2] → 0x188b+0x20
+          ▾ #27 System.IntPtr  [0xc56+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc56+0x2] → 0x11ca+0x14
+              TypeName: 1594 — "IntPtr"  [0xc58+0x2] → 0x184e+0x7
+              TypeNamespace: 1211 — "System"  [0xc5a+0x2] → 0x16cf+0x7
+          ▾ #28 System.Runtime.InteropServices.Marshal  [0xc5c+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc5c+0x2] → 0x11ca+0x14
+              TypeName: 1157 — "Marshal"  [0xc5e+0x2] → 0x1699+0x8
+              TypeNamespace: 1624 — "System.Runtime.InteropServices"  [0xc60+0x2] → 0x186c+0x1f
+          ▾ #29 System.Byte  [0xc62+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc62+0x2] → 0x11ca+0x14
+              TypeName: 954 — "Byte"  [0xc64+0x2] → 0x15ce+0x5
+              TypeNamespace: 1211 — "System"  [0xc66+0x2] → 0x16cf+0x7
+          ▾ #30 System.Text.Encoding  [0xc68+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc68+0x2] → 0x11ca+0x14
+              TypeName: 1024 — "Encoding"  [0xc6a+0x2] → 0x1614+0x9
+              TypeNamespace: 1885 — "System.Text"  [0xc6c+0x2] → 0x1971+0xc
+          ▾ #31 System.UriBuilder  [0xc6e+0x6]
+              ResolutionScope: 14 — AssemblyRef #3 (System 4.0.0.0)  [0xc6e+0x2] → 0x11f2+0x14
+              TypeName: 1419 — "UriBuilder"  [0xc70+0x2] → 0x179f+0xb
+              TypeNamespace: 1211 — "System"  [0xc72+0x2] → 0x16cf+0x7
+          ▾ #32 System.Uri  [0xc74+0x6]
+              ResolutionScope: 14 — AssemblyRef #3 (System 4.0.0.0)  [0xc74+0x2] → 0x11f2+0x14
+              TypeName: 1110 — "Uri"  [0xc76+0x2] → 0x166a+0x4
+              TypeNamespace: 1211 — "System"  [0xc78+0x2] → 0x16cf+0x7
+          ▾ #33 System.IO.Path  [0xc7a+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc7a+0x2] → 0x11ca+0x14
+              TypeName: 1105 — "Path"  [0xc7c+0x2] → 0x1665+0x5
+              TypeNamespace: 116 — "System.IO"  [0xc7e+0x2] → 0x1288+0xa
+          ▾ #34 System.AppDomainSetup  [0xc80+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc80+0x2] → 0x11ca+0x14
+              TypeName: 1388 — "AppDomainSetup"  [0xc82+0x2] → 0x1780+0xf
+              TypeNamespace: 1211 — "System"  [0xc84+0x2] → 0x16cf+0x7
+          ▾ #35 System.String  [0xc86+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc86+0x2] → 0x11ca+0x14
+              TypeName: 1081 — "String"  [0xc88+0x2] → 0x164d+0x7
+              TypeNamespace: 1211 — "System"  [0xc8a+0x2] → 0x16cf+0x7
+          ▾ #36 System.Security.Policy.Evidence  [0xc8c+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc8c+0x2] → 0x11ca+0x14
+              TypeName: 290 — "Evidence"  [0xc8e+0x2] → 0x1336+0x9
+              TypeNamespace: 1897 — "System.Security.Policy"  [0xc90+0x2] → 0x197d+0x17
+          ▾ #37 System.Exception  [0xc92+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc92+0x2] → 0x11ca+0x14
+              TypeName: 1362 — "Exception"  [0xc94+0x2] → 0x1766+0xa
+              TypeNamespace: 1211 — "System"  [0xc96+0x2] → 0x16cf+0x7
+          ▾ #38 System.Type  [0xc98+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc98+0x2] → 0x11ca+0x14
+              TypeName: 476 — "Type"  [0xc9a+0x2] → 0x13f0+0x5
+              TypeNamespace: 1211 — "System"  [0xc9c+0x2] → 0x16cf+0x7
+          ▾ #39 System.Reflection.MemberInfo  [0xc9e+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xc9e+0x2] → 0x11ca+0x14
+              TypeName: 1372 — "MemberInfo"  [0xca0+0x2] → 0x1770+0xb
+              TypeNamespace: 1307 — "System.Reflection"  [0xca2+0x2] → 0x172f+0x12
+          ▾ #40 Enumerator  [0xca4+0x6]
+              ResolutionScope: 11 — TypeRef #2 (System.Collections.Generic.List`1)  [0xca4+0x2] → 0xbc0+0x6
+              TypeName: 1489 — "Enumerator"  [0xca6+0x2] → 0x17e5+0xb
+              TypeNamespace: 0 — ""  [0xca8+0x2] → 0x1214+0x1
+          ▾ #41 System.Reflection.AssemblyName  [0xcaa+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcaa+0x2] → 0x11ca+0x14
+              TypeName: 430 — "AssemblyName"  [0xcac+0x2] → 0x13c2+0xd
+              TypeNamespace: 1307 — "System.Reflection"  [0xcae+0x2] → 0x172f+0x12
+          ▾ #42 System.RuntimeTypeHandle  [0xcb0+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcb0+0x2] → 0x11ca+0x14
+              TypeName: 345 — "RuntimeTypeHandle"  [0xcb2+0x2] → 0x136d+0x12
+              TypeNamespace: 1211 — "System"  [0xcb4+0x2] → 0x16cf+0x7
+          ▾ #43 System.ResolveEventHandler  [0xcb6+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcb6+0x2] → 0x11ca+0x14
+              TypeName: 1444 — "ResolveEventHandler"  [0xcb8+0x2] → 0x17b8+0x14
+              TypeNamespace: 1211 — "System"  [0xcba+0x2] → 0x16cf+0x7
+          ▾ #44 System.InvalidOperationException  [0xcbc+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcbc+0x2] → 0x11ca+0x14
+              TypeName: 1346 — "InvalidOperationException"  [0xcbe+0x2] → 0x1756+0x1a
+              TypeNamespace: 1211 — "System"  [0xcc0+0x2] → 0x16cf+0x7
+          ▾ #45 System.Threading.Monitor  [0xcc2+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcc2+0x2] → 0x11ca+0x14
+              TypeName: 1524 — "Monitor"  [0xcc4+0x2] → 0x1808+0x8
+              TypeNamespace: 1007 — "System.Threading"  [0xcc6+0x2] → 0x1603+0x11
+          ▾ #46 System.Tuple  [0xcc8+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcc8+0x2] → 0x11ca+0x14
+              TypeName: 403 — "Tuple"  [0xcca+0x2] → 0x13a7+0x6
+              TypeNamespace: 1211 — "System"  [0xccc+0x2] → 0x16cf+0x7
+          ▾ #47 System.CrossAppDomainDelegate  [0xcce+0x6]
+              ResolutionScope: 6 — AssemblyRef #1 (mscorlib 4.0.0.0)  [0xcce+0x2] → 0x11ca+0x14
+              TypeName: 562 — "CrossAppDomainDelegate"  [0xcd0+0x2] → 0x1446+0x17
+              TypeNamespace: 1211 — "System"  [0xcd2+0x2] → 0x16cf+0x7
+        ▾ TypeDef — 6 rows, 14 bytes each  [0xcd4+0x54]
+          ▾ #1 <Module>  [0xcd4+0xe]
+              Flags: 0x0 []  [0xcd4+0x4]
+              TypeName: 107 — "<Module>"  [0xcd8+0x2] → 0x127f+0x9
+              TypeNamespace: 0 — ""  [0xcda+0x2] → 0x1214+0x1
+              Extends: 0 — null  [0xcdc+0x2]
+              FieldList: 1 — Field #1 (_initialized)  [0xcde+0x2] → 0xd28+0x6
+              MethodList: 1 — MethodDef #1 (PtrToStringUtf8)  [0xce0+0x2] → 0xd5e+0xe
+          ▾ #2 ClrLoader.ClrLoader — Public Abstract Sealed BeforeFieldInit, extends System.Object  [0xce2+0xe]
+              Flags: 0x100181 [Public | Abstract | Sealed | BeforeFieldInit]  [0xce2+0x4]
+              TypeName: 1409 — "ClrLoader"  [0xce6+0x2] → 0x1795+0xa
+              TypeNamespace: 1409 — "ClrLoader"  [0xce8+0x2] → 0x1795+0xa
+              Extends: 5 — TypeRef #1 (System.Object)  [0xcea+0x2] → 0xbba+0x6
+              FieldList: 1 — Field #1 (_initialized)  [0xcec+0x2] → 0xd28+0x6
+              MethodList: 1 — MethodDef #1 (PtrToStringUtf8)  [0xcee+0x2] → 0xd5e+0xe
+          ▾ #3 ClrLoader.DomainSetup — Public Abstract Sealed BeforeFieldInit, extends System.Object  [0xcf0+0xe]
+              Flags: 0x100181 [Public | Abstract | Sealed | BeforeFieldInit]  [0xcf0+0x4]
+              TypeName: 1391 — "DomainSetup"  [0xcf4+0x2] → 0x1783+0xc
+              TypeNamespace: 1409 — "ClrLoader"  [0xcf6+0x2] → 0x1795+0xa
+              Extends: 5 — TypeRef #1 (System.Object)  [0xcf8+0x2] → 0xbba+0x6
+              FieldList: 3 — Field #3 (_disposed)  [0xcfa+0x2] → 0xd34+0x6
+              MethodList: 10 — MethodDef #10 (StoreFunctorFromDomainData)  [0xcfc+0x2] → 0xddc+0xe
+          ▾ #4 EntryPoint — NestedPublic Sealed, extends System.MulticastDelegate  [0xcfe+0xe]
+              Flags: 0x102 [NestedPublic | Sealed]  [0xcfe+0x4]
+              TypeName: 1849 — "EntryPoint"  [0xd02+0x2] → 0x194d+0xb
+              TypeNamespace: 0 — ""  [0xd04+0x2] → 0x1214+0x1
+              Extends: 25 — TypeRef #6 (System.MulticastDelegate)  [0xd06+0x2] → 0xbd8+0x6
+              FieldList: 3 — Field #3 (_disposed)  [0xd08+0x2] → 0xd34+0x6
+              MethodList: 12 — MethodDef #12 (.ctor)  [0xd0a+0x2] → 0xdf8+0xe
+          ▾ #5 ClrLoader.DomainData — BeforeFieldInit, extends System.Object  [0xd0c+0xe]
+              Flags: 0x100000 [BeforeFieldInit]  [0xd0c+0x4]
+              TypeName: 142 — "DomainData"  [0xd10+0x2] → 0x12a2+0xb
+              TypeNamespace: 1409 — "ClrLoader"  [0xd12+0x2] → 0x1795+0xa
+              Extends: 5 — TypeRef #1 (System.Object)  [0xd14+0x2] → 0xbba+0x6
+              FieldList: 3 — Field #3 (_disposed)  [0xd16+0x2] → 0xd34+0x6
+              MethodList: 16 — MethodDef #16 (get_Domain)  [0xd18+0x2] → 0xe30+0xe
+          ▾ #6 <>c__DisplayClass7_0 — NestedPrivate Sealed BeforeFieldInit, extends System.Object  [0xd1a+0xe]
+              Flags: 0x100103 [NestedPrivate | Sealed | BeforeFieldInit]  [0xd1a+0x4]
+              TypeName: 1 — "<>c__DisplayClass7_0"  [0xd1e+0x2] → 0x1215+0x15
+              TypeNamespace: 0 — ""  [0xd20+0x2] → 0x1214+0x1
+              Extends: 5 — TypeRef #1 (System.Object)  [0xd22+0x2] → 0xbba+0x6
+              FieldList: 8 — Field #8 (assemblyName)  [0xd24+0x2] → 0xd52+0x6
+              MethodList: 22 — MethodDef #22 (.ctor)  [0xd26+0x2] → 0xe84+0xe
+        ▾ Field — 9 rows, 6 bytes each  [0xd28+0x36]
+          ▾ #1 _initialized — bool  [0xd28+0x6]
+              Flags: 0x11 [Private | Static]  [0xd28+0x2]
+              Name: 231 — "_initialized"  [0xd2a+0x2] → 0x12fb+0xd
+              Signature: 10 — bool  [0xd2c+0x2] → 0x1c47+0x2
+          ▾ #2 _domains — System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0xd2e+0x6]
+              Flags: 0x11 [Private | Static]  [0xd2e+0x2]
+              Name: 1744 — "_domains"  [0xd30+0x2] → 0x18e4+0x9
+              Signature: 13 — System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0xd32+0x2] → 0x1c4a+0x7
+          ▾ #3 _disposed — bool  [0xd34+0x6]
+              Flags: 0x1 [Private]  [0xd34+0x2]
+              Name: 221 — "_disposed"  [0xd36+0x2] → 0x12f1+0xa
+              Signature: 10 — bool  [0xd38+0x2] → 0x1c47+0x2
+          ▾ #4 <Domain>k__BackingField — class System.AppDomain  [0xd3a+0x6]
+              Flags: 0x21 [Private | InitOnly]  [0xd3a+0x2]
+              Name: 244 — "<Domain>k__BackingField"  [0xd3c+0x2] → 0x1308+0x18
+              Signature: 112 — class System.AppDomain  [0xd3e+0x2] → 0x1cad+0x3
+          ▾ #5 _functors — System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0xd40+0x6]
+              Flags: 0x6 [Public]  [0xd40+0x2]
+              Name: 1762 — "_functors"  [0xd42+0x2] → 0x18f6+0xa
+              Signature: 116 — System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0xd44+0x2] → 0x1cb1+0xd
+          ▾ #6 _resolvedAssemblies — System.Collections.Generic.HashSet`1<string>  [0xd46+0x6]
+              Flags: 0x6 [Public]  [0xd46+0x2]
+              Name: 1702 — "_resolvedAssemblies"  [0xd48+0x2] → 0x18ba+0x14
+              Signature: 130 — System.Collections.Generic.HashSet`1<string>  [0xd4a+0x2] → 0x1cbf+0x6
+          ▾ #7 _lockObj — object  [0xd4c+0x6]
+              Flags: 0x31 [Private | Static | InitOnly]  [0xd4c+0x2]
+              Name: 1114 — "_lockObj"  [0xd4e+0x2] → 0x166e+0x9
+              Signature: 137 — object  [0xd50+0x2] → 0x1cc6+0x2
+          ▾ #8 assemblyName — string  [0xd52+0x6]
+              Flags: 0x6 [Public]  [0xd52+0x2]
+              Name: 443 — "assemblyName"  [0xd54+0x2] → 0x13cf+0xd
+              Signature: 172 — string  [0xd56+0x2] → 0x1ce9+0x2
+          ▾ #9 assemblyPath — string  [0xd58+0x6]
+              Flags: 0x6 [Public]  [0xd58+0x2]
+              Name: 1097 — "assemblyPath"  [0xd5a+0x2] → 0x165d+0xd
+              Signature: 172 — string  [0xd5c+0x2] → 0x1ce9+0x2
+        ▾ MethodDef — 23 rows, 14 bytes each  [0xd5e+0x142]
+          ▾ #1 PtrToStringUtf8 — string(native int), body at RVA 0x21a0 (.text)  [0xd5e+0xe]
+              RVA: 0x21a0 — RVA 0x21a0 (.text)  [0xd5e+0x4] → 0x5a0+0x0
+              ImplFlags: 0x0 []  [0xd62+0x2]
+              Flags: 0x91 [Private | Static | HideBySig]  [0xd64+0x2]
+              Name: 91 — "PtrToStringUtf8"  [0xd66+0x2] → 0x126f+0x10
+              Signature: 21 — string(native int)  [0xd68+0x2] → 0x1c52+0x4
+              ParamList: 1 — Param #1 (ptr)  [0xd6a+0x2] → 0xea0+0x6
+            ▾ Body — fat header, 60 bytes of IL  [0x5a0+0xc]
+                Flags / Size: 0x3013 [InitLocals | 0x3003] — header 12 bytes  [0x5a0+0x2]
+                MaxStack: 4  [0x5a2+0x2]
+                CodeSize: 60  [0x5a4+0x4]
+                LocalVarSigTok: 0x11000001  [0x5a8+0x4]
+                IL Code — 60 bytes  [0x5ac+0x0]
+          ▾ #2 Initialize — modopt(System.Runtime.CompilerServices.CallConvCdecl) void(), body at RVA 0x20b0 (.text)  [0xd6c+0xe]
+              RVA: 0x20b0 — RVA 0x20b0 (.text)  [0xd6c+0x4] → 0x4b0+0x0
+              ImplFlags: 0x0 []  [0xd70+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xd72+0x2]
+              Name: 991 — "Initialize"  [0xd74+0x2] → 0x15f3+0xb
+              Signature: 26 — modopt(System.Runtime.CompilerServices.CallConvCdecl) void()  [0xd76+0x2] → 0x1c57+0x5
+              ParamList: 2 — Param #2 (namePtr)  [0xd78+0x2] → 0xea6+0x6
+            ▾ Body — tiny header, 34 bytes of IL  [0x4b0+0xc]
+                Header: 0x8a — tiny, 34 bytes of code  [0x4b0+0x1]
+                IL Code — 34 bytes  [0x4b1+0xb]
+          ▾ #3 get_AssemblyDirectory — string(), body at RVA 0x20d3 (.text)  [0xd7a+0xe]
+              RVA: 0x20d3 — RVA 0x20d3 (.text)  [0xd7a+0x4] → 0x4d3+0x0
+              ImplFlags: 0x0 []  [0xd7e+0x2]
+              Flags: 0x891 [Private | Static | HideBySig | SpecialName]  [0xd80+0x2]
+              Name: 1946 — "get_AssemblyDirectory"  [0xd82+0x2] → 0x19ae+0x16
+              Signature: 32 — string()  [0xd84+0x2] → 0x1c5d+0x3
+              ParamList: 2 — Param #2 (namePtr)  [0xd86+0x2] → 0xea6+0x6
+            ▾ Body — tiny header, 31 bytes of IL  [0x4d3+0xc]
+                Header: 0x7e — tiny, 31 bytes of code  [0x4d3+0x1]
+                IL Code — 31 bytes  [0x4d4+0xb]
+          ▾ #4 CreateAppDomain — modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int), body at RVA 0x21e8 (.text)  [0xd88+0xe]
+              RVA: 0x21e8 — RVA 0x21e8 (.text)  [0xd88+0x4] → 0x5e8+0x0
+              ImplFlags: 0x0 []  [0xd8c+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xd8e+0x2]
+              Name: 1266 — "CreateAppDomain"  [0xd90+0x2] → 0x1706+0x10
+              Signature: 36 — modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int)  [0xd92+0x2] → 0x1c61+0x7
+              ParamList: 2 — Param #2 (namePtr)  [0xd94+0x2] → 0xea6+0x6
+            ▾ Body — fat header, 158 bytes of IL  [0x5e8+0xc]
+                Flags / Size: 0x3013 [InitLocals | 0x3003] — header 12 bytes  [0x5e8+0x2]
+                MaxStack: 4  [0x5ea+0x2]
+                CodeSize: 158  [0x5ec+0x4]
+                LocalVarSigTok: 0x11000002  [0x5f0+0x4]
+                IL Code — 158 bytes  [0x5f4+0x0]
+          ▾ #5 GetFunction — modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int, native int, native int), body at RVA 0x2294 (.text)  [0xd96+0xe]
+              RVA: 0x2294 — RVA 0x2294 (.text)  [0xd96+0x4] → 0x694+0x0
+              ImplFlags: 0x0 []  [0xd9a+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xd9c+0x2]
+              Name: 1325 — "GetFunction"  [0xd9e+0x2] → 0x1741+0xc
+              Signature: 44 — modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int, native int, native int)  [0xda0+0x2] → 0x1c69+0x9
+              ParamList: 4 — Param #4 (domain)  [0xda2+0x2] → 0xeb2+0x6
+            ▾ Body — fat header, 192 bytes of IL, exception clauses  [0x694+0xc]
+                Flags / Size: 0x301b [MoreSects | InitLocals | 0x3003] — header 12 bytes  [0x694+0x2]
+                MaxStack: 4  [0x696+0x2]
+                CodeSize: 192  [0x698+0x4]
+                LocalVarSigTok: 0x11000003  [0x69c+0x4]
+                IL Code — 192 bytes  [0x6a0+0x0]
+          ▾ #6 CloseAppDomain — modopt(System.Runtime.CompilerServices.CallConvCdecl) void(native int), body at RVA 0x2370 (.text)  [0xda4+0xe]
+              RVA: 0x2370 — RVA 0x2370 (.text)  [0xda4+0x4] → 0x770+0x0
+              ImplFlags: 0x0 []  [0xda8+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xdaa+0x2]
+              Name: 1251 — "CloseAppDomain"  [0xdac+0x2] → 0x16f7+0xf
+              Signature: 54 — modopt(System.Runtime.CompilerServices.CallConvCdecl) void(native int)  [0xdae+0x2] → 0x1c73+0x6
+              ParamList: 8 — Param #8 (domain)  [0xdb0+0x2] → 0xeca+0x6
+            ▾ Body — fat header, 112 bytes of IL, exception clauses  [0x770+0xc]
+                Flags / Size: 0x301b [MoreSects | InitLocals | 0x3003] — header 12 bytes  [0x770+0x2]
+                MaxStack: 4  [0x772+0x2]
+                CodeSize: 112  [0x774+0x4]
+                LocalVarSigTok: 0x11000004  [0x778+0x4]
+                IL Code — 112 bytes  [0x77c+0x0]
+          ▾ #7 Close — modopt(System.Runtime.CompilerServices.CallConvCdecl) void(), body at RVA 0x23fc (.text)  [0xdb2+0xe]
+              RVA: 0x23fc — RVA 0x23fc (.text)  [0xdb2+0x4] → 0x7fc+0x0
+              ImplFlags: 0x0 []  [0xdb6+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xdb8+0x2]
+              Name: 526 — "Close"  [0xdba+0x2] → 0x1422+0x6
+              Signature: 26 — modopt(System.Runtime.CompilerServices.CallConvCdecl) void()  [0xdbc+0x2] → 0x1c57+0x5
+              ParamList: 9 — Param #9 (s)  [0xdbe+0x2] → 0xed0+0x6
+            ▾ Body — fat header, 67 bytes of IL, exception clauses  [0x7fc+0xc]
+                Flags / Size: 0x301b [MoreSects | InitLocals | 0x3003] — header 12 bytes  [0x7fc+0x2]
+                MaxStack: 1  [0x7fe+0x2]
+                CodeSize: 67  [0x800+0x4]
+                LocalVarSigTok: 0x11000005  [0x804+0x4]
+                IL Code — 67 bytes  [0x808+0x0]
+          ▾ #8 Print — void(string), body at RVA 0x20f3 (.text)  [0xdc0+0xe]
+              RVA: 0x20f3 — RVA 0x20f3 (.text)  [0xdc0+0x4] → 0x4f3+0x0
+              ImplFlags: 0x0 []  [0xdc4+0x2]
+              Flags: 0x93 [Assembly | Static | HideBySig]  [0xdc6+0x2]
+              Name: 1860 — "Print"  [0xdc8+0x2] → 0x1958+0x6
+              Signature: 61 — void(string)  [0xdca+0x2] → 0x1c7a+0x4
+              ParamList: 9 — Param #9 (s)  [0xdcc+0x2] → 0xed0+0x6
+            ▾ Body — tiny header, 1 bytes of IL  [0x4f3+0x2]
+                Header: 0x6 — tiny, 1 bytes of code  [0x4f3+0x1]
+                IL Code — 1 bytes  [0x4f4+0x1]
+          ▾ #9 .cctor — void(), body at RVA 0x20f5 (.text)  [0xdce+0xe]
+              RVA: 0x20f5 — RVA 0x20f5 (.text)  [0xdce+0x4] → 0x4f5+0x0
+              ImplFlags: 0x0 []  [0xdd2+0x2]
+              Flags: 0x1891 [Private | Static | HideBySig | SpecialName | RTSpecialName]  [0xdd4+0x2]
+              Name: 1506 — ".cctor"  [0xdd6+0x2] → 0x17f6+0x7
+              Signature: 66 — void()  [0xdd8+0x2] → 0x1c7f+0x3
+              ParamList: 10 — Param #10 (domain)  [0xdda+0x2] → 0xed6+0x6
+            ▾ Body — tiny header, 17 bytes of IL  [0x4f5+0xc]
+                Header: 0x46 — tiny, 17 bytes of code  [0x4f5+0x1]
+                IL Code — 17 bytes  [0x4f6+0xb]
+          ▾ #10 StoreFunctorFromDomainData — void(), body at RVA 0x245c (.text)  [0xddc+0xe]
+              RVA: 0x245c — RVA 0x245c (.text)  [0xddc+0x4] → 0x85c+0x0
+              ImplFlags: 0x0 []  [0xde0+0x2]
+              Flags: 0x96 [Public | Static | HideBySig]  [0xde2+0x2]
+              Name: 126 — "StoreFunctorFromDomainData"  [0xde4+0x2] → 0x1292+0x1b
+              Signature: 66 — void()  [0xde6+0x2] → 0x1c7f+0x3
+              ParamList: 10 — Param #10 (domain)  [0xde8+0x2] → 0xed6+0x6
+            ▾ Body — fat header, 104 bytes of IL  [0x85c+0xc]
+                Flags / Size: 0x3013 [InitLocals | 0x3003] — header 12 bytes  [0x85c+0x2]
+                MaxStack: 5  [0x85e+0x2]
+                CodeSize: 104  [0x860+0x4]
+                LocalVarSigTok: 0x11000006  [0x864+0x4]
+                IL Code — 104 bytes  [0x868+0x0]
+          ▾ #11 GetDelegate — class System.Delegate(class System.AppDomain, string, string, string), body at RVA 0x24d0 (.text)  [0xdea+0xe]
+              RVA: 0x24d0 — RVA 0x24d0 (.text)  [0xdea+0x4] → 0x8d0+0x0
+              ImplFlags: 0x0 []  [0xdee+0x2]
+              Flags: 0x91 [Private | Static | HideBySig]  [0xdf0+0x2]
+              Name: 615 — "GetDelegate"  [0xdf2+0x2] → 0x147b+0xc
+              Signature: 74 — class System.Delegate(class System.AppDomain, string, string, string)  [0xdf4+0x2] → 0x1c87+0x9
+              ParamList: 10 — Param #10 (domain)  [0xdf6+0x2] → 0xed6+0x6
+            ▾ Body — fat header, 40 bytes of IL  [0x8d0+0xc]
+                Flags / Size: 0x3013 [InitLocals | 0x3003] — header 12 bytes  [0x8d0+0x2]
+                MaxStack: 3  [0x8d2+0x2]
+                CodeSize: 40  [0x8d4+0x4]
+                LocalVarSigTok: 0x11000007  [0x8d8+0x4]
+                IL Code — 40 bytes  [0x8dc+0x0]
+          ▾ #12 .ctor — instance void(object, native int)  [0xdf8+0xe]
+              RVA: 0x0  [0xdf8+0x4]
+              ImplFlags: 0x3 [Runtime]  [0xdfc+0x2]
+              Flags: 0x1886 [Public | HideBySig | SpecialName | RTSpecialName]  [0xdfe+0x2]
+              Name: 1500 — ".ctor"  [0xe00+0x2] → 0x17f0+0x6
+              Signature: 84 — instance void(object, native int)  [0xe02+0x2] → 0x1c91+0x5
+              ParamList: 14 — Param #14 (object)  [0xe04+0x2] → 0xeee+0x6
+          ▾ #13 Invoke — instance int32(native int, int32)  [0xe06+0xe]
+              RVA: 0x0  [0xe06+0x4]
+              ImplFlags: 0x3 [Runtime]  [0xe0a+0x2]
+              Flags: 0x1c6 [Public | Virtual | HideBySig | NewSlot]  [0xe0c+0x2]
+              Name: 326 — "Invoke"  [0xe0e+0x2] → 0x135a+0x7
+              Signature: 90 — instance int32(native int, int32)  [0xe10+0x2] → 0x1c97+0x5
+              ParamList: 16 — Param #16 (buffer)  [0xe12+0x2] → 0xefa+0x6
+          ▾ #14 BeginInvoke — instance class System.IAsyncResult(native int, int32, class System.AsyncCallback, object)  [0xe14+0xe]
+              RVA: 0x0  [0xe14+0x4]
+              ImplFlags: 0x3 [Runtime]  [0xe18+0x2]
+              Flags: 0x1c6 [Public | Virtual | HideBySig | NewSlot]  [0xe1a+0x2]
+              Name: 321 — "BeginInvoke"  [0xe1c+0x2] → 0x1355+0xc
+              Signature: 96 — instance class System.IAsyncResult(native int, int32, class System.AsyncCallback, object)  [0xe1e+0x2] → 0x1c9d+0x9
+              ParamList: 18 — Param #18 (buffer)  [0xe20+0x2] → 0xf06+0x6
+          ▾ #15 EndInvoke — instance int32(class System.IAsyncResult)  [0xe22+0xe]
+              RVA: 0x0  [0xe22+0x4]
+              ImplFlags: 0x3 [Runtime]  [0xe26+0x2]
+              Flags: 0x1c6 [Public | Virtual | HideBySig | NewSlot]  [0xe28+0x2]
+              Name: 311 — "EndInvoke"  [0xe2a+0x2] → 0x134b+0xa
+              Signature: 106 — instance int32(class System.IAsyncResult)  [0xe2c+0x2] → 0x1ca7+0x5
+              ParamList: 22 — Param #22 (result)  [0xe2e+0x2] → 0xf1e+0x6
+          ▾ #16 get_Domain — instance class System.AppDomain(), body at RVA 0x2107 (.text)  [0xe30+0xe]
+              RVA: 0x2107 — RVA 0x2107 (.text)  [0xe30+0x4] → 0x507+0x0
+              ImplFlags: 0x0 []  [0xe34+0x2]
+              Flags: 0x886 [Public | HideBySig | SpecialName]  [0xe36+0x2]
+              Name: 1227 — "get_Domain"  [0xe38+0x2] → 0x16df+0xb
+              Signature: 140 — instance class System.AppDomain()  [0xe3a+0x2] → 0x1cc9+0x4
+              ParamList: 23 — Param #23 (domain)  [0xe3c+0x2] → 0xf24+0x6
+            ▾ Body — tiny header, 7 bytes of IL  [0x507+0x8]
+                Header: 0x1e — tiny, 7 bytes of code  [0x507+0x1]
+                IL Code — 7 bytes  [0x508+0x7]
+          ▾ #17 .ctor — instance void(class System.AppDomain), body at RVA 0x210f (.text)  [0xe3e+0xe]
+              RVA: 0x210f — RVA 0x210f (.text)  [0xe3e+0x4] → 0x50f+0x0
+              ImplFlags: 0x0 []  [0xe42+0x2]
+              Flags: 0x1886 [Public | HideBySig | SpecialName | RTSpecialName]  [0xe44+0x2]
+              Name: 1500 — ".ctor"  [0xe46+0x2] → 0x17f0+0x6
+              Signature: 145 — instance void(class System.AppDomain)  [0xe48+0x2] → 0x1cce+0x5
+              ParamList: 23 — Param #23 (domain)  [0xe4a+0x2] → 0xf24+0x6
+            ▾ Body — tiny header, 36 bytes of IL  [0x50f+0xc]
+                Header: 0x92 — tiny, 36 bytes of code  [0x50f+0x1]
+                IL Code — 36 bytes  [0x510+0xb]
+          ▾ #18 installResolver — instance void(string), body at RVA 0x2504 (.text)  [0xe4c+0xe]
+              RVA: 0x2504 — RVA 0x2504 (.text)  [0xe4c+0x4] → 0x904+0x0
+              ImplFlags: 0x0 []  [0xe50+0x2]
+              Flags: 0x81 [Private | HideBySig]  [0xe52+0x2]
+              Name: 1470 — "installResolver"  [0xe54+0x2] → 0x17d2+0x10
+              Signature: 151 — instance void(string)  [0xe56+0x2] → 0x1cd4+0x4
+              ParamList: 24 — Param #24 (assemblyPath)  [0xe58+0x2] → 0xf2a+0x6
+            ▾ Body — fat header, 96 bytes of IL  [0x904+0xc]
+                Flags / Size: 0x3013 [InitLocals | 0x3003] — header 12 bytes  [0x904+0x2]
+                MaxStack: 3  [0x906+0x2]
+                CodeSize: 96  [0x908+0x4]
+                LocalVarSigTok: 0x11000008  [0x90c+0x4]
+                IL Code — 96 bytes  [0x910+0x0]
+          ▾ #19 GetFunctor — instance native int(string, string, string), body at RVA 0x2570 (.text)  [0xe5a+0xe]
+              RVA: 0x2570 — RVA 0x2570 (.text)  [0xe5a+0x4] → 0x970+0x0
+              ImplFlags: 0x0 []  [0xe5e+0x2]
+              Flags: 0x86 [Public | HideBySig]  [0xe60+0x2]
+              Name: 1513 — "GetFunctor"  [0xe62+0x2] → 0x17fd+0xb
+              Signature: 156 — instance native int(string, string, string)  [0xe64+0x2] → 0x1cd9+0x6
+              ParamList: 25 — Param #25 (assemblyPath)  [0xe66+0x2] → 0xf30+0x6
+            ▾ Body — fat header, 330 bytes of IL, exception clauses  [0x970+0xc]
+                Flags / Size: 0x301b [MoreSects | InitLocals | 0x3003] — header 12 bytes  [0x970+0x2]
+                MaxStack: 4  [0x972+0x2]
+                CodeSize: 330  [0x974+0x4]
+                LocalVarSigTok: 0x11000009  [0x978+0x4]
+                IL Code — 330 bytes  [0x97c+0x0]
+          ▾ #20 Dispose — instance void(), body at RVA 0x2134 (.text)  [0xe68+0xe]
+              RVA: 0x2134 — RVA 0x2134 (.text)  [0xe68+0x4] → 0x534+0x0
+              ImplFlags: 0x0 []  [0xe6c+0x2]
+              Flags: 0x1e6 [Public | Final | Virtual | HideBySig | NewSlot]  [0xe6e+0x2]
+              Name: 532 — "Dispose"  [0xe70+0x2] → 0x1428+0x8
+              Signature: 163 — instance void()  [0xe72+0x2] → 0x1ce0+0x3
+              ParamList: 28 — Param #28 (sender)  [0xe74+0x2] → 0xf42+0x6
+            ▾ Body — tiny header, 51 bytes of IL  [0x534+0xc]
+                Header: 0xce — tiny, 51 bytes of code  [0x534+0x1]
+                IL Code — 51 bytes  [0x535+0xb]
+          ▾ #21 .cctor — void(), body at RVA 0x2168 (.text)  [0xe76+0xe]
+              RVA: 0x2168 — RVA 0x2168 (.text)  [0xe76+0x4] → 0x568+0x0
+              ImplFlags: 0x0 []  [0xe7a+0x2]
+              Flags: 0x1891 [Private | Static | HideBySig | SpecialName | RTSpecialName]  [0xe7c+0x2]
+              Name: 1506 — ".cctor"  [0xe7e+0x2] → 0x17f6+0x7
+              Signature: 66 — void()  [0xe80+0x2] → 0x1c7f+0x3
+              ParamList: 28 — Param #28 (sender)  [0xe82+0x2] → 0xf42+0x6
+            ▾ Body — tiny header, 11 bytes of IL  [0x568+0xc]
+                Header: 0x2e — tiny, 11 bytes of code  [0x568+0x1]
+                IL Code — 11 bytes  [0x569+0xb]
+          ▾ #22 .ctor — instance void(), body at RVA 0x2174 (.text)  [0xe84+0xe]
+              RVA: 0x2174 — RVA 0x2174 (.text)  [0xe84+0x4] → 0x574+0x0
+              ImplFlags: 0x0 []  [0xe88+0x2]
+              Flags: 0x1886 [Public | HideBySig | SpecialName | RTSpecialName]  [0xe8a+0x2]
+              Name: 1500 — ".ctor"  [0xe8c+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0xe8e+0x2] → 0x1ce0+0x3
+              ParamList: 28 — Param #28 (sender)  [0xe90+0x2] → 0xf42+0x6
+            ▾ Body — tiny header, 7 bytes of IL  [0x574+0x8]
+                Header: 0x1e — tiny, 7 bytes of code  [0x574+0x1]
+                IL Code — 7 bytes  [0x575+0x7]
+          ▾ #23 <installResolver>b__0 — instance class System.Reflection.Assembly(object, class System.ResolveEventArgs), body at RVA 0x217c (.text)  [0xe92+0xe]
+              RVA: 0x217c — RVA 0x217c (.text)  [0xe92+0x4] → 0x57c+0x0
+              ImplFlags: 0x0 []  [0xe96+0x2]
+              Flags: 0x83 [Assembly | HideBySig]  [0xe98+0x2]
+              Name: 22 — "<installResolver>b__0"  [0xe9a+0x2] → 0x122a+0x16
+              Signature: 175 — instance class System.Reflection.Assembly(object, class System.ResolveEventArgs)  [0xe9c+0x2] → 0x1cec+0x7
+              ParamList: 28 — Param #28 (sender)  [0xe9e+0x2] → 0xf42+0x6
+            ▾ Body — tiny header, 33 bytes of IL  [0x57c+0xc]
+                Header: 0x86 — tiny, 33 bytes of code  [0x57c+0x1]
+                IL Code — 33 bytes  [0x57d+0xb]
+        ▾ Param — 29 rows, 6 bytes each  [0xea0+0xae]
+          ▾ #1 ptr  [0xea0+0x6]
+              Flags: 0x0 []  [0xea0+0x2]
+              Sequence: 1  [0xea2+0x2]
+              Name: 1601 — "ptr"  [0xea4+0x2] → 0x1855+0x4
+          ▾ #2 namePtr  [0xea6+0x6]
+              Flags: 0x0 []  [0xea6+0x2]
+              Sequence: 1  [0xea8+0x2]
+              Name: 1558 — "namePtr"  [0xeaa+0x2] → 0x182a+0x8
+          ▾ #3 configFilePtr  [0xeac+0x6]
+              Flags: 0x0 []  [0xeac+0x2]
+              Sequence: 2  [0xeae+0x2]
+              Name: 1532 — "configFilePtr"  [0xeb0+0x2] → 0x1810+0xe
+          ▾ #4 domain  [0xeb2+0x6]
+              Flags: 0x0 []  [0xeb2+0x2]
+              Sequence: 1  [0xeb4+0x2]
+              Name: 1300 — "domain"  [0xeb6+0x2] → 0x1728+0x7
+          ▾ #5 assemblyPathPtr  [0xeb8+0x6]
+              Flags: 0x0 []  [0xeb8+0x2]
+              Sequence: 2  [0xeba+0x2]
+              Name: 1566 — "assemblyPathPtr"  [0xebc+0x2] → 0x1832+0x10
+          ▾ #6 typeNamePtr  [0xebe+0x6]
+              Flags: 0x0 []  [0xebe+0x2]
+              Sequence: 3  [0xec0+0x2]
+              Name: 1546 — "typeNamePtr"  [0xec2+0x2] → 0x181e+0xc
+          ▾ #7 functionPtr  [0xec4+0x6]
+              Flags: 0x0 []  [0xec4+0x2]
+              Sequence: 4  [0xec6+0x2]
+              Name: 1582 — "functionPtr"  [0xec8+0x2] → 0x1842+0xc
+          ▾ #8 domain  [0xeca+0x6]
+              Flags: 0x0 []  [0xeca+0x2]
+              Sequence: 1  [0xecc+0x2]
+              Name: 1300 — "domain"  [0xece+0x2] → 0x1728+0x7
+          ▾ #9 s  [0xed0+0x6]
+              Flags: 0x0 []  [0xed0+0x2]
+              Sequence: 1  [0xed2+0x2]
+              Name: 1770 — "s"  [0xed4+0x2] → 0x18fe+0x2
+          ▾ #10 domain  [0xed6+0x6]
+              Flags: 0x0 []  [0xed6+0x2]
+              Sequence: 1  [0xed8+0x2]
+              Name: 1300 — "domain"  [0xeda+0x2] → 0x1728+0x7
+          ▾ #11 assemblyPath  [0xedc+0x6]
+              Flags: 0x0 []  [0xedc+0x2]
+              Sequence: 2  [0xede+0x2]
+              Name: 1097 — "assemblyPath"  [0xee0+0x2] → 0x165d+0xd
+          ▾ #12 typeName  [0xee2+0x6]
+              Flags: 0x0 []  [0xee2+0x2]
+              Sequence: 3  [0xee4+0x2]
+              Name: 418 — "typeName"  [0xee6+0x2] → 0x13b6+0x9
+          ▾ #13 function  [0xee8+0x6]
+              Flags: 0x0 []  [0xee8+0x2]
+              Sequence: 4  [0xeea+0x2]
+              Name: 1337 — "function"  [0xeec+0x2] → 0x174d+0x9
+          ▾ #14 object  [0xeee+0x6]
+              Flags: 0x0 []  [0xeee+0x2]
+              Sequence: 1  [0xef0+0x2]
+              Name: 1793 — "object"  [0xef2+0x2] → 0x1915+0x7
+          ▾ #15 method  [0xef4+0x6]
+              Flags: 0x0 []  [0xef4+0x2]
+              Sequence: 2  [0xef6+0x2]
+              Name: 268 — "method"  [0xef8+0x2] → 0x1320+0x7
+          ▾ #16 buffer  [0xefa+0x6]
+              Flags: 0x0 []  [0xefa+0x2]
+              Sequence: 1  [0xefc+0x2]
+              Name: 1437 — "buffer"  [0xefe+0x2] → 0x17b1+0x7
+          ▾ #17 size  [0xf00+0x6]
+              Flags: 0x0 []  [0xf00+0x2]
+              Sequence: 2  [0xf02+0x2]
+              Name: 1002 — "size"  [0xf04+0x2] → 0x15fe+0x5
+          ▾ #18 buffer  [0xf06+0x6]
+              Flags: 0x0 []  [0xf06+0x2]
+              Sequence: 1  [0xf08+0x2]
+              Name: 1437 — "buffer"  [0xf0a+0x2] → 0x17b1+0x7
+          ▾ #19 size  [0xf0c+0x6]
+              Flags: 0x0 []  [0xf0c+0x2]
+              Sequence: 2  [0xf0e+0x2]
+              Name: 1002 — "size"  [0xf10+0x2] → 0x15fe+0x5
+          ▾ #20 callback  [0xf12+0x6]
+              Flags: 0x0 []  [0xf12+0x2]
+              Sequence: 3  [0xf14+0x2]
+              Name: 1148 — "callback"  [0xf16+0x2] → 0x1690+0x9
+          ▾ #21 object  [0xf18+0x6]
+              Flags: 0x0 []  [0xf18+0x2]
+              Sequence: 4  [0xf1a+0x2]
+              Name: 1793 — "object"  [0xf1c+0x2] → 0x1915+0x7
+          ▾ #22 result  [0xf1e+0x6]
+              Flags: 0x0 []  [0xf1e+0x2]
+              Sequence: 1  [0xf20+0x2]
+              Name: 1830 — "result"  [0xf22+0x2] → 0x193a+0x7
+          ▾ #23 domain  [0xf24+0x6]
+              Flags: 0x0 []  [0xf24+0x2]
+              Sequence: 1  [0xf26+0x2]
+              Name: 1300 — "domain"  [0xf28+0x2] → 0x1728+0x7
+          ▾ #24 assemblyPath  [0xf2a+0x6]
+              Flags: 0x0 []  [0xf2a+0x2]
+              Sequence: 1  [0xf2c+0x2]
+              Name: 1097 — "assemblyPath"  [0xf2e+0x2] → 0x165d+0xd
+          ▾ #25 assemblyPath  [0xf30+0x6]
+              Flags: 0x0 []  [0xf30+0x2]
+              Sequence: 1  [0xf32+0x2]
+              Name: 1097 — "assemblyPath"  [0xf34+0x2] → 0x165d+0xd
+          ▾ #26 typeName  [0xf36+0x6]
+              Flags: 0x0 []  [0xf36+0x2]
+              Sequence: 2  [0xf38+0x2]
+              Name: 418 — "typeName"  [0xf3a+0x2] → 0x13b6+0x9
+          ▾ #27 function  [0xf3c+0x6]
+              Flags: 0x0 []  [0xf3c+0x2]
+              Sequence: 3  [0xf3e+0x2]
+              Name: 1337 — "function"  [0xf40+0x2] → 0x174d+0x9
+          ▾ #28 sender  [0xf42+0x6]
+              Flags: 0x0 []  [0xf42+0x2]
+              Sequence: 1  [0xf44+0x2]
+              Name: 1430 — "sender"  [0xf46+0x2] → 0x17aa+0x7
+          ▾ #29 args  [0xf48+0x6]
+              Flags: 0x0 []  [0xf48+0x2]
+              Sequence: 2  [0xf4a+0x2]
+              Name: 1739 — "args"  [0xf4c+0x2] → 0x18df+0x5
+        ▾ InterfaceImpl — 1 row, 4 bytes each, sorted  [0xf4e+0x4]
+          ▾ #1  [0xf4e+0x4]
+              Class: 5 — TypeDef #5 (ClrLoader.DomainData)  [0xf4e+0x2] → 0xd0c+0xe
+              Interface: 37 — TypeRef #9 (System.IDisposable)  [0xf50+0x2] → 0xbea+0x6
+        ▾ MemberRef — 79 rows, 6 bytes each  [0xf52+0x1da]
+          ▾ #1 System.Runtime.CompilerServices.CompilationRelaxationsAttribute::.ctor — instance void(int32)  [0xf52+0x6]
+              Class: 121 — TypeRef #15 (System.Runtime.CompilerServices.CompilationRelaxationsAttribute)  [0xf52+0x2] → 0xc0e+0x6
+              Name: 1500 — ".ctor"  [0xf54+0x2] → 0x17f0+0x6
+              Signature: 183 — instance void(int32)  [0xf56+0x2] → 0x1cf4+0x4
+          ▾ #2 System.Runtime.CompilerServices.RuntimeCompatibilityAttribute::.ctor — instance void()  [0xf58+0x6]
+              Class: 129 — TypeRef #16 (System.Runtime.CompilerServices.RuntimeCompatibilityAttribute)  [0xf58+0x2] → 0xc14+0x6
+              Name: 1500 — ".ctor"  [0xf5a+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0xf5c+0x2] → 0x1ce0+0x3
+          ▾ #3 System.Diagnostics.DebuggableAttribute::.ctor — instance void(valuetype DebuggingModes)  [0xf5e+0x6]
+              Class: 137 — TypeRef #17 (System.Diagnostics.DebuggableAttribute)  [0xf5e+0x2] → 0xc1a+0x6
+              Name: 1500 — ".ctor"  [0xf60+0x2] → 0x17f0+0x6
+              Signature: 228 — instance void(valuetype DebuggingModes)  [0xf62+0x2] → 0x1d21+0x5
+          ▾ #4 System.Runtime.Versioning.TargetFrameworkAttribute::.ctor — instance void(string)  [0xf64+0x6]
+              Class: 153 — TypeRef #19 (System.Runtime.Versioning.TargetFrameworkAttribute)  [0xf64+0x2] → 0xc26+0x6
+              Name: 1500 — ".ctor"  [0xf66+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf68+0x2] → 0x1cd4+0x4
+          ▾ #5 System.Reflection.AssemblyCompanyAttribute::.ctor — instance void(string)  [0xf6a+0x6]
+              Class: 161 — TypeRef #20 (System.Reflection.AssemblyCompanyAttribute)  [0xf6a+0x2] → 0xc2c+0x6
+              Name: 1500 — ".ctor"  [0xf6c+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf6e+0x2] → 0x1cd4+0x4
+          ▾ #6 System.Reflection.AssemblyConfigurationAttribute::.ctor — instance void(string)  [0xf70+0x6]
+              Class: 169 — TypeRef #21 (System.Reflection.AssemblyConfigurationAttribute)  [0xf70+0x2] → 0xc32+0x6
+              Name: 1500 — ".ctor"  [0xf72+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf74+0x2] → 0x1cd4+0x4
+          ▾ #7 System.Reflection.AssemblyFileVersionAttribute::.ctor — instance void(string)  [0xf76+0x6]
+              Class: 177 — TypeRef #22 (System.Reflection.AssemblyFileVersionAttribute)  [0xf76+0x2] → 0xc38+0x6
+              Name: 1500 — ".ctor"  [0xf78+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf7a+0x2] → 0x1cd4+0x4
+          ▾ #8 System.Reflection.AssemblyInformationalVersionAttribute::.ctor — instance void(string)  [0xf7c+0x6]
+              Class: 185 — TypeRef #23 (System.Reflection.AssemblyInformationalVersionAttribute)  [0xf7c+0x2] → 0xc3e+0x6
+              Name: 1500 — ".ctor"  [0xf7e+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf80+0x2] → 0x1cd4+0x4
+          ▾ #9 System.Reflection.AssemblyProductAttribute::.ctor — instance void(string)  [0xf82+0x6]
+              Class: 193 — TypeRef #24 (System.Reflection.AssemblyProductAttribute)  [0xf82+0x2] → 0xc44+0x6
+              Name: 1500 — ".ctor"  [0xf84+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf86+0x2] → 0x1cd4+0x4
+          ▾ #10 System.Reflection.AssemblyTitleAttribute::.ctor — instance void(string)  [0xf88+0x6]
+              Class: 201 — TypeRef #25 (System.Reflection.AssemblyTitleAttribute)  [0xf88+0x2] → 0xc4a+0x6
+              Name: 1500 — ".ctor"  [0xf8a+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xf8c+0x2] → 0x1cd4+0x4
+          ▾ #11 System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor — instance void()  [0xf8e+0x6]
+              Class: 209 — TypeRef #26 (System.Runtime.CompilerServices.CompilerGeneratedAttribute)  [0xf8e+0x2] → 0xc50+0x6
+              Name: 1500 — ".ctor"  [0xf90+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0xf92+0x2] → 0x1ce0+0x3
+          ▾ #12 System.IntPtr::Zero — native int  [0xf94+0x6]
+              Class: 217 — TypeRef #27 (System.IntPtr)  [0xf94+0x2] → 0xc56+0x6
+              Name: 1383 — "Zero"  [0xf96+0x2] → 0x177b+0x5
+              Signature: 384 — native int  [0xf98+0x2] → 0x1dbd+0x2
+          ▾ #13 System.IntPtr::op_Equality — bool(native int, native int)  [0xf9a+0x6]
+              Class: 217 — TypeRef #27 (System.IntPtr)  [0xf9a+0x2] → 0xc56+0x6
+              Name: 1968 — "op_Equality"  [0xf9c+0x2] → 0x19c4+0xc
+              Signature: 387 — bool(native int, native int)  [0xf9e+0x2] → 0x1dc0+0x5
+          ▾ #14 System.Runtime.InteropServices.Marshal::ReadByte — uint8(native int, int32)  [0xfa0+0x6]
+              Class: 225 — TypeRef #28 (System.Runtime.InteropServices.Marshal)  [0xfa0+0x2] → 0xc5c+0x6
+              Name: 950 — "ReadByte"  [0xfa2+0x2] → 0x15ca+0x9
+              Signature: 393 — uint8(native int, int32)  [0xfa4+0x2] → 0x1dc6+0x5
+          ▾ #15 System.Runtime.InteropServices.Marshal::Copy — void(native int, uint8[], int32, int32)  [0xfa6+0x6]
+              Class: 225 — TypeRef #28 (System.Runtime.InteropServices.Marshal)  [0xfa6+0x2] → 0xc5c+0x6
+              Name: 1941 — "Copy"  [0xfa8+0x2] → 0x19a9+0x5
+              Signature: 399 — void(native int, uint8[], int32, int32)  [0xfaa+0x2] → 0x1dcc+0x8
+          ▾ #16 System.Text.Encoding::get_UTF8 — class System.Text.Encoding()  [0xfac+0x6]
+              Class: 241 — TypeRef #30 (System.Text.Encoding)  [0xfac+0x2] → 0xc68+0x6
+              Name: 82 — "get_UTF8"  [0xfae+0x2] → 0x1266+0x9
+              Signature: 408 — class System.Text.Encoding()  [0xfb0+0x2] → 0x1dd5+0x4
+          ▾ #17 System.Text.Encoding::GetString — instance string(uint8[])  [0xfb2+0x6]
+              Class: 241 — TypeRef #30 (System.Text.Encoding)  [0xfb2+0x2] → 0xc68+0x6
+              Name: 1078 — "GetString"  [0xfb4+0x2] → 0x164a+0xa
+              Signature: 413 — instance string(uint8[])  [0xfb6+0x2] → 0x1dda+0x5
+          ▾ #18 System.AppDomain::get_CurrentDomain — class System.AppDomain()  [0xfb8+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0xfb8+0x2] → 0xbd2+0x6
+              Name: 1282 — "get_CurrentDomain"  [0xfba+0x2] → 0x1716+0x12
+              Signature: 419 — class System.AppDomain()  [0xfbc+0x2] → 0x1de0+0x4
+          ▾ #19 Add — instance void(!0)  [0xfbe+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0xfbe+0x2] → 0x11ac+0x2
+              Name: 217 — "Add"  [0xfc0+0x2] → 0x12ed+0x4
+              Signature: 431 — instance void(!0)  [0xfc2+0x2] → 0x1dec+0x5
+          ▾ #20 System.Reflection.Assembly::GetExecutingAssembly — class System.Reflection.Assembly()  [0xfc4+0x6]
+              Class: 105 — TypeRef #13 (System.Reflection.Assembly)  [0xfc4+0x2] → 0xc02+0x6
+              Name: 1920 — "GetExecutingAssembly"  [0xfc6+0x2] → 0x1994+0x15
+              Signature: 437 — class System.Reflection.Assembly()  [0xfc8+0x2] → 0x1df2+0x4
+          ▾ #21 System.Reflection.Assembly::get_CodeBase — instance string()  [0xfca+0x6]
+              Class: 105 — TypeRef #13 (System.Reflection.Assembly)  [0xfca+0x2] → 0xc02+0x6
+              Name: 493 — "get_CodeBase"  [0xfcc+0x2] → 0x1401+0xd
+              Signature: 442 — instance string()  [0xfce+0x2] → 0x1df7+0x3
+          ▾ #22 System.UriBuilder::.ctor — instance void(string)  [0xfd0+0x6]
+              Class: 249 — TypeRef #31 (System.UriBuilder)  [0xfd0+0x2] → 0xc6e+0x6
+              Name: 1500 — ".ctor"  [0xfd2+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0xfd4+0x2] → 0x1cd4+0x4
+          ▾ #23 System.UriBuilder::get_Path — instance string()  [0xfd6+0x6]
+              Class: 249 — TypeRef #31 (System.UriBuilder)  [0xfd6+0x2] → 0xc6e+0x6
+              Name: 1088 — "get_Path"  [0xfd8+0x2] → 0x1654+0x9
+              Signature: 442 — instance string()  [0xfda+0x2] → 0x1df7+0x3
+          ▾ #24 System.Uri::UnescapeDataString — string(string)  [0xfdc+0x6]
+              Class: 257 — TypeRef #32 (System.Uri)  [0xfdc+0x2] → 0xc74+0x6
+              Name: 1059 — "UnescapeDataString"  [0xfde+0x2] → 0x1637+0x13
+              Signature: 446 — string(string)  [0xfe0+0x2] → 0x1dfb+0x4
+          ▾ #25 System.IO.Path::GetDirectoryName — string(string)  [0xfe2+0x6]
+              Class: 265 — TypeRef #33 (System.IO.Path)  [0xfe2+0x2] → 0xc7a+0x6
+              Name: 456 — "GetDirectoryName"  [0xfe4+0x2] → 0x13dc+0x11
+              Signature: 446 — string(string)  [0xfe6+0x2] → 0x1dfb+0x4
+          ▾ #26 System.String::Concat — string(string, string, string, string)  [0xfe8+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0xfe8+0x2] → 0xc86+0x6
+              Name: 1772 — "Concat"  [0xfea+0x2] → 0x1900+0x7
+              Signature: 464 — string(string, string, string, string)  [0xfec+0x2] → 0x1e0d+0x7
+          ▾ #27 System.String::IsNullOrEmpty — bool(string)  [0xfee+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0xfee+0x2] → 0xc86+0x6
+              Name: 1994 — "IsNullOrEmpty"  [0xff0+0x2] → 0x19de+0xe
+              Signature: 472 — bool(string)  [0xff2+0x2] → 0x1e15+0x4
+          ▾ #28 System.AppDomainSetup::.ctor — instance void()  [0xff4+0x6]
+              Class: 273 — TypeRef #34 (System.AppDomainSetup)  [0xff4+0x2] → 0xc80+0x6
+              Name: 1500 — ".ctor"  [0xff6+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0xff8+0x2] → 0x1ce0+0x3
+          ▾ #29 System.AppDomainSetup::set_ApplicationBase — instance void(string)  [0xffa+0x6]
+              Class: 273 — TypeRef #34 (System.AppDomainSetup)  [0xffa+0x2] → 0xc80+0x6
+              Name: 506 — "set_ApplicationBase"  [0xffc+0x2] → 0x140e+0x14
+              Signature: 151 — instance void(string)  [0xffe+0x2] → 0x1cd4+0x4
+          ▾ #30 System.AppDomainSetup::set_ConfigurationFile — instance void(string)  [0x1000+0x6]
+              Class: 273 — TypeRef #34 (System.AppDomainSetup)  [0x1000+0x2] → 0xc80+0x6
+              Name: 381 — "set_ConfigurationFile"  [0x1002+0x2] → 0x1391+0x16
+              Signature: 151 — instance void(string)  [0x1004+0x2] → 0x1cd4+0x4
+          ▾ #31 System.String::Concat — string(string, string)  [0x1006+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0x1006+0x2] → 0xc86+0x6
+              Name: 1772 — "Concat"  [0x1008+0x2] → 0x1900+0x7
+              Signature: 477 — string(string, string)  [0x100a+0x2] → 0x1e1a+0x5
+          ▾ #32 System.AppDomain::CreateDomain — class System.AppDomain(string, class System.Security.Policy.Evidence, class System.AppDomainSetup)  [0x100c+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x100c+0x2] → 0xbd2+0x6
+              Name: 1238 — "CreateDomain"  [0x100e+0x2] → 0x16ea+0xd
+              Signature: 483 — class System.AppDomain(string, class System.Security.Policy.Evidence, class System.AppDomainSetup)  [0x1010+0x2] → 0x1e20+0xb
+          ▾ #33 System.String::Format — string(string, object)  [0x1012+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0x1012+0x2] → 0xc86+0x6
+              Name: 1779 — "Format"  [0x1014+0x2] → 0x1907+0x7
+              Signature: 495 — string(string, object)  [0x1016+0x2] → 0x1e2c+0x5
+          ▾ #34 get_Count — instance int32()  [0x1018+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0x1018+0x2] → 0x11ac+0x2
+              Name: 1866 — "get_Count"  [0x101a+0x2] → 0x195e+0xa
+              Signature: 501 — instance int32()  [0x101c+0x2] → 0x1e32+0x3
+          ▾ #35 System.IntPtr::.ctor — instance void(int32)  [0x101e+0x6]
+              Class: 217 — TypeRef #27 (System.IntPtr)  [0x101e+0x2] → 0xc56+0x6
+              Name: 1500 — ".ctor"  [0x1020+0x2] → 0x17f0+0x6
+              Signature: 183 — instance void(int32)  [0x1022+0x2] → 0x1cf4+0x4
+          ▾ #36 System.IntPtr::op_Explicit — int32(native int)  [0x1024+0x6]
+              Class: 217 — TypeRef #27 (System.IntPtr)  [0x1024+0x2] → 0xc56+0x6
+              Name: 1800 — "op_Explicit"  [0x1026+0x2] → 0x191c+0xc
+              Signature: 517 — int32(native int)  [0x1028+0x2] → 0x1e42+0x4
+          ▾ #37 get_Item — instance !0(int32)  [0x102a+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0x102a+0x2] → 0x11ac+0x2
+              Name: 1193 — "get_Item"  [0x102c+0x2] → 0x16bd+0x9
+              Signature: 522 — instance !0(int32)  [0x102e+0x2] → 0x1e47+0x5
+          ▾ #38 System.String::Concat — string(string[])  [0x1030+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0x1030+0x2] → 0xc86+0x6
+              Name: 1772 — "Concat"  [0x1032+0x2] → 0x1900+0x7
+              Signature: 528 — string(string[])  [0x1034+0x2] → 0x1e4d+0x5
+          ▾ #39 System.Exception::GetType — instance class System.Type()  [0x1036+0x6]
+              Class: 297 — TypeRef #37 (System.Exception)  [0x1036+0x2] → 0xc92+0x6
+              Name: 473 — "GetType"  [0x1038+0x2] → 0x13ed+0x8
+              Signature: 534 — instance class System.Type()  [0x103a+0x2] → 0x1e53+0x5
+          ▾ #40 System.Reflection.MemberInfo::get_Name — instance string()  [0x103c+0x6]
+              Class: 313 — TypeRef #39 (System.Reflection.MemberInfo)  [0x103c+0x2] → 0xc9e+0x6
+              Name: 409 — "get_Name"  [0x103e+0x2] → 0x13ad+0x9
+              Signature: 442 — instance string()  [0x1040+0x2] → 0x1df7+0x3
+          ▾ #41 System.Exception::get_Message — instance string()  [0x1042+0x6]
+              Class: 297 — TypeRef #37 (System.Exception)  [0x1042+0x2] → 0xc92+0x6
+              Name: 299 — "get_Message"  [0x1044+0x2] → 0x133f+0xc
+              Signature: 442 — instance string()  [0x1046+0x2] → 0x1df7+0x3
+          ▾ #42 System.Exception::get_StackTrace — instance string()  [0x1048+0x6]
+              Class: 297 — TypeRef #37 (System.Exception)  [0x1048+0x2] → 0xc92+0x6
+              Name: 275 — "get_StackTrace"  [0x104a+0x2] → 0x1327+0xf
+              Signature: 442 — instance string()  [0x104c+0x2] → 0x1df7+0x3
+          ▾ #43 System.IntPtr::op_Inequality — bool(native int, native int)  [0x104e+0x6]
+              Class: 217 — TypeRef #27 (System.IntPtr)  [0x104e+0x2] → 0xc56+0x6
+              Name: 1980 — "op_Inequality"  [0x1050+0x2] → 0x19d0+0xe
+              Signature: 387 — bool(native int, native int)  [0x1052+0x2] → 0x1dc0+0x5
+          ▾ #44 GetEnumerator — instance Enumerator<!0>()  [0x1054+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0x1054+0x2] → 0x11ac+0x2
+              Name: 1486 — "GetEnumerator"  [0x1056+0x2] → 0x17e2+0xe
+              Signature: 556 — instance Enumerator<!0>()  [0x1058+0x2] → 0x1e69+0x9
+          ▾ #45 get_Current — instance !0()  [0x105a+0x6]
+              Class: 20 — TypeSpec #2 (Enumerator<class ClrLoader.DomainData>)  [0x105a+0x2] → 0x11ae+0x2
+              Name: 1837 — "get_Current"  [0x105c+0x2] → 0x1941+0xc
+              Signature: 574 — instance !0()  [0x105e+0x2] → 0x1e7b+0x4
+          ▾ #46 MoveNext — instance bool()  [0x1060+0x6]
+              Class: 20 — TypeSpec #2 (Enumerator<class ClrLoader.DomainData>)  [0x1060+0x2] → 0x11ae+0x2
+              Name: 1876 — "MoveNext"  [0x1062+0x2] → 0x1968+0x9
+              Signature: 579 — instance bool()  [0x1064+0x2] → 0x1e80+0x3
+          ▾ #47 System.IDisposable::Dispose — instance void()  [0x1066+0x6]
+              Class: 73 — TypeRef #9 (System.IDisposable)  [0x1066+0x2] → 0xbea+0x6
+              Name: 532 — "Dispose"  [0x1068+0x2] → 0x1428+0x8
+              Signature: 163 — instance void()  [0x106a+0x2] → 0x1ce0+0x3
+          ▾ #48 Clear — instance void()  [0x106c+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0x106c+0x2] → 0x11ac+0x2
+              Name: 1403 — "Clear"  [0x106e+0x2] → 0x178f+0x6
+              Signature: 163 — instance void()  [0x1070+0x2] → 0x1ce0+0x3
+          ▾ #49 .ctor — instance void()  [0x1072+0x6]
+              Class: 12 — TypeSpec #1 (System.Collections.Generic.List`1<class ClrLoader.DomainData>)  [0x1072+0x2] → 0x11ac+0x2
+              Name: 1500 — ".ctor"  [0x1074+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0x1076+0x2] → 0x1ce0+0x3
+          ▾ #50 System.AppDomain::GetData — instance object(string)  [0x1078+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x1078+0x2] → 0xbd2+0x6
+              Name: 153 — "GetData"  [0x107a+0x2] → 0x12ad+0x8
+              Signature: 592 — instance object(string)  [0x107c+0x2] → 0x1e8d+0x4
+          ▾ #51 System.Runtime.InteropServices.Marshal::GetFunctionPointerForDelegate — native int(class System.Delegate)  [0x107e+0x6]
+              Class: 225 — TypeRef #28 (System.Runtime.InteropServices.Marshal)  [0x107e+0x2] → 0xc5c+0x6
+              Name: 585 — "GetFunctionPointerForDelegate"  [0x1080+0x2] → 0x145d+0x1e
+              Signature: 597 — native int(class System.Delegate)  [0x1082+0x2] → 0x1e92+0x5
+          ▾ #52 System.AppDomain::SetData — instance void(string, object)  [0x1084+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x1084+0x2] → 0xbd2+0x6
+              Name: 161 — "SetData"  [0x1086+0x2] → 0x12b5+0x8
+              Signature: 603 — instance void(string, object)  [0x1088+0x2] → 0x1e98+0x5
+          ▾ #53 System.Reflection.AssemblyName::GetAssemblyName — class System.Reflection.AssemblyName(string)  [0x108a+0x6]
+              Class: 329 — TypeRef #41 (System.Reflection.AssemblyName)  [0x108a+0x2] → 0xcaa+0x6
+              Name: 427 — "GetAssemblyName"  [0x108c+0x2] → 0x13bf+0x10
+              Signature: 618 — class System.Reflection.AssemblyName(string)  [0x108e+0x2] → 0x1ea7+0x6
+          ▾ #54 System.AppDomain::Load — instance class System.Reflection.Assembly(class System.Reflection.AssemblyName)  [0x1090+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x1090+0x2] → 0xbd2+0x6
+              Name: 205 — "Load"  [0x1092+0x2] → 0x12e1+0x5
+              Signature: 625 — instance class System.Reflection.Assembly(class System.Reflection.AssemblyName)  [0x1094+0x2] → 0x1eae+0x7
+          ▾ #55 System.Reflection.Assembly::GetType — instance class System.Type(string, bool)  [0x1096+0x6]
+              Class: 105 — TypeRef #13 (System.Reflection.Assembly)  [0x1096+0x2] → 0xc02+0x6
+              Name: 473 — "GetType"  [0x1098+0x2] → 0x13ed+0x8
+              Signature: 633 — instance class System.Type(string, bool)  [0x109a+0x2] → 0x1eb6+0x7
+          ▾ #56 System.Type::GetTypeFromHandle — class System.Type(valuetype System.RuntimeTypeHandle)  [0x109c+0x6]
+              Class: 305 — TypeRef #38 (System.Type)  [0x109c+0x2] → 0xc98+0x6
+              Name: 363 — "GetTypeFromHandle"  [0x109e+0x2] → 0x137f+0x12
+              Signature: 641 — class System.Type(valuetype System.RuntimeTypeHandle)  [0x10a0+0x2] → 0x1ebe+0x8
+          ▾ #57 System.Delegate::CreateDelegate — class System.Delegate(class System.Type, class System.Type, string)  [0x10a2+0x6]
+              Class: 33 — TypeRef #4 (System.Delegate)  [0x10a2+0x2] → 0xbcc+0x6
+              Name: 547 — "CreateDelegate"  [0x10a4+0x2] → 0x1437+0xf
+              Signature: 650 — class System.Delegate(class System.Type, class System.Type, string)  [0x10a6+0x2] → 0x1ec7+0xb
+          ▾ #58 System.Object::.ctor — instance void()  [0x10a8+0x6]
+              Class: 9 — TypeRef #1 (System.Object)  [0x10a8+0x2] → 0xbba+0x6
+              Name: 1500 — ".ctor"  [0x10aa+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0x10ac+0x2] → 0x1ce0+0x3
+          ▾ #59 .ctor — instance void()  [0x10ae+0x6]
+              Class: 28 — TypeSpec #3 (System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>)  [0x10ae+0x2] → 0x11b0+0x2
+              Name: 1500 — ".ctor"  [0x10b0+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0x10b2+0x2] → 0x1ce0+0x3
+          ▾ #60 .ctor — instance void()  [0x10b4+0x6]
+              Class: 36 — TypeSpec #4 (System.Collections.Generic.HashSet`1<string>)  [0x10b4+0x2] → 0x11b2+0x2
+              Name: 1500 — ".ctor"  [0x10b6+0x2] → 0x17f0+0x6
+              Signature: 163 — instance void()  [0x10b8+0x2] → 0x1ce0+0x3
+          ▾ #61 System.Reflection.AssemblyName::get_Name — instance string()  [0x10ba+0x6]
+              Class: 329 — TypeRef #41 (System.Reflection.AssemblyName)  [0x10ba+0x2] → 0xcaa+0x6
+              Name: 409 — "get_Name"  [0x10bc+0x2] → 0x13ad+0x9
+              Signature: 442 — instance string()  [0x10be+0x2] → 0x1df7+0x3
+          ▾ #62 Contains — instance bool(!0)  [0x10c0+0x6]
+              Class: 36 — TypeSpec #4 (System.Collections.Generic.HashSet`1<string>)  [0x10c0+0x2] → 0x11b2+0x2
+              Name: 1753 — "Contains"  [0x10c2+0x2] → 0x18ed+0x9
+              Signature: 686 — instance bool(!0)  [0x10c4+0x2] → 0x1eeb+0x5
+          ▾ #63 Add — instance bool(!0)  [0x10c6+0x6]
+              Class: 36 — TypeSpec #4 (System.Collections.Generic.HashSet`1<string>)  [0x10c6+0x2] → 0x11b2+0x2
+              Name: 217 — "Add"  [0x10c8+0x2] → 0x12ed+0x4
+              Signature: 686 — instance bool(!0)  [0x10ca+0x2] → 0x1eeb+0x5
+          ▾ #64 System.ResolveEventHandler::.ctor — instance void(object, native int)  [0x10cc+0x6]
+              Class: 345 — TypeRef #43 (System.ResolveEventHandler)  [0x10cc+0x2] → 0xcb6+0x6
+              Name: 1500 — ".ctor"  [0x10ce+0x2] → 0x17f0+0x6
+              Signature: 84 — instance void(object, native int)  [0x10d0+0x2] → 0x1c91+0x5
+          ▾ #65 System.AppDomain::add_AssemblyResolve — instance void(class System.ResolveEventHandler)  [0x10d2+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x10d2+0x2] → 0xbd2+0x6
+              Name: 971 — "add_AssemblyResolve"  [0x10d4+0x2] → 0x15df+0x14
+              Signature: 692 — instance void(class System.ResolveEventHandler)  [0x10d6+0x2] → 0x1ef1+0x6
+          ▾ #66 System.InvalidOperationException::.ctor — instance void(string)  [0x10d8+0x6]
+              Class: 353 — TypeRef #44 (System.InvalidOperationException)  [0x10d8+0x2] → 0xcbc+0x6
+              Name: 1500 — ".ctor"  [0x10da+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0x10dc+0x2] → 0x1cd4+0x4
+          ▾ #67 System.Threading.Monitor::Enter — void(object, bool&)  [0x10de+0x6]
+              Class: 361 — TypeRef #45 (System.Threading.Monitor)  [0x10de+0x2] → 0xcc2+0x6
+              Name: 1464 — "Enter"  [0x10e0+0x2] → 0x17cc+0x6
+              Signature: 714 — void(object, bool&)  [0x10e2+0x2] → 0x1f07+0x6
+          ▾ #68 System.Tuple::Create — generic<3> System.Tuple`3<!!0, !!1, !!2>(!!0, !!1, !!2)  [0x10e4+0x6]
+              Class: 369 — TypeRef #46 (System.Tuple)  [0x10e4+0x2] → 0xcc8+0x6
+              Name: 540 — "Create"  [0x10e6+0x2] → 0x1430+0x7
+              Signature: 721 — generic<3> System.Tuple`3<!!0, !!1, !!2>(!!0, !!1, !!2)  [0x10e8+0x2] → 0x1f0e+0x13
+          ▾ #69 TryGetValue — instance bool(!0, !1&)  [0x10ea+0x6]
+              Class: 28 — TypeSpec #3 (System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>)  [0x10ea+0x2] → 0x11b0+0x2
+              Name: 959 — "TryGetValue"  [0x10ec+0x2] → 0x15d3+0xc
+              Signature: 747 — instance bool(!0, !1&)  [0x10ee+0x2] → 0x1f28+0x8
+          ▾ #70 System.CrossAppDomainDelegate::.ctor — instance void(object, native int)  [0x10f0+0x6]
+              Class: 377 — TypeRef #47 (System.CrossAppDomainDelegate)  [0x10f0+0x2] → 0xcce+0x6
+              Name: 1500 — ".ctor"  [0x10f2+0x2] → 0x17f0+0x6
+              Signature: 84 — instance void(object, native int)  [0x10f4+0x2] → 0x1c91+0x5
+          ▾ #71 System.AppDomain::DoCallBack — instance void(class System.CrossAppDomainDelegate)  [0x10f6+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x10f6+0x2] → 0xbd2+0x6
+              Name: 1123 — "DoCallBack"  [0x10f8+0x2] → 0x1677+0xb
+              Signature: 756 — instance void(class System.CrossAppDomainDelegate)  [0x10fa+0x2] → 0x1f31+0x6
+          ▾ #72 System.Exception::.ctor — instance void(string)  [0x10fc+0x6]
+              Class: 297 — TypeRef #37 (System.Exception)  [0x10fc+0x2] → 0xc92+0x6
+              Name: 1500 — ".ctor"  [0x10fe+0x2] → 0x17f0+0x6
+              Signature: 151 — instance void(string)  [0x1100+0x2] → 0x1cd4+0x4
+          ▾ #73 set_Item — instance void(!0, !1)  [0x1102+0x6]
+              Class: 28 — TypeSpec #3 (System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>)  [0x1102+0x2] → 0x11b0+0x2
+              Name: 1202 — "set_Item"  [0x1104+0x2] → 0x16c6+0x9
+              Signature: 763 — instance void(!0, !1)  [0x1106+0x2] → 0x1f38+0x7
+          ▾ #74 System.Threading.Monitor::Exit — void(object)  [0x1108+0x6]
+              Class: 361 — TypeRef #45 (System.Threading.Monitor)  [0x1108+0x2] → 0xcc2+0x6
+              Name: 1812 — "Exit"  [0x110a+0x2] → 0x1928+0x5
+              Signature: 771 — void(object)  [0x110c+0x2] → 0x1f40+0x4
+          ▾ #75 Clear — instance void()  [0x110e+0x6]
+              Class: 28 — TypeSpec #3 (System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>)  [0x110e+0x2] → 0x11b0+0x2
+              Name: 1403 — "Clear"  [0x1110+0x2] → 0x178f+0x6
+              Signature: 163 — instance void()  [0x1112+0x2] → 0x1ce0+0x3
+          ▾ #76 System.AppDomain::Unload — void(class System.AppDomain)  [0x1114+0x6]
+              Class: 41 — TypeRef #5 (System.AppDomain)  [0x1114+0x2] → 0xbd2+0x6
+              Name: 210 — "Unload"  [0x1116+0x2] → 0x12e6+0x7
+              Signature: 776 — void(class System.AppDomain)  [0x1118+0x2] → 0x1f45+0x5
+          ▾ #77 System.ResolveEventArgs::get_Name — instance string()  [0x111a+0x6]
+              Class: 113 — TypeRef #14 (System.ResolveEventArgs)  [0x111a+0x2] → 0xc08+0x6
+              Name: 409 — "get_Name"  [0x111c+0x2] → 0x13ad+0x9
+              Signature: 442 — instance string()  [0x111e+0x2] → 0x1df7+0x3
+          ▾ #78 System.String::Contains — instance bool(string)  [0x1120+0x6]
+              Class: 281 — TypeRef #35 (System.String)  [0x1120+0x2] → 0xc86+0x6
+              Name: 1753 — "Contains"  [0x1122+0x2] → 0x18ed+0x9
+              Signature: 782 — instance bool(string)  [0x1124+0x2] → 0x1f4b+0x4
+          ▾ #79 System.Reflection.Assembly::LoadFrom — class System.Reflection.Assembly(string)  [0x1126+0x6]
+              Class: 105 — TypeRef #13 (System.Reflection.Assembly)  [0x1126+0x2] → 0xc02+0x6
+              Name: 1218 — "LoadFrom"  [0x1128+0x2] → 0x16d6+0x9
+              Signature: 787 — class System.Reflection.Assembly(string)  [0x112a+0x2] → 0x1f50+0x5
+        ▾ CustomAttribute — 13 rows, 6 bytes each, sorted  [0x112c+0x4e]
+          ▾ #1 System.Runtime.CompilerServices.CompilationRelaxationsAttribute — on Assembly #1 (ClrLoader 1.0.0.0)(8)  [0x112c+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x112c+0x2] → 0x11b4+0x16
+              Type: 11 — MemberRef #1 (System.Runtime.CompilerServices.CompilationRelaxationsAttribute::.ctor)  [0x112e+0x2] → 0xf52+0x6
+              Value: 188 — (8)  [0x1130+0x2] → 0x1cf9+0x8
+          ▾ #2 System.Runtime.CompilerServices.RuntimeCompatibilityAttribute — on Assembly #1 (ClrLoader 1.0.0.0)(WrapNonExceptionThrows = true)  [0x1132+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1132+0x2] → 0x11b4+0x16
+              Type: 19 — MemberRef #2 (System.Runtime.CompilerServices.RuntimeCompatibilityAttribute::.ctor)  [0x1134+0x2] → 0xf58+0x6
+              Value: 197 — (WrapNonExceptionThrows = true)  [0x1136+0x2] → 0x1d02+0x1e
+          ▾ #3 System.Diagnostics.DebuggableAttribute — on Assembly #1 (ClrLoader 1.0.0.0)(6 bytes)  [0x1138+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1138+0x2] → 0x11b4+0x16
+              Type: 27 — MemberRef #3 (System.Diagnostics.DebuggableAttribute::.ctor)  [0x113a+0x2] → 0xf5e+0x6
+              Value: 234 — (6 bytes)  [0x113c+0x2] → 0x1d27+0x8
+          ▾ #4 System.Runtime.Versioning.TargetFrameworkAttribute — on Assembly #1 (ClrLoader 1.0.0.0)(".NETFramework,Version=v4.6.1", FrameworkDisplayName = ".NET Framework 4.6.1")  [0x113e+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x113e+0x2] → 0x11b4+0x16
+              Type: 35 — MemberRef #4 (System.Runtime.Versioning.TargetFrameworkAttribute::.ctor)  [0x1140+0x2] → 0xf64+0x6
+              Value: 243 — (".NETFramework,Version=v4.6.1", FrameworkDisplayName = ".NET Framework 4.6.1")  [0x1142+0x2] → 0x1d30+0x4d
+          ▾ #5 System.Reflection.AssemblyCompanyAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("ClrLoader")  [0x1144+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1144+0x2] → 0x11b4+0x16
+              Type: 43 — MemberRef #5 (System.Reflection.AssemblyCompanyAttribute::.ctor)  [0x1146+0x2] → 0xf6a+0x6
+              Value: 321 — ("ClrLoader")  [0x1148+0x2] → 0x1d7e+0xe
+          ▾ #6 System.Reflection.AssemblyConfigurationAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("release")  [0x114a+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x114a+0x2] → 0x11b4+0x16
+              Type: 51 — MemberRef #6 (System.Reflection.AssemblyConfigurationAttribute::.ctor)  [0x114c+0x2] → 0xf70+0x6
+              Value: 336 — ("release")  [0x114e+0x2] → 0x1d8d+0xc
+          ▾ #7 System.Reflection.AssemblyFileVersionAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("1.0.0.0")  [0x1150+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1150+0x2] → 0x11b4+0x16
+              Type: 59 — MemberRef #7 (System.Reflection.AssemblyFileVersionAttribute::.ctor)  [0x1152+0x2] → 0xf76+0x6
+              Value: 349 — ("1.0.0.0")  [0x1154+0x2] → 0x1d9a+0xc
+          ▾ #8 System.Reflection.AssemblyInformationalVersionAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("1.0.0")  [0x1156+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1156+0x2] → 0x11b4+0x16
+              Type: 67 — MemberRef #8 (System.Reflection.AssemblyInformationalVersionAttribute::.ctor)  [0x1158+0x2] → 0xf7c+0x6
+              Value: 362 — ("1.0.0")  [0x115a+0x2] → 0x1da7+0xa
+          ▾ #9 System.Reflection.AssemblyProductAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("ClrLoader")  [0x115c+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x115c+0x2] → 0x11b4+0x16
+              Type: 75 — MemberRef #9 (System.Reflection.AssemblyProductAttribute::.ctor)  [0x115e+0x2] → 0xf82+0x6
+              Value: 321 — ("ClrLoader")  [0x1160+0x2] → 0x1d7e+0xe
+          ▾ #10 System.Reflection.AssemblyTitleAttribute — on Assembly #1 (ClrLoader 1.0.0.0)("ClrLoader")  [0x1162+0x6]
+              Parent: 46 — Assembly #1 (ClrLoader 1.0.0.0)  [0x1162+0x2] → 0x11b4+0x16
+              Type: 83 — MemberRef #10 (System.Reflection.AssemblyTitleAttribute::.ctor)  [0x1164+0x2] → 0xf88+0x6
+              Value: 321 — ("ClrLoader")  [0x1166+0x2] → 0x1d7e+0xe
+          ▾ #11 System.Runtime.CompilerServices.CompilerGeneratedAttribute — on Field #4 (<Domain>k__BackingField)()  [0x1168+0x6]
+              Parent: 129 — Field #4 (<Domain>k__BackingField)  [0x1168+0x2] → 0xd3a+0x6
+              Type: 91 — MemberRef #11 (System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor)  [0x116a+0x2] → 0xf8e+0x6
+              Value: 373 — ()  [0x116c+0x2] → 0x1db2+0x4
+          ▾ #12 System.Runtime.CompilerServices.CompilerGeneratedAttribute — on TypeDef #6 (<>c__DisplayClass7_0)()  [0x116e+0x6]
+              Parent: 195 — TypeDef #6 (<>c__DisplayClass7_0)  [0x116e+0x2] → 0xd1a+0xe
+              Type: 91 — MemberRef #11 (System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor)  [0x1170+0x2] → 0xf8e+0x6
+              Value: 373 — ()  [0x1172+0x2] → 0x1db2+0x4
+          ▾ #13 System.Runtime.CompilerServices.CompilerGeneratedAttribute — on MethodDef #16 (get_Domain)()  [0x1174+0x6]
+              Parent: 512 — MethodDef #16 (get_Domain)  [0x1174+0x2] → 0xe30+0xe
+              Type: 91 — MemberRef #11 (System.Runtime.CompilerServices.CompilerGeneratedAttribute::.ctor)  [0x1176+0x2] → 0xf8e+0x6
+              Value: 373 — ()  [0x1178+0x2] → 0x1db2+0x4
+        ▾ StandAloneSig — 9 rows, 2 bytes each  [0x117a+0x12]
+          ▾ #1 — locals (int32, uint8[])  [0x117a+0x2]
+              Signature: 378 — locals (int32, uint8[])  [0x117a+0x2] → 0x1db7+0x5
+          ▾ #2 — locals (string, string, string, class System.AppDomainSetup, class System.AppDomain, class ClrLoader.DomainData)  [0x117c+0x2]
+              Signature: 451 — locals (string, string, string, class System.AppDomainSetup, class System.AppDomain, class ClrLoader.DomainData)  [0x117c+0x2] → 0x1e00+0xc
+          ▾ #3 — locals (string, string, string, class ClrLoader.DomainData, native int, class System.Exception)  [0x117e+0x2]
+              Signature: 505 — locals (string, string, string, class ClrLoader.DomainData, native int, class System.Exception)  [0x117e+0x2] → 0x1e36+0xb
+          ▾ #4 — locals (class System.Exception)  [0x1180+0x2]
+              Signature: 540 — locals (class System.Exception)  [0x1180+0x2] → 0x1e59+0x5
+          ▾ #5 — locals (Enumerator<class ClrLoader.DomainData>)  [0x1182+0x2]
+              Signature: 546 — locals (Enumerator<class ClrLoader.DomainData>)  [0x1182+0x2] → 0x1e5f+0x9
+          ▾ #6 — locals (string, string, string, class System.Delegate, native int)  [0x1184+0x2]
+              Signature: 583 — locals (string, string, string, class System.Delegate, native int)  [0x1184+0x2] → 0x1e84+0x8
+          ▾ #7 — locals (class System.Reflection.AssemblyName, class System.Type)  [0x1186+0x2]
+              Signature: 609 — locals (class System.Reflection.AssemblyName, class System.Type)  [0x1186+0x2] → 0x1e9e+0x8
+          ▾ #8 — locals (class <>c__DisplayClass7_0)  [0x1188+0x2]
+              Signature: 681 — locals (class <>c__DisplayClass7_0)  [0x1188+0x2] → 0x1ee6+0x4
+          ▾ #9 — locals (object, bool, string, System.Tuple`3<string, string, string>, native int, native int)  [0x118a+0x2]
+              Signature: 699 — locals (object, bool, string, System.Tuple`3<string, string, string>, native int, native int)  [0x118a+0x2] → 0x1ef8+0xe
+        ▾ PropertyMap — 2 rows, 4 bytes each, sorted  [0x118c+0x8]
+          ▾ #1  [0x118c+0x4]
+              Parent: 2 — TypeDef #2 (ClrLoader.ClrLoader)  [0x118c+0x2] → 0xce2+0xe
+              PropertyList: 1 — Property #1 (AssemblyDirectory)  [0x118e+0x2] → 0x1194+0x6
+          ▾ #2  [0x1190+0x4]
+              Parent: 5 — TypeDef #5 (ClrLoader.DomainData)  [0x1190+0x2] → 0xd0c+0xe
+              PropertyList: 2 — Property #2 (Domain)  [0x1192+0x2] → 0x119a+0x6
+        ▾ Property — 2 rows, 6 bytes each  [0x1194+0xc]
+          ▾ #1 AssemblyDirectory — string  [0x1194+0x6]
+              Flags: 0x0 []  [0x1194+0x2]
+              Name: 1950 — "AssemblyDirectory"  [0x1196+0x2] → 0x19b2+0x12
+              Type: 70 — string  [0x1198+0x2] → 0x1c83+0x3
+          ▾ #2 Domain — instance class System.AppDomain  [0x119a+0x6]
+              Flags: 0x0 []  [0x119a+0x2]
+              Name: 1293 — "Domain"  [0x119c+0x2] → 0x1721+0x7
+              Type: 167 — instance class System.AppDomain  [0x119e+0x2] → 0x1ce4+0x4
+        ▾ MethodSemantics — 2 rows, 6 bytes each, sorted  [0x11a0+0xc]
+          ▾ #1  [0x11a0+0x6]
+              Semantics: 0x2 [Getter]  [0x11a0+0x2]
+              Method: 3 — MethodDef #3 (get_AssemblyDirectory)  [0x11a2+0x2] → 0xd7a+0xe
+              Association: 3 — Property #1 (AssemblyDirectory)  [0x11a4+0x2] → 0x1194+0x6
+          ▾ #2  [0x11a6+0x6]
+              Semantics: 0x2 [Getter]  [0x11a6+0x2]
+              Method: 16 — MethodDef #16 (get_Domain)  [0x11a8+0x2] → 0xe30+0xe
+              Association: 5 — Property #2 (Domain)  [0x11aa+0x2] → 0x119a+0x6
+        ▾ TypeSpec — 4 rows, 2 bytes each  [0x11ac+0x8]
+          ▾ #1 System.Collections.Generic.List`1<class ClrLoader.DomainData> — System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0x11ac+0x2]
+              Signature: 424 — System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0x11ac+0x2] → 0x1de5+0x6
+          ▾ #2 Enumerator<class ClrLoader.DomainData> — Enumerator<class ClrLoader.DomainData>  [0x11ae+0x2]
+              Signature: 566 — Enumerator<class ClrLoader.DomainData>  [0x11ae+0x2] → 0x1e73+0x7
+          ▾ #3 System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int> — System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0x11b0+0x2]
+              Signature: 662 — System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0x11b0+0x2] → 0x1ed3+0xc
+          ▾ #4 System.Collections.Generic.HashSet`1<string> — System.Collections.Generic.HashSet`1<string>  [0x11b2+0x2]
+              Signature: 675 — System.Collections.Generic.HashSet`1<string>  [0x11b2+0x2] → 0x1ee0+0x5
+        ▾ Assembly — 1 row, 22 bytes each  [0x11b4+0x16]
+          ▾ #1 ClrLoader 1.0.0.0  [0x11b4+0x16]
+              HashAlgId: SHA1 (0x8004)  [0x11b4+0x4]
+              MajorVersion: 1  [0x11b8+0x2]
+              MinorVersion: 0  [0x11ba+0x2]
+              BuildNumber: 0  [0x11bc+0x2]
+              RevisionNumber: 0  [0x11be+0x2]
+              Flags: 0x0 []  [0x11c0+0x4]
+              PublicKey: 0 — empty  [0x11c4+0x2] → 0x1c3d+0x0
+              Name: 1409 — "ClrLoader"  [0x11c6+0x2] → 0x1795+0xa
+              Culture: 0 — ""  [0x11c8+0x2] → 0x1214+0x1
+        ▾ AssemblyRef — 3 rows, 20 bytes each  [0x11ca+0x3c]
+          ▾ #1 mscorlib 4.0.0.0  [0x11ca+0x14]
+              MajorVersion: 4  [0x11ca+0x2]
+              MinorVersion: 0  [0x11cc+0x2]
+              BuildNumber: 0  [0x11ce+0x2]
+              RevisionNumber: 0  [0x11d0+0x2]
+              Flags: 0x0 []  [0x11d2+0x4]
+              PublicKeyOrToken: 1 — b77a5c561934e089  [0x11d6+0x2] → 0x1c3e+0x8
+              Name: 169 — "mscorlib"  [0x11d8+0x2] → 0x12bd+0x9
+              Culture: 0 — ""  [0x11da+0x2] → 0x1214+0x1
+              HashValue: 0 — empty  [0x11dc+0x2] → 0x1c3d+0x0
+          ▾ #2 System.Core 4.0.0.0  [0x11de+0x14]
+              MajorVersion: 4  [0x11de+0x2]
+              MinorVersion: 0  [0x11e0+0x2]
+              BuildNumber: 0  [0x11e2+0x2]
+              RevisionNumber: 0  [0x11e4+0x2]
+              Flags: 0x0 []  [0x11e6+0x4]
+              PublicKeyOrToken: 1 — b77a5c561934e089  [0x11ea+0x2] → 0x1c3e+0x8
+              Name: 481 — "System.Core"  [0x11ec+0x2] → 0x13f5+0xc
+              Culture: 0 — ""  [0x11ee+0x2] → 0x1214+0x1
+              HashValue: 0 — empty  [0x11f0+0x2] → 0x1c3d+0x0
+          ▾ #3 System 4.0.0.0  [0x11f2+0x14]
+              MajorVersion: 4  [0x11f2+0x2]
+              MinorVersion: 0  [0x11f4+0x2]
+              BuildNumber: 0  [0x11f6+0x2]
+              RevisionNumber: 0  [0x11f8+0x2]
+              Flags: 0x0 []  [0x11fa+0x4]
+              PublicKeyOrToken: 1 — b77a5c561934e089  [0x11fe+0x2] → 0x1c3e+0x8
+              Name: 1211 — "System"  [0x1200+0x2] → 0x16cf+0x7
+              Culture: 0 — ""  [0x1202+0x2] → 0x1214+0x1
+              HashValue: 0 — empty  [0x1204+0x2] → 0x1c3d+0x0
+        ▾ NestedClass — 2 rows, 4 bytes each, sorted  [0x1206+0x8]
+          ▾ #1  [0x1206+0x4]
+              NestedClass: 4 — TypeDef #4 (EntryPoint)  [0x1206+0x2] → 0xcfe+0xe
+              EnclosingClass: 3 — TypeDef #3 (ClrLoader.DomainSetup)  [0x1208+0x2] → 0xcf0+0xe
+          ▾ #2  [0x120a+0x4]
+              NestedClass: 6 — TypeDef #6 (<>c__DisplayClass7_0)  [0x120a+0x2] → 0xd1a+0xe
+              EnclosingClass: 5 — TypeDef #5 (ClrLoader.DomainData)  [0x120c+0x2] → 0xd0c+0xe
+        ▾ MethodSpec — 1 row, 4 bytes each  [0x120e+0x4]
+          ▾ #1 — <string, string, string>  [0x120e+0x4]
+              Method: 137 — MemberRef #68 (System.Tuple::Create)  [0x120e+0x2] → 0x10e4+0x6
+              Instantiation: 741 — <string, string, string>  [0x1210+0x2] → 0x1f22+0x5
+          Padding — 2 bytes  [0x1212+0x2]
+      ▾ #Strings — 2008 bytes  [0x1214+0x7d8]
+          0x0: ""  [0x1214+0x1]
+          0x1: "<>c__DisplayClass7_0"  [0x1215+0x15]
+          0x16: "<installResolver>b__0"  [0x122a+0x16]
+          0x2c: "HashSet`1"  [0x1240+0xa]
+          0x36: "List`1"  [0x124a+0x7]
+          0x3d: "Dictionary`2"  [0x1251+0xd]
+          0x4a: "Tuple`3"  [0x125e+0x8]
+          0x52: "get_UTF8"  [0x1266+0x9]
+          0x5b: "PtrToStringUtf8"  [0x126f+0x10]
+          0x6b: "<Module>"  [0x127f+0x9]
+          0x74: "System.IO"  [0x1288+0xa]
+          0x7e: "StoreFunctorFromDomainData"  [0x1292+0x1b]
+          0x99: "GetData"  [0x12ad+0x8]
+          0xa1: "SetData"  [0x12b5+0x8]
+          0xa9: "mscorlib"  [0x12bd+0x9]
+          0xb2: "System.Collections.Generic"  [0x12c6+0x1b]
+          0xcd: "Load"  [0x12e1+0x5]
+          0xd2: "Unload"  [0x12e6+0x7]
+          0xd9: "Add"  [0x12ed+0x4]
+          0xdd: "_disposed"  [0x12f1+0xa]
+          0xe7: "_initialized"  [0x12fb+0xd]
+          0xf4: "<Domain>k__BackingField"  [0x1308+0x18]
+          0x10c: "method"  [0x1320+0x7]
+          0x113: "get_StackTrace"  [0x1327+0xf]
+          0x122: "Evidence"  [0x1336+0x9]
+          0x12b: "get_Message"  [0x133f+0xc]
+          0x137: "EndInvoke"  [0x134b+0xa]
+          0x141: "BeginInvoke"  [0x1355+0xc]
+          0x14d: "IDisposable"  [0x1361+0xc]
+          0x159: "RuntimeTypeHandle"  [0x136d+0x12]
+          0x16b: "GetTypeFromHandle"  [0x137f+0x12]
+          0x17d: "set_ConfigurationFile"  [0x1391+0x16]
+          0x193: "Tuple"  [0x13a7+0x6]
+          0x199: "get_Name"  [0x13ad+0x9]
+          0x1a2: "typeName"  [0x13b6+0x9]
+          0x1ab: "GetAssemblyName"  [0x13bf+0x10]
+          0x1bb: "assemblyName"  [0x13cf+0xd]
+          0x1c8: "GetDirectoryName"  [0x13dc+0x11]
+          0x1d9: "GetType"  [0x13ed+0x8]
+          0x1e1: "System.Core"  [0x13f5+0xc]
+          0x1ed: "get_CodeBase"  [0x1401+0xd]
+          0x1fa: "set_ApplicationBase"  [0x140e+0x14]
+          0x20e: "Close"  [0x1422+0x6]
+          0x214: "Dispose"  [0x1428+0x8]
+          0x21c: "Create"  [0x1430+0x7]
+          0x223: "CreateDelegate"  [0x1437+0xf]
+          0x232: "CrossAppDomainDelegate"  [0x1446+0x17]
+          0x249: "GetFunctionPointerForDelegate"  [0x145d+0x1e]
+          0x267: "GetDelegate"  [0x147b+0xc]
+          0x273: "MulticastDelegate"  [0x1487+0x12]
+          0x285: "CompilerGeneratedAttribute"  [0x1499+0x1b]
+          0x2a0: "DebuggableAttribute"  [0x14b4+0x14]
+          0x2b4: "AssemblyTitleAttribute"  [0x14c8+0x17]
+          0x2cb: "TargetFrameworkAttribute"  [0x14df+0x19]
+          0x2e4: "AssemblyFileVersionAttribute"  [0x14f8+0x1d]
+          0x301: "AssemblyInformationalVersionAttribute"  [0x1515+0x26]
+          0x327: "AssemblyConfigurationAttribute"  [0x153b+0x1f]
+          0x346: "CompilationRelaxationsAttribute"  [0x155a+0x20]
+          0x366: "AssemblyProductAttribute"  [0x157a+0x19]
+          0x37f: "AssemblyCompanyAttribute"  [0x1593+0x19]
+          0x398: "RuntimeCompatibilityAttribute"  [0x15ac+0x1e]
+          0x3b6: "ReadByte"  [0x15ca+0x9]
+          0x3bf: "TryGetValue"  [0x15d3+0xc]
+          0x3cb: "add_AssemblyResolve"  [0x15df+0x14]
+          0x3df: "Initialize"  [0x15f3+0xb]
+          0x3ea: "size"  [0x15fe+0x5]
+          0x3ef: "System.Threading"  [0x1603+0x11]
+          0x400: "Encoding"  [0x1614+0x9]
+          0x409: "System.Runtime.Versioning"  [0x161d+0x1a]
+          0x423: "UnescapeDataString"  [0x1637+0x13]
+          0x436: "GetString"  [0x164a+0xa]
+          0x440: "get_Path"  [0x1654+0x9]
+          0x449: "assemblyPath"  [0x165d+0xd]
+          0x456: "Uri"  [0x166a+0x4]
+          0x45a: "_lockObj"  [0x166e+0x9]
+          0x463: "DoCallBack"  [0x1677+0xb]
+          0x46e: "AsyncCallback"  [0x1682+0xe]
+          0x47c: "callback"  [0x1690+0x9]
+          0x485: "Marshal"  [0x1699+0x8]
+          0x48d: "CallConvCdecl"  [0x16a1+0xe]
+          0x49b: "ClrLoader.dll"  [0x16af+0xe]
+          0x4a9: "get_Item"  [0x16bd+0x9]
+          0x4b2: "set_Item"  [0x16c6+0x9]
+          0x4bb: "System"  [0x16cf+0x7]
+          0x4c2: "LoadFrom"  [0x16d6+0x9]
+          0x4cb: "get_Domain"  [0x16df+0xb]
+          0x4d6: "CreateDomain"  [0x16ea+0xd]
+          0x4e3: "CloseAppDomain"  [0x16f7+0xf]
+          0x4f2: "CreateAppDomain"  [0x1706+0x10]
+          0x502: "get_CurrentDomain"  [0x1716+0x12]
+          0x514: "domain"  [0x1728+0x7]
+          0x51b: "System.Reflection"  [0x172f+0x12]
+          0x52d: "GetFunction"  [0x1741+0xc]
+          0x539: "function"  [0x174d+0x9]
+          0x542: "InvalidOperationException"  [0x1756+0x1a]
+          0x55c: "MemberInfo"  [0x1770+0xb]
+          0x567: "Zero"  [0x177b+0x5]
+          0x56c: "AppDomainSetup"  [0x1780+0xf]
+          0x57b: "Clear"  [0x178f+0x6]
+          0x581: "ClrLoader"  [0x1795+0xa]
+          0x58b: "UriBuilder"  [0x179f+0xb]
+          0x596: "sender"  [0x17aa+0x7]
+          0x59d: "buffer"  [0x17b1+0x7]
+          0x5a4: "ResolveEventHandler"  [0x17b8+0x14]
+          0x5b8: "Enter"  [0x17cc+0x6]
+          0x5be: "installResolver"  [0x17d2+0x10]
+          0x5ce: "GetEnumerator"  [0x17e2+0xe]
+          0x5dc: ".ctor"  [0x17f0+0x6]
+          0x5e2: ".cctor"  [0x17f6+0x7]
+          0x5e9: "GetFunctor"  [0x17fd+0xb]
+          0x5f4: "Monitor"  [0x1808+0x8]
+          0x5fc: "configFilePtr"  [0x1810+0xe]
+          0x60a: "typeNamePtr"  [0x181e+0xc]
+          0x616: "namePtr"  [0x182a+0x8]
+          0x61e: "assemblyPathPtr"  [0x1832+0x10]
+          0x62e: "functionPtr"  [0x1842+0xc]
+          0x63a: "IntPtr"  [0x184e+0x7]
+          0x641: "ptr"  [0x1855+0x4]
+          0x645: "System.Diagnostics"  [0x1859+0x13]
+          0x658: "System.Runtime.InteropServices"  [0x186c+0x1f]
+          0x677: "System.Runtime.CompilerServices"  [0x188b+0x20]
+          0x697: "DebuggingModes"  [0x18ab+0xf]
+          0x6a6: "_resolvedAssemblies"  [0x18ba+0x14]
+          0x6ba: "ResolveEventArgs"  [0x18ce+0x11]
+          0x6cb: "args"  [0x18df+0x5]
+          0x6d0: "_domains"  [0x18e4+0x9]
+          0x6d9: "Contains"  [0x18ed+0x9]
+          0x6e2: "_functors"  [0x18f6+0xa]
+          0x6ec: "Concat"  [0x1900+0x7]
+          0x6f3: "Format"  [0x1907+0x7]
+          0x6fa: "Object"  [0x190e+0x7]
+          0x701: "object"  [0x1915+0x7]
+          0x708: "op_Explicit"  [0x191c+0xc]
+          0x714: "Exit"  [0x1928+0x5]
+          0x719: "IAsyncResult"  [0x192d+0xd]
+          0x726: "result"  [0x193a+0x7]
+          0x72d: "get_Current"  [0x1941+0xc]
+          0x739: "EntryPoint"  [0x194d+0xb]
+          0x744: "Print"  [0x1958+0x6]
+          0x74a: "get_Count"  [0x195e+0xa]
+          0x754: "MoveNext"  [0x1968+0x9]
+          0x75d: "System.Text"  [0x1971+0xc]
+          0x769: "System.Security.Policy"  [0x197d+0x17]
+          0x780: "GetExecutingAssembly"  [0x1994+0x15]
+          0x795: "Copy"  [0x19a9+0x5]
+          0x79a: "get_AssemblyDirectory"  [0x19ae+0x16]
+          0x7b0: "op_Equality"  [0x19c4+0xc]
+          0x7bc: "op_Inequality"  [0x19d0+0xe]
+          0x7ca: "IsNullOrEmpty"  [0x19de+0xe]
+      ▾ #US — 576 bytes  [0x19ec+0x240]
+          0x0: ""  [0x19ec+0x1]
+          0x1: "Creating AppDomain " — plain  [0x19ed+0x28]
+          0x29: " with " — plain  [0x1a15+0xe]
+          0x37: "Base: " — plain  [0x1a23+0xe]
+          0x45: "Located domain {0}" — plain  [0x1a31+0x26]
+          0x6b: "Getting functor for function " — plain  [0x1a57+0x3c]
+          0xa7: " of type " — plain  [0x1a93+0x14]
+          0xbb: " in assembly " — plain  [0x1aa7+0x1c]
+          0xd7: "Exception in GetFunction: " — plain  [0x1ac3+0x36]
+          0x10d: " " — plain  [0x1af9+0x4]
+          0x111: "\n" — plain  [0x1afd+0x4]
+          0x115: "Exception in CloseAppDomain: " — plain  [0x1b01+0x3c]
+          0x151: "_assemblyPath" — plain  [0x1b3d+0x1c]
+          0x16d: "_typeName" — plain  [0x1b59+0x14]
+          0x181: "_function" — plain  [0x1b6d+0x14]
+          0x195: "_thisDelegate" — plain  [0x1b81+0x1c]
+          0x1b1: "_thisFunctor" — plain  [0x1b9d+0x1a]
+          0x1cb: "Domain is already disposed" — plain  [0x1bb7+0x36]
+          0x201: "Unable to get functor for " — plain  [0x1bed+0x36]
+          0x237: ", " — plain  [0x1c23+0x6]
+          0x23d: ""  [0x1c29+0x1]
+          0x23e: ""  [0x1c2a+0x1]
+          0x23f: ""  [0x1c2b+0x1]
+      ▾ #GUID — 1 GUIDs  [0x1c2c+0x10]
+          #1: {348d3d8c-9fb0-467d-9404-8fd6e4addae8}  [0x1c2c+0x10]
+      ▾ #Blob — 796 bytes  [0x1c3c+0x31c]
+          0x0:   ||  [0x1c3c+0x1]
+          0x1: b7 7a 5c 56 19 34 e0 89  |.z\V.4..|  [0x1c3d+0x9]
+          0xa: 06 02  |..| — field signature: bool  [0x1c46+0x3]
+          0xd: 06 15 12 09 01 12 14  |.......| — field signature: System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0x1c49+0x8]
+          0x15: 00 01 0e 18  |....| — method signature: string(native int)  [0x1c51+0x5]
+          0x1a: 00 00 20 0d 01  |.. ..| — method signature: modopt(System.Runtime.CompilerServices.CallConvCdecl) void()  [0x1c56+0x6]
+          0x20: 00 00 0e  |...| — method signature: string()  [0x1c5c+0x4]
+          0x24: 00 02 20 0d 18 18 18  |.. ....| — method signature: modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int)  [0x1c60+0x8]
+          0x2c: 00 04 20 0d 18 18 18 18 18  |.. ......| — method signature: modopt(System.Runtime.CompilerServices.CallConvCdecl) native int(native int, native int, native int, native int)  [0x1c68+0xa]
+          0x36: 00 01 20 0d 01 18  |.. ...| — method signature: modopt(System.Runtime.CompilerServices.CallConvCdecl) void(native int)  [0x1c72+0x7]
+          0x3d: 00 01 01 0e  |....| — method signature: void(string)  [0x1c79+0x5]
+          0x42: 00 00 01  |...| — method signature: void()  [0x1c7e+0x4]
+          0x46: 08 00 0e  |...| — property signature: string  [0x1c82+0x4]
+          0x4a: 00 04 12 11 12 15 0e 0e 0e  |.........| — method signature: class System.Delegate(class System.AppDomain, string, string, string)  [0x1c86+0xa]
+          0x54: 20 02 01 1c 18  | ....| — method signature: instance void(object, native int)  [0x1c90+0x6]
+          0x5a: 20 02 08 18 08  | ....| — method signature: instance int32(native int, int32)  [0x1c96+0x6]
+          0x60: 20 04 12 1d 18 08 12 21 1c  | ......!.| — method signature: instance class System.IAsyncResult(native int, int32, class System.AsyncCallback, object)  [0x1c9c+0xa]
+          0x6a: 20 01 08 12 1d  | ....| — method signature: instance int32(class System.IAsyncResult)  [0x1ca6+0x6]
+          0x70: 06 12 15  |...| — field signature: class System.AppDomain  [0x1cac+0x4]
+          0x74: 06 15 12 29 02 15 12 2d 03 0e 0e 0e 18  |...)...-.....| — field signature: System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0x1cb0+0xe]
+          0x82: 06 15 12 31 01 0e  |...1..| — field signature: System.Collections.Generic.HashSet`1<string>  [0x1cbe+0x7]
+          0x89: 06 1c  |..| — field signature: object  [0x1cc5+0x3]
+          0x8c: 20 00 12 15  | ...| — method signature: instance class System.AppDomain()  [0x1cc8+0x5]
+          0x91: 20 01 01 12 15  | ....| — method signature: instance void(class System.AppDomain)  [0x1ccd+0x6]
+          0x97: 20 01 01 0e  | ...| — method signature: instance void(string)  [0x1cd3+0x5]
+          0x9c: 20 03 18 0e 0e 0e  | .....| — method signature: instance native int(string, string, string)  [0x1cd8+0x7]
+          0xa3: 20 00 01  | ..| — method signature: instance void()  [0x1cdf+0x4]
+          0xa7: 28 00 12 15  |(...| — property signature: instance class System.AppDomain  [0x1ce3+0x5]
+          0xac: 06 0e  |..| — field signature: string  [0x1ce8+0x3]
+          0xaf: 20 02 12 35 1c 12 39  | ..5..9| — method signature: instance class System.Reflection.Assembly(object, class System.ResolveEventArgs)  [0x1ceb+0x8]
+          0xb7: 20 01 01 08  | ...| — member reference signature: instance void(int32)  [0x1cf3+0x5]
+          0xbc: 01 00 08 00 00 00 00 00  |........| — custom attribute value: (6 bytes)  [0x1cf8+0x9]
+          0xc5: 01 00 01 00 54 02 16 57 72 61 70 4e 6f 6e 45 78 …  |....T..WrapNonEx| — custom attribute value: (28 bytes)  [0x1d01+0x1f]
+          0xe4: 20 01 01 11 49  | ...I| — member reference signature: instance void(valuetype DebuggingModes)  [0x1d20+0x6]
+          0xea: 01 00 02 00 00 00 00 00  |........| — custom attribute value: (6 bytes)  [0x1d26+0x9]
+          0xf3: 01 00 1c 2e 4e 45 54 46 72 61 6d 65 77 6f 72 6b …  |....NETFramework| — custom attribute value: (75 bytes)  [0x1d2f+0x4e]
+          0x141: 01 00 09 43 6c 72 4c 6f 61 64 65 72 00 00  |...ClrLoader..| — custom attribute value: (12 bytes)  [0x1d7d+0xf]
+          0x150: 01 00 07 72 65 6c 65 61 73 65 00 00  |...release..| — custom attribute value: (10 bytes)  [0x1d8c+0xd]
+          0x15d: 01 00 07 31 2e 30 2e 30 2e 30 00 00  |...1.0.0.0..| — custom attribute value: (10 bytes)  [0x1d99+0xd]
+          0x16a: 01 00 05 31 2e 30 2e 30 00 00  |...1.0.0..| — custom attribute value: (8 bytes)  [0x1da6+0xb]
+          0x175: 01 00 00 00  |....| — custom attribute value: (2 bytes)  [0x1db1+0x5]
+          0x17a: 07 02 08 1d 05  |.....| — stand-alone signature: locals (int32, uint8[])  [0x1db6+0x6]
+          0x180: 06 18  |..| — member reference signature: native int  [0x1dbc+0x3]
+          0x183: 00 02 02 18 18  |.....| — member reference signature: bool(native int, native int)  [0x1dbf+0x6]
+          0x189: 00 02 05 18 08  |.....| — member reference signature: uint8(native int, int32)  [0x1dc5+0x6]
+          0x18f: 00 04 01 18 1d 05 08 08  |........| — member reference signature: void(native int, uint8[], int32, int32)  [0x1dcb+0x9]
+          0x198: 00 00 12 79  |...y| — member reference signature: class System.Text.Encoding()  [0x1dd4+0x5]
+          0x19d: 20 01 0e 1d 05  | ....| — member reference signature: instance string(uint8[])  [0x1dd9+0x6]
+          0x1a3: 00 00 12 15  |....| — member reference signature: class System.AppDomain()  [0x1ddf+0x5]
+          0x1a8: 15 12 09 01 12 14  |......| — type specification: System.Collections.Generic.List`1<class ClrLoader.DomainData>  [0x1de4+0x7]
+          0x1af: 20 01 01 13 00  | ....| — member reference signature: instance void(!0)  [0x1deb+0x6]
+          0x1b5: 00 00 12 35  |...5| — member reference signature: class System.Reflection.Assembly()  [0x1df1+0x5]
+          0x1ba: 20 00 0e  | ..| — member reference signature: instance string()  [0x1df6+0x4]
+          0x1be: 00 01 0e 0e  |....| — member reference signature: string(string)  [0x1dfa+0x5]
+          0x1c3: 07 06 0e 0e 0e 12 80 89 12 15 12 14  |............| — stand-alone signature: locals (string, string, string, class System.AppDomainSetup, class System.AppDomain, class ClrLoader.DomainData)  [0x1dff+0xd]
+          0x1d0: 00 04 0e 0e 0e 0e 0e  |.......| — member reference signature: string(string, string, string, string)  [0x1e0c+0x8]
+          0x1d8: 00 01 02 0e  |....| — member reference signature: bool(string)  [0x1e14+0x5]
+          0x1dd: 00 02 0e 0e 0e  |.....| — member reference signature: string(string, string)  [0x1e19+0x6]
+          0x1e3: 00 03 12 15 0e 12 80 91 12 80 89  |...........| — member reference signature: class System.AppDomain(string, class System.Security.Policy.Evidence, class System.AppDomainSetup)  [0x1e1f+0xc]
+          0x1ef: 00 02 0e 0e 1c  |.....| — member reference signature: string(string, object)  [0x1e2b+0x6]
+          0x1f5: 20 00 08  | ..| — member reference signature: instance int32()  [0x1e31+0x4]
+          0x1f9: 07 06 0e 0e 0e 12 14 18 12 80 95  |...........| — stand-alone signature: locals (string, string, string, class ClrLoader.DomainData, native int, class System.Exception)  [0x1e35+0xc]
+          0x205: 00 01 08 18  |....| — member reference signature: int32(native int)  [0x1e41+0x5]
+          0x20a: 20 01 13 00 08  | ....| — member reference signature: instance !0(int32)  [0x1e46+0x6]
+          0x210: 00 01 0e 1d 0e  |.....| — member reference signature: string(string[])  [0x1e4c+0x6]
+          0x216: 20 00 12 80 99  | ....| — member reference signature: instance class System.Type()  [0x1e52+0x6]
+          0x21c: 07 01 12 80 95  |.....| — stand-alone signature: locals (class System.Exception)  [0x1e58+0x6]
+          0x222: 07 01 15 11 80 a1 01 12 14  |.........| — stand-alone signature: locals (Enumerator<class ClrLoader.DomainData>)  [0x1e5e+0xa]
+          0x22c: 20 00 15 11 80 a1 01 13 00  | ........| — member reference signature: instance Enumerator<!0>()  [0x1e68+0xa]
+          0x236: 15 11 80 a1 01 12 14  |.......| — type specification: Enumerator<class ClrLoader.DomainData>  [0x1e72+0x8]
+          0x23e: 20 00 13 00  | ...| — member reference signature: instance !0()  [0x1e7a+0x5]
+          0x243: 20 00 02  | ..| — member reference signature: instance bool()  [0x1e7f+0x4]
+          0x247: 07 05 0e 0e 0e 12 11 18  |........| — stand-alone signature: locals (string, string, string, class System.Delegate, native int)  [0x1e83+0x9]
+          0x250: 20 01 1c 0e  | ...| — member reference signature: instance object(string)  [0x1e8c+0x5]
+          0x255: 00 01 18 12 11  |.....| — member reference signature: native int(class System.Delegate)  [0x1e91+0x6]
+          0x25b: 20 02 01 0e 1c  | ....| — member reference signature: instance void(string, object)  [0x1e97+0x6]
+          0x261: 07 02 12 80 a5 12 80 99  |........| — stand-alone signature: locals (class System.Reflection.AssemblyName, class System.Type)  [0x1e9d+0x9]
+          0x26a: 00 01 12 80 a5 0e  |......| — member reference signature: class System.Reflection.AssemblyName(string)  [0x1ea6+0x7]
+          0x271: 20 01 12 35 12 80 a5  | ..5...| — member reference signature: instance class System.Reflection.Assembly(class System.Reflection.AssemblyName)  [0x1ead+0x8]
+          0x279: 20 02 12 80 99 0e 02  | ......| — member reference signature: instance class System.Type(string, bool)  [0x1eb5+0x8]
+          0x281: 00 01 12 80 99 11 80 a9  |........| — member reference signature: class System.Type(valuetype System.RuntimeTypeHandle)  [0x1ebd+0x9]
+          0x28a: 00 03 12 11 12 80 99 12 80 99 0e  |...........| — member reference signature: class System.Delegate(class System.Type, class System.Type, string)  [0x1ec6+0xc]
+          0x296: 15 12 29 02 15 12 2d 03 0e 0e 0e 18  |..)...-.....| — type specification: System.Collections.Generic.Dictionary`2<System.Tuple`3<string, string, string>, native int>  [0x1ed2+0xd]
+          0x2a3: 15 12 31 01 0e  |..1..| — type specification: System.Collections.Generic.HashSet`1<string>  [0x1edf+0x6]
+          0x2a9: 07 01 12 18  |....| — stand-alone signature: locals (class <>c__DisplayClass7_0)  [0x1ee5+0x5]
+          0x2ae: 20 01 02 13 00  | ....| — member reference signature: instance bool(!0)  [0x1eea+0x6]
+          0x2b4: 20 01 01 12 80 ad  | .....| — member reference signature: instance void(class System.ResolveEventHandler)  [0x1ef0+0x7]
+          0x2bb: 07 06 1c 02 0e 15 12 2d 03 0e 0e 0e 18 18  |.......-......| — stand-alone signature: locals (object, bool, string, System.Tuple`3<string, string, string>, native int, native int)  [0x1ef7+0xf]
+          0x2ca: 00 02 01 1c 10 02  |......| — member reference signature: void(object, bool&)  [0x1f06+0x7]
+          0x2d1: 10 03 03 15 12 2d 03 1e 00 1e 01 1e 02 1e 00 1e …  |.....-..........| — member reference signature: generic<3> System.Tuple`3<!!0, !!1, !!2>(!!0, !!1, !!2)  [0x1f0d+0x14]
+          0x2e5: 0a 03 0e 0e 0e  |.....| — method instantiation: <string, string, string>  [0x1f21+0x6]
+          0x2eb: 20 02 02 13 00 10 13 01  | .......| — member reference signature: instance bool(!0, !1&)  [0x1f27+0x9]
+          0x2f4: 20 01 01 12 80 bd  | .....| — member reference signature: instance void(class System.CrossAppDomainDelegate)  [0x1f30+0x7]
+          0x2fb: 20 02 01 13 00 13 01  | ......| — member reference signature: instance void(!0, !1)  [0x1f37+0x8]
+          0x303: 00 01 01 1c  |....| — member reference signature: void(object)  [0x1f3f+0x5]
+          0x308: 00 01 01 12 15  |.....| — member reference signature: void(class System.AppDomain)  [0x1f44+0x6]
+          0x30e: 20 01 02 0e  | ...| — member reference signature: instance bool(string)  [0x1f4a+0x5]
+          0x313: 00 01 12 35 0e  |...5.| — member reference signature: class System.Reflection.Assembly(string)  [0x1f4f+0x6]
+          0x319:   ||  [0x1f55+0x1]
+          0x31a:   ||  [0x1f56+0x1]
+          0x31b:   ||  [0x1f57+0x1]
+    ▾ VTable Fixups — 1 entries  [0x458+0x8]
+      ▾ #0  [0x458+0x8]
+          RVA: 0x4000 — .sdata  [0x458+0x4] → 0x2200+0x0
+          Count: 5  [0x45c+0x2]
+          Type: 0x6 [64BIT | FROM_UNMANAGED]  [0x45e+0x2]
+  ▾ Version Information — file 1.0.0.0, product 1.0.0.0  [0x2458+0x2c0]
+      wLength: 0x2c0  [0x2458+0x2]
+      wValueLength: 52  [0x245a+0x2]
+      wType: 0  [0x245c+0x2]
+      szKey: "VS_VERSION_INFO"  [0x245e+0x20]
+    ▾ VS_FIXEDFILEINFO  [0x2480+0x34]
+        dwSignature: 0xfeef04bd  [0x2480+0x4]
+        dwStrucVersion: 0x10000  [0x2484+0x4]
+        dwFileVersionMS: 0x10000  [0x2488+0x4]
+        dwFileVersionLS: 0x0  [0x248c+0x4]
+        dwProductVersionMS: 0x10000  [0x2490+0x4]
+        dwProductVersionLS: 0x0  [0x2494+0x4]
+        dwFileFlagsMask: 0x3f  [0x2498+0x4]
+        dwFileFlags: 0x0 []  [0x249c+0x4]
+        dwFileOS: WINDOWS32 (0x4)  [0x24a0+0x4]
+        dwFileType: DLL (0x2)  [0x24a4+0x4]
+        dwFileSubtype: 0x0  [0x24a8+0x4]
+        dwFileDateMS: 0x0  [0x24ac+0x4]
+        dwFileDateLS: 0x0  [0x24b0+0x4]
+    ▾ VarFileInfo  [0x24b4+0x44]
+        wLength: 0x44  [0x24b4+0x2]
+        wValueLength: 0  [0x24b6+0x2]
+        wType: 1  [0x24b8+0x2]
+        szKey: "VarFileInfo"  [0x24ba+0x18]
+      ▾ Translation  [0x24d4+0x24]
+          wLength: 0x24  [0x24d4+0x2]
+          wValueLength: 4  [0x24d6+0x2]
+          wType: 0  [0x24d8+0x2]
+          szKey: "Translation"  [0x24da+0x18]
+          Value: "000004b0" — language and code page  [0x24f4+0x4]
+    ▾ StringFileInfo  [0x24f8+0x220]
+        wLength: 0x220  [0x24f8+0x2]
+        wValueLength: 0  [0x24fa+0x2]
+        wType: 1  [0x24fc+0x2]
+        szKey: "StringFileInfo"  [0x24fe+0x1e]
+      ▾ 000004b0  [0x251c+0x1fc]
+          wLength: 0x1fc  [0x251c+0x2]
+          wValueLength: 0  [0x251e+0x2]
+          wType: 1  [0x2520+0x2]
+          szKey: "000004b0"  [0x2522+0x12]
+        ▾ CompanyName — ClrLoader  [0x2534+0x34]
+            wLength: 0x34  [0x2534+0x2]
+            wValueLength: 10  [0x2536+0x2]
+            wType: 1  [0x2538+0x2]
+            szKey: "CompanyName"  [0x253a+0x18]
+            Value: "ClrLoader"  [0x2554+0x14]
+        ▾ FileDescription — ClrLoader  [0x2568+0x3c]
+            wLength: 0x3c  [0x2568+0x2]
+            wValueLength: 10  [0x256a+0x2]
+            wType: 1  [0x256c+0x2]
+            szKey: "FileDescription"  [0x256e+0x20]
+            Value: "ClrLoader"  [0x2590+0x14]
+        ▾ FileVersion — 1.0.0.0  [0x25a4+0x30]
+            wLength: 0x30  [0x25a4+0x2]
+            wValueLength: 8  [0x25a6+0x2]
+            wType: 1  [0x25a8+0x2]
+            szKey: "FileVersion"  [0x25aa+0x18]
+            Value: "1.0.0.0"  [0x25c4+0x10]
+        ▾ InternalName — ClrLoader.dll  [0x25d4+0x3c]
+            wLength: 0x3c  [0x25d4+0x2]
+            wValueLength: 14  [0x25d6+0x2]
+            wType: 1  [0x25d8+0x2]
+            szKey: "InternalName"  [0x25da+0x1a]
+            Value: "ClrLoader.dll"  [0x25f4+0x1c]
+        ▾ LegalCopyright —    [0x2610+0x28]
+            wLength: 0x28  [0x2610+0x2]
+            wValueLength: 2  [0x2612+0x2]
+            wType: 1  [0x2614+0x2]
+            szKey: "LegalCopyright"  [0x2616+0x1e]
+            Value: " "  [0x2634+0x4]
+        ▾ OriginalFilename — ClrLoader.dll  [0x2638+0x44]
+            wLength: 0x44  [0x2638+0x2]
+            wValueLength: 14  [0x263a+0x2]
+            wType: 1  [0x263c+0x2]
+            szKey: "OriginalFilename"  [0x263e+0x22]
+            Value: "ClrLoader.dll"  [0x2660+0x1c]
+        ▾ ProductName — ClrLoader  [0x267c+0x34]
+            wLength: 0x34  [0x267c+0x2]
+            wValueLength: 10  [0x267e+0x2]
+            wType: 1  [0x2680+0x2]
+            szKey: "ProductName"  [0x2682+0x18]
+            Value: "ClrLoader"  [0x269c+0x14]
+        ▾ ProductVersion — 1.0.0  [0x26b0+0x30]
+            wLength: 0x30  [0x26b0+0x2]
+            wValueLength: 6  [0x26b2+0x2]
+            wType: 1  [0x26b4+0x2]
+            szKey: "ProductVersion"  [0x26b6+0x1e]
+            Value: "1.0.0"  [0x26d4+0xc]
+        ▾ Assembly Version — 1.0.0.0  [0x26e0+0x38]
+            wLength: 0x38  [0x26e0+0x2]
+            wValueLength: 8  [0x26e2+0x2]
+            wType: 1  [0x26e4+0x2]
+            szKey: "Assembly Version"  [0x26e6+0x22]
+            Value: "1.0.0.0"  [0x2708+0x10]

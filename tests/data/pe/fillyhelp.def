@@ -1,0 +1,4 @@
+LIBRARY fillyhelp.dll
+EXPORTS
+  helper_named
+  helper_ord @7 NONAME
