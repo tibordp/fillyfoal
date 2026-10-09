@@ -1,0 +1,23 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ lossless-alpha.webp — WebP lossless, 16×16, alpha  [0x0+0x3e]
+  ▾ Header  [0x0+0xc]
+      Chunk ID: "RIFF"  [0x0+0x4]
+      Size: 54  [0x4+0x4]
+      Form type: "WEBP"  [0x8+0x4]
+  ▾ VP8L — 16×16, alpha  [0xc+0x32]
+      Chunk ID: "VP8L"  [0xc+0x4]
+      Chunk size: 42  [0x10+0x4]
+    ▾ Header  [0x14+0x5]
+        Signature: 0x2f  [0x14+0x1]
+        Width − 1: 15 — 16 px  [0x15+0x2]
+        Height − 1: 15 — 16 px  [0x16+0x3]
+        Alpha is used: true  [0x18+0x1]
+        Version: 0  [0x18+0x1]
+    ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x19+0x25]
+        Transform present: true  [0x19+0x1]
+        Transform type: predictor (0x0) — transform 1  [0x19+0x1]
+        Block size bits: 7 — 512×512 blocks  [0x19+0x1]
+        Transform data — an entropy-coded sub-image of per-block parameters follows; the rest of the stream is entropy-coded

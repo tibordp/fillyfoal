@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ lossless.webp — WebP lossless, 16×16  [0x0+0x72]
   ▾ Header  [0x0+0xc]
@@ -16,5 +16,9 @@ expression: "common::explore(&name, &data)"
         Height − 1: 15 — 16 px  [0x16+0x3]
         Alpha is used: false  [0x18+0x1]
         Version: 0  [0x18+0x1]
-      Bitstream  [0x19+0x58]
+    ▾ Image stream — transforms, color cache, then entropy-coded pixels  [0x19+0x58]
+        Transform present: false  [0x19+0x1]
+        Color cache: false  [0x19+0x1]
+        Meta prefix codes: false  [0x19+0x1]
+        Prefix codes — entropy-coded data follows
       Pad byte  [0x71+0x1]

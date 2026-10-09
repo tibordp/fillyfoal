@@ -71,11 +71,12 @@ expression: "common::explore(&display_name(&path), &data)"
         Size: 18 — 18 bytes  [0x198+0xa]
         Terminator: 60 0a  |`.|  [0x1a2+0x2]
     ▾ Content — 18 bytes  [0x1a4+0x12]
+        ! warning: no IEND chunk: the file is truncated
         Signature  [0x1a4+0x8]
-      ▾ real — 0x6e6f7420 bytes  [0x1ac+0xa]
+      ▾ real — 1.7 GiB  [0x1ac+0xa]
           ! truncated: needed 0x6e6f742c bytes at 0x1ac, only 0xa available [0x1ac+0x6e6f742c]
           Length: 1852797984  [0x1ac+0x4]
           Type: "real" — ancillary, private, safe to copy  [0x1b0+0x4]
-          Data  [0x1b4+0x0]
-          CRC: 0x616c6c79  [0x1b2+0x4]
-            ! warning: CRC mismatch: computed 0x61089c5c
+            ! warning: the third letter must be uppercase (reserved bit) [0x1b0+0x4]
+            ! note: unknown ancillary chunk: decoders may ignore it [0x1b0+0x4]
+          Data  [0x1b4+0x2]

@@ -198,6 +198,11 @@ and reproduce every file byte for byte.
 | `bmp/testsrc-bgra.bmp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=12x8:rate=1 -frames:v 1 -pix_fmt bgra` |
 | `bmp/testsrc-monob.bmp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=12x8:rate=1 -frames:v 1 -pix_fmt monob` |
 | `bmp/testsrc-rgb565.bmp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=12x8:rate=1 -frames:v 1 -pix_fmt rgb565le` |
+| `bmp/testsrc-pal8.bmp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=12x8:rate=1 -frames:v 1 -pix_fmt pal8` |
+| `bmp/testsrc-rgb555.bmp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=12x8:rate=1 -frames:v 1 -pix_fmt rgb555le` |
+| `png/apng.png` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=8x6:rate=10 -frames:v 3 -plays 0 -f apng` |
+| `png/cicp-bt709.png` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=8x6:rate=1 -frames:v 1 -vf setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709` (cICP, cHRM, gAMA) |
+| `png/hdr10.png` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) with libx265 4.2 | reproduced byte-for-byte with ffmpeg 8.1.2 in two steps: `-f lavfi -i testsrc=size=64x64:rate=1 -frames:v 1 -pix_fmt yuv420p10le -c:v libx265 -x265-params "log-level=error:hdr10=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc:master-display=G(13250,34500)B(7500,3000)R(34000,16000)WP(15635,16450)L(10000000,1):max-cll=1000,400" hdr.hevc`, then `-i hdr.hevc -frames:v 1 -vf scale=8:6,format=rgb48be hdr10.png` (cICP, cLLI, mDCV). Note: FFmpeg 8.1.2's PNG encoder writes the mDCV primaries out of order (34000, 13250, 7500, 3000, 2, 0 for red, green, blue x/y); `ffprobe -show_frames` of the PNG reads back the same values as the dissector |
 | `dpx/testsrc-rgb10.dpx` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=4x2:rate=1 -frames:v 1 -pix_fmt gbrp10le` |
 | `dpx/testsrc-rgb48.dpx` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=4x2:rate=1 -frames:v 1 -pix_fmt rgb48le` |
 | `exr/testsrc-none.exr` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | reproduced byte-for-byte with ffmpeg 8.1.2: `-f lavfi -i testsrc=size=2x2:rate=25 -frames:v 1 -pix_fmt gbrapf32le` |
@@ -344,6 +349,16 @@ and reproduce every file byte for byte.
 | `jpeg/precision12.jpg` | libjpeg-turbo 3.2.0 cjpeg | reproduced byte-for-byte: `cjpeg -precision 12 -quality 85` of the same frame |
 | `jpeg/cmyk-adobe.jpg` | Pillow 12.3.0 (libjpeg-turbo) | reproduced byte-for-byte: the PPM frame `.convert("CMYK").save(..., quality=80)` (Adobe APP14) |
 | `jpeg/pillow-pair.mpo` | Pillow 12.3.0 (libjpeg-turbo) | reproduced byte-for-byte: the PPM frame resized to 16x16 and its mirror image, `save("x.mpo", save_all=True, append_images=[mirror], quality=70)` (MPF index, two images) |
+| `webp/lossless-alpha.webp` | libwebp cwebp 1.6.0 | reproduced byte-for-byte: `cwebp -quiet -lossless -exact rgba.png`, input from `tests/data/webp/make_inputs.py` (Pillow 12.3.0) |
+| `webp/lossy-alpha-raw.webp` | libwebp cwebp 1.6.0 | reproduced byte-for-byte: `cwebp -quiet -q 60 -alpha_method 0 rgba.png` (uncompressed ALPH) |
+| `webp/lossy-alpha-meta.webp` | libwebp cwebp 1.6.0 | `cwebp -quiet -q 50 -alpha_filter best -metadata icc,exif,xmp rgba-meta.png`; the input's LittleCMS sRGB profile carries its creation time, so only that profile's date differs on a re-run |
+| `webp/anim-mixed.webp` | libwebp img2webp 1.6.0 | reproduced byte-for-byte: `img2webp -loop 3 -d 120 -lossless frame0.png -lossy -q 40 -d 80 frame1.png -lossless -d 200 frame2.png` |
+| `png/palette-metadata.png` | Pillow 12.3.0 (zlib-ng 2.19, LittleCMS) | `tests/data/png/make_external.py`; reproduced byte-for-byte except the embedded LittleCMS sRGB profile's creation time (in the zlib-compressed iCCP) |
+| `png/interlaced-sbit.png` | pypng 0.20220715.0 | reproduced byte-for-byte by `tests/data/png/make_external.py` (Adam7, sBIT, gAMA, bKGD, tRNS, pHYs, the zlib stream split over two IDAT chunks) |
+| `png/gray-alpha16.png` | pypng 0.20220715.0 | reproduced byte-for-byte by `tests/data/png/make_external.py` |
+| `png/gray2-trns.png` | pypng 0.20220715.0 | reproduced byte-for-byte by `tests/data/png/make_external.py` |
+| `gif/pillow-anim.gif` | Pillow 12.3.0 | reproduced byte-for-byte by `tests/data/gif/make_external.py` |
+| `ico/` | Pillow 12.3.0 | reproduced byte-for-byte by `tests/data/ico/make_external.py` |
 
 ## Version control
 

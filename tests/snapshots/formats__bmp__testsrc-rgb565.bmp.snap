@@ -1,10 +1,10 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ testsrc-rgb565.bmp — 12×8, 16-bit, BI_BITFIELDS  [0x0+0x102]
+▾ testsrc-rgb565.bmp — 12×8, 16-bit, BI_BITFIELDS 5-6-5  [0x0+0x102]
   ▾ File Header  [0x0+0xe]
-      bfType: "BM"  [0x0+0x2]
+      bfType: "BM" — Windows or OS/2 bitmap  [0x0+0x2]
       bfSize: 258  [0x2+0x4]
       bfReserved1: 0  [0x6+0x2]
       bfReserved2: 0  [0x8+0x2]
@@ -12,7 +12,7 @@ expression: "common::explore(&name, &data)"
   ▾ BITMAPINFOHEADER — 12×8, 16-bit, BI_BITFIELDS  [0xe+0x28]
       biSize: 40 — BITMAPINFOHEADER  [0xe+0x4]
       biWidth: 12  [0x12+0x4]
-      biHeight: 8  [0x16+0x4]
+      biHeight: 8 — positive: rows stored bottom-up  [0x16+0x4]
       biPlanes: 1  [0x1a+0x2]
       biBitCount: 16  [0x1c+0x2]
       biCompression: BI_BITFIELDS (0x3)  [0x1e+0x4]
@@ -21,8 +21,8 @@ expression: "common::explore(&name, &data)"
       biYPelsPerMeter: 0  [0x2a+0x4]
       biClrUsed: 0  [0x2e+0x4]
       biClrImportant: 0  [0x32+0x4]
-  ▾ Color masks  [0x36+0xc]
-      Red mask: 0xf800  [0x36+0x4]
-      Green mask: 0x7e0  [0x3a+0x4]
-      Blue mask: 0x1f  [0x3e+0x4]
-    Pixel array — 8 rows of 0x18 bytes  [0x42+0xc0]
+  ▾ Color masks — 5-6-5  [0x36+0xc]
+      Red mask: 0xf800 — 5 bits (11–15)  [0x36+0x4]
+      Green mask: 0x7e0 — 6 bits (5–10)  [0x3a+0x4]
+      Blue mask: 0x1f — 5 bits (0–4)  [0x3e+0x4]
+    Pixel array — 8 rows of 24 bytes, bottom-up  [0x42+0xc0]

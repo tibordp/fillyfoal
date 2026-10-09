@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ testsrc-rgb555.bmp — 12×8, 16-bit, BI_RGB 5-5-5  [0x0+0xf6]
+  ▾ File Header  [0x0+0xe]
+      bfType: "BM" — Windows or OS/2 bitmap  [0x0+0x2]
+      bfSize: 246  [0x2+0x4]
+      bfReserved1: 0  [0x6+0x2]
+      bfReserved2: 0  [0x8+0x2]
+      bfOffBits: 0x36  [0xa+0x4]
+  ▾ BITMAPINFOHEADER — 12×8, 16-bit, BI_RGB 5-5-5  [0xe+0x28]
+      biSize: 40 — BITMAPINFOHEADER  [0xe+0x4]
+      biWidth: 12  [0x12+0x4]
+      biHeight: 8 — positive: rows stored bottom-up  [0x16+0x4]
+      biPlanes: 1  [0x1a+0x2]
+      biBitCount: 16  [0x1c+0x2]
+      biCompression: BI_RGB (0x0)  [0x1e+0x4]
+      biSizeImage: 192  [0x22+0x4]
+      biXPelsPerMeter: 0  [0x26+0x4]
+      biYPelsPerMeter: 0  [0x2a+0x4]
+      biClrUsed: 0  [0x2e+0x4]
+      biClrImportant: 0  [0x32+0x4]
+    Pixel array — 8 rows of 24 bytes, bottom-up  [0x36+0xc0]

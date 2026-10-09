@@ -1,10 +1,10 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ testsrc-monob.bmp — 12×8, 1-bit, BI_RGB  [0x0+0x5e]
   ▾ File Header  [0x0+0xe]
-      bfType: "BM"  [0x0+0x2]
+      bfType: "BM" — Windows or OS/2 bitmap  [0x0+0x2]
       bfSize: 94  [0x2+0x4]
       bfReserved1: 0  [0x6+0x2]
       bfReserved2: 0  [0x8+0x2]
@@ -12,7 +12,7 @@ expression: "common::explore(&name, &data)"
   ▾ BITMAPINFOHEADER — 12×8, 1-bit, BI_RGB  [0xe+0x28]
       biSize: 40 — BITMAPINFOHEADER  [0xe+0x4]
       biWidth: 12  [0x12+0x4]
-      biHeight: 8  [0x16+0x4]
+      biHeight: 8 — positive: rows stored bottom-up  [0x16+0x4]
       biPlanes: 1  [0x1a+0x2]
       biBitCount: 1  [0x1c+0x2]
       biCompression: BI_RGB (0x0)  [0x1e+0x4]
@@ -24,4 +24,4 @@ expression: "common::explore(&name, &data)"
   ▾ Palette — 2 colors  [0x36+0x8]
       [0]: "#000000"  [0x36+0x4]
       [1]: "#ffffff"  [0x3a+0x4]
-    Pixel array — 8 rows of 0x4 bytes  [0x3e+0x20]
+    Pixel array — 8 rows of 4 bytes, bottom-up  [0x3e+0x20]
