@@ -597,7 +597,7 @@ def r2004(ver):
     section("AcDb:Preview", preview([(1, bytes(range(80))), image], address + 32), 5, False)
     summary = b"".join(
         string(s)
-        for s in ("Floor plan", "fillyfoal fixture", "Tibor", "dwg; test", "synthetic", "Tibor", "3", "")
+        for s in ("Floor plan", "fillyfoal fixture", "fillyfoal", "dwg; test", "synthetic", "fillyfoal", "3", "")
     )
     summary += struct.pack("<II", 0, 3_600_000)  # editing time: 1 hour
     summary += struct.pack("<II", 2460000, 43_200_000)  # created

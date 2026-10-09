@@ -69,7 +69,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `zip/zipcrypto.zip` | Info-ZIP Zip 3.0 (macOS /usr/bin/zip) | `zip -e` (ZipCrypto), version made by 3.0/Unix, UT and ux extra fields; password `fillyfoal` |
 | `zip/winzip-aes.zip` | bsdtar (libarchive) zip writer | `--options zip:encryption=aes...`; layout (version made by 2.0/Unix, ux before the AES extra, data descriptors) matches a fresh bsdtar run; password `fillyfoal` |
 | `zip/encrypted-lzma-bzip2.zip` | 7-Zip (7zz) | two `7zz a -tzip` runs (AES-256 + BZip2, ZipCrypto + LZMA); NTFS extra fields and versions 51/63 as 7-Zip writes them; password `fillyfoal` |
-| `xar/files.xar` | macOS xar(1) | TOC has real inode/device numbers and a `com.apple.provenance` extended attribute |
+| `xar/files.xar` | macOS xar(1) | TOC has real inode/device numbers and a `com.apple.provenance` extended attribute. Contents `hello.txt` (`hello tar\n`), `sub/pixel.png` and `sub/a-very-long-file-name-...-classic-tar-header.txt` (`x`), all with mtime `TZ=UTC touch -t 202401020304`, in a directory under `/tmp`; `xar -cf files.xar --prop-exclude user hello.txt sub` (no owner user name; uid, gid and group remain) |
 | `pbzx/pbz4.aar` | macOS aa (Apple Archive) | `aa archive` with LZ4 compression; entries carry `com.apple.provenance` xattrs |
 | `pbzx/pbze.aar` | macOS aa (Apple Archive) | `aa archive` with LZFSE compression; entries carry `com.apple.provenance` xattrs |
 | `pbzx/pbzz.aar` | macOS aa (Apple Archive) | `aa archive` with zlib compression |
@@ -95,7 +95,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
-| `elf/aarch64-debug.o` | Apple clang 21.0.0 | `.comment` and DWARF producer; built from target/fx/elf/obj.c |
+| `elf/aarch64-debug.o` | Apple clang 21.0.0 | `.comment` and DWARF producer; source `tests/data/elf/obj.c` (its MD5 matches the DWARF line table's). Built in `/tmp/fixtures/elf` with `clang --target=aarch64-linux-gnu -O2 -g -gz=zlib -ffile-prefix-map=/tmp/fixtures/elf=$P -fdebug-prefix-map=/tmp/fixtures/elf=$P -c obj.c -o aarch64-debug.o`, `P=/build/fillyfoal/tests/fixtures/external/elf/aarch64-debug` (a path long enough that `.debug_str` is still worth compressing), so `DW_AT_comp_dir` names no real directory |
 | `elf/armeb.o` | Apple clang 21.0.0 | `.comment`; big-endian ARM target |
 | `elf/i386-static` | Homebrew clang + LLD 20.1.8 | `.comment` names both; the Go build-id and SystemTap notes come from inline assembly in the source |
 | `elf/ppc64.o` | Homebrew clang 20.1.8 | `.comment` |
