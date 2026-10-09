@@ -1,38 +1,54 @@
-//! PDF documents.
+//! PDF documents (ISO 32000-2), structure rather than layout.
 //!
 //! Expanding the file reads the header, `startxref`, and the chain of
 //! cross-reference sections (classic tables and cross-reference streams,
 //! newest first, following `/Prev` and `/XRefStm`). If that fails, objects
 //! are found by scanning for `N G obj`. Everything else is lazy:
 //!
-//! - the trailer, catalog and info dictionaries, whose references expand
-//!   into the objects they point to (the path of objects above a node is
-//!   carried along, so `/Parent` loops end instead of recursing);
-//! - the page tree, walked with a visited set;
-//! - every object by number, including those inside object streams;
-//! - each revision (incremental update) with its entries and trailer.
+//! - the file as written: each revision (the original and every
+//!   incremental update) with its body objects in file order, its
+//!   cross-reference table (subsections and 20-byte entries) or stream
+//!   (decoded rows), its trailer, `startxref` and `%%EOF`;
+//! - the linearization dictionary and the primary hint stream's page offset
+//!   and shared object hint tables;
+//! - the trailer, catalog and information dictionaries, whose references
+//!   expand into the objects they point to (the path of objects above a
+//!   node is carried along, so `/Parent` loops end instead of recursing);
+//!   physical views (bodies, object streams) show references as links
+//!   instead, so each object is dissected where it is written;
+//! - the page tree (sizes, inherited media boxes), outlines, form fields,
+//!   signatures (`/ByteRange` coverage and the PKCS #7 `/Contents`) and the
+//!   encryption dictionary (permissions, crypt filters, key check).
 //!
-//! Stream data is decompressed (FlateDecode, with PNG predictors) into
-//! derived sources on demand; JPEG and JPEG 2000 data is dissected as is.
+//! Stream data is decoded on demand through its filter chain (Flate and
+//! LZW with predictors, ASCII85, ASCIIHex, RunLength, decryption) and handed
+//! to the dissector for what it holds: JPEG and JPEG 2000 images, ICC
+//! profiles, XMP packets, CFF, TrueType and OpenType font programs, Type 1
+//! fonts (clear text and decrypted private part), embedded files, object
+//! streams, cross-reference streams; content streams and CMaps are split
+//! into operators.
 
 mod content;
 mod crypt;
+mod document;
+mod hints;
 mod objects;
+mod streams;
 mod syntax;
 
 use std::borrow::Cow;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use objects::{Loc, Located, Section, SectionKind, Xref};
+use objects::{Loc, Located, Section, SectionKind, Tail, Xref};
 use syntax::{Item, Obj};
 
-use crate::bytes::to_u64;
+use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::{Format, Head, Input, Probe, content};
+use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -72,24 +88,66 @@ pub struct Doc {
     trailer: Option<Located>,
     /// The standard security handler, for encrypted documents.
     security: Option<Arc<crypt::Security>>,
+    /// The linearization parameter dictionary (the first object), if any.
+    linearized: Option<Located>,
+    /// The revisions in file order.
+    revisions: Vec<Revision>,
+    /// Every object stored at a file offset (by any section), by offset:
+    /// its number and generation.
+    by_offset: BTreeMap<u64, (u32, u16)>,
 }
 
 pub type DocRef = Arc<Doc>;
+
+/// One revision as written: the bytes from the end of the previous one to
+/// its `%%EOF`.
+#[derive(Clone, Copy, Debug)]
+struct Revision {
+    /// Its cross-reference section (an index in `Doc::sections`).
+    section: usize,
+    start: u64,
+    end: u64,
+    tail: Option<Tail>,
+}
+
+/// How references below a node behave: a logical view follows them into
+/// the objects they point to; a physical view (where objects are listed as
+/// written) shows them as links.
+#[derive(Clone)]
+struct Walk {
+    /// Objects open above (to stop at cycles).
+    path: Arc<Vec<u32>>,
+    follow: bool,
+}
+
+impl Walk {
+    fn logical() -> Self {
+        Walk {
+            path: Arc::new(Vec::new()),
+            follow: true,
+        }
+    }
+
+    fn physical() -> Self {
+        Walk {
+            path: Arc::new(Vec::new()),
+            follow: false,
+        }
+    }
+}
 
 /// Reads object `num`, wherever the cross-reference data says it is.
 async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
     match doc.xref.get(&num) {
         Some(&Loc::Offset { offset, .. }) => {
-            let (found, _, mut located) =
-                objects::object_at(cx, doc.region, offset, Some(&doc.xref)).await?;
-            decrypt_strings(cx, doc, &mut located).await;
-            if found != num {
-                return Err(Diagnostic::malformed(format!(
+            let located = located_at(cx, doc, offset).await?;
+            match located.id {
+                Some((found, _)) if found != num => Err(Diagnostic::malformed(format!(
                     "cross-reference entry for object {num} points at object {found}"
                 ))
-                .at(located.whole));
+                .at(located.whole)),
+                _ => Ok(located),
             }
-            Ok(located)
         }
         Some(&Loc::Compressed { stream, index }) => Ok(objects::in_object_stream(
             cx,
@@ -101,11 +159,18 @@ async fn resolve(cx: &Cx, doc: &Doc, num: u32) -> Result<Located> {
         )
         .await?
         .1),
-        Some(Loc::Free) => Err(Diagnostic::note(format!("object {num} is free"))),
+        Some(Loc::Free { .. }) => Err(Diagnostic::note(format!("object {num} is free"))),
         None => Err(Diagnostic::malformed(format!(
             "object {num} is not in the cross-reference data"
         ))),
     }
+}
+
+/// The indirect object at `offset`, with its strings decrypted.
+async fn located_at(cx: &Cx, doc: &Doc, offset: u64) -> Result<Located> {
+    let (_, _, mut located) = objects::object_at(cx, doc.region, offset, Some(&doc.xref)).await?;
+    decrypt_strings(cx, doc, &mut located).await;
+    Ok(located)
 }
 
 /// Replaces the strings of an encrypted object with their plaintext, when
@@ -116,6 +181,12 @@ async fn decrypt_strings(cx: &Cx, doc: &Doc, located: &mut Located) {
         return;
     };
     if security.strings == crypt::Method::Identity {
+        return;
+    }
+    // The encryption dictionary's own strings are not encrypted.
+    if let Some(trailer) = &doc.trailer
+        && trailer.item.get("Encrypt").and_then(Item::reference) == Some(id)
+    {
         return;
     }
     let Some(key) = crypt::file_key(cx, security, false).await else {
@@ -169,6 +240,28 @@ async fn deref(cx: &Cx, doc: &Doc, item: &Item) -> Option<Item> {
     }
 }
 
+/// Like [`deref`], with the span that positions in the result are relative to
+/// (`base` for a direct object).
+async fn deref_at(cx: &Cx, doc: &Doc, item: &Item, base: Span) -> Option<(Item, Span)> {
+    match item.reference() {
+        Some((num, _)) => resolve(cx, doc, num).await.ok().map(|l| (l.item, l.base)),
+        None => Some((item.clone(), base)),
+    }
+}
+
+/// An integer, directly or through a reference.
+async fn int_of(cx: &Cx, doc: &Doc, item: Option<&Item>) -> Option<i64> {
+    let item = item?;
+    match item.int() {
+        Some(v) => Some(v),
+        None => deref(cx, doc, item).await?.int(),
+    }
+}
+
+fn plural(n: impl Into<u64>) -> &'static str {
+    if n.into() == 1 { "" } else { "s" }
+}
+
 // ---------------------------------------------------------------------------
 // Entry point
 
@@ -177,31 +270,63 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, HEADER_WINDOW)).await?;
     let start = syntax::find(&head, b"%PDF-", 0)
         .ok_or_else(|| Diagnostic::malformed("no %PDF- header").at(file.sub(0, 8)))?;
-    let start = to_u64(start);
-    let region = file.tail(start);
-    let line_end = head
-        .iter()
-        .skip(crate::bytes::to_usize(start))
-        .position(|&b| b == b'\r' || b == b'\n')
-        .map_or(8, to_u64);
-    let version = String::from_utf8_lossy(
-        head.get(
-            crate::bytes::to_usize(start).saturating_add(5)
-                ..crate::bytes::to_usize(start.saturating_add(line_end)),
-        )
-        .unwrap_or_default(),
-    )
-    .trim()
-    .to_owned();
+    let region = file.tail(to_u64(start));
+    let rest = head.get(start..).unwrap_or_default();
+    let is_eol = |b: &u8| *b == b'\r' || *b == b'\n';
+    let line_end = rest.iter().position(is_eol).unwrap_or(8.min(rest.len()));
+    let version = String::from_utf8_lossy(rest.get(5..line_end).unwrap_or_default())
+        .trim()
+        .to_owned();
     if start > 0 {
-        cx.emit(Node::new("Leading data").span(file.sub(0, start)));
+        cx.emit(Node::new("Leading data").span(file.sub(0, to_u64(start))));
     }
     cx.emit(
         Node::new("Header")
-            .span(region.sub(0, line_end))
+            .span(region.sub(0, to_u64(line_end)))
             .value(Value::Text(version.clone()))
             .desc("PDF version"),
     );
+    // Comment lines after the header (the binary marker), up to the first
+    // object.
+    let mut pos = line_end;
+    let mut first_object = None;
+    loop {
+        pos = pos.saturating_add(
+            rest.get(pos..)
+                .unwrap_or_default()
+                .iter()
+                .take_while(|&&b| syntax::is_white(b))
+                .count(),
+        );
+        match rest.get(pos) {
+            Some(b'%') => {}
+            Some(_) => {
+                first_object = Some(to_u64(pos));
+                break;
+            }
+            None => break,
+        }
+        let line = rest.get(pos..).unwrap_or_default();
+        let len = line.iter().position(is_eol).unwrap_or(line.len());
+        let text = line.get(1..len).unwrap_or_default();
+        if text.iter().filter(|&&b| b >= 0x80).count() >= 4 {
+            cx.emit(
+                Node::new("Binary marker")
+                    .span(region.sub(to_u64(pos), to_u64(len)))
+                    .value(Value::Bytes(text.iter().take(16).copied().collect()))
+                    .desc("A comment of bytes above 127, so transfer programs treat the file as binary"),
+            );
+        } else {
+            cx.emit(
+                Node::new("Comment")
+                    .span(region.sub(to_u64(pos), to_u64(len)))
+                    .value(Value::Text(crate::text::latin1(
+                        text.get(..256).unwrap_or(text),
+                    ))),
+            );
+        }
+        pos = pos.saturating_add(len);
+    }
 
     // startxref, near the end.
     let tail_len = region.len.min(2048);
@@ -213,17 +338,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     });
 
     let mut diags = Vec::new();
-    let (sections, chain_error) = match startxref {
+    let (mut sections, chain_error) = match startxref {
         Some((_, offset)) => objects::chain(&cx, region, offset).await,
         None => (Vec::new(), Some(Diagnostic::malformed("no startxref"))),
     };
     let mut xref = Xref::new();
+    let mut by_offset = BTreeMap::new();
+    let mut n = 0u32;
     for section in &sections {
-        for (i, &(num, loc)) in section.entries.iter().enumerate() {
-            if i % 1024 == 1023 {
+        for &(num, loc) in section.all_entries() {
+            n = n.wrapping_add(1);
+            if n.is_multiple_of(1024) {
                 cx.checkpoint().await;
             }
             xref.entry(num).or_insert(loc);
+            if let Loc::Offset { offset, generation } = loc {
+                by_offset.entry(offset).or_insert((num, generation));
+            }
         }
     }
     let mut trailer = sections.first().and_then(|s| s.trailer.clone());
@@ -232,12 +363,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         diags.push(e);
     }
     if sections.is_empty() || trailer.as_ref().and_then(|t| t.item.get("Root")).is_none() {
-        let (found, scanned_trailer) = objects::scan(&cx, region).await?;
+        let (found, scanned_trailer, tables) = objects::scan(&cx, region).await?;
+        // Tables found by scanning are shown as written (their entries are
+        // not trusted over the objects found).
+        if sections.is_empty() {
+            for &offset in tables.iter().rev() {
+                if let Ok(section) = objects::section(&cx, region, offset).await {
+                    sections.push(section);
+                }
+            }
+        }
         for (i, (num, loc)) in found.into_iter().enumerate() {
             if i % 1024 == 1023 {
                 cx.checkpoint().await;
             }
             xref.entry(num).or_insert(loc);
+            if let Loc::Offset { offset, generation } = loc {
+                by_offset.entry(offset).or_insert((num, generation));
+            }
         }
         if trailer.as_ref().and_then(|t| t.item.get("Root")).is_none() {
             trailer = scanned_trailer.or(trailer);
@@ -247,6 +390,45 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             "cross-reference data unusable; objects were found by scanning",
         ));
     }
+
+    // The linearization dictionary is the first object, if any.
+    let mut linearized = None;
+    if let Some(at) = first_object
+        && let Ok((_, _, located)) = objects::object_at(&cx, region, at, Some(&xref)).await
+        && located.item.get("Linearized").is_some()
+    {
+        linearized = Some(located);
+    }
+
+    // Revisions in file order, each up to its %%EOF.
+    let mut order: Vec<(u64, usize)> = sections
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.offset, i))
+        .collect();
+    order.sort_unstable();
+    let mut revisions = Vec::with_capacity(order.len());
+    let mut from = 0u64;
+    for (_, i) in order {
+        let Some(section) = sections.get(i) else {
+            continue;
+        };
+        let after = match (section.kind, &section.trailer) {
+            (SectionKind::Table, Some(trailer)) => trailer.whole.end(),
+            _ => section.span.end(),
+        }
+        .saturating_sub(region.offset);
+        let tail = objects::tail_at(&cx, region, after).await;
+        let end = tail.map_or(after, |t| t.end).max(from);
+        revisions.push(Revision {
+            section: i,
+            start: from,
+            end,
+            tail,
+        });
+        from = end;
+    }
+
     let mut doc = Doc {
         input,
         region,
@@ -254,6 +436,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         sections,
         trailer,
         security: None,
+        linearized,
+        revisions,
+        by_offset,
     };
     if let Some(trailer) = &doc.trailer
         && let Some(encrypt) = trailer.item.get("Encrypt")
@@ -278,19 +463,49 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.diag(d);
     }
 
-    cx.annotate(annotation(&cx, &doc, &version).await);
+    // The catalog, for the summary and the document-level nodes.
+    let catalog = match doc.trailer.as_ref().and_then(|t| t.item.get("Root")) {
+        Some(root) => match &doc.trailer {
+            Some(trailer) => deref_at(&cx, &doc, root, trailer.base).await,
+            None => None,
+        },
+        None => None,
+    };
+    let pages = match &catalog {
+        Some((catalog, _)) => match catalog.get("Pages") {
+            Some(pages) => match deref(&cx, &doc, pages).await {
+                Some(pages) => int_of(&cx, &doc, pages.get("Count")).await,
+                None => None,
+            },
+            None => None,
+        },
+        None => None,
+    };
+    cx.annotate(annotation(&cx, &doc, &version, catalog.as_ref().map(|c| &c.0), pages).await);
 
-    let path: Arc<Vec<u32>> = Arc::new(Vec::new());
+    let walk = Walk::logical();
+    if let Some(node) = document::linearization_node(&doc) {
+        cx.emit(node);
+    }
     if let Some(trailer) = &doc.trailer {
         let item = &trailer.item;
-        cx.emit(item_node(&doc, "Trailer".into(), item, trailer.base, &path).span(trailer.whole));
+        cx.emit(
+            item_node(
+                &doc,
+                "Trailer".into(),
+                item,
+                trailer.base,
+                &Walk::physical(),
+            )
+            .span(trailer.whole),
+        );
         if let Some(root) = item.get("Root") {
             cx.emit(item_node(
                 &doc,
                 "Document Catalog".into(),
                 root,
                 trailer.base,
-                &path,
+                &walk,
             ));
         }
         if let Some(info) = item.get("Info") {
@@ -299,77 +514,138 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 "Document Information".into(),
                 info,
                 trailer.base,
-                &path,
+                &walk,
             ));
         }
     }
-    cx.emit(
-        Node::new("Pages")
-            .desc("The page tree, in reading order")
-            .lazy(pages, doc.clone()),
-    );
+    if let Some(node) = document::encryption_node(&doc) {
+        cx.emit(node);
+    }
+    let mut pages_node = Node::new("Pages")
+        .desc("The page tree, in reading order")
+        .lazy(crate::expander!(self::pages: DocRef), doc.clone());
+    if let Some(count) = pages {
+        pages_node = pages_node.summary(format!("{count} page{}", plural(count.unsigned_abs())));
+    }
+    cx.emit(pages_node);
+    if let Some((catalog, base)) = &catalog {
+        for node in document::catalog_nodes(&cx, &doc, catalog, *base).await {
+            cx.emit(node);
+        }
+    }
     cx.emit(
         Node::new("Objects")
             .summary(format!("{} entries", doc.xref.len()))
-            .desc("Every object in the cross-reference data, by number")
-            .lazy(objects_list, doc.clone()),
+            .desc("Every object in the cross-reference data, by number, with where it is")
+            .lazy(crate::expander!(self::objects_list: DocRef), doc.clone()),
     );
-    if !doc.sections.is_empty() {
+    if doc.revisions.is_empty() {
+        if !doc.by_offset.is_empty() {
+            cx.emit(
+                Node::new("Body")
+                    .summary(format!(
+                        "{} object{} found",
+                        doc.by_offset.len(),
+                        plural(to_u64(doc.by_offset.len()))
+                    ))
+                    .desc("The objects found in the file, in file order")
+                    .lazy(
+                        crate::expander!(self::body: (DocRef, u64, u64)),
+                        (doc.clone(), 0, region.len),
+                    ),
+            );
+        }
+        if let Some((at, offset)) = startxref {
+            let len = tail
+                .len()
+                .saturating_sub(to_usize(at.saturating_sub(tail_at)));
+            let mut node = Node::new("startxref")
+                .span(region.sub(at, to_u64(len)))
+                .value(Value::UInt {
+                    value: offset,
+                    bits: 64,
+                    radix: Radix::Hex,
+                });
+            if !scanned {
+                node = node.target(region.sub(offset, 4));
+            }
+            cx.emit(node);
+        }
+    } else {
+        let count = doc.revisions.len();
         cx.emit(
             Node::new("Revisions")
                 .summary(format!(
-                    "{} cross-reference section{}",
-                    doc.sections.len(),
-                    if doc.sections.len() == 1 { "" } else { "s" }
+                    "{count} cross-reference section{}",
+                    plural(to_u64(count))
                 ))
-                .desc("The original file and its incremental updates, oldest first")
-                .lazy(revisions, doc.clone()),
+                .desc(
+                    "The file as written: the original and its incremental updates, in file order",
+                )
+                .lazy(crate::expander!(self::revisions: DocRef), doc.clone()),
         );
-    }
-    if let Some((at, offset)) = startxref {
-        let len = tail
-            .len()
-            .saturating_sub(crate::bytes::to_usize(at.saturating_sub(tail_at)));
-        let mut node = Node::new("startxref")
-            .span(region.sub(at, to_u64(len)))
-            .value(Value::UInt {
-                value: offset,
-                bits: 64,
-                radix: Radix::Hex,
-            });
-        if !scanned {
-            node = node.target(region.sub(offset, 4));
-        }
-        cx.emit(node);
     }
     Ok(())
 }
 
-async fn annotation(cx: &Cx, doc: &Doc, version: &str) -> String {
+/// The number of revisions: sections, less the first-page section of a
+/// linearized file (which belongs to the original).
+fn revision_count(doc: &Doc) -> usize {
+    let n = doc.sections.len();
+    if doc.linearized.is_some() && n > 1 {
+        n.saturating_sub(1)
+    } else {
+        n
+    }
+}
+
+async fn annotation(
+    cx: &Cx,
+    doc: &Doc,
+    version: &str,
+    catalog: Option<&Item>,
+    pages: Option<i64>,
+) -> String {
     let mut out = format!("PDF {version}");
+    if let Some(v) = catalog.and_then(|c| c.get("Version")).and_then(Item::name) {
+        out = format!("PDF {v} (header {version})");
+    }
+    if let Some(count) = pages {
+        out = format!("{out}, {count} page{}", plural(count.unsigned_abs()));
+    }
+    let revisions = revision_count(doc);
+    if revisions > 1 {
+        out = format!("{out}, {revisions} revisions");
+    }
+    if doc.linearized.is_some() {
+        out.push_str(", linearized");
+    }
     let Some(trailer) = &doc.trailer else {
         return out;
     };
-    if let Some(root) = trailer.item.get("Root")
-        && let Some(catalog) = deref(cx, doc, root).await
-    {
-        if let Some(v) = catalog.get("Version").and_then(Item::name) {
-            out = format!("PDF {v} (header {version})");
-        }
-        if let Some(pages) = catalog.get("Pages")
-            && let Some(pages) = deref(cx, doc, pages).await
-            && let Some(count) = pages.get("Count").and_then(Item::int)
-        {
-            out = format!("{out}, {count} page{}", if count == 1 { "" } else { "s" });
-        }
-    }
-    if doc.sections.len() > 1 {
-        out = format!("{out}, {} revisions", doc.sections.len());
-    }
     let locked = match &doc.security {
         Some(security) => crypt::file_key(cx, security, false).await.is_none(),
         None => false,
     };
+    if trailer.item.get("Encrypt").is_some() {
+        let cipher = doc
+            .security
+            .as_ref()
+            .map(|s| format!(" ({})", s.describe()))
+            .unwrap_or_default();
+        out = format!(
+            "{out}, encrypted{cipher}{}",
+            if locked { ", password required" } else { "" }
+        );
+    }
+    if let Some(form) = catalog.and_then(|c| c.get("AcroForm"))
+        && let Some(form) = deref(cx, doc, form).await
+        && int_of(cx, doc, form.get("SigFlags"))
+            .await
+            .is_some_and(|f| f & 1 != 0)
+    {
+        out.push_str(", signed");
+    }
     if let Some(info) = trailer.item.get("Info")
         && !locked
         && let Some(info) = deref(cx, doc, info).await
@@ -383,13 +659,6 @@ async fn annotation(cx: &Cx, doc: &Doc, version: &str) -> String {
             }
         }
     }
-    if trailer.item.get("Encrypt").is_some() {
-        out.push_str(if locked {
-            ", encrypted (password required)"
-        } else {
-            ", encrypted"
-        });
-    }
     out
 }
 
@@ -401,14 +670,14 @@ struct ItemState {
     doc: DocRef,
     item: Item,
     base: Span,
-    path: Arc<Vec<u32>>,
+    walk: Walk,
 }
 
 #[derive(Clone)]
 struct ObjState {
     doc: DocRef,
     num: u32,
-    path: Arc<Vec<u32>>,
+    walk: Walk,
 }
 
 /// A one-line rendering for summaries.
@@ -452,20 +721,14 @@ fn array_summary(items: &[Item]) -> String {
     format!("[{}{more}]", preview.join(" "))
 }
 
-fn item_node(
-    doc: &DocRef,
-    name: Cow<'static, str>,
-    item: &Item,
-    base: Span,
-    path: &Arc<Vec<u32>>,
-) -> Node {
+fn item_node(doc: &DocRef, name: Cow<'static, str>, item: &Item, base: Span, walk: &Walk) -> Node {
     let span = base.sub(to_u64(item.start), syntax::len_u64(item));
     let node = Node::new(name).span(span);
     let state = || ItemState {
         doc: doc.clone(),
         item: item.clone(),
         base,
-        path: path.clone(),
+        walk: walk.clone(),
     };
     match &item.obj {
         Obj::Null => node.summary("null"),
@@ -498,7 +761,7 @@ fn item_node(
                 node
             }
         }
-        Obj::Ref(num, generation) => reference(doc, node, *num, *generation, path),
+        Obj::Ref(num, generation) => reference(doc, node, *num, *generation, walk),
         Obj::Array(items) => node
             .summary(array_summary(items))
             .lazy(crate::expander!(self::array_children: ItemState), state()),
@@ -508,34 +771,41 @@ fn item_node(
     }
 }
 
-/// A reference: expands into the object it points to, unless that object is
-/// already open above (a cycle such as `/Parent`) or the path is too deep.
-fn reference(doc: &DocRef, node: Node, num: u32, generation: u16, path: &Arc<Vec<u32>>) -> Node {
+/// A reference: a link to the object it points to, which a logical view
+/// also expands into, unless that object is already open above (a cycle
+/// such as `/Parent`) or the path is too deep.
+fn reference(doc: &DocRef, node: Node, num: u32, generation: u16, walk: &Walk) -> Node {
     let mut node = node.value(Value::Text(format!("{num} {generation} R")));
     match doc.xref.get(&num) {
         Some(&Loc::Offset { offset, .. }) => node = node.target(doc.region.sub(offset, 0)),
         Some(Loc::Compressed { stream, .. }) => {
             node = node.summary(format!("in object stream {stream}"))
         }
-        Some(Loc::Free) => return node.summary("free object"),
+        Some(Loc::Free { .. }) => return node.summary("free object"),
         None => return node.diag(Diagnostic::warning(format!("object {num} does not exist"))),
     }
-    if path.contains(&num) {
+    if !walk.follow {
+        return node;
+    }
+    if walk.path.contains(&num) {
         return node.summary("already open above");
     }
-    if path.len() >= MAX_DEPTH {
+    if walk.path.len() >= MAX_DEPTH {
         return node.diag(Diagnostic::limit(format!(
             "references followed deeper than {MAX_DEPTH}"
         )));
     }
-    let mut path = path.to_vec();
+    let mut path = walk.path.to_vec();
     path.push(num);
     node.lazy(
         crate::expander!(self::object_children: ObjState),
         ObjState {
             doc: doc.clone(),
             num,
-            path: Arc::new(path),
+            walk: Walk {
+                path: Arc::new(path),
+                follow: true,
+            },
         },
     )
 }
@@ -551,7 +821,7 @@ async fn array_children(cx: Cx, state: ItemState) -> Result<()> {
             format!("[{i}]").into(),
             item,
             state.base,
-            &state.path,
+            &state.walk,
         ))
         .await;
     }
@@ -564,21 +834,40 @@ async fn dict_children(cx: Cx, state: ItemState) -> Result<()> {
     };
     cx.set_count(Count::Exact(to_u64(entries.len())));
     for entry in entries.iter() {
-        let node = item_node(
-            &state.doc,
-            format!("/{}", entry.key).into(),
-            &entry.value,
-            state.base,
-            &state.path,
-        );
-        // The span covers the key too.
-        let span = state.base.sub(
-            to_u64(entry.key_start),
-            to_u64(entry.value.end.saturating_sub(entry.key_start)),
-        );
-        cx.push(node.span(span)).await;
+        cx.push(entry_node(&state.doc, entry, state.base, &state.walk))
+            .await;
     }
     Ok(())
+}
+
+/// A dictionary entry: the value's node, spanning the key too.
+/// Keys whose references point back or across the document's tree (a
+/// page's parent, an annotation's page, a destination): a logical view
+/// shows them as links rather than expanding the same objects again.
+const BACK_LINKS: &[&str] = &["Parent", "P", "Prev", "Last", "Dest", "D", "Pg"];
+
+fn entry_node(doc: &DocRef, entry: &syntax::Entry, base: Span, walk: &Walk) -> Node {
+    let link = Walk {
+        path: walk.path.clone(),
+        follow: false,
+    };
+    let walk = if walk.follow && BACK_LINKS.contains(&entry.key.as_str()) {
+        &link
+    } else {
+        walk
+    };
+    let span = base.sub(
+        to_u64(entry.key_start),
+        to_u64(entry.value.end.saturating_sub(entry.key_start)),
+    );
+    item_node(
+        doc,
+        format!("/{}", entry.key).into(),
+        &entry.value,
+        base,
+        walk,
+    )
+    .span(span)
 }
 
 /// One line describing an object.
@@ -589,20 +878,13 @@ fn describe(located: &Located) -> String {
     };
     match located.data {
         Some(data) => {
-            let filters = objects::filters(&located.item);
-            let filters = if filters.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    ", {}",
-                    filters
-                        .iter()
-                        .map(|f| format!("/{f}"))
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )
-            };
-            format!("stream, {base}, {} bytes{filters}", data.len)
+            let kind = streams::kind(&located.item)
+                .map(|k| format!("{k}, "))
+                .unwrap_or_default();
+            let filters = streams::filters_summary(&located.item)
+                .map(|f| format!(", {f}"))
+                .unwrap_or_default();
+            format!("stream, {kind}{base}, {} bytes{filters}", data.len)
         }
         None => base,
     }
@@ -613,31 +895,58 @@ fn describe(located: &Located) -> String {
 async fn object_children(cx: Cx, state: ObjState) -> Result<()> {
     let located = resolve(&cx, &state.doc, state.num).await?;
     cx.annotate(describe(&located));
-    emit_object(&cx, &state.doc, &located, &state.path).await
+    emit_object(&cx, &state.doc, &located, &state.walk).await
 }
 
-async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, path: &Arc<Vec<u32>>) -> Result<()> {
+/// The contents of an object already read (a body object, an object in an
+/// object stream).
+async fn located_children(cx: Cx, (doc, located, walk): (DocRef, Located, Walk)) -> Result<()> {
+    emit_object(&cx, &doc, &located, &walk).await
+}
+
+/// A node for an object read at a known place, listed where it is written.
+fn located_node(doc: &DocRef, name: String, located: Located) -> Node {
+    Node::new(name)
+        .span(located.whole)
+        .summary(describe(&located))
+        .lazy(
+            crate::expander!(self::located_children: (DocRef, Located, Walk)),
+            (doc.clone(), located, Walk::physical()),
+        )
+}
+
+/// Where an indirect object is written: its `N G obj` line.
+fn header_node(located: &Located) -> Option<Node> {
+    let (num, generation) = located.id?;
+    let start = located
+        .base
+        .offset
+        .saturating_add(to_u64(located.item.start));
+    Some(
+        Node::new("Object header")
+            .span(
+                located
+                    .whole
+                    .sub(0, start.saturating_sub(located.whole.offset)),
+            )
+            .value(Value::Text(format!("{num} {generation} obj"))),
+    )
+}
+
+async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, walk: &Walk) -> Result<()> {
     let item = &located.item;
+    if !walk.follow
+        && let Some(node) = header_node(located)
+    {
+        cx.emit(node);
+    }
     match &item.obj {
         Obj::Dict(entries) => {
             for (i, entry) in entries.iter().enumerate() {
                 if i % 256 == 255 {
                     cx.checkpoint().await;
                 }
-                let span = located.base.sub(
-                    to_u64(entry.key_start),
-                    to_u64(entry.value.end.saturating_sub(entry.key_start)),
-                );
-                cx.emit(
-                    item_node(
-                        doc,
-                        format!("/{}", entry.key).into(),
-                        &entry.value,
-                        located.base,
-                        path,
-                    )
-                    .span(span),
-                );
+                cx.emit(entry_node(doc, entry, located.base, walk));
             }
         }
         Obj::Array(items) => {
@@ -650,118 +959,48 @@ async fn emit_object(cx: &Cx, doc: &DocRef, located: &Located, path: &Arc<Vec<u3
                     format!("[{i}]").into(),
                     it,
                     located.base,
-                    path,
+                    walk,
                 ));
             }
         }
-        _ => cx.emit(item_node(doc, "Value".into(), item, located.base, path)),
+        _ => cx.emit(item_node(doc, "Value".into(), item, located.base, walk)),
     }
-    if located.data.is_some() {
-        cx.emit(stream_data(doc, located));
-        if looks_like_content(item) {
+    let physical = !walk.follow && located.id.is_some();
+    let item_end = located.base.offset.saturating_add(to_u64(item.end));
+    if let Some(data) = located.data {
+        if physical {
             cx.emit(
-                Node::new("Content operators")
-                    .desc("The stream read as a content stream (page or form drawing operators)")
-                    .lazy(content_operators, (doc.clone(), located.clone())),
-            );
-        }
-        if item.get("Type").and_then(Item::name) == Some("ObjStm") {
-            cx.emit(
-                Node::new("Contained objects")
-                    .summary(format!(
-                        "{} objects",
-                        item.get("N").and_then(Item::int).unwrap_or(0)
+                Node::new("Stream keyword")
+                    .span(Span::new(
+                        data.source,
+                        item_end,
+                        data.offset.saturating_sub(item_end),
                     ))
-                    .lazy(
-                        contained_objects,
-                        (doc.clone(), located.clone(), path.clone()),
-                    ),
+                    .value(Value::Text("stream".to_owned())),
             );
         }
-    }
-    Ok(())
-}
-
-/// The data of a stream, decoded on expansion.
-fn stream_data(doc: &DocRef, located: &Located) -> Node {
-    let Some(data) = located.data else {
-        return Node::new("Stream data");
-    };
-    let input = doc.input;
-    let expected = located
-        .item
-        .get("DL")
-        .and_then(Item::int)
-        .and_then(|n| u64::try_from(n).ok());
-    let name = "Stream data";
-    if objects::is_encrypted(located, doc.security.as_ref()) {
-        return Node::new(name)
-            .span(data)
-            .summary(format!("{} bytes, encrypted", data.len))
-            .lazy(encrypted_stream, (doc.clone(), located.clone()));
-    }
-    match objects::codec(&located.item) {
-        Ok((codec, names)) => {
-            let image = match names.last().map(String::as_str) {
-                Some("DCTDecode" | "DCT") => Some("JPEG image"),
-                Some("JPXDecode") => Some("JPEG 2000 image"),
-                Some("JBIG2Decode") => Some("JBIG2 image"),
-                Some("CCITTFaxDecode" | "CCF") => Some("CCITT fax image"),
-                _ => None,
-            };
-            let filters: Vec<String> = names.iter().map(|f| format!("/{f}")).collect();
-            let summary = match (filters.is_empty(), image) {
-                (true, _) => format!("{} bytes", data.len),
-                (false, Some(kind)) => format!("{} bytes, {}: {kind}", data.len, filters.join(" ")),
-                (false, None) => format!("{} bytes, {}", data.len, filters.join(" ")),
-            };
-            content(name, input, data, codec, expected).summary(summary)
+        for node in streams::nodes(doc, located) {
+            cx.emit(node);
         }
-        Err(e) => Node::new(name)
-            .span(data)
-            .summary(format!("{} bytes", data.len))
-            .diag(Diagnostic::unsupported(e)),
     }
-}
-
-/// An encrypted stream: decrypted (asking for the password if needed),
-/// then decoded and dissected.
-async fn encrypted_stream(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
-    let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
-    cx.annotate(format!("{:#x} bytes decrypted and decoded", span.len));
-    crate::formats::dissect_or_data(cx, doc.input.nested(span)).await
-}
-
-/// Streams without a type are usually page contents; forms say /Form.
-fn looks_like_content(dict: &Item) -> bool {
-    let subtype = dict.get("Subtype").and_then(Item::name);
-    let typed = dict.get("Type").is_some() || subtype.is_some();
-    let other = ["Length1", "Length2", "N", "Width"]
-        .iter()
-        .any(|k| dict.get(k).is_some());
-    (!typed && !other) || subtype == Some("Form")
-}
-
-async fn content_operators(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
-    let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
-    content::operators(&cx, span).await
-}
-
-async fn contained_objects(
-    cx: Cx,
-    (doc, objstm, path): (DocRef, Located, Arc<Vec<u32>>),
-) -> Result<()> {
-    let decoded = objects::decode(&cx, &objstm, doc.security.as_ref()).await?;
-    let index = objects::object_stream_index(&cx, &objstm, decoded).await?;
-    cx.set_count(Count::Exact(to_u64(index.entries.len())));
-    for &(num, offset) in &index.entries {
-        let num = u32::try_from(num).unwrap_or(u32::MAX);
-        let node = Node::new(format!("Object {num}")).span(decoded.sub(offset, 0));
-        cx.push(
-            reference(&doc, node, num, 0, &path)
-                .summary(format!("at {offset:#x} in the decoded stream")),
-        )
-        .await;
+    if physical {
+        // `endstream` and `endobj`.
+        let from = located.data.map_or(item_end, |d| d.end());
+        let len = located.whole.end().saturating_sub(from);
+        if len > 0 {
+            let span = Span::new(located.whole.source, from, len.min(64));
+            let bytes = cx.read_avail(span).await?;
+            let keywords: Vec<String> = bytes
+                .split(|&b| syntax::is_white(b))
+                .filter(|w| !w.is_empty())
+                .map(crate::text::latin1)
+                .collect();
+            cx.emit(
+                Node::new("End keywords")
+                    .span(span)
+                    .value(Value::Text(keywords.join(" "))),
+            );
+        }
     }
     Ok(())
 }
@@ -769,6 +1008,37 @@ async fn contained_objects(
 // ---------------------------------------------------------------------------
 // Collections
 
+/// Where an object is, as a value and a summary.
+fn loc_value(loc: Loc) -> (Value, String) {
+    match loc {
+        Loc::Free { next, generation } => (
+            Value::UInt {
+                value: next,
+                bits: 64,
+                radix: Radix::Dec,
+            },
+            format!("free, next free object {next}, generation {generation}"),
+        ),
+        Loc::Offset { offset, generation } => (
+            Value::UInt {
+                value: offset,
+                bits: 64,
+                radix: Radix::Hex,
+            },
+            format!("in use, generation {generation}"),
+        ),
+        Loc::Compressed { stream, index } => (
+            Value::UInt {
+                value: u64::from(stream),
+                bits: 32,
+                radix: Radix::Dec,
+            },
+            format!("in object stream {stream}, index {index}"),
+        ),
+    }
+}
+
+/// Every object by number: where it is and what it is, linked to it.
 async fn objects_list(cx: Cx, doc: DocRef) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(doc.xref.len())));
     for (&num, &loc) in &doc.xref {
@@ -776,27 +1046,15 @@ async fn objects_list(cx: Cx, doc: DocRef) -> Result<()> {
             Loc::Offset { generation, .. } => format!("Object {num} {generation}"),
             _ => format!("Object {num}"),
         };
-        let path = Arc::new(vec![num]);
+        let (value, place) = loc_value(loc);
+        let node = Node::new(label).value(value);
         let node = match loc {
-            Loc::Free => Node::new(label).summary("free"),
+            Loc::Free { .. } => node.summary(place),
             _ => match resolve(&cx, &doc, num).await {
-                Ok(located) => {
-                    let summary = match loc {
-                        Loc::Compressed { stream, .. } => {
-                            format!("{} (in object stream {stream})", describe(&located))
-                        }
-                        _ => describe(&located),
-                    };
-                    Node::new(label).span(located.whole).summary(summary).lazy(
-                        object_children,
-                        ObjState {
-                            doc: doc.clone(),
-                            num,
-                            path,
-                        },
-                    )
-                }
-                Err(e) => Node::new(label).diag(e),
+                Ok(located) => node
+                    .summary(format!("{} ({place})", describe(&located)))
+                    .target(located.whole),
+                Err(e) => node.summary(place).diag(e),
             },
         };
         cx.push(node).await;
@@ -804,8 +1062,65 @@ async fn objects_list(cx: Cx, doc: DocRef) -> Result<()> {
     Ok(())
 }
 
+/// The objects written in `start..end`, in file order.
+async fn body(cx: Cx, (doc, start, end): (DocRef, u64, u64)) -> Result<()> {
+    let objects: Vec<(u64, u32)> = doc
+        .by_offset
+        .range(start..end)
+        .map(|(&offset, &(num, _))| (offset, num))
+        .collect();
+    cx.set_count(Count::Exact(to_u64(objects.len())));
+    for (offset, num) in objects {
+        let node = match located_at(&cx, &doc, offset).await {
+            Ok(located) => {
+                let name = match located.id {
+                    Some((n, g)) => format!("Object {n} {g}"),
+                    None => format!("Object {num}"),
+                };
+                located_node(&doc, name, located)
+            }
+            Err(e) => Node::new(format!("Object {num}"))
+                .span(doc.region.sub(offset, 0))
+                .diag(e),
+        };
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+/// A common paper size, for page summaries.
+fn paper(w: f64, h: f64) -> Option<&'static str> {
+    const SIZES: &[(f64, f64, &str)] = &[
+        (595.0, 842.0, "A4"),
+        (612.0, 792.0, "US Letter"),
+        (612.0, 1008.0, "US Legal"),
+        (842.0, 1191.0, "A3"),
+        (420.0, 595.0, "A5"),
+        (499.0, 709.0, "B5"),
+        (792.0, 1224.0, "Tabloid"),
+    ];
+    let (a, b) = if w <= h { (w, h) } else { (h, w) };
+    SIZES
+        .iter()
+        .find(|(x, y, _)| (a - x).abs() < 1.5 && (b - y).abs() < 1.5)
+        .map(|(_, _, name)| *name)
+}
+
+fn rectangle(item: Option<&Item>) -> Option<[f64; 4]> {
+    let v: Vec<f64> = item?
+        .array()?
+        .iter()
+        .filter_map(|i| match i.obj {
+            Obj::Int(n) => Some(n as f64),
+            Obj::Real(r) => Some(r),
+            _ => None,
+        })
+        .collect();
+    v.try_into().ok()
+}
+
 /// The page tree in order: a depth-first walk from the catalog's /Pages,
-/// skipping nodes already visited.
+/// skipping nodes already visited. `/MediaBox` and `/Rotate` are inherited.
 async fn pages(cx: Cx, doc: DocRef) -> Result<()> {
     let Some(trailer) = &doc.trailer else {
         return Ok(());
@@ -821,10 +1136,10 @@ async fn pages(cx: Cx, doc: DocRef) -> Result<()> {
         .get("Pages")
         .and_then(Item::reference)
         .ok_or_else(|| Diagnostic::malformed("catalog has no /Pages reference"))?;
-    let mut stack = vec![top.0];
+    let mut stack: Vec<(u32, Option<[f64; 4]>, Option<i64>)> = vec![(top.0, None, None)];
     let mut seen = BTreeSet::new();
     let mut number = 0u64;
-    while let Some(num) = stack.pop() {
+    while let Some((num, media, rotate)) = stack.pop() {
         cx.checkpoint().await;
         if !seen.insert(num) {
             cx.diag(Diagnostic::malformed(format!(
@@ -842,44 +1157,50 @@ async fn pages(cx: Cx, doc: DocRef) -> Result<()> {
                 continue;
             }
         };
-        let kind = located.item.get("Type").and_then(Item::name);
-        let kids = located.item.get("Kids").and_then(Item::array);
+        let item = &located.item;
+        let media = rectangle(item.get("MediaBox")).or(media);
+        let rotate = item.get("Rotate").and_then(Item::int).or(rotate);
+        let kind = item.get("Type").and_then(Item::name);
+        let kids = item.get("Kids").and_then(Item::array);
         match (kind, kids) {
             (Some("Pages"), Some(kids)) | (None, Some(kids)) => {
                 stack.extend(
                     kids.iter()
                         .rev()
                         .filter_map(Item::reference)
-                        .map(|(n, _)| n),
+                        .map(|(n, _)| (n, media, rotate)),
                 );
             }
             _ => {
                 number = number.saturating_add(1);
                 let mut summary = format!("object {num}");
-                if let Some(mb) = located.item.get("MediaBox").and_then(Item::array) {
-                    let v: Vec<f64> = mb
-                        .iter()
-                        .filter_map(|i| match i.obj {
-                            Obj::Int(n) => Some(n as f64),
-                            Obj::Real(r) => Some(r),
-                            _ => None,
-                        })
-                        .collect();
-                    if let [x0, y0, x1, y1] = v.as_slice() {
-                        summary = format!("{summary}, {}×{} pt", x1 - x0, y1 - y0);
+                if let Some([x0, y0, x1, y1]) = media {
+                    let (w, h) = ((x1 - x0).abs(), (y1 - y0).abs());
+                    summary = format!("{summary}, {w}×{h} pt");
+                    if let Some(name) = paper(w, h) {
+                        summary = format!(
+                            "{summary} ({name}{})",
+                            if w > h { " landscape" } else { "" }
+                        );
                     }
                 }
-                let path = Arc::new(vec![num]);
+                if let Some(r) = rotate.filter(|&r| r.rem_euclid(360) != 0) {
+                    summary = format!("{summary}, rotated {r}°");
+                }
+                let walk = Walk {
+                    path: Arc::new(vec![num]),
+                    follow: true,
+                };
                 cx.push(
                     Node::new(format!("Page {number}"))
                         .span(located.whole)
                         .summary(summary)
                         .lazy(
-                            object_children,
+                            crate::expander!(self::object_children: ObjState),
                             ObjState {
                                 doc: doc.clone(),
                                 num,
-                                path,
+                                walk,
                             },
                         ),
                 )
@@ -890,30 +1211,48 @@ async fn pages(cx: Cx, doc: DocRef) -> Result<()> {
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Revisions: the file as written
+
 async fn revisions(cx: Cx, doc: DocRef) -> Result<()> {
-    let count = doc.sections.len();
+    let count = doc.revisions.len();
     cx.set_count(Count::Exact(to_u64(count)));
-    for (i, section) in doc.sections.iter().rev().enumerate() {
-        let kind = match section.kind {
-            SectionKind::Table => "cross-reference table",
-            SectionKind::Stream => "cross-reference stream",
+    let linearized = doc.linearized.is_some() && count > 1;
+    for (i, revision) in doc.revisions.iter().enumerate() {
+        let Some(section) = doc.sections.get(revision.section) else {
+            continue;
         };
-        let label = if i == 0 {
-            "original".to_owned()
-        } else {
-            format!("update {i}")
+        let kind = match (section.kind, section.hybrid.is_some()) {
+            (SectionKind::Table, false) => "cross-reference table",
+            (SectionKind::Table, true) => "hybrid cross-reference table and stream",
+            (SectionKind::Stream, _) => "cross-reference stream",
         };
+        let label = match (linearized, i) {
+            (true, 0) => "linearized, first-page section".to_owned(),
+            (true, 1) | (false, 0) => "original".to_owned(),
+            (true, _) => format!("update {}", i.saturating_sub(1)),
+            (false, _) => format!("update {i}"),
+        };
+        let objects = doc
+            .by_offset
+            .range(revision.start..section.offset.max(revision.start))
+            .count();
+        let entries = section.all_entries().count();
         cx.push(
             Node::new(format!("Revision {}", i.saturating_add(1)))
-                .span(section.span)
+                .span(
+                    doc.region
+                        .sub(revision.start, revision.end.saturating_sub(revision.start)),
+                )
                 .summary(format!(
-                    "{label}: {kind} at {:#x}, {} entries",
+                    "{label}: {objects} object{}, {kind} at {:#x} with {entries} entr{}",
+                    plural(to_u64(objects)),
                     section.offset,
-                    section.entries.len()
+                    if entries == 1 { "y" } else { "ies" }
                 ))
                 .lazy(
-                    revision,
-                    (doc.clone(), count.saturating_sub(i).saturating_sub(1)),
+                    crate::expander!(self::revision_children: (DocRef, usize)),
+                    (doc.clone(), i),
                 ),
         )
         .await;
@@ -921,53 +1260,202 @@ async fn revisions(cx: Cx, doc: DocRef) -> Result<()> {
     Ok(())
 }
 
-async fn revision(cx: Cx, (doc, index): (DocRef, usize)) -> Result<()> {
-    let Some(section) = doc.sections.get(index) else {
+async fn revision_children(cx: Cx, (doc, index): (DocRef, usize)) -> Result<()> {
+    let Some(revision) = doc.revisions.get(index).copied() else {
         return Ok(());
     };
-    cx.emit(
-        Node::new("Entries")
-            .span(section.span)
-            .summary(format!("{} objects", section.entries.len()))
-            .lazy(section_entries, (doc.clone(), index)),
-    );
-    if let Some(trailer) = &section.trailer {
-        let path = Arc::new(Vec::new());
-        let name = match section.kind {
-            SectionKind::Table => "Trailer",
-            SectionKind::Stream => "Stream dictionary",
-        };
+    let Some(section) = doc.sections.get(revision.section) else {
+        return Ok(());
+    };
+    let body_end = section.offset.max(revision.start);
+    let objects = doc.by_offset.range(revision.start..body_end).count();
+    if objects > 0 {
         cx.emit(
-            item_node(&doc, name.into(), &trailer.item, trailer.base, &path).span(trailer.whole),
+            Node::new("Body")
+                .span(
+                    doc.region
+                        .sub(revision.start, body_end.saturating_sub(revision.start)),
+                )
+                .summary(format!("{objects} object{}", plural(to_u64(objects))))
+                .desc("The objects of this revision, in file order")
+                .lazy(
+                    crate::expander!(self::body: (DocRef, u64, u64)),
+                    (doc.clone(), revision.start, body_end),
+                ),
         );
-        if section.kind == SectionKind::Stream {
-            cx.emit(stream_data(&doc, trailer));
+    }
+    let walk = Walk::physical();
+    match section.kind {
+        SectionKind::Table => {
+            cx.emit(table_node(&doc, revision.section, false));
+            if let Some(trailer) = &section.trailer {
+                cx.emit(
+                    item_node(&doc, "Trailer".into(), &trailer.item, trailer.base, &walk)
+                        .span(trailer.whole),
+                );
+            }
+            if let Some(hybrid) = &section.hybrid
+                && let Some(stream) = &hybrid.trailer
+            {
+                cx.emit(
+                    located_node(
+                        &doc,
+                        "Cross-reference stream (/XRefStm)".to_owned(),
+                        stream.clone(),
+                    )
+                    .desc("The stream of a hybrid-reference file: entries readers of PDF 1.5 and later add to the table's"),
+                );
+            }
+        }
+        SectionKind::Stream => {
+            if let Some(stream) = &section.trailer {
+                cx.emit(
+                    located_node(&doc, "Cross-reference stream".to_owned(), stream.clone()).desc(
+                        "The cross-reference entries and the trailer dictionary, as a stream",
+                    ),
+                );
+            }
+        }
+    }
+    if let Some(tail) = revision.tail {
+        let mut node = Node::new("startxref")
+            .span(tail.startxref)
+            .value(Value::UInt {
+                value: tail.value,
+                bits: 64,
+                radix: Radix::Hex,
+            });
+        if tail.value == section.offset {
+            node = node.target(doc.region.sub(tail.value, 4));
+        } else if tail.value == 0 && doc.linearized.is_some() {
+            node = node.summary("0 in the first-page trailer of a linearized file");
+        } else {
+            node = node.diag(Diagnostic::warning(format!(
+                "points at {:#x}, but this section is at {:#x}",
+                tail.value, section.offset
+            )));
+        }
+        cx.emit(node);
+        if let Some(eof) = tail.eof {
+            cx.emit(
+                Node::new("End-of-file marker")
+                    .span(eof)
+                    .value(Value::Text("%%EOF".to_owned())),
+            );
         }
     }
     Ok(())
 }
 
-async fn section_entries(cx: Cx, (doc, index): (DocRef, usize)) -> Result<()> {
-    let Some(section) = doc.sections.get(index) else {
+/// A classic cross-reference table (or, for a stream section, its rows).
+fn table_node(doc: &DocRef, section: usize, hybrid: bool) -> Node {
+    let Some(s) = doc.sections.get(section) else {
+        return Node::new("Cross-reference table");
+    };
+    let s = if hybrid {
+        match s.hybrid.as_deref() {
+            Some(h) => h,
+            None => return Node::new("Cross-reference table"),
+        }
+    } else {
+        s
+    };
+    let entries = s.entries.len();
+    let subsections = s.subsections.len();
+    Node::new("Cross-reference table")
+        .span(s.span)
+        .summary(format!(
+            "{entries} entr{} in {subsections} subsection{}",
+            if entries == 1 { "y" } else { "ies" },
+            plural(to_u64(subsections))
+        ))
+        .lazy(
+            crate::expander!(self::subsections_list: (DocRef, usize, bool)),
+            (doc.clone(), section, hybrid),
+        )
+}
+
+/// The section `section` of `doc` (or its hybrid stream).
+fn section_of(doc: &Doc, section: usize, hybrid: bool) -> Option<&Section> {
+    let s = doc.sections.get(section)?;
+    if hybrid { s.hybrid.as_deref() } else { Some(s) }
+}
+
+async fn subsections_list(cx: Cx, (doc, section, hybrid): (DocRef, usize, bool)) -> Result<()> {
+    let Some(s) = section_of(&doc, section, hybrid) else {
         return Ok(());
     };
-    cx.set_count(Count::Exact(to_u64(section.entries.len())));
-    for &(num, loc) in &section.entries {
-        let node = Node::new(format!("Object {num}"));
-        let node = match loc {
-            Loc::Free => node.summary("free"),
-            Loc::Offset { offset, generation } => node
-                .value(Value::UInt {
-                    value: offset,
-                    bits: 64,
-                    radix: Radix::Hex,
-                })
-                .summary(format!("in use, generation {generation}"))
-                .target(doc.region.sub(offset, 0)),
-            Loc::Compressed { stream, index } => {
-                node.summary(format!("object stream {stream}, index {index}"))
-            }
+    if s.kind == SectionKind::Table {
+        cx.emit(
+            Node::new("Keyword")
+                .span(doc.region.sub(s.offset, 4))
+                .value(Value::Text("xref".to_owned())),
+        );
+    }
+    cx.set_count(Count::Exact(to_u64(s.subsections.len())));
+    for (i, sub) in s.subsections.iter().enumerate() {
+        let last = sub.first.saturating_add(to_u64(sub.len)).saturating_sub(1);
+        let name = match sub.len {
+            0 => format!("Subsection at {}", sub.first),
+            1 => format!("Object {}", sub.first),
+            _ => format!("Objects {}–{last}", sub.first),
         };
+        cx.push(
+            Node::new(name)
+                .span(sub.span)
+                .summary(format!(
+                    "{} entr{}",
+                    sub.len,
+                    if sub.len == 1 { "y" } else { "ies" }
+                ))
+                .lazy(
+                    crate::expander!(self::subsection_entries: (DocRef, usize, bool, usize)),
+                    (doc.clone(), section, hybrid, i),
+                ),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+async fn subsection_entries(
+    cx: Cx,
+    (doc, section, hybrid, index): (DocRef, usize, bool, usize),
+) -> Result<()> {
+    let Some(s) = section_of(&doc, section, hybrid) else {
+        return Ok(());
+    };
+    let Some(sub) = s.subsections.get(index) else {
+        return Ok(());
+    };
+    if let Some(header) = sub.header {
+        cx.emit(
+            Node::new("Header")
+                .span(header)
+                .value(Value::Text(format!("{} {}", sub.first, sub.len)))
+                .desc("The first object number and the number of entries"),
+        );
+    }
+    let entries = s
+        .entries
+        .get(sub.index..sub.index.saturating_add(sub.len))
+        .unwrap_or_default();
+    cx.set_count(Count::Exact(to_u64(entries.len())));
+    let spans = s
+        .spans
+        .get(sub.index..sub.index.saturating_add(sub.len))
+        .unwrap_or_default();
+    for (i, &(num, loc)) in entries.iter().enumerate() {
+        let (value, summary) = loc_value(loc);
+        let mut node = Node::new(format!("Object {num}"))
+            .value(value)
+            .summary(summary);
+        if let Some(&span) = spans.get(i) {
+            node = node.span(span);
+        }
+        if let Loc::Offset { offset, .. } = loc {
+            node = node.target(doc.region.sub(offset, 0));
+        }
         cx.push(node).await;
     }
     Ok(())

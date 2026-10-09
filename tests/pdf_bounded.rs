@@ -126,9 +126,11 @@ fn a_huge_kids_array_is_parsed_in_steps() {
 /// The content operators of object 4.
 fn operators(host: &mut Host) -> NodeId {
     let root = host.root;
-    let objects = child(host, root, "Objects");
-    let object = child(host, objects, "Object 4 0");
-    let operators = child(host, object, "Content operators");
+    let revisions = child(host, root, "Revisions");
+    let revision = child(host, revisions, "Revision 1");
+    let body = child(host, revision, "Body");
+    let object = child(host, body, "Object 4 0");
+    let operators = child(host, object, "Operators");
     host.session.expand(operators, 2);
     operators
 }

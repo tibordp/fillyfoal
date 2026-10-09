@@ -4,67 +4,11 @@ expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ classic.pdf — PDF 1.4, 2 pages, 2 revisions, title "Fixture, updated", producer "pdf_gen.py"  [0x0+0x599]
     Header: "1.4"  [0x0+0x8]
-  ▾ Trailer — 4 entries  [0x553+0x30]
+    Binary marker: e2 e3 cf d3  |....|  [0x9+0x5]
+  ▾ Trailer — 4 entries  [0x54b+0x38]
       /Size: 11  [0x556+0x8]
-    ▾ /Root: "1 0 R" — /Catalog, 3 entries  [0x55f+0xb] → 0xf+0x0
-        /Type: "/Catalog"  [0x1a+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-          ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-              /Type: "/Page"  [0x9d+0xb]
-              /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                [0]: 0  [0xc2+0x1]
-                [1]: 0  [0xc4+0x1]
-                [2]: 612  [0xc6+0x3]
-                [3]: 792  [0xca+0x3]
-            ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-              ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                  Value: 49  [0x236+0x2]
-                /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x2b]
-                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                  Td: "72 720" — move text position  [#1:0xd+0x9]
-                  Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                  ET — end text  [#1:0x28+0x2]
-            ▾ /Resources — 1 entries  [0xdf+0x26]
-              ▾ /Font — 1 entries  [0xed+0x15]
-                ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                    /Type: "/Font"  [0x196+0xb]
-                    /Subtype: "/Type1"  [0x1a2+0xf]
-                    /BaseFont: "/Helvetica"  [0x1b2+0x14]
-          ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-              /Type: "/Page"  [0x1dc+0xb]
-              /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                [0]: 0  [0x201+0x1]
-                [1]: 0  [0x203+0x1]
-                [2]: 595.28  [0x205+0x6]
-                [3]: 841.89  [0x20c+0x6]
-            ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                /Length: 17  [0x24b+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [0x260+0x11]
-                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-              ▾ Content operators
-                  m: "0 0" — move to  [0x260+0x5]
-                  l: "100 100" — line to  [0x266+0x9]
-                  S — stroke  [0x270+0x1]
-          /Count: 2  [0x7f+0x8]
-        /PageMode: "/UseNone"  [0x36+0x12]
-    ▾ /Info: "9 0 R" — 3 entries  [0x56b+0xb] → 0x459+0x0
-        /Title: "Fixture, updated"  [0x464+0x19]
-        /Producer: "pdf_gen.py"  [0x47e+0x16]
-        /ModDate: "D:20260102000000Z"  [0x495+0x1c]
+      /Root: "1 0 R"  [0x55f+0xb] → 0xf+0x0
+      /Info: "9 0 R"  [0x56b+0xb] → 0x459+0x0
       /Prev: 760  [0x577+0x9]
   ▾ Document Catalog: "1 0 R" — /Catalog, 3 entries  [0x565+0x5] → 0xf+0x0
       /Type: "/Catalog"  [0x1a+0xe]
@@ -73,7 +17,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
         ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
             /Type: "/Page"  [0x9d+0xb]
-            /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
+            /Parent: "2 0 R"  [0xa9+0xd] → 0x53+0x0
           ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
               [0]: 0  [0xc2+0x1]
               [1]: 0  [0xc4+0x1]
@@ -88,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [#1:0x0+0x2b]
                   Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-            ▾ Content operators
+            ▾ Operators
                 BT — begin text  [#1:0x0+0x2]
                 Tf: "/F1 24" — set font  [#1:0x3+0x9]
                 Td: "72 720" — move text position  [#1:0xd+0x9]
@@ -102,7 +46,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   /BaseFont: "/Helvetica"  [0x1b2+0x14]
         ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
             /Type: "/Page"  [0x1dc+0xb]
-            /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
+            /Parent: "2 0 R"  [0x1e8+0xd] → 0x53+0x0
           ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
               [0]: 0  [0x201+0x1]
               [1]: 0  [0x203+0x1]
@@ -115,7 +59,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Line endings: "none" — 0 LF, 0 CRLF, 0 CR
               ▾ Lines — 1 line  [0x260+0x11]
                   Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-            ▾ Content operators
+            ▾ Operators
                 m: "0 0" — move to  [0x260+0x5]
                 l: "100 100" — line to  [0x266+0x9]
                 S — stroke  [0x270+0x1]
@@ -125,33 +69,10 @@ expression: "common::explore(&display_name(&path), &data)"
       /Title: "Fixture, updated"  [0x464+0x19]
       /Producer: "pdf_gen.py"  [0x47e+0x16]
       /ModDate: "D:20260102000000Z"  [0x495+0x1c]
-  ▾ Pages
+  ▾ Pages — 2 pages
     ▾ Page 1 — /Page, 5 entries  [0x92+0x7d]
         /Type: "/Page"  [0x9d+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0xa9+0xd] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-            [0]: "3 0 R" — already open above  [0x72+0x5] → 0x92+0x0
-          ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-              /Type: "/Page"  [0x1dc+0xb]
-              /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                [0]: 0  [0x201+0x1]
-                [1]: 0  [0x203+0x1]
-                [2]: 595.28  [0x205+0x6]
-                [3]: 841.89  [0x20c+0x6]
-            ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                /Length: 17  [0x24b+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [0x260+0x11]
-                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-              ▾ Content operators
-                  m: "0 0" — move to  [0x260+0x5]
-                  l: "100 100" — line to  [0x266+0x9]
-                  S — stroke  [0x270+0x1]
-          /Count: 2  [0x7f+0x8]
+        /Parent: "2 0 R"  [0xa9+0xd] → 0x53+0x0
       ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
           [0]: 0  [0xc2+0x1]
           [1]: 0  [0xc4+0x1]
@@ -166,7 +87,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [#1:0x0+0x2b]
               Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-        ▾ Content operators
+        ▾ Operators
             BT — begin text  [#1:0x0+0x2]
             Tf: "/F1 24" — set font  [#1:0x3+0x9]
             Td: "72 720" — move text position  [#1:0xd+0x9]
@@ -180,40 +101,7 @@ expression: "common::explore(&display_name(&path), &data)"
               /BaseFont: "/Helvetica"  [0x1b2+0x14]
     ▾ Page 2 — /Page, 4 entries  [0x1d1+0x5c]
         /Type: "/Page"  [0x1dc+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0x1e8+0xd] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-          ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-              /Type: "/Page"  [0x9d+0xb]
-              /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                [0]: 0  [0xc2+0x1]
-                [1]: 0  [0xc4+0x1]
-                [2]: 612  [0xc6+0x3]
-                [3]: 792  [0xca+0x3]
-            ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-              ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                  Value: 49  [0x236+0x2]
-                /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x2b]
-                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                  Td: "72 720" — move text position  [#1:0xd+0x9]
-                  Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                  ET — end text  [#1:0x28+0x2]
-            ▾ /Resources — 1 entries  [0xdf+0x26]
-              ▾ /Font — 1 entries  [0xed+0x15]
-                ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                    /Type: "/Font"  [0x196+0xb]
-                    /Subtype: "/Type1"  [0x1a2+0xf]
-                    /BaseFont: "/Helvetica"  [0x1b2+0x14]
-            [1]: "6 0 R" — already open above  [0x78+0x5] → 0x1d1+0x0
-          /Count: 2  [0x7f+0x8]
+        /Parent: "2 0 R"  [0x1e8+0xd] → 0x53+0x0
       ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
           [0]: 0  [0x201+0x1]
           [1]: 0  [0x203+0x1]
@@ -226,463 +114,168 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "none" — 0 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [0x260+0x11]
               Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-        ▾ Content operators
+        ▾ Operators
             m: "0 0" — move to  [0x260+0x5]
             l: "100 100" — line to  [0x266+0x9]
             S — stroke  [0x270+0x1]
   ▾ Objects — 11 entries
-      Object 0 — free
-    ▾ Object 1 0 — /Catalog, 3 entries  [0xf+0x43]
-        /Type: "/Catalog"  [0x1a+0xe]
-      ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-          ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-              /Type: "/Page"  [0x9d+0xb]
-              /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                [0]: 0  [0xc2+0x1]
-                [1]: 0  [0xc4+0x1]
-                [2]: 612  [0xc6+0x3]
-                [3]: 792  [0xca+0x3]
-            ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-              ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                  Value: 49  [0x236+0x2]
-                /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x2b]
-                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                  Td: "72 720" — move text position  [#1:0xd+0x9]
-                  Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                  ET — end text  [#1:0x28+0x2]
-            ▾ /Resources — 1 entries  [0xdf+0x26]
-              ▾ /Font — 1 entries  [0xed+0x15]
-                ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                    /Type: "/Font"  [0x196+0xb]
-                    /Subtype: "/Type1"  [0x1a2+0xf]
-                    /BaseFont: "/Helvetica"  [0x1b2+0x14]
-          ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-              /Type: "/Page"  [0x1dc+0xb]
-              /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                [0]: 0  [0x201+0x1]
-                [1]: 0  [0x203+0x1]
-                [2]: 595.28  [0x205+0x6]
-                [3]: 841.89  [0x20c+0x6]
-            ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                /Length: 17  [0x24b+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [0x260+0x11]
-                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-              ▾ Content operators
-                  m: "0 0" — move to  [0x260+0x5]
-                  l: "100 100" — line to  [0x266+0x9]
-                  S — stroke  [0x270+0x1]
-          /Count: 2  [0x7f+0x8]
-        /PageMode: "/UseNone"  [0x36+0x12]
-    ▾ Object 2 0 — /Pages, 3 entries  [0x53+0x3e]
-        /Type: "/Pages"  [0x5e+0xc]
-      ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-        ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf — /Catalog, 3 entries (in use, generation 0) → 0xf+0x43
+      Object 2 0: 0x53 — /Pages, 3 entries (in use, generation 0) → 0x53+0x3e
+      Object 3 0: 0x92 — /Page, 5 entries (in use, generation 0) → 0x92+0x7d
+      Object 4 0: 0x110 — stream, 2 entries, 49 bytes, /FlateDecode (in use, generation 0) → 0x110+0x7a
+      Object 5 0: 0x18b — /Font /Type1, 3 entries (in use, generation 0) → 0x18b+0x45
+      Object 6 0: 0x1d1 — /Page, 4 entries (in use, generation 0) → 0x1d1+0x5c
+      Object 7 0: 0x22e — 49 (in use, generation 0) → 0x22e+0x11
+      Object 8 0: 0x240 — stream, 1 entries, 17 bytes (in use, generation 0) → 0x240+0x42
+      Object 9 0: 0x459 — 3 entries (in use, generation 0) → 0x459+0x62
+      Object 10 0: 0x4bc — [10 items] (in use, generation 0) → 0x4bc+0x45
+  ▾ Revisions — 2 cross-reference sections
+    ▾ Revision 1 — original: 9 objects, cross-reference table at 0x2f8 with 10 entries  [0x0+0x459]
+      ▾ Body — 9 objects  [0x0+0x2f8]
+        ▾ Object 1 0 — /Catalog, 3 entries  [0xf+0x43]
+            Object header: "1 0 obj"  [0xf+0x8]
+            /Type: "/Catalog"  [0x1a+0xe]
+            /Pages: "2 0 R"  [0x29+0xc] → 0x53+0x0
+            /PageMode: "/UseNone"  [0x36+0x12]
+            End keywords: "endobj"  [0x4b+0x7]
+        ▾ Object 2 0 — /Pages, 3 entries  [0x53+0x3e]
+            Object header: "2 0 obj"  [0x53+0x8]
+            /Type: "/Pages"  [0x5e+0xc]
+          ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
+              [0]: "3 0 R"  [0x72+0x5] → 0x92+0x0
+              [1]: "6 0 R"  [0x78+0x5] → 0x1d1+0x0
+            /Count: 2  [0x7f+0x8]
+            End keywords: "endobj"  [0x8a+0x7]
+        ▾ Object 3 0 — /Page, 5 entries  [0x92+0x7d]
+            Object header: "3 0 obj"  [0x92+0x8]
             /Type: "/Page"  [0x9d+0xb]
-            /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
+            /Parent: "2 0 R"  [0xa9+0xd] → 0x53+0x0
           ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
               [0]: 0  [0xc2+0x1]
               [1]: 0  [0xc4+0x1]
               [2]: 612  [0xc6+0x3]
               [3]: 792  [0xca+0x3]
-          ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-            ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                Value: 49  [0x236+0x2]
-              /Filter: "/FlateDecode"  [0x129+0x14]
-            ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                Encoding: "UTF-8"
-                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-              ▾ Lines — 1 line  [#1:0x0+0x2b]
-                  Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-            ▾ Content operators
-                BT — begin text  [#1:0x0+0x2]
-                Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                Td: "72 720" — move text position  [#1:0xd+0x9]
-                Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                ET — end text  [#1:0x28+0x2]
+            /Contents: "4 0 R"  [0xcf+0xf] → 0x110+0x0
           ▾ /Resources — 1 entries  [0xdf+0x26]
             ▾ /Font — 1 entries  [0xed+0x15]
-              ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                  /Type: "/Font"  [0x196+0xb]
-                  /Subtype: "/Type1"  [0x1a2+0xf]
-                  /BaseFont: "/Helvetica"  [0x1b2+0x14]
-        ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-            /Type: "/Page"  [0x1dc+0xb]
-            /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-          ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-              [0]: 0  [0x201+0x1]
-              [1]: 0  [0x203+0x1]
-              [2]: 595.28  [0x205+0x6]
-              [3]: 841.89  [0x20c+0x6]
-          ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-              /Length: 17  [0x24b+0xa]
-            ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                Encoding: "UTF-8"
-                Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-              ▾ Lines — 1 line  [0x260+0x11]
-                  Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-            ▾ Content operators
-                m: "0 0" — move to  [0x260+0x5]
-                l: "100 100" — line to  [0x266+0x9]
-                S — stroke  [0x270+0x1]
-        /Count: 2  [0x7f+0x8]
-    ▾ Object 3 0 — /Page, 5 entries  [0x92+0x7d]
-        /Type: "/Page"  [0x9d+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0xa9+0xd] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-            [0]: "3 0 R" — already open above  [0x72+0x5] → 0x92+0x0
-          ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-              /Type: "/Page"  [0x1dc+0xb]
-              /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                [0]: 0  [0x201+0x1]
-                [1]: 0  [0x203+0x1]
-                [2]: 595.28  [0x205+0x6]
-                [3]: 841.89  [0x20c+0x6]
-            ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                /Length: 17  [0x24b+0xa]
-              ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                  Encoding: "UTF-8"
-                  Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [0x260+0x11]
-                    Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-              ▾ Content operators
-                  m: "0 0" — move to  [0x260+0x5]
-                  l: "100 100" — line to  [0x266+0x9]
-                  S — stroke  [0x270+0x1]
-          /Count: 2  [0x7f+0x8]
-      ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-          [0]: 0  [0xc2+0x1]
-          [1]: 0  [0xc4+0x1]
-          [2]: 612  [0xc6+0x3]
-          [3]: 792  [0xca+0x3]
-      ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-        ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-            Value: 49  [0x236+0x2]
-          /Filter: "/FlateDecode"  [0x129+0x14]
-        ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-            Encoding: "UTF-8"
-            Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [#1:0x0+0x2b]
-              Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-        ▾ Content operators
-            BT — begin text  [#1:0x0+0x2]
-            Tf: "/F1 24" — set font  [#1:0x3+0x9]
-            Td: "72 720" — move text position  [#1:0xd+0x9]
-            Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-            ET — end text  [#1:0x28+0x2]
-      ▾ /Resources — 1 entries  [0xdf+0x26]
-        ▾ /Font — 1 entries  [0xed+0x15]
-          ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-              /Type: "/Font"  [0x196+0xb]
-              /Subtype: "/Type1"  [0x1a2+0xf]
-              /BaseFont: "/Helvetica"  [0x1b2+0x14]
-    ▾ Object 4 0 — stream, 2 entries, 49 bytes, /FlateDecode  [0x110+0x7a]
-      ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-          Value: 49  [0x236+0x2]
-        /Filter: "/FlateDecode"  [0x129+0x14]
-      ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-          Encoding: "UTF-8"
-          Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [#1:0x0+0x2b]
-            Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-      ▾ Content operators
-          BT — begin text  [#1:0x0+0x2]
-          Tf: "/F1 24" — set font  [#1:0x3+0x9]
-          Td: "72 720" — move text position  [#1:0xd+0x9]
-          Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-          ET — end text  [#1:0x28+0x2]
-    ▾ Object 5 0 — /Font /Type1, 3 entries  [0x18b+0x45]
-        /Type: "/Font"  [0x196+0xb]
-        /Subtype: "/Type1"  [0x1a2+0xf]
-        /BaseFont: "/Helvetica"  [0x1b2+0x14]
-    ▾ Object 6 0 — /Page, 4 entries  [0x1d1+0x5c]
-        /Type: "/Page"  [0x1dc+0xb]
-      ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0x1e8+0xd] → 0x53+0x0
-          /Type: "/Pages"  [0x5e+0xc]
-        ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-          ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-              /Type: "/Page"  [0x9d+0xb]
-              /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-            ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                [0]: 0  [0xc2+0x1]
-                [1]: 0  [0xc4+0x1]
-                [2]: 612  [0xc6+0x3]
-                [3]: 792  [0xca+0x3]
-            ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-              ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                  Value: 49  [0x236+0x2]
-                /Filter: "/FlateDecode"  [0x129+0x14]
-              ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                  Encoding: "UTF-8"
-                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                ▾ Lines — 1 line  [#1:0x0+0x2b]
-                    Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-              ▾ Content operators
-                  BT — begin text  [#1:0x0+0x2]
-                  Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                  Td: "72 720" — move text position  [#1:0xd+0x9]
-                  Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                  ET — end text  [#1:0x28+0x2]
-            ▾ /Resources — 1 entries  [0xdf+0x26]
-              ▾ /Font — 1 entries  [0xed+0x15]
-                ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                    /Type: "/Font"  [0x196+0xb]
-                    /Subtype: "/Type1"  [0x1a2+0xf]
-                    /BaseFont: "/Helvetica"  [0x1b2+0x14]
-            [1]: "6 0 R" — already open above  [0x78+0x5] → 0x1d1+0x0
-          /Count: 2  [0x7f+0x8]
-      ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-          [0]: 0  [0x201+0x1]
-          [1]: 0  [0x203+0x1]
-          [2]: 595.28  [0x205+0x6]
-          [3]: 841.89  [0x20c+0x6]
-      ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-          /Length: 17  [0x24b+0xa]
-        ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-            Encoding: "UTF-8"
-            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [0x260+0x11]
-              Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-        ▾ Content operators
-            m: "0 0" — move to  [0x260+0x5]
-            l: "100 100" — line to  [0x266+0x9]
-            S — stroke  [0x270+0x1]
-    ▾ Object 7 0 — 49  [0x22e+0x11]
-        Value: 49  [0x236+0x2]
-    ▾ Object 8 0 — stream, 1 entries, 17 bytes  [0x240+0x42]
-        /Length: 17  [0x24b+0xa]
-      ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-          Encoding: "UTF-8"
-          Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-        ▾ Lines — 1 line  [0x260+0x11]
-            Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-      ▾ Content operators
-          m: "0 0" — move to  [0x260+0x5]
-          l: "100 100" — line to  [0x266+0x9]
-          S — stroke  [0x270+0x1]
-    ▾ Object 9 0 — 3 entries  [0x459+0x62]
-        /Title: "Fixture, updated"  [0x464+0x19]
-        /Producer: "pdf_gen.py"  [0x47e+0x16]
-        /ModDate: "D:20260102000000Z"  [0x495+0x1c]
-    ▾ Object 10 0 — [10 items]  [0x4bc+0x45]
-        [0]: 1  [0x4c6+0x1]
-        [1]: 2.5  [0x4c8+0x3]
-        [2]: -3  [0x4cc+0x2]
-        [3]: "/Name"  [0x4cf+0x5]
-        [4]: true  [0x4d5+0x4]
-        [5]: false  [0x4da+0x5]
-        [6] — null  [0x4e0+0x4]
-        [7]: "str"  [0x4e5+0x5]
-        [8]: "ABC" — hex string  [0x4eb+0x8]
-      ▾ [9]: "3 0 R" — /Page, 5 entries  [0x4f4+0x5] → 0x92+0x0
-          /Type: "/Page"  [0x9d+0xb]
-        ▾ /Parent: "2 0 R" — /Pages, 3 entries  [0xa9+0xd] → 0x53+0x0
-            /Type: "/Pages"  [0x5e+0xc]
-          ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-              [0]: "3 0 R" — already open above  [0x72+0x5] → 0x92+0x0
-            ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-                /Type: "/Page"  [0x1dc+0xb]
-                /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-              ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                  [0]: 0  [0x201+0x1]
-                  [1]: 0  [0x203+0x1]
-                  [2]: 595.28  [0x205+0x6]
-                  [3]: 841.89  [0x20c+0x6]
-              ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                  /Length: 17  [0x24b+0xa]
-                ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                    Encoding: "UTF-8"
-                    Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                  ▾ Lines — 1 line  [0x260+0x11]
-                      Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-                ▾ Content operators
-                    m: "0 0" — move to  [0x260+0x5]
-                    l: "100 100" — line to  [0x266+0x9]
-                    S — stroke  [0x270+0x1]
-            /Count: 2  [0x7f+0x8]
-        ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-            [0]: 0  [0xc2+0x1]
-            [1]: 0  [0xc4+0x1]
-            [2]: 612  [0xc6+0x3]
-            [3]: 792  [0xca+0x3]
-        ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-          ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-              Value: 49  [0x236+0x2]
+                /F1: "5 0 R"  [0xf6+0x9] → 0x18b+0x0
+            End keywords: "endobj"  [0x108+0x7]
+        ▾ Object 4 0 — stream, 2 entries, 49 bytes, /FlateDecode  [0x110+0x7a]
+            Object header: "4 0 obj"  [0x110+0x8]
+            /Length: "7 0 R"  [0x11b+0xd] → 0x22e+0x0
             /Filter: "/FlateDecode"  [0x129+0x14]
+            Stream keyword: "stream"  [0x140+0x8]
           ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
               Encoding: "UTF-8"
               Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
             ▾ Lines — 1 line  [#1:0x0+0x2b]
                 Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-          ▾ Content operators
+          ▾ Operators
               BT — begin text  [#1:0x0+0x2]
               Tf: "/F1 24" — set font  [#1:0x3+0x9]
               Td: "72 720" — move text position  [#1:0xd+0x9]
               Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
               ET — end text  [#1:0x28+0x2]
-        ▾ /Resources — 1 entries  [0xdf+0x26]
-          ▾ /Font — 1 entries  [0xed+0x15]
-            ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                /Type: "/Font"  [0x196+0xb]
-                /Subtype: "/Type1"  [0x1a2+0xf]
-                /BaseFont: "/Helvetica"  [0x1b2+0x14]
-  ▾ Revisions — 2 cross-reference sections
-    ▾ Revision 1 — original: cross-reference table at 0x2f8, 10 entries  [0x2f8+0xd0]
-      ▾ Entries — 10 objects  [0x2f8+0xd0]
-          Object 0 — free
-          Object 1: 0xf — in use, generation 0 → 0xf+0x0
-          Object 2: 0x53 — in use, generation 0 → 0x53+0x0
-          Object 3: 0x92 — in use, generation 0 → 0x92+0x0
-          Object 4: 0x110 — in use, generation 0 → 0x110+0x0
-          Object 5: 0x18b — in use, generation 0 → 0x18b+0x0
-          Object 6: 0x1d1 — in use, generation 0 → 0x1d1+0x0
-          Object 7: 0x22e — in use, generation 0 → 0x22e+0x0
-          Object 8: 0x240 — in use, generation 0 → 0x240+0x0
-          Object 9: 0x283 — in use, generation 0 → 0x283+0x0
-      ▾ Trailer — 4 entries  [0x3d2+0x72]
+            End keywords: "endstream endobj"  [0x179+0x11]
+        ▾ Object 5 0 — /Font /Type1, 3 entries  [0x18b+0x45]
+            Object header: "5 0 obj"  [0x18b+0x8]
+            /Type: "/Font"  [0x196+0xb]
+            /Subtype: "/Type1"  [0x1a2+0xf]
+            /BaseFont: "/Helvetica"  [0x1b2+0x14]
+            End keywords: "endobj"  [0x1c9+0x7]
+        ▾ Object 6 0 — /Page, 4 entries  [0x1d1+0x5c]
+            Object header: "6 0 obj"  [0x1d1+0x8]
+            /Type: "/Page"  [0x1dc+0xb]
+            /Parent: "2 0 R"  [0x1e8+0xd] → 0x53+0x0
+          ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
+              [0]: 0  [0x201+0x1]
+              [1]: 0  [0x203+0x1]
+              [2]: 595.28  [0x205+0x6]
+              [3]: 841.89  [0x20c+0x6]
+            /Contents: "8 0 R"  [0x214+0xf] → 0x240+0x0
+            End keywords: "endobj"  [0x226+0x7]
+        ▾ Object 7 0 — 49  [0x22e+0x11]
+            Object header: "7 0 obj"  [0x22e+0x8]
+            Value: 49  [0x236+0x2]
+            End keywords: "endobj"  [0x238+0x7]
+        ▾ Object 8 0 — stream, 1 entries, 17 bytes  [0x240+0x42]
+            Object header: "8 0 obj"  [0x240+0x8]
+            /Length: 17  [0x24b+0xa]
+            Stream keyword: "stream"  [0x258+0x8]
+          ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
+              Encoding: "UTF-8"
+              Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [0x260+0x11]
+                Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
+          ▾ Operators
+              m: "0 0" — move to  [0x260+0x5]
+              l: "100 100" — line to  [0x266+0x9]
+              S — stroke  [0x270+0x1]
+            End keywords: "endstream endobj"  [0x271+0x11]
+        ▾ Object 9 0 — 3 entries  [0x283+0x74]
+            Object header: "9 0 obj"  [0x283+0x8]
+            /Title: "Fixture (classic)"  [0x28e+0x1c]
+            /Producer: "hand" — hex string  [0x2ab+0x20]
+            /CreationDate: "D:20260101000000Z"  [0x2cc+0x21]
+            End keywords: "endobj"  [0x2f0+0x7]
+      ▾ Cross-reference table — 10 entries in 1 subsection  [0x2f8+0xd2]
+          Keyword: "xref"  [0x2f8+0x4]
+        ▾ Objects 0–9 — 10 entries  [0x2fd+0xcd]
+            Header: "0 10"  [0x2fd+0x4]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x302+0x14]
+            Object 1: 0xf — in use, generation 0  [0x316+0x14] → 0xf+0x0
+            Object 2: 0x53 — in use, generation 0  [0x32a+0x14] → 0x53+0x0
+            Object 3: 0x92 — in use, generation 0  [0x33e+0x14] → 0x92+0x0
+            Object 4: 0x110 — in use, generation 0  [0x352+0x14] → 0x110+0x0
+            Object 5: 0x18b — in use, generation 0  [0x366+0x14] → 0x18b+0x0
+            Object 6: 0x1d1 — in use, generation 0  [0x37a+0x14] → 0x1d1+0x0
+            Object 7: 0x22e — in use, generation 0  [0x38e+0x14] → 0x22e+0x0
+            Object 8: 0x240 — in use, generation 0  [0x3a2+0x14] → 0x240+0x0
+            Object 9: 0x283 — in use, generation 0  [0x3b6+0x14] → 0x283+0x0
+      ▾ Trailer — 4 entries  [0x3ca+0x7a]
           /Size: 10  [0x3d5+0x8]
-        ▾ /Root: "1 0 R" — /Catalog, 3 entries  [0x3de+0xb] → 0xf+0x0
-            /Type: "/Catalog"  [0x1a+0xe]
-          ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x53+0x0
-              /Type: "/Pages"  [0x5e+0xc]
-            ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-              ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-                  /Type: "/Page"  [0x9d+0xb]
-                  /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-                ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                    [0]: 0  [0xc2+0x1]
-                    [1]: 0  [0xc4+0x1]
-                    [2]: 612  [0xc6+0x3]
-                    [3]: 792  [0xca+0x3]
-                ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-                  ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                      Value: 49  [0x236+0x2]
-                    /Filter: "/FlateDecode"  [0x129+0x14]
-                  ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                      Encoding: "UTF-8"
-                      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [#1:0x0+0x2b]
-                        Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-                  ▾ Content operators
-                      BT — begin text  [#1:0x0+0x2]
-                      Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                      Td: "72 720" — move text position  [#1:0xd+0x9]
-                      Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                      ET — end text  [#1:0x28+0x2]
-                ▾ /Resources — 1 entries  [0xdf+0x26]
-                  ▾ /Font — 1 entries  [0xed+0x15]
-                    ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                        /Type: "/Font"  [0x196+0xb]
-                        /Subtype: "/Type1"  [0x1a2+0xf]
-                        /BaseFont: "/Helvetica"  [0x1b2+0x14]
-              ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-                  /Type: "/Page"  [0x1dc+0xb]
-                  /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-                ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                    [0]: 0  [0x201+0x1]
-                    [1]: 0  [0x203+0x1]
-                    [2]: 595.28  [0x205+0x6]
-                    [3]: 841.89  [0x20c+0x6]
-                ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                    /Length: 17  [0x24b+0xa]
-                  ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                      Encoding: "UTF-8"
-                      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [0x260+0x11]
-                        Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-                  ▾ Content operators
-                      m: "0 0" — move to  [0x260+0x5]
-                      l: "100 100" — line to  [0x266+0x9]
-                      S — stroke  [0x270+0x1]
-              /Count: 2  [0x7f+0x8]
-            /PageMode: "/UseNone"  [0x36+0x12]
-        ▾ /Info: "9 0 R" — 3 entries  [0x3ea+0xb] → 0x459+0x0
-            /Title: "Fixture, updated"  [0x464+0x19]
-            /Producer: "pdf_gen.py"  [0x47e+0x16]
-            /ModDate: "D:20260102000000Z"  [0x495+0x1c]
+          /Root: "1 0 R"  [0x3de+0xb] → 0xf+0x0
+          /Info: "9 0 R"  [0x3ea+0xb] → 0x459+0x0
         ▾ /ID — [( "3DUfwª»ÌÝîÿ) ( "3DUfwª»ÌÝîÿ)]  [0x3f6+0x4b]
             [0]: 00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff  |.."3DUfw........| — 16 bytes  [0x3fb+0x22]
             [1]: 00 11 22 33 44 55 66 77 88 99 aa bb cc dd ee ff  |.."3DUfw........| — 16 bytes  [0x41e+0x22]
-    ▾ Revision 2 — update 1: cross-reference table at 0x502, 3 entries  [0x502+0x47]
-      ▾ Entries — 3 objects  [0x502+0x47]
-          Object 0 — free
-          Object 9: 0x459 — in use, generation 0 → 0x459+0x0
-          Object 10: 0x4bc — in use, generation 0 → 0x4bc+0x0
-      ▾ Trailer — 4 entries  [0x553+0x30]
-          /Size: 11  [0x556+0x8]
-        ▾ /Root: "1 0 R" — /Catalog, 3 entries  [0x55f+0xb] → 0xf+0x0
-            /Type: "/Catalog"  [0x1a+0xe]
-          ▾ /Pages: "2 0 R" — /Pages, 3 entries  [0x29+0xc] → 0x53+0x0
-              /Type: "/Pages"  [0x5e+0xc]
-            ▾ /Kids — [3 0 R 6 0 R]  [0x6b+0x13]
-              ▾ [0]: "3 0 R" — /Page, 5 entries  [0x72+0x5] → 0x92+0x0
-                  /Type: "/Page"  [0x9d+0xb]
-                  /Parent: "2 0 R" — already open above  [0xa9+0xd] → 0x53+0x0
-                ▾ /MediaBox — [0 0 612 792]  [0xb7+0x17]
-                    [0]: 0  [0xc2+0x1]
-                    [1]: 0  [0xc4+0x1]
-                    [2]: 612  [0xc6+0x3]
-                    [3]: 792  [0xca+0x3]
-                ▾ /Contents: "4 0 R" — stream, 2 entries, 49 bytes, /FlateDecode  [0xcf+0xf] → 0x110+0x0
-                  ▾ /Length: "7 0 R" — 49  [0x11b+0xd] → 0x22e+0x0
-                      Value: 49  [0x236+0x2]
-                    /Filter: "/FlateDecode"  [0x129+0x14]
-                  ▾ Stream data — UTF-8 text, LF line endings, 1 line  [0x148+0x31]
-                      Encoding: "UTF-8"
-                      Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [#1:0x0+0x2b]
-                        Line 1: "BT /F1 24 Tf 72 720 Td (Hello, PDF!) Tj ET"  [#1:0x0+0x2a]
-                  ▾ Content operators
-                      BT — begin text  [#1:0x0+0x2]
-                      Tf: "/F1 24" — set font  [#1:0x3+0x9]
-                      Td: "72 720" — move text position  [#1:0xd+0x9]
-                      Tj: "(Hello, PDF!)" — show text  [#1:0x17+0x10]
-                      ET — end text  [#1:0x28+0x2]
-                ▾ /Resources — 1 entries  [0xdf+0x26]
-                  ▾ /Font — 1 entries  [0xed+0x15]
-                    ▾ /F1: "5 0 R" — /Font /Type1, 3 entries  [0xf6+0x9] → 0x18b+0x0
-                        /Type: "/Font"  [0x196+0xb]
-                        /Subtype: "/Type1"  [0x1a2+0xf]
-                        /BaseFont: "/Helvetica"  [0x1b2+0x14]
-              ▾ [1]: "6 0 R" — /Page, 4 entries  [0x78+0x5] → 0x1d1+0x0
-                  /Type: "/Page"  [0x1dc+0xb]
-                  /Parent: "2 0 R" — already open above  [0x1e8+0xd] → 0x53+0x0
-                ▾ /MediaBox — [0 0 595.28 841.89]  [0x1f6+0x1d]
-                    [0]: 0  [0x201+0x1]
-                    [1]: 0  [0x203+0x1]
-                    [2]: 595.28  [0x205+0x6]
-                    [3]: 841.89  [0x20c+0x6]
-                ▾ /Contents: "8 0 R" — stream, 1 entries, 17 bytes  [0x214+0xf] → 0x240+0x0
-                    /Length: 17  [0x24b+0xa]
-                  ▾ Stream data — UTF-8 text, 1 line  [0x260+0x11]
-                      Encoding: "UTF-8"
-                      Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-                    ▾ Lines — 1 line  [0x260+0x11]
-                        Line 1: "0 0 m 100 100 l S"  [0x260+0x11]
-                  ▾ Content operators
-                      m: "0 0" — move to  [0x260+0x5]
-                      l: "100 100" — line to  [0x266+0x9]
-                      S — stroke  [0x270+0x1]
-              /Count: 2  [0x7f+0x8]
-            /PageMode: "/UseNone"  [0x36+0x12]
-        ▾ /Info: "9 0 R" — 3 entries  [0x56b+0xb] → 0x459+0x0
+        startxref: 0x2f8  [0x445+0xd] → 0x2f8+0x4
+        End-of-file marker: "%%EOF"  [0x453+0x5]
+    ▾ Revision 2 — update 1: 2 objects, cross-reference table at 0x502 with 3 entries  [0x459+0x140]
+      ▾ Body — 2 objects  [0x459+0xa9]
+        ▾ Object 9 0 — 3 entries  [0x459+0x62]
+            Object header: "9 0 obj"  [0x459+0x8]
             /Title: "Fixture, updated"  [0x464+0x19]
             /Producer: "pdf_gen.py"  [0x47e+0x16]
             /ModDate: "D:20260102000000Z"  [0x495+0x1c]
+            End keywords: "endobj"  [0x4b4+0x7]
+        ▾ Object 10 0 — [10 items]  [0x4bc+0x45]
+            Object header: "10 0 obj"  [0x4bc+0x9]
+            [0]: 1  [0x4c6+0x1]
+            [1]: 2.5  [0x4c8+0x3]
+            [2]: -3  [0x4cc+0x2]
+            [3]: "/Name"  [0x4cf+0x5]
+            [4]: true  [0x4d5+0x4]
+            [5]: false  [0x4da+0x5]
+            [6] — null  [0x4e0+0x4]
+            [7]: "str"  [0x4e5+0x5]
+            [8]: "ABC" — hex string  [0x4eb+0x8]
+            [9]: "3 0 R"  [0x4f4+0x5] → 0x92+0x0
+            End keywords: "endobj"  [0x4fa+0x7]
+      ▾ Cross-reference table — 3 entries in 2 subsections  [0x502+0x49]
+          Keyword: "xref"  [0x502+0x4]
+        ▾ Object 0 — 1 entry  [0x507+0x18]
+            Header: "0 1"  [0x507+0x3]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x50b+0x14]
+        ▾ Objects 9–10 — 2 entries  [0x51f+0x2c]
+            Header: "9 2"  [0x51f+0x3]
+            Object 9: 0x459 — in use, generation 0  [0x523+0x14] → 0x459+0x0
+            Object 10: 0x4bc — in use, generation 0  [0x537+0x14] → 0x4bc+0x0
+      ▾ Trailer — 4 entries  [0x54b+0x38]
+          /Size: 11  [0x556+0x8]
+          /Root: "1 0 R"  [0x55f+0xb] → 0xf+0x0
+          /Info: "9 0 R"  [0x56b+0xb] → 0x459+0x0
           /Prev: 760  [0x577+0x9]
-    startxref: 0x502  [0x584+0x15] → 0x502+0x4
+        startxref: 0x502  [0x584+0xe] → 0x502+0x4
+        End-of-file marker: "%%EOF"  [0x593+0x5]
