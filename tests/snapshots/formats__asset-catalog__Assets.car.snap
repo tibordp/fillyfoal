@@ -56,6 +56,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Rendition length: 8  [0x4a4+0x4]
         TLV  [0x4a8+0x0]
       ▾ Rendition data — 8 bytes  [0x4a8+0x8]
+          ! warning: no IEND chunk: the file is truncated
           Signature  [0x4a8+0x8]
   ▾ EXTENDED_METADATA  [0x4f0+0x404] → 0x96b+0x16
       Tag: "ATEM"  [0x4f0+0x4]

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ lossy.webp — WebP lossy, 16×16  [0x0+0xf0]
   ▾ Header  [0x0+0xc]
@@ -12,12 +12,13 @@ expression: "common::explore(&name, &data)"
       Chunk size: 220  [0x10+0x4]
     ▾ Frame header  [0x14+0xa]
         Frame type: 0 — key frame  [0x14+0x1]
-        Version: 0  [0x14+0x1]
+        Version: bicubic reconstruction, normal loop filter (0x0)  [0x14+0x1]
         Show frame: true  [0x14+0x1]
-        First partition size: 34  [0x14+0x3]
+        First partition size: 34 — 34 bytes  [0x14+0x3]
         Start code: 0x2a019d — 9d 01 2a  [0x17+0x3]
         Width: 16  [0x1a+0x2]
         Horizontal scale: none (0x0)  [0x1b+0x1]
         Height: 16  [0x1c+0x2]
         Vertical scale: none (0x0)  [0x1d+0x1]
-      Bitstream  [0x1e+0xd2]
+      First partition — modes and probabilities (boolean-entropy-coded)  [0x1e+0x22]
+      Token partitions — DCT coefficients (boolean-entropy-coded)  [0x40+0xb0]

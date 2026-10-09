@@ -1,16 +1,16 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ core-4bit.bmp — 6×3, 4-bit, BI_RGB  [0x0+0x56]
   ▾ File Header  [0x0+0xe]
-      bfType: "BM"  [0x0+0x2]
+      bfType: "BM" — Windows or OS/2 bitmap  [0x0+0x2]
       bfSize: 86  [0x2+0x4]
       bfReserved1: 0  [0x6+0x2]
       bfReserved2: 0  [0x8+0x2]
       bfOffBits: 0x4a  [0xa+0x4]
   ▾ BITMAPCOREHEADER — 6×3, 4-bit, BI_RGB  [0xe+0xc]
-      biSize: 12 — BITMAPCOREHEADER  [0xe+0x4]
+      bcSize: 12 — BITMAPCOREHEADER  [0xe+0x4]
       bcWidth: 6  [0x12+0x2]
       bcHeight: 3  [0x14+0x2]
       bcPlanes: 1  [0x16+0x2]
@@ -32,4 +32,4 @@ expression: "common::explore(&name, &data)"
       [13]: "#0d2fd0"  [0x41+0x3]
       [14]: "#0e1fe0"  [0x44+0x3]
       [15]: "#0f0ff0"  [0x47+0x3]
-    Pixel array — 3 rows of 0x4 bytes  [0x4a+0xc]
+    Pixel array — 3 rows of 4 bytes, bottom-up  [0x4a+0xc]

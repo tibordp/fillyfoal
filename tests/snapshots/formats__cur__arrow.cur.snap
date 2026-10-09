@@ -1,13 +1,13 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ arrow.cur — Windows cursor, 1 images  [0x0+0x86]
+▾ arrow.cur — Windows cursor, 1 image: 8×8  [0x0+0x86]
   ▾ Header  [0x0+0x6]
       Reserved: 0  [0x0+0x2]
       Type: Cursor (0x2)  [0x2+0x2]
       Image count: 1  [0x4+0x2]
-  ▾ Image 0 — 8×8  [0x6+0x10] → 0x16+0x70
+  ▾ Image 0 — 8×8, hotspot (3, 4), 112 bytes  [0x6+0x10] → 0x16+0x70
     ▾ Directory entry  [0x6+0x10]
         Width: 8  [0x6+0x1]
         Height: 8  [0x7+0x1]
@@ -21,7 +21,7 @@ expression: "common::explore(&name, &data)"
       ▾ BITMAPINFOHEADER — 8×16, 1-bit, BI_RGB  [0x16+0x28]
           biSize: 40 — BITMAPINFOHEADER  [0x16+0x4]
           biWidth: 8  [0x1a+0x4]
-          biHeight: 16  [0x1e+0x4]
+          biHeight: 16 — positive: rows stored bottom-up  [0x1e+0x4]
           biPlanes: 1  [0x22+0x2]
           biBitCount: 1  [0x24+0x2]
           biCompression: BI_RGB (0x0)  [0x26+0x4]
@@ -33,5 +33,5 @@ expression: "common::explore(&name, &data)"
       ▾ Palette — 2 colors  [0x3e+0x8]
           [0]: "#000000"  [0x3e+0x4]
           [1]: "#ffffff"  [0x42+0x4]
-        Pixel array — 8 rows of 0x4 bytes  [0x46+0x20]
+        Pixel array — 8 rows of 4 bytes, bottom-up  [0x46+0x20]
         AND mask — 1-bit transparency mask  [0x66+0x20]

@@ -2,14 +2,17 @@
 //!
 //! A 6-byte header and a directory of 16-byte entries, each pointing at an
 //! image that is either a PNG stream or a headerless DIB whose height covers
-//! both the color (XOR) image and the 1-bit AND mask.
+//! both the color (XOR) image and the 1-bit AND mask. Cursors keep their
+//! hotspot where icons have planes and bit count.
 
-use crate::bytes::{u16_le, u32_le};
+use crate::bytes::{u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
-use crate::error::Result;
+use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::{Format, Head, Input, Probe, embedded};
+use crate::formats::util::arcutil::human_size;
+use crate::formats::util::vidutil::plural;
+use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -69,7 +72,7 @@ const TYPES: EnumTable = &[(1, "Icon"), (2, "Cursor")];
 
 record! {
     pub struct Header {
-        reserved: u16 "Reserved",
+        reserved: u16 "Reserved" .desc("Always 0"),
         kind: u16 "Type" .enumeration(TYPES),
         count: u16 "Image count",
     }
@@ -77,27 +80,27 @@ record! {
 
 record! {
     pub struct IconEntry {
-        width: u8 "Width" .desc("0 means 256"),
-        height: u8 "Height" .desc("0 means 256"),
-        colors: u8 "Color count" .desc("0 if 8 bits per pixel or more"),
+        width: u8 "Width" .desc("0 means 256") .with(|&v, n| if v == 0 { n.summary("256 px") } else { n }),
+        height: u8 "Height" .desc("0 means 256") .with(|&v, n| if v == 0 { n.summary("256 px") } else { n }),
+        colors: u8 "Color count" .desc("Palette entries; 0 for 8 bits per pixel or more"),
         reserved: u8 "Reserved",
-        planes: u16 "Planes",
-        bit_count: u16 "Bits per pixel",
-        size: u32 "Image size",
-        offset: u32 "Image offset" .hex(),
+        planes: u16 "Planes" .desc("0 or 1"),
+        bit_count: u16 "Bits per pixel" .desc("Often 0 for PNG images; the image itself is authoritative"),
+        size: u32 "Image size" .desc("Size of the image data in bytes"),
+        offset: u32 "Image offset" .hex() .desc("Offset of the image data from the start of the file"),
     }
 }
 
 record! {
     pub struct CursorEntry {
-        width: u8 "Width" .desc("0 means 256"),
-        height: u8 "Height" .desc("0 means 256"),
+        width: u8 "Width" .desc("0 means 256") .with(|&v, n| if v == 0 { n.summary("256 px") } else { n }),
+        height: u8 "Height" .desc("0 means 256") .with(|&v, n| if v == 0 { n.summary("256 px") } else { n }),
         colors: u8 "Color count",
         reserved: u8 "Reserved",
-        hotspot_x: u16 "Hotspot X",
-        hotspot_y: u16 "Hotspot Y",
-        size: u32 "Image size",
-        offset: u32 "Image offset" .hex(),
+        hotspot_x: u16 "Hotspot X" .desc("The click point, from the left"),
+        hotspot_y: u16 "Hotspot Y" .desc("The click point, from the top"),
+        size: u32 "Image size" .desc("Size of the image data in bytes"),
+        offset: u32 "Image offset" .hex() .desc("Offset of the image data from the start of the file"),
     }
 }
 
@@ -105,13 +108,43 @@ fn side(v: u8) -> u16 {
     if v == 0 { 256 } else { v.into() }
 }
 
+/// Sizes listed in the file summary at most.
+const SUMMARY_SIZES: usize = 8;
+
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let header_span = file.sub(0, Header::SIZE);
     let header = parse(&cx, header_span, LE, &(), Header::layout).await?;
     cx.emit(Header::node("Header", header_span, LE));
-    let what = if header.kind == 2 { "cursor" } else { "icon" };
-    cx.annotate(format!("Windows {what}, {} images", header.count));
+    let cursor = header.kind == 2;
+    let what = if cursor { "cursor" } else { "icon" };
+    let directory = file.sub(
+        Header::SIZE,
+        u64::from(header.count).saturating_mul(IconEntry::SIZE),
+    );
+    let entries = cx.read_avail(directory).await?;
+    let mut sizes: Vec<String> = Vec::new();
+    for entry in entries.as_chunks::<16>().0.iter().take(SUMMARY_SIZES) {
+        let w = side(entry.first().copied().unwrap_or(0));
+        let h = side(entry.get(1).copied().unwrap_or(0));
+        let offset = u32_le(entry, 12).unwrap_or(0);
+        let magic = cx.read_avail(file.sub(offset.into(), 8)).await?;
+        let mut s = dims(w, h);
+        if magic == PNG {
+            s.push_str(" PNG");
+        } else if !cursor && let Some(bits) = u16_le(entry, 6).filter(|&b| b != 0) {
+            s = format!("{s} {bits}-bit");
+        }
+        sizes.push(s);
+    }
+    let mut line = format!("Windows {what}, {}", plural(header.count, "image"));
+    if !sizes.is_empty() {
+        line = format!("{line}: {}", sizes.join(", "));
+        if usize::from(header.count) > SUMMARY_SIZES {
+            line.push_str(", …");
+        }
+    }
+    cx.annotate(line);
     cx.set_count(Count::Exact(u64::from(header.count).saturating_add(1)));
     for index in 0..u64::from(header.count) {
         let entry_span = file.sub(
@@ -125,38 +158,99 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut summary = dims(side(entry.width), side(entry.height));
         if png {
             summary.push_str(", PNG");
-        } else if entry.bit_count != 0 && header.kind == 1 {
+        } else if entry.bit_count != 0 && !cursor {
             summary = format!("{summary}, {}-bit", entry.bit_count);
         }
-        cx.push(
-            Node::new(format!("Image {index}"))
-                .span(entry_span)
-                .summary(summary)
-                .target(image)
-                .lazy(image_entry, (input, entry_span, image, header.kind, png)),
-        )
+        if cursor {
+            // planes and bit_count hold the hotspot.
+            summary = format!("{summary}, hotspot ({}, {})", entry.planes, entry.bit_count);
+        }
+        summary = format!("{summary}, {}", human_size(entry.size.into()));
+        let mut node = Node::new(format!("Image {index}"))
+            .span(entry_span)
+            .summary(summary)
+            .target(image);
+        if image.len < u64::from(entry.size) {
+            node = node.diag(Diagnostic::truncated(
+                Span::new(image.source, image.offset, entry.size.into()),
+                image.len,
+            ));
+        }
+        if u64::from(entry.offset) < Header::SIZE.saturating_add(directory.len) {
+            node = node.diag(Diagnostic::malformed("the image overlaps the directory"));
+        }
+        cx.push(node.lazy(
+            image_entry,
+            Entry {
+                input,
+                entry: entry_span,
+                image,
+                cursor,
+                png,
+                width: side(entry.width),
+                height: side(entry.height),
+            },
+        ))
         .await;
     }
     Ok(())
 }
 
-async fn image_entry(
-    cx: Cx,
-    (input, entry, image, kind, png): (Input, Span, Span, u16, bool),
-) -> Result<()> {
-    if kind == 2 {
-        cx.emit(CursorEntry::node("Directory entry", entry, LE));
+#[derive(Clone, Copy, Debug)]
+struct Entry {
+    input: Input,
+    entry: Span,
+    image: Span,
+    cursor: bool,
+    png: bool,
+    width: u16,
+    height: u16,
+}
+
+async fn image_entry(cx: Cx, e: Entry) -> Result<()> {
+    if e.cursor {
+        cx.emit(CursorEntry::node("Directory entry", e.entry, LE));
     } else {
-        cx.emit(IconEntry::node("Directory entry", entry, LE));
+        cx.emit(IconEntry::node("Directory entry", e.entry, LE));
     }
-    if png {
-        cx.emit(embedded("PNG image", input.nested(image)));
+    if e.png {
+        let ihdr = cx.read_avail(e.image.sub(16, 8)).await?;
+        let mut node = embedded_as("PNG image", e.input.nested(e.image), &super::png::FORMAT)
+            .desc("Stored as a complete PNG file (Windows Vista and later)");
+        if let (Some(w), Some(h)) = (u32_be(&ihdr, 0), u32_be(&ihdr, 4))
+            && (w != u32::from(e.width) || h != u32::from(e.height))
+        {
+            node = node.diag(Diagnostic::note(format!(
+                "the directory says {}, the PNG is {}",
+                dims(e.width, e.height),
+                dims(w, h)
+            )));
+        }
+        cx.emit(node);
     } else {
-        cx.emit(
-            Node::new("DIB image")
-                .span(image)
-                .lazy(dib_image, (input, image)),
-        );
+        let head = cx.read_avail(e.image.sub(4, 8)).await?;
+        let mut node = Node::new("DIB image")
+            .span(e.image)
+            .desc(
+                "A device-independent bitmap without file header. Its header's height \
+                 is twice the icon's: the color (XOR) image is followed by a 1-bit AND \
+                 mask of the same size, which marks transparent pixels",
+            )
+            .lazy(dib_image, (e.input, e.image));
+        if let (Some(w), Some(h)) = (
+            crate::bytes::i32_le(&head, 0),
+            crate::bytes::i32_le(&head, 4),
+        ) && (i64::from(w) != i64::from(e.width)
+            || i64::from(h) != i64::from(e.height).saturating_mul(2))
+        {
+            node = node.diag(Diagnostic::note(format!(
+                "the directory says {}, the bitmap header {}×{} (twice the height expected)",
+                dims(e.width, e.height),
+                w,
+                h
+            )));
+        }
+        cx.emit(node);
     }
     Ok(())
 }
