@@ -1,8 +1,8 @@
 //! Scientific and lab data: bioinformatics ([`bio`]), instrument recordings
 //! (`instruments`, `waveforms`), spectroscopy, microscopy and lab images
-//! (`microscopy`, `lab_images`), FITS and DICOM (`imaging`), molecular
-//! simulation, statistics package data files (`stats`: SPSS, SAS, Stata)
-//! and other science datasets (`datasets`).
+//! (`microscopy`, `lab_images`), DICOM (`imaging`; FITS is in
+//! `image::fits`), molecular simulation, statistics package data files
+//! (`stats`: SPSS, SAS, Stata) and other science datasets (`datasets`).
 //!
 //! Geoscience lives in [`super::geo`].
 
