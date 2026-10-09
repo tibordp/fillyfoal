@@ -1026,7 +1026,7 @@ pub static FORMATS: &[&Format] = &[
     &publishing::dtp::QUARK,
     &publishing::dtp::XARA,
     &publishing::dtp::SCRIBUS,
-    &publishing::dtp::XMP,
+    &image::xmp::FORMAT,
     &publishing::authoring::HYPERCARD,
     &publishing::authoring::FIGMA,
     &publishing::authoring::RIVE,

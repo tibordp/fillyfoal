@@ -59,8 +59,19 @@ const RAF_TAGS: EnumTable = &[
     (0x0121, "Raw image size"),
     (0x0130, "Fuji layout"),
     (0x0131, "X-Trans layout"),
-    (0x2000, "White balance (auto)"),
-    (0x2ff0, "White balance (as shot)"),
+    (0x2000, "White balance levels (auto)"),
+    (0x2100, "White balance levels (daylight)"),
+    (0x2200, "White balance levels (cloudy)"),
+    (0x2300, "White balance levels (daylight fluorescent)"),
+    (0x2301, "White balance levels (day white fluorescent)"),
+    (0x2302, "White balance levels (white fluorescent)"),
+    (0x2310, "White balance levels (warm white fluorescent)"),
+    (
+        0x2311,
+        "White balance levels (living room warm white fluorescent)",
+    ),
+    (0x2400, "White balance levels (tungsten)"),
+    (0x2ff0, "White balance levels (as shot)"),
     (0x9650, "Raw exposure bias"),
     (0xc000, "RAF data"),
 ];
@@ -70,37 +81,85 @@ pub async fn dissect_raf(cx: Cx, input: Input) -> Result<()> {
     let span = file.sub(0, RafHeader::SIZE);
     let h = parse(&cx, span, BE, &(), RafHeader::layout).await?;
     cx.emit(RafHeader::node("Header", span, BE));
-    cx.annotate(format!(
-        "Fujifilm {}, format {}",
-        h.camera.trim(),
-        h.format_version
-    ));
+    // Files with a second (multi-shot) raw image carry its offsets after
+    // the header, before the JPEG.
+    let mut second = None;
+    if h.jpeg_offset >= 0x88 {
+        let extra = file.sub(0x6c, 0x1c);
+        let block = cx.block(extra).await?;
+        let mut f = Fields::emitting(&cx, &block, BE);
+        f.bytes("Unknown", 12).emit()?;
+        let header_offset = f.u32("Second CFA header offset").hex().emit()?;
+        let header_length = f.u32("Second CFA header length").emit()?;
+        let cfa_offset = f.u32("Second CFA offset").hex().emit()?;
+        let cfa_length = f.u32("Second CFA length").emit()?;
+        if header_offset > 0 && cfa_offset > 0 {
+            second = Some((header_offset, header_length, cfa_offset, cfa_length));
+        }
+    }
+    let mut summary = format!("Fujifilm {}, RAF {}", h.camera.trim(), h.format_version);
     if h.jpeg_length > 0 {
         let jpeg = file.sub(h.jpeg_offset.into(), h.jpeg_length.into());
         cx.emit(embedded("JPEG preview", input.nested(jpeg)));
     }
-    if h.cfa_header_length > 0 {
-        let records = file.sub(h.cfa_header_offset.into(), h.cfa_header_length.into());
-        cx.emit(
-            Node::new("CFA header")
-                .span(records)
-                .lazy(raf_records, records),
-        );
-    }
-    if h.cfa_length > 0 {
-        let cfa = file.sub(h.cfa_offset.into(), h.cfa_length.into());
-        let head = cx.read_avail(cfa.sub(0, 4)).await?;
-        if head == b"II*\0" || head == b"MM\0*" {
-            cx.emit(embedded_as(
-                "CFA (TIFF)",
-                input.nested(cfa),
-                &super::tiff::FORMAT,
-            ));
-        } else {
-            cx.emit(Node::new("CFA data").span(cfa));
+    let shots = std::iter::once((
+        h.cfa_header_offset,
+        h.cfa_header_length,
+        h.cfa_offset,
+        h.cfa_length,
+    ))
+    .chain(second);
+    for (i, (header_offset, header_length, cfa_offset, cfa_length)) in shots.enumerate() {
+        let suffix = if i == 0 { "" } else { " (second)" };
+        if header_length > 0 {
+            let records = file.sub(header_offset.into(), header_length.into());
+            if i == 0
+                && let Some(size) = raf_size(&cx, records).await
+            {
+                summary = format!("{summary}, {size} raw");
+            }
+            cx.emit(
+                Node::new(format!("CFA header{suffix}"))
+                    .span(records)
+                    .lazy(raf_records, records),
+            );
+        }
+        if cfa_length > 0 {
+            let cfa = file.sub(cfa_offset.into(), cfa_length.into());
+            let head = cx.read_avail(cfa.sub(0, 4)).await?;
+            if head == b"II*\0" || head == b"MM\0*" {
+                cx.emit(embedded_as(
+                    format!("CFA (TIFF){suffix}"),
+                    input.nested(cfa),
+                    &super::tiff::FORMAT,
+                ));
+            } else {
+                cx.emit(Node::new(format!("CFA data{suffix}")).span(cfa));
+            }
         }
     }
+    cx.annotate(summary);
     Ok(())
+}
+
+/// The raw image size from the CFA header records ("6240×4160").
+async fn raf_size(cx: &Cx, span: Span) -> Option<String> {
+    let mut cur = Cursor::new(cx, span, BE);
+    let count = cur.u32().await.ok()?;
+    for _ in 0..count.min(256) {
+        if cur.remaining() < 4 {
+            break;
+        }
+        let tag = cur.u16().await.ok()?;
+        let size = cur.u16().await.ok()?;
+        if matches!(tag, 0x0100 | 0x0121) && size == 4 {
+            let height = cur.u16().await.ok()?;
+            let width = cur.u16().await.ok()?;
+            return Some(dims(width, height));
+        }
+        cur.skip(size.into());
+    }
+    None
 }
 
 async fn raf_records(cx: Cx, span: Span) -> Result<()> {
@@ -125,13 +184,33 @@ async fn raf_records(cx: Cx, span: Span) -> Result<()> {
         )
         .span(cur.since(start))
         .summary(format!("{size} bytes"));
-        if size == 4 {
-            let v = cx.read(data).await?;
-            let (a, b) = (
-                crate::bytes::u16_be(&v, 0).unwrap_or(0),
-                crate::bytes::u16_be(&v, 2).unwrap_or(0),
-            );
-            node = node.summary(format!("{a}, {b}"));
+        let v = cx.read_avail(data.sub(0, 64)).await?;
+        let word = |i: usize| crate::bytes::u16_be(&v, i.saturating_mul(2)).unwrap_or(0);
+        match (tag, size) {
+            (0x0100 | 0x0111 | 0x0121, 4) => {
+                node = node.value(super::text(dims(word(1), word(0))));
+            }
+            (0x0110, 4) => node = node.summary(format!("top {}, left {}", word(0), word(1))),
+            (0x0115, 4) => node = node.summary(format!("{}:{}", word(1), word(0))),
+            (0x2000..=0x2fff, 6) => {
+                node = node.summary(format!("G {}, R {}, B {}", word(0), word(1), word(2)));
+            }
+            (0x0131, 36) => {
+                let colours = |c: u8| match c {
+                    0 => 'R',
+                    1 => 'G',
+                    2 => 'B',
+                    _ => '?',
+                };
+                let rows: Vec<String> = v
+                    .chunks(6)
+                    .map(|row| row.iter().map(|&c| colours(c)).collect())
+                    .collect();
+                node = node.value(super::text(rows.join("/")));
+            }
+            (_, 4) => node = node.summary(format!("{}, {}", word(0), word(1))),
+            (_, 2) => node = node.value(super::uint(word(0))),
+            _ => {}
         }
         cx.push(node).await;
     }

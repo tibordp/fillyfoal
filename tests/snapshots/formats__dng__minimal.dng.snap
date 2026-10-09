@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ minimal.dng — DNG LE, Filly Raw One, 4×4, 16-bit Color filter array, Uncompressed  [0x0+0xf2]
   ▾ Header  [0x0+0x8]
@@ -69,7 +69,7 @@ expression: "common::explore(&name, &data)"
       ▾ Values — 2 values  [0x8a+0x4]
           [0]: 2  [0x8a+0x2]
           [1]: 2  [0x8c+0x2]
-    ▾ CFAPattern: 00 01 01 02  |....| — 4 bytes  [0x8e+0xc]
+    ▾ CFAPattern: 00 01 01 02  |....| — RGGB  [0x8e+0xc]
         Tag: 0x828e — CFAPattern  [0x8e+0x2]
         Type: BYTE (0x1)  [0x90+0x2]
         Count: 4  [0x92+0x4]
@@ -79,7 +79,7 @@ expression: "common::explore(&name, &data)"
           [1]: 1  [0x97+0x1]
           [2]: 1  [0x98+0x1]
           [3]: 2  [0x99+0x1]
-    ▾ DNGVersion: 01 04 00 00  |....| — 4 bytes  [0x9a+0xc]
+    ▾ DNGVersion: "1.4.0.0"  [0x9a+0xc]
         Tag: 0xc612 — DNGVersion  [0x9a+0x2]
         Type: BYTE (0x1)  [0x9c+0x2]
         Count: 4  [0x9e+0x4]
@@ -96,5 +96,5 @@ expression: "common::explore(&name, &data)"
         Value offset: 0xc4  [0xae+0x4]
         Data  [0xc4+0xe]
       Next IFD offset: 0x0  [0xb2+0x4]
-    ▾ Strips — 1 strips
-        [0] — 0x20 bytes at 0xd2  [0xd2+0x20]
+    ▾ Strips — 1 strip
+        Strip 0 — 32 bytes at 0xd2  [0xd2+0x20]

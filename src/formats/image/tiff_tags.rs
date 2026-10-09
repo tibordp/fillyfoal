@@ -1,8 +1,14 @@
-//! TIFF, EXIF and GPS tag names and value tables.
+//! TIFF, Exif, GPS, Interoperability, DNG and GeoTIFF tag names, the field
+//! types the specifications give each tag, and value tables.
+//!
+//! Names follow TIFF 6.0, TIFF/EP, Exif 2.32/3.0 (CIPA DC-008), DNG 1.7
+//! and GeoTIFF 1.1; where a tag has no name in a specification (camera
+//! private tags), the names used by ExifTool are used.
 
-use crate::value::{EnumTable, FlagTable, flag};
+use crate::value::{EnumTable, FlagTable, field, flag};
 
-/// Baseline, extension, DNG and EXIF tags (EXIF tags may appear in IFD0).
+/// Baseline, extension, TIFF/EP, DNG, GeoTIFF and Exif tags (Exif tags may
+/// appear in IFD0).
 pub const TAGS: EnumTable = &[
     (0x000b, "ProcessingSoftware"),
     (0x00fe, "NewSubfileType"),
@@ -66,10 +72,17 @@ pub const TAGS: EnumTable = &[
     (0x0154, "SMinSampleValue"),
     (0x0155, "SMaxSampleValue"),
     (0x0156, "TransferRange"),
+    (0x0157, "ClipPath"),
     (0x015b, "JPEGTables"),
     (0x0200, "JPEGProc"),
     (0x0201, "JPEGInterchangeFormat"),
     (0x0202, "JPEGInterchangeFormatLength"),
+    (0x0203, "JPEGRestartInterval"),
+    (0x0205, "JPEGLosslessPredictors"),
+    (0x0206, "JPEGPointTransforms"),
+    (0x0207, "JPEGQTables"),
+    (0x0208, "JPEGDCTables"),
+    (0x0209, "JPEGACTables"),
     (0x0211, "YCbCrCoefficients"),
     (0x0212, "YCbCrSubSampling"),
     (0x0213, "YCbCrPositioning"),
@@ -80,20 +93,34 @@ pub const TAGS: EnumTable = &[
     (0x800d, "ImageID"),
     (0x828d, "CFARepeatPatternDim"),
     (0x828e, "CFAPattern"),
+    (0x828f, "BatteryLevel"),
     (0x8298, "Copyright"),
     (0x829a, "ExposureTime"),
     (0x829d, "FNumber"),
+    (0x830e, "ModelPixelScale"),
     (0x83bb, "IPTC-NAA"),
+    (0x8482, "ModelTiepoint"),
+    (0x85d8, "ModelTransformation"),
     (0x8649, "PhotoshopImageResources"),
     (0x8769, "ExifIFD"),
     (0x8773, "ICCProfile"),
+    (0x87af, "GeoKeyDirectory"),
+    (0x87b0, "GeoDoubleParams"),
+    (0x87b1, "GeoAsciiParams"),
     (0x8822, "ExposureProgram"),
     (0x8824, "SpectralSensitivity"),
     (0x8825, "GPSInfo"),
     (0x8827, "PhotographicSensitivity"),
     (0x8828, "OECF"),
+    (0x8829, "Interlace"),
+    (0x882a, "TimeZoneOffset"),
+    (0x882b, "SelfTimerMode"),
     (0x8830, "SensitivityType"),
+    (0x8831, "StandardOutputSensitivity"),
     (0x8832, "RecommendedExposureIndex"),
+    (0x8833, "ISOSpeed"),
+    (0x8834, "ISOSpeedLatitudeyyy"),
+    (0x8835, "ISOSpeedLatitudezzz"),
     (0x9000, "ExifVersion"),
     (0x9003, "DateTimeOriginal"),
     (0x9004, "DateTimeDigitized"),
@@ -112,12 +139,31 @@ pub const TAGS: EnumTable = &[
     (0x9208, "LightSource"),
     (0x9209, "Flash"),
     (0x920a, "FocalLength"),
+    (0x920b, "FlashEnergy"),
+    (0x920c, "SpatialFrequencyResponse"),
+    (0x920d, "Noise"),
+    (0x920e, "FocalPlaneXResolution"),
+    (0x920f, "FocalPlaneYResolution"),
+    (0x9210, "FocalPlaneResolutionUnit"),
+    (0x9211, "ImageNumber"),
+    (0x9212, "SecurityClassification"),
+    (0x9213, "ImageHistory"),
     (0x9214, "SubjectArea"),
+    (0x9215, "ExposureIndex"),
+    (0x9216, "TIFF-EPStandardID"),
+    (0x9217, "SensingMethod"),
     (0x927c, "MakerNote"),
     (0x9286, "UserComment"),
     (0x9290, "SubSecTime"),
     (0x9291, "SubSecTimeOriginal"),
     (0x9292, "SubSecTimeDigitized"),
+    (0x935c, "ImageSourceData"),
+    (0x9400, "Temperature"),
+    (0x9401, "Humidity"),
+    (0x9402, "Pressure"),
+    (0x9403, "WaterDepth"),
+    (0x9404, "Acceleration"),
+    (0x9405, "CameraElevationAngle"),
     (0x9c9b, "XPTitle"),
     (0x9c9c, "XPComment"),
     (0x9c9d, "XPAuthor"),
@@ -130,6 +176,7 @@ pub const TAGS: EnumTable = &[
     (0xa004, "RelatedSoundFile"),
     (0xa005, "InteroperabilityIFD"),
     (0xa20b, "FlashEnergy"),
+    (0xa20c, "SpatialFrequencyResponse"),
     (0xa20e, "FocalPlaneXResolution"),
     (0xa20f, "FocalPlaneYResolution"),
     (0xa210, "FocalPlaneResolutionUnit"),
@@ -149,6 +196,7 @@ pub const TAGS: EnumTable = &[
     (0xa408, "Contrast"),
     (0xa409, "Saturation"),
     (0xa40a, "Sharpness"),
+    (0xa40b, "DeviceSettingDescription"),
     (0xa40c, "SubjectDistanceRange"),
     (0xa420, "ImageUniqueID"),
     (0xa430, "CameraOwnerName"),
@@ -157,6 +205,18 @@ pub const TAGS: EnumTable = &[
     (0xa433, "LensMake"),
     (0xa434, "LensModel"),
     (0xa435, "LensSerialNumber"),
+    (0xa436, "ImageTitle"),
+    (0xa437, "Photographer"),
+    (0xa438, "ImageEditor"),
+    (0xa439, "CameraFirmware"),
+    (0xa43a, "RAWDevelopingSoftware"),
+    (0xa43b, "ImageEditingSoftware"),
+    (0xa43c, "MetadataEditingSoftware"),
+    (0xa460, "CompositeImage"),
+    (0xa461, "SourceImageNumberOfCompositeImage"),
+    (0xa462, "SourceExposureTimesOfCompositeImage"),
+    (0xa480, "GDAL_METADATA"),
+    (0xa481, "GDAL_NODATA"),
     (0xa500, "Gamma"),
     (0xb000, "MPFVersion"),
     (0xb001, "NumberOfImages"),
@@ -177,13 +237,19 @@ pub const TAGS: EnumTable = &[
     (0xbcc3, "AlphaByteCount"),
     (0xbcc4, "ImageDataDiscard"),
     (0xbcc5, "AlphaDataDiscard"),
+    (0xc4a5, "PrintIM"),
+    (0xc640, "RawImageSegmentation"),
     (0xc612, "DNGVersion"),
     (0xc613, "DNGBackwardVersion"),
     (0xc614, "UniqueCameraModel"),
     (0xc615, "LocalizedCameraModel"),
+    (0xc616, "CFAPlaneColor"),
+    (0xc617, "CFALayout"),
     (0xc618, "LinearizationTable"),
     (0xc619, "BlackLevelRepeatDim"),
     (0xc61a, "BlackLevel"),
+    (0xc61b, "BlackLevelDeltaH"),
+    (0xc61c, "BlackLevelDeltaV"),
     (0xc61d, "WhiteLevel"),
     (0xc61e, "DefaultScale"),
     (0xc61f, "DefaultCropOrigin"),
@@ -192,8 +258,11 @@ pub const TAGS: EnumTable = &[
     (0xc622, "ColorMatrix2"),
     (0xc623, "CameraCalibration1"),
     (0xc624, "CameraCalibration2"),
+    (0xc625, "ReductionMatrix1"),
+    (0xc626, "ReductionMatrix2"),
     (0xc627, "AnalogBalance"),
     (0xc628, "AsShotNeutral"),
+    (0xc629, "AsShotWhiteXY"),
     (0xc62a, "BaselineExposure"),
     (0xc62b, "BaselineNoise"),
     (0xc62c, "BaselineSharpness"),
@@ -201,26 +270,94 @@ pub const TAGS: EnumTable = &[
     (0xc62e, "LinearResponseLimit"),
     (0xc62f, "CameraSerialNumber"),
     (0xc630, "LensInfo"),
+    (0xc631, "ChromaBlurRadius"),
+    (0xc632, "AntiAliasStrength"),
     (0xc633, "ShadowScale"),
     (0xc634, "DNGPrivateData"),
     (0xc635, "MakerNoteSafety"),
     (0xc65a, "CalibrationIlluminant1"),
     (0xc65b, "CalibrationIlluminant2"),
+    (0xc65c, "BestQualityScale"),
+    (0xc65d, "RawDataUniqueID"),
     (0xc68b, "OriginalRawFileName"),
+    (0xc68c, "OriginalRawFileData"),
     (0xc68d, "ActiveArea"),
+    (0xc68e, "MaskedAreas"),
+    (0xc68f, "AsShotICCProfile"),
+    (0xc690, "AsShotPreProfileMatrix"),
+    (0xc691, "CurrentICCProfile"),
+    (0xc692, "CurrentPreProfileMatrix"),
+    (0xc6bf, "ColorimetricReference"),
     (0xc6f3, "CameraCalibrationSignature"),
     (0xc6f4, "ProfileCalibrationSignature"),
+    (0xc6f5, "ExtraCameraProfiles"),
+    (0xc6f6, "AsShotProfileName"),
+    (0xc6f7, "NoiseReductionApplied"),
     (0xc6f8, "ProfileName"),
+    (0xc6f9, "ProfileHueSatMapDims"),
+    (0xc6fa, "ProfileHueSatMapData1"),
+    (0xc6fb, "ProfileHueSatMapData2"),
+    (0xc6fc, "ProfileToneCurve"),
     (0xc6fd, "ProfileEmbedPolicy"),
     (0xc6fe, "ProfileCopyright"),
     (0xc714, "ForwardMatrix1"),
     (0xc715, "ForwardMatrix2"),
     (0xc716, "PreviewApplicationName"),
     (0xc717, "PreviewApplicationVersion"),
+    (0xc718, "PreviewSettingsName"),
     (0xc719, "PreviewSettingsDigest"),
     (0xc71a, "PreviewColorSpace"),
     (0xc71b, "PreviewDateTime"),
+    (0xc71c, "RawImageDigest"),
+    (0xc71d, "OriginalRawFileDigest"),
+    (0xc71e, "SubTileBlockSize"),
+    (0xc71f, "RowInterleaveFactor"),
+    (0xc725, "ProfileLookTableDims"),
+    (0xc726, "ProfileLookTableData"),
+    (0xc740, "OpcodeList1"),
+    (0xc741, "OpcodeList2"),
+    (0xc74e, "OpcodeList3"),
+    (0xc761, "NoiseProfile"),
+    (0xc763, "TimeCodes"),
+    (0xc764, "FrameRate"),
+    (0xc772, "TStop"),
+    (0xc789, "ReelName"),
+    (0xc791, "OriginalDefaultFinalSize"),
+    (0xc792, "OriginalBestQualityFinalSize"),
+    (0xc793, "OriginalDefaultCropSize"),
+    (0xc7a1, "CameraLabel"),
+    (0xc7a3, "ProfileHueSatMapEncoding"),
+    (0xc7a4, "ProfileLookTableEncoding"),
+    (0xc7a5, "BaselineExposureOffset"),
+    (0xc7a6, "DefaultBlackRender"),
     (0xc7a7, "NewRawImageDigest"),
+    (0xc7a8, "RawToPreviewGain"),
+    (0xc7b5, "DefaultUserCrop"),
+    (0xcd2d, "ProfileGainTableMap"),
+    (0xcd2e, "SemanticName"),
+    (0xcd30, "SemanticInstanceID"),
+    (0xcd31, "CalibrationIlluminant3"),
+    (0xcd32, "CameraCalibration3"),
+    (0xcd33, "ColorMatrix3"),
+    (0xcd34, "ForwardMatrix3"),
+    (0xcd35, "IlluminantData1"),
+    (0xcd36, "IlluminantData2"),
+    (0xcd37, "IlluminantData3"),
+    (0xcd38, "MaskSubArea"),
+    (0xcd39, "ProfileHueSatMapData3"),
+    (0xcd3a, "ReductionMatrix3"),
+    (0xcd3f, "RGBTables"),
+    (0xcd40, "ProfileGainTableMap2"),
+    (0xcd43, "ColumnInterleaveFactor"),
+    (0xcd44, "ImageSequenceInfo"),
+    (0xcd46, "ImageStats"),
+    (0xcd47, "ProfileDynamicRange"),
+    (0xcd48, "ProfileGroupName"),
+    (0xcd49, "JXLDistance"),
+    (0xcd4a, "JXLEffort"),
+    (0xcd4b, "JXLDecodeSpeed"),
+    (0xea1c, "Padding"),
+    (0xea1d, "OffsetSchema"),
 ];
 
 pub const GPS_TAGS: EnumTable = &[
@@ -266,6 +403,49 @@ pub const INTEROP_TAGS: EnumTable = &[
     (0x1002, "RelatedImageLength"),
 ];
 
+/// The raw IFD of Panasonic RW2 files (tags below 0x100 and a few that
+/// reuse baseline numbers); other tags are the baseline ones.
+pub const PANASONIC_RAW_TAGS: EnumTable = &[
+    (0x0001, "PanasonicRawVersion"),
+    (0x0002, "SensorWidth"),
+    (0x0003, "SensorHeight"),
+    (0x0004, "SensorTopBorder"),
+    (0x0005, "SensorLeftBorder"),
+    (0x0006, "SensorBottomBorder"),
+    (0x0007, "SensorRightBorder"),
+    (0x0008, "SamplesPerPixel"),
+    (0x0009, "CFAPattern"),
+    (0x000a, "BitsPerSample"),
+    (0x000b, "Compression"),
+    (0x000e, "LinearityLimitRed"),
+    (0x000f, "LinearityLimitGreen"),
+    (0x0010, "LinearityLimitBlue"),
+    (0x0011, "RedBalance"),
+    (0x0012, "BlueBalance"),
+    (0x0013, "WBInfo"),
+    (0x0017, "ISO"),
+    (0x0018, "HighISOMultiplierRed"),
+    (0x0019, "HighISOMultiplierGreen"),
+    (0x001a, "HighISOMultiplierBlue"),
+    (0x001c, "BlackLevelRed"),
+    (0x001d, "BlackLevelGreen"),
+    (0x001e, "BlackLevelBlue"),
+    (0x0024, "WBRedLevel"),
+    (0x0025, "WBGreenLevel"),
+    (0x0026, "WBBlueLevel"),
+    (0x0027, "WBInfo2"),
+    (0x002d, "RawFormat"),
+    (0x002e, "JpgFromRaw"),
+    (0x002f, "CropTop"),
+    (0x0030, "CropLeft"),
+    (0x0031, "CropBottom"),
+    (0x0032, "CropRight"),
+    (0x0118, "RawDataOffset"),
+    (0x0119, "DistortionInfo"),
+    (0x011c, "Gamma"),
+    (0x0120, "CameraIFD"),
+];
+
 pub const TYPES: EnumTable = &[
     (1, "BYTE"),
     (2, "ASCII"),
@@ -285,6 +465,346 @@ pub const TYPES: EnumTable = &[
     (18, "IFD8"),
 ];
 
+// ---------------------------------------------------------------------------
+// Field types the specifications give each tag.
+
+const B: u32 = 1 << 1;
+const A: u32 = 1 << 2;
+const S: u32 = 1 << 3;
+const L: u32 = 1 << 4;
+const R: u32 = 1 << 5;
+const U: u32 = 1 << 7;
+const SR: u32 = 1 << 10;
+const F: u32 = 1 << 11;
+const D: u32 = 1 << 12;
+const IFD: u32 = 1 << 13;
+const L8: u32 = 1 << 16;
+const IFD8: u32 = 1 << 18;
+/// Integers of any unsigned width (DNG allows BYTE, SHORT or LONG for
+/// many counts and levels).
+const UINT: u32 = B | S | L;
+
+/// `(tag, allowed types, count)` with count 0 for any.
+type Spec = &'static [(u16, u32, u32)];
+
+const MAIN_SPEC: Spec = &[
+    (0x00fe, L, 1),
+    (0x00ff, S, 1),
+    (0x0100, S | L | L8, 1),
+    (0x0101, S | L | L8, 1),
+    (0x0102, S, 0),
+    (0x0103, S, 1),
+    (0x0106, S, 1),
+    (0x010a, S, 1),
+    (0x010d, A, 0),
+    (0x010e, A, 0),
+    (0x010f, A, 0),
+    (0x0110, A, 0),
+    (0x0111, S | L | L8, 0),
+    (0x0112, S, 1),
+    (0x0115, S, 1),
+    (0x0116, S | L | L8, 1),
+    (0x0117, S | L | L8, 0),
+    (0x011a, R, 1),
+    (0x011b, R, 1),
+    (0x011c, S, 1),
+    (0x011d, A, 0),
+    (0x0128, S, 1),
+    (0x0129, S, 2),
+    (0x012d, S, 0),
+    (0x0131, A, 0),
+    (0x0132, A, 20),
+    (0x013b, A, 0),
+    (0x013c, A, 0),
+    (0x013d, S, 1),
+    (0x013e, R, 2),
+    (0x013f, R, 6),
+    (0x0140, S, 0),
+    (0x0142, S | L, 1),
+    (0x0143, S | L, 1),
+    (0x0144, L | L8, 0),
+    (0x0145, S | L | L8, 0),
+    (0x014a, L | IFD | L8 | IFD8, 0),
+    (0x0152, S, 0),
+    (0x0153, S, 0),
+    (0x015b, U, 0),
+    (0x0201, L, 1),
+    (0x0202, L, 1),
+    (0x0211, R, 3),
+    (0x0212, S, 2),
+    (0x0213, S, 1),
+    (0x0214, R | L, 6),
+    (0x02bc, B | U, 0),
+    (0x4746, S, 1),
+    (0x4749, S, 1),
+    (0x828d, S, 2),
+    (0x828e, B, 0),
+    (0x8298, A, 0),
+    (0x829a, R, 1),
+    (0x829d, R, 1),
+    (0x830e, D, 3),
+    (0x83bb, L | U | B, 0),
+    (0x8482, D, 0),
+    (0x85d8, D, 16),
+    (0x8649, B | U, 0),
+    (0x8769, L | IFD, 1),
+    (0x8773, U | B, 0),
+    (0x87af, S, 0),
+    (0x87b0, D, 0),
+    (0x87b1, A, 0),
+    (0x8822, S, 1),
+    (0x8824, A, 0),
+    (0x8825, L | IFD, 1),
+    (0x8827, S, 0),
+    (0x8828, U, 0),
+    (0x8830, S, 1),
+    (0x8831, L, 1),
+    (0x8832, L, 1),
+    (0x8833, L, 1),
+    (0x8834, L, 1),
+    (0x8835, L, 1),
+    (0x9000, U, 4),
+    (0x9003, A, 20),
+    (0x9004, A, 20),
+    (0x9010, A, 7),
+    (0x9011, A, 7),
+    (0x9012, A, 7),
+    (0x9101, U, 4),
+    (0x9102, R, 1),
+    (0x9201, SR, 1),
+    (0x9202, R, 1),
+    (0x9203, SR, 1),
+    (0x9204, SR, 1),
+    (0x9205, R, 1),
+    (0x9206, R, 1),
+    (0x9207, S, 1),
+    (0x9208, S, 1),
+    (0x9209, S, 1),
+    (0x920a, R, 1),
+    (0x9214, S, 0),
+    (0x927c, U, 0),
+    (0x9286, U, 0),
+    (0x9290, A, 0),
+    (0x9291, A, 0),
+    (0x9292, A, 0),
+    (0x9400, SR, 1),
+    (0x9401, R, 1),
+    (0x9402, R, 1),
+    (0x9403, SR, 1),
+    (0x9404, R, 1),
+    (0x9405, SR, 1),
+    (0x9c9b, B, 0),
+    (0x9c9c, B, 0),
+    (0x9c9d, B, 0),
+    (0x9c9e, B, 0),
+    (0x9c9f, B, 0),
+    (0xa000, U, 4),
+    (0xa001, S, 1),
+    (0xa002, S | L, 1),
+    (0xa003, S | L, 1),
+    (0xa004, A, 13),
+    (0xa005, L | IFD, 1),
+    (0xa20b, R, 1),
+    (0xa20c, U, 0),
+    (0xa20e, R, 1),
+    (0xa20f, R, 1),
+    (0xa210, S, 1),
+    (0xa214, S, 2),
+    (0xa215, R, 1),
+    (0xa217, S, 1),
+    (0xa300, U, 1),
+    (0xa301, U, 1),
+    (0xa302, U, 0),
+    (0xa401, S, 1),
+    (0xa402, S, 1),
+    (0xa403, S, 1),
+    (0xa404, R, 1),
+    (0xa405, S, 1),
+    (0xa406, S, 1),
+    (0xa407, S, 1),
+    (0xa408, S, 1),
+    (0xa409, S, 1),
+    (0xa40a, S, 1),
+    (0xa40b, U, 0),
+    (0xa40c, S, 1),
+    (0xa420, A, 33),
+    (0xa430, A, 0),
+    (0xa431, A, 0),
+    (0xa432, R, 4),
+    (0xa433, A, 0),
+    (0xa434, A, 0),
+    (0xa435, A, 0),
+    (0xa436, A, 0),
+    (0xa437, A, 0),
+    (0xa438, A, 0),
+    (0xa439, A, 0),
+    (0xa43a, A, 0),
+    (0xa43b, A, 0),
+    (0xa43c, A, 0),
+    (0xa460, S, 1),
+    (0xa461, S, 2),
+    (0xa462, U, 0),
+    (0xa480, A, 0),
+    (0xa481, A, 0),
+    (0xa500, R, 1),
+    (0xc612, B, 4),
+    (0xc613, B, 4),
+    (0xc614, A, 0),
+    (0xc616, B, 0),
+    (0xc617, S, 1),
+    (0xc618, S, 0),
+    (0xc619, S, 2),
+    (0xc61a, UINT | R, 0),
+    (0xc61b, SR, 0),
+    (0xc61c, SR, 0),
+    (0xc61d, UINT, 0),
+    (0xc61e, R, 2),
+    (0xc61f, UINT | R, 2),
+    (0xc620, UINT | R, 2),
+    (0xc621, SR, 0),
+    (0xc622, SR, 0),
+    (0xc623, SR, 0),
+    (0xc624, SR, 0),
+    (0xc625, SR, 0),
+    (0xc626, SR, 0),
+    (0xc627, R, 0),
+    (0xc628, S | R, 0),
+    (0xc629, R, 2),
+    (0xc62a, SR, 1),
+    (0xc62b, R, 1),
+    (0xc62c, R, 1),
+    (0xc62d, L, 1),
+    (0xc62e, R, 1),
+    (0xc62f, A, 0),
+    (0xc630, R, 4),
+    (0xc631, R, 1),
+    (0xc632, R, 1),
+    (0xc633, R, 1),
+    (0xc634, B, 0),
+    (0xc635, S, 1),
+    (0xc65a, S, 1),
+    (0xc65b, S, 1),
+    (0xc65c, R, 1),
+    (0xc65d, B, 16),
+    (0xc68b, A | B, 0),
+    (0xc68c, U, 0),
+    (0xc68d, S | L, 4),
+    (0xc68e, S | L, 0),
+    (0xc68f, U, 0),
+    (0xc690, SR, 0),
+    (0xc691, U, 0),
+    (0xc692, SR, 0),
+    (0xc6bf, S, 1),
+    (0xc6f3, A | B, 0),
+    (0xc6f4, A | B, 0),
+    (0xc6f5, L, 0),
+    (0xc6f6, A | B, 0),
+    (0xc6f7, R, 1),
+    (0xc6f8, A | B, 0),
+    (0xc6f9, L, 3),
+    (0xc6fa, F, 0),
+    (0xc6fb, F, 0),
+    (0xc6fc, F, 0),
+    (0xc6fd, L, 1),
+    (0xc6fe, A | B, 0),
+    (0xc714, SR, 0),
+    (0xc715, SR, 0),
+    (0xc716, A | B, 0),
+    (0xc717, A | B, 0),
+    (0xc718, A | B, 0),
+    (0xc719, B, 16),
+    (0xc71a, L, 1),
+    (0xc71b, A, 0),
+    (0xc71c, B, 16),
+    (0xc71d, B, 16),
+    (0xc71e, S | L, 2),
+    (0xc71f, S | L, 1),
+    (0xc725, L, 3),
+    (0xc726, F, 0),
+    (0xc740, U, 0),
+    (0xc741, U, 0),
+    (0xc74e, U, 0),
+    (0xc761, D, 0),
+    (0xc7a7, B, 16),
+];
+
+const GPS_SPEC: Spec = &[
+    (0x00, B, 4),
+    (0x01, A, 2),
+    (0x02, R, 3),
+    (0x03, A, 2),
+    (0x04, R, 3),
+    (0x05, B, 1),
+    (0x06, R, 1),
+    (0x07, R, 3),
+    (0x08, A, 0),
+    (0x09, A, 2),
+    (0x0a, A, 2),
+    (0x0b, R, 1),
+    (0x0c, A, 2),
+    (0x0d, R, 1),
+    (0x0e, A, 2),
+    (0x0f, R, 1),
+    (0x10, A, 2),
+    (0x11, R, 1),
+    (0x12, A, 0),
+    (0x13, A, 2),
+    (0x14, R, 3),
+    (0x15, A, 2),
+    (0x16, R, 3),
+    (0x17, A, 2),
+    (0x18, R, 1),
+    (0x19, A, 2),
+    (0x1a, R, 1),
+    (0x1b, U, 0),
+    (0x1c, U, 0),
+    (0x1d, A, 11),
+    (0x1e, S, 1),
+    (0x1f, R, 1),
+];
+
+const INTEROP_SPEC: Spec = &[
+    (0x0001, A, 4),
+    (0x0002, U, 4),
+    (0x1000, A, 0),
+    (0x1001, S | L, 1),
+    (0x1002, S | L, 1),
+];
+
+/// Which specification table a tag is checked against.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpecTable {
+    Main,
+    Gps,
+    Interop,
+}
+
+/// The types (as a bit set over type codes) and count the specification
+/// gives `tag`, if it is a tag we know the rules of.
+pub fn spec(table: SpecTable, tag: u16) -> Option<(u32, u32)> {
+    let spec = match table {
+        SpecTable::Main => MAIN_SPEC,
+        SpecTable::Gps => GPS_SPEC,
+        SpecTable::Interop => INTEROP_SPEC,
+    };
+    spec.iter()
+        .find(|(t, _, _)| *t == tag)
+        .map(|&(_, types, count)| (types, count))
+}
+
+/// "SHORT or LONG" for a set of type codes.
+pub fn type_names(mask: u32) -> String {
+    let names: Vec<&str> = TYPES
+        .iter()
+        .filter(|(code, _)| u32::try_from(*code).is_ok_and(|c| c < 32 && mask & (1u32 << c) != 0))
+        .map(|(_, name)| *name)
+        .collect();
+    names.join(" or ")
+}
+
+// ---------------------------------------------------------------------------
+// Value tables
+
 pub const COMPRESSION: EnumTable = &[
     (1, "Uncompressed"),
     (2, "CCITT modified Huffman RLE"),
@@ -296,18 +816,44 @@ pub const COMPRESSION: EnumTable = &[
     (8, "Deflate (Adobe)"),
     (9, "JBIG B&W"),
     (10, "JBIG color"),
+    (99, "JPEG (Leaf)"),
+    (262, "Kodak 262"),
+    (32766, "NeXT 2-bit RLE"),
+    (32767, "Sony ARW compressed"),
+    (32769, "Packed RAW (Epson ERF)"),
+    (32770, "Samsung SRW compressed"),
+    (32771, "CCITT RLE word-aligned"),
     (32773, "PackBits"),
+    (32809, "ThunderScan"),
+    (32867, "Kodak KDC compressed"),
+    (32895, "IT8 CT padding"),
+    (32896, "IT8 linework RLE"),
+    (32897, "IT8 monochrome"),
+    (32898, "IT8 binary line art"),
+    (32908, "Pixar film"),
+    (32909, "Pixar log"),
     (32946, "Deflate"),
+    (32947, "Kodak DCS"),
     (34661, "JBIG"),
+    (34676, "SGI LogLuv RLE"),
+    (34677, "SGI LogLuv 24-bit"),
     (34712, "JPEG 2000"),
+    (34713, "Nikon NEF compressed"),
+    (34715, "JBIG2 TIFF FX"),
+    (34887, "LERC"),
     (34892, "Lossy JPEG (DNG)"),
-    (34925, "LZMA"),
+    (34925, "LZMA2"),
+    (34933, "PNG"),
+    (34934, "JPEG XR"),
     (50000, "Zstandard"),
     (50001, "WebP"),
+    (50002, "JPEG XL (GDAL)"),
     (52546, "JPEG XL"),
+    (65000, "Kodak DCR compressed"),
+    (65535, "Pentax PEF compressed"),
 ];
 
-const PHOTOMETRIC: EnumTable = &[
+pub const PHOTOMETRIC: EnumTable = &[
     (0, "WhiteIsZero"),
     (1, "BlackIsZero"),
     (2, "RGB"),
@@ -321,7 +867,10 @@ const PHOTOMETRIC: EnumTable = &[
     (32803, "Color filter array"),
     (32844, "LogL"),
     (32845, "LogLuv"),
+    (32892, "Linear raw"),
     (34892, "Linear raw"),
+    (51177, "Depth"),
+    (52527, "Photometric mask"),
 ];
 
 const ORIENTATION: EnumTable = &[
@@ -341,21 +890,37 @@ const PREDICTOR: EnumTable = &[
     (1, "None"),
     (2, "Horizontal differencing"),
     (3, "Floating point"),
+    (34892, "Horizontal differencing ×2"),
+    (34893, "Horizontal differencing ×4"),
+    (34894, "Floating point ×2"),
+    (34895, "Floating point ×4"),
 ];
-const SAMPLE_FORMAT: EnumTable = &[
+pub const SAMPLE_FORMAT: EnumTable = &[
     (1, "Unsigned integer"),
     (2, "Signed integer"),
     (3, "IEEE float"),
     (4, "Undefined"),
+    (5, "Complex integer"),
+    (6, "Complex IEEE float"),
 ];
-const EXTRA_SAMPLES: EnumTable = &[
+pub const EXTRA_SAMPLES: EnumTable = &[
     (0, "Unspecified"),
     (1, "Associated alpha"),
     (2, "Unassociated alpha"),
 ];
 const FILL_ORDER: EnumTable = &[(1, "MSB first"), (2, "LSB first")];
+const THRESHHOLDING: EnumTable = &[(1, "None"), (2, "Ordered dither"), (3, "Error diffusion")];
+const GRAY_RESPONSE_UNIT: EnumTable = &[
+    (1, "0.1"),
+    (2, "0.01"),
+    (3, "0.001"),
+    (4, "0.0001"),
+    (5, "0.00001"),
+];
+const INK_SET: EnumTable = &[(1, "CMYK"), (2, "Not CMYK")];
 const YCBCR_POSITIONING: EnumTable = &[(1, "Centered"), (2, "Co-sited")];
-const EXPOSURE_PROGRAM: EnumTable = &[
+const JPEG_PROC: EnumTable = &[(1, "Baseline"), (14, "Lossless")];
+pub const EXPOSURE_PROGRAM: EnumTable = &[
     (0, "Not defined"),
     (1, "Manual"),
     (2, "Normal program"),
@@ -365,6 +930,7 @@ const EXPOSURE_PROGRAM: EnumTable = &[
     (6, "Action program"),
     (7, "Portrait mode"),
     (8, "Landscape mode"),
+    (9, "Bulb"),
 ];
 const METERING_MODE: EnumTable = &[
     (0, "Unknown"),
@@ -376,15 +942,20 @@ const METERING_MODE: EnumTable = &[
     (6, "Partial"),
     (255, "Other"),
 ];
-const LIGHT_SOURCE: EnumTable = &[
+pub const LIGHT_SOURCE: EnumTable = &[
     (0, "Unknown"),
     (1, "Daylight"),
     (2, "Fluorescent"),
-    (3, "Tungsten"),
+    (3, "Tungsten (incandescent)"),
     (4, "Flash"),
     (9, "Fine weather"),
     (10, "Cloudy weather"),
     (11, "Shade"),
+    (12, "Daylight fluorescent (D 5700-7100K)"),
+    (13, "Day white fluorescent (N 4600-5500K)"),
+    (14, "Cool white fluorescent (W 3800-4500K)"),
+    (15, "White fluorescent (WW 3250-3800K)"),
+    (16, "Warm white fluorescent (L 2600-3250K)"),
     (17, "Standard light A"),
     (18, "Standard light B"),
     (19, "Standard light C"),
@@ -403,6 +974,7 @@ const SCENE_CAPTURE: EnumTable = &[
     (1, "Landscape"),
     (2, "Portrait"),
     (3, "Night scene"),
+    (4, "Other"),
 ];
 const SENSING_METHOD: EnumTable = &[
     (1, "Not defined"),
@@ -413,8 +985,31 @@ const SENSING_METHOD: EnumTable = &[
     (7, "Trilinear"),
     (8, "Color sequential linear"),
 ];
-const CUSTOM_RENDERED: EnumTable = &[(0, "Normal"), (1, "Custom")];
+/// TIFF/EP's SensingMethod (0x9217) counts from 0.
+const SENSING_METHOD_EP: EnumTable = &[
+    (0, "Undefined"),
+    (1, "Monochrome area"),
+    (2, "One-chip color area"),
+    (3, "Two-chip color area"),
+    (4, "Three-chip color area"),
+    (5, "Color sequential area"),
+    (6, "Monochrome linear"),
+    (7, "Trilinear"),
+    (8, "Color sequential linear"),
+];
+const CUSTOM_RENDERED: EnumTable = &[
+    (0, "Normal"),
+    (1, "Custom"),
+    (2, "HDR (no original saved)"),
+    (3, "HDR (original saved)"),
+    (4, "Original (for HDR)"),
+    (6, "Panorama"),
+    (7, "Portrait HDR"),
+    (8, "Portrait"),
+];
 const LEVEL: EnumTable = &[(0, "Normal"), (1, "Low"), (2, "High")];
+const SATURATION: EnumTable = &[(0, "Normal"), (1, "Low saturation"), (2, "High saturation")];
+const SHARPNESS: EnumTable = &[(0, "Normal"), (1, "Soft"), (2, "Hard")];
 const GAIN_CONTROL: EnumTable = &[
     (0, "None"),
     (1, "Low gain up"),
@@ -422,42 +1017,120 @@ const GAIN_CONTROL: EnumTable = &[
     (3, "Low gain down"),
     (4, "High gain down"),
 ];
+const SENSITIVITY_TYPE: EnumTable = &[
+    (0, "Unknown"),
+    (1, "Standard output sensitivity"),
+    (2, "Recommended exposure index"),
+    (3, "ISO speed"),
+    (4, "SOS and REI"),
+    (5, "SOS and ISO speed"),
+    (6, "REI and ISO speed"),
+    (7, "SOS, REI and ISO speed"),
+];
+const SUBJECT_DISTANCE_RANGE: EnumTable = &[
+    (0, "Unknown"),
+    (1, "Macro"),
+    (2, "Close view"),
+    (3, "Distant view"),
+];
+const COMPOSITE_IMAGE: EnumTable = &[
+    (0, "Unknown"),
+    (1, "Not a composite image"),
+    (2, "General composite image"),
+    (3, "Composite image captured while shooting"),
+];
+const CFA_LAYOUT: EnumTable = &[
+    (1, "Rectangular"),
+    (2, "Staggered, even columns offset down 1/2 row"),
+    (3, "Staggered, even columns offset up 1/2 row"),
+    (4, "Staggered, even rows offset right 1/2 column"),
+    (5, "Staggered, even rows offset left 1/2 column"),
+    (
+        6,
+        "Staggered, even rows offset up 1/2 row, even columns offset left 1/2 column",
+    ),
+    (
+        7,
+        "Staggered, even rows offset up 1/2 row, even columns offset right 1/2 column",
+    ),
+    (
+        8,
+        "Staggered, even rows offset down 1/2 row, even columns offset left 1/2 column",
+    ),
+    (
+        9,
+        "Staggered, even rows offset down 1/2 row, even columns offset right 1/2 column",
+    ),
+];
+const MAKER_NOTE_SAFETY: EnumTable = &[(0, "Unsafe"), (1, "Safe")];
+const PREVIEW_COLOR_SPACE: EnumTable = &[
+    (0, "Unknown"),
+    (1, "Gray gamma 2.2"),
+    (2, "sRGB"),
+    (3, "Adobe RGB"),
+    (4, "ProPhoto RGB"),
+];
+const PROFILE_EMBED_POLICY: EnumTable = &[
+    (0, "Allow copying"),
+    (1, "Embed if used"),
+    (2, "Never embed"),
+    (3, "No restrictions"),
+];
+const COLORIMETRIC_REFERENCE: EnumTable = &[(0, "Scene-referred"), (1, "Output-referred (ICC)")];
+const DEFAULT_BLACK_RENDER: EnumTable = &[(0, "Auto"), (1, "None")];
 
 pub const SUBFILE_FLAGS: FlagTable = &[
     flag(0x1, "REDUCED_RESOLUTION"),
     flag(0x2, "PAGE"),
     flag(0x4, "TRANSPARENCY_MASK"),
+    flag(0x8, "DEPTH_MAP"),
     flag(0x10, "MIXED_RASTER_CONTENT"),
+    flag(0x10000, "ENHANCED"),
 ];
 
 pub const FLASH_FLAGS: FlagTable = &[
     flag(0x01, "FIRED"),
-    crate::value::field(0x06, 0x04, "RETURN_NOT_DETECTED"),
-    crate::value::field(0x06, 0x06, "RETURN_DETECTED"),
-    crate::value::field(0x18, 0x08, "MODE_ON"),
-    crate::value::field(0x18, 0x10, "MODE_OFF"),
-    crate::value::field(0x18, 0x18, "MODE_AUTO"),
+    field(0x06, 0x04, "RETURN_NOT_DETECTED"),
+    field(0x06, 0x06, "RETURN_DETECTED"),
+    field(0x18, 0x08, "MODE_ON"),
+    field(0x18, 0x10, "MODE_OFF"),
+    field(0x18, 0x18, "MODE_AUTO"),
     flag(0x20, "NO_FLASH_FUNCTION"),
     flag(0x40, "RED_EYE_REDUCTION"),
 ];
 
-/// The value table of a tag in the main/EXIF namespace, if it is an
+pub const T4_FLAGS: FlagTable = &[
+    flag(0x1, "2D_CODING"),
+    flag(0x2, "UNCOMPRESSED"),
+    flag(0x4, "FILL_BITS"),
+];
+
+pub const T6_FLAGS: FlagTable = &[flag(0x2, "UNCOMPRESSED")];
+
+/// The value table of a tag in the main/Exif namespace, if it is an
 /// enumeration.
 pub fn enumeration(tag: u16) -> Option<EnumTable> {
     Some(match tag {
+        0x00ff => RAW_FILE_TYPE_SUBFILE,
         0x0103 => COMPRESSION,
         0x0106 => PHOTOMETRIC,
+        0x0107 => THRESHHOLDING,
         0x010a => FILL_ORDER,
         0x0112 => ORIENTATION,
         0x011c => PLANAR,
-        0x0128 | 0xa210 => RESOLUTION_UNIT,
+        0x0122 => GRAY_RESPONSE_UNIT,
+        0x0128 | 0xa210 | 0x9210 => RESOLUTION_UNIT,
         0x013d => PREDICTOR,
+        0x014c => INK_SET,
         0x0152 => EXTRA_SAMPLES,
         0x0153 => SAMPLE_FORMAT,
+        0x0200 => JPEG_PROC,
         0x0213 => YCBCR_POSITIONING,
         0x8822 => EXPOSURE_PROGRAM,
+        0x8830 => SENSITIVITY_TYPE,
         0x9207 => METERING_MODE,
-        0x9208 => LIGHT_SOURCE,
+        0x9208 | 0xc65a | 0xc65b | 0xcd31 => LIGHT_SOURCE,
+        0x9217 => SENSING_METHOD_EP,
         0xa001 => COLOR_SPACE,
         0xa217 => SENSING_METHOD,
         0xa401 => CUSTOM_RENDERED,
@@ -465,7 +1138,58 @@ pub fn enumeration(tag: u16) -> Option<EnumTable> {
         0xa403 => WHITE_BALANCE,
         0xa406 => SCENE_CAPTURE,
         0xa407 => GAIN_CONTROL,
-        0xa408..=0xa40a => LEVEL,
+        0xa408 => LEVEL,
+        0xa409 => SATURATION,
+        0xa40a => SHARPNESS,
+        0xa40c => SUBJECT_DISTANCE_RANGE,
+        0xa460 => COMPOSITE_IMAGE,
+        0xc617 => CFA_LAYOUT,
+        0xc635 => MAKER_NOTE_SAFETY,
+        0xc6bf => COLORIMETRIC_REFERENCE,
+        0xc6fd => PROFILE_EMBED_POLICY,
+        0xc71a => PREVIEW_COLOR_SPACE,
+        0xc7a6 => DEFAULT_BLACK_RENDER,
         _ => return None,
     })
 }
+
+/// SubfileType (0xff), the old form of NewSubfileType.
+const RAW_FILE_TYPE_SUBFILE: EnumTable = &[
+    (1, "Full-resolution image"),
+    (2, "Reduced-resolution image"),
+    (3, "Single page of a multi-page image"),
+];
+
+pub const GPS_ALTITUDE_REF: EnumTable = &[
+    (0, "Above sea level"),
+    (1, "Below sea level"),
+    (2, "Positive ellipsoidal height"),
+    (3, "Negative ellipsoidal height"),
+];
+
+pub const GPS_DIFFERENTIAL: EnumTable = &[(0, "No correction"), (1, "Differential corrected")];
+
+/// Exif FileSource (0xa300).
+pub const FILE_SOURCE: EnumTable = &[
+    (0, "Others"),
+    (1, "Film scanner"),
+    (2, "Reflection print scanner"),
+    (3, "Digital still camera"),
+];
+
+/// Exif SceneType (0xa301).
+pub const SCENE_TYPE: EnumTable = &[(1, "Directly photographed")];
+
+/// MPF image types (MPEntry attribute bits 0-23).
+pub const MP_TYPES: EnumTable = &[
+    (0x030000, "Baseline primary image"),
+    (0x010001, "Large thumbnail (VGA)"),
+    (0x010002, "Large thumbnail (Full HD)"),
+    (0x010003, "Large thumbnail (4K)"),
+    (0x010004, "Large thumbnail (8K)"),
+    (0x010005, "Large thumbnail (16K)"),
+    (0x020001, "Multi-frame panorama"),
+    (0x020002, "Multi-frame disparity"),
+    (0x020003, "Multi-frame multi-angle"),
+    (0x000000, "Undefined"),
+];

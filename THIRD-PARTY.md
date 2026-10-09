@@ -353,5 +353,7 @@ closely enough to credit:
   chainbreaker (GPL-2.0-or-later).
 - SAS and SPSS decompression (`src/codec/statdata.rs`): ReadStat (MIT) and
   pandas' SAS reader (BSD-3-Clause).
+- Camera maker-note tag names (`src/formats/image/tiff/maker.rs`): Phil
+  Harvey's ExifTool tag documentation (Perl's licence: GPL or Artistic).
 - Installer layouts (`src/formats/archive/installer/`): NSIS (zlib),
   innoextract (zlib), unshield (MIT) and 7-Zip's NSIS handler (LGPL-2.1+).

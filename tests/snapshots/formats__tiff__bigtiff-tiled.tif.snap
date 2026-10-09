@@ -1,15 +1,15 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ bigtiff-tiled.tif — BigTIFF LE, 16×16, 8-bit BlackIsZero, Deflate (Adobe)  [0x0+0x13c]
+▾ bigtiff-tiled.tif — BigTIFF LE, 16×16, 8-bit BlackIsZero, Deflate (Adobe), 16×16 tiles  [0x0+0x13c]
   ▾ Header  [0x0+0x10]
       Byte order: "II" — little-endian  [0x0+0x2]
       Version: BigTIFF (0x2b)  [0x2+0x2]
       Offset size: 8  [0x4+0x2]
       Reserved: 0  [0x6+0x2]
       First IFD offset: 0x10  [0x8+0x8]
-  ▾ IFD0 — 16×16, 8-bit BlackIsZero, Deflate (Adobe)  [0x10+0xec]
+  ▾ IFD0 — 16×16, 8-bit BlackIsZero, Deflate (Adobe), 16×16 tiles  [0x10+0xec]
       Entry count: 11  [0x10+0x8]
     ▾ NewSubfileType: 0x0 []  [0x18+0x14]
         Tag: 0xfe — NewSubfileType  [0x18+0x2]
@@ -67,5 +67,6 @@ expression: "common::explore(&name, &data)"
         Count: 1  [0xe4+0x8]
         Value: 01 00 00 00 00 00 00 00  |........|  [0xec+0x8]
       Next IFD offset: 0x0  [0xf4+0x8]
-    ▾ Tiles — 1 tiles
-        [0] — 0x40 bytes at 0xfc  [0xfc+0x40]
+    ▾ Tiles — 1 tile
+      ▾ Tile 0 — 64 bytes at 0xfc  [0xfc+0x40]
+          ! malformed: not a zlib stream [0xfc+0x40]

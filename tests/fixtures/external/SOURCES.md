@@ -162,6 +162,9 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `pdf/encrypted-empty-rc4-40.pdf` | pypdf | `/Producer (pypdf)`; empty user password |
 | `pdf/encrypted-password-aes-256.pdf` | pypdf | `/Producer (pypdf)`; user password `fillyfoal` |
 | `pdf/encrypted-password-rc4-128.pdf` | pypdf | `/Producer (pypdf)`; user password `fillyfoal` |
+| `tiff/exif-piexif.tif` | piexif 1.1.3 (thumbnail by Pillow 12.3) | reproduced byte-for-byte: `uv run --with pillow==12.3.0 --with piexif==1.1.3 python tests/data/tiff/exif_piexif.py tests/fixtures/external/tiff/exif-piexif.tif`; the Exif block of a JPEG APP1 segment without its `Exif\0\0` prefix; tag values are ours |
+| `tiff/geotiff-bigtiff.tif` | tifffile 2026.9.20 (numpy 2.5.3; ICC profile by Pillow 12.3's LittleCMS) | `uv run --with tifffile==2026.9.20 --with numpy==2.5.3 --with pillow==12.3.0 python tests/data/tiff/geotiff_tifffile.py tests/fixtures/external/tiff/geotiff-bigtiff.tif` reproduces it except for the embedded profile's creation time; the GeoTIFF key values are ours |
+| `icc/lcms-srgb.icc` | LittleCMS 2 via Pillow 12.3 (`ImageCms.createProfile("sRGB")`) | `uv run --with pillow==12.3.0 python -c "from PIL import ImageCms; open('lcms-srgb.icc','wb').write(ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes())"` reproduces it except for the creation time in the header |
 
 ## Binary value encodings
 

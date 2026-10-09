@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tiny.mrw — Minolta raw, 8×6, 12-bit  [0x0+0xd0]
     Magic: 00 4d 52 4d  |.MRM|  [0x0+0x4]
@@ -17,7 +17,7 @@ expression: "common::explore(&name, &data)"
       Unknown: 00 00 00 00 00  |.....|  [0x23+0x5]
       Bayer pattern: 0x1  [0x28+0x2]
     White balance gains (WBG) — 12 bytes  [0x2a+0x14]
-  ▾ TIFF metadata (TTW) — TIFF BE, Minolta Co., Ltd. DiMAGE T1  [0x46+0x42]
+  ▾ TIFF metadata (TTW) — Exif: Minolta Co., Ltd. DiMAGE T1  [0x46+0x42]
     ▾ Header  [0x46+0x8]
         Byte order: "MM" — big-endian  [0x46+0x2]
         Version: TIFF (0x2a)  [0x48+0x2]

@@ -1583,7 +1583,7 @@ fn xmp(input: Input, span: Span) -> Node {
     embedded_as(
         "XMP packet",
         input.nested(span),
-        &crate::formats::publishing::dtp::XMP,
+        &crate::formats::image::xmp::FORMAT,
     )
 }
 

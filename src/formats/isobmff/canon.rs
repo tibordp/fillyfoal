@@ -116,7 +116,13 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
                 b"CMT3" => "Canon makernote (TIFF)",
                 _ => "GPS IFD (TIFF)",
             };
-            cx.emit(embedded(name, st.input.nested(body)));
+            // CMT3/CMT4 are maker-note and GPS IFDs: tiff names their tags.
+            cx.emit(crate::formats::image::tiff::cr3_metadata(
+                name,
+                st.input,
+                body,
+                st.header.kind,
+            ));
         }
         b"THMB" | b"PRVW" => {
             let head = cx.read_avail(body.sub(0, 32)).await?;

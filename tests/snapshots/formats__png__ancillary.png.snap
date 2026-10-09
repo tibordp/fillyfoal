@@ -124,7 +124,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Keyword: "Raw profile type exif"  [0x160+0x16]
       Compression method: deflate (0x0)  [0x176+0x1]
       Text: "\nexif\n      64\n4578696600004d4d002a000000080002010f00020000000a00000026011000020000000a\n000000300000000066696c6c79666f616c0073796e74686574696300\n"  [0x177+0x5b]
-    ▾ Exif — TIFF BE, fillyfoal synthetic  [#2:0x6+0x3a]
+    ▾ Exif — Exif: fillyfoal synthetic  [#2:0x6+0x3a]
       ▾ Header  [#2:0x6+0x8]
           Byte order: "MM" — big-endian  [#2:0x6+0x2]
           Version: TIFF (0x2a)  [#2:0x8+0x2]

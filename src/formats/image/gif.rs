@@ -569,7 +569,7 @@ async fn extension(cx: Cx, (input, span, label): (Input, Span, u8)) -> Result<()
                         embedded_as(
                             "XMP packet",
                             input.nested(packet),
-                            &crate::formats::publishing::dtp::XMP,
+                            &crate::formats::image::xmp::FORMAT,
                         )
                         .summary(format!("{} of XML, stored raw", human_size(packet.len))),
                     );
