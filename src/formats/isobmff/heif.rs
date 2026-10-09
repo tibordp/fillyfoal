@@ -8,7 +8,10 @@ use crate::bytes::{to_u64, u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
-use crate::formats::util::vidutil::{fourcc, hex, uint};
+use crate::fields::struct_node;
+use crate::formats::util::vidutil::{
+    H264_NAL_TYPES, HEVC_NAL_TYPES, fourcc, hex, lookup_or, plural, uint,
+};
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -47,15 +50,15 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
             })
             .await?;
             let rest = body.tail(4u64.saturating_add(width));
-            children(cx, st.input, rest, ctx.child_of(*b"iinf", rest)).await?;
+            children(cx, st.input, rest, ctx.child(*b"iinf", rest)).await?;
         }
         b"infe" => emit_fields(cx, body, infe).await?,
         b"iloc" => iloc(cx, st).await?,
-        b"ipma" => ipma(cx, body).await?,
+        b"ipma" => ipma(cx, body, ctx.siblings).await?,
         b"iref" => {
             emit_fields(cx, body.sub(0, 4), |f| full_box(f).map(|_| ())).await?;
             let rest = body.tail(4);
-            children(cx, st.input, rest, ctx.child_of(*b"iref", rest)).await?;
+            children(cx, st.input, rest, ctx.child(*b"iref", rest)).await?;
         }
         _ if &ctx.parent == b"iref" => {
             // The iref version decides the width of item IDs; it sits just
@@ -113,7 +116,8 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
         b"imir" => {
             emit_fields(cx, body, |f| {
                 f.u8("Axis")
-                    .with(|&a, n| n.summary(if a & 1 == 0 { "vertical" } else { "horizontal" }))
+                    .with(|&a, n| n.summary(mirror_name(a)))
+                    .desc("ISO/IEC 23008-12:2022: bit 0; 0 exchanges top and bottom, 1 left and right")
                     .emit()?;
                 Ok(())
             })
@@ -122,7 +126,12 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
         b"auxC" => {
             emit_fields(cx, body, |f| {
                 full_box(f)?;
-                f.cstr("Auxiliary type").emit()?;
+                f.cstr("Auxiliary type")
+                    .with(|t, n| match aux_name(t) {
+                        Some(name) => n.summary(name),
+                        None => n,
+                    })
+                    .emit()?;
                 let rest = f.remaining();
                 if rest > 0 {
                     f.bytes("Subtype", rest).emit()?;
@@ -174,6 +183,48 @@ pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
     Ok(true)
 }
 
+fn mirror_name(axis: u8) -> &'static str {
+    if axis & 1 == 0 {
+        "top and bottom exchanged (vertical flip)"
+    } else {
+        "left and right exchanged (horizontal flip)"
+    }
+}
+
+/// Well-known auxiliary image types.
+fn aux_name(urn: &str) -> Option<&'static str> {
+    Some(match urn {
+        "urn:mpeg:mpegB:cicp:systems:auxiliary:alpha" | "urn:mpeg:hevc:2015:auxid:1" => {
+            "alpha plane"
+        }
+        "urn:mpeg:mpegB:cicp:systems:auxiliary:depth" | "urn:mpeg:hevc:2015:auxid:2" => "depth map",
+        "urn:com:apple:photo:2020:aux:hdrgainmap" => "Apple HDR gain map",
+        "urn:com:apple:photo:2018:aux:portraiteffectsmatte" => "Apple portrait effects matte",
+        "urn:com:apple:photo:2019:aux:semanticskinmatte" => "Apple skin matte",
+        "urn:com:apple:photo:2019:aux:semantichairmatte" => "Apple hair matte",
+        "urn:com:apple:photo:2019:aux:semanticteethmatte" => "Apple teeth matte",
+        "urn:com:apple:photo:2020:aux:semanticskymatte" => "Apple sky matte",
+        _ => return None,
+    })
+}
+
+/// Kinds of item reference.
+fn reference_name(kind: &[u8]) -> Option<&'static str> {
+    Some(match kind {
+        b"dimg" => "derived from",
+        b"thmb" => "thumbnail of",
+        b"auxl" => "auxiliary image for",
+        b"cdsc" => "describes",
+        b"base" => "pre-derived from",
+        b"prem" => "premultiplied by",
+        b"exbl" => "scalability layer of",
+        b"iloc" => "data located by",
+        b"font" => "font for",
+        b"tbas" => "tile base",
+        _ => return None,
+    })
+}
+
 fn item_id(f: &mut Fields<'_>, narrow: bool, name: &'static str) -> Result<u32> {
     if narrow {
         f.u16(name).emit().map(u32::from)
@@ -182,8 +233,10 @@ fn item_id(f: &mut Fields<'_>, narrow: bool, name: &'static str) -> Result<u32> 
     }
 }
 
+const INFE_FLAGS: crate::value::FlagTable = &[crate::value::flag(0x1, "HIDDEN")];
+
 fn infe(f: &mut Fields<'_>) -> Result<()> {
-    let (v, _) = full_box(f)?;
+    let (v, _) = super::full_box_flags(f, INFE_FLAGS)?;
     if v < 2 {
         f.u16("Item ID").emit()?;
         f.u16("Protection index").emit()?;
@@ -220,6 +273,8 @@ fn infe(f: &mut Fields<'_>) -> Result<()> {
 fn item_type_name(kind: &[u8]) -> Option<&'static str> {
     Some(match kind {
         b"hvc1" => "HEVC image",
+        b"vvc1" => "VVC image",
+        b"avc3" => "H.264 image",
         b"av01" => "AV1 image",
         b"avc1" => "H.264 image",
         b"jpeg" => "JPEG image",
@@ -479,6 +534,7 @@ async fn item_node(cx: Cx, (s, item, kind): (Iloc, ItemLoc, Option<[u8; 4]>)) ->
     }
     if let [data] = spans.as_slice() {
         let data = *data;
+        let size = format!("{} bytes", data.len);
         let node = match kind.as_ref() {
             Some(b"Exif") => {
                 // A 4-byte offset to the TIFF header precedes the payload.
@@ -488,25 +544,180 @@ async fn item_node(cx: Cx, (s, item, kind): (Iloc, ItemLoc, Option<[u8; 4]>)) ->
                     "Exif",
                     s.input.nested(data.tail(4u64.saturating_add(skip.into()))),
                 )
+                .summary(size)
             }
             Some(b"mime") | Some(b"jpeg") | Some(b"j2k1") | Some(b"uri ") => {
-                embedded("Data", s.input.nested(data))
+                embedded("Data", s.input.nested(data)).summary(size)
             }
-            _ => Node::new("Data").span(data),
+            Some(b"grid") => {
+                let d = cx.read_avail(data.sub(0, 12)).await?;
+                let mut node = struct_node("Image grid", data, BE, (), grid_layout);
+                if let Some(g) = grid_summary(&d) {
+                    node = node.summary(g);
+                }
+                node
+            }
+            Some(b"iovl") => {
+                struct_node("Image overlay", data, BE, (), overlay_layout).summary(size)
+            }
+            Some(b"av01") => Node::new("AV1 data")
+                .span(data)
+                .summary(size)
+                .lazy(item_obus, data),
+            Some(b"hvc1") | Some(b"avc1") | Some(b"hvt1") => {
+                let hevc = kind.as_ref() != Some(b"avc1");
+                Node::new(if hevc { "HEVC data" } else { "H.264 data" })
+                    .span(data)
+                    .summary(size)
+                    .lazy(item_nals, (data, hevc))
+            }
+            _ => Node::new("Data").span(data).summary(size),
         };
-        cx.emit(node.summary(format!("{} bytes", data.len)));
+        cx.emit(node);
     } else if spans.len() > 1 {
         cx.emit(Node::new("Data").summary("item data is split across extents"));
     }
     Ok(())
 }
 
-async fn ipma(cx: &Cx, body: Span) -> Result<()> {
+fn grid_summary(d: &[u8]) -> Option<String> {
+    let flags = *d.get(1)?;
+    let rows = u32::from(*d.get(2)?).saturating_add(1);
+    let cols = u32::from(*d.get(3)?).saturating_add(1);
+    let (w, h) = if flags & 1 != 0 {
+        (u32_be(d, 4)?, u32_be(d, 8)?)
+    } else {
+        (u16_be(d, 4)?.into(), u16_be(d, 6)?.into())
+    };
+    Some(format!("{cols}×{rows} tiles, output {w}×{h}"))
+}
+
+fn grid_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u8("Version").emit()?;
+    let flags = f
+        .u8("Flags")
+        .hex()
+        .with(|&v, n| {
+            n.summary(if v & 1 != 0 {
+                "32-bit sizes"
+            } else {
+                "16-bit sizes"
+            })
+        })
+        .emit()?;
+    f.u8("Rows minus one")
+        .with(|&v, n| n.summary(format!("{} rows", u16::from(v).saturating_add(1))))
+        .emit()?;
+    f.u8("Columns minus one")
+        .with(|&v, n| n.summary(format!("{} columns", u16::from(v).saturating_add(1))))
+        .emit()?;
+    if flags & 1 != 0 {
+        f.u32("Output width").emit()?;
+        f.u32("Output height").emit()?;
+    } else {
+        f.u16("Output width").emit()?;
+        f.u16("Output height").emit()?;
+    }
+    Ok(())
+}
+
+fn overlay_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u8("Version").emit()?;
+    let flags = f.u8("Flags").hex().emit()?;
+    let wide = flags & 1 != 0;
+    for name in ["Fill red", "Fill green", "Fill blue", "Fill alpha"] {
+        f.u16(name).emit()?;
+    }
+    f.uword("Output width", wide).emit()?;
+    f.uword("Output height", wide).emit()?;
+    let entry = if wide { 8 } else { 4 };
+    while f.remaining() >= entry {
+        if wide {
+            f.i32("Horizontal offset").emit()?;
+            f.i32("Vertical offset").emit()?;
+        } else {
+            f.int::<i16>("Horizontal offset").emit()?;
+            f.int::<i16>("Vertical offset").emit()?;
+        }
+    }
+    Ok(())
+}
+
+async fn item_obus(cx: Cx, span: Span) -> Result<()> {
+    super::codec::obus(&cx, span).await
+}
+
+/// Lists the length-prefixed NAL units of an HEVC/H.264 image item.
+async fn item_nals(cx: Cx, (span, hevc): (Span, bool)) -> Result<()> {
+    let mut pos = 0u64;
+    let mut index = 0u64;
+    while pos.saturating_add(4) <= span.len {
+        let head = cx.read_avail(span.sub(pos, 6)).await?;
+        let len = u64::from(u32_be(&head, 0).unwrap_or(0));
+        let unit = span.sub(pos, len.saturating_add(4));
+        let (name, kind) = if hevc {
+            let t = head.get(4).map_or(0, |b| (b >> 1) & 0x3f);
+            (lookup_or(HEVC_NAL_TYPES, t.into()), t)
+        } else {
+            let t = head.get(4).map_or(0, |b| b & 0x1f);
+            (lookup_or(H264_NAL_TYPES, t.into()), t)
+        };
+        let mut node = Node::new(format!("NAL unit {}", index.saturating_add(1)))
+            .span(unit)
+            .summary(format!("{name}, {len} bytes"));
+        let parameters = if hevc {
+            matches!(kind, 32..=34 | 39 | 40)
+        } else {
+            matches!(kind, 6..=8)
+        };
+        if parameters && len > 0 && len < 0x1000 {
+            let nal = cx.read_avail(unit.tail(4)).await?;
+            let s = if hevc {
+                super::codec::hevc_nal_summary(&nal)
+            } else {
+                super::codec::avc_nal_summary(&nal)
+            };
+            if let Some(s) = s {
+                node = node.summary(format!("{s}, {len} bytes"));
+            }
+        }
+        cx.push(node).await;
+        if len == 0 {
+            break;
+        }
+        pos = pos.saturating_add(len).saturating_add(4);
+        index = index.saturating_add(1);
+    }
+    if pos < span.len {
+        cx.emit(Node::new("Trailing bytes").span(span.tail(pos)));
+    }
+    Ok(())
+}
+
+/// The boxes in `ipco` (property index − 1 → type and body).
+async fn property_kinds(cx: &Cx, iprp: Span) -> Result<Vec<([u8; 4], Span)>> {
+    let mut out = Vec::new();
+    let Some((h, span)) = find_child(cx, iprp, b"ipco").await? else {
+        return Ok(out);
+    };
+    let ipco = span.tail(h.header_len);
+    let mut pos = 0u64;
+    while let Ok(Some(h)) = super::read_header(cx, ipco, pos).await {
+        out.push((h.kind, ipco.sub(pos, h.size).tail(h.header_len)));
+        pos = pos.saturating_add(h.size);
+        if out.len() >= 4096 || h.to_end {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+async fn ipma(cx: &Cx, body: Span, iprp: Span) -> Result<()> {
+    let kinds = property_kinds(cx, iprp).await.unwrap_or_default();
     let block = cx.block(body.sub(0, 0x100000)).await?;
     let mut f = Fields::emitting(cx, &block, BE);
     let (v, flags) = full_box(&mut f)?;
     let n = f.u32("Entry count").emit()?;
-    let mut silent = Fields::new(&block, BE);
     for i in 0..n {
         if f.remaining() == 0 {
             break;
@@ -515,6 +726,7 @@ async fn ipma(cx: &Cx, body: Span) -> Result<()> {
             cx.checkpoint().await;
         }
         let start = f.pos();
+        let mut silent = Fields::new(&block, BE);
         silent.seek(start);
         let id = item_id(&mut silent, v < 1, "Item ID")?;
         let count = silent.u8("Association count").get()?;
@@ -527,16 +739,50 @@ async fn ipma(cx: &Cx, body: Span) -> Result<()> {
                 let a = silent.u8("Association").get()?;
                 (a >> 7 == 1, u16::from(a & 0x7f))
             };
-            parts.push(format!("{index}{}", if essential { "*" } else { "" }));
+            let name = usize::from(index)
+                .checked_sub(1)
+                .and_then(|i| kinds.get(i))
+                .map_or_else(|| format!("#{index}"), |(k, _)| fourcc(k));
+            parts.push(format!("{name}{}", if essential { "*" } else { "" }));
         }
         let len = silent.pos().saturating_sub(start);
-        f.skip(len);
         let span = body.sub(start, len);
-        cx.emit(
-            Node::new(format!("Item {id}"))
-                .span(span)
-                .summary(format!("properties {}", parts.join(", ")))
-                .desc("Property indices are 1-based positions in ipco; * marks essential"),
+        f.node(
+            struct_node(
+                format!("Item {id}"),
+                span,
+                BE,
+                (v < 1, flags & 1 != 0),
+                association_layout,
+            )
+            .summary(parts.join(", "))
+            .desc("Properties by type, in ipco order; * marks essential ones"),
+        );
+        f.skip(len);
+    }
+    Ok(())
+}
+
+fn association_layout(f: &mut Fields<'_>, &(narrow, wide): &(bool, bool)) -> Result<()> {
+    item_id(f, narrow, "Item ID")?;
+    let n = f.u8("Association count").emit()?;
+    for _ in 0..n {
+        let span = f.peek_span(if wide { 2 } else { 1 });
+        let (essential, index) = if wide {
+            let a = f.u16("Association").get()?;
+            (a >> 15 == 1, a & 0x7fff)
+        } else {
+            let a = f.u8("Association").get()?;
+            (a >> 7 == 1, u16::from(a & 0x7f))
+        };
+        f.node(
+            uint(
+                "Property index",
+                span,
+                index.into(),
+                if wide { 15 } else { 7 },
+            )
+            .summary(if essential { "essential" } else { "optional" }),
         );
     }
     Ok(())
@@ -545,9 +791,46 @@ async fn ipma(cx: &Cx, body: Span) -> Result<()> {
 /// Summaries for the box list.
 pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
     let kind = &st.header.kind;
+    if &st.ctx.parent == b"iref" {
+        let at = Span::new(
+            st.ctx.siblings.source,
+            st.ctx.siblings.offset.saturating_sub(4),
+            1,
+        );
+        let narrow = cx.read_avail(at).await.ok()?.first().copied().unwrap_or(0) == 0;
+        let d = small(cx, st.body().sub(0, 512)).await.ok()?;
+        let w = if narrow { 2usize } else { 4 };
+        let id = |at: usize| {
+            if narrow {
+                u16_be(&d, at).map(u32::from)
+            } else {
+                u32_be(&d, at)
+            }
+        };
+        let from = id(0)?;
+        let n = u16_be(&d, w)?;
+        let to: Vec<String> = (0..usize::from(n).min(64))
+            .filter_map(|i| id(w.saturating_add(2).saturating_add(i.saturating_mul(w))))
+            .map(|v| v.to_string())
+            .collect();
+        let what = reference_name(kind).unwrap_or("references");
+        return Some(format!("item {from} {what} {}", to.join(", ")));
+    }
     if !matches!(
         kind,
-        b"pitm" | b"iinf" | b"infe" | b"iloc" | b"ipma" | b"ispe" | b"irot" | b"pixi" | b"auxC"
+        b"pitm"
+            | b"iinf"
+            | b"infe"
+            | b"iloc"
+            | b"ipma"
+            | b"ispe"
+            | b"irot"
+            | b"imir"
+            | b"pixi"
+            | b"auxC"
+            | b"rloc"
+            | b"lsel"
+            | b"a1op"
     ) {
         return None;
     }
@@ -561,75 +844,108 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
         }
     };
     match kind {
-        b"pitm" => Some(format!("item {}", id(4, v == 0)?)),
-        b"iinf" => Some(crate::formats::util::vidutil::plural(
-            id(4, v == 0)?,
-            "item",
-        )),
+        b"pitm" => Some(format!("primary item {}", id(4, v == 0)?)),
+        b"iinf" => Some(plural(id(4, v == 0)?, "item")),
         b"infe" if v >= 2 => {
             let item = id(4, v == 2)?;
             let at: usize = if v == 2 { 8 } else { 10 };
             let t = d.get(at..at.saturating_add(4))?;
             let name = crate::text::until_nul(d.get(at.saturating_add(4)..)?);
-            Some(if name.is_empty() {
-                format!("item {item}: {}", fourcc(t))
-            } else {
-                format!("item {item}: {} \"{name}\"", fourcc(t))
+            let mut s = format!("item {item}: {}", fourcc(t));
+            if let Some(n) = item_type_name(t) {
+                s = format!("{s} ({n})");
+            }
+            if !name.is_empty() {
+                s = format!("{s} \"{name}\"");
+            }
+            if u32_be(&d, 0).is_some_and(|f| f & 1 != 0) {
+                s.push_str(", hidden");
+            }
+            Some(s)
+        }
+        b"iloc" => Some(plural(id(6, v < 2)?, "item")),
+        b"ipma" => Some(plural(u32_be(&d, 4)?, "item")),
+        b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
+        b"irot" => Some(if v & 3 == 0 {
+            "no rotation".to_owned()
+        } else {
+            format!("{}° anti-clockwise", u16::from(v & 3).saturating_mul(90))
+        }),
+        b"imir" => Some(mirror_name(v).to_owned()),
+        b"pixi" => {
+            let n = usize::from(*d.get(4)?);
+            let bits: Vec<String> = d
+                .get(5..5usize.saturating_add(n))?
+                .iter()
+                .map(u8::to_string)
+                .collect();
+            Some(format!(
+                "{n} channel{}, {} bits",
+                if n == 1 { "" } else { "s" },
+                bits.join("/")
+            ))
+        }
+        b"auxC" => {
+            let urn = crate::text::until_nul(d.get(4..)?);
+            Some(match aux_name(&urn) {
+                Some(n) => n.to_owned(),
+                None => urn,
             })
         }
-        b"iloc" => Some(crate::formats::util::vidutil::plural(id(6, v < 2)?, "item")),
-        b"ipma" => Some(crate::formats::util::vidutil::plural(
-            u32_be(&d, 4)?,
-            "item",
-        )),
-        b"ispe" => Some(format!("{}×{}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
-        b"irot" => Some(format!("{}°", u16::from(v & 3).saturating_mul(90))),
-        b"pixi" => Some(format!("{} channels, {} bits", d.get(4)?, d.get(5)?)),
-        b"auxC" => Some(crate::text::until_nul(d.get(4..)?)),
+        b"rloc" => Some(format!("at {}, {}", u32_be(&d, 4)?, u32_be(&d, 8)?)),
+        b"lsel" => Some(format!("layer {}", u16_be(&d, 0)?)),
+        b"a1op" => Some(format!("operating point {v}")),
         _ => None,
     }
 }
 
-/// What the file node says about a HEIF/AVIF `meta` box: item count and
-/// the primary image's type and size.
-pub async fn summary(cx: &Cx, meta: Span) -> Result<Option<String>> {
-    let types = item_types(cx, meta).await?;
-    let primary = match find_child(cx, meta, b"pitm").await? {
-        Some((h, span)) => {
-            let d = cx.read_avail(span.tail(h.header_len).sub(0, 8)).await?;
-            if d.first().copied().unwrap_or(0) == 0 {
-                u16_be(&d, 4).map(u32::from)
-            } else {
-                u32_be(&d, 4)
-            }
-        }
-        None => None,
+/// Item references in `iref`: (type, from, to).
+async fn references(cx: &Cx, meta: Span) -> Result<Vec<([u8; 4], u32, Vec<u32>)>> {
+    let mut out = Vec::new();
+    let Some((h, span)) = find_child(cx, meta, b"iref").await? else {
+        return Ok(out);
     };
-    let mut parts = vec![crate::formats::util::vidutil::plural(
-        crate::bytes::to_u64(types.len()),
-        "item",
-    )];
-    if let Some(p) = primary {
-        let kind = types
-            .iter()
-            .find(|(id, _)| *id == p)
-            .map_or_else(|| "?".to_owned(), |(_, t)| fourcc(t));
-        let mut s = format!("primary {kind}");
-        if let Some((w, h)) = primary_size(cx, meta, p).await? {
-            s = format!("{s} {w}×{h}");
+    let d = small(cx, span.tail(h.header_len)).await?;
+    let narrow = d.first().copied().unwrap_or(0) == 0;
+    let w = if narrow { 2usize } else { 4 };
+    let id = |at: usize| {
+        if narrow {
+            u16_be(&d, at).map(u32::from)
+        } else {
+            u32_be(&d, at)
         }
-        parts.push(s);
+    };
+    let mut at = 4usize;
+    while out.len() < 4096 {
+        let Some(size) = u32_be(&d, at).and_then(|s| usize::try_from(s).ok()) else {
+            break;
+        };
+        if size < 8 {
+            break;
+        }
+        let Some(kind) = crate::bytes::array::<4>(&d, at.saturating_add(4)) else {
+            break;
+        };
+        let body = at.saturating_add(8);
+        let Some(from) = id(body) else { break };
+        let n = u16_be(&d, body.saturating_add(w)).unwrap_or(0);
+        let first = body.saturating_add(w).saturating_add(2);
+        let to = (0..usize::from(n))
+            .map_while(|i| id(first.saturating_add(i.saturating_mul(w))))
+            .collect();
+        out.push((kind, from, to));
+        at = at.saturating_add(size);
     }
-    Ok(Some(parts.join(", ")))
+    Ok(out)
 }
 
-/// The `ispe` property associated with `item`, via `ipma` and `ipco`.
-async fn primary_size(cx: &Cx, meta: Span, item: u32) -> Result<Option<(u32, u32)>> {
+/// The properties associated with `item`: (type, body), via ipma and ipco.
+async fn item_properties(cx: &Cx, meta: Span, item: u32) -> Result<Vec<([u8; 4], Span)>> {
     let Some(iprp) = super::find_path(cx, meta, &[b"iprp"]).await? else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let Some((h, span)) = find_child(cx, iprp, b"ipma").await? else {
-        return Ok(None);
+        return Ok(Vec::new());
     };
     let d = small(cx, span.tail(h.header_len)).await?;
     let v = d.first().copied().unwrap_or(0);
@@ -664,24 +980,128 @@ async fn primary_size(cx: &Cx, meta: Span, item: u32) -> Result<Option<(u32, u32
             break;
         }
     }
-    let Some(ipco) = super::find_path(cx, iprp, &[b"ipco"]).await? else {
-        return Ok(None);
-    };
-    // Walk ipco children, matching 1-based indices.
-    let mut pos = 0u64;
-    let mut index = 1u16;
-    while let Some(h) = super::read_header(cx, ipco, pos).await? {
-        if &h.kind == b"ispe" && indices.contains(&index) {
-            let d = cx
-                .read_avail(ipco.sub(pos.saturating_add(h.header_len), 12))
-                .await?;
-            return Ok(u32_be(&d, 4).zip(u32_be(&d, 8)));
+    let kinds = property_kinds(cx, iprp).await?;
+    Ok(indices
+        .iter()
+        .filter_map(|&i| kinds.get(usize::from(i).checked_sub(1)?).copied())
+        .collect())
+}
+
+/// The name of an image item type for summaries.
+fn codec_of(kind: &[u8; 4]) -> String {
+    match kind {
+        b"hvc1" => "HEVC".to_owned(),
+        b"av01" => "AV1".to_owned(),
+        b"avc1" | b"avc3" => "H.264".to_owned(),
+        b"jpeg" => "JPEG".to_owned(),
+        b"j2k1" => "JPEG 2000".to_owned(),
+        b"vvc1" => "VVC".to_owned(),
+        b"unci" => "uncompressed".to_owned(),
+        _ => fourcc(kind),
+    }
+}
+
+/// What the file node says about a HEIF/AVIF `meta` box: the primary
+/// image's size, codec and layout, what is attached to it, the item count.
+pub async fn summary(cx: &Cx, meta: Span) -> Result<Option<String>> {
+    let types = item_types(cx, meta).await?;
+    let type_of = |id: u32| types.iter().find(|(i, _)| *i == id).map(|(_, t)| *t);
+    let primary = match find_child(cx, meta, b"pitm").await? {
+        Some((h, span)) => {
+            let d = cx.read_avail(span.tail(h.header_len).sub(0, 8)).await?;
+            if d.first().copied().unwrap_or(0) == 0 {
+                u16_be(&d, 4).map(u32::from)
+            } else {
+                u32_be(&d, 4)
+            }
         }
-        pos = pos.saturating_add(h.size);
-        index = index.saturating_add(1);
-        if index > 1024 {
-            break;
+        None => None,
+    };
+    let refs = references(cx, meta).await?;
+    let mut parts = Vec::new();
+    if let Some(p) = primary {
+        let props = item_properties(cx, meta, p).await?;
+        let mut size = None;
+        for (k, body) in &props {
+            if k == b"ispe" {
+                let d = cx.read_avail(body.sub(0, 12)).await?;
+                size = u32_be(&d, 4).zip(u32_be(&d, 8));
+            }
+        }
+        let codec = match type_of(p) {
+            Some(k) if &k == b"grid" || &k == b"iovl" || &k == b"iden" => {
+                let tiles: Vec<u32> = refs
+                    .iter()
+                    .filter(|(t, from, _)| t == b"dimg" && *from == p)
+                    .flat_map(|(_, _, to)| to.iter().copied())
+                    .collect();
+                let base = tiles
+                    .first()
+                    .and_then(|&t| type_of(t))
+                    .map_or_else(|| "?".to_owned(), |t| codec_of(&t));
+                let n = crate::bytes::to_u64(tiles.len());
+                match &k {
+                    b"grid" => format!("{base} grid of {}", plural(n, "tile")),
+                    b"iovl" => format!("{base} overlay of {}", plural(n, "image")),
+                    _ => format!("{base} (derived)"),
+                }
+            }
+            Some(k) => codec_of(&k),
+            None => "?".to_owned(),
+        };
+        parts.push(match size {
+            Some((w, h)) => format!("{w}×{h} {codec}"),
+            None => codec,
+        });
+        for (k, body) in &props {
+            let d = cx.read_avail(body.sub(0, 1)).await?;
+            let v = d.first().copied().unwrap_or(0);
+            match k {
+                b"irot" if v & 3 != 0 => parts.push(format!(
+                    "rotated {}° anti-clockwise",
+                    u16::from(v & 3).saturating_mul(90)
+                )),
+                b"imir" => parts.push(if v & 1 == 0 {
+                    "flipped vertically".to_owned()
+                } else {
+                    "flipped horizontally".to_owned()
+                }),
+                _ => {}
+            }
+        }
+        // Attached items: auxiliary images, metadata, thumbnails.
+        for (t, from, to) in &refs {
+            if !to.contains(&p) {
+                continue;
+            }
+            let label = match t {
+                b"auxl" => {
+                    let mut name = "auxiliary image".to_owned();
+                    for (k, body) in item_properties(cx, meta, *from).await? {
+                        if &k == b"auxC" {
+                            let d = small(cx, body.sub(0, 256)).await?;
+                            let urn = crate::text::until_nul(d.get(4..).unwrap_or_default());
+                            if let Some(n) = aux_name(&urn) {
+                                name = n.to_owned();
+                            }
+                        }
+                    }
+                    name
+                }
+                b"thmb" => "thumbnail".to_owned(),
+                b"cdsc" => match type_of(*from) {
+                    Some(k) if &k == b"Exif" => "Exif".to_owned(),
+                    Some(k) if &k == b"mime" => "XMP".to_owned(),
+                    Some(k) => fourcc(&k),
+                    None => continue,
+                },
+                _ => continue,
+            };
+            if !parts.contains(&label) {
+                parts.push(label);
+            }
         }
     }
-    Ok(None)
+    parts.push(plural(crate::bytes::to_u64(types.len()), "item"));
+    Ok(Some(parts.join(", ")))
 }

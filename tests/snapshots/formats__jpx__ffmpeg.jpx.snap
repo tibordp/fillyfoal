@@ -1,19 +1,19 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ ffmpeg.jpx — JPEG 2000 extended (jpx), 16×16, 3 components  [0x0+0x495]
   ▾ jP    [0x0+0xc]
       Size: 12  [0x0+0x4]
       Type: "jP  "  [0x4+0x4]
       Signature: 0xd0a870a  [0x8+0x4]
-  ▾ ftyp — jpx , compatible: jpx  jp2  jpxb  [0xc+0x1c]
+  ▾ ftyp — jpx  (JPEG 2000 extended), compatible: jpx  jp2  jpxb  [0xc+0x1c]
       Size: 28  [0xc+0x4]
       Type: "ftyp"  [0x10+0x4]
-      Major brand: "jpx "  [0x14+0x4]
+      Major brand: "jpx " — JPEG 2000 extended  [0x14+0x4]
       Minor version: 0x0  [0x18+0x4]
-      Compatible brand: "jpx "  [0x1c+0x4]
-      Compatible brand: "jp2 "  [0x20+0x4]
+      Compatible brand: "jpx " — JPEG 2000 extended  [0x1c+0x4]
+      Compatible brand: "jp2 " — JPEG 2000  [0x20+0x4]
       Compatible brand: "jpxb"  [0x24+0x4]
   ▾ jp2h  [0x28+0x2d]
       Size: 45  [0x28+0x4]

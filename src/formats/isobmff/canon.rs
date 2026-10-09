@@ -66,14 +66,14 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
     let ctx = st.ctx;
     if let Some(u) = st.header.uuid {
         match u {
-            CANON => children(cx, st.input, body, ctx.child_of(*b"uuid", body)).await?,
+            CANON => children(cx, st.input, body, ctx.child(*b"uuid", body)).await?,
             CANON_PREVIEW => {
                 let block = cx.block(body.sub(0, 8)).await?;
                 let mut f = Fields::emitting(cx, &block, BE);
                 f.u32("Unknown").hex().emit()?;
                 f.u32("Unknown").hex().emit()?;
                 let rest = body.tail(8);
-                children(cx, st.input, rest, ctx.child_of(*b"uuid", rest)).await?;
+                children(cx, st.input, rest, ctx.child(*b"uuid", rest)).await?;
             }
             XMP | SPHERICAL => cx.emit(embedded("XML", st.input.nested(body))),
             _ => cx.emit(Node::new("Data").span(body)),
@@ -94,7 +94,7 @@ pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {
             f.u32("Unknown").emit()?;
             f.u32("Track count").emit()?;
             let rest = body.tail(12);
-            children(cx, st.input, rest, ctx.child_of(*b"CCTP", rest)).await?;
+            children(cx, st.input, rest, ctx.child(*b"CCTP", rest)).await?;
         }
         b"CCDT" => {
             let block = cx.block(body.sub(0, 16)).await?;

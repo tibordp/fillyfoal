@@ -228,6 +228,8 @@ and reproduce every file byte for byte.
 | `j2k/tiled-gray.j2k` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` comment marker in the codestream; not byte-reproduced |
 | `jp2/ffmpeg.jp2` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | commit b86c5c84 ("fixtures generated with ffmpeg"); `Lavc` marker |
 | `avif/svtav1.avif` | FFmpeg 8 with libsvtav1 | commit b86c5c84 ("fixtures generated with ffmpeg and sips") |
+| `avif/grid-alpha.avif` | avifenc 1.4.2 (aom 3.15.0) | reproduced byte-for-byte: `avifenc -q 20 --qalpha 20 -s 10 -y 420 -g 2x1 --exif exif.bin --xmp xmp.xml --irot 1 --imir 0 --pasp 1,1 --clli 1000,400 --cicp 1/13/6 tile.png tile.png`; tile.png from FFmpeg `testsrc=size=64x64,format=rgba,geq=...:a='X*4'`; exif.bin from piexif 1.1.3 (Make fillyfoal, Model Fixture, ISO 400); xmp.xml a one-element XMP packet |
+| `avif/sequence.avifs` | avifenc 1.4.2 (aom 3.15.0) | `avifenc -q 30 -s 10 --fps 10 frame1.png frame2.png frame3.png` on three 16×16 `testsrc` frames from FFmpeg; reproduced except the creation/modification times avifenc writes |
 
 ## FFmpeg: audio
 
@@ -293,10 +295,16 @@ and reproduce every file byte for byte.
 | `3g2/h263-aac.3g2` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` marker; commit b86c5c84 ("fixtures generated with ffmpeg") |
 | `3gp/h263-aac.3gp` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` marker; commit b86c5c84 |
 | `m4a/song.m4a` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavf`/`Lavc` markers; commit b86c5c84 |
+| `m4a/tags.m4a` | FFmpeg 8.1.2 (aac), then mutagen 1.48.1 | reproduced byte-for-byte: FFmpeg `sine=sample_rate=22050:duration=0.1` + an 8×8 red PNG (`color=c=red:size=8x8`, bitexact) + the chapters of mov/hevc-pcm.mov, `-c:a aac -b:a 24k -ac 1 -c:v copy -disposition:v attached_pic` with title/artist/album/album_artist/genre/date/track 3/12/disc 1/2/composer/comment/compilation/gapless_playback/media_type metadata, `-fflags +bitexact -flags:a +bitexact`; then mutagen added `----:com.apple.iTunes:REPLAYGAIN_TRACK_GAIN` = `-6.50 dB` and `tmpo` = 120 |
 | `mov/mpeg4.mov` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavf`/`Lavc` markers; commit b86c5c84 |
+| `mov/hevc-pcm.mov` | FFmpeg 8.1.2 (libx265, pcm_s16le, mov muxer) | reproduced byte-for-byte in two steps: (1) `testsrc=size=64x48:rate=30000/1001,format=yuv420p` + `sine=sample_rate=8000:duration=0.1`, `-frames:v 3 -c:v libx265 -tag:v hvc1 -c:a pcm_s16le -t 0.1` `-fflags +bitexact -flags:v +bitexact -flags:a +bitexact` → stage1.mov; (2) `-display_rotation:v:0 90 -i stage1.mov -i chapters.ffmeta -map 0:v -map 0:a -map_metadata 1 -map_chapters 1 -c copy -timecode "01:02:03;04" -metadata com.apple.quicktime.make=fillyfoal -metadata com.apple.quicktime.location.ISO6709=+46.0500+014.5000/ -movflags use_metadata_tags -fflags +bitexact`; chapters.ffmeta: title "Chaptered", chapters "Opening" 0–40 ms and "Ending" 40–80 ms |
 | `mp4/fragmented.mp4` | FFmpeg 8 with libx264 | `Lavf`/`Lavc`/x264 markers; commit b86c5c84 |
 | `mp4/h264-aac.mp4` | FFmpeg 8 with libx264 | `Lavf`/`Lavc`/x264 markers; commit b86c5c84 |
 | `mp4/hevc.mp4` | FFmpeg 8 with libx265 | `Lavf`/`Lavc`/x265 markers; commit b86c5c84 |
+| `mp4/audio-codecs.mp4` | FFmpeg 8.1.2 (libopus, ac3, flac, eac3, alac, AudioToolbox aac_at) | reproduced byte-for-byte: `sine=frequency=440:sample_rate=48000:duration=0.1` and `...:sample_rate=44100...` inputs, `-map 0 -map 0 -map 1 -map 0 -map 1 -map 1 -c:a:0 libopus -b:a:0 16k -ac:a:0 1 -c:a:1 ac3 -b:a:1 96k -ac:a:1 6 -c:a:2 flac -ac:a:2 1 -c:a:3 eac3 -b:a:3 64k -ac:a:3 2 -c:a:4 alac -ac:a:4 2 -c:a:5 aac_at -profile:a:5 28 -ac:a:5 2 -b:a:5 32k -map_metadata -1` `-fflags +bitexact -flags:v +bitexact -flags:a +bitexact` (profile 28 = HE-AACv2) |
+| `mp4/video-codecs.mp4` | FFmpeg 8.1.2 (libvpx-vp9, libsvtav1 4.1.0) | reproduced byte-for-byte: `testsrc=size=64x64:rate=25,format=yuv420p`, `-map 0 -map 0 -frames:v 2 -c:v:0 libvpx-vp9 -b:v:0 30k -c:v:1 libsvtav1 -preset:v:1 12 -crf:v:1 55 -color_primaries:v bt709 -color_trc:v bt709 -colorspace:v bt709 -color_range:v tv -map_metadata -1` `-fflags +bitexact -flags:v +bitexact -flags:a +bitexact` |
+| `mp4/subtitles.mp4` | FFmpeg 8.1.2 (mov_text, ttml) | reproduced byte-for-byte: a two-cue SRT ("Hello" 0–0.5 s, "World" 0.6–1 s) given twice, `-map 0 -map 1 -c:s:0 mov_text -c:s:1 ttml -metadata:s:s:0 language=eng -metadata:s:s:1 language=deu -fflags +bitexact` |
+| `mp4/cenc-fragmented.mp4` | FFmpeg 8.1.2 (libx264, aac, CENC encryption) | reproduced byte-for-byte: `testsrc=size=32x32:rate=10,format=yuv420p` + `sine=sample_rate=16000:duration=0.4`, `-frames:v 4 -t 0.4 -c:v libx264 -g 2 -c:a aac -b:a 16k -ac 1 -encryption_scheme cenc-aes-ctr -encryption_key 00112233445566778899aabbccddeeff -encryption_kid 0123456789abcdef0123456789abcdef -movflags frag_keyframe+empty_moov+default_base_moof+separate_moof -write_prft pts` `-fflags +bitexact -flags:v +bitexact -flags:a +bitexact` (a test key, not a secret) |
 | `avi/mjpeg-pcm.avi` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavc` marker in the MJPEG frames |
 | `flv/h263-nellymoser.flv` | FFmpeg 8 (libavformat 62.12.102, libavcodec 62.28.102) | `Lavf` encoder metadata |
 | `flv/h264-aac.flv` | FFmpeg 8 with libx264 | `Lavf`/`Lavc`/x264 markers |
@@ -315,6 +323,7 @@ and reproduce every file byte for byte.
 | Fixture | Producer | Evidence and edits |
 | --- | --- | --- |
 | `heif/sips.heic` | macOS sips (ImageIO) | commit b86c5c84 ("generated with ffmpeg and sips (HEIC)") |
+| `heif/grid-exif.heic` | macOS 26.5 sips (ImageIO) | reproduced byte-for-byte: `sips -s format heic -s formatOptions 10` on a 1100×520 blue JPEG (FFmpeg `color=c=blue:size=1100x520`) with the Exif of avif/grid-alpha.avif inserted by piexif; sips tiles it as a 3×2 grid |
 | `ktx/sips.ktx` | macOS sips (ImageIO) | ImageIO key/value data (`AlphaInfo_APPLE`) |
 | `ktx2/sips.ktx2` | macOS sips (ImageIO / libktx 4.0) | `KTXwriter: ImageIO / libktx v4.0` |
 | `astc/sips.astc` | macOS sips (ImageIO) | named for its producer like the other sips fixtures; real ASTC block data (compare the hand-made astc/tex.astc) |
