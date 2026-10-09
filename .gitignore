@@ -2,3 +2,4 @@
 /.claude
 .DS_Store
 !/tests/fixtures/**/.DS_Store
+__pycache__/
