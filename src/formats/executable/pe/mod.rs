@@ -1,14 +1,33 @@
-//! PE/COFF images: EXE, DLL, SYS, EFI.
+//! PE/COFF images: EXE, DLL, SYS, EFI (Microsoft PE/COFF specification,
+//! revision 12; `winnt.h` for the structures it leaves out).
 //!
 //! Expanding the file costs a handful of small reads: the DOS header, the NT
 //! headers and the section table, which everything else depends on (RVA
-//! translation). Directories, sections and their contents are dissected only
-//! when expanded.
+//! translation), plus the import descriptors and their lookup tables, counted
+//! for the summary. Directories, sections and their contents are dissected
+//! only when expanded:
+//!
+//! - `exports`, `imports` (also delay-load, bound imports and the IAT),
+//!   `resdir` (the resource tree; typed resource data in `resource` and
+//!   `version`), `debug`, `loadcfg` (TLS and load configuration with the
+//!   guard tables), `unwind` (exception data), `extra` (Rich header, base
+//!   relocations, certificates, plain DOS executables);
+//! - `.NET`: `clr` (CLR header and metadata root), `metadata` (tables and
+//!   heaps), `signature` (blobs), `managed` (manifest resources).
 
+mod clr;
+mod debug;
+mod exports;
 mod extra;
+mod imports;
+mod loadcfg;
 mod managed;
+mod metadata;
+mod resdir;
 pub(crate) mod resource;
+mod signature;
 pub(crate) mod tables;
+mod unwind;
 pub(crate) mod version;
 
 pub use extra::DOS_EXE;
@@ -17,7 +36,7 @@ use std::sync::Arc;
 
 use tables::*;
 
-use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
+use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
@@ -25,18 +44,18 @@ use crate::formats::util::binutil::RangeIndex;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{Radix, Value, lookup};
+use crate::value::{Value, lookup};
 
 const LE: Endian = Endian::Little;
 /// Longest name (DLL, function, forwarder) we look for a terminator in.
 const MAX_NAME: u64 = 4096;
-/// Windows uses three levels (type, name, language).
-const MAX_RESOURCE_DEPTH: usize = 8;
-const HIGH_BIT: u32 = 0x8000_0000;
-const ORDINAL_FLAG_32: u64 = 0x8000_0000;
-const ORDINAL_FLAG_64: u64 = 0x8000_0000_0000_0000;
 const IMAGE_FILE_EXECUTABLE: u16 = 0x0002;
 const IMAGE_FILE_DLL: u16 = 0x2000;
+const DLLCHAR_WDM_DRIVER: u16 = 0x2000;
+/// Offset of `CheckSum` in the optional header (both PE32 and PE32+).
+const CHECKSUM_AT: u64 = 64;
+/// Images up to this size get their checksum verified.
+const MAX_CHECKSUM_FILE: u64 = 64 << 20;
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -59,13 +78,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(struct_node("DOS Header", dos, LE, file, dos_header));
     let lfanew = u64::from(parse(&cx, dos, LE, &file, dos_header).await?);
     if lfanew > 64 {
-        cx.emit(
-            Node::new("DOS Stub")
-                .span(file.sub(64, lfanew.saturating_sub(64)))
-                .desc("Real-mode program run when the image is started under DOS"),
-        );
-        if let Ok(Some(rich)) = extra::rich_header(&cx, file, lfanew).await {
-            cx.emit(rich);
+        let rich = extra::rich_header(&cx, file, lfanew).await.ok().flatten();
+        let stub_end = rich.as_ref().map_or(lfanew, |r| r.start);
+        cx.emit(stub_node(&cx, file, stub_end).await);
+        if let Some(rich) = rich {
+            let end = rich.end;
+            cx.emit(rich.node);
+            if end < lfanew {
+                cx.emit(padding_node(
+                    "Padding",
+                    file.sub(end, lfanew.saturating_sub(end)),
+                    "Zero bytes between the Rich header and the PE header",
+                ));
+            }
         }
     }
 
@@ -102,24 +127,139 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("NT Headers")
             .span(nt.sub(0, nt_len))
-            .lazy(nt_headers, (file, lfanew)),
+            .lazy(nt_headers, (input, lfanew)),
     );
+    let pe = load(&cx, input, lfanew).await?;
+    cx.annotate(summary(&pe, &Overview::default()));
+
+    let table = pe.section_table;
+    cx.emit(
+        Node::new("Section Table")
+            .span(table)
+            .summary(format!("{} sections", pe.sections.len()))
+            .lazy(section_table, pe.clone()),
+    );
+    let headers_end = u64::from(pe.size_of_headers).min(file.len);
+    let table_end = table.end().saturating_sub(file.offset);
+    if table_end < headers_end {
+        cx.emit(
+            Node::new("Header Padding")
+                .span(file.sub(table_end, headers_end.saturating_sub(table_end)))
+                .desc("Rest of the headers, up to SizeOfHeaders (FileAlignment); bound imports may live here"),
+        );
+    }
+
+    for (index, name) in DATA_DIRECTORIES.iter().enumerate() {
+        let (rva, size) = pe.directory(index);
+        if rva != 0 || size != 0 {
+            cx.emit(directory(&pe, index, name, rva, size));
+        }
+    }
+
+    let (res_rva, res_size) = pe.directory(DIR_RESOURCE);
+    if res_rva != 0
+        && res_size != 0
+        && let Ok(Some(span)) = resdir::find(&cx, &pe, res_rva, RT_VERSION, None).await
+    {
+        let node = Node::new("Version Information")
+            .span(span)
+            .lazy(version::block, span);
+        cx.emit(match version::summary(&cx, span).await {
+            Ok(summary) => node.summary(summary),
+            Err(e) => node.diag(e),
+        });
+    }
+
+    // Inno Setup's loader keeps the offsets of the installer data in
+    // RCDATA #11111 (5.1.5 and later) or at file offset 0x30.
+    let inno = if res_rva != 0 && res_size != 0 {
+        resdir::find(&cx, &pe, res_rva, resource::RT_RCDATA, Some(11111))
+            .await
+            .ok()
+            .flatten()
+    } else {
+        None
+    };
+    if let Some(table) =
+        crate::formats::archive::installer::inno::loader_table(&cx, file, inno).await
+    {
+        cx.emit(
+            crate::formats::embedded_as(
+                "Inno Setup installer",
+                input.nested(table),
+                &crate::formats::archive::installer::inno::FORMAT,
+            )
+            .desc("The installer data, located by the setup loader's offset table"),
+        );
+    }
+
+    let end = pe.image_end();
+    if end < file.len {
+        // The certificate table is appended after the image; anything
+        // beyond it (or instead of it) is overlay data.
+        let (cert_at, cert_len) = pe.directory(DIR_SECURITY);
+        let cert_end = u64::from(cert_at).saturating_add(cert_len.into());
+        let overlay_at = if cert_at != 0 && u64::from(cert_at) >= end && cert_end <= file.len {
+            if u64::from(cert_at) > end {
+                cx.emit(
+                    Node::new("Overlay")
+                        .span(file.sub(end, u64::from(cert_at).saturating_sub(end)))
+                        .desc("Data between the last section and the certificate table"),
+                );
+            }
+            cert_end
+        } else {
+            end
+        };
+        if overlay_at < file.len {
+            cx.emit(
+                embedded("Overlay", input.nested(file.tail(overlay_at)))
+                    .summary(format!(
+                        "{} bytes after the {}",
+                        file.len.saturating_sub(overlay_at),
+                        if overlay_at == end {
+                            "last section"
+                        } else {
+                            "certificate table"
+                        }
+                    ))
+                    .desc(
+                        "Data appended to the image; installers and self-extractors keep payloads here",
+                    ),
+            );
+        }
+    }
+
+    let overview = overview(&cx, &pe).await;
+    cx.annotate(summary(&pe, &overview));
+    Ok(())
+}
+
+fn not_pe(signature: &[u8]) -> Diagnostic {
+    match signature.get(..2) {
+        Some(b"NE") => Diagnostic::unsupported("16-bit NE executable"),
+        Some(b"LE" | b"LX") => Diagnostic::unsupported("LE/LX executable (VxD or OS/2)"),
+        _ => Diagnostic::unsupported("DOS executable without a PE header"),
+    }
+}
+
+/// Reads the NT headers and the section table.
+async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
+    let file = input.span;
+    let nt = file.tail(lfanew);
     let signature = cx.read_avail(nt.sub(0, 4)).await?;
     if signature != b"PE\0\0" {
         return Err(not_pe(&signature).at(nt.sub(0, 4)));
     }
-    let header = header?;
+    let header = parse(cx, nt.sub(4, 20), LE, &(), file_header).await?;
     let optional = parse(
-        &cx,
+        cx,
         nt.sub(24, header.optional_size.into()),
         LE,
-        &(),
+        &OptCtx::default(),
         optional_header,
     )
     .await?;
-    cx.annotate(summary(&header, &optional));
-
-    // The section table is a prerequisite for translating RVAs.
     let table = nt.sub(
         24u64.saturating_add(header.optional_size.into()),
         u64::from(header.sections).saturating_mul(40),
@@ -137,131 +277,111 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
         }
     }
-
     let rva_index = RangeIndex::new(
         sections
             .iter()
             .map(|s| (s.virtual_address.into(), s.mapped_size().into())),
     );
-    let pe: Pe = Arc::new(PeInfo {
-        input,
-        wide: optional.wide,
-        size_of_headers: optional.size_of_headers,
-        sections,
-        rva_index,
-    });
-    cx.emit(
-        Node::new("Section Table")
-            .span(table)
-            .summary(format!("{} sections", pe.sections.len()))
-            .lazy(section_table, pe.clone()),
-    );
-
-    let directories = cx.read_avail(optional.directories).await?;
-    for (index, name) in DATA_DIRECTORIES.iter().enumerate() {
+    let raw = cx.read_avail(optional.directories).await?;
+    let mut directories = [(0u32, 0u32); 16];
+    for (index, slot) in directories.iter_mut().enumerate() {
         let at = index.saturating_mul(8);
-        let (Some(rva), Some(size)) = (
-            u32_le(&directories, at),
-            u32_le(&directories, at.saturating_add(4)),
-        ) else {
-            break;
-        };
-        if rva != 0 || size != 0 {
-            cx.emit(directory(&pe, index, name, rva, size));
+        if let (Some(rva), Some(size)) = (u32_le(&raw, at), u32_le(&raw, at.saturating_add(4))) {
+            *slot = (rva, size);
         }
     }
-
-    if let (Some(rva), Some(size)) = (
-        u32_le(&directories, DIR_RESOURCE.saturating_mul(8)),
-        u32_le(
-            &directories,
-            DIR_RESOURCE.saturating_mul(8).saturating_add(4),
-        ),
-    ) && rva != 0
-        && size != 0
-        && let Ok(Some(span)) = find_version(&cx, &pe, rva).await
-    {
-        let node = Node::new("Version Information")
-            .span(span)
-            .lazy(version::block, span);
-        cx.emit(match version::summary(&cx, span).await {
-            Ok(summary) => node.summary(summary),
-            Err(e) => node.diag(e),
-        });
-    }
-
-    // Inno Setup's loader keeps the offsets of the installer data in
-    // RCDATA #11111 (5.1.5 and later) or at file offset 0x30.
-    let inno = if let (Some(rva), Some(size)) = (
-        u32_le(&directories, DIR_RESOURCE.saturating_mul(8)),
-        u32_le(
-            &directories,
-            DIR_RESOURCE.saturating_mul(8).saturating_add(4),
-        ),
-    ) && rva != 0
-        && size != 0
-        && let Ok(Some(span)) = find_resource(&cx, &pe, rva, resource::RT_RCDATA, Some(11111)).await
-    {
-        Some(span)
-    } else {
-        None
-    };
-    if let Some(table) =
-        crate::formats::archive::installer::inno::loader_table(&cx, file, inno).await
-    {
-        cx.emit(
-            crate::formats::embedded_as(
-                "Inno Setup installer",
-                input.nested(table),
-                &crate::formats::archive::installer::inno::FORMAT,
-            )
-            .desc("The installer data, located by the setup loader's offset table"),
-        );
-    }
-
-    let end = pe
-        .sections
-        .iter()
-        .map(|s| u64::from(s.raw_pointer).saturating_add(s.raw_size.into()))
-        .chain([u64::from(pe.size_of_headers)])
-        .max()
-        .unwrap_or(0);
-    if end < file.len {
-        cx.emit(
-            embedded("Overlay", input.nested(file.tail(end)))
-                .summary(format!(
-                    "{:#x} bytes after the last section",
-                    file.len.saturating_sub(end)
-                ))
-                .desc(
-                    "Data appended to the image; installers and self-extractors keep payloads here",
-                ),
-        );
-    }
-    Ok(())
+    Ok(Arc::new(PeInfo {
+        input,
+        wide: optional.wide,
+        machine: header.machine,
+        characteristics: header.characteristics,
+        subsystem: optional.subsystem,
+        dll_characteristics: optional.dll_characteristics,
+        image_base: optional.image_base,
+        size_of_headers: optional.size_of_headers,
+        section_table: table,
+        sections,
+        rva_index,
+        directories,
+    }))
 }
 
-fn not_pe(signature: &[u8]) -> Diagnostic {
-    match signature.get(..2) {
-        Some(b"NE") => Diagnostic::unsupported("16-bit NE executable"),
-        Some(b"LE" | b"LX") => Diagnostic::unsupported("LE/LX executable (VxD or OS/2)"),
-        _ => Diagnostic::unsupported("DOS executable without a PE header"),
-    }
+// ---------------------------------------------------------------------------
+// Summary
+
+#[derive(Default)]
+struct Overview {
+    imports: u64,
+    import_dlls: u64,
+    delay_dlls: u64,
+    exports: u64,
+    dotnet: Option<String>,
 }
 
-fn summary(header: &FileHeader, optional: &OptionalHeader) -> String {
-    let format = if optional.wide { "PE32+" } else { "PE32" };
-    let kind = if header.characteristics & IMAGE_FILE_DLL != 0 {
-        "DLL"
-    } else if header.characteristics & IMAGE_FILE_EXECUTABLE != 0 {
-        "executable"
-    } else {
-        "image"
+/// Counts what the summary reports: a bounded number of small reads.
+async fn overview(cx: &Cx, pe: &Pe) -> Overview {
+    let mut out = Overview::default();
+    if let Ok((dlls, functions)) = imports::count(cx, pe).await {
+        out.import_dlls = dlls;
+        out.imports = functions;
+    }
+    out.delay_dlls = imports::count_delay(cx, pe).await.unwrap_or(0);
+    out.exports = exports::count(cx, pe).await.unwrap_or(0);
+    out.dotnet = clr::runtime_version(cx, pe).await.ok();
+    out
+}
+
+fn plural(n: u64, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+fn summary(pe: &PeInfo, o: &Overview) -> String {
+    let format = if pe.wide { "PE32+" } else { "PE32" };
+    let machine = lookup(MACHINE_SHORT, pe.machine.into())
+        .map_or_else(|| format!("machine {:#x}", pe.machine), str::to_owned);
+    let dll = pe.characteristics & IMAGE_FILE_DLL != 0;
+    let kind = match (pe.subsystem, dll) {
+        (10, _) => "EFI application",
+        (11, _) => "EFI boot service driver",
+        (12, _) => "EFI runtime driver",
+        (13, _) => "EFI ROM image",
+        (_, true) => "DLL",
+        (1, false) if pe.dll_characteristics & DLLCHAR_WDM_DRIVER != 0 => "driver",
+        (1, false) => "native executable",
+        _ if pe.characteristics & IMAGE_FILE_EXECUTABLE != 0 => "EXE",
+        _ => "image",
     };
-    let machine = lookup(MACHINE, header.machine.into())
-        .map_or_else(|| format!("machine {:#x}", header.machine), str::to_owned);
-    let subsystem = lookup(SUBSYSTEM, optional.subsystem.into()).unwrap_or("unknown subsystem");
-    format!("{format} {kind}, {machine}, {subsystem}")
+    let mut out = format!("{format} {machine} {kind}");
+    if let 2 | 3 | 9 | 16 = pe.subsystem
+        && let Some(ui) = lookup(SUBSYSTEM_SHORT, pe.subsystem.into())
+    {
+        out.push_str(&format!(" ({ui})"));
+    }
+    if o.import_dlls > 0 {
+        out.push_str(&format!(
+            ", {} from {}",
+            plural(o.imports, "import", "imports"),
+            plural(o.import_dlls, "DLL", "DLLs")
+        ));
+    }
+    if o.delay_dlls > 0 {
+        out.push_str(&format!(
+            ", {} delay-loaded",
+            plural(o.delay_dlls, "DLL", "DLLs")
+        ));
+    }
+    if o.exports > 0 {
+        out.push_str(&format!(", {}", plural(o.exports, "export", "exports")));
+    }
+    if pe.directory(DIR_SECURITY).1 > 0 {
+        out.push_str(", signed");
+    }
+    if let Some(version) = &o.dotnet {
+        out.push_str(&format!(", .NET {version}"));
+    } else if pe.directory(DIR_CLR).0 != 0 {
+        out.push_str(", .NET");
+    }
+    out
 }
 
 // ---------------------------------------------------------------------------
@@ -272,10 +392,17 @@ type Pe = Arc<PeInfo>;
 struct PeInfo {
     input: Input,
     wide: bool,
+    machine: u16,
+    characteristics: u16,
+    subsystem: u16,
+    dll_characteristics: u16,
+    image_base: u64,
     size_of_headers: u32,
+    section_table: Span,
     sections: Vec<Section>,
     /// The sections' RVA ranges, for [`PeInfo::rva_offset`].
     rva_index: RangeIndex,
+    directories: [(u32, u32); 16],
 }
 
 #[derive(Clone, Debug)]
@@ -300,6 +427,14 @@ impl Section {
         }
     }
 
+    fn label(&self) -> String {
+        if self.name.is_empty() {
+            "(unnamed)".to_owned()
+        } else {
+            self.name.clone()
+        }
+    }
+
     fn summary(&self) -> String {
         let flag = |bit: u32, c: char| {
             if self.characteristics & bit != 0 {
@@ -308,8 +443,17 @@ impl Section {
                 '-'
             }
         };
+        let contents = if self.characteristics & 0x20 != 0 {
+            ", code"
+        } else if self.characteristics & 0x80 != 0 {
+            ", uninitialized data"
+        } else if self.characteristics & 0x40 != 0 {
+            ", data"
+        } else {
+            ""
+        };
         format!(
-            "{}{}{}  VA {:#x}+{:#x}, file {:#x}+{:#x}",
+            "{}{}{}  VA {:#x}+{:#x}, file {:#x}+{:#x}{contents}",
             flag(SCN_MEM_READ, 'r'),
             flag(SCN_MEM_WRITE, 'w'),
             flag(SCN_MEM_EXECUTE, 'x'),
@@ -326,14 +470,40 @@ impl PeInfo {
         self.input.span
     }
 
+    /// `(VirtualAddress, Size)` of data directory `index`.
+    fn directory(&self, index: usize) -> (u32, u32) {
+        self.directories.get(index).copied().unwrap_or((0, 0))
+    }
+
+    /// The end of the image in the file: the furthest section or header byte.
+    fn image_end(&self) -> u64 {
+        self.sections
+            .iter()
+            .filter(|s| s.raw_size > 0)
+            .map(|s| u64::from(s.raw_pointer).saturating_add(s.raw_size.into()))
+            .chain([u64::from(self.size_of_headers)])
+            .max()
+            .unwrap_or(0)
+    }
+
+    fn section_of(&self, rva: u32) -> Option<&Section> {
+        self.rva_index
+            .find(rva.into())
+            .and_then(|i| self.sections.get(i))
+    }
+
+    /// "RVA 0x1234 (.text)".
+    fn describe_rva(&self, rva: u32) -> String {
+        match self.section_of(rva) {
+            Some(s) => format!("RVA {rva:#x} ({})", s.label()),
+            None => format!("RVA {rva:#x}"),
+        }
+    }
+
     /// Translates an RVA to an offset in the file.
     fn rva_offset(&self, rva: u32) -> Result<u64> {
         // The first section containing the RVA wins.
-        if let Some(s) = self
-            .rva_index
-            .find(rva.into())
-            .and_then(|i| self.sections.get(i))
-        {
+        if let Some(s) = self.section_of(rva) {
             let delta = rva.saturating_sub(s.virtual_address);
             if delta < s.raw_size {
                 return Ok(u64::from(s.raw_pointer).saturating_add(delta.into()));
@@ -368,6 +538,24 @@ impl PeInfo {
         }
         self.rva_exact(rva, u64::from(count).saturating_mul(width))
     }
+
+    /// The RVA of a virtual address, if it lies above the image base.
+    fn va_rva(&self, va: u64) -> Option<u32> {
+        u32::try_from(va.checked_sub(self.image_base)?).ok()
+    }
+
+    /// The file bytes at virtual address `va`.
+    fn va_span(&self, va: u64, len: u64) -> Result<Span> {
+        let rva = self
+            .va_rva(va)
+            .ok_or_else(|| Diagnostic::malformed(format!("VA {va:#x} is outside the image")))?;
+        self.rva_span(rva, len)
+    }
+
+    /// Size of a pointer in the image.
+    fn word(&self) -> u64 {
+        if self.wide { 8 } else { 4 }
+    }
 }
 
 /// Decorates an RVA field with where it points (or why it points nowhere).
@@ -376,9 +564,38 @@ fn rva_field<'a>(field: Field<'a, u32>, pe: &PeInfo) -> Field<'a, u32> {
         if rva == 0 {
             return node;
         }
+        let node = match pe.section_of(rva) {
+            Some(s) => node.summary(s.label()),
+            None => node,
+        };
         match pe.rva_span(rva, 0) {
             Ok(span) => node.target(span),
-            Err(e) => node.diag(e),
+            // An end address (exclusive) may lie just past its section.
+            Err(e) => match pe.rva_span(rva.saturating_sub(1), 1) {
+                Ok(last) => node.target(Span::new(last.source, last.end(), 0)),
+                Err(_) => node.diag(e),
+            },
+        }
+    })
+}
+
+/// Decorates a virtual address field with where it points.
+fn va_field<'a>(field: Field<'a, u64>, pe: &PeInfo) -> Field<'a, u64> {
+    field.hex().with(|&va, node| {
+        if va == 0 {
+            return node;
+        }
+        match pe.va_rva(va) {
+            Some(rva) => {
+                let node = node.summary(pe.describe_rva(rva));
+                match pe.rva_span(rva, 0) {
+                    Ok(span) => node.target(span),
+                    Err(_) => node,
+                }
+            }
+            None => node.diag(Diagnostic::warning(format!(
+                "VA {va:#x} is below the image base"
+            ))),
         }
     })
 }
@@ -391,8 +608,22 @@ async fn read_name(cx: &Cx, pe: &PeInfo, rva: u32) -> Result<(String, Span)> {
     cx.cstr(pe.rva_span(rva, MAX_NAME)?).await
 }
 
+/// A NUL-terminated name as a text node.
+fn name_node(label: &'static str, name: &str, span: Span) -> Node {
+    Node::new(label)
+        .span(span)
+        .value(Value::Text(name.to_owned()))
+}
+
+fn padding_node(name: &'static str, span: Span, desc: &'static str) -> Node {
+    Node::new(name)
+        .span(span)
+        .summary(format!("{} bytes", span.len))
+        .desc(desc)
+}
+
 // ---------------------------------------------------------------------------
-// Headers
+// DOS header and stub
 
 fn dos_header(f: &mut Fields<'_>, file: &Span) -> Result<u32> {
     f.ascii("e_magic", 2).desc("\"MZ\"").emit()?;
@@ -431,7 +662,144 @@ fn dos_header(f: &mut Fields<'_>, file: &Span) -> Result<u32> {
         .emit()
 }
 
-async fn nt_headers(cx: Cx, (file, lfanew): (Span, u64)) -> Result<()> {
+/// The real-mode program between the DOS header and the PE header (or the
+/// Rich header), as linkers write it: code that prints a `$`-terminated
+/// message with `int 21h` function 9 and exits.
+struct Stub {
+    /// Offset of the code from the start of the stub.
+    code: usize,
+    message: usize,
+    message_len: usize,
+    exit_code: u8,
+}
+
+/// `push cs; pop ds; mov dx, imm16; mov ah, 9; int 21h; mov ax, 4Cxxh; int 21h`.
+fn standard_stub(data: &[u8], code: usize) -> Option<Stub> {
+    let at = |i: usize| data.get(code.checked_add(i)?).copied();
+    let pattern_ok = at(0)? == 0x0e
+        && at(1)? == 0x1f
+        && at(2)? == 0xba
+        && at(5)? == 0xb4
+        && at(6)? == 0x09
+        && at(7)? == 0xcd
+        && at(8)? == 0x21
+        && at(9)? == 0xb8
+        && at(11)? == 0x4c
+        && at(12)? == 0xcd
+        && at(13)? == 0x21;
+    if !pattern_ok {
+        return None;
+    }
+    let dx = usize::from(u16::from_le_bytes([at(3)?, at(4)?]));
+    let message = code.checked_add(dx)?;
+    let rest = data.get(message..)?;
+    let len = rest.iter().take(512).position(|&b| b == b'$')?;
+    Some(Stub {
+        code,
+        message,
+        message_len: len.saturating_add(1),
+        exit_code: at(10)?,
+    })
+}
+
+async fn stub_node(cx: &Cx, file: Span, end: u64) -> Node {
+    let span = file.sub(64, end.saturating_sub(64));
+    let node = Node::new("DOS Stub")
+        .span(span)
+        .desc("Real-mode program run when the image is started under DOS");
+    let Ok(header) = cx.read_avail(file.sub(8, 2)).await else {
+        return node;
+    };
+    let paragraphs = u64::from(u16_le(&header, 0).unwrap_or(4));
+    let Ok(data) = cx.read_avail(span.sub(0, 0x200)).await else {
+        return node;
+    };
+    let code = paragraphs.saturating_mul(16).saturating_sub(64);
+    match standard_stub(&data, crate::bytes::to_usize(code)) {
+        Some(stub) => {
+            let message = data
+                .get(
+                    stub.message
+                        ..stub
+                            .message
+                            .saturating_add(stub.message_len.saturating_sub(1)),
+                )
+                .map(crate::text::latin1)
+                .unwrap_or_default();
+            node.summary(format!("{:?}", message.trim_end()))
+                .lazy(stub_children, (span, paragraphs))
+        }
+        None => node.lazy(stub_children, (span, paragraphs)),
+    }
+}
+
+async fn stub_children(cx: Cx, (span, paragraphs): (Span, u64)) -> Result<()> {
+    let data = cx.read_avail(span.sub(0, 0x200)).await?;
+    let code = paragraphs.saturating_mul(16).saturating_sub(64);
+    let Some(stub) = standard_stub(&data, crate::bytes::to_usize(code)) else {
+        cx.emit(
+            Node::new("Program")
+                .span(span)
+                .desc("Real-mode code and data (not the standard linker stub)"),
+        );
+        return Ok(());
+    };
+    let at = |o: usize| to_u64(o);
+    if stub.code > 0 {
+        cx.emit(padding_node(
+            "Header Extension",
+            span.sub(0, at(stub.code)),
+            "Bytes between the 64-byte header and the paragraph-aligned load module",
+        ));
+    }
+    cx.emit(
+        Node::new("Code")
+            .span(span.sub(at(stub.code), 14))
+            .value(Value::Text(format!(
+                "push cs; pop ds; mov dx, {:#06x}; mov ah, 9; int 21h; mov ax, 0x4c{:02x}; int 21h",
+                stub.message.saturating_sub(stub.code),
+                stub.exit_code
+            )))
+            .summary(format!(
+                "prints the message, exits with code {}",
+                stub.exit_code
+            )),
+    );
+    let code_end = stub.code.saturating_add(14);
+    if stub.message > code_end {
+        cx.emit(padding_node(
+            "Padding",
+            span.sub(at(code_end), at(stub.message.saturating_sub(code_end))),
+            "Between the code and the message",
+        ));
+    }
+    let message_span = span.sub(at(stub.message), at(stub.message_len));
+    let text = data
+        .get(stub.message..stub.message.saturating_add(stub.message_len))
+        .map(crate::text::latin1)
+        .unwrap_or_default();
+    cx.emit(
+        Node::new("Message")
+            .span(message_span)
+            .value(Value::Text(text))
+            .desc("Printed by DOS function 9, which stops at '$'"),
+    );
+    let end = stub.message.saturating_add(stub.message_len);
+    if at(end) < span.len {
+        cx.emit(padding_node(
+            "Padding",
+            span.tail(at(end)),
+            "Zero bytes up to the next structure",
+        ));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// NT headers
+
+async fn nt_headers(cx: Cx, (input, lfanew): (Input, u64)) -> Result<()> {
+    let file = input.span;
     let nt = file.tail(lfanew);
     let signature = cx.block(nt.sub(0, 4)).await?;
     Fields::emitting(&cx, &signature, LE)
@@ -441,14 +809,66 @@ async fn nt_headers(cx: Cx, (file, lfanew): (Span, u64)) -> Result<()> {
     let header_span = nt.sub(4, 20);
     cx.emit(struct_node("File Header", header_span, LE, (), file_header));
     let header = parse(&cx, header_span, LE, &(), file_header).await?;
+    let pe = load(&cx, input, lfanew).await.ok();
+    let checksum = if file.len <= MAX_CHECKSUM_FILE {
+        pe_checksum(
+            &cx,
+            file,
+            lfanew.saturating_add(24).saturating_add(CHECKSUM_AT),
+        )
+        .await
+        .ok()
+    } else {
+        None
+    };
     cx.emit(struct_node(
         "Optional Header",
         nt.sub(24, header.optional_size.into()),
         LE,
-        (),
+        OptCtx { pe, checksum },
         optional_header,
     ));
     Ok(())
+}
+
+/// The image checksum (`CheckSumMappedFile`): 32-bit one's-complement-style
+/// sum of the file's dwords, skipping the `CheckSum` field, folded to 16
+/// bits, plus the file length.
+async fn pe_checksum(cx: &Cx, file: Span, checksum_at: u64) -> Result<u32> {
+    const CHUNK: u64 = 1 << 20;
+    let mut sum = 0u64;
+    let mut pos = 0u64;
+    while pos < file.len {
+        let data = cx.read(file.sub(pos, CHUNK)).await?;
+        if data.is_empty() {
+            break;
+        }
+        for (i, word) in data.chunks(4).enumerate() {
+            if i.is_multiple_of(0x4000) {
+                cx.checkpoint().await;
+            }
+            let at = pos.saturating_add(to_u64(i).saturating_mul(4));
+            if at == checksum_at & !3 {
+                continue;
+            }
+            let mut bytes = [0u8; 4];
+            for (dst, src) in bytes.iter_mut().zip(word) {
+                *dst = *src;
+            }
+            let dword = u64::from(u32::from_le_bytes(bytes));
+            sum = (sum & 0xffff_ffff)
+                .saturating_add(dword)
+                .saturating_add(sum >> 32);
+            if sum > 0xffff_ffff {
+                sum = (sum & 0xffff_ffff).saturating_add(sum >> 32);
+            }
+        }
+        pos = pos.saturating_add(to_u64(data.len()));
+    }
+    sum = (sum & 0xffff).saturating_add(sum >> 16);
+    sum = sum.saturating_add(sum >> 16);
+    sum &= 0xffff;
+    Ok(u32::try_from(sum.saturating_add(file.len) & 0xffff_ffff).unwrap_or(0))
 }
 
 struct FileHeader {
@@ -487,14 +907,24 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<FileHeader> {
     })
 }
 
+/// Context for rendering the optional header: the image (for addresses)
+/// and the computed checksum, when known.
+#[derive(Clone, Default)]
+struct OptCtx {
+    pe: Option<Pe>,
+    checksum: Option<u32>,
+}
+
 struct OptionalHeader {
     wide: bool,
     subsystem: u16,
+    dll_characteristics: u16,
+    image_base: u64,
     size_of_headers: u32,
     directories: Span,
 }
 
-fn optional_header(f: &mut Fields<'_>, _: &()) -> Result<OptionalHeader> {
+fn optional_header(f: &mut Fields<'_>, ctx: &OptCtx) -> Result<OptionalHeader> {
     let magic = f
         .u16("Magic")
         .enumeration(OPTIONAL_MAGIC)
@@ -514,15 +944,19 @@ fn optional_header(f: &mut Fields<'_>, _: &()) -> Result<OptionalHeader> {
     f.u32("SizeOfCode").hex().emit()?;
     f.u32("SizeOfInitializedData").hex().emit()?;
     f.u32("SizeOfUninitializedData").hex().emit()?;
-    f.u32("AddressOfEntryPoint")
-        .hex()
-        .desc("RVA of the entry point, or 0")
-        .emit()?;
+    let entry = f
+        .u32("AddressOfEntryPoint")
+        .desc("RVA of the entry point, or 0");
+    match &ctx.pe {
+        Some(pe) => rva_field(entry, pe).emit()?,
+        None => entry.hex().emit()?,
+    };
     f.u32("BaseOfCode").hex().emit()?;
     if !wide {
         f.u32("BaseOfData").hex().emit()?;
     }
-    f.uword("ImageBase", wide)
+    let image_base = f
+        .uword("ImageBase", wide)
         .hex()
         .desc("Preferred load address")
         .emit()?;
@@ -537,9 +971,22 @@ fn optional_header(f: &mut Fields<'_>, _: &()) -> Result<OptionalHeader> {
     f.u32("Win32VersionValue").emit()?;
     f.u32("SizeOfImage").hex().emit()?;
     let size_of_headers = f.u32("SizeOfHeaders").hex().emit()?;
-    f.u32("CheckSum").hex().emit()?;
+    let computed = ctx.checksum;
+    f.u32("CheckSum")
+        .hex()
+        .desc("Image checksum (CheckSumMappedFile); required for drivers, 0 if not set")
+        .with(|&v, n| match computed {
+            Some(c) if v == 0 => n.summary(format!("not set (computed {c:#x})")),
+            Some(c) if c == v => n.summary("valid"),
+            Some(c) => n.diag(Diagnostic::warning(format!(
+                "checksum mismatch: computed {c:#x}"
+            ))),
+            None => n,
+        })
+        .emit()?;
     let subsystem = f.u16("Subsystem").enumeration(SUBSYSTEM).emit()?;
-    f.u16("DllCharacteristics")
+    let dll_characteristics = f
+        .u16("DllCharacteristics")
         .flags(DLL_CHARACTERISTICS)
         .emit()?;
     f.uword("SizeOfStackReserve", wide).hex().emit()?;
@@ -556,17 +1003,19 @@ fn optional_header(f: &mut Fields<'_>, _: &()) -> Result<OptionalHeader> {
         Node::new("Data Directories")
             .span(directories)
             .summary(format!("{count} entries"))
-            .lazy(data_directories, directories),
+            .lazy(data_directories, (directories, ctx.pe.clone())),
     );
     Ok(OptionalHeader {
         wide,
         subsystem,
+        dll_characteristics,
+        image_base,
         size_of_headers,
         directories,
     })
 }
 
-async fn data_directories(cx: Cx, table: Span) -> Result<()> {
+async fn data_directories(cx: Cx, (table, pe): (Span, Option<Pe>)) -> Result<()> {
     let data = cx.read(table).await?;
     let count = table.len.checked_div(8).unwrap_or(0);
     cx.set_count(Count::Exact(count));
@@ -577,17 +1026,51 @@ async fn data_directories(cx: Cx, table: Span) -> Result<()> {
             break;
         };
         let entry = table.sub(to_u64(at), 8);
+        let summary = match (&pe, index) {
+            _ if rva == 0 && size == 0 => "empty".to_owned(),
+            (_, DIR_SECURITY) => format!("file offset {rva:#x}, {size:#x} bytes"),
+            (Some(pe), _) => format!("{}, {size:#x} bytes", pe.describe_rva(rva)),
+            (None, _) => format!("RVA {rva:#x}, {size:#x} bytes"),
+        };
         cx.push(
-            struct_node(*name, entry, LE, (), data_directory)
-                .summary(format!("RVA {rva:#x}, {size:#x} bytes")),
+            struct_node(*name, entry, LE, (pe.clone(), index), data_directory).summary(summary),
         )
         .await;
     }
     Ok(())
 }
 
-fn data_directory(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.u32("VirtualAddress").hex().emit()?;
+fn data_directory(f: &mut Fields<'_>, (pe, index): &(Option<Pe>, usize)) -> Result<()> {
+    if *index == DIR_SECURITY {
+        let file = pe.as_ref().map(|p| p.file());
+        let at = f
+            .u32("VirtualAddress")
+            .hex()
+            .desc("A file offset, not an RVA, for the certificate table");
+        let size_at = f
+            .block()
+            .data
+            .get(4..8)
+            .and_then(|b| u32_le(b, 0))
+            .unwrap_or(0);
+        match file {
+            Some(file) => at
+                .with(|&v, n| {
+                    if v == 0 {
+                        n
+                    } else {
+                        n.target(file.sub(v.into(), size_at.into()))
+                    }
+                })
+                .emit()?,
+            None => at.emit()?,
+        };
+    } else {
+        match pe {
+            Some(pe) => rva_field(f.u32("VirtualAddress"), pe).emit()?,
+            None => f.u32("VirtualAddress").hex().emit()?,
+        };
+    }
     f.u32("Size").hex().emit()?;
     Ok(())
 }
@@ -597,7 +1080,10 @@ fn data_directory(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 fn section_header(f: &mut Fields<'_>, file: &Span) -> Result<Section> {
     let header = f.peek_span(40);
-    let name = f.ascii("Name", 8).emit()?;
+    let name = f
+        .ascii("Name", 8)
+        .desc("A \"/123\" name refers to the COFF string table (object files only)")
+        .emit()?;
     let virtual_size = f.u32("VirtualSize").hex().emit()?;
     let virtual_address = f.u32("VirtualAddress").hex().emit()?;
     let raw_size = f.u32("SizeOfRawData").hex().emit()?;
@@ -628,13 +1114,8 @@ fn section_header(f: &mut Fields<'_>, file: &Span) -> Result<Section> {
 async fn section_table(cx: Cx, pe: Pe) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(pe.sections.len())));
     for (index, section) in pe.sections.iter().enumerate() {
-        let name = if section.name.is_empty() {
-            "(unnamed)".to_owned()
-        } else {
-            section.name.clone()
-        };
         cx.push(
-            Node::new(name)
+            Node::new(section.label())
                 .span(section.header)
                 .summary(section.summary())
                 .lazy(section_node, (pe.clone(), index)),
@@ -651,17 +1132,48 @@ async fn section_node(cx: Cx, (pe, index): (Pe, usize)) -> Result<()> {
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
     let block = cx.block(section.header).await?;
     section_header(&mut Fields::emitting(&cx, &block, LE), &pe.file())?;
+    // The data directories that live in this section.
+    let start = section.virtual_address;
+    let end = start.saturating_add(section.mapped_size());
+    let inside: Vec<&str> = DATA_DIRECTORIES
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| {
+            let (rva, size) = pe.directory(i);
+            i != DIR_SECURITY && size > 0 && rva >= start && rva < end
+        })
+        .map(|(_, &name)| name)
+        .collect();
     if section.raw_size > 0 {
         let wanted = u64::from(section.raw_size);
-        let data = pe.file().sub(section.raw_pointer.into(), wanted);
+        // Bytes beyond VirtualSize are FileAlignment padding.
+        let used = if section.virtual_size > 0 && section.virtual_size < section.raw_size {
+            u64::from(section.virtual_size)
+        } else {
+            wanted
+        };
+        let data = pe.file().sub(section.raw_pointer.into(), used);
         let mut node = Node::new("Raw Data").span(data);
-        if data.len < wanted {
+        if !inside.is_empty() {
+            node = node.summary(format!("holds {}", inside.join(", ")));
+        }
+        if data.len < used {
             node = node.diag(Diagnostic::truncated(
-                Span::new(data.source, data.offset, wanted),
+                Span::new(data.source, data.offset, used),
                 data.len,
             ));
         }
         cx.emit(node);
+        if used < wanted {
+            cx.emit(padding_node(
+                "Alignment Padding",
+                pe.file().sub(
+                    u64::from(section.raw_pointer).saturating_add(used),
+                    wanted.saturating_sub(used),
+                ),
+                "File bytes beyond VirtualSize, up to FileAlignment",
+            ));
+        }
     }
     Ok(())
 }
@@ -686,7 +1198,7 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
         )
     } else {
         (
-            node.summary(format!("RVA {rva:#x}, {size:#x} bytes")),
+            node.summary(format!("{}, {size:#x} bytes", pe.describe_rva(rva))),
             pe.rva_span(rva, size.into()),
         )
     };
@@ -698,693 +1210,19 @@ fn directory(pe: &Pe, index: usize, name: &'static str, rva: u32, size: u32) -> 
     let dir = Directory { rva, size, span };
     let pe = pe.clone();
     match index {
-        DIR_EXPORT => node.lazy(exports, (pe, dir)),
-        DIR_IMPORT => node.lazy(imports, (pe, dir)),
-        DIR_RESOURCE => node.lazy(
-            resource_directory,
-            ResourceDir {
-                pe,
-                base: rva,
-                offset: 0,
-                path: vec![0],
-                kind: None,
-                name: None,
-            },
-        ),
-        DIR_SECURITY => node.lazy(certificates, (pe.input, dir)),
-        DIR_DEBUG => node.lazy(debug_directory, (pe, dir)),
-        3 => node.lazy(extra::exceptions, (pe, dir)),
-        5 => node.lazy(extra::base_relocations, (pe, dir)),
-        9 => node.lazy(extra::tls, (pe, dir)),
-        10 => node.lazy(extra::load_config, (pe, dir)),
-        13 => node.lazy(extra::delay_imports, (pe, dir)),
-        14 => node.lazy(extra::clr, (pe, dir)),
+        DIR_EXPORT => node.lazy(exports::exports, (pe, dir)),
+        DIR_IMPORT => node.lazy(imports::imports, (pe, dir)),
+        DIR_RESOURCE => node.lazy(resdir::root, (pe, rva)),
+        DIR_EXCEPTION => node.lazy(unwind::exceptions, (pe, dir)),
+        DIR_SECURITY => node.lazy(extra::certificates, (pe.input, dir)),
+        DIR_BASERELOC => node.lazy(extra::base_relocations, (pe, dir)),
+        DIR_DEBUG => node.lazy(debug::directory, (pe, dir)),
+        DIR_TLS => node.lazy(loadcfg::tls, (pe, dir)),
+        DIR_LOAD_CONFIG => node.lazy(loadcfg::load_config, (pe, dir)),
+        DIR_BOUND_IMPORT => node.lazy(imports::bound, (pe, dir)),
+        DIR_IAT => node.lazy(imports::iat, (pe, dir)),
+        DIR_DELAY_IMPORT => node.lazy(imports::delay_imports, (pe, dir)),
+        DIR_CLR => node.lazy(clr::clr, (pe, dir)),
         _ => node,
     }
-}
-
-// --- Exports
-
-#[derive(Clone, Copy, Debug)]
-struct ExportDirectory {
-    name: u32,
-    base: u32,
-    functions: u32,
-    names: u32,
-    address_of_functions: u32,
-    address_of_names: u32,
-    address_of_name_ordinals: u32,
-}
-
-fn export_directory(f: &mut Fields<'_>, pe: &Pe) -> Result<ExportDirectory> {
-    f.u32("Characteristics").hex().emit()?;
-    f.u32("TimeDateStamp").timestamp().emit()?;
-    f.u16("MajorVersion").emit()?;
-    f.u16("MinorVersion").emit()?;
-    let name = rva_field(f.u32("Name"), pe)
-        .desc("RVA of the DLL name")
-        .emit()?;
-    let base = f
-        .u32("Base")
-        .desc("Ordinal of the first exported function")
-        .emit()?;
-    let functions = f.u32("NumberOfFunctions").emit()?;
-    let names = f.u32("NumberOfNames").emit()?;
-    let address_of_functions = rva_field(f.u32("AddressOfFunctions"), pe).emit()?;
-    let address_of_names = rva_field(f.u32("AddressOfNames"), pe).emit()?;
-    let address_of_name_ordinals = rva_field(f.u32("AddressOfNameOrdinals"), pe).emit()?;
-    Ok(ExportDirectory {
-        name,
-        base,
-        functions,
-        names,
-        address_of_functions,
-        address_of_names,
-        address_of_name_ordinals,
-    })
-}
-
-async fn exports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
-    let span = pe.rva_span(dir.rva, 40)?;
-    cx.emit(struct_node(
-        "Export Directory",
-        span,
-        LE,
-        pe.clone(),
-        export_directory,
-    ));
-    let ed = parse(&cx, span, LE, &pe, export_directory).await?;
-    match read_name(&cx, &pe, ed.name).await {
-        Ok((name, at)) => {
-            cx.annotate(format!("{name}, {} functions", ed.functions));
-            cx.emit(Node::new("Name").value(Value::Text(name)).span(at));
-        }
-        Err(e) => cx.diag(e),
-    }
-    cx.emit(
-        Node::new("Functions")
-            .summary(format!("{} functions, {} by name", ed.functions, ed.names))
-            .lazy(export_functions, (pe, dir, ed)),
-    );
-    Ok(())
-}
-
-async fn export_functions(cx: Cx, (pe, dir, ed): (Pe, Directory, ExportDirectory)) -> Result<()> {
-    let address_table = pe.table(ed.address_of_functions, ed.functions, 4)?;
-    let addresses = cx.read(address_table).await?;
-    let names = cx.read(pe.table(ed.address_of_names, ed.names, 4)?).await?;
-    let ordinals = cx
-        .read(pe.table(ed.address_of_name_ordinals, ed.names, 2)?)
-        .await?;
-
-    // Allocation is bounded by bytes actually read, not by declared counts.
-    let mut named = vec![false; addresses.len().checked_div(4).unwrap_or(0)];
-    for i in 0..ordinals.len().checked_div(2).unwrap_or(0) {
-        if i.is_multiple_of(4096) {
-            cx.checkpoint().await;
-        }
-        if let Some(o) = u16_le(&ordinals, i.saturating_mul(2))
-            && let Some(slot) = named.get_mut(usize::from(o))
-        {
-            *slot = true;
-        }
-    }
-    let mut unnamed = Vec::new();
-    for (i, &n) in named.iter().enumerate() {
-        if i.is_multiple_of(4096) {
-            cx.checkpoint().await;
-        }
-        if !n && u32_le(&addresses, i.saturating_mul(4)).is_some_and(|a| a != 0) {
-            unnamed.push(i);
-        }
-    }
-    cx.set_count(Count::Exact(
-        u64::from(ed.names).saturating_add(to_u64(unnamed.len())),
-    ));
-
-    let exports = Exports {
-        pe: &pe,
-        dir,
-        base: ed.base,
-        table: address_table,
-        addresses: &addresses,
-    };
-    for i in 0..to_usize(ed.names.into()) {
-        let name_rva = u32_le(&names, i.saturating_mul(4)).unwrap_or(0);
-        let index = u16_le(&ordinals, i.saturating_mul(2)).unwrap_or(0);
-        let node = match read_name(&cx, &pe, name_rva).await {
-            Ok((name, _)) => exports.entry(&cx, index.into(), name).await,
-            Err(e) => exports
-                .entry(&cx, index.into(), "<unreadable name>".to_owned())
-                .await
-                .diag(e),
-        };
-        cx.push(node).await;
-    }
-    for index in unnamed {
-        let ordinal = ed
-            .base
-            .saturating_add(u32::try_from(index).unwrap_or(u32::MAX));
-        let node = exports.entry(&cx, index, format!("#{ordinal}")).await;
-        cx.push(node).await;
-    }
-    Ok(())
-}
-
-struct Exports<'a> {
-    pe: &'a PeInfo,
-    dir: Directory,
-    base: u32,
-    table: Span,
-    addresses: &'a [u8],
-}
-
-impl Exports<'_> {
-    async fn entry(&self, cx: &Cx, index: usize, name: String) -> Node {
-        let ordinal = self
-            .base
-            .saturating_add(u32::try_from(index).unwrap_or(u32::MAX));
-        let at = index.saturating_mul(4);
-        let node = Node::new(name).span(self.table.sub(to_u64(at), 4));
-        let Some(address) = u32_le(self.addresses, at) else {
-            return node.diag(Diagnostic::malformed(format!(
-                "ordinal index {index} is outside the export address table"
-            )));
-        };
-        let node = node.value(Value::UInt {
-            value: address.into(),
-            bits: 32,
-            radix: Radix::Hex,
-        });
-        // An address inside the export directory is a forwarder string.
-        let forwarded = address
-            .checked_sub(self.dir.rva)
-            .is_some_and(|d| d < self.dir.size);
-        if forwarded {
-            match read_name(cx, self.pe, address).await {
-                Ok((target, at)) => node
-                    .summary(format!("ordinal {ordinal}, forwarded to {target}"))
-                    .target(at),
-                Err(e) => node.diag(e),
-            }
-        } else {
-            let node = node.summary(format!("ordinal {ordinal}"));
-            match self.pe.rva_span(address, 0) {
-                Ok(at) => node.target(at),
-                Err(_) => node,
-            }
-        }
-    }
-}
-
-// --- Imports
-
-#[derive(Clone, Copy, Debug)]
-struct ImportDescriptor {
-    lookup: u32,
-    name: u32,
-    address: u32,
-    null: bool,
-}
-
-fn import_descriptor(f: &mut Fields<'_>, pe: &Pe) -> Result<ImportDescriptor> {
-    let lookup = rva_field(f.u32("OriginalFirstThunk"), pe)
-        .desc("RVA of the import lookup table")
-        .emit()?;
-    let timestamp = f
-        .u32("TimeDateStamp")
-        .hex()
-        .desc("0, or 0xffffffff if the imports are bound")
-        .emit()?;
-    let forwarder = f.u32("ForwarderChain").hex().emit()?;
-    let name = rva_field(f.u32("Name"), pe)
-        .desc("RVA of the DLL name")
-        .emit()?;
-    let address = rva_field(f.u32("FirstThunk"), pe)
-        .desc("RVA of the import address table")
-        .emit()?;
-    Ok(ImportDescriptor {
-        lookup,
-        name,
-        address,
-        null: lookup | timestamp | forwarder | name | address == 0,
-    })
-}
-
-async fn imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
-    let mut rva = dir.rva;
-    loop {
-        let span = pe.rva_span(rva, 20)?;
-        let descriptor = parse(&cx, span, LE, &pe, import_descriptor).await?;
-        if descriptor.null {
-            break;
-        }
-        let node = match read_name(&cx, &pe, descriptor.name).await {
-            Ok((name, _)) => Node::new(name),
-            Err(e) => Node::new("<unreadable name>").diag(e),
-        };
-        cx.push(node.span(span).lazy(import_module, (pe.clone(), span)))
-            .await;
-        rva = rva.checked_add(20).ok_or_else(overflow)?;
-    }
-    Ok(())
-}
-
-async fn import_module(cx: Cx, (pe, descriptor): (Pe, Span)) -> Result<()> {
-    cx.emit(struct_node(
-        "Import Descriptor",
-        descriptor,
-        LE,
-        pe.clone(),
-        import_descriptor,
-    ));
-    let d = parse(&cx, descriptor, LE, &pe, import_descriptor).await?;
-    let table = if d.lookup != 0 { d.lookup } else { d.address };
-    let (width, ordinal_flag) = if pe.wide {
-        (8u32, ORDINAL_FLAG_64)
-    } else {
-        (4u32, ORDINAL_FLAG_32)
-    };
-    let mut index = 0u32;
-    loop {
-        let rva = index
-            .checked_mul(width)
-            .and_then(|o| table.checked_add(o))
-            .ok_or_else(overflow)?;
-        let span = pe.rva_exact(rva, width.into())?;
-        let data = cx.read(span).await?;
-        let thunk = if pe.wide {
-            u64_le(&data, 0)
-        } else {
-            u32_le(&data, 0).map(u64::from)
-        }
-        .unwrap_or(0);
-        if thunk == 0 {
-            break;
-        }
-        let node = if thunk & ordinal_flag != 0 {
-            Node::new(format!("Ordinal {}", thunk & 0xffff))
-        } else {
-            let hint_name = u32::try_from(thunk & 0x7fff_ffff).unwrap_or(0);
-            match hint_and_name(&cx, &pe, hint_name).await {
-                Ok((hint, name, at)) => Node::new(name).summary(format!("hint {hint}")).target(at),
-                Err(e) => Node::new("<unreadable>").diag(e),
-            }
-        };
-        cx.push(node.span(span)).await;
-        index = index.checked_add(1).ok_or_else(overflow)?;
-    }
-    Ok(())
-}
-
-async fn hint_and_name(cx: &Cx, pe: &PeInfo, rva: u32) -> Result<(u16, String, Span)> {
-    let span = pe.rva_span(rva, MAX_NAME.saturating_add(2))?;
-    let hint = cx.read(span.sub(0, 2)).await?;
-    let (name, at) = cx.cstr(span.tail(2)).await?;
-    Ok((
-        u16_le(&hint, 0).unwrap_or(0),
-        name,
-        span.sub(0, at.len.saturating_add(2)),
-    ))
-}
-
-// --- Resources
-
-#[derive(Clone)]
-struct ResourceDir {
-    pe: Pe,
-    /// RVA of the resource section; all offsets are relative to it.
-    base: u32,
-    offset: u32,
-    /// Offsets of this directory and its ancestors, for cycle detection.
-    path: Vec<u32>,
-    /// Resource type (`RT_*`), once known from the first level.
-    kind: Option<u32>,
-    /// Ordinal resource name, once known from the second level.
-    name: Option<u32>,
-}
-
-async fn resource_directory(cx: Cx, dir: ResourceDir) -> Result<()> {
-    let pe = &dir.pe;
-    let level = dir.path.len();
-    let header_rva = dir.base.checked_add(dir.offset).ok_or_else(overflow)?;
-    let header = cx.read(pe.rva_exact(header_rva, 16)?).await?;
-    let named = u16_le(&header, 12).unwrap_or(0);
-    let ids = u16_le(&header, 14).unwrap_or(0);
-    let total = u32::from(named).saturating_add(ids.into());
-    cx.set_count(Count::Exact(total.into()));
-
-    for i in 0..total {
-        let entry_rva = i
-            .checked_mul(8)
-            .and_then(|o| header_rva.checked_add(16)?.checked_add(o))
-            .ok_or_else(overflow)?;
-        let entry = pe.rva_exact(entry_rva, 8)?;
-        let data = cx.read(entry).await?;
-        let name = u32_le(&data, 0).unwrap_or(0);
-        let offset = u32_le(&data, 4).unwrap_or(0);
-
-        let mut diagnostics = Vec::new();
-        let label = if name & HIGH_BIT != 0 {
-            match resource_name(&cx, pe, dir.base, name & !HIGH_BIT).await {
-                Ok(text) => format!("{text:?}"),
-                Err(e) => {
-                    diagnostics.push(e);
-                    "<unreadable name>".to_owned()
-                }
-            }
-        } else {
-            id_label(level, name)
-        };
-        let mut node = Node::new(label).span(entry);
-        for d in diagnostics {
-            node = node.diag(d);
-        }
-
-        let child = offset & !HIGH_BIT;
-        let child_rva = dir.base.checked_add(child).ok_or_else(overflow)?;
-        if offset & HIGH_BIT != 0 {
-            if dir.path.contains(&child) {
-                node = node.diag(Diagnostic::malformed(format!(
-                    "directory at offset {child:#x} contains itself"
-                )));
-            } else if level >= MAX_RESOURCE_DEPTH {
-                node = node.diag(Diagnostic::limit(format!(
-                    "resource directories nested deeper than {MAX_RESOURCE_DEPTH}"
-                )));
-            } else {
-                if let Ok(at) = pe.rva_span(child_rva, 16) {
-                    node = node.target(at);
-                }
-                let mut path = dir.path.clone();
-                path.push(child);
-                node = node.lazy(
-                    crate::expander!(resource_directory: ResourceDir),
-                    ResourceDir {
-                        pe: pe.clone(),
-                        base: dir.base,
-                        offset: child,
-                        path,
-                        kind: if level == 1 && name & HIGH_BIT == 0 {
-                            Some(name)
-                        } else {
-                            dir.kind
-                        },
-                        name: if level == 2 && name & HIGH_BIT == 0 {
-                            Some(name)
-                        } else {
-                            dir.name
-                        },
-                    },
-                );
-            }
-        } else {
-            let span = pe.rva_span(child_rva, 16)?;
-            match parse(&cx, span, LE, pe, resource_data_entry).await {
-                Ok(e) => node = node.summary(format!("{:#x} bytes", e.size)).target(span),
-                Err(e) => node = node.diag(e),
-            }
-            node = node.lazy(resource_data, (pe.clone(), span, dir.kind, dir.name));
-        }
-        cx.push(node).await;
-    }
-    Ok(())
-}
-
-/// Follows type `RT_VERSION`, then the first name and the first language, to
-/// the version resource's data.
-async fn find_version(cx: &Cx, pe: &PeInfo, base: u32) -> Result<Option<Span>> {
-    find_resource(cx, pe, base, RT_VERSION, None).await
-}
-
-/// Follows type `kind`, then name `id` (or the first name), then the first
-/// language, to a resource's data.
-async fn find_resource(
-    cx: &Cx,
-    pe: &PeInfo,
-    base: u32,
-    kind: u32,
-    id: Option<u32>,
-) -> Result<Option<Span>> {
-    let mut offset = 0u32;
-    for level in 0..3 {
-        let header_rva = base.checked_add(offset).ok_or_else(overflow)?;
-        let header = cx.read(pe.rva_exact(header_rva, 16)?).await?;
-        let total = usize::from(u16_le(&header, 12).unwrap_or(0))
-            .saturating_add(u16_le(&header, 14).unwrap_or(0).into());
-        let entries_rva = header_rva.checked_add(16).ok_or_else(overflow)?;
-        let entries = cx
-            .read(pe.rva_exact(entries_rva, to_u64(total.min(64)).saturating_mul(8))?)
-            .await?;
-        let found = (0..total.min(64)).find_map(|i| {
-            let name = u32_le(&entries, i.saturating_mul(8))?;
-            let target = u32_le(&entries, i.saturating_mul(8).saturating_add(4))?;
-            match (level, id) {
-                (0, _) => name == kind,
-                (1, Some(id)) => name == id,
-                _ => true,
-            }
-            .then_some(target)
-        });
-        let Some(target) = found else {
-            return Ok(None);
-        };
-        offset = target & !HIGH_BIT;
-        if target & HIGH_BIT == 0 {
-            let entry_rva = base.checked_add(offset).ok_or_else(overflow)?;
-            let entry = parse(cx, pe.rva_exact(entry_rva, 16)?, LE, &(), data_entry).await?;
-            return Ok(Some(pe.rva_span(entry.rva, entry.size.into())?));
-        }
-    }
-    Ok(None)
-}
-
-fn data_entry(f: &mut Fields<'_>, _: &()) -> Result<DataEntry> {
-    let rva = f.u32("OffsetToData").get()?;
-    let size = f.u32("Size").get()?;
-    Ok(DataEntry { rva, size })
-}
-
-fn id_label(level: usize, id: u32) -> String {
-    match level {
-        1 => lookup(RESOURCE_TYPE, id.into()).map_or_else(|| format!("#{id}"), str::to_owned),
-        3 => format!("Language {}", crate::formats::util::lcid::describe(id)),
-        _ => format!("#{id}"),
-    }
-}
-
-async fn resource_name(cx: &Cx, pe: &PeInfo, base: u32, offset: u32) -> Result<String> {
-    let rva = base.checked_add(offset).ok_or_else(overflow)?;
-    let len = cx.read(pe.rva_exact(rva, 2)?).await?;
-    let len = u16_le(&len, 0).unwrap_or(0);
-    let text = cx
-        .read(pe.rva_exact(
-            rva.checked_add(2).ok_or_else(overflow)?,
-            u64::from(len).saturating_mul(2),
-        )?)
-        .await?;
-    let units: Vec<u16> = (0..usize::from(len))
-        .filter_map(|i| u16_le(&text, i.saturating_mul(2)))
-        .collect();
-    Ok(String::from_utf16_lossy(&units))
-}
-
-#[derive(Clone, Copy, Debug)]
-struct DataEntry {
-    rva: u32,
-    size: u32,
-}
-
-fn resource_data_entry(f: &mut Fields<'_>, pe: &Pe) -> Result<DataEntry> {
-    let rva = rva_field(f.u32("OffsetToData"), pe)
-        .desc("RVA of the resource data")
-        .emit()?;
-    let size = f.u32("Size").hex().emit()?;
-    f.u32("CodePage").emit()?;
-    f.u32("Reserved").emit()?;
-    Ok(DataEntry { rva, size })
-}
-
-async fn resource_data(
-    cx: Cx,
-    (pe, span, kind, name): (Pe, Span, Option<u32>, Option<u32>),
-) -> Result<()> {
-    cx.emit(struct_node(
-        "Data Entry",
-        span,
-        LE,
-        pe.clone(),
-        resource_data_entry,
-    ));
-    let entry = parse(&cx, span, LE, &pe, resource_data_entry).await?;
-    let wanted = u64::from(entry.size);
-    let content = pe.rva_span(entry.rva, wanted)?;
-    let mut node = resource::content(&cx, pe.input, content, kind, name).await;
-    if content.len < wanted {
-        node = node.diag(Diagnostic::truncated(
-            Span::new(content.source, content.offset, wanted),
-            content.len,
-        ));
-    }
-    cx.emit(node);
-    Ok(())
-}
-
-// --- Debug directory
-
-#[derive(Clone, Copy, Debug)]
-struct DebugEntry {
-    kind: u32,
-    size: u32,
-    pointer: u32,
-}
-
-fn debug_entry(f: &mut Fields<'_>, pe: &Pe) -> Result<DebugEntry> {
-    f.u32("Characteristics").hex().emit()?;
-    f.u32("TimeDateStamp").timestamp().emit()?;
-    f.u16("MajorVersion").emit()?;
-    f.u16("MinorVersion").emit()?;
-    let kind = f.u32("Type").enumeration(DEBUG_TYPE).emit()?;
-    let size = f.u32("SizeOfData").hex().emit()?;
-    rva_field(f.u32("AddressOfRawData"), pe).emit()?;
-    let file = pe.file();
-    let pointer = f
-        .u32("PointerToRawData")
-        .hex()
-        .with(|&p, n| n.target(file.sub(p.into(), size.into())))
-        .emit()?;
-    Ok(DebugEntry {
-        kind,
-        size,
-        pointer,
-    })
-}
-
-async fn debug_directory(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
-    if dir.size % 28 != 0 {
-        cx.diag(Diagnostic::warning(format!(
-            "size {:#x} is not a multiple of the 28-byte entry size",
-            dir.size
-        )));
-    }
-    let count = dir.size.checked_div(28).unwrap_or(0);
-    cx.set_count(Count::Exact(count.into()));
-    for i in 0..count {
-        let span = dir.span.sub(u64::from(i).saturating_mul(28), 28);
-        let entry = parse(&cx, span, LE, &pe, debug_entry).await?;
-        let label = lookup(DEBUG_TYPE, entry.kind.into())
-            .map_or_else(|| format!("Type {}", entry.kind), str::to_owned);
-        cx.push(
-            Node::new(label)
-                .span(span)
-                .summary(format!("{:#x} bytes", entry.size))
-                .lazy(debug_entry_node, (pe.clone(), span)),
-        )
-        .await;
-    }
-    Ok(())
-}
-
-async fn debug_entry_node(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
-    let block = cx.block(span).await?;
-    let entry = debug_entry(&mut Fields::emitting(&cx, &block, LE), &pe)?;
-    if entry.size > 0 {
-        let data = pe.file().sub(entry.pointer.into(), entry.size.into());
-        if entry.kind == DEBUG_TYPE_CODEVIEW {
-            cx.emit(Node::new("CodeView").span(data).lazy(codeview, data));
-        } else {
-            cx.emit(Node::new("Data").span(data));
-        }
-    }
-    Ok(())
-}
-
-async fn codeview(cx: Cx, span: Span) -> Result<()> {
-    let block = cx.block(span).await?;
-    let mut f = Fields::emitting(&cx, &block, LE);
-    let signature = f.ascii("Signature", 4).emit()?;
-    match signature.as_str() {
-        "RSDS" => {
-            f.guid("Guid").desc("Must match the PDB").emit()?;
-            f.u32("Age").emit()?;
-        }
-        "NB10" => {
-            f.u32("Offset").emit()?;
-            f.u32("Signature").timestamp().emit()?;
-            f.u32("Age").emit()?;
-        }
-        _ => {
-            return Err(Diagnostic::unsupported(format!(
-                "CodeView signature {signature:?}"
-            )));
-        }
-    }
-    let path = f.cstr("PdbFileName").emit()?;
-    cx.annotate(path);
-    Ok(())
-}
-
-// --- Certificates
-
-#[derive(Clone, Copy, Debug)]
-struct WinCertificate {
-    length: u32,
-    kind: u16,
-}
-
-fn win_certificate(f: &mut Fields<'_>, _: &()) -> Result<WinCertificate> {
-    let length = f
-        .u32("dwLength")
-        .hex()
-        .desc("Length including this header")
-        .emit()?;
-    f.u16("wRevision")
-        .enumeration(CERTIFICATE_REVISION)
-        .emit()?;
-    let kind = f
-        .u16("wCertificateType")
-        .enumeration(CERTIFICATE_TYPE)
-        .emit()?;
-    Ok(WinCertificate { length, kind })
-}
-
-async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Result<()> {
-    let table = dir.span;
-    let mut offset = 0u64;
-    while offset < table.len {
-        let header = table.sub(offset, 8);
-        let cert = parse(&cx, header, LE, &(), win_certificate).await?;
-        if cert.length < 8 {
-            return Err(Diagnostic::malformed(format!(
-                "certificate length {:#x} is shorter than its header",
-                cert.length
-            ))
-            .at(header));
-        }
-        let span = table.sub(offset, cert.length.into());
-        let label = lookup(CERTIFICATE_TYPE, cert.kind.into()).unwrap_or("Certificate");
-        cx.push(
-            Node::new(label)
-                .span(span)
-                .summary(format!("{:#x} bytes", cert.length))
-                .lazy(certificate, (input, span)),
-        )
-        .await;
-        let step = u64::from(cert.length)
-            .checked_next_multiple_of(8)
-            .ok_or_else(overflow)?;
-        offset = offset.saturating_add(step);
-    }
-    Ok(())
-}
-
-async fn certificate(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
-    let block = cx.block(span.sub(0, 8)).await?;
-    win_certificate(&mut Fields::emitting(&cx, &block, LE), &())?;
-    cx.emit(crate::formats::embedded_as(
-        "bCertificate",
-        input.nested(span.tail(8)),
-        &crate::formats::asn1::PKCS7,
-    ));
-    Ok(())
 }

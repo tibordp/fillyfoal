@@ -146,7 +146,7 @@ async fn node(
             } else {
                 Node::new("Menu template (MENUEX)")
                     .span(span)
-                    .diag(Diagnostic::unsupported("extended menu template").at(span))
+                    .lazy(menu_ex, span)
             }
         }
         Some(RT_RCDATA) if cx.read_avail(span.sub(0, 4)).await? == b"TPF0" => embedded_as(
@@ -419,14 +419,32 @@ async fn messages(cx: Cx, span: Span) -> Result<()> {
             Node::new(format!("Block {index}"))
                 .span(table.sub(to_u64(at), 12))
                 .summary(format!("IDs {low:#x}–{high:#x}"))
-                .lazy(message_block, (span, low, high, offset)),
+                .lazy(
+                    message_block,
+                    (span, table.sub(to_u64(at), 12), low, high, offset),
+                ),
         )
         .await;
     }
     Ok(())
 }
 
-async fn message_block(cx: Cx, (span, low, high, offset): (Span, u32, u32, u32)) -> Result<()> {
+fn message_block_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u32("LowId").hex().emit()?;
+    f.u32("HighId").hex().emit()?;
+    f.u32("OffsetToEntries")
+        .hex()
+        .desc("From the start of the message table")
+        .emit()?;
+    Ok(())
+}
+
+async fn message_block(
+    cx: Cx,
+    (span, descriptor, low, high, offset): (Span, Span, u32, u32, u32),
+) -> Result<()> {
+    let block = cx.block(descriptor).await?;
+    message_block_fields(&mut Fields::emitting(&cx, &block, LE), &())?;
     let mut at = u64::from(offset);
     let mut id = low;
     loop {
@@ -456,7 +474,7 @@ async fn message_block(cx: Cx, (span, low, high, offset): (Span, u32, u32, u32))
             Node::new(format!("Message {id:#x}"))
                 .span(entry)
                 .value(Value::Text(text))
-                .summary(encoding),
+                .summary(format!("{encoding}, {len} bytes")),
         )
         .await;
         if id >= high {
@@ -713,6 +731,98 @@ async fn menu(cx: Cx, span: Span) -> Result<()> {
         if flags & 0x80 != 0 {
             // This level ends; so does every enclosing level whose popup
             // was the last item of its own level.
+            let mut ended = true;
+            while ended {
+                match stack.pop() {
+                    Some((_, last)) => ended = last,
+                    None => break 'items,
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+const MFT_FLAGS: FlagTable = &[
+    flag(0x0000_0004, "MFT_BITMAP"),
+    flag(0x0000_0020, "MFT_MENUBARBREAK"),
+    flag(0x0000_0040, "MFT_MENUBREAK"),
+    flag(0x0000_0100, "MFT_OWNERDRAW"),
+    flag(0x0000_0200, "MFT_RADIOCHECK"),
+    flag(0x0000_0800, "MFT_SEPARATOR"),
+    flag(0x0000_2000, "MFT_RIGHTORDER"),
+    flag(0x0000_4000, "MFT_RIGHTJUSTIFY"),
+];
+
+/// An extended menu template: `MENUEX_TEMPLATE_HEADER` (version 1, offset
+/// of the items, help ID), then `MENUEX_TEMPLATE_ITEM`s (type, state, ID,
+/// `bResInfo`, text, DWORD alignment; a popup, `bResInfo & 1`, adds a help
+/// ID and is followed by its items; `bResInfo & 0x80` ends a level). Shown
+/// flat, with the nesting in the item names.
+async fn menu_ex(cx: Cx, span: Span) -> Result<()> {
+    let data = cx.read_avail(span).await?;
+    let header = cx.block(span.sub(0, 8)).await?;
+    {
+        let mut f = Fields::emitting(&cx, &header, LE);
+        f.u16("wVersion").desc("1 for MENUEX").emit()?;
+        f.u16("wOffset")
+            .desc("Offset of the first item from the end of this field")
+            .emit()?;
+        f.u32("dwHelpId").emit()?;
+    }
+    let offset = u16_le(&data, 2).unwrap_or(4);
+    let mut at = 4usize.saturating_add(offset.into());
+    let mut stack: Vec<(String, bool)> = Vec::new();
+    'items: while at < data.len() {
+        cx.checkpoint().await;
+        let start = at;
+        let (Some(kind), Some(state), Some(id), Some(info)) = (
+            u32_le(&data, at),
+            u32_le(&data, at.saturating_add(4)),
+            u32_le(&data, at.saturating_add(8)),
+            u16_le(&data, at.saturating_add(12)),
+        ) else {
+            break;
+        };
+        at = at.saturating_add(14);
+        let (text, used, _) = crate::text::utf16z(data.get(at..).unwrap_or_default(), LE);
+        at = at.saturating_add(used).next_multiple_of(4);
+        let popup = info & 0x01 != 0;
+        if popup {
+            at = at.saturating_add(4);
+        }
+        let entry = span.sub(to_u64(start), to_u64(at.saturating_sub(start)));
+        let label = if kind & 0x800 != 0 {
+            "(separator)".to_owned()
+        } else {
+            text.replace('&', "")
+        };
+        let mut path: Vec<&str> = stack.iter().map(|(n, _)| n.as_str()).collect();
+        path.push(&label);
+        let mut summary = if popup {
+            "popup".to_owned()
+        } else {
+            format!("command {id}")
+        };
+        if state != 0 {
+            summary.push_str(&format!(", state {state:#x}"));
+        }
+        cx.push(
+            Node::new(path.join(" › "))
+                .span(entry)
+                .value(flag_value(MFT_FLAGS, kind.into(), 32))
+                .summary(summary),
+        )
+        .await;
+        if popup {
+            stack.push((label, info & 0x80 != 0));
+            if stack.len() > 32 {
+                cx.diag(Diagnostic::limit("menu nested deeper than 32 levels"));
+                break;
+            }
+            continue;
+        }
+        if info & 0x80 != 0 {
             let mut ended = true;
             while ended {
                 match stack.pop() {

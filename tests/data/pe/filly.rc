@@ -1,0 +1,92 @@
+// Resources of the PE fixtures (compiled with `zig rc`, see make.sh).
+#include <windows.h>
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+1 VERSIONINFO
+FILEVERSION 1,2,3,4
+PRODUCTVERSION 1,2,0,0
+FILEFLAGSMASK 0x3f
+FILEFLAGS VS_FF_PRERELEASE
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_DLL
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904b0"
+        BEGIN
+            VALUE "CompanyName", "fillyfoal"
+            VALUE "FileDescription", "fillyfoal PE test image"
+            VALUE "FileVersion", "1.2.3.4"
+            VALUE "InternalName", "filly"
+            VALUE "LegalCopyright", "Public domain test data"
+            VALUE "OriginalFilename", "filly.dll"
+            VALUE "ProductName", "fillyfoal"
+            VALUE "ProductVersion", "1.2"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
+
+2 RT_MANIFEST "filly.manifest"
+
+100 ICON "filly.ico"
+101 CURSOR "filly.cur"
+102 BITMAP "filly.bmp"
+
+STRINGTABLE
+BEGIN
+    1 "Hello from fillyfoal"
+    2 "Second string"
+    17 "In the second block"
+END
+
+200 DIALOGEX 0, 0, 160, 60
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About filly"
+FONT 8, "MS Shell Dlg", 400, 0, 1
+BEGIN
+    DEFPUSHBUTTON "OK", IDOK, 55, 40, 50, 14
+    LTEXT "fillyfoal test dialog", 1001, 8, 8, 144, 10
+    EDITTEXT 1002, 8, 22, 144, 12, ES_AUTOHSCROLL
+END
+
+201 DIALOG 0, 0, 100, 40
+STYLE WS_POPUP | WS_BORDER
+CAPTION "Classic"
+BEGIN
+    PUSHBUTTON "Cancel", IDCANCEL, 25, 20, 50, 14
+END
+
+300 MENU
+BEGIN
+    POPUP "&File"
+    BEGIN
+        MENUITEM "&Open\tCtrl+O", 301
+        MENUITEM SEPARATOR
+        MENUITEM "E&xit", 302
+    END
+    MENUITEM "&Help", 303
+END
+
+400 ACCELERATORS
+BEGIN
+    "O", 301, VIRTKEY, CONTROL
+    "^Q", 302
+END
+
+500 RCDATA
+BEGIN
+    "fillyfoal raw data\0"
+END
+
+1 MESSAGETABLE "filly.msg"
+
+FILLYDATA CUSTOMTYPE
+BEGIN
+    0x1234, 0x5678
+END

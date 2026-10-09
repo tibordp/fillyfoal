@@ -154,8 +154,76 @@ pub const DATA_DIRECTORIES: [&str; 16] = [
 pub const DIR_EXPORT: usize = 0;
 pub const DIR_IMPORT: usize = 1;
 pub const DIR_RESOURCE: usize = 2;
+pub const DIR_EXCEPTION: usize = 3;
 pub const DIR_SECURITY: usize = 4;
+pub const DIR_BASERELOC: usize = 5;
 pub const DIR_DEBUG: usize = 6;
+pub const DIR_TLS: usize = 9;
+pub const DIR_LOAD_CONFIG: usize = 10;
+pub const DIR_BOUND_IMPORT: usize = 11;
+pub const DIR_IAT: usize = 12;
+pub const DIR_DELAY_IMPORT: usize = 13;
+pub const DIR_CLR: usize = 14;
+
+/// Short architecture names for summaries.
+pub const MACHINE_SHORT: EnumTable = &[
+    (0x14c, "x86"),
+    (0x8664, "x64"),
+    (0xaa64, "ARM64"),
+    (0xa641, "ARM64EC"),
+    (0xa64e, "ARM64X"),
+    (0x1c0, "ARM"),
+    (0x1c2, "Thumb"),
+    (0x1c4, "ARMv7"),
+    (0x200, "Itanium"),
+    (0xebc, "EFI byte code"),
+    (0x5032, "RISC-V 32"),
+    (0x5064, "RISC-V 64"),
+    (0x5128, "RISC-V 128"),
+    (0x6232, "LoongArch 32"),
+    (0x6264, "LoongArch 64"),
+    (0x1f0, "PowerPC"),
+    (0x1f1, "PowerPC FP"),
+    (0x162, "MIPS R3000"),
+    (0x166, "MIPS R4000"),
+    (0x168, "MIPS R10000"),
+    (0x169, "MIPS WCE v2"),
+    (0x266, "MIPS16"),
+    (0x366, "MIPS FPU"),
+    (0x466, "MIPS16 FPU"),
+    (0x184, "Alpha"),
+    (0x284, "Alpha64"),
+    (0x1a2, "SH3"),
+    (0x1a3, "SH3 DSP"),
+    (0x1a6, "SH4"),
+    (0x1a8, "SH5"),
+    (0x1d3, "AM33"),
+    (0x9041, "M32R"),
+];
+
+/// Subsystem names for summaries.
+pub const SUBSYSTEM_SHORT: EnumTable = &[
+    (1, "native"),
+    (2, "GUI"),
+    (3, "console"),
+    (5, "OS/2 console"),
+    (7, "POSIX console"),
+    (8, "native Win9x driver"),
+    (9, "Windows CE GUI"),
+    (10, "EFI application"),
+    (11, "EFI boot service driver"),
+    (12, "EFI runtime driver"),
+    (13, "EFI ROM"),
+    (14, "Xbox"),
+    (16, "boot application"),
+];
+
+pub const MACHINE_I386: u16 = 0x14c;
+pub const MACHINE_AMD64: u16 = 0x8664;
+pub const MACHINE_ARM64: u16 = 0xaa64;
+pub const MACHINE_ARM64EC: u16 = 0xa641;
+pub const MACHINE_ARM64X: u16 = 0xa64e;
+pub const MACHINE_ARMNT: u16 = 0x1c4;
 
 pub const DEBUG_TYPE: EnumTable = &[
     (0, "UNKNOWN"),
@@ -176,11 +244,33 @@ pub const DEBUG_TYPE: EnumTable = &[
     (15, "MPX"),
     (16, "REPRO"),
     (17, "EMBEDDED_PORTABLE_PDB"),
+    (18, "SPGO"),
     (19, "PDBCHECKSUM"),
     (20, "EX_DLLCHARACTERISTICS"),
+    (21, "PERFMAP"),
 ];
 
 pub const DEBUG_TYPE_CODEVIEW: u32 = 2;
+pub const DEBUG_TYPE_FPO: u32 = 3;
+pub const DEBUG_TYPE_MISC: u32 = 4;
+pub const DEBUG_TYPE_VC_FEATURE: u32 = 12;
+pub const DEBUG_TYPE_POGO: u32 = 13;
+pub const DEBUG_TYPE_REPRO: u32 = 16;
+pub const DEBUG_TYPE_EMBEDDED_PDB: u32 = 17;
+pub const DEBUG_TYPE_PDBCHECKSUM: u32 = 19;
+pub const DEBUG_TYPE_EX_DLLCHARACTERISTICS: u32 = 20;
+
+/// `IMAGE_DLLCHARACTERISTICS_EX_*` (debug type 20).
+pub const EX_DLL_CHARACTERISTICS: FlagTable = &[
+    flag(0x01, "CET_COMPAT"),
+    flag(0x02, "CET_COMPAT_STRICT_MODE"),
+    flag(0x04, "CET_SET_CONTEXT_IP_VALIDATION_RELAXED_MODE"),
+    flag(0x08, "CET_DYNAMIC_APIS_ALLOW_IN_PROC"),
+    flag(0x10, "CET_RESERVED_1"),
+    flag(0x20, "CET_RESERVED_2"),
+    flag(0x40, "FORWARD_CFI_COMPAT"),
+    flag(0x80, "HOTPATCH_COMPATIBLE"),
+];
 
 pub const RESOURCE_TYPE: EnumTable = &[
     (1, "RT_CURSOR"),

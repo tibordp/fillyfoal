@@ -1,0 +1,8 @@
+LIBRARY filly64.dll
+EXPORTS
+  filly_add @1
+  filly_mul @2
+  filly_version @3 DATA
+  filly_work @5
+  filly_hidden @10 NONAME
+  filly_ticks = kernel32.GetTickCount @4

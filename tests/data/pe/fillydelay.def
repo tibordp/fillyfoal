@@ -1,0 +1,4 @@
+LIBRARY fillydelay.dll
+EXPORTS
+  delay_one
+  delay_two @2 NONAME
