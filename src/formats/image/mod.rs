@@ -3,10 +3,13 @@
 //! Shared helpers for the family live here: palettes, sized regions and a few
 //! value constructors.
 //!
-//! Also here: PNG and MNG (`png`), ICC profiles (`icc_profile`), other
-//! graphics (`graphics`: metafiles, film frames, GPU textures, swatches),
-//! camera and toolkit formats (`camera`, `toolkits`), paint-program documents
-//! (`paint`) and less common raster formats (`minor`).
+//! Also here: PNG and MNG (`png`), ICC profiles (`icc_profile`), Windows
+//! metafiles (`metafile`), film frames (`dpx`: DPX and Cineon), GPU textures
+//! (`texture`: ASTC, PowerVR, VTF; `dds`, `ktx`), BPG and FLIF (`modern`),
+//! FITS (`fits`), other graphics (`graphics`: PKM, swatches, GIMP brushes,
+//! Paint.NET), camera and toolkit formats (`camera`, `toolkits`),
+//! paint-program documents (`paint`) and less common raster formats
+//! (`minor`).
 
 pub mod bmp;
 pub mod camera;

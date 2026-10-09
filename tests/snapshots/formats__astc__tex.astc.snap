@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tex.astc — 8×8×1, 4×4×1 blocks  [0x0+0x50]
+▾ tex.astc — 8×8, 4×4 blocks (8.00 bpp)  [0x0+0x50]
     Magic: 0x5ca1ab13  [0x0+0x4]
     Block width: 4  [0x4+0x1]
     Block height: 4  [0x5+0x1]
@@ -10,4 +10,4 @@ expression: "common::explore(&display_name(&path), &data)"
     Width: 8  [0x7+0x3]
     Height: 8  [0xa+0x3]
     Depth: 1  [0xd+0x3]
-    Blocks  [0x10+0x40]
+    Blocks — 4 128-bit blocks  [0x10+0x40]

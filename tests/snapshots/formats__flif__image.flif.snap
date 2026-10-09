@@ -2,6 +2,10 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ image.flif — 64×32, 3 channel(s), 8-bit  [0x0+0x19]
-    Header  [0x0+0x8]
+▾ image.flif — 64×32, RGB, 8-bit  [0x0+0x19]
+    Magic: "FLIF"  [0x0+0x4]
+    Format: "3" — non-interlaced, 3 channels (RGB)  [0x4+0x1]
+    Bytes per channel: "1" — 8-bit  [0x5+0x1]
+    Width - 1: 63  [0x6+0x1]
+    Height - 1: 31  [0x7+0x1]
     Image data  [0x8+0x11]

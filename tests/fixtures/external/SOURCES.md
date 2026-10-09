@@ -164,6 +164,7 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `pdf/encrypted-password-rc4-128.pdf` | pypdf | `/Producer (pypdf)`; user password `fillyfoal` |
 | `tiff/exif-piexif.tif` | piexif 1.1.3 (thumbnail by Pillow 12.3) | reproduced byte-for-byte: `uv run --with pillow==12.3.0 --with piexif==1.1.3 python tests/data/tiff/exif_piexif.py tests/fixtures/external/tiff/exif-piexif.tif`; the Exif block of a JPEG APP1 segment without its `Exif\0\0` prefix; tag values are ours |
 | `tiff/geotiff-bigtiff.tif` | tifffile 2026.9.20 (numpy 2.5.3; ICC profile by Pillow 12.3's LittleCMS) | `uv run --with tifffile==2026.9.20 --with numpy==2.5.3 --with pillow==12.3.0 python tests/data/tiff/geotiff_tifffile.py tests/fixtures/external/tiff/geotiff-bigtiff.tif` reproduces it except for the embedded profile's creation time; the GeoTIFF key values are ours |
+| `fits/astropy-tables.fits` | astropy 7.1.1 (numpy 2.3.4) | reproduced byte-for-byte: `uv run --with astropy==7.1.1 --with numpy==2.3.4 python tests/data/fits/astropy_fits.py tests/fixtures/external/fits/astropy-tables.fits`; an unsigned 16-bit image, a binary table with a variable-length array column (heap) and an ASCII table; values are ours |
 | `icc/lcms-srgb.icc` | LittleCMS 2 via Pillow 12.3 (`ImageCms.createProfile("sRGB")`) | `uv run --with pillow==12.3.0 python -c "from PIL import ImageCms; open('lcms-srgb.icc','wb').write(ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes())"` reproduces it except for the creation time in the header |
 
 ## Binary value encodings
@@ -377,6 +378,7 @@ and reproduce every file byte for byte.
 | `ktx/sips.ktx` | macOS sips (ImageIO) | ImageIO key/value data (`AlphaInfo_APPLE`) |
 | `ktx2/sips.ktx2` | macOS sips (ImageIO / libktx 4.0) | `KTXwriter: ImageIO / libktx v4.0` |
 | `astc/sips.astc` | macOS sips (ImageIO) | named for its producer like the other sips fixtures; real ASTC block data (compare the hand-made astc/tex.astc) |
+| `pvr/sips.pvr` | macOS 26.5 sips (ImageIO) | reproduced byte-for-byte: `sips -s format pvr` of a 16x16 ffmpeg testsrc frame saved as PNG (`-f lavfi -i testsrc=size=16x16:rate=1 -frames:v 1`); PVR v3, PVRTC 4bpp RGB |
 | `psd/sips.psd` | macOS sips (ImageIO) | named for its producer; ImageIO image resources with an embedded sRGB profile |
 | `webp/lossless.webp` | libwebp cwebp 1.6 | reproduced byte-for-byte: `cwebp -lossless` of a 16x16 ffmpeg testsrc frame |
 | `webp/lossy.webp` | libwebp cwebp 1.6 | reproduced byte-for-byte: `cwebp -q 50` of the same frame |
