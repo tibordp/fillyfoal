@@ -3,15 +3,22 @@
 //! signatures; and the dyld shared cache header.
 //!
 //! Expanding the file reads the header and the load commands (one read,
-//! usually a few KiB): segments, sections, linked libraries and symbol table
-//! locations all come from there. Symbol tables, signatures and the
-//! `__LINKEDIT` structures are decoded only when expanded.
+//! usually a few KiB): segments, sections, linked libraries and the
+//! locations of every `__LINKEDIT` table come from there. The file is then
+//! laid out by offset: each segment lists what it holds (the header and load
+//! commands, sections, the `__LINKEDIT` tables) with the padding between
+//! them, and whatever lies outside every segment (an object file's
+//! relocations and symbols) follows at the top level. Section contents,
+//! symbols, fixups and signatures are decoded only when expanded.
 
 pub mod codesign;
 pub mod dyld_cache;
 pub mod fat;
 mod linkedit;
+mod sections;
+mod symbols;
 pub(crate) mod tables;
+mod unwind;
 
 use std::sync::Arc;
 
@@ -21,9 +28,9 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::arcutil::human_size;
 use crate::formats::util::binutil::{
-    NodeExt, RangeIndex, cstrings, data_node, ellipsize, get_at, hex, name_or, perms, string_at,
-    text,
+    NodeExt, RangeIndex, cstrings, data_node, ellipsize, get_at, name_or, perms, text,
 };
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -46,6 +53,8 @@ pub static FORMAT: Format = Format {
 
 /// Load command regions larger than this are not read.
 const MAX_COMMANDS: u64 = 4 << 20;
+/// How much of a gap between structures is read to tell padding from data.
+const GAP_PROBE: u64 = 0x1_0000;
 
 // ---------------------------------------------------------------------------
 // Model
@@ -64,6 +73,10 @@ struct Header {
 struct Command {
     span: Span,
     cmd: u32,
+    /// The regions this command points at: `regions[first..end]`.
+    regions: (usize, usize),
+    /// The sections a segment command declares: `sections[first..end]`.
+    sections: (usize, usize),
 }
 
 #[derive(Clone, Debug)]
@@ -72,7 +85,18 @@ struct SegmentInfo {
     vmaddr: u64,
     fileoff: u64,
     filesize: u64,
+    initprot: u32,
     nsects: u32,
+}
+
+impl SegmentInfo {
+    fn label(&self) -> String {
+        if self.name.is_empty() {
+            "Segment".to_owned()
+        } else {
+            self.name.clone()
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -112,10 +136,65 @@ struct Symtab {
     strsize: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 struct Dysymtab {
+    ilocalsym: u32,
+    nlocalsym: u32,
+    iextdefsym: u32,
+    nextdefsym: u32,
+    iundefsym: u32,
+    nundefsym: u32,
     indirectsymoff: u32,
     nindirectsyms: u32,
+}
+
+#[derive(Clone, Debug)]
+struct Dylib {
+    cmd: u32,
+    path: String,
+    current: u32,
+}
+
+impl Dylib {
+    fn short(&self) -> &str {
+        short_dylib(&self.path)
+    }
+}
+
+/// What a region of the file holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Item {
+    Header,
+    Commands,
+    /// A section's contents (index into `sections`).
+    Section(usize),
+    /// A section's relocation entries.
+    Relocations(usize),
+    Symtab,
+    Strtab,
+    Toc,
+    Modtab,
+    ExtRefs,
+    Indirect,
+    ExtRel,
+    LocRel,
+    Rebase,
+    Bind,
+    WeakBind,
+    LazyBind,
+    Export,
+    /// A `linkedit_data_command` region, by command.
+    Data(u32),
+    TwoLevelHints,
+    Note,
+    SymSeg,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Region {
+    offset: u64,
+    len: u64,
+    item: Item,
 }
 
 type Macho = Arc<MachInfo>;
@@ -125,15 +204,25 @@ struct MachInfo {
     endian: Endian,
     wide: bool,
     header: Header,
+    header_size: u64,
     commands: Vec<Command>,
     segments: Vec<SegmentInfo>,
     sections: Vec<SectionInfo>,
-    dylibs: Vec<String>,
+    dylibs: Vec<Dylib>,
     symtab: Option<Symtab>,
     dysymtab: Option<Dysymtab>,
     code_signature: Option<(u32, u32)>,
+    chained_fixups: Option<(u32, u32)>,
+    /// Everything the header and load commands point at, in command order.
+    regions: Vec<Region>,
+    /// `regions` indices sorted by offset (longest first at equal offsets).
+    layout: Vec<usize>,
     /// The segments' address ranges, for [`MachInfo::vm_span`].
     vm_index: RangeIndex,
+    /// The segments' file ranges.
+    file_index: RangeIndex,
+    /// The sections' address ranges, for [`MachInfo::describe`].
+    section_index: RangeIndex,
 }
 
 impl MachInfo {
@@ -153,18 +242,23 @@ impl MachInfo {
         if self.wide { 16 } else { 12 }
     }
 
+    fn two_level(&self) -> bool {
+        self.header.flags & MH_TWOLEVEL != 0
+    }
+
     /// The section numbered `n` (1-based, as in `n_sect`).
     fn section(&self, n: u8) -> Option<&SectionInfo> {
         self.sections.get(usize::from(n).checked_sub(1)?)
     }
 
-    fn dylib(&self, ordinal: u8) -> String {
-        match usize::from(ordinal)
+    /// The library a two-level ordinal refers to.
+    fn dylib(&self, ordinal: u64) -> String {
+        match to_usize(ordinal)
             .checked_sub(1)
             .and_then(|i| self.dylibs.get(i))
         {
-            Some(name) => name.clone(),
-            None => lookup(BIND_SPECIAL_DYLIB, ordinal.into())
+            Some(d) => d.short().to_owned(),
+            None => lookup(BIND_SPECIAL_DYLIB, ordinal)
                 .map_or_else(|| format!("library #{ordinal}"), str::to_owned),
         }
     }
@@ -180,15 +274,46 @@ impl MachInfo {
         ))
     }
 
+    /// `__DATA,__got+0x8` for an address inside a section, else the address.
+    fn describe(&self, addr: u64) -> String {
+        match self
+            .section_index
+            .find(addr)
+            .and_then(|i| self.sections.get(i))
+        {
+            Some(s) if addr == s.addr => s.label(),
+            Some(s) => format!("{}+{:#x}", s.label(), addr.saturating_sub(s.addr)),
+            None => match self.vm_index.find(addr).and_then(|i| self.segments.get(i)) {
+                Some(s) => format!("{}+{:#x}", s.label(), addr.saturating_sub(s.vmaddr)),
+                None => format!("{addr:#x}"),
+            },
+        }
+    }
+
+    /// The image's base address: the `__TEXT` segment's (the mach header's).
     fn text_vmaddr(&self) -> u64 {
         self.segments
             .iter()
             .find(|s| s.name == "__TEXT")
+            .or_else(|| {
+                self.segments
+                    .iter()
+                    .find(|s| s.fileoff == 0 && s.filesize > 0)
+            })
             .map_or(0, |s| s.vmaddr)
     }
 
     fn linkedit(&self, offset: u32, size: u32) -> Span {
         self.file().sub(offset.into(), size.into())
+    }
+
+    fn region_span(&self, r: &Region) -> Span {
+        self.file().sub(r.offset, r.len)
+    }
+
+    /// The region of an item, if the load commands point at one.
+    fn region(&self, item: Item) -> Option<&Region> {
+        self.regions.iter().find(|r| r.item == item)
     }
 }
 
@@ -217,18 +342,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(file.sub(0, 4)).await?;
     let (endian, wide) = magic(&head)
         .ok_or_else(|| Diagnostic::malformed("not a Mach-O header").at(file.sub(0, 4)))?;
-    let header_size = if wide { 32 } else { 28 };
+    let header_size: u64 = if wide { 32 } else { 28 };
     let header_span = file.sub(0, header_size);
     let header = parse(&cx, header_span, endian, &wide, mach_header).await;
-    let mut node = struct_node("Mach Header", header_span, endian, wide, mach_header);
-    if let Ok(h) = &header {
-        node = node.summary(format!(
-            "{}, {}",
-            name_or(FILE_TYPE, h.filetype.into(), "filetype"),
-            arch_name(h.cputype, h.cpusubtype)
-        ));
-    }
-    cx.emit(node);
+    cx.emit(header_node(header_span, endian, wide, header.as_ref().ok()));
     let header = header?;
 
     let ctx = Ctx { wide, file };
@@ -248,6 +365,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         endian,
         wide,
         header,
+        header_size,
         commands: Vec::new(),
         segments: Vec::new(),
         sections: Vec::new(),
@@ -255,7 +373,23 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         symtab: None,
         dysymtab: None,
         code_signature: None,
+        chained_fixups: None,
+        regions: vec![
+            Region {
+                offset: 0,
+                len: header_size,
+                item: Item::Header,
+            },
+            Region {
+                offset: header_size,
+                len: header.sizeofcmds.into(),
+                item: Item::Commands,
+            },
+        ],
+        layout: Vec::new(),
         vm_index: RangeIndex::default(),
+        file_index: RangeIndex::default(),
+        section_index: RangeIndex::default(),
     };
     let block = crate::cx::Block {
         span: region,
@@ -279,77 +413,62 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let span = region.sub(offset, size.into());
-        info.commands.push(Command { span, cmd });
+        let first = info.regions.len();
+        let first_section = info.sections.len();
         let mut f = Fields::new(&block, endian);
         f.seek(offset);
         if let Err(e) = learn(&mut info, &mut f, &ctx, cmd, size) {
             cx.diag(e);
         }
+        info.commands.push(Command {
+            span,
+            cmd,
+            regions: (first, info.regions.len()),
+            sections: (first_section, info.sections.len()),
+        });
         offset = offset.saturating_add(size.into());
     }
+    // Sorting is covered by the per-command checkpoints above.
+    let mut layout: Vec<usize> = (0..info.regions.len()).collect();
+    layout.sort_by_key(|&i| {
+        info.regions.get(i).map_or((u64::MAX, 0), |r| {
+            (r.offset, u64::MAX.saturating_sub(r.len))
+        })
+    });
+    info.layout = layout;
     info.vm_index = RangeIndex::new(info.segments.iter().map(|s| (s.vmaddr, s.filesize)));
+    info.file_index = RangeIndex::new(info.segments.iter().map(|s| (s.fileoff, s.filesize)));
+    info.section_index = RangeIndex::new(info.sections.iter().map(|s| (s.addr, s.size)));
     let m: Macho = Arc::new(info);
 
     let signature = m.code_signature.map(|(o, s)| m.linkedit(o, s));
     let signed = match signature {
-        Some(span) => codesign::summary(&cx, span).await.ok(),
+        Some(span) => codesign::brief(&cx, span).await.ok(),
         None => None,
     };
     cx.annotate(summary(&m, &block.data, signed.as_deref()));
 
-    cx.emit(
-        Node::new("Load Commands")
-            .span(region)
-            .summary(format!("{} commands", m.commands.len()))
-            .lazy(command_list, m.clone()),
-    );
+    cx.emit(commands_node(&m, region));
     if !m.dylibs.is_empty() {
+        let names: Vec<&str> = m.dylibs.iter().map(Dylib::short).collect();
         cx.emit(
             Node::new("Linked Libraries")
-                .summary(ellipsize(&m.dylibs.join(", "), 120))
+                .summary(ellipsize(&names.join(", "), 120))
                 .lazy(libraries, m.clone()),
         );
     }
-    if let Some(symtab) = m.symtab {
-        cx.emit(symtab_node(&m, symtab));
-    }
-    if let Some(span) = signature {
-        let mut node = Node::new("Code Signature")
-            .span(span)
-            .lazy(codesign::superblob, span);
-        if let Some(s) = signed {
-            node = node.summary(s);
-        }
-        cx.emit(node);
-    }
-
-    let end = m
-        .segments
-        .iter()
-        .map(|s| s.fileoff.saturating_add(s.filesize))
-        .chain(
-            m.sections
-                .iter()
-                .filter(|s| !s.is_zerofill())
-                .map(|s| u64::from(s.offset).saturating_add(s.size)),
-        )
-        .chain([header_size.saturating_add(header.sizeofcmds.into())])
-        .max()
-        .unwrap_or(0);
-    if end < file.len && header.filetype != 1 {
-        cx.emit(
-            embedded("Overlay", input.nested(file.tail(end))).summary(format!(
-                "{:#x} bytes after the last segment",
-                file.len.saturating_sub(end)
-            )),
-        );
-    }
+    top_level(&cx, &m).await?;
     Ok(())
 }
 
 /// Records what later expansions need from a load command.
 fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32, size: u32) -> Result<()> {
     let start = f.pos();
+    let mut region = |offset: u64, len: u64, item: Item| {
+        if len > 0 {
+            info.regions.push(Region { offset, len, item });
+        }
+    };
     match cmd {
         LC_SEGMENT | LC_SEGMENT_64 => {
             let segment = segment_command(f, ctx)?;
@@ -361,7 +480,17 @@ fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32, size: u32
                 .checked_div(if ctx.wide { 80 } else { 68 })
                 .unwrap_or(0);
             for _ in 0..u64::from(segment.nsects).min(room) {
-                info.sections.push(section_header(f, ctx)?);
+                let s = section_header(f, ctx)?;
+                let index = info.sections.len();
+                if !s.is_zerofill() && s.offset != 0 {
+                    region(s.offset.into(), s.size, Item::Section(index));
+                }
+                region(
+                    s.reloff.into(),
+                    u64::from(s.nreloc).saturating_mul(8),
+                    Item::Relocations(index),
+                );
+                info.sections.push(s);
             }
             info.segments.push(segment);
         }
@@ -369,29 +498,135 @@ fn learn(info: &mut MachInfo, f: &mut Fields<'_>, ctx: &Ctx, cmd: u32, size: u32
         | LC_LOAD_UPWARD_DYLIB => {
             f.skip(8);
             let name = f.u32("name").get()?;
+            f.skip(4);
+            let current = f.u32("current_version").get().unwrap_or(0);
             f.seek(start.saturating_add(name.into()));
             let path = f.cstr("path").get().unwrap_or_default();
-            info.dylibs.push(short_dylib(&path).to_owned());
+            info.dylibs.push(Dylib { cmd, path, current });
         }
         LC_SYMTAB => {
             f.skip(8);
-            info.symtab = Some(Symtab {
+            let st = Symtab {
                 symoff: f.u32("symoff").get()?,
                 nsyms: f.u32("nsyms").get()?,
                 stroff: f.u32("stroff").get()?,
                 strsize: f.u32("strsize").get()?,
-            });
-        }
-        LC_CODE_SIGNATURE => {
-            f.skip(8);
-            info.code_signature = Some((f.u32("dataoff").get()?, f.u32("datasize").get()?));
+            };
+            let nlist: u64 = if ctx.wide { 16 } else { 12 };
+            region(
+                st.symoff.into(),
+                u64::from(st.nsyms).saturating_mul(nlist),
+                Item::Symtab,
+            );
+            region(st.stroff.into(), st.strsize.into(), Item::Strtab);
+            info.symtab = Some(st);
         }
         LC_DYSYMTAB => {
-            f.skip(8 + 12 * 4);
-            info.dysymtab = Some(Dysymtab {
-                indirectsymoff: f.u32("indirectsymoff").get()?,
-                nindirectsyms: f.u32("nindirectsyms").get()?,
-            });
+            f.skip(8);
+            let mut v = [0u32; 18];
+            for slot in &mut v {
+                *slot = f.u32("").get()?;
+            }
+            let [
+                ilocalsym,
+                nlocalsym,
+                iextdefsym,
+                nextdefsym,
+                iundefsym,
+                nundefsym,
+                tocoff,
+                ntoc,
+                modtaboff,
+                nmodtab,
+                extrefsymoff,
+                nextrefsyms,
+                indirectsymoff,
+                nindirectsyms,
+                extreloff,
+                nextrel,
+                locreloff,
+                nlocrel,
+            ] = v;
+            let d = Dysymtab {
+                ilocalsym,
+                nlocalsym,
+                iextdefsym,
+                nextdefsym,
+                iundefsym,
+                nundefsym,
+                indirectsymoff,
+                nindirectsyms,
+            };
+            let module: u64 = if ctx.wide { 56 } else { 52 };
+            let table = |n: u32, size: u64| u64::from(n).saturating_mul(size);
+            region(tocoff.into(), table(ntoc, 8), Item::Toc);
+            region(modtaboff.into(), table(nmodtab, module), Item::Modtab);
+            region(extrefsymoff.into(), table(nextrefsyms, 4), Item::ExtRefs);
+            region(
+                indirectsymoff.into(),
+                table(nindirectsyms, 4),
+                Item::Indirect,
+            );
+            region(extreloff.into(), table(nextrel, 8), Item::ExtRel);
+            region(locreloff.into(), table(nlocrel, 8), Item::LocRel);
+            info.dysymtab = Some(d);
+        }
+        LC_DYLD_INFO | LC_DYLD_INFO_ONLY => {
+            f.skip(8);
+            for item in [
+                Item::Rebase,
+                Item::Bind,
+                Item::WeakBind,
+                Item::LazyBind,
+                Item::Export,
+            ] {
+                let offset = f.u32("off").get()?;
+                let size = f.u32("size").get()?;
+                region(offset.into(), size.into(), item);
+            }
+        }
+        LC_CODE_SIGNATURE
+        | LC_SEGMENT_SPLIT_INFO
+        | LC_FUNCTION_STARTS
+        | LC_DATA_IN_CODE
+        | LC_DYLIB_CODE_SIGN_DRS
+        | LC_LINKER_OPTIMIZATION_HINT
+        | LC_DYLD_EXPORTS_TRIE
+        | LC_DYLD_CHAINED_FIXUPS
+        | LC_ATOM_INFO
+        | LC_FUNCTION_VARIANTS
+        | LC_FUNCTION_VARIANT_FIXUPS => {
+            f.skip(8);
+            let offset = f.u32("dataoff").get()?;
+            let size = f.u32("datasize").get()?;
+            region(offset.into(), size.into(), Item::Data(cmd));
+            match cmd {
+                LC_CODE_SIGNATURE => info.code_signature = Some((offset, size)),
+                LC_DYLD_CHAINED_FIXUPS => info.chained_fixups = Some((offset, size)),
+                _ => {}
+            }
+        }
+        LC_TWOLEVEL_HINTS => {
+            f.skip(8);
+            let offset = f.u32("offset").get()?;
+            let count = f.u32("nhints").get()?;
+            region(
+                offset.into(),
+                u64::from(count).saturating_mul(4),
+                Item::TwoLevelHints,
+            );
+        }
+        LC_SYMSEG => {
+            f.skip(8);
+            let offset = f.u32("offset").get()?;
+            let size = f.u32("size").get()?;
+            region(offset.into(), size.into(), Item::SymSeg);
+        }
+        LC_NOTE => {
+            f.skip(24);
+            let offset = f.u64("offset").get()?;
+            let size = f.u64("size").get()?;
+            region(offset, size, Item::Note);
         }
         _ => {}
     }
@@ -404,21 +639,14 @@ fn short_dylib(path: &str) -> &str {
 
 fn summary(m: &MachInfo, commands: &[u8], signed: Option<&str>) -> String {
     let h = &m.header;
-    let bits = if m.wide { "64-bit" } else { "32-bit" };
-    let order = if m.endian == Endian::Big {
-        " big-endian"
-    } else {
-        ""
-    };
     let mut parts = vec![format!(
-        "Mach-O {bits}{order} {} {}",
-        name_or(FILE_TYPE_WORDS, h.filetype.into(), "file type"),
-        arch_name(h.cputype, h.cpusubtype)
+        "Mach-O {} {}",
+        arch_name(h.cputype, h.cpusubtype),
+        name_or(FILE_TYPE_WORDS, h.filetype.into(), "file type")
     )];
-    if h.flags & MH_PIE != 0 && h.filetype == MH_EXECUTE {
-        parts.push("PIE".to_owned());
-    }
-    let base = to_u64(if m.wide { 32 } else { 28 });
+    let base = m.header_size;
+    let mut platform = None;
+    let mut encrypted = false;
     for c in &m.commands {
         let rel = c
             .span
@@ -430,31 +658,367 @@ fn summary(m: &MachInfo, commands: &[u8], signed: Option<&str>) -> String {
             .unwrap_or_default();
         let w = |at: usize| get_at::<u32>(bytes, to_u64(at), m.endian).unwrap_or(0);
         match c.cmd {
-            LC_BUILD_VERSION => parts.push(format!(
-                "{} {}",
-                name_or(PLATFORM, w(8).into(), "platform"),
-                version(w(12))
-            )),
-            LC_VERSION_MIN_MACOSX => parts.push(format!("macOS {}", version(w(8)))),
-            LC_VERSION_MIN_IPHONEOS => parts.push(format!("iOS {}", version(w(8)))),
-            LC_VERSION_MIN_TVOS => parts.push(format!("tvOS {}", version(w(8)))),
-            LC_VERSION_MIN_WATCHOS => parts.push(format!("watchOS {}", version(w(8)))),
+            LC_BUILD_VERSION => {
+                platform.get_or_insert_with(|| {
+                    format!(
+                        "{} {}",
+                        name_or(PLATFORM, w(8).into(), "platform"),
+                        version(w(12))
+                    )
+                });
+            }
+            LC_VERSION_MIN_MACOSX
+            | LC_VERSION_MIN_IPHONEOS
+            | LC_VERSION_MIN_TVOS
+            | LC_VERSION_MIN_WATCHOS => {
+                let os = match c.cmd {
+                    LC_VERSION_MIN_MACOSX => "macOS",
+                    LC_VERSION_MIN_IPHONEOS => "iOS",
+                    LC_VERSION_MIN_TVOS => "tvOS",
+                    _ => "watchOS",
+                };
+                platform.get_or_insert_with(|| format!("{os} {}", version(w(8))));
+            }
             LC_ID_DYLIB => {
                 let name =
                     crate::text::until_nul(bytes.get(to_usize(w(8).into())..).unwrap_or_default());
-                parts.push(name);
+                parts.push(format!("{} {}", short_dylib(&name), version(w(16))));
             }
+            LC_ENCRYPTION_INFO | LC_ENCRYPTION_INFO_64 if w(16) != 0 => encrypted = true,
             _ => {}
         }
     }
+    parts.extend(platform);
+    if !m.dylibs.is_empty() {
+        parts.push(count(to_u64(m.dylibs.len()), "dylib", "dylibs"));
+    }
     if let Some(s) = signed {
         parts.push(format!("signed ({s})"));
+    }
+    if encrypted {
+        parts.push("encrypted".to_owned());
+    }
+    if h.flags & MH_PIE != 0 && h.filetype == MH_EXECUTE {
+        parts.push("PIE".to_owned());
+    }
+    if let Some(st) = m.symtab {
+        parts.push(count(st.nsyms.into(), "symbol", "symbols"));
     }
     parts.join(", ")
 }
 
 // ---------------------------------------------------------------------------
+// Layout
+
+/// What lies at the top level besides the header and load commands.
+#[derive(Clone, Copy, Debug)]
+enum Top {
+    Segment(usize),
+    Region(usize),
+}
+
+/// The segments, the regions outside every segment, the gaps between them,
+/// shortcuts to the symbol table and signature, and any overlay.
+async fn top_level(cx: &Cx, m: &Macho) -> Result<()> {
+    let file = m.file();
+    let mut tops: Vec<(u64, u64, Top)> = Vec::new();
+    for (i, s) in m.segments.iter().enumerate() {
+        if s.filesize > 0 {
+            tops.push((s.fileoff, s.filesize, Top::Segment(i)));
+        }
+    }
+    let inside = |r: &Region| m.file_index.find(r.offset).is_some();
+    for &i in &m.layout {
+        let Some(r) = m.regions.get(i) else { continue };
+        if matches!(r.item, Item::Header | Item::Commands) || inside(r) {
+            continue;
+        }
+        tops.push((r.offset, r.len, Top::Region(i)));
+    }
+    tops.sort_by_key(|&(offset, len, _)| (offset, u64::MAX.saturating_sub(len)));
+    let end = m
+        .regions
+        .iter()
+        .map(|r| r.offset.saturating_add(r.len))
+        .chain(tops.iter().map(|t| t.0.saturating_add(t.1)))
+        .max()
+        .unwrap_or(0)
+        .min(file.len);
+    let mut cursor = m
+        .header_size
+        .saturating_add(m.header.sizeofcmds.into())
+        .min(file.len);
+    for (offset, len, top) in tops {
+        if offset >= file.len {
+            continue;
+        }
+        if offset > cursor {
+            cx.push(gap_node(cx, file.sub(cursor, offset.saturating_sub(cursor))).await?)
+                .await;
+        }
+        let node = match top {
+            Top::Segment(i) => segment_node(m, i),
+            Top::Region(i) => match m.regions.get(i) {
+                Some(r) => item_node(m, r),
+                None => continue,
+            },
+        };
+        cx.push(node).await;
+        cursor = cursor.max(offset.saturating_add(len));
+    }
+    let overlay = m.header.filetype != MH_OBJECT && end < file.len;
+    let tail = if overlay { end } else { file.len };
+    if cursor < tail {
+        cx.push(gap_node(cx, file.sub(cursor, tail.saturating_sub(cursor))).await?)
+            .await;
+    }
+    // Shortcuts to what users look for first, when it sits in a segment.
+    for item in [Item::Symtab, Item::Data(LC_CODE_SIGNATURE)] {
+        if let Some(r) = m.region(item).filter(|r| inside(r)) {
+            cx.push(item_node(m, r)).await;
+        }
+    }
+    if overlay {
+        cx.push(
+            embedded("Overlay", m.input.nested(file.tail(end))).summary(format!(
+                "{} after the last segment",
+                human_size(file.len.saturating_sub(end))
+            )),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// A gap between structures: zero padding, or bytes nothing points at.
+async fn gap_node(cx: &Cx, span: Span) -> Result<Node> {
+    let data = cx.read_avail(span.sub(0, GAP_PROBE)).await?;
+    let zeros = data.iter().all(|&b| b == 0);
+    Ok(if zeros {
+        Node::new("Padding")
+            .span(span)
+            .summary(human_size(span.len))
+            .desc("Alignment padding (zeros)")
+    } else {
+        Node::new("Unreferenced Data")
+            .span(span)
+            .summary(human_size(span.len))
+            .desc("Bytes no load command points at")
+    })
+}
+
+fn segment_node(m: &Macho, index: usize) -> Node {
+    let Some(s) = m.segments.get(index) else {
+        return Node::new("?");
+    };
+    let span = m.file().sub(s.fileoff, s.filesize);
+    let mut node = Node::new(s.label())
+        .span(span)
+        .summary(format!(
+            "{}, {}, {} at {:#x}",
+            perms(
+                s.initprot & 1 != 0,
+                s.initprot & 2 != 0,
+                s.initprot & 4 != 0
+            ),
+            count(s.nsects.into(), "section", "sections"),
+            human_size(s.filesize),
+            s.vmaddr
+        ))
+        .lazy(segment_contents, (m.clone(), index));
+    if span.len < s.filesize {
+        node = node.diag(Diagnostic::truncated(
+            Span::new(span.source, span.offset, s.filesize),
+            span.len,
+        ));
+    }
+    node
+}
+
+/// A segment's file range: the regions inside it in offset order, with the
+/// gaps between them.
+async fn segment_contents(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
+    let s = m
+        .segments
+        .get(index)
+        .ok_or_else(|| Diagnostic::internal("segment index out of range"))?;
+    let span = m.file().sub(s.fileoff, s.filesize);
+    let start = span.offset.saturating_sub(m.file().offset);
+    let end = start.saturating_add(span.len);
+    let first = m
+        .layout
+        .partition_point(|&i| m.regions.get(i).is_some_and(|r| r.offset < start));
+    let mut cursor = start;
+    for &i in m.layout.get(first..).unwrap_or_default() {
+        let Some(r) = m.regions.get(i) else { continue };
+        if r.offset >= end {
+            break;
+        }
+        if r.offset > cursor {
+            cx.push(gap_node(&cx, m.file().sub(cursor, r.offset.saturating_sub(cursor))).await?)
+                .await;
+        }
+        cx.push(item_node(&m, r)).await;
+        cursor = cursor.max(r.offset.saturating_add(r.len));
+    }
+    if cursor < end {
+        cx.push(gap_node(&cx, m.file().sub(cursor, end.saturating_sub(cursor))).await?)
+            .await;
+    }
+    Ok(())
+}
+
+/// The node for what a region holds.
+fn item_node(m: &Macho, r: &Region) -> Node {
+    let span = m.region_span(r);
+    let node = match r.item {
+        Item::Header => header_node(span, m.endian, m.wide, Some(&m.header)),
+        Item::Commands => commands_node(m, span),
+        Item::Section(i) => sections::section_node(m, i),
+        Item::Relocations(i) => {
+            let label = m
+                .sections
+                .get(i)
+                .map_or_else(String::new, SectionInfo::label);
+            Node::new(format!("Relocations ({label})"))
+                .span(span)
+                .summary(count(span.len / 8, "entry", "entries"))
+                .lazy(symbols::relocations, (m.clone(), span, i))
+        }
+        Item::Symtab => match m.symtab {
+            Some(st) => symbols::symtab_node(m, st),
+            None => data_node("Symbol Table", span, r.len),
+        },
+        Item::Strtab => Node::new("String Table")
+            .span(span)
+            .summary(human_size(span.len))
+            .lazy(cstrings, span),
+        Item::Toc => Node::new("Table of Contents")
+            .span(span)
+            .summary(count(span.len / 8, "entry", "entries"))
+            .desc("Defined external symbols and the modules defining them")
+            .lazy(symbols::toc, (m.clone(), span)),
+        Item::Modtab => Node::new("Module Table")
+            .span(span)
+            .lazy(symbols::modules, (m.clone(), span)),
+        Item::ExtRefs => Node::new("External References")
+            .span(span)
+            .summary(count(span.len / 4, "entry", "entries"))
+            .lazy(symbols::external_refs, (m.clone(), span)),
+        Item::Indirect => Node::new("Indirect Symbol Table")
+            .span(span)
+            .summary(count(span.len / 4, "entry", "entries"))
+            .desc("Symbol indices for the entries of pointer and stub sections")
+            .lazy(
+                symbols::indirect_symbols,
+                (
+                    m.clone(),
+                    0u32,
+                    u32::try_from(span.len / 4).unwrap_or(u32::MAX),
+                ),
+            ),
+        Item::ExtRel | Item::LocRel => Node::new(if r.item == Item::ExtRel {
+            "External Relocations"
+        } else {
+            "Local Relocations"
+        })
+        .span(span)
+        .summary(count(span.len / 8, "entry", "entries"))
+        .lazy(symbols::relocations, (m.clone(), span, usize::MAX)),
+        Item::Rebase => Node::new("Rebase Info")
+            .span(span)
+            .desc("Rebase opcodes: pointers to slide when the image moves")
+            .lazy(linkedit::rebase_opcodes, (m.clone(), span)),
+        Item::Bind | Item::WeakBind | Item::LazyBind => {
+            let (name, desc) = match r.item {
+                Item::Bind => ("Bind Info", "Bind opcodes: pointers to imported symbols"),
+                Item::WeakBind => (
+                    "Weak Bind Info",
+                    "Bind opcodes: weak definitions coalesced across images",
+                ),
+                _ => (
+                    "Lazy Bind Info",
+                    "Bind opcodes run by the stub helper on first call, one entry per stub",
+                ),
+            };
+            Node::new(name)
+                .span(span)
+                .desc(desc)
+                .lazy(linkedit::bind_opcodes, (m.clone(), span))
+        }
+        Item::Export => Node::new("Export Info")
+            .span(span)
+            .desc("Exported symbols, as a prefix trie")
+            .lazy(linkedit::exports_trie, (m.clone(), span)),
+        Item::Data(cmd) => linkedit_data_node(m, cmd, span),
+        Item::TwoLevelHints => Node::new("Two-Level Namespace Hints")
+            .span(span)
+            .summary(count(span.len / 4, "hint", "hints"))
+            .lazy(symbols::hints, (m.clone(), span)),
+        Item::Note => embedded("Note Data", m.input.nested(span)),
+        Item::SymSeg => data_node("Symbol Segment", span, r.len),
+    };
+    if span.len < r.len {
+        node.diag(Diagnostic::truncated(
+            Span::new(span.source, span.offset, r.len),
+            span.len,
+        ))
+    } else {
+        node
+    }
+}
+
+fn linkedit_data_node(m: &Macho, cmd: u32, span: Span) -> Node {
+    match cmd {
+        LC_CODE_SIGNATURE => Node::new("Code Signature")
+            .span(span)
+            .lazy(codesign::superblob_in, m.input.nested(span)),
+        LC_DYLIB_CODE_SIGN_DRS => Node::new("Code Signing Requirements")
+            .span(span)
+            .desc("Designated requirements of the linked dylibs")
+            .lazy(codesign::superblob_in, m.input.nested(span)),
+        LC_FUNCTION_STARTS => Node::new("Function Starts")
+            .span(span)
+            .desc("ULEB128 deltas between function start addresses")
+            .lazy(linkedit::function_starts, (m.clone(), span)),
+        LC_DATA_IN_CODE => Node::new("Data in Code")
+            .span(span)
+            .summary(count(span.len / 8, "entry", "entries"))
+            .lazy(linkedit::data_in_code, (m.clone(), span)),
+        LC_DYLD_CHAINED_FIXUPS => Node::new("Chained Fixups")
+            .span(span)
+            .lazy(linkedit::chained_fixups, (m.clone(), span)),
+        LC_DYLD_EXPORTS_TRIE => Node::new("Exports Trie")
+            .span(span)
+            .desc("Exported symbols, as a prefix trie")
+            .lazy(linkedit::exports_trie, (m.clone(), span)),
+        LC_LINKER_OPTIMIZATION_HINT => Node::new("Linker Optimization Hints")
+            .span(span)
+            .lazy(linkedit::optimization_hints, (m.clone(), span)),
+        LC_SEGMENT_SPLIT_INFO => data_node("Segment Split Info", span, span.len)
+            .desc("Where the shared cache builder must adjust references between segments"),
+        _ => data_node(
+            lookup(LOAD_COMMAND, cmd.into()).unwrap_or("Data"),
+            span,
+            span.len,
+        ),
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Header
+
+fn header_node(span: Span, endian: Endian, wide: bool, header: Option<&Header>) -> Node {
+    let node = struct_node("Mach Header", span, endian, wide, mach_header);
+    match header {
+        Some(h) => node.summary(format!(
+            "{}, {}",
+            name_or(FILE_TYPE, h.filetype.into(), "filetype"),
+            subtype_summary(h.cputype, h.cpusubtype)
+        )),
+        None => node,
+    }
+}
 
 fn mach_header(f: &mut Fields<'_>, wide: &bool) -> Result<Header> {
     f.u32("magic")
@@ -465,13 +1029,7 @@ fn mach_header(f: &mut Fields<'_>, wide: &bool) -> Result<Header> {
     let cpusubtype = f
         .u32("cpusubtype")
         .hex()
-        .with(|&v, n| {
-            let mut s = arch_name(cputype, v);
-            if v & 0x8000_0000 != 0 {
-                s.push_str(", pointer authentication ABI");
-            }
-            n.summary(s)
-        })
+        .with(|&v, n| n.summary(subtype_summary(cputype, v)))
         .emit()?;
     let filetype = f.u32("filetype").enumeration(FILE_TYPE).emit()?;
     let ncmds = f.u32("ncmds").desc("Number of load commands").emit()?;
@@ -496,6 +1054,13 @@ fn mach_header(f: &mut Fields<'_>, wide: &bool) -> Result<Header> {
 
 // ---------------------------------------------------------------------------
 // Load commands
+
+fn commands_node(m: &Macho, span: Span) -> Node {
+    Node::new("Load Commands")
+        .span(span)
+        .summary(count(to_u64(m.commands.len()), "command", "commands"))
+        .lazy(command_list, m.clone())
+}
 
 async fn command_list(cx: Cx, m: Macho) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(m.commands.len())));
@@ -536,8 +1101,9 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
                 )
             };
             format!(
-                "{name} {}  vm {vmaddr:#x}+{vmsize:#x}, file {fileoff:#x}+{filesize:#x}, {nsects} sections",
-                perms(prot & 1 != 0, prot & 2 != 0, prot & 4 != 0)
+                "{name} {}  vm {vmaddr:#x}+{vmsize:#x}, file {fileoff:#x}+{filesize:#x}, {}",
+                perms(prot & 1 != 0, prot & 2 != 0, prot & 4 != 0),
+                count(nsects.into(), "section", "sections")
             )
         }
         LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB | LC_LAZY_LOAD_DYLIB
@@ -549,6 +1115,7 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
         ),
         LC_LOAD_DYLINKER | LC_ID_DYLINKER | LC_DYLD_ENVIRONMENT | LC_RPATH | LC_SUB_FRAMEWORK
         | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY | LC_TARGET_TRIPLE => lc_str(8),
+        LC_LOADFVMLIB | LC_IDFVMLIB => format!("{} (version {})", lc_str(8), w(12)),
         LC_UUID => uuid(b.get(8..24).unwrap_or_default()),
         LC_BUILD_VERSION => {
             let mut s = format!(
@@ -572,7 +1139,11 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
         | LC_VERSION_MIN_TVOS
         | LC_VERSION_MIN_WATCHOS => format!("{}, SDK {}", version(w(8)), version(w(12))),
         LC_MAIN => format!("entry offset {:#x}, stack size {:#x}", q(8), q(16)),
-        LC_SYMTAB => format!("{} symbols, {:#x} bytes of strings", w(12), w(20)),
+        LC_SYMTAB => format!(
+            "{}, {} of strings",
+            count(w(12).into(), "symbol", "symbols"),
+            human_size(w(20).into())
+        ),
         LC_DYSYMTAB => format!(
             "{} local, {} defined external, {} undefined, {} indirect",
             w(12),
@@ -619,8 +1190,13 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
             q(32),
             q(24)
         ),
-        LC_FILESET_ENTRY => lc_str(24),
+        LC_FILESET_ENTRY => format!("{} at {:#x}", lc_str(24), q(8)),
         LC_THREAD | LC_UNIXTHREAD => format!("flavor {}", w(8)),
+        LC_ROUTINES => format!("init {:#x}", w(8)),
+        LC_ROUTINES_64 => format!("init {:#x}", q(8)),
+        LC_TWOLEVEL_HINTS => format!("{} hints at {:#x}", w(12), w(8)),
+        LC_PREBIND_CKSUM => format!("checksum {:#x}", w(8)),
+        LC_PREBOUND_DYLIB => format!("{}, {} modules", lc_str(8), w(12)),
         _ => String::new(),
     }
 }
@@ -639,41 +1215,38 @@ async fn command_node(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
     let mut extras = Vec::new();
     match c.cmd {
         LC_SEGMENT | LC_SEGMENT_64 => {
-            let segment = segment_command(&mut f, &ctx)?;
+            segment_command(&mut f, &ctx)?;
             // Section headers follow the segment command.
-            let size = if m.wide { 80 } else { 68 };
-            for i in 0..u64::from(segment.nsects) {
+            let size: u64 = if m.wide { 80 } else { 68 };
+            let base = f.pos();
+            for (i, n) in (c.sections.0..c.sections.1).enumerate() {
                 let header = c
                     .span
-                    .sub(f.pos().saturating_add(i.saturating_mul(size)), size);
-                let s = parse(&cx, header, m.endian, &ctx, section_header).await?;
+                    .sub(base.saturating_add(to_u64(i).saturating_mul(size)), size);
+                let Some(s) = m.sections.get(n) else { break };
                 extras.push(
                     Node::new(s.label())
                         .span(header)
-                        .summary(section_summary(&s))
-                        .lazy(section_node, (m.clone(), header)),
+                        .summary(section_summary(s))
+                        .lazy(section_header_node, (m.clone(), header, n)),
                 );
             }
         }
         LC_SYMTAB => {
-            let st = symtab_command(&mut f, &ctx)?;
-            extras.push(symtab_node(&m, st));
-            extras.push(
-                Node::new("String Table")
-                    .span(m.linkedit(st.stroff, st.strsize))
-                    .lazy(cstrings, m.linkedit(st.stroff, st.strsize)),
-            );
+            symtab_command(&mut f, &ctx)?;
         }
         LC_DYSYMTAB => {
-            let d = dysymtab_command(&mut f, &ctx)?;
-            if d.nindirectsyms > 0 {
-                let span = m.linkedit(d.indirectsymoff, d.nindirectsyms.saturating_mul(4));
-                extras.push(
-                    Node::new("Indirect Symbols")
-                        .span(span)
-                        .summary(format!("{} entries", d.nindirectsyms))
-                        .lazy(indirect_symbols, (m.clone(), 0u32, d.nindirectsyms)),
-                );
+            dysymtab_command(&mut f, &ctx)?;
+            if let Some(d) = m.dysymtab {
+                for (name, first, n) in [
+                    ("Local Symbols", d.ilocalsym, d.nlocalsym),
+                    ("Defined External Symbols", d.iextdefsym, d.nextdefsym),
+                    ("Undefined Symbols", d.iundefsym, d.nundefsym),
+                ] {
+                    if n > 0 {
+                        extras.push(symbols::symbol_range_node(&m, name, first, n));
+                    }
+                }
             }
         }
         LC_CODE_SIGNATURE
@@ -687,52 +1260,13 @@ async fn command_node(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
         | LC_ATOM_INFO
         | LC_FUNCTION_VARIANTS
         | LC_FUNCTION_VARIANT_FIXUPS => {
-            let (offset, size) = linkedit_data(&mut f, &ctx)?;
-            let span = m.linkedit(offset, size);
-            let node = match c.cmd {
-                LC_CODE_SIGNATURE => Node::new("Code Signature")
-                    .span(span)
-                    .lazy(codesign::superblob, span),
-                LC_FUNCTION_STARTS => Node::new("Function Starts")
-                    .span(span)
-                    .lazy(linkedit::function_starts, (span, m.text_vmaddr(), m.file())),
-                LC_DATA_IN_CODE => Node::new("Data in Code")
-                    .span(span)
-                    .summary(format!("{} entries", span.len / 8))
-                    .lazy(linkedit::data_in_code, (span, m.endian)),
-                LC_DYLD_CHAINED_FIXUPS => Node::new("Chained Fixups")
-                    .span(span)
-                    .lazy(linkedit::chained_fixups, (span, m.endian, m.dylibs.clone())),
-                LC_DYLD_EXPORTS_TRIE => Node::new("Exports Trie")
-                    .span(span)
-                    .lazy(linkedit::exports_trie, (span, m.text_vmaddr())),
-                _ => data_node("Data", span, size.into()),
-            };
-            extras.push(node);
+            linkedit_data(&mut f, &ctx)?;
         }
         LC_DYLD_INFO | LC_DYLD_INFO_ONLY => {
-            for (name, offset, size) in dyld_info(&mut f, &ctx)? {
-                if size == 0 {
-                    continue;
-                }
-                let span = m.linkedit(offset, size);
-                extras.push(match name {
-                    "Export Info" => Node::new(name)
-                        .span(span)
-                        .lazy(linkedit::exports_trie, (span, m.text_vmaddr())),
-                    "Rebase Info" => data_node(name, span, size.into()),
-                    _ => Node::new(name)
-                        .span(span)
-                        .lazy(linkedit::bind_opcodes, (span, m.wide, m.dylibs.clone())),
-                });
-            }
+            dyld_info(&mut f, &ctx)?;
         }
         LC_NOTE => {
-            let (offset, size) = note_command(&mut f, &ctx)?;
-            extras.push(embedded(
-                "Note Data",
-                m.input.nested(m.file().sub(offset, size)),
-            ));
+            note_command(&mut f, &ctx)?;
         }
         LC_THREAD | LC_UNIXTHREAD => {
             thread_command(&cx, &mut f, c.span.len).await?;
@@ -741,8 +1275,39 @@ async fn command_node(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             simple_command(&mut f, &ctx, c.cmd)?;
         }
     }
+    if !matches!(c.cmd, LC_SEGMENT | LC_SEGMENT_64) {
+        for r in m.regions.get(c.regions.0..c.regions.1).unwrap_or_default() {
+            extras.push(item_node(&m, r));
+        }
+    }
     for node in extras {
         cx.emit(node);
+    }
+    Ok(())
+}
+
+/// A section header in its segment command: the fields, then what the
+/// section holds.
+async fn section_header_node(cx: Cx, (m, header, index): (Macho, Span, usize)) -> Result<()> {
+    let ctx = Ctx {
+        wide: m.wide,
+        file: m.file(),
+    };
+    let block = cx.block(header).await?;
+    let s = section_header(&mut Fields::emitting(&cx, &block, m.endian), &ctx)?;
+    if !s.is_zerofill() && s.size > 0 && s.offset != 0 && m.sections.get(index).is_some() {
+        cx.emit(sections::section_node(&m, index).desc("The section's contents"));
+    }
+    if s.nreloc > 0 {
+        let span = m
+            .file()
+            .sub(s.reloff.into(), u64::from(s.nreloc).saturating_mul(8));
+        cx.emit(
+            Node::new("Relocations")
+                .span(span)
+                .summary(count(s.nreloc.into(), "entry", "entries"))
+                .lazy(symbols::relocations, (m.clone(), span, index)),
+        );
     }
     Ok(())
 }
@@ -765,6 +1330,31 @@ fn lc_str(f: &mut Fields<'_>, label: &'static str, name: &'static str) -> Result
     s
 }
 
+/// Emits the rest of a command after its strings (alignment padding).
+fn command_padding(f: &mut Fields<'_>, end: u64) {
+    if end < f.block().span.len {
+        let rest = f.block().span.len.saturating_sub(end);
+        let span = Span::new(
+            f.block().span.source,
+            f.block().span.offset.saturating_add(end),
+            rest,
+        );
+        f.node(Node::new("padding").span(span).summary(human_size(rest)));
+    }
+}
+
+/// The end of the strings an `lc_str` field at the current position and a
+/// fixed part of `fixed` bytes leave: where padding starts.
+fn string_end(f: &Fields<'_>) -> u64 {
+    let data = &f.block().data;
+    // The string follows the fixed part; the padding follows its NUL.
+    let mut end = to_u64(data.len());
+    while end > 0 && data.get(to_usize(end.saturating_sub(1))) == Some(&0) {
+        end = end.saturating_sub(1);
+    }
+    end.saturating_add(1).min(to_u64(data.len()))
+}
+
 fn segment_command(f: &mut Fields<'_>, c: &Ctx) -> Result<SegmentInfo> {
     command_head(f)?;
     let name = f.ascii("segname", 16).emit()?;
@@ -779,7 +1369,7 @@ fn segment_command(f: &mut Fields<'_>, c: &Ctx) -> Result<SegmentInfo> {
         .emit()?;
     let filesize = f.uword("filesize", c.wide).hex().emit()?;
     f.u32("maxprot").flags(VM_PROT).emit()?;
-    f.u32("initprot").flags(VM_PROT).emit()?;
+    let initprot = f.u32("initprot").flags(VM_PROT).emit()?;
     let nsects = f.u32("nsects").emit()?;
     f.u32("flags").flags(SEGMENT_FLAGS).emit()?;
     Ok(SegmentInfo {
@@ -787,6 +1377,7 @@ fn segment_command(f: &mut Fields<'_>, c: &Ctx) -> Result<SegmentInfo> {
         vmaddr,
         fileoff,
         filesize,
+        initprot,
         nsects,
     })
 }
@@ -805,11 +1396,21 @@ fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
     let addr = f.uword("addr", c.wide).hex().emit()?;
     let size = f.uword("size", c.wide).hex().emit()?;
     let file = c.file;
+    let zerofill = {
+        let here = f.pos();
+        f.skip(4 * 4);
+        let flags = f.u32("").get().unwrap_or(0);
+        f.seek(here);
+        matches!(
+            flags & 0xff,
+            S_ZEROFILL | S_GB_ZEROFILL | S_THREAD_LOCAL_ZEROFILL
+        )
+    };
     let offset = f
         .u32("offset")
         .hex()
         .with(|&v, n| {
-            if v == 0 {
+            if v == 0 || zerofill {
                 n
             } else {
                 n.target(file.sub(v.into(), size))
@@ -819,16 +1420,46 @@ fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
     f.u32("align")
         .with(|&v, n| n.summary(format!("2^{v}")))
         .emit()?;
-    let reloff = f.u32("reloff").hex().emit()?;
+    let nreloc = {
+        let here = f.pos();
+        f.skip(4);
+        let v = f.u32("").get().unwrap_or(0);
+        f.seek(here);
+        v
+    };
+    let reloff = f
+        .u32("reloff")
+        .hex()
+        .with(|&v, n| {
+            if nreloc == 0 {
+                n
+            } else {
+                n.target(file.sub(v.into(), u64::from(nreloc).saturating_mul(8)))
+            }
+        })
+        .emit()?;
     let nreloc = f.u32("nreloc").emit()?;
     let flags = f.u32("flags").flags(SECTION_FLAGS).emit()?;
+    let kind = flags & 0xff;
     let reserved1 = f
         .u32("reserved1")
-        .desc("Indirect symbol index (pointer and stub sections)")
+        .with(|_, n| match kind {
+            S_NON_LAZY_SYMBOL_POINTERS
+            | S_LAZY_SYMBOL_POINTERS
+            | S_SYMBOL_STUBS
+            | S_LAZY_DYLIB_SYMBOL_POINTERS
+            | S_THREAD_LOCAL_VARIABLE_POINTERS => {
+                n.desc("Index of the section's first entry in the indirect symbol table")
+            }
+            _ => n.desc("Reserved"),
+        })
         .emit()?;
     let reserved2 = f
         .u32("reserved2")
-        .desc("Stub size (stub sections)")
+        .with(|_, n| match kind {
+            S_SYMBOL_STUBS => n.desc("Size of each stub"),
+            _ => n.desc("Reserved"),
+        })
         .emit()?;
     if c.wide {
         f.u32("reserved3").emit()?;
@@ -849,59 +1480,70 @@ fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
 
 fn section_summary(s: &SectionInfo) -> String {
     let kind = name_or(SECTION_TYPE, s.kind().into(), "type");
-    format!("{kind}, {:#x} bytes at {:#x}", s.size, s.addr)
+    format!("{kind}, {} at {:#x}", human_size(s.size), s.addr)
 }
 
-fn symtab_command(f: &mut Fields<'_>, c: &Ctx) -> Result<Symtab> {
+fn symtab_command(f: &mut Fields<'_>, c: &Ctx) -> Result<()> {
     command_head(f)?;
     let file = c.file;
-    let symoff = f.u32("symoff").hex().emit()?;
-    let nsyms = f.u32("nsyms").emit()?;
-    let stroff = f
-        .u32("stroff")
+    let nlist: u64 = if c.wide { 16 } else { 12 };
+    let nsyms = peek_word(f, 4, false);
+    f.u32("symoff")
         .hex()
-        .with(|&v, n| n.target(file.sub(v.into(), 0)))
+        .with(|&v, n| n.target(file.sub(v.into(), nsyms.saturating_mul(nlist))))
         .emit()?;
-    let strsize = f.u32("strsize").hex().emit()?;
-    Ok(Symtab {
-        symoff,
-        nsyms,
-        stroff,
-        strsize,
-    })
+    f.u32("nsyms").emit()?;
+    let strsize = peek_word(f, 4, false);
+    f.u32("stroff")
+        .hex()
+        .with(|&v, n| n.target(file.sub(v.into(), strsize)))
+        .emit()?;
+    f.u32("strsize").hex().emit()?;
+    Ok(())
 }
 
-fn dysymtab_command(f: &mut Fields<'_>, _: &Ctx) -> Result<Dysymtab> {
+fn dysymtab_command(f: &mut Fields<'_>, c: &Ctx) -> Result<()> {
     command_head(f)?;
-    for name in [
-        "ilocalsym",
-        "nlocalsym",
-        "iextdefsym",
-        "nextdefsym",
-        "iundefsym",
-        "nundefsym",
+    for (name, desc) in [
+        ("ilocalsym", "Index of the first local symbol"),
+        ("nlocalsym", "Number of local symbols"),
+        ("iextdefsym", "Index of the first defined external symbol"),
+        ("nextdefsym", "Number of defined external symbols"),
+        ("iundefsym", "Index of the first undefined symbol"),
+        ("nundefsym", "Number of undefined symbols"),
     ] {
-        f.u32(name).emit()?;
+        f.u32(name).desc(desc).emit()?;
     }
-    for name in [
-        "tocoff",
-        "ntoc",
-        "modtaboff",
-        "nmodtab",
-        "extrefsymoff",
-        "nextrefsyms",
+    let file = c.file;
+    let module: u64 = if c.wide { 56 } else { 52 };
+    for (off, num, size, desc) in [
+        ("tocoff", "ntoc", 8, "Table of contents"),
+        ("modtaboff", "nmodtab", module, "Module table"),
+        ("extrefsymoff", "nextrefsyms", 4, "External reference table"),
+        (
+            "indirectsymoff",
+            "nindirectsyms",
+            4,
+            "Indirect symbol table",
+        ),
+        ("extreloff", "nextrel", 8, "External relocations"),
+        ("locreloff", "nlocrel", 8, "Local relocations"),
     ] {
-        f.u32(name).emit()?;
+        let n = peek_word(f, 4, false);
+        f.u32(off)
+            .hex()
+            .desc(desc)
+            .with(|&v, node| {
+                if n == 0 {
+                    node
+                } else {
+                    node.target(file.sub(v.into(), n.saturating_mul(size)))
+                }
+            })
+            .emit()?;
+        f.u32(num).emit()?;
     }
-    let indirectsymoff = f.u32("indirectsymoff").hex().emit()?;
-    let nindirectsyms = f.u32("nindirectsyms").emit()?;
-    for name in ["extreloff", "nextrel", "locreloff", "nlocrel"] {
-        f.u32(name).emit()?;
-    }
-    Ok(Dysymtab {
-        indirectsymoff,
-        nindirectsyms,
-    })
+    Ok(())
 }
 
 fn linkedit_data(f: &mut Fields<'_>, c: &Ctx) -> Result<(u32, u32)> {
@@ -917,29 +1559,43 @@ fn linkedit_data(f: &mut Fields<'_>, c: &Ctx) -> Result<(u32, u32)> {
     Ok((offset, size))
 }
 
-fn dyld_info(f: &mut Fields<'_>, _: &Ctx) -> Result<Vec<(&'static str, u32, u32)>> {
+fn dyld_info(f: &mut Fields<'_>, c: &Ctx) -> Result<()> {
     command_head(f)?;
-    let mut out = Vec::new();
-    for (name, off, size) in [
-        ("Rebase Info", "rebase_off", "rebase_size"),
-        ("Bind Info", "bind_off", "bind_size"),
-        ("Weak Bind Info", "weak_bind_off", "weak_bind_size"),
-        ("Lazy Bind Info", "lazy_bind_off", "lazy_bind_size"),
-        ("Export Info", "export_off", "export_size"),
+    let file = c.file;
+    for (off, size) in [
+        ("rebase_off", "rebase_size"),
+        ("bind_off", "bind_size"),
+        ("weak_bind_off", "weak_bind_size"),
+        ("lazy_bind_off", "lazy_bind_size"),
+        ("export_off", "export_size"),
     ] {
-        let o = f.u32(off).hex().emit()?;
-        let s = f.u32(size).hex().emit()?;
-        out.push((name, o, s));
+        let n = peek_word(f, 4, false);
+        f.u32(off)
+            .hex()
+            .with(|&v, node| {
+                if n == 0 {
+                    node
+                } else {
+                    node.target(file.sub(v.into(), n))
+                }
+            })
+            .emit()?;
+        f.u32(size).hex().emit()?;
     }
-    Ok(out)
+    Ok(())
 }
 
-fn note_command(f: &mut Fields<'_>, _: &Ctx) -> Result<(u64, u64)> {
+fn note_command(f: &mut Fields<'_>, c: &Ctx) -> Result<()> {
     command_head(f)?;
     f.ascii("data_owner", 16).emit()?;
-    let offset = f.u64("offset").hex().emit()?;
-    let size = f.u64("size").hex().emit()?;
-    Ok((offset, size))
+    let file = c.file;
+    let size = peek_word(f, 8, true);
+    f.u64("offset")
+        .hex()
+        .with(|&v, n| n.target(file.sub(v, size)))
+        .emit()?;
+    f.u64("size").hex().emit()?;
+    Ok(())
 }
 
 /// Thread states (a flavor, a count and the words), a checkpoint per few
@@ -967,43 +1623,71 @@ async fn thread_command(cx: &Cx, f: &mut Fields<'_>, len: u64) -> Result<()> {
     Ok(())
 }
 
+fn version_field(f: &mut Fields<'_>, name: &'static str) -> Result<u32> {
+    f.u32(name).hex().with(|&v, n| n.summary(version(v))).emit()
+}
+
 /// Fixed-layout commands that need no extra nodes.
 fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
     command_head(f)?;
+    let mut strings = false;
     match cmd {
         LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB | LC_LAZY_LOAD_DYLIB
         | LC_LOAD_UPWARD_DYLIB | LC_ID_DYLIB => {
             lc_str(f, "name.offset", "name")?;
-            f.u32("timestamp").timestamp().emit()?;
-            f.u32("current_version")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
+            f.u32("timestamp")
+                .timestamp()
+                .desc("Build time of the library (usually a placeholder)")
                 .emit()?;
-            f.u32("compatibility_version")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
-                .emit()?;
+            version_field(f, "current_version")?;
+            version_field(f, "compatibility_version")?;
+            strings = true;
         }
         LC_LOAD_DYLINKER | LC_ID_DYLINKER | LC_DYLD_ENVIRONMENT => {
             lc_str(f, "name.offset", "name")?;
+            strings = true;
         }
         LC_RPATH => {
             lc_str(f, "path.offset", "path")?;
+            strings = true;
         }
         LC_SUB_FRAMEWORK => {
             lc_str(f, "umbrella.offset", "umbrella")?;
+            strings = true;
         }
         LC_SUB_UMBRELLA => {
             lc_str(f, "sub_umbrella.offset", "sub_umbrella")?;
+            strings = true;
         }
         LC_SUB_CLIENT => {
             lc_str(f, "client.offset", "client")?;
+            strings = true;
         }
         LC_SUB_LIBRARY => {
             lc_str(f, "sub_library.offset", "sub_library")?;
+            strings = true;
         }
         LC_TARGET_TRIPLE => {
             lc_str(f, "triple.offset", "triple")?;
+            strings = true;
+        }
+        LC_LOADFVMLIB | LC_IDFVMLIB => {
+            lc_str(f, "name.offset", "name")?;
+            f.u32("minor_version").emit()?;
+            f.u32("header_addr").hex().emit()?;
+            strings = true;
+        }
+        LC_PREBOUND_DYLIB => {
+            lc_str(f, "name.offset", "name")?;
+            let modules = f.u32("nmodules").emit()?;
+            let offset = f.u32("linked_modules.offset").hex().emit()?;
+            let here = f.pos();
+            f.seek(offset.into());
+            f.bytes("linked_modules", u64::from(modules).div_ceil(8))
+                .desc("One bit per module of the library: linked or not")
+                .emit()?;
+            f.seek(here);
+            strings = true;
         }
         LC_UUID => {
             f.bytes("uuid", 16).with(|v, n| n.summary(uuid(v))).emit()?;
@@ -1012,32 +1696,17 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
         | LC_VERSION_MIN_IPHONEOS
         | LC_VERSION_MIN_TVOS
         | LC_VERSION_MIN_WATCHOS => {
-            f.u32("version")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
-                .emit()?;
-            f.u32("sdk")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
-                .emit()?;
+            version_field(f, "version")?;
+            version_field(f, "sdk")?;
         }
         LC_BUILD_VERSION => {
             f.u32("platform").enumeration(PLATFORM).emit()?;
-            f.u32("minos")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
-                .emit()?;
-            f.u32("sdk")
-                .hex()
-                .with(|&v, n| n.summary(version(v)))
-                .emit()?;
+            version_field(f, "minos")?;
+            version_field(f, "sdk")?;
             let ntools = f.u32("ntools").emit()?;
             for _ in 0..ntools.min(64) {
                 f.u32("tool").enumeration(TOOL).emit()?;
-                f.u32("version")
-                    .hex()
-                    .with(|&v, n| n.summary(version(v)))
-                    .emit()?;
+                version_field(f, "version")?;
             }
         }
         LC_MAIN => {
@@ -1047,7 +1716,10 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
                 .desc("File offset of main()")
                 .with(|&v, n| n.target(file.sub(v, 0)))
                 .emit()?;
-            f.u64("stacksize").hex().emit()?;
+            f.u64("stacksize")
+                .hex()
+                .desc("Initial stack size (0: the default)")
+                .emit()?;
         }
         LC_SOURCE_VERSION => {
             f.u64("version")
@@ -1063,7 +1735,9 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
                 .with(|&v, n| n.target(file.sub(v.into(), size)))
                 .emit()?;
             f.u32("cryptsize").hex().emit()?;
-            f.u32("cryptid").desc("0: not encrypted").emit()?;
+            f.u32("cryptid")
+                .desc("Encryption system; 0: not encrypted")
+                .emit()?;
             if cmd == LC_ENCRYPTION_INFO_64 {
                 f.u32("pad").emit()?;
             }
@@ -1073,13 +1747,47 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
             for _ in 0..count.min(256) {
                 f.cstr("option").emit()?;
             }
+            command_padding(f, f.pos());
         }
         LC_FILESET_ENTRY => {
             f.u64("vmaddr").hex().emit()?;
             f.u64("fileoff").hex().emit()?;
             lc_str(f, "entry_id.offset", "entry_id")?;
             f.u32("reserved").emit()?;
+            strings = true;
         }
+        LC_ROUTINES | LC_ROUTINES_64 => {
+            let wide = cmd == LC_ROUTINES_64;
+            f.uword("init_address", wide).hex().emit()?;
+            f.uword("init_module", wide).emit()?;
+            for name in [
+                "reserved1",
+                "reserved2",
+                "reserved3",
+                "reserved4",
+                "reserved5",
+                "reserved6",
+            ] {
+                f.uword(name, wide).emit()?;
+            }
+        }
+        LC_TWOLEVEL_HINTS => {
+            let file = c.file;
+            let n = peek_word(f, 4, false);
+            f.u32("offset")
+                .hex()
+                .with(|&v, node| node.target(file.sub(v.into(), n.saturating_mul(4))))
+                .emit()?;
+            f.u32("nhints").emit()?;
+        }
+        LC_PREBIND_CKSUM => {
+            f.u32("cksum").hex().emit()?;
+        }
+        LC_SYMSEG => {
+            f.u32("offset").hex().emit()?;
+            f.u32("size").hex().emit()?;
+        }
+        LC_ATOM_INFO | LC_FUNCTION_VARIANTS | LC_FUNCTION_VARIANT_FIXUPS => {}
         _ => {
             let rest = f.remaining();
             if rest > 0 {
@@ -1087,14 +1795,20 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
             }
         }
     }
+    if strings {
+        command_padding(f, string_end(f));
+    }
     Ok(())
 }
 
 async fn libraries(cx: Cx, m: Macho) -> Result<()> {
-    for (i, name) in m.dylibs.iter().enumerate() {
+    cx.set_count(Count::Exact(to_u64(m.dylibs.len())));
+    for (i, d) in m.dylibs.iter().enumerate() {
+        let kind = name_or(DYLIB_KIND, d.cmd.into(), "kind");
         cx.push(
             Node::new(format!("{}", i.saturating_add(1)))
-                .value(text(name.clone()))
+                .value(text(d.path.clone()))
+                .summary(format!("{kind}, version {}", version(d.current)))
                 .desc("Library ordinal, as used by symbols and binds"),
         )
         .await;
@@ -1102,325 +1816,22 @@ async fn libraries(cx: Cx, m: Macho) -> Result<()> {
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Sections
-
-async fn section_node(cx: Cx, (m, header): (Macho, Span)) -> Result<()> {
-    let ctx = Ctx {
-        wide: m.wide,
-        file: m.file(),
-    };
-    let block = cx.block(header).await?;
-    let s = section_header(&mut Fields::emitting(&cx, &block, m.endian), &ctx)?;
-    let data = m.file().sub(s.offset.into(), s.size);
-    if !s.is_zerofill() && s.size > 0 {
-        let node = match s.kind() {
-            S_CSTRING_LITERALS => Node::new("Strings").span(data).lazy(cstrings, data),
-            S_NON_LAZY_SYMBOL_POINTERS | S_LAZY_SYMBOL_POINTERS | S_SYMBOL_STUBS => {
-                let stride = if s.kind() == S_SYMBOL_STUBS {
-                    u64::from(s.reserved2)
-                } else {
-                    m.word()
-                };
-                let count = s.size.checked_div(stride).unwrap_or(0);
-                let count = u32::try_from(count).unwrap_or(u32::MAX);
-                Node::new("Indirect Symbols")
-                    .span(data)
-                    .summary(format!("{count} entries"))
-                    .lazy(indirect_symbols, (m.clone(), s.reserved1, count))
-            }
-            S_MOD_INIT_FUNC_POINTERS => Node::new("Initializers")
-                .span(data)
-                .lazy(pointers, (m.clone(), data)),
-            _ if s.sectname == "__info_plist" => {
-                let bytes = cx.read_avail(data.sub(0, 0x10000)).await?;
-                Node::new("Info.plist")
-                    .span(data)
-                    .value(text(String::from_utf8_lossy(&bytes).into_owned()))
-            }
-            _ => data_node("Contents", data, s.size),
-        };
-        cx.emit(node);
-    }
-    if s.nreloc > 0 {
-        let span = m
-            .file()
-            .sub(s.reloff.into(), u64::from(s.nreloc).saturating_mul(8));
-        cx.emit(
-            Node::new("Relocations")
-                .span(span)
-                .summary(format!("{} entries", s.nreloc))
-                .lazy(relocations, (m.clone(), span)),
-        );
+/// Emits pre-built nodes: the expander for groups whose children were
+/// decoded together with their parent.
+async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
+    cx.set_count(Count::Exact(to_u64(nodes.len())));
+    for node in nodes.iter() {
+        cx.push(node.clone()).await;
     }
     Ok(())
 }
 
-async fn pointers(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
-    let w = m.word();
-    let count = span.len.checked_div(w).unwrap_or(0);
-    cx.set_count(Count::Exact(count));
-    for i in 0..count {
-        let at = span.sub(i.saturating_mul(w), w);
-        let data = cx.read(at).await?;
-        let value = if m.wide {
-            get_at::<u64>(&data, 0, m.endian).unwrap_or(0)
-        } else {
-            get_at::<u32>(&data, 0, m.endian).map_or(0, u64::from)
-        };
-        let mut node = Node::new(format!("[{i}]"))
-            .span(at)
-            .value(hex(value, m.bits()));
-        if let Some(t) = m.vm_span(value, 0) {
-            node = node.target(t);
-        }
-        cx.push(node).await;
+/// A node whose children are `children`, built already.
+fn group(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, children: Vec<Node>) -> Node {
+    let node = Node::new(name).span(span);
+    if children.is_empty() {
+        node
+    } else {
+        node.lazy(emit_all, Arc::new(children))
     }
-    Ok(())
-}
-
-async fn relocations(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
-    let count = span.len / 8;
-    cx.set_count(Count::Exact(count));
-    let types = relocation_types(m.header.cputype);
-    for i in 0..count {
-        let at = span.sub(i.saturating_mul(8), 8);
-        let data = cx.read(at).await?;
-        let first = get_at::<u32>(&data, 0, m.endian).unwrap_or(0);
-        let second = get_at::<u32>(&data, 4, m.endian).unwrap_or(0);
-        let node = if first & 0x8000_0000 != 0 {
-            // Scattered relocation.
-            let kind = (first >> 24) & 0xf;
-            Node::new(name_or(types, kind.into(), "type"))
-                .span(at)
-                .value(hex((first & 0x00ff_ffff).into(), 32))
-                .summary(format!("scattered, value {second:#x}"))
-        } else {
-            let (symbol, pcrel, length, external, kind) = if m.endian == Endian::Little {
-                (
-                    second & 0x00ff_ffff,
-                    (second >> 24) & 1,
-                    (second >> 25) & 3,
-                    (second >> 27) & 1,
-                    second >> 28,
-                )
-            } else {
-                (
-                    second >> 8,
-                    (second >> 7) & 1,
-                    (second >> 5) & 3,
-                    (second >> 4) & 1,
-                    second & 0xf,
-                )
-            };
-            let target = if external != 0 {
-                symbol_name(&cx, &m, symbol)
-                    .await
-                    .unwrap_or_else(|_| format!("symbol #{symbol}"))
-            } else {
-                m.section(u8::try_from(symbol).unwrap_or(0))
-                    .map_or_else(|| format!("section {symbol}"), SectionInfo::label)
-            };
-            let mut flags = format!("{} bytes", 1u32 << length);
-            if pcrel != 0 {
-                flags.push_str(", pc-relative");
-            }
-            Node::new(name_or(types, kind.into(), "type"))
-                .span(at)
-                .value(hex(first.into(), 32))
-                .summary(format!("{target} ({flags})"))
-        };
-        cx.push(node).await;
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Symbols
-
-fn symtab_node(m: &Macho, st: Symtab) -> Node {
-    let span = m.file().sub(
-        st.symoff.into(),
-        u64::from(st.nsyms).saturating_mul(m.nlist_size()),
-    );
-    Node::new("Symbol Table")
-        .span(span)
-        .summary(format!("{} symbols", st.nsyms))
-        .lazy(symbols, (m.clone(), st))
-}
-
-#[derive(Clone, Copy, Debug)]
-struct Nlist {
-    strx: u32,
-    kind: u8,
-    sect: u8,
-    desc: u16,
-    value: u64,
-}
-
-fn nlist(f: &mut Fields<'_>, m: &Macho) -> Result<Nlist> {
-    let strx = f
-        .u32("n_strx")
-        .hex()
-        .desc("Offset in the string table")
-        .emit()?;
-    let kind = f
-        .u8("n_type")
-        .hex()
-        .with(|&v, n| n.summary(type_summary(v)))
-        .emit()?;
-    let sect = f
-        .u8("n_sect")
-        .with(|&v, n| match m.section(v) {
-            Some(s) if v != 0 => n.summary(s.label()),
-            _ => n.summary("NO_SECT"),
-        })
-        .emit()?;
-    let desc = f
-        .u16("n_desc")
-        .flags(N_DESC)
-        .with(|&v, n| {
-            if kind & 0x0e == 0 && kind & 0xe0 == 0 {
-                n.summary(m.dylib(u8::try_from(v >> 8).unwrap_or(0)))
-            } else {
-                n
-            }
-        })
-        .emit()?;
-    let value = f.uword("n_value", m.wide).hex().emit()?;
-    Ok(Nlist {
-        strx,
-        kind,
-        sect,
-        desc,
-        value,
-    })
-}
-
-fn type_summary(t: u8) -> String {
-    if t & 0xe0 != 0 {
-        return name_or(N_STAB, t.into(), "stab");
-    }
-    let mut s = name_or(N_TYPE, (t & 0x0e).into(), "type");
-    if t & 0x10 != 0 {
-        s.push_str(" PEXT");
-    }
-    if t & 0x01 != 0 {
-        s.push_str(" EXT");
-    }
-    s
-}
-
-async fn symbol_name(cx: &Cx, m: &MachInfo, index: u32) -> Result<String> {
-    let st = m
-        .symtab
-        .ok_or_else(|| Diagnostic::malformed("no symbol table"))?;
-    if index >= st.nsyms {
-        return Err(Diagnostic::malformed(format!(
-            "symbol index {index} out of range"
-        )));
-    }
-    let at = m.file().sub(
-        u64::from(st.symoff).saturating_add(u64::from(index).saturating_mul(m.nlist_size())),
-        4,
-    );
-    let data = cx.read(at).await?;
-    let strx = get_at::<u32>(&data, 0, m.endian).unwrap_or(0);
-    Ok(
-        string_at(cx, m.linkedit(st.stroff, st.strsize), strx.into())
-            .await?
-            .0,
-    )
-}
-
-async fn symbols(cx: Cx, (m, st): (Macho, Symtab)) -> Result<()> {
-    let size = m.nlist_size();
-    let table = m
-        .file()
-        .sub(st.symoff.into(), u64::from(st.nsyms).saturating_mul(size));
-    let strings = m.linkedit(st.stroff, st.strsize);
-    let count = table.len.checked_div(size).unwrap_or(0);
-    if count < st.nsyms.into() {
-        cx.diag(Diagnostic::truncated(
-            Span::new(
-                table.source,
-                table.offset,
-                u64::from(st.nsyms).saturating_mul(size),
-            ),
-            table.len,
-        ));
-    }
-    cx.set_count(Count::Exact(count));
-    for i in 0..count {
-        let span = table.sub(i.saturating_mul(size), size);
-        let sym = parse(&cx, span, m.endian, &m, nlist).await?;
-        let (name, diag) = if sym.strx == 0 {
-            (format!("#{i}"), None)
-        } else {
-            match string_at(&cx, strings, sym.strx.into()).await {
-                Ok((s, _)) if s.is_empty() => (format!("#{i}"), None),
-                Ok((s, _)) => (s, None),
-                Err(e) => (format!("#{i}"), Some(e)),
-            }
-        };
-        let mut summary = type_summary(sym.kind);
-        if sym.kind & 0xe0 == 0 {
-            match sym.kind & 0x0e {
-                0 if !m.dylibs.is_empty() => summary.push_str(&format!(
-                    " from {}",
-                    m.dylib(u8::try_from(sym.desc >> 8).unwrap_or(0))
-                )),
-                0x0e => {
-                    if let Some(s) = m.section(sym.sect) {
-                        summary.push_str(&format!(" {}", s.label()));
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut node = struct_node(name, span, m.endian, m.clone(), nlist)
-            .value(hex(sym.value, m.bits()))
-            .summary(summary);
-        if sym.kind & 0xee == 0x0e
-            && let Some(t) = m.vm_span(sym.value, 0)
-        {
-            node = node.target(t);
-        }
-        if let Some(d) = diag {
-            node = node.diag(d);
-        }
-        cx.push(node).await;
-    }
-    Ok(())
-}
-
-/// Entries of the indirect symbol table, `first..first + count`.
-async fn indirect_symbols(cx: Cx, (m, first, count): (Macho, u32, u32)) -> Result<()> {
-    let d = m
-        .dysymtab
-        .ok_or_else(|| Diagnostic::malformed("no LC_DYSYMTAB"))?;
-    let table = m.linkedit(d.indirectsymoff, d.nindirectsyms.saturating_mul(4));
-    let available = u32::try_from(table.len / 4).unwrap_or(u32::MAX);
-    let count = count.min(available.saturating_sub(first));
-    cx.set_count(Count::Exact(count.into()));
-    for i in 0..count {
-        let index = first.saturating_add(i);
-        let at = table.sub(u64::from(index).saturating_mul(4), 4);
-        let data = cx.read(at).await?;
-        let sym = get_at::<u32>(&data, 0, m.endian).unwrap_or(0);
-        let node = Node::new(format!("[{i}]")).span(at);
-        let node = match sym {
-            0x8000_0000 => node.value(text("INDIRECT_SYMBOL_LOCAL")),
-            0x4000_0000 => node.value(text("INDIRECT_SYMBOL_ABS")),
-            0xc000_0000 => node.value(text("INDIRECT_SYMBOL_LOCAL | ABS")),
-            _ => match symbol_name(&cx, &m, sym).await {
-                Ok(name) => node.value(text(name)).summary(format!("symbol {sym}")),
-                Err(e) => node
-                    .value(crate::formats::util::binutil::dec(sym.into(), 32))
-                    .diag(e),
-            },
-        };
-        cx.push(node).await;
-    }
-    Ok(())
 }
