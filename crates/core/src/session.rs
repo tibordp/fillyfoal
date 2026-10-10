@@ -189,6 +189,10 @@ struct Entry {
     touched: u64,
     /// Work units consumed by the current expansion.
     work: u64,
+    /// How far the current (or last) expansion has got: the index of the
+    /// next child it would produce. Children before it that are not in the
+    /// window were dropped and can only be produced again by a restart.
+    produced: u64,
     /// What the node's own detection step settled on, once it has run.
     interpretation: Option<Interpretation>,
 }
@@ -221,6 +225,7 @@ impl Entry {
             run: None,
             touched: 0,
             work: 0,
+            produced: 0,
             interpretation: None,
         }
     }
@@ -583,6 +588,20 @@ impl<C: Catalog> Session<C> {
         entry.touched = clock;
         let have = entry.first.saturating_add(to_u64(entry.children.len()));
         let first = entry.first;
+        // Children past the window were produced and dropped (see
+        // [`Session::seek`]): the run has moved on, so only a restart
+        // produces them again.
+        if at_least > have
+            && entry.produced > have
+            && !matches!(entry.state, ChildState::NotRequested | ChildState::Leaf)
+        {
+            let children = take(&mut entry.children);
+            for child in children {
+                self.release(child);
+            }
+            self.start(id, first, at_least);
+            return;
+        }
         match entry.state {
             ChildState::NotRequested => self.start(id, first, at_least),
             ChildState::More | ChildState::Running(_) => {
@@ -624,8 +643,13 @@ impl<C: Catalog> Session<C> {
         let keep_to = to_usize(end.saturating_sub(first)).min(entry.children.len());
         let mut dropped: Vec<NodeId> = entry.children.drain(keep_to..).collect();
         dropped.extend(entry.children.drain(..keep_from));
+        // The window needs children from here on; ones before `produced`
+        // were dropped earlier, so the run (which continues from
+        // `produced`) cannot supply them.
+        let need_from = start.max(have);
         let restart = start < first
             || (entry.state == ChildState::NotRequested)
+            || (end > need_from && entry.produced > need_from)
             || (end > have
                 && matches!(entry.state, ChildState::More | ChildState::Running(_))
                 && {
@@ -712,6 +736,7 @@ impl<C: Catalog> Session<C> {
         entry.node.diagnostics.truncate(entry.own_diagnostics);
         entry.error = None;
         entry.work = 0;
+        entry.produced = from;
         entry.first = start;
         entry.state = ChildState::Running(Wait::Ready);
         self.active.retain(|&a| a != id);
@@ -733,6 +758,7 @@ impl<C: Catalog> Session<C> {
             Some(entry) => {
                 entry.run = None;
                 entry.work = 0;
+                entry.produced = 0;
                 entry.error = None;
                 entry.first = 0;
                 entry.node.diagnostics.truncate(entry.own_diagnostics);
@@ -758,13 +784,19 @@ impl<C: Catalog> Session<C> {
         lock(&self.shared).budget = budget.max(1);
         let mut i = 0;
         while let Some(&id) = self.active.get(i) {
-            i = i.saturating_add(1);
             if lock(&self.shared).budget == 0 {
                 break;
             }
+            i = i.saturating_add(1);
             if self.is_runnable(id) {
                 self.step(id);
             }
+        }
+        // Round robin: the next poll starts with the first expansion this one
+        // did not reach, so one that always uses up the budget cannot starve
+        // the others.
+        if i < self.active.len() {
+            self.active.rotate_left(i);
         }
         self.active.retain(|&id| {
             self.slots
@@ -891,7 +923,12 @@ impl<C: Catalog> Session<C> {
             ChildState::Running(Wait::Ready | Wait::Budget) => true,
             ChildState::Running(Wait::Bytes) => {
                 let sh = lock(&self.shared);
-                run.waiting.iter().all(|&(s, i)| sh.cache.contains(s, i))
+                // A chunk past the end of a source that shrank meanwhile
+                // (see [`Session::set_source_len`]) will never be supplied;
+                // the read now ends before it.
+                run.waiting.iter().all(|&(s, i)| {
+                    sh.cache.contains(s, i) || sh.cache.chunk_start(i) >= sh.source_len(s)
+                })
             }
             ChildState::Running(Wait::Secret) => run
                 .secret
@@ -952,6 +989,7 @@ impl<C: Catalog> Session<C> {
             return;
         };
         entry.children.extend(ids);
+        entry.produced = emitted;
         entry.marks.extend(marks);
         if interpretation.is_some() {
             entry.interpretation = interpretation;

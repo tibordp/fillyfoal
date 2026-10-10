@@ -214,6 +214,16 @@ const RELEASE_INPUT: usize = 1024 * 1024;
 const LOOKAHEAD: usize = 64 * 1024;
 /// Output produced per decoder step.
 const LAZY_STEP: usize = 16 * 1024;
+/// Derived memory a lazy read may use even when the limit is reached:
+/// failing the stream instead would truncate it for good over a passing
+/// shortage (other sources may be evicted or collapsed later).
+const MIN_HEADROOM: u64 = 1024 * 1024;
+/// Encoded bytes a decoder may leave unconsumed while it asks for more:
+/// past this (or a quarter of `Limits::max_derived`, if smaller) the stream
+/// is taken to be undecodable at that point. A decoding error looks like a
+/// shortage of input until the input ends, so without a cap a corrupt byte
+/// early in a long stream would buffer all of the rest.
+const MAX_PENDING: u64 = 64 * 1024 * 1024;
 
 pub(crate) struct Shared {
     pub sources: Vec<SourceEntry>,
@@ -440,8 +450,17 @@ impl Shared {
             .saturating_add(to_u64(LOOKAHEAD));
         let need = more_out.saturating_add(more_in);
         self.make_room(need, source);
-        let limit =
-            crate::bytes::to_usize(self.limits.max_derived.saturating_sub(self.derived_bytes));
+        let limit = crate::bytes::to_usize(
+            self.limits
+                .max_derived
+                .saturating_sub(self.derived_bytes)
+                .max(MIN_HEADROOM),
+        );
+        let max_pending = crate::bytes::to_usize(
+            MAX_PENDING
+                .min(self.limits.max_derived / 4)
+                .max(to_u64(LOOKAHEAD).saturating_mul(4)),
+        );
         let mut failure = None;
         let result = loop {
             if st.out_base.saturating_add(to_u64(st.out.len())) >= end || st.done {
@@ -454,6 +473,13 @@ impl Shared {
                 break Err(Pending::Budget);
             }
             let pending = st.input.len().saturating_sub(st.decoder.consumed());
+            if st.starved && !st.input_eof && pending >= max_pending {
+                st.done = true;
+                failure = Some(Diagnostic::malformed(format!(
+                    "undecodable: no progress over {pending:#x} bytes of encoded input"
+                )));
+                continue;
+            }
             if !st.input_eof && (st.starved || pending < LOOKAHEAD) {
                 let fed = st.in_base.saturating_add(to_u64(st.input.len()));
                 let want = (LOOKAHEAD as u64).min(st.parent.len.saturating_sub(fed));
@@ -548,6 +574,26 @@ impl Shared {
             }
         }
         result
+    }
+
+    /// How many cache chunks of host sources a read of `span` touches
+    /// (through piecewise sources; decoded sources hold their own bytes).
+    fn chunks_touched(&self, span: Span) -> u64 {
+        let mut spans = Vec::new();
+        self.resolve(span, 0, &mut spans);
+        spans
+            .iter()
+            .filter(|s| s.len > 0)
+            .filter(|s| {
+                self.source(s.source)
+                    .is_some_and(|e| e.data.is_none() && e.lazy.is_none() && e.pieces.is_none())
+            })
+            .map(|s| {
+                let first = self.cache.chunk_index(s.offset);
+                let last = self.cache.chunk_index(s.end().saturating_sub(1));
+                last.saturating_sub(first).saturating_add(1)
+            })
+            .fold(0u64, u64::saturating_add)
     }
 
     /// Resolves a span of any source to spans of non-piecewise sources.
@@ -730,10 +776,12 @@ impl Cx {
                     Poll::Pending
                 }
                 Err(Pending::Bytes(missing)) => {
-                    // Scattered pieces could need more chunks than the cache
-                    // holds at once; refuse rather than thrash forever.
-                    let needed = to_u64(missing.len()).saturating_mul(sh.cache.chunk_size());
-                    if needed > to_u64(sh.limits.cache_bytes) / 2 {
+                    // Every chunk the read touches must be cached at once;
+                    // scattered pieces could need more than the cache holds,
+                    // and supplying some would evict others forever.
+                    let touched = sh.chunks_touched(span).max(to_u64(missing.len()));
+                    let needed = touched.saturating_mul(sh.cache.chunk_size());
+                    if needed > to_u64(sh.limits.cache_bytes) {
                         return Poll::Ready(Err(Diagnostic::limit(
                             "read spans too many scattered chunks",
                         )

@@ -61,10 +61,17 @@ impl ByteCache {
         let missing: Vec<u64> = (first..=last)
             .filter(|&i| !self.contains(source, i))
             .collect();
+        self.clock = self.clock.wrapping_add(1);
         if !missing.is_empty() {
+            // The chunks this read already has stay fresh, so supplying the
+            // missing ones evicts other chunks rather than these.
+            for index in first..=last {
+                if let Some(chunk) = self.chunks.get_mut(&(source, index)) {
+                    chunk.last_used = self.clock;
+                }
+            }
             return Err(missing);
         }
-        self.clock = self.clock.wrapping_add(1);
         let mut out = Vec::with_capacity(to_usize(end.saturating_sub(start)));
         for index in first..=last {
             let chunk_start = self.chunk_start(index);
