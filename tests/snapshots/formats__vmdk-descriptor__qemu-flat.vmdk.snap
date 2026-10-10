@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ qemu-flat.vmdk — VMDK descriptor (monolithicFlat), 1 extent  [0x0+0x200]
+    Padding — 168 bytes  [0x158+0xa8]
+    Comment: "Disk DescriptorFile"  [0x0+0x16]
+    version: "1"  [0x16+0xa]
+    CID: "43b4f868"  [0x20+0xd]
+    parentCID: "ffffffff"  [0x2d+0x13]
+    createType: "monolithicFlat"  [0x40+0x1c]
+    Comment: "Extent description"  [0x5d+0x15]
+    Extent: "RW 512 FLAT \"qemu-flat-flat.vmdk\" 0" — RW FLAT, 256 KiB in "qemu-flat-flat.vmdk" 0  [0x72+0x24]
+    Comment: "The Disk Data Base"  [0x97+0x15]
+    Comment: "DDB"  [0xac+0x5]
+    ddb.virtualHWVersion: "6"  [0xb2+0x1b]
+    ddb.geometry.cylinders: "0"  [0xcd+0x1d]
+    ddb.geometry.heads: "16"  [0xea+0x1a]
+    ddb.geometry.sectors: "63"  [0x104+0x1c]
+    ddb.adapterType: "ide"  [0x120+0x18]
+    ddb.toolsVersion: "2147483647"  [0x138+0x20]

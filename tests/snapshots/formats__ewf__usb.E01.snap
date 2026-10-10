@@ -84,6 +84,7 @@ expression: "common::explore(&display_name(&path), &data)"
       ▾ Chunk 0 — MBR partition table, 1 primary partition, 512 bytes  [0x57d+0x200] → 0x7f3+0x4
           Bootstrap code — empty  [0x57d+0x1b8]
           Disk signature: 0x0  [0x735+0x4]
+          Copy protection: 0x0 — not protected  [0x739+0x2]
         ▾ Partition 1 — FAT32 (LBA) (0x0c), 14.6 MiB at LBA 2048, active  [0x73b+0x10]
           ▾ Entry  [0x73b+0x10]
               Boot indicator: active (bootable) (0x80)  [0x73b+0x1]
@@ -95,7 +96,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Volume  [0x77d+0x0]
               ! note: empty
               ! truncated: needed 0xea6000 bytes at 0x10057d, only 0x0 available [0x10057d+0xea6000]
+          Partition 2: unused (0x0) — all zeros  [0x74b+0x10]
+          Partition 3: unused (0x0) — all zeros  [0x75b+0x10]
+          Partition 4: unused (0x0) — all zeros  [0x76b+0x10]
           Boot signature: 0xaa55  [0x77b+0x2]
+        ▾ Disk layout — partitions and the space between them  [0x57d+0x200]
+            Master boot record — LBA 0, 512 bytes  [0x57d+0x200]
+            Partition 1: FAT32 (LBA) — LBA 2048–32047, 14.6 MiB; beyond the end of the image  [0x77d+0x0]
       ▾ Chunk 1 — 0x200 bytes decompressed  [0x781+0xe] → 0x7f7+0x4
           Data  [#2:0x0+0x200]
   ▾ hash — 36 bytes  [0x7ff+0x70]

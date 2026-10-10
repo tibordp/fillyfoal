@@ -40,6 +40,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Data (zlib) — MBR partition table, 1 primary partition, 16 KiB  [0xac+0x44]
         Bootstrap code — empty  [#1:0x0+0x1b8]
         Disk signature: 0x0  [#1:0x1b8+0x4]
+        Copy protection: 0x0 — not protected  [#1:0x1bc+0x2]
       ▾ Partition 1 — FAT32 (LBA) (0x0c), 14.6 MiB at LBA 2048, active  [#1:0x1be+0x10]
         ▾ Entry  [#1:0x1be+0x10]
             Boot indicator: active (bootable) (0x80)  [#1:0x1be+0x1]
@@ -51,7 +52,14 @@ expression: "common::explore(&display_name(&path), &data)"
           Volume  [#1:0x4000+0x0]
             ! note: empty
             ! truncated: needed 0xea6000 bytes at 0x100000, only 0x0 available [#1:0x100000+0xea6000]
+        Partition 2: unused (0x0) — all zeros  [#1:0x1ce+0x10]
+        Partition 3: unused (0x0) — all zeros  [#1:0x1de+0x10]
+        Partition 4: unused (0x0) — all zeros  [#1:0x1ee+0x10]
         Boot signature: 0xaa55  [#1:0x1fe+0x2]
+      ▾ Disk layout — partitions and the space between them  [#1:0x0+0x4000]
+          Master boot record — LBA 0, 512 bytes  [#1:0x0+0x200]
+          Unpartitioned space — LBA 1–31: 15.5 KiB, unallocated, all zeros  [#1:0x200+0x3e00]
+          Partition 1: FAT32 (LBA) — LBA 2048–32047, 14.6 MiB; beyond the end of the image  [#1:0x4000+0x0]
       Trailer: "ATT"  [0xf0+0x4]
       Segment length: 97  [0xf4+0x4]
   ▾ md5 — 16 bytes  [0xf8+0x2b] → 0x10b+0x10

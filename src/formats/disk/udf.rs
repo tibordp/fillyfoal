@@ -2324,6 +2324,12 @@ pub async fn emit(cx: &Cx, vol: &Arc<Vol>) -> Result<()> {
                 .lazy(integrity_node, vol.clone()),
         );
     }
+    cx.emit(
+        Node::new("Volume layout")
+            .span(file)
+            .summary("descriptors, partitions and the space outside them")
+            .lazy(layout, vol.clone()),
+    );
     if !vol.maps.is_empty() {
         cx.emit(
             Node::new("Partitions")
@@ -2388,6 +2394,59 @@ pub async fn emit(cx: &Cx, vol: &Arc<Vol>) -> Result<()> {
         }
         cx.emit(node);
     }
+    Ok(())
+}
+
+/// The volume in file order: system area, volume recognition sequence,
+/// anchors, descriptor sequences and partitions; the rest is unused.
+async fn layout(cx: Cx, vol: Arc<Vol>) -> Result<()> {
+    let file = vol.file();
+    let bs = vol.bs.max(1);
+    let mut r = crate::formats::disk::qcow::Regions::default();
+    r.add(0, 32 * 1024, "System area", None);
+    // Volume recognition sequence: descriptors of max(2048, block size).
+    let step = bs.max(2048);
+    let mut at = 32 * 1024u64;
+    for _ in 0..64 {
+        let id = cx.read_avail(file.sub(at.saturating_add(1), 5)).await?;
+        if !matches!(
+            id.as_slice(),
+            b"BEA01" | b"NSR02" | b"NSR03" | b"TEA01" | b"CD001" | b"BOOT2" | b"CDW02"
+        ) {
+            break;
+        }
+        r.add(at, step, "Volume recognition sequence", None);
+        at = at.saturating_add(step);
+    }
+    // Anchors: block 256, the last block and 256 before it.
+    let last = file.len.checked_div(bs).unwrap_or(0).saturating_sub(1);
+    for block in [256, last, last.saturating_sub(256)] {
+        let tag = cx.read_avail(vol.phys(block, 1).sub(0, 2)).await?;
+        if u16_le(&tag, 0) == Some(2) {
+            r.span(file, vol.phys(block, 1), "Anchor volume descriptor pointer");
+        }
+    }
+    for (name, ext) in [
+        ("Main volume descriptor sequence", vol.main),
+        ("Reserve volume descriptor sequence", vol.reserve),
+        ("Logical volume integrity sequence", vol.integrity),
+    ] {
+        if ext.1 > 0 {
+            r.add(
+                u64::from(ext.0).saturating_mul(bs),
+                align(ext.1.into(), bs),
+                name,
+                None,
+            );
+        }
+    }
+    for map in &vol.maps {
+        if let Map::Physical { start, len, .. } | Map::Sparable { start, len, .. } = map {
+            r.span(file, vol.phys(*start, *len), "Partition");
+        }
+    }
+    r.emit(&cx, file, "outside the descriptors and partitions")
+        .await;
     Ok(())
 }
 
