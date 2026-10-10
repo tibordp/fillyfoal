@@ -68,21 +68,9 @@ fn bytes(b: &[u8]) -> String {
 }
 
 /// Formats seconds since the epoch as `YYYY-MM-DD hh:mm:ss UTC`.
-#[allow(clippy::arithmetic_side_effects)] // i128 cannot overflow for i64 input
 fn timestamp(unix_seconds: i64) -> String {
-    let secs = i128::from(unix_seconds);
-    let days = secs.div_euclid(86_400);
-    let rem = secs.rem_euclid(86_400);
-    // Howard Hinnant's civil_from_days.
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i128::from(month <= 2);
+    let (year, month, day) = crate::formats::util::civil::civil(unix_seconds.div_euclid(86_400));
+    let rem = unix_seconds.rem_euclid(86_400);
     format!(
         "{year:04}-{month:02}-{day:02} {:02}:{:02}:{:02} UTC",
         rem / 3600,

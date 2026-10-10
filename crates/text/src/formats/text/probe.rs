@@ -47,15 +47,11 @@ pub fn significant<'a>(data: &'a [u8], comments: &'a [&'a [u8]]) -> impl Iterato
     })
 }
 
-pub fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() {
-        return Some(0);
-    }
-    hay.windows(needle.len()).position(|w| w == needle)
-}
+pub use crate::bytes::contains;
 
-pub fn contains(hay: &[u8], needle: &[u8]) -> bool {
-    find(hay, needle).is_some()
+/// The first position of `needle` in `hay` (an empty needle is at 0).
+pub fn find(hay: &[u8], needle: &[u8]) -> Option<usize> {
+    crate::bytes::find(hay, needle, 0)
 }
 
 pub fn find_nocase(hay: &[u8], needle: &[u8]) -> Option<usize> {

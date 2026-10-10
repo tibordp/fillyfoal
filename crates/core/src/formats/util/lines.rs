@@ -209,59 +209,46 @@ pub fn is_text(h: &Head<'_>) -> bool {
             .all(|&b| b >= 0x20 || matches!(b, b'\n' | b'\r' | b'\t' | 0x0c))
 }
 
-/// A short, single-line preview of some text.
+/// A short, single-line preview of some text: control characters
+/// (newlines, tabs) become spaces, but runs of spaces are kept, unlike
+/// [`super::fmt::preview`] (these are often values of column-aligned
+/// formats).
 pub fn preview(s: &str, max: usize) -> String {
-    // One line: control characters (newlines, tabs) become spaces.
     let s: String = s
         .trim()
         .chars()
         .map(|c| if c.is_control() { ' ' } else { c })
         .collect();
-    let s = s.as_str();
-    if s.chars().count() <= max {
-        return s.to_owned();
-    }
-    let cut: String = s.chars().take(max).collect();
-    format!("{cut}…")
+    super::fmt::clip(&s, max)
 }
 
 // ---------------------------------------------------------------------------
 // Value helpers shared by the science and engineering dissectors.
 
-pub fn text(s: impl Into<String>) -> crate::value::Value {
-    crate::value::Value::Text(s.into())
-}
+pub use super::val::text;
 
+/// A 64-bit unsigned decimal value.
 pub fn uint(value: u64) -> crate::value::Value {
-    crate::value::Value::UInt {
-        value,
-        bits: 64,
-        radix: crate::value::Radix::Dec,
-    }
+    super::val::uint(value, 64)
 }
 
+/// [`super::val::hex`] taking a `u64`.
 pub fn hex(value: u64, bits: u8) -> crate::value::Value {
-    crate::value::Value::UInt {
-        value,
-        bits,
-        radix: crate::value::Radix::Hex,
-    }
+    super::val::hex(value, bits)
 }
 
+/// A 64-bit signed value.
 pub fn int(value: i64) -> crate::value::Value {
-    crate::value::Value::Int { value, bits: 64 }
+    super::val::int(value, 64)
 }
 
 pub fn float(value: f64) -> crate::value::Value {
     crate::value::Value::Float(value)
 }
 
+/// [`super::val::enumv`] with the table first.
 pub fn enumeration(table: crate::value::EnumTable, raw: u64, bits: u8) -> crate::value::Value {
-    crate::value::Value::Enum {
-        raw,
-        bits,
-        name: crate::value::lookup(table, raw),
-    }
+    super::val::enumv(raw, bits, table)
 }
 
 pub fn flags(table: crate::value::FlagTable, raw: u64, bits: u8) -> crate::value::Value {
@@ -298,8 +285,9 @@ pub fn tally(list: &mut Vec<(String, u64)>, key: &str, cap: usize) {
 }
 
 /// Whether `needle` occurs in `hay`.
+/// An empty needle is not found.
 pub fn contains(hay: &[u8], needle: &[u8]) -> bool {
-    !needle.is_empty() && hay.windows(needle.len()).any(|w| w == needle)
+    !needle.is_empty() && crate::bytes::contains(hay, needle)
 }
 
 /// Sets the summary of `node` unless `s` is empty.
