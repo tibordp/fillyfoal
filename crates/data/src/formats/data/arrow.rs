@@ -427,14 +427,10 @@ fn metadata_node(buf: &Buf, t: &Table, slot: usize) -> Option<Node> {
 }
 
 fn group(name: impl Into<std::borrow::Cow<'static, str>>, children: Vec<Node>) -> Node {
-    Node::new(name).lazy(emit_nodes, Arc::new(children))
-}
-
-async fn emit_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.push(n.clone()).await;
-    }
-    Ok(())
+    Node::new(name).lazy(
+        crate::formats::util::arcutil::push_nodes,
+        Arc::new(children),
+    )
 }
 
 /// The fields of a `Field` table.
@@ -1260,7 +1256,7 @@ fn record_batch(buf: &Buf, batch: &Table, fields: &[Field], body: Span) -> (Vec<
                 .span(buf.at(at, 16))
                 .summary(format!("{len} values, {nulls} nulls"))
                 .lazy(
-                    emit_nodes,
+                    crate::formats::util::arcutil::push_nodes,
                     Arc::new(vec![
                         Node::new("Length").span(buf.at(at, 8)).value(int(len, 64)),
                         Node::new("Null count")
@@ -1306,7 +1302,7 @@ fn record_batch(buf: &Buf, batch: &Table, fields: &[Field], body: Span) -> (Vec<
                     .summary(format!("{len} bytes"))
                     .target(body.sub(off, len))
                     .lazy(
-                        emit_nodes,
+                        crate::formats::util::arcutil::push_nodes,
                         Arc::new(vec![
                             Node::new("Offset")
                                 .span(buf.at(at, 8))

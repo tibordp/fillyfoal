@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Header size: 208  [0x8+0x4]
       Version: 0x10d00  [0xc+0x4]
       Flags: 0x0 []  [0x10+0x4]
-      Chunk size: 32768 — 32.0 KiB  [0x14+0x4]
+      Chunk size: 32768 — 32 KiB  [0x14+0x4]
       GUID: {12345678-1234-5678-9abc-def012345678}  [0x18+0x10]
       Part number: 1  [0x28+0x2]
       Total parts: 1  [0x2a+0x2]

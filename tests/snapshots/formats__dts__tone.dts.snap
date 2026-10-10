@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ tone.dts — DTS core, 1411.2 kbps, 44100 Hz, 2 ch, stereo, 58 ms  [0x0+0x2800]
-  ▾ Frames — 10.0 KiB  [0x0+0x2800]
+  ▾ Frames — 10 KiB  [0x0+0x2800]
     ▾ Frame 0 — DTS core, 1411.2 kbps, 44100 Hz, 2 ch, stereo, 2048 bytes  [0x0+0x800]
       ▾ Header  [0x0+0xd]
           Sync word: 0x7ffe8001  [0x0+0x4]

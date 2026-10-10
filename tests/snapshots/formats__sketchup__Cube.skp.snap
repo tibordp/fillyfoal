@@ -41,7 +41,7 @@ expression: "common::explore(&display_name(&path), &data)"
         CRC: 0x26930929 — valid  [0x1f5+0x4]
     ▾ Image data — 1 IDAT chunk, 39 bytes compressed → 52 bytes of scanlines  [0x1f9+0x33]
       ▾ Compressed stream — zlib stream, 39 bytes  [0x201+0x27]
-          CMF: 0x78 — deflate, 32.0 KiB window  [0x201+0x1]
+          CMF: 0x78 — deflate, 32 KiB window  [0x201+0x1]
           FLG: 0xda — maximum compression  [0x202+0x1]
       ▾ Scanlines — 4 rows, 13 bytes each
           Row 0: None (0x0)  [#1:0x0+0xd]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ boot.dol — GameCube/Wii DOL, 768 bytes text, 128 bytes data, 8.0 KiB BSS at 0x80006000, entry 0x80003100  [0x0+0x480]
+▾ boot.dol — GameCube/Wii DOL, 768 bytes text, 128 bytes data, 8 KiB BSS at 0x80006000, entry 0x80003100  [0x0+0x480]
   ▾ Header — entry 0x80003100  [0x0+0x100]
       Section file offsets  [0x0+0x48]
       Section load addresses  [0x48+0x48]

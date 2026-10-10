@@ -79,7 +79,7 @@ pub fn seconds_f64(seconds: f64) -> String {
     seconds_ms(millis)
 }
 
-pub use super::fmt::{plural, uuid};
+pub use super::fmt::uuid;
 
 /// A four-character code, with non-printable bytes escaped, except that
 /// QuickTime's 0xA9 (the first byte of user-data atoms such as `©nam`) is

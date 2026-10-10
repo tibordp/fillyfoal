@@ -51,3 +51,13 @@ pq.write_table(
     compression="gzip",
     write_statistics=False,
 )
+
+# BYTE_STREAM_SPLIT for the numeric columns, uncompressed, no dictionary.
+pq.write_table(
+    t.select(["id", "temp"]),
+    "byte-stream-split.parquet",
+    use_dictionary=False,
+    compression="none",
+    use_byte_stream_split=["id", "temp"],
+    write_statistics=False,
+)

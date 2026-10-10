@@ -2,9 +2,9 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ disc.nrg — Nero image (v2), 4.0 KiB of data, 1 session(s), 1 track(s), 5 chunks, media type 0x1  [0x0+0x109c]
+▾ disc.nrg — Nero image (v2), 4 KiB of data, 1 session(s), 1 track(s), 5 chunks, media type 0x1  [0x0+0x109c]
     Footer (NER5): 0x1000  [0x1090+0xc]
-    Image data — 4.0 KiB  [0x0+0x1000]
+    Image data — 4 KiB  [0x0+0x1000]
   ▾ CUEX: cue sheet (CUEX) (0x43554558) — 4 entries  [0x1000+0x28]
       Entry 0 — track 00 index 00, control/ADR 0x41, LBA -150  [0x1008+0x8]
       Entry 1 — track 01 index 00, control/ADR 0x41, LBA -150  [0x1010+0x8]

@@ -151,7 +151,9 @@ fn parse_avc(w: &mut Walker, info: &mut NalInfo, ps: &ParamSets) -> Option<()> {
                 info.encoder = encoder(n);
             }
             let count = names.as_ref().map_or(0, Vec::len);
-            w.end_summary(|| super::plural(crate::bytes::to_u64(count), "message"));
+            w.end_summary(|| {
+                crate::formats::util::fmt::plural(crate::bytes::to_u64(count), "message")
+            });
             names?;
         }
         9 => {
@@ -236,7 +238,9 @@ fn parse_hevc(w: &mut Walker, info: &mut NalInfo, ps: &ParamSets) -> Option<()> 
                 info.encoder = encoder(n);
             }
             let count = names.as_ref().map_or(0, Vec::len);
-            w.end_summary(|| super::plural(crate::bytes::to_u64(count), "message"));
+            w.end_summary(|| {
+                crate::formats::util::fmt::plural(crate::bytes::to_u64(count), "message")
+            });
             names?;
         }
         _ => {}
@@ -312,9 +316,9 @@ fn trailing(w: &mut Walker, name: &'static str) {
     if w.skip_as(name, left).is_some() {
         w.summary(|| {
             if left.is_multiple_of(8) {
-                super::plural(crate::bytes::to_u64(left / 8), "byte")
+                crate::formats::util::fmt::plural(crate::bytes::to_u64(left / 8), "byte")
             } else {
-                super::plural(crate::bytes::to_u64(left), "bit")
+                crate::formats::util::fmt::plural(crate::bytes::to_u64(left), "bit")
             }
         });
     }
@@ -652,7 +656,7 @@ fn hvcc_walk(
             format!(
                 "{}, {}",
                 super::tables::lookup_or(super::tables::HEVC_NAL_TYPES, t),
-                super::plural(n, "unit")
+                crate::formats::util::fmt::plural(n, "unit")
             )
         });
     }

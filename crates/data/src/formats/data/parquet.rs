@@ -1645,14 +1645,10 @@ async fn levels_v2(cx: Cx, (c, info, span): (Col, PageInfo, Span)) -> Result<()>
 }
 
 fn group(name: impl Into<std::borrow::Cow<'static, str>>, children: Vec<Node>) -> Node {
-    Node::new(name).lazy(emit_all, Arc::new(children))
-}
-
-async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.push(n.clone()).await;
-    }
-    Ok(())
+    Node::new(name).lazy(
+        crate::formats::util::arcutil::push_nodes,
+        Arc::new(children),
+    )
 }
 
 /// The contents of a (decompressed) page: levels, then values.
@@ -1771,6 +1767,22 @@ async fn values(
             nodes.extend(run_nodes(&runs, rest.tail(4), 0));
             cx.emit(group("Values", nodes).span(rest).summary("RLE booleans"));
         }
+        9 if byte_stream_split_width(&c.leaf).is_some() => {
+            // BYTE_STREAM_SPLIT: the k-th bytes of all values, then the
+            // next plane; un-split, the values are PLAIN.
+            let width = byte_stream_split_width(&c.leaf).unwrap_or(1);
+            let planes = rest.sub(0, count.saturating_mul(width));
+            let codec = Codec::Unshuffle {
+                width: to_usize(width),
+            };
+            let decoded = cx.decode_lazy(planes, &codec, planes.len)?;
+            cx.emit(
+                Node::new("Values")
+                    .span(planes)
+                    .summary(format!("{count} BYTE_STREAM_SPLIT values"))
+                    .lazy(plain, (c.leaf.clone(), decoded, count)),
+            );
+        }
         e => {
             cx.emit(
                 Node::new("Values")
@@ -1784,6 +1796,17 @@ async fn values(
         }
     }
     Ok(())
+}
+
+/// The value width BYTE_STREAM_SPLIT splits into planes: INT32, INT64,
+/// FLOAT, DOUBLE and FIXED_LEN_BYTE_ARRAY.
+fn byte_stream_split_width(leaf: &Leaf) -> Option<u64> {
+    match leaf.phys {
+        1 | 4 => Some(4),
+        2 | 5 => Some(8),
+        7 => u64::try_from(leaf.type_length).ok().filter(|&w| w > 0),
+        _ => None,
+    }
 }
 
 /// PLAIN values of a column's physical type.

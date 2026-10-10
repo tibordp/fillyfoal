@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ super.img — Android super image, 2 partitions: system_a, vendor_a (2 metadata slots of 4.0 KiB)  [0x0+0x7200]
+▾ super.img — Android super image, 2 partitions: system_a, vendor_a (2 metadata slots of 4 KiB)  [0x0+0x7200]
     Reserved  [0x0+0x1000]
   ▾ Geometry  [0x1000+0x34]
       Magic: "gDla"  [0x1000+0x4]
@@ -43,7 +43,7 @@ expression: "common::explore(&display_name(&path), &data)"
         First logical sector: 56  [0x3160+0x8]
         Alignment: 0  [0x3168+0x4]
         Alignment offset: 0  [0x316c+0x4]
-        Size: 65536 — 64.0 KiB  [0x3170+0x8]
+        Size: 65536 — 64 KiB  [0x3170+0x8]
         Partition name: "super"  [0x3178+0x24]
         Flags: 0x0 []  [0x319c+0x4]
   ▾ Groups — default, tiny_dynamic_partitions  [0x3100+0x60]
@@ -54,7 +54,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Group  [0x3130+0x30]
         Name: "tiny_dynamic_partitions"  [0x3130+0x24]
         Flags: 0x0 []  [0x3154+0x4]
-        Maximum size: 8388608 — 8.0 MiB  [0x3158+0x8]
+        Maximum size: 8388608 — 8 MiB  [0x3158+0x8]
   ▾ system_a — gzip, 0 bytes uncompressed  [#1:0x0+0x200] → 0x3080+0x34
     ▾ Header  [#1:0x0+0xa]
         ID: 1f 8b  |..|  [#1:0x0+0x2]

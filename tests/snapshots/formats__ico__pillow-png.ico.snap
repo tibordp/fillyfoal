@@ -32,7 +32,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC: 0x1ff3ff61 — valid  [0x53+0x4]
       ▾ Image data — 1 IDAT chunk, 580 bytes compressed → 1.0 KiB of scanlines  [0x57+0x250]
         ▾ Compressed stream — zlib stream, 580 bytes  [0x5f+0x244]
-            CMF: 0x78 — deflate, 32.0 KiB window  [0x5f+0x1]
+            CMF: 0x78 — deflate, 32 KiB window  [0x5f+0x1]
             FLG: 0x9c — default compression  [0x60+0x1]
         ▾ Scanlines — 16 rows, 65 bytes each
             Row 0: None (0x0)  [#1:0x0+0x41]
@@ -85,7 +85,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC: 0x737a7af4 — valid  [0x2d0+0x4]
       ▾ Image data — 1 IDAT chunk, 1.2 KiB compressed → 4.0 KiB of scanlines  [0x2d4+0x4cd]
         ▾ Compressed stream — zlib stream, 1.2 KiB  [0x2dc+0x4c1]
-            CMF: 0x78 — deflate, 32.0 KiB window  [0x2dc+0x1]
+            CMF: 0x78 — deflate, 32 KiB window  [0x2dc+0x1]
             FLG: 0x9c — default compression  [0x2dd+0x1]
         ▾ Scanlines — 32 rows, 129 bytes each
             Row 0: None (0x0)  [#2:0x0+0x81]
@@ -154,7 +154,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC: 0x5702f987 — valid  [0x7ca+0x4]
       ▾ Image data — 1 IDAT chunk, 231 bytes compressed → 9.0 KiB of scanlines  [0x7ce+0xf3]
         ▾ Compressed stream — zlib stream, 231 bytes  [0x7d6+0xe7]
-            CMF: 0x78 — deflate, 32.0 KiB window  [0x7d6+0x1]
+            CMF: 0x78 — deflate, 32 KiB window  [0x7d6+0x1]
             FLG: 0x9c — default compression  [0x7d7+0x1]
         ▾ Scanlines — 48 rows, 193 bytes each
             Row 0: Sub (0x1)  [#3:0x0+0xc1]

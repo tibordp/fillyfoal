@@ -826,7 +826,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Page 3: "10a27d6f755ca795d1a928a41676b5fb210abb4bdc8dfadb4fb62f7b9e34240d" — file 0x3000..0x3340  [0x3420+0x20]
   ▾ Linked Libraries — libSystem.B.dylib
       1: "/usr/lib/libSystem.B.dylib" — load, version 1356.0
-  ▾ __TEXT — r-x, 5 sections, 4.0 KiB at 0x100000000  [0x0+0x1000]
+  ▾ __TEXT — r-x, 5 sections, 4 KiB at 0x100000000  [0x0+0x1000]
     ▾ Mach Header — MH_EXECUTE, arm64  [0x0+0x20]
         magic: 0xfeedfacf  [0x0+0x4]
         cputype: ARM64 (0x100000c)  [0x4+0x4]
@@ -1691,12 +1691,12 @@ expression: "common::explore(&display_name(&path), &data)"
               [0]: 0x2000000 — frameless, stack size 0x0  [0x848+0x4]
               [1]: 0x400000f — frame (fp, lr), x19/x20, x21/x22, x23/x24, x25/x26  [0x84c+0x4]
       Padding — 1.9 KiB  [0x854+0x7ac]
-  ▾ __DATA_CONST — rw-, 2 sections, 4.0 KiB at 0x100001000  [0x1000+0x1000]
+  ▾ __DATA_CONST — rw-, 2 sections, 4 KiB at 0x100001000  [0x1000+0x1000]
     ▾ __got — S_NON_LAZY_SYMBOL_POINTERS, 8 bytes at 0x100001000  [0x1000+0x8]
         dyld_stub_binder: 0x0  [0x1000+0x8]
       __const — S_REGULAR, 24 bytes at 0x100001008  [0x1008+0x18]
       Padding — 4.0 KiB  [0x1020+0xfe0]
-  ▾ __DATA — rw-, 4 sections, 4.0 KiB at 0x100002000  [0x2000+0x1000]
+  ▾ __DATA — rw-, 4 sections, 4 KiB at 0x100002000  [0x2000+0x1000]
     ▾ __la_symbol_ptr — S_LAZY_SYMBOL_POINTERS, 8 bytes at 0x100002000  [0x2000+0x8]
         _printf: 0x1000007c4 — __TEXT,__stub_helper+0x18  [0x2000+0x8] → 0x7c4+0x0
       __data — S_REGULAR, 16 bytes at 0x100002008  [0x2008+0x10]

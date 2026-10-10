@@ -3,7 +3,7 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ surround.ac3 — AC-3, 192 kbps, 48000 Hz, 5.1 ch, dialnorm −24 dB, 128 ms  [0x0+0xc00]
-  ▾ Frames — 3.0 KiB  [0x0+0xc00]
+  ▾ Frames — 3 KiB  [0x0+0xc00]
     ▾ Frame 0 — AC-3, 192 kbps, 48000 Hz, 5.1 ch, 768 bytes  [0x0+0x300]
       ▾ Sync information and BSI  [0x0+0xd]
           Sync word: 0xb77  [0x0+0x2]

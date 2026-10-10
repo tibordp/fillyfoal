@@ -12,6 +12,7 @@ fillyfoal-core.workspace = true
 fillyfoal-archive.workspace = true
 fillyfoal-data.workspace = true
 fillyfoal-exec.workspace = true
+fillyfoal-image.workspace = true
 fillyfoal-text.workspace = true
 
 [lints]

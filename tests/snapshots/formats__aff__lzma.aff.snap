@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ lzma.aff — AFF image, 5 segments, 1 pages, 16.0 KiB image  [0x0+0x13e]
+▾ lzma.aff — AFF image, 5 segments, 1 pages, 16 KiB image  [0x0+0x13e]
     Signature: "AFF10"  [0x0+0x8]
   ▾ pagesize: 16384  [0x8+0x20] → 0x20+0x0
       Magic: "AFF"  [0x8+0x4]
@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Data  [0x20+0x0]
       Trailer: "ATT"  [0x20+0x4]
       Segment length: 32  [0x24+0x4]
-  ▾ imagesize: 16384 — 16.0 KiB  [0x28+0x29] → 0x41+0x8
+  ▾ imagesize: 16384 — 16 KiB  [0x28+0x29] → 0x41+0x8
       Magic: "AFF"  [0x28+0x4]
       Name length: 9  [0x2c+0x4]
       Data length: 8  [0x30+0x4]
@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Data length: 95  [0x9f+0x4]
       Flags: 0x21 [COMPRESSED | ALG_LZMA]  [0xa3+0x4]
       Name: "page0"  [0xa7+0x5]
-    ▾ Data (LZMA) — MBR partition table, 1 primary partition, 16.0 KiB  [0xac+0x5f]
+    ▾ Data (LZMA) — MBR partition table, 1 primary partition, 16 KiB  [0xac+0x5f]
         Bootstrap code — empty  [#1:0x0+0x1b8]
         Disk signature: 0x0  [#1:0x1b8+0x4]
         Copy protection: 0x0 — not protected  [#1:0x1bc+0x2]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ zany.min — Pokémon mini "Pokemon Zany" (MPZE), 9.0 KiB  [0x0+0x2400]
+▾ zany.min — Pokémon mini "Pokemon Zany" (MPZE), 9 KiB  [0x0+0x2400]
     BIOS area (not in cartridge)  [0x0+0x2100]
     Signature: "MN"  [0x2100+0x2]
     Reset and interrupt vectors: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x2102+0xa2]

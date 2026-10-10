@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ hack.ups — UPS patch, 1.0 KiB → 1.0 KiB, 3 hunks changing 11 bytes, patch CRC valid  [0x0+0x27]
+▾ hack.ups — UPS patch, 1 KiB → 1.0 KiB, 3 hunks changing 11 bytes, patch CRC valid  [0x0+0x27]
     Magic: "UPS1"  [0x0+0x4]
     Source size: 1024  [0x4+0x2]
     Target size: 1029  [0x6+0x2]

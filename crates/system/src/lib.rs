@@ -31,6 +31,8 @@ pub mod formats {
     #[allow(unused_imports)]
     pub(crate) use fillyfoal_exec::formats::java;
     #[allow(unused_imports)]
+    pub(crate) use fillyfoal_image::formats::{font, image};
+    #[allow(unused_imports)]
     pub(crate) use fillyfoal_text::formats::text;
 
     pub mod forensics;

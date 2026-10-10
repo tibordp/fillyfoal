@@ -6,7 +6,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Header  [0x0+0x6]
       Magic: "LZIP"  [0x0+0x4]
       Version: 1  [0x4+0x1]
-      Coded dictionary size: 16 — 64.0 KiB  [0x5+0x1]
+      Coded dictionary size: 16 — 64 KiB  [0x5+0x1]
   ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall, 99 bottles of beer.), ~98 records  [0x6+0x127]
       Delimiter: "comma"
     ▾ Header — 99 bottles of beer on the wall, 99 bottles of beer.  [#1:0x0+0x33]

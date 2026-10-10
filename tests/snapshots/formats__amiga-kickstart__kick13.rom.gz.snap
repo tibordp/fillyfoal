@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ kick13.rom — Amiga Kickstart 1.3 (34.5), exec 34.2, 256.0 KiB, checksum valid  [0x0+0x40000]
+▾ kick13.rom — Amiga Kickstart 1.3 (34.5), exec 34.2, 256 KiB, checksum valid  [0x0+0x40000]
     Magic: 0x1111  [0x0+0x2]
     JMP opcode: 0x4ef9  [0x2+0x2]
     Entry point: 0xfc00d2  [0x4+0x4]

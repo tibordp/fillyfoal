@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Header  [0x0+0x6]
         Magic: "LZIP"  [0x0+0x4]
         Version: 1  [0x4+0x1]
-        Coded dictionary size: 16 — 64.0 KiB  [0x5+0x1]
+        Coded dictionary size: 16 — 64 KiB  [0x5+0x1]
     ▾ Decompressed — UTF-8 text, LF line endings, 1 line  [0x6+0x18]
         Encoding: "UTF-8"
         Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
@@ -21,7 +21,7 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Header  [0x32+0x6]
         Magic: "LZIP"  [0x32+0x4]
         Version: 1  [0x36+0x1]
-        Coded dictionary size: 12 — 4.0 KiB  [0x37+0x1]
+        Coded dictionary size: 12 — 4 KiB  [0x37+0x1]
     ▾ Decompressed — UTF-8 text, LF line endings, 1 line  [0x38+0x19]
         Encoding: "UTF-8"
         Line endings: "LF" — 1 LF, 0 CRLF, 0 CR

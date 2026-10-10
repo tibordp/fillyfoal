@@ -95,7 +95,7 @@ expression: "common::explore(&display_name(&path), &data)"
                   Flags: 0xc0 — 1 filter, compressed size present, uncompressed size present  [0x1ab+0x1]
                   Compressed size: 256 — 256 bytes  [0x1ac+0x2]
                   Uncompressed size: 3200 — 3.1 KiB  [0x1ae+0x2]
-                ▾ LZMA2 — dictionary 8.0 MiB  [0x1b0+0x3]
+                ▾ LZMA2 — dictionary 8 MiB  [0x1b0+0x3]
                     Filter ID: LZMA2 (0x21)  [0x1b0+0x1]
                     Properties size: 1  [0x1b1+0x1]
                     Properties: 16  |.|  [0x1b2+0x1]

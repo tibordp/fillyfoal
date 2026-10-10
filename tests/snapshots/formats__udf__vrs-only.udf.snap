@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ vrs-only.udf — UDF image, 38.0 KiB  [0x0+0x9800]
+▾ vrs-only.udf — UDF image, 38 KiB  [0x0+0x9800]
     ! warning: no UDF anchor volume descriptor pointer found
     System area — empty  [0x0+0x8000]
   ▾ Volume descriptors — 3 descriptors  [0x8000+0x1800]

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ SONIC2__.VMI — VMU save "SONICADV2_SY" (SONIC2__.VMS), "Sonic Adventure 2 save", 16.0 KiB, 2001-06-19  [0x0+0x6c]
+▾ SONIC2__.VMI — VMU save "SONICADV2_SY" (SONIC2__.VMS), "Sonic Adventure 2 save", 16 KiB, 2001-06-19  [0x0+0x6c]
     Checksum: 53 45 46 41  |SEFA|  [0x0+0x4]
     Description: "Sonic Adventure 2 save          "  [0x4+0x20]
     Copyright: "SEGA                            "  [0x24+0x20]

@@ -270,7 +270,7 @@ expression: "common::explore(&display_name(&path), &data)"
           datasize: 0x0  [0x12c4+0x4]
     ▾ Linked Libraries — libSystem.B.dylib
         1: "/usr/lib/libSystem.B.dylib" — load, version 1356.0
-    ▾ __TEXT — r-x, 2 sections, 4.0 KiB at 0x0  [0x1000+0x1000]
+    ▾ __TEXT — r-x, 2 sections, 4 KiB at 0x0  [0x1000+0x1000]
       ▾ Mach Header — MH_DYLIB, x86_64  [0x1000+0x20]
           magic: 0xfeedfacf  [0x1000+0x4]
           cputype: X86_64 (0x1000007)  [0x1004+0x4]
@@ -912,7 +912,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Padding — 1 byte  [0x81cf+0x1]
     ▾ Linked Libraries — libSystem.B.dylib
         1: "/usr/lib/libSystem.B.dylib" — load, version 1356.0
-    ▾ __TEXT — r-x, 2 sections, 16.0 KiB at 0x0  [0x4000+0x4000]
+    ▾ __TEXT — r-x, 2 sections, 16 KiB at 0x0  [0x4000+0x4000]
       ▾ Mach Header — MH_DYLIB, arm64  [0x4000+0x20]
           magic: 0xfeedfacf  [0x4000+0x4]
           cputype: ARM64 (0x100000c)  [0x4004+0x4]

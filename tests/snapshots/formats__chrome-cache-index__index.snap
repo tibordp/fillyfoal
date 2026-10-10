@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ index — Chromium disk cache index v3.0, 3 entries, 40.0 KiB  [0x0+0x270]
+▾ index — Chromium disk cache index v3.0, 3 entries, 40 KiB  [0x0+0x270]
   ▾ Header  [0x0+0x100]
       Magic: 0xc103cac3  [0x0+0x4]
       Version: 0x30000  [0x4+0x4]

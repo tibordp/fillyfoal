@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ Mcd001.ps2 — PS2 memory card v1.2.0.0, 8.0 MiB (8192 clusters of 1024 bytes), with ECC, root at cluster 0  [0x0+0x2400]
+▾ Mcd001.ps2 — PS2 memory card v1.2.0.0, 8 MiB (8192 clusters of 1024 bytes), with ECC, root at cluster 0  [0x0+0x2400]
   ▾ Superblock  [0x0+0x152]
       Magic: "Sony PS2 Memory Card Format "  [0x0+0x1c]
       Version: "1.2.0.0"  [0x1c+0xc]

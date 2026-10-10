@@ -547,18 +547,6 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
     Ok(true)
 }
 
-/// "300 ms", "1.5 s", "2:05".
-fn playing_time(ms: u64) -> String {
-    if ms < 1000 {
-        format!("{ms} ms")
-    } else if ms < 60_000 {
-        let s = format!("{:.2}", ms as f64 / 1000.0);
-        format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
-    } else {
-        crate::formats::util::sound::duration(ms as f64 / 1000.0)
-    }
-}
-
 pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>> {
     let chunks = scan(cx, ctx, region, 4096).await?;
     let Some(first) = chunks.first() else {
@@ -593,7 +581,10 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
                         _ => {}
                     }
                 }
-                line.push_str(&format!(", {}", playing_time(total)));
+                line.push_str(&format!(
+                    ", {}",
+                    crate::formats::image::playing_time(total as f64 / 1000.0)
+                ));
                 if let Some(anim) = chunks.iter().find(|c| &c.id == b"ANIM") {
                     let b = cx.read_avail(anim.data.sub(4, 2)).await?;
                     match crate::bytes::u16_le(&b, 0) {

@@ -11,6 +11,6 @@ expression: "common::explore(&display_name(&path), &data)"
     Cache size: 11520 — 11.2 KiB  [0x1c+0x8]
     Write reason: 0  [0x24+0x4]
   ▾ Entries — 2 entries  [0x28+0x20]
-      1122334455667788: 2020-09-13 12:26:40 UTC — 10.0 KiB  [0x28+0x10]
-      0abcdef012345678: 2020-09-13 12:35:00 UTC — 1.0 KiB  [0x38+0x10]
+      1122334455667788: 2020-09-13 12:26:40 UTC — 10 KiB  [0x28+0x10]
+      0abcdef012345678: 2020-09-13 12:35:00 UTC — 1 KiB  [0x38+0x10]
     Last modified: 2020-09-13 12:43:20 UTC  [0x48+0x8]

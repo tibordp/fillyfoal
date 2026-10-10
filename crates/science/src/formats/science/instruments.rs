@@ -1606,7 +1606,7 @@ async fn tdms_value(cur: &mut Cursor<'_>, t: u32) -> Result<Value> {
             let secs = cur.u64().await?.cast_signed();
             // Seconds since 1904-01-01 UTC.
             Value::Timestamp {
-                unix_seconds: secs.saturating_sub(2_082_844_800),
+                unix_seconds: secs.saturating_sub(crate::text::MAC_EPOCH),
             }
         }
         0x8_000c => {

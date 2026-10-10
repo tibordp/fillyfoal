@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.dax — DAX v1, 16.0 KiB image in 2 zlib frames, 0 non-compressed areas  [0x0+0x6a]
+▾ game.dax — DAX v1, 16 KiB image in 2 zlib frames, 0 non-compressed areas  [0x0+0x6a]
   ▾ Header  [0x0+0x20]
       Magic: "DAX"  [0x0+0x4]
       Uncompressed size: 16384  [0x4+0x4]

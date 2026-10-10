@@ -13,6 +13,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::audio::id3::PICTURE_TYPE;
 use crate::formats::iff::wav;
+use crate::formats::image::bmp;
 use crate::formats::util::fmt::plural;
 use crate::formats::util::val::name_or;
 use crate::formats::util::vidutil;
@@ -1633,23 +1634,13 @@ async fn index_block(
 // ---------------------------------------------------------------------------
 // Codec structures shared with AVI and Matroska
 
-const BI_COMPRESSION: EnumTable = &[
-    (0, "BI_RGB"),
-    (1, "BI_RLE8"),
-    (2, "BI_RLE4"),
-    (3, "BI_BITFIELDS"),
-    (4, "BI_JPEG"),
-    (5, "BI_PNG"),
-    (6, "BI_ALPHABITFIELDS"),
-];
-
 /// "Motion JPEG (MJPG)", "BI_RGB".
 pub fn compression_name(c: &[u8]) -> String {
     let v = u32_le(c, 0).unwrap_or(0);
     if v < 0x100 {
         return match v {
             0 => "RGB".to_owned(),
-            _ => vidutil::lookup_or(BI_COMPRESSION, v.into()),
+            _ => vidutil::lookup_or(bmp::COMPRESSION, v.into()),
         };
     }
     let code = vidutil::fourcc(c);
@@ -1660,47 +1651,22 @@ pub fn compression_name(c: &[u8]) -> String {
 }
 
 /// BITMAPINFOHEADER, as used by ASF, AVI and Matroska (V_MS/VFW/FOURCC)
-/// video streams, with its palette.
+/// video streams, with the codec data within `biSize` and the palette.
 pub fn bitmapinfoheader(f: &mut Fields<'_>) -> Result<()> {
-    let size = f.u32("Header size").emit()?;
-    let start = f.pos().saturating_sub(4);
-    f.i32("Width").emit()?;
-    f.i32("Height")
-        .desc("Negative for top-down bitmaps")
-        .emit()?;
-    f.u16("Planes").emit()?;
-    let bits = f.u16("Bits per pixel").emit()?;
-    let compression = f
-        .bytes("Compression", 4)
-        .with(|c, n| {
-            let v = u32_le(c, 0).unwrap_or(0);
-            if v < 0x100 {
-                n.value(Value::Enum {
-                    raw: v.into(),
-                    bits: 32,
-                    name: crate::value::lookup(BI_COMPRESSION, v.into()),
-                })
-            } else {
-                let n = n.value(Value::Text(vidutil::fourcc(c)));
-                match vidutil::codec_name(c) {
-                    Some(name) => n.summary(name),
-                    None => n,
-                }
-            }
-        })
-        .emit()?;
-    f.u32("Image size").emit()?;
-    f.i32("Horizontal pixels per meter").emit()?;
-    f.i32("Vertical pixels per meter").emit()?;
-    let used = f.u32("Colors used").emit()?;
-    f.u32("Important colors").emit()?;
+    let start = f.pos();
+    let info = bmp::info_header(f, &bmp::Compression::FourCC)?;
+    let (size, bits, used, raw) = (
+        info.size,
+        info.bit_count,
+        info.colors_used,
+        info.compression,
+    );
     let end = start.saturating_add(size.into());
     if end > f.pos() {
         let n = end.saturating_sub(f.pos());
         f.bytes("Codec-specific data", n).emit()?;
     }
     f.seek(end.max(f.pos()));
-    let raw = u32_le(&compression, 0).unwrap_or(u32::MAX);
     if bits <= 8 && bits > 0 && raw <= 2 && f.remaining() >= 4 {
         let colors = if used == 0 {
             1u64 << bits.min(8)

@@ -7,7 +7,7 @@ expression: "common::explore(&display_name(&path), &data)"
     File size: 8304  [0x8+0x8]
     First chunk offset: 0x18  [0x10+0x8]
     CHNKHead — 40 bytes  [0x18+0x38]
-  ▾ CHNKSQLi — SQLite 3.53.4, 2 pages of 4.0 KiB, UTF-8, 1 table, 1 row  [0x60+0x2000]
+  ▾ CHNKSQLi — SQLite 3.53.4, 2 pages of 4 KiB, UTF-8, 1 table, 1 row  [0x60+0x2000]
     ▾ Database Header  [0x60+0x64]
         Header string: "SQLite format 3"  [0x60+0x10]
         Page size: 4096  [0x70+0x2]
@@ -87,7 +87,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 Rowid: 1  [0x2058+0x1]
                 Local payload — all 7 bytes  [0x2059+0x7]
             Unallocated space — 4077 bytes  [0x106a+0xfed]
-    ▾ Pages — 2 pages of 4.0 KiB
+    ▾ Pages — 2 pages of 4 KiB
       ▾ Page 1 — leaf table B-tree page of sqlite_schema  [0x60+0x1000]
         ▾ Database Header  [0x60+0x64]
             Header string: "SQLite format 3"  [0x60+0x10]

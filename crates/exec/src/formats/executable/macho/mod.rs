@@ -1826,6 +1826,9 @@ fn group(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, children: 
     if children.is_empty() {
         node
     } else {
-        node.lazy(super::push_nodes, Arc::new(children))
+        node.lazy(
+            crate::formats::util::arcutil::push_nodes,
+            Arc::new(children),
+        )
     }
 }

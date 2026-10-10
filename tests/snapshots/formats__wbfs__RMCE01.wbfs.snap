@@ -2,11 +2,11 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ RMCE01.wbfs — WBFS, 1048576 sectors of 512 bytes, WBFS sectors of 2.0 MiB, 1 disc(s): "Mario Kart Wii"  [0x0+0x500]
+▾ RMCE01.wbfs — WBFS, 1048576 sectors of 512 bytes, WBFS sectors of 2 MiB, 1 disc(s): "Mario Kart Wii"  [0x0+0x500]
     Magic: "WBFS"  [0x0+0x4]
     HD sectors: 1048576  [0x4+0x4]
     HD sector size (shift): 9 — 512 bytes  [0x8+0x1]
-    WBFS sector size (shift): 21 — 2.0 MiB  [0x9+0x1]
+    WBFS sector size (shift): 21 — 2 MiB  [0x9+0x1]
     Version: 1  [0xa+0x1]
     Padding: 0  [0xb+0x1]
     Disc table — 1 slots used  [0xc+0x1f4]
