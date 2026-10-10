@@ -299,14 +299,15 @@ impl Shared {
                 continue;
             };
             let held = entry.held();
-            entry.data = None;
             let Some(fresh) = LazyDecode::new(
                 origin.parent,
                 entry.recipe.as_ref().unwrap_or(&Codec::Stored),
             ) else {
+                // Not decodable again after all: keep the bytes.
                 entry.recipe = None;
                 continue;
             };
+            entry.data = None;
             entry.lazy = Some(Box::new(fresh));
             self.derived_bytes = self.derived_bytes.saturating_sub(held);
         }
@@ -755,7 +756,9 @@ impl Cx {
                 Ok(data) => {
                     sh.charge(1u64.saturating_add(to_u64(data.len()) >> 12));
                     // A short read of a lazily decoded source that stopped
-                    // on an error is that error, not the end of the data.
+                    // on an error is that error, not the end of the data;
+                    // a warning (a checksum mismatch, a stream shorter than
+                    // declared) explains a short read too.
                     let failed = (to_u64(data.len()) < span.len)
                         .then(|| sh.source(span.source))
                         .flatten()

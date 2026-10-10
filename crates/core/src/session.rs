@@ -27,7 +27,8 @@ pub struct Limits {
     /// Total bytes of decoded (derived) sources kept in memory.
     pub max_derived: u64,
     /// Work units one expansion may consume before it is stopped with a
-    /// `Limit` diagnostic. A safety net against dissectors that loop without
+    /// `Limit` diagnostic, counted from its start or from the last page of
+    /// children it filled. A safety net against dissectors that loop without
     /// making progress on malformed input.
     pub max_work: u64,
 }
@@ -1037,7 +1038,14 @@ impl<C: Catalog> Session<C> {
                         run.secret = secret;
                         ChildState::Running(Wait::Secret)
                     }
-                    Some(Stop::Page) => ChildState::More,
+                    Some(Stop::Page) => {
+                        // The host paces the expansion from here on: the
+                        // work limit bounds work between pages (where a
+                        // dissector that makes no progress shows), not the
+                        // whole of a long listing.
+                        entry.work = 0;
+                        ChildState::More
+                    }
                     None => {
                         entry.state = ChildState::Failed;
                         entry.error = Some(Diagnostic::internal(

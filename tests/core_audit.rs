@@ -279,3 +279,19 @@ fn memory_pressure_does_not_truncate_lazy_streams() {
         ]
     );
 }
+
+#[test]
+fn the_work_limit_bounds_work_between_pages_not_a_whole_listing() {
+    let mut session = Session::new(Limits {
+        max_work: 1000,
+        ..Limits::default()
+    });
+    let root = numbers_root(&mut session, 5000);
+    for page in 1..=50 {
+        session.expand(root, page * 100);
+        run(&mut session, &[], 1_000_000, 100);
+    }
+    let children = session.children(root).unwrap();
+    assert!(children.error.is_none(), "{:?}", children.error);
+    assert_eq!(children.ids.len(), 5000);
+}

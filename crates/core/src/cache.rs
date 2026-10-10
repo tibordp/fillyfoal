@@ -4,7 +4,7 @@
 //! indices, which the session turns into byte requests for the host, so the
 //! host always reads whole aligned chunks (built-in read-ahead).
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use crate::bytes::{to_u64, to_usize};
 use crate::span::SourceId;
@@ -15,6 +15,9 @@ pub(crate) struct ByteCache {
     used: usize,
     clock: u64,
     chunks: HashMap<(SourceId, u64), Chunk>,
+    /// The chunks by last use, oldest first, for eviction in logarithmic
+    /// time (a host may choose small chunks, and so many of them).
+    order: BTreeSet<(u64, SourceId, u64)>,
 }
 
 struct Chunk {
@@ -30,6 +33,7 @@ impl ByteCache {
             used: 0,
             clock: 0,
             chunks: HashMap::new(),
+            order: BTreeSet::new(),
         }
     }
 
@@ -49,6 +53,16 @@ impl ByteCache {
         self.chunks.contains_key(&(source, index))
     }
 
+    /// Marks a chunk as used now.
+    fn touch(&mut self, source: SourceId, index: u64) {
+        let clock = self.clock;
+        if let Some(chunk) = self.chunks.get_mut(&(source, index)) {
+            self.order.remove(&(chunk.last_used, source, index));
+            chunk.last_used = clock;
+            self.order.insert((clock, source, index));
+        }
+    }
+
     /// Copies bytes `start..end` of `source`, or returns the indices of the
     /// chunks that must be supplied first. The caller guarantees that `end`
     /// does not exceed the source length.
@@ -62,23 +76,20 @@ impl ByteCache {
             .filter(|&i| !self.contains(source, i))
             .collect();
         self.clock = self.clock.wrapping_add(1);
+        // The chunks this read has stay fresh, also when some are missing,
+        // so that supplying those evicts other chunks rather than these.
+        for index in first..=last {
+            self.touch(source, index);
+        }
         if !missing.is_empty() {
-            // The chunks this read already has stay fresh, so supplying the
-            // missing ones evicts other chunks rather than these.
-            for index in first..=last {
-                if let Some(chunk) = self.chunks.get_mut(&(source, index)) {
-                    chunk.last_used = self.clock;
-                }
-            }
             return Err(missing);
         }
         let mut out = Vec::with_capacity(to_usize(end.saturating_sub(start)));
         for index in first..=last {
             let chunk_start = self.chunk_start(index);
-            let Some(chunk) = self.chunks.get_mut(&(source, index)) else {
+            let Some(chunk) = self.chunks.get(&(source, index)) else {
                 break;
             };
-            chunk.last_used = self.clock;
             let from = to_usize(start.saturating_sub(chunk_start));
             let to = to_usize(end.saturating_sub(chunk_start)).min(chunk.data.len());
             if let Some(bytes) = chunk.data.get(from..to) {
@@ -97,7 +108,9 @@ impl ByteCache {
         };
         if let Some(old) = self.chunks.insert((source, index), chunk) {
             self.used = self.used.saturating_sub(old.data.len());
+            self.order.remove(&(old.last_used, source, index));
         }
+        self.order.insert((self.clock, source, index));
         self.used = self.used.saturating_add(len);
         self.evict();
     }
@@ -106,6 +119,7 @@ impl ByteCache {
     pub fn truncate(&mut self, source: SourceId, len: u64) {
         let chunk_size = self.chunk_size;
         let mut freed = 0usize;
+        let order = &mut self.order;
         self.chunks.retain(|&(s, index), chunk| {
             let keep = s != source
                 || index
@@ -114,6 +128,7 @@ impl ByteCache {
                     <= len;
             if !keep {
                 freed = freed.saturating_add(chunk.data.len());
+                order.remove(&(chunk.last_used, s, index));
             }
             keep
         });
@@ -122,15 +137,10 @@ impl ByteCache {
 
     fn evict(&mut self) {
         while self.used > self.capacity && self.chunks.len() > 1 {
-            let Some(key) = self
-                .chunks
-                .iter()
-                .min_by_key(|(_, c)| c.last_used)
-                .map(|(k, _)| *k)
-            else {
+            let Some((_, source, index)) = self.order.pop_first() else {
                 break;
             };
-            if let Some(chunk) = self.chunks.remove(&key) {
+            if let Some(chunk) = self.chunks.remove(&(source, index)) {
                 self.used = self.used.saturating_sub(chunk.data.len());
             }
         }
