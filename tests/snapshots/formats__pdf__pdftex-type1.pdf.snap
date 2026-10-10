@@ -1,0 +1,342 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pdftex-type1.pdf — PDF 1.7, 1 page, title "fillyfoal", producer "pdfTeX-1.40.29"  [0x0+0x93f]
+    Header: "1.7"  [0x0+0x8]
+    Binary marker: d0 d4 c5 d8  |....|  [0x9+0x5]
+  ▾ Trailer — 3 entries  [0x8f9+0x30]
+      /Size: 11  [0x904+0x8]
+      /Root: "9 0 R"  [0x90d+0xb] → 0x765+0x0
+      /Info: "10 0 R"  [0x919+0xc] → 0x796+0x0
+  ▾ Document Catalog: "9 0 R" — /Catalog, 2 entries  [0x913+0x5] → 0x765+0x0
+      /Type: "/Catalog"  [0x770+0xe]
+    ▾ /Pages: "5 0 R" — /Pages, 3 entries  [0x77f+0xc] → 0x72c+0x0
+        /Type: "/Pages"  [0x737+0xc]
+        /Count: 1  [0x744+0x8]
+      ▾ /Kids — [2 0 R]  [0x74d+0xd]
+        ▾ [0]: "2 0 R" — /Page, 5 entries  [0x754+0x5] → 0xa0+0x0
+            /Type: "/Page"  [0xab+0xb]
+          ▾ /Contents: "3 0 R" — stream, 2 entries, 66 bytes, /FlateDecode  [0xb7+0xf] → 0xf+0x0
+              /Length: 66  [0x1a+0xa]
+              /Filter: "/FlateDecode"  [0x2d+0x14]
+            ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x4c+0x42]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+              ▾ Lines — 3 lines  [#1:0x0+0x3a]
+                  Line 1: "BT"  [#1:0x0+0x2]
+                  Line 2: "/F51 23.9103 Tf 19.925 82.889 Td [(ABC)-500(CAB)]TJ"  [#1:0x3+0x33]
+                  Line 3: "ET"  [#1:0x37+0x2]
+            ▾ Operators
+                BT — begin text  [#1:0x0+0x2]
+                Tf: "/F51 23.9103" — set font  [#1:0x3+0xf]
+                Td: "19.925 82.889" — move text position  [#1:0x13+0x10]
+                TJ: "[(ABC) -500 (CAB)]" — show text with positioning  [#1:0x24+0x12]
+                ET — end text  [#1:0x37+0x2]
+          ▾ /Resources: "1 0 R" — 2 entries  [0xc7+0x10] → 0x10f+0x0
+            ▾ /Font — 1 entries  [0x11a+0x16]
+              ▾ /F51: "4 0 R" — /Font /Type1, 7 entries  [0x123+0xa] → 0x69d+0x0
+                  /Type: "/Font"  [0x6a8+0xb]
+                  /Subtype: "/Type1"  [0x6b4+0xf]
+                  /BaseFont: "/QUNNOA+FillyfoalBox"  [0x6c4+0x1e]
+                ▾ /FontDescriptor: "8 0 R" — /FontDescriptor, 12 entries  [0x6e3+0x15] → 0x5c9+0x0
+                    /Type: "/FontDescriptor"  [0x5d4+0x15]
+                    /FontName: "/QUNNOA+FillyfoalBox"  [0x5ea+0x1e]
+                    /Flags: 4  [0x609+0x8]
+                  ▾ /FontBBox — [0 0 600 700]  [0x612+0x17]
+                      [0]: 0  [0x61d+0x1]
+                      [1]: 0  [0x61f+0x1]
+                      [2]: 600  [0x621+0x3]
+                      [3]: 700  [0x625+0x3]
+                    /Ascent: 0  [0x62a+0x9]
+                    /CapHeight: 0  [0x634+0xc]
+                    /Descent: 0  [0x641+0xa]
+                    /ItalicAngle: 0  [0x64c+0xe]
+                    /StemV: 0  [0x65b+0x8]
+                    /XHeight: 400  [0x664+0xc]
+                    /CharSet: "/A/B/C"  [0x671+0x11]
+                  ▾ /FontFile: "7 0 R" — stream, Type 1 font program, 5 entries, 997 bytes, /FlateDecode  [0x683+0xf] → 0x170+0x0
+                      /Length1: 556  [0x17b+0xc]
+                      /Length2: 636  [0x188+0xc]
+                      /Length3: 0  [0x195+0xa]
+                      /Length: 997  [0x1a0+0xb]
+                      /Filter: "/FlateDecode"  [0x1b3+0x14]
+                    ▾ Stream data — Type 1 font: 556 bytes of clear text, 636 encrypted, 0 after  [0x1d2+0x3e5]
+                      ▾ Clear-text part — Type 1 font QUNNOA+FillyfoalBox  [#2:0x0+0x22c]
+                          Header: "%!PS-AdobeFont-1.0: FillyfoalBox 001.000"  [#2:0x0+0x28]
+                          FontName: "QUNNOA+FillyfoalBox"  [#2:0x153+0x22]
+                      ▾ Private dictionary — 632 bytes decrypted  [#2:0x22c+0x27c]
+                          RD: "{string currentfile exch readstring pop}executeonly"
+                          ND: "{noaccess def}executeonly"
+                          NP: "{noaccess put}executeonly"
+                          BlueValues: "[0 0 700 700]"
+                          MinFeature: "{16 16}"
+                          password: "5839"
+                          lenIV: "4"
+                          Subrs: 4
+                        ▾ CharStrings — 4 glyphs  [#3:0x179+0xff]
+                            .notdef: 8b f8 88 0d 0e  |.....| — 5 bytes of Type 1 charstring  [#3:0x199+0x9]
+                            A: 8b f8 ec 0d bd 8b 15 f8 88 8b 05 8b f9 50 05 fc …  |.............P..| — 21 bytes of Type 1 charstring  [#3:0x1af+0x19]
+                            B: 8b f8 88 0d bd 8b 15 f8 24 8b 05 fb 5c f9 50 05 …  |........$...\.P.| — 18 bytes of Type 1 charstring  [#3:0x1d5+0x16]
+                            C: 8b f8 24 0d bd 8b 15 f7 c0 8b 05 8b f7 f2 05 fb …  |..$.............| — 21 bytes of Type 1 charstring  [#3:0x1f8+0x19]
+                          Decrypted program — 632 bytes  [#3:0x0+0x278]
+                  /FirstChar: 65  [0x6f9+0xd]
+                  /LastChar: 67  [0x707+0xc]
+                ▾ /Widths: "6 0 R" — [3 items]  [0x714+0xd] → 0x153+0x0
+                    [0]: 600  [0x15c+0x3]
+                    [1]: 500  [0x160+0x3]
+                    [2]: 400  [0x164+0x3]
+            ▾ /ProcSet — [/PDF /Text]  [0x131+0x17]
+                [0]: "/PDF"  [0x13c+0x4]
+                [1]: "/Text"  [0x141+0x5]
+          ▾ /MediaBox — [0 0 199.253 99.626]  [0xd8+0x1e]
+              [0]: 0  [0xe3+0x1]
+              [1]: 0  [0xe5+0x1]
+              [2]: 199.253  [0xe7+0x7]
+              [3]: 99.626  [0xef+0x6]
+            /Parent: "5 0 R"  [0xf7+0xd] → 0x72c+0x0
+  ▾ Document Information: "10 0 R" — 5 entries  [0x91f+0x6] → 0x796+0x0
+      /Producer: "pdfTeX-1.40.29"  [0x7a2+0x1a]
+      /Title: "fillyfoal"  [0x7bd+0x12]
+      /Author: "fillyfoal"  [0x7d0+0x13]
+      /Creator: "fillyfoal"  [0x7e4+0x14]
+      /Trapped: "/False"  [0x7f9+0xf]
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 5 entries  [0xa0+0x6e]
+        /Type: "/Page"  [0xab+0xb]
+      ▾ /Contents: "3 0 R" — stream, 2 entries, 66 bytes, /FlateDecode  [0xb7+0xf] → 0xf+0x0
+          /Length: 66  [0x1a+0xa]
+          /Filter: "/FlateDecode"  [0x2d+0x14]
+        ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x4c+0x42]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+          ▾ Lines — 3 lines  [#1:0x0+0x3a]
+              Line 1: "BT"  [#1:0x0+0x2]
+              Line 2: "/F51 23.9103 Tf 19.925 82.889 Td [(ABC)-500(CAB)]TJ"  [#1:0x3+0x33]
+              Line 3: "ET"  [#1:0x37+0x2]
+        ▾ Operators
+            BT — begin text  [#1:0x0+0x2]
+            Tf: "/F51 23.9103" — set font  [#1:0x3+0xf]
+            Td: "19.925 82.889" — move text position  [#1:0x13+0x10]
+            TJ: "[(ABC) -500 (CAB)]" — show text with positioning  [#1:0x24+0x12]
+            ET — end text  [#1:0x37+0x2]
+      ▾ /Resources: "1 0 R" — 2 entries  [0xc7+0x10] → 0x10f+0x0
+        ▾ /Font — 1 entries  [0x11a+0x16]
+          ▾ /F51: "4 0 R" — /Font /Type1, 7 entries  [0x123+0xa] → 0x69d+0x0
+              /Type: "/Font"  [0x6a8+0xb]
+              /Subtype: "/Type1"  [0x6b4+0xf]
+              /BaseFont: "/QUNNOA+FillyfoalBox"  [0x6c4+0x1e]
+            ▾ /FontDescriptor: "8 0 R" — /FontDescriptor, 12 entries  [0x6e3+0x15] → 0x5c9+0x0
+                /Type: "/FontDescriptor"  [0x5d4+0x15]
+                /FontName: "/QUNNOA+FillyfoalBox"  [0x5ea+0x1e]
+                /Flags: 4  [0x609+0x8]
+              ▾ /FontBBox — [0 0 600 700]  [0x612+0x17]
+                  [0]: 0  [0x61d+0x1]
+                  [1]: 0  [0x61f+0x1]
+                  [2]: 600  [0x621+0x3]
+                  [3]: 700  [0x625+0x3]
+                /Ascent: 0  [0x62a+0x9]
+                /CapHeight: 0  [0x634+0xc]
+                /Descent: 0  [0x641+0xa]
+                /ItalicAngle: 0  [0x64c+0xe]
+                /StemV: 0  [0x65b+0x8]
+                /XHeight: 400  [0x664+0xc]
+                /CharSet: "/A/B/C"  [0x671+0x11]
+              ▾ /FontFile: "7 0 R" — stream, Type 1 font program, 5 entries, 997 bytes, /FlateDecode  [0x683+0xf] → 0x170+0x0
+                  /Length1: 556  [0x17b+0xc]
+                  /Length2: 636  [0x188+0xc]
+                  /Length3: 0  [0x195+0xa]
+                  /Length: 997  [0x1a0+0xb]
+                  /Filter: "/FlateDecode"  [0x1b3+0x14]
+                ▾ Stream data — Type 1 font: 556 bytes of clear text, 636 encrypted, 0 after  [0x1d2+0x3e5]
+                  ▾ Clear-text part — Type 1 font QUNNOA+FillyfoalBox  [#2:0x0+0x22c]
+                      Header: "%!PS-AdobeFont-1.0: FillyfoalBox 001.000"  [#2:0x0+0x28]
+                      FontName: "QUNNOA+FillyfoalBox"  [#2:0x153+0x22]
+                  ▾ Private dictionary — 632 bytes decrypted  [#2:0x22c+0x27c]
+                      RD: "{string currentfile exch readstring pop}executeonly"
+                      ND: "{noaccess def}executeonly"
+                      NP: "{noaccess put}executeonly"
+                      BlueValues: "[0 0 700 700]"
+                      MinFeature: "{16 16}"
+                      password: "5839"
+                      lenIV: "4"
+                      Subrs: 4
+                    ▾ CharStrings — 4 glyphs  [#3:0x179+0xff]
+                        .notdef: 8b f8 88 0d 0e  |.....| — 5 bytes of Type 1 charstring  [#3:0x199+0x9]
+                        A: 8b f8 ec 0d bd 8b 15 f8 88 8b 05 8b f9 50 05 fc …  |.............P..| — 21 bytes of Type 1 charstring  [#3:0x1af+0x19]
+                        B: 8b f8 88 0d bd 8b 15 f8 24 8b 05 fb 5c f9 50 05 …  |........$...\.P.| — 18 bytes of Type 1 charstring  [#3:0x1d5+0x16]
+                        C: 8b f8 24 0d bd 8b 15 f7 c0 8b 05 8b f7 f2 05 fb …  |..$.............| — 21 bytes of Type 1 charstring  [#3:0x1f8+0x19]
+                      Decrypted program — 632 bytes  [#3:0x0+0x278]
+              /FirstChar: 65  [0x6f9+0xd]
+              /LastChar: 67  [0x707+0xc]
+            ▾ /Widths: "6 0 R" — [3 items]  [0x714+0xd] → 0x153+0x0
+                [0]: 600  [0x15c+0x3]
+                [1]: 500  [0x160+0x3]
+                [2]: 400  [0x164+0x3]
+        ▾ /ProcSet — [/PDF /Text]  [0x131+0x17]
+            [0]: "/PDF"  [0x13c+0x4]
+            [1]: "/Text"  [0x141+0x5]
+      ▾ /MediaBox — [0 0 199.253 99.626]  [0xd8+0x1e]
+          [0]: 0  [0xe3+0x1]
+          [1]: 0  [0xe5+0x1]
+          [2]: 199.253  [0xe7+0x7]
+          [3]: 99.626  [0xef+0x6]
+        /Parent: "5 0 R"  [0xf7+0xd] → 0x72c+0x0
+  ▾ Objects — 11 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0x10f — 2 entries (in use, generation 0) → 0x10f+0x43
+      Object 2 0: 0xa0 — /Page, 5 entries (in use, generation 0) → 0xa0+0x6e
+      Object 3 0: 0xf — stream, 2 entries, 66 bytes, /FlateDecode (in use, generation 0) → 0xf+0x90
+      Object 4 0: 0x69d — /Font /Type1, 7 entries (in use, generation 0) → 0x69d+0x8e
+      Object 5 0: 0x72c — /Pages, 3 entries (in use, generation 0) → 0x72c+0x38
+      Object 6 0: 0x153 — [3 items] (in use, generation 0) → 0x153+0x1c
+      Object 7 0: 0x170 — stream, Type 1 font program, 5 entries, 997 bytes, /FlateDecode (in use, generation 0) → 0x170+0x458
+      Object 8 0: 0x5c9 — /FontDescriptor, 12 entries (in use, generation 0) → 0x5c9+0xd3
+      Object 9 0: 0x765 — /Catalog, 2 entries (in use, generation 0) → 0x765+0x30
+      Object 10 0: 0x796 — 5 entries (in use, generation 0) → 0x796+0x7c
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 10 objects, cross-reference table at 0x813 with 11 entries  [0x0+0x93f]
+      ▾ Body — 10 objects  [0x0+0x813]
+        ▾ Object 3 0 — stream, 2 entries, 66 bytes, /FlateDecode  [0xf+0x90]
+            Object header: "3 0 obj"  [0xf+0x8]
+            /Length: 66  [0x1a+0xa]
+            /Filter: "/FlateDecode"  [0x2d+0x14]
+            Stream keyword: "stream"  [0x44+0x8]
+          ▾ Stream data — UTF-8 text, LF line endings, 3 lines  [0x4c+0x42]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 3 LF, 0 CRLF, 0 CR
+            ▾ Lines — 3 lines  [#1:0x0+0x3a]
+                Line 1: "BT"  [#1:0x0+0x2]
+                Line 2: "/F51 23.9103 Tf 19.925 82.889 Td [(ABC)-500(CAB)]TJ"  [#1:0x3+0x33]
+                Line 3: "ET"  [#1:0x37+0x2]
+          ▾ Operators
+              BT — begin text  [#1:0x0+0x2]
+              Tf: "/F51 23.9103" — set font  [#1:0x3+0xf]
+              Td: "19.925 82.889" — move text position  [#1:0x13+0x10]
+              TJ: "[(ABC) -500 (CAB)]" — show text with positioning  [#1:0x24+0x12]
+              ET — end text  [#1:0x37+0x2]
+            End keywords: "endstream endobj"  [0x8e+0x11]
+        ▾ Object 2 0 — /Page, 5 entries  [0xa0+0x6e]
+            Object header: "2 0 obj"  [0xa0+0x8]
+            /Type: "/Page"  [0xab+0xb]
+            /Contents: "3 0 R"  [0xb7+0xf] → 0xf+0x0
+            /Resources: "1 0 R"  [0xc7+0x10] → 0x10f+0x0
+          ▾ /MediaBox — [0 0 199.253 99.626]  [0xd8+0x1e]
+              [0]: 0  [0xe3+0x1]
+              [1]: 0  [0xe5+0x1]
+              [2]: 199.253  [0xe7+0x7]
+              [3]: 99.626  [0xef+0x6]
+            /Parent: "5 0 R"  [0xf7+0xd] → 0x72c+0x0
+            End keywords: "endobj"  [0x107+0x7]
+        ▾ Object 1 0 — 2 entries  [0x10f+0x43]
+            Object header: "1 0 obj"  [0x10f+0x8]
+          ▾ /Font — 1 entries  [0x11a+0x16]
+              /F51: "4 0 R"  [0x123+0xa] → 0x69d+0x0
+          ▾ /ProcSet — [/PDF /Text]  [0x131+0x17]
+              [0]: "/PDF"  [0x13c+0x4]
+              [1]: "/Text"  [0x141+0x5]
+            End keywords: "endobj"  [0x14b+0x7]
+        ▾ Object 6 0 — [3 items]  [0x153+0x1c]
+            Object header: "6 0 obj"  [0x153+0x8]
+            [0]: 600  [0x15c+0x3]
+            [1]: 500  [0x160+0x3]
+            [2]: 400  [0x164+0x3]
+            End keywords: "endobj"  [0x168+0x7]
+        ▾ Object 7 0 — stream, Type 1 font program, 5 entries, 997 bytes, /FlateDecode  [0x170+0x458]
+            Object header: "7 0 obj"  [0x170+0x8]
+            /Length1: 556  [0x17b+0xc]
+            /Length2: 636  [0x188+0xc]
+            /Length3: 0  [0x195+0xa]
+            /Length: 997  [0x1a0+0xb]
+            /Filter: "/FlateDecode"  [0x1b3+0x14]
+            Stream keyword: "stream"  [0x1ca+0x8]
+          ▾ Stream data — Type 1 font: 556 bytes of clear text, 636 encrypted, 0 after  [0x1d2+0x3e5]
+            ▾ Clear-text part — Type 1 font QUNNOA+FillyfoalBox  [#2:0x0+0x22c]
+                Header: "%!PS-AdobeFont-1.0: FillyfoalBox 001.000"  [#2:0x0+0x28]
+                FontName: "QUNNOA+FillyfoalBox"  [#2:0x153+0x22]
+            ▾ Private dictionary — 632 bytes decrypted  [#2:0x22c+0x27c]
+                RD: "{string currentfile exch readstring pop}executeonly"
+                ND: "{noaccess def}executeonly"
+                NP: "{noaccess put}executeonly"
+                BlueValues: "[0 0 700 700]"
+                MinFeature: "{16 16}"
+                password: "5839"
+                lenIV: "4"
+                Subrs: 4
+              ▾ CharStrings — 4 glyphs  [#3:0x179+0xff]
+                  .notdef: 8b f8 88 0d 0e  |.....| — 5 bytes of Type 1 charstring  [#3:0x199+0x9]
+                  A: 8b f8 ec 0d bd 8b 15 f8 88 8b 05 8b f9 50 05 fc …  |.............P..| — 21 bytes of Type 1 charstring  [#3:0x1af+0x19]
+                  B: 8b f8 88 0d bd 8b 15 f8 24 8b 05 fb 5c f9 50 05 …  |........$...\.P.| — 18 bytes of Type 1 charstring  [#3:0x1d5+0x16]
+                  C: 8b f8 24 0d bd 8b 15 f7 c0 8b 05 8b f7 f2 05 fb …  |..$.............| — 21 bytes of Type 1 charstring  [#3:0x1f8+0x19]
+                Decrypted program — 632 bytes  [#3:0x0+0x278]
+            End keywords: "endstream endobj"  [0x5b7+0x11]
+        ▾ Object 8 0 — /FontDescriptor, 12 entries  [0x5c9+0xd3]
+            Object header: "8 0 obj"  [0x5c9+0x8]
+            /Type: "/FontDescriptor"  [0x5d4+0x15]
+            /FontName: "/QUNNOA+FillyfoalBox"  [0x5ea+0x1e]
+            /Flags: 4  [0x609+0x8]
+          ▾ /FontBBox — [0 0 600 700]  [0x612+0x17]
+              [0]: 0  [0x61d+0x1]
+              [1]: 0  [0x61f+0x1]
+              [2]: 600  [0x621+0x3]
+              [3]: 700  [0x625+0x3]
+            /Ascent: 0  [0x62a+0x9]
+            /CapHeight: 0  [0x634+0xc]
+            /Descent: 0  [0x641+0xa]
+            /ItalicAngle: 0  [0x64c+0xe]
+            /StemV: 0  [0x65b+0x8]
+            /XHeight: 400  [0x664+0xc]
+            /CharSet: "/A/B/C"  [0x671+0x11]
+            /FontFile: "7 0 R"  [0x683+0xf] → 0x170+0x0
+            End keywords: "endobj"  [0x695+0x7]
+        ▾ Object 4 0 — /Font /Type1, 7 entries  [0x69d+0x8e]
+            Object header: "4 0 obj"  [0x69d+0x8]
+            /Type: "/Font"  [0x6a8+0xb]
+            /Subtype: "/Type1"  [0x6b4+0xf]
+            /BaseFont: "/QUNNOA+FillyfoalBox"  [0x6c4+0x1e]
+            /FontDescriptor: "8 0 R"  [0x6e3+0x15] → 0x5c9+0x0
+            /FirstChar: 65  [0x6f9+0xd]
+            /LastChar: 67  [0x707+0xc]
+            /Widths: "6 0 R"  [0x714+0xd] → 0x153+0x0
+            End keywords: "endobj"  [0x724+0x7]
+        ▾ Object 5 0 — /Pages, 3 entries  [0x72c+0x38]
+            Object header: "5 0 obj"  [0x72c+0x8]
+            /Type: "/Pages"  [0x737+0xc]
+            /Count: 1  [0x744+0x8]
+          ▾ /Kids — [2 0 R]  [0x74d+0xd]
+              [0]: "2 0 R"  [0x754+0x5] → 0xa0+0x0
+            End keywords: "endobj"  [0x75d+0x7]
+        ▾ Object 9 0 — /Catalog, 2 entries  [0x765+0x30]
+            Object header: "9 0 obj"  [0x765+0x8]
+            /Type: "/Catalog"  [0x770+0xe]
+            /Pages: "5 0 R"  [0x77f+0xc] → 0x72c+0x0
+            End keywords: "endobj"  [0x78e+0x7]
+        ▾ Object 10 0 — 5 entries  [0x796+0x7c]
+            Object header: "10 0 obj"  [0x796+0x9]
+            /Producer: "pdfTeX-1.40.29"  [0x7a2+0x1a]
+            /Title: "fillyfoal"  [0x7bd+0x12]
+            /Author: "fillyfoal"  [0x7d0+0x13]
+            /Creator: "fillyfoal"  [0x7e4+0x14]
+            /Trapped: "/False"  [0x7f9+0xf]
+            End keywords: "endobj"  [0x80b+0x7]
+      ▾ Cross-reference table — 11 entries in 1 subsection  [0x813+0xe6]
+          Keyword: "xref"  [0x813+0x4]
+        ▾ Objects 0–10 — 11 entries  [0x818+0xe1]
+            Header: "0 11"  [0x818+0x4]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x81d+0x14]
+            Object 1: 0x10f — in use, generation 0  [0x831+0x14] → 0x10f+0x0
+            Object 2: 0xa0 — in use, generation 0  [0x845+0x14] → 0xa0+0x0
+            Object 3: 0xf — in use, generation 0  [0x859+0x14] → 0xf+0x0
+            Object 4: 0x69d — in use, generation 0  [0x86d+0x14] → 0x69d+0x0
+            Object 5: 0x72c — in use, generation 0  [0x881+0x14] → 0x72c+0x0
+            Object 6: 0x153 — in use, generation 0  [0x895+0x14] → 0x153+0x0
+            Object 7: 0x170 — in use, generation 0  [0x8a9+0x14] → 0x170+0x0
+            Object 8: 0x5c9 — in use, generation 0  [0x8bd+0x14] → 0x5c9+0x0
+            Object 9: 0x765 — in use, generation 0  [0x8d1+0x14] → 0x765+0x0
+            Object 10: 0x796 — in use, generation 0  [0x8e5+0x14] → 0x796+0x0
+      ▾ Trailer — 3 entries  [0x8f9+0x30]
+          /Size: 11  [0x904+0x8]
+          /Root: "9 0 R"  [0x90d+0xb] → 0x765+0x0
+          /Info: "10 0 R"  [0x919+0xc] → 0x796+0x0
+        startxref: 0x813  [0x92a+0xe] → 0x813+0x4
+        End-of-file marker: "%%EOF"  [0x939+0x5]

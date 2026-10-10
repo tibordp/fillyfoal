@@ -62,13 +62,22 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
         }
         let t = line.trim();
         if let Some(rest) = t.strip_prefix('/') {
-            let (key, value) = rest.split_once(' ').unwrap_or((rest, ""));
+            // A name ends at white space or a delimiter (`/RD{...}`).
+            let end = rest
+                .find(|c: char| c.is_whitespace() || "{}[]()<>/%".contains(c))
+                .unwrap_or(rest.len());
+            let (key, value) = rest.split_at(end);
             let value = value
                 .trim()
                 .trim_end_matches(" def")
                 .trim_end_matches(" ND")
                 .trim_end_matches(" |-")
                 .trim();
+            // `{16 16}def`: a procedure or array needs no space before def.
+            let value = match value.strip_suffix("def") {
+                Some(v) if v.ends_with(['}', ']', ')']) => v,
+                _ => value,
+            };
             if !value.is_empty() && value.len() < 120 && !key.is_empty() {
                 cx.emit(Node::new(key.to_owned()).value(Value::Text(value.to_owned())));
             }

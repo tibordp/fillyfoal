@@ -1,5 +1,6 @@
 //! Adobe font metrics (AFM) and ASCII Type 1 fonts (PFA).
 
+use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
@@ -67,12 +68,27 @@ async fn pfa(cx: Cx, input: Input) -> Result<()> {
                 .to_owned();
             cx.emit(Node::new("FontName").span(*span).value(text(name.clone())));
         } else if line.contains("eexec") {
-            let encrypted = input
+            let rest = input
                 .span
                 .tail(span.end().saturating_sub(input.span.offset));
-            cx.emit(crate::formats::font::type1::private_node(
-                input, encrypted, true,
-            ));
+            // The encrypted part starts after the line break: hex digits
+            // in a PFA file, binary when the font program comes from a
+            // PDF `/FontFile` or a PFB segment saved as is. A clear-text
+            // part on its own (PDF's `/Length1` bytes) ends here.
+            let head = cx.read_avail(rest.sub(0, 64)).await?;
+            let skip = head
+                .iter()
+                .take_while(|&&b| matches!(b, b' ' | b'\t' | b'\r' | b'\n'))
+                .count();
+            let encrypted = rest.tail(to_u64(skip));
+            if !encrypted.is_empty() {
+                let hex = head
+                    .get(skip..skip.saturating_add(4))
+                    .is_some_and(|h| h.len() == 4 && h.iter().all(u8::is_ascii_hexdigit));
+                cx.emit(crate::formats::font::type1::private_node(
+                    input, encrypted, hex,
+                ));
+            }
             break;
         }
     }

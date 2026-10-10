@@ -1,0 +1,321 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ pdftex-jbig2.pdf — PDF 1.7, 1 page, title "fillyfoal", producer "pdfTeX-1.40.29"  [0x0+0x48d]
+    Header: "1.7"  [0x0+0x8]
+    Binary marker: d0 d4 c5 d8  |....|  [0x9+0x5]
+  ▾ Trailer — 3 entries  [0x44a+0x2e]
+      /Size: 9  [0x455+0x7]
+      /Root: "7 0 R"  [0x45d+0xb] → 0x2e0+0x0
+      /Info: "8 0 R"  [0x469+0xb] → 0x311+0x0
+  ▾ Document Catalog: "7 0 R" — /Catalog, 2 entries  [0x463+0x5] → 0x2e0+0x0
+      /Type: "/Catalog"  [0x2eb+0xe]
+    ▾ /Pages: "5 0 R" — /Pages, 3 entries  [0x2fa+0xc] → 0x2a7+0x0
+        /Type: "/Pages"  [0x2b2+0xc]
+        /Count: 1  [0x2bf+0x8]
+      ▾ /Kids — [3 0 R]  [0x2c8+0xd]
+        ▾ [0]: "3 0 R" — /Page, 5 entries  [0x2cf+0x5] → 0x85+0x0
+            /Type: "/Page"  [0x90+0xb]
+          ▾ /Contents: "4 0 R" — stream, 2 entries, 39 bytes, /FlateDecode  [0x9c+0xf] → 0xf+0x0
+              /Length: 39  [0x1a+0xa]
+              /Filter: "/FlateDecode"  [0x2d+0x14]
+            ▾ Stream data — UTF-8 text, LF line endings, 4 lines  [0x4c+0x27]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+              ▾ Lines — 4 lines  [#1:0x0+0x22]
+                  Line 1: "q"  [#1:0x0+0x1]
+                  Line 2: "64 0 0 32 0 67.626 cm"  [#1:0x2+0x15]
+                  Line 3: "/Im1 Do"  [#1:0x18+0x7]
+                  Line 4: "Q"  [#1:0x20+0x1]
+            ▾ Operators
+                q — save graphics state  [#1:0x0+0x1]
+                cm: "64 0 0 32 0 67.626" — concatenate matrix  [#1:0x2+0x15]
+                Do: "/Im1" — paint XObject  [#1:0x18+0x7]
+                Q — restore graphics state  [#1:0x20+0x1]
+          ▾ /Resources: "2 0 R" — 2 entries  [0xac+0x10] → 0x20f+0x0
+            ▾ /XObject — 1 entries  [0x21a+0x19]
+              ▾ /Im1: "1 0 R" — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R)  [0x226+0xa] → 0xf4+0x0
+                  /Type: "/XObject"  [0xff+0xe]
+                  /Subtype: "/Image"  [0x10e+0xf]
+                  /Width: 64  [0x11e+0x9]
+                  /Height: 32  [0x128+0xa]
+                  /ColorSpace: "/DeviceGray"  [0x133+0x17]
+                  /BitsPerComponent: 1  [0x14b+0x13]
+                  /Length: 73  [0x15f+0xa]
+                ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
+                    [0]: "/JBIG2Decode"  [0x173+0xc]
+                ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
+                  ▾ [0] — 1 entries  [0x18f+0x19]
+                    ▾ /JBIG2Globals: "6 0 R" — stream, 1 entries, 37 bytes  [0x192+0x13] → 0x250+0x0
+                        /Length: 37  [0x25b+0xa]
+                      ▾ Stream data — 37 bytes  [0x270+0x25]
+                          Data  [0x270+0x25]
+                      ▾ Operators — binary data, not a content stream
+                ▾ Stream data — 73 bytes, image 64×32, /DeviceGray, 1-bit, /JBIG2Decode (globals in 6 0 R)  [0x1b4+0x49]
+                  ▾ Globals (6 0 R) — 1 segment  [0x270+0x25]
+                    ▾ Segment 0 — Symbol dictionary, page 0, 26 bytes  [0x270+0xb] → 0x27b+0x1a
+                        Segment number: 0  [0x270+0x4]
+                        Flags: 0x0 — Symbol dictionary  [0x274+0x1]
+                        Referred-to segment count: 0x0 — 0 segments  [0x275+0x1]
+                        Page association: 0  [0x276+0x1]
+                        Data length: 26  [0x277+0x4]
+                        Data  [0x27b+0x1a]
+                  ▾ Image segments — 2 segments  [0x1b4+0x49]
+                    ▾ Segment 1 — Page information, page 1, 19 bytes  [0x1b4+0xb] → 0x1bf+0x13
+                        Segment number: 1  [0x1b4+0x4]
+                        Flags: 0x30 — Page information  [0x1b8+0x1]
+                        Referred-to segment count: 0x0 — 0 segments  [0x1b9+0x1]
+                        Page association: 1  [0x1ba+0x1]
+                        Data length: 19  [0x1bb+0x4]
+                      ▾ Page information  [0x1bf+0x13]
+                          Width: 64  [0x1bf+0x4]
+                          Height: 32  [0x1c3+0x4]
+                          X resolution: 2835  [0x1c7+0x4]
+                          Y resolution: 2835  [0x1cb+0x4]
+                          Flags: 0x0  [0x1cf+0x1]
+                          Striping: 0x0  [0x1d0+0x2]
+                    ▾ Segment 2 — Immediate text region, page 1, 31 bytes  [0x1d2+0xc] → 0x1de+0x1f
+                        Segment number: 2  [0x1d2+0x4]
+                        Flags: 0x6 — Immediate text region  [0x1d6+0x1]
+                        Referred-to segment count: 0x20 — 1 segment  [0x1d7+0x1]
+                        Referred-to segments: 00  |.| — 0  [0x1d8+0x1]
+                        Page association: 1  [0x1d9+0x1]
+                        Data length: 31  [0x1da+0x4]
+                        Data  [0x1de+0x1f]
+            ▾ /ProcSet — [/PDF]  [0x234+0x11]
+                [0]: "/PDF"  [0x23f+0x4]
+          ▾ /MediaBox — [0 0 199.253 99.626]  [0xbd+0x1e]
+              [0]: 0  [0xc8+0x1]
+              [1]: 0  [0xca+0x1]
+              [2]: 199.253  [0xcc+0x7]
+              [3]: 99.626  [0xd4+0x6]
+            /Parent: "5 0 R"  [0xdc+0xd] → 0x2a7+0x0
+  ▾ Document Information: "8 0 R" — 5 entries  [0x46f+0x5] → 0x311+0x0
+      /Producer: "pdfTeX-1.40.29"  [0x31c+0x1a]
+      /Title: "fillyfoal"  [0x337+0x12]
+      /Author: "fillyfoal"  [0x34a+0x13]
+      /Creator: "fillyfoal"  [0x35e+0x14]
+      /Trapped: "/False"  [0x373+0xf]
+  ▾ Pages — 1 page
+    ▾ Page 1 — /Page, 5 entries  [0x85+0x6e]
+        /Type: "/Page"  [0x90+0xb]
+      ▾ /Contents: "4 0 R" — stream, 2 entries, 39 bytes, /FlateDecode  [0x9c+0xf] → 0xf+0x0
+          /Length: 39  [0x1a+0xa]
+          /Filter: "/FlateDecode"  [0x2d+0x14]
+        ▾ Stream data — UTF-8 text, LF line endings, 4 lines  [0x4c+0x27]
+            Encoding: "UTF-8"
+            Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+          ▾ Lines — 4 lines  [#1:0x0+0x22]
+              Line 1: "q"  [#1:0x0+0x1]
+              Line 2: "64 0 0 32 0 67.626 cm"  [#1:0x2+0x15]
+              Line 3: "/Im1 Do"  [#1:0x18+0x7]
+              Line 4: "Q"  [#1:0x20+0x1]
+        ▾ Operators
+            q — save graphics state  [#1:0x0+0x1]
+            cm: "64 0 0 32 0 67.626" — concatenate matrix  [#1:0x2+0x15]
+            Do: "/Im1" — paint XObject  [#1:0x18+0x7]
+            Q — restore graphics state  [#1:0x20+0x1]
+      ▾ /Resources: "2 0 R" — 2 entries  [0xac+0x10] → 0x20f+0x0
+        ▾ /XObject — 1 entries  [0x21a+0x19]
+          ▾ /Im1: "1 0 R" — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R)  [0x226+0xa] → 0xf4+0x0
+              /Type: "/XObject"  [0xff+0xe]
+              /Subtype: "/Image"  [0x10e+0xf]
+              /Width: 64  [0x11e+0x9]
+              /Height: 32  [0x128+0xa]
+              /ColorSpace: "/DeviceGray"  [0x133+0x17]
+              /BitsPerComponent: 1  [0x14b+0x13]
+              /Length: 73  [0x15f+0xa]
+            ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
+                [0]: "/JBIG2Decode"  [0x173+0xc]
+            ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
+              ▾ [0] — 1 entries  [0x18f+0x19]
+                ▾ /JBIG2Globals: "6 0 R" — stream, 1 entries, 37 bytes  [0x192+0x13] → 0x250+0x0
+                    /Length: 37  [0x25b+0xa]
+                  ▾ Stream data — 37 bytes  [0x270+0x25]
+                      Data  [0x270+0x25]
+                  ▾ Operators — binary data, not a content stream
+            ▾ Stream data — 73 bytes, image 64×32, /DeviceGray, 1-bit, /JBIG2Decode (globals in 6 0 R)  [0x1b4+0x49]
+              ▾ Globals (6 0 R) — 1 segment  [0x270+0x25]
+                ▾ Segment 0 — Symbol dictionary, page 0, 26 bytes  [0x270+0xb] → 0x27b+0x1a
+                    Segment number: 0  [0x270+0x4]
+                    Flags: 0x0 — Symbol dictionary  [0x274+0x1]
+                    Referred-to segment count: 0x0 — 0 segments  [0x275+0x1]
+                    Page association: 0  [0x276+0x1]
+                    Data length: 26  [0x277+0x4]
+                    Data  [0x27b+0x1a]
+              ▾ Image segments — 2 segments  [0x1b4+0x49]
+                ▾ Segment 1 — Page information, page 1, 19 bytes  [0x1b4+0xb] → 0x1bf+0x13
+                    Segment number: 1  [0x1b4+0x4]
+                    Flags: 0x30 — Page information  [0x1b8+0x1]
+                    Referred-to segment count: 0x0 — 0 segments  [0x1b9+0x1]
+                    Page association: 1  [0x1ba+0x1]
+                    Data length: 19  [0x1bb+0x4]
+                  ▾ Page information  [0x1bf+0x13]
+                      Width: 64  [0x1bf+0x4]
+                      Height: 32  [0x1c3+0x4]
+                      X resolution: 2835  [0x1c7+0x4]
+                      Y resolution: 2835  [0x1cb+0x4]
+                      Flags: 0x0  [0x1cf+0x1]
+                      Striping: 0x0  [0x1d0+0x2]
+                ▾ Segment 2 — Immediate text region, page 1, 31 bytes  [0x1d2+0xc] → 0x1de+0x1f
+                    Segment number: 2  [0x1d2+0x4]
+                    Flags: 0x6 — Immediate text region  [0x1d6+0x1]
+                    Referred-to segment count: 0x20 — 1 segment  [0x1d7+0x1]
+                    Referred-to segments: 00  |.| — 0  [0x1d8+0x1]
+                    Page association: 1  [0x1d9+0x1]
+                    Data length: 31  [0x1da+0x4]
+                    Data  [0x1de+0x1f]
+        ▾ /ProcSet — [/PDF]  [0x234+0x11]
+            [0]: "/PDF"  [0x23f+0x4]
+      ▾ /MediaBox — [0 0 199.253 99.626]  [0xbd+0x1e]
+          [0]: 0  [0xc8+0x1]
+          [1]: 0  [0xca+0x1]
+          [2]: 199.253  [0xcc+0x7]
+          [3]: 99.626  [0xd4+0x6]
+        /Parent: "5 0 R"  [0xdc+0xd] → 0x2a7+0x0
+  ▾ Objects — 9 entries
+      Object 0: 0 — free, next free object 0, generation 65535
+      Object 1 0: 0xf4 — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R) (in use, generation 0) → 0xf4+0x11a
+      Object 2 0: 0x20f — 2 entries (in use, generation 0) → 0x20f+0x40
+      Object 3 0: 0x85 — /Page, 5 entries (in use, generation 0) → 0x85+0x6e
+      Object 4 0: 0xf — stream, 2 entries, 39 bytes, /FlateDecode (in use, generation 0) → 0xf+0x75
+      Object 5 0: 0x2a7 — /Pages, 3 entries (in use, generation 0) → 0x2a7+0x38
+      Object 6 0: 0x250 — stream, 1 entries, 37 bytes (in use, generation 0) → 0x250+0x56
+      Object 7 0: 0x2e0 — /Catalog, 2 entries (in use, generation 0) → 0x2e0+0x30
+      Object 8 0: 0x311 — 5 entries (in use, generation 0) → 0x311+0x7b
+  ▾ Revisions — 1 cross-reference section
+    ▾ Revision 1 — original: 8 objects, cross-reference table at 0x38d with 9 entries  [0x0+0x48d]
+      ▾ Body — 8 objects  [0x0+0x38d]
+        ▾ Object 4 0 — stream, 2 entries, 39 bytes, /FlateDecode  [0xf+0x75]
+            Object header: "4 0 obj"  [0xf+0x8]
+            /Length: 39  [0x1a+0xa]
+            /Filter: "/FlateDecode"  [0x2d+0x14]
+            Stream keyword: "stream"  [0x44+0x8]
+          ▾ Stream data — UTF-8 text, LF line endings, 4 lines  [0x4c+0x27]
+              Encoding: "UTF-8"
+              Line endings: "LF" — 4 LF, 0 CRLF, 0 CR
+            ▾ Lines — 4 lines  [#1:0x0+0x22]
+                Line 1: "q"  [#1:0x0+0x1]
+                Line 2: "64 0 0 32 0 67.626 cm"  [#1:0x2+0x15]
+                Line 3: "/Im1 Do"  [#1:0x18+0x7]
+                Line 4: "Q"  [#1:0x20+0x1]
+          ▾ Operators
+              q — save graphics state  [#1:0x0+0x1]
+              cm: "64 0 0 32 0 67.626" — concatenate matrix  [#1:0x2+0x15]
+              Do: "/Im1" — paint XObject  [#1:0x18+0x7]
+              Q — restore graphics state  [#1:0x20+0x1]
+            End keywords: "endstream endobj"  [0x73+0x11]
+        ▾ Object 3 0 — /Page, 5 entries  [0x85+0x6e]
+            Object header: "3 0 obj"  [0x85+0x8]
+            /Type: "/Page"  [0x90+0xb]
+            /Contents: "4 0 R"  [0x9c+0xf] → 0xf+0x0
+            /Resources: "2 0 R"  [0xac+0x10] → 0x20f+0x0
+          ▾ /MediaBox — [0 0 199.253 99.626]  [0xbd+0x1e]
+              [0]: 0  [0xc8+0x1]
+              [1]: 0  [0xca+0x1]
+              [2]: 199.253  [0xcc+0x7]
+              [3]: 99.626  [0xd4+0x6]
+            /Parent: "5 0 R"  [0xdc+0xd] → 0x2a7+0x0
+            End keywords: "endobj"  [0xec+0x7]
+        ▾ Object 1 0 — stream, image 64×32, /DeviceGray, 1-bit, /XObject /Image, 9 entries, 73 bytes, /JBIG2Decode (globals in 6 0 R)  [0xf4+0x11a]
+            Object header: "1 0 obj"  [0xf4+0x8]
+            /Type: "/XObject"  [0xff+0xe]
+            /Subtype: "/Image"  [0x10e+0xf]
+            /Width: 64  [0x11e+0x9]
+            /Height: 32  [0x128+0xa]
+            /ColorSpace: "/DeviceGray"  [0x133+0x17]
+            /BitsPerComponent: 1  [0x14b+0x13]
+            /Length: 73  [0x15f+0xa]
+          ▾ /Filter — [/JBIG2Decode]  [0x16a+0x16]
+              [0]: "/JBIG2Decode"  [0x173+0xc]
+          ▾ /DecodeParms — [<<1 entries>>]  [0x181+0x28]
+            ▾ [0] — 1 entries  [0x18f+0x19]
+                /JBIG2Globals: "6 0 R"  [0x192+0x13] → 0x250+0x0
+            Stream keyword: "stream"  [0x1ac+0x8]
+          ▾ Stream data — 73 bytes, image 64×32, /DeviceGray, 1-bit, /JBIG2Decode (globals in 6 0 R)  [0x1b4+0x49]
+            ▾ Globals (6 0 R) — 1 segment  [0x270+0x25]
+              ▾ Segment 0 — Symbol dictionary, page 0, 26 bytes  [0x270+0xb] → 0x27b+0x1a
+                  Segment number: 0  [0x270+0x4]
+                  Flags: 0x0 — Symbol dictionary  [0x274+0x1]
+                  Referred-to segment count: 0x0 — 0 segments  [0x275+0x1]
+                  Page association: 0  [0x276+0x1]
+                  Data length: 26  [0x277+0x4]
+                  Data  [0x27b+0x1a]
+            ▾ Image segments — 2 segments  [0x1b4+0x49]
+              ▾ Segment 1 — Page information, page 1, 19 bytes  [0x1b4+0xb] → 0x1bf+0x13
+                  Segment number: 1  [0x1b4+0x4]
+                  Flags: 0x30 — Page information  [0x1b8+0x1]
+                  Referred-to segment count: 0x0 — 0 segments  [0x1b9+0x1]
+                  Page association: 1  [0x1ba+0x1]
+                  Data length: 19  [0x1bb+0x4]
+                ▾ Page information  [0x1bf+0x13]
+                    Width: 64  [0x1bf+0x4]
+                    Height: 32  [0x1c3+0x4]
+                    X resolution: 2835  [0x1c7+0x4]
+                    Y resolution: 2835  [0x1cb+0x4]
+                    Flags: 0x0  [0x1cf+0x1]
+                    Striping: 0x0  [0x1d0+0x2]
+              ▾ Segment 2 — Immediate text region, page 1, 31 bytes  [0x1d2+0xc] → 0x1de+0x1f
+                  Segment number: 2  [0x1d2+0x4]
+                  Flags: 0x6 — Immediate text region  [0x1d6+0x1]
+                  Referred-to segment count: 0x20 — 1 segment  [0x1d7+0x1]
+                  Referred-to segments: 00  |.| — 0  [0x1d8+0x1]
+                  Page association: 1  [0x1d9+0x1]
+                  Data length: 31  [0x1da+0x4]
+                  Data  [0x1de+0x1f]
+            End keywords: "endstream endobj"  [0x1fd+0x11]
+        ▾ Object 2 0 — 2 entries  [0x20f+0x40]
+            Object header: "2 0 obj"  [0x20f+0x8]
+          ▾ /XObject — 1 entries  [0x21a+0x19]
+              /Im1: "1 0 R"  [0x226+0xa] → 0xf4+0x0
+          ▾ /ProcSet — [/PDF]  [0x234+0x11]
+              [0]: "/PDF"  [0x23f+0x4]
+            End keywords: "endobj"  [0x248+0x7]
+        ▾ Object 6 0 — stream, 1 entries, 37 bytes  [0x250+0x56]
+            Object header: "6 0 obj"  [0x250+0x8]
+            /Length: 37  [0x25b+0xa]
+            Stream keyword: "stream"  [0x268+0x8]
+          ▾ Stream data — 37 bytes  [0x270+0x25]
+              Data  [0x270+0x25]
+          ▾ Operators — binary data, not a content stream
+            End keywords: "endstream endobj"  [0x295+0x11]
+        ▾ Object 5 0 — /Pages, 3 entries  [0x2a7+0x38]
+            Object header: "5 0 obj"  [0x2a7+0x8]
+            /Type: "/Pages"  [0x2b2+0xc]
+            /Count: 1  [0x2bf+0x8]
+          ▾ /Kids — [3 0 R]  [0x2c8+0xd]
+              [0]: "3 0 R"  [0x2cf+0x5] → 0x85+0x0
+            End keywords: "endobj"  [0x2d8+0x7]
+        ▾ Object 7 0 — /Catalog, 2 entries  [0x2e0+0x30]
+            Object header: "7 0 obj"  [0x2e0+0x8]
+            /Type: "/Catalog"  [0x2eb+0xe]
+            /Pages: "5 0 R"  [0x2fa+0xc] → 0x2a7+0x0
+            End keywords: "endobj"  [0x309+0x7]
+        ▾ Object 8 0 — 5 entries  [0x311+0x7b]
+            Object header: "8 0 obj"  [0x311+0x8]
+            /Producer: "pdfTeX-1.40.29"  [0x31c+0x1a]
+            /Title: "fillyfoal"  [0x337+0x12]
+            /Author: "fillyfoal"  [0x34a+0x13]
+            /Creator: "fillyfoal"  [0x35e+0x14]
+            /Trapped: "/False"  [0x373+0xf]
+            End keywords: "endobj"  [0x385+0x7]
+      ▾ Cross-reference table — 9 entries in 1 subsection  [0x38d+0xbd]
+          Keyword: "xref"  [0x38d+0x4]
+        ▾ Objects 0–8 — 9 entries  [0x392+0xb8]
+            Header: "0 9"  [0x392+0x3]
+            Object 0: 0 — free, next free object 0, generation 65535  [0x396+0x14]
+            Object 1: 0xf4 — in use, generation 0  [0x3aa+0x14] → 0xf4+0x0
+            Object 2: 0x20f — in use, generation 0  [0x3be+0x14] → 0x20f+0x0
+            Object 3: 0x85 — in use, generation 0  [0x3d2+0x14] → 0x85+0x0
+            Object 4: 0xf — in use, generation 0  [0x3e6+0x14] → 0xf+0x0
+            Object 5: 0x2a7 — in use, generation 0  [0x3fa+0x14] → 0x2a7+0x0
+            Object 6: 0x250 — in use, generation 0  [0x40e+0x14] → 0x250+0x0
+            Object 7: 0x2e0 — in use, generation 0  [0x422+0x14] → 0x2e0+0x0
+            Object 8: 0x311 — in use, generation 0  [0x436+0x14] → 0x311+0x0
+      ▾ Trailer — 3 entries  [0x44a+0x2e]
+          /Size: 9  [0x455+0x7]
+          /Root: "7 0 R"  [0x45d+0xb] → 0x2e0+0x0
+          /Info: "8 0 R"  [0x469+0xb] → 0x311+0x0
+        startxref: 0x38d  [0x479+0xd] → 0x38d+0x4
+        End-of-file marker: "%%EOF"  [0x487+0x5]

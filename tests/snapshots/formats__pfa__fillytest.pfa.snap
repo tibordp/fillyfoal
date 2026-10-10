@@ -5,14 +5,14 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ fillytest.pfa — Type 1 font FillyTest  [0x0+0x6e8]
     Header: "%!PS-AdobeFont-1.0: FillyTest 001.000"  [0x0+0x25]
     FontName: "FillyTest"  [0x47+0x18]
-  ▾ Private dictionary — 758 bytes decrypted  [0xcf+0x619]
-      RD{string: "currentfile exch readstring pop}executeonly"
-      ND{noaccess: "def}executeonly"
-      NP{noaccess: "put}executeonly"
+  ▾ Private dictionary — 758 bytes decrypted  [0xd0+0x618]
+      RD: "{string currentfile exch readstring pop}executeonly"
+      ND: "{noaccess def}executeonly"
+      NP: "{noaccess put}executeonly"
       BlueValues: "[-15 0 700 715]"
       StdHW: "[50]"
       lenIV: "4"
-      MinFeature{16: "16}def"
+      MinFeature: "{16 16}"
       password: "5839"
       Subrs: 1
     ▾ CharStrings — 3 glyphs  [#1:0x13b+0x1bb]

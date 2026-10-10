@@ -1,7 +1,8 @@
 //! Stream data: what a stream holds, its filter chain, and the node that
 //! decodes it and hands it on (to the image, font, ICC, XMP or other
 //! dissector it belongs to, or to the walkers of PDF's own streams: object
-//! streams, cross-reference streams, Type 1 font programs, hint streams).
+//! streams, cross-reference streams, Type 1 font programs, hint streams,
+//! JBIG2 segments with their globals).
 
 use std::sync::Arc;
 
@@ -12,8 +13,9 @@ use super::{DocRef, located_node};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::image::jbig2;
 use crate::formats::util::fmt::plural;
-use crate::formats::{content as content_node, dissect_or_data, embedded};
+use crate::formats::{content as content_node, dissect_or_data, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -277,6 +279,12 @@ fn data_node(doc: &DocRef, located: &Located) -> Node {
     if has("Length1") && has("Length2") && !has("Subtype") && !has("Type") {
         return node.lazy(crate::expander!(self::type1_font: (DocRef, Located)), state);
     }
+    if objects::filters(item).last().map(String::as_str) == Some("JBIG2Decode") {
+        return node.lazy(
+            crate::expander!(self::jbig2_image: (DocRef, Located)),
+            state,
+        );
+    }
     if objects::is_encrypted(located, doc.security.as_ref()) {
         return node
             .summary(format!("{summary}, encrypted"))
@@ -303,6 +311,16 @@ async fn encrypted(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
 async fn operators(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
     let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
     let head = cx.read_avail(span.sub(0, 1024)).await?;
+    // Untyped streams that are not content (a /JBIG2Globals stream, say)
+    // start with binary data; content and CMaps start with text.
+    if head
+        .iter()
+        .find(|b| !b.is_ascii_whitespace())
+        .is_some_and(|&b| !(0x20..0x7f).contains(&b))
+    {
+        cx.annotate("binary data, not a content stream");
+        return Ok(());
+    }
     let syntax = if crate::bytes::find(&head, b"begincmap", 0).is_some() {
         cx.annotate("CMap");
         Syntax::CMap
@@ -406,6 +424,34 @@ async fn xref_rows(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
         span.len
     ));
     cx.emit(Node::new("Rows").span(span));
+    Ok(())
+}
+
+/// A `/JBIG2Decode` stream: JBIG2 segments in the embedded organisation
+/// (no file header), after the global segments of its `/JBIG2Globals`
+/// stream, which the image's segments may refer to.
+async fn jbig2_image(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()> {
+    let span = objects::decode(&cx, &located, doc.security.as_ref()).await?;
+    let last = objects::filters(&located.item).len().saturating_sub(1);
+    let globals = objects::parms(&located.item, last)
+        .and_then(|p| p.get("JBIG2Globals"))
+        .and_then(Item::reference);
+    if let Some((num, generation)) = globals {
+        let name = format!("Globals ({num} {generation} R)");
+        let decoded = match super::resolve(&cx, &doc, num).await {
+            Ok(g) => objects::decode(&cx, &g, doc.security.as_ref()).await,
+            Err(e) => Err(e),
+        };
+        cx.emit(match decoded {
+            Ok(g) => embedded_as(name, doc.input.nested(g), &jbig2::EMBEDDED),
+            Err(e) => Node::new(name).diag(e),
+        });
+    }
+    cx.emit(embedded_as(
+        "Image segments",
+        doc.input.nested(span),
+        &jbig2::EMBEDDED,
+    ));
     Ok(())
 }
 
