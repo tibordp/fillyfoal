@@ -355,9 +355,10 @@ pub async fn dissect_blob(cx: Cx, input: Input) -> Result<()> {
     if let Some(bits) = key_bits(&base, &[]) {
         summary = format!("{summary}, {bits} bits");
     }
-    cx.annotate(summary);
+    cx.annotate(summary.clone());
     if cert {
-        certificate(&cx, &mut cur, input).await?;
+        let detail = certificate(&cx, &mut cur, input).await?;
+        cx.annotate(format!("{summary}, {detail}"));
     }
     if !cur.at_end() {
         cx.emit(Node::new("Trailing data").span(cur.span(cur.remaining())));
@@ -365,8 +366,9 @@ pub async fn dissect_blob(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// The rest of an OpenSSH certificate after the public key fields.
-async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> {
+/// The rest of an OpenSSH certificate after the public key fields; returns
+/// a summary of it.
+async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<String> {
     let start = cur.pos();
     let serial = cur.u64().await?;
     cx.emit(
@@ -397,11 +399,16 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> 
     cx.emit(string_node("Key ID", &id, span));
     let (principals, span) = ssh_string(cur).await?;
     let names = ssh_strings(&principals);
-    cx.emit(text_node("Valid principals", span, &names.join(", ")));
+    cx.emit(text_node("Valid principals", span, &names.join(", ")).lazy(
+        crate::expander!(self::packed: (Span, Packed)),
+        (span, Packed::Principals),
+    ));
+    let mut validity = Vec::new();
     for name in ["Valid after", "Valid before"] {
         let start = cur.pos();
         let t = cur.u64().await?;
         let node = Node::new(name).span(cur.since(start));
+        validity.push(t);
         cx.emit(if t == u64::MAX {
             node.summary("forever")
         } else {
@@ -415,15 +422,122 @@ async fn certificate(cx: &Cx, cur: &mut Cursor<'_>, input: Input) -> Result<()> 
         let items = ssh_strings(&data);
         // Name/value pairs: show the names.
         let keys: Vec<String> = items.iter().step_by(2).cloned().collect();
-        cx.emit(text_node(name, span, &keys.join(", ")));
+        let mut node = text_node(name, span, &keys.join(", "));
+        if !keys.is_empty() {
+            node = node.lazy(
+                crate::expander!(self::packed: (Span, Packed)),
+                (span, Packed::Options),
+            );
+        }
+        cx.emit(node);
     }
     let (_, span) = ssh_string(cur).await?;
     cx.emit(Node::new("Reserved").span(span));
     let (_, span) = ssh_string(cur).await?;
     let key = span.sub(4, span.len.saturating_sub(4));
     cx.emit(embedded_as("Signature key", input.nested(key), &BLOB));
-    let (_, span) = ssh_string(cur).await?;
-    cx.emit(Node::new("Signature").span(span));
+    let (sig, span) = ssh_string(cur).await?;
+    let sig_type = ssh_strings(&sig).into_iter().next().unwrap_or_default();
+    cx.emit(Node::new("Signature").span(span).summary(sig_type).lazy(
+        crate::expander!(self::packed: (Span, Packed)),
+        (span, Packed::Signature),
+    ));
+    let kind = match kind {
+        1 => "user certificate",
+        2 => "host certificate",
+        _ => "certificate",
+    };
+    let mut summary = format!("{kind} \"{}\"", String::from_utf8_lossy(&id));
+    if !names.is_empty() {
+        summary = format!("{summary} for {}", names.join(", "));
+    }
+    if let [after, before] = validity[..] {
+        let day = |t: u64| crate::formats::util::civil::date(i64::try_from(t).unwrap_or(i64::MAX));
+        summary = match (after, before) {
+            (0, u64::MAX) => format!("{summary}, valid forever"),
+            (a, u64::MAX) => format!("{summary}, valid from {}", day(a)),
+            (a, b) => format!("{summary}, valid {} to {}", day(a), day(b)),
+        };
+    }
+    Ok(summary)
+}
+
+/// What an SSH string packs: a list of strings, name/value pairs, or a
+/// signature (type and blob).
+#[derive(Clone, Copy)]
+enum Packed {
+    Principals,
+    Options,
+    Signature,
+}
+
+/// The items of an SSH string (its length prefix included in `span`).
+async fn packed(cx: Cx, (span, kind): (Span, Packed)) -> Result<()> {
+    let data = cx.read(span.sub(0, 0x10_0000)).await?;
+    let mut at = 4usize;
+    let mut items = Vec::new();
+    while let Some(len) = crate::bytes::u32_be(&data, at) {
+        let start = at.saturating_add(4);
+        let end = start.saturating_add(crate::bytes::to_usize(len.into()));
+        let Some(body) = data.get(start..end) else {
+            break;
+        };
+        items.push((at, end, body));
+        at = end;
+        if items.len() >= 4096 {
+            break;
+        }
+    }
+    let whole = |from: usize, to: usize| span.sub(to_u64(from), to_u64(to.saturating_sub(from)));
+    match kind {
+        Packed::Principals => {
+            for (from, to, body) in items {
+                cx.push(string_node("Principal", body, whole(from, to)))
+                    .await;
+            }
+        }
+        Packed::Options => {
+            let mut it = items.into_iter();
+            while let Some((from, to, name)) = it.next() {
+                let value = it.next();
+                let end = value.map_or(to, |(_, e, _)| e);
+                let label = String::from_utf8_lossy(name).into_owned();
+                // The value is itself a string (empty for flags).
+                let inner = value.and_then(|(_, _, v)| {
+                    let len = crate::bytes::to_usize(crate::bytes::u32_be(v, 0)?.into());
+                    (len.saturating_add(4) == v.len())
+                        .then(|| v.get(4..))
+                        .flatten()
+                });
+                let node = Node::new(label).span(whole(from, end));
+                let node = match (value, inner) {
+                    (Some((_, _, [])), _) => node.summary("flag"),
+                    (_, Some(text)) => {
+                        node.value(Value::Text(String::from_utf8_lossy(text).into_owned()))
+                    }
+                    (Some((_, _, v)), None) => {
+                        node.value(Value::Bytes(v.iter().take(64).copied().collect()))
+                    }
+                    (None, _) => node,
+                };
+                cx.push(node).await;
+            }
+        }
+        Packed::Signature => {
+            let mut it = items.into_iter();
+            if let Some((from, to, kind)) = it.next() {
+                cx.emit(string_node("Signature algorithm", kind, whole(from, to)));
+            }
+            if let Some((from, to, blob)) = it.next() {
+                cx.emit(
+                    Node::new("Signature blob")
+                        .span(whole(from, to))
+                        .value(Value::Bytes(blob.iter().take(64).copied().collect()))
+                        .summary(format!("{} bytes", blob.len())),
+                );
+            }
+        }
+    }
     Ok(())
 }
 

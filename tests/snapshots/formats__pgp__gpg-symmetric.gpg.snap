@@ -1,0 +1,33 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gpg-symmetric.gpg — OpenPGP encrypted message  [0x0+0x68]
+  ▾ Symmetric-Key Encrypted Session Key Packet  [0x0+0xf]
+      Packet header: Symmetric-Key Encrypted Session Key (0x3) — old format, 13 body bytes  [0x0+0x2]
+      Version: 4  [0x2+0x1]
+      Symmetric cipher: AES-256 (0x9)  [0x3+0x1]
+      S2K specifier: iterated and salted (0x3)  [0x4+0x1]
+      Hash algorithm: SHA-512 (0xa)  [0x5+0x1]
+      Salt: 97 be aa ba b2 ff c9 19  |........|  [0x6+0x8]
+      Coded count: 96  [0xe+0x1]
+      Iterations: 65536
+  ▾ Symmetrically Encrypted Integrity Protected Data Packet  [0xf+0x59]
+      Packet header: Symmetrically Encrypted Integrity Protected Data (0x12) — new format, 87 body bytes  [0xf+0x2]
+      Version: 1  [0x11+0x1]
+    ▾ Encrypted data — decrypted with the passphrase  [0x12+0x56]
+      ▾ Decrypted packets  [#1:0x0+0x2e]
+        ▾ Compressed Data Packet — ZIP  [#1:0x0+0x2e]
+            Packet header: Compressed Data (0x8) — old format, 45 body bytes  [#1:0x0+0x1]
+            Algorithm: ZIP (0x1)  [#1:0x1+0x1]
+          ▾ Packets — 0x2a bytes decompressed  [#1:0x2+0x2c]
+            ▾ Literal Data Packet — "msg.txt"  [#2:0x0+0x2a]
+                Packet header: Literal Data (0xb) — old format, 40 body bytes  [#2:0x0+0x2]
+                Format: binary (0x62)  [#2:0x2+0x1]
+                File name: "msg.txt"  [#2:0x3+0x8]
+                Date: 2026-10-10 19:21:11 UTC  [#2:0xb+0x4]
+              ▾ Literal data — UTF-8 text, LF line endings, 1 line  [#2:0xf+0x1b]
+                  Encoding: "UTF-8"
+                  Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+                ▾ Lines — 1 line  [#2:0xf+0x1b]
+                    Line 1: "fillyfoal pgp test message"  [#2:0xf+0x1a]

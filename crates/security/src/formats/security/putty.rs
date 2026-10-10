@@ -113,6 +113,12 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
         };
         if let Some(n) = key.strip_suffix("-Lines").map(str::to_owned) {
             let count: usize = value.trim().parse().unwrap_or(0);
+            cx.emit(
+                Node::new(key.to_owned())
+                    .span(*span)
+                    .value(uint(crate::bytes::to_u64(count), 32))
+                    .desc("lines of base64 that follow"),
+            );
             let (Some((_, first)), Some((_, last))) = (
                 all.get(i),
                 all.get(

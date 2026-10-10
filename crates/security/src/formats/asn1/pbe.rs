@@ -123,7 +123,10 @@ pub fn describe(alg: &[u8]) -> String {
             enc.map_or("unknown cipher", |e| cipher_name(&e))
         );
     }
-    pkcs12_pbe(&oid).map_or_else(|| format!("algorithm {oid}"), |(name, ..)| name.to_owned())
+    pkcs12_pbe(&oid).map_or_else(
+        || super::oids::name(&oid).map_or_else(|| format!("algorithm {oid}"), str::to_owned),
+        |(name, ..)| name.to_owned(),
+    )
 }
 
 fn prf_name(oid: &str) -> &'static str {
@@ -255,6 +258,10 @@ pub async fn decrypt(
         }
     } else if oid == "1.2.840.113549.1.5.13" {
         pbes2(cx, params, password.text, ciphertext).await?
+    } else if oid == JKS_KEY_PROTECTOR {
+        jks_key_protector(cx, password.text, ciphertext).await?
+    } else if oid == JCE_PBE_MD5_3DES {
+        jce_pbe_md5_3des(cx, params, password.text, ciphertext).await?
     } else {
         return Err(Failure::Unsupported(format!("encryption algorithm {oid}")));
     };
@@ -262,6 +269,100 @@ pub async fn decrypt(
         return Err(Failure::Wrong);
     }
     Ok(plain)
+}
+
+/// Sun's JKS key protector (`sun.security.provider.KeyProtector`).
+const JKS_KEY_PROTECTOR: &str = "1.3.6.1.4.1.42.2.17.1.1";
+/// Sun JCE's PBEWithMD5AndTripleDES (`com.sun.crypto.provider.KeyProtector`).
+const JCE_PBE_MD5_3DES: &str = "1.3.6.1.4.1.42.2.19.1";
+
+/// A password as Java's UTF-16 code units, big-endian, without a
+/// terminator (how the JKS key protector hashes it).
+fn utf16_be(password: &[u8]) -> Vec<u8> {
+    String::from_utf8_lossy(password)
+        .encode_utf16()
+        .flat_map(u16::to_be_bytes)
+        .collect()
+}
+
+/// The JKS key protector: a 20-byte salt, the key XORed with a SHA-1
+/// keystream (each block the SHA-1 of the password and the previous block,
+/// starting from the salt), and the SHA-1 of the password and the
+/// plaintext as a check.
+async fn jks_key_protector(cx: &Cx, password: &[u8], data: &[u8]) -> Result<Vec<u8>, Failure> {
+    let len = data.len().checked_sub(40).ok_or(Failure::Wrong)?;
+    let salt = data.get(..20).ok_or(Failure::Wrong)?;
+    let encrypted = data
+        .get(20..20usize.saturating_add(len))
+        .ok_or(Failure::Wrong)?;
+    let check = data
+        .get(20usize.saturating_add(len)..)
+        .ok_or(Failure::Wrong)?;
+    let pw = utf16_be(password);
+    let mut block = salt.to_vec();
+    let mut plain = Vec::with_capacity(len);
+    for (i, chunk) in encrypted.chunks(20).enumerate() {
+        let mut h = Sha1::new();
+        h.update(&pw);
+        h.update(&block);
+        block = h.finish();
+        plain.extend(chunk.iter().zip(&block).map(|(c, k)| c ^ k));
+        if i.is_multiple_of(64) {
+            cx.checkpoint().await;
+        }
+    }
+    let mut h = Sha1::new();
+    h.update(&pw);
+    h.update(&plain);
+    if h.finish() != check {
+        return Err(Failure::Wrong);
+    }
+    Ok(plain)
+}
+
+/// Sun JCE's PBEWithMD5AndTripleDES: each salt half (the first reversed
+/// when both are equal) hashed with the password `iterations` times by MD5
+/// gives 16 bytes of the 3DES key and IV.
+async fn jce_pbe_md5_3des(
+    cx: &Cx,
+    params: &[u8],
+    password: &[u8],
+    ciphertext: &[u8],
+) -> Result<Vec<u8>, Failure> {
+    let (salt, iterations) = salt_and_iterations(params)
+        .ok_or_else(|| Failure::Unsupported("malformed PBE parameters".into()))?;
+    let iterations = check_iterations(iterations)?;
+    let mut salt = salt.to_vec();
+    if salt.len() != 8 {
+        return Err(Failure::Unsupported(format!("{}-byte salt", salt.len())));
+    }
+    if salt.get(..4) == salt.get(4..)
+        && let Some(first) = salt.get_mut(..4)
+    {
+        first.reverse();
+    }
+    // Java hands the password over as its chars' low seven bits.
+    let pw: Vec<u8> = String::from_utf8_lossy(password)
+        .chars()
+        .map(|c| u8::try_from(u32::from(c) & 0x7f).unwrap_or(0))
+        .collect();
+    let mut derived = Vec::with_capacity(32);
+    for half in salt.chunks(4) {
+        let mut state = half.to_vec();
+        for i in 0..iterations {
+            let mut h = crypto::Md5::new();
+            h.update(&state);
+            h.update(&pw);
+            state = h.finish();
+            if i.is_multiple_of(1024) {
+                cx.checkpoint().await;
+            }
+        }
+        derived.extend(state);
+    }
+    let (key, iv) = derived.split_at(24);
+    let c = TripleDes::new(key).ok_or_else(|| Failure::Unsupported("3DES key".into()))?;
+    unpad(cbc_paced(cx, &c, iv, ciphertext).await, 8)
 }
 
 fn unpad(mut data: Vec<u8>, block: usize) -> Result<Vec<u8>, Failure> {

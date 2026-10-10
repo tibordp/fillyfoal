@@ -1,0 +1,17 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ age-armored.age — PEM, 1 × AGE ENCRYPTED FILE  [0x0+0x179]
+  ▾ AGE ENCRYPTED FILE  [0x0+0x179]
+    ▾ Contents — age, 1 recipient (X25519), 27 bytes of plaintext  [#1:0x0+0xe3]
+        Version: "age-encryption.org/v1"  [#1:0x0+0x15]
+      ▾ Recipient stanza (X25519) — X25519 recipient  [#1:0x16+0x62]
+          Type: "X25519"  [#1:0x19+0x6]
+          Ephemeral share: f4 a1 c3 6c f9 db 3f 8b ca 6d b4 e0 be 73 b1 50 …  |...l..?..m...s.P| — 32 bytes  [#1:0x20+0x2b]
+          Body: 58 e4 71 67 7d ec f9 58 75 27 f5 75 a2 6c 63 53 …  |X.qg}..Xu'.u.lcS| — 32 bytes, file key wrapped with ChaCha20-Poly1305 (16 bytes and a tag)  [#1:0x4c+0x2b]
+        Header MAC: ef 03 59 64 be 2f 62 7f a1 dd aa a1 d4 ed 4c 01 …  |..Yd./b.......L.| — HMAC-SHA-256 of the header under a key derived from the file key  [#1:0x78+0x2f]
+      ▾ Payload — 1 chunk, 27 bytes of plaintext  [#1:0xa8+0x3b]
+          Nonce: a4 25 69 ce 5e 10 35 32 b3 4c 1b 23 81 d1 c8 60  |.%i.^.52.L.#...`|  [#1:0xa8+0x10]
+          Chunk 0 — 27 bytes plaintext + 16-byte tag, final  [#1:0xb8+0x2b]
+            ! note: ChaCha20-Poly1305 (needs the file key)

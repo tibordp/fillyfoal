@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ digested.p7m — PKCS#7, digestedData  [0x0+0x6b]
+  ▾ ContentInfo — SEQUENCE, digestedData  [0x0+0x6b]
+      contentType: "1.2.840.113549.1.7.5" — OBJECT IDENTIFIER, digestedData  [0x2+0xb]
+    ▾ content — [0]  [0xd+0x5e]
+      ▾ DigestedData — SEQUENCE  [0xf+0x5c]
+          version: 0 — INTEGER  [0x11+0x3]
+        ▾ digestAlgorithm — SEQUENCE, sha256  [0x14+0xd]
+            algorithm: "2.16.840.1.101.3.4.2.1" — OBJECT IDENTIFIER, sha256  [0x16+0xb]
+        ▾ encapContentInfo — SEQUENCE, data  [0x21+0x28]
+            eContentType: "1.2.840.113549.1.7.1" — OBJECT IDENTIFIER, data  [0x23+0xb]
+          ▾ eContent — [0]  [0x2e+0x1b]
+            ▾ Data — UTF-8 text, LF line endings, 1 line  [0x30+0x19]
+                Encoding: "UTF-8"
+                Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
+              ▾ Lines — 1 line  [0x32+0x17]
+                  Line 1: "fillyfoal test message"  [0x32+0x16]
+          digest: "77:A5:E1:72:B2:8F:DA:8F:54:79:E4:0C:F1:82:39:65:AE:53:F7:D1:B9:EB:A7:35:EA:B9:F8:88:2C:17:C6:B0" — OCTET STRING, 32 bytes  [0x49+0x22]

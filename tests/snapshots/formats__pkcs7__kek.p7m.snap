@@ -1,0 +1,24 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ kek.p7m — PKCS#7, envelopedData, 1 recipient, aes128-CBC  [0x0+0xa0]
+  ▾ ContentInfo — SEQUENCE, envelopedData  [0x0+0xa0]
+      contentType: "1.2.840.113549.1.7.3" — OBJECT IDENTIFIER, envelopedData  [0x3+0xb]
+    ▾ content — [0]  [0xe+0x92]
+      ▾ EnvelopedData — SEQUENCE  [0x11+0x8f]
+          version: 2 — INTEGER  [0x14+0x3]
+        ▾ recipientInfos — SET  [0x17+0x3b]
+          ▾ KEKRecipientInfo — [2]  [0x19+0x39]
+              version: 4 — INTEGER  [0x1b+0x3]
+            ▾ kekid — SEQUENCE  [0x1e+0xd]
+                keyIdentifier: "66:69:6C:6C:79:66:6F:61:6C" — OCTET STRING, 9 bytes  [0x20+0xb]
+            ▾ keyEncryptionAlgorithm — SEQUENCE, aes128-wrap  [0x2b+0xd]
+                algorithm: "2.16.840.1.101.3.4.1.5" — OBJECT IDENTIFIER, aes128-wrap  [0x2d+0xb]
+              encryptedKey: f1 1c 30 af 72 a6 97 ea ff bf ee 2b da ae 76 16 …  |..0.r......+..v.| — OCTET STRING, 24 bytes  [0x38+0x1a]
+        ▾ encryptedContentInfo — SEQUENCE, data  [0x52+0x4e]
+            contentType: "1.2.840.113549.1.7.1" — OBJECT IDENTIFIER, data  [0x54+0xb]
+          ▾ contentEncryptionAlgorithm — SEQUENCE, aes128-CBC  [0x5f+0x1f]
+              algorithm: "2.16.840.1.101.3.4.1.2" — OBJECT IDENTIFIER, aes128-CBC  [0x61+0xb]
+              iv: 0f cd 70 0f c8 15 24 43 2c d8 9b 39 e4 d4 45 e2  |..p...$C,..9..E.| — OCTET STRING, 16 bytes  [0x6c+0x12]
+            encryptedContent: 81 75 95 30 85 14 0a b1 8f e6 33 03 0c 3d ea bf …  |.u.0......3..=..| — [0], 32 bytes  [0x7e+0x22]

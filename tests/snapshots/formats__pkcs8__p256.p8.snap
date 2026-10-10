@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ p256.p8 — Private key (PKCS#8), ecPublicKey, prime256v1  [0x0+0x8a]
+  ▾ PrivateKeyInfo — SEQUENCE  [0x0+0x8a]
+      version: 0 — INTEGER  [0x3+0x3]
+    ▾ privateKeyAlgorithm — SEQUENCE, ecPublicKey = prime256v1  [0x6+0x15]
+        algorithm: "1.2.840.10045.2.1" — OBJECT IDENTIFIER, ecPublicKey  [0x8+0x9]
+        namedCurve: "1.2.840.10045.3.1.7" — OBJECT IDENTIFIER, prime256v1  [0x11+0xa]
+    ▾ privateKey — OCTET STRING, 109 bytes, encapsulates DER  [0x1b+0x6f]
+      ▾ ECPrivateKey — SEQUENCE  [0x1d+0x6d]
+          version: 1 — INTEGER  [0x1f+0x3]
+          privateKey: b2 16 f6 54 f9 23 c4 4e da 9b 3c 62 9d 07 36 ba …  |...T.#.N..<b..6.| — OCTET STRING, 32 bytes  [0x22+0x22]
+        ▾ publicKey — [1]  [0x44+0x46]
+          ▾ publicKey: 04 ae c7 1c 67 9e 56 e9 fa 25 70 c3 c9 6c 84 a1 …  |....g.V..%p..l..| — BIT STRING, uncompressed point, 256-bit coordinates  [0x46+0x44]
+              format: uncompressed (0x4)  [0x49+0x1]
+              x: ae c7 1c 67 9e 56 e9 fa 25 70 c3 c9 6c 84 a1 b1 …  |...g.V..%p..l...| — 32 bytes  [0x4a+0x20]
+              y: 15 1d db 71 ac b4 df 63 5d 84 68 42 60 6a 91 2b …  |...q...c].hB`j.+| — 32 bytes  [0x6a+0x20]

@@ -1,0 +1,13 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ leaf-pub.der — Public key, EC P-256 (prime256v1)  [0x0+0x5b]
+  ▾ SubjectPublicKeyInfo — SEQUENCE, EC P-256 (prime256v1)  [0x0+0x5b]
+    ▾ algorithm — SEQUENCE, ecPublicKey = prime256v1  [0x2+0x15]
+        algorithm: "1.2.840.10045.2.1" — OBJECT IDENTIFIER, ecPublicKey  [0x4+0x9]
+        namedCurve: "1.2.840.10045.3.1.7" — OBJECT IDENTIFIER, prime256v1  [0xd+0xa]
+    ▾ subjectPublicKey: 04 57 9e c8 30 c5 74 ea 98 90 b8 7d b9 8d 6f 8a …  |.W..0.t....}..o.| — BIT STRING, uncompressed point, 256-bit coordinates  [0x17+0x44]
+        format: uncompressed (0x4)  [0x1a+0x1]
+        x: 57 9e c8 30 c5 74 ea 98 90 b8 7d b9 8d 6f 8a 3a …  |W..0.t....}..o.:| — 32 bytes  [0x1b+0x20]
+        y: 59 16 37 b9 d0 a0 a6 ec c9 34 9f e5 60 a9 67 5b …  |Y.7......4..`.g[| — 32 bytes  [0x3b+0x20]

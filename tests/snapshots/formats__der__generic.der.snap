@@ -1,0 +1,26 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ generic.der — ASN.1 DER, SEQUENCE, 185 bytes  [0x0+0xb9]
+  ▾ SEQUENCE  [0x0+0xb9]
+      BOOLEAN: true  [0x3+0x3]
+      INTEGER: -129  [0x6+0x4]
+      INTEGER: 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef  |.#Eg.....#Eg....| — 121-bit  [0xa+0x12]
+      NULL  [0x1c+0x2]
+      OBJECT IDENTIFIER: "1.3.6.1.4.1.55555.9"  [0x1e+0xb]
+      UTF8String: "fillyfoal Ã¼nÃ¯cÃ¶dÃ©"  [0x29+0x1f]
+      PrintableString: "Fillyfoal Test"  [0x48+0x10]
+      IA5String: "test@example.test"  [0x58+0x13]
+      BMPString: "wide"  [0x6b+0xa]
+      UTCTime: 2026-01-01 12:00:00 UTC  [0x75+0xf]
+      GeneralizedTime: 2026-01-01 12:00:00 UTC  [0x84+0x11]
+      BIT STRING: 54  |T| — 6 bits  [0x95+0x4]
+      OCTET STRING: 00 11 22 33  |.."3| — 4 bytes  [0x99+0x6]
+      ENUMERATED: 3  [0x9f+0x3]
+    ▾ SET  [0xa2+0x8]
+        INTEGER: 1  [0xa4+0x3]
+        INTEGER: 2  [0xa7+0x3]
+      [0]: "*"  [0xaa+0x3]
+    ▾ [1]  [0xad+0xc]
+        UTF8String: "explicit"  [0xaf+0xa]

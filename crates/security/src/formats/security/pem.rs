@@ -270,6 +270,18 @@ async fn expand_block(cx: Cx, (input, block): (Input, Block)) -> Result<()> {
         "CERTIFICATE REQUEST" | "NEW CERTIFICATE REQUEST" => Some(&crate::formats::asn1::CSR),
         "PKCS7" | "CMS" => Some(&crate::formats::asn1::PKCS7),
         "OPENSSH PRIVATE KEY" => Some(&super::openssh::OPENSSH_KEY),
+        "PUBLIC KEY" => Some(&crate::formats::asn1::SPKI),
+        "PRIVATE KEY" => Some(&crate::formats::asn1::PKCS8),
+        "ENCRYPTED PRIVATE KEY" => Some(&crate::formats::asn1::PKCS8_ENCRYPTED),
+        "RSA PRIVATE KEY" => Some(&crate::formats::asn1::RSA_PRIVATE_KEY),
+        "RSA PUBLIC KEY" => Some(&crate::formats::asn1::RSA_PUBLIC_KEY),
+        "EC PRIVATE KEY" => Some(&crate::formats::asn1::EC_PRIVATE_KEY),
+        "DSA PRIVATE KEY" => Some(&crate::formats::asn1::DSA_PRIVATE_KEY),
+        "DH PARAMETERS" => Some(&crate::formats::asn1::DH_PARAMS),
+        "DSA PARAMETERS" => Some(&crate::formats::asn1::DSA_PARAMS),
+        "OCSP REQUEST" => Some(&crate::formats::asn1::OCSP_REQUEST),
+        "OCSP RESPONSE" => Some(&crate::formats::asn1::OCSP_RESPONSE),
+        "AGE ENCRYPTED FILE" => Some(&super::age::AGE),
         _ => None,
     };
     let node = match format {

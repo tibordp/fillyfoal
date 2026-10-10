@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ pubkey.asc — OpenPGP public key, EdDSA (legacy), "Alice Example <alice@example.test>" (armored)  [0x0+0x28b]
   ▾ PGP PUBLIC KEY BLOCK  [0x0+0x28b]
@@ -42,7 +42,7 @@ expression: "common::explore(&name, &data)"
           Public-key algorithm: ECDH (0x12)  [#1:0xe1+0x1]
           Curve: "1.3.6.1.4.1.3029.1.5.1" — Curve25519 (legacy)  [#1:0xe2+0xb]
           Public point: 40 64 65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 …  |@defghijklmnopqr| — 263-bit  [#1:0xed+0x23]
-          KDF parameters: 03 01 08 07  |....|  [#1:0x110+0x4]
+          KDF parameters: 03 01 08 07  |....| — SHA-256, key wrap with AES-128  [#1:0x110+0x4]
           Fingerprint: "BCD94DBBFD837EE168C514B3F5EA6E7166E54488" — key ID F5EA6E7166E54488  [#1:0xdc+0x38]
       ▾ Signature Packet — v4 subkey binding, EdDSA (legacy) with SHA-256  [#1:0x114+0x7e]
           Packet header: Signature (0x2) — old format, 124 body bytes  [#1:0x114+0x2]

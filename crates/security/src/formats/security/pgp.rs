@@ -9,6 +9,7 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_be, u32_be};
+use crate::codec::crypto::Hash;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::datakit::sha1;
@@ -109,6 +110,26 @@ const CIPHERS: EnumTable = &[
 ];
 
 const COMPRESSION: EnumTable = &[(0, "uncompressed"), (1, "ZIP"), (2, "ZLIB"), (3, "BZip2")];
+
+/// AEAD modes (RFC 9580; OCB was also GnuPG's draft-v5 default).
+const AEAD: EnumTable = &[(1, "EAX"), (2, "OCB"), (3, "GCM")];
+
+const FEATURES: FlagTable = &[
+    flag(0x01, "SEIPD v1 (MDC)"),
+    flag(0x02, "AEAD (draft, OCB)"),
+    flag(0x04, "v5 keys (draft)"),
+    flag(0x08, "SEIPD v2"),
+];
+
+const KEY_SERVER_PREFERENCES: FlagTable = &[flag(0x80, "no-modify")];
+
+const REVOCATION_REASONS: EnumTable = &[
+    (0, "no reason specified"),
+    (1, "key is superseded"),
+    (2, "key material has been compromised"),
+    (3, "key is retired and no longer used"),
+    (32, "user ID information is no longer valid"),
+];
 
 const SIG_TYPES: EnumTable = &[
     (0x00, "binary document"),
@@ -380,6 +401,7 @@ async fn packets(cx: Cx, stream: Stream) -> Result<()> {
     let span = stream.span;
     let mut pos = 0u64;
     let mut index = 0u64;
+    let mut skesk = None;
     while pos < span.len {
         let head = cx.read_avail(span.sub(pos, 6)).await?;
         let Some(h) = header(&head) else {
@@ -427,9 +449,13 @@ async fn packets(cx: Cx, stream: Stream) -> Result<()> {
                 new_format: h.new_format,
                 header: header_span,
                 body,
+                skesk,
             },
         ))
         .await;
+        if h.tag == 3 {
+            skesk = Some(body);
+        }
         index = index.saturating_add(1);
         pos = next.max(pos.saturating_add(1));
     }
@@ -527,6 +553,9 @@ struct PacketState {
     new_format: bool,
     header: Span,
     body: Span,
+    /// The body of the last symmetric-key session key packet before this
+    /// one (for decrypting encrypted data with a passphrase).
+    skesk: Option<Span>,
 }
 
 /// Emits fields of a body held in memory; positions are relative to `span`.
@@ -682,22 +711,7 @@ async fn packet(cx: Cx, state: PacketState) -> Result<()> {
     match state.tag {
         8 => return compressed(&cx, &state).await,
         11 => return literal(&cx, &state).await,
-        9 | 18 | 20 => {
-            let data = cx.read_avail(state.body.sub(0, 1)).await?;
-            if state.tag != 9 {
-                let mut b = Body {
-                    cx: &cx,
-                    span: state.body,
-                    data: &data,
-                    pos: 0,
-                };
-                b.u8("Version", None);
-                b.rest("Encrypted data");
-            } else {
-                cx.emit(Node::new("Encrypted data").span(state.body));
-            }
-            return Ok(());
-        }
+        9 | 18 | 20 => return encrypted(&cx, &state).await,
         _ => {}
     }
     let data = cx.read(state.body.sub(0, MAX_BODY)).await?;
@@ -770,7 +784,19 @@ fn public_fields(b: &mut Body<'_>, algo: u8) -> Option<()> {
             b.curve()?;
             b.mpi("Public point")?;
             let len = usize::from(*b.data.get(b.pos)?);
-            b.bytes("KDF parameters", len.saturating_add(1)).map(|_| ())
+            let (kdf, span) = b.take(len.saturating_add(1))?;
+            let mut node = Node::new("KDF parameters")
+                .span(span)
+                .value(Value::Bytes(kdf.to_vec()));
+            if let [3, 1, hash, cipher] = kdf {
+                node = node.summary(format!(
+                    "{}, key wrap with {}",
+                    lookup(HASHES, (*hash).into()).unwrap_or("unknown hash"),
+                    lookup(CIPHERS, (*cipher).into()).unwrap_or("unknown cipher")
+                ));
+            }
+            b.cx.emit(node);
+            Some(())
         }
         25 => b.bytes("Public key", 32).map(|_| ()),
         26 => b.bytes("Public key", 56).map(|_| ()),
@@ -958,9 +984,90 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                         bits: 32,
                         radix: Radix::Dec,
                     })
-                    .summary("seconds"),
+                    .summary(duration(s)),
                 None => node,
             },
+            30 | 23 => {
+                let raw = u64::from(body.first().copied().unwrap_or(0));
+                let table = if kind == 30 {
+                    FEATURES
+                } else {
+                    KEY_SERVER_PREFERENCES
+                };
+                let (set, unknown) = crate::value::decode_flags(table, raw);
+                node.value(Value::Flags {
+                    raw,
+                    bits: 8,
+                    set,
+                    unknown,
+                })
+            }
+            34 => {
+                let names: Vec<String> = body
+                    .iter()
+                    .map(|&a| lookup(AEAD, a.into()).map_or_else(|| a.to_string(), str::to_owned))
+                    .collect();
+                node.value(Value::Text(names.join(", ")))
+            }
+            39 => {
+                let names: Vec<String> = body
+                    .chunks(2)
+                    .map(|pair| match pair {
+                        [c, a] => format!(
+                            "{}/{}",
+                            lookup(CIPHERS, (*c).into()).unwrap_or("?"),
+                            lookup(AEAD, (*a).into()).unwrap_or("?")
+                        ),
+                        _ => "?".to_owned(),
+                    })
+                    .collect();
+                node.value(Value::Text(names.join(", ")))
+            }
+            20 => match notation(body) {
+                Some((name, value)) => node.value(Value::Text(format!("{name}={value}"))),
+                None => node.value(Value::Bytes(body.iter().take(32).copied().collect())),
+            },
+            29 => {
+                let code = body.first().copied().unwrap_or(0);
+                let reason =
+                    String::from_utf8_lossy(body.get(1..).unwrap_or_default()).into_owned();
+                node.value(Value::Enum {
+                    raw: code.into(),
+                    bits: 8,
+                    name: lookup(REVOCATION_REASONS, code.into()),
+                })
+                .summary(reason)
+            }
+            5 => match body {
+                [level, amount, ..] => node
+                    .value(Value::UInt {
+                        value: (*level).into(),
+                        bits: 8,
+                        radix: Radix::Dec,
+                    })
+                    .summary(format!("level {level}, trust amount {amount}")),
+                _ => node,
+            },
+            6 => node.value(Value::Text(
+                String::from_utf8_lossy(body.strip_suffix(b"\0").unwrap_or(body)).into_owned(),
+            )),
+            12 => match body {
+                [class, algo, fpr @ ..] => {
+                    node.value(Value::Text(hex_upper(fpr))).summary(format!(
+                        "class {class:#x}, {}",
+                        lookup(PK_ALGOS, (*algo).into()).unwrap_or("unknown algorithm")
+                    ))
+                }
+                _ => node,
+            },
+            32 => {
+                let at = body_at.saturating_add(1);
+                let sig_span = span.sub(to_u64(at), to_u64(body.len()));
+                node.summary(format!("{} bytes", body.len())).lazy(
+                    crate::expander!(self::embedded_signature: (Span, Arc<Vec<u8>>)),
+                    (sig_span, Arc::new(body.to_vec())),
+                )
+            }
             16 => node.value(Value::Text(hex_upper(body))),
             33 | 35 => node
                 .value(Value::Text(hex_upper(body.get(1..).unwrap_or_default())))
@@ -996,6 +1103,51 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
         }
         cx.push(node).await;
         at = start.saturating_add(whole.max(1));
+    }
+    Ok(())
+}
+
+/// A notation subpacket: flags, name and value lengths, name, value.
+fn notation(body: &[u8]) -> Option<(String, String)> {
+    let flags = u32_be(body, 0)?;
+    let name_len = usize::from(u16_be(body, 4)?);
+    let value_len = usize::from(u16_be(body, 6)?);
+    let name = body.get(8..8usize.saturating_add(name_len))?;
+    let value = body
+        .get(8usize.saturating_add(name_len)..)?
+        .get(..value_len)?;
+    let value = if flags & 0x8000_0000 != 0 {
+        String::from_utf8_lossy(value).into_owned()
+    } else {
+        hex_upper(value)
+    };
+    Some((String::from_utf8_lossy(name).into_owned(), value))
+}
+
+/// A duration in seconds, as days or years.
+fn duration(secs: u32) -> String {
+    let days = secs / 86_400;
+    match (days, secs % 86_400) {
+        (0, _) => format!("{secs} seconds"),
+        (d, 0) if d % 365 == 0 => format!(
+            "{} ({d} days)",
+            crate::formats::util::fmt::plural(d / 365, "year")
+        ),
+        (d, 0) => format!("{d} days"),
+        (d, _) => format!("about {d} days"),
+    }
+}
+
+/// An Embedded Signature subpacket: a whole signature packet body.
+async fn embedded_signature(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
+    let mut b = Body {
+        cx: &cx,
+        span,
+        data: &data,
+        pos: 0,
+    };
+    if signature(&mut b).is_none() {
+        cx.diag(Diagnostic::truncated(span, to_u64(b.pos)));
     }
     Ok(())
 }
@@ -1149,6 +1301,318 @@ async fn inflate_packets(cx: Cx, (stream, zlib): (Stream, bool)) -> Result<()> {
         depth: stream.depth,
     };
     packets(cx, inner).await
+}
+
+// ---------------------------------------------------------------------------
+// Encrypted data
+
+const PASSPHRASE_PROMPT: &str = "Passphrase for the OpenPGP message";
+/// Largest encrypted packet decrypted with a passphrase.
+const MAX_DECRYPT: u64 = 64 << 20;
+/// The AEAD authentication tag, after each chunk and at the end.
+const AEAD_TAG: u64 = 16;
+/// Most AEAD chunks listed.
+const MAX_AEAD_CHUNKS: u64 = 1 << 20;
+
+/// The fields of an encrypted data packet (tags 9, 18 and 20).
+async fn encrypted(cx: &Cx, state: &PacketState) -> Result<()> {
+    if state.tag == 9 {
+        cx.emit(
+            Node::new("Encrypted data")
+                .span(state.body)
+                .summary("CFB with resynchronization, no integrity protection"),
+        );
+        return Ok(());
+    }
+    let data = cx.read_avail(state.body.sub(0, 64)).await?;
+    let mut b = Body {
+        cx,
+        span: state.body,
+        data: &data,
+        pos: 0,
+    };
+    let version = b.u8("Version", None).unwrap_or(0);
+    if state.tag == 18 && version == 1 {
+        let rest = state.body.tail(1);
+        let mut node = Node::new("Encrypted data")
+            .span(rest)
+            .summary(format!("{} bytes, CFB with a SHA-1 MDC", rest.len));
+        node = match state.skesk {
+            Some(skesk) => node.lazy(
+                crate::expander!(self::decrypt_seipd: (Stream, Span, Span)),
+                (state.stream, skesk, rest),
+            ),
+            None => node.diag(Diagnostic::note(
+                "needs the session key (a recipient's private key)",
+            )),
+        };
+        cx.emit(node);
+        return Ok(());
+    }
+    // SEIPD v2 (RFC 9580) and GnuPG's AEAD packet (draft v5).
+    b.u8("Symmetric cipher", Some(CIPHERS));
+    let aead = b.u8("AEAD mode", Some(AEAD));
+    let chunk = b.u8("Chunk size", None).unwrap_or(0);
+    let size = 1u64
+        .checked_shl(u32::from(chunk).saturating_add(6))
+        .unwrap_or(u64::MAX);
+    if state.tag == 18 {
+        b.bytes("Salt", 32);
+    } else {
+        let iv = match aead {
+            Some(1) => 16,
+            Some(2) => 15,
+            Some(3) => 12,
+            _ => 0,
+        };
+        b.bytes("Starting IV", iv);
+    }
+    let rest = state.body.tail(to_u64(b.pos));
+    cx.emit(
+        Node::new("Encrypted chunks")
+            .span(rest)
+            .summary(format!("{} bytes of plaintext per chunk", size))
+            .lazy(
+                crate::expander!(self::aead_chunks: (Span, u64)),
+                (rest, size),
+            ),
+    );
+    Ok(())
+}
+
+/// The chunks of AEAD-encrypted data, each followed by its tag, and the
+/// final tag.
+async fn aead_chunks(cx: Cx, (span, size): (Span, u64)) -> Result<()> {
+    let body = span.len.saturating_sub(AEAD_TAG);
+    let step = size.saturating_add(AEAD_TAG);
+    let chunks = body.div_ceil(step.max(1)).min(MAX_AEAD_CHUNKS);
+    for i in 0..chunks {
+        let chunk = span.sub(
+            i.saturating_mul(step),
+            step.min(body.saturating_sub(i.saturating_mul(step))),
+        );
+        cx.push(Node::new(format!("Chunk {i}")).span(chunk).summary(format!(
+            "{} bytes and a 16-byte tag",
+            chunk.len.saturating_sub(AEAD_TAG)
+        )))
+        .await;
+    }
+    cx.push(
+        Node::new("Final tag")
+            .span(span.tail(body))
+            .desc("authenticates the total length"),
+    )
+    .await;
+    Ok(())
+}
+
+/// A symmetric-key session key packet's parameters.
+struct Skesk {
+    cipher: u8,
+    s2k: u8,
+    hash: u8,
+    salt: Vec<u8>,
+    count: u64,
+    /// The session key encrypted with the passphrase's key, if any (else
+    /// that key is the session key).
+    esk: Vec<u8>,
+}
+
+fn parse_skesk(data: &[u8]) -> Option<Skesk> {
+    let (&version, rest) = data.split_first()?;
+    if version != 4 {
+        return None;
+    }
+    let (&cipher, rest) = rest.split_first()?;
+    let (&s2k, rest) = rest.split_first()?;
+    let (&hash, rest) = rest.split_first()?;
+    let (salt, count, rest) = match s2k {
+        0 => (&[][..], 0, rest),
+        1 => (rest.get(..8)?, 0, rest.get(8..)?),
+        3 => {
+            let c = *rest.get(8)?;
+            let count = (16u64 + u64::from(c & 15)) << ((c >> 4).saturating_add(6));
+            (rest.get(..8)?, count, rest.get(9..)?)
+        }
+        _ => return None,
+    };
+    Some(Skesk {
+        cipher,
+        s2k,
+        hash,
+        salt: salt.to_vec(),
+        count,
+        esk: rest.to_vec(),
+    })
+}
+
+/// The S2K key of `len` bytes from the passphrase with hash `H`: one hash
+/// context per digest's worth, each preloaded with one more zero byte;
+/// iterated S2K hashes salt and passphrase repeated to `count` bytes.
+async fn s2k_hash<H: Hash>(cx: &Cx, p: &Skesk, password: &[u8], len: usize) -> Vec<u8> {
+    let mut data = p.salt.clone();
+    data.extend_from_slice(password);
+    let total = if p.s2k == 3 {
+        usize::try_from(p.count)
+            .unwrap_or(usize::MAX)
+            .max(data.len())
+    } else {
+        data.len()
+    };
+    let mut out = Vec::new();
+    let mut preload = 0usize;
+    while out.len() < len && !data.is_empty() {
+        let mut h = H::new();
+        h.update(&vec![0; preload]);
+        let mut done = 0usize;
+        let mut rounds = 0u32;
+        while done < total {
+            let n = data.len().min(total.saturating_sub(done));
+            h.update(data.get(..n).unwrap_or_default());
+            done = done.saturating_add(n);
+            rounds = rounds.saturating_add(1);
+            if rounds.is_multiple_of(2048) {
+                cx.checkpoint().await;
+            }
+        }
+        out.extend(h.finish());
+        preload = preload.saturating_add(1);
+    }
+    out.truncate(len);
+    out
+}
+
+async fn s2k_key(cx: &Cx, p: &Skesk, password: &[u8], len: usize) -> Option<Vec<u8>> {
+    use crate::codec::crypto::{Md5, Sha1, Sha256, Sha384, Sha512};
+    Some(match p.hash {
+        1 => s2k_hash::<Md5>(cx, p, password, len).await,
+        2 => s2k_hash::<Sha1>(cx, p, password, len).await,
+        8 => s2k_hash::<Sha256>(cx, p, password, len).await,
+        9 => s2k_hash::<Sha384>(cx, p, password, len).await,
+        10 => s2k_hash::<Sha512>(cx, p, password, len).await,
+        _ => return None,
+    })
+}
+
+/// AES key length of an OpenPGP cipher ID.
+fn aes_key_len(cipher: u8) -> Option<usize> {
+    Some(match cipher {
+        7 => 16,
+        8 => 24,
+        9 => 32,
+        _ => return None,
+    })
+}
+
+/// OpenPGP CFB decryption (a zero IV, no resynchronization), a piece at
+/// a time.
+async fn cfb_decrypt(cx: &Cx, aes: &crate::codec::crypto::Aes, data: &[u8]) -> Vec<u8> {
+    let mut prev = [0u8; 16];
+    let mut out = Vec::with_capacity(data.len());
+    for (i, block) in data.chunks(16).enumerate() {
+        let mut stream = prev;
+        aes.encrypt_block(&mut stream);
+        out.extend(block.iter().zip(stream).map(|(c, k)| c ^ k));
+        if let Ok(full) = <[u8; 16]>::try_from(block) {
+            prev = full;
+        }
+        if i.is_multiple_of(256) {
+            cx.checkpoint().await;
+        }
+    }
+    out
+}
+
+/// Decrypts SEIPD v1 data with a passphrase: the key from the session key
+/// packet's S2K (or the session key it encrypts), CFB over a random
+/// block, two check bytes, the packets and a modification detection code.
+async fn decrypt_seipd(cx: Cx, (stream, skesk, data_span): (Stream, Span, Span)) -> Result<()> {
+    let origin = Origin {
+        parent: data_span,
+        transform: "pgp-decrypt",
+    };
+    let plain = match cx.derived(origin) {
+        Some(found) => found.span,
+        None => {
+            let raw = cx.read(skesk.sub(0, 1024)).await?;
+            let Some(params) = parse_skesk(&raw) else {
+                return Err(Diagnostic::unsupported("session key packet version or S2K").at(skesk));
+            };
+            if data_span.len > MAX_DECRYPT {
+                return Err(Diagnostic::limit("encrypted data too large to decrypt").at(data_span));
+            }
+            let data = cx.read(data_span).await?;
+            let mut found = None;
+            for attempt in 0..crate::secret::MAX_ATTEMPTS {
+                let request =
+                    crate::secret::SecretRequest::password(stream.span, PASSPHRASE_PROMPT, attempt);
+                let Some(secret) = cx.secret(request).await else {
+                    break;
+                };
+                let Some(len) = aes_key_len(params.cipher) else {
+                    return Err(Diagnostic::unsupported(format!(
+                        "{} encryption",
+                        lookup(CIPHERS, params.cipher.into()).unwrap_or("unknown")
+                    ))
+                    .at(skesk));
+                };
+                let Some(key) = s2k_key(&cx, &params, secret.expose(), len).await else {
+                    return Err(Diagnostic::unsupported("S2K hash algorithm").at(skesk));
+                };
+                // An encrypted session key: its algorithm, then the key.
+                let (cipher, key) = if params.esk.is_empty() {
+                    (params.cipher, key)
+                } else {
+                    let Some(aes) = crate::codec::crypto::Aes::new(&key) else {
+                        break;
+                    };
+                    let sk = cfb_decrypt(&cx, &aes, &params.esk).await;
+                    let Some((&algo, rest)) = sk.split_first() else {
+                        continue;
+                    };
+                    (algo, rest.to_vec())
+                };
+                if aes_key_len(cipher) != Some(key.len()) {
+                    continue;
+                }
+                let Some(aes) = crate::codec::crypto::Aes::new(&key) else {
+                    continue;
+                };
+                let out = cfb_decrypt(&cx, &aes, &data).await;
+                // The block's last two bytes repeat: a quick passphrase check.
+                if out.len() >= 18 + 22 && out.get(14..16) == out.get(16..18) {
+                    found = Some(out);
+                    break;
+                }
+            }
+            let Some(out) = found else {
+                cx.emit(
+                    Node::new("Ciphertext")
+                        .span(data_span)
+                        .diag(Diagnostic::note("needs the passphrase")),
+                );
+                return Ok(());
+            };
+            let end = out.len().saturating_sub(22);
+            let mdc_ok = out.get(end..end.saturating_add(2)) == Some(&[0xd3, 0x14][..])
+                && out.get(end.saturating_add(2)..)
+                    == Some(&sha1(out.get(..end.saturating_add(2)).unwrap_or_default())[..]);
+            let packets = out.get(18..end).unwrap_or_default().to_vec();
+            let error =
+                (!mdc_ok).then(|| Diagnostic::warning("modification detection code mismatch"));
+            cx.add_derived(origin, packets, data_span.len, error)?.span
+        }
+    };
+    cx.emit(Node::new("Decrypted packets").span(plain).lazy(
+        crate::expander!(self::packets: Stream),
+        Stream {
+            input: stream.input.nested(plain),
+            span: plain,
+            depth: stream.depth.saturating_add(1),
+        },
+    ));
+    cx.annotate("decrypted with the passphrase");
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

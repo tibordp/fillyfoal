@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ p256.der — EC private key, prime256v1, 256-bit, with public key  [0x0+0x79]
+  ▾ ECPrivateKey — SEQUENCE  [0x0+0x79]
+      version: 1 — INTEGER  [0x2+0x3]
+      privateKey: b2 16 f6 54 f9 23 c4 4e da 9b 3c 62 9d 07 36 ba …  |...T.#.N..<b..6.| — OCTET STRING, 32 bytes  [0x5+0x22]
+    ▾ parameters — [0], prime256v1  [0x27+0xc]
+        namedCurve: "1.2.840.10045.3.1.7" — OBJECT IDENTIFIER, prime256v1  [0x29+0xa]
+    ▾ publicKey — [1]  [0x33+0x46]
+      ▾ publicKey: 04 ae c7 1c 67 9e 56 e9 fa 25 70 c3 c9 6c 84 a1 …  |....g.V..%p..l..| — BIT STRING, uncompressed point, 256-bit coordinates  [0x35+0x44]
+          format: uncompressed (0x4)  [0x38+0x1]
+          x: ae c7 1c 67 9e 56 e9 fa 25 70 c3 c9 6c 84 a1 b1 …  |...g.V..%p..l...| — 32 bytes  [0x39+0x20]
+          y: 15 1d db 71 ac b4 df 63 5d 84 68 42 60 6a 91 2b …  |...q...c].hB`j.+| — 32 bytes  [0x59+0x20]

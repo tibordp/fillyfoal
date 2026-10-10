@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ encrypted-data.p7m — PKCS#7, encryptedData, aes128-CBC  [0x0+0x62]
+  ▾ ContentInfo — SEQUENCE, encryptedData  [0x0+0x62]
+      contentType: "1.2.840.113549.1.7.6" — OBJECT IDENTIFIER, encryptedData  [0x2+0xb]
+    ▾ content — [0]  [0xd+0x55]
+      ▾ EncryptedData — SEQUENCE  [0xf+0x53]
+          version: 0 — INTEGER  [0x11+0x3]
+        ▾ encryptedContentInfo — SEQUENCE, data  [0x14+0x4e]
+            contentType: "1.2.840.113549.1.7.1" — OBJECT IDENTIFIER, data  [0x16+0xb]
+          ▾ contentEncryptionAlgorithm — SEQUENCE, aes128-CBC  [0x21+0x1f]
+              algorithm: "2.16.840.1.101.3.4.1.2" — OBJECT IDENTIFIER, aes128-CBC  [0x23+0xb]
+              iv: 0d aa 12 18 52 48 5a ef 14 73 bb f2 40 97 a2 a2  |....RHZ..s..@...| — OCTET STRING, 16 bytes  [0x2e+0x12]
+            encryptedContent: 21 bc cd 44 89 2b 20 fb 63 10 e4 a9 03 c8 fc 96 …  |!..D.+ .c.......| — [0], 32 bytes  [0x40+0x22]

@@ -1,0 +1,8 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ rsa1024.der — RSA public key, 1024-bit, e=65537  [0x0+0x8c]
+  ▾ RSAPublicKey — SEQUENCE, 1024-bit, e=65537  [0x0+0x8c]
+      modulus: c0 e7 a1 3c 98 ce 39 f8 25 1f 46 84 ab fc 55 39 …  |...<..9.%.F...U9| — INTEGER, 1024-bit  [0x3+0x84]
+      publicExponent: 65537 — INTEGER  [0x87+0x5]
