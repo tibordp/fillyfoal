@@ -10,9 +10,9 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::datakit::{clip, size};
+use crate::formats::util::fmt::{clip, size};
 use crate::formats::util::json::{self, Json};
-use crate::formats::{Format, Head, Input, Probe};
+use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;
@@ -252,9 +252,12 @@ pub async fn safetensors(cx: Cx, input: Input) -> Result<()> {
         size(data.len)
     ));
     cx.emit(
-        Node::new("Header")
-            .span(header_span)
-            .summary(format!("{} bytes of JSON", header_span.len)),
+        embedded_as(
+            "Header",
+            input.nested(header_span),
+            &crate::formats::text::json::FORMAT,
+        )
+        .summary(format!("{} bytes of JSON", header_span.len)),
     );
     if !metadata.is_empty() {
         cx.emit(

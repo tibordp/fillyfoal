@@ -7,24 +7,13 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor, Path};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
 
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Maya binary (IFF-85 with 4-byte alignment)
@@ -169,7 +158,7 @@ async fn alembic(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(6, 2))
-            .value(uint(u16_be(&head, 6).unwrap_or(0).into(), 16)),
+            .value(uint(u16_be(&head, 6).unwrap_or(0), 16)),
     );
     let root = u64_le(&head, 8).unwrap_or(0);
     cx.emit(

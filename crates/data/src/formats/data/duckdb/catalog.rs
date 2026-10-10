@@ -18,8 +18,8 @@ use super::serial::{
 };
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::text::plural;
 use crate::formats::util::binutil::Tree;
+use crate::formats::util::fmt::grouped_count;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
@@ -252,7 +252,14 @@ fn entry(bs: &mut Bs<'_>, t: &mut Tree, node: usize, links: &dyn Links) -> (u64,
         match id {
             99 => {
                 kind = bs.uvar()?;
-                leaf(t, node, bs, at, "Catalog type", enumv(CATALOG_TYPES, kind));
+                leaf(
+                    t,
+                    node,
+                    bs,
+                    at,
+                    "Catalog type",
+                    enumv(kind, 8, CATALOG_TYPES),
+                );
                 let label = lookup(CATALOG_TYPES, kind).unwrap_or("entry");
                 let mut cap = label.to_owned();
                 if let Some(first) = cap.get_mut(..1) {
@@ -289,7 +296,7 @@ fn entry(bs: &mut Bs<'_>, t: &mut Tree, node: usize, links: &dyn Links) -> (u64,
             }
             102 if kind == 1 => {
                 let r = bs.uvar()?;
-                leaf(t, node, bs, at, "Total rows", uint(r));
+                leaf(t, node, bs, at, "Total rows", uint(r, 64));
                 rows = Some(r);
             }
             103 if kind == 1 => {
@@ -308,13 +315,13 @@ fn entry(bs: &mut Bs<'_>, t: &mut Tree, node: usize, links: &dyn Links) -> (u64,
                     Ok(())
                 })?;
                 close(t, g, bs, at);
-                summarize(t, g, plural(n, "pointer", "pointers"));
+                summarize(t, g, grouped_count(n, "pointer", "pointers"));
             }
             104 if kind == 1 => {
                 let g = group(t, Some(node), "Index storage");
                 let n = bs.list(|bs, _| index_storage(bs, t, g))?;
                 close(t, g, bs, at);
-                summarize(t, g, plural(n, "index", "indexes"));
+                summarize(t, g, grouped_count(n, "index", "indexes"));
             }
             _ => return Ok(false),
         }
@@ -337,7 +344,7 @@ fn entry(bs: &mut Bs<'_>, t: &mut Tree, node: usize, links: &dyn Links) -> (u64,
         if !summary.is_empty() {
             summary.push_str(", ");
         }
-        summary.push_str(&plural(r, "row", "rows"));
+        summary.push_str(&grouped_count(r, "row", "rows"));
     }
     t.update(node, |n| n.renamed(name));
     summarize(t, node, summary);
@@ -372,7 +379,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
         match (id, c.kind) {
             (100, _) => {
                 c.kind = bs.uvar()?;
-                leaf(t, g, bs, at, "Type", enumv(CATALOG_TYPES, c.kind));
+                leaf(t, g, bs, at, "Type", enumv(c.kind, 8, CATALOG_TYPES));
             }
             (101, _) => drop(leaf_str(bs, t, g, at, "Catalog")?),
             (102, _) => c.schema = leaf_str(bs, t, g, at, "Schema")?,
@@ -386,7 +393,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
             }
             (105, _) => {
                 let v = bs.uvar()?;
-                leaf(t, g, bs, at, "On conflict", enumv(ON_CONFLICT, v));
+                leaf(t, g, bs, at, "On conflict", enumv(v, 8, ON_CONFLICT));
             }
             (106, _) => {
                 let sql = leaf_str(bs, t, g, at, "SQL")?;
@@ -453,8 +460,8 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
                 })?;
                 close(t, m, bs, at);
                 let n = all;
-                summarize(t, m, plural(n, "column", "columns"));
-                c.summary = plural(n, "column", "columns");
+                summarize(t, m, grouped_count(n, "column", "columns"));
+                c.summary = grouped_count(n, "column", "columns");
             }
             (202, 1) => {
                 let m = group(t, Some(g), "Constraints");
@@ -465,7 +472,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
                     Ok(())
                 })?;
                 close(t, m, bs, at);
-                summarize(t, m, plural(n, "constraint", "constraints"));
+                summarize(t, m, grouped_count(n, "constraint", "constraints"));
             }
             // view
             (200, 3) => c.name = leaf_str(bs, t, g, at, "Name")?,
@@ -497,7 +504,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
             (200, 6) => c.name = leaf_str(bs, t, g, at, "Name")?,
             (201, 6) => {
                 let v = bs.uvar()?;
-                leaf(t, g, bs, at, "Usage count", uint(v));
+                leaf(t, g, bs, at, "Usage count", uint(v, 64));
             }
             (202..=205, 6) => {
                 let v = bs.svar()?;
@@ -558,7 +565,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
             (201, 4) => drop(leaf_str(bs, t, g, at, "Table")?),
             (202, 4) => {
                 let v = bs.uvar()?;
-                leaf(t, g, bs, at, "Index type", uint(v));
+                leaf(t, g, bs, at, "Index type", uint(v, 64));
             }
             (203, 4) => {
                 let v = bs.uvar()?;
@@ -569,13 +576,14 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
                     at,
                     "Constraint type",
                     enumv(
+                        v,
+                        8,
                         &[
                             (0, "none"),
                             (1, "unique"),
                             (2, "primary key"),
                             (3, "foreign key"),
                         ],
-                        v,
                     ),
                 );
             }
@@ -615,7 +623,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
                 bs.list(|bs, _| {
                     let at = bs.pos();
                     let v = bs.uvar()?;
-                    leaf(t, m, bs, at, "Column", uint(v));
+                    leaf(t, m, bs, at, "Column", uint(v, 64));
                     Ok(())
                 })?;
                 close(t, m, bs, at);
@@ -637,7 +645,7 @@ fn create_info(bs: &mut Bs<'_>, t: &mut Tree, g: usize, c: &mut Created) -> Resu
         c.summary = format!("next {}, increment {}", seq.1, seq.0);
     }
     if c.kind == 3 && types > 0 && c.summary.is_empty() {
-        c.summary = plural(types, "column", "columns");
+        c.summary = grouped_count(types, "column", "columns");
     }
     r
 }
@@ -733,13 +741,13 @@ fn column(bs: &mut Bs<'_>, t: &mut Tree, m: usize, i: u64) -> Result<(String, Ty
                     bs,
                     at,
                     "Category",
-                    enumv(&[(0, "standard"), (1, "generated")], v),
+                    enumv(v, 8, &[(0, "standard"), (1, "generated")]),
                 );
                 generated = v == 1;
             }
             104 => {
                 let v = bs.uvar()?;
-                leaf(t, node, bs, at, "Compression", enumv(COMPRESSION, v));
+                leaf(t, node, bs, at, "Compression", enumv(v, 8, COMPRESSION));
             }
             105 => {
                 let v = value(bs, 0)?;
@@ -787,11 +795,11 @@ fn constraint(bs: &mut Bs<'_>, t: &mut Tree, m: usize, columns: &[(String, Ty)])
         match (id, kind) {
             (100, _) => {
                 kind = bs.uvar()?;
-                leaf(t, node, bs, at, "Type", enumv(CONSTRAINTS, kind));
+                leaf(t, node, bs, at, "Type", enumv(kind, 8, CONSTRAINTS));
             }
             (200, 1) | (201, 3) => {
                 let v = bs.uvar()?;
-                leaf(t, node, bs, at, "Column index", uint(v));
+                leaf(t, node, bs, at, "Column index", uint(v, 64));
                 index = Some(v);
             }
             (200, 2) => {
@@ -831,12 +839,13 @@ fn constraint(bs: &mut Bs<'_>, t: &mut Tree, m: usize, columns: &[(String, Ty)])
                     at,
                     "Side",
                     enumv(
+                        v,
+                        8,
                         &[
                             (0, "primary key table"),
                             (1, "foreign key table"),
                             (2, "self reference"),
                         ],
-                        v,
                     ),
                 );
             }
@@ -977,7 +986,11 @@ fn index_storage(bs: &mut Bs<'_>, t: &mut Tree, p: usize) -> Result<()> {
         Ok(true)
     })?;
     close(t, node, bs, start);
-    summarize(t, node, plural(allocators, "allocator", "allocators"));
+    summarize(
+        t,
+        node,
+        grouped_count(allocators, "allocator", "allocators"),
+    );
     Ok(())
 }
 
@@ -990,7 +1003,7 @@ fn allocator(bs: &mut Bs<'_>, t: &mut Tree, p: usize) -> Result<()> {
         match id {
             100 => {
                 size = bs.uvar()?;
-                leaf(t, node, bs, at, "Segment size", uint(size));
+                leaf(t, node, bs, at, "Segment size", uint(size, 64));
             }
             102 => {
                 let m = group(t, Some(node), "Buffers");
@@ -1036,7 +1049,7 @@ fn allocator(bs: &mut Bs<'_>, t: &mut Tree, p: usize) -> Result<()> {
         node,
         format!(
             "{size}-byte segments, {}",
-            plural(buffers, "buffer", "buffers")
+            grouped_count(buffers, "buffer", "buffers")
         ),
     );
     Ok(())
@@ -1127,7 +1140,7 @@ pub async fn table_data(
                 None,
                 Node::new("Row group count")
                     .span(bs.span(at))
-                    .value(uint(count)),
+                    .value(uint(count, 64)),
             );
             roots.push(n);
             if count > crate::bytes::to_u64(bs.data().len()) && bs.short {
@@ -1158,11 +1171,11 @@ fn column_statistics(bs: &mut Bs<'_>, t: &mut Tree, node: usize, ty: &Ty) -> Res
                         match id {
                             100 => {
                                 let v = bs.uvar()?;
-                                leaf(t, g, bs, at, "Sample count", uint(v));
+                                leaf(t, g, bs, at, "Sample count", uint(v, 64));
                             }
                             101 => {
                                 let v = bs.uvar()?;
-                                leaf(t, g, bs, at, "Total count", uint(v));
+                                leaf(t, g, bs, at, "Total count", uint(v, 64));
                             }
                             102 => {
                                 if bs.present()? {
@@ -1171,7 +1184,7 @@ fn column_statistics(bs: &mut Bs<'_>, t: &mut Tree, node: usize, ty: &Ty) -> Res
                                         match id {
                                             100 => {
                                                 let v = bs.uvar()?;
-                                                leaf(t, h, bs, at, "Storage type", uint(v));
+                                                leaf(t, h, bs, at, "Storage type", uint(v, 64));
                                             }
                                             101 => {
                                                 let b = bs.blob()?;
@@ -1185,7 +1198,7 @@ fn column_statistics(bs: &mut Bs<'_>, t: &mut Tree, node: usize, ty: &Ty) -> Res
                                                     Value::Bytes(b.get(..16).unwrap_or(b).to_vec()),
                                                 );
                                                 t.update(i, |x| {
-                                                    x.summary(plural(n, "byte", "bytes"))
+                                                    x.summary(grouped_count(n, "byte", "bytes"))
                                                 });
                                             }
                                             _ => return Ok(false),
@@ -1228,7 +1241,7 @@ fn base_stats(bs: &mut Bs<'_>, t: &mut Tree, p: usize, ty: &Ty, depth: usize) ->
             }
             102 => {
                 let v = bs.uvar()?;
-                leaf(t, p, bs, at, "Distinct count", uint(v));
+                leaf(t, p, bs, at, "Distinct count", uint(v, 64));
             }
             103 => {
                 let s = type_stats(bs, t, p, ty, depth)?;
@@ -1301,7 +1314,7 @@ fn type_stats(bs: &mut Bs<'_>, t: &mut Tree, p: usize, ty: &Ty, depth: usize) ->
             }
             (204, Phys::Str) => {
                 let v = bs.uvar()?;
-                leaf(t, p, bs, at, "Max length", uint(v));
+                leaf(t, p, bs, at, "Max length", uint(v, 64));
                 shown.push(format!("max length {v}"));
             }
             (200, Phys::List | Phys::Array) => {
@@ -1448,11 +1461,11 @@ async fn row_group(
                 }
                 102 => {
                     close(t, g, bs, fat);
-                    summarize(t, g, plural(n, "column", "columns"));
+                    summarize(t, g, grouped_count(n, "column", "columns"));
                 }
                 _ => {
                     close(t, g, bs, fat);
-                    summarize(t, g, plural(n, "pointer", "pointers"));
+                    summarize(t, g, grouped_count(n, "pointer", "pointers"));
                 }
             }
             Ok(())
@@ -1488,11 +1501,11 @@ fn row_group_field(
         }
         100 => {
             *start = bs.uvar()?;
-            leaf(t, node, bs, fat, "Row start", uint(*start));
+            leaf(t, node, bs, fat, "Row start", uint(*start, 64));
         }
         101 => {
             *count = bs.uvar()?;
-            leaf(t, node, bs, fat, "Tuple count", uint(*count));
+            leaf(t, node, bs, fat, "Tuple count", uint(*count, 64));
         }
         102 | 103 => {
             let name = if id == 102 {
@@ -1623,7 +1636,7 @@ pub async fn column_data(
                 }
                 s.piece(cx, t, |bs, t| {
                     close(t, g, bs, at);
-                    summarize(t, g, plural(n, "segment", "segments"));
+                    summarize(t, g, grouped_count(n, "segment", "segments"));
                     Ok(())
                 })
                 .await?;
@@ -1783,11 +1796,11 @@ fn data_pointer(
         match id {
             100 => {
                 row = bs.uvar()?;
-                leaf(t, node, bs, at, "Row start", uint(row));
+                leaf(t, node, bs, at, "Row start", uint(row, 64));
             }
             101 => {
                 count = bs.uvar()?;
-                leaf(t, node, bs, at, "Tuple count", uint(count));
+                leaf(t, node, bs, at, "Tuple count", uint(count, 64));
             }
             102 => {
                 let (b, o) = block_ptr(bs)?;
@@ -1805,7 +1818,7 @@ fn data_pointer(
             }
             103 => {
                 comp = bs.uvar()?;
-                leaf(t, node, bs, at, "Compression", enumv(COMPRESSION, comp));
+                leaf(t, node, bs, at, "Compression", enumv(comp, 8, COMPRESSION));
             }
             104 => {
                 let g = group(t, Some(node), "Statistics");
@@ -1880,7 +1893,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
                                     103 => "Entries to skip",
                                     _ => "Entries seen",
                                 };
-                                leaf(t, b, bs, at, name, uint(v));
+                                leaf(t, b, bs, at, name, uint(v, 64));
                             }
                             101 => {
                                 let v = bs.f64()?;
@@ -1890,7 +1903,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
                                 let n = bs.list(|bs, _| {
                                     pair(bs, |bs| bs.f64().map(drop), |bs| bs.uvar().map(drop))
                                 })?;
-                                leaf(t, b, bs, at, "Weights", uint(n));
+                                leaf(t, b, bs, at, "Weights", uint(n, 64));
                             }
                             _ => return Ok(false),
                         }
@@ -1901,7 +1914,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
             }
             101 => {
                 let v = bs.uvar()?;
-                leaf(t, g, bs, at, "Sample type", uint(v));
+                leaf(t, g, bs, at, "Sample type", uint(v, 64));
             }
             102 => {
                 let v = bs.bool()?;
@@ -1909,7 +1922,7 @@ fn sample(bs: &mut Bs<'_>, t: &mut Tree, g: usize) -> Result<()> {
             }
             200 => {
                 let v = bs.uvar()?;
-                leaf(t, g, bs, at, "Sample count", uint(v));
+                leaf(t, g, bs, at, "Sample count", uint(v, 64));
                 summarize(t, g, format!("{v} rows sampled"));
             }
             201 => {

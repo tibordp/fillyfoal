@@ -20,7 +20,7 @@ use crate::formats::text::probe;
 use crate::formats::text::scan::LineBuf;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::Value;
 
 pub mod bufr;
 pub mod dlis;
@@ -43,50 +43,13 @@ pub mod vehicle;
 // ---------------------------------------------------------------------------
 // Values
 
-pub(crate) fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-pub(crate) fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-pub(crate) fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
-pub(crate) fn int(value: i64, bits: u8) -> Value {
-    Value::Int { value, bits }
-}
-
-pub(crate) fn enumv(table: EnumTable, raw: u64, bits: u8) -> Value {
-    Value::Enum {
-        raw,
-        bits,
-        name: lookup(table, raw),
-    }
-}
+pub(crate) use crate::formats::util::val::{enumv, hex, int, text, uint};
 
 pub(crate) fn time(unix_seconds: i64) -> Value {
     Value::Timestamp { unix_seconds }
 }
 
-/// Emits prepared nodes: the expander for small structures that were
-/// parsed anyway to build their parent's summary.
-pub(crate) async fn emit_nodes(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    for n in nodes {
-        cx.emit(n);
-    }
-    Ok(())
-}
+pub(crate) use crate::formats::util::arcutil::emit_nodes;
 
 /// `x` rounded to six decimal places, for display.
 pub(crate) fn round(x: f64) -> f64 {
@@ -232,41 +195,4 @@ pub(crate) fn key_value(line: &LineBuf, sep: u8) -> Option<Node> {
         return None;
     }
     Some(field_node(key, v).span(line.span))
-}
-
-// ---------------------------------------------------------------------------
-// Bit fields
-
-/// Big-endian (MSB-first) bit reader over a byte slice, as used by RTCM.
-pub(crate) struct Bits<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl<'a> Bits<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Bits { data, pos: 0 }
-    }
-
-    /// The next `n` (at most 64) bits as an unsigned number; `None` past
-    /// the end.
-    pub fn u(&mut self, n: u32) -> Option<u64> {
-        let mut v = 0u64;
-        for _ in 0..n.min(64) {
-            let byte = *self.data.get(self.pos / 8)?;
-            let bit = byte.checked_shr(7u32.saturating_sub(u32::try_from(self.pos % 8).ok()?))? & 1;
-            v = (v << 1) | u64::from(bit);
-            self.pos = self.pos.saturating_add(1);
-        }
-        Some(v)
-    }
-
-    /// The next `n` bits as a two's-complement signed number.
-    pub fn i(&mut self, n: u32) -> Option<i64> {
-        let v = self.u(n)?;
-        let shift = 64u32.saturating_sub(n.min(64));
-        v.cast_signed()
-            .checked_shl(shift)
-            .and_then(|x| x.checked_shr(shift))
-    }
 }

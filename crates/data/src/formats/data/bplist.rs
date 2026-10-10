@@ -12,7 +12,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::util::datakit::{cf_time, clip, uint};
+use crate::formats::util::datakit::be_uint;
+use crate::formats::util::datakit::{cf_time, uint};
+use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -83,12 +85,6 @@ struct Obj {
     refs: u64,
     /// Data that is itself a binary plist.
     nested: bool,
-}
-
-fn be_uint(bytes: &[u8]) -> u64 {
-    bytes.iter().fold(0u64, |acc, &b| {
-        acc.checked_shl(8).unwrap_or(0) | u64::from(b)
-    })
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {

@@ -29,6 +29,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::scan::{LINE_CAP, Lines, Scanner};
+use crate::formats::util::fmt::count;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::{Origin, Span};
@@ -218,16 +219,13 @@ enum Inner<'a> {
     },
 }
 
-/// Hex digits to bytes (odd or bad digits end it).
+/// Hex digits to bytes, leniently: unlike `crate::text::unhex`, a bad
+/// digit ends the data and an odd last digit is dropped.
 fn unhex(text: &str) -> Vec<u8> {
     let digits: Vec<u8> = text
         .bytes()
         .filter(|b| !b.is_ascii_whitespace())
-        .map_while(|b| {
-            char::from(b)
-                .to_digit(16)
-                .and_then(|d| u8::try_from(d).ok())
-        })
+        .map_while(crate::text::hex_digit)
         .collect();
     digits
         .as_chunks::<2>()
@@ -551,15 +549,10 @@ async fn dxf(cx: Cx, input: Input) -> Result<()> {
         Encoding::Binary { .. } => ", binary DXF",
     });
     if let Some(n) = entities {
-        summary.push_str(&format!(", {}", plural(n, "entity", "entities")));
+        summary.push_str(&format!(", {}", count(n, "entity", "entities")));
     }
     cx.annotate(summary);
     Ok(())
-}
-
-/// "1 entity", "2 entities".
-fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
 }
 
 /// "4 LINE, 1 CIRCLE, ..." (most frequent first).
@@ -579,23 +572,23 @@ fn type_summary(types: &BTreeMap<String, u64>, max: usize) -> String {
 
 async fn push_section(cx: &Cx, doc: Doc, s: Found, sections: &mut u64, entities: &mut Option<u64>) {
     *sections = sections.saturating_add(1);
-    let count = |name: &str| s.types.get(name).copied().unwrap_or(0);
+    let of_type = |name: &str| s.types.get(name).copied().unwrap_or(0);
     let summary = match s.name.as_str() {
-        "HEADER" => plural(s.vars, "variable", "variables"),
-        "CLASSES" => plural(count("CLASS"), "class", "classes"),
-        "TABLES" => plural(count("TABLE"), "table", "tables"),
-        "BLOCKS" => plural(count("BLOCK"), "block", "blocks"),
+        "HEADER" => count(s.vars, "variable", "variables"),
+        "CLASSES" => count(of_type("CLASS"), "class", "classes"),
+        "TABLES" => count(of_type("TABLE"), "table", "tables"),
+        "BLOCKS" => count(of_type("BLOCK"), "block", "blocks"),
         "ENTITIES" => {
             *entities = Some(s.records);
             format!(
                 "{}: {}",
-                plural(s.records, "entity", "entities"),
+                count(s.records, "entity", "entities"),
                 type_summary(&s.types, 6)
             )
         }
-        "OBJECTS" => plural(s.records, "object", "objects"),
+        "OBJECTS" => count(s.records, "object", "objects"),
         "THUMBNAILIMAGE" => "preview image".to_owned(),
-        _ => plural(s.records, "record", "records"),
+        _ => count(s.records, "record", "records"),
     };
     let name = if s.name.is_empty() {
         "SECTION".to_owned()

@@ -5,6 +5,7 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::binutil::get;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -82,22 +83,15 @@ struct Level {
     matrix: Option<u8>,
 }
 
-fn u32_at(data: &[u8], at: usize, endian: Endian) -> Option<u32> {
-    match endian {
-        Endian::Little => crate::bytes::u32_le(data, at),
-        Endian::Big => crate::bytes::u32_be(data, at),
-    }
-}
-
 /// An element tag: type, size, header length, and whether it is the small
 /// (4-byte data) form.
 fn tag(data: &[u8], endian: Endian) -> Option<(u32, u64, u64)> {
-    let first = u32_at(data, 0, endian)?;
+    let first = get::<u32>(data, 0, endian)?;
     if first >> 16 != 0 {
         // Small data element: size in the upper half, data in the next 4.
         return Some((first & 0xffff, u64::from(first >> 16), 4));
     }
-    Some((first, u64::from(u32_at(data, 4, endian)?), 8))
+    Some((first, u64::from(get::<u32>(data, 4, endian)?), 8))
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -312,14 +306,14 @@ async fn element(cx: &Cx, level: &Level, node: Node, kind: u32, data: Span) -> R
                     .as_chunks::<4>()
                     .0
                     .iter()
-                    .filter_map(|c| u32_at(c, 0, level.endian).and_then(char::from_u32))
+                    .filter_map(|c| get::<u32>(c, 0, level.endian).and_then(char::from_u32))
                     .collect(),
             };
             Ok(typed.value(Value::Text(text)))
         }
         6 if typed.name == "Array flags" => {
             let raw = cx.read_avail(data.sub(0, 4)).await?;
-            let flags = u32_at(&raw, 0, level.endian).unwrap_or(0);
+            let flags = get::<u32>(&raw, 0, level.endian).unwrap_or(0);
             let class = flags & 0xff;
             let (set, _) = crate::value::decode_flags(ARRAY_FLAGS, u64::from(flags >> 8 & 0xff));
             let node = typed.value(Value::Enum {
@@ -375,7 +369,7 @@ fn matrix_summary(data: &[u8], endian: Endian) -> (String, u8) {
             .unwrap_or_default();
         match i {
             0 => {
-                flags = u32_at(body, 0, endian).unwrap_or(0);
+                flags = get::<u32>(body, 0, endian).unwrap_or(0);
                 class = (flags & 0xff) as u8;
             }
             1 => {
@@ -383,7 +377,7 @@ fn matrix_summary(data: &[u8], endian: Endian) -> (String, u8) {
                     .as_chunks::<4>()
                     .0
                     .iter()
-                    .filter_map(|c| u32_at(c, 0, endian).map(|d| d.to_string()))
+                    .filter_map(|c| get::<u32>(c, 0, endian).map(|d| d.to_string()))
                     .collect();
                 parts.push(format!("[{}]", dims.join("×")));
             }

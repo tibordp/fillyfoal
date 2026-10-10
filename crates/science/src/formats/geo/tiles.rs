@@ -1,6 +1,7 @@
 //! Map tiles and vector data: PMTiles archives, FlatGeobuf, Mapbox vector
 //! tiles (protobuf) and OpenStreetMap o5m/o5c streams.
 
+use super::emit_nodes;
 use super::{enumv, hex, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u32_le, u64_le};
 use crate::codec::Codec;
@@ -23,6 +24,8 @@ const LE: Endian = Endian::Little;
 
 /// Directories and tiles are read whole; larger ones are refused.
 const MAX_BLOB: u64 = 16 << 20;
+/// Enough of a gzip stream for any member header.
+const GZIP_HEAD: u64 = 1 << 18;
 
 // ---------------------------------------------------------------------------
 // PMTiles v3
@@ -218,16 +221,11 @@ async fn directory_entries(cx: &Cx, state: &PmState, dir: Span) -> Result<Vec<Di
         1 => cx.read(dir).await?,
         compression => {
             let (span, codec) = match compression {
-                // gzip: a bare 10-byte header (no optional fields), DEFLATE,
-                // then the CRC and size.
+                // gzip: `Codec::Gzip` starts after the first member's header.
                 2 => {
-                    let head = cx.read(dir.sub(0, 10)).await?;
-                    if head.get(..4) != Some(&[0x1f, 0x8b, 8, 0][..]) {
-                        return Err(
-                            Diagnostic::unsupported("gzip directory with header fields").at(dir)
-                        );
-                    }
-                    (dir.sub(10, dir.len.saturating_sub(18)), Codec::Deflate)
+                    let head = cx.read_avail(dir.sub(0, GZIP_HEAD)).await?;
+                    let header = crate::codec::gzip::header_len(&head).map_err(|e| e.at(dir))?;
+                    (dir.tail(to_u64(header)), Codec::Gzip)
                 }
                 3 => (dir, Codec::Brotli),
                 4 => (dir, Codec::Zstd),
@@ -453,7 +451,7 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
         cx.emit(leaf(
             "Geometry type",
             at(p, 1),
-            enumv(GEOMETRY_TYPES, root.u8(&buf, 2).unwrap_or(0).into(), 8),
+            enumv(root.u8(&buf, 2).unwrap_or(0), 8, GEOMETRY_TYPES),
         ));
     }
     for (i, label) in [(3usize, "Has Z"), (4, "Has M"), (5, "Has T"), (6, "Has TM")] {
@@ -476,7 +474,7 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
         cx.emit(leaf(
             "Index node size",
             at(p, 2),
-            uint(root.u16(&buf, 9).unwrap_or(0).into(), 16),
+            uint(root.u16(&buf, 9).unwrap_or(0), 16),
         ));
     }
     if let Some(crs) = root.table(&buf, 10) {
@@ -503,7 +501,7 @@ async fn fgb_header(cx: Cx, hspan: Span) -> Result<()> {
             cx.emit(
                 Node::new(format!("Column {name}"))
                     .span(at(t.pos, 4))
-                    .value(enumv(COLUMN_TYPES, ty.into(), 8)),
+                    .value(enumv(ty, 8, COLUMN_TYPES)),
             );
         }
     }
@@ -637,7 +635,7 @@ async fn fgb_feature(cx: Cx, (body, columns): (Span, Columns)) -> Result<()> {
         let ty = g.u8(&buf, 6).unwrap_or(0);
         let mut node = Node::new("Geometry")
             .span(body.sub(to_u64(g.pos), 4))
-            .value(enumv(GEOMETRY_TYPES, ty.into(), 8));
+            .value(enumv(ty, 8, GEOMETRY_TYPES));
         if let Some((n, start)) = g.vector(&buf, 1, 8) {
             let n = n / 2;
             let coords: Vec<String> = (0..n.min(4))
@@ -931,7 +929,7 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                     );
                     match g.number {
                         1 => parts.push(leaf("Id", gspan, uint(g.value, 64))),
-                        3 => parts.push(leaf("Type", gspan, enumv(GEOM_TYPES, g.value, 8))),
+                        3 => parts.push(leaf("Type", gspan, enumv(g.value, 8, GEOM_TYPES))),
                         2 => {
                             // Only the first 32 pairs are shown.
                             let tags = packed(&mut pace, g.payload(payload), 64).await;
@@ -964,7 +962,8 @@ async fn mvt_layer(cx: Cx, body: Span) -> Result<()> {
                     node = node
                         .summary(crate::value::lookup(GEOM_TYPES, t.value).unwrap_or("UNKNOWN"));
                 }
-                cx.push(node.lazy(super::emit_nodes, parts)).await;
+                cx.push(node.lazy(emit_nodes, std::sync::Arc::new(parts)))
+                    .await;
                 index = index.saturating_add(1);
             }
             n => cx.push(Node::new(format!("Field {n}")).span(span)).await,
@@ -1006,12 +1005,8 @@ async fn o5m(cx: Cx, input: Input) -> Result<()> {
                 ids = [0; 3];
             }
             let name = crate::value::lookup(DATASETS, kind.into()).unwrap_or("marker");
-            cx.push(
-                Node::new(name)
-                    .span(cur.since(start))
-                    .value(hex(kind.into(), 8)),
-            )
-            .await;
+            cx.push(Node::new(name).span(cur.since(start)).value(hex(kind, 8)))
+                .await;
             if kind == 0xfe {
                 break;
             }

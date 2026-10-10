@@ -10,6 +10,7 @@
 
 use std::sync::Arc;
 
+use crate::bytes::padding;
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
@@ -79,10 +80,6 @@ fn type_size(t: u32) -> u64 {
 
 fn type_name(t: u32) -> &'static str {
     lookup(TYPES, t.into()).unwrap_or("unknown")
-}
-
-fn pad4(n: u64) -> u64 {
-    n.wrapping_neg() & 3
 }
 
 #[derive(Clone, Debug)]
@@ -186,7 +183,7 @@ impl Reader<'_> {
             return Err(Diagnostic::malformed("invalid name length").at(at));
         }
         let bytes = self.cur.bytes(len).await?;
-        self.cur.skip(pad4(len));
+        self.cur.skip(padding(len, 4));
         Ok(String::from_utf8_lossy(&bytes).into_owned())
     }
 
@@ -226,7 +223,7 @@ impl Reader<'_> {
                     values.len,
                 ));
             }
-            self.cur.skip(len.saturating_add(pad4(len)));
+            self.cur.skip(len.saturating_add(padding(len, 4)));
             out.push(Attr {
                 name,
                 kind,
@@ -334,7 +331,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             a.saturating_add(if single {
                 slab
             } else {
-                slab.saturating_add(pad4(slab))
+                slab.saturating_add(padding(slab, 4))
             })
         });
         (records.iter().map(|v| v.begin).min().unwrap_or(0), size)
@@ -416,7 +413,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Data")
             .span(file.sub(first, file.len.saturating_sub(first)))
-            .summary(crate::formats::util::datakit::size(
+            .summary(crate::formats::util::fmt::size(
                 file.len.saturating_sub(first),
             ))
             .lazy(data, header.clone()),
@@ -491,7 +488,7 @@ impl<'a> Fr<'a> {
     }
 
     fn padding(&mut self, len: u64) -> Option<()> {
-        let n = to_usize(pad4(len));
+        let n = to_usize(padding(len, 4));
         if n > 0 {
             let (bytes, span) = self.take(n)?;
             self.out.push(
@@ -731,7 +728,7 @@ async fn attribute_fields(
                 ),
         );
     }
-    let pad = a.values.sub(len, pad4(len));
+    let pad = a.values.sub(len, padding(len, 4));
     if pad.len > 0 {
         let bytes = cx.read(pad).await?;
         cx.emit(Node::new("Padding").span(pad).value(Value::Bytes(bytes)));
@@ -842,7 +839,7 @@ async fn variable(cx: Cx, (header, index): (Arc<Header>, usize)) -> Result<()> {
         });
         // Writers store 2^32 - 1 for variables too large to say (CDF-2).
         let slab = header.slab(v);
-        let expected = slab.saturating_add(pad4(slab));
+        let expected = slab.saturating_add(padding(slab, 4));
         if v.vsize != expected
             && v.vsize != u64::from(u32::MAX)
             && let Some(last) = fr.out.last_mut()
@@ -901,7 +898,7 @@ fn data_node(header: &Arc<Header>, v: &Var) -> Node {
             .summary(format!(
                 "{}, {}",
                 signature(header, v),
-                crate::formats::util::datakit::size(slab)
+                crate::formats::util::fmt::size(slab)
             ))
             .lazy(
                 values,
@@ -925,7 +922,7 @@ fn data_node(header: &Arc<Header>, v: &Var) -> Node {
             "{}, {} records of {}",
             signature(header, v),
             header.numrecs,
-            crate::formats::util::datakit::size(slab)
+            crate::formats::util::fmt::size(slab)
         ))
         .target(file.sub(v.begin, slab))
         .lazy(record_slabs, (header.clone(), v.begin, v.kind, shape, slab))
@@ -962,8 +959,8 @@ async fn record_slabs(
     Ok(())
 }
 
-/// Row-major coordinates of element `i` in `shape`.
-fn coords(mut i: u64, shape: &[u64]) -> Vec<u64> {
+/// Row-major coordinates of element `i` in `shape` (also used for HDF5).
+pub(crate) fn coords(mut i: u64, shape: &[u64]) -> Vec<u64> {
     let mut out = vec![0u64; shape.len()];
     for (slot, &d) in out.iter_mut().zip(shape).rev() {
         let d = d.max(1);
@@ -1052,7 +1049,7 @@ async fn data(cx: Cx, header: Arc<Header>) -> Result<()> {
     for v in fixed {
         cx.push(data_node(&header, v)).await;
         let slab = header.slab(v);
-        let pad = file.sub(v.begin.saturating_add(slab), pad4(slab));
+        let pad = file.sub(v.begin.saturating_add(slab), padding(slab, 4));
         if pad.len > 0 {
             cx.push(Node::new("Padding").span(pad)).await;
         }
@@ -1068,7 +1065,7 @@ async fn data(cx: Cx, header: Arc<Header>) -> Result<()> {
                 .summary(format!(
                     "{} records of {}",
                     header.numrecs,
-                    crate::formats::util::datakit::size(header.recsize)
+                    crate::formats::util::fmt::size(header.recsize)
                 ))
                 .lazy(records, header.clone()),
         )
@@ -1122,8 +1119,8 @@ async fn record(cx: Cx, (header, vars, r): (Arc<Header>, Arc<Vec<Var>>, u64)) ->
                     },
                 ),
         );
-        if !single && pad4(slab) > 0 {
-            let pad = file.sub(at.saturating_add(slab), pad4(slab));
+        if !single && padding(slab, 4) > 0 {
+            let pad = file.sub(at.saturating_add(slab), padding(slab, 4));
             let bytes = cx.read_avail(pad).await?;
             cx.emit(
                 Node::new("Padding")

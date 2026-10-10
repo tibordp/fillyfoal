@@ -19,6 +19,7 @@ pub mod xport;
 use std::sync::Arc;
 
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::clip;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
@@ -92,16 +93,6 @@ pub fn number(v: f64) -> String {
         format!("{}", v as i64)
     } else {
         format!("{v}")
-    }
-}
-
-fn clip(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
-        s.to_owned()
-    } else {
-        let mut out: String = s.chars().take(max).collect();
-        out.push('…');
-        out
     }
 }
 

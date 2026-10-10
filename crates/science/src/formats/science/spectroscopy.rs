@@ -1,13 +1,14 @@
 //! Spectroscopy and diffraction data: Thermo Galactic SPC spectra, NMRPipe
 //! and Sparky NMR spectra, and Rigaku RAS diffraction scans.
 
+use super::{field_text, kv_spans};
 use crate::bytes::{to_u64, to_usize, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::util::lines::{Lines, float32, number, text, uint};
+use crate::formats::util::lines::{Lines, float32, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -16,12 +17,6 @@ use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn field_text(b: &[u8]) -> String {
-    String::from_utf8_lossy(b)
-        .trim_matches(['\0', ' '])
-        .to_owned()
-}
 
 // ---------------------------------------------------------------------------
 // Thermo Galactic SPC spectra
@@ -538,13 +533,6 @@ async fn rigaku_ras(cx: Cx, input: Input) -> Result<()> {
             format!(", {} target", get("HW_XG_TARGET_NAME"))
         }
     ));
-    Ok(())
-}
-
-async fn kv_spans(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
-    }
     Ok(())
 }
 

@@ -3,6 +3,8 @@
 
 use crate::bytes::{to_u64, to_usize};
 use crate::error::Diagnostic;
+use crate::formats::util::floats::f16;
+use crate::formats::util::val;
 use crate::node::Node;
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
 
@@ -597,23 +599,10 @@ fn int(bytes: &[u8], be: bool, signed: bool) -> Option<Value> {
     })
 }
 
-fn half(bits: u16) -> f64 {
-    let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
-    let exp = i32::from((bits >> 10) & 0x1f);
-    let frac = f64::from(bits & 0x3ff);
-    let magnitude = match exp {
-        0 => frac * 2f64.powi(-24),
-        31 if frac == 0.0 => f64::INFINITY,
-        31 => f64::NAN,
-        _ => (1.0 + frac / 1024.0) * 2f64.powi(exp.saturating_sub(15)),
-    };
-    sign * magnitude
-}
-
 fn float(bytes: &[u8], be: bool) -> Option<Value> {
     let f = match (bytes.len(), be) {
-        (2, false) => half(u16::from_le_bytes(bytes.try_into().ok()?)),
-        (2, true) => half(u16::from_be_bytes(bytes.try_into().ok()?)),
+        (2, false) => f16(u16::from_le_bytes(bytes.try_into().ok()?)),
+        (2, true) => f16(u16::from_be_bytes(bytes.try_into().ok()?)),
         (4, false) => f64::from(f32::from_le_bytes(bytes.try_into().ok()?)),
         (4, true) => f64::from(f32::from_be_bytes(bytes.try_into().ok()?)),
         (8, false) => f64::from_le_bytes(bytes.try_into().ok()?),
@@ -654,7 +643,7 @@ pub fn value(ty: &Ty, bytes: &[u8]) -> Value {
             None => raw(),
         },
         Ty::Ref { kind: 0, .. } => match super::util::uint(bytes, 0, bytes.len().min(8)) {
-            Some(addr) => super::util::hex(addr),
+            Some(addr) => val::hex(addr, 64),
             None => raw(),
         },
         _ => Value::Text(format(ty, bytes)),

@@ -7,7 +7,8 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::util::lines::{Lines, number, preview, text, uint};
+use crate::formats::science::kv_spans;
+use crate::formats::util::lines::{Lines, preview, text, uint};
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::record;
@@ -298,7 +299,7 @@ async fn slow5(cx: Cx, input: Input) -> Result<()> {
             .span(file.sub(0, end))
             .value(uint(to_u64(n)))
             .summary(columns)
-            .lazy(kv_items, items.clone()),
+            .lazy(kv_spans, items.clone()),
     );
     let mut lines = Lines::at(&cx, file, end);
     let mut reads = 0u64;
@@ -321,13 +322,6 @@ async fn slow5(cx: Cx, input: Input) -> Result<()> {
         get("#slow5_version"),
         get("#num_read_groups")
     ));
-    Ok(())
-}
-
-async fn kv_items(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
-    }
     Ok(())
 }
 
@@ -354,7 +348,7 @@ async fn blow5(cx: Cx, input: Input) -> Result<()> {
             .span(header)
             .value(uint(to_u64(items.len())))
             .summary(columns)
-            .lazy(kv_items, items),
+            .lazy(kv_spans, items),
     );
     let mut cur = Cursor::new(&cx, file, LE);
     cur.seek(68u64.saturating_add(hlen.into()));
@@ -471,7 +465,7 @@ async fn hic(cx: Cx, input: Input) -> Result<()> {
         Node::new("Attributes")
             .span(cur.since(s))
             .value(uint(nattr.into()))
-            .lazy(kv_items, attrs),
+            .lazy(kv_spans, attrs),
     );
     let s = cur.pos();
     let nchr = cur.u32().await?;
@@ -491,7 +485,7 @@ async fn hic(cx: Cx, input: Input) -> Result<()> {
         Node::new("Chromosomes")
             .span(cur.since(s))
             .value(uint(nchr.into()))
-            .lazy(kv_items, chroms),
+            .lazy(kv_spans, chroms),
     );
     let s = cur.pos();
     let nres = cur.u32().await?;

@@ -6,6 +6,7 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
+use crate::formats::science::kv_spans;
 use crate::formats::util::lines::{
     Line, Lines, head_lines, is_text, number, preview, summarize, tally, text, uint,
 };
@@ -60,7 +61,7 @@ async fn hmmer3(cx: Cx, input: Input) -> Result<()> {
                     node,
                     format!("{} {}, length {}", get("ACC"), get("ALPH"), get("LENG")),
                 )
-                .lazy(kv_items, std::mem::take(&mut fields)),
+                .lazy(kv_spans, std::mem::take(&mut fields)),
             )
             .await;
             models = models.saturating_add(1);
@@ -687,13 +688,6 @@ async fn amber_prmtop(cx: Cx, input: Input) -> Result<()> {
 async fn prmtop_pointers(cx: Cx, values: Vec<u64>) -> Result<()> {
     for (i, v) in values.into_iter().enumerate().take(32) {
         cx.emit(Node::new(PRMTOP_POINTERS.get(i).copied().unwrap_or("pointer")).value(uint(v)));
-    }
-    Ok(())
-}
-
-async fn kv_items(cx: Cx, items: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in items {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
     }
     Ok(())
 }

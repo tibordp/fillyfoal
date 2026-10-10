@@ -9,25 +9,14 @@ use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 fn zstr(b: &[u8]) -> String {
     crate::text::until_nul(b)
@@ -287,7 +276,7 @@ async fn mysql_frm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("FRM version")
             .span(file.sub(2, 1))
-            .value(uint(head.get(2).copied().unwrap_or(0).into(), 8)),
+            .value(uint(head.get(2).copied().unwrap_or(0), 8)),
     );
     let engine = head.get(3).copied().unwrap_or(0);
     let name = MYSQL_ENGINES
@@ -302,12 +291,12 @@ async fn mysql_frm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("I/O size")
             .span(file.sub(4, 2))
-            .value(uint(u16_le(&head, 4).unwrap_or(0).into(), 16)),
+            .value(uint(u16_le(&head, 4).unwrap_or(0), 16)),
     );
     cx.emit(
         Node::new("Record length")
             .span(file.sub(0x10, 2))
-            .value(uint(u16_le(&head, 0x10).unwrap_or(0).into(), 16)),
+            .value(uint(u16_le(&head, 0x10).unwrap_or(0), 16)),
     );
     let version = u32_le(&head, 0x33).unwrap_or(0);
     cx.emit(

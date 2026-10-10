@@ -194,7 +194,7 @@ fn i32_node(num: u64, v: u32) -> Node {
         node.value(Value::Float(widen(f32::from_bits(v))))
             .summary(format!("I32, float; fixed32 {v:#x}"))
     } else if v < 1 << 24 {
-        node.value(uint(v.into(), 32)).summary("I32, fixed32")
+        node.value(uint(v, 32)).summary("I32, fixed32")
     } else {
         let x = f32::from_bits(v);
         let alt = if x.is_finite() {
@@ -202,8 +202,7 @@ fn i32_node(num: u64, v: u32) -> Node {
         } else {
             String::new()
         };
-        node.value(hex(v.into(), 32))
-            .summary(format!("I32, fixed32{alt}"))
+        node.value(hex(v, 32)).summary(format!("I32, fixed32{alt}"))
     }
 }
 

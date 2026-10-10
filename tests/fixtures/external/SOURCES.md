@@ -243,6 +243,7 @@ volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
 | `arrow-stream/table.arrows` | pyarrow 26.0.0 | same script (`ipc.new_stream`); reproduced byte-for-byte |
 | `parquet/indexed.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | `tests/data/parquet/make_fixtures.py`: two row groups, dictionary and PLAIN encodings, Snappy, statistics, the page index and a bloom filter; reproduced byte-for-byte |
 | `parquet/v2.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | same script: data page v2, Zstandard, page CRCs; reproduced byte-for-byte |
+| `parquet/gzip.parquet` | pyarrow 26.0.0 (parquet-cpp-arrow 26.0.0) | same script: GZIP pages (whole RFC 1952 streams), no dictionary; reproduced byte-for-byte |
 | `rocksdb-sst/bzip2.sst` | RocksDB via rocksdict | edit: db/host/session identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/lz4.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |
 | `rocksdb-sst/snappy.sst` | RocksDB via rocksdict | edit: identity properties overwritten with `x`; RocksDB still ingests the file |

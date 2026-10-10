@@ -577,7 +577,7 @@ fn scalar_node(node: Node, raw: &[u8]) -> Node {
                     bits: 16,
                 })
             } else {
-                node.value(uint(v.into(), 16))
+                node.value(uint(v, 16))
             }
         }
         4 => {
@@ -592,7 +592,7 @@ fn scalar_node(node: Node, raw: &[u8]) -> Node {
                 node.value(Value::Float(widen(f32::from_bits(v))))
                     .summary(format!("float?; 32-bit {v:#x}"))
             } else {
-                node.value(uint(v.into(), 32))
+                node.value(uint(v, 32))
             }
         }
         _ => {

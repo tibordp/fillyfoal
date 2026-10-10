@@ -576,7 +576,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 cx.push(
                     Node::new("End of content")
                         .span(r.span(pos, 1))
-                        .value(vt::uint(0xff, 8)),
+                        .value(vt::uint(0xffu8, 8)),
                 )
                 .await;
                 pos = pos.saturating_add(1);

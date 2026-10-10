@@ -16,23 +16,8 @@ pub mod flatbuffers;
 pub mod protobuf;
 pub mod thrift;
 
-use crate::value::{Radix, Value};
-
-pub(crate) fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-pub(crate) fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
-}
+pub(crate) use crate::formats::util::val::{hex, uint};
+use crate::value::Value;
 
 /// An `f32` as the `f64` with the same shortest decimal form.
 pub(crate) fn widen(x: f32) -> f64 {
@@ -74,12 +59,7 @@ pub(crate) fn printable(bytes: &[u8], cut: bool) -> bool {
 
 /// Text for display: lossy UTF-8, at most `max` characters.
 pub(crate) fn short_text(bytes: &[u8], max: usize) -> String {
-    let s = String::from_utf8_lossy(bytes);
-    if s.chars().count() > max {
-        s.chars().take(max).collect::<String>() + "…"
-    } else {
-        s.into_owned()
-    }
+    crate::formats::util::fmt::clip(&String::from_utf8_lossy(bytes), max)
 }
 
 /// `n` and a noun, pluralised ("1 field", "2 fields", "3 entries").

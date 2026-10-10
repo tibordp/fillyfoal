@@ -237,7 +237,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     if first == total {
         cx.annotate(format!(
             "BSON document, {}",
-            crate::formats::text::plural(total, "byte", "bytes")
+            crate::formats::util::fmt::grouped_count(total, "byte", "bytes")
         ));
         return elements(cx, (input.span, false, Path::new())).await;
     }
@@ -270,7 +270,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn document_summary(r: &mut ByteReader<'_>, at: u64, len: u64) -> String {
     let base = format!(
         "document, {}",
-        crate::formats::text::plural(len, "byte", "bytes")
+        crate::formats::util::fmt::grouped_count(len, "byte", "bytes")
     );
     let Ok(head) = r
         .bytes(at.saturating_add(4), 5.min(len.saturating_sub(4)))
@@ -410,7 +410,7 @@ fn sub_document(
     let kind = if array { "array" } else { "document" };
     let node = node.summary(format!(
         "{kind}, {}",
-        crate::formats::text::plural(len, "byte", "bytes")
+        crate::formats::util::fmt::grouped_count(len, "byte", "bytes")
     ));
     if len <= 5 {
         return node;

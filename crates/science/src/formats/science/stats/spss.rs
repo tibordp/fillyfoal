@@ -23,6 +23,7 @@ use crate::fields::Endian;
 use crate::formats::Input;
 use crate::formats::Probe;
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::binutil::get;
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -269,19 +270,6 @@ fn eight(bytes: &[u8]) -> [u8; 8] {
     out
 }
 
-fn i32_of(bytes: &[u8], at: usize, endian: Endian) -> i32 {
-    let b = [
-        bytes.get(at).copied().unwrap_or(0),
-        bytes.get(at.saturating_add(1)).copied().unwrap_or(0),
-        bytes.get(at.saturating_add(2)).copied().unwrap_or(0),
-        bytes.get(at.saturating_add(3)).copied().unwrap_or(0),
-    ];
-    match endian {
-        Endian::Big => i32::from_be_bytes(b),
-        Endian::Little => i32::from_le_bytes(b),
-    }
-}
-
 /// Reads an `i32` count and the span of `count * unit` bytes after it,
 /// rejecting counts the region cannot hold.
 async fn counted(cur: &mut Cursor<'_>, unit: u64) -> Result<(u32, Span)> {
@@ -317,9 +305,9 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
         let rec = match kind {
             2 => {
                 let head = cur.bytes(28).await?;
-                let width = i32_of(&head, 0, endian);
-                let has_label = i32_of(&head, 4, endian);
-                let n_missing = i32_of(&head, 8, endian);
+                let width = get::<i32>(&head, 0, endian).unwrap_or(0);
+                let has_label = get::<i32>(&head, 4, endian).unwrap_or(0);
+                let n_missing = get::<i32>(&head, 8, endian).unwrap_or(0);
                 let name = String::from_utf8_lossy(trim_end(head.get(20..28).unwrap_or_default()))
                     .into_owned();
                 let mut label = String::new();
@@ -358,8 +346,8 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
                         name,
                         width,
                         label,
-                        print: i32_of(&head, 12, endian),
-                        write: i32_of(&head, 16, endian),
+                        print: get::<i32>(&head, 12, endian).unwrap_or(0),
+                        write: get::<i32>(&head, 16, endian).unwrap_or(0),
                         missing,
                         slot: dict.slots,
                         slots: 1,
@@ -398,11 +386,12 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
                 let set = dict.sets.len().saturating_sub(1);
                 let indexes: Vec<i32> = (0..count)
                     .map(|i| {
-                        i32_of(
+                        get::<i32>(
                             &raw,
                             crate::bytes::to_usize(u64::from(i).saturating_mul(4)),
                             endian,
                         )
+                        .unwrap_or(0)
                     })
                     .collect();
                 for (i, index) in indexes.into_iter().enumerate() {
@@ -441,7 +430,7 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
                 match subtype {
                     3 if read_small => {
                         let raw = cx.read(span).await?;
-                        let code = i32_of(&raw, 28, endian);
+                        let code = get::<i32>(&raw, 28, endian).unwrap_or(0);
                         if dict.encoding.is_none() {
                             dict.encoding = code_page(code).map(str::to_owned);
                         }
@@ -523,11 +512,12 @@ async fn walk_dict(cx: &Cx, file: Span, dict: &mut Dict) -> Result<()> {
         };
         for (i, var) in dict.vars.iter_mut().enumerate() {
             let at = |k: usize| {
-                i32_of(
+                get::<i32>(
                     &raw,
                     i.saturating_mul(per).saturating_add(k).saturating_mul(4),
                     endian,
                 )
+                .unwrap_or(0)
             };
             if crate::bytes::to_u64(i.saturating_add(1).saturating_mul(per)) <= u64::from(count) {
                 var.display = Some(if per == 3 {
@@ -692,7 +682,7 @@ async fn zsav(cx: &Cx, file: Span, data: Span, dict: &Dict, _: &Codec) -> Result
         u64::try_from(trailer_len).unwrap_or(u64::MAX),
     )?;
     let raw = cx.read(trailer).await?;
-    let get32 = |at: usize| i32_of(&raw, at, endian);
+    let get32 = |at: usize| get::<i32>(&raw, at, endian).unwrap_or(0);
     let get64 = |at: usize| {
         match endian {
             Endian::Big => crate::bytes::u64_be(&raw, at),
@@ -827,7 +817,7 @@ async fn extension(
     let data = span.tail(16);
     let raw = cx.read_avail(data.sub(0, 1 << 16)).await?;
     let int = |name: &'static str, at: u64, table: Option<EnumTable>| {
-        let v = i32_of(&raw, crate::bytes::to_usize(at), endian);
+        let v = get::<i32>(&raw, crate::bytes::to_usize(at), endian).unwrap_or(0);
         let node = Node::new(name).span(data.sub(at, 4));
         match table {
             Some(t) => node.value(Value::Enum {
@@ -863,7 +853,7 @@ async fn extension(
                 };
                 let mut node = int(name, crate::bytes::to_u64(i).saturating_mul(4), table);
                 if i == 7 {
-                    let code = i32_of(&raw, 28, endian);
+                    let code = get::<i32>(&raw, 28, endian).unwrap_or(0);
                     if let Some(cp) = code_page(code) {
                         node = node.summary(cp);
                     }

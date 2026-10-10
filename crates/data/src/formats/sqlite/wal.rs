@@ -432,7 +432,7 @@ async fn dissect_wal(cx: Cx, input: Input) -> Result<()> {
     let mut summary = format!(
         "SQLite WAL, {page_size}-byte pages, checkpoint {}, {}",
         header.checkpoint,
-        super::plural(frames, "frame", "frames")
+        crate::formats::util::fmt::grouped_count(frames, "frame", "frames")
     );
     if !header_ok {
         summary.push_str(", header checksum mismatch (the log is ignored)");
@@ -441,8 +441,8 @@ async fn dissect_wal(cx: Cx, input: Input) -> Result<()> {
         let valid = s.valid();
         summary = format!(
             "{summary}: {} committed in {}",
-            super::thousands(committed),
-            super::plural(s.commits, "transaction", "transactions")
+            crate::formats::util::fmt::grouped(committed),
+            crate::formats::util::fmt::grouped_count(s.commits, "transaction", "transactions")
         );
         if valid > committed {
             summary = format!("{summary}, {} uncommitted", valid.saturating_sub(committed));
@@ -456,7 +456,9 @@ async fn dissect_wal(cx: Cx, input: Input) -> Result<()> {
     }
     cx.annotate(summary);
     let mut frames_node = Node::new("Frames")
-        .summary(super::plural(frames, "frame", "frames"))
+        .summary(crate::formats::util::fmt::grouped_count(
+            frames, "frame", "frames",
+        ))
         .desc("Each frame is a 24-byte header and a new version of one database page")
         .lazy(wal_frames, (wal, header_ok));
     if !header_ok {
@@ -733,7 +735,7 @@ async fn dissect_journal(cx: Cx, input: Input) -> Result<()> {
         .fold(0u64, |a, s| a.saturating_add(s.records));
     let mut summary = format!(
         "SQLite rollback journal, {}",
-        super::plural(total, "page record", "page records")
+        crate::formats::util::fmt::grouped_count(total, "page record", "page records")
     );
     if segments.len() > 1 {
         summary = format!("{summary} in {} segments", segments.len());
@@ -760,7 +762,7 @@ async fn dissect_journal(cx: Cx, input: Input) -> Result<()> {
                 .span(file.sub(seg.at, seg.end.saturating_sub(seg.at)))
                 .summary(format!(
                     "{}, nonce {:#010x}",
-                    super::plural(seg.records, "record", "records"),
+                    crate::formats::util::fmt::grouped_count(seg.records, "record", "records"),
                     seg.nonce
                 ))
                 .lazy(segment, (db.clone(), seg));

@@ -33,15 +33,7 @@ use std::sync::Arc;
 
 const BE: Endian = Endian::Big;
 
-const CENTRES: EnumTable = &[
-    (7, "US NCEP"),
-    (34, "Japan JMA"),
-    (54, "Canada CMC"),
-    (74, "UK Met Office"),
-    (78, "Germany DWD"),
-    (85, "Météo-France"),
-    (98, "ECMWF"),
-];
+use super::grib::{CENTRES, indicator1, rest, u24};
 
 const CATEGORIES: EnumTable = &[
     (0, "surface data, land"),
@@ -199,7 +191,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let head = cx.read_avail(file.sub(w.pos, 8)).await?;
         if !head.starts_with(b"BUFR") {
             let window = cx.read_avail(file.sub(w.pos, SEARCH_WINDOW)).await?;
-            match window.windows(4).position(|x| x == b"BUFR") {
+            match crate::bytes::find(&window, b"BUFR", 0) {
                 Some(off) if off > 0 => {
                     let off = to_u64(off);
                     cx.push(
@@ -343,7 +335,7 @@ async fn message(cx: Cx, (span, edition): (Span, u8)) -> Result<()> {
         span.sub(0, 8),
         BE,
         (),
-        indicator,
+        indicator1,
     ));
     let end = span.len.saturating_sub(4);
     let mut pos = 8u64;
@@ -420,35 +412,6 @@ async fn message(cx: Cx, (span, edition): (Span, u8)) -> Result<()> {
             .span(span.sub(end, 4))
             .value(Value::Text("7777".into())),
     );
-    Ok(())
-}
-
-fn u24(f: &mut Fields<'_>, name: &'static str) -> Result<u64> {
-    let raw = f
-        .bytes(name, 3)
-        .with(|b, n| {
-            n.value(Value::UInt {
-                value: crate::formats::util::datakit::be_uint(b),
-                bits: 24,
-                radix: crate::value::Radix::Dec,
-            })
-        })
-        .emit()?;
-    Ok(crate::formats::util::datakit::be_uint(&raw))
-}
-
-fn rest(f: &mut Fields<'_>, name: &'static str) -> Result<()> {
-    let n = f.remaining();
-    if n > 0 {
-        f.bytes(name, n).emit()?;
-    }
-    Ok(())
-}
-
-fn indicator(f: &mut Fields<'_>, _: &()) -> Result<()> {
-    f.ascii("Magic", 4).emit()?;
-    u24(f, "Total length")?;
-    f.u8("Edition").emit()?;
     Ok(())
 }
 

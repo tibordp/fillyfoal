@@ -1737,7 +1737,7 @@ fn cif_probe(h: &Head<'_>) -> bool {
         .into_iter()
         .find(|l| !l.is_empty() && !(l.starts_with(b"#") && !l.starts_with(b"#\\#CIF")));
     (h.starts_with(b"#\\#CIF_") || first.is_some_and(|l| l.starts_with(b"data_")))
-        && h.data.windows(2).any(|w| w == b"\n_")
+        && crate::bytes::contains(h.data, b"\n_")
 }
 
 declare_format!(pub CIF = "cif", "Crystallographic Information File (CIF/mmCIF)", ["cif", "mmcif", "mcif"], "chemical/x-cif",
@@ -2014,7 +2014,7 @@ fn molfile_counts(h: &Head<'_>) -> bool {
 }
 
 fn is_sdf(h: &Head<'_>) -> bool {
-    h.data.windows(5).any(|w| w == b"\n$$$$")
+    crate::bytes::contains(h.data, b"\n$$$$")
 }
 
 declare_format!(pub SDF = "mdl-sdf", "MDL structure-data file (SDF)", ["sdf", "sd"], "chemical/x-mdl-sdfile",

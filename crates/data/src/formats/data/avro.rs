@@ -5,7 +5,8 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::{Codec, Format, Input, Probe, content};
+use crate::formats::text::json;
+use crate::formats::{Codec, Format, Input, Probe, content, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -22,10 +23,19 @@ pub static FORMAT: Format = Format {
 /// Metadata entries read.
 const MAX_ENTRIES: usize = 4096;
 
+/// A metadata map entry: its key, (the first MiB of) its value, and
+/// where the entry and its value are.
+struct Entry {
+    key: String,
+    value: Vec<u8>,
+    span: Span,
+    value_span: Span,
+}
+
 /// A zigzag-encoded variable-length long at `at`: value and length.
 fn long(data: &[u8], at: usize) -> Option<(i64, usize)> {
     let (raw, n) = crate::bytes::uleb128(data.get(at..)?)?;
-    Some((((raw >> 1) as i64) ^ 0i64.wrapping_sub((raw & 1) as i64), n))
+    Some((crate::formats::util::wire::protobuf::zigzag(raw), n))
 }
 
 /// Reads a long through the cursor position `pos` of `span`.
@@ -45,7 +55,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     );
     // Metadata map: blocks of (count, [size,] entries), ending with count 0.
     let mut pos = 4u64;
-    let mut entries: Vec<(String, Vec<u8>, Span)> = Vec::new();
+    let mut entries: Vec<Entry> = Vec::new();
     let map_start = pos;
     loop {
         let (count, n) = read_long(&cx, file, pos).await?;
@@ -73,28 +83,26 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             let value_span = file.sub_exact(pos, vlen.unsigned_abs())?;
             let value = cx.read(value_span.sub(0, 1 << 20)).await?;
             pos = pos.saturating_add(vlen.unsigned_abs());
-            entries.push((
-                String::from_utf8_lossy(&key).into_owned(),
+            entries.push(Entry {
+                key: String::from_utf8_lossy(&key).into_owned(),
                 value,
-                file.sub(start, pos.saturating_sub(start)),
-            ));
+                span: file.sub(start, pos.saturating_sub(start)),
+                value_span,
+            });
         }
     }
     let mut meta = Node::new("Metadata")
         .span(file.sub(map_start, pos.saturating_sub(map_start)))
         .summary(format!("{} entries", entries.len()));
-    let codec = entries
-        .iter()
-        .find(|(k, _, _)| k == "avro.codec")
-        .map_or_else(
-            || "null".to_owned(),
-            |(_, v, _)| String::from_utf8_lossy(v).into_owned(),
-        );
-    let schema = entries
-        .iter()
-        .find(|(k, _, _)| k == "avro.schema")
-        .map(|(_, v, _)| String::from_utf8_lossy(v).into_owned());
-    meta = meta.lazy(metadata, std::sync::Arc::new(entries));
+    let codec = entries.iter().find(|e| e.key == "avro.codec").map_or_else(
+        || "null".to_owned(),
+        |e| String::from_utf8_lossy(&e.value).into_owned(),
+    );
+    let schema = match entries.iter().find(|e| e.key == "avro.schema") {
+        Some(e) => schema_name(&cx, &e.value).await,
+        None => None,
+    };
+    meta = meta.lazy(metadata, (input, std::sync::Arc::new(entries)));
     cx.emit(meta);
     let sync_span = file.sub(pos, 16);
     let sync = cx.read(sync_span).await?;
@@ -106,7 +114,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     pos = pos.saturating_add(16);
 
     let mut summary = format!("Avro object container, codec {codec}");
-    if let Some(name) = schema.as_deref().and_then(schema_name) {
+    if let Some(name) = schema {
         summary = format!("{summary}, schema {name}");
     }
     cx.annotate(summary);
@@ -118,18 +126,29 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-/// The top-level "name" of a JSON schema (a light scan, not a JSON parser).
-fn schema_name(schema: &str) -> Option<String> {
-    let at = schema.find("\"name\"")?;
-    let rest = schema.get(at.saturating_add(6)..)?;
-    let start = rest.find('"')?.saturating_add(1);
-    let len = rest.get(start..)?.find('"')?;
-    rest.get(start..start.saturating_add(len))
-        .map(str::to_owned)
+/// The "name" of a JSON schema (a record, enum or fixed type).
+async fn schema_name(cx: &Cx, schema: &[u8]) -> Option<String> {
+    let json = crate::formats::util::json::parse(cx, schema).await.ok()?;
+    json.get("name")?.as_str().map(str::to_owned)
 }
 
-async fn metadata(cx: Cx, entries: std::sync::Arc<Vec<(String, Vec<u8>, Span)>>) -> Result<()> {
-    for (key, value, span) in entries.iter() {
+async fn metadata(cx: Cx, (input, entries): (Input, std::sync::Arc<Vec<Entry>>)) -> Result<()> {
+    for Entry {
+        key,
+        value,
+        span,
+        value_span,
+    } in entries.iter()
+    {
+        if key == "avro.schema" {
+            cx.push(embedded_as(
+                key.clone(),
+                input.nested(*value_span),
+                &json::FORMAT,
+            ))
+            .await;
+            continue;
+        }
         let node = match std::str::from_utf8(value) {
             Ok(text) => Node::new(key.clone()).value(Value::Text(text.to_owned())),
             Err(_) => {

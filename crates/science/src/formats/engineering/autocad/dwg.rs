@@ -49,7 +49,7 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Radix, Value, flag};
+use crate::value::{EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 
@@ -999,24 +999,6 @@ async fn page_header(cx: Cx, span: Span) -> Result<()> {
     f.u32("Data checksum").hex().emit()?;
     f.u32("Unknown").hex().emit()?;
     Ok(())
-}
-
-/// `Value::UInt` in hex.
-pub(crate) fn hex(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Hex,
-    }
-}
-
-/// `Value::UInt` in decimal.
-pub(crate) fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
 }
 
 #[cfg(test)]

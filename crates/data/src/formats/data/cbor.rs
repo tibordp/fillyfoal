@@ -9,7 +9,9 @@
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::datakit::{ByteReader, clip, hex};
+use crate::formats::util::datakit::{ByteReader, hex};
+use crate::formats::util::floats::f16;
+use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -197,19 +199,6 @@ fn describe(h: &Head) -> String {
     }
 }
 
-fn half(bits: u16) -> f64 {
-    let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
-    let exp = i32::from((bits >> 10) & 0x1f);
-    let frac = f64::from(bits & 0x3ff);
-    let magnitude = match exp {
-        0 => frac * 2f64.powi(-24),
-        31 if frac == 0.0 => f64::INFINITY,
-        31 => f64::NAN,
-        _ => (1.0 + frac / 1024.0) * 2f64.powi(exp.saturating_sub(15)),
-    };
-    sign * magnitude
-}
-
 /// A node for the item at `start..end`.
 async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String) -> Result<Node> {
     let h = head(r, start).await?;
@@ -288,7 +277,7 @@ async fn item_node(r: &mut ByteReader<'_>, start: u64, end: u64, name: String) -
             21 => node.value(Value::Bool(true)),
             22 => node.value(Value::Text("null".into())),
             23 => node.value(Value::Text("undefined".into())),
-            25 => node.value(Value::Float(half(u16::try_from(h.arg).unwrap_or(0)))),
+            25 => node.value(Value::Float(f16(u16::try_from(h.arg).unwrap_or(0)))),
             26 => node.value(Value::Float(f64::from(f32::from_bits(
                 u32::try_from(h.arg).unwrap_or(0),
             )))),

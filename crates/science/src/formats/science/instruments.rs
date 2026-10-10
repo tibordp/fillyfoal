@@ -3,6 +3,7 @@
 //! Blackrock NEV/NSx, Plexon, BrainVision, Neuralynx), LabVIEW TDMS, and
 //! machine-learning data (MNIST IDX).
 
+use super::{field_text, kv_spans, systemtime};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_be, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
@@ -21,13 +22,6 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-/// Trims ASCII padding (spaces and NULs) from a fixed-width text field.
-fn field_text(b: &[u8]) -> String {
-    String::from_utf8_lossy(b)
-        .trim_matches(['\0', ' '])
-        .to_owned()
-}
 
 // ---------------------------------------------------------------------------
 // FCS (Flow Cytometry Standard)
@@ -225,7 +219,7 @@ async fn fcs(cx: Cx, input: Input) -> Result<()> {
         Node::new("TEXT")
             .span(text_span)
             .summary(format!("{n} keyword(s)"))
-            .lazy(fcs_text, pairs),
+            .lazy(kv_spans, pairs),
     );
     let data_span = file.sub(
         data_begin,
@@ -262,13 +256,6 @@ async fn fcs(cx: Cx, input: Input) -> Result<()> {
             format!(", {cytometer}")
         }
     ));
-    Ok(())
-}
-
-async fn fcs_text(cx: Cx, pairs: Vec<(String, String, Span)>) -> Result<()> {
-    for (k, v, span) in pairs {
-        cx.push(Node::new(k).span(span).value(number(&v))).await;
-    }
     Ok(())
 }
 
@@ -325,18 +312,13 @@ async fn fcs_events(
     Ok(())
 }
 
-#[allow(clippy::cast_possible_truncation)]
+/// An unsigned integer from the first (up to) 8 bytes of `b`.
 fn read_uint(b: &[u8], endian: Endian) -> u64 {
-    let mut v = 0u64;
+    let b = b.get(..8).unwrap_or(b);
     match endian {
-        Endian::Big => b.iter().take(8).for_each(|&x| v = (v << 8) | u64::from(x)),
-        Endian::Little => b
-            .iter()
-            .take(8)
-            .rev()
-            .for_each(|&x| v = (v << 8) | u64::from(x)),
+        Endian::Big => crate::formats::util::datakit::be_uint(b),
+        Endian::Little => crate::formats::util::datakit::le_uint(b),
     }
-    v
 }
 
 async fn fcs_event(
@@ -1838,21 +1820,6 @@ declare_format!(pub NEV = "nev", "Blackrock neural events (NEV)", ["nev"], "appl
     Probe::Magic(&[(0, b"NEURALEV"), (0, b"BREVENTS")]), nev);
 declare_format!(pub NSX = "nsx", "Blackrock continuous data (NSx)", ["ns1", "ns2", "ns3", "ns4", "ns5", "ns6", "nsx"], "application/x-blackrock-nsx",
     Probe::Magic(&[(0, b"NEURALCD"), (0, b"NEURALSG"), (0, b"BRSMPGRP")]), nsx);
-
-/// A Windows SYSTEMTIME as text.
-fn systemtime(b: &[u8]) -> String {
-    let w = |i: usize| u16_le(b, i.saturating_mul(2)).unwrap_or(0);
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}.{:03}",
-        w(0),
-        w(1),
-        w(3),
-        w(4),
-        w(5),
-        w(6),
-        w(7)
-    )
-}
 
 record! {
     pub struct NevHeader {

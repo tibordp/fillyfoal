@@ -33,8 +33,9 @@ use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::formats::Input;
-use crate::formats::text::plural;
+use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::{dec, hex, text};
+use crate::formats::util::fmt::grouped_count;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
@@ -201,7 +202,10 @@ impl Arr {
             1 => format!("{}-byte slots", self.width),
             _ => "bytes".to_owned(),
         };
-        let mut s = format!("{}, {width}", plural(self.size, "element", "elements"));
+        let mut s = format!(
+            "{}, {width}",
+            grouped_count(self.size, "element", "elements")
+        );
         if !kind.is_empty() {
             s.push_str(&format!(" ({})", kind.join(", ")));
         }
@@ -449,7 +453,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(file.sub(0, 24))
-            .lazy(emit_all, Arc::new(kids)),
+            .lazy(emit_nodes, Arc::new(kids)),
     );
     // Streaming form: the top ref is in the footer.
     if top == u64::MAX && file.len >= 40 {
@@ -499,7 +503,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .iter()
         .filter(|(n, _)| n.as_deref().is_some_and(|n| n.starts_with(b"class_")))
         .count();
-    summary.push_str(&format!(", {}", plural(to_u64(user), "class", "classes")));
+    summary.push_str(&format!(
+        ", {}",
+        grouped_count(to_u64(user), "class", "classes")
+    ));
     cx.annotate(summary);
     let list: Vec<(String, u64)> = names
         .items
@@ -515,16 +522,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Tables")
             .span(tables.span)
-            .summary(plural(to_u64(list.len()), "table", "tables"))
+            .summary(grouped_count(to_u64(list.len()), "table", "tables"))
             .lazy(tables_x, (file, Arc::new(list))),
     );
-    Ok(())
-}
-
-async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.emit(n.clone());
-    }
     Ok(())
 }
 
@@ -567,8 +567,8 @@ async fn tables_x(cx: Cx, (file, list): (Span, Arc<Vec<(String, u64)>>)) -> Resu
                 .span(span)
                 .summary(format!(
                     "{}, {}",
-                    plural(cols, "column", "columns"),
-                    plural(objects, "object", "objects")
+                    grouped_count(cols, "column", "columns"),
+                    grouped_count(objects, "object", "objects")
                 ))
                 .lazy(table_x, (file, *r, Arc::new(name.clone()), keys.clone())),
             Err(e) => Node::new(shown).diag(e),
@@ -729,13 +729,13 @@ async fn table_x(cx: Cx, (file, r, _name, keys): TableState) -> Result<()> {
             n = n.summary("primary key");
             kids.push(Node::new("Primary key").value(Value::Bool(true)));
         }
-        cols.push(n.lazy(emit_all, Arc::new(kids)));
+        cols.push(n.lazy(emit_nodes, Arc::new(kids)));
     }
     let shown = cols.len();
     cx.emit(
         Node::new("Columns")
-            .summary(plural(to_u64(shown), "column", "columns"))
-            .lazy(emit_all, Arc::new(cols)),
+            .summary(grouped_count(to_u64(shown), "column", "columns"))
+            .lazy(emit_nodes, Arc::new(cols)),
     );
     if t.cluster != 0 {
         let a = array(&cx, file, t.cluster).await?;
@@ -782,7 +782,7 @@ async fn objects(cx: Cx, (file, r, offset, t, path): ClusterState) -> Result<()>
                     .summary(format!(
                         "keys {start}–{}, {}",
                         next.saturating_sub(1),
-                        plural(count, "object", "objects")
+                        grouped_count(count, "object", "objects")
                     ))
                     .lazy(
                         crate::expander!(self::objects: ClusterState),
@@ -854,7 +854,7 @@ async fn objects(cx: Cx, (file, r, offset, t, path): ClusterState) -> Result<()>
         cx.push(
             Node::new(format!("#{key}"))
                 .summary(shown.join(", "))
-                .lazy(emit_all, Arc::new(values)),
+                .lazy(emit_nodes, Arc::new(values)),
         )
         .await;
         i = i.saturating_add(1);
@@ -863,13 +863,7 @@ async fn objects(cx: Cx, (file, r, offset, t, path): ClusterState) -> Result<()>
 }
 
 fn short(v: &Value) -> String {
-    let s = crate::render::value(v);
-    if s.chars().count() > 24 {
-        let cut: String = s.chars().take(24).collect();
-        format!("{cut}…")
-    } else {
-        s
-    }
+    crate::formats::util::fmt::clip(&crate::render::value(v), 24)
 }
 
 /// The value of column `c` for the object at `i` in its leaf's array.
@@ -912,14 +906,14 @@ async fn scalar_or_list(cx: &Cx, file: Span, c: &Column, a: &Arr, i: u64) -> Res
             }
             items.push(n.renamed(format!("[{k}]")));
         }
-        let mut summary = plural(list.size, "element", "elements");
+        let mut summary = grouped_count(list.size, "element", "elements");
         if list.size > LIST_SHOWN {
             summary.push_str(&format!(" ({LIST_SHOWN} shown)"));
         }
         return Ok(node
             .value(text(format!("[{}]", shown.join(", "))))
             .summary(summary)
-            .lazy(emit_all, Arc::new(items)));
+            .lazy(emit_nodes, Arc::new(items)));
     }
     element(cx, file, c, a, i, false).await
 }
@@ -965,7 +959,7 @@ async fn element(cx: &Cx, file: Span, c: &Column, a: &Arr, i: u64, in_list: bool
                         n.value(text(text_of(d)))
                     } else {
                         n.value(Value::Bytes(d.get(..64).unwrap_or(d).to_vec()))
-                            .summary(plural(to_u64(d.len()), "byte", "bytes"))
+                            .summary(grouped_count(to_u64(d.len()), "byte", "bytes"))
                     }
                 }
                 Some((None, span)) => Node::new(c.name.clone()).span(*span).summary("null"),

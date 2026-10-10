@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u16_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;
@@ -187,7 +188,7 @@ fn key_fields(rd: &mut Rd<'_>, kind: V1Kind, heap_names: &[(u64, String)]) -> Op
                 rd.push(
                     Node::new(format!("Offset {i}"))
                         .span(span)
-                        .value(super::util::dec(v)),
+                        .value(val::uint(v, 64)),
                 );
             }
         }
@@ -870,7 +871,7 @@ fn record_fields(rd: &mut Rd<'_>, kind: u8, rank: Option<usize>) -> Option<Strin
                 rd.push(
                     Node::new(format!("Scaled offset {i}"))
                         .span(span)
-                        .value(super::util::dec(v)),
+                        .value(val::uint(v, 64)),
                 );
                 offs.push(v);
             }

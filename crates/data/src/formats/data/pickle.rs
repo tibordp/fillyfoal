@@ -5,7 +5,8 @@
 
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::datakit::{ByteReader, be_uint, clip, le_uint};
+use crate::formats::util::datakit::{ByteReader, be_uint, le_uint};
+use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::value::Value;

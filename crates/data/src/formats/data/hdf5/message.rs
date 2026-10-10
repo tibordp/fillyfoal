@@ -7,6 +7,7 @@ use std::sync::Arc;
 use crate::bytes::{to_u64, to_usize, u16_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Radix, Value, field, flag, lookup};
@@ -599,18 +600,17 @@ pub fn dataspace(rd: &mut Rd<'_>) -> Option<Space> {
     let l = rd.l;
     let mut dims = Vec::new();
     for i in 0..rank {
-        dims.push(field_node(
-            rd,
-            format!("Dimension {i} size"),
-            l,
-            super::util::dec,
-        )?);
+        dims.push(field_node(rd, format!("Dimension {i} size"), l, |v| {
+            val::uint(v, 64)
+        })?);
     }
     let mut max = None;
     if flags & 1 != 0 {
         let mut m = Vec::new();
         for i in 0..rank {
-            let v = field_node(rd, format!("Dimension {i} maximum"), l, super::util::dec)?;
+            let v = field_node(rd, format!("Dimension {i} maximum"), l, |v| {
+                val::uint(v, 64)
+            })?;
             if undefined(v, l) {
                 rd.note("unlimited");
                 m.push(u64::MAX);
@@ -622,12 +622,9 @@ pub fn dataspace(rd: &mut Rd<'_>) -> Option<Space> {
     }
     if version == 1 && flags & 2 != 0 {
         for i in 0..rank {
-            field_node(
-                rd,
-                format!("Dimension {i} permutation"),
-                l,
-                super::util::dec,
-            )?;
+            field_node(rd, format!("Dimension {i} permutation"), l, |v| {
+                val::uint(v, 64)
+            })?;
         }
     }
     Some(Space { kind, dims, max })
@@ -732,12 +729,9 @@ fn layout(rd: &mut Rd<'_>) -> Option<Layout> {
         };
         let mut dims = Vec::new();
         for i in 0..rank {
-            dims.push(field_node(
-                rd,
-                format!("Dimension {i} size"),
-                4,
-                super::util::dec,
-            )?);
+            dims.push(field_node(rd, format!("Dimension {i} size"), 4, |v| {
+                val::uint(v, 64)
+            })?);
         }
         return Some(match class {
             0 => {
@@ -779,12 +773,9 @@ fn layout(rd: &mut Rd<'_>) -> Option<Layout> {
             let addr = rd.addr("B-tree address")?;
             let mut dims = Vec::new();
             for i in 0..rank {
-                dims.push(field_node(
-                    rd,
-                    format!("Dimension {i} size"),
-                    4,
-                    super::util::dec,
-                )?);
+                dims.push(field_node(rd, format!("Dimension {i} size"), 4, |v| {
+                    val::uint(v, 64)
+                })?);
             }
             if let Some(last) = rd.last() {
                 last.summary = Some("element size".to_owned());
@@ -811,12 +802,9 @@ fn layout(rd: &mut Rd<'_>) -> Option<Layout> {
             let width = to_usize(rd.num("Dimension size encoded length", 1)?);
             let mut dims = Vec::new();
             for i in 0..rank {
-                dims.push(field_node(
-                    rd,
-                    format!("Dimension {i} size"),
-                    width,
-                    super::util::dec,
-                )?);
+                dims.push(field_node(rd, format!("Dimension {i} size"), width, |v| {
+                    val::uint(v, 64)
+                })?);
             }
             if let Some(last) = rd.last() {
                 last.summary = Some("element size".to_owned());
@@ -953,7 +941,7 @@ fn filter(rd: &mut Rd<'_>, version: u64) -> Option<Filter> {
     };
     let mut values = Vec::new();
     for i in 0..nvalues {
-        let v = field_node(rd, format!("Client data {i}"), 4, super::util::dec)?;
+        let v = field_node(rd, format!("Client data {i}"), 4, |v| val::uint(v, 64))?;
         if let Some(m) = meanings.get(to_usize(i)) {
             rd.note(*m);
         }
@@ -1445,7 +1433,7 @@ pub fn header_fields(h: &Header, m: &Msg) -> Vec<Node> {
         out.push(
             Node::new("Size")
                 .span(whole.sub(1, 2))
-                .value(super::util::dec(size)),
+                .value(val::uint(size, 64)),
         );
         out.push(Node::new("Flags").span(whole.sub(3, 1)).value(flags));
         if h.flags & 0x04 != 0 {
@@ -1457,7 +1445,7 @@ pub fn header_fields(h: &Header, m: &Msg) -> Vec<Node> {
             out.push(
                 Node::new("Creation order")
                     .span(whole.sub(4, 2))
-                    .value(super::util::dec(raw.into())),
+                    .value(val::uint(raw, 64)),
             );
         }
     } else {
@@ -1465,7 +1453,7 @@ pub fn header_fields(h: &Header, m: &Msg) -> Vec<Node> {
         out.push(
             Node::new("Size")
                 .span(whole.sub(2, 2))
-                .value(super::util::dec(size)),
+                .value(val::uint(size, 64)),
         );
         out.push(Node::new("Flags").span(whole.sub(4, 1)).value(flags));
         let raw = h

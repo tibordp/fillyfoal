@@ -71,22 +71,6 @@ pub fn undefined(addr: u64, n: usize) -> bool {
     }
 }
 
-pub fn hex(v: u64) -> Value {
-    Value::UInt {
-        value: v,
-        bits: 64,
-        radix: Radix::Hex,
-    }
-}
-
-pub fn dec(v: u64) -> Value {
-    Value::UInt {
-        value: v,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
-
 fn bits_of(n: usize) -> u8 {
     u8::try_from(n.saturating_mul(8).min(64)).unwrap_or(64)
 }
@@ -387,10 +371,6 @@ impl<'a> Rd<'a> {
 // ---------------------------------------------------------------------------
 // Checksums
 
-fn le32(b: &[u8], at: usize) -> u32 {
-    crate::bytes::u32_le(b, at).unwrap_or(0)
-}
-
 /// Bob Jenkins' lookup3 `hashlittle` with an initial value of 0, which
 /// HDF5 uses for metadata checksums (`H5_checksum_lookup3`).
 pub async fn lookup3(cx: &Cx, data: &[u8]) -> u32 {
@@ -403,9 +383,9 @@ pub async fn lookup3(cx: &Cx, data: &[u8]) -> u32 {
         let Some((block, tail)) = rest.split_at_checked(12) else {
             break;
         };
-        a = a.wrapping_add(le32(block, 0));
-        b = b.wrapping_add(le32(block, 4));
-        c = c.wrapping_add(le32(block, 8));
+        a = a.wrapping_add(crate::bytes::u32_le(block, 0).unwrap_or(0));
+        b = b.wrapping_add(crate::bytes::u32_le(block, 4).unwrap_or(0));
+        c = c.wrapping_add(crate::bytes::u32_le(block, 8).unwrap_or(0));
         a = a.wrapping_sub(c);
         a ^= c.rotate_left(4);
         c = c.wrapping_add(b);
@@ -437,9 +417,9 @@ pub async fn lookup3(cx: &Cx, data: &[u8]) -> u32 {
     if let Some(dst) = last.get_mut(..rest.len()) {
         dst.copy_from_slice(rest);
     }
-    a = a.wrapping_add(le32(&last, 0));
-    b = b.wrapping_add(le32(&last, 4));
-    c = c.wrapping_add(le32(&last, 8));
+    a = a.wrapping_add(crate::bytes::u32_le(&last, 0).unwrap_or(0));
+    b = b.wrapping_add(crate::bytes::u32_le(&last, 4).unwrap_or(0));
+    c = c.wrapping_add(crate::bytes::u32_le(&last, 8).unwrap_or(0));
     c ^= b;
     c = c.wrapping_sub(b.rotate_left(14));
     a ^= c;
@@ -519,9 +499,4 @@ pub fn shape(dims: &[u64]) -> String {
     } else {
         join(dims, "×")
     }
-}
-
-/// A byte count for summaries.
-pub fn size_text(n: u64) -> String {
-    crate::formats::util::datakit::size(n)
 }

@@ -163,7 +163,7 @@ fn typed(phys: i64, bytes: &[u8]) -> Value {
                 .map_or(0, i32::from_le_bytes);
             Some(Value::Timestamp {
                 unix_seconds: i64::from(day)
-                    .saturating_sub(2_440_588)
+                    .saturating_sub(crate::formats::util::civil::UNIX_JULIAN_DAY)
                     .saturating_mul(86_400)
                     .saturating_add(nanos / 1_000_000_000),
             })
@@ -1018,7 +1018,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .summary(format!(
                 "{}, {}",
                 meta.groups.len(),
-                crate::formats::util::datakit::size(data_end.saturating_sub(4))
+                crate::formats::util::fmt::size(data_end.saturating_sub(4))
             ))
             .lazy(row_groups, state.clone()),
     );
@@ -1156,7 +1156,7 @@ async fn row_groups(cx: Cx, ctx: Ctx) -> Result<()> {
             .summary(format!(
                 "{rows} rows, {} columns, {}",
                 cols.len(),
-                crate::formats::util::datakit::size(u64::try_from(bytes).unwrap_or(0))
+                crate::formats::util::fmt::size(u64::try_from(bytes).unwrap_or(0))
             ))
             .lazy(columns, (ctx.clone(), g));
         if let Some(start) = start {
@@ -1280,7 +1280,7 @@ async fn pages(cx: Cx, (ctx, col, span): (Ctx, usize, Span)) -> Result<()> {
                     let info = page_info(&data);
                     format!(
                         "{}, {} values, {}",
-                        crate::formats::util::datakit::size(compressed),
+                        crate::formats::util::fmt::size(compressed),
                         info.num_values,
                         lookup(ENCODINGS, info.encoding.cast_unsigned()).unwrap_or("?")
                     )
@@ -1443,8 +1443,8 @@ async fn page(
     );
     let mut node = Node::new(name).span(values).summary(format!(
         "{} → {}",
-        crate::formats::util::datakit::size(values.len),
-        crate::formats::util::datakit::size(expected)
+        crate::formats::util::fmt::size(values.len),
+        crate::formats::util::fmt::size(expected)
     ));
     node = match codec(c.codec) {
         Some(codec) if expected <= MAX_PAGE => {
@@ -1464,6 +1464,16 @@ async fn decoded_page(
     cx: Cx,
     (c, info, span, codec, expected): (Col, PageInfo, Span, Codec, u64),
 ) -> Result<()> {
+    // A GZIP page is a whole RFC 1952 stream; `Codec::Gzip` decodes from
+    // the end of the first member's header.
+    let span = if matches!(codec, Codec::Gzip) {
+        let head = cx.read_avail(span.sub(0, 1 << 18)).await?;
+        span.tail(to_u64(
+            crate::codec::gzip::header_len(&head).map_err(|e| e.at(span))?,
+        ))
+    } else {
+        span
+    };
     let decoded = crate::codec::decode_span(&cx, span, &codec, Some(expected)).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
@@ -1898,7 +1908,7 @@ async fn bloom_filters(cx: Cx, ctx: Ctx) -> Result<()> {
         cx.push(
             group(format!("{} (row group {})", c.leaf.path, c.group), children)
                 .span(ctx.input.span.sub(off, total))
-                .summary(crate::formats::util::datakit::size(total)),
+                .summary(crate::formats::util::fmt::size(total)),
         )
         .await;
     }

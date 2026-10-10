@@ -18,6 +18,8 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::civil::SAS_EPOCH;
+use crate::formats::util::floats::ibm;
 use crate::formats::{Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -30,9 +32,6 @@ declare_format!(pub XPORT = "sas-xport", "SAS transport file", ["xpt", "xport"],
         (0, b"HEADER RECORD*******LIBRARY HEADER RECORD!!!!!!!"),
         (0, b"HEADER RECORD*******LIBV8   HEADER RECORD!!!!!!!"),
     ]), dissect);
-
-/// SAS dates count days from 1960-01-01.
-const EPOCH: i64 = -315_619_200;
 
 const DATE_FORMATS: &[&str] = &[
     "DATE", "MMDDYY", "DDMMYY", "YYMMDD", "E8601DA", "WEEKDATE", "WORDDATE", "MONYY",
@@ -76,26 +75,6 @@ fn header_name(rec: &[u8]) -> Option<&[u8]> {
 fn digits(rec: &[u8], at: usize, len: usize) -> Option<u64> {
     let s = String::from_utf8_lossy(rec.get(at..at.saturating_add(len))?).into_owned();
     s.trim().parse().ok()
-}
-
-/// An IBM 370 hexadecimal float, big-endian, truncated to `bytes.len()`.
-pub fn ibm_float(bytes: &[u8]) -> f64 {
-    let mut full = [0u8; 8];
-    for (o, b) in full.iter_mut().zip(bytes) {
-        *o = *b;
-    }
-    let bits = u64::from_be_bytes(full);
-    let fraction = bits & 0x00ff_ffff_ffff_ffff;
-    if fraction == 0 {
-        return 0.0;
-    }
-    let exponent = i32::from(((bits >> 56) & 0x7f) as u8).saturating_sub(64);
-    let magnitude = fraction as f64 / 72_057_594_037_927_936.0 * 16f64.powi(exponent);
-    if bits >> 63 == 1 {
-        -magnitude
-    } else {
-        magnitude
-    }
 }
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
@@ -429,12 +408,12 @@ fn cell(var: &Var, raw: &[u8]) -> Cell {
         };
         return Cell::Missing { name, raw: None };
     }
-    let v = ibm_float(raw);
+    let v = ibm(raw).unwrap_or(0.0);
     let format = var.format.to_ascii_uppercase();
     if DATE_FORMATS.contains(&format.as_str()) {
-        date_cell(v, 86_400.0, EPOCH, false)
+        date_cell(v, 86_400.0, SAS_EPOCH, false)
     } else if DATETIME_FORMATS.contains(&format.as_str()) {
-        date_cell(v, 1.0, EPOCH, true)
+        date_cell(v, 1.0, SAS_EPOCH, true)
     } else {
         Cell::Number(v)
     }
@@ -477,18 +456,4 @@ async fn observations(cx: Cx, m: Arc<Member>) -> Result<()> {
         cx.push(row_node(name, span, items)).await;
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ibm_floats() {
-        assert_eq!(ibm_float(&[0x41, 0x10, 0, 0, 0, 0, 0, 0]), 1.0);
-        assert_eq!(ibm_float(&[0xc1, 0x10, 0, 0, 0, 0, 0, 0]), -1.0);
-        assert_eq!(ibm_float(&[0x42, 0x64]), 100.0);
-        assert_eq!(ibm_float(&[0x40, 0x80, 0, 0, 0, 0, 0, 0]), 0.5);
-        assert_eq!(ibm_float(&[0; 8]), 0.0);
-    }
 }

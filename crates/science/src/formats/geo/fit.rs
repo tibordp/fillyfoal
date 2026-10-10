@@ -341,7 +341,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let crc_span = file.sub(crc_at, 2);
     if crc_span.len == 2 {
         let stored = u16_le(&cx.read(crc_span).await?, 0).unwrap_or(0);
-        let mut node = leaf("CRC", crc_span, hex(stored.into(), 16));
+        let mut node = leaf("CRC", crc_span, hex(stored, 16));
         // Checking the CRC reads the whole file; only do it for small files.
         if crc_at <= 4 << 20 {
             let all = cx.read(file.sub(0, crc_at)).await?;
@@ -497,7 +497,7 @@ async fn records(cx: Cx, data: Span) -> Result<()> {
 
 async fn definition(cx: Cx, (span, rh): (Span, u8)) -> Result<()> {
     cx.emit(
-        leaf("Record header", span.sub(0, 1), hex(rh.into(), 8)).summary(format!(
+        leaf("Record header", span.sub(0, 1), hex(rh, 8)).summary(format!(
             "local type {}{}",
             rh & 15,
             if rh & 0x20 != 0 {
@@ -522,7 +522,7 @@ async fn definition(cx: Cx, (span, rh): (Span, u8)) -> Result<()> {
     cx.emit(leaf(
         "Global message number",
         span.sub(3, 2),
-        enumv(MESSAGES, def.global.into(), 16),
+        enumv(def.global, 16, MESSAGES),
     ));
     cx.emit(leaf(
         "Fields",
@@ -644,7 +644,7 @@ fn present(v: &Value, kind: Kind) -> (Value, Option<String>) {
             )
         }
         (Kind::Enum(table), _, Value::UInt { value, bits, .. }) => {
-            (enumv(table, *value, *bits), None)
+            (enumv(*value, *bits, table), None)
         }
         _ => (v.clone(), None),
     }

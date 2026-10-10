@@ -10,11 +10,12 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::floats::ibm;
 use crate::formats::util::lines::{
     Line, Lines, enumeration, float32, head_lines, int, is_text, number, preview, summarize, text,
     uint,
 };
-use crate::formats::{Head, Input, Probe};
+use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
@@ -123,19 +124,9 @@ record! {
     }
 }
 
-/// IBM System/360 single-precision float.
-fn ibm_float(v: u32) -> f64 {
-    let sign = if v >> 31 == 0 { 1.0 } else { -1.0 };
-    let exponent = i32::try_from((v >> 24) & 0x7f)
-        .unwrap_or(64)
-        .saturating_sub(64);
-    let fraction = f64::from(v & 0x00ff_ffff) / 16_777_216.0;
-    sign * fraction * 16f64.powi(exponent)
-}
-
 fn segy_sample(b: &[u8], format: u16) -> f64 {
     match format {
-        1 => ibm_float(u32_be(b, 0).unwrap_or(0)),
+        1 => ibm(&u32_be(b, 0).unwrap_or(0).to_be_bytes()).unwrap_or(0.0),
         2 => f64::from(crate::bytes::i32_be(b, 0).unwrap_or(0)),
         3 => f64::from(u16_be(b, 0).unwrap_or(0).cast_signed()),
         5 => f64::from(f32::from_bits(u32_be(b, 0).unwrap_or(0))),
@@ -855,7 +846,7 @@ async fn mseed3(cx: Cx, input: Input) -> Result<()> {
                     "{:04}-{:03} {:02}:{:02}:{:02}.{:09}, {} samples at {rate} Hz",
                     h.year, h.day, h.hour, h.minute, h.second, h.nanosecond, h.samples
                 ))
-                .lazy(mseed3_record, (hs, sid_span, extra, data)),
+                .lazy(mseed3_record, (input, hs, sid_span, extra, data)),
         )
         .await;
         count = count.saturating_add(1);
@@ -865,7 +856,10 @@ async fn mseed3(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn mseed3_record(cx: Cx, (header, sid, extra, data): (Span, Span, Span, Span)) -> Result<()> {
+async fn mseed3_record(
+    cx: Cx,
+    (input, header, sid, extra, data): (Input, Span, Span, Span, Span),
+) -> Result<()> {
     cx.emit(Mseed3Header::node("Fixed header", header, LE));
     let s = cx.read_avail(sid).await?;
     cx.emit(
@@ -874,12 +868,11 @@ async fn mseed3_record(cx: Cx, (header, sid, extra, data): (Span, Span, Span, Sp
             .value(text(String::from_utf8_lossy(&s))),
     );
     if extra.len > 0 {
-        let e = cx.read_avail(extra.sub(0, 4096)).await?;
-        cx.emit(
-            Node::new("Extra headers (JSON)")
-                .span(extra)
-                .value(text(preview(&String::from_utf8_lossy(&e), 200))),
-        );
+        cx.emit(embedded_as(
+            "Extra headers (JSON)",
+            input.nested(extra),
+            &crate::formats::text::json::FORMAT,
+        ));
     }
     cx.emit(Node::new("Data").span(data));
     Ok(())
@@ -1406,10 +1399,12 @@ async fn e57(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(xml.sub(0, 4096)).await?;
     let head = String::from_utf8_lossy(&head).into_owned();
     cx.emit(
-        Node::new("XML section")
-            .span(xml)
-            .summary(format!("{} bytes", xml.len))
-            .lazy(xml_lines, xml),
+        embedded_as(
+            "XML section",
+            input.nested(xml),
+            &crate::formats::text::xml::FORMAT,
+        )
+        .summary(format!("{} bytes", xml.len)),
     );
     let pages = file.len.checked_div(page).unwrap_or(0);
     cx.emit(
@@ -1463,24 +1458,6 @@ async fn e57_pages(cx: Cx, (file, page): (Span, u64)) -> Result<()> {
             )));
         }
         cx.push(node).await;
-    }
-    Ok(())
-}
-
-/// The lines of an embedded text (XML) section.
-async fn xml_lines(cx: Cx, span: Span) -> Result<()> {
-    let mut lines = Lines::new(&cx, span);
-    while let Some(line) = lines.next().await? {
-        cx.progress_in(span, span.offset.saturating_add(lines.pos()));
-        let t = line.text();
-        if !t.trim().is_empty() {
-            cx.push(
-                Node::new(format!("Line {}", line.pos))
-                    .span(line.content())
-                    .value(text(preview(&t, 200))),
-            )
-            .await;
-        }
     }
     Ok(())
 }
@@ -2413,13 +2390,6 @@ async fn vicar_label(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn ibm_floats() {
-        assert!((ibm_float(0x4110_0000) - 1.0).abs() < 1e-12);
-        assert!((ibm_float(0xc276_a000) + 118.625).abs() < 1e-9);
-        assert_eq!(ibm_float(0), 0.0);
-    }
 
     #[test]
     fn crc32c_check_value() {

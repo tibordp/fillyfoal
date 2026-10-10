@@ -7,6 +7,7 @@
 
 use std::borrow::Cow;
 
+use super::emit_nodes;
 use super::{leaf, text};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
@@ -848,7 +849,7 @@ fn wkt_element(p: Piece<'_>, at: &mut usize, depth: u32, work: &mut u64) -> Opti
     Some(if nodes.is_empty() {
         node
     } else {
-        node.lazy(super::emit_nodes, nodes)
+        node.lazy(emit_nodes, std::sync::Arc::new(nodes))
     })
 }
 

@@ -9,6 +9,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::compression::gzip;
 use crate::formats::util::lines::{enumeration, float32, hex, int, preview, summarize, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -20,26 +21,8 @@ const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
 // ---------------------------------------------------------------------------
-// BGZF: concatenated gzip members, each carrying its size in a "BC" subfield.
-
-record! {
-    pub struct BgzfHeader {
-        magic: bytes[2] "ID",
-        method: u8 "CM",
-        flags: u8 "FLG" .hex(),
-        mtime: u32 "MTIME" .timestamp(),
-        xfl: u8 "XFL",
-        os: u8 "OS",
-        xlen: u16 "XLEN" .desc("Length of the extra field"),
-    }
-}
-
-record! {
-    pub struct BgzfTrailer {
-        crc: u32 "CRC32" .hex(),
-        isize: u32 "ISIZE" .desc("Uncompressed size of this block"),
-    }
-}
+// BGZF: concatenated gzip members, each carrying its size in a "BC" subfield
+// of the extra field. The member header and trailer are gzip's.
 
 /// The BSIZE of the "BC" subfield in a gzip extra field.
 fn bc_subfield(extra: &[u8]) -> Option<u16> {
@@ -62,7 +45,7 @@ fn bgzf_peek(h: &Head<'_>) -> Option<Vec<u8>> {
     let xlen = usize::from(u16_le(h.data, 10)?);
     let extra = h.data.get(12..12usize.saturating_add(xlen))?;
     let bsize = usize::from(bc_subfield(extra)?);
-    let start = 12usize.saturating_add(xlen);
+    let start = crate::codec::gzip::header_len(h.data).ok()?;
     let end = bsize.saturating_add(1).saturating_sub(8).min(h.data.len());
     let cdata = h.data.get(start..end)?;
     let mut out = Vec::new();
@@ -175,14 +158,15 @@ async fn bgzf_block_node(
     cx: Cx,
     (input, span, xlen, cdata, isize): (Input, Span, u16, Span, u32),
 ) -> Result<()> {
-    cx.emit(BgzfHeader::node(
+    cx.emit(gzip::Header::node(
         "Header",
-        span.sub(0, BgzfHeader::SIZE),
+        span.sub(0, gzip::Header::SIZE),
         LE,
     ));
-    let extra = span.sub(12, xlen.into());
+    let extra = span.sub(gzip::Header::SIZE, 2u64.saturating_add(xlen.into()));
     let data = cx.block(extra).await?;
     let mut f = Fields::emitting(&cx, &data, LE);
+    f.u16("XLEN").desc("Length of the extra field").emit()?;
     f.ascii("Subfield ID", 2).emit()?;
     f.u16("Subfield length").emit()?;
     f.u16("BSIZE").desc("Total block size minus 1").emit()?;
@@ -190,7 +174,7 @@ async fn bgzf_block_node(
         content("Data", input, cdata, Codec::Deflate, Some(isize.into()))
             .summary(format!("{} compressed bytes", cdata.len)),
     );
-    cx.emit(BgzfTrailer::node(
+    cx.emit(gzip::Trailer::node(
         "Trailer",
         span.sub(span.len.saturating_sub(8), 8),
         LE,

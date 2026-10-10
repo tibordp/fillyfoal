@@ -28,6 +28,7 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::civil::SAS_EPOCH;
 use crate::formats::{Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -37,9 +38,6 @@ const MAGIC: &[u8] = b"\0\0\0\0\0\0\0\0\0\0\0\0\xc2\xea\x81\x60\xb3\x14\x11\xcf\
 
 declare_format!(pub SAS7BDAT = "sas7bdat", "SAS data set", ["sas7bdat", "sas7bcat"], "application/x-sas-data",
     Probe::Magic(&[(0, MAGIC)]), dissect);
-
-/// SAS times count seconds (dates: days) from 1960-01-01.
-const EPOCH: i64 = -315_619_200;
 
 /// The encoding byte at offset 70 (ReadStat's and pandas' tables, as
 /// remembered), as WHATWG labels where one exists.
@@ -349,7 +347,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let os_name = field(56, 16);
     let time = |v: f64, name: &'static str, at: u64| {
         let node = Node::new(name).span(file.sub(at, 8));
-        match date_cell(v, 1.0, EPOCH, true) {
+        match date_cell(v, 1.0, SAS_EPOCH, true) {
             Cell::Date { unix_seconds, .. } => node.value(Value::Timestamp { unix_seconds }),
             _ => node.value(Value::Float(v)),
         }
@@ -501,7 +499,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         } else {
             "big-endian"
         },
-        match date_cell(created, 1.0, EPOCH, true) {
+        match date_cell(created, 1.0, SAS_EPOCH, true) {
             Cell::Date { unix_seconds, .. } => format!(", created {}", super::date_string(unix_seconds, true)),
             _ => String::new(),
         }
@@ -607,9 +605,9 @@ async fn metadata(cx: &Cx, sas: &mut Sas) -> Result<()> {
     if sas.codec.is_none() {
         // pandas looks for the literal anywhere in the first text blob.
         let first = blobs.first().map(Vec::as_slice).unwrap_or_default();
-        if first.windows(8).any(|w| w == b"SASYZCRL") {
+        if crate::bytes::contains(first, b"SASYZCRL") {
             sas.codec = Some(Codec::SasRle);
-        } else if first.windows(8).any(|w| w == b"SASYZCR2") {
+        } else if crate::bytes::contains(first, b"SASYZCR2") {
             sas.codec = Some(Codec::SasRdc);
         }
     }
@@ -873,9 +871,9 @@ fn cell(sas: &Sas, col: &Column, raw: &[u8]) -> Cell {
     }
     let upper = col.format.to_ascii_uppercase();
     if DATE_FORMATS.contains(&upper.as_str()) {
-        date_cell(v, 86_400.0, EPOCH, false)
+        date_cell(v, 86_400.0, SAS_EPOCH, false)
     } else if DATETIME_FORMATS.contains(&upper.as_str()) {
-        date_cell(v, 1.0, EPOCH, true)
+        date_cell(v, 1.0, SAS_EPOCH, true)
     } else {
         Cell::Number(v)
     }

@@ -38,8 +38,9 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::codec::{Codec, crc::crc32c_update};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::text::plural;
+use crate::formats::util::arcutil::emit_nodes;
 use crate::formats::util::binutil::{dec, hex, hex_string, text};
+use crate::formats::util::fmt::grouped_count;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -220,7 +221,7 @@ pub async fn btree(cx: Cx, input: Input) -> Result<()> {
         Node::new("Descriptor block")
             .span(file.sub(0, ALLOC))
             .summary(format!("block manager version {major}.{minor}"))
-            .lazy(emit_all, Arc::new(kids)),
+            .lazy(emit_nodes, Arc::new(kids)),
     );
     cx.emit(
         Node::new("Blocks")
@@ -229,15 +230,8 @@ pub async fn btree(cx: Cx, input: Input) -> Result<()> {
     );
     cx.annotate(format!(
         "WiredTiger B-tree file, block manager {major}.{minor}, {}",
-        plural(file.len, "byte", "bytes")
+        grouped_count(file.len, "byte", "bytes")
     ));
-    Ok(())
-}
-
-async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.emit(n.clone());
-    }
     Ok(())
 }
 
@@ -274,9 +268,9 @@ fn page_summary(h: &PageHeader) -> String {
         .unwrap_or("page")
         .to_owned();
     if h.kind == 5 {
-        s.push_str(&format!(", {}", plural(h.entries.into(), "byte", "bytes")));
+        s.push_str(&format!(", {}", grouped_count(h.entries, "byte", "bytes")));
     } else if h.kind != 1 {
-        s.push_str(&format!(", {}", plural(h.entries.into(), "cell", "cells")));
+        s.push_str(&format!(", {}", grouped_count(h.entries, "cell", "cells")));
     }
     if h.flags & 1 != 0 {
         s.push_str(", compressed");
@@ -304,7 +298,7 @@ async fn blocks(cx: Cx, (input, file): (Input, Span)) -> Result<()> {
             cx.push(
                 Node::new("Unused")
                     .span(file.sub(start, pos.saturating_sub(start)))
-                    .summary(plural(pos.saturating_sub(start), "byte", "bytes")),
+                    .summary(grouped_count(pos.saturating_sub(start), "byte", "bytes")),
             )
             .await;
         }
@@ -378,7 +372,7 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
     cx.emit(
         Node::new("Page header")
             .span(span.sub(0, 28))
-            .lazy(emit_all, Arc::new(ph)),
+            .lazy(emit_nodes, Arc::new(ph)),
     );
     let stored = u32_le(&head, 32).unwrap_or(0);
     let bflags = head.get(36).copied().unwrap_or(0);
@@ -416,7 +410,7 @@ async fn page(cx: Cx, (input, file, pos): PageState) -> Result<()> {
     cx.emit(
         Node::new("Block header")
             .span(span.sub(28, 12))
-            .lazy(emit_all, Arc::new(bh)),
+            .lazy(emit_nodes, Arc::new(bh)),
     );
     if h.flags & 8 != 0 {
         cx.emit(
@@ -516,7 +510,10 @@ async fn extents(cx: &Cx, image: Span) -> Result<()> {
             Node::new(format!("Extent {off:#x}"))
                 .span(span)
                 .value(dec(size, 64))
-                .summary(format!("{} at {off:#x}", plural(size, "byte", "bytes"))),
+                .summary(format!(
+                    "{} at {off:#x}",
+                    grouped_count(size, "byte", "bytes")
+                )),
         )
         .await;
     }
@@ -678,13 +675,13 @@ fn item_node(name: &str, input: Input, span: Span, d: &[u8], key: bool) -> Node 
         if s.contains('=') && body.len() <= MAX_CONFIG_LEN {
             let items = config(body, 0, 0, span).0;
             if !items.is_empty() {
-                return node.value(text(s)).lazy(emit_all, Arc::new(items));
+                return node.value(text(s)).lazy(emit_nodes, Arc::new(items));
             }
         }
         return node.value(text(s));
     }
     node.value(Value::Bytes(d.get(..64).unwrap_or(d).to_vec()))
-        .summary(plural(to_u64(d.len()), "byte", "bytes"))
+        .summary(grouped_count(to_u64(d.len()), "byte", "bytes"))
 }
 
 fn cell_fields(c: &Cell, span: Span) -> Vec<Node> {
@@ -716,7 +713,7 @@ fn cell_fields(c: &Cell, span: Span) -> Vec<Node> {
     kids.push(
         Node::new("Data")
             .span(sub(c.data.0, c.data.1))
-            .summary(plural(len, "byte", "bytes")),
+            .summary(grouped_count(len, "byte", "bytes")),
     );
     kids
 }
@@ -796,7 +793,7 @@ async fn emit_pair(
             Node::new("Key")
                 .span(cspan(k))
                 .value(text(show_key(full)))
-                .lazy(emit_all, Arc::new(fields)),
+                .lazy(emit_nodes, Arc::new(fields)),
         );
     }
     if let Some(v) = &value {
@@ -830,7 +827,7 @@ async fn emit_pair(
             Node::new("Value cell")
                 .span(cspan(v))
                 .summary(label)
-                .lazy(emit_all, Arc::new(fields)),
+                .lazy(emit_nodes, Arc::new(fields)),
         );
         if key.is_none() {
             name = label.to_owned();
@@ -840,7 +837,7 @@ async fn emit_pair(
         to_u64(start.unwrap_or(0)),
         to_u64(end.saturating_sub(start.unwrap_or(0))),
     );
-    let mut node = Node::new(name).span(span).lazy(emit_all, Arc::new(kids));
+    let mut node = Node::new(name).span(span).lazy(emit_nodes, Arc::new(kids));
     if !summary.is_empty() {
         node = node.summary(summary);
     }
@@ -848,13 +845,7 @@ async fn emit_pair(
 }
 
 fn short(v: &Value) -> String {
-    let s = crate::render::value(v);
-    if s.chars().count() > 48 {
-        let cut: String = s.chars().take(48).collect();
-        format!("{cut}…")
-    } else {
-        s
-    }
+    crate::formats::util::fmt::clip(&crate::render::value(v), 48)
 }
 
 /// An address cookie: where the block is, expandable into that page.
@@ -914,8 +905,8 @@ fn config(s: &[u8], mut pos: usize, depth: usize, base: Span) -> (Vec<Node>, usi
                 let mut node = Node::new(key).span(at(start, end));
                 if !kids.is_empty() {
                     node = node
-                        .summary(plural(n, "item", "items"))
-                        .lazy(emit_all, Arc::new(kids));
+                        .summary(grouped_count(n, "item", "items"))
+                        .lazy(emit_nodes, Arc::new(kids));
                 } else {
                     node = node.value(text("()"));
                 }
@@ -994,9 +985,9 @@ fn checkpoint_addr(node: Node, hexs: &str) -> Node {
     }
     node.summary(format!(
         "checkpoint cookie v{version}, {}",
-        plural(i, "integer", "integers")
+        grouped_count(i, "integer", "integers")
     ))
-    .lazy(emit_all, Arc::new(kids))
+    .lazy(emit_nodes, Arc::new(kids))
 }
 
 /// The turtle file: alternating key and value lines.
@@ -1037,7 +1028,7 @@ pub async fn turtle(cx: Cx, input: Input) -> Result<()> {
         if value.contains(&b'=') {
             let (items, _) = config(value, 0, 0, vspan);
             if !items.is_empty() {
-                node = node.lazy(emit_all, Arc::new(items));
+                node = node.lazy(emit_nodes, Arc::new(items));
             }
         }
         cx.push(node).await;

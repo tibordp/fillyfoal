@@ -27,7 +27,8 @@ use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::formats::text::scan::Scanner;
-use crate::formats::util::datakit::{ByteReader, be_uint, clip};
+use crate::formats::util::datakit::{ByteReader, be_uint};
+use crate::formats::util::fmt::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -715,7 +716,7 @@ async fn plain_value(
                 node,
                 Some(format!(
                     "clob, {}",
-                    crate::formats::text::plural(h.len, "byte", "bytes")
+                    crate::formats::util::fmt::grouped_count(h.len, "byte", "bytes")
                 )),
             )
         }

@@ -11,6 +11,8 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::binutil::get;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
@@ -34,31 +36,17 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-fn read_u32(data: &[u8], at: usize, e: Endian) -> Option<u32> {
-    match e {
-        Endian::Little => crate::bytes::u32_le(data, at),
-        Endian::Big => crate::bytes::u32_be(data, at),
-    }
-}
-
-fn read_u16(data: &[u8], at: usize, e: Endian) -> Option<u16> {
-    match e {
-        Endian::Little => crate::bytes::u16_le(data, at),
-        Endian::Big => crate::bytes::u16_be(data, at),
-    }
-}
-
 /// The byte order whose magic number matches at offset 12.
 fn endian(data: &[u8]) -> Option<Endian> {
-    [Endian::Little, Endian::Big]
-        .into_iter()
-        .find(|&e| read_u32(data, 12, e).is_some_and(|m| matches!(m, BTREE | HASH | QUEUE | HEAP)))
+    [Endian::Little, Endian::Big].into_iter().find(|&e| {
+        get::<u32>(data, 12, e).is_some_and(|m| matches!(m, BTREE | HASH | QUEUE | HEAP))
+    })
 }
 
 fn pagesize(h: &Head<'_>) -> Option<u32> {
     let e = endian(h.data)?;
-    let size = read_u32(h.data, 20, e)?;
-    let version = read_u32(h.data, 16, e)?;
+    let size = get::<u32>(h.data, 20, e)?;
+    let version = get::<u32>(h.data, 16, e)?;
     (size.is_power_of_two() && (512..=65536).contains(&size) && (1..=20).contains(&version))
         .then_some(size)
 }
@@ -112,7 +100,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read(file.sub(0, 512)).await?;
     let e =
         endian(&head).ok_or_else(|| Diagnostic::malformed("unknown magic").at(file.sub(12, 4)))?;
-    let u32v = |at: usize| read_u32(&head, at, e).unwrap_or(0);
+    let u32v = |at: usize| get::<u32>(&head, at, e).unwrap_or(0);
     let magic = u32v(12);
     let pagesize = u64::from(u32v(20));
     if !pagesize.is_power_of_two() || !(512..=65536).contains(&pagesize) {
@@ -215,13 +203,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn emit_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.emit(n.clone());
-    }
-    Ok(())
-}
-
 /// A page read into memory with its header decoded.
 struct Page {
     span: Span,
@@ -239,9 +220,9 @@ async fn load(cx: &Cx, db: &Db, no: u32) -> Result<Page> {
     let e = db.endian;
     Ok(Page {
         span,
-        next: read_u32(&data, 16, e).unwrap_or(0),
-        entries: read_u16(&data, 20, e).unwrap_or(0),
-        hf_offset: read_u16(&data, 22, e).unwrap_or(0),
+        next: get::<u32>(&data, 16, e).unwrap_or(0),
+        entries: get::<u16>(&data, 20, e).unwrap_or(0),
+        hf_offset: get::<u16>(&data, 22, e).unwrap_or(0),
         level: data.get(24).copied().unwrap_or(0),
         kind: data.get(25).copied().unwrap_or(0),
         data,
@@ -264,7 +245,7 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
     let mut out = Vec::new();
     let mut prev = size;
     for i in 0..usize::from(page.entries) {
-        let Some(off) = read_u16(
+        let Some(off) = get::<u16>(
             &page.data,
             to_usize(HEADER).saturating_add(i.saturating_mul(2)),
             e,
@@ -278,15 +259,15 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
         let item = match page.kind {
             // B-tree and recno leaves, duplicate pages: BKEYDATA / BOVERFLOW.
             1 | 5 | 6 | 12 => {
-                let len = usize::from(read_u16(&page.data, off, e).unwrap_or(0));
+                let len = usize::from(get::<u16>(&page.data, off, e).unwrap_or(0));
                 let kind = page.data.get(off.saturating_add(2)).copied().unwrap_or(0) & 0x7f;
                 if kind == 3 {
                     Item {
                         range: (off, off.saturating_add(12).min(size)),
                         kind,
                         data: (off, off),
-                        page: read_u32(&page.data, off.saturating_add(4), e),
-                        total: read_u32(&page.data, off.saturating_add(8), e).unwrap_or(0),
+                        page: get::<u32>(&page.data, off.saturating_add(4), e),
+                        total: get::<u32>(&page.data, off.saturating_add(8), e).unwrap_or(0),
                     }
                 } else {
                     let start = off.saturating_add(3);
@@ -302,7 +283,7 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
             }
             // Internal pages: BINTERNAL (length, type, unused, child, records, data).
             3 | 4 => {
-                let len = usize::from(read_u16(&page.data, off, e).unwrap_or(0));
+                let len = usize::from(get::<u16>(&page.data, off, e).unwrap_or(0));
                 let start = off.saturating_add(12);
                 let end = if page.kind == 4 {
                     start
@@ -313,8 +294,8 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
                     range: (off, end),
                     kind: page.data.get(off.saturating_add(2)).copied().unwrap_or(0) & 0x7f,
                     data: (start, end),
-                    page: read_u32(&page.data, off.saturating_add(4), e),
-                    total: read_u32(&page.data, off.saturating_add(8), e).unwrap_or(0),
+                    page: get::<u32>(&page.data, off.saturating_add(4), e),
+                    total: get::<u32>(&page.data, off.saturating_add(8), e).unwrap_or(0),
                 }
             }
             // Hash pages: HKEYDATA (type, data) up to the previous item.
@@ -326,8 +307,8 @@ fn items(db: &Db, page: &Page) -> Vec<Item> {
                         range: (off, end),
                         kind,
                         data: (off, off),
-                        page: read_u32(&page.data, off.saturating_add(4), e),
-                        total: read_u32(&page.data, off.saturating_add(8), e).unwrap_or(0),
+                        page: get::<u32>(&page.data, off.saturating_add(4), e),
+                        total: get::<u32>(&page.data, off.saturating_add(8), e).unwrap_or(0),
                     }
                 } else {
                     Item {
@@ -540,19 +521,19 @@ async fn page_contents(cx: Cx, (db, no): (DbRef, u32)) -> Result<()> {
             .span(h.sub(0, 8))
             .value(Value::Text(format!(
                 "{}/{}",
-                read_u32(&page.data, 0, e).unwrap_or(0),
-                read_u32(&page.data, 4, e).unwrap_or(0)
+                get::<u32>(&page.data, 0, e).unwrap_or(0),
+                get::<u32>(&page.data, 4, e).unwrap_or(0)
             ))),
     );
     cx.emit(
         Node::new("Page number")
             .span(h.sub(8, 4))
-            .value(u(read_u32(&page.data, 8, e).unwrap_or(0).into(), 32)),
+            .value(u(get::<u32>(&page.data, 8, e).unwrap_or(0).into(), 32)),
     );
     cx.emit(
         Node::new("Previous page")
             .span(h.sub(12, 4))
-            .value(u(read_u32(&page.data, 12, e).unwrap_or(0).into(), 32)),
+            .value(u(get::<u32>(&page.data, 12, e).unwrap_or(0).into(), 32)),
     );
     cx.emit(
         Node::new("Next page")
