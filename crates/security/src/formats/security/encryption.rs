@@ -221,13 +221,10 @@ async fn minisign(cx: Cx, input: Input) -> Result<()> {
         } else if !line.trim().is_empty() {
             let decoded = base64(line.trim().as_bytes()).bytes;
             let alg = String::from_utf8_lossy(decoded.get(..2).unwrap_or_default()).into_owned();
-            let id: String = decoded
-                .get(2..10)
-                .unwrap_or_default()
-                .iter()
-                .rev()
-                .map(|b| format!("{b:02X}"))
-                .collect();
+            // The key ID is shown as a big-endian number.
+            let mut id_bytes = decoded.get(2..10).unwrap_or_default().to_vec();
+            id_bytes.reverse();
+            let id = crate::text::hex_upper(&id_bytes);
             let label = match (i, decoded.len()) {
                 (_, 42) => {
                     kind = "public key";

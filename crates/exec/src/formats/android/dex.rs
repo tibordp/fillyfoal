@@ -20,6 +20,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::binutil::{NodeExt, Reader, get_at, mutf8};
 use crate::formats::util::fmt::clip;
+use crate::formats::util::sound::sign_extend;
 use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
@@ -464,7 +465,7 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
 async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
     const CHUNK: u64 = 1 << 16;
     let mut sha = Sha1::new();
-    let (mut a, mut b) = (1u32, 0u32);
+    let mut adler = crate::codec::Adler32::new();
     let mut pos = 12u64;
     while pos < file.len {
         let data = cx.read(file.sub(pos, CHUNK)).await?;
@@ -477,10 +478,7 @@ async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
             sha.update(rest);
         }
         for chunk in data.chunks(4096) {
-            for &byte in chunk {
-                a = (a.wrapping_add(u32::from(byte))) % 65521;
-                b = (b.wrapping_add(a)) % 65521;
-            }
+            adler.update(chunk);
             cx.checkpoint().await;
         }
         pos = pos.saturating_add(to_u64(data.len()));
@@ -490,7 +488,7 @@ async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
         *d = s;
     }
     Ok(Checks {
-        adler: (b << 16) | a,
+        adler: adler.value(),
         sha1,
     })
 }
@@ -1218,14 +1216,6 @@ fn read_le(r: &mut Reader<'_>, n: usize) -> Option<u64> {
     Some(v)
 }
 
-fn sign_extend(v: u64, bytes: usize) -> i64 {
-    let shift = 64u32.saturating_sub(u32::try_from(bytes.saturating_mul(8)).unwrap_or(64));
-    if shift == 0 || shift >= 64 {
-        return v as i64;
-    }
-    (v.wrapping_shl(shift) as i64).wrapping_shr(shift)
-}
-
 /// Decodes an `encoded_value` into text pieces.
 fn encoded_value(r: &mut Reader<'_>, out: &mut Vec<Piece>, depth: u32) -> Option<()> {
     let h = r.u8()?;
@@ -1235,12 +1225,13 @@ fn encoded_value(r: &mut Reader<'_>, out: &mut Vec<Piece>, depth: u32) -> Option
     match h & 0x1f {
         0x00 => {
             let v = read_le(r, 1)?;
-            push(out, format!("{}", sign_extend(v, 1)));
+            push(out, format!("{}", sign_extend(v, 8)));
         }
         0x02 | 0x04 | 0x06 => {
             let v = read_le(r, size)?;
             let suffix = if h & 0x1f == 0x06 { "L" } else { "" };
-            push(out, format!("{}{suffix}", sign_extend(v, size)));
+            let bits = u8::try_from(size.saturating_mul(8)).unwrap_or(64);
+            push(out, format!("{}{suffix}", sign_extend(v, bits)));
         }
         0x03 => {
             let v = read_le(r, size)?;

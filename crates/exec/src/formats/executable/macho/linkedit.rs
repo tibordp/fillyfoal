@@ -161,13 +161,6 @@ fn bits(raw: u64, shift: u32, width: u32) -> u64 {
             .map_or(u64::MAX, |v| v.wrapping_sub(1))
 }
 
-fn sign_extend(v: u64, width: u32) -> i64 {
-    let shift = 64u32.saturating_sub(width);
-    i64::from_ne_bytes(v.checked_shl(shift).unwrap_or(0).to_ne_bytes())
-        .checked_shr(shift)
-        .unwrap_or(0)
-}
-
 /// Bytes between chain entries for each pointer format.
 fn chain_stride(format: u16) -> u64 {
     match format {
@@ -230,7 +223,7 @@ pub(super) fn decode_fixup(raw: u64, format: u16, base: u64) -> Option<Fixup> {
                 }
                 (false, true) => Fixup::Bind {
                     ordinal: u32::try_from(bits(raw, 0, ordinal_bits)).unwrap_or(0),
-                    addend: sign_extend(bits(raw, 32, 19), 19),
+                    addend: crate::formats::util::sound::sign_extend(bits(raw, 32, 19), 19),
                     auth: None,
                     next,
                 },

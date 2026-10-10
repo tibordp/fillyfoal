@@ -115,20 +115,32 @@ fn record_names(block: u64) -> EnumTable {
 // ---------------------------------------------------------------------------
 // Bit reading
 
-struct Bits<'a> {
-    data: &'a [u8],
-    /// Position in bits.
-    pos: u64,
+/// A reader of LLVM bitstreams (bitcode, Clang modules and serialized
+/// Swift modules): fields are packed least significant bit first, in
+/// little-endian 32-bit words. All reads return `None` (and leave the
+/// position where it was reached) at the end of `data` or on an
+/// out-of-range width.
+pub struct Bits<'a> {
+    pub data: &'a [u8],
+    /// Position in bits from the start of `data`.
+    pub pos: u64,
 }
 
-impl Bits<'_> {
-    fn remaining(&self) -> u64 {
+impl<'a> Bits<'a> {
+    /// A reader at the start of `data`.
+    pub fn new(data: &'a [u8]) -> Self {
+        Bits { data, pos: 0 }
+    }
+
+    /// Bits left after the position.
+    pub fn remaining(&self) -> u64 {
         to_u64(self.data.len())
             .saturating_mul(8)
             .saturating_sub(self.pos)
     }
 
-    fn read(&mut self, n: u32) -> Option<u64> {
+    /// A fixed-width field of `n` (at most 64) bits.
+    pub fn read(&mut self, n: u32) -> Option<u64> {
         if n > 64 || u64::from(n) > self.remaining() {
             return None;
         }
@@ -146,7 +158,9 @@ impl Bits<'_> {
         Some(value)
     }
 
-    fn vbr(&mut self, n: u32) -> Option<u64> {
+    /// A variable-width field in `n`-bit chunks (2 to 32), each with a
+    /// continuation bit at the top; `None` beyond 64 bits.
+    pub fn vbr(&mut self, n: u32) -> Option<u64> {
         if !(2..=32).contains(&n) {
             return None;
         }
@@ -166,7 +180,8 @@ impl Bits<'_> {
         }
     }
 
-    fn align32(&mut self) {
+    /// Skips to the next 32-bit word boundary.
+    pub fn align32(&mut self) {
         self.pos = self.pos.checked_next_multiple_of(32).unwrap_or(u64::MAX);
     }
 }

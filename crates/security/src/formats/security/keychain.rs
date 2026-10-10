@@ -32,6 +32,7 @@ use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::fmt::{fourcc, uuid};
 use crate::formats::{Input, Probe, embedded_as};
 use crate::node::Node;
@@ -461,10 +462,7 @@ async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .or_else(|| lookup(RELATIONS, relation.into()).map(str::to_owned));
         let mut node = Node::new(table_title(relation))
             .span(table)
-            .summary(format!(
-                "{records} record{}",
-                if records == 1 { "" } else { "s" }
-            ))
+            .summary(plural(records, "record"))
             .lazy(
                 self::table,
                 TableState {

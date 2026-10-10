@@ -4,12 +4,13 @@
 //! Section headers keep their PE layout; file offsets in them still count
 //! the stripped headers, so they are adjusted by `StrippedSize - 40`.
 
+use super::coff::{self, Section, SectionContext};
 use crate::bytes::u16_le;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
-use crate::fields::{Endian, parse};
-use crate::formats::executable::pe::tables::{MACHINE, SECTION_CHARACTERISTICS, SUBSYSTEM};
+use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::executable::pe::tables::{MACHINE, SUBSYSTEM};
 use crate::formats::util::binutil::data_node;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
@@ -59,20 +60,8 @@ record! {
     }
 }
 
-record! {
-    struct SectionHeader {
-        name: ascii[8] "Name",
-        virtual_size: u32 "VirtualSize" .hex(),
-        virtual_address: u32 "VirtualAddress" .hex(),
-        raw_size: u32 "SizeOfRawData" .hex(),
-        raw_pointer: u32 "PointerToRawData" .hex() .desc("Counts the stripped headers"),
-        relocations: u32 "PointerToRelocations" .hex(),
-        linenumbers: u32 "PointerToLinenumbers" .hex(),
-        nrelocs: u16 "NumberOfRelocations",
-        nlines: u16 "NumberOfLinenumbers",
-        characteristics: u32 "Characteristics" .flags(SECTION_CHARACTERISTICS),
-    }
-}
+/// Bytes in a section header.
+const SECTION_HEADER: u64 = 40;
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -89,7 +78,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let delta = u64::from(h.stripped).saturating_sub(TeHeader::SIZE);
     let table = file.sub(
         TeHeader::SIZE,
-        u64::from(h.sections).saturating_mul(SectionHeader::SIZE),
+        u64::from(h.sections).saturating_mul(SECTION_HEADER),
     );
     cx.emit(
         Node::new("Section Table")
@@ -100,12 +89,22 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
+/// A section header; offsets count `delta` stripped bytes.
+fn section_header(f: &mut Fields<'_>, &(file, delta): &(Span, u64)) -> Result<Section> {
+    let context = SectionContext {
+        file,
+        stripped: delta,
+        strings: &[],
+    };
+    coff::section_header(f, &context)
+}
+
 async fn sections(cx: Cx, (file, table, delta): (Span, Span, u64)) -> Result<()> {
-    let count = table.len / SectionHeader::SIZE;
+    let count = table.len / SECTION_HEADER;
     cx.set_count(Count::Exact(count));
     for i in 0..count {
-        let at = table.sub(i.saturating_mul(SectionHeader::SIZE), SectionHeader::SIZE);
-        let s = parse(&cx, at, LE, &(), SectionHeader::layout).await?;
+        let at = table.sub(i.saturating_mul(SECTION_HEADER), SECTION_HEADER);
+        let s = parse(&cx, at, LE, &(file, delta), section_header).await?;
         let offset = u64::from(s.raw_pointer).saturating_sub(delta);
         let data = file.sub(offset, s.raw_size.into());
         cx.push(
@@ -120,15 +119,18 @@ async fn sections(cx: Cx, (file, table, delta): (Span, Span, u64)) -> Result<()>
                 s.virtual_address, s.virtual_size, s.raw_size
             ))
             .target(data)
-            .lazy(section, (at, data, s.raw_size)),
+            .lazy(section, (at, data, s.raw_size, file, delta)),
         )
         .await;
     }
     Ok(())
 }
 
-async fn section(cx: Cx, (at, data, size): (Span, Span, u32)) -> Result<()> {
-    cx.emit(SectionHeader::node("Header", at, LE));
+async fn section(
+    cx: Cx,
+    (at, data, size, file, delta): (Span, Span, u32, Span, u64),
+) -> Result<()> {
+    cx.emit(struct_node("Header", at, LE, (file, delta), section_header));
     cx.emit(data_node("Raw Data", data, size.into()));
     Ok(())
 }

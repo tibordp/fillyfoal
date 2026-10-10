@@ -36,12 +36,15 @@ use std::sync::Arc;
 
 use tables::*;
 
+use super::coff::{MAX_STRINGS, Section, SectionContext, section_header};
+
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields, parse, struct_node};
 use crate::formats::util::binutil::RangeIndex;
 use crate::formats::util::fmt::count;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -162,15 +165,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         && res_size != 0
         && let Ok(Some(span)) = resdir::find(&cx, &pe, res_rva, RT_VERSION, None).await
     {
-        let node = Node::new("Version Information")
-            .span(span)
-            .lazy(version::block, (span, resource::Layout::Win32));
-        cx.emit(
-            match version::summary(&cx, span, resource::Layout::Win32).await {
-                Ok(summary) => node.summary(summary),
-                Err(e) => node.diag(e),
-            },
-        );
+        let layout = resource::Layout::Win32;
+        let node = Node::new("Version Information").span(span);
+        cx.emit(match version::summary(&cx, span, layout).await {
+            Ok(summary) => node.summary(summary).lazy(version::block, (span, layout)),
+            Err(e) => node.diag(e),
+        });
     }
 
     // Inno Setup's loader keeps the offsets of the installer data in
@@ -267,12 +267,28 @@ async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
         24u64.saturating_add(header.optional_size.into()),
         u64::from(header.sections).saturating_mul(40),
     );
+    // Images rarely have a COFF symbol table, but MinGW's keep one, and with
+    // it the string table that long section names (`/4` for `.debug_info`)
+    // refer to.
+    let mut strings = Vec::new();
+    if header.symptr != 0 {
+        let at =
+            u64::from(header.symptr).saturating_add(u64::from(header.nsyms).saturating_mul(18));
+        let size = cx.read_avail(file.sub(at, 4)).await?;
+        let size = u64::from(u32_le(&size, 0).unwrap_or(0)).min(MAX_STRINGS);
+        strings = cx.read_avail(file.sub(at, size)).await?;
+    }
     let block = cx.block(table).await?;
     let mut sections = Vec::new();
     let mut fields = Fields::new(&block, LE);
+    let context = SectionContext {
+        file,
+        stripped: 0,
+        strings: &strings,
+    };
     for _ in 0..header.sections {
         cx.checkpoint().await;
-        match section_header(&mut fields, &file) {
+        match section_header(&mut fields, &context) {
             Ok(section) => sections.push(section),
             Err(e) => {
                 cx.diag(e);
@@ -304,6 +320,7 @@ async fn load(cx: &Cx, input: Input, lfanew: u64) -> Result<Pe> {
         size_of_headers: optional.size_of_headers,
         section_table: table,
         sections,
+        strings,
         rva_index,
         directories,
     }))
@@ -336,8 +353,7 @@ async fn overview(cx: &Cx, pe: &Pe) -> Overview {
 
 fn summary(pe: &PeInfo, o: &Overview) -> String {
     let format = if pe.wide { "PE32+" } else { "PE32" };
-    let machine = lookup(MACHINE_SHORT, pe.machine.into())
-        .map_or_else(|| format!("machine {:#x}", pe.machine), str::to_owned);
+    let machine = name_or(MACHINE_SHORT, pe.machine.into(), "machine");
     let dll = pe.characteristics & IMAGE_FILE_DLL != 0;
     let kind = match (pe.subsystem, dll) {
         (10, _) => "EFI application",
@@ -399,41 +415,14 @@ struct PeInfo {
     size_of_headers: u32,
     section_table: Span,
     sections: Vec<Section>,
+    /// The COFF string table, if the image has a symbol table.
+    strings: Vec<u8>,
     /// The sections' RVA ranges, for [`PeInfo::rva_offset`].
     rva_index: RangeIndex,
     directories: [(u32, u32); 16],
 }
 
-#[derive(Clone, Debug)]
-struct Section {
-    header: Span,
-    name: String,
-    virtual_size: u32,
-    virtual_address: u32,
-    raw_size: u32,
-    raw_pointer: u32,
-    characteristics: u32,
-}
-
 impl Section {
-    /// The size of the section in memory (the raw size if the virtual size
-    /// is zero).
-    fn mapped_size(&self) -> u32 {
-        if self.virtual_size == 0 {
-            self.raw_size
-        } else {
-            self.virtual_size
-        }
-    }
-
-    fn label(&self) -> String {
-        if self.name.is_empty() {
-            "(unnamed)".to_owned()
-        } else {
-            self.name.clone()
-        }
-    }
-
     fn summary(&self) -> String {
         let flag = |bit: u32, c: char| {
             if self.characteristics & bit != 0 {
@@ -878,6 +867,8 @@ async fn pe_checksum(cx: &Cx, file: Span, checksum_at: u64) -> Result<u32> {
 struct FileHeader {
     machine: u16,
     sections: u16,
+    symptr: u32,
+    nsyms: u32,
     optional_size: u16,
     characteristics: u16,
 }
@@ -893,11 +884,12 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<FileHeader> {
         .timestamp()
         .desc("Link time, or a content hash for reproducible builds")
         .emit()?;
-    f.u32("PointerToSymbolTable")
+    let symptr = f
+        .u32("PointerToSymbolTable")
         .hex()
         .desc("File offset of the COFF symbol table (deprecated for images)")
         .emit()?;
-    f.u32("NumberOfSymbols").emit()?;
+    let nsyms = f.u32("NumberOfSymbols").emit()?;
     let optional_size = f.u16("SizeOfOptionalHeader").hex().emit()?;
     let characteristics = f
         .u16("Characteristics")
@@ -906,6 +898,8 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<FileHeader> {
     Ok(FileHeader {
         machine,
         sections,
+        symptr,
+        nsyms,
         optional_size,
         characteristics,
     })
@@ -1082,39 +1076,6 @@ fn data_directory(f: &mut Fields<'_>, (pe, index): &(Option<Pe>, usize)) -> Resu
 // ---------------------------------------------------------------------------
 // Sections
 
-fn section_header(f: &mut Fields<'_>, file: &Span) -> Result<Section> {
-    let header = f.peek_span(40);
-    let name = f
-        .ascii("Name", 8)
-        .desc("A \"/123\" name refers to the COFF string table (object files only)")
-        .emit()?;
-    let virtual_size = f.u32("VirtualSize").hex().emit()?;
-    let virtual_address = f.u32("VirtualAddress").hex().emit()?;
-    let raw_size = f.u32("SizeOfRawData").hex().emit()?;
-    let raw_pointer = f
-        .u32("PointerToRawData")
-        .hex()
-        .with(|&p, n| n.target(file.sub(p.into(), raw_size.into())))
-        .emit()?;
-    f.u32("PointerToRelocations").hex().emit()?;
-    f.u32("PointerToLinenumbers").hex().emit()?;
-    f.u16("NumberOfRelocations").emit()?;
-    f.u16("NumberOfLinenumbers").emit()?;
-    let characteristics = f
-        .u32("Characteristics")
-        .flags(SECTION_CHARACTERISTICS)
-        .emit()?;
-    Ok(Section {
-        header,
-        name,
-        virtual_size,
-        virtual_address,
-        raw_size,
-        raw_pointer,
-        characteristics,
-    })
-}
-
 async fn section_table(cx: Cx, pe: Pe) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(pe.sections.len())));
     for (index, section) in pe.sections.iter().enumerate() {
@@ -1135,7 +1096,12 @@ async fn section_node(cx: Cx, (pe, index): (Pe, usize)) -> Result<()> {
         .get(index)
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
     let block = cx.block(section.header).await?;
-    section_header(&mut Fields::emitting(&cx, &block, LE), &pe.file())?;
+    let context = SectionContext {
+        file: pe.file(),
+        stripped: 0,
+        strings: &pe.strings,
+    };
+    section_header(&mut Fields::emitting(&cx, &block, LE), &context)?;
     // The data directories that live in this section.
     let start = section.virtual_address;
     let end = start.saturating_add(section.mapped_size());

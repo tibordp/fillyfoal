@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{DIR_DELAY_IMPORT, DIR_IMPORT};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -194,7 +195,7 @@ pub(super) async fn imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             descriptor.address
         };
         let n = count_thunks(&cx, &pe, table).await;
-        let mut summary = format!("{n} function{}", if n == 1 { "" } else { "s" });
+        let mut summary = plural(n, "function");
         if descriptor.timestamp != 0 {
             summary.push_str(", bound");
         }
@@ -552,10 +553,7 @@ pub(super) async fn delay_imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<
         };
         cx.push(
             node.span(span)
-                .summary(format!(
-                    "{n} function{}, delay-loaded",
-                    if n == 1 { "" } else { "s" }
-                ))
+                .summary(format!("{}, delay-loaded", plural(n, "function")))
                 .lazy(delay_module, (pe.clone(), span)),
         )
         .await;
@@ -707,10 +705,7 @@ pub(super) async fn bound(cx: Cx, (_pe, dir): (Pe, Directory)) -> Result<()> {
         };
         cx.push(
             node.span(span)
-                .summary(format!(
-                    "{refs} forwarder reference{}",
-                    if refs == 1 { "" } else { "s" }
-                ))
+                .summary(plural(refs, "forwarder reference"))
                 .lazy(bound_entry, (base, span)),
         )
         .await;

@@ -12,6 +12,7 @@ use crate::bytes::{to_u64, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, field, flag};
@@ -130,10 +131,7 @@ pub(super) async fn tls(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             cx.emit(
                 Node::new("Callbacks")
                     .span(array)
-                    .summary(format!(
-                        "{count} callback{}",
-                        if count == 1 { "" } else { "s" }
-                    ))
+                    .summary(plural(count, "callback"))
                     .desc("Called on process and thread attach and detach, before the entry point")
                     .lazy(va_list, (pe.clone(), array)),
             );
@@ -730,8 +728,7 @@ async fn dynamic_relocations(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         let size = u64::from(u32_le(&raw, crate::bytes::to_usize(width)).unwrap_or(0));
         let len = width.saturating_add(4).saturating_add(size);
         let entry = span.sub(at, len);
-        let name = crate::value::lookup(DYNAMIC_SYMBOL, symbol)
-            .map_or_else(|| format!("Symbol {symbol:#x}"), str::to_owned);
+        let name = crate::formats::util::val::name_or(DYNAMIC_SYMBOL, symbol, "Symbol");
         cx.push(
             Node::new(name)
                 .span(entry)

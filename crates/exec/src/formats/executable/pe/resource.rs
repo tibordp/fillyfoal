@@ -15,6 +15,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::image::{bmp, dims};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::lines::flags as flag_value;
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
@@ -121,18 +122,15 @@ async fn node(
             let what = if cursor { "Cursor group" } else { "Icon group" };
             Node::new(what)
                 .span(span)
-                .summary(format!(
-                    "{count} image{}",
-                    if count == 1 { "" } else { "s" }
-                ))
+                .summary(plural(count, "image"))
                 .lazy(group, (span, cursor))
         }
         Some(RT_VERSION) => {
-            let node = Node::new("Version Info")
-                .span(span)
-                .lazy(version::block, (span, layout));
+            // A root block that does not parse is reported once, not again
+            // on expansion.
+            let node = Node::new("Version Info").span(span);
             match version::summary(cx, span, layout).await {
-                Ok(summary) => node.summary(summary),
+                Ok(summary) => node.summary(summary).lazy(version::block, (span, layout)),
                 Err(e) => node.diag(e),
             }
         }

@@ -44,7 +44,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Optional debug header size: 22  [#5:0x30+0x4]
           EC substream size: 25  [#5:0x34+0x4]
           Flags: 0x0  [#5:0x38+0x2]
-          Machine: x64 (0x8664)  [#5:0x3a+0x2]
+          Machine: AMD64 (0x8664)  [#5:0x3a+0x2]
           Padding: 0  [#5:0x3c+0x4]
         Substreams  [#5:0x40+0x107]
     ▾ Stream 4: ID info (IPI) — 76 bytes  [#6:0x0+0x4c]

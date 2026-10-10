@@ -12,6 +12,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::embedded_as;
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::{Origin, Span};
 use crate::value::{Value, lookup};
@@ -153,8 +154,8 @@ async fn table(cx: &Cx, dir: &ResourceDir) -> Result<(Vec<String>, u32)> {
                 let n = u32::from(u16_le(&head, 12).unwrap_or(0))
                     .saturating_add(u16_le(&head, 14).unwrap_or(0).into());
                 node = node.summary(match level {
-                    1 => format!("{n} resource{}", if n == 1 { "" } else { "s" }),
-                    _ => format!("{n} language{}", if n == 1 { "" } else { "s" }),
+                    1 => plural(n, "resource"),
+                    _ => plural(n, "language"),
                 });
             }
         } else if let Ok(span) = pe.rva_span(child_rva, 16)
@@ -275,11 +276,8 @@ async fn resource_name(cx: &Cx, pe: &PeInfo, base: u32, offset: u32) -> Result<(
     let text = cx
         .read(pe.rva_exact(rva.checked_add(2).ok_or_else(overflow)?, bytes)?)
         .await?;
-    let units: Vec<u16> = (0..usize::from(len))
-        .filter_map(|i| u16_le(&text, i.saturating_mul(2)))
-        .collect();
     Ok((
-        String::from_utf16_lossy(&units),
+        crate::text::utf16(&text, LE),
         pe.rva_span(rva, bytes.saturating_add(2))?,
     ))
 }

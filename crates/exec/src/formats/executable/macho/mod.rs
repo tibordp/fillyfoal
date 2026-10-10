@@ -1069,8 +1069,7 @@ async fn command_list(cx: Cx, m: Macho) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(m.commands.len())));
     for (index, c) in m.commands.iter().enumerate() {
         let bytes = cx.read_avail(c.span.sub(0, 0x1000)).await?;
-        let label = lookup(LOAD_COMMAND, c.cmd.into())
-            .map_or_else(|| format!("LC {:#x}", c.cmd), str::to_owned);
+        let label = name_or(LOAD_COMMAND, c.cmd.into(), "LC");
         cx.push(
             Node::new(label)
                 .span(c.span)

@@ -1092,7 +1092,9 @@ async fn compressed(cx: &Cx, elf: &Elf, section: &Section, data: Span) -> Result
     let size = f.uword("ch_size", wide).get()?;
     let payload = data.tail(header_size);
     let node = match kind {
+        // ELFCOMPRESS_ZLIB: a zlib stream; ELFCOMPRESS_ZSTD: Zstandard frames.
         1 => content("Decompressed", elf.input, payload, Codec::Zlib, Some(size)),
+        2 => content("Decompressed", elf.input, payload, Codec::Zstd, Some(size)),
         _ => data_node("Compressed data", payload, payload.len).diag(Diagnostic::unsupported(
             format!("{} compression", name_or(COMPRESSION, kind.into(), "type")),
         )),

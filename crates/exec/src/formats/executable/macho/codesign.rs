@@ -265,7 +265,7 @@ pub async fn superblob_in(cx: Cx, input: Input) -> Result<()> {
         if requirements {
             name_or(REQUIREMENT_TYPE, kind.into(), "requirement type")
         } else {
-            lookup(SLOT, kind.into()).map_or_else(|| format!("Slot {kind:#x}"), str::to_owned)
+            name_or(SLOT, kind.into(), "Slot")
         }
     };
     let table = span.sub(12, to_u64(blobs.len()).saturating_mul(8));

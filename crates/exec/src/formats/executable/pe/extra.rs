@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -884,10 +885,7 @@ pub(super) async fn certificates(cx: Cx, (input, dir): (Input, Directory)) -> Re
         }
         offset = offset.saturating_add(step);
     }
-    cx.annotate(format!(
-        "{count} certificate{}",
-        if count == 1 { "" } else { "s" }
-    ));
+    cx.annotate(plural(count, "certificate"));
     Ok(())
 }
 

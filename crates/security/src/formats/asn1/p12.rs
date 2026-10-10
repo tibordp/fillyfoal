@@ -309,9 +309,7 @@ async fn bag_name(cx: &Cx, attributes: Option<&El<'_>>) -> Option<String> {
             "1.2.840.113549.1.9.21" => {
                 let mut hex = String::from("key ID ");
                 for piece in value.content.chunks(TEXT_PIECE) {
-                    for b in piece {
-                        hex.push_str(&format!("{b:02x}"));
-                    }
+                    hex.push_str(&crate::text::hex_lower(piece));
                     cx.checkpoint().await;
                 }
                 key_id = Some(hex);

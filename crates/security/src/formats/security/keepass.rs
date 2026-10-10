@@ -892,33 +892,17 @@ async fn block_list(cx: Cx, (blocks, what): (Arc<Vec<BlockInfo>>, &'static str))
     Ok(())
 }
 
-/// The gzip layer (if any) around `span`: the decompressed span.
+/// The gzip layer around `span`: the decompressed span.
 async fn gunzip(cx: &Cx, span: Span) -> Result<Span> {
-    let head = cx.read_avail(span.sub(0, 4096)).await?;
-    let bad = || Diagnostic::malformed("not a gzip stream").at(span);
-    if head.get(..3) != Some(&[0x1f, 0x8b, 8][..]) {
-        return Err(bad());
+    // A member header is under 256 KiB (extra field, name and comment up
+    // to 64 KiB each).
+    let head = cx.read_avail(span.sub(0, 0x4_0000)).await?;
+    if !head.starts_with(&[0x1f, 0x8b]) {
+        return Err(Diagnostic::malformed("not a gzip stream").at(span));
     }
-    let flags = *head.get(3).ok_or_else(bad)?;
-    let mut pos = 10usize;
-    if flags & 4 != 0 {
-        let n = usize::from(u16_le(&head, pos).ok_or_else(bad)?);
-        pos = pos.saturating_add(2).saturating_add(n);
-    }
-    for bit in [8u8, 16] {
-        if flags & bit != 0 {
-            let n = head
-                .get(pos..)
-                .and_then(|r| r.iter().position(|&b| b == 0))
-                .ok_or_else(bad)?;
-            pos = pos.saturating_add(n).saturating_add(1);
-        }
-    }
-    if flags & 2 != 0 {
-        pos = pos.saturating_add(2);
-    }
-    let body = span.tail(to_u64(pos));
-    let decoded = decode_span(cx, body, &Codec::Deflate, None).await?;
+    let header = crate::codec::gzip::header_len(&head).map_err(|e| e.at(span))?;
+    let body = span.tail(to_u64(header));
+    let decoded = decode_span(cx, body, &Codec::Gzip, None).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
     }

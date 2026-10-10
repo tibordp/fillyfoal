@@ -10,5 +10,6 @@ expression: "common::explore(&display_name(&path), &data)"
       Authenticated: 2025-10-05 21:33:20 UTC
       Expires: 2025-10-06 07:33:20 UTC
       Session key — aes256-cts-hmac-sha1-96, 32 bytes  [0x8a+0x20]
-    ▾ Ticket  [0xcb+0x5]
-        ! unsupported: unrecognized format [0xcb+0x5]
+    ▾ Ticket — ASN.1 DER, [APPLICATION 1], 5 bytes  [0xcb+0x5]
+      ▾ [APPLICATION 1]  [0xcb+0x5]
+          INTEGER: 5  [0xcd+0x3]

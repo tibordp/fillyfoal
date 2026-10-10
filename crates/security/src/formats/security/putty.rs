@@ -539,6 +539,7 @@ async fn private_fields(cx: &Cx, algorithm: &str, span: Span) -> Result<()> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::text::hex_lower;
 
     #[test]
     fn argon2_80_byte_output_matches_argon2_cffi() {
@@ -555,7 +556,7 @@ mod tests {
         let salt: Vec<u8> = (0..16).collect();
         let mut a = Argon2::new(params, b"fillyfoal", &salt, &[], &[]).unwrap();
         while !a.step(64) {}
-        let hex: String = a.finish().iter().map(|b| format!("{b:02x}")).collect();
+        let hex = hex_lower(&a.finish());
         assert_eq!(
             hex,
             "6ebd0e3db8f0afbf7762bb78e8dfefec15a49b9ceea97d8b5e9b95a204d551563b984f20592a4504f52b67891c63f39359cb4885aee38a971ddef308c72388656015a7e02ff1e026973ed690c3994852"

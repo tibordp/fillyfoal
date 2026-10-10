@@ -10,7 +10,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::binutil::data_node;
-use crate::formats::util::fmt::clip;
+use crate::formats::util::fmt::{clip, fourcc};
 use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::Node;
@@ -98,10 +98,6 @@ const SYSTEM_VALUE: EnumTable = &[
 
 const COMPONENT: EnumTable = &[(0, "unknown"), (1, "uint32"), (2, "int32"), (3, "float32")];
 
-fn fourcc(v: u32) -> String {
-    String::from_utf8_lossy(&v.to_le_bytes()).into_owned()
-}
-
 /// A version token: program type in the high 16 bits, major/minor nibbles.
 fn shader_model(token: u32) -> String {
     format!(
@@ -140,7 +136,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ));
     }
     let mut summary = vec!["DirectX shader".to_owned()];
-    let names: Vec<String> = chunks.iter().map(|(id, ..)| fourcc(*id)).collect();
+    let names: Vec<String> = chunks
+        .iter()
+        .map(|(id, ..)| fourcc(&id.to_le_bytes()))
+        .collect();
     for (id, _, data) in &chunks {
         match &id.to_le_bytes() {
             b"SHDR" | b"SHEX" => {
@@ -162,7 +161,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (id, span, data) in chunks {
         let what = crate::value::lookup(CHUNK, id.into()).unwrap_or("chunk");
         cx.emit(
-            Node::new(fourcc(id))
+            Node::new(fourcc(&id.to_le_bytes()))
                 .span(span)
                 .summary(format!("{what}, {:#x} bytes", data.len))
                 .lazy(chunk, (input, id, data)),

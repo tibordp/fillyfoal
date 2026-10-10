@@ -6,8 +6,9 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::asn1::DER;
 use crate::formats::util::val::{hex, text, uint};
-use crate::formats::{Head, Input, Probe, embedded};
+use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
@@ -332,9 +333,9 @@ async fn ccache_cred(
         key.len
     )));
     // Tickets are DER (ASN.1 application tag 1).
-    cx.emit(embedded("Ticket", input.nested(ticket)));
+    cx.emit(embedded_as("Ticket", input.nested(ticket), &DER));
     if second.len > 0 {
-        cx.emit(embedded("Second ticket", input.nested(second)));
+        cx.emit(embedded_as("Second ticket", input.nested(second), &DER));
     }
     Ok(())
 }

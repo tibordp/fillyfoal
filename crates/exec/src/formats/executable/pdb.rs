@@ -14,6 +14,7 @@ use crate::declare_format;
 use crate::dsl::{Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::executable::pe::tables::{MACHINE, MACHINE_SHORT};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -51,14 +52,6 @@ const PDB_VERSIONS: EnumTable = &[
     (20_030_901, "VC80"),
     (20_091_201, "VC110"),
     (20_140_508, "VC140"),
-];
-
-const MACHINES: EnumTable = &[
-    (0x14c, "x86"),
-    (0x8664, "x64"),
-    (0xaa64, "ARM64"),
-    (0x1c4, "ARMNT"),
-    (0x200, "IA64"),
 ];
 
 /// Fixed stream numbers.
@@ -197,7 +190,7 @@ async fn pdb(cx: Cx, input: Input) -> Result<()> {
     {
         let header = cx.read(dbi.sub(0, 64)).await?;
         let machine = crate::bytes::u16_le(&header, 58).unwrap_or(0);
-        if let Some(m) = lookup(MACHINES, machine.into()) {
+        if let Some(m) = lookup(MACHINE_SHORT, machine.into()) {
             summary = format!("{summary}, {m}");
         }
     }
@@ -281,7 +274,7 @@ record! {
         debug_header_size: i32 "Optional debug header size",
         ec_size: i32 "EC substream size",
         flags: u16 "Flags" .hex(),
-        machine: u16 "Machine" .enumeration(MACHINES),
+        machine: u16 "Machine" .enumeration(MACHINE),
         _padding: u32 "Padding",
     }
 }
