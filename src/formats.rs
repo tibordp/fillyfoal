@@ -140,6 +140,12 @@ pub static FORMATS: &[&Format] = &[
     &android::vdex::FORMAT,
     #[cfg(feature = "exec")]
     &android::art::FORMAT,
+    #[cfg(feature = "exec")]
+    &android::apksig::LINEAGE,
+    #[cfg(feature = "exec")]
+    &android::apksig::IDSIG,
+    #[cfg(feature = "exec")]
+    &android::apksig::SIGNING_BLOCK,
     #[cfg(feature = "system")]
     &forensics::minidump::FORMAT,
     #[cfg(feature = "exec")]

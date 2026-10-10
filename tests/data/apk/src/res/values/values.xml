@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Fillyfoal sample</string>
+    <string name="greeting">Hello, %1$s!</string>
+    <string name="styled">Some <b>bold</b> text</string>
+    <plurals name="items">
+        <item quantity="one">%d item</item>
+        <item quantity="other">%d items</item>
+    </plurals>
+    <string-array name="planets">
+        <item>Mercury</item>
+        <item>Venus</item>
+    </string-array>
+    <integer-array name="primes">
+        <item>2</item>
+        <item>3</item>
+        <item>5</item>
+    </integer-array>
+    <color name="accent">#FF336699</color>
+    <color name="translucent">#80FF0000</color>
+    <dimen name="margin">16dp</dimen>
+    <dimen name="text">14sp</dimen>
+    <dimen name="ratio">50%</dimen>
+    <integer name="answer">42</integer>
+    <bool name="enabled">true</bool>
+    <item name="scale" type="dimen" format="float">1.5</item>
+    <item name="alias" type="string">@string/app_name</item>
+    <attr name="sampleColor" format="color|reference" />
+    <declare-styleable name="SampleView">
+        <attr name="sampleColor" />
+        <attr name="mode">
+            <enum name="fast" value="1" />
+            <enum name="slow" value="2" />
+        </attr>
+    </declare-styleable>
+    <style name="Sample" parent="@android:style/Theme.Material.Light">
+        <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

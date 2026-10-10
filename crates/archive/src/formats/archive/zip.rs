@@ -874,6 +874,24 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(label);
 
     let cd_span = file.sub(dir.offset.saturating_add(prefix), dir.size);
+    if let Some(block) = apk_signing_block(&cx, file, dir.offset.saturating_add(prefix)).await {
+        if let Some(pad) = zero_run_before(&cx, file, block).await {
+            cx.emit(
+                Node::new("Alignment padding")
+                    .span(pad)
+                    .summary(format!("{} zero bytes", pad.len))
+                    .desc("Zeros apksigner appends to the entries so the APK Signing Block starts on a 4 KiB boundary"),
+            );
+        }
+        cx.emit(
+            crate::formats::embedded_named(
+                "APK Signing Block",
+                input.nested(block),
+                "apk-signing-block",
+            )
+            .summary(format!("{} bytes before the central directory", block.len)),
+        );
+    }
     cx.emit(
         Node::new("Central Directory")
             .span(cd_span)
@@ -899,6 +917,31 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     eocd_node = eocd_node.summary(format!("at {eocd_offset:#x}"));
     cx.emit(eocd_node);
     Ok(())
+}
+
+/// The APK Signing Block that APK Signature Scheme v2 and later put right
+/// before the central directory at `cd`: a size, ID-value pairs, the size
+/// again and the magic `APK Sig Block 42`.
+async fn apk_signing_block(cx: &Cx, file: Span, cd: u64) -> Option<Span> {
+    let footer = cx.read(file.sub(cd.checked_sub(24)?, 24)).await.ok()?;
+    if footer.get(8..24)? != b"APK Sig Block 42" {
+        return None;
+    }
+    let total = u64_le(&footer, 0)?.checked_add(8)?;
+    Some(file.sub(cd.checked_sub(total)?, total))
+}
+
+/// The zeros right before a 4 KiB-aligned `block` (at most 4095 bytes).
+async fn zero_run_before(cx: &Cx, file: Span, block: Span) -> Option<Span> {
+    let at = block.offset.checked_sub(file.offset)?;
+    if at % 4096 != 0 {
+        return None;
+    }
+    let len = at.min(4095);
+    let start = block.offset.checked_sub(len)?;
+    let bytes = cx.read(Span::new(block.source, start, len)).await.ok()?;
+    let zeros = to_u64(bytes.iter().rev().take_while(|&&b| b == 0).count());
+    (zeros > 0).then(|| Span::new(block.source, block.offset.saturating_sub(zeros), zeros))
 }
 
 async fn probe_head(cx: &Cx, file: Span) -> Result<OwnedHead> {
