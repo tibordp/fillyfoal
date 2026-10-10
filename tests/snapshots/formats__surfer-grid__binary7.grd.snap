@@ -14,5 +14,5 @@ expression: "common::explore(&display_name(&path), &data)"
       zMin: 1  [0x3c+0x8]
       zMax: 6  [0x44+0x8]
       Rotation: 0  [0x4c+0x8]
-      Blank value: 170141000000000000000000000000000000000  [0x54+0x8]
+      Blank value: 1.70141e38  [0x54+0x8]
     DATA — 48 bytes  [0x5c+0x38]

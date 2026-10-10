@@ -13,5 +13,5 @@ expression: "common::explore(&display_name(&path), &data)"
     Date: "Fri May 17 10:30:00 2024"  [0x3d+0x1a]
     Units (mm): 1  [0x57+0x9]
     Resolution: 0.000001  [0x60+0x9]
-    Normal tolerance: 0.0000000001  [0x69+0x9]
+    Normal tolerance: 1e-10  [0x69+0x9]
     Entity records  [0x72+0x26]

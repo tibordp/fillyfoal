@@ -32,7 +32,7 @@ pub fn value(v: &Value) -> String {
             }
             format!("{raw:#x} [{}]", parts.join(" | "))
         }
-        Value::Float(f) => format!("{f}"),
+        Value::Float(f) => float(*f),
         Value::Timestamp { unix_seconds } => timestamp(*unix_seconds),
         Value::Text(s) => format!("{s:?}"),
         Value::Bytes(b) => bytes(b),
@@ -153,5 +153,17 @@ fn render(session: &Session, id: NodeId, depth: usize, out: &mut String) {
     }
     if let Some(error) = children.error {
         let _ = writeln!(out, "{inner}  ! {error}");
+    }
+}
+
+/// A float as Rust prints it (shortest round-trip form), switching to
+/// exponent notation for very large or very small magnitudes, which `{}`
+/// would spell out with hundreds of digits.
+fn float(f: f64) -> String {
+    let a = f.abs();
+    if a != 0.0 && a.is_finite() && !(1e-6..1e21).contains(&a) {
+        format!("{f:e}")
+    } else {
+        format!("{f}")
     }
 }

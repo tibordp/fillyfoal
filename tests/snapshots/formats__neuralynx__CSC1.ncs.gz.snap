@@ -12,7 +12,7 @@ expression: "common::explore(&display_name(&path), &data)"
       RecordSize: 1044  [0xa1+0x10]
       AcqEntName: "CSC1"  [0xb3+0x10]
       SamplingFrequency: 32000  [0xc5+0x18]
-      ADBitVolts: 0.000000030518  [0xdf+0x1a]
+      ADBitVolts: 3.0518e-8  [0xdf+0x1a]
       InputRange: 1000  [0xfb+0x10]
   ▾ Records — 2 × 1044 bytes  [0x4000+0x828]
     ▾ Record 0: 1000000 — channel 0, 512 valid sample(s) at 32000 Hz  [0x4000+0x414]
