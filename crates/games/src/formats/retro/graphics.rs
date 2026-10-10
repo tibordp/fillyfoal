@@ -2,13 +2,15 @@
 //! ROMs and Workbench icons, Degas and NEOchrome pictures, Koala paintings,
 //! MSX BSAVE files and Amstrad AMSDOS headers.
 
-use super::util::{clean, dec, hex, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -102,7 +104,7 @@ async fn kickstart(cx: Cx, input: Input) -> Result<()> {
     let mut verdict = "";
     let mut node = Node::new("Checksum")
         .span(file.sub(foot, 4))
-        .value(hex(stored.into(), 32));
+        .value(hex(stored, 32));
     if file.len <= cx.limits().max_read {
         let all = cx.read(file).await?;
         // Sum of all longs with end-around carry must be 0xFFFFFFFF.
@@ -124,7 +126,7 @@ async fn kickstart(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("ROM size")
             .span(file.sub(foot.saturating_add(4), 4))
-            .value(dec(declared.into(), 32)),
+            .value(uint(declared, 32)),
     );
     cx.emit(Node::new("Autovectors").span(file.sub(foot.saturating_add(8), 16)));
     cx.emit(
@@ -363,7 +365,7 @@ async fn st_palette(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new(format!("Colour {i}"))
                 .span(span.sub(to_u64(i).saturating_mul(2), 2))
-                .value(hex(v.into(), 16))
+                .value(hex(v, 16))
                 .summary(st_colour(v)),
         );
     }

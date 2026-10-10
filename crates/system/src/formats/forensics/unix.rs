@@ -10,6 +10,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::arcutil::unix_mode;
 use crate::formats::util::datakit::{clip, hex, hex_string, size, text};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
@@ -20,7 +21,8 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
-fn unix_time(seconds: i64) -> Value {
+/// Unix seconds as a timestamp value.
+pub(crate) fn unix_time(seconds: i64) -> Value {
     Value::Timestamp {
         unix_seconds: seconds,
     }
@@ -579,27 +581,6 @@ async fn mbdb_string(cur: &mut Cursor<'_>) -> Result<(Option<Vec<u8>>, Span)> {
     Ok((Some(bytes), cur.since(start)))
 }
 
-fn file_mode(mode: u16) -> String {
-    let kind = match mode & 0xf000 {
-        0x4000 => 'd',
-        0xa000 => 'l',
-        0x8000 => '-',
-        _ => '?',
-    };
-    let bits: String = (0..9)
-        .map(|i| {
-            let set = mode & (0o400 >> i) != 0;
-            match (set, i % 3) {
-                (false, _) => '-',
-                (true, 0) => 'r',
-                (true, 1) => 'w',
-                (true, _) => 'x',
-            }
-        })
-        .collect();
-    format!("{kind}{bits}")
-}
-
 async fn mbdb(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(
@@ -648,7 +629,7 @@ async fn mbdb(cx: Cx, input: Input) -> Result<()> {
             Node::new(name)
                 .span(cur.since(start))
                 .value(unix_time(mtime.into()))
-                .summary(format!("{} {}", file_mode(mode), size(len)))
+                .summary(format!("{} {}", unix_mode(u64::from(mode)), size(len)))
                 .lazy(mbdb_record, cur.since(start)),
         )
         .await;
@@ -696,7 +677,9 @@ async fn mbdb_record(cx: Cx, span: Span) -> Result<()> {
     let fixed_at = cur.pos();
     let block = cx.block(span.sub(fixed_at, 40)).await?;
     let mut f = Fields::emitting(&cx, &block, BE);
-    f.u16("Mode").with(|&m, n| n.summary(file_mode(m))).emit()?;
+    f.u16("Mode")
+        .with(|&m, n| n.summary(unix_mode(u64::from(m))))
+        .emit()?;
     f.u64("Inode").emit()?;
     f.u32("UID").emit()?;
     f.u32("GID").emit()?;
@@ -1351,7 +1334,7 @@ async fn mbdx(cx: Cx, input: Input) -> Result<()> {
                 .value(hex(offset, 32))
                 .summary(format!(
                     "{} (record at {:#x} in Manifest.mbdb)",
-                    file_mode(mode),
+                    unix_mode(u64::from(mode)),
                     u64::from(offset).saturating_add(6)
                 )),
         )

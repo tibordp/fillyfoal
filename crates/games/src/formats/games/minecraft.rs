@@ -4,14 +4,11 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // Minecraft NBT (uncompressed; gzipped NBT reaches here through gzip)

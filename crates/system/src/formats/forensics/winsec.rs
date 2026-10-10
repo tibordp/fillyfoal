@@ -7,6 +7,7 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
@@ -271,10 +272,7 @@ pub fn sd_summary(b: &[u8]) -> String {
             return Some(format!("null {what}"));
         }
         let count = u16_le(b, off.checked_add(4)?)?;
-        Some(format!(
-            "{what} {count} ACE{}",
-            if count == 1 { "" } else { "s" }
-        ))
+        Some(format!("{what} {}", plural(count, "ACE")))
     };
     parts.extend(acl(at(16), control & 0x4 != 0, "DACL"));
     parts.extend(acl(at(12), control & 0x10 != 0, "SACL"));
@@ -316,9 +314,7 @@ pub async fn security_descriptor(cx: Cx, (span, rights): (Span, FlagTable)) -> R
             let size = u16_le(bytes, 2).unwrap_or(0);
             let count = u16_le(bytes, 4).unwrap_or(0);
             let acl = s.sub(0, size.into());
-            let mut node = Node::new(name)
-                .span(acl)
-                .summary(format!("{count} ACE{}", if count == 1 { "" } else { "s" }));
+            let mut node = Node::new(name).span(acl).summary(plural(count, "ACE"));
             if !present {
                 node = node.desc("Offset set, but the control flags say it is absent");
             }

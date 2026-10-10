@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::val::name_or;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -451,8 +452,7 @@ async fn amiga_hunk(cx: Cx, input: Input) -> Result<()> {
     while cur.remaining() >= 4 {
         let start = cur.pos();
         let id = cur.u32().await? & 0x3fff_ffff;
-        let name =
-            lookup(HUNK_TYPES, id.into()).map_or_else(|| format!("hunk {id:#x}"), str::to_owned);
+        let name = name_or(HUNK_TYPES, id.into(), "hunk");
         match id {
             0x3f3 => {
                 // Resident library names, then table size and hunk sizes.

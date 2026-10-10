@@ -80,16 +80,10 @@ struct Rec {
     checksum_ok: bool,
 }
 
+/// The bytes of a record's hex digits; whitespace inside a record is
+/// rejected, so offsets in the line stay two characters per byte.
 fn hex_bytes(text: &[u8]) -> Option<Vec<u8>> {
-    if !text.len().is_multiple_of(2) {
-        return None;
-    }
-    text.chunks(2)
-        .map(|p| {
-            let s = std::str::from_utf8(p).ok()?;
-            u8::from_str_radix(s, 16).ok()
-        })
-        .collect()
+    crate::text::unhex(text).filter(|b| b.len().saturating_mul(2) == text.len())
 }
 
 /// `:LLAAAATT<data>CC`
@@ -266,10 +260,7 @@ async fn dissect(cx: &Cx, input: Input, flavor: Flavor) -> Result<()> {
         let name = if is_data {
             format!("{absolute:#06x}")
         } else {
-            let mut c = kind_name.chars();
-            c.next()
-                .map(|f| f.to_uppercase().chain(c).collect())
-                .unwrap_or_default()
+            crate::formats::util::fmt::capitalize(kind_name)
         };
         let mut node = Node::new(name)
             .span(span)

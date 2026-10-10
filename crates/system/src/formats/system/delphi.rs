@@ -20,6 +20,9 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::data::valuetree::decimal_string;
+use crate::formats::util::civil::ole_date;
+use crate::formats::util::floats::f80_le;
 use crate::formats::util::lines::{float, int};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
@@ -507,7 +510,7 @@ async fn show(cx: &Cx, r: &mut Reader<'_>) -> Result<(u8, Parsed)> {
         0 => Parsed::Null,
         1 => Parsed::List,
         2 | 3 | 4 | 19 => Parsed::Int(r.int(kind)?),
-        5 => Parsed::Float(extended(r.take(10)?)),
+        5 => Parsed::Float(f80_le(r.take(10)?).unwrap_or(f64::NAN)),
         15 => Parsed::Float(f32::from_le_bytes(r.take(4)?.try_into().unwrap_or_default()).into()),
         17 => Parsed::Date(f64::from_le_bytes(
             r.take(8)?.try_into().unwrap_or_default(),
@@ -568,23 +571,6 @@ async fn show(cx: &Cx, r: &mut Reader<'_>) -> Result<(u8, Parsed)> {
         _ => return Err(malformed(&format!("unknown value type {kind}"), start)),
     };
     Ok((kind, parsed))
-}
-/// An 80-bit x87 extended float.
-fn extended(b: &[u8]) -> f64 {
-    let mut mant = [0u8; 8];
-    mant.copy_from_slice(b.get(..8).unwrap_or(&[0; 8]));
-    let mant = u64::from_le_bytes(mant);
-    let se = u16::from_le_bytes([
-        b.get(8).copied().unwrap_or(0),
-        b.get(9).copied().unwrap_or(0),
-    ]);
-    let exp = i32::from(se & 0x7fff);
-    if exp == 0 && mant == 0 {
-        return 0.0;
-    }
-    let m = mant as f64;
-    let v = m * 2f64.powi(exp.saturating_sub(16383 + 63));
-    if se & 0x8000 != 0 { -v } else { v }
 }
 /// A component node.
 fn component_node(input: Input, form: &Form, index: usize) -> Node {
@@ -751,18 +737,19 @@ async fn value_node(
         Parsed::Nil => node.summary("nil"),
         Parsed::Int(v) => node.value(int(v)),
         Parsed::Float(v) => node.value(float(v)).summary(type_name),
-        Parsed::Currency(v) => node.value(float(v as f64 / 10_000.0)).summary("vaCurrency"),
-        Parsed::Date(days) => {
-            let seconds = (days - 25_569.0) * 86_400.0;
-            if seconds.is_finite() && seconds.abs() < 1e13 {
-                #[allow(clippy::cast_possible_truncation)]
-                let unix_seconds = seconds.round() as i64;
-                node.value(Value::Timestamp { unix_seconds })
-                    .summary(format!("vaDate {days}"))
-            } else {
-                node.value(float(days)).summary("vaDate")
-            }
-        }
+        Parsed::Currency(v) => node
+            .value(Value::Text(decimal_string(
+                v < 0,
+                &v.unsigned_abs().to_string(),
+                -4,
+            )))
+            .summary("vaCurrency"),
+        Parsed::Date(days) => match ole_date(days) {
+            Some(unix_seconds) => node
+                .value(Value::Timestamp { unix_seconds })
+                .summary(format!("vaDate {days}")),
+            None => node.value(float(days)).summary("vaDate"),
+        },
         Parsed::Text(t) => node.value(Value::Text(t)),
         Parsed::Ident(t) => node.value(Value::Text(t)).summary("identifier"),
         Parsed::Bool(b) => node.value(Value::Bool(b)),

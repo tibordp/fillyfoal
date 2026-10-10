@@ -33,16 +33,18 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::{label, plural, preview, read_label, uint, value_node};
+use super::{label, preview, read_label, uint, value_node};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{FlagTable, Radix, Value, flag};
+use crate::value::{FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const HEADER: u64 = 16;
@@ -571,20 +573,12 @@ fn integer(data: &[u8]) -> Option<u64> {
     }
 }
 
-fn int_value(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
-
 /// A duplicate value (a key of a sub-page or sub-database).
 async fn dup_value(cx: &Cx, env: &Env, span: Span, int: bool) -> Result<Node> {
     if int {
         let data = cx.read_avail(span.sub(0, 8)).await?;
         if let Some(v) = integer(&data) {
-            return Ok(Node::new("Value").span(span).value(int_value(v)));
+            return Ok(Node::new("Value").span(span).value(val::uint(v, 64)));
         }
     }
     value_node(cx, "Value", &env.input, span).await
@@ -735,7 +729,7 @@ struct Entry {
 async fn entry(cx: Cx, e: Entry) -> Result<()> {
     let key = cx.read_avail(e.key.sub(0, 256)).await?;
     let key_value = match integer(&key) {
-        Some(v) if e.free => int_value(v),
+        Some(v) if e.free => val::uint(v, 64),
         _ => preview(&key, e.key.len),
     };
     cx.emit(
@@ -772,7 +766,7 @@ async fn entry(cx: Cx, e: Entry) -> Result<()> {
                     "page {pg} is not an overflow page (flags {flags:#x})"
                 )))
             } else {
-                node.summary(plural(pages.into(), "page"))
+                node.summary(plural(pages, "page"))
             };
         }
         cx.emit(node);

@@ -1,13 +1,15 @@
 //! Chiptune trackers and register dumps: FamiTracker, DefleMask, Furnace,
 //! S98, GYM, Organya, GoatTracker, SNDH, Pro Tracker 3 and PSG.
 
-use super::util::{clean, dec, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_be, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -99,7 +101,7 @@ async fn famitracker(cx: Cx, input: Input) -> Result<()> {
         blocks = blocks.saturating_add(1);
         let mut node = Node::new(id.clone())
             .span(cur.since(start))
-            .value(dec(block_version.into(), 32))
+            .value(uint(block_version, 32))
             .summary(format!("version {block_version}, {len} bytes"))
             .target(data);
         if id == "INFO" {
@@ -180,7 +182,7 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(cur.since(at))
-            .value(dec(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let at = cur.pos();
     let system = cur.u8().await?;
@@ -216,7 +218,7 @@ async fn deflemask(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Pattern matrix rows")
             .span(cur.since(at))
-            .value(dec(matrix.into(), 8)),
+            .value(uint(matrix, 8)),
     );
     cx.emit(
         Node::new("Pattern matrix, instruments, wavetables, patterns, samples")
@@ -615,7 +617,7 @@ async fn organya(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(format!("Track {i} ({kind})"))
                 .span(entry)
-                .value(dec(notes, 16))
+                .value(uint(notes, 16))
                 .summary(format!(
                     "{notes} notes, instrument {inst}, frequency {freq}"
                 ))
@@ -725,7 +727,7 @@ async fn sndh(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Subtunes")
                     .span(file.sub(at, 4))
-                    .value(dec(tunes, 8)),
+                    .value(uint(tunes, 8)),
             );
             pos = pos.saturating_add(4);
         } else if ["TA", "TB", "TC", "TD", "!V"]

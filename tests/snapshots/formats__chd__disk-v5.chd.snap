@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ disk-v5.chd — CHD v5, hard disk, 8 KiB in 2 hunks of 4 KiB, uncompressed, 2 metadata entries  [0x0+0x2000]
+▾ disk-v5.chd — CHD v5, hard disk, 8.0 KiB in 2 hunks of 4.0 KiB, uncompressed, 2 metadata entries  [0x0+0x2000]
   ▾ Header — version 5  [0x0+0x7c]
       Magic: "MComprHD"  [0x0+0x8]
       Header length: 124  [0x8+0x4]

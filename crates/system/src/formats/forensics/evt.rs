@@ -8,6 +8,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
+use crate::formats::forensics::winsec::sid_node;
 use crate::formats::util::datakit::clip;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -189,9 +190,9 @@ async fn record(cx: Cx, span: Span) -> Result<()> {
     f.utf16z("Computername").emit()?;
     if rec.sid_length > 0 {
         f.seek(rec.sid_offset.into());
-        f.bytes("UserSid", rec.sid_length.into())
-            .with(|b, n| n.value(Value::Text(sid(b))))
-            .emit()?;
+        let span = f.peek_span(rec.sid_length.into());
+        let b = f.bytes("UserSid", rec.sid_length.into()).get()?;
+        f.node(sid_node("UserSid", span, &b));
     }
     if rec.strings > 0 {
         let at = u64::from(rec.string_offset);
@@ -234,19 +235,4 @@ async fn strings_list(cx: Cx, (span, count): (Span, u16)) -> Result<()> {
         }
     }
     Ok(())
-}
-
-/// A binary SID as `S-1-5-21-...`.
-pub fn sid(b: &[u8]) -> String {
-    let revision = b.first().copied().unwrap_or(0);
-    let count = usize::from(b.get(1).copied().unwrap_or(0));
-    let authority = crate::formats::util::datakit::be_uint(b.get(2..8).unwrap_or_default());
-    let mut out = format!("S-{revision}-{authority}");
-    for i in 0..count {
-        match crate::bytes::u32_le(b, 8usize.saturating_add(i.saturating_mul(4))) {
-            Some(v) => out.push_str(&format!("-{v}")),
-            None => break,
-        }
-    }
-    out
 }

@@ -6,11 +6,7 @@ use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
-
-/// NUL-terminated (or padded) Latin-1 text.
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
+use crate::text::until_nul;
 
 // ---------------------------------------------------------------------------
 // Bethesda: TES3 / TES4+ plugins
@@ -100,12 +96,13 @@ async fn tes(cx: Cx, input: Input) -> Result<()> {
                         }
                         .unwrap_or(0);
                         if tes3 {
-                            summary = format!("{} ", zstr(data.get(8..40).unwrap_or_default()));
+                            summary =
+                                format!("{} ", until_nul(data.get(8..40).unwrap_or_default()));
                         }
                         summary.push_str(&format!("v{version:.2}, {records} records"));
                     }
-                    "CNAM" => summary = format!("{} by {}", summary, zstr(data)),
-                    "MAST" => masters.push(zstr(data)),
+                    "CNAM" => summary = format!("{} by {}", summary, until_nul(data)),
+                    "MAST" => masters.push(until_nul(data)),
                     _ => {}
                 }
                 at = at.saturating_add(hl).saturating_add(len);

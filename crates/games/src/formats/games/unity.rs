@@ -40,20 +40,13 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Prim, struct_node};
+use crate::formats::util::val::uint;
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Radix, Value, field, flag, lookup};
 
 const BE: Endian = Endian::Big;
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 fn align(pos: u64, to: u64) -> u64 {
     pos.checked_next_multiple_of(to).unwrap_or(pos)
@@ -186,7 +179,7 @@ async fn bundle(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Format version")
             .span(vspan)
-            .value(uint(version.into(), 32)),
+            .value(uint(version, 32)),
     );
     let (player, s2) = cur.cstr(64).await?;
     cx.emit(
@@ -474,11 +467,7 @@ async fn blocks_info(cx: Cx, (info, file, data_start): (Span, Span, u64)) -> Res
     );
     let cspan = cur.span(4);
     let n = cur.u32().await?;
-    cx.emit(
-        Node::new("Block count")
-            .span(cspan)
-            .value(uint(n.into(), 32)),
-    );
+    cx.emit(Node::new("Block count").span(cspan).value(uint(n, 32)));
     let table = info.sub_exact(cur.pos(), u64::from(n).saturating_mul(10))?;
     cx.emit(
         Node::new("Blocks")

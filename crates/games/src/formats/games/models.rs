@@ -9,29 +9,14 @@ use crate::dsl::{ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{Radix, Value};
+use crate::text::until_nul;
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 /// The text up to the first newline in `span` (or all of it), and its span.
 async fn line_at(cx: &Cx, span: Span) -> Result<(String, Span)> {
@@ -128,7 +113,7 @@ async fn milkshape(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(10, 4))
-            .value(uint(version.into(), 32)),
+            .value(uint(version, 32)),
     );
     let at = cur.pos();
     let vertices = u64::from(cur.u16().await?);
@@ -152,7 +137,7 @@ async fn milkshape(cx: Cx, input: Input) -> Result<()> {
     for _ in 0..groups {
         let g = cur.pos();
         cur.skip(1);
-        let name = zstr(&cur.bytes(32).await?);
+        let name = until_nul(&cur.bytes(32).await?);
         let n = u64::from(cur.u16().await?);
         cur.skip(n.saturating_mul(2).saturating_add(1));
         names.push(name.clone());
@@ -200,7 +185,7 @@ async fn cal3d(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 4))
-            .value(uint(version.into(), 32)),
+            .value(uint(version, 32)),
     );
     let (what, detail) = match kind {
         b'M' => (
@@ -297,7 +282,7 @@ declare_format!(pub NIF = "nif", "Gamebryo/NetImmerse model (NIF)", ["nif", "kf"
 async fn short_string(cur: &mut Cursor<'_>) -> Result<(String, Span)> {
     let len = u64::from(cur.u8().await?);
     let span = cur.span(len);
-    Ok((zstr(&cur.bytes(len).await?), span))
+    Ok((until_nul(&cur.bytes(len).await?), span))
 }
 
 async fn nif(cx: Cx, input: Input) -> Result<()> {
@@ -347,14 +332,14 @@ async fn nif(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("User version")
             .span(cur.since(at))
-            .value(uint(user.into(), 32)),
+            .value(uint(user, 32)),
     );
     let at = cur.pos();
     let blocks = cur.u32().await?;
     cx.emit(
         Node::new("Blocks")
             .span(cur.since(at))
-            .value(uint(blocks.into(), 32)),
+            .value(uint(blocks, 32)),
     );
     let mut game = String::new();
     if user >= 3 {
@@ -502,17 +487,17 @@ async fn sp2(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 4))
-            .value(uint(u32_le(&head, 4).unwrap_or(0).into(), 32)),
+            .value(uint(u32_le(&head, 4).unwrap_or(0), 32)),
     );
     cx.emit(
         Node::new("Frames")
             .span(file.sub(8, 4))
-            .value(uint(frames.into(), 32)),
+            .value(uint(frames, 32)),
     );
     for i in 0..u64::from(frames.min(1024)) {
         let at = 12u64.saturating_add(i.saturating_mul(80));
         let fr = cx.read(file.sub_exact(at, 80)?).await?;
-        let name = zstr(fr.get(16..80).unwrap_or_default());
+        let name = until_nul(fr.get(16..80).unwrap_or_default());
         cx.push(Node::new(name).span(file.sub(at, 80)).summary(format!(
             "{}×{}",
             u32_le(&fr, 0).unwrap_or(0),

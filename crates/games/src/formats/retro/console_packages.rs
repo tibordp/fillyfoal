@@ -2,13 +2,16 @@
 //! Switch NCZ and NPDM, PS3 PUP, PS4 PKG, PSP ~PSP modules, GBA SharkPort
 //! saves, MAME input recordings and save states.
 
-use super::util::{clean, hex, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u32_be, u32_le, u64_be, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::name_or;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -297,7 +300,7 @@ async fn ps3_pup(cx: Cx, input: Input) -> Result<()> {
                 .trim()
                 .to_owned();
         }
-        let name = lookup(PUP_ENTRIES, id).map_or_else(|| format!("entry {id:#x}"), str::to_owned);
+        let name = name_or(PUP_ENTRIES, id, "entry");
         cx.push(
             embedded(name, input.nested(data))
                 .value(hex(id, 64))
@@ -424,7 +427,7 @@ async fn ps4_pkg(cx: Cx, input: Input) -> Result<()> {
             embedded(name, input.nested(data))
         };
         cx.push(
-            node.value(hex(eid.into(), 32))
+            node.value(hex(eid, 32))
                 .summary(size(data.len))
                 .target(table.sub(to_u64(i).saturating_mul(32), 32)),
         )
@@ -562,7 +565,7 @@ async fn sharkport(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Platform")
             .span(cur.since(at))
-            .value(hex(platform.into(), 32)),
+            .value(hex(platform, 32)),
     );
     let mut strings = Vec::new();
     for name in ["Title", "Date", "Notes"] {

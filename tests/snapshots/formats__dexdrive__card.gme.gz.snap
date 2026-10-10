@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ card.gme — DexDrive image, 128 KiB of card data, note "My save!"  [0x0+0x20f40]
+▾ card.gme — DexDrive image, 128.0 KiB of card data, note "My save!"  [0x0+0x20f40]
     Signature: "123-456-STD"  [0x0+0xb]
     Slot comments — 1 non-empty  [0x40+0xf00]
   ▾ Memory card — PlayStation memory card, 1/15 blocks used, 1 save(s): "Final Fantasy 7 Save 01"  [0xf40+0x20000]

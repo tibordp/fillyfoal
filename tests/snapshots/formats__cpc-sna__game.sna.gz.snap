@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.sna — CPC snapshot v3, CPC 6128, 64 KiB RAM, PC 0x4000, chunks BRKS  [0x0+0x1010d]
+▾ game.sna — CPC snapshot v3, CPC 6128, 64.0 KiB RAM, PC 0x4000, chunks BRKS  [0x0+0x1010d]
   ▾ Header  [0x0+0x100]
       Signature: "MV - SNA"  [0x0+0x8]
       Unused: 00 00 00 00 00 00 00 00  |........|  [0x8+0x8]
@@ -43,5 +43,5 @@ expression: "common::explore(&display_name(&path), &data)"
       PSG registers: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00  |................|  [0x5b+0x10]
       Memory dump size (KiB): 64  [0x6b+0x2]
       CPC type: CPC 6128 (0x2)  [0x6d+0x1]
-    Memory dump — 64 KiB  [0x100+0x10000]
+    Memory dump — 64.0 KiB  [0x100+0x10000]
     BRKS — 5 bytes  [0x10100+0xd]

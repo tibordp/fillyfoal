@@ -6,6 +6,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -14,10 +15,6 @@ use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // Flattened device tree (DTB)

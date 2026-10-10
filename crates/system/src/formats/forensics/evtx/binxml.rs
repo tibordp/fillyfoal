@@ -16,10 +16,14 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::forensics::winsec::{parse_sid, sid_name};
+use crate::formats::text::xml::decode_entities;
 use crate::formats::util::binutil::Tree;
+use crate::formats::util::civil::systemtime;
+use crate::formats::util::datakit::guid_le;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Guid, Radix, Value, lookup};
+use crate::text::hex_upper;
+use crate::value::{EnumTable, Radix, Value, lookup};
 
 /// Tokens and bytes a record may cost to parse and render.
 pub const MAX_STEPS: u64 = 1 << 20;
@@ -631,7 +635,7 @@ impl<'a> Parser<'a> {
                 ));
             }
             let dnode = self.add(node, Node::new("Template definition"));
-            let guid = guid(self.bytes(def_at.saturating_add(4), 16, end)?);
+            let guid = guid_le(self.bytes(def_at.saturating_add(4), 16, end)?);
             let next = self.u32(def_at, end)?;
             let hspan = self.span(def_at, 24);
             self.add(
@@ -892,7 +896,7 @@ impl<'a> Parser<'a> {
                 depth.saturating_add(1),
             );
             if e.name == "Provider" && name == "Name" && facts.provider.is_none() {
-                facts.provider = Some(unescape(&inner.text));
+                facts.provider = Some(decode_entities(&inner.text, false));
             }
             out.push(&format!(
                 " {name}=\"{}\"",
@@ -918,7 +922,7 @@ impl<'a> Parser<'a> {
             && slot.is_none()
             && !inner.text.contains('<')
         {
-            *slot = Some(unescape(&inner.text));
+            *slot = Some(decode_entities(&inner.text, false));
         }
         if inner.text.is_empty() {
             out.push("/>");
@@ -964,24 +968,6 @@ fn escape(s: &str, quotes: bool) -> String {
     out
 }
 
-fn unescape(s: &str) -> String {
-    s.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&amp;", "&")
-}
-
-fn guid(b: &[u8]) -> Guid {
-    let mut data4 = [0u8; 8];
-    data4.copy_from_slice(b.get(8..16).unwrap_or(&[0; 8]));
-    Guid {
-        data1: u32_le(b, 0).unwrap_or(0),
-        data2: u16_le(b, 4).unwrap_or(0),
-        data3: u16_le(b, 6).unwrap_or(0),
-        data4,
-    }
-}
-
 /// `2026-10-09T23:05:53.4961830Z` for a FILETIME.
 pub fn filetime_text(ticks: u64) -> String {
     let unix = crate::text::filetime_to_unix(ticks);
@@ -991,18 +977,19 @@ pub fn filetime_text(ticks: u64) -> String {
     format!("{stem}.{frac:07}Z")
 }
 
+/// `2026-10-09T23:05:53.496Z` for a SYSTEMTIME; out-of-range fields are
+/// shown as stored.
 fn systemtime_text(b: &[u8]) -> String {
-    let w = |i: usize| u16_le(b, i.saturating_mul(2)).unwrap_or(0);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        w(0),
-        w(1),
-        w(3),
-        w(4),
-        w(5),
-        w(6),
-        w(7)
-    )
+    let w: [u16; 8] = std::array::from_fn(|i| u16_le(b, i.saturating_mul(2)).unwrap_or(0));
+    let [year, month, _, day, hour, minute, second, millis] = w;
+    let Some(unix) = systemtime(w) else {
+        return format!(
+            "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}.{millis:03}Z"
+        );
+    };
+    let base = crate::render::value(&Value::Timestamp { unix_seconds: unix });
+    let stem = base.strip_suffix(" UTC").unwrap_or(&base).replace(' ', "T");
+    format!("{stem}.{millis:03}Z")
 }
 
 /// Size of one element of a fixed-size type (for arrays).
@@ -1075,7 +1062,7 @@ pub fn value_text(kind: u8, b: &[u8]) -> String {
         0x0b => le(4).map(|v| f32::from_bits(v as u32).to_string()),
         0x0c => le(8).map(|v| f64::from_bits(v).to_string()),
         0x0d => le(4).map(|v| if v != 0 { "true" } else { "false" }.to_owned()),
-        0x0f if b.len() == 16 => Some(guid(b).to_string().to_uppercase()),
+        0x0f if b.len() == 16 => Some(guid_le(b).to_string().to_uppercase()),
         0x10 => match b.len() {
             8 => le(8).map(|v| format!("0x{v:016x}")),
             4 => le(4).map(|v| format!("0x{v:08x}")),
@@ -1089,10 +1076,6 @@ pub fn value_text(kind: u8, b: &[u8]) -> String {
         _ => None,
     };
     shown.unwrap_or_else(|| hex_upper(b))
-}
-
-fn hex_upper(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02X}")).collect()
 }
 
 /// A substitution value as a typed node value.
@@ -1135,7 +1118,7 @@ fn typed_value(kind: u8, b: &[u8]) -> Value {
         0x0c if sized(8) => Value::Float(f64::from_bits(u64_le(b, 0).unwrap_or(0))),
         0x0d if sized(4) => Value::Bool(u32_le(b, 0).unwrap_or(0) != 0),
         0x0e => Value::Bytes(b.to_vec()),
-        0x0f if sized(16) => Value::Guid(guid(b)),
+        0x0f if sized(16) => Value::Guid(guid_le(b)),
         0x11 if sized(8) => Value::Timestamp {
             unix_seconds: crate::text::filetime_to_unix(u64_le(b, 0).unwrap_or(0)),
         },

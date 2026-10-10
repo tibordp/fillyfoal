@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.cso — CSO (deflate) v1, 4 KiB image in 2 blocks of 2 KiB  [0x0+0x946]
+▾ game.cso — CSO (deflate) v1, 4.0 KiB image in 2 blocks of 2.0 KiB  [0x0+0x946]
   ▾ Header  [0x0+0x18]
       Magic: "CISO"  [0x0+0x4]
       Header size: 24  [0x4+0x4]

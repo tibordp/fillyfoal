@@ -25,6 +25,7 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::forensics::winsec::{KEY_RIGHTS, sd_summary, security_descriptor};
 use crate::formats::util::datakit::{clip, hex, uint};
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -64,7 +65,8 @@ const BOOT_TYPES: EnumTable = &[
     (2, "boot-time recovery (second)"),
 ];
 
-const VALUE_TYPES: EnumTable = &[
+/// Registry value data types (`REG_*`).
+pub(crate) const VALUE_TYPES: EnumTable = &[
     (0, "REG_NONE"),
     (1, "REG_SZ"),
     (2, "REG_EXPAND_SZ"),
@@ -742,8 +744,7 @@ async fn value_node(cx: &Cx, hive: &H, offset: u32) -> Result<Node> {
     } else {
         clip(&name, 120)
     };
-    let type_name =
-        lookup(VALUE_TYPES, kind.into()).map_or_else(|| format!("type {kind:#x}"), str::to_owned);
+    let type_name = name_or(VALUE_TYPES, kind.into(), "type");
     let mut node = Node::new(name).span(hive.whole(vk));
     let vk_fields = vk.sub(0, 0x14u64.saturating_add(name_len.into()));
     let data = match value_data(cx, hive, vk, size, data_offset).await {

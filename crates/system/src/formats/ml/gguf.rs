@@ -43,7 +43,9 @@ const VALUE_TYPES: EnumTable = &[
     (12, "float64"),
 ];
 
-const TENSOR_TYPES: EnumTable = &[
+/// ggml tensor types (`enum ggml_type`), shared by GGUF and the older GGML
+/// containers.
+pub(crate) const TENSOR_TYPES: EnumTable = &[
     (0, "F32"),
     (1, "F16"),
     (2, "Q4_0"),
@@ -124,10 +126,6 @@ fn scalar_size(kind: u32) -> Option<u64> {
 fn scalar_value(kind: u32, bytes: &[u8]) -> Value {
     let raw = le_uint(bytes);
     let bits = u8::try_from(bytes.len().saturating_mul(8)).unwrap_or(64);
-    let signed = |raw: u64, bits: u8| -> i64 {
-        let shift = 64u32.saturating_sub(bits.into());
-        ((raw << shift) as i64) >> shift
-    };
     match kind {
         0 | 2 | 4 | 10 => Value::UInt {
             value: raw,
@@ -135,7 +133,7 @@ fn scalar_value(kind: u32, bytes: &[u8]) -> Value {
             radix: crate::value::Radix::Dec,
         },
         1 | 3 | 5 | 11 => Value::Int {
-            value: signed(raw, bits),
+            value: crate::formats::util::sound::sign_extend(raw, bits),
             bits,
         },
         6 => Value::Float(f64::from(f32::from_bits(raw as u32))),

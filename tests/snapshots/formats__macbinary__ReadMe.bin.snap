@@ -8,7 +8,7 @@ expression: "common::explore(&display_name(&path), &data)"
     File name: "ReadMe"  [0x2+0x3f]
     File type: "TEXT"  [0x41+0x4]
     Creator: "ttxt"  [0x45+0x4]
-    Finder flags (high): 0x1 [HAS_BEEN_INITED]  [0x49+0x1]
+    Finder flags (high): 0x1 [hasBeenInited]  [0x49+0x1]
     Zero: 0  [0x4a+0x1]
     Vertical position: 0  [0x4b+0x2]
     Horizontal position: 0  [0x4d+0x2]

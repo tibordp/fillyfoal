@@ -2,13 +2,15 @@
 //! HFE, SuperCard Pro, IPF (CAPS/SPS), Pasti STX, ImageDisk, Teledisk,
 //! DiskCopy 4.2, Applesauce A2R and MOOF, D88 and Amiga RDB.
 
-use super::util::{dec, hex, size, text};
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -17,18 +19,6 @@ use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn fourcc(raw: &[u8]) -> String {
-    raw.iter()
-        .map(|&b| {
-            if b.is_ascii_graphic() || b == b' ' {
-                char::from(b)
-            } else {
-                '.'
-            }
-        })
-        .collect()
-}
 
 // ---------------------------------------------------------------------------
 // HxC Floppy Emulator (HFE)
@@ -416,7 +406,7 @@ async fn ipf(cx: Cx, input: Input) -> Result<()> {
                 "record CRC mismatch: computed {computed:#010x}"
             )));
         }
-        cx.push(node.value(hex(stored.into(), 32))).await;
+        cx.push(node.value(hex(stored, 32))).await;
     }
     let what = info.map_or_else(String::new, |i| {
         format!(
@@ -767,7 +757,7 @@ async fn td0_tracks(cx: Cx, (file, at): (Span, u64)) -> Result<()> {
         cx.push(
             Node::new(format!("Cylinder {cyl} head {}", head & 1))
                 .span(cur.since(start))
-                .value(dec(count.into(), 8))
+                .value(uint(count, 8))
                 .summary(format!("{count} sectors, {repeated} run-length encoded")),
         )
         .await;

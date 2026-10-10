@@ -10,28 +10,14 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
+use crate::text::until_nul;
 use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 // ---------------------------------------------------------------------------
 // Havok packfiles, Bethesda materials
@@ -71,7 +57,7 @@ async fn hkx(cx: Cx, input: Input) -> Result<()> {
     let section_len: u64 = if version >= 11 { 64 } else { 48 };
     for _ in 0..sections.min(16) {
         let s = cx.read(file.sub_exact(pos, section_len)?).await?;
-        let name = zstr(s.get(..20).unwrap_or_default());
+        let name = until_nul(s.get(..20).unwrap_or_default());
         let start = u64::from(u32_le(&s, 20).unwrap_or(0));
         let end = u64::from(u32_le(&s, 44).unwrap_or(0));
         cx.push(
@@ -103,7 +89,7 @@ async fn bgsm(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 4))
-            .value(uint(version.into(), 32)),
+            .value(uint(version, 32)),
     );
     // Texture paths: length-prefixed strings ending in ".dds".
     let body = cx.read_avail(file.sub(0, 1 << 14)).await?;
@@ -113,7 +99,7 @@ async fn bgsm(cx: Cx, input: Input) -> Result<()> {
         let len = usize::try_from(u32_le(&body, i).unwrap_or(0)).unwrap_or(0);
         let s = body.get(i.saturating_add(4)..i.saturating_add(4).saturating_add(len));
         if let Some(s) = s.filter(|s| len > 4 && s.last() == Some(&0)) {
-            let t = zstr(s);
+            let t = until_nul(s);
             let lower = t.to_ascii_lowercase();
             if t.bytes().all(|b| b.is_ascii_graphic() || b == b' ')
                 && (lower.ends_with(".dds") || lower.ends_with(".bgsm"))
@@ -246,10 +232,10 @@ async fn wc3_mdx(cx: Cx, input: Input) -> Result<()> {
         match chunk.id.as_slice() {
             b"VERS" => {
                 version = u32_le(&cx.read(chunk.body.sub(0, 4)).await?, 0).unwrap_or(0);
-                node = node.value(uint(version.into(), 32));
+                node = node.value(uint(version, 32));
             }
             b"MODL" => {
-                name = zstr(&cx.read(chunk.body.sub(0, 80)).await?);
+                name = until_nul(&cx.read(chunk.body.sub(0, 80)).await?);
                 node = node.value(text(name.clone()));
             }
             _ => {}
@@ -406,7 +392,7 @@ async fn allegro(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Objects")
             .span(file.sub(4, 4))
-            .value(uint(count.into(), 32)),
+            .value(uint(count, 32)),
     );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(8);

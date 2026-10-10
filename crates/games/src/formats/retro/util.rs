@@ -5,41 +5,9 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value};
-
-pub fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
-pub fn dec(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-pub fn text(value: impl Into<String>) -> Value {
-    Value::Text(value.into())
-}
-
-/// `1.5 MiB`, `12 KiB` or `100 bytes`.
-pub fn size(n: u64) -> String {
-    if n >= 1024 * 1024 {
-        let tenths = n.saturating_mul(10) / (1024 * 1024);
-        format!("{}.{} MiB", tenths / 10, tenths % 10)
-    } else if n >= 1024 {
-        format!("{} KiB", n / 1024)
-    } else {
-        format!("{n} bytes")
-    }
-}
 
 /// A big-endian unsigned integer of `width` bytes (1..=8), emitted as a hex
 /// field. Covers 24-bit offsets and other odd widths.
@@ -105,7 +73,11 @@ pub async fn varint_field(
 ) -> Result<u64> {
     let start = cur.pos();
     let value = varint(cur, kind).await?;
-    cx.emit(Node::new(name).span(cur.since(start)).value(dec(value, 64)));
+    cx.emit(
+        Node::new(name)
+            .span(cur.since(start))
+            .value(uint(value, 64)),
+    );
     Ok(value)
 }
 
@@ -137,7 +109,7 @@ pub async fn crc32_of(cx: &Cx, span: Span) -> Option<u32> {
 
 /// A node for a stored CRC-32, marked valid or mismatched against `computed`.
 pub fn crc_node(name: &'static str, span: Span, stored: u32, computed: Option<u32>) -> Node {
-    let node = Node::new(name).span(span).value(hex(stored.into(), 32));
+    let node = Node::new(name).span(span).value(hex(stored, 32));
     match computed {
         Some(c) if c == stored => node.summary("valid"),
         Some(c) => node.diag(Diagnostic::warning(format!(

@@ -7,14 +7,10 @@ use crate::error::Result;
 use crate::formats::ml::text::block_lines;
 use crate::formats::text::probe::{self, significant};
 use crate::formats::text::scan::Lines;
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // build.prop

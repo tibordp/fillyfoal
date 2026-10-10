@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.daa — PowerISO DAA v1.0, 192 KiB ISO in 3 chunks of 64 KiB  [0x0+0x9c]
+▾ game.daa — PowerISO DAA v1.0, 192.0 KiB ISO in 3 chunks of 64.0 KiB  [0x0+0x9c]
   ▾ Header  [0x0+0x4c]
       Signature: "DAA"  [0x0+0x10]
       Chunk table offset: 0x4c  [0x10+0x4]

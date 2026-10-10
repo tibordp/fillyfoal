@@ -2,13 +2,15 @@
 //! GameCube and Wii banners, TPL texture libraries, 3DO cels, HxC MFM and
 //! FDI floppy images.
 
-use super::util::{clean, dec, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -511,7 +513,7 @@ async fn hxc_mfm(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Track {number} side {side}"))
                 .span(table.sub(to_u64(i).saturating_mul(11), 11))
-                .value(dec(len, 32))
+                .value(uint(len, 32))
                 .summary(format!("{len} MFM bytes"))
                 .target(file.sub(at, len)),
         )

@@ -23,14 +23,6 @@ const PREVIEW_BYTES: u64 = 256;
 /// Values at least this long are offered to format detection.
 const DISSECT_MIN: u64 = 16;
 
-pub(crate) fn plural(n: u64, what: &str) -> String {
-    if n == 1 {
-        format!("1 {what}")
-    } else {
-        format!("{n} {what}s")
-    }
-}
-
 pub(crate) fn uint(name: &'static str, value: u64, span: Span) -> Node {
     Node::new(name).span(span).value(Value::UInt {
         value,

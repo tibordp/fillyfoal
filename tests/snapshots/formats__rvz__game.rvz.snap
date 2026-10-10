@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.rvz — RVZ 1.00.00 GameCube image "The Legend of Zelda: The Wind Waker", 1392.3 MiB → 300 bytes, Zstandard chunks of 2.0 MiB  [0x0+0x144]
+▾ game.rvz — RVZ 1.00.00 GameCube image "The Legend of Zelda: The Wind Waker", 1.4 GiB → 300 bytes, Zstandard chunks of 2.0 MiB  [0x0+0x144]
     Magic: "RVZ"  [0x0+0x3]
     Magic version: 1  [0x3+0x1]
     Version: 16777216 — 1.00.00  [0x4+0x4]

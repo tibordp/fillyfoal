@@ -2,13 +2,15 @@
 //! descriptors, 3DS SMDH icons and FIRM firmware, Switch KIP1/INI1 kernel
 //! processes, Xbox 360 STFS packages and Xbox XDVDFS (XISO) images.
 
-use super::util::{clean, hex, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -72,7 +74,7 @@ async fn dol(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(name)
                 .span(file.sub(offset.into(), len.into()))
-                .value(hex(address.into(), 32))
+                .value(hex(address, 32))
                 .summary(format!("{} at {address:#010x}", size(len.into()))),
         );
     }
@@ -300,7 +302,7 @@ async fn firm(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(format!("Section {i}"))
                 .span(file.sub(offset.into(), len.into()))
-                .value(hex(address.into(), 32))
+                .value(hex(address, 32))
                 .summary(format!(
                     "{} at {address:#010x}, {}",
                     size(len.into()),

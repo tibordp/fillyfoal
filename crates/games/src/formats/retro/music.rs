@@ -6,18 +6,15 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Codec, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(value: String) -> Value {
-    Value::Text(value)
-}
 
 // ---------------------------------------------------------------------------
 // NSF / NSFe (NES)

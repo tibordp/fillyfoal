@@ -49,8 +49,10 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::forensics::evtx::LEVELS;
 use crate::formats::util::datakit::guid_le;
 use crate::formats::util::datakit::{hex, text, uint};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -164,15 +166,6 @@ const EVENT_PROPERTIES: FlagTable = &[
     flag(0x0002, "FORWARDED_XML"),
     flag(0x0004, "LEGACY_EVENTLOG"),
     flag(0x0008, "RELOGGABLE"),
-];
-
-const LEVELS: EnumTable = &[
-    (0, "Log always"),
-    (1, "Critical"),
-    (2, "Error"),
-    (3, "Warning"),
-    (4, "Information"),
-    (5, "Verbose"),
 ];
 
 const EXT_TYPES: EnumTable = &[
@@ -541,20 +534,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     lf.clock.reference = reference;
     let b = lf.version.to_le_bytes();
     let mut summary = format!(
-        "Event trace log, version {}.{}, build {}, {} processor{}",
+        "Event trace log, version {}.{}, build {}, {}",
         b[0],
         b[1],
         lf.build,
-        lf.processors,
-        if lf.processors == 1 { "" } else { "s" }
+        plural(lf.processors, "processor")
     );
     if !lf.logger.is_empty() {
         summary = format!("{summary}, logger \"{}\"", lf.logger);
     }
     let buffers = file.len.div_ceil(size);
     summary = format!(
-        "{summary}, {buffers} buffer{} of {size:#x} bytes",
-        if buffers == 1 { "" } else { "s" }
+        "{summary}, {} of {size:#x} bytes",
+        plural(buffers, "buffer")
     );
     if lf.events_lost > 0 {
         summary = format!("{summary}, {} events lost", lf.events_lost);

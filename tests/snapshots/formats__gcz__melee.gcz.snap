@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ melee.gcz — GCZ GameCube image, 4 KiB → 2 KiB, 2 blocks of 2 KiB  [0x0+0x874]
+▾ melee.gcz — GCZ GameCube image, 4.0 KiB → 2.1 KiB, 2 blocks of 2.0 KiB  [0x0+0x874]
   ▾ Header  [0x0+0x20]
       Magic: 0xb10bc001  [0x0+0x4]
       Disc type: GameCube (0x0)  [0x4+0x4]

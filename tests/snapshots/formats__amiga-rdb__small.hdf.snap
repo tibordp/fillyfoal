@@ -36,5 +36,5 @@ expression: "common::explore(&display_name(&path), &data)"
       Disk vendor: "IBM     "  [0xa0+0x8]
       Disk product: "DTTA-351010     "  [0xa8+0x10]
       Disk revision: "T56A"  [0xb8+0x4]
-  ▾ Partition DH0 — DOS3, cylinders 1-3, 6 KiB, boot priority 0  [0x800+0x1800] → 0x200+0x200
+  ▾ Partition DH0 — DOS3, cylinders 1-3, 6.0 KiB, boot priority 0  [0x800+0x1800] → 0x200+0x200
       ! unsupported: unrecognized format [0x800+0x1800]
