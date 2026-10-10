@@ -258,9 +258,7 @@ fn block(
             same = 0;
             last = None;
             if out.len() > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             continue;
         }
@@ -274,9 +272,7 @@ fn block(
         crc = crc_update(crc, b);
     }
     if out.len() > limit {
-        return Err(Diagnostic::limit(format!(
-            "decompressed data exceeds {limit:#x} bytes"
-        )));
+        return Err(Diagnostic::output_limit(limit));
     }
     if !nsis && !crc != stored_crc {
         return Err(bad("block CRC mismatch"));

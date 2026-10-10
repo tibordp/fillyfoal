@@ -89,9 +89,7 @@ impl Decode for Decoder {
         }
         let original = usize::try_from(r.original).map_err(|_| bad("too large"))?;
         if original > limit.saturating_add(self.released_out) {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let chunks = r.original.div_ceil(chunk);
         // The table has one entry per chunk after the first (and the empty

@@ -3,7 +3,7 @@
 use std::fmt;
 use std::sync::Arc;
 
-use super::cipher::Aes;
+use super::cipher::{Aes, Rc4State};
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
@@ -217,33 +217,14 @@ impl Decode for AesCtrLe {
 /// RC4 as a streaming stage.
 #[derive(Clone)]
 pub struct Rc4 {
-    s: [u8; 256],
-    i: u8,
-    j: u8,
+    state: Rc4State,
     pos: usize,
 }
 
 impl Rc4 {
     pub fn new(key: &Key) -> Self {
-        let mut s: [u8; 256] = std::array::from_fn(|i| u8::try_from(i).unwrap_or(0));
-        let key = key.expose();
-        if !key.is_empty() {
-            let mut j = 0u8;
-            for i in 0..256usize {
-                let k = key
-                    .get(i.checked_rem(key.len()).unwrap_or(0))
-                    .copied()
-                    .unwrap_or(0);
-                j = j
-                    .wrapping_add(s.get(i).copied().unwrap_or(0))
-                    .wrapping_add(k);
-                s.swap(i, usize::from(j));
-            }
-        }
         Rc4 {
-            s,
-            i: 0,
-            j: 0,
+            state: Rc4State::new(key.expose()),
             pos: 0,
         }
     }
@@ -270,14 +251,14 @@ impl Decode for Rc4 {
         if out.len().saturating_add(take) > limit {
             return Err(Diagnostic::limit("decrypted data exceeds the limit"));
         }
-        let get = |s: &[u8; 256], x: u8| s.get(usize::from(x)).copied().unwrap_or(0);
-        for &b in available.get(..take).unwrap_or_default() {
-            self.i = self.i.wrapping_add(1);
-            self.j = self.j.wrapping_add(get(&self.s, self.i));
-            self.s.swap(usize::from(self.i), usize::from(self.j));
-            let t = get(&self.s, self.i).wrapping_add(get(&self.s, self.j));
-            out.push(b ^ get(&self.s, t));
-        }
+        let state = &mut self.state;
+        out.extend(
+            available
+                .get(..take)
+                .unwrap_or_default()
+                .iter()
+                .map(|&b| state.apply(b)),
+        );
         self.pos = self.pos.saturating_add(take);
         Ok(Step::More)
     }

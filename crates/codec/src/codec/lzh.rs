@@ -958,9 +958,7 @@ impl Lzh {
                 return Ok(Step::More);
             }
             if self.produced > crate::bytes::to_u64(limit) {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             let method = self.params.method;
             let more = match method {
@@ -1039,9 +1037,7 @@ impl Decode for Lzh {
             _ => CRC32.update(self.crc, new),
         };
         if self.produced > crate::bytes::to_u64(limit) {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let step = result?;
         if step == Step::Done {

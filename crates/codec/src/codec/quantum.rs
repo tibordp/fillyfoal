@@ -280,9 +280,7 @@ impl Quantum {
         limit: usize,
     ) -> Result<()> {
         if out.len().saturating_add(frame_len) > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let window = 1usize << self.window_bits;
         if self.hist.len() > window.saturating_mul(2) {

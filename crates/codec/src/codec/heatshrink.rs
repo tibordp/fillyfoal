@@ -120,9 +120,7 @@ impl Decode for Heatshrink {
                 .produced
                 .saturating_add(out.len().saturating_sub(before));
             if self.produced > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             self.bit = self.bit.saturating_add(need);
         }

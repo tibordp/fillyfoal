@@ -15,10 +15,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("LZO: {what}"))
 }
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// Decodes one LZO1X stream (up to and including its end marker) onto `out`;
 /// returns the number of input bytes consumed. At most `limit` bytes are
 /// produced.
@@ -118,7 +114,7 @@ impl Lzo1x {
             return Err(bad("match distance before the start of the output"));
         }
         if held.saturating_add(len) > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         self.pos = next;
         self.at = LzoAt::Match {
@@ -668,7 +664,7 @@ impl Lzop {
             return Err(bad("truncated lzop block"));
         }
         if out.len().saturating_add(raw) > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let wants = |flag: u32| flags & flag != 0;
         self.block = Some(LzopBlock {

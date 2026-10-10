@@ -11,14 +11,10 @@ fn bad(what: &str) -> Diagnostic {
 
 fn limit_check(out: &[u8], limit: usize) -> Result<()> {
     if out.len() > limit {
-        Err(too_big(limit))
+        Err(Diagnostic::output_limit(limit))
     } else {
         Ok(())
     }
-}
-
-pub(crate) fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
 }
 
 /// Most input bytes one unit scans without producing output (a length
@@ -175,7 +171,7 @@ pub(crate) fn literal_chunk(
         return Err(trunc());
     }
     if n > budget {
-        return Err(too_big(limit));
+        return Err(Diagnostic::output_limit(limit));
     }
     let end = pos.saturating_add(n);
     out.extend_from_slice(input.get(*pos..end).unwrap_or_default());
@@ -197,7 +193,7 @@ pub(crate) fn match_chunk(
 ) -> Result<usize> {
     let n = (*left).min(room.max(1));
     if n > budget {
-        return Err(too_big(limit));
+        return Err(Diagnostic::output_limit(limit));
     }
     copy_back(out, dist, n)?;
     *left = left.saturating_sub(n);
@@ -472,12 +468,6 @@ impl Decode for Lz4Block {
     }
 }
 
-fn u32_at(data: &[u8], at: usize) -> Option<u32> {
-    data.get(at..at.checked_add(4)?)
-        .and_then(|s| s.try_into().ok())
-        .map(u32::from_le_bytes)
-}
-
 /// A stretch `[from, end)` of the input (a block, a chunk) that a
 /// container decodes a step at a time, through an inner decoder whose
 /// input positions are relative to `from`, or by copying (advancing
@@ -623,7 +613,7 @@ impl Lz4Frame {
         match self.at {
             Lz4At::Done => {}
             Lz4At::Magic => {
-                let Some(magic) = u32_at(input, pos) else {
+                let Some(magic) = crate::bytes::u32_le(input, pos) else {
                     // The end, unless more input is coming.
                     if !eof {
                         return Err(bad("truncated LZ4 frame magic"));
@@ -661,8 +651,8 @@ impl Lz4Frame {
                         self.at = Lz4At::Legacy;
                     }
                     m if m & 0xffff_fff0 == 0x184d_2a50 => {
-                        let len =
-                            u32_at(input, pos).ok_or_else(|| bad("truncated skippable frame"))?;
+                        let len = crate::bytes::u32_le(input, pos)
+                            .ok_or_else(|| bad("truncated skippable frame"))?;
                         self.pos = pos
                             .saturating_add(4)
                             .saturating_add(crate::bytes::to_usize(len.into()));
@@ -676,7 +666,8 @@ impl Lz4Frame {
                 block_checksum,
                 content_checksum,
             } => {
-                let size = u32_at(input, pos).ok_or_else(|| bad("truncated LZ4 block size"))?;
+                let size = crate::bytes::u32_le(input, pos)
+                    .ok_or_else(|| bad("truncated LZ4 block size"))?;
                 let pos = pos.saturating_add(4);
                 if size == 0 {
                     self.pos = pos.saturating_add(if content_checksum { 4 } else { 0 });
@@ -701,7 +692,7 @@ impl Lz4Frame {
             Lz4At::Legacy => {
                 // Independent blocks of up to 8 MiB until the next magic
                 // number or the end.
-                let Some(len) = u32_at(input, pos) else {
+                let Some(len) = crate::bytes::u32_le(input, pos) else {
                     if !eof {
                         return Err(bad("truncated legacy LZ4 block size"));
                     }
@@ -864,18 +855,15 @@ impl Units for Snappy {
         limit: usize,
     ) -> Result<usize> {
         let Some(expected) = self.expected else {
-            let mut pos = 0usize;
-            let mut expected = 0u64;
-            for shift in (0..35).step_by(7) {
-                let b = *input
-                    .get(pos)
-                    .ok_or_else(|| bad("truncated Snappy length"))?;
-                pos = pos.saturating_add(1);
-                expected |= u64::from(b & 0x7f) << shift;
-                if b & 0x80 == 0 {
-                    break;
-                }
-            }
+            // A varint of at most five bytes (32 bits).
+            let (expected, pos) = crate::bytes::uleb128(input.get(..5).unwrap_or(input))
+                .ok_or_else(|| {
+                    bad(if input.len() < 5 {
+                        "truncated Snappy length"
+                    } else {
+                        "Snappy length too long"
+                    })
+                })?;
             let expected = crate::bytes::to_usize(expected);
             if expected > limit.saturating_sub(out.len()) {
                 return Err(Diagnostic::limit(format!(
@@ -952,7 +940,7 @@ impl Units for Snappy {
             return Err(bad("match offset outside the output"));
         }
         if out.len().saturating_add(len) > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         copy_back(out, dist, len)?;
         self.pos = pos;

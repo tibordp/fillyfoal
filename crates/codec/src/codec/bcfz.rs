@@ -99,9 +99,7 @@ impl Decode for Bcfz {
         limit: usize,
     ) -> Result<Step> {
         if self.size > crate::bytes::to_u64(limit) {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         let goal = out.len().saturating_add(step);
         let mut bits = Bits {

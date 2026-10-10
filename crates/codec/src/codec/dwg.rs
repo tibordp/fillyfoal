@@ -167,9 +167,7 @@ impl Lz77 {
             return Err(bad("page decodes to more than its size"));
         }
         if out_len.saturating_add(n) > limit {
-            return Err(Diagnostic::limit(format!(
-                "decompressed data exceeds {limit:#x} bytes"
-            )));
+            return Err(Diagnostic::output_limit(limit));
         }
         self.produced = produced;
         Ok(())

@@ -648,9 +648,7 @@ impl Lzx {
                 .unwrap_or(usize::MAX)
                 .min(frame_len.saturating_sub(produced));
             if out.len().saturating_add(produced).saturating_add(todo) > limit {
-                return Err(Diagnostic::limit(format!(
-                    "decompressed data exceeds {limit:#x} bytes"
-                )));
+                return Err(Diagnostic::output_limit(limit));
             }
             self.run(input, eof, todo, start)?;
             produced = produced.saturating_add(todo);

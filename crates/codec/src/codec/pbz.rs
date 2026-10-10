@@ -19,21 +19,7 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("pbz: {what}"))
 }
 
-fn too_large(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
-fn u64_be(data: &[u8], at: usize) -> Option<u64> {
-    data.get(at..at.checked_add(8)?)
-        .and_then(|s| s.try_into().ok())
-        .map(u64::from_be_bytes)
-}
-
-fn u32_le(data: &[u8], at: usize) -> Option<u32> {
-    data.get(at..at.checked_add(4)?)
-        .and_then(|s| s.try_into().ok())
-        .map(u32::from_le_bytes)
-}
+use crate::bytes::{u32_le, u64_be};
 
 /// Whether a chunk's data is compressed with `algorithm` (the magic's last
 /// byte). Stored chunks normally have equal sizes, but some writers record
@@ -208,7 +194,7 @@ fn bv4_header(data: &[u8], at: usize, held: usize, limit: usize) -> Result<Optio
                 return Err(bad("truncated stored block"));
             }
             if held.saturating_add(raw) > limit {
-                return Err(too_large(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             Ok(Some(Bv4Block {
                 sub,
@@ -261,7 +247,7 @@ impl Pbz {
         };
         let chunk = if raw == packed || !looks_compressed(algorithm, data) {
             if data.len() > room {
-                return Err(too_large(limit));
+                return Err(Diagnostic::output_limit(limit));
             }
             Chunk::Stored { copied: 0 }
         } else {

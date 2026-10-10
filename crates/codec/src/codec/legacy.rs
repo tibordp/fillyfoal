@@ -7,10 +7,6 @@ use crate::codec::lz::{Units, run_units};
 use crate::codec::pipeline::{Decode, Step};
 use crate::error::{Diagnostic, Result};
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// Copies `len` bytes from `dist` back (overlap allowed); the window starts
 /// at `base`.
 fn copy_back(
@@ -27,7 +23,7 @@ fn copy_back(
         )));
     }
     if out.len().saturating_sub(base).saturating_add(len) > limit {
-        return Err(too_big(limit));
+        return Err(Diagnostic::output_limit(limit));
     }
     crate::codec::lz::copy_back(out, dist, len)
 }
@@ -46,7 +42,7 @@ fn literals(
         .get(pos..end)
         .ok_or_else(|| Diagnostic::malformed(format!("{what}: truncated literal run")))?;
     if out.len().saturating_sub(base).saturating_add(n) > limit {
-        return Err(too_big(limit));
+        return Err(Diagnostic::output_limit(limit));
     }
     out.extend_from_slice(lit);
     Ok(end)
@@ -224,7 +220,7 @@ impl Units for LzfFramed {
             .get(start..start.saturating_add(clen))
             .ok_or_else(|| Diagnostic::malformed("LZF: truncated ZV block"))?;
         if out.len().saturating_add(ulen) > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let before = out.len();
         let decoded = if compressed {

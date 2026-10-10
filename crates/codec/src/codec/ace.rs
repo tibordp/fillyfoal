@@ -41,10 +41,6 @@ fn bad(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("ACE: {what}"))
 }
 
-fn too_big(limit: usize) -> Diagnostic {
-    Diagnostic::limit(format!("decompressed data exceeds {limit:#x} bytes"))
-}
-
 /// One file of a (solid) stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Member {
@@ -1345,7 +1341,7 @@ impl Decoder {
                 };
                 let size = to_usize(m.size);
                 if size > limit.saturating_sub(out.len()) {
-                    return Err(too_big(limit));
+                    return Err(Diagnostic::output_limit(limit));
                 }
                 if size > 0 && m.method > 2 {
                     return Err(Diagnostic::unsupported("ACE compression method"));
@@ -1498,7 +1494,7 @@ pub fn comment(buf: &[u8], limit: usize) -> Result<Vec<u8>> {
     let mut table = vec![0usize; 511];
     while out.len() < want {
         if out.len() > limit {
-            return Err(too_big(limit));
+            return Err(Diagnostic::output_limit(limit));
         }
         let n = out.len();
         let source = if n > 1 {

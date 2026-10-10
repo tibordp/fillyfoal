@@ -509,10 +509,7 @@ impl super::Stepped for Argon2 {
 )]
 mod tests {
     use super::*;
-
-    fn hex(b: &[u8]) -> String {
-        b.iter().map(|x| format!("{x:02x}")).collect()
-    }
+    use crate::text::hex_lower as hex;
 
     fn run(variant: Variant, version: u32) -> String {
         // RFC 9106 section 5 test vectors.
