@@ -269,18 +269,20 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
     if page == 0 || !page.is_power_of_two() || page > 1 << 20 {
         return Err(Diagnostic::malformed(format!("page size {page}")).at(file.sub(36, 4)));
     }
-    let header_len = if b.version >= 3 { 4096 } else { page };
+    // `struct boot_img_hdr_v0..v4` sizes; v3 and later use 4 KiB pages.
+    let header_size: u64 = match b.version {
+        0 => 1632,
+        1 => 1648,
+        2 => 1660,
+        3 => 1580,
+        _ => 1584,
+    };
     cx.emit(
-        struct_node(
-            "Header",
-            file.sub(0, header_len.min(1660)),
-            LE,
-            (),
-            boot_layout,
-        )
-        .summary(format!("version {}", b.version)),
+        struct_node("Header", file.sub(0, header_size), LE, (), boot_layout)
+            .summary(format!("version {}", b.version)),
     );
-    let mut at = header_len.div_ceil(page).saturating_mul(page);
+    let mut at = header_size.div_ceil(page).saturating_mul(page);
+    padding(&cx, file, header_size, at, "Header padding");
     let mut parts = Vec::new();
     for (name, size) in [
         ("Kernel", b.kernel),
@@ -297,7 +299,13 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         let node = embedded(name, input.nested(span)).summary(human_size(size));
         cx.emit(crate::formats::util::arcutil::check_len(node, span, size));
         parts.push(format!("{} {}", name.to_lowercase(), human_size(size)));
+        let end = at.saturating_add(size);
         at = at.saturating_add(size.div_ceil(page).saturating_mul(page));
+        padding(&cx, file, end, at, "Padding");
+    }
+    if at < file.len {
+        let rest = file.tail(at);
+        cx.emit(embedded("Trailing data", input.nested(rest)).summary(human_size(rest.len)));
     }
     cx.annotate(format!(
         "Android boot image v{}, {}",
@@ -305,6 +313,20 @@ pub async fn dissect_boot(cx: Cx, input: Input) -> Result<()> {
         parts.join(", ")
     ));
     Ok(())
+}
+
+/// A node for the bytes from `start` to `end` of `file` that pad a payload
+/// to the page size, if any.
+pub fn padding(cx: &Cx, file: Span, start: u64, end: u64, name: &'static str) {
+    let end = end.min(file.len);
+    if end > start {
+        cx.emit(
+            Node::new(name)
+                .span(file.sub(start, end.saturating_sub(start)))
+                .summary(human_size(end.saturating_sub(start)))
+                .desc("Fills the rest of the page"),
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

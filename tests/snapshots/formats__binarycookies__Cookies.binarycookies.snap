@@ -76,9 +76,16 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ Root — dict (1)  [0x149+0x3]
         NSHTTPCookieAcceptPolicy: 2 — integer  [0x167+0x2]
     ▾ Objects — 3 objects  [0x149+0x20]
-        #0 — dict (1)  [0x149+0x3]
-        #1: "NSHTTPCookieAcceptPolicy" — ASCII string  [0x14c+0x1b]
-        #2: 2 — integer  [0x167+0x2]
+      ▾ #0 — dict (1)  [0x149+0x3]
+          Marker: 0xd1 — dictionary, size nibble 1  [0x149+0x1]
+          Value 0: 1 — #1: "NSHTTPCookieAcceptPolicy"  [0x14a+0x1] → 0x14c+0x1b
+      ▾ #1: "NSHTTPCookieAcceptPolicy" — ASCII string  [0x14c+0x1b]
+          Marker: 0x5f — ASCII string, size nibble 15  [0x14c+0x1]
+          Count: 24  [0x14d+0x2]
+          Value: "NSHTTPCookieAcceptPolicy"  [0x14f+0x18]
+      ▾ #2: 2 — integer  [0x167+0x2]
+          Marker: 0x10 — integer, size nibble 0  [0x167+0x1]
+          Value: 2  [0x168+0x1]
     ▾ Offset table — 3 entries  [0x169+0x3]
         #0: 0x8  [0x169+0x1] → 0x149+0x1
         #1: 0xb  [0x16a+0x1] → 0x14c+0x1

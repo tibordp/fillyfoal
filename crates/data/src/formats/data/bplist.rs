@@ -61,6 +61,9 @@ struct Plist {
     ref_size: u8,
     objects: u64,
     table: u64,
+    /// NSKeyedArchiver: the `$objects` array (reference list start, count),
+    /// which UIDs index.
+    archive: Option<(u64, u64)>,
 }
 
 type Pl = Arc<Plist>;
@@ -109,19 +112,28 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .len
         .checked_div(trailer.offset_size.into())
         .unwrap_or(0);
-    let pl: Pl = Arc::new(Plist {
+    let mut plist = Plist {
         input,
         offset_size: trailer.offset_size,
         ref_size: trailer.ref_size,
         objects: listed,
         table: trailer.table,
-    });
-
+        archive: None,
+    };
     let root = if sizes_ok {
-        Some(object(&cx, &pl, trailer.top).await)
+        Some(object(&cx, &plist, trailer.top).await)
     } else {
         None
     };
+    if let Some(Ok(obj)) = &root
+        && obj.kind == Kind::Dict
+        && let Some(index) = key_value(&cx, &plist, obj, "$objects").await
+        && let Ok(array) = object(&cx, &plist, index).await
+        && array.kind == Kind::Array
+    {
+        plist.archive = Some((array.refs, array.count));
+    }
+    let pl: Pl = Arc::new(plist);
     match &root {
         Some(Ok(obj)) => {
             let mut summary = format!("binary plist, {} objects", trailer.objects);
@@ -348,6 +360,89 @@ async fn has_key(cx: &Cx, pl: &Plist, dict: &Obj, wanted: &str) -> bool {
     false
 }
 
+/// The object number of the value under string key `wanted` (among the
+/// first keys).
+async fn key_value(cx: &Cx, pl: &Plist, dict: &Obj, wanted: &str) -> Option<u64> {
+    let refs = u64::from(pl.ref_size);
+    for i in 0..dict.count.min(64) {
+        let at = dict.refs.saturating_add(i.saturating_mul(refs));
+        let key = reference(cx, pl, at).await.ok()?;
+        if let Ok(obj) = object(cx, pl, key).await
+            && obj.value == Some(Value::Text(wanted.to_owned()))
+        {
+            let value_at = at.saturating_add(dict.count.saturating_mul(refs));
+            return reference(cx, pl, value_at).await.ok();
+        }
+    }
+    None
+}
+
+/// What an NSKeyedArchiver UID refers to: the `$objects` entry's string,
+/// or the class name of an archived object.
+async fn uid_summary(cx: &Cx, pl: &Plist, uid: u64) -> Option<String> {
+    let (refs, count) = pl.archive?;
+    if uid >= count {
+        return Some(format!("$objects[{uid}] (out of range)"));
+    }
+    let size = u64::from(pl.ref_size);
+    let index = reference(cx, pl, refs.saturating_add(uid.saturating_mul(size)))
+        .await
+        .ok()?;
+    let obj = object(cx, pl, index).await.ok()?;
+    let what = match (&obj.value, obj.kind) {
+        (Some(Value::Text(t)), _) if t == "$null" => "$null".to_owned(),
+        (Some(Value::Text(t)), _) => format!("\"{}\"", clip(t, 60)),
+        (Some(Value::UInt { value, .. }), _) => format!("{} {value}", obj.summary),
+        (Some(Value::Int { value, .. }), _) => format!("{} {value}", obj.summary),
+        (Some(Value::Float(f)), _) => format!("{} {f}", obj.summary),
+        (Some(Value::Bool(b)), _) => b.to_string(),
+        (None, Kind::Dict) => match class_name(cx, pl, &obj).await {
+            Some(c) => format!("<{c}>"),
+            None => match own_class_name(cx, pl, &obj).await {
+                Some(c) => format!("class {c}"),
+                None => obj.summary.clone(),
+            },
+        },
+        _ => obj.summary.clone(),
+    };
+    Some(format!("$objects[{uid}]: {what}"))
+}
+
+/// The `$classname` of a class description dictionary.
+async fn own_class_name(cx: &Cx, pl: &Plist, dict: &Obj) -> Option<String> {
+    let name = key_value(cx, pl, dict, "$classname").await?;
+    match object(cx, pl, name).await.ok()?.value? {
+        Value::Text(t) => Some(t),
+        _ => None,
+    }
+}
+
+/// The `$classname` of an archived object's `$class`.
+async fn class_name(cx: &Cx, pl: &Plist, dict: &Obj) -> Option<String> {
+    let class_ref = key_value(cx, pl, dict, "$class").await?;
+    let uid = match object(cx, pl, class_ref).await.ok()?.value? {
+        Value::UInt { value, .. } => value,
+        _ => return None,
+    };
+    let (refs, count) = pl.archive?;
+    if uid >= count {
+        return None;
+    }
+    let size = u64::from(pl.ref_size);
+    let index = reference(cx, pl, refs.saturating_add(uid.saturating_mul(size)))
+        .await
+        .ok()?;
+    let class = object(cx, pl, index).await.ok()?;
+    if class.kind != Kind::Dict {
+        return None;
+    }
+    let name = key_value(cx, pl, &class, "$classname").await?;
+    match object(cx, pl, name).await.ok()?.value? {
+        Value::Text(t) => Some(t),
+        _ => None,
+    }
+}
+
 #[derive(Clone)]
 struct Walk {
     pl: Pl,
@@ -418,12 +513,36 @@ async fn members(cx: Cx, walk: Walk) -> Result<()> {
             _ => format!("[{i}]"),
         };
         let node = match object(&cx, pl, child).await {
-            Ok(o) => object_node(pl, name, child, &o, &walk.path).desc(format!("object #{child}")),
+            Ok(o) => {
+                let uid = uid_of(&o);
+                let mut node =
+                    object_node(pl, name, child, &o, &walk.path).desc(format!("object #{child}"));
+                if let Some(uid) = uid
+                    && let Some(s) = uid_summary(&cx, pl, uid).await
+                {
+                    node = node.summary(s);
+                } else if o.kind == Kind::Dict && pl.archive.is_some() {
+                    if let Some(c) = class_name(&cx, pl, &o).await {
+                        node = node.summary(format!("<{c}>, {}", o.summary));
+                    } else if let Some(c) = own_class_name(&cx, pl, &o).await {
+                        node = node.summary(format!("class {c}, {}", o.summary));
+                    }
+                }
+                node
+            }
             Err(e) => Node::new(name).diag(e),
         };
         cx.push(node).await;
     }
     Ok(())
+}
+
+/// The value of a UID object.
+fn uid_of(o: &Obj) -> Option<u64> {
+    match (&o.value, o.summary.as_str()) {
+        (Some(Value::UInt { value, .. }), "UID") => Some(*value),
+        _ => None,
+    }
 }
 
 async fn objects(cx: Cx, pl: Pl) -> Result<()> {
@@ -432,9 +551,16 @@ async fn objects(cx: Cx, pl: Pl) -> Result<()> {
         let node = match object(&cx, &pl, index).await {
             // A flat listing: containers are walked from the root instead.
             Ok(o) => {
+                let mut summary = o.summary.clone();
+                if let Some(uid) = uid_of(&o)
+                    && let Some(s) = uid_summary(&cx, &pl, uid).await
+                {
+                    summary = format!("UID, {s}");
+                }
                 let node = Node::new(format!("#{index}"))
                     .span(o.span)
-                    .summary(o.summary);
+                    .summary(summary)
+                    .lazy(object_parts, (pl.clone(), index));
                 match o.value {
                     Some(v) => node.value(v),
                     None => node,
@@ -443,6 +569,114 @@ async fn objects(cx: Cx, pl: Pl) -> Result<()> {
             Err(e) => Node::new(format!("#{index}")).diag(e),
         };
         cx.push(node).await;
+    }
+    Ok(())
+}
+
+const MARKER_KIND: &[(u64, &str)] = &[
+    (0x0, "singleton (null, false, true, fill)"),
+    (0x1, "integer"),
+    (0x2, "real"),
+    (0x3, "date"),
+    (0x4, "data"),
+    (0x5, "ASCII string"),
+    (0x6, "UTF-16 string"),
+    (0x7, "UTF-8 string"),
+    (0x8, "UID"),
+    (0xa, "array"),
+    (0xb, "ordered set"),
+    (0xc, "set"),
+    (0xd, "dictionary"),
+];
+
+/// One object's encoding: the marker byte (type nibble and size nibble),
+/// the count integer when the size nibble is 0xf, then the payload or the
+/// object references.
+async fn object_parts(cx: Cx, (pl, index): (Pl, u64)) -> Result<()> {
+    let o = object(&cx, &pl, index).await?;
+    let file = pl.input.span;
+    let start = o.span.offset.saturating_sub(file.offset);
+    let marker = cx.read(file.sub(start, 1)).await?;
+    let m = marker.first().copied().unwrap_or(0);
+    cx.emit(
+        Node::new("Marker")
+            .span(file.sub(start, 1))
+            .value(crate::formats::util::datakit::hex(u64::from(m), 8))
+            .summary(format!(
+                "{}, size nibble {}",
+                crate::value::lookup(MARKER_KIND, (m >> 4).into()).unwrap_or("reserved"),
+                m & 0xf
+            )),
+    );
+    // A size nibble of 0xf is followed by an integer object with the count.
+    let (count, body) = if m & 0xf == 0xf && matches!(m >> 4, 0x4..=0x7 | 0xa..=0xd) {
+        let int = cx.read(file.sub(start.saturating_add(1), 1)).await?;
+        let width = 1u64 << (int.first().copied().unwrap_or(0) & 3);
+        let bytes = cx.read(file.sub(start.saturating_add(2), width)).await?;
+        (
+            be_uint(&bytes),
+            start.saturating_add(2).saturating_add(width),
+        )
+    } else {
+        (u64::from(m & 0xf), start.saturating_add(1))
+    };
+    if body > start.saturating_add(1) {
+        let count_span = file.sub(
+            start.saturating_add(1),
+            body.saturating_sub(start).saturating_sub(1),
+        );
+        cx.emit(
+            Node::new("Count")
+                .span(count_span)
+                .value(uint(count, 64))
+                .desc("An integer object holding the length"),
+        );
+    }
+    let end = o
+        .span
+        .offset
+        .saturating_sub(file.offset)
+        .saturating_add(o.span.len);
+    match o.kind {
+        Kind::Scalar => {
+            if end > body {
+                let s = file.sub(body, end.saturating_sub(body));
+                let node = Node::new("Value").span(s);
+                cx.emit(match o.value {
+                    Some(v) if !matches!(m >> 4, 0x4) => node.value(v),
+                    _ => node,
+                });
+            }
+        }
+        _ => {
+            let size = u64::from(pl.ref_size);
+            let n = o.count;
+            let half = if o.kind == Kind::Dict { n / 2 } else { n };
+            for i in 0..n.min(1 << 20) {
+                let at = o.refs.saturating_add(i.saturating_mul(size));
+                let target = reference(&cx, &pl, at).await?;
+                let label = if o.kind == Kind::Dict {
+                    if i < half {
+                        format!("Key {i}")
+                    } else {
+                        format!("Value {}", i.saturating_sub(half))
+                    }
+                } else {
+                    format!("Member {i}")
+                };
+                let mut node = Node::new(label)
+                    .span(file.sub(at, size))
+                    .value(uint(target, 64));
+                if let Ok(t) = object(&cx, &pl, target).await {
+                    let what = match &t.value {
+                        Some(Value::Text(s)) => format!("#{target}: \"{}\"", clip(s, 60)),
+                        _ => format!("#{target}: {}", t.summary),
+                    };
+                    node = node.summary(what).target(t.span);
+                }
+                cx.push(node).await;
+            }
+        }
     }
     Ok(())
 }

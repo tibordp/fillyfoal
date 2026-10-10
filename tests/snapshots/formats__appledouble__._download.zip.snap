@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ ._download.zip — AppleDouble, finder info, resource fork  [0x0+0x149]
     Magic: 0x51607  [0x0+0x4]
@@ -37,9 +37,18 @@ expression: "common::explore(&name, &data)"
             [0]: "https://example.invalid/file.zip" — ASCII string  [0xe8+0x23]
             [1]: "https://example.invalid/" — ASCII string  [0x10b+0x1b]
         ▾ Objects — 3 objects  [0xe5+0x41]
-            #0 — array (2)  [0xe5+0x3]
-            #1: "https://example.invalid/file.zip" — ASCII string  [0xe8+0x23]
-            #2: "https://example.invalid/" — ASCII string  [0x10b+0x1b]
+          ▾ #0 — array (2)  [0xe5+0x3]
+              Marker: 0xa2 — array, size nibble 2  [0xe5+0x1]
+              Member 0: 1 — #1: "https://example.invalid/file.zip"  [0xe6+0x1] → 0xe8+0x23
+              Member 1: 2 — #2: "https://example.invalid/"  [0xe7+0x1] → 0x10b+0x1b
+          ▾ #1: "https://example.invalid/file.zip" — ASCII string  [0xe8+0x23]
+              Marker: 0x5f — ASCII string, size nibble 15  [0xe8+0x1]
+              Count: 32  [0xe9+0x2]
+              Value: "https://example.invalid/file.zip"  [0xeb+0x20]
+          ▾ #2: "https://example.invalid/" — ASCII string  [0x10b+0x1b]
+              Marker: 0x5f — ASCII string, size nibble 15  [0x10b+0x1]
+              Count: 24  [0x10c+0x2]
+              Value: "https://example.invalid/"  [0x10e+0x18]
         ▾ Offset table — 3 entries  [0x126+0x3]
             #0: 0x8  [0x126+0x1] → 0xe5+0x1
             #1: 0xb  [0x127+0x1] → 0xe8+0x1

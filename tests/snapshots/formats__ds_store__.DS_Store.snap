@@ -24,11 +24,22 @@ expression: "common::explore(&display_name(&path), &data)"
           ShowSidebar: true — boolean  [0x1044+0x1]
           WindowBounds: "{{100, 100}, {800, 600}}" — ASCII string  [0x1045+0x1b]
       ▾ Objects — 5 objects  [0x1026+0x3a]
-          #0 — dict (2)  [0x1026+0x5]
-          #1: "ShowSidebar" — ASCII string  [0x102b+0xc]
-          #2: "WindowBounds" — ASCII string  [0x1037+0xd]
-          #3: true — boolean  [0x1044+0x1]
-          #4: "{{100, 100}, {800, 600}}" — ASCII string  [0x1045+0x1b]
+        ▾ #0 — dict (2)  [0x1026+0x5]
+            Marker: 0xd2 — dictionary, size nibble 2  [0x1026+0x1]
+            Key 0: 1 — #1: "ShowSidebar"  [0x1027+0x1] → 0x102b+0xc
+            Value 0: 2 — #2: "WindowBounds"  [0x1028+0x1] → 0x1037+0xd
+        ▾ #1: "ShowSidebar" — ASCII string  [0x102b+0xc]
+            Marker: 0x5b — ASCII string, size nibble 11  [0x102b+0x1]
+            Value: "ShowSidebar"  [0x102c+0xb]
+        ▾ #2: "WindowBounds" — ASCII string  [0x1037+0xd]
+            Marker: 0x5c — ASCII string, size nibble 12  [0x1037+0x1]
+            Value: "WindowBounds"  [0x1038+0xc]
+        ▾ #3: true — boolean  [0x1044+0x1]
+            Marker: 0x9 — singleton (null, false, true, fill), size nibble 9  [0x1044+0x1]
+        ▾ #4: "{{100, 100}, {800, 600}}" — ASCII string  [0x1045+0x1b]
+            Marker: 0x5f — ASCII string, size nibble 15  [0x1045+0x1]
+            Count: 24  [0x1046+0x2]
+            Value: "{{100, 100}, {800, 600}}"  [0x1048+0x18]
       ▾ Offset table — 5 entries  [0x1060+0x5]
           #0: 0x8  [0x1060+0x1] → 0x1026+0x1
           #1: 0xd  [0x1061+0x1] → 0x102b+0x1

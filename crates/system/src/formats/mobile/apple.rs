@@ -570,6 +570,7 @@ fn csi_header(f: &mut Fields<'_>, _: &()) -> Result<(String, u32, u32, u32, Stri
 
 async fn car(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
+    let header: BomHeader = crate::dsl::read_record(&cx, file.sub(0, BomHeader::SIZE), BE).await?;
     cx.emit(BomHeader::node(
         "BOM header",
         file.sub(0, BomHeader::SIZE),
@@ -591,6 +592,9 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
             .collect();
     }
     let tokens = Arc::new(tokens);
+    // Every byte that belongs to something: the header, the blocks, the
+    // index and the variables; the rest is unused (zeros between blocks).
+    let mut used: Vec<(u64, u64)> = vec![(0, BomHeader::SIZE)];
     for (name, block, var) in &bom.vars {
         let span = bom.block(*block).unwrap_or(file.sub(0, 0));
         let node = match name.as_str() {
@@ -609,11 +613,65 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
                 .span(span)
                 .summary("B+ tree of rendition keys")
                 .lazy(renditions_tree, (bom.clone(), *block, tokens.clone())),
+            "FACETKEYS" | "APPEARANCEKEYS" | "BITMAPKEYS" | "LOCALIZATIONKEYS" => {
+                let kind = match name.as_str() {
+                    "FACETKEYS" => TreeKind::Facets,
+                    "APPEARANCEKEYS" | "LOCALIZATIONKEYS" => TreeKind::Names,
+                    _ => TreeKind::Bitmaps,
+                };
+                Node::new(name.clone())
+                    .span(span)
+                    .summary("B+ tree")
+                    .lazy(car_tree, (bom.clone(), *block, kind))
+            }
             _ => Node::new(name.clone())
                 .span(span)
                 .summary(format!("block {block}, {} bytes", span.len)),
         };
         cx.push(node.target(*var)).await;
+    }
+    let index = file.sub(header.index_offset.into(), header.index_length.into());
+    let vars = file.sub(header.vars_offset.into(), header.vars_length.into());
+    cx.push(
+        Node::new("Block index")
+            .span(index)
+            .summary(format!("{} slots", bom.block_count()))
+            .lazy(block_index, (bom.clone(), index)),
+    )
+    .await;
+    cx.push(
+        Node::new("Variables")
+            .span(vars)
+            .summary(format!("{} variables", bom.vars.len()))
+            .lazy(variables, (bom.clone(), vars)),
+    )
+    .await;
+    used.push((index.offset.saturating_sub(file.offset), index.len));
+    used.push((vars.offset.saturating_sub(file.offset), vars.len));
+    for id in 0..bom.block_count().min(1 << 20) {
+        if id.is_multiple_of(1024) {
+            cx.checkpoint().await;
+        }
+        if let Some(s) = bom.block(id)
+            && s.len > 0
+        {
+            used.push((s.offset.saturating_sub(file.offset), s.len));
+        }
+    }
+    used.sort_unstable();
+    let mut pos = 0u64;
+    for (at, len) in used {
+        if at > pos {
+            let s = file.sub(pos, at.saturating_sub(pos));
+            cx.push(Node::new("Unused").span(s).summary(size(s.len)))
+                .await;
+        }
+        pos = pos.max(at.saturating_add(len));
+    }
+    if pos < file.len {
+        let s = file.tail(pos);
+        cx.push(Node::new("Unused").span(s).summary(size(s.len)))
+            .await;
     }
     let names: Vec<&str> = bom.vars.iter().map(|v| v.0.as_str()).collect();
     cx.annotate(format!(
@@ -621,6 +679,260 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
         names.join(", ")
     ));
     Ok(())
+}
+
+/// The block index: a slot count, (offset, length) per slot (null blocks
+/// are zero), then the free list.
+async fn block_index(cx: Cx, (bom, span): (Arc<Bom>, Span)) -> Result<()> {
+    let block = cx.block(span.sub(0, 4)).await?;
+    let mut f = Fields::emitting(&cx, &block, BE);
+    let count = f.u32("Slot count").emit()?;
+    let mut used = 0u32;
+    for id in 0..count.min(1 << 20) {
+        let at = 4u64.saturating_add(u64::from(id).saturating_mul(8));
+        let Some(s) = bom.block(id) else { break };
+        let entry = span.sub(at, 8);
+        if s.len == 0 && s.offset == bom.file.offset {
+            continue;
+        }
+        used = used.saturating_add(1);
+        cx.push(
+            Node::new(format!("Block {id}"))
+                .span(entry)
+                .summary(format!(
+                    "{} at {:#x}",
+                    size(s.len),
+                    s.offset.saturating_sub(bom.file.offset)
+                ))
+                .target(s),
+        )
+        .await;
+    }
+    let after = 4u64.saturating_add(u64::from(count).saturating_mul(8));
+    if after < span.len {
+        let rest = span.tail(after);
+        cx.push(
+            Node::new("Null slots and free list")
+                .span(rest)
+                .summary(size(rest.len)),
+        )
+        .await;
+    }
+    let _ = used;
+    Ok(())
+}
+
+/// Named variables: block number, name length, name.
+async fn variables(cx: Cx, (bom, span): (Arc<Bom>, Span)) -> Result<()> {
+    let block = cx.block(span.sub(0, 4)).await?;
+    let mut f = Fields::emitting(&cx, &block, BE);
+    f.u32("Count").emit()?;
+    for (name, block, var) in &bom.vars {
+        cx.push(
+            struct_node(name.clone(), *var, BE, (), |f, _| {
+                f.u32("Block").emit()?;
+                let len = f.u8("Name length").emit()?;
+                f.ascii("Name", len.into()).emit()?;
+                Ok(())
+            })
+            .summary(format!("block {block}")),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TreeKind {
+    /// Facet name → hot spot and rendition attributes.
+    Facets,
+    /// Name (appearance, localization) → identifier.
+    Names,
+    /// Inline name identifier → bitmap key words.
+    Bitmaps,
+}
+
+fn tree_header(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.ascii("Tag", 4).emit()?;
+    f.u32("Version").emit()?;
+    f.u32("Root page").emit()?;
+    f.u32("Page size").emit()?;
+    f.u32("Path count").emit()?;
+    f.u8("Inline keys")
+        .desc("1 when leaf keys are values rather than block numbers")
+        .emit()?;
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Unknown", rest).emit()?;
+    }
+    Ok(())
+}
+
+/// The pages of a BOM tree, root first then breadth first (bounded).
+async fn tree_pages(cx: &Cx, bom: &Bom, root: u32) -> Vec<(u32, Span, bool, Vec<(u32, u32)>)> {
+    let mut out = Vec::new();
+    let mut queue = std::collections::VecDeque::from([root]);
+    let mut seen = std::collections::BTreeSet::new();
+    while let Some(page) = queue.pop_front() {
+        if !seen.insert(page) || out.len() >= 4096 {
+            continue;
+        }
+        let Some(span) = bom.block(page) else {
+            continue;
+        };
+        let Ok(h) = cx.read(span.sub(0, 12)).await else {
+            continue;
+        };
+        let leaf = crate::bytes::u16_be(&h, 0).unwrap_or(0) != 0;
+        let count = crate::bytes::u16_be(&h, 2).unwrap_or(0);
+        let Ok(raw) = cx
+            .read(span.sub(12, u64::from(count).saturating_mul(8)))
+            .await
+        else {
+            continue;
+        };
+        let entries: Vec<(u32, u32)> = raw
+            .chunks(8)
+            .map(|e| (u32_be(e, 0).unwrap_or(0), u32_be(e, 4).unwrap_or(0)))
+            .collect();
+        if !leaf {
+            queue.extend(entries.iter().map(|e| e.0));
+        }
+        out.push((page, span, leaf, entries));
+    }
+    out
+}
+
+fn page_fields(f: &mut Fields<'_>, _: &()) -> Result<()> {
+    f.u16("Is leaf").emit()?;
+    let count = f.u16("Count").emit()?;
+    f.u32("Forward").emit()?;
+    f.u32("Backward").emit()?;
+    for _ in 0..count {
+        f.u32("Value").emit()?;
+        f.u32("Key").emit()?;
+    }
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Unused", rest).emit()?;
+    }
+    Ok(())
+}
+
+async fn pages(cx: Cx, (bom, root): (Arc<Bom>, u32)) -> Result<()> {
+    for (page, span, leaf, entries) in tree_pages(&cx, &bom, root).await {
+        cx.push(
+            struct_node(format!("Page {page}"), span, BE, (), page_fields).summary(format!(
+                "{}, {}",
+                if leaf { "leaf" } else { "index" },
+                crate::formats::util::fmt::count(to_u64(entries.len()), "entry", "entries")
+            )),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+async fn car_tree(cx: Cx, (bom, block, kind): (Arc<Bom>, u32, TreeKind)) -> Result<()> {
+    let span = bom
+        .block(block)
+        .ok_or_else(|| Diagnostic::malformed("missing tree block"))?;
+    cx.emit(struct_node("Tree header", span, BE, (), tree_header));
+    let head = cx.read(span.sub(0, 21)).await?;
+    let root = u32_be(&head, 8).unwrap_or(0);
+    let inline = head.get(20) == Some(&1) || kind == TreeKind::Bitmaps;
+    let all = tree_pages(&cx, &bom, root).await;
+    cx.emit(
+        Node::new("Pages")
+            .summary(crate::formats::util::fmt::plural(to_u64(all.len()), "page"))
+            .lazy(pages, (bom.clone(), root)),
+    );
+    for (_, _, leaf, entries) in all {
+        if !leaf {
+            continue;
+        }
+        for (value, key) in entries {
+            let Some(v) = bom.block(value) else { continue };
+            let name = if inline {
+                format!("Identifier {key}")
+            } else {
+                match bom.block(key) {
+                    Some(k) => crate::text::until_nul(&cx.read(k.sub(0, 256)).await?),
+                    None => format!("key {key}"),
+                }
+            };
+            let key_span = if inline { None } else { bom.block(key) };
+            let data = cx.read(v.sub(0, 4096)).await?;
+            let node = match kind {
+                TreeKind::Facets => {
+                    let n = u16_le(&data, 4).unwrap_or(0);
+                    let attrs: Vec<String> = (0..usize::from(n).min(32))
+                        .filter_map(|i| {
+                            let at = 6usize.saturating_add(i.saturating_mul(4));
+                            let a = u16_le(&data, at)?;
+                            let val = u16_le(&data, at.saturating_add(2))?;
+                            Some(format!(
+                                "{}={val}",
+                                lookup(CAR_ATTRIBUTES, a.into()).unwrap_or("?")
+                            ))
+                        })
+                        .collect();
+                    Node::new(name).span(v).summary(attrs.join(", "))
+                }
+                TreeKind::Names => Node::new(name)
+                    .span(v)
+                    .value(uint(u16_le(&data, 0).unwrap_or(0), 16)),
+                TreeKind::Bitmaps => {
+                    Node::new(name)
+                        .span(v)
+                        .summary(crate::formats::util::fmt::plural(
+                            to_u64(data.len() / 4),
+                            "word",
+                        ))
+                }
+            };
+            cx.push(node.lazy(car_entry, (key_span, v, kind))).await;
+        }
+    }
+    Ok(())
+}
+
+async fn car_entry(cx: Cx, (key, value, kind): (Option<Span>, Span, TreeKind)) -> Result<()> {
+    if let Some(k) = key {
+        let text = crate::text::until_nul(&cx.read(k.sub(0, 256)).await?);
+        cx.emit(Node::new("Key").span(k).value(text_value(text)));
+    }
+    let block = cx.block(value).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    match kind {
+        TreeKind::Facets => {
+            f.u16("Hot spot x").emit()?;
+            f.u16("Hot spot y").emit()?;
+            let n = f.u16("Attribute count").emit()?;
+            for _ in 0..n.min(256) {
+                let a = f.u16("Attribute").enumeration(CAR_ATTRIBUTES).emit()?;
+                let _ = a;
+                f.u16("Value").emit()?;
+            }
+        }
+        TreeKind::Names => {
+            f.u16("Identifier").emit()?;
+        }
+        TreeKind::Bitmaps => {
+            while f.remaining() >= 4 {
+                f.u32("Word").hex().emit()?;
+            }
+        }
+    }
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Rest", rest).emit()?;
+    }
+    Ok(())
+}
+
+fn text_value(s: String) -> Value {
+    text(s)
 }
 
 async fn key_format(cx: Cx, (span, tokens): (Span, Arc<Vec<u32>>)) -> Result<()> {
@@ -650,9 +962,13 @@ async fn renditions_tree(
 ) -> Result<()> {
     let mut walk = TreeWalk::new(&cx, &bom, block).await?;
     cx.emit(
-        Node::new("Tree header")
-            .span(walk.span)
+        struct_node("Tree header", walk.span, BE, (), tree_header)
             .summary(format!("root page {}, {} paths", walk.root, walk.paths)),
+    );
+    cx.emit(
+        Node::new("Pages")
+            .summary("index and leaf pages")
+            .lazy(pages, (bom.clone(), walk.root)),
     );
     while let Some((value, key)) = walk.next(&cx, &bom).await? {
         cx.push(rendition_node(&cx, &bom, key, value, &tokens).await?)
@@ -677,44 +993,223 @@ async fn rendition_node(cx: &Cx, bom: &Bom, key: u32, value: u32, tokens: &[u32]
         crate::fields::parse(cx, value_span.sub(0, 184), LE, &(), csi_header)
             .await
             .unwrap_or_default();
+    let what = if w > 0 {
+        format!("{w}×{h} @{}x {format}", scale / 100)
+    } else {
+        format.clone()
+    };
     Ok(Node::new(if name.is_empty() {
         format!("block {value}")
     } else {
         name
     })
     .span(value_span)
-    .summary(format!(
-        "{w}×{h} @{}x {format}; {}",
-        scale / 100,
-        attrs.join(", ")
+    .summary(format!("{what}; {}", attrs.join(", ")))
+    .lazy(
+        rendition,
+        (bom.input, key_span, value_span, Arc::new(tokens.to_vec())),
     ))
-    .lazy(rendition, (bom.input, key_span, value_span)))
 }
 
-async fn rendition(cx: Cx, (input, key, value): (Input, Span, Span)) -> Result<()> {
+/// CSI TLV tags (`kCSIElement…` as seen in CoreUI output).
+const CSI_TLV: EnumTable = &[
+    (1001, "Slices"),
+    (1003, "Metrics"),
+    (1004, "Blend mode and opacity"),
+    (1005, "UTI"),
+    (1006, "EXIF orientation"),
+    (1007, "Bytes per row"),
+];
+
+/// Compression of a `MLEC` pixel rendition.
+const CSI_COMPRESSION: EnumTable = &[
+    (0, "uncompressed"),
+    (1, "RLE"),
+    (2, "zip"),
+    (3, "LZVN"),
+    (4, "LZFSE"),
+    (5, "JPEG + LZFSE"),
+    (6, "blurred"),
+    (7, "ASTC"),
+    (8, "palette image"),
+    (9, "HEVC"),
+    (10, "deepmap LZFSE"),
+    (11, "deepmap2"),
+];
+
+async fn rendition(
+    cx: Cx,
+    (input, key, value, tokens): (Input, Span, Span, Arc<Vec<u32>>),
+) -> Result<()> {
     cx.emit(
         Node::new("Key")
             .span(key)
-            .summary(format!("{} attributes", key.len / 2)),
+            .summary(format!("{} attributes", key.len / 2))
+            .lazy(rendition_key, (key, tokens)),
     );
     let head = value.sub(0, 184);
     let (_, _, _, _, _, tlv) = crate::fields::parse(&cx, head, LE, &(), csi_header).await?;
     cx.emit(struct_node("CSI header", head, LE, (), csi_header));
-    cx.emit(Node::new("TLV").span(value.sub(184, tlv.into())));
+    let tlv_span = value.sub(184, tlv.into());
+    cx.emit(
+        Node::new("TLV")
+            .span(tlv_span)
+            .summary(size(tlv_span.len))
+            .lazy(csi_tlv, tlv_span),
+    );
     let data = value.tail(184u64.saturating_add(tlv.into()));
     let magic = cx.read_avail(data.sub(0, 4)).await?;
     if magic.len() == 4 && magic.iter().all(u8::is_ascii_alphanumeric) {
-        // A CoreUI-encoded rendition (e.g. "MLEC" compressed pixels).
+        // A CoreUI-encoded rendition; the tag is stored little-endian.
         let tag: String = magic.iter().rev().map(|&b| char::from(b)).collect();
         cx.emit(
             Node::new("Rendition data")
                 .span(data)
-                .summary(format!("'{tag}', {} bytes", data.len)),
+                .summary(format!("'{tag}', {} bytes", data.len))
+                .lazy(rendition_data, (input, data, tag)),
         );
     } else {
         cx.emit(
             embedded("Rendition data", input.nested(data)).summary(format!("{} bytes", data.len)),
         );
+    }
+    Ok(())
+}
+
+async fn rendition_key(cx: Cx, (key, tokens): (Span, Arc<Vec<u32>>)) -> Result<()> {
+    let data = cx.read(key).await?;
+    for (i, w) in data.chunks(2).enumerate() {
+        let name = tokens
+            .get(i)
+            .and_then(|&t| lookup(CAR_ATTRIBUTES, t.into()))
+            .unwrap_or("attribute");
+        cx.push(
+            Node::new(name)
+                .span(key.sub(to_u64(i).saturating_mul(2), 2))
+                .value(uint(u16_le(w, 0).unwrap_or(0), 16)),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// Tag, length and value records after the CSI header.
+async fn csi_tlv(cx: Cx, span: Span) -> Result<()> {
+    let data = cx.read(span).await?;
+    let mut at = 0usize;
+    while at.saturating_add(8) <= data.len() {
+        let tag = u32_le(&data, at).unwrap_or(0);
+        let len = u32_le(&data, at.saturating_add(4)).unwrap_or(0);
+        let whole = span.sub(to_u64(at), u64::from(len).saturating_add(8));
+        cx.push(
+            Node::new(crate::formats::util::val::name_or(
+                CSI_TLV,
+                tag.into(),
+                "Tag",
+            ))
+            .span(whole)
+            .lazy(tlv_entry, (whole, tag)),
+        )
+        .await;
+        at = at.saturating_add(8).saturating_add(to_usize(len.into()));
+    }
+    if at < data.len() {
+        let rest = span.tail(to_u64(at));
+        cx.push(Node::new("Trailing bytes").span(rest)).await;
+    }
+    Ok(())
+}
+
+async fn tlv_entry(cx: Cx, (span, tag): (Span, u32)) -> Result<()> {
+    let block = cx.block(span).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.u32("Tag").enumeration(CSI_TLV).emit()?;
+    f.u32("Length").emit()?;
+    match tag {
+        1001 => {
+            let n = f.u32("Slice count").emit()?;
+            for _ in 0..n.min(1024) {
+                f.u32("x").emit()?;
+                f.u32("y").emit()?;
+                f.u32("Width").emit()?;
+                f.u32("Height").emit()?;
+            }
+        }
+        1003 => {
+            let n = f.u32("Metric count").emit()?;
+            for _ in 0..n.min(1024) {
+                f.u32("Top-left inset width").emit()?;
+                f.u32("Top-left inset height").emit()?;
+                f.u32("Bottom-right inset width").emit()?;
+                f.u32("Bottom-right inset height").emit()?;
+                f.u32("Image width").emit()?;
+                f.u32("Image height").emit()?;
+            }
+        }
+        1004 => {
+            f.u32("Blend mode").emit()?;
+            f.f32("Opacity").emit()?;
+        }
+        1005 => {
+            let len = f.u32("UTI length").emit()?;
+            f.u32("Reserved").emit()?;
+            f.ascii("UTI", len.into()).emit()?;
+        }
+        1006 => {
+            f.u32("Orientation").emit()?;
+        }
+        1007 => {
+            f.u32("Bytes per row").emit()?;
+        }
+        _ => {}
+    }
+    let rest = f.remaining();
+    if rest > 0 {
+        f.bytes("Value", rest).emit()?;
+    }
+    Ok(())
+}
+
+async fn rendition_data(cx: Cx, (input, data, tag): (Input, Span, String)) -> Result<()> {
+    let block = cx.block(data.sub(0, 16)).await?;
+    let mut f = Fields::emitting(&cx, &block, LE);
+    f.ascii("Tag", 4).desc("Stored little-endian").emit()?;
+    match tag.as_str() {
+        "CELM" => {
+            f.u32("Version").emit()?;
+            f.u32("Compression").enumeration(CSI_COMPRESSION).emit()?;
+            let len = f.u32("Length").emit()?;
+            let pixels = data.sub(16, len.into());
+            cx.emit(
+                Node::new("Compressed pixels")
+                    .span(pixels)
+                    .summary(size(pixels.len))
+                    .desc("CoreUI pixel data in the compression named above"),
+            );
+        }
+        "COLR" => {
+            f.u32("Version").emit()?;
+            f.u32("Flags").hex().emit()?;
+            let n = f.u32("Component count").emit()?;
+            let comps = cx
+                .block(data.sub(16, u64::from(n).saturating_mul(8)))
+                .await?;
+            let mut g = Fields::emitting(&cx, &comps, LE);
+            for _ in 0..n.min(16) {
+                g.f64("Component").emit()?;
+            }
+        }
+        "RAWD" => {
+            f.u32("Version").emit()?;
+            let len = f.u32("Length").emit()?;
+            cx.emit(
+                embedded("Data", input.nested(data.sub(12, len.into()))).summary(size(len.into())),
+            );
+        }
+        _ => {
+            let rest = data.tail(4);
+            cx.emit(Node::new("Payload").span(rest).summary(size(rest.len)));
+        }
     }
     Ok(())
 }

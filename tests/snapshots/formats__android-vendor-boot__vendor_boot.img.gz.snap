@@ -20,6 +20,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Ramdisk table entries: 1  [0x844+0x4]
       Ramdisk table entry size: 108  [0x848+0x4]
       Bootconfig size: 26  [0x84c+0x4]
+    Header padding — 1.9 KiB  [0x850+0x7b0]
   ▾ Vendor ramdisks — 1 ramdisks, 94 bytes  [0x1000+0x5e]
     ▾ platform — gzip, 256 bytes uncompressed  [0x1000+0x5e] → 0x3000+0x6c
       ▾ Header  [0x1000+0xa]
@@ -72,6 +73,7 @@ expression: "common::explore(&display_name(&path), &data)"
               Name size: 11  [#1:0xe2+0x8]
               Checksum: 0x0  [#1:0xea+0x8]
             Name: "TRAILER!!!"  [#1:0xf2+0xb]
+    Padding — 3.9 KiB  [0x105e+0xfa2]
   ▾ DTB — "tiny", DTB v17  [0x2000+0x62]
     ▾ Header  [0x2000+0x28]
         Magic: 0xd00dfeed  [0x2000+0x4]
@@ -88,9 +90,18 @@ expression: "common::explore(&display_name(&path), &data)"
     ▾ /  [0x2038+0x24]
         model: "tiny"  [0x2040+0x14] → 0x204c+0x5
       Strings  [0x205c+0x6]
-    Ramdisk table — 1 entries  [0x3000+0x6c]
+    Padding — 3.9 KiB  [0x2062+0xf9e]
+  ▾ Ramdisk table — 1 entries  [0x3000+0x6c]
+    ▾ Entry 0 — platform  [0x3000+0x6c]
+        Ramdisk size: 94 — 94 bytes  [0x3000+0x4]
+        Ramdisk offset: 0x0  [0x3004+0x4]
+        Ramdisk type: platform (0x1)  [0x3008+0x4]
+        Ramdisk name: "platform"  [0x300c+0x20]
+        Board ID: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 …  |................|  [0x302c+0x40]
+    Padding — 3.9 KiB  [0x306c+0xf94]
   ▾ Bootconfig — UTF-8 text, LF line endings, 1 line  [0x4000+0x1a]
       Encoding: "UTF-8"
       Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
     ▾ Lines — 1 line  [0x4000+0x1a]
         Line 1: "androidboot.hardware=tiny"  [0x4000+0x19]
+    Padding — 4.0 KiB  [0x401a+0xfe6]
