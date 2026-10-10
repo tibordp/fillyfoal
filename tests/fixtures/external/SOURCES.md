@@ -591,6 +591,50 @@ and reproduce every file byte for byte.
 | `pem/openssh-rsa.key` | ssh-keygen (OpenSSH_10.2p1, macOS) | the same script: `ssh-keygen -t rsa -b 1024 -N ''`, unedited |
 | `keychain/items.keychain` | macOS `security` (Security.framework, macOS 26) | `sh tests/data/keychain/make.sh` (random salts and keys: same structure, new bytes): `security create-keychain -p fillyfoal`, a generic and an internet password, an OpenSSL self-signed certificate and its EC private key imported; unedited |
 
+## Packet captures
+
+Captured with tcpdump 4.99.5 / libpcap 1.10.5 and dumpcap, tshark and
+editcap from Wireshark 4.4.19 in a Debian trixie image
+(`tests/data/pcap/Dockerfile`, built as `fillyfoal-pcap-tools`), on an
+`--internal` Docker network (10.99.0.0/24, fd99::/64, no route out) between
+a server container (`server.sh`: unbound, dnsmasq DHCP, python http.server,
+`openssl s_server` with a throwaway P-256 certificate for www.example.com,
+chrony) and a client container (`client.sh`) that captures on its own
+interface; `bash tests/data/pcap/run.sh` runs both, then
+`convert.sh` in a container without network for the other formats. MAC
+addresses are the containers' random ones. Not byte-reproducible (times,
+ports, random values). Checked against `tshark -V` from the same image:
+addresses, ports, DNS names and record data, TLS cipher suites, extensions
+and certificate, DHCP options, NTP timestamps, ICMP types and quoted
+datagrams, checksums (tshark with checksum validation on reports the same
+correct / pseudo-header-only values), pcapng block and option values.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `pcap/dns.pcap` | tcpdump | `dig` against unbound: A, AAAA, MX, TXT, NS, SOA, SRV, CNAME, HTTPS (SVCB params), CAA, NXDOMAIN with SOA, PTR, and one query over TCP; EDNS OPT records |
+| `pcap/http.pcap` | tcpdump | curl to python http.server: two GETs and a 404 |
+| `pcap/tls12.pcap` | tcpdump | `openssl s_client -tls1_2` with SNI and ALPN; the handshake carries the certificate in the clear |
+| `pcap/tls13.pcap` | tcpdump | `openssl s_client -tls1_3` with SNI and ALPN (x25519 key share) |
+| `pcap/icmp.pcap` | tcpdump | ARP, ping and ping -6 (with NDP), fragmented echo (IPv4 fragments, IPv6 fragment headers), record-route option, IGMPv3 (router-alert option) and MLDv2 reports (hop-by-hop header) from `mcast-join.py` |
+| `pcap/udp.pcap` | tcpdump | busybox udhcpc against dnsmasq, chrony NTP, logger (syslog), SSDP / mDNS / LLMNR queries from `udp-probes.py`, snmpget, a curl HTTP/3 attempt (QUIC Initial packets) and the ICMP port-unreachable replies |
+| `pcap/sll.pcap` | tcpdump `-i any -y LINUX_SLL` | Linux cooked capture v1 |
+| `pcap/sll2.pcap` | tcpdump `-i any` | Linux cooked capture v2 |
+| `pcap/nano.pcap` | tcpdump `--time-stamp-precision=nano` | nanosecond pcap |
+| `pcap/vlan.pcap` | tcpdump | pings over an 802.1Q VLAN interface and an 802.1ad + 802.1Q (QinQ) stack |
+| `pcap/kuznetzov.pcap` | editcap `-F modpcap` | nano.pcap in Kuznetzov's modified pcap format |
+| `pcapng/dumpcap.pcapng` | dumpcap | two interfaces (eth0 with a capture filter, lo) with interface statistics blocks; TLS 1.3 session and a loopback ping |
+| `pcapng/tls-secrets.pcapng` | editcap `--inject-secrets tls,keylog.txt -a 4:…` | dumpcap.pcapng with a Decryption Secrets Block (the client's SSLKEYLOGFILE) and a packet comment |
+| `pcapng/names.pcapng` | tshark `-P -N dn -W n -F pcapng` | dns.pcap with a Name Resolution Block |
+| `pcapng/sections.pcapng` | tshark `-F pcapng`, concatenated | sll2.pcap and vlan.pcap converted to pcapng and joined (`cat`): two sections |
+| `snoop/http.snoop` | editcap `-F snoop` | http.pcap as a Solaris snoop file |
+| `netmon/dns.cap` | editcap `-F netmon2` | dns.pcap as a Network Monitor 2.0 file |
+| `btsnoop/hci.btsnoop` | text2pcap `-l 201`, editcap `-F btsnoop -C 4` | HCI H4 packets written by hand in `hci.txt` (reset, read BD_ADDR, LE scan enable, an advertising report, an L2CAP information request); editcap writes the container, keeps the original lengths and marks every record received |
+
+Edits: in the four pcapng files the `shb_os` and `if_os` options (the
+Docker host's kernel release) were rewritten to "Linux" by
+`tests/data/pcap/scrub-pcapng.py`, which recomputes option and block
+lengths and copies everything else.
+
 ## Office documents and installers (Compound File)
 
 LibreOffice fixtures are converted from flat ODF sources in `tests/data/`
