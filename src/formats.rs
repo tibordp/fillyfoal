@@ -301,6 +301,7 @@ pub static FORMATS: &[&Format] = &[
     &image::crw::FORMAT,
     #[cfg(feature = "image")]
     &image::jbig2::FORMAT,
+    #[cfg(feature = "image")]
     &image::jbig2::EMBEDDED,
     #[cfg(feature = "image")]
     &image::tiff::FORMAT,
