@@ -24,6 +24,9 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     defaults:
       run:
         working-directory: web
@@ -32,6 +35,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      # Compiled crates, by content hash: workspace crates that didn't
+      # change (a fresh checkout's mtimes defeat Cargo's own freshness
+      # check) come from the cache. rust-cache keeps the registry and
+      # third-party dependencies.
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: web/wasm

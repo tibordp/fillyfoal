@@ -23,20 +23,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - run: cargo fmt --check
+      - run: cargo fmt --all --check
       - run: cargo fmt --check --manifest-path web/wasm/Cargo.toml
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
           targets: wasm32-unknown-unknown
+      # Compiled crates, by content hash: workspace crates that didn't
+      # change (a fresh checkout's mtimes defeat Cargo's own freshness
+      # check) come from the cache. rust-cache keeps the registry and
+      # third-party dependencies.
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: |
             .
             web/wasm
@@ -52,24 +61,47 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
+      # Compiled crates, by content hash: workspace crates that didn't
+      # change (a fresh checkout's mtimes defeat Cargo's own freshness
+      # check) come from the cache. rust-cache keeps the registry and
+      # third-party dependencies.
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo test
 
   msrv:
     name: Build (MSRV)
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@1.88
+      # Compiled crates, by content hash: workspace crates that didn't
+      # change (a fresh checkout's mtimes defeat Cargo's own freshness
+      # check) come from the cache. rust-cache keeps the registry and
+      # third-party dependencies.
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: cargo check --lib
 
   web:
     name: Web app
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     defaults:
       run:
         working-directory: web
@@ -78,8 +110,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      # Compiled crates, by content hash: workspace crates that didn't
+      # change (a fresh checkout's mtimes defeat Cargo's own freshness
+      # check) come from the cache. rust-cache keeps the registry and
+      # third-party dependencies.
+      - uses: mozilla-actions/sccache-action@v0.0.9
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
           workspaces: web/wasm
       - uses: taiki-e/install-action@v2
         with:
