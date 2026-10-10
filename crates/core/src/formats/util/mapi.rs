@@ -155,6 +155,7 @@ pub const NAMES: EnumTable = &[
     (0x5ffb, "RecipientTrackStatusTime"),
     (0x5ffd, "RecipientFlags"),
     (0x5fff, "RecipientTrackStatus"),
+    (0x6001, "DotStuffState"),
     (0x6633, "PstLrNoRestrictions"),
     (0x6635, "PstHiddenCount"),
     (0x6636, "PstHiddenUnread"),

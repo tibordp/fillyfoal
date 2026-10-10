@@ -13,6 +13,7 @@ use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::disk::ntfs::{ATTR_TYPES, FILE_ATTRIBUTES};
 use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::{clip, hex, size, text, uint};
+use crate::formats::util::mapi;
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -1408,36 +1409,12 @@ async fn job_triggers(cx: Cx, list: Vec<Span>) -> Result<()> {
 declare_format!(pub NK2 = "outlook-nk2", "Outlook autocomplete cache (NK2)", ["nk2"], "application/x-ms-nk2",
     Probe::Magic(&[(0, b"\x0d\xf0\xad\xba")]), nk2);
 
-const MAPI_TYPES: EnumTable = &[
-    (0x0002, "PT_SHORT"),
-    (0x0003, "PT_LONG"),
-    (0x0005, "PT_DOUBLE"),
-    (0x000b, "PT_BOOLEAN"),
-    (0x0014, "PT_I8"),
-    (0x001e, "PT_STRING8"),
-    (0x001f, "PT_UNICODE"),
-    (0x0040, "PT_SYSTIME"),
-    (0x0048, "PT_CLSID"),
-    (0x0102, "PT_BINARY"),
-];
-
-const MAPI_PROPS: EnumTable = &[
-    (0x0fff, "PR_ENTRYID"),
-    (0x0ffe, "PR_OBJECT_TYPE"),
-    (0x3001, "PR_DISPLAY_NAME"),
-    (0x3002, "PR_ADDRTYPE"),
-    (0x3003, "PR_EMAIL_ADDRESS"),
-    (0x300b, "PR_SEARCH_KEY"),
-    (0x3900, "PR_DISPLAY_TYPE"),
-    (0x39fe, "PR_SMTP_ADDRESS"),
-    (0x39ff, "PR_7BIT_DISPLAY_NAME"),
-    (0x5ff6, "PR_DROPDOWN_DISPLAY_NAME"),
-    (0x5ff7, "PR_NICK_NAME_W"),
-    (0x5ffd, "PR_NICK_NAME_FLAGS"),
-    (0x6001, "PR_NICK_NAME_DOTSTUFF"),
-    (0x6002, "PR_NICK_NAME_COUNT"),
-    (0x6003, "PR_NICK_NAME_WEIGHT"),
-    (0x6004, "PR_NICK_NAME_LAST_USED"),
+/// Properties the autocomplete cache uses that [MS-OXPROPS] doesn't name
+/// (the rest are named by `util::mapi`).
+const NK2_PROPS: EnumTable = &[
+    (0x6002, "NickNameCount"),
+    (0x6003, "NickNameWeight"),
+    (0x6004, "NickNameLastUsed"),
 ];
 
 fn mapi_variable(kind: u16) -> bool {
@@ -1513,9 +1490,11 @@ async fn nk2_row(cx: Cx, span: Span) -> Result<()> {
         let kind = u16_le(p, 0).unwrap_or(0);
         let id = u16_le(p, 2).unwrap_or(0);
         let entry = table_span.sub(to_u64(i).saturating_mul(16), 16);
-        let name = lookup(MAPI_PROPS, id.into())
-            .map_or_else(|| format!("Property {id:#06x}"), str::to_owned);
-        let type_name = lookup(MAPI_TYPES, kind.into()).unwrap_or("?");
+        let name = match lookup(NK2_PROPS, id.into()) {
+            Some(n) => n.to_owned(),
+            None => mapi::property_name(id, &[]),
+        };
+        let type_name = lookup(mapi::TYPES, kind.into()).unwrap_or("?");
         let mut node = Node::new(name)
             .span(entry)
             .desc(format!("{type_name} ({kind:#06x})"));
@@ -1530,15 +1509,12 @@ async fn nk2_row(cx: Cx, span: Span) -> Result<()> {
             };
             node = node.value(value).target(cur.since(start));
         } else {
-            let raw = u64_le(p, 8).unwrap_or(0);
-            node = node.value(match kind {
-                0x0040 => filetime(raw),
-                0x000b => Value::Bool(raw & 0xffff != 0),
-                0x0002 => uint(raw & 0xffff, 16),
-                0x0003 => uint(raw & 0xffff_ffff, 32),
-                0x0005 => Value::Float(f64::from_bits(raw)),
-                _ => hex(raw, 64),
-            });
+            let raw = p.get(8..16).unwrap_or_default();
+            let (value, detail) = mapi::fixed_scalar(id, kind, raw);
+            node = node.value(value.unwrap_or_else(|| hex(u64_le(p, 8).unwrap_or(0), 64)));
+            if let Some(detail) = detail {
+                node = node.summary(detail);
+            }
         }
         cx.push(node).await;
     }
