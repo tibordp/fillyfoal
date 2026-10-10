@@ -20,11 +20,12 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::disk::{PieceList, content_node, fragments_node, size};
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
+use crate::value::{EnumTable, FlagTable, Value, flag};
 
 const LE: Endian = Endian::Little;
 const ROOT_RECORD: u64 = 5;
@@ -685,8 +686,7 @@ async fn record_node(cx: Cx, (fs, n): (Vol, u64)) -> Result<()> {
 }
 
 fn attribute_node(fs: &Vol, a: &Attr) -> Node {
-    let kind = lookup(ATTR_TYPES, a.kind.into())
-        .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
+    let kind = name_or(ATTR_TYPES, a.kind.into(), "Attribute");
     let name = if a.name.is_empty() {
         kind
     } else {

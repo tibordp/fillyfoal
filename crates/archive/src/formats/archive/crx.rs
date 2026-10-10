@@ -142,11 +142,11 @@ async fn message(cx: Cx, (input, span, kind, depth): (Input, Span, Kind, u32)) -
                 // Ecdsa-Sig-Value, an RSA one a bare value. Both DER forms are a
                 // SEQUENCE.
                 let der = bytes.first() == Some(&0x30)
-                    && match (kind, name) {
-                        (Kind::RsaProof | Kind::EcdsaProof, "public_key") => true,
-                        (Kind::EcdsaProof, "signature") => true,
-                        _ => false,
-                    };
+                    && matches!(
+                        (kind, name),
+                        (Kind::RsaProof | Kind::EcdsaProof, "public_key")
+                            | (Kind::EcdsaProof, "signature")
+                    );
                 if der {
                     node = embedded_named(label, input.nested(body), "der").summary(size(body.len));
                 } else if sub != Kind::Unknown && depth < MAX_DEPTH {
