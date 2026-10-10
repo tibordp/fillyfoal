@@ -1,7 +1,6 @@
-/* Paper and ink, shared with the landing page. Colour means something:
-   rust is the one accent (cursor, links, what's being done), the cells'
-   hues say which structure bytes belong to, and highlighter yellow is the
-   selection. */
+/* Paper and ink, shared with the landing page. Rust is the one accent
+   (cursor, links, what's being done) and highlighter yellow the selection,
+   in the tree and in the bytes alike; hues are the landing poster's. */
 :root {
   --bg: #f3efe6;
   --surface: #f7f4ec;
@@ -26,20 +25,15 @@
   --pink: oklch(0.5 0.14 350);
   --sel: oklch(0.9 0.09 95);
   --sel-inactive: color-mix(in srgb, var(--fg) 8%, var(--bg));
-  /* A byte's colour: its structure's hue, in two shades that alternate
-     field by field, and a strong one for the field pointed at. */
+  /* The landing poster's cells: a structure's hue, in two shades that
+     alternate field by field, and a strong one for the field pointed at. */
   --cell-l: 0.89;
   --cell-c: 0.055;
   --cell-alt-l: 0.83;
   --cell-alt-c: 0.075;
-  --cell-on-l: 0.62;
-  --cell-on-c: 0.15;
+  --cell-on-l: 0.66;
+  --cell-on-c: 0.12;
   --cell-on-fg: #fff;
-  --tint0: oklch(var(--cell-l) var(--cell-c) 75);
-  --tint1: oklch(var(--cell-alt-l) var(--cell-alt-c) 75);
-  --tint-hover: oklch(var(--cell-on-l) var(--cell-on-c) 75);
-  --span: oklch(var(--cell-alt-l) var(--cell-alt-c) 75);
-  --target: oklch(var(--cell-alt-l) var(--cell-alt-c) 20);
   --shadow-sm: none;
   --shadow-lg: 6px 6px 0 var(--fg);
   --radius: 3px;
@@ -436,15 +430,6 @@ button.brand:hover::before {
   background: var(--border);
 }
 
-.swatch {
-  --h: 75;
-  flex-shrink: 0;
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  background: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
-}
-
 .chevron {
   flex-shrink: 0;
   width: 18px;
@@ -730,11 +715,15 @@ button.brand:hover::before {
   color: var(--fg-faint);
   pointer-events: none;
 }
+/* Each byte sits in half a space either side, so the cursor is centred on
+   it and a highlight runs through the spaces between its bytes. */
 .hex-bytes .b {
-  padding-right: 1ch;
+  --pl: 0.5ch;
+  --pr: 0.5ch;
+  padding: 0 var(--pr) 0 var(--pl);
 }
 .hex-bytes .b[data-gap] {
-  padding-right: 2ch;
+  --pr: 1.5ch;
 }
 .hex-chars {
   margin-left: 1ch;
@@ -742,29 +731,41 @@ button.brand:hover::before {
 .hex-chars .b[data-np] {
   color: var(--fg-faint);
 }
-.b {
-  border-radius: 2px;
+/* Bytes fill their line, so a highlight over several lines is one block. */
+.hex-line .b {
+  display: inline-block;
+  height: 20px;
 }
-.b-span {
-  background: var(--span);
-}
-.b-cell {
-  --h: 75;
-  background: oklch(var(--cell-l) var(--cell-c) var(--h));
-}
+/* The highlight: the selected field's bytes, in the tree's selection
+   colour; the hex selection in ink. */
 .b-on {
-  background: oklch(var(--cell-on-l) var(--cell-on-c) var(--h));
-  color: var(--cell-on-fg);
-}
-.b-target {
-  background: var(--target);
+  --hl: var(--sel);
+  background: var(--hl);
 }
 .b-sel {
-  background: var(--fg);
+  --hl: var(--fg);
+  background: var(--hl);
   color: var(--bg);
 }
 .b-sel-inactive {
-  background: var(--sel-inactive);
+  --hl: var(--sel-inactive);
+  background: var(--hl);
+}
+/* A highlight's ends leave the space outside its first and last bytes. */
+.b-start {
+  background: linear-gradient(to right, transparent var(--pl), var(--hl) var(--pl));
+}
+.b-end {
+  background: linear-gradient(to left, transparent var(--pr), var(--hl) var(--pr));
+}
+.b-start.b-end {
+  background: var(--hl);
+  background-clip: content-box;
+}
+/* What the selected field points to. */
+.b-target {
+  text-decoration: underline 2px var(--accent);
+  text-underline-offset: 4px;
 }
 .b-cursor {
   outline: 1.5px solid var(--accent);
@@ -779,15 +780,12 @@ button.brand:hover::before {
   color: var(--fg-muted);
   font-family: var(--font);
 }
-.hex-hover {
-  flex-shrink: 0;
-  padding: 4px 14px;
-  border-top: 1px solid var(--border);
-  font-size: 12px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  background: var(--surface-2);
+.hex-wrap {
+  flex: 1;
+  min-height: 80px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
 }
 
 .details {

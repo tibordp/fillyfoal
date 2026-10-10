@@ -17,9 +17,6 @@ use fillyfoal::{
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-/// Children of one node scanned per call of [`Dissection::find_child_at`].
-const SCAN: usize = 4096;
-
 #[wasm_bindgen]
 pub struct Dissection {
     session: Session,
@@ -206,15 +203,6 @@ impl Dissection {
         Ok(json(&state).trim_matches('"').to_string())
     }
 
-    #[wasm_bindgen(js_name = childCount)]
-    pub fn child_count(&self, key: u32) -> Result<u32, JsError> {
-        let id = self.id(key)?;
-        Ok(self
-            .session
-            .children(id)
-            .map_or(0, |c| u32::try_from(c.ids.len()).unwrap_or(u32::MAX)))
-    }
-
     #[wasm_bindgen(js_name = childKeys)]
     pub fn child_keys(&mut self, key: u32) -> Result<Vec<u32>, JsError> {
         let id = self.id(key)?;
@@ -226,11 +214,12 @@ impl Dissection {
         Ok(ids.into_iter().map(|id| self.key(id)).collect())
     }
 
-    /// The first loaded child of `key` from index `from` (and at most
-    /// [`SCAN`] of them) whose bytes include `offset` of `source`. JSON:
+    /// Of `key`'s loaded children from index `from`, the one that comes
+    /// closest to byte `offset` of `source` (see [`Dissection::reach`]), a
+    /// container before a plain field at the same distance. JSON:
     /// `{found: key | null, scanned}` where `scanned` is where to go on from.
-    #[wasm_bindgen(js_name = findChildAt)]
-    pub fn find_child_at(
+    #[wasm_bindgen(js_name = closestChild)]
+    pub fn closest_child(
         &mut self,
         key: u32,
         from: u32,
@@ -238,28 +227,58 @@ impl Dissection {
         offset: f64,
     ) -> Result<String, JsError> {
         let id = self.id(key)?;
-        let source = self.source(source)?;
-        let at = Span::new(source, int(offset), 1);
-        let (hit, scanned) = match self.session.children(id) {
-            None => (None, from as usize),
-            Some(children) => {
-                let start = (from as usize).min(children.ids.len());
-                let end = start.saturating_add(SCAN).min(children.ids.len());
-                let hit = children.ids.get(start..end).and_then(|ids| {
-                    ids.iter().copied().find(|&child| {
-                        self.session
-                            .node(child)
-                            .and_then(|n| n.span)
-                            .is_some_and(|s| !s.is_empty() && s.contains(&at))
-                    })
-                });
-                (hit, end)
-            }
-        };
-        let found = hit.map(|id| self.key(id));
+        let lineage = self.lineage(self.source(source)?, int(offset));
+        let ids = self.children_from(id, from);
+        let best = ids
+            .iter()
+            .filter_map(|&child| {
+                let (rank, has_children, _) = self.reach(child, &lineage);
+                rank.map(|rank| ((rank, !has_children), child))
+            })
+            .min_by_key(|(order, _)| *order)
+            .map(|(_, child)| child);
+        let found = best.map(|id| self.key(id));
         Ok(json(&Found {
             found,
-            scanned: u32::try_from(scanned).unwrap_or(u32::MAX),
+            scanned: self.scanned(from, ids.len()),
+            deeper: Vec::new(),
+        }))
+    }
+
+    /// One step of the search below a node none of whose children come
+    /// close to the byte: of `key`'s loaded children from index `from`, the
+    /// first that does (`found`), else those worth looking below
+    /// (`deeper`): the ones with children whose bytes lie in a byte space
+    /// on the byte's lineage.
+    #[wasm_bindgen(js_name = searchChildren)]
+    pub fn search_children(
+        &mut self,
+        key: u32,
+        from: u32,
+        source: u32,
+        offset: f64,
+    ) -> Result<String, JsError> {
+        let id = self.id(key)?;
+        let lineage = self.lineage(self.source(source)?, int(offset));
+        let ids = self.children_from(id, from);
+        let mut deeper = Vec::new();
+        let mut found = None;
+        for &child in &ids {
+            let (rank, has_children, leads) = self.reach(child, &lineage);
+            if rank.is_some() {
+                found = Some(child);
+                break;
+            }
+            if has_children && leads {
+                deeper.push(child);
+            }
+        }
+        let found = found.map(|id| self.key(id));
+        let deeper = deeper.into_iter().map(|id| self.key(id)).collect();
+        Ok(json(&Found {
+            found,
+            scanned: self.scanned(from, ids.len()),
+            deeper,
         }))
     }
 
@@ -377,6 +396,48 @@ impl Dissection {
             .get(key as usize)
             .copied()
             .ok_or_else(|| error(format!("no node {key}")))
+    }
+
+    /// `offset` of `source`, then the bytes each stream it lies in was
+    /// decoded from, down to the file.
+    fn lineage(&self, source: SourceId, offset: u64) -> Vec<Span> {
+        let mut lineage = vec![Span::new(source, offset, 1)];
+        while let Some(origin) = lineage.last().and_then(|at| self.session.origin(at.source)) {
+            // A decoded stream is never its own origin, but a loop must end.
+            if lineage.len() > 64 {
+                break;
+            }
+            lineage.push(origin.parent);
+        }
+        lineage
+    }
+
+    /// How close `id` comes to the byte at the head of `lineage`: 0 if it
+    /// holds the byte, n if it holds the bytes the n-th stream down was
+    /// decoded from (a "Content" node spans the compressed data, its fields
+    /// the stream); `None` if neither. Also whether it has children, and
+    /// whether they can lead to the byte at all: only through the byte
+    /// spaces on its lineage.
+    fn reach(&self, id: NodeId, lineage: &[Span]) -> (Option<usize>, bool, bool) {
+        let Some(node) = self.session.node(id) else {
+            return (None, false, false);
+        };
+        let span = node.span.filter(|s| !s.is_empty());
+        let rank = span.and_then(|s| lineage.iter().position(|l| s.contains(l)));
+        let leads = span.is_none_or(|s| lineage.iter().any(|l| l.source == s.source));
+        (rank, node.has_children(), leads)
+    }
+
+    fn children_from(&self, id: NodeId, from: u32) -> Vec<NodeId> {
+        self.session
+            .children(id)
+            .and_then(|c| c.ids.get((from as usize).min(c.ids.len())..))
+            .map(<[NodeId]>::to_vec)
+            .unwrap_or_default()
+    }
+
+    fn scanned(&self, from: u32, more: usize) -> u32 {
+        u32::try_from(more).map_or(u32::MAX, |n| from.saturating_add(n))
     }
 
     fn source(&self, index: u32) -> Result<SourceId, JsError> {
@@ -527,6 +588,7 @@ struct Polled {
 struct Found {
     found: Option<u32>,
     scanned: u32,
+    deeper: Vec<u32>,
 }
 
 #[derive(Serialize)]

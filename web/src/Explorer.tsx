@@ -11,7 +11,6 @@ import { CancelledError, client } from "./client";
 import {
   CHUNK_SIZE,
   HEX_BYTES_PER_ROW,
-  HUES,
   MAX_SCROLL_HEIGHT,
   formatBytes,
   formatSize,
@@ -51,8 +50,6 @@ const OVERSCAN = 6;
 const CACHED_CHUNKS = 64;
 /// Largest download of a decoded stream.
 const MAX_DOWNLOAD = 256 * 1024 * 1024;
-/// Children of the selected field whose bytes are tinted in the hex pane.
-const MAX_TINTED = 2048;
 
 /// A line of the tree: a node, or the "more children" line under one.
 type Row =
@@ -127,7 +124,10 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   const [children, setChildren] = useState<Map<number, number[]>>(new Map());
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [selected, setSelected] = useState<number | null>(null);
-  const [loading, setLoading] = useState<Set<number>>(new Set());
+  // Nodes whose children are being produced, with how many requests are
+  // producing them: a node loaded twice at once is loading until both end.
+  const [loading, setLoading] = useState<Map<number, number>>(new Map());
+  const loadCounts = useRef(new Map<number, number>());
   const [progress, setProgress] = useState<Map<number, ProgressEvent>>(new Map());
   // Requests not about one node: finding a field, Dissect As's target.
   const [working, setWorking] = useState(0);
@@ -178,7 +178,8 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
     setError(null);
     setSecret(null);
     setPickerTarget(null);
-    setLoading(new Set());
+    loadCounts.current = new Map();
+    setLoading(new Map());
     setProgress(new Map());
     let cancelled = false;
     let opened: number | null = null;
@@ -294,19 +295,25 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   );
   const startLoading = useCallback(
     (key: number) => {
-      setLoading((prev) => new Set(prev).add(key));
-      forgetProgress(key);
+      const counts = loadCounts.current;
+      const running = counts.get(key) ?? 0;
+      if (running === 0) forgetProgress(key);
+      counts.set(key, running + 1);
+      setLoading(new Map(counts));
     },
     [forgetProgress],
   );
   const endLoading = useCallback(
     (key: number) => {
-      setLoading((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-      forgetProgress(key);
+      const counts = loadCounts.current;
+      const left = (counts.get(key) ?? 1) - 1;
+      if (left > 0) {
+        counts.set(key, left);
+      } else {
+        counts.delete(key);
+        forgetProgress(key);
+      }
+      setLoading(new Map(counts));
     },
     [forgetProgress],
   );
@@ -353,7 +360,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   const showBusy = useAfterGrace(busy);
   const busyText = (() => {
     if (loading.size > 0) {
-      const keys = [...loading];
+      const keys = [...loading.keys()];
       const measured = keys.filter((k) => progress.has(k));
       const key = measured.length
         ? measured.reduce((a, b) =>
@@ -370,7 +377,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
     return null;
   })();
   const busyPercent = (() => {
-    for (const k of loading) {
+    for (const k of loading.keys()) {
       const p = progress.get(k);
       if (p) return percentOf(p);
     }
@@ -447,16 +454,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
 
   const rootNode = rootKey !== null ? nodes.get(rootKey) : undefined;
   const span = node?.span ?? null;
-  const [pinnedSource, setPinnedSource] = useState<number | null>(null);
-  const source = pinnedSource ?? span?.source ?? fileSource;
-  // A field found from the hex pane keeps the hex pane on the byte space it
-  // was found in, which the field (a container over compressed bytes) may
-  // not live in; a selection made otherwise lets go.
-  const pinNext = useRef<number | null>(null);
-  useEffect(() => {
-    setPinnedSource(pinNext.current);
-    pinNext.current = null;
-  }, [selected]);
+  const source = span?.source ?? fileSource;
   const [sources, setSources] = useState<Map<number, SourceInfo>>(new Map());
   const sourceInfo = sources.get(source);
   const sourceLen =
@@ -519,7 +517,6 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
 
   const [cursor, setCursor] = useState(0);
   const [range, setRange] = useState<Range | null>(null);
-  const [hoverByte, setHoverByte] = useState<number | null>(null);
   // Whether a new selection moves the hex cursor to it: not when the
   // selection came from the hex pane itself.
   const followSelection = useRef(true);
@@ -683,6 +680,13 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
       setWorking((n) => n + 1);
       try {
         const r = await client.call("locate", { session, source: src, offset });
+        const target = r.path[r.path.length - 1];
+        const found = r.pages
+          .flatMap((p) => [p.parent, ...p.nodes])
+          .find((n) => n.key === target);
+        // A byte clicked that no field of its stream holds leaves the
+        // selection, and with it the stream, where it is.
+        if (fromHex && found?.span?.source !== src) return;
         // The field found may be one the filter hides.
         setFilter(null);
         for (const page of r.pages) merge(page);
@@ -691,12 +695,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
           for (const k of r.path.slice(0, -1)) next.add(k);
           return next;
         });
-        const target = r.path[r.path.length - 1];
         if (fromHex && target !== selected) followSelection.current = false;
-        if (fromHex) {
-          if (target === selected) setPinnedSource(src);
-          else pinNext.current = src;
-        }
         setSelected(target);
         if (r.secret) {
           setSecret({
@@ -831,6 +830,52 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   const copyValue = () => {
     if (!node) return false;
     copyText(node.value?.text ?? node.summary ?? node.name);
+  };
+
+  /// The selected line and what's shown below it, as the tree shows them,
+  /// in fillyfoal's tree text: collapsed nodes collapsed, each line's bytes
+  /// after it, problems below.
+  const treeText = (): string | null => {
+    if (selectedIndex < 0) return null;
+    const base = rows[selectedIndex].depth;
+    const lines: string[] = [];
+    for (let i = selectedIndex; i < rows.length; i++) {
+      const row = rows[i];
+      if (i > selectedIndex && row.depth <= base) break;
+      const indent = "  ".repeat(row.depth - base);
+      if (row.kind === "more") {
+        const shown = children.get(row.parent)?.length ?? 0;
+        const total = nodes.get(row.parent)?.children.count;
+        const of = total ? ` of ${total.at_least ? "at least " : ""}${total.n}` : "";
+        lines.push(`${indent}  … (${shown} shown${of})`);
+        continue;
+      }
+      const n = nodes.get(row.key);
+      if (!n) continue;
+      const marker = n.children.state === "leaf" ? "  " : expanded.has(row.key) ? "▾ " : "▸ ";
+      const bytes = n.span ? `  [0x${n.span.offset.toString(16)}+0x${n.span.len.toString(16)}]` : "";
+      lines.push(`${indent}${marker}${nodeLine(n)}${bytes}`);
+      for (const d of n.diagnostics) lines.push(`${indent}    ! ${d.message}`);
+    }
+    return lines.join("\n") + "\n";
+  };
+  const copyTree = () => {
+    const text = treeText();
+    if (text === null) return false;
+    copyText(text, "Copied the tree");
+  };
+
+  /// Save what's selected: the hex selection, else the file the selected
+  /// field stands for (an archive member's content), else its bytes.
+  const saveSelected = async () => {
+    if (zone === "hex" && range) {
+      const base = node ? downloadName(node).replace(/\.[^.]*$/, "") : "bytes";
+      void downloadBytes(hexSelection(), `${base}-${selStart.toString(16)}.bin`);
+      return;
+    }
+    const c = await contentSpan();
+    if (c) void downloadBytes(c.span, c.name.split("/").pop() ?? c.name);
+    else if (span) void downloadBytes(span, downloadName(node));
   };
 
   // --- Dissect As ---
@@ -1058,6 +1103,8 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
       setGoToOpen(true);
     } else if (cmd && e.key.toLowerCase() === "o") {
       onOpen();
+    } else if (cmd && e.key.toLowerCase() === "s") {
+      void saveSelected();
     } else if (cmd && e.key.toLowerCase() === "c" && !typing) {
       // Text selected on the page (the details) copies as usual.
       if (window.getSelection()?.toString()) return;
@@ -1065,7 +1112,6 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
       else copy();
     } else if (cmd && e.key.toLowerCase() === "a" && !typing) {
       if (!span || span.len === 0) return;
-      setPinnedSource(null);
       setRange({ anchor: span.offset, head: span.offset + span.len - 1 });
       focusZone("hex");
     } else if (typing || cmd || e.altKey) {
@@ -1082,11 +1128,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
     } else if (e.key === "t") {
       followTarget();
     } else if (e.key === "s") {
-      void (async () => {
-        const c = await contentSpan();
-        if (c) void downloadBytes(c.span, c.name.split("/").pop() ?? c.name);
-        else if (span) void downloadBytes(span, downloadName(node));
-      })();
+      void saveSelected();
     } else if (e.key === "?") {
       setHelpOpen((h) => !h);
     } else {
@@ -1103,16 +1145,47 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   // --- Mouse in the hex pane ---
 
   const dragging = useRef(false);
-  const byteFromEvent = (e: { clientX: number; clientY: number }) => {
+  /// The byte under the pointer, or with `nearest`, between lines, columns
+  /// or past a line's end (and outside the pane, while dragging) the
+  /// nearest one: on the nearest line drawn, the nearest byte along it.
+  const byteFromEvent = (e: { clientX: number; clientY: number }, nearest = false) => {
     const el = document.elementFromPoint(e.clientX, e.clientY);
     if (el instanceof HTMLElement && el.dataset.offset !== undefined) {
       return parseInt(el.dataset.offset, 10);
     }
-    return undefined;
+    if (!nearest) return undefined;
+    const closest = (els: Iterable<HTMLElement>, gap: (r: DOMRect) => number) => {
+      let best: HTMLElement | undefined;
+      let bestGap = Infinity;
+      for (const candidate of els) {
+        const d = gap(candidate.getBoundingClientRect());
+        if (d < bestGap) [best, bestGap] = [candidate, d];
+      }
+      return best;
+    };
+    const outside = (at: number, from: number, to: number) =>
+      at < from ? from - at : at > to ? at - to : 0;
+    const lines = hexRef.current?.querySelectorAll<HTMLElement>(".hex-line") ?? [];
+    const line = closest(lines, (r) => outside(e.clientY, r.top, r.bottom));
+    const byte = line
+      ? closest(line.querySelectorAll<HTMLElement>(".hex-bytes [data-offset]"), (r) =>
+          outside(e.clientX, r.left, r.right),
+        )
+      : undefined;
+    return byte ? parseInt(byte.dataset.offset!, 10) : undefined;
   };
-  const onHexPointerDown = (e: React.PointerEvent) => {
+  const onHexPointerDown = (e: React.PointerEvent<HTMLElement>) => {
     if (e.button !== 0) return;
-    const offset = byteFromEvent(e);
+    // A press on the scrollbar is the scrollbar's.
+    const pane = e.currentTarget;
+    const box = pane.getBoundingClientRect();
+    if (
+      e.clientX >= box.left + pane.clientLeft + pane.clientWidth ||
+      e.clientY >= box.top + pane.clientTop + pane.clientHeight
+    ) {
+      return;
+    }
+    const offset = byteFromEvent(e, true);
     if (offset === undefined) return;
     e.preventDefault();
     setZone("hex");
@@ -1129,7 +1202,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   useEffect(() => {
     const move = (e: PointerEvent) => {
       if (!dragging.current) return;
-      const offset = byteFromEvent(e);
+      const offset = byteFromEvent(e, true);
       if (offset === undefined) return;
       setRange((prev) => ({ anchor: prev?.anchor ?? offset, head: offset }));
       setCursor(offset);
@@ -1157,6 +1230,7 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   const menuItems: MenuItem[] = [
     { label: "Copy line", shortcut: `${mod}C`, disabled: !node, onSelect: copy },
     { label: "Copy value", shortcut: `⇧${mod}C`, disabled: !node, onSelect: copyValue },
+    { label: "Copy tree", disabled: !node, onSelect: copyTree },
     "separator",
     {
       label: "Copy bytes as hex",
@@ -1223,55 +1297,26 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
   const selEnd = range ? Math.max(range.anchor, range.head) : -2;
   const target = node?.target ?? null;
 
-  // The selected field's children, each in a hue of its own, so its
-  // structure shows in the bytes.
-  const tinted = useMemo(() => {
-    if (selected === null || selected < 0 || !expanded.has(selected)) return [];
-    const kids = children.get(selected) ?? [];
-    const spans: { start: number; end: number; key: number; hue: number }[] = [];
-    let tint = 0;
-    for (const k of kids.slice(0, MAX_TINTED)) {
-      const s = nodes.get(k)?.span;
-      if (!s || s.source !== source || s.len === 0) continue;
-      spans.push({ start: s.offset, end: s.offset + s.len, key: k, hue: HUES[tint++ % HUES.length] });
-    }
-    spans.sort((a, b) => a.start - b.start);
-    return spans;
-  }, [selected, expanded, children, nodes, source]);
+  /// How a byte is highlighted: in the hex selection, in the selected
+  /// field's bytes, or not at all.
+  const highlight = (offset: number) =>
+    offset >= selStart && offset <= selEnd ? "sel" : inSpan(span, source, offset) ? "on" : null;
 
-  const tintAt = (offset: number) => {
-    let lo = 0;
-    let hi = tinted.length - 1;
-    while (lo <= hi) {
-      const mid = (lo + hi) >> 1;
-      const t = tinted[mid];
-      if (offset < t.start) hi = mid - 1;
-      else if (offset >= t.end) lo = mid + 1;
-      else return t;
-    }
-    return undefined;
-  };
-  const hoverTint = hoverByte !== null ? tintAt(hoverByte) : undefined;
-  const hueOf = useMemo(() => new Map(tinted.map((t) => [t.key, t.hue])), [tinted]);
-
-  /// A byte's class, and the hue of the child of the selected field it
-  /// belongs to.
-  const byteLook = (offset: number, ascii: boolean) => {
+  /// A byte's class. A highlight is one band: the space around a byte is
+  /// painted only towards a neighbour on the line highlighted alike.
+  const byteClass = (offset: number, ascii: boolean) => {
+    const kind = highlight(offset);
     let c = "b";
-    let style: React.CSSProperties | undefined;
-    if (offset >= selStart && offset <= selEnd) {
-      c += zone === "hex" ? " b-sel" : " b-sel-inactive";
-    } else if (inSpan(span, source, offset)) {
-      const t = tintAt(offset);
-      if (t) {
-        c += t === hoverTint ? " b-cell b-on" : " b-cell";
-        style = { "--h": t.hue } as React.CSSProperties;
-      } else c += " b-span";
-    } else if (inSpan(target, source, offset)) {
-      c += " b-target";
+    if (kind === "sel") c += zone === "hex" ? " b-sel" : " b-sel-inactive";
+    else if (kind === "on") c += " b-on";
+    else if (inSpan(target, source, offset)) c += " b-target";
+    if (kind && !ascii) {
+      const col = offset % HEX_BYTES_PER_ROW;
+      if (col === 0 || highlight(offset - 1) !== kind) c += " b-start";
+      if (col === HEX_BYTES_PER_ROW - 1 || highlight(offset + 1) !== kind) c += " b-end";
     }
     if (offset === cursor && !ascii) c += zone === "hex" ? " b-cursor" : " b-cursor-inactive";
-    return { className: c, style };
+    return c;
   };
 
   const treeRows = rows.slice(treeFirst, treeLast).map((row, i) => {
@@ -1363,9 +1408,6 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
             expandable && <Chevron />
           )}
         </span>
-        {hueOf.has(row.key) && (
-          <span className="swatch" style={{ "--h": hueOf.get(row.key) } as React.CSSProperties} />
-        )}
         <span className="name">{n.name}</span>
         {n.interpretation &&
           (n.interpretation.forced ? (
@@ -1418,12 +1460,12 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
       if (offset >= sourceLen) break;
       const b = byteAt(offset);
       bytes.push(
-        <span key={j} data-offset={offset} {...byteLook(offset, false)} data-gap={j === 7 || undefined}>
+        <span key={j} data-offset={offset} className={byteClass(offset, false)} data-gap={j === 7 || undefined}>
           {b === undefined ? "··" : hexByte(b)}
         </span>,
       );
       chars.push(
-        <span key={j} data-offset={offset} {...byteLook(offset, true)} data-np={b !== undefined && (b < 0x20 || b > 0x7e) ? true : undefined}>
+        <span key={j} data-offset={offset} className={byteClass(offset, true)} data-np={b !== undefined && (b < 0x20 || b > 0x7e) ? true : undefined}>
           {b === undefined ? " " : printable(b)}
         </span>,
       );
@@ -1601,61 +1643,39 @@ export function Explorer({ file, onOpen, onClose }: ExplorerProps) {
             <span className="source-len" title={lenKnown ? undefined : "Not known until the stream has been decoded to its end"}>
               {lenKnown ? formatSize(sourceLen) : "size unknown"}
             </span>
-            {pinnedSource !== null && pinnedSource !== (span?.source ?? fileSource) && (
-              <button type="button" className="link" onClick={() => setPinnedSource(null)}>
-                Show the field's bytes
-              </button>
-            )}
           </div>
-          <div
-            className="hex"
-            ref={hexRef}
-            tabIndex={0}
-            role="grid"
-            aria-label="Bytes"
-            onKeyDown={onHexKey}
-            onFocus={() => setZone("hex")}
-            onPointerDown={onHexPointerDown}
-            onPointerMove={(e) => {
-              const o = byteFromEvent(e);
-              setHoverByte(o ?? null);
-            }}
-            onPointerLeave={() => setHoverByte(null)}
-            onScroll={(e) =>
-              setHexTop(
-                Math.min(
-                  Math.max(0, hexRows - hexVisible),
-                  Math.floor((e.currentTarget.scrollTop * hexScale) / HEX_ROW),
-                ),
-              )
-            }
-          >
-            <div className="hex-content" style={{ height: Math.min(hexNatural, MAX_SCROLL_HEIGHT) }}>
-              {hexLines}
+          <div className="hex-wrap">
+            <div
+              className="hex"
+              ref={hexRef}
+              tabIndex={0}
+              role="grid"
+              aria-label="Bytes"
+              onKeyDown={onHexKey}
+              onFocus={() => setZone("hex")}
+              onPointerDown={onHexPointerDown}
+              onScroll={(e) =>
+                setHexTop(
+                  Math.min(
+                    Math.max(0, hexRows - hexVisible),
+                    Math.floor((e.currentTarget.scrollTop * hexScale) / HEX_ROW),
+                  ),
+                )
+              }
+            >
+              <div className="hex-content" style={{ height: Math.min(hexNatural, MAX_SCROLL_HEIGHT) }}>
+                {hexLines}
+              </div>
+              {sourceLen === 0 && session !== null && <div className="hex-empty">No bytes</div>}
             </div>
-            {sourceLen === 0 && session !== null && <div className="hex-empty">No bytes</div>}
           </div>
-          {hoverTint && (
-            <div className="hex-hover">
-              {nodes.get(hoverTint.key)?.name}
-              {nodes.get(hoverTint.key)?.value && (
-                <span className="muted">: {nodes.get(hoverTint.key)!.value!.text}</span>
-              )}
-            </div>
-          )}
           <Details
             node={node}
             zone={zone}
             source={sourceLabel}
             sizeOf={sizeOf}
             onFollow={followTarget}
-            onSave={() => {
-              void (async () => {
-                const c = await contentSpan();
-                if (c) void downloadBytes(c.span, c.name.split("/").pop() ?? c.name);
-                else void downloadBytes(span, downloadName(node));
-              })();
-            }}
+            onSave={() => void saveSelected()}
             onCopyBytes={() => void copyBytes(span, "hex")}
             onCopyValue={copyValue}
             inspector={
@@ -2044,7 +2064,7 @@ const SHORTCUTS: [string, string][] = [
   ["G or " + mod + "G", "Go to an offset"],
   ["T", "Go to what the field points to"],
   ["D", "Dissect as another format"],
-  ["S", "Save the field's bytes (an archive member's content)"],
+  ["S or " + mod + "S", "Save the selected bytes, or the field's (an archive member's content)"],
   ["B", "Show or hide the bytes"],
   [mod + "C", "Copy the line, or the selected bytes"],
   ["⇧" + mod + "C", "Copy the value"],

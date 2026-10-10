@@ -29,6 +29,9 @@ const PAGE = 200;
 /// How many children `locate` looks through under one node before giving up
 /// on it.
 const LOCATE_SCAN = 20_000;
+/// How many nodes `locate` looks through below one whose children don't
+/// hold the byte, before it gives up there.
+const LOCATE_SEARCH = 4_096;
 const LOCATE_DEPTH = 64;
 /// How many of a node's children `contentOf` looks through for the file it
 /// holds.
@@ -205,43 +208,74 @@ class Session {
     return holding.length === 1 ? holding[0] : null;
   }
 
-  /// The path from the root to the innermost node whose bytes include
-  /// `offset` of `source`, expanding along the way; as far as it got when
-  /// stopped.
+  /// The path from the root to the innermost node holding byte `offset` of
+  /// `source`, expanding along the way; as far as it got when stopped.
+  ///
+  /// A node can hold the byte itself or, for a decoded stream, the bytes the
+  /// stream was decoded from: a "Content" node spans the compressed data,
+  /// its fields the stream. Where no child holds either, the nodes below are
+  /// searched, since some formats list a part away from its bytes (a ZIP's
+  /// members under its Central Directory).
   async locate(source: number, offset: number, token: Token) {
     const path = [this.root];
     let current = this.root;
     while (path.length < LOCATE_DEPTH && !token.cancelled()) {
-      let scanned = 0;
-      let found: number | null = null;
-      for (;;) {
-        if (this.d.childState(current) === "unloaded") {
-          await this.expand(current, PAGE, token);
-        }
-        if (this.d.childState(current) === "leaf") break;
-        const loaded = this.d.childCount(current);
-        while (found === null && scanned < loaded) {
-          const r = ok(this.d.findChildAt(current, scanned, source, offset));
-          found = r.found;
-          scanned = r.scanned;
-        }
-        const more = this.d.childState(current) === "more";
-        if (
-          found !== null ||
-          !more ||
-          scanned > LOCATE_SCAN ||
-          token.cancelled()
-        ) {
-          break;
-        }
-        this.d.expandMore(current, PAGE);
-        await this.drive(current, token);
-      }
-      if (found === null) break;
-      path.push(found);
-      current = found;
+      const child = await this.closestChild(current, source, offset, token);
+      const found =
+        child !== null ? [child] : await this.search(current, source, offset, token);
+      if (!found) break;
+      path.push(...found);
+      current = found[found.length - 1];
     }
     return path;
+  }
+
+  /// Make sure `key`'s children have been asked for; whether it has any.
+  private async loaded(key: number, token: Token) {
+    if (this.d.childState(key) === "unloaded") await this.expand(key, PAGE, token);
+    return this.d.childState(key) !== "leaf";
+  }
+
+  /// The child of `key` that comes closest to the byte, paging through its
+  /// children.
+  private async closestChild(key: number, source: number, offset: number, token: Token) {
+    let scanned = 0;
+    for (;;) {
+      if (!(await this.loaded(key, token))) return null;
+      const r = ok(this.d.closestChild(key, scanned, source, offset));
+      scanned = r.scanned;
+      const more = this.d.childState(key) === "more";
+      if (r.found !== null || !more || scanned > LOCATE_SCAN || token.cancelled()) {
+        return r.found as number | null;
+      }
+      this.d.expandMore(key, PAGE);
+      await this.drive(key, token);
+    }
+  }
+
+  /// The way down from `key` to the nearest node below it that comes close
+  /// to the byte, searched breadth first through the nodes that can lead to
+  /// it, up to `LOCATE_SEARCH` of them.
+  private async search(key: number, source: number, offset: number, token: Token) {
+    const queue: [number, number[]][] = [[key, []]];
+    let budget = LOCATE_SEARCH;
+    for (let next = queue.shift(); next; next = queue.shift()) {
+      const [parent, way] = next;
+      let scanned = 0;
+      for (;;) {
+        if (token.cancelled() || budget <= 0) return null;
+        if (!(await this.loaded(parent, token))) break;
+        const r = ok(this.d.searchChildren(parent, scanned, source, offset));
+        budget -= r.scanned - scanned;
+        scanned = r.scanned;
+        if (r.found !== null) return [...way, r.found as number];
+        for (const k of r.deeper as number[]) queue.push([k, [...way, k]]);
+        if (this.d.childState(parent) !== "more" || scanned > LOCATE_SCAN) break;
+        this.d.expandMore(parent, PAGE);
+        await this.drive(parent, token);
+      }
+    }
+    return null;
   }
 
   page(key: number): Page {
