@@ -6,16 +6,13 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{FlagTable, Value, flag};
+use crate::value::{FlagTable, flag};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // Imagery: ImageMagick MIFF, Utah RLE, Paint Shop Pro

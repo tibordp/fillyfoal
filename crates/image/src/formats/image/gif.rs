@@ -13,14 +13,15 @@ use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::vidutil::plural;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, field, flag};
 
-use super::{ColorOrder, dims, palette, text, uint};
+use super::{ColorOrder, dims, palette, playing_time};
 
 const LE: Endian = Endian::Little;
 
@@ -332,7 +333,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut full = format!(
             "{summary}, {}, {}",
             plural(images, "frame"),
-            playing_time(centiseconds)
+            playing_time(centiseconds as f64 / 100.0)
         );
         match looping {
             Some(0) => full.push_str(", loops forever"),
@@ -350,18 +351,6 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .await;
     }
     Ok(())
-}
-
-/// "1.5 s", "250 ms", "2:05".
-fn playing_time(centiseconds: u64) -> String {
-    if centiseconds < 100 {
-        format!("{} ms", centiseconds.saturating_mul(10))
-    } else if centiseconds < 6000 {
-        let s = format!("{:.2}", centiseconds as f64 / 100.0);
-        format!("{} s", s.trim_end_matches('0').trim_end_matches('.'))
-    } else {
-        crate::formats::util::sound::duration(centiseconds as f64 / 100.0)
-    }
 }
 
 fn sub_block_summary(count: u64, len: u64) -> String {
@@ -627,7 +616,7 @@ async fn netscape(cx: &Cx, data: Span) -> Result<()> {
                 cx.emit(
                     Node::new("Loop count")
                         .span(value)
-                        .value(uint(loops))
+                        .value(uint(loops, 64))
                         .summary(if loops == 0 {
                             "loop forever".to_owned()
                         } else {
@@ -641,7 +630,7 @@ async fn netscape(cx: &Cx, data: Span) -> Result<()> {
                 cx.emit(
                     Node::new("Buffering size")
                         .span(value)
-                        .value(uint(size))
+                        .value(uint(size, 64))
                         .desc("Sub-block 2: bytes to buffer before playing"),
                 );
             }

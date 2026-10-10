@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use super::rec::{self, K, LE, Spec, bits, enumv, hex, quoted, uint};
+use super::rec::{self, K, LE, Spec, bits, quoted};
 use super::sprm;
 use crate::bytes::{i16_le, i32_le, to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
@@ -16,6 +16,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::val::{enumv, hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;

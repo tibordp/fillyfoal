@@ -9,12 +9,12 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::fourcc;
+use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
-
-use super::{fourcc, hex, int, text, uint};
 
 // ---------------------------------------------------------------------------
 // Director / Shockwave

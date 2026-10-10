@@ -5,14 +5,15 @@
 //! an array of strings: values (`width height colors chars-per-pixel`),
 //! color definitions, then one string per pixel row.
 
-use crate::bytes::to_u64;
+use crate::bytes::{find, to_u64};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
-use super::{dims, text, uint};
+use super::dims;
 
 pub static XBM: Format = Format {
     name: "xbm",
@@ -61,13 +62,6 @@ fn lines(data: &[u8]) -> impl Iterator<Item = (usize, &[u8])> {
     })
 }
 
-fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    data.get(from..)?
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .map(|p| p.saturating_add(from))
-}
-
 pub async fn dissect_xbm(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let data = whole(&cx, file).await?;
@@ -102,7 +96,7 @@ pub async fn dissect_xbm(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new(symbol.to_owned())
                 .span(file.sub(to_u64(start), to_u64(line.len())))
-                .value(uint(value)),
+                .value(uint(value, 64)),
         );
     }
     let open = find(&data, b"{", 0);

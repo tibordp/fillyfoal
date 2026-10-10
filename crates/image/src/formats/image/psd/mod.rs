@@ -5,18 +5,22 @@
 //! and the merged image data. Each length-prefixed section is shown with its
 //! span; resources and layers are listed on expansion.
 
-use crate::bytes::{u16_be, u32_be, u64_be};
+pub mod descriptor;
+
+use crate::bytes::{to_u64, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
+use crate::formats::util::fmt::fourcc;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 const BE: Endian = Endian::Big;
 
@@ -29,7 +33,8 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const COLOR_MODES: EnumTable = &[
+/// Photoshop colour modes (file header, patterns, brushes).
+pub const COLOR_MODES: EnumTable = &[
     (0, "Bitmap"),
     (1, "Grayscale"),
     (2, "Indexed"),
@@ -477,14 +482,202 @@ async fn tagged_blocks(cx: Cx, (span, psb): (Span, bool)) -> Result<()> {
         };
         cur.skip(len);
         let span = cur.since(start);
-        cx.push(
-            Node::new(crate::text::latin1(&key))
-                .span(span)
-                .summary(format!("{len:#x} bytes")),
-        )
-        .await;
+        let body = span.tail(if wide { 16 } else { 12 });
+        let node = Node::new(crate::text::latin1(&key))
+            .span(span)
+            .summary(format!("{len:#x} bytes"));
+        let node = match crate::bytes::array::<4>(&key, 0) {
+            Some(key) => block_node(node, key, body),
+            None => node,
+        };
+        cx.push(node).await;
     }
     Ok(())
+}
+
+/// What a tagged block holds that is shown on expansion: patterns, or
+/// action descriptors after a small header.
+fn block_node(node: Node, key: [u8; 4], body: Span) -> Node {
+    match &key {
+        b"Patt" | b"Pat2" | b"Pat3" => node
+            .desc("Patterns used by the document's layers and effects")
+            .lazy(descriptor::patterns, body),
+        b"lfx2" | b"SoCo" | b"GdFl" | b"PtFl" | b"vscg" | b"vstk" | b"artb" | b"artd" | b"abdd"
+        | b"cinf" | b"pths" | b"anFX" | b"SoLd" | b"SoLE" | b"PlLd" | b"TySh" => {
+            node.lazy(tagged_block, (key, body))
+        }
+        _ => node,
+    }
+}
+
+/// Emits the versioned descriptor at `at` of `data` (the bytes of `body`);
+/// returns its end.
+async fn emit_descriptor(
+    cx: &Cx,
+    name: &'static str,
+    body: Span,
+    data: &[u8],
+    at: usize,
+) -> Option<usize> {
+    let (node, end) = descriptor::versioned_descriptor(cx, name, body, data, at).await;
+    cx.emit(node);
+    end
+}
+
+/// A tagged block holding descriptors: its header fields, then each
+/// versioned descriptor.
+async fn tagged_block(cx: Cx, (key, body): ([u8; 4], Span)) -> Result<()> {
+    if body.len > descriptor::MAX_READ {
+        return Err(Diagnostic::limit("tagged block larger than 16 MiB").at(body));
+    }
+    let data = cx.read(body).await?;
+    let sub = |a: usize, b: usize| body.sub(to_u64(a), to_u64(b.saturating_sub(a)));
+    let word = |at: usize| u32_be(&data, at).unwrap_or(0);
+    let number = |name: &'static str, a: usize, b: usize, v: u64| {
+        Node::new(name).span(sub(a, b)).value(uint(v, 32))
+    };
+    let mut rest;
+    match &key {
+        b"lfx2" => {
+            cx.emit(number("Effects version", 0, 4, word(0).into()));
+            rest = emit_descriptor(&cx, "Effects", body, &data, 4).await;
+        }
+        b"vscg" => {
+            cx.emit(
+                Node::new("Fill kind")
+                    .span(sub(0, 4))
+                    .value(text(fourcc(data.get(..4).unwrap_or_default()))),
+            );
+            rest = emit_descriptor(&cx, "Fill", body, &data, 4).await;
+        }
+        b"SoLd" | b"SoLE" => {
+            cx.emit(
+                Node::new("Identifier")
+                    .span(sub(0, 4))
+                    .value(text(fourcc(data.get(..4).unwrap_or_default()))),
+            );
+            cx.emit(number("Version", 4, 8, word(4).into()));
+            rest = emit_descriptor(&cx, "Smart object", body, &data, 8).await;
+        }
+        b"PlLd" => {
+            cx.emit(
+                Node::new("Identifier")
+                    .span(sub(0, 4))
+                    .value(text(fourcc(data.get(..4).unwrap_or_default()))),
+            );
+            cx.emit(number("Version", 4, 8, word(4).into()));
+            // A Pascal-string ID, page, page count, anti-aliasing, layer
+            // type, an 8-double transform and the warp version.
+            let mut r = descriptor::Rd::at(&data, 8, BE);
+            let id = r
+                .u8()
+                .and_then(|n| r.take(n.into()))
+                .map(crate::text::latin1);
+            if let Some(id) = id {
+                cx.emit(Node::new("Unique ID").span(sub(8, r.pos)).value(text(id)));
+                let at = r.pos;
+                if r.skip(4 * 4 + 8 * 8 + 4).is_some() {
+                    cx.emit(Node::new("Placement").span(sub(at, r.pos)).summary(
+                        "page, page count, anti-aliasing, layer type, transform and warp version",
+                    ));
+                    rest = emit_descriptor(&cx, "Warp", body, &data, r.pos).await;
+                } else {
+                    rest = Some(at);
+                }
+            } else {
+                rest = Some(8);
+            }
+        }
+        b"TySh" => {
+            let half = |at: usize| u16_be(&data, at).unwrap_or(0);
+            cx.emit(number("Version", 0, 2, half(0).into()));
+            let transform: Vec<String> = (0..6usize)
+                .map(|i| {
+                    let v = crate::bytes::f64_be(&data, 2usize.saturating_add(i.saturating_mul(8)));
+                    v.map_or_else(|| "?".to_owned(), |v| format!("{v}"))
+                })
+                .collect();
+            cx.emit(
+                Node::new("Transform")
+                    .span(sub(2, 50))
+                    .value(text(transform.join(", ")))
+                    .desc("xx, xy, yx, yy, tx, ty"),
+            );
+            cx.emit(number("Text version", 50, 52, half(50).into()));
+            rest = emit_descriptor(&cx, "Text", body, &data, 52).await;
+            if let Some(at) = rest {
+                cx.emit(number(
+                    "Warp version",
+                    at,
+                    at.saturating_add(2),
+                    half(at).into(),
+                ));
+                rest = emit_descriptor(&cx, "Warp", body, &data, at.saturating_add(2)).await;
+                if let Some(at) = rest.filter(|&at| at < data.len()) {
+                    cx.emit(
+                        Node::new("Bounds")
+                            .span(sub(at, data.len()))
+                            .desc("Left, top, right and bottom of the text"),
+                    );
+                    rest = None;
+                }
+            }
+        }
+        _ => rest = emit_descriptor(&cx, "Descriptor", body, &data, 0).await,
+    }
+    if let Some(end) = rest.filter(|&end| end < data.len()) {
+        cx.emit(Node::new("Rest").span(sub(end, data.len())));
+    }
+    Ok(())
+}
+
+/// Photoshop image resource blocks on their own (`8BIM`, ID, name, data),
+/// as in PSD files, JPEG APP13 segments, TIFF tag 34377 and ImageMagick's
+/// raw `8bim` profiles.
+pub static IRB: Format = Format {
+    name: "photoshop-irb",
+    title: "Photoshop image resources (8BIM)",
+    extensions: &["8bim", "irb"],
+    mime: "application/x-photoshop-irb",
+    probe: Probe::Never,
+    dissect: crate::expander!(dissect_irb: Input),
+};
+
+async fn dissect_irb(cx: Cx, input: Input) -> Result<()> {
+    resources(cx.clone(), (input, input.span)).await?;
+    cx.annotate("Photoshop image resources");
+    Ok(())
+}
+
+/// The signature of the Photoshop data in TIFF tag 37724 (ImageSourceData).
+const DOCUMENT_DATA: &[u8] = b"Adobe Photoshop Document Data Block\0";
+
+/// A lazy node for TIFF tag 37724: Photoshop's layers as tagged blocks
+/// after a signature.
+pub fn document_data_node(name: &'static str, span: Span) -> Node {
+    Node::new(name)
+        .span(span)
+        .summary("Photoshop layers and document data")
+        .lazy(document_data, span)
+}
+
+async fn document_data(cx: Cx, span: Span) -> Result<()> {
+    let n = to_u64(DOCUMENT_DATA.len());
+    let head = cx.read_avail(span.sub(0, n)).await?;
+    if head != DOCUMENT_DATA {
+        cx.emit(
+            region("Data", span, 0, span.len).diag(Diagnostic::malformed(
+                "no Photoshop document data signature",
+            )),
+        );
+        return Ok(());
+    }
+    cx.emit(
+        Node::new("Signature")
+            .span(span.sub(0, n))
+            .value(text(crate::text::until_nul(&head))),
+    );
+    tagged_blocks(cx, (span.tail(n), false)).await
 }
 
 /// A lazy node listing image resource blocks (`8BIM`, id, name, data) in
@@ -519,7 +712,7 @@ async fn resources(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         let span = cur.since(start);
         let mut node = Node::new(resource_name(id))
             .span(span)
-            .value(uint(id))
+            .value(uint(id, 64))
             .summary(format!("{size:#x} bytes"));
         if !name.is_empty() {
             node = node.summary(format!("{:?}, {size:#x} bytes", crate::text::latin1(&name)));
@@ -562,6 +755,18 @@ async fn resource(cx: Cx, r: Resource) -> Result<()> {
     match r.id {
         1005 => cx.emit(ResolutionInfo::node("Resolution", data, BE)),
         1028 => cx.emit(super::iptc::node("IPTC-IIM", data)),
+        1065 | 1075 | 1076 | 1078 | 1080 | 1082 | 1083 | 1088 | 3000 => {
+            if data.len > descriptor::MAX_READ {
+                return Err(Diagnostic::limit("resource larger than 16 MiB").at(data));
+            }
+            let bytes = cx.read(data).await?;
+            let (node, end) =
+                descriptor::versioned_descriptor(&cx, "Descriptor", data, &bytes, 0).await;
+            cx.emit(node);
+            if let Some(end) = end.filter(|&end| end < bytes.len()) {
+                cx.emit(Node::new("Rest").span(data.tail(to_u64(end))));
+            }
+        }
         1039 => cx.emit(embedded("ICC profile", input.nested(data))),
         1058 | 1059 => cx.emit(embedded_as(
             "Exif",

@@ -4,11 +4,10 @@
 //! size, followed by the operand.
 
 use crate::bytes::{to_u64, u16_le};
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, lookup};
-
-use super::rec::{hex, uint};
 
 pub const NAMES: EnumTable = &[
     // Character

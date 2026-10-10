@@ -1,123 +1,34 @@
 //! VBA projects ([MS-OVBA]): the `PROJECT` and `PROJECTwm` streams, the
 //! `VBA` storage's `_VBA_PROJECT` and `dir` streams, and module streams.
 //! `dir` and module source code are compressed with the MS-OVBA scheme: a
-//! signature byte, then chunks of at most 4096 decompressed bytes, each
-//! either stored or a sequence of flag bytes, literals and copy tokens whose
-//! offset/length split depends on the position within the chunk.
+//! signature byte, then LZNT1 chunks.
 
 use std::sync::Arc;
 
 use super::CfbRef;
-use super::rec::{LE, hex, quoted, uint};
+use super::rec::{LE, quoted};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{EnumTable, Value, lookup};
 
-/// Largest decompressed stream kept (dir streams and source code are small).
-const MAX_OUT: usize = 16 << 20;
-
-/// Decompresses a CompressedContainer. Returns the output and, if the data
-/// is malformed, why decoding stopped.
-pub async fn decompress(cx: &Cx, data: &[u8]) -> (Vec<u8>, Option<String>) {
-    let mut out: Vec<u8> = Vec::new();
-    if data.first() != Some(&1) {
-        return (out, Some("the signature byte is not 1".to_owned()));
+/// Decompresses a CompressedContainer (a signature byte 1, then LZNT1
+/// chunks) into a derived source, with the reason decoding stopped early if
+/// it did.
+async fn decompressed(cx: &Cx, span: Span) -> Result<(Span, Option<Diagnostic>)> {
+    let signature = cx.read(span.sub(0, 1)).await?;
+    if signature.first() != Some(&1) {
+        return Err(Diagnostic::malformed("the signature byte is not 1").at(span.sub(0, 1)));
     }
-    let mut pos = 1usize;
-    while pos < data.len() {
-        cx.checkpoint().await;
-        let Some(header) = u16_le(data, pos) else {
-            return (out, Some("a chunk header is cut short".to_owned()));
-        };
-        let size = usize::from(header & 0x0fff).saturating_add(3);
-        if (header >> 12) & 7 != 3 {
-            return (
-                out,
-                Some(format!("chunk signature at {pos:#x} is not 0b011")),
-            );
-        }
-        let end = pos.saturating_add(size).min(data.len());
-        let mut p = pos.saturating_add(2);
-        let start = out.len();
-        if header & 0x8000 == 0 {
-            // A stored chunk: 4096 raw bytes.
-            out.extend_from_slice(data.get(p..end).unwrap_or_default());
-            pos = end;
-            continue;
-        }
-        while p < end {
-            let Some(&flags) = data.get(p) else { break };
-            p = p.saturating_add(1);
-            for bit in 0..8u32 {
-                if p >= end {
-                    break;
-                }
-                if flags & (1u8 << bit) == 0 {
-                    out.push(data.get(p).copied().unwrap_or(0));
-                    p = p.saturating_add(1);
-                    continue;
-                }
-                let Some(token) = u16_le(data, p) else {
-                    return (out, Some("a copy token is cut short".to_owned()));
-                };
-                p = p.saturating_add(2);
-                let diff = out.len().saturating_sub(start);
-                let mut bit_count = 4u32;
-                while bit_count < 12 && (1usize << bit_count) < diff {
-                    bit_count = bit_count.saturating_add(1);
-                }
-                let length_mask = 0xffffu16 >> bit_count;
-                let length = usize::from(token & length_mask).saturating_add(3);
-                let offset =
-                    usize::from((token & !length_mask) >> (16u32.saturating_sub(bit_count)))
-                        .saturating_add(1);
-                if offset > diff {
-                    return (
-                        out,
-                        Some(format!(
-                            "a copy token at {:#x} reaches before the chunk",
-                            p.saturating_sub(2)
-                        )),
-                    );
-                }
-                let from = out.len().saturating_sub(offset);
-                for k in 0..length {
-                    let b = out.get(from.saturating_add(k)).copied().unwrap_or(0);
-                    out.push(b);
-                }
-            }
-            if out.len() > MAX_OUT {
-                return (out, Some("decompressed data is too large".to_owned()));
-            }
-        }
-        pos = end;
-    }
-    (out, None)
-}
-
-/// Decompresses `span` into a derived source.
-async fn decompressed(
-    cx: &Cx,
-    span: Span,
-    transform: &'static str,
-) -> Result<(Span, Option<String>)> {
-    let data = cx.read(span).await?;
-    let (out, error) = decompress(cx, &data).await;
-    let decoded = cx.add_derived(
-        Origin {
-            parent: span,
-            transform,
-        },
-        out,
-        span.len,
-        error.clone().map(|e| Diagnostic::malformed(e).at(span)),
-    )?;
-    Ok((decoded.span, error))
+    let codec = Codec::Lznt1 { size: None };
+    let decoded = crate::codec::decode_span(cx, span.tail(1), &codec, None).await?;
+    Ok((decoded.span, decoded.error))
 }
 
 const DIR_RECORDS: EnumTable = &[
@@ -220,8 +131,9 @@ async fn project(cx: &Cx, dir: Span) -> Arc<Project> {
         codepage: 1252,
         ..Project::default()
     };
-    if let Ok(data) = cx.read(dir).await {
-        let (out, _) = decompress(cx, &data).await;
+    if let Ok((decoded, _)) = decompressed(cx, dir).await
+        && let Ok(out) = cx.read(decoded).await
+    {
         let mut current: Option<(String, String, u32, bool)> = None;
         for r in dir_records(&out) {
             match r.id {
@@ -265,13 +177,13 @@ async fn project(cx: &Cx, dir: Span) -> Arc<Project> {
 
 /// The `dir` stream: decompressed, then its records.
 pub async fn dir(cx: &Cx, span: Span) -> Result<()> {
-    let (out, error) = decompressed(cx, span, "ovba").await?;
+    let (out, error) = decompressed(cx, span).await?;
     let mut node = Node::new("Decompressed")
         .span(out)
         .summary(format!("{} bytes", out.len))
         .lazy(dir_node, out);
     if let Some(e) = error {
-        node = node.diag(Diagnostic::malformed(e));
+        node = node.diag(e);
     }
     cx.emit(node);
     Ok(())
@@ -350,7 +262,11 @@ fn record_node(span: Span, r: &DirRec, codepage: u16) -> Node {
         node.value(Value::Text(super::rec::codepage_text(codepage, d)))
     } else {
         match (r.id, d.len()) {
-            (0x0001, 4) => node.value(super::rec::enumv(u32_le(d, 0).unwrap_or(0), 32, SYSKIND)),
+            (0x0001, 4) => node.value(crate::formats::util::val::enumv(
+                u32_le(d, 0).unwrap_or(0),
+                32,
+                SYSKIND,
+            )),
             (0x0002 | 0x0014, 4) => {
                 let v = u32_le(d, 0).unwrap_or(0);
                 node.value(hex(v, 32))
@@ -448,7 +364,7 @@ async fn module_body(
         );
     }
     let compressed = span.tail(offset);
-    let (out, error) = decompressed(cx, compressed, "ovba").await?;
+    let (out, error) = decompressed(cx, compressed).await?;
     let preview = cx.read_avail(out.sub(0, 200)).await.unwrap_or_default();
     let mut node = Node::new("Source code")
         .span(out)
@@ -459,7 +375,7 @@ async fn module_body(
         ))
         .lazy(crate::formats::dissect_or_data, input.nested(out));
     if let Some(e) = error {
-        node = node.diag(Diagnostic::malformed(e));
+        node = node.diag(e);
     }
     cx.emit(
         Node::new("CompressedSourceCode")

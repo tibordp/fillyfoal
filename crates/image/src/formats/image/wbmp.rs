@@ -8,10 +8,11 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::uint;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 
-use super::{dims, region, uint};
+use super::{dims, region};
 
 pub static FORMAT: Format = Format {
     name: "wbmp",
@@ -24,15 +25,7 @@ pub static FORMAT: Format = Format {
 
 /// Decodes a multi-byte integer at `pos`: `(value, length)`.
 fn multibyte(data: &[u8], pos: usize) -> Option<(u64, usize)> {
-    let mut value = 0u64;
-    for i in 0..5usize {
-        let b = *data.get(pos.checked_add(i)?)?;
-        value = value.checked_shl(7)? | u64::from(b & 0x7f);
-        if b & 0x80 == 0 {
-            return Some((value, i.checked_add(1)?));
-        }
-    }
-    None
+    crate::bytes::vlq_be(data.get(pos..)?, 5)
 }
 
 /// `(width, height, header length)`.
@@ -64,25 +57,25 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Type")
             .span(file.sub(0, 1))
-            .value(uint(0u8))
+            .value(uint(0u8, 64))
             .desc("0 = monochrome, uncompressed"),
     );
     cx.emit(
         Node::new("Fixed header")
             .span(file.sub(1, 1))
-            .value(uint(0u8)),
+            .value(uint(0u8, 64)),
     );
     let (_, wl) = multibyte(&head, 2).unwrap_or((0, 0));
     cx.emit(
         Node::new("Width")
             .span(file.sub(2, to_u64(wl)))
-            .value(uint(w)),
+            .value(uint(w, 64)),
     );
     let hl = len.saturating_sub(2).saturating_sub(wl);
     cx.emit(
         Node::new("Height")
             .span(file.sub(to_u64(wl).saturating_add(2), to_u64(hl)))
-            .value(uint(h)),
+            .value(uint(h, 64)),
     );
     cx.annotate(format!("{}, 1-bit", dims(w, h)));
     cx.emit(

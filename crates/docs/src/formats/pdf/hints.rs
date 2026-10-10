@@ -10,6 +10,8 @@ use super::syntax::Item;
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
+use crate::formats::util::vidutil::Bits;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -131,34 +133,15 @@ const OTHER_TABLES: &[(&str, &str)] = &[
     ("B", "Embedded file stream hint table"),
 ];
 
-/// A big-endian bit reader.
-struct Bits<'a> {
-    data: &'a [u8],
-    bit: u64,
+/// `width` (at most 64) bits.
+fn read(bits: &mut Bits<'_>, width: u64) -> Option<u64> {
+    bits.bits(u32::try_from(width).ok()?)
 }
 
-impl Bits<'_> {
-    fn read(&mut self, n: u64) -> Option<u64> {
-        if n > 64 {
-            return None;
-        }
-        let mut v = 0u64;
-        for _ in 0..n {
-            let byte = *self.data.get(to_usize(self.bit / 8))?;
-            let shift = 7u32.saturating_sub(u32::try_from(self.bit % 8).unwrap_or(0));
-            v = v.wrapping_shl(1) | u64::from(byte.wrapping_shr(shift) & 1);
-            self.bit = self.bit.saturating_add(1);
-        }
-        Some(v)
-    }
-
-    fn align(&mut self) {
-        self.bit = (self.bit.saturating_add(7) / 8).saturating_mul(8);
-    }
-
-    fn byte(&self) -> u64 {
-        self.bit / 8
-    }
+/// Moves to the next byte boundary.
+fn align(bits: &mut Bits<'_>) {
+    let pad = crate::bytes::padding(to_u64(bits.pos()), 8);
+    let _ = bits.skip(to_usize(pad));
 }
 
 /// Reads `n` values of `width` bits, then moves to the next byte. Stops
@@ -169,12 +152,12 @@ async fn read_run(cx: &Cx, bits: &mut Bits<'_>, n: u64, width: u64) -> (Vec<u64>
         if i % 1024 == 1023 {
             cx.checkpoint().await;
         }
-        match bits.read(width) {
+        match read(bits, width) {
             Some(v) => out.push(v),
             None => return (out, false),
         }
     }
-    bits.align();
+    align(bits);
     (out, true)
 }
 
@@ -182,7 +165,7 @@ async fn read_run(cx: &Cx, bits: &mut Bits<'_>, n: u64, width: u64) -> (Vec<u64>
 fn header(bits: &mut Bits<'_>, layout: &[(u64, &str, &str)]) -> Option<Vec<u64>> {
     layout
         .iter()
-        .map(|&(width, _, _)| bits.read(width))
+        .map(|&(width, _, _)| read(bits, width))
         .collect()
 }
 
@@ -225,12 +208,10 @@ pub async fn hint_tables(cx: Cx, (doc, located): (DocRef, Located)) -> Result<()
         let span = decoded.sub(at, end.saturating_sub(at));
         let node = Node::new(name).span(span);
         let node = match key {
-            "P" => node
-                .summary(format!("{pages} page{}", super::plural(pages)))
-                .lazy(
-                    crate::expander!(self::page_table: (Span, u64)),
-                    (span, pages),
-                ),
+            "P" => node.summary(plural(pages, "page")).lazy(
+                crate::expander!(self::page_table: (Span, u64)),
+                (span, pages),
+            ),
             "S" => node.lazy(crate::expander!(self::shared_table: Span), span),
             _ => node.summary(format!("at {at:#x}")),
         };
@@ -260,20 +241,17 @@ fn emit_header(cx: &Cx, span: Span, layout: &[(u64, &'static str, &'static str)]
 
 async fn page_table(cx: Cx, (span, pages): (Span, u64)) -> Result<()> {
     let data = cx.read(span.sub(0, MAX_HINTS)).await?;
-    let mut bits = Bits {
-        data: &data,
-        bit: 0,
-    };
+    let mut bits = Bits::new(&data);
     let Some(h) = header(&mut bits, PAGE_HEADER) else {
         return Err(Diagnostic::malformed("page offset hint table header is truncated").at(span));
     };
     emit_header(&cx, span, PAGE_HEADER, &h);
     let at = |i: usize| h.get(i).copied().unwrap_or(0);
-    let entries_at = bits.byte();
+    let entries_at = to_u64(bits.pos() / 8);
     cx.emit(
         Node::new("Pages")
             .span(span.tail(entries_at))
-            .summary(format!("{pages} page{}", super::plural(pages)))
+            .summary(plural(pages, "page"))
             .desc("Per page: objects, length, shared objects, content stream position")
             .lazy(
                 crate::expander!(self::page_entries: (Span, u64, Vec<u64>)),
@@ -293,10 +271,7 @@ async fn page_entries(cx: Cx, (span, pages, h): (Span, u64, Vec<u64>)) -> Result
         )));
     }
     let data = cx.read(span.sub(0, MAX_HINTS)).await?;
-    let mut bits = Bits {
-        data: &data,
-        bit: 0,
-    };
+    let mut bits = Bits::new(&data);
     header(&mut bits, PAGE_HEADER);
     let at = |i: usize| h.get(i).copied().unwrap_or(0);
     let mut complete = true;
@@ -346,8 +321,8 @@ async fn page_entries(cx: Cx, (span, pages, h): (Span, u64, Vec<u64>)) -> Result
             if n > 0 {
                 let more = if n > 8 { ", …" } else { "" };
                 parts.push(format!(
-                    "{n} shared object group{} ({}{more})",
-                    super::plural(to_u64(n)),
+                    "{} ({}{more})",
+                    plural(to_u64(n), "shared object group"),
                     list.join(", ")
                 ));
             }
@@ -367,22 +342,19 @@ async fn page_entries(cx: Cx, (span, pages, h): (Span, u64, Vec<u64>)) -> Result
 
 async fn shared_table(cx: Cx, span: Span) -> Result<()> {
     let data = cx.read(span.sub(0, MAX_HINTS)).await?;
-    let mut bits = Bits {
-        data: &data,
-        bit: 0,
-    };
+    let mut bits = Bits::new(&data);
     let Some(h) = header(&mut bits, SHARED_HEADER) else {
         return Err(Diagnostic::malformed("shared object hint table header is truncated").at(span));
     };
     emit_header(&cx, span, SHARED_HEADER, &h);
     let at = |i: usize| h.get(i).copied().unwrap_or(0);
     let groups = at(3);
-    cx.annotate(format!("{groups} group{}", super::plural(groups)));
-    let entries_at = bits.byte();
+    cx.annotate(plural(groups, "group"));
+    let entries_at = to_u64(bits.pos() / 8);
     cx.emit(
         Node::new("Groups")
             .span(span.tail(entries_at))
-            .summary(format!("{groups} group{}", super::plural(groups)))
+            .summary(plural(groups, "group"))
             .desc("Per group: length, objects, MD5 signature")
             .lazy(
                 crate::expander!(self::shared_entries: (Span, Vec<u64>)),
@@ -401,10 +373,7 @@ async fn shared_entries(cx: Cx, (span, h): (Span, Vec<u64>)) -> Result<()> {
         )));
     }
     let data = cx.read(span.sub(0, MAX_HINTS)).await?;
-    let mut bits = Bits {
-        data: &data,
-        bit: 0,
-    };
+    let mut bits = Bits::new(&data);
     header(&mut bits, SHARED_HEADER);
     let mut complete = true;
     let (lengths, ok) = read_run(&cx, &mut bits, groups, at(6)).await;
@@ -415,11 +384,11 @@ async fn shared_entries(cx: Cx, (span, h): (Span, Vec<u64>)) -> Result<()> {
         if i % 1024 == 1023 {
             cx.checkpoint().await;
         }
-        if flag != 0 && (bits.read(64).is_none() || bits.read(64).is_none()) {
+        if flag != 0 && (bits.bits(64).is_none() || bits.bits(64).is_none()) {
             complete = false;
         }
     }
-    bits.align();
+    align(&mut bits);
     let (objects, ok) = read_run(&cx, &mut bits, groups, at(4)).await;
     complete &= ok;
     if !complete {
@@ -432,7 +401,7 @@ async fn shared_entries(cx: Cx, (span, h): (Span, Vec<u64>)) -> Result<()> {
         let mut summary = format!("{} bytes", at(5).saturating_add(len));
         if let Some(n) = objects.get(i) {
             let n = n.saturating_add(1);
-            summary = format!("{summary}, {n} object{}", super::plural(n));
+            summary = format!("{summary}, {}", plural(n, "object"));
         }
         if signed.get(i).is_some_and(|&s| s != 0) {
             summary.push_str(", MD5 signature");

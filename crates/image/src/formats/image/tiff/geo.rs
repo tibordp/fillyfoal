@@ -6,10 +6,10 @@
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
+use crate::formats::util::val::uint;
 use crate::node::{Count, Node};
 use crate::value::{EnumTable, Value, lookup};
 
-use super::super::uint;
 use super::render::trim;
 use super::{Entry, Num, Tiff, num};
 
@@ -167,7 +167,7 @@ async fn keys(cx: Cx, (t, dir, doubles, ascii): State) -> Result<()> {
         let mut node = Node::new(name).span(span);
         match (location, doubles, ascii) {
             (0, _, _) => {
-                node = node.value(uint(value));
+                node = node.value(uint(value, 64));
                 if let Some(text) = code_name(id, value) {
                     node = node.summary(text);
                 }

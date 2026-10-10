@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -168,7 +169,7 @@ async fn raf_records(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Record count")
             .span(span.sub(0, 4))
-            .value(super::uint(count)),
+            .value(uint(count, 64)),
     );
     for _ in 0..count {
         if cur.remaining() < 4 {
@@ -188,7 +189,7 @@ async fn raf_records(cx: Cx, span: Span) -> Result<()> {
         let word = |i: usize| crate::bytes::u16_be(&v, i.saturating_mul(2)).unwrap_or(0);
         match (tag, size) {
             (0x0100 | 0x0111 | 0x0121, 4) => {
-                node = node.value(super::text(dims(word(1), word(0))));
+                node = node.value(text(dims(word(1), word(0))));
             }
             (0x0110, 4) => node = node.summary(format!("top {}, left {}", word(0), word(1))),
             (0x0115, 4) => node = node.summary(format!("{}:{}", word(1), word(0))),
@@ -206,10 +207,10 @@ async fn raf_records(cx: Cx, span: Span) -> Result<()> {
                     .chunks(6)
                     .map(|row| row.iter().map(|&c| colours(c)).collect())
                     .collect();
-                node = node.value(super::text(rows.join("/")));
+                node = node.value(text(rows.join("/")));
             }
             (_, 4) => node = node.summary(format!("{}, {}", word(0), word(1))),
-            (_, 2) => node = node.value(super::uint(word(0))),
+            (_, 2) => node = node.value(uint(word(0), 64)),
             _ => {}
         }
         cx.push(node).await;

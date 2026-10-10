@@ -11,7 +11,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::vidutil::plural;
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;

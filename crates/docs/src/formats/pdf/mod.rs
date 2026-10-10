@@ -48,6 +48,7 @@ use syntax::{Item, Obj};
 use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::{self, plural};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -71,7 +72,7 @@ pub static FORMAT: Format = Format {
 
 fn probe(h: &Head<'_>) -> bool {
     let window = h.data.get(..1024).unwrap_or(h.data);
-    syntax::find(window, b"%PDF-", 0).is_some_and(|at| {
+    crate::bytes::find(window, b"%PDF-", 0).is_some_and(|at| {
         h.data
             .get(at.saturating_add(5))
             .is_some_and(u8::is_ascii_digit)
@@ -258,17 +259,13 @@ async fn int_of(cx: &Cx, doc: &Doc, item: Option<&Item>) -> Option<i64> {
     }
 }
 
-fn plural(n: impl Into<u64>) -> &'static str {
-    if n.into() == 1 { "" } else { "s" }
-}
-
 // ---------------------------------------------------------------------------
 // Entry point
 
 pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read_avail(file.sub(0, HEADER_WINDOW)).await?;
-    let start = syntax::find(&head, b"%PDF-", 0)
+    let start = crate::bytes::find(&head, b"%PDF-", 0)
         .ok_or_else(|| Diagnostic::malformed("no %PDF- header").at(file.sub(0, 8)))?;
     let region = file.tail(to_u64(start));
     let rest = head.get(start..).unwrap_or_default();
@@ -332,7 +329,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let tail_len = region.len.min(2048);
     let tail_at = region.len.saturating_sub(tail_len);
     let tail = cx.read_avail(region.sub(tail_at, tail_len)).await?;
-    let startxref = syntax::rfind(&tail, b"startxref").and_then(|at| {
+    let startxref = crate::bytes::rfind(&tail, b"startxref").and_then(|at| {
         let mut p = syntax::Parser::at(&tail, at.saturating_add(9));
         p.uint().map(|v| (tail_at.saturating_add(to_u64(at)), v))
     });
@@ -525,7 +522,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .desc("The page tree, in reading order")
         .lazy(crate::expander!(self::pages: DocRef), doc.clone());
     if let Some(count) = pages {
-        pages_node = pages_node.summary(format!("{count} page{}", plural(count.unsigned_abs())));
+        pages_node = pages_node.summary(plural(count.unsigned_abs(), "page"));
     }
     cx.emit(pages_node);
     if let Some((catalog, base)) = &catalog {
@@ -544,9 +541,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             cx.emit(
                 Node::new("Body")
                     .summary(format!(
-                        "{} object{} found",
-                        doc.by_offset.len(),
-                        plural(to_u64(doc.by_offset.len()))
+                        "{} found",
+                        plural(to_u64(doc.by_offset.len()), "object")
                     ))
                     .desc("The objects found in the file, in file order")
                     .lazy(
@@ -575,10 +571,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let count = doc.revisions.len();
         cx.emit(
             Node::new("Revisions")
-                .summary(format!(
-                    "{count} cross-reference section{}",
-                    plural(to_u64(count))
-                ))
+                .summary(plural(to_u64(count), "cross-reference section"))
                 .desc(
                     "The file as written: the original and its incremental updates, in file order",
                 )
@@ -611,7 +604,7 @@ async fn annotation(
         out = format!("PDF {v} (header {version})");
     }
     if let Some(count) = pages {
-        out = format!("{out}, {count} page{}", plural(count.unsigned_abs()));
+        out = format!("{out}, {}", plural(count.unsigned_abs(), "page"));
     }
     let revisions = revision_count(doc);
     if revisions > 1 {
@@ -1245,10 +1238,10 @@ async fn revisions(cx: Cx, doc: DocRef) -> Result<()> {
                         .sub(revision.start, revision.end.saturating_sub(revision.start)),
                 )
                 .summary(format!(
-                    "{label}: {objects} object{}, {kind} at {:#x} with {entries} entr{}",
-                    plural(to_u64(objects)),
+                    "{label}: {}, {kind} at {:#x} with {}",
+                    plural(to_u64(objects), "object"),
                     section.offset,
-                    if entries == 1 { "y" } else { "ies" }
+                    fmt::count(to_u64(entries), "entry", "entries")
                 ))
                 .lazy(
                     crate::expander!(self::revision_children: (DocRef, usize)),
@@ -1276,7 +1269,7 @@ async fn revision_children(cx: Cx, (doc, index): (DocRef, usize)) -> Result<()> 
                     doc.region
                         .sub(revision.start, body_end.saturating_sub(revision.start)),
                 )
-                .summary(format!("{objects} object{}", plural(to_u64(objects))))
+                .summary(plural(to_u64(objects), "object"))
                 .desc("The objects of this revision, in file order")
                 .lazy(
                     crate::expander!(self::body: (DocRef, u64, u64)),
@@ -1365,9 +1358,9 @@ fn table_node(doc: &DocRef, section: usize, hybrid: bool) -> Node {
     Node::new("Cross-reference table")
         .span(s.span)
         .summary(format!(
-            "{entries} entr{} in {subsections} subsection{}",
-            if entries == 1 { "y" } else { "ies" },
-            plural(to_u64(subsections))
+            "{} in {}",
+            fmt::count(to_u64(entries), "entry", "entries"),
+            plural(to_u64(subsections), "subsection")
         ))
         .lazy(
             crate::expander!(self::subsections_list: (DocRef, usize, bool)),

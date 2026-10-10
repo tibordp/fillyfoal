@@ -326,7 +326,7 @@ pub fn codepage_text(codepage: u16, data: &[u8]) -> String {
     match codepage {
         1200 => crate::text::utf16(data, LE),
         65001 => String::from_utf8_lossy(data).into_owned(),
-        10000 => crate::formats::util::datakit::mac_roman(data),
+        10000 => crate::codec::charset::Charset::MacRoman.decode(data),
         cp => crate::codec::charset::decode_label(&format!("windows-{cp}"), data)
             .or_else(|| crate::codec::charset::decode_label(&format!("cp{cp}"), data))
             .unwrap_or_else(|| crate::text::latin1(data)),
@@ -343,23 +343,8 @@ pub fn bits(value: u64, shift: u32, width: u32) -> u64 {
 
 /// A text preview for a summary: at most `max` characters, quoted.
 pub fn quoted(s: &str, max: usize) -> String {
-    let clipped = crate::formats::util::datakit::clip(s, max);
+    let clipped = crate::formats::util::fmt::clip(s, max);
     format!("{clipped:?}")
-}
-
-/// A typed unsigned value.
-pub fn uint(value: impl Into<u64>, bits: u8) -> Value {
-    crate::formats::util::datakit::uint(value, bits)
-}
-
-/// A typed unsigned hexadecimal value.
-pub fn hex(value: impl Into<u64>, bits: u8) -> Value {
-    crate::formats::util::datakit::hex(value, bits)
-}
-
-/// A typed enumerated value.
-pub fn enumv(raw: impl Into<u64>, bits: u8, table: EnumTable) -> Value {
-    crate::formats::util::datakit::enumv(raw, bits, table)
 }
 
 /// A typed flags value.

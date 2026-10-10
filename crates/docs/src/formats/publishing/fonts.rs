@@ -12,13 +12,14 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::val::{hex, int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Value};
+use crate::value::Value;
 
-use super::{Rd, hex, int, text, uint};
+use super::{Rd, tag_attr};
 
 const BE: Endian = Endian::Big;
 const LE: Endian = Endian::Little;
@@ -500,7 +501,7 @@ record! {
         underline: u8 "dfUnderline",
         strike_out: u8 "dfStrikeOut",
         weight: u16 "dfWeight",
-        charset: u8 "dfCharSet" .enumeration(CHARSETS),
+        charset: u8 "dfCharSet" .enumeration(crate::formats::font::eot::CHARSETS),
         pix_width: u16 "dfPixWidth",
         pix_height: u16 "dfPixHeight",
         pitch_family: u8 "dfPitchAndFamily" .hex(),
@@ -542,26 +543,6 @@ record! {
         reserved: u32 "dfReserved",
     }
 }
-
-const CHARSETS: EnumTable = &[
-    (0, "ANSI"),
-    (1, "DEFAULT"),
-    (2, "SYMBOL"),
-    (77, "MAC"),
-    (128, "SHIFTJIS"),
-    (129, "HANGUL"),
-    (134, "GB2312"),
-    (136, "CHINESEBIG5"),
-    (161, "GREEK"),
-    (162, "TURKISH"),
-    (177, "HEBREW"),
-    (178, "ARABIC"),
-    (186, "BALTIC"),
-    (204, "RUSSIAN"),
-    (222, "THAI"),
-    (238, "EASTEUROPE"),
-    (255, "OEM"),
-];
 
 fn fontinfo_probe(h: &Head<'_>, versions: &[u16]) -> bool {
     u16_le(h.data, 0).is_some_and(|v| versions.contains(&v))
@@ -1671,22 +1652,10 @@ declare_format!(pub GLIF = "ufo-glif", "UFO glyph (GLIF)", ["glif"], "applicatio
 declare_format!(pub DESIGNSPACE = "designspace", "Font designspace document", ["designspace"], "application/x-designspace+xml",
     Probe::Custom(designspace_probe), designspace);
 
-/// The value of attribute `name` in the first start tag of `head`.
-fn attr(head: &[u8], name: &str) -> Option<String> {
-    let needle = format!(" {name}=\"");
-    let p = probe::find(head, needle.as_bytes())?.saturating_add(needle.len());
-    let rest = head.get(p..)?;
-    let end = rest.iter().position(|&b| b == b'"')?;
-    Some(String::from_utf8_lossy(rest.get(..end)?).into_owned())
-}
-
 async fn glif(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 1024)).await?;
-    let tag = probe::find(&head, b"<glyph")
-        .and_then(|p| head.get(p..))
-        .unwrap_or_default();
-    let name = attr(tag, "name").unwrap_or_default();
-    let format = attr(tag, "format").unwrap_or_default();
+    let name = tag_attr(&head, input.span, b"<glyph", "name").unwrap_or_default();
+    let format = tag_attr(&head, input.span, b"<glyph", "format").unwrap_or_default();
     xml::dissect(cx.clone(), input).await?;
     cx.annotate(format!("UFO glyph {name:?} (GLIF format {format})"));
     Ok(())
@@ -1694,10 +1663,7 @@ async fn glif(cx: Cx, input: Input) -> Result<()> {
 
 async fn designspace(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 1024)).await?;
-    let tag = probe::find(&head, b"<designspace")
-        .and_then(|p| head.get(p..))
-        .unwrap_or_default();
-    let format = attr(tag, "format").unwrap_or_default();
+    let format = tag_attr(&head, input.span, b"<designspace", "format").unwrap_or_default();
     xml::dissect(cx.clone(), input).await?;
     cx.annotate(format!("Font designspace document, format {format}"));
     Ok(())

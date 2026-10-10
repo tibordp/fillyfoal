@@ -7,13 +7,14 @@
 use std::sync::Arc;
 
 use super::CfbRef;
-use super::rec::{LE, hex, uint};
+use super::rec::LE;
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::Input;
 use crate::formats::util::mapi::{self, Named, TYPES, guid, set_label, set_name};
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};
@@ -418,7 +419,7 @@ async fn nameid_stream(cx: &Cx, id: u16, span: Span) -> Result<()> {
                 let end = at.saturating_add(4).saturating_add(len);
                 let text =
                     crate::text::utf16(data.get(at.saturating_add(4)..end).unwrap_or_default(), LE);
-                let padded = end.saturating_add(3) & !3;
+                let padded = to_usize(crate::bytes::align_up(to_u64(end), 4));
                 cx.push(
                     Node::new(format!("Name at {at:#x}"))
                         .span(span.sub(to_u64(at), to_u64(padded.saturating_sub(at))))

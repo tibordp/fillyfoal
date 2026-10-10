@@ -1,0 +1,21 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ palette.dib — DIB, 2×2, 8-bit, BI_RGB  [0x0+0x38]
+  ▾ BITMAPINFOHEADER — 2×2, 8-bit, BI_RGB  [0x0+0x28]
+      biSize: 40 — BITMAPINFOHEADER  [0x0+0x4]
+      biWidth: 2  [0x4+0x4]
+      biHeight: 2 — positive: rows stored bottom-up  [0x8+0x4]
+      biPlanes: 1  [0xc+0x2]
+      biBitCount: 8  [0xe+0x2]
+      biCompression: BI_RGB (0x0)  [0x10+0x4]
+      biSizeImage: 8  [0x14+0x4]
+      biXPelsPerMeter: 2835 — 72 dpi  [0x18+0x4]
+      biYPelsPerMeter: 2835 — 72 dpi  [0x1c+0x4]
+      biClrUsed: 2  [0x20+0x4]
+      biClrImportant: 0  [0x24+0x4]
+  ▾ Palette — 2 colors  [0x28+0x8]
+      [0]: "#000000"  [0x28+0x4]
+      [1]: "#ffffff"  [0x2c+0x4]
+    Pixel array — 2 rows of 4 bytes, bottom-up  [0x30+0x8]

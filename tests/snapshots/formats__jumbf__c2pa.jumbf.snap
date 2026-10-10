@@ -1,0 +1,14 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ c2pa.jumbf — JUMBF: C2PA manifest store  [0x0+0x35]
+  ▾ 'jumb' superbox — 'c2pa' "c2pa"  [0x0+0x35]
+    ▾ 'jumd' description  [0x8+0x1e]
+        Box length: 30  [0x8+0x4]
+        Box type: "jumd"  [0xc+0x4]
+        Content type: 63 32 70 61 00 11 00 10 80 00 00 aa 00 38 9b 71  |c2pa.........8.q| — 'c2pa'  [0x10+0x10]
+        Toggles: 0x3 [REQUESTABLE | LABEL]  [0x20+0x1]
+        Label: "c2pa"  [0x21+0x5]
+    ▾ 'json' JSON — JSON object, 1 member  [0x2e+0x7]
+        a: 1  [0x33+0x1]

@@ -215,6 +215,14 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "image")]
     &image::psd::FORMAT,
     #[cfg(feature = "image")]
+    &image::psd::IRB,
+    #[cfg(feature = "image")]
+    &image::bmp::DIB,
+    #[cfg(feature = "image")]
+    &image::iptc::FORMAT,
+    #[cfg(feature = "image")]
+    &image::jpeg::JUMBF,
+    #[cfg(feature = "image")]
     &image::ico::ICO,
     #[cfg(feature = "image")]
     &image::ico::CUR,

@@ -9,11 +9,13 @@ use crate::bytes::{to_u64, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::sound::Bits;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
 
-use super::{dims, region, text, uint};
+use super::{dims, region};
 
 const BE: Endian = Endian::Big;
 const SIGNATURE: &[u8] = b"\0\0\0\x0cJXL \r\n\x87\n";
@@ -36,46 +38,28 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     }
 }
 
-/// Reads bits least significant first.
-struct Bits<'a> {
-    data: &'a [u8],
-    pos: usize,
-}
-
-impl Bits<'_> {
-    fn read(&mut self, n: u32) -> Option<u64> {
-        let mut value = 0u64;
-        for i in 0..n {
-            let byte = *self.data.get(self.pos / 8)?;
-            let bit = (byte >> (self.pos % 8)) & 1;
-            value |= u64::from(bit).checked_shl(i)?;
-            self.pos = self.pos.checked_add(1)?;
-        }
-        Some(value)
-    }
-
-    /// `U32(1 + u(9), 1 + u(13), 1 + u(18), 1 + u(30))`, as used for sizes.
-    fn size(&mut self) -> Option<u64> {
-        let bits = [9, 13, 18, 30];
-        let selector = usize::try_from(self.read(2)?).ok()?;
-        self.read(*bits.get(selector)?)?.checked_add(1)
-    }
+/// `U32(1 + u(9), 1 + u(13), 1 + u(18), 1 + u(30))`, as used for sizes.
+fn size(b: &mut Bits<'_>) -> Option<u64> {
+    let bits = [9, 13, 18, 30];
+    let selector = usize::try_from(b.read(2)?).ok()?;
+    b.read(*bits.get(selector)?)?.checked_add(1)
 }
 
 /// Width and height from the codestream's SizeHeader, and its length in
 /// bytes (rounded up).
-fn size_header(data: &[u8]) -> Option<(u64, u64, u64)> {
-    let mut b = Bits { data, pos: 16 };
+fn size_header(data: &[u8], span: Span) -> Option<(u64, u64, u64)> {
+    let mut b = Bits::new(data, span).lsb_first();
+    b.seek(16);
     let small = b.read(1)? == 1;
     let height = if small {
         b.read(5)?.checked_add(1)?.checked_mul(8)?
     } else {
-        b.size()?
+        size(&mut b)?
     };
     let ratio = b.read(3)?;
     let width = match ratio {
         0 if small => b.read(5)?.checked_add(1)?.checked_mul(8)?,
-        0 => b.size()?,
+        0 => size(&mut b)?,
         1 => height,
         2 => height.checked_mul(12)? / 10,
         3 => height.checked_mul(4)? / 3,
@@ -84,13 +68,13 @@ fn size_header(data: &[u8]) -> Option<(u64, u64, u64)> {
         6 => height.checked_mul(5)? / 4,
         _ => height.checked_mul(2)?,
     };
-    Some((width, height, to_u64(b.pos.div_ceil(8))))
+    Some((width, height, b.pos().div_ceil(8)))
 }
 
 async fn codestream(cx: &Cx, span: Span) -> Result<()> {
     let head = cx.read_avail(span.sub(0, 16)).await?;
     cx.emit(Node::new("Signature").span(span.sub(0, 2)).summary("FF 0A"));
-    let Some((w, h, len)) = size_header(&head) else {
+    let Some((w, h, len)) = size_header(&head, span) else {
         return Err(Diagnostic::truncated(span.sub(0, 16), to_u64(head.len())));
     };
     cx.annotate(format!("{}, codestream", dims(w, h)));
@@ -111,8 +95,8 @@ async fn codestream(cx: &Cx, span: Span) -> Result<()> {
 
 /// The size header is bit-packed, so both fields share its span.
 async fn size_fields(cx: Cx, (span, w, h): (Span, u64, u64)) -> Result<()> {
-    cx.emit(Node::new("Width").span(span).value(uint(w)));
-    cx.emit(Node::new("Height").span(span).value(uint(h)));
+    cx.emit(Node::new("Width").span(span).value(uint(w, 64)));
+    cx.emit(Node::new("Height").span(span).value(uint(h, 64)));
     Ok(())
 }
 
@@ -152,7 +136,7 @@ async fn container(cx: &Cx, input: Input) -> Result<()> {
             let head = cx.read_avail(payload.sub(offset, 16)).await?;
             if let Some((w, h, _)) = head
                 .starts_with(b"\xff\x0a")
-                .then(|| size_header(&head))
+                .then(|| size_header(&head, payload.sub(offset, 16)))
                 .flatten()
             {
                 dims_found = true;

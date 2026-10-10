@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -156,7 +157,7 @@ async fn element(cx: Cx, (input, span, kind): (Input, Span, Vec<u8>)) -> Result<
             cx.emit(
                 Node::new("Value")
                     .span(data)
-                    .value(super::text(crate::text::latin1(&bytes))),
+                    .value(text(crate::text::latin1(&bytes))),
             );
         }
         b"info" => cx.emit(embedded("Contents", input.nested(data))),

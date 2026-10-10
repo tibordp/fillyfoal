@@ -13,7 +13,7 @@
 
 use std::sync::Arc;
 
-use super::super::rec::{self, LE, bits, hex, quoted, uint};
+use super::super::rec::{self, LE, bits, quoted};
 use super::{
     ASSOC, CHARSETS, Doc, ENVR, FIB_FLAGS2, FONT_FAMILY, Fib, NFIB, PAIRS, PITCH, PREVIEW, pair,
     pair_desc, pieces, text_node, text_range,
@@ -23,6 +23,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
+use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;

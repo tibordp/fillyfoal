@@ -11,13 +11,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::probe;
 use crate::formats::text::scan::{Lines, Scanner};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::Value;
-
-use super::{text, uint};
 
 /// Universal Exit Language: ends a job language and returns to PJL.
 const UEL: &[u8] = b"\x1b%-12345X";

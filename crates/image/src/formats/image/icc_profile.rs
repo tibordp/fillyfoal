@@ -15,7 +15,11 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::datakit::{clip, digest_paced, fourcc};
+use crate::formats::util::datakit::digest_paced;
+use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::util::vidutil::{
+    COLOUR_PRIMARIES, MATRIX_COEFFICIENTS, TRANSFER_CHARACTERISTICS,
+};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -275,42 +279,6 @@ const TECHNOLOGIES: EnumTable = &[
     (sig(b"rhoc"), "Reflection hardcopy original colorimetry"),
     (sig(b"rpoc"), "Reflection print output colorimetry"),
 ];
-const CICP_PRIMARIES: EnumTable = &[
-    (1, "BT.709"),
-    (4, "BT.470 M"),
-    (5, "BT.601 625"),
-    (6, "BT.601 525"),
-    (7, "SMPTE 240M"),
-    (8, "Generic film"),
-    (9, "BT.2020"),
-    (10, "XYZ"),
-    (11, "SMPTE RP 431-2 (DCI-P3)"),
-    (12, "SMPTE EG 432-1 (Display P3)"),
-    (22, "EBU Tech 3213-E"),
-];
-const CICP_TRANSFER: EnumTable = &[
-    (1, "BT.709"),
-    (4, "Gamma 2.2"),
-    (5, "Gamma 2.8"),
-    (6, "BT.601"),
-    (7, "SMPTE 240M"),
-    (8, "Linear"),
-    (13, "sRGB"),
-    (14, "BT.2020 10-bit"),
-    (15, "BT.2020 12-bit"),
-    (16, "PQ (SMPTE ST 2084)"),
-    (17, "SMPTE ST 428-1"),
-    (18, "HLG (ARIB STD-B67)"),
-];
-const CICP_MATRIX: EnumTable = &[
-    (0, "Identity (RGB)"),
-    (1, "BT.709"),
-    (5, "BT.601 625"),
-    (6, "BT.601 525"),
-    (9, "BT.2020 non-constant"),
-    (10, "BT.2020 constant"),
-];
-
 fn version(v: u32) -> String {
     format!("{}.{}.{}", v >> 24, (v >> 20) & 0xf, (v >> 16) & 0xf)
 }
@@ -674,9 +642,9 @@ fn short_value(head: &[u8]) -> Option<String> {
             let t = head.get(9).copied()?;
             Some(format!(
                 "{}, {}",
-                lookup(CICP_PRIMARIES, p.into())
+                lookup(COLOUR_PRIMARIES, p.into())
                     .map_or_else(|| format!("primaries {p}"), str::to_owned),
-                lookup(CICP_TRANSFER, t.into())
+                lookup(TRANSFER_CHARACTERISTICS, t.into())
                     .map_or_else(|| format!("transfer {t}"), str::to_owned)
             ))
         }
@@ -881,13 +849,13 @@ async fn tag_data(cx: Cx, span: Span) -> Result<()> {
         }
         b"cicp" => {
             f.u8("Colour primaries")
-                .enumeration(CICP_PRIMARIES)
+                .enumeration(COLOUR_PRIMARIES)
                 .emit()?;
             f.u8("Transfer characteristics")
-                .enumeration(CICP_TRANSFER)
+                .enumeration(TRANSFER_CHARACTERISTICS)
                 .emit()?;
             f.u8("Matrix coefficients")
-                .enumeration(CICP_MATRIX)
+                .enumeration(MATRIX_COEFFICIENTS)
                 .emit()?;
             f.u8("Video full range flag").emit()?;
         }

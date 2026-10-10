@@ -6,12 +6,13 @@
 use std::collections::BTreeMap;
 
 use super::officeart;
-use super::rec::{K, hex, quoted, uint};
+use super::rec::{K, quoted};
 use crate::bytes::{i32_le, to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::Input;
+use crate::formats::util::val::{hex, uint};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag, lookup};

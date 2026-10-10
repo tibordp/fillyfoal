@@ -4,6 +4,7 @@
 
 use crate::cx::Cx;
 use crate::fields::Endian;
+use crate::formats::util::val::uint;
 use crate::value::{EnumTable, Value, decode_flags, lookup};
 
 use super::super::tiff_tags::{
@@ -606,7 +607,7 @@ fn main(t: Tiff, e: &Entry, bytes: &[u8], values: &[Num], refs: &Refs) -> Option
         },
         0x4746 if one => {
             let v = u(values, 0)?;
-            Shown::new(super::super::uint(v), format!("{v} of 5 stars"))
+            Shown::new(uint(v, 64), format!("{v} of 5 stars"))
         }
         0xc621..=0xc626 | 0xc714 | 0xc715 | 0xcd32..=0xcd34 | 0xcd3a | 0xc690 | 0xc692 => Shown {
             value: None,

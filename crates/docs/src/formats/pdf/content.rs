@@ -254,8 +254,7 @@ fn short(item: &syntax::Item) -> String {
             } else {
                 ""
             };
-            let digits: String = shown.iter().map(|b| format!("{b:02x}")).collect();
-            format!("<{digits}{more}>")
+            format!("<{}{more}>", crate::text::hex_lower(shown))
         }
         Obj::Str { bytes, .. } => match bytes.get(..MAX_SHOWN) {
             // Very long strings are shown in part.

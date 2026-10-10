@@ -8,13 +8,14 @@ use super::objects::Located;
 use super::syntax::{self, Entry, Item, Obj};
 use super::{
     DocRef, MAX_DEPTH, Walk, crypt, deref, deref_at, entry_node, header_node, int_of, located_at,
-    located_node, plural, resolve, short,
+    located_node, resolve, short,
 };
-use crate::bytes::{to_u64, u16_be, u32_be};
+use crate::bytes::to_u64;
 use crate::codec::{self, Codec};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::embedded_as;
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, decode_flags, field, flag, lookup};
@@ -32,7 +33,7 @@ pub(super) fn linearization_node(doc: &DocRef) -> Option<Node> {
     let int = |k: &str| lin.item.get(k).and_then(Item::int);
     let mut parts = Vec::new();
     if let Some(n) = int("N") {
-        parts.push(format!("{n} page{}", plural(n.unsigned_abs())));
+        parts.push(plural(n.unsigned_abs(), "page"));
     }
     if let Some(e) = int("E") {
         parts.push(format!("first page ends at {e:#x}"));
@@ -307,10 +308,7 @@ pub(super) async fn catalog_nodes(cx: &Cx, doc: &DocRef, catalog: &Item, base: S
                 (doc.clone(), item.clone()),
             );
         if let Some(count) = int_of(cx, doc, item.get("Count")).await {
-            node = node.summary(format!(
-                "{count} visible item{}",
-                plural(count.unsigned_abs())
-            ));
+            node = node.summary(plural(count.unsigned_abs(), "visible item"));
         }
         out.push(node);
     }
@@ -326,7 +324,7 @@ pub(super) async fn catalog_nodes(cx: &Cx, doc: &DocRef, catalog: &Item, base: S
         };
         out.push(
             Node::new("Form fields")
-                .summary(format!("{top} top-level field{}", plural(to_u64(top))))
+                .summary(plural(to_u64(top), "top-level field"))
                 .desc("The interactive form's fields (terminal fields, by full name)")
                 .lazy(crate::expander!(self::fields_list: DocRef), doc.clone()),
         );
@@ -400,9 +398,8 @@ async fn outline_items(
             && count != 0
         {
             parts.push(format!(
-                "{} descendant{} {}",
-                count.unsigned_abs(),
-                plural(count.unsigned_abs()),
+                "{} {}",
+                plural(count.unsigned_abs(), "descendant"),
                 if count > 0 { "open" } else { "closed" }
             ));
         }
@@ -578,11 +575,7 @@ fn field_kind(kind: Option<&str>, flags: i64) -> String {
 
 async fn fields_list(cx: Cx, doc: DocRef) -> Result<()> {
     let fields = walk_fields(&cx, &doc).await?;
-    cx.annotate(format!(
-        "{} field{}",
-        fields.len(),
-        plural(to_u64(fields.len()))
-    ));
+    cx.annotate(plural(to_u64(fields.len()), "field"));
     cx.set_count(Count::Exact(to_u64(fields.len())));
     for field in fields {
         let mut summary = field_kind(field.kind.as_deref(), field.flags);
@@ -651,7 +644,7 @@ async fn signatures(cx: Cx, doc: DocRef) -> Result<()> {
         )
         .await;
     }
-    cx.annotate(format!("{count} signature{}", plural(to_u64(count))));
+    cx.annotate(plural(to_u64(count), "signature"));
     Ok(())
 }
 
@@ -728,9 +721,8 @@ async fn signature(cx: Cx, (doc, sig): (DocRef, Located)) -> Result<()> {
         cx.emit(
             Node::new("Signed bytes")
                 .summary(format!(
-                    "{} range{}, {} bytes",
-                    ranges.len(),
-                    plural(to_u64(ranges.len())),
+                    "{}, {} bytes",
+                    plural(to_u64(ranges.len()), "range"),
                     ranges.iter().fold(0u64, |a, r| a.saturating_add(r.1))
                 ))
                 .lazy(
@@ -785,23 +777,6 @@ async fn signed_ranges(cx: Cx, (doc, ranges): (DocRef, Vec<(u64, u64)>)) -> Resu
     Ok(())
 }
 
-/// The total length of the DER element at the start of `head`.
-fn der_length(head: &[u8]) -> Option<u64> {
-    let first = *head.get(1)?;
-    if first < 0x80 {
-        return Some(u64::from(first).saturating_add(2));
-    }
-    let n = usize::from(first & 0x7f);
-    let len = match n {
-        1 => u64::from(*head.get(2)?),
-        2 => u64::from(u16_be(head, 2)?),
-        3 => u64::from(u32_be(head, 1)? & 0x00ff_ffff),
-        4 => u64::from(u32_be(head, 2)?),
-        _ => return None,
-    };
-    Some(len.saturating_add(to_u64(n)).saturating_add(2))
-}
-
 /// The hex string of `/Contents`, decoded: the DER object, then padding.
 async fn signature_value(cx: Cx, (doc, hex): (DocRef, Span)) -> Result<()> {
     let decoded = codec::decode_span(&cx, hex, &Codec::AsciiHex, None).await?;
@@ -809,8 +784,8 @@ async fn signature_value(cx: Cx, (doc, hex): (DocRef, Span)) -> Result<()> {
         cx.diag(e);
     }
     let data = decoded.span;
-    let head = cx.read_avail(data.sub(0, 8)).await?;
-    let der = match der_length(&head) {
+    let head = cx.read_avail(data.sub(0, 12)).await?;
+    let der = match crate::formats::asn1::der::header(&head).and_then(|t| t.total()) {
         Some(len) if head.first() == Some(&0x30) && len <= data.len => len,
         _ => {
             cx.annotate(format!("{} bytes", data.len));

@@ -6,13 +6,14 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, lookup};
 
-use super::{dims, region, text};
+use super::{dims, region};
 
 const BE: Endian = Endian::Big;
 

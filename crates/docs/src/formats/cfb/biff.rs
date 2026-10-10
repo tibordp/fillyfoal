@@ -9,14 +9,14 @@
 use std::sync::Arc;
 
 use super::ptg::{self, Names};
-use super::rec::{
-    self, K, LE, Spec, StrForm, cell_name, column_name, hex, number, quoted, uint, xl_string,
-};
+use super::rec::{self, K, LE, Spec, StrForm, cell_name, column_name, number, quoted, xl_string};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
 use crate::formats::Input;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::{hex, uint};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
@@ -3187,14 +3187,14 @@ pub async fn early_stream(cx: Cx, input: Input) -> Result<()> {
         lookup(BOF_TYPES, dt.into()).unwrap_or("document")
     };
     let mut summary = format!(
-        "Excel {} {kind} (BIFF{}), {records} records, {cells} cells, {fonts} font{}",
+        "Excel {} {kind} (BIFF{}), {records} records, {cells} cells, {}",
         match book.version {
             2 => "2.x",
             3 => "3.0",
             _ => "4.0",
         },
         book.version,
-        if fonts == 1 { "" } else { "s" }
+        plural(fonts, "font")
     );
     if let Some(d) = dims {
         summary = format!("{summary}, used range {d}");

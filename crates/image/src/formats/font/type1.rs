@@ -26,16 +26,13 @@ fn is_space(b: u8) -> bool {
 }
 
 /// The position after `needle` in `data` (from `from`).
-fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    data.get(from..)?
-        .windows(needle.len())
-        .position(|w| w == needle)
-        .map(|p| p.saturating_add(from).saturating_add(needle.len()))
+fn after(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
+    crate::bytes::find(data, needle, from).map(|p| p.saturating_add(needle.len()))
 }
 
 /// The integer after `key` (e.g. `/lenIV 4`).
 fn int_after(data: &[u8], key: &[u8]) -> Option<i64> {
-    let at = find(data, key, 0)?;
+    let at = after(data, key, 0)?;
     let rest = data.get(at..)?;
     let text: String = rest
         .iter()
@@ -55,8 +52,8 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
         .and_then(|n| usize::try_from(n).ok())
         .unwrap_or(4);
     // Cleartext entries of the private dictionary (before the binary parts).
-    let head_end = find(&data, b"/Subrs", 0)
-        .or_else(|| find(&data, b"/CharStrings", 0))
+    let head_end = after(&data, b"/Subrs", 0)
+        .or_else(|| after(&data, b"/CharStrings", 0))
         .unwrap_or(data.len().min(4096));
     let head = String::from_utf8_lossy(data.get(..head_end).unwrap_or_default()).into_owned();
     for (n, line) in head.lines().enumerate() {
@@ -80,7 +77,7 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
     if let Some(n) = int_after(&data, b"/Subrs") {
         cx.emit(Node::new("Subrs").value(Value::Int { value: n, bits: 32 }));
     }
-    if let Some(at) = find(&data, b"/CharStrings", 0) {
+    if let Some(at) = after(&data, b"/CharStrings", 0) {
         let count = int_after(&data, b"/CharStrings").unwrap_or(0);
         cx.emit(
             Node::new("CharStrings")
@@ -102,7 +99,7 @@ pub async fn expand_private(cx: Cx, (input, encrypted, hex): (Input, Span, bool)
 /// `/name len RD <len bytes> ND` entries after `/CharStrings`.
 async fn charstrings(cx: Cx, (program, start, len_iv): (Span, usize, usize)) -> Result<()> {
     let data = crate::codec::read_all(&cx, program).await?;
-    let mut pos = find(&data, b"begin", start).unwrap_or(start);
+    let mut pos = after(&data, b"begin", start).unwrap_or(start);
     let mut n = 0u64;
     loop {
         cx.checkpoint().await;

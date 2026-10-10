@@ -11,6 +11,7 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -85,7 +86,7 @@ fn astc_header(f: &mut Fields<'_>, _: &()) -> Result<(u8, u8, u8, u32, u32, u32)
     let bz = f.u8("Block depth").desc("Texels; 1 for 2D").emit()?;
     let mut size = |name: &'static str| {
         f.bytes(name, 3)
-            .with(|b, n| n.value(super::uint(u24(b))))
+            .with(|b, n| n.value(uint(u24(b), 64)))
             .emit()
             .map(|b| u24(&b))
     };
@@ -760,7 +761,7 @@ async fn vtf_resources(cx: Cx, (file, table): (Span, Span)) -> Result<()> {
             },
             str::to_owned,
         );
-        let mut node = Node::new(name).span(span).value(super::hex(data));
+        let mut node = Node::new(name).span(span).value(hex(data, 64));
         node = if flags & 0x2 != 0 {
             node.summary("inline value")
         } else {

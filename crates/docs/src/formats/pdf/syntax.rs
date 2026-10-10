@@ -866,14 +866,14 @@ impl<'c> Reader<'c> {
                         ended = Some(true);
                         break;
                     }
-                    b'0'..=b'9' => b.saturating_sub(b'0'),
-                    b'a'..=b'f' => b.saturating_sub(b'a').saturating_add(10),
-                    b'A'..=b'F' => b.saturating_sub(b'A').saturating_add(10),
                     _ if is_white(b) => continue,
-                    _ => {
-                        ended = Some(false);
-                        break;
-                    }
+                    _ => match crate::text::hex_digit(b) {
+                        Some(d) => d,
+                        None => {
+                            ended = Some(false);
+                            break;
+                        }
+                    },
                 };
                 match high.take() {
                     Some(h) => out.push(h << 4 | digit),
@@ -956,25 +956,6 @@ impl<'c> Reader<'c> {
         let at = self.scan(from, needle.len(), |_, w, _| w == needle).await?;
         Ok((self.slice(at, at.saturating_add(needle.len())) == needle).then_some(at))
     }
-}
-
-/// Finds `needle` in `data` starting at `from`.
-pub fn find(data: &[u8], needle: &[u8], from: usize) -> Option<usize> {
-    let hay = data.get(from..)?;
-    if needle.is_empty() || hay.len() < needle.len() {
-        return None;
-    }
-    hay.windows(needle.len())
-        .position(|w| w == needle)
-        .and_then(|i| i.checked_add(from))
-}
-
-/// Finds the last `needle` in `data`.
-pub fn rfind(data: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || data.len() < needle.len() {
-        return None;
-    }
-    data.windows(needle.len()).rposition(|w| w == needle)
 }
 
 /// Text of a PDF string: UTF-16BE with a byte order mark, UTF-8 with one,

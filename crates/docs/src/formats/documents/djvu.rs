@@ -28,10 +28,12 @@ use crate::codec::{Codec, decode_span};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::{plural, preview};
+use crate::formats::util::val::{hex, uint};
 use crate::formats::{Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value};
+use crate::value::Value;
 
 declare_format!(pub DJVU = "djvu", "DjVu document", ["djvu", "djv"], "image/vnd.djvu",
     Probe::Magic(&[(0, b"AT&TFORM")]), djvu);
@@ -43,22 +45,6 @@ const MAX_TREE_DEPTH: usize = 32;
 /// Input bytes a parser scans between checkpoints.
 const CHECK_BYTES: usize = 4096;
 
-fn uint(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn hex(value: impl Into<u64>, bits: u8) -> Value {
-    Value::UInt {
-        value: value.into(),
-        bits,
-        radix: Radix::Hex,
-    }
-}
-
 fn to_u64(n: usize) -> u64 {
     u64::try_from(n).unwrap_or(u64::MAX)
 }
@@ -69,21 +55,6 @@ fn to_usize(n: u64) -> usize {
 
 fn lossy(data: &[u8]) -> String {
     String::from_utf8_lossy(data).into_owned()
-}
-
-/// `s` shortened to `max` characters for a summary, on one line.
-fn snippet(s: &str, max: usize) -> String {
-    let flat: String = s
-        .trim_end()
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect();
-    if flat.chars().count() > max {
-        let cut: String = flat.chars().take(max).collect();
-        format!("{cut}…")
-    } else {
-        flat
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -110,10 +81,9 @@ async fn djvu(cx: Cx, input: Input) -> Result<()> {
                 let pages = dir.files.iter().filter(|f| f.kind() == PAGE).count();
                 let how = if dir.bundled { "bundled" } else { "indirect" };
                 format!(
-                    "{how} multi-page DjVu, {pages} page{}, {} file{}",
-                    if pages == 1 { "" } else { "s" },
-                    dir.files.len(),
-                    if dir.files.len() == 1 { "" } else { "s" }
+                    "{how} multi-page DjVu, {}, {}",
+                    plural(to_u64(pages), "page"),
+                    plural(to_u64(dir.files.len()), "file")
                 )
             }
             _ => "multi-page DjVu".to_owned(),
@@ -230,7 +200,7 @@ async fn chunk_node(
             let data = cx.read_avail(body.sub(0, 1024)).await.unwrap_or_default();
             let name = lossy(&data);
             let mut node = node
-                .summary(format!("includes \"{}\"", snippet(&name, 80)))
+                .summary(format!("includes \"{}\"", preview(&name, 80)))
                 .value(Value::Text(name.clone()));
             if let Some(file) = dir.and_then(|d| d.files.iter().find(|f| f.id == name))
                 && let Some(span) = file.chunk(input)
@@ -1466,7 +1436,7 @@ impl Sexprs {
     fn render(&self, idx: usize, max: usize) -> String {
         let mut out = String::new();
         self.render_into(idx, &mut out, max, 0);
-        snippet(&out, max)
+        preview(&out, max)
     }
 
     fn render_into(&self, idx: usize, out: &mut String, max: usize, depth: usize) {
@@ -1532,7 +1502,7 @@ fn sx_node(sx: &Arc<Sexprs>, idx: usize) -> Node {
                 .join(" ");
             let mut node = Node::new(head.unwrap_or_else(|| "List".to_owned())).span(span);
             if !rest.is_empty() {
-                node = node.summary(snippet(&rest, 80));
+                node = node.summary(preview(&rest, 80));
             }
             // A list of only atoms and strings is shown by its summary alone
             // unless it has several arguments.

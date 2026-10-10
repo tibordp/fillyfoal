@@ -31,6 +31,8 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Prim, struct_node};
 use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -356,7 +358,8 @@ struct Entry {
     inline: bool,
 }
 
-fn type_size(kind: u16) -> u64 {
+/// Bytes per value of a field type (0 for unknown types).
+pub(super) fn type_size(kind: u16) -> u64 {
     match kind {
         1 | 2 | 6 | 7 => 1,
         3 | 8 => 2,
@@ -1088,11 +1091,7 @@ async fn image_data(cx: &Cx, t: Tiff, ifd: &Ifd) {
         if let (Some(o), Some(c)) = (ifd.find(offsets), ifd.find(counts)) {
             let n = o.count.min(c.count);
             let mut node = Node::new(format!("{what}s"))
-                .summary(format!(
-                    "{n} {}{}",
-                    what.to_lowercase(),
-                    if n == 1 { "" } else { "s" }
-                ))
+                .summary(plural(n, &what.to_lowercase()))
                 .lazy(
                     pieces,
                     Pieces {
@@ -1277,6 +1276,13 @@ async fn entry(cx: Cx, st: EntryState) -> Result<()> {
             cx.emit(super::psd::resources_node(
                 "Photoshop image resources",
                 t.input,
+                e.data,
+            ));
+            return Ok(());
+        }
+        (Ns::Main, 0x935c) => {
+            cx.emit(super::psd::document_data_node(
+                "Photoshop document data",
                 e.data,
             ));
             return Ok(());
@@ -1601,7 +1607,7 @@ async fn print_im(cx: Cx, (t, e): (Tiff, Entry)) -> Result<()> {
         cx.push(
             Node::new(format!("Entry {tag:#06x}"))
                 .span(entries.sub(to_u64(i).saturating_mul(6), 6))
-                .value(super::hex(value)),
+                .value(hex(value, 64)),
         )
         .await;
     }

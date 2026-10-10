@@ -13,6 +13,7 @@ use crate::bytes::{u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::value::{EnumTable, lookup};
@@ -368,9 +369,9 @@ pub async fn dissect_dpx(cx: Cx, input: Input) -> Result<()> {
     let bits = f.u8("").get()?;
     cx.emit(
         struct_node("Image information", ii, endian, endian, image_info).summary(format!(
-            "{}, {elements} element{}",
+            "{}, {}",
             dims(width, height),
-            if elements == 1 { "" } else { "s" }
+            plural(elements, "element")
         )),
     );
     let offset = u64::from(offset);
@@ -617,9 +618,9 @@ pub async fn dissect_cineon(cx: Cx, input: Input) -> Result<()> {
     let h = f.u32("").get()?;
     cx.emit(
         struct_node("Image information", ii, endian, endian, cineon_image_info).summary(format!(
-            "{}, {channels} channel{}, {bits}-bit",
+            "{}, {}, {bits}-bit",
             dims(w, h),
-            if channels == 1 { "" } else { "s" }
+            plural(channels, "channel")
         )),
     );
     let offset = u64::from(offset);
@@ -658,9 +659,9 @@ pub async fn dissect_cineon(cx: Cx, input: Input) -> Result<()> {
         cx.emit(user_data(&cx, file, headers_end, offset.saturating_sub(headers_end)).await?);
     }
     cx.annotate(format!(
-        "{}, {channels} channel{}, {bits}-bit, {}",
+        "{}, {}, {bits}-bit, {}",
         dims(w, h),
-        if channels == 1 { "" } else { "s" },
+        plural(channels, "channel"),
         endian_name(endian)
     ));
     cx.emit(region(

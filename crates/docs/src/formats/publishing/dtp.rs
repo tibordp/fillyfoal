@@ -9,12 +9,13 @@ use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::{probe, xml};
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::{hex, text, uint};
+use super::tag_attr;
 
 // ---------------------------------------------------------------------------
 // Adobe InDesign
@@ -309,24 +310,15 @@ fn scribus_probe(h: &Head<'_>) -> bool {
 declare_format!(pub SCRIBUS = "scribus", "Scribus document", ["sla", "scd"], "application/vnd.scribus",
     Probe::Custom(scribus_probe), scribus);
 
-/// The value of attribute `name` in the start tag `tag` of `head`.
-fn attr(head: &[u8], tag: &[u8], name: &str) -> Option<String> {
-    let at = probe::find(head, tag)?;
-    let head = head.get(at..)?;
-    let end = head.iter().position(|&b| b == b'>').unwrap_or(head.len());
-    let head = head.get(..end)?;
-    let needle = format!(" {name}=\"");
-    let p = probe::find(head, needle.as_bytes())?.saturating_add(needle.len());
-    let rest = head.get(p..)?;
-    let close = rest.iter().position(|&b| b == b'"')?;
-    Some(String::from_utf8_lossy(rest.get(..close)?).into_owned())
-}
-
 async fn scribus(cx: Cx, input: Input) -> Result<()> {
     let head = cx.read_avail(input.span.sub(0, 4096)).await?;
-    let version = attr(&head, b"<SCRIBUS", "Version").unwrap_or_default();
-    let title = attr(&head, b"<DOCUMENT", "TITLE").filter(|t| !t.is_empty());
-    let pages = attr(&head, b"<DOCUMENT", "ANZPAGES");
+    let attr = |tag: &[u8], name| tag_attr(&head, input.span, tag, name);
+    let version = [&b"<SCRIBUSUTF8NEW"[..], b"<SCRIBUSUTF8", b"<SCRIBUS"]
+        .into_iter()
+        .find_map(|tag| attr(tag, "Version"))
+        .unwrap_or_default();
+    let title = attr(b"<DOCUMENT", "TITLE").filter(|t| !t.is_empty());
+    let pages = attr(b"<DOCUMENT", "ANZPAGES");
     xml::dissect(cx.clone(), input).await?;
     cx.annotate(format!(
         "Scribus document {version}{}{}",

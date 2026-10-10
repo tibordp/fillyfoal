@@ -13,13 +13,14 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
 use crate::value::{EnumTable, lookup};
 
-use super::{dims, text};
+use super::dims;
 
 const LE: Endian = Endian::Little;
 

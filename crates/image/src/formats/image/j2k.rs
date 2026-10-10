@@ -10,12 +10,13 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag, lookup};
 
-use super::{dims, text};
+use super::dims;
 
 const BE: Endian = Endian::Big;
 

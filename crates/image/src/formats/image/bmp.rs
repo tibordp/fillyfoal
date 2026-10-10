@@ -16,7 +16,8 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::vidutil::plural;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -34,6 +35,46 @@ pub static FORMAT: Format = Format {
     probe: Probe::Custom(probe),
     dissect: crate::expander!(dissect: Input),
 };
+
+/// A device-independent bitmap without a file header: an info header
+/// (core, OS/2 2.x, INFO or V2–V5), masks, palette and pixels, as on the
+/// clipboard (`CF_DIB`, `CF_DIBV5`), in OLE and OfficeArt pictures, and in
+/// resources.
+pub static DIB: Format = Format {
+    name: "dib",
+    title: "Device-independent bitmap (no file header)",
+    extensions: &[],
+    mime: "image/bmp",
+    probe: Probe::Never,
+    dissect: crate::expander!(dissect_dib: Input),
+};
+
+/// Windows clipboard formats (`CF_*`), as in clipboard files, OLE property
+/// sets (`VT_CF`) and WAVE `DISP` chunks.
+pub const CLIPBOARD_FORMATS: EnumTable = &[
+    (1, "CF_TEXT"),
+    (2, "CF_BITMAP"),
+    (3, "CF_METAFILEPICT"),
+    (4, "CF_SYLK"),
+    (5, "CF_DIF"),
+    (6, "CF_TIFF"),
+    (7, "CF_OEMTEXT"),
+    (8, "CF_DIB"),
+    (9, "CF_PALETTE"),
+    (10, "CF_PENDATA"),
+    (11, "CF_RIFF"),
+    (12, "CF_WAVE"),
+    (13, "CF_UNICODETEXT"),
+    (14, "CF_ENHMETAFILE"),
+    (15, "CF_HDROP"),
+    (16, "CF_LOCALE"),
+    (17, "CF_DIBV5"),
+    (0x80, "CF_OWNERDISPLAY"),
+    (0x81, "CF_DSPTEXT"),
+    (0x82, "CF_DSPBITMAP"),
+    (0x83, "CF_DSPMETAFILEPICT"),
+    (0x8e, "CF_DSPENHMETAFILE"),
+];
 
 const HEADER_SIZES: &[u32] = &[12, 16, 40, 52, 56, 64, 108, 124];
 
@@ -299,11 +340,48 @@ fn mask_layout(masks: &[u32; 4]) -> String {
     }
 }
 
-fn info_header(f: &mut Fields<'_>, _: &()) -> Result<Info> {
+/// How [`info_header`] shows the compression field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Compression {
+    /// `BI_*` values (and OS/2's), for bitmaps.
+    #[default]
+    Bitmap,
+    /// A video codec's FourCC (`MJPG`, `H264`), with `BI_*` names below
+    /// 0x100, for the BITMAPINFOHEADER of a video stream (AVI `strf`, ASF,
+    /// Matroska `V_MS/VFW/FOURCC`). Only the 40 bytes of BITMAPINFOHEADER
+    /// are read; whatever follows within `biSize` is codec data for the
+    /// caller.
+    FourCC,
+}
+
+/// The compression of a video stream's BITMAPINFOHEADER: an enum value
+/// below 0x100, else the FourCC (with the codec's name as summary).
+fn fourcc_compression(&v: &u32, n: Node) -> Node {
+    if v < 0x100 {
+        return n.value(crate::value::Value::Enum {
+            raw: v.into(),
+            bits: 32,
+            name: lookup(COMPRESSION, v.into()),
+        });
+    }
+    let bytes = v.to_le_bytes();
+    let n = n.value(text(crate::formats::util::fmt::fourcc(&bytes)));
+    match crate::formats::util::vidutil::codec_name(&bytes) {
+        Some(name) => n.summary(name),
+        None => n,
+    }
+}
+
+/// The fields of a DIB info header (any version, told apart by its size
+/// field), as a [`Fields`] layout: `parse(cx, span, Endian::Little,
+/// &Compression::FourCC, info_header)` or `struct_node(...)`. Stops where
+/// the header's size or the data ends.
+pub fn info_header(f: &mut Fields<'_>, how: &Compression) -> Result<Info> {
+    let video = *how == Compression::FourCC;
     let peek = f.u32("Size").get().unwrap_or(0);
     f.seek(0);
-    let core = peek == 12;
-    let os2 = is_os2_size(peek);
+    let core = peek == 12 && !video;
+    let os2 = is_os2_size(peek) && !video;
     let size = f
         .u32(if core {
             "bcSize"
@@ -359,10 +437,13 @@ fn info_header(f: &mut Fields<'_>, _: &()) -> Result<Info> {
     if f.remaining() < 4 {
         return Ok(info);
     }
-    info.compression = f
-        .u32(name("biCompression", "ulCompression"))
-        .enumeration(table)
-        .emit()?;
+    info.compression = if video {
+        f.u32("biCompression").with(fourcc_compression).emit()?
+    } else {
+        f.u32(name("biCompression", "ulCompression"))
+            .enumeration(table)
+            .emit()?
+    };
     if f.remaining() < 4 {
         return Ok(info);
     }
@@ -406,7 +487,7 @@ fn info_header(f: &mut Fields<'_>, _: &()) -> Result<Info> {
         os2_tail(f)?;
         return Ok(info);
     }
-    if size < 52 {
+    if size < 52 || video {
         return Ok(info);
     }
     let red = f.u32("bV5RedMask").hex().with(mask_summary).emit()?;
@@ -523,7 +604,7 @@ fn file_header(f: &mut Fields<'_>, _: &()) -> Result<(u16, u32, u32)> {
         .u16(if os2 { "usType" } else { "bfType" })
         .with(|&t, n| {
             let b = t.to_le_bytes();
-            n.value(super::text(String::from_utf8_lossy(&b).into_owned()))
+            n.value(text(String::from_utf8_lossy(&b).into_owned()))
                 .summary(lookup(FILE_TYPES, t.into()).unwrap_or("unknown"))
         })
         .emit()?;
@@ -742,6 +823,12 @@ pub fn describe(info: &Info) -> String {
     out
 }
 
+async fn dissect_dib(cx: Cx, input: Input) -> Result<()> {
+    let info = dib(&cx, input, input.span, None, false).await?;
+    cx.annotate(format!("DIB, {}", describe(&info)));
+    Ok(())
+}
+
 /// Dissects a DIB in `span`: info header, masks, palette and pixels.
 ///
 /// `pixels` is the offset of the pixel array relative to `span` when known
@@ -776,9 +863,10 @@ async fn dib_at_with(
         );
     }
     let header_span = span.sub(0, size.into());
-    let mut info = parse(cx, header_span, LE, &(), info_header).await?;
+    let how = Compression::Bitmap;
+    let mut info = parse(cx, header_span, LE, &how, info_header).await?;
     let mut header =
-        struct_node(info.version(), header_span, LE, (), info_header).summary(describe(&info));
+        struct_node(info.version(), header_span, LE, how, info_header).summary(describe(&info));
     if mask {
         header = header.desc(
             "An OS/2 icon or pointer mask: the AND mask and the XOR mask stacked, so the height is twice the icon's",
@@ -831,7 +919,7 @@ async fn dib_at_with(
         cx.emit(
             Node::new("Linked profile")
                 .span(at)
-                .value(super::text(crate::text::latin1(
+                .value(text(crate::text::latin1(
                     name.split(|&b| b == 0).next().unwrap_or_default(),
                 )))
                 .desc("File name of the ICC profile (Windows-1252, NUL-terminated)"),

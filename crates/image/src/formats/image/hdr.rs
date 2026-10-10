@@ -5,10 +5,11 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 
-use super::{dims, region, text};
+use super::{dims, region};
 
 pub static FORMAT: Format = Format {
     name: "hdr",

@@ -1,0 +1,9 @@
+---
+source: tests/formats.rs
+expression: "common::explore_as(&display_name(&path), &data, Some(format))"
+---
+▾ datasets.iptc — IPTC-IIM datasets  [0x0+0x26]
+    Coded character set: 1b 25 47  |.%G| — UTF-8  [0x0+0x8] → 0x5+0x3
+    Record version: 4  [0x8+0x7] → 0xd+0x2
+    Object name: "Fixture"  [0xf+0xc] → 0x14+0x7
+    Keywords: "sample"  [0x1b+0xb] → 0x20+0x6

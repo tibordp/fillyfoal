@@ -109,7 +109,10 @@ cfb_format!(
     "Windows Installer package",
     ["msi", "msp", "mst"],
     "application/x-msi",
-    |h| probe_root_clsid(h).is_some_and(|c| apps::installer_kind(&c).is_some())
+    |h| probe_root_clsid(h)
+        .is_some_and(
+            |c| apps::installer_kind(&crate::formats::util::datakit::guid_le(&c)).is_some()
+        )
 );
 cfb_format!(
     THUMBS,
