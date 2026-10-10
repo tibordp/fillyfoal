@@ -386,4 +386,62 @@ impl Decoder for Pbz {
         // Chunks are independent streams, and keep their own history.
         out_len
     }
+
+    /// Between chunks, or inside a stored one: then it holds only
+    /// positions. Inside a compressed chunk the chunk's decoder keeps all
+    /// of the chunk's output so far (its dictionary), so no checkpoint is
+    /// offered there; the next chunk boundary serves instead.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        let current = match &self.current {
+            None => None,
+            Some(cur) => match cur.chunk {
+                Chunk::Stored { copied } => Some(Current {
+                    chunk: Chunk::Stored { copied },
+                    ..*cur
+                }),
+                Chunk::Nested(_) | Chunk::Bv4 { .. } => return None,
+            },
+        };
+        Some(Box::new(Pbz {
+            pos: self.pos,
+            algorithm: self.algorithm,
+            current,
+            done: self.done,
+        }))
+    }
+
+    fn state_size(&self) -> usize {
+        size_of::<Self>()
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::{decode_all, verify_checkpoints};
+
+    #[test]
+    fn checkpoints_between_chunks() {
+        // pbzx with 16 KiB chunks (Python 3): four of words.txt, each
+        // lzma.compress(chunk, format=FORMAT_XZ), then 3000 random bytes
+        // stored (they do not compress).
+        let data = include_bytes!("testdata/words.pbzx");
+        let words = include_bytes!("testdata/words.txt");
+        let out = decode_all(&mut Pbz::default(), data, 1 << 20).unwrap();
+        assert_eq!(out.len(), 65536 + 3000);
+        assert_eq!(&out[..65536], &words[..65536]);
+        assert_eq!(&out[65536..], &data[data.len() - 3000..]);
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Pbz::default()), data, 1000, 1).unwrap();
+        // After each compressed chunk, and inside the stored one.
+        assert!(checked >= 6, "{checked}");
+        assert_eq!(largest, size_of::<Pbz>());
+        // None inside a compressed chunk.
+        let mut d = Pbz::default();
+        let mut out = Vec::new();
+        d.decode(data, true, &mut out, 1000, 1 << 20).unwrap();
+        assert!((1000..16384).contains(&out.len()));
+        assert!(d.checkpoint().is_none());
+    }
 }

@@ -464,6 +464,14 @@ impl Decode for Bzip2 {
         // each block is produced.
         out_len
     }
+
+    /// Nothing on the heap: a step decodes whole blocks, so a checkpoint
+    /// always falls between two (a block needs all of its input for the
+    /// inverse BWT, so there is nothing to resume within one), and keeps
+    /// only the bit position and the stream's combined CRC.
+    fn heap_size(&self) -> Option<usize> {
+        Some(0)
+    }
 }
 
 #[cfg(test)]
@@ -487,6 +495,24 @@ mod tests {
             1 << 20,
         );
         assert_eq!(out.unwrap(), b"hello hello hello hello, bzip2!\n".repeat(3));
+    }
+
+    #[test]
+    fn checkpoints_between_blocks() {
+        use crate::codec::pipeline::{Streaming, decode_all, verify_checkpoints};
+        // bzip2 -1 words.txt (bzip2 1.0.8): two 100 kB blocks; twice, so
+        // a stream boundary falls in between too.
+        let one = include_bytes!("testdata/words.bz2");
+        let words = include_bytes!("testdata/words.txt");
+        let data = [&one[..], &one[..]].concat();
+        let out = decode_all(&mut Streaming(Bzip2::default()), &data, 1 << 20).unwrap();
+        assert_eq!(out, [&words[..], &words[..]].concat());
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(Streaming(Bzip2::default())), &data, 1, 1).unwrap();
+        // After each of the four blocks (the last one's end-of-stream
+        // marker is read by the next step).
+        assert_eq!(checked, 4);
+        assert_eq!(largest, size_of::<Bzip2>());
     }
 
     #[test]

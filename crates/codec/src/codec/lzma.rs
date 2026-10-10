@@ -183,6 +183,14 @@ impl Len {
         }
     }
 
+    /// Heap bytes a clone copies.
+    fn heap_size(&self) -> usize {
+        self.low
+            .len()
+            .saturating_add(self.mid.len())
+            .saturating_mul(size_of::<[u16; 8]>())
+    }
+
     fn decode(&mut self, rc: &mut Range<'_>, pos_state: usize) -> Result<u32> {
         if rc.bit(&mut self.choice)? == 0 {
             let t = self
@@ -250,8 +258,12 @@ impl View {
 #[derive(Clone, Copy)]
 struct Bounds {
     view: View,
-    /// The start of the dictionary (back-references stay at or after it).
+    /// The start of the dictionary (back-references stay at or after it),
+    /// and its stream position: positions (for the literal and position
+    /// states) count from the last dictionary reset, and the first literal
+    /// after one has no previous byte, as in liblzma and 7-Zip.
     dict: usize,
+    base: usize,
     /// The end of the stream or chunk, if known.
     end: Option<usize>,
     /// Pause (between symbols) once the buffer reaches this length.
@@ -302,6 +314,17 @@ impl State {
             state: 0,
             reps: [0; 4],
         }
+    }
+
+    /// Heap bytes a clone copies: the literal probabilities (24 KiB with
+    /// lc + lp = 4, up to 6 MiB in `.lzma` with lc + lp = 12) and the
+    /// length coders' tables.
+    fn heap_size(&self) -> usize {
+        self.literal
+            .len()
+            .saturating_mul(size_of::<u16>())
+            .saturating_add(self.len.heap_size())
+            .saturating_add(self.rep_len.heap_size())
     }
 
     /// A match distance (minus one), for a match of length `len` (minus 2).
@@ -363,8 +386,8 @@ impl State {
         let pb_mask = (1usize << self.props.pb).wrapping_sub(1);
         let lp_mask = (1usize << self.props.lp).wrapping_sub(1);
         let lc = self.props.lc;
-        // Bytes before the stream's start are not its own.
-        let first = b.view.index(0);
+        // Bytes before the dictionary's start are not its own.
+        let first = b.dict;
         loop {
             if b.end.is_some_and(|e| out.len() >= e) {
                 return Ok(true);
@@ -375,7 +398,7 @@ impl State {
             if out.len() >= b.stop || rc.pos > b.avail {
                 return Ok(false);
             }
-            let position = b.view.position(out.len());
+            let position = b.view.position(out.len()).wrapping_sub(b.base);
             let pos_state = position & pb_mask;
             let s = self.state;
             let idx = s.wrapping_mul(16).wrapping_add(pos_state);
@@ -507,6 +530,7 @@ impl State {
 }
 
 /// The decoder in progress: probabilities and range coder.
+#[derive(Clone)]
 struct Running {
     state: State,
     rc: Registers,
@@ -519,6 +543,7 @@ struct Running {
 /// uncompressed size, all ones when unknown and the stream ends with a
 /// marker; then the range-coded data), or raw LZMA with known properties
 /// and possibly a known decoded size (7-Zip, ZIP method 14).
+#[derive(Clone)]
 pub struct LzmaStream {
     /// The header length: 13 for `.lzma`, 0 for raw data.
     header: usize,
@@ -637,6 +662,7 @@ impl Decoder for LzmaStream {
         let bounds = Bounds {
             view: r.view,
             dict: r.view.index(0),
+            base: 0,
             end: r.end,
             stop: out.len().saturating_add(step.max(1)),
             avail: if eof {
@@ -723,6 +749,25 @@ impl Decoder for LzmaStream {
             r.end = r.end.map(|e| e.saturating_sub(n));
         }
     }
+
+    /// A clone, once the dictionary size is known (from the `.lzma` header
+    /// or the container), or before decoding starts: without it no output
+    /// is ever released, so a checkpoint would copy all of it.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        if self.running.is_some() && self.dict.is_none() {
+            return None;
+        }
+        Some(Box::new(self.clone()))
+    }
+
+    /// The probabilities (about 16 KiB with the usual lc + lp = 3, 6 MiB
+    /// at most; the window, the dictionary size, is in `out`).
+    fn state_size(&self) -> usize {
+        let running = self.running.as_ref().map_or(0, |r| {
+            size_of::<Running>().saturating_add(r.state.heap_size())
+        });
+        size_of::<Self>().saturating_add(running)
+    }
 }
 
 /// What [`Lzma2::step`] did.
@@ -755,7 +800,11 @@ pub struct Lzma2 {
     /// Input consumed (from the start of the LZMA2 data), up to the chunk
     /// being decoded.
     pos: usize,
+    /// The LZMA state; dropped between chunks when the next one resets it
+    /// (so a checkpoint there is small).
     state: Option<State>,
+    /// The properties last set (what a state reset without new ones uses).
+    props: Option<Props>,
     /// The stream position of the last dictionary reset.
     dict: usize,
     open: Option<Open>,
@@ -802,6 +851,35 @@ impl Lzma2 {
         view.index(self.dict)
     }
 
+    /// Whether a dictionary reset follows (seen ahead) at buffer index
+    /// `out_len`, between chunks.
+    pub fn at_reset(&self, view: View, out_len: usize) -> bool {
+        self.open.is_none() && !self.done && self.dict_start(view) >= out_len
+    }
+
+    /// Heap bytes a clone copies: the LZMA state, when one is kept.
+    pub fn heap_size(&self) -> usize {
+        self.state.as_ref().map_or(0, State::heap_size)
+    }
+
+    /// After a chunk that ended at stream position `position`: if the next
+    /// chunk's control byte is already there and says it resets the
+    /// dictionary or the state, applies that now (it changes nothing that
+    /// chunk will see), so that between the two chunks all output is
+    /// releasable and no state is kept.
+    fn look_ahead(&mut self, input: &[u8], position: usize) {
+        match input.get(self.pos).copied() {
+            Some(0x01) => self.dict = position,
+            Some(c @ 0xa0..=0xff) => {
+                if c >= 0xe0 {
+                    self.dict = position;
+                }
+                self.state = None;
+            }
+            _ => {}
+        }
+    }
+
     /// Decodes more of `input` (the LZMA2 data so far) into `out`, pausing
     /// between symbols once `out` reaches `stop` bytes. `view` locates this
     /// stream in `out`; `limit` bounds `out`'s length.
@@ -841,6 +919,7 @@ impl Lzma2 {
         let bounds = Bounds {
             view,
             dict: view.index(self.dict),
+            base: self.dict,
             end: Some(view.index(open.end)),
             stop,
             avail: if complete {
@@ -855,6 +934,7 @@ impl Lzma2 {
         if st.run(&mut rc, out, bounds)? {
             self.pos = chunk_end;
             self.open = None;
+            self.look_ahead(input, view.position(out.len()));
             return Ok(Chunk::Decoded);
         }
         self.open = Some(Open {
@@ -908,6 +988,7 @@ impl Lzma2 {
                 if out.len() > limit {
                     return Err(Diagnostic::output_limit(limit));
                 }
+                self.look_ahead(input, view.position(out.len()));
                 Ok(Chunk::Decoded)
             }
             0x80..=0xff => {
@@ -938,12 +1019,11 @@ impl Lzma2 {
                     if props.lc.saturating_add(props.lp) > 4 {
                         return Err(bad("lc + lp exceeds 4"));
                     }
+                    self.props = Some(props);
                     self.state = Some(State::new(props));
                 } else if reset == 1 {
                     let props = self
-                        .state
-                        .as_ref()
-                        .map(|s| s.props)
+                        .props
                         .ok_or_else(|| bad("state reset before properties"))?;
                     self.state = Some(State::new(props));
                 }
@@ -974,7 +1054,7 @@ impl Lzma2 {
 }
 
 /// Raw LZMA2 (7-Zip) as a [`Decoder`].
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct Lzma2Stream {
     core: Lzma2,
     view: Option<View>,
@@ -1022,6 +1102,11 @@ impl Decoder for Lzma2Stream {
             }
             match self.core.step(input, eof, out, view, target, limit)? {
                 Chunk::End => return Ok(Status::Done),
+                // Pause where the dictionary resets, for a checkpoint there
+                // to be nearly free.
+                Chunk::Decoded if out.len() > mark && self.core.at_reset(view, out.len()) => {
+                    return Ok(Status::More);
+                }
                 Chunk::Decoded => {}
                 Chunk::NeedInput if out.len() > mark => return Ok(Status::More),
                 Chunk::NeedInput => return Ok(Status::NeedInput),
@@ -1062,6 +1147,18 @@ impl Decoder for Lzma2Stream {
         if let Some(v) = self.view.as_mut() {
             v.dropped = v.dropped.saturating_add(n);
         }
+    }
+
+    /// A clone: the window (the dictionary size, or everything since the
+    /// last dictionary reset when the size is not known) is in `out`.
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        Some(Box::new(self.clone()))
+    }
+
+    /// The LZMA state (about 16 KiB with lc + lp = 3, 28 KiB with 4; none
+    /// between chunks when the next one resets it).
+    fn state_size(&self) -> usize {
+        size_of::<Self>().saturating_add(self.core.heap_size())
     }
 }
 
@@ -1296,6 +1393,8 @@ impl Decoder for PostFilter {
             )));
         }
         out.extend_from_slice(self.buf.get(..done).unwrap_or_default());
+        // Scratch only: nothing for a checkpoint to copy.
+        self.buf.clear();
         self.at = self.at.saturating_add(done);
         Ok(if last && self.at >= input.len() {
             Status::Done
@@ -1320,8 +1419,19 @@ impl Decoder for PostFilter {
         self.at = self.at.saturating_sub(n);
     }
 
+    /// All of it: the filter never reads its output, and the bytes it
+    /// holds back are input it has not consumed yet.
     fn releasable_output(&self, out_len: usize) -> usize {
         out_len
+    }
+
+    fn checkpoint(&self) -> Option<Box<dyn Decoder>> {
+        Some(Box::new(self.clone()))
+    }
+
+    /// The filter's few registers (and Delta's 256 bytes of history).
+    fn state_size(&self) -> usize {
+        size_of::<Self>().saturating_add(self.buf.len())
     }
 }
 
@@ -1366,6 +1476,154 @@ fn arm64(buf: &mut [u8], pos: u64) {
             instr |= (dest & 0x0003_fffc) << 3;
             instr |= 0u32.wrapping_sub(dest & 0x0002_0000) & 0x00e0_0000;
             *w = instr.to_le_bytes();
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::indexing_slicing)]
+mod tests {
+    use super::*;
+    use crate::codec::pipeline::{decode_all, verify_checkpoints};
+
+    const WORDS: &[u8] = include_bytes!("testdata/words.txt");
+
+    #[test]
+    fn lzma_alone_checkpoints() {
+        // lzma.compress(words, format=FORMAT_ALONE, filters=[{"id":
+        // FILTER_LZMA1, "dict_size": 1 << 16}]) (Python 3, liblzma)
+        let data = include_bytes!("testdata/words.lzma");
+        let out = decode_all(&mut LzmaStream::alone(), data, 1 << 20).unwrap();
+        assert_eq!(out, WORDS);
+        let (checked, largest) =
+            verify_checkpoints(|| Box::new(LzmaStream::alone()), data, 4096, 1).unwrap();
+        assert!(checked > 20, "{checked}");
+        // lc = 3: 0x300 << 3 literal probabilities, plus the rest.
+        assert!((12 << 10..20 << 10).contains(&largest), "{largest}");
+        // The window is the 64 KiB dictionary.
+        let mut d = LzmaStream::alone();
+        let mut out = Vec::new();
+        while out.len() < 100_000 {
+            d.decode(data, true, &mut out, 4096, 1 << 20).unwrap();
+        }
+        assert_eq!(out.len() - d.releasable_output(out.len()), 1 << 16);
+    }
+
+    #[test]
+    fn raw_lzma_without_dictionary_size_is_not_checkpointed() {
+        let data = include_bytes!("testdata/words.lzma");
+        let props = Props::from_byte(data[0]).unwrap();
+        let mut d = LzmaStream::raw(props, Some(WORDS.len()), None);
+        let mut out = Vec::new();
+        d.decode(&data[13..], true, &mut out, 4096, 1 << 20)
+            .unwrap();
+        assert!(d.checkpoint().is_none());
+        let (checked, _) = verify_checkpoints(
+            || Box::new(LzmaStream::raw(props, Some(WORDS.len()), Some(1 << 16))),
+            &data[13..],
+            4096,
+            1,
+        )
+        .unwrap();
+        assert!(checked > 20, "{checked}");
+    }
+
+    #[test]
+    fn lzma2_dictionary_reset_mid_stream() {
+        // Two raw LZMA2 streams joined, the first without its end marker:
+        // lzma.compress(words[:30001], format=FORMAT_RAW, filters=f)[:-1] +
+        // lzma.compress(words[30001:60000], format=FORMAT_RAW, filters=f),
+        // f = [{"id": FILTER_LZMA2, "dict_size": 1 << 16}]. The second
+        // part starts with a dictionary reset at an odd position: positions
+        // count from it, and its first literal has no previous byte (xz
+        // decodes it to the same).
+        let data = include_bytes!("testdata/words-resets.lzma2");
+        let make = || Lzma2Stream::new(Some(1 << 16));
+        let out = decode_all(&mut make(), data, 1 << 20).unwrap();
+        assert_eq!(out, &WORDS[..60000]);
+        let (checked, largest) = verify_checkpoints(|| Box::new(make()), data, 1000, 1).unwrap();
+        assert!(checked > 50, "{checked}");
+        assert!((12 << 10..20 << 10).contains(&largest), "{largest}");
+        // Decoding pauses at the reset, where all output is releasable and
+        // no LZMA state is kept.
+        let mut d = make();
+        let mut out = Vec::new();
+        let mut free = false;
+        while d.decode(data, true, &mut out, 7000, 1 << 20).unwrap() == Status::More {
+            if out.len() == 30001 {
+                assert_eq!(d.releasable_output(out.len()), out.len());
+                assert_eq!(d.state_size(), size_of::<Lzma2Stream>());
+                free = true;
+            }
+        }
+        assert!(free);
+    }
+
+    #[test]
+    fn lzma2_chunk_kinds() {
+        // Raw LZMA2 put together from liblzma's output (Python 3):
+        //   lzma.compress(words[:30000], FORMAT_RAW, f)[:-1]   0xE0 chunk
+        //   stored chunk 0x02 of 4999 random bytes and a 0
+        //   lzma.compress(words[30000:50000], FORMAT_RAW, f), its control
+        //     byte made 0xA0 (state reset only) and its props byte dropped
+        //   stored chunk 0x01 (dictionary reset) of 2999 random bytes and a 0
+        //   lzma.compress(words[50000:60000], FORMAT_RAW, f), its control
+        //     byte made 0xC0 (state reset with properties)
+        // with f = [{"id": FILTER_LZMA2, "dict_size": 1 << 16}]. Each part
+        // encoded alone refers only to itself, its start is a multiple of 4
+        // and the byte before it is 0, so it decodes the same (xz agrees).
+        let data = include_bytes!("testdata/words-chunks.lzma2");
+        let make = || Lzma2Stream::new(Some(1 << 16));
+        let out = decode_all(&mut make(), data, 1 << 20).unwrap();
+        let mut expected = WORDS[..30000].to_vec();
+        expected.extend_from_slice(&data[3297..8297]);
+        expected.extend_from_slice(&WORDS[30000..50000]);
+        expected.extend_from_slice(&data[10537..13537]);
+        expected.extend_from_slice(&WORDS[50000..60000]);
+        assert_eq!(out, expected);
+        let (checked, largest) = verify_checkpoints(|| Box::new(make()), data, 700, 1).unwrap();
+        assert!(checked > 80, "{checked}");
+        assert!((12 << 10..20 << 10).contains(&largest), "{largest}");
+        // Between chunks: the state is dropped before each reset, and all
+        // output is releasable before the dictionary reset.
+        let mut d = make();
+        let mut out = Vec::new();
+        let mut seen = 0;
+        while d.decode(data, true, &mut out, 1000, 1 << 20).unwrap() == Status::More {
+            match out.len() {
+                35000 => {
+                    assert_eq!(d.state_size(), size_of::<Lzma2Stream>());
+                    seen += 1;
+                }
+                55000 => {
+                    assert_eq!(d.releasable_output(out.len()), out.len());
+                    seen += 1;
+                }
+                58000 => {
+                    assert_eq!(d.state_size(), size_of::<Lzma2Stream>());
+                    seen += 1;
+                }
+                _ => {}
+            }
+        }
+        assert_eq!(seen, 3);
+    }
+
+    #[test]
+    fn post_filter_checkpoints() {
+        // Delta (distance 2) over a few kilobytes, as a stand-alone stage.
+        let raw = &WORDS[..5000];
+        let mut encoded = raw.to_vec();
+        for i in (2..encoded.len()).rev() {
+            encoded[i] = encoded[i].wrapping_sub(encoded[i - 2]);
+        }
+        let out = decode_all(&mut PostFilter::new(Post::Delta(2)), &encoded, 1 << 20).unwrap();
+        assert_eq!(out, raw);
+        for post in [Post::Delta(2), Post::X86, Post::Arm, Post::Arm64] {
+            let (checked, largest) =
+                verify_checkpoints(|| Box::new(PostFilter::new(post)), &encoded, 100, 1).unwrap();
+            assert!(checked > 20, "{checked}");
+            assert_eq!(largest, size_of::<PostFilter>());
         }
     }
 }
