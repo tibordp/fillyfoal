@@ -11,27 +11,17 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::system::bom::{Bom, BomHeader, TreeWalk, read_bom};
 use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // NIBArchive (compiled .nib)
@@ -462,7 +452,7 @@ async fn metal_function(
     cx.emit(
         Node::new("Entry size")
             .span(span.sub(0, 4))
-            .value(uint(span.len)),
+            .value(uint(span.len, 64)),
     );
     let mut size = None;
     let mut offset = None;
@@ -486,58 +476,6 @@ async fn metal_function(
 
 // ---------------------------------------------------------------------------
 // Compiled asset catalog (Assets.car)
-
-/// The BOMStore's named blocks (variables) and its block index.
-struct Bom {
-    input: Input,
-    file: Span,
-    index: Vec<u8>,
-    vars: Vec<(String, u32, Span)>,
-}
-
-impl Bom {
-    fn block(&self, id: u32) -> Option<Span> {
-        let at = to_usize(u64::from(id).saturating_mul(8)).saturating_add(4);
-        let offset = u32_be(&self.index, at)?;
-        let len = u32_be(&self.index, at.saturating_add(4))?;
-        Some(self.file.sub(offset.into(), len.into()))
-    }
-
-    fn var(&self, name: &str) -> Option<Span> {
-        self.vars
-            .iter()
-            .find(|v| v.0 == name)
-            .and_then(|v| self.block(v.1))
-    }
-}
-
-async fn read_bom(cx: &Cx, input: Input) -> Result<Bom> {
-    let file = input.span;
-    let head = cx.read(file.sub(0, 32)).await?;
-    let index_at = u32_be(&head, 16).unwrap_or(0);
-    let index_len = u32_be(&head, 20).unwrap_or(0);
-    let vars_at = u32_be(&head, 24).unwrap_or(0);
-    let vars_len = u32_be(&head, 28).unwrap_or(0);
-    let index = cx
-        .read(file.sub_exact(index_at.into(), index_len.into())?)
-        .await?;
-    let mut cur = Cursor::new(cx, file.sub(vars_at.into(), vars_len.into()), BE);
-    let count = cur.u32().await?;
-    let mut vars = Vec::new();
-    for _ in 0..count.min(1024) {
-        let start = cur.pos();
-        let block = cur.u32().await?;
-        let len = cur.u8().await?;
-        let name = String::from_utf8_lossy(&cur.bytes(len.into()).await?).into_owned();
-        vars.push((name, block, cur.since(start)));
-    }
-    Ok(Bom {
-        input,
-        file,
-        index,
-        vars,
-    })
-}
 
 fn car_probe(h: &Head<'_>) -> bool {
     h.starts_with(b"BOMStore")
@@ -632,11 +570,11 @@ fn csi_header(f: &mut Fields<'_>, _: &()) -> Result<(String, u32, u32, u32, Stri
 
 async fn car(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    cx.emit(
-        Node::new("BOM header")
-            .span(file.sub(0, 32))
-            .lazy(bom_header, file),
-    );
+    cx.emit(BomHeader::node(
+        "BOM header",
+        file.sub(0, BomHeader::SIZE),
+        BE,
+    ));
     let bom = Arc::new(read_bom(&cx, input).await?);
     let mut renditions = 0u32;
     let mut tokens = Vec::new();
@@ -685,19 +623,6 @@ async fn car(cx: Cx, input: Input) -> Result<()> {
     Ok(())
 }
 
-async fn bom_header(cx: Cx, file: Span) -> Result<()> {
-    let block = cx.block(file.sub(0, 32)).await?;
-    let mut f = Fields::emitting(&cx, &block, BE);
-    f.ascii("Magic", 8).emit()?;
-    f.u32("Version").emit()?;
-    f.u32("Non-null blocks").emit()?;
-    f.u32("Block index offset").hex().emit()?;
-    f.u32("Block index length").emit()?;
-    f.u32("Variables offset").hex().emit()?;
-    f.u32("Variables length").emit()?;
-    Ok(())
-}
-
 async fn key_format(cx: Cx, (span, tokens): (Span, Arc<Vec<u32>>)) -> Result<()> {
     let block = cx.block(span.sub(0, 12)).await?;
     let mut f = Fields::emitting(&cx, &block, LE);
@@ -719,61 +644,19 @@ async fn key_format(cx: Cx, (span, tokens): (Span, Arc<Vec<u32>>)) -> Result<()>
     Ok(())
 }
 
-/// Most tree pages followed.
-const MAX_PAGES: usize = 100_000;
-
 async fn renditions_tree(
     cx: Cx,
     (bom, block, tokens): (Arc<Bom>, u32, Arc<Vec<u32>>),
 ) -> Result<()> {
-    let tree = bom
-        .block(block)
-        .ok_or_else(|| Diagnostic::malformed("missing tree block"))?;
-    let head = cx.read(tree.sub(0, 21)).await?;
-    if head.get(..4) != Some(b"tree") {
-        return Err(Diagnostic::malformed("not a BOM tree").at(tree.sub(0, 4)));
-    }
-    let mut page = u32_be(&head, 8).unwrap_or(0);
-    let paths = u32_be(&head, 16).unwrap_or(0);
+    let mut walk = TreeWalk::new(&cx, &bom, block).await?;
     cx.emit(
         Node::new("Tree header")
-            .span(tree)
-            .summary(format!("root page {page}, {paths} paths")),
+            .span(walk.span)
+            .summary(format!("root page {}, {} paths", walk.root, walk.paths)),
     );
-    // Descend to the leftmost leaf, then follow the leaves' forward links.
-    let mut visited = std::collections::BTreeSet::new();
-    loop {
-        if !visited.insert(page) || visited.len() > MAX_PAGES {
-            return Err(Diagnostic::malformed(format!("tree page {page} revisited")));
-        }
-        let span = bom
-            .block(page)
-            .ok_or_else(|| Diagnostic::malformed(format!("missing page {page}")))?;
-        let h = cx.read(span.sub(0, 12)).await?;
-        let leaf = u16::from_be_bytes([
-            h.first().copied().unwrap_or(0),
-            h.get(1).copied().unwrap_or(0),
-        ]) != 0;
-        let count = crate::bytes::u16_be(&h, 2).unwrap_or(0);
-        let forward = u32_be(&h, 4).unwrap_or(0);
-        let entries = cx
-            .read(span.sub_exact(12, u64::from(count).saturating_mul(8))?)
-            .await?;
-        if !leaf {
-            page = u32_be(&entries, 0)
-                .ok_or_else(|| Diagnostic::malformed("empty index page").at(span))?;
-            continue;
-        }
-        for i in 0..usize::from(count) {
-            let value = u32_be(&entries, i.saturating_mul(8)).unwrap_or(0);
-            let key = u32_be(&entries, i.saturating_mul(8).saturating_add(4)).unwrap_or(0);
-            cx.push(rendition_node(&cx, &bom, key, value, &tokens).await?)
-                .await;
-        }
-        if forward == 0 {
-            break;
-        }
-        page = forward;
+    while let Some((value, key)) = walk.next(&cx, &bom).await? {
+        cx.push(rendition_node(&cx, &bom, key, value, &tokens).await?)
+            .await;
     }
     Ok(())
 }

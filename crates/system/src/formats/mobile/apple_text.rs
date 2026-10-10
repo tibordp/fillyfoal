@@ -10,14 +10,10 @@ use crate::formats::text::encoding::prepare;
 use crate::formats::text::probe::{self, contains, significant, trim_start};
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{json, yaml};
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // .strings

@@ -2,13 +2,15 @@
 //! Snes9x, FCEUX, RetroArch, Dolphin DTM, SMV, VBM, FCM, M64, GMV, FM2,
 //! PlayStation and PlayStation 2 memory cards, DexDrive and GameCube GCI.
 
-use super::util::{clean, hex, is_ascii_text, lines, size, text};
+use super::util::{clean, is_ascii_text, lines};
 use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -279,9 +281,9 @@ async fn fceux_vars(cx: Cx, data: Span) -> Result<()> {
         .span(cur.since(start))
         .target(value);
         node = match len {
-            1 => node.value(hex(raw.first().copied().unwrap_or(0).into(), 8)),
-            2 => node.value(hex(u16_le(&raw, 0).unwrap_or(0).into(), 16)),
-            4 => node.value(hex(u32_le(&raw, 0).unwrap_or(0).into(), 32)),
+            1 => node.value(hex(raw.first().copied().unwrap_or(0), 8)),
+            2 => node.value(hex(u16_le(&raw, 0).unwrap_or(0), 16)),
+            4 => node.value(hex(u32_le(&raw, 0).unwrap_or(0), 32)),
             8 => node.value(hex(crate::bytes::u64_le(&raw, 0).unwrap_or(0), 64)),
             _ => node.summary(format!("{len} bytes")),
         };

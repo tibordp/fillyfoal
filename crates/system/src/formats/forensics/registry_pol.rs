@@ -5,32 +5,19 @@ use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::forensics::regf::VALUE_TYPES;
+use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
-use crate::value::{EnumTable, Value, lookup};
+use crate::value::lookup;
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // Group Policy Registry.pol
 
 declare_format!(pub REGISTRY_POL = "registry-pol", "Group Policy registry settings (Registry.pol)", ["pol"], "application/x-registry-pol",
     Probe::Magic(&[(0, b"PReg\x01\0\0\0")]), registry_pol);
-
-const REG_TYPES: EnumTable = &[
-    (0, "REG_NONE"),
-    (1, "REG_SZ"),
-    (2, "REG_EXPAND_SZ"),
-    (3, "REG_BINARY"),
-    (4, "REG_DWORD"),
-    (5, "REG_DWORD_BIG_ENDIAN"),
-    (7, "REG_MULTI_SZ"),
-    (11, "REG_QWORD"),
-];
 
 async fn registry_pol(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
@@ -85,7 +72,7 @@ async fn registry_pol(cx: Cx, input: Input) -> Result<()> {
                 to_u64(at.saturating_sub(start)),
             ))
             .value(text(shown))
-            .summary(lookup(REG_TYPES, kind.into()).unwrap_or("unknown type")),
+            .summary(lookup(VALUE_TYPES, kind.into()).unwrap_or("unknown type")),
         )
         .await;
     }

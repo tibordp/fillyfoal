@@ -2,13 +2,14 @@
 //! CSW, C64 TAP, G64, PC64 P00, SCL, TR-DOS, MSX CAS, Oric TAP, Atari CAR
 //! and Atari ST executables.
 
-use super::util::{dec, hex, size, text};
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -352,7 +353,7 @@ async fn g64_tracks(cx: Cx, (file, offsets, speeds): (Span, Span, Span)) -> Resu
                 if track % 2 == 1 { ".5" } else { "" }
             ))
             .span(file.sub(at, len.saturating_add(2)))
-            .value(dec(len, 16))
+            .value(uint(len, 16))
             .summary(format!("{len} GCR bytes, speed zone {zone}")),
         )
         .await;
@@ -450,9 +451,7 @@ async fn scl(cx: Cx, input: Input) -> Result<()> {
     {
         let all = cx.read(file.sub(0, at)).await?;
         let sum = all.iter().fold(0u32, |s, &b| s.wrapping_add(b.into()));
-        let node = Node::new("Checksum")
-            .span(sum_span)
-            .value(hex(stored.into(), 32));
+        let node = Node::new("Checksum").span(sum_span).value(hex(stored, 32));
         cx.emit(if sum == stored {
             node.summary("valid")
         } else {

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ dk.col — ColecoVision "DONKEY KONG" (PRESENTS COLECO, 1982), 8 KiB, start 0x8040  [0x0+0x2000]
+▾ dk.col — ColecoVision "DONKEY KONG" (PRESENTS COLECO, 1982), 8.0 KiB, start 0x8040  [0x0+0x2000]
     Magic: show title screen (0x55aa)  [0x0+0x2]
     Sprite name table: 0x7000  [0x2+0x2]
     Sprite order table: 0x7020  [0x4+0x2]

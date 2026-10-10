@@ -57,34 +57,16 @@ const SUMMARY_READ: u64 = 4096;
 // ---------------------------------------------------------------------------
 // Shared: 7-bit encoded integers and length-prefixed strings
 
-/// .NET's `Read7BitEncodedInt`: up to five bytes, low groups first.
+/// .NET's `Read7BitEncodedInt`: an unsigned LEB128 holding a 32-bit value.
 fn read7(r: &mut Reader<'_>) -> Option<u32> {
-    let mut value = 0u32;
-    for i in 0..5u32 {
-        let b = r.u8()?;
-        value |= u32::from(b & 0x7f)
-            .checked_shl(i.saturating_mul(7))
-            .unwrap_or(0);
-        if b & 0x80 == 0 {
-            return Some(value);
-        }
-    }
-    None
+    r.uleb().and_then(|v| u32::try_from(v).ok())
 }
 
 async fn cursor7(cur: &mut Cursor<'_>) -> Result<u32> {
     let start = cur.pos();
-    let mut value = 0u32;
-    for i in 0..5u32 {
-        let b = cur.u8().await?;
-        value |= u32::from(b & 0x7f)
-            .checked_shl(i.saturating_mul(7))
-            .unwrap_or(0);
-        if b & 0x80 == 0 {
-            return Ok(value);
-        }
-    }
-    Err(Diagnostic::malformed("bad 7-bit encoded length").at(cur.since(start)))
+    let value = cur.uleb128().await?;
+    u32::try_from(value)
+        .map_err(|_| Diagnostic::malformed("bad 7-bit encoded length").at(cur.since(start)))
 }
 
 /// A `BinaryWriter` string: 7-bit byte count, then UTF-8.

@@ -16,12 +16,6 @@ use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::Value;
 
-fn unix_time(seconds: i64) -> Value {
-    Value::Timestamp {
-        unix_seconds: seconds,
-    }
-}
-
 fn first_line<'a>(h: &'a Head<'_>) -> &'a [u8] {
     let d = strip_bom(h.data);
     let line = d.split(|&b| b == b'\n').next().unwrap_or_default();
@@ -32,6 +26,9 @@ fn digits(s: &[u8]) -> bool {
     !s.is_empty() && s.iter().all(u8::is_ascii_digit)
 }
 
+use crate::formats::forensics::unix::unix_time;
+use crate::formats::text::piece::Piece;
+use crate::formats::text::xml;
 use crate::text::url::percent_decode;
 
 /// One history entry: lines, optional time, and the command text.
@@ -475,21 +472,15 @@ struct BookmarkTree {
     roots: Vec<usize>,
 }
 
-/// The value of `name="..."` inside a tag (case-insensitive name).
+/// The value of attribute `name` (case-insensitive) in a start tag that
+/// begins with `<`.
 fn attr(tag: &str, name: &str) -> Option<String> {
-    let lower = tag.to_ascii_lowercase();
-    let key = format!("{}=\"", name.to_ascii_lowercase());
-    let at = lower.find(&key)?.saturating_add(key.len());
-    let rest = tag.get(at..)?;
-    Some(rest.split('"').next()?.to_owned())
-}
-
-fn unescape_html(s: &str) -> String {
-    s.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
+    let piece = Piece::new(tag.as_bytes(), Span::new(crate::span::SourceId(0), 0, 0));
+    xml::attributes(piece)
+        .into_iter()
+        .find(|a| a.name.bytes().eq_ignore_ascii_case(name.as_bytes()))
+        .and_then(|a| a.value)
+        .map(|v| xml::decode_entities(&v.text(), true))
 }
 
 async fn parse_bookmarks(cx: &Cx, data: &str) -> BookmarkTree {
@@ -534,7 +525,8 @@ async fn parse_bookmarks(cx: &Cx, data: &str) -> BookmarkTree {
                 .get(i..)
                 .and_then(|r| r.find(end_tag))
                 .map_or(data.len(), |e| i.saturating_add(e));
-            let title = unescape_html(data.get(i..text_end).unwrap_or_default().trim());
+            let title =
+                xml::decode_entities(data.get(i..text_end).unwrap_or_default().trim(), true);
             let item = Bookmark {
                 title,
                 href: if end_tag == "</a>" {

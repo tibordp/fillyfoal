@@ -9,49 +9,18 @@ use crate::declare_format;
 use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::binutil::get;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
-use crate::value::{EnumTable, Radix, Value};
+use crate::text::until_nul;
+use crate::value::EnumTable;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
-
 fn bom(b: &[u8]) -> Endian {
     if b == b"\xfe\xff" { BE } else { LE }
-}
-
-fn read_u32(b: &[u8], at: usize, e: Endian) -> u32 {
-    if e == BE {
-        u32_be(b, at)
-    } else {
-        u32_le(b, at)
-    }
-    .unwrap_or(0)
-}
-
-fn read_u16(b: &[u8], at: usize, e: Endian) -> u16 {
-    if e == BE {
-        u16_be(b, at)
-    } else {
-        u16_le(b, at)
-    }
-    .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -82,7 +51,7 @@ async fn bfres(cx: Cx, input: Input) -> Result<()> {
         // Switch: "FRES    ", version, BOM, alignment, address size,
         // file name offset, flags, block offset, relocation table, size.
         let e = bom(head.get(12..14).unwrap_or_default());
-        let version = read_u32(&head, 8, e);
+        let version = get::<u32>(&head, 8, e).unwrap_or(0);
         cx.emit(Node::new("Signature").span(file.sub(0, 8)));
         cx.emit(
             Node::new("Version")
@@ -168,11 +137,11 @@ async fn bntx(cx: Cx, input: Input) -> Result<()> {
     f.u32("Relocation table offset").hex().emit()?;
     f.u32("File size").emit()?;
     f.ascii("Target", 4).emit()?;
-    let textures = read_u32(&head, 0x24, e);
+    let textures = get::<u32>(&head, 0x24, e).unwrap_or(0);
     cx.emit(
         Node::new("Textures")
             .span(file.sub(0x24, 4))
-            .value(uint(textures.into(), 32)),
+            .value(uint(textures, 32)),
     );
     cx.emit(Node::new("Texture info and data").span(file.tail(0x28)));
     cx.annotate(format!(
@@ -194,8 +163,8 @@ fn byml_probe(h: &Head<'_>) -> bool {
     } else {
         return false;
     };
-    let version = read_u16(h.data, 2, e);
-    let keys = read_u32(h.data, 4, e);
+    let version = get::<u16>(h.data, 2, e).unwrap_or(0);
+    let keys = get::<u32>(h.data, 4, e).unwrap_or(0);
     (1..=10).contains(&version) && (keys == 0 || (keys >= 16 && u64::from(keys) < h.len))
 }
 
@@ -241,7 +210,7 @@ async fn byml(cx: Cx, input: Input) -> Result<()> {
             continue;
         }
         let h = cx.read(file.sub_exact(at.into(), 4)?).await?;
-        let n = read_u32(&h, 0, e) & 0xff_ffff;
+        let n = get::<u32>(&h, 0, e).unwrap_or(0) & 0xff_ffff;
         if name == "Key table" {
             key_count = n;
         }
@@ -258,7 +227,7 @@ async fn byml(cx: Cx, input: Input) -> Result<()> {
     if root != 0 {
         let h = cx.read(file.sub_exact(root.into(), 4)?).await?;
         root_kind = byml_type(h.first().copied().unwrap_or(0));
-        let n = read_u32(&h, 0, e) & 0xff_ffff;
+        let n = get::<u32>(&h, 0, e).unwrap_or(0) & 0xff_ffff;
         cx.emit(
             Node::new("Root node")
                 .span(file.sub(root.into(), 4))
@@ -305,13 +274,13 @@ async fn msbt(cx: Cx, input: Input) -> Result<()> {
     for _ in 0..sections {
         let h = cx.read(file.sub_exact(pos, 16)?).await?;
         let id = String::from_utf8_lossy(h.get(..4).unwrap_or_default()).into_owned();
-        let size = u64::from(read_u32(&h, 4, e));
+        let size = u64::from(get::<u32>(&h, 4, e).unwrap_or(0));
         let mut node = Node::new(id.clone())
             .span(file.sub(pos, size.saturating_add(16)))
             .summary(format!("{size} bytes"));
         if matches!(id.as_str(), "TXT2" | "LBL1" | "ATR1" | "NLI1" | "TXTW") {
             let c = cx.read(file.sub_exact(pos.saturating_add(16), 4)?).await?;
-            let n = read_u32(&c, 0, e);
+            let n = get::<u32>(&c, 0, e).unwrap_or(0);
             if id == "TXT2" || id == "TXTW" {
                 messages = n;
             }
@@ -373,19 +342,19 @@ async fn cgfx(cx: Cx, input: Input) -> Result<()> {
         .await?;
     let mut parts = Vec::new();
     for (i, name) in CGFX_DICTS.iter().enumerate() {
-        let n = read_u32(&d, 8usize.saturating_add(i.saturating_mul(8)), e);
+        let n = get::<u32>(&d, 8usize.saturating_add(i.saturating_mul(8)), e).unwrap_or(0);
         if n > 0 {
             parts.push(format!("{n} {}", name.to_lowercase()));
         }
     }
     cx.emit(
         Node::new("DATA")
-            .span(file.sub(data_at, u64::from(read_u32(&d, 4, e))))
+            .span(file.sub(data_at, u64::from(get::<u32>(&d, 4, e).unwrap_or(0))))
             .summary(parts.join(", ")),
     );
     cx.emit(
         Node::new("Other blocks")
-            .span(file.tail(data_at.saturating_add(u64::from(read_u32(&d, 4, e))))),
+            .span(file.tail(data_at.saturating_add(u64::from(get::<u32>(&d, 4, e).unwrap_or(0))))),
     );
     cx.annotate(format!("CGFX r{revision:#x}: {}", parts.join(", ")));
     Ok(())
@@ -464,7 +433,7 @@ async fn rarc(cx: Cx, input: Input) -> Result<()> {
     let strings = cx
         .read(file.sub_exact(base.saturating_add(strings_rel.into()), strings_len.into())?)
         .await?;
-    let name_at = |off: u16| zstr(strings.get(usize::from(off)..).unwrap_or_default());
+    let name_at = |off: u16| until_nul(strings.get(usize::from(off)..).unwrap_or_default());
     let table = file.sub(
         base.saturating_add(entries_rel.into()),
         u64::from(entries).saturating_mul(20),
@@ -552,10 +521,10 @@ async fn gim(cx: Cx, input: Input) -> Result<()> {
     let mut images = Vec::new();
     while pos.saturating_add(16) <= file.len {
         let h = cx.read(file.sub(pos, 16)).await?;
-        let kind = read_u16(&h, 0, e);
-        let size = u64::from(read_u32(&h, 4, e));
-        let next = u64::from(read_u32(&h, 8, e));
-        let data = u64::from(read_u32(&h, 12, e));
+        let kind = get::<u16>(&h, 0, e).unwrap_or(0);
+        let size = u64::from(get::<u32>(&h, 4, e).unwrap_or(0));
+        let next = u64::from(get::<u32>(&h, 8, e).unwrap_or(0));
+        let data = u64::from(get::<u32>(&h, 12, e).unwrap_or(0));
         let mut node = Node::new(gim_block(kind))
             .span(file.sub(pos, size))
             .summary(format!("{size} bytes"));
@@ -563,9 +532,9 @@ async fn gim(cx: Cx, input: Input) -> Result<()> {
             let d = cx
                 .read_avail(file.sub(pos.saturating_add(data), 16))
                 .await?;
-            let format = read_u16(&d, 4, e);
-            let w = read_u16(&d, 8, e);
-            let hgt = read_u16(&d, 10, e);
+            let format = get::<u16>(&d, 4, e).unwrap_or(0);
+            let w = get::<u16>(&d, 8, e).unwrap_or(0);
+            let hgt = get::<u16>(&d, 10, e).unwrap_or(0);
             let fmt = [
                 "RGBA5650", "RGBA5551", "RGBA4444", "RGBA8888", "index4", "index8", "index16",
                 "index32", "DXT1", "DXT3", "DXT5",
@@ -822,30 +791,30 @@ async fn xact(cx: Cx, input: Input) -> Result<()> {
         BE
     };
     let head = cx.read(file.sub(0, 0x70)).await?;
-    let content = read_u16(&head, 4, e);
-    let tool = read_u16(&head, 6, e);
+    let content = get::<u16>(&head, 4, e).unwrap_or(0);
+    let tool = get::<u16>(&head, 6, e).unwrap_or(0);
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
     cx.emit(
         Node::new("Content version")
             .span(file.sub(4, 2))
-            .value(uint(content.into(), 16)),
+            .value(uint(content, 16)),
     );
     cx.emit(
         Node::new("Tool version")
             .span(file.sub(6, 2))
-            .value(uint(tool.into(), 16)),
+            .value(uint(tool, 16)),
     );
     let (kind, summary) = if magic == b"SDBK" || magic == b"KBDS" {
         // The sound bank's name is 64 bytes at 0x4a (content version 46).
-        let name = zstr(
+        let name = until_nul(
             head.get(0x4a..0x8a)
                 .unwrap_or(head.get(0x4a..).unwrap_or_default()),
         );
-        let cues = read_u16(&head, 0x13, e);
+        let cues = get::<u16>(&head, 0x13, e).unwrap_or(0);
         ("sound bank", format!("{name:?}, {cues} simple cues"))
     } else {
-        let categories = read_u16(&head, 0x12, e);
-        let variables = read_u16(&head, 0x14, e);
+        let categories = get::<u16>(&head, 0x12, e).unwrap_or(0);
+        let variables = get::<u16>(&head, 0x14, e).unwrap_or(0);
         (
             "global settings",
             format!("{categories} categories, {variables} variables"),
@@ -887,7 +856,7 @@ async fn sega_texture(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Global index")
                 .span(file.sub(0, len.saturating_add(8)))
-                .value(uint(u32_be(&index, 0).unwrap_or(0).into(), 32)),
+                .value(uint(u32_be(&index, 0).unwrap_or(0), 32)),
         );
         pos = len.saturating_add(8);
     }

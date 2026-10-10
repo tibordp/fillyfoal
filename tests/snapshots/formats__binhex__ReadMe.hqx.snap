@@ -10,7 +10,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Version: 0  [#1:0x7+0x1]
     File type: "TEXT"  [#1:0x8+0x4]
     Creator: "ttxt"  [#1:0xc+0x4]
-    Finder flags: 0x100  [#1:0x10+0x2]
+    Finder flags: 0x100 [hasBeenInited]  [#1:0x10+0x2]
     Data fork length: 23  [#1:0x12+0x4]
     Resource fork length: 321  [#1:0x16+0x4]
     Header CRC: 0xd201  [#1:0x1a+0x2]

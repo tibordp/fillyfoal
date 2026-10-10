@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ pokemon.gbx — GBX v1.0 "POCKET MONSTERS", mapper MBC3, 32 KiB ROM, 32 KiB RAM, battery, RTC  [0x0+0x8040]
+▾ pokemon.gbx — GBX v1.0 "POCKET MONSTERS", mapper MBC3, 32.0 KiB ROM, 32.0 KiB RAM, battery, RTC  [0x0+0x8040]
   ▾ ROM — "POCKET MONSTERS", MBC3+RAM+BATTERY  [0x0+0x8000]
       Interrupt vectors and RST  [0x0+0x100]
     ▾ Cartridge header  [0x100+0x50]

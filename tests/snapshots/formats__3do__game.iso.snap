@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.iso — 3DO disc "CD-ROM", 300 blocks of 2048 bytes (600 KiB)  [0x0+0x1000]
+▾ game.iso — 3DO disc "CD-ROM", 300 blocks of 2048 bytes (600.0 KiB)  [0x0+0x1000]
   ▾ Volume label  [0x0+0x84]
       Record type: 1  [0x0+0x1]
       Sync bytes: 5a 5a 5a 5a 5a  |ZZZZZ|  [0x1+0x5]

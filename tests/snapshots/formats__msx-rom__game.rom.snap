@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.rom — MSX machine code ROM, 8 KiB, plain, INIT 0x4010  [0x0+0x2000]
+▾ game.rom — MSX machine code ROM, 8.0 KiB, plain, INIT 0x4010  [0x0+0x2000]
     ID: "AB"  [0x0+0x2]
     INIT: 0x4010  [0x2+0x2]
     STATEMENT: 0x0  [0x4+0x2]

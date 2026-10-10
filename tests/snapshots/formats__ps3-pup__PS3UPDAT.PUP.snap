@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ PS3UPDAT.PUP — PS3 update 4.90, image 65536, 3 files, 10 KiB  [0x0+0x2935]
+▾ PS3UPDAT.PUP — PS3 update 4.90, image 65536, 3 files, 10.0 KiB  [0x0+0x2935]
     Magic: "SCEUF"  [0x0+0x8]
     Package version: 1  [0x8+0x8]
     Image version: 65536  [0x10+0x8]

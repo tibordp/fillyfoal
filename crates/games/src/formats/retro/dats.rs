@@ -2,11 +2,14 @@
 //! and Logiqx XML, MAME software lists), cdrdao TOC files and RetroArch
 //! cheat files.
 
-use super::util::{dec, is_ascii_text, lines, size, text};
+use super::util::{is_ascii_text, lines};
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::text::xml::{self, Kind, Lexer, Mode, Tok};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -297,139 +300,177 @@ declare_format!(pub LOGIQX = "logiqx-dat", "Logiqx XML ROM DAT", ["dat", "xml"],
 declare_format!(pub SOFTLIST = "mame-softlist", "MAME software list", ["xml"],
     "application/x-mame-softlist", Probe::Custom(|h| xml_dat_kind(h) == Some("softlist")), xml_dat);
 
-fn attr(tag: &str, key: &str) -> Option<String> {
-    let needle = format!("{key}=\"");
-    let at = tag.find(&needle)?.saturating_add(needle.len());
-    let rest = tag.get(at..)?;
-    let end = rest.find('"')?;
-    Some(unescape(rest.get(..end)?))
-}
-
-fn unescape(s: &str) -> String {
-    s.replace("&amp;", "&")
-        .replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-}
-
-fn element(body: &str, name: &str) -> Option<String> {
-    let open = format!("<{name}>");
-    let close = format!("</{name}>");
-    let at = body.find(&open)?.saturating_add(open.len());
-    let end = body.get(at..)?.find(&close)?;
-    Some(unescape(body.get(at..at.saturating_add(end))?.trim()))
-}
+/// Header fields shown, in order.
+const HEADER_FIELDS: [&str; 7] = [
+    "name",
+    "description",
+    "version",
+    "date",
+    "author",
+    "homepage",
+    "url",
+];
 
 /// An entry of an XML DAT: name, description, extra, ROM count, byte range.
-type XmlEntry = (String, String, String, usize, usize, usize);
+type XmlEntry = (String, String, String, usize, u64, u64);
+
+/// Characters of an element's text kept.
+const XML_TEXT_CAP: usize = 4096;
+
+/// An entry being read: its start, attributes and child elements.
+#[derive(Default)]
+struct OpenEntry {
+    start: u64,
+    name: String,
+    cloneof: Option<String>,
+    fields: Vec<(String, String)>,
+    roms: usize,
+}
+
+/// The decoded attributes of a start tag.
+async fn start_attrs(lex: &mut Lexer<'_>, t: &Tok) -> Result<Vec<(String, String)>> {
+    let owned = lex.owned(t, 0x10000).await?;
+    Ok(xml::attributes(owned.piece())
+        .iter()
+        .map(|a| {
+            let value = a.value.as_ref().map(|v| v.text()).unwrap_or_default();
+            (a.name.text(), xml::decode_entities(&value, false))
+        })
+        .collect())
+}
+
+fn field(fields: &[(String, String)], key: &str) -> Option<String> {
+    fields
+        .iter()
+        .find(|(k, _)| k == key)
+        .map(|(_, v)| v.clone())
+}
 
 async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
-    let (data, cut) = read_text(&cx, file).await?;
-    let s = String::from_utf8_lossy(&data).into_owned();
-    let softlist = s.contains("<softwarelist");
-    let (list_name, list_desc) = if softlist {
-        let at = s.find("<softwarelist").unwrap_or(0);
-        let tag = s
-            .get(at..)
-            .and_then(|r| r.find('>').map(|e| r.get(..e).unwrap_or_default()))
-            .unwrap_or_default();
-        (
-            attr(tag, "name").unwrap_or_default(),
-            attr(tag, "description").unwrap_or_default(),
-        )
-    } else {
-        let header = s
-            .find("<header>")
-            .and_then(|a| s.get(a..))
-            .and_then(|r| r.find("</header>").map(|e| r.get(..e).unwrap_or_default()))
-            .unwrap_or_default();
-        if let Some(a) = s.find("<header>") {
-            let end = s
-                .get(a..)
-                .and_then(|r| r.find("</header>"))
-                .map_or(a, |e| a.saturating_add(e).saturating_add(9));
-            let fields: Vec<(String, String)> = [
-                "name",
-                "description",
-                "version",
-                "date",
-                "author",
-                "homepage",
-                "url",
-            ]
-            .iter()
-            .filter_map(|k| element(header, k).map(|v| ((*k).to_owned(), v)))
-            .collect();
-            cx.emit(
-                Node::new("Header")
-                    .span(file.sub(to_u64(a), to_u64(end.saturating_sub(a))))
-                    .lazy(dat_pairs, fields),
-            );
-        }
-        (
-            element(header, "name").unwrap_or_default(),
-            element(header, "description").unwrap_or_default(),
-        )
-    };
-    let tags: &[&str] = if softlist {
-        &["software"]
-    } else {
-        &["game", "machine"]
-    };
+    let limit = (4u64 << 20).min(cx.limits().max_read);
+    let mut lex = Lexer::new(&cx, file.sub(0, file.len.min(limit)), Mode::Xml);
+    let mut softlist = false;
+    let (mut list_name, mut list_desc) = (String::new(), String::new());
+    // Open elements; the header or entry being read (depth 1); the child
+    // element (depth 2) whose text is being collected.
+    let mut stack: Vec<Vec<u8>> = Vec::new();
+    let mut header: Option<(u64, Vec<(String, String)>)> = None;
+    let mut entry: Option<OpenEntry> = None;
+    let mut child: Option<(String, String)> = None;
     let mut entries: Vec<XmlEntry> = Vec::new();
     let mut roms = 0usize;
-    let mut pos = 0usize;
-    // The next occurrence of each tag at or after `pos` (`None`: no more),
-    // kept between entries so a tag the file does not use is searched for
-    // once, not once per entry.
-    let mut next: Vec<Option<usize>> = tags.iter().map(|t| s.find(&format!("<{t} "))).collect();
+    let mut tokens = 0u32;
     loop {
-        if entries.len() & 0xff == 0xff {
+        tokens = tokens.wrapping_add(1);
+        if tokens.is_multiple_of(256) {
             cx.checkpoint().await;
         }
-        for (t, n) in tags.iter().zip(next.iter_mut()) {
-            if n.is_some_and(|p| p < pos) {
-                *n = s
-                    .get(pos..)
-                    .and_then(|r| r.find(&format!("<{t} ")).map(|p| pos.saturating_add(p)));
+        let t = lex.next().await?;
+        let closes = match t.kind {
+            Kind::Eof => break,
+            Kind::Start => {
+                let name = lex.name(&t).await?;
+                match stack.len() {
+                    0 if name == b"softwarelist" => {
+                        softlist = true;
+                        let attrs = start_attrs(&mut lex, &t).await?;
+                        list_name = field(&attrs, "name").unwrap_or_default();
+                        list_desc = field(&attrs, "description").unwrap_or_default();
+                    }
+                    1 if name == b"header" && !softlist => header = Some((t.start, Vec::new())),
+                    1 if matches!(name.as_slice(), b"game" | b"machine" | b"software") => {
+                        let attrs = start_attrs(&mut lex, &t).await?;
+                        entry = Some(OpenEntry {
+                            start: t.start,
+                            name: field(&attrs, "name").unwrap_or_default(),
+                            cloneof: field(&attrs, "cloneof"),
+                            ..OpenEntry::default()
+                        });
+                    }
+                    2 if !t.empty && (header.is_some() || entry.is_some()) => {
+                        child = Some((String::from_utf8_lossy(&name).into_owned(), String::new()));
+                    }
+                    _ => {}
+                }
+                if name == b"rom"
+                    && let Some(e) = entry.as_mut()
+                {
+                    e.roms = e.roms.saturating_add(1);
+                }
+                if t.empty {
+                    Some(stack.len())
+                } else {
+                    stack.push(name);
+                    None
+                }
             }
-        }
-        let Some((start, tag)) = tags
-            .iter()
-            .zip(&next)
-            .filter_map(|(t, n)| n.map(|p| (p, *t)))
-            .min()
-        else {
-            break;
+            Kind::End => {
+                stack.pop();
+                Some(stack.len())
+            }
+            Kind::Text | Kind::Cdata => {
+                if let Some((_, text)) = child.as_mut()
+                    && text.len() < XML_TEXT_CAP
+                {
+                    text.push_str(&xml::token_text(&mut lex, &t).await?);
+                }
+                None
+            }
+            _ => None,
         };
-        let close = format!("</{tag}>");
-        let end = s
-            .get(start..)
-            .and_then(|r| r.find(&close))
-            .map_or(s.len(), |e| {
-                start.saturating_add(e).saturating_add(close.len())
-            });
-        let body = s.get(start..end).unwrap_or_default();
-        let open = body.get(..body.find('>').unwrap_or(0)).unwrap_or_default();
-        let name = attr(open, "name").unwrap_or_default();
-        let desc = element(body, "description").unwrap_or_default();
-        let extra = if softlist {
-            format!(
-                "{} {}",
-                element(body, "year").unwrap_or_default(),
-                element(body, "publisher").unwrap_or_default()
-            )
-        } else {
-            attr(open, "cloneof").map_or_else(String::new, |c| format!("clone of {c}"))
-        };
-        let n = body.matches("<rom ").count();
-        roms = roms.saturating_add(n);
-        entries.push((name, desc, extra.trim().to_owned(), n, start, end));
-        pos = end.max(start.saturating_add(1));
-        if entries.len() >= 1_000_000 {
-            break;
+        match closes {
+            Some(2) => {
+                if let Some((name, text)) = child.take() {
+                    let text = text.trim().to_owned();
+                    if let Some((_, fields)) = header.as_mut() {
+                        fields.push((name, text));
+                    } else if let Some(e) = entry.as_mut() {
+                        e.fields.push((name, text));
+                    }
+                }
+            }
+            Some(1) => {
+                if let Some((start, fields)) = header.take() {
+                    list_name = field(&fields, "name").unwrap_or_default();
+                    list_desc = field(&fields, "description").unwrap_or_default();
+                    let shown: Vec<(String, String)> = HEADER_FIELDS
+                        .iter()
+                        .filter_map(|k| field(&fields, k).map(|v| ((*k).to_owned(), v)))
+                        .collect();
+                    cx.emit(
+                        Node::new("Header")
+                            .span(file.sub(start, t.end.saturating_sub(start)))
+                            .lazy(dat_pairs, shown),
+                    );
+                }
+                if let Some(e) = entry.take() {
+                    let extra = if softlist {
+                        format!(
+                            "{} {}",
+                            field(&e.fields, "year").unwrap_or_default(),
+                            field(&e.fields, "publisher").unwrap_or_default()
+                        )
+                    } else {
+                        e.cloneof
+                            .map_or_else(String::new, |c| format!("clone of {c}"))
+                    };
+                    let desc = field(&e.fields, "description").unwrap_or_default();
+                    roms = roms.saturating_add(e.roms);
+                    entries.push((
+                        e.name,
+                        desc,
+                        extra.trim().to_owned(),
+                        e.roms,
+                        e.start,
+                        t.end,
+                    ));
+                    if entries.len() >= 1_000_000 {
+                        break;
+                    }
+                }
+            }
+            _ => {}
         }
     }
     let count = entries.len();
@@ -438,7 +479,7 @@ async fn xml_dat(cx: Cx, input: Input) -> Result<()> {
             .summary(format!("{count} entries, {roms} ROMs"))
             .lazy(xml_entries, (file, entries)),
     );
-    if cut {
+    if file.len > limit {
         cx.diag(Diagnostic::limit("only the first 4 MiB were parsed"));
     }
     cx.annotate(format!(
@@ -468,7 +509,7 @@ async fn xml_entries(cx: Cx, (file, entries): (Span, Vec<XmlEntry>)) -> Result<(
         };
         cx.push(
             Node::new(name)
-                .span(file.sub(to_u64(start), to_u64(end.saturating_sub(start))))
+                .span(file.sub(start, end.saturating_sub(start)))
                 .value(text(desc))
                 .summary(summary),
         )
@@ -608,7 +649,7 @@ async fn cht(cx: Cx, input: Input) -> Result<()> {
         let (k, v) = (k.trim(), v.trim().trim_matches('"'));
         if k == "cheats" {
             declared = v.parse().unwrap_or(0);
-            cx.emit(Node::new("cheats").span(span).value(dec(declared, 32)));
+            cx.emit(Node::new("cheats").span(span).value(uint(declared, 32)));
             continue;
         }
         let Some(rest) = k.strip_prefix("cheat") else {

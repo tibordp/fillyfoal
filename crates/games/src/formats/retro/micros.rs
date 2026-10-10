@@ -2,7 +2,7 @@
 //! ZX Spectrum SNA/SZX/RZX, C64 NIB, VICE snapshots, Atari 8-bit XEX, CAS
 //! and ATX, Apple II ShrinkIt (NuFX), MacBinary and BinHex 4.0.
 
-use super::util::{clean, dec, hex, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_be, u16_le, u32_be, u32_le};
 use crate::codec::crc::crc16_xmodem;
 use crate::cx::Cx;
@@ -10,6 +10,9 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::finder::{FINDER_FLAGS, FINDER_FLAGS_HIGH};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
@@ -365,14 +368,9 @@ async fn rzx(cx: Cx, input: Input) -> Result<()> {
         let raw = cx.read_avail(block.sub(5, 32)).await?;
         let name = lookup(RZX_BLOCKS, id.into()).map_or_else(
             || format!("Block {id:#04x}"),
-            |n| {
-                let mut c = n.chars();
-                c.next()
-                    .map(|f| f.to_uppercase().chain(c).collect())
-                    .unwrap_or_default()
-            },
+            crate::formats::util::fmt::capitalize,
         );
-        let mut node = Node::new(name).span(block).value(hex(id.into(), 8));
+        let mut node = Node::new(name).span(block).value(hex(id, 8));
         match id {
             0x10 => {
                 creator = crate::text::until_nul(raw.get(..20).unwrap_or_default());
@@ -452,7 +450,7 @@ async fn nib(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(13, 1))
-            .value(dec(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let mut tracks = 0u64;
     for (i, pair) in head.get(0x10..).unwrap_or_default().chunks(2).enumerate() {
@@ -615,7 +613,7 @@ async fn atari_xex(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Segment {segments}"))
                 .span(cur.since(start))
-                .value(hex(first.into(), 16))
+                .value(hex(first, 16))
                 .summary(name)
                 .target(data),
         )
@@ -856,7 +854,7 @@ async fn nufx(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(name.clone())
                 .span(record)
-                .value(hex(file_type.into(), 8))
+                .value(hex(file_type, 8))
                 .summary(format!(
                     "type ${file_type:02x}/${aux:04x}, {} thread(s)",
                     parts.len()
@@ -938,16 +936,6 @@ fn macbinary_probe(h: &Head<'_>) -> bool {
 declare_format!(pub MACBINARY = "macbinary", "MacBinary encoded Mac file", ["bin", "macbin"],
     "application/x-macbinary", Probe::Custom(macbinary_probe), macbinary);
 
-const FINDER_FLAGS: FlagTable = &[
-    flag(0x80, "IS_ALIAS"),
-    flag(0x40, "IS_INVISIBLE"),
-    flag(0x20, "HAS_BUNDLE"),
-    flag(0x10, "NAME_LOCKED"),
-    flag(0x08, "IS_STATIONERY"),
-    flag(0x04, "HAS_CUSTOM_ICON"),
-    flag(0x01, "HAS_BEEN_INITED"),
-];
-
 async fn macbinary(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.block(file.sub(0, 128)).await?;
@@ -960,7 +948,9 @@ async fn macbinary(cx: Cx, input: Input) -> Result<()> {
         .emit()?;
     let kind = f.ascii("File type", 4).emit()?;
     let creator = f.ascii("Creator", 4).emit()?;
-    f.u8("Finder flags (high)").flags(FINDER_FLAGS).emit()?;
+    f.u8("Finder flags (high)")
+        .flags(FINDER_FLAGS_HIGH)
+        .emit()?;
     f.u8("Zero").emit()?;
     f.u16("Vertical position").emit()?;
     f.u16("Horizontal position").emit()?;
@@ -1116,7 +1106,7 @@ async fn binhex(cx: Cx, input: Input) -> Result<()> {
     f.u8("Version").emit()?;
     let kind = f.ascii("File type", 4).emit()?;
     let creator = f.ascii("Creator", 4).emit()?;
-    f.u16("Finder flags").hex().emit()?;
+    f.u16("Finder flags").flags(FINDER_FLAGS).emit()?;
     let data_len = u64::from(f.u32("Data fork length").emit()?);
     let rsrc_len = u64::from(f.u32("Resource fork length").emit()?);
     let stored = f.u16("Header CRC").hex().emit()?;

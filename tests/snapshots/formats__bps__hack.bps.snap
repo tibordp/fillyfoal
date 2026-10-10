@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ hack.bps — BPS patch, 1 KiB → 1 KiB, 6 actions (1 SourceRead, 2 TargetRead, 2 SourceCopy, 1 TargetCopy), patch CRC valid  [0x0+0x4f]
+▾ hack.bps — BPS patch, 1.0 KiB → 1.0 KiB, 6 actions (1 SourceRead, 2 TargetRead, 2 SourceCopy, 1 TargetCopy), patch CRC valid  [0x0+0x4f]
     Magic: "BPS1"  [0x0+0x4]
     Source size: 1024  [0x4+0x2]
     Target size: 1029  [0x6+0x2]

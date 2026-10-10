@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.iso — Xbox XDVDFS image, root directory at sector 33 (2048 bytes), 72 KiB  [0x0+0x12005]
+▾ game.iso — Xbox XDVDFS image, root directory at sector 33 (2048 bytes), 72.0 KiB  [0x0+0x12005]
     Magic: "MICROSOFT*XBOX*MEDIA"  [0x10000+0x14]
     Root directory sector: 33  [0x10014+0x4]
     Root directory size: 2048  [0x10018+0x4]

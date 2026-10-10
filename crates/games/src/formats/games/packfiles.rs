@@ -7,29 +7,13 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
-use crate::value::{Radix, Value};
+use crate::text::until_nul;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-/// NUL-terminated (or padded) Latin-1 text.
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 // ---------------------------------------------------------------------------
 // Archives: GTA IMG v2, Descent HOG, Build GRP, EA BIG, Blood RFF,
@@ -44,14 +28,14 @@ async fn gta_img(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Entries")
             .span(file.sub(4, 4))
-            .value(uint(count.into(), 32)),
+            .value(uint(count, 32)),
     );
     for i in 0..count {
         let at = 8u64.saturating_add(u64::from(i).saturating_mul(32));
         let e = cx.read(file.sub_exact(at, 32)?).await?;
         let offset = u64::from(u32_le(&e, 0).unwrap_or(0)).saturating_mul(2048);
         let sectors = u64::from(u16_le(&e, 4).unwrap_or(0));
-        let name = zstr(e.get(8..32).unwrap_or_default());
+        let name = until_nul(e.get(8..32).unwrap_or_default());
         let data = file.sub(offset, sectors.saturating_mul(2048));
         cx.push(embedded(name, input.nested(data)).target(file.sub(at, 32)))
             .await;
@@ -69,7 +53,7 @@ async fn hog(cx: Cx, input: Input) -> Result<()> {
     let mut n = 0u32;
     while pos.saturating_add(17) <= file.len {
         let h = cx.read(file.sub(pos, 17)).await?;
-        let name = zstr(h.get(..13).unwrap_or_default());
+        let name = until_nul(h.get(..13).unwrap_or_default());
         let size = u64::from(u32_le(&h, 13).unwrap_or(0));
         let data = file.sub_exact(pos.saturating_add(17), size)?;
         cx.progress_in(file, file.offset.saturating_add(pos));
@@ -93,7 +77,7 @@ async fn grp(cx: Cx, input: Input) -> Result<()> {
     for i in 0..count {
         let at = 16u64.saturating_add(u64::from(i).saturating_mul(16));
         let e = cx.read(file.sub_exact(at, 16)?).await?;
-        let name = zstr(e.get(..12).unwrap_or_default());
+        let name = until_nul(e.get(..12).unwrap_or_default());
         let size = u64::from(u32_le(&e, 12).unwrap_or(0));
         cx.push(embedded(name, input.nested(file.sub(data_at, size))).target(file.sub(at, 16)))
             .await;
@@ -116,7 +100,7 @@ async fn big(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Archive size (little-endian)")
             .span(file.sub(4, 4))
-            .value(uint(size.into(), 32)),
+            .value(uint(size, 32)),
     );
     let count = f.u32("Entries").emit()?;
     f.u32("Header size").emit()?;
@@ -177,7 +161,7 @@ async fn bnd(cx: Cx, input: Input) -> Result<()> {
             u32_le(&head, 0x0c)
         }
         .unwrap_or(0);
-        (count, zstr(head.get(0x18..0x20).unwrap_or_default()))
+        (count, until_nul(head.get(0x18..0x20).unwrap_or_default()))
     } else {
         let big = head.get(0x0d).copied().unwrap_or(0) != 0;
         let count = if big {
@@ -186,7 +170,7 @@ async fn bnd(cx: Cx, input: Input) -> Result<()> {
             u32_le(&head, 0x10)
         }
         .unwrap_or(0);
-        (count, zstr(head.get(4..12).unwrap_or_default()))
+        (count, until_nul(head.get(4..12).unwrap_or_default()))
     };
     cx.emit(Node::new("Signature").span(file.sub(0, 4)));
     cx.emit(
@@ -197,7 +181,7 @@ async fn bnd(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Files")
             .span(file.sub(if v4 { 0x0c } else { 0x10 }, 4))
-            .value(uint(count.into(), 32)),
+            .value(uint(count, 32)),
     );
     cx.emit(Node::new("Body").span(file.tail(if v4 { 0x40 } else { 0x20 })));
     cx.annotate(format!(

@@ -11,7 +11,7 @@ expression: "common::explore(&display_name(&path), &data)"
     Version: 101  [#1:0xd+0x1]
     File type: "slac"  [#1:0xe+0x4]
     Creator: "lncl"  [#1:0x12+0x4]
-    Finder flags: 0x6d50  [#1:0x16+0x2]
+    Finder flags: 0x6d50 [isShared | hasBeenInited | hasCustomIcon | isStationery | hasBundle | isInvisible | 0x10]  [#1:0x16+0x2]
     Data fork length: 9437184  [#1:0x18+0x4]
     Resource fork length: 0  [#1:0x1c+0x4]
     Header CRC: 0x0  [#1:0x20+0x2]

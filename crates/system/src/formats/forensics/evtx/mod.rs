@@ -49,8 +49,8 @@ pub static FORMAT: Format = Format {
 const FILE_FLAGS: FlagTable = &[flag(1, "DIRTY"), flag(2, "FULL")];
 const CHUNK_FLAGS: FlagTable = &[flag(1, "DIRTY"), flag(4, "NO_CRC32")];
 
-/// Event levels (the `Level` element).
-const LEVELS: EnumTable = &[
+/// Event levels (the `Level` element; ETW event headers use the same).
+pub(crate) const LEVELS: EnumTable = &[
     (0, "LogAlways"),
     (1, "Critical"),
     (2, "Error"),

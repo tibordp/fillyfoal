@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ geometrywars.live — Xbox 360 LIVE package, arcade title "Geometry Wars" for "Geometry Wars: Retro Evolved" (58410A8E) by Bizarre Creations, 4 KiB  [0x0+0xb000]
+▾ geometrywars.live — Xbox 360 LIVE package, arcade title "Geometry Wars" for "Geometry Wars: Retro Evolved" (58410A8E) by Bizarre Creations, 4.0 KiB  [0x0+0xb000]
     Magic: "LIVE"  [0x0+0x4]
     Package signature  [0x4+0x228]
     License entries  [0x22c+0x100]

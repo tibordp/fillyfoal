@@ -3,13 +3,16 @@
 //! DAX, ISZ, DAA, and the GameCube/Wii wrappers (WBFS, GCZ, WIA/RVZ, TGC,
 //! CISO).
 
-use super::util::{clean, dec, hex, is_ascii_text, lines, size, text};
+use super::util::{clean, is_ascii_text, lines};
 use crate::bytes::{u16_le, u32_be, u32_le, u64_be, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::fourcc;
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -18,19 +21,6 @@ use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn fourcc(v: u32) -> String {
-    v.to_be_bytes()
-        .iter()
-        .map(|&b| {
-            if b.is_ascii_graphic() || b == b' ' {
-                char::from(b)
-            } else {
-                '.'
-            }
-        })
-        .collect()
-}
 
 // ---------------------------------------------------------------------------
 // MAME CHD (compressed hunks of data)
@@ -96,10 +86,16 @@ fn chd_header(f: &mut Fields<'_>, _: &()) -> Result<(ChdInfo, String)> {
             ] {
                 let c = f
                     .u32(name)
-                    .with(|&v, n| n.value(text(if v == 0 { "none".to_owned() } else { fourcc(v) })))
+                    .with(|&v, n| {
+                        n.value(text(if v == 0 {
+                            "none".to_owned()
+                        } else {
+                            fourcc(&u32::to_be_bytes(v))
+                        }))
+                    })
                     .emit()?;
                 if c != 0 {
-                    names.push(fourcc(c));
+                    names.push(fourcc(&u32::to_be_bytes(c)));
                 }
             }
             info.compressed_map = !names.is_empty();
@@ -190,7 +186,7 @@ async fn chd(cx: Cx, input: Input) -> Result<()> {
         };
         entries.push(next);
         let tag = u32_be(&raw, 0).unwrap_or(0);
-        let kind = match &fourcc(tag)[..] {
+        let kind = match &fourcc(&u32::to_be_bytes(tag))[..] {
             "GDDD" | "IDNT" => "hard disk",
             "CHCD" | "CHTR" | "CHT2" => "CD-ROM",
             "CHGD" | "CHGT" => "GD-ROM",
@@ -261,7 +257,7 @@ async fn chd_metadata(cx: Cx, (file, entries): (Span, Vec<u64>)) -> Result<()> {
         let data = file.sub(at.saturating_add(16), len);
         let bytes = cx.read_avail(data.sub(0, 1024)).await?;
         let printable = bytes.split(|&b| b == 0).next().unwrap_or_default();
-        let mut node = Node::new(fourcc(tag))
+        let mut node = Node::new(fourcc(&u32::to_be_bytes(tag)))
             .span(file.sub(at, len.saturating_add(16)))
             .value(Value::Enum {
                 raw: tag.into(),
@@ -415,7 +411,7 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Footer (NERO)")
                 .span(file.tail(file.len.saturating_sub(8)))
-                .value(hex(u32_be(&tail, 8).unwrap_or(0).into(), 32))
+                .value(hex(u32_be(&tail, 8).unwrap_or(0), 32))
                 .desc("Offset of the chunk list"),
         );
         (1, u64::from(u32_be(&tail, 8).unwrap_or(0)))
@@ -436,7 +432,7 @@ async fn nrg(cx: Cx, input: Input) -> Result<()> {
         let data = cur.span(len);
         cur.skip(len);
         chunks = chunks.saturating_add(1);
-        let tag = fourcc(id);
+        let tag = fourcc(&u32::to_be_bytes(id));
         let mut node = Node::new(tag.clone())
             .span(cur.since(at))
             .value(Value::Enum {
@@ -932,7 +928,7 @@ async fn gdi(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Track count")
             .span(span)
-            .value(dec(count.trim().parse().unwrap_or(0), 32)),
+            .value(uint(count.trim().parse::<u32>().unwrap_or(0), 32)),
     );
     let mut high = false;
     for (line, span) in it {
@@ -1020,7 +1016,7 @@ async fn ecm(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Run {runs}"))
                 .span(cur.since(start))
-                .value(dec(count, 64))
+                .value(uint(count, 64))
                 .summary(format!(
                     "{count} {name} → {} decoded",
                     size(count.saturating_mul(out))
@@ -1035,7 +1031,7 @@ async fn ecm(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("EDC of decoded image")
                 .span(cur.since(at))
-                .value(hex(edc.into(), 32)),
+                .value(hex(edc, 32)),
         );
     } else if !ended {
         cx.diag(Diagnostic::warning("no end marker"));

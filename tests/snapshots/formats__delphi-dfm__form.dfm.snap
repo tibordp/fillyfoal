@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
       AlphaBlendValue: -40000  [0xfd+0x15]
       Scale: 1.25 — vaExtended  [0x112+0x11]
       Opacity: 0.5 — vaSingle  [0x123+0xd]
-      Price: 12.5 — vaCurrency  [0x130+0xf]
+      Price: "12.5000" — vaCurrency  [0x130+0xf]
       Created: 2023-03-15 12:00:00 UTC — vaDate 45000.5  [0x13f+0x11]
       BigNumber: 1099511627776  [0x150+0x13]
       Glyph — nil  [0x163+0x7]

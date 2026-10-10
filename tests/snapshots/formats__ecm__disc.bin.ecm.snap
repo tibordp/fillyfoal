@@ -2,10 +2,10 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ disc.bin.ecm — ECM image, 3 runs (2 Mode 1, 0 Mode 2/1, 1 Mode 2/2 sectors), decodes to 6 KiB  [0x0+0x193e]
+▾ disc.bin.ecm — ECM image, 3 runs (2 Mode 1, 0 Mode 2/1, 1 Mode 2/2 sectors), decodes to 6.9 KiB  [0x0+0x193e]
     Magic: "ECM"  [0x0+0x4]
     Run 1: 16 — 16 raw bytes → 16 bytes decoded  [0x4+0x11] → 0x5+0x10
-    Run 2: 2 — 2 Mode 1 sectors → 4 KiB decoded  [0x15+0x1007] → 0x16+0x1006
-    Run 3: 1 — 1 Mode 2 form 2 sectors → 2 KiB decoded  [0x101c+0x919] → 0x101d+0x918
+    Run 2: 2 — 2 Mode 1 sectors → 4.6 KiB decoded  [0x15+0x1007] → 0x16+0x1006
+    Run 3: 1 — 1 Mode 2 form 2 sectors → 2.3 KiB decoded  [0x101c+0x919] → 0x101d+0x918
     End marker  [0x1935+0x5]
     EDC of decoded image: 0x12345678  [0x193a+0x4]

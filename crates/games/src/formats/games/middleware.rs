@@ -8,22 +8,16 @@ use crate::declare_format;
 use crate::dsl::{Chunk, ChunkLayout, Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
+use crate::text::until_nul;
 use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 /// Pushes a node for every chunk of `region` from `start`; returns the chunks.
 async fn chunks(cx: &Cx, region: Span, start: u64, layout: ChunkLayout) -> Result<Vec<Chunk>> {
@@ -129,7 +123,7 @@ async fn fsb(cx: Cx, input: Input) -> Result<()> {
                 break;
             }
             cx.push(
-                Node::new(zstr(h.get(2..32).unwrap_or_default()))
+                Node::new(until_nul(h.get(2..32).unwrap_or_default()))
                     .span(file.sub(pos, size))
                     .summary("sample header"),
             )
@@ -200,7 +194,7 @@ async fn xwb(cx: Cx, input: Input) -> Result<()> {
                 u32_be(&b, 4)
             }
             .unwrap_or(0);
-            bank = zstr(b.get(8..72).unwrap_or_default());
+            bank = until_nul(b.get(8..72).unwrap_or_default());
             node = node.summary(format!("{bank:?}, {count} entries"));
         }
         cx.emit(node);
@@ -561,7 +555,7 @@ async fn afs(cx: Cx, input: Input) -> Result<()> {
         let size = u64::from(u32_le(&table, i.saturating_mul(8).saturating_add(4)).unwrap_or(0));
         let name = names
             .get(i.saturating_mul(48)..i.saturating_mul(48).saturating_add(32))
-            .map(zstr)
+            .map(until_nul)
             .filter(|n| !n.is_empty())
             .unwrap_or_else(|| format!("file{i:04}"));
         cx.push(

@@ -2,13 +2,15 @@
 //! Magic Drive dumps, Neo Geo Pocket, Pokémon mini, Neo Geo (.neo), UNIF,
 //! Vectrex, Intellivision, ColecoVision, MSX, WonderSwan and Virtual Boy.
 
-use super::util::{clean, dec, hex, size, text};
+use super::util::clean;
 use crate::bytes::{to_u64, u16_be, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::record;
@@ -127,12 +129,12 @@ async fn sms(cx: Cx, input: Input) -> Result<()> {
     f.node(
         Node::new("Product code")
             .span(file.sub(at.saturating_add(12), 3))
-            .value(dec(product.into(), 32)),
+            .value(uint(product, 32)),
     );
     f.node(
         Node::new("Version")
             .span(file.sub(at.saturating_add(14), 1))
-            .value(dec((p2 & 0xf).into(), 8)),
+            .value(uint(p2 & 0xf, 8)),
     );
     f.node(
         Node::new("Region")
@@ -501,7 +503,7 @@ async fn unif(cx: Cx, input: Input) -> Result<()> {
             }
             "PCK" | "CCK" => {
                 let raw = cx.read_avail(data.sub(0, 4)).await?;
-                node = node.value(hex(u32_le(&raw, 0).unwrap_or(0).into(), 32));
+                node = node.value(hex(u32_le(&raw, 0).unwrap_or(0), 32));
             }
             "PRG" => {
                 prg = prg.saturating_add(len);
@@ -550,7 +552,7 @@ async fn vectrex(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Music pointer")
             .span(file.sub(to_u64(music_at), 2))
-            .value(hex(music.into(), 16)),
+            .value(hex(music, 16)),
     );
     let mut pos = music_at.saturating_add(2);
     let mut titles = Vec::new();

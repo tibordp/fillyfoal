@@ -6,28 +6,13 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe, embedded};
 use crate::node::Node;
+use crate::text::until_nul;
 use crate::value::{Radix, Value};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-/// NUL-terminated (or padded) Latin-1 text.
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 // ---------------------------------------------------------------------------
 // Blizzard: BLP textures, M2 models, Warcraft III maps
@@ -129,7 +114,7 @@ async fn m2(cx: Cx, input: Input) -> Result<()> {
     let version = f.u32("Version").emit()?;
     let name_len = f.u32("Name length").emit()?;
     let name_at = f.u32("Name offset").hex().emit()?;
-    let name = zstr(
+    let name = until_nul(
         &cx.read_avail(body.sub(name_at.into(), u64::from(name_len).min(256)))
             .await?,
     );
@@ -178,7 +163,7 @@ async fn w3m(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Maximum players")
             .span(cur.since(cur.pos().saturating_sub(4)))
-            .value(uint(players.into(), 32)),
+            .value(uint(players, 32)),
     );
     let archive = file.tail(512);
     cx.emit(embedded("MPQ archive", input.nested(archive)));

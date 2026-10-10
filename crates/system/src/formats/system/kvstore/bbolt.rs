@@ -29,12 +29,13 @@
 use std::collections::BTreeSet;
 use std::sync::Arc;
 
-use super::{plural, read_label, uint, value_node};
+use super::{read_label, uint, value_node};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::Path;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::plural;
 use crate::formats::{Input, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -805,7 +806,7 @@ async fn pages(cx: Cx, db: DbRef) -> Result<()> {
         let span = db.input.span.sub(off, extent.saturating_mul(db.page_size));
         let mut summary = type_name(flags).to_owned();
         if flags & (BRANCH | LEAF | FREELIST) != 0 {
-            summary.push_str(&format!(", {}", plural(count.into(), "element")));
+            summary.push_str(&format!(", {}", plural(count, "element")));
         }
         if extent > 1 {
             summary.push_str(&format!(", {}", plural(overflow, "overflow page")));

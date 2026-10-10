@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.zso — ZSO (LZ4) v1, 4 KiB image in 2 blocks of 2 KiB  [0x0+0x2c]
+▾ game.zso — ZSO (LZ4) v1, 4.0 KiB image in 2 blocks of 2.0 KiB  [0x0+0x2c]
   ▾ Header  [0x0+0x18]
       Magic: "ZISO"  [0x0+0x4]
       Header size: 24  [0x4+0x4]

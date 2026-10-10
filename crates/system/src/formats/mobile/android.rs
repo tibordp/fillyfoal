@@ -15,29 +15,15 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
 use crate::formats::text::scan::Lines;
 use crate::formats::util::datakit::{hex_string, size};
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
+use crate::text::until_nul;
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 fn align_up(v: u64, to: u64) -> u64 {
     if to <= 1 {
@@ -171,7 +157,7 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         if i.is_multiple_of(256) {
             cx.checkpoint().await;
         }
-        device_names.push(zstr(d.get(24..60).unwrap_or_default()));
+        device_names.push(until_nul(d.get(24..60).unwrap_or_default()));
     }
     let groups = cx.read(table(h.groups)).await?;
     let mut group_names = Vec::new();
@@ -179,7 +165,7 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         if i.is_multiple_of(256) {
             cx.checkpoint().await;
         }
-        group_names.push(zstr(g.get(..36).unwrap_or_default()));
+        group_names.push(until_nul(g.get(..36).unwrap_or_default()));
     }
     cx.emit(
         Node::new("Block devices")
@@ -201,7 +187,7 @@ async fn lp_super(cx: Cx, input: Input) -> Result<()> {
         if p.len() < 52 {
             break;
         }
-        let name = zstr(p.get(..36).unwrap_or_default());
+        let name = until_nul(p.get(..36).unwrap_or_default());
         let attrs = u32_le(p, 36).unwrap_or(0);
         let first = u32_le(p, 40).unwrap_or(0);
         let count = u32_le(p, 44).unwrap_or(0);
@@ -444,7 +430,7 @@ async fn vendor_ramdisks(
         let len = u32_le(&e, 0).unwrap_or(0);
         let offset = u32_le(&e, 4).unwrap_or(0);
         let kind = u32_le(&e, 8).unwrap_or(0);
-        let name = zstr(e.get(12..44).unwrap_or_default());
+        let name = until_nul(e.get(12..44).unwrap_or_default());
         let label = if name.is_empty() {
             format!("Ramdisk {i}")
         } else {
@@ -487,7 +473,7 @@ async fn bootldr(cx: Cx, input: Input) -> Result<()> {
     for i in 0..count {
         let entry = file.sub_exact(20u64.saturating_add(u64::from(i).saturating_mul(68)), 68)?;
         let e = cx.read(entry).await?;
-        let name = zstr(e.get(..64).unwrap_or_default());
+        let name = until_nul(e.get(..64).unwrap_or_default());
         let len = u64::from(u32_le(&e, 64).unwrap_or(0));
         names.push(name.clone());
         cx.push(
@@ -524,7 +510,7 @@ async fn mtk(cx: Cx, input: Input) -> Result<()> {
             break;
         }
         let len = u64::from(u32_le(&head, 4).unwrap_or(0));
-        let name = zstr(head.get(8..40).unwrap_or_default());
+        let name = until_nul(head.get(8..40).unwrap_or_default());
         let header = file.sub(at, 512);
         let data = file.sub(at.saturating_add(512), len);
         names.push(name.clone());
@@ -613,7 +599,7 @@ async fn pit(cx: Cx, input: Input) -> Result<()> {
         let name = pit_entry(&mut Fields::new(&block, LE), &())?;
         let e = &block.data;
         let blocks = u32_le(e, 24).unwrap_or(0);
-        let flash = zstr(e.get(68..100).unwrap_or_default());
+        let flash = until_nul(e.get(68..100).unwrap_or_default());
         cx.push(struct_node(name, span, LE, (), pit_entry).summary(format!(
             "id {}, {blocks} blocks, {flash}",
             u32_le(e, 8).unwrap_or(0)
@@ -739,7 +725,7 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Section count")
                 .span(cur.since(at))
-                .value(uint(sections.into())),
+                .value(uint(sections, 64)),
         );
         for _ in 0..sections.min(64) {
             let at = cur.pos();
@@ -771,7 +757,7 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Dex file count")
                 .span(Span::new(file.source, file.offset.saturating_add(at), 1))
-                .value(uint(dex_files.into())),
+                .value(uint(dex_files, 64)),
         );
         cx.emit(
             Node::new("Uncompressed size")
@@ -780,7 +766,7 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
                     file.offset.saturating_add(at).saturating_add(1),
                     4,
                 ))
-                .value(uint(inflated.into())),
+                .value(uint(inflated, 64)),
         );
         cx.emit(
             Node::new("Compressed size")
@@ -789,7 +775,7 @@ async fn art_profile(cx: Cx, input: Input) -> Result<()> {
                     file.offset.saturating_add(at).saturating_add(5),
                     4,
                 ))
-                .value(uint(compressed.into())),
+                .value(uint(compressed, 64)),
         );
         let body = file.sub(cur.pos(), compressed.into());
         cx.emit(content(
@@ -835,7 +821,7 @@ async fn fcontext(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(cur.since(at))
-            .value(uint(version.into())),
+            .value(uint(version, 64)),
     );
     let mut summary = Vec::new();
     for (min, label) in [(2u32, "PCRE version"), (5, "Regex architecture")] {
@@ -856,7 +842,7 @@ async fn fcontext(cx: Cx, input: Input) -> Result<()> {
     for _ in 0..stems.min(100_000) {
         let len = cur.u32().await?;
         let s = cur.bytes(u64::from(len).saturating_add(1)).await?;
-        names.push(zstr(&s));
+        names.push(until_nul(&s));
         cx.checkpoint().await;
     }
     cx.emit(
@@ -911,7 +897,7 @@ async fn hprof(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Identifier size")
             .span(cur.since(at))
-            .value(uint(id_size.into())),
+            .value(uint(id_size, 64)),
     );
     if !matches!(id_size, 4 | 8) {
         return Err(Diagnostic::malformed(format!("identifier size {id_size}")).at(cur.since(at)));
@@ -1213,7 +1199,7 @@ async fn logcat(cx: Cx, input: Input) -> Result<()> {
             let rest = data.get(1..).unwrap_or_default();
             let tag_end = rest.iter().position(|&b| b == 0).unwrap_or(rest.len());
             let tag = String::from_utf8_lossy(rest.get(..tag_end).unwrap_or_default()).into_owned();
-            let msg = zstr(rest.get(tag_end.saturating_add(1)..).unwrap_or_default());
+            let msg = until_nul(rest.get(tag_end.saturating_add(1)..).unwrap_or_default());
             let p = PRIORITY.get(usize::from(prio)).copied().unwrap_or("?");
             Node::new(format!("{p}/{tag}"))
                 .value(text(msg.trim_end()))

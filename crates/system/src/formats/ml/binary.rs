@@ -3,34 +3,20 @@
 //! parameters, MXNet NDArray lists, NNEF tensors, fastText models and MLIR
 //! bytecode.
 
+use super::gguf::TENSOR_TYPES;
 use crate::bytes::{u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::val::{int, text, uint};
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn int(value: i64, bits: u8) -> Value {
-    Value::Int { value, bits }
-}
 
 // ---------------------------------------------------------------------------
 // GGML (llama.cpp before GGUF)
@@ -46,23 +32,6 @@ enum Ggml {
     /// `algg`: a LoRA adapter (no vocabulary).
     Ggla,
 }
-
-const GGML_TYPE: EnumTable = &[
-    (0, "F32"),
-    (1, "F16"),
-    (2, "Q4_0"),
-    (3, "Q4_1"),
-    (6, "Q5_0"),
-    (7, "Q5_1"),
-    (8, "Q8_0"),
-    (9, "Q8_1"),
-    (10, "Q2_K"),
-    (11, "Q3_K"),
-    (12, "Q4_K"),
-    (13, "Q5_K"),
-    (14, "Q6_K"),
-    (15, "Q8_K"),
-];
 
 /// Elements per block and bytes per block of a tensor type. Before ggjt v3,
 /// Q4_0, Q4_1 and Q8_0 stored their scales as `f32`.
@@ -381,7 +350,7 @@ async fn ggml_walk(cx: &Cx, file: Span, layout: GgmlLayout, emit: bool) -> Resul
 
 fn tensor_node(t: TensorInfo) -> Node {
     let shape: Vec<String> = t.dims.iter().map(u32::to_string).collect();
-    let kind = lookup(GGML_TYPE, t.kind.into()).unwrap_or("?");
+    let kind = lookup(TENSOR_TYPES, t.kind.into()).unwrap_or("?");
     Node::new(t.name)
         .span(Span::new(
             t.header.source,
@@ -412,7 +381,7 @@ async fn tensor_fields(
     let mut f = Fields::emitting(&cx, &block, LE);
     f.u32("n_dims").emit()?;
     let name_len = f.u32("Name length").emit()?;
-    f.u32("Type").enumeration(GGML_TYPE).emit()?;
+    f.u32("Type").enumeration(TENSOR_TYPES).emit()?;
     for _ in 0..n_dims {
         f.u32("ne").emit()?;
     }
@@ -583,7 +552,7 @@ async fn ncnn_layer(cx: Cx, span: Span) -> Result<()> {
     cx.emit(
         Node::new("Type index")
             .span(cur.since(at))
-            .value(int(kind.into(), 32)),
+            .value(int(kind, 32)),
     );
     let at = cur.pos();
     let bottoms = cur.u32().await?;

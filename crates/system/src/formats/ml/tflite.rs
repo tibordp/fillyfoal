@@ -10,21 +10,10 @@ use crate::error::Result;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value, lookup};
+use crate::value::{EnumTable, lookup};
 
+use crate::formats::util::val::{text, uint};
 use crate::formats::util::wire::flatbuffers::{Fb, Table, Vector, dims, raw_table};
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: 64,
-        radix: Radix::Dec,
-    }
-}
 
 /// The root offset must point inside the file, past the identifier.
 fn root_ok(h: &Head<'_>) -> bool {
@@ -212,7 +201,7 @@ async fn tflite(cx: Cx, input: Input) -> Result<()> {
     cx.emit(header(file, "TFL3"));
     let model = fb.root().await?;
     let version = fb.u32_field(&model, 0).await?.unwrap_or(0);
-    let mut node = Node::new("Version").value(uint(version.into()));
+    let mut node = Node::new("Version").value(uint(version, 64));
     if let Some(p) = fb.field(&model, 0).await? {
         node = node.span(file.sub(p, 4));
     }
@@ -516,7 +505,7 @@ async fn ort(cx: Cx, input: Input) -> Result<()> {
         let ir = fb.u64_field(&model, 0).await?.unwrap_or(0);
         let producer = fb.string(&model, 2).await?.unwrap_or_default();
         let producer_version = fb.string(&model, 3).await?.unwrap_or_default();
-        cx.emit(Node::new("IR version").value(uint(ir)));
+        cx.emit(Node::new("IR version").value(uint(ir, 64)));
         if !producer.is_empty() {
             cx.emit(
                 Node::new("Producer").value(text(
@@ -636,7 +625,7 @@ async fn executorch(cx: Cx, input: Input) -> Result<()> {
     }
     let program = fb.root().await?;
     let version = fb.u32_field(&program, 0).await?.unwrap_or(0);
-    cx.emit(Node::new("Version").value(uint(version.into())));
+    cx.emit(Node::new("Version").value(uint(version, 64)));
     let mut plans = Vec::new();
     if let Some(v) = fb.vector(&program, 1, 4).await? {
         for i in 0..v.len.min(64) {

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ game.isz — ISZ v1, 64 KiB image in 2 chunks of 32 KiB, encryption none  [0x0+0x92]
+▾ game.isz — ISZ v1, 64.0 KiB image in 2 chunks of 32.0 KiB, encryption none  [0x0+0x92]
   ▾ Header  [0x0+0x40]
       Signature: "IsZ!"  [0x0+0x4]
       Header size: 64  [0x4+0x1]

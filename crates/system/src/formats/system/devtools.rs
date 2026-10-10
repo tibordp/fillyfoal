@@ -7,6 +7,7 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::val::text;
 use crate::formats::{Codec, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::record;
@@ -15,10 +16,6 @@ use crate::value::{EnumTable, Value, lookup};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // Precompiled headers: GCC and Clang

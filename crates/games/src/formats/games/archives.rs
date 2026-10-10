@@ -236,13 +236,13 @@ fn psarc_entry(f: &mut Fields<'_>, _: &()) -> Result<(u32, u64, u64)> {
                 bits: 40,
                 radix: crate::value::Radix::Dec,
             })
-            .summary(crate::formats::util::arcutil::human_size(v))
+            .summary(crate::formats::util::fmt::size(v))
         })
         .emit()?;
     let offset = f
         .bytes("Offset", 5)
         .map(|b| be40(&b))
-        .with(|&v, n| n.value(crate::formats::util::arcutil::hex(v)))
+        .with(|&v, n| n.value(crate::formats::util::val::hex(v, 64)))
         .emit()?;
     Ok((block, size, offset))
 }
@@ -268,7 +268,7 @@ async fn psarc_toc(cx: Cx, (span, entry_size, count): (Span, u64, u32)) -> Resul
 /// [`crate::codec::psarc`]. From memory of the community documentation.
 async fn psarc(cx: Cx, input: Input) -> Result<()> {
     use crate::codec::{Codec, psarc::Entry};
-    use crate::formats::util::arcutil::human_size;
+    use crate::formats::util::fmt::size as human_size;
     let file = input.span;
     let h: PsarcHeader = emit_record(&cx, file.sub(0, PsarcHeader::SIZE), BE).await?;
     let summary = format!(

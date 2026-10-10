@@ -10,17 +10,14 @@
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::Result;
+use crate::formats::text::piece::Piece;
 use crate::formats::text::probe::{self, contains, find, significant, trim_start};
 use crate::formats::text::scan::Lines;
 use crate::formats::text::{json, xml, yaml};
+use crate::formats::util::val::text;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::Value;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 /// The first line of the head that is not blank or a comment.
 fn first_line<'a>(data: &'a [u8], comments: &'a [&'a [u8]]) -> &'a [u8] {
@@ -52,13 +49,16 @@ fn json_str(data: &[u8], key: &str) -> Option<String> {
     Some(String::from_utf8_lossy(rest.get(..end)?).into_owned())
 }
 
-/// The value of attribute `name` in an XML start tag.
+/// The value of attribute `name` in an XML start tag (without its `<`).
 fn attr(tag: &[u8], name: &str) -> Option<String> {
-    let needle = format!(" {name}=\"");
-    let at = find(tag, needle.as_bytes())?.saturating_add(needle.len());
-    let rest = tag.get(at..)?;
-    let end = rest.iter().position(|&b| b == b'"')?;
-    Some(String::from_utf8_lossy(rest.get(..end)?).into_owned())
+    let mut full = b"<".to_vec();
+    full.extend_from_slice(tag);
+    let piece = Piece::new(&full, Span::new(crate::span::SourceId(0), 0, 0));
+    xml::attributes(piece)
+        .into_iter()
+        .find(|a| a.name.bytes() == name.as_bytes())
+        .and_then(|a| a.value)
+        .map(|v| xml::decode_entities(&v.text(), false))
 }
 
 /// How often `needle` occurs in `hay`.
@@ -650,7 +650,7 @@ async fn pmml(cx: Cx, input: Input) -> Result<()> {
     let app = find(&head, b"<Application").and_then(|at| {
         let rest = head.get(at..)?;
         let end = rest.iter().position(|&b| b == b'>')?;
-        attr(rest.get(..end)?, "name")
+        attr(rest.get(1..end)?, "name")
     });
     xml::dissect(cx.clone(), input).await?;
     let app = app.map(|a| format!(", from {a}")).unwrap_or_default();

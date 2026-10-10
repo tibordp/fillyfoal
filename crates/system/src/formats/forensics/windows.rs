@@ -1266,21 +1266,21 @@ const TRIGGER_TYPES: EnumTable = &[
     (7, "EVENT_AT_LOGON"),
 ];
 
-/// A SYSTEMTIME (eight 16-bit fields) as text.
+/// A SYSTEMTIME (eight 16-bit fields, local time) as text; fields out of
+/// range are shown as stored.
 fn systemtime_text(raw: &[u8]) -> String {
-    let part = |i: usize| u16_le(raw, i.saturating_mul(2)).unwrap_or(0);
-    if part(0) == 0 {
+    let w: [u16; 8] = std::array::from_fn(|i| u16_le(raw, i.saturating_mul(2)).unwrap_or(0));
+    let [year, month, _, day, hour, minute, second, _] = w;
+    if year == 0 {
         return "never".to_owned();
     }
-    format!(
-        "{:04}-{:02}-{:02} {:02}:{:02}:{:02}",
-        part(0),
-        part(1),
-        part(3),
-        part(4),
-        part(5),
-        part(6)
-    )
+    match crate::formats::util::civil::systemtime(w) {
+        Some(unix_seconds) => {
+            let shown = crate::render::value(&Value::Timestamp { unix_seconds });
+            shown.strip_suffix(" UTC").unwrap_or(&shown).to_owned()
+        }
+        None => format!("{year:04}-{month:02}-{day:02} {hour:02}:{minute:02}:{second:02}"),
+    }
 }
 
 fn systemtime(f: &mut Fields<'_>, name: &'static str) -> Result<String> {
@@ -2354,8 +2354,7 @@ async fn clp_format(
             );
             let bpp = u16_le(&head, 14).unwrap_or(0);
             cx.emit(
-                Node::new("Device-independent bitmap")
-                    .span(data)
+                crate::formats::embedded_named("Bitmap", input.nested(data), "dib")
                     .summary(format!("{w}×{} at {bpp} bpp", h.unsigned_abs())),
             );
         }

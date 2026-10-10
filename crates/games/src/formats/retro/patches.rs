@@ -2,15 +2,15 @@
 //! updates: IPS (and EBP), IPS32, UPS, BPS, VCDIFF (xdelta3), bsdiff, PPF, APS,
 //! GDIFF, Ninja RUP and Windows delta (PA30).
 
-use super::util::{
-    Varint, crc_node, crc32_of, dec, find_zero, hex, size, text, uint_be, varint, varint_field,
-};
+use super::util::{Varint, crc_node, crc32_of, find_zero, uint_be, varint, varint_field};
 use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
 use crate::record;
@@ -151,12 +151,12 @@ async fn beat_footer(cx: &Cx, file: Span) -> Result<bool> {
     cx.emit(
         Node::new("Source CRC-32")
             .span(file.sub(at, 4))
-            .value(hex(u32_le(&footer, 0).unwrap_or(0).into(), 32)),
+            .value(hex(u32_le(&footer, 0).unwrap_or(0), 32)),
     );
     cx.emit(
         Node::new("Target CRC-32")
             .span(file.sub(at.saturating_add(4), 4))
-            .value(hex(u32_le(&footer, 4).unwrap_or(0).into(), 32)),
+            .value(hex(u32_le(&footer, 4).unwrap_or(0), 32)),
     );
     cx.emit(crc_node(
         "Patch CRC-32",
@@ -357,7 +357,7 @@ async fn vcdiff(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(3, 1))
-            .value(dec(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let indicator = cur.u8().await?;
     let (set, unknown) = crate::value::decode_flags(VCD_HDR, indicator.into());
@@ -497,7 +497,7 @@ async fn vcdiff_window(cx: Cx, span: Span) -> Result<()> {
         cx.emit(
             Node::new("Adler-32")
                 .span(cur.since(at))
-                .value(hex(sum.into(), 32)),
+                .value(hex(sum, 32)),
         );
     }
     for (name, len) in [
@@ -828,7 +828,7 @@ async fn aps_n64(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Record {records}"))
                 .span(cur.since(start))
-                .value(hex(offset.into(), 32))
+                .value(hex(offset, 32))
                 .summary(summary),
         )
         .await;
@@ -869,7 +869,7 @@ async fn aps_gba(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Block {i}"))
                 .span(span)
-                .value(hex(offset.into(), 32))
+                .value(hex(offset, 32))
                 .summary(format!(
                     "64 KiB XOR at {offset:#x}, CRC16 {:#06x} → {:#06x}",
                     u16_le(&head, 4).unwrap_or(0),
@@ -908,9 +908,13 @@ async fn gdiff(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(file.sub(0, 4))
-            .value(hex(0xd1ff_d1ff, 32)),
+            .value(hex(0xd1ff_d1ffu32, 32)),
     );
-    cx.emit(Node::new("Version").span(file.sub(4, 1)).value(dec(4, 8)));
+    cx.emit(
+        Node::new("Version")
+            .span(file.sub(4, 1))
+            .value(uint(4u8, 8)),
+    );
     let mut cur = Cursor::new(&cx, file, BE);
     cur.seek(5);
     let (mut commands, mut out, mut data, mut copies) = (0u64, 0u64, 0u64, 0u64);
@@ -1111,7 +1115,7 @@ async fn rup(cx: Cx, input: Input) -> Result<()> {
                 cx.push(
                     Node::new("Unknown command")
                         .span(cur.since(start))
-                        .value(hex(other.into(), 8))
+                        .value(hex(other, 8))
                         .diag(Diagnostic::malformed("unknown RUP command")),
                 )
                 .await;

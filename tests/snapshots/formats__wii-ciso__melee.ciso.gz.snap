@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ melee.ciso — compact ISO, 2 blocks of 32 KiB stored, image 96 KiB  [0x0+0x18000]
+▾ melee.ciso — compact ISO, 2 blocks of 32.0 KiB stored, image 96.0 KiB  [0x0+0x18000]
     Magic: "CISO"  [0x0+0x4]
     Block size: 32768  [0x4+0x4]
     Block map — 2 of 3 blocks present  [0x8+0x7ff8]
