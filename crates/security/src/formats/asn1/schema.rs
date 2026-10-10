@@ -16,6 +16,9 @@ pub enum Schema {
     /// before this field in the same SEQUENCE: `(OID, name, schema)`, where
     /// the name, if any, replaces the field's.
     DefinedBy(&'static [(&'static str, Option<&'static str>, &'static Schema)]),
+    /// A context-tagged primitive that is an IMPLICIT string of this
+    /// universal type (its text is decoded as that type's).
+    Implicit(u64),
 }
 
 impl Schema {
@@ -84,7 +87,7 @@ impl Matcher {
 
     pub fn child(&mut self, id: u8) -> (Option<&'static str>, &'static Schema) {
         match self.schema {
-            Schema::Any | Schema::DefinedBy(_) => (None, &UNKNOWN),
+            Schema::Any | Schema::DefinedBy(_) | Schema::Implicit(_) => (None, &UNKNOWN),
             Schema::SeqOf(name, schema) => (Some(name), schema),
             Schema::Name => (Some("RelativeDistinguishedName"), &RDN),
             Schema::Seq(fields) => {
@@ -298,7 +301,7 @@ static SPC_PE_IMAGE_DATA: Schema = Schema::Seq(&[
 
 /// SpcLink, a CHOICE: one of these.
 static SPC_LINK: Schema = Schema::Seq(&[
-    opt("url", &[0x80], &UNKNOWN),
+    opt("url", &[0x80], &IA5_STRING),
     opt("moniker", &[0xa1], &SPC_SERIALIZED_OBJECT),
     opt("file", &[0xa2], &SPC_STRING),
 ]);
@@ -310,9 +313,12 @@ static SPC_SERIALIZED_OBJECT: Schema = Schema::Seq(&[
 
 /// SpcString, a CHOICE: one of these.
 static SPC_STRING: Schema = Schema::Seq(&[
-    opt("unicode", &[0x80], &UNKNOWN),
-    opt("ascii", &[0x81], &UNKNOWN),
+    opt("unicode", &[0x80], &BMP_STRING),
+    opt("ascii", &[0x81], &IA5_STRING),
 ]);
+
+static BMP_STRING: Schema = Schema::Implicit(30);
+static IA5_STRING: Schema = Schema::Implicit(22);
 
 /// Scripts, installers and other files signed through a subject interface
 /// package.
