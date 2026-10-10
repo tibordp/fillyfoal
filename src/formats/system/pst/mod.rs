@@ -20,6 +20,12 @@
 //! - **LTP** (`ltp`): the heap-on-node (allocations addressed by HID), BTHs
 //!   on it, property contexts (one object's properties) and table contexts
 //!   (rows with a column per property).
+//! - **Structure** (`heapview`): the node B-tree view shows each LTP
+//!   node's heap block by block (HNHDR/HNPAGEHDR/HNBITMAPHDR, page map,
+//!   every allocation labelled as BTH header, BTH records, TCINFO, row
+//!   matrix or property value), and the fields of page trailers, page
+//!   metadata, block trailers and internal blocks (XBLOCK, XXBLOCK,
+//!   SLBLOCK, SIBLOCK).
 //! - **Messaging** (`store`): the message store, the folder tree (from
 //!   each folder's hierarchy table), each folder's contents table (paged,
 //!   with resume marks), messages with their properties, bodies (plain
@@ -36,6 +42,7 @@
 //! FPMap, DList pages) and search folders' internals. Compressed RTF bodies are
 //! decoded with `Codec::Lzfu`.
 
+mod heapview;
 mod ltp;
 mod ndb;
 mod props;

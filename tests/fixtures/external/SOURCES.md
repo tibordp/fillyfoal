@@ -512,3 +512,24 @@ reproducible byte for byte.
 | `xls/xlwt.xls` | xlwt 1.3.0 | `uv run --with xlwt==1.3.0 python tests/data/xls/make_xlwt.py xlwt.xls`; reproduced byte-for-byte |
 | `ppt/deck.ppt` | LibreOffice 26.8.1.1 ("MS PowerPoint 97" filter) | `lo-convert.sh ppt tests/data/ppt/deck.fodp`: two slides with titles, bullets, notes, a rectangle and an ellipse |
 | `msi/hello.msi` | msitools 0.106 (`wixl`) | `wixl -o hello.msi tests/data/msi/hello.wxs` next to `tests/data/msi/readme.txt`; the package code and times differ on each run |
+
+## Windows
+
+Made by Windows' own components on an ARM64 Windows 11 VM (build 26200,
+`ge_release` 26100 binaries) named FILLYFOAL, via
+`tests/data/windows/make-fixtures.ps1` (event log service + `wevtutil`,
+`RegSaveKeyEx`, `esent.dll`, `dbghelp`), which refuses to run unless the
+computer is named FILLYFOAL, sets registry ownership to
+BUILTIN\Administrators and scans its outputs for the account's names and
+SID. The files are unchanged; not byte-for-byte reproducible (times, record
+numbers, random signatures, process memory). The minidumps record the VM's
+time zone.
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `evtx/fillyfoal.evtx` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `wevtutil epl` of a 1 MiB classic log `Fillyfoal` after 600 `Write-EventLog` calls: sources FillyfoalSource/FillyfoalOther alternating, event IDs 1000–1016, all five entry types, categories 0–3, a two-line message and 1–40 bytes of raw data each; 4 chunks (records 1–181, 182–360, 361–540, 541–600), 17 chunks allocated. Checked against python-evtx 0.8.1 (every record's number, time, event ID, level, provider, keywords, task and binary data) |
+| `regf/fillyfoal-latest.hiv` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `RegSaveKeyEx(REG_LATEST_FORMAT)` of `HKCU\Software\Fillyfoal`: hive 1.5 with values of every common type (REG_SZ, REG_EXPAND_SZ, REG_MULTI_SZ, REG_DWORD, REG_QWORD, a 4-byte and a 40 000-byte REG_BINARY (big data `db` cell), the default value, a 208-character value name, REG_NONE), subkeys `Many` (2 100 subkeys: an `ri` over `lh` lists) and `Nested\Deeper\Deepest` (REG_DWORD 42), one shared security descriptor (Administrators/SYSTEM full control, Everyone read). Checked against python-registry 1.3.1 (all values, subkey counts) |
+| `regf/fillyfoal-standard.hiv` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same key saved with `REG_STANDARD_FORMAT`: hive 1.3, `lf`/`li` index lists, the 40 000-byte value in one data cell. Checked against python-registry 1.3.1 |
+| `ese/fillyfoal.edb` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | esent.dll database (format 0x620, update 300, 4 KiB pages, clean shutdown) with table `Fixtures` (400 rows; every column type: Bit, UnsignedByte, Short, Long autoincrement, Currency, IEEESingle, IEEEDouble, DateTime, Binary, Text in UTF-16 and Windows-1252, LongBinary and LongText (20 000-byte and 6 000-character separated long values every 50th row), UnsignedLong, LongLong, GUID, UnsignedShort, a tagged multi-valued Text column), a primary index and a two-column secondary index, and table `Small` (3 rows). Checked against dissect.esedb 3.18 (catalog, column types, every row value of both tables; dissect cannot reassemble one of the 20 000-byte long values) and our page checksums (ECC + XOR, every page valid) |
+| `minidump/ping-normal.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | `MiniDumpWriteDump(MiniDumpNormal)` of a running `PING.EXE` on ARM64: thread list (6 threads, ARM64 contexts), module list (12 modules with RSDS CodeView records), function table, memory list, system info, misc info (version 5), system memory info, process VM counters. The skelsec `minidump` package rejects ARM64 dumps, so the streams were checked with a short `struct` script against dbghelp's documented layouts |
+| `minidump/ping-info.dmp` | Windows (event log service + wevtutil / RegSaveKeyEx / esent.dll / dbghelp), via tests/data/windows/make-fixtures.ps1, on a VM named FILLYFOAL | the same process with `MiniDumpWithUnloadedModules \| MiniDumpWithFullMemoryInfo \| MiniDumpWithThreadInfo` (0x1820): adds the thread info list and the memory info list (240 regions); no module had been unloaded, so there is no unloaded-module stream |

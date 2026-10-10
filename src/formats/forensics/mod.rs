@@ -26,3 +26,4 @@ pub mod userdata;
 pub mod wab;
 pub mod windiag;
 pub mod windows;
+pub mod winsec;
