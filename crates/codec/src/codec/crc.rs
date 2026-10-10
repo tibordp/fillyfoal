@@ -157,6 +157,18 @@ pub fn crc32c_update(crc: u32, data: &[u8]) -> u32 {
     low32(CRC32C.update(crc.into(), data))
 }
 
+/// The CRC-32C masking of Snappy framing, LevelDB/RocksDB logs and
+/// TFRecord: rotated right by 15 bits, plus `0xa282ead8` (so that a CRC
+/// over data containing CRCs is not degenerate).
+pub fn mask_crc32c(crc: u32) -> u32 {
+    crc.rotate_right(15).wrapping_add(0xa282_ead8)
+}
+
+/// [`crc32c`] of `data`, masked (see [`mask_crc32c`]).
+pub fn crc32c_masked(data: &[u8]) -> u32 {
+    mask_crc32c(crc32c(data))
+}
+
 /// CRC-64/XZ.
 pub fn crc64(data: &[u8]) -> u64 {
     CRC64_XZ.checksum(data)
@@ -212,6 +224,7 @@ mod tests {
         assert_eq!(crc16_modbus(c), 0x4b37);
         assert_eq!(crc16_xmodem(c), 0x31c3);
         assert_eq!(crc8(c), 0xf4);
+        assert_eq!(crc32c_masked(c), 0xc78a_b0e5);
     }
 
     #[test]

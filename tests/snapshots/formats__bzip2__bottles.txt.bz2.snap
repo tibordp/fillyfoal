@@ -14,9 +14,9 @@ expression: "common::explore(&display_name(&path), &data)"
       Original pointer: 1663  [0xe+0x4]
   ▾ Blocks — 1 block  [0x4+0x132]
       Block 0: 0x9d479efe — bit offset 0x0, 295 bytes compressed  [0x4+0x128]
-  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall,  99 bottles of beer.), ~98 records  [0x0+0x136]
+  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall, 99 bottles of beer.), ~98 records  [0x0+0x136]
       Delimiter: "comma"
-    ▾ Header — 99 bottles of beer on the wall,  99 bottles of beer.  [#1:0x0+0x33]
+    ▾ Header — 99 bottles of beer on the wall, 99 bottles of beer.  [#1:0x0+0x33]
         Column 1: "99 bottles of beer on the wall"  [#1:0x0+0x1e]
         Column 2: " 99 bottles of beer."  [#1:0x1f+0x14]
     ▾ Record 1 — 98 bottles of beer on the wall, 98 bottles of beer.  [#1:0x34+0x33]

@@ -3,9 +3,9 @@ source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ filters-blocks.xz — xz, 6 blocks, 5.0 KiB uncompressed, SHA-256  [0x0+0x544]
-  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall,  99 bottles of beer.), ~98 records  [0x0+0x544]
+  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall, 99 bottles of beer.), ~98 records  [0x0+0x544]
       Delimiter: "comma"
-    ▾ Header — 99 bottles of beer on the wall,  99 bottles of beer.  [#1:0x0+0x33]
+    ▾ Header — 99 bottles of beer on the wall, 99 bottles of beer.  [#1:0x0+0x33]
         Column 1: "99 bottles of beer on the wall"  [#1:0x0+0x1e]
         Column 2: " 99 bottles of beer."  [#1:0x1f+0x14]
     ▾ Record 1 — 98 bottles of beer on the wall, 98 bottles of beer.  [#1:0x34+0x33]

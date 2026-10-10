@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ people.csv — CSV, 4 columns (name, age, city, zip), ~7 records  [0x0+0x89]
     Delimiter: "comma"
@@ -19,7 +19,7 @@ expression: "common::explore(&name, &data)"
       age: 51  [0x3a+0x2]
       city: "Maribor"  [0x3d+0x9]
       zip: 2000  [0x47+0x4]
-  ▾ Record 3 — "He said ""hi""",7.5,"multi  line",  [0x4d+0x23]
+  ▾ Record 3 — "He said ""hi""",7.5,"multi line",  [0x4d+0x23]
       name: "He said \"hi\""  [0x4d+0x10]
       age: 7.5  [0x5e+0x3]
       city: "multi\r\nline"  [0x62+0xd]

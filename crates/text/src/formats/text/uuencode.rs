@@ -10,7 +10,9 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-use super::decode::{self, Decoded, Transform};
+use crate::codec::Codec;
+
+use super::decode;
 use super::encoding::prepare;
 use super::scan::Lines;
 use super::{plural, probe, text_node};
@@ -84,68 +86,6 @@ fn is_xx(line: &[u8]) -> bool {
     xx_ok && !uu_ok
 }
 
-/// Decodes uu/xxencoded lines up to the terminating empty line, a bounded
-/// number of bytes at a time.
-struct LineDecoder {
-    xx: bool,
-    pos: usize,
-    bytes: Vec<u8>,
-    error: Option<String>,
-}
-
-impl LineDecoder {
-    fn new(xx: bool, len: usize) -> Self {
-        LineDecoder {
-            xx,
-            pos: 0,
-            bytes: Vec::with_capacity((len / 4).saturating_mul(3)),
-            error: None,
-        }
-    }
-}
-
-impl decode::Step for LineDecoder {
-    fn step(&mut self, data: &[u8], limit: usize) -> bool {
-        let stop = self.pos.saturating_add(limit);
-        while self.pos < data.len() && self.pos < stop {
-            let rest = data.get(self.pos..).unwrap_or_default();
-            let (line, used) = match rest.iter().position(|&b| b == b'\n') {
-                Some(n) => (rest.get(..n).unwrap_or_default(), n.saturating_add(1)),
-                None => (rest, rest.len()),
-            };
-            self.pos = self.pos.saturating_add(used);
-            let line = line.strip_suffix(b"\r").unwrap_or(line);
-            if line.is_empty() {
-                continue;
-            }
-            let last = if self.xx {
-                matches!(line, b"+")
-            } else {
-                matches!(line, b"`" | b" ")
-            };
-            if last {
-                return true;
-            }
-            let ok = if self.xx {
-                decode::xx_line(line, &mut self.bytes)
-            } else {
-                decode::uu_line(line, &mut self.bytes)
-            };
-            if !ok && self.error.is_none() {
-                self.error = Some("line shorter than its length character says".to_owned());
-            }
-        }
-        self.pos >= data.len()
-    }
-
-    fn finish(self) -> Decoded {
-        Decoded {
-            bytes: self.bytes,
-            error: self.error,
-        }
-    }
-}
-
 #[derive(Clone, Debug)]
 struct Block {
     input: Input,
@@ -154,17 +94,12 @@ struct Block {
 }
 
 async fn content(cx: Cx, b: Block) -> Result<()> {
-    let (span, error) = match b.kind {
-        Kind::Base64 => decode::derive_with(&cx, b.body, Transform::Base64).await?,
-        Kind::Uu => {
-            let make = |len| LineDecoder::new(false, len);
-            decode::derive_stepped(&cx, b.body, "uudecode", make).await?
-        }
-        Kind::Xx => {
-            let make = |len| LineDecoder::new(true, len);
-            decode::derive_stepped(&cx, b.body, "xxdecode", make).await?
-        }
+    let codec = match b.kind {
+        Kind::Base64 => Codec::Base64,
+        Kind::Uu => Codec::Uu,
+        Kind::Xx => Codec::Xx,
     };
+    let (span, error) = decode::derive_codec(&cx, b.body, &codec).await?;
     if let Some(e) = error {
         cx.diag(e);
     }

@@ -7,9 +7,9 @@ expression: "common::explore(&display_name(&path), &data)"
       Properties: 93 — lc=3 lp=0 pb=2  [0x0+0x1]
       Dictionary size: 8388608 — 8.0 MiB  [0x1+0x4]
       Uncompressed size: 18446744073709551615 — unknown (end marker)  [0x5+0x8]
-  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall,  99 bottles of beer.), ~98 records  [0x0+0x134]
+  ▾ Decompressed — CSV, 2 columns (99 bottles of beer on the wall, 99 bottles of beer.), ~98 records  [0x0+0x134]
       Delimiter: "comma"
-    ▾ Header — 99 bottles of beer on the wall,  99 bottles of beer.  [#1:0x0+0x33]
+    ▾ Header — 99 bottles of beer on the wall, 99 bottles of beer.  [#1:0x0+0x33]
         Column 1: "99 bottles of beer on the wall"  [#1:0x0+0x1e]
         Column 2: " 99 bottles of beer."  [#1:0x1f+0x14]
     ▾ Record 1 — 98 bottles of beer on the wall, 98 bottles of beer.  [#1:0x34+0x33]

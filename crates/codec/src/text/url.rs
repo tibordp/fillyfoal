@@ -4,15 +4,7 @@
 //! These only make text readable; they never replace the raw value, which
 //! callers keep and show alongside.
 
-/// The value of a hex digit.
-fn hex(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b.wrapping_sub(b'0')),
-        b'a'..=b'f' => Some(b.wrapping_sub(b'a').wrapping_add(10)),
-        b'A'..=b'F' => Some(b.wrapping_sub(b'A').wrapping_add(10)),
-        _ => None,
-    }
-}
+use crate::text::hex_digit as hex;
 
 /// `%XX` escapes decoded to bytes; malformed escapes are kept as they are.
 pub fn percent_decode_bytes(text: &[u8]) -> Vec<u8> {

@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ table.tsv — TSV, 3 columns (id, value, label), ~4 records  [0x0+0x3d]
     Delimiter: "tab"
@@ -16,7 +16,7 @@ expression: "common::explore(&name, &data)"
       id: 2  [0x1b+0x1]
       value: -1000  [0x1d+0x4]
       label: "beta gamma"  [0x22+0xa]
-  ▾ Record 3 — 3  "quoted tab"  [0x2d+0xf]
+  ▾ Record 3 — 3 "quoted tab"  [0x2d+0xf]
       id: 3  [0x2d+0x1]
       value: ""  [0x2f+0x0]
       label: "quoted\ttab"  [0x30+0xc]

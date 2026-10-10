@@ -1,15 +1,27 @@
 //! Transfer encodings found inside text: base64, quoted-printable, hex,
 //! percent-encoding, uu- and xxencoding, and `data:` URLs. Each decoder is
 //! tolerant and reports where it stopped.
+//!
+//! The decoders are the codec crate's ([`filters::Base64`],
+//! [`filters::QuotedPrintable`], [`filters::UuLines`], [`filters::YEnc`]):
+//! spans are decoded with [`derive_codec`] into evictable derived sources
+//! (decoded again on demand), and in-memory buffers with [`base64`] and
+//! [`quoted_printable`].
 
+use crate::codec::Codec;
 use crate::codec::charset::Label;
+use crate::codec::filters::{self, ByteFilter};
 use crate::cx::Cx;
-use crate::error::{Diagnostic, Result};
+use crate::error::{DiagKind, Diagnostic, Result};
 use crate::formats::Input;
 use crate::node::Node;
 use crate::span::{Origin, Span};
+use crate::text::hex_digit;
 
 use super::encoding::Encoding;
+
+pub use crate::codec::filters::{XX_ALPHABET, xx_value};
+pub use crate::formats::util::fmt::preview;
 
 /// The result of decoding: bytes, and the first problem, if any.
 pub struct Decoded {
@@ -17,20 +29,9 @@ pub struct Decoded {
     pub error: Option<String>,
 }
 
-fn base64_value(b: u8) -> Option<u32> {
-    match b {
-        b'A'..=b'Z' => Some(u32::from(b.saturating_sub(b'A'))),
-        b'a'..=b'z' => Some(u32::from(b.saturating_sub(b'a')).saturating_add(26)),
-        b'0'..=b'9' => Some(u32::from(b.saturating_sub(b'0')).saturating_add(52)),
-        b'+' | b'-' => Some(62),
-        b'/' | b'_' => Some(63),
-        _ => None,
-    }
-}
-
 /// A decoder that works through an in-memory buffer a bounded step at a
 /// time, so that a large body can be decoded between checkpoints.
-pub(super) trait Step: Send {
+trait Step: Send {
     /// Decodes about `limit` more input bytes of `data` (always the same
     /// buffer); returns whether the decoder is done.
     fn step(&mut self, data: &[u8], limit: usize) -> bool;
@@ -46,69 +47,60 @@ fn run<S: Step>(mut s: S, data: &[u8]) -> Decoded {
 /// Input bytes a stepped decoder works through between checkpoints.
 const STEP: usize = 64 * 1024;
 
-/// Runs `s` over `data` in bounded steps with a checkpoint in between.
-async fn run_stepped<S: Step>(cx: &Cx, mut s: S, data: &[u8]) -> Decoded {
-    while !s.step(data, STEP) {
-        cx.checkpoint().await;
-    }
-    s.finish()
-}
-
-struct Base64 {
+/// A codec's [`ByteFilter`] over an in-memory buffer: it stops at the
+/// first error (keeping what was decoded before it) and remembers where.
+struct Filtered<F> {
+    filter: F,
     pos: usize,
-    acc: u32,
-    bits: u32,
     bytes: Vec<u8>,
     error: Option<String>,
-    /// Where the first invalid character is.
+    /// The offset of the byte the filter failed on.
     bad: Option<usize>,
 }
 
-impl Base64 {
-    fn new(len: usize) -> Self {
-        Base64 {
+impl<F: ByteFilter> Filtered<F> {
+    fn new(filter: F, capacity: usize) -> Self {
+        Filtered {
+            filter,
             pos: 0,
-            acc: 0,
-            bits: 0,
-            bytes: Vec::with_capacity((len / 4).saturating_mul(3)),
+            bytes: Vec::with_capacity(capacity),
             error: None,
             bad: None,
         }
     }
 }
 
-impl Step for Base64 {
+impl<F: ByteFilter + Send> Step for Filtered<F> {
     fn step(&mut self, data: &[u8], limit: usize) -> bool {
         let end = self.pos.saturating_add(limit).min(data.len());
         while self.pos < end {
             let i = self.pos;
             let Some(&b) = data.get(i) else { break };
             self.pos = i.saturating_add(1);
-            if b.is_ascii_whitespace() {
-                continue;
-            }
-            if b == b'=' {
-                return true;
-            }
-            let Some(v) = base64_value(b) else {
-                self.error = Some(format!(
-                    "invalid base64 character {:?} at {i}",
-                    char::from(b)
-                ));
-                self.bad = Some(i);
-                return true;
-            };
-            self.acc = (self.acc << 6 | v) & 0x00ff_ffff;
-            self.bits = self.bits.saturating_add(6);
-            if self.bits >= 8 {
-                self.bits = self.bits.saturating_sub(8);
-                self.bytes.push(((self.acc >> self.bits) & 0xff) as u8);
+            match self.filter.byte(b, &mut self.bytes) {
+                Ok(true) => {}
+                Ok(false) => {
+                    // The end-of-data marker: the rest is ignored.
+                    self.pos = data.len();
+                }
+                Err(e) => {
+                    self.error = Some(e.message);
+                    self.bad = Some(i);
+                    return true;
+                }
             }
         }
         self.pos >= data.len()
     }
 
-    fn finish(self) -> Decoded {
+    fn finish(mut self) -> Decoded {
+        if self.error.is_none() {
+            if let Err(e) = self.filter.finish(&mut self.bytes) {
+                self.error = Some(e.message);
+            } else if let Some(w) = self.filter.warning() {
+                self.error = Some(w.message);
+            }
+        }
         Decoded {
             bytes: self.bytes,
             error: self.error,
@@ -116,31 +108,26 @@ impl Step for Base64 {
     }
 }
 
+fn base64_filter(len: usize) -> Filtered<filters::Base64> {
+    Filtered::new(filters::Base64::default(), (len / 4).saturating_mul(3))
+}
+
 /// Base64 (standard or URL-safe alphabet), ignoring whitespace. Stops at
-/// padding or at the first invalid character.
+/// padding or at the first invalid character (see [`filters::Base64`]).
 pub fn base64(data: &[u8]) -> Decoded {
-    run(Base64::new(data.len()), data)
+    run(base64_filter(data.len()), data)
 }
 
 /// Like [`base64`], in bounded steps with checkpoints in between, failing
 /// with the offset of the first invalid character.
 pub async fn base64_strict(cx: &Cx, data: &[u8]) -> std::result::Result<Vec<u8>, usize> {
-    let mut s = Base64::new(data.len());
+    let mut s = base64_filter(data.len());
     while !s.step(data, STEP) {
         cx.checkpoint().await;
     }
     match s.bad {
         Some(at) => Err(at),
         None => Ok(s.bytes),
-    }
-}
-
-fn hex_value(b: u8) -> Option<u8> {
-    match b {
-        b'0'..=b'9' => Some(b.saturating_sub(b'0')),
-        b'a'..=b'f' => Some(b.saturating_sub(b'a').saturating_add(10)),
-        b'A'..=b'F' => Some(b.saturating_sub(b'A').saturating_add(10)),
-        _ => None,
     }
 }
 
@@ -172,7 +159,7 @@ impl Step for Hex {
             if b.is_ascii_whitespace() || b == b',' || b == b'\\' {
                 continue;
             }
-            let Some(v) = hex_value(b) else {
+            let Some(v) = hex_digit(b) else {
                 self.error = Some(format!("invalid hex digit {:?} at {i}", char::from(b)));
                 return true;
             };
@@ -195,120 +182,24 @@ impl Step for Hex {
     }
 }
 
-/// Hex digit pairs, ignoring whitespace and (optionally) commas.
+/// Hex digit pairs, ignoring whitespace, commas and backslashes.
 pub fn hex(data: &[u8]) -> Decoded {
     run(Hex::new(data.len()), data)
 }
 
-struct QuotedPrintable {
-    pos: usize,
-    bytes: Vec<u8>,
-}
-
-impl QuotedPrintable {
-    fn new(len: usize) -> Self {
-        QuotedPrintable {
-            pos: 0,
-            bytes: Vec::with_capacity(len),
-        }
-    }
-}
-
-impl Step for QuotedPrintable {
-    fn step(&mut self, data: &[u8], limit: usize) -> bool {
-        let end = self.pos.saturating_add(limit).min(data.len());
-        // Escapes look ahead past `end`: `data` is the whole buffer.
-        let mut i = self.pos;
-        while i < end {
-            let Some(&b) = data.get(i) else { break };
-            i = i.saturating_add(1);
-            if b != b'=' {
-                self.bytes.push(b);
-                continue;
-            }
-            match (data.get(i).copied(), data.get(i.saturating_add(1)).copied()) {
-                (Some(b'\r'), Some(b'\n')) => i = i.saturating_add(2),
-                (Some(b'\n'), _) => i = i.saturating_add(1),
-                (Some(h), Some(l)) => match (hex_value(h), hex_value(l)) {
-                    (Some(h), Some(l)) => {
-                        self.bytes.push(h << 4 | l);
-                        i = i.saturating_add(2);
-                    }
-                    _ => self.bytes.push(b'='),
-                },
-                _ => self.bytes.push(b'='),
-            }
-        }
-        self.pos = i;
-        self.pos >= data.len()
-    }
-
-    fn finish(self) -> Decoded {
-        Decoded {
-            bytes: self.bytes,
-            error: None,
-        }
-    }
-}
-
-/// Quoted-printable (RFC 2045): `=XX` escapes and `=` soft line breaks.
+/// Quoted-printable (RFC 2045): `=XX` escapes and `=` soft line breaks (see
+/// [`filters::QuotedPrintable`]).
 pub fn quoted_printable(data: &[u8]) -> Decoded {
-    run(QuotedPrintable::new(data.len()), data)
-}
-
-/// One line of uuencoded data (the first character encodes the length).
-pub fn uu_line(line: &[u8], out: &mut Vec<u8>) -> bool {
-    line_6bit(line, out, |b| b.wrapping_sub(0x20) & 0x3f)
-}
-
-/// The xxencode alphabet.
-pub const XX_ALPHABET: &[u8; 64] =
-    b"+-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-
-/// The value of an xxencoded character (0 for characters outside the
-/// alphabet).
-pub fn xx_value(b: u8) -> u8 {
-    XX_ALPHABET
-        .iter()
-        .position(|&c| c == b)
-        .and_then(|i| u8::try_from(i).ok())
-        .unwrap_or(0)
-}
-
-/// One line of xxencoded data: uuencoding with the alphabet
-/// `+-0-9A-Za-z` (the first character encodes the length).
-pub fn xx_line(line: &[u8], out: &mut Vec<u8>) -> bool {
-    line_6bit(line, out, xx_value)
-}
-
-/// A uu/xx line: a length character, then groups of four 6-bit
-/// characters for three bytes each.
-fn line_6bit(line: &[u8], out: &mut Vec<u8>, dec: impl Fn(u8) -> u8) -> bool {
-    let Some(&first) = line.first() else {
-        return false;
-    };
-    let len = usize::from(dec(first));
-    let body = line.get(1..).unwrap_or_default();
-    let mut produced = 0usize;
-    for group in body.chunks(4) {
-        let c = |i: usize| group.get(i).map_or(0, |&b| dec(b));
-        let triple = [
-            c(0) << 2 | c(1) >> 4,
-            (c(1) & 0x0f) << 4 | c(2) >> 2,
-            (c(2) & 0x03) << 6 | c(3),
-        ];
-        for b in triple {
-            if produced < len {
-                out.push(b);
-                produced = produced.saturating_add(1);
-            }
-        }
-    }
-    produced == len
+    run(
+        Filtered::new(filters::QuotedPrintable::default(), data.len()),
+        data,
+    )
 }
 
 /// Decodes `span` with `decode` into a derived source (reusing it if it was
-/// decoded before), returning its span and any decoding problem.
+/// decoded before), returning its span and any decoding problem. The
+/// source stays in memory for the session; decoders that exist as a
+/// [`Codec`] go through [`derive_codec`] instead.
 pub async fn derive(
     cx: &Cx,
     span: Span,
@@ -341,6 +232,35 @@ fn store(
     let consumed = crate::bytes::to_u64(data.len());
     let out = cx.add_derived(origin, decoded.bytes, consumed, error.clone())?;
     Ok((out.span, error))
+}
+
+/// Decodes `span` with `codec` into a derived source (once; the source is
+/// evictable and decoded again when needed), returning its span and the
+/// first decoding problem, prefixed with the codec's name. Data that fails
+/// before its first decoded byte gives an empty source and the problem.
+pub async fn derive_codec(
+    cx: &Cx,
+    span: Span,
+    codec: &Codec,
+) -> Result<(Span, Option<Diagnostic>)> {
+    let name = codec.name();
+    let named = |e: Diagnostic| Diagnostic {
+        message: format!("{name}: {}", e.message),
+        ..e.at(span)
+    };
+    match crate::codec::decode_span(cx, span, codec, None).await {
+        Ok(d) => Ok((d.span, d.error.map(named))),
+        Err(e) if e.kind == DiagKind::Malformed => {
+            let origin = Origin {
+                parent: span,
+                transform: name,
+            };
+            let error = named(e);
+            let out = cx.add_derived(origin, Vec::new(), span.len, Some(error.clone()))?;
+            Ok((out.span, Some(error)))
+        }
+        Err(e) => Err(e),
+    }
 }
 
 /// A node for content transfer-encoded in `span`: decoded on expansion into
@@ -454,31 +374,25 @@ pub async fn derive_with(
     let name = transform.name();
     match transform {
         Transform::Identity => Ok((span, None)),
-        Transform::Base64 => derive_stepped(cx, span, name, Base64::new).await,
-        Transform::QuotedPrintable => derive_stepped(cx, span, name, QuotedPrintable::new).await,
-        Transform::Hex => derive_stepped(cx, span, name, Hex::new).await,
+        Transform::Base64 => derive_codec(cx, span, &Codec::Base64).await,
+        Transform::QuotedPrintable => derive_codec(cx, span, &Codec::QuotedPrintable).await,
+        Transform::Hex => {
+            let origin = Origin {
+                parent: span,
+                transform: name,
+            };
+            if let Some(found) = cx.derived(origin) {
+                return Ok((found.span, found.error));
+            }
+            let data = crate::codec::read_all(cx, span).await?;
+            let mut s = Hex::new(data.len());
+            while !s.step(&data, STEP) {
+                cx.checkpoint().await;
+            }
+            store(cx, origin, &data, s.finish())
+        }
         Transform::Percent => derive(cx, span, name, |d| transform.decode(d)).await,
     }
-}
-
-/// Like [`derive`], decoding with the [`Step`] decoder `make` returns (given
-/// the encoded length) in bounded steps.
-pub(super) async fn derive_stepped<S: Step>(
-    cx: &Cx,
-    span: Span,
-    transform: &'static str,
-    make: impl FnOnce(usize) -> S,
-) -> Result<(Span, Option<Diagnostic>)> {
-    let origin = Origin {
-        parent: span,
-        transform,
-    };
-    if let Some(found) = cx.derived(origin) {
-        return Ok((found.span, found.error));
-    }
-    let data = crate::codec::read_all(cx, span).await?;
-    let decoded = run_stepped(cx, make(data.len()), &data).await;
-    store(cx, origin, &data, decoded)
 }
 
 async fn expand_decoded(
@@ -530,15 +444,25 @@ pub fn cap(text: &str, max: usize) -> (String, bool) {
     }
 }
 
-/// A one-line preview of `text` for summaries.
-pub fn preview(text: &str, max: usize) -> String {
-    let one_line: String = text
-        .chars()
-        .map(|c| if c.is_control() { ' ' } else { c })
-        .collect();
-    let trimmed = one_line.trim();
-    match cap(trimmed, max) {
-        (s, true) => format!("{s}…"),
-        (s, false) => s,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn in_memory_decoders() {
+        let b = base64(b"SGVs\r\nbG8=trailing");
+        assert_eq!((b.bytes.as_slice(), b.error), (&b"Hello"[..], None));
+        let b = base64(b"QUJD*");
+        assert_eq!(b.bytes, b"ABC");
+        assert_eq!(
+            b.error.as_deref(),
+            Some("invalid base64 character '*' at 4")
+        );
+        let q = quoted_printable(b"a=3Db=\r\nc=");
+        assert_eq!((q.bytes.as_slice(), q.error), (&b"a=bc="[..], None));
+        let h = hex(b"de ad,be\\ef 0");
+        assert_eq!(h.bytes, [0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(h.error.as_deref(), Some("odd number of hex digits"));
+        assert_eq!(preview("  a\n\tb ", 10), "a b");
     }
 }

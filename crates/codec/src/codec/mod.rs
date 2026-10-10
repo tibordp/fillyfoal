@@ -251,6 +251,32 @@ pub enum Codec {
     /// BinHex 4.0's 6-bit text and 0x90 run-length encoding (the text
     /// between the colons).
     BinHex,
+    /// Base64, standard or URL-safe, whitespace ignored, up to the padding
+    /// (see [`filters::Base64`]).
+    Base64,
+    /// Quoted-printable (RFC 2045).
+    QuotedPrintable,
+    /// The lines of a uuencoded file's body (see [`filters::UuLines`]).
+    Uu,
+    /// The lines of an xxencoded file's body.
+    Xx,
+    /// yEnc-encoded lines (the body between `=ybegin`/`=ypart` and `=yend`).
+    YEnc,
+    /// Byte planes of `width`-byte elements interleaved back into elements
+    /// (HDF5 shuffle, Parquet `BYTE_STREAM_SPLIT`; see
+    /// [`filters::Unshuffle`]).
+    Unshuffle {
+        width: usize,
+    },
+    /// XOR with a repeating key.
+    Xor {
+        key: Vec<u8>,
+    },
+    /// The bytes of each `width`-byte group reversed (N64 `.v64`: 2, `.n64`:
+    /// 4).
+    ByteSwap {
+        width: usize,
+    },
     /// Stages applied in order. `name` and `lazy_name` identify the chain
     /// for memoization (see `Origin`); they must be distinct.
     Chain {
@@ -342,6 +368,14 @@ impl Codec {
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta",
             Codec::Yaz0 { .. } => "yaz0",
             Codec::BinHex => "binhex",
+            Codec::Base64 => "base64",
+            Codec::QuotedPrintable => "quoted-printable",
+            Codec::Uu => "uudecode",
+            Codec::Xx => "xxdecode",
+            Codec::YEnc => "ydecode",
+            Codec::Unshuffle { .. } => "unshuffle",
+            Codec::Xor { .. } => "xor",
+            Codec::ByteSwap { .. } => "byteswap",
             Codec::Chain { name, .. } => name,
         }
     }
@@ -415,6 +449,14 @@ impl Codec {
             Codec::PostFilter(lzma::Post::Delta(_)) => "delta (lazy)",
             Codec::Yaz0 { .. } => "yaz0 (lazy)",
             Codec::BinHex => "binhex (lazy)",
+            Codec::Base64 => "base64 (lazy)",
+            Codec::QuotedPrintable => "quoted-printable (lazy)",
+            Codec::Uu => "uudecode (lazy)",
+            Codec::Xx => "xxdecode (lazy)",
+            Codec::YEnc => "ydecode (lazy)",
+            Codec::Unshuffle { .. } => "unshuffle (lazy)",
+            Codec::Xor { .. } => "xor (lazy)",
+            Codec::ByteSwap { .. } => "byteswap (lazy)",
             Codec::Chain { lazy_name, .. } => lazy_name,
         }
     }
@@ -476,7 +518,15 @@ impl Codec {
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
             | Codec::TiffPredictor { .. }
-            | Codec::MeatPack => "decoded",
+            | Codec::MeatPack
+            | Codec::Base64
+            | Codec::QuotedPrintable
+            | Codec::Uu
+            | Codec::Xx
+            | Codec::YEnc
+            | Codec::Unshuffle { .. }
+            | Codec::Xor { .. }
+            | Codec::ByteSwap { .. } => "decoded",
             Codec::CapnpPacked => "unpacked",
             Codec::Chain { .. } => "decoded",
         }
@@ -495,7 +545,15 @@ impl Codec {
             | Codec::AsciiHex
             | Codec::Ascii85
             | Codec::PngPredictor { .. }
-            | Codec::TiffPredictor { .. } => 1,
+            | Codec::TiffPredictor { .. }
+            | Codec::Base64
+            | Codec::QuotedPrintable
+            | Codec::Uu
+            | Codec::Xx
+            | Codec::YEnc
+            | Codec::Unshuffle { .. }
+            | Codec::Xor { .. }
+            | Codec::ByteSwap { .. } => 1,
             Codec::RunLength | Codec::PackBits => 128,
             Codec::Lz4Frame | Codec::Lz4Block | Codec::Snappy | Codec::SnappyFramed => 256,
             // A zero tag and a count stand for 256 zero words.
@@ -667,6 +725,18 @@ impl Codec {
             Codec::PostFilter(post) => Box::new(lzma::PostFilter::new(*post)),
             Codec::Yaz0 { size } => Box::new(Streaming(yaz0::Yaz0::new(*size))),
             Codec::BinHex => Box::new(Streaming(binhex::BinHex::default())),
+            Codec::Base64 => Box::new(Streaming(filters::Bytes::new(filters::Base64::default()))),
+            Codec::QuotedPrintable => Box::new(Streaming(filters::Bytes::new(
+                filters::QuotedPrintable::default(),
+            ))),
+            Codec::Uu => Box::new(Streaming(filters::Bytes::new(filters::UuLines::uu()))),
+            Codec::Xx => Box::new(Streaming(filters::Bytes::new(filters::UuLines::xx()))),
+            Codec::YEnc => Box::new(Streaming(filters::Bytes::new(filters::YEnc::default()))),
+            Codec::Unshuffle { width } => Box::new(Streaming(filters::Unshuffle::new(*width))),
+            Codec::Xor { key } => Box::new(Streaming(filters::Bytes::new(filters::Xor::new(key)))),
+            Codec::ByteSwap { width } => Box::new(Streaming(filters::Bytes::new(
+                filters::ByteSwap::new(*width),
+            ))),
             Codec::Chain { stages, .. } => Box::new(pipeline::Chain::new(
                 stages.iter().filter_map(Codec::decoder).collect(),
             )),
