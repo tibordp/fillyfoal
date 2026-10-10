@@ -60,9 +60,10 @@ fn truncated(what: &str) -> Diagnostic {
     Diagnostic::malformed(format!("truncated gzip {what}"))
 }
 
-/// The length of the member header at the start of `data`, or why there
-/// is none yet.
-fn header_len(data: &[u8]) -> Result<usize> {
+/// The length of the gzip member header at the start of `data` (starting
+/// with its magic), or why there is none yet: `Codec::Gzip` decodes from
+/// the end of the first member's header.
+pub fn header_len(data: &[u8]) -> Result<usize> {
     let byte = |at: usize| {
         data.get(at)
             .copied()

@@ -43,6 +43,61 @@ pub fn utf16(data: &[u8], endian: Endian) -> String {
     String::from_utf16_lossy(&units)
 }
 
+/// UTF-16 of a known length with trailing NULs removed (fixed-size name
+/// fields).
+pub fn utf16_trimmed(data: &[u8], endian: Endian) -> String {
+    let mut s = utf16(data, endian);
+    s.truncate(s.trim_end_matches('\0').len());
+    s
+}
+
+/// The value of an ASCII hex digit.
+pub fn hex_digit(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b.wrapping_sub(b'0')),
+        b'a'..=b'f' => Some(b.wrapping_sub(b'a').wrapping_add(10)),
+        b'A'..=b'F' => Some(b.wrapping_sub(b'A').wrapping_add(10)),
+        _ => None,
+    }
+}
+
+/// Bytes from hex digits, ignoring ASCII whitespace; `None` on any other
+/// character or an odd number of digits.
+pub fn unhex(s: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+    let digits: Vec<u8> = s
+        .as_ref()
+        .iter()
+        .copied()
+        .filter(|b| !b.is_ascii_whitespace())
+        .map(hex_digit)
+        .collect::<Option<_>>()?;
+    let (pairs, rest) = digits.as_chunks::<2>();
+    if !rest.is_empty() {
+        return None;
+    }
+    Some(pairs.iter().map(|&[h, l]| h << 4 | l).collect())
+}
+
+/// Lowercase hex of `bytes` (hashes, IDs).
+pub fn hex_lower(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
+    for b in bytes {
+        let _ = write!(out, "{b:02x}");
+    }
+    out
+}
+
+/// Uppercase hex of `bytes`.
+pub fn hex_upper(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
+    for b in bytes {
+        let _ = write!(out, "{b:02X}");
+    }
+    out
+}
+
 /// ISO 8859-1: every byte is a code point.
 pub fn latin1(data: &[u8]) -> String {
     data.iter().map(|&b| char::from(b)).collect()

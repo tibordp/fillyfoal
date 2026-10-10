@@ -76,6 +76,14 @@ impl Diagnostic {
         Diagnostic::new(DiagKind::Note, message)
     }
 
+    /// Decoded output would exceed `limit` bytes.
+    pub fn output_limit(limit: impl Into<u64>) -> Self {
+        Diagnostic::limit(format!(
+            "decompressed data exceeds {:#x} bytes",
+            limit.into()
+        ))
+    }
+
     pub fn internal(message: impl Into<String>) -> Self {
         Diagnostic::new(DiagKind::Internal, message)
     }
