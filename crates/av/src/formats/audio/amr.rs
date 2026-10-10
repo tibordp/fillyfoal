@@ -115,7 +115,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Magic")
             .span(file.sub(0, magic_len))
-            .value(crate::formats::util::sound::text(
+            .value(crate::formats::util::val::text(
                 String::from_utf8_lossy(
                     head.get(..to_usize(magic_len).saturating_sub(1))
                         .unwrap_or_default(),
@@ -132,7 +132,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Channel description")
                 .span(file.sub(pos, 4))
-                .value(crate::formats::util::sound::hex(desc, 32))
+                .value(crate::formats::util::val::hex(desc, 32))
                 .summary(format!("{channels} channels")),
         );
         pos = pos.saturating_add(4);

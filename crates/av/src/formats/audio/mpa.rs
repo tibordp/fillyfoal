@@ -18,9 +18,9 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
-    Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, hex, junk_node, leaf, resync, tail_node,
-    text, uint,
+    Bits, CRC16_MPEG, FrameSyntax, bits_node, duration, junk_node, leaf, resync, tail_node,
 };
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe, audio::id3};
 use crate::node::{Count, Node};
 use crate::span::Span;

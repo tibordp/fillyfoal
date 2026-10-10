@@ -9,15 +9,11 @@ use crate::fields::Endian;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::value::Value;
 
 const LE: Endian = Endian::Little;
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
 use crate::formats::text::scan::head_lines as lines;
+use crate::formats::util::val::text;
 
 // ---------------------------------------------------------------------------
 // Subtitles: EBU STL, Scenarist SCC, VobSub index

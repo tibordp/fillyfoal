@@ -15,7 +15,9 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::sound::{decode_text, duration, fourcc, hex, text, uint};
+use crate::formats::util::fmt::plural;
+use crate::formats::util::sound::{decode_text, duration, fourcc};
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
@@ -125,15 +127,13 @@ impl Ev {
 
 /// A variable-length quantity at `at`: (value, bytes).
 fn varlen(b: &[u8], at: usize) -> std::result::Result<(u32, usize), Bad> {
-    let mut value = 0u32;
-    for i in 0..4usize {
-        let byte = *b.get(at.saturating_add(i)).ok_or(Bad::Short)?;
-        value = (value << 7) | u32::from(byte & 0x7f);
-        if byte & 0x80 == 0 {
-            return Ok((value, i.saturating_add(1)));
-        }
+    let rest = b.get(at..).unwrap_or_default();
+    match crate::bytes::vlq_be(rest, 4) {
+        // Four 7-bit groups always fit.
+        Some((value, len)) => Ok((u32::try_from(value).unwrap_or(u32::MAX), len)),
+        None if rest.len() < 4 => Err(Bad::Short),
+        None => Err(Bad::Invalid("variable-length quantity longer than 4 bytes")),
     }
-    Err(Bad::Invalid("variable-length quantity longer than 4 bytes"))
 }
 
 /// Decodes the event header at the start of `b` (at most 10 bytes long).
@@ -382,10 +382,9 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let (header, span) = Cursor::new(&cx, file, BE).record::<Header>().await?;
     cx.emit(Header::node("Header", span, BE));
     let mut line = format!(
-        "MIDI format {}, {} track{}",
+        "MIDI format {}, {}",
         header.format,
-        header.tracks,
-        if header.tracks == 1 { "" } else { "s" }
+        plural(header.tracks, "track")
     );
     cx.annotate(line.clone());
 

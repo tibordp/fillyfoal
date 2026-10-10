@@ -37,7 +37,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Channels: 1  [0x79+0x1]
         Maximum run: 0  [0x7a+0x2]
         Maximum frame bytes: 8196  [0x7c+0x4]
-        Average bit rate: 128000  [0x80+0x4]
+        Average bit rate: 128000 — 128 kb/s  [0x80+0x4]
         Sample rate: 8000  [0x84+0x4]
   ▾ data — 673 bytes of audio  [0x88+0x2b1]
       Chunk type: "data"  [0x88+0x4]

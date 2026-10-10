@@ -6,13 +6,14 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
+use crate::formats::audio::ac3;
 use crate::formats::util::sound::Bits as BitFields;
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::{self, lookup_or, nal};
 use crate::span::{SourceId, Span};
 use crate::value::EnumTable;
 
-pub use crate::formats::util::vidutil::khz;
+use crate::formats::util::vidutil::khz;
 
 /// A bit reader over the next `n` bytes of `f`, emitting when `cx` is
 /// given; `f` advances past them.
@@ -50,32 +51,6 @@ pub fn channel_count(n: u64) -> String {
 pub const AC3_RATES: EnumTable = &[(0, "48000 Hz"), (1, "44100 Hz"), (2, "32000 Hz")];
 const AC3_RATE_HZ: [u64; 3] = [48000, 44100, 32000];
 
-pub const AC3_ACMOD: EnumTable = &[
-    (0, "1+1 (dual mono)"),
-    (1, "1/0 (mono)"),
-    (2, "2/0 (stereo)"),
-    (3, "3/0 (L C R)"),
-    (4, "2/1 (L R S)"),
-    (5, "3/1 (L C R S)"),
-    (6, "2/2 (L R SL SR)"),
-    (7, "3/2 (L C R SL SR)"),
-];
-
-pub const AC3_BSMOD: EnumTable = &[
-    (0, "complete main"),
-    (1, "music and effects"),
-    (2, "visually impaired"),
-    (3, "hearing impaired"),
-    (4, "dialogue"),
-    (5, "commentary"),
-    (6, "emergency"),
-    (7, "voice over / karaoke"),
-];
-
-const AC3_BITRATES: [u64; 19] = [
-    32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640,
-];
-
 /// What a `dac3` or the first `dec3` substream says.
 #[derive(Clone, Debug, Default)]
 pub struct Ac3 {
@@ -104,7 +79,7 @@ impl Ac3 {
             (7, false) => "5.0".to_owned(),
             (7, true) => "5.1".to_owned(),
             _ => {
-                let base = lookup_or(AC3_ACMOD, self.acmod);
+                let base = lookup_or(ac3::ACMOD, self.acmod);
                 let base = base.split(' ').next().unwrap_or_default().to_owned();
                 if self.lfe {
                     format!("{base}+LFE")
@@ -131,16 +106,16 @@ pub fn dac3_layout(b: &mut BitFields<'_>) -> Result<Ac3> {
         .emit()?;
     b.field("Bit stream identification (bsid)", 5).emit()?;
     b.field("Bit stream mode (bsmod)", 3)
-        .enumeration(AC3_BSMOD)
+        .enumeration(ac3::BSMOD)
         .emit()?;
     let acmod = b
         .field("Audio coding mode (acmod)", 3)
-        .enumeration(AC3_ACMOD)
+        .enumeration(ac3::ACMOD)
         .emit()?;
     let lfe = b.field("LFE on", 1).flag().emit()?;
     let rate = b
         .field("Bit rate code", 5)
-        .with(|v, n| match AC3_BITRATES.get(to_usize(v)) {
+        .with(|v, n| match ac3::BITRATES.get(to_usize(v)) {
             Some(k) => n.summary(format!("{k} kb/s")),
             None => n,
         })
@@ -150,7 +125,10 @@ pub fn dac3_layout(b: &mut BitFields<'_>) -> Result<Ac3> {
         rate: AC3_RATE_HZ.get(to_usize(fscod)).copied().unwrap_or(0),
         acmod,
         lfe: lfe == 1,
-        kbps: AC3_BITRATES.get(to_usize(rate)).copied().unwrap_or(0),
+        kbps: ac3::BITRATES
+            .get(to_usize(rate))
+            .copied()
+            .map_or(0, u64::from),
         atmos: false,
     })
 }
@@ -175,11 +153,11 @@ pub fn dec3_layout(b: &mut BitFields<'_>) -> Result<Ac3> {
         b.field("Reserved", 1).emit()?;
         b.field("Audio service (asvc)", 1).flag().emit()?;
         b.field("Bit stream mode (bsmod)", 3)
-            .enumeration(AC3_BSMOD)
+            .enumeration(ac3::BSMOD)
             .emit()?;
         let acmod = b
             .field("Audio coding mode (acmod)", 3)
-            .enumeration(AC3_ACMOD)
+            .enumeration(ac3::ACMOD)
             .emit()?;
         let lfe = b.field("LFE on", 1).flag().emit()?;
         b.field("Reserved", 3).emit()?;

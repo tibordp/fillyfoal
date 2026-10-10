@@ -21,7 +21,9 @@ use crate::bytes::{u32_be, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::sound::{fourcc, peek_text, text};
+use crate::formats::util::binutil::get;
+use crate::formats::util::sound::{fourcc, peek_text};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -349,19 +351,12 @@ pub fn is_container(family: Family, id: &FourCc) -> bool {
     }
 }
 
-fn word(endian: Endian, data: &[u8], at: usize) -> Option<u32> {
-    match endian {
-        Endian::Little => u32_le(data, at),
-        Endian::Big => u32_be(data, at),
-    }
-}
-
 /// Reads the chunk header at `pos` of `region`: id, declared size, and the
 /// whole chunk's length (header, data, pad), resolving RF64 sizes.
 async fn header(cx: &Cx, ctx: &Ctx, region: Span, pos: u64) -> Result<(FourCc, u64, u64)> {
     let h = cx.read(region.sub(pos, 8)).await?;
     let id = crate::bytes::array::<4>(&h, 0).unwrap_or_default();
-    let raw = word(ctx.endian, &h, 4).unwrap_or(0);
+    let raw = get::<u32>(&h, 4, ctx.endian).unwrap_or(0);
     let size = if raw == u32::MAX && ctx.family == Family::Riff {
         ctx.sizes
             .iter()
@@ -539,13 +534,13 @@ async fn common(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 &crate::formats::image::xmp::FORMAT,
             ));
         }
+        // Broadcast Wave iXML and ADM (BW64) axml.
         (b"iXML" | b"axml", _) => {
-            let text = peek_text(cx, chunk.data, chunk.data.len.min(1 << 20)).await?;
-            cx.emit(
-                Node::new("XML")
-                    .span(chunk.data)
-                    .value(crate::value::Value::Text(text)),
-            );
+            cx.emit(embedded_as(
+                "XML",
+                input.nested(chunk.data),
+                &crate::formats::text::xml::FORMAT,
+            ));
         }
         _ => return Ok(false),
     }
@@ -673,7 +668,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             return Err(Diagnostic::malformed("not a RIFF or IFF file").at(file.sub(0, 4)));
         }
     };
-    let raw = word(endian, &head, 4).unwrap_or(0);
+    let raw = get::<u32>(&head, 4, endian).unwrap_or(0);
 
     let mut sizes: Vec<(FourCc, u64)> = Vec::new();
     let mut size = u64::from(raw);

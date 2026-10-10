@@ -706,7 +706,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Format tag: PCM (0x1)  [0x1c23+0x2]
           Channels: 1  [0x1c25+0x2]
           Sample rate: 44100  [0x1c27+0x4]
-          Average bytes per second: 88200  [0x1c2b+0x4]
+          Average bytes per second: 88200 — 706 kb/s  [0x1c2b+0x4]
           Block align: 2  [0x1c2f+0x2]
           Bits per sample: 16  [0x1c31+0x2]
       ▾ data — 16 bytes, 0 ms  [0x1c33+0x18]

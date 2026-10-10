@@ -29,7 +29,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Channels: 1  [0x49+0x1]
         Maximum run: 255  [0x4a+0x2]
         Maximum frame bytes: 1348  [0x4c+0x4]
-        Average bit rate: 42125  [0x50+0x4]
+        Average bit rate: 42125 — 42.1 kb/s  [0x50+0x4]
         Sample rate: 16000  [0x54+0x4]
   ▾ chan — Mono, 1 ch  [0x58+0x18]
       Chunk type: "chan"  [0x58+0x4]

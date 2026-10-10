@@ -11,22 +11,14 @@ use crate::fields::Fields;
 use crate::fields::struct_node;
 use crate::formats::util::vidutil::nal::{NalCodec, group, parse_nal};
 use crate::formats::util::vidutil::{
-    H264_NAL_TYPES, HEVC_NAL_TYPES, ParamSets, fourcc, hex, lookup_or, plural, uint,
+    H264_NAL_TYPES, HEVC_NAL_TYPES, ParamSets, fourcc, hex, lookup_or, uint,
 };
 use crate::formats::{Input, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
-use super::{BE, BoxState, children, find_child, full_box, small, version_flags};
-
-async fn emit_fields(
-    cx: &Cx,
-    span: Span,
-    layout: impl FnOnce(&mut Fields<'_>) -> Result<()>,
-) -> Result<()> {
-    let block = cx.block(span.sub(0, 0x10000)).await?;
-    layout(&mut Fields::emitting(cx, &block, BE))
-}
+use super::{BE, BoxState, children, emit_fields, find_child, full_box, small, version_flags};
+use crate::formats::util::fmt::plural;
 
 /// Decodes HEIF boxes. Returns `false` for other types.
 pub async fn decode_item_box(cx: &Cx, st: &BoxState) -> Result<bool> {
@@ -376,7 +368,7 @@ async fn iloc(cx: &Cx, st: &BoxState) -> Result<()> {
     cx.emit(
         Node::new("Items")
             .span(body.tail(state.start))
-            .summary(crate::formats::util::vidutil::plural(count, "item"))
+            .summary(plural(count, "item"))
             .lazy(iloc_items, state),
     );
     Ok(())
@@ -885,8 +877,8 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
                 .map(u8::to_string)
                 .collect();
             Some(format!(
-                "{n} channel{}, {} bits",
-                if n == 1 { "" } else { "s" },
+                "{}, {} bits",
+                plural(to_u64(n), "channel"),
                 bits.join("/")
             ))
         }

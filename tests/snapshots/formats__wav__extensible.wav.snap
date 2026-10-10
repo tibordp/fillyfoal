@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Format tag: Extensible (0xfffe)  [0x14+0x2]
       Channels: 3  [0x16+0x2]
       Sample rate: 4000  [0x18+0x4]
-      Average bytes per second: 36000  [0x1c+0x4]
+      Average bytes per second: 36000 — 288 kb/s  [0x1c+0x4]
       Block align: 9  [0x20+0x2]
       Bits per sample: 24  [0x22+0x2]
       Extension size: 22  [0x24+0x2]

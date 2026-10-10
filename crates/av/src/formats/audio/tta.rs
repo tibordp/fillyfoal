@@ -9,8 +9,9 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
 use crate::formats::audio::ape::trailing_tags;
-use crate::formats::iff::wav::khz;
-use crate::formats::util::sound::{channels, duration_of, hex, leaf, table};
+use crate::formats::util::sound::{channels, duration_of, leaf, table};
+use crate::formats::util::val::hex;
+use crate::formats::util::vidutil::khz;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -70,7 +71,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         2 => "stereo".to_owned(),
         n => channels(n),
     };
-    let mut line = format!("TTA {}-bit, {}, {layout}", h.bits, khz(h.rate));
+    let mut line = format!("TTA {}-bit, {}, {layout}", h.bits, khz(h.rate.into()));
     if let Some(d) = duration_of(h.samples.into(), h.rate.into()) {
         line.push_str(&format!(", {d}"));
     }

@@ -4,6 +4,7 @@
 //! and the descriptors inside them. Sections arrive here reassembled.
 
 use crate::bytes::{u16_be, u32_be};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::nal::group;
 use crate::formats::util::vidutil::{self, lookup_or};
@@ -704,7 +705,7 @@ fn descriptor_body(w: &mut Walker, tag: u8, len: usize) -> Option<String> {
                 w.x("service_id", 16)?;
                 w.en("service_type", 8, SERVICE_TYPES)?;
             }
-            Some(vidutil::plural(crate::bytes::to_u64(len / 3), "service"))
+            Some(plural(crate::bytes::to_u64(len / 3), "service"))
         }
         0x48 => {
             let t = w.en("service_type", 8, SERVICE_TYPES)?;
@@ -960,7 +961,7 @@ pub fn descriptor_loop(w: &mut Walker, len: usize) -> Option<Vec<(u8, Vec<u8>)>>
                 Some(s) if !s.is_empty() => s,
                 _ => format!(
                     "tag {tag:#04x}, {}",
-                    vidutil::plural(crate::bytes::to_u64(n), "byte")
+                    plural(crate::bytes::to_u64(n), "byte")
                 ),
             });
             w.push(node);
@@ -1093,7 +1094,7 @@ fn section_walk(w: &mut Walker, d: &[u8], out: &mut Decoded) -> Option<()> {
                 out.pat.push((number, pid));
                 n = n.saturating_add(1);
             }
-            out.summary = Some(vidutil::plural(n, "program"));
+            out.summary = Some(plural(n, "program"));
         }
         0x01 | 0x03 => {
             let n = body_end.saturating_sub(w.pos() >> 3);
@@ -1127,10 +1128,7 @@ fn section_walk(w: &mut Walker, d: &[u8], out: &mut Decoded) -> Option<()> {
                     len: (w.pos() >> 3).saturating_sub(start >> 3),
                 });
             }
-            out.summary = Some(vidutil::plural(
-                crate::bytes::to_u64(pmt.streams.len()),
-                "stream",
-            ));
+            out.summary = Some(plural(crate::bytes::to_u64(pmt.streams.len()), "stream"));
             out.pmt = Some(pmt);
         }
         0x40 | 0x41 => {

@@ -118,7 +118,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Format tag: 0x1010 (unknown)  [#4:0x14+0x2]
           Channels: 5394  [#4:0x16+0x2]
           Sample rate: 168694026  [#4:0x18+0x4]
-          Average bytes per second: 4143644163  [#4:0x1c+0x4]
+          Average bytes per second: 4143644163 — 33149153 kb/s  [#4:0x1c+0x4]
           Block align: 1535  [#4:0x20+0x2]
           Bits per sample: 3081  [#4:0x22+0x2]
           Extension size: 5644  [#4:0x24+0x2]

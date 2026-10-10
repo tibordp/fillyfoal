@@ -2,11 +2,13 @@
 //! variable-length sizes) and the older version 7 (`MP+` and a fixed
 //! header).
 
+use crate::bytes::vlq_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::audio::ape::trailing_tags;
-use crate::formats::util::sound::{Bits, channels, duration_of, leaf, uint};
+use crate::formats::util::sound::{Bits, channels, duration_of, leaf};
+use crate::formats::util::val::uint;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -36,17 +38,8 @@ const KEYS: &[(&[u8; 2], &str)] = &[
     (b"CT", "Chapter tag"),
 ];
 
-/// A Musepack SV8 variable-length integer: the value and its length.
-fn varint(data: &[u8]) -> Option<(u64, usize)> {
-    let mut value = 0u64;
-    for (i, &b) in data.iter().enumerate().take(9) {
-        value = (value << 7) | u64::from(b & 0x7f);
-        if b & 0x80 == 0 {
-            return Some((value, i.saturating_add(1)));
-        }
-    }
-    None
-}
+/// Musepack SV8 sizes are big-endian base-128 integers of at most 9 bytes.
+const MAX_VARINT: usize = 9;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct StreamHeader {
@@ -57,8 +50,8 @@ struct StreamHeader {
 
 fn stream_header(data: &[u8]) -> Option<StreamHeader> {
     let rest = data.get(5..)?;
-    let (samples, a) = varint(rest)?;
-    let (_, b) = varint(rest.get(a..)?)?;
+    let (samples, a) = vlq_be(rest, MAX_VARINT)?;
+    let (_, b) = vlq_be(rest.get(a..)?, MAX_VARINT)?;
     let bits = crate::bytes::u16_be(rest, a.saturating_add(b))?;
     Some(StreamHeader {
         samples,
@@ -80,7 +73,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         while pos < end {
             let head = cx.read_avail(file.sub(pos, 11)).await?;
             let key: [u8; 2] = crate::bytes::array(&head, 0).unwrap_or_default();
-            let Some((size, size_len)) = head.get(2..).and_then(varint) else {
+            let Some((size, size_len)) = head.get(2..).and_then(|d| vlq_be(d, MAX_VARINT)) else {
                 cx.emit(
                     Node::new("Unparsed data")
                         .span(file.sub(pos, end.saturating_sub(pos)))
@@ -130,10 +123,10 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
     cx.emit(leaf(
         "Key",
         span.sub(0, 2),
-        crate::formats::util::sound::text(crate::formats::util::sound::fourcc(&key)),
+        crate::formats::util::val::text(crate::formats::util::sound::fourcc(&key)),
     ));
     let head = cx.read(span.sub(2, header_len.saturating_sub(2))).await?;
-    let size = varint(&head).map_or(0, |v| v.0);
+    let size = vlq_be(&head, MAX_VARINT).map_or(0, |v| v.0);
     cx.emit(leaf(
         "Size",
         span.sub(2, header_len.saturating_sub(2)),
@@ -149,7 +142,10 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
             f.u8("Stream version").emit()?;
             let mut at = 5usize;
             for name in ["Sample count", "Beginning silence"] {
-                let (v, n) = data.get(at..).and_then(varint).unwrap_or((0, 1));
+                let (v, n) = data
+                    .get(at..)
+                    .and_then(|d| vlq_be(d, MAX_VARINT))
+                    .unwrap_or((0, 1));
                 cx.emit(leaf(
                     name,
                     payload.sub(crate::bytes::to_u64(at), crate::bytes::to_u64(n)),
@@ -206,7 +202,7 @@ async fn packet(cx: Cx, (span, header_len, key): (Span, u64, [u8; 2])) -> Result
             f.u8("Encoder build").emit()?;
         }
         b"SO" => {
-            let (v, n) = varint(&data).unwrap_or((0, 1));
+            let (v, n) = vlq_be(&data, MAX_VARINT).unwrap_or((0, 1));
             cx.emit(
                 leaf(
                     "Offset",
@@ -312,7 +308,7 @@ async fn sv7(cx: &Cx, file: Span) -> Result<()> {
     };
     let mut line = format!(
         "Musepack SV7, {}, stereo",
-        crate::formats::iff::wav::khz(rate)
+        crate::formats::util::vidutil::khz(rate.into())
     );
     if let Some(d) = duration_of(samples, rate.into()) {
         line.push_str(&format!(", {d}"));

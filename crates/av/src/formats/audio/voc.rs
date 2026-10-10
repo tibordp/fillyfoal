@@ -6,7 +6,8 @@ use crate::bytes::{u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::sound::{channels, duration, leaf, peek_text, text, u24};
+use crate::formats::util::sound::{channels, duration, leaf, peek_text, u24};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -210,11 +211,7 @@ async fn block_summary(cx: &Cx, kind: u8, span: Span) -> Result<String> {
 
 async fn block(cx: Cx, (kind, span): (u8, Span)) -> Result<()> {
     if kind == 0 {
-        cx.emit(leaf(
-            "Type",
-            span,
-            crate::formats::util::sound::uint(0u8, 8),
-        ));
+        cx.emit(leaf("Type", span, crate::formats::util::val::uint(0u8, 8)));
         return Ok(());
     }
     let head = cx.block(span.sub(0, 16)).await?;

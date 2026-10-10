@@ -11,17 +11,19 @@ use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
-use crate::value::Value;
+
+use crate::formats::util::val::text;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
 /// Pushes a node for every chunk of `region` from `start`; returns the chunks.
-async fn chunks(cx: &Cx, region: Span, start: u64, layout: ChunkLayout) -> Result<Vec<Chunk>> {
+pub(crate) async fn chunks(
+    cx: &Cx,
+    region: Span,
+    start: u64,
+    layout: ChunkLayout,
+) -> Result<Vec<Chunk>> {
     let mut cur = Cursor::new(cx, region, layout.endian);
     cur.seek(start);
     let mut out = Vec::new();

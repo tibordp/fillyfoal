@@ -24,6 +24,7 @@ use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::emit_nodes;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::nal::{self, NalCodec, group};
 use crate::formats::util::vidutil::{self, ParamSets, enumerated, seconds_ms, text, uint, vp9};
@@ -141,6 +142,7 @@ struct Codec {
 
 #[derive(Clone, Debug)]
 struct Tag {
+    input: Input,
     span: Span,
     kind: u8,
     size: u64,
@@ -208,6 +210,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             | (u32::from(head.get(7).copied().unwrap_or(0)) << 24);
         let total = size.saturating_add(15);
         let tag = Tag {
+            input,
             span: file.sub(pos, total),
             kind,
             size,
@@ -409,7 +412,7 @@ async fn expand_tag(cx: Cx, tag: Tag) -> Result<()> {
     cx.emit(sid);
     let data = tag.data();
     match tag.kind {
-        8 => audio(&cx, data).await?,
+        8 => audio(&cx, tag.input, data).await?,
         9 => video(&cx, data, &tag.codec).await?,
         18 => {
             amf_values(
@@ -442,7 +445,7 @@ async fn expand_tag(cx: Cx, tag: Tag) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Audio
 
-async fn audio(cx: &Cx, data: Span) -> Result<()> {
+async fn audio(cx: &Cx, input: Input, data: Span) -> Result<()> {
     let d = cx.read_avail(data.sub(0, 64)).await?;
     let Some(&b) = d.first() else {
         return Ok(());
@@ -456,7 +459,7 @@ async fn audio(cx: &Cx, data: Span) -> Result<()> {
         SOUND_FORMATS,
     ));
     if b >> 4 == 9 {
-        return enhanced_audio(cx, data, &d).await;
+        return enhanced_audio(cx, input, data, &d).await;
     }
     cx.emit(
         uint("Sound rate", s, ((b >> 2) & 3).into(), 2).summary(
@@ -520,7 +523,7 @@ async fn asc_node(cx: &Cx, span: Span) -> Result<Node> {
     Ok(node)
 }
 
-async fn enhanced_audio(cx: &Cx, data: Span, d: &[u8]) -> Result<()> {
+async fn enhanced_audio(cx: &Cx, input: Input, data: Span, d: &[u8]) -> Result<()> {
     let b = d.first().copied().unwrap_or(0);
     let packet = b & 15;
     cx.emit(enumerated(
@@ -551,12 +554,11 @@ async fn enhanced_audio(cx: &Cx, data: Span, d: &[u8]) -> Result<()> {
             }
             cx.emit(node);
         }
-        (0, b"fLaC") => cx.emit(
-            Node::new("FLAC metadata")
-                .span(body)
-                .summary(format!("{} bytes", body.len))
-                .desc("The FLAC metadata blocks (STREAMINFO first)"),
-        ),
+        // The metadata blocks, STREAMINFO first, with or without `fLaC`.
+        (0, b"fLaC") if bytes.starts_with(b"fLaC") => {
+            crate::formats::audio::flac::codec_config(cx, input, body).await?;
+        }
+        (0, b"fLaC") => crate::formats::audio::flac::metadata_blocks(cx, input, body, 0).await?,
         (4, _) => {
             let mut w = Walker::new(bytes, body, false, true);
             let ok = (|| -> Option<()> {
@@ -1459,7 +1461,7 @@ impl<'a> Amf3<'a> {
         }
         if !children.is_empty() {
             node = node
-                .summary(vidutil::plural(to_u64(children.len()), "entry"))
+                .summary(plural(to_u64(children.len()), "entry"))
                 .lazy(emit_nodes, Arc::new(children));
         }
         Some(node)

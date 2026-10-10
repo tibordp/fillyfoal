@@ -62,7 +62,7 @@ pub async fn order_node(cx: &Cx, span: Span) -> Result<Node> {
     Ok(Node::new("Orders")
         .span(span)
         .summary(format!("{} entries", list.len()))
-        .value(crate::formats::util::sound::text(orders(&list))))
+        .value(crate::formats::util::val::text(orders(&list))))
 }
 
 /// How a pointer table addresses its targets.

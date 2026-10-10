@@ -13,6 +13,7 @@ use std::sync::Arc;
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::Result;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, NalCodec, ParamSets, parse_nal};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
@@ -345,7 +346,7 @@ impl AuStats {
             }
             parts.push(pic);
         } else if self.slices > 0 {
-            parts.push(vidutil::plural(self.slices, "slice"));
+            parts.push(plural(self.slices, "slice"));
         }
         if let Some(f) = self.frame_num {
             parts.push(format!("frame_num {f}"));
@@ -356,10 +357,7 @@ impl AuStats {
         if !self.others.is_empty() {
             parts.push(format!("with {}", self.others.join(", ")));
         }
-        parts.push(format!(
-            "{}, {bytes} bytes",
-            vidutil::plural(units, "NAL unit")
-        ));
+        parts.push(format!("{}, {bytes} bytes", plural(units, "NAL unit")));
         parts.join(", ")
     }
 }

@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::av1::{self, SeqInfo};
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::nal::group;
@@ -114,7 +115,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         h.width,
         h.height,
         detail.map(|d| format!(" ({d})")).unwrap_or_default(),
-        vidutil::plural(h.frames, "frame")
+        plural(h.frames, "frame")
     ));
     let mut walk = match cx.resume::<Walk>() {
         Some(w) => w,
@@ -244,7 +245,7 @@ fn frame_summary(
                 }
                 Some(format!(
                     "superframe of {}: {}",
-                    vidutil::plural(to_u64(sizes.len()), "frame"),
+                    plural(to_u64(sizes.len()), "frame"),
                     kinds.join("; ")
                 ))
             } else {
@@ -261,7 +262,7 @@ fn frame_summary(
                 .filter_map(|o| o.summary.clone())
                 .collect();
             if frames.is_empty() {
-                Some(vidutil::plural(to_u64(obus.len()), "OBU"))
+                Some(plural(to_u64(obus.len()), "OBU"))
             } else {
                 Some(frames.join("; "))
             }
@@ -311,7 +312,7 @@ async fn expand_frame(cx: Cx, frame: Frame) -> Result<()> {
                             .span(index)
                             .summary(format!(
                                 "{} of {}",
-                                vidutil::plural(to_u64(sizes.len()), "frame"),
+                                plural(to_u64(sizes.len()), "frame"),
                                 sizes
                                     .iter()
                                     .map(|s| format!("{s}"))
@@ -511,11 +512,7 @@ pub async fn dissect_obu(cx: Cx, input: Input) -> Result<()> {
         if !summary.is_empty() {
             summary.push_str(", ");
         }
-        summary.push_str(&format!(
-            "{}, {} bytes",
-            vidutil::plural(count, "OBU"),
-            tu.span.len
-        ));
+        summary.push_str(&format!("{}, {} bytes", plural(count, "OBU"), tu.span.len));
         cx.progress_in(file, file.offset.saturating_add(start));
         cx.push(
             Node::new(format!("Temporal unit {}", walk.index))

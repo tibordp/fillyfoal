@@ -203,7 +203,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut line = format!(
         "Monkey's Audio {}-bit, {}, {layout}",
         info.bits,
-        crate::formats::iff::wav::khz(info.rate),
+        crate::formats::util::vidutil::khz(info.rate.into()),
     );
     if let Some(d) = duration_of(info.samples, info.rate.into()) {
         line.push_str(&format!(", {d}"));
@@ -229,7 +229,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 crate::formats::util::sound::leaf(
                     name,
                     span,
-                    crate::formats::util::sound::uint(crate::bytes::u32_le(&v, 0).unwrap_or(0), 32),
+                    crate::formats::util::val::uint(crate::bytes::u32_le(&v, 0).unwrap_or(0), 32),
                 )
             }
             "Seek bit table" => Node::new(name)

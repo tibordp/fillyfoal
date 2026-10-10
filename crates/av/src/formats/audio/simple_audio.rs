@@ -7,9 +7,8 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, Layout, parse, struct_node};
-use crate::formats::util::sound::{
-    channels, duration, duration_of, hz, leaf, peek_text, text, u24,
-};
+use crate::formats::util::sound::{channels, duration, duration_of, hz, leaf, peek_text, u24};
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;

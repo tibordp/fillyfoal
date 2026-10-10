@@ -20,6 +20,7 @@ use crate::span::Span;
 use crate::value::EnumTable;
 
 use super::{mpeg1_pts, pes_header, pes_times, seconds_90k, stream_id_name};
+use crate::formats::util::fmt::plural;
 
 pub static MPEG2_PS: Format = Format {
     name: "mpeg-ps",
@@ -561,7 +562,7 @@ fn lpcm_summary(d: &[u8]) -> Option<String> {
     let channels = (b & 7).saturating_add(1);
     Some(format!(
         "LPCM, {bits}-bit, {rate} kHz, {}",
-        vidutil::plural(channels, "channel")
+        plural(channels, "channel")
     ))
 }
 

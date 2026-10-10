@@ -8,7 +8,8 @@ use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::Endian;
 use crate::formats::tracker::{named, note_name, order_node};
-use crate::formats::util::sound::{table, text};
+use crate::formats::util::sound::table;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -104,10 +105,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Song length")
             .span(file.sub(950, 1))
-            .value(crate::formats::util::sound::uint(song_length, 8)),
+            .value(crate::formats::util::val::uint(song_length, 8)),
     );
     cx.emit(Node::new("Restart position").span(file.sub(951, 1)).value(
-        crate::formats::util::sound::uint(head.get(951).copied().unwrap_or(0), 8),
+        crate::formats::util::val::uint(head.get(951).copied().unwrap_or(0), 8),
     ));
     let order_span = file.sub(952, u64::from(song_length.min(128)));
     cx.emit(order_node(&cx, order_span).await?);

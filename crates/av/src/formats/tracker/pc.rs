@@ -11,25 +11,11 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Codec, Head, Input, Probe, content};
 use crate::node::Node;
 use crate::record;
-use crate::value::{Radix, Value};
+
+use crate::formats::util::val::{text, uint};
+use crate::text::until_nul;
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 // ---------------------------------------------------------------------------
 // Tracker modules
@@ -294,7 +280,7 @@ async fn symphonie(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 4))
-            .value(uint(u32_be(&head, 4).unwrap_or(0).into(), 32)),
+            .value(uint(u32_be(&head, 4).unwrap_or(0), 32)),
     );
     // Chunks: a signed type, then (for data chunks) a length.
     let mut pos = 8u64;
@@ -433,7 +419,7 @@ async fn psm(cx: Cx, input: Input) -> Result<()> {
         let mut node = chunk.node();
         match chunk.id.as_slice() {
             b"TITL" => {
-                title = zstr(&cx.read_avail(chunk.body.sub(0, 64)).await?);
+                title = until_nul(&cx.read_avail(chunk.body.sub(0, 64)).await?);
                 node = node.value(text(title.clone()));
             }
             b"DSMP" => samples = samples.saturating_add(1),
@@ -504,7 +490,7 @@ async fn gus_patch(cx: Cx, input: Input) -> Result<()> {
     f.u16("Master volume").emit()?;
     f.u32("Data size").emit()?;
     let ins = cx.read(file.sub_exact(129, 63)?).await?;
-    let name = zstr(ins.get(2..18).unwrap_or_default());
+    let name = until_nul(ins.get(2..18).unwrap_or_default());
     cx.emit(
         Node::new("Instrument")
             .span(file.sub(129, 63))
@@ -517,7 +503,7 @@ async fn gus_patch(cx: Cx, input: Input) -> Result<()> {
     let mut pos = 239u64;
     for _ in 0..waves.min(256) {
         let w = cx.read(file.sub_exact(pos, 96)?).await?;
-        let wname = zstr(w.get(..7).unwrap_or_default());
+        let wname = until_nul(w.get(..7).unwrap_or_default());
         let size = u64::from(u32_le(&w, 8).unwrap_or(0));
         let rate = u16_le(&w, 20).unwrap_or(0);
         let root = u32_le(&w, 30).unwrap_or(0);

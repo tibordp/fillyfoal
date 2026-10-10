@@ -20,7 +20,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Format tag: µ-law (0x7)  [0x38+0x2]
       Channels: 1  [0x3a+0x2]
       Sample rate: 4000  [0x3c+0x4]
-      Average bytes per second: 4000  [0x40+0x4]
+      Average bytes per second: 4000 — 32 kb/s  [0x40+0x4]
       Block align: 1  [0x44+0x2]
       Bits per sample: 8  [0x46+0x2]
       Extension size: 0  [0x48+0x2]

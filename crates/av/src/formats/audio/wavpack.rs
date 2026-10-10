@@ -139,8 +139,10 @@ impl BlockHeader {
     fn describe(&self) -> String {
         format!(
             "{}, {}, {}",
-            self.rate()
-                .map_or_else(|| "custom rate".to_owned(), crate::formats::iff::wav::khz),
+            self.rate().map_or_else(
+                || "custom rate".to_owned(),
+                |r| crate::formats::util::vidutil::khz(r.into())
+            ),
             self.sample_format(),
             if self.flags & 4 != 0 {
                 "mono"
@@ -260,7 +262,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut line = format!(
         "WavPack {}, {}, {layout}",
         first.sample_format(),
-        rate.map_or_else(|| "custom rate".to_owned(), crate::formats::iff::wav::khz)
+        rate.map_or_else(
+            || "custom rate".to_owned(),
+            |r| crate::formats::util::vidutil::khz(r.into())
+        )
     );
     if first.flags & 0x8 != 0 {
         line.push_str(", hybrid (lossy)");
@@ -382,7 +387,7 @@ async fn block(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
         );
         let node = Node::new(name)
             .span(cur.since(start))
-            .value(crate::formats::util::sound::hex(id, 8))
+            .value(crate::formats::util::val::hex(id, 8))
             .summary(format!("{real} bytes"));
         let state = (
             input,
@@ -411,12 +416,7 @@ async fn sub_block(
     let head = cx.read(span.sub(0, header_len)).await?;
     let id = head.first().copied().unwrap_or(0);
     cx.emit(
-        leaf(
-            "ID",
-            span.sub(0, 1),
-            crate::formats::util::sound::hex(id, 8),
-        )
-        .summary(format!(
+        leaf("ID", span.sub(0, 1), crate::formats::util::val::hex(id, 8)).summary(format!(
             "function {:#04x}{}{}{}",
             id & 0x3f,
             if id & 0x20 != 0 { ", optional" } else { "" },
@@ -427,7 +427,7 @@ async fn sub_block(
     cx.emit(leaf(
         "Size (words)",
         span.sub(1, header_len.saturating_sub(1)),
-        crate::formats::util::sound::uint(
+        crate::formats::util::val::uint(
             if id & 0x80 != 0 {
                 crate::bytes::u24_le(&head, 1).unwrap_or(0)
             } else {
@@ -444,7 +444,7 @@ async fn sub_block(
             cx.emit(leaf(
                 "Sample rate",
                 data,
-                crate::formats::util::sound::uint(sample_rate(&raw).unwrap_or(0), 32),
+                crate::formats::util::val::uint(sample_rate(&raw).unwrap_or(0), 32),
             ));
         }
         0x02 => {
@@ -488,13 +488,13 @@ async fn sub_block(
                 cx.emit(leaf(
                     "Channels",
                     data.sub(0, 1),
-                    crate::formats::util::sound::uint(n, 32),
+                    crate::formats::util::val::uint(n, 32),
                 ));
                 cx.emit(
                     leaf(
                         "Channel mask",
                         data.tail(if raw.len() == 6 { 3 } else { 1 }),
-                        crate::formats::util::sound::hex(mask, 32),
+                        crate::formats::util::val::hex(mask, 32),
                     )
                     .summary(crate::formats::iff::wav::layout(
                         u16::try_from(n).unwrap_or(u16::MAX),
@@ -516,7 +516,7 @@ async fn sub_block(
                 leaf(
                     "Extension",
                     data,
-                    crate::formats::util::sound::text(crate::formats::util::sound::latin1_z(&raw)),
+                    crate::formats::util::val::text(crate::formats::util::sound::latin1_z(&raw)),
                 )
                 .desc("File type of the original (wav, w64, caf, dff, dsf)"),
             );
@@ -529,12 +529,8 @@ async fn sub_block(
                 crate::bytes::u16_le(&raw, 0).map_or(0, u32::from)
             };
             cx.emit(
-                leaf(
-                    "Checksum",
-                    data,
-                    crate::formats::util::sound::hex(value, 32),
-                )
-                .desc("Of the block, excluding this sub-block"),
+                leaf("Checksum", data, crate::formats::util::val::hex(value, 32))
+                    .desc("Of the block, excluding this sub-block"),
             );
         }
         _ => cx.emit(Node::new("Data").span(data)),

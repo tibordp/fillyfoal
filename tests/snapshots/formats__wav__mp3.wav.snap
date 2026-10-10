@@ -13,7 +13,7 @@ expression: "common::explore(&display_name(&path), &data)"
       Format tag: MPEG Layer III (0x55)  [0x14+0x2]
       Channels: 1  [0x16+0x2]
       Sample rate: 8000  [0x18+0x4]
-      Average bytes per second: 1000  [0x1c+0x4]
+      Average bytes per second: 1000 — 8 kb/s  [0x1c+0x4]
       Block align: 576  [0x20+0x2]
       Bits per sample: 0  [0x22+0x2]
       Extension size: 12  [0x24+0x2]

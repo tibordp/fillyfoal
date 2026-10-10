@@ -13,7 +13,8 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::Input;
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::sound::{clip, decode_text, image_info, leaf, text};
+use crate::formats::util::sound::{clip, decode_text, image_info, leaf};
+use crate::formats::util::val::text;
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -309,10 +310,7 @@ struct Scan {
 
 impl Scan {
     fn title(&self) -> Option<String> {
-        match (&self.artist, &self.title) {
-            (Some(a), Some(t)) => Some(format!("{a} – {t}")),
-            (a, t) => a.clone().or_else(|| t.clone()),
-        }
+        super::id3::artist_title(self.artist.clone(), self.title.clone())
     }
 }
 

@@ -9,15 +9,11 @@ use crate::fields::Endian;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::value::Value;
 
 const BE: Endian = Endian::Big;
 
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
 use crate::formats::text::scan::head_lines as header_lines;
+use crate::formats::util::val::text;
 
 // ---------------------------------------------------------------------------
 // Audio: NIST SPHERE, Audio Visual Research, Portable Voice Format

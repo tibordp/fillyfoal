@@ -11,7 +11,10 @@ use crate::bytes::{to_u64, u16_le, u32_le, u64_le};
 use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::audio::id3::PICTURE_TYPE;
 use crate::formats::iff::wav;
+use crate::formats::util::fmt::plural;
+use crate::formats::util::val::name_or;
 use crate::formats::util::vidutil;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
@@ -580,9 +583,9 @@ async fn describe(cx: &Cx, obj: &Object) -> Option<String> {
     let d = cx.read_avail(obj.span.sub(0, 0x400)).await.ok()?;
     let g = obj.guid;
     if g == HEADER {
-        Some(vidutil::plural(u32_le(&d, 24)?, "object"))
+        Some(plural(u32_le(&d, 24)?, "object"))
     } else if g == DATA {
-        Some(vidutil::plural(u64_le(&d, 40)?, "packet"))
+        Some(plural(u64_le(&d, 40)?, "packet"))
     } else if g == FILE_PROPERTIES {
         let play = u64_le(&d, 64)?;
         let preroll = u64_le(&d, 80)?;
@@ -599,17 +602,17 @@ async fn describe(cx: &Cx, obj: &Object) -> Option<String> {
         let title = crate::text::utf16(d.get(34..34usize.saturating_add(title_len))?, LE);
         Some(title.trim_end_matches('\0').to_owned()).filter(|t| !t.is_empty())
     } else if g == EXTENDED_CONTENT || g == METADATA || g == METADATA_LIBRARY {
-        Some(vidutil::plural(u16_le(&d, 24)?, "attribute"))
+        Some(plural(u16_le(&d, 24)?, "attribute"))
     } else if g == CODEC_LIST {
-        Some(vidutil::plural(u32_le(&d, 40)?, "codec"))
+        Some(plural(u32_le(&d, 40)?, "codec"))
     } else if g == MARKER {
-        Some(vidutil::plural(u32_le(&d, 40)?, "marker"))
+        Some(plural(u32_le(&d, 40)?, "marker"))
     } else if g == SCRIPT_COMMAND {
-        Some(vidutil::plural(u16_le(&d, 40)?, "command"))
+        Some(plural(u16_le(&d, 40)?, "command"))
     } else if g == LANGUAGE_LIST {
-        Some(vidutil::plural(u16_le(&d, 24)?, "language"))
+        Some(plural(u16_le(&d, 24)?, "language"))
     } else if g == STREAM_BITRATES {
-        Some(vidutil::plural(u16_le(&d, 24)?, "stream"))
+        Some(plural(u16_le(&d, 24)?, "stream"))
     } else if g == EXTENDED_STREAM {
         let number = u16_le(&d, 72)?;
         let per_frame = u64_le(&d, 76)?;
@@ -631,7 +634,7 @@ async fn describe(cx: &Cx, obj: &Object) -> Option<String> {
         || g == MEDIA_OBJECT_INDEX_PARAMETERS
         || g == TIMECODE_INDEX_PARAMETERS
     {
-        Some(vidutil::plural(u16_le(&d, 28)?, "index specifier"))
+        Some(plural(u16_le(&d, 28)?, "index specifier"))
     } else if g == PADDING {
         Some(format!("{} bytes", obj.span.len.saturating_sub(24)))
     } else {
@@ -650,12 +653,12 @@ fn stream_summary(d: &[u8]) -> Option<String> {
         let codec = compression_name(ts.get(27..31)?);
         Some(format!("#{number} video: {codec} {w}×{h}"))
     } else if kind == AUDIO_MEDIA {
-        let tag = u16_le(ts, 0)?;
+        let w = wav::peek_format(ts)?;
         Some(format!(
             "#{number} audio: {}, {}, {} Hz",
-            vidutil::lookup_or(wav::FORMAT_TAG, tag.into()),
-            channel_word(u16_le(ts, 2)?),
-            u32_le(ts, 4)?
+            w.codec_name(),
+            channel_word(w.channels),
+            w.rate
         ))
     } else {
         Some(format!(
@@ -686,11 +689,12 @@ fn stream_short(d: &[u8]) -> Option<String> {
             u32_le(ts, 4)?
         ))
     } else if kind == AUDIO_MEDIA {
+        let w = wav::peek_format(ts)?;
         Some(format!(
             "{} {} {} Hz",
-            vidutil::lookup_or(wav::FORMAT_TAG, u16_le(ts, 0)?.into()),
-            channel_word(u16_le(ts, 2)?),
-            u32_le(ts, 4)?
+            w.codec_name(),
+            channel_word(w.channels),
+            w.rate
         ))
     } else {
         Some(guid_name(&kind).unwrap_or("stream").to_lowercase())
@@ -759,7 +763,7 @@ async fn expand_object(cx: Cx, obj: Object) -> Result<()> {
                 .span(packets)
                 .summary(format!(
                     "{} of {} bytes",
-                    vidutil::plural(n, "packet"),
+                    plural(n, "packet"),
                     obj.packet_size
                 ))
                 .lazy(expand_packets, (packets, n, obj.packet_size)),
@@ -1097,7 +1101,7 @@ fn stream_properties(f: &mut Fields<'_>) -> Result<()> {
     let end = f.pos().saturating_add(ts_len.into());
     // Each layout only where the type-specific data is large enough.
     if kind == AUDIO_MEDIA && ts_len >= 16 {
-        waveformatex(f)?;
+        wav::wave_format(f, &())?;
     } else if kind == VIDEO_MEDIA && ts_len >= 51 {
         f.u32("Encoded image width").emit()?;
         f.u32("Encoded image height").emit()?;
@@ -1240,7 +1244,8 @@ fn codec_entry(f: &mut Fields<'_>) -> Result<Option<String>> {
     } else if kind == 2
         && let Some(tag) = u16_le(&info, 0)
     {
-        node = node.summary(vidutil::lookup_or(wav::FORMAT_TAG, tag.into()));
+        // Only the format tag: the codec list carries no WAVEFORMATEX.
+        node = node.summary(wav::tag_name(tag));
     }
     f.node(node);
     let what = crate::value::lookup(CODEC_TYPES, kind.into()).unwrap_or("codec");
@@ -1431,30 +1436,6 @@ fn typed_value(kind: u16, bytes: &[u8]) -> Option<Value> {
     })
 }
 
-const PICTURE_TYPES: EnumTable = &[
-    (0, "other"),
-    (1, "file icon"),
-    (2, "other file icon"),
-    (3, "front cover"),
-    (4, "back cover"),
-    (5, "leaflet page"),
-    (6, "media"),
-    (7, "lead artist"),
-    (8, "artist"),
-    (9, "conductor"),
-    (10, "band"),
-    (11, "composer"),
-    (12, "lyricist"),
-    (13, "recording location"),
-    (14, "during recording"),
-    (15, "during performance"),
-    (16, "video capture"),
-    (17, "bright coloured fish"),
-    (18, "illustration"),
-    (19, "band logotype"),
-    (20, "publisher logotype"),
-];
-
 /// "front cover, image/jpeg, 12345 bytes".
 fn picture_summary(d: &[u8]) -> Option<String> {
     let kind = *d.first()?;
@@ -1462,7 +1443,7 @@ fn picture_summary(d: &[u8]) -> Option<String> {
     let (mime, _, _) = crate::text::utf16z(d.get(5..)?, LE);
     Some(format!(
         "{}, {mime}, {len} bytes",
-        vidutil::lookup_or(PICTURE_TYPES, kind.into())
+        name_or(PICTURE_TYPE, kind.into(), "picture type")
     ))
 }
 
@@ -1489,7 +1470,7 @@ async fn expand_picture(
     let value = span.tail(value_at);
     let head = cx.block(value.sub(0, 0x1000)).await?;
     let mut f = Fields::emitting(&cx, &head, LE);
-    f.u8("Picture type").enumeration(PICTURE_TYPES).emit()?;
+    f.u8("Picture type").enumeration(PICTURE_TYPE).emit()?;
     let len = f.u32("Picture data length").emit()?;
     f.utf16z("MIME type").emit()?;
     f.utf16z("Description").emit()?;
@@ -1582,10 +1563,7 @@ async fn simple_index_entries(
             let span = page.sub(j.saturating_mul(6), 6);
             let mut node = Node::new(format!("Entry {}", i.saturating_add(j)))
                 .span(span)
-                .summary(format!(
-                    "packet {number}, {}",
-                    vidutil::plural(packets_n, "packet")
-                ))
+                .summary(format!("packet {number}, {}", plural(packets_n, "packet")))
                 .lazy(simple_entry, span);
             if let Some(p) = packets {
                 node = node.target(p.sub(
@@ -1654,171 +1632,6 @@ async fn index_block(
 
 // ---------------------------------------------------------------------------
 // Codec structures shared with AVI and Matroska
-
-pub const CHANNEL_MASK: FlagTable = &[
-    flag(0x1, "FRONT_LEFT"),
-    flag(0x2, "FRONT_RIGHT"),
-    flag(0x4, "FRONT_CENTER"),
-    flag(0x8, "LOW_FREQUENCY"),
-    flag(0x10, "BACK_LEFT"),
-    flag(0x20, "BACK_RIGHT"),
-    flag(0x40, "FRONT_LEFT_OF_CENTER"),
-    flag(0x80, "FRONT_RIGHT_OF_CENTER"),
-    flag(0x100, "BACK_CENTER"),
-    flag(0x200, "SIDE_LEFT"),
-    flag(0x400, "SIDE_RIGHT"),
-    flag(0x800, "TOP_CENTER"),
-    flag(0x1000, "TOP_FRONT_LEFT"),
-    flag(0x2000, "TOP_FRONT_CENTER"),
-    flag(0x4000, "TOP_FRONT_RIGHT"),
-    flag(0x8000, "TOP_BACK_LEFT"),
-    flag(0x10000, "TOP_BACK_CENTER"),
-    flag(0x20000, "TOP_BACK_RIGHT"),
-];
-
-const MP3_FLAGS: FlagTable = &[
-    field(0x3, 0x0, "PADDING_ISO"),
-    field(0x3, 0x1, "PADDING_ON"),
-    field(0x3, 0x2, "PADDING_OFF"),
-];
-
-const MPEG_LAYERS: FlagTable = &[flag(1, "LAYER1"), flag(2, "LAYER2"), flag(4, "LAYER3")];
-const MPEG_MODES: FlagTable = &[
-    flag(1, "STEREO"),
-    flag(2, "JOINT_STEREO"),
-    flag(4, "DUAL_CHANNEL"),
-    flag(8, "SINGLE_CHANNEL"),
-];
-const MPEG_FLAGS: FlagTable = &[
-    flag(1, "PRIVATE_BIT"),
-    flag(2, "COPYRIGHT"),
-    flag(4, "ORIGINAL_HOME"),
-    flag(8, "PROTECTION_BIT"),
-    flag(0x10, "MPEG1"),
-];
-const WMA_OPTIONS: FlagTable = &[
-    flag(1, "EXPONENT_VLC"),
-    flag(2, "BIT_RESERVOIR"),
-    flag(4, "VARIABLE_BLOCK_LENGTH"),
-];
-
-/// The KSDATAFORMAT_SUBTYPE GUIDs are `XXXXXXXX-0000-0010-8000-00aa00389b71`
-/// with a format tag in the first field.
-fn subformat_tag(g: &Guid) -> Option<u16> {
-    (g.data2 == 0 && g.data3 == 0x10 && g.data4 == [0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71])
-        .then(|| u16::try_from(g.data1).ok())
-        .flatten()
-}
-
-/// WAVEFORMATEX (and WAVEFORMATEXTENSIBLE), as used by ASF, AVI and
-/// Matroska (A_MS/ACM) audio streams, with the extra data of common
-/// codecs decoded.
-pub fn waveformatex(f: &mut Fields<'_>) -> Result<()> {
-    let tag = f.u16("Format tag").enumeration(wav::FORMAT_TAG).emit()?;
-    f.u16("Channels").emit()?;
-    f.u32("Samples per second").emit()?;
-    f.u32("Average bytes per second")
-        .with(|&v, n| {
-            n.summary(format!(
-                "{} kb/s",
-                vidutil::num(f64::from(v) * 8.0 / 1000.0)
-            ))
-        })
-        .emit()?;
-    f.u16("Block alignment").emit()?;
-    if f.remaining() < 2 {
-        return Ok(());
-    }
-    f.u16("Bits per sample").emit()?;
-    if f.remaining() < 2 {
-        return Ok(());
-    }
-    let n = u64::from(f.u16("Extra data size").emit()?);
-    let end = f.pos().saturating_add(n);
-    match tag {
-        0xfffe if n >= 22 => {
-            f.u16("Valid bits per sample")
-                .desc("Or samples per block, for compressed formats")
-                .emit()?;
-            f.u32("Channel mask").flags(CHANNEL_MASK).emit()?;
-            f.guid("Subformat")
-                .with(|g, node| match subformat_tag(g) {
-                    Some(t) => node.summary(vidutil::lookup_or(wav::FORMAT_TAG, t.into())),
-                    None => node,
-                })
-                .emit()?;
-        }
-        0x0055 if n >= 12 => {
-            f.u16("ID")
-                .enumeration(&[(0, "unknown"), (1, "MPEG"), (2, "constant frame size")])
-                .emit()?;
-            f.u32("Flags").flags(MP3_FLAGS).emit()?;
-            f.u16("Block size").emit()?;
-            f.u16("Frames per block").emit()?;
-            f.u16("Codec delay").desc("Samples").emit()?;
-        }
-        0x0050 if n >= 22 => {
-            f.u16("Layer").flags(MPEG_LAYERS).emit()?;
-            f.u32("Bitrate").emit()?;
-            f.u16("Mode").flags(MPEG_MODES).emit()?;
-            f.u16("Mode extension").emit()?;
-            f.u16("Emphasis").emit()?;
-            f.u16("Flags").flags(MPEG_FLAGS).emit()?;
-            f.u32("PTS low").emit()?;
-            f.u32("PTS high").emit()?;
-        }
-        0x0011 | 0x0002 | 0x0200 if n >= 2 => {
-            f.u16("Samples per block").emit()?;
-            if tag == 0x0002 && n >= 4 {
-                let coefs = f.u16("Coefficient count").emit()?;
-                for _ in 0..coefs {
-                    if f.pos().saturating_add(4) > end {
-                        break;
-                    }
-                    f.int::<i16>("Coefficient 1").emit()?;
-                    f.int::<i16>("Coefficient 2").emit()?;
-                }
-            }
-        }
-        0x0160 if n >= 4 => {
-            f.u16("Samples per block").emit()?;
-            f.u16("Encode options").flags(WMA_OPTIONS).emit()?;
-        }
-        0x0161 if n >= 6 => {
-            f.u32("Samples per block").emit()?;
-            f.u16("Encode options").flags(WMA_OPTIONS).emit()?;
-            if n >= 10 {
-                f.u32("Super block alignment").emit()?;
-            }
-        }
-        0x0162 | 0x0163 if n >= 18 => {
-            f.u16("Valid bits per sample").emit()?;
-            f.u32("Channel mask").flags(CHANNEL_MASK).emit()?;
-            f.u32("Reserved 1").emit()?;
-            f.u32("Reserved 2").emit()?;
-            f.u16("Encode options").hex().emit()?;
-            f.u16("Reserved 3").emit()?;
-        }
-        0x00ff | 0x1610 | 0xa106 | 0x4143 if n >= 2 => {
-            let at = f.pos();
-            let asc = f.bytes("AudioSpecificConfig", n).get()?;
-            let span = f.block().span.sub(at, n);
-            let (info, nodes) = vidutil::nal::asc(&asc, span, true);
-            let node = vidutil::nal::group("AudioSpecificConfig", span, nodes);
-            f.node(match info {
-                Some(a) => node.summary(a.describe()),
-                None => node,
-            });
-        }
-        _ => {}
-    }
-    if f.pos() < end {
-        let rest = end.saturating_sub(f.pos());
-        f.bytes("Codec-specific data", rest).emit()?;
-    }
-    f.seek(end);
-    Ok(())
-}
 
 const BI_COMPRESSION: EnumTable = &[
     (0, "BI_RGB"),
@@ -1899,7 +1712,7 @@ pub fn bitmapinfoheader(f: &mut Fields<'_>) -> Result<()> {
         f.node(
             Node::new("Palette")
                 .span(span)
-                .summary(vidutil::plural(len / 4, "colour"))
+                .summary(plural(len / 4, "colour"))
                 .desc("RGBQUAD entries: blue, green, red, reserved"),
         );
         f.skip(len);
@@ -2022,7 +1835,7 @@ impl Packet {
             self.send_time, self.duration
         );
         if self.multiple {
-            s.push_str(&format!(", {}", vidutil::plural(self.count, "payload")));
+            s.push_str(&format!(", {}", plural(self.count, "payload")));
         } else {
             s.push_str(", 1 payload");
         }
@@ -2072,7 +1885,7 @@ fn parse_packet(f: &mut Fields<'_>) -> Result<Packet> {
             .with(|&v, n| {
                 n.summary(format!(
                     "{}, lengths: {}",
-                    vidutil::plural(v & 0x3f, "payload"),
+                    plural(v & 0x3f, "payload"),
                     ["none", "byte", "word", "dword"]
                         .get(usize::from(v >> 6))
                         .copied()
@@ -2371,7 +2184,7 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<(String, u32)> {
         parts.push(streams.join(" + "));
     }
     if markers > 0 {
-        parts.push(vidutil::plural(markers, "marker"));
+        parts.push(plural(markers, "marker"));
     }
     if let Some(t) = title {
         parts.push(format!("\"{t}\""));

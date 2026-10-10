@@ -16,17 +16,20 @@
 
 use std::sync::Arc;
 
-use crate::bytes::{to_u64, u32_be, u32_le};
+use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::audio::{flac, vorbis};
+use crate::formats::audio::{caf, flac, ogg, vorbis};
 use crate::formats::iff::wav;
+use crate::formats::util::datakit::be_uint;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound;
-use crate::formats::util::vidutil::{self, detached, nal, seconds_f64, uint};
+use crate::formats::util::vidutil::{self, detached, khz, nal, seconds_f64, uint};
 use crate::formats::{Format, Head, Input, Probe, content, embedded};
 use crate::node::Node;
 use crate::span::Span;
+use crate::text::until_nul;
 use crate::value::{EnumTable, FlagTable, Radix, Value, field, flag};
 
 pub static MKV: Format = Format {
@@ -262,13 +265,7 @@ fn child_uint(d: &[u8], id: u32) -> Option<u64> {
 }
 
 fn child_text(d: &[u8], id: u32) -> Option<String> {
-    child(d, id).map(text)
-}
-
-fn be_uint(d: &[u8]) -> u64 {
-    d.iter()
-        .take(8)
-        .fold(0u64, |acc, &b| (acc << 8) | u64::from(b))
+    child(d, id).map(until_nul)
 }
 
 fn be_int(d: &[u8]) -> i64 {
@@ -288,10 +285,6 @@ fn be_float(d: &[u8]) -> Option<f64> {
         8 => Some(f64::from_be_bytes(d.try_into().ok()?)),
         _ => None,
     }
-}
-
-fn text(d: &[u8]) -> String {
-    crate::text::until_nul(d)
 }
 
 // ---------------------------------------------------------------------------
@@ -1260,7 +1253,7 @@ fn leaf(node: Node, kind: Kind, d: &[u8], el: &Element) -> Node {
             }
             None => node.diag(Diagnostic::malformed("float of invalid size")),
         },
-        Kind::Str | Kind::Utf8 => node.value(Value::Text(text(d))),
+        Kind::Str | Kind::Utf8 => node.value(Value::Text(until_nul(d))),
         Kind::Date => {
             let ns = be_int(d);
             node.value(Value::Timestamp {
@@ -1472,7 +1465,7 @@ fn track_brief(d: &[u8]) -> TrackBrief {
         match id {
             TRACK_NUMBER => t.number = be_uint(v),
             CODEC_ID => {
-                t.codec_id = text(v);
+                t.codec_id = until_nul(v);
                 t.codec = codec_of(&t.codec_id);
             }
             CONTENT_ENCODINGS => {
@@ -1537,10 +1530,10 @@ fn track_summary(d: &[u8]) -> TrackSummary {
         match id {
             TRACK_NUMBER => t.number = be_uint(v),
             TRACK_TYPE => t.kind = be_uint(v),
-            CODEC_ID => t.codec = text(v),
-            NAME => t.name = Some(text(v)),
-            LANGUAGE if t.language.is_none() => t.language = Some(text(v)),
-            LANGUAGE_BCP47 => t.language = Some(text(v)),
+            CODEC_ID => t.codec = until_nul(v),
+            NAME => t.name = Some(until_nul(v)),
+            LANGUAGE if t.language.is_none() => t.language = Some(until_nul(v)),
+            LANGUAGE_BCP47 => t.language = Some(until_nul(v)),
             FLAG_FORCED => t.forced = be_uint(v) != 0,
             DEFAULT_DURATION => {
                 let ns = be_uint(v);
@@ -1595,11 +1588,6 @@ fn channel_word(n: u64) -> String {
         8 => "7.1".to_owned(),
         n => format!("{n} ch"),
     }
-}
-
-/// "48 kHz", "44.1 kHz".
-fn khz(rate: f64) -> String {
-    format!("{} kHz", rate / 1000.0)
 }
 
 impl TrackSummary {
@@ -1711,15 +1699,17 @@ impl TrackSummary {
                 .private
                 .get(16..20)
                 .map(crate::formats::video::asf::compression_name),
-            Codec::Acm => {
-                acm_tag(&self.private).map(|t| vidutil::lookup_or(wav::FORMAT_TAG, t.into()))
-            }
+            Codec::Acm => wav::peek_format(&self.private).map(|w| w.codec_name()),
             _ => None,
         };
         let name = real.as_deref().unwrap_or(codec_name(&self.codec));
         match self.kind {
             1 if self.width > 0 => format!("{name} {}×{}", self.width, self.height),
-            2 => format!("{name} {} {}", channel_word(self.channels), khz(self.rate)),
+            2 => format!(
+                "{name} {} {}",
+                channel_word(self.channels),
+                khz(self.rate as u64)
+            ),
             0x11 => format!("{name} subtitles"),
             _ => name.to_owned(),
         }
@@ -1784,7 +1774,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
                 .collect();
             Some(format!(
                 "{}: {}",
-                vidutil::plural(to_u64(list.len()), "track"),
+                plural(to_u64(list.len()), "track"),
                 list.join(", ")
             ))
         }
@@ -1891,7 +1881,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             }
             Some(s)
         }
-        CONTENT_ENCODINGS => Some(vidutil::plural(to_u64(count(CONTENT_ENCODING)), "encoding")),
+        CONTENT_ENCODINGS => Some(plural(to_u64(count(CONTENT_ENCODING)), "encoding")),
         CONTENT_ENCODING => {
             let scope = child_uint(&d, CONTENT_ENCODING_SCOPE).unwrap_or(1);
             let mut what = Vec::new();
@@ -1958,7 +1948,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             }
             Some(s)
         }
-        ATTACHMENTS => Some(vidutil::plural(
+        ATTACHMENTS => Some(plural(
             to_u64(count_children(cx, data, ATTACHED_FILE).await),
             "file",
         )),
@@ -1977,9 +1967,9 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
                 format!("{name} ({})", extra.join(", "))
             })
         }
-        CHAPTERS => Some(vidutil::plural(to_u64(count(EDITION_ENTRY)), "edition")),
+        CHAPTERS => Some(plural(to_u64(count(EDITION_ENTRY)), "edition")),
         EDITION_ENTRY => {
-            let mut s = vidutil::plural(to_u64(count(CHAPTER_ATOM)), "chapter");
+            let mut s = plural(to_u64(count(CHAPTER_ATOM)), "chapter");
             if let Some(name) =
                 child(&d, EDITION_DISPLAY).and_then(|v| child_text(v, EDITION_STRING))
             {
@@ -2008,10 +1998,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             }
             let nested = count(CHAPTER_ATOM);
             if nested > 0 {
-                s.push_str(&format!(
-                    ", {}",
-                    vidutil::plural(to_u64(nested), "sub-chapter")
-                ));
+                s.push_str(&format!(", {}", plural(to_u64(nested), "sub-chapter")));
             }
             if child_uint(&d, CHAPTER_FLAG_HIDDEN).is_some_and(|v| v != 0) {
                 s.push_str(", hidden");
@@ -2028,7 +2015,7 @@ async fn master_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) ->
             })
         }
         EDITION_DISPLAY => child_text(&d, EDITION_STRING).map(|t| format!("\"{t}\"")),
-        TAGS => Some(vidutil::plural(to_u64(count(TAG)), "tag")),
+        TAGS => Some(plural(to_u64(count(TAG)), "tag")),
         TAG => {
             let target = child(&d, TARGETS).map_or_else(|| "segment".to_owned(), targets_summary);
             let names: Vec<String> = mem_children(&d)
@@ -2125,7 +2112,7 @@ async fn group_summary(cx: &Cx, el: &Element, tracks: Option<&[TrackBrief]>) -> 
     if refs == 0 {
         s.push_str(", keyframe");
     } else {
-        s.push_str(&format!(", {}", vidutil::plural(refs, "reference")));
+        s.push_str(&format!(", {}", plural(refs, "reference")));
     }
     Some(s)
 }
@@ -2219,7 +2206,7 @@ fn block_summary(
     match h.frames {
         Some(n) => s.push_str(&format!(
             ", {} ({} lacing), {payload} bytes",
-            vidutil::plural(n, "frame"),
+            plural(n, "frame"),
             vidutil::lookup_or(LACING, h.lacing().into())
         )),
         None => s.push_str(&format!(", {payload} bytes")),
@@ -2406,7 +2393,7 @@ async fn block(cx: Cx, el: Element) -> Result<()> {
             .summary(format!(
                 "{} lacing, {}",
                 vidutil::lookup_or(LACING, h.lacing().into()),
-                vidutil::plural(to_u64(frames.len()), "frame")
+                plural(to_u64(frames.len()), "frame")
             ))
             .lazy(
                 lacing_header,
@@ -2443,7 +2430,7 @@ async fn lacing_header(cx: Cx, (span, lacing, payload): (Span, u8, u64)) -> Resu
                 bits: 8,
                 radix: Radix::Dec,
             })
-            .summary(vidutil::plural(u16::from(count).saturating_add(1), "frame")),
+            .summary(plural(u16::from(count).saturating_add(1), "frame")),
     );
     let Ok((_, frames)) = laces(&d, lacing, payload) else {
         return Ok(());
@@ -2593,7 +2580,7 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
             let what = xiph_id_summary(first).unwrap_or_else(|| "headers".to_owned());
             Some(format!(
                 "{what}; {}",
-                vidutil::plural(to_u64(packets.len()), "header")
+                plural(to_u64(packets.len()), "header")
             ))
         }
         Codec::Opus => {
@@ -2608,7 +2595,7 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
             if !d.starts_with(b"fLaC") {
                 return None;
             }
-            flac_streaminfo(d.get(8..)?)
+            flac::config_summary(d)
         }
         Codec::Aac => vidutil::asc_summary(d),
         Codec::Vfw => {
@@ -2626,24 +2613,15 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
             Some(format!("{codec} {w}×{}, {bits}-bit", h.unsigned_abs()))
         }
         Codec::Acm => {
-            let tag = acm_tag(d)?;
-            let channels = u16::from_le_bytes(crate::bytes::array(d, 2)?);
-            let rate = u32::from_le_bytes(crate::bytes::array(d, 4)?);
+            let w = wav::peek_format(d)?;
             Some(format!(
-                "{}, {rate} Hz, {}",
-                vidutil::lookup_or(wav::FORMAT_TAG, tag.into()),
-                channel_word(channels.into())
+                "{}, {} Hz, {}",
+                w.codec_name(),
+                w.rate,
+                channel_word(w.channels.into())
             ))
         }
-        Codec::Alac => {
-            let c = alac_config(d)?;
-            Some(format!(
-                "{} Hz, {}, {}-bit",
-                u32_be(c, 20)?,
-                channel_word((*c.get(9)?).into()),
-                c.get(5)?
-            ))
-        }
+        Codec::Alac => caf::peek_alac(d).map(|c| caf::alac_summary(&c)),
         Codec::Text | Codec::TextHeader => {
             let t = String::from_utf8_lossy(d);
             let line = t.lines().map(str::trim).find(|l| !l.is_empty())?;
@@ -2651,37 +2629,6 @@ fn private_summary(codec: Codec, d: &[u8]) -> Option<String> {
         }
         Codec::Mjpeg | Codec::Other => None,
     }
-}
-
-/// The format tag of a WAVEFORMATEX (the subformat's, for EXTENSIBLE).
-fn acm_tag(d: &[u8]) -> Option<u16> {
-    let tag = u16::from_le_bytes(crate::bytes::array(d, 0)?);
-    if tag == 0xfffe {
-        return u16::from_le_bytes(crate::bytes::array(d, 24)?).into();
-    }
-    Some(tag)
-}
-
-/// The 24-byte ALACSpecificConfig, with or without its `alac` atom header.
-fn alac_config(d: &[u8]) -> Option<&[u8]> {
-    if d.get(4..8) == Some(b"alac") {
-        d.get(12..36)
-    } else {
-        d.get(..24)
-    }
-}
-
-/// FLAC STREAMINFO: "44100 Hz, 2 ch, 16-bit, 441000 samples".
-fn flac_streaminfo(d: &[u8]) -> Option<String> {
-    let mut b = vidutil::Bits::new(d.get(10..18)?);
-    let rate = b.bits(20)?;
-    let channels = b.bits(3)?.saturating_add(1);
-    let bits = b.bits(5)?.saturating_add(1);
-    let samples = b.bits(36)?;
-    Some(format!(
-        "{rate} Hz, {}, {bits}-bit, {samples} samples",
-        channel_word(channels)
-    ))
 }
 
 const VP9_FEATURES: EnumTable = &[
@@ -2745,20 +2692,9 @@ fn xiph_packets(d: &[u8], total: u64) -> Option<(usize, Vec<(usize, usize)>)> {
 /// What the identification header of a Xiph codec says.
 fn xiph_id_summary(p: &[u8]) -> Option<String> {
     match p {
-        [1, b'v', b'o', b'r', b'b', b'i', b's', ..] => {
-            let channels = *p.get(11)?;
-            let rate = u32::from_le_bytes(crate::bytes::array(p, 12)?);
-            let nominal = i32::from_le_bytes(crate::bytes::array(p, 20)?);
-            let mut s = format!("Vorbis, {}, {rate} Hz", channel_word(channels.into()));
-            if nominal > 0 {
-                s.push_str(&format!(", nominal {} kb/s", nominal / 1000));
-            }
-            Some(s)
-        }
+        [1, b'v', b'o', b'r', b'b', b'i', b's', ..] => ogg::VorbisId::peek(p).map(|v| v.summary()),
         [0x80, b't', b'h', b'e', b'o', b'r', b'a', ..] => {
-            let w = crate::bytes::u24_be(p, 14)?;
-            let h = crate::bytes::u24_be(p, 17)?;
-            Some(format!("Theora, {w}×{h}"))
+            ogg::TheoraId::peek(p).map(|t| t.summary())
         }
         [0x80, b'k', b'a', b't', b'e', ..] => Some("Kate".to_owned()),
         _ => None,
@@ -2816,7 +2752,7 @@ async fn codec_private(cx: Cx, el: Element) -> Result<()> {
             }
         }
         Codec::Opus => emit_all(&cx, nal::opus(&d, span, true, false).1),
-        Codec::Flac => flac_private(&cx, el.input, data).await?,
+        Codec::Flac => flac::codec_config(&cx, el.input, data).await?,
         Codec::Xiph => xiph_private(&cx, el.input, data).await?,
         Codec::Vfw => {
             let block = cx.block(span).await?;
@@ -2830,32 +2766,13 @@ async fn codec_private(cx: Cx, el: Element) -> Result<()> {
         Codec::Acm => {
             let block = cx.block(span).await?;
             let mut f = Fields::emitting(&cx, &block, Endian::Little);
-            crate::formats::video::asf::waveformatex(&mut f)?;
+            wav::wave_format(&mut f, &())?;
             let rest = f.remaining();
             if rest > 0 {
                 f.bytes("Extra data", rest).emit()?;
             }
         }
-        Codec::Alac => {
-            let block = cx.block(span).await?;
-            let mut f = Fields::emitting(&cx, &block, Endian::Big);
-            if d.get(4..8) == Some(b"alac") {
-                f.u32("Atom size").emit()?;
-                f.ascii("Atom type", 4).emit()?;
-                f.u32("Version and flags").hex().emit()?;
-            }
-            f.u32("Frame length").desc("Samples per frame").emit()?;
-            f.u8("Compatible version").emit()?;
-            f.u8("Bit depth").emit()?;
-            f.u8("Rice history mult").emit()?;
-            f.u8("Rice initial history").emit()?;
-            f.u8("Rice parameter limit").emit()?;
-            f.u8("Channels").emit()?;
-            f.u16("Max run").emit()?;
-            f.u32("Max frame bytes").emit()?;
-            f.u32("Average bit rate").emit()?;
-            f.u32("Sample rate").emit()?;
-        }
+        Codec::Alac => caf::alac_cookie(&cx, data).await?,
         Codec::Text | Codec::TextHeader => {
             cx.emit(
                 Node::new("Text")
@@ -2866,40 +2783,6 @@ async fn codec_private(cx: Cx, el: Element) -> Result<()> {
         Codec::Mjpeg | Codec::Other => {
             cx.emit(Node::new("Data").span(data));
         }
-    }
-    Ok(())
-}
-
-/// `fLaC` followed by metadata blocks.
-async fn flac_private(cx: &Cx, input: Input, data: Span) -> Result<()> {
-    let magic = cx.read_avail(data.sub(0, 4)).await?;
-    if magic != b"fLaC" {
-        cx.emit(Node::new("Data").span(data).diag(Diagnostic::malformed(
-            "FLAC codec data without the fLaC signature",
-        )));
-        return Ok(());
-    }
-    cx.emit(
-        Node::new("Signature")
-            .span(data.sub(0, 4))
-            .value(Value::Text("fLaC".to_owned())),
-    );
-    let mut pos = 4u64;
-    while pos.saturating_add(4) <= data.len {
-        let h = cx.read_avail(data.sub(pos, 4)).await?;
-        let Some(len) = crate::bytes::u24_be(&h, 1) else {
-            break;
-        };
-        let last = h.first().is_some_and(|b| b & 0x80 != 0);
-        let span = data.sub(pos, 4u64.saturating_add(len.into()));
-        cx.emit(flac::block_node(cx, input, span).await?);
-        pos = pos.saturating_add(span.len.max(1));
-        if last {
-            break;
-        }
-    }
-    if pos < data.len {
-        cx.emit(Node::new("Trailing data").span(data.tail(pos)));
     }
     Ok(())
 }
@@ -2920,7 +2803,7 @@ async fn xiph_private(cx: &Cx, input: Input, data: Span) -> Result<()> {
             .span(data.sub(0, to_u64(header)))
             .summary(format!(
                 "{}: {}",
-                vidutil::plural(to_u64(packets.len()), "packet"),
+                plural(to_u64(packets.len()), "packet"),
                 packets
                     .iter()
                     .map(|(_, l)| format!("{l} bytes"))
@@ -2973,62 +2856,8 @@ fn xiph_kind(head: &[u8]) -> u8 {
 
 async fn xiph_packet(cx: Cx, (input, span, kind): (Input, Span, u8)) -> Result<()> {
     match kind {
-        1 => {
-            let block = cx.block(span.sub(0, 30)).await?;
-            let mut f = Fields::emitting(&cx, &block, Endian::Little);
-            f.u8("Packet type").emit()?;
-            f.ascii("Signature", 6).emit()?;
-            f.u32("Vorbis version").emit()?;
-            f.u8("Channels").emit()?;
-            f.u32("Sample rate").emit()?;
-            f.i32("Maximum bitrate").emit()?;
-            f.i32("Nominal bitrate").emit()?;
-            f.i32("Minimum bitrate").emit()?;
-            f.u8("Block sizes")
-                .with(|&v, n| {
-                    n.summary(format!(
-                        "{} / {} samples",
-                        1u32 << (v & 0xf).min(31),
-                        1u32 << (v >> 4).min(31)
-                    ))
-                })
-                .emit()?;
-            f.u8("Framing flag").emit()?;
-        }
-        0x80 => {
-            let block = cx.block(span.sub(0, 42)).await?;
-            let mut f = Fields::emitting(&cx, &block, Endian::Big);
-            f.u8("Packet type").emit()?;
-            f.ascii("Signature", 6).emit()?;
-            f.u8("Major version").emit()?;
-            f.u8("Minor version").emit()?;
-            f.u8("Revision").emit()?;
-            f.u16("Frame width (macroblocks)").emit()?;
-            f.u16("Frame height (macroblocks)").emit()?;
-            sound::u24(&mut f, "Picture width", Endian::Big).emit()?;
-            sound::u24(&mut f, "Picture height", Endian::Big).emit()?;
-            f.u8("Picture X offset").emit()?;
-            f.u8("Picture Y offset").emit()?;
-            let num = f.u32("Frame rate numerator").emit()?;
-            f.u32("Frame rate denominator")
-                .with(|&den, n| {
-                    if den > 0 {
-                        n.summary(format!("{:.3} fps", f64::from(num) / f64::from(den)))
-                    } else {
-                        n
-                    }
-                })
-                .emit()?;
-            sound::u24(&mut f, "Aspect ratio numerator", Endian::Big).emit()?;
-            sound::u24(&mut f, "Aspect ratio denominator", Endian::Big).emit()?;
-            f.u8("Colour space")
-                .enumeration(&[(0, "undefined"), (1, "Rec. 470M"), (2, "Rec. 470BG")])
-                .emit()?;
-            sound::u24(&mut f, "Nominal bitrate", Endian::Big).emit()?;
-            f.u16("Quality, keyframe shift, pixel format")
-                .hex()
-                .emit()?;
-        }
+        1 => ogg::vorbis_id(&cx, &cx.block(span.sub(0, 30)).await?)?,
+        0x80 => ogg::theora_id(&cx, &cx.block(span.sub(0, 42)).await?)?,
         _ => {
             cx.emit(
                 Node::new("Packet type and signature")
@@ -3136,10 +2965,10 @@ async fn file_summary(cx: &Cx, file: Span) -> Option<String> {
     parts.extend(duration);
     parts.extend(tracks);
     if chapters > 0 {
-        parts.push(vidutil::plural(to_u64(chapters), "chapter"));
+        parts.push(plural(to_u64(chapters), "chapter"));
     }
     if attachments > 0 {
-        parts.push(vidutil::plural(to_u64(attachments), "attachment"));
+        parts.push(plural(to_u64(attachments), "attachment"));
     }
     if live {
         parts.push("live (unknown sizes)".to_owned());

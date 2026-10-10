@@ -654,6 +654,17 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 // ---------------------------------------------------------------------------
 // Shared field helpers
 
+/// Decodes the start of `span` (up to 64 KiB) with `layout`, emitting the
+/// fields as children.
+pub async fn emit_fields(
+    cx: &Cx,
+    span: Span,
+    layout: impl FnOnce(&mut Fields<'_>) -> Result<()>,
+) -> Result<()> {
+    let block = cx.block(span.sub(0, 0x10000)).await?;
+    layout(&mut Fields::emitting(cx, &block, BE))
+}
+
 /// Emits (or silently reads) a FullBox version and flags.
 pub fn full_box(f: &mut Fields<'_>) -> Result<(u8, u32)> {
     let version = f.u8("Version").emit()?;

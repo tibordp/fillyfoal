@@ -11,7 +11,9 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::embedded;
 use crate::formats::iff::{Chunk, Ctx, Entry, FourCc, find, scan, wav};
-use crate::formats::util::sound::{fourcc, peek_text, text};
+use crate::formats::util::fmt::plural;
+use crate::formats::util::sound::{fourcc, peek_text};
+use crate::formats::util::val::text;
 use crate::formats::util::vidutil;
 use crate::formats::video::asf;
 use crate::node::{Count, Node};
@@ -263,8 +265,8 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
                 h.width,
                 h.height,
                 vidutil::num(h.fps()),
-                vidutil::plural(h.total_frames, "frame"),
-                vidutil::plural(h.streams, "stream")
+                plural(h.total_frames, "frame"),
+                plural(h.streams, "stream")
             );
             if h.flags & 0x100 != 0 {
                 s.push_str(", interleaved");
@@ -281,7 +283,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
                 s.push_str(&format!(
                     ", {} fps, {}",
                     vidutil::num(h.rate()),
-                    vidutil::plural(h.length, "frame")
+                    plural(h.length, "frame")
                 ));
             } else {
                 let unit = if &h.kind == b"auds" {
@@ -321,7 +323,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         }),
         b"dmlh" => {
             let d = cx.read_avail(chunk.data.sub(0, 4)).await?;
-            u32_le(&d, 0).map(|n| format!("{} in all", vidutil::plural(n, "frame")))
+            u32_le(&d, 0).map(|n| format!("{} in all", plural(n, "frame")))
         }
         b"vprp" => {
             let d = cx.read_avail(chunk.data.sub(0, 36)).await?;
@@ -453,7 +455,7 @@ fn vprp_summary(d: &[u8]) -> Option<String> {
     }
     parts.push(format!("{}:{}", aspect >> 16, aspect & 0xffff));
     parts.push(format!("{w}×{h}"));
-    parts.push(vidutil::plural(fields, "field"));
+    parts.push(plural(fields, "field"));
     Some(parts.join(", "))
 }
 
@@ -476,7 +478,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             Some(h) if &h.kind == b"auds" => {
                 let block = cx.block(data).await?;
                 let mut f = Fields::emitting(cx, &block, e);
-                asf::waveformatex(&mut f)?;
+                wav::wave_format(&mut f, &())?;
                 let rest = f.remaining();
                 if rest > 0 {
                     f.bytes("Extra data", rest).emit()?;
@@ -864,22 +866,12 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
                 format!("{codec} {} fps", vidutil::num(h.rate()))
             }
             b"auds" => {
-                let tag = u16_le(&format, 0).unwrap_or(0);
-                let tag = if tag == 0xfffe {
-                    u16_le(&format, 24).unwrap_or(tag)
-                } else {
-                    tag
-                };
-                let channels = u16_le(&format, 2).unwrap_or(0);
-                let rate = u32_le(&format, 4).unwrap_or(0);
+                let w = wav::peek_format(&format).unwrap_or_default();
                 format!(
-                    "{} {} {rate} Hz",
-                    vidutil::lookup_or(wav::FORMAT_TAG, tag.into()),
-                    match channels {
-                        1 => "mono".to_owned(),
-                        2 => "stereo".to_owned(),
-                        n => format!("{n} ch"),
-                    }
+                    "{} {} {} Hz",
+                    w.codec_name(),
+                    wav::layout(w.channels, None),
+                    w.rate
                 )
             }
             kind => format!("{} stream", stream_type(kind)),

@@ -14,7 +14,8 @@ use crate::formats::Input;
 use crate::formats::audio::{flac, id3};
 use crate::formats::text::decode::{Transform, derive_with};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::sound::{clip, image_info, leaf, text, uint};
+use crate::formats::util::sound::{clip, image_info, leaf};
+use crate::formats::util::val::{text, uint};
 use crate::node::{Count, Node};
 use crate::span::Span;
 
@@ -234,8 +235,5 @@ pub async fn title(cx: &Cx, span: Span) -> Option<String> {
             }
         }
     }
-    match (artist, title) {
-        (Some(a), Some(t)) => Some(format!("{a} – {t}")),
-        (a, t) => a.or(t),
-    }
+    super::id3::artist_title(artist, title)
 }
