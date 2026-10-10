@@ -8,7 +8,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
 use crate::formats::util::vidutil::{
-    Entry, duration, enumerated, fourcc, num, plural, read_small, table, text, uuid,
+    Entry, duration, enumerated, fourcc, num, read_small, table, text, uuid,
 };
 use crate::node::{Count, Node};
 use crate::record;
@@ -17,6 +17,7 @@ use crate::value::{EnumTable, Radix, Value};
 
 use super::boxes::sample_flags;
 use super::{BE, BoxState, full_box, small};
+use crate::formats::util::fmt::plural;
 
 record! {
     pub struct TimeToSample {

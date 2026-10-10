@@ -4,35 +4,18 @@
 use crate::bytes::{u32_be, u32_le};
 use crate::cx::Cx;
 use crate::declare_format;
-use crate::dsl::{Chunk, ChunkLayout, Cursor};
+use crate::dsl::{ChunkLayout, Cursor};
 use crate::error::Result;
 use crate::fields::Endian;
+use crate::formats::util::val::text;
+use crate::formats::video::containers::chunks;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
+use crate::text::until_nul;
 use crate::value::Value;
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
-
-/// Pushes a node for every chunk of `region` from `start`; returns the chunks.
-async fn chunks(cx: &Cx, region: Span, start: u64, layout: ChunkLayout) -> Result<Vec<Chunk>> {
-    let mut cur = Cursor::new(cx, region, layout.endian);
-    cur.seek(start);
-    let mut out = Vec::new();
-    while let Some(chunk) = cur.chunk(layout).await? {
-        cx.push(chunk.node()).await;
-        out.push(chunk);
-    }
-    Ok(out)
-}
 
 // ---------------------------------------------------------------------------
 // TwinVQ, Logic EXS24, ReCycle, Power Tab
@@ -110,7 +93,7 @@ async fn exs(cx: Cx, input: Input) -> Result<()> {
         if let Some(c) = counts.get_mut(index) {
             *c = c.saturating_add(1);
         }
-        let chunk_name = zstr(h.get(20..84).unwrap_or_default());
+        let chunk_name = until_nul(h.get(20..84).unwrap_or_default());
         if index == 0 {
             name = chunk_name.clone();
         }

@@ -9,7 +9,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::util::sound::clip;
-use crate::formats::util::vidutil::{fourcc, num, plural, seconds_ms};
+use crate::formats::util::vidutil::{fourcc, num, seconds_ms};
 use crate::formats::{embedded, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
@@ -17,6 +17,7 @@ use crate::value::{EnumTable, Value};
 
 use super::boxes::language;
 use super::{BE, BoxState, Ctx, children, find_child, full_box, small};
+use crate::formats::util::fmt::plural;
 
 /// Well-known iTunes metadata item names.
 pub fn item_name(kind: &[u8]) -> Option<&'static str> {

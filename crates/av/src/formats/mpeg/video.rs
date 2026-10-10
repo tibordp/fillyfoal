@@ -8,6 +8,7 @@
 
 use crate::cx::Cx;
 use crate::error::Result;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::bitwalk::Walker;
 use crate::formats::util::vidutil::{self, Bits};
 use crate::formats::{Format, Head, Input, Probe};
@@ -119,14 +120,6 @@ const ESCAPED: EnumTable = &[
 ];
 const CHROMA: EnumTable = &[(1, "4:2:0"), (2, "4:2:2"), (3, "4:4:4")];
 const STRUCTURES: EnumTable = &[(1, "top field"), (2, "bottom field"), (3, "frame")];
-const VIDEO_FORMATS: EnumTable = &[
-    (0, "component"),
-    (1, "PAL"),
-    (2, "NTSC"),
-    (3, "SECAM"),
-    (4, "MAC"),
-    (5, "unspecified"),
-];
 
 fn profile_level(v: u64) -> String {
     if v & 0x80 != 0 {
@@ -334,7 +327,7 @@ fn summary(code: u8, d: &[u8], slices: u64) -> String {
                 vidutil::lookup_or(PICTURE_TYPES, t)
             )
         }
-        0x01..=0xaf => vidutil::plural(slices, "slice"),
+        0x01..=0xaf => plural(slices, "slice"),
         0xb2 => user_data_text(body)
             .map_or_else(|| format!("{} bytes", body.len()), |t| format!("“{t}”")),
         0xb3 => SequenceHeader::parse(body)
@@ -499,7 +492,7 @@ fn extension(w: &mut Walker) -> Option<()> {
             w.u("frame_rate_extension_d", 5)?;
         }
         2 => {
-            w.en("video_format", 3, VIDEO_FORMATS)?;
+            w.en("video_format", 3, vidutil::tables::VIDEO_FORMATS)?;
             if w.flag("colour_description")? {
                 w.en("colour_primaries", 8, vidutil::COLOUR_PRIMARIES)?;
                 w.en(

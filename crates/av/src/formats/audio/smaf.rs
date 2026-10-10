@@ -6,7 +6,8 @@ use crate::bytes::{u16_be, u32_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::util::sound::{decode_text, fourcc, hex, leaf, text};
+use crate::formats::util::sound::{decode_text, fourcc, leaf};
+use crate::formats::util::val::{hex, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -70,7 +71,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(leaf(
         "Size",
         file.sub(4, 4),
-        crate::formats::util::sound::uint(size, 32),
+        crate::formats::util::val::uint(size, 32),
     ));
     // The file chunk ends with a CRC-16 (which some writers omit).
     let body = file.sub(8, size);

@@ -9,14 +9,16 @@
 //! bitmap and descriptions; shared with AIFF's `CHAN`), `info`, `strg`,
 //! `mark`, `regn`, `inst`, `peak`, `ovvw`, `umid`, `uuid`, `midi`, `free`.
 
+use crate::bytes::vlq_be;
 use crate::bytes::{to_u64, to_usize, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::dsl::{Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse};
 use crate::formats::iff::wav;
-use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, table, text, uint};
-use crate::formats::util::vidutil::esds;
+use crate::formats::util::sound::{channels, duration_of, fourcc, leaf, table};
+use crate::formats::util::val::{text, uint};
+use crate::formats::util::vidutil::{self, esds};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -137,7 +139,7 @@ impl Description {
 
     fn rate(&self) -> String {
         if self.rate.fract() == 0.0 && self.rate >= 0.0 && self.rate < 4e9 {
-            wav::khz(self.rate as u32)
+            vidutil::khz(self.rate as u64)
         } else {
             format!("{:.3} Hz", self.rate)
         }
@@ -415,6 +417,24 @@ async fn chunk(cx: Cx, st: ChunkState) -> Result<()> {
                     }
                 }
                 b"alac" => alac_cookie(&cx, data).await?,
+                // Apple's own encoders write cookies of their own layout;
+                // only the standard headers are decoded.
+                b"flac" if cx.read_avail(data.sub(0, 4)).await? == b"fLaC" => {
+                    crate::formats::audio::flac::codec_config(&cx, st.input, data).await?;
+                }
+                b"opus" => {
+                    let d = vidutil::read_small(&cx, data, 0x10000).await?;
+                    if d.starts_with(b"OpusHead") {
+                        let (o, nodes) = vidutil::nal::opus(&d, data, true, false);
+                        let mut node = vidutil::nal::group("Opus ID header", data, nodes);
+                        if let Some(o) = o {
+                            node = node.summary(o.describe());
+                        }
+                        cx.emit(node);
+                    } else {
+                        cx.emit(Node::new("Data").span(data));
+                    }
+                }
                 _ => cx.emit(Node::new("Data").span(data)),
             }
         }
@@ -512,20 +532,6 @@ struct PacketTable {
     variable_frames: bool,
 }
 
-/// A CAF variable-length integer (7 bits per byte, most significant
-/// first): (value, bytes).
-fn varint(b: &[u8], at: usize) -> Option<(u64, usize)> {
-    let mut value = 0u64;
-    for i in 0..9usize {
-        let byte = *b.get(at.saturating_add(i))?;
-        value = (value << 7) | u64::from(byte & 0x7f);
-        if byte & 0x80 == 0 {
-            return Some((value, i.saturating_add(1)));
-        }
-    }
-    None
-}
-
 async fn packet_table(cx: Cx, t: PacketTable) -> Result<()> {
     if !t.variable_size && !t.variable_frames {
         cx.emit(Node::new("Data").span(t.entries));
@@ -543,14 +549,14 @@ async fn packet_table(cx: Cx, t: PacketTable) -> Result<()> {
         let mut size = None;
         let mut frames = None;
         if t.variable_size {
-            let Some((v, n)) = varint(&b, used) else {
+            let Some((v, n)) = b.get(used..).and_then(|rest| vlq_be(rest, 9)) else {
                 break;
             };
             size = Some(v);
             used = used.saturating_add(n);
         }
         if t.variable_frames {
-            let Some((v, n)) = varint(&b, used) else {
+            let Some((v, n)) = b.get(used..).and_then(|rest| vlq_be(rest, 9)) else {
                 break;
             };
             frames = Some(v);
@@ -853,26 +859,44 @@ record! {
         channels: u8 "Channels",
         max_run: u16 "Maximum run",
         max_frame_bytes: u32 "Maximum frame bytes" .desc("0 = unknown"),
-        avg_bit_rate: u32 "Average bit rate",
+        avg_bit_rate: u32 "Average bit rate"
+            .with(|&v, n| if v > 0 { n.summary(vidutil::bitrate(v.into())) } else { n }),
         sample_rate: u32 "Sample rate",
     }
 }
 
-fn alac_summary(c: &AlacConfig) -> String {
+/// The `ALACSpecificConfig` at the start of `d`: bare, or in an `alac`
+/// atom (size, type, version and flags first), for summaries.
+pub fn peek_alac(d: &[u8]) -> Option<AlacConfig> {
+    let d = if d.get(4..8) == Some(b"alac") {
+        d.get(12..)?
+    } else {
+        d
+    };
+    let block = crate::cx::Block {
+        span: vidutil::detached(d.len()),
+        data: d.to_vec(),
+    };
+    AlacConfig::read(&mut Fields::new(&block, BE)).ok()
+}
+
+/// "16-bit, 44.1 kHz, 2 ch, 4096 samples per frame".
+pub fn alac_summary(c: &AlacConfig) -> String {
     format!(
         "{}-bit, {}, {}, {} samples per frame",
         c.bit_depth,
-        wav::khz(c.sample_rate),
+        vidutil::khz(c.sample_rate.into()),
         channels(c.channels),
         c.frame_length
     )
 }
 
-/// The ALAC cookie: either the bare `ALACSpecificConfig` (with an
-/// optional channel layout), or QuickTime-style `frma` and `alac` atoms.
-async fn alac_cookie(cx: &Cx, data: Span) -> Result<()> {
+/// The ALAC cookie (also Matroska's `A_ALAC` codec private data): either
+/// the bare `ALACSpecificConfig` (with an optional channel layout), or
+/// QuickTime-style `frma` and `alac` atoms.
+pub async fn alac_cookie(cx: &Cx, data: Span) -> Result<()> {
     let head = cx.read_avail(data.sub(0, 8)).await?;
-    if head.get(4..8) != Some(b"frma".as_slice()) {
+    if !matches!(head.get(4..8), Some(b"frma" | b"alac")) {
         let config = data.sub(0, AlacConfig::SIZE);
         let c = crate::dsl::read_record::<AlacConfig>(cx, config, BE).await?;
         cx.emit(AlacConfig::node("ALACSpecificConfig", config, BE).summary(alac_summary(&c)));

@@ -9,22 +9,11 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Radix, Value};
+
+use crate::formats::util::val::{text, uint};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // RealAudio, Psion, EVS
@@ -48,7 +37,7 @@ async fn realaudio(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 2))
-            .value(uint(version.into(), 16)),
+            .value(uint(version, 16)),
     );
     if version == 3 {
         let mut cur = Cursor::new(&cx, file, BE);
@@ -76,22 +65,22 @@ async fn realaudio(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Data size")
             .span(file.sub(12, 4))
-            .value(uint(data.into(), 32)),
+            .value(uint(data, 32)),
     );
     cx.emit(
         Node::new("Codec flavor")
             .span(file.sub(22, 2))
-            .value(uint(flavor.into(), 16)),
+            .value(uint(flavor, 16)),
     );
     cx.emit(
         Node::new("Sample rate")
             .span(file.sub(48, 2))
-            .value(uint(rate.into(), 16)),
+            .value(uint(rate, 16)),
     );
     cx.emit(
         Node::new("Channels")
             .span(file.sub(54, 2))
-            .value(uint(channels.into(), 16)),
+            .value(uint(channels, 16)),
     );
     cx.emit(
         Node::new("Codec")
@@ -145,7 +134,7 @@ async fn evs(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Channels")
             .span(file.sub(12, 4))
-            .value(uint(channels.into(), 32)),
+            .value(uint(channels, 32)),
     );
     cx.emit(Node::new("Frames").span(file.tail(16)));
     cx.annotate(format!("EVS speech, {channels} channel(s)"));

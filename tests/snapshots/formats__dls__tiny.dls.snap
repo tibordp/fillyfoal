@@ -98,7 +98,7 @@ expression: "common::explore(&name, &data)"
           Format tag: PCM (0x1)  [0xfe+0x2]
           Channels: 1  [0x100+0x2]
           Sample rate: 8000  [0x102+0x4]
-          Average bytes per second: 8000  [0x106+0x4]
+          Average bytes per second: 8000 — 64 kb/s  [0x106+0x4]
           Block align: 1  [0x10a+0x2]
           Bits per sample: 8  [0x10c+0x2]
       ▾ data — 64 bytes  [0x10e+0x48]

@@ -14,17 +14,19 @@
 use std::sync::Arc;
 
 use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
-use crate::cx::Cx;
+use crate::cx::{Block, Cx};
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::arcutil::{count, human_size};
+use crate::formats::util::arcutil::{count, emit_nodes, human_size};
 use crate::formats::util::sound::{Bits, duration, leaf, u24};
+use crate::formats::util::val::uint;
+use crate::formats::util::vidutil::{audio::OpusInfo, nal};
 use crate::formats::{Format, Head, Input, Probe, audio::flac, audio::vorbis};
 use crate::node::Node;
 use crate::record;
 use crate::span::{Origin, Span};
-use crate::value::{EnumTable, FlagTable, flag};
+use crate::value::{FlagTable, flag};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
@@ -273,8 +275,10 @@ impl Stream {
         };
         match codec {
             Codec::Vorbis => {
-                s.channels = p.get(11).copied().unwrap_or(0).into();
-                s.rate = f64::from(u32_le(p, 12).unwrap_or(0));
+                if let Some(v) = VorbisId::peek(p) {
+                    s.channels = v.channels.into();
+                    s.rate = f64::from(v.rate);
+                }
             }
             Codec::Opus => {
                 s.channels = p.get(9).copied().unwrap_or(0).into();
@@ -284,24 +288,17 @@ impl Stream {
             Codec::Flac => {
                 // "\x7fFLAC", 2 version bytes, 2 header count, "fLaC", block
                 // header (4), then STREAMINFO.
-                let info = p.get(17..).unwrap_or_default();
-                let rate = crate::bytes::u24_be(info, 10).unwrap_or(0) >> 4;
-                s.rate = f64::from(rate);
-                s.channels = info
-                    .get(12)
-                    .map_or(0, |b| u64::from((b >> 1) & 7).saturating_add(1));
+                if let Some(info) = p.get(17..).and_then(flac::peek_streaminfo) {
+                    s.rate = info.rate as f64;
+                    s.channels = info.channels;
+                }
             }
             Codec::Theora => {
-                let num = crate::bytes::u32_be(p, 22).unwrap_or(0);
-                let den = crate::bytes::u32_be(p, 26).unwrap_or(0);
-                if den > 0 {
-                    s.rate = f64::from(num) / f64::from(den);
+                if let Some(t) = TheoraId::peek(p) {
+                    s.rate = t.fps;
+                    s.skip = t.granule_shift.into();
+                    s.describe = t.summary();
                 }
-                let w = crate::bytes::u24_be(p, 14).unwrap_or(0);
-                let h = crate::bytes::u24_be(p, 17).unwrap_or(0);
-                let shift = crate::bytes::u16_be(p, 40).map_or(0, |v| (v >> 5) & 0x1f);
-                s.skip = shift.into();
-                s.describe = format!("Theora {w}×{h}, {:.3} fps", s.rate);
             }
             Codec::Speex => {
                 s.rate = f64::from(u32_le(p, 36).unwrap_or(0));
@@ -317,12 +314,8 @@ impl Stream {
                     s.describe.push_str(&format!(" (input {input} Hz)"));
                 }
             }
-            if codec == Codec::Vorbis {
-                let nominal = crate::bytes::i32_le(p, 20).unwrap_or(0);
-                if nominal > 0 {
-                    s.describe
-                        .push_str(&format!(", {} kbps nominal", nominal / 1000));
-                }
+            if let Some(v) = VorbisId::peek(p) {
+                s.describe = v.summary();
             }
         }
         s
@@ -845,7 +838,10 @@ async fn packet_node(
     }
     if let Some(g) = granule.filter(|&g| g != u64::MAX && kind.is_none()) {
         match stream.and_then(|s| s.seconds(g)) {
-            Some(t) => summary.push_str(&format!(", ends at {}", seconds(t))),
+            Some(t) => summary.push_str(&format!(
+                ", ends at {}",
+                super::id3::ms_time((t * 1000.0).round() as u64)
+            )),
             None => summary.push_str(&format!(", granule {g}")),
         }
     }
@@ -859,12 +855,6 @@ async fn packet_node(
         kind: kind.unwrap_or(Kind::Data(codec)),
     };
     Ok(node.lazy(expand_packet, state))
-}
-
-/// "1:02.250".
-fn seconds(t: f64) -> String {
-    let ms = (t * 1000.0).round() as u64;
-    format!("{}:{:02}.{:03}", ms / 60_000, ms / 1000 % 60, ms % 1000)
 }
 
 const OPUS_BANDWIDTH: [&str; 5] = ["NB", "MB", "WB", "SWB", "FB"];
@@ -1005,13 +995,46 @@ struct PacketState {
     kind: Kind,
 }
 
-const OPUS_FAMILY: EnumTable = &[
-    (0, "mono/stereo (RTP)"),
-    (1, "Vorbis channel order"),
-    (2, "ambisonics"),
-    (3, "ambisonics with demixing matrix"),
-    (255, "unordered"),
-];
+/// The OpusHead channel mapping (decoded by the shared header parser as
+/// bytes) with each output channel and the stream it comes from.
+fn channel_mapping(node: Node, o: &OpusInfo, d: &[u8]) -> Node {
+    let (Some(span), Some(&streams), Some(&coupled)) = (node.span, d.get(19), d.get(20)) else {
+        return node;
+    };
+    let channels = u8::try_from(o.channels).unwrap_or(u8::MAX);
+    let mut children = Vec::new();
+    for (i, &v) in d
+        .get(21..)
+        .unwrap_or_default()
+        .iter()
+        .take(channels.into())
+        .enumerate()
+    {
+        let channel = if o.family == 1 {
+            vorbis_channel(channels, i)
+        } else {
+            "channel"
+        };
+        let source = if v == 255 {
+            "silence".to_owned()
+        } else if v < coupled.saturating_mul(2) {
+            format!(
+                "stream {} {}",
+                v / 2,
+                if v % 2 == 0 { "left" } else { "right" }
+            )
+        } else if v < streams.saturating_add(coupled) {
+            format!("stream {} (mono)", v.saturating_sub(coupled))
+        } else {
+            "invalid".to_owned()
+        };
+        children.push(
+            leaf(format!("Channel {i}"), span.sub(to_u64(i), 1), uint(v, 8))
+                .summary(format!("{channel}: {source}")),
+        );
+    }
+    node.lazy(emit_nodes, Arc::new(children))
+}
 
 /// Channel names in Vorbis order, by channel count.
 fn vorbis_channel(count: u8, index: usize) -> &'static str {
@@ -1059,6 +1082,161 @@ fn vorbis_channel(count: u8, index: usize) -> &'static str {
     layout.get(index).copied().unwrap_or("channel")
 }
 
+/// The Vorbis identification header at the start of `block` (also in
+/// Matroska's codec private data).
+pub fn vorbis_id(cx: &Cx, block: &Block) -> Result<()> {
+    let mut f = Fields::emitting(cx, block, LE);
+    f.bytes("Packet type and signature", 7).emit()?;
+    f.u32("Vorbis version").emit()?;
+    f.u8("Channels").emit()?;
+    f.u32("Sample rate")
+        .with(|&v, n| n.summary(format!("{v} Hz")))
+        .emit()?;
+    for name in ["Maximum bitrate", "Nominal bitrate", "Minimum bitrate"] {
+        f.i32(name)
+            .with(|&v, n| {
+                if v > 0 {
+                    n.summary(format!("{} kbps", v / 1000))
+                } else {
+                    n.summary("unset")
+                }
+            })
+            .emit()?;
+    }
+    f.u8("Block sizes")
+        .with(|&v, n| {
+            n.summary(format!(
+                "{} / {} samples",
+                1u32 << (v & 0xf).min(31),
+                1u32 << (v >> 4).min(31)
+            ))
+        })
+        .emit()?;
+    f.u8("Framing flag").emit()?;
+    Ok(())
+}
+
+/// The Theora identification header at the start of `block` (also in
+/// Matroska's codec private data).
+pub fn theora_id(cx: &Cx, block: &Block) -> Result<()> {
+    let mut f = Fields::emitting(cx, block, BE);
+    f.bytes("Packet type and signature", 7).emit()?;
+    f.u8("Major version").emit()?;
+    f.u8("Minor version").emit()?;
+    f.u8("Revision").emit()?;
+    f.u16("Frame width (macroblocks)")
+        .with(|&v, n| n.summary(format!("{} pixels", u32::from(v).saturating_mul(16))))
+        .emit()?;
+    f.u16("Frame height (macroblocks)")
+        .with(|&v, n| n.summary(format!("{} pixels", u32::from(v).saturating_mul(16))))
+        .emit()?;
+    u24(&mut f, "Picture width", BE).emit()?;
+    u24(&mut f, "Picture height", BE).emit()?;
+    f.u8("Picture X offset").emit()?;
+    f.u8("Picture Y offset").emit()?;
+    let num = f.u32("Frame rate numerator").emit()?;
+    f.u32("Frame rate denominator")
+        .with(|&d, n| {
+            if d > 0 {
+                n.summary(format!("{:.3} fps", f64::from(num) / f64::from(d)))
+            } else {
+                n
+            }
+        })
+        .emit()?;
+    u24(&mut f, "Aspect ratio numerator", BE).emit()?;
+    u24(&mut f, "Aspect ratio denominator", BE).emit()?;
+    f.u8("Color space")
+        .enumeration(&[(0, "undefined"), (1, "Rec. 470M"), (2, "Rec. 470BG")])
+        .emit()?;
+    u24(&mut f, "Nominal bitrate", BE)
+        .with(|&v, n| {
+            if v == 0 {
+                n.summary("unset")
+            } else {
+                n.summary(format!("{} kbps", v / 1000))
+            }
+        })
+        .emit()?;
+    let at = f.pos();
+    let data = block.data.get(to_usize(at)..).unwrap_or_default();
+    let mut b = Bits::emitting(cx, data, block.span.tail(at));
+    b.field("Quality", 6).emit()?;
+    b.field("Keyframe granule shift", 5)
+        .desc("Granule positions are (keyframe << shift) + frames since it")
+        .emit()?;
+    b.field("Pixel format", 2)
+        .enumeration(&[(0, "4:2:0"), (1, "reserved"), (2, "4:2:2"), (3, "4:4:4")])
+        .emit()?;
+    b.field("Reserved", 3).emit()?;
+    Ok(())
+}
+
+/// What a Vorbis identification header says, for summaries.
+#[derive(Clone, Copy, Debug)]
+pub struct VorbisId {
+    pub channels: u8,
+    pub rate: u32,
+    pub nominal: i32,
+}
+
+impl VorbisId {
+    pub fn peek(p: &[u8]) -> Option<VorbisId> {
+        if !p.starts_with(b"\x01vorbis") {
+            return None;
+        }
+        Some(VorbisId {
+            channels: *p.get(11)?,
+            rate: u32_le(p, 12)?,
+            nominal: crate::bytes::i32_le(p, 20).unwrap_or(0),
+        })
+    }
+
+    /// "Vorbis, 44100 Hz, 2 ch, 128 kbps nominal".
+    pub fn summary(&self) -> String {
+        let mut s = format!("Vorbis, {} Hz, {} ch", self.rate, self.channels);
+        if self.nominal > 0 {
+            s.push_str(&format!(", {} kbps nominal", self.nominal / 1000));
+        }
+        s
+    }
+}
+
+/// What a Theora identification header says, for summaries.
+#[derive(Clone, Copy, Debug)]
+pub struct TheoraId {
+    pub width: u32,
+    pub height: u32,
+    /// Frames per second (0 if unset).
+    pub fps: f64,
+    pub granule_shift: u16,
+}
+
+impl TheoraId {
+    pub fn peek(p: &[u8]) -> Option<TheoraId> {
+        if !p.starts_with(b"\x80theora") {
+            return None;
+        }
+        let num = crate::bytes::u32_be(p, 22)?;
+        let den = crate::bytes::u32_be(p, 26)?;
+        Some(TheoraId {
+            width: crate::bytes::u24_be(p, 14)?,
+            height: crate::bytes::u24_be(p, 17)?,
+            fps: if den > 0 {
+                f64::from(num) / f64::from(den)
+            } else {
+                0.0
+            },
+            granule_shift: crate::bytes::u16_be(p, 40).map_or(0, |v| (v >> 5) & 0x1f),
+        })
+    }
+
+    /// "Theora 320×240, 25.000 fps".
+    pub fn summary(&self) -> String {
+        format!("Theora {}×{}, {:.3} fps", self.width, self.height, self.fps)
+    }
+}
+
 async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
     let span = join(&cx, &st.pieces).await?;
     if st.pieces.len() > 1 {
@@ -1069,36 +1247,7 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
     }
     let block = cx.block(span.sub(0, span.len.min(0x1000))).await?;
     match st.kind {
-        Kind::VorbisId => {
-            let mut f = Fields::emitting(&cx, &block, LE);
-            f.bytes("Packet type and signature", 7).emit()?;
-            f.u32("Vorbis version").emit()?;
-            f.u8("Channels").emit()?;
-            f.u32("Sample rate")
-                .with(|&v, n| n.summary(format!("{v} Hz")))
-                .emit()?;
-            for name in ["Maximum bitrate", "Nominal bitrate", "Minimum bitrate"] {
-                f.i32(name)
-                    .with(|&v, n| {
-                        if v > 0 {
-                            n.summary(format!("{} kbps", v / 1000))
-                        } else {
-                            n.summary("unset")
-                        }
-                    })
-                    .emit()?;
-            }
-            f.u8("Block sizes")
-                .with(|&v, n| {
-                    n.summary(format!(
-                        "{} / {} samples",
-                        1u32 << (v & 0xf).min(31),
-                        1u32 << (v >> 4).min(31)
-                    ))
-                })
-                .emit()?;
-            f.u8("Framing flag").emit()?;
-        }
+        Kind::VorbisId => vorbis_id(&cx, &block)?,
         Kind::VorbisComment | Kind::TheoraComment | Kind::OpusTags | Kind::SpeexComment => {
             let skip = match st.kind {
                 Kind::OpusTags => 8,
@@ -1119,63 +1268,13 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             }
         }
         Kind::OpusHead => {
-            let mut f = Fields::emitting(&cx, &block, LE);
-            f.ascii("Signature", 8).emit()?;
-            f.u8("Version").emit()?;
-            let channels = f.u8("Channels").emit()?;
-            f.u16("Pre-skip")
-                .desc("Samples (at 48 kHz) to discard from the start")
-                .with(|&v, n| n.summary(format!("{:.2} ms", f64::from(v) / 48.0)))
-                .emit()?;
-            f.u32("Input sample rate")
-                .with(|&v, n| {
-                    if v == 0 {
-                        n.summary("unspecified")
-                    } else {
-                        n.summary(format!("{v} Hz"))
+            let (info, nodes) = nal::opus(&block.data, block.span, true, false);
+            for node in nodes {
+                match &info {
+                    Some(o) if node.name == "Channel mapping" => {
+                        cx.emit(channel_mapping(node, o, &block.data));
                     }
-                })
-                .desc("Of the original audio; Opus always decodes at 48 kHz")
-                .emit()?;
-            f.int::<i16>("Output gain")
-                .with(|&g, n| n.summary(format!("{:+.2} dB", f64::from(g) / 256.0)))
-                .desc("Q7.8 dB, applied when decoding")
-                .emit()?;
-            let family = f
-                .u8("Channel mapping family")
-                .enumeration(OPUS_FAMILY)
-                .emit()?;
-            if family != 0 {
-                let streams = f.u8("Stream count").emit()?;
-                let coupled = f
-                    .u8("Coupled streams")
-                    .desc("Streams that are stereo pairs (they come first)")
-                    .emit()?;
-                for i in 0..channels {
-                    let index = usize::from(i);
-                    let channel = if family == 1 {
-                        vorbis_channel(channels, index)
-                    } else {
-                        "channel"
-                    };
-                    f.u8("Channel mapping")
-                        .with(|&v, n| {
-                            let source = if v == 255 {
-                                "silence".to_owned()
-                            } else if v < coupled.saturating_mul(2) {
-                                format!(
-                                    "stream {} {}",
-                                    v / 2,
-                                    if v % 2 == 0 { "left" } else { "right" }
-                                )
-                            } else if v < streams.saturating_add(coupled) {
-                                format!("stream {} (mono)", v.saturating_sub(coupled))
-                            } else {
-                                "invalid".to_owned()
-                            };
-                            n.summary(format!("{channel} {i}: {source}"))
-                        })
-                        .emit()?;
+                    _ => cx.emit(node),
                 }
             }
         }
@@ -1189,58 +1288,7 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             cx.emit(flac::block_node(&cx, st.input, span.tail(13)).await?);
         }
         Kind::FlacBlock => cx.emit(flac::block_node(&cx, st.input, span).await?),
-        Kind::TheoraId => {
-            let mut f = Fields::emitting(&cx, &block, BE);
-            f.bytes("Packet type and signature", 7).emit()?;
-            f.u8("Major version").emit()?;
-            f.u8("Minor version").emit()?;
-            f.u8("Revision").emit()?;
-            f.u16("Frame width (macroblocks)")
-                .with(|&v, n| n.summary(format!("{} pixels", u32::from(v).saturating_mul(16))))
-                .emit()?;
-            f.u16("Frame height (macroblocks)")
-                .with(|&v, n| n.summary(format!("{} pixels", u32::from(v).saturating_mul(16))))
-                .emit()?;
-            u24(&mut f, "Picture width", BE).emit()?;
-            u24(&mut f, "Picture height", BE).emit()?;
-            f.u8("Picture X offset").emit()?;
-            f.u8("Picture Y offset").emit()?;
-            let num = f.u32("Frame rate numerator").emit()?;
-            f.u32("Frame rate denominator")
-                .with(|&d, n| {
-                    if d > 0 {
-                        n.summary(format!("{:.3} fps", f64::from(num) / f64::from(d)))
-                    } else {
-                        n
-                    }
-                })
-                .emit()?;
-            u24(&mut f, "Aspect ratio numerator", BE).emit()?;
-            u24(&mut f, "Aspect ratio denominator", BE).emit()?;
-            f.u8("Color space")
-                .enumeration(&[(0, "undefined"), (1, "Rec. 470M"), (2, "Rec. 470BG")])
-                .emit()?;
-            u24(&mut f, "Nominal bitrate", BE)
-                .with(|&v, n| {
-                    if v == 0 {
-                        n.summary("unset")
-                    } else {
-                        n.summary(format!("{} kbps", v / 1000))
-                    }
-                })
-                .emit()?;
-            let at = f.pos();
-            let data = block.data.get(to_usize(at)..).unwrap_or_default();
-            let mut b = Bits::emitting(&cx, data, span.tail(at));
-            b.field("Quality", 6).emit()?;
-            b.field("Keyframe granule shift", 5)
-                .desc("Granule positions are (keyframe << shift) + frames since it")
-                .emit()?;
-            b.field("Pixel format", 2)
-                .enumeration(&[(0, "4:2:0"), (1, "reserved"), (2, "4:2:2"), (3, "4:4:4")])
-                .emit()?;
-            b.field("Reserved", 3).emit()?;
-        }
+        Kind::TheoraId => theora_id(&cx, &block)?,
         Kind::SpeexHeader => {
             let mut f = Fields::emitting(&cx, &block, LE);
             f.ascii("Signature", 8).emit()?;
@@ -1301,7 +1349,7 @@ async fn expand_packet(cx: Cx, st: PacketState) -> Result<()> {
             cx.emit(leaf(
                 "Message headers",
                 headers,
-                crate::formats::util::sound::text(String::from_utf8_lossy(&text).into_owned()),
+                crate::formats::util::val::text(String::from_utf8_lossy(&text).into_owned()),
             ));
         }
         Kind::VorbisSetup => {

@@ -25,6 +25,7 @@ use crate::value::{EnumTable, Value};
 
 use super::si::{self, STREAM_TYPES};
 use super::{pes_header, pes_summary, pes_times, seconds_90k};
+use crate::formats::util::fmt::plural;
 
 pub static FORMAT: Format = Format {
     name: "mpegts",
@@ -323,7 +324,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .filter_map(|p| p.service.as_ref().map(|s| s.name.clone()))
         .filter(|n| !n.is_empty())
         .collect();
-    let mut programs = vidutil::plural(to_u64(psi.programs.len()), "program");
+    let mut programs = plural(to_u64(psi.programs.len()), "program");
     if !names.is_empty() {
         programs = format!("{programs}: {}", names.join(", "));
     }
@@ -371,7 +372,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(input.span.sub(0, total))
             .summary(format!(
                 "{} of {} bytes",
-                vidutil::plural(count, "packet"),
+                plural(count, "packet"),
                 ts.layout.stride
             ))
             .lazy(packets, ts.clone()),
@@ -389,7 +390,7 @@ fn summary(ts: &Ts, duration: Option<f64>) -> String {
         _ => "MPEG-TS".to_owned(),
     }];
     if ts.psi.programs.len() > 1 {
-        parts.push(vidutil::plural(to_u64(ts.psi.programs.len()), "program"));
+        parts.push(plural(to_u64(ts.psi.programs.len()), "program"));
     } else if let Some(s) = ts.psi.programs.first().and_then(|p| p.service.as_ref())
         && !s.name.is_empty()
     {
@@ -415,7 +416,7 @@ fn summary(ts: &Ts, duration: Option<f64>) -> String {
     if let Some(d) = duration {
         parts.push(vidutil::seconds_f64(d));
     }
-    parts.push(vidutil::plural(ts.count, "packet"));
+    parts.push(plural(ts.count, "packet"));
     parts.join(", ")
 }
 
@@ -1145,12 +1146,9 @@ async fn pids_node(cx: Cx, ts: Ts) -> Result<()> {
             parts.push(name);
         }
         let share = s.packets as f64 * 100.0 / total as f64;
-        parts.push(format!(
-            "{} ({share:.1}%)",
-            vidutil::plural(s.packets, "packet")
-        ));
+        parts.push(format!("{} ({share:.1}%)", plural(s.packets, "packet")));
         if s.cc_errors > 0 {
-            parts.push(vidutil::plural(s.cc_errors, "continuity error"));
+            parts.push(plural(s.cc_errors, "continuity error"));
         }
         if s.scrambled > 0 {
             parts.push(format!("{} scrambled", s.scrambled));

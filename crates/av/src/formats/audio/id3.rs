@@ -20,10 +20,10 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::util::arcutil::human_size;
-use crate::formats::util::sound::{
-    clip, enumerated, hex, image_info, latin1_field, latin1_z, leaf, text, uint,
-};
-use crate::formats::{Format, Input, Probe, audio::apetag, embedded};
+use crate::formats::util::datakit::be_uint;
+use crate::formats::util::sound::{clip, image_info, latin1_field, latin1_z, leaf};
+use crate::formats::util::val::{enumv, hex, text, uint};
+use crate::formats::{Format, Input, Probe, audio::apetag, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::{Origin, Span};
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
@@ -611,28 +611,22 @@ async fn resync(cx: &Cx, span: Span) -> Result<Span> {
     let mut out = Vec::with_capacity(data.len());
     let mut prev = 0u8;
     for chunk in data.chunks(0x10000) {
-        for &b in chunk {
-            if !(prev == 0xff && b == 0) {
-                out.push(b);
-            }
-            prev = b;
-        }
+        prev = unsync(&mut out, chunk, prev);
         cx.checkpoint().await;
     }
     Ok(cx.add_derived(origin, out, span.len, None)?.span)
 }
 
-/// `ff 00` → `ff` on a small buffer.
-fn unsync_bytes(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len());
-    let mut prev = 0u8;
+/// Appends `data` to `out` with unsynchronisation undone (`ff 00` → `ff`).
+/// `prev` is the byte before `data`; returns the last byte of `data`.
+fn unsync(out: &mut Vec<u8>, data: &[u8], mut prev: u8) -> u8 {
     for &b in data {
         if !(prev == 0xff && b == 0) {
             out.push(b);
         }
         prev = b;
     }
-    out
+    prev
 }
 
 /// A frame header: ID, size and flags.
@@ -880,7 +874,8 @@ async fn frame_prefix(cx: &Cx, frame: &Frame, max: u64) -> Result<Option<(Vec<u8
     }
     if e.unsync {
         let raw = cx.read_avail(e.data.sub(0, max.saturating_mul(2))).await?;
-        let mut bytes = unsync_bytes(&raw);
+        let mut bytes = Vec::with_capacity(raw.len());
+        unsync(&mut bytes, &raw, 0);
         bytes.truncate(to_usize(max));
         return Ok(Some((bytes, e.data.len)));
     }
@@ -1017,7 +1012,7 @@ fn genres(value: &str) -> String {
 }
 
 /// Milliseconds as `m:ss.mmm` (or `h:mm:ss.mmm`).
-fn ms_time(ms: u64) -> String {
+pub fn ms_time(ms: u64) -> String {
     let (h, m, s, frac) = (ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000);
     if h > 0 {
         format!("{h}:{m:02}:{s:02}.{frac:03}")
@@ -1043,12 +1038,6 @@ fn stars(rating: u8) -> &'static str {
         160..=223 => "★★★★",
         _ => "★★★★★",
     }
-}
-
-fn be_uint(b: &[u8]) -> u64 {
-    b.iter()
-        .take(8)
-        .fold(0u64, |acc, &x| (acc << 8) | u64::from(x))
 }
 
 // ---------------------------------------------------------------------------
@@ -1401,7 +1390,7 @@ impl Body<'_> {
     fn encoding(&mut self) -> u8 {
         let enc = self.rest().first().copied().unwrap_or(0);
         let span = self.take(1);
-        let mut node = leaf("Encoding", span, enumerated(enc, 8, ENCODING));
+        let mut node = leaf("Encoding", span, enumv(enc, 8, ENCODING));
         if enc > 3 {
             node = node.diag(Diagnostic::malformed("unknown text encoding"));
         }
@@ -1528,11 +1517,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
                 b.string("MIME type", 0);
             }
             if let Some((span, kind)) = b.byte() {
-                b.emit(leaf(
-                    "Picture type",
-                    span,
-                    enumerated(kind, 8, PICTURE_TYPE),
-                ));
+                b.emit(leaf("Picture type", span, enumv(kind, 8, PICTURE_TYPE)));
             }
             b.string("Description", enc);
             let picture = b.rest_span();
@@ -1555,7 +1540,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
         }
         "PRIV" => {
             let owner = b.string("Owner", 0);
-            private(b, &owner);
+            private(b, input, &owner);
         }
         "UFID" => {
             b.string("Owner", 0);
@@ -1617,7 +1602,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
                 b.emit(leaf(
                     "Interpolation",
                     span,
-                    enumerated(v, 8, &[(0, "band"), (1, "linear")]),
+                    enumv(v, 8, &[(0, "band"), (1, "linear")]),
                 ));
             }
             b.string("Identification", 0);
@@ -1676,11 +1661,11 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
                 b.emit(leaf(
                     "Timestamp format",
                     span,
-                    enumerated(v, 8, TIMESTAMP_FORMAT),
+                    enumv(v, 8, TIMESTAMP_FORMAT),
                 ));
             }
             if let Some((span, v)) = b.byte() {
-                b.emit(leaf("Content type", span, enumerated(v, 8, SYLT_CONTENT)));
+                b.emit(leaf("Content type", span, enumv(v, 8, SYLT_CONTENT)));
             }
             b.string("Description", enc);
             let span = b.rest_span();
@@ -1698,7 +1683,7 @@ fn render(b: &mut Body<'_>, frame: &Frame, id: &str) -> Result<()> {
                 b.emit(leaf(
                     "Timestamp format",
                     span,
-                    enumerated(v, 8, TIMESTAMP_FORMAT),
+                    enumv(v, 8, TIMESTAMP_FORMAT),
                 ));
             }
             let span = b.rest_span();
@@ -1779,7 +1764,7 @@ fn flags_value(raw: u64, bits: u8, table: FlagTable) -> Value {
 }
 
 /// PRIV payloads whose owners say what they are.
-fn private(b: &mut Body<'_>, owner: &str) {
+fn private(b: &mut Body<'_>, input: Input, owner: &str) {
     let span = b.rest_span();
     let data = b.rest().to_vec();
     b.at = b.data.len();
@@ -1808,10 +1793,10 @@ fn private(b: &mut Body<'_>, owner: &str) {
             let (s, _, _) = crate::text::utf16z(&data, Endian::Little);
             leaf("Value", span, text(s))
         }
-        "XMP" => leaf(
+        "XMP" => embedded_as(
             "XMP",
-            span,
-            text(String::from_utf8_lossy(&data).into_owned()),
+            input.nested(span),
+            &crate::formats::image::xmp::FORMAT,
         ),
         _ => {
             if span.is_empty() {
@@ -1829,7 +1814,7 @@ async fn expand_rva2(cx: Cx, span: Span) -> Result<()> {
     cx.emit(leaf(
         "Channel",
         span.sub(0, 1),
-        enumerated(channel, 8, CHANNEL_TYPE),
+        enumv(channel, 8, CHANNEL_TYPE),
     ));
     if let Some(a) = crate::bytes::array::<2>(&d, 1) {
         let v = i16::from_be_bytes(a);
@@ -1914,12 +1899,8 @@ async fn expand_etco(cx: Cx, (span, format): (Span, u8)) -> Result<()> {
         let d = cx.read(event).await?;
         let kind = d.first().copied().unwrap_or(0);
         let stamp = be_uint(d.get(1..5).unwrap_or_default());
-        cx.push(leaf(
-            timestamp(format, stamp),
-            event,
-            enumerated(kind, 8, EVENT),
-        ))
-        .await;
+        cx.push(leaf(timestamp(format, stamp), event, enumv(kind, 8, EVENT)))
+            .await;
         at = at.saturating_add(5);
     }
     Ok(())
@@ -2058,13 +2039,19 @@ fn picture<'a>(id: &str, d: &'a [u8]) -> Option<(u8, String, &'a [u8])> {
     Some((kind, mime, rest.get(desc..)?))
 }
 
+/// "Artist – Title", or whichever of the two is known (ID3, APE and
+/// Vorbis comment summaries).
+pub fn artist_title(artist: Option<String>, title: Option<String>) -> Option<String> {
+    match (artist, title) {
+        (Some(a), Some(t)) => Some(format!("{a} – {t}")),
+        (a, t) => a.or(t),
+    }
+}
+
 impl Scan {
     /// "Artist – Title".
     fn title(&self) -> Option<String> {
-        match (&self.artist, &self.title) {
-            (Some(a), Some(t)) => Some(format!("{a} – {t}")),
-            (a, t) => a.clone().or_else(|| t.clone()),
-        }
+        artist_title(self.artist.clone(), self.title.clone())
     }
 
     /// "ID3v2.4, 12 frames, 48.0 KiB: Artist – Title (Album, 2019), track
@@ -2190,11 +2177,8 @@ fn v1_layout(f: &mut Fields<'_>, _: &()) -> Result<V1> {
 
 impl V1 {
     fn title(&self) -> Option<String> {
-        let parts: Vec<&str> = [self.artist.trim(), self.title.trim()]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .collect();
-        (!parts.is_empty()).then(|| parts.join(" – "))
+        let known = |s: &str| (!s.trim().is_empty()).then(|| s.trim().to_owned());
+        artist_title(known(&self.artist), known(&self.title))
     }
 
     /// "ID3v1.1: Artist – Title (Album, 1999), track 3, Rock".

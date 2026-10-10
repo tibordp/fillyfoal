@@ -7,17 +7,21 @@
 //! The `fmt ` layout ([`wave_format`]) is shared with AVI audio streams,
 //! DLS wave pools and Sony Wave64.
 
-use crate::bytes::{u32_be, u32_le, u64_le};
+use crate::bytes::{u32_le, u64_le};
 use crate::cx::Cx;
 use crate::dsl::{Record, emit_record};
 use crate::error::Result;
 use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::audio::midi::{manufacturer, note_name};
 use crate::formats::iff::{Chunk, Ctx, FourCc, find, scan};
+use crate::formats::util::binutil::get;
+use crate::formats::util::fmt::plural;
 use crate::formats::util::sound::{
-    channels, clip, duration_of, fourcc, latin1_field, peek_text, table, text, trim_nul,
+    channels, clip, duration_of, fourcc, latin1_field, peek_text, table, trim_nul,
 };
-use crate::formats::util::vidutil::asc_summary;
+use crate::formats::util::val::name_or;
+use crate::formats::util::val::text;
+use crate::formats::util::vidutil::{self, khz};
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -134,7 +138,7 @@ pub const FORMAT_TAG: EnumTable = &[
 ];
 
 /// WAVE_FORMAT_EXTENSIBLE speaker positions (ksmedia.h `SPEAKER_*`).
-const SPEAKERS: FlagTable = &[
+pub const SPEAKERS: FlagTable = &[
     flag(0x1, "FRONT_LEFT"),
     flag(0x2, "FRONT_RIGHT"),
     flag(0x4, "FRONT_CENTER"),
@@ -202,20 +206,6 @@ pub fn layout(count: u16, mask: Option<u32>) -> String {
     }
 }
 
-/// A sample rate in kHz without needless digits: "8 kHz", "44.1 kHz".
-pub fn khz(rate: u32) -> String {
-    if rate < 1000 {
-        return format!("{rate} Hz");
-    }
-    let (whole, frac) = (rate / 1000, rate % 1000);
-    if frac == 0 {
-        format!("{whole} kHz")
-    } else {
-        let frac = format!("{frac:03}");
-        format!("{whole}.{} kHz", frac.trim_end_matches('0'))
-    }
-}
-
 /// A bit rate from bytes per second: "128 kb/s".
 fn kbps(bytes_per_second: u32) -> String {
     let bits = u64::from(bytes_per_second).saturating_mul(8);
@@ -247,11 +237,10 @@ impl WaveFormat {
     }
 
     pub fn codec_name(&self) -> String {
-        if let Some(name) = self.subformat_name {
-            return name.to_owned();
+        match self.subformat_name {
+            Some(name) => name.to_owned(),
+            None => tag_name(self.codec()),
         }
-        lookup(FORMAT_TAG, self.codec().into())
-            .map_or_else(|| format!("format {:#06x}", self.codec()), str::to_owned)
     }
 
     /// Formats whose data is whole sample frames of `align` bytes.
@@ -286,7 +275,7 @@ impl WaveFormat {
         }
         s.push_str(&format!(
             ", {}, {}",
-            khz(self.rate),
+            khz(self.rate.into()),
             layout(self.channels, self.mask)
         ));
         if !self.is_framed() && self.avg_bytes > 0 {
@@ -313,6 +302,33 @@ impl WaveFormat {
             None => duration_of(bytes, self.avg_bytes.into()),
         }
     }
+}
+
+/// A `WAVE_FORMAT_*` tag by name: "PCM", "format 0x1234".
+pub fn tag_name(tag: u16) -> String {
+    name_or(FORMAT_TAG, tag.into(), "format")
+}
+
+/// The fixed fields of a little-endian `WAVEFORMATEX` (and the subformat of
+/// WAVE_FORMAT_EXTENSIBLE) at the start of `d`, for summaries; `None` if
+/// it is shorter than the basic 14 bytes.
+pub fn peek_format(d: &[u8]) -> Option<WaveFormat> {
+    let block = crate::cx::Block {
+        span: crate::formats::util::vidutil::detached(d.len()),
+        data: d.to_vec(),
+    };
+    let mut f = Fields::new(&block, Endian::Little);
+    let mut w = WaveFormat {
+        tag: f.u16("Format tag").get().ok()?,
+        channels: f.u16("Channels").get().ok()?,
+        rate: f.u32("Sample rate").get().ok()?,
+        avg_bytes: f.u32("Average bytes per second").get().ok()?,
+        align: f.u16("Block align").get().ok()?,
+        ..WaveFormat::default()
+    };
+    // The rest is optional for a peek: a short extension leaves it unset.
+    let _ = wave_format_rest(&mut f, &mut w);
+    Some(w)
 }
 
 /// The KSDATAFORMAT_SUBTYPE GUIDs are `XXXXXXXX-0000-0010-8000-00aa00389b71`
@@ -373,6 +389,12 @@ const MPEG_FLAGS: FlagTable = &[
     flag(0x10, "MPEG1"),
 ];
 
+const WMA_OPTIONS: FlagTable = &[
+    flag(1, "EXPONENT_VLC"),
+    flag(2, "BIT_RESERVOIR"),
+    flag(4, "VARIABLE_BLOCK_LENGTH"),
+];
+
 const AAC_PAYLOAD: EnumTable = &[(0, "raw"), (1, "ADTS"), (2, "ADIF"), (3, "LOAS")];
 
 /// Coefficient pairs shown for Microsoft ADPCM (the standard set has 7).
@@ -384,10 +406,19 @@ pub fn wave_format(f: &mut Fields<'_>, _: &()) -> Result<WaveFormat> {
         tag: f.u16("Format tag").enumeration(FORMAT_TAG).emit()?,
         channels: f.u16("Channels").emit()?,
         rate: f.u32("Sample rate").desc("Samples per second").emit()?,
-        avg_bytes: f.u32("Average bytes per second").emit()?,
+        avg_bytes: f
+            .u32("Average bytes per second")
+            .with(|&v, n| if v > 0 { n.summary(kbps(v)) } else { n })
+            .emit()?,
         align: f.u16("Block align").desc("Bytes per sample frame").emit()?,
         ..WaveFormat::default()
     };
+    wave_format_rest(f, &mut w)?;
+    Ok(w)
+}
+
+/// `wBitsPerSample`, `cbSize` and the extension, where present.
+fn wave_format_rest(f: &mut Fields<'_>, w: &mut WaveFormat) -> Result<()> {
     if f.remaining() >= 2 {
         w.bits = f.u16("Bits per sample").emit()?;
     }
@@ -399,9 +430,9 @@ pub fn wave_format(f: &mut Fields<'_>, _: &()) -> Result<WaveFormat> {
         let extra = u64::from(declared).min(f.remaining());
         let end = f.pos().saturating_add(extra);
         if w.tag == 0xfffe && extra >= 22 {
-            extensible(f, &mut w)?;
+            extensible(f, w)?;
         } else {
-            extension(f, &w, extra)?;
+            extension(f, w, extra)?;
         }
         if f.pos() < end {
             f.bytes("Extension data", end.saturating_sub(f.pos()))
@@ -409,7 +440,7 @@ pub fn wave_format(f: &mut Fields<'_>, _: &()) -> Result<WaveFormat> {
         }
         f.seek(end);
     }
-    Ok(w)
+    Ok(())
 }
 
 fn extensible(f: &mut Fields<'_>, w: &mut WaveFormat) -> Result<()> {
@@ -433,10 +464,7 @@ fn extensible(f: &mut Fields<'_>, w: &mut WaveFormat) -> Result<()> {
     let guid = f
         .guid("Subformat")
         .with(|g, n| match (subformat_tag(g), subformat_special(g)) {
-            (Some(tag), _) => n.summary(
-                lookup(FORMAT_TAG, tag.into())
-                    .map_or_else(|| format!("format {tag:#06x}"), str::to_owned),
-            ),
+            (Some(tag), _) => n.summary(tag_name(tag)),
             (None, Some(name)) => n.summary(name),
             (None, None) => n,
         })
@@ -468,8 +496,8 @@ fn extension(f: &mut Fields<'_>, w: &WaveFormat, extra: u64) -> Result<()> {
                 );
             }
         }
-        // IMAADPCMWAVEFORMAT, GSM610WAVEFORMAT
-        0x0011 | 0x0031 if extra >= 2 => {
+        // IMAADPCMWAVEFORMAT, GSM610WAVEFORMAT, CREATIVEADPCMWAVEFORMAT
+        0x0011 | 0x0031 | 0x0200 if extra >= 2 => {
             f.u16("Samples per block").emit()?;
         }
         // MPEGLAYER3WAVEFORMAT
@@ -495,14 +523,9 @@ fn extension(f: &mut Fields<'_>, w: &WaveFormat, extra: u64) -> Result<()> {
             f.u32("PTS (low)").emit()?;
             f.u32("PTS (high)").emit()?;
         }
-        // HEAACWAVEINFO / raw AAC: an AudioSpecificConfig follows.
-        0x00ff | 0x1601 | 0x706d | 0xa106 if extra >= 2 => {
-            f.bytes("AudioSpecificConfig", extra)
-                .with(|b, n| match asc_summary(b) {
-                    Some(s) => n.summary(s),
-                    None => n,
-                })
-                .emit()?;
+        // Raw AAC: an AudioSpecificConfig follows.
+        0x00ff | 0x1601 | 0x4143 | 0x706d | 0xa106 if extra >= 2 => {
+            audio_specific_config(f, extra)?;
         }
         0x1610 if extra >= 12 => {
             f.u16("Payload type").enumeration(AAC_PAYLOAD).emit()?;
@@ -511,25 +534,51 @@ fn extension(f: &mut Fields<'_>, w: &WaveFormat, extra: u64) -> Result<()> {
             f.bytes("Reserved", 7).emit()?;
             let rest = extra.saturating_sub(12);
             if rest > 0 {
-                f.bytes("AudioSpecificConfig", rest)
-                    .with(|b, n| match asc_summary(b) {
-                        Some(s) => n.summary(s),
-                        None => n,
-                    })
-                    .emit()?;
+                audio_specific_config(f, rest)?;
             }
         }
         // WMAUDIO1WAVEFORMAT, WMAUDIO2WAVEFORMAT
         0x0160 if extra >= 4 => {
             f.u16("Samples per block").emit()?;
-            f.u16("Encode options").hex().emit()?;
+            f.u16("Encode options").flags(WMA_OPTIONS).emit()?;
         }
-        0x0161 if extra >= 10 => {
+        0x0161 if extra >= 6 => {
             f.u32("Samples per block").emit()?;
+            f.u16("Encode options").flags(WMA_OPTIONS).emit()?;
+            if extra >= 10 {
+                f.u32("Super block align").emit()?;
+            }
+        }
+        // WMAUDIO3WAVEFORMAT (WMA Pro, WMA Lossless)
+        0x0162 | 0x0163 if extra >= 18 => {
+            f.u16("Valid bits per sample").emit()?;
+            let count = w.channels;
+            f.u32("Channel mask")
+                .flags(SPEAKERS)
+                .with(|&m, n| n.summary(layout(count, Some(m))))
+                .emit()?;
+            f.u32("Reserved").emit()?;
+            f.u32("Reserved").emit()?;
             f.u16("Encode options").hex().emit()?;
-            f.u32("Super block align").emit()?;
+            f.u16("Reserved").emit()?;
         }
         _ => {}
+    }
+    Ok(())
+}
+
+/// An MPEG-4 AudioSpecificConfig of `len` bytes, decoded.
+fn audio_specific_config(f: &mut Fields<'_>, len: u64) -> Result<()> {
+    let at = f.pos();
+    let asc = f.bytes("AudioSpecificConfig", len).get()?;
+    if f.is_emitting() {
+        let span = f.block().span.sub(at, len);
+        let (info, nodes) = vidutil::nal::asc(&asc, span, true);
+        let node = vidutil::nal::group("AudioSpecificConfig", span, nodes);
+        f.node(match info {
+            Some(a) => node.summary(a.describe()),
+            None => node,
+        });
     }
     Ok(())
 }
@@ -781,13 +830,6 @@ async fn fmt_of(cx: &Cx, chunk: &Chunk) -> Option<WaveFormat> {
         .ok()
 }
 
-fn word(endian: Endian, data: &[u8]) -> Option<u32> {
-    match endian {
-        Endian::Little => u32_le(data, 0),
-        Endian::Big => u32_be(data, 0),
-    }
-}
-
 /// The `ds64` sample count of an RF64/BW64 file.
 async fn ds64_samples(cx: &Cx, ctx: &Ctx) -> Option<u64> {
     if ctx.sizes.is_empty() {
@@ -800,7 +842,7 @@ async fn ds64_samples(cx: &Cx, ctx: &Ctx) -> Option<u64> {
 
 /// The `fact` sample count, resolving RF64's 0xffffffff through `ds64`.
 async fn fact_value(cx: &Cx, ctx: &Ctx, data: Span) -> Option<u64> {
-    let n = word(ctx.endian, &cx.read_avail(data.sub(0, 4)).await.ok()?)?;
+    let n = get::<u32>(&cx.read_avail(data.sub(0, 4)).await.ok()?, 0, ctx.endian)?;
     if n == u32::MAX
         && let Some(n) = ds64_samples(cx, ctx).await
     {
@@ -852,11 +894,11 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
             .await
             .map(|n| format!("{n} samples")),
         b"cue " => {
-            let n = word(e, &cx.read(data.sub(0, 4)).await?).unwrap_or(0);
+            let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
             Some(format!("{n} cue points"))
         }
         b"plst" => {
-            let n = word(e, &cx.read(data.sub(0, 4)).await?).unwrap_or(0);
+            let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
             Some(format!("{n} segments"))
         }
         b"bext" => {
@@ -873,10 +915,9 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
         b"smpl" => {
             let s = crate::dsl::read_record::<Sampler>(cx, data.sub(0, Sampler::SIZE), e).await?;
             Some(format!(
-                "unity note {}, {} loop{}",
+                "unity note {}, {}",
                 note32(s.unity_note),
-                s.loops,
-                if s.loops == 1 { "" } else { "s" }
+                plural(s.loops, "loop")
             ))
         }
         b"inst" => {
@@ -933,14 +974,14 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
             }
         }
         b"labl" | b"note" if &chunk.list == b"adtl" => {
-            let id = word(e, &cx.read(data.sub(0, 4)).await?).unwrap_or(0);
+            let id = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
             let text = peek_text(cx, data.tail(4), 120).await?;
             Some(format!("cue {id}: {}", clip(&text, 60)))
         }
         b"ltxt" if &chunk.list == b"adtl" => {
             let head = cx.read(data.sub(0, 12)).await?;
-            let id = word(e, &head).unwrap_or(0);
-            let len = word(e, head.get(4..).unwrap_or_default()).unwrap_or(0);
+            let id = get::<u32>(&head, 0, e).unwrap_or(0);
+            let len = get::<u32>(&head, 4, e).unwrap_or(0);
             let purpose = fourcc(head.get(8..12).unwrap_or_default());
             let text = peek_text(cx, data.tail(20), 120).await?;
             let mut s = format!("cue {id}, {len} samples, {purpose}");
@@ -950,7 +991,7 @@ pub async fn summary(cx: &Cx, chunk: &Chunk) -> Result<Option<String>> {
             Some(s)
         }
         b"slnt" => {
-            let n = word(e, &cx.read(data.sub(0, 4)).await?).unwrap_or(0);
+            let n = get::<u32>(&cx.read(data.sub(0, 4)).await?, 0, e).unwrap_or(0);
             Some(format!("{n} samples of silence"))
         }
         _ if &chunk.list == b"exif" => Some(clip(&peek_text(cx, data, 120).await?, 60)),
@@ -1171,11 +1212,18 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
                 .enumeration(DISP_TYPE)
                 .emit()?;
             let body = data.tail(4);
-            if kind == 1 {
-                let t = peek_text(cx, body, body.len.min(1 << 16)).await?;
-                cx.emit(Node::new("Text").span(body).value(text(t)));
-            } else {
-                cx.emit(Node::new("Data").span(body));
+            match kind {
+                1 => {
+                    let t = peek_text(cx, body, body.len.min(1 << 16)).await?;
+                    cx.emit(Node::new("Text").span(body).value(text(t)));
+                }
+                // A packed DIB: BITMAPINFOHEADER, colour table, pixels.
+                8 => cx.emit(crate::formats::embedded_named(
+                    "Bitmap",
+                    chunk.input().nested(body),
+                    "dib",
+                )),
+                _ => cx.emit(Node::new("Data").span(body)),
             }
         }
         b"slnt" => {
@@ -1290,7 +1338,7 @@ pub fn bext(f: &mut Fields<'_>, rate: u32) -> Result<()> {
     let reference = (u64::from(high) << 32) | u64::from(low);
     let mut node = Node::new("Time reference")
         .span(at)
-        .value(crate::formats::util::sound::uint(reference, 64))
+        .value(crate::formats::util::val::uint(reference, 64))
         .desc("Sample frames since midnight at the first sample");
     if let Some(t) = clock(reference, rate) {
         node = node.summary(t);
@@ -1399,7 +1447,7 @@ fn cart(cx: &Cx, f: &mut Fields<'_>) -> Result<()> {
         cx.emit(
             Node::new(format!("Post timer {i}"))
                 .span(at)
-                .value(crate::formats::util::sound::uint(value, 32))
+                .value(crate::formats::util::val::uint(value, 32))
                 .summary(fourcc(&usage)),
         );
     }
@@ -1447,9 +1495,4 @@ pub async fn describe(cx: &Cx, ctx: &Ctx, region: Span) -> Result<Option<String>
         }
     }
     Ok(Some(line))
-}
-
-/// A lazy node for a `WAVEFORMATEX` at `span` (used by AVI and DLS).
-pub fn format_node(name: &'static str, span: Span, endian: Endian) -> Node {
-    struct_node(name, span, endian, (), wave_format)
 }

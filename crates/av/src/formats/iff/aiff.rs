@@ -10,7 +10,8 @@ use crate::error::Result;
 use crate::fields::{Fields, parse};
 use crate::formats::audio::midi::note_name;
 use crate::formats::iff::{Chunk, Ctx, FourCc, find};
-use crate::formats::util::sound::{channels, duration, f80_be, fourcc, hz, text};
+use crate::formats::util::sound::{channels, duration, f80_be, fourcc, hz};
+use crate::formats::util::val::text;
 use crate::node::Node;
 use crate::record;
 use crate::span::Span;
@@ -126,7 +127,7 @@ impl Common {
 
     fn rate_text(&self) -> String {
         if self.rate.fract() == 0.0 && self.rate > 0.0 && self.rate < 4e9 {
-            crate::formats::iff::wav::khz(self.rate as u32)
+            crate::formats::util::vidutil::khz(self.rate as u64)
         } else {
             hz(self.rate)
         }

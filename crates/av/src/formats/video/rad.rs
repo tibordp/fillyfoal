@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -102,8 +103,8 @@ pub async fn dissect_bink(cx: Cx, input: Input) -> Result<()> {
         },
         h.width,
         h.height,
-        vidutil::plural(h.frames, "frame"),
-        vidutil::plural(h.tracks, "audio track")
+        plural(h.frames, "frame"),
+        plural(h.tracks, "audio track")
     ));
     let tracks = u64::from(h.tracks.min(MAX_TRACKS));
     if h.tracks > MAX_TRACKS {
@@ -116,7 +117,7 @@ pub async fn dissect_bink(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Audio tracks")
                 .span(s)
-                .summary(vidutil::plural(tracks, "track"))
+                .summary(plural(tracks, "track"))
                 .lazy(bink_tracks, (s, tracks)),
         );
         pos = pos.saturating_add(len);
@@ -126,7 +127,7 @@ pub async fn dissect_bink(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .span(index)
-            .summary(vidutil::plural(count, "frame"))
+            .summary(plural(count, "frame"))
             .desc("From the frame index; bit 0 of an offset marks a keyframe")
             .lazy(bink_frames, Frames { index, count, file }),
     );
@@ -288,9 +289,9 @@ pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
         h.signature.get(3..).unwrap_or(""),
         h.width,
         h.height,
-        vidutil::plural(h.frames, "frame"),
+        plural(h.frames, "frame"),
         vidutil::num(fps),
-        vidutil::plural(crate::bytes::to_u64(audio), "audio track")
+        plural(crate::bytes::to_u64(audio), "audio track")
     ));
     let count = u64::from(h.frames).saturating_add(u64::from(h.flags & 1));
     let mut pos = SmackerHeader::SIZE;
@@ -315,7 +316,7 @@ pub async fn dissect_smacker(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Frames")
             .span(data)
-            .summary(vidutil::plural(count, "frame"))
+            .summary(plural(count, "frame"))
             .lazy(
                 smacker_frames,
                 SmkFrames {
@@ -354,7 +355,7 @@ async fn smacker_frames(cx: Cx, fr: SmkFrames) -> Result<()> {
             }
             let tracks = (t >> 1).count_ones();
             if tracks > 0 {
-                parts.push(vidutil::plural(tracks, "audio chunk"));
+                parts.push(plural(tracks, "audio chunk"));
             }
             let mut node = Node::new(format!("Frame {}", i.saturating_add(j)))
                 .span(span)

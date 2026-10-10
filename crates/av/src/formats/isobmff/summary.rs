@@ -5,13 +5,14 @@ use crate::bytes::{to_u64, to_usize, u16_be, u32_be, u64_be};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::formats::Input;
-use crate::formats::util::vidutil::{fourcc, plural};
+use crate::formats::util::vidutil::fourcc;
 use crate::span::Span;
 
 use super::boxes::{bitrate, handler_name, matrix_at, short_language, transform};
 use super::sample::{CodecInfo, EntryKind, codec_info};
 use super::tables::fps;
 use super::{BoxState, Brand, find_child, find_path, read_header, small};
+use crate::formats::util::fmt::plural;
 
 /// The handler type of a `trak` or `mdia` box body.
 pub async fn handler_of(cx: &Cx, kind: &[u8; 4], body: Span) -> Option<[u8; 4]> {

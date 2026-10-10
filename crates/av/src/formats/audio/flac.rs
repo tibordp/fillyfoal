@@ -15,9 +15,9 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
-    Bits, CRC16_BUYPASS, bits_node, channels, duration_of, enumerated, hex, image_info, leaf,
-    parse_bits, table, text, uint,
+    Bits, CRC16_BUYPASS, bits_node, channels, duration_of, image_info, leaf, parse_bits, table,
 };
+use crate::formats::util::val::{enumv, hex, text, uint};
 use crate::formats::{Format, Input, Probe, audio::id3, audio::vorbis, embedded};
 use crate::node::{Count, Node};
 use crate::record;
@@ -231,6 +231,69 @@ pub async fn block_node(cx: &Cx, input: Input, span: Span) -> Result<Node> {
     ))
 }
 
+/// STREAMINFO decoded from its 34-byte body at the start of `d`, for
+/// summaries.
+pub fn peek_streaminfo(d: &[u8]) -> Option<StreamInfo> {
+    let d = d.get(..34)?;
+    streaminfo(&mut Bits::new(
+        d,
+        crate::formats::util::vidutil::detached(d.len()),
+    ))
+    .ok()
+}
+
+/// Emits a lazy node for each metadata block of `region` from `pos` up to
+/// the one flagged last, then any bytes after it: FLAC codec
+/// configuration in other containers (ISOBMFF `dfLa`, Matroska, FLV, CAF).
+pub async fn metadata_blocks(cx: &Cx, input: Input, region: Span, mut pos: u64) -> Result<()> {
+    while pos.saturating_add(4) <= region.len {
+        let h = cx.read_avail(region.sub(pos, 4)).await?;
+        let Some(len) = crate::bytes::u24_be(&h, 1) else {
+            break;
+        };
+        let last = h.first().is_some_and(|b| b & 0x80 != 0);
+        let span = region.sub(pos, 4u64.saturating_add(len.into()));
+        cx.emit(block_node(cx, input, span).await?);
+        pos = pos.saturating_add(span.len.max(1));
+        if last {
+            break;
+        }
+    }
+    if pos < region.len {
+        cx.emit(Node::new("Trailing data").span(region.tail(pos)));
+    }
+    Ok(())
+}
+
+/// `fLaC` followed by metadata blocks: FLAC codec configuration as
+/// Matroska, FLV and CAF store it.
+pub async fn codec_config(cx: &Cx, input: Input, data: Span) -> Result<()> {
+    let magic = cx.read_avail(data.sub(0, 4)).await?;
+    if magic != b"fLaC" {
+        cx.emit(Node::new("Data").span(data).diag(Diagnostic::malformed(
+            "FLAC codec data without the fLaC signature",
+        )));
+        return Ok(());
+    }
+    cx.emit(
+        Node::new("Signature")
+            .span(data.sub(0, 4))
+            .value(text("fLaC")),
+    );
+    metadata_blocks(cx, input, data, 4).await
+}
+
+/// "44100 Hz, 2 ch, 16-bit, 0:05" for the STREAMINFO at the start of a
+/// metadata block sequence that may begin with `fLaC`.
+pub fn config_summary(d: &[u8]) -> Option<String> {
+    let blocks = d.strip_prefix(b"fLaC").unwrap_or(d);
+    // The first block must be STREAMINFO.
+    (blocks.first()? & 0x7f == 0)
+        .then(|| peek_streaminfo(blocks.get(4..)?))
+        .flatten()
+        .map(|s| s.summary())
+}
+
 /// The vendor string of a comment block.
 async fn vendor(cx: &Cx, data: Span) -> Option<String> {
     let head = cx.read_avail(data.sub(0, 4)).await.ok()?;
@@ -247,7 +310,7 @@ pub async fn block(cx: Cx, b: Block) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, BE);
     f.u8("Header")
         .with(|&v, n| {
-            n.value(enumerated(v & 0x7f, 7, BLOCK_TYPE))
+            n.value(enumv(v & 0x7f, 7, BLOCK_TYPE))
                 .summary(if v & 0x80 != 0 {
                     "last metadata block"
                 } else {
@@ -486,7 +549,7 @@ pub async fn picture(cx: &Cx, input: Input, data: Span) -> Result<()> {
     let block = cx.block(data.sub(0, data.len.min(1 << 16))).await?;
     let mut f = Fields::emitting(cx, &block, BE);
     f.u32("Picture type")
-        .with(|&v, n| n.value(enumerated(v, 32, id3::PICTURE_TYPE)))
+        .with(|&v, n| n.value(enumv(v, 32, id3::PICTURE_TYPE)))
         .emit()?;
     let len = f.u32("MIME type length").emit()?;
     crate::formats::util::sound::latin1_field(&mut f, "MIME type", len.into()).emit()?;

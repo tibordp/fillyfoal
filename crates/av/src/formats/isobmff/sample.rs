@@ -21,8 +21,10 @@ use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, flag};
 
 use super::boxes::bitrate;
-use super::codec::{self, Ac3, bits_at, channel_count, khz};
-use super::{BE, BoxState, Brand, children, full_box, read_header, small};
+use super::codec::{self, Ac3, bits_at, channel_count};
+use super::{BE, BoxState, Brand, children, emit_fields, full_box, read_header, small};
+use crate::formats::audio::{caf, flac};
+use crate::formats::util::vidutil::khz;
 
 /// What kind of sample entry a FourCC is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -742,14 +744,11 @@ fn configure(info: &mut CodecInfo, kind: &[u8; 4], b: &[u8]) {
         }
         b"dfLa" => {
             // FullBox, then metadata blocks; STREAMINFO comes first.
-            if let Some(si) = b.get(8..) {
-                let mut r = vidutil::Bits::new(si.get(10..18).unwrap_or_default());
-                if let (Some(rate), Some(ch), Some(bits)) = (r.bits(20), r.bits(3), r.bits(5)) {
-                    info.rate = rate;
-                    info.channels = ch.saturating_add(1);
-                    info.layout = Some(channel_count(info.channels));
-                    info.bits = Some(bits.saturating_add(1));
-                }
+            if let Some(si) = b.get(8..).and_then(flac::peek_streaminfo) {
+                info.rate = si.rate;
+                info.channels = si.channels;
+                info.layout = Some(channel_count(info.channels));
+                info.bits = Some(si.bits);
             }
             info.codec_string = Some("flac".to_owned());
         }
@@ -772,10 +771,10 @@ fn configure(info: &mut CodecInfo, kind: &[u8; 4], b: &[u8]) {
         }
         b"alac" => {
             // FullBox, then ALACSpecificConfig.
-            info.bits = b.get(9).map(|&v| u64::from(v));
-            info.channels = b.get(13).map_or(info.channels, |&v| u64::from(v));
-            if let Some(r) = u32_be(b, 24) {
-                info.rate = r.into();
+            if let Some(c) = b.get(4..).and_then(caf::peek_alac) {
+                info.bits = Some(c.bit_depth.into());
+                info.channels = c.channels.into();
+                info.rate = c.sample_rate.into();
             }
             info.codec_string = Some("alac".to_owned());
         }
@@ -887,16 +886,6 @@ const FIELD_ORDERS: EnumTable = &[
     (14, "bottom field first, interleaved"),
 ];
 
-const FLAC_BLOCKS: EnumTable = &[
-    (0, "STREAMINFO"),
-    (1, "PADDING"),
-    (2, "APPLICATION"),
-    (3, "SEEKTABLE"),
-    (4, "VORBIS_COMMENT"),
-    (5, "CUESHEET"),
-    (6, "PICTURE"),
-];
-
 const CHANNEL_LAYOUTS: EnumTable = &[
     (0, "use channel descriptions"),
     (1, "use channel bitmap"),
@@ -960,15 +949,6 @@ const CHANNEL_LAYOUTS: EnumTable = &[
     (194, "Atmos 9.1.6"),
 ];
 
-async fn emit_fields(
-    cx: &Cx,
-    span: Span,
-    layout: impl FnOnce(&mut Fields<'_>) -> Result<()>,
-) -> Result<()> {
-    let block = cx.block(span.sub(0, 0x10000)).await?;
-    layout(&mut Fields::emitting(cx, &block, BE))
-}
-
 /// Decodes the start of `span` with a `vidutil` record decoder and emits
 /// its nodes as children.
 async fn emit_walked(cx: &Cx, span: Span, decode: fn(&[u8], Span) -> Vec<Node>) -> Result<()> {
@@ -999,7 +979,10 @@ pub async fn decode_config(cx: &Cx, st: &BoxState) -> Result<bool> {
             esds::descriptors(cx, st.input, body.tail(4), 0).await?;
         }
         b"dOps" => emit_walked(cx, body, |d, s| nal::opus(d, s, true, true).1).await?,
-        b"dfLa" => dfla(cx, body).await?,
+        b"dfLa" => {
+            emit_fields(cx, body.sub(0, 4), |f| full_box(f).map(|_| ())).await?;
+            flac::metadata_blocks(cx, st.input, body, 4).await?;
+        }
         b"dac3" => {
             emit_bits(cx, body, codec::dac3_layout).await?;
         }
@@ -1281,7 +1264,7 @@ pub async fn describe_config(cx: &Cx, st: &BoxState) -> Option<String> {
         b"dOps" => nal::opus(&d, codec::nowhere(d.len()), false, true)
             .0
             .map(|o| o.describe()),
-        b"dfLa" => flac_streaminfo(d.get(8..)?),
+        b"dfLa" => flac::config_summary(d.get(4..)?),
         b"dac3" => codec::dac3_layout(&mut crate::formats::util::sound::Bits::new(
             &d,
             codec::nowhere(d.len()),
@@ -1361,110 +1344,15 @@ pub async fn describe_config(cx: &Cx, st: &BoxState) -> Option<String> {
                 ),
             })
         }
-        b"alac" => Some(format!(
-            "{}-bit, {}, {}",
-            d.get(9)?,
-            channel_count((*d.get(13)?).into()),
-            khz(u32_be(&d, 24)?.into())
-        )),
+        b"alac" => caf::peek_alac(d.get(4..)?).map(|c| caf::alac_summary(&c)),
         _ => None,
     }
 }
 
-async fn dfla(cx: &Cx, body: Span) -> Result<()> {
-    let block = cx.block(body.sub(0, 0x10000)).await?;
-    let mut f = Fields::emitting(cx, &block, BE);
-    full_box(&mut f)?;
-    while f.remaining() >= 4 {
-        let start = f.pos();
-        let header = u32_be(&block.data, to_usize(start)).unwrap_or(0);
-        let kind = (header >> 24) & 0x7f;
-        let len = u64::from(header & 0x00ff_ffff);
-        let span = body.sub(start, len.saturating_add(4));
-        let data = block
-            .data
-            .get(to_usize(start.saturating_add(4))..)
-            .unwrap_or_default();
-        let mut node = Node::new(lookup_or(FLAC_BLOCKS, kind.into()))
-            .span(span)
-            .summary(format!(
-                "{} bytes{}",
-                len,
-                if header >> 31 == 1 { ", last" } else { "" }
-            ))
-            .lazy(flac_block, (span, kind));
-        if kind == 0
-            && let Some(s) = flac_streaminfo(data)
-        {
-            node = node.summary(s);
-        }
-        f.node(node);
-        f.skip(len.saturating_add(4));
-        if header >> 31 == 1 {
-            break;
-        }
-    }
-    Ok(())
-}
-
-async fn flac_block(cx: Cx, (span, kind): (Span, u32)) -> Result<()> {
-    let data = cx.read_avail(span.sub(0, 0x10000)).await?;
-    let mut b = crate::formats::util::sound::Bits::emitting(&cx, &data, span);
-    b.field("Last block", 1).flag().emit()?;
-    b.field("Block type", 7).enumeration(FLAC_BLOCKS).emit()?;
-    let len = b.field("Length", 24).emit()?;
-    if kind == 0 {
-        b.field("Min block size", 16).emit()?;
-        b.field("Max block size", 16).emit()?;
-        b.field("Min frame size", 24).emit()?;
-        b.field("Max frame size", 24).emit()?;
-        b.field("Sample rate", 20)
-            .with(|v, n| n.summary(khz(v)))
-            .emit()?;
-        b.field("Channels minus one", 3)
-            .with(|v, n| n.summary(channel_count(v.saturating_add(1))))
-            .emit()?;
-        b.field("Bits per sample minus one", 5)
-            .with(|v, n| n.summary(format!("{} bits", v.saturating_add(1))))
-            .emit()?;
-        b.field("Total samples", 36).emit()?;
-        b.bytes("MD5 signature", 16).emit()?;
-    } else if len > 0 {
-        cx.emit(Node::new("Data").span(span.tail(4)));
-    }
-    Ok(())
-}
-
-pub fn flac_streaminfo(d: &[u8]) -> Option<String> {
-    let mut b = vidutil::Bits::new(d.get(10..18)?);
-    let rate = b.bits(20)?;
-    let channels = b.bits(3)?.saturating_add(1);
-    let bits = b.bits(5)?.saturating_add(1);
-    let samples = b.bits(36)?;
-    let mut s = format!("{}, {}, {bits}-bit", khz(rate), channel_count(channels));
-    if rate > 0 && samples > 0 {
-        s = format!("{s}, {}", vidutil::duration(samples, rate));
-    }
-    Some(s)
-}
-
+/// FullBox, then `ALACSpecificConfig`.
 fn alac(f: &mut Fields<'_>) -> Result<()> {
     full_box(f)?;
-    f.u32("Frame length").desc("Samples per frame").emit()?;
-    f.u8("Compatible version").emit()?;
-    f.u8("Bit depth").emit()?;
-    f.u8("Rice history mult").emit()?;
-    f.u8("Rice initial history").emit()?;
-    f.u8("Rice limit").emit()?;
-    f.u8("Channels").emit()?;
-    f.u16("Max run").emit()?;
-    f.u32("Max frame bytes").emit()?;
-    f.u32("Average bit rate")
-        .with(|&v, n| n.summary(bitrate(v.into())))
-        .emit()?;
-    f.u32("Sample rate")
-        .with(|&v, n| n.summary(format!("{v} Hz")))
-        .emit()?;
+    caf::AlacConfig::read(f)?;
     Ok(())
 }
 

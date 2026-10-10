@@ -7,10 +7,10 @@ use crate::error::Result;
 use crate::fields::{Fields, struct_node};
 use crate::formats::util::vidutil::{duration, fixed8, fixed16, fourcc, num, sfixed16, text, uuid};
 use crate::node::Node;
-use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, flag};
 
-use super::{BE, BoxState, Brand, children, full_box, full_box_flags, small};
+use super::{BE, BoxState, Brand, children, emit_fields, full_box, full_box_flags, small};
+use crate::formats::util::fmt::plural;
 
 const TKHD_FLAGS: FlagTable = &[
     flag(0x1, "ENABLED"),
@@ -313,15 +313,6 @@ pub fn matrix_at(d: &[u8], at: usize) -> Option<[i32; 9]> {
         *slot = v as i32;
     }
     Some(m)
-}
-
-async fn emit_fields(
-    cx: &Cx,
-    span: Span,
-    layout: impl FnOnce(&mut Fields<'_>) -> Result<()>,
-) -> Result<()> {
-    let block = cx.block(span.sub(0, 0x10000)).await?;
-    layout(&mut Fields::emitting(cx, &block, BE))
 }
 
 /// Decodes the boxes this module knows. Returns `false` for other types.
@@ -882,10 +873,7 @@ pub async fn describe(cx: &Cx, st: &BoxState) -> Option<String> {
             if version > 0
                 && let Some(n) = u32_be(&d, 20)
             {
-                s = format!(
-                    "{s}, {}",
-                    crate::formats::util::vidutil::plural(n, "key ID")
-                );
+                s = format!("{s}, {}", plural(n, "key ID"));
             }
             Some(s)
         }

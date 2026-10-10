@@ -4,6 +4,7 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, text};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
@@ -186,7 +187,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     summary = format!(
         "{summary}, {}{}",
         if exact { "" } else { "~" },
-        vidutil::plural(count, "frame")
+        plural(count, "frame")
     );
     if let Some((n, d)) = fps
         && n > 0

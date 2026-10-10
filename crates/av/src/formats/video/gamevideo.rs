@@ -7,6 +7,7 @@ use crate::cx::Cx;
 use crate::dsl::{Cursor, Record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
+use crate::formats::util::fmt::plural;
 use crate::formats::util::vidutil::{self, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
@@ -221,7 +222,7 @@ pub async fn dissect_film(cx: Cx, input: Input) -> Result<()> {
         } else {
             String::new()
         },
-        vidutil::plural(count, "sample")
+        plural(count, "sample")
     ));
     let stab_span = file.sub(stab, u32_be(&s, 4).map_or(16, u64::from));
     cx.emit(
@@ -229,7 +230,7 @@ pub async fn dissect_film(cx: Cx, input: Input) -> Result<()> {
             .span(stab_span)
             .summary(format!(
                 "base clock {clock} Hz, {}",
-                vidutil::plural(count, "sample")
+                plural(count, "sample")
             ))
             .lazy(film_table, (stab_span, count)),
     );
@@ -513,7 +514,7 @@ pub async fn dissect_flic(cx: Cx, input: Input) -> Result<()> {
         h.width,
         h.height,
         h.depth,
-        vidutil::plural(h.frames, "frame"),
+        plural(h.frames, "frame"),
         ms
     ));
     flic_chunks(&cx, file.tail(FlicHeader::SIZE), 0).await
@@ -539,7 +540,7 @@ async fn flic_chunks(cx: &Cx, region: Span, depth: u32) -> Result<()> {
         let mut node = Node::new(name).span(span);
         if kind == 0xf1fa {
             let sub = u16_le(&d, 6).unwrap_or(0);
-            node = node.summary(format!("frame {frame}, {}", vidutil::plural(sub, "chunk")));
+            node = node.summary(format!("frame {frame}, {}", plural(sub, "chunk")));
             frame = frame.saturating_add(1);
             if depth == 0 {
                 node = node.lazy(crate::expander!(self::flic_frame: Span), span);
@@ -790,17 +791,17 @@ pub async fn dissect_thp(cx: Cx, input: Input) -> Result<()> {
         }
     }
     parts.push(format!("{} fps", vidutil::num(f64::from(h.fps))));
-    parts.push(vidutil::plural(h.frames, "frame"));
+    parts.push(plural(h.frames, "frame"));
     cx.annotate(parts.join(", "));
     cx.emit(
         Node::new("Component data")
             .span(comp.sub(0, crate::bytes::to_u64(at)))
-            .summary(vidutil::plural(n, "component")),
+            .summary(plural(n, "component")),
     );
     cx.emit(
         Node::new("Frames")
             .span(file.tail(h.first.into()))
-            .summary(vidutil::plural(h.frames, "frame"))
+            .summary(plural(h.frames, "frame"))
             .lazy(
                 thp_frames,
                 ThpFrames {

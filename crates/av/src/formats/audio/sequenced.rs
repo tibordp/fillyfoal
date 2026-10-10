@@ -10,27 +10,12 @@ use crate::fields::{Endian, Fields};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::record;
-use crate::value::{Radix, Value};
+
+use crate::formats::util::val::{text, uint};
+use crate::text::until_nul;
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-/// NUL-terminated (or padded) Latin-1 text.
-fn zstr(b: &[u8]) -> String {
-    crate::text::until_nul(b)
-}
 
 // ---------------------------------------------------------------------------
 // Music: Doom MUS, HMI, AHX, MO3, DigiBooster, Farandole
@@ -74,7 +59,7 @@ async fn hmi(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Signature")
             .span(file.sub(0, if hmp { 8 } else { 12 }))
-            .value(text(zstr(head.get(..18).unwrap_or_default()))),
+            .value(text(until_nul(head.get(..18).unwrap_or_default()))),
     );
     let tracks = if hmp {
         u32_le(&head, 0x30)
@@ -86,7 +71,7 @@ async fn hmi(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Tracks")
                 .span(file.sub(0x30, 4))
-                .value(uint(tracks.into(), 32)),
+                .value(uint(tracks, 32)),
         );
     }
     cx.emit(Node::new("Body").span(file.tail(0x40)));
@@ -162,7 +147,7 @@ async fn dbm(cx: Cx, input: Input) -> Result<()> {
     while let Some(chunk) = cur.chunk(ChunkLayout::new(4, 4, BE)).await? {
         let mut node = chunk.node();
         if chunk.id == b"NAME" {
-            title = zstr(&cx.read_avail(chunk.body.sub(0, 64)).await?);
+            title = until_nul(&cx.read_avail(chunk.body.sub(0, 64)).await?);
             node = node.value(text(title.clone()));
         }
         cx.push(node).await;

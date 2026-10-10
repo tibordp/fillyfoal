@@ -10,7 +10,7 @@ use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;
 
-use super::{BE, BoxState, small};
+use super::{BE, BoxState, emit_fields, small};
 
 const COLOUR_METHODS: EnumTable = &[
     (1, "enumerated"),
@@ -72,15 +72,6 @@ const PROGRESSION: EnumTable = &[
     (3, "PCRL"),
     (4, "CPRL"),
 ];
-
-async fn emit_fields(
-    cx: &Cx,
-    span: Span,
-    layout: impl FnOnce(&mut Fields<'_>) -> Result<()>,
-) -> Result<()> {
-    let block = cx.block(span.sub(0, 0x10000)).await?;
-    layout(&mut Fields::emitting(cx, &block, BE))
-}
 
 /// Decodes JP2 boxes. Returns `false` for other types.
 pub async fn decode(cx: &Cx, st: &BoxState) -> Result<bool> {

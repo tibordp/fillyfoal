@@ -13,8 +13,9 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::formats::util::arcutil::human_size;
 use crate::formats::util::sound::{
-    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node, hex, leaf,
+    Bits, CRC16_BUYPASS, FrameRef, FrameSyntax, bits_node, duration, frames_node, leaf,
 };
+use crate::formats::util::val::hex;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::{SourceId, Span};
@@ -44,11 +45,11 @@ const WORDS_44K: [u16; 38] = [
     69, 70, 87, 88, 104, 105, 121, 122, 139, 140, 174, 175, 208, 209, 243, 244, 278, 279, 348, 349,
     417, 418, 487, 488, 557, 558, 696, 697, 835, 836, 975, 976, 1114, 1115, 1253, 1254, 1393, 1394,
 ];
-const BITRATES: [u16; 19] = [
+pub const BITRATES: [u16; 19] = [
     32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384, 448, 512, 576, 640,
 ];
 
-const ACMOD: EnumTable = &[
+pub const ACMOD: EnumTable = &[
     (0, "1+1 (dual mono)"),
     (1, "1/0 (mono)"),
     (2, "2/0 (stereo)"),
@@ -59,7 +60,7 @@ const ACMOD: EnumTable = &[
     (7, "3/2 (L, C, R, SL, SR)"),
 ];
 const CHANNELS: [u8; 8] = [2, 1, 2, 3, 3, 4, 4, 5];
-const BSMOD: EnumTable = &[
+pub const BSMOD: EnumTable = &[
     (0, "complete main"),
     (1, "music and effects"),
     (2, "visually impaired"),

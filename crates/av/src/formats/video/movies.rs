@@ -10,21 +10,10 @@ use crate::fields::{Endian, Fields};
 use crate::formats::text::scan::head_lines;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::Node;
-use crate::value::{Radix, Value};
+
+use crate::formats::util::val::{text, uint};
 
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Video: LucasArts SMUSH, DXA, Acorn Replay, SGI movies
@@ -156,7 +145,7 @@ async fn sgi_movie(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(4, 2))
-            .value(uint(version.into(), 16)),
+            .value(uint(version, 16)),
     );
     cx.emit(Node::new("Movie").span(file.tail(8)));
     cx.annotate(format!("SGI movie, version {version}"));
