@@ -10,7 +10,7 @@ use super::{
     DocRef, MAX_DEPTH, Walk, crypt, deref, deref_at, entry_node, header_node, int_of, located_at,
     located_node, resolve, short,
 };
-use crate::bytes::{to_u64, u16_be, u32_be};
+use crate::bytes::to_u64;
 use crate::codec::{self, Codec};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
@@ -777,23 +777,6 @@ async fn signed_ranges(cx: Cx, (doc, ranges): (DocRef, Vec<(u64, u64)>)) -> Resu
     Ok(())
 }
 
-/// The total length of the DER element at the start of `head`.
-fn der_length(head: &[u8]) -> Option<u64> {
-    let first = *head.get(1)?;
-    if first < 0x80 {
-        return Some(u64::from(first).saturating_add(2));
-    }
-    let n = usize::from(first & 0x7f);
-    let len = match n {
-        1 => u64::from(*head.get(2)?),
-        2 => u64::from(u16_be(head, 2)?),
-        3 => u64::from(u32_be(head, 1)? & 0x00ff_ffff),
-        4 => u64::from(u32_be(head, 2)?),
-        _ => return None,
-    };
-    Some(len.saturating_add(to_u64(n)).saturating_add(2))
-}
-
 /// The hex string of `/Contents`, decoded: the DER object, then padding.
 async fn signature_value(cx: Cx, (doc, hex): (DocRef, Span)) -> Result<()> {
     let decoded = codec::decode_span(&cx, hex, &Codec::AsciiHex, None).await?;
@@ -801,8 +784,8 @@ async fn signature_value(cx: Cx, (doc, hex): (DocRef, Span)) -> Result<()> {
         cx.diag(e);
     }
     let data = decoded.span;
-    let head = cx.read_avail(data.sub(0, 8)).await?;
-    let der = match der_length(&head) {
+    let head = cx.read_avail(data.sub(0, 12)).await?;
+    let der = match crate::formats::asn1::der::header(&head).and_then(|t| t.total()) {
         Some(len) if head.first() == Some(&0x30) && len <= data.len => len,
         _ => {
             cx.annotate(format!("{} bytes", data.len));
