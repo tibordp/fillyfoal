@@ -655,7 +655,8 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     let block = f.block().data.clone();
     let flavor = Flavor::of(&block);
     f.ascii("Name", 100).emit()?;
-    ascii_num(f, "Mode", 8, 8, Num::Mode).emit()?;
+    let kind = type_bits(block.get(156).copied().unwrap_or(0));
+    ascii_num(f, "Mode", 8, 8, Num::ModeOf(kind)).emit()?;
     ascii_num(f, "UID", 8, 8, Num::Dec).emit()?;
     ascii_num(f, "GID", 8, 8, Num::Dec).emit()?;
     ascii_num(f, "Size", 12, 8, Num::Dec)

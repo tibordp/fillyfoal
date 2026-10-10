@@ -11,7 +11,7 @@ use crate::error::{Diagnostic, Result};
 use crate::formats::data::netcdf::coords;
 use crate::formats::util::fmt;
 use crate::node::{Count, Node};
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{Radix, Value};
 
 use super::btree::{EaIter, FaIter, V1Iter, V2Iter};
@@ -21,7 +21,7 @@ use super::util::{FileRef, join, uint};
 
 /// Elements read at once.
 const WINDOW: u64 = 64 * 1024;
-/// Largest decoded chunk unshuffled or checksummed in memory.
+/// Largest decoded chunk checksummed in memory or decoded eagerly.
 const MAX_CHUNK: u64 = 16 << 20;
 /// Bytes of a variable-length value shown.
 const MAX_VLEN: u64 = 4096;
@@ -210,7 +210,10 @@ async fn element(
             let target = super::object_node(file, "Object".to_owned(), addr, &b.path);
             node.summary("object reference")
                 .target(file.at(addr, 4))
-                .lazy(super::util::emit_all, Arc::new(vec![target]))
+                .lazy(
+                    crate::formats::util::arcutil::push_nodes,
+                    Arc::new(vec![target]),
+                )
         }
         Ty::Ref { kind: 1, .. } => {
             let o = file.o;
@@ -240,7 +243,10 @@ async fn element(
                 );
             }
             node.value(Value::Text(datatype::format(&b.ty, bytes)))
-                .lazy(super::util::emit_all, Arc::new(children))
+                .lazy(
+                    crate::formats::util::arcutil::push_nodes,
+                    Arc::new(children),
+                )
         }
         ty => node.value(datatype::value(ty, bytes)),
     }
@@ -361,7 +367,7 @@ pub fn data_node(d: &Arc<Dset>) -> Option<Node> {
                 .summary(format!("global heap {heap:#x}, object {index}"))
                 .target(file.at(heap, 4))
                 .lazy(
-                    super::util::emit_all,
+                    crate::formats::util::arcutil::push_nodes,
                     Arc::new(vec![super::heap::gcol_node(file, heap)]),
                 )
         }
@@ -707,6 +713,12 @@ async fn chunk_expand(cx: Cx, (d, c): (Arc<Dset>, Chunk)) -> Result<()> {
         Some(_) => "Filtered data".to_owned(),
         None => "Shuffled data".to_owned(),
     };
+    // The shuffle filter is applied first when writing, so undone last.
+    if let Some(width) = shuffle.filter(|&w| w > 1) {
+        codecs.push(Codec::Unshuffle {
+            width: to_usize(width),
+        });
+    }
     let codec = match codecs.len() {
         0 => None,
         1 => codecs.pop(),
@@ -716,14 +728,14 @@ async fn chunk_expand(cx: Cx, (d, c): (Arc<Dset>, Chunk)) -> Result<()> {
         Node::new(name)
             .span(span)
             .summary(format!("{} → {}", fmt::size(span.len), fmt::size(full)))
-            .lazy(decoded, (d.clone(), c, span, codec, shuffle, full)),
+            .lazy(decoded, (d.clone(), c, span, codec, full)),
     );
     Ok(())
 }
 
 async fn decoded(
     cx: Cx,
-    (d, c, span, codec, shuffle, full): (Arc<Dset>, Chunk, Span, Option<Codec>, Option<u64>, u64),
+    (d, c, span, codec, full): (Arc<Dset>, Chunk, Span, Option<Codec>, u64),
 ) -> Result<()> {
     let mut out = span;
     if let Some(codec) = &codec {
@@ -737,48 +749,8 @@ async fn decoded(
             decoded.span
         };
     }
-    if let Some(width) = shuffle {
-        out = unshuffle(&cx, out, width).await?;
-    }
     if let Some(b) = block_for(&d, &c, out) {
         values(cx, b).await?;
     }
     Ok(())
-}
-
-/// Undoes HDF5's byte shuffle (byte `j` of every element stored together),
-/// into a derived source.
-async fn unshuffle(cx: &Cx, span: Span, width: u64) -> Result<Span> {
-    let origin = Origin {
-        parent: span,
-        transform: "hdf5-unshuffle",
-    };
-    if let Some(found) = cx.derived(origin) {
-        return Ok(found.span);
-    }
-    if width <= 1 || span.len > MAX_CHUNK {
-        if width > 1 {
-            cx.diag(Diagnostic::limit(
-                "chunk too large to unshuffle; values are shown shuffled",
-            ));
-        }
-        return Ok(span);
-    }
-    let data = cx.read(span).await?;
-    let w = to_usize(width);
-    let n = data.len().checked_div(w).unwrap_or(0);
-    // Byte `j` of element `i` was stored at `j * n + i`; bytes after the
-    // last whole element are stored as they are.
-    let mut out = data.clone();
-    for (k, slot) in out.iter_mut().enumerate().take(n.saturating_mul(w)) {
-        if k % 65536 == 65535 {
-            cx.checkpoint().await;
-        }
-        let (i, j) = (k.checked_div(w).unwrap_or(0), k.checked_rem(w).unwrap_or(0));
-        if let Some(&b) = data.get(j.saturating_mul(n).saturating_add(i)) {
-            *slot = b;
-        }
-    }
-    let len = to_u64(data.len());
-    Ok(cx.add_derived(origin, out, len, None)?.span)
 }

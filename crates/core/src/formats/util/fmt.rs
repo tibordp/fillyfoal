@@ -46,7 +46,8 @@ pub fn grouped_count(n: impl Into<u64>, one: &str, many: &str) -> String {
     }
 }
 
-/// A byte count: `"1 byte"`, `"512 bytes"`, `"1.2 MiB"`.
+/// A byte count: `"1 byte"`, `"512 bytes"`, `"1.2 MiB"`; exact multiples
+/// of a unit have no fraction (`"4 KiB"`).
 pub fn size(n: u64) -> String {
     const UNITS: [&str; 6] = ["KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
     if n < 1024 {
@@ -57,12 +58,19 @@ pub fn size(n: u64) -> String {
         };
     }
     let mut value = n as f64 / 1024.0;
+    let mut divisor: u64 = 1024;
     let mut unit = 0usize;
     while value >= 1024.0 && unit < 5 {
         value /= 1024.0;
+        divisor = divisor.saturating_mul(1024);
         unit = unit.saturating_add(1);
     }
-    format!("{value:.1} {}", UNITS.get(unit).copied().unwrap_or("EiB"))
+    let name = UNITS.get(unit).copied().unwrap_or("EiB");
+    if n.checked_rem(divisor) == Some(0) {
+        format!("{} {name}", n.checked_div(divisor).unwrap_or(0))
+    } else {
+        format!("{value:.1} {name}")
+    }
 }
 
 /// Text shortened to `max` characters, with an ellipsis if cut.
@@ -156,6 +164,10 @@ mod tests {
     fn text() {
         assert_eq!(size(1), "1 byte");
         assert_eq!(size(1536), "1.5 KiB");
+        assert_eq!(size(4096), "4 KiB");
+        assert_eq!(size(256 << 10), "256 KiB");
+        assert_eq!(size(3 << 30), "3 GiB");
+        assert_eq!(size(1025), "1.0 KiB");
         assert_eq!(clip("abcdef", 3), "abc…");
         assert_eq!(preview("  a\n\tb  c ", 10), "a b c");
         assert_eq!(capitalize("élan"), "Élan");

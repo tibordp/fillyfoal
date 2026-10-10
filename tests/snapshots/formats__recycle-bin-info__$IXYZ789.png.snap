@@ -1,9 +1,9 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ $IXYZ789.png — deleted file "C:\\Users\\fixture\\Pictures\\old.png", 2.0 KiB  [0x0+0x220]
+▾ $IXYZ789.png — deleted file "C:\\Users\\fixture\\Pictures\\old.png", 2 KiB  [0x0+0x220]
     Version: 1  [0x0+0x8]
-    Original size: 2048 — 2.0 KiB  [0x8+0x8]
+    Original size: 2048 — 2 KiB  [0x8+0x8]
     Deletion time: 2017-07-14 02:40:00 UTC  [0x10+0x8]
     Original path: "C:\\Users\\fixture\\Pictures\\old.png"  [0x18+0x208]

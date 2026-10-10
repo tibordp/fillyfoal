@@ -26,7 +26,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Sector count: 131  [#1:0xdc+0x8]
           Compressed offset: 0x0  [#1:0xe4+0x8] → 0x0+0xdbe
           Compressed length: 3518  [#1:0xec+0x8]
-        ▾ Data — FAT16 filesystem "T", 10.0 MiB, 10196 clusters of 1.0 KiB  [0x0+0xdbe]
+        ▾ Data — FAT16 filesystem "T", 10.0 MiB, 10196 clusters of 1 KiB  [0x0+0xdbe]
           ▾ Boot sector (BPB) — OEM "BSD  4.4"  [#2:0x0+0x200]
               Jump instruction: eb 3c 90  |.<.|  [#2:0x0+0x3]
               OEM name: "BSD  4.4"  [#2:0x3+0x8]
@@ -68,7 +68,7 @@ expression: "common::explore(&display_name(&path), &data)"
             FAT 2 — copy  [#2:0x5200+0x5000]
           ▾ Root directory  [#2:0xa200+0x4000]
               Volume label: "T"  [#2:0xa200+0x20]
-            ▾ ._ — 4.0 KiB, modified 2026-10-06 00:39:18  [#2:0xa220+0x40]
+            ▾ ._ — 4 KiB, modified 2026-10-06 00:39:18  [#2:0xa220+0x40]
               ▾ Long name entries — 1 entries  [#2:0xa220+0x20]
                 ▾ Long name entry  [#2:0xa220+0x20]
                     Sequence number: 0x41  [#2:0xa220+0x1]
@@ -89,9 +89,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   First cluster (high word): 0  [#2:0xa254+0x2]
                   Modified: 2026-10-06 00:39:18 UTC  [#2:0xa256+0x4]
                   First cluster (low word): 2  [#2:0xa25a+0x2]
-                  File size: 4096 — 4.0 KiB  [#2:0xa25c+0x4]
-              ▾ Clusters — contiguous, 4.0 KiB
-                  Fragment 0 — file offset 0x0, 4.0 KiB  [#2:0xe200+0x1000]
+                  File size: 4096 — 4 KiB  [#2:0xa25c+0x4]
+              ▾ Clusters — contiguous, 4 KiB
+                  Fragment 0 — file offset 0x0, 4 KiB  [#2:0xe200+0x1000]
               ▾ Content — AppleDouble, finder info, resource fork  [#2:0xe200+0x1000]
                   Magic: 0x51607  [#2:0xe200+0x4]
                   Version: 0x20000  [#2:0xe204+0x4]
@@ -121,7 +121,7 @@ expression: "common::explore(&display_name(&path), &data)"
                       com.apple.provenance: 01 02 00 99 cd ad ea d4 24 84 76  |........$.v| — 11 bytes  [#2:0xe278+0x20] → #2:0xe298+0xb
                 ▾ Resource fork — resource fork:   [#2:0xf0e2+0x11e] → #2:0xe226+0xc
                     Header  [#2:0xf0e2+0x10]
-            ▾ ._hello.txt — 4.0 KiB, modified 2026-10-06 00:39:18  [#2:0xa260+0x40]
+            ▾ ._hello.txt — 4 KiB, modified 2026-10-06 00:39:18  [#2:0xa260+0x40]
               ▾ Long name entries — 1 entries  [#2:0xa260+0x20]
                 ▾ Long name entry  [#2:0xa260+0x20]
                     Sequence number: 0x41  [#2:0xa260+0x1]
@@ -142,9 +142,9 @@ expression: "common::explore(&display_name(&path), &data)"
                   First cluster (high word): 0  [#2:0xa294+0x2]
                   Modified: 2026-10-06 00:39:18 UTC  [#2:0xa296+0x4]
                   First cluster (low word): 6  [#2:0xa29a+0x2]
-                  File size: 4096 — 4.0 KiB  [#2:0xa29c+0x4]
-              ▾ Clusters — contiguous, 4.0 KiB
-                  Fragment 0 — file offset 0x0, 4.0 KiB  [#2:0xf200+0x1000]
+                  File size: 4096 — 4 KiB  [#2:0xa29c+0x4]
+              ▾ Clusters — contiguous, 4 KiB
+                  Fragment 0 — file offset 0x0, 4 KiB  [#2:0xf200+0x1000]
               ▾ Content — AppleDouble, finder info, resource fork  [#2:0xf200+0x1000]
                   Magic: 0x51607  [#2:0xf200+0x4]
                   Version: 0x20000  [#2:0xf204+0x4]
@@ -184,7 +184,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 First cluster (high word): 0  [#2:0xa2f4+0x2]
                 Modified: 2026-10-06 00:39:18 UTC  [#2:0xa2f6+0x4]
                 First cluster (low word): 6  [#2:0xa2fa+0x2]
-                File size: 4096 — 4.0 KiB  [#2:0xa2fc+0x4]
+                File size: 4096 — 4 KiB  [#2:0xa2fc+0x4]
             ▾ hello.txt — 10 bytes, modified 2026-10-06 00:38:56  [#2:0xa300+0x20]
               ▾ Directory entry  [#2:0xa300+0x20]
                   Short name: "HELLO.TXT"  [#2:0xa300+0xb]
@@ -205,7 +205,7 @@ expression: "common::explore(&display_name(&path), &data)"
                 ▾ Lines — 1 line  [#2:0x10200+0xa]
                     Line 1: "hello dmg"  [#2:0x10200+0x9]
               Unused entries — 503 free slots (end of directory)  [#2:0xa320+0x3ee0]
-            Data region — 9.0 KiB  [#2:0xe200+0x2400]
+            Data region — 9 KiB  [#2:0xe200+0x2400]
           ▾ Free clusters — from the FAT
       ▾ Chunk 1 — ignore, sectors 131..+20375 (9.9 MiB)  [#1:0xf4+0x28]
           Type: ignore (0x2)  [#1:0xf4+0x4]

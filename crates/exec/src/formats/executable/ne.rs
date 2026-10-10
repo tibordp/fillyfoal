@@ -8,12 +8,12 @@ use std::sync::Arc;
 
 use super::pe::resource::content16;
 use super::pe::tables::RESOURCE_TYPE;
-use super::push_nodes;
 use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::fmt::clip;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};

@@ -79,10 +79,6 @@ fn handle(data: &[u8], at: usize) -> Option<(u64, u64, usize)> {
     Some((offset, size, e))
 }
 
-fn mask(crc: u32) -> u32 {
-    crc.rotate_right(15).wrapping_add(0xa282_ead8)
-}
-
 /// Which table flavour a block belongs to: compression type numbers and
 /// framing differ between LevelDB and RocksDB (and its format versions).
 #[derive(Clone, Copy)]
@@ -328,8 +324,8 @@ async fn read_block(
         cx.checkpoint().await;
     }
     let crc = !crc32c_update(crc, &[kind]);
-    let diag =
-        (mask(crc) != stored).then(|| Diagnostic::warning("block checksum mismatch (CRC-32C)"));
+    let diag = (crate::codec::crc::mask_crc32c(crc) != stored)
+        .then(|| Diagnostic::warning("block checksum mismatch (CRC-32C)"));
     Ok((data, kind, diag))
 }
 

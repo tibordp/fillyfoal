@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ exfat.img — exFAT filesystem "FIXTURE", 1.0 MiB, 224 clusters of 4.0 KiB  [0x0+0x100000]
+▾ exfat.img — exFAT filesystem "FIXTURE", 1 MiB, 224 clusters of 4 KiB  [0x0+0x100000]
   ▾ Boot sector  [0x0+0x200]
       Jump instruction: eb 76 90  |.v.|  [0x0+0x3]
       File system name: "EXFAT   "  [0x3+0x8]
@@ -136,7 +136,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [0x25000+0x11]
             Line 1: "hello from ExFAT"  [0x25000+0x10]
-    ▾ ._hello.txt — 4.0 KiB, modified 2026-10-05 22:44:42  [0x230c0+0x60]
+    ▾ ._hello.txt — 4 KiB, modified 2026-10-05 22:44:42  [0x230c0+0x60]
       ▾ Directory entries — 3 entries  [0x230c0+0x60]
         ▾ File  [0x230c0+0x20]
             Entry type: 0x85  [0x230c0+0x1]
@@ -162,13 +162,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x230e8+0x8]
             Reserved: 0  [0x230f0+0x4]
             First cluster: 6  [0x230f4+0x4]
-            Data length: 4096 — 4.0 KiB  [0x230f8+0x8]
+            Data length: 4096 — 4 KiB  [0x230f8+0x8]
         ▾ File name  [0x23100+0x20]
             Entry type: 0xc1  [0x23100+0x1]
             Flags: 0x0  [0x23101+0x1]
             Name characters: "._hello.txt"  [0x23102+0x1e]
-      ▾ Clusters — contiguous, 4.0 KiB
-          Fragment 0 — file offset 0x0, 4.0 KiB  [0x24000+0x1000]
+      ▾ Clusters — contiguous, 4 KiB
+          Fragment 0 — file offset 0x0, 4 KiB  [0x24000+0x1000]
       ▾ Content — AppleDouble, finder info, resource fork  [0x24000+0x1000]
           Magic: 0x51607  [0x24000+0x4]
           Version: 0x20000  [0x24004+0x4]
@@ -224,7 +224,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x23148+0x8]
             Reserved: 0  [0x23150+0x4]
             First cluster: 8  [0x23154+0x4]
-            Data length: 4096 — 4.0 KiB  [0x23158+0x8]
+            Data length: 4096 — 4 KiB  [0x23158+0x8]
         ▾ File name  [0x23160+0x20]
             Entry type: 0xc1  [0x23160+0x1]
             Flags: 0x0  [0x23161+0x1]
@@ -267,7 +267,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
           ▾ Lines — 1 line  [0x29000+0xc]
               Line 1: "nested file"  [0x29000+0xb]
-      ▾ ._nested.md — 4.0 KiB, modified 2026-10-05 22:44:42  [0x26060+0x60]
+      ▾ ._nested.md — 4 KiB, modified 2026-10-05 22:44:42  [0x26060+0x60]
         ▾ Directory entries — 3 entries  [0x26060+0x60]
           ▾ File  [0x26060+0x20]
               Entry type: 0x85  [0x26060+0x1]
@@ -293,13 +293,13 @@ expression: "common::explore(&display_name(&path), &data)"
               Valid data length: 4096  [0x26088+0x8]
               Reserved: 0  [0x26090+0x4]
               First cluster: 10  [0x26094+0x4]
-              Data length: 4096 — 4.0 KiB  [0x26098+0x8]
+              Data length: 4096 — 4 KiB  [0x26098+0x8]
           ▾ File name  [0x260a0+0x20]
               Entry type: 0xc1  [0x260a0+0x1]
               Flags: 0x0  [0x260a1+0x1]
               Name characters: "._nested.md"  [0x260a2+0x1e]
-        ▾ Clusters — contiguous, 4.0 KiB
-            Fragment 0 — file offset 0x0, 4.0 KiB  [0x28000+0x1000]
+        ▾ Clusters — contiguous, 4 KiB
+            Fragment 0 — file offset 0x0, 4 KiB  [0x28000+0x1000]
         ▾ Content — AppleDouble, finder info, resource fork  [0x28000+0x1000]
             Magic: 0x51607  [0x28000+0x4]
             Version: 0x20000  [0x28004+0x4]
@@ -330,7 +330,7 @@ expression: "common::explore(&display_name(&path), &data)"
           ▾ Resource fork — resource fork:   [0x28ee2+0x11e] → 0x28026+0xc
               Header  [0x28ee2+0x10]
         Unused entries — 122 free slots (end of directory)  [0x260c0+0xf40]
-    ▾ ._Sub directory — 4.0 KiB, modified 2026-10-05 22:44:42  [0x23180+0x60]
+    ▾ ._Sub directory — 4 KiB, modified 2026-10-05 22:44:42  [0x23180+0x60]
       ▾ Directory entries — 3 entries  [0x23180+0x60]
         ▾ File  [0x23180+0x20]
             Entry type: 0x85  [0x23180+0x1]
@@ -356,13 +356,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x231a8+0x8]
             Reserved: 0  [0x231b0+0x4]
             First cluster: 9  [0x231b4+0x4]
-            Data length: 4096 — 4.0 KiB  [0x231b8+0x8]
+            Data length: 4096 — 4 KiB  [0x231b8+0x8]
         ▾ File name  [0x231c0+0x20]
             Entry type: 0xc1  [0x231c0+0x1]
             Flags: 0x0  [0x231c1+0x1]
             Name characters: "._Sub directory"  [0x231c2+0x1e]
-      ▾ Clusters — contiguous, 4.0 KiB
-          Fragment 0 — file offset 0x0, 4.0 KiB  [0x27000+0x1000]
+      ▾ Clusters — contiguous, 4 KiB
+          Fragment 0 — file offset 0x0, 4 KiB  [0x27000+0x1000]
       ▾ Content — AppleDouble, finder info, resource fork  [0x27000+0x1000]
           Magic: 0x51607  [0x27000+0x4]
           Version: 0x20000  [0x27004+0x4]
@@ -438,7 +438,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Line endings: "LF" — 1 LF, 0 CRLF, 0 CR
         ▾ Lines — 1 line  [0x2b000+0x1f]
             Line 1: "a file with a rather long name"  [0x2b000+0x1e]
-    ▾ ._A file with a rather long name.txt — 4.0 KiB, modified 2026-10-05 22:44:42  [0x23280+0xa0]
+    ▾ ._A file with a rather long name.txt — 4 KiB, modified 2026-10-05 22:44:42  [0x23280+0xa0]
       ▾ Directory entries — 5 entries  [0x23280+0xa0]
         ▾ File  [0x23280+0x20]
             Entry type: 0x85  [0x23280+0x1]
@@ -464,7 +464,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x232a8+0x8]
             Reserved: 0  [0x232b0+0x4]
             First cluster: 12  [0x232b4+0x4]
-            Data length: 4096 — 4.0 KiB  [0x232b8+0x8]
+            Data length: 4096 — 4 KiB  [0x232b8+0x8]
         ▾ File name  [0x232c0+0x20]
             Entry type: 0xc1  [0x232c0+0x1]
             Flags: 0x0  [0x232c1+0x1]
@@ -477,8 +477,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Entry type: 0xc1  [0x23300+0x1]
             Flags: 0x0  [0x23301+0x1]
             Name characters: "me.txt"  [0x23302+0x1e]
-      ▾ Clusters — contiguous, 4.0 KiB
-          Fragment 0 — file offset 0x0, 4.0 KiB  [0x2a000+0x1000]
+      ▾ Clusters — contiguous, 4 KiB
+          Fragment 0 — file offset 0x0, 4 KiB  [0x2a000+0x1000]
       ▾ Content — AppleDouble, finder info, resource fork  [0x2a000+0x1000]
           Magic: 0x51607  [0x2a000+0x4]
           Version: 0x20000  [0x2a004+0x4]
@@ -508,7 +508,7 @@ expression: "common::explore(&display_name(&path), &data)"
               com.apple.provenance: 01 02 00 99 cd ad ea d4 24 84 76  |........$.v| — 11 bytes  [0x2a078+0x20] → 0x2a098+0xb
         ▾ Resource fork — resource fork:   [0x2aee2+0x11e] → 0x2a026+0xc
             Header  [0x2aee2+0x10]
-    ▾ binary.bin — 6.0 KiB, modified 2026-10-05 22:44:44  [0x23320+0x60]
+    ▾ binary.bin — 6 KiB, modified 2026-10-05 22:44:44  [0x23320+0x60]
       ▾ Directory entries — 3 entries  [0x23320+0x60]
         ▾ File  [0x23320+0x20]
             Entry type: 0x85  [0x23320+0x1]
@@ -534,16 +534,16 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 6144  [0x23348+0x8]
             Reserved: 0  [0x23350+0x4]
             First cluster: 15  [0x23354+0x4]
-            Data length: 6144 — 6.0 KiB  [0x23358+0x8]
+            Data length: 6144 — 6 KiB  [0x23358+0x8]
         ▾ File name  [0x23360+0x20]
             Entry type: 0xc1  [0x23360+0x1]
             Flags: 0x0  [0x23361+0x1]
             Name characters: "binary.bin"  [0x23362+0x1e]
-      ▾ Clusters — contiguous, 6.0 KiB
-          Fragment 0 — file offset 0x0, 6.0 KiB  [0x2d000+0x1800]
-      ▾ Content — 6.0 KiB  [0x2d000+0x1800]
+      ▾ Clusters — contiguous, 6 KiB
+          Fragment 0 — file offset 0x0, 6 KiB  [0x2d000+0x1800]
+      ▾ Content — 6 KiB  [0x2d000+0x1800]
           Data  [0x2d000+0x1800]
-    ▾ ._binary.bin — 4.0 KiB, modified 2026-10-05 22:44:42  [0x23380+0x60]
+    ▾ ._binary.bin — 4 KiB, modified 2026-10-05 22:44:42  [0x23380+0x60]
       ▾ Directory entries — 3 entries  [0x23380+0x60]
         ▾ File  [0x23380+0x20]
             Entry type: 0x85  [0x23380+0x1]
@@ -569,13 +569,13 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x233a8+0x8]
             Reserved: 0  [0x233b0+0x4]
             First cluster: 14  [0x233b4+0x4]
-            Data length: 4096 — 4.0 KiB  [0x233b8+0x8]
+            Data length: 4096 — 4 KiB  [0x233b8+0x8]
         ▾ File name  [0x233c0+0x20]
             Entry type: 0xc1  [0x233c0+0x1]
             Flags: 0x0  [0x233c1+0x1]
             Name characters: "._binary.bin"  [0x233c2+0x1e]
-      ▾ Clusters — contiguous, 4.0 KiB
-          Fragment 0 — file offset 0x0, 4.0 KiB  [0x2c000+0x1000]
+      ▾ Clusters — contiguous, 4 KiB
+          Fragment 0 — file offset 0x0, 4 KiB  [0x2c000+0x1000]
       ▾ Content — AppleDouble, finder info, resource fork  [0x2c000+0x1000]
           Magic: 0x51607  [0x2c000+0x4]
           Version: 0x20000  [0x2c004+0x4]
@@ -640,7 +640,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Entry type: 0xc1  [0x23440+0x1]
             Flags: 0x0  [0x23441+0x1]
             Name characters: "_index"  [0x23442+0x1e]
-    ▾ ._.metadata_never_index — 4.0 KiB, modified 2026-10-05 22:44:44  [0x23460+0x80]
+    ▾ ._.metadata_never_index — 4 KiB, modified 2026-10-05 22:44:44  [0x23460+0x80]
       ▾ Directory entries — 4 entries  [0x23460+0x80]
         ▾ File  [0x23460+0x20]
             Entry type: 0x85  [0x23460+0x1]
@@ -666,7 +666,7 @@ expression: "common::explore(&display_name(&path), &data)"
             Valid data length: 4096  [0x23488+0x8]
             Reserved: 0  [0x23490+0x4]
             First cluster: 17  [0x23494+0x4]
-            Data length: 4096 — 4.0 KiB  [0x23498+0x8]
+            Data length: 4096 — 4 KiB  [0x23498+0x8]
         ▾ File name  [0x234a0+0x20]
             Entry type: 0xc1  [0x234a0+0x1]
             Flags: 0x0  [0x234a1+0x1]
@@ -675,8 +675,8 @@ expression: "common::explore(&display_name(&path), &data)"
             Entry type: 0xc1  [0x234c0+0x1]
             Flags: 0x0  [0x234c1+0x1]
             Name characters: "er_index"  [0x234c2+0x1e]
-      ▾ Clusters — contiguous, 4.0 KiB
-          Fragment 0 — file offset 0x0, 4.0 KiB  [0x2f000+0x1000]
+      ▾ Clusters — contiguous, 4 KiB
+          Fragment 0 — file offset 0x0, 4 KiB  [0x2f000+0x1000]
       ▾ Content — AppleDouble, finder info, resource fork  [0x2f000+0x1000]
           Magic: 0x51607  [0x2f000+0x4]
           Version: 0x20000  [0x2f004+0x4]
@@ -707,6 +707,6 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Resource fork — resource fork:   [0x2fee2+0x11e] → 0x2f026+0xc
             Header  [0x2fee2+0x10]
       Unused entries — 89 free slots (end of directory)  [0x234e0+0xb20]
-    Cluster heap — 896.0 KiB  [0x20000+0xe0000]
+    Cluster heap — 896 KiB  [0x20000+0xe0000]
   ▾ Free clusters — from the allocation bitmap
-      Clusters 18–225 — free, 832.0 KiB  [0x30000+0xd0000]
+      Clusters 18–225 — free, 832 KiB  [0x30000+0xd0000]

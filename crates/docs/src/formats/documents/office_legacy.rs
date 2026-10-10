@@ -1463,7 +1463,7 @@ fn winword_fib(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, u32, u32)> {
     f.u16("nProduct").hex().emit()?;
     let lid = f
         .u16("Language")
-        .enumeration(crate::formats::util::lcid::LCIDS)
+        .enumeration(crate::formats::util::lcid::DISPLAY_NAMES)
         .emit()?;
     f.int::<i16>("pnNext").emit()?;
     f.u16("Flags").flags(WINWORD_FLAGS).emit()?;
@@ -1504,7 +1504,7 @@ async fn winword2(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "Word for Windows {} document, {}, {words} words",
         if ident == 0xa5db { "2.0" } else { "1.x" },
-        crate::formats::util::lcid::name(lid.into()).unwrap_or("unknown language")
+        crate::formats::util::lcid::display_name(lid.into()).unwrap_or("unknown language")
     ));
     Ok(())
 }

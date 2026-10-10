@@ -1784,8 +1784,8 @@ expression: "common::explore(&display_name(&path), &data)"
             ▾ [1]: "{dataset: 0x127f, dimension: 0}"  [0x28e1+0x10]
                 dataset: 0x127f  [0x28e1+0x8]
                 dimension: 0  [0x28e9+0x4]
-      ▾ Chunks — chunks of 512 (4.0 KiB)
-        ▾ Chunk [0]: 0x5952 — 4.0 KiB  [0x5952+0x1000]
+      ▾ Chunks — chunks of 512 (4 KiB)
+        ▾ Chunk [0]: 0x5952 — 4 KiB  [0x5952+0x1000]
             [0]: 0  [0x5952+0x8]
             [1]: 6  [0x595a+0x8]
             Chunk padding — 510 elements beyond the dataset's extent
@@ -2782,8 +2782,8 @@ expression: "common::explore(&display_name(&path), &data)"
               Type: scalar (0x0)  [0x1631+0x1]
           ▾ Data — 1 element, 4 bytes  [0x1632+0x4]
               Value: 0  [0x1632+0x4]
-      ▾ Chunks — chunks of 4096 (4.0 KiB)
-        ▾ Chunk [0]: 0x6952 — 4.0 KiB  [0x6952+0x1000]
+      ▾ Chunks — chunks of 4096 (4 KiB)
+        ▾ Chunk [0]: 0x6952 — 4 KiB  [0x6952+0x1000]
             [0]: 0  [0x6952+0x1]
             [1]: 1  [0x6953+0x1]
             Chunk padding — 4094 elements beyond the dataset's extent
@@ -4208,8 +4208,8 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Chunks — chunks of 2 (8 bytes)
           ▾ Chunk [0]: 0x7cf — 12 bytes, shuffle → deflate  [0x7cf+0xc]
             ▾ deflate stream — 12 bytes → 8 bytes  [0x7cf+0xc]
-                [0]: 6  [#2:0x0+0x4]
-                [1]: 12  [#2:0x4+0x4]
+                [0]: 6  [#1:0x0+0x4]
+                [1]: 12  [#1:0x4+0x4]
       ▾ station: 0x51f6 — dataset, vlen string UTF-8 [2], contiguous  [0x49a6+0x20] → 0x51f6+0x4
         ▾ Object header — version 2, 9 messages, 2 blocks  [0x51f6+0x12f]
             Signature: "OHDR"  [0x51f6+0x4]

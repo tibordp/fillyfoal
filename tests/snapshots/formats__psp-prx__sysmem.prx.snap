@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ sysmem.prx — PSP module "sceSystemMemoryManager" v1.1, tag 0x4c9494f0, ELF 32.0 KiB, devkit 0x6060010, compressed  [0x0+0x350]
+▾ sysmem.prx — PSP module "sceSystemMemoryManager" v1.1, tag 0x4c9494f0, ELF 32 KiB, devkit 0x6060010, compressed  [0x0+0x350]
   ▾ Header  [0x0+0xd4]
       Magic: "~PSP"  [0x0+0x4]
       Module attributes: 0x1000 [KERNEL]  [0x4+0x2]

@@ -16,8 +16,8 @@ use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value};
 
 pub use super::floats::f80_be;
-pub use super::val::enumv as enumerated;
-pub use super::val::{hex, text, uint};
+use super::val::enumv as enumerated;
+use super::val::{hex, text, uint};
 
 /// A leaf node with a value.
 pub fn leaf(name: impl Into<Cow<'static, str>>, span: Span, value: Value) -> Node {

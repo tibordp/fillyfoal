@@ -131,7 +131,7 @@ pub fn looks_like_text(data: &[u8]) -> bool {
 /// Seconds between 1601-01-01 (Windows FILETIME epoch) and 1970-01-01.
 const FILETIME_EPOCH: i64 = 11_644_473_600;
 /// Seconds between 1904-01-01 (classic Mac / HFS epoch) and 1970-01-01.
-const MAC_EPOCH: i64 = 2_082_844_800;
+pub const MAC_EPOCH: i64 = 2_082_844_800;
 
 /// Windows FILETIME (100 ns ticks since 1601) to Unix seconds.
 pub fn filetime_to_unix(ticks: u64) -> i64 {

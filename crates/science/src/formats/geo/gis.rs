@@ -8,6 +8,7 @@ use std::sync::Arc;
 use super::emit_nodes;
 use super::{enumv, fixed, hex, int, leaf, text, uint};
 use crate::bytes::{to_u64, to_usize, u16_le, u32_be, u32_le, u64_le};
+use crate::codec::Codec;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::dsl::{Cursor, Record, read_record};
@@ -1002,9 +1003,13 @@ async fn garmin_img(cx: Cx, input: Input) -> Result<()> {
                 .span(span)
                 .summary(format!("{size} bytes"))
                 .lazy(subfile, span),
-            Ok(span) => Node::new(name)
-                .span(span)
-                .summary(format!("{size} bytes, XOR-masked")),
+            Ok(span) => match cx.decode_lazy(span, &Codec::Xor { key: vec![x] }, span.len) {
+                Ok(plain) => Node::new(name)
+                    .span(span)
+                    .summary(format!("{size} bytes, XOR-masked"))
+                    .lazy(subfile, plain),
+                Err(e) => Node::new(name).span(span).diag(e),
+            },
             Err(e) => Node::new(name).span(fat).diag(e),
         };
         cx.push(node).await;

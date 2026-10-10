@@ -10,6 +10,8 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Path, Record, read_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
+use crate::formats::disk::ntfs::{ATTR_TYPES, FILE_ATTRIBUTES};
+use crate::formats::image::bmp::CLIPBOARD_FORMATS;
 use crate::formats::util::datakit::{clip, hex, size, text, uint};
 use crate::formats::{Head, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
@@ -24,24 +26,6 @@ fn filetime(ticks: u64) -> Value {
         unix_seconds: crate::text::filetime_to_unix(ticks),
     }
 }
-
-const FILE_ATTRIBUTES: FlagTable = &[
-    flag(0x0001, "READONLY"),
-    flag(0x0002, "HIDDEN"),
-    flag(0x0004, "SYSTEM"),
-    flag(0x0010, "DIRECTORY"),
-    flag(0x0020, "ARCHIVE"),
-    flag(0x0040, "DEVICE"),
-    flag(0x0080, "NORMAL"),
-    flag(0x0100, "TEMPORARY"),
-    flag(0x0200, "SPARSE_FILE"),
-    flag(0x0400, "REPARSE_POINT"),
-    flag(0x0800, "COMPRESSED"),
-    flag(0x1000, "OFFLINE"),
-    flag(0x2000, "NOT_CONTENT_INDEXED"),
-    flag(0x4000, "ENCRYPTED"),
-    flag(0x1000_0000, "DIRECTORY (index view)"),
-];
 
 // ---------------------------------------------------------------------------
 // Jump lists: *.customDestinations-ms
@@ -454,24 +438,6 @@ const MFT_FLAGS: FlagTable = &[
     flag(8, "SPECIAL_INDEX"),
 ];
 
-const ATTRIBUTE_TYPES: EnumTable = &[
-    (0x10, "$STANDARD_INFORMATION"),
-    (0x20, "$ATTRIBUTE_LIST"),
-    (0x30, "$FILE_NAME"),
-    (0x40, "$OBJECT_ID"),
-    (0x50, "$SECURITY_DESCRIPTOR"),
-    (0x60, "$VOLUME_NAME"),
-    (0x70, "$VOLUME_INFORMATION"),
-    (0x80, "$DATA"),
-    (0x90, "$INDEX_ROOT"),
-    (0xa0, "$INDEX_ALLOCATION"),
-    (0xb0, "$BITMAP"),
-    (0xc0, "$REPARSE_POINT"),
-    (0xd0, "$EA_INFORMATION"),
-    (0xe0, "$EA"),
-    (0x100, "$LOGGED_UTILITY_STREAM"),
-];
-
 const ATTRIBUTE_FLAGS: FlagTable = &[
     flag(1, "COMPRESSED"),
     flag(0x4000, "ENCRYPTED"),
@@ -663,7 +629,7 @@ async fn mft_entry(cx: Cx, (input, span): (Input, Span)) -> Result<()> {
             .lazy(mft_header, span),
     );
     for (i, a) in mft_attributes(&block.data, first).into_iter().enumerate() {
-        let type_name = lookup(ATTRIBUTE_TYPES, a.kind.into())
+        let type_name = lookup(ATTR_TYPES, a.kind.into())
             .map_or_else(|| format!("Attribute {:#x}", a.kind), str::to_owned);
         let name = if a.name.is_empty() {
             type_name
@@ -719,7 +685,7 @@ async fn mft_attribute(cx: Cx, (input, span, a): (Input, Span, MftAttr)) -> Resu
         data,
     };
     let mut f = Fields::emitting(&cx, &block, LE);
-    f.u32("Type").enumeration(ATTRIBUTE_TYPES).emit()?;
+    f.u32("Type").enumeration(ATTR_TYPES).emit()?;
     f.u32("Length").emit()?;
     let non_resident = f.u8("Non-resident").emit()?;
     let name_len = f.u8("Name length").emit()?;
@@ -2224,31 +2190,6 @@ fn clp_probe(h: &Head<'_>) -> bool {
 
 declare_format!(pub CLP = "clipboard", "Windows Clipboard file", ["clp"], "application/x-ms-clipboard",
     Probe::Custom(clp_probe), clp);
-
-const CLIPBOARD_FORMATS: EnumTable = &[
-    (1, "CF_TEXT"),
-    (2, "CF_BITMAP"),
-    (3, "CF_METAFILEPICT"),
-    (4, "CF_SYLK"),
-    (5, "CF_DIF"),
-    (6, "CF_TIFF"),
-    (7, "CF_OEMTEXT"),
-    (8, "CF_DIB"),
-    (9, "CF_PALETTE"),
-    (10, "CF_PENDATA"),
-    (11, "CF_RIFF"),
-    (12, "CF_WAVE"),
-    (13, "CF_UNICODETEXT"),
-    (14, "CF_ENHMETAFILE"),
-    (15, "CF_HDROP"),
-    (16, "CF_LOCALE"),
-    (17, "CF_DIBV5"),
-    (0x80, "CF_OWNERDISPLAY"),
-    (0x81, "CF_DSPTEXT"),
-    (0x82, "CF_DSPBITMAP"),
-    (0x83, "CF_DSPMETAFILEPICT"),
-    (0x8e, "CF_DSPENHMETAFILE"),
-];
 
 fn clp_entry_layout(f: &mut Fields<'_>, nt: &bool) -> Result<(u32, u32, u32, String)> {
     let id = if *nt {

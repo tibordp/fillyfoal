@@ -11,7 +11,7 @@ use crate::fields::Fields;
 use crate::formats::util::datakit::guid_le;
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{Guid, Value, lookup};
+use crate::value::{Value, lookup};
 
 use super::tables::{FILE_NODE_IDS, JCID_IS_PROPERTY_SET, JCIDS};
 
@@ -785,7 +785,7 @@ pub fn body(f: &mut Fields<'_>, hdr: &Hdr, file: Span, table: Option<&IdTable>) 
         0x024 => {
             b.index = Some(f.u32("index").emit()?);
             let g = f.guid("guid").emit()?;
-            b.guid = Some(guid_bytes(&g));
+            b.guid = Some(g.to_le_bytes());
         }
         0x025 => {
             f.u32("iIndexMapFrom").emit()?;
@@ -900,7 +900,7 @@ pub fn body(f: &mut Fields<'_>, hdr: &Hdr, file: Span, table: Option<&IdTable>) 
         0x094 => {
             b.fcr = Some(reference(f, hdr, file, "ref")?);
             let g = f.guid("guidReference").emit()?;
-            b.guid = Some(guid_bytes(&g));
+            b.guid = Some(g.to_le_bytes());
         }
         0x0A4 | 0x0A5 | 0x0C4 | 0x0C5 => {
             b.fcr = Some(reference(f, hdr, file, "ref")?);
@@ -945,21 +945,6 @@ fn ref_flags(v: u32) -> String {
     } else {
         parts.join(", ")
     }
-}
-
-pub fn guid_bytes(g: &Guid) -> [u8; 16] {
-    let mut out = [0u8; 16];
-    let mut parts = g
-        .data1
-        .to_le_bytes()
-        .into_iter()
-        .chain(g.data2.to_le_bytes())
-        .chain(g.data3.to_le_bytes())
-        .chain(g.data4);
-    for b in out.iter_mut() {
-        *b = parts.next().unwrap_or(0);
-    }
-    out
 }
 
 /// Parses `{xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}` (case-insensitive) into
@@ -1025,7 +1010,7 @@ mod tests {
             guid_le(&bytes).to_string(),
             "{bde316e7-2665-4511-a4c4-8d4d0b7a9eac}"
         );
-        assert_eq!(guid_bytes(&guid_le(&bytes)), bytes);
+        assert_eq!(guid_le(&bytes).to_le_bytes(), bytes);
         assert!(parse_guid("{BDE316E7-2665-4511-A4C4-8D4D0B7A9EA}").is_none());
     }
 

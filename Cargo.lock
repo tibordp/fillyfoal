@@ -182,6 +182,7 @@ dependencies = [
  "fillyfoal-core",
  "fillyfoal-data",
  "fillyfoal-exec",
+ "fillyfoal-image",
  "fillyfoal-text",
 ]
 

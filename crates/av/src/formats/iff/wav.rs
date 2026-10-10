@@ -742,14 +742,6 @@ fn smpte(v: u32) -> String {
     format!("{:+03}:{m:02}:{s:02}:{f:02}", h as i8)
 }
 
-const DISP_TYPE: EnumTable = &[
-    (1, "CF_TEXT"),
-    (2, "CF_BITMAP"),
-    (3, "CF_METAFILEPICT"),
-    (8, "CF_DIB"),
-    (14, "CF_ENHMETAFILE"),
-];
-
 const LEVL_FORMAT: EnumTable = &[(1, "8-bit"), (2, "16-bit")];
 const LEVL_POINTS: EnumTable = &[(1, "positive peaks"), (2, "positive and negative peaks")];
 
@@ -1209,7 +1201,7 @@ pub async fn chunk(cx: &Cx, chunk: &Chunk) -> Result<bool> {
             let block = cx.block(data.sub(0, 4)).await?;
             let kind = Fields::emitting(cx, &block, e)
                 .u32("Type")
-                .enumeration(DISP_TYPE)
+                .enumeration(crate::formats::image::bmp::CLIPBOARD_FORMATS)
                 .emit()?;
             let body = data.tail(4);
             match kind {

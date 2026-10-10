@@ -5,12 +5,12 @@
 
 use std::sync::Arc;
 
-use super::push_nodes;
 use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
+use crate::formats::util::arcutil::push_nodes;
 use crate::formats::util::fmt::clip;
 use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};

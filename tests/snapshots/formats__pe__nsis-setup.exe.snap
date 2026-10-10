@@ -411,7 +411,7 @@ expression: "common::explore(&display_name(&path), &data)"
               CRC: 0x907753de — valid  [#3:0x1d+0x4]
           ▾ Image data — 1 IDAT chunk, 12 bytes compressed → 4 bytes of scanlines  [#3:0x21+0x18]
             ▾ Compressed stream — zlib stream, 12 bytes  [#3:0x29+0xc]
-                CMF: 0x78 — deflate, 32.0 KiB window  [#3:0x29+0x1]
+                CMF: 0x78 — deflate, 32 KiB window  [#3:0x29+0x1]
                 FLG: 0x9c — default compression  [#3:0x2a+0x1]
             ▾ Scanlines — 1 row, 4 bytes each
                 Row 0: None (0x0)  [#4:0x0+0x4]
@@ -467,7 +467,7 @@ expression: "common::explore(&display_name(&path), &data)"
             CRC: 0x907753de — valid  [#3:0x1d+0x4]
         ▾ Image data — 1 IDAT chunk, 12 bytes compressed → 4 bytes of scanlines  [#3:0x21+0x18]
           ▾ Compressed stream — zlib stream, 12 bytes  [#3:0x29+0xc]
-              CMF: 0x78 — deflate, 32.0 KiB window  [#3:0x29+0x1]
+              CMF: 0x78 — deflate, 32 KiB window  [#3:0x29+0x1]
               FLG: 0x9c — default compression  [#3:0x2a+0x1]
           ▾ Scanlines — 1 row, 4 bytes each
               Row 0: None (0x0)  [#4:0x0+0x4]

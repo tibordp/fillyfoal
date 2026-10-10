@@ -2,8 +2,8 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ qemu-fixed.vhd — VHD fixed disk, 272.0 KiB (created by "qemu" 5.3 on "Wi2k")  [0x0+0x44200]
-  ▾ Virtual disk — FAT12 filesystem "FILLYFOAL", 256.0 KiB, 119 clusters of 2.0 KiB  [0x0+0x44000]
+▾ qemu-fixed.vhd — VHD fixed disk, 272 KiB (created by "qemu" 5.3 on "Wi2k")  [0x0+0x44200]
+  ▾ Virtual disk — FAT12 filesystem "FILLYFOAL", 256 KiB, 119 clusters of 2 KiB  [0x0+0x44000]
     ▾ Boot sector (BPB) — OEM "mkfs.fat"  [0x0+0x200]
         Jump instruction: eb 3c 90  |.<.|  [0x0+0x3]
         OEM name: "mkfs.fat"  [0x3+0x8]
@@ -138,8 +138,8 @@ expression: "common::explore(&display_name(&path), &data)"
         Unused entries — 509 free slots (end of directory)  [0x660+0x3fa0]
       Data region — 254.5 KiB  [0x4600+0x3fa00]
     ▾ Free clusters — from the FAT
-        Clusters 4–120 — free, 234.0 KiB  [0x5600+0x3a800]
-  ▾ Footer — fixed disk, 272.0 KiB  [0x44000+0x200]
+        Clusters 4–120 — free, 234 KiB  [0x5600+0x3a800]
+  ▾ Footer — fixed disk, 272 KiB  [0x44000+0x200]
       Cookie: "conectix"  [0x44000+0x8]
       Features: 0x2 [RESERVED]  [0x44008+0x4]
       File format version: 0x10000 — 1.0  [0x4400c+0x4]
@@ -148,11 +148,11 @@ expression: "common::explore(&display_name(&path), &data)"
       Creator application: "qemu" — QEMU  [0x4401c+0x4]
       Creator version: 0x50003 — 5.3  [0x44020+0x4]
       Creator host OS: "Wi2k" — Windows  [0x44024+0x4]
-      Original size: 278528 — 272.0 KiB  [0x44028+0x8]
-      Current size: 278528 — 272.0 KiB  [0x44030+0x8]
+      Original size: 278528 — 272 KiB  [0x44028+0x8]
+      Current size: 278528 — 272 KiB  [0x44030+0x8]
       Cylinders: 8  [0x44038+0x2]
       Heads: 4  [0x4403a+0x1]
-      Sectors per track: 17 — CHS capacity 272.0 KiB  [0x4403b+0x1]
+      Sectors per track: 17 — CHS capacity 272 KiB  [0x4403b+0x1]
       Disk type: fixed (0x2)  [0x4403c+0x4]
       Checksum: 0xffffe7e4  [0x44040+0x4]
       Unique id: "2c17bddd-9b7f-4141-b479-2355c171eb38"  [0x44044+0x10]

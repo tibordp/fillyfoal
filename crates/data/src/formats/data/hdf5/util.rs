@@ -91,15 +91,11 @@ pub fn group(name: impl Into<std::borrow::Cow<'static, str>>, children: Vec<Node
     if children.is_empty() {
         node
     } else {
-        node.lazy(emit_all, Arc::new(children))
+        node.lazy(
+            crate::formats::util::arcutil::push_nodes,
+            Arc::new(children),
+        )
     }
-}
-
-pub async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    for n in nodes.iter() {
-        cx.push(n.clone()).await;
-    }
-    Ok(())
 }
 
 /// Decodes fields from bytes held in memory, recording a node for each.

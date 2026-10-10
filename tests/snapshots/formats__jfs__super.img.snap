@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ super.img — JFS v2 filesystem "jfsvol", 64.0 MiB, 4096-byte blocks  [0x0+0x10000]
+▾ super.img — JFS v2 filesystem "jfsvol", 64 MiB, 4096-byte blocks  [0x0+0x10000]
     Reserved — 32 KiB left for boot loaders and partition data  [0x0+0x8000]
   ▾ Superblock — version 2  [0x8000+0xb8]
       Magic: "JFS1"  [0x8000+0x4]

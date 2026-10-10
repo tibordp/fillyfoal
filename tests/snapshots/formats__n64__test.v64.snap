@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ test.v64 — "FILLYFOAL", North America, byte-swapped (.v64)  [0x0+0x1040]
   ▾ Header — byte-swapped (.v64)  [#1:0x0+0x40]
@@ -17,5 +17,5 @@ expression: "common::explore(&name, &data)"
       Cartridge ID: "FF"  [#1:0x3c+0x2]
       Country: North America (0x45)  [#1:0x3e+0x1]
       Version: 0  [#1:0x3f+0x1]
-    Boot code (IPL3)  [0x40+0xfc0]
-    Program  [0x1000+0x40]
+    Boot code (IPL3)  [#1:0x40+0xfc0]
+    Program  [#1:0x1000+0x40]

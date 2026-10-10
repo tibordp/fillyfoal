@@ -913,45 +913,6 @@ const SWIFT_BLOCKS: EnumTable = &[
     (16, "OPTIONS_BLOCK"),
 ];
 
-/// Little-endian bit reader over a small buffer.
-struct Bits<'a> {
-    data: &'a [u8],
-    pos: u64,
-}
-
-impl Bits<'_> {
-    fn read(&mut self, n: u32) -> Option<u64> {
-        let mut v = 0u64;
-        for i in 0..n {
-            let byte = self.data.get(to_usize(self.pos / 8))?;
-            let bit = byte
-                .checked_shr(u32::try_from(self.pos % 8).unwrap_or(0))
-                .unwrap_or(0)
-                & 1;
-            v |= u64::from(bit).checked_shl(i)?;
-            self.pos = self.pos.saturating_add(1);
-        }
-        Some(v)
-    }
-
-    fn vbr(&mut self, n: u32) -> Option<u64> {
-        let hi = 1u64.checked_shl(n.saturating_sub(1))?;
-        let mut v = 0u64;
-        let mut shift = 0u32;
-        loop {
-            let chunk = self.read(n)?;
-            v |= (chunk & hi.saturating_sub(1)).checked_shl(shift)?;
-            if chunk & hi == 0 {
-                return Some(v);
-            }
-            shift = shift.saturating_add(n.saturating_sub(1));
-            if shift >= 64 {
-                return None;
-            }
-        }
-    }
-}
-
 async fn swiftmodule(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     cx.emit(
@@ -964,10 +925,7 @@ async fn swiftmodule(cx: Cx, input: Input) -> Result<()> {
     let mut blocks = Vec::new();
     while at < file.len {
         let window = cx.read_avail(file.sub(at, 16)).await?;
-        let mut bits = Bits {
-            data: &window,
-            pos: 0,
-        };
+        let mut bits = crate::formats::bytecode::bitcode::Bits::new(&window);
         let abbrev = bits.read(2);
         if abbrev != Some(1) {
             // Top level holds only blocks (ENTER_SUBBLOCK).

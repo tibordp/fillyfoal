@@ -39,7 +39,7 @@ use crate::value::{EnumTable, FlagTable, Value, flag};
 use crate::formats::util::val::hex;
 use datatype::Ty;
 use message::{Dense, Info, Layout, Link, Space, Target};
-use util::{File, FileRef, Rd, checksum_node, emit_all, group, shape};
+use util::{File, FileRef, Rd, checksum_node, group, shape};
 
 const SIGNATURE: &[u8] = b"\x89HDF\r\n\x1a\n";
 /// Objects followed below one another.
@@ -895,7 +895,10 @@ async fn attribute_node(cx: &Cx, st: &ObjState, info: Info, fields: Vec<Node>, s
         }
         None => node = node.summary("datatype not decoded"),
     }
-    node.lazy(emit_all, Arc::new(children))
+    node.lazy(
+        crate::formats::util::arcutil::push_nodes,
+        Arc::new(children),
+    )
 }
 
 async fn attributes(cx: Cx, st: ObjState) -> Result<()> {

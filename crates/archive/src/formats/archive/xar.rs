@@ -330,7 +330,18 @@ async fn files(cx: Cx, (input, toc, expected, heap): (Input, Span, u64, Span)) -
         let path = full_path(&entries, i);
         let mut children = vec![Node::new("Type").value(text(e.kind.clone()))];
         if !e.mode.is_empty() {
-            let mode = u64::from_str_radix(&e.mode, 8).unwrap_or(0);
+            // The mode holds only permission bits; the type is its own element.
+            let kind = match e.kind.as_str() {
+                "file" | "hardlink" => 0o100_000,
+                "directory" => 0o040_000,
+                "symlink" => 0o120_000,
+                "fifo" => 0o010_000,
+                "character special" => 0o020_000,
+                "block special" => 0o060_000,
+                "socket" => 0o140_000,
+                _ => 0,
+            };
+            let mode = u64::from_str_radix(&e.mode, 8).unwrap_or(0) | kind;
             children.push(
                 Node::new("Mode")
                     .value(text(e.mode.clone()))

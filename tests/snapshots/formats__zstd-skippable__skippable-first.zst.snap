@@ -23,7 +23,7 @@ expression: "common::explore(&display_name(&path), &data)"
           Block type: compressed (0x2)  [0x15+0x1]
           Block size: 10 — 10 bytes  [0x15+0x3]
           Compressed data  [0x18+0xa]
-      ▾ Block 1 — RLE, 128.0 KiB  [0x22+0x4]
+      ▾ Block 1 — RLE, 128 KiB  [0x22+0x4]
           Last block: false  [0x22+0x1]
           Block type: RLE (0x1)  [0x22+0x1]
           Block size: 131072 — 131072 repetitions  [0x22+0x3]

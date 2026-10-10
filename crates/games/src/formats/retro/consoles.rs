@@ -1,6 +1,7 @@
 //! Console ROM and executable headers.
 
 use crate::bytes::{to_u64, u16_le, u32_le};
+use crate::codec::Codec;
 use crate::codec::crc::crc16_modbus as crc16;
 use crate::cx::Cx;
 use crate::declare_format;
@@ -10,7 +11,7 @@ use crate::fields::Endian;
 use crate::formats::{Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::record;
-use crate::span::{Origin, Span};
+use crate::span::Span;
 use crate::value::{EnumTable, FlagTable, Value, field, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -497,41 +498,26 @@ record! {
 async fn n64(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let head = cx.read(file.sub(0, 0x40)).await?;
-    // Byte-swapped dumps are normalised into a derived copy of the header.
-    let (span, order) = match head.get(..4) {
-        Some(b"\x80\x37\x12\x40") => (file.sub(0, 0x40), "big-endian (.z64)"),
+    // Byte-swapped dumps are shown through a derived copy in native
+    // (big-endian) order, decoded as far as it is read.
+    let (rom, order) = match head.get(..4) {
+        Some(b"\x80\x37\x12\x40") => (file, "big-endian (.z64)"),
         Some(magic) => {
-            let swapped: Vec<u8> = if magic == b"\x37\x80\x40\x12" {
-                head.chunks(2)
-                    .flat_map(|c| c.iter().rev().copied())
-                    .collect()
+            let (width, order) = if magic == b"\x37\x80\x40\x12" {
+                (2, "byte-swapped (.v64)")
             } else {
-                head.chunks(4)
-                    .flat_map(|c| c.iter().rev().copied())
-                    .collect()
+                (4, "little-endian (.n64)")
             };
-            let decoded = cx.add_derived(
-                Origin {
-                    parent: file.sub(0, 0x40),
-                    transform: "n64-byteswap",
-                },
-                swapped,
-                0x40,
-                None,
-            )?;
-            let order = if magic == b"\x37\x80\x40\x12" {
-                "byte-swapped (.v64)"
-            } else {
-                "little-endian (.n64)"
-            };
-            (decoded.span, order)
+            let rom = cx.decode_lazy(file, &Codec::ByteSwap { width }, file.len)?;
+            (rom, order)
         }
         None => return Err(Diagnostic::truncated(file.sub(0, 4), 0)),
     };
+    let span = rom.sub(0, 0x40);
     let h: N64Header = read_record(&cx, span, BE).await?;
     cx.emit(N64Header::node("Header", span, BE).summary(order));
-    cx.emit(Node::new("Boot code (IPL3)").span(file.sub(0x40, 0xfc0)));
-    cx.emit(Node::new("Program").span(file.tail(0x1000)));
+    cx.emit(Node::new("Boot code (IPL3)").span(rom.sub(0x40, 0xfc0)));
+    cx.emit(Node::new("Program").span(rom.tail(0x1000)));
     let country = lookup(N64_COUNTRY, h.country.into()).unwrap_or("unknown region");
     cx.annotate(format!("{:?}, {country}, {order}", h.name.trim_end()));
     Ok(())

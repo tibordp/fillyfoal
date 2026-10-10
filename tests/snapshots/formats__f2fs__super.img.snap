@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ super.img — F2FS 1.16 filesystem "flashvol", 256.0 MiB, Linux version 6.1.0-fixture  [0x0+0x4000]
+▾ super.img — F2FS 1.16 filesystem "flashvol", 256 MiB, Linux version 6.1.0-fixture  [0x0+0x4000]
     Boot area — 1 KiB before the superblock  [0x0+0x400]
   ▾ Superblock — checksum valid  [0x400+0xc00]
       Magic: 0xf2f52010  [0x400+0x4]

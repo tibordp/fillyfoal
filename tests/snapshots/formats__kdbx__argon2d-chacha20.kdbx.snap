@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ argon2d-chacha20.kdbx — KeePass KDBX 4.0, ChaCha20, Argon2d, 2 passes, 64.0 KiB, 2 lanes  [0x0+0x74d]
+▾ argon2d-chacha20.kdbx — KeePass KDBX 4.0, ChaCha20, Argon2d, 2 passes, 64 KiB, 2 lanes  [0x0+0x74d]
     Signature 1: 0x9aa2d903  [0x0+0x4]
     Signature 2: 0xb54bfb67  [0x4+0x4]
     Minor version: 0  [0x8+0x2]
@@ -11,11 +11,11 @@ expression: "common::explore(&display_name(&path), &data)"
     Compression flags: gzip (0x1)  [0x21+0x9] → 0x26+0x4
     Master seed — 32 bytes  [0x2a+0x25] → 0x2f+0x20
     Encryption IV — 12 bytes  [0x4f+0x11] → 0x54+0xc
-  ▾ KDF parameters — Argon2d, 2 passes, 64.0 KiB, 2 lanes  [0x60+0x90] → 0x65+0x8b
+  ▾ KDF parameters — Argon2d, 2 passes, 64 KiB, 2 lanes  [0x60+0x90] → 0x65+0x8b
       Version: 0x100  [0x65+0x2]
       $UUID: "Argon2d"  [0x67+0x1e]
       I: 2  [0x85+0x12]
-      M: 65536 — 64.0 KiB  [0x97+0x12]
+      M: 65536 — 64 KiB  [0x97+0x12]
       P: 2  [0xa9+0xe]
       S — Bytes, 32 bytes  [0xb7+0x2a]
       V: 0x13  [0xe1+0xe]

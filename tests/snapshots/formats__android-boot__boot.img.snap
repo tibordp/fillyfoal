@@ -85,7 +85,7 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Header  [#2:0x9c+0x6e]
             Magic: "070701"  [#2:0x9c+0x6]
             Inode: 0  [#2:0xa2+0x8]
-            Mode: 0 — 0o0 ----------  [#2:0xaa+0x8]
+            Mode: 0 — 0o0 ?---------  [#2:0xaa+0x8]
             UID: 0  [#2:0xb2+0x8]
             GID: 0  [#2:0xba+0x8]
             Links: 1  [#2:0xc2+0x8]

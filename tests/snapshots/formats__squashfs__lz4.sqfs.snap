@@ -2,12 +2,12 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ lz4.sqfs — SquashFS 4.0, LZ4, 3 inodes, 128.0 KiB blocks, 221 bytes  [0x0+0xdd]
+▾ lz4.sqfs — SquashFS 4.0, LZ4, 3 inodes, 128 KiB blocks, 221 bytes  [0x0+0xdd]
   ▾ Superblock — version 4.0  [0x0+0x60]
       Magic: "hsqs"  [0x0+0x4]
       Inode count: 3  [0x4+0x4]
       Modification time: 2024-01-02 03:04:00 UTC  [0x8+0x4]
-      Block size: 131072 — 128.0 KiB  [0xc+0x4]
+      Block size: 131072 — 128 KiB  [0xc+0x4]
       Fragment count: 0  [0x10+0x4]
       Compression: LZ4 (0x5)  [0x14+0x2]
       Block size (log2): 17  [0x16+0x2]

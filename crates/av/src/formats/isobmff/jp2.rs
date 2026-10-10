@@ -6,6 +6,7 @@ use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::Fields;
 use crate::formats::embedded;
+use crate::formats::image::j2k::{MARKERS, PROGRESSION};
 use crate::node::Node;
 use crate::span::Span;
 use crate::value::EnumTable;
@@ -40,37 +41,6 @@ const ENUM_CS: EnumTable = &[
     (22, "YPbPr(1125/60)"),
     (23, "YPbPr(1250/50)"),
     (24, "e-sYCC"),
-];
-
-const MARKERS: EnumTable = &[
-    (0xff4f, "SOC"),
-    (0xff51, "SIZ"),
-    (0xff52, "COD"),
-    (0xff53, "COC"),
-    (0xff55, "TLM"),
-    (0xff57, "PLM"),
-    (0xff58, "PLT"),
-    (0xff5c, "QCD"),
-    (0xff5d, "QCC"),
-    (0xff5e, "RGN"),
-    (0xff5f, "POC"),
-    (0xff60, "PPM"),
-    (0xff61, "PPT"),
-    (0xff63, "CRG"),
-    (0xff64, "COM"),
-    (0xff90, "SOT"),
-    (0xff91, "SOP"),
-    (0xff92, "EPH"),
-    (0xff93, "SOD"),
-    (0xffd9, "EOC"),
-];
-
-const PROGRESSION: EnumTable = &[
-    (0, "LRCP"),
-    (1, "RLCP"),
-    (2, "RPCL"),
-    (3, "PCRL"),
-    (4, "CPRL"),
 ];
 
 /// Decodes JP2 boxes. Returns `false` for other types.

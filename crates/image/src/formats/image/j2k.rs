@@ -29,7 +29,8 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const MARKERS: EnumTable = &[
+/// JPEG 2000 codestream marker codes.
+pub const MARKERS: EnumTable = &[
     (0xff4f, "SOC"),
     (0xff51, "SIZ"),
     (0xff52, "COD"),
@@ -57,7 +58,8 @@ const MARKERS: EnumTable = &[
     (0xffd9, "EOC"),
 ];
 
-const PROGRESSION: EnumTable = &[
+/// Progression orders of the COD marker.
+pub const PROGRESSION: EnumTable = &[
     (0, "LRCP"),
     (1, "RLCP"),
     (2, "RPCL"),

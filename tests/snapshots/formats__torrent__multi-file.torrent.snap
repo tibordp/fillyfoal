@@ -1,8 +1,8 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ multi-file.torrent — torrent, "fillyfoal-sample", 3 files, 31.2 KiB, 16.0 KiB pieces  [0x0+0x1f3]
+▾ multi-file.torrent — torrent, "fillyfoal-sample", 3 files, 31.2 KiB, 16 KiB pieces  [0x0+0x1f3]
   ▾ Root — dict (6)  [0x0+0x1f3]
       announce: "http://tracker.example.invalid/announce"  [0xb+0x2a]
     ▾ announce-list — list (2)  [0x45+0x52]

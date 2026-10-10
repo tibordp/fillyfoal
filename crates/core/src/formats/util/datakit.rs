@@ -3,35 +3,19 @@
 use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::node::Node;
 use crate::span::Span;
 use crate::value::Value;
 
-pub use super::civil::CF_EPOCH;
+use super::civil::CF_EPOCH;
 pub use super::fmt::{clip, fourcc, size};
 pub use super::val::{enumv, hex, name_or, text, uint};
 /// Lowercase hexadecimal of `bytes` (hashes, IDs).
 pub use crate::text::hex_lower as hex_string;
 
-/// Mac OS Roman, the classic Macintosh character set.
-pub fn mac_roman(bytes: &[u8]) -> String {
-    crate::codec::charset::Charset::MacRoman.decode(bytes)
-}
-
 /// Reads up to `max` bytes of `span` as lossy UTF-8 text (for previews).
 pub async fn text_preview(cx: &Cx, span: Span, max: u64) -> Result<String> {
     let data = cx.read_avail(span.sub(0, max)).await?;
     Ok(String::from_utf8_lossy(&data).into_owned())
-}
-
-/// A leaf for a text field stored at `span`, read in full (bounded by `max`).
-pub async fn text_node(cx: &Cx, name: &'static str, span: Span, max: u64) -> Result<Node> {
-    let text = text_preview(cx, span, max).await?;
-    let mut node = Node::new(name).span(span).value(Value::Text(text));
-    if span.len > max {
-        node = node.summary(format!("first {max:#x} of {:#x} bytes", span.len));
-    }
-    Ok(node)
 }
 
 /// Seconds since 2001-01-01 as a Unix timestamp value.

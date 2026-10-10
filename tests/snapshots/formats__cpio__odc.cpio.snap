@@ -66,7 +66,7 @@ expression: "common::explore(&display_name(&path), &data)"
           CRC: 0x3a7e9b55 — valid  [0x131+0x4]
       ▾ Image data — 1 IDAT chunk, 10 bytes compressed → 2 bytes of scanlines  [0x135+0x16]
         ▾ Compressed stream — zlib stream, 10 bytes  [0x13d+0xa]
-            CMF: 0x78 — deflate, 32.0 KiB window  [0x13d+0x1]
+            CMF: 0x78 — deflate, 32 KiB window  [0x13d+0x1]
             FLG: 0x9c — default compression  [0x13e+0x1]
         ▾ Scanlines — 1 row, 2 bytes each
             Row 0: None (0x0)  [#1:0x0+0x2]
@@ -84,7 +84,7 @@ expression: "common::explore(&display_name(&path), &data)"
         Magic: "070707"  [0x157+0x6]
         Device: 0  [0x15d+0x6]
         Inode: 0  [0x163+0x6]
-        Mode: 0 — 0o0 ----------  [0x169+0x6]
+        Mode: 0 — 0o0 ?---------  [0x169+0x6]
         UID: 0  [0x16f+0x6]
         GID: 0  [0x175+0x6]
         Links: 1  [0x17b+0x6]

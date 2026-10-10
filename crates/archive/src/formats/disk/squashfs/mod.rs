@@ -96,6 +96,21 @@ const INODE_TYPES: EnumTable = &[
     (14, "socket (extended)"),
 ];
 
+/// The `S_IF*` bits for an inode type: squashfs keeps only the permission
+/// bits in the mode and the file type in the inode type.
+fn type_bits(kind: u16) -> u64 {
+    match kind {
+        1 | 8 => 0o040_000,
+        2 | 9 => 0o100_000,
+        3 | 10 => 0o120_000,
+        4 | 11 => 0o060_000,
+        5 | 12 => 0o020_000,
+        6 | 13 => 0o010_000,
+        7 | 14 => 0o140_000,
+        _ => 0,
+    }
+}
+
 record! {
     pub struct Superblock {
         magic: ascii[4] "Magic",
@@ -539,17 +554,20 @@ impl Inode {
         let mut s = if self.is_file() || self.is_dir() {
             format!(
                 "{}, {what}, {}",
-                unix_mode(self.mode.into()),
+                unix_mode(u64::from(self.mode) | type_bits(self.kind)),
                 fmt::size(self.file_size)
             )
         } else if matches!(self.kind, 4 | 5 | 11 | 12) {
             format!(
                 "{}, {what}, {}",
-                unix_mode(self.mode.into()),
+                unix_mode(u64::from(self.mode) | type_bits(self.kind)),
                 device_summary(self.rdev)
             )
         } else {
-            format!("{}, {what}", unix_mode(self.mode.into()))
+            format!(
+                "{}, {what}",
+                unix_mode(u64::from(self.mode) | type_bits(self.kind))
+            )
         };
         if self.nlink > 1 && !self.is_dir() {
             s.push_str(&format!(", {} links", self.nlink));
@@ -703,7 +721,7 @@ fn inode_layout(f: &mut Fields<'_>, ctx: &InodeCtx) -> Result<()> {
     f.u16("Type").enumeration(INODE_TYPES).emit()?;
     f.u16("Mode")
         .hex()
-        .with(|&m, n| n.summary(unix_mode(m.into())))
+        .with(|&m, n| n.summary(unix_mode(u64::from(m) | type_bits(ctx.kind))))
         .emit()?;
     f.u16("Owner (ID index)").emit()?;
     f.u16("Group (ID index)").emit()?;

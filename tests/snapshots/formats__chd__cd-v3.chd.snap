@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ cd-v3.chd — CHD v3, CD-ROM, 8.0 KiB in 2 hunks of 4.0 KiB, zlib, 1 metadata entries  [0x0+0x112]
+▾ cd-v3.chd — CHD v3, CD-ROM, 8 KiB in 2 hunks of 4 KiB, zlib, 1 metadata entries  [0x0+0x112]
   ▾ Header — version 3  [0x0+0x78]
       Magic: "MComprHD"  [0x0+0x8]
       Header length: 120  [0x8+0x4]

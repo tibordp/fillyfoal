@@ -97,6 +97,18 @@ pub struct Guid {
     pub data4: [u8; 8],
 }
 
+impl Guid {
+    /// The GUID's 16 bytes in Windows' mixed-endian order (the first three
+    /// fields little-endian), the inverse of `datakit::guid_le`.
+    pub fn to_le_bytes(&self) -> [u8; 16] {
+        let [a, b, c, d] = self.data1.to_le_bytes();
+        let [e, f] = self.data2.to_le_bytes();
+        let [g, h] = self.data3.to_le_bytes();
+        let [i, j, k, l, m, n, o, p] = self.data4;
+        [a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p]
+    }
+}
+
 impl fmt::Display for Guid {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let d = &self.data4;

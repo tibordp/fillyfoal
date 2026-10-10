@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ tiny.hqx — BinHex 4.0 "cored" (slac/lncl), data 9.0 MiB, resource 0 bytes, header CRC mismatch  [0x0+0x61]
+▾ tiny.hqx — BinHex 4.0 "cored" (slac/lncl), data 9 MiB, resource 0 bytes, header CRC mismatch  [0x0+0x61]
     ! warning: header CRC mismatch
     Banner: "(This file must be converted with BinHex 4.0)"  [0x0+0x2d]
     Encoded data — 48 bytes → 35 bytes  [0x2f+0x30]
@@ -15,5 +15,5 @@ expression: "common::explore(&display_name(&path), &data)"
     Data fork length: 9437184  [#1:0x18+0x4]
     Resource fork length: 0  [#1:0x1c+0x4]
     Header CRC: 0x0  [#1:0x20+0x2]
-  ▾ Data fork — 9.0 MiB  [#1:0x22+0x1]
+  ▾ Data fork — 9 MiB  [#1:0x22+0x1]
       ! unsupported: unrecognized format [#1:0x22+0x1]

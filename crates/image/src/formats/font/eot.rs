@@ -138,10 +138,11 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .span(data)
             .diag(Diagnostic::unsupported("MicroType Express compression"))
     } else if h.flags & 0x1000_0000 != 0 {
+        // TTEMBED_XORENCRYPTDATA: every byte XORed with 0x50.
         summary.push_str(", XOR-obfuscated");
-        Node::new("Font data")
-            .span(data)
-            .diag(Diagnostic::unsupported("XOR-obfuscated font data"))
+        let codec = crate::codec::Codec::Xor { key: vec![0x50] };
+        let plain = cx.decode_lazy(data, &codec, data.len)?;
+        embedded_as("Font data", input.nested(plain), &SFNT).desc("Font data XORed with 0x50")
     } else {
         embedded_as("Font data", input.nested(data), &SFNT)
     };

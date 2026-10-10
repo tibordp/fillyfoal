@@ -12,7 +12,6 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::util::arcutil::crc32c;
 use crate::formats::{Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -1051,21 +1050,14 @@ static TF_EVENT: Msg = Msg {
     title: &[],
 };
 
-fn masked_crc(data: &[u8]) -> u32 {
-    mask_crc(crc32c(data))
-}
-
-fn mask_crc(crc: u32) -> u32 {
-    crc.rotate_right(15).wrapping_add(0xa282_ead8)
-}
-
 fn tfrecord_probe(h: &Head<'_>) -> bool {
     let (Some(len), Some(crc), Some(bytes)) =
         (u64_le(h.data, 0), u32_le(h.data, 8), h.data.get(..8))
     else {
         return false;
     };
-    len.checked_add(16).is_some_and(|total| total <= h.len) && masked_crc(bytes) == crc
+    len.checked_add(16).is_some_and(|total| total <= h.len)
+        && crate::codec::crc::crc32c_masked(bytes) == crc
 }
 
 declare_format!(pub TFRECORD = "tfrecord", "TFRecord file (TensorFlow records, event logs)", ["tfrecord", "tfrecords"], "application/x-tfrecord",
@@ -1096,7 +1088,7 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
         let crc_at = cur.pos();
         let data_crc = cur.u32().await?;
         let mut node = Node::new(format!("Record {n}")).span(cur.since(start));
-        if head.get(..8).map(masked_crc) != Some(len_crc) {
+        if head.get(..8).map(crate::codec::crc::crc32c_masked) != Some(len_crc) {
             node = node.diag(
                 Diagnostic::malformed("length CRC mismatch")
                     .at(file.sub(start.saturating_add(8), 4)),
@@ -1105,7 +1097,7 @@ async fn tfrecord(cx: Cx, input: Input) -> Result<()> {
         if len <= CRC_MAX {
             let data = cx.read(body).await?;
             let crc = crate::formats::util::datakit::crc32c_paced(&cx, &data).await;
-            if mask_crc(crc) != data_crc {
+            if crate::codec::crc::mask_crc32c(crc) != data_crc {
                 node =
                     node.diag(Diagnostic::malformed("data CRC mismatch").at(file.sub(crc_at, 4)));
             }

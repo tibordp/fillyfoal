@@ -123,7 +123,8 @@ fn probe(h: &Head<'_>) -> bool {
         && bits.is_some_and(|b| matches!(b, 1 | 4 | 8 | 16 | 24 | 32))
 }
 
-const COMPRESSION: EnumTable = &[
+/// `BI_*` compression values of a Windows bitmap info header.
+pub const COMPRESSION: EnumTable = &[
     (0, "BI_RGB"),
     (1, "BI_RLE8"),
     (2, "BI_RLE4"),
@@ -378,8 +379,9 @@ fn fourcc_compression(&v: &u32, n: Node) -> Node {
 /// the header's size or the data ends.
 pub fn info_header(f: &mut Fields<'_>, how: &Compression) -> Result<Info> {
     let video = *how == Compression::FourCC;
+    let start = f.pos();
     let peek = f.u32("Size").get().unwrap_or(0);
-    f.seek(0);
+    f.seek(start);
     let core = peek == 12 && !video;
     let os2 = is_os2_size(peek) && !video;
     let size = f
@@ -390,8 +392,18 @@ pub fn info_header(f: &mut Fields<'_>, how: &Compression) -> Result<Info> {
         } else {
             "biSize"
         })
-        .with(|&s, n| n.summary(version_name(s)))
-        .desc("Size of this header, which identifies its version")
+        .with(move |&s, n| {
+            n.summary(if video && s > 40 {
+                "BITMAPINFOHEADER and codec data"
+            } else {
+                version_name(s)
+            })
+        })
+        .desc(if video {
+            "Size of this header and the codec data after it"
+        } else {
+            "Size of this header, which identifies its version"
+        })
         .emit()?;
     let mut info = Info {
         size,

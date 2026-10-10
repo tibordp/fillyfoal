@@ -71,7 +71,7 @@ av = ["dep:fillyfoal-av", "image", "text"]
 security = ["dep:fillyfoal-security", "text"]
 exec = ["dep:fillyfoal-exec", "archive", "image", "security", "text"]
 docs = ["dep:fillyfoal-docs", "av", "data", "image", "security", "text"]
-system = ["dep:fillyfoal-system", "archive", "data", "exec", "text"]
+system = ["dep:fillyfoal-system", "archive", "data", "exec", "image", "text"]
 science = ["dep:fillyfoal-science", "archive", "image", "text"]
 games = ["dep:fillyfoal-games", "system", "text"]
 

@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ minix3.img — Minix v3 filesystem, 64.0 KiB, 32 inodes, 60-character names  [0x0+0x10000]
+▾ minix3.img — Minix v3 filesystem, 64 KiB, 32 inodes, 60-character names  [0x0+0x10000]
   ▾ Superblock  [0x400+0x1f]
       Inodes: 32  [0x400+0x4]
       Padding: 0  [0x404+0x2]
@@ -74,9 +74,9 @@ expression: "common::explore(&display_name(&path), &data)"
         Zones (7 direct, indirect, double, triple): 0c 00 00 00 0a 00 00 00 0e 00 00 00 00 00 00 00 …  |................|  [0x1118+0x28]
       Inodes 6–32 — 27 unused  [0x1140+0x6c0]
   ▾ Free zones — from the zone bitmap
-      Zones 11–11 — free, 1.0 KiB  [0x2c00+0x400]
-      Zones 13–13 — free, 1.0 KiB  [0x3400+0x400]
-      Zones 15–63 — free, 49.0 KiB  [0x3c00+0xc400]
+      Zones 11–11 — free, 1 KiB  [0x2c00+0x400]
+      Zones 13–13 — free, 1 KiB  [0x3400+0x400]
+      Zones 15–63 — free, 49 KiB  [0x3c00+0xc400]
   ▾ Root directory — inode 1
     ▾ Inode 1  [0x1000+0x40]
         Mode: 0x41ed — drwxr-xr-x  [0x1000+0x2]
@@ -147,8 +147,8 @@ expression: "common::explore(&display_name(&path), &data)"
           Changed: 2024-05-17 13:37:42 UTC  [0x1114+0x4]
           Zones (7 direct, indirect, double, triple): 0c 00 00 00 0a 00 00 00 0e 00 00 00 00 00 00 00 …  |................|  [0x1118+0x28]
       ▾ Zones — 3 fragments, 2.5 KiB
-          Fragment 0 — file offset 0x0, 1.0 KiB  [0x3000+0x400]
-          Fragment 1 — file offset 0x400, 1.0 KiB  [0x2800+0x400]
+          Fragment 0 — file offset 0x0, 1 KiB  [0x3000+0x400]
+          Fragment 1 — file offset 0x400, 1 KiB  [0x2800+0x400]
           Fragment 2 — file offset 0x800, 552 bytes  [0x3800+0x228]
       ▾ Content — 2.5 KiB  [#1:0x0+0xa28]
           Data  [#1:0x0+0xa28]

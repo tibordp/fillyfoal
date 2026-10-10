@@ -2772,7 +2772,7 @@ expression: "common::explore(&display_name(&path), &data)"
       1: "/usr/lib/libSystem.B.dylib" — load, version 1356.0
       2: "/usr/lib/libobjc.A.dylib" — load, version 228.0
       3: "/usr/lib/swift/libswiftCore.dylib" — load, version 0.0
-  ▾ __TEXT — r-x, 15 sections, 8.0 KiB at 0x100000000  [0x0+0x2000]
+  ▾ __TEXT — r-x, 15 sections, 8 KiB at 0x100000000  [0x0+0x2000]
     ▾ Mach Header — MH_EXECUTE, arm64  [0x0+0x20]
         magic: 0xfeedfacf  [0x0+0x4]
         cputype: ARM64 (0x100000c)  [0x4+0x4]
@@ -5639,7 +5639,7 @@ expression: "common::explore(&display_name(&path), &data)"
               [4]: 0x400001f — frame (fp, lr), x19/x20, x21/x22, x23/x24, x25/x26, x27/x28  [0x1770+0x4]
               [5]: 0x4000003 — frame (fp, lr), x19/x20, x21/x22  [0x1774+0x4]
       Padding — 2.1 KiB  [0x1778+0x888]
-  ▾ __DATA_CONST — rw-, 4 sections, 4.0 KiB at 0x100002000  [0x2000+0x1000]
+  ▾ __DATA_CONST — rw-, 4 sections, 4 KiB at 0x100002000  [0x2000+0x1000]
     ▾ __got — S_NON_LAZY_SYMBOL_POINTERS, 168 bytes at 0x100002000  [0x2000+0xa8]
         _objc_opt_self: "_objc_opt_self" — bind import 0 from libobjc.A.dylib  [0x2000+0x8]
         _$sSS6appendyySSF: "_$sSS6appendyySSF" — bind import 1 from libswiftCore.dylib  [0x2008+0x8]
@@ -5670,7 +5670,7 @@ expression: "common::explore(&display_name(&path), &data)"
           version: 0  [0x2208+0x4]
           flags: 0x6030740 [HasCategoryClassProperties | 0x6030700] — Swift ABI 1539, pre-stable version 7  [0x220c+0x4]
       Padding — 3.5 KiB  [0x2210+0xdf0]
-  ▾ __DATA — rw-, 4 sections, 4.0 KiB at 0x100003000  [0x3000+0x1000]
+  ▾ __DATA — rw-, 4 sections, 4 KiB at 0x100003000  [0x3000+0x1000]
       __objc_const — S_REGULAR, 184 bytes at 0x100003000  [0x3000+0xb8]
       __data — S_REGULAR, 184 bytes at 0x1000030b8  [0x30b8+0xb8]
       Padding — 3.6 KiB  [0x3170+0xe90]

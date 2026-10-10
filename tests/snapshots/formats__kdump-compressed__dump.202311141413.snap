@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ dump.202311141413 — Linux kernel dump of web01, kernel 5.15.0-91-generic, 1.0 KiB blocks  [0x0+0x1818]
+▾ dump.202311141413 — Linux kernel dump of web01, kernel 5.15.0-91-generic, 1 KiB blocks  [0x0+0x1818]
   ▾ Disk dump header  [0x0+0x1d4]
       Signature: "KDUMP   "  [0x0+0x8]
       Header version: 6  [0x8+0x4]

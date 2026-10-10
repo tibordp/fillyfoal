@@ -435,11 +435,6 @@ const SNAPPY_CHUNK: EnumTable = &[
     (0xff, "stream identifier"),
 ];
 
-/// Snappy's masked CRC-32C.
-fn mask_crc(crc: u32) -> u32 {
-    (crc.rotate_right(15)).wrapping_add(0xa282_ead8)
-}
-
 pub async fn dissect_snappy(cx: Cx, input: Input) -> Result<()> {
     let file = input.span;
     let mut cur = Cursor::new(&cx, file, LE);
@@ -519,8 +514,9 @@ async fn snappy_chunk(cx: Cx, (span, kind): (Span, u8)) -> Result<()> {
             if kind == 0x01 {
                 if data.len <= cx.limits().max_read {
                     let bytes = cx.read(data).await?;
-                    let computed =
-                        mask_crc(crate::formats::util::datakit::crc32c_paced(&cx, &bytes).await);
+                    let computed = crate::codec::crc::mask_crc32c(
+                        crate::formats::util::datakit::crc32c_paced(&cx, &bytes).await,
+                    );
                     crc_node = if computed == stored {
                         crc_node.summary("valid")
                     } else {

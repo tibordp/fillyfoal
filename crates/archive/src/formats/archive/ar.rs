@@ -204,7 +204,7 @@ fn header_layout(f: &mut Fields<'_>, _: &()) -> Result<()> {
     ascii_num(f, "Modification time", 12, 10, Num::Time).emit()?;
     ascii_num(f, "Owner ID", 6, 10, Num::Dec).emit()?;
     ascii_num(f, "Group ID", 6, 10, Num::Dec).emit()?;
-    ascii_num(f, "Mode", 8, 8, Num::Mode).emit()?;
+    ascii_num(f, "Mode", 8, 8, Num::ModeOf(0o100_000)).emit()?;
     ascii_num(f, "Size", 10, 10, Num::Dec)
         .with(|&s, n| match s {
             Some(s) => n.summary(fmt::size(s)),

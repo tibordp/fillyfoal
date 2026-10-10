@@ -5,7 +5,7 @@
 use std::borrow::Cow;
 use std::sync::Arc;
 
-pub use crate::codec::crc::{crc16_arc, crc32c};
+pub use crate::codec::crc::crc16_arc;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Field, Fields};
@@ -24,7 +24,7 @@ pub fn hex(value: u64) -> Value {
     super::val::hex(value, 64)
 }
 
-pub use super::val::text;
+use super::val::text;
 
 /// A byte count for summaries: `"512 bytes"`, `"1.2 MiB"`.
 pub use super::fmt::size as human_size;
@@ -48,6 +48,17 @@ pub fn unsupported(name: impl Into<Cow<'static, str>>, span: Span, codec: &str) 
 pub async fn emit_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
     for node in nodes.iter() {
         cx.emit(node.clone());
+    }
+    Ok(())
+}
+
+/// Expander that pushes pre-built nodes with an exact count, waiting for
+/// the consumer between them: for groups whose children were decoded
+/// together with their parent but may be many.
+pub async fn push_nodes(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
+    cx.set_count(crate::node::Count::Exact(crate::bytes::to_u64(nodes.len())));
+    for node in nodes.iter() {
+        cx.push(node.clone()).await;
     }
     Ok(())
 }
@@ -103,6 +114,10 @@ pub enum Num {
     Oct,
     /// Unix permission bits and file type.
     Mode,
+    /// Unix permission bits of a file whose type is stored elsewhere (tar's
+    /// type flag) or implied (ar members): the summary shows them with
+    /// these type bits where the value has none.
+    ModeOf(u64),
     /// Seconds since the Unix epoch.
     Time,
 }
@@ -143,6 +158,11 @@ pub fn present(node: Node, v: u64, show: Num) -> Node {
         Num::Mode => node
             .value(uint(v))
             .summary(format!("0o{v:o} {}", unix_mode(v))),
+        Num::ModeOf(kind) => {
+            let full = if v & 0o170_000 == 0 { v | kind } else { v };
+            node.value(uint(v))
+                .summary(format!("0o{v:o} {}", unix_mode(full)))
+        }
         Num::Time => node.value(Value::Timestamp {
             unix_seconds: i64::try_from(v).unwrap_or(i64::MAX),
         }),
@@ -159,7 +179,7 @@ pub fn unix_mode(mode: u64) -> String {
         0o040_000 => 'd',
         0o020_000 => 'c',
         0o010_000 => 'p',
-        _ => '-',
+        _ => '?',
     };
     let mut out = String::with_capacity(10);
     out.push(kind);
@@ -397,7 +417,6 @@ mod tests {
     #[test]
     fn checksums() {
         assert_eq!(crc16_arc(b"123456789"), 0xbb3d);
-        assert_eq!(crc32c(b"123456789"), 0xe306_9283);
         assert_eq!(xxh32(b"", 0), 0x02cc_5d05);
         assert_eq!(
             xxh32(b"Nobody inspects the spammish repetition", 0),

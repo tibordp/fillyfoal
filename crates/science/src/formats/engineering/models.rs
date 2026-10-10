@@ -201,7 +201,10 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
         Node::new("Header")
             .span(file.sub(0, header_len))
             .summary(format.clone())
-            .lazy(emit_nodes, header_nodes),
+            .lazy(
+                crate::formats::util::arcutil::push_nodes,
+                std::sync::Arc::new(header_nodes),
+            ),
     );
     let binary = format.starts_with("binary");
     let mut at = header_len;
@@ -224,13 +227,6 @@ async fn ply(cx: Cx, input: Input) -> Result<()> {
         }
     }
     cx.annotate(format!("PLY {format}: {}", summary.join(", ")));
-    Ok(())
-}
-
-async fn emit_nodes(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    for node in nodes {
-        cx.push(node).await;
-    }
     Ok(())
 }
 

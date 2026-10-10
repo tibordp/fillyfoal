@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ mario.aps — APS N64 patch "Mario hack" for cart NSM, 2 records, output 8.0 MiB  [0x0+0x5e]
+▾ mario.aps — APS N64 patch "Mario hack" for cart NSM, 2 records, output 8 MiB  [0x0+0x5e]
     Magic: "APS10"  [0x0+0x5]
     Header type: N64-specific (0x1)  [0x5+0x1]
     Encoding method: 0  [0x6+0x1]
