@@ -226,14 +226,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let size = streams
         .iter()
         .fold(0u64, |a, s| a.saturating_add(s.uncompressed));
-    // The index records the decoded size, so large streams decode lazily.
-    cx.emit(crate::formats::content(
-        "Decompressed",
-        input,
-        file,
-        crate::codec::Codec::Xz,
-        Some(size),
-    ));
+    // The index records the decoded size, so large streams decode lazily,
+    // from the block before a read.
+    cx.emit(
+        Node::new("Decompressed")
+            .span(file)
+            .lazy(decompressed, (input, Arc::new(streams.clone()), size)),
+    );
     let check = streams.first().map_or(0, |s| s.check);
     let mut summary = format!(
         "xz, {}, {} uncompressed, {}",
@@ -277,6 +276,76 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             .await;
     }
     Ok(())
+}
+
+/// Seeds at most this many block starts: each costs a few dozen bytes.
+const MAX_SEEDS: u64 = 4096;
+
+async fn decompressed(
+    cx: Cx,
+    (input, streams, size): (Input, Arc<Vec<Stream>>, u64),
+) -> Result<()> {
+    let file = input.span;
+    let codec = crate::codec::Codec::Xz;
+    if !crate::formats::decodes_lazily(file, &codec, size) {
+        return crate::formats::expand_content(cx, (input, file, codec, Some(size))).await;
+    }
+    let seeds = block_seeds(&cx, file, &streams, size).await?;
+    crate::formats::expand_content_seeded(cx, (input, file, codec, size), seeds).await
+}
+
+/// Where the decoded content can be decoded from without what comes
+/// before: the block starts the indexes list (each block starts a new
+/// dictionary), at most [`MAX_SEEDS`] of them, evenly spread. Only up to
+/// the first stream whose header or index does not check out, the way a
+/// decoder from the start would stop or fail there.
+async fn block_seeds(
+    cx: &Cx,
+    file: Span,
+    streams: &[Stream],
+    size: u64,
+) -> Result<Vec<crate::cx::Seed>> {
+    let spacing = (size / MAX_SEEDS).max(1);
+    let mut seeds = Vec::new();
+    let mut out = 0u64;
+    let mut last = 0u64;
+    for (n, stream) in streams.iter().enumerate() {
+        let header = cx.read(stream.span.sub(0, StreamHeader::SIZE)).await?;
+        let index = cx.read(stream.index).await?;
+        let covered = index
+            .get(..index.len().saturating_sub(4))
+            .unwrap_or_default();
+        let stored = u32_le(&index, covered.len());
+        if !header.starts_with(b"\xfd7zXZ\0")
+            || (n == 0 && stream.span.offset != file.offset)
+            || stored != Some(crate::formats::util::datakit::crc32_paced(cx, covered).await)
+        {
+            break;
+        }
+        let flags = header.get(7).copied().unwrap_or(0);
+        let ordinal = u32::try_from(n).unwrap_or(u32::MAX).saturating_add(1);
+        let mut at = stream
+            .span
+            .offset
+            .saturating_sub(file.offset)
+            .saturating_add(StreamHeader::SIZE);
+        for (i, &(unpadded, uncompressed)) in stream.records.iter().enumerate() {
+            if i.is_multiple_of(4096) {
+                cx.checkpoint().await;
+            }
+            if out > 0 && out.saturating_sub(last) >= spacing {
+                last = out;
+                seeds.push(crate::cx::Seed {
+                    out_pos: out,
+                    in_pos: at,
+                    decoder: Box::new(crate::codec::xz::XzStream::at_block(flags, ordinal, at)),
+                });
+            }
+            at = at.saturating_add(align_up(unpadded, 4));
+            out = out.saturating_add(uncompressed);
+        }
+    }
+    Ok(seeds)
 }
 
 async fn stream_node(cx: Cx, (input, stream): (Input, Stream)) -> Result<()> {

@@ -393,6 +393,31 @@ async fn expand_content_hinted(
     expand_content(cx, (input, span, codec, None)).await
 }
 
+/// Whether [`expand_content`] decodes `span`, recorded to decode to
+/// `expected` bytes with `codec`, on demand: a large size, not beyond the
+/// codec's maximum ratio. Containers that record points the stream can be
+/// decoded from check this before collecting them for
+/// [`expand_content_seeded`].
+pub fn decodes_lazily(span: Span, codec: &Codec, expected: u64) -> bool {
+    !matches!(codec, Codec::Stored)
+        && expected > LAZY_THRESHOLD
+        && expected <= span.len.saturating_mul(codec.max_ratio())
+}
+
+/// [`expand_content`] for content that [`decodes_lazily`], with the points
+/// its container records it can be decoded from (see
+/// [`Cx::decode_lazy_seeded`]): a read anywhere decodes from the nearest
+/// one, the first time too.
+pub async fn expand_content_seeded(
+    cx: Cx,
+    (input, span, codec, len): (Input, Span, Codec, u64),
+    seeds: Vec<crate::cx::Seed>,
+) -> Result<()> {
+    let decoded = cx.decode_lazy_seeded(span, &codec, len, seeds)?;
+    cx.annotate(format!("{len:#x} bytes, decoded on demand"));
+    dissect_or_data(cx, input.nested(decoded)).await
+}
+
 pub async fn expand_content(
     cx: Cx,
     (input, span, codec, expected): (Input, Span, Codec, Option<u64>),
@@ -403,11 +428,7 @@ pub async fn expand_content(
         // multi-gigabyte tarball only decodes what those entries need. A
         // claimed size beyond the codec's maximum ratio is bogus and gets the
         // eager path (which reports the real size).
-        codec
-            if expected.is_some_and(|e| {
-                e > LAZY_THRESHOLD && e <= span.len.saturating_mul(codec.max_ratio())
-            }) =>
-        {
+        codec if expected.is_some_and(|e| decodes_lazily(span, &codec, e)) => {
             let len = expected.unwrap_or(0);
             let decoded = cx.decode_lazy(span, &codec, len)?;
             cx.annotate(format!("{len:#x} bytes, decoded on demand"));

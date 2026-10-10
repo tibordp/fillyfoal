@@ -586,3 +586,142 @@ fn unsized_cpio_streams() {
         cpio.len()
     );
 }
+
+/// `tests/data/lazy/{blocks.xz, frames.zst, seekable.zst}` (see
+/// `seekable.py`): 32 MiB of this, in 1 MiB xz blocks or zstd frames.
+fn seekable_byte(i: u64) -> u8 {
+    (i * 7 + (i >> 12) + (i >> 20) * 29) as u8
+}
+
+const SEEKABLE_LEN: u64 = 32 << 20;
+
+fn lazy_data(name: &str) -> Vec<u8> {
+    std::fs::read(format!(
+        "{}/tests/data/lazy/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap()
+}
+
+/// Steps of `budget` units a read of `len` bytes at `at` takes, checking
+/// the bytes.
+fn steps_to_read(host: &mut Host, source: Span, at: u64, len: u64, budget: u64) -> u64 {
+    let mut steps = 0;
+    let data = loop {
+        match host.session.read_step(source.sub(at, len), budget) {
+            ReadProgress::Done(data) => break data,
+            ReadProgress::NeedBytes(r) => supply(host, r),
+            ReadProgress::Yielded => steps += 1,
+        }
+        assert!(steps < 1_000_000, "read makes no progress");
+    };
+    let want: Vec<u8> = (at..at + len).map(seekable_byte).collect();
+    assert_eq!(data, want, "at {at:#x}");
+    steps
+}
+
+/// Emits the whole stream decoded on demand with nothing seeded: what a
+/// far read cost before containers seeded their streams.
+async fn unseeded(cx: Cx, (file, codec): (Span, fillyfoal::codec::Codec)) -> Result<()> {
+    let s = cx.decode_lazy(file, &codec, SEEKABLE_LEN)?;
+    cx.emit(Node::new("stream").span(s));
+    Ok(())
+}
+
+/// The decoded source of a fixture's "Decompressed" node, and of the same
+/// bytes decoded with nothing seeded.
+fn seeded_and_unseeded(name: &str, codec: fillyfoal::codec::Codec) -> [(Host, Span); 2] {
+    let data = lazy_data(name);
+    let mut host = Host::named(name, data.clone(), Limits::default());
+    host.explore(host.root, 1, 100);
+    let content = host.child(host.root, "Decompressed").unwrap();
+    host.session.expand(content, 1);
+    host.run();
+    let summary = host.session.node(content).unwrap().summary.clone();
+    assert!(
+        summary
+            .as_deref()
+            .unwrap_or("")
+            .contains("decoded on demand"),
+        "{name}: {summary:?}"
+    );
+    let child = host.session.children(content).unwrap().ids[0];
+    let span = host.session.node(child).unwrap().span.unwrap();
+    assert_eq!(span.len, SEEKABLE_LEN);
+
+    let file = Span::new(fillyfoal::SourceId::default_host(), 0, data.len() as u64);
+    let mut plain = Host::new(data, Limits::default());
+    let root = plain
+        .session
+        .add_root(Node::new("plain").lazy(unseeded, (file, codec)));
+    plain.session.expand(root, 1);
+    plain.run();
+    let stream = plain.session.children(root).unwrap().ids[0];
+    let plain_span = plain.session.node(stream).unwrap().span.unwrap();
+    [(host, span), (plain, plain_span)]
+}
+
+/// An xz index, a zstd seek table, and the frames a small multi-frame zstd
+/// file's headers record seed the decoded stream: the first read 30 MiB in
+/// decodes from the block or frame before it, not from the start.
+#[test]
+fn recorded_blocks_and_frames_seed_lazily_decoded_streams() {
+    use fillyfoal::codec::Codec;
+    for (name, codec) in [
+        ("blocks.xz", Codec::Xz),
+        ("seekable.zst", Codec::Zstd),
+        ("frames.zst", Codec::Zstd),
+    ] {
+        let [(mut host, span), (mut plain, plain_span)] = seeded_and_unseeded(name, codec);
+        let far = 30 << 20 | 12345;
+        let before = steps_to_read(&mut plain, plain_span, far, 4096, 50);
+        let after = steps_to_read(&mut host, span, far, 4096, 50);
+        eprintln!("{name}: a far first read takes {after} steps of 50 units (unseeded: {before})");
+        assert!(
+            after * 10 < before,
+            "{name}: {after} steps (unseeded: {before})"
+        );
+        // Everywhere else reads right too: the start, across a block
+        // boundary, and the end.
+        for at in [0, (7 << 20) - 100, SEEKABLE_LEN - 4096] {
+            steps_to_read(&mut host, span, at, 4096, 1 << 20);
+        }
+    }
+}
+
+/// Each stream of a multi-stream xz file is seeded from its own index.
+#[test]
+fn every_stream_of_an_xz_file_is_seeded() {
+    let one = lazy_data("blocks.xz");
+    let mut data = one.clone();
+    data.extend_from_slice(&[0; 8]);
+    data.extend_from_slice(&one);
+    let mut host = Host::named("two.xz", data, Limits::default());
+    host.explore(host.root, 1, 100);
+    let content = host.child(host.root, "Decompressed").unwrap();
+    host.session.expand(content, 1);
+    host.run();
+    let child = host.session.children(content).unwrap().ids[0];
+    let span = host.session.node(child).unwrap().span.unwrap();
+    assert_eq!(span.len, 2 * SEEKABLE_LEN);
+    for at in [
+        SEEKABLE_LEN + (30 << 20) + 5,
+        SEEKABLE_LEN - 2048,
+        2 * SEEKABLE_LEN - 4096,
+    ] {
+        let mut steps = 0;
+        let got = loop {
+            match host.session.read_step(span.sub(at, 4096), 50) {
+                ReadProgress::Done(data) => break data,
+                ReadProgress::NeedBytes(r) => supply(&mut host, r),
+                ReadProgress::Yielded => steps += 1,
+            }
+        };
+        let want: Vec<u8> = (at..at + 4096)
+            .map(|i| seekable_byte(i % SEEKABLE_LEN))
+            .collect();
+        assert_eq!(got, want, "at {at:#x}");
+        // At most a block (1 MiB) of decoding: about five steps.
+        assert!(steps <= 10, "{steps} steps at {at:#x}");
+    }
+}
