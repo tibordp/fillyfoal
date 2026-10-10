@@ -1322,6 +1322,12 @@ async fn revision_children(cx: Cx, (doc, index): (DocRef, usize)) -> Result<()> 
             node = node.target(doc.region.sub(tail.value, 4));
         } else if tail.value == 0 && doc.linearized.is_some() {
             node = node.summary("0 in the first-page trailer of a linearized file");
+        } else if doc.linearized.is_some() && doc.sections.iter().any(|s| s.offset == tail.value) {
+            // A linearized file's last startxref names the first-page
+            // section (ISO 32000-1 F.3.11).
+            node = node
+                .target(doc.region.sub(tail.value, 4))
+                .summary("the first-page cross-reference section of a linearized file");
         } else {
             node = node.diag(Diagnostic::warning(format!(
                 "points at {:#x}, but this section is at {:#x}",

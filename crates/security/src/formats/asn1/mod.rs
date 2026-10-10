@@ -429,7 +429,7 @@ async fn element(
         detail = constructed_summary(cx, content, schema).await?;
         node = nested(node, level, content, schema);
     } else {
-        let (n, d) = primitive(cx, level, tlv, content, node).await?;
+        let (n, d) = primitive(cx, level, tlv, content, node, schema).await?;
         node = n;
         detail = detail.or(d);
     }
@@ -508,6 +508,7 @@ async fn primitive(
     tlv: &Tlv,
     content: Span,
     node: Node,
+    schema: &'static Schema,
 ) -> Result<(Node, Option<String>)> {
     let is_string = tlv.is_universal(der::OCTET_STRING) || tlv.is_universal(der::BIT_STRING);
     if is_string && content.len > NESTED_MAX {
@@ -520,6 +521,11 @@ async fn primitive(
     let complete = to_u64(data.len()) == content.len;
     let len_detail = format!("{} bytes", content.len);
     if tlv.class != der::CLASS_UNIVERSAL {
+        if let Schema::Implicit(tag) = schema
+            && let Some(text) = der::string(*tag, &data)
+        {
+            return Ok((node.value(Value::Text(text)), None));
+        }
         return Ok(match der::printable(&data) {
             // dNSName, rfc822Name, URI: internationalised host names.
             Some(text) if complete => {

@@ -5,5 +5,5 @@ expression: "common::explore(&display_name(&path), &data)"
 ▾ tiny.pfa — Type 1 font Tiny-Regular  [0x0+0x144]
     Header: "%!PS-AdobeFont-1.0: Tiny-Regular 001.000"  [0x0+0x28]
     FontName: "Tiny-Regular"  [0x45+0x1b]
-  ▾ Private dictionary — 92 bytes decrypted  [0x72+0xd2]
+  ▾ Private dictionary — 92 bytes decrypted  [0x73+0xd1]
       Decrypted program — 92 bytes  [#1:0x0+0x5c]

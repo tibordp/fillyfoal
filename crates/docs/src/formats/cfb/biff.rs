@@ -971,7 +971,7 @@ impl Book {
     fn formula_version(&self) -> Option<u8> {
         if self.biff8 {
             Some(8)
-        } else if self.early() {
+        } else if matches!(self.version, 2..=5) {
             Some(self.version)
         } else {
             None
@@ -1120,6 +1120,11 @@ async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
                 };
                 book.names.defined.push(name);
             }
+            0x0018 if book.version == 5 => {
+                book.names
+                    .defined
+                    .push(name5(&data, book.codepage).unwrap_or_default());
+            }
             0x00fc if book.biff8 => {
                 let mut parts = vec![r.body()];
                 parts.extend(continues(cx, stream, pos.saturating_add(r.span.len)).await?);
@@ -1134,6 +1139,7 @@ async fn load_book(cx: &Cx, stream: Span) -> Result<Book> {
         }
         pos = pos.saturating_add(r.span.len);
     }
+    book.names.tabs = sheets.clone();
     book.names.xti = xti
         .into_iter()
         .map(|(sb, first)| {
@@ -1549,11 +1555,9 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
         0x0006 => {
             let cce = to_usize(u16_le(data, 20)?.into());
             let rgce = data.get(22..22usize.saturating_add(cce))?;
-            let text = if book.biff8 {
-                ptg::tokens(rgce, &book.names).1
-            } else {
-                None
-            };
+            let text = book
+                .formula_version()
+                .and_then(|v| ptg::tokens_for(rgce, &book.names, v).1);
             let value = formula_value(data)?;
             match text {
                 Some(t) => format!("{} = {t} → {value}", cell(data)?),
@@ -1696,6 +1700,22 @@ async fn describe(cx: &Cx, kind: u16, data: &[u8], book: &Book, parts: &[Span]) 
             }
         },
         0x0017 if book.biff8 => format!("{} references", u16_le(data, 0)?),
+        0x0017 => extern_sheet(&xl_string(data, 0, StrForm::Bytes8)?.0),
+        0x0016 => format!("{} EXTERNSHEET records", u16_le(data, 0)?),
+        0x0018 if book.version == 5 => {
+            let name = name5(data, book.codepage)?;
+            let cch = usize::from(*data.get(3)?);
+            let flags = u16_le(data, 0)?;
+            let cce = usize::from(u16_le(data, 4)?);
+            let at = 14usize.saturating_add(if flags & 0x20 != 0 { 1 } else { cch });
+            let formula = data
+                .get(at..at.saturating_add(cce))
+                .and_then(|r| ptg::tokens_for(r, &book.names, 5).1);
+            match formula {
+                Some(f) => format!("{name} = {f}"),
+                None => name,
+            }
+        }
         0x013d => format!("{} sheet IDs", data.len() / 2),
         0x005d => {
             let ot = u16_le(data, 4)?;
@@ -2005,6 +2025,22 @@ async fn record(
             }
         }
         0x0018 if biff8 => name_record(&mut f, &book)?,
+        0x0018 if book.version == 5 => name_record5(&mut f, &book)?,
+        0x0016 => {
+            f.u16("cxals")
+                .desc("EXTERNSHEET records that follow")
+                .emit()?;
+        }
+        0x0017 => {
+            f.u8("cch").emit()?;
+            let at = to_usize(f.pos());
+            let raw = f.block().data.get(at..).unwrap_or_default().to_vec();
+            let text = extern_sheet(&rec::codepage_text(book.codepage, &raw));
+            f.bytes("rgch", to_u64(raw.len()))
+                .with(|_, n| n.summary(text))
+                .desc("Encoded document and sheet name")
+                .emit()?;
+        }
         0x005d if biff8 => obj(&mut f)?,
         0x001c if biff8 => {
             f.u16("rw").emit()?;
@@ -2419,6 +2455,59 @@ fn name_record(f: &mut Fields<'_>, book: &Book) -> Result<()> {
     );
     f.skip(cce);
     Ok(())
+}
+
+/// The name of a BIFF5 NAME record (its built-in code with fBuiltin).
+fn name5(data: &[u8], codepage: u16) -> Option<String> {
+    let flags = u16_le(data, 0)?;
+    let cch = usize::from(*data.get(3)?);
+    Some(if flags & 0x20 != 0 {
+        ptg::builtin_name(*data.get(14)?)
+    } else {
+        rec::codepage_text(codepage, data.get(14..14usize.saturating_add(cch))?)
+    })
+}
+
+/// BIFF5 NAME: flags, shortcut, name and formula lengths, the EXTERNSHEET
+/// and sheet indices, four description lengths, the name (8-bit) and the
+/// formula.
+fn name_record5(f: &mut Fields<'_>, book: &Book) -> Result<()> {
+    let flags = f.u16("Flags").flags(NAME_FLAGS).emit()?;
+    f.u8("chKey").emit()?;
+    let cch = f.u8("cch").emit()?;
+    let cce = f.u16("cce").emit()?;
+    f.u16("ixals")
+        .desc("EXTERNSHEET index of a local name's sheet")
+        .emit()?;
+    f.u16("itab")
+        .desc("1-based sheet index for a local name, 0 for a global one")
+        .emit()?;
+    f.u8("cchCustMenu").emit()?;
+    f.u8("cchDescription").emit()?;
+    f.u8("cchHelptopic").emit()?;
+    f.u8("cchStatustext").emit()?;
+    let used = if flags & 0x20 != 0 { 1 } else { u64::from(cch) };
+    if let Some(name) = name5(&f.block().data, book.codepage) {
+        f.node(
+            Node::new("Name")
+                .span(f.peek_span(used))
+                .value(Value::Text(name)),
+        );
+    }
+    f.skip(used);
+    rgce_tokens(f, book, cce, false)
+}
+
+/// An EXTERNSHEET record's encoded name: a leading code says what it is.
+fn extern_sheet(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some('\u{3}') => format!("sheet {} of this workbook", quoted(chars.as_str(), 60)),
+        Some('\u{2}') => format!("sheet {} of this document", quoted(chars.as_str(), 60)),
+        Some('\u{4}') => "this workbook (add-in functions)".to_owned(),
+        Some('\u{1}') => format!("external document {}", quoted(chars.as_str(), 60)),
+        _ => quoted(s, 60),
+    }
 }
 
 /// OBJ: a list of sub-records ending with ftEnd.

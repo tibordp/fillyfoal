@@ -8,13 +8,13 @@ expression: "common::explore(&display_name(&path), &data)"
       FontName: "FillyTest"
       Text — 208 bytes  [0x6+0xd0]
   ▾ Segment 1: Binary (eexec) (0x2) — 502 bytes decrypted  [0xd6+0x200]
-      RD{string: "currentfile exch readstring pop}executeonly"
-      ND{noaccess: "def}executeonly"
-      NP{noaccess: "put}executeonly"
+      RD: "{string currentfile exch readstring pop}executeonly"
+      ND: "{noaccess def}executeonly"
+      NP: "{noaccess put}executeonly"
       BlueValues: "[-15 0 700 715]"
       StdHW: "[50]"
       lenIV: "4"
-      MinFeature{16: "16}def"
+      MinFeature: "{16 16}"
       password: "5839"
       Subrs: 1
     ▾ CharStrings — 3 glyphs  [#1:0x13b+0xbb]
