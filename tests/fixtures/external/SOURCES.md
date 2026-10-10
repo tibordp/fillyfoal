@@ -87,7 +87,8 @@ libavformat 62.12.102 / libavcodec 62.28.102, i.e. FFmpeg 8).
 | `apfs/apfs.img.gz` | macOS newfs_apfs 2811.120.14.0.1 | formatter string in the superblock; populated on a mounted volume. Stored with `gzip -n` (the harness inflates it) |
 | `exfat/exfat.img.gz` | macOS newfs_exfat | populated on a mounted volume (AppleDouble `._` files with `com.apple.provenance`). Stored with `gzip -n` |
 | `hfsplus/hfsplus.img.gz` | macOS (newfs_hfs/hdiutil, inferred) | last-mounted version `10.0` (macOS); not byte-reproduced. Stored with `gzip -n` |
-| `udf/` | macOS hdiutil (DiscRecording 9.0.3d5) | `sh tests/data/udf/gen.sh tests/fixtures/external` (`hdiutil makehybrid -udf -udf-version 1.02` / `1.50`; 2.00 and 2.01 produce the same bytes as 1.50); not byte-reproducible (recording times, volume set ID). Stored with `gzip -9 -n` |
+| `udf/udf-1.02.iso.gz` | macOS hdiutil (DiscRecording 9.0.3d5) | `sh tests/data/udf/gen.sh tests/fixtures/external` (`hdiutil makehybrid -udf -udf-version 1.02` / `1.50`; 2.00 and 2.01 produce the same bytes as 1.50); not byte-reproducible (recording times, volume set ID). Stored with `gzip -9 -n` |
+| `udf/udf-1.50.iso.gz` | macOS hdiutil (DiscRecording 9.0.3d5) | same script, `-udf-version 1.50`; not byte-reproducible. Stored with `gzip -9 -n` |
 | `iso9660/udf-bridge.iso.gz` | macOS hdiutil (DiscRecording 9.0.3d5) | same script: `hdiutil makehybrid -iso -udf` (ISO 9660 with Rock Ridge plus a UDF 1.50 bridge); not byte-reproducible |
 | `iso9660/pycdlib-udf.iso.gz` | pycdlib 1.21.0 | same script: `uv run --with pycdlib==1.21.0 python tests/data/udf/pycdlib_udf.py` (`udf="2.60"`, though the descriptors it writes say UDF 1.02 and NSR02; includes a UDF symlink); not byte-reproducible (timestamps) |
 | `swap/mkswap.img` | util-linux mkswap | commit 3dc63ea4 ("a real mkswap fixture"); label `realswap`, UUID chosen with `-U` |
@@ -122,6 +123,43 @@ byte-reproducible; the others are (the scripts fix UUIDs, labels and times).
 | `fat/` | dosfstools 4.2 mkfs.fat, mtools 4.0 | `make-fat.sh`: `mkfs.fat -F 12/16/32 -i … -n FILLYFOAL`, filled with `mcopy -s -m` (long names, subdirectories) under `SOURCE_DATE_EPOCH` |
 | `exfat/linux-exfat.img.raw.zst` | exfatprogs mkfs.exfat, Linux 7.0 exfat | `make-fat.sh`: `mkfs.exfat -L fillyfoal -c 4K -b 4K`, mounted and filled; random volume serial |
 | `ntfs/mkntfs.img.raw.zst` | ntfs-3g 2022.10 mkntfs, Linux 7.0 ntfs3 | `make-fat.sh`: `mkntfs -T -F -L fillyfoal` (1100 KiB), mounted with ntfs3 and filled. 128 KiB compressed: the 128 KiB `$UpCase` table does not compress |
+## Disk images (Linux tools)
+
+All made by `sh tests/data/disk/make-fixtures.sh` in a Debian trixie
+container (`tests/data/disk/Dockerfile`, host name `fillyfoal`) running
+`tests/data/disk/inner.sh`; the commands are in that script. Tools: QEMU
+10.0.13 (`qemu-img`, `qemu-io`), util-linux 2.41 `sfdisk`, gdisk 1.0.10
+`sgdisk`, mtools `mformat`/`mcopy`, xorriso 1.5.6, genisoimage 1.1.11,
+udftools 2.3 `mkudffs`, cryptsetup 2.7.5. None is byte-reproducible
+(timestamps, random UUIDs and salts). The guest content is a small FAT
+volume (`mkfs.fat`, two text files). Images over 64 KiB are stored whole as
+`<name>.raw.zst` (`zstd -19`; the harness decompresses them).
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `qcow/qemu-v1.qcow` | qemu-img | `qemu-img convert -O qcow -c` (QCOW version 1, compressed clusters) |
+| `qcow/qemu-v2-backing.qcow2` | qemu-img, qemu-io | `qemu-img create -o compat=0.10,cluster_size=4096 -b base.qcow2 -F qcow2`, then plain and compressed writes; backing file not included |
+| `qcow/qemu-v3.qcow2` | qemu-img, qemu-io | `compat=1.1,cluster_size=4096`: zero and compressed clusters, internal snapshot, writes after it (copy on write), persistent bitmap |
+| `qcow/qemu-extl2-zstd.qcow2.raw.zst` | qemu-img, qemu-io | `extended_l2=on,cluster_size=16k,compression_type=zstd`: subcluster writes and zeroes, a zstd-compressed cluster |
+| `qcow/qemu-luks.qcow2.raw.zst` | qemu-img | `encrypt.format=luks` (passphrase `fillyfoal`); edit: LUKS key material zeroed (`zero-key-material.py`) |
+| `qcow/qemu-datafile.qcow2` | qemu-img | `data_file=qemu-datafile.raw,data_file_raw=on`; data file not included |
+| `vmdk/qemu-monolithic-sparse.vmdk.raw.zst` | qemu-img | `convert -O vmdk -o subformat=monolithicSparse` (redundant grain tables) |
+| `vmdk/qemu-stream-optimized.vmdk.raw.zst` | qemu-img | `subformat=streamOptimized` (QEMU keeps the tables up front; compressed grains with grain markers) |
+| `vmdk/qemu-twogb-s001.vmdk.raw.zst` | qemu-img | the extent of `subformat=twoGbMaxExtentSparse` (no embedded descriptor) |
+| `vmdk-descriptor/qemu-twogb.vmdk` | qemu-img | its descriptor file |
+| `vmdk-descriptor/qemu-flat.vmdk` | qemu-img | `subformat=monolithicFlat,hwversion=6` descriptor (flat extent not included) |
+| `vhd/qemu-dynamic.vhd.raw.zst` | qemu-img | `convert -O vpc -o subformat=dynamic` |
+| `vhd/qemu-fixed.vhd.raw.zst` | qemu-img | `subformat=fixed` |
+| `vhdx/qemu-dynamic.vhdx.raw.zst` | qemu-img, qemu-io | `convert -O vhdx -o subformat=dynamic,block_size=1M`, then a write (leaves a log entry) |
+| `mbr/sfdisk-extended.img.raw.zst` | sfdisk, mtools | `sfdisk` script with primary, extended and logical partitions and gaps; FAT in partition 1 (`mformat -i img@@32768`) |
+| `gpt/sgdisk.img.raw.zst` | sgdisk, mtools | five partitions with names, type codes, fixed GUIDs and attributes (`-A 3:set:2`, `-A 4:set:60/63`); FAT in the ESP |
+| `gpt/sgdisk-hybrid.img.raw.zst` | sgdisk | the same, then `sgdisk -h 1:3` (hybrid MBR) |
+| `iso9660/xorriso-eltorito.iso.raw.zst` | xorriso | Rock Ridge (symlinks, device node, long names), Joliet, zisofs (`-set_filter_r --zisofs`), El Torito BIOS and UEFI entries |
+| `iso9660/genisoimage-1999.iso.raw.zst` | genisoimage | `-iso-level 4` (enhanced volume descriptor), Joliet, Rock Ridge 1.09 (`RR`), floppy-emulation El Torito |
+| `iso9660/genisoimage-relocated.iso.raw.zst` | genisoimage | `-R`: deep directories relocated to `rr_moved` (`CL`/`PL`/`RE`), a long name continued in a `CE` area, device node, symlink |
+| `udf/mkudffs.udf.raw.zst` | mkudffs (udftools 2.3) | `mkudffs --media-type=hd --blocksize=2048` on a 1 MiB file (empty UDF 2.01 volume) |
+| `luks/cryptsetup-luks1.img.raw.zst` | cryptsetup | `luksFormat --type luks1` (aes-cbc-essiv:sha256), `luksAddKey`; edits: truncated after 4 KiB of payload, key material zeroed |
+| `luks/cryptsetup-luks2.img.raw.zst` | cryptsetup | `luksFormat --type luks2` (argon2id), `luksAddKey --pbkdf pbkdf2`, `config --priority prefer`, `token import`; edits: truncated after 4 KiB of payload, keyslot areas zeroed |
 
 ## Compilers, linkers and toolchains
 

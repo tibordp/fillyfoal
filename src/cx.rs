@@ -846,6 +846,16 @@ impl Cx {
             .is_some_and(|s| s.on_demand)
     }
 
+    /// Whether reading the end of `source` is cheap: it is not decoded on
+    /// demand, or its decoder has already reached the end of the stream (the
+    /// decoder keeps a window behind its position, so the tail is still
+    /// held, or re-decodable from a recent point).
+    pub fn tail_is_cheap(&self, source: SourceId) -> bool {
+        lock(&self.shared)
+            .source(source)
+            .is_none_or(|s| !s.on_demand || s.lazy.as_ref().is_some_and(|st| st.done))
+    }
+
     /// A previously derived source with this origin, if any. Dissectors use
     /// this to avoid decoding the same bytes twice (e.g. after a collapse).
     pub fn derived(&self, origin: Origin) -> Option<crate::codec::Decoded> {

@@ -1845,8 +1845,10 @@ fn check_nesting(cx: &Cx, input: &Input) -> Result<()> {
 pub async fn head(cx: &Cx, span: Span) -> Result<(Vec<u8>, Vec<u8>)> {
     let max = cx.limits().max_read;
     let data = cx.read_avail(span.sub(0, HEAD_LEN.min(max))).await?;
-    // Reading the tail of a lazily decoded stream would decode all of it.
-    let tail = if span.len > HEAD_LEN && cx.is_lazy(span.source) {
+    // Reading the tail of a lazily decoded stream would decode all of it,
+    // unless its decoder has already reached the end (an unsized stream
+    // decoded to find its length, see `dissect_unsized`).
+    let tail = if span.len > HEAD_LEN && !cx.tail_is_cheap(span.source) {
         Vec::new()
     } else if span.len > HEAD_LEN {
         cx.read_avail(span.tail(span.len.saturating_sub(TAIL_LEN.min(max))))

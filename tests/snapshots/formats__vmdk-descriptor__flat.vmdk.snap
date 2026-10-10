@@ -1,16 +1,20 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ flat.vmdk — VMDK descriptor (monolithicFlat)  [0x0+0x14b]
-    version: "1"  [0x16+0x9]
-    encoding: "UTF-8"  [0x20+0x10]
-    CID: "fffffffe"  [0x31+0xc]
-    parentCID: "ffffffff"  [0x3e+0x12]
-    createType: "monolithicFlat"  [0x51+0x1b]
-    Extent: "RW 4194304 FLAT \"fixture-flat.vmdk\" 0" — RW FLAT, 2 GiB in "fixture-flat.vmdk" 0  [0x83+0x25]
-    ddb.virtualHWVersion: "4"  [0xc5+0x1a]
-    ddb.geometry.cylinders: "1"  [0xe0+0x1c]
-    ddb.geometry.heads: "16"  [0xfd+0x19]
-    ddb.geometry.sectors: "63"  [0x117+0x1b]
-    ddb.adapterType: "ide"  [0x133+0x17]
+▾ flat.vmdk — VMDK descriptor (monolithicFlat), 1 extent  [0x0+0x14b]
+    Comment: "Disk DescriptorFile"  [0x0+0x16]
+    version: "1"  [0x16+0xa]
+    encoding: "UTF-8"  [0x20+0x11]
+    CID: "fffffffe"  [0x31+0xd]
+    parentCID: "ffffffff"  [0x3e+0x13]
+    createType: "monolithicFlat"  [0x51+0x1c]
+    Comment: "Extent description"  [0x6e+0x15]
+    Extent: "RW 4194304 FLAT \"fixture-flat.vmdk\" 0" — RW FLAT, 2 GiB in "fixture-flat.vmdk" 0  [0x83+0x26]
+    Comment: "The Disk Data Base"  [0xaa+0x15]
+    Comment: "DDB"  [0xbf+0x5]
+    ddb.virtualHWVersion: "4"  [0xc5+0x1b]
+    ddb.geometry.cylinders: "1"  [0xe0+0x1d]
+    ddb.geometry.heads: "16"  [0xfd+0x1a]
+    ddb.geometry.sectors: "63"  [0x117+0x1c]
+    ddb.adapterType: "ide"  [0x133+0x18]

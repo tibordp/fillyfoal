@@ -39,6 +39,7 @@ expression: "common::explore(&display_name(&path), &data)"
   ▾ Virtual disk — MBR partition table, 1 primary partition, 32 KiB
       Bootstrap code — empty  [#1:0x0+0x1b8]
       Disk signature: 0xbadf00d  [#1:0x1b8+0x4]
+      Copy protection: 0x0 — not protected  [#1:0x1bc+0x2]
     ▾ Partition 1 — FAT12 (0x01), 24 KiB at LBA 1, active  [#1:0x1be+0x10]
       ▾ Entry  [#1:0x1be+0x10]
           Boot indicator: active (bootable) (0x80)  [#1:0x1be+0x1]
@@ -146,4 +147,11 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Free clusters — from the FAT
             Clusters 3–29 — free, 13.5 KiB  [#1:0xc00+0x3600]
             Clusters 32–45 — free, 7 KiB  [#1:0x4600+0x1c00]
+      Partition 2: unused (0x0) — all zeros  [#1:0x1ce+0x10]
+      Partition 3: unused (0x0) — all zeros  [#1:0x1de+0x10]
+      Partition 4: unused (0x0) — all zeros  [#1:0x1ee+0x10]
       Boot signature: 0xaa55  [#1:0x1fe+0x2]
+    ▾ Disk layout — partitions and the space between them  [#1:0x0+0x8000]
+        Master boot record — LBA 0, 512 bytes  [#1:0x0+0x200]
+        Partition 1: FAT12 — LBA 1–48, 24 KiB  [#1:0x200+0x6000]
+        Unpartitioned space — LBA 49–63: 7.5 KiB, unallocated, all zeros  [#1:0x6200+0x1e00]

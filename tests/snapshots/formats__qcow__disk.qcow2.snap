@@ -2,7 +2,7 @@
 source: tests/formats.rs
 expression: "common::explore(&display_name(&path), &data)"
 ---
-▾ disk.qcow2 — QCOW3 (qcow2 v3) image, 32 KiB virtual, 4 KiB clusters, 1 snapshots  [0x0+0xd000]
+▾ disk.qcow2 — QCOW2 version 3 image, 32 KiB virtual, 4 KiB clusters, zlib (raw deflate), 1 snapshot  [0x0+0xd000]
   ▾ Header  [0x0+0x48]
       Magic: 51 46 49 fb  |QFI.|  [0x0+0x4]
       Version: 3  [0x4+0x4]
@@ -23,26 +23,78 @@ expression: "common::explore(&display_name(&path), &data)"
       Auto-clear features: 0x0 []  [0x58+0x8]
       Refcount order: 4 — 16-bit refcounts  [0x60+0x4]
       Header length: 104  [0x64+0x4]
-  ▾ Header extensions  [0x68+0xf98]
-      Feature name table: 0x6803f857 — incompatible bit 0: dirty bit; incompatible bit 1: corrupt bit; compatible bit 0: lazy refcounts  [0x68+0x98]
-      End of extensions  [0x100+0x8]
-  ▾ L1 table — 1 entries  [0x1000+0x8]
-      L1[0] — guest 0x0, L2 table at 0x4000  [0x1000+0x8] → 0x4000+0x1000
-    Refcount table  [0x2000+0x1000]
+  ▾ Header extensions — feature name table  [0x68+0xa0]
+    ▾ Feature name table — 3 features  [0x68+0x98]
+        Type: feature name table (0x6803f857)  [0x68+0x4]
+        Length: 144  [0x6c+0x4]
+      ▾ Feature — incompatible bit 0: dirty bit  [0x70+0x30]
+          Type: incompatible (0x0)  [0x70+0x1]
+          Bit: 0  [0x71+0x1]
+          Name: "dirty bit"  [0x72+0x2e]
+      ▾ Feature — incompatible bit 1: corrupt bit  [0xa0+0x30]
+          Type: incompatible (0x0)  [0xa0+0x1]
+          Bit: 1  [0xa1+0x1]
+          Name: "corrupt bit"  [0xa2+0x2e]
+      ▾ Feature — compatible bit 0: lazy refcounts  [0xd0+0x30]
+          Type: compatible (0x1)  [0xd0+0x1]
+          Bit: 0  [0xd1+0x1]
+          Name: "lazy refcounts"  [0xd2+0x2e]
+    ▾ End of extensions  [0x100+0x8]
+        Type: end of extensions (0x0)  [0x100+0x4]
+        Length: 0  [0x104+0x4]
+    Unused — rest of the header cluster  [0x108+0xef8]
+  ▾ L1 table — 1 entry, each covering 2 MiB of the guest  [0x1000+0x8]
+    ▾ L1[0]: 0x8000000000004000 [COPIED] — guest 0x0–0x1fffff: L2 table at 0x4000, copied  [0x1000+0x8] → 0x4000+0x1000
+      ▾ L2[0] — guest 0x0: host 0x5000, copied  [0x4000+0x8] → 0x5000+0x1000
+          Descriptor: 0x8000000000005000 [COPIED]  [0x4000+0x8]
+          Host offset: 0x5000  [0x4000+0x8] → 0x5000+0x1000
+        L2[1–3]: unallocated (0x0) — guest 0x1000–0x3fff: unallocated  [0x4008+0x18]
+      ▾ L2[4] — guest 0x4000: host 0x6000, copied  [0x4020+0x8] → 0x6000+0x1000
+          Descriptor: 0x8000000000006000 [COPIED]  [0x4020+0x8]
+          Host offset: 0x6000  [0x4020+0x8] → 0x6000+0x1000
+        L2[5–511]: unallocated (0x0) — guest 0x5000–0x1fffff: unallocated  [0x4028+0xfd8]
+  ▾ Refcount table — 512 entries, 16-bit refcounts  [0x2000+0x1000]
+    ▾ Refcount table[0]: 0x3000 — clusters 0x0–0x7ff: refcount block at 0x3000  [0x2000+0x8] → 0x3000+0x1000
+        Clusters 0x0–0x7ff: 0 — free  [0x3000+0x1000]
+      Refcount table[1–511]: unallocated (0x0) — clusters 0x800–0xfffff: no refcount block (all free)  [0x2008+0xff8]
   ▾ Snapshots — 1
-    ▾ Snapshot 0: initial — id 1, VM state 0 bytes  [0xc000+0x30]
+    ▾ Snapshot 0: initial — id 1, 1 L1 entries, VM state 0 bytes  [0xc000+0x30]
         L1 table offset: 0x1000  [0xc000+0x8]
         L1 entries: 1  [0xc008+0x4]
         Id length: 1  [0xc00c+0x2]
         Name length: 7  [0xc00e+0x2]
         Created: 2024-05-17 13:37:42 UTC  [0xc010+0x4]
         Created (ns): 0  [0xc014+0x4]
-        VM clock (ns): 123456789  [0xc018+0x8]
-        VM state size: 0  [0xc020+0x4]
+        VM clock (ns): 123456789 — 0.123456789 s  [0xc018+0x8]
+        VM state size: 0 — 0 bytes  [0xc020+0x4]
         Extra data size: 0  [0xc024+0x4]
+        Id: "1"  [0xc028+0x1]
+        Name: "initial"  [0xc029+0x7]
+      ▾ L1 table — 1 entry, each covering 2 MiB of the guest  [0x1000+0x8]
+        ▾ L1[0]: 0x8000000000004000 [COPIED] — guest 0x0–0x1fffff: L2 table at 0x4000, copied  [0x1000+0x8] → 0x4000+0x1000
+          ▾ L2[0] — guest 0x0: host 0x5000, copied  [0x4000+0x8] → 0x5000+0x1000
+              Descriptor: 0x8000000000005000 [COPIED]  [0x4000+0x8]
+              Host offset: 0x5000  [0x4000+0x8] → 0x5000+0x1000
+            L2[1–3]: unallocated (0x0) — guest 0x1000–0x3fff: unallocated  [0x4008+0x18]
+          ▾ L2[4] — guest 0x4000: host 0x6000, copied  [0x4020+0x8] → 0x6000+0x1000
+              Descriptor: 0x8000000000006000 [COPIED]  [0x4020+0x8]
+              Host offset: 0x6000  [0x4020+0x8] → 0x6000+0x1000
+            L2[5–511]: unallocated (0x0) — guest 0x5000–0x1fffff: unallocated  [0x4028+0xfd8]
+  ▾ Host cluster map — what each cluster of the file holds  [0x0+0xd000]
+      Header — 4 KiB  [0x0+0x1000]
+      L1 table — 4 KiB  [0x1000+0x1000]
+      Refcount table — 4 KiB  [0x2000+0x1000]
+      Refcount block — 4 KiB  [0x3000+0x1000]
+      L2 table — 4 KiB  [0x4000+0x1000]
+      Data — guest 0x0–0xfff, 4 KiB  [0x5000+0x1000]
+      Data — guest 0x4000–0x4fff, 4 KiB  [0x6000+0x1000]
+      Unused — 20 KiB, not referenced by any table  [0x7000+0x5000]
+      Snapshot table — 48 bytes  [0xc000+0x30]
+      Unused — 3.9 KiB, not referenced by any table  [0xc030+0xfd0]
   ▾ Virtual disk — MBR partition table, 1 primary partition, 32 KiB
       Bootstrap code — empty  [#1:0x0+0x1b8]
       Disk signature: 0xbadf00d  [#1:0x1b8+0x4]
+      Copy protection: 0x0 — not protected  [#1:0x1bc+0x2]
     ▾ Partition 1 — FAT12 (0x01), 24 KiB at LBA 1, active  [#1:0x1be+0x10]
       ▾ Entry  [#1:0x1be+0x10]
           Boot indicator: active (bootable) (0x80)  [#1:0x1be+0x1]
@@ -150,4 +202,11 @@ expression: "common::explore(&display_name(&path), &data)"
         ▾ Free clusters — from the FAT
             Clusters 3–29 — free, 13.5 KiB  [#1:0xc00+0x3600]
             Clusters 32–45 — free, 7 KiB  [#1:0x4600+0x1c00]
+      Partition 2: unused (0x0) — all zeros  [#1:0x1ce+0x10]
+      Partition 3: unused (0x0) — all zeros  [#1:0x1de+0x10]
+      Partition 4: unused (0x0) — all zeros  [#1:0x1ee+0x10]
       Boot signature: 0xaa55  [#1:0x1fe+0x2]
+    ▾ Disk layout — partitions and the space between them  [#1:0x0+0x8000]
+        Master boot record — LBA 0, 512 bytes  [#1:0x0+0x200]
+        Partition 1: FAT12 — LBA 1–48, 24 KiB  [#1:0x200+0x6000]
+        Unpartitioned space — LBA 49–63: 7.5 KiB, unallocated, all zeros  [#1:0x6200+0x1e00]
