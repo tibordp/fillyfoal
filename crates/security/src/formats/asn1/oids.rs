@@ -279,6 +279,11 @@ const OIDS: &[(&str, &str)] = &[
     // PKCS#9 and S/MIME attributes
     ("1.2.840.113549.1.9.16.2.11", "encrypKeyPref"),
     ("1.2.840.113549.1.9.16.1.1", "receipt"),
+    // Java key stores
+    ("2.16.840.1.113894.746875.1.1", "oracleTrustedKeyUsage"),
+    ("1.2.840.113549.1.9.23.1", "x509Crl"),
+    ("1.3.6.1.4.1.42.2.17.1.1", "jksKeyProtector"),
+    ("1.3.6.1.4.1.42.2.19.1", "pbeWithMD5AndTripleDES"),
     // Netscape
     ("2.16.840.1.113730.1.1", "netscapeCertType"),
     ("2.16.840.1.113730.1.13", "netscapeComment"),

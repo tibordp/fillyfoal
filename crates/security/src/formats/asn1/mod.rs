@@ -136,7 +136,7 @@ asn1_format!(
     ["p8", "key", "der"],
     "application/pkcs8-encrypted",
     probe_pkcs8_encrypted,
-    &schema::UNKNOWN,
+    &schema::TOP_ENCRYPTED_PRIVATE_KEY_INFO,
     Kind::EncryptedKey
 );
 asn1_format!(
@@ -272,6 +272,17 @@ asn1_format!(
     Kind::DsaParams
 );
 asn1_format!(
+    KRB5_TICKET,
+    dissect_krb5_ticket,
+    "krb5-ticket",
+    "Kerberos ticket (DER)",
+    ["der"],
+    "application/octet-stream",
+    probe_krb5_ticket,
+    &schema::TOP_KRB5_TICKET,
+    Kind::KrbTicket
+);
+asn1_format!(
     DER,
     dissect_der,
     "der",
@@ -305,6 +316,7 @@ enum Kind {
     Spki,
     DhParams,
     DsaParams,
+    KrbTicket,
 }
 
 /// The content of the single outer SEQUENCE spanning the whole input (as
@@ -638,6 +650,23 @@ fn probe_dsa_params(h: &Head<'_>) -> bool {
         && int_len(els.first()) >= 64
         && (20..=32).contains(&int_len(els.get(1)))
         && int_len(els.get(2)) >= 64
+}
+
+/// Ticket ::= [APPLICATION 1] SEQUENCE { [0] INTEGER 5, [1] realm, ... }.
+fn probe_krb5_ticket(h: &Head<'_>) -> bool {
+    let Some(tlv) = der::header(h.data) else {
+        return false;
+    };
+    if tlv.id != 0x61 || tlv.total() != Some(h.len) {
+        return false;
+    }
+    let inner = h.data.get(to_usize(tlv.header)..).unwrap_or_default();
+    der::first(inner)
+        .filter(|(t, _)| t.id == 0x30)
+        .and_then(|(_, seq)| der::first(seq))
+        .filter(|(t, _)| t.id == 0xa0)
+        .and_then(|(_, v)| der::first(v))
+        .is_some_and(|(t, v)| t.id == 0x02 && der::integer(v) == Some(5))
 }
 
 fn probe_der(h: &Head<'_>) -> bool {

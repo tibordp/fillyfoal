@@ -306,7 +306,11 @@ and reproduce every file byte for byte.
 | `csr/leaf.csr` | OpenSSL 3 (openssl CLI) | self-signature verifies (`openssl req -verify`) |
 | `spki/leaf-pub.der` | OpenSSL 3 (openssl CLI, inferred) | SubjectPublicKeyInfo of the leaf key (was `der/leaf-pub.der`) |
 | `pkcs7/signed.p7s` | OpenSSL 3 (openssl CLI) | CMS signature verifies (`openssl cms -verify`) |
-| `pkcs12/` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
+| `pkcs12/empty-password.p12` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
+| `pkcs12/leaf.p12` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
+| `pkcs12/legacy-rc2-3des.p12` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
+| `pkcs12/modern-aes.p12` | OpenSSL 3 (`openssl pkcs12 -export`) | all four: OpenSSL 3 defaults (SHA-256 MAC, 2048 iterations, PBES2/AES-256-CBC) or `-legacy` (RC2/3DES, SHA-1 MAC); password `fillyfoal` (empty for empty-password.p12) |
+| `pkcs12/keytool.p12` | keytool (Eclipse Temurin 21.0.12 JRE) | `sh tests/data/jks/make-keytool.sh` in Docker with no network: an EC private key entry, a trusted certificate and an AES secret key; password `fillyfoal` |
 | `pkcs8-encrypted/` | OpenSSL 3 (`openssl pkcs8 -topk8`) | both: `-v1 PBE-SHA1-3DES` and the PBES2/AES-256 default; password `fillyfoal` |
 | `x509/ca-rsa.cer` | OpenSSL 3.6.3 (openssl CLI) | `sh tests/data/x509/make.sh` (fresh keys each run: same structure, new bytes): RSA-2048 root CA with name constraints (DNS, email, IPv4/IPv6 ranges, directory name), certificate policies (CPS URI, user notice), policy constraints, inhibitAnyPolicy, Microsoft CA version; checked against `openssl x509 -text` |
 | `x509/leaf-p256.cer` | OpenSSL 3.6.3 (openssl CLI) | the same script: P-256 leaf signed by `x509/ca-rsa.cer` with a SAN of every name type, key usage, EKU, AKI with issuer and serial, issuer alternative name, CRL distribution point with reasons and CRL issuer, AIA, TLS feature, Microsoft template name and template, Netscape cert type and comment, and a fabricated RFC 6962 SCT list (two SCTs with filler signatures, handed to openssl as the extension's DER); checked against `openssl x509 -text` |
@@ -339,6 +343,23 @@ and reproduce every file byte for byte.
 | `dsa-private-key/` | OpenSSL 3.6.3 (`openssl dsa -outform DER`) | the same script: DSA private key (OpenSSL's traditional encoding) |
 | `der/generic.der` | OpenSSL 3.6.3 (`openssl asn1parse -genconf`) | the same script: one SEQUENCE of assorted universal types (BOOLEAN, INTEGERs, NULL, OID, strings, times, BIT/OCTET STRING, ENUMERATED, SET, implicit and explicit tags) |
 | `pem/chain.pem` | OpenSSL 3 (openssl CLI) | leaf + CA chain; `openssl verify` accepts it |
+
+## Keyrings, Kerberos and age (Docker)
+
+| Fixture | Producer | Evidence and edits |
+| --- | --- | --- |
+| `age/` | age 1.2.1 (Alpine 3.20 package) | `sh tests/data/age/make.sh` (random keys and file keys): X25519 recipient, passphrase `fillyfoal` (scrypt, work factor 18), ssh-ed25519 and ssh-rsa recipients; stanzas checked against the age v1 specification |
+| `pem/age-armored.age` | age 1.2.1 (Alpine 3.20 package) | the same script: `age -a`, an ASCII-armored X25519 file |
+| `gnome-keyring/secret-tool.keyring` | gnome-keyring-daemon 48.0 and libsecret's secret-tool (Debian trixie) | `sh tests/data/gnome-keyring/make.sh` in Docker with no network: login keyring unlocked with `fillyfoal`, two items stored with secret-tool; decrypts with the test password (MD5 check of the decrypted items matches) |
+| `pgp/gpg-key.gpg` | GnuPG 2.4.9 (Alpine 3.20) | `sh tests/data/pgp/make-gpg.sh` (Docker, throwaway GNUPGHOME): Ed25519 primary key with signing, Curve25519 encryption and authentication subkeys (embedded back-signature), expiries and a second user ID; checked against `gpg --list-packets --verbose` |
+| `pgp/gpg-signed-encrypted.gpg` | GnuPG 2.4.9 (Alpine 3.20) | the same script: signed (with a notation), ZLIB-compressed and encrypted to the key (ECDH, AES-256 OCB AEAD packet) |
+| `pgp/gpg-symmetric.gpg` | GnuPG 2.4.9 (Alpine 3.20) | the same script: `--symmetric` with passphrase `fillyfoal` (iterated SHA-512 S2K, AES-256, SEIPD v1 with MDC); decrypts with the test passphrase |
+| `pgp/gpg-detached.sig` | GnuPG 2.4.9 (Alpine 3.20) | the same script: a detached signature by the signing subkey |
+| `krb5-ccache/` | MIT Kerberos 1.21.3 (Debian trixie krb5-kdc, krb5-user) | `sh tests/data/krb5-ccache/make.sh` in Docker with no network: a throwaway KDC for FILLYFOAL.TEST; `kinit -f -r 2d` and `kvno` into a version 4 cache (TGT and two service tickets, a `fast_avail` config entry), `ccache_type = 3` for a version 3 cache; checked against `klist -e -f -a` |
+| `putty-key/` | PuTTYgen 0.83 (Debian trixie putty-tools) | `sh tests/data/putty-key/make-puttygen.sh` in Docker with no network: PPK v3 Ed25519 and ECDSA P-384 keys without a passphrase, an RSA-1024 key encrypted with Argon2id (64 KiB, 1 pass), a PPK v2 encrypted Ed25519 key; passphrase `fillyfoal`; every MAC verifies |
+| `jks/keytool.jks` | keytool (Eclipse Temurin 21.0.12 JRE) | `sh tests/data/jks/make-keytool.sh` in Docker with no network: an EC private key entry with its certificate and a trusted certificate; password `fillyfoal` |
+| `jks/keytool.jceks` | keytool (Eclipse Temurin 21.0.12 JRE) | the same script: JCEKS with an EC private key entry, a trusted certificate and an AES-128 secret key |
+| `krb5-keytab/` | MIT Kerberos 1.21.3 (`kadmin.local ktadd`) | the same script: keys of two service principals (AES-256, AES-128, AES-256-SHA384) |
 
 ## FFmpeg: images
 

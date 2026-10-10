@@ -1,6 +1,6 @@
 ---
 source: tests/formats.rs
-expression: "common::explore(&name, &data)"
+expression: "common::explore(&display_name(&path), &data)"
 ---
 ▾ encrypted.gpg — OpenPGP encrypted message  [0x0+0x2ea]
   ▾ Public-Key Encrypted Session Key Packet — for key E8712CCAAB08519A  [0x0+0x8e]
@@ -12,4 +12,5 @@ expression: "common::explore(&name, &data)"
   ▾ Symmetrically Encrypted Integrity Protected Data Packet  [0x8e+0x25c]
       Packet header: Symmetrically Encrypted Integrity Protected Data (0x12) — new format, 601 body bytes  [0x8e+0x2]
       Version: 1  [#1:0x0+0x1]
-      Encrypted data — 600 bytes  [#1:0x1+0x258]
+      Encrypted data — 600 bytes, CFB with a SHA-1 MDC  [#1:0x1+0x258]
+        ! note: needs the session key (a recipient's private key)

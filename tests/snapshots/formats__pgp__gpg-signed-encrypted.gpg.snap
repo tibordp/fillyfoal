@@ -1,0 +1,22 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gpg-signed-encrypted.gpg — OpenPGP encrypted message  [0x0+0x15f]
+  ▾ Public-Key Encrypted Session Key Packet — for key D7C586C5C59999C2  [0x0+0x60]
+      Packet header: Public-Key Encrypted Session Key (0x1) — old format, 94 body bytes  [0x0+0x2]
+      Version: 3  [0x2+0x1]
+      Key ID: "D7C586C5C59999C2"  [0x3+0x8]
+      Public-key algorithm: ECDH (0x12)  [0xb+0x1]
+      Ephemeral point: 40 56 cd cd 4a 3a 8f 60 a6 ac fc 37 10 01 1e 8d …  |@V..J:.`...7....| — 263-bit  [0xc+0x23]
+      Wrapped session key: 30 a8 9c bc 02 d5 68 82 a7 7f 91 cf 4d fc cd 9f …  |0.....h.....M...|  [0x2f+0x31]
+  ▾ AEAD Encrypted Data Packet  [0x60+0xff]
+      Packet header: AEAD Encrypted Data (0x14) — new format, 252 body bytes  [0x60+0x3]
+      Version: 1  [0x63+0x1]
+      Symmetric cipher: AES-256 (0x9)  [0x64+0x1]
+      AEAD mode: OCB (0x2)  [0x65+0x1]
+      Chunk size: 16  [0x66+0x1]
+      Starting IV: d9 fe a5 47 7e 4a 97 94 e3 57 32 14 50 52 72  |...G~J...W2.PRr|  [0x67+0xf]
+    ▾ Encrypted chunks — 4194304 bytes of plaintext per chunk  [0x76+0xe9]
+        Chunk 0 — 201 bytes and a 16-byte tag  [0x76+0xd9]
+        Final tag  [0x14f+0x10]

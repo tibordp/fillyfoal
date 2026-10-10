@@ -1,0 +1,19 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ gpg-detached.sig — OpenPGP signature  [0x0+0x77]
+  ▾ Signature Packet — v4 binary document, EdDSA (legacy) with SHA-512  [0x0+0x77]
+      Packet header: Signature (0x2) — old format, 117 body bytes  [0x0+0x2]
+      Version: 4  [0x2+0x1]
+      Signature type: binary document (0x0)  [0x3+0x1]
+      Public-key algorithm: EdDSA (legacy) (0x16)  [0x4+0x1]
+      Hash algorithm: SHA-512 (0xa)  [0x5+0x1]
+    ▾ Hashed subpackets — 29 bytes  [0x6+0x1f]
+        Issuer Fingerprint: "19A51309509CBECA8A207275999C5742DB49BDED" — v4  [0x8+0x17]
+        Signature Creation Time: 2026-10-10 19:21:11 UTC  [0x1f+0x6]
+    ▾ Unhashed subpackets — 10 bytes  [0x25+0xc]
+        Issuer Key ID: "999C5742DB49BDED"  [0x27+0xa]
+      Hash prefix: a5 53  |.S|  [0x31+0x2]
+      r: 06 91 ae 8e 0a 47 5b 9d 65 f0 97 6c b0 6b 49 be …  |.....G[.e..l.kI.| — 251-bit  [0x33+0x22]
+      s: 1b da 01 70 55 59 8f 7c 46 75 94 d6 85 44 b5 c5 …  |...pUY.|Fu...D..| — 253-bit  [0x55+0x22]

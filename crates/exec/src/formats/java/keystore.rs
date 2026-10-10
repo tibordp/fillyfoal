@@ -213,7 +213,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         Node::new("Digest")
             .span(digest)
             .value(text(crate::text::hex_lower(&bytes)))
-            .desc("SHA-1 over the password (UTF-16), \"Mighty Aphrodite\" and the keystore"),
+            .desc("SHA-1 over the password (UTF-16), \"Mighty Aphrodite\" and the keystore")
+            .lazy(verify_digest, (input, offset)),
     );
     if offset.saturating_add(20) < file.len {
         cx.emit(
@@ -247,5 +248,62 @@ async fn entry_list(cx: Cx, (ctx, spans): (Ctx, Vec<Span>)) -> Result<()> {
 async fn entry_view(cx: Cx, (ctx, span): (Ctx, Span)) -> Result<()> {
     let block = cx.block(span).await?;
     entry(&cx, &mut Fields::emitting(&cx, &block, BE), &ctx).await?;
+    Ok(())
+}
+
+/// Largest key store whose digest is checked.
+const MAX_CHECKED: u64 = 16 << 20;
+
+/// The integrity digest for `password`: SHA-1 of the password as UTF-16BE,
+/// "Mighty Aphrodite" and the store, hashed a piece at a time.
+async fn store_digest(cx: &Cx, password: &[u8], data: &[u8]) -> Vec<u8> {
+    use crate::codec::crypto::{Hash, Sha1};
+    let pw: Vec<u8> = String::from_utf8_lossy(password)
+        .encode_utf16()
+        .flat_map(u16::to_be_bytes)
+        .collect();
+    let mut h = Sha1::new();
+    h.update(&pw);
+    h.update(b"Mighty Aphrodite");
+    for piece in data.chunks(4096) {
+        h.update(piece);
+        cx.checkpoint().await;
+    }
+    h.finish()
+}
+
+/// Checks the integrity digest with the store password.
+async fn verify_digest(cx: Cx, (input, offset): (Input, u64)) -> Result<()> {
+    let file = input.span;
+    let node = Node::new("Integrity check").span(file.sub(offset, 20));
+    if offset > MAX_CHECKED {
+        cx.emit(node.diag(Diagnostic::limit("key store too large to check")));
+        return Ok(());
+    }
+    let data = cx.read(file.sub(0, offset)).await?;
+    let expected = cx.read(file.sub(offset, 20)).await?;
+    let mut verified =
+        (store_digest(&cx, b"", &data).await == expected).then_some("verified (empty password)");
+    let mut attempt = 0;
+    while verified.is_none() && attempt < crate::secret::MAX_ATTEMPTS {
+        let request = crate::secret::SecretRequest::password(
+            file,
+            "Password for the Java key store",
+            attempt,
+        );
+        let Some(secret) = cx.secret(request).await else {
+            break;
+        };
+        if store_digest(&cx, secret.expose(), &data).await == expected {
+            verified = Some("verified with the store password");
+        }
+        attempt = attempt.saturating_add(1);
+    }
+    cx.emit(match verified {
+        Some(how) => node.summary(how),
+        None => node.diag(Diagnostic::note(
+            "not checked (no password, or a wrong one)",
+        )),
+    });
     Ok(())
 }

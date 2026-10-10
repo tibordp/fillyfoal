@@ -710,6 +710,8 @@ pub static FORMATS: &[&Format] = &[
     #[cfg(feature = "security")]
     &asn1::DSA_PARAMS,
     #[cfg(feature = "security")]
+    &asn1::KRB5_TICKET,
+    #[cfg(feature = "security")]
     &asn1::DER,
     #[cfg(feature = "security")]
     &security::pgp::FORMAT,

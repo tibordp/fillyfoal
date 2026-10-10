@@ -1,0 +1,16 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ passphrase.age — age, 1 recipient (scrypt), 27 bytes of plaintext  [0x0+0xd1]
+    Version: "age-encryption.org/v1"  [0x0+0x15]
+  ▾ Recipient stanza (scrypt) — passphrase, scrypt work factor 2^18  [0x16+0x50]
+      Type: "scrypt"  [0x19+0x6]
+      Salt: 5c 4e 7c 29 e6 35 d3 45 bc 9a a1 09 63 7c 62 78  |\N|).5.E....c|bx| — 16 bytes  [0x20+0x16]
+      Work factor (log2 N): 18 — N = 2^18  [0x37+0x2]
+      Body: 40 2e fe ad 26 64 ab 01 9c b0 60 5f 68 c7 0e 89 …  |@...&d....`_h...| — 32 bytes, file key wrapped with ChaCha20-Poly1305 (16 bytes and a tag)  [0x3a+0x2b]
+    Header MAC: 62 13 08 8d 83 d8 06 c2 25 dd 46 70 c3 4e 18 dc …  |b.......%.Fp.N..| — HMAC-SHA-256 of the header under a key derived from the file key  [0x66+0x2f]
+  ▾ Payload — 1 chunk, 27 bytes of plaintext  [0x96+0x3b]
+      Nonce: 20 01 26 25 a5 2c 1e f8 aa e7 77 03 a6 45 99 f5  | .&%.,....w..E..|  [0x96+0x10]
+      Chunk 0 — 27 bytes plaintext + 16-byte tag, final  [0xa6+0x2b]
+        ! note: ChaCha20-Poly1305 (needs the file key)

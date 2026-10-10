@@ -1,0 +1,15 @@
+---
+source: tests/formats.rs
+expression: "common::explore(&display_name(&path), &data)"
+---
+▾ x25519.age — age, 1 recipient (X25519), 27 bytes of plaintext  [0x0+0xe3]
+    Version: "age-encryption.org/v1"  [0x0+0x15]
+  ▾ Recipient stanza (X25519) — X25519 recipient  [0x16+0x62]
+      Type: "X25519"  [0x19+0x6]
+      Ephemeral share: 2e c6 3e 70 e6 54 21 44 07 24 1c b4 70 8e f2 32 …  |..>p.T!D.$..p..2| — 32 bytes  [0x20+0x2b]
+      Body: 51 7f e8 68 29 8a ea 47 e8 14 ba 89 ff d5 40 55 …  |Q..h)..G......@U| — 32 bytes, file key wrapped with ChaCha20-Poly1305 (16 bytes and a tag)  [0x4c+0x2b]
+    Header MAC: d8 ee db 10 b0 ea 00 34 2c 60 48 80 bc 70 88 bc …  |.......4,`H..p..| — HMAC-SHA-256 of the header under a key derived from the file key  [0x78+0x2f]
+  ▾ Payload — 1 chunk, 27 bytes of plaintext  [0xa8+0x3b]
+      Nonce: 0c de b2 5b b0 75 93 bb 52 ab e0 52 de 9b 98 f4  |...[.u..R..R....|  [0xa8+0x10]
+      Chunk 0 — 27 bytes plaintext + 16-byte tag, final  [0xb8+0x2b]
+        ! note: ChaCha20-Poly1305 (needs the file key)

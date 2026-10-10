@@ -52,6 +52,7 @@ pub(super) fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
             Some(format!("{p}-bit p, {q}-bit q"))
         }
         Kind::Spki => x509::public_key_info(content),
+        Kind::KrbTicket => krb_ticket(content),
         Kind::DhParams => {
             let mut ints = der::elements(content);
             let p = ints.next().map(|(_, p)| x509::integer_bits(p))?;
@@ -80,6 +81,7 @@ pub(super) fn annotation(kind: Kind, head: &[u8], len: u64) -> String {
         Kind::Spki => "Public key",
         Kind::DhParams => "DH parameters",
         Kind::DsaParams => "DSA parameters",
+        Kind::KrbTicket => "Kerberos ticket",
     };
     match detail {
         Some(d) => format!("{title}, {d}"),
@@ -571,4 +573,40 @@ fn provision(head: &[u8]) -> Option<String> {
         out.push(format!("expires {}", date.get(..10).unwrap_or(&date)));
     }
     (!out.is_empty()).then(|| out.join(", "))
+}
+
+/// A Kerberos ticket (the content of its `[APPLICATION 1]`): service,
+/// realm and encryption type.
+fn krb_ticket(content: &[u8]) -> Option<String> {
+    let (_, fields) = der::first(content)?;
+    let mut realm = String::new();
+    let mut sname = String::new();
+    let mut etype = None;
+    for (t, v) in der::elements(fields) {
+        match t.id {
+            0xa1 => {
+                realm = der::first(v)
+                    .and_then(|(t, s)| der::display(&t, s))
+                    .unwrap_or_default();
+            }
+            0xa2 => {
+                sname = der::first(v)
+                    .and_then(|(_, p)| x509::krb_principal(p))
+                    .unwrap_or_default();
+            }
+            0xa3 => {
+                etype = der::first(v)
+                    .and_then(|(_, e)| der::first(e))
+                    .and_then(|(_, w)| der::first(w))
+                    .and_then(|(_, n)| der::integer(n));
+            }
+            _ => {}
+        }
+    }
+    let mut out = format!("for {sname}@{realm}");
+    if let Some(e) = etype.and_then(|e| u64::try_from(e).ok()) {
+        let name = crate::value::lookup(super::schema::KRB_ETYPES, e).unwrap_or("unknown enctype");
+        out = format!("{out}, {name}");
+    }
+    Some(out)
 }

@@ -904,3 +904,16 @@ pub async fn ec_point(cx: Cx, span: Span) -> Result<()> {
     }
     Ok(())
 }
+
+/// A Kerberos PrincipalName's content: `component/component`.
+pub fn krb_principal(content: &[u8]) -> Option<String> {
+    let mut parts = der::elements(content);
+    let _kind = parts.next()?;
+    let (_, strings) = parts.next()?;
+    let (_, seq) = der::first(strings)?;
+    let names: Vec<String> = der::elements(seq)
+        .take(16)
+        .filter_map(|(t, v)| der::display(&t, v))
+        .collect();
+    Some(names.join("/"))
+}

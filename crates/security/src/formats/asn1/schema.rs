@@ -242,6 +242,7 @@ static ALGORITHM_PARAMETERS: Schema = Schema::DefinedBy(&[
         Some("pkcs-12PbeParams"),
         &PKCS12_PBE,
     ),
+    ("1.3.6.1.4.1.42.2.19.1", Some("PBEParameter"), &PKCS12_PBE),
     (
         "1.3.133.16.840.63.0.2",
         Some("keyWrapAlgorithm"),
@@ -1217,8 +1218,118 @@ pub static PFX: Schema = Schema::Seq(&[
 
 static AUTH_SAFE: Schema = Schema::Seq(&[
     req("contentType", OID, &UNKNOWN),
-    opt("content", &[0xa0], &UNKNOWN),
+    opt("content", &[0xa0], &AUTH_SAFE_CONTENT),
 ]);
+
+/// The authenticated safe: (for password integrity) data holding a
+/// sequence of ContentInfos, each plain or encrypted SafeContents.
+static AUTH_SAFE_CONTENT: Schema = Schema::DefinedBy(&[(
+    "1.2.840.113549.1.7.1",
+    None,
+    &Schema::Seq(&[req(
+        "AuthenticatedSafe",
+        OCTETS,
+        &Schema::Encap(&Schema::Seq(&[req(
+            "AuthenticatedSafe",
+            SEQ,
+            &Schema::SeqOf("ContentInfo", &P12_CONTENT_INFO),
+        )])),
+    )]),
+)]);
+static P12_CONTENT_INFO: Schema = Schema::Seq(&[
+    req("contentType", OID, &UNKNOWN),
+    opt("content", &[0xa0], &P12_CONTENTS),
+]);
+static P12_CONTENTS: Schema = Schema::DefinedBy(&[
+    (
+        "1.2.840.113549.1.7.1",
+        None,
+        &Schema::Seq(&[req(
+            "SafeContents",
+            OCTETS,
+            &Schema::Encap(&Schema::Seq(&[req("SafeContents", SEQ, &SAFE_CONTENTS)])),
+        )]),
+    ),
+    ("1.2.840.113549.1.7.6", None, &EXPLICIT_ENCRYPTED_DATA),
+]);
+static SAFE_CONTENTS: Schema = Schema::SeqOf("SafeBag", &SAFE_BAG);
+static SAFE_BAG: Schema = Schema::Seq(&[
+    req("bagId", OID, &UNKNOWN),
+    req("bagValue", &[0xa0], &BAG_VALUES),
+    opt("bagAttributes", SET, &ATTRIBUTES),
+]);
+static BAG_VALUES: Schema = Schema::DefinedBy(&[
+    (
+        "1.2.840.113549.1.12.10.1.1",
+        None,
+        &Schema::Seq(&[req("PrivateKeyInfo", SEQ, &PRIVATE_KEY_INFO)]),
+    ),
+    (
+        "1.2.840.113549.1.12.10.1.2",
+        None,
+        &Schema::Seq(&[req(
+            "EncryptedPrivateKeyInfo",
+            SEQ,
+            &ENCRYPTED_PRIVATE_KEY_INFO,
+        )]),
+    ),
+    (
+        "1.2.840.113549.1.12.10.1.3",
+        None,
+        &Schema::Seq(&[req("CertBag", SEQ, &CERT_BAG)]),
+    ),
+    (
+        "1.2.840.113549.1.12.10.1.4",
+        None,
+        &Schema::Seq(&[req("CRLBag", SEQ, &CRL_BAG)]),
+    ),
+    (
+        "1.2.840.113549.1.12.10.1.5",
+        None,
+        &Schema::Seq(&[req("SecretBag", SEQ, &SECRET_BAG)]),
+    ),
+    (
+        "1.2.840.113549.1.12.10.1.6",
+        None,
+        &Schema::Seq(&[req("SafeContents", SEQ, &SAFE_CONTENTS)]),
+    ),
+]);
+static CERT_BAG: Schema = Schema::Seq(&[
+    req("certId", OID, &UNKNOWN),
+    req("certValue", &[0xa0], &CERT_VALUES),
+]);
+static CERT_VALUES: Schema = Schema::DefinedBy(&[(
+    "1.2.840.113549.1.9.22.1",
+    None,
+    &Schema::Seq(&[req(
+        "x509Certificate",
+        OCTETS,
+        &Schema::Encap(&TOP_CERTIFICATE),
+    )]),
+)]);
+static CRL_BAG: Schema = Schema::Seq(&[
+    req("crlId", OID, &UNKNOWN),
+    req("crlValue", &[0xa0], &CRL_VALUES),
+]);
+static CRL_VALUES: Schema = Schema::DefinedBy(&[(
+    "1.2.840.113549.1.9.23.1",
+    None,
+    &Schema::Seq(&[req("x509CRL", OCTETS, &Schema::Encap(&TOP_CRL))]),
+)]);
+/// SecretBag: a type, and the value (Java stores a shrouded key bag).
+static SECRET_BAG: Schema = Schema::Seq(&[
+    req("secretTypeId", OID, &UNKNOWN),
+    req("secretValue", &[0xa0], &SECRET_VALUES),
+]);
+static SECRET_VALUES: Schema = Schema::DefinedBy(&[(
+    "1.2.840.113549.1.12.10.1.2",
+    None,
+    &Schema::Seq(&[req(
+        "secretValue",
+        OCTETS,
+        &Schema::Encap(&TOP_ENCRYPTED_PRIVATE_KEY_INFO),
+    )]),
+)]);
 
 static MAC_DATA: Schema = Schema::Seq(&[
     req("mac", SEQ, &DIGEST_INFO),
@@ -1502,3 +1613,72 @@ pub static TOP_TIME_STAMP_REQ: Schema = Schema::Seq(&[req("TimeStampReq", SEQ, &
 pub static TOP_TIME_STAMP_RESP: Schema =
     Schema::Seq(&[req("TimeStampResp", SEQ, &TIME_STAMP_RESP)]);
 pub static TOP_TST_INFO: Schema = Schema::Seq(&[req("TSTInfo", SEQ, &TST_INFO)]);
+
+// --- Kerberos (RFC 4120) ---------------------------------------------------
+
+pub const KRB_ETYPES: EnumTable = &[
+    (1, "des-cbc-crc"),
+    (3, "des-cbc-md5"),
+    (16, "des3-cbc-sha1"),
+    (17, "aes128-cts-hmac-sha1-96"),
+    (18, "aes256-cts-hmac-sha1-96"),
+    (19, "aes128-cts-hmac-sha256-128"),
+    (20, "aes256-cts-hmac-sha384-192"),
+    (23, "rc4-hmac"),
+    (24, "rc4-hmac-exp"),
+    (25, "camellia128-cts-cmac"),
+    (26, "camellia256-cts-cmac"),
+];
+
+pub const KRB_NAME_TYPES: EnumTable = &[
+    (0, "NT-UNKNOWN"),
+    (1, "NT-PRINCIPAL"),
+    (2, "NT-SRV-INST"),
+    (3, "NT-SRV-HST"),
+    (4, "NT-SRV-XHST"),
+    (5, "NT-UID"),
+    (10, "NT-ENTERPRISE"),
+    (11, "NT-WELLKNOWN"),
+];
+
+pub static TOP_KRB5_TICKET: Schema = Schema::Seq(&[req("Ticket", &[0x61], &KRB_TICKET_APP)]);
+static KRB_TICKET_APP: Schema = Schema::Seq(&[req("fields", SEQ, &KRB_TICKET)]);
+static KRB_TICKET: Schema = Schema::Seq(&[
+    req("tkt-vno", &[0xa0], &K_INT),
+    req("realm", &[0xa1], &K_STRING),
+    req("sname", &[0xa2], &K_PRINCIPAL),
+    req("enc-part", &[0xa3], &K_ENCRYPTED),
+]);
+static K_INT: Schema = Schema::Seq(&[req("value", INT, &UNKNOWN)]);
+static K_STRING: Schema = Schema::Seq(&[req("KerberosString", ANY, &UNKNOWN)]);
+static K_PRINCIPAL: Schema = Schema::Seq(&[req("PrincipalName", SEQ, &KRB_PRINCIPAL)]);
+static KRB_PRINCIPAL: Schema = Schema::Summary(x509::krb_principal, &KRB_PRINCIPAL_BODY);
+static KRB_PRINCIPAL_BODY: Schema = Schema::Seq(&[
+    req("name-type", &[0xa0], &K_NAME_TYPE),
+    req("name-string", &[0xa1], &K_NAME_STRINGS),
+]);
+static K_NAME_TYPE: Schema = Schema::Seq(&[req("Int32", INT, &KRB_NAME_TYPE)]);
+static KRB_NAME_TYPE: Schema = Schema::Enum(KRB_NAME_TYPES);
+static K_NAME_STRINGS: Schema = Schema::Seq(&[req("names", SEQ, &KRB_NAME_STRINGS)]);
+static KRB_NAME_STRINGS: Schema = Schema::SeqOf("KerberosString", &UNKNOWN);
+static K_ENCRYPTED: Schema = Schema::Seq(&[req("EncryptedData", SEQ, &KRB_ENCRYPTED)]);
+static KRB_ENCRYPTED: Schema = Schema::Seq(&[
+    req("etype", &[0xa0], &K_ETYPE),
+    opt("kvno", &[0xa1], &K_INT),
+    req("cipher", &[0xa2], &K_CIPHER),
+]);
+static K_ETYPE: Schema = Schema::Seq(&[req("Int32", INT, &KRB_ETYPE)]);
+static KRB_ETYPE: Schema = Schema::Enum(KRB_ETYPES);
+static K_CIPHER: Schema = Schema::Seq(&[req("OCTET STRING", OCTETS, &UNKNOWN)]);
+
+// --- Encrypted private keys (PKCS#8) ----------------------------------------
+
+pub static TOP_ENCRYPTED_PRIVATE_KEY_INFO: Schema = Schema::Seq(&[req(
+    "EncryptedPrivateKeyInfo",
+    SEQ,
+    &ENCRYPTED_PRIVATE_KEY_INFO,
+)]);
+static ENCRYPTED_PRIVATE_KEY_INFO: Schema = Schema::Seq(&[
+    req("encryptionAlgorithm", SEQ, &ALGORITHM),
+    req("encryptedData", OCTETS, &UNKNOWN),
+]);

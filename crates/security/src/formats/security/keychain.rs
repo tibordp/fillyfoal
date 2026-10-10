@@ -581,6 +581,22 @@ async fn table(cx: Cx, t: TableState) -> Result<()> {
             BE,
         ))
         .await;
+        let live_slots = slots.iter().filter(|&&o| live(o)).count();
+        if !slots.is_empty() {
+            cx.push(
+                Node::new("Record slots")
+                    .span(t.table.sub(
+                        TableHeader::SIZE,
+                        crate::bytes::to_u64(slots.len()).saturating_mul(4),
+                    ))
+                    .summary(format!(
+                        "{}, {live_slots} in use",
+                        plural(crate::bytes::to_u64(slots.len()), "slot")
+                    ))
+                    .lazy(record_slots, t.table),
+            )
+            .await;
+        }
         index = 1;
     }
     // Index 0 is the header; slots follow.
@@ -632,15 +648,241 @@ async fn table(cx: Cx, t: TableState) -> Result<()> {
         cx.push(node).await;
     }
     if th.indexes_offset != 0 && th.indexes_offset < th.size {
+        let span = t.table.sub(
+            th.indexes_offset.into(),
+            u64::from(th.size.saturating_sub(th.indexes_offset)),
+        );
+        let head = cx.read_avail(span.sub(0, 8)).await?;
+        let count = u32_be(&head, 4).unwrap_or(0);
         cx.push(
             Node::new("Indexes")
-                .span(t.table.sub(
-                    th.indexes_offset.into(),
-                    u64::from(th.size.saturating_sub(th.indexes_offset)),
-                ))
-                .summary("index data (not decoded)"),
+                .span(span)
+                .summary(crate::formats::util::fmt::count(count, "index", "indexes"))
+                .lazy(indexes, (t.table, span)),
         )
         .await;
+    }
+    Ok(())
+}
+
+/// The slot array of a table: record offsets from the table (0 or odd:
+/// free).
+async fn record_slots(cx: Cx, table: Span) -> Result<()> {
+    let (_, slots) = table_records(&cx, table).await?;
+    for (i, off) in slots.into_iter().enumerate() {
+        let span = table.sub(
+            TableHeader::SIZE.saturating_add(crate::bytes::to_u64(i).saturating_mul(4)),
+            4,
+        );
+        let mut node = Node::new(format!("Slot {i}"))
+            .span(span)
+            .value(Value::UInt {
+                value: off.into(),
+                bits: 32,
+                radix: Radix::Hex,
+            });
+        node = if live(off) {
+            node.target(table.sub(off.into(), RecordHeader::SIZE))
+        } else {
+            node.summary("free")
+        };
+        cx.push(node).await;
+    }
+    Ok(())
+}
+
+/// The offsets of a record's attribute values (offset + 1 from the record,
+/// 0 when absent), named by the schema.
+async fn attribute_offsets(cx: Cx, (span, names): (Span, Arc<Vec<String>>)) -> Result<()> {
+    let raw = cx.read_avail(span).await?;
+    for (i, (c, name)) in raw.as_chunks::<4>().0.iter().zip(names.iter()).enumerate() {
+        let v = u32::from_be_bytes(*c);
+        let node = Node::new(name.clone())
+            .span(span.sub(crate::bytes::to_u64(i).saturating_mul(4), 4))
+            .value(Value::UInt {
+                value: v.into(),
+                bits: 32,
+                radix: Radix::Hex,
+            });
+        cx.push(if v == 0 { node.summary("absent") } else { node })
+            .await;
+    }
+    Ok(())
+}
+
+/// Most attributes per index and keys listed per index.
+const MAX_INDEX_ATTRIBUTES: u32 = 64;
+const MAX_INDEX_KEYS: u32 = 1 << 20;
+
+/// A table's indexes (`DbConstIndex`): size, count and offsets (from the
+/// table), then each index.
+async fn indexes(cx: Cx, (table, span): (Span, Span)) -> Result<()> {
+    let head = cx.block(span.sub(0, 8)).await?;
+    let mut f = Fields::emitting(&cx, &head, BE);
+    f.u32("Indexes size").hex().emit()?;
+    let count = f.u32("Index count").emit()?.min(MAX_TABLES);
+    let raw = cx
+        .read(span.sub_exact(8, u64::from(count).saturating_mul(4))?)
+        .await?;
+    for (i, off) in raw
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|c| u32::from_be_bytes(*c))
+        .enumerate()
+    {
+        let at = table.tail(off.into());
+        let head = cx.read_avail(at.sub(0, 16)).await?;
+        let size = u32_be(&head, 0).unwrap_or(0);
+        let id = u32_be(&head, 4).unwrap_or(0);
+        let unique = u32_be(&head, 8).unwrap_or(0);
+        let index = at.sub(0, size.into());
+        cx.push(
+            Node::new(format!("Index {id}"))
+                .span(index)
+                .summary(if unique == 1 { "unique" } else { "non-unique" })
+                .target(span.sub(
+                    8u64.saturating_add(crate::bytes::to_u64(i).saturating_mul(4)),
+                    4,
+                ))
+                .lazy(self::index, (table, index)),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// One index: its attributes, and a key (the attribute values) and record
+/// number per indexed record.
+async fn index(cx: Cx, (table, span): (Span, Span)) -> Result<()> {
+    let head = cx.block(span.sub(0, 16)).await?;
+    let mut f = Fields::emitting(&cx, &head, BE);
+    f.u32("Index size").hex().emit()?;
+    f.u32("Index ID").emit()?;
+    f.u32("Unique")
+        .desc("1 for a unique index (stored inverted from the schema's CSSM index type)")
+        .emit()?;
+    let n = f.u32("Attribute count").emit()?.min(MAX_INDEX_ATTRIBUTES);
+    let ids = cx
+        .read(span.sub_exact(16, u64::from(n).saturating_mul(4))?)
+        .await?;
+    for (i, c) in ids.as_chunks::<4>().0.iter().enumerate() {
+        let id = u32::from_be_bytes(*c);
+        let title = four_cc(id).unwrap_or_else(|| format!("{id:#x}"));
+        let node = Node::new(format!("Attribute {i}"))
+            .span(span.sub(
+                16u64.saturating_add(crate::bytes::to_u64(i).saturating_mul(4)),
+                4,
+            ))
+            .value(Value::Text(title));
+        cx.emit(match attribute_title(id) {
+            Some(t) => node.summary(t),
+            None => node,
+        });
+    }
+    let at = 16u64.saturating_add(u64::from(n).saturating_mul(4));
+    let head = cx.read(span.sub_exact(at, 4)?).await?;
+    let keys = u32_be(&head, 0).unwrap_or(0).min(MAX_INDEX_KEYS);
+    cx.emit(
+        Node::new("Key count")
+            .span(span.sub(at, 4))
+            .value(Value::UInt {
+                value: keys.into(),
+                bits: 32,
+                radix: Radix::Dec,
+            }),
+    );
+    let list = u64::from(keys).saturating_mul(4);
+    let offsets = cx.read(span.sub_exact(at.saturating_add(4), list)?).await?;
+    let records = cx
+        .read(span.sub_exact(at.saturating_add(4).saturating_add(list), list)?)
+        .await?;
+    cx.emit(
+        Node::new("Key offsets")
+            .span(span.sub(at.saturating_add(4), list))
+            .summary("from the table"),
+    );
+    cx.emit(
+        Node::new("Record numbers")
+            .span(span.sub(at.saturating_add(4).saturating_add(list), list))
+            .summary("of the record each key belongs to"),
+    );
+    let pairs = offsets
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(records.as_chunks::<4>().0.iter());
+    for (i, (o, r)) in pairs.enumerate() {
+        let off = u32::from_be_bytes(*o);
+        let number = u32::from_be_bytes(*r);
+        let key = table.tail(off.into());
+        let size = u32_be(&cx.read_avail(key.sub(0, 4)).await?, 0).unwrap_or(0);
+        // The size counts the values after it.
+        let key = key.sub(0, u64::from(size).saturating_add(4));
+        let bytes = cx.read_avail(key.sub(0, 4096)).await?;
+        // The values, each a length and padded bytes (or a 32-bit integer).
+        let mut parts = Vec::new();
+        let mut pos = 4usize;
+        while let Some(len) = u32_be(&bytes, pos) {
+            let len = crate::bytes::to_usize(len.into());
+            let start = pos.saturating_add(4);
+            match bytes.get(start..start.saturating_add(len)) {
+                Some(v) if parts.len() < 16 => {
+                    parts.push(printable(v).unwrap_or_else(|| format!("{len} bytes")));
+                }
+                _ => break,
+            }
+            pos = start.saturating_add(len.next_multiple_of(4));
+        }
+        let _ = i;
+        cx.push(
+            Node::new(format!("Key for record {number}"))
+                .span(key)
+                .summary(parts.join(", "))
+                .lazy(index_key, key),
+        )
+        .await;
+    }
+    Ok(())
+}
+
+/// The values of an index key.
+async fn index_key(cx: Cx, key: Span) -> Result<()> {
+    let bytes = cx.read_avail(key.sub(0, 4096)).await?;
+    cx.emit(
+        Node::new("Values size")
+            .span(key.sub(0, 4))
+            .value(Value::UInt {
+                value: u32_be(&bytes, 0).unwrap_or(0).into(),
+                bits: 32,
+                radix: Radix::Hex,
+            }),
+    );
+    let mut pos = 4usize;
+    let mut n = 0u32;
+    while let Some(len) = u32_be(&bytes, pos) {
+        let l = crate::bytes::to_usize(len.into());
+        let start = pos.saturating_add(4);
+        let Some(v) = bytes.get(start..start.saturating_add(l)) else {
+            break;
+        };
+        let padded = l.next_multiple_of(4);
+        let span = key.sub(
+            crate::bytes::to_u64(pos),
+            crate::bytes::to_u64(padded.saturating_add(4)),
+        );
+        let node = Node::new(format!("Value {n}")).span(span);
+        cx.emit(match printable(v) {
+            Some(text) => node.value(Value::Text(text)),
+            None => node
+                .value(Value::Bytes(v.iter().take(64).copied().collect()))
+                .summary(format!("{l} bytes")),
+        });
+        pos = start.saturating_add(padded);
+        n = n.saturating_add(1);
+        if n >= 64 {
+            break;
+        }
     }
     Ok(())
 }
@@ -725,10 +967,18 @@ async fn record(cx: Cx, r: RecordState) -> Result<()> {
     let bytes = cx.read_avail(r.record).await?;
     let offsets_len = crate::bytes::to_u64(attrs.len()).saturating_mul(4);
     if !attrs.is_empty() {
+        let names: Vec<String> = attrs.iter().map(|a| a.name.clone()).collect();
         cx.emit(
             Node::new("Attribute offsets")
                 .span(r.record.sub(RecordHeader::SIZE, offsets_len))
-                .summary(format!("{} attributes", attrs.len())),
+                .summary(format!("{} attributes", attrs.len()))
+                .lazy(
+                    attribute_offsets,
+                    (
+                        r.record.sub(RecordHeader::SIZE, offsets_len),
+                        Arc::new(names),
+                    ),
+                ),
         );
     }
     for (i, a) in attrs.iter().enumerate() {
@@ -785,9 +1035,9 @@ async fn ssgp(cx: Cx, data: Span) -> Result<()> {
     );
     cx.emit(
         Node::new("Key label")
-            .span(data.sub(0, 20))
-            .value(Value::Bytes(bytes.get(..20).unwrap_or_default().to_vec()))
-            .desc("the Label of the symmetric key record that encrypts this item"),
+            .span(data.sub(4, 16))
+            .value(Value::Bytes(bytes.get(4..20).unwrap_or_default().to_vec()))
+            .desc("with the magic, the Label of the symmetric key record that encrypts this item"),
     );
     cx.emit(
         Node::new("IV")
