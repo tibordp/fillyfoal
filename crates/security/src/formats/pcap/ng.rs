@@ -6,13 +6,14 @@
 //! are listed in pages; packet blocks carry a protocol summary, and expanding
 //! a block decodes its fields, options and packet headers.
 
-use crate::bytes::{u16_be, u16_le, u32_be, u32_le};
+use crate::bytes::{u32_be, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::pcap::{link_name, net, time_text};
-use crate::formats::util::datakit::{enumv, hex, uint};
+use crate::formats::util::binutil::get;
+use crate::formats::util::val::{enumv, hex, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -83,20 +84,6 @@ struct Block {
     iface: Option<Interface>,
 }
 
-fn rd32(endian: Endian, data: &[u8], at: usize) -> Option<u32> {
-    match endian {
-        Endian::Little => u32_le(data, at),
-        Endian::Big => u32_be(data, at),
-    }
-}
-
-fn rd16(endian: Endian, data: &[u8], at: usize) -> Option<u16> {
-    match endian {
-        Endian::Little => u16_le(data, at),
-        Endian::Big => u16_be(data, at),
-    }
-}
-
 /// Splits a timestamp in units of `resol` into seconds, fraction and digits.
 fn split_ts(ts: u64, resol: u8) -> (i64, u64, usize) {
     let units: u64 = if resol & 0x80 != 0 {
@@ -146,8 +133,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             };
             interfaces.clear();
         }
-        let kind = rd32(endian, &head, 0).unwrap_or(0);
-        let len = u64::from(rd32(endian, &head, 4).unwrap_or(0));
+        let kind = get::<u32>(&head, 0, endian).unwrap_or(0);
+        let len = u64::from(get::<u32>(&head, 4, endian).unwrap_or(0));
         if len < 12 || !len.is_multiple_of(4) {
             return Err(Diagnostic::malformed(format!("bad block length {len:#x}"))
                 .at(input.span.sub(start, 8)));
@@ -161,8 +148,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let mut iface = None;
         match kind {
             SHB => {
-                let major = rd16(endian, &head, 12).unwrap_or(0);
-                let minor = rd16(endian, &head, 14).unwrap_or(0);
+                let major = get::<u16>(&head, 12, endian).unwrap_or(0);
+                let minor = get::<u16>(&head, 14, endian).unwrap_or(0);
                 summary = format!(
                     "version {major}.{minor}, {}-endian",
                     if endian == Endian::Little {
@@ -176,8 +163,8 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 }
             }
             1 => {
-                let link = u32::from(rd16(endian, &head, 8).unwrap_or(0));
-                let snaplen = rd32(endian, &head, 12).unwrap_or(0);
+                let link = u32::from(get::<u16>(&head, 8, endian).unwrap_or(0));
+                let snaplen = get::<u32>(&head, 12, endian).unwrap_or(0);
                 let resol = idb_resolution(&cx, span, endian).await;
                 let i = Interface { link, resol };
                 summary = format!(
@@ -191,14 +178,14 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             6 | 2 => {
                 let id = if kind == 6 {
-                    rd32(endian, &head, 8).unwrap_or(0)
+                    get::<u32>(&head, 8, endian).unwrap_or(0)
                 } else {
-                    u32::from(rd16(endian, &head, 8).unwrap_or(0))
+                    u32::from(get::<u16>(&head, 8, endian).unwrap_or(0))
                 };
                 iface = interfaces.get(crate::bytes::to_usize(id.into())).copied();
-                let high = u64::from(rd32(endian, &head, 12).unwrap_or(0));
-                let low = u64::from(rd32(endian, &head, 16).unwrap_or(0));
-                let captured = rd32(endian, &head, 20).unwrap_or(0);
+                let high = u64::from(get::<u32>(&head, 12, endian).unwrap_or(0));
+                let low = u64::from(get::<u32>(&head, 16, endian).unwrap_or(0));
+                let captured = get::<u32>(&head, 20, endian).unwrap_or(0);
                 let resol = iface.map_or(6, |i| i.resol);
                 summary = format!(
                     "packet {packets}, {captured} bytes, {}",
@@ -215,7 +202,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             }
             3 => {
                 iface = interfaces.first().copied();
-                let original = rd32(endian, &head, 8).unwrap_or(0);
+                let original = get::<u32>(&head, 8, endian).unwrap_or(0);
                 summary = format!("packet {packets}, {original} bytes");
                 if let Some(i) = iface {
                     let data = span.sub(12, len.saturating_sub(16));
@@ -227,7 +214,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                 packets = packets.saturating_add(1);
             }
             5 => {
-                let id = rd32(endian, &head, 8).unwrap_or(0);
+                let id = get::<u32>(&head, 8, endian).unwrap_or(0);
                 iface = interfaces.get(crate::bytes::to_usize(id.into())).copied();
                 summary = format!("interface {id}");
             }
@@ -273,8 +260,8 @@ async fn idb_resolution(cx: &Cx, span: Span, endian: Endian) -> u8 {
     let end = crate::bytes::to_usize(span.len.saturating_sub(4)).min(data.len());
     let mut at = 16usize;
     while at.saturating_add(4) <= end {
-        let code = rd16(endian, &data, at).unwrap_or(0);
-        let len = usize::from(rd16(endian, &data, at.saturating_add(2)).unwrap_or(0));
+        let code = get::<u16>(&data, at, endian).unwrap_or(0);
+        let len = usize::from(get::<u16>(&data, at.saturating_add(2), endian).unwrap_or(0));
         if code == 0 {
             break;
         }
@@ -450,8 +437,8 @@ async fn name_records_end(
         }
         n = n.wrapping_add(1);
         let i = crate::bytes::to_usize(at);
-        let kind = rd16(endian, &data.data, i).unwrap_or(0);
-        let len = u64::from(rd16(endian, &data.data, i.saturating_add(2)).unwrap_or(0));
+        let kind = get::<u16>(&data.data, i, endian).unwrap_or(0);
+        let len = u64::from(get::<u16>(&data.data, i.saturating_add(2), endian).unwrap_or(0));
         at = at
             .saturating_add(4)
             .saturating_add(len.checked_next_multiple_of(4).unwrap_or(u64::MAX));
@@ -632,7 +619,7 @@ async fn options(cx: Cx, (span, endian, kind): (Span, Endian, u32)) -> Result<()
                     bits: 64,
                 }),
                 (6 | 2, 2, 4) => {
-                    let v = rd32(endian, &bytes, 0).unwrap_or(0);
+                    let v = get::<u32>(&bytes, 0, endian).unwrap_or(0);
                     let dir = match v & 3 {
                         1 => "inbound",
                         2 => "outbound",
@@ -641,7 +628,7 @@ async fn options(cx: Cx, (span, endian, kind): (Span, Endian, u32)) -> Result<()
                     node.value(hex(v, 32)).summary(dir)
                 }
                 (_, _, 8) => node.value(uint(rd64(&bytes).unwrap_or(0), 64)),
-                (_, _, 4) => node.value(uint(rd32(endian, &bytes, 0).unwrap_or(0), 32)),
+                (_, _, 4) => node.value(uint(get::<u32>(&bytes, 0, endian).unwrap_or(0), 32)),
                 _ => node.value(Value::Bytes(bytes.get(..32).unwrap_or(&bytes).to_vec())),
             }
         };

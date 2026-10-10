@@ -6,7 +6,9 @@
 use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::binutil::{data_node, ellipsize, text};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
@@ -136,7 +138,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .collect();
     cx.annotate(format!(
         "OCaml bytecode executable (format {version}), sections {}, {prims} primitives",
-        ellipsize(&ids.join(" "), 80)
+        clip(&ids.join(" "), 80)
     ));
     for n in nodes {
         cx.checkpoint().await;
@@ -150,7 +152,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Section Count")
             .span(count_span)
-            .value(crate::formats::util::binutil::dec(count.into(), 32)),
+            .value(crate::formats::util::val::uint(count, 32)),
     );
     cx.emit(
         Node::new("Magic")

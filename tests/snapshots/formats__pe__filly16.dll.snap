@@ -74,15 +74,17 @@ expression: "common::explore(&display_name(&path), &data)"
           MinAlloc: 0x10  [0xce+0x2]
     ▾ Resource Table  [0xd0+0x36]
         rscAlignShift: 4  [0xd0+0x2]
-      ▾ RCDATA — 1 resources  [0xd2+0x14]
-        ▾ #1 — UTF-8 text, 1 line  [0x190+0x10] → 0xda+0xc
-            Encoding: "UTF-8"
-            Line endings: "none" — 0 LF, 0 CRLF, 0 CR
-          ▾ Lines — 1 line  [0x190+0x10]
-              Line 1: "RCDATA payload: "  [0x190+0x10]
-      ▾ VERSION — 1 resources  [0xe6+0x14]
+      ▾ RT_RCDATA — 1 resources  [0xd2+0x14]
+        ▾ #1 — 0x10 bytes at 0x190  [0x190+0x10] → 0xda+0xc
+          ▾ Content — UTF-8 text, 1 line  [0x190+0x10]
+              Encoding: "UTF-8"
+              Line endings: "none" — 0 LF, 0 CRLF, 0 CR
+            ▾ Lines — 1 line  [0x190+0x10]
+                Line 1: "RCDATA payload: "  [0x190+0x10]
+      ▾ RT_VERSION — 1 resources  [0xe6+0x14]
         ▾ FILLYVER — 0x10 bytes at 0x1c0  [0x1c0+0x10] → 0xee+0xc
-            Data  [0x1c0+0x10]
+            Version Info  [0x1c0+0x10]
+              ! malformed: block length 0x5601 does not fit (have 0x10)
     ▾ Resident Names — 3 names  [0x106+0x19]
         FILLY — module name / description  [0x106+0x8]
         TROT — ordinal 1  [0x10e+0x7]

@@ -4,13 +4,9 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::declare_format;
 use crate::error::{Diagnostic, Result};
+use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
-use crate::value::Value;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
 
 // ---------------------------------------------------------------------------
 // age encryption

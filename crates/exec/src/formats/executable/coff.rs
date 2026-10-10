@@ -16,7 +16,9 @@ use crate::fields::{Endian, Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{
     FILE_CHARACTERISTICS, MACHINE, SECTION_CHARACTERISTICS,
 };
-use crate::formats::util::binutil::{cstrings, data_node, ellipsize, hex, name_or, text};
+use crate::formats::util::binutil::{cstrings, data_node};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{hex, name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -24,7 +26,7 @@ use crate::value::{EnumTable, lookup};
 
 const LE: Endian = Endian::Little;
 /// Largest string table we load.
-const MAX_STRINGS: u64 = 4 << 20;
+pub(super) const MAX_STRINGS: u64 = 4 << 20;
 const BIGOBJ_CLASS_ID: [u8; 16] = [
     0xc7, 0xa1, 0xba, 0xd1, 0xee, 0xba, 0xa9, 0x4b, 0xaf, 0x20, 0xfa, 0xf6, 0x6a, 0xa4, 0xdc, 0xb8,
 ];
@@ -245,15 +247,125 @@ fn relocation_types(machine: u16) -> EnumTable {
 // ---------------------------------------------------------------------------
 // Model
 
+/// A section header (`IMAGE_SECTION_HEADER`): the same 40 bytes in COFF
+/// objects, PE images and UEFI TE images.
 #[derive(Clone, Debug)]
-struct Section {
-    header: Span,
-    name: String,
-    raw_size: u32,
-    raw_ptr: u32,
-    reloc_ptr: u32,
-    nreloc: u16,
-    chars: u32,
+pub(super) struct Section {
+    pub header: Span,
+    /// The name, with `/123` names resolved through the string table.
+    pub name: String,
+    pub virtual_size: u32,
+    pub virtual_address: u32,
+    pub raw_size: u32,
+    pub raw_pointer: u32,
+    pub reloc_pointer: u32,
+    pub nreloc: u16,
+    pub characteristics: u32,
+}
+
+impl Section {
+    /// The size of the section in memory (the raw size if the virtual size
+    /// is zero).
+    pub fn mapped_size(&self) -> u32 {
+        if self.virtual_size == 0 {
+            self.raw_size
+        } else {
+            self.virtual_size
+        }
+    }
+
+    pub fn label(&self) -> String {
+        if self.name.is_empty() {
+            "(unnamed)".to_owned()
+        } else {
+            self.name.clone()
+        }
+    }
+
+    /// Where the section's data is in `file`: `PointerToRawData` less the
+    /// bytes `stripped` from the front (TE images), or `None` if the
+    /// section has no data in the file.
+    pub fn data(&self, file: Span, stripped: u64) -> Option<Span> {
+        (self.raw_pointer != 0 && self.raw_size != 0).then(|| {
+            file.sub(
+                u64::from(self.raw_pointer).saturating_sub(stripped),
+                self.raw_size.into(),
+            )
+        })
+    }
+}
+
+/// What reading section headers needs: the file their pointers are in, the
+/// bytes stripped from its front (TE images), and the COFF string table for
+/// long names (whole, with its size field; empty if there is none).
+pub(super) struct SectionContext<'a> {
+    pub file: Span,
+    pub stripped: u64,
+    pub strings: &'a [u8],
+}
+
+impl SectionContext<'_> {
+    /// A section name field: inline, or `/offset` into the string table.
+    fn name(&self, raw: &[u8]) -> String {
+        let inline = crate::text::until_nul(raw);
+        match inline.strip_prefix('/').and_then(|n| n.parse::<u32>().ok()) {
+            Some(offset) if offset >= 4 => self
+                .strings
+                .get(to_usize(offset.into())..)
+                .map_or(inline, crate::text::until_nul),
+            _ => inline,
+        }
+    }
+}
+
+/// Reads one 40-byte section header (showing its fields if `f` emits).
+pub(super) fn section_header(f: &mut Fields<'_>, cx: &SectionContext<'_>) -> Result<Section> {
+    let header = f.peek_span(40);
+    let at = to_usize(f.pos());
+    let raw = f
+        .block()
+        .data
+        .get(at..at.saturating_add(8))
+        .unwrap_or_default();
+    let name = cx.name(raw);
+    f.bytes("Name", 8)
+        .with(|_, n| n.value(text(name.clone())))
+        .desc("A \"/123\" name refers to the COFF string table")
+        .emit()?;
+    let virtual_size = f.u32("VirtualSize").hex().emit()?;
+    let virtual_address = f.u32("VirtualAddress").hex().emit()?;
+    let raw_size = f.u32("SizeOfRawData").hex().emit()?;
+    let (file, stripped) = (cx.file, cx.stripped);
+    let mut pointer = f.u32("PointerToRawData").hex().with(move |&p, n| {
+        if p == 0 {
+            n
+        } else {
+            n.target(file.sub(u64::from(p).saturating_sub(stripped), raw_size.into()))
+        }
+    });
+    if stripped > 0 {
+        pointer = pointer.desc("Counts the stripped headers");
+    }
+    let raw_pointer = pointer.emit()?;
+    let reloc_pointer = f.u32("PointerToRelocations").hex().emit()?;
+    f.u32("PointerToLinenumbers").hex().emit()?;
+    let nreloc = f.u16("NumberOfRelocations").emit()?;
+    f.u16("NumberOfLinenumbers").emit()?;
+    let characteristics = f
+        .u32("Characteristics")
+        .flags(SECTION_CHARACTERISTICS)
+        .emit()?;
+    Ok(Section {
+        header,
+        name,
+        virtual_size,
+        virtual_address,
+        raw_size,
+        raw_pointer,
+        reloc_pointer,
+        nreloc,
+        characteristics,
+    })
 }
 
 type Coff = Arc<CoffInfo>;
@@ -273,19 +385,18 @@ impl CoffInfo {
         if self.big { 20 } else { 18 }
     }
 
+    fn section_context(&self) -> SectionContext<'_> {
+        SectionContext {
+            file: self.file,
+            stripped: 0,
+            strings: &self.strings,
+        }
+    }
+
     fn string(&self, offset: u32) -> Option<String> {
         self.strings
             .get(to_usize(offset.into())..)
             .map(crate::text::until_nul)
-    }
-
-    /// A short name field: inline, or `/offset` into the string table.
-    fn section_name(&self, raw: &[u8]) -> String {
-        let inline = crate::text::until_nul(raw);
-        match inline.strip_prefix('/').and_then(|n| n.parse::<u32>().ok()) {
-            Some(offset) => self.string(offset).unwrap_or(inline),
-            None => inline,
-        }
     }
 
     /// A symbol name field: inline, or zeros and a string table offset.
@@ -379,35 +490,6 @@ fn bigobj_header(f: &mut Fields<'_>, _: &()) -> Result<Header> {
     })
 }
 
-fn section_header(f: &mut Fields<'_>, c: &Coff) -> Result<()> {
-    let raw = f.block().data.get(..8).unwrap_or_default().to_vec();
-    f.bytes("Name", 8)
-        .with(|_, n| n.value(text(c.section_name(&raw))))
-        .emit()?;
-    f.u32("VirtualSize").hex().emit()?;
-    f.u32("VirtualAddress").hex().emit()?;
-    let size = f.u32("SizeOfRawData").hex().emit()?;
-    let file = c.file;
-    f.u32("PointerToRawData")
-        .hex()
-        .with(|&p, n| {
-            if p == 0 {
-                n
-            } else {
-                n.target(file.sub(p.into(), size.into()))
-            }
-        })
-        .emit()?;
-    f.u32("PointerToRelocations").hex().emit()?;
-    f.u32("PointerToLinenumbers").hex().emit()?;
-    f.u16("NumberOfRelocations").emit()?;
-    f.u16("NumberOfLinenumbers").emit()?;
-    f.u32("Characteristics")
-        .flags(SECTION_CHARACTERISTICS)
-        .emit()?;
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Entry point
 
@@ -446,23 +528,19 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         strings,
     };
     let block = cx.block(table).await?;
-    for i in 0..u64::from(h.sections) {
+    let mut fields = Fields::new(&block, LE);
+    let mut sections = Vec::new();
+    for _ in 0..h.sections {
         cx.checkpoint().await;
-        let at = to_usize(i.saturating_mul(40));
-        let d = block
-            .data
-            .get(at..at.saturating_add(40))
-            .unwrap_or_default();
-        info.sections.push(Section {
-            header: table.sub(i.saturating_mul(40), 40),
-            name: info.section_name(d.get(..8).unwrap_or_default()),
-            raw_size: u32_le(d, 16).unwrap_or(0),
-            raw_ptr: u32_le(d, 20).unwrap_or(0),
-            reloc_ptr: u32_le(d, 24).unwrap_or(0),
-            nreloc: u16_le(d, 32).unwrap_or(0),
-            chars: u32_le(d, 36).unwrap_or(0),
-        });
+        match section_header(&mut fields, &info.section_context()) {
+            Ok(section) => sections.push(section),
+            Err(e) => {
+                cx.diag(e);
+                break;
+            }
+        }
     }
+    info.sections = sections;
     let c: Coff = Arc::new(info);
 
     let mut summary = format!(
@@ -475,10 +553,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let directives = c.sections.iter().find(|s| s.name == ".drectve");
     let mut directive_text = None;
     if let Some(s) = directives {
-        let span = file.sub(s.raw_ptr.into(), s.raw_size.into());
+        let span = file.sub(s.raw_pointer.into(), s.raw_size.into());
         let bytes = cx.read_avail(span.sub(0, 0x10000)).await?;
         let t = String::from_utf8_lossy(&bytes).trim().to_owned();
-        summary.push_str(&format!(", directives: {}", ellipsize(&t, 80)));
+        summary.push_str(&format!(", directives: {}", clip(&t, 80)));
         directive_text = Some((t, span));
     }
     cx.annotate(summary);
@@ -517,14 +595,20 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 async fn section_list(cx: Cx, c: Coff) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(c.sections.len())));
     for (i, s) in c.sections.iter().enumerate() {
-        let flag = |bit: u32, ch: char| if s.chars & bit != 0 { ch } else { '-' };
+        let flag = |bit: u32, ch: char| {
+            if s.characteristics & bit != 0 {
+                ch
+            } else {
+                '-'
+            }
+        };
         let summary = format!(
             "{}{}{}  {:#x} bytes at {:#x}, {} relocations",
             flag(0x4000_0000, 'r'),
             flag(0x8000_0000, 'w'),
             flag(0x2000_0000, 'x'),
             s.raw_size,
-            s.raw_ptr,
+            s.raw_pointer,
             s.nreloc
         );
         cx.push(
@@ -544,15 +628,15 @@ async fn section_node(cx: Cx, (c, index): (Coff, usize)) -> Result<()> {
         .get(index)
         .ok_or_else(|| Diagnostic::internal("section index out of range"))?;
     let block = cx.block(s.header).await?;
-    section_header(&mut Fields::emitting(&cx, &block, LE), &c)?;
-    if s.raw_size > 0 && s.raw_ptr != 0 {
-        let data = c.file.sub(s.raw_ptr.into(), s.raw_size.into());
+    section_header(&mut Fields::emitting(&cx, &block, LE), &c.section_context())?;
+    if let Some(data) = s.data(c.file, 0) {
         cx.emit(data_node("Raw Data", data, s.raw_size.into()));
     }
     if s.nreloc > 0 {
-        let span = c
-            .file
-            .sub(s.reloc_ptr.into(), u64::from(s.nreloc).saturating_mul(10));
+        let span = c.file.sub(
+            s.reloc_pointer.into(),
+            u64::from(s.nreloc).saturating_mul(10),
+        );
         cx.emit(
             Node::new("Relocations")
                 .span(span)
@@ -589,7 +673,7 @@ async fn relocations(cx: Cx, (c, span): (Coff, Span)) -> Result<()> {
         cx.push(
             Node::new(name_or(types, kind.into(), "type"))
                 .span(at)
-                .value(hex(address.into(), 32))
+                .value(hex(address, 32))
                 .summary(target),
         )
         .await;
@@ -675,7 +759,7 @@ async fn symbol_list(cx: Cx, c: Coff) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(whole)
-                .value(hex(sym.value.into(), 32))
+                .value(hex(sym.value, 32))
                 .summary(summary)
                 .lazy(symbol_node, (c.clone(), index, sym, aux)),
         )

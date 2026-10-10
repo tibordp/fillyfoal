@@ -9,8 +9,10 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{ellipsize, mutf8, name_or, text};
-use crate::formats::{Format, Input, Probe, embedded};
+use crate::formats::util::binutil::mutf8;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{name_or, text};
+use crate::formats::{Format, Input, Probe, embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{EnumTable, Value};
@@ -68,12 +70,20 @@ fn utf(f: &mut Fields<'_>, label: &'static str) -> Result<String> {
 }
 
 fn certificate(f: &mut Fields<'_>, c: &Ctx, label: &'static str) -> Result<()> {
-    if c.version == 2 {
-        utf(f, "certificate type")?;
-    }
+    // Version 1 key stores hold X.509 certificates only.
+    let kind = if c.version == 2 {
+        utf(f, "certificate type")?
+    } else {
+        "X.509".to_owned()
+    };
     let len = f.u32("certificate length").emit()?;
     let span = f.peek_span(len.into());
-    f.node(embedded(label, c.input.nested(span)).summary(format!("{len} bytes, DER")));
+    let inner = c.input.nested(span);
+    f.node(if kind == "X.509" {
+        embedded_as(label, inner, &crate::formats::asn1::X509)
+    } else {
+        embedded(label, inner).summary(format!("{len} bytes, {kind}"))
+    });
     f.skip(len.into());
     if f.pos() > f.block().span.len {
         return Err(Diagnostic::truncated(span, 0));
@@ -99,10 +109,11 @@ async fn entry(cx: &Cx, f: &mut Fields<'_>, c: &Ctx) -> Result<EntryInfo> {
         1 => {
             let len = f.u32("key length").emit()?;
             let span = f.peek_span(len.into());
-            f.node(
-                embedded("Protected key", c.input.nested(span))
-                    .summary(format!("{len} bytes, EncryptedPrivateKeyInfo (DER)")),
-            );
+            f.node(embedded_as(
+                "Protected key",
+                c.input.nested(span),
+                &crate::formats::asn1::PKCS8_ENCRYPTED,
+            ));
             f.skip(len.into());
             certificates = f.u32("chain length").emit()?;
             for _ in 0..certificates {
@@ -184,7 +195,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         .collect();
     cx.annotate(format!(
         "Java KeyStore ({kind} v{version}), {count} entries: {}",
-        ellipsize(&aliases.join(", "), 100)
+        clip(&aliases.join(", "), 100)
     ));
     let table = file.sub(12, offset.saturating_sub(12));
     cx.emit(
@@ -201,7 +212,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Digest")
             .span(digest)
-            .value(text(crate::formats::util::binutil::hex_string(&bytes)))
+            .value(text(crate::text::hex_lower(&bytes)))
             .desc("SHA-1 over the password (UTF-16), \"Mighty Aphrodite\" and the keystore"),
     );
     if offset.saturating_add(20) < file.len {

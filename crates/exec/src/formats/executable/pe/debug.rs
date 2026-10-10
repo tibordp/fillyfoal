@@ -13,9 +13,9 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::content;
-use crate::formats::util::binutil::hex_string;
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{Value, lookup};
 
 #[derive(Clone, Copy, Debug)]
@@ -283,7 +283,7 @@ async fn repro(cx: Cx, span: Span) -> Result<()> {
     let mut f = Fields::emitting(&cx, &block, LE);
     let len = f.u32("Length").emit()?;
     let hash = f.bytes("Hash", len.into()).emit()?;
-    cx.annotate(hex_string(&hash));
+    cx.annotate(hex_lower(&hash));
     Ok(())
 }
 
@@ -375,7 +375,7 @@ async fn pdb_checksum(cx: Cx, span: Span) -> Result<()> {
     let algorithm = f.cstr("AlgorithmName").emit()?;
     let rest = f.remaining();
     let hash = f.bytes("Checksum", rest).emit()?;
-    cx.annotate(format!("{algorithm} {}", hex_string(&hash)));
+    cx.annotate(format!("{algorithm} {}", hex_lower(&hash)));
     Ok(())
 }
 

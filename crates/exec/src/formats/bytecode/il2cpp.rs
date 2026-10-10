@@ -6,7 +6,7 @@
 use crate::bytes::{to_u64, to_usize, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
-use crate::formats::util::binutil::{dec, hex, text};
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -32,12 +32,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("sanity")
             .span(file.sub(0, 4))
-            .value(hex(0xfab1_1baf, 32)),
+            .value(hex(0xfab1_1baf_u32, 32)),
     );
     cx.emit(
         Node::new("version")
             .span(file.sub(4, 4))
-            .value(dec(version.into(), 32)),
+            .value(uint(version, 32)),
     );
     // The header ends where the first table starts.
     let first = u32_le(&head, 8).unwrap_or(0).clamp(8, 0x400);

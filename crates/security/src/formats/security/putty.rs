@@ -32,15 +32,13 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
 use crate::formats::text::decode::{Transform, decoded_node, derive_with};
 use crate::formats::text::ssh::key_bits;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
-use crate::value::{Radix, Value};
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
+use crate::text::unhex;
+use crate::value::Value;
 
 use crate::formats::text::scan::head_lines as header_lines;
 
@@ -72,25 +70,6 @@ type ArgonHeader = (
     Option<u32>,
     Option<Vec<u8>>,
 );
-
-fn unhex(s: &str) -> Option<Vec<u8>> {
-    let s = s.trim();
-    if s.len().checked_rem(2) != Some(0) {
-        return None;
-    }
-    s.as_bytes()
-        .chunks(2)
-        .map(|p| u8::from_str_radix(std::str::from_utf8(p).ok()?, 16).ok())
-        .collect()
-}
-
-fn uint(v: u64) -> Value {
-    Value::UInt {
-        value: v,
-        bits: 32,
-        radix: Radix::Dec,
-    }
-}
 
 async fn ppk(cx: Cx, input: Input) -> Result<()> {
     let all = header_lines(&cx, input.span, 1 << 16).await?;
@@ -224,7 +203,7 @@ async fn ppk(cx: Cx, input: Input) -> Result<()> {
             }
             "Argon2-Memory" | "Argon2-Passes" | "Argon2-Parallelism" => {
                 if let Ok(v) = value.trim().parse::<u64>() {
-                    node = node.value(uint(v));
+                    node = node.value(uint(v, 32));
                     if key == "Argon2-Memory" {
                         node = node.summary("KiB");
                     }
@@ -560,6 +539,7 @@ async fn private_fields(cx: &Cx, algorithm: &str, span: Span) -> Result<()> {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::text::hex_lower;
 
     #[test]
     fn argon2_80_byte_output_matches_argon2_cffi() {
@@ -576,7 +556,7 @@ mod tests {
         let salt: Vec<u8> = (0..16).collect();
         let mut a = Argon2::new(params, b"fillyfoal", &salt, &[], &[]).unwrap();
         while !a.step(64) {}
-        let hex: String = a.finish().iter().map(|b| format!("{b:02x}")).collect();
+        let hex = hex_lower(&a.finish());
         assert_eq!(
             hex,
             "6ebd0e3db8f0afbf7762bb78e8dfefec15a49b9ceea97d8b5e9b95a204d551563b984f20592a4504f52b67891c63f39359cb4885aee38a971ddef308c72388656015a7e02ff1e026973ed690c3994852"

@@ -28,10 +28,9 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::arcutil::human_size;
-use crate::formats::util::binutil::{
-    NodeExt, RangeIndex, cstrings, data_node, ellipsize, get_at, name_or, perms, text,
-};
+use crate::formats::util::binutil::{NodeExt, RangeIndex, cstrings, data_node, get_at, perms};
+use crate::formats::util::fmt::{clip, size};
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -453,7 +452,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         let names: Vec<&str> = m.dylibs.iter().map(Dylib::short).collect();
         cx.emit(
             Node::new("Linked Libraries")
-                .summary(ellipsize(&names.join(", "), 120))
+                .summary(clip(&names.join(", "), 120))
                 .lazy(libraries, m.clone()),
         );
     }
@@ -690,7 +689,7 @@ fn summary(m: &MachInfo, commands: &[u8], signed: Option<&str>) -> String {
     }
     parts.extend(platform);
     if !m.dylibs.is_empty() {
-        parts.push(count(to_u64(m.dylibs.len()), "dylib", "dylibs"));
+        parts.push(grouped_count(to_u64(m.dylibs.len()), "dylib", "dylibs"));
     }
     if let Some(s) = signed {
         parts.push(format!("signed ({s})"));
@@ -702,7 +701,7 @@ fn summary(m: &MachInfo, commands: &[u8], signed: Option<&str>) -> String {
         parts.push("PIE".to_owned());
     }
     if let Some(st) = m.symtab {
-        parts.push(count(st.nsyms.into(), "symbol", "symbols"));
+        parts.push(grouped_count(st.nsyms, "symbol", "symbols"));
     }
     parts.join(", ")
 }
@@ -782,7 +781,7 @@ async fn top_level(cx: &Cx, m: &Macho) -> Result<()> {
         cx.push(
             embedded("Overlay", m.input.nested(file.tail(end))).summary(format!(
                 "{} after the last segment",
-                human_size(file.len.saturating_sub(end))
+                size(file.len.saturating_sub(end))
             )),
         )
         .await;
@@ -797,12 +796,12 @@ async fn gap_node(cx: &Cx, span: Span) -> Result<Node> {
     Ok(if zeros {
         Node::new("Padding")
             .span(span)
-            .summary(human_size(span.len))
+            .summary(size(span.len))
             .desc("Alignment padding (zeros)")
     } else {
         Node::new("Unreferenced Data")
             .span(span)
-            .summary(human_size(span.len))
+            .summary(size(span.len))
             .desc("Bytes no load command points at")
     })
 }
@@ -821,8 +820,8 @@ fn segment_node(m: &Macho, index: usize) -> Node {
                 s.initprot & 2 != 0,
                 s.initprot & 4 != 0
             ),
-            count(s.nsects.into(), "section", "sections"),
-            human_size(s.filesize),
+            grouped_count(s.nsects, "section", "sections"),
+            size(s.filesize),
             s.vmaddr
         ))
         .lazy(segment_contents, (m.clone(), index));
@@ -882,7 +881,7 @@ fn item_node(m: &Macho, r: &Region) -> Node {
                 .map_or_else(String::new, SectionInfo::label);
             Node::new(format!("Relocations ({label})"))
                 .span(span)
-                .summary(count(span.len / 8, "entry", "entries"))
+                .summary(grouped_count(span.len / 8, "entry", "entries"))
                 .lazy(symbols::relocations, (m.clone(), span, i))
         }
         Item::Symtab => match m.symtab {
@@ -891,11 +890,11 @@ fn item_node(m: &Macho, r: &Region) -> Node {
         },
         Item::Strtab => Node::new("String Table")
             .span(span)
-            .summary(human_size(span.len))
+            .summary(size(span.len))
             .lazy(cstrings, span),
         Item::Toc => Node::new("Table of Contents")
             .span(span)
-            .summary(count(span.len / 8, "entry", "entries"))
+            .summary(grouped_count(span.len / 8, "entry", "entries"))
             .desc("Defined external symbols and the modules defining them")
             .lazy(symbols::toc, (m.clone(), span)),
         Item::Modtab => Node::new("Module Table")
@@ -903,11 +902,11 @@ fn item_node(m: &Macho, r: &Region) -> Node {
             .lazy(symbols::modules, (m.clone(), span)),
         Item::ExtRefs => Node::new("External References")
             .span(span)
-            .summary(count(span.len / 4, "entry", "entries"))
+            .summary(grouped_count(span.len / 4, "entry", "entries"))
             .lazy(symbols::external_refs, (m.clone(), span)),
         Item::Indirect => Node::new("Indirect Symbol Table")
             .span(span)
-            .summary(count(span.len / 4, "entry", "entries"))
+            .summary(grouped_count(span.len / 4, "entry", "entries"))
             .desc("Symbol indices for the entries of pointer and stub sections")
             .lazy(
                 symbols::indirect_symbols,
@@ -923,7 +922,7 @@ fn item_node(m: &Macho, r: &Region) -> Node {
             "Local Relocations"
         })
         .span(span)
-        .summary(count(span.len / 8, "entry", "entries"))
+        .summary(grouped_count(span.len / 8, "entry", "entries"))
         .lazy(symbols::relocations, (m.clone(), span, usize::MAX)),
         Item::Rebase => Node::new("Rebase Info")
             .span(span)
@@ -953,7 +952,7 @@ fn item_node(m: &Macho, r: &Region) -> Node {
         Item::Data(cmd) => linkedit_data_node(m, cmd, span),
         Item::TwoLevelHints => Node::new("Two-Level Namespace Hints")
             .span(span)
-            .summary(count(span.len / 4, "hint", "hints"))
+            .summary(grouped_count(span.len / 4, "hint", "hints"))
             .lazy(symbols::hints, (m.clone(), span)),
         Item::Note => embedded("Note Data", m.input.nested(span)),
         Item::SymSeg => data_node("Symbol Segment", span, r.len),
@@ -983,7 +982,7 @@ fn linkedit_data_node(m: &Macho, cmd: u32, span: Span) -> Node {
             .lazy(linkedit::function_starts, (m.clone(), span)),
         LC_DATA_IN_CODE => Node::new("Data in Code")
             .span(span)
-            .summary(count(span.len / 8, "entry", "entries"))
+            .summary(grouped_count(span.len / 8, "entry", "entries"))
             .lazy(linkedit::data_in_code, (m.clone(), span)),
         LC_DYLD_CHAINED_FIXUPS => Node::new("Chained Fixups")
             .span(span)
@@ -1058,7 +1057,11 @@ fn mach_header(f: &mut Fields<'_>, wide: &bool) -> Result<Header> {
 fn commands_node(m: &Macho, span: Span) -> Node {
     Node::new("Load Commands")
         .span(span)
-        .summary(count(to_u64(m.commands.len()), "command", "commands"))
+        .summary(grouped_count(
+            to_u64(m.commands.len()),
+            "command",
+            "commands",
+        ))
         .lazy(command_list, m.clone())
 }
 
@@ -1066,8 +1069,7 @@ async fn command_list(cx: Cx, m: Macho) -> Result<()> {
     cx.set_count(Count::Exact(to_u64(m.commands.len())));
     for (index, c) in m.commands.iter().enumerate() {
         let bytes = cx.read_avail(c.span.sub(0, 0x1000)).await?;
-        let label = lookup(LOAD_COMMAND, c.cmd.into())
-            .map_or_else(|| format!("LC {:#x}", c.cmd), str::to_owned);
+        let label = name_or(LOAD_COMMAND, c.cmd.into(), "LC");
         cx.push(
             Node::new(label)
                 .span(c.span)
@@ -1103,7 +1105,7 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
             format!(
                 "{name} {}  vm {vmaddr:#x}+{vmsize:#x}, file {fileoff:#x}+{filesize:#x}, {}",
                 perms(prot & 1 != 0, prot & 2 != 0, prot & 4 != 0),
-                count(nsects.into(), "section", "sections")
+                grouped_count(nsects, "section", "sections")
             )
         }
         LC_LOAD_DYLIB | LC_LOAD_WEAK_DYLIB | LC_REEXPORT_DYLIB | LC_LAZY_LOAD_DYLIB
@@ -1116,7 +1118,7 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
         LC_LOAD_DYLINKER | LC_ID_DYLINKER | LC_DYLD_ENVIRONMENT | LC_RPATH | LC_SUB_FRAMEWORK
         | LC_SUB_UMBRELLA | LC_SUB_CLIENT | LC_SUB_LIBRARY | LC_TARGET_TRIPLE => lc_str(8),
         LC_LOADFVMLIB | LC_IDFVMLIB => format!("{} (version {})", lc_str(8), w(12)),
-        LC_UUID => uuid(b.get(8..24).unwrap_or_default()),
+        LC_UUID => uuid(b.get(8..24).unwrap_or_default()).to_uppercase(),
         LC_BUILD_VERSION => {
             let mut s = format!(
                 "{} {}, SDK {}",
@@ -1141,8 +1143,8 @@ fn command_summary(m: &MachInfo, cmd: u32, b: &[u8]) -> String {
         LC_MAIN => format!("entry offset {:#x}, stack size {:#x}", q(8), q(16)),
         LC_SYMTAB => format!(
             "{}, {} of strings",
-            count(w(12).into(), "symbol", "symbols"),
-            human_size(w(20).into())
+            grouped_count(w(12), "symbol", "symbols"),
+            size(w(20).into())
         ),
         LC_DYSYMTAB => format!(
             "{} local, {} defined external, {} undefined, {} indirect",
@@ -1305,7 +1307,7 @@ async fn section_header_node(cx: Cx, (m, header, index): (Macho, Span, usize)) -
         cx.emit(
             Node::new("Relocations")
                 .span(span)
-                .summary(count(s.nreloc.into(), "entry", "entries"))
+                .summary(grouped_count(s.nreloc, "entry", "entries"))
                 .lazy(symbols::relocations, (m.clone(), span, index)),
         );
     }
@@ -1339,7 +1341,7 @@ fn command_padding(f: &mut Fields<'_>, end: u64) {
             f.block().span.offset.saturating_add(end),
             rest,
         );
-        f.node(Node::new("padding").span(span).summary(human_size(rest)));
+        f.node(Node::new("padding").span(span).summary(size(rest)));
     }
 }
 
@@ -1480,7 +1482,7 @@ fn section_header(f: &mut Fields<'_>, c: &Ctx) -> Result<SectionInfo> {
 
 fn section_summary(s: &SectionInfo) -> String {
     let kind = name_or(SECTION_TYPE, s.kind().into(), "type");
-    format!("{kind}, {} at {:#x}", human_size(s.size), s.addr)
+    format!("{kind}, {} at {:#x}", size(s.size), s.addr)
 }
 
 fn symtab_command(f: &mut Fields<'_>, c: &Ctx) -> Result<()> {
@@ -1690,7 +1692,9 @@ fn simple_command(f: &mut Fields<'_>, c: &Ctx, cmd: u32) -> Result<()> {
             strings = true;
         }
         LC_UUID => {
-            f.bytes("uuid", 16).with(|v, n| n.summary(uuid(v))).emit()?;
+            f.bytes("uuid", 16)
+                .with(|v, n| n.summary(uuid(v).to_uppercase()))
+                .emit()?;
         }
         LC_VERSION_MIN_MACOSX
         | LC_VERSION_MIN_IPHONEOS
@@ -1816,22 +1820,12 @@ async fn libraries(cx: Cx, m: Macho) -> Result<()> {
     Ok(())
 }
 
-/// Emits pre-built nodes: the expander for groups whose children were
-/// decoded together with their parent.
-async fn emit_all(cx: Cx, nodes: Arc<Vec<Node>>) -> Result<()> {
-    cx.set_count(Count::Exact(to_u64(nodes.len())));
-    for node in nodes.iter() {
-        cx.push(node.clone()).await;
-    }
-    Ok(())
-}
-
 /// A node whose children are `children`, built already.
 fn group(name: impl Into<std::borrow::Cow<'static, str>>, span: Span, children: Vec<Node>) -> Node {
     let node = Node::new(name).span(span);
     if children.is_empty() {
         node
     } else {
-        node.lazy(emit_all, Arc::new(children))
+        node.lazy(super::push_nodes, Arc::new(children))
     }
 }

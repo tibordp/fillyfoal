@@ -3,6 +3,7 @@
 //! probes, for summaries, and for the values of primitive nodes.
 
 use crate::bytes::to_usize;
+use crate::formats::util::civil::{date, days_from_civil};
 use crate::value::EnumTable;
 
 pub const CLASS_UNIVERSAL: u8 = 0;
@@ -308,24 +309,6 @@ pub fn time(tag: u64, content: &[u8]) -> Option<i64> {
         .checked_add(hour.checked_mul(3600)?)?
         .checked_add(minute.checked_mul(60)?)?
         .checked_add(second)
-}
-
-pub use crate::formats::util::civil::days_from_civil;
-
-/// `YYYY-MM-DD` of a Unix timestamp, for summaries.
-#[allow(clippy::arithmetic_side_effects)] // i128 cannot overflow for i64 input
-pub fn date(unix_seconds: i64) -> String {
-    let days = i128::from(unix_seconds).div_euclid(86_400);
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i128::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}")
 }
 
 /// A one-line rendering of a primitive value, for summaries.

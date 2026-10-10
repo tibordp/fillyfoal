@@ -11,7 +11,9 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{Reader, data_node, ellipsize, text};
+use crate::formats::util::binutil::{Reader, data_node};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::text;
 use crate::formats::{Codec, Format, Input, Probe, content};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -281,7 +283,7 @@ async fn chunk(cx: Cx, (m, index, input): (Module, usize, Input)) -> Result<()> 
             cx.emit(
                 Node::new("Strings")
                     .span(c.data)
-                    .value(text(ellipsize(&String::from_utf8_lossy(&bytes), 4096))),
+                    .value(text(clip(&String::from_utf8_lossy(&bytes), 4096))),
             );
         }
         b"LitT" => {

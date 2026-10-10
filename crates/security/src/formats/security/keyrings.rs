@@ -7,10 +7,12 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::datakit::{hex_string, size, text};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::text;
 use crate::formats::{Input, Probe};
 use crate::node::Node;
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{EnumTable, Value, lookup};
 
 const BE: Endian = Endian::Big;
@@ -188,7 +190,7 @@ async fn kwallet(cx: Cx, input: Input) -> Result<()> {
         cx.push(
             Node::new(format!("Folder {i}"))
                 .span(cur.since(start))
-                .value(text(hex_string(&folder_hash)))
+                .value(text(hex_lower(&folder_hash)))
                 .desc("MD5 of the folder name")
                 .summary(format!("{entries} entries"))
                 .lazy(kw_entries, list),
@@ -214,7 +216,7 @@ async fn kw_entries(cx: Cx, list: Span) -> Result<()> {
         cx.push(
             Node::new(format!("Entry {i}"))
                 .span(list.sub(crate::bytes::to_u64(i).saturating_mul(16), 16))
-                .value(text(hex_string(h)))
+                .value(text(hex_lower(h)))
                 .desc("MD5 of the entry key"),
         )
         .await;

@@ -11,6 +11,7 @@ use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, parse, struct_node};
 use crate::formats::executable::pe::tables::{DIR_DELAY_IMPORT, DIR_IMPORT};
+use crate::formats::util::fmt::plural;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -37,14 +38,6 @@ fn thunk_value(pe: &PeInfo, data: &[u8]) -> u64 {
         u32_le(data, 0).map(u64::from)
     }
     .unwrap_or(0)
-}
-
-fn word_value(pe: &PeInfo, value: u64) -> Value {
-    Value::UInt {
-        value,
-        bits: if pe.wide { 64 } else { 32 },
-        radix: Radix::Hex,
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -202,7 +195,7 @@ pub(super) async fn imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
             descriptor.address
         };
         let n = count_thunks(&cx, &pe, table).await;
-        let mut summary = format!("{n} function{}", if n == 1 { "" } else { "s" });
+        let mut summary = plural(n, "function");
         if descriptor.timestamp != 0 {
             summary.push_str(", bound");
         }
@@ -273,7 +266,7 @@ async fn walk_thunks(
         if thunk == 0 {
             let node = Node::new("End of table")
                 .span(span)
-                .value(word_value(pe, 0))
+                .value(pe.word_value(0))
                 .desc("A zero entry ends the lookup table");
             cx.push(match iat {
                 Some(iat) => node.lazy(terminator, (pe.clone(), span, iat)),
@@ -303,7 +296,7 @@ async fn walk_thunks(
                 Err(e) => (Node::new("<unreadable>").diag(e), None),
             }
         };
-        let node = node.span(span).value(word_value(pe, thunk)).lazy(
+        let node = node.span(span).value(pe.word_value(thunk)).lazy(
             function_parts,
             FunctionParts {
                 pe: pe.clone(),
@@ -361,7 +354,7 @@ async fn function_parts(cx: Cx, p: FunctionParts) -> Result<()> {
     cx.emit(
         Node::new("Lookup Entry")
             .span(p.lookup)
-            .value(word_value(&p.pe, thunk))
+            .value(p.pe.word_value(thunk))
             .summary(meaning),
     );
     if let Some(iat) = p.iat {
@@ -369,7 +362,7 @@ async fn function_parts(cx: Cx, p: FunctionParts) -> Result<()> {
         cx.emit(
             Node::new("Address Entry")
                 .span(iat)
-                .value(word_value(&p.pe, slot))
+                .value(p.pe.word_value(slot))
                 .summary(if p.delay {
                     "address of the delay-load thunk, replaced on first call"
                 } else if slot == thunk {
@@ -408,13 +401,13 @@ async fn terminator(cx: Cx, (pe, lookup, iat): (Pe, Span, Span)) -> Result<()> {
     cx.emit(
         Node::new("Lookup Entry")
             .span(lookup)
-            .value(word_value(&pe, 0)),
+            .value(pe.word_value(0)),
     );
     let slot = thunk_value(&pe, &cx.read(iat).await?);
     cx.emit(
         Node::new("Address Entry")
             .span(iat)
-            .value(word_value(&pe, slot)),
+            .value(pe.word_value(slot)),
     );
     Ok(())
 }
@@ -450,7 +443,7 @@ pub(super) async fn iat(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<()> {
         cx.push(
             Node::new(format!("#{i}"))
                 .span(span)
-                .value(word_value(&pe, value))
+                .value(pe.word_value(value))
                 .summary(summary),
         )
         .await;
@@ -560,10 +553,7 @@ pub(super) async fn delay_imports(cx: Cx, (pe, dir): (Pe, Directory)) -> Result<
         };
         cx.push(
             node.span(span)
-                .summary(format!(
-                    "{n} function{}, delay-loaded",
-                    if n == 1 { "" } else { "s" }
-                ))
+                .summary(format!("{}, delay-loaded", plural(n, "function")))
                 .lazy(delay_module, (pe.clone(), span)),
         )
         .await;
@@ -594,7 +584,7 @@ async fn delay_module(cx: Cx, (pe, descriptor): (Pe, Span)) -> Result<()> {
         cx.emit(
             Node::new("Module Handle")
                 .span(span)
-                .value(word_value(&pe, value))
+                .value(pe.word_value(value))
                 .desc("Filled in with the DLL's HMODULE when it is loaded"),
         );
     }
@@ -645,7 +635,7 @@ async fn address_list(cx: Cx, (pe, span): (Pe, Span)) -> Result<()> {
         cx.push(
             Node::new(format!("#{i}"))
                 .span(slot)
-                .value(word_value(&pe, value)),
+                .value(pe.word_value(value)),
         )
         .await;
     }
@@ -715,10 +705,7 @@ pub(super) async fn bound(cx: Cx, (_pe, dir): (Pe, Directory)) -> Result<()> {
         };
         cx.push(
             node.span(span)
-                .summary(format!(
-                    "{refs} forwarder reference{}",
-                    if refs == 1 { "" } else { "s" }
-                ))
+                .summary(plural(refs, "forwarder reference"))
                 .lazy(bound_entry, (base, span)),
         )
         .await;

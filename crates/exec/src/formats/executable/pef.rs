@@ -7,7 +7,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::util::binutil::{data_node, ellipsize, name_or};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -122,7 +124,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if libraries.is_empty() {
             String::new()
         } else {
-            format!(", imports {}", ellipsize(&libraries.join(", "), 100))
+            format!(", imports {}", clip(&libraries.join(", "), 100))
         }
     ));
     for (at, s) in sections {

@@ -1032,6 +1032,5 @@ pub fn machine_flags(machine: u16) -> FlagTable {
 
 /// A short machine name for summaries (as `file` prints them).
 pub fn machine_name(machine: u16) -> String {
-    crate::value::lookup(MACHINE, machine.into())
-        .map_or_else(|| format!("machine {machine:#x}"), str::to_owned)
+    crate::formats::util::val::name_or(MACHINE, machine.into(), "machine")
 }

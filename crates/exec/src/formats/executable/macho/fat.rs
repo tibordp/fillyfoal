@@ -10,7 +10,7 @@ use crate::bytes::u32_be;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::arcutil::human_size;
+use crate::formats::util::fmt;
 use crate::formats::{Format, Head, Input, Probe, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -141,13 +141,13 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
                     "Unreferenced Data"
                 })
                 .span(gap)
-                .summary(human_size(gap.len)),
+                .summary(fmt::size(gap.len)),
             );
         }
         let slice = file.sub(arch.offset, arch.size);
         let mut node = embedded(name, input.nested(slice)).summary(format!(
             "{} at {:#x}, aligned to {:#x}",
-            human_size(arch.size),
+            fmt::size(arch.size),
             arch.offset,
             1u64 << arch.align.min(63)
         ));
@@ -165,7 +165,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Trailing Data")
                 .span(rest)
-                .summary(human_size(rest.len)),
+                .summary(fmt::size(rest.len)),
         );
     }
     Ok(())
@@ -186,7 +186,7 @@ async fn arch_table(cx: Cx, (table, wide, file): (Span, bool, Span)) -> Result<(
                 (wide, file),
                 fat_arch,
             )
-            .summary(format!("{} at {:#x}", human_size(arch.size), arch.offset)),
+            .summary(format!("{} at {:#x}", fmt::size(arch.size), arch.offset)),
         )
         .await;
     }

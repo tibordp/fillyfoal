@@ -33,11 +33,14 @@ use crate::declare_format;
 use crate::dsl::{Cursor, Record, emit_record};
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
+use crate::formats::util::civil::days_from_civil;
+use crate::formats::util::fmt::{count, size};
 use crate::formats::{Input, Probe, embedded, embedded_as};
 use crate::node::Node;
 use crate::record;
 use crate::secret::{MAX_ATTEMPTS, SecretRequest};
 use crate::span::{Origin, Span};
+use crate::text::{hex_lower, until_nul};
 use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -87,23 +90,11 @@ impl Kdf {
                     argon2::Variant::I => "Argon2i",
                     argon2::Variant::Id => "Argon2id",
                 },
-                plural(params.iterations.into(), "pass", "passes"),
-                kib(params.memory_kib.into()),
-                plural(params.lanes.into(), "lane", "lanes")
+                count(params.iterations, "pass", "passes"),
+                size(u64::from(params.memory_kib).saturating_mul(1024)),
+                count(params.lanes, "lane", "lanes")
             ),
         }
-    }
-}
-
-fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
-}
-
-fn kib(n: u64) -> String {
-    if n >= 1024 && n.is_multiple_of(1024) {
-        format!("{} MiB", n / 1024)
-    } else {
-        format!("{n} KiB")
     }
 }
 
@@ -151,7 +142,7 @@ async fn derive(cx: &Cx, kdf: &Kdf, key: &[u8], at: Span) -> Result<Vec<u8>> {
             if params.blocks().saturating_mul(1024) > limits.max_derived {
                 return Err(Diagnostic::limit(format!(
                     "Argon2 memory ({}) exceeds the memory limit",
-                    kib(params.blocks())
+                    size(params.blocks().saturating_mul(1024))
                 ))
                 .at(at));
             }
@@ -362,10 +353,6 @@ const STREAMS: EnumTable = &[
     (3, "ChaCha20"),
 ];
 
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
-}
-
 /// What the payload needs from the outer header.
 #[derive(Clone, Debug, Default)]
 struct Header {
@@ -453,7 +440,9 @@ fn vd_uint(item: &VdItem) -> Option<u64> {
 /// The KDF a KDBX 4 parameter dictionary describes.
 fn kdf_from(items: &[VdItem]) -> std::result::Result<Kdf, String> {
     let get = |k: &str| items.iter().find(|i| i.key == k);
-    let uuid = get("$UUID").map(|i| hex(&i.value)).ok_or("no KDF UUID")?;
+    let uuid = get("$UUID")
+        .map(|i| hex_lower(&i.value))
+        .ok_or("no KDF UUID")?;
     let name = KDFS
         .iter()
         .find(|(u, _)| *u == uuid)
@@ -526,7 +515,7 @@ async fn variant_dict_node(cx: Cx, span: Span) -> Result<()> {
         }
         node = match item.kind {
             0x42 if item.key == "$UUID" => {
-                let uuid = hex(&item.value);
+                let uuid = hex_lower(&item.value);
                 let name = KDFS.iter().find(|(u, _)| *u == uuid).map(|(_, n)| *n);
                 node.value(Value::Text(name.map_or(uuid, str::to_owned)))
             }
@@ -542,7 +531,7 @@ async fn variant_dict_node(cx: Cx, span: Span) -> Result<()> {
                         },
                     });
                     if item.key == "M" {
-                        n.summary(kib(v / 1024))
+                        n.summary(size(v))
                     } else {
                         n
                     }
@@ -610,7 +599,7 @@ async fn kdbx(cx: Cx, input: Input) -> Result<()> {
         let mut node = Node::new(name).span(cur.since(start)).target(data);
         match id {
             2 => {
-                let uuid = hex(&bytes);
+                let uuid = hex_lower(&bytes);
                 h.cipher = KDBX_CIPHERS
                     .iter()
                     .find(|(g, _)| *g == uuid)
@@ -903,33 +892,17 @@ async fn block_list(cx: Cx, (blocks, what): (Arc<Vec<BlockInfo>>, &'static str))
     Ok(())
 }
 
-/// The gzip layer (if any) around `span`: the decompressed span.
+/// The gzip layer around `span`: the decompressed span.
 async fn gunzip(cx: &Cx, span: Span) -> Result<Span> {
-    let head = cx.read_avail(span.sub(0, 4096)).await?;
-    let bad = || Diagnostic::malformed("not a gzip stream").at(span);
-    if head.get(..3) != Some(&[0x1f, 0x8b, 8][..]) {
-        return Err(bad());
+    // A member header is under 256 KiB (extra field, name and comment up
+    // to 64 KiB each).
+    let head = cx.read_avail(span.sub(0, 0x4_0000)).await?;
+    if !head.starts_with(&[0x1f, 0x8b]) {
+        return Err(Diagnostic::malformed("not a gzip stream").at(span));
     }
-    let flags = *head.get(3).ok_or_else(bad)?;
-    let mut pos = 10usize;
-    if flags & 4 != 0 {
-        let n = usize::from(u16_le(&head, pos).ok_or_else(bad)?);
-        pos = pos.saturating_add(2).saturating_add(n);
-    }
-    for bit in [8u8, 16] {
-        if flags & bit != 0 {
-            let n = head
-                .get(pos..)
-                .and_then(|r| r.iter().position(|&b| b == 0))
-                .ok_or_else(bad)?;
-            pos = pos.saturating_add(n).saturating_add(1);
-        }
-    }
-    if flags & 2 != 0 {
-        pos = pos.saturating_add(2);
-    }
-    let body = span.tail(to_u64(pos));
-    let decoded = decode_span(cx, body, &Codec::Deflate, None).await?;
+    let header = crate::codec::gzip::header_len(&head).map_err(|e| e.at(span))?;
+    let body = span.tail(to_u64(header));
+    let decoded = decode_span(cx, body, &Codec::Gzip, None).await?;
     if let Some(e) = decoded.error {
         cx.diag(e);
     }
@@ -1113,7 +1086,7 @@ async fn kdbx4_payload(
     cx.emit(
         Node::new("Inner header")
             .span(inner)
-            .summary(plural(binaries.into(), "attachment", "attachments"))
+            .summary(count(binaries, "attachment", "attachments"))
             .lazy(inner_header, (input, inner)),
     );
     emit_document(cx, input, content.tail(cur.pos()), Some(binaries)).await
@@ -1703,8 +1676,8 @@ async fn database(cx: Cx, (_input, xml): (Input, Span)) -> Result<()> {
     let history: usize = doc.entries.iter().map(|e| e.history.len()).sum();
     cx.annotate(format!(
         "{}, {}",
-        plural(to_u64(doc.groups.len()), "group", "groups"),
-        plural(
+        count(to_u64(doc.groups.len()), "group", "groups"),
+        count(
             to_u64(doc.entries.len().saturating_sub(history)),
             "entry",
             "entries"
@@ -1736,8 +1709,8 @@ fn group_node(doc: &Arc<Doc>, xml: Span, g: usize, depth: usize) -> Node {
     };
     let node = Node::new(name).span(sub(xml, group.span)).summary(format!(
         "{}, {}",
-        plural(to_u64(group.groups.len()), "group", "groups"),
-        plural(to_u64(group.entries.len()), "entry", "entries")
+        count(to_u64(group.groups.len()), "group", "groups"),
+        count(to_u64(group.entries.len()), "entry", "entries")
     ));
     if depth >= MAX_DEPTH {
         return node.diag(Diagnostic::limit("groups nested too deeply"));
@@ -1812,7 +1785,7 @@ async fn entry_children(cx: Cx, (doc, xml, e): DocState) -> Result<()> {
     if !entry.history.is_empty() {
         cx.emit(
             Node::new("History")
-                .summary(plural(to_u64(entry.history.len()), "revision", "revisions"))
+                .summary(count(to_u64(entry.history.len()), "revision", "revisions"))
                 .lazy(history, (doc.clone(), xml, e)),
         );
     }
@@ -2046,30 +2019,6 @@ const KDB_ENTRY_FIELDS: EnumTable = &[
     (0xffff, "End"),
 ];
 
-fn kdb_text(bytes: &[u8]) -> String {
-    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-    String::from_utf8_lossy(bytes.get(..end).unwrap_or_default()).into_owned()
-}
-
-/// Days from 1970-01-01 to a proleptic Gregorian date.
-fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
-    let y = if m <= 2 { y.saturating_sub(1) } else { y };
-    let era = y.div_euclid(400);
-    let yoe = y.saturating_sub(era.saturating_mul(400));
-    let mp = (m.saturating_add(9)).rem_euclid(12);
-    let doy = (153i64.saturating_mul(mp).saturating_add(2) / 5)
-        .saturating_add(d)
-        .saturating_sub(1);
-    let doe = yoe
-        .saturating_mul(365)
-        .saturating_add(yoe / 4)
-        .saturating_sub(yoe / 100)
-        .saturating_add(doy);
-    era.saturating_mul(146_097)
-        .saturating_add(doe)
-        .saturating_sub(719_468)
-}
-
 /// A KeePass 1 packed time (year 14 bits, month 4, day 5, hour 5, minute
 /// 6, second 6, big-endian bit order); `None` for "never" (2999-12-28).
 fn kdb_time(b: &[u8]) -> Option<Option<i64>> {
@@ -2090,7 +2039,7 @@ fn kdb_time(b: &[u8]) -> Option<Option<i64>> {
     if year == 2999 {
         return Some(None);
     }
-    let days = days_from_civil(year, month, day);
+    let days = days_from_civil(year, month, day)?;
     Some(Some(
         days.saturating_mul(86_400)
             .saturating_add(hour.saturating_mul(3600))
@@ -2110,7 +2059,7 @@ async fn kdb_records(
             .iter()
             .find(|f| f.0 == kind)
             .and_then(|&(_, at, len)| data.get(at..at.saturating_add(len)))
-            .map(kdb_text)
+            .map(until_nul)
             .unwrap_or_default()
     };
     // Group names by ID (the first group with an ID wins), for the entries.
@@ -2207,7 +2156,7 @@ async fn kdb_fields(
         };
         node = match (groups, kind) {
             (_, 0xffff) => node,
-            (true, 2) | (false, 4 | 5 | 6 | 8 | 13) => node.value(Value::Text(kdb_text(&bytes))),
+            (true, 2) | (false, 4 | 5 | 6 | 8 | 13) => node.value(Value::Text(until_nul(&bytes))),
             (true, 3..=6) | (false, 9..=12) => match kdb_time(&bytes) {
                 Some(Some(t)) => node.value(Value::Timestamp { unix_seconds: t }),
                 Some(None) => node.summary("never"),
@@ -2229,7 +2178,7 @@ async fn kdb_fields(
                 }),
                 None => node.diag(Diagnostic::malformed("bad integer")),
             },
-            (false, 1) => node.value(Value::Text(hex(&bytes))),
+            (false, 1) => node.value(Value::Text(hex_lower(&bytes))),
             (false, 14) if !bytes.is_empty() => {
                 cx.emit(node.summary(format!("{len} bytes")));
                 cx.emit(embedded("Attachment", input.nested(span)));

@@ -15,6 +15,7 @@ use crate::formats::util::datakit::sha1;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::Node;
 use crate::span::{Origin, Span};
+use crate::text::hex_upper;
 use crate::value::{EnumTable, FlagTable, Radix, Value, flag, lookup};
 
 /// Compressed packets nested inside each other.
@@ -486,7 +487,7 @@ fn packet_summary(tag: u8, data: &[u8]) -> Option<String> {
             Some(format!(
                 "v{version} {}, created {}",
                 lookup(PK_ALGOS, algo.into()).unwrap_or("unknown algorithm"),
-                crate::formats::asn1::der::date(time.into())
+                crate::formats::util::civil::date(time.into())
             ))
         }
         2 => {
@@ -510,14 +511,10 @@ fn packet_summary(tag: u8, data: &[u8]) -> Option<String> {
             let name = data.get(2..2usize.saturating_add(n))?;
             Some(format!("{:?}", String::from_utf8_lossy(name)))
         }
-        1 => Some(format!("for key {}", hex(data.get(1..9)?))),
-        4 => Some(format!("by key {}", hex(data.get(4..12)?))),
+        1 => Some(format!("for key {}", hex_upper(data.get(1..9)?))),
+        4 => Some(format!("by key {}", hex_upper(data.get(4..12)?))),
         _ => None,
     }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02X}")).collect()
 }
 
 // ---------------------------------------------------------------------------
@@ -618,7 +615,7 @@ impl<'a> Body<'a> {
     fn key_id(&mut self, name: &'static str) -> Option<()> {
         let (b, span) = self.take(8)?;
         self.cx
-            .emit(Node::new(name).span(span).value(Value::Text(hex(b))));
+            .emit(Node::new(name).span(span).value(Value::Text(hex_upper(b))));
         Some(())
     }
 
@@ -809,10 +806,10 @@ fn key(b: &mut Body<'_>, secret: bool) -> Option<()> {
         b.cx.emit(
             Node::new("Fingerprint")
                 .span(span)
-                .value(Value::Text(hex(&fingerprint)))
+                .value(Value::Text(hex_upper(&fingerprint)))
                 .summary(format!(
                     "key ID {}",
-                    hex(fingerprint.get(12..).unwrap_or_default())
+                    hex_upper(fingerprint.get(12..).unwrap_or_default())
                 )),
         );
     }
@@ -964,9 +961,9 @@ async fn subpackets(cx: Cx, (span, data): (Span, Arc<Vec<u8>>)) -> Result<()> {
                     .summary("seconds"),
                 None => node,
             },
-            16 => node.value(Value::Text(hex(body))),
+            16 => node.value(Value::Text(hex_upper(body))),
             33 | 35 => node
-                .value(Value::Text(hex(body.get(1..).unwrap_or_default())))
+                .value(Value::Text(hex_upper(body.get(1..).unwrap_or_default())))
                 .summary(format!("v{}", body.first().copied().unwrap_or(0))),
             27 => {
                 let raw = u64::from(body.first().copied().unwrap_or(0));
@@ -1199,7 +1196,10 @@ async fn armor_block(
     if let Some(range) = &block.checksum {
         let line = text.get(range.clone()).unwrap_or_default();
         let mut node = Node::new("Checksum").span(pem::sub(input.span, range));
-        if let Ok(sum) = pem::base64(line.get(1..).unwrap_or_default())
+        if let crate::formats::text::decode::Decoded {
+            bytes: sum,
+            error: None,
+        } = crate::formats::text::decode::base64(line.get(1..).unwrap_or_default())
             && let [a, b, c] = sum.as_slice()
         {
             let stored = u32::from_be_bytes([0, *a, *b, *c]);
@@ -1242,11 +1242,11 @@ mod tests {
     #[test]
     fn hashes_and_headers() {
         assert_eq!(
-            hex(&sha1(b"abc")),
+            hex_upper(&sha1(b"abc")),
             "A9993E364706816ABA3E25717850C26C9CD0D89D"
         );
         assert_eq!(
-            hex(&sha1(&[0x61; 1000])),
+            hex_upper(&sha1(&[0x61; 1000])),
             "291E9A6C66994949B57BA5E650361E98FC36B1BA"
         );
         assert_eq!(crate::codec::crc::crc24(b""), 0xb704ce);

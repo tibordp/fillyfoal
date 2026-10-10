@@ -17,9 +17,10 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Fields;
-use crate::formats::util::binutil::{ellipsize, hex_string};
+use crate::formats::util::fmt::clip;
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{EnumTable, FlagTable, Radix, Value, decode_flags, field, flag, lookup};
 
 const NONE: usize = usize::MAX;
@@ -1326,7 +1327,7 @@ fn present_tables(valid: u64) -> String {
         .filter(|t| valid & (1u64 << t) != 0)
         .map(table_name)
         .collect();
-    ellipsize(&names.join(", "), 200)
+    clip(&names.join(", "), 200)
 }
 
 async fn row_counts(cx: Cx, (root, span): (Span, Span)) -> Result<()> {
@@ -1367,7 +1368,7 @@ async fn table_rows(cx: Cx, (pe, root, table): (Pe, Span, usize)) -> Result<()> 
         let name = if label.is_empty() {
             format!("#{row}")
         } else {
-            format!("#{row} {}", ellipsize(&label, 100))
+            format!("#{row} {}", clip(&label, 100))
         };
         let summary = row_summary(&cx, &md, &pe, table, row).await;
         let node = Node::new(name)
@@ -1476,7 +1477,7 @@ async fn blob_text(cx: &Cx, md: &Metadata, index: u32, kind: SigKind) -> String 
             if bytes.is_empty() {
                 String::new()
             } else {
-                ellipsize(&hex_string(&bytes), 64)
+                clip(&hex_lower(&bytes), 64)
             }
         }
         _ => {
@@ -1735,8 +1736,8 @@ async fn walk_blobs(
             match (label.is_empty(), summary.is_empty()) {
                 (true, true) => node,
                 (false, true) => node.summary(label),
-                (true, false) => node.summary(ellipsize(&summary, 200)),
-                (false, false) => node.summary(format!("{label}: {}", ellipsize(&summary, 200))),
+                (true, false) => node.summary(clip(&summary, 200)),
+                (false, false) => node.summary(format!("{label}: {}", clip(&summary, 200))),
             }
         };
         cx.push(node).await;

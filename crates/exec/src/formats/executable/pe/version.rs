@@ -4,8 +4,15 @@
 //! wType, szKey (UTF-16), padding, Value, padding, Children`. The root's
 //! value is a `VS_FIXEDFILEINFO`; `StringFileInfo` holds per-language string
 //! tables and `VarFileInfo` the list of translations.
+//!
+//! 16-bit Windows (NE) resources have the same tree with an older block
+//! header: `wLength, wValueLength, szKey (ANSI)`, no `wType`, and text
+//! values counted in bytes. Their strings are text, the root's and
+//! `Translation`'s values binary.
 
-use crate::bytes::{to_u64, u16_le, u32_le};
+use super::resource::Layout;
+use crate::bytes::{align_up, to_u64, to_usize, u16_le, u32_le};
+use crate::codec::charset::Charset;
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
@@ -91,39 +98,56 @@ struct Block {
 }
 
 fn align4(n: usize) -> usize {
-    n.checked_next_multiple_of(4).unwrap_or(usize::MAX)
+    to_usize(align_up(to_u64(n), 4))
 }
 
-/// Reads a NUL-terminated UTF-16LE string at `start`; returns it and the
-/// offset after the terminator.
-fn utf16z(data: &[u8], start: usize) -> (String, usize) {
-    let mut units = Vec::new();
-    let mut at = start;
-    while let Some(unit) = u16_le(data, at) {
-        at = at.saturating_add(2);
-        if unit == 0 {
-            break;
+impl Layout {
+    /// Bytes of block header before `szKey`.
+    fn header_len(self) -> usize {
+        match self {
+            Layout::Win32 => 6,
+            Layout::Win16 => 4,
         }
-        units.push(unit);
     }
-    (String::from_utf16_lossy(&units), at)
+
+    /// A NUL-terminated string at the start of `data`, and the bytes it
+    /// takes with the terminator.
+    fn string(self, data: &[u8]) -> (String, usize) {
+        match self {
+            Layout::Win32 => {
+                let (s, len, _) = crate::text::utf16z(data, Endian::Little);
+                (s, len)
+            }
+            Layout::Win16 => {
+                let end = data.iter().position(|&b| b == 0);
+                let text = data.get(..end.unwrap_or(data.len())).unwrap_or_default();
+                let len = end.map_or(data.len(), |e| e.saturating_add(1));
+                (Charset::Windows1252.decode(text), len)
+            }
+        }
+    }
 }
 
-fn parse_block(data: &[u8]) -> Result<Block> {
+fn parse_block(data: &[u8], layout: Layout) -> Result<Block> {
+    let header = layout.header_len();
     let len = usize::from(u16_le(data, 0).ok_or_else(short)?);
     let value_len = usize::from(u16_le(data, 2).ok_or_else(short)?);
-    let text = u16_le(data, 4).ok_or_else(short)? == 1;
-    if len < 6 || len > data.len() {
+    if len < header || len > data.len() {
         return Err(Diagnostic::malformed(format!(
             "block length {len:#x} does not fit (have {:#x})",
             data.len()
         )));
     }
     let block = data.get(..len).unwrap_or_default();
-    let (key, key_end) = utf16z(block, 6);
+    let (key, key_len) = layout.string(block.get(header..).unwrap_or_default());
+    let key_end = header.saturating_add(key_len);
+    let text = match layout {
+        Layout::Win32 => u16_le(data, 4) == Some(1),
+        Layout::Win16 => key != "VS_VERSION_INFO" && key != "Translation",
+    };
     let value_start = align4(key_end).min(len);
-    // Text values count UTF-16 units, binary values count bytes.
-    let value_bytes = if text {
+    // Win32 text values count UTF-16 units; everything else counts bytes.
+    let value_bytes = if text && layout == Layout::Win32 {
         value_len.saturating_mul(2)
     } else {
         value_len
@@ -145,17 +169,17 @@ fn short() -> Diagnostic {
 }
 
 /// The text value of a block, without its terminator.
-fn text_value(data: &[u8], block: &Block) -> String {
+fn text_value(data: &[u8], block: &Block, layout: Layout) -> String {
     let bytes = data
         .get(block.value_start..block.value_end)
         .unwrap_or_default();
-    utf16z(bytes, 0).0
+    layout.string(bytes).0
 }
 
 /// Summary of `VS_VERSIONINFO` at `span` (for the top-level node).
-pub async fn summary(cx: &Cx, span: Span) -> Result<String> {
+pub async fn summary(cx: &Cx, span: Span, layout: Layout) -> Result<String> {
     let data = cx.read(span.sub(0, 0xffff)).await?;
-    let block = parse_block(&data)?;
+    let block = parse_block(&data, layout)?;
     let fixed = data
         .get(block.value_start..block.value_end)
         .filter(|v| to_u64(v.len()) >= FixedFileInfo::SIZE);
@@ -181,9 +205,9 @@ pub async fn summary(cx: &Cx, span: Span) -> Result<String> {
 }
 
 /// Expands one block: its header fields, its value and its child blocks.
-pub async fn block(cx: Cx, span: Span) -> Result<()> {
+pub async fn block(cx: Cx, (span, layout): (Span, Layout)) -> Result<()> {
     let data = cx.read_avail(span).await?;
-    let b = parse_block(&data)?;
+    let b = parse_block(&data, layout)?;
     let span = span.sub(0, to_u64(b.len));
     let block = crate::cx::Block {
         span,
@@ -193,12 +217,15 @@ pub async fn block(cx: Cx, span: Span) -> Result<()> {
         let mut f = Fields::emitting(&cx, &block, Endian::Little);
         f.u16("wLength").hex().emit()?;
         f.u16("wValueLength").emit()?;
-        f.u16("wType").desc("1 = text, 0 = binary").emit()?;
+        if layout == Layout::Win32 {
+            f.u16("wType").desc("1 = text, 0 = binary").emit()?;
+        }
     }
+    let header = layout.header_len();
     cx.emit(
         Node::new("szKey")
             .value(Value::Text(b.key.clone()))
-            .span(span.sub(6, to_u64(b.key_end.saturating_sub(6)))),
+            .span(span.sub(to_u64(header), to_u64(b.key_end.saturating_sub(header)))),
     );
 
     let value_span = span.sub(
@@ -215,7 +242,7 @@ pub async fn block(cx: Cx, span: Span) -> Result<()> {
         } else if b.text {
             cx.emit(
                 Node::new("Value")
-                    .value(Value::Text(text_value(&block.data, &b)))
+                    .value(Value::Text(text_value(&block.data, &b, layout)))
                     .span(value_span),
             );
         } else if b.key == "Translation" {
@@ -242,7 +269,7 @@ pub async fn block(cx: Cx, span: Span) -> Result<()> {
     while at < b.len {
         cx.checkpoint().await;
         let rest = block.data.get(at..).unwrap_or_default();
-        let child = match parse_block(rest) {
+        let child = match parse_block(rest, layout) {
             Ok(child) => child,
             Err(e) => {
                 cx.diag(e.at(span.tail(to_u64(at))));
@@ -252,14 +279,66 @@ pub async fn block(cx: Cx, span: Span) -> Result<()> {
         let child_span = span.sub(to_u64(at), to_u64(child.len));
         let mut node = Node::new(child.key.clone()).span(child_span);
         if child.text && child.value_len > 0 {
-            node = node.summary(text_value(rest, &child));
+            node = node.summary(text_value(rest, &child, layout));
         }
-        cx.push(node.lazy(crate::expander!(self::block: Span), child_span))
-            .await;
+        cx.push(node.lazy(
+            crate::expander!(self::block: (Span, Layout)),
+            (child_span, layout),
+        ))
+        .await;
         if child.len == 0 {
             break;
         }
         at = align4(at.saturating_add(child.len));
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::arithmetic_side_effects,
+    clippy::cast_possible_truncation
+)]
+mod tests {
+    use super::*;
+
+    /// A 16-bit block: header, ANSI key, value and children, DWORD-aligned.
+    fn block16(key: &str, value: &[u8], children: &[Vec<u8>]) -> Vec<u8> {
+        let mut b = vec![0, 0];
+        b.extend((value.len() as u16).to_le_bytes());
+        b.extend(key.as_bytes());
+        b.push(0);
+        b.resize(b.len().next_multiple_of(4), 0);
+        b.extend(value);
+        for c in children {
+            b.resize(b.len().next_multiple_of(4), 0);
+            b.extend(c);
+        }
+        let len = (b.len() as u16).to_le_bytes();
+        b[..2].copy_from_slice(&len);
+        b
+    }
+
+    #[test]
+    fn win16_blocks() {
+        let string = block16("CompanyName", b"Acme\0", &[]);
+        let table = block16("040904E4", &[], &[string]);
+        let info = block16("StringFileInfo", &[], &[table]);
+        let root = block16("VS_VERSION_INFO", &[0; 52], &[info]);
+
+        let b = parse_block(&root, Layout::Win16).unwrap();
+        assert_eq!((b.key.as_str(), b.text), ("VS_VERSION_INFO", false));
+        assert_eq!((b.value_start, b.value_end), (20, 72));
+        let info = parse_block(&root[72..], Layout::Win16).unwrap();
+        assert_eq!(info.key, "StringFileInfo");
+        let table = &root[72 + align4(info.value_end)..];
+        let t = parse_block(table, Layout::Win16).unwrap();
+        assert_eq!(t.key, "040904E4");
+        let string = &table[align4(t.value_end)..];
+        let s = parse_block(string, Layout::Win16).unwrap();
+        assert!(s.text);
+        assert_eq!(text_value(string, &s, Layout::Win16), "Acme");
+    }
 }

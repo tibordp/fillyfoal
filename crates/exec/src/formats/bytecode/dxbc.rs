@@ -9,10 +9,13 @@ use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{data_node, ellipsize, hex_string, name_or, text};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::fmt::{clip, fourcc};
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::EnumTable;
 
 const LE: Endian = Endian::Little;
@@ -95,10 +98,6 @@ const SYSTEM_VALUE: EnumTable = &[
 
 const COMPONENT: EnumTable = &[(0, "unknown"), (1, "uint32"), (2, "int32"), (3, "float32")];
 
-fn fourcc(v: u32) -> String {
-    String::from_utf8_lossy(&v.to_le_bytes()).into_owned()
-}
-
 /// A version token: program type in the high 16 bits, major/minor nibbles.
 fn shader_model(token: u32) -> String {
     format!(
@@ -115,7 +114,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     let mut f = Fields::emitting(&cx, &head, LE);
     f.ascii("magic", 4).emit()?;
     f.bytes("checksum", 16)
-        .with(|b, n| n.summary(hex_string(b)))
+        .with(|b, n| n.summary(hex_lower(b)))
         .desc("Modified MD5 of the rest of the container")
         .emit()?;
     f.u32("version").emit()?;
@@ -137,7 +136,10 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         ));
     }
     let mut summary = vec!["DirectX shader".to_owned()];
-    let names: Vec<String> = chunks.iter().map(|(id, ..)| fourcc(*id)).collect();
+    let names: Vec<String> = chunks
+        .iter()
+        .map(|(id, ..)| fourcc(&id.to_le_bytes()))
+        .collect();
     for (id, _, data) in &chunks {
         match &id.to_le_bytes() {
             b"SHDR" | b"SHEX" => {
@@ -154,12 +156,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
             _ => {}
         }
     }
-    summary.push(format!("chunks {}", ellipsize(&names.join(" "), 80)));
+    summary.push(format!("chunks {}", clip(&names.join(" "), 80)));
     cx.annotate(summary.join(", "));
     for (id, span, data) in chunks {
         let what = crate::value::lookup(CHUNK, id.into()).unwrap_or("chunk");
         cx.emit(
-            Node::new(fourcc(id))
+            Node::new(fourcc(&id.to_le_bytes()))
                 .span(span)
                 .summary(format!("{what}, {:#x} bytes", data.len))
                 .lazy(chunk, (input, id, data)),
@@ -231,7 +233,7 @@ async fn chunk(cx: Cx, (input, id, data): (Input, u32, Span)) -> Result<()> {
             let mut f = Fields::emitting(&cx, &block, LE);
             f.u32("flags").emit()?;
             f.bytes("digest", 16)
-                .with(|b, n| n.summary(hex_string(b)))
+                .with(|b, n| n.summary(hex_lower(b)))
                 .emit()?;
             Ok(())
         }
@@ -248,7 +250,7 @@ async fn signature(cx: &Cx, data: Span, id: u32) -> Result<()> {
     cx.emit(
         Node::new("element count")
             .span(data.sub(0, 4))
-            .value(crate::formats::util::binutil::dec(count.into(), 32)),
+            .value(crate::formats::util::val::uint(count, 32)),
     );
     let width = if matches!(&id.to_le_bytes(), b"ISG1" | b"OSG1") {
         32usize

@@ -5,10 +5,11 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::util::binutil::{data_node, hex_string};
+use crate::formats::util::binutil::data_node;
 use crate::formats::{Format, Input, Probe};
 use crate::node::Node;
 use crate::record;
+use crate::text::hex_lower;
 
 const LE: Endian = Endian::Little;
 
@@ -25,7 +26,7 @@ record! {
     struct Header {
         magic: u64 "magic" .hex(),
         version: u32 "version",
-        source_hash: bytes[20] "sourceHash" .with(|b, n| n.summary(hex_string(b))),
+        source_hash: bytes[20] "sourceHash" .with(|b, n| n.summary(hex_lower(b))),
         file_length: u32 "fileLength" .hex(),
         global_code: u32 "globalCodeIndex",
         functions: u32 "functionCount",
@@ -61,7 +62,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Footer")
             .span(footer)
-            .value(crate::formats::util::binutil::text(hex_string(&hash)))
+            .value(crate::formats::util::val::text(hex_lower(&hash)))
             .desc("SHA-1 of everything before it"),
     );
     Ok(())

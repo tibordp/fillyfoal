@@ -8,7 +8,8 @@ use crate::bytes::{to_u64, u32_be, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{data_node, hex, name_or};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::val::{hex, name_or};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -329,7 +330,7 @@ async fn symbols(cx: Cx, (table, strings, e): (Span, Span, Endian)) -> Result<()
         }
         cx.push(
             struct_node(name, at, e, (), nlist)
-                .value(hex(value.into(), 32))
+                .value(hex(value, 32))
                 .summary(summary),
         )
         .await;

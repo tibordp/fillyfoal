@@ -16,7 +16,9 @@ use crate::cx::Cx;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{NodeExt, Reader, dec, ellipsize, hex, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Format, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -349,10 +351,7 @@ async fn module_summary(cx: &Cx, m: &ModuleInfo) -> String {
             }
             names.push(export);
         }
-        parts.push(format!(
-            "{n} exports ({})",
-            ellipsize(&names.join(", "), 80)
-        ));
+        parts.push(format!("{n} exports ({})", clip(&names.join(", "), 80)));
     }
     parts.join(", ")
 }
@@ -420,7 +419,7 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
     f.u8("id").enumeration(SECTION).emit()?;
     let size_len = header.span.len.saturating_sub(1);
     f.bytes("size", size_len)
-        .with(|_, n| n.value(dec(s.body.len, 32)).desc("LEB128"))
+        .with(|_, n| n.value(uint(s.body.len, 32)).desc("LEB128"))
         .emit()?;
     if s.body.len > MAX_SECTION {
         return Err(Diagnostic::limit("section too large to decode").at(s.body));
@@ -496,7 +495,7 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
             cx.emit(
                 Node::new("start function")
                     .span(b.at(start))
-                    .value(dec(f, 32)),
+                    .value(uint(f, 32)),
             );
             Ok(())
         }
@@ -531,7 +530,7 @@ async fn section(cx: Cx, (m, index): (Module, usize)) -> Result<()> {
             cx.emit(
                 Node::new("data segments")
                     .span(b.at(start))
-                    .value(dec(n, 32)),
+                    .value(uint(n, 32)),
             );
             Ok(())
         }
@@ -749,7 +748,7 @@ fn element(b: &mut Body<'_>, i: u64) -> Option<(String, Value, String)> {
     }
     Some((
         format!("segment {i}"),
-        text(ellipsize(&items.join(", "), 120)),
+        text(clip(&items.join(", "), 120)),
         format!("{mode}, {n} items"),
     ))
 }
@@ -1027,7 +1026,7 @@ async fn name_subsection(cx: Cx, (id, span, data): (u8, Span, Vec<u8>)) -> Resul
                 }
                 Some((
                     format!("[{outer}]"),
-                    text(ellipsize(&names.join(", "), 120)),
+                    text(clip(&names.join(", "), 120)),
                     String::new(),
                 ))
             })

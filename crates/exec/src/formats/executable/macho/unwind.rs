@@ -12,8 +12,9 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, parse};
-use crate::formats::util::arcutil::human_size;
-use crate::formats::util::binutil::{Reader, dec, get_at, hex, text};
+use crate::formats::util::binutil::{Reader, get_at};
+use crate::formats::util::fmt::size;
+use crate::formats::util::val::{hex, text, uint};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
@@ -118,7 +119,7 @@ fn encoding_node(
 ) -> Node {
     Node::new(name)
         .span(span)
-        .value(hex(enc.into(), 32))
+        .value(hex(enc, 32))
         .summary(encoding_summary(cputype, enc))
 }
 
@@ -168,7 +169,7 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
         cx.emit(
             Node::new("Common Encodings")
                 .span(common)
-                .summary(count(h.common_count.into(), "encoding", "encodings"))
+                .summary(grouped_count(h.common_count, "encoding", "encodings"))
                 .desc("Encodings shared by all pages, referenced by index")
                 .lazy(encodings, (m.clone(), common, 0u32)),
         );
@@ -181,8 +182,8 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
         cx.emit(
             Node::new("Personalities")
                 .span(personalities)
-                .summary(count(
-                    h.personality_count.into(),
+                .summary(grouped_count(
+                    h.personality_count,
                     "personality",
                     "personalities",
                 ))
@@ -215,14 +216,14 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
         let mut fields = vec![
             Node::new("functionOffset")
                 .span(at.sub(0, 4))
-                .value(hex(entry.function.into(), 32))
+                .value(hex(entry.function, 32))
                 .summary(m.describe(addr)),
             Node::new("secondLevelPagesSectionOffset")
                 .span(at.sub(4, 4))
-                .value(hex(entry.second_level.into(), 32)),
+                .value(hex(entry.second_level, 32)),
             Node::new("lsdaIndexArraySectionOffset")
                 .span(at.sub(8, 4))
-                .value(hex(entry.lsda.into(), 32)),
+                .value(hex(entry.lsda, 32)),
         ];
         if entry.second_level != 0
             && let Some(f) = fields.get_mut(1)
@@ -240,7 +241,7 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
         );
     }
     cx.emit(
-        group("First-Level Index", table, index_nodes).summary(count(
+        group("First-Level Index", table, index_nodes).summary(grouped_count(
             to_u64(entries.len()),
             "entry",
             "entries",
@@ -256,7 +257,7 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
         cx.emit(
             Node::new("LSDA Index")
                 .span(lsda)
-                .summary(count(lsda.len / 8, "entry", "entries"))
+                .summary(grouped_count(lsda.len / 8, "entry", "entries"))
                 .desc("Functions with language-specific data (exception tables)")
                 .lazy(lsda_index, (m.clone(), lsda)),
         );
@@ -298,7 +299,7 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
                 .span(page)
                 .summary(format!(
                     "{label}, {}",
-                    count(entry_count.into(), "function", "functions")
+                    grouped_count(entry_count, "function", "functions")
                 ))
                 .lazy(
                     second_level_page,
@@ -316,7 +317,7 @@ pub(super) async fn unwind_info(cx: Cx, (m, index): (Macho, usize)) -> Result<()
                 Span::new(span.source, first, last.saturating_sub(first)),
                 pages,
             )
-            .summary(count(to_u64(n), "page", "pages")),
+            .summary(grouped_count(to_u64(n), "page", "pages")),
         );
     }
     Ok(())
@@ -347,7 +348,7 @@ async fn personality_list(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
         let addr = m.text_vmaddr().saturating_add(off.into());
         let mut node = Node::new(format!("[{}]", i.saturating_add(1)))
             .span(span.sub(i.saturating_mul(4), 4))
-            .value(hex(off.into(), 32))
+            .value(hex(off, 32))
             .summary(m.describe(addr));
         if let Some(t) = m.vm_span(addr, m.word()) {
             node = node.target(t);
@@ -375,11 +376,11 @@ async fn lsda_index(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
                 vec![
                     Node::new("functionOffset")
                         .span(at.sub(0, 4))
-                        .value(hex(function.into(), 32))
+                        .value(hex(function, 32))
                         .summary(m.describe(f)),
                     Node::new("lsdaOffset")
                         .span(at.sub(4, 4))
-                        .value(hex(lsda.into(), 32))
+                        .value(hex(lsda, 32))
                         .summary(m.describe(l)),
                 ],
             )
@@ -417,8 +418,8 @@ async fn second_level_page(
             },
         },
     ));
-    cx.emit(field("entryPageOffset", 4, 2, hex(entry_offset.into(), 16)));
-    cx.emit(field("entryCount", 6, 2, dec(entry_count.into(), 16)));
+    cx.emit(field("entryPageOffset", 4, 2, hex(entry_offset, 16)));
+    cx.emit(field("entryCount", 6, 2, uint(entry_count, 16)));
     match kind {
         2 => {
             let entries = page.sub(
@@ -428,20 +429,15 @@ async fn second_level_page(
             cx.emit(
                 Node::new("Entries")
                     .span(entries)
-                    .summary(count(entry_count.into(), "function", "functions"))
+                    .summary(grouped_count(entry_count, "function", "functions"))
                     .lazy(regular_entries, (m.clone(), entries)),
             );
         }
         3 => {
             let enc_offset = get_at::<u16>(&head, 8, e).unwrap_or(0);
             let enc_count = get_at::<u16>(&head, 10, e).unwrap_or(0);
-            cx.emit(field(
-                "encodingsPageOffset",
-                8,
-                2,
-                hex(enc_offset.into(), 16),
-            ));
-            cx.emit(field("encodingsCount", 10, 2, dec(enc_count.into(), 16)));
+            cx.emit(field("encodingsPageOffset", 8, 2, hex(enc_offset, 16)));
+            cx.emit(field("encodingsCount", 10, 2, uint(enc_count, 16)));
             let entries = page.sub(
                 entry_offset.into(),
                 u64::from(entry_count).saturating_mul(4),
@@ -450,7 +446,7 @@ async fn second_level_page(
             cx.emit(
                 Node::new("Entries")
                     .span(entries)
-                    .summary(count(entry_count.into(), "function", "functions"))
+                    .summary(grouped_count(entry_count, "function", "functions"))
                     .desc("Function offset from the page's first function (24 bits), encoding index (8 bits)")
                     .lazy(
                         compressed_entries,
@@ -461,7 +457,7 @@ async fn second_level_page(
                 cx.emit(
                     Node::new("Page Encodings")
                         .span(local)
-                        .summary(count(enc_count.into(), "encoding", "encodings"))
+                        .summary(grouped_count(enc_count, "encoding", "encodings"))
                         .lazy(encodings, (m.clone(), local, common_count)),
                 );
             }
@@ -488,7 +484,7 @@ async fn regular_entries(cx: Cx, (m, span): (Macho, Span)) -> Result<()> {
                 vec![
                     Node::new("functionOffset")
                         .span(at.sub(0, 4))
-                        .value(hex(function.into(), 32)),
+                        .value(hex(function, 32)),
                     encoding_node("encoding", at.sub(4, 4), m.header.cputype, enc),
                 ],
             )
@@ -584,7 +580,7 @@ pub(super) async fn compact_unwind(cx: Cx, (m, index): (Macho, usize)) -> Result
                         .desc("Usually 0 here, set by a relocation"),
                     Node::new("length")
                         .span(at.sub(w, 4))
-                        .value(hex(length.into(), 32)),
+                        .value(hex(length, 32)),
                     encoding_node(
                         "encoding",
                         at.sub(w.saturating_add(4), 4),
@@ -710,7 +706,7 @@ fn parse_cie(
     nodes.push(
         Node::new("version")
             .span(at(s, r.pos()))
-            .value(dec(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     s = r.pos();
     let aug = r.cstr().unwrap_or_default();
@@ -739,7 +735,7 @@ fn parse_cie(
         nodes.push(
             Node::new("code_alignment_factor")
                 .span(at(s, r.pos()))
-                .value(dec(v, 64)),
+                .value(uint(v, 64)),
         );
     }
     s = r.pos();
@@ -761,7 +757,7 @@ fn parse_cie(
         nodes.push(
             Node::new("return_address_register")
                 .span(at(s, r.pos()))
-                .value(dec(v, 64)),
+                .value(uint(v, 64)),
         );
     }
     if aug.starts_with('z') {
@@ -771,7 +767,7 @@ fn parse_cie(
         nodes.push(
             Node::new("augmentation_length")
                 .span(at(s, r.pos()))
-                .value(dec(len, 64)),
+                .value(uint(len, 64)),
         );
         let end = r.pos().saturating_add(to_usize(len));
         for c in aug.chars().skip(1) {
@@ -782,7 +778,7 @@ fn parse_cie(
                     nodes.push(
                         Node::new("personality_encoding")
                             .span(at(s, r.pos()))
-                            .value(hex(enc.into(), 8))
+                            .value(hex(enc, 8))
                             .summary(encoding_name(enc)),
                     );
                     s = r.pos();
@@ -801,7 +797,7 @@ fn parse_cie(
                     nodes.push(
                         Node::new("lsda_encoding")
                             .span(at(s, r.pos()))
-                            .value(hex(cie.lsda_encoding.into(), 8))
+                            .value(hex(cie.lsda_encoding, 8))
                             .summary(encoding_name(cie.lsda_encoding)),
                     );
                 }
@@ -810,7 +806,7 @@ fn parse_cie(
                     nodes.push(
                         Node::new("fde_encoding")
                             .span(at(s, r.pos()))
-                            .value(hex(cie.fde_encoding.into(), 8))
+                            .value(hex(cie.fde_encoding, 8))
                             .summary(encoding_name(cie.fde_encoding)),
                     );
                 }
@@ -841,18 +837,14 @@ pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             cx.push(
                 Node::new("Terminator")
                     .span(span.sub(pos, 4))
-                    .value(hex(0, 32))
+                    .value(hex(0u32, 32))
                     .desc("A zero length ends the frame information"),
             )
             .await;
             pos = pos.saturating_add(4);
             if let Some(rest) = (pos < span.len).then(|| span.tail(pos)) {
-                cx.push(
-                    Node::new("Padding")
-                        .span(rest)
-                        .summary(human_size(rest.len)),
-                )
-                .await;
+                cx.push(Node::new("Padding").span(rest).summary(size(rest.len)))
+                    .await;
             }
             break;
         }
@@ -877,7 +869,7 @@ pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             nodes.push(
                 Node::new("CIE_id")
                     .span(at(id_at, id_at.saturating_add(4)))
-                    .value(hex(0, 32)),
+                    .value(hex(0u32, 32)),
             );
             let (cie, fields, summary, end) =
                 parse_cie(&data, id_at.saturating_add(4), &m, &at, record_addr);
@@ -889,7 +881,7 @@ pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             nodes.push(
                 Node::new("CIE_pointer")
                     .span(at(id_at, id_at.saturating_add(4)))
-                    .value(hex(id.into(), 32))
+                    .value(hex(id, 32))
                     .summary(format!("CIE at {cie_pos:#x}"))
                     .target(span.sub(cie_pos, 0)),
             );
@@ -938,7 +930,7 @@ pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
                 nodes.push(
                     Node::new("augmentation_length")
                         .span(at(s, r.pos()))
-                        .value(dec(len, 64)),
+                        .value(uint(len, 64)),
                 );
                 let end = r.pos().saturating_add(to_usize(len));
                 if cie.lsda_encoding != 0xff && len > 0 {
@@ -973,7 +965,7 @@ pub(super) async fn eh_frame(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
             nodes.push(
                 Node::new("Call Frame Instructions")
                     .span(instructions)
-                    .summary(human_size(instructions.len)),
+                    .summary(size(instructions.len)),
             );
         }
         let (name, summary) = node;

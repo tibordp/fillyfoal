@@ -13,7 +13,9 @@ use crate::bytes::{to_u64, to_usize, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, struct_node};
-use crate::formats::util::binutil::{NodeExt, Reader, Tree, ellipsize, text};
+use crate::formats::util::binutil::{NodeExt, Reader, Tree};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -377,7 +379,7 @@ impl XmlBuilder<'_> {
                     .summary(kind_name),
             );
         }
-        let summary = ellipsize(&parts.join(" "), 160);
+        let summary = clip(&parts.join(" "), 160);
         if self.root_summary.is_none() {
             self.root_summary = Some(format!("<{name} {summary}>"));
         }
@@ -479,7 +481,7 @@ pub async fn dissect_xml(cx: Cx, input: Input) -> Result<()> {
     }
     let summary = b.root_summary.take();
     cx.annotate(match summary {
-        Some(s) => format!("Android binary XML: {}", ellipsize(&s, 160)),
+        Some(s) => format!("Android binary XML: {}", clip(&s, 160)),
         None => "Android binary XML".to_owned(),
     });
     let tree = Arc::new(b.tree);

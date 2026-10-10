@@ -19,7 +19,8 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{RangeIndex, data_node, get_at, name_or, perms, text};
+use crate::formats::util::binutil::{RangeIndex, data_node, get_at, perms};
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Codec, Format, Head, Input, Probe, content, embedded};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -528,10 +529,7 @@ fn summary(elf: &ElfInfo, facts: &Facts) -> String {
             8 => "xxHash",
             _ => "hex",
         };
-        parts.push(format!(
-            "BuildID[{hash}]={}",
-            crate::formats::util::binutil::hex_string(id)
-        ));
+        parts.push(format!("BuildID[{hash}]={}", crate::text::hex_lower(id)));
     }
     if let Some(id) = &facts.go_build_id {
         parts.push(format!("Go BuildID={id}"));
@@ -1094,7 +1092,9 @@ async fn compressed(cx: &Cx, elf: &Elf, section: &Section, data: Span) -> Result
     let size = f.uword("ch_size", wide).get()?;
     let payload = data.tail(header_size);
     let node = match kind {
+        // ELFCOMPRESS_ZLIB: a zlib stream; ELFCOMPRESS_ZSTD: Zstandard frames.
         1 => content("Decompressed", elf.input, payload, Codec::Zlib, Some(size)),
+        2 => content("Decompressed", elf.input, payload, Codec::Zstd, Some(size)),
         _ => data_node("Compressed data", payload, payload.len).diag(Diagnostic::unsupported(
             format!("{} compression", name_or(COMPRESSION, kind.into(), "type")),
         )),

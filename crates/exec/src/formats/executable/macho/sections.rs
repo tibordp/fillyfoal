@@ -12,10 +12,12 @@ use crate::bytes::to_u64;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Fields, struct_node};
-use crate::formats::util::binutil::{Reader, cstrings, get_at, hex, hex_string, text};
+use crate::formats::util::binutil::{Reader, cstrings, get_at};
+use crate::formats::util::val::{hex, text};
 use crate::formats::{embedded, embedded_as};
 use crate::node::{Count, Node};
 use crate::span::Span;
+use crate::text::hex_lower;
 
 /// How a section's contents are shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -228,7 +230,7 @@ async fn entry(
         }
         Content::Literals(16) => Node::new(format!("[{i}]"))
             .span(at)
-            .value(text(hex_string(&bytes))),
+            .value(text(hex_lower(&bytes))),
         Content::Literals(width) => {
             let v = if width == 8 {
                 get_at::<u64>(&bytes, 0, m.endian).unwrap_or(0)
@@ -313,7 +315,7 @@ async fn entry(
                     } else {
                         "8-bit"
                     }),
-                    _ => field.value(crate::formats::util::binutil::dec(raw, m.bits())),
+                    _ => field.value(crate::formats::util::val::uint(raw, m.bits())),
                 });
             }
             let len = word(w.saturating_mul(3));
@@ -435,7 +437,7 @@ async fn addrsig(cx: Cx, (m, index): (Macho, usize)) -> Result<()> {
         cx.push(
             Node::new(name)
                 .span(at)
-                .value(crate::formats::util::binutil::dec(symbol, 32)),
+                .value(crate::formats::util::val::uint(symbol, 32)),
         )
         .await;
     }

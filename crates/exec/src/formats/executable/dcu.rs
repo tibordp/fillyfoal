@@ -77,7 +77,8 @@ use std::sync::Arc;
 use crate::bytes::u32_le;
 use crate::cx::Cx;
 use crate::error::{Diagnostic, Result};
-use crate::formats::util::binutil::{dec, hex, text};
+use crate::formats::util::fmt::count;
+use crate::formats::util::val::{hex, text, uint};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -767,10 +768,6 @@ async fn read_item(
     }))
 }
 
-fn plural(n: u64, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
-}
-
 fn type_label(names: &Names, n: i64) -> String {
     names.type_name(n).unwrap_or_else(|| format!("type #{n}"))
 }
@@ -789,7 +786,7 @@ fn describe(rec: &Rec, names: &Names, number: Option<i64>, nested: u64) -> (Stri
             rec.what,
             dos_time(u32::try_from(num("Time")).unwrap_or(0))
         ),
-        b'd' | b'e' => format!("{}, {}", rec.what, plural(nested, "import", "imports")),
+        b'd' | b'e' => format!("{}, {}", rec.what, count(nested, "import", "imports")),
         b'f' => match number.and_then(|n| names.type_of_import(n)) {
             Some(t) => format!("{}, type #{t}", rec.what),
             None => rec.what.to_owned(),
@@ -806,12 +803,12 @@ fn describe(rec: &Rec, names: &Names, number: Option<i64>, nested: u64) -> (Stri
         b'(' => format!(
             "{}, {} of code, {}",
             rec.what,
-            plural(
+            count(
                 u64::try_from(num("Code size")).unwrap_or(0),
                 "byte",
                 "bytes"
             ),
-            plural(nested, "parameter or local", "parameters and locals")
+            count(nested, "parameter or local", "parameters and locals")
         ),
         0x9e => {
             label = "Record 0x9e".to_owned();
@@ -829,7 +826,7 @@ fn describe(rec: &Rec, names: &Names, number: Option<i64>, nested: u64) -> (Stri
                 "{} (parent {}), {}",
                 rec.what,
                 type_label(names, num("Parent")),
-                plural(nested, "member", "members")
+                count(nested, "member", "members")
             )
         }
         b',' => format!(
@@ -874,20 +871,20 @@ fn field_node(f: &Field, span: Span, rec: &Rec, names: &Names) -> Node {
         Kind::Byte => node.value(hex(raw, 8)),
         Kind::Raw32 | Kind::Check => node.value(hex(raw, 32)),
         Kind::Flags => node.value(hex(raw, 32)),
-        Kind::Packed => node.value(dec(raw, 32)),
+        Kind::Packed => node.value(uint(raw, 32)),
         Kind::Signed => node.value(Value::Int {
             value: f.num,
             bits: 32,
         }),
         Kind::TypeRef => {
-            let n = node.value(dec(raw, 32));
+            let n = node.value(uint(raw, 32));
             match names.type_name(f.num) {
                 Some(s) => n.summary(s),
                 None => n,
             }
         }
         Kind::DeclRef => {
-            let n = node.value(dec(raw, 32));
+            let n = node.value(uint(raw, 32));
             match names.decl_name(f.num) {
                 Some(s) => n.summary(s),
                 None => n,
@@ -1107,7 +1104,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         }
         let mut node = Node::new(label)
             .span(run.region)
-            .summary(plural(run.count, unit.0, unit.1))
+            .summary(count(run.count, unit.0, unit.1))
             .lazy(run_items, (*run, names.clone()));
         if run.section == Section::UnitRefs {
             node = node.desc(
@@ -1145,18 +1142,18 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
 
     let mut note = format!("{product} compiled unit");
     if units > 0 {
-        note.push_str(&format!(", {}", plural(units, "used unit", "used units")));
+        note.push_str(&format!(", {}", count(units, "used unit", "used units")));
     }
     if decls > 0 {
         note.push_str(&format!(
             ", {}",
-            plural(decls, "declaration", "declarations")
+            count(decls, "declaration", "declarations")
         ));
     }
     if sources > 0 {
         note.push_str(&format!(
             ", {}",
-            plural(sources, "source file", "source files")
+            count(sources, "source file", "source files")
         ));
     }
     if valid_dos_time(time) {
@@ -1174,7 +1171,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
     let old = OLD_MAGIC.iter().any(|(m, _)| *m == magic);
     let mut node = Node::new("Magic")
         .span(span.sub(0, 4))
-        .value(hex(magic.into(), 32));
+        .value(hex(magic, 32));
     if let Some(v) = version(magic) {
         node = node.summary(v);
     }
@@ -1200,7 +1197,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
         cx.emit(
             Node::new("Platform / flags")
                 .span(span.sub(0, 3))
-                .value(hex((magic & 0x00ff_ffff).into(), 24))
+                .value(hex(magic & 0x00ff_ffff, 24))
                 .desc("Low three bytes of the magic; meaning not established"),
         );
     }
@@ -1208,7 +1205,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
         cx.emit(
             Node::new("File size")
                 .span(span.sub(4, 4))
-                .value(dec(size.into(), 32)),
+                .value(uint(size, 32)),
         );
     }
     if let Some(t) = u32_le(&data, 8) {
@@ -1225,7 +1222,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
             cx.emit(
                 Node::new("Unknown")
                     .span(span.sub(12, 4))
-                    .value(hex(v.into(), 32))
+                    .value(hex(v, 32))
                     .desc(
                         "Meaning not established; used-unit records carry values of the same \
                          shape",
@@ -1237,7 +1234,7 @@ async fn header_fields(cx: Cx, (span, d7): (Span, bool)) -> Result<()> {
                 cx.emit(
                     Node::new("Unknown")
                         .span(span.sub(at, 1))
-                        .value(hex(b.into(), 8))
+                        .value(hex(b, 8))
                         .desc("Meaning not established"),
                 );
             }

@@ -3,12 +3,16 @@
 //! `e_lfanew`. Shows the header, the object table, names and imported
 //! modules.
 
+use std::sync::Arc;
+
+use super::push_nodes;
 use crate::bytes::{to_u64, u32_le};
 use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::Result;
 use crate::fields::{Endian, parse};
-use crate::formats::util::binutil::{ellipsize, name_or};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::name_or;
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::record;
@@ -157,19 +161,14 @@ fn pascal_list(data: &[u8], ordinals: bool, limit: usize, base: Span) -> Vec<Nod
     let mut out = Vec::new();
     let mut at = 0usize;
     while out.len() < limit {
-        let Some(&n) = data.get(at) else { break };
-        if n == 0 {
+        let Some((name, n)) = super::ne::pascal(data, at) else {
+            break;
+        };
+        if n <= 1 {
             break;
         }
-        let start = at.saturating_add(1);
-        let end = start.saturating_add(usize::from(n));
-        let Some(s) = data.get(start..end) else { break };
-        let name = String::from_utf8_lossy(s).into_owned();
-        let len = if ordinals {
-            usize::from(n).saturating_add(3)
-        } else {
-            usize::from(n).saturating_add(1)
-        };
+        let end = at.saturating_add(n);
+        let len = if ordinals { n.saturating_add(2) } else { n };
         let mut node = Node::new(name).span(base.sub(to_u64(at), to_u64(len)));
         if ordinals {
             let ordinal = crate::bytes::u16_le(data, end).unwrap_or(0);
@@ -235,7 +234,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         if names.is_empty() {
             String::new()
         } else {
-            format!(", imports {}", ellipsize(&names.join(", "), 80))
+            format!(", imports {}", clip(&names.join(", "), 80))
         }
     ));
     let table = base.sub(
@@ -251,12 +250,12 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Resident Names")
             .span(resident_span)
-            .lazy(emit_all, resident),
+            .lazy(push_nodes, Arc::new(resident)),
     );
     cx.emit(
         Node::new("Imported Modules")
             .span(imports_span)
-            .lazy(emit_all, imports),
+            .lazy(push_nodes, Arc::new(imports)),
     );
     if h.nonresident_length > 0 {
         let span = file.sub(h.nonresident_names.into(), h.nonresident_length.into());
@@ -264,7 +263,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Non-resident Names")
                 .span(span)
-                .lazy(emit_all, pascal_list(&data, true, 0x4000, span)),
+                .lazy(push_nodes, Arc::new(pascal_list(&data, true, 0x4000, span))),
         );
     }
     Ok(())
@@ -289,14 +288,6 @@ async fn objects(cx: Cx, table: Span) -> Result<()> {
             )),
         )
         .await;
-    }
-    Ok(())
-}
-
-async fn emit_all(cx: Cx, nodes: Vec<Node>) -> Result<()> {
-    cx.set_count(Count::Exact(to_u64(nodes.len())));
-    for n in nodes {
-        cx.push(n).await;
     }
     Ok(())
 }

@@ -16,6 +16,7 @@ use crate::bytes::{to_u64, u16_le, u32_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Fields, struct_node};
+use crate::formats::util::val::hex;
 use crate::node::{Count, Node};
 use crate::span::Span;
 use crate::value::{Radix, Value};
@@ -35,14 +36,6 @@ fn arch(machine: u16) -> Arch {
         MACHINE_ARM64 | MACHINE_ARM64EC | MACHINE_ARM64X => Arch::Arm64,
         MACHINE_ARMNT | 0x1c0 | 0x1c2 => Arch::Arm,
         _ => Arch::Legacy,
-    }
-}
-
-fn hex32(v: u32) -> Value {
-    Value::UInt {
-        value: v.into(),
-        bits: 32,
-        radix: Radix::Hex,
     }
 }
 
@@ -379,7 +372,7 @@ fn packed_arm64(span: Span, d: u32) -> Node {
     };
     Node::new("Packed Unwind Data")
         .span(span)
-        .value(hex32(d))
+        .value(hex(d, 32))
         .summary(format!(
             "{length} bytes, frame {frame} bytes, {reg_i} integer and {} FP registers saved{}, {cr_text}",
             if reg_f == 0 { 0 } else { reg_f.saturating_add(1) },
@@ -538,7 +531,7 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
     cx.emit(
         Node::new("Header")
             .span(head_span.sub(0, 4))
-            .value(hex32(w))
+            .value(hex(w, 32))
             .summary(format!(
                 "function {} bytes, version {}{}{}, {epilogs} epilog{}, {words} code words",
                 (w & 0x3ffff).saturating_mul(4),
@@ -557,7 +550,7 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
         cx.emit(
             Node::new("Extended Header")
                 .span(head_span.sub(4, 4))
-                .value(hex32(ext))
+                .value(hex(ext, 32))
                 .summary(format!("{epilogs} epilogs, {words} code words")),
         );
         at = 8;
@@ -575,7 +568,7 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
         cx.push(
             Node::new(format!("Epilog Scope {i}"))
                 .span(body.sub(at, 4))
-                .value(hex32(s))
+                .value(hex(s, 32))
                 .summary(format!(
                     "starts at +{:#x}, codes from index {}",
                     (s & 0x3ffff).saturating_mul(4),
@@ -608,7 +601,7 @@ async fn arm64_xdata(cx: Cx, (pe, rva): (Pe, u32)) -> Result<()> {
         let handler = u32_le(&data, pos).unwrap_or(0);
         let mut node = Node::new("Exception Handler")
             .span(body.sub(at, 4))
-            .value(hex32(handler))
+            .value(hex(handler, 32))
             .summary(pe.describe_rva(handler))
             .desc("RVA of the language-specific handler; its data follows");
         if let Ok(t) = pe.rva_span(handler, 0) {

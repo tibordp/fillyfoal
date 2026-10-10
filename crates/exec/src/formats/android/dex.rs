@@ -18,13 +18,15 @@ use crate::cx::Cx;
 use crate::dsl::Record;
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields, parse, struct_node};
-use crate::formats::util::binutil::{
-    NodeExt, Reader, dec, ellipsize, get_at, hex, hex_string, mutf8, name_or, text,
-};
+use crate::formats::util::binutil::{NodeExt, Reader, get_at, mutf8};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::sound::sign_extend;
+use crate::formats::util::val::{hex, name_or, text, uint};
 use crate::formats::{Format, Head, Input, Probe, embedded_as};
 use crate::node::{Count, Node};
 use crate::record;
 use crate::span::Span;
+use crate::text::hex_lower;
 use crate::value::{EnumTable, FlagTable, Value, decode_flags, flag, lookup};
 
 const LE: Endian = Endian::Little;
@@ -403,7 +405,7 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
             Some(c) if c.sha1.as_slice() == v.as_slice() => n.summary("valid"),
             Some(c) => n.diag(Diagnostic::warning(format!(
                 "signature mismatch: computed {}",
-                hex_string(&c.sha1)
+                hex_lower(&c.sha1)
             ))),
             None => n,
         })
@@ -463,7 +465,7 @@ fn header(f: &mut Fields<'_>, (file, checks): &(Span, Option<Checks>)) -> Result
 async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
     const CHUNK: u64 = 1 << 16;
     let mut sha = Sha1::new();
-    let (mut a, mut b) = (1u32, 0u32);
+    let mut adler = crate::codec::Adler32::new();
     let mut pos = 12u64;
     while pos < file.len {
         let data = cx.read(file.sub(pos, CHUNK)).await?;
@@ -476,10 +478,7 @@ async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
             sha.update(rest);
         }
         for chunk in data.chunks(4096) {
-            for &byte in chunk {
-                a = (a.wrapping_add(u32::from(byte))) % 65521;
-                b = (b.wrapping_add(a)) % 65521;
-            }
+            adler.update(chunk);
             cx.checkpoint().await;
         }
         pos = pos.saturating_add(to_u64(data.len()));
@@ -489,7 +488,7 @@ async fn verify(cx: &Cx, file: Span) -> Result<Checks> {
         *d = s;
     }
     Ok(Checks {
-        adler: (b << 16) | a,
+        adler: adler.value(),
         sha1,
     })
 }
@@ -621,7 +620,7 @@ async fn map_list(cx: Cx, dex: Dex) -> Result<()> {
     cx.emit(
         Node::new("size")
             .span(size_span)
-            .value(dec(u32_le(&size, 0).unwrap_or(0).into(), 32)),
+            .value(uint(u32_le(&size, 0).unwrap_or(0), 32)),
     );
     // Each section ends where the next one (by offset) starts.
     let mut offsets: Vec<u32> = items.iter().map(|(i, _)| i.offset).collect();
@@ -695,7 +694,7 @@ async fn id_list(cx: Cx, (dex, kind): (Dex, Kind)) -> Result<()> {
                 let target = dex.file.sub(off.into(), 0);
                 match dex.string(&cx, i).await {
                     Ok(s) => Node::new(format!("#{i}"))
-                        .value(hex(off.into(), 32))
+                        .value(hex(off, 32))
                         .summary(format!("{s:?}")),
                     Err(e) => Node::new(format!("#{i}")).diag(e),
                 }
@@ -705,7 +704,7 @@ async fn id_list(cx: Cx, (dex, kind): (Dex, Kind)) -> Result<()> {
                 let name = dex.type_name(&cx, i).await;
                 let idx = dex.word(&cx, t, 4, i, 0).await.unwrap_or(0);
                 Node::new(format!("#{i}"))
-                    .value(dec(idx.into(), 32))
+                    .value(uint(idx, 32))
                     .summary(format!("{name} ({})", java_name(&name)))
             }
             Kind::Proto => {
@@ -830,9 +829,9 @@ async fn id_item(cx: Cx, (dex, kind, at): (Dex, Kind, Span)) -> Result<()> {
         let mut node = Node::new(name)
             .span(span)
             .value(if name.ends_with("_off") {
-                hex(value.into(), bits)
+                hex(value, bits)
             } else {
-                dec(value.into(), bits)
+                uint(value, bits)
             })
             .maybe_summary(resolved);
         if name == "parameters_off" && value != 0 {
@@ -884,7 +883,7 @@ async fn class_def(cx: Cx, (dex, at): (Dex, Span)) -> Result<()> {
     f.u32("interfaces_off")
         .hex()
         .with(|&v, n| {
-            let n = n.maybe_summary(ellipsize(&interfaces.join(", "), 120));
+            let n = n.maybe_summary(clip(&interfaces.join(", "), 120));
             match target(v) {
                 Some(t) => n.target(t),
                 None => n,
@@ -1118,7 +1117,7 @@ async fn handler_list(cx: Cx, (dex, span): (Dex, Span)) -> Result<()> {
     cx.emit(
         Node::new("size")
             .span(span.sub(0, to_u64(r.pos())))
-            .value(dec(n, 32)),
+            .value(uint(n, 32)),
     );
     for _ in 0..n.min(65536) {
         let start = r.pos();
@@ -1217,14 +1216,6 @@ fn read_le(r: &mut Reader<'_>, n: usize) -> Option<u64> {
     Some(v)
 }
 
-fn sign_extend(v: u64, bytes: usize) -> i64 {
-    let shift = 64u32.saturating_sub(u32::try_from(bytes.saturating_mul(8)).unwrap_or(64));
-    if shift == 0 || shift >= 64 {
-        return v as i64;
-    }
-    (v.wrapping_shl(shift) as i64).wrapping_shr(shift)
-}
-
 /// Decodes an `encoded_value` into text pieces.
 fn encoded_value(r: &mut Reader<'_>, out: &mut Vec<Piece>, depth: u32) -> Option<()> {
     let h = r.u8()?;
@@ -1234,12 +1225,13 @@ fn encoded_value(r: &mut Reader<'_>, out: &mut Vec<Piece>, depth: u32) -> Option
     match h & 0x1f {
         0x00 => {
             let v = read_le(r, 1)?;
-            push(out, format!("{}", sign_extend(v, 1)));
+            push(out, format!("{}", sign_extend(v, 8)));
         }
         0x02 | 0x04 | 0x06 => {
             let v = read_le(r, size)?;
             let suffix = if h & 0x1f == 0x06 { "L" } else { "" };
-            push(out, format!("{}{suffix}", sign_extend(v, size)));
+            let bits = u8::try_from(size.saturating_mul(8)).unwrap_or(64);
+            push(out, format!("{}{suffix}", sign_extend(v, bits)));
         }
         0x03 => {
             let v = read_le(r, size)?;
@@ -1529,7 +1521,7 @@ async fn item_label(
         TYPE_STRING_DATA => {
             r.uleb();
             let s = r.cstr().map(mutf8).unwrap_or_default();
-            (name, format!("{:?}", ellipsize(&s, 120)))
+            (name, format!("{:?}", clip(&s, 120)))
         }
         TYPE_TYPE_LIST => {
             let types = dex.type_list(cx, offset).await;
@@ -1566,14 +1558,14 @@ async fn item_label(
                 format!(
                     "{} {}",
                     lookup(VISIBILITY, vis.into()).unwrap_or("?"),
-                    ellipsize(&dex.render(cx, &out).await, 200)
+                    clip(&dex.render(cx, &out).await, 200)
                 ),
             )
         }
         TYPE_ENCODED_ARRAY => {
             let mut out = Vec::new();
             let _ = encoded_array(&mut r, &mut out, 0);
-            (name, ellipsize(&dex.render(cx, &out).await, 200))
+            (name, clip(&dex.render(cx, &out).await, 200))
         }
         TYPE_ANNOTATION_SET | TYPE_ANNOTATION_SET_REF_LIST => {
             let n = u32_le(data, 0).unwrap_or(0);
@@ -1611,7 +1603,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
             cx.emit(
                 Node::new("utf16_size")
                     .span(field(s, &r))
-                    .value(dec(units, 32))
+                    .value(uint(units, 32))
                     .desc("Length in UTF-16 code units"),
             );
             let s = r.pos();
@@ -1626,11 +1618,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
         }
         TYPE_TYPE_LIST | TYPE_ANNOTATION_SET_REF_LIST | TYPE_ANNOTATION_SET => {
             let n = r.int::<u32>(LE).unwrap_or(0);
-            cx.emit(
-                Node::new("size")
-                    .span(span.sub(0, 4))
-                    .value(dec(n.into(), 32)),
-            );
+            cx.emit(Node::new("size").span(span.sub(0, 4)).value(uint(n, 32)));
             let width = if kind == TYPE_TYPE_LIST { 2usize } else { 4 };
             for i in 0..usize::try_from(n).unwrap_or(0) {
                 let at = 4usize.saturating_add(i.saturating_mul(width));
@@ -1639,13 +1627,11 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
                     let t = u16_le(data, at).unwrap_or(0);
                     Node::new(format!("type_idx[{i}]"))
                         .span(entry)
-                        .value(dec(t.into(), 16))
+                        .value(uint(t, 16))
                         .summary(dex.type_name(&cx, t.into()).await)
                 } else {
                     let off = u32_le(data, at).unwrap_or(0);
-                    let mut node = Node::new(format!("#{i}"))
-                        .span(entry)
-                        .value(hex(off.into(), 32));
+                    let mut node = Node::new(format!("#{i}")).span(entry).value(hex(off, 32));
                     if off != 0 {
                         let target_kind = if kind == TYPE_ANNOTATION_SET {
                             TYPE_ANNOTATION
@@ -1679,7 +1665,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
             for (c, name) in counts.iter_mut().zip(names) {
                 let s = r.pos();
                 *c = r.uleb().unwrap_or(0);
-                cx.emit(Node::new(name).span(field(s, &r)).value(dec(*c, 32)));
+                cx.emit(Node::new(name).span(field(s, &r)).value(uint(*c, 32)));
             }
             for (group, &count) in counts.iter().enumerate() {
                 let mut index = 0u32;
@@ -1745,7 +1731,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
         TYPE_ENCODED_ARRAY => {
             let s = r.pos();
             let n = r.uleb().unwrap_or(0);
-            cx.emit(Node::new("size").span(field(s, &r)).value(dec(n, 32)));
+            cx.emit(Node::new("size").span(field(s, &r)).value(uint(n, 32)));
             for i in 0..n.min(65536) {
                 let s = r.pos();
                 let mut out = Vec::new();
@@ -1819,7 +1805,7 @@ async fn item_fields(cx: Cx, (dex, kind, offset): (Dex, u16, u32)) -> Result<()>
             cx.emit(
                 Node::new("call_site_off")
                     .span(span.sub(0, 4))
-                    .value(hex(off.into(), 32))
+                    .value(hex(off, 32))
                     .target(dex.file.sub(off.into(), 0))
                     .lazy(
                         crate::expander!(self::item_fields: (Dex, u16, u32)),
@@ -1882,7 +1868,7 @@ async fn annotation_body(cx: &Cx, dex: &DexInfo, span: Span, data: &[u8], at: us
     cx.emit(
         Node::new("type_idx")
             .span(span.sub(to_u64(s), to_u64(r.pos().saturating_sub(s))))
-            .value(dec(ty.into(), 32))
+            .value(uint(ty, 32))
             .summary(dex.type_name(cx, ty).await),
     );
     let s = r.pos();
@@ -1890,7 +1876,7 @@ async fn annotation_body(cx: &Cx, dex: &DexInfo, span: Span, data: &[u8], at: us
     cx.emit(
         Node::new("size")
             .span(span.sub(to_u64(s), to_u64(r.pos().saturating_sub(s))))
-            .value(dec(n, 32)),
+            .value(uint(n, 32)),
     );
     for _ in 0..n.min(65536) {
         let s = r.pos();
@@ -1923,14 +1909,14 @@ async fn debug_info(cx: &Cx, dex: &DexInfo, span: Span, data: &[u8]) {
     cx.emit(
         Node::new("line_start")
             .span(field(s, &r))
-            .value(dec(line_start, 32)),
+            .value(uint(line_start, 32)),
     );
     let s = r.pos();
     let params = r.uleb().unwrap_or(0);
     cx.emit(
         Node::new("parameters_size")
             .span(field(s, &r))
-            .value(dec(params, 32)),
+            .value(uint(params, 32)),
     );
     for i in 0..params.min(65536) {
         let s = r.pos();
@@ -1945,7 +1931,7 @@ async fn debug_info(cx: &Cx, dex: &DexInfo, span: Span, data: &[u8]) {
         cx.push(
             Node::new(format!("parameter_names[{i}]"))
                 .span(field(s, &r))
-                .value(dec(raw, 32))
+                .value(uint(raw, 32))
                 .summary(name),
         )
         .await;

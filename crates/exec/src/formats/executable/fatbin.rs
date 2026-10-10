@@ -7,7 +7,8 @@ use crate::bytes::{u16_le, u32_le, u64_le};
 use crate::cx::Cx;
 use crate::error::Result;
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{data_node, text};
+use crate::formats::util::binutil::data_node;
+use crate::formats::util::val::text;
 use crate::formats::{Format, Input, Probe, embedded};
 use crate::node::Node;
 use crate::span::Span;
@@ -75,7 +76,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
     for (header, content, kind, flags, arch) in entries {
         let label = format!(
             "{} sm_{arch}",
-            crate::formats::util::binutil::name_or(KIND, kind.into(), "kind")
+            crate::formats::util::val::name_or(KIND, kind.into(), "kind")
         );
         cx.emit(
             Node::new(label)

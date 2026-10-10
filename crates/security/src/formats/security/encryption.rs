@@ -8,23 +8,12 @@ use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
 use crate::formats::text::decode::base64;
 use crate::formats::text::scan::head_lines;
+use crate::formats::util::val::{text, uint};
 use crate::formats::{Input, Probe};
 use crate::node::Node;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Encrypted files: Password Safe, OpenSSL enc, AES Crypt, AxCrypt
@@ -96,7 +85,7 @@ async fn aescrypt(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(3, 1))
-            .value(uint(version.into(), 8)),
+            .value(uint(version, 8)),
     );
     let mut pos = 5u64;
     let mut created_by = String::new();
@@ -232,13 +221,10 @@ async fn minisign(cx: Cx, input: Input) -> Result<()> {
         } else if !line.trim().is_empty() {
             let decoded = base64(line.trim().as_bytes()).bytes;
             let alg = String::from_utf8_lossy(decoded.get(..2).unwrap_or_default()).into_owned();
-            let id: String = decoded
-                .get(2..10)
-                .unwrap_or_default()
-                .iter()
-                .rev()
-                .map(|b| format!("{b:02X}"))
-                .collect();
+            // The key ID is shown as a big-endian number.
+            let mut id_bytes = decoded.get(2..10).unwrap_or_default().to_vec();
+            id_bytes.reverse();
+            let id = crate::text::hex_upper(&id_bytes);
             let label = match (i, decoded.len()) {
                 (_, 42) => {
                     kind = "public key";

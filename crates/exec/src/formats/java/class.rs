@@ -14,7 +14,9 @@ use crate::bytes::{to_u64, to_usize};
 use crate::cx::{Block, Cx};
 use crate::error::{Diagnostic, Result};
 use crate::fields::{Endian, Fields};
-use crate::formats::util::binutil::{NodeExt, Reader, ellipsize, mutf8, name_or, text};
+use crate::formats::util::binutil::{NodeExt, Reader, mutf8};
+use crate::formats::util::fmt::clip;
+use crate::formats::util::val::{name_or, text};
 use crate::formats::{Format, Head, Input, Probe};
 use crate::node::{Count, Node};
 use crate::span::Span;
@@ -530,7 +532,7 @@ pub async fn dissect(cx: Cx, input: Input) -> Result<()> {
         cx.emit(
             Node::new("Interfaces")
                 .span(c.span(*at, list.len().saturating_mul(2).saturating_add(2)))
-                .summary(ellipsize(&names.join(", "), 120))
+                .summary(clip(&names.join(", "), 120))
                 .lazy(interfaces, c.clone()),
         );
     }
@@ -581,7 +583,7 @@ fn header(f: &mut Fields<'_>, _: &()) -> Result<()> {
 
 fn attribute_names(c: &ClassInfo, list: &[Attribute]) -> String {
     let names: Vec<&str> = list.iter().map(|a| c.utf8(a.name).unwrap_or("?")).collect();
-    ellipsize(&names.join(", "), 120)
+    clip(&names.join(", "), 120)
 }
 
 // ---------------------------------------------------------------------------
@@ -924,9 +926,7 @@ fn attribute_summary(c: &ClassInfo, name: &str, a: &Attribute) -> String {
         }
         "MethodParameters" => format!("{} entries", b.first().copied().unwrap_or(0)),
         // 1 KiB holds well over the 80 characters shown.
-        "SourceDebugExtension" => {
-            ellipsize(&String::from_utf8_lossy(b.get(..1024).unwrap_or(b)), 80)
-        }
+        "SourceDebugExtension" => clip(&String::from_utf8_lossy(b.get(..1024).unwrap_or(b)), 80),
         _ => format!("{} bytes", b.len()),
     }
 }
@@ -1139,7 +1139,7 @@ async fn attribute(cx: Cx, (c, owner, depth, index): (Class, Owner, u32, usize))
                     Node::new(format!("[{i}]"))
                         .span(block.span.sub(start, f.pos().saturating_sub(start)))
                         .value(text(c.resolve(method)))
-                        .summary(ellipsize(&values.join(", "), 120)),
+                        .summary(clip(&values.join(", "), 120)),
                 );
             }
         }
@@ -1325,7 +1325,7 @@ fn operand(c: &ClassInfo, r: &mut Reader<'_>, pc: usize, kind: Operands) -> Opti
                 }
             }
             cases.push(format!("default: {}", target(default.into())));
-            ellipsize(&cases.join(", "), 200)
+            clip(&cases.join(", "), 200)
         }
         Operands::Wide => {
             let inner = r.u8()?;

@@ -6,33 +6,15 @@ use crate::declare_format;
 use crate::dsl::Cursor;
 use crate::error::{Diagnostic, Result};
 use crate::fields::Endian;
-use crate::formats::{Head, Input, Probe, embedded};
+use crate::formats::asn1::DER;
+use crate::formats::util::val::{hex, text, uint};
+use crate::formats::{Head, Input, Probe, embedded_as};
 use crate::node::Node;
 use crate::span::Span;
-use crate::value::{EnumTable, Radix, Value};
+use crate::value::{EnumTable, Value};
 
 const LE: Endian = Endian::Little;
 const BE: Endian = Endian::Big;
-
-fn text(s: impl Into<String>) -> Value {
-    Value::Text(s.into())
-}
-
-fn uint(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Dec,
-    }
-}
-
-fn hex(value: u64, bits: u8) -> Value {
-    Value::UInt {
-        value,
-        bits,
-        radix: Radix::Hex,
-    }
-}
 
 fn time(secs: u32) -> Value {
     Value::Timestamp {
@@ -91,7 +73,7 @@ async fn keytab(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(0, 2))
-            .value(hex(u16_be(&v, 0).unwrap_or(0).into(), 16)),
+            .value(hex(u16_be(&v, 0).unwrap_or(0), 16)),
     );
     let mut cur = Cursor::new(&cx, file, endian);
     cur.seek(2);
@@ -158,7 +140,7 @@ async fn keytab_entry(cx: Cx, (entry, endian): (Span, Endian)) -> Result<()> {
     cx.emit(
         Node::new("Components")
             .span(e.since(at))
-            .value(uint(count.into(), 16)),
+            .value(uint(count, 16)),
     );
     let mut n = u64::from(count);
     if endian == LE {
@@ -183,7 +165,7 @@ async fn keytab_entry(cx: Cx, (entry, endian): (Span, Endian)) -> Result<()> {
     cx.emit(
         Node::new("Name type")
             .span(e.since(at))
-            .value(uint(kind.into(), 32)),
+            .value(uint(kind, 32)),
     );
     let at = e.pos();
     let stamp = e.u32().await?;
@@ -193,7 +175,7 @@ async fn keytab_entry(cx: Cx, (entry, endian): (Span, Endian)) -> Result<()> {
     cx.emit(
         Node::new("Key version (8-bit)")
             .span(e.since(at))
-            .value(uint(kvno.into(), 8)),
+            .value(uint(kvno, 8)),
     );
     let at = e.pos();
     let etype = e.u16().await?;
@@ -220,7 +202,7 @@ async fn keytab_entry(cx: Cx, (entry, endian): (Span, Endian)) -> Result<()> {
         cx.emit(
             Node::new("Key version (32-bit)")
                 .span(e.since(at))
-                .value(uint(v.into(), 32)),
+                .value(uint(v, 32)),
         );
     }
     Ok(())
@@ -275,7 +257,7 @@ async fn ccache(cx: Cx, input: Input) -> Result<()> {
     cx.emit(
         Node::new("Version")
             .span(file.sub(0, 2))
-            .value(hex(version.into(), 16)),
+            .value(hex(version, 16)),
     );
     if version == 0x0504 {
         let at = cur.pos();
@@ -351,9 +333,9 @@ async fn ccache_cred(
         key.len
     )));
     // Tickets are DER (ASN.1 application tag 1).
-    cx.emit(embedded("Ticket", input.nested(ticket)));
+    cx.emit(embedded_as("Ticket", input.nested(ticket), &DER));
     if second.len > 0 {
-        cx.emit(embedded("Second ticket", input.nested(second)));
+        cx.emit(embedded_as("Second ticket", input.nested(second), &DER));
     }
     Ok(())
 }
