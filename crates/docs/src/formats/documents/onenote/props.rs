@@ -528,7 +528,10 @@ impl PropSet {
     /// A UTF-16 string property (without trailing NULs).
     pub fn string(&self, data: &[u8], id: u32) -> Option<String> {
         match self.get(id)?.value {
-            PValue::Bytes(at, len) => Some(utf16(data.get(at..at.saturating_add(len))?)),
+            PValue::Bytes(at, len) => Some(crate::text::utf16_trimmed(
+                data.get(at..at.saturating_add(len))?,
+                crate::fields::Endian::Little,
+            )),
             _ => None,
         }
     }
@@ -538,7 +541,14 @@ impl PropSet {
         if let Some(p) = self.get(RICH_EDIT_TEXT_UNICODE)
             && let PValue::Bytes(at, len) = p.value
         {
-            return Some((utf16(data.get(at..at.saturating_add(len))?), at, len));
+            return Some((
+                crate::text::utf16_trimmed(
+                    data.get(at..at.saturating_add(len))?,
+                    crate::fields::Endian::Little,
+                ),
+                at,
+                len,
+            ));
         }
         if let Some(p) = self.get(TEXT_EXTENDED_ASCII)
             && let PValue::Bytes(at, len) = p.value
@@ -555,12 +565,6 @@ impl PropSet {
             _ => None,
         }
     }
-}
-
-pub fn utf16(b: &[u8]) -> String {
-    crate::text::utf16(b, crate::fields::Endian::Little)
-        .trim_end_matches('\0')
-        .to_owned()
 }
 
 pub fn ansi(b: &[u8]) -> String {

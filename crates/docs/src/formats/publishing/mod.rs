@@ -24,6 +24,29 @@ pub mod fonts;
 pub mod printing;
 
 use crate::fields::Endian;
+use crate::formats::text::piece::Piece;
+use crate::formats::text::xml;
+use crate::span::Span;
+
+/// The value of attribute `name` in the first `tag` start tag (`b"<glyph"`)
+/// of `head`, a prefix of `span` read for a summary.
+pub(crate) fn tag_attr(head: &[u8], span: Span, tag: &[u8], name: &str) -> Option<String> {
+    let mut from = 0;
+    let start = loop {
+        let at = crate::bytes::find(head, tag, from)?;
+        let next = head.get(at.saturating_add(tag.len())).copied();
+        if next.is_none_or(|b| b.is_ascii_whitespace() || b == b'>' || b == b'/') {
+            break at;
+        }
+        from = at.saturating_add(1);
+    };
+    let piece = Piece::new(head.get(start..)?, span.sub(crate::bytes::to_u64(start), 0));
+    xml::attributes(piece)
+        .into_iter()
+        .find(|a| a.name.bytes() == name.as_bytes())?
+        .value
+        .map(|v| xml::decode_entities(&v.text(), false))
+}
 
 /// A synchronous reader over bytes already in memory, for structures that
 /// must be measured before they can be shown lazily (descriptors, action
@@ -112,10 +135,6 @@ impl<'a> Rd<'a> {
     pub fn unicode(&mut self) -> Option<String> {
         let units = usize::try_from(self.u32()?).ok()?;
         let b = self.take(units.checked_mul(2)?)?;
-        Some(
-            crate::text::utf16(b, self.endian)
-                .trim_end_matches('\0')
-                .to_owned(),
-        )
+        Some(crate::text::utf16_trimmed(b, self.endian))
     }
 }

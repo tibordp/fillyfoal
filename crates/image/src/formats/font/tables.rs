@@ -148,28 +148,9 @@ pub fn encoding_name(platform: u16, encoding: u16) -> String {
     lookup(table, encoding.into()).map_or_else(|| format!("encoding {encoding}"), str::to_owned)
 }
 
-const WINDOWS_LANGUAGES: EnumTable = &[
-    (0x0409, "en-US"),
-    (0x0809, "en-GB"),
-    (0x0407, "de-DE"),
-    (0x040c, "fr-FR"),
-    (0x0410, "it-IT"),
-    (0x0411, "ja-JP"),
-    (0x0412, "ko-KR"),
-    (0x0413, "nl-NL"),
-    (0x0415, "pl-PL"),
-    (0x0416, "pt-BR"),
-    (0x0419, "ru-RU"),
-    (0x041d, "sv-SE"),
-    (0x0424, "sl-SI"),
-    (0x0804, "zh-CN"),
-    (0x0404, "zh-TW"),
-    (0x0c0a, "es-ES"),
-];
-
 fn language_name(platform: u16, language: u16) -> String {
     match platform {
-        3 => lookup(WINDOWS_LANGUAGES, language.into())
+        3 => crate::formats::util::lcid::name(language.into())
             .map_or_else(|| format!("LCID {language:#06x}"), str::to_owned),
         1 if language == 0 => "English".to_owned(),
         _ => format!("language {language}"),

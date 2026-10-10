@@ -834,11 +834,11 @@ fn prop_node(
         PValue::Bytes(at, len) => {
             let bytes = data.get(*at..at.saturating_add(*len)).unwrap_or_default();
             match kind {
-                Kind::Utf16 => node.value(text(props::utf16(bytes))),
+                Kind::Utf16 => node.value(text(crate::text::utf16_trimmed(bytes, LE))),
                 Kind::Ansi => node.value(text(props::ansi(bytes))),
                 Kind::Guid if bytes.len() == 16 => node.value(Value::Guid(guid_le(bytes))),
                 _ if tables::property(raw).is_none() && looks_like_utf16(bytes) => node
-                    .value(text(props::utf16(bytes)))
+                    .value(text(crate::text::utf16_trimmed(bytes, LE)))
                     .summary("unknown property, looks like UTF-16 text"),
                 _ if bytes.len() <= 64 => node.value(Value::Bytes(bytes.to_vec())),
                 _ => node.summary(format!("{} bytes", bytes.len())),

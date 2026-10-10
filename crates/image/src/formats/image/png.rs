@@ -1600,12 +1600,11 @@ async fn raw_profile(
         if crate::bytes::to_u64(out.len()) >= length {
             break;
         }
-        let digit = match b {
-            b'0'..=b'9' => b.wrapping_sub(b'0'),
-            b'a'..=b'f' => b.wrapping_sub(b'a').wrapping_add(10),
-            b'A'..=b'F' => b.wrapping_sub(b'A').wrapping_add(10),
-            b'\n' | b'\r' | b' ' => continue,
-            _ => return Ok(None),
+        if matches!(b, b'\n' | b'\r' | b' ') {
+            continue;
+        }
+        let Some(digit) = crate::text::hex_digit(b) else {
+            return Ok(None);
         };
         match high.take() {
             Some(h) => out.push(h.wrapping_mul(16) | digit),

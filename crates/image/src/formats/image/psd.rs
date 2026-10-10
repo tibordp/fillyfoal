@@ -30,7 +30,8 @@ pub static FORMAT: Format = Format {
     dissect: crate::expander!(dissect: Input),
 };
 
-const COLOR_MODES: EnumTable = &[
+/// Photoshop colour modes (file header, patterns, brushes).
+pub const COLOR_MODES: EnumTable = &[
     (0, "Bitmap"),
     (1, "Grayscale"),
     (2, "Indexed"),

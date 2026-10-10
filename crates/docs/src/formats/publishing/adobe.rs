@@ -32,22 +32,9 @@ const MAX_READ: u64 = 16 << 20;
 /// Longest Photoshop Unicode string accepted (code units).
 const MAX_STRING: u32 = 0x1_0000;
 
-const IMAGE_MODES: EnumTable = &[
-    (0, "bitmap"),
-    (1, "grayscale"),
-    (2, "indexed"),
-    (3, "RGB"),
-    (4, "CMYK"),
-    (7, "multichannel"),
-    (8, "duotone"),
-    (9, "Lab"),
-];
-
 fn mode_name(mode: u32) -> &'static str {
-    IMAGE_MODES
-        .iter()
-        .find(|(k, _)| *k == u64::from(mode))
-        .map_or("unknown mode", |(_, v)| v)
+    crate::value::lookup(crate::formats::image::psd::COLOR_MODES, mode.into())
+        .unwrap_or("unknown mode")
 }
 
 /// A Photoshop Unicode string read through a cursor: u32 code units, UTF-16BE.
@@ -60,7 +47,7 @@ async fn ustr(cur: &mut Cursor<'_>) -> Result<String> {
         );
     }
     let b = cur.bytes(u64::from(units).saturating_mul(2)).await?;
-    Ok(crate::text::utf16(&b, BE).trim_end_matches('\0').to_owned())
+    Ok(crate::text::utf16_trimmed(&b, BE))
 }
 
 /// Emits `node` when `on`; lets one parser both measure and render.

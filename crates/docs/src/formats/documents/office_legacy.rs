@@ -1457,21 +1457,14 @@ const WINWORD_FLAGS: crate::value::FlagTable = &[
     crate::value::flag(0x0100, "fEncrypted"),
 ];
 
-const LANGUAGES: EnumTable = &[
-    (0x0407, "German"),
-    (0x0409, "English (US)"),
-    (0x040c, "French"),
-    (0x0410, "Italian"),
-    (0x0413, "Dutch"),
-    (0x0809, "English (UK)"),
-    (0x0c0a, "Spanish"),
-];
-
 fn winword_fib(f: &mut Fields<'_>, _: &()) -> Result<(u16, u16, u32, u32)> {
     let ident = f.u16("wIdent").hex().emit()?;
     f.u16("nFib").emit()?;
     f.u16("nProduct").hex().emit()?;
-    let lid = f.u16("Language").enumeration(LANGUAGES).emit()?;
+    let lid = f
+        .u16("Language")
+        .enumeration(crate::formats::util::lcid::LCIDS)
+        .emit()?;
     f.int::<i16>("pnNext").emit()?;
     f.u16("Flags").flags(WINWORD_FLAGS).emit()?;
     f.u16("nFibBack").emit()?;
@@ -1511,7 +1504,7 @@ async fn winword2(cx: Cx, input: Input) -> Result<()> {
     cx.annotate(format!(
         "Word for Windows {} document, {}, {words} words",
         if ident == 0xa5db { "2.0" } else { "1.x" },
-        lookup(LANGUAGES, lid.into()).unwrap_or("unknown language")
+        crate::formats::util::lcid::name(lid.into()).unwrap_or("unknown language")
     ));
     Ok(())
 }

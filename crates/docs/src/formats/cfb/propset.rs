@@ -337,7 +337,7 @@ fn parse_dictionary(data: &[u8], codepage: u16) -> (Vec<(u32, String, usize, usi
             .to_owned();
         let mut end = start.saturating_add(bytes);
         if wide {
-            end = end.saturating_add(3) & !3;
+            end = to_usize(align_up(to_u64(end), 4));
         }
         out.push((id, name, at, end.saturating_sub(at)));
         at = end;
@@ -503,9 +503,7 @@ fn decode(
             let cch = to_usize(u32_le(data, at)?.into());
             let start = at.checked_add(4)?;
             let raw = data.get(start..start.checked_add(cch.checked_mul(2)?)?)?;
-            let text = crate::text::utf16(raw, LE)
-                .trim_end_matches('\0')
-                .to_owned();
+            let text = crate::text::utf16_trimmed(raw, LE);
             simple(
                 Some(Value::Text(text)),
                 to_usize(align_up(to_u64(cch.saturating_mul(2).saturating_add(4)), 4)),

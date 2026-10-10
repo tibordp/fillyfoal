@@ -41,20 +41,27 @@ const FLAGS: FlagTable = &[
     flag(0x1000_0000, "TTEMBED_XORENCRYPTDATA"),
 ];
 
-const CHARSETS: EnumTable = &[
+/// Windows GDI character sets (`LOGFONT.lfCharSet`, `.FNT dfCharSet`).
+pub const CHARSETS: EnumTable = &[
     (0, "ANSI"),
     (1, "DEFAULT"),
     (2, "SYMBOL"),
+    (77, "MAC"),
     (128, "SHIFTJIS"),
+    (129, "HANGUL"),
+    (130, "JOHAB"),
     (134, "GB2312"),
     (136, "CHINESEBIG5"),
     (161, "GREEK"),
     (162, "TURKISH"),
+    (163, "VIETNAMESE"),
     (177, "HEBREW"),
     (178, "ARABIC"),
     (186, "BALTIC"),
     (204, "RUSSIAN"),
+    (222, "THAI"),
     (238, "EASTEUROPE"),
+    (255, "OEM"),
 ];
 
 record! {
